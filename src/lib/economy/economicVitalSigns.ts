@@ -70,6 +70,7 @@ export type VitalSignsHistoryRow = {
   twoSidedListingShare: number | null;
   activeTradedListingShare: number | null;
   sovereignNoHolderBondShare: number | null;
+  corporateNoHolderBondShare: number | null;
 };
 
 type ProjectedMetric = { value: number | null } | undefined;
@@ -81,6 +82,7 @@ type HistoryProjection = {
     twoSidedListingShare?: ProjectedMetric;
     activeTradedListingShare?: ProjectedMetric;
     sovereignNoHolderBondShare?: ProjectedMetric;
+    corporateNoHolderBondShare?: ProjectedMetric;
   };
 };
 
@@ -1046,6 +1048,13 @@ export function computeEconomicVitalSigns(input: Inputs): EconomicVitalSigns {
         (row) => row.sovereignNoHolderBondShare,
         "unmatured_sovereign_issue_count_median_12"
       ),
+      corporateNoHolderBondShareMedian: recent12Median(
+        input.turn,
+        history,
+        noHolderShare(corporateBonds).value,
+        (row) => row.corporateNoHolderBondShare,
+        "unmatured_corporate_issue_count_median_12"
+      ),
     },
     households: {
       householdsObserved: wealth.length,
@@ -1275,6 +1284,7 @@ export async function snapshotEconomicVitalSigns(
         "securities.twoSidedListingShare.value": 1,
         "securities.activeTradedListingShare.value": 1,
         "securities.sovereignNoHolderBondShare.value": 1,
+        "securities.corporateNoHolderBondShare.value": 1,
       })
       .sort({ turn: 1 })
       .toArray(),
@@ -1312,6 +1322,7 @@ export async function snapshotEconomicVitalSigns(
     twoSidedListingShare: doc.securities?.twoSidedListingShare?.value ?? null,
     activeTradedListingShare: doc.securities?.activeTradedListingShare?.value ?? null,
     sovereignNoHolderBondShare: doc.securities?.sovereignNoHolderBondShare?.value ?? null,
+    corporateNoHolderBondShare: doc.securities?.corporateNoHolderBondShare?.value ?? null,
   }));
   const snapshot = computeEconomicVitalSigns({
     turn,

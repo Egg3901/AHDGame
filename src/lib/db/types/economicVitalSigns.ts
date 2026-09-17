@@ -151,6 +151,7 @@ export interface EconomicVitalSigns {
     twoSidedListingShareMedian: EconomicMetric;
     activeTradedListingShareMedian: EconomicMetric;
     sovereignNoHolderBondShareMedian: EconomicMetric;
+    corporateNoHolderBondShareMedian: EconomicMetric;
   };
   measurement: {
     confidence: "low" | "medium" | "high";
