@@ -274,5 +274,12 @@
     "bonds": "{count, plural, one {# bond holding} other {# bond holdings}}",
     "funds": "Investment fund holdings",
     "corporation": "View corporation"
+  },
+  "regimeChanges": {
+    "title": "Why this changed",
+    "description": "Recent recorded changes, newest first. Each entry shows the change and its cause. Projections above are estimates, not recorded events.",
+    "empty": "No changes have been recorded yet.",
+    "unknown": "No reason was recorded.",
+    "turn": "Turn {turn}"
   }
 }

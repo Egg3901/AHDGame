@@ -2,7 +2,19 @@
  * @vitest-environment happy-dom
  */
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render as rtlRender, screen, waitFor } from "@testing-library/react";
+import { NextIntlClientProvider } from "next-intl";
+import type { ReactElement } from "react";
+import profile from "@/../messages/en/profile.json";
+
+function render(ui: ReactElement) {
+  return rtlRender(
+    <NextIntlClientProvider locale="en" messages={{ profile }}>
+      {ui}
+    </NextIntlClientProvider>
+  );
+}
+
 import { RegimeHealthTab } from "./RegimeHealthTab";
 
 function mockFetch(
