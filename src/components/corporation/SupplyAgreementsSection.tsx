@@ -46,6 +46,8 @@ interface SupplyAgreement {
   lastShortfallPenaltyAnchor?: number;
   lastSupplierCashDelta?: number;
   lastSupplierCashCurrency?: string;
+  lastBuyerCashDelta?: number;
+  lastBuyerCashCurrency?: string;
   lastUnpaidSettlementAnchor?: number;
 }
 
@@ -514,10 +516,13 @@ export default function SupplyAgreementsSection({
           </p>
         )}
 
-        {role === "supplier" &&
-          (a.status === "active" || a.status === "cancelling") &&
+        {(a.status === "active" || a.status === "cancelling") &&
           Number.isFinite(a.lastDeliveryTurn) &&
-          (a.lastAchievableUnits !== undefined || (a.lastShortfallUnits ?? 0) > 0) && (
+          (role === "buyer" ||
+            a.lastAchievableUnits !== undefined ||
+            (a.lastShortfallUnits ?? 0) > 0 ||
+            a.lastSupplierCashDelta !== undefined ||
+            a.lastBuyerCashDelta !== undefined) && (
             <div
               className={`rounded-lg border p-2.5 text-xs ${
                 (a.lastShortfallUnits ?? 0) > 0
@@ -561,7 +566,10 @@ export default function SupplyAgreementsSection({
                 </dd>
                 <dt>{t("settlement.netCash")}</dt>
                 <dd className="text-right font-medium text-foreground tabular-nums">
-                  {formatCash(a.lastSupplierCashDelta ?? 0, a.lastSupplierCashCurrency)}
+                  {formatCash(
+                    role === "buyer" ? (a.lastBuyerCashDelta ?? 0) : (a.lastSupplierCashDelta ?? 0),
+                    role === "buyer" ? a.lastBuyerCashCurrency : a.lastSupplierCashCurrency
+                  )}
                 </dd>
                 {(a.lastUnpaidSettlementAnchor ?? 0) > 0 && (
                   <>
