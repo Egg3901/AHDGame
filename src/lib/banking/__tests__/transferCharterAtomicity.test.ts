@@ -411,6 +411,165 @@ describe("transferBankCharterToAcquirer crash recovery", () => {
     }
   });
 
+  it("drains a foreign orphan adopted before a crash ahead of its cleanup", async () => {
+    // Attempt 1 adopts the stale foreign plan (durable CAS) then throws
+    // before removing the superseded acquirer's orphan claim. The retry joins
+    // the adopted plan, which no longer names the loser, so without a durable
+    // pending-cleanup record the orphan would strand as a ghost bank.
+    const staleAcquirer = new ObjectId();
+    memory.seed("corporations", [{ _id: staleAcquirer, name: "Stale Bidder" }]);
+    await memory
+      .collection("corporations")
+      .updateOne(
+        { _id: staleAcquirer },
+        { $set: { bankCharter: { ...makeCharter() }, updatedAt: now } }
+      );
+    await memory.collection("corporations").updateOne(
+      { _id: targetId },
+      {
+        $set: {
+          bankCharterTransfer: {
+            to: staleAcquirer,
+            currency: "USD",
+            attemptId: "stale-attempt",
+            fingerprint: charterFingerprint(corp(targetId).bankCharter as BankCharter),
+            startedAt: now,
+          },
+          updatedAt: now,
+        },
+      }
+    );
+
+    const corps = memory.collection("corporations");
+    const orig = corps.updateOne.bind(corps);
+    let crashed = false;
+    vi.spyOn(corps, "updateOne").mockImplementation(async (filter, update, options) => {
+      const unset = (update as { $unset?: Record<string, unknown> }).$unset;
+      const target = (filter as { _id?: ObjectId })._id;
+      if (!crashed && unset && "bankCharter" in unset && target?.equals(staleAcquirer)) {
+        crashed = true;
+        throw new Error("crash between adopt and orphan cleanup");
+      }
+      return orig(filter, update, options);
+    });
+
+    await expect(transferBankCharterToAcquirer(db(), targetId, acquirerId, now)).rejects.toThrow(
+      "crash between adopt and orphan cleanup"
+    );
+
+    const retry = await transferBankCharterToAcquirer(db(), targetId, acquirerId, now);
+    expect(retry).toMatchObject({ ok: true, transferred: true });
+    expect("bankCharter" in corp(staleAcquirer)).toBe(false);
+    expectUnified();
+  });
+
+  it("converges when a crash lands between stale-plan takeover and own-slot cleanup", async () => {
+    // Crash after claim plus drift leaves the superseded copy on our own
+    // slot. Attempt 1 takes the stale plan over, then throws before removing
+    // that copy. The retry must drain it and move the current charter, not
+    // read its own orphan as a foreign bank and conflict forever.
+    const before = makeCharter();
+    const drifted = makeCharter({ cashReserves: (before.cashReserves ?? 0) + 1_000 });
+    await memory.collection("corporations").updateOne(
+      { _id: targetId },
+      {
+        $set: {
+          bankCharter: drifted,
+          bankCharterTransfer: {
+            to: acquirerId,
+            currency: "USD",
+            attemptId: "stale-attempt",
+            fingerprint: charterFingerprint(before),
+            startedAt: now,
+          },
+          updatedAt: now,
+        },
+      }
+    );
+    await memory
+      .collection("corporations")
+      .updateOne({ _id: acquirerId }, { $set: { bankCharter: { ...before }, updatedAt: now } });
+
+    const corps = memory.collection("corporations");
+    const orig = corps.updateOne.bind(corps);
+    let crashed = false;
+    vi.spyOn(corps, "updateOne").mockImplementation(async (filter, update, options) => {
+      const unset = (update as { $unset?: Record<string, unknown> }).$unset;
+      const target = (filter as { _id?: ObjectId })._id;
+      if (!crashed && unset && "bankCharter" in unset && target?.equals(acquirerId)) {
+        crashed = true;
+        throw new Error("crash between takeover and own-slot cleanup");
+      }
+      return orig(filter, update, options);
+    });
+
+    await expect(transferBankCharterToAcquirer(db(), targetId, acquirerId, now)).rejects.toThrow(
+      "crash between takeover and own-slot cleanup"
+    );
+
+    const retry = await transferBankCharterToAcquirer(db(), targetId, acquirerId, now);
+    expect(retry).toMatchObject({ ok: true, transferred: true });
+    expect(corp(acquirerId).bankCharter?.cashReserves).toBe(drifted.cashReserves);
+    expectUnified();
+  });
+
+  it("drains chained superseded orphans across adopt-of-adopt crashes", async () => {
+    // Plan S1 (orphan claim on S1) is adopted by B, which crashes before its
+    // cleanup; C adopts B's plan and crashes the same way. The final retry
+    // joins C's plan and must still clear S1: pending cleanups survive every
+    // supersession, not just the most recent one.
+    const staleId = new ObjectId();
+    const midId = new ObjectId();
+    memory.seed("corporations", [
+      { _id: staleId, name: "Stale Bidder" },
+      { _id: midId, name: "Middle Bidder" },
+    ]);
+    await memory
+      .collection("corporations")
+      .updateOne({ _id: staleId }, { $set: { bankCharter: { ...makeCharter() }, updatedAt: now } });
+    await memory.collection("corporations").updateOne(
+      { _id: targetId },
+      {
+        $set: {
+          bankCharterTransfer: {
+            to: staleId,
+            currency: "USD",
+            attemptId: "stale-attempt",
+            fingerprint: charterFingerprint(corp(targetId).bankCharter as BankCharter),
+            startedAt: now,
+          },
+          updatedAt: now,
+        },
+      }
+    );
+
+    const corps = memory.collection("corporations");
+    const orig = corps.updateOne.bind(corps);
+    let faults = 0;
+    vi.spyOn(corps, "updateOne").mockImplementation(async (filter, update, options) => {
+      const unset = (update as { $unset?: Record<string, unknown> }).$unset;
+      const target = (filter as { _id?: ObjectId })._id;
+      if (faults < 2 && unset && "bankCharter" in unset && !target?.equals(targetId)) {
+        faults += 1;
+        throw new Error("crash ahead of orphan cleanup");
+      }
+      return orig(filter, update, options);
+    });
+
+    await expect(transferBankCharterToAcquirer(db(), targetId, midId, now)).rejects.toThrow(
+      "crash ahead of orphan cleanup"
+    );
+    await expect(transferBankCharterToAcquirer(db(), targetId, acquirerId, now)).rejects.toThrow(
+      "crash ahead of orphan cleanup"
+    );
+
+    const retry = await transferBankCharterToAcquirer(db(), targetId, acquirerId, now);
+    expect(retry).toMatchObject({ ok: true, transferred: true });
+    expect("bankCharter" in corp(staleId)).toBe(false);
+    expect("bankCharter" in corp(midId)).toBe(false);
+    expectUnified();
+  });
+
   it("old-code negative control: without a plan the retry strands split keys", async () => {
     // Pre-fix sequence inline: claim, release, then a throw before any
     // re-key, with no recovery plan anywhere. The old retry then reports "no

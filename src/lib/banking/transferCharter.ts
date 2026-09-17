@@ -108,6 +108,50 @@ function identityFilter(charter: BankCharter): Record<string, unknown> {
 
 type CharterTransferPlan = NonNullable<Corporation["bankCharterTransfer"]>;
 
+type CharterTransferOrphan = { to: ObjectId; fingerprint: string };
+
+function dedupOrphans(orphans: CharterTransferOrphan[]): CharterTransferOrphan[] {
+  const seen = new Set<string>();
+  const out: CharterTransferOrphan[] = [];
+  for (const orphan of orphans) {
+    const key = `${orphan.to.toString()}@${orphan.fingerprint}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(orphan);
+  }
+  return out;
+}
+
+/**
+ * Remove every charter copy a superseded attempt may have left behind.
+ * Each entry is resolved against the holder's CURRENT charter and removed
+ * only on an exact fingerprint match, so a genuinely different bank never
+ * matches and a concurrent change simply misses for the next attempt to
+ * retry. The live copy is never a drain target: an entry naming our own slot
+ * with the live fingerprint is our own claim and is skipped.
+ */
+async function drainOrphans(
+  db: Db,
+  orphans: CharterTransferOrphan[],
+  ownId: ObjectId,
+  liveFingerprint: string,
+  now: Date
+): Promise<void> {
+  if (orphans.length === 0) return;
+  const corps = db.collection<Corporation>("corporations");
+  for (const orphan of orphans) {
+    if (sameId(orphan.to, ownId) && orphan.fingerprint === liveFingerprint) continue;
+    const holder = await corps.findOne({ _id: orphan.to }, { projection: { bankCharter: 1 } });
+    if (!holder?.bankCharter || charterFingerprint(holder.bankCharter) !== orphan.fingerprint) {
+      continue;
+    }
+    await corps.updateOne(
+      { _id: orphan.to, ...fingerprintFilter(holder.bankCharter) },
+      { $unset: { bankCharter: "" }, $set: { updatedAt: now } }
+    );
+  }
+}
+
 function isOwnedPlan(plan: CharterTransferPlan | null | undefined): plan is CharterTransferPlan & {
   attemptId: string;
   fingerprint: string;
@@ -229,11 +273,12 @@ async function clearPlan(
  * Crash safety (issue #2014): production Mongo has no multi-document
  * transactions (see `runWithOptionalTransaction`), so the claim, release, and
  * re-keys cannot commit atomically. Instead the shell carries a durable
- * recovery plan (`bankCharterTransfer`: planned owner plus charter currency)
- * stamped before the claim and cleared after the last re-key. Every satellite
- * write is an idempotent set keyed on the old owner, so an interruption or
- * throw after ANY durable write converges on retry: a charterless shell with
- * a surviving plan resumes its re-keys toward the planned owner instead of
+ * recovery plan (`bankCharterTransfer`: planned owner, charter currency,
+ * attempt token, charter fingerprint, plus pending orphan cleanups) stamped
+ * before the claim and cleared after the last re-key. Every satellite write
+ * is an idempotent set keyed on the old owner, so an interruption or throw
+ * after ANY durable write converges on retry: a charterless shell with a
+ * surviving plan resumes its re-keys toward the planned owner instead of
  * reporting "no transfer required" over split records, and a shell that still
  * holds its charter resumes at the guarded claim/release. Concurrent
  * same-pair retries are safe for the same reason; nothing here reports
@@ -250,8 +295,11 @@ async function clearPlan(
  * retries join the shared plan by (owner, fingerprint) and converge without
  * double-apply. Retargeting a shell whose charter never left (stale foreign
  * plan plus orphan claim) stays safe: the adopt is a compare-and-swap on the
- * old token guarded on the shell still holding the charter, and the orphan
- * cleanup is fingerprint-guarded so it never touches a foreign bank.
+ * old token guarded on the shell still holding the charter, the superseded
+ * owner and its claimed fingerprint persist in the plan as pending orphans
+ * (carried across chained supersessions), and every owner and joiner drains
+ * them with fingerprint-guarded removals before claiming, so a crash between
+ * the swap and the cleanup still converges instead of stranding a ghost bank.
  */
 export async function transferBankCharterToAcquirer(
   db: Db,
@@ -310,8 +358,11 @@ export async function transferBankCharterToAcquirer(
     // The charter already moved but a crash or throw interrupted the
     // satellite re-keys (or their ack). Resume toward the planned owner and
     // only then clear the plan, so this call never reports "nothing to do"
-    // while records still name the shell.
+    // while records still name the shell. Pending orphan cleanups drain first:
+    // they were due before the claim, so anything still listed here is a copy
+    // a crash saved from the owner-path cleanup.
     const destId = plan.to;
+    await drainOrphans(db, plan.orphans ?? [], destId, plan.fingerprint, now);
     const counts = await rekeySatellites(db, targetId, destId, plan.currency, now);
     await clearPlan(db, targetId, destId, plan.attemptId, now);
     return { ok: true, transferred: true, currency: plan.currency, ...counts };
@@ -341,9 +392,30 @@ export async function transferBankCharterToAcquirer(
     sameId(plan.to, acquirerId) &&
     plan.fingerprint !== fingerprint &&
     charterFingerprint(acquirer.bankCharter) === plan.fingerprint;
+  // The slot holds a superseded copy of our own claim that a crash saved
+  // from cleanup after the plan already moved on: the plan records that exact
+  // copy as a pending orphan, so it must not read as a foreign bank occupying
+  // the slot. The owner path drains it before claiming.
+  const slotFingerprint = acquirer.bankCharter ? charterFingerprint(acquirer.bankCharter) : null;
+  const orphanedOwnSlot =
+    !!slotFingerprint &&
+    !!plan &&
+    sameId(plan.to, acquirerId) &&
+    slotFingerprint !== fingerprint &&
+    (plan.orphans ?? []).some(
+      (orphan) => sameId(orphan.to, acquirerId) && orphan.fingerprint === slotFingerprint
+    );
   const conflict = bankTransferConflict(target, acquirer);
-  if (conflict && !ownClaim && !staleOwnClaim) return { ok: false, error: conflict };
-  if (charter.status !== "active" && acquirer.bankCharter && !ownClaim && !staleOwnClaim) {
+  if (conflict && !ownClaim && !staleOwnClaim && !orphanedOwnSlot) {
+    return { ok: false, error: conflict };
+  }
+  if (
+    charter.status !== "active" &&
+    acquirer.bankCharter &&
+    !ownClaim &&
+    !staleOwnClaim &&
+    !orphanedOwnSlot
+  ) {
     return { ok: true, transferred: false, currency: null, ...NO_COUNTS };
   }
 
@@ -362,8 +434,7 @@ export async function transferBankCharterToAcquirer(
   // token, guarded on the shell still holding this charter — a shell that
   // already released is someone's in-flight transfer and is never adopted.
   let owned: string | null = null;
-  let prevTo: ObjectId | null = null;
-  let prevFingerprint: string | null = null;
+  let pendingOrphans: CharterTransferOrphan[] = [];
   const stamp = await corps.updateOne(
     { _id: targetId, bankCharterTransfer: { $exists: false } },
     { $set: { bankCharterTransfer: stampPlan, updatedAt: now } }
@@ -386,8 +457,10 @@ export async function transferBankCharterToAcquirer(
       curPlan.fingerprint === fingerprint &&
       curPlan.currency === charter.currency
     ) {
-      // Same-pair sibling (or our own lost-ack retry): drive jointly.
+      // Same-pair sibling (or our own lost-ack retry): drive jointly, draining
+      // whatever pending cleanups the shared plan still carries.
       owned = curPlan.attemptId;
+      pendingOrphans = [...(curPlan.orphans ?? [])];
     } else if (curPlan && sameId(curPlan.to, acquirerId)) {
       // Stale own plan: it names this acquirer but its fingerprint predates
       // the shell's current charter. Fingerprinted economics move on every
@@ -398,22 +471,41 @@ export async function transferBankCharterToAcquirer(
       // charter, then proceed as owner under fresh identity. Foreign plans
       // never reach here (same `to` is required), so a different acquirer's
       // race still conflicts below with zero writes.
+      const takeOverPlan = {
+        ...stampPlan,
+        orphans: dedupOrphans([
+          ...(curPlan.orphans ?? []),
+          { to: acquirerId, fingerprint: curPlan.fingerprint },
+        ]),
+      };
       const takeOver = await corps.updateOne(
         {
           _id: targetId,
           ...identityFilter(charter),
           "bankCharterTransfer.attemptId": curPlan.attemptId,
         },
-        { $set: { bankCharterTransfer: stampPlan, updatedAt: now } }
+        { $set: { bankCharterTransfer: takeOverPlan, updatedAt: now } }
       );
       if (takeOver.modifiedCount === 1) {
         owned = attemptId;
-        prevFingerprint = curPlan.fingerprint;
+        pendingOrphans = [...takeOverPlan.orphans];
       }
     } else if (curRaw && !sameId(curRaw.to, acquirerId)) {
       // Foreign plan: adopt only while the shell still holds this charter.
       // The token CAS means exactly one adopter wins; losers conflict below
-      // without writing anything.
+      // without writing anything. The superseded owner plus the fingerprint
+      // it may have claimed persist in the plan, so a crash ahead of the
+      // cleanup below still converges on retry, as do chained adopts.
+      const adoptPlan = {
+        ...stampPlan,
+        orphans: dedupOrphans([
+          ...(isOwnedPlan(curRaw) ? (curRaw.orphans ?? []) : []),
+          {
+            to: curRaw.to,
+            fingerprint: isOwnedPlan(curRaw) ? curRaw.fingerprint : fingerprint,
+          },
+        ]),
+      };
       const adopt = await corps.updateOne(
         {
           _id: targetId,
@@ -422,11 +514,11 @@ export async function transferBankCharterToAcquirer(
             ? { "bankCharterTransfer.attemptId": curRaw.attemptId }
             : { "bankCharterTransfer.to": curRaw.to }),
         },
-        { $set: { bankCharterTransfer: stampPlan, updatedAt: now } }
+        { $set: { bankCharterTransfer: adoptPlan, updatedAt: now } }
       );
       if (adopt.modifiedCount === 1) {
         owned = attemptId;
-        prevTo = curRaw.to;
+        pendingOrphans = [...adoptPlan.orphans];
       }
     } else if (!curRaw) {
       // Plan vanished under us (winner completed and cleared, or a rollback);
@@ -447,32 +539,16 @@ export async function transferBankCharterToAcquirer(
     };
   }
 
-  // A previous attempt aimed at a DIFFERENT acquirer may have left its claim
-  // behind (crash between its claim and release). Remove that orphan copy
-  // first: the fingerprint guard means a foreign bank never matches. This
-  // runs before claiming so a crash between the two simply repeats the
+  // Superseded attempts may have left claimed copies behind (crash between
+  // their claim and release, then a plan supersession). Drain every pending
+  // orphan first: each removal is fingerprint-guarded, so a foreign bank
+  // never matches and our own live claim (when present) is skipped. This runs
+  // before claiming, and every same-pair joiner repeats it from the durable
+  // plan, so a crash or throw anywhere in this sequence simply repeats the
   // idempotent cleanup on retry. Only the plan owner reaches here, and only
-  // with the shell still holding the charter, so the copy is provably orphan.
-  if (prevTo && !sameId(prevTo, acquirerId)) {
-    await corps.updateOne(
-      { _id: prevTo, ...fingerprintFilter(charter) },
-      { $unset: { bankCharter: "" }, $set: { updatedAt: now } }
-    );
-  } else if (prevFingerprint) {
-    // The superseded plan left its claimed copy behind on our own slot
-    // (crash after claim, then drift). Remove exactly that stale copy:
-    // reaching here means the join already failed, so the superseded
-    // fingerprint always differs from the fresh one and the current charter
-    // is never the delete target. A sibling's fresh claim of the current
-    // charter (or any foreign bank) never matches the old fingerprint.
-    const slot = await corps.findOne({ _id: acquirerId }, { projection: { bankCharter: 1 } });
-    if (slot?.bankCharter && charterFingerprint(slot.bankCharter) === prevFingerprint) {
-      await corps.updateOne(
-        { _id: acquirerId, ...fingerprintFilter(slot.bankCharter) },
-        { $unset: { bankCharter: "" }, $set: { updatedAt: now } }
-      );
-    }
-  }
+  // with the shell still holding the charter, so every drained copy is
+  // provably orphan.
+  await drainOrphans(db, pendingOrphans, acquirerId, fingerprint, now);
 
   // Claim the acquirer's charter slot, guarded: a charter issued on the
   // acquirer between the caller's pre-check and this write must fail here

@@ -187,6 +187,22 @@ export interface Corporation {
      */
     attemptId?: string;
     /**
+     * Charter copies that may have been orphaned by superseded attempts and
+     * still need removal (review of PR #2016). Each supersession appends the
+     * replaced plan's owner plus the fingerprint it may have claimed; every
+     * owner and every same-pair joiner drains the list with
+     * fingerprint-guarded removals before claiming, so a crash between the
+     * plan compare-and-swap and the cleanup cannot strand a ghost bank. The
+     * list is append-only across supersessions (deduplicated) so chained
+     * adopts keep every pending cleanup, and it dies with the plan on clear.
+     */
+    orphans?: {
+      /** Corporation that may hold the orphaned copy. */
+      to: ObjectId;
+      /** Fingerprint of the charter copy to remove. */
+      fingerprint: string;
+    }[];
+    /**
      * Ownership fingerprint of the charter being moved
      * (`charterFingerprint` in transferCharter.ts): identity plus economic
      * fields, so a genuinely different bank sharing currency/turn/type/status
