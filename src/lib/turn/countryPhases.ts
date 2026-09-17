@@ -328,7 +328,12 @@ export const COUNTRY_ELECTION_PHASES: Partial<Record<CountryId, CountryElectionP
     // bootstrap), the spawner's fallback recomputes the identical Shugiin
     // canonical cycle, so the council still aligns with the Shugiin.
     { name: "jpRegionalCouncilElections", fn: ensureJPRegionalCouncilElections },
-    { name: "jpCouncillorElections", fn: ensureJPCouncillorElections },
+    // Sangiin spawner takes a class filter before the turn, so the registry
+    // passes both through: natural class selection plus the in-flight turn.
+    {
+      name: "jpCouncillorElections",
+      fn: (gameNow, currentTurn) => ensureJPCouncillorElections(gameNow, undefined, currentTurn),
+    },
     { name: "jpGovernorElections", fn: ensureJPGovernorElections },
   ],
   IE: [

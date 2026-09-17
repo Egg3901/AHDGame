@@ -113,6 +113,40 @@ function seedCompletedCycle(elections: Election[]): void {
   }
 }
 
+/**
+ * Convert a typed fixture doc to a plain record at the mock boundary, so the
+ * in-memory matcher never needs an Election-to-Record cast.
+ */
+function asRecord(doc: Election | State): Record<string, unknown> {
+  return { ...doc };
+}
+
+const SORTABLE_DATE_FIELDS: ReadonlySet<string> = new Set([
+  "createdAt",
+  "updatedAt",
+  "startTime",
+  "endTime",
+  "primaryEndTime",
+]);
+
+/** Millis for a sortable date field, read through keyof with a Date guard. */
+function electionTime(doc: Election, field: string): number {
+  if (!SORTABLE_DATE_FIELDS.has(field)) return 0;
+  const value = doc[field as keyof Election];
+  if (value instanceof Date) return value.getTime();
+  return 0;
+}
+
+/**
+ * Narrow an optional production field the spawner must have set. Fails the
+ * test on a missing field instead of hiding the gap behind `!`.
+ */
+function requireDefined<T>(value: T | undefined, label: string): T {
+  expect(value).toBeDefined();
+  if (value === undefined) throw new Error(`spawned election is missing ${label}`);
+  return value;
+}
+
 function matchesDoc(doc: Record<string, unknown>, filter: Record<string, unknown>): boolean {
   for (const [key, cond] of Object.entries(filter)) {
     if (key === "$or") {
@@ -166,15 +200,13 @@ function mountDb(mount: Mount): void {
   };
   const electionsApi = {
     find: (filter: Record<string, unknown> = {}) => {
-      const rows = mount.elections.filter((doc) =>
-        matchesDoc(doc as unknown as Record<string, unknown>, filter)
-      );
+      const rows = mount.elections.filter((doc) => matchesDoc(asRecord(doc), filter));
       return {
         sort: (spec: Record<string, 1 | -1>) => {
           const [[field, direction]] = Object.entries(spec);
           const sorted = [...rows].sort((a, b) => {
-            const left = new Date((a as Record<string, unknown>)[field] as string).getTime();
-            const right = new Date((b as Record<string, unknown>)[field] as string).getTime();
+            const left = electionTime(a, field);
+            const right = electionTime(b, field);
             return direction === -1 ? right - left : left - right;
           });
           return { toArray: () => Promise.resolve(sorted) };
@@ -183,9 +215,7 @@ function mountDb(mount: Mount): void {
       };
     },
     findOne: async (filter: Record<string, unknown> = {}) =>
-      mount.elections.find((doc) =>
-        matchesDoc(doc as unknown as Record<string, unknown>, filter)
-      ) ?? null,
+      mount.elections.find((doc) => matchesDoc(asRecord(doc), filter)) ?? null,
     insertMany: async (docs: Omit<Election, "_id">[]) => {
       for (const doc of docs) mount.elections.push({ _id: new ObjectId(), ...doc } as Election);
       return { insertedCount: docs.length, insertedIds: {} };
@@ -202,7 +232,7 @@ function mountDb(mount: Mount): void {
     ) => {
       for (const op of ops) {
         const target = mount.elections.find((doc) =>
-          matchesDoc(doc as unknown as Record<string, unknown>, op.updateOne.filter)
+          matchesDoc(asRecord(doc), op.updateOne.filter)
         );
         if (target) Object.assign(target, op.updateOne.update.$set);
       }
@@ -211,10 +241,7 @@ function mountDb(mount: Mount): void {
   };
   const statesApi = {
     find: (filter: Record<string, unknown> = {}) => ({
-      toArray: () =>
-        Promise.resolve(
-          states.filter((doc) => matchesDoc(doc as unknown as Record<string, unknown>, filter))
-        ),
+      toArray: () => Promise.resolve(states.filter((doc) => matchesDoc(asRecord(doc), filter))),
     }),
     findOne: async () => null,
   };
@@ -323,11 +350,19 @@ describe("issue #2060: country cycles respawn on the first post-resolution turn"
     ] as const) {
       for (const doc of liveDocs(mount, countryId, electionType)) {
         expect(doc.status).toBe("active");
-        expect(doc.startTurn).toBe(193);
-        expect(doc.startTime).toEqual(NOW_193);
+        const startTurn = requireDefined(doc.startTurn, "startTurn");
+        const startTime = requireDefined(doc.startTime, "startTime");
+        const primaryEndTurn = requireDefined(doc.primaryEndTurn, "primaryEndTurn");
+        const primaryEndTime = requireDefined(doc.primaryEndTime, "primaryEndTime");
+        const primaryDurationHours = requireDefined(
+          doc.primaryDurationHours,
+          "primaryDurationHours"
+        );
+        expect(startTurn).toBe(193);
+        expect(startTime).toEqual(NOW_193);
         // The whole primary still lies ahead, not one turn already elapsed.
-        expect(doc.primaryEndTurn - doc.startTurn).toBeGreaterThanOrEqual(doc.primaryDurationHours);
-        expect(doc.primaryEndTime.getTime()).toBeGreaterThan(doc.startTime.getTime());
+        expect(primaryEndTurn - startTurn).toBeGreaterThanOrEqual(primaryDurationHours);
+        expect(primaryEndTime.getTime()).toBeGreaterThan(startTime.getTime());
       }
     }
   });
@@ -340,22 +375,26 @@ describe("issue #2060: country cycles respawn on the first post-resolution turn"
     expect(shugiin).toHaveLength(2);
     for (const doc of shugiin) {
       // Anchored to the in-flight clock, not the stale persisted turn.
-      expect(doc.startTime).toEqual(turnToWallClock(doc.startTurn, NOW_193, 193));
+      expect(requireDefined(doc.startTime, "startTime")).toEqual(
+        turnToWallClock(requireDefined(doc.startTurn, "startTurn"), NOW_193, 193)
+      );
       // Primary still open: the window is eroded by history, never elapsed at birth.
-      expect(doc.primaryEndTurn).toBeGreaterThan(193);
+      expect(requireDefined(doc.primaryEndTurn, "primaryEndTurn")).toBeGreaterThan(193);
       expect(doc.status).toBe("active");
     }
     // Regional councils mirror the live Shugiin schedule exactly.
     const councils = liveDocs(mount, "JP", "regionalCouncil");
     expect(councils).toHaveLength(2);
     for (const council of councils) {
-      const mirror = shugiin.find((s) => s.state === council.state);
-      expect(mirror).toBeDefined();
-      expect(council.cycle).toBe(mirror!.cycle);
-      expect(council.startTurn).toBe(mirror!.startTurn);
-      expect(council.startTime).toEqual(mirror!.startTime);
-      expect(council.primaryEndTurn).toBe(mirror!.primaryEndTurn);
-      expect(council.endTurn).toBe(mirror!.endTurn);
+      const mirror = requireDefined(
+        shugiin.find((s) => s.state === council.state),
+        `shugiin mirror for ${council.state}`
+      );
+      expect(council.cycle).toBe(mirror.cycle);
+      expect(council.startTurn).toBe(mirror.startTurn);
+      expect(council.startTime).toEqual(mirror.startTime);
+      expect(council.primaryEndTurn).toBe(mirror.primaryEndTurn);
+      expect(council.endTurn).toBe(mirror.endTurn);
     }
   });
 
