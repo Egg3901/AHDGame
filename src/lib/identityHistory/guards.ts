@@ -17,7 +17,7 @@ const SENTINEL_IPS: ReadonlySet<string> = new Set(["unknown", "::1", "127.0.0.1"
 export function isGroupableIdentityValue(
   track: IdentityTrack,
   value: string | null | undefined
-): boolean {
+): value is string {
   if (!value) return false;
   if (track === "ip") {
     if (SENTINEL_IPS.has(value)) return false;
