@@ -57,6 +57,20 @@ function booleanFlag(
   }
 }
 
+/**
+ * Validate one actors-mode value shared by every job entry point (local MCP,
+ * box MCP, worker). Omitted means pure NPP autonomy, the harness default —
+ * so jobs written before the mode existed stay byte-identical. Throws on
+ * anything else so a typo can never silently run the wrong population.
+ */
+export function parseActorsField(value: unknown): SimActorMode | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== "string" || !SIM_ACTOR_MODES.includes(value as SimActorMode)) {
+    throw new Error(`invalid actors "${String(value)}"`);
+  }
+  return value as SimActorMode;
+}
+
 /** Pure builder for the conditional runWorld CLI args of one sim job.
  * Extracted from worker.ts so argument emission is unit-testable; worker.ts
  * stays the only caller in production. */
@@ -115,12 +129,8 @@ export function buildRunWorldArgs(job: SimJobExperimentFields): string[] {
   // Simulation actor mode (#1993). Omitted means pure NPP autonomy (the
   // harness default); an explicit value must be a known mode — a typo can
   // never silently run the wrong population.
-  if (job.actors) {
-    if (!SIM_ACTOR_MODES.includes(job.actors as SimActorMode)) {
-      throw new Error(`invalid actors "${job.actors}"`);
-    }
-    args.push(`--actors=${job.actors}`);
-  }
+  const actors = parseActorsField(job.actors);
+  if (actors) args.push(`--actors=${actors}`);
   if (job.countries) {
     // Comma-separated ids become part of a child-process argv — validate each.
     const ids = job.countries

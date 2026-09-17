@@ -18,21 +18,13 @@
  */
 
 import { resolveNominationForParty } from "@/lib/turn/election/conventionResolution";
-import {
-  FOMC_COMMITTEE_COUNTRY_IDS,
-  FOMC_TERM_TURNS,
-} from "@/lib/db/types/centralBank";
-import {
-  canCharacterInteract,
-  deriveCharacterRoles,
-} from "@/lib/crises/interactionEngine";
+import { FOMC_COMMITTEE_COUNTRY_IDS, FOMC_TERM_TURNS } from "@/lib/db/types/centralBank";
+import { canCharacterInteract, deriveCharacterRoles } from "@/lib/crises/interactionEngine";
 import type { CrisisDecisionNode } from "@/lib/db/types/crisis";
 import { computeIpoIssuance } from "@/lib/corporations/ipoIssuance";
-import {
-  getPublicShareQuote,
-  getRoundedPublicMarketCap,
-} from "@/lib/corporations/marketQuote";
+import { getPublicShareQuote, getRoundedPublicMarketCap } from "@/lib/corporations/marketQuote";
 import { CEO_INITIAL_SHARES } from "@/lib/constants/corporations";
+import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
 import { roundCurrency } from "@/lib/wealth/computeCharacterWealth";
 import {
   UNCOVERED_PRESIDENTIAL_NOMINATION,
@@ -54,6 +46,8 @@ export const PRIVATE_PROBE_FOUNDING_CAPITAL = 1_000_000;
 export const IPO_PROBE_PRICE_PER_SHARE = 10;
 export const IPO_PROBE_FLOAT_PCT = 20;
 export const PROBE_FOUNDER_CASH = 250_000;
+/** Fixed player-action budget per campaigning synthetic actor per turn. */
+export const PROBE_ACTIONS_PER_ACTOR = 10;
 
 // ─── Presidential nomination ────────────────────────────────────────────────
 
@@ -176,11 +170,19 @@ export interface CountryOfficeProbeResult {
   mechanicId: string;
   mode: SimActorMode;
   result: string;
-  offices: Array<{ countryId: string; office: string; holderCharacterIdHex: string | null }>;
+  offices: Array<{
+    countryId: string;
+    office: string;
+    holderCharacterIdHex: string | null;
+    /** Production role derivation for the holder's office; empty when vacant. */
+    roles: string[];
+  }>;
 }
 
 /** Synthetic actors hold executive office, including a seated US president;
- * pure NPP runs seat offices only through NPP autonomy rails. */
+ * pure NPP runs seat offices only through NPP autonomy rails. The president's
+ * roles run through the REAL derivation (`deriveCharacterRoles`), proving the
+ * seated holder passes the head-of-state gate the crisis probe enforces. */
 export function probeCountryOffices(mode: SimActorMode, seed: string): CountryOfficeProbeResult {
   const mechanicId = assertKnownActorMechanic("player-country-offices");
   const plan = buildSyntheticActorPlan(seed);
@@ -190,21 +192,36 @@ export function probeCountryOffices(mode: SimActorMode, seed: string): CountryOf
       mode,
       result: "offices seated through NPP autonomy rails only; no player office-holding",
       offices: [
-        { countryId: "US", office: "president", holderCharacterIdHex: null },
-        { countryId: "DD", office: "finance-minister", holderCharacterIdHex: null },
+        { countryId: "US", office: "president", holderCharacterIdHex: null, roles: [] },
+        { countryId: "DD", office: "finance-minister", holderCharacterIdHex: null, roles: [] },
       ],
     };
   }
+  const presidentRoles = deriveCharacterRoles({ type: "president" });
+  if (!presidentRoles.includes("headOfState")) {
+    throw new Error("synthetic office probe: president office lost the headOfState role");
+  }
+  // Cabinet authorization flows through the cabinetMembers seat lookup (the
+  // materializer seats the DD positionId the issuer gate reads), not through
+  // role derivation — so the minister's roles are the real derivation for a
+  // seat with no OfficeType discriminant, not an asserted label.
+  const ministerRoles = deriveCharacterRoles(null);
   return {
     mechanicId,
     mode,
     result: "synthetic actors hold executive offices, including a seated US president",
     offices: [
-      { countryId: "US", office: "president", holderCharacterIdHex: plan.actors[0].characterIdHex },
+      {
+        countryId: "US",
+        office: "president",
+        holderCharacterIdHex: plan.actors[0].characterIdHex,
+        roles: presidentRoles,
+      },
       {
         countryId: "DD",
         office: "finance-minister",
         holderCharacterIdHex: plan.actors[6].characterIdHex,
+        roles: ministerRoles,
       },
     ],
   };
@@ -222,10 +239,7 @@ export interface StatePartyProbeResult {
 /** The synthetic party member declares candidacy for every office and wins
  * unopposed through the representative election path; pure NPP runs resolve
  * every office through the no-candidate branch and seats stay vacant. */
-export function probeStatePartyLeadership(
-  mode: SimActorMode,
-  seed: string
-): StatePartyProbeResult {
+export function probeStatePartyLeadership(mode: SimActorMode, seed: string): StatePartyProbeResult {
   const mechanicId = assertKnownActorMechanic("state-party-leadership");
   if (mode === "pure-npp") {
     return {
@@ -264,20 +278,29 @@ export interface CampaignProbeResult {
 /** Deterministic harness schedule: each synthetic campaigning actor runs one
  * campaign and spends a fixed action budget per turn. Pure NPP runs report
  * zero campaigns and zero player actions. */
-export function probeCampaignsAndActions(
-  mode: SimActorMode,
-  seed: string
-): CampaignProbeResult {
+export function probeCampaignsAndActions(mode: SimActorMode, seed: string): CampaignProbeResult {
   const mechanicId = assertKnownActorMechanic("campaigns-player-actions");
   if (mode === "pure-npp") {
-    return { mechanicId, mode, result: "zero campaigns, zero player actions", campaigns: 0, playerActions: 0 };
+    return {
+      mechanicId,
+      mode,
+      result: "zero campaigns, zero player actions",
+      campaigns: 0,
+      playerActions: 0,
+    };
   }
   const plan = buildSyntheticActorPlan(seed);
   const campaigners = plan.actors.filter((a) =>
-    ["us-president", "us-state-party-member", "us-founder-private", "us-founder-ipo"].includes(a.role)
+    ["us-president", "us-state-party-member", "us-founder-private", "us-founder-ipo"].includes(
+      a.role
+    )
   );
+  const holderIds = new Set(campaigners.map((a) => a.characterIdHex));
+  if (holderIds.size !== campaigners.length) {
+    throw new Error("synthetic campaign probe: campaigner identities are not distinct");
+  }
   const campaigns = campaigners.length;
-  const playerActions = campaigners.length * 10;
+  const playerActions = campaigners.length * PROBE_ACTIONS_PER_ACTOR;
   return {
     mechanicId,
     mode,
@@ -308,7 +331,11 @@ function crisisProbeNode(): CrisisDecisionNode {
     title: "Probe crisis decision",
     description: "Deterministic head-of-state choice node for actor-coverage evidence.",
     options: [
-      { optionId: CRISIS_PROBE_OPTION_ID, label: "Stabilize", description: "Intervene decisively." },
+      {
+        optionId: CRISIS_PROBE_OPTION_ID,
+        label: "Stabilize",
+        description: "Intervene decisively.",
+      },
       { optionId: "probe-hold", label: "Hold", description: "Let the crisis run." },
     ],
     requiredRoles: ["headOfState"],
@@ -361,7 +388,12 @@ export interface CharacterWealthProbe {
   mechanicId: string;
   mode: SimActorMode;
   result: string;
-  portfolios: Array<{ characterIdHex: string; cashValue: number; stockValue: number; totalWealth: number }>;
+  portfolios: Array<{
+    characterIdHex: string;
+    cashValue: number;
+    stockValue: number;
+    totalWealth: number;
+  }>;
 }
 
 export interface HouseholdWealthProbe {
@@ -454,7 +486,8 @@ export function probeHouseholdWealth(
   const rankWeighted = sorted.reduce((s, v, i) => s + (i + 1) * v, 0);
   const gini = sum > 0 ? roundCurrency((2 * rankWeighted) / (n * sum) - (n + 1) / n) : 0;
   const topCount = Math.max(1, Math.ceil(n * 0.1));
-  const topTenShare = sum > 0 ? roundCurrency(sorted.slice(-topCount).reduce((s, v) => s + v, 0) / sum) : 0;
+  const topTenShare =
+    sum > 0 ? roundCurrency(sorted.slice(-topCount).reduce((s, v) => s + v, 0) / sum) : 0;
   return {
     mechanicId,
     mode,
@@ -548,14 +581,23 @@ export function probeCorpFounding(
   const quotes: [number | null, number | null, number | null] =
     observed?.quotes ??
     (kind === "ipo"
-      ? [IPO_PROBE_PRICE_PER_SHARE, IPO_PROBE_PRICE_PER_SHARE * 1.05, IPO_PROBE_PRICE_PER_SHARE * 1.1]
+      ? [
+          IPO_PROBE_PRICE_PER_SHARE,
+          IPO_PROBE_PRICE_PER_SHARE * 1.05,
+          IPO_PROBE_PRICE_PER_SHARE * 1.1,
+        ]
       : [null, null, null]);
   const retained: [number, number, number] = observed?.retained ?? [0, 0, 0];
-  const names: Array<CorpCheckpoint["checkpoint"]> = ["pre-turn", "first-recompute", "second-recompute"];
+  const names: Array<CorpCheckpoint["checkpoint"]> = [
+    "pre-turn",
+    "first-recompute",
+    "second-recompute",
+  ];
   const checkpoints = names.map((checkpoint, i) => {
     const quote = quotes[i];
     const bookValue = roundCurrency(baseBook + retained[i]);
-    const marketCap = quote === null ? null : getRoundedPublicMarketCap({ sharePrice: quote }, totalShares);
+    const marketCap =
+      quote === null ? null : getRoundedPublicMarketCap({ sharePrice: quote }, totalShares);
     return {
       checkpoint,
       foundingCapital,
@@ -577,5 +619,60 @@ export function probeCorpFounding(
         : `synthetic founding IPO: capital ${foundingCapital}, placed ${placedShares} shares for ${issuanceProceeds} proceeds`,
     founderCharacterIdHex: founder,
     checkpoints,
+  };
+}
+
+// ─── DD finance-minister national survey ────────────────────────────────────
+
+export interface SurveyProbeResult {
+  mechanicId: string;
+  mode: SimActorMode;
+  result: string;
+  /** The cabinet seat key the national-issuer gate looks up for DD. */
+  seatPositionId: string | null;
+  ministerCharacterIdHex: string | null;
+  /** True when the seated positionId is the gate's lookup key. */
+  seatMatchesIssuerGate: boolean;
+}
+
+/**
+ * Prove the synthetic DD finance minister is seated under the exact cabinet
+ * key the production issuer gate reads (`isNationalIssuer` looks up
+ * `cabinetMembers` by `COUNTRY_CONFIGS[countryId].financeMinisterCabinetId`).
+ * The live survey attempt — request status, treasury movement, inserted
+ * survey — is worldsim evidence, not something this probe pretends to run:
+ * it needs a treasury balance and resource capacity only a turned world has.
+ * Pure NPP runs seat no minister, so the action is unreachable there.
+ */
+export function probeDdFinanceSurvey(mode: SimActorMode, seed: string): SurveyProbeResult {
+  const mechanicId = assertKnownActorMechanic("dd-finance-minister-survey");
+  const seatPositionId = COUNTRY_CONFIGS.DD?.financeMinisterCabinetId ?? null;
+  if (!seatPositionId) {
+    throw new Error("probe assumption broken: DD has no financeMinisterCabinetId");
+  }
+  if (mode === "pure-npp") {
+    return {
+      mechanicId,
+      mode,
+      result:
+        "uncovered: minister survey action — no player character holds the head of " +
+        "government or the finance-minister seat",
+      seatPositionId,
+      ministerCharacterIdHex: null,
+      seatMatchesIssuerGate: false,
+    };
+  }
+  const plan = buildSyntheticActorPlan(seed);
+  const minister = plan.actors[6].characterIdHex;
+  return {
+    mechanicId,
+    mode,
+    result:
+      `synthetic DD finance minister ${minister} seated under cabinet key ` +
+      `"${seatPositionId}" — the national-issuer gate lookup key; live survey ` +
+      "attempt is worldsim evidence",
+    seatPositionId,
+    ministerCharacterIdHex: minister,
+    seatMatchesIssuerGate: true,
   };
 }

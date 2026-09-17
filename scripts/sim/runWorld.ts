@@ -50,11 +50,7 @@ import {
   type ActorCoverageManifest,
   type SimActorMode,
 } from "@/lib/sim/actorCoverage";
-import {
-  SIM_ACTOR_USERNAME_PREFIX,
-  parseSimActorMode,
-  snapshotActorPopulation,
-} from "@/lib/sim/syntheticActors";
+import { parseSimActorMode } from "@/lib/sim/syntheticActors";
 import {
   economicExperimentConfigSet,
   isGameplayOverrideArg,
@@ -992,35 +988,40 @@ async function main() {
     }
   );
 
-  // Actor-coverage manifest (#1993): evaluate every known actor-gated mechanic
-  // as covered or unreachable from LIVE sandbox counts and stamp it into the
-  // effective run manifest. Pure NPP runs honestly report vacancies; synthetic
-  // mode without materialized synthetic characters degrades to unreachable
+  // Actor-coverage manifest (#1993): in synthetic mode, materialize the
+  // deterministic population FIRST (idempotent sandbox upserts, before any
+  // turn advances), then evaluate every known actor-gated mechanic from the
+  // PERSISTED sandbox counts — never from the intended plan. Pure NPP runs
+  // skip seeding entirely and honestly report vacancies; synthetic mode
+  // without materialized synthetic characters degrades to unreachable
   // (see SYNTHETIC_UNSEEDED_REASON) instead of claiming coverage from a flag.
   {
-    const simUsernamePrefix = SIM_ACTOR_USERNAME_PREFIX.replace(/\./g, "\\.");
-    const [characters, users, syntheticCharacters, syntheticUsers] = await Promise.all([
-      db.collection("characters").countDocuments({}),
-      db.collection("users").countDocuments({}),
-      db.collection("characters").countDocuments({ isSynthetic: true }),
-      db.collection("users").countDocuments({ username: { $regex: `^${simUsernamePrefix}` } }),
-    ]);
-    const manifest = evaluateActorCoverage(
-      snapshotActorPopulation({
-        mode: actorMode,
-        preset,
-        characters,
-        users,
-        syntheticCharacters,
-        syntheticUsers,
-      }),
-      new Date().toISOString()
-    );
+    if (actorMode === "synthetic") {
+      const { materializeSyntheticActors } = await import("@/lib/sim/materializeSyntheticActors");
+      const gameStateTurn = await db.collection<GameState>("gameState").findOne({ _id: "current" });
+      const seeded = await materializeSyntheticActors(db, {
+        seed,
+        runId,
+        turn: (gameStateTurn?.currentTurn as number | undefined) ?? 0,
+      });
+      log(
+        `Seeded synthetic actors (seed=${seed}): ${seeded.characters} characters, ` +
+          `${seeded.users} users, ${seeded.officials} official(s), ` +
+          `${seeded.cabinetSeats} cabinet seat(s), ${seeded.statePartyCandidates} candidacies, ` +
+          `${seeded.corporations} corporations`
+      );
+    }
+    const { readActorPopulation } = await import("@/lib/sim/materializeSyntheticActors");
+    const snapshot = await readActorPopulation(db, { mode: actorMode, preset });
+    const manifest = evaluateActorCoverage(snapshot, new Date().toISOString());
     await simRuns.updateOne({ _id: runId }, { $set: { actorCoverage: manifest } });
     log(
       `Actor mode: ${actorMode} — ${manifest.mechanicCount - uncoveredEntries(manifest).length}` +
         `/${manifest.mechanicCount} mechanics covered ` +
-        `(characters=${characters} users=${users} synthetic=${syntheticCharacters}/${syntheticUsers})`
+        `(characters=${snapshot.characters} users=${snapshot.users} ` +
+        `synthetic=${snapshot.syntheticCharacters}/${snapshot.syntheticUsers} ` +
+        `candidates=${snapshot.statePartyCandidates} crisisDecided=${snapshot.crisisDecidedInteractions} ` +
+        `wealthRows=${snapshot.wealthListRows} playerCorps=${snapshot.playerFoundedCorps})`
     );
     for (const warning of actorCoverageWarnings(manifest)) log(warning);
   }
@@ -1174,7 +1175,7 @@ if (hasFlag("help") || hasFlag("h")) {
       "--seed=<id> [--preset=2019-default] [--turns=500] [--db=<name>] [--autonomy=v3|v4] " +
       "[--run-id=<id>] [--checkpoint-every=10] " +
       "[--foreign-policy=off|shadow|active] [--foreign-policy-stage=votes|proposals|trade|support|war] " +
-      "[--mode=full|elections-only|economy-only|macro-only] " +
+      "[--mode=full|elections-only|economy-only|macro-only] [--actors=pure-npp|synthetic] " +
       "[--npp-market-coverage=true|false] " +
       "[--npp-fragile-market-supply=true|false] " +
       "[--macro-growth] [--pre-iteration|--no-pre-iteration] [--preserve-player-rail] [--preserve-live-config] [--sector-investment-snapshots=<directory>] [--quiet]"
