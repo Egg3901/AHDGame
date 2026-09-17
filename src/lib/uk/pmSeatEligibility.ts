@@ -32,6 +32,9 @@ export async function hasRequiredPrimeMinisterSeat(
   const projection = { projection: { _id: 1 } } as const;
   const seat = characterId
     ? await officials.findOne({ countryId, officeType: "commons", characterId }, projection)
-    : await officials.findOne({ countryId, officeType: "commons", nppId, isNPP: true }, projection);
+    : await officials.findOne(
+        { countryId, officeType: "commons", nppId: nppId!, isNPP: true },
+        projection
+      );
   return seat !== null;
 }
