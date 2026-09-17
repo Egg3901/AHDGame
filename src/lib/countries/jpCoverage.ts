@@ -900,6 +900,10 @@ export const JP_COVERAGE: readonly CoverageEntry[] = [
 /** Deliberately not handled by this plan, so no phase. Each entry states why. */
 export const ACKNOWLEDGED_OUT_OF_SCOPE: ReadonlyArray<{ file: string; why: string }> = [
   {
+    file: "scripts/countries/emit-country-snapshot.ts",
+    why: "Tooling, not a home for Japan facts. It is the generalised form of Japan's one-off emitter and names JP only in prose -- explaining that STATE_ADJACENCY.JP IS JP_ADJACENCY, which is why the name-matching rule it used to carry could be dropped rather than parameterised. The coverage rules match a JP declaration and `JP:HOK`-style keys in a comment, which is the right degree of bluntness for source and the wrong one for a script ABOUT the move.",
+  },
+  {
     file: "src/lib/seeds/reference/worldSeats2027.ts",
     why: "Arrived from origin/development with the 2027 preset, AFTER the Japan folder work. It is a multi-country 2027 seat file (JP_SHUGIIN_2027/JP_SANGIIN_2027 beside the UK and German arrays), the same shape as historicalSeats.ts, which D6 also left in place. Splitting Japan's slice out is the next country-folder increment, not part of this one.",
   },

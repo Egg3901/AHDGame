@@ -79,6 +79,39 @@ describe("Japan satisfies the country contract", () => {
   });
 
   /**
+   * ⚠️ THREE IDENTITY FIELDS BECAME OPTIONAL WHEN THE CONTRACT MET ITS FIRST
+   * PRESIDENTIAL COUNTRY, AND THIS IS WHAT STOPS THAT BEING SLACK.
+   *
+   * `parliamentarySurface`, `regionCensusLabels` and `stateDisplayNames` were
+   * required, because the contract was written against a sample of one: Japan,
+   * which is parliamentary and is nobody's default. The US is presidential, so
+   * it has no parliamentary executive to give a surface to, and it IS the
+   * default country, so `REGION_CENSUS_LABELS` and `STATE_DISPLAY_NAMES` have no
+   * US key on purpose -- unlisted countries take the generic labels and
+   * `compactRegionCode`.
+   *
+   * Making them optional and stopping there would let a parliamentary country
+   * drop its surface silently, which is precisely the class of failure this file
+   * exists to catch. So the requirement is not removed, it is narrowed: it now
+   * depends on `config.governmentType`, which is the field that actually decides
+   * whether the value should exist. The header on this file says a member that
+   * is "optional and quietly absent" means the shape is wrong; a member that is
+   * conditionally required by a discriminant does not have that problem.
+   */
+  it("requires the parliamentary surface of parliamentary countries only", () => {
+    const parliamentary = JP.institutions.config.governmentType !== "presidential";
+    expect(parliamentary, "JP should not be presidential").toBe(true);
+    expect(
+      JP.identity.parliamentarySurface,
+      "a parliamentary country needs a surface"
+    ).toBeDefined();
+    // `executiveTitle`, not `title`: the surface names the head of government
+    // ("Prime Minister"), and its nested plaques carry the `title` fields.
+    expect(JP.identity.parliamentarySurface?.executiveTitle).toBeTruthy();
+    expect(JP.identity.parliamentarySurface?.headPlaque.title).toBeTruthy();
+  });
+
+  /**
    * ⚠️ EVERY shipping preset, counted from SHIPPING_PRESETS rather than a
    * literal. An early revision listed five and dropped 1999 and 2007, for which
    * Japan carries real region, census and demographic data; upstream then added

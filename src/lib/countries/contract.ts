@@ -83,11 +83,32 @@ export interface CountryIdentity {
   /**
    * The PARLIAMENTARY surface. `onePartyExecutiveSurface.ts` declares a symbol
    * of the same name that is NOT Japan's and does not move.
+   *
+   * ⚠️ OPTIONAL BECAUSE A PRESIDENTIAL COUNTRY HAS NONE, NOT BECAUSE IT IS
+   * SLACK. `SURFACES` in `parliamentaryExecutiveSurface.ts` has no US entry and
+   * should not: the US has no parliamentary executive to give a surface to.
+   * `contract.test.ts` requires it for every country whose
+   * `config.governmentType` is parliamentary, so the requirement moved from
+   * "every country" to "every country of this kind" rather than being dropped.
    */
-  readonly parliamentarySurface: ParliamentaryExecutiveSurface;
-  readonly regionCensusLabels: CensusLabelSet;
-  /** Region display names (STATE_DISPLAY_NAMES), used by the commodity map. */
-  readonly stateDisplayNames: Readonly<Record<string, string>>;
+  readonly parliamentarySurface?: ParliamentaryExecutiveSurface;
+  /**
+   * ⚠️ OPTIONAL BECAUSE THE US IS THE DEFAULT COUNTRY. `REGION_CENSUS_LABELS`
+   * has no US key; consumers fall back to the generic labels, and that fallback
+   * is not US data hiding behind a US-specific branch -- it is the same text
+   * every unlisted country gets. Authoring a US entry here would invent an
+   * authored value out of a default, which is the failure this whole exercise
+   * exists to prevent, only pointing the other way.
+   */
+  readonly regionCensusLabels?: CensusLabelSet;
+  /**
+   * Region display names (STATE_DISPLAY_NAMES), used by the commodity map.
+   *
+   * ⚠️ OPTIONAL for the same reason. With no US key the map falls back to
+   * `compactRegionCode(countryId, stateId)`, which derives from the state id
+   * rather than naming anything. There is no US value to move.
+   */
+  readonly stateDisplayNames?: Readonly<Record<string, string>>;
   /**
    * `regional` is OPTIONAL: Japan has no REGIONAL_ADDRESS_NAME entry and uses the
    * documented "State of the State" default. Requiring it would author a fallback
