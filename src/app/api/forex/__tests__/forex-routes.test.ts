@@ -30,6 +30,13 @@ vi.mock("@/lib/currency/featureFlag", () => ({
 }));
 vi.mock("@/lib/api/requireAuth", () => ({
   requireAuthWithCharacter: vi.fn(),
+  requireBasicAuth: vi.fn(),
+}));
+vi.mock("@/lib/api/userApiAuth", () => ({
+  requireUserApiKey: vi.fn(),
+}));
+vi.mock("@/lib/financialTxLog/emit", () => ({
+  emitTx: vi.fn(),
 }));
 vi.mock("@/lib/api/rateLimit", () => ({
   checkRateLimit: vi.fn().mockReturnValue({ ok: true }),
@@ -47,6 +54,9 @@ import { GET as GET_FOREX_MONETARY_POLICY } from "../monetary-policy/route";
 import { GET as GET_FOREX_TRADES } from "../trades/route";
 import { GET as GET_FOREX_ORDERS, POST as POST_FOREX_ORDERS } from "../orders/route";
 import { GET as GET_FOREX_TRANSACTIONS } from "../transactions/route";
+import { POST as POST_FOREX_EXCHANGE } from "../exchange/route";
+import { POST as POST_V1_FOREX_EXCHANGE } from "../../v1/forex/exchange/route";
+import { keyedInsertId } from "@/lib/db/nonAtomicMoneyFlow";
 
 let db: MockDb;
 
@@ -55,9 +65,13 @@ function primeForexCollections() {
   for (const name of [
     "exchangeRates",
     "gameState",
+    "gameConfig",
+    "users",
     "currencyOrders",
     "characters",
     "tradeHistory",
+    "centralBanks",
+    "nonAtomicMoneyFlowReceipts",
   ]) {
     db.collection(name);
   }
@@ -399,7 +413,6 @@ describe("POST /api/forex/orders", () => {
     vi.mocked(isForexEnabled).mockResolvedValue(true);
 
     const charId = new ObjectId();
-    const insertedId = new ObjectId();
     const { requireAuthWithCharacter } = await import("@/lib/api/requireAuth");
     vi.mocked(requireAuthWithCharacter).mockResolvedValue(
       mockAuthCharacter({
@@ -415,12 +428,34 @@ describe("POST /api/forex/orders", () => {
       modifiedCount: 1,
       matchedCount: 1,
     });
-    db.collectionMocks.currencyOrders.insertOne.mockResolvedValue({ insertedId });
+    db.collectionMocks.currencyOrders.insertOne.mockResolvedValue({ insertedId: new ObjectId() });
+    // The route reads the created row back by its deterministic key-derived id.
+    const { keyedInsertId } = await import("@/lib/db/nonAtomicMoneyFlow");
+    const expectedOrderId = keyedInsertId("order-key-1", "forex-order");
+    const createdAt = new Date();
+    db.collectionMocks.currencyOrders.findOne.mockResolvedValue({
+      _id: expectedOrderId,
+      characterId: charId,
+      characterName: "Pol",
+      countryId: "US",
+      type: "limit",
+      direction: "buy",
+      fromCurrency: "USD",
+      toCurrency: "JPY",
+      amount: 2000,
+      limitRate: 108,
+      expiresAtTurn: 34,
+      status: "open",
+      filledAmount: 0,
+      spreadCharged: 0,
+      createdAt,
+      updatedAt: createdAt,
+    });
 
     const res = await POST_FOREX_ORDERS(
       new Request("http://localhost/api/forex/orders", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "Idempotency-Key": "order-key-1" },
         body: JSON.stringify({
           fromCurrency: "USD",
           toCurrency: "JPY",
@@ -433,24 +468,34 @@ describe("POST /api/forex/orders", () => {
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json.success).toBe(true);
-    expect(json.orderId).toBe(insertedId.toString());
+    // Same key always rebuilds the same order id instead of opening a second order.
+    expect(json.orderId).toBe(expectedOrderId.toHexString());
 
+    // Crash-safe escrow: the debit is a keyed leg (balance guard + key guard
+    // in one atomic write), not the legacy bare $gte update.
     expect(db.collectionMocks.characters.updateOne).toHaveBeenCalledWith(
-      { _id: charId, "currencyBalances.personal.USD": { $gte: 2000 } },
+      expect.objectContaining({
+        _id: charId,
+        "currencyBalances.personal.USD": { $gte: 2000 },
+        appliedMoneyFlowKeys: { $ne: "order-key-1" },
+      }),
       expect.objectContaining({
         $inc: expect.objectContaining({ "currencyBalances.personal.USD": -2000 }),
-      })
+      }),
+      undefined
     );
 
     const insertCall = db.collectionMocks.currencyOrders.insertOne.mock.calls[0][0] as {
+      _id: ObjectId;
       expiresAtTurn: number;
       limitRate: number;
     };
+    expect(insertCall._id).toEqual(expectedOrderId);
     expect(insertCall.expiresAtTurn).toBe(34);
     expect(insertCall.limitRate).toBe(108);
   });
 
-  it("refunds escrow when order insertion fails after the debit", async () => {
+  it("compensates the escrow when order insertion fails after the debit", async () => {
     await setupDb();
     const { isForexEnabled } = await import("@/lib/currency/featureFlag");
     vi.mocked(isForexEnabled).mockResolvedValue(true);
@@ -467,15 +512,16 @@ describe("POST /api/forex/orders", () => {
     );
 
     db.collectionMocks.gameState.findOne.mockResolvedValue({ currentTurn: 10 });
-    db.collectionMocks.characters.updateOne
-      .mockResolvedValueOnce({ modifiedCount: 1, matchedCount: 1 })
-      .mockResolvedValueOnce({ modifiedCount: 1, matchedCount: 1 });
+    db.collectionMocks.characters.updateOne.mockResolvedValue({
+      modifiedCount: 1,
+      matchedCount: 1,
+    });
     db.collectionMocks.currencyOrders.insertOne.mockRejectedValue(new Error("write failed"));
 
     const res = await POST_FOREX_ORDERS(
       new Request("http://localhost/api/forex/orders", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "Idempotency-Key": "order-key-2" },
         body: JSON.stringify({
           fromCurrency: "USD",
           toCurrency: "JPY",
@@ -486,13 +532,18 @@ describe("POST /api/forex/orders", () => {
     );
 
     expect(res.status).toBeGreaterThanOrEqual(500);
-    expect(db.collectionMocks.characters.updateOne).toHaveBeenNthCalledWith(
-      2,
-      { _id: charId },
-      expect.objectContaining({
-        $inc: expect.objectContaining({ "currencyBalances.personal.USD": 2000 }),
-      })
+    // The failed insert reverses the applied escrow prefix with a
+    // compensation leg (negated $inc under a compensation key), so the
+    // receipt settles compensated instead of stranding the debit.
+    const refundCall = db.collectionMocks.characters.updateOne.mock.calls[1];
+    expect(refundCall[0]).toMatchObject({ _id: charId });
+    expect(refundCall[1]).toMatchObject({
+      $inc: { "currencyBalances.personal.USD": 2000 },
+    });
+    const receiptUpdate = db.collectionMocks.nonAtomicMoneyFlowReceipts.updateOne.mock.calls.find(
+      (call) => (call[1] as { $set?: { status?: string } }).$set?.status === "compensated"
     );
+    expect(receiptUpdate).toBeDefined();
   });
 });
 
@@ -684,5 +735,271 @@ describe("GET /api/forex/transactions", () => {
     const items = json.turns[0].items as Array<{ kind: string; source?: string }>;
     expect(items.every((i) => i.kind === "row")).toBe(true);
     expect(items[0].source).toBe("auto_dividend");
+  });
+});
+
+describe("POST /api/forex/exchange (Idempotency-Key)", () => {
+  /** Programs every read/write the market-maker trade needs on the mock Db. */
+  function primeExchangeSuccess(userId: ObjectId, charId: ObjectId) {
+    db.collectionMocks.gameState.findOne.mockResolvedValue({ currentTurn: 100 });
+    db.collectionMocks.gameConfig.findOne.mockResolvedValue({});
+    db.collectionMocks.users.findOne.mockResolvedValue({
+      _id: userId,
+      activeCharacterId: charId,
+    });
+    db.collectionMocks.characters.findOne.mockResolvedValue({
+      _id: charId,
+      countryId: "US",
+      name: "Trader",
+      currencyBalances: { personal: { USD: 1_000_000 } },
+    });
+    db.collectionMocks.exchangeRates.findOne.mockImplementation((filter: { _id: string }) => {
+      if (filter._id === "US") {
+        return Promise.resolve({
+          _id: "US",
+          countryId: "US",
+          currencyCode: "USD",
+          rate: 1.0,
+        });
+      }
+      if (filter._id === "JP") {
+        return Promise.resolve({
+          _id: "JP",
+          countryId: "JP",
+          currencyCode: "JPY",
+          rate: 106.0,
+        });
+      }
+      return Promise.resolve(null);
+    });
+    db.collectionMocks.characters.updateOne.mockResolvedValue({
+      matchedCount: 1,
+      modifiedCount: 1,
+    });
+    db.collectionMocks.tradeHistory.insertOne.mockResolvedValue({ insertedId: new ObjectId() });
+    db.collectionMocks.centralBanks.updateOne.mockResolvedValue({
+      matchedCount: 1,
+      modifiedCount: 1,
+    });
+  }
+
+  function exchangeReq(key?: string) {
+    return POST_FOREX_EXCHANGE(
+      new Request("http://localhost/api/forex/exchange", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(key !== undefined ? { "Idempotency-Key": key } : {}),
+        },
+        body: JSON.stringify({ fromCurrency: "USD", toCurrency: "JPY", amount: 1000 }),
+      })
+    );
+  }
+
+  it("returns 403 when forex is disabled", async () => {
+    await setupDb();
+    const { isForexEnabled } = await import("@/lib/currency/featureFlag");
+    vi.mocked(isForexEnabled).mockResolvedValue(false);
+
+    expect((await exchangeReq()).status).toBe(403);
+  });
+
+  it("replays the stored trade on a same-key retry: 200 twice, one trade", async () => {
+    await setupDb();
+    const { isForexEnabled } = await import("@/lib/currency/featureFlag");
+    vi.mocked(isForexEnabled).mockResolvedValue(true);
+
+    const userId = new ObjectId();
+    const charId = new ObjectId();
+    const key = "exchange-key-replay";
+    const { requireBasicAuth } = await import("@/lib/api/requireAuth");
+    vi.mocked(requireBasicAuth).mockResolvedValue({
+      ok: true as const,
+      user: { userId: userId.toHexString() },
+    } as never);
+    primeExchangeSuccess(userId, charId);
+
+    const { emitTx: emitTxWeb } = await import("@/lib/financialTxLog/emit");
+    const emitBeforeWeb = vi.mocked(emitTxWeb).mock.calls.length;
+
+    const first = await exchangeReq(key);
+    expect(first.status).toBe(200);
+    const firstJson = await first.json();
+    expect(firstJson).toMatchObject({
+      success: true,
+      trade: { fromCurrency: "USD", toCurrency: "JPY", fromAmount: 1000 },
+    });
+    const walletWritesAfterFirst = db.collectionMocks.characters.updateOne.mock.calls.length;
+
+    // Same key hits the completed receipt: the stored history row replays the
+    // trade, and neither the wallet nor the history nor the money log moves.
+    const storedTrade = db.collectionMocks.tradeHistory.insertOne.mock.calls[0][0];
+    expect(storedTrade._id).toEqual(keyedInsertId(key, "forex-trade"));
+    db.collectionMocks.tradeHistory.findOne.mockResolvedValue(storedTrade);
+    db.collectionMocks.nonAtomicMoneyFlowReceipts.insertOne.mockRejectedValue(
+      Object.assign(new Error("E11000 duplicate key"), { code: 11000 })
+    );
+    db.collectionMocks.nonAtomicMoneyFlowReceipts.findOne.mockResolvedValue({
+      _id: key,
+      status: "completed",
+      fingerprint: `forex-market:${charId.toHexString()}:characters:USD:JPY:1000`,
+    });
+
+    const second = await exchangeReq(key);
+    expect(second.status).toBe(200);
+    const secondJson = await second.json();
+    expect(secondJson.trade).toEqual(firstJson.trade);
+    expect(db.collectionMocks.characters.updateOne.mock.calls.length).toBe(walletWritesAfterFirst);
+    expect(db.collectionMocks.tradeHistory.insertOne).toHaveBeenCalledTimes(1);
+    const { emitTx } = await import("@/lib/financialTxLog/emit");
+    // Only the first attempt logs: the replay returns the stored trade, and
+    // the money log row from the first attempt already stands.
+    expect(vi.mocked(emitTx).mock.calls.length).toBe(emitBeforeWeb + 1);
+  });
+
+  it("returns 400 for an over-long Idempotency-Key without trading", async () => {
+    await setupDb();
+    const { isForexEnabled } = await import("@/lib/currency/featureFlag");
+    vi.mocked(isForexEnabled).mockResolvedValue(true);
+
+    const userId = new ObjectId();
+    const charId = new ObjectId();
+    const { requireBasicAuth } = await import("@/lib/api/requireAuth");
+    vi.mocked(requireBasicAuth).mockResolvedValue({
+      ok: true as const,
+      user: { userId: userId.toHexString() },
+    } as never);
+    primeExchangeSuccess(userId, charId);
+
+    expect((await exchangeReq("k".repeat(129))).status).toBe(400);
+    expect(db.collectionMocks.characters.updateOne).not.toHaveBeenCalled();
+    expect(db.collectionMocks.tradeHistory.insertOne).not.toHaveBeenCalled();
+  });
+});
+
+describe("POST /api/v1/forex/exchange (Idempotency-Key)", () => {
+  function primeV1ExchangeSuccess(userId: ObjectId, charId: ObjectId) {
+    db.collectionMocks.gameState.findOne.mockResolvedValue({ currentTurn: 100 });
+    db.collectionMocks.gameConfig.findOne.mockResolvedValue({});
+    db.collectionMocks.users.findOne.mockResolvedValue({
+      _id: userId,
+      activeCharacterId: charId,
+    });
+    db.collectionMocks.characters.findOne.mockResolvedValue({
+      _id: charId,
+      countryId: "US",
+      name: "Trader",
+      currencyBalances: { personal: { USD: 1_000_000 } },
+    });
+    db.collectionMocks.exchangeRates.findOne.mockImplementation((filter: { _id: string }) => {
+      if (filter._id === "US") {
+        return Promise.resolve({
+          _id: "US",
+          countryId: "US",
+          currencyCode: "USD",
+          rate: 1.0,
+        });
+      }
+      if (filter._id === "JP") {
+        return Promise.resolve({
+          _id: "JP",
+          countryId: "JP",
+          currencyCode: "JPY",
+          rate: 106.0,
+        });
+      }
+      return Promise.resolve(null);
+    });
+    db.collectionMocks.characters.updateOne.mockResolvedValue({
+      matchedCount: 1,
+      modifiedCount: 1,
+    });
+    db.collectionMocks.tradeHistory.insertOne.mockResolvedValue({ insertedId: new ObjectId() });
+    db.collectionMocks.centralBanks.updateOne.mockResolvedValue({
+      matchedCount: 1,
+      modifiedCount: 1,
+    });
+  }
+
+  function v1ExchangeReq(key?: string) {
+    return POST_V1_FOREX_EXCHANGE(
+      new Request("http://localhost/api/v1/forex/exchange", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-API-Key": "ahd_priv_test",
+          ...(key !== undefined ? { "Idempotency-Key": key } : {}),
+        },
+        body: JSON.stringify({ fromCurrency: "USD", toCurrency: "JPY", amount: 1000 }),
+      })
+    );
+  }
+
+  it("replays the stored trade on a same-key retry: 200 twice, one trade", async () => {
+    await setupDb();
+    const { isForexEnabled } = await import("@/lib/currency/featureFlag");
+    vi.mocked(isForexEnabled).mockResolvedValue(true);
+
+    const userId = new ObjectId();
+    const charId = new ObjectId();
+    const key = "v1-exchange-key-replay";
+    const { requireUserApiKey } = await import("@/lib/api/userApiAuth");
+    vi.mocked(requireUserApiKey).mockResolvedValue({
+      ok: true as const,
+      ownerUserId: userId.toHexString(),
+    } as never);
+    primeV1ExchangeSuccess(userId, charId);
+
+    const { emitTx: emitTxV1 } = await import("@/lib/financialTxLog/emit");
+    const emitBeforeV1 = vi.mocked(emitTxV1).mock.calls.length;
+
+    const first = await v1ExchangeReq(key);
+    expect(first.status).toBe(200);
+    const firstJson = await first.json();
+    expect(firstJson).toMatchObject({
+      success: true,
+      trade: { fromCurrency: "USD", toCurrency: "JPY", fromAmount: 1000 },
+    });
+    const walletWritesAfterFirst = db.collectionMocks.characters.updateOne.mock.calls.length;
+
+    const storedTrade = db.collectionMocks.tradeHistory.insertOne.mock.calls[0][0];
+    expect(storedTrade._id).toEqual(keyedInsertId(key, "forex-trade"));
+    db.collectionMocks.tradeHistory.findOne.mockResolvedValue(storedTrade);
+    db.collectionMocks.nonAtomicMoneyFlowReceipts.insertOne.mockRejectedValue(
+      Object.assign(new Error("E11000 duplicate key"), { code: 11000 })
+    );
+    db.collectionMocks.nonAtomicMoneyFlowReceipts.findOne.mockResolvedValue({
+      _id: key,
+      status: "completed",
+      fingerprint: `forex-market:${charId.toHexString()}:characters:USD:JPY:1000`,
+    });
+
+    const second = await v1ExchangeReq(key);
+    expect(second.status).toBe(200);
+    const secondJson = await second.json();
+    expect(secondJson.trade).toEqual(firstJson.trade);
+    expect(db.collectionMocks.characters.updateOne.mock.calls.length).toBe(walletWritesAfterFirst);
+    expect(db.collectionMocks.tradeHistory.insertOne).toHaveBeenCalledTimes(1);
+    const { emitTx } = await import("@/lib/financialTxLog/emit");
+    expect(vi.mocked(emitTx).mock.calls.length).toBe(emitBeforeV1 + 1);
+  });
+
+  it("returns 400 for an over-long Idempotency-Key without trading", async () => {
+    await setupDb();
+    const { isForexEnabled } = await import("@/lib/currency/featureFlag");
+    vi.mocked(isForexEnabled).mockResolvedValue(true);
+
+    const userId = new ObjectId();
+    const charId = new ObjectId();
+    const { requireUserApiKey } = await import("@/lib/api/userApiAuth");
+    vi.mocked(requireUserApiKey).mockResolvedValue({
+      ok: true as const,
+      ownerUserId: userId.toHexString(),
+    } as never);
+    primeV1ExchangeSuccess(userId, charId);
+
+    expect((await v1ExchangeReq("k".repeat(129))).status).toBe(400);
+    expect(db.collectionMocks.characters.updateOne).not.toHaveBeenCalled();
+    expect(db.collectionMocks.tradeHistory.insertOne).not.toHaveBeenCalled();
   });
 });

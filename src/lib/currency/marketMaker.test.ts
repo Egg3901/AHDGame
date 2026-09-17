@@ -5,7 +5,13 @@ import { ObjectId } from "mongodb";
 import type { Db } from "mongodb";
 import { getCountryForCurrency, distributeConversionSpread } from "./marketMaker";
 
-vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
+const { supportMock } = vi.hoisted(() => ({ supportMock: vi.fn() }));
+
+vi.mock("@/lib/db/transactionSupport", () => ({
+  assertTransactionSupportAtBoot: supportMock,
+}));
+
+vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn(), getMongoClient: vi.fn() }));
 
 describe("distributeConversionSpread", () => {
   let db: MockDb;
@@ -60,6 +66,8 @@ beforeEach(async () => {
   db = createMockDb();
   const { getDb } = await import("@/lib/mongodb");
   vi.mocked(getDb).mockResolvedValue(db as unknown as Db);
+  // Standalone topology: run the sequential keyed fallback, never sessions.
+  supportMock.mockResolvedValue(false);
 });
 
 describe("executeMarketMakerTrade", () => {
@@ -84,9 +92,17 @@ describe("executeMarketMakerTrade", () => {
     db.collectionMocks.exchangeRates.findOne
       .mockResolvedValueOnce({ _id: "US", countryId: "US", currencyCode: "USD", rate: 1.0 })
       .mockResolvedValueOnce({ _id: "JP", countryId: "JP", currencyCode: "JPY", rate: 106.0 });
-    db.collectionMocks.characters.updateOne.mockResolvedValue({ modifiedCount: 1 });
+    // Keyed legs report through matchedCount: the mock must show a match or
+    // the step disambiguates to guard-rejected.
+    db.collectionMocks.characters.updateOne.mockResolvedValue({
+      matchedCount: 1,
+      modifiedCount: 1,
+    });
     db.collectionMocks.tradeHistory.insertOne.mockResolvedValue({ insertedId: new ObjectId() });
-    db.collectionMocks.centralBanks.updateOne.mockResolvedValue({ modifiedCount: 1 });
+    db.collectionMocks.centralBanks.updateOne.mockResolvedValue({
+      matchedCount: 1,
+      modifiedCount: 1,
+    });
 
     const { executeMarketMakerTrade } = await import("./marketMaker");
     const result = await executeMarketMakerTrade(typedDb, {
@@ -119,11 +135,17 @@ describe("executeMarketMakerTrade", () => {
     typedDb.collection("tradeHistory");
     typedDb.collection("centralBanks");
     db.collectionMocks.exchangeRates.updateOne.mockResolvedValue({ modifiedCount: 1 });
-    db.collectionMocks.centralBanks.updateOne.mockResolvedValue({ modifiedCount: 1 });
+    db.collectionMocks.centralBanks.updateOne.mockResolvedValue({
+      matchedCount: 1,
+      modifiedCount: 1,
+    });
     db.collectionMocks.characters.findOne.mockResolvedValue({
       currencyBalances: { personal: { USD: 5000 } },
     });
-    db.collectionMocks.characters.updateOne.mockResolvedValue({ modifiedCount: 1 });
+    db.collectionMocks.characters.updateOne.mockResolvedValue({
+      matchedCount: 1,
+      modifiedCount: 1,
+    });
     // US chair set spread strength to 1.5× → fee = round(1000 × 0.01 × 1.5) = 15.
     db.collectionMocks.exchangeRates.findOne
       .mockResolvedValueOnce({
@@ -305,9 +327,15 @@ describe("executeMarketMakerTrade", () => {
     db.collectionMocks.exchangeRates.findOne
       .mockResolvedValueOnce({ _id: "UK", countryId: "UK", currencyCode: "GBP", rate: 0.75 })
       .mockResolvedValueOnce({ _id: "US", countryId: "US", currencyCode: "USD", rate: 1.0 });
-    db.collectionMocks.characters.updateOne.mockResolvedValue({ modifiedCount: 1 });
+    db.collectionMocks.characters.updateOne.mockResolvedValue({
+      matchedCount: 1,
+      modifiedCount: 1,
+    });
     db.collectionMocks.tradeHistory.insertOne.mockResolvedValue({ insertedId: new ObjectId() });
-    db.collectionMocks.centralBanks.updateOne.mockResolvedValue({ modifiedCount: 1 });
+    db.collectionMocks.centralBanks.updateOne.mockResolvedValue({
+      matchedCount: 1,
+      modifiedCount: 1,
+    });
 
     const { executeMarketMakerTrade } = await import("./marketMaker");
     const result = await executeMarketMakerTrade(typedDb, {

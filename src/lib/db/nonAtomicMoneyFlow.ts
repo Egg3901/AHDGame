@@ -59,17 +59,31 @@ import { ObjectId, type ClientSession, type Collection, type Filter } from "mong
  * sector transition via organizeSectorSpend), union founding (combined
  * actions/funds debit + deterministic union insert + guarded leadership
  * claim via unionFoundingSpend, with command-level replay/conflict/settled
- * key tests).
+ * key tests), forex request surfaces (limit-order create, peer fill,
+ * cancel, direct create/accept/decline via the forexSpend primitives, web
+ * + v1 market-maker exchange via executeMarketMakerTrade, all with
+ * Idempotency-Key validation/forwarding and route-level replay/invalid/
+ * conflict tests; merged per-bank spread steps via
+ * makeSpreadDistributionStepsForFees).
  * Ownership-only and excluded (no balance writes): union leadership
  * accept/resign/decline/vote (ownerId/unionLeaderOf/vote rows only),
  * bargaining settlement (campaign claim + agreement insert + expectation
  * restore move no balances), campaign upgrades (single-document guarded
  * spend).
- * Still on the legacy debit-first-plus-compensation fallback: forex
- * orders/direct/fill/cancel, bond sell/default/payoff, index-fund
- * cron/rebalancing, directAction, state-org build — multi-write status
- * machines, positional holder claims, and bulkWrite batches that need
- * reserve/order/history support beyond keyed single-document writes.
+ * Forex turn paths DO mutate money and remain legacy (BEWARE — the request
+ * surfaces above being migrated does not cover these): the
+ * triggered-limit matcher in processTriggeredLimitOrders credits takers
+ * and central-bank spread slices with bare `$inc` writes, expireStaleOrders
+ * refunds escrow via an unkeyed bulkWrite, and the intervention side
+ * effects draw reserves the same way (all in src/lib/turn/forexTurn.ts,
+ * run from the stateEffectsPhase forexTurn phase). A crash between the
+ * status transition and the money writes there can still strand or double
+ * value; migrating them means expressing each as keyed steps here.
+ * Still on the legacy debit-first-plus-compensation fallback: bond
+ * sell/default/payoff, index-fund cron/rebalancing, directAction,
+ * state-org build — multi-write status machines, positional holder
+ * claims, and bulkWrite batches that need reserve/order/history support
+ * beyond keyed single-document writes.
  * Military recruitment sits outside even that: manual unwind (ministerial
  * action, manpower pool, defence appropriation, arsenal lots, unit insert)
  * with no transaction wrapper at all. Migrating one of those means

@@ -35,9 +35,9 @@ export function calculateSpreadFee(amount: number, spreadRate: number): number {
  * three slices always sum back to `totalFee`.
  *
  * Routing (the two CB slices can land at different banks):
- * - **forexRevenue** (40%, home-currency revenue) → the **source** country's CB
+ * - **forexRevenue** (25%, home-currency revenue) → the **source** country's CB
  *   (`sourceCountryId`), the home country of the collected currency.
- * - **reserve slice** (10%, denominated in the *collected* currency) → the
+ * - **reserve slice** (50%, denominated in the *collected* currency) → the
  *   **destination** country's CB (`destinationCountryId`). On a cross-currency
  *   conversion the collected currency is foreign to the destination CB, so this
  *   is how a central bank accumulates *foreign-currency* reserves — e.g. a JP

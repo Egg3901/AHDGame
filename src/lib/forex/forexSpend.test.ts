@@ -927,7 +927,7 @@ describe("applyForexFillSpend (direct accept)", () => {
     });
     expect(fill.makerSpread).toBe(4);
     expect(fill.takerSpread).toBe(3);
-    expect(personalOf(db, takerId)).toMatchObject({ GBP: 50_000 - 1_503, USD: 1_996 });
+    expect(personalOf(db, takerId)).toMatchObject({ GBP: 100_000 - 1_503, USD: 1_996 });
     expect(personalOf(db, makerId)).toMatchObject({ USD: 18_000, GBP: 1_500 });
     // Conservation: the 2_000 escrow splits exactly into the target credit
     // (1_996) plus the maker CB slice (4).
@@ -952,6 +952,14 @@ describe("applyForexFillSpend (direct accept)", () => {
     // to the UK bank as a foreign reserve, the GBP taker slice to the US bank.
     expect(bankDoc(db, "UK").spreadFeeReserveBalances).toMatchObject({ USD: 2 });
     expect(bankDoc(db, "US").spreadFeeReserveBalances).toMatchObject({ GBP: 2 });
+    // Same-bank merge: each bank also takes the other fee's revenue slice
+    // (maker 4 → revenue 1 to the US bank; taker 3 → revenue 1 to the UK
+    // bank), and both slices land in ONE keyed write per bank — a second
+    // same-bank step would collide on the key guard and skip its slice.
+    expect(bankDoc(db, "UK")).toMatchObject({ forexRevenue: 1 });
+    expect(bankDoc(db, "US")).toMatchObject({ forexRevenue: 1 });
+    expect(bankDoc(db, "UK").appliedMoneyFlowKeys).toHaveLength(1);
+    expect(bankDoc(db, "US").appliedMoneyFlowKeys).toHaveLength(1);
     expect(receipt(db, "direct-accept").status).toBe("completed");
   });
 
@@ -1028,7 +1036,7 @@ describe("applyForexFillSpend (direct accept)", () => {
       applyForexFillSpend(db as unknown as Db, acceptInput(orderId))
     ).rejects.toThrow(FOREX_DIRECT_UNAVAILABLE);
 
-    expect(personalOf(db, takerId)).toMatchObject({ GBP: 50_000, USD: 0 });
+    expect(personalOf(db, takerId)).toMatchObject({ GBP: 100_000, USD: 0 });
     expect(personalOf(db, makerId).GBP).toBe(0);
     expect(historyDocs(db)).toHaveLength(0);
     expect(receipt(db, "direct-accept").status).toBe("compensated");
@@ -1050,7 +1058,7 @@ describe("applyForexFillSpend (direct accept)", () => {
 
     expect(retry.duplicate).toBe(true);
     expect(retry.fillAmount).toBe(2_000);
-    expect(personalOf(db, takerId)).toMatchObject({ GBP: 50_000 - 1_503, USD: 1_996 });
+    expect(personalOf(db, takerId)).toMatchObject({ GBP: 100_000 - 1_503, USD: 1_996 });
     expect(personalOf(db, makerId).GBP).toBe(1_500);
     expect(historyDocs(db)).toHaveLength(1);
     expect(receipt(db, "direct-accept").status).toBe("completed");

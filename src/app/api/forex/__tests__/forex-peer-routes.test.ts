@@ -24,13 +24,6 @@ vi.mock("@/lib/api/rateLimit", () => ({
       })
   ),
 }));
-vi.mock("@/lib/currency/spreadFees", async (importOriginal) => {
-  const mod = await importOriginal<typeof import("@/lib/currency/spreadFees")>();
-  return {
-    ...mod,
-    distributeSpreadFee: vi.fn().mockResolvedValue({ destroyed: 0, toCentralBank: 0 }),
-  };
-});
 // Direct-trade routes read the clock via getGameTime for the new-character barrier.
 // currentTurn 100 + fixtures without createdTurn/createdAt → barrier never blocks here.
 vi.mock("@/lib/time/gameTime", () => ({
@@ -41,6 +34,7 @@ import { POST as POST_FILL_LIMIT_ORDER } from "../orders/[orderId]/fill/route";
 import { DELETE as DELETE_LIMIT_ORDER } from "../orders/[orderId]/route";
 import { POST as POST_DIRECT_TRADE_REQUEST } from "../direct/route";
 import { POST as POST_DIRECT_TRADE } from "../direct/[requestId]/route";
+import { keyedInsertId } from "@/lib/db/nonAtomicMoneyFlow";
 
 let db: MockDb;
 
@@ -52,6 +46,7 @@ function primeCollections() {
     "tradeHistory",
     "playerMail",
     "centralBanks",
+    "nonAtomicMoneyFlowReceipts",
   ]) {
     db.collection(name);
   }
@@ -250,14 +245,14 @@ describe("POST /api/forex/orders/[orderId]/fill", () => {
     });
 
     db.collectionMocks.gameState.findOne.mockResolvedValue({ currentTurn: 51 });
+    // The fill pre-checks the taker's live balance inside the primitive.
+    db.collectionMocks.characters.findOne.mockResolvedValue({
+      _id: fillerId,
+      currencyBalances: { personal: { USD: 0, GBP: 50_000 } },
+    });
     db.collectionMocks.characters.updateOne.mockResolvedValue({
       modifiedCount: 1,
       matchedCount: 1,
-    });
-    db.collectionMocks.currencyOrders.findOneAndUpdate.mockResolvedValue({
-      _id: orderId,
-      status: "open",
-      filledAmount: 0,
     });
     db.collectionMocks.currencyOrders.updateOne.mockResolvedValue({
       modifiedCount: 1,
@@ -279,7 +274,7 @@ describe("POST /api/forex/orders/[orderId]/fill", () => {
 });
 
 describe("DELETE /api/forex/orders/[orderId]", () => {
-  it("does not refund twice when the cancellation claim loses the race", async () => {
+  it("loses cleanly when a concurrent fill wins the order race: 400, no refund", async () => {
     await setupDb();
     const { isForexEnabled } = await import("@/lib/currency/featureFlag");
     vi.mocked(isForexEnabled).mockResolvedValue(true);
@@ -301,13 +296,243 @@ describe("DELETE /api/forex/orders/[orderId]", () => {
       amount: 500,
       filledAmount: 0,
     });
-    db.collectionMocks.currencyOrders.findOneAndUpdate.mockResolvedValue(null);
+    // A concurrent fill's transition commits first: the cancel's guarded
+    // order step matches nothing, disambiguates to guard-rejected (the row
+    // exists without this key), and settles failed with nothing applied.
+    db.collectionMocks.currencyOrders.updateOne.mockResolvedValue({
+      modifiedCount: 0,
+      matchedCount: 0,
+    });
 
     const res = await DELETE_LIMIT_ORDER(new Request("http://localhost", { method: "DELETE" }), {
       params: Promise.resolve({ orderId: orderId.toString() }),
     });
 
     expect(res.status).toBe(400);
+    const json = await res.json();
+    expect(json.error).toMatch(/open or partial/);
+    expect(db.collectionMocks.characters.updateOne).not.toHaveBeenCalled();
+  });
+
+  it("cancels an open order and refunds the full escrow exactly once", async () => {
+    await setupDb();
+    const { isForexEnabled } = await import("@/lib/currency/featureFlag");
+    vi.mocked(isForexEnabled).mockResolvedValue(true);
+
+    const ownerId = new ObjectId();
+    const orderId = new ObjectId();
+    const { requireAuthWithCharacter } = await import("@/lib/api/requireAuth");
+    vi.mocked(requireAuthWithCharacter).mockResolvedValue(
+      authOk({ _id: ownerId, name: "Poster", countryId: "US" })
+    );
+
+    db.collectionMocks.currencyOrders.findOne.mockResolvedValue({
+      _id: orderId,
+      type: "limit",
+      status: "open",
+      characterId: ownerId,
+      fromCurrency: "USD",
+      toCurrency: "GBP",
+      amount: 500,
+      filledAmount: 0,
+    });
+    db.collectionMocks.currencyOrders.updateOne.mockResolvedValue({
+      modifiedCount: 1,
+      matchedCount: 1,
+    });
+    db.collectionMocks.characters.updateOne.mockResolvedValue({
+      modifiedCount: 1,
+      matchedCount: 1,
+    });
+
+    const res = await DELETE_LIMIT_ORDER(
+      new Request("http://localhost", {
+        method: "DELETE",
+        headers: { "Idempotency-Key": "cancel-key-1" },
+      }),
+      { params: Promise.resolve({ orderId: orderId.toString() }) }
+    );
+
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json).toMatchObject({
+      success: true,
+      refundedAmount: 500,
+      refundedCurrency: "USD",
+    });
+    // The guarded cancel transition carries the flow key.
+    expect(db.collectionMocks.currencyOrders.updateOne).toHaveBeenCalledWith(
+      expect.objectContaining({
+        _id: orderId,
+        appliedMoneyFlowKeys: { $ne: "cancel-key-1" },
+      }),
+      expect.objectContaining({ $set: expect.objectContaining({ status: "cancelled" }) }),
+      expect.anything()
+    );
+    // The escrow refund is a keyed leg for the full remainder.
+    expect(db.collectionMocks.characters.updateOne).toHaveBeenCalledWith(
+      expect.objectContaining({
+        _id: ownerId,
+        appliedMoneyFlowKeys: { $ne: "cancel-key-1" },
+      }),
+      expect.objectContaining({
+        $inc: expect.objectContaining({ "currencyBalances.personal.USD": 500 }),
+      }),
+      expect.anything()
+    );
+  });
+
+  it("replays the stored refund on a same-key retry: 200 twice, refund applied once", async () => {
+    await setupDb();
+    const { isForexEnabled } = await import("@/lib/currency/featureFlag");
+    vi.mocked(isForexEnabled).mockResolvedValue(true);
+
+    const ownerId = new ObjectId();
+    const orderId = new ObjectId();
+    const key = "cancel-key-replay";
+    const { requireAuthWithCharacter } = await import("@/lib/api/requireAuth");
+    vi.mocked(requireAuthWithCharacter).mockResolvedValue(
+      authOk({ _id: ownerId, name: "Poster", countryId: "US" })
+    );
+
+    // Route pre-read plus primitive reads always see the same open row here;
+    // the receipt claim is what distinguishes first attempt from replay.
+    db.collectionMocks.currencyOrders.findOne.mockResolvedValue({
+      _id: orderId,
+      type: "limit",
+      status: "open",
+      characterId: ownerId,
+      fromCurrency: "USD",
+      toCurrency: "GBP",
+      amount: 500,
+      filledAmount: 0,
+    });
+    db.collectionMocks.currencyOrders.updateOne.mockResolvedValue({
+      modifiedCount: 1,
+      matchedCount: 1,
+    });
+    db.collectionMocks.characters.updateOne.mockResolvedValue({
+      modifiedCount: 1,
+      matchedCount: 1,
+    });
+
+    const cancelReq = () =>
+      DELETE_LIMIT_ORDER(
+        new Request("http://localhost", {
+          method: "DELETE",
+          headers: { "Idempotency-Key": key },
+        }),
+        { params: Promise.resolve({ orderId: orderId.toString() }) }
+      );
+
+    const first = await cancelReq();
+    expect(first.status).toBe(200);
+    expect(await first.json()).toMatchObject({
+      success: true,
+      refundedAmount: 500,
+      refundedCurrency: "USD",
+    });
+    const writesAfterFirst = db.collectionMocks.characters.updateOne.mock.calls.length;
+
+    // Second attempt with the same key hits the completed receipt and replays
+    // the stored refund from the order row without moving money again.
+    db.collectionMocks.nonAtomicMoneyFlowReceipts.insertOne.mockRejectedValue(
+      Object.assign(new Error("E11000 duplicate key"), { code: 11000 })
+    );
+    db.collectionMocks.nonAtomicMoneyFlowReceipts.findOne.mockResolvedValue({
+      _id: key,
+      status: "completed",
+      fingerprint: `forex-cancel:${orderId.toHexString()}:${ownerId.toHexString()}`,
+    });
+
+    const second = await cancelReq();
+    expect(second.status).toBe(200);
+    expect(await second.json()).toMatchObject({
+      success: true,
+      refundedAmount: 500,
+      refundedCurrency: "USD",
+    });
+    expect(db.collectionMocks.characters.updateOne.mock.calls.length).toBe(writesAfterFirst);
+  });
+
+  it("returns 400 for an over-long Idempotency-Key without touching the order", async () => {
+    await setupDb();
+    const { isForexEnabled } = await import("@/lib/currency/featureFlag");
+    vi.mocked(isForexEnabled).mockResolvedValue(true);
+
+    const ownerId = new ObjectId();
+    const orderId = new ObjectId();
+    const { requireAuthWithCharacter } = await import("@/lib/api/requireAuth");
+    vi.mocked(requireAuthWithCharacter).mockResolvedValue(
+      authOk({ _id: ownerId, name: "Poster", countryId: "US" })
+    );
+
+    // The route loads and authorizes the order before it validates the key.
+    db.collectionMocks.currencyOrders.findOne.mockResolvedValue({
+      _id: orderId,
+      type: "limit",
+      status: "open",
+      characterId: ownerId,
+      fromCurrency: "USD",
+      toCurrency: "GBP",
+      amount: 500,
+      filledAmount: 0,
+    });
+
+    const res = await DELETE_LIMIT_ORDER(
+      new Request("http://localhost", {
+        method: "DELETE",
+        headers: { "Idempotency-Key": "k".repeat(129) },
+      }),
+      { params: Promise.resolve({ orderId: orderId.toString() }) }
+    );
+
+    expect(res.status).toBe(400);
+    expect(db.collectionMocks.currencyOrders.updateOne).not.toHaveBeenCalled();
+    expect(db.collectionMocks.characters.updateOne).not.toHaveBeenCalled();
+  });
+
+  it("returns 409 when the key was already used for a different cancellation", async () => {
+    await setupDb();
+    const { isForexEnabled } = await import("@/lib/currency/featureFlag");
+    vi.mocked(isForexEnabled).mockResolvedValue(true);
+
+    const ownerId = new ObjectId();
+    const orderId = new ObjectId();
+    const key = "cancel-key-conflict";
+    const { requireAuthWithCharacter } = await import("@/lib/api/requireAuth");
+    vi.mocked(requireAuthWithCharacter).mockResolvedValue(
+      authOk({ _id: ownerId, name: "Poster", countryId: "US" })
+    );
+
+    db.collectionMocks.currencyOrders.findOne.mockResolvedValue({
+      _id: orderId,
+      type: "limit",
+      status: "open",
+      characterId: ownerId,
+      fromCurrency: "USD",
+      toCurrency: "GBP",
+      amount: 500,
+      filledAmount: 0,
+    });
+    db.collectionMocks.nonAtomicMoneyFlowReceipts.insertOne.mockRejectedValue(
+      Object.assign(new Error("E11000 duplicate key"), { code: 11000 })
+    );
+    db.collectionMocks.nonAtomicMoneyFlowReceipts.findOne.mockResolvedValue({
+      _id: key,
+      status: "completed",
+      fingerprint: "forex-cancel:some-other-order:some-other-owner",
+    });
+
+    const res = await DELETE_LIMIT_ORDER(
+      new Request("http://localhost", {
+        method: "DELETE",
+        headers: { "Idempotency-Key": key },
+      }),
+      { params: Promise.resolve({ orderId: orderId.toString() }) }
+    );
+
+    expect(res.status).toBe(409);
     expect(db.collectionMocks.characters.updateOne).not.toHaveBeenCalled();
   });
 });
@@ -358,6 +583,8 @@ describe("POST /api/forex/direct/[requestId]", () => {
       fromCurrency: "USD",
       toCurrency: "GBP",
       amount: 500,
+      filledAmount: 0,
+      spreadCharged: 0,
       limitRate: 0.78,
     });
 
@@ -366,12 +593,14 @@ describe("POST /api/forex/direct/[requestId]", () => {
       userId: new ObjectId(),
       sequentialId: 1,
     });
-    db.collectionMocks.currencyOrders.findOneAndUpdate.mockResolvedValue({
-      _id: reqId,
-      status: "open",
+    db.collectionMocks.currencyOrders.updateOne.mockResolvedValue({
+      modifiedCount: 1,
+      matchedCount: 1,
     });
-    db.collectionMocks.currencyOrders.updateOne.mockResolvedValue({ modifiedCount: 1 });
-    db.collectionMocks.characters.updateOne.mockResolvedValue({ modifiedCount: 1 });
+    db.collectionMocks.characters.updateOne.mockResolvedValue({
+      modifiedCount: 1,
+      matchedCount: 1,
+    });
     db.collectionMocks.playerMail.insertOne.mockResolvedValue({ insertedId: new ObjectId() });
 
     const res = await POST_DIRECT_TRADE(
@@ -387,8 +616,9 @@ describe("POST /api/forex/direct/[requestId]", () => {
     expect(json.success).toBe(true);
     expect(json.action).toBe("declined");
 
+    // The decline refunds the sender's full escrow through a keyed leg.
     expect(db.collectionMocks.characters.updateOne).toHaveBeenCalledWith(
-      { _id: senderId },
+      expect.objectContaining({ _id: senderId }),
       expect.objectContaining({
         $inc: expect.objectContaining({ "currencyBalances.personal.USD": 500 }),
       }),
@@ -397,7 +627,89 @@ describe("POST /api/forex/direct/[requestId]", () => {
     expect(db.collectionMocks.playerMail.insertOne).toHaveBeenCalled();
   });
 
-  it("decline does not refund twice when the order claim fails", async () => {
+  it("decline replays on a same-key retry: 200 twice, refund and mail once each", async () => {
+    await setupDb();
+    const { isForexEnabled } = await import("@/lib/currency/featureFlag");
+    vi.mocked(isForexEnabled).mockResolvedValue(true);
+
+    const targetId = new ObjectId();
+    const senderId = new ObjectId();
+    const reqId = new ObjectId();
+    const key = "decline-key-replay";
+
+    const { requireAuthWithCharacter } = await import("@/lib/api/requireAuth");
+    vi.mocked(requireAuthWithCharacter).mockResolvedValue(
+      authOk({
+        _id: targetId,
+        name: "Target",
+        countryId: "US",
+        sequentialId: 2,
+      })
+    );
+
+    db.collectionMocks.currencyOrders.findOne.mockResolvedValue({
+      _id: reqId,
+      type: "direct",
+      status: "open",
+      characterId: senderId,
+      characterName: "Sender",
+      targetCharacterId: targetId,
+      fromCurrency: "USD",
+      toCurrency: "GBP",
+      amount: 500,
+      filledAmount: 0,
+      spreadCharged: 0,
+      limitRate: 0.78,
+    });
+    db.collectionMocks.characters.findOne.mockResolvedValue({
+      _id: senderId,
+      userId: new ObjectId(),
+      sequentialId: 1,
+    });
+    db.collectionMocks.currencyOrders.updateOne.mockResolvedValue({
+      modifiedCount: 1,
+      matchedCount: 1,
+    });
+    db.collectionMocks.characters.updateOne.mockResolvedValue({
+      modifiedCount: 1,
+      matchedCount: 1,
+    });
+    db.collectionMocks.playerMail.insertOne.mockResolvedValue({ insertedId: new ObjectId() });
+
+    const declineReq = () =>
+      POST_DIRECT_TRADE(
+        new Request("http://localhost", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Idempotency-Key": key },
+          body: JSON.stringify({ action: "decline" }),
+        }),
+        { params: Promise.resolve({ requestId: reqId.toString() }) }
+      );
+
+    const first = await declineReq();
+    expect(first.status).toBe(200);
+    expect(await first.json()).toMatchObject({ success: true, action: "declined" });
+    const writesAfterFirst = db.collectionMocks.characters.updateOne.mock.calls.length;
+
+    // Same key hits the completed receipt: the stored outcome replays from
+    // the order row, and the route skips both the refund and the mail.
+    db.collectionMocks.nonAtomicMoneyFlowReceipts.insertOne.mockRejectedValue(
+      Object.assign(new Error("E11000 duplicate key"), { code: 11000 })
+    );
+    db.collectionMocks.nonAtomicMoneyFlowReceipts.findOne.mockResolvedValue({
+      _id: key,
+      status: "completed",
+      fingerprint: `forex-decline:${reqId.toHexString()}:${targetId.toHexString()}`,
+    });
+
+    const second = await declineReq();
+    expect(second.status).toBe(200);
+    expect(await second.json()).toMatchObject({ success: true, action: "declined" });
+    expect(db.collectionMocks.characters.updateOne.mock.calls.length).toBe(writesAfterFirst);
+    expect(db.collectionMocks.playerMail.insertOne).toHaveBeenCalledTimes(1);
+  });
+
+  it("decline returns 400 for an over-long Idempotency-Key without refunding", async () => {
     await setupDb();
     const { isForexEnabled } = await import("@/lib/currency/featureFlag");
     vi.mocked(isForexEnabled).mockResolvedValue(true);
@@ -421,6 +733,51 @@ describe("POST /api/forex/direct/[requestId]", () => {
       fromCurrency: "USD",
       toCurrency: "GBP",
       amount: 500,
+      filledAmount: 0,
+      spreadCharged: 0,
+      limitRate: 0.78,
+    });
+
+    const res = await POST_DIRECT_TRADE(
+      new Request("http://localhost", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Idempotency-Key": "k".repeat(129) },
+        body: JSON.stringify({ action: "decline" }),
+      }),
+      { params: Promise.resolve({ requestId: reqId.toString() }) }
+    );
+
+    expect(res.status).toBe(400);
+    expect(db.collectionMocks.characters.updateOne).not.toHaveBeenCalled();
+    expect(db.collectionMocks.playerMail.insertOne).not.toHaveBeenCalled();
+  });
+
+  it("decline loses cleanly when a concurrent accept wins the race: 400, no refund", async () => {
+    await setupDb();
+    const { isForexEnabled } = await import("@/lib/currency/featureFlag");
+    vi.mocked(isForexEnabled).mockResolvedValue(true);
+
+    const targetId = new ObjectId();
+    const senderId = new ObjectId();
+    const reqId = new ObjectId();
+
+    const { requireAuthWithCharacter } = await import("@/lib/api/requireAuth");
+    vi.mocked(requireAuthWithCharacter).mockResolvedValue(
+      authOk({ _id: targetId, name: "Target", countryId: "US", sequentialId: 2 })
+    );
+
+    db.collectionMocks.currencyOrders.findOne.mockResolvedValue({
+      _id: reqId,
+      type: "direct",
+      status: "open",
+      characterId: senderId,
+      characterName: "Sender",
+      targetCharacterId: targetId,
+      fromCurrency: "USD",
+      toCurrency: "GBP",
+      amount: 500,
+      filledAmount: 0,
+      spreadCharged: 0,
       limitRate: 0.78,
     });
     db.collectionMocks.characters.findOne.mockResolvedValue({
@@ -428,7 +785,12 @@ describe("POST /api/forex/direct/[requestId]", () => {
       userId: new ObjectId(),
       sequentialId: 1,
     });
-    db.collectionMocks.currencyOrders.findOneAndUpdate.mockResolvedValue(null);
+    // The accept's transition commits first: the decline's guarded cancel
+    // step matches nothing and the receipt settles failed with no refund.
+    db.collectionMocks.currencyOrders.updateOne.mockResolvedValue({
+      modifiedCount: 0,
+      matchedCount: 0,
+    });
 
     const res = await POST_DIRECT_TRADE(
       new Request("http://localhost", {
@@ -439,7 +801,10 @@ describe("POST /api/forex/direct/[requestId]", () => {
       { params: Promise.resolve({ requestId: reqId.toString() }) }
     );
     expect(res.status).toBe(400);
+    const json = await res.json();
+    expect(json.error).toMatch(/no longer open/);
     expect(db.collectionMocks.characters.updateOne).not.toHaveBeenCalled();
+    expect(db.collectionMocks.playerMail.insertOne).not.toHaveBeenCalled();
   });
 
   it("returns 403 when caller is not the trade target", async () => {
@@ -501,7 +866,14 @@ describe("POST /api/forex/direct/[requestId]", () => {
       fromCurrency: "USD",
       toCurrency: "GBP",
       amount: 1000,
+      filledAmount: 0,
+      spreadCharged: 0,
       limitRate: 0.8,
+    });
+    // The accept pre-checks the target's live balance inside the primitive.
+    db.collectionMocks.characters.findOne.mockResolvedValue({
+      _id: targetId,
+      currencyBalances: { personal: { GBP: 1 } },
     });
 
     const res = await POST_DIRECT_TRADE(
@@ -547,24 +919,31 @@ describe("POST /api/forex/direct/[requestId]", () => {
       fromCurrency: "USD",
       toCurrency: "GBP",
       amount: 200,
+      filledAmount: 0,
+      spreadCharged: 0,
       limitRate: 0.75,
     });
 
     db.collectionMocks.gameState.findOne.mockResolvedValue({ currentTurn: 12 });
-    db.collectionMocks.currencyOrders.findOneAndUpdate.mockResolvedValue({
-      _id: reqId,
-      status: "open",
-    });
     db.collectionMocks.characters.updateOne.mockResolvedValue({
       modifiedCount: 1,
       matchedCount: 1,
     });
-    db.collectionMocks.currencyOrders.updateOne.mockResolvedValue({ modifiedCount: 1 });
+    db.collectionMocks.currencyOrders.updateOne.mockResolvedValue({
+      modifiedCount: 1,
+      matchedCount: 1,
+    });
     db.collectionMocks.tradeHistory.insertOne.mockResolvedValue({ insertedId: new ObjectId() });
-    db.collectionMocks.characters.findOne.mockResolvedValue({
-      _id: senderId,
-      userId: new ObjectId(),
-      sequentialId: 9,
+    // One mock serves two reads: the taker balance pre-check and the sender
+    // mail lookup after settlement.
+    db.collectionMocks.characters.findOne.mockImplementation((filter: { _id: ObjectId }) => {
+      if (filter._id.toString() === targetId.toString()) {
+        return Promise.resolve({
+          _id: targetId,
+          currencyBalances: { personal: { GBP: 50_000, USD: 0 } },
+        });
+      }
+      return Promise.resolve({ _id: senderId, userId: new ObjectId(), sequentialId: 9 });
     });
     db.collectionMocks.playerMail.insertOne.mockResolvedValue({ insertedId: new ObjectId() });
 
@@ -584,20 +963,151 @@ describe("POST /api/forex/direct/[requestId]", () => {
     expect(db.collectionMocks.tradeHistory.insertOne).toHaveBeenCalled();
   });
 
-  it("accept reopens the order without crediting the sender when fallback debit fails", async () => {
+  it("accept replays on a same-key retry: 200 twice, money and mail move once", async () => {
     await setupDb();
-    const { getMongoClient } = await import("@/lib/mongodb");
-    vi.mocked(getMongoClient).mockResolvedValue({
-      startSession: () => ({
-        withTransaction: vi.fn(async () => {
-          const err = new Error("no tx") as Error & { code?: number };
-          err.code = 20;
-          throw err;
-        }),
-        endSession: vi.fn(async () => {}),
-      }),
-    } as never);
+    const { isForexEnabled } = await import("@/lib/currency/featureFlag");
+    vi.mocked(isForexEnabled).mockResolvedValue(true);
 
+    const targetId = new ObjectId();
+    const senderId = new ObjectId();
+    const reqId = new ObjectId();
+    const key = "accept-key-replay";
+
+    const { requireAuthWithCharacter } = await import("@/lib/api/requireAuth");
+    vi.mocked(requireAuthWithCharacter).mockResolvedValue(
+      authOk({
+        _id: targetId,
+        name: "Target",
+        countryId: "US",
+        sequentialId: 3,
+        currencyBalances: { personal: { GBP: 50_000, USD: 0 } },
+      })
+    );
+
+    db.collectionMocks.currencyOrders.findOne.mockResolvedValue({
+      _id: reqId,
+      type: "direct",
+      status: "open",
+      characterId: senderId,
+      characterName: "Sender",
+      targetCharacterId: targetId,
+      fromCurrency: "USD",
+      toCurrency: "GBP",
+      amount: 200,
+      filledAmount: 0,
+      spreadCharged: 0,
+      limitRate: 0.75,
+    });
+
+    db.collectionMocks.gameState.findOne.mockResolvedValue({ currentTurn: 12 });
+    db.collectionMocks.characters.updateOne.mockResolvedValue({
+      modifiedCount: 1,
+      matchedCount: 1,
+    });
+    db.collectionMocks.currencyOrders.updateOne.mockResolvedValue({
+      modifiedCount: 1,
+      matchedCount: 1,
+    });
+    db.collectionMocks.tradeHistory.insertOne.mockResolvedValue({ insertedId: new ObjectId() });
+    db.collectionMocks.characters.findOne.mockImplementation((filter: { _id: ObjectId }) => {
+      if (filter._id.toString() === targetId.toString()) {
+        return Promise.resolve({
+          _id: targetId,
+          currencyBalances: { personal: { GBP: 50_000, USD: 0 } },
+        });
+      }
+      return Promise.resolve({ _id: senderId, userId: new ObjectId(), sequentialId: 9 });
+    });
+    db.collectionMocks.playerMail.insertOne.mockResolvedValue({ insertedId: new ObjectId() });
+
+    const acceptReq = () =>
+      POST_DIRECT_TRADE(
+        new Request("http://localhost", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Idempotency-Key": key },
+          body: JSON.stringify({ action: "accept" }),
+        }),
+        { params: Promise.resolve({ requestId: reqId.toString() }) }
+      );
+
+    const first = await acceptReq();
+    expect(first.status).toBe(200);
+    const firstJson = await first.json();
+    expect(firstJson).toMatchObject({ success: true, action: "accepted" });
+    const charWritesAfterFirst = db.collectionMocks.characters.updateOne.mock.calls.length;
+    const orderWritesAfterFirst = db.collectionMocks.currencyOrders.updateOne.mock.calls.length;
+
+    // Same key hits the completed receipt: the stored history row replays the
+    // outcome, and the route skips settlement, transition, and mail.
+    const storedTrade = db.collectionMocks.tradeHistory.insertOne.mock.calls[0][0];
+    db.collectionMocks.tradeHistory.findOne.mockResolvedValue(storedTrade);
+    db.collectionMocks.nonAtomicMoneyFlowReceipts.insertOne.mockRejectedValue(
+      Object.assign(new Error("E11000 duplicate key"), { code: 11000 })
+    );
+    db.collectionMocks.nonAtomicMoneyFlowReceipts.findOne.mockResolvedValue({
+      _id: key,
+      status: "completed",
+      fingerprint: `forex-direct:${reqId.toHexString()}:${targetId.toHexString()}`,
+    });
+
+    const second = await acceptReq();
+    expect(second.status).toBe(200);
+    const secondJson = await second.json();
+    expect(secondJson).toMatchObject({ success: true, action: "accepted" });
+    expect(secondJson.trade).toEqual(firstJson.trade);
+    expect(db.collectionMocks.characters.updateOne.mock.calls.length).toBe(charWritesAfterFirst);
+    expect(db.collectionMocks.currencyOrders.updateOne.mock.calls.length).toBe(
+      orderWritesAfterFirst
+    );
+    expect(db.collectionMocks.tradeHistory.insertOne).toHaveBeenCalledTimes(1);
+    expect(db.collectionMocks.playerMail.insertOne).toHaveBeenCalledTimes(1);
+  });
+
+  it("accept returns 400 for an over-long Idempotency-Key without settling", async () => {
+    await setupDb();
+    const { isForexEnabled } = await import("@/lib/currency/featureFlag");
+    vi.mocked(isForexEnabled).mockResolvedValue(true);
+
+    const targetId = new ObjectId();
+    const senderId = new ObjectId();
+    const reqId = new ObjectId();
+
+    const { requireAuthWithCharacter } = await import("@/lib/api/requireAuth");
+    vi.mocked(requireAuthWithCharacter).mockResolvedValue(
+      authOk({ _id: targetId, name: "Target", countryId: "US", sequentialId: 3 })
+    );
+
+    db.collectionMocks.currencyOrders.findOne.mockResolvedValue({
+      _id: reqId,
+      type: "direct",
+      status: "open",
+      characterId: senderId,
+      characterName: "Sender",
+      targetCharacterId: targetId,
+      fromCurrency: "USD",
+      toCurrency: "GBP",
+      amount: 200,
+      filledAmount: 0,
+      spreadCharged: 0,
+      limitRate: 0.75,
+    });
+
+    const res = await POST_DIRECT_TRADE(
+      new Request("http://localhost", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Idempotency-Key": "k".repeat(129) },
+        body: JSON.stringify({ action: "accept" }),
+      }),
+      { params: Promise.resolve({ requestId: reqId.toString() }) }
+    );
+
+    expect(res.status).toBe(400);
+    expect(db.collectionMocks.characters.updateOne).not.toHaveBeenCalled();
+    expect(db.collectionMocks.tradeHistory.insertOne).not.toHaveBeenCalled();
+  });
+
+  it("accept fails closed without touching the order when the taker debit races", async () => {
+    await setupDb();
     const { isForexEnabled } = await import("@/lib/currency/featureFlag");
     vi.mocked(isForexEnabled).mockResolvedValue(true);
 
@@ -626,16 +1136,23 @@ describe("POST /api/forex/direct/[requestId]", () => {
       fromCurrency: "USD",
       toCurrency: "GBP",
       amount: 200,
+      filledAmount: 0,
+      spreadCharged: 0,
       limitRate: 0.75,
     });
     db.collectionMocks.gameState.findOne.mockResolvedValue({ currentTurn: 12 });
-    db.collectionMocks.currencyOrders.findOneAndUpdate.mockResolvedValue({
-      _id: reqId,
-      status: "open",
+    // The pre-check sees a funded target, but the taker-settle leg loses its
+    // atomic guard at step time (the balance moved first). The receipt
+    // settles failed with nothing applied: no sender credit, no order
+    // transition, no history row, no mail.
+    db.collectionMocks.characters.findOne.mockResolvedValue({
+      _id: targetId,
+      currencyBalances: { personal: { GBP: 50_000, USD: 0 } },
     });
-    db.collectionMocks.characters.updateOne
-      .mockResolvedValueOnce({ modifiedCount: 0, matchedCount: 1 })
-      .mockResolvedValue({ modifiedCount: 1, matchedCount: 1 });
+    db.collectionMocks.characters.updateOne.mockResolvedValue({
+      modifiedCount: 0,
+      matchedCount: 0,
+    });
 
     const res = await POST_DIRECT_TRADE(
       new Request("http://localhost", {
@@ -646,13 +1163,14 @@ describe("POST /api/forex/direct/[requestId]", () => {
       { params: Promise.resolve({ requestId: reqId.toString() }) }
     );
     expect(res.status).toBe(400);
+    const json = await res.json();
+    expect(json.error).toContain("Insufficient");
+    // The taker-settle leg is the first step: one guarded attempt, then the
+    // flow stops before the order transition.
     expect(db.collectionMocks.characters.updateOne).toHaveBeenCalledTimes(1);
-    expect(db.collectionMocks.currencyOrders.updateOne).toHaveBeenCalledWith(
-      { _id: reqId, status: "processing" },
-      expect.objectContaining({
-        $set: expect.objectContaining({ status: "open" }),
-      })
-    );
+    expect(db.collectionMocks.currencyOrders.updateOne).not.toHaveBeenCalled();
+    expect(db.collectionMocks.tradeHistory.insertOne).not.toHaveBeenCalled();
+    expect(db.collectionMocks.playerMail.insertOne).not.toHaveBeenCalled();
   });
 
   it("blocks a new character (within the 24-turn barrier) from accepting with 403", async () => {
@@ -751,8 +1269,10 @@ describe("POST /api/forex/direct/[requestId]", () => {
 });
 
 describe("POST /api/forex/direct", () => {
-  it("refunds escrow when order creation fails after the debit", async () => {
+  it("compensates the escrow when request creation fails after the debit", async () => {
     await setupDb();
+    // Exercise the standalone fallback explicitly: transactions unsupported,
+    // so the keyed sequential path must still reconcile to no partial state.
     const { getMongoClient } = await import("@/lib/mongodb");
     vi.mocked(getMongoClient).mockResolvedValue({
       startSession: () => ({
@@ -786,9 +1306,10 @@ describe("POST /api/forex/direct", () => {
       sequentialId: 4,
     });
     db.collectionMocks.gameState.findOne.mockResolvedValue({ currentTurn: 33 });
-    db.collectionMocks.characters.updateOne
-      .mockResolvedValueOnce({ modifiedCount: 1, matchedCount: 1 })
-      .mockResolvedValueOnce({ modifiedCount: 1, matchedCount: 1 });
+    db.collectionMocks.characters.updateOne.mockResolvedValue({
+      modifiedCount: 1,
+      matchedCount: 1,
+    });
     db.collectionMocks.currencyOrders.insertOne.mockRejectedValue(new Error("write failed"));
 
     const res = await POST_DIRECT_TRADE_REQUEST(
@@ -806,13 +1327,18 @@ describe("POST /api/forex/direct", () => {
     );
 
     expect(res.status).toBeGreaterThanOrEqual(500);
-    expect(db.collectionMocks.characters.updateOne).toHaveBeenNthCalledWith(
-      2,
-      { _id: senderId },
-      expect.objectContaining({
-        $inc: expect.objectContaining({ "currencyBalances.personal.USD": 500 }),
-      })
+    // The failed request-row insert reverses the applied escrow prefix with
+    // a compensation leg instead of stranding the debit.
+    const refundCall = db.collectionMocks.characters.updateOne.mock.calls[1];
+    expect(refundCall[0]).toMatchObject({ _id: senderId });
+    expect(refundCall[1]).toMatchObject({
+      $inc: { "currencyBalances.personal.USD": 500 },
+    });
+    const receiptUpdate = db.collectionMocks.nonAtomicMoneyFlowReceipts.updateOne.mock.calls.find(
+      (call) => (call[1] as { $set?: { status?: string } }).$set?.status === "compensated"
     );
+    expect(receiptUpdate).toBeDefined();
+    expect(db.collectionMocks.playerMail.insertOne).not.toHaveBeenCalled();
   });
 
   it("returns success even when the notification mail write fails", async () => {
@@ -866,6 +1392,135 @@ describe("POST /api/forex/direct", () => {
     const json = await res.json();
     expect(json.success).toBe(true);
     expect(json.notifiedTarget).toBe(false);
+  });
+
+  it("replays the same request id on a same-key retry: one escrow debit", async () => {
+    await setupDb();
+    const { isForexEnabled } = await import("@/lib/currency/featureFlag");
+    vi.mocked(isForexEnabled).mockResolvedValue(true);
+
+    const senderId = new ObjectId();
+    const targetId = new ObjectId();
+    const key = "direct-create-key-replay";
+    const { requireAuthWithCharacter } = await import("@/lib/api/requireAuth");
+    vi.mocked(requireAuthWithCharacter).mockResolvedValue(
+      authOk({
+        _id: senderId,
+        name: "Sender",
+        countryId: "US",
+        sequentialId: 8,
+        currencyBalances: { personal: { USD: 10_000 } },
+      })
+    );
+
+    db.collectionMocks.characters.findOne.mockResolvedValue({
+      _id: targetId,
+      userId: new ObjectId(),
+      name: "Target",
+      sequentialId: 4,
+    });
+    db.collectionMocks.gameState.findOne.mockResolvedValue({ currentTurn: 33 });
+    db.collectionMocks.characters.updateOne.mockResolvedValue({
+      modifiedCount: 1,
+      matchedCount: 1,
+    });
+    db.collectionMocks.currencyOrders.insertOne.mockResolvedValue({
+      insertedId: new ObjectId(),
+    });
+    db.collectionMocks.playerMail.insertOne.mockResolvedValue({ insertedId: new ObjectId() });
+
+    const createReq = () =>
+      POST_DIRECT_TRADE_REQUEST(
+        new Request("http://localhost", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Idempotency-Key": key },
+          body: JSON.stringify({
+            targetCharacterId: targetId.toString(),
+            fromCurrency: "USD",
+            toCurrency: "GBP",
+            amount: 500,
+            proposedRate: 0.78,
+          }),
+        })
+      );
+
+    const first = await createReq();
+    expect(first.status).toBe(200);
+    const firstJson = await first.json();
+    // The request id derives from the key: a retry can never open a second order.
+    expect(firstJson.requestId).toBe(keyedInsertId(key, "forex-order").toHexString());
+    const escrowDebitsAfterFirst = db.collectionMocks.characters.updateOne.mock.calls.filter(
+      ([, update]) =>
+        (update as { $inc?: Record<string, number> }).$inc?.["currencyBalances.personal.USD"] ===
+        -500
+    ).length;
+
+    // Same key + same inputs hits the completed receipt and replays the stored
+    // request id without escrowing again.
+    db.collectionMocks.nonAtomicMoneyFlowReceipts.insertOne.mockRejectedValue(
+      Object.assign(new Error("E11000 duplicate key"), { code: 11000 })
+    );
+    db.collectionMocks.nonAtomicMoneyFlowReceipts.findOne.mockResolvedValue({
+      _id: key,
+      status: "completed",
+      fingerprint: `forex-order:${senderId.toHexString()}:direct:USD:GBP:500:0.78:buy:default:${targetId.toHexString()}`,
+    });
+
+    const second = await createReq();
+    expect(second.status).toBe(200);
+    const secondJson = await second.json();
+    expect(secondJson.requestId).toBe(firstJson.requestId);
+    const escrowDebitsAfterSecond = db.collectionMocks.characters.updateOne.mock.calls.filter(
+      ([, update]) =>
+        (update as { $inc?: Record<string, number> }).$inc?.["currencyBalances.personal.USD"] ===
+        -500
+    ).length;
+    expect(escrowDebitsAfterSecond).toBe(escrowDebitsAfterFirst);
+    expect(db.collectionMocks.currencyOrders.insertOne).toHaveBeenCalledTimes(1);
+  });
+
+  it("returns 400 for an over-long Idempotency-Key without escrowing", async () => {
+    await setupDb();
+    const { isForexEnabled } = await import("@/lib/currency/featureFlag");
+    vi.mocked(isForexEnabled).mockResolvedValue(true);
+
+    const senderId = new ObjectId();
+    const targetId = new ObjectId();
+    const { requireAuthWithCharacter } = await import("@/lib/api/requireAuth");
+    vi.mocked(requireAuthWithCharacter).mockResolvedValue(
+      authOk({
+        _id: senderId,
+        name: "Sender",
+        countryId: "US",
+        sequentialId: 8,
+        currencyBalances: { personal: { USD: 10_000 } },
+      })
+    );
+
+    db.collectionMocks.characters.findOne.mockResolvedValue({
+      _id: targetId,
+      userId: new ObjectId(),
+      name: "Target",
+      sequentialId: 4,
+    });
+
+    const res = await POST_DIRECT_TRADE_REQUEST(
+      new Request("http://localhost", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Idempotency-Key": "k".repeat(129) },
+        body: JSON.stringify({
+          targetCharacterId: targetId.toString(),
+          fromCurrency: "USD",
+          toCurrency: "GBP",
+          amount: 500,
+          proposedRate: 0.78,
+        }),
+      })
+    );
+
+    expect(res.status).toBe(400);
+    expect(db.collectionMocks.characters.updateOne).not.toHaveBeenCalled();
+    expect(db.collectionMocks.currencyOrders.insertOne).not.toHaveBeenCalled();
   });
 
   it("blocks a new character (within the 24-turn barrier) from initiating with 403", async () => {
