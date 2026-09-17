@@ -22,7 +22,13 @@ import { getOfficeLabel } from "@/lib/utils/politics";
 import { triggerLeadershipElectionsAfterChamberVote } from "@/lib/congress/leadershipElections";
 import { resolvePresidentElection } from "@/lib/turn/election/presidentResolution";
 import { resolveNGPresidentElection } from "@/lib/turn/election/ngPresidentResolution";
-import { COUNTRIES_WITH_BESPOKE_PRESIDENTIAL_ELECTIONS } from "@/lib/constants/countries";
+import {
+  COUNTRIES_WITH_BESPOKE_PRESIDENTIAL_ELECTIONS,
+  COUNTRY_CONFIGS,
+  isPresidentialGovernmentType,
+  type CountryId,
+} from "@/lib/constants/countries";
+import { isExecutiveOffice } from "@/lib/elections/executiveOffice";
 import { spawnHouseElection, spawnCommonsElection } from "@/lib/turn/election/electionSpawning";
 import {
   allocateSeats,
@@ -219,13 +225,71 @@ export async function resolveOneGeneralElection(
         .filter((c) => !!c.isNPP && !!c.nppId && !liveCandidateNppIds.has(c.nppId.toString()))
         .map((c) => c._id.toString())
     );
-    if (retiredNppCandidateIds.size > 0) {
-      console.warn(
-        `[Turn] Election ${election._id} (${election.electionType}/${election.state}): ` +
-          `excluding ${retiredNppCandidateIds.size} retired or missing NPP candidate(s)`
-      );
+    // A sitting national executive in a presidential system cannot take a
+    // legislative (or any non-executive) seat (#2038). The resolver usually
+    // seats the executive after the legislature, but a delayed executive
+    // seating retry or a filing after the seating can produce the reverse
+    // order. Exclude such winners before allocation so the seat falls to the
+    // next eligible candidate (or the vacancy path when none remains).
+    // Parliamentary heads of government legitimately sit in the legislature,
+    // so this applies only where the country config is presidential.
+    const executiveIneligibleCandidateIds = new Set<string>();
+    if (
+      election.electionType !== "president" &&
+      isPresidentialGovernmentType(
+        COUNTRY_CONFIGS[(election.countryId ?? "US") as CountryId]?.governmentType
+      )
+    ) {
+      const holderCharIds = candidates
+        .filter((c): c is typeof c & { characterId: ObjectId } => !c.isNPP && !!c.characterId)
+        .map((c) => c.characterId);
+      const holderNppIds = candidates
+        .filter((c): c is typeof c & { nppId: ObjectId } => !!c.isNPP && !!c.nppId)
+        .map((c) => c.nppId);
+      const [holderChars, holderMpps] = await Promise.all([
+        holderCharIds.length > 0
+          ? db
+              .collection<Character>("characters")
+              .find({ _id: { $in: holderCharIds } }, { projection: { currentOffice: 1 } })
+              .toArray()
+          : Promise.resolve([]),
+        holderNppIds.length > 0
+          ? db
+              .collection<NPP>("npps")
+              // Seat resolution reads the office, never the 30KB stance map.
+              .find({ _id: { $in: holderNppIds } }, { projection: { currentOffice: 1 } })
+              .toArray()
+          : Promise.resolve([]),
+      ]);
+      const holderOfficeById = new Map<string, Character["currentOffice"] | NPP["currentOffice"]>();
+      for (const h of holderChars) holderOfficeById.set(h._id.toString(), h.currentOffice);
+      for (const h of holderMpps) holderOfficeById.set(h._id.toString(), h.currentOffice);
+      for (const c of candidates) {
+        const holderId = c.isNPP ? c.nppId?.toString() : c.characterId?.toString();
+        if (holderId && isExecutiveOffice(holderOfficeById.get(holderId) ?? null)) {
+          executiveIneligibleCandidateIds.add(c._id.toString());
+        }
+      }
+      if (executiveIneligibleCandidateIds.size > 0) {
+        console.warn(
+          `[Turn] Election ${election._id} (${election.electionType}/${election.state}): ` +
+            `excluding ${executiveIneligibleCandidateIds.size} sitting-executive candidate(s) ineligible for a non-executive seat`
+        );
+      }
+    }
+    const droppedCandidateIds = new Set([
+      ...retiredNppCandidateIds,
+      ...executiveIneligibleCandidateIds,
+    ]);
+    if (droppedCandidateIds.size > 0) {
+      if (retiredNppCandidateIds.size > 0) {
+        console.warn(
+          `[Turn] Election ${election._id} (${election.electionType}/${election.state}): ` +
+            `excluding ${retiredNppCandidateIds.size} retired or missing NPP candidate(s)`
+        );
+      }
       effectiveVotes = Object.fromEntries(
-        Object.entries(effectiveVotes).filter(([id]) => !retiredNppCandidateIds.has(id))
+        Object.entries(effectiveVotes).filter(([id]) => !droppedCandidateIds.has(id))
       );
       totalVotesCast = Object.values(effectiveVotes).reduce((sum, votes) => sum + votes, 0);
     }
@@ -301,7 +365,11 @@ export async function resolveOneGeneralElection(
       }
     }
 
-    const ineligibleCandidateIds = new Set([...deletedCandidateIds, ...retiredNppCandidateIds]);
+    const ineligibleCandidateIds = new Set([
+      ...deletedCandidateIds,
+      ...retiredNppCandidateIds,
+      ...executiveIneligibleCandidateIds,
+    ]);
     const ranked = candidateIds
       // `party` lets allocateSeats compute its minimum-share eligibility on the
       // PARTY aggregate share (same-party candidates pooled) instead of the

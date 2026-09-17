@@ -176,6 +176,8 @@ export interface NotificationSnoozedEntry {
 }
 
 export interface NotificationPreferences {
+  /** Silence direct-message badges; delivery and inbox access stay available. Defaults to false. */
+  muteMail?: boolean;
   mutedTypes?: NotificationType[];
   snoozedTypes?: NotificationSnoozedEntry[];
 }

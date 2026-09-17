@@ -4,7 +4,7 @@ import { resolveControllingCorporateParent } from "@/lib/corporations/reservedCo
 import { appointCaretakerCeo } from "@/lib/corporations/caretakerCeo";
 import { openCeoTenure, closeCeoTenure } from "@/lib/corporations/ceoHistory";
 import { canActOnCorporationAsParent } from "../authorization";
-import { humanBlockedFromSubsidiaryCeo } from "../helpers";
+import { subsidiaryCeoBlockMessage, subsidiaryCeoBlockReason } from "../helpers";
 import { collectSiblingSubsidiaryCeoUserIds, resolveParentCeoUserId } from "../parentContext";
 import { fail, type SubsidiaryCommandResult } from "../commandTypes";
 
@@ -65,20 +65,17 @@ export async function appointSubsidiaryCeo(
     return fail("The selected character cannot serve as CEO (no owning player).");
   }
 
-  // One-person rule keys on the human behind the CEO seat.
+  // One-person rule keys on sitting humans, not NPP-caretaker stash.
   const parentOwnerUserId = parent.userId;
   const parentCeoUserId = await resolveParentCeoUserId(db, parent);
   const siblingCeoUserIds = await collectSiblingSubsidiaryCeoUserIds(db, parent._id, sub._id);
-  if (
-    humanBlockedFromSubsidiaryCeo({
-      candidateUserId: character.userId,
-      parentOwnerUserId,
-      parentCeoUserId,
-      siblingSubsidiaryCeoUserIds: siblingCeoUserIds,
-    })
-  ) {
-    return fail("A subsidiary must be run by a different player than the parent.", 403);
-  }
+  const block = subsidiaryCeoBlockReason({
+    candidateUserId: character.userId,
+    parentOwnerUserId,
+    parentCeoUserId,
+    siblingSubsidiaryCeoUserIds: siblingCeoUserIds,
+  });
+  if (block) return fail(subsidiaryCeoBlockMessage(block), 403);
 
   // Reseat: close the current holder's tenure, then set the new human CEO.
   const previousCeoId = sub.ceoId;

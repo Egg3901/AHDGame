@@ -1,7 +1,9 @@
 import type { MetadataRoute } from "next";
-import { getCanonicalUrl } from "@/lib/siteMetadata";
+import { headers } from "next/headers";
+import { getCanonicalUrl, getWikiSiteUrl } from "@/lib/siteMetadata";
 
-export default function robots(): MetadataRoute.Robots {
+export default async function robots(): Promise<MetadataRoute.Robots> {
+  const wikiHost = (await headers()).get("host")?.startsWith("wiki.") ?? false;
   return {
     rules: [
       {
@@ -41,6 +43,6 @@ export default function robots(): MetadataRoute.Robots {
         ],
       },
     ],
-    sitemap: getCanonicalUrl("/sitemap.xml"),
+    sitemap: wikiHost ? `${getWikiSiteUrl()}/sitemap.xml` : getCanonicalUrl("/sitemap.xml"),
   };
 }

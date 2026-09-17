@@ -1,3 +1,8 @@
+import { getGameTime } from "@/lib/time/gameTime";
+import {
+  presenceBuiltThisTurn,
+  presenceSpendThisTurn,
+} from "@/lib/campaigns/presenceBuiltThisTurn";
 import { NextResponse } from "next/server";
 import { withNoStore } from "@/lib/api/withNoStore";
 import { getDb } from "@/lib/mongodb";
@@ -55,6 +60,7 @@ async function handleGET() {
       // that `stateOrgLevelCost` is anchor-denominated.
       loadCampaignFxRate(db, character),
     ]);
+    const gameTime = await getGameTime();
     const byState = new Map(rows.map((r) => [r.stateId, r]));
 
     const states = [...residentPoliticalIds].sort();
@@ -66,6 +72,11 @@ async function handleGET() {
         level,
         totalInvested: row?.totalInvested ?? 0,
         updatedAt: row?.updatedAt ?? null,
+        spentThisTurn: presenceSpendThisTurn(row, gameTime.lastTurnProcessed),
+        builtThisTurn: presenceBuiltThisTurn(
+          row?.lastBuildAt ?? row?.updatedAt,
+          gameTime.lastTurnProcessed
+        ),
         /** Cost of the NEXT level here, in the campaign's own currency. */
         nextCost: statePresenceNextCost(level, fxRate),
       };

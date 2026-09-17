@@ -6,6 +6,28 @@ import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import type { Db } from "mongodb";
 import { ObjectId } from "mongodb";
 import { resetCorpFxRateCacheForTests } from "@/lib/currency/corporationCapital";
+// Static imports on purpose: bondTurn pulls a large transitive graph whose
+// cold vite transform (~31s) exceeds the 15s per-test timeout. A dynamic
+// import("./bondTurn") inside a test pays that cost inside the timeout window;
+// the timed-out execution then keeps running as a zombie and steals the next
+// test's getDb-backed mocks. Static imports resolve during collection, which
+// carries no per-test timeout, so no zombie can form. vi.mock is hoisted above
+// these imports, so every name below still resolves to its mock.
+import { processBondTurn } from "./bondTurn";
+import { getDb } from "@/lib/mongodb";
+import {
+  getBondCountryId,
+  isCorporateBond,
+  issueScheduledSovereignBondSeries,
+} from "@/lib/bonds/sovereign";
+import { emitTxBulk } from "@/lib/financialTxLog/emit";
+import { fireBondDefaultPulse } from "@/lib/corporations/sentimentEvents";
+import { createNotifications } from "@/lib/notifications";
+import { processSovereignImfFacilityPayments } from "@/lib/sovereignDefault/imfSovereignFacilityTurn";
+import { processSovereignRecoveryTurn } from "@/lib/sovereignDefault/recovery/recoveryTurn";
+import { processSovereignLegislativeTurn } from "@/lib/sovereignDefault/legislative/legislativeTurn";
+import { executeCorporationBondRefinance } from "@/lib/bonds/executeCorporationBondRefinance";
+import { executeCorporationBondRestructure } from "@/lib/bonds/executeCorporationBondRestructure";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 vi.mock("@/lib/bonds/sovereign", () => ({
@@ -87,20 +109,37 @@ function makeCursor(docs: unknown[]) {
 describe("processBondTurn", () => {
   let db: MockDb;
 
-  beforeEach(async () => {
+  /**
+   * Shape-based stub for the two same-filter `bonds.find({ matured: false })`
+   * reads on the turn path. The turn-open read takes full documents with no
+   * projection; the Phase-7 history snapshot chains
+   * `.project({ _id: 1, marketPrice: 1 })` (see snapshotBondHistory). Routing
+   * on that call shape instead of call order means a repeated or late
+   * execution can never shift full docs into the snapshot slot and crash on
+   * a holder-less doc (`bond.holders is not iterable`).
+   */
+  function mockBondFinds(fullDocs: unknown[], snapshotDocs: unknown[]) {
+    db.collectionMocks["bonds"]!.find.mockImplementation(() => {
+      const fullCursor = makeCursor(fullDocs);
+      const snapshotCursor = makeCursor(snapshotDocs);
+      snapshotCursor.project = vi.fn().mockReturnValue(snapshotCursor);
+      fullCursor.project = vi.fn().mockReturnValue(snapshotCursor);
+      return fullCursor;
+    });
+  }
+
+  beforeEach(() => {
     vi.clearAllMocks();
     resetCorpFxRateCacheForTests();
     db = createMockDb();
     for (const name of ["bonds", "corporations", "centralBanks", "bondHistory", "characters"]) {
       db.collection(name);
     }
-    const { getDb } = await import("@/lib/mongodb");
     vi.mocked(getDb).mockResolvedValue(db as unknown as Db);
   });
 
   it("returns zero counts when no active bonds exist", async () => {
     // bonds.find returns empty by default
-    const { processBondTurn } = await import("./bondTurn");
     const result = await processBondTurn(10);
 
     expect(result.bondsProcessed).toBe(0);
@@ -123,15 +162,7 @@ describe("processBondTurn", () => {
     };
 
     // First bonds.find returns the active bond
-    let bondFindCount = 0;
-    db.collectionMocks["bonds"]!.find.mockImplementation(() => {
-      bondFindCount++;
-      if (bondFindCount === 1) return makeCursor([bond]);
-      // Second call: updated bonds for history snapshot
-      const cursor = makeCursor([{ _id: bond._id, marketPrice: 1.02 }]);
-      cursor.project = vi.fn().mockReturnValue(cursor);
-      return cursor;
-    });
+    mockBondFinds([bond], [{ _id: bond._id, marketPrice: 1.02 }]);
     db.collectionMocks["centralBanks"]!.find.mockReturnValue(
       makeCursor([{ countryId: "US", primeRate: 2.75 }])
     );
@@ -139,7 +170,6 @@ describe("processBondTurn", () => {
       toArray: vi.fn().mockResolvedValue([]),
     });
 
-    const { processBondTurn } = await import("./bondTurn");
     const result = await processBondTurn(10);
 
     expect(result.bondsProcessed).toBe(1);
@@ -162,14 +192,7 @@ describe("processBondTurn", () => {
       currencyCode: "USD" as const,
     };
 
-    let bondFindCount = 0;
-    db.collectionMocks["bonds"]!.find.mockImplementation(() => {
-      bondFindCount++;
-      if (bondFindCount === 1) return makeCursor([bond]);
-      const cursor = makeCursor([{ _id: bond._id, marketPrice: 1.02 }]);
-      cursor.project = vi.fn().mockReturnValue(cursor);
-      return cursor;
-    });
+    mockBondFinds([bond], [{ _id: bond._id, marketPrice: 1.02 }]);
     db.collectionMocks["centralBanks"]!.find.mockReturnValue(
       makeCursor([{ countryId: "US", primeRate: 2.75 }])
     );
@@ -178,7 +201,6 @@ describe("processBondTurn", () => {
     });
     db.collection("bondMarketPools");
 
-    const { processBondTurn } = await import("./bondTurn");
     await processBondTurn(10);
 
     // perTurnCouponPayment is mocked to 10 per unit: 20 pool units -> 200.
@@ -204,14 +226,7 @@ describe("processBondTurn", () => {
       currencyCode: "USD" as const,
     };
 
-    let bondFindCount = 0;
-    db.collectionMocks["bonds"]!.find.mockImplementation(() => {
-      bondFindCount++;
-      if (bondFindCount === 1) return makeCursor([bond]);
-      const cursor = makeCursor([{ _id: bond._id, marketPrice: 1 }]);
-      cursor.project = vi.fn().mockReturnValue(cursor);
-      return cursor;
-    });
+    mockBondFinds([bond], [{ _id: bond._id, marketPrice: 1 }]);
     db.collectionMocks["centralBanks"]!.find.mockReturnValue(
       makeCursor([{ countryId: "US", primeRate: 2.75 }])
     );
@@ -220,7 +235,6 @@ describe("processBondTurn", () => {
     });
     db.collection("bondMarketPools");
 
-    const { processBondTurn } = await import("./bondTurn");
     const result = await processBondTurn(10);
 
     expect(result.bondsMatured).toBe(1);
@@ -246,14 +260,7 @@ describe("processBondTurn", () => {
       corporationId: new ObjectId(),
     };
 
-    let bondFindCount = 0;
-    db.collectionMocks["bonds"]!.find.mockImplementation(() => {
-      bondFindCount++;
-      if (bondFindCount === 1) return makeCursor([bond]);
-      const cursor = makeCursor([{ _id: bond._id, marketPrice: 1.02 }]);
-      cursor.project = vi.fn().mockReturnValue(cursor);
-      return cursor;
-    });
+    mockBondFinds([bond], [{ _id: bond._id, marketPrice: 1.02 }]);
     db.collectionMocks["centralBanks"]!.find.mockReturnValue(
       makeCursor([{ countryId: "US", primeRate: 2.75 }])
     );
@@ -261,7 +268,6 @@ describe("processBondTurn", () => {
       toArray: vi.fn().mockResolvedValue([]),
     });
 
-    const { processBondTurn } = await import("./bondTurn");
     const result = await processBondTurn(10);
 
     expect(result.couponsPaid).toBeGreaterThan(0);
@@ -289,14 +295,7 @@ describe("processBondTurn", () => {
       currencyCode: "USD" as const,
     };
 
-    let bondFindCount = 0;
-    db.collectionMocks["bonds"]!.find.mockImplementation(() => {
-      bondFindCount++;
-      if (bondFindCount === 1) return makeCursor([bond]);
-      const cursor = makeCursor([{ _id: bond._id, marketPrice: 1.02 }]);
-      cursor.project = vi.fn().mockReturnValue(cursor);
-      return cursor;
-    });
+    mockBondFinds([bond], [{ _id: bond._id, marketPrice: 1.02 }]);
     db.collectionMocks["centralBanks"]!.find.mockReturnValue(
       makeCursor([{ countryId: "US", primeRate: 2.75 }])
     );
@@ -304,7 +303,6 @@ describe("processBondTurn", () => {
       toArray: vi.fn().mockResolvedValue([]),
     });
 
-    const { processBondTurn } = await import("./bondTurn");
     const result = await processBondTurn(10);
 
     expect(result.bondsProcessed).toBe(1);
@@ -343,14 +341,7 @@ describe("processBondTurn", () => {
       currencyCode: "USD" as const,
     };
 
-    let bondFindCount = 0;
-    db.collectionMocks["bonds"]!.find.mockImplementation(() => {
-      bondFindCount++;
-      if (bondFindCount === 1) return makeCursor([bond]);
-      const cursor = makeCursor([{ _id: bond._id, marketPrice: 1.02 }]);
-      cursor.project = vi.fn().mockReturnValue(cursor);
-      return cursor;
-    });
+    mockBondFinds([bond], [{ _id: bond._id, marketPrice: 1.02 }]);
     db.collectionMocks["centralBanks"]!.find.mockReturnValue(
       makeCursor([{ countryId: "US", primeRate: 2.75 }])
     );
@@ -361,10 +352,8 @@ describe("processBondTurn", () => {
       makeCursor([{ _id: charId, name: "Test Holder" }])
     );
 
-    const { processBondTurn } = await import("./bondTurn");
     await processBondTurn(10);
 
-    const { emitTxBulk } = await import("@/lib/financialTxLog/emit");
     expect(vi.mocked(emitTxBulk)).toHaveBeenCalled();
     const allEntries = vi.mocked(emitTxBulk).mock.calls.flatMap((c) => c[1] as unknown[]);
     const couponEntry = allEntries.find(
@@ -406,14 +395,7 @@ describe("processBondTurn", () => {
       currencyCode: "USD" as const,
     };
 
-    let bondFindCount = 0;
-    db.collectionMocks["bonds"]!.find.mockImplementation(() => {
-      bondFindCount++;
-      if (bondFindCount === 1) return makeCursor([bond]);
-      const cursor = makeCursor([{ _id: bond._id, marketPrice: 1.02 }]);
-      cursor.project = vi.fn().mockReturnValue(cursor);
-      return cursor;
-    });
+    mockBondFinds([bond], [{ _id: bond._id, marketPrice: 1.02 }]);
     db.collectionMocks["centralBanks"]!.find.mockReturnValue(
       makeCursor([{ countryId: "US", primeRate: 2.75 }])
     );
@@ -428,10 +410,8 @@ describe("processBondTurn", () => {
     const emitDeferred = new Promise<void>((resolve) => {
       releaseEmit = resolve;
     });
-    const { emitTxBulk } = await import("@/lib/financialTxLog/emit");
     vi.mocked(emitTxBulk).mockReturnValueOnce(emitDeferred);
 
-    const { processBondTurn } = await import("./bondTurn");
     let resolved = false;
     const pending = processBondTurn(10).then(() => {
       resolved = true;
@@ -458,20 +438,12 @@ describe("processBondTurn", () => {
       publicFloat: 0,
     };
 
-    let bondFindCount = 0;
-    db.collectionMocks["bonds"]!.find.mockImplementation(() => {
-      bondFindCount++;
-      if (bondFindCount === 1) return makeCursor([bond]);
-      const cursor = makeCursor([]);
-      cursor.project = vi.fn().mockReturnValue(cursor);
-      return cursor;
-    });
+    mockBondFinds([bond], []);
     db.collectionMocks["centralBanks"]!.find.mockReturnValue(makeCursor([]));
     db.collectionMocks["bondHistory"]!.aggregate.mockReturnValue({
       toArray: vi.fn().mockResolvedValue([]),
     });
 
-    const { processBondTurn } = await import("./bondTurn");
     const result = await processBondTurn(10);
 
     expect(result.bondsMatured).toBe(1);
@@ -503,20 +475,15 @@ describe("processBondTurn", () => {
       _id: new ObjectId(),
     };
 
-    const { isCorporateBond } = await import("@/lib/bonds/sovereign");
     vi.mocked(isCorporateBond).mockReturnValue(true);
 
-    let bondFindCount = 0;
-    db.collectionMocks["bonds"]!.find.mockImplementation(() => {
-      bondFindCount++;
-      if (bondFindCount === 1) return makeCursor([firstBond, secondBond]);
-      const cursor = makeCursor([
+    mockBondFinds(
+      [firstBond, secondBond],
+      [
         { _id: firstBond._id, marketPrice: 0.1 },
         { _id: secondBond._id, marketPrice: 0.1 },
-      ]);
-      cursor.project = vi.fn().mockReturnValue(cursor);
-      return cursor;
-    });
+      ]
+    );
     db.collectionMocks["corporations"]!.find.mockReturnValue(
       makeCursor([
         {
@@ -532,10 +499,8 @@ describe("processBondTurn", () => {
       toArray: vi.fn().mockResolvedValue([]),
     });
 
-    const { processBondTurn } = await import("./bondTurn");
     await processBondTurn(10);
 
-    const { fireBondDefaultPulse } = await import("@/lib/corporations/sentimentEvents");
     expect(vi.mocked(fireBondDefaultPulse)).toHaveBeenCalledTimes(1);
     expect(vi.mocked(fireBondDefaultPulse)).toHaveBeenCalledWith(
       expect.anything(),
@@ -563,14 +528,7 @@ describe("processBondTurn", () => {
         publicFloat: 0,
         corporationId: issuerCorpId,
       };
-      let bondFindCount = 0;
-      db.collectionMocks["bonds"]!.find.mockImplementation(() => {
-        bondFindCount++;
-        if (bondFindCount === 1) return makeCursor([bond]);
-        const cursor = makeCursor([{ _id: bond._id, marketPrice: 0.1 }]);
-        cursor.project = vi.fn().mockReturnValue(cursor);
-        return cursor;
-      });
+      mockBondFinds([bond], [{ _id: bond._id, marketPrice: 0.1 }]);
       db.collectionMocks["corporations"]!.find.mockReturnValue(
         makeCursor([
           { _id: issuerCorpId, liquidCapital: -100, countryId: "US", name: "Paused Corp" },
@@ -591,17 +549,14 @@ describe("processBondTurn", () => {
 
     it("does NOT default a cash-negative issuer while paused", async () => {
       arrangeCashNegativeIssuer(true);
-      const { processBondTurn } = await import("./bondTurn");
       const result = await processBondTurn(10);
 
       expect(result.bondsDefaulted).toBe(0);
-      const { fireBondDefaultPulse } = await import("@/lib/corporations/sentimentEvents");
       expect(vi.mocked(fireBondDefaultPulse)).not.toHaveBeenCalled();
     });
 
     it("does NOT stamp a credit penalty while paused", async () => {
       arrangeCashNegativeIssuer(true);
-      const { processBondTurn } = await import("./bondTurn");
       await processBondTurn(10);
 
       // The only corporations.updateMany is the expiry sweep at the top of the
@@ -614,7 +569,6 @@ describe("processBondTurn", () => {
 
     it("still settles the turn's bond obligations while paused", async () => {
       arrangeCashNegativeIssuer(true);
-      const { processBondTurn } = await import("./bondTurn");
       const result = await processBondTurn(10);
 
       // Settlement is contractual and must not be skipped: sovereign holders
@@ -624,11 +578,9 @@ describe("processBondTurn", () => {
 
     it("DOES default the same issuer once corporations are live again", async () => {
       arrangeCashNegativeIssuer(false);
-      const { processBondTurn } = await import("./bondTurn");
       const result = await processBondTurn(10);
 
       expect(result.bondsDefaulted).toBe(1);
-      const { fireBondDefaultPulse } = await import("@/lib/corporations/sentimentEvents");
       expect(vi.mocked(fireBondDefaultPulse)).toHaveBeenCalledTimes(1);
     });
 
@@ -637,7 +589,6 @@ describe("processBondTurn", () => {
       // had a turn to act, but all four cure routes are pause-gated, so during
       // a pause they were locked out of the very window being held against them.
       arrangeCashNegativeIssuer(true);
-      const { processBondTurn } = await import("./bondTurn");
       const result = await processBondTurn(10);
 
       expect(result.bondsAutoRestructured).toBe(0);
@@ -648,7 +599,6 @@ describe("processBondTurn", () => {
     it("treats a missing gameState as not paused, so detection is never silently disabled", async () => {
       arrangeCashNegativeIssuer(false);
       db.collectionMocks["gameState"]!.findOne.mockResolvedValue(null);
-      const { processBondTurn } = await import("./bondTurn");
       const result = await processBondTurn(10);
 
       expect(result.bondsDefaulted).toBe(1);
@@ -657,7 +607,6 @@ describe("processBondTurn", () => {
 
   it("clears expired bond default credit penalties", async () => {
     // bonds.find returns empty (no active bonds)
-    const { processBondTurn } = await import("./bondTurn");
     await processBondTurn(10);
 
     // Should clear expired penalties
@@ -668,10 +617,8 @@ describe("processBondTurn", () => {
   });
 
   it("issues scheduled sovereign bonds", async () => {
-    const { processBondTurn } = await import("./bondTurn");
     await processBondTurn(10);
 
-    const { issueScheduledSovereignBondSeries } = await import("@/lib/bonds/sovereign");
     expect(issueScheduledSovereignBondSeries).toHaveBeenCalledWith(
       expect.anything(),
       10,
@@ -680,30 +627,21 @@ describe("processBondTurn", () => {
   });
 
   it("invokes processSovereignImfFacilityPayments each turn", async () => {
-    const { processSovereignImfFacilityPayments } =
-      await import("@/lib/sovereignDefault/imfSovereignFacilityTurn");
     vi.mocked(processSovereignImfFacilityPayments).mockClear();
-    const { processBondTurn } = await import("./bondTurn");
     await processBondTurn(100);
     expect(processSovereignImfFacilityPayments).toHaveBeenCalledTimes(1);
     expect(vi.mocked(processSovereignImfFacilityPayments).mock.calls[0][1]).toBe(100);
   });
 
   it("invokes processSovereignRecoveryTurn each turn", async () => {
-    const { processSovereignRecoveryTurn } =
-      await import("@/lib/sovereignDefault/recovery/recoveryTurn");
     vi.mocked(processSovereignRecoveryTurn).mockClear();
-    const { processBondTurn } = await import("./bondTurn");
     await processBondTurn(100);
     expect(processSovereignRecoveryTurn).toHaveBeenCalledTimes(1);
     expect(vi.mocked(processSovereignRecoveryTurn).mock.calls[0][1]).toBe(100);
   });
 
   it("invokes processSovereignLegislativeTurn each turn", async () => {
-    const { processSovereignLegislativeTurn } =
-      await import("@/lib/sovereignDefault/legislative/legislativeTurn");
     vi.mocked(processSovereignLegislativeTurn).mockClear();
-    const { processBondTurn } = await import("./bondTurn");
     await processBondTurn(100);
     expect(processSovereignLegislativeTurn).toHaveBeenCalledTimes(1);
     expect(vi.mocked(processSovereignLegislativeTurn).mock.calls[0][2]).toBe(100);
@@ -726,14 +664,7 @@ describe("processBondTurn", () => {
       corporationId: issuerCorpId,
     };
 
-    let bondFindCount = 0;
-    db.collectionMocks["bonds"]!.find.mockImplementation(() => {
-      bondFindCount++;
-      if (bondFindCount === 1) return makeCursor([bond]);
-      const cursor = makeCursor([{ _id: bond._id, marketPrice: 1.01 }]);
-      cursor.project = vi.fn().mockReturnValue(cursor);
-      return cursor;
-    });
+    mockBondFinds([bond], [{ _id: bond._id, marketPrice: 1.01 }]);
     db.collectionMocks["centralBanks"]!.find.mockReturnValue(
       makeCursor([{ countryId: "US", primeRate: 2.75 }])
     );
@@ -741,7 +672,6 @@ describe("processBondTurn", () => {
       toArray: vi.fn().mockResolvedValue([]),
     });
 
-    const { processBondTurn } = await import("./bondTurn");
     const result = await processBondTurn(10);
 
     expect(result.couponsPaid).toBeGreaterThan(0);
@@ -776,17 +706,9 @@ describe("processBondTurn", () => {
       corporationId: new ObjectId(),
     };
 
-    const { getBondCountryId } = await import("@/lib/bonds/sovereign");
     vi.mocked(getBondCountryId).mockReturnValue("JP");
 
-    let bondFindCount = 0;
-    db.collectionMocks["bonds"]!.find.mockImplementation(() => {
-      bondFindCount++;
-      if (bondFindCount === 1) return makeCursor([bond]);
-      const cursor = makeCursor([{ _id: bond._id, marketPrice: 1.01 }]);
-      cursor.project = vi.fn().mockReturnValue(cursor);
-      return cursor;
-    });
+    mockBondFinds([bond], [{ _id: bond._id, marketPrice: 1.01 }]);
 
     db.collection("exchangeRates");
     db.collectionMocks["exchangeRates"]!.find.mockReturnValue({
@@ -810,7 +732,6 @@ describe("processBondTurn", () => {
       toArray: vi.fn().mockResolvedValue([]),
     });
 
-    const { processBondTurn } = await import("./bondTurn");
     await processBondTurn(10);
 
     const charBulkWrite = db.collectionMocks["characters"]!.bulkWrite;
@@ -851,14 +772,7 @@ describe("processBondTurn", () => {
       corporationId: issuerCorpId,
     };
 
-    let bondFindCount = 0;
-    db.collectionMocks["bonds"]!.find.mockImplementation(() => {
-      bondFindCount++;
-      if (bondFindCount === 1) return makeCursor([bond]);
-      const cursor = makeCursor([{ _id: bond._id, marketPrice: 1.01 }]);
-      cursor.project = vi.fn().mockReturnValue(cursor);
-      return cursor;
-    });
+    mockBondFinds([bond], [{ _id: bond._id, marketPrice: 1.01 }]);
 
     db.collection("exchangeRates");
     db.collectionMocks["exchangeRates"]!.find.mockReturnValue({
@@ -882,7 +796,6 @@ describe("processBondTurn", () => {
       toArray: vi.fn().mockResolvedValue([]),
     });
 
-    const { processBondTurn } = await import("./bondTurn");
     await processBondTurn(10);
 
     // Bond has no currencyCode/countryId (pre-migration convention) so it
@@ -920,17 +833,9 @@ describe("processBondTurn", () => {
     };
 
     // isCorporateBond mock uses !!b.isCorporate
-    const { isCorporateBond } = await import("@/lib/bonds/sovereign");
     vi.mocked(isCorporateBond).mockReturnValue(true);
 
-    let bondFindCount = 0;
-    db.collectionMocks["bonds"]!.find.mockImplementation(() => {
-      bondFindCount++;
-      if (bondFindCount === 1) return makeCursor([bond]);
-      const cursor = makeCursor([{ _id: bond._id, marketPrice: 1.0 }]);
-      cursor.project = vi.fn().mockReturnValue(cursor);
-      return cursor;
-    });
+    mockBondFinds([bond], [{ _id: bond._id, marketPrice: 1.0 }]);
     db.collectionMocks["corporations"]!.find.mockReturnValue(
       makeCursor([{ _id: issuerCorpId, liquidCapital: 500_000, countryId: "US" }])
     );
@@ -941,7 +846,6 @@ describe("processBondTurn", () => {
       toArray: vi.fn().mockResolvedValue([]),
     });
 
-    const { processBondTurn } = await import("./bondTurn");
     await processBondTurn(10);
 
     // The issuing corporation should have liquidCapital decremented for public float coupons
@@ -971,29 +875,20 @@ describe("processBondTurn", () => {
       corporationId: issuerCorpId,
     };
 
-    const { isCorporateBond } = await import("@/lib/bonds/sovereign");
     vi.mocked(isCorporateBond).mockReturnValue(true);
 
-    let bondFindCount = 0;
-    let corpFindCount = 0;
-    db.collectionMocks["bonds"]!.find.mockImplementation(() => {
-      bondFindCount++;
-      if (bondFindCount === 1) return makeCursor([bond]);
-      // After price update, return bond still active
-      const cursor = makeCursor([{ _id: bondId, marketPrice: 0.5 }]);
-      cursor.project = vi.fn().mockReturnValue(cursor);
-      return cursor;
-    });
+    // After price update, return bond still active
+    mockBondFinds([bond], [{ _id: bondId, marketPrice: 0.5 }]);
     db.collectionMocks["corporations"]!.find.mockImplementation(() => {
-      corpFindCount++;
-      if (corpFindCount === 1) {
-        // Initial fetch for corp data
-        return makeCursor([{ _id: issuerCorpId, liquidCapital: 5, countryId: "US" }]);
-      }
+      // The up-front corp read is unprojected; the solvency-gate re-read
+      // chains .project() (bondTurn.ts). Route on that shape, not call order,
+      // so a repeated execution can never swap the pre/post-deduction states.
+      const initialCursor = makeCursor([{ _id: issuerCorpId, liquidCapital: 5, countryId: "US" }]);
       // After coupon deduction, corp is now negative (simulating deduction happened)
-      const cursor = makeCursor([{ _id: issuerCorpId, liquidCapital: -50 }]);
-      cursor.project = vi.fn().mockReturnValue(cursor);
-      return cursor;
+      const updatedCursor = makeCursor([{ _id: issuerCorpId, liquidCapital: -50 }]);
+      updatedCursor.project = vi.fn().mockReturnValue(updatedCursor);
+      initialCursor.project = vi.fn().mockReturnValue(updatedCursor);
+      return initialCursor;
     });
     db.collectionMocks["centralBanks"]!.find.mockReturnValue(
       makeCursor([{ countryId: "US", primeRate: 2.75 }])
@@ -1002,7 +897,6 @@ describe("processBondTurn", () => {
       toArray: vi.fn().mockResolvedValue([]),
     });
 
-    const { processBondTurn } = await import("./bondTurn");
     const result = await processBondTurn(10);
 
     expect(result.bondsDefaulted).toBe(1);
@@ -1031,21 +925,12 @@ describe("processBondTurn", () => {
       corporationId: new ObjectId(),
     };
 
-    let bondFindCount = 0;
-    db.collectionMocks["bonds"]!.find.mockImplementation(() => {
-      bondFindCount++;
-      if (bondFindCount === 1) return makeCursor([bond]);
-      // After maturity, no active bonds
-      const cursor = makeCursor([]);
-      cursor.project = vi.fn().mockReturnValue(cursor);
-      return cursor;
-    });
+    mockBondFinds([bond], []);
     db.collectionMocks["centralBanks"]!.find.mockReturnValue(makeCursor([]));
     db.collectionMocks["bondHistory"]!.aggregate.mockReturnValue({
       toArray: vi.fn().mockResolvedValue([]),
     });
 
-    const { processBondTurn } = await import("./bondTurn");
     const result = await processBondTurn(10);
 
     expect(result.bondsMatured).toBe(1);
@@ -1083,20 +968,12 @@ describe("processBondTurn", () => {
       corporationId: new ObjectId(),
     };
 
-    let bondFindCount = 0;
-    db.collectionMocks["bonds"]!.find.mockImplementation(() => {
-      bondFindCount++;
-      if (bondFindCount === 1) return makeCursor([bond]);
-      const cursor = makeCursor([]);
-      cursor.project = vi.fn().mockReturnValue(cursor);
-      return cursor;
-    });
+    mockBondFinds([bond], []);
     db.collectionMocks["centralBanks"]!.find.mockReturnValue(makeCursor([]));
     db.collectionMocks["bondHistory"]!.aggregate.mockReturnValue({
       toArray: vi.fn().mockResolvedValue([]),
     });
 
-    const { processBondTurn } = await import("./bondTurn");
     const result = await processBondTurn(10);
 
     expect(result.bondsMatured).toBe(1);
@@ -1148,17 +1025,9 @@ describe("processBondTurn", () => {
       countryId: undefined, // corporate bond, not sovereign
     };
 
-    const { isCorporateBond } = await import("@/lib/bonds/sovereign");
     vi.mocked(isCorporateBond).mockReturnValue(true);
 
-    let bondFindCount = 0;
-    db.collectionMocks["bonds"]!.find.mockImplementation(() => {
-      bondFindCount++;
-      if (bondFindCount === 1) return makeCursor([bond]);
-      const cursor = makeCursor([]);
-      cursor.project = vi.fn().mockReturnValue(cursor);
-      return cursor;
-    });
+    mockBondFinds([bond], []);
     db.collectionMocks["corporations"]!.find.mockReturnValue(
       makeCursor([
         {
@@ -1176,10 +1045,8 @@ describe("processBondTurn", () => {
       toArray: vi.fn().mockResolvedValue([]),
     });
 
-    const { createNotifications } = await import("@/lib/notifications");
     vi.mocked(createNotifications).mockClear();
 
-    const { processBondTurn } = await import("./bondTurn");
     const result = await processBondTurn(10);
 
     expect(result.bondsMatured).toBe(1);
@@ -1232,17 +1099,9 @@ describe("processBondTurn", () => {
       currencyCode: "USD" as const,
     };
 
-    const { isCorporateBond } = await import("@/lib/bonds/sovereign");
     vi.mocked(isCorporateBond).mockReturnValue(true);
 
-    let bondFindCount = 0;
-    db.collectionMocks["bonds"]!.find.mockImplementation(() => {
-      bondFindCount++;
-      if (bondFindCount === 1) return makeCursor([bond]);
-      const cursor = makeCursor([{ _id: bondId, marketPrice: 1.02 }]);
-      cursor.project = vi.fn().mockReturnValue(cursor);
-      return cursor;
-    });
+    mockBondFinds([bond], [{ _id: bondId, marketPrice: 1.02 }]);
     db.collectionMocks["corporations"]!.find.mockReturnValue(
       makeCursor([
         {
@@ -1261,10 +1120,8 @@ describe("processBondTurn", () => {
       toArray: vi.fn().mockResolvedValue([]),
     });
 
-    const { processBondTurn } = await import("./bondTurn");
     await processBondTurn(10);
 
-    const { emitTxBulk } = await import("@/lib/financialTxLog/emit");
     const allEntries = vi.mocked(emitTxBulk).mock.calls.flatMap((c) => c[1] as unknown[]);
     const issuerCouponEntry = allEntries.find(
       (e: unknown) =>
@@ -1310,26 +1167,16 @@ describe("processBondTurn", () => {
       currencyCode: "USD" as const,
     };
 
-    const { isCorporateBond } = await import("@/lib/bonds/sovereign");
     vi.mocked(isCorporateBond).mockReturnValue(false);
 
-    let bondFindCount = 0;
-    db.collectionMocks["bonds"]!.find.mockImplementation(() => {
-      bondFindCount++;
-      if (bondFindCount === 1) return makeCursor([bond]);
-      const cursor = makeCursor([]);
-      cursor.project = vi.fn().mockReturnValue(cursor);
-      return cursor;
-    });
+    mockBondFinds([bond], []);
     db.collectionMocks["centralBanks"]!.find.mockReturnValue(makeCursor([]));
     db.collectionMocks["bondHistory"]!.aggregate.mockReturnValue({
       toArray: vi.fn().mockResolvedValue([]),
     });
 
-    const { processBondTurn } = await import("./bondTurn");
     await processBondTurn(10);
 
-    const { emitTxBulk } = await import("@/lib/financialTxLog/emit");
     const allEntries = vi.mocked(emitTxBulk).mock.calls.flatMap((c) => c[1] as unknown[]);
     const govEntry = allEntries.find(
       (e: unknown) =>
@@ -1378,17 +1225,9 @@ describe("processBondTurn", () => {
       currencyCode: "USD" as const,
     };
 
-    const { isCorporateBond } = await import("@/lib/bonds/sovereign");
     vi.mocked(isCorporateBond).mockReturnValue(true);
 
-    let bondFindCount = 0;
-    db.collectionMocks["bonds"]!.find.mockImplementation(() => {
-      bondFindCount++;
-      if (bondFindCount === 1) return makeCursor([bond]);
-      const cursor = makeCursor([]);
-      cursor.project = vi.fn().mockReturnValue(cursor);
-      return cursor;
-    });
+    mockBondFinds([bond], []);
     db.collectionMocks["corporations"]!.find.mockReturnValue(
       makeCursor([
         {
@@ -1405,10 +1244,8 @@ describe("processBondTurn", () => {
       toArray: vi.fn().mockResolvedValue([]),
     });
 
-    const { processBondTurn } = await import("./bondTurn");
     await processBondTurn(10);
 
-    const { emitTxBulk } = await import("@/lib/financialTxLog/emit");
     const allEntries = vi.mocked(emitTxBulk).mock.calls.flatMap((c) => c[1] as unknown[]);
     const issuerEntry = allEntries.find(
       (e: unknown) =>
@@ -1459,18 +1296,9 @@ describe("processBondTurn", () => {
       currencyCode: "USD" as const,
     };
 
-    const { isCorporateBond } = await import("@/lib/bonds/sovereign");
     vi.mocked(isCorporateBond).mockReturnValue(true);
 
-    let bondFindCount = 0;
-    db.collectionMocks["bonds"]!.find.mockImplementation(() => {
-      bondFindCount++;
-      if (bondFindCount === 1) return makeCursor([bond]);
-      // After maturity, no active bonds remain
-      const cursor = makeCursor([]);
-      cursor.project = vi.fn().mockReturnValue(cursor);
-      return cursor;
-    });
+    mockBondFinds([bond], []);
     db.collectionMocks["corporations"]!.find.mockReturnValue(
       makeCursor([
         {
@@ -1494,10 +1322,8 @@ describe("processBondTurn", () => {
       toArray: vi.fn().mockResolvedValue([]),
     });
 
-    const { processBondTurn } = await import("./bondTurn");
     await processBondTurn(10);
 
-    const { emitTxBulk } = await import("@/lib/financialTxLog/emit");
     const allEntries = vi.mocked(emitTxBulk).mock.calls.flatMap((c) => c[1] as unknown[]);
     const maturityEntry = allEntries.find(
       (e: unknown) =>
@@ -1541,17 +1367,9 @@ describe("processBondTurn", () => {
       currencyCode: "GBP" as const,
     };
 
-    const { isCorporateBond } = await import("@/lib/bonds/sovereign");
     vi.mocked(isCorporateBond).mockReturnValue(true);
 
-    let bondFindCount = 0;
-    db.collectionMocks["bonds"]!.find.mockImplementation(() => {
-      bondFindCount++;
-      if (bondFindCount === 1) return makeCursor([bond]);
-      const cursor = makeCursor([{ _id: bondId, marketPrice: 1.02 }]);
-      cursor.project = vi.fn().mockReturnValue(cursor);
-      return cursor;
-    });
+    mockBondFinds([bond], [{ _id: bondId, marketPrice: 1.02 }]);
     db.collection("exchangeRates");
     db.collectionMocks["exchangeRates"]!.find.mockReturnValue({
       toArray: vi.fn().mockResolvedValue([
@@ -1584,10 +1402,8 @@ describe("processBondTurn", () => {
       toArray: vi.fn().mockResolvedValue([]),
     });
 
-    const { processBondTurn } = await import("./bondTurn");
     await processBondTurn(10);
 
-    const { emitTxBulk } = await import("@/lib/financialTxLog/emit");
     const allEntries = vi.mocked(emitTxBulk).mock.calls.flatMap((c) => c[1] as unknown[]);
     const couponEntry = allEntries.find(
       (e: unknown) =>
@@ -1637,17 +1453,9 @@ describe("processBondTurn", () => {
       currencyCode: "GBP" as const,
     };
 
-    const { isCorporateBond } = await import("@/lib/bonds/sovereign");
     vi.mocked(isCorporateBond).mockReturnValue(true);
 
-    let bondFindCount = 0;
-    db.collectionMocks["bonds"]!.find.mockImplementation(() => {
-      bondFindCount++;
-      if (bondFindCount === 1) return makeCursor([bond]);
-      const cursor = makeCursor([]);
-      cursor.project = vi.fn().mockReturnValue(cursor);
-      return cursor;
-    });
+    mockBondFinds([bond], []);
     db.collection("exchangeRates");
     db.collectionMocks["exchangeRates"]!.find.mockReturnValue({
       toArray: vi.fn().mockResolvedValue([
@@ -1679,10 +1487,8 @@ describe("processBondTurn", () => {
       toArray: vi.fn().mockResolvedValue([]),
     });
 
-    const { processBondTurn } = await import("./bondTurn");
     await processBondTurn(10);
 
-    const { emitTxBulk } = await import("@/lib/financialTxLog/emit");
     const allEntries = vi.mocked(emitTxBulk).mock.calls.flatMap((c) => c[1] as unknown[]);
     const maturityEntry = allEntries.find(
       (e: unknown) =>
@@ -1719,17 +1525,9 @@ describe("processBondTurn", () => {
       corporationId: issuerCorpId,
     };
 
-    const { isCorporateBond } = await import("@/lib/bonds/sovereign");
     vi.mocked(isCorporateBond).mockReturnValue(true);
 
-    let bondFindCount = 0;
-    db.collectionMocks["bonds"]!.find.mockImplementation(() => {
-      bondFindCount++;
-      if (bondFindCount === 1) return makeCursor([bond]);
-      const cursor = makeCursor([{ _id: bondId, marketPrice: 1.02 }]);
-      cursor.project = vi.fn().mockReturnValue(cursor);
-      return cursor;
-    });
+    mockBondFinds([bond], [{ _id: bondId, marketPrice: 1.02 }]);
     db.collectionMocks["corporations"]!.find.mockReturnValue(
       makeCursor([
         {
@@ -1749,10 +1547,8 @@ describe("processBondTurn", () => {
       toArray: vi.fn().mockResolvedValue([]),
     });
 
-    const { createNotifications } = await import("@/lib/notifications");
     vi.mocked(createNotifications).mockClear();
 
-    const { processBondTurn } = await import("./bondTurn");
     await processBondTurn(100);
 
     expect(createNotifications).toHaveBeenCalledWith(
@@ -1785,15 +1581,7 @@ describe("processBondTurn", () => {
       corporationId: new ObjectId(),
     };
 
-    let bondFindCount = 0;
-    db.collectionMocks["bonds"]!.find.mockImplementation(() => {
-      bondFindCount++;
-      if (bondFindCount === 1) return makeCursor([bond]);
-      // Second call returns the updated bond with new market price
-      const cursor = makeCursor([{ _id: bondId, marketPrice: 1.02 }]);
-      cursor.project = vi.fn().mockReturnValue(cursor);
-      return cursor;
-    });
+    mockBondFinds([bond], [{ _id: bondId, marketPrice: 1.02 }]);
     db.collectionMocks["centralBanks"]!.find.mockReturnValue(
       makeCursor([{ countryId: "US", primeRate: 3.0 }])
     );
@@ -1801,7 +1589,6 @@ describe("processBondTurn", () => {
       toArray: vi.fn().mockResolvedValue([]),
     });
 
-    const { processBondTurn } = await import("./bondTurn");
     const result = await processBondTurn(10);
 
     expect(result.bondHistorySnapshots).toBe(1);
@@ -1832,21 +1619,13 @@ describe("processBondTurn", () => {
       corporationId: new ObjectId(),
     };
 
-    let bondFindCount = 0;
-    db.collectionMocks["bonds"]!.find.mockImplementation(() => {
-      bondFindCount++;
-      if (bondFindCount === 1) return makeCursor([bond]);
-      const cursor = makeCursor([{ _id: bondId, marketPrice: 0.99 }]);
-      cursor.project = vi.fn().mockReturnValue(cursor);
-      return cursor;
-    });
+    mockBondFinds([bond], [{ _id: bondId, marketPrice: 0.99 }]);
     db.collectionMocks["centralBanks"]!.find.mockReturnValue(makeCursor([]));
     // Simulate prior history — bond has already paid $50 interest
     db.collectionMocks["bondHistory"]!.aggregate.mockReturnValue({
       toArray: vi.fn().mockResolvedValue([{ _id: bondId, maxInterest: 50 }]),
     });
 
-    const { processBondTurn } = await import("./bondTurn");
     await processBondTurn(10);
 
     const insertCalls = db.collectionMocks["bondHistory"]!.insertMany.mock.calls;
@@ -1870,21 +1649,12 @@ describe("processBondTurn", () => {
       corporationId: new ObjectId(),
     };
 
-    let bondFindCount = 0;
-    db.collectionMocks["bonds"]!.find.mockImplementation(() => {
-      bondFindCount++;
-      if (bondFindCount === 1) return makeCursor([bond]);
-      // After maturity, no active bonds remain
-      const cursor = makeCursor([]);
-      cursor.project = vi.fn().mockReturnValue(cursor);
-      return cursor;
-    });
+    mockBondFinds([bond], []);
     db.collectionMocks["centralBanks"]!.find.mockReturnValue(makeCursor([]));
     db.collectionMocks["bondHistory"]!.aggregate.mockReturnValue({
       toArray: vi.fn().mockResolvedValue([]),
     });
 
-    const { processBondTurn } = await import("./bondTurn");
     const result = await processBondTurn(10);
 
     expect(result.bondHistorySnapshots).toBe(0);
@@ -1975,20 +1745,15 @@ describe("processBondTurn", () => {
       corporationId: otherIssuerCorpId,
     };
 
-    const { isCorporateBond } = await import("@/lib/bonds/sovereign");
     vi.mocked(isCorporateBond).mockReturnValue(true);
 
-    let bondFindCount = 0;
-    db.collectionMocks["bonds"]!.find.mockImplementation(() => {
-      bondFindCount++;
-      if (bondFindCount === 1) return makeCursor([issuedBond, heldBond]);
-      const cursor = makeCursor([
+    mockBondFinds(
+      [issuedBond, heldBond],
+      [
         { _id: issuedBond._id, marketPrice: 1.0 },
         { _id: heldBond._id, marketPrice: 1.0 },
-      ]);
-      cursor.project = vi.fn().mockReturnValue(cursor);
-      return cursor;
-    });
+      ]
+    );
     const balances = installCorpBalanceSimulator(
       new Map([
         [targetCorpId.toString(), 2],
@@ -2006,7 +1771,6 @@ describe("processBondTurn", () => {
       toArray: vi.fn().mockResolvedValue([]),
     });
 
-    const { processBondTurn } = await import("./bondTurn");
     const result = await processBondTurn(10);
 
     expect(result.bondsDefaulted).toBe(0);
@@ -2051,17 +1815,9 @@ describe("processBondTurn", () => {
       corporationId: otherIssuerCorpId,
     };
 
-    const { isCorporateBond } = await import("@/lib/bonds/sovereign");
     vi.mocked(isCorporateBond).mockReturnValue(true);
 
-    let bondFindCount = 0;
-    db.collectionMocks["bonds"]!.find.mockImplementation(() => {
-      bondFindCount++;
-      if (bondFindCount === 1) return makeCursor([issuedBond, heldBond]);
-      const cursor = makeCursor([{ _id: issuedBond._id, marketPrice: 1.0 }]);
-      cursor.project = vi.fn().mockReturnValue(cursor);
-      return cursor;
-    });
+    mockBondFinds([issuedBond, heldBond], [{ _id: issuedBond._id, marketPrice: 1.0 }]);
     const balances = installCorpBalanceSimulator(
       new Map([
         [targetCorpId.toString(), 10],
@@ -2083,7 +1839,6 @@ describe("processBondTurn", () => {
       toArray: vi.fn().mockResolvedValue([]),
     });
 
-    const { processBondTurn } = await import("./bondTurn");
     const result = await processBondTurn(10);
 
     expect(result.bondsDefaulted).toBe(0);
@@ -2122,17 +1877,9 @@ describe("processBondTurn", () => {
       corporationId: issuerCorpId,
     };
 
-    const { isCorporateBond } = await import("@/lib/bonds/sovereign");
     vi.mocked(isCorporateBond).mockReturnValue(true);
 
-    let bondFindCount = 0;
-    db.collectionMocks["bonds"]!.find.mockImplementation(() => {
-      bondFindCount++;
-      if (bondFindCount === 1) return makeCursor([couponBond, maturingBond]);
-      const cursor = makeCursor([]);
-      cursor.project = vi.fn().mockReturnValue(cursor);
-      return cursor;
-    });
+    mockBondFinds([couponBond, maturingBond], []);
     installCorpBalanceSimulator(new Map([[issuerCorpId.toString(), 100]]), {
       [issuerCorpId.toString()]: {
         countryId: "US",
@@ -2148,7 +1895,6 @@ describe("processBondTurn", () => {
       toArray: vi.fn().mockResolvedValue([]),
     });
 
-    const { processBondTurn } = await import("./bondTurn");
     const result = await processBondTurn(10);
 
     // Both bonds belong to the defaulted issuer; the maturing bond is marked
@@ -2194,17 +1940,9 @@ describe("processBondTurn", () => {
       corporationId: issuerAId,
     };
 
-    const { isCorporateBond } = await import("@/lib/bonds/sovereign");
     vi.mocked(isCorporateBond).mockReturnValue(true);
 
-    let bondFindCount = 0;
-    db.collectionMocks["bonds"]!.find.mockImplementation(() => {
-      bondFindCount++;
-      if (bondFindCount === 1) return makeCursor([bondY, bondZ]);
-      const cursor = makeCursor([{ _id: bondZ._id, marketPrice: 0.5 }]);
-      cursor.project = vi.fn().mockReturnValue(cursor);
-      return cursor;
-    });
+    mockBondFinds([bondY, bondZ], [{ _id: bondZ._id, marketPrice: 0.5 }]);
     installCorpBalanceSimulator(
       new Map([
         [issuerBId.toString(), 0],
@@ -2222,7 +1960,6 @@ describe("processBondTurn", () => {
       toArray: vi.fn().mockResolvedValue([]),
     });
 
-    const { processBondTurn } = await import("./bondTurn");
     const result = await processBondTurn(10);
 
     // Both bondY (B's, primary default) AND bondZ (A's, cascaded default)
@@ -2287,17 +2024,9 @@ describe("processBondTurn", () => {
       corporationId: idA,
     };
 
-    const { isCorporateBond } = await import("@/lib/bonds/sovereign");
     vi.mocked(isCorporateBond).mockReturnValue(true);
 
-    let bondFindCount = 0;
-    db.collectionMocks["bonds"]!.find.mockImplementation(() => {
-      bondFindCount++;
-      if (bondFindCount === 1) return makeCursor([bondYC, bondYB, bondZA]);
-      const cursor = makeCursor([{ _id: bondZA._id, marketPrice: 0.5 }]);
-      cursor.project = vi.fn().mockReturnValue(cursor);
-      return cursor;
-    });
+    mockBondFinds([bondYC, bondYB, bondZA], [{ _id: bondZA._id, marketPrice: 0.5 }]);
     installCorpBalanceSimulator(
       new Map([
         [idC.toString(), 0],
@@ -2317,7 +2046,6 @@ describe("processBondTurn", () => {
       toArray: vi.fn().mockResolvedValue([]),
     });
 
-    const { processBondTurn } = await import("./bondTurn");
     const result = await processBondTurn(10);
 
     // All three bonds should be marked defaulted (C's matured-into-defaulted,
@@ -2369,17 +2097,9 @@ describe("processBondTurn", () => {
       corporationId: issuerCorpId,
     };
 
-    const { isCorporateBond } = await import("@/lib/bonds/sovereign");
     vi.mocked(isCorporateBond).mockImplementation((b: any) => !!b.isCorporate);
 
-    let bondFindCount = 0;
-    db.collectionMocks["bonds"]!.find.mockImplementation(() => {
-      bondFindCount++;
-      if (bondFindCount === 1) return makeCursor([sovereignBond, issuedBond]);
-      const cursor = makeCursor([{ _id: issuedBond._id, marketPrice: 1.0 }]);
-      cursor.project = vi.fn().mockReturnValue(cursor);
-      return cursor;
-    });
+    mockBondFinds([sovereignBond, issuedBond], [{ _id: issuedBond._id, marketPrice: 1.0 }]);
     const balances = installCorpBalanceSimulator(new Map([[issuerCorpId.toString(), 10]]), {
       [issuerCorpId.toString()]: { countryId: "US" },
     });
@@ -2390,7 +2110,6 @@ describe("processBondTurn", () => {
       toArray: vi.fn().mockResolvedValue([]),
     });
 
-    const { processBondTurn } = await import("./bondTurn");
     const result = await processBondTurn(10);
 
     expect(result.bondsDefaulted).toBe(0);
@@ -2415,17 +2134,9 @@ describe("processBondTurn", () => {
       corporationId: issuerCorpId,
     };
 
-    const { isCorporateBond } = await import("@/lib/bonds/sovereign");
     vi.mocked(isCorporateBond).mockReturnValue(true);
 
-    let bondFindCount = 0;
-    db.collectionMocks["bonds"]!.find.mockImplementation(() => {
-      bondFindCount++;
-      if (bondFindCount === 1) return makeCursor([bond]);
-      const cursor = makeCursor([{ _id: bond._id, marketPrice: 0.5 }]);
-      cursor.project = vi.fn().mockReturnValue(cursor);
-      return cursor;
-    });
+    mockBondFinds([bond], [{ _id: bond._id, marketPrice: 0.5 }]);
     installCorpBalanceSimulator(new Map([[issuerCorpId.toString(), 5]]), {
       [issuerCorpId.toString()]: { countryId: "US" },
     });
@@ -2436,7 +2147,6 @@ describe("processBondTurn", () => {
       toArray: vi.fn().mockResolvedValue([]),
     });
 
-    const { processBondTurn } = await import("./bondTurn");
     const result = await processBondTurn(10);
 
     expect(result.bondsDefaulted).toBe(1);
@@ -2454,14 +2164,7 @@ describe("processBondTurn", () => {
         publicFloat: 0,
         corporationId: new ObjectId(),
       };
-      let bondFindCount = 0;
-      db.collectionMocks["bonds"]!.find.mockImplementation(() => {
-        bondFindCount++;
-        if (bondFindCount === 1) return makeCursor([activeBond]);
-        const cursor = makeCursor([]);
-        cursor.project = vi.fn().mockReturnValue(cursor);
-        return cursor;
-      });
+      mockBondFinds([activeBond], []);
       db.collectionMocks["centralBanks"]!.find.mockReturnValue(
         makeCursor([{ countryId: "US", primeRate: 2.75 }])
       );
@@ -2475,12 +2178,9 @@ describe("processBondTurn", () => {
 
     it("prefers refinance (no sector sale) when the corp can refinance", async () => {
       const corp = { _id: new ObjectId(), name: "AutoRefi Co", userId: new ObjectId() };
-      const { isCorporateBond } = await import("@/lib/bonds/sovereign");
       vi.mocked(isCorporateBond).mockReturnValue(false);
       installLingeringDefault(corp);
 
-      const { executeCorporationBondRefinance } =
-        await import("@/lib/bonds/executeCorporationBondRefinance");
       vi.mocked(executeCorporationBondRefinance).mockResolvedValue({
         ok: true,
         bondId: "newbond",
@@ -2490,11 +2190,7 @@ describe("processBondTurn", () => {
         retiredBondIds: ["old1", "old2"],
         bondsMatured: 2,
       });
-      const { executeCorporationBondRestructure } =
-        await import("@/lib/bonds/executeCorporationBondRestructure");
-      const { createNotifications } = await import("@/lib/notifications");
 
-      const { processBondTurn } = await import("./bondTurn");
       const result = await processBondTurn(10);
 
       expect(result.bondsAutoRefinanced).toBe(2);
@@ -2515,18 +2211,13 @@ describe("processBondTurn", () => {
 
     it("falls back to restructure (sector sale) when refinance is infeasible", async () => {
       const corp = { _id: new ObjectId(), name: "SellSectors Co", userId: new ObjectId() };
-      const { isCorporateBond } = await import("@/lib/bonds/sovereign");
       vi.mocked(isCorporateBond).mockReturnValue(false);
       installLingeringDefault(corp);
 
-      const { executeCorporationBondRefinance } =
-        await import("@/lib/bonds/executeCorporationBondRefinance");
       vi.mocked(executeCorporationBondRefinance).mockResolvedValue({
         ok: false,
         reason: "Cannot refinance within debt limits",
       });
-      const { executeCorporationBondRestructure } =
-        await import("@/lib/bonds/executeCorporationBondRestructure");
       vi.mocked(executeCorporationBondRestructure).mockResolvedValue({
         paid: 1_000,
         bondsMatured: 1,
@@ -2534,9 +2225,7 @@ describe("processBondTurn", () => {
         proceeds: 1_500,
         residualLiquidCapital: 500,
       });
-      const { createNotifications } = await import("@/lib/notifications");
 
-      const { processBondTurn } = await import("./bondTurn");
       const result = await processBondTurn(10);
 
       expect(vi.mocked(executeCorporationBondRestructure)).toHaveBeenCalledTimes(1);

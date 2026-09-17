@@ -1,3 +1,4 @@
+import { escapeRegex } from "@/lib/utils/escapeRegex";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
@@ -10,8 +11,8 @@ import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { normalizeDiscordInviteUrl } from "@/lib/discord/invite";
 
 const settingsSchema = z.object({
-  name: z.string().min(3).max(60).trim().optional(),
-  abbreviation: z.string().min(2).max(10).trim().optional(),
+  name: z.string().trim().min(3).max(60).optional(),
+  abbreviation: z.string().trim().min(2).max(10).optional(),
   color: z
     .string()
     .regex(/^#[0-9A-Fa-f]{6}$/, "Must be a valid hex color")
@@ -68,6 +69,15 @@ export async function PATCH(
       throw forbidden("Only the coalition chair can update settings.");
     }
 
+    if (name !== undefined) {
+      const duplicate = await db.collection<Coalition>("coalitions").findOne({
+        _id: { $ne: coalition._id },
+        countryId,
+        name: { $regex: new RegExp(`^${escapeRegex(name)}$`, "i") },
+      });
+      if (duplicate) throw badRequest("A coalition with this name already exists in your country.");
+    }
+
     const now = new Date();
     const updates: Record<string, unknown> = { updatedAt: now };
     if (name !== undefined) updates.name = name;
@@ -82,9 +92,14 @@ export async function PATCH(
       updates.discordInviteUrl = normalizedDiscordInviteUrl;
     }
 
-    await db
+    const result = await db
       .collection<Coalition>("coalitions")
-      .updateOne({ _id: coalition._id }, { $set: updates });
+      .updateOne(
+        { _id: coalition._id, countryId, chairCharacterId: character._id },
+        { $set: updates }
+      );
+    if (result.matchedCount === 0)
+      throw forbidden("Coalition chair changed. Refresh and try again.");
 
     return NextResponse.json({ success: true });
   } catch (error) {
