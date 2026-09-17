@@ -261,7 +261,8 @@ describe("NPP capacity telemetry — emitted observations persist versioned", ()
 
     const bulkWrite = vi.fn().mockResolvedValue(undefined);
     const deleteMany = vi.fn().mockResolvedValue(undefined);
-    const db = { collection: vi.fn().mockReturnValue({ bulkWrite, deleteMany }) } as never;
+    const collection = vi.fn().mockReturnValue({ bulkWrite, deleteMany });
+    const db = { collection } as never;
     await recordCapacityDecisionBulkBestEffort(db, TURN, observations);
 
     // One flush for the whole boundary: no per-row writes, no new reads.
@@ -284,8 +285,8 @@ describe("NPP capacity telemetry — emitted observations persist versioned", ()
     const increments = Object.keys(Object.assign({}, ...ops.map((op) => op.updateOne.update.$inc)));
     expect(increments).toContain("buckets.npp:npp-managed:order:strategy_disallowed.observations");
     expect(increments).toContain("buckets.npp:npp-managed:order:mothballed.observations");
-    expect(db.collection).toHaveBeenCalledTimes(1);
-    expect(db.collection).toHaveBeenCalledWith(CAPACITY_DECISION_COLLECTION);
+    expect(collection).toHaveBeenCalledTimes(1);
+    expect(collection).toHaveBeenCalledWith(CAPACITY_DECISION_COLLECTION);
     expect(deleteMany).toHaveBeenCalledTimes(1);
     expect(deleteMany).toHaveBeenCalledWith({
       turn: { $lt: TURN - CAPACITY_DECISION_RETENTION_TURNS + 1 },

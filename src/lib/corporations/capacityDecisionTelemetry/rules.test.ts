@@ -9,7 +9,9 @@ import {
   type CapacityDecisionObservation,
 } from "./rules";
 
-function observation(overrides: Partial<CapacityDecisionObservation> = {}): CapacityDecisionObservation {
+function observation(
+  overrides: Partial<CapacityDecisionObservation> = {}
+): CapacityDecisionObservation {
   return {
     actor: "player",
     cohort: "player-managed",
@@ -96,9 +98,10 @@ describe("capacity decision telemetry rules", () => {
     ]);
     const summary = summarizeCapacityDecisionBuckets(buckets);
     expect(summary.denominators).toEqual({ observations: 3, requestedUnits: 25 });
-    expect(
-      summary.buckets["player:player-managed:order:placed"]?.observationShare
-    ).toBeCloseTo(2 / 3, 10);
+    expect(summary.buckets["player:player-managed:order:placed"]?.observationShare).toBeCloseTo(
+      2 / 3,
+      10
+    );
     expect(
       summary.buckets["player:player-managed:order:insufficient_cash"]?.observationShare
     ).toBeCloseTo(1 / 3, 10);

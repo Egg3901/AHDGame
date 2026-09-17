@@ -16,10 +16,7 @@ interface CapacityDecisionFunnelDocument {
   buckets: Record<string, unknown>;
 }
 
-function incrementsFor(
-  key: string,
-  values: Record<string, number>
-): Record<string, number> {
+function incrementsFor(key: string, values: Record<string, number>): Record<string, number> {
   return Object.fromEntries(
     Object.entries(values).map(([field, value]) => [`buckets.${key}.${field}`, value])
   );

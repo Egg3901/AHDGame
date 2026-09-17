@@ -6,7 +6,9 @@ import {
 } from "./persistence";
 import type { CapacityDecisionObservation } from "./rules";
 
-function observation(overrides: Partial<CapacityDecisionObservation> = {}): CapacityDecisionObservation {
+function observation(
+  overrides: Partial<CapacityDecisionObservation> = {}
+): CapacityDecisionObservation {
   return {
     actor: "npp",
     cohort: "npp-managed",
@@ -27,15 +29,16 @@ function observation(overrides: Partial<CapacityDecisionObservation> = {}): Capa
 function mockDb() {
   const bulkWrite = vi.fn().mockResolvedValue(undefined);
   const deleteMany = vi.fn().mockResolvedValue(undefined);
+  const collection = vi.fn().mockReturnValue({ bulkWrite, deleteMany });
   const db = {
-    collection: vi.fn().mockReturnValue({ bulkWrite, deleteMany }),
+    collection,
   };
-  return { db: db as never, bulkWrite, deleteMany };
+  return { db: db as never, collection, bulkWrite, deleteMany };
 }
 
 describe("recordCapacityDecisionBulkBestEffort", () => {
   it("flushes a whole cohort in one bulk write with schema version 2", async () => {
-    const { db, bulkWrite, deleteMany } = mockDb();
+    const { db, collection, bulkWrite, deleteMany } = mockDb();
     await recordCapacityDecisionBulkBestEffort(db, 100, [
       observation(),
       observation({ outcome: "mothballed", requestedUnits: 0 }),
@@ -63,8 +66,8 @@ describe("recordCapacityDecisionBulkBestEffort", () => {
       "buckets.npp:npp-managed:order:placed.requestedUnitsSum": 7,
     });
     // One collection, bounded retention, no per-row writes.
-    expect(db.collection).toHaveBeenCalledTimes(1);
-    expect(db.collection).toHaveBeenCalledWith(CAPACITY_DECISION_COLLECTION);
+    expect(collection).toHaveBeenCalledTimes(1);
+    expect(collection).toHaveBeenCalledWith(CAPACITY_DECISION_COLLECTION);
     expect(deleteMany).toHaveBeenCalledTimes(1);
     expect(deleteMany).toHaveBeenCalledWith({
       turn: { $lt: 100 - CAPACITY_DECISION_RETENTION_TURNS + 1 },
@@ -81,8 +84,8 @@ describe("recordCapacityDecisionBulkBestEffort", () => {
   it("never throws: telemetry must not fail the turn", async () => {
     const { bulkWrite } = mockDb();
     bulkWrite.mockRejectedValueOnce(new Error("mongo down"));
-    const { db } = mockDb();
-    (db.collection as ReturnType<typeof vi.fn>).mockReturnValue({
+    const { db, collection } = mockDb();
+    collection.mockReturnValue({
       bulkWrite,
       deleteMany: vi.fn().mockRejectedValue(new Error("mongo down")),
     });
