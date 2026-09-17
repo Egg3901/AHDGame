@@ -6,7 +6,7 @@ import type { StatKey } from "@/lib/stats/statsConstants";
 import {
   FUNDRAISE_ACTION_COST,
   fundraiseYieldAnchor,
-  isFundraiseEligible,
+  quoteFundraiseAction,
   getCampaignActionCost,
   quoteCampaignAction,
   getAdvertiseActionCost,
@@ -28,10 +28,14 @@ import {
 
 export {
   FUNDRAISE_ACTION_COST,
+  FUNDRAISE_NO_DONOR_ERROR,
   calculateFundraisingAmount,
   fundraiseYieldAnchor,
   isFundraiseEligible,
+  quoteFundraiseAction,
   type FundraiseActor,
+  type FundraiseQuoteActor,
+  type FundraiseQuote,
   CAMPAIGN_BASE_FUND_COST,
   CAMPAIGN_MAX_INFLUENCE,
   getFundMultiplier,
@@ -266,10 +270,18 @@ export const ACTIONS: Record<ActionType, ActionDefinition> = {
     baseCost: FUNDRAISE_ACTION_COST,
     requiresState: false,
     effect: (character: Character, _state?: State, ctx?: ActionEffectContext) => {
-      // Fundraising stat scales the yield (gentle ±20%). Shared with every UI
-      // quote via fundraiseYieldAnchor so the card can never advertise a
-      // different number than the one credited.
-      const amount = fundraiseYieldAnchor(character);
+      // Single source of truth: the UI card, the advisor and the projection
+      // quote this same quote, so the advertised yield can never drift from
+      // the credited result. canPerformAction runs the quote first; the throw
+      // below is a defensive invariant for direct effect callers that skip
+      // validation.
+      const quote = quoteFundraiseAction({
+        donorBaseLevel: character.donorBaseLevel,
+        politicalInfluence: character.politicalInfluence,
+        fundraising: character.stats?.fundraising,
+      });
+      if (!quote.ok) throw new Error(quote.error);
+      const amount = quote.yieldAnchor;
       const fmt = ctx?.formatFunds ?? plainFunds;
       return {
         fundsChange: amount,
@@ -602,13 +614,19 @@ export function canPerformAction(
     };
   }
 
-  // Fundraising requires an established donor base
-  if (actionType === "fundraise" && !isFundraiseEligible(character.donorBaseLevel)) {
-    return {
-      canPerform: false,
-      reason:
-        "You have no donor base. Use 'Build Donor Network' first to establish one before fundraising.",
-    };
+  // Fundraise validates through the same rules quote the UI and the effect
+  // use: flat AP cost and the stat-scaled yield. A zero donor base rejects
+  // here with the quote reason instead of pricing a yield that cannot be
+  // earned.
+  if (actionType === "fundraise") {
+    const quote = quoteFundraiseAction({
+      donorBaseLevel: character.donorBaseLevel,
+      politicalInfluence: character.politicalInfluence,
+      fundraising: character.stats?.fundraising,
+    });
+    if (!quote.ok) {
+      return { canPerform: false, reason: quote.error };
+    }
   }
 
   // Polls validate through the same rules quote the poll page and the effect
