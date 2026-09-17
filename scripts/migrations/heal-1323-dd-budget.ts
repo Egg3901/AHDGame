@@ -174,6 +174,13 @@ async function main() {
       lastUpdated: new Date(),
     };
     const keys = Object.keys(shareBaseline) as (keyof FederalTaxBases)[];
+    // No baseline, no target: the fixed point is computed FROM these shares, so
+    // with none recorded there is nothing to re-anchor to. This happens when the
+    // heal runs before `fiscalBaseGrowth` has ever self-healed the field (it
+    // snapshots the current shares on the first turn it finds it absent). Heal
+    // the other three items now, run one turn, then re-run this heal — do not
+    // report the book healed while the drift is still in it.
+    const basesBlocked = keys.length === 0;
     let probe: FederalTaxBases = { ...(budget.taxBases as FederalTaxBases) };
     for (const key of keys) {
       const share = shareBaseline[key];
@@ -193,6 +200,9 @@ async function main() {
         `${factors.wageGrowth.toFixed(1)}/${factors.tradeGrowth.toFixed(1)}/${factors.gdpGrowth.toFixed(1)})`
     );
     let basesStale = false;
+    if (basesBlocked) {
+      console.log("    no taxBaseGdpShareBaseline on this book — skipping; re-run after one turn");
+    }
     for (const key of keys) {
       const share = shareBaseline[key];
       if (share == null || !(share > 0)) continue;
@@ -357,12 +367,18 @@ async function main() {
 
     if (!APPLY) {
       console.log(
-        `\nNothing written. ${writesPending} document(s) would change. Re-run with --apply.`
+        `\nNothing written. ${writesPending} document(s) would change. Re-run with --apply.` +
+          (basesBlocked ? " (plus the blocked base re-anchor once a baseline exists)" : "")
       );
       return;
     }
-    if (writesPending === 0) {
+    if (writesPending === 0 && !basesBlocked) {
       console.log("\nAlready healed: every figure matches. Wrote nothing.");
+      return;
+    }
+    if (writesPending === 0) {
+      console.log("\nNot healed: tax bases still drifted with no baseline to re-anchor to.");
+      console.log("Run one turn, then re-run this heal.");
       return;
     }
 
