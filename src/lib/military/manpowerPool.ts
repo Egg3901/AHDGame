@@ -75,6 +75,15 @@ export async function ensureManpowerPool(
   return { pool, ceiling };
 }
 
+/**
+ * Live manpower ceiling for compensation paths that must refund without
+ * breaching it (issue #1672: the crash-safe military-recruit revert refunds
+ * under the same clamp as `returnManpower`).
+ */
+export async function manpowerCeilingFor(db: Db, countryId: string): Promise<number> {
+  return ceilingFor(db, countryId);
+}
+
 /** Guarded draw. False when the pool was short — caller must not proceed. */
 export async function drawManpower(db: Db, countryId: string, men: number): Promise<boolean> {
   const res = await getNationalManpowerCollection(db).updateOne(
