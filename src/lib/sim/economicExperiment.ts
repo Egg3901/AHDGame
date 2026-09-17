@@ -5,6 +5,7 @@ export interface EconomicExperimentConfig {
   canonicalFreightBillingEnabled?: boolean;
   shortageResponsiveSourcingEnabled?: boolean;
   indexFundBondLiquidityEnabled?: boolean;
+  sovereignIssuanceConsolidationEnabled?: boolean;
   equityLiquidityFacilityEnabled?: boolean;
   nppMarketCoverageEnabled?: boolean;
   nppFragileMarketSupplyEnabled?: boolean;
@@ -38,9 +39,10 @@ export function parseEquityLiquidityFacilityEnabled(
 
 /** True when one argv entry is a gameplay override, which
  * --preserve-live-config refuses to run alongside. Covers both the canonical
- * equity liquidity facility flag and its deprecated alias. */
+ * equity liquidity facility flag and its deprecated alias, plus the #1001
+ * sovereign issuance consolidation flag. */
 export function isGameplayOverrideArg(value: string): boolean {
-  return /^(--(?:market-mode|labour-mode|autonomy|difficulty|foreign-policy|foreign-policy-stage|freight-settlement|npp-market-coverage|npp-fragile-market-supply|canonical-freight-billing|shortage-responsive-sourcing|index-fund-bond-liquidity|equity-liquidity-facility|equity-liquidity)=|--(?:scarcity-drift|brand-loyalty|brand-loyalty-slice|quality|demographics|command-economy|macro-growth|pre-iteration|no-pre-iteration)$)/.test(
+  return /^(--(?:market-mode|labour-mode|autonomy|difficulty|foreign-policy|foreign-policy-stage|freight-settlement|npp-market-coverage|npp-fragile-market-supply|canonical-freight-billing|shortage-responsive-sourcing|index-fund-bond-liquidity|sovereign-issuance-consolidation|equity-liquidity-facility|equity-liquidity)=|--(?:scarcity-drift|brand-loyalty|brand-loyalty-slice|quality|demographics|command-economy|macro-growth|pre-iteration|no-pre-iteration)$)/.test(
     value
   );
 }
@@ -60,6 +62,9 @@ export function economicExperimentConfigSet(
       : {}),
     ...(config.indexFundBondLiquidityEnabled !== undefined
       ? { indexFundBondLiquidityEnabled: config.indexFundBondLiquidityEnabled }
+      : {}),
+    ...(config.sovereignIssuanceConsolidationEnabled !== undefined
+      ? { sovereignIssuanceConsolidationEnabled: config.sovereignIssuanceConsolidationEnabled }
       : {}),
     ...(config.equityLiquidityFacilityEnabled !== undefined
       ? { equityLiquidityFacilityEnabled: config.equityLiquidityFacilityEnabled }
@@ -85,6 +90,9 @@ export function economicExperimentCliArgs(config: EconomicExperimentConfig): str
       : []),
     ...(set.indexFundBondLiquidityEnabled !== undefined
       ? [`--index-fund-bond-liquidity=${String(set.indexFundBondLiquidityEnabled)}`]
+      : []),
+    ...(set.sovereignIssuanceConsolidationEnabled !== undefined
+      ? [`--sovereign-issuance-consolidation=${String(set.sovereignIssuanceConsolidationEnabled)}`]
       : []),
     ...(set.equityLiquidityFacilityEnabled !== undefined
       ? [`--${EQUITY_LIQUIDITY_FACILITY_CLI_FLAG}=${String(set.equityLiquidityFacilityEnabled)}`]
