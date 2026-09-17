@@ -52,8 +52,7 @@
       "enterRace": "Enter Race",
       "liveResults": "Live Results →",
       "unknownCandidate": "Unknown",
-      "partyPrimary": "{party} Primary",
-      "moreCandidates": "+{count, plural, one {# more candidate} other {# more candidates}}"
+      "partyPrimary": "{party} Primary"
     },
     "presidentialCard": {
       "awaitingResults": "Awaiting results, candidates entered",
