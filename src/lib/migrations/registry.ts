@@ -12,6 +12,7 @@
 // Incident response scripts (heal-*, inspect-*, audit-*, fix-*) live in
 // scripts/migrations/incidents/ and DO NOT belong in this registry.
 
+import { migration as supplyListingIndexes } from "./entries/2026-09-17-supply-listing-indexes";
 import type { Migration } from "./types";
 
 import { migration as bondCurrencyStamp } from "./entries/2026-04-15-bond-currency-stamp";
@@ -79,6 +80,7 @@ import { migration as centralBankPricingPhaseIn } from "./entries/2026-09-11-cen
 import { migration as providerIdentityIndexes } from "./entries/2026-09-10-provider-identity-indexes";
 import { migration as sourceFenceIndexes } from "./entries/2026-09-11-source-fence-indexes";
 import { migration as repriceCurrentSovereignRisk } from "./entries/2026-09-12-reprice-current-sovereign-risk";
+import { migration as repairDuplicateCorporationSequentialIds } from "./entries/2026-09-17-repair-duplicate-corporation-sequential-ids";
 
 export const MIGRATIONS: Migration[] = [
   // v0.2.6 currency cutover (declarative — shipped via standalone scripts)
@@ -247,6 +249,12 @@ export const MIGRATIONS: Migration[] = [
   // Ticket #1269: persisted sovereign fields must follow the current debt/GDP
   // ladder after historical seed anchors stop rescaling live risk.
   repriceCurrentSovereignRisk,
+  supplyListingIndexes,
+  // Issue #2028: worlds seeded while the FR/IT/ES/SE/TR/GR/AT/FI sovereign
+  // issuers reused 900_009-900_016 keep ambiguous corporation URLs and an
+  // unprotected collection until something renumbers them in place. Seed +
+  // bootstrap cover fresh/reset worlds; this reaches ones already running.
+  repairDuplicateCorporationSequentialIds,
 ];
 
 // D13 rollback drill — registered but deliberately OUTSIDE the normal chain.

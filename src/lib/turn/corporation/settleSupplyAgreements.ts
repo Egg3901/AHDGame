@@ -198,6 +198,8 @@ export interface SupplyAgreementDelivery {
   penaltyAnchor?: number;
   supplierCashDeltaLocal?: number;
   supplierCurrencyCode?: CurrencyCode;
+  buyerCashDeltaLocal?: number;
+  buyerCurrencyCode?: CurrencyCode;
   unpaidSettlementAnchor?: number;
 }
 
@@ -1019,6 +1021,8 @@ export function computeSupplyAgreementSettlements(args: {
     if (deliveryRecord) {
       deliveryRecord.supplierCashDeltaLocal = supplierLocal;
       deliveryRecord.supplierCurrencyCode = supplier.ccy;
+      deliveryRecord.buyerCashDeltaLocal = -buyerLocal;
+      deliveryRecord.buyerCurrencyCode = buyer.ccy;
     }
 
     // Supplier is credited its net position; buyer is debited it (each in its
@@ -1227,6 +1231,7 @@ export async function settleSupplyAgreements(args: {
         lastShortfallUnits: Math.round(delivery.shortfallUnits ?? 0),
         lastShortfallPenaltyAnchor: Math.round(delivery.penaltyAnchor ?? 0),
         lastSupplierCashDelta: delivery.supplierCashDeltaLocal ?? 0,
+        lastBuyerCashDelta: delivery.buyerCashDeltaLocal ?? 0,
         lastUnpaidSettlementAnchor: Math.round(delivery.unpaidSettlementAnchor ?? 0),
         ...(delivery.achievableUnits !== undefined
           ? { lastAchievableUnits: Math.round(delivery.achievableUnits) }
@@ -1237,11 +1242,17 @@ export async function settleSupplyAgreements(args: {
         ...(delivery.supplierCurrencyCode
           ? { lastSupplierCashCurrency: delivery.supplierCurrencyCode }
           : {}),
+        ...(delivery.buyerCurrencyCode
+          ? { lastBuyerCashCurrency: delivery.buyerCurrencyCode }
+          : {}),
         updatedAt: now,
       };
       const unsetFields: Partial<
         Record<
-          "lastAchievableUnits" | "lastCreditedProductionUnits" | "lastSupplierCashCurrency",
+          | "lastAchievableUnits"
+          | "lastCreditedProductionUnits"
+          | "lastSupplierCashCurrency"
+          | "lastBuyerCashCurrency",
           ""
         >
       > = {
@@ -1250,6 +1261,7 @@ export async function settleSupplyAgreements(args: {
           ? { lastCreditedProductionUnits: "" }
           : {}),
         ...(!delivery.supplierCurrencyCode ? { lastSupplierCashCurrency: "" } : {}),
+        ...(!delivery.buyerCurrencyCode ? { lastBuyerCashCurrency: "" } : {}),
       };
       deliveryOps.push({
         updateOne: {

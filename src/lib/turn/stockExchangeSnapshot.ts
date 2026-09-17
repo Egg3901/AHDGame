@@ -53,6 +53,7 @@ import { buildPoliticalBaseModifiers } from "@/lib/politicalLegislation/marginAd
 import type { PoliticalMetricsDoc } from "@/lib/db/types/politicalMetrics";
 import { resolveGameYear } from "@/lib/era/era";
 import { getPublicShareQuote, getRoundedPublicMarketCap } from "@/lib/corporations/marketQuote";
+import { isTradableListing } from "@/lib/stockExchange/listingEligibility";
 import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
 import type { CountryId } from "@/lib/constants/countries";
 import {
@@ -837,21 +838,32 @@ export async function generateStockExchangeSnapshots(currentTurn: number, db?: D
           ? corporations.find((c) => c._id.equals(controlling.corporationId))?.name
           : undefined;
 
+        // Every early return is 0: with no comparable history (zero current
+        // or historical shares, missing or non-finite prices) there is no
+        // measured return, and only finite values are ever persisted (#2033).
         const calcSplitAdjustedPriceChange = (
           historyPoint: PriceHistoryPoint | null | undefined
         ): number => {
-          if (!historyPoint || historyPoint.price <= 0) return 0;
-          // Fall back to current totalShares when historical record predates the totalShares field,
-          // which means no split adjustment (ratio = 1) and gives a clean price-to-price comparison.
+          if (!Number.isFinite(sharePrice) || sharePrice <= 0) return 0;
+          if (!Number.isFinite(totalShares) || totalShares <= 0) return 0;
+          if (!historyPoint || !Number.isFinite(historyPoint.price) || historyPoint.price <= 0) {
+            return 0;
+          }
+          // A historical record without share counts predates the field, so
+          // there is no split to adjust for (ratio = 1): a clean
+          // price-to-price comparison. An explicit zero carries no basis.
           const historicalShares = historyPoint.totalShares ?? totalShares;
+          if (!Number.isFinite(historicalShares) || historicalShares <= 0) return 0;
           const splitAdjustedHistoricalPrice =
             historyPoint.price * (historicalShares / totalShares);
-          if (splitAdjustedHistoricalPrice <= 0) return 0;
-          return (
+          if (!Number.isFinite(splitAdjustedHistoricalPrice) || splitAdjustedHistoricalPrice <= 0) {
+            return 0;
+          }
+          const change =
             Math.round(
               ((sharePrice - splitAdjustedHistoricalPrice) / splitAdjustedHistoricalPrice) * 10000
-            ) / 100
-          );
+            ) / 100;
+          return Number.isFinite(change) ? change : 0;
         };
 
         const history = priceHistoryByCorpId.get(corp._id.toString());
@@ -909,6 +921,13 @@ export async function generateStockExchangeSnapshots(currentTurn: number, db?: D
           })(),
           publicFloat: corp.publicFloat ?? 0,
           exchange: getExchange(corp),
+          // Canonical tradability flag (#2033): zero-share / zero-float
+          // rows stay visible as operating firms but leave every
+          // tradable denominator and numerator.
+          isTradable: isTradableListing({
+            totalShares,
+            publicFloat: corp.publicFloat ?? 0,
+          }),
           isNatcorp,
           isSubsidiary: controlling != null,
           subsidiaryParentName,

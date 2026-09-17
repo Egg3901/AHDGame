@@ -27,7 +27,11 @@ import {
 } from "@/lib/financialTxLog/atomicCashGuard";
 import { emitTx } from "@/lib/financialTxLog/emit";
 import { creditTreasuryProceeds } from "@/lib/nationalization/treasury";
-import { isEligibleAsSubsidiaryParent, humanBlockedFromSubsidiaryCeo } from "../helpers";
+import {
+  isEligibleAsSubsidiaryParent,
+  subsidiaryCeoBlockMessage,
+  subsidiaryCeoBlockReason,
+} from "../helpers";
 import { collectSiblingSubsidiaryCeoUserIds, resolveParentCeoUserId } from "../parentContext";
 import { pickOrCreateNppCeoForNewCorp } from "../nppCeoSelection";
 import { SPIN_OFF_COOLDOWN_TURNS, spinOffCostAnchor } from "../constants";
@@ -124,19 +128,15 @@ export async function spinOff(
     if (!character || !character.userId) {
       return fail("The selected character cannot serve as CEO (no owning player).");
     }
-    // One-person rule (keys on the human behind the seat).
     const parentCeoUserId = await resolveParentCeoUserId(db, parent);
     const siblingCeoUserIds = await collectSiblingSubsidiaryCeoUserIds(db, parent._id, new Oid());
-    if (
-      humanBlockedFromSubsidiaryCeo({
-        candidateUserId: character.userId,
-        parentOwnerUserId: parent.userId,
-        parentCeoUserId,
-        siblingSubsidiaryCeoUserIds: siblingCeoUserIds,
-      })
-    ) {
-      return fail("A subsidiary must be run by a different player than the parent.", 403);
-    }
+    const block = subsidiaryCeoBlockReason({
+      candidateUserId: character.userId,
+      parentOwnerUserId: parent.userId,
+      parentCeoUserId,
+      siblingSubsidiaryCeoUserIds: siblingCeoUserIds,
+    });
+    if (block) return fail(subsidiaryCeoBlockMessage(block), 403);
     ceoId = appointedCeoCharacterId;
     ceoUserId = character.userId;
     ceoTypeResolved = "character";
