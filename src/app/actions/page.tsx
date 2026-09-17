@@ -11,11 +11,11 @@ import {
   getCampaignActionCost,
   getAdvertiseActionCost,
   getDonorActionCost,
-  getAdvertiseFundCost,
   getBuildDonorBaseFundCost,
   fundraiseYieldLocal,
   isCampaignEligible,
   quoteCampaignAction,
+  quoteAdvertiseAction,
 } from "@/lib/actions";
 import { getHomeCurrency, getTotalPersonalLiquidWealth } from "@/lib/currency/characterFunds";
 import { getGdpBaseline } from "@/lib/utils/fundGeneration";
@@ -445,25 +445,34 @@ export default function ActionsPage() {
           }
         : undefined
     );
+    // Same rules quote the server executes: tiered AP cost, GDP-scaled fund
+    // cost and stat-scaled gain. When the quote rejects (unallocated stats or
+    // home-state economics still loading), the AP tiers stay displayable from
+    // favorability alone while the fund cost reports 0: GDP-scaled cards
+    // already block fund display until home-state data loads, and the server
+    // rejects execution with the quote reason.
+    const advertiseQuote = quoteAdvertiseAction(
+      {
+        favorability: character.favorability,
+        charisma: character.stats?.charisma,
+      },
+      homeState
+        ? {
+            gdpMillions: homeState.gdp,
+            population: homeState.population,
+            countryId: character.countryId,
+          }
+        : undefined
+    );
     const campaignActionCost = campaignQuote.ok
       ? campaignQuote.apCost
       : getCampaignActionCost(influence);
     const campaignFundCost = campaignQuote.ok ? campaignQuote.fundCostAnchor : 0;
     const campaignMaxed = !isCampaignEligible(influence);
-    const advertiseActionCost = getAdvertiseActionCost(character?.favorability ?? 0);
-    const advertiseFundCost = homeState
-      ? getAdvertiseFundCost(
-          character?.favorability ?? 0,
-          homeState.gdp,
-          homeState.population,
-          countryId
-        )
-      : getAdvertiseFundCost(
-          character?.favorability ?? 0,
-          getGdpBaseline(countryId),
-          1_000_000,
-          countryId
-        );
+    const advertiseActionCost = advertiseQuote.ok
+      ? advertiseQuote.apCost
+      : getAdvertiseActionCost(character?.favorability ?? 0);
+    const advertiseFundCost = advertiseQuote.ok ? advertiseQuote.fundCostAnchor : 0;
     const fundraiseActionCost = getDonorActionCost(character?.donorBaseLevel ?? 0, "fundraise");
     const buildDonorBaseActionCost = getDonorActionCost(
       character?.donorBaseLevel ?? 0,

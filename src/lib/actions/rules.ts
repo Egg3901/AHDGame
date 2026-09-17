@@ -7,6 +7,12 @@
  * political influence with diminishing returns. quoteCampaignAction is the
  * single source of truth both the UI quote and execution call; missing stats
  * or missing home-state economics reject instead of falling back to neutral
+ * values.
+ *
+ * Advertise costs tiered action points plus a GDP-scaled fund cost and gains
+ * favorability with diminishing returns. quoteAdvertiseAction is the single
+ * source of truth both the UI quote and execution call; missing stats or
+ * missing home-state economics reject instead of falling back to neutral
  * values. Hosts own currency conversion, atomic resource checks and
  * persistence.
  */
@@ -79,6 +85,18 @@ export const CAMPAIGN_BASE_FUND_COST = 20_000;
 /** Political influence cap: campaigning at 100% is ineligible. */
 export const CAMPAIGN_MAX_INFLUENCE = 100;
 
+// ── Advertise (Game1724 slice) ──────────────────────────────────────────────
+// Cost and effect math moved verbatim from `../actions` so the UI quote, the
+// execute shell and NPP callers share one implementation. Balance is
+// unchanged: the numbers below are the historical formulas, only the owner
+// moved. The strict entry point is quoteAdvertiseAction; the lenient wrappers
+// (getAdvertiseActionCost/getAdvertiseFundCost/advertiseFavorabilityGain) stay
+// for AP-only and NPP callers that never had stat/target context.
+// getFundMultiplier below is shared by both slices (one implementation).
+
+/** Base advertise fund cost before tier/GDP scaling, in ANCHOR units. */
+export const ADVERTISE_BASE_FUND_COST = 100_000;
+
 /**
  * Shared fund-cost multiplier for actions that spend money.
  * multiplier = (1 + tier × 0.2) × gdpScalar
@@ -111,6 +129,19 @@ export function getCampaignActionCost(influence: number): number {
 }
 
 /**
+ * Tiered action-point cost for the Advertise action.
+ * Tier based on current favorability (0–100).
+ */
+export function getAdvertiseActionCost(favorability: number): number {
+  const clampedFavorability = Math.max(0, Math.min(100, favorability));
+  if (clampedFavorability >= 85) return 9;
+  if (clampedFavorability >= 70) return 8;
+  if (clampedFavorability >= 50) return 7;
+  if (clampedFavorability >= 30) return 6;
+  return 5;
+}
+
+/**
  * Fund cost for the Campaign action.
  * Base $20,000 × tier, scaled by state GDP per capita relative to country baseline.
  * GDP is stored in millions of dollars (e.g. CT = 289,500 → $289.5B).
@@ -124,6 +155,21 @@ export function getCampaignFundCost(
   const tier = getCampaignActionCost(influence); // 1-5
   const multiplier = getFundMultiplier(tier - 1, stateGdpMillions, statePopulation, countryId);
   return Math.round((CAMPAIGN_BASE_FUND_COST * tier * multiplier) / 1_000) * 1_000;
+}
+
+/**
+ * Fund cost for the Advertise action.
+ * Base $100,000 scaled by favorability tier and state GDP per capita.
+ */
+export function getAdvertiseFundCost(
+  favorability: number,
+  stateGdpMillions: number,
+  statePopulation: number,
+  countryId = "US"
+): number {
+  const tier = getAdvertiseActionCost(favorability) - 5; // tier index 0-4
+  const multiplier = getFundMultiplier(tier, stateGdpMillions, statePopulation, countryId);
+  return Math.round((ADVERTISE_BASE_FUND_COST * multiplier) / 1_000) * 1_000;
 }
 
 /**
@@ -151,6 +197,22 @@ export function isCampaignEligible(influence: number): boolean {
 }
 
 /**
+ * Base favorability gain for one "Run Advertisements" action, before stat
+ * scaling. Shared by player actions and NPP turn processing so the two stay at
+ * parity: base +3, diminishing returns above 70% favorability (−0.1 per point
+ * over 70), floored at 1 so an ad is never fully wasted. `effectivenessMult`
+ * carries the player's charisma multiplier; NPPs pass the default 1.
+ */
+export function advertiseFavorabilityGain(
+  currentFavorability: number,
+  effectivenessMult = 1
+): number {
+  const baseGain = 3;
+  const penalty = currentFavorability > 70 ? (currentFavorability - 70) * 0.1 : 0;
+  return Math.max(1, Math.floor((baseGain - penalty) * effectivenessMult));
+}
+
+/**
  * Raw campaign actor inputs, preserved explicitly. Stat fields arrive as the
  * stored raw values (or missing for characters that predate the stat system);
  * the rules own the statMultiplier interpretation and reject missing stats
@@ -169,6 +231,29 @@ export interface CampaignQuoteActor {
  * fallback cost.
  */
 export interface CampaignQuoteTarget {
+  gdpMillions?: number | null;
+  population?: number | null;
+  countryId?: string | null;
+}
+
+/**
+ * Raw advertise actor inputs, preserved explicitly. The favorability and the
+ * stored raw charisma arrive as-is (or missing for characters that predate
+ * the stat system); the rules own the statMultiplier interpretation and
+ * reject a missing stat instead of substituting the neutral fallback.
+ */
+export interface AdvertiseQuoteActor {
+  favorability?: number | null;
+  charisma?: number | null;
+}
+
+/**
+ * Raw advertise target inputs, preserved explicitly. The state GDP,
+ * population and country currency basis arrive as stored; the rules own the
+ * GDP-scalar interpretation and reject a missing target instead of
+ * substituting the unscaled tier fallback.
+ */
+export interface AdvertiseQuoteTarget {
   gdpMillions?: number | null;
   population?: number | null;
   countryId?: string | null;
@@ -242,4 +327,63 @@ export function quoteCampaignAction(
   // Charisma scales the diminishing-returns gain (gentle ±20%).
   const influenceGain = campaignInfluenceGain(influence, statMultiplier(charisma));
   return { ok: true, apCost: getCampaignActionCost(influence), fundCostAnchor, influenceGain };
+}
+
+/**
+ * Authoritative advertise quote: tiered AP cost, GDP-scaled fund cost in
+ * ANCHOR units, and the charisma-scaled favorability gain. Invalid or
+ * incomplete inputs reject with a typed error the shell surfaces; they never
+ * silently resolve to neutral values.
+ */
+export type AdvertiseQuote =
+  | { ok: true; apCost: number; fundCostAnchor: number; favorabilityGain: number }
+  | { ok: false; error: string };
+
+export function quoteAdvertiseAction(
+  actor: AdvertiseQuoteActor,
+  target?: AdvertiseQuoteTarget | null
+): AdvertiseQuote {
+  const favorability = actor.favorability;
+  if (typeof favorability !== "number" || !Number.isFinite(favorability)) {
+    return { ok: false, error: "Advertise requires a favorability value." };
+  }
+  const { charisma } = actor;
+  if (typeof charisma !== "number" || !Number.isFinite(charisma)) {
+    return {
+      ok: false,
+      error:
+        "Advertise requires an allocated charisma stat. Allocate your stats before advertising.",
+    };
+  }
+  if (!target) {
+    return {
+      ok: false,
+      error: "Advertise requires home-state economic data (GDP and population).",
+    };
+  }
+  const { gdpMillions, population, countryId } = target;
+  if (typeof gdpMillions !== "number" || !Number.isFinite(gdpMillions) || gdpMillions < 0) {
+    return {
+      ok: false,
+      error: "Advertise requires home-state economic data (GDP and population).",
+    };
+  }
+  if (typeof population !== "number" || !Number.isFinite(population) || population <= 0) {
+    return {
+      ok: false,
+      error: "Advertise requires home-state economic data (GDP and population).",
+    };
+  }
+  if (typeof countryId !== "string" || countryId.length === 0) {
+    return { ok: false, error: "Advertise requires a country currency basis." };
+  }
+  const fundCostAnchor = getAdvertiseFundCost(favorability, gdpMillions, population, countryId);
+  // Charisma scales the diminishing-returns gain (gentle ±20%).
+  const favorabilityGain = advertiseFavorabilityGain(favorability, statMultiplier(charisma));
+  return {
+    ok: true,
+    apCost: getAdvertiseActionCost(favorability),
+    fundCostAnchor,
+    favorabilityGain,
+  };
 }

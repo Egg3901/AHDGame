@@ -18,6 +18,11 @@ import {
   campaignInfluenceGain,
   isCampaignEligible,
   quoteCampaignAction,
+  ADVERTISE_BASE_FUND_COST,
+  getAdvertiseActionCost,
+  getAdvertiseFundCost,
+  advertiseFavorabilityGain,
+  quoteAdvertiseAction,
 } from "./rules";
 import {
   ACTIONS,
@@ -358,6 +363,145 @@ describe("campaign failure agreement", () => {
     ).toBe(false);
     expect(quoteCampaignAction(actor, { gdpMillions: 65_000, population: 1_000_000 }).ok).toBe(
       false
+    );
+  });
+});
+// ── Advertise (Game1724 slice) ──────────────────────────────────────────────
+// Average-GDP US home state: gdpPerCapita = 65_000 × 1M / 1M hits the 65_000
+// baseline exactly, so the GDP scalar is 1.0 and fund pins read straight off
+// the tier multiplier ($100K × (1 + tier × 0.2)).
+const AVG_STATE = { gdp: 65_000, population: 1_000_000, name: "Test State" } as State;
+const AVG_TARGET = { gdpMillions: 65_000, population: 1_000_000, countryId: "US" };
+// Charisma 5.5 is the neutral pivot: statMultiplier is exactly 1.0, so gain
+// pins read straight off the diminishing-returns curve (base +3).
+const NEUTRAL_CHARISMA = { charisma: 5.5 };
+
+function advertiseCharacter(favorability: number, charisma?: number | null): Character {
+  return makeCharacter({
+    favorability,
+    stats: charisma === null ? undefined : { charisma: charisma ?? 5.5 },
+  } as Partial<Character>);
+}
+
+describe("Advertise action point quotes", () => {
+  it("tiers 5-9 AP across favorability through the shared rule", () => {
+    for (const favorability of [0, 10, 29, 30, 50, 70, 85, 100]) {
+      expect(getActionPointCost(advertiseCharacter(favorability), "advertise")).toBe(
+        getAdvertiseActionCost(favorability)
+      );
+    }
+    expect(ADVERTISE_BASE_FUND_COST).toBe(100_000);
+  });
+});
+
+describe("getAdvertiseFundCost independent literals", () => {
+  it("tier 0 at average GDP costs the $100K base", () => {
+    expect(getAdvertiseFundCost(0, 65_000, 1_000_000)).toBe(100_000);
+  });
+  it("tier 2 (fav 50) at average GDP costs $140K", () => {
+    expect(getAdvertiseFundCost(50, 65_000, 1_000_000)).toBe(140_000);
+  });
+  it("tier 4 (fav 90) at average GDP costs $180K", () => {
+    expect(getAdvertiseFundCost(90, 65_000, 1_000_000)).toBe(180_000);
+  });
+});
+
+describe("advertiseFavorabilityGain independent literals", () => {
+  it("base +3 at low favorability, neutral charisma", () => {
+    expect(advertiseFavorabilityGain(0, 1)).toBe(3);
+  });
+  it("diminishing returns above 70 (fav 90 → +1)", () => {
+    expect(advertiseFavorabilityGain(90, 1)).toBe(1);
+  });
+  it("floors at 1 so an ad is never fully wasted", () => {
+    expect(advertiseFavorabilityGain(100, 1)).toBe(1);
+  });
+});
+
+describe("quoteAdvertiseAction strictness", () => {
+  it("quotes AP cost, anchor fund cost and gain from one source", () => {
+    const quote = quoteAdvertiseAction({ favorability: 0, ...NEUTRAL_CHARISMA }, AVG_TARGET);
+    expect(quote).toEqual({ ok: true, apCost: 5, fundCostAnchor: 100_000, favorabilityGain: 3 });
+  });
+  it("rejects a missing charisma stat instead of neutral-scaling the gain", () => {
+    const quote = quoteAdvertiseAction({ favorability: 10 }, AVG_TARGET);
+    expect(quote.ok).toBe(false);
+    expect(quote.ok ? "" : quote.error).toContain("charisma");
+  });
+  it("rejects a missing home-state target instead of unscaled tier pricing", () => {
+    const quote = quoteAdvertiseAction({ favorability: 10, ...NEUTRAL_CHARISMA });
+    expect(quote.ok).toBe(false);
+    expect(quote.ok ? "" : quote.error).toContain("home-state");
+  });
+  it("rejects a missing country basis", () => {
+    const quote = quoteAdvertiseAction(
+      { favorability: 10, ...NEUTRAL_CHARISMA },
+      { gdpMillions: 65_000, population: 1_000_000 }
+    );
+    expect(quote.ok).toBe(false);
+    expect(quote.ok ? "" : quote.error).toContain("country");
+  });
+});
+
+describe("Advertise quote/debit/result agreement", () => {
+  it("effect debits and credits exactly what the quote advertises, across tiers", () => {
+    for (const favorability of [0, 29, 30, 50, 70, 85, 100]) {
+      const char = advertiseCharacter(favorability);
+      const quote = quoteAdvertiseAction({ favorability, ...NEUTRAL_CHARISMA }, AVG_TARGET);
+      expect(quote.ok).toBe(true);
+      if (!quote.ok) continue;
+      expect(getActionPointCost(char, "advertise")).toBe(quote.apCost);
+      const effect = ACTIONS.advertise.effect(char, AVG_STATE);
+      expect(effect.fundsChange).toBe(-quote.fundCostAnchor);
+      expect(effect.favorabilityChange).toBe(quote.favorabilityGain);
+    }
+  });
+  it("the execute gate surfaces the quote reason for missing stats", () => {
+    const char = makeCharacter({ actions: 10, favorability: 10, funds: 1_000_000 });
+    expect(canPerformAction(char, "advertise", AVG_STATE)).toEqual({
+      canPerform: false,
+      reason:
+        "Advertise requires an allocated charisma stat. Allocate your stats before advertising.",
+    });
+  });
+  it("the execute gate surfaces the quote reason for a missing state", () => {
+    const char = advertiseCharacter(10);
+    expect(canPerformAction(char, "advertise")).toEqual({
+      canPerform: false,
+      reason: "Advertise requires home-state economic data (GDP and population).",
+    });
+  });
+});
+
+describe("Advertise single-source sensitivity", () => {
+  it("one favorability bump moves the quote, the AP debit and the effect together", () => {
+    const before = quoteAdvertiseAction({ favorability: 10, ...NEUTRAL_CHARISMA }, AVG_TARGET);
+    const after = quoteAdvertiseAction({ favorability: 85, ...NEUTRAL_CHARISMA }, AVG_TARGET);
+    expect(before.ok && after.ok).toBe(true);
+    if (!before.ok || !after.ok) return;
+    // No second formula edit: AP cost, fund cost and effect all follow the one input.
+    expect([before.apCost, after.apCost]).toEqual([5, 9]);
+    expect([before.fundCostAnchor, after.fundCostAnchor]).toEqual([100_000, 180_000]);
+    expect(getActionPointCost(advertiseCharacter(10), "advertise")).toBe(before.apCost);
+    expect(getActionPointCost(advertiseCharacter(85), "advertise")).toBe(after.apCost);
+    expect(ACTIONS.advertise.effect(advertiseCharacter(10), AVG_STATE).fundsChange).toBe(
+      -before.fundCostAnchor
+    );
+    expect(ACTIONS.advertise.effect(advertiseCharacter(85), AVG_STATE).fundsChange).toBe(
+      -after.fundCostAnchor
+    );
+  });
+  it("one charisma bump moves the quoted gain and the credited gain together", () => {
+    const weak = quoteAdvertiseAction({ favorability: 10, charisma: 1 }, AVG_TARGET);
+    const strong = quoteAdvertiseAction({ favorability: 10, charisma: 10 }, AVG_TARGET);
+    expect(weak.ok && strong.ok).toBe(true);
+    if (!weak.ok || !strong.ok) return;
+    expect(strong.favorabilityGain).toBeGreaterThan(weak.favorabilityGain);
+    expect(ACTIONS.advertise.effect(advertiseCharacter(10, 1), AVG_STATE).favorabilityChange).toBe(
+      weak.favorabilityGain
+    );
+    expect(ACTIONS.advertise.effect(advertiseCharacter(10, 10), AVG_STATE).favorabilityChange).toBe(
+      strong.favorabilityGain
     );
   });
 });

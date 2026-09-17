@@ -9,9 +9,10 @@ import {
   FUNDRAISE_ACTION_COST,
   fundraiseYieldAnchor,
   isFundraiseEligible,
-  getFundMultiplier,
   getCampaignActionCost,
   quoteCampaignAction,
+  getAdvertiseActionCost,
+  quoteAdvertiseAction,
 } from "./actions/rules";
 
 export {
@@ -31,6 +32,14 @@ export {
   type CampaignQuoteActor,
   type CampaignQuoteTarget,
   type CampaignQuote,
+  ADVERTISE_BASE_FUND_COST,
+  getAdvertiseActionCost,
+  getAdvertiseFundCost,
+  advertiseFavorabilityGain,
+  quoteAdvertiseAction,
+  type AdvertiseQuoteActor,
+  type AdvertiseQuoteTarget,
+  type AdvertiseQuote,
 } from "./actions/rules";
 
 /**
@@ -141,21 +150,6 @@ export function calculateInfluenceAccrual(_currentInfluence: number): number {
 }
 
 /**
- * Fund cost for the Advertise action.
- * Base $100,000 scaled by favorability tier and state GDP per capita.
- */
-export function getAdvertiseFundCost(
-  favorability: number,
-  stateGdpMillions: number,
-  statePopulation: number,
-  countryId = "US"
-): number {
-  const tier = getAdvertiseActionCost(favorability) - 5; // tier index 0-4
-  const multiplier = getFundMultiplier(tier, stateGdpMillions, statePopulation, countryId);
-  return Math.round((100_000 * multiplier) / 1_000) * 1_000;
-}
-
-/**
  * Fund cost for the BuildDonorBase action (0–75 level range).
  * Linear base: $3K + $1.5K/level, scaled by state GDP per capita (0.85–2.0×) vs country baseline.
  * Early levels are cheap (~$3K); L75 costs ~$114K (before GDP scaling).
@@ -175,19 +169,6 @@ export function getBuildDonorBaseFundCost(
 }
 
 /**
- * Tiered action-point cost for the Advertise action.
- * Tier based on current favorability (0–100).
- */
-export function getAdvertiseActionCost(favorability: number): number {
-  const clampedFavorability = Math.max(0, Math.min(100, favorability));
-  if (clampedFavorability >= 85) return 9;
-  if (clampedFavorability >= 70) return 8;
-  if (clampedFavorability >= 50) return 7;
-  if (clampedFavorability >= 30) return 6;
-  return 5;
-}
-
-/**
  * Action-point cost for Fundraise and BuildDonorBase actions (0–75 level range).
  *
  * Fundraise: flat 3 AP at every level — no escalating penalty for a large network.
@@ -202,22 +183,6 @@ export function getDonorActionCost(
 ): number {
   if (action === "fundraise") return FUNDRAISE_ACTION_COST;
   return Math.min(20, Math.round(4 + Math.pow(donorBaseLevel / 75, 1.4) * 16));
-}
-
-/**
- * Base favorability gain for one "Run Advertisements" action, before stat
- * scaling. Shared by player actions and NPP turn processing so the two stay at
- * parity: base +3, diminishing returns above 70% favorability (−0.1 per point
- * over 70), floored at 1 so an ad is never fully wasted. `effectivenessMult`
- * carries the player's charisma multiplier; NPPs pass the default 1.
- */
-export function advertiseFavorabilityGain(
-  currentFavorability: number,
-  effectivenessMult = 1
-): number {
-  const baseGain = 3;
-  const penalty = currentFavorability > 70 ? (currentFavorability - 70) * 0.1 : 0;
-  return Math.max(1, Math.floor((baseGain - penalty) * effectivenessMult));
 }
 
 /**
@@ -345,24 +310,30 @@ export const ACTIONS: Record<ActionType, ActionDefinition> = {
     baseCost: 5,
     requiresState: false,
     effect: (character: Character, state?: State, ctx?: ActionEffectContext) => {
-      const currentFav = character.favorability;
-      // Base +3 with diminishing returns above 70% and a floor of 1 (shared with
-      // NPP processing), then charisma scales the result (gentle ±20%).
-      const charismaMult = statMultiplier(statValue(character, "charisma"));
-      const favGain = advertiseFavorabilityGain(currentFav, charismaMult);
-
-      const tier = getAdvertiseActionCost(currentFav) - 5; // convert cost (5-9) to tier index (0-4)
-      const baseCost = 100_000;
-      const multiplier = state
-        ? getFundMultiplier(tier, state.gdp, state.population, character.countryId)
-        : 1 + tier * 0.2;
-      const cost = Math.round((baseCost * multiplier) / 1_000) * 1_000;
+      // Single source of truth: the UI card quotes this same quote, so the
+      // advertised cost/gain can never drift from the debited/credited result.
+      // canPerformAction runs the quote first; the throw below is a defensive
+      // invariant for direct effect callers that skip validation.
+      const quote = quoteAdvertiseAction(
+        {
+          favorability: character.favorability,
+          charisma: character.stats?.charisma,
+        },
+        state
+          ? {
+              gdpMillions: state.gdp,
+              population: state.population,
+              countryId: character.countryId,
+            }
+          : undefined
+      );
+      if (!quote.ok) throw new Error(quote.error);
       const fmt = ctx?.formatFunds ?? plainFunds;
 
       return {
-        fundsChange: -cost,
-        favorabilityChange: favGain,
-        message: `Spent ${fmt(cost)} on ads and gained ${favGain} favorability points!`,
+        fundsChange: -quote.fundCostAnchor,
+        favorabilityChange: quote.favorabilityGain,
+        message: `Spent ${fmt(quote.fundCostAnchor)} on ads and gained ${quote.favorabilityGain} favorability points!`,
       };
     },
   },
@@ -573,6 +544,29 @@ export function canPerformAction(
       reason:
         "You have no donor base. Use 'Build Donor Network' first to establish one before fundraising.",
     };
+  }
+
+  // Advertise validates through the same rules quote the UI and the effect use:
+  // tiered AP cost, GDP-scaled fund cost and the charisma-scaled gain. Missing
+  // stats or missing home-state economics reject here with the quote reason
+  // instead of falling back to neutral values.
+  if (actionType === "advertise") {
+    const quote = quoteAdvertiseAction(
+      {
+        favorability: character.favorability,
+        charisma: character.stats?.charisma,
+      },
+      state
+        ? {
+            gdpMillions: state.gdp,
+            population: state.population,
+            countryId: character.countryId,
+          }
+        : undefined
+    );
+    if (!quote.ok) {
+      return { canPerform: false, reason: quote.error };
+    }
   }
 
   // Check if state is required
