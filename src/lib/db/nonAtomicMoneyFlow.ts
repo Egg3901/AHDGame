@@ -1,5 +1,5 @@
-import type { ClientSession, Collection, Filter } from "mongodb";
-import type { ObjectId } from "mongodb";
+import { createHash } from "node:crypto";
+import { ObjectId, type ClientSession, type Collection, type Filter } from "mongodb";
 
 /**
  * Partial-write safety for money flows on deployments without transaction
@@ -36,10 +36,14 @@ import type { ObjectId } from "mongodb";
  * as legs (same-collection via `runMoneyFlowLegs`, cross-collection via
  * per-leg `makeLegStep` + `runMoneyFlowSteps`) and their guarded `$set` /
  * deterministic-insert side effects as revertible steps (`applyKeyedUpdate`,
- * `insertKeyedDoc`). Still on the legacy debit-first-plus-compensation
- * fallback: forex orders/direct/fill/cancel, bond sell/default/payoff,
- * index-fund cron/rebalancing, directAction, state-org build, and bargaining
- * escalation — multi-write status machines, positional holder claims, and
+ * `insertKeyedDoc` via `makeInsertStep`, deterministic `_id` via
+ * `keyedInsertId`). Migrated: character transfers, donations, election
+ * travel/primary/surge, state-attack. Still on the legacy
+ * debit-first-plus-compensation fallback: canvassing, player ads, both
+ * recruitment flows, treasury transfer, nominate, campaign commands and
+ * targeting, union busting/bargaining, forex orders/direct/fill/cancel, bond
+ * sell/default/payoff, index-fund cron/rebalancing, directAction, state-org
+ * build — multi-write status machines, positional holder claims, and
  * bulkWrite batches that need reserve/order/history support beyond keyed
  * single-document writes. Migrating one of those means expressing its writes
  * as steps here, with an explicit inverse per step that mutates prior state.
@@ -383,9 +387,28 @@ export async function applyKeyedUpdate<TDoc extends MoneyFlowAccount>(
 }
 
 /**
+ * Derive a deterministic insert `_id` from a flow's idempotency key. A client
+ * retry (or crash recovery) under the same key rebuilds the same `_id`, so
+ * the insert step converges to `already-applied` instead of duplicating the
+ * row. The domain salts the hash so two flows sharing a key string (e.g. a
+ * state attack and a player ad) never collide. Keys minted per request
+ * (`randomUUID`) still yield unique ids per attempt, preserving the old
+ * non-idempotent behavior for keyless callers.
+ */
+export function keyedInsertId(key: string, domain: string): ObjectId {
+  validateKey(key);
+  if (typeof domain !== "string" || domain.length === 0) {
+    throw new TypeError("Keyed insert id needs a non-empty domain");
+  }
+  const digest = createHash("sha256").update(`${domain}:${key}`).digest();
+  return new ObjectId(Buffer.from(digest.subarray(0, 12)));
+}
+
+/**
  * Insert a document with a caller-supplied `_id` (pre-generated before the
- * flow starts so every attempt and every recovery uses the same one). A
- * duplicate key means this step already applied; anything else throws.
+ * flow starts so every attempt and every recovery uses the same one; see
+ * `keyedInsertId`). A duplicate key means this step already applied; anything
+ * else throws.
  */
 export async function insertKeyedDoc<TSchema>(
   collection: Collection<TSchema>,
@@ -423,6 +446,34 @@ export interface MoneyFlowStep {
   name: string;
   apply(options?: MoneyFlowOptions): Promise<MoneyFlowLegOutcome>;
   revert?(options?: MoneyFlowOptions): Promise<MoneyFlowLegOutcome>;
+}
+
+/**
+ * A deterministic insert as a terminal step. A survived insert error (a real
+ * crash runs no code at all, so anything observed here is a failure the
+ * process lived through) reports `guard-rejected` so the applied prefix is
+ * compensated instead of stranded debited-with-no-row; the caller maps the
+ * step to its own error. Duplicate `_id` still converges to
+ * `already-applied` inside `insertKeyedDoc`.
+ */
+export function makeInsertStep<TSchema>(
+  name: string,
+  collection: Collection<TSchema>,
+  doc: TSchema
+): MoneyFlowStep {
+  if (typeof name !== "string" || name.length === 0) {
+    throw new TypeError("Insert step needs a non-empty name");
+  }
+  return {
+    name,
+    apply: async (options) => {
+      try {
+        return await insertKeyedDoc(collection, doc, options ?? {});
+      } catch {
+        return "guard-rejected";
+      }
+    },
+  };
 }
 
 /**
