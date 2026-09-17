@@ -21,11 +21,7 @@ import { isCorporateIssuerBond } from "@/lib/bonds/corporateCredit";
 import { netPerTurnDebtServiceAnchor } from "@/lib/bonds/corpBondCashflows";
 import {
   buildActiveMarketBuckets,
-  ESSENTIAL_SHORTAGE_SCORE,
-  expansionFrontierStates,
-  findBestUnownedSector,
   hasEnterableHeadroom,
-  sectorPeakShortageScore,
   sectorShortageScore,
   markMarketsActive,
   computeMacroProductionPolicy,
@@ -139,23 +135,19 @@ import { maybePushNppTechUnlock } from "@/lib/turn/npp/corpBehaviorConfig";
 import {
   fragileReinvestmentPriority,
   loadNppPlacementSignals,
-  resolveFragileEntryTreatment,
 } from "@/lib/turn/npp/fragileMarketSupply";
 import {
-  blankNppCandidateExclusions,
-  buildNppMarketEntryDiagnostic,
   resolveFoundingShortfallReason,
   resolveNppMarketEntryCredit,
   setNppMarketEntryReason,
   type NppMarketEntryDiagnostic,
 } from "@/lib/turn/npp/entryDiagnostics";
+import { evaluateNppEntry } from "@/lib/turn/npp/entryEvaluation";
 import {
-  frontierEntryCohortKey,
-  frontierEntryControllerKey,
-  frontierEntryExperimentEnabledFrom,
-  isFrontierEntryRelaxableReason,
-  recordFrontierEntry,
-} from "@/lib/economy/frontierEntryExperiment";
+  createFrontierEntryTurnState,
+  evaluateFrontierCandidate,
+  settleFrontierEntryPlacement,
+} from "@/lib/turn/npp/frontierEntryCandidate";
 import type {
   NppCorpDecision,
   NppCorpDecisionContext,
@@ -194,7 +186,6 @@ import {
   GLUT_MOTHBALL_PRICE_RATIO,
   GLUT_RESTART_PRICE_RATIO,
   COST_MOTHBALL_LOSS_TURNS,
-  ORDINARY_ENTRY_MIN_SHORTAGE,
 } from "@/lib/turn/npp/nppCorporationTuning";
 
 export {
@@ -487,15 +478,11 @@ export async function processNppCorporationDecisions(
       { projection: { nppCorpStrategyEnabled: 1, frontierEntryExperimentEnabled: 1 } }
     );
   const strategyLoopEnabled = strategyGate?.nppCorpStrategyEnabled !== false;
-  // Frontier-entry experiment (issue #991). Fail-closed: absent or non-true
-  // resolves to disabled, in which case no ctx carries experiment state and
-  // every decision is byte-identical to the legacy path. Read piggybacks on
-  // the strategy-gate fetch above: no new turn-path round trip.
-  const frontierEntryEnabled = frontierEntryExperimentEnabledFrom(
+  // Frontier-entry experiment turn state (issue #991). See
+  // createFrontierEntryTurnState: fail-closed, no new turn-path round trip.
+  const frontierEntryTurn = createFrontierEntryTurnState(
     strategyGate?.frontierEntryExperimentEnabled
   );
-  const frontierEnteredCohorts = new Set<string>();
-  const frontierEnteredControllers = new Set<string>();
 
   const { labourMode, retailExpansionPaused } = await loadNppBehaviorConfig(db, turn);
   const labourWagesEnabled = isLabourSystemMode(labourMode) && labourAtLeast(labourMode, "wages");
@@ -534,13 +521,7 @@ export async function processNppCorporationDecisions(
       labourWagesEnabled,
       currentYear: techCurrentYear > 0 ? techCurrentYear : undefined,
       techTreesEnabled,
-      frontierEntry: frontierEntryEnabled
-        ? {
-            enabled: true,
-            enteredCohorts: frontierEnteredCohorts,
-            enteredControllers: frontierEnteredControllers,
-          }
-        : undefined,
+      frontierEntry: frontierEntryTurn,
     };
     let decision = makeNppCorpDecision(
       decisionContext,
@@ -1236,176 +1217,74 @@ export function makeNppCorpDecision(
   }
 
   // ── 5. Sector expansion ───────────────────────────────────────────────────
-  // Expansion has no fixed corporation-size ceiling. It proceeds one site at a
-  // time on deterministic cohort slots, prefers the neighboring-state frontier,
-  // and pauses when the current logistics strength cannot support another site.
-  // A critical shortage may use corporate credit on that same cohort slot.
+  // Candidate search, ordinary entry gates, and the funnel diagnostic naming
+  // the first binding gate. See evaluateNppEntry. The frontier fallback (5b)
+  // overlays this evaluation; the shared priced founding block below prices
+  // whichever target survives.
   const surplusCash = liquidCapital - effectiveCashFloor;
-  const existingBuckets = new Set(sectors.map((s) => bucketKey(s.stateId, s.sectorType)));
-  const frontierStates = expansionFrontierStates(corp.countryId, corp.headquartersState, sectors);
-  const candidateExclusions = blankNppCandidateExclusions();
-  const entryCandidate = findBestUnownedSector(
-    corp.countryId,
-    corp.headquartersState,
-    corp.type,
-    corp.secondaryType,
-    existingBuckets,
+  const entry = evaluateNppEntry({
+    corp,
+    sectors,
     unownedByCountry,
     stateControlled,
     priceRatioOf,
-    plants?.enabled === true,
-    plants?.eraUnitScale ?? 1,
     placementSignals,
-    frontierStates,
-    candidateExclusions
-  );
-  const expansion =
-    levers.allowExpansion &&
-    isProfitable &&
-    corpMargin >= effectiveExpansionMinMargin &&
-    !(ctx.retailExpansionPaused && entryCandidate?.sectorType === "retail")
-      ? entryCandidate
-      : null;
-  const {
-    candidatePriceRatioOf: entryCandidatePriceRatioOf,
-    interventionTargetCommodity,
-    foundingStrategyId,
-  } = resolveFragileEntryTreatment(entryCandidate, placementSignals, priceRatioOf);
-  const entryCandidateShortageScore = entryCandidate
-    ? Math.max(
-        sectorPeakShortageScore(
-          entryCandidate.sectorType as CorporationType,
-          entryCandidate.countryId,
-          entryCandidatePriceRatioOf
-        ),
-        interventionTargetCommodity
-          ? (entryCandidatePriceRatioOf(interventionTargetCommodity, entryCandidate.countryId) ?? 0)
-          : 0
-      )
-    : undefined;
-  const expansionShortageScore = entryCandidateShortageScore ?? 1;
-  const hasLogisticsCapacity = effectiveSectors < logisticsSupportedSectors;
-  const marketEntryEligible = ctx.ordinaryEntryEligible !== false;
-  const exceptionalShortageEntry =
-    expansion !== null &&
-    expansionShortageScore >= ESSENTIAL_SHORTAGE_SCORE &&
-    ctx.shortageEntryEligible === true &&
-    marketEntryEligible &&
-    hasLogisticsCapacity;
-  // Demand audit step 5: never found an ordinary plant into a glutted
-  // market — the growth governor is trying to shrink out of ≤0.85, so
-  // building there manufactures the loser the corp would then have to shed.
-  // Peak score (not mean): a mixed plant with one healthy leg still founds.
-  // Score 0 means no leg was priced (early-world thin markets): fail open.
-  const ordinaryEntryTargetGlutted =
-    expansionShortageScore > 0 && expansionShortageScore <= ORDINARY_ENTRY_MIN_SHORTAGE;
-  const ordinaryEntry =
-    expansion !== null &&
-    hasLogisticsCapacity &&
-    marketEntryEligible &&
-    !ordinaryEntryTargetGlutted &&
-    (plants?.enabled === true || surplusCash > effectiveExpansionMinCash);
-  // Funnel inputs mirror the founding-gate order in
-  // capacityDecisionTelemetry: retail pause and glut are evaluated on the
-  // candidate (not the null expansion), so the diagnostic names the gate that
-  // actually bound instead of falling through to the cash floor.
-  entryDiagnostic = buildNppMarketEntryDiagnostic({
-    corporation: corp,
-    sectorCount: effectiveSectors,
-    logisticsSupportedSectors,
+    plantsEnabled: plants?.enabled === true,
+    eraUnitScale: plants?.eraUnitScale ?? 1,
     profitable: isProfitable,
     marginPct: corpMargin,
     marginFloorPct: effectiveExpansionMinMargin,
-    cohortEligible: marketEntryEligible,
-    strategyAllowsExpansion: levers.allowExpansion,
-    hasLogisticsCapacity,
-    target: entryCandidate,
-    shortageScore: entryCandidateShortageScore,
-    frontierStates,
-    retailBlocked: ctx.retailExpansionPaused === true && entryCandidate?.sectorType === "retail",
-    targetGlutted: ordinaryEntryTargetGlutted && !exceptionalShortageEntry,
+    surplusCash,
+    minCash: effectiveExpansionMinCash,
+    sectorCount: effectiveSectors,
+    logisticsSupportedSectors,
+    allowExpansion: levers.allowExpansion,
+    ordinaryEntryEligible: ctx.ordinaryEntryEligible,
+    shortageEntryEligible: ctx.shortageEntryEligible,
+    retailExpansionPaused: ctx.retailExpansionPaused,
     entryCapReached: newSectors.length >= NPP_SHORTAGE_ENTRIES_PER_TURN,
-    candidateExclusions,
   });
-  if (interventionTargetCommodity) {
-    entryDiagnostic = { ...entryDiagnostic, interventionTargetCommodity };
-  }
+  const {
+    entryCandidate,
+    expansion,
+    hasLogisticsCapacity,
+    marketEntryEligible,
+    exceptionalShortageEntry,
+    ordinaryEntryTargetGlutted,
+    ordinaryEntry,
+    foundingStrategyId,
+  } = entry;
+  entryDiagnostic = entry.diagnostic;
   // Whether the founding evaluation below runs at all. Captured so the
   // capacity observation can tell pre-evaluation gates (eligibility, demand)
   // from affordability gates; `newSectors` is still empty here, so the cap
   // term is trivially true and needs no gate of its own.
   // ── 5b. Frontier-entry experiment fallback (issue #991) ───────────────────
-  // When the experiment flag is on, a policy-cleared candidate rejected only
-  // on an expectational gate (profitability, margin band, nominal cash
-  // surplus) gets one priced evaluation through the SAME founding block
-  // below: the same real quote, the same post-floor affordability, the same
-  // headroom/size/per-turn-cap gates, the same cash debit and unowned-pool
-  // draw. Only the relaxable reasons qualify, so state-controlled, glutted,
-  // retail-paused, cohort-staggered, cap-rejected, and candidate-less
-  // rejections never reach here, and the priced affordability inside stays
-  // binding: an override never funds a plant the corp cannot pay for.
-  // Slot check only at this stage: the founding block prices the quote, and
-  // a placement still requires its affordability gate to pass. Ordinary
-  // entries consume the same cohort/controller slots (recorded after the
-  // block), so a cohort that already entered this turn is ineligible.
-  // Clause map onto `frontierEntryEligible` in economy/frontierEntryExperiment
-  // (the contract definition, unit-tested there): experimentEnabled comes
-  // from the flag-gated ctx state, policyCleared holds because the candidate
-  // survived the partition/state-control/deposit filters, the set checks are
-  // the cohort/controller caps, and foundingCostPriced/financed are the
-  // affordability gate below operating on the real debited amounts.
-  const frontierTurnState = ctx.frontierEntry?.enabled === true ? ctx.frontierEntry : null;
-  const frontierRelaxedReason =
-    frontierTurnState != null &&
-    entryCandidate != null &&
-    entryDiagnostic != null &&
-    isFrontierEntryRelaxableReason(entryDiagnostic.reason)
-      ? entryDiagnostic.reason
-      : null;
-  const frontierCohortKey =
-    frontierRelaxedReason != null && entryCandidate != null
-      ? frontierEntryCohortKey(corp.countryId, entryCandidate.stateId)
-      : null;
-  const frontierControllerKey =
-    frontierTurnState != null
-      ? frontierEntryControllerKey({
-          corporationId: ownCorporationId,
-          controllingCorporationId: corp.parentDividendFloorSetByCorpId?.toString() ?? null,
-        })
-      : null;
-  // The funnel reason names the FIRST failing gate, so a relaxable reason
-  // does not prove the later gates passed: an unprofitable corp may also be
-  // cohort-staggered, logistics-capped, retail-paused, or glutted. Re-verify
-  // every non-expectational pre-pricing gate explicitly, mirroring the
-  // diagnostic inputs. Anything failing here keeps its own reason and never
-  // reaches the priced block. (The per-turn cap needs no check here:
-  // `foundingBlockEntered` below still enforces it.)
-  const frontierGatesHold =
-    entryCandidate != null &&
-    levers.allowExpansion &&
-    hasLogisticsCapacity &&
-    marketEntryEligible &&
-    !(ctx.retailExpansionPaused === true && entryCandidate.sectorType === "retail") &&
-    !ordinaryEntryTargetGlutted;
-  const frontierCandidate =
-    frontierTurnState != null &&
-    frontierRelaxedReason != null &&
-    frontierGatesHold &&
-    entryCandidate != null &&
-    frontierCohortKey != null &&
-    frontierControllerKey != null &&
-    !frontierTurnState.enteredCohorts.has(frontierCohortKey) &&
-    !frontierTurnState.enteredControllers.has(frontierControllerKey)
-      ? entryCandidate
-      : null;
+  // A policy-cleared candidate rejected only on an expectational gate gets
+  // one priced evaluation through the shared founding block below. See
+  // evaluateFrontierCandidate for the relaxable reasons, gate revalidation,
+  // and slot checks.
+  const frontier = evaluateFrontierCandidate({
+    turnState: ctx.frontierEntry,
+    corp,
+    candidate: entryCandidate,
+    diagnostic: entryDiagnostic,
+    gates: {
+      allowExpansion: levers.allowExpansion,
+      hasLogisticsCapacity,
+      marketEntryEligible,
+      retailBlocked: ctx.retailExpansionPaused === true && entryCandidate?.sectorType === "retail",
+      targetGlutted: ordinaryEntryTargetGlutted,
+    },
+  });
   // The ordinary target when the corp earned it, else the experiment's
   // second-chance target. `expansion` is the entry candidate itself whenever
   // it is non-null, so the block below prices the same slot either way.
-  const foundingTarget = expansion ?? frontierCandidate;
+  const foundingTarget = expansion ?? frontier?.target ?? null;
   const foundingBlockEntered =
     foundingTarget !== null &&
     newSectors.length < NPP_SHORTAGE_ENTRIES_PER_TURN &&
-    (ordinaryEntry || exceptionalShortageEntry || frontierCandidate !== null);
+    (ordinaryEntry || exceptionalShortageEntry || frontier !== null);
   // Founding outcome tracked across the priced branches for the capacity
   // observation; see capacityDecisionTelemetry. Blank until a branch prices
   // the candidate: pre-pricing gates observe explicit zeros, never a
@@ -1633,52 +1512,18 @@ export function makeNppCorpDecision(
     }
   }
 
-  // Frontier experiment slot accounting. A placement consumes one
-  // state-country cohort slot and one controller slot for the rest of the
-  // turn, whether it entered through the ordinary path or the experiment
-  // fallback. A placement counts as the experiment's only when the founding
-  // block ran because of the fallback (neither ordinary nor exceptional entry
-  // held): note `expansion` alone cannot distinguish them, since a corp that
-  // earned a candidate but missed the nominal surplus band still prices that
-  // same candidate through the experiment. Experiment placements carry the
-  // trial marker so the rollback report is computable from persisted funnel
-  // diagnostics; the capacity observation below keeps the authoritative gate
-  // verdict (the relaxed reason), so the funnel still measures the
-  // un-overridden pipeline. No protection is attached to the founded sector:
-  // it divests, mothballs, and fails exactly like any ordinary founding.
-  if (
-    frontierTurnState != null &&
-    entryDiagnostic != null &&
-    entryDiagnostic.reason === "entered"
-  ) {
-    const experimentPlaced =
-      frontierCandidate != null && !ordinaryEntry && !exceptionalShortageEntry;
-    const slotCohortKey =
-      experimentPlaced && frontierCohortKey != null
-        ? frontierCohortKey
-        : frontierEntryCohortKey(
-            entryDiagnostic.countryId,
-            entryDiagnostic.targetStateId ?? entryCandidate?.stateId ?? ""
-          );
-    const slotControllerKey =
-      frontierControllerKey ?? frontierEntryControllerKey({ corporationId: ownCorporationId });
-    recordFrontierEntry(
-      frontierTurnState.enteredCohorts,
-      frontierTurnState.enteredControllers,
-      slotCohortKey,
-      slotControllerKey
-    );
-    if (experimentPlaced && frontierRelaxedReason != null) {
-      entryDiagnostic = {
-        ...entryDiagnostic,
-        frontierExperiment: {
-          cohortKey: slotCohortKey,
-          controllerKey: slotControllerKey,
-          relaxedReason: frontierRelaxedReason,
-        },
-      };
-    }
-  }
+  // Frontier experiment slot accounting: every placement consumes one
+  // cohort and one controller slot; experiment placements carry the trial
+  // marker. See settleFrontierEntryPlacement.
+  entryDiagnostic = settleFrontierEntryPlacement({
+    turnState: ctx.frontierEntry,
+    frontier,
+    diagnostic: entryDiagnostic,
+    corp,
+    fallbackCandidate: entryCandidate,
+    ordinaryEntry,
+    exceptionalShortageEntry,
+  });
 
   // One founding observation per corp per turn; gate evaluation lives in
   // capacityDecisionTelemetry.
