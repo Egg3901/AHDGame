@@ -10,16 +10,23 @@ import { parseJsonBody } from "@/lib/api/validate";
 import { handleRouteError, forbidden, notFound, badRequest } from "@/lib/api/errors";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
-import { buildPersonalBalanceInc, getPersonalBalance } from "@/lib/currency/characterFunds";
-import { calculateSpreadFee, distributeSpreadFee } from "@/lib/currency/spreadFees";
-import { getCountryForCurrency } from "@/lib/currency/marketMaker";
-import { LIMIT_ORDER_SPREAD } from "@/lib/constants/currencies";
 import {
   nonConvertibleCurrencyMessage,
   nonConvertibleTradeCurrency,
 } from "@/lib/constants/commandEconomy";
-import { runWithOptionalTransaction } from "@/lib/db/runWithOptionalTransaction";
-import type { CurrencyOrder, GameConfig, GameState, TradeHistoryEntry } from "@/lib/db/types";
+import {
+  applyForexFillSpend,
+  FOREX_FILL_INSUFFICIENT,
+  FOREX_FILL_ORDER_MISSING,
+  FOREX_FILL_OWNER_MISSING,
+  FOREX_FILL_RACED,
+  FOREX_FILL_UNAVAILABLE,
+} from "@/lib/forex/forexSpend";
+import {
+  MoneyFlowKeyConflictError,
+  MoneyFlowTerminalError,
+} from "@/lib/db/nonAtomicMoneyFlow";
+import type { CurrencyOrder, GameConfig, GameState } from "@/lib/db/types";
 import { recordAudit } from "@/lib/audit/recordAudit";
 
 interface RouteParams {
@@ -77,220 +84,76 @@ export async function POST(request: Request, { params }: RouteParams) {
       throw badRequest(nonConvertibleCurrencyMessage(blocked));
     }
 
-    const remaining = order.amount - order.filledAmount;
-    const fillAmount = parsed.data.amount ? Math.min(parsed.data.amount, remaining) : remaining;
-
-    if (fillAmount <= 0) throw badRequest("Nothing left to fill on this order");
-
-    // The filler takes the opposite side: they provide toCurrency and receive fromCurrency.
-    // Use the order's limitRate as the trade rate.
-    // Total spread: 0.175%, split evenly (0.0875% each side).
-    const halfSpreadRate = LIMIT_ORDER_SPREAD / 2;
-
-    // Filler needs to provide toCurrency amount: fillAmount * limitRate
-    const toCurrencyAmount = fillAmount * order.limitRate!;
-
-    // Each party pays spread in their own currency denomination
-    const posterSpreadFromCurrency = calculateSpreadFee(fillAmount, halfSpreadRate);
-    const fillerSpreadToCurrency = calculateSpreadFee(toCurrencyAmount, halfSpreadRate);
-
-    const fillerBalance = getPersonalBalance(auth.user.character, order.toCurrency, true);
-    const fillerTotalCost = toCurrencyAmount + fillerSpreadToCurrency;
-    if (fillerBalance < fillerTotalCost) {
-      throw badRequest(
-        `Insufficient ${order.toCurrency}. Need ${Math.ceil(fillerTotalCost).toLocaleString()}, have ${Math.floor(fillerBalance).toLocaleString()}.`
-      );
+    // Crash-safe fill (issue #1672): taker settlement, poster credit, the
+    // guarded order transition, the history row, and both half-spread CB
+    // slices run as keyed idempotent steps, so a crash between the sequential
+    // writes reconciles to exactly one fill instead of stranding a
+    // half-landed one, and a concurrent fill/cancel race compensates the
+    // loser instead of double-moving money. `Idempotency-Key` replays the
+    // stored fill without moving money again.
+    const headerKey = request.headers.get("Idempotency-Key");
+    if (headerKey !== null && (headerKey.length === 0 || headerKey.length > 128)) {
+      return NextResponse.json({ error: "Invalid Idempotency-Key header" }, { status: 400 });
     }
 
     const currentTurn = gs?.currentTurn ?? 0;
     const now = new Date();
 
-    const newFilledAmount = order.filledAmount + fillAmount;
-    const newStatus = newFilledAmount >= order.amount ? "filled" : "partial";
-
-    // Balance updates:
-    // Filler: deduct toCurrency (amount + spread), credit fromCurrency net of the
-    // poster's half-spread. That half-spread was escrowed by the poster at order
-    // creation (escrow = order.amount fromCurrency) and is now routed to the CB via
-    // distributeSpreadFee below. Crediting the filler the FULL fillAmount while also
-    // handing posterSpreadFromCurrency to the CB minted fromCurrency on every fill
-    // (nothing was ever debited for it). Netting it out of the filler credit makes
-    // the escrow actually fund the spread: (fillAmount - posterSpread) to filler +
-    // posterSpread to CB = fillAmount out of escrow. Conserved.
-    // Poster: credit toCurrency (amount), poster spread stays escrowed and is distributed
-    const fillerFromCurrencyCredit = fillAmount - posterSpreadFromCurrency;
-    const fillerSettlementInc = {
-      ...buildPersonalBalanceInc(-fillerTotalCost, order.toCurrency, true),
-      ...buildPersonalBalanceInc(fillerFromCurrencyCredit, order.fromCurrency, true),
-    };
-    const fillerRollbackInc = {
-      ...buildPersonalBalanceInc(fillerTotalCost, order.toCurrency, true),
-      ...buildPersonalBalanceInc(-fillerFromCurrencyCredit, order.fromCurrency, true),
-    };
-    const posterCreditInc = buildPersonalBalanceInc(toCurrencyAmount, order.toCurrency, true);
-
-    const fromCountryId = getCountryForCurrency(order.fromCurrency);
-    const toCountryId = getCountryForCurrency(order.toCurrency);
-    const claimFilter = {
-      _id: order._id,
-      status: { $in: ["open", "partial"] as const },
-      filledAmount: order.filledAmount,
-    };
-    const tradeHistoryEntry = {
-      buyerCharacterId: order.characterId,
-      sellerCharacterId: auth.user.character._id,
-      fromCurrency: order.fromCurrency,
-      toCurrency: order.toCurrency,
-      amount: fillAmount,
-      rate: order.limitRate!,
-      spread: posterSpreadFromCurrency,
-      turn: currentTurn,
-      createdAt: now,
-      source: "limit_order",
-    } as TradeHistoryEntry;
-
-    await runWithOptionalTransaction(
-      async (session) => {
-        const claimedOrder = await db
-          .collection<CurrencyOrder>("currencyOrders")
-          .findOneAndUpdate(
-            claimFilter,
-            { $set: { status: "processing", updatedAt: now } },
-            { returnDocument: "before", session }
-          );
-        if (!claimedOrder) {
-          throw badRequest("Order was already filled by another trader");
-        }
-
-        const fillerResult = await db.collection("characters").updateOne(
-          {
-            _id: auth.user.character._id,
-            [`currencyBalances.personal.${order.toCurrency}`]: { $gte: fillerTotalCost },
-          },
-          { $inc: fillerSettlementInc },
-          { session }
-        );
-        if (fillerResult.modifiedCount === 0) {
-          throw badRequest(`Insufficient ${order.toCurrency} balance`);
-        }
-
-        const posterResult = await db
-          .collection("characters")
-          .updateOne({ _id: order.characterId }, { $inc: posterCreditInc }, { session });
-        if (posterResult.matchedCount === 0) {
-          throw notFound("Order owner not found");
-        }
-
-        const fillResult = await db.collection<CurrencyOrder>("currencyOrders").updateOne(
-          { _id: order._id, status: "processing" },
-          {
-            $set: { status: newStatus, updatedAt: now },
-            $inc: { filledAmount: fillAmount, spreadCharged: posterSpreadFromCurrency },
-          },
-          { session }
-        );
-        if (fillResult.matchedCount === 0) {
-          throw badRequest("Order was already filled by another trader");
-        }
-
-        await db.collection<TradeHistoryEntry>("tradeHistory").insertOne(tradeHistoryEntry, {
-          session,
-        });
-      },
-      async () => {
-        const claimedOrder = await db
-          .collection<CurrencyOrder>("currencyOrders")
-          .findOneAndUpdate(
-            claimFilter,
-            { $set: { status: "processing", updatedAt: now } },
-            { returnDocument: "before" }
-          );
-        if (!claimedOrder) {
-          throw badRequest("Order was already filled by another trader");
-        }
-
-        let fillerSettled = false;
-        let posterCredited = false;
-
-        try {
-          const fillerResult = await db.collection("characters").updateOne(
-            {
-              _id: auth.user.character._id,
-              [`currencyBalances.personal.${order.toCurrency}`]: { $gte: fillerTotalCost },
-            },
-            { $inc: fillerSettlementInc }
-          );
-          if (fillerResult.modifiedCount === 0) {
-            throw badRequest(`Insufficient ${order.toCurrency} balance`);
-          }
-          fillerSettled = true;
-
-          const posterResult = await db
-            .collection("characters")
-            .updateOne({ _id: order.characterId }, { $inc: posterCreditInc });
-          if (posterResult.matchedCount === 0) {
-            throw notFound("Order owner not found");
-          }
-          posterCredited = true;
-
-          const fillResult = await db.collection<CurrencyOrder>("currencyOrders").updateOne(
-            { _id: order._id, status: "processing" },
-            {
-              $set: { status: newStatus, updatedAt: now },
-              $inc: { filledAmount: fillAmount, spreadCharged: posterSpreadFromCurrency },
-            }
-          );
-          if (fillResult.matchedCount === 0) {
-            throw badRequest("Order was already filled by another trader");
-          }
-          await db.collection<TradeHistoryEntry>("tradeHistory").insertOne(tradeHistoryEntry);
-        } catch (error) {
-          if (posterCredited) {
-            await db
-              .collection("characters")
-              .updateOne(
-                { _id: order.characterId },
-                { $inc: buildPersonalBalanceInc(-toCurrencyAmount, order.toCurrency, true) }
-              );
-          }
-          if (fillerSettled) {
-            await db
-              .collection("characters")
-              .updateOne({ _id: auth.user.character._id }, { $inc: fillerRollbackInc });
-          }
-          await db
-            .collection<CurrencyOrder>("currencyOrders")
-            .updateOne(
-              { _id: order._id, status: "processing" },
-              { $set: { status: order.status, updatedAt: new Date() } }
-            );
-          throw error;
-        }
+    let fill: Awaited<ReturnType<typeof applyForexFillSpend>>;
+    try {
+      fill = await applyForexFillSpend(db, {
+        kind: "limit",
+        orderId: order._id,
+        takerCharacterId: auth.user.character._id,
+        ...(parsed.data.amount !== undefined ? { requestedAmount: parsed.data.amount } : {}),
+        now,
+        turn: currentTurn,
+        fingerprint: `forex-fill:${order._id.toHexString()}:${auth.user.character._id.toHexString()}:${parsed.data.amount ?? "full"}`,
+        ...(headerKey !== null ? { idempotencyKey: headerKey } : {}),
+      });
+    } catch (error) {
+      if (error instanceof Error && error.message === FOREX_FILL_ORDER_MISSING) {
+        throw notFound("Order not found");
       }
-    );
-
-    await Promise.all(
-      [
-        fromCountryId
-          ? distributeSpreadFee(
-              db,
-              posterSpreadFromCurrency,
-              fromCountryId,
-              order.fromCurrency,
-              toCountryId ?? undefined
-            )
-          : null,
-        toCountryId
-          ? distributeSpreadFee(
-              db,
-              fillerSpreadToCurrency,
-              toCountryId,
-              order.toCurrency,
-              fromCountryId ?? undefined
-            )
-          : null,
-      ].filter(Boolean)
-    );
+      if (error instanceof Error && error.message.startsWith(`${FOREX_FILL_UNAVAILABLE}:`)) {
+        const reason = error.message.slice(FOREX_FILL_UNAVAILABLE.length + 1);
+        if (reason === "not-limit") throw badRequest("Only limit orders can be peer-filled");
+        if (reason === "empty") throw badRequest("Nothing left to fill on this order");
+        throw badRequest("Order is not available for filling");
+      }
+      if (error instanceof Error && error.message.startsWith(FOREX_FILL_RACED)) {
+        throw badRequest("Order was already filled by another trader");
+      }
+      if (error instanceof Error && error.message.startsWith(FOREX_FILL_INSUFFICIENT)) {
+        const parts = error.message.split(":");
+        if (parts[1] === "precheck" && parts.length === 4) {
+          const need = Number(parts[2]);
+          const have = Number(parts[3]);
+          if (Number.isFinite(need) && Number.isFinite(have)) {
+            throw badRequest(
+              `Insufficient ${order.toCurrency}. Need ${Math.ceil(need).toLocaleString()}, have ${Math.floor(have).toLocaleString()}.`
+            );
+          }
+        }
+        throw badRequest(`Insufficient ${order.toCurrency} balance`);
+      }
+      if (error instanceof Error && error.message.startsWith(FOREX_FILL_OWNER_MISSING)) {
+        throw notFound("Order owner not found");
+      }
+      if (error instanceof MoneyFlowTerminalError) {
+        return NextResponse.json(
+          { error: "This fill already settled. Start a new fill to try again." },
+          { status: 409 }
+        );
+      }
+      if (error instanceof MoneyFlowKeyConflictError) {
+        return NextResponse.json(
+          { error: "This idempotency key was already used for a different fill." },
+          { status: 409 }
+        );
+      }
+      throw error;
+    }
 
     recordAudit({
       source: "api",
@@ -302,24 +165,24 @@ export async function POST(request: Request, { params }: RouteParams) {
         name: `${order.fromCurrency}->${order.toCurrency}`,
       },
       counterparty: { type: "character", id: order.characterId, name: undefined },
-      amount: fillAmount,
+      amount: fill.fillAmount,
       currencyCode: order.fromCurrency,
       delta: [
-        { field: "status", before: order.status, after: newStatus },
-        { field: "filledAmount", before: order.filledAmount, after: newFilledAmount },
-        { field: "fillAmount", before: null, after: fillAmount },
-        { field: "rate", before: null, after: order.limitRate },
+        { field: "status", before: order.status, after: fill.orderStatus },
+        { field: "filledAmount", before: order.filledAmount, after: order.filledAmount + fill.fillAmount },
+        { field: "fillAmount", before: null, after: fill.fillAmount },
+        { field: "rate", before: null, after: fill.rate },
       ],
       outcome: "ok",
     });
 
     return NextResponse.json({
       success: true,
-      filledAmount: fillAmount,
-      rate: order.limitRate,
-      posterSpread: posterSpreadFromCurrency,
-      fillerSpread: fillerSpreadToCurrency,
-      orderStatus: newStatus,
+      filledAmount: fill.fillAmount,
+      rate: fill.rate,
+      posterSpread: fill.makerSpread,
+      fillerSpread: fill.takerSpread,
+      orderStatus: fill.orderStatus,
     });
   } catch (error) {
     return handleRouteError(error);

@@ -1,16 +1,37 @@
 // src/lib/currency/marketMaker.ts
-import type { Db, ObjectId } from "mongodb";
+import { randomUUID } from "node:crypto";
+import type { ClientSession, Db, ObjectId } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
 import type { CurrencyCode } from "@/lib/constants/currencies";
-import type { ExchangeRate, TradeHistoryEntry, TradeSource } from "@/lib/db/types";
+import type {
+  Character,
+  ExchangeRate,
+  TradeHistoryEntry,
+  TradeSource,
+} from "@/lib/db/types";
+import type { ImperialCharacter } from "@/lib/db/types/imperialCharacter";
 import {
   MARKET_MAKER_SPREAD,
   CURRENCY_ANCHOR_COUNTRY,
   COUNTRY_CURRENCY_MAP,
   clampForexSpreadStrength,
 } from "@/lib/constants/currencies";
-import { buildPersonalBalanceInc } from "@/lib/currency/characterFunds";
-import { calculateSpreadFee, distributeSpreadFee } from "@/lib/currency/spreadFees";
+import {
+  calculateSpreadFee,
+  distributeSpreadFee,
+  makeSpreadDistributionSteps,
+} from "@/lib/currency/spreadFees";
+import { getMoneyFlowReceiptsCollection } from "@/lib/db/collections/moneyFlowReceipts";
+import {
+  claimMoneyFlowReceipt,
+  keyedInsertId,
+  makeInsertStep,
+  makeLegStep,
+  runMoneyFlowSteps,
+  type MoneyFlowLegOutcome,
+  type MoneyFlowStepRef,
+} from "@/lib/db/nonAtomicMoneyFlow";
+import { runWithOptionalTransaction } from "@/lib/db/runWithOptionalTransaction";
 
 interface MarketMakerTradeParams {
   characterId: ObjectId;
@@ -25,6 +46,15 @@ interface MarketMakerTradeParams {
   source?: TradeSource;
   /** Optional reference to the originating entity (corp id, bond id, etc.). */
   sourceRef?: string;
+  /**
+   * Caller-supplied idempotency key (e.g. `Idempotency-Key` header echoed by
+   * the forex routes). Same key + same trade replays the stored outcome
+   * instead of trading again. Omit to mint one: the trade is still
+   * crash-safe within the attempt, but a client retry mints a new key and is
+   * treated as a new trade (still guarded by the atomic wallet debit). Turn
+   * phases, auto-convert, and corp/bond income flows omit it.
+   */
+  idempotencyKey?: string;
 }
 
 interface MarketMakerTradeResult {
@@ -35,6 +65,24 @@ interface MarketMakerTradeResult {
   effectiveRate: number;
   spreadCharged: number;
   tradeHistoryId?: ObjectId;
+  /** True when this call replayed a previously settled same-key trade. */
+  duplicate?: boolean;
+}
+
+/** Wallet leg failed: the balance raced between the quote and the write. */
+export const FOREX_TRADE_INSUFFICIENT = "FOREX_TRADE_INSUFFICIENT";
+/** Trade-history insert failed after the wallet moved (prefix compensated). */
+export const FOREX_TRADE_RECORD = "FOREX_TRADE_RECORD";
+/** Central-bank spread slice failed after the wallet moved (prefix compensated). */
+export const FOREX_TRADE_SPREAD = "FOREX_TRADE_SPREAD";
+
+function mapTradeError(step: MoneyFlowStepRef, outcome: MoneyFlowLegOutcome): Error {
+  // Preserve the historical failure surface: a raced wallet debit was
+  // `Insufficient <ccy> balance` (400); anything after the wallet moved
+  // compensates the prefix instead of stranding a half-landed trade.
+  if (step.name === "wallet-settle") return new Error(`${FOREX_TRADE_INSUFFICIENT}:${outcome}`);
+  if (step.name === "trade-record") return new Error(`${FOREX_TRADE_RECORD}:${outcome}`);
+  return new Error(`${FOREX_TRADE_SPREAD}:${step.name}:${outcome}`);
 }
 
 /**
@@ -255,31 +303,31 @@ export async function executeMarketMakerTrade(
     };
   }
 
-  // Atomic balance update with race-condition guard:
-  // The filter checks the character has sufficient fromCurrency before deducting.
-  const deductInc = buildPersonalBalanceInc(-spendAmount, fromCurrency, true);
-  const creditInc = buildPersonalBalanceInc(toAmount, toCurrency, true);
-
-  const result = await db
-    .collection(collection)
-    .updateOne(
-      { _id: characterId, [`currencyBalances.personal.${fromCurrency}`]: { $gte: spendAmount } },
-      { $inc: { ...deductInc, ...creditInc } }
-    );
-
-  if (result.modifiedCount === 0) {
-    return {
-      success: false,
-      error: `Insufficient ${fromCurrency} balance`,
-      fromAmount: amount,
-      toAmount: 0,
-      effectiveRate: 0,
-      spreadCharged: 0,
-    };
+  // Crash-safe settlement (issue #1672): the wallet debit+credit rides one
+  // keyed leg on the character document (same atomic guard as the old
+  // `$gte` update, plus the idempotency key), the trade-history row is a
+  // deterministic insert, and the central-bank spread slices are keyed steps
+  // with the same split/routing as distributeSpreadFee. A crash between the
+  // sequential writes leaves an `in_progress` receipt and retrying with the
+  // same key reconciles to exactly one trade instead of trading twice (or
+  // moving money with no history row). The pre-quote guards above still
+  // return failure objects so internal callers (turn, auto-convert,
+  // corp/bond flows) see the historical shape.
+  const key = params.idempotencyKey ?? randomUUID();
+  if (key.length === 0 || key.length > 128) {
+    throw new RangeError("Forex trade idempotency key must be 1-128 characters");
   }
-
-  // Record trade history
-  const tradeEntry: Omit<TradeHistoryEntry, "_id"> = {
+  // Built from stable request inputs, never from the resolved quote: the
+  // quote depends on live rates, so a same-key crash recovery that
+  // recomputes it must converge on the stored steps (key guards), not fail
+  // closed on a fingerprint mismatch.
+  const fingerprint = `forex-market:${characterId.toHexString()}:${collection}:${fromCurrency}:${toCurrency}:${amount}`;
+  const tradeId = keyedInsertId(key, "forex-trade");
+  const receipts = await getMoneyFlowReceiptsCollection(db);
+  const tradeHistory = db.collection<TradeHistoryEntry>("tradeHistory");
+  const now = new Date();
+  const tradeEntry: TradeHistoryEntry = {
+    _id: tradeId,
     buyerCharacterId: characterId,
     sellerCharacterId: null, // market maker
     fromCurrency,
@@ -288,27 +336,100 @@ export async function executeMarketMakerTrade(
     rate: crossRate,
     spread: spreadFee,
     turn,
-    createdAt: new Date(),
+    createdAt: now,
     source: source ?? "manual",
     ...(sourceRef ? { sourceRef } : {}),
   };
-  const { insertedId: tradeHistoryId } = await db
-    .collection<TradeHistoryEntry>("tradeHistory")
-    .insertOne(tradeEntry as TradeHistoryEntry);
+  // Dust trades can round toAmount to zero (e.g. 1 JPY → USD); a zero
+  // extraInc is invalid as a leg, and the old `$inc` by zero was a no-op, so
+  // the credit rides only when nonzero.
+  const toCreditField = `currencyBalances.personal.${toCurrency}`;
+  const toCreditIncs = toAmount !== 0 ? { [toCreditField]: toAmount } : undefined;
+  const walletStep =
+    collection === "imperialCharacters"
+      ? makeLegStep(key, {
+          name: "wallet-settle",
+          collection: db.collection<ImperialCharacter>("imperialCharacters"),
+          docId: characterId,
+          field: `currencyBalances.personal.${fromCurrency}`,
+          delta: -spendAmount,
+          minBalance: spendAmount,
+          ...(toCreditIncs ? { extraIncs: toCreditIncs } : {}),
+        })
+      : makeLegStep(key, {
+          name: "wallet-settle",
+          collection: db.collection<Character>("characters"),
+          docId: characterId,
+          field: `currencyBalances.personal.${fromCurrency}`,
+          delta: -spendAmount,
+          minBalance: spendAmount,
+          ...(toCreditIncs ? { extraIncs: toCreditIncs } : {}),
+        });
 
-  // Distribute spread fee: destroy sink; forexRevenue to the source currency's
-  // CB; the reserve slice (in fromCurrency) accrues to the destination currency's
-  // CB as a foreign reserve — so converting foreign income (coupons/dividends) to
-  // home currency builds the recipient country's foreign-currency reserves in the
-  // outflow currency.
-  await distributeSpreadFee(db, spreadFee, fromCountryId, fromCurrency, toCountryId);
-
-  return {
-    success: true,
-    fromAmount: spendAmount,
-    toAmount,
-    effectiveRate: crossRate,
-    spreadCharged: spreadFee,
-    tradeHistoryId,
+  const runTrade = async (session?: ClientSession): Promise<MarketMakerTradeResult> => {
+    const opts = session ? { session } : {};
+    const claim = await claimMoneyFlowReceipt(receipts, key, fingerprint, opts);
+    if (claim === "duplicate") {
+      // A completed key replays the stored outcome without re-reading live
+      // rates or the wallet: the trade already landed, so re-quoting could
+      // refute a settled trade.
+      const stored = await tradeHistory.findOne({ _id: tradeId }, opts);
+      if (!stored) {
+        throw new Error("FOREX_TRADE_RECEIPT_ORPHANED");
+      }
+      return {
+        success: true,
+        fromAmount: stored.amount,
+        toAmount: Math.round((stored.amount - stored.spread) * stored.rate),
+        effectiveRate: stored.rate,
+        spreadCharged: stored.spread,
+        tradeHistoryId: stored._id,
+        duplicate: true,
+      };
+    }
+    try {
+      await runMoneyFlowSteps(
+        receipts,
+        key,
+        [
+          walletStep,
+          makeInsertStep("trade-record", tradeHistory, tradeEntry),
+          ...makeSpreadDistributionSteps(db, key, {
+            totalFee: spreadFee,
+            sourceCountryId: fromCountryId,
+            currencyCode: fromCurrency,
+            destinationCountryId: toCountryId,
+          }),
+        ],
+        mapTradeError,
+        opts
+      );
+    } catch (error) {
+      if (error instanceof Error && error.message.startsWith(FOREX_TRADE_INSUFFICIENT)) {
+        return {
+          success: false,
+          error: `Insufficient ${fromCurrency} balance`,
+          fromAmount: amount,
+          toAmount: 0,
+          effectiveRate: 0,
+          spreadCharged: 0,
+        };
+      }
+      throw error;
+    }
+    return {
+      success: true,
+      fromAmount: spendAmount,
+      toAmount,
+      effectiveRate: crossRate,
+      spreadCharged: spreadFee,
+      tradeHistoryId: tradeId,
+      duplicate: claim === "in-progress",
+    };
   };
+
+  return runWithOptionalTransaction(
+    async (session) => runTrade(session),
+    async () => runTrade()
+  );
 }

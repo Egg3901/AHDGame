@@ -4,7 +4,7 @@
 // Errors: 400, 401, 403 (forex disabled), 500
 import { NextResponse } from "next/server";
 import { withNoStore } from "@/lib/api/withNoStore";
-import type { InsertOneResult, ObjectId } from "mongodb";
+import { ObjectId } from "mongodb";
 import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
@@ -12,13 +12,20 @@ import { parseJsonBody } from "@/lib/api/validate";
 import { handleRouteError, badRequest, forbidden } from "@/lib/api/errors";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
-import { getPersonalBalance, buildPersonalBalanceInc } from "@/lib/currency/characterFunds";
+import { getPersonalBalance } from "@/lib/currency/characterFunds";
 import { ZOD_ACTIVE_CURRENCY_ENUM } from "@/lib/constants/currencies";
 import {
   nonConvertibleCurrencyMessage,
   nonConvertibleTradeCurrency,
 } from "@/lib/constants/commandEconomy";
-import { runWithOptionalTransaction } from "@/lib/db/runWithOptionalTransaction";
+import {
+  applyForexOrderCreateSpend,
+  FOREX_ORDER_INSUFFICIENT,
+} from "@/lib/forex/forexSpend";
+import {
+  MoneyFlowKeyConflictError,
+  MoneyFlowTerminalError,
+} from "@/lib/db/nonAtomicMoneyFlow";
 import type { CurrencyOrder, CurrencyOrderStatus, GameConfig, GameState } from "@/lib/db/types";
 import { recordAudit } from "@/lib/audit/recordAudit";
 
@@ -124,84 +131,70 @@ export async function POST(request: Request) {
       throw badRequest(nonConvertibleCurrencyMessage(blocked));
     }
 
-    // Atomic escrow: deduct fromCurrency only if sufficient balance exists.
-    // The $gte filter prevents double-spend if two requests race.
-    const balanceField = `currencyBalances.personal.${fromCurrency}`;
-    const escrowInc = buildPersonalBalanceInc(-amount, fromCurrency, true);
+    // Crash-safe escrow (issue #1672): the fromCurrency debit is a keyed
+    // idempotent leg and the order row a deterministic insert, so a crash
+    // between the sequential writes reconciles to exactly one escrowed order
+    // instead of debiting for an order that never landed (or landing it
+    // twice). `Idempotency-Key` replays the stored order id without
+    // escrowing again.
+    const headerKey = request.headers.get("Idempotency-Key");
+    if (headerKey !== null && (headerKey.length === 0 || headerKey.length > 128)) {
+      return NextResponse.json({ error: "Invalid Idempotency-Key header" }, { status: 400 });
+    }
+
     const now = new Date();
-    const order: Omit<CurrencyOrder, "_id"> = {
-      characterId: character._id,
-      characterName: character.name,
-      countryId: character.countryId,
-      type: "limit",
-      direction,
-      fromCurrency,
-      toCurrency,
-      amount,
-      limitRate,
-      expiresAtTurn: expiresInTurns ? currentTurn + expiresInTurns : undefined,
-      status: "open",
-      filledAmount: 0,
-      spreadCharged: 0,
-      createdAt: now,
-      updatedAt: now,
-    };
-
-    let insertedId: ObjectId | null = null;
-    await runWithOptionalTransaction(
-      async (session) => {
-        const escrowResult = await db
-          .collection("characters")
-          .updateOne(
-            { _id: character._id, [balanceField]: { $gte: amount } },
-            { $inc: escrowInc },
-            { session }
-          );
-        if (escrowResult.modifiedCount === 0) {
-          const balance = getPersonalBalance(character, fromCurrency, true);
-          throw badRequest(
-            `Insufficient ${fromCurrency} balance. Have ${Math.floor(balance).toLocaleString()}, need ${amount.toLocaleString()}.`
-          );
-        }
-
-        const result: InsertOneResult<CurrencyOrder> = await db
-          .collection<CurrencyOrder>("currencyOrders")
-          .insertOne(order as CurrencyOrder, { session });
-        insertedId = result.insertedId;
-      },
-      async () => {
-        const escrowResult = await db
-          .collection("characters")
-          .updateOne({ _id: character._id, [balanceField]: { $gte: amount } }, { $inc: escrowInc });
-        if (escrowResult.modifiedCount === 0) {
-          const balance = getPersonalBalance(character, fromCurrency, true);
-          throw badRequest(
-            `Insufficient ${fromCurrency} balance. Have ${Math.floor(balance).toLocaleString()}, need ${amount.toLocaleString()}.`
-          );
-        }
-
-        try {
-          const result: InsertOneResult<CurrencyOrder> = await db
-            .collection<CurrencyOrder>("currencyOrders")
-            .insertOne(order as CurrencyOrder);
-          insertedId = result.insertedId;
-        } catch (error) {
-          await db
-            .collection("characters")
-            .updateOne(
-              { _id: character._id },
-              { $inc: buildPersonalBalanceInc(amount, fromCurrency, true) }
-            );
-          throw error;
-        }
+    let orderId: string;
+    try {
+      const result = await applyForexOrderCreateSpend(db, {
+        characterId: character._id,
+        characterName: character.name,
+        countryId: character.countryId,
+        orderType: "limit",
+        direction,
+        fromCurrency,
+        toCurrency,
+        amount,
+        limitRate,
+        ...(expiresInTurns ? { expiresAtTurn: currentTurn + expiresInTurns } : {}),
+        now,
+        fingerprint: `forex-order:${character._id.toHexString()}:limit:${fromCurrency}:${toCurrency}:${amount}:${limitRate}:${direction}:${expiresInTurns ?? "default"}`,
+        ...(headerKey !== null ? { idempotencyKey: headerKey } : {}),
+      });
+      orderId = result.orderId.toHexString();
+    } catch (error) {
+      if (error instanceof Error && error.message.startsWith(FOREX_ORDER_INSUFFICIENT)) {
+        const balance = getPersonalBalance(character, fromCurrency, true);
+        throw badRequest(
+          `Insufficient ${fromCurrency} balance. Have ${Math.floor(balance).toLocaleString()}, need ${amount.toLocaleString()}.`
+        );
       }
-    );
+      if (error instanceof MoneyFlowTerminalError) {
+        return NextResponse.json(
+          { error: "This order already settled. Start a new order to try again." },
+          { status: 409 }
+        );
+      }
+      if (error instanceof MoneyFlowKeyConflictError) {
+        return NextResponse.json(
+          { error: "This idempotency key was already used for a different order." },
+          { status: 409 }
+        );
+      }
+      throw error;
+    }
+
+    const created = await db
+      .collection<CurrencyOrder>("currencyOrders")
+      .findOne({ _id: new ObjectId(orderId) });
+    if (!created) {
+      return handleRouteError(new Error("FOREX_ORDER_READBACK_MISSING"));
+    }
 
     recordAudit({
       source: "api",
       action: "forex.order",
       category: "market",
-      subject: { type: "currencyOrder", id: insertedId!, name: `${fromCurrency}->${toCurrency}` },
+      subject: { type: "currencyOrder", id: created._id, name: `${fromCurrency}->${toCurrency}` },
       counterparty: { type: "currency", id: toCurrency, name: toCurrency },
       amount: amount,
       currencyCode: fromCurrency,
@@ -216,10 +209,24 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       success: true,
-      orderId: insertedId!.toString(),
+      orderId,
       order: {
-        ...order,
-        _id: insertedId!.toString(),
+        characterId: created.characterId.toHexString(),
+        characterName: created.characterName,
+        countryId: created.countryId,
+        type: created.type,
+        direction: created.direction,
+        fromCurrency: created.fromCurrency,
+        toCurrency: created.toCurrency,
+        amount: created.amount,
+        limitRate: created.limitRate,
+        ...(created.expiresAtTurn !== undefined ? { expiresAtTurn: created.expiresAtTurn } : {}),
+        status: created.status,
+        filledAmount: created.filledAmount,
+        spreadCharged: created.spreadCharged,
+        createdAt: created.createdAt,
+        updatedAt: created.updatedAt,
+        _id: orderId,
       },
     });
   } catch (error) {
