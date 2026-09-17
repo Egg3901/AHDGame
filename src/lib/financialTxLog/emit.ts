@@ -24,7 +24,7 @@ import type {
   ActionAuditSubject,
 } from "@/lib/db/types/actionAuditLog";
 
-type TxInput = Omit<FinancialTxLogEntry, "_id" | "expiresAt" | "flagged">;
+export type TxInput = Omit<FinancialTxLogEntry, "_id" | "expiresAt" | "flagged">;
 
 function amountToAnchor(
   amount: number,
@@ -215,6 +215,7 @@ const TX_TYPE_TO_AUDIT_ACTION: Partial<Record<FinancialTxType, string>> = {
 
   // Resource prospecting + extraction contracts
   corp_prospecting_cost: "corp.prospecting_cost",
+  corp_tech_unlock: "corp.tech_unlock",
   govt_prospecting_cost: "gov.prospecting_cost",
   contract_signing_fee: "contract.signing_fee",
   contract_royalty_payment: "contract.royalty_payment",
@@ -285,6 +286,25 @@ export async function emitTx(db: Db, entry: TxInput, thresholds?: TxThresholds):
   }
 }
 
+function buildTxDocs(
+  entries: TxInput[],
+  thresholds: TxThresholds,
+  turnLengthMinutes: number,
+  ratesByCurrency: Map<string, number>
+): FinancialTxLogEntry[] {
+  return entries.map((entry) => {
+    const entryWithAnchor = withAnchorAmount(entry, ratesByCurrency);
+    const flags = evaluateTier1Flags(entryWithAnchor, thresholds);
+    return {
+      ...entryWithAnchor,
+      _id: new ObjectId(),
+      expiresAt: computeExpiresAtSync(entryWithAnchor.createdAt, turnLengthMinutes),
+      suspectFlags: flags.length > 0 ? flags : undefined,
+      flagged: flags.length > 0,
+    };
+  });
+}
+
 // Bulk emission — callers MUST pre-load thresholds with loadTxThresholds once before the loop.
 export async function emitTxBulk(
   db: Db,
@@ -297,17 +317,7 @@ export async function emitTxBulk(
     // the hot path of bondTurn / corporationTurn (~hundreds of entries/turn).
     const turnLengthMinutes = await loadTurnLengthMinutes(db);
     const ratesByCurrency = await loadAnchorRateMap(db, entries);
-    const docs: FinancialTxLogEntry[] = entries.map((entry) => {
-      const entryWithAnchor = withAnchorAmount(entry, ratesByCurrency);
-      const flags = evaluateTier1Flags(entryWithAnchor, thresholds);
-      return {
-        ...entryWithAnchor,
-        _id: new ObjectId(),
-        expiresAt: computeExpiresAtSync(entryWithAnchor.createdAt, turnLengthMinutes),
-        suspectFlags: flags.length > 0 ? flags : undefined,
-        flagged: flags.length > 0,
-      };
-    });
+    const docs = buildTxDocs(entries, thresholds, turnLengthMinutes, ratesByCurrency);
     await db.collection<FinancialTxLogEntry>("financialTxLog").insertMany(docs, { ordered: false });
     await shadowLedgerFromTx(db, docs);
     // BULK path so the hot loop (bondTurn / corporationTurn, hundreds of
@@ -316,4 +326,40 @@ export async function emitTxBulk(
   } catch (err) {
     Sentry.captureException(err, { extra: { phase: "emitTxBulk", count: entries.length } });
   }
+}
+
+/**
+ * Strict single-row emission for post-commit ledger writes that must not go
+ * missing (sector tech-tree unlocks, ticket #1998).
+ *
+ * Unlike `emitTx`, which is fire-and-forget by design, this THROWS when the
+ * row cannot be persisted, so the caller can roll back the cash debit it just
+ * committed instead of leaving a successful debit with no visible entry. The
+ * insert is retried a bounded number of times for transient failures; only a
+ * persistent failure throws. Doc construction (anchor derivation, suspect
+ * flags, expiry) is identical to the bulk path above.
+ */
+export async function emitTxStrict(
+  db: Db,
+  entry: TxInput,
+  options: { thresholds?: TxThresholds; maxAttempts?: number } = {}
+): Promise<FinancialTxLogEntry> {
+  const maxAttempts = Math.max(1, options.maxAttempts ?? 3);
+  const thresholds = options.thresholds ?? (await loadTxThresholds(db));
+  const turnLengthMinutes = await loadTurnLengthMinutes(db);
+  const ratesByCurrency = await loadAnchorRateMap(db, [entry]);
+  const [doc] = buildTxDocs([entry], thresholds, turnLengthMinutes, ratesByCurrency);
+  let lastError: unknown = null;
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      await db.collection<FinancialTxLogEntry>("financialTxLog").insertOne(doc);
+      await shadowLedgerFromTx(db, [doc]);
+      recordAudit(buildAuditEnvelope(doc));
+      return doc;
+    } catch (err) {
+      lastError = err;
+    }
+  }
+  Sentry.captureException(lastError, { extra: { phase: "emitTxStrict", type: entry.type } });
+  throw lastError;
 }
