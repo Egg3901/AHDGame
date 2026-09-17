@@ -36,7 +36,15 @@ function SeenAt({ value, known }: { value: string | null; known: boolean }) {
   return <LocalTime value={value} options={{ dateStyle: "medium", timeStyle: "short" }} />;
 }
 
-function TrackSection({ userId, track }: { userId: string; track: Track }) {
+function TrackSection({
+  userId,
+  track,
+  isModeratorContext,
+}: {
+  userId: string;
+  track: Track;
+  isModeratorContext: boolean;
+}) {
   const [open, setOpen] = useState(false);
   const [page, setPage] = useState(1);
   const [data, setData] = useState<HistoryPage | null>(null);
@@ -47,8 +55,13 @@ function TrackSection({ userId, track }: { userId: string; track: Track }) {
     setLoading(true);
     setError(null);
     try {
+      // `context` tells the server which surface is asking, so the moderator
+      // panel gets masked addresses even when an admin is the one looking.
+      // Without it this table printed a raw IP directly beneath the same card's
+      // "Network details hidden" label.
+      const context = isModeratorContext ? "moderator" : "admin";
       const res = await fetch(
-        `/api/admin/players/${userId}/identity-history?track=${track}&page=${page}`
+        `/api/admin/players/${userId}/identity-history?track=${track}&page=${page}&context=${context}`
       );
       if (!res.ok) throw new Error(`Request failed (${res.status})`);
       setData((await res.json()) as HistoryPage);
@@ -57,7 +70,7 @@ function TrackSection({ userId, track }: { userId: string; track: Track }) {
     } finally {
       setLoading(false);
     }
-  }, [userId, track, page]);
+  }, [userId, track, page, isModeratorContext]);
 
   // Lazy: nothing is fetched until the section is opened, so a collapsed panel
   // costs nothing on a list that already loads up to 500 accounts.
@@ -178,11 +191,17 @@ function TrackSection({ userId, track }: { userId: string; track: Track }) {
  * are highlighted, which is what makes rotation visible without diffing hashes
  * by eye.
  */
-export function IdentityHistoryPanel({ userId }: { userId: string }) {
+export function IdentityHistoryPanel({
+  userId,
+  isModeratorContext,
+}: {
+  userId: string;
+  isModeratorContext: boolean;
+}) {
   return (
     <div className="mt-2 space-y-1">
-      <TrackSection userId={userId} track="ip" />
-      <TrackSection userId={userId} track="fingerprint" />
+      <TrackSection userId={userId} track="ip" isModeratorContext={isModeratorContext} />
+      <TrackSection userId={userId} track="fingerprint" isModeratorContext={isModeratorContext} />
     </div>
   );
 }

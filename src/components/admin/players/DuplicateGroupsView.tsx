@@ -435,7 +435,7 @@ export function DuplicateGroupsView({
                   </div>
 
                   {/* Rotation history — collapsed by default, fetched on open */}
-                  <IdentityHistoryPanel userId={user.id} />
+                  <IdentityHistoryPanel userId={user.id} isModeratorContext={isModeratorContext} />
 
                   {/* Actions */}
                   <div className="flex flex-wrap gap-2">
