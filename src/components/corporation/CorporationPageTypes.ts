@@ -127,6 +127,7 @@ export interface CorporationDetail {
    * capacity one. Absent/false everywhere else.
    */
   plantsMode?: boolean;
+  labourEnabled?: boolean;
   /** Corp-wide physical rollups; null/absent outside plants. */
   physical?: CorporationPhysicalRollup | null;
   _id: string;
