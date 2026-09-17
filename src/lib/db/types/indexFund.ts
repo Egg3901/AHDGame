@@ -209,6 +209,20 @@ export interface IndexFundRedemptionQueueEntry {
   status: IndexFundRedemptionStatus;
   /** Set while the cron owns this payout. Processing rows require reconciliation after a crash. */
   processingStartedAt?: Date;
+  /**
+   * Money-flow idempotency key of the payout attempt that owns this row
+   * (issue #1672). Set at claim time next to `processingStartedAt`, cleared
+   * when the claim is restored. A row that still carries a key after a crash
+   * resumes under that key instead of paying fresh, and a fresh claim refuses
+   * rows that carry one, so an operator-restored row cannot double-pay.
+   */
+  processingFlowKey?: string;
+  /**
+   * The queue status before the owning payout claimed this row (issue #1672).
+   * Lets crash recovery restore the exact prior status instead of guessing it
+   * from the paid amount.
+   */
+  processingFromStatus?: IndexFundRedemptionStatus;
   createdAt: Date;
   updatedAt: Date;
 }

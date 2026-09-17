@@ -73,7 +73,7 @@ import {
 import { sellFundBondHoldingsForCash } from "@/lib/bonds/sellFundBondUnits";
 import { getAllFundDefinitions } from "@/lib/indexFunds/fundDefinitions";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
-import { buildPersonalBalanceInc, loadCharacterFxRate } from "@/lib/currency/characterFunds";
+import { loadCharacterFxRate } from "@/lib/currency/characterFunds";
 import {
   corpLiquidCapitalToAnchor,
   resolveCorpLiquidCurrencyCode,
@@ -91,11 +91,18 @@ import {
 } from "@/lib/indexFunds/fundCrossRebalancing";
 import { findRemovedConstituentHoldings } from "@/lib/indexFunds/fundConstituentLifecycle";
 import { writeOffDeadConstituentHoldings } from "@/lib/indexFunds/fundHoldingWriteOff";
+import { remainingRedemptionUnits } from "@/lib/indexFunds/fundRedemptionQueue";
 import {
-  redemptionEntryStatusAfterPayout,
-  remainingRedemptionUnits,
-} from "@/lib/indexFunds/fundRedemptionQueue";
-import { logIndexFundRedeem, resolveIndexFundHolder } from "@/lib/indexFunds/fundTxLog";
+  applyQueuedRedemptionSpend,
+  buildQueuedRedemptionFingerprint,
+  buildQueuedRedemptionKey,
+  recoverQueuedRedemptionOrphans,
+  QUEUED_REDEMPTION_FUNDS,
+  QUEUED_REDEMPTION_HOLDER,
+  QUEUED_REDEMPTION_QUEUE,
+  QUEUED_REDEMPTION_TX,
+} from "@/lib/indexFunds/queuedRedemptionSpend";
+import { MoneyFlowKeyConflictError, MoneyFlowTerminalError } from "@/lib/db/nonAtomicMoneyFlow";
 import { runWithOptionalTransaction } from "@/lib/db/runWithOptionalTransaction";
 import { TURNS_PER_DAY, MS_PER_TURN } from "@/lib/constants/turnTime";
 import { placeFundShareBuyOrder, cancelFundShareOrder } from "@/lib/indexFunds/fundShareOrders";
@@ -782,8 +789,25 @@ export async function processQueuedRedemptions(
   forexEnabled: boolean,
   currentTurn: number
 ): Promise<number> {
+  // Crash recovery first: resume payouts a dead pass left behind, before the
+  // fresh queue loads, so a resumed settle lands before new slices compute
+  // against the same cash. Recovery never breaks the pass.
+  let paid = 0;
+  try {
+    paid += await recoverQueuedRedemptionOrphans(db, fund._id);
+  } catch (err) {
+    console.warn(
+      `[indexfund-cron] queued redemption recovery for ${fund.slug} did not run: ${
+        err instanceof Error ? err.message : String(err)
+      }`
+    );
+  }
+  // Recovery may have moved cash; re-read the baseline the slices use.
+  let fundState = (await getFundById(db, fund._id)) ?? fund;
+  let availableCash = fundState.cashAnchor;
+
   const pending = await listPendingRedemptions(db, fund._id);
-  if (pending.length === 0) return 0;
+  if (pending.length === 0) return paid;
 
   // Wallet credits are in the fund's native currency; the ₳ → native multiplier
   // is stamped on each queue entry at request time (entry.redeemFxRate, ticket
@@ -797,23 +821,23 @@ export async function processQueuedRedemptions(
       console.warn(
         `[indexfund-cron] deferring ${pending.length} queued redemption(s) for ${fund.slug}: FX rate for ${fund.anchorCurrencyCode} unavailable`
       );
-      return 0;
+      return paid;
     }
   }
-
-  let paid = 0;
-  let fundState = fund;
-  let availableCash = fund.cashAnchor;
 
   // Units still unserved in this pass. Decremented as each entry is handled so
   // the share is measured against who is still waiting, not the original queue.
   let unservedUnits = pending.reduce((sum, e) => sum + Math.max(0, e.units ?? 0), 0);
 
   for (const pendingEntry of pending) {
-    // Claim before any fund debit or holder credit. If a later write fails, a
-    // processing row is quarantined for manual reconciliation instead of being
-    // paid a second time on the next turn. Automatic replay is unsafe because a
-    // crash can occur on either side of the holder credit.
+    // Claim before any fund debit or holder credit. The claim carries this
+    // payout's money-flow key, so a crash resumes under that key (via the
+    // recovery pass above) instead of paying fresh, and a fresh claim refuses
+    // rows that still carry one, so an operator-restored row cannot
+    // double-pay. If a later write fails terminally, the row is restored (the
+    // receipt invariant guarantees no partial effect); otherwise it stays
+    // quarantined for ops instead of being paid a second time.
+    const flowKey = buildQueuedRedemptionKey(pendingEntry._id, currentTurn);
     const entry = await db
       .collection<IndexFundRedemptionQueueEntry>(FUND_REDEMPTION_QUEUE_COLLECTION)
       .findOneAndUpdate(
@@ -822,8 +846,17 @@ export async function processQueuedRedemptions(
           status: pendingEntry.status,
           units: pendingEntry.units,
           paidAmountAnchor: pendingEntry.paidAmountAnchor,
+          processingFlowKey: { $exists: false },
         },
-        { $set: { status: "processing", processingStartedAt: new Date(), updatedAt: new Date() } },
+        {
+          $set: {
+            status: "processing",
+            processingStartedAt: new Date(),
+            processingFlowKey: flowKey,
+            processingFromStatus: pendingEntry.status,
+            updatedAt: new Date(),
+          },
+        },
         { returnDocument: "before" }
       );
     if (!entry) continue;
@@ -834,7 +867,7 @@ export async function processQueuedRedemptions(
           { _id: entry._id, status: "processing" },
           {
             $set: { status: entry.status, updatedAt: new Date() },
-            $unset: { processingStartedAt: "" },
+            $unset: { processingStartedAt: "", processingFlowKey: "", processingFromStatus: "" },
           }
         );
     };
@@ -847,7 +880,7 @@ export async function processQueuedRedemptions(
           { _id: entry._id, status: "processing" },
           {
             $set: { status: "paid", updatedAt: new Date() },
-            $unset: { processingStartedAt: "" },
+            $unset: { processingStartedAt: "", processingFlowKey: "", processingFromStatus: "" },
           }
         );
       continue;
@@ -922,154 +955,86 @@ export async function processQueuedRedemptions(
     // Native-currency equivalent for personal wallet credits (₳ × blended rate).
     // Absent redeemFxRate = pre-fix queue row → credit rate-free (× 1), matching
     // what the holder was owed under the old symmetric-scale code (no windfall).
+    // Every figure below is pinned on the resume plan, so a same-key retry
+    // replays these exact amounts instead of recomputing from post-debit state.
     const redeemFxRate = entry.redeemFxRate ?? 1;
     const paidNative = forexEnabled ? paidAmount * redeemFxRate : paidAmount;
 
     // New queue rows burned units at request time; legacy rows burn as they pay.
     const shouldBurnUnitsNow = entry.unitsBurnedAtRequest !== true;
-    const debitFilter: Record<string, unknown> = {
-      _id: fund._id,
-      cashAnchor: { $gte: paidAmount },
-    };
-    const debitInc: Record<string, number> = { cashAnchor: -paidAmount };
-    if (shouldBurnUnitsNow) {
-      debitFilter.unitSupply = { $gte: quote.redeemableUnits };
-      debitInc.unitSupply = -quote.redeemableUnits;
-    }
-
-    // Guarded debit: only pay out if the fund still holds enough cash. Legacy
-    // queued rows also require supply because their units were not burned yet.
-    const debitResult = await db.collection<IndexFund>("indexFunds").updateOne(debitFilter, {
-      $inc: debitInc,
-      $set: { updatedAt: new Date() },
-    });
-    if (debitResult.matchedCount === 0) {
-      await restoreQueueClaim();
-      break;
-    }
-    availableCash -= paidAmount;
-
-    if (entry.characterId) {
-      const inc = buildPersonalBalanceInc(paidNative, fundState.anchorCurrencyCode, forexEnabled);
-      const creditResult = await db
-        .collection("characters")
-        .updateOne({ _id: entry.characterId }, { $inc: inc, $set: { updatedAt: new Date() } });
-      if (creditResult.matchedCount === 0) {
-        // Character gone — refund the fund cash and skip this entry
-        await db.collection<IndexFund>("indexFunds").updateOne(
-          { _id: fund._id },
-          {
-            $inc: {
-              cashAnchor: paidAmount,
-              ...(shouldBurnUnitsNow ? { unitSupply: quote.redeemableUnits } : {}),
-            },
-          }
-        );
-        await restoreQueueClaim();
-        continue;
-      }
-    } else if (entry.imperialCharacterId) {
-      const inc = buildPersonalBalanceInc(paidNative, fundState.anchorCurrencyCode, forexEnabled);
-      const creditResult = await db
-        .collection("imperialCharacters")
-        .updateOne(
-          { _id: entry.imperialCharacterId },
-          { $inc: inc, $set: { updatedAt: new Date() } }
-        );
-      if (creditResult.matchedCount === 0) {
-        await db.collection<IndexFund>("indexFunds").updateOne(
-          { _id: fund._id },
-          {
-            $inc: {
-              cashAnchor: paidAmount,
-              ...(shouldBurnUnitsNow ? { unitSupply: quote.redeemableUnits } : {}),
-            },
-          }
-        );
-        await restoreQueueClaim();
-        continue;
-      }
-    } else if (entry.nppId) {
-      const creditResult = await db.collection("npps").updateOne(
-        { _id: entry.nppId },
-        {
-          $inc: { nppInvestmentCashAnchor: paidAmount },
-          $set: { updatedAt: new Date() },
-        }
-      );
-      if (creditResult.matchedCount === 0) {
-        await db.collection<IndexFund>("indexFunds").updateOne(
-          { _id: fund._id },
-          {
-            $inc: {
-              cashAnchor: paidAmount,
-              ...(shouldBurnUnitsNow ? { unitSupply: quote.redeemableUnits } : {}),
-            },
-          }
-        );
-        await restoreQueueClaim();
-        continue;
-      }
-    } else {
-      await db.collection<IndexFund>("indexFunds").updateOne(
-        { _id: fund._id },
-        {
-          $inc: {
-            cashAnchor: paidAmount,
-            ...(shouldBurnUnitsNow ? { unitSupply: quote.redeemableUnits } : {}),
-          },
-        }
-      );
-      await restoreQueueClaim();
-      continue;
-    }
-
-    const remainingAfterPay = quote.queuedUnits;
-    await db.collection<IndexFundRedemptionQueueEntry>(FUND_REDEMPTION_QUEUE_COLLECTION).updateOne(
-      { _id: entry._id, status: "processing" },
-      {
-        $set: {
-          status: redemptionEntryStatusAfterPayout(remainingAfterPay),
-          paidAmountAnchor: (entry.paidAmountAnchor ?? 0) + paidAmount,
-          units: remainingAfterPay,
-          requestedAmountAnchor: remainingAfterPay * redemptionNav,
-          updatedAt: new Date(),
-        },
-        $unset: { processingStartedAt: "" },
-      }
-    );
-
-    await insertFundTransaction(db, {
-      fundId: fund._id,
-      kind: "redemption",
-      holderKind: entry.holderKind,
-      characterId: entry.characterId,
-      imperialCharacterId: entry.imperialCharacterId,
-      nppId: entry.nppId,
-      units: quote.redeemableUnits,
-      navAnchor: redemptionNav,
-      amountAnchor: paidAmount,
-      note: "Paid from queued redemption",
-      createdAt: new Date(),
-    });
-
-    if (entry.holderKind === "character" || entry.holderKind === "imperial_character") {
-      const holder = await resolveIndexFundHolder(db, entry);
-      if (holder) {
-        void logIndexFundRedeem(db, {
-          fund: fundState,
-          holder,
-          units: quote.redeemableUnits,
-          navAnchor: redemptionNav,
-          amountAnchor: paidAmount,
-          source: "cron_queue",
-          queuedRemainder: remainingAfterPay,
+    const holderKind = entry.characterId
+      ? "character"
+      : entry.imperialCharacterId
+        ? "imperial_character"
+        : entry.nppId
+          ? "npp"
+          : "unknown";
+    const holderId = entry.characterId ?? entry.imperialCharacterId ?? entry.nppId;
+    try {
+      const payout = await applyQueuedRedemptionSpend(db, {
+        fundId: fund._id,
+        fundSlug: fund.slug,
+        fundName: fund.name,
+        fundTicker: fund.tickerSymbol,
+        anchorCurrencyCode: fundState.anchorCurrencyCode,
+        entryId: entry._id,
+        holderKind,
+        ...(entry.characterId ? { characterId: entry.characterId } : {}),
+        ...(entry.imperialCharacterId ? { imperialCharacterId: entry.imperialCharacterId } : {}),
+        ...(entry.nppId ? { nppId: entry.nppId } : {}),
+        entryPaidBefore: entry.paidAmountAnchor ?? 0,
+        unitsRemaining,
+        redemptionNav,
+        redeemFxRate,
+        forexEnabled,
+        paidNative,
+        cashForThisEntry,
+        redeemableUnits: quote.redeemableUnits,
+        paidAmount,
+        remainingAfterPay: quote.queuedUnits,
+        shouldBurnUnitsNow,
+        turn: currentTurn,
+        fingerprint: buildQueuedRedemptionFingerprint({
+          fundId: fund._id,
+          entryId: entry._id,
+          holderKind,
+          ...(holderId ? { holderId } : {}),
+          unitsRemaining,
+          redemptionNav,
+          redeemFxRate,
+          paidNative,
+          redeemableUnits: quote.redeemableUnits,
+          paidAmount,
+          remainingAfterPay: quote.queuedUnits,
           turn: currentTurn,
-        });
+        }),
+        idempotencyKey: flowKey,
+      });
+      availableCash -= payout.outcome.paidAmountAnchor;
+      if (!payout.duplicate && payout.outcome.redeemableUnits > 0) paid++;
+    } catch (err) {
+      // The receipt invariant guarantees no partial effect on terminal
+      // settlement (failed = nothing applied, compensated = prefix reversed),
+      // so restoring the claim there is safe and self-healing. A lost queue
+      // race or a foreign key conflict leaves the row quarantined for ops.
+      const code = err instanceof Error ? err.message.split(":")[0] : "";
+      if (code === QUEUED_REDEMPTION_FUNDS) {
+        await restoreQueueClaim();
+        break;
       }
+      if (
+        code === QUEUED_REDEMPTION_HOLDER ||
+        code === QUEUED_REDEMPTION_TX ||
+        err instanceof MoneyFlowTerminalError
+      ) {
+        await restoreQueueClaim();
+        continue;
+      }
+      if (code === QUEUED_REDEMPTION_QUEUE || err instanceof MoneyFlowKeyConflictError) {
+        continue;
+      }
+      throw err;
     }
-
-    paid++;
   }
 
   return paid;

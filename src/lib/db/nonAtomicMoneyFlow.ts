@@ -176,6 +176,25 @@ import { ObjectId, type ClientSession, type Collection, type Filter } from "mong
  * with command-level validation-order/key-path/fresh-vs-replay/stored-
  * outcome/degraded-plan/error-parity tests and Idempotency-Key
  * validation/forwarding/minting plus settled/conflict route tests).
+ * Index-fund queued redemptions are migrated (one payout slice per queue
+ * entry via the queuedRedemptionSpend primitive, driven by
+ * processQueuedRedemptions: the caller keeps queue ordering, the
+ * FX-availability gate, liquidity pre-steps, pro-rata slicing, and
+ * forward-priced NAV, and every computed figure (units, NAV, FX rate,
+ * native/anchor amounts, slice partition, prior paid) is pinned on the
+ * receipt resume plan at claim time, so a same-key retry replays the stored
+ * amounts instead of recomputing from post-debit state; fund debit (with the
+ * legacy burn-now supply guard) + holder credit (character/imperial wallet
+ * at the pinned native figure, NPP in anchor) + queue settle + deterministic
+ * audit row run as keyed steps under a per-entry-per-turn caller key, with
+ * same-key replay, fingerprint-conflict, terminal, crash-after-every-write,
+ * concurrent-processor, partial-queue, rounding-boundary,
+ * compensation/convergence, and orphan-recovery tests; the queue claim
+ * carries the flow key and refuses keyed rows, and the pass re-drives
+ * orphaned receipts and keyed processing rows before the fresh queue loads.
+ * A survived audit-row insert error compensates the prefix (the historical
+ * unwind-and-throw stranded money moved with no row); the holder log stays
+ * post-commit best effort).
  * Forex turn chair interventions are migrated
  * (applyForexInterventionSpend: deterministic per-turn key, resume plan
  * persisted on the receipt at claim, keyed rate-writeback + combined

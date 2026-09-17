@@ -1067,3 +1067,153 @@ describe("fundCron — rebalanceFundToTarget bid logic", () => {
     expect(cancelFundShareOrder).toHaveBeenCalledWith(expect.anything(), staleBidId);
   });
 });
+
+// ---------------------------------------------------------------------------
+// processQueuedRedemptions — caller key propagation through the keyed primitive
+// ---------------------------------------------------------------------------
+
+describe("fundCron — processQueuedRedemptions caller key propagation", () => {
+  it("pays an NPP slice through the keyed primitive with an entry+turn key", async () => {
+    const { buildQueuedRedemptionKey } = await import("./queuedRedemptionSpend");
+    const db = createMockDb();
+    const fundId = new ObjectId();
+    const entryId = new ObjectId();
+    const holderNppId = new ObjectId();
+    const fund: IndexFund = {
+      _id: fundId,
+      slug: "key-test",
+      name: "Key Test Fund",
+      tickerSymbol: "KTF",
+      scope: "country",
+      kind: "broad",
+      countryId: "US",
+      anchorCurrencyCode: "USD",
+      status: "active",
+      quotedNav: 100,
+      unitSupply: 100,
+      reserveUnits: 0,
+      cashAnchor: 5_000,
+      targetConstituents: [],
+      holdings: [],
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    const queueEntry: IndexFundRedemptionQueueEntry = {
+      _id: entryId,
+      fundId,
+      holderKind: "npp",
+      nppId: holderNppId,
+      units: 10,
+      requestedNavAnchor: 100,
+      requestedAmountAnchor: 1_000,
+      paidAmountAnchor: 0,
+      status: "queued",
+      unitsBurnedAtRequest: true,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    const { listPendingRedemptions, getFundById } = await import("@/lib/indexFunds/fundQueries");
+    vi.mocked(listPendingRedemptions).mockResolvedValueOnce([queueEntry]);
+    vi.mocked(getFundById).mockResolvedValueOnce(null);
+    db.collection("indexFundRedemptionQueue");
+    db.collectionMocks.indexFundRedemptionQueue.findOneAndUpdate.mockResolvedValueOnce(queueEntry);
+
+    const paid = await processQueuedRedemptions(db as never, fund, false, 1);
+
+    expect(paid).toBe(1);
+    // Caller-propagated key: one payout per entry and turn.
+    const expectedKey = buildQueuedRedemptionKey(entryId, 1);
+    expect(db.collectionMocks.nonAtomicMoneyFlowReceipts.insertOne).toHaveBeenCalledWith(
+      expect.objectContaining({ _id: expectedKey }),
+      undefined
+    );
+    // Guarded fund debit at the pinned slice amount.
+    expect(db.collectionMocks.indexFunds.updateOne).toHaveBeenCalledWith(
+      expect.objectContaining({ _id: fundId, cashAnchor: { $gte: 1_000 } }),
+      expect.objectContaining({ $inc: expect.objectContaining({ cashAnchor: -1_000 }) }),
+      undefined
+    );
+    // NPP credit moves anchor, and the queue settles paid.
+    expect(db.collectionMocks.npps.updateOne).toHaveBeenCalledWith(
+      expect.objectContaining({ _id: holderNppId }),
+      expect.objectContaining({
+        $inc: expect.objectContaining({ nppInvestmentCashAnchor: 1_000 }),
+      }),
+      undefined
+    );
+    expect(db.collectionMocks.indexFundRedemptionQueue.updateOne).toHaveBeenCalledWith(
+      expect.objectContaining({ _id: entryId }),
+      expect.objectContaining({ $set: expect.objectContaining({ status: "paid" }) }),
+      undefined
+    );
+    expect(db.collectionMocks.indexFundTransactions.insertOne).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: "redemption", units: 10, amountAnchor: 1_000 }),
+      undefined
+    );
+  });
+
+  it("restores the claim and breaks the pass when the fund debit loses its race", async () => {
+    const db = createMockDb();
+    const fundId = new ObjectId();
+    const firstEntryId = new ObjectId();
+    const secondEntryId = new ObjectId();
+    const holderNppId = new ObjectId();
+    const fund: IndexFund = {
+      _id: fundId,
+      slug: "race-test",
+      name: "Race Test Fund",
+      tickerSymbol: "RTF",
+      scope: "country",
+      kind: "broad",
+      countryId: "US",
+      anchorCurrencyCode: "USD",
+      status: "active",
+      quotedNav: 100,
+      unitSupply: 100,
+      reserveUnits: 0,
+      cashAnchor: 5_000,
+      targetConstituents: [],
+      holdings: [],
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    const makeEntry = (id: ObjectId): IndexFundRedemptionQueueEntry => ({
+      _id: id,
+      fundId,
+      holderKind: "npp",
+      nppId: holderNppId,
+      units: 10,
+      requestedNavAnchor: 100,
+      requestedAmountAnchor: 1_000,
+      paidAmountAnchor: 0,
+      status: "queued",
+      unitsBurnedAtRequest: true,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    const { listPendingRedemptions, getFundById } = await import("@/lib/indexFunds/fundQueries");
+    vi.mocked(listPendingRedemptions).mockResolvedValueOnce([
+      makeEntry(firstEntryId),
+      makeEntry(secondEntryId),
+    ]);
+    vi.mocked(getFundById).mockResolvedValueOnce(null);
+    db.collection("indexFundRedemptionQueue");
+    db.collectionMocks.indexFundRedemptionQueue.findOneAndUpdate.mockResolvedValueOnce(
+      makeEntry(firstEntryId)
+    );
+    db.collection("indexFunds");
+    db.collectionMocks.indexFunds.updateOne.mockResolvedValueOnce({ matchedCount: 0 });
+
+    const paid = await processQueuedRedemptions(db as never, fund, false, 1);
+
+    expect(paid).toBe(0);
+    // Claim restored to queued, and the pass broke before the second entry.
+    expect(db.collectionMocks.indexFundRedemptionQueue.updateOne).toHaveBeenCalledWith(
+      expect.objectContaining({ _id: firstEntryId }),
+      expect.objectContaining({ $set: expect.objectContaining({ status: "queued" }) })
+    );
+    expect(db.collectionMocks.indexFundRedemptionQueue.findOneAndUpdate.mock.calls).toHaveLength(1);
+  });
+});
