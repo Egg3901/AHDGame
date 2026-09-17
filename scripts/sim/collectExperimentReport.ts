@@ -15,11 +15,13 @@
  *     npx tsx scripts/sim/collectExperimentReport.ts --db=ahd_sim_run1 --run-id=run1
  */
 
-// Forces module scope — otherwise this file (no top-level import/export,
-// only dynamic imports inside main()) is treated as a global script, and its
-// top-level const/function names collide with collectMetrics.ts's identical
-// ones (same issue hit earlier this session with runWorld.ts).
-export {};
+// Static import of a pure args module only (no Mongo, no env, no side
+// effects): the requestedConfig key list is shared with simJobArgs.ts so a
+// queueable field cannot be emitted by the worker yet dropped from the
+// report. Everything else stays dynamically imported inside main() to avoid
+// colliding with collectMetrics.ts's identical top-level names (same issue
+// hit earlier with runWorld.ts).
+import { SIM_JOB_REQUESTED_CONFIG_KEYS } from "./simJobArgs";
 
 function arg(flag: string): string | undefined {
   const prefix = `--${flag}=`;
@@ -97,6 +99,8 @@ async function main() {
       seed: (job as { seed?: string } | null)?.seed,
       turns: (job as { turns?: number } | null)?.turns,
       jobId: runId,
+      // Pinned source (#1966): provenance reachable only here, beside the
+      // requested-vs-effective config identity below.
       source: {
         worktree: ((job as { sourceWorktree?: string } | null)?.sourceWorktree ??
           (sandboxRun as { source?: { worktree?: string } } | null)?.source?.worktree ??
@@ -110,28 +114,13 @@ async function main() {
         executedCommit: ((sandboxRun as { source?: { executedCommit?: string } } | null)?.source
           ?.executedCommit ?? null) as string | null,
       },
+      // Run identity: what the queue asked for (shared key list with
+      // simJobArgs.ts, so newly queueable fields appear here automatically),
+      // beside effectiveConfigInitial for what the sandbox run actually saw.
       requestedConfig: job
         ? Object.fromEntries(
             Object.entries(job).filter(([key]) =>
-              [
-                "preset",
-                "turns",
-                "seed",
-                "sourceWorktree",
-                "sourceCommit",
-                "startPolicy",
-                "marketSystemMode",
-                "labourSystemMode",
-                "autonomyLevel",
-                "allFeatureFlags",
-                "freightSettlementMode",
-                "canonicalFreightBillingEnabled",
-                "shortageResponsiveSourcingEnabled",
-                "indexFundBondLiquidityEnabled",
-                "equityLiquidityFacilityEnabled",
-                "nppMarketCoverageEnabled",
-                "nppFragileMarketSupplyEnabled",
-              ].includes(key)
+              (SIM_JOB_REQUESTED_CONFIG_KEYS as readonly string[]).includes(key)
             )
           )
         : undefined,

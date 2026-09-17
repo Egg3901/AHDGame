@@ -50,6 +50,12 @@ import {
   parseOptionalBoolean,
   type FreightSettlementExperimentMode,
 } from "@/lib/sim/economicExperiment";
+// Pure constant module (no Mongo, no env), safe to import eagerly like
+// @/lib/market/modes above — see the env-setup comment below.
+import {
+  REAL_OUTPUT_SHADOW_CLI_FLAG,
+  parseRealOutputShadowEnabled,
+} from "@/lib/economy/realOutputShadow";
 
 interface SimRunDoc {
   _id: string;
@@ -230,6 +236,12 @@ const nppFragileMarketSupplyEnabled = parseOptionalBoolean(
   arg("npp-fragile-market-supply"),
   "npp-fragile-market-supply"
 );
+// Real-output shadow diagnostic (issue #1470, queued sim-only): explicit
+// true/false through the canonical parser, absent leaves the sandbox default
+// (off). Refused alongside --preserve-live-config via isGameplayOverrideArg,
+// and never implied by --all-feature-flags (that sweep writes gameState
+// flags; this one lives on gameConfig).
+const realOutputShadowEnabled = parseRealOutputShadowEnabled(arg(REAL_OUTPUT_SHADOW_CLI_FLAG));
 // Clone mode: the sandbox DB was pre-loaded with a restore of the LIVE world
 // (mongorestore), so skip bootstrap AND the "real world" users guardrail, and
 // instead autonomize the human players' corporations so the whole economy runs
@@ -761,6 +773,11 @@ async function main() {
     equityLiquidityFacilityEnabled,
     nppMarketCoverageEnabled,
     nppFragileMarketSupplyEnabled,
+    // Queued sim-only: economicExperimentConfigSet writes this onto the
+    // SANDBOX gameConfig and records it on the simRuns doc; the report's
+    // requestedConfig carries what the job asked for and
+    // effectiveConfigInitial captures what the run saw.
+    realOutputShadowEnabled,
   };
   const economicExperimentSet = economicExperimentConfigSet(economicExperiment);
   if (Object.keys(economicExperimentSet).length > 0) {

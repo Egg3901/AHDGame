@@ -69,6 +69,19 @@ describe("admin feature gates foreign policy mode", () => {
     expect(db.collection("gameState").updateOne).not.toHaveBeenCalled();
   });
 
+  it("refuses the real-output shadow flag: sim-queue only, never admin gameplay (issue #1470)", async () => {
+    const { POST } = await import("./route");
+
+    for (const value of [true, false]) {
+      const response = await POST(
+        request({ kind: "boolean", key: "realOutputShadowEnabled", value })
+      );
+
+      expect(response.status).toBe(400);
+    }
+    expect(db.collection("gameState").updateOne).not.toHaveBeenCalled();
+  });
+
   it("advances the active rollout stage with an admin audit stamp", async () => {
     db.collection("gameState").findOne.mockResolvedValue({
       _id: "current",

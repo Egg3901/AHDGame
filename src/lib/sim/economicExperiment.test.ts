@@ -106,6 +106,35 @@ describe("economic experiment configuration", () => {
     );
   });
 
+  it("carries the real-output shadow flag through config set and CLI args", () => {
+    // Run identity: the sandbox gameConfig write and the simRuns/report
+    // records flow from economicExperimentConfigSet, and worker emission
+    // round-trips through the canonical CLI spelling.
+    expect(economicExperimentConfigSet({ realOutputShadowEnabled: true })).toEqual({
+      realOutputShadowEnabled: true,
+    });
+    expect(economicExperimentConfigSet({ realOutputShadowEnabled: false })).toEqual({
+      realOutputShadowEnabled: false,
+    });
+    expect(economicExperimentCliArgs({ realOutputShadowEnabled: true })).toEqual([
+      "--real-output-shadow=true",
+    ]);
+    expect(economicExperimentCliArgs({ realOutputShadowEnabled: false })).toEqual([
+      "--real-output-shadow=false",
+    ]);
+  });
+
+  it("leaves the real-output shadow flag unset unless explicitly requested", () => {
+    expect(economicExperimentConfigSet({})).not.toHaveProperty("realOutputShadowEnabled");
+    expect(economicExperimentCliArgs({})).not.toContain("--real-output-shadow=true");
+  });
+
+  it("guards the real-output shadow flag under preserve-live-config", () => {
+    expect(isGameplayOverrideArg("--real-output-shadow=true")).toBe(true);
+    expect(isGameplayOverrideArg("--real-output-shadow=false")).toBe(true);
+    expect(isGameplayOverrideArg("--real-output-shadow")).toBe(false);
+  });
+
   it("guards both equity spellings under preserve-live-config", () => {
     expect(isGameplayOverrideArg("--equity-liquidity-facility=true")).toBe(true);
     expect(isGameplayOverrideArg("--equity-liquidity-facility=false")).toBe(true);

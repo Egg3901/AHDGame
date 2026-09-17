@@ -1,3 +1,5 @@
+import { REAL_OUTPUT_SHADOW_CLI_FLAG } from "@/lib/economy/realOutputShadow";
+
 export type FreightSettlementExperimentMode = "shadow" | "active";
 
 export interface EconomicExperimentConfig {
@@ -8,6 +10,13 @@ export interface EconomicExperimentConfig {
   equityLiquidityFacilityEnabled?: boolean;
   nppMarketCoverageEnabled?: boolean;
   nppFragileMarketSupplyEnabled?: boolean;
+  /**
+   * Real-output shadow diagnostic (issue #1470). Queued sim-only: runWorld
+   * writes it onto the SANDBOX gameConfig when the canonical CLI flag sets
+   * it. Never set by seeds, bootstrap, the admin surface, or the
+   * all-feature sweep.
+   */
+  realOutputShadowEnabled?: boolean;
 }
 
 export function parseOptionalBoolean(value: string | undefined, flag: string): boolean | undefined {
@@ -38,9 +47,11 @@ export function parseEquityLiquidityFacilityEnabled(
 
 /** True when one argv entry is a gameplay override, which
  * --preserve-live-config refuses to run alongside. Covers both the canonical
- * equity liquidity facility flag and its deprecated alias. */
+ * equity liquidity facility flag and its deprecated alias, plus the
+ * real-output shadow flag (REAL_OUTPUT_SHADOW_CLI_FLAG): a clone run that
+ * preserves the live config must never pick up an experiment override. */
 export function isGameplayOverrideArg(value: string): boolean {
-  return /^(--(?:market-mode|labour-mode|autonomy|difficulty|foreign-policy|foreign-policy-stage|freight-settlement|npp-market-coverage|npp-fragile-market-supply|canonical-freight-billing|shortage-responsive-sourcing|index-fund-bond-liquidity|equity-liquidity-facility|equity-liquidity)=|--(?:scarcity-drift|brand-loyalty|brand-loyalty-slice|quality|demographics|command-economy|macro-growth|pre-iteration|no-pre-iteration)$)/.test(
+  return /^(--(?:market-mode|labour-mode|autonomy|difficulty|foreign-policy|foreign-policy-stage|freight-settlement|npp-market-coverage|npp-fragile-market-supply|canonical-freight-billing|shortage-responsive-sourcing|index-fund-bond-liquidity|equity-liquidity-facility|equity-liquidity|real-output-shadow)=|--(?:scarcity-drift|brand-loyalty|brand-loyalty-slice|quality|demographics|command-economy|macro-growth|pre-iteration|no-pre-iteration)$)/.test(
     value
   );
 }
@@ -70,6 +81,9 @@ export function economicExperimentConfigSet(
     ...(config.nppFragileMarketSupplyEnabled !== undefined
       ? { nppFragileMarketSupplyEnabled: config.nppFragileMarketSupplyEnabled }
       : {}),
+    ...(config.realOutputShadowEnabled !== undefined
+      ? { realOutputShadowEnabled: config.realOutputShadowEnabled }
+      : {}),
   };
 }
 
@@ -94,6 +108,9 @@ export function economicExperimentCliArgs(config: EconomicExperimentConfig): str
       : []),
     ...(set.nppFragileMarketSupplyEnabled !== undefined
       ? [`--npp-fragile-market-supply=${String(set.nppFragileMarketSupplyEnabled)}`]
+      : []),
+    ...(set.realOutputShadowEnabled !== undefined
+      ? [`--${REAL_OUTPUT_SHADOW_CLI_FLAG}=${String(set.realOutputShadowEnabled)}`]
       : []),
   ];
 }

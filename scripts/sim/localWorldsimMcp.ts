@@ -204,6 +204,10 @@ const TOOLS: ToolDef[] = [
         sourceCommit: str(
           "Pinned source (#1966): full 40-hex commit SHA that must equal the worktree HEAD. Requires sourceWorktree."
         ),
+        realOutputShadowEnabled: bool(
+          "Whether this sandbox run additionally persists the constant-price real-output shadow diagnostic beside the live nominal signal (issue #1470). Sandbox-only; explicit false is retained for control runs. Never enabled in production or admin gameplay."
+        ),
+        ),
       },
       ["preset", "turns", "seed"]
     ),
@@ -265,6 +269,12 @@ const TOOLS: ToolDef[] = [
         sourceWorktree: a.sourceWorktree === undefined ? undefined : String(a.sourceWorktree),
         sourceCommit: a.sourceCommit === undefined ? undefined : String(a.sourceCommit),
       });
+      if (
+        a.realOutputShadowEnabled !== undefined &&
+        typeof a.realOutputShadowEnabled !== "boolean"
+      ) {
+        throw new Error("realOutputShadowEnabled must be boolean");
+      }
       const res = await enqueue(db, {
         preset,
         turns,
@@ -295,6 +305,9 @@ const TOOLS: ToolDef[] = [
         ...(a.nppFragileMarketSupplyEnabled !== undefined
           ? { nppFragileMarketSupplyEnabled: a.nppFragileMarketSupplyEnabled }
           : {}),
+        ...(a.realOutputShadowEnabled !== undefined
+          ? { realOutputShadowEnabled: a.realOutputShadowEnabled }
+          : {}),
       });
       return {
         ...res,
@@ -312,6 +325,7 @@ const TOOLS: ToolDef[] = [
         equityLiquidityFacilityEnabled: a.equityLiquidityFacilityEnabled ?? "preset default",
         nppMarketCoverageEnabled: a.nppMarketCoverageEnabled ?? "preset default",
         nppFragileMarketSupplyEnabled: a.nppFragileMarketSupplyEnabled ?? "preset default",
+        realOutputShadowEnabled: a.realOutputShadowEnabled ?? "preset default (off)",
         note: 'Poll with sim_run_status. The local worker claims queued jobs within ~15s — if status stays "queued" for minutes, the worker is not running (check sim_worker_health).',
       };
     },

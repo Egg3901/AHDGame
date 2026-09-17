@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { assertSafeToken, buildRunWorldArgs, type SimJobExperimentFields } from "./simJobArgs";
+import {
+  SIM_JOB_REQUESTED_CONFIG_KEYS,
+  assertSafeToken,
+  buildRunWorldArgs,
+  type SimJobExperimentFields,
+} from "./simJobArgs";
+import { REAL_OUTPUT_SHADOW_CLI_FLAG } from "@/lib/economy/realOutputShadow";
 
 describe("sim worker runWorld argument emission", () => {
   it("carries an explicit true equity override with the canonical flag", () => {
@@ -67,5 +73,51 @@ describe("sim worker runWorld argument emission", () => {
   it("validates safe tokens", () => {
     expect(assertSafeToken("run-1_seed", "_id")).toBe("run-1_seed");
     expect(() => assertSafeToken("a/b", "_id")).toThrow('Job field "_id" failed validation');
+  });
+
+  it("carries an explicit true/false real-output shadow override with the canonical flag", () => {
+    expect(REAL_OUTPUT_SHADOW_CLI_FLAG).toBe("real-output-shadow");
+    expect(buildRunWorldArgs({ realOutputShadowEnabled: true })).toContain(
+      "--real-output-shadow=true"
+    );
+    expect(buildRunWorldArgs({ realOutputShadowEnabled: false })).toContain(
+      "--real-output-shadow=false"
+    );
+  });
+
+  it("omits the real-output shadow flag when the job leaves it unset", () => {
+    expect(buildRunWorldArgs({}).some((a) => a.includes("real-output-shadow"))).toBe(false);
+  });
+
+  it("never implies the shadow flag from --all-feature-flags", () => {
+    expect(buildRunWorldArgs({ allFeatureFlags: true })).toEqual(["--all-feature-flags"]);
+  });
+
+  it("rejects non-boolean shadow values instead of stringifying them", () => {
+    const job = { realOutputShadowEnabled: "true" } as unknown as SimJobExperimentFields;
+    expect(() => buildRunWorldArgs(job)).toThrow("realOutputShadowEnabled must be boolean");
+  });
+
+  it("keeps the report requestedConfig keys covering every emitted experiment field", () => {
+    // Run identity: collectExperimentReport.ts filters the job doc through
+    // this list, so a queueable field missing here would be silently dropped
+    // from the report while still affecting the run.
+    const keys = [...SIM_JOB_REQUESTED_CONFIG_KEYS];
+    for (const field of [
+      "marketSystemMode",
+      "labourSystemMode",
+      "freightSettlementMode",
+      "canonicalFreightBillingEnabled",
+      "shortageResponsiveSourcingEnabled",
+      "indexFundBondLiquidityEnabled",
+      "equityLiquidityFacilityEnabled",
+      "nppMarketCoverageEnabled",
+      "nppFragileMarketSupplyEnabled",
+      "realOutputShadowEnabled",
+      "allFeatureFlags",
+      "autonomyLevel",
+    ]) {
+      expect(keys).toContain(field);
+    }
   });
 });

@@ -4,6 +4,7 @@
 // env, safe to import eagerly.
 import { MARKET_MODE_ORDER, type MarketSystemMode } from "@/lib/market/modes";
 import { LABOUR_MODE_ORDER, type LabourSystemMode } from "@/lib/labour/modes";
+import { REAL_OUTPUT_SHADOW_CLI_FLAG } from "@/lib/economy/realOutputShadow";
 
 /** Subset of a simJobs document that controls runWorld CLI emission. */
 export interface SimJobExperimentFields {
@@ -16,11 +17,45 @@ export interface SimJobExperimentFields {
   equityLiquidityFacilityEnabled?: boolean;
   nppMarketCoverageEnabled?: boolean;
   nppFragileMarketSupplyEnabled?: boolean;
+  /**
+   * Real-output shadow diagnostic (issue #1470). Queued sim-only: emitted as
+   * the canonical CLI flag so runWorld writes it onto the SANDBOX
+   * gameConfig. Absent means unset (off). Never enabled in production or by
+   * the all-feature sweep.
+   */
+  realOutputShadowEnabled?: boolean;
   allFeatureFlags?: boolean;
   autonomyLevel?: string;
   mode?: string;
   countries?: string;
 }
+
+/**
+ * Job fields the experiment report records as `requestedConfig` (run
+ * identity: what the queue asked for, beside the sandbox's
+ * `effectiveConfigInitial` for what the run actually saw). Single source of
+ * truth shared by simJobArgs consumers and collectExperimentReport.ts, so a
+ * new queueable field cannot be emitted by the worker yet dropped from the
+ * report.
+ */
+export const SIM_JOB_REQUESTED_CONFIG_KEYS = [
+  "preset",
+  "turns",
+  "seed",
+  "startPolicy",
+  "marketSystemMode",
+  "labourSystemMode",
+  "autonomyLevel",
+  "allFeatureFlags",
+  "freightSettlementMode",
+  "canonicalFreightBillingEnabled",
+  "shortageResponsiveSourcingEnabled",
+  "indexFundBondLiquidityEnabled",
+  "equityLiquidityFacilityEnabled",
+  "nppMarketCoverageEnabled",
+  "nppFragileMarketSupplyEnabled",
+  "realOutputShadowEnabled",
+] as const;
 
 /** Pattern every job-derived value (id/seed/preset/dbName) must match before
  * it is used as a Mongo db name or passed as a child-process CLI arg. */
@@ -84,6 +119,9 @@ export function buildRunWorldArgs(job: SimJobExperimentFields): string[] {
   booleanFlag(job, "equityLiquidityFacilityEnabled", "equity-liquidity-facility", args);
   booleanFlag(job, "nppMarketCoverageEnabled", "npp-market-coverage", args);
   booleanFlag(job, "nppFragileMarketSupplyEnabled", "npp-fragile-market-supply", args);
+  // Explicit true AND false are both emitted so control arms stay explicit;
+  // absent stays absent (off). Never implied by --all-feature-flags.
+  booleanFlag(job, "realOutputShadowEnabled", REAL_OUTPUT_SHADOW_CLI_FLAG, args);
   if (job.allFeatureFlags !== undefined) {
     if (typeof job.allFeatureFlags !== "boolean") {
       throw new Error("allFeatureFlags must be boolean");

@@ -104,6 +104,10 @@ interface SimJob {
   equityLiquidityFacilityEnabled?: boolean;
   nppMarketCoverageEnabled?: boolean;
   nppFragileMarketSupplyEnabled?: boolean;
+  /** Real-output shadow diagnostic (issue #1470). Queued sim-only; the worker
+   * only forwards it to runWorld argv (see simJobArgs.ts). Never set on
+   * production worlds. */
+  realOutputShadowEnabled?: boolean;
   allFeatureFlags?: boolean;
   autonomyLevel?: string;
   /** Sim turn-phase profile: "elections-only" skips the economy phases. Default full. */
