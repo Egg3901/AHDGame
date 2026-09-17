@@ -119,6 +119,19 @@ export interface EconomicVitalSigns {
   };
   money: {
     currenciesObserved: number;
+    /** Rows on the current observation contract (growth-comparable in principle). */
+    currentAccountingCurrencies: number;
+    /** Rows with a finite same-version growth reading this turn. */
+    comparableGrowthCurrencies: number;
+    /** Observation contract version per currency code; null on legacy observations. */
+    observationVersions: Record<string, number | null>;
+    /**
+     * Growth comparability per currency code: high = comparable reading,
+     * medium = current method but still warming up, low = legacy/unversioned.
+     */
+    observationConfidence: Record<string, "high" | "medium" | "low">;
+    /** Bond-pool settlement inventory excluded from observed M2 (#2021). */
+    excludedBondPoolCash: EconomicMetric;
     medianAnnualizedM2GrowthPct: EconomicMetric;
     medianInflationPct: EconomicMetric;
     moneyGrowthInflationCorrelation: EconomicMetric;

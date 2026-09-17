@@ -1,4 +1,5 @@
 import { currentMoneyGrowth } from "@/lib/moneySupply/rules/growthSignal";
+import { MONEY_ACCOUNTING_VERSION } from "@/lib/moneySupply/calculate";
 import type { Db } from "mongodb";
 import type {
   Bond,
@@ -744,6 +745,27 @@ export function computeEconomicVitalSigns(input: Inputs): EconomicVitalSigns {
     0
   );
   const totalCredit = input.money.reduce((sum, row) => sum + Math.max(0, row.creditOutstanding), 0);
+  // Bond-pool settlement inventory excluded from observed M2 under the v3
+  // boundary (#2021). Legacy rows predate the field and contribute zero, so a
+  // mixed-version window under-reports rather than inventing history.
+  const totalExcludedBondPoolCash = input.money.reduce(
+    (sum, row) => sum + Math.max(0, row.excludedBondPoolCash ?? 0),
+    0
+  );
+  const currentAccountingRows = input.money.filter(
+    (row) => row.accountingVersion === MONEY_ACCOUNTING_VERSION
+  );
+  const observationVersions: Record<string, number | null> = {};
+  const observationConfidence: Record<string, "high" | "medium" | "low"> = {};
+  for (const row of input.money) {
+    observationVersions[row.currencyCode] = row.accountingVersion ?? null;
+    observationConfidence[row.currencyCode] =
+      currentMoneyGrowth(row) != null
+        ? "high"
+        : row.accountingVersion === MONEY_ACCOUNTING_VERSION
+          ? "medium"
+          : "low";
+  }
   const activity = monetaryActivity(input.balanceSnapshot, input.ledgerTurnover);
   const history = input.history ?? [];
   const coverage = computeCoverage(input.turn, history);
@@ -765,6 +787,12 @@ export function computeEconomicVitalSigns(input: Inputs): EconomicVitalSigns {
     measurementReasons.push("commodity_participant_sample_empty");
   }
   if (!input.entryFunnel) measurementReasons.push("npp_entry_funnel_unavailable");
+  if (currentAccountingRows.length < input.money.length) {
+    measurementReasons.push("money_observation_version_transition");
+  }
+  if (moneyGrowth.length < currentAccountingRows.length) {
+    measurementReasons.push("money_growth_awaiting_comparable_window");
+  }
   const measurementConfidence: EconomicVitalSigns["measurement"]["confidence"] =
     measurementReasons.length === 0
       ? "high"
@@ -1060,6 +1088,18 @@ export function computeEconomicVitalSigns(input: Inputs): EconomicVitalSigns {
     },
     money: {
       currenciesObserved: input.money.length,
+      currentAccountingCurrencies: currentAccountingRows.length,
+      comparableGrowthCurrencies: moneyGrowth.length,
+      /** Per-currency observation contract version; null on legacy observations. */
+      observationVersions,
+      /** Per-currency growth comparability: high = comparable, medium = current method but warming, low = legacy. */
+      observationConfidence,
+      /** Bond-pool settlement inventory excluded from observed M2 (#2021). */
+      excludedBondPoolCash: metric(
+        totalExcludedBondPoolCash,
+        input.money.length,
+        "currency_stock_sum"
+      ),
       medianAnnualizedM2GrowthPct: metric(
         median(moneyGrowth),
         moneyGrowth.length,

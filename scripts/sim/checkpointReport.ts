@@ -660,16 +660,19 @@ async function main(): Promise<void> {
     .toArray();
   const moneyByCountry: Record<
     string,
-    { turn: number; m1: number; m2: number; growth: number; currency: string }
+    { turn: number; m1: number; m2: number; growth: number | null; currency: string }
   > = {};
   for (const r of msLatestRows) {
     const cid = String(r._id ?? "");
     if (!cid) continue;
+    // Unavailable growth stays null here: it is "no comparable observation",
+    // not zero growth, and the table renders it as n/a (#2021).
+    const growth = r.growth as number | null;
     moneyByCountry[cid] = {
       turn: (r.turn as number) ?? maxTurn,
       m1: (r.m1 as number) ?? 0,
       m2: (r.m2 as number) ?? 0,
-      growth: (r.growth as number) ?? 0,
+      growth: typeof growth === "number" && Number.isFinite(growth) ? growth : null,
       currency: currencyFor(cid),
     };
   }
@@ -1202,7 +1205,7 @@ async function main(): Promise<void> {
     .toArray();
   const moneyTrendByCountry: Record<
     string,
-    { turn: number[]; m1: number[]; m2: number[]; growth: number[] }
+    { turn: number[]; m1: number[]; m2: number[]; growth: Array<number | null> }
   > = {};
   const extShareByCountry: Record<string, number[]> = {};
   for (const r of msRows) {
@@ -1211,7 +1214,9 @@ async function main(): Promise<void> {
     t.turn.push(r._id.t);
     t.m1.push(r.m1 ?? 0);
     t.m2.push(r.m2 ?? 0);
-    t.growth.push(r.growth ?? 0);
+    // Preserve unavailable growth as null so the chart leaves a gap instead
+    // of drawing a false 0.00% line (#2021).
+    t.growth.push(typeof r.growth === "number" && Number.isFinite(r.growth) ? r.growth : null);
     (extShareByCountry[cid] ??= []).push(r.m2 > 0 ? (100 * (r.ext ?? 0)) / r.m2 : 0);
   }
   const MAX_MONEY_POINTS = 220;
@@ -1219,7 +1224,7 @@ async function main(): Promise<void> {
     const n = t.turn.length;
     if (n <= MAX_MONEY_POINTS) continue;
     const stride = Math.ceil(n / MAX_MONEY_POINTS);
-    const keep = (arr: number[]): number[] => {
+    const keep = <T,>(arr: T[]): T[] => {
       const out = arr.filter((_, i) => i % stride === 0);
       if (arr.length && out[out.length - 1] !== arr[arr.length - 1]) out.push(arr[arr.length - 1]);
       return out;
@@ -2405,7 +2410,16 @@ function drawMultiLine(lines, opts) {
   if (!lines.length) return '<svg class="chart" viewBox="0 0 '+W+' '+H+'"><text x="'+(W/2)+'" y="'+(H/2)+'" class="ax" text-anchor="middle">'+esc(opts.emptyText||"No data")+'</text></svg>';
 
   const vals = [], turns = [];
-  for (const L of lines) { L.ys.forEach((v) => vals.push(v)); L.xs.forEach((t) => turns.push(t)); }
+  // Unavailable readings are null gaps (#2021), not zeros: keep them out of
+  // the scale and break the line there instead of diving to 0.
+  for (const L of lines) {
+    L.ys.forEach((v) => {
+      if (typeof v === "number" && Number.isFinite(v)) vals.push(v);
+    });
+    L.xs.forEach((t) => turns.push(t));
+  }
+  if (!vals.length)
+    return '<svg class="chart" viewBox="0 0 '+W+' '+H+'"><text x="'+(W/2)+'" y="'+(H/2)+'" class="ax" text-anchor="middle">'+esc(opts.emptyText||"No data")+'</text></svg>';
 
   let lo = Math.min.apply(null, vals), hi = Math.max.apply(null, vals);
   if (opts.zeroFloor && lo > 0) lo = 0;
@@ -2429,12 +2443,35 @@ function drawMultiLine(lines, opts) {
   const ordered2 = [...lines].sort((a, b) => (a.heavy ? 1 : 0) - (b.heavy ? 1 : 0));
   for (const L of ordered2) {
     const col = L.color || "#8b949e";
-    const pts = L.xs.map((t, i) => X(t).toFixed(1)+","+Y(L.ys[i]).toFixed(1)).join(" ");
-    if (L.heavy) {
-      g += '<polyline points="'+pts+'" fill="none" stroke="#161b22" stroke-width="5.5" stroke-linejoin="round" stroke-linecap="round"/>';
+    // Split the line at null gaps so unavailable turns read as breaks.
+    const segs = [];
+    let cur = [];
+    L.xs.forEach((t, i) => {
+      const v = L.ys[i];
+      if (typeof v === "number" && Number.isFinite(v)) cur.push(X(t).toFixed(1)+","+Y(v).toFixed(1));
+      else {
+        if (cur.length === 1) segs.push([cur[0], cur[0]]);
+        else if (cur.length > 1) segs.push(cur);
+        cur = [];
+      }
+    });
+    if (cur.length === 1) segs.push([cur[0], cur[0]]);
+    else if (cur.length > 1) segs.push(cur);
+    for (const pts of segs) {
+      if (L.heavy) {
+        g += '<polyline points="'+pts.join(" ")+'" fill="none" stroke="#161b22" stroke-width="5.5" stroke-linejoin="round" stroke-linecap="round"/>';
+      }
+      g += '<polyline points="'+pts.join(" ")+'" fill="none" stroke="'+col+'" stroke-width="'+(L.heavy?2:1.25)+'" stroke-opacity="'+(L.heavy?1:0.55)+'" stroke-linejoin="round" stroke-linecap="round"/>';
     }
-    g += '<polyline points="'+pts+'" fill="none" stroke="'+col+'" stroke-width="'+(L.heavy?2:1.25)+'" stroke-opacity="'+(L.heavy?1:0.55)+'" stroke-linejoin="round" stroke-linecap="round"/>';
-    const lx = L.xs[L.xs.length-1], ly = L.ys[L.ys.length-1];
+    let lx = null, ly = null;
+    for (let i = L.xs.length - 1; i >= 0; i--) {
+      if (typeof L.ys[i] === "number" && Number.isFinite(L.ys[i])) {
+        lx = L.xs[i];
+        ly = L.ys[i];
+        break;
+      }
+    }
+    if (lx == null) continue;
     g += '<circle cx="'+X(lx).toFixed(1)+'" cy="'+Y(ly).toFixed(1)+'" r="'+(L.heavy?4:2.4)+'" fill="'+col+'" stroke="#161b22" stroke-width="2"/>';
     if (L.heavy || opts.alwaysLabel) {
       g += '<text x="'+(X(lx)+8).toFixed(1)+'" y="'+(Y(ly)+4).toFixed(1)+'" class="endlab" fill="'+col+'">'+esc(L.key)+'</text>';
@@ -2722,7 +2759,7 @@ function render() {
         + '<td>' + esc(m.currency || cid) + '</td>'
         + '<td>' + fmtMoney(m.m1) + '</td>'
         + '<td>' + fmtMoney(m.m2) + '</td>'
-        + '<td>' + (m.growth || 0).toFixed(2) + '%</td>'
+        + '<td>' + (m.growth == null ? 'n/a' : m.growth.toFixed(2) + '%') + '</td>'
         + '<td>t' + m.turn + '</td></tr>';
     }
     html += '</tbody></table></div>';
