@@ -8,6 +8,18 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { Db } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 
+// Same stub as inflationRecalc.test.ts: ensureFederalBudget() lazily imports
+// the full national-budget seed graph, whose transform cost alone exceeds the
+// per-test timeout and hung the "seeds a preset default" case. The stub
+// preserves the production contract (seeds carry the _id budget-id convention
+// plus countryId; lookup is by countryId).
+vi.mock("@/lib/seeds/reference/budgets", () => ({
+  getInitialNationalBudgetsForPreset: () => [
+    { _id: "federal", countryId: "US" },
+    { _id: "UK", countryId: "UK" },
+  ],
+}));
+
 let db: MockDb;
 beforeEach(() => {
   vi.clearAllMocks();

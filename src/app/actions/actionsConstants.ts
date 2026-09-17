@@ -1,5 +1,6 @@
 import { formatFundsCompact } from "@/lib/utils/formatters";
 import { getHomeCurrency } from "@/lib/currency/characterFunds";
+import { DEBATE_PREP_ACTION_COST, describeDebatePrepEffect } from "@/lib/actions/rules";
 import type { ActionCard } from "./actionsTypes";
 
 export const CARDS: ActionCard[] = [
@@ -164,10 +165,13 @@ export const CARDS: ActionCard[] = [
     tagline: "Study the briefing books",
     flavor:
       "Briefing binders, mock questions, and rehearsal. No war chest required — just focus. A sharp performance on stage starts here, one quiet evening at a time.",
-    actionCost: 1,
+    // Single source of truth: the same rules quote the execute shell gates
+    // on, so the advertised cost and odds can never drift from the resolved
+    // roll (the label previously advertised 10% while the roll resolved 15%).
+    actionCost: DEBATE_PREP_ACTION_COST,
     fundCost: () => null,
     fundLabel: () => "Free",
-    effect: "10% chance: +1 Debate",
+    effect: describeDebatePrepEffect(),
     imageSlug: "debatePrep",
     imageAlt: "A private study set out for briefing work",
     category: "research",

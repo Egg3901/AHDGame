@@ -55,6 +55,7 @@ import { recordShareTrade } from "@/lib/corporations/shareTradeHistory";
 import type { ShareTradeParty } from "@/lib/db/types/shareTradeHistory";
 import { stampSubjectDeleted } from "@/lib/financialTxLog/stampDeleted";
 import { emitTxBulk, loadTxThresholds } from "@/lib/financialTxLog/emit";
+import { refundCorpLiquidCapital } from "@/lib/financialTxLog/atomicCashGuard";
 import type { FinancialTxLogEntry } from "@/lib/db/types/financialTxLog";
 import { releaseCorporationHeldBondsToFloat } from "@/lib/corporations/releaseHeldBondsToFloat";
 import { bankTransferConflict, transferBankCharterToAcquirer } from "@/lib/banking/transferCharter";
@@ -69,6 +70,21 @@ import { attachMergerRemedy } from "@/lib/corporations/mergerReview/lifecycle";
 import { clampProductionPolicy } from "@/lib/utils/productionPolicy";
 
 type TakeoverTxInput = Omit<FinancialTxLogEntry, "_id" | "expiresAt" | "flagged">;
+
+/**
+ * Thrown when the in-lock bank-charter transfer refuses the merge AFTER the
+ * parent debit has applied. Caught below so the debit (and any shell-cash
+ * credit) is refunded first; then reported with the transfer's original 400
+ * message so the pre-existing status/error semantics and retry guidance
+ * ("Try again", "revoke one of the two charters first") are unchanged.
+ */
+class BankCharterRaceError extends Error {
+  readonly status = 400 as const;
+  constructor(message: string) {
+    super(message);
+    this.name = "BankCharterRaceError";
+  }
+}
 
 /** One squeezed-out holder's buyout credit, counterparty being the absorbed corp. */
 function takeoverPayoutLeg(
@@ -298,6 +314,10 @@ export async function runHostileTakeover(request: Request, { params }: RoutePara
         }
       );
       if (debitResult.modifiedCount === 0) {
+        // No refund owed: the $gte-gated debit did not apply, so no money
+        // moved. This early return is before every mutation by construction;
+        // keep it that way — anything added after the debit below must run
+        // inside the try so the catch refund covers it.
         return NextResponse.json(
           { error: "Insufficient liquid capital (race with another transaction)." },
           { status: 400 }
@@ -315,17 +335,22 @@ export async function runHostileTakeover(request: Request, { params }: RoutePara
       const ledgerLegs: TakeoverTxInput[] = [];
       const parentLedgerCurrency = (resolveCorpLiquidCurrencyCode(parent) ?? "USD") as CurrencyCode;
 
-      // Banked subsidiary (ticket-1267): move the charter and re-key its loan
-      // book, interbank sides, savings accounts and depositor pointers to the
-      // parent BEFORE the shell is deleted below. Runs here — right after the
-      // debit, before any payout — so a conflict still unwinds cleanly through
-      // the catch refund (cashTransferApplied is still false).
-      const bankTransfer = await transferBankCharterToAcquirer(db, target._id, parent._id, now);
-      if (!bankTransfer.ok) {
-        return NextResponse.json({ error: bankTransfer.error }, { status: 400 });
-      }
-
       try {
+        // Banked subsidiary (ticket-1267): move the charter and re-key its loan
+        // book, interbank sides, savings accounts and depositor pointers to the
+        // parent BEFORE the shell is deleted below. Runs INSIDE this try, right
+        // after the debit and before any payout, so a mid-merge conflict (the
+        // parent chartered a bank between the pre-lock check and this write, or
+        // the target's charter changed under us) throws into the catch refund
+        // below instead of returning past it with the debit unrefunded. The
+        // transfer helper leaves no partial charter behind on its !ok paths
+        // (conflict returns before any write; a lost release race rolls the
+        // claim back), so refunding money here restores everything.
+        const bankTransfer = await transferBankCharterToAcquirer(db, target._id, parent._id, now);
+        if (!bankTransfer.ok) {
+          throw new BankCharterRaceError(bankTransfer.error);
+        }
+
         const takeoverTurn = await getCurrentTurn(db);
         const parentParty: ShareTradeParty = { corporationId: parent._id, name: parent.name };
         for (const sh of minority) {
@@ -809,19 +834,36 @@ export async function runHostileTakeover(request: Request, { params }: RoutePara
           ),
         });
       } catch (err) {
-        // Restore parent's liquidCapital to the pre-debit value. If the cash
-        // transfer landed before the crash, subtract that credit from the
-        // refund so we don't over-refund. Reverses the debit alone when the
-        // error occurred before the cash transfer (e.g., RATE_UNAVAILABLE
-        // during minority payout).
-        const netRefund = totalInParentCapital - (cashTransferApplied ? cashToParentLocal : 0);
-        await db.collection<Corporation>("corporations").updateOne(
-          { _id: parent._id },
-          {
-            $inc: { liquidCapital: netRefund },
-            $set: { updatedAt: new Date() },
+        // Single refund site for every post-debit failure (charter race,
+        // RATE_UNAVAILABLE, payout throw, cash-transfer crash): runs exactly
+        // once per failed attempt, before any error mapping below.
+        // Leg 1 reverses the minority-payout debit via the shared corp-cash
+        // primitive (pure $inc, idempotent, never balance-gated). Leg 2 claws
+        // back the shell-cash credit only when it landed, so the parent ends
+        // at exactly its pre-debit balance in every ordering. A refund write
+        // that itself fails is rethrown with context (never swallowed: silent
+        // success here would report a 400/503 while money is gone).
+        const failureLabel = err instanceof Error ? err.message : String(err);
+        try {
+          await refundCorpLiquidCapital(db, parent._id, totalInParentCapital);
+          if (cashTransferApplied && cashToParentLocal > 0) {
+            await db.collection<Corporation>("corporations").updateOne(
+              { _id: parent._id },
+              {
+                $inc: { liquidCapital: -cashToParentLocal },
+                $set: { updatedAt: new Date() },
+              }
+            );
           }
-        );
+        } catch (refundError) {
+          throw new Error(
+            `Hostile takeover rollback failed for parent ${parent._id.toString()} after '${failureLabel}': could not restore liquidCapital`,
+            { cause: refundError }
+          );
+        }
+        if (err instanceof BankCharterRaceError) {
+          return NextResponse.json({ error: err.message }, { status: err.status });
+        }
         if (err instanceof Error && err.message === "RATE_UNAVAILABLE") {
           return NextResponse.json(
             { error: "Exchange rate unavailable, try again shortly" },

@@ -1,5 +1,7 @@
 "use client";
 
+import { useSearchParams } from "next/navigation";
+
 import { useCallback, useEffect, useState } from "react";
 import { regionPartyApiUrl } from "@/lib/urls";
 import { useToast } from "@/contexts/ToastContext";
@@ -42,6 +44,7 @@ export function StatePartyInfluencePanel({
   onPartyRefresh,
 }: StatePartyInfluencePanelProps) {
   const currencyCode = COUNTRY_CONFIGS[countryId.toUpperCase() as CountryId]?.currencyCode ?? "USD";
+  const searchParams = useSearchParams();
   const { showToast } = useToast();
   const [data, setData] = useState<StatePartyInfluenceData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -141,6 +144,8 @@ export function StatePartyInfluencePanel({
       ) : (
         <NppRosterPanel
           scope="state"
+          initialNppId={searchParams?.get("npp")}
+          initialState={searchParams?.get("state")}
           npps={rosterNpps}
           actions={data.actions}
           currency={currencyCode}

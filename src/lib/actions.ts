@@ -2,7 +2,7 @@ import type { Character, State, ActionType } from "@/lib/db/types";
 import { getHomeCurrency, getTotalPersonalLiquidWealth } from "@/lib/currency/characterFunds";
 import { CURRENCY_SYMBOLS, type CurrencyCode } from "@/lib/constants/currencies";
 import { campaignAnchorToLocal } from "@/lib/campaigns/campaignCurrency";
-import { DEBATE_PREP_ACTION_COST, type StatKey } from "@/lib/stats/statsConstants";
+import type { StatKey } from "@/lib/stats/statsConstants";
 import {
   FUNDRAISE_ACTION_COST,
   fundraiseYieldAnchor,
@@ -21,6 +21,9 @@ import {
   getPollActionCost,
   quotePollAction,
   type PollTier,
+  DEBATE_PREP_ACTION_COST,
+  quoteDebatePrepAction,
+  describeDebatePrepAction,
 } from "./actions/rules";
 
 export {
@@ -75,6 +78,17 @@ export {
   type PollTier,
   type PollQuoteActor,
   type PollQuote,
+  DEBATE_PREP_ACTION_COST,
+  DEBATE_PREP_SUCCESS_CHANCE,
+  DEBATE_PREP_DEBATE_GAIN,
+  DEBATE_PREP_DISABLED_ERROR,
+  DEBATE_PREP_UNALLOCATED_ERROR,
+  quoteDebatePrepAction,
+  describeDebatePrepAction,
+  describeDebatePrepEffect,
+  type DebatePrepQuoteActor,
+  type DebatePrepQuoteOptions,
+  type DebatePrepQuote,
 } from "./actions/rules";
 
 /**
@@ -463,8 +477,10 @@ export const ACTIONS: Record<ActionType, ActionDefinition> = {
   debatePrep: {
     type: "debatePrep",
     name: "Debate Prep",
-    description:
-      "Study briefing books and rehearse. 10% chance to raise your Debate skill by 1. No fund cost.",
+    // Single source of truth: the card effect label quotes this same chance
+    // constant, so the advertised odds can never drift from the resolved roll
+    // (the text previously advertised 10% while the roll resolved 15%).
+    description: describeDebatePrepAction(),
     baseCost: DEBATE_PREP_ACTION_COST,
     requiresState: false,
     // The actual roll + Debate write is handled in the execute route (it needs
@@ -495,6 +511,12 @@ export type CanPerformActionOptions = {
   forexEnabled?: boolean;
   /** Live home FX rate for converting stored local campaign funds back to internal units. */
   homeFxRate?: number;
+  /**
+   * Resolved RPG-stats feature flag for Debate Prep validation. The execute
+   * shell always passes the resolved value; callers that cannot know it omit
+   * the field and skip the flag leg only (the stat-block leg still applies).
+   */
+  rpgStatsEnabled?: boolean;
 };
 
 /**
@@ -596,6 +618,24 @@ export function canPerformAction(
   if (actionType === "poll" || actionType === "pollLarge") {
     const tier: PollTier = actionType === "pollLarge" ? "large" : "small";
     const quote = quotePollAction({ intellect: character.stats?.intellect }, tier);
+    if (!quote.ok) {
+      return { canPerform: false, reason: quote.error };
+    }
+  }
+
+  // Debate Prep validates through the same rules quote the execute gate
+  // uses: flat AP cost, the fixed success chance and the flag + stat-block
+  // eligibility. A missing stat block rejects here with the quote reason
+  // instead of charging for a roll that cannot land. The flag leg applies
+  // only when the caller passes the resolved value (the execute shell does).
+  if (actionType === "debatePrep") {
+    const quote = quoteDebatePrepAction(
+      {
+        debate: character.stats?.debate,
+        hasStats: !!character.stats,
+      },
+      { rpgStatsEnabled: options?.rpgStatsEnabled }
+    );
     if (!quote.ok) {
       return { canPerform: false, reason: quote.error };
     }
