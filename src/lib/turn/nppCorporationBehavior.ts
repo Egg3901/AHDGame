@@ -66,7 +66,6 @@ import {
   type CeoArchetype,
 } from "@/lib/turn/ceoArchetype";
 import type { CorporationType } from "@/lib/constants/corporations";
-import type { CountryId } from "@/lib/constants/countries";
 import { partitionOpenMarkets } from "@/lib/economy/queries/privateEnterpriseGate";
 import type { CommodityPrice } from "@/lib/db/types/commodityPrice";
 import type { CommodityType } from "@/lib/constants/commodities";
@@ -136,6 +135,7 @@ import { readCorpEconomicAnchor } from "@/lib/currency/corpEconomyFields";
 import { getNppCashFloorAnchor } from "@/lib/turn/npp/nppCashReserve";
 import { loadNppBehaviorConfig } from "@/lib/turn/npp/behaviorConfig";
 import { maybePushNppTechUnlock } from "@/lib/turn/npp/corpBehaviorConfig";
+import type { TechUnlockLedgerInput } from "@/lib/corporations/techTree/techUnlockLedger";
 import {
   fragileReinvestmentPriority,
   loadNppPlacementSignals,
@@ -221,6 +221,11 @@ export async function processNppCorporationDecisions(
   }>;
   newSectors: Array<Omit<CorporateSector, "_id"> & { _id: ObjectId }>;
   divestedSectorIds: ObjectId[];
+  /**
+   * Tech-unlock ledger intents (ticket #1998). Verified and flushed by the
+   * caller after the corporation bulkWrite applies.
+   */
+  techLedger: TechUnlockLedgerInput[];
 }> {
   const nppCorps = await db
     .collection<Corporation>("corporations")
@@ -241,6 +246,7 @@ export async function processNppCorporationDecisions(
   }> = [];
   const newSectors: Array<Omit<CorporateSector, "_id"> & { _id: ObjectId }> = [];
   const allDivestedSectorIds: ObjectId[] = [];
+  const techLedger: TechUnlockLedgerInput[] = [];
 
   if (nppCorps.length === 0)
     return {
@@ -248,6 +254,7 @@ export async function processNppCorporationDecisions(
       sectorUpdates: allSectorUpdates,
       newSectors,
       divestedSectorIds: allDivestedSectorIds,
+      techLedger,
     };
 
   const corpIds = nppCorps.map((c) => c._id);
@@ -581,6 +588,7 @@ export async function processNppCorporationDecisions(
         corpUpdates,
         liquidCapitalDelta: decision.liquidCapitalDelta,
         cashReserve: decision.cashFloorLocal,
+        techLedger,
       });
     }
 
@@ -628,6 +636,7 @@ export async function processNppCorporationDecisions(
     sectorUpdates: allSectorUpdates,
     newSectors,
     divestedSectorIds: allDivestedSectorIds,
+    techLedger,
   };
 }
 

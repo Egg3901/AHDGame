@@ -42,7 +42,10 @@ export function buildEraCrossingContent(eraLabel: string): string {
   return `A new decade dawns. Commentators are already asking what the ${eraLabel} will bring — and which of the old certainties will survive them.`;
 }
 
-export async function runEraCrossing(db: Db): Promise<EraCrossingResult> {
+export async function runEraCrossing(
+  db: Db,
+  currentYearOverride?: number
+): Promise<EraCrossingResult> {
   const gameState = await db.collection<GameState>("gameState").findOne(
     { _id: "current" },
     {
@@ -51,7 +54,9 @@ export async function runEraCrossing(db: Db): Promise<EraCrossingResult> {
   );
   if (!gameState?.eraSystemEnabled) return { ran: false };
 
-  const currentYear = gameState.currentYear;
+  // Prefer the turn context's authoritative year: the persisted
+  // gameState.currentYear is only stamped at turn end (#2059).
+  const currentYear = currentYearOverride ?? gameState.currentYear;
   if (currentYear === undefined || !Number.isFinite(currentYear)) return { ran: false };
 
   const era = eraFromYear(currentYear);
@@ -101,7 +106,10 @@ export interface MetricActivationResult {
  * the current year WITHOUT posting, so enabling the era system mid-game never
  * bursts decades of missed "inventions" into the wire.
  */
-export async function runMetricActivation(db: Db): Promise<MetricActivationResult> {
+export async function runMetricActivation(
+  db: Db,
+  currentYearOverride?: number
+): Promise<MetricActivationResult> {
   const gameState = await db.collection<GameState>("gameState").findOne(
     { _id: "current" },
     {
@@ -114,7 +122,9 @@ export async function runMetricActivation(db: Db): Promise<MetricActivationResul
   );
   if (!gameState?.eraSystemEnabled) return { posted: [] };
 
-  const currentYear = gameState.currentYear;
+  // Prefer the turn context's authoritative year: the persisted
+  // gameState.currentYear is only stamped at turn end (#2059).
+  const currentYear = currentYearOverride ?? gameState.currentYear;
   if (currentYear === undefined || !Number.isFinite(currentYear)) return { posted: [] };
 
   const lastYear = gameState.lastMetricActivationYear;

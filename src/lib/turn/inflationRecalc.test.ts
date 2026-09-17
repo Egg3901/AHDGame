@@ -60,6 +60,20 @@ vi.mock("@/lib/constants/countries", () => {
   };
 });
 
+// ensureFederalBudget() lazily imports the full national-budget seed graph
+// (a ~20k-line module family). Transforming the real graph inside a test costs
+// longer than the per-test timeout on transform alone, which hung the two
+// missing-budget cases. Stub the one function the self-heal path uses while
+// preserving its production contract: the seeds carry the _id budget-id
+// convention ("federal" for the US, country code otherwise) plus countryId,
+// and ensureFederalBudget looks them up by countryId.
+vi.mock("@/lib/seeds/reference/budgets", () => ({
+  getInitialNationalBudgetsForPreset: () => [
+    { _id: "federal", countryId: "US" },
+    { _id: "UK", countryId: "UK" },
+  ],
+}));
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function makeCentralBank(countryId: string, primeRate = 3.0) {

@@ -55,7 +55,11 @@ function truncate(s: string | undefined | null, max: number): string {
   return `${s.slice(0, max - 1).trimEnd()}…`;
 }
 
-export async function processCrisisTurn(db: Db, turn: number): Promise<number> {
+export async function processCrisisTurn(
+  db: Db,
+  turn: number,
+  currentYear?: number | null
+): Promise<number> {
   // Aid-bill resolution + penalty reversal run independently of whether any
   // crisis is currently active, so they must execute before the early return.
   await processCrisisAidResolutions(db, turn);
@@ -66,10 +70,15 @@ export async function processCrisisTurn(db: Db, turn: number): Promise<number> {
   // advances every turn the war is being fought, which is what makes prolonging
   // it progressively more expensive in approval.
   const gameState = await getGameState(db);
+  // Prefer the caller's authoritative calendar year: the persisted
+  // gameState.currentYear is only stamped at turn end, so on the first turn of
+  // a new year it still holds the prior year and year-gated openings would run
+  // one turn late (#2059). Non-turn callers omit it and keep the persisted read.
+  const effectiveYear = currentYear ?? gameState?.currentYear;
   await processLivingConflictsTurn(
     db,
     turn,
-    gameState?.currentYear,
+    effectiveYear,
     gameState?.livingConflictsEnabled === true
   );
   const livingEnabled = gameState?.livingConflictsEnabled === true;
@@ -82,7 +91,7 @@ export async function processCrisisTurn(db: Db, turn: number): Promise<number> {
     vietnam = await livingVietnamAsLegacyState(db);
     setVietnamEscalationLevel(normalizeVietnamLevel(vietnam.level));
   } else {
-    await processVietnamChainOpening(db, turn, gameState?.currentYear);
+    await processVietnamChainOpening(db, turn, effectiveYear);
     vietnam = await tickVietnamEscalation(db);
     await refreshVietnamEscalationLevel(db);
   }
@@ -255,7 +264,7 @@ export async function processCrisisTurn(db: Db, turn: number): Promise<number> {
       db,
       livingEnabled ? toResolve.filter((crisis) => crisis.chain?.family !== "vietnam") : toResolve,
       turn,
-      gameState?.currentYear
+      effectiveYear
     );
   }
 
