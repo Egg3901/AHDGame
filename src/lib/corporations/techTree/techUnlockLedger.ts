@@ -2,7 +2,7 @@ import * as Sentry from "@sentry/nextjs";
 import type { Db, ObjectId } from "mongodb";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import { sumStrengthGrants, type TechTreeNode } from "@/lib/constants/techTree";
-import type { Corporation, FinancialTxLogEntry } from "@/lib/db/types";
+import type { ActionAuditInput, Corporation, FinancialTxLogEntry } from "@/lib/db/types";
 import { emitTxStrict, loadTxThresholds, type TxInput } from "@/lib/financialTxLog/emit";
 
 /**
@@ -166,6 +166,26 @@ export interface TechUnlockFlushResult {
   skippedUncommitted: number;
   skippedDuplicate: number;
   refunded: number;
+}
+
+/** Build the exceptional turn-audit row without bloating the turn orchestrator. */
+export function buildTechUnlockFlushAudit(result: TechUnlockFlushResult): ActionAuditInput | null {
+  if (result.refunded === 0 && result.emitted === result.attempted) return null;
+  return {
+    source: "turn",
+    category: "corp",
+    action: "corp.tech_unlock_ledger",
+    phase: "corporationTurn",
+    subject: { type: "corpBatch", name: "npp tech-unlock ledger" },
+    outcome: result.refunded > 0 ? "error" : "ok",
+    meta: {
+      attempted: result.attempted,
+      emitted: result.emitted,
+      skippedUncommitted: result.skippedUncommitted,
+      skippedDuplicate: result.skippedDuplicate,
+      refunded: result.refunded,
+    },
+  };
 }
 
 /**

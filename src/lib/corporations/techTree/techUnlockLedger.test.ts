@@ -6,6 +6,7 @@ import { isLedgerShadowEnabled } from "@/lib/ledger/featureFlag";
 import type { Corporation, CorporateSector } from "@/lib/db/types";
 import { unlockTechNode } from "@/lib/corporations/commands/techTree/unlockTechNode";
 import {
+  buildTechUnlockFlushAudit,
   buildTechUnlockRefundUpdate,
   buildTechUnlockTxEntry,
   flushNppTechUnlockLedger,
@@ -488,5 +489,33 @@ describe("NPP tech unlock ledger", () => {
     const result = await flushNppTechUnlockLedger(db, techLedger);
     expect(result).toMatchObject({ skippedDuplicate: 1, emitted: 0 });
     expect(txInserts).toHaveLength(0);
+  });
+
+  it("omits a turn audit when every intended ledger row was emitted", () => {
+    expect(
+      buildTechUnlockFlushAudit({
+        attempted: 2,
+        emitted: 2,
+        skippedUncommitted: 0,
+        skippedDuplicate: 0,
+        refunded: 0,
+      })
+    ).toBeNull();
+  });
+
+  it("summarizes exceptional NPP flush outcomes for the turn audit", () => {
+    expect(
+      buildTechUnlockFlushAudit({
+        attempted: 3,
+        emitted: 1,
+        skippedUncommitted: 1,
+        skippedDuplicate: 0,
+        refunded: 1,
+      })
+    ).toMatchObject({
+      action: "corp.tech_unlock_ledger",
+      outcome: "error",
+      meta: { attempted: 3, emitted: 1, skippedUncommitted: 1, refunded: 1 },
+    });
   });
 });

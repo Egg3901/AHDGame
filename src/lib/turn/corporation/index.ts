@@ -84,7 +84,10 @@ import { processSoeRemittance } from "@/lib/nationalization/soeRemittance";
 import { processPendingNationalizations } from "@/lib/nationalization/pendingNationalizations";
 import { processNationalizationAuctions } from "@/lib/nationalization/privatizationAuction";
 import { processNppCorporationDecisions } from "@/lib/turn/nppCorporationBehavior";
-import { flushNppTechUnlockLedger } from "@/lib/corporations/techTree/techUnlockLedger";
+import {
+  buildTechUnlockFlushAudit,
+  flushNppTechUnlockLedger,
+} from "@/lib/corporations/techTree/techUnlockLedger";
 import { processNppSupplyAgreements } from "@/lib/turn/npp/nppSupplyAgreements";
 import { processNppProspecting } from "@/lib/turn/npp/nppProspecting";
 import { processNppCorpTreasury } from "@/lib/turn/npp/nppCorpTreasury";
@@ -1178,29 +1181,12 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await db.collection("corporations").bulkWrite(corpOps as any[]);
   }
-  // Tech-unlock ledger (ticket #1998): emit finance-history debits only for
-  // NPP unlocks whose guarded op provably applied above. The flush verifies
-  // the post-write node set, dedupes against existing rows, and refunds a
-  // debit whose row cannot be persisted — inert when no unlock was picked.
+  // Emit only for NPP unlocks proven applied above; the flush dedupes and
+  // refunds any debit whose ledger row cannot be persisted (ticket #1998).
   if (nppTechLedger.length > 0) {
     const techFlush = await flushNppTechUnlockLedger(db, nppTechLedger);
-    if (techFlush.refunded > 0 || techFlush.emitted !== techFlush.attempted) {
-      corpAuditEntries.push({
-        source: "turn",
-        category: "corp",
-        action: "corp.tech_unlock_ledger",
-        phase: "corporationTurn",
-        subject: { type: "corpBatch", name: "npp tech-unlock ledger" },
-        outcome: techFlush.refunded > 0 ? "error" : "ok",
-        meta: {
-          attempted: techFlush.attempted,
-          emitted: techFlush.emitted,
-          skippedUncommitted: techFlush.skippedUncommitted,
-          skippedDuplicate: techFlush.skippedDuplicate,
-          refunded: techFlush.refunded,
-        },
-      });
-    }
+    const techAudit = buildTechUnlockFlushAudit(techFlush);
+    if (techAudit) corpAuditEntries.push(techAudit);
   }
   // One read plus one bulk write, instead of two serial round trips per
   // accrual against a collection holding one document per currency. Missing
