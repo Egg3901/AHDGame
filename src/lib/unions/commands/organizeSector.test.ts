@@ -1,6 +1,13 @@
 import { describe, it, expect, vi } from "vitest";
 import { ObjectId } from "mongodb";
 import type { Db } from "mongodb";
+
+// The drive spend runs standalone here: no replica set in unit tests.
+vi.mock("@/lib/db/runWithOptionalTransaction", () => ({
+  runWithOptionalTransaction: vi
+    .fn()
+    .mockImplementation(async (_inside: unknown, fallback: () => Promise<unknown>) => fallback()),
+}));
 import type { Character, CorporateSector, Union } from "@/lib/db/types";
 import {
   ORGANIZE_SECTOR_ACTION_COST,
@@ -203,8 +210,8 @@ describe("organizeSector (command)", () => {
     const rivalUnion = makeUnion(new ObjectId(), { approval: 90 }); // strong incumbent
     const sector = makeSector({ representingUnionId: rivalUnion._id, unionization: 80 });
 
-    const characterUpdate = vi.fn().mockResolvedValue({ modifiedCount: 1 });
-    const unionUpdate = vi.fn().mockResolvedValue({ modifiedCount: 1 });
+    const characterUpdate = vi.fn().mockResolvedValue({ matchedCount: 1, modifiedCount: 1 });
+    const unionUpdate = vi.fn().mockResolvedValue({ matchedCount: 1, modifiedCount: 1 });
     const sectorUpdate = vi.fn();
 
     const db = {
@@ -223,7 +230,16 @@ describe("organizeSector (command)", () => {
         if (name === "corporateSectors") {
           return { findOne: vi.fn().mockResolvedValue(sector), updateOne: sectorUpdate };
         }
-        if (name === "characters") return { updateOne: characterUpdate };
+        if (name === "characters") {
+          return { findOne: vi.fn().mockResolvedValue(null), updateOne: characterUpdate };
+        }
+        if (name === "nonAtomicMoneyFlowReceipts") {
+          return {
+            insertOne: vi.fn().mockResolvedValue({ insertedId: "key" }),
+            findOne: vi.fn().mockResolvedValue(null),
+            updateOne: vi.fn().mockResolvedValue({ matchedCount: 1 }),
+          };
+        }
         if (name === "federalBudget")
           return { findOne: vi.fn().mockResolvedValue({ unionsBanned: false }) };
         throw new Error(`unexpected collection ${name}`);
@@ -248,5 +264,180 @@ describe("organizeSector (command)", () => {
     // But the spend did happen.
     expect(characterUpdate).toHaveBeenCalled();
     expect(unionUpdate).toHaveBeenCalled();
+  });
+
+  function driveDb(
+    union: Union,
+    sector: CorporateSector,
+    overrides: {
+      unionUpdate?: ReturnType<typeof vi.fn>;
+      sectorUpdate?: ReturnType<typeof vi.fn>;
+      receiptsInsertOne?: ReturnType<typeof vi.fn>;
+      receiptsFindOne?: ReturnType<typeof vi.fn>;
+    } = {}
+  ) {
+    const characterUpdate = vi.fn().mockResolvedValue({ matchedCount: 1, modifiedCount: 1 });
+    const unionUpdate =
+      overrides.unionUpdate ??
+      vi.fn().mockResolvedValue({ matchedCount: 1, modifiedCount: 1 });
+    const sectorUpdate =
+      overrides.sectorUpdate ??
+      vi.fn().mockResolvedValue({ matchedCount: 1, modifiedCount: 1 });
+    const db = {
+      collection: (name: string) => {
+        if (name === "gameState") return gameStateCollection();
+        if (name === "unions") {
+          return { findOne: vi.fn().mockResolvedValue(union), updateOne: unionUpdate };
+        }
+        if (name === "corporateSectors") {
+          return { findOne: vi.fn().mockResolvedValue(sector), updateOne: sectorUpdate };
+        }
+        if (name === "characters") {
+          return { findOne: vi.fn().mockResolvedValue(null), updateOne: characterUpdate };
+        }
+        if (name === "nonAtomicMoneyFlowReceipts") {
+          return {
+            insertOne:
+              overrides.receiptsInsertOne ?? vi.fn().mockResolvedValue({ insertedId: "key" }),
+            findOne: overrides.receiptsFindOne ?? vi.fn().mockResolvedValue(null),
+            updateOne: vi.fn().mockResolvedValue({ matchedCount: 1 }),
+          };
+        }
+        if (name === "federalBudget")
+          return { findOne: vi.fn().mockResolvedValue({ unionsBanned: false }) };
+        throw new Error(`unexpected collection ${name}`);
+      },
+    } as unknown as Db;
+    return { db, characterUpdate, unionUpdate, sectorUpdate };
+  }
+
+  function duplicateKeyError(): Error {
+    return Object.assign(new Error("E11000 duplicate key error"), { code: 11000 });
+  }
+
+  it("charges both debits then applies the sector snapshot-guarded transition", async () => {
+    const character = makeCharacter();
+    const union = makeUnion(character._id);
+    const sector = makeSector();
+    const { db, characterUpdate, unionUpdate, sectorUpdate } = driveDb(union, sector);
+
+    const result = await organizeSector(db, character, union._id.toString(), sector._id.toString());
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.won).toBe(true);
+    expect(result.wasRaid).toBe(false);
+    // Both debits are guarded single-document legs: concurrent drives cannot
+    // both pass on a stale pool.
+    expect(characterUpdate.mock.calls[0][0]).toMatchObject({
+      _id: character._id,
+      actions: { $gte: ORGANIZE_SECTOR_ACTION_COST },
+    });
+    expect(unionUpdate.mock.calls[0][0]).toMatchObject({ _id: union._id });
+    // The sector write still guards the pre-drive snapshot.
+    expect(sectorUpdate.mock.calls[0][0]).toMatchObject({
+      _id: sector._id,
+      unionization: sector.unionization,
+    });
+    expect(result.unionization).toBeGreaterThan(sector.unionization);
+    expect(result.representingUnionId).toBe(union._id.toString());
+  });
+
+  it("compensates the actions debit when the treasury loses its race", async () => {
+    const character = makeCharacter();
+    const union = makeUnion(character._id);
+    const sector = makeSector();
+    const { db, characterUpdate, sectorUpdate } = driveDb(union, sector, {
+      unionUpdate: vi.fn().mockResolvedValue({ matchedCount: 0, modifiedCount: 0 }),
+    });
+
+    const result = await organizeSector(db, character, union._id.toString(), sector._id.toString());
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.status).toBe(409);
+    expect(result.error).toMatch(/treasury changed/i);
+    // The applied actions prefix is reversed; the sector is never touched.
+    expect(characterUpdate).toHaveBeenCalledTimes(2);
+    expect(sectorUpdate).not.toHaveBeenCalled();
+  });
+
+  it("reverses both debits when the sector moved under the drive", async () => {
+    const character = makeCharacter();
+    const union = makeUnion(character._id);
+    const sector = makeSector();
+    const { db, characterUpdate, unionUpdate } = driveDb(union, sector, {
+      sectorUpdate: vi.fn().mockResolvedValue({ matchedCount: 0, modifiedCount: 0 }),
+    });
+
+    const result = await organizeSector(db, character, union._id.toString(), sector._id.toString());
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.status).toBe(409);
+    expect(result.error).toMatch(/sector state changed/i);
+    expect(characterUpdate).toHaveBeenCalledTimes(2);
+    expect(unionUpdate).toHaveBeenCalledTimes(2);
+  });
+
+  it("replays a same-key retry without charging again", async () => {
+    const character = makeCharacter();
+    const union = makeUnion(character._id);
+    const sector = makeSector();
+    const fingerprint = `organize-sector:${union._id.toHexString()}:${sector._id.toHexString()}`;
+    const { db, characterUpdate } = driveDb(union, sector, {
+      receiptsInsertOne: vi.fn().mockRejectedValue(duplicateKeyError()),
+      receiptsFindOne: vi.fn().mockResolvedValue({ _id: "k", status: "completed", fingerprint }),
+    });
+
+    const result = await organizeSector(db, character, union._id.toString(), sector._id.toString(), {
+      idempotencyKey: "k",
+    });
+
+    expect(result.ok).toBe(true);
+    expect(characterUpdate).not.toHaveBeenCalled();
+  });
+
+  it("rejects a key reused for a different drive", async () => {
+    const character = makeCharacter();
+    const union = makeUnion(character._id);
+    const sector = makeSector();
+    const { db, characterUpdate } = driveDb(union, sector, {
+      receiptsInsertOne: vi.fn().mockRejectedValue(duplicateKeyError()),
+      receiptsFindOne: vi
+        .fn()
+        .mockResolvedValue({ _id: "k", status: "completed", fingerprint: "organize-sector:other" }),
+    });
+
+    const result = await organizeSector(db, character, union._id.toString(), sector._id.toString(), {
+      idempotencyKey: "k",
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.status).toBe(409);
+    expect(result.error).toMatch(/different drive/i);
+    expect(characterUpdate).not.toHaveBeenCalled();
+  });
+
+  it("fails closed when the key already settled without completing", async () => {
+    const character = makeCharacter();
+    const union = makeUnion(character._id);
+    const sector = makeSector();
+    const fingerprint = `organize-sector:${union._id.toHexString()}:${sector._id.toHexString()}`;
+    const { db, characterUpdate } = driveDb(union, sector, {
+      receiptsInsertOne: vi.fn().mockRejectedValue(duplicateKeyError()),
+      receiptsFindOne: vi.fn().mockResolvedValue({ _id: "k", status: "failed", fingerprint }),
+    });
+
+    const result = await organizeSector(db, character, union._id.toString(), sector._id.toString(), {
+      idempotencyKey: "k",
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.status).toBe(409);
+    expect(result.error).toMatch(/already settled/i);
+    expect(characterUpdate).not.toHaveBeenCalled();
   });
 });

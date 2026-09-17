@@ -16,7 +16,7 @@ interface RouteParams {
 // remaining 40% queues as a 4-turn drip via supportAccrual.
 // Auth: requireAuthWithCharacter (must be campaign manager or nominee)
 // Errors: 400, 401, 403, 404, 409, 429
-export async function POST(_request: Request, { params }: RouteParams) {
+export async function POST(request: Request, { params }: RouteParams) {
   try {
     const { id: campaignId } = await params;
 
@@ -33,11 +33,19 @@ export async function POST(_request: Request, { params }: RouteParams) {
     if (!rateLimit.ok) return rateLimitResponse(rateLimit.retryAfter);
     const user = auth.user;
 
+    // Crash-safe spend (issue #1672): a client retry with the same key
+    // replays the stored rally outcome instead of spending again.
+    const headerKey = request.headers.get("Idempotency-Key");
+    if (headerKey !== null && (headerKey.length === 0 || headerKey.length > 128)) {
+      return NextResponse.json({ error: "Invalid Idempotency-Key header" }, { status: 400 });
+    }
+
     const db = await getDb();
     const result = await fireRallyOneShot({
       db,
       campaignId: new ObjectId(campaignId),
       user,
+      ...(headerKey !== null ? { idempotencyKey: headerKey } : {}),
     });
     return NextResponse.json({ success: true, ...result });
   } catch (error) {

@@ -11,7 +11,6 @@
  */
 import { loadCampaignCurrencyRates } from "@/lib/campaigns/campaignCurrency";
 import type { Db } from "mongodb";
-import { ObjectId } from "mongodb";
 import type { Character, Union } from "@/lib/db/types";
 import type { CountryId } from "@/lib/constants/countries";
 import type { CorporationType } from "@/lib/constants/corporations";
@@ -28,6 +27,14 @@ import {
 import { isUnionsBanned, UNIONS_BANNED_MESSAGE } from "@/lib/labour/unionLaws";
 import { rejectIfTurnProcessing } from "./unionActions";
 import type { UnionActionResult } from "./unionActions";
+import {
+  applyUnionFoundingSpend,
+  FOUNDING_INSERT_BLOCKED,
+  FOUNDING_INSERT_FAILED,
+  FOUNDING_LEADERSHIP_CHANGED,
+  FOUNDING_SPEND_INSUFFICIENT,
+} from "@/lib/unions/unionFoundingSpend";
+import { MoneyFlowKeyConflictError, MoneyFlowTerminalError } from "@/lib/db/nonAtomicMoneyFlow";
 
 export { MAX_UNION_NAME_LENGTH, MIN_UNION_NAME_LENGTH, UNION_FOUNDING_ACTION_COST };
 
@@ -43,15 +50,17 @@ export interface FoundUnionInput {
  * FUNDS plus `UNION_FOUNDING_ACTION_COST` action points, and cannot reuse a
  * name already taken by another union in the same (countryId, sectorType) pair.
  *
- * Both costs come out of ONE conditional `findOneAndUpdate` guarded on both
- * balances, the same shape `npps/commands/directAction` uses, so a founder can
- * never pay the funds and keep the action points (or the reverse) and two
- * concurrent foundings cannot both pass on a stale balance.
+ * Both costs come out of ONE guarded money-flow leg (issue #1672), the same
+ * shape `npps/commands/directAction` uses, so a founder can never pay the
+ * funds and keep the action points (or the reverse) and two concurrent
+ * foundings cannot both pass on a stale balance. A crash between the
+ * founding writes reconciles to exactly one charged founding.
  */
 export async function foundUnion(
   db: Db,
   character: Character,
-  input: FoundUnionInput
+  input: FoundUnionInput,
+  options?: { idempotencyKey?: string }
 ): Promise<UnionActionResult> {
   const turnBusy = await rejectIfTurnProcessing(db);
   if (turnBusy) return turnBusy;
@@ -143,90 +152,50 @@ export async function foundUnion(
     };
   }
 
-  // ONE guarded write for both costs: partial payment is unrepresentable, and
-  // a concurrent spend that drains either balance loses the race outright.
-  const spend = await db.collection<Character>("characters").findOneAndUpdate(
-    {
-      _id: character._id,
-      actions: { $gte: UNION_FOUNDING_ACTION_COST },
-      [campaignFundsField]: { $gte: costLocal },
-    },
-    {
-      $inc: {
-        actions: -UNION_FOUNDING_ACTION_COST,
-        [campaignFundsField]: -costLocal,
-      },
-      $set: { updatedAt: new Date() },
-    },
-    { returnDocument: "after" }
-  );
-  if (!spend) {
-    return {
-      ok: false,
-      status: 409,
-      error: "Your campaign funds or action points changed, reload and try again.",
-    };
-  }
-
-  /** Undo the combined spend when a later step fails, so nothing is charged for nothing. */
-  const refundFoundingCost = async () => {
-    await db.collection<Character>("characters").updateOne(
-      { _id: character._id },
-      {
-        $inc: {
-          actions: UNION_FOUNDING_ACTION_COST,
-          [campaignFundsField]: costLocal,
-        },
-      }
-    );
-  };
-
   const now = new Date();
+  // Crash-safe spend (issue #1672): the combined actions+funds debit is a
+  // keyed idempotent leg, the union row a deterministic insert, and the
+  // leadership claim a guarded keyed update, so a crash between the
+  // sequential writes reconciles to exactly one charged founding instead of
+  // charging for a union that never landed (or founding it twice). A later
+  // failure compensates the applied prefix in reverse, the historical
+  // refund-on-failure made crash-safe. `Idempotency-Key` replays the stored
+  // outcome without charging again.
   try {
-    const insertResult = await db.collection<Union>("unions").insertOne({
-      _id: new ObjectId(),
-      countryId: input.countryId,
-      sectorType: input.sectorType,
-      name,
-      ownerId: character._id,
-      ownerType: "character",
-      pendingLeaderCharacterId: null,
-      treasury: 0,
-      strength: 0,
-      approval: BASE_APPROVAL,
-      duesPerWorkerAnnual: 0,
-      activeServices: [],
-      foundedByCharacterId: character._id,
-      lastCalledStrikeTurn: null,
-      demandedWageLevel: null,
-      createdAt: now,
-      updatedAt: now,
-    } as Union);
-
-    // Claim leadership under the same guarded filter acceptUnionLeadership
-    // uses, so a concurrent leadership win elsewhere cannot leave one
-    // character heading two unions. A lost race unwinds the founding.
-    const claim = await db.collection<Character>("characters").updateOne(
-      {
-        _id: character._id,
-        $or: [{ unionLeaderOf: null }, { unionLeaderOf: { $exists: false } }],
+    const settled = await applyUnionFoundingSpend(db, {
+      characterId: character._id,
+      campaignFundsField,
+      costFundsLocal: costLocal,
+      costActions: UNION_FOUNDING_ACTION_COST,
+      unionDoc: {
+        countryId: input.countryId,
+        sectorType: input.sectorType,
+        name,
+        ownerId: character._id,
+        ownerType: "character",
+        pendingLeaderCharacterId: null,
+        treasury: 0,
+        strength: 0,
+        approval: BASE_APPROVAL,
+        duesPerWorkerAnnual: 0,
+        activeServices: [],
+        foundedByCharacterId: character._id,
+        lastCalledStrikeTurn: null,
+        demandedWageLevel: null,
+        createdAt: now,
+        updatedAt: now,
       },
-      { $set: { unionLeaderOf: insertResult.insertedId, updatedAt: now } }
-    );
-    if (claim.modifiedCount === 0) {
-      await db.collection<Union>("unions").deleteOne({ _id: insertResult.insertedId });
-      await refundFoundingCost();
-      return {
-        ok: false,
-        status: 409,
-        error: "You already lead a union. Step down before founding another.",
-      };
-    }
-
+      priorCharacterUpdatedAt: character.updatedAt,
+      now,
+      fingerprint: `found-union:${input.countryId}:${input.sectorType}:${nameLower}`,
+      ...(options?.idempotencyKey !== undefined
+        ? { idempotencyKey: options.idempotencyKey }
+        : {}),
+    });
     return {
       ok: true,
       status: 200,
-      unionId: insertResult.insertedId.toString(),
+      unionId: settled.unionId.toString(),
       name,
       countryId: input.countryId,
       sectorType: input.sectorType,
@@ -235,18 +204,50 @@ export async function foundUnion(
       currency: homeCurrency,
     };
   } catch (error) {
-    // The union document didn't land, refund rather than leave the founder
-    // charged for nothing. Covers both genuine infra failures and a
-    // duplicate-key race on a legacy (countryId, sectorType) unique index
-    // some worlds may still carry from before rival unions existed.
-    await refundFoundingCost();
-    const message =
-      error &&
-      typeof error === "object" &&
-      "code" in error &&
-      (error as { code: unknown }).code === 11000
-        ? "This country and industry already has a union blocking a second one at the database level, contact ops."
-        : "Failed to found the union, you have been refunded.";
-    return { ok: false, status: 409, error: message };
+    const message = error instanceof Error ? error.message : "";
+    if (message.startsWith(FOUNDING_SPEND_INSUFFICIENT)) {
+      return {
+        ok: false,
+        status: 409,
+        error: "Your campaign funds or action points changed, reload and try again.",
+      };
+    }
+    if (message.startsWith(FOUNDING_INSERT_BLOCKED)) {
+      return {
+        ok: false,
+        status: 409,
+        error:
+          "This country and industry already has a union blocking a second one at the database level, contact ops.",
+      };
+    }
+    if (message.startsWith(FOUNDING_INSERT_FAILED)) {
+      return {
+        ok: false,
+        status: 409,
+        error: "Failed to found the union, you have been refunded.",
+      };
+    }
+    if (message.startsWith(FOUNDING_LEADERSHIP_CHANGED)) {
+      return {
+        ok: false,
+        status: 409,
+        error: "You already lead a union. Step down before founding another.",
+      };
+    }
+    if (error instanceof MoneyFlowKeyConflictError) {
+      return {
+        ok: false,
+        status: 409,
+        error: "This founding key was already used for a different founding.",
+      };
+    }
+    if (error instanceof MoneyFlowTerminalError) {
+      return {
+        ok: false,
+        status: 409,
+        error: "This founding already settled; retry without the idempotency key.",
+      };
+    }
+    throw error;
   }
 }

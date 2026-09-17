@@ -46,7 +46,16 @@ export async function POST(request: Request, { params }: RouteParams) {
       return NextResponse.json({ error: "Character not found" }, { status: 404 });
     }
 
-    const result = await organizeSector(db, character, id, parsed.data.sectorId);
+    // Crash-safe spend (issue #1672): a client retry with the same key
+    // replays the stored drive outcome instead of charging again.
+    const headerKey = request.headers.get("Idempotency-Key");
+    if (headerKey !== null && (headerKey.length === 0 || headerKey.length > 128)) {
+      return NextResponse.json({ error: "Invalid Idempotency-Key header" }, { status: 400 });
+    }
+
+    const result = await organizeSector(db, character, id, parsed.data.sectorId, {
+      ...(headerKey !== null ? { idempotencyKey: headerKey } : {}),
+    });
     if (!result.ok) {
       return NextResponse.json({ error: result.error }, { status: result.status });
     }

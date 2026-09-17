@@ -21,11 +21,17 @@
  * exactly the shape of the alt-funding rings the forensics work exists to catch.
  */
 import type { Db } from "mongodb";
-import type { Character, Union } from "@/lib/db/types";
+import type { Character } from "@/lib/db/types";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
 import { getHomeCurrency } from "@/lib/currency/characterFunds";
 import { rejectIfTurnProcessing, resolveOwnedUnion } from "./unionActions";
 import type { UnionActionResult } from "./unionActions";
+import {
+  applyUnionTreasuryFundingSpend,
+  UNION_FUND_CREDIT_FAILED,
+  UNION_FUND_DEBIT_INSUFFICIENT,
+} from "@/lib/unions/unionTreasuryFundingSpend";
+import { MoneyFlowKeyConflictError, MoneyFlowTerminalError } from "@/lib/db/nonAtomicMoneyFlow";
 
 /**
  * Smallest contribution worth a write. Not a balance question: it stops a
@@ -37,16 +43,19 @@ export const MIN_UNION_CONTRIBUTION = 1;
 /**
  * Fund the treasury of the union `character` leads.
  *
- * The debit is the same conditional single-document guard every other cash
- * spend uses, so two concurrent contributions can never both pass on a stale
- * balance. If the treasury credit then fails the cash is refunded, so the
- * failure mode is "nothing happened", never "charged for nothing".
+ * The debit is a keyed idempotent money-flow leg (issue #1672) carrying the
+ * same conditional guard every other cash spend uses, so two concurrent
+ * contributions can never both pass on a stale balance. If the treasury
+ * credit then fails the cash is compensated, so the failure mode is
+ * "nothing happened", never "charged for nothing", and a crash between the
+ * writes reconciles instead of stranding either half.
  */
 export async function fundUnionTreasury(
   db: Db,
   character: Character,
   unionId: string,
-  amount: number
+  amount: number,
+  options?: { idempotencyKey?: string }
 ): Promise<UnionActionResult> {
   const turnBusy = await rejectIfTurnProcessing(db);
   if (turnBusy) return turnBusy;
@@ -74,47 +83,58 @@ export async function fundUnionTreasury(
     forexEnabled && typeof character.currencyBalances?.campaign === "number";
   const campaignFundsField = useForexCampaignBalance ? "currencyBalances.campaign" : "funds";
 
-  // Conditional single-document debit: two concurrent contributions can never
-  // both pass on a stale balance, and the balance can never go negative.
-  const debited = await db
-    .collection<Character>("characters")
-    .findOneAndUpdate(
-      { _id: character._id, [campaignFundsField]: { $gte: contribution } },
-      { $inc: { [campaignFundsField]: -contribution }, $set: { updatedAt: new Date() } },
-      { returnDocument: "after" }
-    );
-  if (!debited) {
-    const available = useForexCampaignBalance
-      ? (character.currencyBalances?.campaign ?? 0)
-      : (character.funds ?? 0);
-    return {
-      ok: false,
-      status: 402,
-      error: `You do not have ${contribution.toLocaleString()} ${homeCurrency} in campaign funds (you have ${Math.floor(available).toLocaleString()}).`,
-    };
-  }
-
+  const now = new Date();
+  // Crash-safe spend (issue #1672): the funder debit is a keyed idempotent
+  // leg and the treasury credit a keyed update, so a crash between the
+  // sequential writes reconciles to exactly one charged contribution instead
+  // of charging for money that never landed (or landing it twice).
+  // `Idempotency-Key` replays the stored outcome without charging again.
   try {
-    const credited = await db
-      .collection<Union>("unions")
-      .updateOne(
-        { _id: union._id },
-        { $inc: { treasury: contribution }, $set: { updatedAt: new Date() } }
-      );
-    if (credited.modifiedCount === 0) {
-      throw new Error("union treasury credit matched no document");
+    await applyUnionTreasuryFundingSpend(db, {
+      characterId: character._id,
+      unionId: union._id,
+      campaignFundsField,
+      contribution,
+      now,
+      fingerprint: `fund:${character._id.toHexString()}:${union._id.toHexString()}:${contribution}`,
+      ...(options?.idempotencyKey !== undefined
+        ? { idempotencyKey: options.idempotencyKey }
+        : {}),
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "";
+    if (message.startsWith(UNION_FUND_DEBIT_INSUFFICIENT)) {
+      const available = useForexCampaignBalance
+        ? (character.currencyBalances?.campaign ?? 0)
+        : (character.funds ?? 0);
+      return {
+        ok: false,
+        status: 402,
+        error: `You do not have ${contribution.toLocaleString()} ${homeCurrency} in campaign funds (you have ${Math.floor(available).toLocaleString()}).`,
+      };
     }
-  } catch {
-    // Pure $inc back, never gated on balance, so the refund cannot itself fail
-    // the way the guarded debit can.
-    await db
-      .collection<Character>("characters")
-      .updateOne({ _id: character._id }, { $inc: { [campaignFundsField]: contribution } });
-    return {
-      ok: false,
-      status: 500,
-      error: "The contribution did not go through, you have been refunded.",
-    };
+    if (message.startsWith(UNION_FUND_CREDIT_FAILED)) {
+      return {
+        ok: false,
+        status: 500,
+        error: "The contribution did not go through, you have been refunded.",
+      };
+    }
+    if (error instanceof MoneyFlowKeyConflictError) {
+      return {
+        ok: false,
+        status: 409,
+        error: "This contribution key was already used for a different contribution.",
+      };
+    }
+    if (error instanceof MoneyFlowTerminalError) {
+      return {
+        ok: false,
+        status: 409,
+        error: "This contribution already settled; retry without the idempotency key.",
+      };
+    }
+    throw error;
   }
 
   return {

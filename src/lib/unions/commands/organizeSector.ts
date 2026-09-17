@@ -29,6 +29,13 @@ import type { Character, CorporateSector, Union } from "@/lib/db/types";
 import { unionApproval } from "@/lib/unions/unionDues";
 import { resolveOwnedUnion, rejectIfTurnProcessing, type UnionActionResult } from "./unionActions";
 import {
+  applyOrganizeSectorSpend,
+  ORGANIZE_ACTIONS_CHANGED,
+  ORGANIZE_SECTOR_CHANGED,
+  ORGANIZE_TREASURY_CHANGED,
+} from "@/lib/unions/organizeSectorSpend";
+import { MoneyFlowKeyConflictError, MoneyFlowTerminalError } from "@/lib/db/nonAtomicMoneyFlow";
+import {
   ORGANIZE_SECTOR_ACTION_COST,
   RAID_APPROVAL_EDGE_REQUIRED,
   clamp0to100,
@@ -154,7 +161,8 @@ export async function organizeSector(
   db: Db,
   character: Character,
   unionId: string,
-  sectorId: string
+  sectorId: string,
+  options?: { idempotencyKey?: string }
 ): Promise<OrganizeSectorResult> {
   const turnBusy = await rejectIfTurnProcessing(db);
   if (turnBusy) return turnBusy;
@@ -224,37 +232,70 @@ export async function organizeSector(
 
   const now = new Date();
 
-  // Charge action points first (mirrors organizeUnion's spend-then-refund-on-
-  // failure order).
-  const actionSpend = await db
-    .collection<Character>("characters")
-    .updateOne(
-      { _id: character._id, actions: { $gte: ORGANIZE_SECTOR_ACTION_COST } },
-      { $inc: { actions: -ORGANIZE_SECTOR_ACTION_COST }, $set: { updatedAt: now } }
-    );
-  if (actionSpend.modifiedCount === 0) {
-    return {
-      ok: false,
-      status: 409,
-      error: "Your available actions changed. Please try again.",
-    };
-  }
-
-  const treasurySpend = await db
-    .collection<Union>("unions")
-    .updateOne(
-      { _id: union._id, treasury: { $gte: treasuryCost } },
-      { $inc: { treasury: -treasuryCost }, $set: { updatedAt: now } }
-    );
-  if (treasurySpend.modifiedCount === 0) {
-    await db
-      .collection<Character>("characters")
-      .updateOne({ _id: character._id }, { $inc: { actions: ORGANIZE_SECTOR_ACTION_COST } });
-    return {
-      ok: false,
-      status: 409,
-      error: "Union treasury changed, please retry.",
-    };
+  const newRepresentingObjectId = outcome.newRepresentingUnionId
+    ? new ObjectId(outcome.newRepresentingUnionId)
+    : null;
+  // Crash-safe spend (issue #1672): the action-points debit and the treasury
+  // debit are keyed idempotent legs and the sector transition a keyed update
+  // guarded on the pre-drive snapshot, so a crash between the sequential
+  // writes reconciles to exactly one charged drive instead of charging for a
+  // push that never landed (or landing it twice). A later failure compensates
+  // the applied prefix in reverse, the historical spend-then-refund-on-
+  // failure made crash-safe. `Idempotency-Key` replays the stored outcome
+  // without charging again. A raid that lost its contest charges the debits
+  // and leaves the sector untouched.
+  try {
+    await applyOrganizeSectorSpend(db, {
+      characterId: character._id,
+      unionId: union._id,
+      sectorId: sector._id,
+      actionCost: ORGANIZE_SECTOR_ACTION_COST,
+      treasuryCost,
+      priorUnionization: sector.unionization,
+      priorRepresentingUnionId: sector.representingUnionId,
+      nextUnionization: outcome.newUnionization,
+      nextRepresentingUnionId: newRepresentingObjectId,
+      now,
+      applySector: outcome.applied,
+      fingerprint: `organize-sector:${union._id.toHexString()}:${sector._id.toHexString()}`,
+      ...(options?.idempotencyKey !== undefined
+        ? { idempotencyKey: options.idempotencyKey }
+        : {}),
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "";
+    if (message.startsWith(ORGANIZE_ACTIONS_CHANGED)) {
+      return {
+        ok: false,
+        status: 409,
+        error: "Your available actions changed. Please try again.",
+      };
+    }
+    if (message.startsWith(ORGANIZE_TREASURY_CHANGED)) {
+      return {
+        ok: false,
+        status: 409,
+        error: "Union treasury changed, please retry.",
+      };
+    }
+    if (message.startsWith(ORGANIZE_SECTOR_CHANGED)) {
+      return { ok: false, status: 409, error: "Sector state changed, please retry." };
+    }
+    if (error instanceof MoneyFlowKeyConflictError) {
+      return {
+        ok: false,
+        status: 409,
+        error: "This drive key was already used for a different drive.",
+      };
+    }
+    if (error instanceof MoneyFlowTerminalError) {
+      return {
+        ok: false,
+        status: 409,
+        error: "This drive already settled; retry without the idempotency key.",
+      };
+    }
+    throw error;
   }
 
   // A raid that lost its contest: the spend above is the entire penalty, the
@@ -270,35 +311,6 @@ export async function organizeSector(
       cashSpent: treasuryCost,
       actionsSpent: ORGANIZE_SECTOR_ACTION_COST,
     };
-  }
-
-  const newRepresentingObjectId = outcome.newRepresentingUnionId
-    ? new ObjectId(outcome.newRepresentingUnionId)
-    : null;
-  const sectorUpdate = await db.collection<CorporateSector>("corporateSectors").updateOne(
-    {
-      _id: sector._id,
-      unionization: sector.unionization,
-      representingUnionId: sector.representingUnionId,
-    },
-    {
-      $set: {
-        unionization: outcome.newUnionization,
-        representingUnionId: newRepresentingObjectId,
-        updatedAt: now,
-      },
-    }
-  );
-  if (sectorUpdate.modifiedCount === 0) {
-    // Sector changed between our read and write, refund both spends rather
-    // than silently apply the drive against stale data.
-    await db
-      .collection<Character>("characters")
-      .updateOne({ _id: character._id }, { $inc: { actions: ORGANIZE_SECTOR_ACTION_COST } });
-    await db
-      .collection<Union>("unions")
-      .updateOne({ _id: union._id }, { $inc: { treasury: treasuryCost } });
-    return { ok: false, status: 409, error: "Sector state changed, please retry." };
   }
 
   return {

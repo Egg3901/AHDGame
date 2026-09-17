@@ -74,12 +74,20 @@ export async function POST(request: Request, { params }: RouteParams) {
     const body = await parseClicks(request);
     if (!body.ok) return NextResponse.json({ error: body.error }, { status: 400 });
 
+    // Crash-safe spend (issue #1672): a client retry with the same key
+    // replays the stored purchase outcome instead of charging again.
+    const headerKey = request.headers.get("Idempotency-Key");
+    if (headerKey !== null && (headerKey.length === 0 || headerKey.length > 128)) {
+      return NextResponse.json({ error: "Invalid Idempotency-Key header" }, { status: 400 });
+    }
+
     const db = await getDb();
     const result = await contributeCampaignStrength({
       db,
       campaignId: new ObjectId(campaignId),
       user: auth.user,
       clicks: body.clicks,
+      ...(headerKey !== null ? { idempotencyKey: headerKey } : {}),
     });
     return NextResponse.json({
       success: true,

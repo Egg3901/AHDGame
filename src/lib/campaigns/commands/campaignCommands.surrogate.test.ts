@@ -20,6 +20,13 @@ const access = vi.hoisted(() => ({
 }));
 vi.mock("@/lib/campaigns/access", () => access);
 
+// The rally spend runs standalone here: no replica set in unit tests.
+vi.mock("@/lib/db/runWithOptionalTransaction", () => ({
+  runWithOptionalTransaction: vi
+    .fn()
+    .mockImplementation(async (_inside: unknown, fallback: () => Promise<unknown>) => fallback()),
+}));
+
 // General-phase by default (primary ended at turn 1, race ends far out, clock at 100).
 vi.mock("@/lib/time/gameTime", async (importActual) => ({
   ...(await importActual<typeof import("@/lib/time/gameTime")>()),

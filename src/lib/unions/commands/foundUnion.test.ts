@@ -18,6 +18,13 @@ vi.mock("@/lib/db/collections/gameState", () => ({
   }),
 }));
 
+// The founding spend runs standalone here: no replica set in unit tests.
+vi.mock("@/lib/db/runWithOptionalTransaction", () => ({
+  runWithOptionalTransaction: vi
+    .fn()
+    .mockImplementation(async (_inside: unknown, fallback: () => Promise<unknown>) => fallback()),
+}));
+
 function makeCharacter(overrides: Partial<Character> = {}): Character {
   return {
     _id: new ObjectId(),
@@ -39,19 +46,27 @@ function baseDb(options: {
   insertOne?: ReturnType<typeof vi.fn>;
 }) {
   const insertOne = options.insertOne ?? vi.fn().mockResolvedValue({ insertedId: new ObjectId() });
-  const characterFindOneAndUpdate = vi.fn().mockResolvedValue({ funds: 900_000, actions: 40 });
-  const characterUpdateOne = vi.fn().mockResolvedValue({ modifiedCount: 1 });
+  // Crash-safe spend (issue #1672): the founding debit is a keyed idempotent
+  // leg and the leadership claim a guarded keyed update, both plain
+  // `updateOne` calls now (no `findOneAndUpdate`).
+  const characterUpdateOne = vi.fn().mockResolvedValue({ matchedCount: 1, modifiedCount: 1 });
+  const characterFindOne = vi.fn().mockResolvedValue(null);
   const unionsDeleteOne = vi.fn().mockResolvedValue({ deletedCount: 1 });
+  const unionsFindOne = vi.fn().mockResolvedValue(null);
   const unionsFind = vi.fn().mockImplementation(() => ({
     toArray: async () => (options.existingNames ?? []).map((name) => ({ name })),
   }));
+  const receiptsInsertOne = vi.fn().mockResolvedValue({ insertedId: "key" });
+  const receiptsFindOne = vi.fn().mockResolvedValue(null);
+  const receiptsUpdateOne = vi.fn().mockResolvedValue({ matchedCount: 1 });
 
   return {
     insertOne,
     unionsFind,
     characterUpdateOne,
-    characterFindOneAndUpdate,
+    characterFindOne,
     unionsDeleteOne,
+    receiptsInsertOne,
     db: {
       collection: (name: string) => {
         if (name === "gameState") return gameStateCollection();
@@ -59,12 +74,21 @@ function baseDb(options: {
           return { findOne: vi.fn().mockResolvedValue({ unionsBanned: options.banned ?? false }) };
         }
         if (name === "unions") {
-          return { find: unionsFind, insertOne, deleteOne: unionsDeleteOne };
+          return {
+            find: unionsFind,
+            findOne: unionsFindOne,
+            insertOne,
+            deleteOne: unionsDeleteOne,
+          };
         }
         if (name === "characters") {
+          return { findOne: characterFindOne, updateOne: characterUpdateOne };
+        }
+        if (name === "nonAtomicMoneyFlowReceipts") {
           return {
-            findOneAndUpdate: characterFindOneAndUpdate,
-            updateOne: characterUpdateOne,
+            insertOne: receiptsInsertOne,
+            findOne: receiptsFindOne,
+            updateOne: receiptsUpdateOne,
           };
         }
         throw new Error(`unexpected collection ${name}`);
@@ -170,8 +194,10 @@ describe("foundUnion", () => {
   });
 
   it("claims unionLeaderOf on the founder, guarded, and unwinds a lost race", async () => {
-    const insertedId = new ObjectId();
-    const insertOne = vi.fn().mockResolvedValue({ insertedId });
+    // The union `_id` derives from the idempotency key, so the mock's
+    // `insertedId` is ignored: the claim must name the row that was actually
+    // inserted.
+    const insertOne = vi.fn().mockResolvedValue({ insertedId: new ObjectId() });
     const { db, characterUpdateOne } = baseDb({ insertOne });
     const character = makeCharacter();
 
@@ -181,31 +207,43 @@ describe("foundUnion", () => {
       name: "Rival Steelworkers",
     });
     expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const [insertedDoc] = insertOne.mock.calls[0] as [Union];
     const claimCall = characterUpdateOne.mock.calls.find(
       ([, update]) => update?.$set?.unionLeaderOf != null
     );
     expect(claimCall).toBeDefined();
-    expect(claimCall![1].$set.unionLeaderOf).toEqual(insertedId);
+    expect(claimCall![0]).toMatchObject({ _id: character._id });
+    expect(claimCall![1].$set.unionLeaderOf).toEqual(insertedDoc._id);
+    expect(result.unionId).toBe((insertedDoc._id as ObjectId).toString());
 
     // Lost race: the guarded claim matches nothing, the union is deleted and
-    // the founder refunded.
-    const insertedId2 = new ObjectId();
-    const insertOne2 = vi.fn().mockResolvedValue({ insertedId: insertedId2 });
+    // the founder refunded. Only the claim fails: the debit leg lands first.
+    const insertOne2 = vi.fn().mockResolvedValue({ insertedId: new ObjectId() });
     const raceDb = baseDb({ insertOne: insertOne2 });
-    raceDb.characterUpdateOne.mockResolvedValue({ modifiedCount: 0 });
+    raceDb.characterUpdateOne.mockImplementation(async (filter: Record<string, unknown>) =>
+      "$or" in filter ? { matchedCount: 0, modifiedCount: 0 } : { matchedCount: 1, modifiedCount: 1 }
+    );
     const raceResult = await foundUnion(raceDb.db, makeCharacter(), {
       countryId: "US",
       sectorType: "manufacturing",
       name: "Racing Union",
     });
     expect(raceResult.ok).toBe(false);
-    if (!raceResult.ok) expect(raceResult.status).toBe(409);
-    expect(raceDb.unionsDeleteOne).toHaveBeenCalledWith({ _id: insertedId2 });
+    if (!raceResult.ok) {
+      expect(raceResult.status).toBe(409);
+      expect(raceResult.error).toMatch(/already lead a union/i);
+    }
+    const [raceDoc] = insertOne2.mock.calls[0] as [Union];
+    expect(raceDb.unionsDeleteOne).toHaveBeenCalledWith(
+      { _id: raceDoc._id, ownerId: expect.anything() },
+      undefined
+    );
   });
 
   it("charges campaign funds and action points together in one guarded write", async () => {
     const character = makeCharacter();
-    const { db, characterFindOneAndUpdate } = baseDb({});
+    const { db, characterUpdateOne } = baseDb({});
 
     const result = await foundUnion(db, character, {
       countryId: "US",
@@ -217,8 +255,9 @@ describe("foundUnion", () => {
     expect(result.actionsSpent).toBe(UNION_FOUNDING_ACTION_COST);
     expect(result.campaignFundsSpent).toBeGreaterThan(0);
 
-    // Personal wealth is never touched: the fee is political spending.
-    const [filter, update] = characterFindOneAndUpdate.mock.calls[0];
+    // Personal wealth is never touched: the fee is political spending, and
+    // both costs land in ONE guarded money-flow leg.
+    const [filter, update] = characterUpdateOne.mock.calls[0];
     expect(filter).toMatchObject({
       _id: character._id,
       actions: { $gte: UNION_FOUNDING_ACTION_COST },
@@ -231,7 +270,7 @@ describe("foundUnion", () => {
 
   it("refuses when campaign funds are short, before spending any action points", async () => {
     const character = makeCharacter({ funds: 1 } as Partial<Character>);
-    const { db, insertOne, characterFindOneAndUpdate } = baseDb({});
+    const { db, insertOne, characterUpdateOne } = baseDb({});
 
     const result = await foundUnion(db, character, {
       countryId: "US",
@@ -243,7 +282,7 @@ describe("foundUnion", () => {
       expect(result.status).toBe(402);
       expect(result.error).toMatch(/campaign funds/i);
     }
-    expect(characterFindOneAndUpdate).not.toHaveBeenCalled();
+    expect(characterUpdateOne).not.toHaveBeenCalled();
     expect(insertOne).not.toHaveBeenCalled();
   });
 
@@ -251,7 +290,7 @@ describe("foundUnion", () => {
     const character = makeCharacter({
       actions: UNION_FOUNDING_ACTION_COST - 1,
     } as Partial<Character>);
-    const { db, insertOne, characterFindOneAndUpdate } = baseDb({});
+    const { db, insertOne, characterUpdateOne } = baseDb({});
 
     const result = await foundUnion(db, character, {
       countryId: "US",
@@ -263,7 +302,7 @@ describe("foundUnion", () => {
       expect(result.status).toBe(402);
       expect(result.error).toMatch(/action points/i);
     }
-    expect(characterFindOneAndUpdate).not.toHaveBeenCalled();
+    expect(characterUpdateOne).not.toHaveBeenCalled();
     expect(insertOne).not.toHaveBeenCalled();
   });
 
@@ -284,7 +323,7 @@ describe("foundUnion", () => {
 it("charges the world's fixed campaign base rate rather than modern calibration", async () => {
   const { isForexEnabled } = await import("@/lib/currency/featureFlag");
   vi.mocked(isForexEnabled).mockResolvedValueOnce(true);
-  const { db, characterFindOneAndUpdate } = baseDb({});
+  const { db, characterUpdateOne } = baseDb({});
   const result = await foundUnion(db, makeCharacter({ countryId: "UK", funds: 2000000 }), {
     countryId: "UK",
     sectorType: "manufacturing",
@@ -292,5 +331,5 @@ it("charges the world's fixed campaign base rate rather than modern calibration"
   });
   expect(result.ok).toBe(true);
   expect(result).toMatchObject({ campaignFundsSpent: 1000000 });
-  expect(characterFindOneAndUpdate.mock.calls[0][1].$inc.funds).toBe(-1000000);
+  expect(characterUpdateOne.mock.calls[0][1].$inc.funds).toBe(-1000000);
 });

@@ -1,7 +1,7 @@
 import { loadCampaignCurrencyRates } from "@/lib/campaigns/campaignCurrency";
 import { loadOppositionTargets } from "@/lib/campaigns/oppositionTargets";
 import type { AuthUserWithCharacter } from "@/lib/auth";
-import { ApiError, badRequest, forbidden, notFound } from "@/lib/api/errors";
+import { ApiError, badRequest, forbidden, internalError, notFound } from "@/lib/api/errors";
 import { assertSameCountry, isSameCountry } from "@/lib/api/sameCountry";
 import {
   isCampaignManagerUser,
@@ -19,6 +19,17 @@ import {
   CAMPAIGN_DONATION_CAMPAIGN_MISSING,
   CAMPAIGN_DONATION_INSUFFICIENT,
 } from "@/lib/campaigns/campaignDonationSpend";
+import {
+  applyCampaignStrengthSpend,
+  STRENGTH_ACTIVITY_FAILED,
+  STRENGTH_CAMPAIGN_MISSING,
+  STRENGTH_DEBIT_INSUFFICIENT,
+} from "@/lib/campaigns/campaignStrengthSpend";
+import {
+  applyRallySpend,
+  RALLY_ACTIONS_CHANGED,
+  RALLY_CANDIDATE_CHANGED,
+} from "@/lib/campaigns/rallySpend";
 import { createNotification } from "@/lib/notifications";
 import type {
   Campaign,
@@ -673,8 +684,13 @@ export async function contributeCampaignStrength(params: {
    * unchanged.
    */
   clicks?: number | "max";
+  /**
+   * Caller-supplied idempotency key (e.g. `Idempotency-Key` header echoed by
+   * the route). Same key + same purchase replays instead of charging again.
+   */
+  idempotencyKey?: string;
 }) {
-  const { db, campaignId, user, clicks: requestedClicks = 1 } = params;
+  const { db, campaignId, user, clicks: requestedClicks = 1, idempotencyKey } = params;
   const campaignRates = await loadCampaignCurrencyRates(db);
   const now = new Date();
   const campaign = await getCampaignOrThrow(db, campaignId);
@@ -794,91 +810,89 @@ export async function contributeCampaignStrength(params: {
   const targetName = targetCandidate?.characterName ?? targetCandidateId ?? campaignId.toString();
   const auditTurn = await getCurrentTurn(db);
 
-  const charUpdate = await db.collection<Character>("characters").updateOne(
-    {
-      _id: character._id,
-      actions: { $gte: costActions },
-      [csCampaignFundsField]: { $gte: costFundsLocal },
-    },
-    {
-      $inc: {
-        actions: -costActions,
-        [csCampaignFundsField]: -costFundsLocal,
-      },
-      $set: { updatedAt: now },
-    }
-  );
-  if (charUpdate.matchedCount === 0) {
-    throw badRequest("Insufficient resources — may have changed since page load");
-  }
-
-  const campaignUpdate = await db.collection<Campaign>("campaigns").updateOne(
-    { _id: campaignId },
-    {
-      $inc: { campaignStrength: strengthAdded },
-      $set: { updatedAt: now },
-    }
-  );
-  if (campaignUpdate.matchedCount === 0) {
-    await db.collection<Character>("characters").updateOne(
-      { _id: character._id },
-      {
-        $inc: {
-          actions: costActions,
-          [csCampaignFundsField]: costFundsLocal,
-        },
-        $set: { updatedAt: now },
-      }
-    );
-    throw notFound("Campaign not found");
-  }
-
   const actorName = character.name ?? user.character.name ?? "Unknown";
   const nextCampaignStrength = currentCS + strengthAdded;
   // Batched contributions are one debit and one audit row, so the row has to
   // say how many clicks it stood in for or the ledger reads as a single
   // implausibly large donation.
   const batchSuffix = clicks > 1 ? ` (x${clicks})` : "";
-  void db.collection("activityLog").insertOne({
-    type: "game_action",
-    timestamp: now,
-    userId: new ObjectId(user.userId),
-    characterId: character._id,
-    characterName: actorName,
-    username: user.username,
-    countryId: character.countryId,
-    actionType: "campaign_strength",
-    actionCost: costActions,
-    turn: auditTurn,
-    targetId: campaignId,
-    targetName,
-    targetType: "campaign",
-    result: {
-      success: true,
-      fundsChange: -costFundsLocal,
-      message: `Added ${strengthAdded.toFixed(1)} campaign strength to ${targetName}${batchSuffix}`,
-    },
-    summary: `campaign_strength - ${actorName} added ${strengthAdded.toFixed(1)} CS to ${targetName}${batchSuffix}`,
-    details: {
-      campaignId: campaignId.toString(),
-      electionId: campaign.electionId.toString(),
-      electionType: election.electionType,
-      countryId: election.countryId,
-      candidateId: targetCandidateId,
-      candidateName: targetName,
-      candidateParty: targetCandidate?.party ?? campaign.party,
-      clicks,
-      strengthPerClick,
-      strengthAdded,
-      campaignStrengthBefore: currentCS,
-      campaignStrengthAfter: nextCampaignStrength,
-      costFunds: costFundsLocal,
+  // Crash-safe spend (issue #1672): the character debit is a keyed idempotent
+  // leg, the campaign credit a keyed update, and the audit row a
+  // deterministic insert, so a crash between the sequential writes reconciles
+  // to exactly one charged purchase instead of charging for strength that
+  // never landed (or landing it twice). `Idempotency-Key` replays the stored
+  // outcome without charging again; the caller reports its recomputed quote,
+  // matching the stored one whenever nothing moved between attempts.
+  try {
+    await applyCampaignStrengthSpend(db, {
+      characterId: character._id,
+      campaignId,
+      fundsField: csCampaignFundsField,
+      costFundsLocal,
       costActions,
-      currencyCode: homeCurrency,
-      fxRate: campaignRate,
-      actorNationalInfluence: npi,
-    },
-  });
+      strengthAdded,
+      priorCampaignUpdatedAt: campaign.updatedAt ?? now,
+      now,
+      activityEntry: {
+        type: "game_action",
+        timestamp: now,
+        userId: new ObjectId(user.userId),
+        characterId: character._id,
+        characterName: actorName,
+        username: user.username,
+        countryId: character.countryId,
+        actionType: "campaign_strength",
+        actionCost: costActions,
+        turn: auditTurn,
+        targetId: campaignId,
+        targetName,
+        targetType: "campaign",
+        result: {
+          success: true,
+          fundsChange: -costFundsLocal,
+          message: `Added ${strengthAdded.toFixed(1)} campaign strength to ${targetName}${batchSuffix}`,
+        },
+        summary: `campaign_strength - ${actorName} added ${strengthAdded.toFixed(1)} CS to ${targetName}${batchSuffix}`,
+        details: {
+          campaignId: campaignId.toString(),
+          electionId: campaign.electionId.toString(),
+          electionType: election.electionType,
+          countryId: election.countryId,
+          candidateId: targetCandidateId,
+          candidateName: targetName,
+          candidateParty: targetCandidate?.party ?? campaign.party,
+          clicks,
+          strengthPerClick,
+          strengthAdded,
+          campaignStrengthBefore: currentCS,
+          campaignStrengthAfter: nextCampaignStrength,
+          costFunds: costFundsLocal,
+          costActions,
+          currencyCode: homeCurrency,
+          fxRate: campaignRate,
+          actorNationalInfluence: npi,
+        },
+      },
+      // Stable request inputs, never the resolved quote: the quote depends on
+      // live campaign strength, so a same-key recovery that recomputes it
+      // must converge on the stored steps, not fail closed on a mismatch.
+      fingerprint: `campaign-strength:${campaignId.toHexString()}:${character._id.toHexString()}:${String(requestedClicks)}`,
+      ...(idempotencyKey !== undefined ? { idempotencyKey } : {}),
+    });
+  } catch (error) {
+    const message = (error as Error).message;
+    if (message.startsWith(STRENGTH_DEBIT_INSUFFICIENT)) {
+      if (message.includes("character-missing")) throw notFound("Character not found");
+      throw badRequest("Insufficient resources - may have changed since page load");
+    }
+    if (message.startsWith(STRENGTH_CAMPAIGN_MISSING)) {
+      throw notFound("Campaign not found");
+    }
+    if (message.startsWith(STRENGTH_ACTIVITY_FAILED)) {
+      throw internalError("Campaign strength purchase failed, you have been refunded.");
+    }
+    throw error;
+  }
 
   return {
     campaignStrength: nextCampaignStrength,
@@ -1261,8 +1275,13 @@ export async function fireRallyOneShot(params: {
   db: Db;
   campaignId: ObjectId;
   user: AuthUserWithCharacter & { hasCharacter: true; character: Character };
+  /**
+   * Caller-supplied idempotency key (e.g. `Idempotency-Key` header echoed by
+   * the route). Same key + same rally replays instead of spending again.
+   */
+  idempotencyKey?: string;
 }) {
-  const { db, campaignId, user } = params;
+  const { db, campaignId, user, idempotencyKey } = params;
   const campaign = await getCampaignOrThrow(db, campaignId);
 
   const now = new Date();
@@ -1315,38 +1334,37 @@ export async function fireRallyOneShot(params: {
   const currentSupport = typeof candidate.support === "number" ? candidate.support : 50;
   const nextSupport = Math.max(0, Math.min(100, currentSupport + immediateBump));
 
-  // Atomic guard: matches actions + lastRallyTurn at read time. If the
-  // candidate fired a rally between our read and write (extremely
-  // unlikely with rate-limit) the modifiedCount === 0 throws.
-  const lastRallyMatch =
-    typeof candidate.lastRallyTurn === "number"
-      ? { lastRallyTurn: candidate.lastRallyTurn }
-      : { lastRallyTurn: { $exists: false } };
-
-  const campaignResult = await db.collection<Campaign>("campaigns").updateOne(
-    { _id: campaignId, actions: { $gte: actionCost } },
-    {
-      $inc: { actions: -actionCost },
-      $set: { updatedAt: now },
+  // Crash-safe spend (issue #1672): the campaign-actions debit is a keyed
+  // idempotent leg and the candidate support write a keyed update guarded on
+  // the one-per-turn throttle, so a crash between the sequential writes
+  // reconciles to exactly one charged rally instead of spending actions for
+  // support that never landed (or landing it twice). `Idempotency-Key`
+  // replays the stored outcome without spending again.
+  try {
+    await applyRallySpend(db, {
+      campaignId,
+      candidateRowId: candidate._id,
+      actionCost,
+      priorLastRallyTurn: candidate.lastRallyTurn,
+      nextSupport,
+      currentTurn,
+      accrualEntry: entry,
+      now,
+      // Turn-scoped, matching the throttle: a same-key retry next turn
+      // conflicts (fail closed) instead of replaying last turn's rally.
+      fingerprint: `rally:${campaignId.toHexString()}:${candidate._id.toHexString()}:${currentTurn}`,
+      ...(idempotencyKey !== undefined ? { idempotencyKey } : {}),
+    });
+  } catch (error) {
+    const message = (error as Error).message;
+    if (message.startsWith(RALLY_ACTIONS_CHANGED)) {
+      throw new ApiError(409, "Campaign actions changed since page load. Please refresh.");
     }
-  );
-  if (campaignResult.modifiedCount === 0) {
-    throw new ApiError(409, "Campaign actions changed since page load. Please refresh.");
-  }
-
-  const candidateResult = await db.collection<ElectionCandidate>("electionCandidates").updateOne(
-    { _id: candidate._id, ...lastRallyMatch },
-    {
-      $set: { support: nextSupport, lastRallyTurn: currentTurn },
-      $push: { supportAccrual: entry },
+    if (message.startsWith(RALLY_CANDIDATE_CHANGED)) {
+      if (message.includes("candidate-missing")) throw notFound("Candidate not found");
+      throw new ApiError(409, "Rally state changed since page load. Please refresh.");
     }
-  );
-  if (candidateResult.modifiedCount === 0) {
-    // Roll back the campaign action deduction.
-    await db
-      .collection<Campaign>("campaigns")
-      .updateOne({ _id: campaignId }, { $inc: { actions: actionCost } });
-    throw new ApiError(409, "Rally state changed since page load. Please refresh.");
+    throw error;
   }
 
   // Per-race wire. Fire-and-forget, after both writes have committed.

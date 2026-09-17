@@ -53,7 +53,16 @@ export async function POST(request: Request, { params }: RouteParams) {
       return NextResponse.json({ error: "Character not found" }, { status: 404 });
     }
 
-    const result = await fundUnionTreasury(db, character, id, parsed.data.amount);
+    // Crash-safe spend (issue #1672): a client retry with the same key
+    // replays the stored contribution outcome instead of charging again.
+    const headerKey = request.headers.get("Idempotency-Key");
+    if (headerKey !== null && (headerKey.length === 0 || headerKey.length > 128)) {
+      return NextResponse.json({ error: "Invalid Idempotency-Key header" }, { status: 400 });
+    }
+
+    const result = await fundUnionTreasury(db, character, id, parsed.data.amount, {
+      ...(headerKey !== null ? { idempotencyKey: headerKey } : {}),
+    });
     if (!result.ok) {
       return NextResponse.json({ error: result.error }, { status: result.status });
     }
