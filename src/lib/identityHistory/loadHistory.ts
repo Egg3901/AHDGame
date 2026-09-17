@@ -4,27 +4,26 @@ import {
   type IdentityObservation,
   type IdentityTrack,
 } from "@/lib/db/types/identityObservation";
-import { maskIp } from "@/lib/utils/maskIp";
-import { hashSensitiveSignal } from "@/lib/utils/hashSignal";
-
 /**
- * A moderator never sees a raw identity signal.
+ * The moderator panel gets NO value detail at all, not a masked address and not
+ * a hash.
  *
- * IPs are masked to the /24, matching `hydrateMembers` on the alt panel, so a
- * moderator can still judge "same network" without reading the address.
- * Fingerprints are hashed with the SAME function `/api/moderator/users` uses
- * for its `*Key` columns, so the value shown here lines up with the one in the
- * users table instead of being a second, unrelatable string.
+ * Withholding it entirely rather than emitting a derived form means the raw
+ * value never leaves the server in any shape a moderator bundle could hold,
+ * compare or leak. `sharedWithCount` is still computed server-side from the
+ * real values, so the actionable part ("another account has been here too")
+ * survives without disclosing what the value is.
  */
-function presentValue(value: string, track: IdentityTrack, revealNetwork: boolean): string {
-  if (revealNetwork) return value;
-  return track === "ip" ? maskIp(value) : (hashSensitiveSignal(value) ?? "");
+function presentValue(value: string, revealNetwork: boolean): string | null {
+  return revealNetwork ? value : null;
 }
 
 export const IDENTITY_HISTORY_PAGE_SIZE = 10;
 
 export interface IdentityHistoryRow {
-  value: string;
+  /** Null when the caller is not entitled to the value (the moderator panel).
+   * The UI renders "This value hidden" rather than any derived form of it. */
+  value: string | null;
   /** Null when `datesKnown` is false. The UI shows "date unknown" rather than
    * a fabricated timestamp. */
   firstSeen: string | null;
@@ -99,7 +98,7 @@ export async function loadIdentityHistory(
 
   return {
     rows: docs.map((doc) => ({
-      value: presentValue(doc.value, track, revealNetwork),
+      value: presentValue(doc.value, revealNetwork),
       firstSeen: doc.datesKnown ? doc.firstSeen.toISOString() : null,
       lastSeen: doc.datesKnown ? doc.lastSeen.toISOString() : null,
       observations: doc.observations,

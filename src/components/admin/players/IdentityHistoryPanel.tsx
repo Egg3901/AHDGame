@@ -9,7 +9,8 @@ type Track = "ip" | "fingerprint";
  * Declared locally rather than imported: that module reaches the database, and
  * a client component importing it would pull the driver into the bundle. */
 interface HistoryRow {
-  value: string;
+  /** Null in the moderator panel: the server withholds the value entirely. */
+  value: string | null;
   firstSeen: string | null;
   lastSeen: string | null;
   observations: number;
@@ -123,11 +124,15 @@ function TrackSection({
                   <tbody>
                     {data.rows.map((row, i) => (
                       <tr
-                        key={`${row.value}-${row.firstSeen ?? "undated"}-${i}`}
+                        key={`${row.value ?? "hidden"}-${row.firstSeen ?? "undated"}-${i}`}
                         className={row.sharedWithCount > 0 ? "bg-amber-500/10" : undefined}
                       >
                         <td className="py-1 pr-3 font-mono">
-                          {row.value}
+                          {row.value === null ? (
+                            <span className="font-sans italic text-muted">This value hidden</span>
+                          ) : (
+                            row.value
+                          )}
                           {row.sharedWithCount > 0 && (
                             <span
                               className="ml-2 whitespace-nowrap rounded bg-amber-500/20 px-1.5 py-0.5 font-sans text-amber-400"

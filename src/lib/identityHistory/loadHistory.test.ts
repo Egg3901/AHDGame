@@ -78,11 +78,16 @@ describe("loadIdentityHistory", () => {
     for (const r of page.rows) expect(r.sharedWithCount).toBe(0);
   });
 
-  it("masks IPs when revealNetwork is false", async () => {
-    const page = await loadIdentityHistory(fakeDb([row(USER, "68.192.35.139", 1)]), USER, "ip", 1, {
+  it("withholds the IP entirely when revealNetwork is false", async () => {
+    const raw = "68.192.35.139";
+    const page = await loadIdentityHistory(fakeDb([row(USER, raw, 1)]), USER, "ip", 1, {
       revealNetwork: false,
     });
-    expect(page.rows[0].value).toBe("68.192.35.xxx");
+    // Not a mask, not a hash, nothing derived: the value never leaves the
+    // server. The UI renders "This value hidden" for a null.
+    expect(page.rows[0].value).toBeNull();
+    expect(JSON.stringify(page)).not.toContain(raw);
+    expect(JSON.stringify(page)).not.toContain("68.192.35");
   });
 
   it("gives an admin the raw fingerprint", async () => {
@@ -93,15 +98,26 @@ describe("loadIdentityHistory", () => {
     expect(page.rows[0].value).toBe("abc123def456");
   });
 
-  it("hashes a fingerprint for a moderator, matching the users-table *Key column", async () => {
+  it("withholds the fingerprint entirely when revealNetwork is false", async () => {
     const raw = "abc123def456";
     const fp: IdentityObservation = { ...row(USER, raw, 1), track: "fingerprint" };
     const page = await loadIdentityHistory(fakeDb([fp]), USER, "fingerprint", 1, {
       revealNetwork: false,
     });
-    expect(page.rows[0].value).not.toBe(raw);
-    // Same function /api/moderator/users uses, so the two surfaces corroborate.
-    expect(page.rows[0].value).toBe(hashSensitiveSignal(raw));
+    expect(page.rows[0].value).toBeNull();
+    expect(JSON.stringify(page)).not.toContain(raw);
+    // No hash either — a hash is still a stable identifier a moderator bundle
+    // could hold and correlate.
+    expect(JSON.stringify(page)).not.toContain(hashSensitiveSignal(raw));
+  });
+
+  it("still reports the shared-account count when the value is withheld", async () => {
+    // The actionable signal survives: a moderator sees that someone else has
+    // been on this value without being told what it is.
+    const rows = [row(USER, "1.1.1.1", 1), row(OTHER, "1.1.1.1", 2)];
+    const page = await loadIdentityHistory(fakeDb(rows), USER, "ip", 1, { revealNetwork: false });
+    expect(page.rows[0].value).toBeNull();
+    expect(page.rows[0].sharedWithCount).toBe(1);
   });
 
   it("emits null dates for undated rows", async () => {
