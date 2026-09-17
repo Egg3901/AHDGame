@@ -34,6 +34,14 @@ import {
   calculateConvertCashInfamy,
   convertCashConversion,
   quoteConvertCashAction,
+  POLL_BASE_FUND_COST,
+  POLL_LARGE_BASE_FUND_COST,
+  POLL_ACTION_COST,
+  POLL_LARGE_ACTION_COST,
+  getPollActionCost,
+  getPollBaseFundCost,
+  getPollFundCost,
+  quotePollAction,
 } from "./rules";
 import {
   ACTIONS,
@@ -673,6 +681,104 @@ describe("donor quote matches debit and result through one source", () => {
   });
 });
 
+// ── Poll (Game1724 slice) ───────────────────────────────────────────────────
+// quotePollAction owns the flat AP cost and the intellect-scaled fund cost.
+// The poll API route (GET quote and affordability, POST atomic debit), the
+// poll page display, getActionPointCost (debit), the action effect (result)
+// and canPerformAction (failure) all route through it, so the numbers below
+// prove agreement instead of re-stating the formula.
+
+function pollCharacter(intellect?: number | null): Character {
+  return makeCharacter({
+    actions: 100,
+    funds: 100_000_000,
+    stats: intellect === null ? undefined : ({ intellect: intellect ?? 5.5 } as Character["stats"]),
+  });
+}
+
+describe("poll base costs are single-sourced", () => {
+  it("pins the $25K/$75K bases the intellect hook scales", () => {
+    expect(POLL_BASE_FUND_COST).toBe(25_000);
+    expect(POLL_LARGE_BASE_FUND_COST).toBe(75_000);
+    expect(getPollBaseFundCost("small")).toBe(25_000);
+    expect(getPollBaseFundCost("large")).toBe(75_000);
+  });
+  it("pins the flat 2/6 AP costs across the rules and the debit path", () => {
+    expect(POLL_ACTION_COST).toBe(2);
+    expect(POLL_LARGE_ACTION_COST).toBe(6);
+    expect(getPollActionCost("small")).toBe(2);
+    expect(getPollActionCost("large")).toBe(6);
+    expect(ACTIONS.poll.baseCost).toBe(2);
+    expect(ACTIONS.pollLarge.baseCost).toBe(6);
+    expect(getActionPointCost(pollCharacter(), "poll")).toBe(2);
+    expect(getActionPointCost(pollCharacter(), "pollLarge")).toBe(6);
+  });
+});
+
+describe("getPollFundCost independent literals", () => {
+  it("neutral intellect pays the unscaled base", () => {
+    expect(getPollFundCost("small", 5.5)).toBe(25_000);
+    expect(getPollFundCost("large", 5.5)).toBe(75_000);
+  });
+  it("low intellect pays more (stat 1 → 0.82x divisor)", () => {
+    expect(getPollFundCost("small", 1)).toBe(30_488);
+    expect(getPollFundCost("large", 1)).toBe(91_463);
+  });
+  it("high intellect pays less (stat 10 → 1.18x divisor)", () => {
+    expect(getPollFundCost("small", 10)).toBe(21_186);
+    expect(getPollFundCost("large", 10)).toBe(63_559);
+  });
+});
+
+describe("poll quote matches debit and result through one source", () => {
+  it("pins the baseline quotes (neutral intellect)", () => {
+    expect(quotePollAction({ intellect: 5.5 }, "small")).toEqual({
+      ok: true,
+      apCost: 2,
+      fundCostAnchor: 25_000,
+    });
+    expect(quotePollAction({ intellect: 5.5 }, "large")).toEqual({
+      ok: true,
+      apCost: 6,
+      fundCostAnchor: 75_000,
+    });
+  });
+  it("quote, AP debit and effect result agree across tiers and intellects", () => {
+    for (const tier of ["small", "large"] as const) {
+      const actionKey = tier === "large" ? "pollLarge" : "poll";
+      for (const intellect of [1, 5.5, 10]) {
+        const char = pollCharacter(intellect);
+        const quote = quotePollAction({ intellect }, tier);
+        expect(quote.ok).toBe(true);
+        if (!quote.ok) continue;
+        // Debit side: AP cost and the effect result carry the same numbers.
+        expect(getActionPointCost(char, actionKey)).toBe(quote.apCost);
+        expect(ACTIONS[actionKey].effect(char).fundsChange).toBe(-quote.fundCostAnchor);
+        // The quote itself applies the historical math, not a copy of it.
+        expect(quote.apCost).toBe(getPollActionCost(tier));
+        expect(quote.fundCostAnchor).toBe(getPollFundCost(tier, intellect));
+      }
+    }
+  });
+  it("a test-only intellect bump moves quote, AP debit and effect together", () => {
+    // One base input changes (intellect 1 -> 10); both the displayed quote
+    // and the debited/applied result must follow it through the same
+    // function, with no second formula edit.
+    const weak = quotePollAction({ intellect: 1 }, "small");
+    const strong = quotePollAction({ intellect: 10 }, "small");
+    expect(weak.ok && strong.ok).toBe(true);
+    if (!weak.ok || !strong.ok) return;
+    expect(strong.fundCostAnchor).toBeLessThan(weak.fundCostAnchor);
+    expect(getActionPointCost(pollCharacter(10), "poll")).toBe(strong.apCost);
+    expect(ACTIONS.poll.effect(pollCharacter(1)).fundsChange).toBe(-weak.fundCostAnchor);
+    expect(ACTIONS.poll.effect(pollCharacter(10)).fundsChange).toBe(-strong.fundCostAnchor);
+    const large = quotePollAction({ intellect: 10 }, "large");
+    expect(large.ok).toBe(true);
+    if (!large.ok) return;
+    expect(ACTIONS.pollLarge.effect(pollCharacter(10)).fundsChange).toBe(-large.fundCostAnchor);
+  });
+});
+
 describe("donor failure agreement", () => {
   it("missing fundraising rejects quote, validation and batch with one reason", () => {
     const quote = quoteBuildDonorBaseAction(
@@ -860,5 +966,38 @@ describe("convert cash effect/debit agreement", () => {
     expect(canPerformAction(cashCharacter(500_000), "convertCash")).toEqual({
       canPerform: true,
     });
+  });
+});
+
+describe("poll failure agreement", () => {
+  it("missing intellect rejects quote, validation and batch with one reason", () => {
+    const reason =
+      "Polling requires an allocated intellect stat. Allocate your stats before commissioning a poll.";
+    for (const tier of ["small", "large"] as const) {
+      expect(quotePollAction({}, tier)).toEqual({ ok: false, error: reason });
+      expect(quotePollAction({ intellect: null }, tier)).toEqual({ ok: false, error: reason });
+      expect(quotePollAction({ intellect: NaN }, tier)).toEqual({ ok: false, error: reason });
+    }
+    const noStats = pollCharacter(null);
+    expect(canPerformAction(noStats, "poll")).toEqual({ canPerform: false, reason });
+    expect(canPerformAction(noStats, "pollLarge")).toEqual({ canPerform: false, reason });
+    expect(simulateActionBatch(noStats, undefined, "poll", 5)).toEqual({
+      ok: false,
+      reason,
+    });
+    expect(simulateActionBatch(noStats, undefined, "pollLarge", 5)).toEqual({
+      ok: false,
+      reason,
+    });
+  });
+  it("validation passes and batch simulates for an allocated intellect", () => {
+    const char = pollCharacter(5.5);
+    expect(canPerformAction(char, "poll")).toEqual({ canPerform: true });
+    expect(canPerformAction(char, "pollLarge")).toEqual({ canPerform: true });
+    const batch = simulateActionBatch(char, undefined, "poll", 5);
+    expect(batch.ok).toBe(true);
+    if (!batch.ok) return;
+    expect(batch.totalActionPoints).toBe(10);
+    expect(batch.netFundsChange).toBe(-125_000);
   });
 });

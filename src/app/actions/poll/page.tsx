@@ -242,8 +242,10 @@ export default function PollPage() {
     hasActionsSmall,
     hasActionsLarge,
   } = pollData;
-  const fundCost = selectedTier === "large" ? 75000 : 25000;
-  const actionCost = selectedTier === "large" ? 6 : 2;
+  // Server-quoted from the same rules quote execution debits: flat AP cost
+  // per tier plus the intellect-scaled fund cost in ANCHOR units.
+  const fundCost = pollData.fundCost;
+  const actionCost = pollData.actionCost;
   const canAfford = selectedTier === "large" ? canAffordLarge : canAffordSmall;
   const hasActions = selectedTier === "large" ? hasActionsLarge : hasActionsSmall;
   const canCommission = canAfford && hasActions && !commissioning && !pollCommissioned;
@@ -304,7 +306,9 @@ export default function PollPage() {
                   </p>
                 </div>
                 <div className="shrink-0 text-right">
-                  <div className="text-sm font-bold text-yellow-400">$25,000</div>
+                  <div className="text-sm font-bold text-yellow-400">
+                    ${pollData.fundCostSmall.toLocaleString()}
+                  </div>
                   <div className="text-xs text-muted">2 actions</div>
                 </div>
               </div>
@@ -331,7 +335,9 @@ export default function PollPage() {
                   </p>
                 </div>
                 <div className="shrink-0 text-right">
-                  <div className="text-sm font-bold text-yellow-400">$75,000</div>
+                  <div className="text-sm font-bold text-yellow-400">
+                    ${pollData.fundCostLarge.toLocaleString()}
+                  </div>
                   <div className="text-xs text-muted">6 actions</div>
                 </div>
               </div>

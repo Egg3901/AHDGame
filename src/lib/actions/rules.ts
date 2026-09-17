@@ -27,6 +27,13 @@
  * the single source of truth the default effect, the execute shell, the AI
  * advisor and the UI previews call; a missing or non-positive amount rejects
  * with a typed reason instead of pricing zero.
+ *
+ * Polls cost flat action points plus an intellect-scaled fund cost.
+ * quotePollAction is the single source of truth the poll API route (quote,
+ * affordability and atomic debit), the poll page display, the action effect
+ * and canPerformAction all call; a missing intellect stat rejects instead of
+ * falling back to the unscaled base. Hosts own currency conversion, atomic
+ * resource checks and persistence.
  */
 import { statMultiplier } from "../stats/statMultiplier";
 import { NEUTRAL_STAT } from "../stats/statsConstants";
@@ -603,5 +610,87 @@ export function quoteConvertCashAction(actor: ConvertCashQuoteActor): ConvertCas
     cashDebitLocal: amount,
     convertedLocal: convertCashConversion(amount),
     infamy: calculateConvertCashInfamy(amount),
+  };
+}
+
+// ── Poll (Game1724 slice) ───────────────────────────────────────────────────
+// Cost math moved verbatim from `../actions` so the poll API route (GET quote
+// and affordability, POST atomic debit), the poll page display, the action
+// effect and canPerformAction share one implementation. Balance is unchanged:
+// the numbers below are the historical formulas, only the owner moved. The
+// strict entry point is quotePollAction; getPollBaseFundCost stays for
+// display-only callers that must render a price when the quote rejects.
+
+/** Poll tier: quick ("small") or full demographic ("large") poll. */
+export type PollTier = "small" | "large";
+
+/** Base quick-poll fund cost before the intellect hook, in ANCHOR units. */
+export const POLL_BASE_FUND_COST = 25_000;
+
+/** Base full-poll fund cost before the intellect hook, in ANCHOR units. */
+export const POLL_LARGE_BASE_FUND_COST = 75_000;
+
+/** Action-point cost for one quick poll. */
+export const POLL_ACTION_COST = 2;
+
+/** Action-point cost for one full demographic poll. */
+export const POLL_LARGE_ACTION_COST = 6;
+
+/**
+ * Action-point cost for one poll of the given tier. Flat per tier: polls do
+ * not scale AP with stats or state.
+ */
+export function getPollActionCost(tier: PollTier): number {
+  return tier === "large" ? POLL_LARGE_ACTION_COST : POLL_ACTION_COST;
+}
+
+/**
+ * Unscaled base fund cost for one poll of the given tier, in ANCHOR units.
+ * Display-only fallback; execution always prices through quotePollAction.
+ */
+export function getPollBaseFundCost(tier: PollTier): number {
+  return tier === "large" ? POLL_LARGE_BASE_FUND_COST : POLL_BASE_FUND_COST;
+}
+
+/**
+ * Fund cost for one poll of the given tier, in ANCHOR units.
+ * Intellect lowers polling cost (gentle ±20%), matching the historical
+ * `../actions` effect math exactly.
+ */
+export function getPollFundCost(tier: PollTier, intellect: number): number {
+  return Math.round(getPollBaseFundCost(tier) / statMultiplier(intellect));
+}
+
+/**
+ * Raw poll actor inputs, preserved explicitly. The stored raw intellect
+ * arrives as-is (or missing for characters that predate the stat system);
+ * the rules own the statMultiplier interpretation and reject a missing stat
+ * instead of substituting the neutral fallback.
+ */
+export interface PollQuoteActor {
+  intellect?: number | null;
+}
+
+/**
+ * Authoritative poll quote: flat AP cost and the intellect-scaled fund cost
+ * in ANCHOR units. A missing or invalid intellect rejects with a typed error
+ * the shell surfaces; it never silently resolves to the unscaled base.
+ */
+export type PollQuote =
+  { ok: true; apCost: number; fundCostAnchor: number } | { ok: false; error: string };
+
+export function quotePollAction(actor: PollQuoteActor, tier: PollTier): PollQuote {
+  const { intellect } = actor;
+  if (typeof intellect !== "number" || !Number.isFinite(intellect)) {
+    return {
+      ok: false,
+      error:
+        "Polling requires an allocated intellect stat. Allocate your stats before commissioning a poll.",
+    };
+  }
+  return {
+    ok: true,
+    apCost: getPollActionCost(tier),
+    fundCostAnchor: getPollFundCost(tier, intellect),
   };
 }
