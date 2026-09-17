@@ -19,7 +19,14 @@ import {
   LABOUR_UNEMPLOYMENT_AUTOMATION_K,
   LABOUR_UNEMPLOYMENT_AUTOMATION_CAP_PP,
 } from "@/lib/labour/laborCost";
-import { LABOUR_UNEMPLOYMENT_TIGHTNESS_CAP_PP } from "@/lib/labour/labourMarket";
+import {
+  LABOUR_UNEMPLOYMENT_TIGHTNESS_CAP_PP,
+  accumulateLabourDemand,
+  computeLabourTightness,
+  labourUnemploymentTightnessPressure,
+  makeLabourDemandByState,
+  roundTightness,
+} from "@/lib/labour/labourMarket";
 
 const ctx = (over: Partial<EngineNodeContext>): EngineNodeContext => ({
   current: {},
@@ -525,6 +532,41 @@ describe("unemploymentNode — #791 measured-tightness channel", () => {
     );
     expect(tight).toBeLessThan(baseline);
     expect(slack).toBeGreaterThan(baseline);
+  });
+
+  it("chains production headcounts through tightness into the target", () => {
+    // Build the signal the way the corp turn does: accumulate sector headcounts,
+    // divide by the metric engine labour force, persist rounded. Nothing here
+    // is derived from unemployment, so this also pins the anti-circularity.
+    const demand = makeLabourDemandByState();
+    accumulateLabourDemand(demand, "s1", 150);
+    accumulateLabourDemand(demand, "s1", 250);
+    const tight = roundTightness(computeLabourTightness(demand.get("s1")!, 200)!);
+    expect(tight).toBe(2);
+    const baseline = unemploymentNode.compute!(ctx(base));
+    const withMeasured = unemploymentNode.compute!(
+      ctx({
+        ...base,
+        current: { ...base.current, "economic.labourTightness": tight },
+      })
+    );
+    expect(withMeasured).toBeLessThan(baseline);
+    expect(baseline - withMeasured).toBeCloseTo(-labourUnemploymentTightnessPressure(2), 9);
+
+    // Mirror image from headcounts: 100 wanted over a 200-strong force reads
+    // slack and lifts the target by the symmetric amount.
+    const slackDemand = makeLabourDemandByState();
+    accumulateLabourDemand(slackDemand, "s1", 100);
+    const slackTight = roundTightness(computeLabourTightness(slackDemand.get("s1")!, 200)!);
+    expect(slackTight).toBe(0.5);
+    const withSlack = unemploymentNode.compute!(
+      ctx({
+        ...base,
+        current: { ...base.current, "economic.labourTightness": slackTight },
+      })
+    );
+    expect(withSlack).toBeGreaterThan(baseline);
+    expect(withSlack - baseline).toBeCloseTo(baseline - withMeasured, 9);
   });
 
   it("a sustained demand shock drifts unemployment down turn after turn", () => {
