@@ -6,7 +6,8 @@
  * Cash moves between funds; no issuer treasury or public float is touched.
  */
 
-import type { ClientSession, Collection, Db, ObjectId } from "mongodb";
+import { ObjectId } from "mongodb";
+import type { ClientSession, Collection, Db } from "mongodb";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import type { Corporation, IndexFund } from "@/lib/db/types";
 import { resolveShareExecutionPrice } from "@/lib/corporations/marketExecution";
@@ -432,9 +433,7 @@ async function pinCrossLeg(
     context?.funds.find((f) => f._id.toString() === id);
   const sellerSnapshot = contextFund(base.sellerFundIdHex);
   const buyerSnapshot = contextFund(base.buyerFundIdHex);
-  const corpSnapshot = context?.corps.find(
-    (c) => c._id.toString() === base.corporationIdHex
-  );
+  const corpSnapshot = context?.corps.find((c) => c._id.toString() === base.corporationIdHex);
 
   let sellerName = sellerSnapshot?.name;
   let buyerName = buyerSnapshot?.name;
@@ -457,16 +456,14 @@ async function pinCrossLeg(
     const funds = db.collection<IndexFund>("indexFunds");
     const [sellerLive, buyerLive] = await Promise.all([
       sellerName === undefined || sellerAvg === undefined || anchor === undefined
-        ? funds.findOne(
-            { _id: plan.sellerFundId } as never,
-            { projection: { name: 1, anchorCurrencyCode: 1, holdings: 1 } }
-          )
+        ? funds.findOne({ _id: plan.sellerFundId } as never, {
+            projection: { name: 1, anchorCurrencyCode: 1, holdings: 1 },
+          })
         : null,
       buyerName === undefined || anchor === undefined
-        ? funds.findOne(
-            { _id: plan.buyerFundId } as never,
-            { projection: { name: 1, anchorCurrencyCode: 1 } }
-          )
+        ? funds.findOne({ _id: plan.buyerFundId } as never, {
+            projection: { name: 1, anchorCurrencyCode: 1 },
+          })
         : null,
     ]);
     if (sellerName === undefined) sellerName = sellerLive?.name;
@@ -482,10 +479,9 @@ async function pinCrossLeg(
     if (executionPriceLocal === undefined) {
       const corpLive = await db
         .collection<Corporation>("corporations")
-        .findOne(
-          { _id: plan.corporationId } as never,
-          { projection: { sharePrice: 1, fundamentalSharePrice: 1, liquidCurrencyCode: 1 } }
-        );
+        .findOne({ _id: plan.corporationId } as never, {
+          projection: { sharePrice: 1, fundamentalSharePrice: 1, liquidCurrencyCode: 1 },
+        });
       if (!corpLive) {
         return skip({
           ...base,
@@ -514,8 +510,8 @@ async function pinCrossLeg(
   if (!Number.isFinite(executionPriceLocal) || (executionPriceLocal as number) <= 0) {
     return skip({
       ...base,
-      sellerFundName,
-      buyerFundName,
+      sellerFundName: sellerName,
+      buyerFundName: buyerName,
       executionPriceLocal: 0,
       anchorCurrencyCode: anchor,
       sellerAvgCostAnchor: null,
@@ -523,8 +519,8 @@ async function pinCrossLeg(
   }
   return {
     ...base,
-    sellerFundName,
-    buyerFundName,
+    sellerFundName: sellerName,
+    buyerFundName: buyerName,
     executionPriceLocal: executionPriceLocal as number,
     anchorCurrencyCode: anchor,
     ...(liquidCurrency !== undefined ? { corpCurrencyCode: liquidCurrency as string } : {}),

@@ -22,11 +22,7 @@ import {
 import { runWithOptionalTransaction } from "@/lib/db/runWithOptionalTransaction";
 import { recordShareTrade } from "@/lib/corporations/shareTradeHistory";
 import type { CurrencyCode } from "@/lib/constants/currencies";
-import type {
-  IndexFundHolding,
-  IndexFundTransaction,
-  Shareholder,
-} from "@/lib/db/types";
+import type { IndexFundHolding, IndexFundTransaction, Shareholder } from "@/lib/db/types";
 
 /** Seller cap-table debit lost its race (shares moved) or the corp row went: caller skips. */
 export const FUND_CROSS_TRANSFER_SELLER = "FUND_CROSS_TRANSFER_SELLER";
@@ -146,8 +142,7 @@ export function isFundCrossTransferOutcome(value: unknown): value is FundCrossTr
   if (!value || typeof value !== "object") return false;
   const outcome = value as Record<string, unknown>;
   return (
-    typeof outcome.sharesTransferred === "number" &&
-    typeof outcome.valueTransferred === "number"
+    typeof outcome.sharesTransferred === "number" && typeof outcome.valueTransferred === "number"
   );
 }
 
@@ -493,7 +488,17 @@ async function revertBuyerCapCreditKeyed(
     key,
     {
       collection: corps,
-      filter: { _id: plan.corpId } as Filter<CrossCorpAccount>,
+      // The buyer row must still exist for the positional `$` to resolve:
+      // real Mongo throws when the update carries `shareholders.$` but the
+      // filter names no array element, so a bare `{ _id }` filter would make
+      // every compensation of a pre-existing buyer row crash instead of
+      // reverting. (A row already gone converges earlier via the live-read
+      // check; a row removed between that read and this write reports
+      // `guard-rejected`, settling UNCOMPENSATED fail-closed.)
+      filter: {
+        _id: plan.corpId,
+        "shareholders.fundId": plan.buyerFundId,
+      } as Filter<CrossCorpAccount>,
       update: {
         $inc: { "shareholders.$.shares": -plan.shares },
         $set: { "shareholders.$.avgCostPerShare": restoredAvg, updatedAt: now },
@@ -671,7 +676,12 @@ function makeSellerHoldingsStep(db: Db, key: string, plan: NormalizedCrossPlan):
       const opts = stepOpts ?? {};
       const live = await readHoldings(db, plan.sellerFundId, opts);
       if (live === null) return "missing";
-      const image = updateHoldingAfterSale(live, plan.corpId, plan.shares, plan.pricePerShareAnchor);
+      const image = updateHoldingAfterSale(
+        live,
+        plan.corpId,
+        plan.shares,
+        plan.pricePerShareAnchor
+      );
       return applyKeyedUpdate(
         subkey,
         {
@@ -930,13 +940,17 @@ export async function applyFundCrossTransferSpend(
     throw new RangeError("Fund cross transfer shares must be a positive integer");
   }
   if (!Number.isFinite(input.pricePerShareAnchor) || input.pricePerShareAnchor <= 0) {
-    throw new RangeError("Fund cross transfer pricePerShareAnchor must be a positive finite amount");
+    throw new RangeError(
+      "Fund cross transfer pricePerShareAnchor must be a positive finite amount"
+    );
   }
   if (!Number.isFinite(input.valueAnchor) || input.valueAnchor <= 0) {
     throw new RangeError("Fund cross transfer valueAnchor must be a positive finite amount");
   }
   if (!Number.isFinite(input.executionPriceLocal) || input.executionPriceLocal <= 0) {
-    throw new RangeError("Fund cross transfer executionPriceLocal must be a positive finite amount");
+    throw new RangeError(
+      "Fund cross transfer executionPriceLocal must be a positive finite amount"
+    );
   }
   if (typeof input.sellerFundName !== "string" || input.sellerFundName.length === 0) {
     throw new TypeError("Fund cross transfer needs sellerFundName");
@@ -1012,6 +1026,7 @@ export async function applyFundCrossTransferSpend(
     buyerFundName: stored.buyerFundName,
     anchorCurrencyCode: stored.anchorCurrencyCode,
     ...(stored.corpCurrencyCode !== undefined ? { corpCurrencyCode: stored.corpCurrencyCode } : {}),
+    sellerAvgCostAnchor: stored.sellerAvgCostAnchor,
     turn: stored.turn,
     fingerprint: input.fingerprint,
     idempotencyKey: key,

@@ -458,7 +458,17 @@ async function revertCorpReserveKeyed(
     key,
     {
       collection: corps,
-      filter: { _id: plan.corpId } as Filter<BuyCorpAccount>,
+      // The buyer row must still exist for the positional `$` to resolve:
+      // real Mongo throws when the update carries `shareholders.$` but the
+      // filter names no array element, so a bare `{ _id }` filter would make
+      // every compensation of a pre-existing buyer row crash instead of
+      // reverting. (A row already gone converges earlier via the live-read
+      // check; a row removed between that read and this write reports
+      // `guard-rejected`, settling UNCOMPENSATED fail-closed.)
+      filter: {
+        _id: plan.corpId,
+        "shareholders.fundId": plan.fundId,
+      } as Filter<BuyCorpAccount>,
       update: {
         $inc: { "shareholders.$.shares": -plan.shares, ...reverseInc },
         $set: { "shareholders.$.avgCostPerShare": restoredAvg, updatedAt: now },

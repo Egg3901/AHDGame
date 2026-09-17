@@ -299,10 +299,30 @@ import { ObjectId, type ClientSession, type Collection, type Filter } from "mong
  * whose guard no longer matches refunds the accrual, and a fund or position
  * that vanished between plan and apply compensates the prefix, instead of
  * the legacy strand (the old six-bulk-write path is removed).
- * Still on the legacy debit-first-plus-compensation fallback:
- * index-fund cron/rebalancing orchestration (its bond purchase/sale legs
- * and its float-buy, equity-sale, dividend, and NPP-invest legs are keyed;
- * cross-fund writes are not).
+ * Index-fund cross-fund transfers are migrated (one seller-to-buyer move
+ * via the fundCrossTransferSpend primitive, driven by
+ * executeFundCrossRebalancing: the pass pins participants, targets,
+ * ordering, quantities, currencies/rates, and child keys on a parent
+ * receipt before the first transfer, then runs each leg under its child
+ * key, with same-key replay, fingerprint-conflict, terminal,
+ * crash-after-every-write, concurrent-transfer, partial-pass,
+ * stored-plan compensation, and negative-control tests; bid escrow and
+ * cancel refunds are keyed; the cron passes context and per-turn parent
+ * keys. Two defects the first focused tests caught are fixed: the
+ * stored-plan resume dropped `sellerAvgCostAnchor` (emptied seller
+ * positions compensated at the sale price), and the buyer-cap-credit
+ * reverts in the cross-transfer and float-buy primitives used a bare
+ * `{ _id }` filter with a positional `shareholders.$` update, which real
+ * Mongo rejects (no array element named) — both reverts now carry the
+ * buyer-row match. A survived pre-claim leg error keeps its failed verdict
+ * on resume (fail closed, recorded in errors); seller/buyer/cash races
+ * settle the leg skipped, like the legacy guarded writes.
+ * Still on the legacy debit-first-plus-compensation fallback: none known
+ * in the index-fund cron/rebalancing orchestration (all legs keyed).
+ * Open seams for the next pass: pension scheme investing
+ * (src/lib/pensions/schemeInvesting.ts), holding write-offs
+ * (src/lib/indexFunds/fundHoldingWriteOff.ts), and the share-order fill
+ * audit path (fillShareOrder.ts) were sighted but not audited here.
  *
  * Operations note: receipts accumulate one small document per keyed flow. The
  * TTL index on `createdAt` is seeded by `seedMoneyFlowIndexes` (registered in
