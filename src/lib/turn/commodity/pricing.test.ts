@@ -19,6 +19,22 @@ const BASE = Object.fromEntries(COMMODITY_TYPES.map((c) => [c, 100])) as Record<
   number
 >;
 
+function commodityPrice(overrides: Partial<CommodityPrice> = {}): CommodityPrice {
+  return {
+    commodity: "food",
+    basePrice: 100,
+    globalPrice: 100,
+    globalSupply: 100,
+    globalDemand: 100,
+    statePrices: {},
+    stateSupply: {},
+    stateDemand: {},
+    turn: 1,
+    updatedAt: new Date("2026-01-01T00:00:00Z"),
+    ...overrides,
+  };
+}
+
 function balanceMaps(food: { supply: number; demand: number }): {
   global: GlobalLedger;
   byState: StateLedger;
@@ -85,7 +101,7 @@ describe("buildLaggedRatios", () => {
   it("ratios prior price against the nominal-scaled base", () => {
     const out = buildLaggedRatios(
       BASE,
-      new Map([["food", { commodity: "food", globalPrice: 200 } as CommodityPrice]]),
+      new Map([["food", commodityPrice({ globalPrice: 200 })]]),
       1
     );
     expect(out.get("food")).toBe(2);
@@ -100,15 +116,17 @@ describe("priceCommodity", () => {
     const { commodity, priceOp } = priceCommodity(ctx, "food", seen);
     expect(commodity).toBe("food");
     const set = priceOp.updateOne.update.$set;
+    const nationalPrices = set.nationalPrices;
     expect(set.globalPrice).toBeGreaterThan(0);
     expect(set.statePrices["s1"]).toBeGreaterThan(0);
-    expect(set.nationalPrices["US"]).toBeGreaterThan(0);
+    expect(nationalPrices).toBeDefined();
+    expect(nationalPrices?.["US"]).toBeGreaterThan(0);
     expect(set.nudgePrice).toBeNull();
     expect(set.stateNudges).toEqual({});
     expect(priceOp.updateOne.upsert).toBe(true);
     expect(seen.has("s1")).toBe(true);
     expect(ctx.appliedGlobalPrices.get("food")).toBe(set.globalPrice);
-    expect(ctx.appliedNationalPrices.get("food")!["US"]).toBe(set.nationalPrices["US"]);
+    expect(ctx.appliedNationalPrices.get("food")!["US"]).toBe(nationalPrices?.["US"]);
   });
 
   it("drifts the state price toward target at the drift rate", () => {
@@ -121,8 +139,8 @@ describe("priceCommodity", () => {
     const start = target * 2;
     const second = pricingContext(bal, {
       existingPriceMap: new Map([
-        ["food", { commodity: "food", globalPrice: globalG, statePrices: { s1: start } }],
-      ]) as Map<string, CommodityPrice>,
+        ["food", commodityPrice({ globalPrice: globalG, statePrices: { s1: start } })],
+      ]),
       appliedGlobalPrices: new Map(),
       appliedStatePrices: new Map(),
       appliedNationalPrices: new Map(),
@@ -138,8 +156,8 @@ describe("priceCommodity", () => {
       { supply: 100, demand: 120 },
       {
         existingPriceMap: new Map([
-          ["food", { commodity: "food", hardPeg: 50, stateHardPegs: { s1: 60 } }],
-        ]) as Map<string, CommodityPrice>,
+          ["food", commodityPrice({ hardPeg: 50, stateHardPegs: { s1: 60 } })],
+        ]),
       }
     );
     const { priceOp } = priceCommodity(ctx, "food", new Set());
