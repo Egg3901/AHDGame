@@ -48,14 +48,12 @@ import {
 import {
   conferenceDocId,
   conferenceHistoryEntry,
+  getConference,
   getOrSeedConference,
   pushConferenceHistory,
 } from "./conferenceStore";
 import type { ConferenceRulesMotion, UKPartyConference } from "./types";
-import type {
-  Character,
-  PoliticalParty,
-} from "@/lib/db/types";
+import type { Character, PoliticalParty } from "@/lib/db/types";
 import type { CountryId } from "@/lib/constants/countries";
 
 /**
@@ -159,10 +157,12 @@ export interface ConferenceStateView {
   votingClosesTurn: number;
   turnsUntilOpen: number;
   turnsUntilClose: number;
-  proposal: UKPartyConference["proposal"] & {
-    quorumNeeded: number;
-    eligibleVoters: number;
-  } | null;
+  proposal:
+    | (UKPartyConference["proposal"] & {
+        quorumNeeded: number;
+        eligibleVoters: number;
+      })
+    | null;
   motions: (ConferenceRulesMotion & { quorumNeeded: number; eligibleVoters: number })[];
   platform: { pledgeIds: string[]; ratifiedYear: number; ratifiedAtTurn: number } | null;
   ratified: boolean;
@@ -221,8 +221,7 @@ export async function getConferenceState(
     opensAtTurn: doc.opensAtTurn,
     votingClosesTurn: doc.votingClosesTurn,
     turnsUntilOpen: Math.max(0, doc.opensAtTurn - currentTurn),
-    turnsUntilClose:
-      doc.status === "open" ? Math.max(0, doc.votingClosesTurn - currentTurn) : 0,
+    turnsUntilClose: doc.status === "open" ? Math.max(0, doc.votingClosesTurn - currentTurn) : 0,
     proposal: doc.proposal
       ? {
           ...doc.proposal,
@@ -517,10 +516,8 @@ export async function voteOnMotion(
   if (prev === vote) {
     return { success: true, votesFor: motion.votesFor, votesAgainst: motion.votesAgainst };
   }
-  const votesFor =
-    motion.votesFor + (vote === "aye" ? 1 : 0) - (prev === "aye" ? 1 : 0);
-  const votesAgainst =
-    motion.votesAgainst + (vote === "nay" ? 1 : 0) - (prev === "nay" ? 1 : 0);
+  const votesFor = motion.votesFor + (vote === "aye" ? 1 : 0) - (prev === "aye" ? 1 : 0);
+  const votesAgainst = motion.votesAgainst + (vote === "nay" ? 1 : 0) - (prev === "nay" ? 1 : 0);
   const motions = doc.motions.map((m) =>
     m.motionId === motionId
       ? { ...m, votes: { ...m.votes, [voter._id.toString()]: vote }, votesFor, votesAgainst }
@@ -552,7 +549,11 @@ export async function ensureNppPlatformProposal(
 ): Promise<boolean> {
   if (doc.proposal) return false;
   const catalog = pledgeCatalogFor(countryId);
-  const pledgeIds = selectNppPledges(catalog, party.economicPosition ?? 0, party.socialPosition ?? 0);
+  const pledgeIds = selectNppPledges(
+    catalog,
+    party.economicPosition ?? 0,
+    party.socialPosition ?? 0
+  );
   if (pledgeIds.length !== MANIFESTO_PLEDGE_COUNT) return false;
   const updated = await getUKPartyConferencesCollection(db).findOneAndUpdate(
     { _id: doc._id, status: "open", proposal: null },
@@ -736,7 +737,7 @@ export async function resolveConference(
     claimed.motions.map(async (motion) => {
       if (motion.status !== "voting") return motion;
       let votesFor = motion.votesFor;
-      let votesAgainst = motion.votesAgainst;
+      const votesAgainst = motion.votesAgainst;
       if (isNpp && votesFor + votesAgainst === 0) {
         // Deterministic NPP committee: a valid tabled motion carries.
         votesFor = Math.max(1, committeeSize);
@@ -754,7 +755,13 @@ export async function resolveConference(
             `Conference motion ${motion.motionId} failed: ${result.reason}`
           )
         );
-        return { ...motion, votesFor, votesAgainst, status: "failed" as const, resolvedAtTurn: currentTurn };
+        return {
+          ...motion,
+          votesFor,
+          votesAgainst,
+          status: "failed" as const,
+          resolvedAtTurn: currentTurn,
+        };
       }
       const applied = await applyPassedMotion(
         db,
@@ -775,7 +782,13 @@ export async function resolveConference(
             { characterId: motion.proposedByCharacterId, actorName: motion.proposedByName }
           )
         );
-        return { ...motion, votesFor, votesAgainst, status: "passed" as const, resolvedAtTurn: currentTurn };
+        return {
+          ...motion,
+          votesFor,
+          votesAgainst,
+          status: "passed" as const,
+          resolvedAtTurn: currentTurn,
+        };
       }
       motionsVoided += 1;
       history.push(
@@ -864,11 +877,9 @@ export async function applyConferencePayoff(
   if (!claimed?.proposal) return { applied: false, approvalGroups: 0, cohesionPs: 0 };
 
   let approvalGroups = 0;
-  if (isConferencePayoffEnabled()) {
+  if (isConferencePayoffEnabled(process.env.UK_CONFERENCE_PAYOFF)) {
     const catalog = pledgeCatalogFor(countryId);
-    const salience = new Map(
-      catalog.map((e) => [e.id, Object.keys(e.salienceByGroup ?? {})])
-    );
+    const salience = new Map(catalog.map((e) => [e.id, Object.keys(e.salienceByGroup ?? {})]));
     const groups = payoffGroupsForPledges(claimed.proposal.pledgeIds, salience).slice(
       0,
       CONFERENCE_MAX_PAYOFF_GROUPS
@@ -889,15 +900,8 @@ export async function applyConferencePayoff(
   }
 
   const tier = resolvePartyTier(party);
-  const cap = resolvePartyPsCap(
-    tier,
-    party.psCapEarnedRegions?.length ?? 0,
-    NATIONAL_PS_CAP
-  );
-  const grant = Math.max(
-    0,
-    Math.min(CONFERENCE_COHESION_PS, cap - (party.politicalStrength ?? 0))
-  );
+  const cap = resolvePartyPsCap(tier, party.psCapEarnedRegions?.length ?? 0, NATIONAL_PS_CAP);
+  const grant = Math.max(0, Math.min(CONFERENCE_COHESION_PS, cap - (party.politicalStrength ?? 0)));
   if (grant > 0) {
     await db
       .collection<PoliticalParty>("politicalParties")
@@ -924,18 +928,24 @@ export async function applyConferencePayoff(
     }
   );
 
-  const chair = party.chairId
-    ? await db
-        .collection<Character>("characters")
-        .findOne({ _id: party.chairId }, { projection: { userId: 1, name: 1 } })
-    : null;
-  if (chair?.userId) {
-    await createNotification({
-      userId: chair.userId,
-      type: "system",
-      title: "Conference Concluded",
-      message: `Your party conference ratified the standing platform. The party gains +${grant} political strength${approvalGroups > 0 ? ` and favorability in ${approvalGroups} voter groups` : ""}. The leader will finalise the election manifesto from this platform at dissolution.`,
-    });
+  // The payoff above is already claimed and persisted; the chair notice is
+  // decorative and must never fail the turn or double-pay on retry.
+  try {
+    const chair = party.chairId
+      ? await db
+          .collection<Character>("characters")
+          .findOne({ _id: party.chairId }, { projection: { userId: 1, name: 1 } })
+      : null;
+    if (chair?.userId) {
+      await createNotification({
+        userId: chair.userId,
+        type: "system",
+        title: "Conference Concluded",
+        message: `Your party conference ratified the standing platform. The party gains +${grant} political strength${approvalGroups > 0 ? ` and favorability in ${approvalGroups} voter groups` : ""}. The leader will finalise the election manifesto from this platform at dissolution.`,
+      });
+    }
+  } catch {
+    // Notification is best-effort; the payoff claim already prevents duplicates.
   }
   recordAudit({
     source: "turn",
@@ -968,7 +978,9 @@ export async function postConferenceNews(
       ? `${partyName} closed its annual conference after ratifying a new standing platform. The leader will finalise the election manifesto from it when an election is called.`
       : `${partyName} closed its annual conference without agreeing a standing platform.`,
     "general",
-    { title: `${partyName} conference ${year}: ${ratified ? "platform ratified" : "no platform agreed"}` }
+    {
+      title: `${partyName} conference ${year}: ${ratified ? "platform ratified" : "no platform agreed"}`,
+    }
   );
 }
 

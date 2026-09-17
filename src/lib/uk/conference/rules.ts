@@ -142,8 +142,8 @@ export function resolveConferenceMotion(input: RatificationInput): RatificationR
  * the constants above are calibrated in worldsim; the cohesion PS credit
  * is sub-threshold and applies ungated.
  */
-export function isConferencePayoffEnabled(): boolean {
-  return process.env.UK_CONFERENCE_PAYOFF === "1";
+export function isConferencePayoffEnabled(envValue: string | undefined): boolean {
+  return envValue === "1";
 }
 
 /**
