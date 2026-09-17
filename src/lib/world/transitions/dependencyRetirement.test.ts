@@ -161,7 +161,7 @@ function macroDocs(db: Db): MacroCountryState[] {
   const entry = (
     db as unknown as { __collections: Map<string, MemoryCollection> }
   ).__collections.get("macroCountries");
-  return ((entry?.docs ?? []) as MacroCountryState[]).map((d) => ({ ...d }));
+  return ((entry?.docs ?? []) as unknown as MacroCountryState[]).map((d) => ({ ...d }));
 }
 
 /** A dependency macro representation shaped like a seeded aggregate country. */
