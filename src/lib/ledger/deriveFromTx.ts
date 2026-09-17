@@ -143,6 +143,15 @@ const REASON_BY_TX_TYPE: Partial<Record<FinancialTxLogEntry["type"], string>> = 
   // A bond sale is the reverse of a purchase (cash from the bond position
   // asset). Share one reason so sales net against purchases per currency.
   bond_sell: "bond_principal_investment",
+  // #992 tranche 3: capital seeding a new entity. The charter corp debit and
+  // the wind-up sponsor return are single-sided by construction (the debit
+  // covers seed + fee while the fund receives the seed alone), and the
+  // charter path now books the fund's seed receipt as its own fund-subject
+  // row under this same type — so both directions share ONE reason and the
+  // money-supply check nets a seeding against its return per currency instead
+  // of pooling both in `unattributed`. (The spin-off incorporation fee debit
+  // shares the type; it is likewise a seeding flow.)
+  corp_capital_seed: "seed_capital",
   corp_escrow_funding: "escrow_transfer",
   corp_group_relief: "corporate_group_transfer",
   caucus_tax_debit: "party_internal_transfer",
@@ -198,6 +207,12 @@ const FUND_MIRROR_TX_TYPES: ReadonlySet<string> = new Set([
  */
 export function fundMirrorAccount(tx: DerivableTx): string | null {
   if (!FUND_MIRROR_TX_TYPES.has(tx.type)) return null;
+  // #992 tranche 3: a fund-subject row already evidences the fund side, so
+  // mirroring it would book the fund twice (base primary plus mirror
+  // primary cancel out and the fund delta vanishes). fund_transfer is the
+  // exception: its subject is the buyer fund while meta carries the seller,
+  // so the mirror is the seller's side, not a duplicate.
+  if (tx.subjectType === "fund" && tx.type !== "fund_transfer") return null;
   const meta = tx.meta;
   const fundId = meta?.fundId;
   const fundCurrency = meta?.fundCurrency;

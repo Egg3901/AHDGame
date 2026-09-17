@@ -991,13 +991,30 @@ export async function payShareholders(
   // Index-fund shareholders → fund cash (₳). Same pool, no FX (cashAnchor is ₳).
   // #3451: previously dropped by allocateShareholderPool. The whole-corp shell is
   // deleted after this transition, so the fund's holding of it is pulled too.
+  // #992 tranche 3: fund rows are ledgered with the same share_buyout_payout
+  // type as every other holder bucket now that fund cash is a ledger account.
   if (allocation.fundRows.length > 0) {
-    await payFundShareholderRows(db, allocation.fundRows, target._id, now);
+    const { txEntries: fundTxEntries } = await payFundShareholderRows(
+      db,
+      allocation.fundRows,
+      target._id,
+      now,
+      {
+        ledger: ledger
+          ? {
+              turn: ledger.turn,
+              txType: "share_buyout_payout",
+              kind: ledger.kind,
+              counterpartyId: target._id,
+              counterpartyName: target.name,
+            }
+          : undefined,
+      }
+    );
+    if (ledger) ledgerEntries.push(...fundTxEntries);
   }
 
-  // Flush every holder leg in one insert. Index-fund rows are deliberately not
-  // ledgered here: fund cash is not yet a ledger account (see the fund
-  // conservation work), so a leg with no counter-account would look like a leak.
+  // Flush every holder leg in one insert.
   if (ledger && ledgerEntries.length > 0) {
     await emitTxBulk(db, ledgerEntries, await loadTxThresholds(db));
   }
