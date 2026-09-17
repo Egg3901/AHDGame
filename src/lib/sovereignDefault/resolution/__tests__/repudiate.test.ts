@@ -97,9 +97,21 @@ function makeMockDb(initial: BudgetRow | null, bonds: Array<Record<string, unkno
       }
       if (name === "bonds") {
         return {
-          find: vi.fn().mockReturnValue({
-            toArray: vi.fn(async () => bonds.map((b) => ({ ...b }))),
-          }),
+          // Production Mongo applies the options.projection, so the mock
+          // must too: docs arriving without the query-filtered fields read
+          // as non-sovereign to the outstanding helper (refs #1975).
+          find: vi.fn((_q: unknown, opts?: { projection?: Record<string, number> }) => ({
+            toArray: vi.fn(async () =>
+              bonds.map((b) => {
+                if (!opts?.projection) return { ...b };
+                const out: Record<string, unknown> = {};
+                for (const [k, v] of Object.entries(b)) {
+                  if (k === "_id" || opts.projection[k] === 1) out[k] = v;
+                }
+                return out;
+              })
+            ),
+          })),
         };
       }
       throw new Error(`unexpected: ${name}`);

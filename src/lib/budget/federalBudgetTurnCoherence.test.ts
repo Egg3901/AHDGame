@@ -133,7 +133,15 @@ describe("federal budget end-of-turn coherence (#1975 slice: surplus + bond-ledg
       const outstanding = await outstandingByCountry(db);
       for (const b of budgets) {
         const key = String(b.countryId ?? b._id);
-        expect(checkFederalBudgetInvariants(b)).toEqual([]);
+        // Pass the ledger sum in: without `outstandingSovereignPrincipal`
+        // the debt leg is skipped and this assertion would check surplus
+        // only, not the principal invariant this suite exists to prove.
+        expect(
+          checkFederalBudgetInvariants({
+            ...b,
+            outstandingSovereignPrincipal: outstanding.get(key) ?? 0,
+          })
+        ).toEqual([]);
         expect(b.surplus).toBe(federalSurplus(b));
         // The stock IS the haircut-adjusted active non-defaulted face.
         expect(b.debt?.principal).toBe(outstanding.get(key) ?? 0);

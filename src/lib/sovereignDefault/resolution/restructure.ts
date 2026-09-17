@@ -111,7 +111,18 @@ export async function applyRestructureResolution(
     .collection<Bond>("bonds")
     .find(
       { issuerType: "sovereign", countryId: countryCode, matured: false, defaulted: false },
-      { projection: { totalIssued: 1, restructureHaircutPercent: 1 } }
+      // The outstanding helper re-checks the query-filtered fields, so they
+      // must be projected: a doc arriving without `issuerType` reads as
+      // non-sovereign and contributes 0, which would zero the stored stock.
+      {
+        projection: {
+          issuerType: 1,
+          matured: 1,
+          defaulted: 1,
+          totalIssued: 1,
+          restructureHaircutPercent: 1,
+        },
+      }
     )
     .toArray();
   const writtenDownPrincipal = Math.round(sumOutstandingSovereignPrincipal(postHaircutBonds));

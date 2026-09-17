@@ -913,7 +913,17 @@ describe("issueScheduledSovereignBondSeries", () => {
   });
 
   it("skips when total issue amount is below bond unit face value", async () => {
-    const budget = makeBudget({ surplus: 0 }); // no deficit
+    // Coherent no-deficit budget: the DERIVED surplus is zero, not just the
+    // stored cache. A stale stored surplus alone must never size issuance.
+    const budget = makeBudget({
+      surplus: 0,
+      spending: {
+        byCategory: { healthcare: 1_200_000_000_000 },
+        stateGrants: 600_000_000_000,
+        debtInterest: 0,
+        total: 4_200_000_000_000,
+      },
+    });
     const { db } = setupScheduledMocks({ budget });
     const count = await issueScheduledSovereignBondSeries(db as unknown as Db, TURN, new Date());
     expect(count).toBe(0);

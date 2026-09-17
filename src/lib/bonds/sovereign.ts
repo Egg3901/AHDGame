@@ -474,7 +474,11 @@ export async function issueScheduledSovereignBondSeries(
     const budget = budgetByCountry.get(countryId);
     if (!budget) continue;
 
-    const annualDeficit = Math.max(0, -(budget.surplus ?? 0));
+    // Derived, not read: `surplus` is a cache of `revenue.total - spending.total`
+    // that drifts intra-turn through every writer's read-modify-write (same
+    // reason the admin issuance path uses federalSurplus, above). Sizing a
+    // quarter's sovereign issuance off the stale cache issues the wrong face.
+    const annualDeficit = Math.max(0, -federalSurplus(budget));
     const deficitAmount = calculateQuarterlyIssuanceAmount(annualDeficit);
     // Always roll over bonds maturing in the next quarter on top of any deficit-
     // driven issuance. Mirrors real-world Treasury behavior: maturing principal
