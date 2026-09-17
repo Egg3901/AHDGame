@@ -24,7 +24,8 @@ import type { Campaign, Election } from "@/lib/db/types";
 import { ObjectId } from "mongodb";
 import { applyDiminishingReturns } from "@/lib/utils/diminishingReturns";
 import { resolveCanvassGroup } from "@/lib/demographics/countryDemographics";
-import { runWithOptionalTransaction } from "@/lib/db/runWithOptionalTransaction";
+import { randomUUID } from "node:crypto";
+import { applyCanvassSpend } from "@/lib/canvassing/canvassSpend";
 import {
   resolveCanvassState,
   resolveRunningMateCanvassState,
@@ -313,99 +314,39 @@ export async function POST(req: NextRequest) {
       totalBoost += adjustedBoost;
     }
 
-    const characterSpendFilter = {
-      _id: user.character._id,
-      actions: { $gte: totalActionsCost },
-      [campaignFundsField]: { $gte: totalFundsCostLocal },
-    };
-    const turnoutFilter = { _id: stateId, lastUpdated: turnoutData.lastUpdated };
-    const turnoutUpdate = {
-      $set: {
-        [`modifiers.${modifierCategoryKey}.${group}`]: currentModifier,
-        campaignModifiers,
-        lastUpdated: new Date(),
-      },
-    };
-
-    // Surrogate branch: draw down the ticket's shared per-day pool BEFORE the
-    // personal spend, guarded by $gte so a depleted pool blocks the canvass with
-    // no character debit. On any downstream failure the pool is restored (mirror
-    // of the character/turnout rollback below).
-    if (surrogateCampaignId) {
-      const poolResult = await db.collection<Campaign>("campaigns").updateOne(
-        {
-          _id: surrogateCampaignId,
-          runningMateSurrogateActionsRemaining: { $gte: totalActionsCost },
+    // Crash-safe spend (issue #1672): the optional surrogate-pool draw and the
+    // character funds+actions debit are keyed idempotent legs and the turnout
+    // boost a terminal keyed write, so a crash between the sequential writes
+    // reconciles to exactly one charged canvass instead of charging for a
+    // boost that never landed. `Idempotency-Key` replays the stored outcome
+    // without charging again.
+    const headerKey = req.headers.get("Idempotency-Key");
+    if (headerKey !== null && (headerKey.length === 0 || headerKey.length > 128)) {
+      return NextResponse.json({ error: "Invalid Idempotency-Key header" }, { status: 400 });
+    }
+    try {
+      await applyCanvassSpend(db, {
+        characterId: user.character._id,
+        campaignFundsField,
+        totalFundsCostLocal,
+        totalActionsCost,
+        ...(surrogateCampaignId ? { surrogateCampaignId } : {}),
+        turnout: {
+          stateId,
+          lastUpdated: turnoutData.lastUpdated,
+          modifierPath: `modifiers.${modifierCategoryKey}.${group}`,
+          modifierValue: currentModifier,
+          campaignModifiers,
         },
-        {
-          $inc: { runningMateSurrogateActionsRemaining: -totalActionsCost },
-          $set: { updatedAt: new Date() },
-        }
-      );
-      if (poolResult.modifiedCount === 0) {
+        fingerprint: `${user.character._id.toHexString()}:${stateId}:${modifierCategoryKey}:${group}:${count}`,
+        idempotencyKey: headerKey ?? randomUUID(),
+      });
+    } catch (error) {
+      if ((error as Error).message === "SURROGATE_DEPLETED") {
         return NextResponse.json(
           { error: "No running-mate surrogate actions remaining today." },
           { status: 409 }
         );
-      }
-    }
-
-    try {
-      await runWithOptionalTransaction(
-        async (session) => {
-          const spendResult = await db.collection("characters").updateOne(
-            characterSpendFilter,
-            {
-              $inc: {
-                [campaignFundsField]: -totalFundsCostLocal,
-                actions: -totalActionsCost,
-              },
-            },
-            { session }
-          );
-          if (spendResult.modifiedCount === 0) throw new Error("INSUFFICIENT_RESOURCES");
-
-          const turnoutResult = await turnoutCollection.updateOne(turnoutFilter, turnoutUpdate, {
-            session,
-          });
-          if (turnoutResult.modifiedCount === 0) throw new Error("TURNOUT_CONFLICT");
-        },
-        async () => {
-          const spendResult = await db.collection("characters").updateOne(characterSpendFilter, {
-            $inc: {
-              [campaignFundsField]: -totalFundsCostLocal,
-              actions: -totalActionsCost,
-            },
-          });
-          if (spendResult.modifiedCount === 0) throw new Error("INSUFFICIENT_RESOURCES");
-
-          try {
-            const turnoutResult = await turnoutCollection.updateOne(turnoutFilter, turnoutUpdate);
-            if (turnoutResult.modifiedCount === 0) throw new Error("TURNOUT_CONFLICT");
-          } catch (error) {
-            await db.collection("characters").updateOne(
-              { _id: user.character._id },
-              {
-                $inc: {
-                  [campaignFundsField]: totalFundsCostLocal,
-                  actions: totalActionsCost,
-                },
-              }
-            );
-            throw error;
-          }
-        }
-      );
-    } catch (error) {
-      // Restore the surrogate pool debit if the personal spend / turnout write
-      // failed after we drew it down.
-      if (surrogateCampaignId) {
-        await db
-          .collection<Campaign>("campaigns")
-          .updateOne(
-            { _id: surrogateCampaignId },
-            { $inc: { runningMateSurrogateActionsRemaining: totalActionsCost } }
-          );
       }
       if ((error as Error).message === "INSUFFICIENT_RESOURCES") {
         return NextResponse.json(
@@ -413,7 +354,7 @@ export async function POST(req: NextRequest) {
           { status: 409 }
         );
       }
-      if ((error as Error).message === "TURNOUT_CONFLICT") {
+      if ((error as Error).message.startsWith("TURNOUT_CONFLICT")) {
         return NextResponse.json(
           { error: "State turnout changed while canvassing. Please refresh and try again." },
           { status: 409 }

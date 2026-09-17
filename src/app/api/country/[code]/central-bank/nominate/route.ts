@@ -13,7 +13,8 @@ import { getGameState } from "@/lib/gameState";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { notifyCbExecutiveNominationDiscord } from "@/lib/centralBankChairEvents";
 import { getCentralBankScope } from "@/lib/centralBank/helpers";
-import { runWithOptionalTransaction } from "@/lib/db/runWithOptionalTransaction";
+import { randomUUID } from "node:crypto";
+import { applyNominateSpend } from "@/lib/centralBank/nominateSpend";
 
 interface RouteContext {
   params: Promise<{ code: string }>;
@@ -135,54 +136,23 @@ export async function POST(request: Request, context: RouteContext) {
       nominatedByName: auth.character.name,
       nominatedAt: new Date(),
     };
+    // Crash-safe spend (issue #1672): the action debit is a keyed idempotent
+    // leg and the nomination push a terminal keyed write, so a crash between
+    // the sequential writes reconciles instead of charging for a nomination
+    // that never landed. `Idempotency-Key` replays the stored outcome
+    // without charging again.
+    const headerKey = request.headers.get("Idempotency-Key");
+    if (headerKey !== null && (headerKey.length === 0 || headerKey.length > 128)) {
+      return NextResponse.json({ error: "Invalid Idempotency-Key header" }, { status: 400 });
+    }
     try {
-      await runWithOptionalTransaction(
-        async (session) => {
-          const debitResult = await db
-            .collection<Character>("characters")
-            .updateOne(
-              { _id: auth.character._id, actions: { $gte: 1 } },
-              { $inc: { actions: -1 } },
-              { session }
-            );
-          if (debitResult.modifiedCount === 0) throw new Error("INSUFFICIENT_ACTIONS");
-
-          const nominationResult = await centralBanks.updateOne(
-            { _id: bankId, "nominations.characterId": { $ne: targetId } },
-            {
-              $push: { nominations: nomination },
-              $set: { updatedAt: new Date() },
-            },
-            { session }
-          );
-          if (nominationResult.modifiedCount === 0) throw new Error("NOMINATION_CONFLICT");
-        },
-        async () => {
-          const debitResult = await db
-            .collection<Character>("characters")
-            .updateOne(
-              { _id: auth.character._id, actions: { $gte: 1 } },
-              { $inc: { actions: -1 } }
-            );
-          if (debitResult.modifiedCount === 0) throw new Error("INSUFFICIENT_ACTIONS");
-
-          try {
-            const nominationResult = await centralBanks.updateOne(
-              { _id: bankId, "nominations.characterId": { $ne: targetId } },
-              {
-                $push: { nominations: nomination },
-                $set: { updatedAt: new Date() },
-              }
-            );
-            if (nominationResult.modifiedCount === 0) throw new Error("NOMINATION_CONFLICT");
-          } catch (error) {
-            await db
-              .collection<Character>("characters")
-              .updateOne({ _id: auth.character._id }, { $inc: { actions: 1 } });
-            throw error;
-          }
-        }
-      );
+      await applyNominateSpend(db, {
+        bankId,
+        nominatorId: auth.character._id,
+        nomination,
+        fingerprint: `${bankId}:${targetId.toHexString()}`,
+        idempotencyKey: headerKey ?? randomUUID(),
+      });
     } catch (error) {
       if ((error as Error).message === "INSUFFICIENT_ACTIONS") {
         return NextResponse.json(
@@ -190,7 +160,7 @@ export async function POST(request: Request, context: RouteContext) {
           { status: 400 }
         );
       }
-      if ((error as Error).message === "NOMINATION_CONFLICT") {
+      if ((error as Error).message.startsWith("NOMINATION_CONFLICT")) {
         return NextResponse.json(
           badRequest("This nomination was already submitted. Please refresh.").toJson(),
           { status: 409 }
