@@ -14,6 +14,12 @@ vi.mock("@/lib/api/rateLimit", () => ({
   checkRateLimit: vi.fn(() => ({ ok: true })),
   rateLimitResponse: vi.fn(),
 }));
+// The strength spend runs standalone here: no replica set in unit tests.
+vi.mock("@/lib/db/runWithOptionalTransaction", () => ({
+  runWithOptionalTransaction: vi
+    .fn()
+    .mockImplementation(async (_inside: unknown, fallback: () => Promise<unknown>) => fallback()),
+}));
 vi.mock("@/lib/api/errors", async () => {
   const actual = await vi.importActual<typeof import("@/lib/api/errors")>("@/lib/api/errors");
   return {
@@ -57,14 +63,25 @@ function makeParams(id: string) {
 /** All fixture worlds use the same fixed USD basis, independently of live FX. */
 function campaignDb(collections: Record<string, Record<string, unknown>>) {
   return {
-    collection: vi.fn((name: string) =>
-      name === "exchangeRates"
-        ? {
-            ...collections[name],
-            find: vi.fn(() => ({ toArray: async () => [{ currencyCode: "USD", baseRate: 1 }] })),
-          }
-        : collections[name]
-    ),
+    collection: vi.fn((name: string) => {
+      if (name === "exchangeRates") {
+        return {
+          ...collections[name],
+          find: vi.fn(() => ({ toArray: async () => [{ currencyCode: "USD", baseRate: 1 }] })),
+        };
+      }
+      // Crash-safe spend (issue #1672): success paths claim a money-flow
+      // receipt, so worlds that predate the migration get a fresh-claim
+      // receipts collection by default instead of a 500 on undefined.
+      if (name === "nonAtomicMoneyFlowReceipts" && !collections[name]) {
+        return {
+          insertOne: vi.fn().mockResolvedValue({ insertedId: "route-key" }),
+          findOne: vi.fn().mockResolvedValue(null),
+          updateOne: vi.fn().mockResolvedValue({ matchedCount: 1 }),
+        };
+      }
+      return collections[name];
+    }),
   };
 }
 
@@ -349,7 +366,10 @@ describe("POST /api/campaigns/[id]/campaign-strength", () => {
     } as any);
 
     const charUpdateResult = { matchedCount: 1 };
-    const campaignUpdateResult = {};
+    // The crash-safe spend (issue #1672) treats `matchedCount === 1` as
+    // applied and disambiguates anything else, so the credit mock must carry
+    // matchedCount the way the real driver does.
+    const campaignUpdateResult = { matchedCount: 1 };
     const activityInsertOne = vi.fn().mockResolvedValue({ insertedId: new ObjectId() });
     const collections: Record<string, any> = {
       campaigns: {
@@ -389,6 +409,8 @@ describe("POST /api/campaigns/[id]/campaign-strength", () => {
     expect(body.costActions).toBe(campaignStrengthContributionActions(strengthAdded));
     expect(body.currencyCode).toBe("USD");
     expect(body.campaignStrength).toBeCloseTo(currentCS + strengthAdded);
+    // Crash-safe spend (issue #1672): the audit row is a deterministic keyed
+    // insert, so it carries the derived `_id` and the session opt passthrough.
     expect(activityInsertOne).toHaveBeenCalledWith(
       expect.objectContaining({
         type: "game_action",
@@ -407,7 +429,8 @@ describe("POST /api/campaigns/[id]/campaign-strength", () => {
           costFunds: expectedCost,
           currencyCode: "USD",
         }),
-      })
+      }),
+      undefined
     );
   });
 

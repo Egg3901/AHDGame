@@ -48,27 +48,33 @@ import { ObjectId, type ClientSession, type Collection, type Filter } from "mong
  * cross-character standing ads (shared adSpend primitive; self-purchase stays
  * a single atomic update), union busting (guarded sector-claim + corp-debit
  * via unionBustingSpend), union bargaining escalation (campaign claim +
- * treasury leg + per-local strike steps via bargainingEscalationSpend).
+ * treasury leg + per-local strike steps via bargainingEscalationSpend),
+ * campaign strength purchases (character debit + campaign credit +
+ * deterministic audit insert via campaignStrengthSpend, with command-level
+ * success/race/missing/activity/key-path tests), rallies (campaign-actions
+ * debit + throttled candidate write via rallySpend, with command-level
+ * atomic/tamper/throttle/key-path tests), union treasury funding (character
+ * campaign-funds debit + treasury credit via unionTreasuryFundingSpend),
+ * union organizing drives (actions + treasury debits + snapshot-guarded
+ * sector transition via organizeSectorSpend), union founding (combined
+ * actions/funds debit + deterministic union insert + guarded leadership
+ * claim via unionFoundingSpend, with command-level replay/conflict/settled
+ * key tests).
  * Ownership-only and excluded (no balance writes): union leadership
  * accept/resign/decline/vote (ownerId/unionLeaderOf/vote rows only),
  * bargaining settlement (campaign claim + agreement insert + expectation
  * restore move no balances), campaign upgrades (single-document guarded
  * spend).
- * Still on the legacy debit-first-plus-compensation fallback: campaign
- * strength purchases (character debit + campaign credit + refund) and
- * rallies (campaign-actions debit + candidate support write + rollback),
- * union treasury funding (character campaign-funds debit + treasury credit +
- * refund), union organizing drives (actions + treasury debits with manual
- * compensation), union founding (combined actions/funds spend + refund on a
- * failed union insert), forex orders/direct/fill/cancel, bond
- * sell/default/payoff, index-fund cron/rebalancing, directAction, state-org
- * build — multi-write status machines, positional holder claims, and
- * bulkWrite batches that need reserve/order/history support beyond keyed
- * single-document writes. Military recruitment sits outside even that: manual
- * unwind (ministerial action, manpower pool, defence appropriation, arsenal
- * lots, unit insert) with no transaction wrapper at all. Migrating one of
- * those means expressing its writes as steps here, with an explicit inverse
- * per step that mutates prior state.
+ * Still on the legacy debit-first-plus-compensation fallback: forex
+ * orders/direct/fill/cancel, bond sell/default/payoff, index-fund
+ * cron/rebalancing, directAction, state-org build — multi-write status
+ * machines, positional holder claims, and bulkWrite batches that need
+ * reserve/order/history support beyond keyed single-document writes.
+ * Military recruitment sits outside even that: manual unwind (ministerial
+ * action, manpower pool, defence appropriation, arsenal lots, unit insert)
+ * with no transaction wrapper at all. Migrating one of those means
+ * expressing its writes as steps here, with an explicit inverse per step
+ * that mutates prior state.
  *
  * Operations note: receipts accumulate one small document per keyed flow. The
  * TTL index on `createdAt` is seeded by `seedMoneyFlowIndexes` (registered in

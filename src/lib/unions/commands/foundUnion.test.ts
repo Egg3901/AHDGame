@@ -44,6 +44,8 @@ function baseDb(options: {
   existingNames?: string[];
   banned?: boolean;
   insertOne?: ReturnType<typeof vi.fn>;
+  receiptsInsertOne?: ReturnType<typeof vi.fn>;
+  receiptsFindOne?: ReturnType<typeof vi.fn>;
 }) {
   const insertOne = options.insertOne ?? vi.fn().mockResolvedValue({ insertedId: new ObjectId() });
   // Crash-safe spend (issue #1672): the founding debit is a keyed idempotent
@@ -56,8 +58,9 @@ function baseDb(options: {
   const unionsFind = vi.fn().mockImplementation(() => ({
     toArray: async () => (options.existingNames ?? []).map((name) => ({ name })),
   }));
-  const receiptsInsertOne = vi.fn().mockResolvedValue({ insertedId: "key" });
-  const receiptsFindOne = vi.fn().mockResolvedValue(null);
+  const receiptsInsertOne =
+    options.receiptsInsertOne ?? vi.fn().mockResolvedValue({ insertedId: "key" });
+  const receiptsFindOne = options.receiptsFindOne ?? vi.fn().mockResolvedValue(null);
   const receiptsUpdateOne = vi.fn().mockResolvedValue({ matchedCount: 1 });
 
   return {
@@ -67,6 +70,7 @@ function baseDb(options: {
     characterFindOne,
     unionsDeleteOne,
     receiptsInsertOne,
+    receiptsFindOne,
     db: {
       collection: (name: string) => {
         if (name === "gameState") return gameStateCollection();
@@ -222,7 +226,9 @@ describe("foundUnion", () => {
     const insertOne2 = vi.fn().mockResolvedValue({ insertedId: new ObjectId() });
     const raceDb = baseDb({ insertOne: insertOne2 });
     raceDb.characterUpdateOne.mockImplementation(async (filter: Record<string, unknown>) =>
-      "$or" in filter ? { matchedCount: 0, modifiedCount: 0 } : { matchedCount: 1, modifiedCount: 1 }
+      "$or" in filter
+        ? { matchedCount: 0, modifiedCount: 0 }
+        : { matchedCount: 1, modifiedCount: 1 }
     );
     const raceResult = await foundUnion(raceDb.db, makeCharacter(), {
       countryId: "US",
@@ -317,6 +323,85 @@ describe("foundUnion", () => {
     });
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.status).toBe(403);
+  });
+
+  function duplicateKeyError(): Error {
+    return Object.assign(new Error("E11000 duplicate key error"), { code: 11000 });
+  }
+
+  it("replays the stored founding when the same key and name retry", async () => {
+    const character = makeCharacter();
+    const fingerprint = "found-union:US:manufacturing:rival steelworkers";
+    const { db, characterUpdateOne, insertOne } = baseDb({
+      receiptsInsertOne: vi.fn().mockRejectedValue(duplicateKeyError()),
+      receiptsFindOne: vi
+        .fn()
+        .mockResolvedValue({ _id: "retry-key", status: "completed", fingerprint }),
+    });
+
+    const result = await foundUnion(
+      db,
+      character,
+      { countryId: "US", sectorType: "manufacturing", name: "Rival Steelworkers" },
+      { idempotencyKey: "retry-key" }
+    );
+
+    expect(result.ok).toBe(true);
+    expect(characterUpdateOne).not.toHaveBeenCalled();
+    expect(insertOne).not.toHaveBeenCalled();
+  });
+
+  it("rejects a key reused for a different founding", async () => {
+    const character = makeCharacter();
+    const { db, characterUpdateOne } = baseDb({
+      receiptsInsertOne: vi.fn().mockRejectedValue(duplicateKeyError()),
+      receiptsFindOne: vi
+        .fn()
+        .mockResolvedValue({
+          _id: "used-key",
+          status: "completed",
+          fingerprint: "found-union:other",
+        }),
+    });
+
+    const result = await foundUnion(
+      db,
+      character,
+      { countryId: "US", sectorType: "manufacturing", name: "Rival Steelworkers" },
+      { idempotencyKey: "used-key" }
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.status).toBe(409);
+      expect(result.error).toMatch(/different founding/i);
+    }
+    expect(characterUpdateOne).not.toHaveBeenCalled();
+  });
+
+  it("fails closed when the key already settled without completing", async () => {
+    const character = makeCharacter();
+    const fingerprint = "found-union:US:manufacturing:rival steelworkers";
+    const { db, characterUpdateOne } = baseDb({
+      receiptsInsertOne: vi.fn().mockRejectedValue(duplicateKeyError()),
+      receiptsFindOne: vi
+        .fn()
+        .mockResolvedValue({ _id: "settled-key", status: "failed", fingerprint }),
+    });
+
+    const result = await foundUnion(
+      db,
+      character,
+      { countryId: "US", sectorType: "manufacturing", name: "Rival Steelworkers" },
+      { idempotencyKey: "settled-key" }
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.status).toBe(409);
+      expect(result.error).toMatch(/already settled/i);
+    }
+    expect(characterUpdateOne).not.toHaveBeenCalled();
   });
 });
 
