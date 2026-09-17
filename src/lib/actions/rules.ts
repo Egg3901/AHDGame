@@ -15,6 +15,12 @@
  * missing home-state economics reject instead of falling back to neutral
  * values. Hosts own currency conversion, atomic resource checks and
  * persistence.
+ *
+ * BuildDonorBase costs level-scaled action points plus a GDP-scaled fund cost
+ * (discounted by the fundraising stat) and gains one donor level.
+ * quoteBuildDonorBaseAction is the single source of truth both the UI quote
+ * and execution call; missing stats or missing home-state economics reject
+ * instead of falling back to neutral values.
  */
 import { statMultiplier } from "../stats/statMultiplier";
 import { NEUTRAL_STAT } from "../stats/statsConstants";
@@ -385,5 +391,135 @@ export function quoteAdvertiseAction(
     apCost: getAdvertiseActionCost(favorability),
     fundCostAnchor,
     favorabilityGain,
+  };
+}
+
+// ── BuildDonorBase (Game1724 slice 3) ───────────────────────────────────────
+// Cost, eligibility and effect math moved verbatim from `../actions` so the UI
+// quote, the execute shell and NPP callers share one implementation. Balance
+// is unchanged: the numbers below are the historical formulas, only the owner
+// moved. The strict entry point is quoteBuildDonorBaseAction; the lenient
+// wrappers (getBuildDonorBaseActionCost/getBuildDonorBaseFundCost) stay for
+// AP-only and NPP callers that never had stat/target context.
+
+/** Base donor-network fund cost before level/GDP scaling, in ANCHOR units. */
+export const BUILD_DONOR_BASE_FUND = 3_000;
+
+/** Per-level donor-network fund cost, in ANCHOR units. */
+export const BUILD_DONOR_BASE_FUND_PER_LEVEL = 1_500;
+
+/** Donor levels gained per BuildDonorBase action. */
+export const BUILD_DONOR_BASE_LEVEL_GAIN = 1;
+
+/**
+ * Fund cost for the BuildDonorBase action (0–75 level range).
+ * Linear base: $3K + $1.5K/level, scaled by state GDP per capita (0.85–2.0×) vs country baseline.
+ * Early levels are cheap (~$3K); L75 costs ~$116K (before GDP scaling).
+ * Total 0→75 ≈ $4.4M at national-average GDP.
+ */
+export function getBuildDonorBaseFundCost(
+  donorBaseLevel: number,
+  stateGdpMillions: number,
+  statePopulation: number,
+  countryId = "US"
+): number {
+  const baseCost = BUILD_DONOR_BASE_FUND + donorBaseLevel * BUILD_DONOR_BASE_FUND_PER_LEVEL;
+  const baseline = getGdpBaseline(countryId);
+  const gdpPerCapita = (stateGdpMillions * 1_000_000) / statePopulation;
+  const gdpScalar = Math.max(0.85, Math.min(2.0, gdpPerCapita / baseline));
+  return Math.round((baseCost * gdpScalar) / 1_000) * 1_000;
+}
+
+/**
+ * Action-point cost for the BuildDonorBase action (0–75 level range).
+ * Power curve from 4 AP (L0) to 20 AP (L75), notable high-end.
+ *   Formula: min(20, round(4 + (level/75)^1.4 × 16))
+ *   L0=4  L10=5  L25=8  L50=13  L65=17  L75=20
+ */
+export function getBuildDonorBaseActionCost(donorBaseLevel: number): number {
+  return Math.min(20, Math.round(4 + Math.pow(donorBaseLevel / 75, 1.4) * 16));
+}
+
+/**
+ * Raw BuildDonorBase actor inputs, preserved explicitly. The fundraising stat
+ * arrives as the stored raw value (or missing for characters that predate the
+ * stat system); the rules own the statMultiplier interpretation and reject a
+ * missing stat instead of substituting the neutral fallback.
+ */
+export interface BuildDonorBaseQuoteActor {
+  donorBaseLevel?: number | null;
+  fundraising?: number | null;
+}
+
+/**
+ * Raw BuildDonorBase target inputs, preserved explicitly. The state GDP,
+ * population and country currency basis arrive as stored; the rules own the
+ * GDP-scalar interpretation and reject a missing target instead of
+ * substituting the flat fallback cost.
+ */
+export interface BuildDonorBaseQuoteTarget {
+  gdpMillions?: number | null;
+  population?: number | null;
+  countryId?: string | null;
+}
+
+/**
+ * Authoritative BuildDonorBase quote: level-scaled AP cost, GDP-scaled fund
+ * cost in ANCHOR units (after the fundraising cost-curve hook), and the donor
+ * level gain. Invalid or incomplete inputs reject with a typed error the
+ * shell surfaces; they never silently resolve to neutral values.
+ */
+export type BuildDonorBaseQuote =
+  | { ok: true; apCost: number; fundCostAnchor: number; donorGain: number }
+  | { ok: false; error: string };
+
+export function quoteBuildDonorBaseAction(
+  actor: BuildDonorBaseQuoteActor,
+  target?: BuildDonorBaseQuoteTarget | null
+): BuildDonorBaseQuote {
+  const level = actor.donorBaseLevel;
+  if (typeof level !== "number" || !Number.isFinite(level) || level < 0) {
+    return { ok: false, error: "Build Donor Network requires a donor base level." };
+  }
+  const { fundraising } = actor;
+  if (typeof fundraising !== "number" || !Number.isFinite(fundraising)) {
+    return {
+      ok: false,
+      error:
+        "Build Donor Network requires an allocated fundraising stat. Allocate your stats before expanding your network.",
+    };
+  }
+  if (!target) {
+    return {
+      ok: false,
+      error: "Build Donor Network requires home-state economic data (GDP and population).",
+    };
+  }
+  const { gdpMillions, population, countryId } = target;
+  if (typeof gdpMillions !== "number" || !Number.isFinite(gdpMillions) || gdpMillions < 0) {
+    return {
+      ok: false,
+      error: "Build Donor Network requires home-state economic data (GDP and population).",
+    };
+  }
+  if (typeof population !== "number" || !Number.isFinite(population) || population <= 0) {
+    return {
+      ok: false,
+      error: "Build Donor Network requires home-state economic data (GDP and population).",
+    };
+  }
+  if (typeof countryId !== "string" || countryId.length === 0) {
+    return { ok: false, error: "Build Donor Network requires a country currency basis." };
+  }
+  // Fundraising softens the donor-network cost curve (higher → cheaper).
+  const fundCostAnchor = Math.round(
+    getBuildDonorBaseFundCost(level, gdpMillions, population, countryId) /
+      statMultiplier(fundraising)
+  );
+  return {
+    ok: true,
+    apCost: getBuildDonorBaseActionCost(level),
+    fundCostAnchor,
+    donorGain: BUILD_DONOR_BASE_LEVEL_GAIN,
   };
 }

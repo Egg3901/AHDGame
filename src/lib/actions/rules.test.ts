@@ -23,6 +23,12 @@ import {
   getAdvertiseFundCost,
   advertiseFavorabilityGain,
   quoteAdvertiseAction,
+  BUILD_DONOR_BASE_FUND,
+  BUILD_DONOR_BASE_FUND_PER_LEVEL,
+  BUILD_DONOR_BASE_LEVEL_GAIN,
+  getBuildDonorBaseActionCost,
+  getBuildDonorBaseFundCost,
+  quoteBuildDonorBaseAction,
 } from "./rules";
 import {
   ACTIONS,
@@ -502,6 +508,223 @@ describe("Advertise single-source sensitivity", () => {
     );
     expect(ACTIONS.advertise.effect(advertiseCharacter(10, 10), AVG_STATE).favorabilityChange).toBe(
       strong.favorabilityGain
+    );
+  });
+});
+
+// ── BuildDonorBase (Game1724 slice 3) ───────────────────────────────────────
+// quoteBuildDonorBaseAction owns the level-scaled AP cost, the GDP-scaled fund
+// cost with the fundraising discount, and the +1 level gain. The UI quote,
+// getActionPointCost (debit), the action effect (result) and canPerformAction
+// (failure) all route through it, so the numbers below prove agreement
+// instead of re-stating the formula.
+
+const donorStats = (fundraising: number): CharacterStats => ({
+  ...NEUTRAL_STATS,
+  fundraising,
+});
+
+function donorCharacter(
+  level: number,
+  fundraising = 5.5,
+  overrides: Partial<Character> = {}
+): Character {
+  return makeCharacter({
+    actions: 100,
+    funds: 100_000_000,
+    donorBaseLevel: level,
+    countryId: "US",
+    stats: donorStats(fundraising),
+    ...overrides,
+  });
+}
+
+function donorState(): State {
+  return {
+    name: "Test State",
+    gdp: 65_000,
+    population: 1_000_000,
+    countryId: "US",
+  } as unknown as State;
+}
+
+const DONOR_TARGET = { gdpMillions: 65_000, population: 1_000_000, countryId: "US" };
+
+describe("donor base cost is single-sourced", () => {
+  it("pins the $3K base and $1.5K per-level scale the fund formula uses", () => {
+    expect(BUILD_DONOR_BASE_FUND).toBe(3_000);
+    expect(BUILD_DONOR_BASE_FUND_PER_LEVEL).toBe(1_500);
+    expect(BUILD_DONOR_BASE_LEVEL_GAIN).toBe(1);
+  });
+  it("AP costs agree across the rules, the debit path and the quote", () => {
+    const cases: Array<[number, number]> = [
+      [0, 4],
+      [10, 5],
+      [25, 7],
+      [50, 13],
+      [65, 17],
+      [75, 20],
+    ];
+    for (const [level, ap] of cases) {
+      expect(getBuildDonorBaseActionCost(level)).toBe(ap);
+      expect(getDonorActionCost(level, "buildDonorBase")).toBe(ap);
+      expect(getActionPointCost(donorCharacter(level), "buildDonorBase")).toBe(ap);
+    }
+  });
+});
+
+describe("getBuildDonorBaseFundCost independent literals", () => {
+  it("L0 at average GDP costs the $3K base", () => {
+    expect(getBuildDonorBaseFundCost(0, 65_000, 1_000_000)).toBe(3_000);
+  });
+  it("L10 at average GDP costs $18K", () => {
+    expect(getBuildDonorBaseFundCost(10, 65_000, 1_000_000)).toBe(18_000);
+  });
+  it("L50 at average GDP costs $78K", () => {
+    expect(getBuildDonorBaseFundCost(50, 65_000, 1_000_000)).toBe(78_000);
+  });
+  it("L75 at average GDP costs $116K", () => {
+    expect(getBuildDonorBaseFundCost(75, 65_000, 1_000_000)).toBe(116_000);
+  });
+});
+
+describe("donor quote matches debit and result through one source", () => {
+  it("pins the baseline quote (level 0, average GDP, neutral fundraising)", () => {
+    const quote = quoteBuildDonorBaseAction({ donorBaseLevel: 0, fundraising: 5.5 }, DONOR_TARGET);
+    expect(quote).toEqual({ ok: true, apCost: 4, fundCostAnchor: 3_000, donorGain: 1 });
+  });
+  it("pins the fundraising discount (level 0, weak vs strong stat)", () => {
+    const weak = quoteBuildDonorBaseAction({ donorBaseLevel: 0, fundraising: 1 }, DONOR_TARGET);
+    const strong = quoteBuildDonorBaseAction({ donorBaseLevel: 0, fundraising: 10 }, DONOR_TARGET);
+    expect(weak).toEqual({ ok: true, apCost: 4, fundCostAnchor: 3_659, donorGain: 1 });
+    expect(strong).toEqual({ ok: true, apCost: 4, fundCostAnchor: 2_542, donorGain: 1 });
+  });
+  it("quote, AP debit, fund debit and result agree across a sweep", () => {
+    const levels = [0, 10, 25, 50, 65, 75];
+    const fundraisingStats = [1, 5.5, 10];
+    for (const state of [donorState(), richState()]) {
+      for (const level of levels) {
+        for (const fundraising of fundraisingStats) {
+          const char = donorCharacter(level, fundraising);
+          const quote = quoteBuildDonorBaseAction(
+            { donorBaseLevel: level, fundraising },
+            { gdpMillions: state.gdp, population: state.population, countryId: "US" }
+          );
+          expect(quote.ok).toBe(true);
+          if (!quote.ok) continue;
+          // Debit side: AP cost and the effect result carry the same numbers.
+          expect(getActionPointCost(char, "buildDonorBase")).toBe(quote.apCost);
+          const effect = ACTIONS.buildDonorBase.effect(char, state);
+          expect(effect.fundsChange).toBe(-quote.fundCostAnchor);
+          expect(effect.donorBaseLevelChange).toBe(quote.donorGain);
+          // The quote itself applies the historical math, not a copy of it.
+          expect(quote.apCost).toBe(getBuildDonorBaseActionCost(level));
+          expect(quote.fundCostAnchor).toBe(
+            Math.round(
+              getBuildDonorBaseFundCost(level, state.gdp, state.population, "US") /
+                statMultiplier(fundraising)
+            )
+          );
+        }
+      }
+    }
+  });
+  it("a test-only level bump moves quote and debit together", () => {
+    // One base input changes (level 10 -> 75, crossing AP tiers 5 -> 20);
+    // both the displayed quote and the debited/applied result must follow it
+    // through the same function, with no second formula edit.
+    const before = quoteBuildDonorBaseAction(
+      { donorBaseLevel: 10, fundraising: 5.5 },
+      DONOR_TARGET
+    );
+    const after = quoteBuildDonorBaseAction({ donorBaseLevel: 75, fundraising: 5.5 }, DONOR_TARGET);
+    expect(before.ok && after.ok).toBe(true);
+    if (!before.ok || !after.ok) return;
+    expect(after.apCost).toBe(20);
+    expect(after.apCost).toBeGreaterThan(before.apCost);
+    expect(after.fundCostAnchor).toBeGreaterThan(before.fundCostAnchor);
+    const state = donorState();
+    const effectBefore = ACTIONS.buildDonorBase.effect(donorCharacter(10), state);
+    const effectAfter = ACTIONS.buildDonorBase.effect(donorCharacter(75), state);
+    expect(effectBefore.fundsChange).toBe(-before.fundCostAnchor);
+    expect(effectAfter.fundsChange).toBe(-after.fundCostAnchor);
+    expect(effectAfter.donorBaseLevelChange).toBe(after.donorGain);
+    expect(getActionPointCost(donorCharacter(75), "buildDonorBase")).toBe(after.apCost);
+    expect(getActionPointCost(donorCharacter(10), "buildDonorBase")).toBe(before.apCost);
+  });
+  it("a test-only fundraising bump moves quoted and applied cost together", () => {
+    const weak = quoteBuildDonorBaseAction({ donorBaseLevel: 25, fundraising: 1 }, DONOR_TARGET);
+    const strong = quoteBuildDonorBaseAction({ donorBaseLevel: 25, fundraising: 10 }, DONOR_TARGET);
+    expect(weak.ok && strong.ok).toBe(true);
+    if (!weak.ok || !strong.ok) return;
+    expect(weak.fundCostAnchor).toBeGreaterThan(strong.fundCostAnchor);
+    const state = donorState();
+    expect(ACTIONS.buildDonorBase.effect(donorCharacter(25, 1), state).fundsChange).toBe(
+      -weak.fundCostAnchor
+    );
+    expect(ACTIONS.buildDonorBase.effect(donorCharacter(25, 10), state).fundsChange).toBe(
+      -strong.fundCostAnchor
+    );
+  });
+});
+
+describe("donor failure agreement", () => {
+  it("missing fundraising rejects quote, validation and batch with one reason", () => {
+    const quote = quoteBuildDonorBaseAction(
+      { donorBaseLevel: 10, fundraising: undefined },
+      DONOR_TARGET
+    );
+    expect(quote.ok).toBe(false);
+    if (quote.ok) return;
+    expect(quote.error).toMatch(/fundraising/);
+    const noStats = makeCharacter({
+      actions: 100,
+      funds: 100_000_000,
+      donorBaseLevel: 10,
+      countryId: "US",
+      stats: undefined,
+    });
+    expect(canPerformAction(noStats, "buildDonorBase", donorState())).toEqual({
+      canPerform: false,
+      reason: quote.error,
+    });
+    expect(simulateActionBatch(noStats, donorState(), "buildDonorBase", 5)).toEqual({
+      ok: false,
+      reason: quote.error,
+    });
+  });
+  it("missing target rejects quote and validation with the same reason", () => {
+    const quote = quoteBuildDonorBaseAction({ donorBaseLevel: 10, fundraising: 5.5 }, undefined);
+    expect(quote.ok).toBe(false);
+    if (quote.ok) return;
+    expect(canPerformAction(donorCharacter(10), "buildDonorBase", undefined)).toEqual({
+      canPerform: false,
+      reason: quote.error,
+    });
+  });
+  it("degenerate targets and levels reject instead of pricing", () => {
+    const actor = { donorBaseLevel: 10, fundraising: 5.5 };
+    expect(
+      quoteBuildDonorBaseAction(actor, { gdpMillions: 65_000, population: 0, countryId: "US" }).ok
+    ).toBe(false);
+    expect(
+      quoteBuildDonorBaseAction(actor, { gdpMillions: 65_000, population: 1_000_000 }).ok
+    ).toBe(false);
+    expect(
+      quoteBuildDonorBaseAction({ donorBaseLevel: -1, fundraising: 5.5 }, DONOR_TARGET).ok
+    ).toBe(false);
+  });
+  it("the effect throws the quote reason instead of pricing without context", () => {
+    const noStats = makeCharacter({
+      actions: 100,
+      funds: 100_000_000,
+      donorBaseLevel: 10,
+      countryId: "US",
+      stats: undefined,
+    });
+    expect(() => ACTIONS.buildDonorBase.effect(noStats, donorState())).toThrow(/fundraising/);
+    expect(() => ACTIONS.buildDonorBase.effect(donorCharacter(10), undefined)).toThrow(
+      /home-state/
     );
   });
 });
