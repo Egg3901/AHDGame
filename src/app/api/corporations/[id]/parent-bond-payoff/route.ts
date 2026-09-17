@@ -1,8 +1,6 @@
 import { NextResponse } from "next/server";
-import { ObjectId, type ClientSession, type AnyBulkWriteOperation } from "mongodb";
-import * as Sentry from "@sentry/nextjs";
+import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
-import { runWithOptionalTransaction } from "@/lib/db/runWithOptionalTransaction";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { requireCorporationActionsEnabled } from "@/lib/api/requireCorporationActions";
 import { parseJsonBody } from "@/lib/api/validate";
@@ -16,9 +14,18 @@ import {
 import type { Bond, Character, Corporation } from "@/lib/db/types";
 import type { ImperialCharacter } from "@/lib/db/types/imperialCharacter";
 import { BOND_UNIT_FACE_VALUE } from "@/lib/db/types/bond";
+import {
+  applyBondPayoffSpend,
+  buildBondPayoffFingerprint,
+  BOND_PAYOFF_FUNDS,
+  BOND_PAYOFF_HOLDER,
+  BOND_PAYOFF_MATURE,
+  type BondPayoffHolderCredit,
+} from "@/lib/bonds/bondPayoffSpend";
+import { MoneyFlowKeyConflictError, MoneyFlowTerminalError } from "@/lib/db/nonAtomicMoneyFlow";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
-import { buildPersonalBalanceInc, getHomeCurrency } from "@/lib/currency/characterFunds";
+import { getHomeCurrency } from "@/lib/currency/characterFunds";
 import {
   acquirerOwnershipPercent,
   HOSTILE_TAKEOVER_OWNERSHIP_THRESHOLD_PERCENT,
@@ -60,6 +67,13 @@ export async function POST(request: Request, { params }: RouteParams) {
     const parsed = await parseJsonBody(request, parentBondPayoffSchema);
     if (!parsed.success) {
       return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+    }
+
+    // Crash-safe settlement (issue #1672): a client retry with the same key
+    // replays the stored payoff outcome instead of paying again.
+    const headerKey = request.headers.get("Idempotency-Key");
+    if (headerKey !== null && (headerKey.length === 0 || headerKey.length > 128)) {
+      return NextResponse.json({ error: "Invalid Idempotency-Key header" }, { status: 400 });
     }
 
     const db = await getDb();
@@ -184,8 +198,15 @@ export async function POST(request: Request, { params }: RouteParams) {
         const charIncs = new Map<string, number>();
         const imperialIncs = new Map<string, number>();
         const corpIncs = new Map<string, number>();
+        // Index funds and autonomous NPPs hold bond units too (BondHolder.fundId
+        // / .nppId). They were silently dropped by the holder chain below while
+        // the bonds were still marked matured, so their principal simply
+        // vanished (same gap as fixed on the cash route, #809). Both hold in
+        // anchor, matching the bondTurn coupon/maturity legs.
+        const fundIncsAnchor = new Map<string, number>();
+        const nppIncsAnchor = new Map<string, number>();
         const pendingMaturityTxs: Array<{
-          holderType: "character" | "imperial" | "corp";
+          holderType: "character" | "imperial" | "corp" | "fund" | "npp";
           holderId: string;
           bondId: string;
           bondCcy: CurrencyCode | undefined;
@@ -236,6 +257,30 @@ export async function POST(request: Request, { params }: RouteParams) {
                 units: h.units,
                 couponRate: bond.couponRate,
               });
+            } else if (h.fundId) {
+              const k = h.fundId.toString();
+              fundIncsAnchor.set(k, (fundIncsAnchor.get(k) ?? 0) + faceAnchor);
+              pendingMaturityTxs.push({
+                holderType: "fund",
+                holderId: k,
+                bondId: bond._id.toString(),
+                bondCcy,
+                faceAnchor,
+                units: h.units,
+                couponRate: bond.couponRate,
+              });
+            } else if (h.nppId) {
+              const k = h.nppId.toString();
+              nppIncsAnchor.set(k, (nppIncsAnchor.get(k) ?? 0) + faceAnchor);
+              pendingMaturityTxs.push({
+                holderType: "npp",
+                holderId: k,
+                bondId: bond._id.toString(),
+                bondCcy,
+                faceAnchor,
+                units: h.units,
+                couponRate: bond.couponRate,
+              });
             }
           }
         }
@@ -250,271 +295,166 @@ export async function POST(request: Request, { params }: RouteParams) {
           string,
           { currency: CurrencyCode; fxRate: number; doc: Corporation }
         >();
-        const bondIds = outstandingBonds.map((b) => b._id);
-
-        // Move the money atomically when the deployment supports transactions
-        // (Atlas / replica set). The live server is a Railway standalone mongod
-        // where transactions throw code 20; `runWithOptionalTransaction` then
-        // falls back to sequential writes, which we keep money-safe with an
-        // explicit compensation stack. Invariant: the payoff either fully
-        // completes or has no net financial effect — never a partial state.
-        const applyPayoff = async (
-          session: ClientSession | undefined,
-          compensate: boolean
-        ): Promise<void> => {
-          const sessionOpt: { session?: ClientSession } = session ? { session } : {};
-          const forexEnabled = await isForexEnabled();
-
-          // ── Phase R: reads + validation + op building (no writes yet) ──
-          // All holder reads happen before any debit, so missing/invalid holder
-          // data costs nothing on the standalone fallback path. Each credit is
-          // built alongside its exact reversal for compensation.
-          let charOps: AnyBulkWriteOperation<Character>[] = [];
-          let charReverseOps: AnyBulkWriteOperation<Character>[] = [];
-          if (charIncs.size > 0) {
-            const charIds = [...charIncs.keys()].map((entryId) => new ObjectId(entryId));
-            const charDocs = await db
-              .collection<Character>("characters")
-              .find({ _id: { $in: charIds } }, sessionOpt)
-              .project<Pick<Character, "_id" | "countryId" | "name">>({
-                _id: 1,
-                countryId: 1,
-                name: 1,
-              })
-              .toArray();
-            if (charDocs.length !== charIncs.size) {
-              throw internalError("Bond holder data is inconsistent; contact an admin.");
-            }
-            const charCurrencyMap = new Map(
-              charDocs.map((c) => [c._id.toString(), getHomeCurrency(c as Character)])
-            );
-            for (const c of charDocs) nameById.set(c._id.toString(), c.name as string);
-
-            const buildCharOps = (sign: 1 | -1): AnyBulkWriteOperation<Character>[] =>
-              [...charIncs.entries()].map(([charIdStr, amtAnchor]) => {
-                const currency = charCurrencyMap.get(charIdStr) ?? "USD";
-                const amt = forexEnabled ? anchorToLocal(amtAnchor, currency) : amtAnchor;
-                return {
-                  updateOne: {
-                    filter: { _id: new ObjectId(charIdStr) },
-                    update: {
-                      $inc: buildPersonalBalanceInc(sign * amt, currency, forexEnabled),
-                      $set: { updatedAt: now },
-                    },
-                  },
-                };
-              });
-            charOps = buildCharOps(1);
-            charReverseOps = buildCharOps(-1);
+        // Holder reads happen before any write, so missing/invalid holder
+        // data costs nothing: no debit, no maturation, no credit. Amounts are
+        // converted to each holder's own denomination here; the keyed flow
+        // below applies them exactly once.
+        const forexEnabled = await isForexEnabled();
+        const charCurrencyMap = new Map<string, string>();
+        if (charIncs.size > 0) {
+          const charIds = [...charIncs.keys()].map((entryId) => new ObjectId(entryId));
+          const charDocs = await db
+            .collection<Character>("characters")
+            .find({ _id: { $in: charIds } })
+            .project<Pick<Character, "_id" | "countryId" | "name">>({
+              _id: 1,
+              countryId: 1,
+              name: 1,
+            })
+            .toArray();
+          if (charDocs.length !== charIncs.size) {
+            throw internalError("Bond holder data is inconsistent; contact an admin.");
           }
-
-          let imperialOps: AnyBulkWriteOperation<ImperialCharacter>[] = [];
-          let imperialReverseOps: AnyBulkWriteOperation<ImperialCharacter>[] = [];
-          if (imperialIncs.size > 0) {
-            const imperialIds = [...imperialIncs.keys()].map((entryId) => new ObjectId(entryId));
-            const imperialDocs = await db
-              .collection<ImperialCharacter>("imperialCharacters")
-              .find({ _id: { $in: imperialIds } }, sessionOpt)
-              .project<Pick<ImperialCharacter, "_id" | "countryId" | "name">>({
-                _id: 1,
-                countryId: 1,
-                name: 1,
-              })
-              .toArray();
-            if (imperialDocs.length !== imperialIncs.size) {
-              throw internalError("Bond holder data is inconsistent; contact an admin.");
-            }
-            const imperialCurrencyMap = new Map(
-              imperialDocs.map((c) => [c._id.toString(), getHomeCurrency(c as ImperialCharacter)])
-            );
-            for (const c of imperialDocs) nameById.set(c._id.toString(), c.name as string);
-
-            const buildImperialOps = (sign: 1 | -1): AnyBulkWriteOperation<ImperialCharacter>[] =>
-              [...imperialIncs.entries()].map(([imperialIdStr, amtAnchor]) => {
-                const currency = imperialCurrencyMap.get(imperialIdStr) ?? "USD";
-                const amt = forexEnabled ? anchorToLocal(amtAnchor, currency) : amtAnchor;
-                return {
-                  updateOne: {
-                    filter: { _id: new ObjectId(imperialIdStr) },
-                    update: {
-                      $inc: buildPersonalBalanceInc(sign * amt, currency, forexEnabled),
-                      $set: { updatedAt: now },
-                    },
-                  },
-                };
-              });
-            imperialOps = buildImperialOps(1);
-            imperialReverseOps = buildImperialOps(-1);
+          for (const c of charDocs) {
+            charCurrencyMap.set(c._id.toString(), getHomeCurrency(c as Character));
+            nameById.set(c._id.toString(), c.name as string);
           }
+        }
 
-          let corpOps: AnyBulkWriteOperation<Corporation>[] = [];
-          let corpReverseOps: AnyBulkWriteOperation<Corporation>[] = [];
-          if (corpIncs.size > 0) {
-            const creditorIds = [...corpIncs.keys()].map((entryId) => new ObjectId(entryId));
-            const creditorDocs = await db
-              .collection<Corporation>("corporations")
-              .find({ _id: { $in: creditorIds } }, sessionOpt)
-              .toArray();
-            if (creditorDocs.length !== corpIncs.size) {
-              throw internalError("Bond holder data is inconsistent; contact an admin.");
-            }
-            const resolvedCreditors = creditorDocs.map((creditor) => {
-              const fxRate = fxRateForCorpFromMap(creditor, fxByCurrency);
-              const currency = (resolveCorpLiquidCurrencyCode(creditor) ?? "USD") as CurrencyCode;
-              return { creditor, fxRate, currency };
-            });
-            for (const { creditor, fxRate, currency } of resolvedCreditors) {
-              holderCorpFxByHolderId.set(creditor._id.toString(), {
-                currency,
-                fxRate,
-                doc: creditor,
-              });
-              nameById.set(creditor._id.toString(), creditor.name);
-            }
-            const buildCorpOps = (sign: 1 | -1): AnyBulkWriteOperation<Corporation>[] =>
-              [...corpIncs.entries()].map(([corpIdStr, amt]) => {
-                const info = holderCorpFxByHolderId.get(corpIdStr);
-                if (!info) {
-                  throw internalError("Bond holder data is inconsistent; contact an admin.");
-                }
-                const amtInCapital = anchorToCorpLiquidCapital(amt, info.doc, info.fxRate);
-                return {
-                  updateOne: {
-                    filter: { _id: new ObjectId(corpIdStr) },
-                    update: {
-                      $inc: { liquidCapital: sign * amtInCapital },
-                      $set: { updatedAt: now },
-                    },
-                  },
-                };
-              });
-            corpOps = buildCorpOps(1);
-            corpReverseOps = buildCorpOps(-1);
+        const imperialCurrencyMap = new Map<string, string>();
+        if (imperialIncs.size > 0) {
+          const imperialIds = [...imperialIncs.keys()].map((entryId) => new ObjectId(entryId));
+          const imperialDocs = await db
+            .collection<ImperialCharacter>("imperialCharacters")
+            .find({ _id: { $in: imperialIds } })
+            .project<Pick<ImperialCharacter, "_id" | "countryId" | "name">>({
+              _id: 1,
+              countryId: 1,
+              name: 1,
+            })
+            .toArray();
+          if (imperialDocs.length !== imperialIncs.size) {
+            throw internalError("Bond holder data is inconsistent; contact an admin.");
           }
+          for (const c of imperialDocs) {
+            imperialCurrencyMap.set(c._id.toString(), getHomeCurrency(c as ImperialCharacter));
+            nameById.set(c._id.toString(), c.name as string);
+          }
+        }
 
-          // ── Phase W: writes (debit → credits → mature) ──
-          // In transaction mode (compensate=false) any throw aborts and Mongo
-          // rolls back — no manual undo. On the standalone fallback
-          // (compensate=true) each completed write registers its reversal, and a
-          // later failure replays them in reverse so no money is created or lost.
-          const undo: Array<() => Promise<void>> = [];
-          const compensateAndThrow = async (err: unknown): Promise<never> => {
-            if (compensate) {
-              for (const revert of undo.reverse()) {
-                try {
-                  await revert();
-                } catch (compErr) {
-                  // Compensation-of-last-resort failed: the standalone deployment
-                  // is genuinely mid-failure. Surface loudly for manual
-                  // reconciliation rather than swallow a money inconsistency.
-                  Sentry.captureException(compErr, {
-                    extra: {
-                      context: "parent-bond-payoff fallback compensation failed",
-                      parentCorporationId: refreshedParent._id.toString(),
-                      targetCorporationId: target._id.toString(),
-                    },
-                  });
-                }
-              }
-            }
-            throw err;
-          };
-
-          // 1. Debit the parent (conditional). Nothing else is written yet, so a
-          //    failure here needs no compensation.
-          const debitResult = await db
+        if (corpIncs.size > 0) {
+          const creditorIds = [...corpIncs.keys()].map((entryId) => new ObjectId(entryId));
+          const creditorDocs = await db
             .collection<Corporation>("corporations")
-            .updateOne(
-              { _id: refreshedParent._id, liquidCapital: { $gte: costInParentCapital } },
-              { $inc: { liquidCapital: -costInParentCapital }, $set: { updatedAt: now } },
-              sessionOpt
-            );
-          if (debitResult.modifiedCount === 0) {
-            throw badRequest("Insufficient liquid capital (race with another transaction).");
+            .find({ _id: { $in: creditorIds } })
+            .toArray();
+          if (creditorDocs.length !== corpIncs.size) {
+            throw internalError("Bond holder data is inconsistent; contact an admin.");
           }
-          undo.push(async () => {
-            await db
-              .collection<Corporation>("corporations")
-              .updateOne(
-                { _id: refreshedParent._id },
-                { $inc: { liquidCapital: costInParentCapital }, $set: { updatedAt: now } },
-                sessionOpt
-              );
+          for (const creditor of creditorDocs) {
+            const fxRate = fxRateForCorpFromMap(creditor, fxByCurrency);
+            const currency = (resolveCorpLiquidCurrencyCode(creditor) ?? "USD") as CurrencyCode;
+            holderCorpFxByHolderId.set(creditor._id.toString(), {
+              currency,
+              fxRate,
+              doc: creditor,
+            });
+            nameById.set(creditor._id.toString(), creditor.name);
+          }
+        }
+
+        // Settle through the shared keyed payoff flow (issue #1672): the
+        // guarded parent debit lands first, one resumable credit per holder
+        // second, the per-bond maturity claims last. A later failure
+        // compensates its own prefix, so the payoff either fully completes or
+        // has no net financial effect, on every topology.
+        const holderCredits: BondPayoffHolderCredit[] = [];
+        for (const [charIdStr, amtAnchor] of charIncs) {
+          const currency = charCurrencyMap.get(charIdStr) ?? "USD";
+          holderCredits.push({
+            kind: "character",
+            holderId: new ObjectId(charIdStr),
+            field: forexEnabled ? `currencyBalances.personal.${currency}` : "cashOnHand",
+            amount: forexEnabled ? anchorToLocal(amtAnchor, currency) : amtAnchor,
           });
+        }
+        for (const [imperialIdStr, amtAnchor] of imperialIncs) {
+          const currency = imperialCurrencyMap.get(imperialIdStr) ?? "USD";
+          holderCredits.push({
+            kind: "imperial",
+            holderId: new ObjectId(imperialIdStr),
+            field: forexEnabled ? `currencyBalances.personal.${currency}` : "cashOnHand",
+            amount: forexEnabled ? anchorToLocal(amtAnchor, currency) : amtAnchor,
+          });
+        }
+        for (const [corpIdStr, amtAnchor] of corpIncs) {
+          const info = holderCorpFxByHolderId.get(corpIdStr);
+          if (!info) {
+            throw internalError("Bond holder data is inconsistent; contact an admin.");
+          }
+          holderCredits.push({
+            kind: "corp",
+            holderId: new ObjectId(corpIdStr),
+            field: "liquidCapital",
+            amount: anchorToCorpLiquidCapital(amtAnchor, info.doc, info.fxRate),
+          });
+        }
+        // Index funds hold in anchor on `cashAnchor`; autonomous NPPs on
+        // `nppInvestmentCashAnchor` (investment returns, NOT campaign funds).
+        // Same accounts and units the bondTurn coupon/maturity legs credit.
+        for (const [fundIdStr, amtAnchor] of fundIncsAnchor) {
+          holderCredits.push({
+            kind: "fund",
+            holderId: new ObjectId(fundIdStr),
+            field: "cashAnchor",
+            amount: Math.round(amtAnchor * 100) / 100,
+          });
+        }
+        for (const [nppIdStr, amtAnchor] of nppIncsAnchor) {
+          holderCredits.push({
+            kind: "npp",
+            holderId: new ObjectId(nppIdStr),
+            field: "nppInvestmentCashAnchor",
+            amount: Math.round(amtAnchor * 100) / 100,
+          });
+        }
 
-          // 2–4. Credit holders. Register each reversal only after the write lands.
-          if (charOps.length > 0) {
-            try {
-              await db.collection<Character>("characters").bulkWrite(charOps, sessionOpt);
-            } catch (err) {
-              return compensateAndThrow(err);
-            }
-            undo.push(async () => {
-              await db.collection<Character>("characters").bulkWrite(charReverseOps, sessionOpt);
-            });
-          }
-          if (imperialOps.length > 0) {
-            try {
-              await db
-                .collection<ImperialCharacter>("imperialCharacters")
-                .bulkWrite(imperialOps, sessionOpt);
-            } catch (err) {
-              return compensateAndThrow(err);
-            }
-            undo.push(async () => {
-              await db
-                .collection<ImperialCharacter>("imperialCharacters")
-                .bulkWrite(imperialReverseOps, sessionOpt);
-            });
-          }
-          if (corpOps.length > 0) {
-            try {
-              await db.collection<Corporation>("corporations").bulkWrite(corpOps, sessionOpt);
-            } catch (err) {
-              return compensateAndThrow(err);
-            }
-            undo.push(async () => {
-              await db
-                .collection<Corporation>("corporations")
-                .bulkWrite(corpReverseOps, sessionOpt);
-            });
-          }
+        const bondIds = outstandingBonds.map((b) => b._id);
+        const fingerprint = buildBondPayoffFingerprint({
+          cureMethod: "parent_payoff",
+          payerCorpId: refreshedParent._id,
+          issuerCorpId: target._id,
+          debitLiquidCapital: costInParentCapital,
+          bonds: bondIds,
+          holders: holderCredits.map((h) => ({
+            kind: h.kind,
+            holderId: h.holderId,
+            amount: h.amount,
+          })),
+        });
 
-          // 5. Mature the bonds last: on failure there is nothing to un-mature
-          //    (the only write whose reversal would need prior-state capture).
-          let matured: { modifiedCount: number };
-          try {
-            matured = await db.collection<Bond>("bonds").updateMany(
-              { _id: { $in: bondIds }, corporationId: target._id, matured: false },
-              {
-                $set: {
-                  matured: true,
-                  marketPrice: 1,
-                  defaulted: false,
-                  defaultCure: {
-                    cureMethod: "parent_payoff" as const,
-                    curedAtTurn: cureTurn,
-                  },
-                  updatedAt: now,
-                },
-              },
-              sessionOpt
-            );
-          } catch (err) {
-            return compensateAndThrow(err);
-          }
-          if (matured.modifiedCount !== bondIds.length) {
-            return compensateAndThrow(
-              badRequest("Bond state changed during payoff. Refresh and try again.")
-            );
-          }
-        };
-
+        // Map a keyed-settlement failure back onto the historical surface: a
+        // lost parent-funds race is the 400 race refusal, a lost maturity race
+        // the 400 bond-state refusal, a vanished holder the 500 inconsistent
+        // error. The primitive already compensated any applied prefix.
         try {
-          await runWithOptionalTransaction(
-            (session) => applyPayoff(session, false),
-            () => applyPayoff(undefined, true)
-          );
+          await applyBondPayoffSpend(db, {
+            payerCorpId: refreshedParent._id,
+            issuerCorpId: target._id,
+            debitLiquidCapital: costInParentCapital,
+            holders: holderCredits,
+            bonds: outstandingBonds.map((b) => ({
+              bondId: b._id,
+              priorMarketPrice: b.marketPrice,
+              priorDefaulted: b.defaulted ?? false,
+            })),
+            cureMethod: "parent_payoff",
+            onlyDefaulted: false,
+            curedAtTurn: cureTurn,
+            now,
+            fingerprint,
+            ...(headerKey !== null ? { idempotencyKey: headerKey } : {}),
+          });
         } catch (err) {
           if (err instanceof Error && err.message === "RATE_UNAVAILABLE") {
             return NextResponse.json(
@@ -522,32 +462,100 @@ export async function POST(request: Request, { params }: RouteParams) {
               { status: 503 }
             );
           }
+          if (err instanceof MoneyFlowTerminalError) {
+            return NextResponse.json(
+              { error: "Payoff already settled; start a new attempt with a new key." },
+              { status: 409 }
+            );
+          }
+          if (err instanceof MoneyFlowKeyConflictError) {
+            return NextResponse.json(
+              { error: "Idempotency key was reused for a different payoff." },
+              { status: 409 }
+            );
+          }
+          const message = err instanceof Error ? err.message : "";
+          if (message.startsWith(BOND_PAYOFF_FUNDS)) {
+            return NextResponse.json(
+              badRequest("Insufficient liquid capital (race with another transaction).").toJson(),
+              { status: 400 }
+            );
+          }
+          if (message.startsWith(BOND_PAYOFF_MATURE)) {
+            return NextResponse.json(
+              badRequest("Bond state changed during payoff. Refresh and try again.").toJson(),
+              { status: 400 }
+            );
+          }
+          if (message.startsWith(BOND_PAYOFF_HOLDER)) {
+            throw internalError("Bond holder data is inconsistent; contact an admin.");
+          }
           throw err;
         }
 
         if (pendingMaturityTxs.length > 0) {
           const currentTurn = cureTurn;
-          const txEntries = pendingMaturityTxs.map((t) => {
+          const txEntries = pendingMaturityTxs.flatMap((t) => {
             const bondRate = t.bondCcy ? (fxByCurrency.get(t.bondCcy) ?? 1) : 1;
             const bondLocalAmount = t.faceAnchor * (bondRate > 0 ? bondRate : 1);
 
-            if (t.holderType === "corp") {
-              const info = holderCorpFxByHolderId.get(t.holderId);
-              const lcAmount = anchorToCorpLiquidCapital(
-                t.faceAnchor,
-                info?.doc,
-                info?.fxRate ?? 1
-              );
-              const lcCurrency = info?.currency ?? "USD";
-              return {
+            // Autonomous NPP investment returns are deliberately kept out of
+            // the tx log, matching the NPP investment-account isolation the
+            // bondTurn coupon/maturity legs already apply.
+            if (t.holderType === "npp") return [];
+
+            if (t.holderType === "corp" || t.holderType === "fund") {
+              // A fund holds in anchor and has no corp FX doc, so it logs the
+              // anchor amount directly; a corporation logs in its own liquid
+              // currency.
+              const info =
+                t.holderType === "corp" ? holderCorpFxByHolderId.get(t.holderId) : undefined;
+              const lcAmount =
+                t.holderType === "fund"
+                  ? t.faceAnchor
+                  : anchorToCorpLiquidCapital(t.faceAnchor, info?.doc, info?.fxRate ?? 1);
+              const lcCurrency = t.holderType === "fund" ? "USD" : (info?.currency ?? "USD");
+              return [
+                {
+                  type: "bond_maturity" as const,
+                  turn: currentTurn,
+                  createdAt: now,
+                  subjectType: "corporation" as const,
+                  subjectId: new ObjectId(t.holderId),
+                  subjectName: nameById.get(t.holderId) ?? "(holder)",
+                  amount: Math.round(lcAmount * 100) / 100,
+                  currencyCode: lcCurrency as CurrencyCode,
+                  counterpartyType: "corporation" as const,
+                  counterpartyId: target._id,
+                  counterpartyName: target.name,
+                  meta: {
+                    bondId: t.bondId,
+                    units: t.units,
+                    couponRate: t.couponRate,
+                    source: "parent_bond_payoff",
+                    parentCorporationId: refreshedParent._id.toString(),
+                    ...(t.holderType === "fund" ? { fundId: t.holderId } : {}),
+                    ...(t.bondCcy
+                      ? {
+                          bondCurrency: t.bondCcy,
+                          bondAmount: Math.round(bondLocalAmount * 100) / 100,
+                        }
+                      : {}),
+                  },
+                },
+              ];
+            }
+
+            return [
+              {
                 type: "bond_maturity" as const,
                 turn: currentTurn,
                 createdAt: now,
-                subjectType: "corporation" as const,
+                subjectType: "character" as const,
                 subjectId: new ObjectId(t.holderId),
                 subjectName: nameById.get(t.holderId) ?? "(holder)",
-                amount: Math.round(lcAmount * 100) / 100,
-                currencyCode: lcCurrency as CurrencyCode,
+                amount: Math.round(bondLocalAmount * 100) / 100,
+                currencyCode: (t.bondCcy ?? "USD") as CurrencyCode,
                 counterpartyType: "corporation" as const,
                 counterpartyId: target._id,
                 counterpartyName: target.name,
@@ -557,37 +565,10 @@ export async function POST(request: Request, { params }: RouteParams) {
                   couponRate: t.couponRate,
                   source: "parent_bond_payoff",
                   parentCorporationId: refreshedParent._id.toString(),
-                  ...(t.bondCcy
-                    ? {
-                        bondCurrency: t.bondCcy,
-                        bondAmount: Math.round(bondLocalAmount * 100) / 100,
-                      }
-                    : {}),
+                  ...(t.holderType === "imperial" ? { imperial: true } : {}),
                 },
-              };
-            }
-
-            return {
-              type: "bond_maturity" as const,
-              turn: currentTurn,
-              createdAt: now,
-              subjectType: "character" as const,
-              subjectId: new ObjectId(t.holderId),
-              subjectName: nameById.get(t.holderId) ?? "(holder)",
-              amount: Math.round(bondLocalAmount * 100) / 100,
-              currencyCode: (t.bondCcy ?? "USD") as CurrencyCode,
-              counterpartyType: "corporation" as const,
-              counterpartyId: target._id,
-              counterpartyName: target.name,
-              meta: {
-                bondId: t.bondId,
-                units: t.units,
-                couponRate: t.couponRate,
-                source: "parent_bond_payoff",
-                parentCorporationId: refreshedParent._id.toString(),
-                ...(t.holderType === "imperial" ? { imperial: true } : {}),
               },
-            };
+            ];
           });
           const thresholds = await loadTxThresholds(db);
           await emitTxBulk(db, txEntries, thresholds);

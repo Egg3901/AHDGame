@@ -1,7 +1,11 @@
 /**
- * Regression tests for POST /api/corporations/[id]/bond-default/cash —
- * specifically the financial-ledger emission added to fix the gap where
- * defaulted-bond cash payoffs moved millions silently with no tx rows.
+ * Keyed-flow tests for POST /api/corporations/[id]/bond-default/cash
+ * (issue #1672): defaulted bonds cure through the shared bondPayoffSpend
+ * primitive (guarded liquid+escrow debit, one resumable credit per holder,
+ * per-bond maturity claims over still-defaulted bonds), so these tests
+ * assert the keyed surface — invalid key, replay, conflict, same-key
+ * partial recovery — plus the escrow split, the fund/NPP coverage (#809),
+ * and the preserved status/body contract.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { ObjectId } from "mongodb";
@@ -39,38 +43,29 @@ vi.mock("@/lib/financialTxLog/emit", () => ({
 vi.mock("@/lib/gameState", () => ({
   getGameState: vi.fn().mockResolvedValue({ currentTurn: 444 }),
 }));
+vi.mock("@/lib/db/transactionSupport", () => ({
+  assertTransactionSupportAtBoot: vi.fn().mockResolvedValue(false),
+}));
 
 let db: MockDb;
-let endSessionMock: ReturnType<typeof vi.fn>;
 
 beforeEach(async () => {
   vi.clearAllMocks();
-  endSessionMock = vi.fn().mockResolvedValue(undefined);
   db = createMockDb();
   for (const name of [
     "bonds",
     "corporations",
     "characters",
     "imperialCharacters",
-    "exchangeRates",
     "indexFunds",
     "npps",
+    "nonAtomicMoneyFlowReceipts",
+    "exchangeRates",
   ]) {
     db.collection(name);
   }
-  db.collectionMocks["bonds"]!.updateMany.mockResolvedValue({
-    modifiedCount: 1,
-    matchedCount: 1,
-  } as never);
   const { getDb } = await import("@/lib/mongodb");
   vi.mocked(getDb).mockResolvedValue(db as never);
-  const { getMongoClient } = await import("@/lib/mongodb");
-  vi.mocked(getMongoClient).mockResolvedValue({
-    startSession: () => ({
-      withTransaction: vi.fn(async (callback: () => Promise<unknown>) => callback()),
-      endSession: endSessionMock,
-    }),
-  } as never);
   const { requireBasicAuth } = await import("@/lib/api/requireAuth");
   vi.mocked(requireBasicAuth).mockResolvedValue({
     ok: true,
@@ -97,531 +92,324 @@ function makeCursor(docs: unknown[]) {
   };
 }
 
-describe("POST /api/corporations/[id]/bond-default/cash — ledger emission", () => {
-  it("emits bond_maturity tx rows for every holder receiving face value", async () => {
-    // Pre-fix: the cash route deducted liquidCapital from the issuer corp,
-    // credited each holder's wallet/lc, and matured the bonds — all without
-    // a single financialTxLog row. A ~$193M default cure flow disappeared
-    // from the audit trail. This pins the new emit so every holder receives
-    // a `bond_maturity` row.
-    const corpId = new ObjectId();
-    const charId = new ObjectId();
-    const imperialId = new ObjectId();
-    const corpHolderId = new ObjectId();
-    const bondId = new ObjectId();
+interface Fixture {
+  corpId: ObjectId;
+  charId: ObjectId;
+  imperialId: ObjectId;
+  holderCorpId: ObjectId;
+  fundId: ObjectId;
+  nppId: ObjectId;
+  bondA: Record<string, unknown>;
+  bondB: Record<string, unknown>;
+}
 
-    const corporation = {
-      _id: corpId,
-      name: "Test Issuer",
-      countryId: "US",
-      liquidCapital: 1_000_000,
-      liquidCurrencyCode: "USD",
-    };
+/**
+ * Two DEFAULTED USD bonds, face 17_000 + 5_000 = 22_000. The issuer holds
+ * 20_000 liquid, so the 2_000 remainder draws from the positive buyback
+ * escrow. Holder units x $1k face: char 12, imperial 4, corp 2, fund 2,
+ * npp 1 (21_000 credited; 1_000 of bond-A float retired silently).
+ */
+async function setupFixture(overrides: Record<string, unknown> = {}): Promise<Fixture> {
+  const corpId = new ObjectId();
+  const charId = new ObjectId();
+  const imperialId = new ObjectId();
+  const holderCorpId = new ObjectId();
+  const fundId = new ObjectId();
+  const nppId = new ObjectId();
+  const bondAId = new ObjectId();
+  const bondBId = new ObjectId();
 
-    const { resolveCorporation } = await import("@/lib/api/corporations/resolveQuery");
-    vi.mocked(resolveCorporation).mockResolvedValue({
-      ok: true,
-      corporation,
-    } as never);
-    db.collectionMocks["corporations"]!.findOne.mockResolvedValue(corporation as never);
+  const corporation = {
+    _id: corpId,
+    name: "Debtor Corp",
+    countryId: "US",
+    liquidCapital: 20_000,
+    liquidCurrencyCode: "USD",
+    shareEscrowBalance: 50_000,
+    ...overrides,
+  };
 
-    const defaultedBond = {
-      _id: bondId,
-      corporationId: corpId,
-      currencyCode: "USD",
-      matured: false,
-      defaulted: true,
-      couponRate: 8,
-      holders: [
-        { characterId: charId, units: 10 },
-        { imperialCharacterId: imperialId, units: 5 },
-        { corporationId: corpHolderId, units: 3 },
-      ],
-    };
+  const { resolveCorporation } = await import("@/lib/api/corporations/resolveQuery");
+  vi.mocked(resolveCorporation).mockResolvedValue({ ok: true, corporation } as never);
+  db.collectionMocks["corporations"]!.findOne.mockResolvedValue(corporation as never);
 
-    db.collectionMocks["bonds"]!.find.mockReturnValue(makeCursor([defaultedBond]));
-    // FX rates — empty (USD bonds, no conversion)
-    db.collectionMocks["exchangeRates"]!.find.mockReturnValue(makeCursor([]));
-    // Holder docs for currency lookup
-    db.collectionMocks["characters"]!.find.mockReturnValue({
-      project: vi.fn().mockReturnValue({
-        toArray: vi.fn().mockResolvedValue([{ _id: charId, countryId: "US" }]),
+  const bondA = {
+    _id: bondAId,
+    corporationId: corpId,
+    currencyCode: "USD",
+    matured: false,
+    defaulted: true,
+    couponRate: 6,
+    marketPrice: 0.4,
+    totalIssued: 17_000,
+    publicFloat: 1,
+    holders: [
+      { characterId: charId, units: 12 },
+      { imperialCharacterId: imperialId, units: 4 },
+    ],
+  };
+  const bondB = {
+    _id: bondBId,
+    corporationId: corpId,
+    currencyCode: "USD",
+    matured: false,
+    defaulted: true,
+    couponRate: 5,
+    marketPrice: 0.3,
+    totalIssued: 5_000,
+    publicFloat: 0,
+    holders: [
+      { corporationId: holderCorpId, units: 2 },
+      { fundId, units: 2 },
+      { nppId, units: 1 },
+    ],
+  };
+  db.collectionMocks["bonds"]!.find.mockReturnValue(makeCursor([bondA, bondB]));
+  db.collectionMocks["exchangeRates"]!.find.mockReturnValue(makeCursor([]));
+
+  db.collectionMocks["characters"]!.find.mockReturnValue({
+    project: vi.fn().mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([{ _id: charId, countryId: "US", name: "Alice" }]),
+    }),
+  });
+  db.collectionMocks["imperialCharacters"]!.find.mockReturnValue({
+    project: vi.fn().mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([{ _id: imperialId, countryId: "US", name: "Imperator" }]),
+    }),
+  });
+  db.collectionMocks["corporations"]!.find.mockReturnValue(
+    makeCursor([
+      { _id: holderCorpId, name: "Holder Corp", countryId: "US", liquidCurrencyCode: "USD" },
+    ])
+  );
+
+  return { corpId, charId, imperialId, holderCorpId, fundId, nppId, bondA, bondB };
+}
+
+function postCash(corpId: ObjectId, headers?: Record<string, string>) {
+  return import("./route").then(({ POST }) =>
+    POST(
+      new Request(`http://localhost/api/corporations/${corpId.toString()}/bond-default/cash`, {
+        method: "POST",
+        headers: { ...(headers ?? {}) },
       }),
-    });
-    db.collectionMocks["imperialCharacters"]!.find.mockReturnValue({
-      project: vi.fn().mockReturnValue({
-        toArray: vi.fn().mockResolvedValue([{ _id: imperialId, countryId: "US" }]),
-      }),
-    });
-    // Holder corp lookup
-    db.collectionMocks["corporations"]!.find.mockReturnValue(
-      makeCursor([
-        {
-          _id: corpHolderId,
-          name: "Holder Corp",
-          countryId: "US",
-          liquidCurrencyCode: "USD",
-        },
-      ])
-    );
+      { params: Promise.resolve({ id: corpId.toString() }) }
+    )
+  );
+}
 
-    const req = new Request(
-      `http://localhost/api/corporations/${corpId.toString()}/bond-default/cash`,
-      { method: "POST" }
-    );
-    const { POST } = await import("./route");
-    const res = await POST(req, { params: Promise.resolve({ id: corpId.toString() }) });
+describe("POST /api/corporations/[id]/bond-default/cash — keyed flow", () => {
+  it("cures defaulted bonds with a liquid+escrow debit and pays every holder kind", async () => {
+    const f = await setupFixture();
+
+    const res = await postCash(f.corpId);
     expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ success: true, paid: 22_000, bondsMatured: 2 });
 
+    // Liquid covers 20_000, the positive escrow tops up the 2_000 remainder
+    // in the same atomic payer write.
+    const debitCall = db.collectionMocks["corporations"]!.updateOne.mock.calls.find(
+      (call) => (call[1] as { $inc?: { liquidCapital?: number } }).$inc?.liquidCapital === -20_000
+    );
+    expect(debitCall).toBeDefined();
+    expect(debitCall?.[0]).toEqual(
+      expect.objectContaining({
+        _id: f.corpId,
+        liquidCapital: { $gte: 20_000 },
+        shareEscrowBalance: { $gte: 2_000 },
+      })
+    );
+    expect(debitCall?.[1]).toEqual(
+      expect.objectContaining({
+        $inc: expect.objectContaining({ liquidCapital: -20_000, shareEscrowBalance: -2_000 }),
+      })
+    );
+
+    // Holder credits land on each holder's own account and field.
+    expect(db.collectionMocks["characters"]!.updateOne.mock.calls[0]?.[1]).toEqual(
+      expect.objectContaining({ $inc: expect.objectContaining({ cashOnHand: 12_000 }) })
+    );
+    expect(db.collectionMocks["imperialCharacters"]!.updateOne.mock.calls[0]?.[1]).toEqual(
+      expect.objectContaining({ $inc: expect.objectContaining({ cashOnHand: 4_000 }) })
+    );
+    expect(db.collectionMocks["indexFunds"]!.updateOne.mock.calls[0]?.[1]).toEqual(
+      expect.objectContaining({ $inc: expect.objectContaining({ cashAnchor: 2_000 }) })
+    );
+    expect(db.collectionMocks["npps"]!.updateOne.mock.calls[0]?.[1]).toEqual(
+      expect.objectContaining({
+        $inc: expect.objectContaining({ nppInvestmentCashAnchor: 1_000 }),
+      })
+    );
+
+    // Cash cures claim only still-defaulted bonds, stamped with the cure.
+    const bondCalls = db.collectionMocks["bonds"]!.updateOne.mock.calls;
+    expect(bondCalls).toHaveLength(2);
+    for (const call of bondCalls) {
+      expect(call[0]).toEqual(expect.objectContaining({ matured: false, defaulted: true }));
+      expect(call[1]).toEqual(
+        expect.objectContaining({
+          $set: expect.objectContaining({
+            matured: true,
+            defaulted: false,
+            defaultCure: { cureMethod: "cash", curedAtTurn: 444 },
+          }),
+        })
+      );
+    }
+
+    const receipts = db.collectionMocks["nonAtomicMoneyFlowReceipts"]!;
+    expect((receipts.insertOne.mock.calls[0]?.[0] as { fingerprint: string }).fingerprint).toMatch(
+      /^bond-payoff:cash:/
+    );
+
+    // Ledger: fund payout logged, NPP investment returns excluded.
     const { emitTxBulk } = await import("@/lib/financialTxLog/emit");
-    expect(vi.mocked(emitTxBulk)).toHaveBeenCalled();
-    const allEntries = vi.mocked(emitTxBulk).mock.calls.flatMap((c) => c[1] as unknown[]);
-
-    const charEntry = allEntries.find(
-      (e: unknown) =>
-        (e as { type?: string }).type === "bond_maturity" &&
-        (e as { subjectId?: ObjectId }).subjectId?.toString() === charId.toString()
-    ) as
-      | {
-          type: string;
-          subjectType: string;
-          subjectId: ObjectId;
-          amount: number;
-          currencyCode: string;
-          meta?: { bondId?: string; units?: number };
-        }
-      | undefined;
-    expect(charEntry).toBeDefined();
-    expect(charEntry!.subjectType).toBe("character");
-    expect(charEntry!.amount).toBeGreaterThan(0);
-    expect(charEntry!.currencyCode).toBe("USD");
-    expect(charEntry!.meta?.bondId).toBe(bondId.toString());
-    expect(charEntry!.meta?.units).toBe(10);
-
-    const imperialEntry = allEntries.find(
-      (e: unknown) =>
-        (e as { type?: string }).type === "bond_maturity" &&
-        (e as { subjectId?: ObjectId }).subjectId?.toString() === imperialId.toString()
-    ) as
-      | { subjectType: string; amount: number; meta?: { units?: number; imperial?: boolean } }
-      | undefined;
-    expect(imperialEntry).toBeDefined();
-    expect(imperialEntry!.subjectType).toBe("character");
-    expect(imperialEntry!.meta?.imperial).toBe(true);
-    expect(imperialEntry!.meta?.units).toBe(5);
-
-    const corpHolderEntry = allEntries.find(
-      (e: unknown) =>
-        (e as { type?: string }).type === "bond_maturity" &&
-        (e as { subjectType?: string }).subjectType === "corporation" &&
-        (e as { subjectId?: ObjectId }).subjectId?.toString() === corpHolderId.toString()
-    ) as
-      | {
-          subjectType: string;
-          subjectName: string;
-          currencyCode: string;
-          amount: number;
-          meta?: {
-            units?: number;
-            bondCurrency?: string;
-            bondAmount?: number;
-          };
-        }
-      | undefined;
-    expect(corpHolderEntry).toBeDefined();
-    expect(corpHolderEntry!.subjectName).toBe("Holder Corp");
-    expect(corpHolderEntry!.meta?.units).toBe(3);
-    // Same-currency fixture (USD bond, USD holder): row amount and meta.bondAmount
-    // are both in USD and should match the same numeric value.
-    expect(corpHolderEntry!.currencyCode).toBe("USD");
-    expect(corpHolderEntry!.meta?.bondCurrency).toBe("USD");
-    expect(corpHolderEntry!.meta?.bondAmount).toBeCloseTo(corpHolderEntry!.amount);
+    const rows = vi.mocked(emitTxBulk).mock.calls[0]?.[1] as Array<{
+      subjectId: ObjectId;
+      subjectType: string;
+      amount: number;
+      meta?: { source?: string; fundId?: string; units?: number };
+    }>;
+    expect(rows).toHaveLength(4);
+    expect(rows.every((r) => r.meta?.source === "default_cash_payoff")).toBe(true);
+    const fundRow = rows.find((r) => r.subjectId.toString() === f.fundId.toString())!;
+    expect(fundRow.subjectType).toBe("corporation");
+    expect(fundRow.amount).toBe(2_000);
+    expect(fundRow.meta?.fundId).toBe(f.fundId.toString());
+    expect(rows.some((r) => r.subjectId.toString() === f.nppId.toString())).toBe(false);
   });
 
-  it("preserves defaultedAtTurn and stamps defaultCure on cured bonds", async () => {
-    // Pre-fix: the cure routes did `$unset: { defaultedAtTurn: "" }`, erasing
-    // the bond's default history from the doc. Post-fix: the historical mark
-    // stays, and a defaultCure object is added so the Bonds tab can render a
-    // "DEFAULT CURED" badge instead of a bare MATURED chip.
-    const corpId = new ObjectId();
-    const charId = new ObjectId();
-    const corporation = {
-      _id: corpId,
-      name: "Test Issuer",
-      countryId: "US",
-      liquidCapital: 1_000_000,
-      liquidCurrencyCode: "USD",
-    };
-    const { resolveCorporation } = await import("@/lib/api/corporations/resolveQuery");
-    vi.mocked(resolveCorporation).mockResolvedValue({ ok: true, corporation } as never);
-    db.collectionMocks["corporations"]!.findOne.mockResolvedValue(corporation as never);
+  it("rejects an invalid Idempotency-Key header without touching money", async () => {
+    const f = await setupFixture();
 
-    db.collectionMocks["bonds"]!.find.mockReturnValue(
-      makeCursor([
-        {
-          _id: new ObjectId(),
-          corporationId: corpId,
-          currencyCode: "USD",
-          matured: false,
-          defaulted: true,
-          couponRate: 8,
-          holders: [{ characterId: charId, units: 5 }],
-        },
-      ])
-    );
-    db.collectionMocks["exchangeRates"]!.find.mockReturnValue(makeCursor([]));
-    db.collectionMocks["characters"]!.find.mockReturnValue({
-      project: vi.fn().mockReturnValue({
-        toArray: vi.fn().mockResolvedValue([{ _id: charId, countryId: "US" }]),
-      }),
-    });
-
-    const req = new Request(
-      `http://localhost/api/corporations/${corpId.toString()}/bond-default/cash`,
-      { method: "POST" }
-    );
-    const { POST } = await import("./route");
-    const res = await POST(req, { params: Promise.resolve({ id: corpId.toString() }) });
-    expect(res.status).toBe(200);
-
-    const updateManyCall = db.collectionMocks["bonds"]!.updateMany.mock.calls[0];
-    expect(updateManyCall).toBeDefined();
-    const updateOp = updateManyCall![1] as {
-      $set: {
-        matured?: boolean;
-        marketPrice?: number;
-        defaulted?: boolean;
-        defaultCure?: { cureMethod?: string; curedAtTurn?: number };
-      };
-      $unset?: Record<string, string>;
-    };
-    expect(updateOp.$set.matured).toBe(true);
-    expect(updateOp.$set.marketPrice).toBe(1);
-    expect(updateOp.$set.defaulted).toBe(false);
-    expect(updateOp.$set.defaultCure?.cureMethod).toBe("cash");
-    expect(updateOp.$set.defaultCure?.curedAtTurn).toBe(444);
-    // Critical: defaultedAtTurn must NOT be unset — the historical mark stays.
-    expect(updateOp.$unset?.defaultedAtTurn).toBeUndefined();
-  });
-
-  it("returns 400 (no money moved) when atomic debit loses the race", async () => {
-    const corpId = new ObjectId();
-    const corporation = {
-      _id: corpId,
-      name: "Test",
-      countryId: "US",
-      liquidCapital: 1_000_000,
-      liquidCurrencyCode: "USD",
-    };
-    const { resolveCorporation } = await import("@/lib/api/corporations/resolveQuery");
-    vi.mocked(resolveCorporation).mockResolvedValue({ ok: true, corporation } as never);
-    db.collectionMocks["corporations"]!.findOne.mockResolvedValue(corporation as never);
-
-    db.collectionMocks["bonds"]!.find.mockReturnValue(
-      makeCursor([
-        {
-          _id: new ObjectId(),
-          corporationId: corpId,
-          currencyCode: "USD",
-          matured: false,
-          defaulted: true,
-          couponRate: 8,
-          holders: [{ characterId: new ObjectId(), units: 5 }],
-        },
-      ])
-    );
-    db.collectionMocks["exchangeRates"]!.find.mockReturnValue(makeCursor([]));
-    // Atomic debit guard: modifiedCount 0 = lost the race.
-    db.collectionMocks["corporations"]!.updateOne.mockResolvedValueOnce({
-      modifiedCount: 0,
-      matchedCount: 0,
-    } as never);
-
-    const req = new Request(
-      `http://localhost/api/corporations/${corpId.toString()}/bond-default/cash`,
-      { method: "POST" }
-    );
-    const { POST } = await import("./route");
-    const res = await POST(req, { params: Promise.resolve({ id: corpId.toString() }) });
+    const res = await postCash(f.corpId, { "Idempotency-Key": "x".repeat(129) });
     expect(res.status).toBe(400);
-    // No bond updates and no holder writes should have fired.
-    expect(db.collectionMocks["bonds"]!.updateMany).not.toHaveBeenCalled();
+    expect(((await res.json()) as { error: string }).error).toBe("Invalid Idempotency-Key header");
+    expect(db.collectionMocks["corporations"]!.updateOne).not.toHaveBeenCalled();
+    expect(db.collectionMocks["nonAtomicMoneyFlowReceipts"]!.insertOne).not.toHaveBeenCalled();
   });
 
-  it("relies on transaction rollback instead of issuing a manual refund on post-debit failure", async () => {
-    const corpId = new ObjectId();
-    const charId = new ObjectId();
-    const corporation = {
-      _id: corpId,
-      name: "Test Issuer",
-      countryId: "US",
-      liquidCapital: 1_000_000,
-      liquidCurrencyCode: "USD",
-    };
-    const { resolveCorporation } = await import("@/lib/api/corporations/resolveQuery");
-    vi.mocked(resolveCorporation).mockResolvedValue({ ok: true, corporation } as never);
-    db.collectionMocks["corporations"]!.findOne.mockResolvedValue(corporation as never);
+  it("replays the same Idempotency-Key without moving money again", async () => {
+    const f = await setupFixture();
+    const headers = { "Idempotency-Key": "cash-payoff-replay" };
 
-    db.collectionMocks["bonds"]!.find.mockReturnValue(
-      makeCursor([
-        {
-          _id: new ObjectId(),
-          corporationId: corpId,
-          currencyCode: "USD",
-          matured: false,
-          defaulted: true,
-          couponRate: 8,
-          totalIssued: 10_000,
-          holders: [{ characterId: charId, units: 10 }],
-        },
-      ])
-    );
-    db.collectionMocks["exchangeRates"]!.find.mockReturnValue(makeCursor([]));
-    db.collectionMocks["characters"]!.find.mockReturnValue({
-      project: vi.fn().mockReturnValue({
-        toArray: vi.fn().mockResolvedValue([{ _id: charId, countryId: "US", name: "Alice" }]),
-      }),
+    const first = await postCash(f.corpId, headers);
+    expect(first.status).toBe(200);
+
+    const receipts = db.collectionMocks["nonAtomicMoneyFlowReceipts"]!;
+    const fingerprint = (receipts.insertOne.mock.calls[0]?.[0] as { fingerprint: string })
+      .fingerprint;
+    receipts.insertOne.mockRejectedValueOnce({ code: 11000 });
+    receipts.findOne.mockResolvedValue({
+      _id: "cash-payoff-replay",
+      status: "completed",
+      fingerprint,
     });
 
-    // Initial debit succeeds (modifiedCount 1). Holder credit then throws.
-    db.collectionMocks["corporations"]!.updateOne.mockResolvedValue({
-      modifiedCount: 1,
+    const writes = db.collectionMocks["corporations"]!.updateOne.mock.calls.length;
+    const second = await postCash(f.corpId, headers);
+    expect(second.status).toBe(200);
+    expect(db.collectionMocks["corporations"]!.updateOne.mock.calls.length).toBe(writes);
+  });
+
+  it("maps a reused key for a different payoff to 409 without moving money", async () => {
+    const f = await setupFixture();
+    const receipts = db.collectionMocks["nonAtomicMoneyFlowReceipts"]!;
+    receipts.insertOne.mockRejectedValueOnce({ code: 11000 });
+    receipts.findOne.mockResolvedValue({
+      _id: "cash-payoff-conflict",
+      status: "completed",
+      fingerprint: "bond-payoff:cash:something-else",
+    });
+
+    const res = await postCash(f.corpId, { "Idempotency-Key": "cash-payoff-conflict" });
+    expect(res.status).toBe(409);
+    expect(((await res.json()) as { error: string }).error).toContain("different payoff");
+    expect(db.collectionMocks["corporations"]!.updateOne).not.toHaveBeenCalled();
+    expect(db.collectionMocks["bonds"]!.updateOne).not.toHaveBeenCalled();
+  });
+
+  it("resumes under the same key after a mid-payoff crash instead of conflicting", async () => {
+    const f = await setupFixture();
+    const headers = { "Idempotency-Key": "cash-payoff-crash" };
+    db.collectionMocks["bonds"]!.updateOne.mockResolvedValueOnce({
       matchedCount: 1,
-    } as never);
-    db.collectionMocks["characters"]!.bulkWrite.mockRejectedValueOnce(
-      new Error("Simulated DB write failure")
-    );
+      modifiedCount: 1,
+    });
+    db.collectionMocks["bonds"]!.updateOne.mockRejectedValueOnce(new Error("INJECTED_CRASH"));
 
-    const req = new Request(
-      `http://localhost/api/corporations/${corpId.toString()}/bond-default/cash`,
-      { method: "POST" }
-    );
-    const { POST } = await import("./route");
-    const res = await POST(req, { params: Promise.resolve({ id: corpId.toString() }) });
-    // Outer catch turns the rethrown error into a 500.
-    expect(res.status).toBe(500);
+    const crashed = await postCash(f.corpId, headers);
+    expect(crashed.status).toBe(500);
 
-    const calls = db.collectionMocks["corporations"]!.updateOne.mock.calls;
-    expect(calls).toHaveLength(1);
-    const debitCall = calls[0][1] as { $inc?: { liquidCapital?: number } };
-    expect(debitCall.$inc?.liquidCapital).toBeLessThan(0);
-    expect(endSessionMock).toHaveBeenCalled();
-  });
-
-  it("aborts the transaction when a referenced holder record is missing", async () => {
-    const corpId = new ObjectId();
-    const missingCharId = new ObjectId();
-    const corporation = {
-      _id: corpId,
-      name: "Test Issuer",
-      countryId: "US",
-      liquidCapital: 1_000_000,
-      liquidCurrencyCode: "USD",
+    const receipts = db.collectionMocks["nonAtomicMoneyFlowReceipts"]!;
+    const firstInsert = receipts.insertOne.mock.calls[0]?.[0] as {
+      _id: string;
+      fingerprint: string;
     };
-    const { resolveCorporation } = await import("@/lib/api/corporations/resolveQuery");
-    vi.mocked(resolveCorporation).mockResolvedValue({ ok: true, corporation } as never);
-    db.collectionMocks["corporations"]!.findOne.mockResolvedValue(corporation as never);
-
-    db.collectionMocks["bonds"]!.find.mockReturnValue(
-      makeCursor([
-        {
-          _id: new ObjectId(),
-          corporationId: corpId,
-          currencyCode: "USD",
-          matured: false,
-          defaulted: true,
-          couponRate: 8,
-          totalIssued: 5_000,
-          holders: [{ characterId: missingCharId, units: 5 }],
-        },
-      ])
+    const planUpdate = receipts.updateOne.mock.calls.find(
+      (call) => (call[1] as { $set?: { bondPayoffPlan?: unknown } }).$set?.bondPayoffPlan
     );
-    db.collectionMocks["exchangeRates"]!.find.mockReturnValue(makeCursor([]));
-    db.collectionMocks["characters"]!.find.mockReturnValue({
-      project: vi.fn().mockReturnValue({
-        toArray: vi.fn().mockResolvedValue([]),
-      }),
+    expect(planUpdate).toBeDefined();
+
+    // Only bond B is still defaulted on the retry: the shrunken fingerprint
+    // must resume the stored plan under the same key, not 409.
+    db.collectionMocks["bonds"]!.find.mockReturnValue(makeCursor([f.bondB]));
+    receipts.insertOne.mockRejectedValueOnce({ code: 11000 });
+    receipts.findOne.mockResolvedValue({
+      _id: firstInsert._id,
+      status: "in_progress",
+      fingerprint: firstInsert.fingerprint,
+      bondPayoffPlan: (planUpdate![1] as { $set: { bondPayoffPlan: unknown } }).$set.bondPayoffPlan,
     });
 
-    const req = new Request(
-      `http://localhost/api/corporations/${corpId.toString()}/bond-default/cash`,
-      { method: "POST" }
+    const retry = await postCash(f.corpId, headers);
+    expect(retry.status).toBe(200);
+    const settled = receipts.updateOne.mock.calls.filter(
+      (call) => (call[1] as { $set?: { status?: string } }).$set?.status === "completed"
     );
-    const { POST } = await import("./route");
-    const res = await POST(req, { params: Promise.resolve({ id: corpId.toString() }) });
-    expect(res.status).toBe(500);
-    expect(db.collectionMocks["bonds"]!.updateMany).toHaveBeenCalledTimes(1);
-    expect(db.collectionMocks["characters"]!.bulkWrite).not.toHaveBeenCalled();
+    expect(settled.length).toBeGreaterThan(0);
+  });
+
+  it("returns 400 with no writes when liquid plus escrow cannot cover the cost", async () => {
+    const f = await setupFixture({ liquidCapital: 1_000, shareEscrowBalance: 100 });
+
+    const res = await postCash(f.corpId);
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { error: string }).error).toContain("Insufficient");
+    expect(db.collectionMocks["corporations"]!.updateOne).not.toHaveBeenCalled();
+    expect(db.collectionMocks["bonds"]!.updateOne).not.toHaveBeenCalled();
     const { emitTxBulk } = await import("@/lib/financialTxLog/emit");
     expect(vi.mocked(emitTxBulk)).not.toHaveBeenCalled();
-    expect(endSessionMock).toHaveBeenCalled();
+  });
+
+  it("returns 400 when no defaulted bonds remain", async () => {
+    const f = await setupFixture();
+    db.collectionMocks["bonds"]!.find.mockReturnValue(makeCursor([]));
+
+    const res = await postCash(f.corpId);
+    expect(res.status).toBe(400);
+    expect(db.collectionMocks["corporations"]!.updateOne).not.toHaveBeenCalled();
+  });
+
+  it("aborts before any write when a referenced holder record is missing", async () => {
+    const f = await setupFixture();
+    db.collectionMocks["characters"]!.find.mockReturnValue({
+      project: vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue([]) }),
+    });
+
+    const res = await postCash(f.corpId);
+    expect(res.status).toBe(500);
+    expect(db.collectionMocks["corporations"]!.updateOne).not.toHaveBeenCalled();
+    expect(db.collectionMocks["bonds"]!.updateOne).not.toHaveBeenCalled();
   });
 
   it("returns 503 when game state is unavailable (no turn=0 leakage)", async () => {
-    const corpId = new ObjectId();
-    const corporation = {
-      _id: corpId,
-      name: "Test",
-      countryId: "US",
-      liquidCapital: 1_000_000,
-      liquidCurrencyCode: "USD",
-    };
-    const { resolveCorporation } = await import("@/lib/api/corporations/resolveQuery");
-    vi.mocked(resolveCorporation).mockResolvedValue({ ok: true, corporation } as never);
-
+    const f = await setupFixture();
     const { getGameState } = await import("@/lib/gameState");
     vi.mocked(getGameState).mockResolvedValueOnce(null as never);
 
-    const req = new Request(
-      `http://localhost/api/corporations/${corpId.toString()}/bond-default/cash`,
-      { method: "POST" }
-    );
-    const { POST } = await import("./route");
-    const res = await POST(req, { params: Promise.resolve({ id: corpId.toString() }) });
+    const res = await postCash(f.corpId);
     expect(res.status).toBe(503);
-    // No bonds.updateMany should have fired.
-    expect(db.collectionMocks["bonds"]!.updateMany).not.toHaveBeenCalled();
-  });
-});
-
-describe("POST /api/corporations/[id]/bond-default/cash — fund and NPP holders", () => {
-  it("pays index-fund and autonomous-NPP holders their principal before curing (#809)", async () => {
-    // Pre-fix the holder chain only handled character / imperial / corporation.
-    // Fund and NPP units were skipped, yet the corporation was still debited
-    // the WHOLE bond face (sumDefaultedBondPrincipal sums bond.totalIssued, not
-    // per-holder) and the bond was marked cured — so their principal was
-    // destroyed, not merely uncollected.
-    const corpId = new ObjectId();
-    const fundId = new ObjectId();
-    const nppId = new ObjectId();
-    const bondId = new ObjectId();
-
-    const corporation = {
-      _id: corpId,
-      name: "Test Issuer",
-      countryId: "US",
-      liquidCapital: 1_000_000,
-      liquidCurrencyCode: "USD",
-    };
-    const { resolveCorporation } = await import("@/lib/api/corporations/resolveQuery");
-    vi.mocked(resolveCorporation).mockResolvedValue({ ok: true, corporation } as never);
-    db.collectionMocks["corporations"]!.findOne.mockResolvedValue(corporation as never);
-
-    db.collectionMocks["bonds"]!.find.mockReturnValue(
-      makeCursor([
-        {
-          _id: bondId,
-          corporationId: corpId,
-          currencyCode: "USD",
-          matured: false,
-          defaulted: true,
-          couponRate: 8,
-          totalIssued: 15_000,
-          holders: [
-            { fundId, units: 10 },
-            { nppId, units: 5 },
-          ],
-        },
-      ])
-    );
-    db.collectionMocks["exchangeRates"]!.find.mockReturnValue(makeCursor([]));
-    db.collectionMocks["characters"]!.find.mockReturnValue({
-      project: vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue([]) }),
-    });
-    db.collectionMocks["imperialCharacters"]!.find.mockReturnValue({
-      project: vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue([]) }),
-    });
-    db.collectionMocks["corporations"]!.find.mockReturnValue(makeCursor([]));
-
-    const req = new Request(
-      `http://localhost/api/corporations/${corpId.toString()}/bond-default/cash`,
-      { method: "POST" }
-    );
-    const { POST } = await import("./route");
-    const res = await POST(req, { params: Promise.resolve({ id: corpId.toString() }) });
-    expect(res.status).toBe(200);
-
-    // 10 units x $1,000 face = 10,000 to the fund's anchor cash.
-    const fundWrite = db.collectionMocks["indexFunds"]!.bulkWrite.mock.calls[0]![0] as Array<{
-      updateOne: { filter: { _id: ObjectId }; update: { $inc: { cashAnchor: number } } };
-    }>;
-    expect(fundWrite).toHaveLength(1);
-    expect(fundWrite[0]!.updateOne.filter._id.toString()).toBe(fundId.toString());
-    expect(fundWrite[0]!.updateOne.update.$inc.cashAnchor).toBe(10_000);
-
-    // 5 units x $1,000 = 5,000 to the NPP's INVESTMENT account, not its war chest.
-    const nppWrite = db.collectionMocks["npps"]!.bulkWrite.mock.calls[0]![0] as Array<{
-      updateOne: {
-        filter: { _id: ObjectId };
-        update: { $inc: { nppInvestmentCashAnchor: number } };
-      };
-    }>;
-    expect(nppWrite).toHaveLength(1);
-    expect(nppWrite[0]!.updateOne.filter._id.toString()).toBe(nppId.toString());
-    expect(nppWrite[0]!.updateOne.update.$inc.nppInvestmentCashAnchor).toBe(5_000);
-  });
-
-  it("logs the fund payout but keeps NPP investment returns out of the tx log", async () => {
-    const corpId = new ObjectId();
-    const fundId = new ObjectId();
-    const nppId = new ObjectId();
-
-    const corporation = {
-      _id: corpId,
-      name: "Test Issuer",
-      countryId: "US",
-      liquidCapital: 1_000_000,
-      liquidCurrencyCode: "USD",
-    };
-    const { resolveCorporation } = await import("@/lib/api/corporations/resolveQuery");
-    vi.mocked(resolveCorporation).mockResolvedValue({ ok: true, corporation } as never);
-    db.collectionMocks["corporations"]!.findOne.mockResolvedValue(corporation as never);
-    db.collectionMocks["bonds"]!.find.mockReturnValue(
-      makeCursor([
-        {
-          _id: new ObjectId(),
-          corporationId: corpId,
-          currencyCode: "USD",
-          matured: false,
-          defaulted: true,
-          couponRate: 8,
-          totalIssued: 15_000,
-          holders: [
-            { fundId, units: 10 },
-            { nppId, units: 5 },
-          ],
-        },
-      ])
-    );
-    db.collectionMocks["exchangeRates"]!.find.mockReturnValue(makeCursor([]));
-    db.collectionMocks["characters"]!.find.mockReturnValue({
-      project: vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue([]) }),
-    });
-    db.collectionMocks["imperialCharacters"]!.find.mockReturnValue({
-      project: vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue([]) }),
-    });
-    db.collectionMocks["corporations"]!.find.mockReturnValue(makeCursor([]));
-
-    const req = new Request(
-      `http://localhost/api/corporations/${corpId.toString()}/bond-default/cash`,
-      { method: "POST" }
-    );
-    const { POST } = await import("./route");
-    expect((await POST(req, { params: Promise.resolve({ id: corpId.toString() }) })).status).toBe(
-      200
-    );
-
-    const { emitTxBulk } = await import("@/lib/financialTxLog/emit");
-    const rows = vi.mocked(emitTxBulk).mock.calls[0]![1] as Array<{
-      subjectId: ObjectId;
-      amount: number;
-      meta?: Record<string, unknown>;
-    }>;
-    // The fund's payout is auditable...
-    const fundRow = rows.find((r) => r.subjectId.toString() === fundId.toString());
-    expect(fundRow?.amount).toBe(10_000);
-    expect(fundRow?.meta?.fundId).toBe(fundId.toString());
-    // ...while NPP investment returns stay out, matching the bondTurn legs.
-    expect(rows.some((r) => r.subjectId.toString() === nppId.toString())).toBe(false);
+    expect(db.collectionMocks["bonds"]!.updateOne).not.toHaveBeenCalled();
   });
 });

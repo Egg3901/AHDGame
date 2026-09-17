@@ -83,7 +83,15 @@ import { ObjectId, type ClientSession, type Collection, type Filter } from "mong
  * with Idempotency-Key validation/forwarding and route-level
  * compensation/replay/invalid-key/conflict tests; corp FX spread routing
  * runs inside the flow; the financial-tx audit row stays post-commit best
- * effort).
+ * effort), bond payoffs (parent payoff of a subsidiary's bonds + cash cure
+ * of an issuer's own defaulted bonds via the shared bondPayoffSpend
+ * primitive: guarded payer debit with liquid/escrow split, one resumable
+ * credit per character/imperial/corp/fund/NPP holder, per-bond maturity
+ * claims, with Idempotency-Key validation/forwarding and route-level
+ * replay/invalid-key/conflict/partial-recovery tests; the resume plan is
+ * persisted on the receipt at claim time, so a same-key retry after partial
+ * maturity reconciles the stored plan instead of conflicting; the
+ * financial-tx maturity rows stay post-commit best effort).
  * Ownership-only and excluded (no balance writes): union leadership
  * accept/resign/decline/vote (ownerId/unionLeaderOf/vote rows only),
  * bargaining settlement (campaign claim + agreement insert + expectation
@@ -99,9 +107,9 @@ import { ObjectId, type ClientSession, type Collection, type Filter } from "mong
  * status transition and the money writes there can still strand or double
  * value; migrating them means expressing each as keyed steps here.
  * Still on the legacy debit-first-plus-compensation fallback: bond
- * default/payoff, index-fund cron/rebalancing orchestration (its bond
- * purchase/sale legs are keyed; surrounding equity/dividend/cross-fund
- * writes are not), directAction,
+ * default dissolution/refinance/restructure, index-fund cron/rebalancing
+ * orchestration (its bond purchase/sale legs are keyed; surrounding
+ * equity/dividend/cross-fund writes are not), directAction,
  * state-org build — multi-write status machines, positional holder
  * claims, and bulkWrite batches that need reserve/order/history support
  * beyond keyed single-document writes.
