@@ -16,6 +16,7 @@ import { NATIONAL_TERMINAL_STATUSES } from "@/lib/congress/billProposalLimits";
 import { imposeEmbargo, liftEmbargo } from "@/lib/trade/commands/embargoCommands";
 import { resolveLegislatedEmbargoes } from "@/lib/trade/reconcileEmbargoes";
 import { getCabinetMembersCollection } from "@/lib/db/collections/cabinetMembers";
+import type { UnifiedCabinetMember } from "@/lib/db/types/unifiedCabinetMember";
 import {
   refundMinisterialAction,
   resolveMinisterialRemaining,
@@ -70,22 +71,25 @@ export async function POST(request: Request) {
     const seatPositionId = TRADE_MINISTER_POSITION_BY_COUNTRY[sourceCountry];
     const charging = seatPositionId != null && minister.auth.positionId === seatPositionId;
     const membersCol = getCabinetMembersCollection(db);
-    let chargedMember: NonNullable<Awaited<ReturnType<typeof membersCol.findOne>>> | null = null;
+    let chargedMember: UnifiedCabinetMember | null = null;
     if (charging) {
       const member = await membersCol.findOne({
         countryId: sourceCountry,
         positionId: seatPositionId,
       });
+      if (!member) {
+        throw badRequest("No cabinet actions remaining to impose an embargo this turn.");
+      }
       // Shared UK pool: both offices of a dual holder spend one balance (issue #2049).
-      const actions = await resolveMinisterialRemaining(db, sourceCountry, member!);
+      const actions = await resolveMinisterialRemaining(db, sourceCountry, member);
       if (actions < 1) {
         throw badRequest("No cabinet actions remaining to impose an embargo this turn.");
       }
-      const spend = await spendMinisterialAction(db, sourceCountry, member!);
+      const spend = await spendMinisterialAction(db, sourceCountry, member);
       if (!spend.ok) {
         throw badRequest("No cabinet actions remaining to impose an embargo this turn.");
       }
-      chargedMember = member!;
+      chargedMember = member;
     }
 
     const currentTurn = await getCurrentTurn(db);

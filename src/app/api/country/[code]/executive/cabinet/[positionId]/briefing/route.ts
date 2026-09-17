@@ -204,7 +204,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
     // UK player holders share one pool across both offices (issue #2049), so
     // both office pages report the same remaining balance.
     const sharedRemaining =
-      countryId === "UK" && member?.characterId
+      countryId === COUNTRY_CONFIGS.UK.id && member?.characterId
         ? (holderChar?.sharedMinisterialActions ?? null)
         : null;
     const buildMemberView = ({ includeActions }: { includeActions: boolean }) =>

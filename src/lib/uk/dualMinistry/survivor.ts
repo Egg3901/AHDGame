@@ -31,8 +31,9 @@ export async function preserveSurvivingCabinetRow(
     .findOne({ _id: characterId }, { projection: { currentOffice: 1 } });
   const current = character?.currentOffice;
   if (!current || !CABINET_OFFICE_TYPES.has(current.type)) return true;
-  if ("positionId" in current && current.positionId === survivor.positionId) return true;
-  const survivorOffice: OfficeType = { type: current.type, positionId: survivor.positionId };
+  if (!("positionId" in current)) return true;
+  if (current.positionId === survivor.positionId) return true;
+  const survivorOffice: OfficeType = { ...current, positionId: survivor.positionId };
   await db
     .collection<Character>("characters")
     .updateOne({ _id: characterId }, { $set: { currentOffice: survivorOffice, updatedAt: now } });

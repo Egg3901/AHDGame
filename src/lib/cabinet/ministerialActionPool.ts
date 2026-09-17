@@ -7,6 +7,8 @@ import type { Character } from "@/lib/db/types";
 import type { CountryId } from "@/lib/constants/countries";
 import { isSharedPoolStale, sharedPoolFromRows } from "@/lib/uk/dualMinistry/rules";
 
+export { MINISTERIAL_ACTION_RESET_HINT } from "./ministerialActionHint";
+
 /** Fields to seed on a new cabinet appointment's action pool. */
 export function initialMinisterialActionFields(now: Date = new Date()) {
   return {
@@ -14,8 +16,6 @@ export function initialMinisterialActionFields(now: Date = new Date()) {
     lastMinisterialActionResetDay: getCalendarDayInTimezone(now),
   };
 }
-
-export const MINISTERIAL_ACTION_RESET_HINT = "Resets daily at midnight Eastern Time.";
 
 /**
  * True when this row draws from a shared per-player pool: UK rows held by a
