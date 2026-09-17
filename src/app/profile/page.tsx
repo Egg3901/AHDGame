@@ -303,7 +303,7 @@ async function getCharacterData() {
         ]);
         return {
           doctrineAdopted: doctrine.adopted,
-          // A dismissed general's retained record is not surfaced as an active profile.
+          // Retain former service for the read-only military profile.
           general: commission.general,
           militaryService: {
             commissioned: commission.commissioned,

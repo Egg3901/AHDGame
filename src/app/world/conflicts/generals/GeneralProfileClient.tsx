@@ -92,9 +92,7 @@ export function GeneralProfileClient({
   serviceRecord?: React.ReactNode;
   subject: CharacterSubject;
   adopted: Record<string, number>;
-  /** The commissioned general's profile, or null when the character is not a general
-   *  (never commissioned, or dismissed — a dismissed veteran's retained record is not
-   *  shown as active). */
+  /** Current or retained military profile. Former service must be passed read-only. */
   general: ProfileGeneral | null;
   editable: boolean;
   curEra: number;

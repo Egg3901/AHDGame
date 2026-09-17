@@ -22,7 +22,7 @@ const base: ComponentProps<typeof ProfileTabs> = {
 };
 function shell(props: Partial<ComponentProps<typeof ProfileTabs>> = {}) {
   return (
-    <NextIntlClientProvider locale="en" messages={{ profile }}>
+    <NextIntlClientProvider locale="en" messages={profile}>
       <ProfileTabs {...base} {...props} />
     </NextIntlClientProvider>
   );
