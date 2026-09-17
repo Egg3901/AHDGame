@@ -65,7 +65,17 @@ function acquirerFixture(overrides: Record<string, unknown> = {}) {
   } as unknown as Corporation;
 }
 
-function propose(target: Corporation, priceAnchor: number, acquirer?: Corporation) {
+function propose(
+  target: Corporation,
+  priceAnchor: number,
+  acquirer?: Corporation,
+  freshOverride?: Corporation | null
+) {
+  // Default fresh read: control unchanged since search. Flip tests override.
+  // `null` models a target deleted after search; `undefined` keeps the snapshot.
+  db.collection("corporations").findOne.mockResolvedValue(
+    freshOverride === undefined ? target : freshOverride
+  );
   return proposeAcquisitionOffer(db as unknown as Db, {
     acquirer: acquirer ?? acquirerFixture(),
     target,
@@ -80,6 +90,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   db = createMockDb();
   db.collection("acquisitionOffers");
+  db.collection("corporations");
   vi.mocked(executeAgreedAcquisition).mockResolvedValue({
     ok: true,
     sectorsMoved: 2,
@@ -189,6 +200,63 @@ describe("proposeAcquisitionOffer against NPP targets (#217)", () => {
     const dup = await propose(targetFixture(), 1_100_000);
     expect(dup.ok).toBe(false);
     if (!dup.ok) expect(dup.status).toBe(409);
+  });
+});
+
+describe("proposeAcquisitionOffer stale-snapshot control flips (#217)", () => {
+  beforeEach(() => {
+    db.collectionMocks.acquisitionOffers!.insertOne.mockResolvedValue({
+      insertedId: new ObjectId(),
+    });
+  });
+
+  it("falls back to the pending human flow when a caretaker takes control after search", async () => {
+    const snapshot = targetFixture();
+    const fresh = targetFixture({ caretakerCeo: { displacedCeoId: new ObjectId() } });
+    const r = await propose(snapshot, 50_000_000, undefined, fresh);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.autoAccepted).toBe(false);
+
+    const inserted = db.collectionMocks.acquisitionOffers!.insertOne.mock.calls[0][0] as {
+      status: string;
+    };
+    expect(inserted.status).toBe("pending");
+    expect(vi.mocked(executeAgreedAcquisition)).not.toHaveBeenCalled();
+    expect(vi.mocked(createNotification)).toHaveBeenCalledTimes(1);
+  });
+
+  it("falls back to pending when the CEO flips to player-run, even below the asking price", async () => {
+    const snapshot = targetFixture();
+    const fresh = targetFixture({ ceoType: "character" });
+    const r = await propose(snapshot, 500_000, undefined, fresh);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.autoAccepted).toBe(false);
+    expect(vi.mocked(executeAgreedAcquisition)).not.toHaveBeenCalled();
+    expect(vi.mocked(createNotification)).toHaveBeenCalledTimes(1);
+  });
+
+  it("returns 404 with no execution when the target was deleted after search", async () => {
+    const r = await propose(targetFixture(), 1_100_000, undefined, null);
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.status).toBe(404);
+    expect(r.error).toMatch(/no longer exists/);
+    expect(db.collectionMocks.acquisitionOffers!.insertOne).not.toHaveBeenCalled();
+    expect(vi.mocked(executeAgreedAcquisition)).not.toHaveBeenCalled();
+  });
+
+  it("blocks a target nationalized after search, with no execution", async () => {
+    const snapshot = targetFixture();
+    const fresh = targetFixture({ ownershipState: "stateOwned" });
+    const r = await propose(snapshot, 5_000_000, undefined, fresh);
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.status).toBe(400);
+    expect(r.error).toMatch(/State-owned/);
+    expect(db.collectionMocks.acquisitionOffers!.insertOne).not.toHaveBeenCalled();
+    expect(vi.mocked(executeAgreedAcquisition)).not.toHaveBeenCalled();
   });
 });
 

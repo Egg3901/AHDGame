@@ -120,18 +120,29 @@ export async function proposeAcquisitionOffer(
       status: 409,
     };
 
-  const targetValuationAnchor = await referenceValuationAnchor(db, target);
+  // Re-read the target: the caller's snapshot may predate a control change
+  // (player caretaker appointed, CEO flipped, nationalization, deletion).
+  // Auto-accept must never absorb a corp that is no longer genuinely AI-run,
+  // and the valuation must reflect current economics, not a stale read.
+  const freshTarget = await db.collection<Corporation>("corporations").findOne({ _id: target._id });
+  if (!freshTarget) return { ok: false, error: "Target corporation no longer exists", status: 404 };
+  if (freshTarget.countryOwnerId || freshTarget.ownershipState === "stateOwned")
+    return { ok: false, error: "State-owned corporations cannot be acquired", status: 400 };
+
+  const targetValuationAnchor = await referenceValuationAnchor(db, freshTarget);
   const valuationAnchor = Math.round(targetValuationAnchor);
   const now = new Date();
   const offers = db.collection<AcquisitionOffer>(OFFERS);
 
   // Human-run target (including caretaker-run player corps): unchanged flow.
   // The offer stays pending until the target's CEO accepts, and the target's
-  // controlling user is notified.
-  if (!isNppAutoResolvableTarget(target)) {
+  // controlling user is notified. A target that flipped out of AI-run control
+  // after search lands here too, so no player property is ever auto-absorbed
+  // without consent.
+  if (!isNppAutoResolvableTarget(freshTarget)) {
     const res = await offers.insertOne({
       acquirerCorporationId: acquirer._id,
-      targetCorporationId: target._id,
+      targetCorporationId: freshTarget._id,
       proposedByCharacterId: proposerCharacterId,
       ...(proposerUserId ? { proposedByUserId: proposerUserId } : {}),
       priceAnchor: Math.round(priceAnchor),
@@ -144,15 +155,15 @@ export async function proposeAcquisitionOffer(
     } as AcquisitionOffer);
 
     // Notify the target's CEO (if a player controls it).
-    if (target.userId) {
+    if (freshTarget.userId) {
       void createNotification({
-        userId: target.userId,
+        userId: freshTarget.userId,
         type: "corp_vote_opened",
         title: "Acquisition offer received",
-        message: `${acquirer.name} has offered to acquire ${target.name}. Review it in the Deals tab.`,
+        message: `${acquirer.name} has offered to acquire ${freshTarget.name}. Review it in the Deals tab.`,
         metadata: {
           acquisitionOfferId: res.insertedId.toHexString(),
-          corporationId: target._id.toHexString(),
+          corporationId: freshTarget._id.toHexString(),
         },
       });
     }
