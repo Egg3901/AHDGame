@@ -15,8 +15,10 @@ export const CORPORATE_NO_HOLDER_BOND_SHARE_TARGET = 0.35;
 
 /**
  * Minimum rolling-median observations before the alert trusts the series.
- * A median over 3+ turns cannot be moved by a single-turn spike, so anything
- * thinner reports insufficient data instead of warning or clearing.
+ * With 3+ turns a single-turn spike cannot dictate the median: it stays
+ * within the range of the genuine turns, while a 1-observation median IS the
+ * spike and a 2-observation median splits the difference. Anything thinner
+ * reports insufficient data instead of warning or clearing.
  */
 export const CORPORATE_NO_HOLDER_MEDIAN_MIN_OBSERVATIONS = 3;
 
