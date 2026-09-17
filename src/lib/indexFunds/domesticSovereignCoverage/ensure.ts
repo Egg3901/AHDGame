@@ -41,7 +41,7 @@ export async function ensureDomesticSovereignBondFunds(
 
   const registered = await getRegisteredCountryIds(db);
   const budgets = await db
-    .collection("federalBudget")
+    .collection<{ _id: string }>("federalBudget")
     .find(
       { _id: { $in: registered.map((countryId) => getNationalBudgetId(countryId)) } },
       { projection: { _id: 1 } }
@@ -54,9 +54,7 @@ export async function ensureDomesticSovereignBondFunds(
       matured: false,
       defaulted: { $ne: true },
     })
-  )
-    .filter((value): value is string => typeof value === "string")
-    .filter((value) => value.length > 0);
+  ).flatMap((value) => (typeof value === "string" && value.length > 0 ? [value] : []));
   const serviceableFunds = await db
     .collection<IndexFund>("indexFunds")
     .find(
@@ -64,7 +62,9 @@ export async function ensureDomesticSovereignBondFunds(
       { projection: { countryId: 1, anchorCurrencyCode: 1, scope: 1 } }
     )
     .toArray();
-  const coveredHomeCountryIds = serviceableFunds.map((fund) => resolveFundBondCountryId(fund));
+  const coveredHomeCountryIds = serviceableFunds
+    .map((fund) => resolveFundBondCountryId(fund))
+    .filter((value): value is NonNullable<typeof value> => value !== undefined);
 
   const planned = planDomesticSovereignCoverage({
     enabled: true,
