@@ -8,7 +8,11 @@ import type {
   OfficeType,
   Character,
 } from "@/lib/db/types";
-import { MULTI_SEAT_TYPES, officeKeyForElectionType } from "@/lib/utils/electionLabels";
+import {
+  MULTI_SEAT_TYPES,
+  isSpecialCommonsElection,
+  officeKeyForElectionType,
+} from "@/lib/utils/electionLabels";
 import { triggerLeadershipElectionsAfterChamberVote } from "@/lib/congress/leadershipElections";
 import { spawnHouseElection, spawnCommonsElection } from "@/lib/turn/election/electionSpawning";
 import { notifyGovernorOfSenateVacancy } from "@/lib/governors/senateVacancy";
@@ -183,7 +187,13 @@ export async function resolveElectionWithNoTally(
   election: Election,
   now: Date
 ): Promise<OneElectionResult> {
-  if (MULTI_SEAT_TYPES.has(election.electionType) && election.state) {
+  // Commons by-elections (#860) never sweep: an uncontested race leaves the
+  // seats vacant and the watcher retries after the cooldown.
+  if (
+    MULTI_SEAT_TYPES.has(election.electionType) &&
+    !isSpecialCommonsElection(election.electionType) &&
+    election.state
+  ) {
     await db
       .collection<ElectedOfficial>("electedOfficials")
       .deleteMany(multiSeatOfficialFilter(election));
@@ -287,8 +297,13 @@ export async function resolveElectionWithZeroVotes(
   if (election.electionType === "senate") {
     await triggerLeadershipElectionsAfterChamberVote(db, "senate", now);
   }
-  // Clear stale officials for any multi-seat election type
-  if (MULTI_SEAT_TYPES.has(election.electionType) && election.state) {
+  // Clear stale officials for any multi-seat election type — except Commons
+  // by-elections (#860), which leave vacant seats in place for watcher retry.
+  if (
+    MULTI_SEAT_TYPES.has(election.electionType) &&
+    !isSpecialCommonsElection(election.electionType) &&
+    election.state
+  ) {
     await db
       .collection<ElectedOfficial>("electedOfficials")
       .deleteMany(multiSeatOfficialFilter(election));
@@ -386,8 +401,13 @@ export async function resolveElectionWithNoRankedCandidates(
   if (election.electionType === "senate") {
     await triggerLeadershipElectionsAfterChamberVote(db, "senate", now);
   }
-  // Clear stale officials for any multi-seat election type
-  if (MULTI_SEAT_TYPES.has(election.electionType) && election.state) {
+  // Clear stale officials for any multi-seat election type — except Commons
+  // by-elections (#860), which leave vacant seats in place for watcher retry.
+  if (
+    MULTI_SEAT_TYPES.has(election.electionType) &&
+    !isSpecialCommonsElection(election.electionType) &&
+    election.state
+  ) {
     await db
       .collection<ElectedOfficial>("electedOfficials")
       .deleteMany(multiSeatOfficialFilter(election));

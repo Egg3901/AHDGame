@@ -16,6 +16,7 @@ import { updatePoliticianPagesAfterElection } from "@/lib/wiki/updatePoliticianP
 import {
   ELECTION_TYPE_SHORT_LABEL,
   MULTI_SEAT_TYPES,
+  isSpecialCommonsElection,
   officeKeyForElectionType,
 } from "@/lib/utils/electionLabels";
 import { getOfficeLabel } from "@/lib/utils/politics";
@@ -354,7 +355,11 @@ export async function resolveOneGeneralElection(
     // in-game year — resolves to undefined (proportional behavior) from 1999
     // on, so a world graduates back to proportional as its clock advances.
     let majoritarianBonus: MajoritarianBonusConfig | undefined;
-    if (election.electionType === "commons" || election.electionType === "snap_commons") {
+    if (
+      election.electionType === "commons" ||
+      election.electionType === "snap_commons" ||
+      isSpecialCommonsElection(election.electionType)
+    ) {
       const gsForCommons = await (await getGameStateCollection(db)).findOne({ _id: "current" });
       commonsSeats = getUkCommonsSeats(gsForCommons?.preset);
       majoritarianBonus = getMajoritarianBonus(election.electionType, gsForCommons?.currentYear);
@@ -430,9 +435,38 @@ export async function resolveOneGeneralElection(
       );
 
     if (isMultiSeat) {
-      await db
-        .collection<ElectedOfficial>("electedOfficials")
-        .deleteMany(multiSeatOfficialFilter(election));
+      if (isSpecialCommonsElection(election.electionType)) {
+        // ADDITIVE seating (#860): a by-election fills only its claimed
+        // vacancies. Remove holder-less `commons` rows (the tombstones the
+        // watcher recorded vacancies for) up to the seats this race filled,
+        // and leave every seated MP untouched. Sitting MPs keep their rows;
+        // the winner loop below inserts fresh rows for the filled seats.
+        const seatsFilled = winners.reduce((n, [, s]) => n + s, 0);
+        if (seatsFilled > 0) {
+          const vacantRows = await db
+            .collection<ElectedOfficial>("electedOfficials")
+            .find(
+              {
+                officeType: "commons",
+                state: election.state,
+                ...(election.countryId ? { countryId: election.countryId } : {}),
+                characterId: null,
+                nppId: null,
+              },
+              { projection: { _id: 1 }, sort: { _id: 1 }, limit: seatsFilled }
+            )
+            .toArray();
+          if (vacantRows.length > 0) {
+            await db
+              .collection<ElectedOfficial>("electedOfficials")
+              .deleteMany({ _id: { $in: vacantRows.map((r) => r._id) } });
+          }
+        }
+      } else {
+        await db
+          .collection<ElectedOfficial>("electedOfficials")
+          .deleteMany(multiSeatOfficialFilter(election));
+      }
       // Class-scoped multi-seat chambers (JP Sangiin): the filter above keys on
       // chamberClass, so councillors seeded WITHOUT a class are invisible to it
       // — every class election inserted winners beside the seeded roster and
@@ -593,7 +627,10 @@ export async function resolveOneGeneralElection(
           break;
         case "commons":
         case "snap_commons":
-          // Snap winners become regular Commons MPs — same seat, same officeType.
+        case "special_commons":
+          // Snap and by-election winners become regular Commons MPs — same
+          // seat, same officeType. By-election winners serve out the remainder
+          // of the vacated term until the next regular cycle.
           officeType = { type: "commons", state: election.state, seatsHeld: seats };
           break;
         case "regionalCouncil":
@@ -1035,8 +1072,14 @@ export async function resolveOneGeneralElection(
       await triggerLeadershipElectionsAfterChamberVote(db, "senate", now);
     }
     // Sweep stale currentOffice for any multi-seat election type — losers and
-    // non-runners who still claim this constituency get cleared.
-    if (MULTI_SEAT_TYPES.has(election.electionType) && election.state) {
+    // non-runners who still claim this constituency get cleared. Skipped for
+    // Commons by-elections (#860): the rest of the delegation was not on the
+    // ballot, so sitting MPs keep their seats and their currentOffice.
+    if (
+      MULTI_SEAT_TYPES.has(election.electionType) &&
+      !isSpecialCommonsElection(election.electionType) &&
+      election.state
+    ) {
       await sweepStaleOffice(
         db,
         election.electionType,

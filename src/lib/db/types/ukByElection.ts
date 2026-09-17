@@ -12,13 +12,17 @@ import type { CountryId } from "@/lib/constants/countries";
  * resolution either retains the MP or vacates the seat.
  */
 
-/** How a Commons seat became vacant. */
+/** How a Commons seat became vacant. `removal` is the watcher backstop for
+ * holder-less rows left by paths that do not record a reason (character
+ * death, account deletion, admin removal); hooked paths write a precise
+ * reason instead. */
 export type CommonsVacancyReason =
   | "death"
   | "retirement"
   | "defection"
   | "resignation"
-  | "recall";
+  | "recall"
+  | "removal";
 
 /** Lifecycle of a vacancy doc. `scheduled` means a live `special_commons`
  * election claims it; `filled` means the by-election seated a winner;

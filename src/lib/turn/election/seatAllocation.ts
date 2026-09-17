@@ -186,7 +186,13 @@ export function getMajoritarianBonus(
   electionType: string,
   currentYear: number | null | undefined
 ): MajoritarianBonusConfig | undefined {
-  if (electionType !== "commons" && electionType !== "snap_commons") return undefined;
+  if (
+    electionType !== "commons" &&
+    electionType !== "snap_commons" &&
+    electionType !== "special_commons"
+  ) {
+    return undefined;
+  }
   if (typeof currentYear !== "number" || !Number.isFinite(currentYear)) return undefined;
   if (currentYear >= MODERN_ERA_START_YEAR) return undefined;
   return { exponent: UK_COMMONS_FPTP_EXPONENT };
