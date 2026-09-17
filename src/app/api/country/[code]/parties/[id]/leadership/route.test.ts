@@ -82,9 +82,16 @@ describe("GET /api/country/[code]/parties/[id]/leadership", () => {
 
   it("returns 403 for banned accounts", async () => {
     const { requireAuthWithCharacter } = await setup();
-    const auth = memberAuth(characterId);
-    auth.user.isBanned = true;
-    vi.mocked(requireAuthWithCharacter).mockResolvedValue(auth);
+    vi.mocked(requireAuthWithCharacter).mockResolvedValue({
+      ok: true,
+      user: {
+        userId: new ObjectId().toString(),
+        username: "mp",
+        isAdmin: false,
+        isBanned: true,
+        character: { _id: characterId, name: "MP One", party: "2", countryId: "UK" },
+      },
+    } as never);
 
     const { GET } = await import("./route");
     const response = await GET(makeRequest(), { params: Promise.resolve({ code: "uk", id: "2" }) });

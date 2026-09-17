@@ -23,7 +23,7 @@ const amendRulesSchema = z.object({
   survivalImmunityTurns: z.number().optional(),
 });
 
-// PATCH /api/country/[code]/parties/[id]/leadership/rules — the governing
+// PATCH /api/country/[code]/parties/[id]/leadership/ruleset — the governing
 // committee amends its party's leadership-removal ruleset within safe bounds.
 // Auth: requireAuthWithCharacter; party member, committee-gated in the command.
 // Errors: 400, 401, 403, 404, 409, 429

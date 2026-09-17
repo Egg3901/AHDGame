@@ -229,7 +229,7 @@ export function LeadershipPanel({
               if (electorate !== data.ruleset.electorate) patch.electorate = electorate;
               void runAction(
                 "amend",
-                `${baseUrl}/rules`,
+                `${baseUrl}/ruleset`,
                 {
                   method: "PATCH",
                   headers: { "Content-Type": "application/json" },

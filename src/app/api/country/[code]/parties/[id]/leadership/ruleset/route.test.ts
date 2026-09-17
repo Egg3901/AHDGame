@@ -12,7 +12,7 @@ vi.mock("@/lib/uk/leadership/leadershipCommands", () => ({ amendLeadershipRules:
 const NOW = new Date("2026-09-17T00:00:00Z");
 
 function makeRequest(body: unknown) {
-  return new Request("http://localhost/api/country/uk/parties/2/leadership/rules", {
+  return new Request("http://localhost/api/country/uk/parties/2/leadership/ruleset", {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: typeof body === "string" ? body : JSON.stringify(body),
@@ -36,7 +36,7 @@ async function setup() {
   };
 }
 
-describe("PATCH /api/country/[code]/parties/[id]/leadership/rules", () => {
+describe("PATCH /api/country/[code]/parties/[id]/leadership/ruleset", () => {
   let db: MockDb;
   let characterId: ObjectId;
 

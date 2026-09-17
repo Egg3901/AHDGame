@@ -11,6 +11,7 @@ import {
 import { DEFAULT_CON_RULESET, DEFAULT_LAB_RULESET } from "./leadershipRemoval";
 import { createFakeLeadershipDb } from "./leadershipTestDb";
 import type { PoliticalParty } from "@/lib/db/types";
+import type { UKPartyLeadership } from "./leadershipTypes";
 
 function party(overrides: Partial<PoliticalParty> = {}): PoliticalParty {
   return {
@@ -91,7 +92,9 @@ describe("getOrSeedPartyLeadership", () => {
     expect(doc.history).toHaveLength(1);
     expect(doc.history[0].kind).toBe("seeded");
 
-    const stored = await db.collection("ukPartyLeadership").findOne({ _id: doc._id });
+    const stored = await db
+      .collection<UKPartyLeadership>("ukPartyLeadership")
+      .findOne({ _id: doc._id });
     expect(stored?.ruleset).toEqual({ ...DEFAULT_CON_RULESET });
   });
 
@@ -113,7 +116,7 @@ describe("getOrSeedPartyLeadership", () => {
     const p = party();
     const first = await getOrSeedPartyLeadership(db, "UK", p, new Date(), 100);
     await db
-      .collection("ukPartyLeadership")
+      .collection<UKPartyLeadership>("ukPartyLeadership")
       .updateOne(
         { _id: first._id },
         { $set: { ruleset: { ...first.ruleset, removalMajorityPct: 0.6 } } }

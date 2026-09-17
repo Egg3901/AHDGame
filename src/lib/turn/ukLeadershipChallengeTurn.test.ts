@@ -12,6 +12,7 @@ import {
   LEADERSHIP_GATHERING_WINDOW_TURNS,
 } from "@/lib/uk/leadership/rules";
 import type { PoliticalParty } from "@/lib/db/types";
+import type { UKPartyLeadership } from "@/lib/uk/leadership/leadershipTypes";
 
 vi.mock("@/lib/notifications", () => ({ createNotification: async () => undefined }));
 vi.mock("@/lib/country/registeredCountries", () => ({ getRegisteredCountryIds: vi.fn() }));
@@ -97,7 +98,9 @@ describe("processUkLeadershipChallengeTurn", () => {
       NOW()
     );
     expect(result).toEqual({ expired: 1, resolved: 0, removed: 0 });
-    const leadership = await db.collection("ukPartyLeadership").findOne({ _id: "UK:2" });
+    const leadership = await db
+      .collection<UKPartyLeadership>("ukPartyLeadership")
+      .findOne({ _id: "UK:2" });
     expect(leadership?.activeChallengeId).toBeNull();
   });
 

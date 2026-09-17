@@ -134,7 +134,7 @@ describe("LeadershipPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: "Amend rules" }));
 
     await waitFor(() => expect(screen.getByText("Rules amended.")).toBeTruthy());
-    const patch = calls.find((c) => c.url.endsWith("/rules"));
+    const patch = calls.find((c) => c.url.endsWith("/ruleset"));
     expect(patch?.init.method).toBe("PATCH");
     expect(JSON.parse(patch?.init.body as string)).toEqual({ triggerThresholdPct: 0.2 });
     // Initial load plus the post-action refresh.
