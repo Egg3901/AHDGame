@@ -792,3 +792,152 @@ it("does not mix legacy money growth into the current median", () => {
   });
   expect(snapshot.money.medianAnnualizedM2GrowthPct.value).toBe(4);
 });
+
+describe("ring-fenced bank and escrow money", () => {
+  const balanceSnapshot = {
+    _id: new ObjectId(),
+    turn: 100,
+    createdAt: new Date(),
+    balances: {
+      "character:active:USD": 40,
+      "character:dormant:USD": 60,
+      "corporation:active:USD": 100,
+    },
+  };
+
+  it("reports active-charter reserves and escrow in anchor with FX conversion", () => {
+    const snapshot = computeEconomicVitalSigns({
+      ...emptyInput,
+      balanceSnapshot,
+      anchorRates: { USD: 1, EUR: 2 },
+      ringFenced: [
+        {
+          charterActive: true,
+          charterCurrency: "USD",
+          cashReserves: 100,
+          liquidCurrency: "USD",
+          escrowBalance: 50,
+        },
+        {
+          charterActive: true,
+          charterCurrency: "EUR",
+          cashReserves: 200,
+          liquidCurrency: "EUR",
+          escrowBalance: undefined,
+        },
+        {
+          charterActive: false,
+          charterCurrency: "USD",
+          cashReserves: 500,
+          liquidCurrency: "USD",
+          escrowBalance: undefined,
+        },
+        {
+          charterActive: false,
+          charterCurrency: "USD",
+          cashReserves: undefined,
+          liquidCurrency: "USD",
+          escrowBalance: -30,
+        },
+      ],
+    });
+
+    // 100 USD + 200 EUR / 2; the failed charter and the buyback debt are excluded.
+    expect(snapshot.money.bankCashReservesAnchor.value).toBe(200);
+    expect(snapshot.money.bankCashReservesAnchor.observations).toBe(2);
+    expect(snapshot.money.escrowCashAnchor.value).toBe(50);
+    expect(snapshot.money.escrowCashAnchor.observations).toBe(1);
+    // (200 + 50) / (200 modeled + 200 + 50).
+    expect(snapshot.money.ringFencedShareOfLiquid.value).toBeCloseTo(250 / 450);
+    expect(snapshot.measurement.reasons).not.toContainEqual(
+      expect.stringMatching(/^bank_cash_incomplete_/)
+    );
+  });
+
+  it("flags incomplete bank classification and fails the share closed", () => {
+    const snapshot = computeEconomicVitalSigns({
+      ...emptyInput,
+      balanceSnapshot,
+      anchorRates: { USD: 1 },
+      ringFenced: [
+        {
+          charterActive: true,
+          charterCurrency: "USD",
+          cashReserves: 100,
+          liquidCurrency: "USD",
+          escrowBalance: undefined,
+        },
+        {
+          charterActive: true,
+          charterCurrency: "USD",
+          cashReserves: undefined,
+          liquidCurrency: "USD",
+          escrowBalance: undefined,
+        },
+      ],
+    });
+
+    expect(snapshot.money.bankCashReservesAnchor.value).toBe(100);
+    expect(snapshot.money.bankCashReservesAnchor.observations).toBe(1);
+    expect(snapshot.money.ringFencedShareOfLiquid.value).toBeNull();
+    expect(snapshot.measurement.reasons).toContain("bank_cash_incomplete_1_of_2_reporting");
+  });
+
+  it("reports unknown bank stock and share when no active charter reports", () => {
+    const snapshot = computeEconomicVitalSigns({
+      ...emptyInput,
+      balanceSnapshot,
+      anchorRates: { USD: 1 },
+      ringFenced: [
+        {
+          charterActive: true,
+          charterCurrency: "USD",
+          cashReserves: undefined,
+          liquidCurrency: "USD",
+          escrowBalance: undefined,
+        },
+      ],
+    });
+
+    expect(snapshot.money.bankCashReservesAnchor.value).toBeNull();
+    expect(snapshot.money.ringFencedShareOfLiquid.value).toBeNull();
+    expect(snapshot.measurement.reasons).toContain("bank_cash_incomplete_0_of_1_reporting");
+  });
+
+  it("fails the share closed without a balance snapshot and leaves a null velocity seam", () => {
+    const snapshot = computeEconomicVitalSigns({
+      ...emptyInput,
+      balanceSnapshot: null,
+      anchorRates: { USD: 1 },
+      ringFenced: [
+        {
+          charterActive: true,
+          charterCurrency: "USD",
+          cashReserves: 100,
+          liquidCurrency: "USD",
+          escrowBalance: undefined,
+        },
+      ],
+    });
+
+    expect(snapshot.money.bankCashReservesAnchor.value).toBe(100);
+    expect(snapshot.money.ringFencedShareOfLiquid.value).toBeNull();
+    // No ledger turnover feed covers bank accounts, so velocity stays an
+    // explicit null seam instead of an estimate from unrelated flows.
+    expect(snapshot.money.bankGrossVelocity48.value).toBeNull();
+    expect(snapshot.money.bankGrossVelocity48.observations).toBe(0);
+    expect(snapshot.money.bankGrossVelocity48.basis).toBe("bank_turnover_not_in_ledger");
+  });
+
+  it("reports honest zeros when no bank or escrow money exists", () => {
+    const snapshot = computeEconomicVitalSigns({ ...emptyInput, balanceSnapshot, ringFenced: [] });
+
+    expect(snapshot.money.bankCashReservesAnchor.value).toBe(0);
+    expect(snapshot.money.bankCashReservesAnchor.observations).toBe(0);
+    expect(snapshot.money.escrowCashAnchor.value).toBe(0);
+    expect(snapshot.money.ringFencedShareOfLiquid.value).toBe(0);
+    expect(snapshot.measurement.reasons).not.toContainEqual(
+      expect.stringMatching(/^bank_cash_incomplete_/)
+    );
+  });
+});

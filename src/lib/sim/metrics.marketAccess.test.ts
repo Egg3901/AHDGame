@@ -52,6 +52,8 @@ describe("marketAccessMetricsFromSnapshot", () => {
         externalBroadMoneyShare: value(0.4),
         activeModeledBalanceShare48: value(0.25),
         modeledGrossVelocity48: value(0.75),
+        bankCashReservesAnchor: value(200),
+        ringFencedShareOfLiquid: value(0.4),
       },
       measurement: { confidence: "medium", reasons: ["test"] },
       reconciliation: { status: "amber" },
@@ -104,6 +106,8 @@ describe("marketAccessMetricsFromSnapshot", () => {
       externalBroadMoneyShare: 0.4,
       activeModeledBalanceShare48: 0.25,
       modeledGrossVelocity48: 0.75,
+      bankCashReservesAnchor: 200,
+      ringFencedShareOfLiquid: 0.4,
       measurementConfidence: "medium",
       reconciliationStatus: "amber",
     });
