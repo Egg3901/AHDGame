@@ -56,15 +56,18 @@ export async function processTreasuryTurn(_turn: number): Promise<{ countriesPro
   let countriesProcessed = 0;
   for (const b of budgets) {
     // Invariant: every federalBudget carries a signed treasuryBalance (set at
-    // creation + backfilled). If one is still null, heal it in place from the
-    // canonical fiscal position (−debt.principal) so the country starts accruing
-    // this turn instead of freezing — and surface the gap in logs.
+    // creation + backfilled). If one is still null, heal it in place to zero so
+    // the country starts accruing this turn instead of freezing, and surface
+    // the gap in logs. The heal is zero, never bond debt: cash and
+    // `debt.principal` are separate positions, and fabricating a cash hole from
+    // the bond stock would invent an obligation payment that never happened
+    // (refs #1975).
     let current = b.treasuryBalance;
     if (current == null) {
-      current = -(b.debt?.principal ?? 0);
+      current = 0;
       console.warn(
         `[treasuryTurn] ${String(b._id)} had null treasuryBalance; ` +
-          `initializing to ${current} (=-debt.principal). Seed/backfill missed this budget.`
+          `initializing to 0 (cash unknown; bond stock untouched). Seed/backfill missed this budget.`
       );
     }
 
