@@ -7,6 +7,7 @@ import {
   assertSandboxDb,
   materializeSyntheticActors,
   readActorPopulation,
+  syntheticCorporateSequentialId,
   syntheticTicker,
 } from "./materializeSyntheticActors";
 import { SYNTHETIC_ACTOR_ROLES } from "./actorCoverage";
@@ -265,6 +266,19 @@ describe("materializeSyntheticActors", () => {
     expect(official?.isNPP).toBe(false);
   });
 
+  it("mirrors the presidency onto the character doc like a production inauguration", async () => {
+    const db = fakeDb();
+    await materializeSyntheticActors(db, { seed: SEED, runId: "run-1", turn: 0, now: NOW });
+    const plan = buildSyntheticActorPlan(SEED);
+    const president = await db
+      .collection("characters")
+      .findOne({ _id: new ObjectId(plan.actors[0].characterIdHex) });
+    // deriveCharacterRoles keys headOfState off currentOffice.type; the US
+    // config has no isHeadOfState office type, so without this mirror the
+    // seated president resolves as a private citizen.
+    expect((president?.currentOffice as { type?: string } | undefined)?.type).toBe("president");
+  });
+
   it("seats the DD finance minister under the issuer gate's own lookup key", async () => {
     const db = fakeDb();
     await materializeSyntheticActors(db, { seed: SEED, runId: "run-1", turn: 0, now: NOW });
@@ -355,6 +369,132 @@ describe("materializeSyntheticActors", () => {
   it("derives tickers deterministically without leaking hex case", () => {
     expect(syntheticTicker(SEED, "us-founder-ipo")).toBe(syntheticTicker(SEED, "us-founder-ipo"));
     expect(syntheticTicker(SEED, "us-founder-ipo")).toMatch(/^S[A-Z]{4}$/);
+  });
+
+  it("retries state-party seeding without duplicating candidates or votes", async () => {
+    const db = fakeDb();
+    plantRealOrg(db);
+    const first = await materializeSyntheticActors(db, {
+      seed: SEED,
+      runId: "run-1",
+      turn: 0,
+      now: NOW,
+    });
+    const second = await materializeSyntheticActors(db, {
+      seed: SEED,
+      runId: "run-1",
+      turn: 0,
+      now: NOW,
+    });
+    // The retry attaches to the same live voting elections (nothing new to
+    // create) and upserts the same deterministic candidate/vote ids, so
+    // counts never grow.
+    expect(first.statePartyElections).toBe(3);
+    expect(second.statePartyElections).toBe(0);
+    expect(await db.collection("statePartyElections").countDocuments({})).toBe(3);
+    expect(await db.collection("statePartyCandidates").countDocuments({})).toBe(3);
+    expect(await db.collection("statePartyVotes").countDocuments({})).toBe(3);
+  });
+
+  it("queues the Fed nomination once and never on retry (idempotent accept pool)", async () => {
+    const db = fakeDb();
+    (db as unknown as FakeDb).store.set(
+      "centralBanks",
+      new Map([
+        [
+          "US",
+          {
+            _id: "US",
+            chairCharacterId: null,
+            chairTermExpiresAtTurn: null,
+            nominations: [],
+          },
+        ],
+      ])
+    );
+    const first = await materializeSyntheticActors(db, {
+      seed: SEED,
+      runId: "run-1",
+      turn: 0,
+      now: NOW,
+    });
+    expect(first.fedNominations).toBe(1);
+    const second = await materializeSyntheticActors(db, {
+      seed: SEED,
+      runId: "run-1",
+      turn: 0,
+      now: NOW,
+    });
+    expect(second.fedNominations).toBe(0);
+    const bank = await db.collection("centralBanks").findOne({ _id: "US" });
+    expect((bank?.nominations ?? []) as unknown[]).toHaveLength(1);
+  });
+
+  it("refuses to overwrite a real user row at a deterministic id (clone-mode restore)", async () => {
+    const db = fakeDb();
+    const plan = buildSyntheticActorPlan(SEED);
+    // A --clone-mode live restore carries real users without isSynthetic
+    // markers; seeding must fail loudly instead of hijacking the row.
+    (db as unknown as FakeDb).store.set(
+      "users",
+      new Map([
+        [
+          plan.actors[0].userIdHex,
+          {
+            _id: new ObjectId(plan.actors[0].userIdHex),
+            email: "real-player@example.com",
+            username: "realplayer",
+          },
+        ],
+      ])
+    );
+    await expect(
+      materializeSyntheticActors(db, { seed: SEED, runId: "run-1", turn: 0, now: NOW })
+    ).rejects.toThrow('non-synthetic document(s) already own _id(s) in "users"');
+    // Refusal happens before any write: the sandbox is untouched.
+    expect((db as unknown as FakeDb).docCount("characters")).toBe(0);
+  });
+
+  it("refuses a real corporation holding a seeded ticker", async () => {
+    const db = fakeDb();
+    (db as unknown as FakeDb).store.set(
+      "corporations",
+      new Map([
+        [
+          "real-corp",
+          {
+            _id: new ObjectId(),
+            tickerSymbol: syntheticTicker(SEED, "us-founder-private"),
+            sequentialId: 42,
+            name: "Real Corp",
+          },
+        ],
+      ])
+    );
+    await expect(
+      materializeSyntheticActors(db, { seed: SEED, runId: "run-1", turn: 0, now: NOW })
+    ).rejects.toThrow("already own a seeded ticker/sequentialId");
+  });
+
+  it("refuses a real corporation holding a seeded sequential id", async () => {
+    const db = fakeDb();
+    (db as unknown as FakeDb).store.set(
+      "corporations",
+      new Map([
+        [
+          "real-corp",
+          {
+            _id: new ObjectId(),
+            tickerSymbol: "REAL",
+            sequentialId: syntheticCorporateSequentialId(SEED, 0),
+            name: "Real Corp",
+          },
+        ],
+      ])
+    );
+    await expect(
+      materializeSyntheticActors(db, { seed: SEED, runId: "run-1", turn: 0, now: NOW })
+    ).rejects.toThrow("already own a seeded ticker/sequentialId");
   });
 });
 

@@ -308,6 +308,12 @@ export async function materializeSyntheticActors(
     infamy: 0,
     cashOnHand: PROBE_FOUNDER_CASH,
     currencyBalances: { personal: { USD: PROBE_FOUNDER_CASH } },
+    // The seated executive mirrors the electedOfficials row on the character
+    // doc, exactly as a production inauguration does. Without it the crisis
+    // role check (`deriveCharacterRoles`, keyed off `currentOffice.type`)
+    // sees a private citizen: the US config carries no `isHeadOfState`
+    // office type, so the officials row alone cannot resolve headOfState.
+    ...(a.role === "us-president" ? { currentOffice: { type: "president" } } : {}),
     createdTurn: turn,
     createdAt: now,
     updatedAt: now,
@@ -366,10 +372,10 @@ export async function materializeSyntheticActors(
   const member = actor("us-state-party-member");
   const memberCharacterId = new ObjectId(member.characterIdHex);
   const electionWindow = 24;
-  const persistedParties = (await db
-    .collection("politicalParties")
-    .find({})
-    .toArray()) as Array<{ countryId?: string; sequentialId?: number | string }>;
+  const persistedParties = (await db.collection("politicalParties").find({}).toArray()) as Array<{
+    countryId?: string;
+    sequentialId?: number | string;
+  }>;
   const livePartyKeys = new Set(
     persistedParties.map((p) => `${p.countryId ?? "US"}:${String(p.sequentialId)}`)
   );
@@ -382,8 +388,7 @@ export async function materializeSyntheticActors(
   const seatedOrgs = persistedOrgs
     .filter(
       (org) =>
-        livePartyKeys.size === 0 ||
-        livePartyKeys.has(`${org.countryId ?? "US"}:${org.partyId}`)
+        livePartyKeys.size === 0 || livePartyKeys.has(`${org.countryId ?? "US"}:${org.partyId}`)
     )
     .sort((a, b) => (a._id < b._id ? -1 : a._id > b._id ? 1 : 0));
   const targetOrg =
@@ -403,7 +408,8 @@ export async function materializeSyntheticActors(
         status: "voting",
       });
       const electionId =
-        (existing?._id as ObjectId | undefined) ?? objectIdFor(seed, `state-party-election:${position}`);
+        (existing?._id as ObjectId | undefined) ??
+        objectIdFor(seed, `state-party-election:${position}`);
       if (!existing) {
         statePartyElections.push({
           _id: electionId,
