@@ -94,6 +94,7 @@ export const gameConfig: GameConfig = {
   // requires a simulation report per CONTRIBUTING.md before any world enables it.
   canonicalFreightBillingEnabled: false,
   shortageResponsiveSourcingEnabled: false,
+  sovereignIssuanceConsolidationEnabled: false,
   indexFundBondLiquidityEnabled: false,
   domesticSovereignBondCoverageEnabled: false,
   nppMarketCoverageEnabled: false,
