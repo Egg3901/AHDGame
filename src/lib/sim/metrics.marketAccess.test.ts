@@ -44,6 +44,7 @@ describe("marketAccessMetricsFromSnapshot", () => {
         depthToMarketCap: value(0.01),
         medianFilledOrderExecutionHours: value(8),
         medianAmihudIlliquidity48: value(2),
+        medianTopTraderNotionalShare48: value(0.7),
       },
       households: { wealthGini: value(0.9) },
       money: {
@@ -98,6 +99,7 @@ describe("marketAccessMetricsFromSnapshot", () => {
       depthToMarketCap: 0.01,
       medianFilledOrderExecutionHours: 8,
       medianAmihudIlliquidity48: 2,
+      medianTopTraderNotionalShare48: 0.7,
       wealthGini: 0.9,
       annualizedM2GrowthPct: 8,
       transactionalMoneyShare: 0.3,
