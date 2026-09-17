@@ -19,7 +19,9 @@ import { emitTxStrict, loadTxThresholds, type TxInput } from "@/lib/financialTxL
  *   `amount` equal to the cash cost, the corp's own currency, the turn, and
  *   the technology's identity in `meta`.
  * - `emitTxStrict` persists it with bounded retries and THROWS on persistent
- *   failure, so a committed debit can never go silently invisible.
+ *   failure, so a committed debit can never go silently invisible. An
+ *   applied-but-unacknowledged insert is adopted (verified field-by-field),
+ *   not rolled back.
  * - `buildTechUnlockRefundUpdate` (pure) reverses one committed unlock for
  *   the compensating refund when the ledger insert persistently fails:
  *   rolled-back unlocks then show neither a cash debit nor a ledger row.

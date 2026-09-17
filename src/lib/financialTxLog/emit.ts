@@ -13,6 +13,7 @@ import {
   computeExpiresAtSync,
   loadTurnLengthMinutes,
 } from "@/lib/financialTxLog/expiresAt";
+import { isDuplicateKeyError } from "@/lib/api/errors";
 import { isLedgerShadowEnabled } from "@/lib/ledger/featureFlag";
 import { deriveLedgerEntries } from "@/lib/ledger/deriveFromTx";
 import { emitLedgerEntries } from "@/lib/ledger/emit";
@@ -338,6 +339,18 @@ export async function emitTxBulk(
  * insert is retried a bounded number of times for transient failures; only a
  * persistent failure throws. Doc construction (anchor derivation, suspect
  * flags, expiry) is identical to the bulk path above.
+ *
+ * Applied-but-unacknowledged adoption: retries reuse the same deterministic
+ * `_id`, so a duplicate-key error most likely means an earlier attempt
+ * applied server-side while its acknowledgement was lost. Re-inserting can
+ * never succeed, and throwing here would roll back a debit that IS visible,
+ * so the stored row is verified by `_id` and adopted when it is provably the
+ * intended write (see {@link isSameTxRow}). The lost acknowledgement always
+ * happens at the insert, before the shadow-ledger and audit fans run, so the
+ * adoption path emits those exactly once rather than duplicating them. A
+ * same-`_id` row with different content, or a duplicate with no row found,
+ * is a hard failure: the original error (or a mismatch error) is thrown and
+ * the caller rolls back as usual.
  */
 export async function emitTxStrict(
   db: Db,
@@ -358,8 +371,139 @@ export async function emitTxStrict(
       return doc;
     } catch (err) {
       lastError = err;
+      if (isDuplicateKeyError(err)) {
+        // Retries reuse the same _id, so a duplicate key most likely means
+        // the row is already present: applied by an earlier attempt whose ack
+        // was lost. Re-inserting can never succeed, and throwing here would
+        // roll back a debit that IS visible. Adopt the stored row only when
+        // it is provably the intended write; anything else stays a hard
+        // failure so the caller rolls back as usual.
+        const existing = await findTxById(db, doc._id);
+        if (existing && isSameTxRow(existing, doc)) {
+          await shadowLedgerFromTx(db, [existing]);
+          recordAudit(buildAuditEnvelope(existing));
+          return existing;
+        }
+        if (existing) {
+          lastError = new Error(
+            `emitTxStrict: duplicate _id ${doc._id.toString()} with mismatched content ` +
+              `(${txRowDiffs(existing, doc).join(",")}); refusing to adopt`
+          );
+        }
+        break;
+      }
     }
   }
   Sentry.captureException(lastError, { extra: { phase: "emitTxStrict", type: entry.type } });
   throw lastError;
+}
+
+async function findTxById(db: Db, id: ObjectId): Promise<FinancialTxLogEntry | null> {
+  try {
+    return await db.collection<FinancialTxLogEntry>("financialTxLog").findOne({ _id: id });
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The stored row is provably the intended write only when every immutable
+ * identity and value field matches: transaction type, turn, creation time,
+ * subject identity, exact amount and currency (plus the derived anchor
+ * snapshot), counterparty identity, balance marker, and the full `meta`
+ * payload (which carries the ledger key and the technology identity).
+ * Derived bookkeeping (`expiresAt`, `suspectFlags`, `flagged`) is excluded:
+ * it is recomputed from the compared fields, so matching inputs imply
+ * matching derivatives, and flag timestamps would only add noise.
+ *
+ * `type` plus `meta.ledgerKey` alone is NOT enough: a same-`_id` row with a
+ * different amount, subject, or node would otherwise be adopted as success
+ * while the visible debit belongs to a different write.
+ */
+function isSameTxRow(existing: FinancialTxLogEntry, doc: FinancialTxLogEntry): boolean {
+  return txRowDiffs(existing, doc).length === 0;
+}
+
+/** Field-level differences between the stored row and the intended write. */
+function txRowDiffs(existing: FinancialTxLogEntry, doc: FinancialTxLogEntry): string[] {
+  const diffs: string[] = [];
+  const check = (name: string, same: boolean): void => {
+    if (!same) diffs.push(name);
+  };
+  check("type", existing.type === doc.type);
+  check("turn", existing.turn === doc.turn);
+  check("createdAt", sameTxTime(existing.createdAt, doc.createdAt));
+  check("subjectType", existing.subjectType === doc.subjectType);
+  check("subjectId", sameTxId(existing.subjectId, doc.subjectId));
+  check("countryId", existing.countryId === doc.countryId);
+  check("subjectName", existing.subjectName === doc.subjectName);
+  check("subjectSequentialId", existing.subjectSequentialId === doc.subjectSequentialId);
+  check("amount", existing.amount === doc.amount);
+  check("currencyCode", existing.currencyCode === doc.currencyCode);
+  check("anchorAmount", existing.anchorAmount === doc.anchorAmount);
+  check("counterpartyType", existing.counterpartyType === doc.counterpartyType);
+  check("counterpartyId", sameTxId(existing.counterpartyId, doc.counterpartyId));
+  check("counterpartyName", existing.counterpartyName === doc.counterpartyName);
+  check("balanceAfter", existing.balanceAfter === doc.balanceAfter);
+  check("meta", sameTxValue(existing.meta, doc.meta));
+  return diffs;
+}
+
+function sameTxTime(a: Date, b: Date): boolean {
+  return new Date(a).getTime() === new Date(b).getTime();
+}
+
+function sameTxId(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (a == null || b == null) return false;
+  const aEquals = (a as { equals?: unknown }).equals;
+  if (typeof aEquals === "function") {
+    try {
+      return (aEquals as (other: unknown) => boolean).call(a, b);
+    } catch {
+      return false;
+    }
+  }
+  const bEquals = (b as { equals?: unknown }).equals;
+  if (typeof bEquals === "function") {
+    try {
+      return (bEquals as (other: unknown) => boolean).call(b, a);
+    } catch {
+      return false;
+    }
+  }
+  return String(a) === String(b);
+}
+
+/**
+ * Structural value equality for `meta` payloads (plain JSON plus stamped
+ * ObjectId/Date values). Reference equality is the fast path; class
+ * instances compare through their own `equals` when available.
+ */
+function sameTxValue(a: unknown, b: unknown): boolean {
+  if (Object.is(a, b)) return true;
+  if (typeof a !== typeof b) return false;
+  if (a == null || b == null) return false;
+  if (a instanceof Date && b instanceof Date) return a.getTime() === b.getTime();
+  if (Array.isArray(a) && Array.isArray(b)) {
+    return a.length === b.length && a.every((v, i) => sameTxValue(v, b[i]));
+  }
+  if (typeof a === "object" && typeof b === "object") {
+    const aEquals = (a as { equals?: unknown }).equals;
+    const bEquals = (b as { equals?: unknown }).equals;
+    if (typeof aEquals === "function" || typeof bEquals === "function") {
+      return sameTxId(a, b);
+    }
+    const aKeys = Object.keys(a);
+    const bKeys = Object.keys(b as object);
+    return (
+      aKeys.length === bKeys.length &&
+      aKeys.every(
+        (k) =>
+          Object.prototype.hasOwnProperty.call(b, k) &&
+          sameTxValue((a as Record<string, unknown>)[k], (b as Record<string, unknown>)[k])
+      )
+    );
+  }
+  return false;
 }

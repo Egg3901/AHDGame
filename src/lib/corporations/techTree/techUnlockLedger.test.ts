@@ -1,6 +1,8 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { ObjectId } from "mongodb";
 import type { Db } from "mongodb";
+import { recordAudit } from "@/lib/audit/recordAudit";
+import { isLedgerShadowEnabled } from "@/lib/ledger/featureFlag";
 import type { Corporation, CorporateSector } from "@/lib/db/types";
 import { unlockTechNode } from "@/lib/corporations/commands/techTree/unlockTechNode";
 import {
@@ -93,6 +95,50 @@ function mockDb(
 
 const NODE_1950_1 = corpNodeId("1950", 1); // Management by Objectives, rd cost 8
 const CASH_1950_1 = Math.round(2_000_000 * 0.15); // 300_000
+
+beforeEach(() => {
+  vi.clearAllMocks();
+});
+
+function duplicateKeyError(): Error & { code?: number } {
+  const err = new Error("E11000 duplicate key error collection") as Error & { code?: number };
+  err.code = 11000;
+  return err;
+}
+
+/**
+ * Simulate an insert that applies server-side but loses its acknowledgement,
+ * so the retry with the same deterministic _id hits E11000. `mutateStored`
+ * corrupts the stored row to simulate a same-_id collision with a different
+ * write; `store: false` simulates the row going missing after the duplicate.
+ */
+function mockAppliedButUnackedTx(
+  db: Db,
+  txInserts: Record<string, unknown>[],
+  opts: {
+    mutateStored?: (doc: Record<string, unknown>) => Record<string, unknown>;
+    store?: boolean;
+  } = {}
+) {
+  const { mutateStored, store = true } = opts;
+  const stored: Record<string, unknown>[] = [];
+  let calls = 0;
+  (db.collection("financialTxLog") as any).insertOne = vi.fn((doc: Record<string, unknown>) => {
+    calls += 1;
+    if (calls === 1) {
+      if (store) {
+        const row = mutateStored ? mutateStored(doc) : doc;
+        stored.push(row);
+        txInserts.push(row);
+      }
+      return Promise.reject(new Error("network timeout after apply"));
+    }
+    return Promise.reject(duplicateKeyError());
+  });
+  (db.collection("financialTxLog") as any).findOne = (filter: Record<string, any>) =>
+    Promise.resolve(stored.find((d) => d._id === filter._id) ?? null);
+  return { stored };
+}
 
 describe("tech unlock ledger (ticket #1998)", () => {
   it("negative control: the pre-fix cash-only debit moves cash with no ledger row", async () => {
@@ -187,6 +233,94 @@ describe("tech unlock ledger (ticket #1998)", () => {
     expect(refund.$inc.liquidCapital).toBe(CASH_1950_1);
     expect(refund.$inc.rdScore).toBe(8);
     expect(refund.$pull).toEqual({ unlockedTechNodeIds: NODE_1950_1 });
+  });
+
+  it("an applied-but-unacked ledger insert is adopted, not rolled back", async () => {
+    const corp = makeCorp();
+    const { db, txInserts, corpsUpdateOne } = mockDb();
+    // First attempt: the row is applied server-side but the ack is lost.
+    // Retries reuse the same _id, so they hit the unique _id index (E11000).
+    mockAppliedButUnackedTx(db, txInserts);
+
+    const res = await unlockTechNode(db, corp, NODE_1950_1, 1953, 82);
+    // The debit IS visible, so the unlock must stand: exactly one row, no refund.
+    expect(res).toMatchObject({ ok: true, cashSpent: CASH_1950_1 });
+    expect(txInserts).toHaveLength(1);
+    expect(corpsUpdateOne).toHaveBeenCalledOnce();
+    // The adoption completes the audit fan exactly once for the visible debit.
+    expect(vi.mocked(recordAudit)).toHaveBeenCalledOnce();
+    const envelope = vi.mocked(recordAudit).mock.calls[0][0] as {
+      refs: { financialTxLogId: unknown };
+    };
+    expect(envelope.refs.financialTxLogId).toBe((txInserts[0] as { _id: unknown })._id);
+  });
+
+  it("adoption emits one shadow entry and one audit row, never duplicates", async () => {
+    const corp = makeCorp();
+    const { db, txInserts, corpsUpdateOne, collections } = mockDb();
+    const ledgerInsertMany = vi.fn(() => Promise.resolve({ insertedCount: 1 }));
+    collections.ledgerEntries = { insertMany: ledgerInsertMany };
+    vi.mocked(isLedgerShadowEnabled).mockResolvedValueOnce(true);
+    mockAppliedButUnackedTx(db, txInserts);
+
+    const res = await unlockTechNode(db, corp, NODE_1950_1, 1953, 82);
+    expect(res).toMatchObject({ ok: true, cashSpent: CASH_1950_1 });
+    expect(corpsUpdateOne).toHaveBeenCalledOnce();
+    // The lost ack happened at the insert, before either fan ran, so adoption
+    // emits each downstream exactly once from the adopted row.
+    expect(ledgerInsertMany).toHaveBeenCalledOnce();
+    const shadowDocs = ledgerInsertMany.mock.calls[0][0] as Record<string, any>[];
+    expect(shadowDocs).toHaveLength(1);
+    expect(shadowDocs[0].legs[0].amount).toBe(-CASH_1950_1);
+    expect(shadowDocs[0].legs[1].amount).toBe(CASH_1950_1);
+    expect(vi.mocked(recordAudit)).toHaveBeenCalledOnce();
+  });
+
+  it("a same-_id row with different content is rejected and rolled back", async () => {
+    const corp = makeCorp();
+    const { db, txInserts, corpsUpdateOne } = mockDb();
+    // Same _id, but the stored row is a different write: different amount,
+    // node, and ledger key. Matching on type alone would wrongly adopt this.
+    mockAppliedButUnackedTx(db, txInserts, {
+      mutateStored: (doc) => ({
+        ...doc,
+        amount: (doc.amount as number) - 1,
+        meta: {
+          ...(doc.meta as Record<string, unknown>),
+          nodeId: "other-node",
+          ledgerKey: "other-key",
+        },
+      }),
+    });
+
+    const res = await unlockTechNode(db, corp, NODE_1950_1, 1953, 82);
+    // Must fail loudly, never adopted as success: the debit is refunded.
+    expect(res).toMatchObject({ ok: false, status: 500 });
+    expect(corpsUpdateOne.mock.calls.length).toBe(2);
+    const [, refund] = corpsUpdateOne.mock.calls[1];
+    expect(refund.$inc.liquidCapital).toBe(CASH_1950_1);
+    expect(refund.$inc.rdScore).toBe(8);
+    expect(refund.$pull).toEqual({ unlockedTechNodeIds: NODE_1950_1 });
+    expect(vi.mocked(recordAudit)).not.toHaveBeenCalled();
+  });
+
+  it("a duplicate key with no stored row stays a hard failure and rolls back", async () => {
+    const corp = makeCorp();
+    const { db, txInserts, corpsUpdateOne } = mockDb();
+    (db.collection("financialTxLog") as any).insertOne = vi.fn(() =>
+      Promise.reject(duplicateKeyError())
+    );
+    (db.collection("financialTxLog") as any).findOne = () => Promise.resolve(null);
+
+    const res = await unlockTechNode(db, corp, NODE_1950_1, 1953, 82);
+    // Nothing to adopt, so strict failure stands: no row, full refund.
+    expect(res).toMatchObject({ ok: false, status: 500 });
+    expect(txInserts).toHaveLength(0);
+    expect(corpsUpdateOne.mock.calls.length).toBe(2);
+    const [, refund] = corpsUpdateOne.mock.calls[1];
+    expect(refund.$inc.liquidCapital).toBe(CASH_1950_1);
+    expect(refund.$pull).toEqual({ unlockedTechNodeIds: NODE_1950_1 });
+    expect(vi.mocked(recordAudit)).not.toHaveBeenCalled();
   });
 
   it("refund builder reverses the unlock exactly", () => {
@@ -293,6 +427,32 @@ describe("NPP tech unlock ledger", () => {
     const result = await flushNppTechUnlockLedger(db, techLedger);
     expect(result).toMatchObject({ skippedUncommitted: 1, emitted: 0 });
     expect(txInserts).toHaveLength(0);
+  });
+
+  it("persistently failing NPP ledger rows refund the unlock, not the row", async () => {
+    const { corp, sectors, corpUpdates, techLedger } = nppSetup();
+    maybePushNppTechUnlock({
+      corp,
+      sectors,
+      techCurrentYear: 1953,
+      turn: 82,
+      now: new Date(),
+      corpUpdates,
+      techLedger,
+    });
+    const intent = techLedger[0];
+    const { db, txInserts, corpsUpdateOne } = mockDb({ failTxInserts: 10 });
+    (db.collection("corporations").find as any) = () => ({
+      toArray: () => Promise.resolve([{ _id: corp._id, unlockedTechNodeIds: [intent.nodeId] }]),
+    });
+    const result = await flushNppTechUnlockLedger(db, techLedger);
+    expect(result).toMatchObject({ attempted: 1, emitted: 0, refunded: 1 });
+    expect(txInserts).toHaveLength(0);
+    expect(corpsUpdateOne).toHaveBeenCalledOnce();
+    const [filter, refund] = corpsUpdateOne.mock.calls[0];
+    expect(filter).toMatchObject({ _id: corp._id });
+    expect(refund.$inc.liquidCapital).toBe(intent.cashCost);
+    expect(refund.$pull).toEqual({ unlockedTechNodeIds: intent.nodeId });
   });
 
   it("already-logged NPP unlocks are not duplicated", async () => {
