@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import {
   determineNPPRiskArchetype,
   computeNPPInvestableBudget,
@@ -6,7 +6,6 @@ import {
   NPP_WEALTH_SATURATION_YEARS,
   nppAnnualIncomeAnchor,
   nppAccrualDampingMultiplier,
-  processNPPFundInvestments,
 } from "./nppInvesting";
 import type { NPP } from "@/lib/db/types";
 import { ObjectId } from "mongodb";
@@ -146,133 +145,13 @@ describe("nppInvesting", () => {
     });
   });
 
-  describe("processNPPFundInvestments wealth-saturation integration (#3245)", () => {
-    // US conservative NPP baseline: floor(80000/48 × 0.4) = 666/turn budget,
-    // saturation cap = 2 × 80000 = ₳160,000.
-    const FUND_ID = new ObjectId();
-    const NAV = 100;
-    const activeFund = {
-      _id: FUND_ID,
-      slug: "us-broad",
-      status: "active",
-      scope: "country",
-      countryId: "US",
-      kind: "broad",
-      quotedNav: NAV,
-    };
-
-    type MockDb = import("@/lib/test-utils/mockDb").MockDb;
-    let db: MockDb;
-
-    function makeNppDoc(overrides: Record<string, unknown> = {}) {
-      return {
-        _id: new ObjectId(),
-        countryId: "US",
-        favorability: 80,
-        politicalInfluence: 80, // conservative archetype
-        nppInvestmentCashAnchor: 0,
-        ...overrides,
-      };
-    }
-
-    async function setup(
-      nppDocs: Record<string, unknown>[],
-      nppPositions: { nppId: ObjectId; fundId: ObjectId; units: number }[]
-    ) {
-      const { createMockDb, createAsyncIterableCursor } = await import("@/lib/test-utils/mockDb");
-      db = createMockDb();
-      // Active funds for listActiveFunds.
-      const fundsCol = db.collection("indexFunds");
-      fundsCol.find.mockReturnValue(createAsyncIterableCursor([activeFund]));
-      // NPP roster.
-      const nppsCol = db.collection("npps");
-      nppsCol.find.mockReturnValue(createAsyncIterableCursor(nppDocs));
-      // Positions: the wealth-valuation query has no nppId clause; the pass-4
-      // existing-position query filters nppId: { $in }. Dispatch on the filter.
-      const positionsCol = db.collection("indexFundPositions");
-      positionsCol.find.mockImplementation((filter: Record<string, unknown>) =>
-        createAsyncIterableCursor(filter && "nppId" in filter ? [] : nppPositions)
-      );
-      return db;
-    }
-
-    function accrualIncsFrom(dbm: MockDb): number[] {
-      const bulk = dbm.collectionMocks["npps"]?.bulkWrite;
-      if (!bulk || bulk.mock.calls.length === 0) return [];
-      const incs: number[] = [];
-      for (const call of bulk.mock.calls) {
-        for (const op of call[0] as {
-          updateOne: { update: { $inc?: Record<string, number> } };
-        }[]) {
-          const inc = op.updateOne.update.$inc?.nppInvestmentCashAnchor;
-          if (inc !== undefined) incs.push(inc);
-        }
-      }
-      return incs;
-    }
-
-    beforeEach(() => {
-      vi.clearAllMocks();
-    });
-
-    it("accrues the full undamped budget at zero wealth (legacy behavior preserved)", async () => {
-      const dbm = await setup([makeNppDoc()], []);
-      const result = await processNPPFundInvestments(dbm as never, { currentTurn: 10 });
-      expect(result.nppsProcessed).toBe(1);
-      const incs = accrualIncsFrom(dbm);
-      expect(incs).toContain(666); // floor(80000/48 × 0.4)
-    });
-
-    it("halves the accrual at half the saturation cap", async () => {
-      const dbm = await setup([makeNppDoc({ nppInvestmentCashAnchor: 80_000 })], []);
-      await processNPPFundInvestments(dbm as never, { currentTurn: 10 });
-      const incs = accrualIncsFrom(dbm);
-      expect(incs).toContain(333); // floor(666 × 0.5)
-    });
-
-    it("skips a saturated NPP entirely — no accrual, no debit, no subscriptions", async () => {
-      const dbm = await setup([makeNppDoc({ nppInvestmentCashAnchor: 200_000 })], []);
-      const result = await processNPPFundInvestments(dbm as never, { currentTurn: 10 });
-      expect(result.nppsProcessed).toBe(0);
-      expect(result.totalInvested).toBe(0);
-      expect(dbm.collectionMocks["npps"].bulkWrite).not.toHaveBeenCalled();
-      // Money conservation: nothing was minted and nothing was destroyed —
-      // there is no drain leg, so no financialTxLog sink entry is required.
-      expect(dbm.collectionMocks["financialTxLog"]).toBeUndefined();
-    });
-
-    it("counts fund-position value toward saturation, not just cash", async () => {
-      const npp = makeNppDoc({ nppInvestmentCashAnchor: 0 });
-      const dbm = await setup(
-        [npp],
-        [{ nppId: npp._id as ObjectId, fundId: FUND_ID, units: 2_000 }] // 2000 × ₳100 = ₳200k ≥ cap
-      );
-      const result = await processNPPFundInvestments(dbm as never, { currentTurn: 10 });
-      expect(result.nppsProcessed).toBe(0);
-      expect(accrualIncsFrom(dbm)).toHaveLength(0);
-    });
-
-    it("never debits more than the damped accrual (invest ≤ income, no negative drift)", async () => {
-      const dbm = await setup([makeNppDoc({ nppInvestmentCashAnchor: 80_000 })], []);
-      await processNPPFundInvestments(dbm as never, { currentTurn: 10 });
-      const incs = accrualIncsFrom(dbm);
-      const accrued = incs.filter((v) => v > 0).reduce((a, b) => a + b, 0);
-      const debited = -incs.filter((v) => v < 0).reduce((a, b) => a + b, 0);
-      expect(debited).toBeLessThanOrEqual(accrued);
-    });
-
-    it("values wealth only from NPP-held positions (players are structurally exempt)", async () => {
-      const dbm = await setup([makeNppDoc()], []);
-      await processNPPFundInvestments(dbm as never, { currentTurn: 10 });
-      // The valuation query is scoped holderKind: "npp"; character positions
-      // can never enter the damping measure, and the characters collection is
-      // never touched by this phase.
-      const firstFindFilter = dbm.collectionMocks["indexFundPositions"].find.mock
-        .calls[0][0] as Record<string, unknown>;
-      expect(firstFindFilter).toMatchObject({ holderKind: "npp" });
-      expect(dbm.collectionMocks["characters"]).toBeUndefined();
-    });
-  });
+  // processNPPFundInvestments wealth-saturation and crash-safety integration
+  // (#3245, #1672) moved to nppInvestSpend.test.ts ("NPP pass over the
+  // crash-safe primitive"), which drives the pass against a stateful fake:
+  // full-budget accrual, halved damping, saturated skip with zero writes,
+  // position-value saturation, invest-below-accrual, player exemption,
+  // same-turn no-op replay, crashed-pass resume with stored-vs-live prices,
+  // and per-NPP fail-closed isolation.
 
   describe("ARCHETYPE_ALLOCATIONS", () => {
     it("all archetype allocations sum to broadPct + sectorPct <= 1", () => {

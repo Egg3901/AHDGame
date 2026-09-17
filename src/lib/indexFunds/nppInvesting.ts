@@ -12,14 +12,19 @@
  * Gated behind isIndexFundsEnabled (indexFundsMode).
  */
 
-import { ObjectId, type AnyBulkWriteOperation, type Db, type Document } from "mongodb";
-import type { NPP, IndexFund, IndexFundPosition, IndexFundTransaction } from "@/lib/db/types";
+import { ObjectId, type Db } from "mongodb";
+import type { NPP, IndexFund, IndexFundPosition } from "@/lib/db/types";
 import { isIndexFundsEnabled } from "@/lib/indexFunds/featureFlag";
+import { FUND_POSITION_COLLECTION, listActiveFunds } from "@/lib/indexFunds/fundQueries";
+import { MoneyFlowKeyConflictError, MoneyFlowTerminalError } from "@/lib/db/nonAtomicMoneyFlow";
 import {
-  FUND_POSITION_COLLECTION,
-  FUND_TRANSACTION_COLLECTION,
-  listActiveFunds,
-} from "@/lib/indexFunds/fundQueries";
+  applyNppInvestSpend,
+  buildNppInvestFingerprint,
+  buildNppInvestKey,
+  recoverNppInvestOrphans,
+  resumeNppInvestByKey,
+  type NppInvestSubscription,
+} from "@/lib/indexFunds/nppInvestSpend";
 import type { CountryId } from "@/lib/constants/countries";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 
@@ -171,12 +176,13 @@ type ProjectedNPP = {
   lastIndexFundInvestmentTurn?: number;
 };
 
-interface PlannedSubscription {
-  nppId: ObjectId;
-  fund: IndexFund;
-  units: number;
-  costAnchor: number;
+interface PlannedNppInvestment {
+  npp: ProjectedNPP;
   archetype: NPRiskArchetype;
+  budget: number;
+  investedThisNPP: number;
+  canarySkipped: boolean;
+  subscriptions: { fund: IndexFund; units: number; costAnchor: number }[];
 }
 
 /**
@@ -246,22 +252,28 @@ function buildNppSubscriptions(
  * Process fund investments for all active NPPs.
  * Called from the fund cron cycle.
  *
- * Batched rewrite (2026-07): the original version did this per-NPP with an
- * awaited DB round-trip inside the loop (accrual, then per-subscription
- * debit+credit+fund-update+tx-insert) — ~5-10 sequential round-trips per NPP.
- * At 10k+ NPPs that's 50k-100k+ sequential awaits in one turn phase, found via
- * the headless sim harness to be THE dominant cost of a turn (turnLogs showed
- * ~97s of a ~108s turn with zero telemetry, traced to this exact function via
- * the indexFunds phase). Rewritten as: (1) compute every NPP's accrual +
- * subscriptions in memory (pure, no IO — extracted to buildNppSubscriptions),
- * (2) one bulkWrite for all accruals, (3) one bulkWrite for all debits (same
- * $gte guard as before, preserved per-op), (4) fund-level unitSupply/
- * cashAnchor updates AGGREGATED per fund across every NPP first, so a fund
- * held by thousands of NPPs gets ONE $inc, not thousands, (5) position
- * credits split into a bulkWrite for existing positions (using the exact same
- * weighted-avgNavAnchor aggregation-pipeline update creditFundPosition uses)
- * and an insertMany for brand-new positions, (6) one insertMany for the
- * transaction log.
+ * Crash-safe orchestration (issue #1672): the 2026-07 batched rewrite below
+ * (per-NPP planning in memory, then one bulkWrite per write kind) left the
+ * whole operation unguarded across six sequential bulk writes: a crash
+ * between the accrual bulkWrite and the debit bulkWrite double-invested on
+ * retry (the retry re-accrued), a crash after the debits stranded NPP cash
+ * with no positions, and a fund or position that vanished mid-pass left units
+ * minted against a debit that never matched. The pass now plans every NPP
+ * exactly as before (same selection, allocation, damping, budget, NAV, and
+ * ordering math, all in memory with no IO in the loop) and then executes one
+ * NPP at a time through the `applyNppInvestSpend` primitive: the budget,
+ * subscriptions, NAVs, and child keys are pinned on that NPP's receipt before
+ * its first mutation, so a same-turn retry replays the stored plan instead of
+ * re-accruing or repricing from post-debit state. A same-turn re-run of the
+ * whole pass first re-drives receipts a crashed pass left `in_progress`
+ * (applied steps converge, the rest land) and then plans fresh only for NPPs
+ * without this turn's stamp, so a retry never accrues or invests twice.
+ *
+ * Perf note: per-NPP keyed flows cost more round trips than the old six bulk
+ * writes (each NPP does a claim, a plan persist, and one guarded write per
+ * step). That is the price of crash safety, accepted the same way for queued
+ * redemptions; measure with `AHD_TURN_ROUNDTRIP_PROFILE=1 npx tsx
+ * scripts/perf/one-turn.ts` before and after if this phase regresses.
  *
  * Correctness: subscription amounts are constructed as fractions of `budget`
  * that sum to at most `budget` by construction (domesticBudget + globalBudget
@@ -270,7 +282,14 @@ function buildNppSubscriptions(
  * synchronous pass, and the debit guard (kept, not just assumed) will always
  * match. A `investedThisNPP > budget` check is kept anyway as a canary: if
  * that math is ever wrong, this NPP's subscriptions are dropped and logged as
- * an error rather than risking an over-debit.
+ * an error rather than risking an over-debit (the NPP still accrues, exactly
+ * like the old path).
+ *
+ * Fail-closed deviations from the old strand-prone behavior (all per-NPP,
+ * the rest of the pass continues): a debit whose $gte guard no longer matches
+ * refunds the accrual instead of leaving the NPP debited with no positions;
+ * a fund or position that vanished between plan and apply compensates the
+ * NPP's prefix instead of minting units with no backing or no owner row.
  */
 export async function processNPPFundInvestments(
   db: Db,
@@ -292,9 +311,20 @@ export async function processNPPFundInvestments(
     return { nppsProcessed: 0, totalInvested: 0, errors: [] };
   }
 
+  // ── Orphan recovery FIRST, before every read below. ─────────────────────
+  // A crashed pass leaves `in_progress` receipts; resuming them applies the
+  // accrual, which stamps the NPP row. The roster snapshot must see those
+  // stamps, otherwise the planning loop would replan a resumed NPP from
+  // post-accrual state (a different fingerprint) and hit the stored receipt.
+  // A same-turn re-run without this ordering would fail resumed NPPs on a key
+  // conflict instead of skipping them.
+  const orphans = await recoverNppInvestOrphans(db, currentTurn);
+  let nppsProcessed = orphans.resumed;
+  let totalInvested = orphans.investedAnchor;
+
   const activeFunds = await listActiveFunds(db);
   if (activeFunds.length === 0) {
-    return { nppsProcessed: 0, totalInvested: 0, errors: [] };
+    return { nppsProcessed, totalInvested, errors };
   }
 
   const npps = await db
@@ -337,12 +367,11 @@ export async function processNPPFundInvestments(
   }
 
   // ── Pass 1: pure in-memory planning — no DB calls in this loop. ──────────
+  // Selection, allocation, damping, budget, NAV, and ordering math are
+  // byte-identical to the old bulk path; only the write plumbing changed
+  // (per-NPP keyed flows below instead of six bulk writes).
   const now = new Date();
-  const accrualOps: AnyBulkWriteOperation<Document>[] = [];
-  const debitOps: AnyBulkWriteOperation<Document>[] = [];
-  const planned: PlannedSubscription[] = [];
-  let nppsProcessed = 0;
-  let totalInvested = 0;
+  const plans: PlannedNppInvestment[] = [];
 
   for (const npp of npps) {
     try {
@@ -366,25 +395,9 @@ export async function processNPPFundInvestments(
       if (budget <= 0) continue;
       if (npp.lastIndexFundInvestmentTurn === currentTurn) continue;
 
-      accrualOps.push({
-        updateOne: {
-          filter: {
-            _id: npp._id,
-            $or: [
-              { lastIndexFundInvestmentTurn: { $ne: currentTurn } },
-              { lastIndexFundInvestmentTurn: { $exists: false } },
-            ],
-          },
-          update: {
-            $inc: { nppInvestmentCashAnchor: budget },
-            $set: { lastIndexFundInvestmentTurn: currentTurn, updatedAt: now },
-          },
-        },
-      });
-
       const subscriptions = buildNppSubscriptions(npp, archetype, budget, activeFunds);
       let investedThisNPP = 0;
-      const nppPlanned: PlannedSubscription[] = [];
+      const nppPlanned: { fund: IndexFund; units: number; costAnchor: number }[] = [];
 
       for (const { fund, amount } of subscriptions) {
         // Skip near-insolvent funds — below 1 unit of anchor currency, NPPs would
@@ -393,82 +406,51 @@ export async function processNPPFundInvestments(
         const units = Math.floor(amount / fund.quotedNav);
         if (units <= 0) continue;
         const costAnchor = units * fund.quotedNav;
-        nppPlanned.push({ nppId: npp._id, fund, units, costAnchor, archetype });
+        nppPlanned.push({ fund, units, costAnchor });
         investedThisNPP += costAnchor;
       }
 
       if (investedThisNPP > budget) {
         // Should be mathematically impossible (subscriptions sum to <= budget
-        // by construction) — canary, not a real guard. Drop rather than risk
-        // an over-debit if this ever fires.
+        // by construction): canary, not a real guard. The NPP still accrues
+        // but its subscriptions are dropped rather than risking an over-debit.
         errors.push(
           `NPP ${npp._id}: planned investment ${investedThisNPP} exceeds budget ${budget}, skipping subscriptions this turn`
         );
-      } else if (investedThisNPP > 0) {
-        debitOps.push({
-          updateOne: {
-            filter: { _id: npp._id, nppInvestmentCashAnchor: { $gte: investedThisNPP } },
-            update: {
-              $inc: { nppInvestmentCashAnchor: -investedThisNPP },
-              $set: { updatedAt: now },
-            },
-          },
+        plans.push({
+          npp,
+          archetype,
+          budget,
+          investedThisNPP: 0,
+          canarySkipped: true,
+          subscriptions: [],
         });
-        planned.push(...nppPlanned);
-        totalInvested += investedThisNPP;
+      } else {
+        plans.push({
+          npp,
+          archetype,
+          budget,
+          investedThisNPP,
+          canarySkipped: false,
+          subscriptions: nppPlanned,
+        });
       }
-
-      nppsProcessed++;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       errors.push(`NPP ${npp._id}: ${message}`);
     }
   }
 
-  // ── Pass 2: accrue cash for every NPP, then debit for the ones investing. ─
-  // Sequential relative to each other (debit's guard depends on accrual
-  // having landed), but each pass is a single batched round-trip.
-  if (accrualOps.length > 0) {
-    await db.collection("npps").bulkWrite(accrualOps, { ordered: false });
-  }
-  if (debitOps.length > 0) {
-    await db.collection("npps").bulkWrite(debitOps, { ordered: false });
+  if (plans.length === 0) {
+    return { nppsProcessed, totalInvested, errors };
   }
 
-  if (planned.length === 0) {
-    return { nppsProcessed, totalInvested: 0, errors };
-  }
-
-  // ── Pass 3: fund-level unitSupply/cashAnchor — ONE op per distinct fund, ──
-  // aggregated across every NPP that bought into it, not one op per purchase.
-  const perFundTotals = new Map<string, { units: number; cashAnchor: number }>();
-  for (const p of planned) {
-    const key = String(p.fund._id);
-    const entry = perFundTotals.get(key) ?? { units: 0, cashAnchor: 0 };
-    entry.units += p.units;
-    entry.cashAnchor += p.costAnchor;
-    perFundTotals.set(key, entry);
-  }
-  const fundOps: AnyBulkWriteOperation<Document>[] = [...perFundTotals.entries()].map(
-    ([fundId, totals]) => ({
-      updateOne: {
-        filter: { _id: new ObjectId(fundId) },
-        update: {
-          $inc: { unitSupply: totals.units, cashAnchor: totals.cashAnchor },
-          $set: { updatedAt: now },
-        },
-      },
-    })
-  );
-  if (fundOps.length > 0) {
-    await db.collection("indexFunds").bulkWrite(fundOps, { ordered: false });
-  }
-
-  // ── Pass 4: position credits. Existing positions get the SAME weighted- ──
-  // avgNavAnchor aggregation-pipeline update creditFundPosition uses (just
-  // batched); brand-new positions are pre-detected and inserted directly —
-  // no per-position round-trip either way.
-  const distinctNppIds = [...new Set(planned.map((p) => String(p.nppId)))].map(
+  // ── Pass 2: pre-detect existing positions in one batched read. ───────────
+  // Pinned per subscription on the flow input: a same-key retry replays the
+  // stored flag instead of re-reading (a position created by the first attempt
+  // must still read as "new" so its deterministic insert converges instead of
+  // double-crediting through the update path).
+  const distinctNppIds = [...new Set(plans.map((p) => String(p.npp._id)))].map(
     (id) => new ObjectId(id)
   );
   const existingPositions = await db
@@ -480,86 +462,67 @@ export async function processNPPFundInvestments(
     .toArray();
   const existingKeys = new Set(existingPositions.map((p) => `${p.fundId}:${p.nppId}`));
 
-  const positionUpdateOps: AnyBulkWriteOperation<Document>[] = [];
-  const positionInsertDocs: Omit<IndexFundPosition, "_id">[] = [];
-  for (const p of planned) {
-    const key = `${p.fund._id}:${p.nppId}`;
-    if (existingKeys.has(key)) {
-      positionUpdateOps.push({
-        updateOne: {
-          filter: { fundId: p.fund._id, holderKind: "npp", nppId: p.nppId },
-          update: [
-            {
-              $set: {
-                avgNavAnchor: {
-                  $cond: [
-                    { $gt: [{ $add: ["$units", p.units] }, 0] },
-                    {
-                      $divide: [
-                        {
-                          $add: [
-                            {
-                              $multiply: [
-                                "$units",
-                                { $ifNull: ["$avgNavAnchor", p.fund.quotedNav] },
-                              ],
-                            },
-                            p.units * p.fund.quotedNav,
-                          ],
-                        },
-                        { $add: ["$units", p.units] },
-                      ],
-                    },
-                    p.fund.quotedNav,
-                  ],
-                },
-                units: { $add: ["$units", p.units] },
-                updatedAt: now,
-              },
-            },
-          ],
-        },
+  // ── Pass 3: one keyed flow per NPP, in roster order. ─────────────────────
+  // Each flow pins its budget, subscriptions, NAVs, and child keys on its
+  // receipt before its first mutation; a per-NPP failure is recorded and the
+  // rest of the pass continues. Sequential awaits keep the write order
+  // deterministic; concurrency across NPPs would interleave fund-credit legs
+  // with no benefit (every leg is keyed, so order carries no safety meaning).
+  for (const plan of plans) {
+    const subscriptions: NppInvestSubscription[] = plan.subscriptions.map((s) => ({
+      fundId: s.fund._id,
+      fundSlug: s.fund.slug,
+      quotedNav: s.fund.quotedNav,
+      units: s.units,
+      costAnchor: s.costAnchor,
+      existingPosition: existingKeys.has(`${s.fund._id}:${plan.npp._id}`),
+    }));
+    const key = buildNppInvestKey(plan.npp._id, currentTurn);
+    const fingerprint = buildNppInvestFingerprint({
+      nppId: plan.npp._id,
+      turn: currentTurn,
+      budget: plan.budget,
+      investedAnchor: plan.investedThisNPP,
+      archetype: plan.archetype,
+      canarySkipped: plan.canarySkipped,
+      subscriptions,
+    });
+    try {
+      const result = await applyNppInvestSpend(db, {
+        nppId: plan.npp._id,
+        turn: currentTurn,
+        budget: plan.budget,
+        investedAnchor: plan.investedThisNPP,
+        archetype: plan.archetype,
+        subscriptions,
+        canarySkipped: plan.canarySkipped,
+        fingerprint,
+        idempotencyKey: key,
+        now,
       });
-    } else {
-      positionInsertDocs.push({
-        fundId: p.fund._id,
-        holderKind: "npp",
-        nppId: p.nppId,
-        units: p.units,
-        avgNavAnchor: p.fund.quotedNav,
-        createdAt: now,
-        updatedAt: now,
-      });
+      nppsProcessed++;
+      totalInvested += result.outcome.investedAnchor;
+    } catch (err) {
+      // A same-key retry can land on a receipt the orphan driver could not
+      // resume (changed figures fail the fingerprint check by design, and a
+      // settled receipt fails terminal-closed). Reconcile by key: a resumable
+      // receipt completes here and tallies; anything else records the original
+      // error and the NPP invests next cycle under a new key.
+      if (err instanceof MoneyFlowKeyConflictError || err instanceof MoneyFlowTerminalError) {
+        try {
+          const reconciled = await resumeNppInvestByKey(db, key, plan.npp._id, currentTurn);
+          if (reconciled) {
+            nppsProcessed++;
+            totalInvested += reconciled.outcome.investedAnchor;
+            continue;
+          }
+        } catch {
+          // Fall through to the recorded error below.
+        }
+      }
+      const message = err instanceof Error ? err.message : String(err);
+      errors.push(`NPP ${plan.npp._id}: ${message}`);
     }
-  }
-  if (positionUpdateOps.length > 0) {
-    await db.collection(FUND_POSITION_COLLECTION).bulkWrite(positionUpdateOps, { ordered: false });
-  }
-  if (positionInsertDocs.length > 0) {
-    // Two NPPs never share an identity (nppId is part of the unique key), so
-    // no intra-batch duplicate-key risk here the way creditFundPosition's
-    // single-caller retry path guards against.
-    await db
-      .collection<IndexFundPosition>(FUND_POSITION_COLLECTION)
-      .insertMany(positionInsertDocs as IndexFundPosition[]);
-  }
-
-  // ── Pass 5: transaction log — pure inserts, no contention. ────────────────
-  const txDocs: Omit<IndexFundTransaction, "_id">[] = planned.map((p) => ({
-    fundId: p.fund._id,
-    kind: "subscription",
-    holderKind: "npp",
-    nppId: p.nppId,
-    units: p.units,
-    navAnchor: p.fund.quotedNav,
-    amountAnchor: p.costAnchor,
-    note: `NPP ${p.nppId} subscription (${p.archetype})`,
-    createdAt: now,
-  }));
-  if (txDocs.length > 0) {
-    await db
-      .collection<IndexFundTransaction>(FUND_TRANSACTION_COLLECTION)
-      .insertMany(txDocs as IndexFundTransaction[]);
   }
 
   return { nppsProcessed, totalInvested, errors };

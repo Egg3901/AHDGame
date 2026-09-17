@@ -282,10 +282,27 @@ import { ObjectId, type ClientSession, type Collection, type Filter } from "mong
  * the fresh attempt, never on a replay. A same-turn re-run resumes via the
  * deterministic keys; there is no pass-level orphan driver (like buys/sales,
  * no intent row exists to strand).
+ * Index-fund NPP investing is migrated (one GDP-budget investment per NPP
+ * via the nppInvestSpend primitive, driven by processNPPFundInvestments: the
+ * caller keeps roster/valuation/allocation/damping/NAV reads and pins every
+ * computed figure (budget, subscriptions, NAVs, ordering, existing/new
+ * position flags, child keys) on the receipt resume plan at claim time, so a
+ * same-key retry replays the stored amounts instead of re-accruing or
+ * repricing from post-debit state; NPP accrue (turn-stamped) + debit legs
+ * with distinct subkeys, one fund credit per subscription, live-image
+ * position steps (deterministic insert for new rows, exact-inverse revert),
+ * and deterministic audit rows run as keyed steps under a per-NPP-per-turn
+ * caller key, with same-key replay, fingerprint-conflict, terminal,
+ * crash-after-every-write, concurrent-investor, partial-pass, and
+ * compensation tests; the pass re-drives orphaned receipts before its fresh
+ * roster loads and reconciles key-conflict/terminal receipts by key. A debit
+ * whose guard no longer matches refunds the accrual, and a fund or position
+ * that vanished between plan and apply compensates the prefix, instead of
+ * the legacy strand (the old six-bulk-write path is removed).
  * Still on the legacy debit-first-plus-compensation fallback:
  * index-fund cron/rebalancing orchestration (its bond purchase/sale legs
- * and its float-buy, equity-sale, and dividend legs are keyed; cross-fund
- * writes are not).
+ * and its float-buy, equity-sale, dividend, and NPP-invest legs are keyed;
+ * cross-fund writes are not).
  *
  * Operations note: receipts accumulate one small document per keyed flow. The
  * TTL index on `createdAt` is seeded by `seedMoneyFlowIndexes` (registered in
