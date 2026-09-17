@@ -328,9 +328,10 @@ export async function reserveDeletion(
   const decision = decideAdmission(args.snapshot, caller, args.now);
   if (!decision.ok) return { ok: false, reason: "denied", denial: decision.denial };
   if (hasDeletionMarker(args.snapshot)) return { ok: false, reason: "conflict" };
-  if (typeof caller.iat !== "number" || !Number.isSafeInteger(caller.iat)) {
-    return { ok: false, reason: "unavailable" };
-  }
+  // No separate iat check here: `decideAdmission` above already rejects any
+  // non-safe-integer proof as `denied/proof`, so reaching this point proves
+  // `caller.iat` is a safe integer. Mapping it to `unavailable` (transport)
+  // would also mistype a validation outcome as retryable.
   const reservationId = args.reservationId ?? randomUUID();
   if (!isValidReservationId(reservationId)) {
     return { ok: false, reason: "unavailable" };

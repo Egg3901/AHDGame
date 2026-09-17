@@ -671,6 +671,47 @@ describe("admission authorization", () => {
     });
     expect(second).toEqual({ ok: false, reason: "conflict" });
   });
+
+  it("mints a valid reservation id on the production default path", async () => {
+    // Every route call omits `reservationId`, so the `randomUUID()` default is
+    // the path that actually ships: prove it admits and round-trips.
+    const user = makeUser();
+    const { store } = seedStore(user);
+    const snapshot = (await store.findOne({ _id: user._id })) as User;
+    const res = await reserveDeletion(store, {
+      userId: user._id,
+      snapshot,
+      caller: callerFor(user, T0),
+      now: T0,
+      onInvalidate: () => {},
+    });
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(res.requestedAt.getTime()).toBe(T0.getTime());
+    const stored = (await store.findOne({ _id: user._id })) as User;
+    const cmd = asWellFormedCommand(stored.accountDeletion);
+    expect(cmd?.reservationId).toBe(res.reservationId);
+    expect(res.reservationId).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+    );
+  });
+
+  it("admits legacy explicit-null revocation cutoffs", async () => {
+    // Legacy rows may store an explicit null cutoff; admission must treat that
+    // as current and pin it via the `$type: "null"` snapshot, not lock them out.
+    const user = makeUser({ authRevokedAt: null });
+    const { store } = seedStore(user);
+    const snapshot = (await store.findOne({ _id: user._id })) as User;
+    const res = await reserveDeletion(store, {
+      userId: user._id,
+      snapshot,
+      caller: callerFor(user, T0),
+      now: T0,
+      reservationId: rid("res-null-cutoff"),
+      onInvalidate: () => {},
+    });
+    expect(res).toEqual({ ok: true, reservationId: rid("res-null-cutoff"), requestedAt: T0 });
+  });
 });
 
 async function reserveOk(
@@ -1257,6 +1298,132 @@ describe("worker lease fencing", () => {
     expect((store.read(hex) as Record<string, unknown>).accountDeletion).toMatchObject({
       state: "reserved",
     });
+  });
+
+  it("resumes a crashed cascade to a terminal receipt at generation + 1", async () => {
+    // Holder claims then crashes before checkpointing: expiry, reclaim,
+    // checkpoint, and completion must run end to end with the original
+    // reservation identity and audit fields intact.
+    const user = makeUser();
+    const { store } = seedStore(user);
+    await reserveOk(store, user, T0, rid("res-crash"));
+    const first = await claimCommand(store, {
+      userId: user._id,
+      reservationId: rid("res-crash"),
+      workerId: "worker-a",
+      now: T0,
+      leaseTtlMs: 5_000,
+      onInvalidate: () => {},
+    });
+    expect(first.ok).toBe(true);
+    store.dbNow = new Date(T0.getTime() + 30_000);
+    const afterCrash = new Date(T0.getTime() + 30_000);
+    const reclaim = await claimCommand(store, {
+      userId: user._id,
+      reservationId: rid("res-crash"),
+      workerId: "worker-b",
+      now: afterCrash,
+      onInvalidate: () => {},
+    });
+    expect(reclaim.ok).toBe(true);
+    if (!reclaim.ok) return;
+    expect(reclaim.generation).toBe(1);
+    const holder = {
+      userId: user._id,
+      reservationId: rid("res-crash"),
+      workerId: "worker-b",
+      generation: 1,
+      now: afterCrash,
+      onInvalidate: () => {},
+    };
+    expect(await checkpointDeletion(store, holder)).toEqual({ ok: true });
+    expect(await confirmDeletionCompleted(store, holder)).toEqual({ ok: true });
+    const terminal = (await store.findOne({ _id: user._id })) as User;
+    expect(terminal.accountDeletion?.state).toBe("complete");
+    expect(terminal.accountDeletion?.reservationId).toBe(rid("res-crash"));
+    expect(terminal.accountDeletion?.requestedAt.getTime()).toBe(T0.getTime());
+    expect(terminal.accountDeletion?.workerGeneration).toBe(1);
+  });
+
+  it("conflicts worker advances before the first claim and denies unknown rows", async () => {
+    const user = makeUser();
+    const { store } = seedStore(user);
+    await reserveOk(store, user, T0, rid("res-preclaim"));
+    const base = {
+      userId: user._id,
+      reservationId: rid("res-preclaim"),
+      workerId: "worker-a",
+      generation: 0,
+      now: T0,
+      onInvalidate: () => {},
+    };
+    expect(await renewLease(store, base)).toEqual({ ok: false, reason: "conflict" });
+    expect(await checkpointDeletion(store, base)).toEqual({ ok: false, reason: "conflict" });
+    expect(await confirmDeletionCompleted(store, base)).toEqual({
+      ok: false,
+      reason: "conflict",
+    });
+    expect(
+      await claimCommand(store, {
+        userId: new ObjectId(),
+        reservationId: rid("res-preclaim"),
+        workerId: "worker-a",
+        now: T0,
+        onInvalidate: () => {},
+      })
+    ).toEqual({ ok: false, reason: "denied" });
+    expect(readDeletionCommand((await store.findOne({ _id: user._id })) as User)?.state).toBe(
+      "reserved"
+    );
+  });
+
+  it("strands a future-anchored lease until the database clock passes it, then reclaims", async () => {
+    // A worker with a skewed clock mints a far-future deadline (the proposed
+    // deadline need only be future at write time). The lease is then
+    // un-renewable and un-reclaimable at the true clock, so it strands until
+    // the database clock passes it; crash resume still terminates after that.
+    const user = makeUser();
+    const { store } = seedStore(user);
+    await reserveOk(store, user, T0, rid("res-skew"));
+    const skewed = new Date(T0.getTime() + 3600_000);
+    const claimed = await claimCommand(store, {
+      userId: user._id,
+      reservationId: rid("res-skew"),
+      workerId: "worker-a",
+      now: skewed,
+      onInvalidate: () => {},
+    });
+    expect(claimed.ok).toBe(true);
+    expect(
+      await claimCommand(store, {
+        userId: user._id,
+        reservationId: rid("res-skew"),
+        workerId: "worker-b",
+        now: T0,
+        onInvalidate: () => {},
+      })
+    ).toEqual({ ok: false, reason: "conflict" });
+    expect(
+      await renewLease(store, {
+        userId: user._id,
+        reservationId: rid("res-skew"),
+        workerId: "worker-a",
+        generation: 0,
+        now: T0,
+        onInvalidate: () => {},
+      })
+    ).toEqual({ ok: false, reason: "conflict" });
+    const afterSkew = new Date(skewed.getTime() + DELETION_LEASE_TTL_MS + 1000);
+    store.dbNow = new Date(afterSkew.getTime());
+    const reclaim = await claimCommand(store, {
+      userId: user._id,
+      reservationId: rid("res-skew"),
+      workerId: "worker-b",
+      now: afterSkew,
+      onInvalidate: () => {},
+    });
+    expect(reclaim.ok).toBe(true);
+    if (reclaim.ok) expect(reclaim.generation).toBe(1);
   });
 });
 
