@@ -142,6 +142,34 @@ export interface EconomicVitalSigns {
     governmentGrossVelocity48: EconomicMetric;
     /** Turnover over closing balances for pooled vehicles (fund, org, npp legs). */
     intermediatedGrossVelocity48: EconomicMetric;
+    /**
+     * Ring-fenced bank cash reserves in anchor, summed over reporting active
+     * charters. Null when active charters exist but none reports reserves, so
+     * an unclassified stock never reads as zero. Outside the shadow ledger:
+     * neither stock-checked nor part of the modeled velocity denominators.
+     */
+    bankCashReservesAnchor: EconomicMetric;
+    /**
+     * Nonnegative share-escrow balances in anchor. Absent means instant
+     * settlement mode, which holds no escrow, so empty reads as zero rather
+     * than unknown. Negative rows are buyback debt, not money, and are floored
+     * per row like the modeled balance stocks.
+     */
+    escrowCashAnchor: EconomicMetric;
+    /**
+     * Ring-fenced (bank plus escrow) share of ledger-backed plus ring-fenced
+     * closing stock. Null without a balance snapshot, with an incomplete bank
+     * classification, or on a non-positive denominator: a stated allocation
+     * ratio must never rest on a partial stock.
+     */
+    ringFencedShareOfLiquid: EconomicMetric;
+    /**
+     * Persisted null seam: bank accounts emit no ledger legs, so no
+     * authoritative 48-turn turnover exists for the bank holder class. The
+     * numerator is unavailable, not zero; estimating it from unrelated flows
+     * would manufacture a velocity.
+     */
+    bankGrossVelocity48: EconomicMetric;
   };
   /** How much of the 48 turn window actually produced a snapshot, and which turns did not. */
   coverage: {
