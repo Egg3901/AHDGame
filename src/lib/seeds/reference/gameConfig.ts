@@ -95,6 +95,7 @@ export const gameConfig: GameConfig = {
   canonicalFreightBillingEnabled: false,
   shortageResponsiveSourcingEnabled: false,
   indexFundBondLiquidityEnabled: false,
+  domesticSovereignBondCoverageEnabled: false,
   nppMarketCoverageEnabled: false,
   nppFragileMarketSupplyEnabled: false,
   regionalConditionsOverviewEnabled: true,

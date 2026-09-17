@@ -62,36 +62,47 @@ export interface SovereignDemandScenario {
 export const SOVEREIGN_DEMAND_SCENARIOS: readonly SovereignDemandScenario[] = [
   {
     id: "baseline-1001",
-    label: "Baseline (control: both gates off)",
+    label: "Baseline (control: all gates off)",
     demandChannel: "none",
-    runWorldArgs: ["--sovereign-issuance-consolidation=false", "--index-fund-bond-liquidity=false"],
+    runWorldArgs: [
+      "--sovereign-issuance-consolidation=false",
+      "--index-fund-bond-liquidity=false",
+      "--domestic-sovereign-bond-coverage=false",
+    ],
     queueable: true,
   },
   {
     id: "issuance-consolidation-1001",
     label: "Issuance consolidation (gated tranche merge)",
     demandChannel: "consolidation",
-    runWorldArgs: ["--sovereign-issuance-consolidation=true", "--index-fund-bond-liquidity=false"],
+    runWorldArgs: [
+      "--sovereign-issuance-consolidation=true",
+      "--index-fund-bond-liquidity=false",
+      "--domestic-sovereign-bond-coverage=false",
+    ],
     queueable: true,
   },
   {
     id: "cross-border-eligibility-1001",
     label: "Safe cross-border fund eligibility (#968 facility)",
     demandChannel: "cross-border",
-    runWorldArgs: ["--sovereign-issuance-consolidation=false", "--index-fund-bond-liquidity=true"],
+    runWorldArgs: [
+      "--sovereign-issuance-consolidation=false",
+      "--index-fund-bond-liquidity=true",
+      "--domestic-sovereign-bond-coverage=false",
+    ],
     queueable: true,
   },
   {
     id: "domestic-fund-coverage-1001",
-    label: "Domestic fund coverage (no gate yet)",
+    label: "Domestic fund coverage (gated home-sovereign funds)",
     demandChannel: "domestic-coverage",
-    runWorldArgs: null,
-    queueable: false,
-    blockedReason:
-      "No mechanic gate exists for domestic fund coverage: no gameConfig flag, " +
-      "no runWorld argument, and no seeding change has landed. Define the " +
-      "scenario identity now; queue it only after the gate lands. Until then " +
-      "its evidence is missing by construction.",
+    runWorldArgs: [
+      "--sovereign-issuance-consolidation=false",
+      "--index-fund-bond-liquidity=false",
+      "--domestic-sovereign-bond-coverage=true",
+    ],
+    queueable: true,
   },
 ];
 

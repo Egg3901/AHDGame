@@ -398,6 +398,14 @@ export interface GameConfig {
   sovereignIssuanceConsolidationEnabled?: boolean;
   /** Dark gate for the index-fund 20 percent sovereign-bond allocation target. */
   indexFundBondLiquidityEnabled?: boolean;
+  /**
+   * Dark gate for domestic sovereign-bond coverage (#1001): ensures one
+   * home-sovereign bond fund per uncovered sovereign issuer so the existing
+   * real-cash deploy pass can reach their paper. Default off until worldsim
+   * evidence lands; ENABLING IS A BALANCE CHANGE and merges only with a
+   * simulation report from scripts/sim/ per CONTRIBUTING.md.
+   */
+  domesticSovereignBondCoverageEnabled?: boolean;
   /** Governance record required when the sovereign-bond allocation target is enabled. */
   indexFundBondLiquidityIntervention?: EconomicInterventionPlan;
   /** Dark gate for bounded, index-fund-backed two-sided equity quotes. */

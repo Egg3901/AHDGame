@@ -62,21 +62,27 @@ describe("sovereign demand evaluation harness (#1001)", () => {
       "cross-border-eligibility-1001",
       "domestic-fund-coverage-1001",
     ]);
-    // Runnable scenarios pin both existing gates; the domestic scenario has
-    // no gate and says so instead of inventing one.
+    // Every scenario is queueable and pins all three gates; exactly one
+    // scenario enables each candidate gate, the control enables none.
+    expect(SOVEREIGN_DEMAND_SCENARIOS.every((row) => row.queueable)).toBe(true);
     for (const row of SOVEREIGN_DEMAND_SCENARIOS) {
-      if (row.queueable) {
-        expect(
-          row.runWorldArgs?.some((arg) => arg.startsWith("--index-fund-bond-liquidity="))
-        ).toBe(true);
-        expect(
-          row.runWorldArgs?.some((arg) => arg.startsWith("--sovereign-issuance-consolidation="))
-        ).toBe(true);
-      } else {
-        expect(row.runWorldArgs).toBeNull();
-        expect(row.blockedReason).toMatch(/no .*gate/i);
-      }
+      expect(row.runWorldArgs?.some((arg) => arg.startsWith("--index-fund-bond-liquidity="))).toBe(
+        true
+      );
+      expect(
+        row.runWorldArgs?.some((arg) => arg.startsWith("--sovereign-issuance-consolidation="))
+      ).toBe(true);
+      expect(
+        row.runWorldArgs?.some((arg) => arg.startsWith("--domestic-sovereign-bond-coverage="))
+      ).toBe(true);
     }
+    expect(
+      SOVEREIGN_DEMAND_SCENARIOS.find((row) => row.id === "baseline-1001")?.runWorldArgs
+    ).toEqual([
+      "--sovereign-issuance-consolidation=false",
+      "--index-fund-bond-liquidity=false",
+      "--domestic-sovereign-bond-coverage=false",
+    ]);
     expect(
       SOVEREIGN_DEMAND_SCENARIOS.find((row) => row.id === "issuance-consolidation-1001")
         ?.runWorldArgs
@@ -85,6 +91,14 @@ describe("sovereign demand evaluation harness (#1001)", () => {
       SOVEREIGN_DEMAND_SCENARIOS.find((row) => row.id === "cross-border-eligibility-1001")
         ?.runWorldArgs
     ).toContain("--index-fund-bond-liquidity=true");
+    expect(
+      SOVEREIGN_DEMAND_SCENARIOS.find((row) => row.id === "domestic-fund-coverage-1001")
+        ?.runWorldArgs
+    ).toEqual([
+      "--sovereign-issuance-consolidation=false",
+      "--index-fund-bond-liquidity=false",
+      "--domestic-sovereign-bond-coverage=true",
+    ]);
   });
 
   it("aggregates the terminal window as a median, skipping nulls", () => {
@@ -268,13 +282,15 @@ describe("sovereign demand evaluation harness (#1001)", () => {
     expect(noRun.status).toBe("missing");
     expect(noRun.firstFailure?.detail).toMatch(/no evidence collected/i);
 
+    // The domestic scenario is queueable now that its gate exists; without a
+    // run its evidence is missing like any other unrun scenario.
     const blocked = evaluateSovereignDemandScenario(
       scenario("domestic-fund-coverage-1001"),
       base,
       null
     );
     expect(blocked.status).toBe("missing");
-    expect(blocked.firstFailure?.detail).toMatch(/no mechanic gate/i);
+    expect(blocked.firstFailure?.detail).toMatch(/no evidence collected/i);
 
     const noBaseline = evaluateSovereignDemandScenario(
       scenario("issuance-consolidation-1001"),
@@ -367,7 +383,7 @@ describe("sovereign demand evaluation harness (#1001)", () => {
     expect(matrix.queue).toHaveLength(4);
     expect(
       matrix.queue.find((row) => row.scenarioId === "domestic-fund-coverage-1001")
-    ).toMatchObject({ queueable: false });
+    ).toMatchObject({ queueable: true });
     expect(matrix.generatedBy).toMatch(/#1001/);
   });
 

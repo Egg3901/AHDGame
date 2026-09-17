@@ -74,7 +74,7 @@ function printQueue(): void {
   const lines = [
     "# #1001 worldsim queue: one controlled run per queueable scenario.",
     "# Same seed/preset/turns across all four so the comparison is controlled.",
-    "# Domestic fund coverage has no gate yet: not queueable, evidence missing by construction.",
+    "# All four scenarios are queueable; each pins all three gates explicitly.",
   ];
   for (const scenario of SOVEREIGN_DEMAND_SCENARIOS) {
     if (scenario.queueable && scenario.runWorldArgs) {
