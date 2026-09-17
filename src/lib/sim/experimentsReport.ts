@@ -467,7 +467,7 @@ export async function collectExperimentsReport(db: Db): Promise<ExperimentsRepor
         .toArray(),
       collectBalanceMetrics(db),
       db.collection<GameState>("gameState").findOne({ _id: "current" }),
-      db.collection("gameConfig").findOne({ _id: "default" }),
+      db.collection("gameConfig").findOne({ _id: "default" as never }),
     ]);
 
   const parties: PartyInfo[] = partyRows.map((p) => ({

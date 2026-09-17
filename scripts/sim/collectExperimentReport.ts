@@ -84,7 +84,7 @@ async function main() {
     // job doc (seed/turns) and the repo's git state. The worldsim MCP ships as
     // part of the ops-dashboard, so its version is that package's version.
     const job = await opsDb.collection("simJobs").findOne({ _id: runId as never });
-    const sandboxRun = await sandboxDb.collection("simRuns").findOne({ _id: runId });
+    const sandboxRun = await sandboxDb.collection("simRuns").findOne({ _id: runId as never });
     let mcpVersion: string | undefined;
     try {
       const { readFileSync } = await import("fs");

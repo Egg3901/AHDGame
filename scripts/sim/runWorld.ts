@@ -908,13 +908,13 @@ async function main() {
               ?.currentTurn ?? 0
           ),
           gameState: scalarConfig(
-            (await db.collection("gameState").findOne({ _id: "current" })) as Record<
+            (await db.collection("gameState").findOne({ _id: "current" as never })) as Record<
               string,
               unknown
             > | null
           ),
           gameConfig: scalarConfig(
-            (await db.collection("gameConfig").findOne({ _id: "default" })) as Record<
+            (await db.collection("gameConfig").findOne({ _id: "default" as never })) as Record<
               string,
               unknown
             > | null
