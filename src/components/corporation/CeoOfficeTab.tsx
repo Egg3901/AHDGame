@@ -339,11 +339,13 @@ function CeoOfficeCommandCenter({
       targetGrowthRate?: number;
       productionPolicy?: number; // pragma: allowlist secret
       pricingPosture?: number | null;
+      wageLevel?: number;
       preview?: boolean;
     }
   ): Promise<{
     ok: boolean;
     matchedCount?: number;
+    wages?: import("./ceo/CeoProductionSubtab").BulkOperationsResult["wages"];
     growth?: {
       targetGrowthRate: number;
       projectedTotalCostPerTurn: number;
@@ -361,7 +363,7 @@ function CeoOfficeCommandCenter({
       const data = await res.json();
       if (!res.ok) return { ok: false, error: data.error ?? "Failed to apply" };
       if (!body.preview) onRefresh();
-      return { ok: true, matchedCount: data.matchedCount, growth: data.growth };
+      return { ok: true, matchedCount: data.matchedCount, growth: data.growth, wages: data.wages };
     } catch {
       return { ok: false, error: "Network error" };
     }
@@ -809,11 +811,13 @@ function CeoOfficeClassic({
       targetGrowthRate?: number;
       productionPolicy?: number; // pragma: allowlist secret
       pricingPosture?: number | null;
+      wageLevel?: number;
       preview?: boolean;
     }
   ): Promise<{
     ok: boolean;
     matchedCount?: number;
+    wages?: import("./ceo/CeoProductionSubtab").BulkOperationsResult["wages"];
     growth?: {
       targetGrowthRate: number;
       projectedTotalCostPerTurn: number;
@@ -831,7 +835,7 @@ function CeoOfficeClassic({
       const data = await res.json();
       if (!res.ok) return { ok: false, error: data.error ?? "Failed to apply" };
       if (!body.preview) onRefresh();
-      return { ok: true, matchedCount: data.matchedCount, growth: data.growth };
+      return { ok: true, matchedCount: data.matchedCount, growth: data.growth, wages: data.wages };
     } catch {
       return { ok: false, error: "Network error" };
     }
