@@ -82,6 +82,7 @@ import { bankEquity, cashBackedDeposits, getCashReserves } from "@/lib/banking/b
 import { settleTransition } from "@/lib/banking/settlementJournal";
 import { oid, type TransitionLeg, type TransitionProjection } from "@/lib/banking/rules/boundary";
 import { getNationalBudgetId } from "@/lib/bonds/sovereign";
+import { resyncFederalBudgetDebtFromBalance } from "@/lib/budget/treasurySpend";
 import type { FederalBudget } from "@/lib/db/types";
 import { emitBankingAuditEvent } from "@/lib/banking/auditEvents";
 import { loadBankingPolicy } from "@/lib/banking/policy";
@@ -502,7 +503,22 @@ export async function returnDepositBook(
     // The cash moved on an earlier attempt and any projections that attempt
     // did not reach have just been finished. Nothing more to report: the
     // amounts belong to the attempt that moved them.
+    if (fromTreasury > 0) {
+      await resyncFederalBudgetDebtFromBalance(db, {
+        _id: getNationalBudgetId(getCountryIdForCurrency(currency)),
+      });
+    }
     return { ...EMPTY, depositorsFlipped };
+  }
+
+  if (fromTreasury > 0) {
+    // The journaled treasury-backstop projection moves the balance (plus the
+    // spending/surplus legs) but cannot derive debt principal from it, so the
+    // derived chain is resynced here. Idempotent: a pure function of the
+    // post-settlement balance.
+    await resyncFederalBudgetDebtFromBalance(db, {
+      _id: getNationalBudgetId(getCountryIdForCurrency(currency)),
+    });
   }
 
   const result: DepositBookReturnResult = {
@@ -732,6 +748,10 @@ function depositAggregateClearProjection(
 /**
  * Debit treasuryBalance and book the spend on spending.byCategory.depositInsurance.
  * Unconditional: an unaffordable backstop pushes the treasury into debt.
+ *
+ * The balance/spending/surplus legs stay `$inc` (concurrent-safe), and the
+ * balance-derived debt chain is resynced after: without it `debt.principal`
+ * goes stale and trips the end-of-turn budget invariant (#1975).
  */
 export async function debitTreasuryDepositInsurance(
   db: Db,
@@ -754,4 +774,5 @@ export async function debitTreasuryDepositInsurance(
       $set: { updatedAt: now },
     }
   );
+  await resyncFederalBudgetDebtFromBalance(db, { _id: budgetId });
 }

@@ -2,6 +2,7 @@ import type { Db } from "mongodb";
 import { type CountryId } from "@/lib/constants/countries";
 import type { InternationalOrganizationId } from "@/lib/constants/internationalOrganizations";
 import type { FederalBudget } from "@/lib/db/types";
+import { resyncFederalBudgetDebtFromBalance } from "@/lib/budget/treasurySpend";
 import { loadWorldPreset } from "@/lib/currency/gdpAnchorRate";
 import {
   convertLocal,
@@ -78,6 +79,11 @@ export async function payOrganizationAid(
   const fundCountry = await resolveOrgFundCurrencyCountry(db, organizationId);
   const preset = await loadWorldPreset(db);
   const recipientLocal = convertLocal(fundCountry, recipient, amountFund, preset);
+  // Aid credits cash, not income: revenue/spending/surplus are untouched. But
+  // `debt.principal` is a cache of the signed treasuryBalance (see
+  // treasuryBalance.ts), so a balance-only $inc leaves it stale and trips the
+  // end-of-turn budget invariant (#1975). The resync is a pure function of the
+  // post-write balance, so it stays correct under retry.
   await db.collection<FederalBudget>("federalBudget").updateOne(
     { countryId: recipient },
     {
@@ -85,6 +91,7 @@ export async function payOrganizationAid(
       $set: { updatedAt: new Date() },
     }
   );
+  await resyncFederalBudgetDebtFromBalance(db, { countryId: recipient });
   await applyOrganizationAidBoost(db, recipient, localToUsd(fundCountry, amountFund, preset));
   return true;
 }
