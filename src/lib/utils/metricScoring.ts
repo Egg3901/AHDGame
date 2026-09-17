@@ -19,7 +19,7 @@ import { JP_MEDIAN_INCOME_BAND } from "@/lib/countries/jp/economy";
  * unfairly inflated and strong-currency countries aren't penalized.
  */
 
-interface ScoreThreshold {
+export interface ScoreThreshold {
   best: number;
   worst: number;
 }

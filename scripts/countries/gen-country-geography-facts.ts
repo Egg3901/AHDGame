@@ -1,0 +1,184 @@
+/**
+ * Writes `src/lib/countries/<cc>/geographyFacts.ts` from the pre-move snapshot.
+ *
+ *   npx tsx scripts/countries/gen-country-geography-facts.ts US
+ *
+ * ⚠ THIS GENERATOR EXISTS BECAUSE THE HAND-WRITTEN VERSION WAS WRONG SIX TIMES
+ * IN ONE FILE. A first draft of `us/geographyFacts.ts` was typed out from
+ * memory of the registry shapes. Checked against the snapshot it had:
+ *
+ *   nonPartyIndependentBias   0.06          actual 2.3333333333333335
+ *   medianIncomeThresholds    {good, bad}   actual {best, worst}, both values wrong
+ *   core5Normals              {era: "1953"} actual {year: 1953}, every value wrong
+ *   mapAnchor                 [-98, 39]     actual [-98.5, 39.8]
+ *   worldRegion               "Americas"    actual "americas"
+ *   adjacency                 {} (a stub)   actual 51 states
+ *
+ * Every one typechecks. Two are plausible numbers that are simply not this
+ * country's. That is the transcription risk the plan names as its single
+ * largest, arriving exactly as predicted, in the module that looked small enough
+ * to type by hand.
+ *
+ * ⚠ THE OUTPUT MUST STAY FREE OF VALUE IMPORTS. It is the light half of the
+ * geography pair; `geography.ts` pulls every era of census and metric data.
+ */
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname } from "node:path";
+
+interface Entry {
+  readonly shape: string;
+  readonly value: unknown;
+}
+
+const COUNTRY = process.argv[2]?.toUpperCase();
+const FORCE = process.argv.includes("--force");
+
+if (!COUNTRY || !/^[A-Z]{2}$/.test(COUNTRY)) {
+  console.error("usage: npx tsx scripts/countries/gen-country-geography-facts.ts <CC> [--force]");
+  process.exit(1);
+}
+
+const lower = COUNTRY.toLowerCase();
+const SNAPSHOT = `src/lib/countries/__snapshots__/${lower}.pre-move.json`;
+const OUT = `src/lib/countries/${lower}/geographyFacts.ts`;
+
+if (!existsSync(SNAPSHOT)) {
+  console.error(`${SNAPSHOT} does not exist. Emit it before rewiring any registry.`);
+  process.exit(1);
+}
+if (existsSync(OUT) && !FORCE) {
+  console.error(`${OUT} exists. Pass --force to overwrite it.`);
+  process.exit(1);
+}
+
+const snap = JSON.parse(readFileSync(SNAPSHOT, "utf8")) as Record<string, Entry>;
+
+function v(name: string): string {
+  const e = snap[name];
+  if (!e) throw new Error(`${name} is not in ${SNAPSHOT}.`);
+  if (e.shape === "absent") {
+    throw new Error(
+      `${name} has no ${COUNTRY} entry. An unexported registry also snapshots as ` +
+        `"absent" -- run check-snapshot-imports.ts before believing this.`
+    );
+  }
+  return JSON.stringify(e.value, null, 2);
+}
+
+function maybe(name: string): string | null {
+  const e = snap[name];
+  if (!e || e.shape === "absent") return null;
+  return JSON.stringify(e.value, null, 2);
+}
+
+/** The inverse ISO map is `{ "840": "US" }`; the folder wants just the code. */
+const isoInverse = snap.ISO_NUMERIC_TO_COUNTRY?.value as Record<string, string> | undefined;
+const isoCodes = isoInverse ? Object.keys(isoInverse) : [];
+const isoForward = JSON.parse(v("COUNTRY_TO_ISO_NUMERIC")) as string;
+if (isoCodes.length !== 1 || isoCodes[0] !== isoForward) {
+  throw new Error(
+    `The ISO pair disagrees: COUNTRY_TO_ISO_NUMERIC says "${isoForward}" but ` +
+      `ISO_NUMERIC_TO_COUNTRY holds ${JSON.stringify(isoCodes)}. They are two ` +
+      `registries describing one fact and must be moved together.`
+  );
+}
+
+const unMemberSince = maybe("COUNTRY_UN_MEMBER_SINCE");
+const conscription = maybe("CONSCRIPTION_SEED");
+
+const out = `import type { AdjacencyMap } from "@/lib/constants/stateAdjacency";
+import type { Continent } from "@/lib/constants/countryContinents";${
+  conscription ? '\nimport type { ConscriptionPolicy } from "@/lib/demographics/conscription";' : ""
+}
+import type { NormalAnchor } from "@/lib/era/metricCatalog";
+import type { ScoreThreshold } from "@/lib/utils/metricScoring";
+import type { WorldEntityRegion } from "@/lib/world/worldEntityManifest";
+
+/**
+ * The small facts about where ${COUNTRY} is.
+ *
+ * ⚠ GENERATED FROM \`__snapshots__/${lower}.pre-move.json\`, NOT TRANSCRIBED.
+ * Regenerate with:
+ *
+ *     npx tsx scripts/countries/gen-country-geography-facts.ts ${COUNTRY} --force
+ *
+ * A hand-written draft of this file got six values wrong, including an
+ * independent-bias of 0.06 where the registry says 2.33 and a threshold object
+ * with the wrong KEYS. All six typechecked. Do not edit values here by hand.
+ *
+ * ⚠ KEEP THIS FILE FREE OF VALUE IMPORTS. It is the light half of the pair;
+ * \`geography.ts\` imports every era of census, metric and region data as values.
+ * A registry that forwards to the heavy module for one string ships all of it to
+ * the browser -- which shipped once already, when \`countryContinents.ts\` started
+ * pulling 108 KB per bundle for a continent name.
+ *
+ * ⚠ THE ISO PAIR IS TWO REGISTRIES DESCRIBING ONE FACT.
+ * \`COUNTRY_TO_ISO_NUMERIC\` maps ${COUNTRY} to the code and
+ * \`ISO_NUMERIC_TO_COUNTRY\` maps it back. The generator asserts they agree
+ * before writing; if they ever disagree, a lookup by code and a lookup by
+ * country would report different things.
+ */
+
+export const ${COUNTRY}_CONTINENT: Continent = ${v("COUNTRY_CONTINENT")};
+
+/** ISO 3166-1 numeric. \`ISO_NUMERIC_TO_COUNTRY\` holds the inverse entry. */
+export const ${COUNTRY}_ISO_NUMERIC = ${v("COUNTRY_TO_ISO_NUMERIC")};
+${unMemberSince ? `\nexport const ${COUNTRY}_UN_MEMBER_SINCE = ${unMemberSince};\n` : ""}
+export const ${COUNTRY}_WORLD_REGION: WorldEntityRegion = ${v("COUNTRY_REGIONS")};
+
+/** Where an NPP corporation is seated when it has no other home. */
+export const ${COUNTRY}_NPP_CAPITAL_STATE = ${v("NPP_CAPITAL_STATES")};
+
+/** Independent-bias nudge for the non-party bucket. */
+export const ${COUNTRY}_NON_PARTY_INDEPENDENT_BIAS = ${v(
+  "NON_PARTY_BUCKET_INDEPENDENT_BIAS_BY_COUNTRY"
+)};
+
+/** Map centring for the commodity and world maps: [longitude, latitude]. */
+export const ${COUNTRY}_MAP_ANCHOR: [number, number] = ${v("COUNTRY_ANCHOR")};
+
+/**
+ * Median-income scoring thresholds.
+ *
+ * ⚠ LOCAL CURRENCY, like every money figure in the folder, and NOT comparable to
+ * another country's.
+ */
+export const ${COUNTRY}_MEDIAN_INCOME_THRESHOLDS: ScoreThreshold = ${v("MEDIAN_INCOME_THRESHOLDS")};
+${
+  conscription
+    ? `\n/** Conscription policy at seed time. */\nexport const ${COUNTRY}_CONSCRIPTION: ConscriptionPolicy = ${conscription};\n`
+    : ""
+}
+/**
+ * Core-5 metric normals, keyed by metric.
+ *
+ * ⚠ THE REGISTRY IS METRIC-FIRST, NOT COUNTRY-FIRST. \`CORE5_NORMALS\` is read as
+ * \`CORE5_NORMALS.gdpGrowth.${COUNTRY}\`, so the snapshot captured one entry per
+ * metric rather than one object for the country. Each anchor is keyed \`year\`,
+ * a NUMBER -- not \`era\`, a string.
+ */
+export const ${COUNTRY}_CORE5_NORMALS: Record<string, NormalAnchor[]> = ${v("CORE5_NORMALS")};
+
+/**
+ * Which regions border which.
+ *
+ * ⚠ KEYED BY REGION, AND FOR ${COUNTRY} THOSE KEYS ARE NOT COUNTRY CODES. In the
+ * United States' map \`CA\`, \`DE\` and \`IN\` are California, Delaware and Indiana,
+ * not Canada, Germany and India. A tool that reads two-letter keys as countries
+ * misreads this file, which is how 5,900 lines of US state data stayed invisible
+ * to the relocation guard until its rule was fixed.
+ */
+export const ${COUNTRY}_ADJACENCY_MAP: AdjacencyMap = ${v("STATE_ADJACENCY")};
+`;
+
+mkdirSync(dirname(OUT), { recursive: true });
+writeFileSync(OUT, out, "utf8");
+const adjacency = JSON.parse(v("STATE_ADJACENCY")) as Record<string, unknown>;
+console.log(`wrote ${OUT}`);
+console.log(`  iso pair agree  : ${isoForward}`);
+console.log(`  adjacency keys  : ${Object.keys(adjacency).length}`);
+console.log(
+  `  core5 metrics   : ${Object.keys(JSON.parse(v("CORE5_NORMALS")) as object).join(", ")}`
+);
+if (!unMemberSince) console.log(`  omitted         : UN_MEMBER_SINCE (absent, not defaulted)`);
+if (!conscription) console.log(`  omitted         : CONSCRIPTION_SEED (absent, not defaulted)`);
