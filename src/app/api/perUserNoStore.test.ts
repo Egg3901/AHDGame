@@ -47,7 +47,11 @@ const mockGetAuthUser = vi.fn();
 const mockGetAuthUserWithCharacter = vi.fn();
 vi.mock("@/lib/auth", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/auth")>();
-  return { ...actual, getAuthUser: mockGetAuthUser, getAuthUserWithCharacter: mockGetAuthUserWithCharacter };
+  return {
+    ...actual,
+    getAuthUser: mockGetAuthUser,
+    getAuthUserWithCharacter: mockGetAuthUserWithCharacter,
+  };
 });
 
 const mockIsForexEnabled = vi.fn();
@@ -105,7 +109,10 @@ const character = {
 const characterUser = { ...basicUser, character, hasCharacter: true };
 const adminOk = { ok: true, admin: { userId, username: "root" } };
 const fail = (mock: Mock, status = 401) =>
-  mock.mockResolvedValue({ ok: false, response: NextResponse.json({ error: "Unauthorized" }, { status }) });
+  mock.mockResolvedValue({
+    ok: false,
+    response: NextResponse.json({ error: "Unauthorized" }, { status }),
+  });
 
 const req = (path: string) => new Request(`https://example.test${path}`);
 const idParams = (id = characterId.toHexString()) => ({ params: Promise.resolve({ id }) });
@@ -140,33 +147,48 @@ describe("per-user GET auth failures are never cacheable", () => {
     { name: "auth/character", run: async () => (await import("./auth/character/route")).GET() },
     {
       name: "auth/active-character",
-      run: async () => (await import("./auth/active-character/route")).GET(req("/api/auth/active-character")),
+      run: async () =>
+        (await import("./auth/active-character/route")).GET(req("/api/auth/active-character")),
     },
-    { name: "character/savings", run: async () => (await import("./character/savings/route")).GET() },
+    {
+      name: "character/savings",
+      run: async () => (await import("./character/savings/route")).GET(),
+    },
     {
       name: "character/savings/ledger",
-      run: async () => (await import("./character/savings/ledger/route")).GET(req("/api/character/savings/ledger")),
+      run: async () =>
+        (await import("./character/savings/ledger/route")).GET(
+          req("/api/character/savings/ledger")
+        ),
     },
     { name: "character/loc", run: async () => (await import("./character/loc/route")).GET() },
     {
       name: "character/allocate-stats",
       run: async () =>
-        (await import("./character/allocate-stats/route")).GET(req("/api/character/allocate-stats")),
+        (await import("./character/allocate-stats/route")).GET(
+          req("/api/character/allocate-stats")
+        ),
     },
-    { name: "character/constituency", run: async () => (await import("./character/constituency/route")).GET() },
+    {
+      name: "character/constituency",
+      run: async () => (await import("./character/constituency/route")).GET(),
+    },
     // character/relocate: covered on the success path below (its auth-failure
     // path hangs the test runner under mocks; residual, see handoff).
     {
       name: "character/[id]/portfolio",
-      run: async () => (await import("./character/[id]/portfolio/route")).GET(req("/x"), idParams()),
+      run: async () =>
+        (await import("./character/[id]/portfolio/route")).GET(req("/x"), idParams()),
     },
     {
       name: "character/[id]/sovereign-holdings",
-      run: async () => (await import("./character/[id]/sovereign-holdings/route")).GET(req("/x"), idParams()),
+      run: async () =>
+        (await import("./character/[id]/sovereign-holdings/route")).GET(req("/x"), idParams()),
     },
     {
       name: "character/[id]/fund-portfolio",
-      run: async () => (await import("./character/[id]/fund-portfolio/route")).GET(req("/x"), idParams()),
+      run: async () =>
+        (await import("./character/[id]/fund-portfolio/route")).GET(req("/x"), idParams()),
     },
     {
       name: "characters/[id]/subscribe rejects a malformed id without caching",
@@ -175,7 +197,10 @@ describe("per-user GET auth failures are never cacheable", () => {
           params: Promise.resolve({ id: "not-an-id" }),
         }),
     },
-    { name: "charters", run: async () => (await import("./charters/route")).GET(req("/api/charters?me=true")) },
+    {
+      name: "charters",
+      run: async () => (await import("./charters/route")).GET(req("/api/charters?me=true")),
+    },
     { name: "player-ads", run: async () => (await import("./player-ads/route")).GET() },
     {
       name: "forex/orders",
@@ -183,16 +208,25 @@ describe("per-user GET auth failures are never cacheable", () => {
     },
     {
       name: "forex/transactions",
-      run: async () => (await import("./forex/transactions/route")).GET(req("/api/forex/transactions")),
+      run: async () =>
+        (await import("./forex/transactions/route")).GET(req("/api/forex/transactions")),
     },
     { name: "tutorial/context", run: async () => (await import("./tutorial/context/route")).GET() },
     { name: "tutorial/plan", run: async () => (await import("./tutorial/plan/route")).GET() },
-    { name: "onboarding/signals", run: async () => (await import("./onboarding/signals/route")).GET() },
-    { name: "canvassing/eligibility", run: async () => (await import("./canvassing/eligibility/route")).GET() },
+    {
+      name: "onboarding/signals",
+      run: async () => (await import("./onboarding/signals/route")).GET(),
+    },
+    {
+      name: "canvassing/eligibility",
+      run: async () => (await import("./canvassing/eligibility/route")).GET(),
+    },
     {
       name: "actions/poll",
       run: async () =>
-        (await import("./actions/poll/route")).GET(new NextRequest("https://example.test/api/actions/poll")),
+        (await import("./actions/poll/route")).GET(
+          new NextRequest("https://example.test/api/actions/poll")
+        ),
     },
     {
       name: "actions/recommendations",
@@ -232,7 +266,8 @@ describe("per-user GET auth failures are never cacheable", () => {
     },
     {
       name: "settings/retired-characters/[id]",
-      run: async () => (await import("./settings/retired-characters/[id]/route")).GET(req("/x"), idParams()),
+      run: async () =>
+        (await import("./settings/retired-characters/[id]/route")).GET(req("/x"), idParams()),
     },
     {
       name: "settings/achievements/list",
@@ -242,7 +277,10 @@ describe("per-user GET auth failures are never cacheable", () => {
       name: "settings/resignable-positions",
       run: async () => (await import("./settings/resignable-positions/route")).GET(),
     },
-    { name: "game/turn/dashboard", run: async () => (await import("./game/turn/dashboard/route")).GET() },
+    {
+      name: "game/turn/dashboard",
+      run: async () => (await import("./game/turn/dashboard/route")).GET(),
+    },
     { name: "news", run: async () => (await import("./news/route")).GET(req("/api/news")) },
     {
       name: "unions/[id]/leader/vote disabled",
@@ -264,11 +302,13 @@ describe("per-user GET auth failures are never cacheable", () => {
     },
     {
       name: "search/universal short query",
-      run: async () => (await import("./search/universal/route")).GET(req("/api/search/universal?q=a")),
+      run: async () =>
+        (await import("./search/universal/route")).GET(req("/api/search/universal?q=a")),
     },
     {
       name: "suggestions/public",
-      run: async () => (await import("./suggestions/public/route")).GET(req("/api/suggestions/public")),
+      run: async () =>
+        (await import("./suggestions/public/route")).GET(req("/api/suggestions/public")),
     },
   ];
 
@@ -286,11 +326,15 @@ describe("per-user GET auth failures are never cacheable", () => {
     expect(keys.status).toBe(401);
     expectNoStore(keys);
 
-    const fund = await (await import("./character/[id]/fund-portfolio/route")).GET(req("/x"), idParams());
+    const fund = await (
+      await import("./character/[id]/fund-portfolio/route")
+    ).GET(req("/x"), idParams());
     expect(fund.status).toBe(401);
     expectNoStore(fund);
 
-    const badId = await (await import("./character/[id]/sovereign-holdings/route")).GET(req("/x"), {
+    const badId = await (
+      await import("./character/[id]/sovereign-holdings/route")
+    ).GET(req("/x"), {
       params: Promise.resolve({ id: "nope" }),
     });
     expect(badId.status).toBe(401);
@@ -299,9 +343,9 @@ describe("per-user GET auth failures are never cacheable", () => {
 
   it("stamps no-store on the admin character-switch validation error", async () => {
     mockRequireAdmin.mockResolvedValue(adminOk);
-    const res = await (await import("./auth/active-character/route")).GET(
-      req("/api/auth/active-character")
-    );
+    const res = await (
+      await import("./auth/active-character/route")
+    ).GET(req("/api/auth/active-character"));
     expect(res.status).toBe(400);
     expectNoStore(res);
   });
@@ -336,7 +380,9 @@ describe("per-user GET success paths are never cacheable", () => {
       name: "character/savings/ledger",
       run: async () => {
         okBasic();
-        return (await import("./character/savings/ledger/route")).GET(req("/api/character/savings/ledger"));
+        return (await import("./character/savings/ledger/route")).GET(
+          req("/api/character/savings/ledger")
+        );
       },
     },
     {
@@ -350,7 +396,9 @@ describe("per-user GET success paths are never cacheable", () => {
       name: "character/allocate-stats",
       run: async () => {
         mockRequireHumanSession.mockResolvedValue({ ok: true, user: basicUser });
-        return (await import("./character/allocate-stats/route")).GET(req("/api/character/allocate-stats"));
+        return (await import("./character/allocate-stats/route")).GET(
+          req("/api/character/allocate-stats")
+        );
       },
     },
     {
@@ -378,7 +426,9 @@ describe("per-user GET success paths are never cacheable", () => {
       name: "character/[id]/sovereign-holdings returns 200 with no-store",
       run: async () => {
         mockRequireAuth.mockResolvedValue({ ok: true, user: characterUser });
-        const res = await (await import("./character/[id]/sovereign-holdings/route")).GET(req("/x"), idParams());
+        const res = await (
+          await import("./character/[id]/sovereign-holdings/route")
+        ).GET(req("/x"), idParams());
         expect(res.status).toBe(200);
         return res;
       },
@@ -422,7 +472,9 @@ describe("per-user GET success paths are never cacheable", () => {
       name: "forex/transactions returns 200 with no-store",
       run: async () => {
         okCharacter();
-        const res = await (await import("./forex/transactions/route")).GET(req("/api/forex/transactions"));
+        const res = await (
+          await import("./forex/transactions/route")
+        ).GET(req("/api/forex/transactions"));
         expect(res.status).toBe(200);
         return res;
       },
@@ -482,16 +534,22 @@ describe("per-user GET success paths are never cacheable", () => {
       name: "political-operations/state-org/by-state",
       run: async () => {
         okBasic();
-        return (await import("./political-operations/state-org/by-state/[stateId]/route")).GET(req("/x"), {
-          params: Promise.resolve({ stateId: "CA" }),
-        });
+        return (await import("./political-operations/state-org/by-state/[stateId]/route")).GET(
+          req("/x"),
+          {
+            params: Promise.resolve({ stateId: "CA" }),
+          }
+        );
       },
     },
     {
       name: "corporation/[id]/private-invites",
       run: async () => {
         okBasic();
-        return (await import("./corporation/[id]/private-invites/route")).GET(req("/x"), idParams());
+        return (await import("./corporation/[id]/private-invites/route")).GET(
+          req("/x"),
+          idParams()
+        );
       },
     },
     {
@@ -526,7 +584,10 @@ describe("per-user GET success paths are never cacheable", () => {
       name: "settings/retired-characters/[id]",
       run: async () => {
         okBasic();
-        return (await import("./settings/retired-characters/[id]/route")).GET(req("/x"), idParams());
+        return (await import("./settings/retired-characters/[id]/route")).GET(
+          req("/x"),
+          idParams()
+        );
       },
     },
     {
@@ -562,7 +623,9 @@ describe("per-user GET success paths are never cacheable", () => {
     {
       name: "unions/[id]/leader/vote returns 404 with no-store for an unknown union",
       run: async () => {
-        const res = await (await import("./unions/[id]/leader/vote/route")).GET(req("/x"), idParams());
+        const res = await (
+          await import("./unions/[id]/leader/vote/route")
+        ).GET(req("/x"), idParams());
         expect(res.status).toBe(404);
         return res;
       },
@@ -570,7 +633,9 @@ describe("per-user GET success paths are never cacheable", () => {
     {
       name: "wiki/[slug] returns 404 with no-store for an unknown page",
       run: async () => {
-        const res = await (await import("./wiki/[slug]/route")).GET(req("/api/wiki/x"), {
+        const res = await (
+          await import("./wiki/[slug]/route")
+        ).GET(req("/api/wiki/x"), {
           params: Promise.resolve({ slug: "x" }),
         });
         expect(res.status).toBe(404);
@@ -590,7 +655,8 @@ describe("per-user GET success paths are never cacheable", () => {
     },
     {
       name: "suggestions/public",
-      run: async () => (await import("./suggestions/public/route")).GET(req("/api/suggestions/public")),
+      run: async () =>
+        (await import("./suggestions/public/route")).GET(req("/api/suggestions/public")),
     },
   ])("$name stamps no-store", async ({ run }) => {
     expectNoStore(await run());
