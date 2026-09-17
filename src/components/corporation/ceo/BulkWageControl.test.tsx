@@ -19,7 +19,7 @@ it("requires a fresh preview after editing wages and applies the previewed level
     },
   });
   render(
-    <NextIntlClientProvider locale="en" messages={{ corporations }}>
+    <NextIntlClientProvider locale="en" messages={corporations}>
       <BulkWageControl country="US" sectorType={null} onBulkOperations={action} fmtMoney={String} />
     </NextIntlClientProvider>
   );
