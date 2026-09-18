@@ -29,6 +29,15 @@ import { TR_IDENTITY } from "@/lib/countries/tr/identity";
 import { GR_IDENTITY } from "@/lib/countries/gr/identity";
 import { AT_IDENTITY } from "@/lib/countries/at/identity";
 import { FI_IDENTITY } from "@/lib/countries/fi/identity";
+import { PL_IDENTITY } from "@/lib/countries/pl/identity";
+import { HU_IDENTITY } from "@/lib/countries/hu/identity";
+import { RO_IDENTITY } from "@/lib/countries/ro/identity";
+import { YU_IDENTITY } from "@/lib/countries/yu/identity";
+import { BG_IDENTITY } from "@/lib/countries/bg/identity";
+import { CS_IDENTITY } from "@/lib/countries/cs/identity";
+import { BLR_IDENTITY } from "@/lib/countries/blr/identity";
+import { UKR_IDENTITY } from "@/lib/countries/ukr/identity";
+import { BAL_IDENTITY } from "@/lib/countries/bal/identity";
 
 export interface ExecutiveSeal {
   src: string;
@@ -64,42 +73,15 @@ export const EXECUTIVE_SEALS: Partial<Record<CountryId, ExecutiveSeal>> = {
   GR: GR_IDENTITY.executiveSeal,
   AT: AT_IDENTITY.executiveSeal,
   FI: FI_IDENTITY.executiveSeal,
-  HU: {
-    src: "https://upload.wikimedia.org/wikipedia/commons/thumb/8/8d/Coat_of_arms_of_Hungary_(1957-1990).svg/330px-Coat_of_arms_of_Hungary_(1957-1990).svg.png",
-    alt: "Coat of arms of the Hungarian People's Republic",
-  },
-  PL: {
-    src: "https://upload.wikimedia.org/wikipedia/commons/thumb/1/1f/Coat_of_arms_of_the_People's_Republic_of_Poland.svg/330px-Coat_of_arms_of_the_People's_Republic_of_Poland.svg.png",
-    alt: "Coat of arms of the Polish People's Republic",
-  },
-  RO: {
-    src: "https://upload.wikimedia.org/wikipedia/commons/thumb/f/fe/Coat_of_arms_of_the_Socialist_Republic_of_Romania.svg/330px-Coat_of_arms_of_the_Socialist_Republic_of_Romania.svg.png",
-    alt: "Coat of arms of the Socialist Republic of Romania",
-  },
-  YU: {
-    src: "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c2/Emblem_of_SFR_Yugoslavia.svg/330px-Emblem_of_SFR_Yugoslavia.svg.png",
-    alt: "Emblem of SFR Yugoslavia",
-  },
-  BG: {
-    src: "https://upload.wikimedia.org/wikipedia/commons/thumb/2/25/Coat_of_arms_of_Bulgaria_(1971-1990).svg/330px-Coat_of_arms_of_Bulgaria_(1971-1990).svg.png",
-    alt: "Coat of arms of the People's Republic of Bulgaria",
-  },
-  BLR: {
-    src: "https://upload.wikimedia.org/wikipedia/commons/thumb/b/b3/Emblem_of_the_Byelorussian_Soviet_Socialist_Republic.svg/330px-Emblem_of_the_Byelorussian_Soviet_Socialist_Republic.svg.png",
-    alt: "Emblem of the Byelorussian SSR",
-  },
-  UKR: {
-    src: "https://upload.wikimedia.org/wikipedia/commons/thumb/2/2b/Emblem_of_the_Ukrainian_SSR.svg/330px-Emblem_of_the_Ukrainian_SSR.svg.png",
-    alt: "Emblem of the Ukrainian SSR",
-  },
-  CS: {
-    src: "https://upload.wikimedia.org/wikipedia/commons/thumb/9/96/Coat_of_arms_of_Czechoslovakia_(1960-1990).svg/330px-Coat_of_arms_of_Czechoslovakia_(1960-1990).svg.png",
-    alt: "Coat of arms of the Czechoslovak Socialist Republic",
-  },
-  BAL: {
-    src: "https://upload.wikimedia.org/wikipedia/commons/thumb/5/55/State_Emblem_of_the_Soviet_Union.svg/330px-State_Emblem_of_the_Soviet_Union.svg.png",
-    alt: "State Emblem of the Soviet Union (Baltic SSRs)",
-  },
+  HU: HU_IDENTITY.executiveSeal,
+  PL: PL_IDENTITY.executiveSeal,
+  RO: RO_IDENTITY.executiveSeal,
+  YU: YU_IDENTITY.executiveSeal,
+  BG: BG_IDENTITY.executiveSeal,
+  BLR: BLR_IDENTITY.executiveSeal,
+  UKR: UKR_IDENTITY.executiveSeal,
+  CS: CS_IDENTITY.executiveSeal,
+  BAL: BAL_IDENTITY.executiveSeal,
 };
 
 /** Real-world executive seal for a country, or null when none is configured. */

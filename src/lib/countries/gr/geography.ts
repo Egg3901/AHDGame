@@ -1,8 +1,8 @@
 import type { CountryGeography } from "../contract";
-import { grMetricPresets1953 } from "@/lib/seeds/gr/grMetricPresets1953";
-import { grRegions } from "@/lib/seeds/gr/grRegions";
-import { grRegions1953 } from "@/lib/seeds/gr/grRegions1953";
-import { grStateMetrics } from "@/lib/seeds/gr/grStateMetrics";
+import { grMetricPresets1953 } from "./data/grMetricPresets1953";
+import { grRegions } from "./data/grRegions";
+import { grRegions1953 } from "./data/grRegions1953";
+import { grStateMetrics } from "./data/grStateMetrics";
 import {
   GR_ADJACENCY_MAP,
   GR_CONTINENT,

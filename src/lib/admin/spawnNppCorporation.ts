@@ -62,6 +62,17 @@ import { TR_NPP_CAPITAL_STATE } from "@/lib/countries/tr/geographyFacts";
 import { GR_NPP_CAPITAL_STATE } from "@/lib/countries/gr/geographyFacts";
 import { AT_NPP_CAPITAL_STATE } from "@/lib/countries/at/geographyFacts";
 import { FI_NPP_CAPITAL_STATE } from "@/lib/countries/fi/geographyFacts";
+import { PL_NPP_CAPITAL_STATE } from "@/lib/countries/pl/geographyFacts";
+import { HU_NPP_CAPITAL_STATE } from "@/lib/countries/hu/geographyFacts";
+import { RO_NPP_CAPITAL_STATE } from "@/lib/countries/ro/geographyFacts";
+import { YU_NPP_CAPITAL_STATE } from "@/lib/countries/yu/geographyFacts";
+import { BG_NPP_CAPITAL_STATE } from "@/lib/countries/bg/geographyFacts";
+import { CS_NPP_CAPITAL_STATE } from "@/lib/countries/cs/geographyFacts";
+import { SCO_NPP_CAPITAL_STATE } from "@/lib/countries/sco/geographyFacts";
+import { WAL_NPP_CAPITAL_STATE } from "@/lib/countries/wal/geographyFacts";
+import { BLR_NPP_CAPITAL_STATE } from "@/lib/countries/blr/geographyFacts";
+import { UKR_NPP_CAPITAL_STATE } from "@/lib/countries/ukr/geographyFacts";
+import { BAL_NPP_CAPITAL_STATE } from "@/lib/countries/bal/geographyFacts";
 
 /**
  * Default founding book for an admin/NPP-spawned corporation, in ₳ at MODERN
@@ -87,16 +98,16 @@ export const NPP_CAPITAL_STATES: Record<CountryId, string> = {
   IE: IE_NPP_CAPITAL_STATE,
   NG: NG_NPP_CAPITAL_STATE, // federal capital (Abuja/FCT) sits in the North-Central zone
   BR: BR_NPP_CAPITAL_STATE,
-  HU: "", // coming-soon: regions not yet seeded
-  PL: "",
-  RO: "",
-  YU: "",
-  BG: "",
+  HU: HU_NPP_CAPITAL_STATE, // coming-soon: regions not yet seeded
+  PL: PL_NPP_CAPITAL_STATE,
+  RO: RO_NPP_CAPITAL_STATE,
+  YU: YU_NPP_CAPITAL_STATE,
+  BG: BG_NPP_CAPITAL_STATE,
   // Union republics: seeded regions exist, so these carry real capitals.
-  UKR: "UKR_KYI",
-  BLR: "BLR_MIN",
-  CS: "",
-  BAL: "BAL_LVA", // Riga: the largest Baltic city and the regional administrative centre
+  UKR: UKR_NPP_CAPITAL_STATE,
+  BLR: BLR_NPP_CAPITAL_STATE,
+  CS: CS_NPP_CAPITAL_STATE,
+  BAL: BAL_NPP_CAPITAL_STATE, // Riga: the largest Baltic city and the regional administrative centre
   RU: RU_NPP_CAPITAL_STATE,
   // Econ-tier market democracies — capital region (political capital where the
   // administrative and market capital differ, e.g. Ankara over Istanbul). These
@@ -112,8 +123,8 @@ export const NPP_CAPITAL_STATES: Record<CountryId, string> = {
   AT: AT_NPP_CAPITAL_STATE, // Vienna
   FI: FI_NPP_CAPITAL_STATE, // Uusimaa (Helsinki)
   DD: DD_NPP_CAPITAL_STATE, // regions not yet seeded
-  SCO: "", // Latent — sub-regions seeded at secession (cannot spawn pre-activation)
-  WAL: "", // Latent — sub-regions seeded at secession (cannot spawn pre-activation)
+  SCO: SCO_NPP_CAPITAL_STATE, // Latent — sub-regions seeded at secession (cannot spawn pre-activation)
+  WAL: WAL_NPP_CAPITAL_STATE, // Latent — sub-regions seeded at secession (cannot spawn pre-activation)
 };
 
 export interface SpawnNppCorporationInput {

@@ -1,4 +1,5 @@
 import type { CountryElections } from "../contract";
+import type { CountryElectionPhaseEntry } from "@/lib/turn/countryPhases";
 import type { SpawnElectionsResult } from "@/lib/turn/perpetualElections/registry";
 import {
   DE_WAHLKREIS_SEATS,
@@ -7,6 +8,17 @@ import {
   TOTAL_DE_WAHLKREIS_SEATS,
 } from "@/lib/constants/states";
 import { ensureDEElections } from "./elections/perpetual";
+/*
+ * ⚠️ BOTH FROM THE DEFINING MODULE. Importing
+ * `ensureDEMinisterPresidentElections` through `./elections/perpetual` gave a
+ * DIFFERENT function object from the one `COUNTRY_ELECTION_PHASES` holds --
+ * same name, same behaviour, not the same reference -- and the harness compares
+ * phase `fn` by reference for exactly that reason.
+ */
+import {
+  ensureDELandtagElections,
+  ensureDEMinisterPresidentElections,
+} from "./elections/germanyLandtag";
 
 /**
  * Germany's elections.
@@ -30,7 +42,24 @@ const spawn = async (now: Date): Promise<SpawnElectionsResult> => {
   return { message: "DE Bundestag continuity check complete." };
 };
 
+/**
+ * The election phases, in the order `countryPhases.ts` declares them.
+ *
+ * ⚠️ `spawn` AND `electionPhases` ARE DIFFERENT LISTS AND THIS COUNTRY HAS
+ * BOTH. `spawn` is the continuity check the perpetual-election registry runs;
+ * these are the turn phases. They overlap but are not the same set -- the
+ * folder previously carried only `spawn`, so anything reading the folder for a
+ * country's phases got nothing. The harness compares this list against
+ * `COUNTRY_ELECTION_PHASES` entry by entry, `fn` by reference.
+ */
+const phases: CountryElectionPhaseEntry[] = [
+  { name: "deElections", fn: ensureDEElections },
+  { name: "deLandtagElections", fn: ensureDELandtagElections },
+  { name: "deMinisterPresidentElections", fn: ensureDEMinisterPresidentElections },
+];
+
 export const DE_ELECTIONS: CountryElections = {
+  electionPhases: phases,
   spawn,
   seats: {
     byChamber: {

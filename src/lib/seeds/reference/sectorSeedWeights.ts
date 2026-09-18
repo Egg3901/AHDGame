@@ -30,6 +30,17 @@ import { TR_ECONOMY } from "@/lib/countries/tr/economy";
 import { GR_ECONOMY } from "@/lib/countries/gr/economy";
 import { AT_ECONOMY } from "@/lib/countries/at/economy";
 import { FI_ECONOMY } from "@/lib/countries/fi/economy";
+import { PL_ECONOMY } from "@/lib/countries/pl/economy";
+import { HU_ECONOMY } from "@/lib/countries/hu/economy";
+import { RO_ECONOMY } from "@/lib/countries/ro/economy";
+import { YU_ECONOMY } from "@/lib/countries/yu/economy";
+import { BG_ECONOMY } from "@/lib/countries/bg/economy";
+import { CS_ECONOMY } from "@/lib/countries/cs/economy";
+import { SCO_ECONOMY } from "@/lib/countries/sco/economy";
+import { WAL_ECONOMY } from "@/lib/countries/wal/economy";
+import { BLR_ECONOMY } from "@/lib/countries/blr/economy";
+import { UKR_ECONOMY } from "@/lib/countries/ukr/economy";
+import { BAL_ECONOMY } from "@/lib/countries/bal/economy";
 
 type SectorWeightMap = Partial<Record<CorporationType, number>>;
 
@@ -71,45 +82,9 @@ export const COUNTRY_SECTOR_WEIGHTS: Record<CountryId, SectorWeightMap> = {
   US: US_ECONOMY.sectorWeights.base,
   UK: UK_ECONOMY.sectorWeights.base,
   // Latent - mirrors UK; dedicated SCO weights are not authored.
-  SCO: {
-    real_estate: 14,
-    financial: 13,
-    manufacturing: 9,
-    technology: 8,
-    healthcare: 8,
-    retail: 7,
-    construction: 6,
-    media: 5,
-    chemical_industries: 5,
-    entertainment: 4,
-    telecommunications: 4,
-    logistics: 4,
-    energy: 3,
-    automobiles: 3,
-    defense: 3,
-    extraction: 3,
-    agriculture: 1,
-  },
+  SCO: SCO_ECONOMY.sectorWeights.base,
   // Latent - mirrors UK; dedicated WAL weights are not authored.
-  WAL: {
-    real_estate: 14,
-    financial: 13,
-    manufacturing: 9,
-    technology: 8,
-    healthcare: 8,
-    retail: 7,
-    construction: 6,
-    media: 5,
-    chemical_industries: 5,
-    entertainment: 4,
-    telecommunications: 4,
-    logistics: 4,
-    energy: 3,
-    automobiles: 3,
-    defense: 3,
-    extraction: 3,
-    agriculture: 1,
-  },
+  WAL: WAL_ECONOMY.sectorWeights.base,
   DE: DE_ECONOMY.sectorWeights.base,
   JP: JP_ECONOMY.sectorWeights.base,
   CN: CN_ECONOMY.sectorWeights.base,
@@ -118,106 +93,19 @@ export const COUNTRY_SECTOR_WEIGHTS: Record<CountryId, SectorWeightMap> = {
   NG: NG_ECONOMY.sectorWeights.base,
   // Hungary — planned socialist economy: heavy industry + agriculture, minimal
   // finance/tech/media.
-  HU: {
-    manufacturing: 22,
-    agriculture: 14,
-    chemical_industries: 10,
-    energy: 9,
-    construction: 8,
-    automobiles: 7,
-    retail: 6,
-    logistics: 5,
-    healthcare: 5,
-    real_estate: 3,
-    extraction: 3,
-    defense: 2,
-    financial: 2,
-    technology: 1,
-    telecommunications: 1,
-    media: 1,
-    entertainment: 1,
-  },
+  HU: HU_ECONOMY.sectorWeights.base,
   // Eastern Bloc planned economies (normalized at read).
-  PL: {
-    manufacturing: 22,
-    agriculture: 13,
-    extraction: 11,
-    energy: 8,
-    chemical_industries: 8,
-    construction: 7,
-    retail: 6,
-    healthcare: 5,
-  },
-  RO: {
-    manufacturing: 20,
-    agriculture: 16,
-    energy: 10,
-    extraction: 8,
-    chemical_industries: 8,
-    construction: 7,
-    retail: 6,
-    healthcare: 4,
-  },
-  YU: {
-    manufacturing: 16,
-    agriculture: 12,
-    retail: 10,
-    construction: 9,
-    logistics: 7,
-    entertainment: 6,
-    real_estate: 6,
-    healthcare: 6,
-    financial: 4,
-  },
-  BG: {
-    agriculture: 20,
-    manufacturing: 18,
-    energy: 8,
-    chemical_industries: 7,
-    construction: 7,
-    retail: 6,
-    healthcare: 5,
-  },
+  PL: PL_ECONOMY.sectorWeights.base,
+  RO: RO_ECONOMY.sectorWeights.base,
+  YU: YU_ECONOMY.sectorWeights.base,
+  BG: BG_ECONOMY.sectorWeights.base,
   // Ukraine. Post-Soviet shape even in the eras where it is not seeded: the
   // Donbas/Dnieper metallurgical belt and the black-earth grain surplus are the
   // two things that survive every regime change.
-  UKR: {
-    manufacturing: 22,
-    agriculture: 16,
-    extraction: 10,
-    energy: 9,
-    chemical_industries: 8,
-    construction: 7,
-    retail: 6,
-    healthcare: 5,
-  },
-  BLR: {
-    manufacturing: 24,
-    agriculture: 16,
-    chemical_industries: 10,
-    energy: 8,
-    construction: 7,
-    automobiles: 6,
-    retail: 5,
-  },
-  CS: {
-    manufacturing: 28,
-    automobiles: 10,
-    chemical_industries: 9,
-    energy: 8,
-    construction: 7,
-    retail: 6,
-    healthcare: 5,
-  },
-  BAL: {
-    manufacturing: 18,
-    agriculture: 16,
-    logistics: 8,
-    energy: 7,
-    construction: 7,
-    retail: 6,
-    healthcare: 5,
-  },
+  UKR: UKR_ECONOMY.sectorWeights.base,
+  BLR: BLR_ECONOMY.sectorWeights.base,
+  CS: CS_ECONOMY.sectorWeights.base,
+  BAL: BAL_ECONOMY.sectorWeights.base,
   // USSR — command economy: heavy industry, energy/extraction, defense, agriculture.
   RU: RU_ECONOMY.sectorWeights.base,
   // France 1979 — diversified mixed economy: manufacturing/autos, nuclear energy,

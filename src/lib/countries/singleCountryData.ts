@@ -60,6 +60,17 @@ export const CONVERTED: readonly string[] = [
   "GR",
   "AT",
   "FI",
+  "PL",
+  "HU",
+  "RO",
+  "YU",
+  "BG",
+  "CS",
+  "SCO",
+  "WAL",
+  "BLR",
+  "UKR",
+  "BAL",
 ];
 
 /**
@@ -123,11 +134,6 @@ export const ACKNOWLEDGED_OUTSIDE: ReadonlyArray<{
     file: "src/lib/constants/devolution.ts",
     country: "UK",
     why: "The devolution and secession machinery. It is written around the UK because the UK is the game's devolved state, but Scotland and Wales are separate countries in it -- SCO and WAL have their own ids -- so this is a multi-entity mechanic, not one country's table.",
-  },
-  {
-    file: "src/lib/constants/regionBanner.ts",
-    country: "UK",
-    why: "Region banner configuration read by every country's region pages; the UK entries sit inside a country-keyed map.",
   },
 
   // ---- Shared modules that CONTAIN United States data without BEING it. ----

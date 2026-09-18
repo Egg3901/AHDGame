@@ -34,8 +34,8 @@ import { brRegionCensusData1979 } from "@/lib/seeds/br/brRegionCensusData1979";
 import { frRegionCensusData1979 } from "@/lib/seeds/fr/frRegionCensusData1979";
 import { ngRegionCensusData1979 } from "@/lib/seeds/ng/ngRegionCensusData1979";
 import { ngRegionCensusData } from "@/lib/seeds/ng/ngRegionCensusData";
-import { scoRegionCensusData, scoRegionCensusData1991 } from "@/lib/seeds/sco/scoRegionCensusData";
-import { walRegionCensusData, walRegionCensusData1991 } from "@/lib/seeds/wal/walRegionCensusData";
+import { scoRegionCensusData } from "@/lib/seeds/sco/scoRegionCensusData";
+import { walRegionCensusData } from "@/lib/seeds/wal/walRegionCensusData";
 
 /** Archetype-style Layer-1 census (UK/JP/DE/IE/CN/BR). */
 export interface ArchetypeRegionCensus {
@@ -83,62 +83,34 @@ import { IT_GEOGRAPHY } from "@/lib/countries/it/geography";
 import { ES_GEOGRAPHY } from "@/lib/countries/es/geography";
 import { SE_GEOGRAPHY } from "@/lib/countries/se/geography";
 import { TR_GEOGRAPHY } from "@/lib/countries/tr/geography";
+import { PL_GEOGRAPHY } from "@/lib/countries/pl/geography";
+import { HU_GEOGRAPHY } from "@/lib/countries/hu/geography";
+import { RO_GEOGRAPHY } from "@/lib/countries/ro/geography";
+import { YU_GEOGRAPHY } from "@/lib/countries/yu/geography";
+import { BG_GEOGRAPHY } from "@/lib/countries/bg/geography";
+import { CS_GEOGRAPHY } from "@/lib/countries/cs/geography";
+import { SCO_GEOGRAPHY } from "@/lib/countries/sco/geography";
+import { WAL_GEOGRAPHY } from "@/lib/countries/wal/geography";
+import { BLR_GEOGRAPHY } from "@/lib/countries/blr/geography";
+import { UKR_GEOGRAPHY } from "@/lib/countries/ukr/geography";
+import { BAL_GEOGRAPHY } from "@/lib/countries/bal/geography";
 
 export const CENSUS_BUNDLES: Partial<Record<CountryId, PresetBundles>> = {
-  PL: {
-    // Authored 1953 census existed but was never registered here, so
-    // getRegionCensusData returned null and seedCohortVectors silently skipped
-    // every PL region — no age pyramid at all for a demographic run.
-    "1953-default": plRegionCensusData1953,
-  },
-  CS: {
-    // Authored 1953 census existed but was never registered here, so
-    // getRegionCensusData returned null and seedCohortVectors silently skipped
-    // every CS region — no age pyramid at all for a demographic run.
-    "1953-default": csRegionCensusData1953,
-  },
-  HU: {
-    // Authored 1953 census existed but was never registered here, so
-    // getRegionCensusData returned null and seedCohortVectors silently skipped
-    // every HU region — no age pyramid at all for a demographic run.
-    "1953-default": huRegionCensusData1953,
-  },
-  RO: {
-    // Authored 1953 census existed but was never registered here, so
-    // getRegionCensusData returned null and seedCohortVectors silently skipped
-    // every RO region — no age pyramid at all for a demographic run.
-    "1953-default": roRegionCensusData1953,
-  },
-  BG: {
-    // Authored 1953 census existed but was never registered here, so
-    // getRegionCensusData returned null and seedCohortVectors silently skipped
-    // every BG region — no age pyramid at all for a demographic run.
-    "1953-default": bgRegionCensusData1953,
-  },
-  YU: {
-    // Authored 1953 census existed but was never registered here, so
-    // getRegionCensusData returned null and seedCohortVectors silently skipped
-    // every YU region — no age pyramid at all for a demographic run.
-    "1953-default": yuRegionCensusData1953,
-  },
+  PL: PL_GEOGRAPHY.censusBundles,
+  CS: CS_GEOGRAPHY.censusBundles,
+  HU: HU_GEOGRAPHY.censusBundles,
+  RO: RO_GEOGRAPHY.censusBundles,
+  BG: BG_GEOGRAPHY.censusBundles,
+  YU: YU_GEOGRAPHY.censusBundles,
   // Soviet union republics promoted to their own countries. Unlike the
   // satellites above these carry BOTH Cold-War eras: the 1959 and 1979 all-Union
   // censuses are the best-documented demographic series in the bloc, and the
   // ethnic movement between them (Russification, in-migration to the Baltic
   // cities, the west of Ukraine staying Ukrainian) is a mechanic here rather
   // than flavour, so an era proxy would flatten the thing being modelled.
-  UKR: {
-    "1953-default": uaRegionCensusData1953,
-    "1979-default": uaRegionCensusData,
-  },
-  BLR: {
-    "1953-default": blrRegionCensusData1953,
-    "1979-default": blrRegionCensusData,
-  },
-  BAL: {
-    "1953-default": balRegionCensusData1953,
-    "1979-default": balRegionCensusData,
-  },
+  UKR: UKR_GEOGRAPHY.censusBundles,
+  BLR: BLR_GEOGRAPHY.censusBundles,
+  BAL: BAL_GEOGRAPHY.censusBundles,
 
   US: US_GEOGRAPHY.censusBundles,
   UK: UK_GEOGRAPHY.censusBundles,
@@ -164,8 +136,8 @@ export const CENSUS_BUNDLES: Partial<Record<CountryId, PresetBundles>> = {
   NG: NG_GEOGRAPHY.censusBundles,
   // Seceded nations carry their own per-sub-region census (differentiated from
   // the former UK Scotland/Wales aggregate).
-  SCO: { "2019-default": scoRegionCensusData, "1991-default": scoRegionCensusData1991 },
-  WAL: { "2019-default": walRegionCensusData, "1991-default": walRegionCensusData1991 },
+  SCO: SCO_GEOGRAPHY.censusBundles,
+  WAL: WAL_GEOGRAPHY.censusBundles,
 };
 
 /**

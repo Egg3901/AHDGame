@@ -24,6 +24,17 @@ import { TR_MAP_REGISTRY } from "@/lib/countries/tr/geographyFacts";
 import { GR_MAP_REGISTRY } from "@/lib/countries/gr/geographyFacts";
 import { AT_MAP_REGISTRY } from "@/lib/countries/at/geographyFacts";
 import { FI_MAP_REGISTRY } from "@/lib/countries/fi/geographyFacts";
+import { PL_MAP_REGISTRY } from "@/lib/countries/pl/geographyFacts";
+import { HU_MAP_REGISTRY } from "@/lib/countries/hu/geographyFacts";
+import { RO_MAP_REGISTRY } from "@/lib/countries/ro/geographyFacts";
+import { YU_MAP_REGISTRY } from "@/lib/countries/yu/geographyFacts";
+import { BG_MAP_REGISTRY } from "@/lib/countries/bg/geographyFacts";
+import { CS_MAP_REGISTRY } from "@/lib/countries/cs/geographyFacts";
+import { SCO_MAP_REGISTRY } from "@/lib/countries/sco/geographyFacts";
+import { WAL_MAP_REGISTRY } from "@/lib/countries/wal/geographyFacts";
+import { BLR_MAP_REGISTRY } from "@/lib/countries/blr/geographyFacts";
+import { UKR_MAP_REGISTRY } from "@/lib/countries/ukr/geographyFacts";
+import { BAL_MAP_REGISTRY } from "@/lib/countries/bal/geographyFacts";
 
 export interface CountryMapConfig {
   /** Country ID */
@@ -75,69 +86,15 @@ export const COUNTRY_MAP_REGISTRY: Record<CountryId, CountryMapConfig> = {
   BR: BR_MAP_REGISTRY,
   CN: CN_MAP_REGISTRY,
   NG: NG_MAP_REGISTRY,
-  HU: {
-    countryId: "HU",
-    name: "Hungary",
-    overviewPath: "/country/hu",
-    mapPath: "/country/hu/map",
-    hasRegionMap: false,
-  },
-  PL: {
-    countryId: "PL",
-    name: "Poland",
-    overviewPath: "/country/pl",
-    mapPath: "/country/pl/map",
-    hasRegionMap: false,
-  },
-  RO: {
-    countryId: "RO",
-    name: "Romania",
-    overviewPath: "/country/ro",
-    mapPath: "/country/ro/map",
-    hasRegionMap: false,
-  },
-  YU: {
-    countryId: "YU",
-    name: "Yugoslavia",
-    overviewPath: "/country/yu",
-    mapPath: "/country/yu/map",
-    hasRegionMap: false,
-  },
-  BG: {
-    countryId: "BG",
-    name: "Bulgaria",
-    overviewPath: "/country/bg",
-    mapPath: "/country/bg/map",
-    hasRegionMap: false,
-  },
-  BLR: {
-    countryId: "BLR",
-    name: "Belarus",
-    overviewPath: "/country/blr",
-    mapPath: "/country/blr/map",
-    hasRegionMap: false,
-  },
-  UKR: {
-    countryId: "UKR",
-    name: "Ukraine",
-    overviewPath: "/country/ua",
-    mapPath: "/country/ua/map",
-    hasRegionMap: false,
-  },
-  CS: {
-    countryId: "CS",
-    name: "Czechoslovakia",
-    overviewPath: "/country/cs",
-    mapPath: "/country/cs/map",
-    hasRegionMap: false,
-  },
-  BAL: {
-    countryId: "BAL",
-    name: "Baltic Republics",
-    overviewPath: "/country/bal",
-    mapPath: "/country/bal/map",
-    hasRegionMap: false,
-  },
+  HU: HU_MAP_REGISTRY,
+  PL: PL_MAP_REGISTRY,
+  RO: RO_MAP_REGISTRY,
+  YU: YU_MAP_REGISTRY,
+  BG: BG_MAP_REGISTRY,
+  BLR: BLR_MAP_REGISTRY,
+  UKR: UKR_MAP_REGISTRY,
+  CS: CS_MAP_REGISTRY,
+  BAL: BAL_MAP_REGISTRY,
   RU: RU_MAP_REGISTRY,
   FR: FR_MAP_REGISTRY,
   IT: IT_MAP_REGISTRY,
@@ -149,21 +106,9 @@ export const COUNTRY_MAP_REGISTRY: Record<CountryId, CountryMapConfig> = {
   FI: FI_MAP_REGISTRY,
   DD: DD_MAP_REGISTRY,
   // Latent — region map (public/sco-regions.json) wired in at SP3.
-  SCO: {
-    countryId: "SCO",
-    name: "Scotland",
-    overviewPath: "/country/sco",
-    mapPath: "/country/sco/map",
-    hasRegionMap: false,
-  },
+  SCO: SCO_MAP_REGISTRY,
   // Latent — region map (public/wal-regions.json) wired in at SP3.
-  WAL: {
-    countryId: "WAL",
-    name: "Wales",
-    overviewPath: "/country/wal",
-    mapPath: "/country/wal/map",
-    hasRegionMap: false,
-  },
+  WAL: WAL_MAP_REGISTRY,
 };
 
 /**

@@ -19,6 +19,17 @@ import { TR_CABINET_SEAT_IDS } from "@/lib/countries/tr/institutionsFacts";
 import { GR_CABINET_SEAT_IDS } from "@/lib/countries/gr/institutionsFacts";
 import { AT_CABINET_SEAT_IDS } from "@/lib/countries/at/institutionsFacts";
 import { FI_CABINET_SEAT_IDS } from "@/lib/countries/fi/institutionsFacts";
+import { PL_CABINET_SEAT_IDS } from "@/lib/countries/pl/institutionsFacts";
+import { HU_CABINET_SEAT_IDS } from "@/lib/countries/hu/institutionsFacts";
+import { RO_CABINET_SEAT_IDS } from "@/lib/countries/ro/institutionsFacts";
+import { YU_CABINET_SEAT_IDS } from "@/lib/countries/yu/institutionsFacts";
+import { BG_CABINET_SEAT_IDS } from "@/lib/countries/bg/institutionsFacts";
+import { CS_CABINET_SEAT_IDS } from "@/lib/countries/cs/institutionsFacts";
+import { SCO_CABINET_SEAT_IDS } from "@/lib/countries/sco/institutionsFacts";
+import { WAL_CABINET_SEAT_IDS } from "@/lib/countries/wal/institutionsFacts";
+import { BLR_CABINET_SEAT_IDS } from "@/lib/countries/blr/institutionsFacts";
+import { UKR_CABINET_SEAT_IDS } from "@/lib/countries/ukr/institutionsFacts";
+import { BAL_CABINET_SEAT_IDS } from "@/lib/countries/bal/institutionsFacts";
 
 /**
  * The built-in organizations seeded at game start. Player-created orgs use
@@ -649,18 +660,18 @@ export const FOREIGN_AFFAIRS_POSITION_BY_COUNTRY: Record<CountryId, string | nul
   // CN/IE/NG, left standing for eight more countries: a player foreign minister here
   // was never recognized, and only the head-of-government fallback could act. Note
   // the same cabinets also hold `minister_of_foreign_trade`, which is NOT this seat.
-  HU: "minister_of_foreign_affairs",
-  PL: "minister_of_foreign_affairs",
-  RO: "minister_of_foreign_affairs",
-  YU: "minister_of_foreign_affairs",
-  BG: "minister_of_foreign_affairs",
+  HU: HU_CABINET_SEAT_IDS.foreignAffairs,
+  PL: PL_CABINET_SEAT_IDS.foreignAffairs,
+  RO: RO_CABINET_SEAT_IDS.foreignAffairs,
+  YU: YU_CABINET_SEAT_IDS.foreignAffairs,
+  BG: BG_CABINET_SEAT_IDS.foreignAffairs,
   // The Ukrainian and Byelorussian SSRs ran their own foreign ministries and
   // held UN seats in their own right from 1945, which is exactly why they are
   // the two union republics with a real seat here rather than a null.
-  BLR: "minister_of_foreign_affairs",
-  UKR: "minister_of_foreign_affairs",
-  CS: "minister_of_foreign_affairs",
-  BAL: "minister_of_foreign_affairs",
+  BLR: BLR_CABINET_SEAT_IDS.foreignAffairs,
+  UKR: UKR_CABINET_SEAT_IDS.foreignAffairs,
+  CS: CS_CABINET_SEAT_IDS.foreignAffairs,
+  BAL: BAL_CABINET_SEAT_IDS.foreignAffairs,
   RU: RU_CABINET_SEAT_IDS.foreignAffairs,
   FR: FR_CABINET_SEAT_IDS.foreignAffairs,
   IT: IT_CABINET_SEAT_IDS.foreignAffairs,
@@ -676,8 +687,8 @@ export const FOREIGN_AFFAIRS_POSITION_BY_COUNTRY: Record<CountryId, string | nul
   // (validateDeclareWar refuses any target not enabled for players), and the
   // diplomatic surfaces for a devolved administration are unverified. The
   // completeness test below carries them as named exceptions so this stays visible.
-  SCO: null,
-  WAL: null,
+  SCO: SCO_CABINET_SEAT_IDS.foreignAffairs,
+  WAL: WAL_CABINET_SEAT_IDS.foreignAffairs,
 };
 
 /**
@@ -695,15 +706,15 @@ export const TRADE_MINISTER_POSITION_BY_COUNTRY: Record<CountryId, string | null
   IE: IE_CABINET_SEAT_IDS.tradeMinister, // Minister for Enterprise, Trade and Employment
   BR: BR_CABINET_SEAT_IDS.tradeMinister,
   NG: NG_CABINET_SEAT_IDS.tradeMinister,
-  HU: null,
-  PL: null,
-  RO: null,
-  YU: null,
-  BG: null,
-  BLR: null,
-  UKR: null,
-  CS: null,
-  BAL: null,
+  HU: HU_CABINET_SEAT_IDS.tradeMinister,
+  PL: PL_CABINET_SEAT_IDS.tradeMinister,
+  RO: RO_CABINET_SEAT_IDS.tradeMinister,
+  YU: YU_CABINET_SEAT_IDS.tradeMinister,
+  BG: BG_CABINET_SEAT_IDS.tradeMinister,
+  BLR: BLR_CABINET_SEAT_IDS.tradeMinister,
+  UKR: UKR_CABINET_SEAT_IDS.tradeMinister,
+  CS: CS_CABINET_SEAT_IDS.tradeMinister,
+  BAL: BAL_CABINET_SEAT_IDS.tradeMinister,
   RU: RU_CABINET_SEAT_IDS.tradeMinister,
   FR: FR_CABINET_SEAT_IDS.tradeMinister,
   IT: IT_CABINET_SEAT_IDS.tradeMinister,
@@ -719,6 +730,6 @@ export const TRADE_MINISTER_POSITION_BY_COUNTRY: Record<CountryId, string | null
   // (validateDeclareWar refuses any target not enabled for players), and the
   // diplomatic surfaces for a devolved administration are unverified. The
   // completeness test below carries them as named exceptions so this stays visible.
-  SCO: null,
-  WAL: null,
+  SCO: SCO_CABINET_SEAT_IDS.tradeMinister,
+  WAL: WAL_CABINET_SEAT_IDS.tradeMinister,
 };

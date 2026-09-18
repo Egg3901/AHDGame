@@ -17,6 +17,16 @@ import { TR_ISO_NUMERIC } from "@/lib/countries/tr/geographyFacts";
 import { GR_ISO_NUMERIC } from "@/lib/countries/gr/geographyFacts";
 import { AT_ISO_NUMERIC } from "@/lib/countries/at/geographyFacts";
 import { FI_ISO_NUMERIC } from "@/lib/countries/fi/geographyFacts";
+import { PL_ISO_NUMERIC } from "@/lib/countries/pl/geographyFacts";
+import { HU_ISO_NUMERIC } from "@/lib/countries/hu/geographyFacts";
+import { RO_ISO_NUMERIC } from "@/lib/countries/ro/geographyFacts";
+import { YU_ISO_NUMERIC } from "@/lib/countries/yu/geographyFacts";
+import { BG_ISO_NUMERIC } from "@/lib/countries/bg/geographyFacts";
+import { CS_ISO_NUMERIC } from "@/lib/countries/cs/geographyFacts";
+import { SCO_ISO_NUMERIC } from "@/lib/countries/sco/geographyFacts";
+import { WAL_ISO_NUMERIC } from "@/lib/countries/wal/geographyFacts";
+import { BLR_ISO_NUMERIC } from "@/lib/countries/blr/geographyFacts";
+import { UKR_ISO_NUMERIC } from "@/lib/countries/ukr/geographyFacts";
 
 /** Natural-Earth ISO-numeric (topojson feature id) → in-game CountryId. */
 export const ISO_NUMERIC_TO_COUNTRY: Record<string, CountryId> = {
@@ -59,14 +69,14 @@ export const COUNTRY_TO_ISO_NUMERIC: Record<CountryId, string> = {
   BR: BR_ISO_NUMERIC,
   CN: CN_ISO_NUMERIC,
   NG: NG_ISO_NUMERIC,
-  HU: "348",
-  PL: "616",
-  RO: "642",
-  YU: "890",
-  BG: "100",
-  BLR: "112",
-  UKR: "804",
-  CS: "200",
+  HU: HU_ISO_NUMERIC,
+  PL: PL_ISO_NUMERIC,
+  RO: RO_ISO_NUMERIC,
+  YU: YU_ISO_NUMERIC,
+  BG: BG_ISO_NUMERIC,
+  BLR: BLR_ISO_NUMERIC,
+  UKR: UKR_ISO_NUMERIC,
+  CS: CS_ISO_NUMERIC,
   BAL: "", // EE+LV+LT combined — no single ISO-numeric
   RU: RU_ISO_NUMERIC,
   FR: FR_ISO_NUMERIC,
@@ -78,8 +88,8 @@ export const COUNTRY_TO_ISO_NUMERIC: Record<CountryId, string> = {
   AT: AT_ISO_NUMERIC,
   FI: FI_ISO_NUMERIC,
   DD: DD_ISO_NUMERIC,
-  SCO: "826", // shares GB code; not on the commodity map until secession
-  WAL: "826", // shares GB code; not on the commodity map until secession
+  SCO: SCO_ISO_NUMERIC, // shares GB code; not on the commodity map until secession
+  WAL: WAL_ISO_NUMERIC, // shares GB code; not on the commodity map until secession
 };
 
 /** Resolve a topojson feature id (ISO-numeric string) to a CountryId, or undefined. */

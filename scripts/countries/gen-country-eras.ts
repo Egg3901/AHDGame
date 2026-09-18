@@ -35,7 +35,7 @@ interface Entry {
 const COUNTRY = process.argv[2]?.toUpperCase();
 const FORCE = process.argv.includes("--force");
 
-if (!COUNTRY || !/^[A-Z]{2}$/.test(COUNTRY)) {
+if (!COUNTRY || !/^[A-Z]{2,3}$/.test(COUNTRY)) {
   console.error("usage: npx tsx scripts/countries/gen-country-eras.ts <COUNTRY_ID> [--force]");
   process.exit(1);
 }

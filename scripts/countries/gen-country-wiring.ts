@@ -32,7 +32,7 @@ const COUNTRY = process.argv[2]?.toUpperCase();
 const DISPLAY = process.argv[3];
 const FORCE = process.argv.includes("--force");
 
-if (!COUNTRY || !/^[A-Z]{2}$/.test(COUNTRY) || !DISPLAY) {
+if (!COUNTRY || !/^[A-Z]{2,3}$/.test(COUNTRY) || !DISPLAY) {
   console.error(
     'usage: npx tsx scripts/countries/gen-country-wiring.ts <CC> "<Display Name>" [--force]'
   );
@@ -45,12 +45,21 @@ const SNAPSHOT = `src/lib/countries/__snapshots__/${cc}.pre-move.json`;
 const snap = JSON.parse(readFileSync(SNAPSHOT, "utf8")) as Record<string, Entry>;
 
 /** Where this country's authored data lives, in preference order. */
-const DATA_DIRS = [`${DIR}/data`, `src/lib/seeds/${cc}`];
+/**
+ * ⚠ THE SEED DIRECTORY IS NOT ALWAYS THE COUNTRY ID. Ukraine's id is `UKR` and
+ * its seed files are `src/lib/seeds/ua/uaRegions.ts` -- directory and symbol
+ * prefix both `ua`. Assuming `seeds/<id>` found nothing for it, which would have
+ * produced a folder with no regions rather than an error.
+ */
+const SEED_PREFIX: Record<string, string> = { ukr: "ua" };
+const seedPrefix = SEED_PREFIX[cc] ?? cc;
+
+const DATA_DIRS = [`${DIR}/data`, `src/lib/seeds/${seedPrefix}`];
 
 function findModule(stem: string): string | null {
   for (const dir of DATA_DIRS) {
     if (existsSync(`${dir}/${stem}.ts`)) {
-      return dir.startsWith(DIR) ? `./data/${stem}` : `@/lib/seeds/${cc}/${stem}`;
+      return dir.startsWith(DIR) ? `./data/${stem}` : `@/lib/seeds/${seedPrefix}/${stem}`;
     }
   }
   return null;
@@ -99,12 +108,12 @@ const metricPresets = presetsOf("METRIC_PRESET_BUNDLES");
 const anchorPresets = presetsOf("POPULATION_ANCHOR_BUNDLES");
 const regionPresets = presetsOf("FULL_ERA_REGION_BUNDLES");
 
-const census = eraStems(`${cc}RegionCensusData`, censusPresets);
-const metrics = eraStems(`${cc}MetricPresets`, metricPresets);
-const anchors = eraStems(`${cc}PopulationAnchors`, anchorPresets);
-const regions = eraStems(`${cc}Regions`, regionPresets);
+const census = eraStems(`${seedPrefix}RegionCensusData`, censusPresets);
+const metrics = eraStems(`${seedPrefix}MetricPresets`, metricPresets);
+const anchors = eraStems(`${seedPrefix}PopulationAnchors`, anchorPresets);
+const regions = eraStems(`${seedPrefix}Regions`, regionPresets);
 
-const rawStem = `${cc}StateMetrics`;
+const rawStem = `${seedPrefix}StateMetrics`;
 const rawMod = findModule(rawStem);
 const rawExport = exportsOf(rawStem)[0];
 
@@ -203,7 +212,7 @@ if (REGION_OVERRIDE) {
   for (const [, mod, name] of REGION_OVERRIDE) addImport(mod, name);
 }
 
-if (regions.length === 0 && findModule(`${cc}Regions`)) {
+if (regions.length === 0 && findModule(`${seedPrefix}Regions`)) {
   console.error(
     `${cc}Regions.ts is on disk but no region eras were derived: FULL_ERA_REGION_BUNDLES
 ` +
@@ -283,7 +292,7 @@ ${block(regions)}
 
 export const ${COUNTRY}_GEOGRAPHY: CountryGeography = {
   continent: ${COUNTRY}_CONTINENT,
-  isoNumeric: ${COUNTRY}_ISO_NUMERIC,${opt("unMemberSince", "UN_MEMBER_SINCE")}
+${opt("isoNumeric", "ISO_NUMERIC")}${opt("unMemberSince", "UN_MEMBER_SINCE")}
   worldRegion: ${COUNTRY}_WORLD_REGION,
   nppCapitalState: ${COUNTRY}_NPP_CAPITAL_STATE,${opt("nonPartyIndependentBias", "NON_PARTY_INDEPENDENT_BIAS")}${opt("conscription", "CONSCRIPTION")}${opt("populationMultipliers", "POPULATION_MULTIPLIERS")}${opt("core5Normals", "CORE5_NORMALS")}
   adjacency: ${COUNTRY}_ADJACENCY_MAP,
@@ -330,8 +339,31 @@ function cabinetModule(stem: string): string | null {
   return null;
 }
 
+/** The exports of `constants/<cc><stem>.ts`, wherever it now lives. */
+function cabinetExports(stem: string): string[] {
+  for (const p of [`${DIR}/cabinet/${cc}${stem}.ts`, `src/lib/constants/${cc}${stem}.ts`]) {
+    if (existsSync(p)) {
+      return [...readFileSync(p, "utf8").matchAll(/^export const ([A-Za-z0-9_]+)/gm)].map(
+        (m) => m[1]
+      );
+    }
+  }
+  return [];
+}
+
 const cabinetPositionsMod = cabinetModule("Cabinet");
-const cabinetOrdersMod = cabinetModule("CabinetOrders");
+/**
+ * ⚠ THE ORDERS ARE NOT ALWAYS IN A FILE OF THEIR OWN. Scotland and Wales
+ * declare `SCO_MINISTERIAL_ORDERS` inside `scoCabinet.ts` rather than a separate
+ * `scoCabinetOrders.ts`, so looking only for the latter emitted a folder with no
+ * cabinet orders for two countries that have them. Fall back to the positions
+ * module when it exports the binding.
+ */
+const cabinetOrdersMod =
+  cabinetModule("CabinetOrders") ??
+  (cabinetPositionsMod && cabinetExports("Cabinet").includes(`${COUNTRY}_MINISTERIAL_ORDERS`)
+    ? cabinetPositionsMod
+    : null);
 const cabinetMechanicsMod = cabinetModule("CabinetMechanics");
 
 const instFacts = [
@@ -433,8 +465,26 @@ function phaseEntries(): Array<[string, string]> {
   const src = readFileSync(PHASES_FILE, "utf8");
   const start = src.search(new RegExp(`^  ${COUNTRY}: \\[`, "m"));
   if (start < 0) return [];
-  const end = src.indexOf("\n  ],", start);
-  const body = src.slice(start, end < 0 ? src.indexOf("]", start) : end);
+  /*
+   * ⚠ BRACKET-MATCHED, BECAUSE A ONE-LINE ENTRY HAS NO `\n  ],` TO FIND. Poland
+   * is written `PL: [{ name: "plSejmElections", fn: ensurePLElections }],` on a
+   * single line. Searching forward for a multi-line terminator ran straight past
+   * it into the next countries' blocks, and Poland's generated elections.ts came
+   * back with FOURTEEN phases -- its own plus Czechoslovakia's, Hungary's,
+   * Romania's, Bulgaria's and Yugoslavia's. It typechecked, and it would have
+   * run five other countries' elections under Poland's id every turn.
+   */
+  const open = src.indexOf("[", start);
+  let depth = 0;
+  let end = open;
+  for (; end < src.length; end++) {
+    if (src[end] === "[") depth++;
+    else if (src[end] === "]") {
+      depth--;
+      if (depth === 0) break;
+    }
+  }
+  const body = src.slice(open, end + 1);
   return [...body.matchAll(/\{\s*name:\s*"([^"]+)",\s*fn:\s*([A-Za-z0-9_]+)\s*\}/g)].map(
     (m) => [m[1], m[2]] as [string, string]
   );

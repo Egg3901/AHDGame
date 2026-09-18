@@ -41,6 +41,17 @@ import { TR_ECONOMY } from "@/lib/countries/tr/economy";
 import { GR_ECONOMY } from "@/lib/countries/gr/economy";
 import { AT_ECONOMY } from "@/lib/countries/at/economy";
 import { FI_ECONOMY } from "@/lib/countries/fi/economy";
+import { PL_ECONOMY } from "@/lib/countries/pl/economy";
+import { HU_ECONOMY } from "@/lib/countries/hu/economy";
+import { RO_ECONOMY } from "@/lib/countries/ro/economy";
+import { YU_ECONOMY } from "@/lib/countries/yu/economy";
+import { BG_ECONOMY } from "@/lib/countries/bg/economy";
+import { CS_ECONOMY } from "@/lib/countries/cs/economy";
+import { SCO_ECONOMY } from "@/lib/countries/sco/economy";
+import { WAL_ECONOMY } from "@/lib/countries/wal/economy";
+import { BLR_ECONOMY } from "@/lib/countries/blr/economy";
+import { UKR_ECONOMY } from "@/lib/countries/ukr/economy";
+import { BAL_ECONOMY } from "@/lib/countries/bal/economy";
 
 /**
  * Shared national policy-record assembly — extracted verbatim from
@@ -74,15 +85,15 @@ export const LEGISLATION_COUNTRY_SCOPES: Record<
   BR: BR_ECONOMY.legislationScope,
   CN: CN_ECONOMY.legislationScope,
   NG: NG_ECONOMY.legislationScope,
-  HU: "hu",
-  PL: "pl",
-  RO: "ro",
-  YU: "yu",
-  BG: "bg",
-  BLR: "blr",
-  UKR: "ukr",
-  CS: "cs",
-  BAL: "bal",
+  HU: HU_ECONOMY.legislationScope,
+  PL: PL_ECONOMY.legislationScope,
+  RO: RO_ECONOMY.legislationScope,
+  YU: YU_ECONOMY.legislationScope,
+  BG: BG_ECONOMY.legislationScope,
+  BLR: BLR_ECONOMY.legislationScope,
+  UKR: UKR_ECONOMY.legislationScope,
+  CS: CS_ECONOMY.legislationScope,
+  BAL: BAL_ECONOMY.legislationScope,
   RU: RU_ECONOMY.legislationScope,
   FR: FR_ECONOMY.legislationScope,
   IT: IT_ECONOMY.legislationScope,
@@ -93,8 +104,8 @@ export const LEGISLATION_COUNTRY_SCOPES: Record<
   AT: AT_ECONOMY.legislationScope,
   FI: FI_ECONOMY.legislationScope,
   DD: DD_ECONOMY.legislationScope,
-  SCO: "sco",
-  WAL: "wls",
+  SCO: SCO_ECONOMY.legislationScope,
+  WAL: WAL_ECONOMY.legislationScope,
 };
 
 /**

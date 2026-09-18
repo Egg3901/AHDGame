@@ -16,6 +16,17 @@ import { TR_MAP_ANCHOR } from "@/lib/countries/tr/geographyFacts";
 import { GR_MAP_ANCHOR } from "@/lib/countries/gr/geographyFacts";
 import { AT_MAP_ANCHOR } from "@/lib/countries/at/geographyFacts";
 import { FI_MAP_ANCHOR } from "@/lib/countries/fi/geographyFacts";
+import { PL_MAP_ANCHOR } from "@/lib/countries/pl/geographyFacts";
+import { HU_MAP_ANCHOR } from "@/lib/countries/hu/geographyFacts";
+import { RO_MAP_ANCHOR } from "@/lib/countries/ro/geographyFacts";
+import { YU_MAP_ANCHOR } from "@/lib/countries/yu/geographyFacts";
+import { BG_MAP_ANCHOR } from "@/lib/countries/bg/geographyFacts";
+import { CS_MAP_ANCHOR } from "@/lib/countries/cs/geographyFacts";
+import { SCO_MAP_ANCHOR } from "@/lib/countries/sco/geographyFacts";
+import { WAL_MAP_ANCHOR } from "@/lib/countries/wal/geographyFacts";
+import { BLR_MAP_ANCHOR } from "@/lib/countries/blr/geographyFacts";
+import { UKR_MAP_ANCHOR } from "@/lib/countries/ukr/geographyFacts";
+import { BAL_MAP_ANCHOR } from "@/lib/countries/bal/geographyFacts";
 
 /**
  * A rough interior lon/lat point per country, used to ORIENT a front: an invasion
@@ -30,8 +41,8 @@ export const COUNTRY_ANCHOR: Record<string, [number, number]> = {
   US: US_MAP_ANCHOR,
   UK: UK_MAP_ANCHOR,
   IE: IE_MAP_ANCHOR,
-  SCO: [-4.2, 56.8],
-  WAL: [-3.8, 52.3],
+  SCO: SCO_MAP_ANCHOR,
+  WAL: WAL_MAP_ANCHOR,
   RU: RU_MAP_ANCHOR,
   DD: DD_MAP_ANCHOR,
   DE: DE_MAP_ANCHOR,
@@ -42,16 +53,16 @@ export const COUNTRY_ANCHOR: Record<string, [number, number]> = {
   FI: FI_MAP_ANCHOR,
   AT: AT_MAP_ANCHOR,
   GR: GR_MAP_ANCHOR,
-  PL: [19.1, 52.1],
-  CS: [15.5, 49.8],
-  HU: [19.5, 47.2],
-  RO: [24.9, 45.9],
-  BG: [25.5, 42.7],
-  YU: [20.5, 44.0],
+  PL: PL_MAP_ANCHOR,
+  CS: CS_MAP_ANCHOR,
+  HU: HU_MAP_ANCHOR,
+  RO: RO_MAP_ANCHOR,
+  BG: BG_MAP_ANCHOR,
+  YU: YU_MAP_ANCHOR,
   TR: TR_MAP_ANCHOR,
-  UKR: [31.0, 49.0],
-  BLR: [27.9, 53.5],
-  BAL: [24.5, 57.0],
+  UKR: UKR_MAP_ANCHOR,
+  BLR: BLR_MAP_ANCHOR,
+  BAL: BAL_MAP_ANCHOR,
   CN: CN_MAP_ANCHOR,
   JP: JP_MAP_ANCHOR,
   NVN: [105.85, 21.03],

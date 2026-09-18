@@ -1,8 +1,15 @@
 import type { CountryElections } from "../contract";
+import type { CountryElectionPhaseEntry } from "@/lib/turn/countryPhases";
 import type { SpawnElectionsResult } from "@/lib/turn/perpetualElections/registry";
 import { NG_SEATS_PER_REGION } from "@/lib/seeds/ng/ngRegions";
 import { NG_REGIONAL_COUNCIL_SEATS } from "@/lib/constants/states";
-import { ensureNGElections } from "./elections/perpetual";
+import {
+  ensureNGElections,
+  ensureNGGovernorElections,
+  ensureNGPresidentialElection,
+  ensureNGRegionalCouncilElections,
+  ensureNGSenateElections,
+} from "./elections/perpetual";
 
 const sum = (table: Readonly<Record<string, number>>): number =>
   Object.values(table).reduce((a, b) => a + b, 0);
@@ -24,7 +31,26 @@ const spawn = async (now: Date): Promise<SpawnElectionsResult> => {
   return { message: "NG election continuity check complete." };
 };
 
+/**
+ * The election phases, in the order `countryPhases.ts` declares them.
+ *
+ * ⚠️ `spawn` AND `electionPhases` ARE DIFFERENT LISTS AND THIS COUNTRY HAS
+ * BOTH. `spawn` is the continuity check the perpetual-election registry runs;
+ * these are the turn phases. They overlap but are not the same set -- the
+ * folder previously carried only `spawn`, so anything reading the folder for a
+ * country's phases got nothing. The harness compares this list against
+ * `COUNTRY_ELECTION_PHASES` entry by entry, `fn` by reference.
+ */
+const phases: CountryElectionPhaseEntry[] = [
+  { name: "ngElections", fn: ensureNGElections },
+  { name: "ngSenateElections", fn: ensureNGSenateElections },
+  { name: "ngGovernorElections", fn: ensureNGGovernorElections },
+  { name: "ngRegionalCouncilElections", fn: ensureNGRegionalCouncilElections },
+  { name: "ngPresidentialElection", fn: ensureNGPresidentialElection },
+];
+
 export const NG_ELECTIONS: CountryElections = {
+  electionPhases: phases,
   spawn,
   seats: {
     byChamber: {

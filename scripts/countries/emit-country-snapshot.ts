@@ -130,7 +130,7 @@ import { COUNTRY_MODIFIER_PATCHES } from "../../src/lib/states/conditions/countr
 import { MEDIAN_INCOME_THRESHOLDS } from "../../src/lib/utils/metricScoring";
 
 const COUNTRY = process.argv[2]?.toUpperCase();
-if (!COUNTRY || !/^[A-Z]{2}$/.test(COUNTRY)) {
+if (!COUNTRY || !/^[A-Z]{2,3}$/.test(COUNTRY)) {
   console.error("usage: npx tsx scripts/countries/emit-country-snapshot.ts <COUNTRY_ID>");
   process.exit(1);
 }

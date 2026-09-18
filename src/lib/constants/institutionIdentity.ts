@@ -20,6 +20,17 @@ import { TR_IDENTITY } from "@/lib/countries/tr/identity";
 import { GR_IDENTITY } from "@/lib/countries/gr/identity";
 import { AT_IDENTITY } from "@/lib/countries/at/identity";
 import { FI_IDENTITY } from "@/lib/countries/fi/identity";
+import { PL_IDENTITY } from "@/lib/countries/pl/identity";
+import { HU_IDENTITY } from "@/lib/countries/hu/identity";
+import { RO_IDENTITY } from "@/lib/countries/ro/identity";
+import { YU_IDENTITY } from "@/lib/countries/yu/identity";
+import { BG_IDENTITY } from "@/lib/countries/bg/identity";
+import { CS_IDENTITY } from "@/lib/countries/cs/identity";
+import { SCO_IDENTITY } from "@/lib/countries/sco/identity";
+import { WAL_IDENTITY } from "@/lib/countries/wal/identity";
+import { BLR_IDENTITY } from "@/lib/countries/blr/identity";
+import { UKR_IDENTITY } from "@/lib/countries/ukr/identity";
+import { BAL_IDENTITY } from "@/lib/countries/bal/identity";
 
 /**
  * Institution identity overlays for the country-pages masthead family
@@ -74,60 +85,15 @@ export const EXECUTIVE_TEXT: Record<CountryId, IdentityText> = {
   CN: CN_IDENTITY.executiveText,
   BR: BR_IDENTITY.executiveText,
   NG: NG_IDENTITY.executiveText,
-  HU: {
-    glyph: "MT",
-    serif: "mono",
-    registry: "Hungarian People's Republic · Council of Ministers",
-    title: "Parliament House",
-  },
-  PL: {
-    glyph: "RM",
-    serif: "mono",
-    registry: "Polish People's Republic · Council of Ministers",
-    title: "Sejm",
-  },
-  RO: {
-    glyph: "CM",
-    serif: "mono",
-    registry: "Socialist Republic of Romania · Council of Ministers",
-    title: "Grand National Assembly",
-  },
-  YU: {
-    glyph: "SK",
-    serif: "mono",
-    registry: "SFR Yugoslavia · Federal Executive Council",
-    title: "Federal Assembly",
-  },
-  BG: {
-    glyph: "MS",
-    serif: "mono",
-    registry: "People's Republic of Bulgaria · Council of Ministers",
-    title: "National Assembly",
-  },
-  BLR: {
-    glyph: "CK",
-    serif: "mono",
-    registry: "Byelorussian SSR · Council of Ministers",
-    title: "Supreme Soviet",
-  },
-  UKR: {
-    glyph: "YK",
-    serif: "mono",
-    registry: "Ukrainian SSR · Council of Ministers",
-    title: "Supreme Soviet",
-  },
-  CS: {
-    glyph: "FV",
-    serif: "mono",
-    registry: "Czechoslovak Socialist Republic · Federal Government",
-    title: "Federal Assembly",
-  },
-  BAL: {
-    glyph: "CK",
-    serif: "mono",
-    registry: "Baltic Soviet Republics · Councils of Ministers",
-    title: "Supreme Soviet",
-  },
+  HU: HU_IDENTITY.executiveText,
+  PL: PL_IDENTITY.executiveText,
+  RO: RO_IDENTITY.executiveText,
+  YU: YU_IDENTITY.executiveText,
+  BG: BG_IDENTITY.executiveText,
+  BLR: BLR_IDENTITY.executiveText,
+  UKR: UKR_IDENTITY.executiveText,
+  CS: CS_IDENTITY.executiveText,
+  BAL: BAL_IDENTITY.executiveText,
   RU: RU_IDENTITY.executiveText,
   FR: FR_IDENTITY.executiveText,
   IT: IT_IDENTITY.executiveText,
@@ -138,18 +104,8 @@ export const EXECUTIVE_TEXT: Record<CountryId, IdentityText> = {
   AT: AT_IDENTITY.executiveText,
   FI: FI_IDENTITY.executiveText,
   DD: DD_IDENTITY.executiveText,
-  SCO: {
-    glyph: "FM",
-    serif: "mono",
-    registry: "Scotland · Scottish Government",
-    title: "Bute House",
-  },
-  WAL: {
-    glyph: "FM",
-    serif: "mono",
-    registry: "Wales · Welsh Government",
-    title: "Welsh Government",
-  },
+  SCO: SCO_IDENTITY.executiveText,
+  WAL: WAL_IDENTITY.executiveText,
 };
 
 export function getExecutiveIdentity(countryId: CountryId): InstitutionIdentity {
@@ -167,60 +123,15 @@ export const POLICY_TEXT: Record<CountryId, IdentityText> = {
   CN: CN_IDENTITY.policyText,
   BR: BR_IDENTITY.policyText,
   NG: NG_IDENTITY.policyText,
-  HU: {
-    glyph: "§",
-    serif: "mono",
-    registry: "Code of Law · Hungarian People's Republic",
-    title: "National Policy",
-  },
-  PL: {
-    glyph: "§",
-    serif: "mono",
-    registry: "Code of Law · Polish People's Republic",
-    title: "National Policy",
-  },
-  RO: {
-    glyph: "§",
-    serif: "mono",
-    registry: "Code of Law · Socialist Republic of Romania",
-    title: "National Policy",
-  },
-  YU: {
-    glyph: "§",
-    serif: "mono",
-    registry: "Code of Law · SFR Yugoslavia",
-    title: "National Policy",
-  },
-  BG: {
-    glyph: "§",
-    serif: "mono",
-    registry: "Code of Law · People's Republic of Bulgaria",
-    title: "National Policy",
-  },
-  BLR: {
-    glyph: "§",
-    serif: "mono",
-    registry: "Code of Law · Byelorussian SSR",
-    title: "National Policy",
-  },
-  UKR: {
-    glyph: "§",
-    serif: "mono",
-    registry: "Code of Law · Ukrainian SSR",
-    title: "National Policy",
-  },
-  CS: {
-    glyph: "§",
-    serif: "mono",
-    registry: "Code of Law · Czechoslovak Socialist Republic",
-    title: "National Policy",
-  },
-  BAL: {
-    glyph: "§",
-    serif: "mono",
-    registry: "Code of Law · Baltic Soviet Republics",
-    title: "National Policy",
-  },
+  HU: HU_IDENTITY.policyText,
+  PL: PL_IDENTITY.policyText,
+  RO: RO_IDENTITY.policyText,
+  YU: YU_IDENTITY.policyText,
+  BG: BG_IDENTITY.policyText,
+  BLR: BLR_IDENTITY.policyText,
+  UKR: UKR_IDENTITY.policyText,
+  CS: CS_IDENTITY.policyText,
+  BAL: BAL_IDENTITY.policyText,
   RU: RU_IDENTITY.policyText,
   FR: FR_IDENTITY.policyText,
   IT: IT_IDENTITY.policyText,
@@ -231,18 +142,8 @@ export const POLICY_TEXT: Record<CountryId, IdentityText> = {
   AT: AT_IDENTITY.policyText,
   FI: FI_IDENTITY.policyText,
   DD: DD_IDENTITY.policyText,
-  SCO: {
-    glyph: "§",
-    serif: "mono",
-    registry: "Statute Book · Scotland",
-    title: "National Policy",
-  },
-  WAL: {
-    glyph: "§",
-    serif: "mono",
-    registry: "Statute Book · Wales",
-    title: "National Policy",
-  },
+  SCO: SCO_IDENTITY.policyText,
+  WAL: WAL_IDENTITY.policyText,
 };
 
 export function getPolicyIdentity(countryId: CountryId): InstitutionIdentity {

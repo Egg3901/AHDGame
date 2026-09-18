@@ -17,6 +17,17 @@ import { TR_IDENTITY } from "@/lib/countries/tr/identity";
 import { GR_IDENTITY } from "@/lib/countries/gr/identity";
 import { AT_IDENTITY } from "@/lib/countries/at/identity";
 import { FI_IDENTITY } from "@/lib/countries/fi/identity";
+import { PL_IDENTITY } from "@/lib/countries/pl/identity";
+import { HU_IDENTITY } from "@/lib/countries/hu/identity";
+import { RO_IDENTITY } from "@/lib/countries/ro/identity";
+import { YU_IDENTITY } from "@/lib/countries/yu/identity";
+import { BG_IDENTITY } from "@/lib/countries/bg/identity";
+import { CS_IDENTITY } from "@/lib/countries/cs/identity";
+import { SCO_IDENTITY } from "@/lib/countries/sco/identity";
+import { WAL_IDENTITY } from "@/lib/countries/wal/identity";
+import { BLR_IDENTITY } from "@/lib/countries/blr/identity";
+import { UKR_IDENTITY } from "@/lib/countries/ukr/identity";
+import { BAL_IDENTITY } from "@/lib/countries/bal/identity";
 
 /**
  * Per-country configuration for the shared executive shell (instrument strip
@@ -52,16 +63,6 @@ export interface ExecutiveSurfaceConfig {
   heroAlt: string;
 }
 
-const PARLIAMENTARY_ACTS: Record<ExecutiveActKind, string> = {
-  signed: "ENACTED",
-  vetoed: "REJECTED",
-  onDesk: "AWAITING",
-  order: "ORDER",
-  confirmed: "APPOINTED",
-  nominated: "NOMINATED",
-  acting: "ACTING",
-};
-
 export const EXECUTIVE_SURFACE: Record<CountryId, ExecutiveSurfaceConfig> = {
   US: US_IDENTITY.executiveSurface,
   UK: UK_IDENTITY.executiveSurface,
@@ -72,87 +73,15 @@ export const EXECUTIVE_SURFACE: Record<CountryId, ExecutiveSurfaceConfig> = {
   BR: BR_IDENTITY.executiveSurface,
   NG: NG_IDENTITY.executiveSurface,
   // Hungary — one-party state, mirrors CN's plenum/directive surface.
-  HU: {
-    clock: { kind: "plenum", label: "Plenum Clock", countdownNoun: "next Assembly session" },
-    actLabels: { ...PARLIAMENTARY_ACTS, order: "DIRECTIVE" },
-    deskKind: "orders",
-    deskLabel: "Directives",
-    rosterTitle: "Council of Ministers",
-    heroImage: "/api/images/hero/hungarian-parliament",
-    heroAlt: "Hungarian Parliament Building, Budapest",
-  },
-  PL: {
-    clock: { kind: "plenum", label: "Plenum Clock", countdownNoun: "next Sejm session" },
-    actLabels: { ...PARLIAMENTARY_ACTS, order: "DIRECTIVE" },
-    deskKind: "orders",
-    deskLabel: "Directives",
-    rosterTitle: "Council of Ministers",
-    heroImage: "/api/images/hero/poland",
-    heroAlt: "Sejm, Warsaw",
-  },
-  RO: {
-    clock: { kind: "plenum", label: "Plenum Clock", countdownNoun: "next Assembly session" },
-    actLabels: { ...PARLIAMENTARY_ACTS, order: "DIRECTIVE" },
-    deskKind: "orders",
-    deskLabel: "Directives",
-    rosterTitle: "Council of Ministers",
-    heroImage: "/api/images/hero/romania",
-    heroAlt: "Grand National Assembly, Bucharest",
-  },
-  YU: {
-    clock: { kind: "plenum", label: "Plenum Clock", countdownNoun: "next Assembly session" },
-    actLabels: { ...PARLIAMENTARY_ACTS, order: "DIRECTIVE" },
-    deskKind: "orders",
-    deskLabel: "Directives",
-    rosterTitle: "Federal Executive Council",
-    heroImage: "/api/images/hero/yugoslavia",
-    heroAlt: "Federal Assembly, Belgrade",
-  },
-  BG: {
-    clock: { kind: "plenum", label: "Plenum Clock", countdownNoun: "next Assembly session" },
-    actLabels: { ...PARLIAMENTARY_ACTS, order: "DIRECTIVE" },
-    deskKind: "orders",
-    deskLabel: "Directives",
-    rosterTitle: "Council of Ministers",
-    heroImage: "/api/images/hero/bulgaria",
-    heroAlt: "National Assembly, Sofia",
-  },
-  BLR: {
-    clock: { kind: "plenum", label: "Plenum Clock", countdownNoun: "next Soviet session" },
-    actLabels: { ...PARLIAMENTARY_ACTS, order: "DIRECTIVE" },
-    deskKind: "orders",
-    deskLabel: "Directives",
-    rosterTitle: "Council of Ministers",
-    heroImage: "/api/images/hero/belarus",
-    heroAlt: "Supreme Soviet, Minsk",
-  },
-  UKR: {
-    clock: { kind: "plenum", label: "Plenum Clock", countdownNoun: "next Soviet session" },
-    actLabels: { ...PARLIAMENTARY_ACTS, order: "DIRECTIVE" },
-    deskKind: "orders",
-    deskLabel: "Directives",
-    rosterTitle: "Council of Ministers",
-    heroImage: "/api/images/hero/ukraine",
-    heroAlt: "Supreme Soviet, Kyiv",
-  },
-  CS: {
-    clock: { kind: "plenum", label: "Plenum Clock", countdownNoun: "next Assembly session" },
-    actLabels: { ...PARLIAMENTARY_ACTS, order: "DIRECTIVE" },
-    deskKind: "orders",
-    deskLabel: "Directives",
-    rosterTitle: "Federal Government",
-    heroImage: "/api/images/hero/czechoslovakia",
-    heroAlt: "Federal Assembly, Prague",
-  },
-  BAL: {
-    clock: { kind: "plenum", label: "Plenum Clock", countdownNoun: "next Soviet session" },
-    actLabels: { ...PARLIAMENTARY_ACTS, order: "DIRECTIVE" },
-    deskKind: "orders",
-    deskLabel: "Directives",
-    rosterTitle: "Councils of Ministers",
-    heroImage: "/api/images/hero/baltics",
-    heroAlt: "Supreme Soviet, Riga",
-  },
+  HU: HU_IDENTITY.executiveSurface,
+  PL: PL_IDENTITY.executiveSurface,
+  RO: RO_IDENTITY.executiveSurface,
+  YU: YU_IDENTITY.executiveSurface,
+  BG: BG_IDENTITY.executiveSurface,
+  BLR: BLR_IDENTITY.executiveSurface,
+  UKR: UKR_IDENTITY.executiveSurface,
+  CS: CS_IDENTITY.executiveSurface,
+  BAL: BAL_IDENTITY.executiveSurface,
   RU: RU_IDENTITY.executiveSurface,
   FR: FR_IDENTITY.executiveSurface,
   IT: IT_IDENTITY.executiveSurface,
@@ -163,24 +92,8 @@ export const EXECUTIVE_SURFACE: Record<CountryId, ExecutiveSurfaceConfig> = {
   AT: AT_IDENTITY.executiveSurface,
   FI: FI_IDENTITY.executiveSurface,
   DD: DD_IDENTITY.executiveSurface,
-  SCO: {
-    clock: { kind: "election", label: "Term Clock", countdownNoun: "next Holyrood election" },
-    actLabels: { ...PARLIAMENTARY_ACTS, order: "ORDER IN COUNCIL" },
-    deskKind: "orders",
-    deskLabel: "Orders in Force",
-    rosterTitle: "Cabinet",
-    heroImage: "/api/images/hero/bute-house",
-    heroAlt: "Bute House, Edinburgh",
-  },
-  WAL: {
-    clock: { kind: "election", label: "Term Clock", countdownNoun: "next Senedd election" },
-    actLabels: { ...PARLIAMENTARY_ACTS, order: "ORDER IN COUNCIL" },
-    deskKind: "orders",
-    deskLabel: "Orders in Force",
-    rosterTitle: "Cabinet",
-    heroImage: "/api/images/hero/senedd",
-    heroAlt: "Senedd, Cardiff",
-  },
+  SCO: SCO_IDENTITY.executiveSurface,
+  WAL: WAL_IDENTITY.executiveSurface,
 };
 
 export function getExecutiveSurface(countryId: CountryId): ExecutiveSurfaceConfig {

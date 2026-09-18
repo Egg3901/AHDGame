@@ -1,4 +1,5 @@
 import type { CountryElections } from "../contract";
+import type { CountryElectionPhaseEntry } from "@/lib/turn/countryPhases";
 import type { SpawnElectionsResult } from "@/lib/turn/perpetualElections/registry";
 import {
   TOTAL_UK_COMMONS_SEATS,
@@ -40,7 +41,24 @@ const spawn = async (now: Date): Promise<SpawnElectionsResult> => {
   return { message: "UK Commons / Regional Council / Governor continuity check complete." };
 };
 
+/**
+ * The election phases, in the order `countryPhases.ts` declares them.
+ *
+ * ⚠️ `spawn` AND `electionPhases` ARE DIFFERENT LISTS AND THIS COUNTRY HAS
+ * BOTH. `spawn` is the continuity check the perpetual-election registry runs;
+ * these are the turn phases. They overlap but are not the same set -- the
+ * folder previously carried only `spawn`, so anything reading the folder for a
+ * country's phases got nothing. The harness compares this list against
+ * `COUNTRY_ELECTION_PHASES` entry by entry, `fn` by reference.
+ */
+const phases: CountryElectionPhaseEntry[] = [
+  { name: "ukElections", fn: ensureUKElections },
+  { name: "ukRegionalCouncilElections", fn: ensureUKRegionalCouncilElections },
+  { name: "ukGovernorElections", fn: ensureUKGovernorElections },
+];
+
 export const UK_ELECTIONS: CountryElections = {
+  electionPhases: phases,
   spawn,
   seats: {
     byChamber: {

@@ -87,6 +87,7 @@ import { MEDIAN_INCOME_THRESHOLDS } from "../../src/lib/utils/metricScoring";
 import { POPULATION_MULTIPLIERS } from "../../src/lib/seeds/reference/era1991PopulationMultipliers";
 import { CENSUS_BUNDLES } from "../../src/lib/seeds/regionCensusData";
 import { SPAWN_ELECTIONS_REGISTRY } from "../../src/lib/turn/perpetualElections/registry";
+import { COUNTRY_ELECTION_PHASES } from "../../src/lib/turn/countryPhases";
 import { CONVERTED } from "../../src/lib/countries/singleCountryData";
 
 type Dict = Record<string, unknown>;
@@ -204,6 +205,58 @@ const NO_CENSUS = {
   CENSUS_BUNDLES: "no census bundle is authored for any era",
 };
 
+/**
+ * The Warsaw Pact tier: the economy tier's profile, plus no NPC bank names.
+ *
+ * ⚠ DERIVED, NOT COPIED. Poland, Hungary, Romania, Yugoslavia, Bulgaria and
+ * Czechoslovakia are absent from every registry the economy tier is, and from
+ * the two NPC-bank-name registries as well. Spelling the shared part out twice
+ * would let the two lists drift; deriving it means a change to the economy
+ * tier's profile is a change to this one, which is what the data says.
+ */
+const EASTERN_BLOC_ABSENCES: Record<string, string> = {
+  ...ECONOMY_TIER_ABSENCES,
+  COUNTRY_HISTORICAL_NAMES: "no NPC bank names are seeded",
+  COUNTRY_MODERN_NAMES: "no NPC bank names are seeded",
+};
+
+const EASTERN_BLOC = ["PL", "HU", "RO", "YU", "BG", "CS"];
+
+/**
+ * The Soviet union republics, and the Baltic bloc that also predates UN entry.
+ *
+ * ⚠ BELARUS AND UKRAINE ARE THE EASTERN BLOC PROFILE EXACTLY. The Baltic
+ * States add one row: no `COUNTRY_UN_MEMBER_SINCE`, which is correct -- the
+ * three republics were not separate UN members in this world.
+ */
+const SOVIET_REPUBLICS = ["BLR", "UKR"];
+const BALTIC = ["BAL"];
+
+/**
+ * Scotland and Wales, which are devolved nations rather than sovereign states.
+ *
+ * ⚠ THEIR PROFILE IS DIFFERENT BECAUSE THEIR STATUS IS. On top of the bloc's
+ * absences they have no UN membership, no executive seal, no order of battle and
+ * no sovereign-corporation legal structure -- four registries whose subject is
+ * sovereignty, and neither is sovereign. They also share the United Kingdom's
+ * ISO code, 826, which is why neither folder owns one.
+ */
+const DEVOLVED_NATIONS = ["SCO", "WAL"];
+const DEVOLVED_ABSENCES: Record<string, string> = {
+  ...EASTERN_BLOC_ABSENCES,
+  /*
+   * ⚠️ SCOTLAND AND WALES DO HAVE CABINET ORDERS, unlike the rest of the tier:
+   * `scoCabinet.ts` and `walCabinet.ts` exist and `ORDERS_BY_COUNTRY` carries
+   * both. The inherited entry is deleted rather than left to rot, and the
+   * harness fails on a stale exemption, which is how this was noticed.
+   */
+  COUNTRY_UN_MEMBER_SINCE: "a devolved nation, not a UN member in its own right",
+  EXECUTIVE_SEALS: "no seal; getSeal returns null and the UI omits it",
+  ORDERS_OF_BATTLE: "no armed forces of its own; getOrderOfBattle returns null",
+  SOVEREIGN_CORP_LEGAL_STRUCTURE: "not sovereign, so there is no sovereign-corp structure",
+};
+delete DEVOLVED_ABSENCES.ORDERS_BY_COUNTRY;
+
 const ECONOMY_TIER = ["FR", "IT", "ES", "SE", "TR"];
 const ECONOMY_TIER_NO_CENSUS = ["GR", "AT", "FI"];
 
@@ -300,6 +353,16 @@ const ABSENT_UPSTREAM: Record<string, Record<string, string>> = {
 };
 
 for (const cc of ECONOMY_TIER) ABSENT_UPSTREAM[cc] = { ...ECONOMY_TIER_ABSENCES };
+for (const cc of EASTERN_BLOC) ABSENT_UPSTREAM[cc] = { ...EASTERN_BLOC_ABSENCES };
+for (const cc of SOVIET_REPUBLICS) ABSENT_UPSTREAM[cc] = { ...EASTERN_BLOC_ABSENCES };
+for (const cc of BALTIC) {
+  ABSENT_UPSTREAM[cc] = {
+    ...EASTERN_BLOC_ABSENCES,
+    COUNTRY_TO_ISO_NUMERIC: 'the row is "", an absence spelled as a string, not an ISO code',
+    COUNTRY_UN_MEMBER_SINCE: "the Baltic republics are not separate UN members in this world",
+  };
+}
+for (const cc of DEVOLVED_NATIONS) ABSENT_UPSTREAM[cc] = { ...DEVOLVED_ABSENCES };
 for (const cc of ECONOMY_TIER_NO_CENSUS) {
   ABSENT_UPSTREAM[cc] = { ...ECONOMY_TIER_ABSENCES, ...NO_CENSUS };
 }
@@ -325,6 +388,14 @@ const SHARED_UPSTREAM: Record<string, Record<string, string>> = {};
  * first; the other eight were always going to be identical, and listing them
  * once keeps the claim in one place.
  */
+for (const cc of [...EASTERN_BLOC, ...SOVIET_REPUBLICS, ...BALTIC, ...DEVOLVED_NATIONS]) {
+  SHARED_UPSTREAM[cc] = {
+    MECHANICS_BY_COUNTRY:
+      "easternBlocCabinet.ts builds the whole Warsaw Pact's cabinets from DD's; " +
+      "PL and YU get variants, CS/HU/RO/BG share one, and none of it is one country's",
+  };
+}
+
 for (const cc of ["BR", ...ECONOMY_TIER, ...ECONOMY_TIER_NO_CENSUS]) {
   SHARED_UPSTREAM[cc] = {
     MECHANICS_BY_COUNTRY: "ECON_COUNTRY_CABINET_MECHANICS, shared by nine economy-tier countries",
@@ -392,9 +463,43 @@ function at(root: unknown, path: string): unknown {
   return path.split(".").reduce<unknown>((o, k) => (o == null ? o : d(o)[k]), root);
 }
 
+/**
+ * Registries where `null` is a VALUE, not an absence.
+ *
+ * ⚠️ `Record<CountryId, string | null>`, AND THE NULL MEANS SOMETHING. The
+ * six Warsaw Pact countries have `TRADE_MINISTER_POSITION_BY_COUNTRY.<cc> ===
+ * null`: the row exists and says this country has no trade minister. Treating
+ * that as "absent" made the harness demand an exemption for a fact the registry
+ * states outright, and an exemption would then have hidden the row going
+ * genuinely missing.
+ */
+/**
+ * Registries where an empty STRING means "no value", not "the empty value".
+ *
+ * ⚠️ NARROW ON PURPOSE. `NPP_CAPITAL_STATES` holds `""` for eleven countries
+ * and it means exactly what it says -- no NPP capital state -- so `""` is an
+ * answer there and the folder carries it. `COUNTRY_TO_ISO_NUMERIC` is different:
+ * the Baltic States' `""` is not an ISO code, and a folder carrying it would be
+ * asserting a code that does not exist.
+ */
+const EMPTY_STRING_IS_ABSENCE = new Set(["COUNTRY_TO_ISO_NUMERIC"]);
+
+const NULL_IS_A_VALUE = new Set([
+  "DEFENSE_POSITION_BY_COUNTRY",
+  "FOREIGN_AFFAIRS_POSITION_BY_COUNTRY",
+  "TRADE_MINISTER_POSITION_BY_COUNTRY",
+]);
+
 const isEmpty = (v: unknown) =>
   v === undefined ||
   v === null ||
+  /*
+   * ⚠️ AN EMPTY STRING IS AN ABSENCE SPELLED AS A VALUE. The Baltic States'
+   * `COUNTRY_TO_ISO_NUMERIC` row is `""` -- not an ISO code, and not a code the
+   * folder should carry. Counting it as present made the harness demand a
+   * folder value for something the registry declines to state.
+   */
+  v === "" ||
   (Array.isArray(v) && v.length === 0) ||
   (typeof v === "object" && v !== null && Object.keys(v).length === 0);
 
@@ -418,10 +523,36 @@ async function verify(cc: string): Promise<boolean> {
     const why = exempt[name];
     const path = FOLDER_PATH[name];
     const sharedWhy = shared[name];
+    /*
+     * Declared HERE, not inside a branch: both the shared path below and the
+     * ordinary path further down need it. The first version was scoped to the
+     * shared branch and six countries kept failing on a legal `null`.
+     */
+    /*
+     * ⚠️ "ABSENT" MEANS THE KEY IS MISSING, NOT THAT THE VALUE IS FALSY. Scotland
+     * and Wales have `MILITARY_BRANCHES_BY_COUNTRY` rows holding `[]` and
+     * `NPP_CAPITAL_STATES` rows holding `""` -- devolved nations with no armed
+     * forces and no NPP capital. Those are ANSWERS. Treating them as absences
+     * made the harness demand an exemption for a row that exists, and an
+     * exemption would then have hidden the row going genuinely missing.
+     *
+     * `undefined`, `null` and `""` still count as absent even with the key
+     * present. Germany's `COUNTRY_UN_MEMBER_SINCE` is written `DE: undefined`
+     * with a comment, and the Baltic States' ISO row is `""` -- absences their
+     * authors spelled out rather than omitted. An empty ARRAY or OBJECT is
+     * different: it is a populated answer that happens to be empty.
+     */
+    const present =
+      cc in registry &&
+      value !== undefined &&
+      value !== null &&
+      !(value === "" && EMPTY_STRING_IS_ABSENCE.has(name));
+    const nullIsValue = NULL_IS_A_VALUE.has(name) && value === null && cc in registry;
 
     if (sharedWhy) {
       const side = path ? at(folder, path) : undefined;
-      if (isEmpty(value)) {
+
+      if (!present && !nullIsValue) {
         console.log(
           `FAIL  ${name}.${cc} is listed as shared upstream ("${sharedWhy}") but the registry ` +
             `no longer carries it.`
@@ -440,7 +571,7 @@ async function verify(cc: string): Promise<boolean> {
       continue;
     }
 
-    if (isEmpty(value)) {
+    if (!present && !nullIsValue) {
       if (why) {
         const side = path ? at(folder, path) : undefined;
         if (!isEmpty(side)) {
@@ -465,7 +596,7 @@ async function verify(cc: string): Promise<boolean> {
 
     if (!path) continue;
     const side = at(folder, path);
-    if (side === undefined) {
+    if (side === undefined && !nullIsValue) {
       console.log(`FAIL  ${name}.${cc} -> the folder side ${path} is undefined`);
       failed++;
       continue;
@@ -486,6 +617,53 @@ async function verify(cc: string): Promise<boolean> {
     }
     if (scalar) scalars++;
     else forwarders++;
+  }
+
+  /*
+   * ⚠️ THE PHASES ARE COMPARED ENTRY BY ENTRY, BECAUSE A GENERATOR ONCE GOT
+   * THEM FROM THE WRONG COUNTRY. `COUNTRY_ELECTION_PHASES` writes one-line
+   * entries -- `SE: [{ name: "seElections", fn: ensureSEElections }],` -- and the
+   * generator that reads it searched forward for a multi-line terminator, ran
+   * past Sweden into Turkey, and gave Sweden THREE phases: its own plus both of
+   * Turkey's. It typechecked and shipped, and it would have run Turkey's
+   * elections under Sweden's id every turn.
+   *
+   * `fn` is compared by reference, which is the only comparison that means
+   * anything for a function: two spawners with the same name are not the same
+   * spawner, and `toEqual` would call them equal.
+   */
+  const declaredPhases = (COUNTRY_ELECTION_PHASES as Dict)[cc] as
+    Array<{ name: string; fn: unknown }> | undefined;
+  const folderPhases = at(folder, "elections.electionPhases") as
+    Array<{ name: string; fn: unknown }> | undefined;
+  if (declaredPhases && declaredPhases.length > 0) {
+    if (!folderPhases) {
+      console.log(
+        `FAIL  ${cc} has ${declaredPhases.length} COUNTRY_ELECTION_PHASES entries but the ` +
+          `folder declares no electionPhases.`
+      );
+      failed++;
+    } else if (folderPhases.length !== declaredPhases.length) {
+      console.log(
+        `FAIL  ${cc} electionPhases count differs: folder ${folderPhases.length} vs ` +
+          `COUNTRY_ELECTION_PHASES ${declaredPhases.length}. ` +
+          `folder=[${folderPhases.map((p) => p.name).join(", ")}]`
+      );
+      failed++;
+    } else {
+      for (let i = 0; i < declaredPhases.length; i++) {
+        if (
+          folderPhases[i].name !== declaredPhases[i].name ||
+          folderPhases[i].fn !== declaredPhases[i].fn
+        ) {
+          console.log(
+            `FAIL  ${cc} electionPhases[${i}] differs: folder ${folderPhases[i].name} vs ` +
+              `declared ${declaredPhases[i].name}`
+          );
+          failed++;
+        }
+      }
+    }
   }
 
   console.log(

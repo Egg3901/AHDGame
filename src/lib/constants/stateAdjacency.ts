@@ -38,6 +38,17 @@ import { TR_ADJACENCY_MAP } from "@/lib/countries/tr/geographyFacts";
 import { GR_ADJACENCY_MAP } from "@/lib/countries/gr/geographyFacts";
 import { AT_ADJACENCY_MAP } from "@/lib/countries/at/geographyFacts";
 import { FI_ADJACENCY_MAP } from "@/lib/countries/fi/geographyFacts";
+import { PL_ADJACENCY_MAP } from "@/lib/countries/pl/geographyFacts";
+import { HU_ADJACENCY_MAP } from "@/lib/countries/hu/geographyFacts";
+import { RO_ADJACENCY_MAP } from "@/lib/countries/ro/geographyFacts";
+import { YU_ADJACENCY_MAP } from "@/lib/countries/yu/geographyFacts";
+import { BG_ADJACENCY_MAP } from "@/lib/countries/bg/geographyFacts";
+import { CS_ADJACENCY_MAP } from "@/lib/countries/cs/geographyFacts";
+import { SCO_ADJACENCY_MAP } from "@/lib/countries/sco/geographyFacts";
+import { WAL_ADJACENCY_MAP } from "@/lib/countries/wal/geographyFacts";
+import { BLR_ADJACENCY_MAP } from "@/lib/countries/blr/geographyFacts";
+import { UKR_ADJACENCY_MAP } from "@/lib/countries/ukr/geographyFacts";
+import { BAL_ADJACENCY_MAP } from "@/lib/countries/bal/geographyFacts";
 
 export type AdjacencyMap = Record<string, readonly string[]>;
 
@@ -81,93 +92,22 @@ export type AdjacencyMap = Record<string, readonly string[]>;
 /** Nigeria's six geopolitical zones. */
 
 /** Hungary's six 1979 macro-regions. Budapest is enclaved within Pest. */
-const HU_ADJACENCY: AdjacencyMap = {
-  HU_BUD: ["HU_PES"],
-  HU_PES: ["HU_BUD", "HU_TRW", "HU_NOR", "HU_ALF"],
-  HU_TRW: ["HU_PES", "HU_TRS", "HU_ALF"],
-  HU_TRS: ["HU_TRW", "HU_ALF"],
-  HU_NOR: ["HU_PES", "HU_ALF"],
-  HU_ALF: ["HU_PES", "HU_TRW", "HU_TRS", "HU_NOR"],
-};
 
 /** Poland's eight 1979 macro-regions. */
-const PL_ADJACENCY: AdjacencyMap = {
-  PL_MAZ: ["PL_LOD", "PL_WLK", "PL_POM", "PL_EAS"],
-  PL_LOD: ["PL_MAZ", "PL_MAL", "PL_SLK", "PL_WLK", "PL_EAS"],
-  PL_MAL: ["PL_LOD", "PL_SLK", "PL_EAS"],
-  PL_SLK: ["PL_LOD", "PL_MAL", "PL_DSL", "PL_WLK"],
-  PL_DSL: ["PL_SLK", "PL_WLK", "PL_POM"],
-  PL_WLK: ["PL_MAZ", "PL_LOD", "PL_SLK", "PL_DSL", "PL_POM"],
-  PL_POM: ["PL_MAZ", "PL_DSL", "PL_WLK", "PL_EAS"],
-  PL_EAS: ["PL_MAZ", "PL_LOD", "PL_MAL", "PL_POM"],
-};
 
 /** Romania's seven 1979 historic-province regions. */
-const RO_ADJACENCY: AdjacencyMap = {
-  RO_BUC: ["RO_MUN"],
-  RO_MUN: ["RO_BUC", "RO_OLT", "RO_TRA", "RO_MOL", "RO_DOB"],
-  RO_OLT: ["RO_MUN", "RO_TRA", "RO_VST"],
-  RO_TRA: ["RO_MUN", "RO_OLT", "RO_VST", "RO_MOL"],
-  RO_VST: ["RO_OLT", "RO_TRA", "RO_MOL"],
-  RO_MOL: ["RO_MUN", "RO_TRA", "RO_VST", "RO_DOB"],
-  RO_DOB: ["RO_MUN", "RO_MOL"],
-};
 
 /** Yugoslavia's six republics and two Serbian autonomous provinces. */
-const YU_ADJACENCY: AdjacencyMap = {
-  YU_SLO: ["YU_CRO"],
-  YU_CRO: ["YU_SLO", "YU_BIH", "YU_VOJ", "YU_MNE"],
-  YU_BIH: ["YU_CRO", "YU_SRB", "YU_MNE"],
-  YU_SRB: ["YU_BIH", "YU_VOJ", "YU_KOS", "YU_MNE", "YU_MKD"],
-  YU_VOJ: ["YU_CRO", "YU_SRB"],
-  YU_KOS: ["YU_SRB", "YU_MNE", "YU_MKD"],
-  YU_MNE: ["YU_CRO", "YU_BIH", "YU_SRB", "YU_KOS"],
-  YU_MKD: ["YU_SRB", "YU_KOS"],
-};
 
 /** Bulgaria's five 1979 geographic regions. */
-const BG_ADJACENCY: AdjacencyMap = {
-  BG_SOF: ["BG_NOR", "BG_THR", "BG_SW"],
-  BG_NOR: ["BG_SOF", "BG_COA", "BG_THR"],
-  BG_COA: ["BG_NOR", "BG_THR"],
-  BG_THR: ["BG_SOF", "BG_NOR", "BG_COA", "BG_SW"],
-  BG_SW: ["BG_SOF", "BG_THR"],
-};
 
 /** Ukraine's six 1953 and 1979 macro-regions. */
-const UKR_ADJACENCY: AdjacencyMap = {
-  UKR_KYI: ["UKR_WES", "UKR_POD", "UKR_DNI"],
-  UKR_WES: ["UKR_KYI", "UKR_POD"],
-  UKR_POD: ["UKR_KYI", "UKR_WES", "UKR_DNI", "UKR_SOU"],
-  UKR_DON: ["UKR_DNI"],
-  UKR_DNI: ["UKR_KYI", "UKR_POD", "UKR_DON", "UKR_SOU"],
-  UKR_SOU: ["UKR_POD", "UKR_DNI"],
-};
 
 /** Byelorussia's six oblasts. */
-const BLR_ADJACENCY: AdjacencyMap = {
-  BLR_MIN: ["BLR_HOM", "BLR_VIT", "BLR_MOG", "BLR_BRE", "BLR_GRO"],
-  BLR_HOM: ["BLR_MIN", "BLR_MOG", "BLR_BRE"],
-  BLR_VIT: ["BLR_MIN", "BLR_MOG", "BLR_GRO"],
-  BLR_MOG: ["BLR_MIN", "BLR_HOM", "BLR_VIT"],
-  BLR_BRE: ["BLR_MIN", "BLR_HOM", "BLR_GRO"],
-  BLR_GRO: ["BLR_MIN", "BLR_VIT", "BLR_BRE"],
-};
 
 /** Czechoslovakia's three historic lands plus enclaved Prague. */
-const CS_ADJACENCY: AdjacencyMap = {
-  CS_PRG: ["CS_BOH"],
-  CS_BOH: ["CS_PRG", "CS_MOR"],
-  CS_MOR: ["CS_BOH", "CS_SVK"],
-  CS_SVK: ["CS_MOR"],
-};
 
 /** Baltic republics, ordered north to south. */
-const BAL_ADJACENCY: AdjacencyMap = {
-  BAL_LTU: ["BAL_LVA"],
-  BAL_LVA: ["BAL_LTU", "BAL_EST"],
-  BAL_EST: ["BAL_LVA"],
-};
 
 /** France's eight 1979 macro-regions. */
 
@@ -193,25 +133,8 @@ const BAL_ADJACENCY: AdjacencyMap = {
 /** Finland's six 1979 macro-regions. */
 
 /** Scotland's seven post-secession sub-regions. */
-const SCO_ADJACENCY: AdjacencyMap = {
-  GLA: ["HIG", "TAY", "CSC", "STH"],
-  LOT: ["CSC", "STH"],
-  HIG: ["GLA", "GRA", "TAY"],
-  GRA: ["HIG", "TAY"],
-  TAY: ["GLA", "HIG", "GRA", "CSC"],
-  STH: ["GLA", "LOT", "CSC"],
-  CSC: ["GLA", "LOT", "TAY", "STH"],
-};
 
 /** Wales's six post-secession sub-regions. */
-const WAL_ADJACENCY: AdjacencyMap = {
-  CDF: ["SWA", "VAL", "MWA"],
-  SWA: ["CDF", "VAL", "MWA", "NWW"],
-  VAL: ["CDF", "SWA", "MWA"],
-  MWA: ["CDF", "SWA", "VAL", "NWW", "NEW"],
-  NWW: ["SWA", "MWA", "NEW"],
-  NEW: ["MWA", "NWW"],
-};
 
 /**
  * Per-country adjacency map. Every country includes its full seeded region
@@ -227,15 +150,15 @@ export const STATE_ADJACENCY: Readonly<Record<CountryId, AdjacencyMap>> = {
   IE: IE_ADJACENCY_MAP,
   BR: BR_ADJACENCY_MAP,
   NG: NG_ADJACENCY_MAP,
-  HU: HU_ADJACENCY,
-  PL: PL_ADJACENCY,
-  RO: RO_ADJACENCY,
-  YU: YU_ADJACENCY,
-  BG: BG_ADJACENCY,
-  UKR: UKR_ADJACENCY,
-  BLR: BLR_ADJACENCY,
-  CS: CS_ADJACENCY,
-  BAL: BAL_ADJACENCY,
+  HU: HU_ADJACENCY_MAP,
+  PL: PL_ADJACENCY_MAP,
+  RO: RO_ADJACENCY_MAP,
+  YU: YU_ADJACENCY_MAP,
+  BG: BG_ADJACENCY_MAP,
+  UKR: UKR_ADJACENCY_MAP,
+  BLR: BLR_ADJACENCY_MAP,
+  CS: CS_ADJACENCY_MAP,
+  BAL: BAL_ADJACENCY_MAP,
   RU: RU_ADJACENCY_MAP,
   FR: FR_ADJACENCY_MAP,
   IT: IT_ADJACENCY_MAP,
@@ -246,8 +169,8 @@ export const STATE_ADJACENCY: Readonly<Record<CountryId, AdjacencyMap>> = {
   AT: AT_ADJACENCY_MAP,
   FI: FI_ADJACENCY_MAP,
   DD: DD_ADJACENCY_MAP,
-  SCO: SCO_ADJACENCY,
-  WAL: WAL_ADJACENCY,
+  SCO: SCO_ADJACENCY_MAP,
+  WAL: WAL_ADJACENCY_MAP,
 };
 
 /**

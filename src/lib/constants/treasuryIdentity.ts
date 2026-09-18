@@ -18,6 +18,17 @@ import { TR_IDENTITY } from "@/lib/countries/tr/identity";
 import { GR_IDENTITY } from "@/lib/countries/gr/identity";
 import { AT_IDENTITY } from "@/lib/countries/at/identity";
 import { FI_IDENTITY } from "@/lib/countries/fi/identity";
+import { PL_IDENTITY } from "@/lib/countries/pl/identity";
+import { HU_IDENTITY } from "@/lib/countries/hu/identity";
+import { RO_IDENTITY } from "@/lib/countries/ro/identity";
+import { YU_IDENTITY } from "@/lib/countries/yu/identity";
+import { BG_IDENTITY } from "@/lib/countries/bg/identity";
+import { CS_IDENTITY } from "@/lib/countries/cs/identity";
+import { SCO_IDENTITY } from "@/lib/countries/sco/identity";
+import { WAL_IDENTITY } from "@/lib/countries/wal/identity";
+import { BLR_IDENTITY } from "@/lib/countries/blr/identity";
+import { UKR_IDENTITY } from "@/lib/countries/ukr/identity";
+import { BAL_IDENTITY } from "@/lib/countries/bal/identity";
 
 /**
  * Treasury / Finance-Ministry identity overlay for the National Budget surface.
@@ -74,87 +85,15 @@ export const TREASURY_TEXT: Record<
   IE: IE_IDENTITY.treasuryText,
   BR: BR_IDENTITY.treasuryText,
   NG: NG_IDENTITY.treasuryText,
-  HU: {
-    glyph: "HU",
-    serif: "mono",
-    budgetTitle: "State Plan Budget",
-    ministry: "MINISTRY OF FINANCE",
-    publicSeal: "PUBLIC RECORD",
-    registry: "Hungarian People's Republic · Ministry of Finance",
-    native: "Magyar Népköztársaság · Pénzügyminisztérium",
-  },
-  PL: {
-    glyph: "PL",
-    serif: "mono",
-    budgetTitle: "State Plan Budget",
-    ministry: "MINISTRY OF FINANCE",
-    publicSeal: "PUBLIC RECORD",
-    registry: "Polish People's Republic · Ministry of Finance",
-    native: "Polska Rzeczpospolita Ludowa · Ministerstwo Finansów",
-  },
-  RO: {
-    glyph: "RO",
-    serif: "mono",
-    budgetTitle: "State Plan Budget",
-    ministry: "MINISTRY OF FINANCE",
-    publicSeal: "PUBLIC RECORD",
-    registry: "Socialist Republic of Romania · Ministry of Finance",
-    native: "Republica Socialistă România · Ministerul Finanțelor",
-  },
-  YU: {
-    glyph: "YU",
-    serif: "mono",
-    budgetTitle: "Federal Budget",
-    ministry: "FEDERAL SECRETARIAT FOR FINANCE",
-    publicSeal: "PUBLIC RECORD",
-    registry: "SFR Yugoslavia · Federal Secretariat for Finance",
-    native: "SFR Jugoslavija · Savezni sekretarijat za finansije",
-  },
-  BG: {
-    glyph: "BG",
-    serif: "mono",
-    budgetTitle: "State Plan Budget",
-    ministry: "MINISTRY OF FINANCE",
-    publicSeal: "PUBLIC RECORD",
-    registry: "People's Republic of Bulgaria · Ministry of Finance",
-    native: "Народна република България · Министерство на финансите",
-  },
-  BLR: {
-    glyph: "BLR",
-    serif: "mono",
-    budgetTitle: "State Plan Budget",
-    ministry: "MINISTRY OF FINANCE",
-    publicSeal: "PUBLIC RECORD",
-    registry: "Byelorussian SSR · Ministry of Finance",
-    native: "Беларуская ССР · Міністэрства фінансаў",
-  },
-  UKR: {
-    glyph: "UKR",
-    serif: "mono",
-    budgetTitle: "State Plan Budget",
-    ministry: "MINISTRY OF FINANCE",
-    publicSeal: "PUBLIC RECORD",
-    registry: "Ukrainian SSR · Ministry of Finance",
-    native: "Українська РСР · Міністерство фінансів",
-  },
-  CS: {
-    glyph: "CS",
-    serif: "mono",
-    budgetTitle: "State Plan Budget",
-    ministry: "FEDERAL MINISTRY OF FINANCE",
-    publicSeal: "PUBLIC RECORD",
-    registry: "Czechoslovak Socialist Republic · Federal Ministry of Finance",
-    native: "Československá socialistická republika · Federální ministerstvo financí",
-  },
-  BAL: {
-    glyph: "BAL",
-    serif: "mono",
-    budgetTitle: "State Plan Budget",
-    ministry: "MINISTRY OF FINANCE",
-    publicSeal: "PUBLIC RECORD",
-    registry: "Baltic Soviet Republics · Ministries of Finance",
-    native: "Baltijas PSR · Finanšu ministrijas",
-  },
+  HU: HU_IDENTITY.treasuryText,
+  PL: PL_IDENTITY.treasuryText,
+  RO: RO_IDENTITY.treasuryText,
+  YU: YU_IDENTITY.treasuryText,
+  BG: BG_IDENTITY.treasuryText,
+  BLR: BLR_IDENTITY.treasuryText,
+  UKR: UKR_IDENTITY.treasuryText,
+  CS: CS_IDENTITY.treasuryText,
+  BAL: BAL_IDENTITY.treasuryText,
   RU: RU_IDENTITY.treasuryText,
   FR: FR_IDENTITY.treasuryText,
   IT: IT_IDENTITY.treasuryText,
@@ -165,24 +104,8 @@ export const TREASURY_TEXT: Record<
   AT: AT_IDENTITY.treasuryText,
   FI: FI_IDENTITY.treasuryText,
   DD: DD_IDENTITY.treasuryText,
-  SCO: {
-    glyph: "AB",
-    serif: "mono",
-    budgetTitle: "Scottish Budget",
-    ministry: "SCOTTISH GOVERNMENT",
-    publicSeal: "PUBLIC RECORD",
-    registry: "Scotland · Scottish Government Finance",
-    native: "Scottish Government · Finance Directorate",
-  },
-  WAL: {
-    glyph: "CY",
-    serif: "mono",
-    budgetTitle: "Welsh Budget",
-    ministry: "WELSH GOVERNMENT",
-    publicSeal: "PUBLIC RECORD",
-    registry: "Wales · Welsh Government Finance",
-    native: "Welsh Government · Finance Directorate",
-  },
+  SCO: SCO_IDENTITY.treasuryText,
+  WAL: WAL_IDENTITY.treasuryText,
 };
 
 export const TREASURY_IDENTITY: Record<CountryId, TreasuryIdentity> = Object.fromEntries(

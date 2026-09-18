@@ -87,6 +87,24 @@ describe("single-country data lives in that country's folder", () => {
           )
           .join("\n")
     );
-    expect(ranked.length).toBeGreaterThan(0);
+    /*
+     * ⚠️ THIS USED TO ASSERT THERE WAS STILL A BACKLOG, and it failed the day the
+     * backlog reached zero -- which is the right moment for a progress reporter
+     * to stop being one. Inverted, it is a real guard: every country the
+     * classifier claims files for is now in CONVERTED, so a NEW country whose
+     * data lands outside a folder fails here rather than being noticed later.
+     *
+     * The five registry-only entities -- SCO, WAL, BLR, UKR, BAL -- are not in
+     * CONVERTED and have no claimed files, so they neither pass nor fail on a
+     * technicality; they simply have nothing to relocate.
+     */
+    expect(
+      ranked.map(([cc, r]) => `${cc} (${r.files} files, ${r.lines} lines)`),
+      `
+${ranked.length} countries still hold data outside a folder.
+` +
+        `Convert them, or explain each file in ACKNOWLEDGED_OUTSIDE.
+`
+    ).toEqual([]);
   });
 });

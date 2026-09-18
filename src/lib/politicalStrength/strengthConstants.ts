@@ -18,6 +18,17 @@ import { TR_ECONOMY } from "@/lib/countries/tr/economy";
 import { GR_ECONOMY } from "@/lib/countries/gr/economy";
 import { AT_ECONOMY } from "@/lib/countries/at/economy";
 import { FI_ECONOMY } from "@/lib/countries/fi/economy";
+import { PL_ECONOMY } from "@/lib/countries/pl/economy";
+import { HU_ECONOMY } from "@/lib/countries/hu/economy";
+import { RO_ECONOMY } from "@/lib/countries/ro/economy";
+import { YU_ECONOMY } from "@/lib/countries/yu/economy";
+import { BG_ECONOMY } from "@/lib/countries/bg/economy";
+import { CS_ECONOMY } from "@/lib/countries/cs/economy";
+import { SCO_ECONOMY } from "@/lib/countries/sco/economy";
+import { WAL_ECONOMY } from "@/lib/countries/wal/economy";
+import { BLR_ECONOMY } from "@/lib/countries/blr/economy";
+import { UKR_ECONOMY } from "@/lib/countries/ukr/economy";
+import { BAL_ECONOMY } from "@/lib/countries/bal/economy";
 
 /**
  * Political Strength reserve and pressure-ladder constants for Phase 3.
@@ -73,15 +84,15 @@ export const TREASURY_PS_RATE_BY_COUNTRY: Record<CountryId, { national: number; 
   BR: BR_ECONOMY.tax.treasuryPsRate,
   CN: CN_ECONOMY.tax.treasuryPsRate,
   NG: NG_ECONOMY.tax.treasuryPsRate,
-  HU: { national: 50_000, state: 25_000 },
-  PL: { national: 50_000, state: 25_000 },
-  RO: { national: 50_000, state: 25_000 },
-  YU: { national: 50_000, state: 25_000 },
-  BG: { national: 50_000, state: 25_000 },
-  UKR: { national: 50_000, state: 25_000 },
-  BLR: { national: 50_000, state: 25_000 },
-  CS: { national: 50_000, state: 25_000 },
-  BAL: { national: 50_000, state: 25_000 },
+  HU: HU_ECONOMY.tax.treasuryPsRate,
+  PL: PL_ECONOMY.tax.treasuryPsRate,
+  RO: RO_ECONOMY.tax.treasuryPsRate,
+  YU: YU_ECONOMY.tax.treasuryPsRate,
+  BG: BG_ECONOMY.tax.treasuryPsRate,
+  UKR: UKR_ECONOMY.tax.treasuryPsRate,
+  BLR: BLR_ECONOMY.tax.treasuryPsRate,
+  CS: CS_ECONOMY.tax.treasuryPsRate,
+  BAL: BAL_ECONOMY.tax.treasuryPsRate,
   RU: RU_ECONOMY.tax.treasuryPsRate,
   FR: FR_ECONOMY.tax.treasuryPsRate,
   IT: IT_ECONOMY.tax.treasuryPsRate,
@@ -92,8 +103,8 @@ export const TREASURY_PS_RATE_BY_COUNTRY: Record<CountryId, { national: number; 
   AT: AT_ECONOMY.tax.treasuryPsRate,
   FI: FI_ECONOMY.tax.treasuryPsRate,
   DD: DD_ECONOMY.tax.treasuryPsRate,
-  SCO: { national: 60_000, state: 30_000 }, // mirrors UK (sterling zone)
-  WAL: { national: 60_000, state: 30_000 }, // mirrors UK (sterling zone)
+  SCO: SCO_ECONOMY.tax.treasuryPsRate, // mirrors UK (sterling zone)
+  WAL: WAL_ECONOMY.tax.treasuryPsRate, // mirrors UK (sterling zone)
 } as const;
 
 // ─── Soft-cap slowdown bands ────────────────────────────────────────────────

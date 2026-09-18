@@ -1,10 +1,6 @@
 import type { CountryElections } from "../contract";
 import type { CountryElectionPhaseEntry } from "@/lib/turn/countryPhases";
-import {
-  ensureSEElections,
-  ensureTRElections,
-  ensureTRSenateElections,
-} from "@/lib/turn/perpetualElections";
+import { ensureSEElections } from "@/lib/turn/perpetualElections";
 
 /**
  * Sweden's elections.
@@ -23,11 +19,7 @@ import {
  * Volkskammer and Brazil's Senate are. An empty `byChamber` would describe a
  * chamber with no seats rather than one whose seats live elsewhere.
  */
-const phases: CountryElectionPhaseEntry[] = [
-  { name: "seElections", fn: ensureSEElections },
-  { name: "trElections", fn: ensureTRElections },
-  { name: "trSenateElections", fn: ensureTRSenateElections },
-];
+const phases: CountryElectionPhaseEntry[] = [{ name: "seElections", fn: ensureSEElections }];
 
 export const SE_ELECTIONS: CountryElections = {
   electionPhases: phases,

@@ -36,7 +36,7 @@ const COUNTRY = process.argv[2]?.toUpperCase();
 const DISPLAY_NAME = process.argv[3];
 const FORCE = process.argv.includes("--force");
 
-if (!COUNTRY || !/^[A-Z]{2}$/.test(COUNTRY) || !DISPLAY_NAME) {
+if (!COUNTRY || !/^[A-Z]{2,3}$/.test(COUNTRY) || !DISPLAY_NAME) {
   console.error(
     'usage: npx tsx scripts/countries/gen-country-identity.ts <COUNTRY_ID> "<Display Name>" [--force]'
   );

@@ -134,17 +134,17 @@ export const SOVEREIGN_CORP_LEGAL_STRUCTURE: Partial<Record<CountryId, LegalStru
   // Warsaw-Pact satellites (Command Economy v2 SOE stack, refs command-economy
   // seed-gap fix): none of these ran a bespoke joint-stock corporate form
   // either — same neutral fallback as RU/DD.
-  PL: "generic_corp",
-  HU: "generic_corp",
-  CS: "generic_corp",
-  BG: "generic_corp",
-  UKR: "generic_corp",
-  BLR: "generic_corp",
-  BAL: "generic_corp",
-  RO: "generic_corp",
+  PL: PL_ECONOMY.sovereignCorpLegalStructure,
+  HU: HU_ECONOMY.sovereignCorpLegalStructure,
+  CS: CS_ECONOMY.sovereignCorpLegalStructure,
+  BG: BG_ECONOMY.sovereignCorpLegalStructure,
+  UKR: UKR_ECONOMY.sovereignCorpLegalStructure,
+  BLR: BLR_ECONOMY.sovereignCorpLegalStructure,
+  BAL: BAL_ECONOMY.sovereignCorpLegalStructure,
+  RO: RO_ECONOMY.sovereignCorpLegalStructure,
   // Yugoslavia — command economy, no bespoke joint-stock form (see YU's SOE
   // note above on why it isn't grouped with the Warsaw-Pact five).
-  YU: "generic_corp",
+  YU: YU_ECONOMY.sovereignCorpLegalStructure,
   // Econ-tier market democracies (corporate-sector seed-gap fix): promoted
   // from the abstract sphere-macro tier to full-autonomous (seedEconTierRosters
   // #3253, seedManifest.ts) with no bespoke joint-stock legal form authored yet
@@ -518,6 +518,15 @@ import { TR_ECONOMY } from "@/lib/countries/tr/economy";
 import { GR_ECONOMY } from "@/lib/countries/gr/economy";
 import { AT_ECONOMY } from "@/lib/countries/at/economy";
 import { FI_ECONOMY } from "@/lib/countries/fi/economy";
+import { PL_ECONOMY } from "@/lib/countries/pl/economy";
+import { HU_ECONOMY } from "@/lib/countries/hu/economy";
+import { RO_ECONOMY } from "@/lib/countries/ro/economy";
+import { YU_ECONOMY } from "@/lib/countries/yu/economy";
+import { BG_ECONOMY } from "@/lib/countries/bg/economy";
+import { CS_ECONOMY } from "@/lib/countries/cs/economy";
+import { BLR_ECONOMY } from "@/lib/countries/blr/economy";
+import { UKR_ECONOMY } from "@/lib/countries/ukr/economy";
+import { BAL_ECONOMY } from "@/lib/countries/bal/economy";
 
 /**
  * Authored historical fiscal baselines for 1953 (Korean War defense shares,

@@ -33,7 +33,7 @@ interface Entry {
 const COUNTRY = process.argv[2]?.toUpperCase();
 const FORCE = process.argv.includes("--force");
 
-if (!COUNTRY || !/^[A-Z]{2}$/.test(COUNTRY)) {
+if (!COUNTRY || !/^[A-Z]{2,3}$/.test(COUNTRY)) {
   console.error("usage: npx tsx scripts/countries/gen-country-geography-facts.ts <CC> [--force]");
   process.exit(1);
 }
@@ -89,7 +89,24 @@ function maybe(name: string): string | null {
 const isoInverse = snap.ISO_NUMERIC_TO_COUNTRY?.value as Record<string, string> | undefined;
 const isoCodes = isoInverse ? Object.keys(isoInverse) : [];
 const isoForward = JSON.parse(v("COUNTRY_TO_ISO_NUMERIC")) as string;
-if (isoCodes.length !== 1 || isoCodes[0] !== isoForward) {
+
+/**
+ * ⚠ THREE OUTCOMES, NOT TWO, AND ONLY ONE OF THEM IS AN ERROR.
+ *
+ *   agree   the forward code maps back to this country. The ordinary case.
+ *   shared  the forward code is real but maps back to SOMEONE ELSE. Scotland
+ *           and Wales both carry "826", which is the United Kingdom's, because
+ *           neither has an ISO code of its own. The pair is not broken; the
+ *           code simply is not theirs to own.
+ *   none    no code at all. The Baltic States carry "", which is not an ISO
+ *           code and must not be written into a folder as though it were.
+ *
+ * The first version threw on all three, which would have stopped three real
+ * countries dead on a fact about ISO rather than about this codebase.
+ */
+const isoShared = isoForward !== "" && isoCodes.length === 0;
+const isoNone = isoForward === "";
+if (!isoNone && !isoShared && (isoCodes.length !== 1 || isoCodes[0] !== isoForward)) {
   throw new Error(
     `The ISO pair disagrees: COUNTRY_TO_ISO_NUMERIC says "${isoForward}" but ` +
       `ISO_NUMERIC_TO_COUNTRY holds ${JSON.stringify(isoCodes)}. They are two ` +
@@ -146,8 +163,21 @@ import type { WorldEntityRegion } from "@/lib/world/worldEntityManifest";
 
 export const ${COUNTRY}_CONTINENT: Continent = ${v("COUNTRY_CONTINENT")};
 
-/** ISO 3166-1 numeric. \`ISO_NUMERIC_TO_COUNTRY\` holds the inverse entry. */
-export const ${COUNTRY}_ISO_NUMERIC = ${v("COUNTRY_TO_ISO_NUMERIC")};
+${
+  isoNone
+    ? `/* No ${COUNTRY}_ISO_NUMERIC: this entity has no ISO 3166-1 code, and the registry
+   says so with an empty string rather than a number. Writing "" into the folder
+   would put a value where there is none. */`
+    : isoShared
+      ? `/**
+ * ISO 3166-1 numeric -- SHARED, not owned. \`ISO_NUMERIC_TO_COUNTRY\` maps this
+ * code back to a DIFFERENT country, because ${COUNTRY} has no code of its own and
+ * carries its parent state's. A lookup by code will not return ${COUNTRY}.
+ */
+export const ${COUNTRY}_ISO_NUMERIC = ${v("COUNTRY_TO_ISO_NUMERIC")};`
+      : `/** ISO 3166-1 numeric. \`ISO_NUMERIC_TO_COUNTRY\` holds the inverse entry. */
+export const ${COUNTRY}_ISO_NUMERIC = ${v("COUNTRY_TO_ISO_NUMERIC")};`
+}
 ${unMemberSince ? `\nexport const ${COUNTRY}_UN_MEMBER_SINCE = ${unMemberSince};\n` : ""}
 export const ${COUNTRY}_WORLD_REGION: WorldEntityRegion = ${v("COUNTRY_REGIONS")};
 
@@ -241,7 +271,9 @@ mkdirSync(dirname(OUT), { recursive: true });
 writeFileSync(OUT, out, "utf8");
 const adjacency = JSON.parse(v("STATE_ADJACENCY")) as Record<string, unknown>;
 console.log(`wrote ${OUT}`);
-console.log(`  iso pair agree  : ${isoForward}`);
+console.log(
+  `  iso             : ${isoNone ? "none (omitted)" : isoShared ? `${isoForward} (shared, not owned)` : `${isoForward} (pair agrees)`}`
+);
 console.log(`  adjacency keys  : ${Object.keys(adjacency).length}`);
 console.log(
   `  core5 metrics   : ${core5 ? Object.keys(JSON.parse(core5) as object).join(", ") : "none"}`

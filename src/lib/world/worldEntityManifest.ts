@@ -42,6 +42,17 @@ import { TR_WORLD_REGION, TR_UN_MEMBER_SINCE } from "@/lib/countries/tr/geograph
 import { GR_WORLD_REGION, GR_UN_MEMBER_SINCE } from "@/lib/countries/gr/geographyFacts";
 import { AT_WORLD_REGION, AT_UN_MEMBER_SINCE } from "@/lib/countries/at/geographyFacts";
 import { FI_WORLD_REGION, FI_UN_MEMBER_SINCE } from "@/lib/countries/fi/geographyFacts";
+import { PL_WORLD_REGION, PL_UN_MEMBER_SINCE } from "@/lib/countries/pl/geographyFacts";
+import { HU_WORLD_REGION, HU_UN_MEMBER_SINCE } from "@/lib/countries/hu/geographyFacts";
+import { RO_WORLD_REGION, RO_UN_MEMBER_SINCE } from "@/lib/countries/ro/geographyFacts";
+import { YU_WORLD_REGION, YU_UN_MEMBER_SINCE } from "@/lib/countries/yu/geographyFacts";
+import { BG_WORLD_REGION, BG_UN_MEMBER_SINCE } from "@/lib/countries/bg/geographyFacts";
+import { CS_WORLD_REGION, CS_UN_MEMBER_SINCE } from "@/lib/countries/cs/geographyFacts";
+import { SCO_WORLD_REGION } from "@/lib/countries/sco/geographyFacts";
+import { WAL_WORLD_REGION } from "@/lib/countries/wal/geographyFacts";
+import { BLR_WORLD_REGION, BLR_UN_MEMBER_SINCE } from "@/lib/countries/blr/geographyFacts";
+import { UKR_WORLD_REGION, UKR_UN_MEMBER_SINCE } from "@/lib/countries/ukr/geographyFacts";
+import { BAL_WORLD_REGION } from "@/lib/countries/bal/geographyFacts";
 
 export type WorldEntityId = string;
 export type WorldEntityStatus = "sovereign" | "dependent" | "emergent" | "dissolved";
@@ -234,13 +245,13 @@ export const COUNTRY_REGIONS: Record<CountryId, WorldEntityRegion> = {
   ES: ES_WORLD_REGION,
   SE: SE_WORLD_REGION,
   IE: IE_WORLD_REGION,
-  HU: "europe",
-  PL: "europe",
-  RO: "europe",
-  YU: "europe",
-  BG: "europe",
-  CS: "europe",
-  UKR: "europe",
+  HU: HU_WORLD_REGION,
+  PL: PL_WORLD_REGION,
+  RO: RO_WORLD_REGION,
+  YU: YU_WORLD_REGION,
+  BG: BG_WORLD_REGION,
+  CS: CS_WORLD_REGION,
+  UKR: UKR_WORLD_REGION,
   RU: RU_WORLD_REGION,
   TR: TR_WORLD_REGION,
   JP: JP_GEOGRAPHY.worldRegion,
@@ -249,10 +260,10 @@ export const COUNTRY_REGIONS: Record<CountryId, WorldEntityRegion> = {
   AT: AT_WORLD_REGION,
   GR: GR_WORLD_REGION,
   FI: FI_WORLD_REGION,
-  BLR: "europe",
-  BAL: "europe",
-  SCO: "europe",
-  WAL: "europe",
+  BLR: BLR_WORLD_REGION,
+  BAL: BAL_WORLD_REGION,
+  SCO: SCO_WORLD_REGION,
+  WAL: WAL_WORLD_REGION,
 };
 
 /** UN admission year priors for CountryConfig sovereigns (strong defaults). */
@@ -272,19 +283,19 @@ export const COUNTRY_UN_MEMBER_SINCE: Partial<Record<CountryId, number>> = {
   JP: JP_GEOGRAPHY.unMemberSince,
   IE: IE_UN_MEMBER_SINCE,
   NG: NG_UN_MEMBER_SINCE,
-  PL: 1945,
-  HU: 1955,
-  RO: 1955,
-  BG: 1955,
+  PL: PL_UN_MEMBER_SINCE,
+  HU: HU_UN_MEMBER_SINCE,
+  RO: RO_UN_MEMBER_SINCE,
+  BG: BG_UN_MEMBER_SINCE,
   // The Ukrainian and Byelorussian SSRs were UN founding members in their own
   // right - Stalin's price for the Yalta voting arrangement. This is real, not a
   // modelling convenience, and it is the single largest thing that separates
   // them from the Baltic republics, whose annexation the UN never recognised and
   // which therefore have no admission year at all.
-  UKR: 1945,
-  BLR: 1945,
-  YU: 1945,
-  CS: 1945,
+  UKR: UKR_UN_MEMBER_SINCE,
+  BLR: BLR_UN_MEMBER_SINCE,
+  YU: YU_UN_MEMBER_SINCE,
+  CS: CS_UN_MEMBER_SINCE,
   GR: GR_UN_MEMBER_SINCE,
   AT: AT_UN_MEMBER_SINCE,
   FI: FI_UN_MEMBER_SINCE,

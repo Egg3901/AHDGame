@@ -1,8 +1,8 @@
 import type { CountryGeography } from "../contract";
-import { atMetricPresets1953 } from "@/lib/seeds/at/atMetricPresets1953";
-import { atRegions } from "@/lib/seeds/at/atRegions";
-import { atRegions1953 } from "@/lib/seeds/at/atRegions1953";
-import { atStateMetrics } from "@/lib/seeds/at/atStateMetrics";
+import { atMetricPresets1953 } from "./data/atMetricPresets1953";
+import { atRegions } from "./data/atRegions";
+import { atRegions1953 } from "./data/atRegions1953";
+import { atStateMetrics } from "./data/atStateMetrics";
 import {
   AT_ADJACENCY_MAP,
   AT_CONTINENT,

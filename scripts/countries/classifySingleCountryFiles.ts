@@ -46,9 +46,9 @@ void CONVERTED;
 const ROOTS = ["src", "scripts"];
 
 /** A row declaring which country it belongs to. The strongest evidence there is. */
-const COUNTRY_ID_FIELD = /countryId:\s*"([A-Z]{2})"/g;
+const COUNTRY_ID_FIELD = /countryId:\s*"([A-Z]{2,3})"/g;
 /** A registry key: `US: {`, `"JP": [`. */
-const REGISTRY_KEY = /(?:^|[{,[(])\s*"?([A-Z]{2})"?\s*:/gm;
+const REGISTRY_KEY = /(?:^|[{,[(])\s*"?([A-Z]{2,3})"?\s*:/gm;
 /** `jp_ldp`, `us_democratic`, `uk_labour`. Unambiguous by construction. */
 const SLUG = /"([a-z]{2})_[a-z0-9_]+"/g;
 
@@ -78,7 +78,7 @@ const SLUG = /"([a-z]{2})_[a-z0-9_]+"/g;
  * says so loudly; a file that DECLARES it gets no such warning.
  */
 const COUNTRY_DECLARATION =
-  /\b(?:export\s+)?(?:const|let|var|function|class|type|interface|enum)\s+([A-Z]{2})_[A-Z0-9_]/g;
+  /\b(?:export\s+)?(?:const|let|var|function|class|type|interface|enum)\s+([A-Z]{2,3})_[A-Z0-9_]/g;
 
 /**
  * Prefixes that look like a country id and are not one.
@@ -92,8 +92,24 @@ const COUNTRY_DECLARATION =
 const NOT_A_COUNTRY_PREFIX = /^(JPY|JPEG|JPG|USD|USE|USSR)([_A-Z]|$)/;
 
 /** Every country id the game knows, so a match can be told from a state code. */
+/**
+ * ⚠️ THREE-LETTER IDS ARE COUNTRIES TOO, AND THEIR ABSENCE HERE WAS INVISIBLE.
+ * `SCO`, `WAL`, `BLR`, `UKR` and `BAL` are entries in `COUNTRY_CONFIGS` with
+ * regions, elections and parties. Every pattern above matched `[A-Z]{2}`
+ * exactly, so the classifier could not see them at all -- and a backlog report
+ * that counted claimed files therefore showed them as having NOTHING to move.
+ * "Nothing detected" and "nothing there" read identically in that output, which
+ * is the same shape of mistake as the coverage roster this guard replaced.
+ *
+ * Three-letter tokens collide far more readily than two (USA, GDP, ALL, NEW),
+ * so the id SET is what keeps this honest: a match only counts if it is a
+ * country this game actually has.
+ */
 const COUNTRY_IDS = new Set(
-  "US UK JP DE FR IT RU CN BR PL CS YU DD AT BG FI GR HU IE NG RO SE ES TR CA IN".split(" ")
+  (
+    "US UK JP DE FR IT RU CN BR PL CS YU DD AT BG FI GR HU IE NG RO SE ES TR CA IN " +
+    "SCO WAL BLR UKR BAL"
+  ).split(" ")
 );
 
 /**
@@ -118,6 +134,32 @@ const US_STATE_CODES = new Set(
     "MT NE NV NH NJ NM NY NC ND OH OK OR PA RI SC SD TN TX UT VT VA WA WV WI WY PR GU VI AS MP"
   ).split(" ")
 );
+
+/**
+ * UK region codes -- the same collision as the US states, one letter longer.
+ *
+ * ⚠️ `SCO` AND `WAL` ARE BOTH UK REGIONS AND COUNTRIES. `ukRegions.ts` lists
+ * `_id: "SCO"` and `_id: "WAL"` beside LON, SEE and EMI, and `COUNTRY_CONFIGS`
+ * holds SCO and WAL as their own entries with their own cabinets and elections.
+ * The moment the classifier learnt to see three-letter ids, every UK file keyed
+ * by region -- census data, metric presets, population anchors -- started
+ * declaring THREE countries and stopped being single-country, so the guard
+ * quietly stopped checking that any of it was in `uk/`.
+ *
+ * Handled exactly as CA/DE/IN are: discount the ambiguous codes, and only when
+ * the file demonstrably keys by UK region. An unambiguous key still counts.
+ */
+const UK_REGION_CODES = new Set("LON SEE SWE EAE EMI WMI YHU NWE NEE SCO WAL NIR".split(" "));
+
+/** SCO and WAL: UK regions that are also countries. */
+const UK_AMBIGUOUS = new Set([...COUNTRY_IDS].filter((c) => UK_REGION_CODES.has(c)));
+
+function hasUkRegionKeys(keys: Set<string>): boolean {
+  for (const key of keys) {
+    if (UK_REGION_CODES.has(key) && !COUNTRY_IDS.has(key)) return true;
+  }
+  return false;
+}
 
 /** The three codes that are both: California/Canada, Delaware/Germany, Indiana/India. */
 const AMBIGUOUS = new Set([...COUNTRY_IDS].filter((c) => US_STATE_CODES.has(c)));
@@ -391,9 +433,11 @@ function declaredCountries(raw: string): Set<string> {
    */
   const keys = new Set([...maskStrings(source).matchAll(REGISTRY_KEY)].map(([, cc]) => cc));
   const stateKeyed = hasUsStateKeys(keys);
+  const ukRegionKeyed = hasUkRegionKeys(keys);
   for (const cc of keys) {
     if (!COUNTRY_IDS.has(cc)) continue;
     if (stateKeyed && AMBIGUOUS.has(cc)) continue;
+    if (ukRegionKeyed && UK_AMBIGUOUS.has(cc)) continue;
     found.add(cc);
   }
   for (const [, cc] of source.matchAll(SLUG)) {

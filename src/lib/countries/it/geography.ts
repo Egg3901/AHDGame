@@ -1,10 +1,10 @@
 import type { CountryGeography } from "../contract";
-import { itMetricPresets1953 } from "@/lib/seeds/it/itMetricPresets1953";
-import { itRegionCensusData } from "@/lib/seeds/it/itRegionCensusData";
-import { itRegionCensusData1953 } from "@/lib/seeds/it/itRegionCensusData1953";
-import { itRegions } from "@/lib/seeds/it/itRegions";
-import { itRegions1953 } from "@/lib/seeds/it/itRegions1953";
-import { itStateMetrics } from "@/lib/seeds/it/itStateMetrics";
+import { itMetricPresets1953 } from "./data/itMetricPresets1953";
+import { itRegionCensusData } from "./data/itRegionCensusData";
+import { itRegionCensusData1953 } from "./data/itRegionCensusData1953";
+import { itRegions } from "./data/itRegions";
+import { itRegions1953 } from "./data/itRegions1953";
+import { itStateMetrics } from "./data/itStateMetrics";
 import {
   IT_ADJACENCY_MAP,
   IT_CONTINENT,

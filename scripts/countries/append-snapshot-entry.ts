@@ -26,7 +26,7 @@ interface Entry {
 const COUNTRY = process.argv[2]?.toUpperCase();
 const REGISTRY = process.argv[3];
 
-if (!COUNTRY || !/^[A-Z]{2}$/.test(COUNTRY) || !REGISTRY) {
+if (!COUNTRY || !/^[A-Z]{2,3}$/.test(COUNTRY) || !REGISTRY) {
   console.error("usage: npx tsx scripts/countries/append-snapshot-entry.ts <CC> <REGISTRY_NAME>");
   process.exit(1);
 }

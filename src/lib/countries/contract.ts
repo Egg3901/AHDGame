@@ -386,7 +386,14 @@ export interface CountryGeography {
    * let them drift. The inverse is keyed by code with JP as the VALUE, so it is
    * pinned by the harness rather than forwarded.
    */
-  readonly isoNumeric: string;
+  /**
+   * ⚠️ OPTIONAL BECAUSE NOT EVERY ENTITY HAS A CODE. The Baltic States carry `""`
+   * in `COUNTRY_TO_ISO_NUMERIC` -- not an ISO code, an absence spelled as an
+   * empty string. Scotland and Wales are the other shape of this: they carry a
+   * real code, 826, which is the United Kingdom's, so `ISO_NUMERIC_TO_COUNTRY`
+   * maps it back to the UK and a lookup by code will never return them.
+   */
+  readonly isoNumeric?: string;
   readonly unMemberSince?: number;
   /**
    * ⚠️ NOT a count. COUNTRY_REGIONS is `Record<CountryId, WorldEntityRegion>` --

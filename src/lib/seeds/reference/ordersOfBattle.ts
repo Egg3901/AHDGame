@@ -37,6 +37,15 @@ import { TR_ORDERS_OF_BATTLE } from "@/lib/countries/tr/institutionsFacts";
 import { GR_ORDERS_OF_BATTLE } from "@/lib/countries/gr/institutionsFacts";
 import { AT_ORDERS_OF_BATTLE } from "@/lib/countries/at/institutionsFacts";
 import { FI_ORDERS_OF_BATTLE } from "@/lib/countries/fi/institutionsFacts";
+import { PL_ORDERS_OF_BATTLE } from "@/lib/countries/pl/institutionsFacts";
+import { HU_ORDERS_OF_BATTLE } from "@/lib/countries/hu/institutionsFacts";
+import { RO_ORDERS_OF_BATTLE } from "@/lib/countries/ro/institutionsFacts";
+import { YU_ORDERS_OF_BATTLE } from "@/lib/countries/yu/institutionsFacts";
+import { BG_ORDERS_OF_BATTLE } from "@/lib/countries/bg/institutionsFacts";
+import { CS_ORDERS_OF_BATTLE } from "@/lib/countries/cs/institutionsFacts";
+import { BLR_ORDERS_OF_BATTLE } from "@/lib/countries/blr/institutionsFacts";
+import { UKR_ORDERS_OF_BATTLE } from "@/lib/countries/ukr/institutionsFacts";
+import { BAL_ORDERS_OF_BATTLE } from "@/lib/countries/bal/institutionsFacts";
 
 export interface OrderOfBattleEntry {
   /** Must match a Branch id for this country (`MILITARY_BRANCHES_BY_COUNTRY`). */
@@ -115,79 +124,21 @@ export const ORDERS_OF_BATTLE: Partial<Record<CountryId, OrderOfBattleEntry[]>> 
   CN: CN_ORDERS_OF_BATTLE,
   RU: RU_ORDERS_OF_BATTLE,
   DD: DD_ORDERS_OF_BATTLE,
-  PL: [
-    { branchId: "ground", type: "Infantry Division", count: 4 },
-    { branchId: "ground", type: "Armored Division", count: 2 },
-    { branchId: "ground", type: "Artillery Regiment", count: 2 },
-    { branchId: "navy", type: "Frigate Squadron", count: 1 },
-    { branchId: "navy", type: "Attack Submarine", count: 1 },
-    { branchId: "airforce", type: "Fighter Wing", count: 3 },
-    { branchId: "airforce", type: "Air Defense Wing", count: 1 },
-  ],
-  CS: [
-    { branchId: "ground", type: "Infantry Division", count: 4 },
-    { branchId: "ground", type: "Armored Division", count: 2 },
-    { branchId: "ground", type: "Artillery Regiment", count: 2 },
-    { branchId: "airforce", type: "Fighter Wing", count: 3 },
-    { branchId: "airforce", type: "Air Defense Wing", count: 1 },
-  ],
-  HU: [
-    { branchId: "ground", type: "Infantry Division", count: 3 },
-    { branchId: "ground", type: "Mechanized Brigade", count: 2 },
-    { branchId: "ground", type: "Artillery Regiment", count: 1 },
-    { branchId: "airforce", type: "Fighter Wing", count: 2 },
-  ],
-  RO: [
-    { branchId: "ground", type: "Infantry Division", count: 4 },
-    { branchId: "ground", type: "Mechanized Brigade", count: 2 },
-    { branchId: "ground", type: "Artillery Regiment", count: 2 },
-    { branchId: "navy", type: "Frigate Squadron", count: 1 },
-    { branchId: "airforce", type: "Fighter Wing", count: 2 },
-  ],
-  BG: [
-    { branchId: "ground", type: "Infantry Division", count: 3 },
-    { branchId: "ground", type: "Mechanized Brigade", count: 2 },
-    { branchId: "ground", type: "Artillery Regiment", count: 1 },
-    { branchId: "navy", type: "Frigate Squadron", count: 1 },
-    { branchId: "airforce", type: "Fighter Wing", count: 2 },
-  ],
+  PL: PL_ORDERS_OF_BATTLE,
+  CS: CS_ORDERS_OF_BATTLE,
+  HU: HU_ORDERS_OF_BATTLE,
+  RO: RO_ORDERS_OF_BATTLE,
+  BG: BG_ORDERS_OF_BATTLE,
   // Union republics. Deliberately thinner than the satellites: the real combat
   // power on this ground belonged to the Soviet military districts, which are
   // counted in RU's roster. What is authored here is the republican
   // establishment - garrison infantry, a fighter regiment, and coastal forces
   // where the republic has a coast. Double-counting the Kyiv or Baltic district
   // here would inflate Warsaw Pact strength by tens of divisions.
-  UKR: [
-    { branchId: "ground", type: "Infantry Division", count: 4 },
-    { branchId: "ground", type: "Mechanized Brigade", count: 2 },
-    { branchId: "ground", type: "Artillery Regiment", count: 2 },
-    { branchId: "navy", type: "Frigate Squadron", count: 1 }, // Black Sea coastal
-    { branchId: "airforce", type: "Fighter Wing", count: 2 },
-  ],
-  BLR: [
-    { branchId: "ground", type: "Infantry Division", count: 3 },
-    { branchId: "ground", type: "Mechanized Brigade", count: 1 },
-    { branchId: "ground", type: "Artillery Regiment", count: 1 },
-    { branchId: "airforce", type: "Fighter Wing", count: 1 },
-  ],
-  BAL: [
-    { branchId: "ground", type: "Infantry Division", count: 2 },
-    { branchId: "ground", type: "Artillery Regiment", count: 1 },
-    // Weighted naval rather than ground: Tallinn, Riga and Liepaja were Baltic
-    // Fleet bases, and the coast is what the republics were garrisoned for.
-    { branchId: "navy", type: "Frigate Squadron", count: 1 },
-    { branchId: "navy", type: "Attack Submarine", count: 1 },
-    { branchId: "airforce", type: "Fighter Wing", count: 1 },
-  ],
-  YU: [
-    { branchId: "ground", type: "Infantry Division", count: 5 },
-    { branchId: "ground", type: "Armored Division", count: 1 },
-    { branchId: "ground", type: "Artillery Regiment", count: 2 },
-    { branchId: "ground", type: "Special Forces Group", count: 1 },
-    { branchId: "navy", type: "Frigate Squadron", count: 1 },
-    { branchId: "navy", type: "Attack Submarine", count: 1 },
-    { branchId: "airforce", type: "Fighter Wing", count: 2 },
-  ],
+  UKR: UKR_ORDERS_OF_BATTLE,
+  BLR: BLR_ORDERS_OF_BATTLE,
+  BAL: BAL_ORDERS_OF_BATTLE,
+  YU: YU_ORDERS_OF_BATTLE,
   NG: NG_ORDERS_OF_BATTLE,
   FR: FR_ORDERS_OF_BATTLE,
   IT: IT_ORDERS_OF_BATTLE,

@@ -27,7 +27,7 @@ interface Entry {
 const COUNTRY = process.argv[2]?.toUpperCase();
 const FORCE = process.argv.includes("--force");
 
-if (!COUNTRY || !/^[A-Z]{2}$/.test(COUNTRY)) {
+if (!COUNTRY || !/^[A-Z]{2,3}$/.test(COUNTRY)) {
   console.error("usage: npx tsx scripts/countries/gen-country-economy.ts <COUNTRY_ID> [--force]");
   process.exit(1);
 }
@@ -122,6 +122,7 @@ const stateSalesTax = maybe("NEUTRAL_STATE_SALES_TAX_BY_COUNTRY");
 const economicBaselineValue = maybe("ECONOMIC_BASELINES");
 const repEconValue = maybe("REP_ECON");
 const costScaleAnchorsValue = maybe("COST_SCALE_ANCHORS");
+const gdpDenomination1953 = maybe("GDP_DENOMINATION_1953");
 const payoutCap = maybe("PLAYER_PAYOUT_CAP_PER_TURN");
 const sovereignStructure = maybe("SOVEREIGN_CORP_LEGAL_STRUCTURE");
 const m2ToGdp = maybe("M2_TO_GDP_1953");
@@ -250,7 +251,13 @@ ${
  * ⚠ 1953 ONLY. \`GDP_DENOMINATION_1953\` is an era table and holds no other
  * preset, so this says nothing about any later era.
  */
-export const ${COUNTRY}_GDP_DENOMINATION_1953 = ${v("GDP_DENOMINATION_1953")};
+${
+  gdpDenomination1953
+    ? `export const ${COUNTRY}_GDP_DENOMINATION_1953 = ${gdpDenomination1953};`
+    : `/* No ${COUNTRY}_GDP_DENOMINATION_1953: the table lists only the countries the 1953
+   world starts with, and ${COUNTRY} is not one of them. Later presets are uniformly
+   local-currency by design, so there is nothing to denominate. */`
+}
 `;
 
 mkdirSync(dirname(OUT), { recursive: true });

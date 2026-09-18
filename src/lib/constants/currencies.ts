@@ -27,6 +27,17 @@ import { TR_ECONOMY } from "@/lib/countries/tr/economy";
 import { GR_ECONOMY } from "@/lib/countries/gr/economy";
 import { AT_ECONOMY } from "@/lib/countries/at/economy";
 import { FI_ECONOMY } from "@/lib/countries/fi/economy";
+import { PL_ECONOMY } from "@/lib/countries/pl/economy";
+import { HU_ECONOMY } from "@/lib/countries/hu/economy";
+import { RO_ECONOMY } from "@/lib/countries/ro/economy";
+import { YU_ECONOMY } from "@/lib/countries/yu/economy";
+import { BG_ECONOMY } from "@/lib/countries/bg/economy";
+import { CS_ECONOMY } from "@/lib/countries/cs/economy";
+import { SCO_ECONOMY } from "@/lib/countries/sco/economy";
+import { WAL_ECONOMY } from "@/lib/countries/wal/economy";
+import { BLR_ECONOMY } from "@/lib/countries/blr/economy";
+import { UKR_ECONOMY } from "@/lib/countries/ukr/economy";
+import { BAL_ECONOMY } from "@/lib/countries/bal/economy";
 
 /**
  * Currency codes for all countries — active and future.
@@ -101,15 +112,15 @@ export const COUNTRY_CURRENCY_MAP: Record<CountryId, CurrencyCode> = {
   BR: BR_ECONOMY.currencyCode,
   CN: CN_ECONOMY.currencyCode,
   NG: NG_ECONOMY.currencyCode,
-  HU: "HUF",
-  PL: "PLZ",
-  RO: "ROL",
-  YU: "YUD",
-  BG: "BGL",
-  BLR: "SUR",
-  UKR: "SUR",
-  CS: "CSK",
-  BAL: "SUR",
+  HU: HU_ECONOMY.currencyCode,
+  PL: PL_ECONOMY.currencyCode,
+  RO: RO_ECONOMY.currencyCode,
+  YU: YU_ECONOMY.currencyCode,
+  BG: BG_ECONOMY.currencyCode,
+  BLR: BLR_ECONOMY.currencyCode,
+  UKR: UKR_ECONOMY.currencyCode,
+  CS: CS_ECONOMY.currencyCode,
+  BAL: BAL_ECONOMY.currencyCode,
   RU: RU_ECONOMY.currencyCode,
   FR: FR_ECONOMY.currencyCode,
   IT: IT_ECONOMY.currencyCode,
@@ -120,8 +131,8 @@ export const COUNTRY_CURRENCY_MAP: Record<CountryId, CurrencyCode> = {
   AT: AT_ECONOMY.currencyCode,
   FI: FI_ECONOMY.currencyCode,
   DD: DD_ECONOMY.currencyCode,
-  SCO: "GBP", // sterlingized — shares the UK's GBP (anchor stays UK)
-  WAL: "GBP", // sterlingized — shares the UK's GBP (anchor stays UK)
+  SCO: SCO_ECONOMY.currencyCode, // sterlingized — shares the UK's GBP (anchor stays UK)
+  WAL: WAL_ECONOMY.currencyCode, // sterlingized — shares the UK's GBP (anchor stays UK)
 };
 
 /**
@@ -789,15 +800,15 @@ export const MONETARY_BASELINES: Record<CountryId, MonetaryBaseline> = {
   BR: BR_ECONOMY.monetary.baseline,
   CN: CN_ECONOMY.monetary.baseline,
   NG: NG_ECONOMY.monetary.baseline,
-  HU: { targetInflation: 3.0, neutralPrimeRate: 5.0 },
-  PL: { targetInflation: 4.0, neutralPrimeRate: 5.0 },
-  RO: { targetInflation: 3.0, neutralPrimeRate: 5.0 },
-  YU: { targetInflation: 15.0, neutralPrimeRate: 12.0 }, // Yugoslav high-inflation
-  BG: { targetInflation: 2.0, neutralPrimeRate: 4.0 },
-  BLR: { targetInflation: 2.0, neutralPrimeRate: 3.0 },
-  UKR: { targetInflation: 2.0, neutralPrimeRate: 3.0 },
-  CS: { targetInflation: 2.0, neutralPrimeRate: 4.0 },
-  BAL: { targetInflation: 2.0, neutralPrimeRate: 3.0 },
+  HU: HU_ECONOMY.monetary.baseline,
+  PL: PL_ECONOMY.monetary.baseline,
+  RO: RO_ECONOMY.monetary.baseline,
+  YU: YU_ECONOMY.monetary.baseline, // Yugoslav high-inflation
+  BG: BG_ECONOMY.monetary.baseline,
+  BLR: BLR_ECONOMY.monetary.baseline,
+  UKR: UKR_ECONOMY.monetary.baseline,
+  CS: CS_ECONOMY.monetary.baseline,
+  BAL: BAL_ECONOMY.monetary.baseline,
   RU: RU_ECONOMY.monetary.baseline,
   FR: FR_ECONOMY.monetary.baseline, // late-1970s French inflation
   IT: IT_ECONOMY.monetary.baseline, // late-1970s Italian inflation
@@ -808,8 +819,8 @@ export const MONETARY_BASELINES: Record<CountryId, MonetaryBaseline> = {
   AT: AT_ECONOMY.monetary.baseline, // hard-schilling DM shadow policy
   FI: FI_ECONOMY.monetary.baseline, // late-1970s markka devaluation-cycle regime
   DD: DD_ECONOMY.monetary.baseline, // administered GDR planned-economy prices
-  SCO: { targetInflation: 2.0, neutralPrimeRate: 3.0 }, // mirrors UK (sterling zone)
-  WAL: { targetInflation: 2.0, neutralPrimeRate: 3.0 }, // mirrors UK (sterling zone)
+  SCO: SCO_ECONOMY.monetary.baseline, // mirrors UK (sterling zone)
+  WAL: WAL_ECONOMY.monetary.baseline, // mirrors UK (sterling zone)
 };
 
 // ── FX Intervention (chair standing policy) ─────────────────────────────────

@@ -1,8 +1,8 @@
 import type { CountryGeography } from "../contract";
-import { fiMetricPresets1953 } from "@/lib/seeds/fi/fiMetricPresets1953";
-import { fiRegions } from "@/lib/seeds/fi/fiRegions";
-import { fiRegions1953 } from "@/lib/seeds/fi/fiRegions1953";
-import { fiStateMetrics } from "@/lib/seeds/fi/fiStateMetrics";
+import { fiMetricPresets1953 } from "./data/fiMetricPresets1953";
+import { fiRegions } from "./data/fiRegions";
+import { fiRegions1953 } from "./data/fiRegions1953";
+import { fiStateMetrics } from "./data/fiStateMetrics";
 import {
   FI_ADJACENCY_MAP,
   FI_CONTINENT,

@@ -17,6 +17,17 @@ import { TR_ECONOMY } from "@/lib/countries/tr/economy";
 import { GR_ECONOMY } from "@/lib/countries/gr/economy";
 import { AT_ECONOMY } from "@/lib/countries/at/economy";
 import { FI_ECONOMY } from "@/lib/countries/fi/economy";
+import { PL_ECONOMY } from "@/lib/countries/pl/economy";
+import { HU_ECONOMY } from "@/lib/countries/hu/economy";
+import { RO_ECONOMY } from "@/lib/countries/ro/economy";
+import { YU_ECONOMY } from "@/lib/countries/yu/economy";
+import { BG_ECONOMY } from "@/lib/countries/bg/economy";
+import { CS_ECONOMY } from "@/lib/countries/cs/economy";
+import { SCO_ECONOMY } from "@/lib/countries/sco/economy";
+import { WAL_ECONOMY } from "@/lib/countries/wal/economy";
+import { BLR_ECONOMY } from "@/lib/countries/blr/economy";
+import { UKR_ECONOMY } from "@/lib/countries/ukr/economy";
+import { BAL_ECONOMY } from "@/lib/countries/bal/economy";
 
 /**
  * Mapping from country to the "stateId" used in collections like statePolicies
@@ -34,15 +45,15 @@ export const NATIONAL_POLICY_STATE_IDS: Record<CountryId, string> = {
   BR: BR_ECONOMY.nationalPolicyStateId,
   CN: CN_ECONOMY.nationalPolicyStateId,
   NG: NG_ECONOMY.nationalPolicyStateId,
-  HU: "hu_national",
-  PL: "pl_national",
-  RO: "ro_national",
-  YU: "yu_national",
-  BG: "bg_national",
-  UKR: "ukr_national",
-  BLR: "blr_national",
-  CS: "cs_national",
-  BAL: "bal_national",
+  HU: HU_ECONOMY.nationalPolicyStateId,
+  PL: PL_ECONOMY.nationalPolicyStateId,
+  RO: RO_ECONOMY.nationalPolicyStateId,
+  YU: YU_ECONOMY.nationalPolicyStateId,
+  BG: BG_ECONOMY.nationalPolicyStateId,
+  UKR: UKR_ECONOMY.nationalPolicyStateId,
+  BLR: BLR_ECONOMY.nationalPolicyStateId,
+  CS: CS_ECONOMY.nationalPolicyStateId,
+  BAL: BAL_ECONOMY.nationalPolicyStateId,
   RU: RU_ECONOMY.nationalPolicyStateId,
   FR: FR_ECONOMY.nationalPolicyStateId,
   IT: IT_ECONOMY.nationalPolicyStateId,
@@ -53,8 +64,8 @@ export const NATIONAL_POLICY_STATE_IDS: Record<CountryId, string> = {
   AT: AT_ECONOMY.nationalPolicyStateId,
   FI: FI_ECONOMY.nationalPolicyStateId,
   DD: DD_ECONOMY.nationalPolicyStateId,
-  SCO: "sco_national",
-  WAL: "wal_national",
+  SCO: SCO_ECONOMY.nationalPolicyStateId,
+  WAL: WAL_ECONOMY.nationalPolicyStateId,
 };
 
 export function getNationalStateId(countryId: CountryId): string {

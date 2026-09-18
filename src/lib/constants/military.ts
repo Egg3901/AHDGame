@@ -90,6 +90,61 @@ import {
   FI_MILITARY_BRANCHES,
   FI_MILITARY_SCALE,
 } from "@/lib/countries/fi/institutionsFacts";
+import {
+  PL_CABINET_SEAT_IDS,
+  PL_MILITARY_BRANCHES,
+  PL_MILITARY_SCALE,
+} from "@/lib/countries/pl/institutionsFacts";
+import {
+  HU_CABINET_SEAT_IDS,
+  HU_MILITARY_BRANCHES,
+  HU_MILITARY_SCALE,
+} from "@/lib/countries/hu/institutionsFacts";
+import {
+  RO_CABINET_SEAT_IDS,
+  RO_MILITARY_BRANCHES,
+  RO_MILITARY_SCALE,
+} from "@/lib/countries/ro/institutionsFacts";
+import {
+  YU_CABINET_SEAT_IDS,
+  YU_MILITARY_BRANCHES,
+  YU_MILITARY_SCALE,
+} from "@/lib/countries/yu/institutionsFacts";
+import {
+  BG_CABINET_SEAT_IDS,
+  BG_MILITARY_BRANCHES,
+  BG_MILITARY_SCALE,
+} from "@/lib/countries/bg/institutionsFacts";
+import {
+  CS_CABINET_SEAT_IDS,
+  CS_MILITARY_BRANCHES,
+  CS_MILITARY_SCALE,
+} from "@/lib/countries/cs/institutionsFacts";
+import {
+  SCO_CABINET_SEAT_IDS,
+  SCO_MILITARY_BRANCHES,
+  SCO_MILITARY_SCALE,
+} from "@/lib/countries/sco/institutionsFacts";
+import {
+  WAL_CABINET_SEAT_IDS,
+  WAL_MILITARY_BRANCHES,
+  WAL_MILITARY_SCALE,
+} from "@/lib/countries/wal/institutionsFacts";
+import {
+  BLR_CABINET_SEAT_IDS,
+  BLR_MILITARY_BRANCHES,
+  BLR_MILITARY_SCALE,
+} from "@/lib/countries/blr/institutionsFacts";
+import {
+  UKR_CABINET_SEAT_IDS,
+  UKR_MILITARY_BRANCHES,
+  UKR_MILITARY_SCALE,
+} from "@/lib/countries/ukr/institutionsFacts";
+import {
+  BAL_CABINET_SEAT_IDS,
+  BAL_MILITARY_BRANCHES,
+  BAL_MILITARY_SCALE,
+} from "@/lib/countries/bal/institutionsFacts";
 
 export interface Branch {
   id: string;
@@ -382,31 +437,12 @@ export const MILITARY_BRANCHES_BY_COUNTRY: Record<CountryId, Branch[]> = {
   // Nigeria: Navy from the 1956 Nigerian Naval Force; Army on independence
   // (1 Oct 1960); Air Force established 1964.
   NG: NG_MILITARY_BRANCHES,
-  HU: [
-    { id: "ground", name: "Ground Forces", abbr: "MH", domain: "ground" },
-    { id: "airforce", name: "Air Force", abbr: "MHL", domain: "air" },
-  ],
-  PL: [
-    { id: "ground", name: "Land Forces", abbr: "WL", domain: "ground" },
-    { id: "navy", name: "Navy", abbr: "MW", domain: "naval" },
-    { id: "airforce", name: "Air Force", abbr: "SP", domain: "air" },
-  ],
-  RO: [
-    { id: "ground", name: "Land Forces", abbr: "FT", domain: "ground" },
-    { id: "navy", name: "Naval Forces", abbr: "FN", domain: "naval" },
-    { id: "airforce", name: "Air Force", abbr: "FA", domain: "air" },
-  ],
+  HU: HU_MILITARY_BRANCHES,
+  PL: PL_MILITARY_BRANCHES,
+  RO: RO_MILITARY_BRANCHES,
   // Yugoslav People's Army — dissolved with the SFRY in 1992.
-  YU: [
-    { id: "ground", name: "Ground Forces", abbr: "KoV", domain: "ground", dissolvedYear: 1992 },
-    { id: "navy", name: "Navy", abbr: "JRM", domain: "naval", dissolvedYear: 1992 },
-    { id: "airforce", name: "Air Force", abbr: "JRV", domain: "air", dissolvedYear: 1992 },
-  ],
-  BG: [
-    { id: "ground", name: "Land Forces", abbr: "SV", domain: "ground" },
-    { id: "navy", name: "Navy", abbr: "VMS", domain: "naval" },
-    { id: "airforce", name: "Air Force", abbr: "VVS", domain: "air" },
-  ],
+  YU: YU_MILITARY_BRANCHES,
+  BG: BG_MILITARY_BRANCHES,
   // Union-republic forces. Constitutionally these existed: the February 1944
   // amendment gave each union republic its own People's Commissariat of Defence,
   // which is the legal fiction that put the Ukrainian and Byelorussian SSRs in
@@ -415,28 +451,14 @@ export const MILITARY_BRANCHES_BY_COUNTRY: Record<CountryId, Branch[]> = {
   // relative to the satellites - these are garrison and territorial forces, not
   // national armies. Ukraine gets a navy (Odesa, Sevastopol, Mykolaiv) and
   // Byelorussia does not, because Byelorussia is landlocked.
-  UKR: [
-    { id: "ground", name: "Ground Forces", abbr: "SV", domain: "ground" },
-    { id: "navy", name: "Naval Forces", abbr: "VMS", domain: "naval" },
-    { id: "airforce", name: "Air Force", abbr: "VPS", domain: "air" },
-  ],
-  BLR: [
-    { id: "ground", name: "Ground Forces", abbr: "SV", domain: "ground" },
-    { id: "airforce", name: "Air Force", abbr: "VVS", domain: "air" },
-  ],
+  UKR: UKR_MILITARY_BRANCHES,
+  BLR: BLR_MILITARY_BRANCHES,
   // Czechoslovakia dissolved 1 Jan 1993 — landlocked, no naval branch.
-  CS: [
-    { id: "ground", name: "Ground Forces", abbr: "PV", domain: "ground", dissolvedYear: 1993 },
-    { id: "airforce", name: "Air Force", abbr: "CSL", domain: "air", dissolvedYear: 1993 },
-  ],
+  CS: CS_MILITARY_BRANCHES,
   // The Baltic republics are one country here, so one set of branches. The naval
   // branch matters more than the ground branch: Tallinn, Riga and Liepaja were
   // the Baltic Fleet's home ports.
-  BAL: [
-    { id: "ground", name: "Ground Forces", abbr: "SV", domain: "ground" },
-    { id: "navy", name: "Naval Forces", abbr: "VMS", domain: "naval" },
-    { id: "airforce", name: "Air Force", abbr: "VVS", domain: "air" },
-  ],
+  BAL: BAL_MILITARY_BRANCHES,
   // ── Soviet Union / Russia ────────────────────────────────────────────────
   // Era-neutral service names: one row serves both a 1953 Soviet and a 2019
   // Russian game (Branch has no namesByYear). PVO Strany became a separate
@@ -453,8 +475,8 @@ export const MILITARY_BRANCHES_BY_COUNTRY: Record<CountryId, Branch[]> = {
   FI: FI_MILITARY_BRANCHES,
   // Nationale Volksarmee: stood up 1 Mar 1956; dissolved with the GDR 3 Oct 1990.
   DD: DD_MILITARY_BRANCHES,
-  SCO: [],
-  WAL: [],
+  SCO: SCO_MILITARY_BRANCHES,
+  WAL: WAL_MILITARY_BRANCHES,
 };
 
 /**
@@ -471,18 +493,18 @@ export const MILITARY_COUNTRY_SCALE: Record<CountryId, number> = {
   IE: IE_MILITARY_SCALE,
   BR: BR_MILITARY_SCALE,
   NG: NG_MILITARY_SCALE,
-  HU: 0.9,
-  PL: 1.0,
-  RO: 0.9,
-  YU: 0.95,
-  BG: 0.85,
+  HU: HU_MILITARY_SCALE,
+  PL: PL_MILITARY_SCALE,
+  RO: RO_MILITARY_SCALE,
+  YU: YU_MILITARY_SCALE,
+  BG: BG_MILITARY_SCALE,
   // Union republics buy at all-Union prices, so no discount against RU's scale;
   // their force is small because the order of battle is small, not because
   // equipment is cheap.
-  UKR: 1.1,
-  BLR: 1.0,
-  CS: 1.0,
-  BAL: 1.0,
+  UKR: UKR_MILITARY_SCALE,
+  BLR: BLR_MILITARY_SCALE,
+  CS: CS_MILITARY_SCALE,
+  BAL: BAL_MILITARY_SCALE,
   RU: RU_MILITARY_SCALE,
   FR: FR_MILITARY_SCALE,
   IT: IT_MILITARY_SCALE,
@@ -493,8 +515,8 @@ export const MILITARY_COUNTRY_SCALE: Record<CountryId, number> = {
   AT: AT_MILITARY_SCALE,
   FI: FI_MILITARY_SCALE,
   DD: DD_MILITARY_SCALE,
-  SCO: 1.0,
-  WAL: 1.0,
+  SCO: SCO_MILITARY_SCALE,
+  WAL: WAL_MILITARY_SCALE,
 };
 
 /** Defense cabinet position per country. */
@@ -507,18 +529,18 @@ export const DEFENSE_POSITION_BY_COUNTRY: Record<CountryId, string | null> = {
   IE: IE_CABINET_SEAT_IDS.defense,
   BR: BR_CABINET_SEAT_IDS.defense,
   NG: NG_CABINET_SEAT_IDS.defense,
-  HU: "minister_of_defence",
-  PL: "minister_of_defence",
-  RO: "minister_of_defence",
-  YU: "minister_of_defence",
-  BG: "minister_of_defence",
+  HU: HU_CABINET_SEAT_IDS.defense,
+  PL: PL_CABINET_SEAT_IDS.defense,
+  RO: RO_CABINET_SEAT_IDS.defense,
+  YU: YU_CABINET_SEAT_IDS.defense,
+  BG: BG_CABINET_SEAT_IDS.defense,
   // Republican defence commissariats/ministries existed on paper from 1944 (see
   // MILITARY_BRANCHES_BY_COUNTRY), so the post is real even though the Soviet
   // General Staff held the actual command authority.
-  UKR: "minister_of_defence",
-  BLR: "minister_of_defence",
-  CS: "minister_of_defence",
-  BAL: "minister_of_defence",
+  UKR: UKR_CABINET_SEAT_IDS.defense,
+  BLR: BLR_CABINET_SEAT_IDS.defense,
+  CS: CS_CABINET_SEAT_IDS.defense,
+  BAL: BAL_CABINET_SEAT_IDS.defense,
   RU: RU_CABINET_SEAT_IDS.defense,
   FR: FR_CABINET_SEAT_IDS.defense,
   IT: IT_CABINET_SEAT_IDS.defense,
@@ -529,8 +551,8 @@ export const DEFENSE_POSITION_BY_COUNTRY: Record<CountryId, string | null> = {
   AT: AT_CABINET_SEAT_IDS.defense,
   FI: FI_CABINET_SEAT_IDS.defense,
   DD: DD_CABINET_SEAT_IDS.defense,
-  SCO: null,
-  WAL: null,
+  SCO: SCO_CABINET_SEAT_IDS.defense,
+  WAL: WAL_CABINET_SEAT_IDS.defense,
 };
 
 /** National readiness tier → global force modifier. */
