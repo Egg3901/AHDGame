@@ -19,7 +19,11 @@ import {
 } from "@/lib/constants/corporations";
 import { getCountryConfig } from "@/lib/constants/countries";
 import { buildCorporationLookups } from "./buildLookups";
-import { computeSharePrices, type SharePriceInput } from "./sharePriceFormula";
+import {
+  annualizedTrailingGrowthRate,
+  computeSharePrices,
+  type SharePriceInput,
+} from "./sharePriceFormula";
 import { indexFundOwnershipFraction } from "@/lib/corporations/indexOwnership";
 import { normalizedEarningsFromHistory } from "./earningsRollingAverage";
 import { applyEquityMethodEarnings } from "./equityMethodEarnings";
@@ -47,6 +51,12 @@ export interface RecomputeSharePricesResult {
 // CountryConfig entry. Not a designed economic parameter — just prevents a
 // bad countryId from crashing repricing for every corporation.
 const FALLBACK_PRIME_RATE_PERCENT = 5;
+
+// How many prior corporationHistory turns feed the plants trailing-growth
+// estimator. 3 matches the earnings rolling-average window
+// (FUNDAMENTAL_ROLLING_AVG_TURNS): the premium reacts to the same recent
+// past the earnings component prices. One query, no per-corp reads.
+const TRAILING_GROWTH_WINDOW_TURNS = 3;
 
 /**
  * Bulk re-price every corporation using fresh post-bondTurn state.
@@ -76,26 +86,44 @@ export async function recomputeSharePricesAfterBondTurn(
   // Pull this turn's snapshots in one query — we need sectorNPV, incomePreDividends,
   // perTurnBondCouponIncome, perTurnBondDragOnNetIncome (none of which change in
   // bondTurn — sectors and revenue are corp-turn outputs).
-  // Also pull PREVIOUS turn's snapshot for the smoothing-term anchor: by the
-  // time we run, both corp.sharePrice and this turn's hist.sharePrice already
-  // hold the corp-turn placeholder. Using that as previousSharePrice in the
-  // formula would double-apply the 0.15 smoothing weight, biasing the result
-  // toward the placeholder. Pulling turn-1 gives the true prior.
+  // Also pull the previous up-to-3 turns of snapshots in a second query. The
+  // turn-1 row anchors the smoothing term: by the time we run, both
+  // corp.sharePrice and this turn's hist.sharePrice already hold the corp-turn
+  // placeholder. Using that as previousSharePrice in the formula would
+  // double-apply the 0.15 smoothing weight, biasing the result toward the
+  // placeholder. Pulling turn-1 gives the true prior. The wider window feeds
+  // the plants trailing-growth estimator (sectorNPV history); still one query,
+  // no per-corp reads.
   const [histRows, prevHistRows] = await Promise.all([
     database.collection<CorporationHistory>("corporationHistory").find({ turn }).toArray(),
     database
       .collection<CorporationHistory>("corporationHistory")
-      .find({ turn: turn - 1 })
-      .project<{ corporationId: ObjectId; sharePrice: number }>({
+      .find({ turn: { $gte: turn - TRAILING_GROWTH_WINDOW_TURNS, $lt: turn } })
+      .project<{ corporationId: ObjectId; turn: number; sharePrice: number; sectorNPV: number }>({
         corporationId: 1,
+        turn: 1,
         sharePrice: 1,
+        sectorNPV: 1,
       })
       .toArray(),
   ]);
   const histByCorpId = new Map(histRows.map((h) => [h.corporationId.toString(), h]));
-  const prevPriceByCorpId = new Map(
-    prevHistRows.map((h) => [h.corporationId.toString(), h.sharePrice])
-  );
+  const priorsByCorpId = new Map<
+    string,
+    { turn: number; sharePrice: number; sectorNPV: number }[]
+  >();
+  for (const h of prevHistRows) {
+    const key = h.corporationId.toString();
+    const list = priorsByCorpId.get(key);
+    if (list) list.push(h);
+    else priorsByCorpId.set(key, [h]);
+  }
+  for (const list of priorsByCorpId.values()) list.sort((a, b) => a.turn - b.turn);
+  const prevPriceByCorpId = new Map<string, number>();
+  for (const [key, list] of priorsByCorpId) {
+    const prior = list[list.length - 1];
+    if (prior.turn === turn - 1) prevPriceByCorpId.set(key, prior.sharePrice);
+  }
 
   // Equity-adjusted earnings: corp.earningsHistory was already updated this turn
   // by processCorporationTurn. buildCorporationLookups was just called so corp
@@ -159,16 +187,11 @@ export async function recomputeSharePricesAfterBondTurn(
     // build orders do. It keeps whatever value it was last left at, forever.
     // Feeding it to the Gordon-growth terminal-value premium below would pay
     // every corp a permanent unearned premium for a setting that does nothing.
-    //
-    // The honest replacement would be a trailing capacity delta, but nothing
-    // persists a per-sector capacity history to difference against (corporation
-    // History carries sectorNPV, not capitalStock), so computing one here would
-    // mean a second per-sector time series purely for this term. Until that
-    // exists, the growth premium is switched OFF under plants — g = 0 is the
-    // premium's neutral value (component 3 evaluates to exactly 0), which
-    // prices a corp on assets + earnings only. That understates a genuinely
-    // expanding corp rather than overstating a stagnant one, which is the
-    // right way round for a valuation floor.
+    // Instead g is estimated from trailing sector-NPV growth over the last
+    // TRAILING_GROWTH_WINDOW_TURNS turns (annualized). A corp whose enterprise
+    // value is actually expanding earns a premium; a flat or shrinking one
+    // gets g = 0, the premium's neutral value. The formula still caps g at
+    // costOfCapital - buffer, so this can never blow up the terminal value.
     const sectors = lookups.sectorsByCorp.get(id) ?? [];
     let growthNumer = 0;
     let growthDenom = 0;
@@ -178,7 +201,16 @@ export async function recomputeSharePricesAfterBondTurn(
       growthNumer += (gr / 100) * rev;
       growthDenom += rev;
     }
-    const sectorGrowthRate = plantsEnabled ? 0 : growthDenom > 0 ? growthNumer / growthDenom : 0;
+    const sectorGrowthRate = plantsEnabled
+      ? annualizedTrailingGrowthRate(
+          typeof hist.sectorNPV === "number" ? hist.sectorNPV : 0,
+          (priorsByCorpId.get(id) ?? []).map((p) => ({ turn: p.turn, sectorNpv: p.sectorNPV })),
+          turn,
+          TURNS_PER_YEAR
+        )
+      : growthDenom > 0
+        ? growthNumer / growthDenom
+        : 0;
 
     // Capitalized build spend in flight (P3a). Already ₳ on disk — see the
     // capex contract in sectorProfitBasis.ts — so no FX normalization.
