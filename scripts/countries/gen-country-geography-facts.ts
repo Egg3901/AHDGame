@@ -87,6 +87,7 @@ const unMemberSince = maybe("COUNTRY_UN_MEMBER_SINCE");
 const conscription = maybe("CONSCRIPTION_SEED");
 
 const out = `import type { AdjacencyMap } from "@/lib/constants/stateAdjacency";
+import type { CountryMapConfig } from "@/lib/commodity-map/commodityMapRegistry";
 import type { Continent } from "@/lib/constants/countryContinents";${
   conscription ? '\nimport type { ConscriptionPolicy } from "@/lib/demographics/conscription";' : ""
 }
@@ -169,6 +170,31 @@ export const ${COUNTRY}_CORE5_NORMALS: Record<string, NormalAnchor[]> = ${v("COR
  * to the relocation guard until its rule was fixed.
  */
 export const ${COUNTRY}_ADJACENCY_MAP: AdjacencyMap = ${v("STATE_ADJACENCY")};
+
+/**
+ * Map registry: where the country's map lives and how its features map to
+ * region ids.
+ *
+ * ⚠ THIS IS NOT A COUPLE OF FIELDS. A hand-written draft of the geography
+ * module stubbed it as \`{ countryId, anchor }\` and would have broken the map
+ * outright: the real record carries \`name\`, \`overviewPath\`, \`mapPath\`,
+ * \`hasRegionMap\`, \`geoUrl\` and a \`featureIdToStateId\` table with one entry per
+ * region. Guessing the shape of a config object is the same failure as guessing
+ * a value, and it typechecks just as readily behind a cast.
+ */
+export const ${COUNTRY}_MAP_REGISTRY: CountryMapConfig = ${v("COUNTRY_MAP_REGISTRY")};
+
+/**
+ * 1991-era cohort multipliers.
+ *
+ * ⚠ 1991 ONLY. \`POPULATION_MULTIPLIERS\` lives in \`stateDemographics1991.ts\`
+ * and describes how that era's cohorts differ from the modern ones. It says
+ * nothing about any other preset, and a country missing from it passes through
+ * unchanged at 1.0 rather than taking someone else's numbers.
+ */
+export const ${COUNTRY}_POPULATION_MULTIPLIERS: Record<string, number> = ${v(
+  "POPULATION_MULTIPLIERS"
+)};
 `;
 
 mkdirSync(dirname(OUT), { recursive: true });

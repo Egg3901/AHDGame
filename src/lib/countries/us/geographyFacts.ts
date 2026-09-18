@@ -1,4 +1,5 @@
 import type { AdjacencyMap } from "@/lib/constants/stateAdjacency";
+import type { CountryMapConfig } from "@/lib/commodity-map/commodityMapRegistry";
 import type { Continent } from "@/lib/constants/countryContinents";
 import type { ConscriptionPolicy } from "@/lib/demographics/conscription";
 import type { NormalAnchor } from "@/lib/era/metricCatalog";
@@ -251,4 +252,98 @@ export const US_ADJACENCY_MAP: AdjacencyMap = {
   WV: ["KY", "MD", "OH", "PA", "VA"],
   WI: ["IA", "IL", "MI", "MN"],
   WY: ["CO", "ID", "MT", "NE", "SD", "UT"],
+};
+
+/**
+ * Map registry: where the country's map lives and how its features map to
+ * region ids.
+ *
+ * ⚠ THIS IS NOT A COUPLE OF FIELDS. A hand-written draft of the geography
+ * module stubbed it as `{ countryId, anchor }` and would have broken the map
+ * outright: the real record carries `name`, `overviewPath`, `mapPath`,
+ * `hasRegionMap`, `geoUrl` and a `featureIdToStateId` table with one entry per
+ * region. Guessing the shape of a config object is the same failure as guessing
+ * a value, and it typechecks just as readily behind a cast.
+ */
+export const US_MAP_REGISTRY: CountryMapConfig = {
+  countryId: "US",
+  name: "United States",
+  overviewPath: "/country/us",
+  mapPath: "/country/us/map",
+  hasRegionMap: true,
+  geoUrl: "https://cdn.jsdelivr.net/npm/us-atlas@3/states-10m.json",
+  featureIdToStateId: {
+    "10": "DE",
+    "11": "DC",
+    "12": "FL",
+    "13": "GA",
+    "15": "HI",
+    "16": "ID",
+    "17": "IL",
+    "18": "IN",
+    "19": "IA",
+    "20": "KS",
+    "21": "KY",
+    "22": "LA",
+    "23": "ME",
+    "24": "MD",
+    "25": "MA",
+    "26": "MI",
+    "27": "MN",
+    "28": "MS",
+    "29": "MO",
+    "30": "MT",
+    "31": "NE",
+    "32": "NV",
+    "33": "NH",
+    "34": "NJ",
+    "35": "NM",
+    "36": "NY",
+    "37": "NC",
+    "38": "ND",
+    "39": "OH",
+    "40": "OK",
+    "41": "OR",
+    "42": "PA",
+    "44": "RI",
+    "45": "SC",
+    "46": "SD",
+    "47": "TN",
+    "48": "TX",
+    "49": "UT",
+    "50": "VT",
+    "51": "VA",
+    "53": "WA",
+    "54": "WV",
+    "55": "WI",
+    "56": "WY",
+    "01": "AL",
+    "02": "AK",
+    "04": "AZ",
+    "05": "AR",
+    "06": "CA",
+    "08": "CO",
+    "09": "CT",
+  },
+  projection: "albers-usa",
+};
+
+/**
+ * 1991-era cohort multipliers.
+ *
+ * ⚠ 1991 ONLY. `POPULATION_MULTIPLIERS` lives in `stateDemographics1991.ts`
+ * and describes how that era's cohorts differ from the modern ones. It says
+ * nothing about any other preset, and a country missing from it passes through
+ * unchanged at 1.0 rather than taking someone else's numbers.
+ */
+export const US_POPULATION_MULTIPLIERS: Record<string, number> = {
+  new_immigrants: 0.4,
+  secular_professionals: 0.6,
+  college_liberals: 0.6,
+  evangelicals: 1.2,
+  rural_traditionalists: 1.15,
+  union_trades: 1.6,
+  young_renters: 0.85,
+  retirees: 0.85,
+  small_business: 1.1,
 };

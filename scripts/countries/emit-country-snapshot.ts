@@ -120,6 +120,7 @@ import { COUNTRY_READINESS_EXPECTATIONS } from "../../src/lib/constants/countryR
 import { INITIAL_RATES } from "../../src/lib/constants/currencies";
 import { COUNTRY_BUCKET_LABELS } from "../../src/lib/demographics/bucketLabelsByCountry";
 import { COUNTRY_ANCHOR } from "../../src/lib/maps/countryAnchors";
+import { POPULATION_MULTIPLIERS } from "../../src/lib/seeds/reference/era1991PopulationMultipliers";
 import { COUNTRY_COMMAND_FLAVOR } from "../../src/lib/military/theaters";
 import { MAJOR_DEFAULT_PARTIES } from "../../src/lib/seeds/defaultPartyTiers";
 import { GDP_DENOMINATION_1953 } from "../../src/lib/seeds/reference/gdpDenomination";
@@ -277,6 +278,7 @@ const REGISTRIES: Record<string, unknown> = {
   MAJOR_DEFAULT_PARTIES,
   MECHANICS_BY_COUNTRY,
   MEDIAN_INCOME_THRESHOLDS,
+  POPULATION_MULTIPLIERS,
   ORDERS_BY_COUNTRY,
   UNION_NAMES_BY_ERA,
   CABINET_IDENTITY,
