@@ -25,6 +25,7 @@ import { UK_ECONOMY } from "@/lib/countries/uk/economy";
 import { DE_ECONOMY } from "@/lib/countries/de/economy";
 import { CN_ECONOMY } from "@/lib/countries/cn/economy";
 import { IE_ECONOMY } from "@/lib/countries/ie/economy";
+import { BR_ECONOMY } from "@/lib/countries/br/economy";
 
 /** Default daily growth rate for unowned sectors (background economy) */
 export const DEFAULT_UNOWNED_GROWTH_RATE = 0.5;
@@ -66,7 +67,7 @@ export const NEUTRAL_STATE_SALES_TAX_BY_COUNTRY: Partial<Record<CountryId, numbe
   JP: JP_ECONOMY.tax.neutralStateSalesTax,
   DE: DE_ECONOMY.tax.neutralStateSalesTax,
   IE: IE_ECONOMY.tax.neutralStateSalesTax,
-  BR: 5,
+  BR: BR_ECONOMY.tax.neutralStateSalesTax,
   CN: CN_ECONOMY.tax.neutralStateSalesTax,
 };
 

@@ -11,6 +11,7 @@ import { IE_IDENTITY } from "@/lib/countries/ie/identity";
 import { RU_IDENTITY } from "@/lib/countries/ru/identity";
 import { DD_IDENTITY } from "@/lib/countries/dd/identity";
 import { NG_IDENTITY } from "@/lib/countries/ng/identity";
+import { BR_IDENTITY } from "@/lib/countries/br/identity";
 
 /**
  * Institution identity overlays for the country-pages masthead family
@@ -63,13 +64,7 @@ export const EXECUTIVE_TEXT: Record<CountryId, IdentityText> = {
   JP: JP_IDENTITY.executiveText,
   IE: IE_IDENTITY.executiveText,
   CN: CN_IDENTITY.executiveText,
-  BR: {
-    glyph: "PR",
-    serif: "mono",
-    registry: "Federative Republic of Brazil · Presidency",
-    title: "Palácio do Planalto",
-    titleEn: "Presidential Palace",
-  },
+  BR: BR_IDENTITY.executiveText,
   NG: NG_IDENTITY.executiveText,
   HU: {
     glyph: "MT",
@@ -205,13 +200,7 @@ export const POLICY_TEXT: Record<CountryId, IdentityText> = {
   JP: JP_IDENTITY.policyText,
   IE: IE_IDENTITY.policyText,
   CN: CN_IDENTITY.policyText,
-  BR: {
-    glyph: "§",
-    serif: "mono",
-    registry: "Code of National Law · Federative Republic of Brazil",
-    title: "Direito Nacional",
-    titleEn: "National Policy",
-  },
+  BR: BR_IDENTITY.policyText,
   NG: NG_IDENTITY.policyText,
   HU: {
     glyph: "§",

@@ -65,7 +65,8 @@ describe("Japan satisfies the country contract", () => {
     expect(JP.institutions.config.name).toBe("Japan");
     // Optional on the contract since Russia has no row; Japan HAS one.
     expect(JP.institutions.legislativeProcess?.executive.title).toBeTruthy();
-    expect(JP.institutions.cabinet.positions.length).toBeGreaterThan(0);
+    // Optional on the contract: Brazil's cabinet is the shared economy-tier set.
+    expect(JP.institutions.cabinet.positions?.length).toBeGreaterThan(0);
     expect(Object.keys(JP.institutions.cabinet.orders ?? {}).length).toBeGreaterThan(0);
     expect(JP.institutions.military.branches.length).toBeGreaterThan(0);
 

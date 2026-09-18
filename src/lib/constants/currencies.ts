@@ -18,6 +18,7 @@ import { IE_ECONOMY } from "@/lib/countries/ie/economy";
 import { RU_ECONOMY } from "@/lib/countries/ru/economy";
 import { DD_ECONOMY } from "@/lib/countries/dd/economy";
 import { NG_ECONOMY } from "@/lib/countries/ng/economy";
+import { BR_ECONOMY } from "@/lib/countries/br/economy";
 
 /**
  * Currency codes for all countries — active and future.
@@ -89,7 +90,7 @@ export const COUNTRY_CURRENCY_MAP: Record<CountryId, CurrencyCode> = {
   // (1:1 GBP) can have its own exchangeRates doc without colliding with DE's DM/EUR rate.
   // Display shows "€" when gameState.eurozoneEnabled (see getEraAwareCurrencySymbol).
   IE: IE_ECONOMY.currencyCode,
-  BR: "BRL",
+  BR: BR_ECONOMY.currencyCode,
   CN: CN_ECONOMY.currencyCode,
   NG: NG_ECONOMY.currencyCode,
   HU: "HUF",
@@ -753,7 +754,7 @@ export const ECONOMIC_BASELINES: Partial<Record<CountryId, EconomicBaseline>> = 
   JP: JP_ECONOMY.economicBaseline,
   DE: DE_ECONOMY.economicBaseline,
   IE: IE_ECONOMY.economicBaseline,
-  BR: { gdpGrowth: 2.5, tradeGrowth: 2.0 },
+  BR: BR_ECONOMY.economicBaseline,
   CN: CN_ECONOMY.economicBaseline,
   NG: NG_ECONOMY.economicBaseline,
 };
@@ -777,7 +778,7 @@ export const MONETARY_BASELINES: Record<CountryId, MonetaryBaseline> = {
   JP: JP_ECONOMY.monetary.baseline,
   DE: DE_ECONOMY.monetary.baseline,
   IE: IE_ECONOMY.monetary.baseline,
-  BR: { targetInflation: 4.0, neutralPrimeRate: 8.0 },
+  BR: BR_ECONOMY.monetary.baseline,
   CN: CN_ECONOMY.monetary.baseline,
   NG: NG_ECONOMY.monetary.baseline,
   HU: { targetInflation: 3.0, neutralPrimeRate: 5.0 },

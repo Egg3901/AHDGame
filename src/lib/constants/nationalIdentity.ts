@@ -8,6 +8,7 @@ import { IE_IDENTITY } from "@/lib/countries/ie/identity";
 import { RU_IDENTITY } from "@/lib/countries/ru/identity";
 import { DD_IDENTITY } from "@/lib/countries/dd/identity";
 import { NG_IDENTITY } from "@/lib/countries/ng/identity";
+import { BR_IDENTITY } from "@/lib/countries/br/identity";
 
 /**
  * National-identity layer for state-owned / National Corporation surfaces.
@@ -85,21 +86,7 @@ export const NATIONAL_IDENTITY: Record<CountryId, NationalIdentity> = {
   IE: IE_IDENTITY.national,
   // Not in the design bundle — same machinery, own palette. Refine when these
   // countries get their nationalization flavor pass (spec §18).
-  BR: {
-    glyph: "BR",
-    serif: "mono",
-    motif: "starRing",
-    name: "Brazil National Corporation",
-    native: "Empresa Nacional do Brasil",
-    registry: "República Federativa do Brasil · Patrimônio do Estado",
-    ministry: "TESOURO NACIONAL",
-    publicSeal: "REGISTRO PÚBLICO",
-    hqCity: "Brasília",
-    palette: ["#0f3b24", "#0b2a19", "#07180f"],
-    accent: "#d4b13f",
-    accentSoft: "#e8cf78",
-    accentName: "Verde-amarelo",
-  },
+  BR: BR_IDENTITY.national,
   NG: NG_IDENTITY.national,
   HU: {
     glyph: "HU",

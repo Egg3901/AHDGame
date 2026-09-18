@@ -1,17 +1,17 @@
 import type { CountryGeography } from "../contract";
-import { ngMetricPresets1953 } from "@/lib/seeds/ng/ngMetricPresets1953";
-import { ngMetricPresets1991, ngMetricPresets2019 } from "@/lib/seeds/ng/ngMetricPresets";
+import { ngMetricPresets1953 } from "./data/ngMetricPresets1953";
+import { ngMetricPresets1991, ngMetricPresets2019 } from "./data/ngMetricPresets";
 import { ngRegionCensusData } from "@/lib/seeds/ng/ngRegionCensusData";
 import { ngRegionCensusData1953 } from "@/lib/seeds/ng/ngRegionCensusData1953";
 import { ngRegionCensusData1979 } from "@/lib/seeds/ng/ngRegionCensusData1979";
-import { ngRegions } from "@/lib/seeds/ng/ngRegions";
-import { ngRegions1953 } from "@/lib/seeds/ng/ngRegions1953";
-import { ngRegions1979 } from "@/lib/seeds/ng/ngRegions1979";
-import { ngRegions1991 } from "@/lib/seeds/ng/ngRegions1991";
-import { ngRegions1999 } from "@/lib/seeds/ng/ngRegions1999";
-import { ngRegions2007 } from "@/lib/seeds/ng/ngRegions2007";
-import { ngRegions2023 } from "@/lib/seeds/ng/ngRegions2023";
-import { ngStateMetrics } from "@/lib/seeds/ng/ngStateMetrics";
+import { ngRegions } from "./data/ngRegions";
+import { ngRegions1953 } from "./data/ngRegions1953";
+import { ngRegions1979 } from "./data/ngRegions1979";
+import { ngRegions1991 } from "./data/ngRegions1991";
+import { ngRegions1999 } from "./data/ngRegions1999";
+import { ngRegions2007 } from "./data/ngRegions2007";
+import { ngRegions2023 } from "./data/ngRegions2023";
+import { ngStateMetrics } from "./data/ngStateMetrics";
 import {
   NG_ADJACENCY_MAP,
   NG_CONSCRIPTION,

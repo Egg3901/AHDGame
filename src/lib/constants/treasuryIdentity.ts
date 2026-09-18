@@ -9,6 +9,7 @@ import { IE_IDENTITY } from "@/lib/countries/ie/identity";
 import { RU_IDENTITY } from "@/lib/countries/ru/identity";
 import { DD_IDENTITY } from "@/lib/countries/dd/identity";
 import { NG_IDENTITY } from "@/lib/countries/ng/identity";
+import { BR_IDENTITY } from "@/lib/countries/br/identity";
 
 /**
  * Treasury / Finance-Ministry identity overlay for the National Budget surface.
@@ -63,17 +64,7 @@ export const TREASURY_TEXT: Record<
   DE: DE_IDENTITY.treasuryText,
   JP: JP_IDENTITY.treasuryText,
   IE: IE_IDENTITY.treasuryText,
-  BR: {
-    glyph: "BR",
-    serif: "mono",
-    budgetTitle: "Orçamento Nacional",
-    budgetTitleEn: "National Budget",
-    ministry: "TESOURO NACIONAL",
-    publicSeal: "PÚBLICO · PUBLIC",
-    registry: "Federative Republic of Brazil · National Treasury",
-    native: "República Federativa do Brasil · Tesouro Nacional",
-    nativeEn: "Federative Republic of Brazil · National Treasury",
-  },
+  BR: BR_IDENTITY.treasuryText,
   NG: NG_IDENTITY.treasuryText,
   HU: {
     glyph: "HU",

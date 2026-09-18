@@ -122,7 +122,7 @@ export const SOVEREIGN_CORP_LEGAL_STRUCTURE: Partial<Record<CountryId, LegalStru
   JP: JP_ECONOMY.sovereignCorpLegalStructure,
   DE: DE_ECONOMY.sovereignCorpLegalStructure,
   IE: IE_ECONOMY.sovereignCorpLegalStructure,
-  BR: "br_sa_aberta",
+  BR: BR_ECONOMY.sovereignCorpLegalStructure,
   CN: CN_ECONOMY.sovereignCorpLegalStructure,
   NG: NG_ECONOMY.sovereignCorpLegalStructure,
   // The USSR has no bespoke joint-stock legal form (Cold-War command economy);
@@ -509,6 +509,7 @@ import { IE_ECONOMY } from "@/lib/countries/ie/economy";
 import { RU_ECONOMY } from "@/lib/countries/ru/economy";
 import { DD_ECONOMY } from "@/lib/countries/dd/economy";
 import { NG_ECONOMY } from "@/lib/countries/ng/economy";
+import { BR_ECONOMY } from "@/lib/countries/br/economy";
 
 /**
  * Authored historical fiscal baselines for 1953 (Korean War defense shares,

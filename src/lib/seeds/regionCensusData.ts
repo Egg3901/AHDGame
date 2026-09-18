@@ -77,6 +77,7 @@ import { IE_GEOGRAPHY } from "@/lib/countries/ie/geography";
 import { RU_GEOGRAPHY } from "@/lib/countries/ru/geography";
 import { DD_GEOGRAPHY } from "@/lib/countries/dd/geography";
 import { NG_GEOGRAPHY } from "@/lib/countries/ng/geography";
+import { BR_GEOGRAPHY } from "@/lib/countries/br/geography";
 
 export const CENSUS_BUNDLES: Partial<Record<CountryId, PresetBundles>> = {
   PL: {
@@ -140,12 +141,7 @@ export const CENSUS_BUNDLES: Partial<Record<CountryId, PresetBundles>> = {
   DE: DE_GEOGRAPHY.censusBundles,
   IE: IE_GEOGRAPHY.censusBundles,
   CN: CN_GEOGRAPHY.censusBundles,
-  BR: {
-    "1953-default": brRegionCensusData1953,
-    "1979-default": brRegionCensusData1979,
-    "2019-default": brRegionCensusData,
-    "1991-default": brRegionCensusData1991,
-  },
+  BR: BR_GEOGRAPHY.censusBundles,
   SE: {
     "1953-default": seRegionCensusData1953,
     "1979-default": seRegionCensusData,

@@ -33,6 +33,7 @@ import { IE_WORLD_REGION, IE_UN_MEMBER_SINCE } from "@/lib/countries/ie/geograph
 import { RU_WORLD_REGION, RU_UN_MEMBER_SINCE } from "@/lib/countries/ru/geographyFacts";
 import { DD_WORLD_REGION } from "@/lib/countries/dd/geographyFacts";
 import { NG_WORLD_REGION, NG_UN_MEMBER_SINCE } from "@/lib/countries/ng/geographyFacts";
+import { BR_WORLD_REGION, BR_UN_MEMBER_SINCE } from "@/lib/countries/br/geographyFacts";
 
 export type WorldEntityId = string;
 export type WorldEntityStatus = "sovereign" | "dependent" | "emergent" | "dissolved";
@@ -216,7 +217,7 @@ function accessFromConfig(countryId: CountryId): LegacyCountryAccess {
 /** Coverage region for CountryConfig-backed entities (1953 gate + diagnostics). */
 export const COUNTRY_REGIONS: Record<CountryId, WorldEntityRegion> = {
   US: US_WORLD_REGION,
-  BR: "americas",
+  BR: BR_WORLD_REGION,
   UK: UK_WORLD_REGION,
   FR: "europe",
   DE: DE_WORLD_REGION,
@@ -253,7 +254,7 @@ export const COUNTRY_UN_MEMBER_SINCE: Partial<Record<CountryId, number>> = {
   FR: 1945,
   RU: RU_UN_MEMBER_SINCE,
   CN: CN_UN_MEMBER_SINCE,
-  BR: 1945,
+  BR: BR_UN_MEMBER_SINCE,
   DE: undefined, // FRG admitted 1973
   DD: undefined, // GDR admitted 1973
   IT: 1955,

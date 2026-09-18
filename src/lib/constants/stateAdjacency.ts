@@ -29,6 +29,7 @@ import { IE_ADJACENCY_MAP } from "@/lib/countries/ie/geographyFacts";
 import { RU_ADJACENCY_MAP } from "@/lib/countries/ru/geographyFacts";
 import { DD_ADJACENCY_MAP } from "@/lib/countries/dd/geographyFacts";
 import { NG_ADJACENCY_MAP } from "@/lib/countries/ng/geographyFacts";
+import { BR_ADJACENCY_MAP } from "@/lib/countries/br/geographyFacts";
 
 export type AdjacencyMap = Record<string, readonly string[]>;
 
@@ -68,13 +69,6 @@ export type AdjacencyMap = Record<string, readonly string[]>;
  */
 
 /** Brazil's five IBGE macro-regions. */
-const BR_ADJACENCY: AdjacencyMap = {
-  NORTE: ["NORDESTE", "CENTRO_OESTE"],
-  NORDESTE: ["NORTE", "CENTRO_OESTE", "SUDESTE"],
-  CENTRO_OESTE: ["NORTE", "NORDESTE", "SUDESTE", "SUL"],
-  SUDESTE: ["NORDESTE", "CENTRO_OESTE", "SUL"],
-  SUL: ["CENTRO_OESTE", "SUDESTE"],
-};
 
 /** Nigeria's six geopolitical zones. */
 
@@ -296,7 +290,7 @@ export const STATE_ADJACENCY: Readonly<Record<CountryId, AdjacencyMap>> = {
   JP: JP_ADJACENCY_MAP,
   CN: CN_ADJACENCY_MAP,
   IE: IE_ADJACENCY_MAP,
-  BR: BR_ADJACENCY,
+  BR: BR_ADJACENCY_MAP,
   NG: NG_ADJACENCY_MAP,
   HU: HU_ADJACENCY,
   PL: PL_ADJACENCY,

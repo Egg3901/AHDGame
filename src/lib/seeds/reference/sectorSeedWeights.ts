@@ -21,6 +21,7 @@ import { IE_ECONOMY } from "@/lib/countries/ie/economy";
 import { RU_ECONOMY } from "@/lib/countries/ru/economy";
 import { DD_ECONOMY } from "@/lib/countries/dd/economy";
 import { NG_ECONOMY } from "@/lib/countries/ng/economy";
+import { BR_ECONOMY } from "@/lib/countries/br/economy";
 
 type SectorWeightMap = Partial<Record<CorporationType, number>>;
 
@@ -105,25 +106,7 @@ export const COUNTRY_SECTOR_WEIGHTS: Record<CountryId, SectorWeightMap> = {
   JP: JP_ECONOMY.sectorWeights.base,
   CN: CN_ECONOMY.sectorWeights.base,
   IE: IE_ECONOMY.sectorWeights.base,
-  BR: {
-    agriculture: 14,
-    real_estate: 11,
-    energy: 9,
-    extraction: 9,
-    manufacturing: 9,
-    financial: 8,
-    retail: 7,
-    construction: 7,
-    chemical_industries: 6,
-    logistics: 4,
-    healthcare: 4,
-    telecommunications: 3,
-    technology: 2,
-    entertainment: 2,
-    media: 2,
-    automobiles: 2,
-    defense: 1,
-  },
+  BR: BR_ECONOMY.sectorWeights.base,
   NG: NG_ECONOMY.sectorWeights.base,
   // Hungary — planned socialist economy: heavy industry + agriculture, minimal
   // finance/tech/media.

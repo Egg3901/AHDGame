@@ -13,6 +13,7 @@ import { DE_ECONOMY } from "@/lib/countries/de/economy";
 import { CN_ECONOMY } from "@/lib/countries/cn/economy";
 import { IE_ECONOMY } from "@/lib/countries/ie/economy";
 import { NG_ECONOMY } from "@/lib/countries/ng/economy";
+import { BR_ECONOMY } from "@/lib/countries/br/economy";
 
 export interface BudgetCostContext {
   budgetCapacity: number;
@@ -127,14 +128,7 @@ export const COST_SCALE_ANCHORS: Partial<Record<CountryId, CostScaleAnchor>> = {
   // PPP-normalized R$900B economy. scaleLow = gpcLow/gpcHigh ≈ 6,040/50,698 ≈ 0.12
   // shrinks absolute costs to the same proportion of the economy they were
   // authored at; scaleHigh 1.0 matches the other modern-calibrated sides (IE/CN/NG).
-  BR: {
-    gdpLow: 900_000_000_000,
-    popLow: 149_000_000,
-    scaleLow: 0.12,
-    gdpHigh: 10_900_000_000_000,
-    popHigh: 215_000_000,
-    scaleHigh: 1.0,
-  },
+  BR: BR_ECONOMY.costScaleAnchors,
   // NG spending-law per-capita costs are calibrated in 2019 naira (scaleHigh=1).
   // 1991 nominal GDP-per-capita was ~1/27 of 2019 (₦1.8T/95M vs ₦144T/200M, pre-
   // SAP-devaluation naira), so scaleLow tames the absolute costs for the SAP-era

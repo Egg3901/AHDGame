@@ -18,6 +18,7 @@ import { DE_IDENTITY } from "@/lib/countries/de/identity";
 import { CN_IDENTITY } from "@/lib/countries/cn/identity";
 import { IE_IDENTITY } from "@/lib/countries/ie/identity";
 import { NG_IDENTITY } from "@/lib/countries/ng/identity";
+import { BR_IDENTITY } from "@/lib/countries/br/identity";
 
 export interface EconomyIdentity {
   /** Watermark / chop glyph (经 / US / …). */
@@ -45,15 +46,7 @@ export const ECONOMY_TEXT: Partial<Record<CountryId, Omit<EconomyIdentity, "acce
   DE: DE_IDENTITY.economyText,
   JP: JP_IDENTITY.economyText,
   IE: IE_IDENTITY.economyText,
-  BR: {
-    glyph: "BR",
-    serif: "mono",
-    title: "Panorama Econômico",
-    titleEn: "Economic Outlook",
-    office: "IBGE · Contas Nacionais",
-    officeEn: "IBGE · National Accounts",
-    registry: "Federative Republic of Brazil · National Accounts Registry",
-  },
+  BR: BR_IDENTITY.economyText,
   NG: NG_IDENTITY.economyText,
 };
 

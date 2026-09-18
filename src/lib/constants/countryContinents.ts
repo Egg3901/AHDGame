@@ -8,6 +8,7 @@ import { IE_CONTINENT } from "@/lib/countries/ie/geographyFacts";
 import { RU_CONTINENT } from "@/lib/countries/ru/geographyFacts";
 import { DD_CONTINENT } from "@/lib/countries/dd/geographyFacts";
 import { NG_CONTINENT } from "@/lib/countries/ng/geographyFacts";
+import { BR_CONTINENT } from "@/lib/countries/br/geographyFacts";
 
 export type Continent =
   "North America" | "South America" | "Europe" | "Africa" | "Asia" | "Oceania";
@@ -29,7 +30,7 @@ export const CONTINENT_ORDER: readonly Continent[] = [
  */
 export const COUNTRY_CONTINENT: Record<CountryId, Continent> = {
   US: US_CONTINENT,
-  BR: "South America",
+  BR: BR_CONTINENT,
   UK: UK_CONTINENT,
   IE: IE_CONTINENT,
   DE: DE_CONTINENT,

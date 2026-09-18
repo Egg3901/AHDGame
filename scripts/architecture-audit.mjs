@@ -216,6 +216,11 @@ const SIZE_CAP_EXEMPT = [
   // Nigeria's, before the move. `ngLegislationTypes.ts` is 3,733 lines.
   "src/lib/countries/ng/data/",
   "src/lib/countries/ng/cabinet/",
+  // Brazil's, before the move. Nothing of Brazil's is over the cap today, and
+  // the entry is added anyway: every country before it that waited until after
+  // the move discovered the exemption by failing the gate.
+  "src/lib/countries/br/data/",
+  "src/lib/countries/br/cabinet/",
   "src/lib/constants/cnCabinetMechanics.ts",
   "src/lib/constants/historicalSeats.ts",
   "src/lib/constants/metricDefinitions.ts",

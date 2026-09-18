@@ -206,9 +206,21 @@ export interface CountryInstitutions {
    * here. Holding copies would be a second source of 1,333 lines.
    */
   readonly cabinet: {
-    readonly positions: readonly unknown[];
+    /**
+     * ⚠️ OPTIONAL BECAUSE A SHARED CABINET IS NOT THIS COUNTRY'S CABINET. Brazil
+     * has no `brCabinet.ts`: `MECHANICS_BY_COUNTRY.BR` and its positions sibling
+     * both point at `ECON_COUNTRY_CABINET_POSITIONS`, the economy-tier set that
+     * NINE countries share. The registry has a BR row, so a coverage count would
+     * call it present -- but forwarding it would file shared machinery inside
+     * Brazil's folder and make eight other countries' cabinet Brazil's data.
+     *
+     * That is the opposite failure from an absent row and it looks identical
+     * from the registry side. A folder carries what the country AUTHORS.
+     */
+    readonly positions?: readonly unknown[];
     readonly orders?: Readonly<Record<string, unknown>>;
-    readonly mechanics: Readonly<Record<string, unknown>>;
+    /** Optional for the same reason as `positions`: Brazil's is the shared set. */
+    readonly mechanics?: Readonly<Record<string, unknown>>;
     /**
      * ⚠️ OPTIONAL: East Germany has no `GROUPS` row, and the only reader is
      * `GROUPS[countryId]?.[positionId] ?? "Centre"` -- already written for the

@@ -1,6 +1,6 @@
 import type { CountryInstitutions } from "../contract";
-import { NG_CABINET_POSITIONS } from "@/lib/constants/ngCabinet";
-import { NG_CABINET_MECHANICS } from "@/lib/constants/ngCabinetMechanics";
+import { NG_CABINET_POSITIONS } from "./cabinet/ngCabinet";
+import { NG_CABINET_MECHANICS } from "./cabinet/ngCabinetMechanics";
 import {
   NG_CABINET_GROUPS,
   NG_CABINET_SEAT_IDS,
@@ -13,12 +13,14 @@ import {
 /**
  * Nigeria's institutions.
  *
- * ⚠️ NO `orders`, NO `estatePortfolio` AND NO `legislativeProcess`. Nigeria
- * has no row in `ORDERS_BY_COUNTRY` (10 keys), `ESTATE_PORTFOLIO_BY_COUNTRY`
- * (8 keys) or `LEGISLATIVE_PROCESS` (6 keys), and there is no `ngCabinetOrders.ts`
- * to point at. `getMinisterialOrders` returns `[]`, `seedCabinetEstates` skips
- * the country, and bill readers fall through to `DEFAULT_PROCESS` -- all three
- * predate this folder.
+ * ⚠️ THE FACTS LIVE IN `./institutionsFacts`. This composes them with the
+ * cabinet, which is heavy; a registry wanting one seat id imports the facts
+ * module or it ships the whole cabinet to the browser.
+ *
+ * ⚠️ WHAT IS ABSENT IS ABSENT UPSTREAM, NOT FORGOTTEN. Fields are emitted
+ * only where the facts module declares them and the cabinet file exists on disk.
+ * Every omission here corresponds to a registry with no NG row, recorded
+ * in the runtime harness's ABSENT_UPSTREAM and checked in both directions.
  */
 export const NG_INSTITUTIONS: CountryInstitutions = {
   config: NG_CONFIG,

@@ -5,6 +5,7 @@ import { UK_POPULATION_MULTIPLIERS } from "@/lib/countries/uk/geographyFacts";
 import { DE_POPULATION_MULTIPLIERS } from "@/lib/countries/de/geographyFacts";
 import { CN_POPULATION_MULTIPLIERS } from "@/lib/countries/cn/geographyFacts";
 import { IE_POPULATION_MULTIPLIERS } from "@/lib/countries/ie/geographyFacts";
+import { BR_POPULATION_MULTIPLIERS } from "@/lib/countries/br/geographyFacts";
 
 /**
  * 1991-era cohort multipliers, per country.
@@ -34,14 +35,5 @@ export const POPULATION_MULTIPLIERS: Partial<Record<CountryId, Record<string, nu
   DE: DE_POPULATION_MULTIPLIERS,
   CN: CN_POPULATION_MULTIPLIERS,
   IE: IE_POPULATION_MULTIPLIERS,
-  BR: {
-    evangelical_conservative: 0.5, // 1991 Pentecostal share ~13% vs ~30% in 2020
-    working_class_pt: 1.15, // PT young + growing in 1991
-    rural_agribusiness: 1.2, // Pre-agro-modernization frontier
-    urban_middle_class: 0.8, // Hyperinflation-crushed
-    urban_poor: 1.15, // Plano-Collor-II era peak
-    afro_brazilian: 1.0,
-    business_financial: 0.7, // Pre-Plano-Real
-    young_progressive: 0.85,
-  },
+  BR: BR_POPULATION_MULTIPLIERS,
 };

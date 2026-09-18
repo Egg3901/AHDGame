@@ -28,6 +28,7 @@ import { IE_ORDERS_OF_BATTLE } from "@/lib/countries/ie/institutionsFacts";
 import { RU_ORDERS_OF_BATTLE } from "@/lib/countries/ru/institutionsFacts";
 import { DD_ORDERS_OF_BATTLE } from "@/lib/countries/dd/institutionsFacts";
 import { NG_ORDERS_OF_BATTLE } from "@/lib/countries/ng/institutionsFacts";
+import { BR_ORDERS_OF_BATTLE } from "@/lib/countries/br/institutionsFacts";
 
 export interface OrderOfBattleEntry {
   /** Must match a Branch id for this country (`MILITARY_BRANCHES_BY_COUNTRY`). */
@@ -241,14 +242,7 @@ export const ORDERS_OF_BATTLE: Partial<Record<CountryId, OrderOfBattleEntry[]>> 
     { branchId: "navy", type: "Frigate Squadron", count: 1 },
     { branchId: "airforce", type: "Fighter Wing", count: 1 },
   ],
-  BR: [
-    { branchId: "exercito", type: "Infantry Division", count: 4 },
-    { branchId: "exercito", type: "Armored Division", count: 1 },
-    { branchId: "exercito", type: "Artillery Regiment", count: 1 },
-    { branchId: "marinha", type: "Frigate Squadron", count: 2 },
-    { branchId: "marinha", type: "Attack Submarine", count: 1 },
-    { branchId: "aerea", type: "Fighter Wing", count: 2 },
-  ],
+  BR: BR_ORDERS_OF_BATTLE,
 };
 
 /** RU's Cold War force. 1979 and 1991 are the same Soviet Army: one table, two eras. */

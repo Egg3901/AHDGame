@@ -15,6 +15,7 @@ import { IE_MAP_REGISTRY } from "@/lib/countries/ie/geographyFacts";
 import { RU_MAP_REGISTRY } from "@/lib/countries/ru/geographyFacts";
 import { DD_MAP_REGISTRY } from "@/lib/countries/dd/geographyFacts";
 import { NG_MAP_REGISTRY } from "@/lib/countries/ng/geographyFacts";
+import { BR_MAP_REGISTRY } from "@/lib/countries/br/geographyFacts";
 
 export interface CountryMapConfig {
   /** Country ID */
@@ -63,13 +64,7 @@ export const COUNTRY_MAP_REGISTRY: Record<CountryId, CountryMapConfig> = {
   DE: DE_MAP_REGISTRY,
   JP: JP_GEOGRAPHY.mapRegistry,
   IE: IE_MAP_REGISTRY,
-  BR: {
-    countryId: "BR",
-    name: "Brazil",
-    overviewPath: "/country/br",
-    mapPath: "/country/br/map",
-    hasRegionMap: false,
-  },
+  BR: BR_MAP_REGISTRY,
   CN: CN_MAP_REGISTRY,
   NG: NG_MAP_REGISTRY,
   HU: {

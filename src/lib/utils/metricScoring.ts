@@ -8,6 +8,7 @@ import { DE_MEDIAN_INCOME_THRESHOLDS } from "@/lib/countries/de/geographyFacts";
 import { CN_MEDIAN_INCOME_THRESHOLDS } from "@/lib/countries/cn/geographyFacts";
 import { IE_MEDIAN_INCOME_THRESHOLDS } from "@/lib/countries/ie/geographyFacts";
 import { NG_MEDIAN_INCOME_THRESHOLDS } from "@/lib/countries/ng/geographyFacts";
+import { BR_MEDIAN_INCOME_THRESHOLDS } from "@/lib/countries/br/geographyFacts";
 
 /**
  * Absolute metric scoring — converts a raw metric value to a 0–100 score
@@ -174,7 +175,7 @@ export const MEDIAN_INCOME_THRESHOLDS: Record<string, ScoreThreshold> = {
   DE: DE_MEDIAN_INCOME_THRESHOLDS,
   IE: IE_MEDIAN_INCOME_THRESHOLDS,
   JP: JP_MEDIAN_INCOME_BAND,
-  BR: { best: 35_000, worst: 13_000 },
+  BR: BR_MEDIAN_INCOME_THRESHOLDS,
   CN: CN_MEDIAN_INCOME_THRESHOLDS,
   NG: NG_MEDIAN_INCOME_THRESHOLDS,
 };

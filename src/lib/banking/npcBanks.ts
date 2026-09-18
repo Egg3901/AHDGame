@@ -20,6 +20,7 @@ import { UK_IDENTITY } from "@/lib/countries/uk/identity";
 import { DE_IDENTITY } from "@/lib/countries/de/identity";
 import { IE_IDENTITY } from "@/lib/countries/ie/identity";
 import { NG_IDENTITY } from "@/lib/countries/ng/identity";
+import { BR_IDENTITY } from "@/lib/countries/br/identity";
 
 /** Provisional: how many NPP retail banks each eligible country seeds. */
 export const NPC_BANKS_PER_COUNTRY = 2;
@@ -85,7 +86,7 @@ export const COUNTRY_HISTORICAL_NAMES: Partial<Record<CountryId, readonly string
   IT: ["Banca Adriatica", "Credito Tirreno"],
   ES: ["Banco del Ebro", "Caja Mercantil del Norte"],
   IE: IE_IDENTITY.historicalNames,
-  BR: ["Banco Paulista de Comercio", "Banco Atlantico do Sul"],
+  BR: BR_IDENTITY.historicalNames,
   NG: NG_IDENTITY.historicalNames,
   SE: ["Svea Merchants Bank", "Norrland Savings Bank"],
   TR: ["Anatolian Commerce Bank", "Bosphorus Trading Bank"],
@@ -103,7 +104,7 @@ export const COUNTRY_MODERN_NAMES: Partial<Record<CountryId, readonly string[]>>
   IT: ["Banca Adriatica Group", "Credito Tirreno"],
   ES: ["Banco del Ebro", "Grupo Mercantil del Norte"],
   IE: IE_IDENTITY.modernNames,
-  BR: ["Banco Paulista de Comercio", "Atlantico Sul Financial"],
+  BR: BR_IDENTITY.modernNames,
   NG: NG_IDENTITY.modernNames,
   SE: ["Svea Banking Group", "Norrland Financial"],
   TR: ["Anatolian Commerce Group", "Bosphorus Financial"],

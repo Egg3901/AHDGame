@@ -226,6 +226,20 @@ const ABSENT_UPSTREAM: Record<string, Record<string, string>> = {
     NEUTRAL_STATE_SALES_TAX_BY_COUNTRY: "no state sales tax row",
     POPULATION_MULTIPLIERS: "no 1991 cohort row; that era passes through at 1.0",
   },
+  BR: {
+    NATIONAL_ADDRESS_NAME: 'no row; the reader falls back to "Address to the Nation"',
+    CABINET_IDENTITY: "no row; getCabinetIdentity falls back to its documented shell",
+    NATIONAL_STATS_IDENTITY: "no row; the reader falls back to DEFAULT_STATS_IDENTITY",
+    LEGISLATIVE_PROCESS: "no row; readers fall through to DEFAULT_PROCESS",
+    ESTATE_PORTFOLIO_BY_COUNTRY: "no row; seedCabinetEstates skips the country",
+    ORDERS_BY_COUNTRY: "no brCabinetOrders.ts exists; getMinisterialOrders returns []",
+    GROUPS: 'no row; getCabinetGroup falls back to "Centre" per position',
+    ENERGY_POSITION_BY_COUNTRY: "no energy seat is designated for Brazil",
+    INFRA_POSITION_BY_COUNTRY: "no infrastructure seat is designated for Brazil",
+    REP_ECON: "no representative economy; incomeToGdp returns its 0.8 default",
+    PLAYER_PAYOUT_CAP_PER_TURN: "no payout cap is configured for Brazil",
+    NEUTRAL_FEDERAL_SALES_TAX_BY_COUNTRY: "no federal sales tax row",
+  },
   IE: {
     NEUTRAL_FEDERAL_SALES_TAX_BY_COUNTRY: "no federal sales tax row for Ireland",
     PLAYER_PAYOUT_CAP_PER_TURN: "no payout cap is configured for Ireland",
@@ -236,6 +250,26 @@ const ABSENT_UPSTREAM: Record<string, Record<string, string>> = {
     COUNTRY_MODERN_NAMES: "no NPC bank names are seeded for China",
     NEUTRAL_FEDERAL_SALES_TAX_BY_COUNTRY: "a command economy with no federal sales tax row",
     PLAYER_PAYOUT_CAP_PER_TURN: "no payout cap is configured for China",
+  },
+};
+
+/**
+ * A registry whose row for this country is SHARED machinery, not its data.
+ *
+ * ⚠ THIS IS THE OPPOSITE FAILURE FROM AN ABSENT ROW, AND IT LOOKS THE SAME
+ * FROM THE REGISTRY SIDE. `MECHANICS_BY_COUNTRY` has all 29 countries, so a
+ * coverage count calls Brazil present -- but `MECHANICS_BY_COUNTRY.BR` is
+ * `ECON_COUNTRY_CABINET_MECHANICS`, the economy-tier set that NINE countries
+ * share. Forwarding it would put eight other countries' cabinet inside Brazil's
+ * folder and make shared machinery look authored.
+ *
+ * So the check inverts: the registry MUST still resolve (a row that disappears
+ * is a real change), and the folder MUST NOT supply a value (supplying one means
+ * the country has authored its own and this entry is stale).
+ */
+const SHARED_UPSTREAM: Record<string, Record<string, string>> = {
+  BR: {
+    MECHANICS_BY_COUNTRY: "ECON_COUNTRY_CABINET_MECHANICS, shared by nine economy-tier countries",
   },
 };
 
@@ -314,6 +348,7 @@ async function verify(cc: string): Promise<boolean> {
     return false;
   }
   const exempt = ABSENT_UPSTREAM[cc] ?? {};
+  const shared = SHARED_UPSTREAM[cc] ?? {};
 
   let resolved = 0;
   let forwarders = 0;
@@ -324,6 +359,28 @@ async function verify(cc: string): Promise<boolean> {
     const value = registry[cc];
     const why = exempt[name];
     const path = FOLDER_PATH[name];
+    const sharedWhy = shared[name];
+
+    if (sharedWhy) {
+      const side = path ? at(folder, path) : undefined;
+      if (isEmpty(value)) {
+        console.log(
+          `FAIL  ${name}.${cc} is listed as shared upstream ("${sharedWhy}") but the registry ` +
+            `no longer carries it.`
+        );
+        failed++;
+      } else if (!isEmpty(side)) {
+        console.log(
+          `FAIL  ${name}.${cc} is listed as shared upstream ("${sharedWhy}"), but the folder ` +
+            `now supplies ${path}. Either the country authored its own and the entry is ` +
+            `stale, or the folder has claimed shared machinery.`
+        );
+        failed++;
+      } else {
+        resolved++;
+      }
+      continue;
+    }
 
     if (isEmpty(value)) {
       if (why) {
