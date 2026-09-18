@@ -26,13 +26,18 @@ const emptyInput = {
   commodityParticipants: [],
 };
 
-function historyRow(turn: number, depthToMarketCap: number): VitalSignsHistoryRow {
+function historyRow(
+  turn: number,
+  depthToMarketCap: number,
+  corporateNoHolderBondShare: number | null = 0.2
+): VitalSignsHistoryRow {
   return {
     turn,
     depthToMarketCap,
     twoSidedListingShare: 0.5,
     activeTradedListingShare: 0.5,
     sovereignNoHolderBondShare: 0.1,
+    corporateNoHolderBondShare,
   };
 }
 
@@ -446,6 +451,8 @@ describe("computeEconomicVitalSigns", () => {
     expect(snapshot.securities.sovereignMedianHolders.value).toBe(0);
     expect(snapshot.securities.sovereignSubscriptionRate.value).toBe(0);
     expect(snapshot.securities.sovereignMaturityHhi.value).toBe(10_000);
+    expect(snapshot.securities.corporateMaturityHhi.value).toBeNull();
+    expect(snapshot.securities.corporateMaturityHhi.observations).toBe(0);
     expect(snapshot.securities.sovereignMedianPriceToParSpreadPct.value).toBe(0);
     expect(snapshot.securities.twoSidedListingShare.value).toBe(0.25);
     expect(snapshot.securities.medianQuotedSpreadPct.value).toBe(40);
@@ -513,6 +520,7 @@ describe("computeEconomicVitalSigns", () => {
       sharePrice: 10,
       sharePriceAnchor: 10,
       totalShares: 1000,
+      publicFloat: 500,
       marketCapAnchor: 10000,
       priceChange48h: 0,
     };
@@ -656,6 +664,406 @@ describe("computeEconomicVitalSigns", () => {
     expect(snapshot.securities.corporateMedianHolders.observations).toBe(0);
     expect(snapshot.securities.corporateSubscriptionRate.value).toBeNull();
     expect(snapshot.securities.corporateSubscriptionRate.observations).toBe(0);
+    expect(snapshot.securities.corporateMedianPriceToParSpreadPct.value).toBeNull();
+    expect(snapshot.securities.corporateMedianPriceToParSpreadPct.observations).toBe(0);
+    expect(snapshot.securities.corporateMaturityHhi.value).toBeNull();
+    expect(snapshot.securities.corporateMaturityHhi.observations).toBe(0);
+  });
+
+  it("prices corporate credit with the same spread basis as sovereign issues", () => {
+    const corpId = new ObjectId();
+    const bond = (overrides: object) => ({
+      _id: new ObjectId(),
+      corporationId: corpId,
+      faceValue: 1_000,
+      couponRate: 4,
+      maturityTurns: 96,
+      issuedAtTurn: 1,
+      maturityTurn: 97,
+      marketPrice: 1,
+      totalIssued: 10_000,
+      publicFloat: 0,
+      holders: [],
+      defaulted: false,
+      defaultedAtTurn: null,
+      matured: false,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      ...overrides,
+    });
+    const snapshot = computeEconomicVitalSigns({
+      ...emptyInput,
+      turn: 30,
+      bonds: [
+        // 10pp discount, 5pp premium, par: median spread is 0.
+        bond({ marketPrice: 0.9 }),
+        bond({ marketPrice: 1.05 }),
+        // Legacy corporate rows omit issuerType and still count as corporate.
+        bond({ marketPrice: 1.0 }),
+        bond({ issuerType: "sovereign", marketPrice: 0.8 }),
+      ] as never,
+    });
+
+    expect(snapshot.securities.corporateMedianPriceToParSpreadPct.value).toBe(0);
+    expect(snapshot.securities.corporateMedianPriceToParSpreadPct.observations).toBe(3);
+    expect(snapshot.securities.corporateMedianPriceToParSpreadPct.basis).toBe(
+      "unmatured_corporate_issue_count"
+    );
+    // The sovereign leg is excluded from the corporate read and priced on its own basis.
+    expect(snapshot.securities.sovereignMedianPriceToParSpreadPct.value).toBeCloseTo(20, 10);
+    expect(snapshot.securities.sovereignMedianPriceToParSpreadPct.observations).toBe(1);
+  });
+
+  it("medians an even corporate spread sample instead of picking a side", () => {
+    const corpId = new ObjectId();
+    const bond = (marketPrice: number) => ({
+      _id: new ObjectId(),
+      corporationId: corpId,
+      faceValue: 1_000,
+      couponRate: 4,
+      maturityTurns: 96,
+      issuedAtTurn: 1,
+      maturityTurn: 97,
+      marketPrice,
+      totalIssued: 10_000,
+      publicFloat: 0,
+      holders: [],
+      defaulted: false,
+      defaultedAtTurn: null,
+      matured: false,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    const snapshot = computeEconomicVitalSigns({
+      ...emptyInput,
+      turn: 30,
+      bonds: [bond(0.9), bond(1.05)] as never,
+    });
+
+    // Spreads [10, -5] median to 2.5; a premium reads as a negative discount, not zero.
+    expect(snapshot.securities.corporateMedianPriceToParSpreadPct.value).toBeCloseTo(2.5, 10);
+    expect(snapshot.securities.corporateMedianPriceToParSpreadPct.observations).toBe(2);
+  });
+
+  it("narrows the corporate spread sample to finite prices, never to zero", () => {
+    const corpId = new ObjectId();
+    const bond = (marketPrice: number) => ({
+      _id: new ObjectId(),
+      corporationId: corpId,
+      faceValue: 1_000,
+      couponRate: 4,
+      maturityTurns: 96,
+      issuedAtTurn: 1,
+      maturityTurn: 97,
+      marketPrice,
+      totalIssued: 10_000,
+      publicFloat: 0,
+      holders: [],
+      defaulted: false,
+      defaultedAtTurn: null,
+      matured: false,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    const partial = computeEconomicVitalSigns({
+      ...emptyInput,
+      turn: 30,
+      bonds: [bond(Number.NaN), bond(0.9)] as never,
+    });
+
+    expect(partial.securities.corporateMedianPriceToParSpreadPct.value).toBeCloseTo(10, 10);
+    expect(partial.securities.corporateMedianPriceToParSpreadPct.observations).toBe(2);
+
+    const unpriced = computeEconomicVitalSigns({
+      ...emptyInput,
+      turn: 30,
+      bonds: [bond(Number.NaN)] as never,
+    });
+
+    expect(unpriced.securities.corporateMedianPriceToParSpreadPct.value).toBeNull();
+    expect(unpriced.securities.corporateMedianPriceToParSpreadPct.observations).toBe(1);
+  });
+
+  it("concentrates corporate refinancing by maturity turn, excluding sovereign face", () => {
+    const corpId = new ObjectId();
+    const bond = (overrides: object) => ({
+      _id: new ObjectId(),
+      corporationId: corpId,
+      faceValue: 1_000,
+      couponRate: 4,
+      maturityTurns: 96,
+      issuedAtTurn: 1,
+      maturityTurn: 97,
+      marketPrice: 1,
+      totalIssued: 10_000,
+      publicFloat: 0,
+      holders: [],
+      defaulted: false,
+      defaultedAtTurn: null,
+      matured: false,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      ...overrides,
+    });
+    // Two equal corporate buckets across two maturity turns: HHI 5,000.
+    // The sovereign leg shares a maturity turn but must not move the read.
+    const split = computeEconomicVitalSigns({
+      ...emptyInput,
+      turn: 30,
+      bonds: [
+        bond({ maturityTurn: 97, totalIssued: 10_000 }),
+        bond({ maturityTurn: 98, totalIssued: 10_000 }),
+        bond({ issuerType: "sovereign", maturityTurn: 97, totalIssued: 1_000_000 }),
+      ] as never,
+    });
+    expect(split.securities.corporateMaturityHhi.value).toBe(5_000);
+    expect(split.securities.corporateMaturityHhi.observations).toBe(2);
+    expect(split.securities.corporateMaturityHhi.basis).toBe("corporate_face_by_maturity_turn");
+
+    // One maturity turn holds all corporate face: a full refinancing cliff.
+    const cliff = computeEconomicVitalSigns({
+      ...emptyInput,
+      turn: 30,
+      bonds: [
+        bond({ maturityTurn: 97, totalIssued: 10_000 }),
+        bond({ maturityTurn: 97, totalIssued: 30_000 }),
+      ] as never,
+    });
+    expect(cliff.securities.corporateMaturityHhi.value).toBe(10_000);
+    expect(cliff.securities.corporateMaturityHhi.observations).toBe(1);
+  });
+
+  it("splits household velocity into transactional and savings activity", () => {
+    const snapshot = computeEconomicVitalSigns({
+      ...emptyInput,
+      turn: 30,
+      balanceSnapshot: {
+        _id: new ObjectId(),
+        turn: 30,
+        createdAt: new Date(),
+        balances: {
+          "character:a:USD": 600,
+          "character_savings:a:USD": 400,
+        },
+      },
+      ledgerTurnover: [
+        { account: "character:a:USD", turnover: 600 },
+        { account: "character_savings:a:USD", turnover: 40 },
+        // System legs never reach the classifier.
+        { account: "mint:reason:USD", turnover: 10_000 },
+      ],
+      ledgerEntryCount: 3,
+    });
+
+    // Wallet turnover over wallet stock only: 600 / 600.
+    expect(snapshot.money.householdTransactionalVelocity48.value).toBe(1);
+    expect(snapshot.money.householdTransactionalVelocity48.basis).toBe(
+      "character_primary_ledger_flow_to_closing_balance"
+    );
+    // Savings turnover over savings stock only: 40 / 400.
+    expect(snapshot.money.householdSavingsVelocity48.value).toBe(0.1);
+    expect(snapshot.money.householdSavingsVelocity48.basis).toBe(
+      "character_savings_primary_ledger_flow_to_closing_balance"
+    );
+    // Savings share of household closing stock: 400 / (600 + 400).
+    expect(snapshot.money.savingsShareOfHouseholdBalances.value).toBe(0.4);
+    expect(snapshot.money.savingsShareOfHouseholdBalances.observations).toBe(2);
+    expect(snapshot.money.savingsShareOfHouseholdBalances.basis).toBe(
+      "character_savings_share_of_household_closing_balance"
+    );
+    // The lumped household velocity still covers both classes: 640 / 1000.
+    expect(snapshot.money.householdGrossVelocity48.value).toBe(0.64);
+  });
+
+  it("reports absent household balances as unknown, not as zero velocity", () => {
+    const snapshot = computeEconomicVitalSigns({ ...emptyInput, turn: 30 });
+
+    expect(snapshot.money.householdTransactionalVelocity48.value).toBeNull();
+    expect(snapshot.money.householdTransactionalVelocity48.observations).toBe(0);
+    expect(snapshot.money.householdSavingsVelocity48.value).toBeNull();
+    expect(snapshot.money.householdSavingsVelocity48.observations).toBe(0);
+    expect(snapshot.money.savingsShareOfHouseholdBalances.value).toBeNull();
+    expect(snapshot.money.savingsShareOfHouseholdBalances.observations).toBe(0);
+  });
+
+  it("reports a missing savings class as unknown without moving the wallet read", () => {
+    const snapshot = computeEconomicVitalSigns({
+      ...emptyInput,
+      turn: 30,
+      balanceSnapshot: {
+        _id: new ObjectId(),
+        turn: 30,
+        createdAt: new Date(),
+        balances: { "character:a:USD": 600 },
+      },
+      ledgerTurnover: [{ account: "character:a:USD", turnover: 600 }],
+      ledgerEntryCount: 1,
+    });
+
+    expect(snapshot.money.householdTransactionalVelocity48.value).toBe(1);
+    // No savings stock: unknown, not zero, and the share is unknown too.
+    expect(snapshot.money.householdSavingsVelocity48.value).toBeNull();
+    expect(snapshot.money.savingsShareOfHouseholdBalances.value).toBeNull();
+    expect(snapshot.money.savingsShareOfHouseholdBalances.observations).toBe(1);
+  });
+
+  it("measures per-listing trade concentration from named counterparties", () => {
+    const concentratedId = new ObjectId();
+    const sharedId = new ObjectId();
+    const alice = { characterId: new ObjectId(), name: "Alice" };
+    const bob = { characterId: new ObjectId(), name: "Bob" };
+    const carol = { characterId: new ObjectId(), name: "Carol" };
+    const dave = { characterId: new ObjectId(), name: "Dave" };
+    const snapshot = computeEconomicVitalSigns({
+      ...emptyInput,
+      turn: 30,
+      globalExchange: {
+        _id: "global",
+        listings: [
+          { _id: concentratedId, totalShares: 1_000, publicFloat: 500 },
+          { _id: sharedId, totalShares: 1_000, publicFloat: 500 },
+        ],
+        updatedAt: new Date(),
+      } as never,
+      trades: [
+        // Concentrated book: Alice takes 90 of 100 notional from the float.
+        {
+          _id: new ObjectId(),
+          corporationId: concentratedId,
+          kind: "market_buy",
+          turn: 29,
+          createdAt: new Date(),
+          shares: 90,
+          pricePerShareAnchor: 1,
+          totalAnchor: 90,
+          to: alice,
+          from: null,
+        },
+        {
+          _id: new ObjectId(),
+          corporationId: concentratedId,
+          kind: "market_buy",
+          turn: 29,
+          createdAt: new Date(),
+          shares: 10,
+          pricePerShareAnchor: 1,
+          totalAnchor: 10,
+          to: bob,
+          from: null,
+        },
+        // Shared book: Carol and Dave split 100 evenly across one peer fill.
+        {
+          _id: new ObjectId(),
+          corporationId: sharedId,
+          kind: "peer_fill",
+          turn: 29,
+          createdAt: new Date(),
+          shares: 100,
+          pricePerShareAnchor: 1,
+          totalAnchor: 100,
+          to: dave,
+          from: carol,
+        },
+        // Non-economic kinds never count toward inventory concentration.
+        {
+          _id: new ObjectId(),
+          corporationId: sharedId,
+          kind: "issuance",
+          turn: 29,
+          createdAt: new Date(),
+          shares: 1_000,
+          pricePerShareAnchor: 1,
+          totalAnchor: 1_000,
+          to: carol,
+          from: null,
+        },
+      ],
+    });
+
+    // Top shares [0.9, 0.5]: median 0.7 across the two traded listings.
+    expect(snapshot.securities.medianTopTraderNotionalShare48.value).toBeCloseTo(0.7, 10);
+    expect(snapshot.securities.medianTopTraderNotionalShare48.observations).toBe(2);
+    expect(snapshot.securities.medianTopTraderNotionalShare48.basis).toBe(
+      "named_counterparty_share_of_listing_notional_48_turns"
+    );
+  });
+
+  it("reports absent equity trade concentration as unknown, not as dispersed", () => {
+    const corpId = new ObjectId();
+    const floatOnly = computeEconomicVitalSigns({
+      ...emptyInput,
+      turn: 30,
+      globalExchange: {
+        _id: "global",
+        listings: [{ _id: corpId, totalShares: 1_000, publicFloat: 500 }],
+        updatedAt: new Date(),
+      } as never,
+      trades: [
+        {
+          _id: new ObjectId(),
+          corporationId: corpId,
+          kind: "market_buy",
+          turn: 29,
+          createdAt: new Date(),
+          shares: 1,
+          pricePerShareAnchor: 1,
+          totalAnchor: 10,
+          to: null,
+          from: null,
+        },
+      ],
+    });
+
+    expect(floatOnly.securities.medianTopTraderNotionalShare48.value).toBeNull();
+    expect(floatOnly.securities.medianTopTraderNotionalShare48.observations).toBe(0);
+
+    const empty = computeEconomicVitalSigns({ ...emptyInput, turn: 30 });
+    expect(empty.securities.medianTopTraderNotionalShare48.value).toBeNull();
+    expect(empty.securities.medianTopTraderNotionalShare48.observations).toBe(0);
+  });
+
+  it("medians the corporate no-holder share so one spiky turn cannot anchor a baseline", () => {
+    const history: VitalSignsHistoryRow[] = [];
+    for (let turn = 19; turn <= 29; turn += 1) {
+      // One turn where every corporate issue sits holderless; the rest sit at 0.4.
+      history.push(historyRow(turn, 0.1, turn === 25 ? 1 : 0.4));
+    }
+
+    // No bonds this turn, so the median comes from the 11 history rows alone:
+    // ten at 0.4 plus one spike at 1 medians to 0.4.
+    const snapshot = computeEconomicVitalSigns({ ...emptyInput, turn: 30, history });
+
+    expect(snapshot.securitiesRecent12.corporateNoHolderBondShareMedian.value).toBe(0.4);
+    expect(snapshot.securitiesRecent12.corporateNoHolderBondShareMedian.observations).toBe(11);
+    expect(snapshot.securitiesRecent12.corporateNoHolderBondShareMedian.basis).toBe(
+      "unmatured_corporate_issue_count_median_12"
+    );
+    // The sovereign leg keeps its own baseline from the same history rows.
+    expect(snapshot.securitiesRecent12.sovereignNoHolderBondShareMedian.value).toBe(0.1);
+  });
+
+  it("reports an absent corporate no-holder baseline as unknown, not as zero", () => {
+    const snapshot = computeEconomicVitalSigns({ ...emptyInput, turn: 30 });
+
+    expect(snapshot.securities.corporateNoHolderBondShare.value).toBeNull();
+    expect(snapshot.securities.corporateNoHolderBondShare.observations).toBe(0);
+    expect(snapshot.securitiesRecent12.corporateNoHolderBondShareMedian.value).toBeNull();
+    expect(snapshot.securitiesRecent12.corporateNoHolderBondShareMedian.observations).toBe(0);
+  });
+
+  it("skips pre-field history rows instead of reading them as dispersed holders", () => {
+    // Snapshots persisted before the corporate leg existed carry no value.
+    const history: VitalSignsHistoryRow[] = [];
+    for (let turn = 27; turn <= 29; turn += 1) {
+      history.push(historyRow(turn, 0.1, turn === 29 ? 0.6 : null));
+    }
+
+    const snapshot = computeEconomicVitalSigns({ ...emptyInput, turn: 30, history });
+
+    // Only turn 29 contributes; the null rows narrow the sample instead of
+    // reading as zero holderless issues.
+    expect(snapshot.securitiesRecent12.corporateNoHolderBondShareMedian.value).toBe(0.6);
+    expect(snapshot.securitiesRecent12.corporateNoHolderBondShareMedian.observations).toBe(1);
   });
 
   it("records a skipped stock versus flow check as unknown, not as zero divergences", () => {
@@ -791,4 +1199,280 @@ it("does not mix legacy money growth into the current median", () => {
     money: [money, { ...money, _id: "new", accountingVersion: 2, annualizedM2GrowthPct: 4 }],
   });
   expect(snapshot.money.medianAnnualizedM2GrowthPct.value).toBe(4);
+});
+
+describe("ring-fenced bank and escrow money", () => {
+  const balanceSnapshot = {
+    _id: new ObjectId(),
+    turn: 100,
+    createdAt: new Date(),
+    balances: {
+      "character:active:USD": 40,
+      "character:dormant:USD": 60,
+      "corporation:active:USD": 100,
+    },
+  };
+
+  it("reports active-charter reserves and escrow in anchor with FX conversion", () => {
+    const snapshot = computeEconomicVitalSigns({
+      ...emptyInput,
+      balanceSnapshot,
+      anchorRates: { USD: 1, EUR: 2 },
+      ringFenced: [
+        {
+          charterActive: true,
+          charterCurrency: "USD",
+          cashReserves: 100,
+          liquidCurrency: "USD",
+          escrowBalance: 50,
+        },
+        {
+          charterActive: true,
+          charterCurrency: "EUR",
+          cashReserves: 200,
+          liquidCurrency: "EUR",
+          escrowBalance: undefined,
+        },
+        {
+          charterActive: false,
+          charterCurrency: "USD",
+          cashReserves: 500,
+          liquidCurrency: "USD",
+          escrowBalance: undefined,
+        },
+        {
+          charterActive: false,
+          charterCurrency: "USD",
+          cashReserves: undefined,
+          liquidCurrency: "USD",
+          escrowBalance: -30,
+        },
+      ],
+    });
+
+    // 100 USD + 200 EUR / 2; the failed charter and the buyback debt are excluded.
+    expect(snapshot.money.bankCashReservesAnchor.value).toBe(200);
+    expect(snapshot.money.bankCashReservesAnchor.observations).toBe(2);
+    expect(snapshot.money.escrowCashAnchor.value).toBe(50);
+    expect(snapshot.money.escrowCashAnchor.observations).toBe(1);
+    // (200 + 50) / (200 modeled + 200 + 50).
+    expect(snapshot.money.ringFencedShareOfLiquid.value).toBeCloseTo(250 / 450);
+    expect(snapshot.measurement.reasons).not.toContainEqual(
+      expect.stringMatching(/^bank_cash_incomplete_/)
+    );
+  });
+
+  it("flags incomplete bank classification and fails the share closed", () => {
+    const snapshot = computeEconomicVitalSigns({
+      ...emptyInput,
+      balanceSnapshot,
+      anchorRates: { USD: 1 },
+      ringFenced: [
+        {
+          charterActive: true,
+          charterCurrency: "USD",
+          cashReserves: 100,
+          liquidCurrency: "USD",
+          escrowBalance: undefined,
+        },
+        {
+          charterActive: true,
+          charterCurrency: "USD",
+          cashReserves: undefined,
+          liquidCurrency: "USD",
+          escrowBalance: undefined,
+        },
+      ],
+    });
+
+    expect(snapshot.money.bankCashReservesAnchor.value).toBe(100);
+    expect(snapshot.money.bankCashReservesAnchor.observations).toBe(1);
+    expect(snapshot.money.ringFencedShareOfLiquid.value).toBeNull();
+    expect(snapshot.measurement.reasons).toContain("bank_cash_incomplete_1_of_2_reporting");
+  });
+
+  it("reports unknown bank stock and share when no active charter reports", () => {
+    const snapshot = computeEconomicVitalSigns({
+      ...emptyInput,
+      balanceSnapshot,
+      anchorRates: { USD: 1 },
+      ringFenced: [
+        {
+          charterActive: true,
+          charterCurrency: "USD",
+          cashReserves: undefined,
+          liquidCurrency: "USD",
+          escrowBalance: undefined,
+        },
+      ],
+    });
+
+    expect(snapshot.money.bankCashReservesAnchor.value).toBeNull();
+    expect(snapshot.money.ringFencedShareOfLiquid.value).toBeNull();
+    expect(snapshot.measurement.reasons).toContain("bank_cash_incomplete_0_of_1_reporting");
+  });
+
+  it("fails the share closed without a balance snapshot and leaves a null velocity seam", () => {
+    const snapshot = computeEconomicVitalSigns({
+      ...emptyInput,
+      balanceSnapshot: null,
+      anchorRates: { USD: 1 },
+      ringFenced: [
+        {
+          charterActive: true,
+          charterCurrency: "USD",
+          cashReserves: 100,
+          liquidCurrency: "USD",
+          escrowBalance: undefined,
+        },
+      ],
+    });
+
+    expect(snapshot.money.bankCashReservesAnchor.value).toBe(100);
+    expect(snapshot.money.ringFencedShareOfLiquid.value).toBeNull();
+    // No ledger turnover feed covers bank accounts, so velocity stays an
+    // explicit null seam instead of an estimate from unrelated flows.
+    expect(snapshot.money.bankGrossVelocity48.value).toBeNull();
+    expect(snapshot.money.bankGrossVelocity48.observations).toBe(0);
+    expect(snapshot.money.bankGrossVelocity48.basis).toBe("bank_turnover_not_in_ledger");
+  });
+
+  it("reports honest zeros when no bank or escrow money exists", () => {
+    const snapshot = computeEconomicVitalSigns({ ...emptyInput, balanceSnapshot, ringFenced: [] });
+
+    expect(snapshot.money.bankCashReservesAnchor.value).toBe(0);
+    expect(snapshot.money.bankCashReservesAnchor.observations).toBe(0);
+    expect(snapshot.money.escrowCashAnchor.value).toBe(0);
+    expect(snapshot.money.ringFencedShareOfLiquid.value).toBe(0);
+    expect(snapshot.measurement.reasons).not.toContainEqual(
+      expect.stringMatching(/^bank_cash_incomplete_/)
+    );
+  });
+  it("measures securities breadth over tradable listings, intersecting the trade window", () => {
+    // Mixed snapshot (#2033): three ordinary public corporations, two
+    // zero-share/zero-float state enterprises, and a retained-window trade for
+    // a dissolved corporation that is no longer listed at all.
+    const tradableIds = [new ObjectId(), new ObjectId(), new ObjectId()];
+    const soeIds = [new ObjectId(), new ObjectId()];
+    const dissolvedId = new ObjectId();
+    const listing = (id: ObjectId, overrides: object) => ({
+      _id: id,
+      sequentialId: 1,
+      name: `Firm ${id.toString()}`,
+      type: "manufacturing",
+      sharePrice: 10,
+      sharePriceAnchor: 10,
+      totalShares: 1000,
+      publicFloat: 500,
+      marketCapAnchor: 10000,
+      priceChange48h: 0,
+      ...overrides,
+    });
+    const listings = [
+      listing(tradableIds[0]!, {}),
+      listing(tradableIds[1]!, {}),
+      listing(tradableIds[2]!, {}),
+      listing(soeIds[0]!, { totalShares: 0, publicFloat: 0, isNatcorp: true }),
+      listing(soeIds[1]!, { totalShares: 1000, publicFloat: 0, isNatcorp: true }),
+    ];
+    const trade = (corporationId: ObjectId) =>
+      ({
+        _id: new ObjectId(),
+        corporationId,
+        kind: "market_buy",
+        turn: 99,
+        createdAt: new Date(),
+        shares: 2,
+        pricePerShareAnchor: 5,
+        totalAnchor: 10,
+        to: null,
+        from: null,
+      }) as never;
+    const order = (corporationId: ObjectId, type: "buy" | "sell") =>
+      ({
+        _id: new ObjectId(),
+        corporationId,
+        characterId: new ObjectId(),
+        type,
+        shares: 10,
+        sharesRemaining: 10,
+        pricePerShare: type === "buy" ? 9 : 11,
+        escrowAmount: 0,
+        status: "open" as const,
+        createdAt: new Date("2026-08-29T00:00:00.000Z"),
+        updatedAt: new Date("2026-08-29T00:00:00.000Z"),
+      }) as never;
+
+    const snapshot = computeEconomicVitalSigns({
+      ...emptyInput,
+      turn: 100,
+      globalExchange: { _id: "global", listings } as never,
+      // Two eligible listings traded; the SOE trade and the dissolved-corp
+      // trade sit in the retained window but must not enter the numerator.
+      trades: [
+        trade(tradableIds[0]!),
+        trade(tradableIds[1]!),
+        trade(soeIds[0]!),
+        trade(dissolvedId),
+      ],
+      shareOrders: [
+        // Only the first eligible listing has both sides of the book. The
+        // zero-share SOE also carries a two-sided book, which must not count.
+        order(tradableIds[0]!, "buy"),
+        order(tradableIds[0]!, "sell"),
+        order(tradableIds[1]!, "buy"),
+        order(soeIds[0]!, "buy"),
+        order(soeIds[0]!, "sell"),
+      ],
+    });
+
+    // Denominator 3 (eligible), numerator 2 (eligible traded): 2/3, not 4/5
+    // and not the stale 3-or-4 over 5.
+    expect(snapshot.securities.activeTradedListingShare.value).toBeCloseTo(2 / 3, 10);
+    expect(snapshot.securities.activeTradedListingShare.observations).toBe(3);
+    expect(snapshot.securities.twoSidedListingShare.value).toBeCloseTo(1 / 3, 10);
+    expect(snapshot.securities.twoSidedListingShare.observations).toBe(3);
+    expect(snapshot.securities.organicTwoSidedListingShare.value).toBeCloseTo(1 / 3, 10);
+    // Rolling medians use the same eligible denominator with empty history.
+    expect(snapshot.securitiesRecent12.activeTradedListingShareMedian.value).toBeCloseTo(2 / 3, 10);
+    expect(snapshot.securitiesRecent12.twoSidedListingShareMedian.value).toBeCloseTo(1 / 3, 10);
+    for (const metric of [
+      snapshot.securities.activeTradedListingShare,
+      snapshot.securities.twoSidedListingShare,
+      snapshot.securities.organicTwoSidedListingShare,
+    ]) {
+      expect(metric.value).toBeGreaterThanOrEqual(0);
+      expect(metric.value).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it("reports unknown breadth when no listing is tradable", () => {
+    const id = new ObjectId();
+    const snapshot = computeEconomicVitalSigns({
+      ...emptyInput,
+      turn: 100,
+      globalExchange: {
+        _id: "global",
+        listings: [
+          {
+            _id: id,
+            sequentialId: 1,
+            name: "SoE",
+            type: "manufacturing",
+            sharePrice: 10,
+            totalShares: 0,
+            publicFloat: 0,
+            marketCapAnchor: 0,
+            priceChange48h: 0,
+          },
+        ],
+      } as never,
+      trades: [],
+      shareOrders: [],
+    });
+
+    expect(snapshot.securities.activeTradedListingShare.value).toBeNull();
+    expect(snapshot.securities.twoSidedListingShare.value).toBeNull();
+    expect(snapshot.securities.organicTwoSidedListingShare.value).toBeNull();
+  });
 });

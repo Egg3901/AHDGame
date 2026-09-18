@@ -13,6 +13,7 @@
 // scripts/migrations/incidents/ and DO NOT belong in this registry.
 
 import { migration as supplyListingIndexes } from "./entries/2026-09-17-supply-listing-indexes";
+import { migration as ukDualMinistryRoleSlot } from "./entries/2026-09-17-uk-dual-ministry-role-slot";
 import type { Migration } from "./types";
 
 import { migration as bondCurrencyStamp } from "./entries/2026-04-15-bond-currency-stamp";
@@ -80,6 +81,8 @@ import { migration as centralBankPricingPhaseIn } from "./entries/2026-09-11-cen
 import { migration as providerIdentityIndexes } from "./entries/2026-09-10-provider-identity-indexes";
 import { migration as sourceFenceIndexes } from "./entries/2026-09-11-source-fence-indexes";
 import { migration as repriceCurrentSovereignRisk } from "./entries/2026-09-12-reprice-current-sovereign-risk";
+import { migration as identityObservationsBackfill } from "./entries/2026-09-16-identity-observations-backfill";
+import { migration as repairDuplicateCorporationSequentialIds } from "./entries/2026-09-17-repair-duplicate-corporation-sequential-ids";
 
 export const MIGRATIONS: Migration[] = [
   // v0.2.6 currency cutover (declarative — shipped via standalone scripts)
@@ -248,7 +251,20 @@ export const MIGRATIONS: Migration[] = [
   // Ticket #1269: persisted sovereign fields must follow the current debt/GDP
   // ladder after historical seed anchors stop rescaling live risk.
   repriceCurrentSovereignRisk,
+  // Seed identityObservations from the scalar identity fields and
+  // fingerprintHistory, so values a player has rotated away from stay visible
+  // to the admin panel and keep grouping accounts.
+  identityObservationsBackfill,
   supplyListingIndexes,
+  // Issue #2028: worlds seeded while the FR/IT/ES/SE/TR/GR/AT/FI sovereign
+  // issuers reused 900_009-900_016 keep ambiguous corporation URLs and an
+  // unprotected collection until something renumbers them in place. Seed +
+  // bootstrap cover fresh/reset worlds; this reaches ones already running.
+  repairDuplicateCorporationSequentialIds,
+  // Issue #2049: UK dual ministry. Classify rows into role slots, init shared
+  // holder pools from current balances, and swap the one-seat index for the
+  // role-slot index. Idempotent, dry-run safe, deletes nothing.
+  ukDualMinistryRoleSlot,
 ];
 
 // D13 rollback drill — registered but deliberately OUTSIDE the normal chain.

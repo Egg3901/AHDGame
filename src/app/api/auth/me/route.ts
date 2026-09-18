@@ -24,6 +24,8 @@ import { getGameState } from "@/lib/gameState";
 import { isRedistrictingEnabled } from "@/lib/redistricting/flag";
 import { loadFxRatesRecord } from "@/lib/currency/corporationCapital";
 import { getNotificationBundleUserIds } from "@/lib/notifications/notificationBundle";
+import { getClientIp } from "@/lib/utils/network";
+import { recordIdentitySignals } from "@/lib/identityHistory/recordObservation";
 import { unifiedSessionIsCurrent } from "@/lib/auth/unifiedSession";
 
 function getPatreonAdPreference(
@@ -151,6 +153,35 @@ export const GET = withNoStore(async () => {
       .catch(() => {
         /* ignore errors */
       });
+
+    // Catch IP rotation that happens WITHOUT a re-login, which capture at the
+    // auth endpoints alone misses entirely. That is the evasion this exists to
+    // see: a player who changes network mid-session never re-authenticates, so
+    // `lastKnownIp` keeps reporting the address they logged in from.
+    //
+    // `getClientIp` reads `headers()`, so it is resolved inside the request
+    // scope rather than from a detached continuation, where it can throw once
+    // the response has been sent. But that puts it on the critical path of the
+    // endpoint EVERY authenticated page load hits, so the whole block is
+    // wrapped: identity history is evidence collection, and a failure to
+    // collect it must never turn into a 500 for the player.
+    //
+    // The equality check short-circuits before any I/O, so a player on a stable
+    // address costs nothing, and the writer's debounce collapses repeat
+    // sightings for one who is roaming.
+    try {
+      const sessionIp = await getClientIp();
+      if (sessionIp !== user?.lastKnownIp) {
+        recordIdentitySignals(db, {
+          userId: new ObjectId(userId),
+          ip: sessionIp,
+          observedAt: new Date(),
+          source: "session",
+        });
+      }
+    } catch {
+      /* never block the session response on identity capture */
+    }
 
     // Get home state name, party name, and unread count in parallel
     let homeStateName: string | undefined;

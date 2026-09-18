@@ -9,6 +9,11 @@ import { requireAuth } from "@/lib/api/requireAuth";
 import { handleRouteError } from "@/lib/api/errors";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { getCabinetMembersCollection } from "@/lib/db/collections/cabinetMembers";
+import {
+  refundMinisterialAction,
+  resolveMinisterialRemaining,
+  spendMinisterialAction,
+} from "@/lib/cabinet/ministerialActionPool";
 import { getMilitaryUnitsCollection } from "@/lib/db/collections/militaryUnits";
 import { DEFENSE_POSITION_BY_COUNTRY, getUnitArchetype } from "@/lib/constants/military";
 import { unitUpgradePrice } from "@/lib/military/procurement";
@@ -72,23 +77,17 @@ export async function POST(_request: Request, { params }: RouteParams) {
       return NextResponse.json({ error: "Unit is already cutting-edge" }, { status: 400 });
     }
 
-    if (member && member.ministerialActions == null) {
-      await membersCol.updateOne({ _id: member._id }, { $set: { ministerialActions: 2 } });
-      member.ministerialActions = 2;
-    }
-    if ((member?.ministerialActions ?? 2) < 1) {
+    // Shared UK pool: both offices of a dual holder spend one balance (issue #2049).
+    const actions = await resolveMinisterialRemaining(db, countryId, member!);
+    if (actions < 1) {
       return NextResponse.json({ error: "No ministerial actions remaining" }, { status: 400 });
     }
 
-    const spend = await membersCol.updateOne(
-      { _id: member!._id, ministerialActions: { $gte: 1 } },
-      { $inc: { ministerialActions: -1 } }
-    );
-    if (spend.modifiedCount === 0) {
+    const spend = await spendMinisterialAction(db, countryId, member!);
+    if (!spend.ok) {
       return NextResponse.json({ error: "No ministerial actions remaining" }, { status: 409 });
     }
-    const refundAction = () =>
-      membersCol.updateOne({ _id: member!._id }, { $inc: { ministerialActions: 1 } });
+    const refundAction = () => refundMinisterialAction(db, countryId, member!);
 
     // Modernising is a purchase, not a free reclassification. Priced off the unit's own
     // build cost through the same GDP-share model recruiting uses, so the two are
