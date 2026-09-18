@@ -7,6 +7,7 @@ import { DE_ECONOMY } from "@/lib/countries/de/economy";
 import { CN_ECONOMY } from "@/lib/countries/cn/economy";
 import { IE_ECONOMY } from "@/lib/countries/ie/economy";
 import { RU_ECONOMY } from "@/lib/countries/ru/economy";
+import { DD_ECONOMY } from "@/lib/countries/dd/economy";
 
 /**
  * Political Strength reserve and pressure-ladder constants for Phase 3.
@@ -80,7 +81,7 @@ export const TREASURY_PS_RATE_BY_COUNTRY: Record<CountryId, { national: number; 
   GR: { national: 70_000, state: 35_000 },
   AT: { national: 70_000, state: 35_000 },
   FI: { national: 60_000, state: 30_000 },
-  DD: { national: 90_000, state: 45_000 },
+  DD: DD_ECONOMY.tax.treasuryPsRate,
   SCO: { national: 60_000, state: 30_000 }, // mirrors UK (sterling zone)
   WAL: { national: 60_000, state: 30_000 }, // mirrors UK (sterling zone)
 } as const;

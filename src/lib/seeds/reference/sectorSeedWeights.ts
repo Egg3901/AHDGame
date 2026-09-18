@@ -19,6 +19,7 @@ import { DE_ECONOMY } from "@/lib/countries/de/economy";
 import { CN_ECONOMY } from "@/lib/countries/cn/economy";
 import { IE_ECONOMY } from "@/lib/countries/ie/economy";
 import { RU_ECONOMY } from "@/lib/countries/ru/economy";
+import { DD_ECONOMY } from "@/lib/countries/dd/economy";
 
 type SectorWeightMap = Partial<Record<CorporationType, number>>;
 
@@ -384,22 +385,7 @@ export const COUNTRY_SECTOR_WEIGHTS: Record<CountryId, SectorWeightMap> = {
     technology: 2,
     media: 2,
   },
-  DD: {
-    manufacturing: 24,
-    chemical_industries: 10,
-    energy: 9,
-    automobiles: 7,
-    agriculture: 9,
-    construction: 7,
-    extraction: 6,
-    defense: 5,
-    logistics: 5,
-    healthcare: 4,
-    retail: 3,
-    real_estate: 2,
-    technology: 2,
-    entertainment: 1,
-  },
+  DD: DD_ECONOMY.sectorWeights.base,
 };
 
 export const STATE_SECTOR_WEIGHT_OVERRIDES: Partial<Record<string, SectorWeightMap>> = {

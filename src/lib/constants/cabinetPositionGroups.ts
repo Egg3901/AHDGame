@@ -18,7 +18,14 @@ import { RU_CABINET_GROUPS } from "@/lib/countries/ru/institutionsFacts";
 export const GROUPS: Record<string, Record<string, CabinetGroup>> = {
   US: US_CABINET_GROUPS,
   UK: UK_CABINET_GROUPS,
-  JP: JP_INSTITUTIONS.cabinet.groups,
+  /*
+   * ⚠️ `?? {}` IS NOT A DEFAULT, IT IS A TYPE BRIDGE. `cabinet.groups` became
+   * optional on the contract because East Germany has no row here at all, and
+   * Japan's folder reaches it through the composed institutions object. Japan
+   * HAS groups; the fallback is unreachable for it. East Germany simply has no
+   * key in this map, so the reader's own `?? "Centre"` still does the work.
+   */
+  JP: JP_INSTITUTIONS.cabinet.groups ?? {},
   IE: IE_CABINET_GROUPS,
   DE: DE_CABINET_GROUPS,
   CN: CN_CABINET_GROUPS,

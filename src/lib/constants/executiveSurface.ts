@@ -6,6 +6,7 @@ import { DE_IDENTITY } from "@/lib/countries/de/identity";
 import { CN_IDENTITY } from "@/lib/countries/cn/identity";
 import { IE_IDENTITY } from "@/lib/countries/ie/identity";
 import { RU_IDENTITY } from "@/lib/countries/ru/identity";
+import { DD_IDENTITY } from "@/lib/countries/dd/identity";
 
 /**
  * Per-country configuration for the shared executive shell (instrument strip
@@ -241,17 +242,7 @@ export const EXECUTIVE_SURFACE: Record<CountryId, ExecutiveSurfaceConfig> = {
     heroImage: "/api/images/hero/government-palace-helsinki",
     heroAlt: "Government Palace, Helsinki",
   },
-  DD: {
-    clock: { kind: "plenum", label: "Plenum Clock", countdownNoun: "next Volkskammer session" },
-    actLabels: { ...PARLIAMENTARY_ACTS, order: "DECREE" },
-    deskKind: "orders",
-    deskLabel: "Decrees",
-    rosterTitle: "Council of Ministers",
-    // Seat of the Council of Ministers — the Palast der Republik (the
-    // `volkskammer` hero slug) belongs to the legislature page.
-    heroImage: "/api/images/hero/altes-stadthaus",
-    heroAlt: "Altes Stadthaus, Berlin",
-  },
+  DD: DD_IDENTITY.executiveSurface,
   SCO: {
     clock: { kind: "election", label: "Term Clock", countdownNoun: "next Holyrood election" },
     actLabels: { ...PARLIAMENTARY_ACTS, order: "ORDER IN COUNCIL" },

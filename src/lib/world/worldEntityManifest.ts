@@ -31,6 +31,7 @@ import { DE_WORLD_REGION } from "@/lib/countries/de/geographyFacts";
 import { CN_WORLD_REGION, CN_UN_MEMBER_SINCE } from "@/lib/countries/cn/geographyFacts";
 import { IE_WORLD_REGION, IE_UN_MEMBER_SINCE } from "@/lib/countries/ie/geographyFacts";
 import { RU_WORLD_REGION, RU_UN_MEMBER_SINCE } from "@/lib/countries/ru/geographyFacts";
+import { DD_WORLD_REGION } from "@/lib/countries/dd/geographyFacts";
 
 export type WorldEntityId = string;
 export type WorldEntityStatus = "sovereign" | "dependent" | "emergent" | "dissolved";
@@ -218,7 +219,7 @@ export const COUNTRY_REGIONS: Record<CountryId, WorldEntityRegion> = {
   UK: UK_WORLD_REGION,
   FR: "europe",
   DE: DE_WORLD_REGION,
-  DD: "europe",
+  DD: DD_WORLD_REGION,
   IT: "europe",
   ES: "europe",
   SE: "europe",

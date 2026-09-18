@@ -209,6 +209,10 @@ const SIZE_CAP_EXEMPT = [
   // EXACT path at `politicalLegislation/laws/ruLaws.ts`; relocating strips that.
   "src/lib/countries/ru/data/",
   "src/lib/countries/ru/cabinet/",
+  // East Germany's, before the move. `ddLaws.ts` is 5,551 lines and is exempt
+  // today by EXACT path under politicalLegislation/laws/.
+  "src/lib/countries/dd/data/",
+  "src/lib/countries/dd/cabinet/",
   "src/lib/constants/cnCabinetMechanics.ts",
   "src/lib/constants/historicalSeats.ts",
   "src/lib/constants/metricDefinitions.ts",

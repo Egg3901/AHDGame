@@ -6,6 +6,7 @@ import { DE_ECONOMY } from "@/lib/countries/de/economy";
 import { CN_ECONOMY } from "@/lib/countries/cn/economy";
 import { IE_ECONOMY } from "@/lib/countries/ie/economy";
 import { RU_ECONOMY } from "@/lib/countries/ru/economy";
+import { DD_ECONOMY } from "@/lib/countries/dd/economy";
 
 /**
  * Mapping from country to the "stateId" used in collections like statePolicies
@@ -41,7 +42,7 @@ export const NATIONAL_POLICY_STATE_IDS: Record<CountryId, string> = {
   GR: "gr_national",
   AT: "at_national",
   FI: "fi_national",
-  DD: "dd_national",
+  DD: DD_ECONOMY.nationalPolicyStateId,
   SCO: "sco_national",
   WAL: "wal_national",
 };

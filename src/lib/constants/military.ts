@@ -35,6 +35,11 @@ import {
   RU_MILITARY_BRANCHES,
   RU_MILITARY_SCALE,
 } from "@/lib/countries/ru/institutionsFacts";
+import {
+  DD_CABINET_SEAT_IDS,
+  DD_MILITARY_BRANCHES,
+  DD_MILITARY_SCALE,
+} from "@/lib/countries/dd/institutionsFacts";
 
 export interface Branch {
   id: string;
@@ -442,32 +447,7 @@ export const MILITARY_BRANCHES_BY_COUNTRY: Record<CountryId, Branch[]> = {
     { id: "airforce", name: "Air Force", abbr: "ILMAV", domain: "air" },
   ],
   // Nationale Volksarmee: stood up 1 Mar 1956; dissolved with the GDR 3 Oct 1990.
-  DD: [
-    {
-      id: "landstreitkraefte",
-      name: "Land Forces",
-      abbr: "LaSK",
-      domain: "ground",
-      establishedYear: 1956,
-      dissolvedYear: 1990,
-    },
-    {
-      id: "volksmarine",
-      name: "People's Navy",
-      abbr: "VM",
-      domain: "naval",
-      establishedYear: 1956,
-      dissolvedYear: 1990,
-    },
-    {
-      id: "luftstreitkraefte",
-      name: "Air Force / Air Defence",
-      abbr: "LSK/LV",
-      domain: "air",
-      establishedYear: 1956,
-      dissolvedYear: 1990,
-    },
-  ],
+  DD: DD_MILITARY_BRANCHES,
   SCO: [],
   WAL: [],
 };
@@ -507,7 +487,7 @@ export const MILITARY_COUNTRY_SCALE: Record<CountryId, number> = {
   GR: 0.9,
   AT: 0.85,
   FI: 0.9,
-  DD: 1.2,
+  DD: DD_MILITARY_SCALE,
   SCO: 1.0,
   WAL: 1.0,
 };
@@ -543,7 +523,7 @@ export const DEFENSE_POSITION_BY_COUNTRY: Record<CountryId, string | null> = {
   GR: "minister_of_defence",
   AT: "minister_of_defence",
   FI: "minister_of_defence",
-  DD: "minister_of_defence",
+  DD: DD_CABINET_SEAT_IDS.defense,
   SCO: null,
   WAL: null,
 };

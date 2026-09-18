@@ -6,6 +6,7 @@ import { DE_IDENTITY } from "@/lib/countries/de/identity";
 import { CN_IDENTITY } from "@/lib/countries/cn/identity";
 import { IE_IDENTITY } from "@/lib/countries/ie/identity";
 import { RU_IDENTITY } from "@/lib/countries/ru/identity";
+import { DD_IDENTITY } from "@/lib/countries/dd/identity";
 
 /**
  * National-identity layer for state-owned / National Corporation surfaces.
@@ -369,21 +370,7 @@ export const NATIONAL_IDENTITY: Record<CountryId, NationalIdentity> = {
     accentSoft: "#93b8e0",
     accentName: "Nordic blue & white",
   },
-  DD: {
-    glyph: "DDR",
-    serif: "mono",
-    motif: "gearStar",
-    name: "Volkseigener Betrieb",
-    native: "VEB Kombinat",
-    registry: "German Democratic Republic · State Asset Registry",
-    ministry: "STATE PLANNING COMMISSION",
-    publicSeal: "PUBLIC REGISTER",
-    hqCity: "East Berlin",
-    palette: ["#3a0d0d", "#2a0a0a", "#150606"],
-    accent: "#cdb15a",
-    accentSoft: "#e2cd8c",
-    accentName: "Socialist red & gold",
-  },
+  DD: DD_IDENTITY.national,
   // Latent secession country — Scottish flavor; refined at activation (SP2).
   SCO: {
     glyph: "AB",

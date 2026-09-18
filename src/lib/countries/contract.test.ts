@@ -68,8 +68,9 @@ describe("Japan satisfies the country contract", () => {
     expect(Object.keys(JP.institutions.cabinet.orders).length).toBeGreaterThan(0);
     expect(JP.institutions.military.branches.length).toBeGreaterThan(0);
 
-    expect(JP.elections.seats.totals.shugiin).toBe(465);
-    expect(JP.elections.seats.totals.sangiin).toBe(248);
+    // Optional on the contract since East Germany apportions from live regions.
+    expect(JP.elections.seats?.totals.shugiin).toBe(465);
+    expect(JP.elections.seats?.totals.sangiin).toBe(248);
     expect(JP.elections.electionPhases?.length).toBe(4);
 
     expect(JP.economy.currencyCode).toBe("JPY");

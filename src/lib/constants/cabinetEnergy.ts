@@ -7,6 +7,7 @@ import { DE_CABINET_SEAT_IDS } from "@/lib/countries/de/institutionsFacts";
 import { CN_CABINET_SEAT_IDS } from "@/lib/countries/cn/institutionsFacts";
 import { IE_CABINET_SEAT_IDS } from "@/lib/countries/ie/institutionsFacts";
 import { RU_CABINET_SEAT_IDS } from "@/lib/countries/ru/institutionsFacts";
+import { DD_CABINET_SEAT_IDS } from "@/lib/countries/dd/institutionsFacts";
 
 export interface EnergySourceDef {
   id: EnergySource;
@@ -110,7 +111,7 @@ export const ENERGY_POSITION_BY_COUNTRY: Partial<Record<CountryId, string>> = {
   // with the existing `Estates | Generation` toggle (the UK environment_secretary
   // path). Era-appropriate sources are enforced by seedEnergyPlants.
   RU: RU_CABINET_SEAT_IDS.energy,
-  DD: "minister_of_machine_building",
+  DD: DD_CABINET_SEAT_IDS.energy,
 };
 
 export const TIER_MULTIPLIER = [1.0, 1.5, 2.0, 2.5] as const;

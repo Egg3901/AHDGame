@@ -41,7 +41,7 @@
  */
 
 /** Countries whose folder is finished. Adding one turns the guard on for it. */
-export const CONVERTED: readonly string[] = ["JP", "US", "UK", "DE", "CN", "IE", "RU"];
+export const CONVERTED: readonly string[] = ["JP", "US", "UK", "DE", "CN", "IE", "RU", "DD"];
 
 /**
  * Files that hold one country's data, are NOT in that country's folder, and are
@@ -133,11 +133,6 @@ export const ACKNOWLEDGED_OUTSIDE: ReadonlyArray<{
     why: "MetricFormat, CabinetMetricEntry and getCabinetMetrics are the cabinet metric machinery; CABINET_METRIC_MAPPINGS carries US rows inside it. Bucket A: the rows move once the reader is country-keyed, the types and the getter stay.",
   },
   {
-    file: "src/lib/demographics/granularCells.ts",
-    country: "US",
-    why: "Twelve exports defining the granular-cell vocabulary -- GRANULAR_DIMENSIONS, GranularDim, BaseGranularCell, GenericGranularCell -- shared by every country's granular electorate. US cells sit inside it.",
-  },
-  {
     file: "src/lib/demographics/eraCheckpoints.ts",
     country: "US",
     why: "Twenty-one exports. EraCheckpointTarget, EraCheckpoint and DocketCaseLookupEntry are shared types; ALL_US_STATES, MIDWEST_STATES and SOUTH are United States groupings. Bucket A: the groupings move, the types stay.",
@@ -151,31 +146,6 @@ export const ACKNOWLEDGED_OUTSIDE: ReadonlyArray<{
     file: "src/lib/seeds/calibration/deriveRegionLeans.ts",
     country: "US",
     why: "One exported function, deriveRegionLeans. Engine code that happens to default to the US, not a table of US facts.",
-  },
-  {
-    file: "src/lib/seeds/calibration/electionBaselines.ts",
-    country: "US",
-    why: "ElectionBaseline, getElectionBaseline and leanToMargin are shared calibration machinery; ELECTION_BASELINES holds US rows. Bucket A.",
-  },
-  {
-    file: "src/lib/seeds/reference/sectorSeedWeights1999.ts",
-    country: "US",
-    why: "A COUNTRY-KEYED era registry (COUNTRY_SECTOR_WEIGHTS_1999 plus its getter) that currently happens to hold only a US entry. Its 1953, 1979 and 1991 siblings carry twenty-plus countries each; this is the same registry with a thinner era, not a United States file.",
-  },
-  {
-    file: "src/lib/seeds/reference/sectorSeedWeights2007.ts",
-    country: "US",
-    why: "Same registry, 2007 era. See the 1999 entry.",
-  },
-  {
-    file: "src/lib/seeds/reference/sectorSeedWeights2023.ts",
-    country: "US",
-    why: "Same registry, 2023 era. See the 1999 entry.",
-  },
-  {
-    file: "src/lib/seeds/reference/sectorSeedWeights2027.ts",
-    country: "US",
-    why: "Same registry, 2027 era. See the 1999 entry.",
   },
 
   // ---- United States client surfaces. Bucket E: they RENDER it, they do not own it. ----

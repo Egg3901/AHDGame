@@ -8,6 +8,7 @@ import { DE_CABINET_SEAT_IDS } from "@/lib/countries/de/institutionsFacts";
 import { CN_CABINET_SEAT_IDS } from "@/lib/countries/cn/institutionsFacts";
 import { IE_CABINET_SEAT_IDS } from "@/lib/countries/ie/institutionsFacts";
 import { RU_CABINET_SEAT_IDS } from "@/lib/countries/ru/institutionsFacts";
+import { DD_CABINET_SEAT_IDS } from "@/lib/countries/dd/institutionsFacts";
 
 /**
  * The built-in organizations seeded at game start. Player-created orgs use
@@ -659,7 +660,7 @@ export const FOREIGN_AFFAIRS_POSITION_BY_COUNTRY: Record<CountryId, string | nul
   GR: "minister_of_foreign_affairs",
   AT: "minister_of_foreign_affairs",
   FI: "minister_of_foreign_affairs",
-  DD: "minister_of_foreign_affairs",
+  DD: DD_CABINET_SEAT_IDS.foreignAffairs,
   // Sub-national entities. Both define `externalAffairsSecretary`, but they are left
   // on the head-of-government fallback deliberately: neither can be a belligerent
   // (validateDeclareWar refuses any target not enabled for players), and the
@@ -702,7 +703,7 @@ export const TRADE_MINISTER_POSITION_BY_COUNTRY: Record<CountryId, string | null
   GR: "minister_of_trade_industry",
   AT: "minister_of_trade_industry",
   FI: "minister_of_trade_industry",
-  DD: "minister_of_foreign_affairs",
+  DD: DD_CABINET_SEAT_IDS.tradeMinister,
   // Sub-national entities. Both define `externalAffairsSecretary`, but they are left
   // on the head-of-government fallback deliberately: neither can be a belligerent
   // (validateDeclareWar refuses any target not enabled for players), and the

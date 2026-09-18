@@ -16,6 +16,7 @@ import { DE_ECONOMY } from "@/lib/countries/de/economy";
 import { CN_ECONOMY } from "@/lib/countries/cn/economy";
 import { IE_ECONOMY } from "@/lib/countries/ie/economy";
 import { RU_ECONOMY } from "@/lib/countries/ru/economy";
+import { DD_ECONOMY } from "@/lib/countries/dd/economy";
 
 /**
  * Currency codes for all countries — active and future.
@@ -108,7 +109,7 @@ export const COUNTRY_CURRENCY_MAP: Record<CountryId, CurrencyCode> = {
   GR: "GRD",
   AT: "ATS",
   FI: "FIM",
-  DD: "DDM",
+  DD: DD_ECONOMY.currencyCode,
   SCO: "GBP", // sterlingized — shares the UK's GBP (anchor stays UK)
   WAL: "GBP", // sterlingized — shares the UK's GBP (anchor stays UK)
 };
@@ -796,7 +797,7 @@ export const MONETARY_BASELINES: Record<CountryId, MonetaryBaseline> = {
   GR: { targetInflation: 15.0, neutralPrimeRate: 16.5 }, // late-1970s drachma inflation regime
   AT: { targetInflation: 4.0, neutralPrimeRate: 5.5 }, // hard-schilling DM shadow policy
   FI: { targetInflation: 6.0, neutralPrimeRate: 8.5 }, // late-1970s markka devaluation-cycle regime
-  DD: { targetInflation: 2.0, neutralPrimeRate: 5.0 }, // administered GDR planned-economy prices
+  DD: DD_ECONOMY.monetary.baseline, // administered GDR planned-economy prices
   SCO: { targetInflation: 2.0, neutralPrimeRate: 3.0 }, // mirrors UK (sterling zone)
   WAL: { targetInflation: 2.0, neutralPrimeRate: 3.0 }, // mirrors UK (sterling zone)
 };

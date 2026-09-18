@@ -86,6 +86,7 @@ function maybe(name: string): string | null {
 
 const assentKey = maybe("REGIONAL_BILL_ASSENT_OFFICE_KEY");
 const legislativeProcess = maybe("LEGISLATIVE_PROCESS");
+const cabinetGroups = maybe("GROUPS");
 
 /** A seat id that may legitimately be absent (ENERGY and INFRA are `Partial`). */
 function seat(name: string): string {
@@ -95,7 +96,7 @@ function seat(name: string): string {
 }
 
 const out = `import type { Branch } from "@/lib/constants/military";
-import type { CabinetGroup } from "@/lib/constants/cabinetPositionGroups";
+${cabinetGroups ? 'import type { CabinetGroup } from "@/lib/constants/cabinetPositionGroups";' : ""}
 import type { CountryConfig } from "@/lib/constants/countries";
 ${legislativeProcess ? 'import type { LegislativeProcess } from "@/lib/legislature/process";' : ""}
 import type { OrderOfBattleEntry } from "@/lib/seeds/reference/ordersOfBattle";
@@ -172,7 +173,12 @@ ${
  * \`Record<string, string>\`, which is not assignable to \`Record<string, CabinetGroup>\`
  * and fails only under \`npm run typecheck\` -- eslint and the test suite both pass.
  */
-export const ${COUNTRY}_CABINET_GROUPS: Record<string, CabinetGroup> = ${v("GROUPS")};
+${
+  cabinetGroups
+    ? `export const ${COUNTRY}_CABINET_GROUPS: Record<string, CabinetGroup> = ${cabinetGroups};`
+    : `/* No ${COUNTRY}_CABINET_GROUPS: the registry has no ${COUNTRY} row, and its only
+   reader already falls back to "Centre" per position. */`
+}
 `;
 
 mkdirSync(dirname(OUT), { recursive: true });
@@ -185,5 +191,7 @@ console.log(
   `  military branches  : ${(JSON.parse(v("MILITARY_BRANCHES_BY_COUNTRY")) as unknown[]).length}`
 );
 console.log(`  orders of battle   : ${(JSON.parse(v("ORDERS_OF_BATTLE")) as unknown[]).length}`);
-console.log(`  cabinet groups     : ${Object.keys(JSON.parse(v("GROUPS")) as object).length}`);
+console.log(
+  `  cabinet groups     : ${cabinetGroups ? Object.keys(JSON.parse(cabinetGroups) as object).length : "none (no row)"}`
+);
 console.log(`\nNow write ${dirname(OUT)}/institutions.ts by hand: it wires the cabinet.`);

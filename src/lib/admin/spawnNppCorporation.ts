@@ -51,6 +51,7 @@ import { DE_NPP_CAPITAL_STATE } from "@/lib/countries/de/geographyFacts";
 import { CN_NPP_CAPITAL_STATE } from "@/lib/countries/cn/geographyFacts";
 import { IE_NPP_CAPITAL_STATE } from "@/lib/countries/ie/geographyFacts";
 import { RU_NPP_CAPITAL_STATE } from "@/lib/countries/ru/geographyFacts";
+import { DD_NPP_CAPITAL_STATE } from "@/lib/countries/dd/geographyFacts";
 
 /**
  * Default founding book for an admin/NPP-spawned corporation, in ₳ at MODERN
@@ -100,7 +101,7 @@ export const NPP_CAPITAL_STATES: Record<CountryId, string> = {
   GR: "GR_ATT", // Attica (Athens)
   AT: "AT_VIE", // Vienna
   FI: "FI_UUS", // Uusimaa (Helsinki)
-  DD: "", // regions not yet seeded
+  DD: DD_NPP_CAPITAL_STATE, // regions not yet seeded
   SCO: "", // Latent — sub-regions seeded at secession (cannot spawn pre-activation)
   WAL: "", // Latent — sub-regions seeded at secession (cannot spawn pre-activation)
 };

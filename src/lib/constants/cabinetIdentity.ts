@@ -7,6 +7,7 @@ import { DE_IDENTITY } from "@/lib/countries/de/identity";
 import { CN_IDENTITY } from "@/lib/countries/cn/identity";
 import { IE_IDENTITY } from "@/lib/countries/ie/identity";
 import { RU_IDENTITY } from "@/lib/countries/ru/identity";
+import { DD_IDENTITY } from "@/lib/countries/dd/identity";
 
 export interface CabinetIdentity {
   /** Large faded background glyph + chop fallback. */
@@ -41,15 +42,7 @@ export const CABINET_IDENTITY: Partial<Record<CountryId, CabinetIdentity>> = {
   RU: RU_IDENTITY.cabinet,
   // East Germany, Council of Ministers (DDR): state gold against deep
   // red-black, matching the Soviet precedent.
-  DD: {
-    glyph: "DDR",
-    serif: "mono",
-    gov: "#d9a93e",
-    govSoft: "#eccb7d",
-    g0: "#4d0f0f",
-    g1: "#320b0b",
-    g2: "#1a0707",
-  },
+  DD: DD_IDENTITY.cabinet,
 };
 
 /**

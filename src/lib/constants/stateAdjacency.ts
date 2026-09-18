@@ -27,6 +27,7 @@ import { DE_ADJACENCY_MAP } from "@/lib/countries/de/geographyFacts";
 import { CN_ADJACENCY_MAP } from "@/lib/countries/cn/geographyFacts";
 import { IE_ADJACENCY_MAP } from "@/lib/countries/ie/geographyFacts";
 import { RU_ADJACENCY_MAP } from "@/lib/countries/ru/geographyFacts";
+import { DD_ADJACENCY_MAP } from "@/lib/countries/dd/geographyFacts";
 
 export type AdjacencyMap = Record<string, readonly string[]>;
 
@@ -59,14 +60,6 @@ export type AdjacencyMap = Record<string, readonly string[]>;
  * Länder have under `DE` (SH, NI, BY, HE) fall outside DD. East Berlin
  * (BEO) is enclaved within Brandenburg, mirroring DE's BE ↔ BB.
  */
-const DD_ADJACENCY: AdjacencyMap = {
-  BEO: ["BB"], // enclaved within Brandenburg
-  MV: ["BB"],
-  BB: ["BEO", "MV", "ST", "SN"],
-  ST: ["BB", "SN", "TH"],
-  SN: ["BB", "ST", "TH"],
-  TH: ["ST", "SN"],
-};
 
 /**
  * Ireland's eight composite planning regions. Borders follow the constituent
@@ -330,7 +323,7 @@ export const STATE_ADJACENCY: Readonly<Record<CountryId, AdjacencyMap>> = {
   GR: GR_ADJACENCY,
   AT: AT_ADJACENCY,
   FI: FI_ADJACENCY,
-  DD: DD_ADJACENCY,
+  DD: DD_ADJACENCY_MAP,
   SCO: SCO_ADJACENCY,
   WAL: WAL_ADJACENCY,
 };

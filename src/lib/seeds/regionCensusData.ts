@@ -75,6 +75,7 @@ import { DE_GEOGRAPHY } from "@/lib/countries/de/geography";
 import { CN_GEOGRAPHY } from "@/lib/countries/cn/geography";
 import { IE_GEOGRAPHY } from "@/lib/countries/ie/geography";
 import { RU_GEOGRAPHY } from "@/lib/countries/ru/geography";
+import { DD_GEOGRAPHY } from "@/lib/countries/dd/geography";
 
 export const CENSUS_BUNDLES: Partial<Record<CountryId, PresetBundles>> = {
   PL: {
@@ -161,7 +162,7 @@ export const CENSUS_BUNDLES: Partial<Record<CountryId, PresetBundles>> = {
   IT: { "1953-default": itRegionCensusData1953, "1979-default": itRegionCensusData1953 },
   ES: { "1953-default": esRegionCensusData1953, "1979-default": esRegionCensusData1953 },
   RU: RU_GEOGRAPHY.censusBundles,
-  DD: { "1953-default": ddRegionCensusData1953, "1979-default": ddRegionCensusData1953 },
+  DD: DD_GEOGRAPHY.censusBundles,
   // 2019-default was missing here even though ngRegionCensusData (the NPC/NBS-based
   // 2019 bundle already used by seeds/international/ng.ts) has existed since NG
   // launched — any full bootstrap/reset to the default preset crashed in

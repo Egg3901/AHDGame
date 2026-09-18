@@ -6,6 +6,7 @@ import { DE_ISO_NUMERIC } from "@/lib/countries/de/geographyFacts";
 import { CN_ISO_NUMERIC } from "@/lib/countries/cn/geographyFacts";
 import { IE_ISO_NUMERIC } from "@/lib/countries/ie/geographyFacts";
 import { RU_ISO_NUMERIC } from "@/lib/countries/ru/geographyFacts";
+import { DD_ISO_NUMERIC } from "@/lib/countries/dd/geographyFacts";
 
 /** Natural-Earth ISO-numeric (topojson feature id) → in-game CountryId. */
 export const ISO_NUMERIC_TO_COUNTRY: Record<string, CountryId> = {
@@ -66,7 +67,7 @@ export const COUNTRY_TO_ISO_NUMERIC: Record<CountryId, string> = {
   GR: "300",
   AT: "040",
   FI: "246",
-  DD: "278",
+  DD: DD_ISO_NUMERIC,
   SCO: "826", // shares GB code; not on the commodity map until secession
   WAL: "826", // shares GB code; not on the commodity map until secession
 };

@@ -13,6 +13,7 @@ import { DE_MAP_REGISTRY } from "@/lib/countries/de/data/deMapConfig";
 import { CN_MAP_REGISTRY } from "@/lib/countries/cn/geographyFacts";
 import { IE_MAP_REGISTRY } from "@/lib/countries/ie/geographyFacts";
 import { RU_MAP_REGISTRY } from "@/lib/countries/ru/geographyFacts";
+import { DD_MAP_REGISTRY } from "@/lib/countries/dd/geographyFacts";
 
 export interface CountryMapConfig {
   /** Country ID */
@@ -196,13 +197,7 @@ export const COUNTRY_MAP_REGISTRY: Record<CountryId, CountryMapConfig> = {
     mapPath: "/country/fi/map",
     hasRegionMap: false,
   },
-  DD: {
-    countryId: "DD",
-    name: "East Germany",
-    overviewPath: "/country/dd",
-    mapPath: "/country/dd/map",
-    hasRegionMap: false,
-  },
+  DD: DD_MAP_REGISTRY,
   // Latent — region map (public/sco-regions.json) wired in at SP3.
   SCO: {
     countryId: "SCO",

@@ -18,6 +18,7 @@ import { DE_IDENTITY } from "@/lib/countries/de/identity";
 import { CN_IDENTITY } from "@/lib/countries/cn/identity";
 import { IE_IDENTITY } from "@/lib/countries/ie/identity";
 import { RU_IDENTITY } from "@/lib/countries/ru/identity";
+import { DD_IDENTITY } from "@/lib/countries/dd/identity";
 
 export interface ExecutiveSeal {
   src: string;
@@ -50,10 +51,7 @@ export const EXECUTIVE_SEALS: Partial<Record<CountryId, ExecutiveSeal>> = {
   // Seals degrade to the generated NationalSeal if a URL fails, so period-emblem
   // filenames that have since moved fall back cleanly.
   RU: RU_IDENTITY.executiveSeal,
-  DD: {
-    src: "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a1/Coat_of_arms_of_East_Germany.svg/330px-Coat_of_arms_of_East_Germany.svg.png",
-    alt: "Coat of arms of East Germany (GDR)",
-  },
+  DD: DD_IDENTITY.executiveSeal,
   FR: {
     src: "https://upload.wikimedia.org/wikipedia/commons/thumb/b/b7/Armoiries_république_française.svg/330px-Armoiries_république_française.svg.png",
     alt: "Arms of the French Republic",

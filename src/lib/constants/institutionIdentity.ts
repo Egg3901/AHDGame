@@ -9,6 +9,7 @@ import { DE_IDENTITY } from "@/lib/countries/de/identity";
 import { CN_IDENTITY } from "@/lib/countries/cn/identity";
 import { IE_IDENTITY } from "@/lib/countries/ie/identity";
 import { RU_IDENTITY } from "@/lib/countries/ru/identity";
+import { DD_IDENTITY } from "@/lib/countries/dd/identity";
 
 /**
  * Institution identity overlays for the country-pages masthead family
@@ -180,14 +181,7 @@ export const EXECUTIVE_TEXT: Record<CountryId, IdentityText> = {
     title: "Valtioneuvosto",
     titleEn: "Government Palace",
   },
-  DD: {
-    glyph: "DDR",
-    serif: "mono",
-    registry: "German Democratic Republic · Council of Ministers",
-    // Seat-of-government place name (the RU "The Kremlin" convention) — the
-    // Volkskammer is the LEGISLATURE and titles that page instead.
-    title: "Altes Stadthaus",
-  },
+  DD: DD_IDENTITY.executiveText,
   SCO: {
     glyph: "FM",
     serif: "mono",
@@ -331,12 +325,7 @@ export const POLICY_TEXT: Record<CountryId, IdentityText> = {
     registry: "Code of Law · Republic of Finland",
     title: "National Policy",
   },
-  DD: {
-    glyph: "§",
-    serif: "mono",
-    registry: "Code of Law · German Democratic Republic",
-    title: "National Policy",
-  },
+  DD: DD_IDENTITY.policyText,
   SCO: {
     glyph: "§",
     serif: "mono",

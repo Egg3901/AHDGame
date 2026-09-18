@@ -457,6 +457,40 @@ export interface Owned {
 
 let cached: Owned[] | null = null;
 
+/**
+ * Is the ONLY evidence a single key inside a country-keyed registry?
+ *
+ * ⚠️ A COUNTRY-KEYED MAP EXPECTS MANY COUNTRIES, SO ONE ROW IN IT PROVES
+ * NOTHING. `constants/commodities.ts` is 2,483 lines of shared commodity
+ * definitions that happen to include
+ * `COUNTRY_COMMODITY_DEMAND_MULTIPLIER: Partial<Record<CountryId, ...>>`, and
+ * today that map holds exactly one row: `DD: { construction_services: 18 }`.
+ * That one key was enough to claim the whole file for East Germany and file it
+ * under `dd/data/` -- taking every other country's commodity definitions with
+ * it, and size-cap-exempting 2,483 lines on the way.
+ *
+ * The row IS East Germany's; the file is everyone's. That is the "bucket A"
+ * split the plan names: the row moves when the reader becomes country-keyed,
+ * the machinery stays. `sectorSeedWeights1999.ts` is acknowledged for exactly
+ * this reason, and it is a registry with a thinner era rather than a US file.
+ *
+ * So: a lone registry key, with no `countryId:` field, no `xx_` slug and no
+ * `CC_` declaration anywhere in the file, is not ownership. Every other form of
+ * evidence still is, and a file with two or more keys was never single-country.
+ */
+function loneRegistryKey(raw: string, country: string): boolean {
+  const source = stripComments(raw);
+  for (const [, cc] of source.matchAll(COUNTRY_ID_FIELD)) if (cc === country) return false;
+  for (const [, cc] of source.matchAll(SLUG)) if (cc.toUpperCase() === country) return false;
+  for (const match of source.matchAll(COUNTRY_DECLARATION)) {
+    if (match[1] !== country) continue;
+    if (NOT_A_COUNTRY_PREFIX.test(match[0].slice(match[0].indexOf(country)))) continue;
+    return false;
+  }
+  const keyed = [...maskStrings(source).matchAll(REGISTRY_KEY)].filter(([, cc]) => cc === country);
+  return keyed.length === 1;
+}
+
 export function singleCountryFiles(): Owned[] {
   if (cached) return cached;
   const out: Owned[] = [];
@@ -495,7 +529,7 @@ export function singleCountryFiles(): Owned[] {
       let by: "name" | "content" = "name";
       if (named && (declared.size === 0 || (declared.size === 1 && declared.has(named)))) {
         country = named;
-      } else if (declared.size === 1 && inDataDir) {
+      } else if (declared.size === 1 && inDataDir && !loneRegistryKey(source, [...declared][0])) {
         country = [...declared][0];
         by = "content";
       } else if (inDataDir && ownedByStateKeys(keys, declared)) {

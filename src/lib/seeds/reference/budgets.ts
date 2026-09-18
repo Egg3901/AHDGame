@@ -130,7 +130,7 @@ export const SOVEREIGN_CORP_LEGAL_STRUCTURE: Partial<Record<CountryId, LegalStru
   // enterprise. See GENERIC_LEGAL_STRUCTURE in constants/legalStructures.ts.
   RU: RU_ECONOMY.sovereignCorpLegalStructure,
   // Same reasoning as RU: a planned economy has no bespoke joint-stock form.
-  DD: "generic_corp",
+  DD: DD_ECONOMY.sovereignCorpLegalStructure,
   // Warsaw-Pact satellites (Command Economy v2 SOE stack, refs command-economy
   // seed-gap fix): none of these ran a bespoke joint-stock corporate form
   // either — same neutral fallback as RU/DD.
@@ -507,6 +507,7 @@ import { DE_ECONOMY } from "@/lib/countries/de/economy";
 import { CN_ECONOMY } from "@/lib/countries/cn/economy";
 import { IE_ECONOMY } from "@/lib/countries/ie/economy";
 import { RU_ECONOMY } from "@/lib/countries/ru/economy";
+import { DD_ECONOMY } from "@/lib/countries/dd/economy";
 
 /**
  * Authored historical fiscal baselines for 1953 (Korean War defense shares,

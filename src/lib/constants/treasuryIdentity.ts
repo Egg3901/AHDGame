@@ -7,6 +7,7 @@ import { DE_IDENTITY } from "@/lib/countries/de/identity";
 import { CN_IDENTITY } from "@/lib/countries/cn/identity";
 import { IE_IDENTITY } from "@/lib/countries/ie/identity";
 import { RU_IDENTITY } from "@/lib/countries/ru/identity";
+import { DD_IDENTITY } from "@/lib/countries/dd/identity";
 
 /**
  * Treasury / Finance-Ministry identity overlay for the National Budget surface.
@@ -235,15 +236,7 @@ export const TREASURY_TEXT: Record<
     registry: "Republic of Finland · Ministry of Finance",
     native: "Suomen Tasavalta · Valtiovarainministeriö",
   },
-  DD: {
-    glyph: "DDR",
-    serif: "mono",
-    budgetTitle: "State Plan Budget",
-    ministry: "MINISTRY OF FINANCE",
-    publicSeal: "PUBLIC RECORD",
-    registry: "German Democratic Republic · Ministry of Finance",
-    native: "Deutsche Demokratische Republik · Ministerium der Finanzen",
-  },
+  DD: DD_IDENTITY.treasuryText,
   SCO: {
     glyph: "AB",
     serif: "mono",

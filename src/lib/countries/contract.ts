@@ -195,7 +195,13 @@ export interface CountryInstitutions {
     readonly positions: readonly unknown[];
     readonly orders: Readonly<Record<string, unknown>>;
     readonly mechanics: Readonly<Record<string, unknown>>;
-    readonly groups: Record<string, CabinetGroup>;
+    /**
+     * ⚠️ OPTIONAL: East Germany has no `GROUPS` row, and the only reader is
+     * `GROUPS[countryId]?.[positionId] ?? "Centre"` -- already written for the
+     * absence. See `stats` on CountryIdentity for why the first cohort made so
+     * many of these look required.
+     */
+    readonly groups?: Record<string, CabinetGroup>;
   };
   readonly military: {
     /**
@@ -233,7 +239,15 @@ export interface CountryElections {
    * the forwarder.
    */
   readonly electionPhases?: CountryElectionPhaseEntry[];
-  readonly seats: {
+  /**
+   * ⚠️ OPTIONAL, BECAUSE SOME COUNTRIES APPORTION FROM THE LIVE REGIONS. East
+   * Germany's spawner reads `seatsFromRegionField(regions, "houseDistricts")`;
+   * there is no static table anywhere to carry, and Russia's Soviet of the Union
+   * works the same way -- `ruSeats.ts` says outright that a parallel map would
+   * drift. A folder that invented `byChamber: {}` to satisfy the type would
+   * report a chamber with no seats, which reads as data rather than as absence.
+   */
+  readonly seats?: {
     readonly byChamber: Readonly<Record<string, Readonly<Record<string, number>>>>;
     readonly totals: Readonly<Record<string, number>>;
   };
