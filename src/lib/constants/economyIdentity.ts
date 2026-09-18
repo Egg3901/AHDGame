@@ -14,6 +14,7 @@ import { getStatsIdentity, type StatsAccent } from "./nationalStatsIdentity";
 import { JP_IDENTITY } from "@/lib/countries/jp/identity";
 import { US_IDENTITY } from "@/lib/countries/us/identity";
 import { UK_IDENTITY } from "@/lib/countries/uk/identity";
+import { DE_IDENTITY } from "@/lib/countries/de/identity";
 
 export interface EconomyIdentity {
   /** Watermark / chop glyph (经 / US / …). */
@@ -46,15 +47,7 @@ export const ECONOMY_TEXT: Partial<Record<CountryId, Omit<EconomyIdentity, "acce
     registry: "People's Republic of China · National Accounts Registry",
   },
   UK: UK_IDENTITY.economyText,
-  DE: {
-    glyph: "DE",
-    serif: "mono",
-    title: "Wirtschaftsausblick",
-    titleEn: "Economic Outlook",
-    office: "Statistisches Bundesamt · Volkswirtschaftliche Gesamtrechnungen",
-    officeEn: "Federal Statistical Office · National Accounts",
-    registry: "Federal Republic of Germany · National Accounts Registry",
-  },
+  DE: DE_IDENTITY.economyText,
   JP: JP_IDENTITY.economyText,
   IE: {
     glyph: "ÉI",

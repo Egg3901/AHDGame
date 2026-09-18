@@ -5,7 +5,6 @@ import {
   ensureCNGovernorElections,
   ensureCNPeoplesCongressElections,
 } from "./countries/cn";
-import { ensureDEElections } from "./countries/de";
 import {
   ensureIECathaoirleachElections,
   ensureIEElections,
@@ -13,9 +12,10 @@ import {
   ensureIEUachtaranElections,
 } from "./countries/ie";
 import { ensureNGElections } from "./countries/ng";
-import { ensurePresidentialElection } from "./shared";
 import { JP_ELECTIONS } from "@/lib/countries/jp/elections";
 import { UK_ELECTIONS } from "@/lib/countries/uk/elections";
+import { US_ELECTIONS } from "@/lib/countries/us/elections";
+import { DE_ELECTIONS } from "@/lib/countries/de/elections";
 
 export interface SpawnElectionsResult {
   message: string;
@@ -26,12 +26,9 @@ export interface SpawnElectionsResult {
 export type SpawnElectionsHandler = (now: Date) => Promise<SpawnElectionsResult | void>;
 
 export const SPAWN_ELECTIONS_REGISTRY: Partial<Record<CountryId, SpawnElectionsHandler>> = {
-  US: ensurePresidentialElection,
+  US: US_ELECTIONS.spawn,
   UK: UK_ELECTIONS.spawn,
-  DE: async (now) => {
-    await ensureDEElections(now);
-    return { message: "DE Bundestag continuity check complete." };
-  },
+  DE: DE_ELECTIONS.spawn,
   JP: JP_ELECTIONS.spawn,
   CN: async (now) => {
     // National NPC Delegates + Provincial People's Congress + macro-region Governor.

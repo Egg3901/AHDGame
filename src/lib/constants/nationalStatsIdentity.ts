@@ -15,6 +15,7 @@ import type { CountryId } from "./countries";
 import { JP_IDENTITY } from "@/lib/countries/jp/identity";
 import { US_IDENTITY } from "@/lib/countries/us/identity";
 import { UK_IDENTITY } from "@/lib/countries/uk/identity";
+import { DE_IDENTITY } from "@/lib/countries/de/identity";
 
 export interface StatsAccent {
   /** Accent gold/brass. */
@@ -64,17 +65,7 @@ export const NATIONAL_STATS_IDENTITY: Partial<Record<CountryId, StatsIdentity>> 
   },
   US: US_IDENTITY.stats,
   UK: UK_IDENTITY.stats,
-  DE: {
-    glyph: "DES",
-    serif: "mono",
-    office: "Statistisches Bundesamt",
-    officeEn: "Federal Statistical Office",
-    title: "Bundesstatistik (Federal Statistics)",
-    titleEn: "Federal Statistics",
-    registry: "Federal Republic of Germany · Statistisches Bundesamt",
-    seal: "DESTATIS",
-    accent: { stat: "#d4a244", statSoft: "#e8c884", g0: "#2a2218", g1: "#1a150d", g2: "#100c07" },
-  },
+  DE: DE_IDENTITY.stats,
   JP: JP_IDENTITY.stats,
   IE: {
     glyph: "CSO",

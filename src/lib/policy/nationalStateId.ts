@@ -1,5 +1,8 @@
 import type { CountryId } from "@/lib/constants/countries";
 import { JP_ECONOMY } from "@/lib/countries/jp/economy";
+import { US_ECONOMY } from "@/lib/countries/us/economy";
+import { UK_ECONOMY } from "@/lib/countries/uk/economy";
+import { DE_ECONOMY } from "@/lib/countries/de/economy";
 
 /**
  * Mapping from country to the "stateId" used in collections like statePolicies
@@ -9,10 +12,10 @@ import { JP_ECONOMY } from "@/lib/countries/jp/economy";
  * Single source of truth — duplicated mappings elsewhere should import this.
  */
 export const NATIONAL_POLICY_STATE_IDS: Record<CountryId, string> = {
-  US: "federal",
-  UK: "uk_national",
+  US: US_ECONOMY.nationalPolicyStateId,
+  UK: UK_ECONOMY.nationalPolicyStateId,
   JP: JP_ECONOMY.nationalPolicyStateId,
-  DE: "de_national",
+  DE: DE_ECONOMY.nationalPolicyStateId,
   IE: "ie_national",
   BR: "br_national",
   CN: "cn_national",

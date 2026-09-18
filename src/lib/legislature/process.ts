@@ -1,5 +1,6 @@
 import type { CountryId } from "@/lib/constants/countries";
 import { JP_LEGISLATIVE_PROCESS } from "@/lib/countries/jp/institutionsFacts";
+import { DE_LEGISLATIVE_PROCESS } from "@/lib/countries/de/institutionsFacts";
 import { US_LEGISLATIVE_PROCESS } from "@/lib/countries/us/institutionsFacts";
 import { UK_LEGISLATIVE_PROCESS } from "@/lib/countries/uk/institutionsFacts";
 
@@ -36,40 +37,7 @@ export interface LegislativeProcess {
   seatingStyle: SeatingStyle;
 }
 
-const DE: LegislativeProcess = {
-  executive: {
-    title: "Federal President",
-    canVeto: false,
-    signLabel: "Presidential signature",
-    signNote:
-      "The Federal President signs and promulgates the law, and may decline only on constitutional grounds.",
-    override: null,
-  },
-  upperNote:
-    "The Bundesrat represents the Länder. Consent bills require its approval; for objection bills it can be overruled by the Bundestag.",
-  dissolution: {
-    actor: "Chancellor",
-    body: "There is no free dissolution. A constructive vote of no confidence must name a successor Chancellor (Art. 67).",
-  },
-  quirks: [
-    {
-      icon: "building",
-      title: "Bundesrat consent",
-      body: "Bills affecting the Länder need Bundesrat approval; others it may only delay.",
-    },
-    {
-      icon: "users",
-      title: "Constructive no-confidence",
-      body: "The Chancellor can only be removed by electing a replacement in the same vote.",
-    },
-    {
-      icon: "doc",
-      title: "Promulgation",
-      body: "The Federal President's signature is largely ceremonial.",
-    },
-  ],
-  seatingStyle: "hemicycle",
-};
+const DE: LegislativeProcess = DE_LEGISLATIVE_PROCESS;
 
 /**
  * Forwarder. Japan's legislative process moved to the country folder in D3.

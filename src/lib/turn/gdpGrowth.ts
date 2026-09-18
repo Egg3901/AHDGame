@@ -20,6 +20,9 @@
 
 import type { CountryId } from "@/lib/constants/countries";
 import { JP_ECONOMY } from "@/lib/countries/jp/economy";
+import { US_ECONOMY } from "@/lib/countries/us/economy";
+import { UK_ECONOMY } from "@/lib/countries/uk/economy";
+import { DE_ECONOMY } from "@/lib/countries/de/economy";
 
 /** Default daily growth rate for unowned sectors (background economy) */
 export const DEFAULT_UNOWNED_GROWTH_RATE = 0.5;
@@ -49,17 +52,17 @@ const SALES_TAX_GROWTH_COEFFICIENT = 0.05;
 const SALES_TAX_GAP_CLAMP = 30;
 
 export const NEUTRAL_FEDERAL_SALES_TAX_BY_COUNTRY: Partial<Record<CountryId, number>> = {
-  US: 0,
-  UK: 20,
+  US: US_ECONOMY.tax.neutralFederalSalesTax,
+  UK: UK_ECONOMY.tax.neutralFederalSalesTax,
   JP: JP_ECONOMY.tax.neutralFederalSalesTax,
-  DE: 19,
+  DE: DE_ECONOMY.tax.neutralFederalSalesTax,
 };
 
 export const NEUTRAL_STATE_SALES_TAX_BY_COUNTRY: Partial<Record<CountryId, number>> = {
-  US: 6,
-  UK: 0,
+  US: US_ECONOMY.tax.neutralStateSalesTax,
+  UK: UK_ECONOMY.tax.neutralStateSalesTax,
   JP: JP_ECONOMY.tax.neutralStateSalesTax,
-  DE: 0,
+  DE: DE_ECONOMY.tax.neutralStateSalesTax,
   IE: 0,
   BR: 5,
   CN: 4,

@@ -2,6 +2,7 @@ import type { CountryId } from "@/lib/constants/countries";
 import { JP_GEOGRAPHY } from "@/lib/countries/jp/geography";
 import { US_POPULATION_MULTIPLIERS } from "@/lib/countries/us/geographyFacts";
 import { UK_POPULATION_MULTIPLIERS } from "@/lib/countries/uk/geographyFacts";
+import { DE_POPULATION_MULTIPLIERS } from "@/lib/countries/de/geographyFacts";
 
 /**
  * 1991-era cohort multipliers, per country.
@@ -28,19 +29,7 @@ export const POPULATION_MULTIPLIERS: Partial<Record<CountryId, Record<string, nu
   US: US_POPULATION_MULTIPLIERS,
   UK: UK_POPULATION_MULTIPLIERS,
   JP: JP_GEOGRAPHY.populationMultipliers,
-  DE: {
-    katholische_konservative: 1.1, // Pre-secularisation
-    gewerkschafter: 1.4, // 1991 union density ~32% vs ~17% in 2020
-    urbane_progressive: 0.7,
-    wirtschaftsliberale: 0.85, // Smaller FDP base
-    ost_post_industriell: 3.0, // Post-reunification visible; cohort emigrated/retired by 2020
-    gruene_mittelschicht: 0.5, // B90/Die Grünen merger just completed 1990
-    rentner_west: 0.85, // Smaller retiree cohort in 1991 West
-    migranten_communities: 0.5, // Pre-1992 asylum surge
-    landwirte_dorf: 1.2, // More agricultural employment
-    junge_grossstadt: 0.9,
-    protest_waehler_ost: 2.5, // Post-reunification PDS/protest peak
-  },
+  DE: DE_POPULATION_MULTIPLIERS,
   CN: {
     party_cadre: 1.15, // Peak SOE party-state era
     urban_professional: 0.5, // Pre-private-sector boom

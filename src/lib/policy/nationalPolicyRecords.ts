@@ -24,6 +24,9 @@ import { getMetricDefinition } from "@/lib/constants/metricDefinitions";
 import type { MetricCategoryId } from "@/lib/db/types";
 import { taxSliderRateLabel } from "@/lib/politicalLegislation/taxSlider";
 import { JP_ECONOMY } from "@/lib/countries/jp/economy";
+import { US_ECONOMY } from "@/lib/countries/us/economy";
+import { UK_ECONOMY } from "@/lib/countries/uk/economy";
+import { DE_ECONOMY } from "@/lib/countries/de/economy";
 
 /**
  * Shared national policy-record assembly — extracted verbatim from
@@ -49,10 +52,10 @@ export const LEGISLATION_COUNTRY_SCOPES: Record<
   CountryId,
   NonNullable<LegislationType["countryScope"]>
 > = {
-  US: "us",
-  UK: "uk",
+  US: US_ECONOMY.legislationScope,
+  UK: UK_ECONOMY.legislationScope,
   JP: JP_ECONOMY.legislationScope,
-  DE: "de",
+  DE: DE_ECONOMY.legislationScope,
   IE: "ie",
   BR: "br",
   CN: "cn",

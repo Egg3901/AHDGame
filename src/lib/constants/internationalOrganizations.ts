@@ -2,6 +2,9 @@ import type { CountryId } from "./countries";
 import type { OrgMemberId } from "@/lib/db/types/internationalOrganization";
 import type { OrganizationCategory } from "./orgCategory";
 import { JP_CABINET_SEAT_IDS } from "@/lib/countries/jp/institutionsFacts";
+import { US_CABINET_SEAT_IDS } from "@/lib/countries/us/institutionsFacts";
+import { UK_CABINET_SEAT_IDS } from "@/lib/countries/uk/institutionsFacts";
+import { DE_CABINET_SEAT_IDS } from "@/lib/countries/de/institutionsFacts";
 
 /**
  * The built-in organizations seeded at game start. Player-created orgs use
@@ -619,9 +622,9 @@ export const CUSTOM_ORG_DEFAULT_LEADERSHIP_TERM_TURNS = DEFAULT_LEADERSHIP_TERM_
  * without a configured seat fall back to the head of government.
  */
 export const FOREIGN_AFFAIRS_POSITION_BY_COUNTRY: Record<CountryId, string | null> = {
-  US: "secretary_of_state",
-  UK: "foreign_secretary",
-  DE: "foreign_minister",
+  US: US_CABINET_SEAT_IDS.foreignAffairs,
+  UK: UK_CABINET_SEAT_IDS.foreignAffairs,
+  DE: DE_CABINET_SEAT_IDS.foreignAffairs,
   JP: JP_CABINET_SEAT_IDS.foreignAffairs,
   IE: "minister_for_foreign_affairs",
   BR: "minister_of_foreign_affairs",
@@ -670,9 +673,9 @@ export const FOREIGN_AFFAIRS_POSITION_BY_COUNTRY: Record<CountryId, string | nul
  * head of government.
  */
 export const TRADE_MINISTER_POSITION_BY_COUNTRY: Record<CountryId, string | null> = {
-  US: "secretary_of_commerce",
-  UK: "business_secretary",
-  DE: "economy_minister",
+  US: US_CABINET_SEAT_IDS.tradeMinister,
+  UK: UK_CABINET_SEAT_IDS.tradeMinister,
+  DE: DE_CABINET_SEAT_IDS.tradeMinister,
   JP: JP_CABINET_SEAT_IDS.tradeMinister,
   CN: "minister_of_commerce",
   IE: "minister_for_enterprise", // Minister for Enterprise, Trade and Employment

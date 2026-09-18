@@ -1,5 +1,8 @@
 import type { CountryId } from "./countries";
 import { JP_CONTINENT } from "@/lib/countries/jp/geographyFacts";
+import { US_CONTINENT } from "@/lib/countries/us/geographyFacts";
+import { UK_CONTINENT } from "@/lib/countries/uk/geographyFacts";
+import { DE_CONTINENT } from "@/lib/countries/de/geographyFacts";
 
 export type Continent =
   "North America" | "South America" | "Europe" | "Africa" | "Asia" | "Oceania";
@@ -20,11 +23,11 @@ export const CONTINENT_ORDER: readonly Continent[] = [
  * one is added.
  */
 export const COUNTRY_CONTINENT: Record<CountryId, Continent> = {
-  US: "North America",
+  US: US_CONTINENT,
   BR: "South America",
-  UK: "Europe",
+  UK: UK_CONTINENT,
   IE: "Europe",
-  DE: "Europe",
+  DE: DE_CONTINENT,
   DD: "Europe",
   FR: "Europe",
   IT: "Europe",

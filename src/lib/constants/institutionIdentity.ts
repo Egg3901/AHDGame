@@ -5,6 +5,7 @@ import { JP_IDENTITY } from "@/lib/countries/jp/identity";
 import { JP_BANK_TEXT } from "@/lib/countries/jp/identity";
 import { US_IDENTITY } from "@/lib/countries/us/identity";
 import { UK_IDENTITY } from "@/lib/countries/uk/identity";
+import { DE_IDENTITY } from "@/lib/countries/de/identity";
 
 /**
  * Institution identity overlays for the country-pages masthead family
@@ -53,13 +54,7 @@ function composeFromNational(countryId: CountryId, text: IdentityText): Institut
 export const EXECUTIVE_TEXT: Record<CountryId, IdentityText> = {
   US: US_IDENTITY.executiveText,
   UK: UK_IDENTITY.executiveText,
-  DE: {
-    glyph: "BK",
-    serif: "mono",
-    registry: "Federal Republic of Germany · Federal Government",
-    title: "Bundeskanzleramt",
-    titleEn: "Federal Chancellery",
-  },
+  DE: DE_IDENTITY.executiveText,
   JP: JP_IDENTITY.executiveText,
   IE: {
     glyph: "DT",
@@ -230,13 +225,7 @@ export function getExecutiveIdentity(countryId: CountryId): InstitutionIdentity 
 export const POLICY_TEXT: Record<CountryId, IdentityText> = {
   US: US_IDENTITY.policyText,
   UK: UK_IDENTITY.policyText,
-  DE: {
-    glyph: "§",
-    serif: "mono",
-    registry: "Code of National Law · Federal Republic of Germany",
-    title: "Bundesrecht",
-    titleEn: "National Policy",
-  },
+  DE: DE_IDENTITY.policyText,
   JP: JP_IDENTITY.policyText,
   IE: {
     glyph: "§",

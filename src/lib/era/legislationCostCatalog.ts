@@ -11,6 +11,7 @@ import { bankingSeparationLegislationTypes } from "@/lib/seeds/shared/bankingSep
 import { JP_ECONOMY } from "@/lib/countries/jp/economy";
 import { US_ECONOMY } from "@/lib/countries/us/economy";
 import { UK_ECONOMY } from "@/lib/countries/uk/economy";
+import { DE_ECONOMY } from "@/lib/countries/de/economy";
 
 export type CostClass = "gdpFraction" | "perCapita" | "none";
 
@@ -916,7 +917,7 @@ export const CALIBRATION_SCALE = 1.5;
 export const REP_ECON: Record<string, { gdp: number; population: number }> = {
   US: US_ECONOMY.repEcon,
   UK: UK_ECONOMY.repEcon,
-  DE: { gdp: 4_500_000_000_000, population: 84_400_000 },
+  DE: DE_ECONOMY.repEcon,
   JP: JP_ECONOMY.repEcon,
   IE: { gdp: 500_000_000_000, population: 5_100_000 },
   CN: { gdp: 126_000_000_000_000, population: 1_412_000_000 },

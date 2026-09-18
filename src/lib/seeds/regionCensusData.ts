@@ -71,6 +71,7 @@ import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
 import { JP_GEOGRAPHY } from "@/lib/countries/jp/geography";
 import { US_GEOGRAPHY } from "@/lib/countries/us/geography";
 import { UK_GEOGRAPHY } from "@/lib/countries/uk/geography";
+import { DE_GEOGRAPHY } from "@/lib/countries/de/geography";
 
 export const CENSUS_BUNDLES: Partial<Record<CountryId, PresetBundles>> = {
   PL: {
@@ -131,13 +132,7 @@ export const CENSUS_BUNDLES: Partial<Record<CountryId, PresetBundles>> = {
   US: US_GEOGRAPHY.censusBundles,
   UK: UK_GEOGRAPHY.censusBundles,
   JP: JP_GEOGRAPHY.censusBundles,
-  DE: {
-    "1953-default": deRegionCensusData1953,
-    "1979-default": deRegionCensusData1979,
-    "2019-default": deRegionCensusData,
-    "1991-default": deRegionCensusData1991,
-    "2027-default": deRegionCensusData2027,
-  },
+  DE: DE_GEOGRAPHY.censusBundles,
   IE: {
     "1953-default": ieRegionCensusData1953,
     "1979-default": ieRegionCensusData1979,

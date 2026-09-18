@@ -1,6 +1,7 @@
 import { JP_MAP_ANCHOR } from "@/lib/countries/jp/geographyFacts";
 import { US_MAP_ANCHOR } from "@/lib/countries/us/geographyFacts";
 import { UK_MAP_ANCHOR } from "@/lib/countries/uk/geographyFacts";
+import { DE_MAP_ANCHOR } from "@/lib/countries/de/geographyFacts";
 
 /**
  * A rough interior lon/lat point per country, used to ORIENT a front: an invasion
@@ -19,7 +20,7 @@ export const COUNTRY_ANCHOR: Record<string, [number, number]> = {
   WAL: [-3.8, 52.3],
   RU: [37.6, 55.8],
   DD: [13.4, 52.5],
-  DE: [10.4, 51.2],
+  DE: DE_MAP_ANCHOR,
   FR: [2.3, 46.6],
   IT: [12.5, 42.8],
   ES: [-3.7, 40.4],

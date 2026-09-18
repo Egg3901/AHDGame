@@ -5,8 +5,21 @@ import {
   JP_MILITARY_BRANCHES,
   JP_MILITARY_SCALE,
 } from "@/lib/countries/jp/institutionsFacts";
-import { US_MILITARY_BRANCHES } from "@/lib/countries/us/institutionsFacts";
-import { UK_MILITARY_BRANCHES } from "@/lib/countries/uk/institutionsFacts";
+import {
+  US_MILITARY_BRANCHES,
+  US_CABINET_SEAT_IDS,
+  US_MILITARY_SCALE,
+} from "@/lib/countries/us/institutionsFacts";
+import {
+  UK_MILITARY_BRANCHES,
+  UK_CABINET_SEAT_IDS,
+  UK_MILITARY_SCALE,
+} from "@/lib/countries/uk/institutionsFacts";
+import {
+  DE_CABINET_SEAT_IDS,
+  DE_MILITARY_BRANCHES,
+  DE_MILITARY_SCALE,
+} from "@/lib/countries/de/institutionsFacts";
 
 export interface Branch {
   id: string;
@@ -315,29 +328,7 @@ export const MILITARY_BRANCHES_BY_COUNTRY: Record<CountryId, Branch[]> = {
   // Bundeswehr: first volunteers sworn 12 Nov 1955 (bundeswehr.de). West Germany had
   // no armed forces in 1953 (demilitarized under occupation / Blank Office planning only),
   // so a 1953 world correctly seeds DE with zero branches — no invented predecessor.
-  DE: [
-    {
-      id: "heer",
-      name: "Heer",
-      abbr: "Heer",
-      domain: "ground",
-      establishedYear: 1955,
-    },
-    {
-      id: "marine",
-      name: "Marine",
-      abbr: "Marine",
-      domain: "naval",
-      establishedYear: 1955,
-    },
-    {
-      id: "luftwaffe",
-      name: "Luftwaffe",
-      abbr: "Lw",
-      domain: "air",
-      establishedYear: 1955,
-    },
-  ],
+  DE: DE_MILITARY_BRANCHES,
   JP: JP_MILITARY_BRANCHES,
   IE: [
     { id: "army", name: "Irish Army", abbr: "Army", domain: "ground" },
@@ -512,11 +503,11 @@ export const MILITARY_BRANCHES_BY_COUNTRY: Record<CountryId, Branch[]> = {
  * authored order of battle. (Ported from prototype: US 2.6, CN 2.0, JP 1.4.)
  */
 export const MILITARY_COUNTRY_SCALE: Record<CountryId, number> = {
-  US: 2.6,
+  US: US_MILITARY_SCALE,
   CN: 2.0,
   JP: JP_MILITARY_SCALE,
-  UK: 1.7,
-  DE: 1.0,
+  UK: UK_MILITARY_SCALE,
+  DE: DE_MILITARY_SCALE,
   IE: 1.0,
   BR: 1.0,
   NG: 0.85,
@@ -548,10 +539,10 @@ export const MILITARY_COUNTRY_SCALE: Record<CountryId, number> = {
 
 /** Defense cabinet position per country. */
 export const DEFENSE_POSITION_BY_COUNTRY: Record<CountryId, string | null> = {
-  US: "secretary_of_defense",
-  UK: "defence_secretary",
+  US: US_CABINET_SEAT_IDS.defense,
+  UK: UK_CABINET_SEAT_IDS.defense,
   CN: "minister_of_defense",
-  DE: "defense_minister",
+  DE: DE_CABINET_SEAT_IDS.defense,
   JP: JP_CABINET_SEAT_IDS.defense,
   IE: "minister_for_defence",
   BR: "minister_of_defence",

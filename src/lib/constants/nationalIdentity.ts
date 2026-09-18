@@ -2,6 +2,7 @@ import type { CountryId } from "@/lib/constants/countries";
 import { JP_IDENTITY } from "@/lib/countries/jp/identity";
 import { US_IDENTITY } from "@/lib/countries/us/identity";
 import { UK_IDENTITY } from "@/lib/countries/uk/identity";
+import { DE_IDENTITY } from "@/lib/countries/de/identity";
 
 /**
  * National-identity layer for state-owned / National Corporation surfaces.
@@ -88,21 +89,7 @@ export const NATIONAL_IDENTITY: Record<CountryId, NationalIdentity> = {
   },
   UK: UK_IDENTITY.national,
   US: US_IDENTITY.national,
-  DE: {
-    glyph: "BU",
-    serif: "mono",
-    motif: "gear",
-    name: "Germany National Corporation",
-    native: "Bundesunternehmen Deutschland",
-    registry: "Bundesrepublik Deutschland · Staatsvermögen",
-    ministry: "BMF · FINANZEN",
-    publicSeal: "ÖFFENTLICHES REGISTER",
-    hqCity: "Berlin",
-    palette: ["#2a2218", "#1a150d", "#100c07"],
-    accent: "#d4a244",
-    accentSoft: "#e8c884",
-    accentName: "Schwarz-Gold",
-  },
+  DE: DE_IDENTITY.national,
   JP: JP_IDENTITY.national,
   IE: {
     glyph: "ÉN",

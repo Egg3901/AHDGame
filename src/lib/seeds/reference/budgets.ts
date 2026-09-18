@@ -117,10 +117,10 @@ import { getStateResourceCapacity, lookupStateResourceCapacity } from "./stateRe
  * running.
  */
 export const SOVEREIGN_CORP_LEGAL_STRUCTURE: Partial<Record<CountryId, LegalStructureId>> = {
-  US: "us_c_corp",
-  UK: "uk_plc",
+  US: US_ECONOMY.sovereignCorpLegalStructure,
+  UK: UK_ECONOMY.sovereignCorpLegalStructure,
   JP: JP_ECONOMY.sovereignCorpLegalStructure,
-  DE: "de_ag",
+  DE: DE_ECONOMY.sovereignCorpLegalStructure,
   IE: "ie_plc",
   BR: "br_sa_aberta",
   CN: "cn_gufen",
@@ -501,6 +501,9 @@ import {
   JP_EXTRA_OVERRIDE_CATEGORIES,
   JP_GRANT_MULTIPLIER,
 } from "@/lib/countries/jp/economy";
+import { US_ECONOMY } from "@/lib/countries/us/economy";
+import { UK_ECONOMY } from "@/lib/countries/uk/economy";
+import { DE_ECONOMY } from "@/lib/countries/de/economy";
 
 /**
  * Authored historical fiscal baselines for 1953 (Korean War defense shares,

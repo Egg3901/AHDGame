@@ -10,6 +10,7 @@ export type CabinetGroup =
 import { JP_INSTITUTIONS } from "@/lib/countries/jp/institutions";
 import { US_CABINET_GROUPS } from "@/lib/countries/us/institutionsFacts";
 import { UK_CABINET_GROUPS } from "@/lib/countries/uk/institutionsFacts";
+import { DE_CABINET_GROUPS } from "@/lib/countries/de/institutionsFacts";
 
 export const GROUPS: Record<string, Record<string, CabinetGroup>> = {
   US: US_CABINET_GROUPS,
@@ -36,19 +37,7 @@ export const GROUPS: Record<string, Record<string, CabinetGroup>> = {
     minister_for_transport: "Domestic",
     minister_for_rural_community: "Domestic",
   },
-  DE: {
-    finance_minister: "Economy",
-    economy_minister: "Economy",
-    labour_minister: "Economy",
-    foreign_minister: "Security & Foreign",
-    interior_minister: "Security & Foreign",
-    defense_minister: "Security & Foreign",
-    justice_minister: "Security & Foreign",
-    health_minister: "Society",
-    education_minister: "Society",
-    transport_minister: "Domestic",
-    environment_minister: "Domestic",
-  },
+  DE: DE_CABINET_GROUPS,
   CN: {
     premier: "Centre",
     vice_premier: "Centre",

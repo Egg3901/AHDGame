@@ -12,6 +12,7 @@ import { STARTING_YEAR, getStartingYearForPreset } from "./turnTime";
 import { JP_ECONOMY } from "@/lib/countries/jp/economy";
 import { US_ECONOMY } from "@/lib/countries/us/economy";
 import { UK_ECONOMY } from "@/lib/countries/uk/economy";
+import { DE_ECONOMY } from "@/lib/countries/de/economy";
 
 /**
  * Currency codes for all countries — active and future.
@@ -75,10 +76,10 @@ export const ZOD_CURRENCY_ENUM: [CurrencyCode, CurrencyCode, ...CurrencyCode[]] 
 
 /** Map country → home currency. Authoritative source for this mapping. */
 export const COUNTRY_CURRENCY_MAP: Record<CountryId, CurrencyCode> = {
-  US: "USD",
-  UK: "GBP",
+  US: US_ECONOMY.currencyCode,
+  UK: UK_ECONOMY.currencyCode,
   JP: JP_ECONOMY.currencyCode,
-  DE: "EUR",
+  DE: DE_ECONOMY.currencyCode,
   // Irish pound (Saorstát/IEP). Distinct from EUR so 1953 Bretton Woods par
   // (1:1 GBP) can have its own exchangeRates doc without colliding with DE's DM/EUR rate.
   // Display shows "€" when gameState.eurozoneEnabled (see getEraAwareCurrencySymbol).
@@ -745,7 +746,7 @@ export const ECONOMIC_BASELINES: Partial<Record<CountryId, EconomicBaseline>> = 
   US: US_ECONOMY.economicBaseline,
   UK: UK_ECONOMY.economicBaseline,
   JP: JP_ECONOMY.economicBaseline,
-  DE: { gdpGrowth: 1.5, tradeGrowth: 0 },
+  DE: DE_ECONOMY.economicBaseline,
   IE: { gdpGrowth: 3.5, tradeGrowth: 2.5 },
   BR: { gdpGrowth: 2.5, tradeGrowth: 2.0 },
   CN: { gdpGrowth: 5.0, tradeGrowth: 4.0 },
@@ -769,7 +770,7 @@ export const MONETARY_BASELINES: Record<CountryId, MonetaryBaseline> = {
   US: US_ECONOMY.monetary.baseline,
   UK: UK_ECONOMY.monetary.baseline,
   JP: JP_ECONOMY.monetary.baseline,
-  DE: { targetInflation: 2.0, neutralPrimeRate: 3.0 },
+  DE: DE_ECONOMY.monetary.baseline,
   IE: { targetInflation: 2.0, neutralPrimeRate: 3.0 },
   BR: { targetInflation: 4.0, neutralPrimeRate: 8.0 },
   CN: { targetInflation: 2.0, neutralPrimeRate: 4.0 },

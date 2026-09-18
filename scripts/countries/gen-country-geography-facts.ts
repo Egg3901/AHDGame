@@ -65,9 +65,23 @@ function v(name: string): string {
   return JSON.stringify(e.value, null, 2);
 }
 
+/**
+ * Legitimately absent for some countries; emitted as an omitted key, never a default.
+ *
+ * ⚠ A NULL VALUE IS AN ABSENCE, AND A `function-valued` SHAPE IS NOT DATA AT
+ * ALL. The extractor records `registry[COUNTRY] ?? null`, so a key present with
+ * an explicit `undefined` -- `DE: undefined, // FRG admitted 1973` -- arrives
+ * here as null. Separately, an entry CONTAINING FUNCTIONS cannot be serialised,
+ * so the emitter marks it `function-valued` and stores null; Germany's map
+ * config has a `featureIdExtractor` arrow and lands in exactly that state.
+ * Emitting either as the literal `null` produced `Type 'null' is not assignable`
+ * -- the right answer for both is to omit the key and say so.
+ */
 function maybe(name: string): string | null {
   const e = snap[name];
   if (!e || e.shape === "absent") return null;
+  if (e.value === null || e.value === undefined) return null;
+  if (e.shape === "function-valued") return null;
   return JSON.stringify(e.value, null, 2);
 }
 
@@ -84,6 +98,7 @@ if (isoCodes.length !== 1 || isoCodes[0] !== isoForward) {
 }
 
 const unMemberSince = maybe("COUNTRY_UN_MEMBER_SINCE");
+const mapRegistry = maybe("COUNTRY_MAP_REGISTRY");
 const conscription = maybe("CONSCRIPTION_SEED");
 
 const out = `import type { AdjacencyMap } from "@/lib/constants/stateAdjacency";
@@ -171,7 +186,9 @@ export const ${COUNTRY}_CORE5_NORMALS: Record<string, NormalAnchor[]> = ${v("COR
  */
 export const ${COUNTRY}_ADJACENCY_MAP: AdjacencyMap = ${v("STATE_ADJACENCY")};
 
-/**
+${
+  mapRegistry
+    ? `/**
  * Map registry: where the country's map lives and how its features map to
  * region ids.
  *
@@ -182,7 +199,19 @@ export const ${COUNTRY}_ADJACENCY_MAP: AdjacencyMap = ${v("STATE_ADJACENCY")};
  * region. Guessing the shape of a config object is the same failure as guessing
  * a value, and it typechecks just as readily behind a cast.
  */
-export const ${COUNTRY}_MAP_REGISTRY: CountryMapConfig = ${v("COUNTRY_MAP_REGISTRY")};
+export const ${COUNTRY}_MAP_REGISTRY: CountryMapConfig = ${mapRegistry};`
+    : `/*
+ * No \`${COUNTRY}_MAP_REGISTRY\` here, deliberately.
+ *
+ * ⚠ THE SNAPSHOT COULD NOT HOLD IT. ${COUNTRY}'s entry in COUNTRY_MAP_REGISTRY
+ * carries a \`featureIdExtractor\` function, which JSON cannot express, so the
+ * emitter recorded the shape as \`function-valued\` with a null value. Emitting
+ * that null would have produced a map config of \`null\` that satisfies a cast
+ * and breaks the map at runtime.
+ *
+ * The block is RELOCATED as source instead -- see \`./data/${lower}MapConfig.ts\`.
+ */`
+}
 
 /**
  * 1991-era cohort multipliers.
@@ -207,4 +236,12 @@ console.log(
   `  core5 metrics   : ${Object.keys(JSON.parse(v("CORE5_NORMALS")) as object).join(", ")}`
 );
 if (!unMemberSince) console.log(`  omitted         : UN_MEMBER_SINCE (absent, not defaulted)`);
+if (!mapRegistry)
+  console.log(
+    `  RELOCATE        : COUNTRY_MAP_REGISTRY is function-valued. Move ${COUNTRY}'s block out of
+` +
+      `                    src/lib/commodity-map/commodityMapRegistry.ts into
+` +
+      `                    src/lib/countries/${lower}/data/${lower}MapConfig.ts and forward it.`
+  );
 if (!conscription) console.log(`  omitted         : CONSCRIPTION_SEED (absent, not defaulted)`);

@@ -41,7 +41,7 @@
  */
 
 /** Countries whose folder is finished. Adding one turns the guard on for it. */
-export const CONVERTED: readonly string[] = ["JP", "US", "UK"];
+export const CONVERTED: readonly string[] = ["JP", "US", "UK", "DE"];
 
 /**
  * Files that hold one country's data, are NOT in that country's folder, and are

@@ -22,6 +22,7 @@ import { JP_INSTITUTIONS } from "@/lib/countries/jp/institutions";
 import { JP_ERAS } from "@/lib/countries/jp/eras";
 import { US_ORDERS_OF_BATTLE } from "@/lib/countries/us/institutionsFacts";
 import { UK_ORDERS_OF_BATTLE } from "@/lib/countries/uk/institutionsFacts";
+import { DE_ORDERS_OF_BATTLE } from "@/lib/countries/de/institutionsFacts";
 
 export interface OrderOfBattleEntry {
   /** Must match a Branch id for this country (`MILITARY_BRANCHES_BY_COUNTRY`). */
@@ -72,19 +73,7 @@ export const ORDERS_OF_BATTLE: Partial<Record<CountryId, OrderOfBattleEntry[]>> 
    * and tactical air force under the Paris Accords, and never operated a
    * strategic bombing arm.
    */
-  DE: [
-    { branchId: "heer", type: "Infantry Division", count: 5 },
-    { branchId: "heer", type: "Armored Division", count: 4 },
-    { branchId: "heer", type: "Mechanized Brigade", count: 3 },
-    { branchId: "heer", type: "Artillery Regiment", count: 2 },
-    { branchId: "heer", type: "Air Defense Battalion", count: 2 },
-    // A Baltic coastal navy: frigates and small submarines, no capital ships.
-    { branchId: "marine", type: "Frigate Squadron", count: 3 },
-    { branchId: "marine", type: "Attack Submarine", count: 2 },
-    { branchId: "luftwaffe", type: "Fighter Wing", count: 4 },
-    { branchId: "luftwaffe", type: "Air Defense Wing", count: 2 },
-    { branchId: "luftwaffe", type: "Airlift Wing", count: 1 },
-  ],
+  DE: DE_ORDERS_OF_BATTLE,
   /**
    * Names BOTH the 1952-54 National Safety Force and the JSDF that replaced it,
    * and lets the branch era gates choose. A 1953 world resolves to the NSF/CSF

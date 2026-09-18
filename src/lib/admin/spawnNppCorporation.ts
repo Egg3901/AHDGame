@@ -45,6 +45,9 @@ import {
 import { getMarketSystemModeForDb, marketAtLeast } from "@/lib/market/featureFlag";
 import { capacityRescaleRatio } from "@/lib/constants/capacityEconomy";
 import { JP_GEOGRAPHY } from "@/lib/countries/jp/geography";
+import { US_NPP_CAPITAL_STATE } from "@/lib/countries/us/geographyFacts";
+import { UK_NPP_CAPITAL_STATE } from "@/lib/countries/uk/geographyFacts";
+import { DE_NPP_CAPITAL_STATE } from "@/lib/countries/de/geographyFacts";
 
 /**
  * Default founding book for an admin/NPP-spawned corporation, in ₳ at MODERN
@@ -62,10 +65,10 @@ export const NPP_DEFAULT_STARTING_CAPITAL_ANCHOR = 2_000_000;
 // dial in spawnNppCorporation above, never by blanking an entry in this map.
 // Blanks mean only "no seeded regions yet".
 export const NPP_CAPITAL_STATES: Record<CountryId, string> = {
-  US: "DC",
-  UK: "LON",
+  US: US_NPP_CAPITAL_STATE,
+  UK: UK_NPP_CAPITAL_STATE,
   JP: JP_GEOGRAPHY.nppCapitalState,
-  DE: "BE",
+  DE: DE_NPP_CAPITAL_STATE,
   CN: "HB", // Huabei (North China) — the region containing Beijing
   IE: "DUB",
   NG: "NORTH_CENTRAL", // federal capital (Abuja/FCT) sits in the North-Central zone

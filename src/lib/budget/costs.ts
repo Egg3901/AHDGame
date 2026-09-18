@@ -9,6 +9,7 @@ import type { CostAnchorCountryId } from "@/lib/politicalLegislation/types";
 import { JP_ECONOMY } from "@/lib/countries/jp/economy";
 import { US_ECONOMY } from "@/lib/countries/us/economy";
 import { UK_ECONOMY } from "@/lib/countries/uk/economy";
+import { DE_ECONOMY } from "@/lib/countries/de/economy";
 
 export interface BudgetCostContext {
   budgetCapacity: number;
@@ -115,14 +116,7 @@ export const COST_SCALE_ANCHORS: Partial<Record<CountryId, CostScaleAnchor>> = {
   US: US_ECONOMY.costScaleAnchors,
   UK: UK_ECONOMY.costScaleAnchors,
   JP: JP_ECONOMY.costScaleAnchors,
-  DE: {
-    gdpLow: 1_600_000_000_000,
-    popLow: 80_000_000,
-    scaleLow: 0.65,
-    gdpHigh: 4_500_000_000_000,
-    popHigh: 84_400_000,
-    scaleHigh: 1.97,
-  },
+  DE: DE_ECONOMY.costScaleAnchors,
   IE: {
     // 24B IEP (own currency, not EUR-converted) — matches the corrected 1991
     // budget seed (src/lib/seeds/reference/budgets.ts), refs #3591.

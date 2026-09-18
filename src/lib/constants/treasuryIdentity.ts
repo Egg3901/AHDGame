@@ -3,6 +3,7 @@ import { getNationalIdentity, type NationalIdentity } from "@/lib/constants/nati
 import { JP_IDENTITY } from "@/lib/countries/jp/identity";
 import { US_IDENTITY } from "@/lib/countries/us/identity";
 import { UK_IDENTITY } from "@/lib/countries/uk/identity";
+import { DE_IDENTITY } from "@/lib/countries/de/identity";
 
 /**
  * Treasury / Finance-Ministry identity overlay for the National Budget surface.
@@ -64,17 +65,7 @@ export const TREASURY_TEXT: Record<
   },
   US: US_IDENTITY.treasuryText,
   UK: UK_IDENTITY.treasuryText,
-  DE: {
-    glyph: "BU",
-    serif: "mono",
-    budgetTitle: "Bundeshaushalt",
-    budgetTitleEn: "Federal Budget",
-    ministry: "BMF · FINANZEN",
-    publicSeal: "ÖFFENTLICH · PUBLIC",
-    registry: "Federal Republic of Germany · Federal Ministry of Finance",
-    native: "Bundesrepublik Deutschland · Bundesfinanzministerium",
-    nativeEn: "Federal Republic of Germany · Federal Ministry of Finance",
-  },
+  DE: DE_IDENTITY.treasuryText,
   JP: JP_IDENTITY.treasuryText,
   IE: {
     glyph: "ÉN",

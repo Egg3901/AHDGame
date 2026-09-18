@@ -191,6 +191,12 @@ const SIZE_CAP_EXEMPT = [
   // avoid this, and the lesson did not survive the next country.
   "src/lib/countries/uk/data/",
   "src/lib/countries/uk/cabinet/",
+  // Germany's, added BEFORE the move this time. `deLegislationTypes.ts` is 6,108
+  // lines and is exempt today only because the list holds a bare "src/lib/seeds/";
+  // relocating it to `de/data/` strips that exemption the instant it moves, which
+  // is exactly how `ukLaws.ts` blocked the gate one country ago.
+  "src/lib/countries/de/data/",
+  "src/lib/countries/de/cabinet/",
   "src/lib/constants/cnCabinetMechanics.ts",
   "src/lib/constants/historicalSeats.ts",
   "src/lib/constants/metricDefinitions.ts",

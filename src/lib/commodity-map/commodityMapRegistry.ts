@@ -9,6 +9,7 @@ import type { CountryId } from "@/lib/constants/countries";
 import { JP_GEOGRAPHY } from "@/lib/countries/jp/geography";
 import { US_MAP_REGISTRY } from "@/lib/countries/us/geographyFacts";
 import { UK_MAP_REGISTRY } from "@/lib/countries/uk/geographyFacts";
+import { DE_MAP_REGISTRY } from "@/lib/countries/de/data/deMapConfig";
 
 export interface CountryMapConfig {
   /** Country ID */
@@ -50,53 +51,11 @@ export interface CountryMapConfig {
  * Both zero-padded ("01") and plain ("1") keys are included since
  * different GeoJSON sources use different ID formats.
  */
-const RS_TO_DE_STATE: Record<string, string> = {
-  "01": "SH",
-  "1": "SH", // Schleswig-Holstein
-  "02": "HH",
-  "2": "HH", // Hamburg
-  "03": "NI",
-  "3": "NI", // Niedersachsen
-  "04": "BRE",
-  "4": "BRE", // Bremen
-  "05": "NW",
-  "5": "NW", // Nordrhein-Westfalen
-  "06": "HE",
-  "6": "HE", // Hessen
-  "07": "RP",
-  "7": "RP", // Rheinland-Pfalz
-  "08": "BW",
-  "8": "BW", // Baden-Württemberg
-  "09": "BY",
-  "9": "BY", // Bayern
-  "10": "SL", // Saarland
-  "11": "BE", // Berlin
-  "12": "BB", // Brandenburg
-  "13": "MV", // Mecklenburg-Vorpommern
-  "14": "SN", // Sachsen
-  "15": "ST", // Sachsen-Anhalt
-  "16": "TH", // Thüringen
-};
 
 export const COUNTRY_MAP_REGISTRY: Record<CountryId, CountryMapConfig> = {
   US: US_MAP_REGISTRY,
   UK: UK_MAP_REGISTRY,
-  DE: {
-    countryId: "DE",
-    name: "Germany",
-    overviewPath: "/country/de",
-    mapPath: "/country/de/map",
-    hasRegionMap: true,
-    // isellsoap/deutschlandGeoJSON features: properties.RS = "01"–"16" (Regionalschlüssel).
-    // Use a custom extractor so we always get the RS code regardless of what geo.id contains.
-    geoUrl:
-      "https://cdn.jsdelivr.net/gh/isellsoap/deutschlandGeoJSON@main/2_bundeslaender/4_niedrig.geo.json",
-    featureIdToStateId: RS_TO_DE_STATE,
-    featureIdExtractor: (geo) => String(geo.properties?.RS ?? ""),
-    projection: "mercator",
-    projectionCenter: [10.5, 51.2],
-    projectionScale: 2200,
-  },
+  DE: DE_MAP_REGISTRY,
   JP: JP_GEOGRAPHY.mapRegistry,
   IE: {
     countryId: "IE",

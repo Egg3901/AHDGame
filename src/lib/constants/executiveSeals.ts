@@ -14,6 +14,7 @@ import type { CountryId } from "./countries";
 import { JP_IDENTITY } from "@/lib/countries/jp/identity";
 import { US_IDENTITY } from "@/lib/countries/us/identity";
 import { UK_IDENTITY } from "@/lib/countries/uk/identity";
+import { DE_IDENTITY } from "@/lib/countries/de/identity";
 
 export interface ExecutiveSeal {
   src: string;
@@ -30,10 +31,7 @@ export interface ExecutiveSeal {
 export const EXECUTIVE_SEALS: Partial<Record<CountryId, ExecutiveSeal>> = {
   US: US_IDENTITY.executiveSeal,
   UK: UK_IDENTITY.executiveSeal,
-  DE: {
-    src: "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e3/Bundesadler_Bundesorgane.svg/330px-Bundesadler_Bundesorgane.svg.png",
-    alt: "Federal eagle of Germany",
-  },
+  DE: DE_IDENTITY.executiveSeal,
   JP: JP_IDENTITY.executiveSeal,
   IE: {
     src: "https://upload.wikimedia.org/wikipedia/commons/thumb/f/fe/Coat_of_arms_of_Ireland.svg/330px-Coat_of_arms_of_Ireland.svg.png",

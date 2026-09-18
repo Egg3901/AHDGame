@@ -59,10 +59,23 @@ function v(name: string): string {
   return JSON.stringify(e.value, null, 2);
 }
 
-/** Legitimately absent for some countries; emitted as an omitted key, never a default. */
+/**
+ * Legitimately absent for some countries; emitted as an omitted key, never a default.
+ *
+ * ⚠ A NULL VALUE IS AN ABSENCE, AND A `function-valued` SHAPE IS NOT DATA AT
+ * ALL. The extractor records `registry[COUNTRY] ?? null`, so a key present with
+ * an explicit `undefined` -- `DE: undefined, // FRG admitted 1973` -- arrives
+ * here as null. Separately, an entry CONTAINING FUNCTIONS cannot be serialised,
+ * so the emitter marks it `function-valued` and stores null; Germany's map
+ * config has a `featureIdExtractor` arrow and lands in exactly that state.
+ * Emitting either as the literal `null` produced `Type 'null' is not assignable`
+ * -- the right answer for both is to omit the key and say so.
+ */
 function maybe(name: string): string | null {
   const e = snap[name];
   if (!e || e.shape === "absent") return null;
+  if (e.value === null || e.value === undefined) return null;
+  if (e.shape === "function-valued") return null;
   return JSON.stringify(e.value, null, 2);
 }
 
@@ -86,6 +99,19 @@ const sectorEntries = eraSectors
   .filter(([, value]) => value !== null)
   .map(([era, value]) => `      "${era}": ${value},`)
   .join("\n");
+
+/**
+ * Optional in the contract and legitimately absent for some countries.
+ *
+ * ⚠ `PLAYER_PAYOUT_CAP_PER_TURN` IS `Partial` AND GERMANY HAS NO ENTRY. An
+ * earlier version read it with the REQUIRED accessor, which throws on absent --
+ * so the first country without a cap could not be generated at all. A country
+ * with no entry takes the shared default; inventing a number here would turn
+ * that fallback into an authored value.
+ */
+const payoutCap = maybe("PLAYER_PAYOUT_CAP_PER_TURN");
+const sovereignStructure = maybe("SOVEREIGN_CORP_LEGAL_STRUCTURE");
+const m2ToGdp = maybe("M2_TO_GDP_1953");
 
 const absentMonetary = eraMonetary.filter(([, value]) => value === null).map(([era]) => era);
 const absentSectors = eraSectors.filter(([, value]) => value === null).map(([era]) => era);
@@ -162,10 +188,22 @@ ${sectorEntries}
     neutralStateSalesTax: ${v("NEUTRAL_STATE_SALES_TAX_BY_COUNTRY")},
     treasuryPsRate,
   },
-  payoutCapPerTurn: ${v("PLAYER_PAYOUT_CAP_PER_TURN")},
-  sovereignCorpLegalStructure: ${v("SOVEREIGN_CORP_LEGAL_STRUCTURE")} as LegalStructureId,
-  m2ToGdp1953: ${v("M2_TO_GDP_1953")},
-};
+${
+  payoutCap
+    ? `  payoutCapPerTurn: ${payoutCap},
+`
+    : ""
+}${
+  sovereignStructure
+    ? `  sovereignCorpLegalStructure: ${sovereignStructure} as LegalStructureId,
+`
+    : ""
+}${
+  m2ToGdp
+    ? `  m2ToGdp1953: ${m2ToGdp},
+`
+    : ""
+}};
 
 /**
  * Whether this country's authored 1953 GDP figures are denominated in USD or in

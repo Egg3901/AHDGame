@@ -1,6 +1,9 @@
 import type { CountryId } from "./countries";
 import type { EnergyPlant, EnergySource } from "@/lib/db/types/energyPlant";
 import { JP_CABINET_SEAT_IDS } from "@/lib/countries/jp/institutionsFacts";
+import { US_CABINET_SEAT_IDS } from "@/lib/countries/us/institutionsFacts";
+import { UK_CABINET_SEAT_IDS } from "@/lib/countries/uk/institutionsFacts";
+import { DE_CABINET_SEAT_IDS } from "@/lib/countries/de/institutionsFacts";
 
 export interface EnergySourceDef {
   id: EnergySource;
@@ -93,9 +96,9 @@ export const ENERGY_SOURCES: EnergySourceDef[] = [
  * metric sits on the reserved transport seat → environment_secretary (net-zero home).
  */
 export const ENERGY_POSITION_BY_COUNTRY: Partial<Record<CountryId, string>> = {
-  US: "secretary_of_energy",
-  UK: "environment_secretary",
-  DE: "economy_minister",
+  US: US_CABINET_SEAT_IDS.energy,
+  UK: UK_CABINET_SEAT_IDS.energy,
+  DE: DE_CABINET_SEAT_IDS.energy,
   CN: "minister_of_ecology_environment",
   JP: JP_CABINET_SEAT_IDS.energy,
   IE: "minister_for_environment_climate",

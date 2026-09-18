@@ -23,6 +23,7 @@ import type { CountryId } from "./countries";
 import { JP_ADJACENCY_MAP } from "@/lib/countries/jp/geographyFacts";
 import { US_ADJACENCY_MAP } from "@/lib/countries/us/geographyFacts";
 import { UK_ADJACENCY_MAP } from "@/lib/countries/uk/geographyFacts";
+import { DE_ADJACENCY_MAP } from "@/lib/countries/de/geographyFacts";
 
 export type AdjacencyMap = Record<string, readonly string[]>;
 
@@ -30,24 +31,6 @@ export type AdjacencyMap = Record<string, readonly string[]>;
  * DE 16 Bundesländer. Standard geographic land adjacency. Berlin (BE)
  * is enclaved entirely within Brandenburg (BB) — its only neighbor.
  */
-const DE_ADJACENCY: AdjacencyMap = {
-  SH: ["HH", "MV", "NI"],
-  HH: ["SH", "NI"],
-  BRE: ["NI"],
-  NI: ["SH", "HH", "BRE", "MV", "BB", "ST", "TH", "HE", "NW"],
-  MV: ["SH", "NI", "BB"],
-  BB: ["MV", "NI", "ST", "SN", "BE"],
-  BE: ["BB"], // enclaved within Brandenburg
-  ST: ["NI", "BB", "SN", "TH"],
-  SN: ["BB", "ST", "TH", "BY"],
-  TH: ["NI", "ST", "SN", "BY", "HE"],
-  BY: ["BW", "HE", "TH", "SN"],
-  BW: ["BY", "HE", "RP"],
-  HE: ["NI", "NW", "RP", "BW", "BY", "TH"],
-  RP: ["NW", "HE", "BW", "SL"],
-  SL: ["RP"],
-  NW: ["NI", "HE", "RP"],
-};
 
 /**
  * CN 7 grouped regions. These are coarse macro-regions; each pair of
@@ -361,7 +344,7 @@ const WAL_ADJACENCY: AdjacencyMap = {
 export const STATE_ADJACENCY: Readonly<Record<CountryId, AdjacencyMap>> = {
   US: US_ADJACENCY_MAP,
   UK: UK_ADJACENCY_MAP,
-  DE: DE_ADJACENCY,
+  DE: DE_ADJACENCY_MAP,
   JP: JP_ADJACENCY_MAP,
   CN: CN_ADJACENCY,
   IE: IE_ADJACENCY,

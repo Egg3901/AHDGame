@@ -25,6 +25,9 @@ import {
 import { isShippingPreset, tierFor } from "./eraRoster";
 import { JP_GEOGRAPHY } from "@/lib/countries/jp/geography";
 import { expandManifestWithBackgroundCountries } from "./backgroundCountryRoster";
+import { US_WORLD_REGION, US_UN_MEMBER_SINCE } from "@/lib/countries/us/geographyFacts";
+import { UK_WORLD_REGION, UK_UN_MEMBER_SINCE } from "@/lib/countries/uk/geographyFacts";
+import { DE_WORLD_REGION } from "@/lib/countries/de/geographyFacts";
 
 export type WorldEntityId = string;
 export type WorldEntityStatus = "sovereign" | "dependent" | "emergent" | "dissolved";
@@ -207,11 +210,11 @@ function accessFromConfig(countryId: CountryId): LegacyCountryAccess {
 
 /** Coverage region for CountryConfig-backed entities (1953 gate + diagnostics). */
 export const COUNTRY_REGIONS: Record<CountryId, WorldEntityRegion> = {
-  US: "americas",
+  US: US_WORLD_REGION,
   BR: "americas",
-  UK: "europe",
+  UK: UK_WORLD_REGION,
   FR: "europe",
-  DE: "europe",
+  DE: DE_WORLD_REGION,
   DD: "europe",
   IT: "europe",
   ES: "europe",
@@ -240,8 +243,8 @@ export const COUNTRY_REGIONS: Record<CountryId, WorldEntityRegion> = {
 
 /** UN admission year priors for CountryConfig sovereigns (strong defaults). */
 export const COUNTRY_UN_MEMBER_SINCE: Partial<Record<CountryId, number>> = {
-  US: 1945,
-  UK: 1945,
+  US: US_UN_MEMBER_SINCE,
+  UK: UK_UN_MEMBER_SINCE,
   FR: 1945,
   RU: 1945,
   CN: 1945,

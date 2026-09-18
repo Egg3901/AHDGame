@@ -4,6 +4,7 @@ import { toUsd } from "./fxNormalize";
 import { JP_MEDIAN_INCOME_BAND } from "@/lib/countries/jp/economy";
 import { US_MEDIAN_INCOME_THRESHOLDS } from "@/lib/countries/us/geographyFacts";
 import { UK_MEDIAN_INCOME_THRESHOLDS } from "@/lib/countries/uk/geographyFacts";
+import { DE_MEDIAN_INCOME_THRESHOLDS } from "@/lib/countries/de/geographyFacts";
 
 /**
  * Absolute metric scoring — converts a raw metric value to a 0–100 score
@@ -167,7 +168,7 @@ const CURRENCY_METRICS = new Set<string>();
 export const MEDIAN_INCOME_THRESHOLDS: Record<string, ScoreThreshold> = {
   US: US_MEDIAN_INCOME_THRESHOLDS,
   UK: UK_MEDIAN_INCOME_THRESHOLDS,
-  DE: { best: 62_000, worst: 22_000 },
+  DE: DE_MEDIAN_INCOME_THRESHOLDS,
   IE: { best: 52_000, worst: 19_000 },
   JP: JP_MEDIAN_INCOME_BAND,
   BR: { best: 35_000, worst: 13_000 },

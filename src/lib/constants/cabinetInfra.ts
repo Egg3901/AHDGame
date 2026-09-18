@@ -1,6 +1,9 @@
 import type { CountryId } from "./countries";
 import type { InfraProject, BuildFundingLevel } from "@/lib/db/types/infraProject";
 import { JP_CABINET_SEAT_IDS } from "@/lib/countries/jp/institutionsFacts";
+import { US_CABINET_SEAT_IDS } from "@/lib/countries/us/institutionsFacts";
+import { UK_CABINET_SEAT_IDS } from "@/lib/countries/uk/institutionsFacts";
+import { DE_CABINET_SEAT_IDS } from "@/lib/countries/de/institutionsFacts";
 
 export interface InfraArchetype {
   id: string;
@@ -122,9 +125,9 @@ export const INFRA_ARCHETYPES: InfraArchetype[] = [
 
 /** Transportation seat per country (clean — never an Estates or Energy seat). */
 export const INFRA_POSITION_BY_COUNTRY: Partial<Record<CountryId, string>> = {
-  US: "secretary_of_transportation",
-  UK: "transport_secretary",
-  DE: "transport_minister",
+  US: US_CABINET_SEAT_IDS.infrastructure,
+  UK: UK_CABINET_SEAT_IDS.infrastructure,
+  DE: DE_CABINET_SEAT_IDS.infrastructure,
   CN: "minister_of_transport",
   JP: JP_CABINET_SEAT_IDS.infrastructure,
   IE: "minister_for_transport",

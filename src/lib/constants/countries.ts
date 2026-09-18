@@ -28,6 +28,10 @@ import {
 } from "@/lib/countries/jp/institutionsFacts";
 import { US_CONFIG } from "@/lib/countries/us/institutionsFacts";
 import { UK_CONFIG } from "@/lib/countries/uk/institutionsFacts";
+import { US_IDENTITY } from "@/lib/countries/us/identity";
+import { UK_IDENTITY } from "@/lib/countries/uk/identity";
+import { DE_CONFIG } from "@/lib/countries/de/institutionsFacts";
+import { DE_IDENTITY } from "@/lib/countries/de/identity";
 
 export type CountryId =
   | "US"
@@ -735,177 +739,7 @@ export const COUNTRY_CONFIGS: Record<CountryId, CountryConfig> = {
   US: US_CONFIG,
 
   UK: UK_CONFIG,
-  DE: {
-    id: "DE",
-    seedEconomicModel: { "1991": "industrialPowerhouse", "2019": "socialMarket" },
-    name: "Germany",
-    flagEmoji: "🇩🇪",
-    code: "DE",
-    socialAxisBaseline: 0,
-    // Matches the module default in deRegionalBudget.ts (DEFAULT_FEDERAL_GRANT_PER_CAPITA).
-    // The 1953-default preset overrides this — see ERA_COUNTRY_CONFIG_OVERRIDES.
-    federalEqualizationGrantPerCapita: 500,
-
-    regionLabel: "Land",
-    regionLabelPlural: "Länder",
-
-    executiveTitle: "Chancellor",
-    governmentType: "parliamentaryRepublic",
-    governmentTypeLabel: "Parliamentary Republic",
-    discordWebhookNote: "ECB rate decisions (shared with Ireland).",
-    coalitionThreshold: 316, // Bundestag majority (630 seats / 2 + 1 under 2023 reform, fixed)
-
-    legislature: {
-      name: "Bundestag",
-      path: "/country/de/legislature",
-      // Bundesrat is appointed by Land governments, not part of the player legislative loop.
-      bicameral: false,
-      upperChamber: {
-        key: "bundesrat",
-        name: "Bundesrat",
-        shortName: "Bundesrat",
-        seats: 69,
-        description: "69 members representing the 16 German Länder.",
-      },
-      lowerChamber: {
-        key: "bundestag",
-        name: "Bundestag",
-        shortName: "Bundestag",
-        seats: 630,
-        description:
-          "630 members elected via mixed-member proportional representation (2023 reform).",
-      },
-    },
-
-    lowerElectionSystem: {
-      termYears: 4,
-      seatsContested: "all",
-      singleMemberConstituencies: false,
-      snapElectionsAllowed: true,
-    },
-    upperElectionSystem: undefined, // Bundesrat members appointed by state governments
-    electionSystems: {
-      lowerChamber: "ams", // Bundestag (Additional Member System / MMP)
-      subNationalChamber: "pr_sainteLague", // Landtag
-      subNationalExecutive: "fptp", // Minister-President — TODO: revisit (Landtag-elected in RL)
-      headOfGovernment: "parliamentary", // Chancellor
-      headOfState: "ceremonial", // Bundespräsident
-    },
-
-    subNationalChamber: {
-      key: "landtag",
-      name: "Landtag",
-      shortName: "Landtag",
-      seats: 1901, // sum of stateSenateSeats across the 16 Länder
-      description: "Elected state legislature of each Bundesland.",
-      elected: true,
-      regionalModel: true,
-    },
-
-    regionalBillAssentTitle: "Minister-President",
-
-    officeTypes: [
-      {
-        key: "chancellor",
-        label: "Chancellor",
-        labelPlural: "Chancellors",
-        isExecutive: true,
-        isSubNational: false,
-        actionBonus: 4,
-        partyStrengthWeight: 1.0,
-      },
-      {
-        key: "bundestag",
-        label: "Member of Bundestag",
-        labelPlural: "Members of Bundestag",
-        chamberKey: "bundestag",
-        isExecutive: false,
-        isSubNational: false,
-        termYears: 4,
-        actionBonus: 1,
-        partyStrengthWeight: 0.85,
-      },
-      {
-        key: "ministerPresident",
-        label: "Minister-President",
-        labelPlural: "Minister-Presidents",
-        isExecutive: false,
-        isSubNational: true,
-        termYears: 5,
-        actionBonus: 2,
-        partyStrengthWeight: 1.0,
-      },
-      {
-        key: "landtag",
-        label: "Mitglied des Landtags",
-        labelPlural: "Mitglieder des Landtags",
-        chamberKey: "landtag",
-        isExecutive: false,
-        isSubNational: true,
-        termYears: 5,
-        actionBonus: 1,
-        partyStrengthWeight: 0.85,
-      },
-      {
-        key: "centralBankChair",
-        label: "President of the ECB",
-        labelPlural: "Presidents of the ECB",
-        isExecutive: false,
-        isSubNational: false,
-        termYears: 4,
-        actionBonus: 3,
-        partyStrengthWeight: 0,
-      },
-    ],
-
-    majorPartyIds: ["spd", "cdu"],
-    partyCreationNPPs: { statesRequired: 2, lockHomeState: false, nppsPerState: 1 },
-    demographicProfileId: "de_archetypes",
-
-    centralBank: {
-      name: "European Central Bank",
-      abbreviation: "ECB",
-      chairTitle: "President of the ECB",
-      defaultPrimeRate: 3.0,
-      sharedBankId: "ECB",
-      centralBankIntorgId: "EU",
-      heroImage: "/api/images/hero/ecb",
-    },
-
-    exchangeName: "DAX",
-    usdExchangeRate: 1.0,
-    currencyCode: "EUR",
-    fiscalYearStartTurnInYear: 40,
-    financeMinisterCabinetId: "finance_minister",
-
-    // Imperial role inherited from the parliamentaryRepublic default (false)
-    // via isImperialCountry(). The Bundespräsident titles/corporation below
-    // are retained for downstream lookups (`getImperialTitle("DE", ...)`)
-    // but DE is no longer surfaced through the imperial-character creation
-    // flow.
-    imperialTitles: {
-      male: "Bundespräsident",
-      female: "Bundespräsidentin",
-      nonbinary: "Bundespräsident",
-    },
-    imperialCorporation: {
-      name: "Federal Cultural Foundation",
-      sector: "media",
-    },
-
-    status: "active",
-    tagline:
-      "Federal parliamentary republic with mixed-member proportional representation across 16 Länder.",
-    descriptor:
-      "A federal parliamentary republic where the Chancellor leads government through a Bundestag majority, elected via mixed-member proportional representation.",
-    heroImage: getCountryFlagUrl("DE"),
-    entryPath: "/country/de",
-    overviewPath: "/country/de",
-    mapPath: "/country/de/map",
-    executivePath: "/country/de/executive",
-    executiveLabel: "Federal Chancellery",
-    centralGovernmentLabel: "Federal Grants",
-  },
+  DE: DE_CONFIG,
   JP: JP_CONFIG,
 
   IE: {
@@ -6824,9 +6658,9 @@ export function getRegionalAddressName(countryId: CountryId): string {
 }
 
 export const NATIONAL_ADDRESS_NAME: Partial<Record<CountryId, string>> = {
-  US: "State of the Union",
-  UK: "Address to the Nation",
-  DE: "Government Declaration",
+  US: US_IDENTITY.addressNames.national,
+  UK: UK_IDENTITY.addressNames.national,
+  DE: DE_IDENTITY.addressNames.national,
   JP: JP_IDENTITY.addressNames.national,
   IE: "Address to the Oireachtas",
 };

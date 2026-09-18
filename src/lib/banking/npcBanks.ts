@@ -17,6 +17,7 @@ import { loadWorldEraUnitScale } from "@/lib/currency/gdpAnchorRate";
 import { JP_IDENTITY } from "@/lib/countries/jp/identity";
 import { US_IDENTITY } from "@/lib/countries/us/identity";
 import { UK_IDENTITY } from "@/lib/countries/uk/identity";
+import { DE_IDENTITY } from "@/lib/countries/de/identity";
 
 /** Provisional: how many NPP retail banks each eligible country seeds. */
 export const NPC_BANKS_PER_COUNTRY = 2;
@@ -77,7 +78,7 @@ export const COUNTRY_HISTORICAL_NAMES: Partial<Record<CountryId, readonly string
   US: US_IDENTITY.historicalNames,
   UK: UK_IDENTITY.historicalNames,
   JP: JP_IDENTITY.historicalNames,
-  DE: ["Rhineland Credit Bank", "Hanseatic Merchants Bank"],
+  DE: DE_IDENTITY.historicalNames,
   FR: ["Banque du Littoral", "Comptoir des Provinces"],
   IT: ["Banca Adriatica", "Credito Tirreno"],
   ES: ["Banco del Ebro", "Caja Mercantil del Norte"],
@@ -95,7 +96,7 @@ export const COUNTRY_MODERN_NAMES: Partial<Record<CountryId, readonly string[]>>
   US: US_IDENTITY.modernNames,
   UK: UK_IDENTITY.modernNames,
   JP: JP_IDENTITY.modernNames,
-  DE: ["Rhineland Credit Group", "Hanseatic Banking Group"],
+  DE: DE_IDENTITY.modernNames,
   FR: ["Groupe Bancaire du Littoral", "Comptoir des Provinces"],
   IT: ["Banca Adriatica Group", "Credito Tirreno"],
   ES: ["Banco del Ebro", "Grupo Mercantil del Norte"],
