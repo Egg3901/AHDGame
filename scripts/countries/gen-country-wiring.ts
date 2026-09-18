@@ -411,6 +411,85 @@ if (!existsSync(OUT_INST) || FORCE) {
   console.log(`${OUT_INST} exists, left alone (pass --force to regenerate).`);
 }
 
+/* ---------------------------------------------------------------------------
+ * elections.ts
+ *
+ * ⚠ ONLY FOR THE PHASE-DRIVEN SHAPE, AND IT REFUSES ANYTHING ELSE. Nineteen
+ * countries remain and every one of them is wired the same way: no row in
+ * `SPAWN_ELECTIONS_REGISTRY`, a list of entries in `COUNTRY_ELECTION_PHASES`,
+ * and spawners that live in files SHARED between countries --
+ * `easternBloc.ts` serves nine, `betaParliaments.ts` serves eight. Nothing moves
+ * into a folder; the phases are read out of `countryPhases.ts`, which is the one
+ * place that already says which phases a country runs and in what order.
+ *
+ * A country with a `spawn` row, or with seat tables, is NOT written here: those
+ * were hand-written for the first ten because the seat sources differ wildly
+ * (a denormalised table, two era-keyed tables, a live region field, or nothing)
+ * and guessing between them is how a chamber ends up with the wrong size.
+ * ------------------------------------------------------------------------- */
+const PHASES_FILE = "src/lib/turn/countryPhases.ts";
+
+function phaseEntries(): Array<[string, string]> {
+  const src = readFileSync(PHASES_FILE, "utf8");
+  const start = src.search(new RegExp(`^  ${COUNTRY}: \\[`, "m"));
+  if (start < 0) return [];
+  const end = src.indexOf("\n  ],", start);
+  const body = src.slice(start, end < 0 ? src.indexOf("]", start) : end);
+  return [...body.matchAll(/\{\s*name:\s*"([^"]+)",\s*fn:\s*([A-Za-z0-9_]+)\s*\}/g)].map(
+    (m) => [m[1], m[2]] as [string, string]
+  );
+}
+
+const phases = phaseEntries();
+const hasSpawnRow = snap.SPAWN_ELECTIONS_REGISTRY?.shape !== "absent";
+const OUT_ELEC = `${DIR}/elections.ts`;
+
+if (existsSync(OUT_ELEC) && !FORCE) {
+  console.log(`${OUT_ELEC} exists, left alone (pass --force to regenerate).`);
+} else if (hasSpawnRow || phases.length === 0) {
+  console.log(
+    `${OUT_ELEC} NOT generated: ${
+      hasSpawnRow
+        ? "this country has a SPAWN_ELECTIONS_REGISTRY row"
+        : "no COUNTRY_ELECTION_PHASES entries were found"
+    }. Write it by hand.`
+  );
+} else {
+  const elections = `import type { CountryElections } from "../contract";
+import type { CountryElectionPhaseEntry } from "@/lib/turn/countryPhases";
+import {
+${phases.map(([, fn]) => `  ${fn},`).join("\n")}
+} from "@/lib/turn/perpetualElections";
+
+/**
+ * ${DISPLAY}'s elections.
+ *
+ * ⚠️ SERVER ONLY. The spawners reach \`getDb\`.
+ *
+ * ⚠️ NO \`spawn\`, AND NOTHING RELOCATED. ${DISPLAY} has no row in
+ * \`SPAWN_ELECTIONS_REGISTRY\`; these phases run through
+ * \`COUNTRY_ELECTION_PHASES\`, in this order. Adding a \`spawn\` would run them a
+ * second time each turn. The spawner functions stay where they are because their
+ * files are shared between countries -- moving one into this folder would take
+ * the others' elections with it.
+ *
+ * ⚠️ NO \`seats\`. There is no seat table for ${DISPLAY} anywhere;
+ * apportionment is read from the live regions, the way East Germany's
+ * Volkskammer and Brazil's Senate are. An empty \`byChamber\` would describe a
+ * chamber with no seats rather than one whose seats live elsewhere.
+ */
+const phases: CountryElectionPhaseEntry[] = [
+${phases.map(([name, fn]) => `  { name: ${JSON.stringify(name)}, fn: ${fn} },`).join("\n")}
+];
+
+export const ${COUNTRY}_ELECTIONS: CountryElections = {
+  electionPhases: phases,
+};
+`;
+  writeFileSync(OUT_ELEC, elections, "utf8");
+  console.log(`wrote ${OUT_ELEC} (${phases.length} phases)`);
+}
+
 const barrel = `import type { CountryFolder } from "../contract";
 import { ${COUNTRY}_IDENTITY } from "./identity";
 import { ${COUNTRY}_INSTITUTIONS } from "./institutions";

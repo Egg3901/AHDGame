@@ -221,6 +221,25 @@ const SIZE_CAP_EXEMPT = [
   // the move discovered the exemption by failing the gate.
   "src/lib/countries/br/data/",
   "src/lib/countries/br/cabinet/",
+  // The economy tier, all eight before the move. None is over the cap today;
+  // the entries go in first on principle, because every country that waited
+  // until after the move found out by failing the gate.
+  "src/lib/countries/fr/data/",
+  "src/lib/countries/fr/cabinet/",
+  "src/lib/countries/it/data/",
+  "src/lib/countries/it/cabinet/",
+  "src/lib/countries/es/data/",
+  "src/lib/countries/es/cabinet/",
+  "src/lib/countries/se/data/",
+  "src/lib/countries/se/cabinet/",
+  "src/lib/countries/tr/data/",
+  "src/lib/countries/tr/cabinet/",
+  "src/lib/countries/gr/data/",
+  "src/lib/countries/gr/cabinet/",
+  "src/lib/countries/at/data/",
+  "src/lib/countries/at/cabinet/",
+  "src/lib/countries/fi/data/",
+  "src/lib/countries/fi/cabinet/",
   "src/lib/constants/cnCabinetMechanics.ts",
   "src/lib/constants/historicalSeats.ts",
   "src/lib/constants/metricDefinitions.ts",

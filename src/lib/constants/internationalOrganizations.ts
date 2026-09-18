@@ -11,6 +11,14 @@ import { RU_CABINET_SEAT_IDS } from "@/lib/countries/ru/institutionsFacts";
 import { DD_CABINET_SEAT_IDS } from "@/lib/countries/dd/institutionsFacts";
 import { NG_CABINET_SEAT_IDS } from "@/lib/countries/ng/institutionsFacts";
 import { BR_CABINET_SEAT_IDS } from "@/lib/countries/br/institutionsFacts";
+import { FR_CABINET_SEAT_IDS } from "@/lib/countries/fr/institutionsFacts";
+import { IT_CABINET_SEAT_IDS } from "@/lib/countries/it/institutionsFacts";
+import { ES_CABINET_SEAT_IDS } from "@/lib/countries/es/institutionsFacts";
+import { SE_CABINET_SEAT_IDS } from "@/lib/countries/se/institutionsFacts";
+import { TR_CABINET_SEAT_IDS } from "@/lib/countries/tr/institutionsFacts";
+import { GR_CABINET_SEAT_IDS } from "@/lib/countries/gr/institutionsFacts";
+import { AT_CABINET_SEAT_IDS } from "@/lib/countries/at/institutionsFacts";
+import { FI_CABINET_SEAT_IDS } from "@/lib/countries/fi/institutionsFacts";
 
 /**
  * The built-in organizations seeded at game start. Player-created orgs use
@@ -654,14 +662,14 @@ export const FOREIGN_AFFAIRS_POSITION_BY_COUNTRY: Record<CountryId, string | nul
   CS: "minister_of_foreign_affairs",
   BAL: "minister_of_foreign_affairs",
   RU: RU_CABINET_SEAT_IDS.foreignAffairs,
-  FR: "minister_of_foreign_affairs",
-  IT: "minister_of_foreign_affairs",
-  ES: "minister_of_foreign_affairs",
-  SE: "minister_of_foreign_affairs",
-  TR: "minister_of_foreign_affairs",
-  GR: "minister_of_foreign_affairs",
-  AT: "minister_of_foreign_affairs",
-  FI: "minister_of_foreign_affairs",
+  FR: FR_CABINET_SEAT_IDS.foreignAffairs,
+  IT: IT_CABINET_SEAT_IDS.foreignAffairs,
+  ES: ES_CABINET_SEAT_IDS.foreignAffairs,
+  SE: SE_CABINET_SEAT_IDS.foreignAffairs,
+  TR: TR_CABINET_SEAT_IDS.foreignAffairs,
+  GR: GR_CABINET_SEAT_IDS.foreignAffairs,
+  AT: AT_CABINET_SEAT_IDS.foreignAffairs,
+  FI: FI_CABINET_SEAT_IDS.foreignAffairs,
   DD: DD_CABINET_SEAT_IDS.foreignAffairs,
   // Sub-national entities. Both define `externalAffairsSecretary`, but they are left
   // on the head-of-government fallback deliberately: neither can be a belligerent
@@ -697,14 +705,14 @@ export const TRADE_MINISTER_POSITION_BY_COUNTRY: Record<CountryId, string | null
   CS: null,
   BAL: null,
   RU: RU_CABINET_SEAT_IDS.tradeMinister,
-  FR: "minister_of_trade_industry",
-  IT: "minister_of_trade_industry",
-  ES: "minister_of_trade_industry",
-  SE: "minister_of_trade_industry",
-  TR: "minister_of_trade_industry",
-  GR: "minister_of_trade_industry",
-  AT: "minister_of_trade_industry",
-  FI: "minister_of_trade_industry",
+  FR: FR_CABINET_SEAT_IDS.tradeMinister,
+  IT: IT_CABINET_SEAT_IDS.tradeMinister,
+  ES: ES_CABINET_SEAT_IDS.tradeMinister,
+  SE: SE_CABINET_SEAT_IDS.tradeMinister,
+  TR: TR_CABINET_SEAT_IDS.tradeMinister,
+  GR: GR_CABINET_SEAT_IDS.tradeMinister,
+  AT: AT_CABINET_SEAT_IDS.tradeMinister,
+  FI: FI_CABINET_SEAT_IDS.tradeMinister,
   DD: DD_CABINET_SEAT_IDS.tradeMinister,
   // Sub-national entities. Both define `externalAffairsSecretary`, but they are left
   // on the head-of-government fallback deliberately: neither can be a belligerent

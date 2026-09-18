@@ -10,6 +10,14 @@ import { RU_ECONOMY } from "@/lib/countries/ru/economy";
 import { DD_ECONOMY } from "@/lib/countries/dd/economy";
 import { NG_ECONOMY } from "@/lib/countries/ng/economy";
 import { BR_ECONOMY } from "@/lib/countries/br/economy";
+import { FR_ECONOMY } from "@/lib/countries/fr/economy";
+import { IT_ECONOMY } from "@/lib/countries/it/economy";
+import { ES_ECONOMY } from "@/lib/countries/es/economy";
+import { SE_ECONOMY } from "@/lib/countries/se/economy";
+import { TR_ECONOMY } from "@/lib/countries/tr/economy";
+import { GR_ECONOMY } from "@/lib/countries/gr/economy";
+import { AT_ECONOMY } from "@/lib/countries/at/economy";
+import { FI_ECONOMY } from "@/lib/countries/fi/economy";
 
 /**
  * Political Strength reserve and pressure-ladder constants for Phase 3.
@@ -75,14 +83,14 @@ export const TREASURY_PS_RATE_BY_COUNTRY: Record<CountryId, { national: number; 
   CS: { national: 50_000, state: 25_000 },
   BAL: { national: 50_000, state: 25_000 },
   RU: RU_ECONOMY.tax.treasuryPsRate,
-  FR: { national: 70_000, state: 35_000 },
-  IT: { national: 70_000, state: 35_000 },
-  ES: { national: 70_000, state: 35_000 },
-  SE: { national: 60_000, state: 30_000 },
-  TR: { national: 70_000, state: 35_000 },
-  GR: { national: 70_000, state: 35_000 },
-  AT: { national: 70_000, state: 35_000 },
-  FI: { national: 60_000, state: 30_000 },
+  FR: FR_ECONOMY.tax.treasuryPsRate,
+  IT: IT_ECONOMY.tax.treasuryPsRate,
+  ES: ES_ECONOMY.tax.treasuryPsRate,
+  SE: SE_ECONOMY.tax.treasuryPsRate,
+  TR: TR_ECONOMY.tax.treasuryPsRate,
+  GR: GR_ECONOMY.tax.treasuryPsRate,
+  AT: AT_ECONOMY.tax.treasuryPsRate,
+  FI: FI_ECONOMY.tax.treasuryPsRate,
   DD: DD_ECONOMY.tax.treasuryPsRate,
   SCO: { national: 60_000, state: 30_000 }, // mirrors UK (sterling zone)
   WAL: { national: 60_000, state: 30_000 }, // mirrors UK (sterling zone)

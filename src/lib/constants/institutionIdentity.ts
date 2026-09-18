@@ -12,6 +12,14 @@ import { RU_IDENTITY } from "@/lib/countries/ru/identity";
 import { DD_IDENTITY } from "@/lib/countries/dd/identity";
 import { NG_IDENTITY } from "@/lib/countries/ng/identity";
 import { BR_IDENTITY } from "@/lib/countries/br/identity";
+import { FR_IDENTITY } from "@/lib/countries/fr/identity";
+import { IT_IDENTITY } from "@/lib/countries/it/identity";
+import { ES_IDENTITY } from "@/lib/countries/es/identity";
+import { SE_IDENTITY } from "@/lib/countries/se/identity";
+import { TR_IDENTITY } from "@/lib/countries/tr/identity";
+import { GR_IDENTITY } from "@/lib/countries/gr/identity";
+import { AT_IDENTITY } from "@/lib/countries/at/identity";
+import { FI_IDENTITY } from "@/lib/countries/fi/identity";
 
 /**
  * Institution identity overlays for the country-pages masthead family
@@ -121,57 +129,14 @@ export const EXECUTIVE_TEXT: Record<CountryId, IdentityText> = {
     title: "Supreme Soviet",
   },
   RU: RU_IDENTITY.executiveText,
-  FR: {
-    glyph: "RF",
-    serif: "mono",
-    registry: "French Republic · Presidency of the Republic",
-    title: "Élysée Palace",
-  },
-  IT: {
-    glyph: "RI",
-    serif: "mono",
-    registry: "Italian Republic · Presidency of the Council",
-    title: "Palazzo Chigi",
-  },
-  ES: {
-    glyph: "RE",
-    serif: "mono",
-    registry: "Kingdom of Spain · Presidency of the Government",
-    title: "La Moncloa",
-  },
-  SE: {
-    glyph: "SE",
-    serif: "mono",
-    registry: "Kingdom of Sweden · Government Offices",
-    title: "Rosenbad",
-  },
-  TR: {
-    glyph: "TC",
-    serif: "mono",
-    registry: "Republic of Turkey · Prime Ministry",
-    title: "Çankaya",
-  },
-  GR: {
-    glyph: "ΕΔ",
-    serif: "mono",
-    registry: "Hellenic Republic · Government",
-    title: "Μέγαρο Μαξίμου",
-    titleEn: "Maximos Mansion",
-  },
-  AT: {
-    glyph: "BK",
-    serif: "mono",
-    registry: "Republic of Austria · Federal Government",
-    title: "Ballhausplatz",
-    titleEn: "Federal Chancellery",
-  },
-  FI: {
-    glyph: "VN",
-    serif: "mono",
-    registry: "Republic of Finland · Council of State",
-    title: "Valtioneuvosto",
-    titleEn: "Government Palace",
-  },
+  FR: FR_IDENTITY.executiveText,
+  IT: IT_IDENTITY.executiveText,
+  ES: ES_IDENTITY.executiveText,
+  SE: SE_IDENTITY.executiveText,
+  TR: TR_IDENTITY.executiveText,
+  GR: GR_IDENTITY.executiveText,
+  AT: AT_IDENTITY.executiveText,
+  FI: FI_IDENTITY.executiveText,
   DD: DD_IDENTITY.executiveText,
   SCO: {
     glyph: "FM",
@@ -257,54 +222,14 @@ export const POLICY_TEXT: Record<CountryId, IdentityText> = {
     title: "National Policy",
   },
   RU: RU_IDENTITY.policyText,
-  FR: {
-    glyph: "§",
-    serif: "mono",
-    registry: "Code of Law · French Republic",
-    title: "National Policy",
-  },
-  IT: {
-    glyph: "§",
-    serif: "mono",
-    registry: "Code of Law · Italian Republic",
-    title: "National Policy",
-  },
-  ES: {
-    glyph: "§",
-    serif: "mono",
-    registry: "Code of Law · Kingdom of Spain",
-    title: "National Policy",
-  },
-  SE: {
-    glyph: "§",
-    serif: "mono",
-    registry: "Code of Law · Kingdom of Sweden",
-    title: "National Policy",
-  },
-  TR: {
-    glyph: "§",
-    serif: "mono",
-    registry: "Code of Law · Republic of Turkey",
-    title: "National Policy",
-  },
-  GR: {
-    glyph: "§",
-    serif: "mono",
-    registry: "Code of Law · Hellenic Republic",
-    title: "National Policy",
-  },
-  AT: {
-    glyph: "§",
-    serif: "mono",
-    registry: "Code of Law · Republic of Austria",
-    title: "National Policy",
-  },
-  FI: {
-    glyph: "§",
-    serif: "mono",
-    registry: "Code of Law · Republic of Finland",
-    title: "National Policy",
-  },
+  FR: FR_IDENTITY.policyText,
+  IT: IT_IDENTITY.policyText,
+  ES: ES_IDENTITY.policyText,
+  SE: SE_IDENTITY.policyText,
+  TR: TR_IDENTITY.policyText,
+  GR: GR_IDENTITY.policyText,
+  AT: AT_IDENTITY.policyText,
+  FI: FI_IDENTITY.policyText,
   DD: DD_IDENTITY.policyText,
   SCO: {
     glyph: "§",

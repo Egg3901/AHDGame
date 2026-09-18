@@ -9,6 +9,14 @@ import { RU_CONTINENT } from "@/lib/countries/ru/geographyFacts";
 import { DD_CONTINENT } from "@/lib/countries/dd/geographyFacts";
 import { NG_CONTINENT } from "@/lib/countries/ng/geographyFacts";
 import { BR_CONTINENT } from "@/lib/countries/br/geographyFacts";
+import { FR_CONTINENT } from "@/lib/countries/fr/geographyFacts";
+import { IT_CONTINENT } from "@/lib/countries/it/geographyFacts";
+import { ES_CONTINENT } from "@/lib/countries/es/geographyFacts";
+import { SE_CONTINENT } from "@/lib/countries/se/geographyFacts";
+import { TR_CONTINENT } from "@/lib/countries/tr/geographyFacts";
+import { GR_CONTINENT } from "@/lib/countries/gr/geographyFacts";
+import { AT_CONTINENT } from "@/lib/countries/at/geographyFacts";
+import { FI_CONTINENT } from "@/lib/countries/fi/geographyFacts";
 
 export type Continent =
   "North America" | "South America" | "Europe" | "Africa" | "Asia" | "Oceania";
@@ -35,10 +43,10 @@ export const COUNTRY_CONTINENT: Record<CountryId, Continent> = {
   IE: IE_CONTINENT,
   DE: DE_CONTINENT,
   DD: DD_CONTINENT,
-  FR: "Europe",
-  IT: "Europe",
-  ES: "Europe",
-  SE: "Europe",
+  FR: FR_CONTINENT,
+  IT: IT_CONTINENT,
+  ES: ES_CONTINENT,
+  SE: SE_CONTINENT,
   HU: "Europe",
   PL: "Europe",
   RO: "Europe",
@@ -49,10 +57,10 @@ export const COUNTRY_CONTINENT: Record<CountryId, Continent> = {
   CS: "Europe",
   BAL: "Europe",
   RU: RU_CONTINENT,
-  TR: "Europe",
-  GR: "Europe",
-  AT: "Europe",
-  FI: "Europe",
+  TR: TR_CONTINENT,
+  GR: GR_CONTINENT,
+  AT: AT_CONTINENT,
+  FI: FI_CONTINENT,
   SCO: "Europe",
   WAL: "Europe",
   NG: NG_CONTINENT,

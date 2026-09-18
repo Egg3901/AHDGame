@@ -22,6 +22,14 @@ import { RU_ECONOMY } from "@/lib/countries/ru/economy";
 import { DD_ECONOMY } from "@/lib/countries/dd/economy";
 import { NG_ECONOMY } from "@/lib/countries/ng/economy";
 import { BR_ECONOMY } from "@/lib/countries/br/economy";
+import { FR_ECONOMY } from "@/lib/countries/fr/economy";
+import { IT_ECONOMY } from "@/lib/countries/it/economy";
+import { ES_ECONOMY } from "@/lib/countries/es/economy";
+import { SE_ECONOMY } from "@/lib/countries/se/economy";
+import { TR_ECONOMY } from "@/lib/countries/tr/economy";
+import { GR_ECONOMY } from "@/lib/countries/gr/economy";
+import { AT_ECONOMY } from "@/lib/countries/at/economy";
+import { FI_ECONOMY } from "@/lib/countries/fi/economy";
 
 type SectorWeightMap = Partial<Record<CorporationType, number>>;
 
@@ -214,143 +222,16 @@ export const COUNTRY_SECTOR_WEIGHTS: Record<CountryId, SectorWeightMap> = {
   RU: RU_ECONOMY.sectorWeights.base,
   // France 1979 — diversified mixed economy: manufacturing/autos, nuclear energy,
   // finance, agriculture (largest in W. Europe), tourism/services, defense (arms).
-  FR: {
-    manufacturing: 16,
-    real_estate: 11,
-    financial: 9,
-    retail: 8,
-    automobiles: 8,
-    agriculture: 8,
-    healthcare: 7,
-    energy: 7,
-    construction: 6,
-    chemical_industries: 5,
-    defense: 5,
-    logistics: 4,
-    entertainment: 3,
-    technology: 2,
-    media: 1,
-  },
+  FR: FR_ECONOMY.sectorWeights.base,
   // Italy 1979 — manufacturing/SME-led (north), autos (FIAT), fashion/retail,
   // tourism/entertainment, agriculture (south), state holdings (IRI/ENI energy).
-  IT: {
-    manufacturing: 18,
-    real_estate: 11,
-    retail: 9,
-    automobiles: 8,
-    agriculture: 8,
-    entertainment: 7,
-    financial: 6,
-    construction: 6,
-    energy: 6,
-    healthcare: 6,
-    chemical_industries: 5,
-    logistics: 4,
-    defense: 3,
-    technology: 2,
-    media: 1,
-  },
-  ES: {
-    manufacturing: 14,
-    real_estate: 12,
-    retail: 9,
-    agriculture: 9,
-    entertainment: 8,
-    automobiles: 7,
-    construction: 7,
-    financial: 6,
-    healthcare: 6,
-    energy: 6,
-    chemical_industries: 4,
-    logistics: 4,
-    defense: 2,
-    technology: 1,
-    media: 1,
-  },
-  SE: {
-    manufacturing: 16,
-    real_estate: 11,
-    healthcare: 9,
-    retail: 8,
-    technology: 7,
-    automobiles: 7,
-    financial: 6,
-    energy: 6,
-    extraction: 6,
-    construction: 5,
-    logistics: 4,
-    agriculture: 3,
-    defense: 3,
-    entertainment: 2,
-    media: 1,
-  },
-  GR: {
-    logistics: 14, // shipping — the world's largest merchant fleet by tonnage
-    real_estate: 12,
-    retail: 10,
-    entertainment: 10, // tourism
-    agriculture: 8,
-    construction: 7,
-    financial: 7,
-    manufacturing: 7,
-    healthcare: 6,
-    energy: 6,
-    media: 4,
-    technology: 3,
-    extraction: 3,
-    defense: 3,
-  },
-  AT: {
-    manufacturing: 17,
-    real_estate: 12,
-    retail: 9,
-    financial: 8,
-    construction: 8,
-    healthcare: 7,
-    entertainment: 7, // Alpine tourism
-    energy: 6,
-    logistics: 6,
-    technology: 5,
-    agriculture: 4,
-    chemical_industries: 4,
-    automobiles: 3,
-    media: 2,
-    extraction: 2,
-  },
-  FI: {
-    manufacturing: 18, // forest products + machinery
-    technology: 10, // Nokia legacy + software cluster
-    real_estate: 11,
-    retail: 8,
-    healthcare: 8,
-    financial: 6,
-    construction: 6,
-    energy: 6,
-    logistics: 6,
-    chemical_industries: 5,
-    extraction: 5, // forestry + mining
-    agriculture: 4,
-    media: 3,
-    entertainment: 2,
-    defense: 2,
-  },
-  TR: {
-    manufacturing: 16,
-    agriculture: 14,
-    real_estate: 11,
-    retail: 9,
-    construction: 8,
-    automobiles: 6,
-    financial: 5,
-    healthcare: 5,
-    energy: 5,
-    logistics: 5,
-    chemical_industries: 4,
-    defense: 4,
-    entertainment: 4,
-    technology: 2,
-    media: 2,
-  },
+  IT: IT_ECONOMY.sectorWeights.base,
+  ES: ES_ECONOMY.sectorWeights.base,
+  SE: SE_ECONOMY.sectorWeights.base,
+  GR: GR_ECONOMY.sectorWeights.base,
+  AT: AT_ECONOMY.sectorWeights.base,
+  FI: FI_ECONOMY.sectorWeights.base,
+  TR: TR_ECONOMY.sectorWeights.base,
   DD: DD_ECONOMY.sectorWeights.base,
 };
 

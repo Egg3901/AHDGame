@@ -8,6 +8,14 @@ import { RU_MAP_ANCHOR } from "@/lib/countries/ru/geographyFacts";
 import { DD_MAP_ANCHOR } from "@/lib/countries/dd/geographyFacts";
 import { NG_MAP_ANCHOR } from "@/lib/countries/ng/geographyFacts";
 import { BR_MAP_ANCHOR } from "@/lib/countries/br/geographyFacts";
+import { FR_MAP_ANCHOR } from "@/lib/countries/fr/geographyFacts";
+import { IT_MAP_ANCHOR } from "@/lib/countries/it/geographyFacts";
+import { ES_MAP_ANCHOR } from "@/lib/countries/es/geographyFacts";
+import { SE_MAP_ANCHOR } from "@/lib/countries/se/geographyFacts";
+import { TR_MAP_ANCHOR } from "@/lib/countries/tr/geographyFacts";
+import { GR_MAP_ANCHOR } from "@/lib/countries/gr/geographyFacts";
+import { AT_MAP_ANCHOR } from "@/lib/countries/at/geographyFacts";
+import { FI_MAP_ANCHOR } from "@/lib/countries/fi/geographyFacts";
 
 /**
  * A rough interior lon/lat point per country, used to ORIENT a front: an invasion
@@ -27,20 +35,20 @@ export const COUNTRY_ANCHOR: Record<string, [number, number]> = {
   RU: RU_MAP_ANCHOR,
   DD: DD_MAP_ANCHOR,
   DE: DE_MAP_ANCHOR,
-  FR: [2.3, 46.6],
-  IT: [12.5, 42.8],
-  ES: [-3.7, 40.4],
-  SE: [18.6, 60.1],
-  FI: [25.7, 61.9],
-  AT: [14.6, 47.6],
-  GR: [21.8, 39.1],
+  FR: FR_MAP_ANCHOR,
+  IT: IT_MAP_ANCHOR,
+  ES: ES_MAP_ANCHOR,
+  SE: SE_MAP_ANCHOR,
+  FI: FI_MAP_ANCHOR,
+  AT: AT_MAP_ANCHOR,
+  GR: GR_MAP_ANCHOR,
   PL: [19.1, 52.1],
   CS: [15.5, 49.8],
   HU: [19.5, 47.2],
   RO: [24.9, 45.9],
   BG: [25.5, 42.7],
   YU: [20.5, 44.0],
-  TR: [35.2, 39.0],
+  TR: TR_MAP_ANCHOR,
   UKR: [31.0, 49.0],
   BLR: [27.9, 53.5],
   BAL: [24.5, 57.0],

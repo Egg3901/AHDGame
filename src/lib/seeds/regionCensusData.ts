@@ -78,6 +78,11 @@ import { RU_GEOGRAPHY } from "@/lib/countries/ru/geography";
 import { DD_GEOGRAPHY } from "@/lib/countries/dd/geography";
 import { NG_GEOGRAPHY } from "@/lib/countries/ng/geography";
 import { BR_GEOGRAPHY } from "@/lib/countries/br/geography";
+import { FR_GEOGRAPHY } from "@/lib/countries/fr/geography";
+import { IT_GEOGRAPHY } from "@/lib/countries/it/geography";
+import { ES_GEOGRAPHY } from "@/lib/countries/es/geography";
+import { SE_GEOGRAPHY } from "@/lib/countries/se/geography";
+import { TR_GEOGRAPHY } from "@/lib/countries/tr/geography";
 
 export const CENSUS_BUNDLES: Partial<Record<CountryId, PresetBundles>> = {
   PL: {
@@ -142,22 +147,14 @@ export const CENSUS_BUNDLES: Partial<Record<CountryId, PresetBundles>> = {
   IE: IE_GEOGRAPHY.censusBundles,
   CN: CN_GEOGRAPHY.censusBundles,
   BR: BR_GEOGRAPHY.censusBundles,
-  SE: {
-    "1953-default": seRegionCensusData1953,
-    "1979-default": seRegionCensusData,
-    "2019-default": seRegionCensusData,
-  },
-  TR: {
-    "1953-default": trRegionCensusData1953,
-    "1979-default": trRegionCensusData,
-    "2019-default": trRegionCensusData,
-  },
-  FR: { "1953-default": frRegionCensusData1953, "1979-default": frRegionCensusData1979 },
+  SE: SE_GEOGRAPHY.censusBundles,
+  TR: TR_GEOGRAPHY.censusBundles,
+  FR: FR_GEOGRAPHY.censusBundles,
   // IT/ES/SU/DD have no authored 1979 census yet; route 1979 to the 1953 bundle as the
   // nearest-era proxy. Without an explicit 1979 entry selectPresetBundle would throw for
   // these (no 2019-default fallback exists), aborting the 1979 reset in seedCohortVectors.
-  IT: { "1953-default": itRegionCensusData1953, "1979-default": itRegionCensusData1953 },
-  ES: { "1953-default": esRegionCensusData1953, "1979-default": esRegionCensusData1953 },
+  IT: IT_GEOGRAPHY.censusBundles,
+  ES: ES_GEOGRAPHY.censusBundles,
   RU: RU_GEOGRAPHY.censusBundles,
   DD: DD_GEOGRAPHY.censusBundles,
   // 2019-default was missing here even though ngRegionCensusData (the NPC/NBS-based

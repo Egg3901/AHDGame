@@ -9,6 +9,14 @@ import { RU_ISO_NUMERIC } from "@/lib/countries/ru/geographyFacts";
 import { DD_ISO_NUMERIC } from "@/lib/countries/dd/geographyFacts";
 import { NG_ISO_NUMERIC } from "@/lib/countries/ng/geographyFacts";
 import { BR_ISO_NUMERIC } from "@/lib/countries/br/geographyFacts";
+import { FR_ISO_NUMERIC } from "@/lib/countries/fr/geographyFacts";
+import { IT_ISO_NUMERIC } from "@/lib/countries/it/geographyFacts";
+import { ES_ISO_NUMERIC } from "@/lib/countries/es/geographyFacts";
+import { SE_ISO_NUMERIC } from "@/lib/countries/se/geographyFacts";
+import { TR_ISO_NUMERIC } from "@/lib/countries/tr/geographyFacts";
+import { GR_ISO_NUMERIC } from "@/lib/countries/gr/geographyFacts";
+import { AT_ISO_NUMERIC } from "@/lib/countries/at/geographyFacts";
+import { FI_ISO_NUMERIC } from "@/lib/countries/fi/geographyFacts";
 
 /** Natural-Earth ISO-numeric (topojson feature id) → in-game CountryId. */
 export const ISO_NUMERIC_TO_COUNTRY: Record<string, CountryId> = {
@@ -61,14 +69,14 @@ export const COUNTRY_TO_ISO_NUMERIC: Record<CountryId, string> = {
   CS: "200",
   BAL: "", // EE+LV+LT combined — no single ISO-numeric
   RU: RU_ISO_NUMERIC,
-  FR: "250",
-  IT: "380",
-  ES: "724",
-  SE: "752",
-  TR: "792",
-  GR: "300",
-  AT: "040",
-  FI: "246",
+  FR: FR_ISO_NUMERIC,
+  IT: IT_ISO_NUMERIC,
+  ES: ES_ISO_NUMERIC,
+  SE: SE_ISO_NUMERIC,
+  TR: TR_ISO_NUMERIC,
+  GR: GR_ISO_NUMERIC,
+  AT: AT_ISO_NUMERIC,
+  FI: FI_ISO_NUMERIC,
   DD: DD_ISO_NUMERIC,
   SCO: "826", // shares GB code; not on the commodity map until secession
   WAL: "826", // shares GB code; not on the commodity map until secession

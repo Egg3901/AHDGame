@@ -52,6 +52,14 @@ export const CONVERTED: readonly string[] = [
   "DD",
   "NG",
   "BR",
+  "FR",
+  "IT",
+  "ES",
+  "SE",
+  "TR",
+  "GR",
+  "AT",
+  "FI",
 ];
 
 /**

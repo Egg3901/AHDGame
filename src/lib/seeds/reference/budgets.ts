@@ -149,14 +149,14 @@ export const SOVEREIGN_CORP_LEGAL_STRUCTURE: Partial<Record<CountryId, LegalStru
   // from the abstract sphere-macro tier to full-autonomous (seedEconTierRosters
   // #3253, seedManifest.ts) with no bespoke joint-stock legal form authored yet
   // — same neutral fallback used for every other country here without one.
-  FR: "generic_corp",
-  IT: "generic_corp",
-  ES: "generic_corp",
-  SE: "generic_corp",
-  TR: "generic_corp",
-  GR: "generic_corp",
-  AT: "generic_corp",
-  FI: "generic_corp",
+  FR: FR_ECONOMY.sovereignCorpLegalStructure,
+  IT: IT_ECONOMY.sovereignCorpLegalStructure,
+  ES: ES_ECONOMY.sovereignCorpLegalStructure,
+  SE: SE_ECONOMY.sovereignCorpLegalStructure,
+  TR: TR_ECONOMY.sovereignCorpLegalStructure,
+  GR: GR_ECONOMY.sovereignCorpLegalStructure,
+  AT: AT_ECONOMY.sovereignCorpLegalStructure,
+  FI: FI_ECONOMY.sovereignCorpLegalStructure,
 };
 
 const budgetLegislationTypes = [
@@ -510,6 +510,14 @@ import { RU_ECONOMY } from "@/lib/countries/ru/economy";
 import { DD_ECONOMY } from "@/lib/countries/dd/economy";
 import { NG_ECONOMY } from "@/lib/countries/ng/economy";
 import { BR_ECONOMY } from "@/lib/countries/br/economy";
+import { FR_ECONOMY } from "@/lib/countries/fr/economy";
+import { IT_ECONOMY } from "@/lib/countries/it/economy";
+import { ES_ECONOMY } from "@/lib/countries/es/economy";
+import { SE_ECONOMY } from "@/lib/countries/se/economy";
+import { TR_ECONOMY } from "@/lib/countries/tr/economy";
+import { GR_ECONOMY } from "@/lib/countries/gr/economy";
+import { AT_ECONOMY } from "@/lib/countries/at/economy";
+import { FI_ECONOMY } from "@/lib/countries/fi/economy";
 
 /**
  * Authored historical fiscal baselines for 1953 (Korean War defense shares,

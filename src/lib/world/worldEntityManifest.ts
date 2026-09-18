@@ -34,6 +34,14 @@ import { RU_WORLD_REGION, RU_UN_MEMBER_SINCE } from "@/lib/countries/ru/geograph
 import { DD_WORLD_REGION } from "@/lib/countries/dd/geographyFacts";
 import { NG_WORLD_REGION, NG_UN_MEMBER_SINCE } from "@/lib/countries/ng/geographyFacts";
 import { BR_WORLD_REGION, BR_UN_MEMBER_SINCE } from "@/lib/countries/br/geographyFacts";
+import { FR_WORLD_REGION, FR_UN_MEMBER_SINCE } from "@/lib/countries/fr/geographyFacts";
+import { IT_WORLD_REGION, IT_UN_MEMBER_SINCE } from "@/lib/countries/it/geographyFacts";
+import { ES_WORLD_REGION, ES_UN_MEMBER_SINCE } from "@/lib/countries/es/geographyFacts";
+import { SE_WORLD_REGION, SE_UN_MEMBER_SINCE } from "@/lib/countries/se/geographyFacts";
+import { TR_WORLD_REGION, TR_UN_MEMBER_SINCE } from "@/lib/countries/tr/geographyFacts";
+import { GR_WORLD_REGION, GR_UN_MEMBER_SINCE } from "@/lib/countries/gr/geographyFacts";
+import { AT_WORLD_REGION, AT_UN_MEMBER_SINCE } from "@/lib/countries/at/geographyFacts";
+import { FI_WORLD_REGION, FI_UN_MEMBER_SINCE } from "@/lib/countries/fi/geographyFacts";
 
 export type WorldEntityId = string;
 export type WorldEntityStatus = "sovereign" | "dependent" | "emergent" | "dissolved";
@@ -219,12 +227,12 @@ export const COUNTRY_REGIONS: Record<CountryId, WorldEntityRegion> = {
   US: US_WORLD_REGION,
   BR: BR_WORLD_REGION,
   UK: UK_WORLD_REGION,
-  FR: "europe",
+  FR: FR_WORLD_REGION,
   DE: DE_WORLD_REGION,
   DD: DD_WORLD_REGION,
-  IT: "europe",
-  ES: "europe",
-  SE: "europe",
+  IT: IT_WORLD_REGION,
+  ES: ES_WORLD_REGION,
+  SE: SE_WORLD_REGION,
   IE: IE_WORLD_REGION,
   HU: "europe",
   PL: "europe",
@@ -234,13 +242,13 @@ export const COUNTRY_REGIONS: Record<CountryId, WorldEntityRegion> = {
   CS: "europe",
   UKR: "europe",
   RU: RU_WORLD_REGION,
-  TR: "europe",
+  TR: TR_WORLD_REGION,
   JP: JP_GEOGRAPHY.worldRegion,
   CN: CN_WORLD_REGION,
   NG: NG_WORLD_REGION,
-  AT: "europe",
-  GR: "europe",
-  FI: "europe",
+  AT: AT_WORLD_REGION,
+  GR: GR_WORLD_REGION,
+  FI: FI_WORLD_REGION,
   BLR: "europe",
   BAL: "europe",
   SCO: "europe",
@@ -251,16 +259,16 @@ export const COUNTRY_REGIONS: Record<CountryId, WorldEntityRegion> = {
 export const COUNTRY_UN_MEMBER_SINCE: Partial<Record<CountryId, number>> = {
   US: US_UN_MEMBER_SINCE,
   UK: UK_UN_MEMBER_SINCE,
-  FR: 1945,
+  FR: FR_UN_MEMBER_SINCE,
   RU: RU_UN_MEMBER_SINCE,
   CN: CN_UN_MEMBER_SINCE,
   BR: BR_UN_MEMBER_SINCE,
   DE: undefined, // FRG admitted 1973
   DD: undefined, // GDR admitted 1973
-  IT: 1955,
-  ES: 1955,
-  SE: 1946,
-  TR: 1945,
+  IT: IT_UN_MEMBER_SINCE,
+  ES: ES_UN_MEMBER_SINCE,
+  SE: SE_UN_MEMBER_SINCE,
+  TR: TR_UN_MEMBER_SINCE,
   JP: JP_GEOGRAPHY.unMemberSince,
   IE: IE_UN_MEMBER_SINCE,
   NG: NG_UN_MEMBER_SINCE,
@@ -277,9 +285,9 @@ export const COUNTRY_UN_MEMBER_SINCE: Partial<Record<CountryId, number>> = {
   BLR: 1945,
   YU: 1945,
   CS: 1945,
-  GR: 1945,
-  AT: 1955,
-  FI: 1955,
+  GR: GR_UN_MEMBER_SINCE,
+  AT: AT_UN_MEMBER_SINCE,
+  FI: FI_UN_MEMBER_SINCE,
 };
 
 /**

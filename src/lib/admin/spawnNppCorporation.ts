@@ -54,6 +54,14 @@ import { RU_NPP_CAPITAL_STATE } from "@/lib/countries/ru/geographyFacts";
 import { DD_NPP_CAPITAL_STATE } from "@/lib/countries/dd/geographyFacts";
 import { NG_NPP_CAPITAL_STATE } from "@/lib/countries/ng/geographyFacts";
 import { BR_NPP_CAPITAL_STATE } from "@/lib/countries/br/geographyFacts";
+import { FR_NPP_CAPITAL_STATE } from "@/lib/countries/fr/geographyFacts";
+import { IT_NPP_CAPITAL_STATE } from "@/lib/countries/it/geographyFacts";
+import { ES_NPP_CAPITAL_STATE } from "@/lib/countries/es/geographyFacts";
+import { SE_NPP_CAPITAL_STATE } from "@/lib/countries/se/geographyFacts";
+import { TR_NPP_CAPITAL_STATE } from "@/lib/countries/tr/geographyFacts";
+import { GR_NPP_CAPITAL_STATE } from "@/lib/countries/gr/geographyFacts";
+import { AT_NPP_CAPITAL_STATE } from "@/lib/countries/at/geographyFacts";
+import { FI_NPP_CAPITAL_STATE } from "@/lib/countries/fi/geographyFacts";
 
 /**
  * Default founding book for an admin/NPP-spawned corporation, in ₳ at MODERN
@@ -95,14 +103,14 @@ export const NPP_CAPITAL_STATES: Record<CountryId, string> = {
   // regions are seeded by the econ-tier roster + region seeders, so an NPP corp
   // can HQ there. Left blank previously, which silently zeroed their NPP-corp
   // spawn even though the countries are full market economies.
-  FR: "FR_IDF", // Île-de-France (Paris)
-  IT: "IT_LAZ", // Lazio (Rome)
-  ES: "ES_MAD", // Comunidad de Madrid
-  SE: "SE_STH", // Stockholm
-  TR: "TR_ANK", // Ankara (political capital)
-  GR: "GR_ATT", // Attica (Athens)
-  AT: "AT_VIE", // Vienna
-  FI: "FI_UUS", // Uusimaa (Helsinki)
+  FR: FR_NPP_CAPITAL_STATE, // Île-de-France (Paris)
+  IT: IT_NPP_CAPITAL_STATE, // Lazio (Rome)
+  ES: ES_NPP_CAPITAL_STATE, // Comunidad de Madrid
+  SE: SE_NPP_CAPITAL_STATE, // Stockholm
+  TR: TR_NPP_CAPITAL_STATE, // Ankara (political capital)
+  GR: GR_NPP_CAPITAL_STATE, // Attica (Athens)
+  AT: AT_NPP_CAPITAL_STATE, // Vienna
+  FI: FI_NPP_CAPITAL_STATE, // Uusimaa (Helsinki)
   DD: DD_NPP_CAPITAL_STATE, // regions not yet seeded
   SCO: "", // Latent — sub-regions seeded at secession (cannot spawn pre-activation)
   WAL: "", // Latent — sub-regions seeded at secession (cannot spawn pre-activation)

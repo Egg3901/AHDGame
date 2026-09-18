@@ -21,6 +21,14 @@ import { DE_IDENTITY } from "@/lib/countries/de/identity";
 import { IE_IDENTITY } from "@/lib/countries/ie/identity";
 import { NG_IDENTITY } from "@/lib/countries/ng/identity";
 import { BR_IDENTITY } from "@/lib/countries/br/identity";
+import { FR_IDENTITY } from "@/lib/countries/fr/identity";
+import { IT_IDENTITY } from "@/lib/countries/it/identity";
+import { ES_IDENTITY } from "@/lib/countries/es/identity";
+import { SE_IDENTITY } from "@/lib/countries/se/identity";
+import { TR_IDENTITY } from "@/lib/countries/tr/identity";
+import { GR_IDENTITY } from "@/lib/countries/gr/identity";
+import { AT_IDENTITY } from "@/lib/countries/at/identity";
+import { FI_IDENTITY } from "@/lib/countries/fi/identity";
 
 /** Provisional: how many NPP retail banks each eligible country seeds. */
 export const NPC_BANKS_PER_COUNTRY = 2;
@@ -82,17 +90,17 @@ export const COUNTRY_HISTORICAL_NAMES: Partial<Record<CountryId, readonly string
   UK: UK_IDENTITY.historicalNames,
   JP: JP_IDENTITY.historicalNames,
   DE: DE_IDENTITY.historicalNames,
-  FR: ["Banque du Littoral", "Comptoir des Provinces"],
-  IT: ["Banca Adriatica", "Credito Tirreno"],
-  ES: ["Banco del Ebro", "Caja Mercantil del Norte"],
+  FR: FR_IDENTITY.historicalNames,
+  IT: IT_IDENTITY.historicalNames,
+  ES: ES_IDENTITY.historicalNames,
   IE: IE_IDENTITY.historicalNames,
   BR: BR_IDENTITY.historicalNames,
   NG: NG_IDENTITY.historicalNames,
-  SE: ["Svea Merchants Bank", "Norrland Savings Bank"],
-  TR: ["Anatolian Commerce Bank", "Bosphorus Trading Bank"],
-  GR: ["Aegean Merchants Bank", "Peloponnese Savings Bank"],
-  AT: ["Alpine Credit Bank", "Danube Commercial Bank"],
-  FI: ["Lakeland Savings Bank", "Bothnia Commercial Bank"],
+  SE: SE_IDENTITY.historicalNames,
+  TR: TR_IDENTITY.historicalNames,
+  GR: GR_IDENTITY.historicalNames,
+  AT: AT_IDENTITY.historicalNames,
+  FI: FI_IDENTITY.historicalNames,
 };
 
 export const COUNTRY_MODERN_NAMES: Partial<Record<CountryId, readonly string[]>> = {
@@ -100,17 +108,17 @@ export const COUNTRY_MODERN_NAMES: Partial<Record<CountryId, readonly string[]>>
   UK: UK_IDENTITY.modernNames,
   JP: JP_IDENTITY.modernNames,
   DE: DE_IDENTITY.modernNames,
-  FR: ["Groupe Bancaire du Littoral", "Comptoir des Provinces"],
-  IT: ["Banca Adriatica Group", "Credito Tirreno"],
-  ES: ["Banco del Ebro", "Grupo Mercantil del Norte"],
+  FR: FR_IDENTITY.modernNames,
+  IT: IT_IDENTITY.modernNames,
+  ES: ES_IDENTITY.modernNames,
   IE: IE_IDENTITY.modernNames,
   BR: BR_IDENTITY.modernNames,
   NG: NG_IDENTITY.modernNames,
-  SE: ["Svea Banking Group", "Norrland Financial"],
-  TR: ["Anatolian Commerce Group", "Bosphorus Financial"],
-  GR: ["Aegean Banking Group", "Peloponnese Financial"],
-  AT: ["Alpine Credit Group", "Danube Banking Group"],
-  FI: ["Lakeland Financial", "Bothnia Banking Group"],
+  SE: SE_IDENTITY.modernNames,
+  TR: TR_IDENTITY.modernNames,
+  GR: GR_IDENTITY.modernNames,
+  AT: AT_IDENTITY.modernNames,
+  FI: FI_IDENTITY.modernNames,
 };
 
 function corridorMidpoint(minOffset: number, maxOffset: number): number {

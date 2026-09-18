@@ -29,6 +29,14 @@ import { RU_ORDERS_OF_BATTLE } from "@/lib/countries/ru/institutionsFacts";
 import { DD_ORDERS_OF_BATTLE } from "@/lib/countries/dd/institutionsFacts";
 import { NG_ORDERS_OF_BATTLE } from "@/lib/countries/ng/institutionsFacts";
 import { BR_ORDERS_OF_BATTLE } from "@/lib/countries/br/institutionsFacts";
+import { FR_ORDERS_OF_BATTLE } from "@/lib/countries/fr/institutionsFacts";
+import { IT_ORDERS_OF_BATTLE } from "@/lib/countries/it/institutionsFacts";
+import { ES_ORDERS_OF_BATTLE } from "@/lib/countries/es/institutionsFacts";
+import { SE_ORDERS_OF_BATTLE } from "@/lib/countries/se/institutionsFacts";
+import { TR_ORDERS_OF_BATTLE } from "@/lib/countries/tr/institutionsFacts";
+import { GR_ORDERS_OF_BATTLE } from "@/lib/countries/gr/institutionsFacts";
+import { AT_ORDERS_OF_BATTLE } from "@/lib/countries/at/institutionsFacts";
+import { FI_ORDERS_OF_BATTLE } from "@/lib/countries/fi/institutionsFacts";
 
 export interface OrderOfBattleEntry {
   /** Must match a Branch id for this country (`MILITARY_BRANCHES_BY_COUNTRY`). */
@@ -181,67 +189,14 @@ export const ORDERS_OF_BATTLE: Partial<Record<CountryId, OrderOfBattleEntry[]>> 
     { branchId: "airforce", type: "Fighter Wing", count: 2 },
   ],
   NG: NG_ORDERS_OF_BATTLE,
-  FR: [
-    { branchId: "terre", type: "Infantry Division", count: 5 },
-    { branchId: "terre", type: "Armored Division", count: 3 },
-    { branchId: "terre", type: "Artillery Regiment", count: 2 },
-    // Arromanches (ex-HMS Colossus) was in French service from 1946, so a 1953
-    // carrier is historically right despite the modern archetype label.
-    { branchId: "marine", type: "Carrier Strike Group", count: 1 },
-    { branchId: "marine", type: "Frigate Squadron", count: 3 },
-    { branchId: "marine", type: "Attack Submarine", count: 2 },
-    { branchId: "air", type: "Fighter Wing", count: 4 },
-    { branchId: "air", type: "Bomber Squadron", count: 2 },
-  ],
-  IT: [
-    { branchId: "esercito", type: "Infantry Division", count: 4 },
-    { branchId: "esercito", type: "Armored Division", count: 2 },
-    { branchId: "esercito", type: "Artillery Regiment", count: 2 },
-    { branchId: "marina", type: "Frigate Squadron", count: 3 },
-    { branchId: "marina", type: "Attack Submarine", count: 1 },
-    { branchId: "aeronautica", type: "Fighter Wing", count: 3 },
-  ],
-  ES: [
-    { branchId: "tierra", type: "Infantry Division", count: 4 },
-    { branchId: "tierra", type: "Armored Division", count: 1 },
-    { branchId: "tierra", type: "Artillery Regiment", count: 2 },
-    { branchId: "armada", type: "Frigate Squadron", count: 2 },
-    { branchId: "aire", type: "Fighter Wing", count: 2 },
-  ],
-  SE: [
-    { branchId: "army", type: "Infantry Division", count: 3 },
-    { branchId: "army", type: "Armored Division", count: 1 },
-    { branchId: "army", type: "Artillery Regiment", count: 1 },
-    { branchId: "navy", type: "Frigate Squadron", count: 2 },
-    { branchId: "navy", type: "Attack Submarine", count: 2 },
-    { branchId: "airforce", type: "Fighter Wing", count: 4 },
-    { branchId: "airforce", type: "Air Defense Wing", count: 1 },
-  ],
-  TR: [
-    { branchId: "ground", type: "Infantry Division", count: 6 },
-    { branchId: "ground", type: "Armored Division", count: 1 },
-    { branchId: "ground", type: "Artillery Regiment", count: 2 },
-    { branchId: "navy", type: "Frigate Squadron", count: 2 },
-    { branchId: "navy", type: "Attack Submarine", count: 1 },
-    { branchId: "airforce", type: "Fighter Wing", count: 3 },
-  ],
-  GR: [
-    { branchId: "army", type: "Infantry Division", count: 4 },
-    { branchId: "army", type: "Artillery Regiment", count: 1 },
-    { branchId: "navy", type: "Frigate Squadron", count: 1 },
-    { branchId: "airforce", type: "Fighter Wing", count: 2 },
-  ],
-  AT: [
-    { branchId: "heer", type: "Infantry Division", count: 2 },
-    { branchId: "heer", type: "Artillery Regiment", count: 1 },
-    { branchId: "luft", type: "Fighter Wing", count: 1 },
-  ],
-  FI: [
-    { branchId: "army", type: "Infantry Division", count: 3 },
-    { branchId: "army", type: "Artillery Regiment", count: 1 },
-    { branchId: "navy", type: "Frigate Squadron", count: 1 },
-    { branchId: "airforce", type: "Fighter Wing", count: 1 },
-  ],
+  FR: FR_ORDERS_OF_BATTLE,
+  IT: IT_ORDERS_OF_BATTLE,
+  ES: ES_ORDERS_OF_BATTLE,
+  SE: SE_ORDERS_OF_BATTLE,
+  TR: TR_ORDERS_OF_BATTLE,
+  GR: GR_ORDERS_OF_BATTLE,
+  AT: AT_ORDERS_OF_BATTLE,
+  FI: FI_ORDERS_OF_BATTLE,
   BR: BR_ORDERS_OF_BATTLE,
 };
 

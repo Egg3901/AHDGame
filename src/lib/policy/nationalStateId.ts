@@ -9,6 +9,14 @@ import { RU_ECONOMY } from "@/lib/countries/ru/economy";
 import { DD_ECONOMY } from "@/lib/countries/dd/economy";
 import { NG_ECONOMY } from "@/lib/countries/ng/economy";
 import { BR_ECONOMY } from "@/lib/countries/br/economy";
+import { FR_ECONOMY } from "@/lib/countries/fr/economy";
+import { IT_ECONOMY } from "@/lib/countries/it/economy";
+import { ES_ECONOMY } from "@/lib/countries/es/economy";
+import { SE_ECONOMY } from "@/lib/countries/se/economy";
+import { TR_ECONOMY } from "@/lib/countries/tr/economy";
+import { GR_ECONOMY } from "@/lib/countries/gr/economy";
+import { AT_ECONOMY } from "@/lib/countries/at/economy";
+import { FI_ECONOMY } from "@/lib/countries/fi/economy";
 
 /**
  * Mapping from country to the "stateId" used in collections like statePolicies
@@ -36,14 +44,14 @@ export const NATIONAL_POLICY_STATE_IDS: Record<CountryId, string> = {
   CS: "cs_national",
   BAL: "bal_national",
   RU: RU_ECONOMY.nationalPolicyStateId,
-  FR: "fr_national",
-  IT: "it_national",
-  ES: "es_national",
-  SE: "se_national",
-  TR: "tr_national",
-  GR: "gr_national",
-  AT: "at_national",
-  FI: "fi_national",
+  FR: FR_ECONOMY.nationalPolicyStateId,
+  IT: IT_ECONOMY.nationalPolicyStateId,
+  ES: ES_ECONOMY.nationalPolicyStateId,
+  SE: SE_ECONOMY.nationalPolicyStateId,
+  TR: TR_ECONOMY.nationalPolicyStateId,
+  GR: GR_ECONOMY.nationalPolicyStateId,
+  AT: AT_ECONOMY.nationalPolicyStateId,
+  FI: FI_ECONOMY.nationalPolicyStateId,
   DD: DD_ECONOMY.nationalPolicyStateId,
   SCO: "sco_national",
   WAL: "wal_national",

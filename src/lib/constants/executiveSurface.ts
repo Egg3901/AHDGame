@@ -9,6 +9,14 @@ import { RU_IDENTITY } from "@/lib/countries/ru/identity";
 import { DD_IDENTITY } from "@/lib/countries/dd/identity";
 import { NG_IDENTITY } from "@/lib/countries/ng/identity";
 import { BR_IDENTITY } from "@/lib/countries/br/identity";
+import { FR_IDENTITY } from "@/lib/countries/fr/identity";
+import { IT_IDENTITY } from "@/lib/countries/it/identity";
+import { ES_IDENTITY } from "@/lib/countries/es/identity";
+import { SE_IDENTITY } from "@/lib/countries/se/identity";
+import { TR_IDENTITY } from "@/lib/countries/tr/identity";
+import { GR_IDENTITY } from "@/lib/countries/gr/identity";
+import { AT_IDENTITY } from "@/lib/countries/at/identity";
+import { FI_IDENTITY } from "@/lib/countries/fi/identity";
 
 /**
  * Per-country configuration for the shared executive shell (instrument strip
@@ -43,16 +51,6 @@ export interface ExecutiveSurfaceConfig {
   heroImage: string;
   heroAlt: string;
 }
-
-const PRESIDENTIAL_ACTS: Record<ExecutiveActKind, string> = {
-  signed: "SIGNED",
-  vetoed: "VETOED",
-  onDesk: "ON DESK",
-  order: "EX. ORDER",
-  confirmed: "CONFIRMED",
-  nominated: "NOMINATED",
-  acting: "ACTING",
-};
 
 const PARLIAMENTARY_ACTS: Record<ExecutiveActKind, string> = {
   signed: "ENACTED",
@@ -156,78 +154,14 @@ export const EXECUTIVE_SURFACE: Record<CountryId, ExecutiveSurfaceConfig> = {
     heroAlt: "Supreme Soviet, Riga",
   },
   RU: RU_IDENTITY.executiveSurface,
-  FR: {
-    clock: { kind: "election", label: "Term Clock", countdownNoun: "presidential election" },
-    actLabels: { ...PRESIDENTIAL_ACTS, order: "DECREE" },
-    deskKind: "bills",
-    deskLabel: "The Desk",
-    rosterTitle: "Government",
-    heroImage: "/api/images/hero/elysee",
-    heroAlt: "Élysée Palace, Paris",
-  },
-  IT: {
-    clock: { kind: "election", label: "Term Clock", countdownNoun: "next general election" },
-    actLabels: PARLIAMENTARY_ACTS,
-    deskKind: "orders",
-    deskLabel: "Orders in Force",
-    rosterTitle: "Council of Ministers",
-    heroImage: "/api/images/hero/palazzo-chigi",
-    heroAlt: "Palazzo Chigi, Rome",
-  },
-  ES: {
-    clock: { kind: "election", label: "Term Clock", countdownNoun: "next general election" },
-    actLabels: PARLIAMENTARY_ACTS,
-    deskKind: "bills",
-    deskLabel: "The Desk",
-    rosterTitle: "Council of Ministers",
-    heroImage: "/api/images/hero/moncloa",
-    heroAlt: "Palacio de la Moncloa, Madrid",
-  },
-  SE: {
-    clock: { kind: "election", label: "Term Clock", countdownNoun: "next general election" },
-    actLabels: PARLIAMENTARY_ACTS,
-    deskKind: "bills",
-    deskLabel: "The Desk",
-    rosterTitle: "Cabinet",
-    heroImage: "/api/images/hero/rosenbad",
-    heroAlt: "Rosenbad, Stockholm",
-  },
-  TR: {
-    clock: { kind: "election", label: "Term Clock", countdownNoun: "next general election" },
-    actLabels: PARLIAMENTARY_ACTS,
-    deskKind: "bills",
-    deskLabel: "The Desk",
-    rosterTitle: "Council of Ministers",
-    heroImage: "/api/images/hero/cankaya",
-    heroAlt: "Çankaya Mansion, Ankara",
-  },
-  GR: {
-    clock: { kind: "election", label: "Term Clock", countdownNoun: "next general election" },
-    actLabels: PARLIAMENTARY_ACTS,
-    deskKind: "orders",
-    deskLabel: "Orders in Force",
-    rosterTitle: "Cabinet",
-    heroImage: "/api/images/hero/maximos-mansion",
-    heroAlt: "Maximos Mansion, Athens",
-  },
-  AT: {
-    clock: { kind: "election", label: "Term Clock", countdownNoun: "next general election" },
-    actLabels: PARLIAMENTARY_ACTS,
-    deskKind: "orders",
-    deskLabel: "Orders in Force",
-    rosterTitle: "Council of Ministers",
-    heroImage: "/api/images/hero/ballhausplatz",
-    heroAlt: "Federal Chancellery at Ballhausplatz, Vienna",
-  },
-  FI: {
-    clock: { kind: "election", label: "Term Clock", countdownNoun: "next general election" },
-    actLabels: PARLIAMENTARY_ACTS,
-    deskKind: "orders",
-    deskLabel: "Orders in Force",
-    rosterTitle: "Council of State",
-    heroImage: "/api/images/hero/government-palace-helsinki",
-    heroAlt: "Government Palace, Helsinki",
-  },
+  FR: FR_IDENTITY.executiveSurface,
+  IT: IT_IDENTITY.executiveSurface,
+  ES: ES_IDENTITY.executiveSurface,
+  SE: SE_IDENTITY.executiveSurface,
+  TR: TR_IDENTITY.executiveSurface,
+  GR: GR_IDENTITY.executiveSurface,
+  AT: AT_IDENTITY.executiveSurface,
+  FI: FI_IDENTITY.executiveSurface,
   DD: DD_IDENTITY.executiveSurface,
   SCO: {
     clock: { kind: "election", label: "Term Clock", countdownNoun: "next Holyrood election" },

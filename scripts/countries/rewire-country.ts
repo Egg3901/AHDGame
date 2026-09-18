@@ -558,13 +558,21 @@ function ensureImport(src: string, binding: string, from: string): string {
  * conservative: anything still referenced anywhere is left alone, so the pass
  * can never remove something load-bearing.
  */
-function pruneOrphans(raw: string, CC: string): [string, string[]] {
+function pruneOrphans(raw: string, _CC: string): [string, string[]] {
   const removed: string[] = [];
   let src = raw;
   for (let pass = 0; pass < 4; pass++) {
     const masked = maskComments(src);
     const names = new Set<string>();
-    for (const m of masked.matchAll(new RegExp(`^(?:const|let)\\s+(${CC}_[A-Za-z0-9_]+)`, "gm")))
+    /*
+     * ⚠ NOT JUST `<CC>_` NAMES. Repointing the eight economy-tier countries'
+     * EXECUTIVE_SURFACE entries orphaned `PRESIDENTIAL_ACTS` in
+     * `executiveSurface.ts` -- a local const several of them shared, whose name
+     * carries no country at all. Scanning only `<CC>_` names left it for lint to
+     * find. Every top-level const is a candidate now; the one-occurrence rule
+     * and the export check are what keep that safe.
+     */
+    for (const m of masked.matchAll(/^(?:const|let)\s+([A-Za-z_$][A-Za-z0-9_$]*)/gm))
       names.add(m[1]);
     for (const m of masked.matchAll(/^import \{([^}]*)\} from/gm))
       for (const n of m[1].split(",")) {

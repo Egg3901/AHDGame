@@ -30,6 +30,14 @@ import { RU_ADJACENCY_MAP } from "@/lib/countries/ru/geographyFacts";
 import { DD_ADJACENCY_MAP } from "@/lib/countries/dd/geographyFacts";
 import { NG_ADJACENCY_MAP } from "@/lib/countries/ng/geographyFacts";
 import { BR_ADJACENCY_MAP } from "@/lib/countries/br/geographyFacts";
+import { FR_ADJACENCY_MAP } from "@/lib/countries/fr/geographyFacts";
+import { IT_ADJACENCY_MAP } from "@/lib/countries/it/geographyFacts";
+import { ES_ADJACENCY_MAP } from "@/lib/countries/es/geographyFacts";
+import { SE_ADJACENCY_MAP } from "@/lib/countries/se/geographyFacts";
+import { TR_ADJACENCY_MAP } from "@/lib/countries/tr/geographyFacts";
+import { GR_ADJACENCY_MAP } from "@/lib/countries/gr/geographyFacts";
+import { AT_ADJACENCY_MAP } from "@/lib/countries/at/geographyFacts";
+import { FI_ADJACENCY_MAP } from "@/lib/countries/fi/geographyFacts";
 
 export type AdjacencyMap = Record<string, readonly string[]>;
 
@@ -162,100 +170,27 @@ const BAL_ADJACENCY: AdjacencyMap = {
 };
 
 /** France's eight 1979 macro-regions. */
-const FR_ADJACENCY: AdjacencyMap = {
-  FR_IDF: ["FR_NOR", "FR_EST", "FR_CEN", "FR_OUE"],
-  FR_NOR: ["FR_IDF", "FR_EST", "FR_OUE"],
-  FR_EST: ["FR_IDF", "FR_NOR", "FR_CEN", "FR_ARA"],
-  FR_OUE: ["FR_IDF", "FR_NOR", "FR_CEN", "FR_SOU"],
-  FR_SOU: ["FR_OUE", "FR_CEN", "FR_ARA", "FR_MED"],
-  FR_ARA: ["FR_EST", "FR_CEN", "FR_SOU", "FR_MED"],
-  FR_MED: ["FR_SOU", "FR_ARA"],
-  FR_CEN: ["FR_IDF", "FR_EST", "FR_OUE", "FR_SOU", "FR_ARA"],
-};
 
 /**
  * Italy's eight 1979 macro-regions. Sicily connects to the south across the
  * Strait of Messina. Sardinia connects to Lazio by the Olbia-Civitavecchia
  * ferry route.
  */
-const IT_ADJACENCY: AdjacencyMap = {
-  IT_NW: ["IT_NE", "IT_TUS"],
-  IT_NE: ["IT_NW", "IT_TUS"],
-  IT_TUS: ["IT_NW", "IT_NE", "IT_LAZ", "IT_SUD"],
-  IT_LAZ: ["IT_TUS", "IT_CAM", "IT_SUD", "IT_SAR"],
-  IT_CAM: ["IT_LAZ", "IT_SUD"],
-  IT_SUD: ["IT_TUS", "IT_LAZ", "IT_CAM", "IT_SIC"],
-  IT_SIC: ["IT_SUD"], // Strait of Messina ferry
-  IT_SAR: ["IT_LAZ"], // Olbia-Civitavecchia ferry
-};
 
 /** Spain's eight 1979 macro-regions. Island groups belong to ES_CEN. */
-const ES_ADJACENCY: AdjacencyMap = {
-  ES_MAD: ["ES_CEN"],
-  ES_CAT: ["ES_VAL", "ES_NOR"],
-  ES_AND: ["ES_VAL", "ES_CEN"],
-  ES_VAL: ["ES_CAT", "ES_AND", "ES_CEN", "ES_NOR"],
-  ES_PVB: ["ES_CEN", "ES_NOR"],
-  ES_GAL: ["ES_CEN", "ES_NOR"],
-  ES_NOR: ["ES_CAT", "ES_VAL", "ES_PVB", "ES_GAL", "ES_CEN"],
-  ES_CEN: ["ES_MAD", "ES_AND", "ES_VAL", "ES_PVB", "ES_GAL", "ES_NOR"],
-};
 
 /** Sweden's eight 1979 macro-regions. */
-const SE_ADJACENCY: AdjacencyMap = {
-  SE_STH: ["SE_EAS", "SE_UPP"],
-  SE_GOT: ["SE_SKA", "SE_SML", "SE_EAS", "SE_VML"],
-  SE_SKA: ["SE_GOT", "SE_SML"],
-  SE_EAS: ["SE_STH", "SE_GOT", "SE_SML", "SE_VML", "SE_UPP"],
-  SE_SML: ["SE_GOT", "SE_SKA", "SE_EAS"],
-  SE_VML: ["SE_GOT", "SE_EAS", "SE_UPP"],
-  SE_NOR: ["SE_UPP"],
-  SE_UPP: ["SE_STH", "SE_EAS", "SE_VML", "SE_NOR"],
-};
 
 /** Turkey's eight 1979 macro-regions. */
-const TR_ADJACENCY: AdjacencyMap = {
-  TR_IST: ["TR_IZM", "TR_BLA", "TR_CEN"],
-  TR_ANK: ["TR_BLA", "TR_CEN"],
-  TR_IZM: ["TR_IST", "TR_MED", "TR_CEN"],
-  TR_MED: ["TR_IZM", "TR_CEN", "TR_ESA", "TR_SEA"],
-  TR_BLA: ["TR_IST", "TR_ANK", "TR_CEN", "TR_ESA"],
-  TR_ESA: ["TR_BLA", "TR_CEN", "TR_MED", "TR_SEA"],
-  TR_SEA: ["TR_MED", "TR_ESA"],
-  TR_CEN: ["TR_IST", "TR_ANK", "TR_IZM", "TR_MED", "TR_BLA", "TR_ESA"],
-};
 
 /**
  * Greece's six 1979 macro-regions. The islands connect to Attica through the
  * Piraeus ferry network.
  */
-const GR_ADJACENCY: AdjacencyMap = {
-  GR_ATT: ["GR_EPC", "GR_PEL", "GR_ISL"],
-  GR_MAC: ["GR_THE", "GR_EPC"],
-  GR_THE: ["GR_MAC", "GR_EPC"],
-  GR_EPC: ["GR_ATT", "GR_MAC", "GR_THE", "GR_PEL"],
-  GR_PEL: ["GR_ATT", "GR_EPC"],
-  GR_ISL: ["GR_ATT"], // Piraeus ferry network
-};
 
 /** Austria's five 1979 macro-regions. Vienna is enclaved within AT_NOE. */
-const AT_ADJACENCY: AdjacencyMap = {
-  AT_VIE: ["AT_NOE"],
-  AT_NOE: ["AT_VIE", "AT_OOE", "AT_STK"],
-  AT_OOE: ["AT_NOE", "AT_STK", "AT_TYR"],
-  AT_STK: ["AT_NOE", "AT_OOE", "AT_TYR"],
-  AT_TYR: ["AT_OOE", "AT_STK"],
-};
 
 /** Finland's six 1979 macro-regions. */
-const FI_ADJACENCY: AdjacencyMap = {
-  FI_UUS: ["FI_SW", "FI_HAM", "FI_EAS"],
-  FI_SW: ["FI_UUS", "FI_HAM", "FI_OST"],
-  FI_HAM: ["FI_UUS", "FI_SW", "FI_EAS", "FI_OST"],
-  FI_EAS: ["FI_UUS", "FI_HAM", "FI_OST"],
-  FI_OST: ["FI_SW", "FI_HAM", "FI_EAS", "FI_LAP"],
-  FI_LAP: ["FI_OST"],
-};
 
 /** Scotland's seven post-secession sub-regions. */
 const SCO_ADJACENCY: AdjacencyMap = {
@@ -302,14 +237,14 @@ export const STATE_ADJACENCY: Readonly<Record<CountryId, AdjacencyMap>> = {
   CS: CS_ADJACENCY,
   BAL: BAL_ADJACENCY,
   RU: RU_ADJACENCY_MAP,
-  FR: FR_ADJACENCY,
-  IT: IT_ADJACENCY,
-  ES: ES_ADJACENCY,
-  SE: SE_ADJACENCY,
-  TR: TR_ADJACENCY,
-  GR: GR_ADJACENCY,
-  AT: AT_ADJACENCY,
-  FI: FI_ADJACENCY,
+  FR: FR_ADJACENCY_MAP,
+  IT: IT_ADJACENCY_MAP,
+  ES: ES_ADJACENCY_MAP,
+  SE: SE_ADJACENCY_MAP,
+  TR: TR_ADJACENCY_MAP,
+  GR: GR_ADJACENCY_MAP,
+  AT: AT_ADJACENCY_MAP,
+  FI: FI_ADJACENCY_MAP,
   DD: DD_ADJACENCY_MAP,
   SCO: SCO_ADJACENCY,
   WAL: WAL_ADJACENCY,

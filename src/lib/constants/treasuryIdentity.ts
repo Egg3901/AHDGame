@@ -10,6 +10,14 @@ import { RU_IDENTITY } from "@/lib/countries/ru/identity";
 import { DD_IDENTITY } from "@/lib/countries/dd/identity";
 import { NG_IDENTITY } from "@/lib/countries/ng/identity";
 import { BR_IDENTITY } from "@/lib/countries/br/identity";
+import { FR_IDENTITY } from "@/lib/countries/fr/identity";
+import { IT_IDENTITY } from "@/lib/countries/it/identity";
+import { ES_IDENTITY } from "@/lib/countries/es/identity";
+import { SE_IDENTITY } from "@/lib/countries/se/identity";
+import { TR_IDENTITY } from "@/lib/countries/tr/identity";
+import { GR_IDENTITY } from "@/lib/countries/gr/identity";
+import { AT_IDENTITY } from "@/lib/countries/at/identity";
+import { FI_IDENTITY } from "@/lib/countries/fi/identity";
 
 /**
  * Treasury / Finance-Ministry identity overlay for the National Budget surface.
@@ -148,78 +156,14 @@ export const TREASURY_TEXT: Record<
     native: "Baltijas PSR · Finanšu ministrijas",
   },
   RU: RU_IDENTITY.treasuryText,
-  FR: {
-    glyph: "RF",
-    serif: "mono",
-    budgetTitle: "State Budget",
-    ministry: "MINISTRY OF ECONOMY AND FINANCE",
-    publicSeal: "PUBLIC RECORD",
-    registry: "French Republic · Ministry of Economy and Finance",
-    native: "République française · Ministère de l'Économie et des Finances",
-  },
-  IT: {
-    glyph: "RI",
-    serif: "mono",
-    budgetTitle: "State Budget",
-    ministry: "MINISTRY OF THE TREASURY",
-    publicSeal: "PUBLIC RECORD",
-    registry: "Italian Republic · Ministry of the Treasury",
-    native: "Repubblica Italiana · Ministero del Tesoro",
-  },
-  ES: {
-    glyph: "RE",
-    serif: "mono",
-    budgetTitle: "State Budget",
-    ministry: "MINISTRY OF FINANCE",
-    publicSeal: "PUBLIC RECORD",
-    registry: "Kingdom of Spain · Ministry of Finance",
-    native: "Reino de España · Ministerio de Hacienda",
-  },
-  SE: {
-    glyph: "SE",
-    serif: "mono",
-    budgetTitle: "State Budget",
-    ministry: "MINISTRY OF FINANCE",
-    publicSeal: "PUBLIC RECORD",
-    registry: "Kingdom of Sweden · Ministry of Finance",
-    native: "Konungariket Sverige · Finansdepartementet",
-  },
-  TR: {
-    glyph: "TC",
-    serif: "mono",
-    budgetTitle: "State Budget",
-    ministry: "MINISTRY OF FINANCE",
-    publicSeal: "PUBLIC RECORD",
-    registry: "Republic of Turkey · Ministry of Finance",
-    native: "Türkiye Cumhuriyeti · Maliye Bakanlığı",
-  },
-  GR: {
-    glyph: "ΕΔ",
-    serif: "mono",
-    budgetTitle: "State Budget",
-    ministry: "MINISTRY OF FINANCE",
-    publicSeal: "PUBLIC RECORD",
-    registry: "Hellenic Republic · Ministry of Finance",
-    native: "Ελληνική Δημοκρατία · Υπουργείο Οικονομικών",
-  },
-  AT: {
-    glyph: "BM",
-    serif: "mono",
-    budgetTitle: "Federal Budget",
-    ministry: "MINISTRY OF FINANCE",
-    publicSeal: "PUBLIC RECORD",
-    registry: "Republic of Austria · Federal Ministry of Finance",
-    native: "Republik Österreich · Bundesministerium für Finanzen",
-  },
-  FI: {
-    glyph: "VM",
-    serif: "mono",
-    budgetTitle: "State Budget",
-    ministry: "MINISTRY OF FINANCE",
-    publicSeal: "PUBLIC RECORD",
-    registry: "Republic of Finland · Ministry of Finance",
-    native: "Suomen Tasavalta · Valtiovarainministeriö",
-  },
+  FR: FR_IDENTITY.treasuryText,
+  IT: IT_IDENTITY.treasuryText,
+  ES: ES_IDENTITY.treasuryText,
+  SE: SE_IDENTITY.treasuryText,
+  TR: TR_IDENTITY.treasuryText,
+  GR: GR_IDENTITY.treasuryText,
+  AT: AT_IDENTITY.treasuryText,
+  FI: FI_IDENTITY.treasuryText,
   DD: DD_IDENTITY.treasuryText,
   SCO: {
     glyph: "AB",

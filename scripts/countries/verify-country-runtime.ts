@@ -161,6 +161,52 @@ const REGISTRIES: Record<string, Dict> = {
  * carrying the country, or a folder that starts supplying the value, is
  * reported rather than silently tolerated.
  */
+/**
+ * A shared absence profile, for countries that are thin in exactly the same way.
+ *
+ * ⚠ EIGHT COUNTRIES, ONE PROFILE, BECAUSE THE PROFILE IS THE FACT. France,
+ * Italy, Spain, Sweden, Turkey, Greece, Austria and Finland are absent from the
+ * SAME twenty registries, character for character -- they are the economy tier,
+ * and they share `ECON_COUNTRY_CABINET_POSITIONS` for the same reason. Writing
+ * eight near-identical blocks would bury that in repetition and let one drift
+ * from the others unnoticed.
+ *
+ * Each entry is still checked per country and in both directions: a country that
+ * gains a row, or a folder that starts supplying a value, fails exactly as it
+ * would from a hand-written block.
+ */
+const ECONOMY_TIER_ABSENCES: Record<string, string> = {
+  NATIONAL_ADDRESS_NAME: 'no row; the reader falls back to "Address to the Nation"',
+  CABINET_IDENTITY: "no row; getCabinetIdentity falls back to its documented shell",
+  NATIONAL_STATS_IDENTITY: "no row; the reader falls back to DEFAULT_STATS_IDENTITY",
+  ECONOMY_TEXT: "no row; the reader falls back to DEFAULT_ECONOMY_TEXT",
+  LEGISLATIVE_PROCESS: "no row; readers fall through to DEFAULT_PROCESS",
+  ESTATE_PORTFOLIO_BY_COUNTRY: "no row; seedCabinetEstates skips the country",
+  ORDERS_BY_COUNTRY: "no cabinet-orders file exists; getMinisterialOrders returns []",
+  GROUPS: 'no row; getCabinetGroup falls back to "Centre" per position',
+  ENERGY_POSITION_BY_COUNTRY: "no energy seat is designated",
+  INFRA_POSITION_BY_COUNTRY: "no infrastructure seat is designated",
+  ECONOMIC_BASELINES: "forex-active with no full baseline, as rateCalculation.ts names it",
+  REP_ECON: "no representative economy; incomeToGdp returns its 0.8 default",
+  COST_SCALE_ANCHORS: "no anchor; costScale returns 1",
+  DEFAULT_STRATEGIC_SECTORS: "no strategic sectors are configured",
+  PLAYER_PAYOUT_CAP_PER_TURN: "no payout cap is configured",
+  NEUTRAL_FEDERAL_SALES_TAX_BY_COUNTRY: "no federal sales tax row",
+  NEUTRAL_STATE_SALES_TAX_BY_COUNTRY: "no state sales tax row",
+  CONSCRIPTION_SEED: "no row; the reader falls back to DEFAULT_POLICY",
+  MEDIAN_INCOME_THRESHOLDS: "no median-income thresholds are configured",
+  POPULATION_MULTIPLIERS: "no 1991 cohort row; that era passes through at 1.0",
+  SPAWN_ELECTIONS_REGISTRY: "spawns through COUNTRY_ELECTION_PHASES, not this registry",
+};
+
+/** The three economy-tier countries that also author no census bundles. */
+const NO_CENSUS = {
+  CENSUS_BUNDLES: "no census bundle is authored for any era",
+};
+
+const ECONOMY_TIER = ["FR", "IT", "ES", "SE", "TR"];
+const ECONOMY_TIER_NO_CENSUS = ["GR", "AT", "FI"];
+
 const ABSENT_UPSTREAM: Record<string, Record<string, string>> = {
   DE: {
     COUNTRY_UN_MEMBER_SINCE: "the FRG was admitted in 1973; the 1953 world has no entry",
@@ -253,6 +299,11 @@ const ABSENT_UPSTREAM: Record<string, Record<string, string>> = {
   },
 };
 
+for (const cc of ECONOMY_TIER) ABSENT_UPSTREAM[cc] = { ...ECONOMY_TIER_ABSENCES };
+for (const cc of ECONOMY_TIER_NO_CENSUS) {
+  ABSENT_UPSTREAM[cc] = { ...ECONOMY_TIER_ABSENCES, ...NO_CENSUS };
+}
+
 /**
  * A registry whose row for this country is SHARED machinery, not its data.
  *
@@ -267,11 +318,18 @@ const ABSENT_UPSTREAM: Record<string, Record<string, string>> = {
  * is a real change), and the folder MUST NOT supply a value (supplying one means
  * the country has authored its own and this entry is stale).
  */
-const SHARED_UPSTREAM: Record<string, Record<string, string>> = {
-  BR: {
+const SHARED_UPSTREAM: Record<string, Record<string, string>> = {};
+
+/*
+ * All nine economy-tier countries point at the same cabinet. Brazil found it
+ * first; the other eight were always going to be identical, and listing them
+ * once keeps the claim in one place.
+ */
+for (const cc of ["BR", ...ECONOMY_TIER, ...ECONOMY_TIER_NO_CENSUS]) {
+  SHARED_UPSTREAM[cc] = {
     MECHANICS_BY_COUNTRY: "ECON_COUNTRY_CABINET_MECHANICS, shared by nine economy-tier countries",
-  },
-};
+  };
+}
 
 /** Where each registry's value lives inside the folder. `null` = no folder side. */
 const FOLDER_PATH: Record<string, string | null> = {

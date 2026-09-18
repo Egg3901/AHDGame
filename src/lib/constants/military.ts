@@ -50,6 +50,46 @@ import {
   BR_MILITARY_BRANCHES,
   BR_MILITARY_SCALE,
 } from "@/lib/countries/br/institutionsFacts";
+import {
+  FR_CABINET_SEAT_IDS,
+  FR_MILITARY_BRANCHES,
+  FR_MILITARY_SCALE,
+} from "@/lib/countries/fr/institutionsFacts";
+import {
+  IT_CABINET_SEAT_IDS,
+  IT_MILITARY_BRANCHES,
+  IT_MILITARY_SCALE,
+} from "@/lib/countries/it/institutionsFacts";
+import {
+  ES_CABINET_SEAT_IDS,
+  ES_MILITARY_BRANCHES,
+  ES_MILITARY_SCALE,
+} from "@/lib/countries/es/institutionsFacts";
+import {
+  SE_CABINET_SEAT_IDS,
+  SE_MILITARY_BRANCHES,
+  SE_MILITARY_SCALE,
+} from "@/lib/countries/se/institutionsFacts";
+import {
+  TR_CABINET_SEAT_IDS,
+  TR_MILITARY_BRANCHES,
+  TR_MILITARY_SCALE,
+} from "@/lib/countries/tr/institutionsFacts";
+import {
+  GR_CABINET_SEAT_IDS,
+  GR_MILITARY_BRANCHES,
+  GR_MILITARY_SCALE,
+} from "@/lib/countries/gr/institutionsFacts";
+import {
+  AT_CABINET_SEAT_IDS,
+  AT_MILITARY_BRANCHES,
+  AT_MILITARY_SCALE,
+} from "@/lib/countries/at/institutionsFacts";
+import {
+  FI_CABINET_SEAT_IDS,
+  FI_MILITARY_BRANCHES,
+  FI_MILITARY_SCALE,
+} from "@/lib/countries/fi/institutionsFacts";
 
 export interface Branch {
   id: string;
@@ -402,46 +442,15 @@ export const MILITARY_BRANCHES_BY_COUNTRY: Record<CountryId, Branch[]> = {
   // Russian game (Branch has no namesByYear). PVO Strany became a separate
   // service 1948; RVSN stood up 17 Dec 1959; Military Space Forces 1992.
   RU: RU_MILITARY_BRANCHES,
-  FR: [
-    { id: "terre", name: "Army", abbr: "AdT", domain: "ground" },
-    { id: "marine", name: "Navy", abbr: "MN", domain: "naval" },
-    { id: "air", name: "Air Force", abbr: "AdA", domain: "air" },
-  ],
-  IT: [
-    { id: "esercito", name: "Army", abbr: "EI", domain: "ground" },
-    { id: "marina", name: "Navy", abbr: "MM", domain: "naval" },
-    { id: "aeronautica", name: "Air Force", abbr: "AM", domain: "air" },
-  ],
-  ES: [
-    { id: "tierra", name: "Army", abbr: "ET", domain: "ground" },
-    { id: "armada", name: "Navy", abbr: "AE", domain: "naval" },
-    { id: "aire", name: "Air Force", abbr: "EA", domain: "air" },
-  ],
-  SE: [
-    { id: "army", name: "Army", abbr: "Armén", domain: "ground" },
-    { id: "navy", name: "Navy", abbr: "Marinen", domain: "naval" },
-    { id: "airforce", name: "Air Force", abbr: "Flygvapnet", domain: "air" },
-  ],
-  TR: [
-    { id: "ground", name: "Land Forces", abbr: "KKK", domain: "ground" },
-    { id: "navy", name: "Naval Forces", abbr: "DzKK", domain: "naval" },
-    { id: "airforce", name: "Air Force", abbr: "HvKK", domain: "air" },
-  ],
-  GR: [
-    { id: "army", name: "Hellenic Army", abbr: "ES", domain: "ground" },
-    { id: "navy", name: "Hellenic Navy", abbr: "PN", domain: "naval" },
-    { id: "airforce", name: "Hellenic Air Force", abbr: "PA", domain: "air" },
-  ],
+  FR: FR_MILITARY_BRANCHES,
+  IT: IT_MILITARY_BRANCHES,
+  ES: ES_MILITARY_BRANCHES,
+  SE: SE_MILITARY_BRANCHES,
+  TR: TR_MILITARY_BRANCHES,
+  GR: GR_MILITARY_BRANCHES,
   // Bundesheer: re-established under the Austrian State Treaty, 1955. Landlocked.
-  AT: [
-    { id: "heer", name: "Land Forces", abbr: "ÖBH", domain: "ground", establishedYear: 1955 },
-    { id: "luft", name: "Air Forces", abbr: "ÖLK", domain: "air", establishedYear: 1955 },
-  ],
-  FI: [
-    { id: "army", name: "Army", abbr: "MAAV", domain: "ground" },
-    { id: "navy", name: "Navy", abbr: "MERIV", domain: "naval" },
-    { id: "airforce", name: "Air Force", abbr: "ILMAV", domain: "air" },
-  ],
+  AT: AT_MILITARY_BRANCHES,
+  FI: FI_MILITARY_BRANCHES,
   // Nationale Volksarmee: stood up 1 Mar 1956; dissolved with the GDR 3 Oct 1990.
   DD: DD_MILITARY_BRANCHES,
   SCO: [],
@@ -475,14 +484,14 @@ export const MILITARY_COUNTRY_SCALE: Record<CountryId, number> = {
   CS: 1.0,
   BAL: 1.0,
   RU: RU_MILITARY_SCALE,
-  FR: 1.5,
-  IT: 1.2,
-  ES: 1.0,
-  SE: 1.1,
-  TR: 1.0,
-  GR: 0.9,
-  AT: 0.85,
-  FI: 0.9,
+  FR: FR_MILITARY_SCALE,
+  IT: IT_MILITARY_SCALE,
+  ES: ES_MILITARY_SCALE,
+  SE: SE_MILITARY_SCALE,
+  TR: TR_MILITARY_SCALE,
+  GR: GR_MILITARY_SCALE,
+  AT: AT_MILITARY_SCALE,
+  FI: FI_MILITARY_SCALE,
   DD: DD_MILITARY_SCALE,
   SCO: 1.0,
   WAL: 1.0,
@@ -511,14 +520,14 @@ export const DEFENSE_POSITION_BY_COUNTRY: Record<CountryId, string | null> = {
   CS: "minister_of_defence",
   BAL: "minister_of_defence",
   RU: RU_CABINET_SEAT_IDS.defense,
-  FR: "minister_of_defence",
-  IT: "minister_of_defence",
-  ES: "minister_of_defence",
-  SE: "minister_of_defence",
-  TR: "minister_of_defence",
-  GR: "minister_of_defence",
-  AT: "minister_of_defence",
-  FI: "minister_of_defence",
+  FR: FR_CABINET_SEAT_IDS.defense,
+  IT: IT_CABINET_SEAT_IDS.defense,
+  ES: ES_CABINET_SEAT_IDS.defense,
+  SE: SE_CABINET_SEAT_IDS.defense,
+  TR: TR_CABINET_SEAT_IDS.defense,
+  GR: GR_CABINET_SEAT_IDS.defense,
+  AT: AT_CABINET_SEAT_IDS.defense,
+  FI: FI_CABINET_SEAT_IDS.defense,
   DD: DD_CABINET_SEAT_IDS.defense,
   SCO: null,
   WAL: null,

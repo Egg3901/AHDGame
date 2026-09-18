@@ -16,6 +16,14 @@ import { RU_MAP_REGISTRY } from "@/lib/countries/ru/geographyFacts";
 import { DD_MAP_REGISTRY } from "@/lib/countries/dd/geographyFacts";
 import { NG_MAP_REGISTRY } from "@/lib/countries/ng/geographyFacts";
 import { BR_MAP_REGISTRY } from "@/lib/countries/br/geographyFacts";
+import { FR_MAP_REGISTRY } from "@/lib/countries/fr/geographyFacts";
+import { IT_MAP_REGISTRY } from "@/lib/countries/it/geographyFacts";
+import { ES_MAP_REGISTRY } from "@/lib/countries/es/geographyFacts";
+import { SE_MAP_REGISTRY } from "@/lib/countries/se/geographyFacts";
+import { TR_MAP_REGISTRY } from "@/lib/countries/tr/geographyFacts";
+import { GR_MAP_REGISTRY } from "@/lib/countries/gr/geographyFacts";
+import { AT_MAP_REGISTRY } from "@/lib/countries/at/geographyFacts";
+import { FI_MAP_REGISTRY } from "@/lib/countries/fi/geographyFacts";
 
 export interface CountryMapConfig {
   /** Country ID */
@@ -131,62 +139,14 @@ export const COUNTRY_MAP_REGISTRY: Record<CountryId, CountryMapConfig> = {
     hasRegionMap: false,
   },
   RU: RU_MAP_REGISTRY,
-  FR: {
-    countryId: "FR",
-    name: "France",
-    overviewPath: "/country/fr",
-    mapPath: "/country/fr/map",
-    hasRegionMap: false,
-  },
-  IT: {
-    countryId: "IT",
-    name: "Italy",
-    overviewPath: "/country/it",
-    mapPath: "/country/it/map",
-    hasRegionMap: false,
-  },
-  ES: {
-    countryId: "ES",
-    name: "Spain",
-    overviewPath: "/country/es",
-    mapPath: "/country/es/map",
-    hasRegionMap: false,
-  },
-  SE: {
-    countryId: "SE",
-    name: "Sweden",
-    overviewPath: "/country/se",
-    mapPath: "/country/se/map",
-    hasRegionMap: false,
-  },
-  GR: {
-    countryId: "GR",
-    name: "Greece",
-    overviewPath: "/country/gr",
-    mapPath: "/country/gr/map",
-    hasRegionMap: false,
-  },
-  TR: {
-    countryId: "TR",
-    name: "Turkey",
-    overviewPath: "/country/tr",
-    mapPath: "/country/tr/map",
-    hasRegionMap: false,
-  },
-  AT: {
-    countryId: "AT",
-    name: "Austria",
-    overviewPath: "/country/at",
-    mapPath: "/country/at/map",
-    hasRegionMap: false,
-  },
-  FI: {
-    countryId: "FI",
-    name: "Finland",
-    overviewPath: "/country/fi",
-    mapPath: "/country/fi/map",
-    hasRegionMap: false,
-  },
+  FR: FR_MAP_REGISTRY,
+  IT: IT_MAP_REGISTRY,
+  ES: ES_MAP_REGISTRY,
+  SE: SE_MAP_REGISTRY,
+  GR: GR_MAP_REGISTRY,
+  TR: TR_MAP_REGISTRY,
+  AT: AT_MAP_REGISTRY,
+  FI: FI_MAP_REGISTRY,
   DD: DD_MAP_REGISTRY,
   // Latent — region map (public/sco-regions.json) wired in at SP3.
   SCO: {

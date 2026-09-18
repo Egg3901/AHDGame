@@ -19,6 +19,14 @@ import { RU_ECONOMY } from "@/lib/countries/ru/economy";
 import { DD_ECONOMY } from "@/lib/countries/dd/economy";
 import { NG_ECONOMY } from "@/lib/countries/ng/economy";
 import { BR_ECONOMY } from "@/lib/countries/br/economy";
+import { FR_ECONOMY } from "@/lib/countries/fr/economy";
+import { IT_ECONOMY } from "@/lib/countries/it/economy";
+import { ES_ECONOMY } from "@/lib/countries/es/economy";
+import { SE_ECONOMY } from "@/lib/countries/se/economy";
+import { TR_ECONOMY } from "@/lib/countries/tr/economy";
+import { GR_ECONOMY } from "@/lib/countries/gr/economy";
+import { AT_ECONOMY } from "@/lib/countries/at/economy";
+import { FI_ECONOMY } from "@/lib/countries/fi/economy";
 
 /**
  * Currency codes for all countries — active and future.
@@ -103,14 +111,14 @@ export const COUNTRY_CURRENCY_MAP: Record<CountryId, CurrencyCode> = {
   CS: "CSK",
   BAL: "SUR",
   RU: RU_ECONOMY.currencyCode,
-  FR: "FRF",
-  IT: "ITL",
-  ES: "ESP",
-  SE: "SEK",
-  TR: "TRL",
-  GR: "GRD",
-  AT: "ATS",
-  FI: "FIM",
+  FR: FR_ECONOMY.currencyCode,
+  IT: IT_ECONOMY.currencyCode,
+  ES: ES_ECONOMY.currencyCode,
+  SE: SE_ECONOMY.currencyCode,
+  TR: TR_ECONOMY.currencyCode,
+  GR: GR_ECONOMY.currencyCode,
+  AT: AT_ECONOMY.currencyCode,
+  FI: FI_ECONOMY.currencyCode,
   DD: DD_ECONOMY.currencyCode,
   SCO: "GBP", // sterlingized — shares the UK's GBP (anchor stays UK)
   WAL: "GBP", // sterlingized — shares the UK's GBP (anchor stays UK)
@@ -791,14 +799,14 @@ export const MONETARY_BASELINES: Record<CountryId, MonetaryBaseline> = {
   CS: { targetInflation: 2.0, neutralPrimeRate: 4.0 },
   BAL: { targetInflation: 2.0, neutralPrimeRate: 3.0 },
   RU: RU_ECONOMY.monetary.baseline,
-  FR: { targetInflation: 10.0, neutralPrimeRate: 9.5 }, // late-1970s French inflation
-  IT: { targetInflation: 15.0, neutralPrimeRate: 12.0 }, // late-1970s Italian inflation
-  ES: { targetInflation: 16.0, neutralPrimeRate: 14.0 }, // late-1970s Spanish transition inflation
-  SE: { targetInflation: 8.0, neutralPrimeRate: 9.0 }, // late-1970s Swedish inflation
-  TR: { targetInflation: 20.0, neutralPrimeRate: 20.0 }, // late-1970s Turkish crisis inflation
-  GR: { targetInflation: 15.0, neutralPrimeRate: 16.5 }, // late-1970s drachma inflation regime
-  AT: { targetInflation: 4.0, neutralPrimeRate: 5.5 }, // hard-schilling DM shadow policy
-  FI: { targetInflation: 6.0, neutralPrimeRate: 8.5 }, // late-1970s markka devaluation-cycle regime
+  FR: FR_ECONOMY.monetary.baseline, // late-1970s French inflation
+  IT: IT_ECONOMY.monetary.baseline, // late-1970s Italian inflation
+  ES: ES_ECONOMY.monetary.baseline, // late-1970s Spanish transition inflation
+  SE: SE_ECONOMY.monetary.baseline, // late-1970s Swedish inflation
+  TR: TR_ECONOMY.monetary.baseline, // late-1970s Turkish crisis inflation
+  GR: GR_ECONOMY.monetary.baseline, // late-1970s drachma inflation regime
+  AT: AT_ECONOMY.monetary.baseline, // hard-schilling DM shadow policy
+  FI: FI_ECONOMY.monetary.baseline, // late-1970s markka devaluation-cycle regime
   DD: DD_ECONOMY.monetary.baseline, // administered GDR planned-economy prices
   SCO: { targetInflation: 2.0, neutralPrimeRate: 3.0 }, // mirrors UK (sterling zone)
   WAL: { targetInflation: 2.0, neutralPrimeRate: 3.0 }, // mirrors UK (sterling zone)

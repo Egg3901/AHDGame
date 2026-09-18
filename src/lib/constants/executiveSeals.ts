@@ -21,6 +21,14 @@ import { RU_IDENTITY } from "@/lib/countries/ru/identity";
 import { DD_IDENTITY } from "@/lib/countries/dd/identity";
 import { NG_IDENTITY } from "@/lib/countries/ng/identity";
 import { BR_IDENTITY } from "@/lib/countries/br/identity";
+import { FR_IDENTITY } from "@/lib/countries/fr/identity";
+import { IT_IDENTITY } from "@/lib/countries/it/identity";
+import { ES_IDENTITY } from "@/lib/countries/es/identity";
+import { SE_IDENTITY } from "@/lib/countries/se/identity";
+import { TR_IDENTITY } from "@/lib/countries/tr/identity";
+import { GR_IDENTITY } from "@/lib/countries/gr/identity";
+import { AT_IDENTITY } from "@/lib/countries/at/identity";
+import { FI_IDENTITY } from "@/lib/countries/fi/identity";
 
 export interface ExecutiveSeal {
   src: string;
@@ -48,38 +56,14 @@ export const EXECUTIVE_SEALS: Partial<Record<CountryId, ExecutiveSeal>> = {
   // filenames that have since moved fall back cleanly.
   RU: RU_IDENTITY.executiveSeal,
   DD: DD_IDENTITY.executiveSeal,
-  FR: {
-    src: "https://upload.wikimedia.org/wikipedia/commons/thumb/b/b7/Armoiries_république_française.svg/330px-Armoiries_république_française.svg.png",
-    alt: "Arms of the French Republic",
-  },
-  IT: {
-    src: "https://upload.wikimedia.org/wikipedia/commons/thumb/0/00/Emblem_of_Italy.svg/330px-Emblem_of_Italy.svg.png",
-    alt: "Emblem of Italy",
-  },
-  ES: {
-    src: "https://upload.wikimedia.org/wikipedia/commons/thumb/7/78/Coat_of_Arms_of_Spain_(1977–1981).svg/330px-Coat_of_Arms_of_Spain_(1977–1981).svg.png",
-    alt: "Coat of arms of Spain (1977–1981)",
-  },
-  SE: {
-    src: "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e5/Great_coat_of_arms_of_Sweden.svg/330px-Great_coat_of_arms_of_Sweden.svg.png",
-    alt: "Greater coat of arms of Sweden",
-  },
-  TR: {
-    src: "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a4/Emblem_of_Turkey.svg/330px-Emblem_of_Turkey.svg.png",
-    alt: "Emblem of Turkey",
-  },
-  GR: {
-    src: "https://upload.wikimedia.org/wikipedia/commons/thumb/7/7c/Coat_of_arms_of_Greece.svg/330px-Coat_of_arms_of_Greece.svg.png",
-    alt: "Coat of arms of Greece",
-  },
-  AT: {
-    src: "https://upload.wikimedia.org/wikipedia/commons/thumb/4/4a/Coat_of_arms_of_Austria.svg/330px-Coat_of_arms_of_Austria.svg.png",
-    alt: "Coat of arms of Austria (Bundesadler)",
-  },
-  FI: {
-    src: "https://upload.wikimedia.org/wikipedia/commons/thumb/a/ae/Coat_of_arms_of_Finland.svg/330px-Coat_of_arms_of_Finland.svg.png",
-    alt: "Coat of arms of Finland",
-  },
+  FR: FR_IDENTITY.executiveSeal,
+  IT: IT_IDENTITY.executiveSeal,
+  ES: ES_IDENTITY.executiveSeal,
+  SE: SE_IDENTITY.executiveSeal,
+  TR: TR_IDENTITY.executiveSeal,
+  GR: GR_IDENTITY.executiveSeal,
+  AT: AT_IDENTITY.executiveSeal,
+  FI: FI_IDENTITY.executiveSeal,
   HU: {
     src: "https://upload.wikimedia.org/wikipedia/commons/thumb/8/8d/Coat_of_arms_of_Hungary_(1957-1990).svg/330px-Coat_of_arms_of_Hungary_(1957-1990).svg.png",
     alt: "Coat of arms of the Hungarian People's Republic",
