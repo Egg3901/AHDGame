@@ -177,10 +177,7 @@ describe("GET /api/singleplayer/statistics", () => {
             { turn: 24, seats: 50 },
             { turn: 23, seats: 999 },
           ]),
-          countryLeaderStates: emptyFind([
-            { popularLegitimacy: 70 },
-            { popularLegitimacy: 50 },
-          ]),
+          countryLeaderStates: emptyFind([{ popularLegitimacy: 70 }, { popularLegitimacy: 50 }]),
         }
       )
     );

@@ -1,10 +1,7 @@
 import type { Db } from "mongodb";
 import type { GameState } from "@/lib/db/types";
 import type { EconomicVitalSigns } from "@/lib/db/types/economicVitalSigns";
-import {
-  ALLOWED_FEATURE_FLAGS,
-  METRIC_DEFINITION_VERSION,
-} from "@/lib/clientStatistics";
+import { ALLOWED_FEATURE_FLAGS, METRIC_DEFINITION_VERSION } from "@/lib/clientStatistics";
 
 const ELECTION_STATUS_FIELDS = {
   upcoming: "electionCountUpcoming",
@@ -155,7 +152,9 @@ export async function collectLocalStatistics(db: Db): Promise<LocalStatisticsPay
       .toArray(),
     db
       .collection("elections")
-      .aggregate<{ _id: string; count: number }>([{ $group: { _id: "$status", count: { $sum: 1 } } }])
+      .aggregate<{ _id: string; count: number }>([
+        { $group: { _id: "$status", count: { $sum: 1 } } },
+      ])
       .toArray(),
     db.collection("governmentFormations").countDocuments(),
     db
@@ -248,7 +247,8 @@ export async function collectLocalStatistics(db: Db): Promise<LocalStatisticsPay
       budgets
         .map((row) =>
           finite(
-            (row as { economicFactors?: { inflationRate?: unknown } }).economicFactors?.inflationRate
+            (row as { economicFactors?: { inflationRate?: unknown } }).economicFactors
+              ?.inflationRate
           )
         )
         .filter((value): value is number => value !== null)
@@ -259,9 +259,7 @@ export async function collectLocalStatistics(db: Db): Promise<LocalStatisticsPay
   let autocracy = 0;
   let withExecutive = 0;
   for (const row of countryStates) {
-    const governmentType = String(
-      (row as { governmentType?: unknown }).governmentType ?? ""
-    );
+    const governmentType = String((row as { governmentType?: unknown }).governmentType ?? "");
     if (AUTOCRACY_TYPES.has(governmentType)) autocracy += 1;
     else if (governmentType) democracy += 1;
     if ((row as { rulingPartyId?: unknown }).rulingPartyId != null) withExecutive += 1;
@@ -279,15 +277,21 @@ export async function collectLocalStatistics(db: Db): Promise<LocalStatisticsPay
   const approvalValues = approvals
     .map((row) => finite((row as { approvalRating?: unknown }).approvalRating))
     .filter((value): value is number => value !== null);
-  setMetric(metrics, "governmentApprovalPercent", weightedMean(
-    approvalValues.map((value) => ({ weight: 1, value }))
-  ));
+  setMetric(
+    metrics,
+    "governmentApprovalPercent",
+    weightedMean(approvalValues.map((value) => ({ weight: 1, value })))
+  );
 
   const legitimacy = leaders
     .map((row) => finite((row as { popularLegitimacy?: unknown }).popularLegitimacy))
     .filter((value): value is number => value !== null);
   if (legitimacy.length > 0) {
-    setMetric(metrics, "averageStability", legitimacy.reduce((a, b) => a + b, 0) / legitimacy.length);
+    setMetric(
+      metrics,
+      "averageStability",
+      legitimacy.reduce((a, b) => a + b, 0) / legitimacy.length
+    );
     setMetric(metrics, "minStability", Math.min(...legitimacy));
     setMetric(metrics, "maxStability", Math.max(...legitimacy));
   }
