@@ -100,6 +100,9 @@ if (isoCodes.length !== 1 || isoCodes[0] !== isoForward) {
 const unMemberSince = maybe("COUNTRY_UN_MEMBER_SINCE");
 const mapRegistry = maybe("COUNTRY_MAP_REGISTRY");
 const nonPartyBias = maybe("NON_PARTY_BUCKET_INDEPENDENT_BIAS_BY_COUNTRY");
+const medianIncome = maybe("MEDIAN_INCOME_THRESHOLDS");
+const core5 = maybe("CORE5_NORMALS");
+const popMultipliers = maybe("POPULATION_MULTIPLIERS");
 const conscription = maybe("CONSCRIPTION_SEED");
 
 const out = `import type { AdjacencyMap } from "@/lib/constants/stateAdjacency";
@@ -112,8 +115,8 @@ ${
 import type { Continent } from "@/lib/constants/countryContinents";${
   conscription ? '\nimport type { ConscriptionPolicy } from "@/lib/demographics/conscription";' : ""
 }
-import type { NormalAnchor } from "@/lib/era/metricCatalog";
-import type { ScoreThreshold } from "@/lib/utils/metricScoring";
+${core5 ? 'import type { NormalAnchor } from "@/lib/era/metricCatalog";' : ""}
+${medianIncome ? 'import type { ScoreThreshold } from "@/lib/utils/metricScoring";' : ""}
 import type { WorldEntityRegion } from "@/lib/world/worldEntityManifest";
 
 /**
@@ -169,7 +172,7 @@ export const ${COUNTRY}_MAP_ANCHOR: [number, number] = ${v("COUNTRY_ANCHOR")};
  * ⚠ LOCAL CURRENCY, like every money figure in the folder, and NOT comparable to
  * another country's.
  */
-export const ${COUNTRY}_MEDIAN_INCOME_THRESHOLDS: ScoreThreshold = ${v("MEDIAN_INCOME_THRESHOLDS")};
+${medianIncome ? `export const ${COUNTRY}_MEDIAN_INCOME_THRESHOLDS: ScoreThreshold = ${medianIncome};` : `/* No ${COUNTRY}_MEDIAN_INCOME_THRESHOLDS: no row in the registry. */`}
 ${
   conscription
     ? `\n/** Conscription policy at seed time. */\nexport const ${COUNTRY}_CONSCRIPTION: ConscriptionPolicy = ${conscription};\n`
@@ -183,7 +186,7 @@ ${
  * metric rather than one object for the country. Each anchor is keyed \`year\`,
  * a NUMBER -- not \`era\`, a string.
  */
-export const ${COUNTRY}_CORE5_NORMALS: Record<string, NormalAnchor[]> = ${v("CORE5_NORMALS")};
+${core5 ? `export const ${COUNTRY}_CORE5_NORMALS: Record<string, NormalAnchor[]> = ${core5};` : `/* No ${COUNTRY}_CORE5_NORMALS: the metric-first registry carries no ${COUNTRY} anchors. */`}
 
 /**
  * Which regions border which.
@@ -231,9 +234,7 @@ export const ${COUNTRY}_MAP_REGISTRY: CountryMapConfig = ${mapRegistry};`
  * nothing about any other preset, and a country missing from it passes through
  * unchanged at 1.0 rather than taking someone else's numbers.
  */
-export const ${COUNTRY}_POPULATION_MULTIPLIERS: Record<string, number> = ${v(
-  "POPULATION_MULTIPLIERS"
-)};
+${popMultipliers ? `export const ${COUNTRY}_POPULATION_MULTIPLIERS: Record<string, number> = ${popMultipliers};` : `/* No ${COUNTRY}_POPULATION_MULTIPLIERS: the 1991 cohort table has no ${COUNTRY} row, so that era passes through at 1.0. */`}
 `;
 
 mkdirSync(dirname(OUT), { recursive: true });
@@ -243,7 +244,7 @@ console.log(`wrote ${OUT}`);
 console.log(`  iso pair agree  : ${isoForward}`);
 console.log(`  adjacency keys  : ${Object.keys(adjacency).length}`);
 console.log(
-  `  core5 metrics   : ${Object.keys(JSON.parse(v("CORE5_NORMALS")) as object).join(", ")}`
+  `  core5 metrics   : ${core5 ? Object.keys(JSON.parse(core5) as object).join(", ") : "none"}`
 );
 if (!unMemberSince) console.log(`  omitted         : UN_MEMBER_SINCE (absent, not defaulted)`);
 if (!mapRegistry)

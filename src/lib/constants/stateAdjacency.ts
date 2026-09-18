@@ -26,6 +26,7 @@ import { UK_ADJACENCY_MAP } from "@/lib/countries/uk/geographyFacts";
 import { DE_ADJACENCY_MAP } from "@/lib/countries/de/geographyFacts";
 import { CN_ADJACENCY_MAP } from "@/lib/countries/cn/geographyFacts";
 import { IE_ADJACENCY_MAP } from "@/lib/countries/ie/geographyFacts";
+import { RU_ADJACENCY_MAP } from "@/lib/countries/ru/geographyFacts";
 
 export type AdjacencyMap = Record<string, readonly string[]>;
 
@@ -50,28 +51,6 @@ export type AdjacencyMap = Record<string, readonly string[]>;
  *     freight/passenger link between Transcaucasia and Central Asia).
  * NCA ↔ KAZ (Caspian only, no service) is deliberately excluded.
  */
-const RU_ADJACENCY: AdjacencyMap = {
-  // RSFSR macro-regions
-  CEN: ["NWR", "NOR", "VOL", "CBE"],
-  NWR: ["CEN", "NOR"],
-  NOR: ["NWR", "CEN", "VOL", "URA", "WSB"],
-  CBE: ["CEN", "VOL", "NCA"],
-  VOL: ["NOR", "CEN", "CBE", "NCA", "URA", "KAZ"],
-  NCA: ["CBE", "VOL", "TRA"],
-  URA: ["NOR", "VOL", "WSB", "KAZ"],
-  WSB: ["NOR", "URA", "ESB", "KAZ"],
-  ESB: ["WSB", "FEA"],
-  FEA: ["ESB"],
-  // Union republics (grouped)
-  KAZ: ["VOL", "URA", "WSB", "CAS"],
-  TRA: ["NCA", "CAS"], // CAS via Baku–Krasnovodsk Caspian ferry
-  CAS: ["KAZ", "TRA"],
-  // MOL is an EXCLAVE of RU's region graph. The Moldavian SSR bordered only the
-  // Ukrainian SSR and Romania; Ukraine is its own country now, so Moldova has no
-  // RU-owned neighbour left. The empty list is correct, not missing data: this
-  // map is land adjacency WITHIN a country's own regions.
-  MOL: [],
-};
 
 /**
  * DD (East Germany) 6 regions. Reuses the modern eastern-Länder codes
@@ -342,7 +321,7 @@ export const STATE_ADJACENCY: Readonly<Record<CountryId, AdjacencyMap>> = {
   BLR: BLR_ADJACENCY,
   CS: CS_ADJACENCY,
   BAL: BAL_ADJACENCY,
-  RU: RU_ADJACENCY,
+  RU: RU_ADJACENCY_MAP,
   FR: FR_ADJACENCY,
   IT: IT_ADJACENCY,
   ES: ES_ADJACENCY,

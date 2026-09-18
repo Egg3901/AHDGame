@@ -5,6 +5,7 @@ import { UK_ECONOMY } from "@/lib/countries/uk/economy";
 import { DE_ECONOMY } from "@/lib/countries/de/economy";
 import { CN_ECONOMY } from "@/lib/countries/cn/economy";
 import { IE_ECONOMY } from "@/lib/countries/ie/economy";
+import { RU_ECONOMY } from "@/lib/countries/ru/economy";
 
 /**
  * Mapping from country to the "stateId" used in collections like statePolicies
@@ -31,7 +32,7 @@ export const NATIONAL_POLICY_STATE_IDS: Record<CountryId, string> = {
   BLR: "blr_national",
   CS: "cs_national",
   BAL: "bal_national",
-  RU: "su_national",
+  RU: RU_ECONOMY.nationalPolicyStateId,
   FR: "fr_national",
   IT: "it_national",
   ES: "es_national",

@@ -66,7 +66,26 @@ export interface CountryIdentity {
   readonly displayName: string;
   readonly cabinet: CabinetIdentity;
   readonly national: NationalIdentity;
-  readonly stats: StatsIdentity;
+  /**
+   * ⚠️ OPTIONAL BECAUSE THE FIRST SIX COUNTRIES WERE NOT THE GAME. This field
+   * was required while only Japan, the United States, the United Kingdom,
+   * Germany, China and Ireland had folders -- and those six are exactly the
+   * countries its registry covers. Russia has a `COUNTRY_CONFIGS` row, a
+   * cabinet, regions and elections, and no row here at all; the registry holds
+   * six to eight keys in total, so what looked like a contract about countries
+   * was a contract about the first cohort.
+   *
+   * Every reader already handles the absence: this one is
+   * `NATIONAL_STATS_IDENTITY[countryId] ?? DEFAULT_STATS_IDENTITY`. A folder
+   * that filled the gap with that default would convert a documented fallback
+   * into an authored value and hide which countries are really configured.
+   *
+   * The same reasoning relaxes `economyText`, `legislativeProcess`,
+   * `economicBaseline`, `repEcon`, `costScaleAnchors`, `conscription` and
+   * `populationMultipliers`. Each one is recorded per country in the runtime
+   * harness's ABSENT_UPSTREAM, which fails if the absence ever stops being true.
+   */
+  readonly stats?: StatsIdentity;
   /**
    * ⚠️ The authored TEXT only. There is deliberately no `treasury` field, because
    * TREASURY_IDENTITY is DERIVED: treasuryIdentity.ts:324 composes it as
@@ -75,7 +94,7 @@ export interface CountryIdentity {
    * a copy here would create a second source of the same values.
    */
   readonly treasuryText: Omit<TreasuryIdentity, "palette" | "accent" | "accentSoft">;
-  readonly economyText: Omit<EconomyIdentity, "accent">;
+  readonly economyText?: Omit<EconomyIdentity, "accent">;
   readonly executiveText: IdentityText;
   readonly policyText: IdentityText;
   readonly executiveSeal: ExecutiveSeal;
@@ -144,7 +163,7 @@ export interface CountryIdentity {
  */
 export interface CountryInstitutions {
   readonly config: CountryConfig;
-  readonly legislativeProcess: LegislativeProcess;
+  readonly legislativeProcess?: LegislativeProcess;
   readonly regionalBillAssentOfficeKey?: string;
   /**
    * Cabinet seat ids. Five of these are one id or null; ESTATE_PORTFOLIO is a
@@ -250,7 +269,12 @@ export interface CountryEconomy {
   readonly nationalPolicyStateId: string;
   /** Scope key for country-scoped legislation. Also a narrow union. */
   readonly legislationScope: NonNullable<LegislationType["countryScope"]>;
-  readonly economicBaseline: { readonly gdpGrowth: number; readonly tradeGrowth: number };
+  /**
+   * ⚠️ OPTIONAL, AND THE CODEBASE SAYS SO OUT LOUD. `rateCalculation.ts` names
+   * the countries -- "IT/ES/SE/TR/FR/RU" -- as forex-active with no full
+   * economic baseline, and handles them. See `stats` above for the general case.
+   */
+  readonly economicBaseline?: { readonly gdpGrowth: number; readonly tradeGrowth: number };
   readonly monetary: {
     /** Required: MONETARY_BASELINES is a total Record, not a Partial. */
     readonly baseline: MonetaryBaseline;
@@ -274,9 +298,9 @@ export interface CountryEconomy {
   };
   readonly strategicSectors?: CorporationType[];
   /** GDP and population anchors for legislation cost scaling. BALANCE SURFACE. */
-  readonly repEcon: { readonly gdp: number; readonly population: number };
+  readonly repEcon?: { readonly gdp: number; readonly population: number };
   /** Cost-scale interpolation anchors. BALANCE SURFACE. */
-  readonly costScaleAnchors: CostScaleAnchor;
+  readonly costScaleAnchors?: CostScaleAnchor;
   readonly tax: {
     readonly neutralFederalSalesTax?: number;
     readonly neutralStateSalesTax?: number;
@@ -336,14 +360,14 @@ export interface CountryGeography {
   readonly adjacency: AdjacencyMap;
   readonly regionNames: Record<string, string>;
   readonly demographicCategoryIds?: string[];
-  readonly conscription: ConscriptionPolicy;
+  readonly conscription?: ConscriptionPolicy;
   /**
    * ⚠️ Forwarded WITHOUT exporting its const. Seven seeders destructure
    * applyEra1991DemographicAdjustments out of a ternary that unions the whole
    * module type with a stub, so any new export on that module collapses the
    * seeded value to `unknown`. Forwarding the JP entry only adds an import.
    */
-  readonly populationMultipliers: Record<string, number>;
+  readonly populationMultipliers?: Record<string, number>;
   /**
    * ⚠️ THREE DIFFERENT TYPES SHARE THE NAME `PresetBundles`, one per seed module:
    * regionCensusData's is keyed to RegionCensus, populationAnchors' to
@@ -367,7 +391,12 @@ export interface CountryGeography {
    * `global` fallback per metric that belongs to every country and must NOT
    * move. Keyed here by metric name.
    */
-  readonly core5Normals: Record<string, NormalAnchor[]>;
+  /**
+   * ⚠️ OPTIONAL: `CORE5_NORMALS` is METRIC-first, and Russia appears under none
+   * of the five metrics. See `stats` on CountryIdentity for why the first cohort
+   * made this look required.
+   */
+  readonly core5Normals?: Record<string, NormalAnchor[]>;
 }
 
 /**

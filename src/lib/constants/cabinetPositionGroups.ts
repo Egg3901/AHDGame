@@ -13,6 +13,7 @@ import { UK_CABINET_GROUPS } from "@/lib/countries/uk/institutionsFacts";
 import { DE_CABINET_GROUPS } from "@/lib/countries/de/institutionsFacts";
 import { CN_CABINET_GROUPS } from "@/lib/countries/cn/institutionsFacts";
 import { IE_CABINET_GROUPS } from "@/lib/countries/ie/institutionsFacts";
+import { RU_CABINET_GROUPS } from "@/lib/countries/ru/institutionsFacts";
 
 export const GROUPS: Record<string, Record<string, CabinetGroup>> = {
   US: US_CABINET_GROUPS,
@@ -21,25 +22,7 @@ export const GROUPS: Record<string, Record<string, CabinetGroup>> = {
   IE: IE_CABINET_GROUPS,
   DE: DE_CABINET_GROUPS,
   CN: CN_CABINET_GROUPS,
-  RU: {
-    director_of_intelligence: "Security & Foreign",
-    premier: "Centre",
-    first_deputy_premier: "Centre",
-    chairman_of_gosplan: "Centre",
-    minister_of_finance: "Economy",
-    gosbank_liaison: "Economy",
-    minister_of_foreign_trade: "Economy",
-    minister_of_internal_trade: "Economy",
-    minister_of_agriculture: "Economy",
-    minister_of_machine_building: "Economy",
-    minister_of_foreign_affairs: "Security & Foreign",
-    minister_of_defence: "Security & Foreign",
-    minister_of_internal_affairs: "Security & Foreign",
-    minister_of_culture: "Society",
-    minister_of_health: "Society",
-    minister_of_higher_education: "Society",
-    minister_of_railways: "Domestic",
-  },
+  RU: RU_CABINET_GROUPS,
   NG: {
     director_of_intelligence: "Security & Foreign",
     secretary_to_government: "Centre",

@@ -7,6 +7,7 @@ import { UK_CABINET_SEAT_IDS } from "@/lib/countries/uk/institutionsFacts";
 import { DE_CABINET_SEAT_IDS } from "@/lib/countries/de/institutionsFacts";
 import { CN_CABINET_SEAT_IDS } from "@/lib/countries/cn/institutionsFacts";
 import { IE_CABINET_SEAT_IDS } from "@/lib/countries/ie/institutionsFacts";
+import { RU_CABINET_SEAT_IDS } from "@/lib/countries/ru/institutionsFacts";
 
 /**
  * The built-in organizations seeded at game start. Player-created orgs use
@@ -649,7 +650,7 @@ export const FOREIGN_AFFAIRS_POSITION_BY_COUNTRY: Record<CountryId, string | nul
   UKR: "minister_of_foreign_affairs",
   CS: "minister_of_foreign_affairs",
   BAL: "minister_of_foreign_affairs",
-  RU: "minister_of_foreign_affairs",
+  RU: RU_CABINET_SEAT_IDS.foreignAffairs,
   FR: "minister_of_foreign_affairs",
   IT: "minister_of_foreign_affairs",
   ES: "minister_of_foreign_affairs",
@@ -692,7 +693,7 @@ export const TRADE_MINISTER_POSITION_BY_COUNTRY: Record<CountryId, string | null
   UKR: null,
   CS: null,
   BAL: null,
-  RU: "minister_of_foreign_affairs",
+  RU: RU_CABINET_SEAT_IDS.tradeMinister,
   FR: "minister_of_trade_industry",
   IT: "minister_of_trade_industry",
   ES: "minister_of_trade_industry",

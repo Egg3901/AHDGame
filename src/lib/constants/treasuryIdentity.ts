@@ -6,6 +6,7 @@ import { UK_IDENTITY } from "@/lib/countries/uk/identity";
 import { DE_IDENTITY } from "@/lib/countries/de/identity";
 import { CN_IDENTITY } from "@/lib/countries/cn/identity";
 import { IE_IDENTITY } from "@/lib/countries/ie/identity";
+import { RU_IDENTITY } from "@/lib/countries/ru/identity";
 
 /**
  * Treasury / Finance-Ministry identity overlay for the National Budget surface.
@@ -161,15 +162,7 @@ export const TREASURY_TEXT: Record<
     registry: "Baltic Soviet Republics · Ministries of Finance",
     native: "Baltijas PSR · Finanšu ministrijas",
   },
-  RU: {
-    glyph: "СССР",
-    serif: "mono",
-    budgetTitle: "State Plan Budget",
-    ministry: "MINISTRY OF FINANCE",
-    publicSeal: "PUBLIC RECORD",
-    registry: "Union of Soviet Socialist Republics · Ministry of Finance",
-    native: "СССР · Министерство финансов",
-  },
+  RU: RU_IDENTITY.treasuryText,
   FR: {
     glyph: "RF",
     serif: "mono",

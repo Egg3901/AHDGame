@@ -6,6 +6,7 @@ import { UK_ESTATE_PORTFOLIO } from "@/lib/countries/uk/institutionsFacts";
 import { DE_ESTATE_PORTFOLIO } from "@/lib/countries/de/institutionsFacts";
 import { CN_ESTATE_PORTFOLIO } from "@/lib/countries/cn/institutionsFacts";
 import { IE_ESTATE_PORTFOLIO } from "@/lib/countries/ie/institutionsFacts";
+import { RU_ESTATE_PORTFOLIO } from "@/lib/countries/ru/institutionsFacts";
 
 // ── Archetype catalog ────────────────────────────────────────────────────────
 export interface EstateArchetype {
@@ -674,19 +675,7 @@ export const ESTATE_PORTFOLIO_BY_COUNTRY: Partial<Record<CountryId, Record<strin
   // with no flagship (the UK Deputy PM precedent). DD mirrors RU's position ids
   // one-for-one (ddCabinet.ts), so the two maps are identical — written out
   // separately rather than aliased so a future divergence is a local edit.
-  RU: {
-    minister_of_foreign_affairs: "foreign",
-    minister_of_internal_affairs: "state_security",
-    chairman_of_gosplan: "planning",
-    gosbank_liaison: "state_bank",
-    minister_of_foreign_trade: "trade_mission",
-    minister_of_internal_trade: "distribution",
-    minister_of_agriculture: "collective_farming",
-    minister_of_machine_building: "heavy_industry",
-    minister_of_culture: "culture",
-    minister_of_health: "socialized_health",
-    minister_of_higher_education: "education",
-  },
+  RU: RU_ESTATE_PORTFOLIO,
   DD: {
     minister_of_foreign_affairs: "foreign",
     minister_of_internal_affairs: "state_security",

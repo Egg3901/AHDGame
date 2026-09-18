@@ -30,6 +30,11 @@ import {
   IE_MILITARY_BRANCHES,
   IE_MILITARY_SCALE,
 } from "@/lib/countries/ie/institutionsFacts";
+import {
+  RU_CABINET_SEAT_IDS,
+  RU_MILITARY_BRANCHES,
+  RU_MILITARY_SCALE,
+} from "@/lib/countries/ru/institutionsFacts";
 
 export interface Branch {
   id: string;
@@ -395,20 +400,7 @@ export const MILITARY_BRANCHES_BY_COUNTRY: Record<CountryId, Branch[]> = {
   // Era-neutral service names: one row serves both a 1953 Soviet and a 2019
   // Russian game (Branch has no namesByYear). PVO Strany became a separate
   // service 1948; RVSN stood up 17 Dec 1959; Military Space Forces 1992.
-  RU: [
-    { id: "ground", name: "Ground Forces", abbr: "SV", domain: "ground" },
-    { id: "navy", name: "Navy", abbr: "VMF", domain: "naval" },
-    { id: "airforce", name: "Air Force", abbr: "VVS", domain: "air" },
-    { id: "pvo", name: "Air Defence Forces", abbr: "PVO", domain: "air", establishedYear: 1948 },
-    {
-      id: "rocket",
-      name: "Strategic Rocket Forces",
-      abbr: "RVSN",
-      domain: "rocket",
-      establishedYear: 1959,
-    },
-    { id: "space", name: "Space Forces", abbr: "VKS", domain: "space", establishedYear: 1992 },
-  ],
+  RU: RU_MILITARY_BRANCHES,
   FR: [
     { id: "terre", name: "Army", abbr: "AdT", domain: "ground" },
     { id: "marine", name: "Navy", abbr: "MN", domain: "naval" },
@@ -506,7 +498,7 @@ export const MILITARY_COUNTRY_SCALE: Record<CountryId, number> = {
   BLR: 1.0,
   CS: 1.0,
   BAL: 1.0,
-  RU: 2.4,
+  RU: RU_MILITARY_SCALE,
   FR: 1.5,
   IT: 1.2,
   ES: 1.0,
@@ -542,7 +534,7 @@ export const DEFENSE_POSITION_BY_COUNTRY: Record<CountryId, string | null> = {
   BLR: "minister_of_defence",
   CS: "minister_of_defence",
   BAL: "minister_of_defence",
-  RU: "minister_of_defence",
+  RU: RU_CABINET_SEAT_IDS.defense,
   FR: "minister_of_defence",
   IT: "minister_of_defence",
   ES: "minister_of_defence",

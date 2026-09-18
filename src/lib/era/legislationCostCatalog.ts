@@ -916,7 +916,14 @@ export const CALIBRATION_SCALE = 1.5;
 // Representative modern (gdp, population) per playable country — from the 2019/2023
 // budget seed configs. Used to precompute the income-to-GDP ratio so a perCapita
 // share targets the same %GDP as a gdpFraction share.
-export const REP_ECON: Record<string, { gdp: number; population: number }> = {
+/*
+ * ⚠️ `Partial`, BECAUSE MOST COUNTRIES ARE NOT IN HERE. The map holds seven
+ * keys; `incomeToGdp` has always read `const e = REP_ECON[country]` and returned
+ * 0.8 when it came back undefined, so the guard was already written for an
+ * absence the TYPE denied. Saying so lets a country folder omit `repEcon`
+ * instead of inventing a representative economy for a country nobody measured.
+ */
+export const REP_ECON: Partial<Record<string, { gdp: number; population: number }>> = {
   US: US_ECONOMY.repEcon,
   UK: UK_ECONOMY.repEcon,
   DE: DE_ECONOMY.repEcon,

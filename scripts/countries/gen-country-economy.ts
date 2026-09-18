@@ -119,6 +119,9 @@ const strategicSectors = maybe("DEFAULT_STRATEGIC_SECTORS");
 const federalSalesTax = maybe("NEUTRAL_FEDERAL_SALES_TAX_BY_COUNTRY");
 const stateSalesTax = maybe("NEUTRAL_STATE_SALES_TAX_BY_COUNTRY");
 
+const economicBaselineValue = maybe("ECONOMIC_BASELINES");
+const repEconValue = maybe("REP_ECON");
+const costScaleAnchorsValue = maybe("COST_SCALE_ANCHORS");
 const payoutCap = maybe("PLAYER_PAYOUT_CAP_PER_TURN");
 const sovereignStructure = maybe("SOVEREIGN_CORP_LEGAL_STRUCTURE");
 const m2ToGdp = maybe("M2_TO_GDP_1953");
@@ -160,11 +163,11 @@ import type { LegalStructureId } from "@/lib/constants/legalStructures";
 const currencyCode = ${v("COUNTRY_CURRENCY_MAP")} as CurrencyCode;
 const nationalPolicyStateId = ${v("NATIONAL_POLICY_STATE_IDS")};
 const legislationScope = ${v("LEGISLATION_COUNTRY_SCOPES")};
-const economicBaseline = ${v("ECONOMIC_BASELINES")};
+${economicBaselineValue ? `const economicBaseline = ${economicBaselineValue};` : `// No ECONOMIC_BASELINES row; the folder omits \`economicBaseline\` rather than defaulting it.`}
 const baselineMonetary = ${v("MONETARY_BASELINES")};
 const sectorWeightsBase = ${v("COUNTRY_SECTOR_WEIGHTS")};
-const repEcon = ${v("REP_ECON")};
-const costScaleAnchors = ${v("COST_SCALE_ANCHORS")};
+${repEconValue ? `const repEcon = ${repEconValue};` : `// No REP_ECON row; the folder omits \`repEcon\` rather than defaulting it.`}
+${costScaleAnchorsValue ? `const costScaleAnchors = ${costScaleAnchorsValue};` : `// No COST_SCALE_ANCHORS row; the folder omits \`costScaleAnchors\` rather than defaulting it.`}
 /**
  * ⚠ THE CAST IS LOAD-BEARING, for the same reason as the cabinet groups:
  * JSON.parse widens each sector name to \`string\`, and \`CorporationType[]\` is a
@@ -181,8 +184,12 @@ export const ${COUNTRY}_ECONOMY: CountryEconomy = {
   currencyCode,
   nationalPolicyStateId,
   legislationScope,
-  economicBaseline,
-  monetary: {
+${
+  economicBaselineValue
+    ? `  economicBaseline,
+`
+    : ""
+}  monetary: {
     baseline: baselineMonetary,
     byEra: {
 ${monetaryEntries}
@@ -195,9 +202,17 @@ ${sectorEntries}
     },
   },
   strategicSectors,
-  repEcon,
-  costScaleAnchors,
-  tax: {
+${
+  repEconValue
+    ? `  repEcon,
+`
+    : ""
+}${
+  costScaleAnchorsValue
+    ? `  costScaleAnchors,
+`
+    : ""
+}  tax: {
 ${
   federalSalesTax
     ? `    neutralFederalSalesTax: ${federalSalesTax},

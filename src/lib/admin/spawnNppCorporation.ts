@@ -50,6 +50,7 @@ import { UK_NPP_CAPITAL_STATE } from "@/lib/countries/uk/geographyFacts";
 import { DE_NPP_CAPITAL_STATE } from "@/lib/countries/de/geographyFacts";
 import { CN_NPP_CAPITAL_STATE } from "@/lib/countries/cn/geographyFacts";
 import { IE_NPP_CAPITAL_STATE } from "@/lib/countries/ie/geographyFacts";
+import { RU_NPP_CAPITAL_STATE } from "@/lib/countries/ru/geographyFacts";
 
 /**
  * Default founding book for an admin/NPP-spawned corporation, in ₳ at MODERN
@@ -85,7 +86,7 @@ export const NPP_CAPITAL_STATES: Record<CountryId, string> = {
   BLR: "BLR_MIN",
   CS: "",
   BAL: "BAL_LVA", // Riga: the largest Baltic city and the regional administrative centre
-  RU: "",
+  RU: RU_NPP_CAPITAL_STATE,
   // Econ-tier market democracies — capital region (political capital where the
   // administrative and market capital differ, e.g. Ankara over Istanbul). These
   // regions are seeded by the econ-tier roster + region seeders, so an NPP corp

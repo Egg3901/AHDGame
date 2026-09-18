@@ -76,7 +76,16 @@ function destination(cc: string, file: string): string {
 /** `../foo` relative to the OLD location, as an `@/lib/...` alias. */
 function absolutise(source: string, oldFile: string): string {
   const dir = dirname(oldFile);
-  return source.replace(/from "(\.\.?\/[^"]+)"/g, (_m, rel: string) => {
+  /*
+   * ⚠ A DYNAMIC IMPORT IS AN IMPORT. The first version matched only
+   * `from "..."`, so `await import("./persistRegionLeans")` inside `seedRU.ts`
+   * travelled to the new directory still pointing at the old one's sibling.
+   * Static imports fail typecheck; this one failed it too, but only because the
+   * module happened not to exist at the new path -- a dynamic import that
+   * resolved to a DIFFERENT real module would have compiled and run the wrong
+   * code.
+   */
+  return source.replace(/(from|import\()\s*"(\.\.?\/[^"]+)"/g, (_m, lead: string, rel: string) => {
     const joined = `${dir}/${rel}`
       .split("/")
       .reduce<string[]>((acc, part) => {
@@ -89,9 +98,10 @@ function absolutise(source: string, oldFile: string): string {
         return acc;
       }, [])
       .join("/");
+    const head = lead === "from" ? "from " : "import(";
     return joined.startsWith("src/lib/")
-      ? `from "@/lib/${joined.slice("src/lib/".length)}"`
-      : `from "${rel}"`;
+      ? `${head}"@/lib/${joined.slice("src/lib/".length)}"`
+      : `${head}"${rel}"`;
   });
 }
 

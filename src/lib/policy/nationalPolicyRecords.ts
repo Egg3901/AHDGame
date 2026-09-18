@@ -29,6 +29,7 @@ import { UK_ECONOMY } from "@/lib/countries/uk/economy";
 import { DE_ECONOMY } from "@/lib/countries/de/economy";
 import { CN_ECONOMY } from "@/lib/countries/cn/economy";
 import { IE_ECONOMY } from "@/lib/countries/ie/economy";
+import { RU_ECONOMY } from "@/lib/countries/ru/economy";
 
 /**
  * Shared national policy-record assembly — extracted verbatim from
@@ -71,7 +72,7 @@ export const LEGISLATION_COUNTRY_SCOPES: Record<
   UKR: "ukr",
   CS: "cs",
   BAL: "bal",
-  RU: "ru",
+  RU: RU_ECONOMY.legislationScope,
   FR: "fr",
   IT: "it",
   ES: "es",

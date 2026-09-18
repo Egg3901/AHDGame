@@ -41,7 +41,7 @@
  */
 
 /** Countries whose folder is finished. Adding one turns the guard on for it. */
-export const CONVERTED: readonly string[] = ["JP", "US", "UK", "DE", "CN", "IE"];
+export const CONVERTED: readonly string[] = ["JP", "US", "UK", "DE", "CN", "IE", "RU"];
 
 /**
  * Files that hold one country's data, are NOT in that country's folder, and are
@@ -109,16 +109,6 @@ export const ACKNOWLEDGED_OUTSIDE: ReadonlyArray<{
     file: "src/lib/constants/regionBanner.ts",
     country: "UK",
     why: "Region banner configuration read by every country's region pages; the UK entries sit inside a country-keyed map.",
-  },
-  {
-    file: "src/lib/migrations/entries/2026-08-26-uk-regional-party-org-backfill.ts",
-    country: "UK",
-    why: "A dated migration entry. Migrations are records of a change that happened, not facts about a country, and they stay where the migration runner reads them.",
-  },
-  {
-    file: "src/lib/remediation/defects/AHD-1102-uk-vat-revenue-gap.ts",
-    country: "UK",
-    why: "A remediation defect definition, registered by id with the remediation runner. Like a migration, it records an incident rather than describing the country.",
   },
 
   // ---- Shared modules that CONTAIN United States data without BEING it. ----

@@ -6,6 +6,7 @@ import { UK_CABINET_SEAT_IDS } from "@/lib/countries/uk/institutionsFacts";
 import { DE_CABINET_SEAT_IDS } from "@/lib/countries/de/institutionsFacts";
 import { CN_CABINET_SEAT_IDS } from "@/lib/countries/cn/institutionsFacts";
 import { IE_CABINET_SEAT_IDS } from "@/lib/countries/ie/institutionsFacts";
+import { RU_CABINET_SEAT_IDS } from "@/lib/countries/ru/institutionsFacts";
 
 export interface EnergySourceDef {
   id: EnergySource;
@@ -108,7 +109,7 @@ export const ENERGY_POSITION_BY_COUNTRY: Partial<Record<CountryId, string>> = {
   // abstraction. This seat is also an estates seat, so FlagshipRouter renders it
   // with the existing `Estates | Generation` toggle (the UK environment_secretary
   // path). Era-appropriate sources are enforced by seedEnergyPlants.
-  RU: "minister_of_machine_building",
+  RU: RU_CABINET_SEAT_IDS.energy,
   DD: "minister_of_machine_building",
 };
 

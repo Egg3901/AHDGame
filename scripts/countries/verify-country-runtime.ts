@@ -166,6 +166,33 @@ const ABSENT_UPSTREAM: Record<string, Record<string, string>> = {
     COUNTRY_UN_MEMBER_SINCE: "the FRG was admitted in 1973; the 1953 world has no entry",
     PLAYER_PAYOUT_CAP_PER_TURN: "no payout cap is configured for Germany",
   },
+  /*
+   * ⚠ SIXTEEN, AND NONE OF THEM A MISTAKE. Russia has a `COUNTRY_CONFIGS`
+   * row, a cabinet, fourteen regions and four election phases, and no row in any
+   * of these. Most of the registries below hold six to eight keys in total --
+   * they were only ever about the first cohort of countries, which is why eight
+   * fields on the contract had to become optional for Russia to be describable
+   * at all. Each line is checked in BOTH directions: if the registry starts
+   * carrying Russia, or the folder starts supplying the value, this fails.
+   */
+  RU: {
+    NATIONAL_ADDRESS_NAME: 'no row; the reader falls back to "Address to the Nation"',
+    NATIONAL_STATS_IDENTITY: "no row; the reader falls back to DEFAULT_STATS_IDENTITY",
+    ECONOMY_TEXT: "no row; the reader falls back to DEFAULT_ECONOMY_TEXT",
+    COUNTRY_HISTORICAL_NAMES: "no NPC bank names are seeded for Russia",
+    COUNTRY_MODERN_NAMES: "no NPC bank names are seeded for Russia",
+    LEGISLATIVE_PROCESS: "no row; readers fall through to DEFAULT_PROCESS",
+    ECONOMIC_BASELINES: "forex-active with no full baseline, as rateCalculation.ts names it",
+    REP_ECON: "no representative economy; incomeToGdp returns its 0.8 default",
+    COST_SCALE_ANCHORS: "no anchor; costScale returns 1",
+    DEFAULT_STRATEGIC_SECTORS: "no strategic sectors are configured for Russia",
+    NEUTRAL_FEDERAL_SALES_TAX_BY_COUNTRY: "a command economy with no federal sales tax row",
+    NEUTRAL_STATE_SALES_TAX_BY_COUNTRY: "no state sales tax row",
+    CONSCRIPTION_SEED: "no row; the reader falls back to DEFAULT_POLICY",
+    MEDIAN_INCOME_THRESHOLDS: "no median-income thresholds are configured",
+    POPULATION_MULTIPLIERS: "no 1991 cohort row; that era passes through at 1.0",
+    SPAWN_ELECTIONS_REGISTRY: "Russia spawns through COUNTRY_ELECTION_PHASES, not this registry",
+  },
   IE: {
     NEUTRAL_FEDERAL_SALES_TAX_BY_COUNTRY: "no federal sales tax row for Ireland",
     PLAYER_PAYOUT_CAP_PER_TURN: "no payout cap is configured for Ireland",

@@ -205,6 +205,10 @@ const SIZE_CAP_EXEMPT = [
   // on the bare "src/lib/seeds/" entry until it relocates.
   "src/lib/countries/ie/data/",
   "src/lib/countries/ie/cabinet/",
+  // Russia's, before the move. `ruLaws.ts` is 5,545 lines and is exempt today by
+  // EXACT path at `politicalLegislation/laws/ruLaws.ts`; relocating strips that.
+  "src/lib/countries/ru/data/",
+  "src/lib/countries/ru/cabinet/",
   "src/lib/constants/cnCabinetMechanics.ts",
   "src/lib/constants/historicalSeats.ts",
   "src/lib/constants/metricDefinitions.ts",

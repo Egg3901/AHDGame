@@ -74,6 +74,7 @@ import { UK_GEOGRAPHY } from "@/lib/countries/uk/geography";
 import { DE_GEOGRAPHY } from "@/lib/countries/de/geography";
 import { CN_GEOGRAPHY } from "@/lib/countries/cn/geography";
 import { IE_GEOGRAPHY } from "@/lib/countries/ie/geography";
+import { RU_GEOGRAPHY } from "@/lib/countries/ru/geography";
 
 export const CENSUS_BUNDLES: Partial<Record<CountryId, PresetBundles>> = {
   PL: {
@@ -159,7 +160,7 @@ export const CENSUS_BUNDLES: Partial<Record<CountryId, PresetBundles>> = {
   // these (no 2019-default fallback exists), aborting the 1979 reset in seedCohortVectors.
   IT: { "1953-default": itRegionCensusData1953, "1979-default": itRegionCensusData1953 },
   ES: { "1953-default": esRegionCensusData1953, "1979-default": esRegionCensusData1953 },
-  RU: { "1953-default": ruRegionCensusData1953, "1979-default": ruRegionCensusData1953 },
+  RU: RU_GEOGRAPHY.censusBundles,
   DD: { "1953-default": ddRegionCensusData1953, "1979-default": ddRegionCensusData1953 },
   // 2019-default was missing here even though ngRegionCensusData (the NPC/NBS-based
   // 2019 bundle already used by seeds/international/ng.ts) has existed since NG

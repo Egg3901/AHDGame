@@ -18,6 +18,7 @@ import { UK_ECONOMY } from "@/lib/countries/uk/economy";
 import { DE_ECONOMY } from "@/lib/countries/de/economy";
 import { CN_ECONOMY } from "@/lib/countries/cn/economy";
 import { IE_ECONOMY } from "@/lib/countries/ie/economy";
+import { RU_ECONOMY } from "@/lib/countries/ru/economy";
 
 type SectorWeightMap = Partial<Record<CorporationType, number>>;
 
@@ -243,21 +244,7 @@ export const COUNTRY_SECTOR_WEIGHTS: Record<CountryId, SectorWeightMap> = {
     healthcare: 5,
   },
   // USSR — command economy: heavy industry, energy/extraction, defense, agriculture.
-  RU: {
-    manufacturing: 20,
-    energy: 12,
-    extraction: 10,
-    defense: 10,
-    agriculture: 12,
-    chemical_industries: 8,
-    construction: 7,
-    automobiles: 5,
-    logistics: 4,
-    healthcare: 4,
-    retail: 3,
-    technology: 2,
-    real_estate: 1,
-  },
+  RU: RU_ECONOMY.sectorWeights.base,
   // France 1979 — diversified mixed economy: manufacturing/autos, nuclear energy,
   // finance, agriculture (largest in W. Europe), tourism/services, defense (arms).
   FR: {

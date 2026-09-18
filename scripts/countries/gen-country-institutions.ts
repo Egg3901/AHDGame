@@ -85,6 +85,7 @@ function maybe(name: string): string | null {
 }
 
 const assentKey = maybe("REGIONAL_BILL_ASSENT_OFFICE_KEY");
+const legislativeProcess = maybe("LEGISLATIVE_PROCESS");
 
 /** A seat id that may legitimately be absent (ENERGY and INFRA are `Partial`). */
 function seat(name: string): string {
@@ -96,7 +97,7 @@ function seat(name: string): string {
 const out = `import type { Branch } from "@/lib/constants/military";
 import type { CabinetGroup } from "@/lib/constants/cabinetPositionGroups";
 import type { CountryConfig } from "@/lib/constants/countries";
-import type { LegislativeProcess } from "@/lib/legislature/process";
+${legislativeProcess ? 'import type { LegislativeProcess } from "@/lib/legislature/process";' : ""}
 import type { OrderOfBattleEntry } from "@/lib/seeds/reference/ordersOfBattle";
 
 /**
@@ -117,7 +118,14 @@ import type { OrderOfBattleEntry } from "@/lib/seeds/reference/ordersOfBattle";
 
 export const ${COUNTRY}_CONFIG: CountryConfig = ${v("COUNTRY_CONFIGS")};
 
-export const ${COUNTRY}_LEGISLATIVE_PROCESS: LegislativeProcess = ${v("LEGISLATIVE_PROCESS")};
+${
+  legislativeProcess
+    ? `export const ${COUNTRY}_LEGISLATIVE_PROCESS: LegislativeProcess = ${legislativeProcess};`
+    : `/* No ${COUNTRY}_LEGISLATIVE_PROCESS: the registry has no ${COUNTRY} row, and readers
+   fall through to DEFAULT_PROCESS. The registry holds six keys; a country absent
+   from it has never had its own process, and writing the default here would say
+   it did. */`
+}
 
 export const ${COUNTRY}_ORDERS_OF_BATTLE: OrderOfBattleEntry[] = ${v("ORDERS_OF_BATTLE")};
 

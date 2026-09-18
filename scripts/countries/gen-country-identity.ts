@@ -99,6 +99,8 @@ function maybe(name: string): string | null {
   return JSON.stringify(e.value, null, 2);
 }
 
+const statsValue = maybe("NATIONAL_STATS_IDENTITY");
+const economyTextValue = maybe("ECONOMY_TEXT");
 const parliamentarySurface = maybe("SURFACES");
 const regionCensusLabels = maybe("REGION_CENSUS_LABELS");
 const stateDisplayNames = maybe("STATE_DISPLAY_NAMES");
@@ -132,14 +134,27 @@ function optional(
 
 required("cabinet", "CabinetIdentity", "CABINET_IDENTITY");
 required("national", "NationalIdentity", "NATIONAL_IDENTITY");
-required("stats", "StatsIdentity", "NATIONAL_STATS_IDENTITY");
+optional(
+  "stats",
+  "StatsIdentity",
+  statsValue,
+  "The country's national-statistics labels.",
+  "No NATIONAL_STATS_IDENTITY row. The reader falls back to DEFAULT_STATS_IDENTITY;\n" +
+    " * authoring that default here would make the fallback look chosen."
+);
 required(
   "treasuryText",
   'Omit<TreasuryIdentity, "palette" | "accent" | "accentSoft">',
   "TREASURY_TEXT",
   "/** The authored text only. The palette is pulled from `national` downstream. */"
 );
-required("economyText", 'Omit<EconomyIdentity, "accent">', "ECONOMY_TEXT");
+optional(
+  "economyText",
+  'Omit<EconomyIdentity, "accent">',
+  economyTextValue,
+  "The authored economy copy. The accent is pulled from `national` downstream.",
+  "No ECONOMY_TEXT row. The reader falls back to DEFAULT_ECONOMY_TEXT."
+);
 required("executiveText", "IdentityText", "EXECUTIVE_TEXT");
 required("policyText", "IdentityText", "POLICY_TEXT");
 required("executiveSeal", "ExecutiveSeal", "EXECUTIVE_SEALS");
@@ -192,12 +207,12 @@ optional(
 const addressName = maybe("NATIONAL_ADDRESS_NAME");
 
 const out = `import type { CabinetIdentity } from "@/lib/constants/cabinetIdentity";
-import type { EconomyIdentity } from "@/lib/constants/economyIdentity";
+${economyTextValue ? 'import type { EconomyIdentity } from "@/lib/constants/economyIdentity";' : ""}
 import type { ExecutiveSeal } from "@/lib/constants/executiveSeals";
 import type { ExecutiveSurfaceConfig } from "@/lib/constants/executiveSurface";
 import type { IdentityText } from "@/lib/constants/institutionIdentity";
 import type { NationalIdentity } from "@/lib/constants/nationalIdentity";
-import type { StatsIdentity } from "@/lib/constants/nationalStatsIdentity";${
+${statsValue ? 'import type { StatsIdentity } from "@/lib/constants/nationalStatsIdentity";' : ""}${
   parliamentarySurface
     ? '\nimport type { ParliamentaryExecutiveSurface } from "@/lib/constants/parliamentaryExecutiveSurface";'
     : ""

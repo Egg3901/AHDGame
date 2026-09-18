@@ -267,6 +267,19 @@ function walk(dir: string): string[] {
     }
     if (!/\.tsx?$/.test(full)) continue;
     if (/\.test\./.test(full) || full.includes("/debug/")) continue;
+    /*
+     * ⚠️ A MIGRATION OR A REMEDIATION IS A RECORD OF AN EVENT, NOT A FACT
+     * ABOUT A COUNTRY. `migrations/entries/2026-08-13-repoint-ru-soes.ts` names
+     * Russia and only Russia, so the classifier claimed it and the relocation
+     * tool filed it under `ru/data/` -- where the migration runner, which reads
+     * this directory, would never find it again. It also broke the build, which
+     * is the only reason it was noticed within the minute.
+     *
+     * These were two hand-written ACKNOWLEDGED_OUTSIDE entries before; the rule
+     * is structural now, because every country has migrations and the excuses
+     * would have multiplied one country at a time.
+     */
+    if (full.includes("/migrations/") || full.includes("/remediation/")) continue;
     out.push(full);
   }
   return out;

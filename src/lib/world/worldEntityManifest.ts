@@ -30,6 +30,7 @@ import { UK_WORLD_REGION, UK_UN_MEMBER_SINCE } from "@/lib/countries/uk/geograph
 import { DE_WORLD_REGION } from "@/lib/countries/de/geographyFacts";
 import { CN_WORLD_REGION, CN_UN_MEMBER_SINCE } from "@/lib/countries/cn/geographyFacts";
 import { IE_WORLD_REGION, IE_UN_MEMBER_SINCE } from "@/lib/countries/ie/geographyFacts";
+import { RU_WORLD_REGION, RU_UN_MEMBER_SINCE } from "@/lib/countries/ru/geographyFacts";
 
 export type WorldEntityId = string;
 export type WorldEntityStatus = "sovereign" | "dependent" | "emergent" | "dissolved";
@@ -229,7 +230,7 @@ export const COUNTRY_REGIONS: Record<CountryId, WorldEntityRegion> = {
   BG: "europe",
   CS: "europe",
   UKR: "europe",
-  RU: "europe",
+  RU: RU_WORLD_REGION,
   TR: "europe",
   JP: JP_GEOGRAPHY.worldRegion,
   CN: CN_WORLD_REGION,
@@ -248,7 +249,7 @@ export const COUNTRY_UN_MEMBER_SINCE: Partial<Record<CountryId, number>> = {
   US: US_UN_MEMBER_SINCE,
   UK: UK_UN_MEMBER_SINCE,
   FR: 1945,
-  RU: 1945,
+  RU: RU_UN_MEMBER_SINCE,
   CN: CN_UN_MEMBER_SINCE,
   BR: 1945,
   DE: undefined, // FRG admitted 1973

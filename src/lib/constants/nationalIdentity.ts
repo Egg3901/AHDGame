@@ -5,6 +5,7 @@ import { UK_IDENTITY } from "@/lib/countries/uk/identity";
 import { DE_IDENTITY } from "@/lib/countries/de/identity";
 import { CN_IDENTITY } from "@/lib/countries/cn/identity";
 import { IE_IDENTITY } from "@/lib/countries/ie/identity";
+import { RU_IDENTITY } from "@/lib/countries/ru/identity";
 
 /**
  * National-identity layer for state-owned / National Corporation surfaces.
@@ -247,21 +248,7 @@ export const NATIONAL_IDENTITY: Record<CountryId, NationalIdentity> = {
     accentSoft: "#e2cd8c",
     accentName: "Soviet red & gold",
   },
-  RU: {
-    glyph: "СССР",
-    serif: "mono",
-    motif: "gearStar",
-    name: "All-Union State Enterprise",
-    native: "Государственное Предприятие СССР",
-    registry: "Union of Soviet Socialist Republics · State Asset Registry",
-    ministry: "GOSPLAN",
-    publicSeal: "PUBLIC REGISTER",
-    hqCity: "Moscow",
-    palette: ["#3a0d0d", "#2a0a0a", "#150606"],
-    accent: "#cdb15a",
-    accentSoft: "#e2cd8c",
-    accentName: "Soviet red & gold",
-  },
+  RU: RU_IDENTITY.national,
   FR: {
     glyph: "RF",
     serif: "mono",

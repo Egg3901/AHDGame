@@ -62,7 +62,8 @@ describe("Japan satisfies the country contract", () => {
     expect(JP.identity.addressNames?.national).toBeTruthy();
 
     expect(JP.institutions.config.name).toBe("Japan");
-    expect(JP.institutions.legislativeProcess.executive.title).toBeTruthy();
+    // Optional on the contract since Russia has no row; Japan HAS one.
+    expect(JP.institutions.legislativeProcess?.executive.title).toBeTruthy();
     expect(JP.institutions.cabinet.positions.length).toBeGreaterThan(0);
     expect(Object.keys(JP.institutions.cabinet.orders).length).toBeGreaterThan(0);
     expect(JP.institutions.military.branches.length).toBeGreaterThan(0);
@@ -72,7 +73,7 @@ describe("Japan satisfies the country contract", () => {
     expect(JP.elections.electionPhases?.length).toBe(4);
 
     expect(JP.economy.currencyCode).toBe("JPY");
-    expect(JP.economy.repEcon.gdp).toBeGreaterThan(0);
+    expect(JP.economy.repEcon?.gdp).toBeGreaterThan(0);
     expect(Object.keys(JP.economy.sectorWeights.base).length).toBeGreaterThan(0);
 
     expect(JP.geography.continent).toBe("Asia");

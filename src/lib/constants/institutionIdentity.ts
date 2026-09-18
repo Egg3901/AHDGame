@@ -8,6 +8,7 @@ import { UK_IDENTITY } from "@/lib/countries/uk/identity";
 import { DE_IDENTITY } from "@/lib/countries/de/identity";
 import { CN_IDENTITY } from "@/lib/countries/cn/identity";
 import { IE_IDENTITY } from "@/lib/countries/ie/identity";
+import { RU_IDENTITY } from "@/lib/countries/ru/identity";
 
 /**
  * Institution identity overlays for the country-pages masthead family
@@ -127,12 +128,7 @@ export const EXECUTIVE_TEXT: Record<CountryId, IdentityText> = {
     registry: "Baltic Soviet Republics · Councils of Ministers",
     title: "Supreme Soviet",
   },
-  RU: {
-    glyph: "CCCP",
-    serif: "mono",
-    registry: "Union of Soviet Socialist Republics · Council of Ministers",
-    title: "The Kremlin",
-  },
+  RU: RU_IDENTITY.executiveText,
   FR: {
     glyph: "RF",
     serif: "mono",
@@ -286,12 +282,7 @@ export const POLICY_TEXT: Record<CountryId, IdentityText> = {
     registry: "Code of Law · Baltic Soviet Republics",
     title: "National Policy",
   },
-  RU: {
-    glyph: "§",
-    serif: "mono",
-    registry: "Code of Law · Union of Soviet Socialist Republics",
-    title: "National Policy",
-  },
+  RU: RU_IDENTITY.policyText,
   FR: {
     glyph: "§",
     serif: "mono",

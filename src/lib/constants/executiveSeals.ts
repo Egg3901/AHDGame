@@ -17,6 +17,7 @@ import { UK_IDENTITY } from "@/lib/countries/uk/identity";
 import { DE_IDENTITY } from "@/lib/countries/de/identity";
 import { CN_IDENTITY } from "@/lib/countries/cn/identity";
 import { IE_IDENTITY } from "@/lib/countries/ie/identity";
+import { RU_IDENTITY } from "@/lib/countries/ru/identity";
 
 export interface ExecutiveSeal {
   src: string;
@@ -48,10 +49,7 @@ export const EXECUTIVE_SEALS: Partial<Record<CountryId, ExecutiveSeal>> = {
   // ── 1979 Cold-War roster. Wikimedia thumb paths derived from md5(filename).
   // Seals degrade to the generated NationalSeal if a URL fails, so period-emblem
   // filenames that have since moved fall back cleanly.
-  RU: {
-    src: "https://upload.wikimedia.org/wikipedia/commons/thumb/5/55/State_Emblem_of_the_Soviet_Union.svg/330px-State_Emblem_of_the_Soviet_Union.svg.png",
-    alt: "State Emblem of the Soviet Union",
-  },
+  RU: RU_IDENTITY.executiveSeal,
   DD: {
     src: "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a1/Coat_of_arms_of_East_Germany.svg/330px-Coat_of_arms_of_East_Germany.svg.png",
     alt: "Coat of arms of East Germany (GDR)",

@@ -5,6 +5,7 @@ import { UK_IDENTITY } from "@/lib/countries/uk/identity";
 import { DE_IDENTITY } from "@/lib/countries/de/identity";
 import { CN_IDENTITY } from "@/lib/countries/cn/identity";
 import { IE_IDENTITY } from "@/lib/countries/ie/identity";
+import { RU_IDENTITY } from "@/lib/countries/ru/identity";
 
 /**
  * Per-country configuration for the shared executive shell (instrument strip
@@ -167,15 +168,7 @@ export const EXECUTIVE_SURFACE: Record<CountryId, ExecutiveSurfaceConfig> = {
     heroImage: "/api/images/hero/baltics",
     heroAlt: "Supreme Soviet, Riga",
   },
-  RU: {
-    clock: { kind: "plenum", label: "Plenum Clock", countdownNoun: "next Supreme Soviet session" },
-    actLabels: { ...PARLIAMENTARY_ACTS, order: "DECREE" },
-    deskKind: "orders",
-    deskLabel: "Decrees",
-    rosterTitle: "Council of Ministers",
-    heroImage: "/api/images/hero/kremlin",
-    heroAlt: "The Kremlin, Moscow",
-  },
+  RU: RU_IDENTITY.executiveSurface,
   FR: {
     clock: { kind: "election", label: "Term Clock", countdownNoun: "presidential election" },
     actLabels: { ...PRESIDENTIAL_ACTS, order: "DECREE" },

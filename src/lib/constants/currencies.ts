@@ -15,6 +15,7 @@ import { UK_ECONOMY } from "@/lib/countries/uk/economy";
 import { DE_ECONOMY } from "@/lib/countries/de/economy";
 import { CN_ECONOMY } from "@/lib/countries/cn/economy";
 import { IE_ECONOMY } from "@/lib/countries/ie/economy";
+import { RU_ECONOMY } from "@/lib/countries/ru/economy";
 
 /**
  * Currency codes for all countries — active and future.
@@ -98,7 +99,7 @@ export const COUNTRY_CURRENCY_MAP: Record<CountryId, CurrencyCode> = {
   UKR: "SUR",
   CS: "CSK",
   BAL: "SUR",
-  RU: "SUR",
+  RU: RU_ECONOMY.currencyCode,
   FR: "FRF",
   IT: "ITL",
   ES: "ESP",
@@ -786,7 +787,7 @@ export const MONETARY_BASELINES: Record<CountryId, MonetaryBaseline> = {
   UKR: { targetInflation: 2.0, neutralPrimeRate: 3.0 },
   CS: { targetInflation: 2.0, neutralPrimeRate: 4.0 },
   BAL: { targetInflation: 2.0, neutralPrimeRate: 3.0 },
-  RU: { targetInflation: 2.0, neutralPrimeRate: 3.0 },
+  RU: RU_ECONOMY.monetary.baseline,
   FR: { targetInflation: 10.0, neutralPrimeRate: 9.5 }, // late-1970s French inflation
   IT: { targetInflation: 15.0, neutralPrimeRate: 12.0 }, // late-1970s Italian inflation
   ES: { targetInflation: 16.0, neutralPrimeRate: 14.0 }, // late-1970s Spanish transition inflation

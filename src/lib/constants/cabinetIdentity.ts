@@ -6,6 +6,7 @@ import { UK_IDENTITY as UK_FOLDER_IDENTITY } from "@/lib/countries/uk/identity";
 import { DE_IDENTITY } from "@/lib/countries/de/identity";
 import { CN_IDENTITY } from "@/lib/countries/cn/identity";
 import { IE_IDENTITY } from "@/lib/countries/ie/identity";
+import { RU_IDENTITY } from "@/lib/countries/ru/identity";
 
 export interface CabinetIdentity {
   /** Large faded background glyph + chop fallback. */
@@ -37,15 +38,7 @@ export const CABINET_IDENTITY: Partial<Record<CountryId, CabinetIdentity>> = {
   },
   // Soviet Union — Council of Ministers (СМ = Совет Министров): deep Soviet
   // red gradient with the gold of the state emblem.
-  RU: {
-    glyph: "СМ",
-    serif: "mono",
-    gov: "#d9a93e",
-    govSoft: "#eccb7d",
-    g0: "#4d0f0f",
-    g1: "#320b0b",
-    g2: "#1a0707",
-  },
+  RU: RU_IDENTITY.cabinet,
   // East Germany, Council of Ministers (DDR): state gold against deep
   // red-black, matching the Soviet precedent.
   DD: {

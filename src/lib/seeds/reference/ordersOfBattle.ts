@@ -25,6 +25,7 @@ import { UK_ORDERS_OF_BATTLE } from "@/lib/countries/uk/institutionsFacts";
 import { DE_ORDERS_OF_BATTLE } from "@/lib/countries/de/institutionsFacts";
 import { CN_ORDERS_OF_BATTLE } from "@/lib/countries/cn/institutionsFacts";
 import { IE_ORDERS_OF_BATTLE } from "@/lib/countries/ie/institutionsFacts";
+import { RU_ORDERS_OF_BATTLE } from "@/lib/countries/ru/institutionsFacts";
 
 export interface OrderOfBattleEntry {
   /** Must match a Branch id for this country (`MILITARY_BRANCHES_BY_COUNTRY`). */
@@ -101,19 +102,7 @@ export const ORDERS_OF_BATTLE: Partial<Record<CountryId, OrderOfBattleEntry[]>> 
    * man. The Second Artillery Corps is 1966, so no rocket branch here.
    */
   CN: CN_ORDERS_OF_BATTLE,
-  RU: [
-    { branchId: "ground", type: "Infantry Division", count: 12 },
-    { branchId: "ground", type: "Armored Division", count: 5 },
-    { branchId: "ground", type: "Mechanized Brigade", count: 5 },
-    { branchId: "ground", type: "Artillery Regiment", count: 4 },
-    { branchId: "ground", type: "Air Defense Battalion", count: 3 },
-    { branchId: "navy", type: "Attack Submarine", count: 4 },
-    { branchId: "navy", type: "Frigate Squadron", count: 3 },
-    { branchId: "navy", type: "Amphibious Group", count: 1 },
-    { branchId: "airforce", type: "Fighter Wing", count: 4 },
-    { branchId: "airforce", type: "Bomber Squadron", count: 3 },
-    { branchId: "pvo", type: "Air Defense Wing", count: 5 },
-  ],
+  RU: RU_ORDERS_OF_BATTLE,
   DD: [
     { branchId: "landstreitkraefte", type: "Infantry Division", count: 3 },
     { branchId: "landstreitkraefte", type: "Mechanized Brigade", count: 2 },

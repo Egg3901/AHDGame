@@ -12,6 +12,7 @@ import { UK_MAP_REGISTRY } from "@/lib/countries/uk/geographyFacts";
 import { DE_MAP_REGISTRY } from "@/lib/countries/de/data/deMapConfig";
 import { CN_MAP_REGISTRY } from "@/lib/countries/cn/geographyFacts";
 import { IE_MAP_REGISTRY } from "@/lib/countries/ie/geographyFacts";
+import { RU_MAP_REGISTRY } from "@/lib/countries/ru/geographyFacts";
 
 export interface CountryMapConfig {
   /** Country ID */
@@ -138,13 +139,7 @@ export const COUNTRY_MAP_REGISTRY: Record<CountryId, CountryMapConfig> = {
     mapPath: "/country/bal/map",
     hasRegionMap: false,
   },
-  RU: {
-    countryId: "RU",
-    name: "Russia",
-    overviewPath: "/country/ru",
-    mapPath: "/country/ru/map",
-    hasRegionMap: false,
-  },
+  RU: RU_MAP_REGISTRY,
   FR: {
     countryId: "FR",
     name: "France",

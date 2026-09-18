@@ -150,6 +150,86 @@ if (!mapFromData && !factsNames.includes(`${COUNTRY}_MAP_REGISTRY`)) {
   process.exit(1);
 }
 
+/**
+ * Region modules on disk but no preset keys: refuse rather than emit a stub.
+ *
+ * ⚠ THE PRESET KEYS COME FROM A DIAGNOSTIC REGISTRY THAT DOES NOT COVER EVERY
+ * COUNTRY. `FULL_ERA_REGION_BUNDLES` lives in `admin/seedDiagnostic/` and is
+ * `Partial`; Russia has `ruRegions.ts` and `ruRegions1953.ts`, authored and
+ * seeded, and no row in it. The generator therefore derived ZERO region eras and
+ * was about to write `regionNames: {}` and `regionBundles: {}` -- an empty map
+ * for a country with fourteen regions, which typechecks and is silently wrong.
+ *
+ * Where the diagnostic registry is blank, the seed runner
+ * (`admin/seed/seed<CC>.ts`) is the authority, so the mapping is passed in
+ * explicitly:
+ *
+ *     --regions "1953-default=ruRegions1953,1979-default=ruRegions,2019-default=ruRegions"
+ */
+const REGION_OVERRIDE = (() => {
+  const flag = process.argv.find((a) => a.startsWith("--regions="));
+  const raw = flag
+    ? flag.slice("--regions=".length)
+    : process.argv[process.argv.indexOf("--regions") + 1];
+  if (!flag && !process.argv.includes("--regions")) return null;
+  const pairs = (raw ?? "").split(",").filter(Boolean);
+  const out: Array<[string, string, string]> = [];
+  for (const pair of pairs) {
+    const [preset, stem] = pair.split("=");
+    const mod = findModule(stem);
+    if (!mod) {
+      console.error(`--regions names ${stem}, which is not on disk.`);
+      process.exit(1);
+    }
+    const picked = exportsOf(stem).find((n) => n === stem) ?? exportsOf(stem)[0];
+    if (!picked) {
+      console.error(`${stem} exports nothing this generator can use.`);
+      process.exit(1);
+    }
+    out.push([preset, mod, picked]);
+  }
+  return out;
+})();
+
+if (REGION_OVERRIDE) {
+  /*
+   * ⚠ THE IMPORTS ARE BUILT BEFORE THIS POINT, so replacing the list is not
+   * enough -- the first override emitted `ruRegions.map(...)` with no import of
+   * `ruRegions` and the module threw `ReferenceError` on load. It failed loudly,
+   * which is the good case; the same mistake one line earlier would have been a
+   * silently empty map.
+   */
+  regions.splice(0, regions.length, ...REGION_OVERRIDE);
+  for (const [, mod, name] of REGION_OVERRIDE) addImport(mod, name);
+}
+
+if (regions.length === 0 && findModule(`${cc}Regions`)) {
+  console.error(
+    `${cc}Regions.ts is on disk but no region eras were derived: FULL_ERA_REGION_BUNDLES
+` +
+      `has no ${COUNTRY} row. Emitting an empty regionNames map would be a stub for a
+` +
+      `country that has regions. Read src/lib/admin/seed/seed${COUNTRY}.ts and pass the
+` +
+      `mapping, e.g.  --regions "1953-default=${cc}Regions1953,2019-default=${cc}Regions"`
+  );
+  process.exit(1);
+}
+
+/**
+ * A geography field that exists only when the facts module declares it.
+ *
+ * ⚠ EVERY OPTIONAL FIELD NEEDS THIS, NOT JUST THE TWO THAT HAD IT. The template
+ * hard-coded `conscription:` and `populationMultipliers:` while the facts
+ * generator had already learnt to omit them, so Russia's geography referenced
+ * `RU_CONSCRIPTION`, which does not exist. It threw `ReferenceError` on load --
+ * loud, and caught by the runtime harness rather than by typecheck, because
+ * eslint's `no-undef` is off for TypeScript and `tsc` sees the facts module's
+ * missing export only where it is imported, which this template also omits.
+ */
+const opt = (field: string, suffix: string): string =>
+  factsNames.includes(`${COUNTRY}_${suffix}`) ? `\n  ${field}: ${COUNTRY}_${suffix},` : "";
+
 const block = (entries: Array<[string, string, string]>) =>
   entries.map(([preset, , name]) => `  ${JSON.stringify(preset)}: ${name},`).join("\n");
 
@@ -203,20 +283,17 @@ ${block(regions)}
 
 export const ${COUNTRY}_GEOGRAPHY: CountryGeography = {
   continent: ${COUNTRY}_CONTINENT,
-  isoNumeric: ${COUNTRY}_ISO_NUMERIC,${factsNames.includes(`${COUNTRY}_UN_MEMBER_SINCE`) ? `\n  unMemberSince: ${COUNTRY}_UN_MEMBER_SINCE,` : ""}
+  isoNumeric: ${COUNTRY}_ISO_NUMERIC,${opt("unMemberSince", "UN_MEMBER_SINCE")}
   worldRegion: ${COUNTRY}_WORLD_REGION,
-  nppCapitalState: ${COUNTRY}_NPP_CAPITAL_STATE,${factsNames.includes(`${COUNTRY}_NON_PARTY_INDEPENDENT_BIAS`) ? `\n  nonPartyIndependentBias: ${COUNTRY}_NON_PARTY_INDEPENDENT_BIAS,` : ""}
+  nppCapitalState: ${COUNTRY}_NPP_CAPITAL_STATE,${opt("nonPartyIndependentBias", "NON_PARTY_INDEPENDENT_BIAS")}${opt("conscription", "CONSCRIPTION")}${opt("populationMultipliers", "POPULATION_MULTIPLIERS")}${opt("core5Normals", "CORE5_NORMALS")}
   adjacency: ${COUNTRY}_ADJACENCY_MAP,
   regionNames,
-  conscription: ${COUNTRY}_CONSCRIPTION,
-  populationMultipliers: ${COUNTRY}_POPULATION_MULTIPLIERS,
   censusBundles,
   populationAnchors,
   metricPresets: metricPresetBundles,
   regionBundles,
   rawMetrics: ${rawExport ?? "[]"},
   mapRegistry: ${COUNTRY}_MAP_REGISTRY,
-  core5Normals: ${COUNTRY}_CORE5_NORMALS,
 };
 `;
 
