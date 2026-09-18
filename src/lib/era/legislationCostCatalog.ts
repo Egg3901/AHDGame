@@ -10,6 +10,7 @@ import { getIncomeAnchor } from "./metricCatalog";
 import { bankingSeparationLegislationTypes } from "@/lib/seeds/shared/bankingSeparationLegislation";
 import { JP_ECONOMY } from "@/lib/countries/jp/economy";
 import { US_ECONOMY } from "@/lib/countries/us/economy";
+import { UK_ECONOMY } from "@/lib/countries/uk/economy";
 
 export type CostClass = "gdpFraction" | "perCapita" | "none";
 
@@ -914,7 +915,7 @@ export const CALIBRATION_SCALE = 1.5;
 // share targets the same %GDP as a gdpFraction share.
 export const REP_ECON: Record<string, { gdp: number; population: number }> = {
   US: US_ECONOMY.repEcon,
-  UK: { gdp: 2_900_000_000_000, population: 68_000_000 },
+  UK: UK_ECONOMY.repEcon,
   DE: { gdp: 4_500_000_000_000, population: 84_400_000 },
   JP: JP_ECONOMY.repEcon,
   IE: { gdp: 500_000_000_000, population: 5_100_000 },

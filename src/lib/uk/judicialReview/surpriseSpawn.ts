@@ -1,12 +1,6 @@
 /**
- * UK JR surprise spawn hazard — rarer than SCOTUS surprise (0.004), tuned for
- * occasional institutional weather over a long playthrough.
+ * Forwarder. Moved into the United Kingdom's country folder.
+ *
+ * ⚠️ A FORWARDER HOLDS NO COPY; existing importers are untouched.
  */
-export const UK_JR_SURPRISE_SPAWN_PROBABILITY_PER_TURN = 0.0035;
-
-export function rollUkJrSurpriseSpawn(
-  randomDraw: number,
-  probability: number = UK_JR_SURPRISE_SPAWN_PROBABILITY_PER_TURN
-): boolean {
-  return randomDraw < probability;
-}
+export * from "@/lib/countries/uk/judicialReview/surpriseSpawn";

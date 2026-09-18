@@ -9,30 +9,11 @@ export type CabinetGroup =
   "Centre" | "Economy" | "Security & Foreign" | "Society" | "Domestic" | "Nations";
 import { JP_INSTITUTIONS } from "@/lib/countries/jp/institutions";
 import { US_CABINET_GROUPS } from "@/lib/countries/us/institutionsFacts";
+import { UK_CABINET_GROUPS } from "@/lib/countries/uk/institutionsFacts";
 
 export const GROUPS: Record<string, Record<string, CabinetGroup>> = {
   US: US_CABINET_GROUPS,
-  UK: {
-    director_of_intelligence: "Security & Foreign",
-    deputy_prime_minister: "Centre",
-    first_secretary_of_state: "Centre",
-    chancellor: "Economy",
-    business_secretary: "Economy",
-    work_secretary: "Economy",
-    foreign_secretary: "Security & Foreign",
-    home_secretary: "Security & Foreign",
-    defence_secretary: "Security & Foreign",
-    justice_secretary: "Security & Foreign",
-    health_secretary: "Society",
-    education_secretary: "Society",
-    levelling_secretary: "Society",
-    transport_secretary: "Domestic",
-    agriculture_secretary: "Domestic",
-    environment_secretary: "Domestic",
-    northern_ireland: "Nations",
-    scotland: "Nations",
-    wales: "Nations",
-  },
+  UK: UK_CABINET_GROUPS,
   JP: JP_INSTITUTIONS.cabinet.groups,
   IE: {
     taoiseach: "Centre",

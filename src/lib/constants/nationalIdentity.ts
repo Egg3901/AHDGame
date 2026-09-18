@@ -1,6 +1,7 @@
 import type { CountryId } from "@/lib/constants/countries";
 import { JP_IDENTITY } from "@/lib/countries/jp/identity";
 import { US_IDENTITY } from "@/lib/countries/us/identity";
+import { UK_IDENTITY } from "@/lib/countries/uk/identity";
 
 /**
  * National-identity layer for state-owned / National Corporation surfaces.
@@ -85,21 +86,7 @@ export const NATIONAL_IDENTITY: Record<CountryId, NationalIdentity> = {
     accentSoft: "#e7cd91",
     accentName: "Crimson & gold",
   },
-  UK: {
-    glyph: "HM",
-    serif: "mono",
-    motif: "laurel",
-    name: "United Kingdom National Corporation",
-    native: "His Majesty's National Enterprise",
-    registry: "United Kingdom · Crown Asset Register",
-    ministry: "HM TREASURY",
-    publicSeal: "PUBLIC REGISTER",
-    hqCity: "London",
-    palette: ["#16233f", "#101a30", "#0c1018"],
-    accent: "#c9a24b",
-    accentSoft: "#e1c382",
-    accentName: "Westminster navy & gold",
-  },
+  UK: UK_IDENTITY.national,
   US: US_IDENTITY.national,
   DE: {
     glyph: "BU",

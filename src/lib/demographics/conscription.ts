@@ -2,6 +2,7 @@ import type { CountryId } from "@/lib/constants/countries";
 import { workingAgePopulation, type AgeSexVector } from "./cohortVector";
 import { JP_GEOGRAPHY } from "@/lib/countries/jp/geography";
 import { US_CONSCRIPTION } from "@/lib/countries/us/geographyFacts";
+import { UK_CONSCRIPTION } from "@/lib/countries/uk/geographyFacts";
 
 export interface ConscriptionOption {
   label: string;
@@ -42,7 +43,7 @@ export interface ConscriptionPolicy {
 /** Per-country seed rung (§4.5.4) — a starting point, NOT a ceiling. */
 export const CONSCRIPTION_SEED: Partial<Record<CountryId, ConscriptionPolicy>> = {
   US: US_CONSCRIPTION,
-  UK: { eligibleBand: [18, 20], sexEnabled: { male: true, female: false }, option: 2 },
+  UK: UK_CONSCRIPTION,
   DE: { eligibleBand: [18, 20], sexEnabled: { male: true, female: false }, option: 1 }, // suspended
   JP: JP_GEOGRAPHY.conscription,
   IE: { eligibleBand: [18, 20], sexEnabled: { male: true, female: false }, option: 2 },

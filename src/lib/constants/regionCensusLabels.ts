@@ -1,5 +1,6 @@
 import type { CountryId } from "@/lib/constants/countries";
 import { JP_IDENTITY } from "@/lib/countries/jp/identity";
+import { UK_IDENTITY } from "@/lib/countries/uk/identity";
 
 export interface CensusLabelSet {
   cardTitles: {
@@ -41,35 +42,16 @@ const URBAN_3 = { urban: "Urban", suburban: "Suburban / town", rural: "Rural" } 
  */
 // Shared by the UK and the seceded nations (SCO/WAL), which reuse the UK census
 // categories and group keys.
-const UK_CENSUS_LABELS: CensusLabelSet = {
-  cardTitles: {
-    ethnicity: "Ethnicity",
-    age: "Age Distribution",
-    education: "Education (Highest)",
-    income: "Household Income",
-    urbanization: "Urbanization",
-  },
-  ethnicity: {
-    white_british: "White British / Irish",
-    asian_british: "Asian British",
-    black_british: "Black British",
-    mixed: "Mixed",
-    other: "Other",
-  },
-  age: { ...AGE_LABELS },
-  education: {
-    no_qualifications: "No qualifications",
-    gcse_equivalent: "GCSE / Level 2",
-    a_level_equivalent: "A-Level / Level 3",
-    degree_plus: "Degree or higher",
-  },
-  income: { ...INCOME_TIERS },
-  urbanization: {
-    urban: "Urban conurbation",
-    suburban: "Suburban / town",
-    rural: "Rural / village",
-  },
-};
+/**
+ * The United Kingdom's census labels, forwarded to its country folder.
+ *
+ * ⚠️ THE CONST FORWARDS, NOT JUST THE `UK:` KEY, BECAUSE THREE COUNTRIES SHARE
+ * IT. Scotland and Wales reuse the UK label set -- `SCO` and `WAL` point at this
+ * same value. Repointing only `UK:` at the folder would have left the seceded
+ * nations reading the old literal, and the two would have drifted the first time
+ * anyone edited a label. One definition, three keys.
+ */
+const UK_CENSUS_LABELS = UK_IDENTITY.regionCensusLabels;
 
 export const REGION_CENSUS_LABELS: Partial<Record<CountryId, CensusLabelSet>> = {
   UK: UK_CENSUS_LABELS,

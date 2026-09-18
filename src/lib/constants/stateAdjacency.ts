@@ -22,35 +22,9 @@
 import type { CountryId } from "./countries";
 import { JP_ADJACENCY_MAP } from "@/lib/countries/jp/geographyFacts";
 import { US_ADJACENCY_MAP } from "@/lib/countries/us/geographyFacts";
+import { UK_ADJACENCY_MAP } from "@/lib/countries/uk/geographyFacts";
 
 export type AdjacencyMap = Record<string, readonly string[]>;
-
-/**
- * UK 12 regions (9 ENG sub-regions + SCO + WAL + NIR). The codebase
- * models UK at this regional grain, not at the 650-constituency level —
- * so adjacency stays manageable.
- *
- * Sea-border edges:
- *   - NIR ↔ SCO (Stranraer/Cairnryan ↔ Belfast ferry).
- *   - NIR ↔ NWE (Liverpool ↔ Belfast ferry).
- * WAL ↔ NIR not included (no direct ferry; Holyhead routes go to ROI).
- */
-const UK_ADJACENCY: AdjacencyMap = {
-  // England sub-regions (geographic land borders)
-  LON: ["SEE", "EAE"],
-  SEE: ["LON", "SWE", "EAE"],
-  SWE: ["SEE", "WMI", "WAL"],
-  EAE: ["LON", "SEE", "EMI", "YHU"],
-  EMI: ["EAE", "WMI", "YHU"],
-  WMI: ["SWE", "EMI", "NWE", "WAL"],
-  YHU: ["EAE", "EMI", "NWE", "NEE"],
-  NWE: ["WMI", "YHU", "NEE", "WAL", "NIR"], // NIR via Liverpool-Belfast ferry
-  NEE: ["YHU", "NWE", "SCO"],
-  // Devolved nations
-  SCO: ["NEE", "NIR"], // NIR via Stranraer-Belfast ferry
-  WAL: ["SWE", "WMI", "NWE"],
-  NIR: ["SCO", "NWE"], // sea borders only
-};
 
 /**
  * DE 16 Bundesländer. Standard geographic land adjacency. Berlin (BE)
@@ -386,7 +360,7 @@ const WAL_ADJACENCY: AdjacencyMap = {
  */
 export const STATE_ADJACENCY: Readonly<Record<CountryId, AdjacencyMap>> = {
   US: US_ADJACENCY_MAP,
-  UK: UK_ADJACENCY,
+  UK: UK_ADJACENCY_MAP,
   DE: DE_ADJACENCY,
   JP: JP_ADJACENCY_MAP,
   CN: CN_ADJACENCY,

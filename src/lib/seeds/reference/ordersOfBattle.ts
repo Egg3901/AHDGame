@@ -21,6 +21,7 @@ import type { CountryId } from "@/lib/constants/countries";
 import { JP_INSTITUTIONS } from "@/lib/countries/jp/institutions";
 import { JP_ERAS } from "@/lib/countries/jp/eras";
 import { US_ORDERS_OF_BATTLE } from "@/lib/countries/us/institutionsFacts";
+import { UK_ORDERS_OF_BATTLE } from "@/lib/countries/uk/institutionsFacts";
 
 export interface OrderOfBattleEntry {
   /** Must match a Branch id for this country (`MILITARY_BRANCHES_BY_COUNTRY`). */
@@ -60,19 +61,7 @@ export const ORDERS_OF_BATTLE: Partial<Record<CountryId, OrderOfBattleEntry[]>> 
    * and Bomber Command working up to the V-force. Clearly the third power, well
    * ahead of France, well behind the US and USSR.
    */
-  UK: [
-    { branchId: "army", type: "Infantry Division", count: 6 },
-    { branchId: "army", type: "Armored Division", count: 2 },
-    { branchId: "army", type: "Artillery Regiment", count: 2 },
-    { branchId: "navy", type: "Carrier Strike Group", count: 2 },
-    { branchId: "navy", type: "Attack Submarine", count: 2 },
-    { branchId: "navy", type: "Frigate Squadron", count: 4 },
-    { branchId: "navy", type: "Amphibious Group", count: 1 },
-    { branchId: "raf", type: "Fighter Wing", count: 4 },
-    { branchId: "raf", type: "Bomber Squadron", count: 3 },
-    { branchId: "raf", type: "Air Defense Wing", count: 1 },
-    { branchId: "raf", type: "Airlift Wing", count: 1 },
-  ],
+  UK: UK_ORDERS_OF_BATTLE,
   /**
    * The Bundeswehr's establishment shape. Like NG, AT and DD, this is a
    * composition target rather than an activation year: the branches carry

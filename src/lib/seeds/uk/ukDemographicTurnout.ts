@@ -1,57 +1,14 @@
-import type { StateDemographicTurnout } from "@/lib/db/types";
-
 /**
- * UK region demographic turnout modifier seeds.
+ * Forwarder. Moved into the United Kingdom's country folder.
  *
- * All modifiers start at 0 — no GOTV or canvassing boosts applied yet.
- * Keys match the UK voter group IDs defined in ukDemographicCategories.ts.
+ * ⚠️ A FORWARDER HOLDS NO COPY; existing importers are untouched.
  *
- * The category key is "uk_voterGroups" to match the UK demographic profile ID
- * and to avoid collision with US "voterGroups" category.
- *
- * One document per UK region (matches ukRegions.ts IDs).
- * The dynamic DemographicModifiers type (Record<string, Record<string, number>>)
- * allows this to coexist with US documents in the same collection.
+ * ⚠️ THE DEFAULT IS RE-EXPORTED SEPARATELY, BECAUSE `export *` DOES NOT CARRY
+ * IT. That is not a style choice -- it is the ES module spec, and it fails at
+ * the consumer rather than here: `seedUK.ts` does `(await import(...)).default`
+ * and typecheck reported "Property 'default' does not exist" on a module that
+ * plainly has one. Every shim over a module with a default export needs this
+ * second line.
  */
-
-const UK_REGION_IDS = [
-  "LON",
-  "SEE",
-  "SWE",
-  "EAE",
-  "EMI",
-  "WMI",
-  "YHU",
-  "NWE",
-  "NEE",
-  "SCO",
-  "WAL",
-  "NIR",
-];
-
-const ZERO_MODIFIERS = {
-  post_industrial_workers: 0,
-  urban_progressives: 0,
-  suburban_homeowners: 0,
-  young_renters: 0,
-  rural_traditionalists: 0,
-  retirees: 0,
-  public_sector: 0,
-  moderate_centrists: 0,
-  populist_right: 0,
-  green_activists: 0,
-  small_business: 0,
-  new_britons: 0,
-};
-
-export const ukDemographicTurnout: StateDemographicTurnout[] = UK_REGION_IDS.map((regionId) => ({
-  _id: regionId,
-  countryId: "UK" as const,
-  modifiers: {
-    uk_voterGroups: { ...ZERO_MODIFIERS },
-  },
-  lastDecayApplied: new Date(),
-  lastUpdated: new Date(),
-}));
-
-export default ukDemographicTurnout;
+export * from "@/lib/countries/uk/data/ukDemographicTurnout";
+export { default } from "@/lib/countries/uk/data/ukDemographicTurnout";

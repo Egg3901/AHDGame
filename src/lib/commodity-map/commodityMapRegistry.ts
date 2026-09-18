@@ -6,9 +6,9 @@
  */
 
 import type { CountryId } from "@/lib/constants/countries";
-import { CDN_GEO } from "@/lib/images/cdnUrls";
 import { JP_GEOGRAPHY } from "@/lib/countries/jp/geography";
 import { US_MAP_REGISTRY } from "@/lib/countries/us/geographyFacts";
+import { UK_MAP_REGISTRY } from "@/lib/countries/uk/geographyFacts";
 
 export interface CountryMapConfig {
   /** Country ID */
@@ -78,36 +78,9 @@ const RS_TO_DE_STATE: Record<string, string> = {
   "16": "TH", // Thüringen
 };
 
-/** NUTS1 → UK region code */
-const NUTS_TO_REGION: Record<string, string> = {
-  UKC: "NEE",
-  UKD: "NWE",
-  UKE: "YHU",
-  UKF: "EMI",
-  UKG: "WMI",
-  UKH: "EAE",
-  UKI: "LON",
-  UKJ: "SEE",
-  UKK: "SWE",
-  UKL: "WAL",
-  UKM: "SCO",
-  UKN: "NIR",
-};
-
 export const COUNTRY_MAP_REGISTRY: Record<CountryId, CountryMapConfig> = {
   US: US_MAP_REGISTRY,
-  UK: {
-    countryId: "UK",
-    name: "United Kingdom",
-    overviewPath: "/country/uk",
-    mapPath: "/country/uk/map",
-    hasRegionMap: true,
-    geoUrl: CDN_GEO.ukNuts1,
-    featureIdToStateId: NUTS_TO_REGION,
-    projection: "mercator",
-    projectionCenter: [-2, 55.5],
-    projectionScale: 1800,
-  },
+  UK: UK_MAP_REGISTRY,
   DE: {
     countryId: "DE",
     name: "Germany",

@@ -4,6 +4,7 @@ import { getNationalIdentity, type NationalIdentity } from "@/lib/constants/nati
 import { JP_IDENTITY } from "@/lib/countries/jp/identity";
 import { JP_BANK_TEXT } from "@/lib/countries/jp/identity";
 import { US_IDENTITY } from "@/lib/countries/us/identity";
+import { UK_IDENTITY } from "@/lib/countries/uk/identity";
 
 /**
  * Institution identity overlays for the country-pages masthead family
@@ -51,12 +52,7 @@ function composeFromNational(countryId: CountryId, text: IdentityText): Institut
 
 export const EXECUTIVE_TEXT: Record<CountryId, IdentityText> = {
   US: US_IDENTITY.executiveText,
-  UK: {
-    glyph: "HM",
-    serif: "mono",
-    registry: "United Kingdom · His Majesty's Government",
-    title: "10 Downing Street",
-  },
+  UK: UK_IDENTITY.executiveText,
   DE: {
     glyph: "BK",
     serif: "mono",
@@ -233,12 +229,7 @@ export function getExecutiveIdentity(countryId: CountryId): InstitutionIdentity 
 
 export const POLICY_TEXT: Record<CountryId, IdentityText> = {
   US: US_IDENTITY.policyText,
-  UK: {
-    glyph: "§",
-    serif: "mono",
-    registry: "Statute Book · United Kingdom",
-    title: "National Policy",
-  },
+  UK: UK_IDENTITY.policyText,
   DE: {
     glyph: "§",
     serif: "mono",

@@ -13,13 +13,9 @@ import {
   ensureIEUachtaranElections,
 } from "./countries/ie";
 import { ensureNGElections } from "./countries/ng";
-import {
-  ensureUKElections,
-  ensureUKGovernorElections,
-  ensureUKRegionalCouncilElections,
-} from "./countries/uk";
 import { ensurePresidentialElection } from "./shared";
 import { JP_ELECTIONS } from "@/lib/countries/jp/elections";
+import { UK_ELECTIONS } from "@/lib/countries/uk/elections";
 
 export interface SpawnElectionsResult {
   message: string;
@@ -31,13 +27,7 @@ export type SpawnElectionsHandler = (now: Date) => Promise<SpawnElectionsResult 
 
 export const SPAWN_ELECTIONS_REGISTRY: Partial<Record<CountryId, SpawnElectionsHandler>> = {
   US: ensurePresidentialElection,
-  UK: async (now) => {
-    // Westminster Commons + devolved Regional Councils + Governor seats.
-    await ensureUKElections(now);
-    await ensureUKRegionalCouncilElections(now);
-    await ensureUKGovernorElections(now);
-    return { message: "UK Commons / Regional Council / Governor continuity check complete." };
-  },
+  UK: UK_ELECTIONS.spawn,
   DE: async (now) => {
     await ensureDEElections(now);
     return { message: "DE Bundestag continuity check complete." };

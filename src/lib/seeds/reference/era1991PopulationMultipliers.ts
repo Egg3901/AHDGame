@@ -1,6 +1,7 @@
 import type { CountryId } from "@/lib/constants/countries";
 import { JP_GEOGRAPHY } from "@/lib/countries/jp/geography";
 import { US_POPULATION_MULTIPLIERS } from "@/lib/countries/us/geographyFacts";
+import { UK_POPULATION_MULTIPLIERS } from "@/lib/countries/uk/geographyFacts";
 
 /**
  * 1991-era cohort multipliers, per country.
@@ -25,19 +26,7 @@ import { US_POPULATION_MULTIPLIERS } from "@/lib/countries/us/geographyFacts";
  */
 export const POPULATION_MULTIPLIERS: Partial<Record<CountryId, Record<string, number>>> = {
   US: US_POPULATION_MULTIPLIERS,
-  UK: {
-    new_britons: 0.3, // Pre-2004 EU expansion immigration wave
-    urban_progressives: 0.7, // Pre-NewLabour identity politics
-    young_renters: 0.85, // Right-to-Buy era boosted home ownership
-    post_industrial_workers: 1.4, // Manufacturing peak pre-deindustrialization
-    rural_traditionalists: 1.15,
-    retirees: 0.9, // Smaller 65+ cohort in 1991
-    populist_right: 0.3, // No UKIP / Reform yet; BNP fringe
-    green_activists: 0.4, // Green Party tiny in 1991
-    suburban_homeowners: 1.15, // Right-to-Buy expansion
-    moderate_centrists: 0.9, // Lib Dems just merged 1988
-    public_sector: 1.15, // Pre-Thatcher-cuts hangover
-  },
+  UK: UK_POPULATION_MULTIPLIERS,
   JP: JP_GEOGRAPHY.populationMultipliers,
   DE: {
     katholische_konservative: 1.1, // Pre-secularisation

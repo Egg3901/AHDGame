@@ -11,6 +11,7 @@ import type { CountryId } from "./countries";
 import { STARTING_YEAR, getStartingYearForPreset } from "./turnTime";
 import { JP_ECONOMY } from "@/lib/countries/jp/economy";
 import { US_ECONOMY } from "@/lib/countries/us/economy";
+import { UK_ECONOMY } from "@/lib/countries/uk/economy";
 
 /**
  * Currency codes for all countries — active and future.
@@ -742,7 +743,7 @@ export interface EconomicBaseline {
 
 export const ECONOMIC_BASELINES: Partial<Record<CountryId, EconomicBaseline>> = {
   US: US_ECONOMY.economicBaseline,
-  UK: { gdpGrowth: 1.5, tradeGrowth: 0 },
+  UK: UK_ECONOMY.economicBaseline,
   JP: JP_ECONOMY.economicBaseline,
   DE: { gdpGrowth: 1.5, tradeGrowth: 0 },
   IE: { gdpGrowth: 3.5, tradeGrowth: 2.5 },
@@ -766,7 +767,7 @@ export interface MonetaryBaseline {
 
 export const MONETARY_BASELINES: Record<CountryId, MonetaryBaseline> = {
   US: US_ECONOMY.monetary.baseline,
-  UK: { targetInflation: 2.0, neutralPrimeRate: 3.0 },
+  UK: UK_ECONOMY.monetary.baseline,
   JP: JP_ECONOMY.monetary.baseline,
   DE: { targetInflation: 2.0, neutralPrimeRate: 3.0 },
   IE: { targetInflation: 2.0, neutralPrimeRate: 3.0 },

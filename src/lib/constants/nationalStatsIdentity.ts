@@ -14,6 +14,7 @@
 import type { CountryId } from "./countries";
 import { JP_IDENTITY } from "@/lib/countries/jp/identity";
 import { US_IDENTITY } from "@/lib/countries/us/identity";
+import { UK_IDENTITY } from "@/lib/countries/uk/identity";
 
 export interface StatsAccent {
   /** Accent gold/brass. */
@@ -62,17 +63,7 @@ export const NATIONAL_STATS_IDENTITY: Partial<Record<CountryId, StatsIdentity>> 
     accent: { stat: "#d8b25e", statSoft: "#e7cd91", g0: "#4a1212", g1: "#2a0e0e", g2: "#160a0e" },
   },
   US: US_IDENTITY.stats,
-  UK: {
-    glyph: "ONS",
-    serif: "mono",
-    office: "Office for National Statistics",
-    officeEn: "Office for National Statistics",
-    title: "National Statistics",
-    titleEn: null,
-    registry: "United Kingdom · Office for National Statistics",
-    seal: "UK ONS",
-    accent: { stat: "#c9a24b", statSoft: "#e1c382", g0: "#16233f", g1: "#101a30", g2: "#0c1018" },
-  },
+  UK: UK_IDENTITY.stats,
   DE: {
     glyph: "DES",
     serif: "mono",

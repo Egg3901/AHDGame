@@ -6,6 +6,7 @@ import {
   JP_MILITARY_SCALE,
 } from "@/lib/countries/jp/institutionsFacts";
 import { US_MILITARY_BRANCHES } from "@/lib/countries/us/institutionsFacts";
+import { UK_MILITARY_BRANCHES } from "@/lib/countries/uk/institutionsFacts";
 
 export interface Branch {
   id: string;
@@ -310,11 +311,7 @@ export const MILITARY_BRANCHES_BY_COUNTRY: Record<CountryId, Branch[]> = {
       establishedYear: 2016,
     },
   ],
-  UK: [
-    { id: "army", name: "British Army", abbr: "Army", domain: "ground" },
-    { id: "navy", name: "Royal Navy", abbr: "RN", domain: "naval" },
-    { id: "raf", name: "Royal Air Force", abbr: "RAF", domain: "air" },
-  ],
+  UK: UK_MILITARY_BRANCHES,
   // Bundeswehr: first volunteers sworn 12 Nov 1955 (bundeswehr.de). West Germany had
   // no armed forces in 1953 (demilitarized under occupation / Blank Office planning only),
   // so a 1953 world correctly seeds DE with zero branches — no invented predecessor.

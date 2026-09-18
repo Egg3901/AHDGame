@@ -18,6 +18,7 @@ import { cnRegions } from "@/lib/seeds/cn/cnRegions";
 import { ieRegions } from "@/lib/seeds/ie/ieRegions";
 import { TERRITORY_ADMISSIONS } from "@/lib/elections/statehoodAdmission";
 import { JP_GEOGRAPHY } from "@/lib/countries/jp/geography";
+import { UK_GEOGRAPHY } from "@/lib/countries/uk/geography";
 
 // State name lookup for display names
 const STATE_NAMES: Record<string, string> = {
@@ -73,20 +74,11 @@ const STATE_NAMES: Record<string, string> = {
   WY: "Wyoming",
 };
 
-const UK_REGION_NAMES: Record<string, string> = {
-  LON: "London",
-  SEE: "South East",
-  SWE: "South West",
-  EAE: "East of England",
-  WMI: "West Midlands",
-  EMI: "East Midlands",
-  YHU: "Yorkshire & Humber",
-  NWE: "North West",
-  NEE: "North East",
-  WAL: "Wales",
-  SCO: "Scotland",
-  NIR: "Northern Ireland",
-};
+/**
+ * The United Kingdom's region names, forwarded to its country folder, where they
+ * are DERIVED from `UK_REGIONS` rather than written out a second time.
+ */
+const UK_REGION_NAMES = UK_GEOGRAPHY.regionNames;
 
 const DE_REGION_NAMES: Record<string, string> = Object.fromEntries(
   deRegions.map((r) => [r._id, r.name])

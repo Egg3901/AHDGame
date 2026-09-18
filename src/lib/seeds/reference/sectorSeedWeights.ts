@@ -14,6 +14,7 @@ import { getCountrySectorWeights2023 } from "./sectorSeedWeights2023";
 import { JP_ECONOMY } from "@/lib/countries/jp/economy";
 import { getCountrySectorWeights2027 } from "./sectorSeedWeights2027";
 import { US_ECONOMY } from "@/lib/countries/us/economy";
+import { UK_ECONOMY } from "@/lib/countries/uk/economy";
 
 type SectorWeightMap = Partial<Record<CorporationType, number>>;
 
@@ -53,25 +54,7 @@ function mergeStateOverride(
 
 export const COUNTRY_SECTOR_WEIGHTS: Record<CountryId, SectorWeightMap> = {
   US: US_ECONOMY.sectorWeights.base,
-  UK: {
-    real_estate: 14,
-    financial: 13,
-    manufacturing: 9,
-    technology: 8,
-    healthcare: 8,
-    retail: 7,
-    construction: 6,
-    media: 5,
-    chemical_industries: 5,
-    entertainment: 4,
-    telecommunications: 4,
-    logistics: 4,
-    energy: 3,
-    automobiles: 3,
-    defense: 3,
-    extraction: 3,
-    agriculture: 1,
-  },
+  UK: UK_ECONOMY.sectorWeights.base,
   // Latent - mirrors UK; dedicated SCO weights are not authored.
   SCO: {
     real_estate: 14,

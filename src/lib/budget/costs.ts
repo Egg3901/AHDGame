@@ -8,6 +8,7 @@ import { COST_INCOME_ANCHORS } from "@/lib/politicalLegislation/costAnchors";
 import type { CostAnchorCountryId } from "@/lib/politicalLegislation/types";
 import { JP_ECONOMY } from "@/lib/countries/jp/economy";
 import { US_ECONOMY } from "@/lib/countries/us/economy";
+import { UK_ECONOMY } from "@/lib/countries/uk/economy";
 
 export interface BudgetCostContext {
   budgetCapacity: number;
@@ -112,14 +113,7 @@ export interface CostScaleAnchor {
  */
 export const COST_SCALE_ANCHORS: Partial<Record<CountryId, CostScaleAnchor>> = {
   US: US_ECONOMY.costScaleAnchors,
-  UK: {
-    gdpLow: 600_000_000_000,
-    popLow: 57_500_000,
-    scaleLow: 0.31,
-    gdpHigh: 2_900_000_000_000,
-    popHigh: 68_000_000,
-    scaleHigh: 1.05,
-  },
+  UK: UK_ECONOMY.costScaleAnchors,
   JP: JP_ECONOMY.costScaleAnchors,
   DE: {
     gdpLow: 1_600_000_000_000,

@@ -2,6 +2,7 @@ import type { CSSProperties } from "react";
 import type { CountryId } from "./countries";
 import { JP_IDENTITY } from "@/lib/countries/jp/identity";
 import { US_IDENTITY } from "@/lib/countries/us/identity";
+import { UK_IDENTITY as UK_FOLDER_IDENTITY } from "@/lib/countries/uk/identity";
 
 export interface CabinetIdentity {
   /** Large faded background glyph + chop fallback. */
@@ -14,26 +15,10 @@ export interface CabinetIdentity {
   g2: string;
 }
 
-/**
- * Per-country dossier identity for the cabinet office. Gold palettes and
- * gradient stops are ported from the "Cabinet Office" design prototype; glyphs
- * are country-level (latin abbreviation, or a CJK character for CN/JP) since
- * the office shell is shared across every seat, not Defense-specific.
- */
-const UK_IDENTITY: CabinetIdentity = {
-  glyph: "UK",
-  serif: "mono",
-  gov: "#c9a24b",
-  govSoft: "#e1c382",
-  g0: "#16233f",
-  g1: "#101a30",
-  g2: "#0c1018",
-};
-
 /** Only cabinet-enabled countries have identities; others fall back to UK. */
 export const CABINET_IDENTITY: Partial<Record<CountryId, CabinetIdentity>> = {
   US: US_IDENTITY.cabinet,
-  UK: UK_IDENTITY,
+  UK: UK_FOLDER_IDENTITY.cabinet,
   CN: {
     glyph: "国",
     serif: "cjk",
@@ -102,7 +87,13 @@ export const CABINET_IDENTITY: Partial<Record<CountryId, CabinetIdentity>> = {
 export function getCabinetIdentity(countryId: string): CabinetIdentity {
   const entry = CABINET_IDENTITY[countryId as CountryId];
   if (entry) return entry;
-  return { ...UK_IDENTITY, glyph: countryId.toUpperCase(), serif: "mono" };
+  // ⚠ THE FALLBACK IS THE UNITED KINGDOM'S CABINET SHELL, and it used to read
+  // a LOCAL `const UK_IDENTITY` declared in this file. That name now collides
+  // with the folder export, and importing the folder's under the same name made
+  // `UK_IDENTITY.cabinet` resolve to the local literal's missing `.cabinet` --
+  // undefined, silently, with typecheck green. The local copy is deleted and the
+  // import is aliased so the two can never be confused again.
+  return { ...UK_FOLDER_IDENTITY.cabinet, glyph: countryId.toUpperCase(), serif: "mono" };
 }
 
 export function cabinetIdentityVars(countryId: string): CSSProperties {

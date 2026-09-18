@@ -13,6 +13,7 @@ import type { CountryId } from "./countries";
 import { getStatsIdentity, type StatsAccent } from "./nationalStatsIdentity";
 import { JP_IDENTITY } from "@/lib/countries/jp/identity";
 import { US_IDENTITY } from "@/lib/countries/us/identity";
+import { UK_IDENTITY } from "@/lib/countries/uk/identity";
 
 export interface EconomyIdentity {
   /** Watermark / chop glyph (经 / US / …). */
@@ -44,15 +45,7 @@ export const ECONOMY_TEXT: Partial<Record<CountryId, Omit<EconomyIdentity, "acce
     officeEn: "National Accounts Office",
     registry: "People's Republic of China · National Accounts Registry",
   },
-  UK: {
-    glyph: "UK",
-    serif: "mono",
-    title: "Economic Outlook",
-    titleEn: null,
-    office: "Office for National Statistics · Economic Accounts",
-    officeEn: "Office for National Statistics · Economic Accounts",
-    registry: "United Kingdom · National Accounts Registry",
-  },
+  UK: UK_IDENTITY.economyText,
   DE: {
     glyph: "DE",
     serif: "mono",

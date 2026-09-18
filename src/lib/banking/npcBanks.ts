@@ -16,6 +16,7 @@ import { getLegalCharterTypes } from "@/lib/banking/separationLaw";
 import { loadWorldEraUnitScale } from "@/lib/currency/gdpAnchorRate";
 import { JP_IDENTITY } from "@/lib/countries/jp/identity";
 import { US_IDENTITY } from "@/lib/countries/us/identity";
+import { UK_IDENTITY } from "@/lib/countries/uk/identity";
 
 /** Provisional: how many NPP retail banks each eligible country seeds. */
 export const NPC_BANKS_PER_COUNTRY = 2;
@@ -74,7 +75,7 @@ const DEFAULT_MODERN_NAMES = ["Meridian Banking Group", "Harbourline Financial"]
  */
 export const COUNTRY_HISTORICAL_NAMES: Partial<Record<CountryId, readonly string[]>> = {
   US: US_IDENTITY.historicalNames,
-  UK: ["Midland Counties Bank", "Clydeside Mercantile Bank"],
+  UK: UK_IDENTITY.historicalNames,
   JP: JP_IDENTITY.historicalNames,
   DE: ["Rhineland Credit Bank", "Hanseatic Merchants Bank"],
   FR: ["Banque du Littoral", "Comptoir des Provinces"],
@@ -92,7 +93,7 @@ export const COUNTRY_HISTORICAL_NAMES: Partial<Record<CountryId, readonly string
 
 export const COUNTRY_MODERN_NAMES: Partial<Record<CountryId, readonly string[]>> = {
   US: US_IDENTITY.modernNames,
-  UK: ["Midland Counties Banking Group", "Clydeside Financial"],
+  UK: UK_IDENTITY.modernNames,
   JP: JP_IDENTITY.modernNames,
   DE: ["Rhineland Credit Group", "Hanseatic Banking Group"],
   FR: ["Groupe Bancaire du Littoral", "Comptoir des Provinces"],

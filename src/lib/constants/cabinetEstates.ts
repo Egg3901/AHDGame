@@ -2,6 +2,7 @@ import type { CountryId } from "./countries";
 import type { CabinetEstate, EstateFundingLevel } from "@/lib/db/types/cabinetEstate";
 import { JP_ESTATE_PORTFOLIO } from "@/lib/countries/jp/institutionsFacts";
 import { US_ESTATE_PORTFOLIO } from "@/lib/countries/us/institutionsFacts";
+import { UK_ESTATE_PORTFOLIO } from "@/lib/countries/uk/institutionsFacts";
 
 // ── Archetype catalog ────────────────────────────────────────────────────────
 export interface EstateArchetype {
@@ -659,17 +660,7 @@ export const ESTATE_CATALOG: Record<string, EstateArchetype[]> = {
 // energy, transportation, and head-of-government / deputy / territorial seats.
 export const ESTATE_PORTFOLIO_BY_COUNTRY: Partial<Record<CountryId, Record<string, string>>> = {
   US: US_ESTATE_PORTFOLIO,
-  UK: {
-    foreign_secretary: "foreign",
-    home_secretary: "homeland",
-    justice_secretary: "justice",
-    health_secretary: "health",
-    education_secretary: "education",
-    business_secretary: "commerce",
-    levelling_secretary: "housing",
-    environment_secretary: "interior",
-    work_secretary: "labor",
-  },
+  UK: UK_ESTATE_PORTFOLIO,
   DE: {
     foreign_minister: "foreign",
     interior_minister: "homeland",

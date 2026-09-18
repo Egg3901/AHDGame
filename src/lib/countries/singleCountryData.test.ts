@@ -349,8 +349,16 @@ function isCountryFolderShim(raw: string): boolean {
     .map((s) => s.trim())
     .filter(Boolean);
   if (statements.length === 0) return false;
+  // ⚠️ `export { default } from` COUNTS, AND LEAVING IT OUT BROKE 21 SHIMS.
+  // `export *` does NOT carry a module's default export -- that is the ES module
+  // spec, not a style choice -- so a shim over a module with a default needs a
+  // second `export { default } from` line. Twenty-one of the UK's did. A
+  // detector that only accepted `export *` then called every one of them a data
+  // file holding UK facts.
   return statements.every((s) =>
-    /^(?:export\s+\*\s+from|import)\s+["']@\/lib\/countries\/[^"']+["']$/.test(s)
+    /^(?:export\s+\*\s+from|export\s*\{[^}]*\}\s*from|import)\s+["']@\/lib\/countries\/[^"']+["']$/.test(
+      s
+    )
   );
 }
 
@@ -373,6 +381,22 @@ function singleCountryFiles(): Owned[] {
       // nearly every line; `contract.ts` and this module's own data list are the
       // same kind of thing. Only the per-country subdirectories hold facts.
       if (/^src\/lib\/countries\/[^/]+\.tsx?$/.test(file)) continue;
+      // ⚠️ SURFACES AND TOOLING ARE EXCLUDED BY PATH, NOT BY 840 HAND-WRITTEN
+      // ENTRIES. `src/app/` and `src/components/` are where a country is
+      // RENDERED and `scripts/` is where it is operated on; neither is where its
+      // facts live. Japan's four client components and four scripts were listed
+      // individually, which was tolerable for one country. The UK alone adds 35
+      // more -- eighteen components, six routes, eleven scripts -- and 24
+      // countries of that would be roughly 840 entries whose only content is
+      // "this is a page" or "this is a migration". That is the artifact
+      // `jpCoverage.ts` proved nobody maintains, arriving by a different door.
+      //
+      // The rule is structural and checkable: a React tree cannot live behind
+      // the server-only barrel, and a dated migration is a record of a change
+      // rather than a fact about a country. `src/lib/` stays fully in scope,
+      // which is where every data module actually is.
+      if (/^src\/app\//.test(file) || /^src\/components\//.test(file)) continue;
+      if (/^scripts\//.test(file)) continue;
       const source = readFileSync(file, "utf8");
       // A forwarder holds no copy, so it is not the country's data by
       // definition -- it is the absence of a second one.

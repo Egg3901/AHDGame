@@ -2,10 +2,6 @@ import type { CountryId } from "@/lib/constants/countries";
 import type { Layer1Config } from "@/lib/seeds/stateDemographics";
 import type { ResetPresetId } from "@/lib/seeds/presetSelector";
 import { selectPresetBundleOptional } from "@/lib/seeds/presetSelector";
-import { ukRegionCensusData } from "@/lib/seeds/uk/ukRegionCensusData";
-import { ukRegionCensusData1953 } from "@/lib/seeds/uk/ukRegionCensusData1953";
-import { ukRegionCensusData1991 } from "@/lib/seeds/uk/ukRegionCensusData1991";
-import { ukRegionCensusData2027 } from "@/lib/seeds/uk/ukRegionCensusData2027";
 import { deRegionCensusData } from "@/lib/seeds/de/deRegionCensusData";
 import { deRegionCensusData1953 } from "@/lib/seeds/de/deRegionCensusData1953";
 import { deRegionCensusData1991 } from "@/lib/seeds/de/deRegionCensusData1991";
@@ -31,7 +27,6 @@ import { ruRegionCensusData1953 } from "@/lib/seeds/ru/ruRegionCensusData1953";
 import { ddRegionCensusData1953 } from "@/lib/seeds/dd/ddRegionCensusData1953";
 import { ngRegionCensusData1953 } from "@/lib/seeds/ng/ngRegionCensusData1953";
 // 1979-era census bundles (authored for the 1979 reset).
-import { ukRegionCensusData1979 } from "@/lib/seeds/uk/ukRegionCensusData1979";
 import { deRegionCensusData1979 } from "@/lib/seeds/de/deRegionCensusData1979";
 import { ieRegionCensusData1979 } from "@/lib/seeds/ie/ieRegionCensusData1979";
 import { cnRegionCensusData1979 } from "@/lib/seeds/cn/cnRegionCensusData1979";
@@ -75,6 +70,7 @@ import { balRegionCensusData } from "@/lib/seeds/bal/balRegionCensusData";
 import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
 import { JP_GEOGRAPHY } from "@/lib/countries/jp/geography";
 import { US_GEOGRAPHY } from "@/lib/countries/us/geography";
+import { UK_GEOGRAPHY } from "@/lib/countries/uk/geography";
 
 export const CENSUS_BUNDLES: Partial<Record<CountryId, PresetBundles>> = {
   PL: {
@@ -133,13 +129,7 @@ export const CENSUS_BUNDLES: Partial<Record<CountryId, PresetBundles>> = {
   },
 
   US: US_GEOGRAPHY.censusBundles,
-  UK: {
-    "1953-default": ukRegionCensusData1953,
-    "1979-default": ukRegionCensusData1979,
-    "2019-default": ukRegionCensusData,
-    "1991-default": ukRegionCensusData1991,
-    "2027-default": ukRegionCensusData2027,
-  },
+  UK: UK_GEOGRAPHY.censusBundles,
   JP: JP_GEOGRAPHY.censusBundles,
   DE: {
     "1953-default": deRegionCensusData1953,

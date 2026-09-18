@@ -184,6 +184,13 @@ const SIZE_CAP_EXEMPT = [
   // folder ever gains, uncapping it from day one.
   "src/lib/countries/us/data/",
   "src/lib/countries/us/cabinet/",
+  // The United Kingdom's, added AFTER the move rather than before -- which is how
+  // `ukLaws.ts` (5,337 LOC) blocked the gate for one commit. It was exempt by
+  // EXACT path at `politicalLegislation/laws/ukLaws.ts`, and relocating it to
+  // `uk/data/` stripped that. The US entries above were added first precisely to
+  // avoid this, and the lesson did not survive the next country.
+  "src/lib/countries/uk/data/",
+  "src/lib/countries/uk/cabinet/",
   "src/lib/constants/cnCabinetMechanics.ts",
   "src/lib/constants/historicalSeats.ts",
   "src/lib/constants/metricDefinitions.ts",

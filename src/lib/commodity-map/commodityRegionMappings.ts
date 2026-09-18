@@ -24,6 +24,7 @@ import { csRegions } from "@/lib/seeds/cs/csRegions";
 import { blrRegions } from "@/lib/seeds/blr/blrRegions";
 import { balRegions } from "@/lib/seeds/bal/balRegions";
 import { JP_IDENTITY } from "@/lib/countries/jp/identity";
+import { UK_IDENTITY } from "@/lib/countries/uk/identity";
 
 // ISO-numeric ⇄ CountryId now live in the neutral countryIso module so non-commodity
 // surfaces (e.g. the IntOrg world map) can reuse them without depending on this file.
@@ -37,20 +38,7 @@ export { ISO_NUMERIC_TO_COUNTRY, COUNTRY_TO_ISO_NUMERIC } from "@/lib/constants/
  * country; see `getStateDisplayName(countryId, stateId)`.
  */
 export const STATE_DISPLAY_NAMES: Partial<Record<CountryId, Record<string, string>>> = {
-  UK: {
-    LON: "London",
-    SEE: "South East",
-    SWE: "South West",
-    EAE: "East of England",
-    EMI: "East Midlands",
-    WMI: "West Midlands",
-    YHU: "Yorkshire",
-    NWE: "North West",
-    NEE: "North East",
-    SCO: "Scotland",
-    WAL: "Wales",
-    NIR: "N. Ireland",
-  },
+  UK: UK_IDENTITY.stateDisplayNames,
   JP: JP_IDENTITY.stateDisplayNames,
   DE: {
     NW: "North Rhine-Westphalia",

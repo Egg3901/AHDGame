@@ -9,6 +9,7 @@ import { getCountryConfig, type CountryId } from "./countries";
 import { getCountryFlagUrl } from "./flags";
 import { getExecutiveSurface } from "./executiveSurface";
 import { JP_IDENTITY } from "@/lib/countries/jp/identity";
+import { UK_IDENTITY } from "@/lib/countries/uk/identity";
 
 export interface ParliamentaryExecutivePlaque {
   title: string;
@@ -40,29 +41,7 @@ export interface ParliamentaryExecutiveSurface {
 }
 
 export const SURFACES: Partial<Record<CountryId, ParliamentaryExecutiveSurface>> = {
-  UK: {
-    executiveTitle: "Prime Minister",
-    memberLabel: "MP",
-    headPlaque: {
-      title: "Prime Minister",
-      sealGlyph: "PM",
-      vacancyNote: "A qualifying party or coalition chair may nominate a Prime Minister.",
-    },
-    oppositionPlaque: {
-      title: "Leader of the Opposition",
-      sealGlyph: "LO",
-      vacancyNote: "The leader of the largest opposition party in the Commons.",
-    },
-    seatsPanel: { title: "Commons seats by party", emptyText: "No Commons MPs elected yet." },
-    hero: {
-      image: "/api/images/hero/downing-street",
-      alt: "10 Downing Street",
-      title: null,
-      tagline: "10 Downing Street · Prime Minister, Cabinet, and the House of Commons",
-      breadcrumbLast: "Downing Street",
-    },
-    heroTitleUsesImperialPossessive: true,
-  },
+  UK: UK_IDENTITY.parliamentarySurface,
   DE: {
     executiveTitle: "Chancellor",
     memberLabel: "Bundestag member",

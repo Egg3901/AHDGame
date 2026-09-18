@@ -2,6 +2,7 @@ import type { CountryId } from "@/lib/constants/countries";
 import { getNationalIdentity, type NationalIdentity } from "@/lib/constants/nationalIdentity";
 import { JP_IDENTITY } from "@/lib/countries/jp/identity";
 import { US_IDENTITY } from "@/lib/countries/us/identity";
+import { UK_IDENTITY } from "@/lib/countries/uk/identity";
 
 /**
  * Treasury / Finance-Ministry identity overlay for the National Budget surface.
@@ -62,15 +63,7 @@ export const TREASURY_TEXT: Record<
     nativeEn: "People's Republic of China · Ministry of Finance",
   },
   US: US_IDENTITY.treasuryText,
-  UK: {
-    glyph: "HM",
-    serif: "mono",
-    budgetTitle: "HM Treasury Budget",
-    ministry: "HM TREASURY",
-    publicSeal: "PUBLIC RECORD",
-    registry: "United Kingdom · HM Treasury",
-    native: "His Majesty's Treasury",
-  },
+  UK: UK_IDENTITY.treasuryText,
   DE: {
     glyph: "BU",
     serif: "mono",

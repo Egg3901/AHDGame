@@ -1,6 +1,7 @@
 import type { CountryId } from "@/lib/constants/countries";
 import { JP_LEGISLATIVE_PROCESS } from "@/lib/countries/jp/institutionsFacts";
 import { US_LEGISLATIVE_PROCESS } from "@/lib/countries/us/institutionsFacts";
+import { UK_LEGISLATIVE_PROCESS } from "@/lib/countries/uk/institutionsFacts";
 
 /** Chamber seating geometry used by the composition + vote-seating charts. */
 export type SeatingStyle = "hemicycle" | "benches" | "horseshoe";
@@ -34,40 +35,6 @@ export interface LegislativeProcess {
   quirks: ProcessQuirk[];
   seatingStyle: SeatingStyle;
 }
-
-const UK: LegislativeProcess = {
-  executive: {
-    title: "The Crown",
-    canVeto: false,
-    signLabel: "Royal Assent",
-    signNote: "Royal Assent is a constitutional formality — it has not been refused since 1708.",
-    override: null,
-  },
-  upperNote:
-    "The Lords may revise or delay a bill, but under the Parliament Acts the Commons ultimately prevails — and the Lords cannot block a money bill.",
-  dissolution: {
-    actor: "Prime Minister",
-    body: "The PM may call a snap general election. Parliament is dissolved and all bills still in progress fall.",
-  },
-  quirks: [
-    {
-      icon: "building",
-      title: "Commons supremacy",
-      body: "The Lords can delay but not block; the Parliament Acts let the Commons override.",
-    },
-    {
-      icon: "bolt",
-      title: "Snap election",
-      body: "A PM-called general election dissolves Parliament and kills all active legislation.",
-    },
-    {
-      icon: "doc",
-      title: "Royal Assent",
-      body: "Assent by the Crown is automatic — a formality, never refused in practice.",
-    },
-  ],
-  seatingStyle: "benches",
-};
 
 const DE: LegislativeProcess = {
   executive: {
@@ -219,7 +186,7 @@ const DEFAULT_PROCESS: LegislativeProcess = {
 
 export const LEGISLATIVE_PROCESS: Partial<Record<CountryId, LegislativeProcess>> = {
   US: US_LEGISLATIVE_PROCESS,
-  UK,
+  UK: UK_LEGISLATIVE_PROCESS,
   DE,
   JP,
   IE,

@@ -41,7 +41,7 @@
  */
 
 /** Countries whose folder is finished. Adding one turns the guard on for it. */
-export const CONVERTED: readonly string[] = ["JP", "US"];
+export const CONVERTED: readonly string[] = ["JP", "US", "UK"];
 
 /**
  * Files that hold one country's data, are NOT in that country's folder, and are
@@ -149,6 +149,58 @@ export const ACKNOWLEDGED_OUTSIDE: ReadonlyArray<{
     why: "The character-creation guide, same reasoning: US examples in a page written for every player.",
   },
 
+  // ---- United Kingdom: shared machinery and engine code. ----
+  {
+    file: "src/lib/constants/devolution.ts",
+    country: "UK",
+    why: "The devolution and secession machinery. It is written around the UK because the UK is the game's devolved state, but Scotland and Wales are separate countries in it -- SCO and WAL have their own ids -- so this is a multi-entity mechanic, not one country's table.",
+  },
+  {
+    file: "src/lib/constants/regionBanner.ts",
+    country: "UK",
+    why: "Region banner configuration read by every country's region pages; the UK entries sit inside a country-keyed map.",
+  },
+  {
+    file: "src/lib/turn/election/seatAllocation.ts",
+    country: "UK",
+    why: "Seat-allocation maths for every country's chambers. It names the UK because Westminster is the worked example, not because it holds UK data.",
+  },
+  {
+    file: "src/lib/turn/election/independenceDesireHook.ts",
+    country: "UK",
+    why: "The independence-desire election hook. Engine code for the devolution mechanic; the values it reads are on the regions.",
+  },
+  {
+    file: "src/lib/turn/independenceDesireDrift.ts",
+    country: "UK",
+    why: "Per-turn independence-desire drift. Engine code, same mechanic.",
+  },
+  {
+    file: "src/lib/turn/primaryResolution.ts",
+    country: "UK",
+    why: "Primary resolution for every country that runs primaries. The UK appears as a branch, which is country-awareness rather than ownership.",
+  },
+  {
+    file: "src/lib/turn/regionalBudget.ts",
+    country: "UK",
+    why: "The generic regional-budget processor. Its per-country siblings (cnRegionalBudget, deRegionalBudget, jpRegionalBudget, ruRegionalBudget) are the country-specific ones; this is the shared path.",
+  },
+  {
+    file: "src/lib/migrations/entries/2026-08-26-uk-regional-party-org-backfill.ts",
+    country: "UK",
+    why: "A dated migration entry. Migrations are records of a change that happened, not facts about a country, and they stay where the migration runner reads them.",
+  },
+  {
+    file: "src/lib/remediation/defects/AHD-1102-uk-vat-revenue-gap.ts",
+    country: "UK",
+    why: "A remediation defect definition, registered by id with the remediation runner. Like a migration, it records an incident rather than describing the country.",
+  },
+  {
+    file: "src/lib/seeds/wiki/content/relocation.ts",
+    country: "UK",
+    why: "A player guide about relocating between countries. It uses UK examples; the page is written for every player.",
+  },
+
   // ---- Shared modules that CONTAIN United States data without BEING it. ----
   //
   // ⚠️ Each of these is bucket A, not bucket D: the country's VALUES could move,
@@ -218,74 +270,14 @@ export const ACKNOWLEDGED_OUTSIDE: ReadonlyArray<{
 
   // ---- United States client surfaces. Bucket E: they RENDER it, they do not own it. ----
   {
-    file: "src/app/country/[code]/map/components/USMapWithModes.tsx",
-    country: "US",
-    why: "Client map component. Moving a React tree into a lib folder would put it behind the server-only barrel, and the folder's map DATA already lives in geographyFacts.",
-  },
-  {
-    file: "src/components/USAMapPaths.tsx",
-    country: "US",
-    why: "SVG path data for a client map component, beside the other countries' map components -- the same placement JapanMapPaths has.",
-  },
-  {
-    file: "src/components/admin/leadership/USLeadershipPanel.tsx",
-    country: "US",
-    why: "Admin client component. It renders US leadership from folder data.",
-  },
-  {
-    file: "src/app/guides/running-for-office/us/page.tsx",
-    country: "US",
-    why: "A player guide page. Prose about the United States, rendered by Next's router, not data the folder owns.",
-  },
-  {
     file: "src/lib/maps/usaGeometry.ts",
     country: "US",
     why: "Projection parameters beside every other country's, so the map registry reads one directory rather than 24 folders. Same reasoning as japanGeometry.ts.",
   },
 
   // ---- Client surfaces. Bucket E: these RENDER the country, they do not own it. ----
-  {
-    file: "src/app/country/[code]/legislature/JPDietPage.tsx",
-    country: "JP",
-    why: "Client component. It renders the Diet from folder data; moving a page into a lib folder would put a React tree behind the server-only barrel.",
-  },
-  {
-    file: "src/app/country/[code]/legislature/JPCabinetProposeBillModal.tsx",
-    country: "JP",
-    why: "Client component, same reasoning as JPDietPage.",
-  },
-  {
-    file: "src/app/country/[code]/legislature/useJPDietPageState.ts",
-    country: "JP",
-    why: "Client hook for JPDietPage. Belongs beside the component it serves.",
-  },
-  {
-    file: "src/components/JapanMapPaths.tsx",
-    country: "JP",
-    why: "SVG path data for a client map component, beside the other country map components.",
-  },
 
   // ---- Tooling. Scripts ABOUT a country are not that country's data. ----
-  {
-    file: "scripts/countries/verify-jp-runtime.ts",
-    country: "JP",
-    why: "The runtime harness for Japan's folder. A test of the data, not the data.",
-  },
-  {
-    file: "scripts/seed/seed-jp.ts",
-    country: "JP",
-    why: "Seed runner. It invokes the folder's seed step and holds no facts.",
-  },
-  {
-    file: "scripts/migrations/backfill-jp-sangiin-seat-ids.ts",
-    country: "JP",
-    why: "A one-off migration against live data. Migrations are dated records of a change and stay in scripts/migrations.",
-  },
-  {
-    file: "scripts/migrations/fix-jp-sector-market-sizes.ts",
-    country: "JP",
-    why: "One-off migration, same reasoning.",
-  },
   {
     file: "src/lib/maps/japanGeometry.ts",
     country: "JP",
