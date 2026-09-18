@@ -1,3 +1,4 @@
+import type { MajorDefaultParty } from "@/lib/seeds/defaultPartyTiers";
 import type { CountryElections } from "../contract";
 import {
   ELECTORAL_VOTES,
@@ -69,7 +70,11 @@ const federalSenateSeats: Readonly<Record<string, number>> = Object.fromEntries(
  * whose chambers are regional -- Japan's eight -- has the same shape and means
  * something different.
  */
+/** Default parties that seed as Major; every other default party seeds Minor. */
+const majorDefaultParties: MajorDefaultParty[] = [{ abbr: "DEM" }, { abbr: "REP" }];
+
 export const US_ELECTIONS: CountryElections = {
+  majorDefaultParties: majorDefaultParties,
   spawn: ensurePresidentialElection,
   seats: {
     byChamber: {

@@ -35,6 +35,7 @@ import type { TreasuryIdentity } from "@/lib/constants/treasuryIdentity";
 import type { LegislativeProcess } from "@/lib/legislature/process";
 import type { OrderOfBattleEntry } from "@/lib/seeds/reference/ordersOfBattle";
 import type { CountryElectionPhaseEntry } from "@/lib/turn/countryPhases";
+import type { MajorDefaultParty } from "@/lib/seeds/defaultPartyTiers";
 import type { SpawnElectionsHandler } from "@/lib/turn/perpetualElections/registry";
 import type { ShippingPreset } from "@/lib/world/eraRoster";
 import type { WorldEntityRegion } from "@/lib/world/worldEntityManifest";
@@ -272,6 +273,15 @@ export interface CountryInstitutions {
  */
 export interface CountryElections {
   readonly spawn?: SpawnElectionsHandler;
+  /**
+   * Default parties that seed as Major; every other default party seeds Minor.
+   *
+   * ⚠️ A STARTING VALUE, NOT A STANDING FACT. `partyTierTurn` recomputes tier
+   * from live Org every turn, so this only sets the badge and cap at game start.
+   * `presets` narrows Major status to specific eras, and is needed only where a
+   * party exists in several presets but is Major in one.
+   */
+  readonly majorDefaultParties?: MajorDefaultParty[];
   readonly billPhases?: unknown;
   /**
    * `{ name, fn }` per phase. The fn values are FUNCTIONS, so toEqual compares

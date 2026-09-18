@@ -1,3 +1,4 @@
+import type { MajorDefaultParty } from "@/lib/seeds/defaultPartyTiers";
 import type { CountryElections } from "../contract";
 import type { CountryElectionPhaseEntry } from "@/lib/turn/countryPhases";
 import type { SpawnElectionsResult } from "@/lib/turn/perpetualElections/registry";
@@ -60,7 +61,11 @@ const phases: CountryElectionPhaseEntry[] = [
   { name: "ieCathaoirleachElections", fn: ensureIECathaoirleachElections },
 ];
 
+/** Default parties that seed as Major; every other default party seeds Minor. */
+const majorDefaultParties: MajorDefaultParty[] = [{ abbr: "FF" }, { abbr: "FG" }, { abbr: "SF" }];
+
 export const IE_ELECTIONS: CountryElections = {
+  majorDefaultParties: majorDefaultParties,
   electionPhases: phases,
   spawn,
   seats: {

@@ -111,6 +111,7 @@ import { COUNTRY_COMMAND_FLAVOR } from "../../src/lib/military/theaters";
 import { COUNTRY_BUCKET_LABELS } from "../../src/lib/demographics/bucketLabelsByCountry";
 import { COUNTRY_MODIFIER_PATCHES } from "../../src/lib/states/conditions/countryPatches";
 import { DOMAIN_BUCKET_AFFINITIES } from "../../src/lib/bucketAffinities";
+import { MAJOR_DEFAULT_PARTIES } from "../../src/lib/seeds/defaultPartyTiers";
 import { COUNTRY_SECTOR_WEIGHTS_1953 } from "../../src/lib/seeds/reference/sectorSeedWeights1953";
 import { REGIONAL_BILL_ASSENT_OFFICE_KEY } from "../../src/lib/constants/countries";
 import { INCOME_ANCHORS } from "../../src/lib/era/metricCatalog";
@@ -201,6 +202,7 @@ const REGISTRIES: Record<string, Dict> = {
   COUNTRY_BUCKET_LABELS: d(COUNTRY_BUCKET_LABELS),
   COUNTRY_MODIFIER_PATCHES: d(COUNTRY_MODIFIER_PATCHES),
   DOMAIN_BUCKET_AFFINITIES: d(DOMAIN_BUCKET_AFFINITIES),
+  MAJOR_DEFAULT_PARTIES: d(MAJOR_DEFAULT_PARTIES),
   SURFACES: d(SURFACES),
   REGION_CENSUS_LABELS: d(REGION_CENSUS_LABELS),
   STATE_DISPLAY_NAMES: d(STATE_DISPLAY_NAMES),
@@ -579,6 +581,33 @@ const ABSENT_BY_REGISTRY: Array<[string, string, readonly string[]]> = [
     "no row in the seed-diagnostic registry; the seed runner is the authority",
     [
       "US",
+      "RU",
+      "DD",
+      "FR",
+      "IT",
+      "ES",
+      "SE",
+      "TR",
+      "GR",
+      "AT",
+      "FI",
+      "PL",
+      "HU",
+      "RO",
+      "YU",
+      "BG",
+      "CS",
+      "SCO",
+      "WAL",
+      "BLR",
+      "UKR",
+      "BAL",
+    ],
+  ],
+  [
+    "MAJOR_DEFAULT_PARTIES",
+    "no major-party list; every default party seeds Minor and partyTierTurn recomputes from live Org",
+    [
       "RU",
       "DD",
       "FR",
@@ -1013,6 +1042,7 @@ const FOLDER_PATH: Record<string, string | null> = {
   NON_PARTY_BUCKET_INDEPENDENT_BIAS_BY_COUNTRY: "geography.nonPartyIndependentBias",
   COUNTRY_COMMAND_FLAVOR: "identity.commandFlavor",
   COUNTRY_MODIFIER_PATCHES: "geography.modifierPatches",
+  MAJOR_DEFAULT_PARTIES: "elections.majorDefaultParties",
   SURFACES: "identity.parliamentarySurface",
   REGION_CENSUS_LABELS: "identity.regionCensusLabels",
   STATE_DISPLAY_NAMES: "identity.stateDisplayNames",

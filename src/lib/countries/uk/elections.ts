@@ -1,3 +1,4 @@
+import type { MajorDefaultParty } from "@/lib/seeds/defaultPartyTiers";
 import type { CountryElections } from "../contract";
 import type { CountryElectionPhaseEntry } from "@/lib/turn/countryPhases";
 import type { SpawnElectionsResult } from "@/lib/turn/perpetualElections/registry";
@@ -57,7 +58,27 @@ const phases: CountryElectionPhaseEntry[] = [
   { name: "ukGovernorElections", fn: ensureUKGovernorElections },
 ];
 
+/** Default parties that seed as Major; every other default party seeds Minor. */
+const majorDefaultParties: MajorDefaultParty[] = [
+  { abbr: "LAB" },
+  { abbr: "CON" },
+  // Lib Dems founded 1988; in 1953 the majors are Conservative + Labour and
+  // the historic Liberal Party (LIB, 1953-only seed) is a Minor third party.
+  {
+    abbr: "LD",
+    presets: [
+      "1979-default",
+      "1991-default",
+      "1999-default",
+      "2007-default",
+      "2019-default",
+      "2023-default",
+    ],
+  },
+];
+
 export const UK_ELECTIONS: CountryElections = {
+  majorDefaultParties: majorDefaultParties,
   electionPhases: phases,
   spawn,
   seats: {

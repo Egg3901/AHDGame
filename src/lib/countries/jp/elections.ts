@@ -1,3 +1,4 @@
+import { JP_PARTY_TIERS } from "@/lib/countries/jp/data/jpPartyTiers";
 import type { CountryElectionPhaseEntry } from "@/lib/turn/countryPhases";
 import type { SpawnElectionsResult } from "@/lib/turn/perpetualElections/registry";
 import type { CountryElections } from "../contract";
@@ -71,6 +72,7 @@ const phases: CountryElectionPhaseEntry[] = [
 ];
 
 export const JP_ELECTIONS: CountryElections = {
+  majorDefaultParties: JP_PARTY_TIERS,
   spawn,
   electionPhases: phases,
   seats: {

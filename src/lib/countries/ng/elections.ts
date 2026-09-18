@@ -1,3 +1,4 @@
+import type { MajorDefaultParty } from "@/lib/seeds/defaultPartyTiers";
 import type { CountryElections } from "../contract";
 import type { CountryElectionPhaseEntry } from "@/lib/turn/countryPhases";
 import type { SpawnElectionsResult } from "@/lib/turn/perpetualElections/registry";
@@ -49,7 +50,20 @@ const phases: CountryElectionPhaseEntry[] = [
   { name: "ngPresidentialElection", fn: ensureNGPresidentialElection },
 ];
 
+/** Default parties that seed as Major; every other default party seeds Minor. */
+const majorDefaultParties: MajorDefaultParty[] = [
+  // 2019 majors — era-exclusive so no presets filter needed.
+  { abbr: "APC" },
+  { abbr: "PDP" },
+  // 1953 late-colonial triad (NCNC/AG/NPC) — all three were major regional
+  // parties contesting under Macpherson/Lyttelton; NPC demographically largest.
+  { abbr: "NCNC" },
+  { abbr: "AG" },
+  { abbr: "NPC" },
+];
+
 export const NG_ELECTIONS: CountryElections = {
+  majorDefaultParties: majorDefaultParties,
   electionPhases: phases,
   spawn,
   seats: {

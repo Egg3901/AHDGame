@@ -1,3 +1,4 @@
+import type { MajorDefaultParty } from "@/lib/seeds/defaultPartyTiers";
 import type { CountryElections } from "../contract";
 import type { CountryElectionPhaseEntry } from "@/lib/turn/countryPhases";
 import type { SpawnElectionsResult } from "@/lib/turn/perpetualElections/registry";
@@ -58,7 +59,15 @@ const phases: CountryElectionPhaseEntry[] = [
   { name: "deMinisterPresidentElections", fn: ensureDEMinisterPresidentElections },
 ];
 
+/** Default parties that seed as Major; every other default party seeds Minor. */
+const majorDefaultParties: MajorDefaultParty[] = [
+  { abbr: "SPD" },
+  { abbr: "CDU" },
+  { abbr: "GRN", presets: ["2019-default"] },
+];
+
 export const DE_ELECTIONS: CountryElections = {
+  majorDefaultParties: majorDefaultParties,
   electionPhases: phases,
   spawn,
   seats: {
