@@ -33,6 +33,8 @@ import { UK_IDENTITY } from "@/lib/countries/uk/identity";
 import { DE_CONFIG } from "@/lib/countries/de/institutionsFacts";
 import { DE_IDENTITY } from "@/lib/countries/de/identity";
 import { CN_CONFIG } from "@/lib/countries/cn/institutionsFacts";
+import { IE_CONFIG } from "@/lib/countries/ie/institutionsFacts";
+import { IE_IDENTITY } from "@/lib/countries/ie/identity";
 
 export type CountryId =
   | "US"
@@ -743,203 +745,7 @@ export const COUNTRY_CONFIGS: Record<CountryId, CountryConfig> = {
   DE: DE_CONFIG,
   JP: JP_CONFIG,
 
-  IE: {
-    id: "IE",
-    seedEconomicModel: { "1991": "agrarian", "2019": "techInnovation" },
-    name: "Ireland",
-    flagEmoji: "🇮🇪",
-    code: "IE",
-    socialAxisBaseline: -1.5,
-
-    regionLabel: "Region",
-    regionLabelPlural: "Regions",
-
-    executiveTitle: "Taoiseach",
-    headOfStateTitle: "Uachtarán na hÉireann",
-    executiveRealmPhrase: "Ireland",
-    governmentType: "parliamentaryRepublic",
-    governmentTypeLabel: "Parliamentary Republic",
-    discordWebhookNote: "ECB rate decisions (shared with Germany).",
-    coalitionThreshold: 81, // Dáil majority (160 seats / 2 + 1)
-
-    legislature: {
-      name: "Oireachtas",
-      path: "/country/ie/legislature",
-      // Seanad is partly elected, partly appointed — not part of the player legislative loop.
-      bicameral: false,
-      upperChamber: {
-        key: "seanad",
-        name: "Seanad Éireann",
-        shortName: "Seanad",
-        seats: 60,
-        description:
-          "60 senators - 43 elected from vocational panels, 11 nominated by the Taoiseach, 6 from universities.",
-      },
-      lowerChamber: {
-        key: "dail",
-        name: "Dáil Éireann",
-        shortName: "Dáil",
-        seats: 160,
-        description:
-          "160 TDs elected by proportional representation using the Single Transferable Vote across multi-seat constituencies.",
-        elected: true,
-      },
-    },
-
-    lowerElectionSystem: {
-      termYears: 5,
-      seatsContested: "all",
-      singleMemberConstituencies: false,
-      snapElectionsAllowed: true,
-    },
-    upperElectionSystem: undefined, // Seanad partly elected, partly appointed
-    electionSystems: {
-      lowerChamber: "pr_hareQuota", // Dáil — TODO: declared PR-STV; resolves as Largest Remainder
-      upperChamber: "pr_hareQuota", // Seanad
-      subNationalChamber: "pr_hareQuota", // Local Councils
-      headOfGovernment: "parliamentary", // Taoiseach
-      headOfState: "fptp", // Uachtarán — TODO: revisit (direct FPTP today)
-    },
-
-    officeTypes: [
-      {
-        key: "taoiseach",
-        label: "Taoiseach",
-        labelPlural: "Taoisigh",
-        isExecutive: true,
-        isSubNational: false,
-        actionBonus: 4,
-        partyStrengthWeight: 1.0,
-      },
-      {
-        key: "tanaiste",
-        label: "Tánaiste",
-        labelPlural: "Tánaistí",
-        isExecutive: true,
-        isSubNational: false,
-        actionBonus: 2,
-        partyStrengthWeight: 1.0,
-      },
-      {
-        // Office label is the bare title; the executive-label renderer in
-        // utils/politics.ts appends "of [realm]" → "Uachtarán of Ireland".
-        // The full constitutional title "Uachtarán na hÉireann" lives on
-        // `headOfStateTitle` for standalone head-of-state rendering.
-        key: "uachtaran",
-        label: "Uachtarán",
-        labelPlural: "Uachtaráin",
-        isExecutive: true,
-        // President of Ireland — IE's ceremonial head of state.
-        isHeadOfState: true,
-        isSubNational: false,
-        termYears: 7,
-        actionBonus: 3,
-        partyStrengthWeight: 0.5,
-      },
-      {
-        key: "dail",
-        label: "Teachta Dála",
-        labelPlural: "Teachtaí Dála",
-        chamberKey: "dail",
-        isExecutive: false,
-        isSubNational: false,
-        termYears: 5,
-        actionBonus: 1,
-        partyStrengthWeight: 0.85,
-      },
-      {
-        key: "centralBankChair",
-        label: "Governor of the Central Bank of Ireland",
-        labelPlural: "Governors of the Central Bank of Ireland",
-        isExecutive: false,
-        isSubNational: false,
-        termYears: 7,
-        actionBonus: 3,
-        partyStrengthWeight: 0,
-      },
-      {
-        key: "localCouncil",
-        label: "Councillor",
-        labelPlural: "Councillors",
-        chamberKey: "localCouncil",
-        isExecutive: false,
-        isSubNational: true,
-        termYears: 5,
-        actionBonus: 1,
-        partyStrengthWeight: 0.8,
-      },
-      {
-        // Recycle the cross-country `governor` office key for the council chair —
-        // same mechanical shape (single-seat, direct election, sub-national) as
-        // UK First Minister / Mayor of London / JP regional governors. Display
-        // label diverges per-region via getRegionalExecutive (regionalExecutive.ts):
-        // Lord Mayor of Dublin (DUB), Lord Mayor of Cork (COR),
-        // Mayor of Limerick (LIM), Mayor of Galway (GAL),
-        // Cathaoirleach elsewhere.
-        key: "governor",
-        label: "Cathaoirleach",
-        labelPlural: "Cathaoirligh",
-        isExecutive: false,
-        isSubNational: true,
-        termYears: 5,
-        actionBonus: 2,
-        partyStrengthWeight: 1.0,
-      },
-    ],
-
-    subNationalChamber: {
-      key: "localCouncil",
-      name: "Local Council",
-      shortName: "Council",
-      seats: 200,
-      description:
-        "Elected councillors representing Ireland's NUTS-III planning regions, exercising delegated local-government functions.",
-      elected: true,
-      regionalModel: true,
-    },
-
-    regionalBillAssentTitle: "Cathaoirleach",
-
-    majorPartyIds: ["fine_gael", "fianna_fail"],
-    partyCreationNPPs: { statesRequired: 2, lockHomeState: false, nppsPerState: 1 },
-    demographicProfileId: "ie_archetypes",
-    executiveTermLimit: {
-      officeKey: "uachtaran",
-      maxTermsPerCharacter: 2,
-      blocksRunningMateSelection: false,
-    },
-
-    centralBank: {
-      // Central Bank of Ireland (1943–). Pre-euro Ireland had its own CB with
-      // the Irish pound on a hard sterling peg (1927–1979); it was never the ECB.
-      // Eurozone display/adoption still uses gameState.eurozoneEnabled; IEP
-      // shows as € when that flag is on. Live IEP↔EUR rate lock is a follow-up.
-      name: "Central Bank of Ireland",
-      abbreviation: "CBI",
-      chairTitle: "Governor of the Central Bank of Ireland",
-      defaultPrimeRate: 3.0,
-      heroImage: "/api/images/hero/ecb",
-    },
-
-    exchangeName: "ISEQ",
-    usdExchangeRate: 1.0,
-    currencyCode: "IEP",
-    fiscalYearStartTurnInYear: 40,
-    financeMinisterCabinetId: "minister_for_finance",
-
-    status: "active",
-    tagline:
-      "Parliamentary republic on the Atlantic edge of Europe - coalition politics, PR-STV elections, and a rapidly modernising economy.",
-    descriptor:
-      "A parliamentary republic where the Taoiseach leads government through a Dáil majority, elected by proportional representation using the Single Transferable Vote across multi-seat constituencies.",
-    heroImage: getCountryFlagUrl("IE"),
-    entryPath: "/country/ie",
-    overviewPath: "/country/ie",
-    mapPath: "/country/ie/map",
-    executivePath: "/country/ie/executive",
-    executiveLabel: "Government Buildings",
-    centralGovernmentLabel: "Exchequer Grants",
-  },
+  IE: IE_CONFIG,
 
   // Latent secession country (Sub-project 1). Authored fully but `coming-soon`
   // and absent from COUNTRY_ORDER, so invisible until the secession actuation
@@ -6448,7 +6254,7 @@ export const NATIONAL_ADDRESS_NAME: Partial<Record<CountryId, string>> = {
   UK: UK_IDENTITY.addressNames?.national,
   DE: DE_IDENTITY.addressNames?.national,
   JP: JP_IDENTITY.addressNames?.national,
-  IE: "Address to the Oireachtas",
+  IE: IE_IDENTITY.addressNames?.national,
 };
 
 /**

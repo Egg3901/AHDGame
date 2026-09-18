@@ -25,6 +25,7 @@ import { US_ADJACENCY_MAP } from "@/lib/countries/us/geographyFacts";
 import { UK_ADJACENCY_MAP } from "@/lib/countries/uk/geographyFacts";
 import { DE_ADJACENCY_MAP } from "@/lib/countries/de/geographyFacts";
 import { CN_ADJACENCY_MAP } from "@/lib/countries/cn/geographyFacts";
+import { IE_ADJACENCY_MAP } from "@/lib/countries/ie/geographyFacts";
 
 export type AdjacencyMap = Record<string, readonly string[]>;
 
@@ -92,16 +93,6 @@ const DD_ADJACENCY: AdjacencyMap = {
  * Ireland's eight composite planning regions. Borders follow the constituent
  * counties documented in `ieRegions.ts`.
  */
-const IE_ADJACENCY: AdjacencyMap = {
-  DUB: ["KIL"],
-  KIL: ["DUB", "MID", "WEX", "DON"],
-  MID: ["KIL", "WEX", "LIM", "GAL", "DON"],
-  WEX: ["KIL", "MID", "LIM", "COR"],
-  LIM: ["MID", "WEX", "COR", "GAL"],
-  COR: ["WEX", "LIM"],
-  GAL: ["MID", "LIM", "DON"],
-  DON: ["KIL", "MID", "GAL"],
-};
 
 /** Brazil's five IBGE macro-regions. */
 const BR_ADJACENCY: AdjacencyMap = {
@@ -339,7 +330,7 @@ export const STATE_ADJACENCY: Readonly<Record<CountryId, AdjacencyMap>> = {
   DE: DE_ADJACENCY_MAP,
   JP: JP_ADJACENCY_MAP,
   CN: CN_ADJACENCY_MAP,
-  IE: IE_ADJACENCY,
+  IE: IE_ADJACENCY_MAP,
   BR: BR_ADJACENCY,
   NG: NG_ADJACENCY,
   HU: HU_ADJACENCY,

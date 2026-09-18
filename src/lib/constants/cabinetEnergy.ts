@@ -5,6 +5,7 @@ import { US_CABINET_SEAT_IDS } from "@/lib/countries/us/institutionsFacts";
 import { UK_CABINET_SEAT_IDS } from "@/lib/countries/uk/institutionsFacts";
 import { DE_CABINET_SEAT_IDS } from "@/lib/countries/de/institutionsFacts";
 import { CN_CABINET_SEAT_IDS } from "@/lib/countries/cn/institutionsFacts";
+import { IE_CABINET_SEAT_IDS } from "@/lib/countries/ie/institutionsFacts";
 
 export interface EnergySourceDef {
   id: EnergySource;
@@ -102,7 +103,7 @@ export const ENERGY_POSITION_BY_COUNTRY: Partial<Record<CountryId, string>> = {
   DE: DE_CABINET_SEAT_IDS.energy,
   CN: CN_CABINET_SEAT_IDS.energy,
   JP: JP_CABINET_SEAT_IDS.energy,
-  IE: "minister_for_environment_climate",
+  IE: IE_CABINET_SEAT_IDS.energy,
   // Power generation sat under heavy industry in the command-economy
   // abstraction. This seat is also an estates seat, so FlagshipRouter renders it
   // with the existing `Estates | Generation` toggle (the UK environment_secretary

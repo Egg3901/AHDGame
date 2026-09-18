@@ -25,6 +25,11 @@ import {
   CN_MILITARY_BRANCHES,
   CN_MILITARY_SCALE,
 } from "@/lib/countries/cn/institutionsFacts";
+import {
+  IE_CABINET_SEAT_IDS,
+  IE_MILITARY_BRANCHES,
+  IE_MILITARY_SCALE,
+} from "@/lib/countries/ie/institutionsFacts";
 
 export interface Branch {
   id: string;
@@ -312,11 +317,7 @@ export const MILITARY_BRANCHES_BY_COUNTRY: Record<CountryId, Branch[]> = {
   // so a 1953 world correctly seeds DE with zero branches — no invented predecessor.
   DE: DE_MILITARY_BRANCHES,
   JP: JP_MILITARY_BRANCHES,
-  IE: [
-    { id: "army", name: "Irish Army", abbr: "Army", domain: "ground" },
-    { id: "navy", name: "Naval Service", abbr: "NS", domain: "naval" },
-    { id: "aircorps", name: "Air Corps", abbr: "AC", domain: "air" },
-  ],
+  IE: IE_MILITARY_BRANCHES,
   BR: [
     { id: "exercito", name: "Army", abbr: "EB", domain: "ground" },
     { id: "marinha", name: "Navy", abbr: "MB", domain: "naval" },
@@ -490,7 +491,7 @@ export const MILITARY_COUNTRY_SCALE: Record<CountryId, number> = {
   JP: JP_MILITARY_SCALE,
   UK: UK_MILITARY_SCALE,
   DE: DE_MILITARY_SCALE,
-  IE: 1.0,
+  IE: IE_MILITARY_SCALE,
   BR: 1.0,
   NG: 0.85,
   HU: 0.9,
@@ -526,7 +527,7 @@ export const DEFENSE_POSITION_BY_COUNTRY: Record<CountryId, string | null> = {
   CN: CN_CABINET_SEAT_IDS.defense,
   DE: DE_CABINET_SEAT_IDS.defense,
   JP: JP_CABINET_SEAT_IDS.defense,
-  IE: "minister_for_defence",
+  IE: IE_CABINET_SEAT_IDS.defense,
   BR: "minister_of_defence",
   NG: "minister_of_defence",
   HU: "minister_of_defence",

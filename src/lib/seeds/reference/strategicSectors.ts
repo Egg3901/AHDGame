@@ -5,6 +5,7 @@ import { US_ECONOMY } from "@/lib/countries/us/economy";
 import { UK_ECONOMY } from "@/lib/countries/uk/economy";
 import { DE_ECONOMY } from "@/lib/countries/de/economy";
 import { CN_ECONOMY } from "@/lib/countries/cn/economy";
+import { IE_ECONOMY } from "@/lib/countries/ie/economy";
 
 /**
  * Per-country default strategic sectors (spec §6.3). Designating a sector type
@@ -17,7 +18,7 @@ export const DEFAULT_STRATEGIC_SECTORS: Partial<Record<CountryId, CorporationTyp
   DE: DE_ECONOMY.strategicSectors,
   JP: JP_ECONOMY.strategicSectors,
   CN: CN_ECONOMY.strategicSectors,
-  IE: ["technology", "financial"],
+  IE: IE_ECONOMY.strategicSectors,
   BR: ["agriculture", "extraction"],
   NG: ["extraction", "energy"],
 };

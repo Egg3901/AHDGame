@@ -17,6 +17,7 @@ import { US_IDENTITY } from "@/lib/countries/us/identity";
 import { UK_IDENTITY } from "@/lib/countries/uk/identity";
 import { DE_IDENTITY } from "@/lib/countries/de/identity";
 import { CN_IDENTITY } from "@/lib/countries/cn/identity";
+import { IE_IDENTITY } from "@/lib/countries/ie/identity";
 
 export interface StatsAccent {
   /** Accent gold/brass. */
@@ -58,17 +59,7 @@ export const NATIONAL_STATS_IDENTITY: Partial<Record<CountryId, StatsIdentity>> 
   UK: UK_IDENTITY.stats,
   DE: DE_IDENTITY.stats,
   JP: JP_IDENTITY.stats,
-  IE: {
-    glyph: "CSO",
-    serif: "mono",
-    office: "An Phríomh-Oifig Staidrimh",
-    officeEn: "Central Statistics Office",
-    title: "Staidreamh Náisiúnta (National Statistics)",
-    titleEn: "National Statistics",
-    registry: "Ireland · Central Statistics Office",
-    seal: "CSO · IE",
-    accent: { stat: "#cba24b", statSoft: "#e4c886", g0: "#123022", g1: "#0d2017", g2: "#08130d" },
-  },
+  IE: IE_IDENTITY.stats,
 };
 
 /** Neutral fallback for countries without a bespoke identity (e.g. BR, NG). */

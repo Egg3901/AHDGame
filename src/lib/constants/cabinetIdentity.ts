@@ -5,6 +5,7 @@ import { US_IDENTITY } from "@/lib/countries/us/identity";
 import { UK_IDENTITY as UK_FOLDER_IDENTITY } from "@/lib/countries/uk/identity";
 import { DE_IDENTITY } from "@/lib/countries/de/identity";
 import { CN_IDENTITY } from "@/lib/countries/cn/identity";
+import { IE_IDENTITY } from "@/lib/countries/ie/identity";
 
 export interface CabinetIdentity {
   /** Large faded background glyph + chop fallback. */
@@ -24,15 +25,7 @@ export const CABINET_IDENTITY: Partial<Record<CountryId, CabinetIdentity>> = {
   CN: CN_IDENTITY.cabinet,
   DE: DE_IDENTITY.cabinet,
   JP: JP_IDENTITY.cabinet,
-  IE: {
-    glyph: "IE",
-    serif: "mono",
-    gov: "#cba24b",
-    govSoft: "#e4c886",
-    g0: "#123022",
-    g1: "#0d2017",
-    g2: "#08130d",
-  },
+  IE: IE_IDENTITY.cabinet,
   NG: {
     glyph: "NG",
     serif: "mono",

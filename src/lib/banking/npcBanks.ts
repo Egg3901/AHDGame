@@ -18,6 +18,7 @@ import { JP_IDENTITY } from "@/lib/countries/jp/identity";
 import { US_IDENTITY } from "@/lib/countries/us/identity";
 import { UK_IDENTITY } from "@/lib/countries/uk/identity";
 import { DE_IDENTITY } from "@/lib/countries/de/identity";
+import { IE_IDENTITY } from "@/lib/countries/ie/identity";
 
 /** Provisional: how many NPP retail banks each eligible country seeds. */
 export const NPC_BANKS_PER_COUNTRY = 2;
@@ -82,7 +83,7 @@ export const COUNTRY_HISTORICAL_NAMES: Partial<Record<CountryId, readonly string
   FR: ["Banque du Littoral", "Comptoir des Provinces"],
   IT: ["Banca Adriatica", "Credito Tirreno"],
   ES: ["Banco del Ebro", "Caja Mercantil del Norte"],
-  IE: ["Hibernian Provincial Bank", "Shannon Valley Bank"],
+  IE: IE_IDENTITY.historicalNames,
   BR: ["Banco Paulista de Comercio", "Banco Atlantico do Sul"],
   NG: ["Niger Delta Trading Bank", "Savannah Merchants Bank"],
   SE: ["Svea Merchants Bank", "Norrland Savings Bank"],
@@ -100,7 +101,7 @@ export const COUNTRY_MODERN_NAMES: Partial<Record<CountryId, readonly string[]>>
   FR: ["Groupe Bancaire du Littoral", "Comptoir des Provinces"],
   IT: ["Banca Adriatica Group", "Credito Tirreno"],
   ES: ["Banco del Ebro", "Grupo Mercantil del Norte"],
-  IE: ["Hibernian Banking Group", "Shannon Valley Financial"],
+  IE: IE_IDENTITY.modernNames,
   BR: ["Banco Paulista de Comercio", "Atlantico Sul Financial"],
   NG: ["Niger Delta Banking Group", "Savannah Financial"],
   SE: ["Svea Banking Group", "Norrland Financial"],

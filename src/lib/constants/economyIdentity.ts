@@ -16,6 +16,7 @@ import { US_IDENTITY } from "@/lib/countries/us/identity";
 import { UK_IDENTITY } from "@/lib/countries/uk/identity";
 import { DE_IDENTITY } from "@/lib/countries/de/identity";
 import { CN_IDENTITY } from "@/lib/countries/cn/identity";
+import { IE_IDENTITY } from "@/lib/countries/ie/identity";
 
 export interface EconomyIdentity {
   /** Watermark / chop glyph (经 / US / …). */
@@ -42,15 +43,7 @@ export const ECONOMY_TEXT: Partial<Record<CountryId, Omit<EconomyIdentity, "acce
   UK: UK_IDENTITY.economyText,
   DE: DE_IDENTITY.economyText,
   JP: JP_IDENTITY.economyText,
-  IE: {
-    glyph: "ÉI",
-    serif: "mono",
-    title: "Ionchas Eacnamaíochta",
-    titleEn: "Economic Outlook",
-    office: "An Phríomh-Oifig Staidrimh · Cuntais Náisiúnta",
-    officeEn: "Central Statistics Office · National Accounts",
-    registry: "Ireland · National Accounts Registry",
-  },
+  IE: IE_IDENTITY.economyText,
   BR: {
     glyph: "BR",
     serif: "mono",

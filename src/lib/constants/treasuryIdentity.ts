@@ -5,6 +5,7 @@ import { US_IDENTITY } from "@/lib/countries/us/identity";
 import { UK_IDENTITY } from "@/lib/countries/uk/identity";
 import { DE_IDENTITY } from "@/lib/countries/de/identity";
 import { CN_IDENTITY } from "@/lib/countries/cn/identity";
+import { IE_IDENTITY } from "@/lib/countries/ie/identity";
 
 /**
  * Treasury / Finance-Ministry identity overlay for the National Budget surface.
@@ -58,17 +59,7 @@ export const TREASURY_TEXT: Record<
   UK: UK_IDENTITY.treasuryText,
   DE: DE_IDENTITY.treasuryText,
   JP: JP_IDENTITY.treasuryText,
-  IE: {
-    glyph: "ÉN",
-    serif: "mono",
-    budgetTitle: "Buiséad Náisiúnta",
-    budgetTitleEn: "National Budget",
-    ministry: "AN ROINN · FINANCE",
-    publicSeal: "POIBLÍ · PUBLIC",
-    registry: "Ireland · Department of Finance",
-    native: "Éire · An Roinn Airgeadais",
-    nativeEn: "Ireland · Department of Finance",
-  },
+  IE: IE_IDENTITY.treasuryText,
   BR: {
     glyph: "BR",
     serif: "mono",

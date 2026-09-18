@@ -94,7 +94,7 @@ export const WIKI_LAST_UPDATED: Record<string, string> = {
   "government-formation": "2026-08-21",
   "granular-polling": "2026-08-20",
   "household-economy": "2026-08-21",
-  "ie-overview": "2026-08-21",
+  "ie-overview": "2026-08-30",
   imf: "2026-08-21",
   "imf-sovereign-facility": "2026-08-21",
   impeachment: "2026-08-27",

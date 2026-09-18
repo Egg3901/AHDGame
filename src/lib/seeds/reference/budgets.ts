@@ -121,7 +121,7 @@ export const SOVEREIGN_CORP_LEGAL_STRUCTURE: Partial<Record<CountryId, LegalStru
   UK: UK_ECONOMY.sovereignCorpLegalStructure,
   JP: JP_ECONOMY.sovereignCorpLegalStructure,
   DE: DE_ECONOMY.sovereignCorpLegalStructure,
-  IE: "ie_plc",
+  IE: IE_ECONOMY.sovereignCorpLegalStructure,
   BR: "br_sa_aberta",
   CN: CN_ECONOMY.sovereignCorpLegalStructure,
   NG: "ng_plc",
@@ -505,6 +505,7 @@ import { US_ECONOMY } from "@/lib/countries/us/economy";
 import { UK_ECONOMY } from "@/lib/countries/uk/economy";
 import { DE_ECONOMY } from "@/lib/countries/de/economy";
 import { CN_ECONOMY } from "@/lib/countries/cn/economy";
+import { IE_ECONOMY } from "@/lib/countries/ie/economy";
 
 /**
  * Authored historical fiscal baselines for 1953 (Korean War defense shares,

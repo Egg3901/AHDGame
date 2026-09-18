@@ -4,6 +4,7 @@ import { US_IDENTITY } from "@/lib/countries/us/identity";
 import { UK_IDENTITY } from "@/lib/countries/uk/identity";
 import { DE_IDENTITY } from "@/lib/countries/de/identity";
 import { CN_IDENTITY } from "@/lib/countries/cn/identity";
+import { IE_IDENTITY } from "@/lib/countries/ie/identity";
 
 /**
  * National-identity layer for state-owned / National Corporation surfaces.
@@ -78,21 +79,7 @@ export const NATIONAL_IDENTITY: Record<CountryId, NationalIdentity> = {
   US: US_IDENTITY.national,
   DE: DE_IDENTITY.national,
   JP: JP_IDENTITY.national,
-  IE: {
-    glyph: "ÉN",
-    serif: "mono",
-    motif: "knot",
-    name: "Ireland National Corporation",
-    native: "Corparáid Náisiúnta na hÉireann",
-    registry: "Éire · Clár Sócmhainní Stáit",
-    ministry: "AN ROINN · FINANCE",
-    publicSeal: "CLÁR POIBLÍ",
-    hqCity: "Dublin",
-    palette: ["#123022", "#0d2017", "#08130d"],
-    accent: "#cba24b",
-    accentSoft: "#e4c886",
-    accentName: "Éire green & gold",
-  },
+  IE: IE_IDENTITY.national,
   // Not in the design bundle — same machinery, own palette. Refine when these
   // countries get their nationalization flavor pass (spec §18).
   BR: {

@@ -1,17 +1,12 @@
 import { type CountryId } from "@/lib/constants/countries";
 import { ensureBRElections, ensureBRSenateElections } from "./countries/br";
-import {
-  ensureIECathaoirleachElections,
-  ensureIEElections,
-  ensureIELocalCouncilElections,
-  ensureIEUachtaranElections,
-} from "./countries/ie";
 import { ensureNGElections } from "./countries/ng";
 import { JP_ELECTIONS } from "@/lib/countries/jp/elections";
 import { UK_ELECTIONS } from "@/lib/countries/uk/elections";
 import { US_ELECTIONS } from "@/lib/countries/us/elections";
 import { DE_ELECTIONS } from "@/lib/countries/de/elections";
 import { CN_ELECTIONS } from "@/lib/countries/cn/elections";
+import { IE_ELECTIONS } from "@/lib/countries/ie/elections";
 
 export interface SpawnElectionsResult {
   message: string;
@@ -36,13 +31,5 @@ export const SPAWN_ELECTIONS_REGISTRY: Partial<Record<CountryId, SpawnElectionsH
     await ensureNGElections(now);
     return { message: "NG election continuity check complete." };
   },
-  IE: async (now) => {
-    await ensureIEElections(now);
-    await ensureIEUachtaranElections(now);
-    await ensureIELocalCouncilElections(now);
-    await ensureIECathaoirleachElections(now);
-    return {
-      message: "IE Dáil, Uachtarán, Local Council, and Cathaoirleach continuity check complete.",
-    };
-  },
+  IE: IE_ELECTIONS.spawn,
 };

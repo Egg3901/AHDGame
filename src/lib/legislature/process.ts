@@ -2,6 +2,7 @@ import type { CountryId } from "@/lib/constants/countries";
 import { JP_LEGISLATIVE_PROCESS } from "@/lib/countries/jp/institutionsFacts";
 import { DE_LEGISLATIVE_PROCESS } from "@/lib/countries/de/institutionsFacts";
 import { CN_LEGISLATIVE_PROCESS } from "@/lib/countries/cn/institutionsFacts";
+import { IE_LEGISLATIVE_PROCESS } from "@/lib/countries/ie/institutionsFacts";
 import { US_LEGISLATIVE_PROCESS } from "@/lib/countries/us/institutionsFacts";
 import { UK_LEGISLATIVE_PROCESS } from "@/lib/countries/uk/institutionsFacts";
 
@@ -49,34 +50,7 @@ const DE: LegislativeProcess = DE_LEGISLATIVE_PROCESS;
  */
 const JP: LegislativeProcess = JP_LEGISLATIVE_PROCESS;
 
-const IE: LegislativeProcess = {
-  executive: {
-    title: "Enactment",
-    canVeto: false,
-    signLabel: "Signed into law",
-    signNote: "Once passed by the Dáil, the bill is enacted into law.",
-    override: null,
-  },
-  upperNote:
-    "The Seanad may revise or delay a bill, but the Dáil ultimately prevails. Seanad business is not player-managed.",
-  dissolution: {
-    actor: "Taoiseach",
-    body: "The Taoiseach may seek a dissolution of the Dáil; a general election is called and all bills in progress fall.",
-  },
-  quirks: [
-    {
-      icon: "building",
-      title: "Dáil supremacy",
-      body: "The Dáil drives all legislation; the Seanad can delay but not block.",
-    },
-    {
-      icon: "bolt",
-      title: "Dissolution",
-      body: "A Taoiseach-sought election dissolves the Dáil and ends pending bills.",
-    },
-  ],
-  seatingStyle: "horseshoe",
-};
+const IE: LegislativeProcess = IE_LEGISLATIVE_PROCESS;
 
 /** Sweden 1953 bicameral Riksdag — same revise/delay shape as IE's Seanad. */
 const SE_1953: LegislativeProcess = {

@@ -5,6 +5,7 @@ import { US_ECONOMY } from "@/lib/countries/us/economy";
 import { UK_ECONOMY } from "@/lib/countries/uk/economy";
 import { DE_ECONOMY } from "@/lib/countries/de/economy";
 import { CN_ECONOMY } from "@/lib/countries/cn/economy";
+import { IE_ECONOMY } from "@/lib/countries/ie/economy";
 
 /**
  * Political Strength reserve and pressure-ladder constants for Phase 3.
@@ -56,7 +57,7 @@ export const TREASURY_PS_RATE_BY_COUNTRY: Record<CountryId, { national: number; 
   UK: UK_ECONOMY.tax.treasuryPsRate,
   DE: DE_ECONOMY.tax.treasuryPsRate,
   JP: JP_ECONOMY.tax.treasuryPsRate,
-  IE: { national: 60_000, state: 30_000 },
+  IE: IE_ECONOMY.tax.treasuryPsRate,
   BR: { national: 350_000, state: 175_000 },
   CN: CN_ECONOMY.tax.treasuryPsRate,
   NG: { national: 30_000_000, state: 15_000_000 },

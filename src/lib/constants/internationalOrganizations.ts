@@ -6,6 +6,7 @@ import { US_CABINET_SEAT_IDS } from "@/lib/countries/us/institutionsFacts";
 import { UK_CABINET_SEAT_IDS } from "@/lib/countries/uk/institutionsFacts";
 import { DE_CABINET_SEAT_IDS } from "@/lib/countries/de/institutionsFacts";
 import { CN_CABINET_SEAT_IDS } from "@/lib/countries/cn/institutionsFacts";
+import { IE_CABINET_SEAT_IDS } from "@/lib/countries/ie/institutionsFacts";
 
 /**
  * The built-in organizations seeded at game start. Player-created orgs use
@@ -627,7 +628,7 @@ export const FOREIGN_AFFAIRS_POSITION_BY_COUNTRY: Record<CountryId, string | nul
   UK: UK_CABINET_SEAT_IDS.foreignAffairs,
   DE: DE_CABINET_SEAT_IDS.foreignAffairs,
   JP: JP_CABINET_SEAT_IDS.foreignAffairs,
-  IE: "minister_for_foreign_affairs",
+  IE: IE_CABINET_SEAT_IDS.foreignAffairs,
   BR: "minister_of_foreign_affairs",
   CN: CN_CABINET_SEAT_IDS.foreignAffairs,
   NG: "minister_of_foreign_affairs",
@@ -679,7 +680,7 @@ export const TRADE_MINISTER_POSITION_BY_COUNTRY: Record<CountryId, string | null
   DE: DE_CABINET_SEAT_IDS.tradeMinister,
   JP: JP_CABINET_SEAT_IDS.tradeMinister,
   CN: CN_CABINET_SEAT_IDS.tradeMinister,
-  IE: "minister_for_enterprise", // Minister for Enterprise, Trade and Employment
+  IE: IE_CABINET_SEAT_IDS.tradeMinister, // Minister for Enterprise, Trade and Employment
   BR: "minister_of_trade_industry",
   NG: "minister_of_trade_industry",
   HU: null,

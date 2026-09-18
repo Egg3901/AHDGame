@@ -12,32 +12,13 @@ import { US_CABINET_GROUPS } from "@/lib/countries/us/institutionsFacts";
 import { UK_CABINET_GROUPS } from "@/lib/countries/uk/institutionsFacts";
 import { DE_CABINET_GROUPS } from "@/lib/countries/de/institutionsFacts";
 import { CN_CABINET_GROUPS } from "@/lib/countries/cn/institutionsFacts";
+import { IE_CABINET_GROUPS } from "@/lib/countries/ie/institutionsFacts";
 
 export const GROUPS: Record<string, Record<string, CabinetGroup>> = {
   US: US_CABINET_GROUPS,
   UK: UK_CABINET_GROUPS,
   JP: JP_INSTITUTIONS.cabinet.groups,
-  IE: {
-    taoiseach: "Centre",
-    tanaiste: "Centre",
-    minister_for_finance: "Economy",
-    minister_for_public_expenditure: "Economy",
-    minister_for_enterprise: "Economy",
-    minister_for_social_protection: "Economy",
-    minister_for_agriculture: "Economy",
-    minister_for_foreign_affairs: "Security & Foreign",
-    minister_for_justice: "Security & Foreign",
-    minister_for_defence: "Security & Foreign",
-    minister_for_health: "Society",
-    minister_for_education: "Society",
-    minister_for_further_higher_education: "Society",
-    minister_for_housing: "Society",
-    minister_for_children: "Society",
-    minister_for_tourism_culture: "Society",
-    minister_for_environment_climate: "Domestic",
-    minister_for_transport: "Domestic",
-    minister_for_rural_community: "Domestic",
-  },
+  IE: IE_CABINET_GROUPS,
   DE: DE_CABINET_GROUPS,
   CN: CN_CABINET_GROUPS,
   RU: {

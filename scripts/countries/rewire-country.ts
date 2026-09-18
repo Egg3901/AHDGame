@@ -48,7 +48,14 @@ const R: Rewire[] = [
     "src/lib/constants/countries.ts",
     "identity",
     "CC_IDENTITY",
-    "CC_IDENTITY.addressNames.national"
+    /*
+     * ⚠ `?.`, BECAUSE `addressNames` IS OPTIONAL ON THE CONTRACT. China has no
+     * row in this registry and omits the field, so the access has to tolerate
+     * its absence -- and `NATIONAL_ADDRESS_NAME` is `Partial`, so `undefined` is
+     * a legal value for it. Without the `?.` every country added after China
+     * fails typecheck on a line the tool wrote.
+     */
+    "CC_IDENTITY.addressNames?.national"
   ),
   r(
     "CABINET_IDENTITY",

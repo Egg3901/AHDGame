@@ -11,6 +11,7 @@ import { US_ECONOMY } from "@/lib/countries/us/economy";
 import { UK_ECONOMY } from "@/lib/countries/uk/economy";
 import { DE_ECONOMY } from "@/lib/countries/de/economy";
 import { CN_ECONOMY } from "@/lib/countries/cn/economy";
+import { IE_ECONOMY } from "@/lib/countries/ie/economy";
 
 export interface BudgetCostContext {
   budgetCapacity: number;
@@ -118,16 +119,7 @@ export const COST_SCALE_ANCHORS: Partial<Record<CountryId, CostScaleAnchor>> = {
   UK: UK_ECONOMY.costScaleAnchors,
   JP: JP_ECONOMY.costScaleAnchors,
   DE: DE_ECONOMY.costScaleAnchors,
-  IE: {
-    // 24B IEP (own currency, not EUR-converted) — matches the corrected 1991
-    // budget seed (src/lib/seeds/reference/budgets.ts), refs #3591.
-    gdpLow: 24_000_000_000,
-    popLow: 3_525_000,
-    scaleLow: 0.2,
-    gdpHigh: 500_000_000_000,
-    popHigh: 5_100_000,
-    scaleHigh: 1.0,
-  },
+  IE: IE_ECONOMY.costScaleAnchors,
   CN: CN_ECONOMY.costScaleAnchors,
   // BR had no legacy PRE_2000/MODERN scale entries, which used to be encoded as
   // scaleLow 1.0 — full modern-authored absolute costs charged against the 1991

@@ -24,6 +24,7 @@ import { US_ORDERS_OF_BATTLE } from "@/lib/countries/us/institutionsFacts";
 import { UK_ORDERS_OF_BATTLE } from "@/lib/countries/uk/institutionsFacts";
 import { DE_ORDERS_OF_BATTLE } from "@/lib/countries/de/institutionsFacts";
 import { CN_ORDERS_OF_BATTLE } from "@/lib/countries/cn/institutionsFacts";
+import { IE_ORDERS_OF_BATTLE } from "@/lib/countries/ie/institutionsFacts";
 
 export interface OrderOfBattleEntry {
   /** Must match a Branch id for this country (`MILITARY_BRANCHES_BY_COUNTRY`). */
@@ -92,12 +93,7 @@ export const ORDERS_OF_BATTLE: Partial<Record<CountryId, OrderOfBattleEntry[]>> 
    * Finland, which is the point. The random fallback had Ireland outgunning the
    * United States.
    */
-  IE: [
-    { branchId: "army", type: "Infantry Division", count: 1 },
-    { branchId: "army", type: "Artillery Regiment", count: 1 },
-    { branchId: "navy", type: "Frigate Squadron", count: 1 },
-    { branchId: "aircorps", type: "Fighter Wing", count: 1 },
-  ],
+  IE: IE_ORDERS_OF_BATTLE,
   /**
    * Straight out of Korea: infantry mass, almost no armour, a coastal navy that
    * barely existed, and a MiG-15 air force that had just fought the USAF. The

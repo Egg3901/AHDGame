@@ -4,6 +4,7 @@ import { US_POPULATION_MULTIPLIERS } from "@/lib/countries/us/geographyFacts";
 import { UK_POPULATION_MULTIPLIERS } from "@/lib/countries/uk/geographyFacts";
 import { DE_POPULATION_MULTIPLIERS } from "@/lib/countries/de/geographyFacts";
 import { CN_POPULATION_MULTIPLIERS } from "@/lib/countries/cn/geographyFacts";
+import { IE_POPULATION_MULTIPLIERS } from "@/lib/countries/ie/geographyFacts";
 
 /**
  * 1991-era cohort multipliers, per country.
@@ -32,16 +33,7 @@ export const POPULATION_MULTIPLIERS: Partial<Record<CountryId, Record<string, nu
   JP: JP_GEOGRAPHY.populationMultipliers,
   DE: DE_POPULATION_MULTIPLIERS,
   CN: CN_POPULATION_MULTIPLIERS,
-  IE: {
-    urban_professional: 0.4, // Pre-MNC FDI tech boom
-    rural_traditional: 1.4, // Pre-Celtic-Tiger urban migration
-    working_class: 1.2, // Industrial decline not yet hit
-    new_irish: 0.1, // 1991 immigration negligible — Ireland still emigrating
-    small_business: 0.9,
-    retirees: 0.85,
-    young_urban: 0.7, // Emigration of young people peaked 1989-93
-    border_communities: 1.1, // Troubles peak
-  },
+  IE: IE_POPULATION_MULTIPLIERS,
   BR: {
     evangelical_conservative: 0.5, // 1991 Pentecostal share ~13% vs ~30% in 2020
     working_class_pt: 1.15, // PT young + growing in 1991

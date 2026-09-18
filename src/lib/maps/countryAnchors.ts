@@ -3,6 +3,7 @@ import { US_MAP_ANCHOR } from "@/lib/countries/us/geographyFacts";
 import { UK_MAP_ANCHOR } from "@/lib/countries/uk/geographyFacts";
 import { DE_MAP_ANCHOR } from "@/lib/countries/de/geographyFacts";
 import { CN_MAP_ANCHOR } from "@/lib/countries/cn/geographyFacts";
+import { IE_MAP_ANCHOR } from "@/lib/countries/ie/geographyFacts";
 
 /**
  * A rough interior lon/lat point per country, used to ORIENT a front: an invasion
@@ -16,7 +17,7 @@ import { CN_MAP_ANCHOR } from "@/lib/countries/cn/geographyFacts";
 export const COUNTRY_ANCHOR: Record<string, [number, number]> = {
   US: US_MAP_ANCHOR,
   UK: UK_MAP_ANCHOR,
-  IE: [-8.2, 53.4],
+  IE: IE_MAP_ANCHOR,
   SCO: [-4.2, 56.8],
   WAL: [-3.8, 52.3],
   RU: [37.6, 55.8],

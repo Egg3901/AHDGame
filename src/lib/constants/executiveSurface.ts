@@ -4,6 +4,7 @@ import { US_IDENTITY } from "@/lib/countries/us/identity";
 import { UK_IDENTITY } from "@/lib/countries/uk/identity";
 import { DE_IDENTITY } from "@/lib/countries/de/identity";
 import { CN_IDENTITY } from "@/lib/countries/cn/identity";
+import { IE_IDENTITY } from "@/lib/countries/ie/identity";
 
 /**
  * Per-country configuration for the shared executive shell (instrument strip
@@ -64,15 +65,7 @@ export const EXECUTIVE_SURFACE: Record<CountryId, ExecutiveSurfaceConfig> = {
   UK: UK_IDENTITY.executiveSurface,
   DE: DE_IDENTITY.executiveSurface,
   JP: JP_IDENTITY.executiveSurface,
-  IE: {
-    clock: { kind: "election", label: "Term Clock", countdownNoun: "next general election" },
-    actLabels: PARLIAMENTARY_ACTS,
-    deskKind: "orders",
-    deskLabel: "Orders in Force",
-    rosterTitle: "Cabinet",
-    heroImage: "/api/images/hero/government-buildings-dublin",
-    heroAlt: "Government Buildings, Dublin",
-  },
+  IE: IE_IDENTITY.executiveSurface,
   CN: CN_IDENTITY.executiveSurface,
   BR: {
     clock: { kind: "election", label: "Term Clock", countdownNoun: "election" },

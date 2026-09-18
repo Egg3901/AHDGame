@@ -7,6 +7,7 @@ import { US_IDENTITY } from "@/lib/countries/us/identity";
 import { UK_IDENTITY } from "@/lib/countries/uk/identity";
 import { DE_IDENTITY } from "@/lib/countries/de/identity";
 import { CN_IDENTITY } from "@/lib/countries/cn/identity";
+import { IE_IDENTITY } from "@/lib/countries/ie/identity";
 
 /**
  * Institution identity overlays for the country-pages masthead family
@@ -57,13 +58,7 @@ export const EXECUTIVE_TEXT: Record<CountryId, IdentityText> = {
   UK: UK_IDENTITY.executiveText,
   DE: DE_IDENTITY.executiveText,
   JP: JP_IDENTITY.executiveText,
-  IE: {
-    glyph: "DT",
-    serif: "mono",
-    registry: "Ireland · Government of Ireland",
-    title: "Tithe an Rialtais",
-    titleEn: "Government Buildings",
-  },
+  IE: IE_IDENTITY.executiveText,
   CN: CN_IDENTITY.executiveText,
   BR: {
     glyph: "PR",
@@ -222,12 +217,7 @@ export const POLICY_TEXT: Record<CountryId, IdentityText> = {
   UK: UK_IDENTITY.policyText,
   DE: DE_IDENTITY.policyText,
   JP: JP_IDENTITY.policyText,
-  IE: {
-    glyph: "§",
-    serif: "mono",
-    registry: "Code of National Law · Ireland",
-    title: "National Policy",
-  },
+  IE: IE_IDENTITY.policyText,
   CN: CN_IDENTITY.policyText,
   BR: {
     glyph: "§",

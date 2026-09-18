@@ -201,6 +201,10 @@ const SIZE_CAP_EXEMPT = [
   // rides on the bare "src/lib/seeds/" entry until it relocates.
   "src/lib/countries/cn/data/",
   "src/lib/countries/cn/cabinet/",
+  // Ireland's, before the move. `ieLegislationTypes.ts` is 5,531 lines and rides
+  // on the bare "src/lib/seeds/" entry until it relocates.
+  "src/lib/countries/ie/data/",
+  "src/lib/countries/ie/cabinet/",
   "src/lib/constants/cnCabinetMechanics.ts",
   "src/lib/constants/historicalSeats.ts",
   "src/lib/constants/metricDefinitions.ts",
