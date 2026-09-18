@@ -108,6 +108,9 @@ import { GDP_DENOMINATION_1953 } from "../../src/lib/seeds/reference/gdpDenomina
 import { RAW_BUNDLES } from "../../src/lib/states/conditions/seedMetricsLoader";
 import { NON_PARTY_BUCKET_INDEPENDENT_BIAS_BY_COUNTRY } from "../../src/lib/turn/partyOrg/pacingConstants";
 import { COUNTRY_COMMAND_FLAVOR } from "../../src/lib/military/theaters";
+import { COUNTRY_BUCKET_LABELS } from "../../src/lib/demographics/bucketLabelsByCountry";
+import { COUNTRY_MODIFIER_PATCHES } from "../../src/lib/states/conditions/countryPatches";
+import { DOMAIN_BUCKET_AFFINITIES } from "../../src/lib/bucketAffinities";
 import { COUNTRY_SECTOR_WEIGHTS_1953 } from "../../src/lib/seeds/reference/sectorSeedWeights1953";
 import { REGIONAL_BILL_ASSENT_OFFICE_KEY } from "../../src/lib/constants/countries";
 import { INCOME_ANCHORS } from "../../src/lib/era/metricCatalog";
@@ -195,6 +198,9 @@ const REGISTRIES: Record<string, Dict> = {
   RAW_BUNDLES: d(RAW_BUNDLES),
   NON_PARTY_BUCKET_INDEPENDENT_BIAS_BY_COUNTRY: d(NON_PARTY_BUCKET_INDEPENDENT_BIAS_BY_COUNTRY),
   COUNTRY_COMMAND_FLAVOR: d(COUNTRY_COMMAND_FLAVOR),
+  COUNTRY_BUCKET_LABELS: d(COUNTRY_BUCKET_LABELS),
+  COUNTRY_MODIFIER_PATCHES: d(COUNTRY_MODIFIER_PATCHES),
+  DOMAIN_BUCKET_AFFINITIES: d(DOMAIN_BUCKET_AFFINITIES),
   SURFACES: d(SURFACES),
   REGION_CENSUS_LABELS: d(REGION_CENSUS_LABELS),
   STATE_DISPLAY_NAMES: d(STATE_DISPLAY_NAMES),
@@ -597,6 +603,68 @@ const ABSENT_BY_REGISTRY: Array<[string, string, readonly string[]]> = [
     ],
   ],
   [
+    "DOMAIN_BUCKET_AFFINITIES",
+    "no authored affinity table; bucketAffinitiesFor falls back to the US block by name",
+    [
+      "RU",
+      "DD",
+      "NG",
+      "BR",
+      "FR",
+      "IT",
+      "ES",
+      "SE",
+      "TR",
+      "GR",
+      "AT",
+      "FI",
+      "PL",
+      "HU",
+      "RO",
+      "YU",
+      "BG",
+      "CS",
+      "SCO",
+      "WAL",
+      "BLR",
+      "UKR",
+      "BAL",
+    ],
+  ],
+  [
+    "COUNTRY_MODIFIER_PATCHES",
+    "no per-modifier override; the global and era defs apply unpatched",
+    [
+      "US",
+      "RU",
+      "DD",
+      "FR",
+      "IT",
+      "ES",
+      "SE",
+      "TR",
+      "GR",
+      "AT",
+      "FI",
+      "PL",
+      "HU",
+      "RO",
+      "YU",
+      "BG",
+      "CS",
+      "SCO",
+      "WAL",
+      "BLR",
+      "UKR",
+      "BAL",
+    ],
+  ],
+  [
+    "COUNTRY_BUCKET_LABELS",
+    "the American terms are the global default (BUCKET_LABELS in bucketLabels.ts); a row here would copy the fallback",
+    ["US"],
+  ],
+  [
     "RAW_BUNDLES",
     "no static state-metrics bundle; SCO/WAL fan out from the UK aggregate at secession, UKR regions are a deferred build",
     ["SCO", "WAL", "UKR"],
@@ -944,6 +1012,7 @@ const FOLDER_PATH: Record<string, string | null> = {
   RAW_BUNDLES: "geography.rawMetrics",
   NON_PARTY_BUCKET_INDEPENDENT_BIAS_BY_COUNTRY: "geography.nonPartyIndependentBias",
   COUNTRY_COMMAND_FLAVOR: "identity.commandFlavor",
+  COUNTRY_MODIFIER_PATCHES: "geography.modifierPatches",
   SURFACES: "identity.parliamentarySurface",
   REGION_CENSUS_LABELS: "identity.regionCensusLabels",
   STATE_DISPLAY_NAMES: "identity.stateDisplayNames",
@@ -1037,6 +1106,62 @@ const FOLDER_MODULE_FORWARD: Record<string, Record<string, string>> = {
     COUNTRY_SECTOR_WEIGHTS_1953: "src/lib/seeds/reference/sectorSeedWeights1953.ts",
   },
 };
+
+/*
+ * Bucket labels forward through a data module rather than the contract, because
+ * the registry is CLIENT-REACHABLE (`FactorLedgerCard` is a client component) and
+ * `identity.ts` may hold no value imports. Inlining 28 countries' labels there
+ * instead would have duplicated the shared EN/DE scaffolding five and two ways --
+ * the duplication this pass exists to remove.
+ *
+ * ⚠️ US IS ABSENT ON PURPOSE and is recorded below, not here: the American terms
+ * ARE the global default, `BUCKET_LABELS` in `bucketLabels.ts`. A US row would be
+ * a second copy of the fallback it falls back to.
+ */
+for (const cc of [
+  "UK",
+  "IE",
+  "NG",
+  "DE",
+  "DD",
+  "AT",
+  "BR",
+  "FR",
+  "IT",
+  "ES",
+  "SE",
+  "FI",
+  "TR",
+  "JP",
+  "CN",
+  "RU",
+  "GR",
+  "HU",
+  "PL",
+  "RO",
+  "YU",
+  "CS",
+  "BAL",
+  "BG",
+  "UKR",
+  "BLR",
+  "SCO",
+  "WAL",
+]) {
+  FOLDER_MODULE_FORWARD[cc] = {
+    ...(FOLDER_MODULE_FORWARD[cc] ?? {}),
+    COUNTRY_BUCKET_LABELS: "src/lib/demographics/bucketLabelsByCountry.ts",
+  };
+}
+
+/* Affinities forward the same way, for the same reason: a client component reads
+ * the table and each country's block is a thousand numbers. */
+for (const cc of ["US", "UK", "IE", "JP", "DE", "CN"]) {
+  FOLDER_MODULE_FORWARD[cc] = {
+    ...(FOLDER_MODULE_FORWARD[cc] ?? {}),
+    DOMAIN_BUCKET_AFFINITIES: "src/lib/bucketAffinities.ts",
+  };
+}
 
 /**
  * Registry rows that are DERIVED elsewhere, so the folder must NOT restate them.
@@ -1152,7 +1277,7 @@ async function verify(cc: string): Promise<boolean> {
       if (!present) {
         console.log(`FAIL  ${name}.${cc} no longer resolves at all.`);
         failed++;
-      } else if (!new RegExp(`from "@/lib/countries/${cc.toLowerCase()}/`).test(src)) {
+      } else if (!new RegExp(`from "(@/lib|\.)/countries/${cc.toLowerCase()}/`).test(src)) {
         console.log(
           `FAIL  ${name}.${cc} is recorded as forwarding to a folder module, but ` +
             `${viaModuleFile} imports nothing from ${cc.toLowerCase()}/. The forward is gone.`
