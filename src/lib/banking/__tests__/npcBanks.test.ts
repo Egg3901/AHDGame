@@ -23,8 +23,9 @@ vi.mock("@/lib/admin/spawnNppCorporation", () => ({
   spawnNppCorporation: (...args: unknown[]) => spawnNppCorporation(...args),
 }));
 
-const modernDepositMid =
-  (MODERN_DEPOSIT_CORRIDOR.minOffset + MODERN_DEPOSIT_CORRIDOR.maxOffset) / 2;
+const modernDepositQuartile =
+  MODERN_DEPOSIT_CORRIDOR.minOffset +
+  0.25 * (MODERN_DEPOSIT_CORRIDOR.maxOffset - MODERN_DEPOSIT_CORRIDOR.minOffset);
 const modernLendingMid =
   (MODERN_LENDING_CORRIDOR.minOffset + MODERN_LENDING_CORRIDOR.maxOffset) / 2;
 
@@ -405,7 +406,7 @@ describe("npcBanks", () => {
   });
 
   describe("runNpcBankPolicy / processNpcBankPolicyTurn", () => {
-    it("pushes drifted offsets to corridor midpoints", async () => {
+    it("pushes drifted offsets to the deposit quartile and lending midpoint", async () => {
       const corp = makeCorp({
         bankCharter: {
           type: "retail",
@@ -450,7 +451,7 @@ describe("npcBanks", () => {
 
       expect(summary.banksChecked).toBe(1);
       expect(summary.banksUpdated).toBe(1);
-      expect(setOffsets.depositOffset).toBe(modernDepositMid);
+      expect(setOffsets.depositOffset).toBe(modernDepositQuartile);
       expect(setOffsets.lendingOffset).toBe(modernLendingMid);
     });
 
@@ -487,6 +488,15 @@ describe("npcBanks", () => {
 
       expect(summary).toEqual({ banksChecked: 0, banksUpdated: 0 });
       expect(db.collectionMocks.corporations!.updateOne).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("corridorDepositTarget", () => {
+    it("sits at the lower quartile, strictly below the midpoint", async () => {
+      const { corridorDepositTarget } = await importNpcBanks();
+      expect(corridorDepositTarget(-4, 0.5)).toBe(-2.875);
+      expect(corridorDepositTarget(-4, 0.5)).toBeLessThan((-4 + 0.5) / 2);
+      expect(corridorDepositTarget(0.5, 6)).toBeLessThan((0.5 + 6) / 2);
     });
   });
 });
