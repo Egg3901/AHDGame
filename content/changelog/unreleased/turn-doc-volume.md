@@ -1,29 +1,36 @@
 ---
 date: 2026-09-18
-title: Resolve trade embargoes through a directed index
+title: Trim repeated scans out of the hourly turn
 summary: >-
-  The clearing engine asked "does an embargo block this flow?" by scanning the
-  whole active embargo list on every trade lane, every turn. It now reads a
-  lookup built once per turn — the same answer for a fraction of the work.
-tags: [trade, economy, performance]
+  Two hot paths re-did work proportional to a list they could have indexed
+  once: trade affinity scanned every active embargo on every trade lane, and
+  supply-agreement delivery re-scanned the whole contract book once per scope.
+  Both now resolve their input once per turn.
+tags: [trade, corporations, economy, performance]
 badges: [patch]
 areas: [engine]
 ---
 
 ## What changed
 
-- `buildTradeAffinity` indexes the active embargoes by directed `source|target`
-  pair once, instead of running a `some`/`for` over the full list on every
-  `affinityFor` / `capUnitsFor` call.
-- Block and cap embargoes, and the `export` / `import` / `both` directions, stay
-  in separate indexes so the predicate is unchanged.
-- Tests pin the direction handling, the `all` commodity wildcard, and the
-  smallest-cap-wins rule across directions.
+- `buildTradeAffinity` indexes active embargoes by directed `source|target` pair
+  once, instead of running a `some`/`for` over the full list on every
+  `affinityFor` / `capUnitsFor` call. Block and cap embargoes, and the
+  `export` / `import` / `both` directions, stay in separate indexes so the
+  predicate is unchanged.
+- `allocateDeliveriesToBuyers` buckets supply agreements by scope once, instead
+  of re-scanning (and re-deriving `scopeOf` for) the whole book inside a loop
+  over every scope. Each scope's flow graph is independent, so the result is
+  unchanged.
+- Tests pin the embargo direction handling, the `all` commodity wildcard, and
+  the smallest-cap-wins rule across directions.
 
 ## Why it matters
 
-The clearing engine calls these helpers once per commodity/exporter/importer
-triple, and the active embargo list runs to thousands of documents in a mature
-world, so the scan was pure per-lane overhead. A CPU profile of a real turn
-measured `embargoMatches` at 2.1 s of self time; after the change the function
-is gone and trade affinity no longer registers in the profile.
+Both were cost proportional to list size where a lookup would do. The clearing
+engine calls the affinity helpers once per commodity/exporter/importer triple
+against an embargo list that runs to thousands of documents in a mature world,
+and the delivery flow ran O(scopes × agreements) over a contract book of the
+same order. A CPU profile of a real turn measured `embargoMatches` at 2.1 s of
+self time and `allocateDeliveriesToBuyers` at 1.1 s; after the changes neither
+scan remains.
