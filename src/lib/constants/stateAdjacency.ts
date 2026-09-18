@@ -28,6 +28,7 @@ import { CN_ADJACENCY_MAP } from "@/lib/countries/cn/geographyFacts";
 import { IE_ADJACENCY_MAP } from "@/lib/countries/ie/geographyFacts";
 import { RU_ADJACENCY_MAP } from "@/lib/countries/ru/geographyFacts";
 import { DD_ADJACENCY_MAP } from "@/lib/countries/dd/geographyFacts";
+import { NG_ADJACENCY_MAP } from "@/lib/countries/ng/geographyFacts";
 
 export type AdjacencyMap = Record<string, readonly string[]>;
 
@@ -76,14 +77,6 @@ const BR_ADJACENCY: AdjacencyMap = {
 };
 
 /** Nigeria's six geopolitical zones. */
-const NG_ADJACENCY: AdjacencyMap = {
-  NORTH_WEST: ["NORTH_EAST", "NORTH_CENTRAL"],
-  NORTH_EAST: ["NORTH_WEST", "NORTH_CENTRAL"],
-  NORTH_CENTRAL: ["NORTH_WEST", "NORTH_EAST", "SOUTH_WEST", "SOUTH_SOUTH", "SOUTH_EAST"],
-  SOUTH_WEST: ["NORTH_CENTRAL", "SOUTH_SOUTH"],
-  SOUTH_SOUTH: ["NORTH_CENTRAL", "SOUTH_WEST", "SOUTH_EAST"],
-  SOUTH_EAST: ["NORTH_CENTRAL", "SOUTH_SOUTH"],
-};
 
 /** Hungary's six 1979 macro-regions. Budapest is enclaved within Pest. */
 const HU_ADJACENCY: AdjacencyMap = {
@@ -304,7 +297,7 @@ export const STATE_ADJACENCY: Readonly<Record<CountryId, AdjacencyMap>> = {
   CN: CN_ADJACENCY_MAP,
   IE: IE_ADJACENCY_MAP,
   BR: BR_ADJACENCY,
-  NG: NG_ADJACENCY,
+  NG: NG_ADJACENCY_MAP,
   HU: HU_ADJACENCY,
   PL: PL_ADJACENCY,
   RO: RO_ADJACENCY,

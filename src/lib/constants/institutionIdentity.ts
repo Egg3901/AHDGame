@@ -10,6 +10,7 @@ import { CN_IDENTITY } from "@/lib/countries/cn/identity";
 import { IE_IDENTITY } from "@/lib/countries/ie/identity";
 import { RU_IDENTITY } from "@/lib/countries/ru/identity";
 import { DD_IDENTITY } from "@/lib/countries/dd/identity";
+import { NG_IDENTITY } from "@/lib/countries/ng/identity";
 
 /**
  * Institution identity overlays for the country-pages masthead family
@@ -69,12 +70,7 @@ export const EXECUTIVE_TEXT: Record<CountryId, IdentityText> = {
     title: "Palácio do Planalto",
     titleEn: "Presidential Palace",
   },
-  NG: {
-    glyph: "FG",
-    serif: "mono",
-    registry: "Federal Republic of Nigeria · Presidency",
-    title: "Aso Rock Villa",
-  },
+  NG: NG_IDENTITY.executiveText,
   HU: {
     glyph: "MT",
     serif: "mono",
@@ -216,12 +212,7 @@ export const POLICY_TEXT: Record<CountryId, IdentityText> = {
     title: "Direito Nacional",
     titleEn: "National Policy",
   },
-  NG: {
-    glyph: "§",
-    serif: "mono",
-    registry: "Code of National Law · Federal Republic of Nigeria",
-    title: "National Policy",
-  },
+  NG: NG_IDENTITY.policyText,
   HU: {
     glyph: "§",
     serif: "mono",

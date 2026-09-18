@@ -40,6 +40,11 @@ import {
   DD_MILITARY_BRANCHES,
   DD_MILITARY_SCALE,
 } from "@/lib/countries/dd/institutionsFacts";
+import {
+  NG_CABINET_SEAT_IDS,
+  NG_MILITARY_BRANCHES,
+  NG_MILITARY_SCALE,
+} from "@/lib/countries/ng/institutionsFacts";
 
 export interface Branch {
   id: string;
@@ -335,17 +340,7 @@ export const MILITARY_BRANCHES_BY_COUNTRY: Record<CountryId, Branch[]> = {
   ],
   // Nigeria: Navy from the 1956 Nigerian Naval Force; Army on independence
   // (1 Oct 1960); Air Force established 1964.
-  NG: [
-    { id: "army", name: "Nigerian Army", abbr: "NA", domain: "ground", establishedYear: 1960 },
-    { id: "navy", name: "Nigerian Navy", abbr: "NN", domain: "naval", establishedYear: 1956 },
-    {
-      id: "airforce",
-      name: "Nigerian Air Force",
-      abbr: "NAF",
-      domain: "air",
-      establishedYear: 1964,
-    },
-  ],
+  NG: NG_MILITARY_BRANCHES,
   HU: [
     { id: "ground", name: "Ground Forces", abbr: "MH", domain: "ground" },
     { id: "airforce", name: "Air Force", abbr: "MHL", domain: "air" },
@@ -465,7 +460,7 @@ export const MILITARY_COUNTRY_SCALE: Record<CountryId, number> = {
   DE: DE_MILITARY_SCALE,
   IE: IE_MILITARY_SCALE,
   BR: 1.0,
-  NG: 0.85,
+  NG: NG_MILITARY_SCALE,
   HU: 0.9,
   PL: 1.0,
   RO: 0.9,
@@ -501,7 +496,7 @@ export const DEFENSE_POSITION_BY_COUNTRY: Record<CountryId, string | null> = {
   JP: JP_CABINET_SEAT_IDS.defense,
   IE: IE_CABINET_SEAT_IDS.defense,
   BR: "minister_of_defence",
-  NG: "minister_of_defence",
+  NG: NG_CABINET_SEAT_IDS.defense,
   HU: "minister_of_defence",
   PL: "minister_of_defence",
   RO: "minister_of_defence",

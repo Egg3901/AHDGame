@@ -8,6 +8,7 @@ import { CN_IDENTITY } from "@/lib/countries/cn/identity";
 import { IE_IDENTITY } from "@/lib/countries/ie/identity";
 import { RU_IDENTITY } from "@/lib/countries/ru/identity";
 import { DD_IDENTITY } from "@/lib/countries/dd/identity";
+import { NG_IDENTITY } from "@/lib/countries/ng/identity";
 
 export interface CabinetIdentity {
   /** Large faded background glyph + chop fallback. */
@@ -28,15 +29,7 @@ export const CABINET_IDENTITY: Partial<Record<CountryId, CabinetIdentity>> = {
   DE: DE_IDENTITY.cabinet,
   JP: JP_IDENTITY.cabinet,
   IE: IE_IDENTITY.cabinet,
-  NG: {
-    glyph: "NG",
-    serif: "mono",
-    gov: "#0f8a4f",
-    govSoft: "#57c98a",
-    g0: "#06301c",
-    g1: "#042214",
-    g2: "#02160d",
-  },
+  NG: NG_IDENTITY.cabinet,
   // Soviet Union — Council of Ministers (СМ = Совет Министров): deep Soviet
   // red gradient with the gold of the state emblem.
   RU: RU_IDENTITY.cabinet,
@@ -49,6 +42,15 @@ export const CABINET_IDENTITY: Partial<Record<CountryId, CabinetIdentity>> = {
  * Resolve the cabinet identity for a country. A missing entry must degrade to
  * the country's own code, never to another country's branding.
  */
+/** The last-resort cabinet palette, used only if the UK's own shell disappears. */
+const DEFAULT_CABINET_SHELL: Omit<CabinetIdentity, "glyph" | "serif"> = {
+  gov: "#4b5563",
+  govSoft: "#9ca3af",
+  g0: "#111827",
+  g1: "#374151",
+  g2: "#6b7280",
+};
+
 export function getCabinetIdentity(countryId: string): CabinetIdentity {
   const entry = CABINET_IDENTITY[countryId as CountryId];
   if (entry) return entry;
@@ -58,7 +60,15 @@ export function getCabinetIdentity(countryId: string): CabinetIdentity {
   // `UK_IDENTITY.cabinet` resolve to the local literal's missing `.cabinet` --
   // undefined, silently, with typecheck green. The local copy is deleted and the
   // import is aliased so the two can never be confused again.
-  return { ...UK_FOLDER_IDENTITY.cabinet, glyph: countryId.toUpperCase(), serif: "mono" };
+  /*
+   * ⚠️ THE `??` GUARDS THE SHELL ITSELF, and it is not decoration. `cabinet`
+   * became optional on the contract because `CABINET_IDENTITY` covers 9 of the
+   * 29 playable countries. The United Kingdom HAS one, so this branch is
+   * unreachable for it today -- but a fallback that would throw if its own
+   * source ever went missing is a fallback that does not work when it matters.
+   */
+  const shell = UK_FOLDER_IDENTITY.cabinet ?? DEFAULT_CABINET_SHELL;
+  return { ...shell, glyph: countryId.toUpperCase(), serif: "mono" };
 }
 
 export function cabinetIdentityVars(countryId: string): CSSProperties {

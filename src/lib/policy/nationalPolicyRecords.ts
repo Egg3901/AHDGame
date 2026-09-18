@@ -31,6 +31,7 @@ import { CN_ECONOMY } from "@/lib/countries/cn/economy";
 import { IE_ECONOMY } from "@/lib/countries/ie/economy";
 import { RU_ECONOMY } from "@/lib/countries/ru/economy";
 import { DD_ECONOMY } from "@/lib/countries/dd/economy";
+import { NG_ECONOMY } from "@/lib/countries/ng/economy";
 
 /**
  * Shared national policy-record assembly — extracted verbatim from
@@ -63,7 +64,7 @@ export const LEGISLATION_COUNTRY_SCOPES: Record<
   IE: IE_ECONOMY.legislationScope,
   BR: "br",
   CN: CN_ECONOMY.legislationScope,
-  NG: "ng",
+  NG: NG_ECONOMY.legislationScope,
   HU: "hu",
   PL: "pl",
   RO: "ro",

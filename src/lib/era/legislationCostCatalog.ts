@@ -14,6 +14,7 @@ import { UK_ECONOMY } from "@/lib/countries/uk/economy";
 import { DE_ECONOMY } from "@/lib/countries/de/economy";
 import { CN_ECONOMY } from "@/lib/countries/cn/economy";
 import { IE_ECONOMY } from "@/lib/countries/ie/economy";
+import { NG_ECONOMY } from "@/lib/countries/ng/economy";
 
 export type CostClass = "gdpFraction" | "perCapita" | "none";
 
@@ -930,7 +931,7 @@ export const REP_ECON: Partial<Record<string, { gdp: number; population: number 
   JP: JP_ECONOMY.repEcon,
   IE: IE_ECONOMY.repEcon,
   CN: CN_ECONOMY.repEcon,
-  NG: { gdp: 144_000_000_000_000, population: 200_000_000 },
+  NG: NG_ECONOMY.repEcon,
 };
 
 /** incomeAnchor(2019) × population / GDP — the household-income-to-GDP ratio. */

@@ -6,6 +6,7 @@ import { CN_MAP_ANCHOR } from "@/lib/countries/cn/geographyFacts";
 import { IE_MAP_ANCHOR } from "@/lib/countries/ie/geographyFacts";
 import { RU_MAP_ANCHOR } from "@/lib/countries/ru/geographyFacts";
 import { DD_MAP_ANCHOR } from "@/lib/countries/dd/geographyFacts";
+import { NG_MAP_ANCHOR } from "@/lib/countries/ng/geographyFacts";
 
 /**
  * A rough interior lon/lat point per country, used to ORIENT a front: an invasion
@@ -47,7 +48,7 @@ export const COUNTRY_ANCHOR: Record<string, [number, number]> = {
   NVN: [105.85, 21.03],
   SVN: [106.7, 10.78],
   BR: [-51.9, -14.2],
-  NG: [8.7, 9.1],
+  NG: NG_MAP_ANCHOR,
 };
 
 /** The orienting point for a country, or null when there is none. */

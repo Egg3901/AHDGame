@@ -17,6 +17,7 @@ import { UK_IDENTITY } from "@/lib/countries/uk/identity";
 import { DE_IDENTITY } from "@/lib/countries/de/identity";
 import { CN_IDENTITY } from "@/lib/countries/cn/identity";
 import { IE_IDENTITY } from "@/lib/countries/ie/identity";
+import { NG_IDENTITY } from "@/lib/countries/ng/identity";
 
 export interface EconomyIdentity {
   /** Watermark / chop glyph (经 / US / …). */
@@ -53,15 +54,7 @@ export const ECONOMY_TEXT: Partial<Record<CountryId, Omit<EconomyIdentity, "acce
     officeEn: "IBGE · National Accounts",
     registry: "Federative Republic of Brazil · National Accounts Registry",
   },
-  NG: {
-    glyph: "NG",
-    serif: "mono",
-    title: "Economic Outlook",
-    titleEn: null,
-    office: "National Bureau of Statistics · National Accounts",
-    officeEn: "National Bureau of Statistics · National Accounts",
-    registry: "Federal Republic of Nigeria · National Accounts Registry",
-  },
+  NG: NG_IDENTITY.economyText,
 };
 
 const DEFAULT_ECONOMY_TEXT: Omit<EconomyIdentity, "accent"> = {

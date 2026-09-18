@@ -14,6 +14,7 @@ import { CN_MAP_REGISTRY } from "@/lib/countries/cn/geographyFacts";
 import { IE_MAP_REGISTRY } from "@/lib/countries/ie/geographyFacts";
 import { RU_MAP_REGISTRY } from "@/lib/countries/ru/geographyFacts";
 import { DD_MAP_REGISTRY } from "@/lib/countries/dd/geographyFacts";
+import { NG_MAP_REGISTRY } from "@/lib/countries/ng/geographyFacts";
 
 export interface CountryMapConfig {
   /** Country ID */
@@ -70,13 +71,7 @@ export const COUNTRY_MAP_REGISTRY: Record<CountryId, CountryMapConfig> = {
     hasRegionMap: false,
   },
   CN: CN_MAP_REGISTRY,
-  NG: {
-    countryId: "NG",
-    name: "Nigeria",
-    overviewPath: "/country/ng",
-    mapPath: "/country/ng/map",
-    hasRegionMap: false,
-  },
+  NG: NG_MAP_REGISTRY,
   HU: {
     countryId: "HU",
     name: "Hungary",

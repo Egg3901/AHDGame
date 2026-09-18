@@ -52,6 +52,7 @@ import { CN_NPP_CAPITAL_STATE } from "@/lib/countries/cn/geographyFacts";
 import { IE_NPP_CAPITAL_STATE } from "@/lib/countries/ie/geographyFacts";
 import { RU_NPP_CAPITAL_STATE } from "@/lib/countries/ru/geographyFacts";
 import { DD_NPP_CAPITAL_STATE } from "@/lib/countries/dd/geographyFacts";
+import { NG_NPP_CAPITAL_STATE } from "@/lib/countries/ng/geographyFacts";
 
 /**
  * Default founding book for an admin/NPP-spawned corporation, in ₳ at MODERN
@@ -75,7 +76,7 @@ export const NPP_CAPITAL_STATES: Record<CountryId, string> = {
   DE: DE_NPP_CAPITAL_STATE,
   CN: CN_NPP_CAPITAL_STATE, // Huabei (North China) — the region containing Beijing
   IE: IE_NPP_CAPITAL_STATE,
-  NG: "NORTH_CENTRAL", // federal capital (Abuja/FCT) sits in the North-Central zone
+  NG: NG_NPP_CAPITAL_STATE, // federal capital (Abuja/FCT) sits in the North-Central zone
   BR: "CENTRO_OESTE",
   HU: "", // coming-soon: regions not yet seeded
   PL: "",

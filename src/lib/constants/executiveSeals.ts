@@ -19,6 +19,7 @@ import { CN_IDENTITY } from "@/lib/countries/cn/identity";
 import { IE_IDENTITY } from "@/lib/countries/ie/identity";
 import { RU_IDENTITY } from "@/lib/countries/ru/identity";
 import { DD_IDENTITY } from "@/lib/countries/dd/identity";
+import { NG_IDENTITY } from "@/lib/countries/ng/identity";
 
 export interface ExecutiveSeal {
   src: string;
@@ -43,10 +44,7 @@ export const EXECUTIVE_SEALS: Partial<Record<CountryId, ExecutiveSeal>> = {
     src: "https://upload.wikimedia.org/wikipedia/commons/thumb/b/bf/Coat_of_arms_of_Brazil.svg/330px-Coat_of_arms_of_Brazil.svg.png",
     alt: "Coat of arms of Brazil",
   },
-  NG: {
-    src: "https://upload.wikimedia.org/wikipedia/commons/thumb/b/bc/Coat_of_arms_of_Nigeria.svg/330px-Coat_of_arms_of_Nigeria.svg.png",
-    alt: "Coat of arms of Nigeria",
-  },
+  NG: NG_IDENTITY.executiveSeal,
   // ── 1979 Cold-War roster. Wikimedia thumb paths derived from md5(filename).
   // Seals degrade to the generated NationalSeal if a URL fails, so period-emblem
   // filenames that have since moved fall back cleanly.

@@ -87,6 +87,8 @@ function maybe(name: string): string | null {
 const assentKey = maybe("REGIONAL_BILL_ASSENT_OFFICE_KEY");
 const legislativeProcess = maybe("LEGISLATIVE_PROCESS");
 const cabinetGroups = maybe("GROUPS");
+const estatePortfolio = maybe("ESTATE_PORTFOLIO_BY_COUNTRY");
+const ordersOfBattle = maybe("ORDERS_OF_BATTLE");
 
 /** A seat id that may legitimately be absent (ENERGY and INFRA are `Partial`). */
 function seat(name: string): string {
@@ -99,7 +101,7 @@ const out = `import type { Branch } from "@/lib/constants/military";
 ${cabinetGroups ? 'import type { CabinetGroup } from "@/lib/constants/cabinetPositionGroups";' : ""}
 import type { CountryConfig } from "@/lib/constants/countries";
 ${legislativeProcess ? 'import type { LegislativeProcess } from "@/lib/legislature/process";' : ""}
-import type { OrderOfBattleEntry } from "@/lib/seeds/reference/ordersOfBattle";
+${ordersOfBattle ? 'import type { OrderOfBattleEntry } from "@/lib/seeds/reference/ordersOfBattle";' : ""}
 
 /**
  * ${COUNTRY}'s institutions, as pure data.
@@ -128,11 +130,11 @@ ${
    it did. */`
 }
 
-export const ${COUNTRY}_ORDERS_OF_BATTLE: OrderOfBattleEntry[] = ${v("ORDERS_OF_BATTLE")};
+${ordersOfBattle ? `export const ${COUNTRY}_ORDERS_OF_BATTLE: OrderOfBattleEntry[] = ${ordersOfBattle};` : `/* No ${COUNTRY}_ORDERS_OF_BATTLE: no row; getOrderOfBattle returns null. */`}
 
 export const ${COUNTRY}_MILITARY_BRANCHES: Branch[] = ${v("MILITARY_BRANCHES_BY_COUNTRY")};
 
-export const ${COUNTRY}_ESTATE_PORTFOLIO: Record<string, string> = ${v("ESTATE_PORTFOLIO_BY_COUNTRY")};
+${estatePortfolio ? `export const ${COUNTRY}_ESTATE_PORTFOLIO: Record<string, string> = ${estatePortfolio};` : `/* No ${COUNTRY}_ESTATE_PORTFOLIO: no row; seedCabinetEstates skips the country. */`}
 
 /**
  * Cabinet seat ids: which of this country's positions fills a cross-country
@@ -190,7 +192,9 @@ console.log(
 console.log(
   `  military branches  : ${(JSON.parse(v("MILITARY_BRANCHES_BY_COUNTRY")) as unknown[]).length}`
 );
-console.log(`  orders of battle   : ${(JSON.parse(v("ORDERS_OF_BATTLE")) as unknown[]).length}`);
+console.log(
+  `  orders of battle   : ${ordersOfBattle ? (JSON.parse(ordersOfBattle) as unknown[]).length : "none (no row)"}`
+);
 console.log(
   `  cabinet groups     : ${cabinetGroups ? Object.keys(JSON.parse(cabinetGroups) as object).length : "none (no row)"}`
 );

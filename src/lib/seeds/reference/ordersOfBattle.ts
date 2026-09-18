@@ -27,6 +27,7 @@ import { CN_ORDERS_OF_BATTLE } from "@/lib/countries/cn/institutionsFacts";
 import { IE_ORDERS_OF_BATTLE } from "@/lib/countries/ie/institutionsFacts";
 import { RU_ORDERS_OF_BATTLE } from "@/lib/countries/ru/institutionsFacts";
 import { DD_ORDERS_OF_BATTLE } from "@/lib/countries/dd/institutionsFacts";
+import { NG_ORDERS_OF_BATTLE } from "@/lib/countries/ng/institutionsFacts";
 
 export interface OrderOfBattleEntry {
   /** Must match a Branch id for this country (`MILITARY_BRANCHES_BY_COUNTRY`). */
@@ -178,12 +179,7 @@ export const ORDERS_OF_BATTLE: Partial<Record<CountryId, OrderOfBattleEntry[]>> 
     { branchId: "navy", type: "Attack Submarine", count: 1 },
     { branchId: "airforce", type: "Fighter Wing", count: 2 },
   ],
-  NG: [
-    { branchId: "army", type: "Infantry Division", count: 2 },
-    { branchId: "army", type: "Artillery Regiment", count: 1 },
-    { branchId: "navy", type: "Frigate Squadron", count: 1 },
-    { branchId: "airforce", type: "Fighter Wing", count: 1 },
-  ],
+  NG: NG_ORDERS_OF_BATTLE,
   FR: [
     { branchId: "terre", type: "Infantry Division", count: 5 },
     { branchId: "terre", type: "Armored Division", count: 3 },

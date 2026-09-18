@@ -213,6 +213,9 @@ const SIZE_CAP_EXEMPT = [
   // today by EXACT path under politicalLegislation/laws/.
   "src/lib/countries/dd/data/",
   "src/lib/countries/dd/cabinet/",
+  // Nigeria's, before the move. `ngLegislationTypes.ts` is 3,733 lines.
+  "src/lib/countries/ng/data/",
+  "src/lib/countries/ng/cabinet/",
   "src/lib/constants/cnCabinetMechanics.ts",
   "src/lib/constants/historicalSeats.ts",
   "src/lib/constants/metricDefinitions.ts",

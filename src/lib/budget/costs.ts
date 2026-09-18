@@ -12,6 +12,7 @@ import { UK_ECONOMY } from "@/lib/countries/uk/economy";
 import { DE_ECONOMY } from "@/lib/countries/de/economy";
 import { CN_ECONOMY } from "@/lib/countries/cn/economy";
 import { IE_ECONOMY } from "@/lib/countries/ie/economy";
+import { NG_ECONOMY } from "@/lib/countries/ng/economy";
 
 export interface BudgetCostContext {
   budgetCapacity: number;
@@ -139,14 +140,7 @@ export const COST_SCALE_ANCHORS: Partial<Record<CountryId, CostScaleAnchor>> = {
   // SAP-devaluation naira), so scaleLow tames the absolute costs for the SAP-era
   // budget rather than over-stating a ₦1.8T-GDP economy. gdp/pop mirror the NG
   // 1991 + 2019 seed configs (enforced by anchorConsistency.test.ts).
-  NG: {
-    gdpLow: 1_800_000_000_000,
-    popLow: 95_000_000,
-    scaleLow: 0.04,
-    gdpHigh: 144_000_000_000_000,
-    popHigh: 200_000_000,
-    scaleHigh: 1.0,
-  },
+  NG: NG_ECONOMY.costScaleAnchors,
 };
 
 /**

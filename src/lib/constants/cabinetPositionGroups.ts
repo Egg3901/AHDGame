@@ -14,6 +14,7 @@ import { DE_CABINET_GROUPS } from "@/lib/countries/de/institutionsFacts";
 import { CN_CABINET_GROUPS } from "@/lib/countries/cn/institutionsFacts";
 import { IE_CABINET_GROUPS } from "@/lib/countries/ie/institutionsFacts";
 import { RU_CABINET_GROUPS } from "@/lib/countries/ru/institutionsFacts";
+import { NG_CABINET_GROUPS } from "@/lib/countries/ng/institutionsFacts";
 
 export const GROUPS: Record<string, Record<string, CabinetGroup>> = {
   US: US_CABINET_GROUPS,
@@ -30,25 +31,7 @@ export const GROUPS: Record<string, Record<string, CabinetGroup>> = {
   DE: DE_CABINET_GROUPS,
   CN: CN_CABINET_GROUPS,
   RU: RU_CABINET_GROUPS,
-  NG: {
-    director_of_intelligence: "Security & Foreign",
-    secretary_to_government: "Centre",
-    minister_of_finance: "Economy",
-    minister_of_petroleum_resources: "Economy",
-    minister_of_power: "Economy",
-    minister_of_trade_industry: "Economy",
-    minister_of_labour: "Economy",
-    minister_of_agriculture: "Economy",
-    minister_of_defence: "Security & Foreign",
-    minister_of_foreign_affairs: "Security & Foreign",
-    minister_of_interior: "Security & Foreign",
-    minister_of_justice: "Security & Foreign",
-    minister_of_health: "Society",
-    minister_of_education: "Society",
-    minister_of_works_housing: "Society",
-    minister_of_information: "Society",
-    minister_of_environment: "Domestic",
-  },
+  NG: NG_CABINET_GROUPS,
 };
 
 export function getCabinetPositionGroup(countryId: string, positionId: string): CabinetGroup {

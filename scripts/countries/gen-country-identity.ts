@@ -99,6 +99,8 @@ function maybe(name: string): string | null {
   return JSON.stringify(e.value, null, 2);
 }
 
+const cabinetValue = maybe("CABINET_IDENTITY");
+const sealValue = maybe("EXECUTIVE_SEALS");
 const statsValue = maybe("NATIONAL_STATS_IDENTITY");
 const economyTextValue = maybe("ECONOMY_TEXT");
 const parliamentarySurface = maybe("SURFACES");
@@ -132,7 +134,13 @@ function optional(
   fields.push(`  ${decl},`);
 }
 
-required("cabinet", "CabinetIdentity", "CABINET_IDENTITY");
+optional(
+  "cabinet",
+  "CabinetIdentity",
+  cabinetValue,
+  "The cabinet's page labels and glyph.",
+  "No CABINET_IDENTITY row. getCabinetIdentity falls back to its documented shell."
+);
 required("national", "NationalIdentity", "NATIONAL_IDENTITY");
 optional(
   "stats",
@@ -157,7 +165,13 @@ optional(
 );
 required("executiveText", "IdentityText", "EXECUTIVE_TEXT");
 required("policyText", "IdentityText", "POLICY_TEXT");
-required("executiveSeal", "ExecutiveSeal", "EXECUTIVE_SEALS");
+optional(
+  "executiveSeal",
+  "ExecutiveSeal",
+  sealValue,
+  "The executive seal.",
+  "No EXECUTIVE_SEALS row. getSeal returns null, and the UI omits the seal."
+);
 required("executiveSurface", "ExecutiveSurfaceConfig", "EXECUTIVE_SURFACE");
 
 optional(
@@ -206,9 +220,9 @@ optional(
  */
 const addressName = maybe("NATIONAL_ADDRESS_NAME");
 
-const out = `import type { CabinetIdentity } from "@/lib/constants/cabinetIdentity";
+const out = `${cabinetValue ? 'import type { CabinetIdentity } from "@/lib/constants/cabinetIdentity";' : ""}
 ${economyTextValue ? 'import type { EconomyIdentity } from "@/lib/constants/economyIdentity";' : ""}
-import type { ExecutiveSeal } from "@/lib/constants/executiveSeals";
+${sealValue ? 'import type { ExecutiveSeal } from "@/lib/constants/executiveSeals";' : ""}
 import type { ExecutiveSurfaceConfig } from "@/lib/constants/executiveSurface";
 import type { IdentityText } from "@/lib/constants/institutionIdentity";
 import type { NationalIdentity } from "@/lib/constants/nationalIdentity";

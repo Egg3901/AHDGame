@@ -64,7 +64,21 @@ import type { WorldEntityRegion } from "@/lib/world/worldEntityManifest";
  */
 export interface CountryIdentity {
   readonly displayName: string;
-  readonly cabinet: CabinetIdentity;
+  /**
+   * ⚠️ MEASURED, NOT GUESSED. `COUNTRY_CONFIGS` holds 29 playable countries.
+   * This field's registry holds 9. The others relaxed alongside it hold 8, 10,
+   * 26 and 27. Every one of them was `readonly` and required, and every one of
+   * their readers already handles the absence -- `getCabinetIdentity` falls back
+   * to a documented shell, `getMinisterialOrders` returns `[]`, `getSeal`
+   * returns null, `getRegionCensus` returns null "for no bundle for the
+   * country", and `seedCabinetEstates` simply `continue`s.
+   *
+   * They were discovered one country at a time -- Russia relaxed eight, East
+   * Germany two more -- until the coverage of all 53 registries was measured
+   * against the playable roster in one go. These six are the remainder. See
+   * `stats` for why the first cohort hid this.
+   */
+  readonly cabinet?: CabinetIdentity;
   readonly national: NationalIdentity;
   /**
    * ⚠️ OPTIONAL BECAUSE THE FIRST SIX COUNTRIES WERE NOT THE GAME. This field
@@ -97,7 +111,7 @@ export interface CountryIdentity {
   readonly economyText?: Omit<EconomyIdentity, "accent">;
   readonly executiveText: IdentityText;
   readonly policyText: IdentityText;
-  readonly executiveSeal: ExecutiveSeal;
+  readonly executiveSeal?: ExecutiveSeal;
   readonly executiveSurface: ExecutiveSurfaceConfig;
   /**
    * The PARLIAMENTARY surface. `onePartyExecutiveSurface.ts` declares a symbol
@@ -184,7 +198,7 @@ export interface CountryInstitutions {
     readonly foreignAffairs: string | null;
     readonly tradeMinister: string | null;
   };
-  readonly estatePortfolio: Record<string, string>;
+  readonly estatePortfolio?: Record<string, string>;
   /**
    * Cabinet data. `orders` and `mechanics` are the SAME objects the registries
    * ORDERS_BY_COUNTRY and MECHANICS_BY_COUNTRY hold for Japan -- their source
@@ -193,7 +207,7 @@ export interface CountryInstitutions {
    */
   readonly cabinet: {
     readonly positions: readonly unknown[];
-    readonly orders: Readonly<Record<string, unknown>>;
+    readonly orders?: Readonly<Record<string, unknown>>;
     readonly mechanics: Readonly<Record<string, unknown>>;
     /**
      * ⚠️ OPTIONAL: East Germany has no `GROUPS` row, and the only reader is
@@ -211,7 +225,7 @@ export interface CountryInstitutions {
      */
     readonly branches: Branch[];
     readonly scale: number;
-    readonly ordersOfBattle: OrderOfBattleEntry[];
+    readonly ordersOfBattle?: OrderOfBattleEntry[];
   };
 }
 
@@ -389,7 +403,7 @@ export interface CountryGeography {
    * exported. Importing "the" PresetBundles would type two of these three wrong,
    * so each is spelled out here.
    */
-  readonly censusBundles: Partial<Record<ResetPresetId, Record<string, RegionCensus>>>;
+  readonly censusBundles?: Partial<Record<ResetPresetId, Record<string, RegionCensus>>>;
   readonly populationAnchors: Partial<Record<ResetPresetId, AnchorBundle>>;
   readonly metricPresets: Partial<Record<ResetPresetId, MetricPresetBundle>>;
   readonly regionBundles: Partial<Record<ResetPresetId, State[]>>;

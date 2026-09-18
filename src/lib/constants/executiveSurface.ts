@@ -7,6 +7,7 @@ import { CN_IDENTITY } from "@/lib/countries/cn/identity";
 import { IE_IDENTITY } from "@/lib/countries/ie/identity";
 import { RU_IDENTITY } from "@/lib/countries/ru/identity";
 import { DD_IDENTITY } from "@/lib/countries/dd/identity";
+import { NG_IDENTITY } from "@/lib/countries/ng/identity";
 
 /**
  * Per-country configuration for the shared executive shell (instrument strip
@@ -78,15 +79,7 @@ export const EXECUTIVE_SURFACE: Record<CountryId, ExecutiveSurfaceConfig> = {
     heroImage: "/api/images/hero/palacio-do-planalto",
     heroAlt: "Palácio do Planalto, Brasília",
   },
-  NG: {
-    clock: { kind: "election", label: "Term Clock", countdownNoun: "election" },
-    actLabels: PRESIDENTIAL_ACTS,
-    deskKind: "bills",
-    deskLabel: "The Desk",
-    rosterTitle: "Cabinet",
-    heroImage: "/api/images/hero/aso-rock",
-    heroAlt: "Aso Rock Presidential Villa, Abuja",
-  },
+  NG: NG_IDENTITY.executiveSurface,
   // Hungary — one-party state, mirrors CN's plenum/directive surface.
   HU: {
     clock: { kind: "plenum", label: "Plenum Clock", countdownNoun: "next Assembly session" },

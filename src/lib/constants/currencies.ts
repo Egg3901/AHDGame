@@ -17,6 +17,7 @@ import { CN_ECONOMY } from "@/lib/countries/cn/economy";
 import { IE_ECONOMY } from "@/lib/countries/ie/economy";
 import { RU_ECONOMY } from "@/lib/countries/ru/economy";
 import { DD_ECONOMY } from "@/lib/countries/dd/economy";
+import { NG_ECONOMY } from "@/lib/countries/ng/economy";
 
 /**
  * Currency codes for all countries — active and future.
@@ -90,7 +91,7 @@ export const COUNTRY_CURRENCY_MAP: Record<CountryId, CurrencyCode> = {
   IE: IE_ECONOMY.currencyCode,
   BR: "BRL",
   CN: CN_ECONOMY.currencyCode,
-  NG: "NGN",
+  NG: NG_ECONOMY.currencyCode,
   HU: "HUF",
   PL: "PLZ",
   RO: "ROL",
@@ -754,7 +755,7 @@ export const ECONOMIC_BASELINES: Partial<Record<CountryId, EconomicBaseline>> = 
   IE: IE_ECONOMY.economicBaseline,
   BR: { gdpGrowth: 2.5, tradeGrowth: 2.0 },
   CN: CN_ECONOMY.economicBaseline,
-  NG: { gdpGrowth: 3.0, tradeGrowth: 2.5 },
+  NG: NG_ECONOMY.economicBaseline,
 };
 
 /**
@@ -778,7 +779,7 @@ export const MONETARY_BASELINES: Record<CountryId, MonetaryBaseline> = {
   IE: IE_ECONOMY.monetary.baseline,
   BR: { targetInflation: 4.0, neutralPrimeRate: 8.0 },
   CN: CN_ECONOMY.monetary.baseline,
-  NG: { targetInflation: 6.0, neutralPrimeRate: 12.0 },
+  NG: NG_ECONOMY.monetary.baseline,
   HU: { targetInflation: 3.0, neutralPrimeRate: 5.0 },
   PL: { targetInflation: 4.0, neutralPrimeRate: 5.0 },
   RO: { targetInflation: 3.0, neutralPrimeRate: 5.0 },

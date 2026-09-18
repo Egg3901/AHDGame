@@ -56,7 +56,8 @@ describe("Japan satisfies the country contract", () => {
    */
   it("fills each member with real content rather than an empty shell", () => {
     expect(JP.identity.displayName).toBe("Japan");
-    expect(JP.identity.cabinet.glyph).toBeTruthy();
+    // Optional on the contract: CABINET_IDENTITY covers 9 of 29 countries.
+    expect(JP.identity.cabinet?.glyph).toBeTruthy();
     // Optional on the contract since China omits it, but Japan HAS one, and the
     // point of this file is that a country's own fields are really filled.
     expect(JP.identity.addressNames?.national).toBeTruthy();
@@ -65,7 +66,7 @@ describe("Japan satisfies the country contract", () => {
     // Optional on the contract since Russia has no row; Japan HAS one.
     expect(JP.institutions.legislativeProcess?.executive.title).toBeTruthy();
     expect(JP.institutions.cabinet.positions.length).toBeGreaterThan(0);
-    expect(Object.keys(JP.institutions.cabinet.orders).length).toBeGreaterThan(0);
+    expect(Object.keys(JP.institutions.cabinet.orders ?? {}).length).toBeGreaterThan(0);
     expect(JP.institutions.military.branches.length).toBeGreaterThan(0);
 
     // Optional on the contract since East Germany apportions from live regions.

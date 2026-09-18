@@ -6,6 +6,7 @@ import { UK_CONSCRIPTION } from "@/lib/countries/uk/geographyFacts";
 import { DE_CONSCRIPTION } from "@/lib/countries/de/geographyFacts";
 import { CN_CONSCRIPTION } from "@/lib/countries/cn/geographyFacts";
 import { IE_CONSCRIPTION } from "@/lib/countries/ie/geographyFacts";
+import { NG_CONSCRIPTION } from "@/lib/countries/ng/geographyFacts";
 
 export interface ConscriptionOption {
   label: string;
@@ -52,7 +53,7 @@ export const CONSCRIPTION_SEED: Partial<Record<CountryId, ConscriptionPolicy>> =
   IE: IE_CONSCRIPTION,
   BR: { eligibleBand: [18, 20], sexEnabled: { male: true, female: false }, option: 5 },
   CN: CN_CONSCRIPTION,
-  NG: { eligibleBand: [18, 20], sexEnabled: { male: true, female: false }, option: 2 },
+  NG: NG_CONSCRIPTION,
 };
 const DEFAULT_POLICY: ConscriptionPolicy = {
   eligibleBand: [18, 20],

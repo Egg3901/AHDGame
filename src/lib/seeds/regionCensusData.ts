@@ -76,6 +76,7 @@ import { CN_GEOGRAPHY } from "@/lib/countries/cn/geography";
 import { IE_GEOGRAPHY } from "@/lib/countries/ie/geography";
 import { RU_GEOGRAPHY } from "@/lib/countries/ru/geography";
 import { DD_GEOGRAPHY } from "@/lib/countries/dd/geography";
+import { NG_GEOGRAPHY } from "@/lib/countries/ng/geography";
 
 export const CENSUS_BUNDLES: Partial<Record<CountryId, PresetBundles>> = {
   PL: {
@@ -167,16 +168,7 @@ export const CENSUS_BUNDLES: Partial<Record<CountryId, PresetBundles>> = {
   // 2019 bundle already used by seeds/international/ng.ts) has existed since NG
   // launched — any full bootstrap/reset to the default preset crashed in
   // seedCohortVectors for every NG state. Wiring gap, not missing data.
-  NG: {
-    "1953-default": ngRegionCensusData1953,
-    "1979-default": ngRegionCensusData1979,
-    // 1991-default was missing → seedCohortVectors skipped every NG state in a 1991
-    // world (no cohort vectors, so NG demographic metrics never computed). Alias to the
-    // 1979 census — the closest authored, era-appropriate for a 1991 world (NG's age
-    // structure is persistently young); NOT the 2019 bundle (would be a modern fallback).
-    "1991-default": ngRegionCensusData1979,
-    "2019-default": ngRegionCensusData,
-  },
+  NG: NG_GEOGRAPHY.censusBundles,
   // Seceded nations carry their own per-sub-region census (differentiated from
   // the former UK Scotland/Wales aggregate).
   SCO: { "2019-default": scoRegionCensusData, "1991-default": scoRegionCensusData1991 },

@@ -7,6 +7,7 @@ import { CN_IDENTITY } from "@/lib/countries/cn/identity";
 import { IE_IDENTITY } from "@/lib/countries/ie/identity";
 import { RU_IDENTITY } from "@/lib/countries/ru/identity";
 import { DD_IDENTITY } from "@/lib/countries/dd/identity";
+import { NG_IDENTITY } from "@/lib/countries/ng/identity";
 
 /**
  * National-identity layer for state-owned / National Corporation surfaces.
@@ -99,21 +100,7 @@ export const NATIONAL_IDENTITY: Record<CountryId, NationalIdentity> = {
     accentSoft: "#e8cf78",
     accentName: "Verde-amarelo",
   },
-  NG: {
-    glyph: "NG",
-    serif: "mono",
-    motif: "gear",
-    name: "Nigeria National Corporation",
-    native: "Nigeria National Enterprise",
-    registry: "Federal Republic of Nigeria · State Asset Registry",
-    ministry: "FEDERAL TREASURY",
-    publicSeal: "PUBLIC REGISTER",
-    hqCity: "Abuja",
-    palette: ["#0d3527", "#0a261c", "#06150f"],
-    accent: "#cdb15a",
-    accentSoft: "#e2cd8c",
-    accentName: "Naija green & gold",
-  },
+  NG: NG_IDENTITY.national,
   HU: {
     glyph: "HU",
     serif: "mono",

@@ -124,7 +124,7 @@ export const SOVEREIGN_CORP_LEGAL_STRUCTURE: Partial<Record<CountryId, LegalStru
   IE: IE_ECONOMY.sovereignCorpLegalStructure,
   BR: "br_sa_aberta",
   CN: CN_ECONOMY.sovereignCorpLegalStructure,
-  NG: "ng_plc",
+  NG: NG_ECONOMY.sovereignCorpLegalStructure,
   // The USSR has no bespoke joint-stock legal form (Cold-War command economy);
   // the neutral fallback keeps corporationTurn able to process the RU state
   // enterprise. See GENERIC_LEGAL_STRUCTURE in constants/legalStructures.ts.
@@ -508,6 +508,7 @@ import { CN_ECONOMY } from "@/lib/countries/cn/economy";
 import { IE_ECONOMY } from "@/lib/countries/ie/economy";
 import { RU_ECONOMY } from "@/lib/countries/ru/economy";
 import { DD_ECONOMY } from "@/lib/countries/dd/economy";
+import { NG_ECONOMY } from "@/lib/countries/ng/economy";
 
 /**
  * Authored historical fiscal baselines for 1953 (Korean War defense shares,

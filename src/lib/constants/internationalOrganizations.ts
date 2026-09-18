@@ -9,6 +9,7 @@ import { CN_CABINET_SEAT_IDS } from "@/lib/countries/cn/institutionsFacts";
 import { IE_CABINET_SEAT_IDS } from "@/lib/countries/ie/institutionsFacts";
 import { RU_CABINET_SEAT_IDS } from "@/lib/countries/ru/institutionsFacts";
 import { DD_CABINET_SEAT_IDS } from "@/lib/countries/dd/institutionsFacts";
+import { NG_CABINET_SEAT_IDS } from "@/lib/countries/ng/institutionsFacts";
 
 /**
  * The built-in organizations seeded at game start. Player-created orgs use
@@ -633,7 +634,7 @@ export const FOREIGN_AFFAIRS_POSITION_BY_COUNTRY: Record<CountryId, string | nul
   IE: IE_CABINET_SEAT_IDS.foreignAffairs,
   BR: "minister_of_foreign_affairs",
   CN: CN_CABINET_SEAT_IDS.foreignAffairs,
-  NG: "minister_of_foreign_affairs",
+  NG: NG_CABINET_SEAT_IDS.foreignAffairs,
   // The eastern bloc and RU reuse DD_CABINET_POSITIONS, which defines a real
   // `minister_of_foreign_affairs`. These were null — the same defect #980 fixed for
   // CN/IE/NG, left standing for eight more countries: a player foreign minister here
@@ -684,7 +685,7 @@ export const TRADE_MINISTER_POSITION_BY_COUNTRY: Record<CountryId, string | null
   CN: CN_CABINET_SEAT_IDS.tradeMinister,
   IE: IE_CABINET_SEAT_IDS.tradeMinister, // Minister for Enterprise, Trade and Employment
   BR: "minister_of_trade_industry",
-  NG: "minister_of_trade_industry",
+  NG: NG_CABINET_SEAT_IDS.tradeMinister,
   HU: null,
   PL: null,
   RO: null,

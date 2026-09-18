@@ -32,6 +32,7 @@ import { CN_WORLD_REGION, CN_UN_MEMBER_SINCE } from "@/lib/countries/cn/geograph
 import { IE_WORLD_REGION, IE_UN_MEMBER_SINCE } from "@/lib/countries/ie/geographyFacts";
 import { RU_WORLD_REGION, RU_UN_MEMBER_SINCE } from "@/lib/countries/ru/geographyFacts";
 import { DD_WORLD_REGION } from "@/lib/countries/dd/geographyFacts";
+import { NG_WORLD_REGION, NG_UN_MEMBER_SINCE } from "@/lib/countries/ng/geographyFacts";
 
 export type WorldEntityId = string;
 export type WorldEntityStatus = "sovereign" | "dependent" | "emergent" | "dissolved";
@@ -235,7 +236,7 @@ export const COUNTRY_REGIONS: Record<CountryId, WorldEntityRegion> = {
   TR: "europe",
   JP: JP_GEOGRAPHY.worldRegion,
   CN: CN_WORLD_REGION,
-  NG: "africa",
+  NG: NG_WORLD_REGION,
   AT: "europe",
   GR: "europe",
   FI: "europe",
@@ -261,7 +262,7 @@ export const COUNTRY_UN_MEMBER_SINCE: Partial<Record<CountryId, number>> = {
   TR: 1945,
   JP: JP_GEOGRAPHY.unMemberSince,
   IE: IE_UN_MEMBER_SINCE,
-  NG: 1960,
+  NG: NG_UN_MEMBER_SINCE,
   PL: 1945,
   HU: 1955,
   RO: 1955,

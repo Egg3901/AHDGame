@@ -7,6 +7,7 @@ import { CN_CONTINENT } from "@/lib/countries/cn/geographyFacts";
 import { IE_CONTINENT } from "@/lib/countries/ie/geographyFacts";
 import { RU_CONTINENT } from "@/lib/countries/ru/geographyFacts";
 import { DD_CONTINENT } from "@/lib/countries/dd/geographyFacts";
+import { NG_CONTINENT } from "@/lib/countries/ng/geographyFacts";
 
 export type Continent =
   "North America" | "South America" | "Europe" | "Africa" | "Asia" | "Oceania";
@@ -53,7 +54,7 @@ export const COUNTRY_CONTINENT: Record<CountryId, Continent> = {
   FI: "Europe",
   SCO: "Europe",
   WAL: "Europe",
-  NG: "Africa",
+  NG: NG_CONTINENT,
   JP: JP_CONTINENT,
   CN: CN_CONTINENT,
 };

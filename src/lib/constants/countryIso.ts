@@ -7,6 +7,7 @@ import { CN_ISO_NUMERIC } from "@/lib/countries/cn/geographyFacts";
 import { IE_ISO_NUMERIC } from "@/lib/countries/ie/geographyFacts";
 import { RU_ISO_NUMERIC } from "@/lib/countries/ru/geographyFacts";
 import { DD_ISO_NUMERIC } from "@/lib/countries/dd/geographyFacts";
+import { NG_ISO_NUMERIC } from "@/lib/countries/ng/geographyFacts";
 
 /** Natural-Earth ISO-numeric (topojson feature id) → in-game CountryId. */
 export const ISO_NUMERIC_TO_COUNTRY: Record<string, CountryId> = {
@@ -48,7 +49,7 @@ export const COUNTRY_TO_ISO_NUMERIC: Record<CountryId, string> = {
   IE: IE_ISO_NUMERIC,
   BR: "076",
   CN: CN_ISO_NUMERIC,
-  NG: "566",
+  NG: NG_ISO_NUMERIC,
   HU: "348",
   PL: "616",
   RO: "642",
