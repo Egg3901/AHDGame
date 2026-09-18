@@ -256,6 +256,115 @@ describe("fillPendingShareOrders", () => {
     );
   });
 
+  it("shares finite pool cash across corporations instead of starving later sells", async () => {
+    const { fillPendingShareOrders } = await import("./shareOrders");
+    const firstCorpId = new ObjectId();
+    const secondCorpId = new ObjectId();
+    const firstSellerId = new ObjectId();
+    const secondSellerId = new ObjectId();
+    const firstOrder = {
+      _id: new ObjectId(),
+      corporationId: firstCorpId,
+      characterId: firstSellerId,
+      type: "sell" as const,
+      shares: 10,
+      sharesRemaining: 10,
+      pricePerShare: 90,
+      escrowAmount: 0,
+      status: "open" as const,
+    };
+    const secondOrder = {
+      _id: new ObjectId(),
+      corporationId: secondCorpId,
+      characterId: secondSellerId,
+      type: "sell" as const,
+      shares: 10,
+      sharesRemaining: 10,
+      pricePerShare: 90,
+      escrowAmount: 0,
+      status: "open" as const,
+    };
+    db.collection("shareOrders").find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([firstOrder, secondOrder]),
+    });
+
+    const firstCorp = {
+      _id: firstCorpId,
+      name: "First Corp",
+      sharePrice: 100,
+      fundamentalSharePrice: 100,
+      publicFloat: 0,
+      totalShares: 1_000,
+      shareholders: [{ characterId: firstSellerId, shares: 10 }],
+      liquidCurrencyCode: "USD",
+      countryId: "US",
+    };
+    const secondCorp = {
+      _id: secondCorpId,
+      name: "Second Corp",
+      sharePrice: 100,
+      fundamentalSharePrice: 100,
+      publicFloat: 0,
+      totalShares: 1_000,
+      shareholders: [{ characterId: secondSellerId, shares: 10 }],
+      liquidCurrencyCode: "USD",
+      countryId: "US",
+    };
+    db.collection("corporations").find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([firstCorp, secondCorp]),
+    });
+    db.collection("characters").find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([
+        { _id: firstSellerId, name: "First Seller", countryId: "US" },
+        { _id: secondSellerId, name: "Second Seller", countryId: "US" },
+      ]),
+      project: vi.fn().mockReturnValue({
+        toArray: vi.fn().mockResolvedValue([
+          { _id: firstSellerId, name: "First Seller", countryId: "US" },
+          { _id: secondSellerId, name: "Second Seller", countryId: "US" },
+        ]),
+      }),
+    });
+
+    const pool = db.collection("equityMarketPools");
+    mockPoolRead(pool, {
+      _id: "USD",
+      cashLocal: 245,
+      targetCashLocal: 245,
+    });
+    pool.updateOne.mockResolvedValue({ matchedCount: 1, modifiedCount: 1 });
+
+    await fillPendingShareOrders(db as unknown as Db, new Date(), 258);
+
+    expect(pool.updateOne).toHaveBeenCalledWith(
+      { _id: "USD", cashLocal: { $gte: 196 } },
+      expect.objectContaining({
+        $inc: expect.objectContaining({ cashLocal: -196, "lifetime.salesOut": 196 }),
+      })
+    );
+    const orderOps = db.collection("shareOrders").bulkWrite.mock.calls[0][0];
+    expect(orderOps).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          updateOne: expect.objectContaining({
+            filter: { _id: firstOrder._id },
+            update: expect.objectContaining({
+              $set: expect.objectContaining({ sharesRemaining: 9 }),
+            }),
+          }),
+        }),
+        expect.objectContaining({
+          updateOne: expect.objectContaining({
+            filter: { _id: secondOrder._id },
+            update: expect.objectContaining({
+              $set: expect.objectContaining({ sharesRemaining: 9 }),
+            }),
+          }),
+        }),
+      ])
+    );
+  });
+
   it("stamps avgCostPerShare on newly-pushed shareholder entries at current market price", async () => {
     const { fillPendingShareOrders } = await import("./shareOrders");
     const corpId = new ObjectId();

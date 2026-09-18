@@ -16,6 +16,10 @@ import type { ShareTradeParty } from "@/lib/db/types/shareTradeHistory";
 import { creditSharesToFund } from "@/lib/corporations/shareholderOps";
 import { upsertFundHoldingShares } from "@/lib/indexFunds/fundQueries";
 import { loadEquityPoolsByCurrency, loadEquityQuote } from "@/lib/equities/marketPool";
+import {
+  allocateEquityPoolSellBudgets,
+  type EquityPoolSellDemand,
+} from "@/lib/equities/equityPoolSellAllocation";
 import type { EquityMarketPool } from "@/lib/db/types";
 import { EQUITY_MARKET_POOLS_COLLECTION } from "@/lib/db/types/equityMarketPool";
 
@@ -108,14 +112,73 @@ export async function fillPendingShareOrders(db: Db, now: Date, turn: number): P
 
   // One pool document per currency; read them once for the whole loop.
   const equityPools = await loadEquityPoolsByCurrency(db);
+  const marketQuotesByCorp = new Map<string, Awaited<ReturnType<typeof loadEquityQuote>>>();
+  const sellDemands: EquityPoolSellDemand[] = [];
+
+  // Allocate the opening pool cash before resolving any order. Without this
+  // pass, the first corporation in Mongo's order is able to consume all of a
+  // currency's cash and later corporations receive no bid at all.
   for (const [corpIdStr, orders] of ordersByCorp) {
     const corp = corpMap.get(corpIdStr);
     if (!corp) continue;
 
     const marketQuote = await loadEquityQuote(db, corp, { pools: equityPools });
-    if (marketQuote.active && !poolCashRemaining.has(marketQuote.currency)) {
-      poolCashRemaining.set(marketQuote.currency, marketQuote.poolCashLocal);
+    marketQuotesByCorp.set(corpIdStr, marketQuote);
+    if (!marketQuote.active || !(marketQuote.bidPriceLocal > 0)) continue;
+
+    const remainingCharacterShares = new Map<string, number>();
+    let notionalLocal = 0;
+    for (const order of orders) {
+      if (
+        order.type !== "sell" ||
+        order.placerFundId ||
+        marketQuote.bidPriceLocal < order.pricePerShare
+      ) {
+        continue;
+      }
+
+      let shares = Math.max(0, order.sharesRemaining);
+      if (!order.placerCorporationId && order.characterId) {
+        const sellerId = order.characterId.toString();
+        const knownShares = remainingCharacterShares.has(sellerId)
+          ? remainingCharacterShares.get(sellerId)!
+          : Math.max(
+              0,
+              (corp.shareholders ?? []).find(
+                (shareholder) => shareholder.characterId?.toString() === sellerId
+              )?.shares ?? 0
+            );
+        shares = Math.min(shares, knownShares);
+        remainingCharacterShares.set(sellerId, Math.max(0, knownShares - shares));
+      }
+      notionalLocal += shares * marketQuote.bidPriceLocal;
     }
+
+    if (Number.isFinite(notionalLocal) && notionalLocal > 0) {
+      sellDemands.push({
+        currency: marketQuote.currency,
+        corporationId: corpIdStr,
+        notionalLocal,
+      });
+    }
+  }
+
+  const openingPoolCash = new Map<CurrencyCode, number>();
+  for (const [currency, pool] of equityPools) {
+    openingPoolCash.set(currency, Math.max(0, pool.cashLocal ?? 0));
+    poolCashRemaining.set(currency, Math.max(0, pool.cashLocal ?? 0));
+  }
+  const sellBudgetRemaining = allocateEquityPoolSellBudgets({
+    cashByCurrency: openingPoolCash,
+    demands: sellDemands,
+  });
+
+  for (const [corpIdStr, orders] of ordersByCorp) {
+    const corp = corpMap.get(corpIdStr);
+    if (!corp) continue;
+
+    const marketQuote = marketQuotesByCorp.get(corpIdStr);
+    if (!marketQuote) continue;
     // Target corp's FX rate, applied to every local-currency amount in this
     // corp's fill loop (price × shares, escrow diffs, proceeds).
     const targetFxRate = fxRateForCorpFromMap(corp, fxByCurrency);
@@ -308,7 +371,12 @@ export async function fillPendingShareOrders(db: Db, now: Date, turn: number): P
           toFill = Math.min(toFill, available);
         }
         if (marketQuote.active) {
-          const cashAvailable = poolCashRemaining.get(marketQuote.currency) ?? 0;
+          const corporationBudget =
+            sellBudgetRemaining.get(marketQuote.currency)?.get(corpIdStr) ?? 0;
+          const cashAvailable = Math.min(
+            poolCashRemaining.get(marketQuote.currency) ?? 0,
+            corporationBudget
+          );
           const cashLimitedShares =
             currentPrice > 0 ? Math.floor((cashAvailable + 1e-9) / currentPrice) : 0;
           toFill = Math.min(toFill, cashLimitedShares);
@@ -319,6 +387,11 @@ export async function fillPendingShareOrders(db: Db, now: Date, turn: number): P
         if (marketQuote.active) {
           const remainingCash = poolCashRemaining.get(marketQuote.currency) ?? 0;
           poolCashRemaining.set(marketQuote.currency, remainingCash - proceedsLocal);
+          const currencyBudgets = sellBudgetRemaining.get(marketQuote.currency);
+          if (currencyBudgets) {
+            const remainingBudget = currencyBudgets.get(corpIdStr) ?? 0;
+            currencyBudgets.set(corpIdStr, Math.max(0, remainingBudget - proceedsLocal));
+          }
           const flow = poolFlows.get(marketQuote.currency) ?? { purchasesIn: 0, salesOut: 0 };
           flow.salesOut += proceedsLocal;
           poolFlows.set(marketQuote.currency, flow);
