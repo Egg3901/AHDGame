@@ -522,8 +522,10 @@ describe("processBankingTurn", () => {
 
     const savBefore = characterState.savings;
     const fundBefore = fundState.balance;
-    // deposit rate = max(0.05, 4+0) = 4%. Interest = 48000 * 0.04 / 48 = 40
-    const expectedInterest = (savBefore * 4) / 100 / TURNS_PER_YEAR;
+    // Pointer model: the bank pays only the premium over the CB base APY.
+    // deposit rate = max(0.05, 4+0) = 4%, base = 2%, premium = 2%.
+    // Interest = 48000 * 0.02 / 48 = 20.
+    const expectedInterest = (savBefore * 2) / 100 / TURNS_PER_YEAR;
 
     const summary = await processBankingTurn(db as unknown as Db, TURN);
 
