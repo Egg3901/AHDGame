@@ -3,6 +3,7 @@ import { COUNTRY_CURRENCY_MAP, CURRENCY_SYMBOLS } from "@/lib/constants/currenci
 import { getNationalIdentity, type NationalIdentity } from "@/lib/constants/nationalIdentity";
 import { JP_IDENTITY } from "@/lib/countries/jp/identity";
 import { JP_BANK_TEXT } from "@/lib/countries/jp/identity";
+import { US_IDENTITY } from "@/lib/countries/us/identity";
 
 /**
  * Institution identity overlays for the country-pages masthead family
@@ -49,12 +50,7 @@ function composeFromNational(countryId: CountryId, text: IdentityText): Institut
 // ── Executive ────────────────────────────────────────────────────────────────
 
 export const EXECUTIVE_TEXT: Record<CountryId, IdentityText> = {
-  US: {
-    glyph: "★",
-    serif: "mono",
-    registry: "Executive Office of the President",
-    title: "The White House",
-  },
+  US: US_IDENTITY.executiveText,
   UK: {
     glyph: "HM",
     serif: "mono",
@@ -236,12 +232,7 @@ export function getExecutiveIdentity(countryId: CountryId): InstitutionIdentity 
 // ── National Policy (code of law) ────────────────────────────────────────────
 
 export const POLICY_TEXT: Record<CountryId, IdentityText> = {
-  US: {
-    glyph: "§",
-    serif: "mono",
-    registry: "Code of National Law · United States",
-    title: "National Policy",
-  },
+  US: US_IDENTITY.policyText,
   UK: {
     glyph: "§",
     serif: "mono",

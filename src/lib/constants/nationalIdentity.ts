@@ -1,5 +1,6 @@
 import type { CountryId } from "@/lib/constants/countries";
 import { JP_IDENTITY } from "@/lib/countries/jp/identity";
+import { US_IDENTITY } from "@/lib/countries/us/identity";
 
 /**
  * National-identity layer for state-owned / National Corporation surfaces.
@@ -99,21 +100,7 @@ export const NATIONAL_IDENTITY: Record<CountryId, NationalIdentity> = {
     accentSoft: "#e1c382",
     accentName: "Westminster navy & gold",
   },
-  US: {
-    glyph: "US",
-    serif: "mono",
-    motif: "starRing",
-    name: "United States National Corporation",
-    native: "Federal Enterprise Holdings",
-    registry: "United States · Federal Asset Registry",
-    ministry: "U.S. TREASURY",
-    publicSeal: "PUBLIC REGISTER",
-    hqCity: "Washington, D.C.",
-    palette: ["#1b2747", "#121b33", "#0b0f1c"],
-    accent: "#b9933f",
-    accentSoft: "#d9b970",
-    accentName: "Federal navy & brass",
-  },
+  US: US_IDENTITY.national,
   DE: {
     glyph: "BU",
     serif: "mono",

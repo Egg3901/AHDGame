@@ -12,6 +12,7 @@
  */
 import type { CountryId } from "./countries";
 import { JP_IDENTITY } from "@/lib/countries/jp/identity";
+import { US_IDENTITY } from "@/lib/countries/us/identity";
 
 export interface ExecutiveSeal {
   src: string;
@@ -26,10 +27,7 @@ export interface ExecutiveSeal {
 }
 
 export const EXECUTIVE_SEALS: Partial<Record<CountryId, ExecutiveSeal>> = {
-  US: {
-    src: "https://upload.wikimedia.org/wikipedia/commons/thumb/3/36/Seal_of_the_President_of_the_United_States.svg/330px-Seal_of_the_President_of_the_United_States.svg.png",
-    alt: "Seal of the President of the United States",
-  },
+  US: US_IDENTITY.executiveSeal,
   UK: {
     src: "https://upload.wikimedia.org/wikipedia/commons/thumb/5/59/Royal_Coat_of_Arms_of_the_United_Kingdom_%28HM_Government%29_%28St_Edwards_Crown%29.svg/330px-Royal_Coat_of_Arms_of_the_United_Kingdom_%28HM_Government%29_%28St_Edwards_Crown%29.svg.png",
     alt: "Royal Arms of His Majesty's Government",

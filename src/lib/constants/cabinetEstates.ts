@@ -1,6 +1,7 @@
 import type { CountryId } from "./countries";
 import type { CabinetEstate, EstateFundingLevel } from "@/lib/db/types/cabinetEstate";
 import { JP_ESTATE_PORTFOLIO } from "@/lib/countries/jp/institutionsFacts";
+import { US_ESTATE_PORTFOLIO } from "@/lib/countries/us/institutionsFacts";
 
 // ── Archetype catalog ────────────────────────────────────────────────────────
 export interface EstateArchetype {
@@ -657,19 +658,7 @@ export const ESTATE_CATALOG: Record<string, EstateArchetype[]> = {
 // Reserved/excluded (no entry → no estates, placeholder stays): finance, defense,
 // energy, transportation, and head-of-government / deputy / territorial seats.
 export const ESTATE_PORTFOLIO_BY_COUNTRY: Partial<Record<CountryId, Record<string, string>>> = {
-  US: {
-    secretary_of_state: "foreign",
-    attorney_general: "justice",
-    secretary_of_interior: "interior",
-    secretary_of_agriculture: "agriculture",
-    secretary_of_commerce: "commerce",
-    secretary_of_labor: "labor",
-    secretary_of_health: "health",
-    secretary_of_hud: "housing",
-    secretary_of_education: "education",
-    secretary_of_veterans: "veterans",
-    secretary_of_homeland: "homeland",
-  },
+  US: US_ESTATE_PORTFOLIO,
   UK: {
     foreign_secretary: "foreign",
     home_secretary: "homeland",

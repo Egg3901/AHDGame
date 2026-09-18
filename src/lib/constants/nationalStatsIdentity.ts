@@ -13,6 +13,7 @@
  */
 import type { CountryId } from "./countries";
 import { JP_IDENTITY } from "@/lib/countries/jp/identity";
+import { US_IDENTITY } from "@/lib/countries/us/identity";
 
 export interface StatsAccent {
   /** Accent gold/brass. */
@@ -60,17 +61,7 @@ export const NATIONAL_STATS_IDENTITY: Partial<Record<CountryId, StatsIdentity>> 
     seal: "统计局 · NBS",
     accent: { stat: "#d8b25e", statSoft: "#e7cd91", g0: "#4a1212", g1: "#2a0e0e", g2: "#160a0e" },
   },
-  US: {
-    glyph: "US",
-    serif: "mono",
-    office: "Bureau of Economic Analysis",
-    officeEn: "Bureau of Economic Analysis",
-    title: "Federal Statistics",
-    titleEn: null,
-    registry: "United States · Bureau of Economic Analysis",
-    seal: "U.S. BEA",
-    accent: { stat: "#b9933f", statSoft: "#d9b970", g0: "#1b2747", g1: "#121b33", g2: "#0b0f1c" },
-  },
+  US: US_IDENTITY.stats,
   UK: {
     glyph: "ONS",
     serif: "mono",

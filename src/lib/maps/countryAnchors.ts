@@ -1,4 +1,5 @@
 import { JP_MAP_ANCHOR } from "@/lib/countries/jp/geographyFacts";
+import { US_MAP_ANCHOR } from "@/lib/countries/us/geographyFacts";
 
 /**
  * A rough interior lon/lat point per country, used to ORIENT a front: an invasion
@@ -10,7 +11,7 @@ import { JP_MAP_ANCHOR } from "@/lib/countries/jp/geographyFacts";
  * src/app/world/conflicts/_coldwar/regionOverlayBridge.ts.
  */
 export const COUNTRY_ANCHOR: Record<string, [number, number]> = {
-  US: [-98.5, 39.8],
+  US: US_MAP_ANCHOR,
   UK: [-2.0, 54.0],
   IE: [-8.2, 53.4],
   SCO: [-4.2, 56.8],

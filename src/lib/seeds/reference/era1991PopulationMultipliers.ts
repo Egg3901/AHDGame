@@ -1,5 +1,6 @@
 import type { CountryId } from "@/lib/constants/countries";
 import { JP_GEOGRAPHY } from "@/lib/countries/jp/geography";
+import { US_POPULATION_MULTIPLIERS } from "@/lib/countries/us/geographyFacts";
 
 /**
  * 1991-era cohort multipliers, per country.
@@ -23,17 +24,7 @@ import { JP_GEOGRAPHY } from "@/lib/countries/jp/geography";
  * This is not one country's data and does not belong in a country folder.
  */
 export const POPULATION_MULTIPLIERS: Partial<Record<CountryId, Record<string, number>>> = {
-  US: {
-    new_immigrants: 0.4, // 1990 Census: Hispanic 9% / Asian 3%
-    secular_professionals: 0.6, // Smaller college-educated cohort
-    college_liberals: 0.6, // Bachelor's rate 21% vs 38% in 2020
-    evangelicals: 1.2, // Peak religiosity in early 1990s
-    rural_traditionalists: 1.15, // Higher rural share pre-suburbanization
-    union_trades: 1.6, // Union density 16% in 1991 vs 10% in 2020
-    young_renters: 0.85, // Less urban concentration
-    retirees: 0.85, // 65+ cohort smaller in 1991
-    small_business: 1.1, // Pre-corporate-consolidation
-  },
+  US: US_POPULATION_MULTIPLIERS,
   UK: {
     new_britons: 0.3, // Pre-2004 EU expansion immigration wave
     urban_progressives: 0.7, // Pre-NewLabour identity politics

@@ -20,6 +20,7 @@
 import type { CountryId } from "@/lib/constants/countries";
 import { JP_INSTITUTIONS } from "@/lib/countries/jp/institutions";
 import { JP_ERAS } from "@/lib/countries/jp/eras";
+import { US_ORDERS_OF_BATTLE } from "@/lib/countries/us/institutionsFacts";
 
 export interface OrderOfBattleEntry {
   /** Must match a Branch id for this country (`MILITARY_BRANCHES_BY_COUNTRY`). */
@@ -53,25 +54,7 @@ export const ORDERS_OF_BATTLE: Partial<Record<CountryId, OrderOfBattleEntry[]>> 
    * ran ~16 Essex-class carriers. Guided-missile ships are deliberately absent:
    * USS Boston, the first, converted in 1955.
    */
-  US: [
-    { branchId: "army", type: "Infantry Division", count: 8 },
-    { branchId: "army", type: "Armored Division", count: 4 },
-    { branchId: "army", type: "Artillery Regiment", count: 3 },
-    { branchId: "army", type: "Air Defense Battalion", count: 2 },
-    // 10th Special Forces Group activated 1952: the first, and era-correct.
-    { branchId: "army", type: "Special Forces Group", count: 1 },
-    { branchId: "navy", type: "Carrier Strike Group", count: 3 },
-    { branchId: "navy", type: "Attack Submarine", count: 3 },
-    { branchId: "navy", type: "Frigate Squadron", count: 3 },
-    { branchId: "navy", type: "Amphibious Group", count: 2 },
-    { branchId: "airforce", type: "Fighter Wing", count: 5 },
-    { branchId: "airforce", type: "Bomber Squadron", count: 5 },
-    { branchId: "airforce", type: "Airlift Wing", count: 3 },
-    { branchId: "airforce", type: "Air Defense Wing", count: 2 },
-    // Exactly the three divisions the Marine Corps fielded in 1953.
-    { branchId: "marines", type: "Marine Division", count: 3 },
-    { branchId: "marines", type: "Marine Expeditionary Unit", count: 1 },
-  ],
+  US: US_ORDERS_OF_BATTLE,
   /**
    * National Service still running: a large conscript army, six fleet carriers,
    * and Bomber Command working up to the V-force. Clearly the third power, well

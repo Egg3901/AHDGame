@@ -1,5 +1,6 @@
 import type { CountryId } from "@/lib/constants/countries";
 import { JP_LEGISLATIVE_PROCESS } from "@/lib/countries/jp/institutionsFacts";
+import { US_LEGISLATIVE_PROCESS } from "@/lib/countries/us/institutionsFacts";
 
 /** Chamber seating geometry used by the composition + vote-seating charts. */
 export type SeatingStyle = "hemicycle" | "benches" | "horseshoe";
@@ -33,42 +34,6 @@ export interface LegislativeProcess {
   quirks: ProcessQuirk[];
   seatingStyle: SeatingStyle;
 }
-
-const US: LegislativeProcess = {
-  executive: {
-    title: "President",
-    canVeto: true,
-    signLabel: "President signs",
-    vetoLabel: "Veto",
-    signNote: "The President may sign the bill into law or return it with a veto.",
-    override: {
-      threshold: "two-thirds",
-      body: "both chambers",
-      note: "A two-thirds vote in both the House and Senate overrides a presidential veto.",
-    },
-  },
-  upperNote:
-    "Both chambers are co-equal — the bill must pass the House and the Senate in identical form.",
-  dissolution: null,
-  quirks: [
-    {
-      icon: "shield",
-      title: "Presidential veto",
-      body: "Enrolled bills go to the President's desk to be signed or vetoed.",
-    },
-    {
-      icon: "users",
-      title: "Veto override",
-      body: "Congress can override a veto with a two-thirds majority in both chambers.",
-    },
-    {
-      icon: "scale",
-      title: "Bicameral identical text",
-      body: "House and Senate must agree on the same text before enrollment.",
-    },
-  ],
-  seatingStyle: "hemicycle",
-};
 
 const UK: LegislativeProcess = {
   executive: {
@@ -253,7 +218,7 @@ const DEFAULT_PROCESS: LegislativeProcess = {
 };
 
 export const LEGISLATIVE_PROCESS: Partial<Record<CountryId, LegislativeProcess>> = {
-  US,
+  US: US_LEGISLATIVE_PROCESS,
   UK,
   DE,
   JP,

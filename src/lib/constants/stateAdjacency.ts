@@ -21,70 +21,9 @@
 
 import type { CountryId } from "./countries";
 import { JP_ADJACENCY_MAP } from "@/lib/countries/jp/geographyFacts";
+import { US_ADJACENCY_MAP } from "@/lib/countries/us/geographyFacts";
 
 export type AdjacencyMap = Record<string, readonly string[]>;
-
-/**
- * US 50 states + DC. Standard contiguous-state adjacency from the
- * Census Bureau's adjacency file plus two sea-border edges by F4-redesign
- * convention:
- *   - AK ↔ WA: ferry / cultural-territorial relationship.
- *   - MI ↔ WI: Lake Michigan crossing (Lake Express ferry).
- * HI is standalone (no adjacencies).
- */
-const US_ADJACENCY: AdjacencyMap = {
-  AL: ["FL", "GA", "MS", "TN"],
-  AK: ["WA"], // sea-border by convention
-  AZ: ["CA", "CO", "NM", "NV", "UT"],
-  AR: ["LA", "MS", "MO", "OK", "TN", "TX"],
-  CA: ["AZ", "NV", "OR"],
-  CO: ["AZ", "KS", "NE", "NM", "OK", "UT", "WY"],
-  CT: ["MA", "NY", "RI"],
-  DE: ["MD", "NJ", "PA"],
-  DC: ["MD", "VA"],
-  FL: ["AL", "GA"],
-  GA: ["AL", "FL", "NC", "SC", "TN"],
-  HI: [], // standalone
-  ID: ["MT", "NV", "OR", "UT", "WA", "WY"],
-  IL: ["IN", "IA", "KY", "MO", "WI"],
-  IN: ["IL", "KY", "MI", "OH"],
-  IA: ["IL", "MN", "MO", "NE", "SD", "WI"],
-  KS: ["CO", "MO", "NE", "OK"],
-  KY: ["IL", "IN", "MO", "OH", "TN", "VA", "WV"],
-  LA: ["AR", "MS", "TX"],
-  ME: ["NH"],
-  MD: ["DE", "DC", "PA", "VA", "WV"],
-  MA: ["CT", "NH", "NY", "RI", "VT"],
-  MI: ["IN", "OH", "WI"], // WI via Lake Michigan (Lake Express ferry)
-  MN: ["IA", "ND", "SD", "WI"],
-  MS: ["AL", "AR", "LA", "TN"],
-  MO: ["AR", "IL", "IA", "KS", "KY", "NE", "OK", "TN"],
-  MT: ["ID", "ND", "SD", "WY"],
-  NE: ["CO", "IA", "KS", "MO", "SD", "WY"],
-  NV: ["AZ", "CA", "ID", "OR", "UT"],
-  NH: ["ME", "MA", "VT"],
-  NJ: ["DE", "NY", "PA"],
-  NM: ["AZ", "CO", "OK", "TX", "UT"],
-  NY: ["CT", "MA", "NJ", "PA", "VT"],
-  NC: ["GA", "SC", "TN", "VA"],
-  ND: ["MN", "MT", "SD"],
-  OH: ["IN", "KY", "MI", "PA", "WV"],
-  OK: ["AR", "CO", "KS", "MO", "NM", "TX"],
-  OR: ["CA", "ID", "NV", "WA"],
-  PA: ["DE", "MD", "NJ", "NY", "OH", "WV"],
-  RI: ["CT", "MA"],
-  SC: ["GA", "NC"],
-  SD: ["IA", "MN", "MT", "NE", "ND", "WY"],
-  TN: ["AL", "AR", "GA", "KY", "MS", "MO", "NC", "VA"],
-  TX: ["AR", "LA", "NM", "OK"],
-  UT: ["AZ", "CO", "ID", "NV", "NM", "WY"],
-  VT: ["MA", "NH", "NY"],
-  VA: ["DC", "KY", "MD", "NC", "TN", "WV"],
-  WA: ["AK", "ID", "OR"], // AK by sea-border convention
-  WV: ["KY", "MD", "OH", "PA", "VA"],
-  WI: ["IA", "IL", "MI", "MN"], // MI via Lake Michigan
-  WY: ["CO", "ID", "MT", "NE", "SD", "UT"],
-};
 
 /**
  * UK 12 regions (9 ENG sub-regions + SCO + WAL + NIR). The codebase
@@ -134,22 +73,6 @@ const DE_ADJACENCY: AdjacencyMap = {
   RP: ["NW", "HE", "BW", "SL"],
   SL: ["RP"],
   NW: ["NI", "HE", "RP"],
-};
-
-/**
- * JP 8 regions. Mainland adjacencies via land + the inland Seto sea
- * bridges/ferries (KNS↔SHI, CGK↔SHI, CGK↔KYU). HOK↔TOH via the
- * Tsugaru Strait (Seikan Tunnel ferries / rail).
- */
-const JP_ADJACENCY: AdjacencyMap = {
-  HOK: ["TOH"], // sea via Tsugaru Strait
-  TOH: ["HOK", "KAN"],
-  KAN: ["TOH", "CHU"],
-  CHU: ["KAN", "KNS"],
-  KNS: ["CHU", "CGK", "SHI"], // SHI via Awaji bridges
-  CGK: ["KNS", "SHI", "KYU"], // SHI via Seto-Ohashi; KYU via Kanmon Strait
-  SHI: ["KNS", "CGK"],
-  KYU: ["CGK"],
 };
 
 /**
@@ -462,7 +385,7 @@ const WAL_ADJACENCY: AdjacencyMap = {
  * every preset.
  */
 export const STATE_ADJACENCY: Readonly<Record<CountryId, AdjacencyMap>> = {
-  US: US_ADJACENCY,
+  US: US_ADJACENCY_MAP,
   UK: UK_ADJACENCY,
   DE: DE_ADJACENCY,
   JP: JP_ADJACENCY_MAP,

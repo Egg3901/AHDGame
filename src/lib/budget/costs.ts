@@ -7,6 +7,7 @@ import { computeLawCost } from "@/lib/politicalLegislation/costEngine";
 import { COST_INCOME_ANCHORS } from "@/lib/politicalLegislation/costAnchors";
 import type { CostAnchorCountryId } from "@/lib/politicalLegislation/types";
 import { JP_ECONOMY } from "@/lib/countries/jp/economy";
+import { US_ECONOMY } from "@/lib/countries/us/economy";
 
 export interface BudgetCostContext {
   budgetCapacity: number;
@@ -110,14 +111,7 @@ export interface CostScaleAnchor {
  * (US/UK/DE had both; JP had only MODERN; IE/CN had only PRE_2000; BR had neither).
  */
 export const COST_SCALE_ANCHORS: Partial<Record<CountryId, CostScaleAnchor>> = {
-  US: {
-    gdpLow: 6_200_000_000_000,
-    popLow: 252_177_000,
-    scaleLow: 0.3,
-    gdpHigh: 27_000_000_000_000,
-    popHigh: 333_000_000,
-    scaleHigh: 1.27,
-  },
+  US: US_ECONOMY.costScaleAnchors,
   UK: {
     gdpLow: 600_000_000_000,
     popLow: 57_500_000,

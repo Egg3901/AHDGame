@@ -12,6 +12,7 @@
 import type { CountryId } from "./countries";
 import { getStatsIdentity, type StatsAccent } from "./nationalStatsIdentity";
 import { JP_IDENTITY } from "@/lib/countries/jp/identity";
+import { US_IDENTITY } from "@/lib/countries/us/identity";
 
 export interface EconomyIdentity {
   /** Watermark / chop glyph (经 / US / …). */
@@ -33,15 +34,7 @@ export interface EconomyIdentity {
 }
 
 export const ECONOMY_TEXT: Partial<Record<CountryId, Omit<EconomyIdentity, "accent">>> = {
-  US: {
-    glyph: "US",
-    serif: "mono",
-    title: "Economic Outlook",
-    titleEn: null,
-    office: "Bureau of National Accounts",
-    officeEn: "Bureau of National Accounts",
-    registry: "United States · National Accounts Registry",
-  },
+  US: US_IDENTITY.economyText,
   CN: {
     glyph: "经",
     serif: "cjk",

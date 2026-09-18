@@ -8,26 +8,10 @@
 export type CabinetGroup =
   "Centre" | "Economy" | "Security & Foreign" | "Society" | "Domestic" | "Nations";
 import { JP_INSTITUTIONS } from "@/lib/countries/jp/institutions";
+import { US_CABINET_GROUPS } from "@/lib/countries/us/institutionsFacts";
 
 export const GROUPS: Record<string, Record<string, CabinetGroup>> = {
-  US: {
-    director_of_intelligence: "Security & Foreign",
-    secretary_of_state: "Security & Foreign",
-    secretary_of_defense: "Security & Foreign",
-    attorney_general: "Security & Foreign",
-    secretary_of_homeland: "Security & Foreign",
-    secretary_of_treasury: "Economy",
-    secretary_of_commerce: "Economy",
-    secretary_of_labor: "Economy",
-    secretary_of_agriculture: "Economy",
-    secretary_of_health: "Society",
-    secretary_of_education: "Society",
-    secretary_of_hud: "Society",
-    secretary_of_veterans: "Society",
-    secretary_of_energy: "Domestic",
-    secretary_of_interior: "Domestic",
-    secretary_of_transportation: "Domestic",
-  },
+  US: US_CABINET_GROUPS,
   UK: {
     director_of_intelligence: "Security & Foreign",
     deputy_prime_minister: "Centre",

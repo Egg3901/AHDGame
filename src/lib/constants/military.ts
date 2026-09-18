@@ -5,6 +5,7 @@ import {
   JP_MILITARY_BRANCHES,
   JP_MILITARY_SCALE,
 } from "@/lib/countries/jp/institutionsFacts";
+import { US_MILITARY_BRANCHES } from "@/lib/countries/us/institutionsFacts";
 
 export interface Branch {
   id: string;
@@ -284,27 +285,7 @@ export const UNIT_TYPES: Record<UnitDomain, UnitArchetype[]> = {
 };
 
 export const MILITARY_BRANCHES_BY_COUNTRY: Record<CountryId, Branch[]> = {
-  US: [
-    { id: "army", name: "U.S. Army", abbr: "USA", domain: "ground" },
-    { id: "navy", name: "U.S. Navy", abbr: "USN", domain: "naval" },
-    // National Security Act of 1947 (effective 18 Sep 1947) — valid in 1953.
-    {
-      id: "airforce",
-      name: "U.S. Air Force",
-      abbr: "USAF",
-      domain: "air",
-      establishedYear: 1947,
-    },
-    { id: "marines", name: "U.S. Marine Corps", abbr: "USMC", domain: "marine" },
-    // FY2020 NDAA / spaceforce.mil: established 20 Dec 2019.
-    {
-      id: "space",
-      name: "U.S. Space Force",
-      abbr: "USSF",
-      domain: "space",
-      establishedYear: 2019,
-    },
-  ],
+  US: US_MILITARY_BRANCHES,
   CN: [
     // PLA ground/navy/air services predate 1953 (PLAAF founded 11 Nov 1949; PLAN 23 Apr 1949).
     { id: "pla", name: "PLA Ground Force", abbr: "PLAGF", domain: "ground" },

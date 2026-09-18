@@ -13,6 +13,7 @@ import { getCountrySectorWeights2007 } from "./sectorSeedWeights2007";
 import { getCountrySectorWeights2023 } from "./sectorSeedWeights2023";
 import { JP_ECONOMY } from "@/lib/countries/jp/economy";
 import { getCountrySectorWeights2027 } from "./sectorSeedWeights2027";
+import { US_ECONOMY } from "@/lib/countries/us/economy";
 
 type SectorWeightMap = Partial<Record<CorporationType, number>>;
 
@@ -51,25 +52,7 @@ function mergeStateOverride(
 }
 
 export const COUNTRY_SECTOR_WEIGHTS: Record<CountryId, SectorWeightMap> = {
-  US: {
-    real_estate: 14,
-    financial: 10,
-    technology: 9,
-    manufacturing: 9,
-    healthcare: 9,
-    retail: 7,
-    construction: 6,
-    logistics: 5,
-    chemical_industries: 5,
-    automobiles: 4,
-    defense: 4,
-    media: 4,
-    telecommunications: 4,
-    energy: 3,
-    entertainment: 3,
-    agriculture: 2,
-    extraction: 2,
-  },
+  US: US_ECONOMY.sectorWeights.base,
   UK: {
     real_estate: 14,
     financial: 13,

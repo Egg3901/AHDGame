@@ -1,6 +1,7 @@
 import type { CSSProperties } from "react";
 import type { CountryId } from "./countries";
 import { JP_IDENTITY } from "@/lib/countries/jp/identity";
+import { US_IDENTITY } from "@/lib/countries/us/identity";
 
 export interface CabinetIdentity {
   /** Large faded background glyph + chop fallback. */
@@ -31,15 +32,7 @@ const UK_IDENTITY: CabinetIdentity = {
 
 /** Only cabinet-enabled countries have identities; others fall back to UK. */
 export const CABINET_IDENTITY: Partial<Record<CountryId, CabinetIdentity>> = {
-  US: {
-    glyph: "US",
-    serif: "mono",
-    gov: "#b9933f",
-    govSoft: "#d9b970",
-    g0: "#1b2747",
-    g1: "#121b33",
-    g2: "#0b0f1c",
-  },
+  US: US_IDENTITY.cabinet,
   UK: UK_IDENTITY,
   CN: {
     glyph: "国",

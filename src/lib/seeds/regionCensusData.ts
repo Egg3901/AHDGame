@@ -2,14 +2,6 @@ import type { CountryId } from "@/lib/constants/countries";
 import type { Layer1Config } from "@/lib/seeds/stateDemographics";
 import type { ResetPresetId } from "@/lib/seeds/presetSelector";
 import { selectPresetBundleOptional } from "@/lib/seeds/presetSelector";
-import { stateCensusData } from "@/lib/seeds/stateDemographics";
-import { stateCensusData1953 } from "@/lib/seeds/stateCensusData1953";
-import { stateCensusData1979 } from "@/lib/seeds/stateCensusData1979";
-import { stateCensusData1991 } from "@/lib/seeds/stateCensusData1991";
-import { stateCensusData1999 } from "@/lib/seeds/stateCensusData1999";
-import { stateCensusData2007 } from "@/lib/seeds/stateCensusData2007";
-import { stateCensusData2023 } from "@/lib/seeds/stateCensusData2023";
-import { stateCensusData2027 } from "@/lib/seeds/stateCensusData2027";
 import { ukRegionCensusData } from "@/lib/seeds/uk/ukRegionCensusData";
 import { ukRegionCensusData1953 } from "@/lib/seeds/uk/ukRegionCensusData1953";
 import { ukRegionCensusData1991 } from "@/lib/seeds/uk/ukRegionCensusData1991";
@@ -82,6 +74,7 @@ import { balRegionCensusData1953 } from "@/lib/seeds/bal/balRegionCensusData1953
 import { balRegionCensusData } from "@/lib/seeds/bal/balRegionCensusData";
 import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
 import { JP_GEOGRAPHY } from "@/lib/countries/jp/geography";
+import { US_GEOGRAPHY } from "@/lib/countries/us/geography";
 
 export const CENSUS_BUNDLES: Partial<Record<CountryId, PresetBundles>> = {
   PL: {
@@ -139,16 +132,7 @@ export const CENSUS_BUNDLES: Partial<Record<CountryId, PresetBundles>> = {
     "1979-default": balRegionCensusData,
   },
 
-  US: {
-    "1953-default": stateCensusData1953, // 1979 shares proxy, 1979-authored positions stripped
-    "1979-default": stateCensusData1979,
-    "1991-default": stateCensusData1991,
-    "1999-default": stateCensusData1999,
-    "2007-default": stateCensusData2007,
-    "2019-default": stateCensusData,
-    "2023-default": stateCensusData2023,
-    "2027-default": stateCensusData2027,
-  },
+  US: US_GEOGRAPHY.censusBundles,
   UK: {
     "1953-default": ukRegionCensusData1953,
     "1979-default": ukRegionCensusData1979,

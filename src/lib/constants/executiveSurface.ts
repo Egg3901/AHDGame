@@ -1,5 +1,6 @@
 import type { CountryId } from "@/lib/constants/countries";
 import { JP_IDENTITY } from "@/lib/countries/jp/identity";
+import { US_IDENTITY } from "@/lib/countries/us/identity";
 
 /**
  * Per-country configuration for the shared executive shell (instrument strip
@@ -56,15 +57,7 @@ const PARLIAMENTARY_ACTS: Record<ExecutiveActKind, string> = {
 };
 
 export const EXECUTIVE_SURFACE: Record<CountryId, ExecutiveSurfaceConfig> = {
-  US: {
-    clock: { kind: "election", label: "Term Clock", countdownNoun: "election" },
-    actLabels: PRESIDENTIAL_ACTS,
-    deskKind: "bills",
-    deskLabel: "The Desk",
-    rosterTitle: "Cabinet",
-    heroImage: "/api/images/hero/white-house",
-    heroAlt: "The White House, Washington D.C.",
-  },
+  US: US_IDENTITY.executiveSurface,
   UK: {
     clock: { kind: "election", label: "Term Clock", countdownNoun: "next general election" },
     actLabels: { ...PARLIAMENTARY_ACTS, order: "ORDER IN COUNCIL" },
