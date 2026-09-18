@@ -139,14 +139,6 @@ export async function recomputeSharePricesAfterBondTurn(
     const fxRate = fxRateForCorpFromMap(corp, lookups.exchangeRatesByCurrency);
     const liquidCapitalAnchor = corpCapitalToAnchor(corp.liquidCapital, homeCurrency, fxRate);
 
-    // Mirror the issuance-proceeds exclusion from sectorCalculations so the
-    // post-bond recompute doesn't inflate tangible book for corps that have
-    // realized proceeds from selling their own shares out of the public float.
-    const issuanceProceedsAnchor = corpCapitalToAnchor(
-      corp.shareIssuanceProceeds ?? 0,
-      homeCurrency,
-      fxRate
-    );
     const activeBankCharter = corp.bankCharter?.status === "active" ? corp.bankCharter : null;
     const bankFxRate = activeBankCharter
       ? (lookups.exchangeRatesByCurrency.get(activeBankCharter.currency) ?? 1)
@@ -221,7 +213,10 @@ export async function recomputeSharePricesAfterBondTurn(
 
     inputs.push({
       corpId: id,
-      liquidCapitalAnchor: Math.max(0, liquidCapitalAnchor - issuanceProceedsAnchor),
+      // Issuance already scales the per-share price when new shares are created.
+      // Cash that subsequently arrives is a real retained asset and belongs in
+      // tangible book; subtracting it again double-counts dilution.
+      liquidCapitalAnchor: Math.max(0, liquidCapitalAnchor),
       bankEquityAnchor,
       sectorNPVAnchor,
       issuedBondDebt: lookups.issuedBondDebtByCorpId.get(id) ?? 0,

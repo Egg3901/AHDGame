@@ -83,6 +83,7 @@ import { migration as sourceFenceIndexes } from "./entries/2026-09-11-source-fen
 import { migration as repriceCurrentSovereignRisk } from "./entries/2026-09-12-reprice-current-sovereign-risk";
 import { migration as identityObservationsBackfill } from "./entries/2026-09-16-identity-observations-backfill";
 import { migration as repairDuplicateCorporationSequentialIds } from "./entries/2026-09-17-repair-duplicate-corporation-sequential-ids";
+import { migration as normalizeShareCorporateActions } from "./entries/2026-09-18-normalize-share-corporate-actions";
 
 export const MIGRATIONS: Migration[] = [
   // v0.2.6 currency cutover (declarative — shipped via standalone scripts)
@@ -265,6 +266,9 @@ export const MIGRATIONS: Migration[] = [
   // holder pools from current balances, and swap the one-seat index for the
   // role-slot index. Idempotent, dry-run safe, deletes nothing.
   ukDualMinistryRoleSlot,
+  // Corporate actions remain available for cost-basis replay, but contribute
+  // no executable volume or notional to share-market aggregates.
+  normalizeShareCorporateActions,
 ];
 
 // D13 rollback drill — registered but deliberately OUTSIDE the normal chain.
