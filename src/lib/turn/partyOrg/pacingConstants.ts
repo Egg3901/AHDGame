@@ -14,6 +14,9 @@
 
 import type { CountryId } from "@/lib/constants/countries";
 import { JP_GEOGRAPHY } from "@/lib/countries/jp/geography";
+import { US_NON_PARTY_INDEPENDENT_BIAS } from "@/lib/countries/us/geographyFacts";
+import { UK_NON_PARTY_INDEPENDENT_BIAS } from "@/lib/countries/uk/geographyFacts";
+import { DE_NON_PARTY_INDEPENDENT_BIAS } from "@/lib/countries/de/geographyFacts";
 
 /**
  * Passive Reg% drift per turn toward each party's `(Org% − country lag)`
@@ -134,10 +137,10 @@ export const REG_LAG_BELOW_ORG_PCT_BY_COUNTRY: Partial<Record<CountryId, number>
  * Countries absent from this map fall back to `NON_PARTY_BUCKET_INDEPENDENT_BIAS`.
  */
 export const NON_PARTY_BUCKET_INDEPENDENT_BIAS_BY_COUNTRY: Partial<Record<CountryId, number>> = {
-  US: 7 / 3,
-  UK: 1,
+  US: US_NON_PARTY_INDEPENDENT_BIAS,
+  UK: UK_NON_PARTY_INDEPENDENT_BIAS,
   JP: JP_GEOGRAPHY.nonPartyIndependentBias,
-  DE: 3 / 7,
+  DE: DE_NON_PARTY_INDEPENDENT_BIAS,
 };
 
 /**

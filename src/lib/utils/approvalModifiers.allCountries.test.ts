@@ -32,8 +32,8 @@ const ERA_1979_ONLY = new Set<string>([
   "BLR",
   "CS",
   "BAL",
-  // Cold-War additions — like the rest of this set they have no state-metrics
-  // bundle in the 2019/1991 rosters (loadSeededStateMetrics returns []).
+  // Cold-War additions — their bundles are 1953-era, so they are not part of
+  // the 2019/1991 rosters this audit covers.
   "GR",
   "AT",
   "FI",

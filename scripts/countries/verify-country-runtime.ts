@@ -105,6 +105,8 @@ import { FULL_ERA_REGION_BUNDLES } from "../../src/lib/admin/seedDiagnostic/regi
 import { REGION_NAME_MAPS } from "../../src/lib/admin/seed/seedSeats";
 import { M2_TO_GDP_1953 } from "../../src/lib/seeds/reference/moneySupply";
 import { GDP_DENOMINATION_1953 } from "../../src/lib/seeds/reference/gdpDenomination";
+import { RAW_BUNDLES } from "../../src/lib/states/conditions/seedMetricsLoader";
+import { NON_PARTY_BUCKET_INDEPENDENT_BIAS_BY_COUNTRY } from "../../src/lib/turn/partyOrg/pacingConstants";
 import { COUNTRY_SECTOR_WEIGHTS_1953 } from "../../src/lib/seeds/reference/sectorSeedWeights1953";
 import { REGIONAL_BILL_ASSENT_OFFICE_KEY } from "../../src/lib/constants/countries";
 import { INCOME_ANCHORS } from "../../src/lib/era/metricCatalog";
@@ -189,6 +191,8 @@ const REGISTRIES: Record<string, Dict> = {
   MONETARY_BASELINES_1991: d(MONETARY_BASELINES_1991),
   M2_TO_GDP_1953: d(M2_TO_GDP_1953),
   GDP_DENOMINATION_1953: d(GDP_DENOMINATION_1953),
+  RAW_BUNDLES: d(RAW_BUNDLES),
+  NON_PARTY_BUCKET_INDEPENDENT_BIAS_BY_COUNTRY: d(NON_PARTY_BUCKET_INDEPENDENT_BIAS_BY_COUNTRY),
   SURFACES: d(SURFACES),
   REGION_CENSUS_LABELS: d(REGION_CENSUS_LABELS),
   STATE_DISPLAY_NAMES: d(STATE_DISPLAY_NAMES),
@@ -591,6 +595,42 @@ const ABSENT_BY_REGISTRY: Array<[string, string, readonly string[]]> = [
     ],
   ],
   [
+    "RAW_BUNDLES",
+    "no static state-metrics bundle; SCO/WAL fan out from the UK aggregate at secession, UKR regions are a deferred build",
+    ["SCO", "WAL", "UKR"],
+  ],
+  [
+    "NON_PARTY_BUCKET_INDEPENDENT_BIAS_BY_COUNTRY",
+    "no country override; the reader falls back to NON_PARTY_BUCKET_INDEPENDENT_BIAS",
+    [
+      "CN",
+      "IE",
+      "RU",
+      "DD",
+      "NG",
+      "BR",
+      "FR",
+      "IT",
+      "ES",
+      "SE",
+      "TR",
+      "GR",
+      "AT",
+      "FI",
+      "PL",
+      "HU",
+      "RO",
+      "YU",
+      "BG",
+      "CS",
+      "SCO",
+      "WAL",
+      "BLR",
+      "UKR",
+      "BAL",
+    ],
+  ],
+  [
     "GDP_DENOMINATION_1953",
     "not a 1953 starting country; later presets are uniformly local-currency",
     ["SCO", "WAL"],
@@ -899,6 +939,8 @@ const FOLDER_PATH: Record<string, string | null> = {
   MONETARY_BASELINES_1991: "economy.monetary.byEra.1991",
   M2_TO_GDP_1953: "economy.m2ToGdp1953",
   GDP_DENOMINATION_1953: "economy.gdpDenomination1953",
+  RAW_BUNDLES: "geography.rawMetrics",
+  NON_PARTY_BUCKET_INDEPENDENT_BIAS_BY_COUNTRY: "geography.nonPartyIndependentBias",
   SURFACES: "identity.parliamentarySurface",
   REGION_CENSUS_LABELS: "identity.regionCensusLabels",
   STATE_DISPLAY_NAMES: "identity.stateDisplayNames",

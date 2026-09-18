@@ -483,6 +483,28 @@ const R: Rewire[] = [
     "CC_GEOGRAPHY.regionNames"
   ),
 
+  /* ---- the last tranche -----------------------------------------------------
+   *
+   * ⚠ THESE TWO NEEDED NO CONTRACT CHANGE AT ALL. `geography.rawMetrics` and
+   * `geography.nonPartyIndependentBias` have been folder fields since the
+   * contract was written, and every folder already populates them -- Japan
+   * forwarded to both, and nobody wired the other 28 countries. The data was
+   * single-sourced in the folder and duplicated in the registry at the same
+   * time, which is the state that looks finished from either side alone.
+   */
+  r(
+    "RAW_BUNDLES",
+    "src/lib/states/conditions/seedMetricsLoader.ts",
+    "geography",
+    "CC_GEOGRAPHY",
+    "CC_GEOGRAPHY.rawMetrics"
+  ),
+  r(
+    "NON_PARTY_BUCKET_INDEPENDENT_BIAS_BY_COUNTRY",
+    "src/lib/turn/partyOrg/pacingConstants.ts",
+    "geographyFacts",
+    "CC_NON_PARTY_INDEPENDENT_BIAS"
+  ),
   r(
     "GDP_DENOMINATION_1953",
     "src/lib/seeds/reference/gdpDenomination.ts",
