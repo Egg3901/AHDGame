@@ -133,6 +133,17 @@ function corridorMidpoint(minOffset: number, maxOffset: number): number {
   return (minOffset + maxOffset) / 2;
 }
 
+/**
+ * Lower-quartile deposit target for NPC banks. Incumbents price deposits
+ * lazily: a player bank that merely matches the old midpoint still wins
+ * share, which leaves room for a lending margin instead of forcing every
+ * bank to overpay for the same base. Lending stays at the midpoint so NPC
+ * loan-book economics do not move with this.
+ */
+export function corridorDepositTarget(minOffset: number, maxOffset: number): number {
+  return minOffset + 0.25 * (maxOffset - minOffset);
+}
+
 function offsetsMatch(a: number, b: number): boolean {
   return Math.abs(a - b) <= OFFSET_DRIFT_EPSILON;
 }
@@ -328,7 +339,8 @@ async function issueCharterWithFlag(
 
 /**
  * For each active NPP-owned deposit-taking bank: if rate offsets have drifted
- * from corridor midpoints, push them back via {@link setBankRates}.
+ * from target, push them back via {@link setBankRates} - deposits to the
+ * lower quartile ({@link corridorDepositTarget}), lending to the midpoint.
  * Hold-reserve / lend-the-book behavior comes from bankingTurn's NPC flows.
  */
 export async function runNpcBankPolicy(db: Db, _turn: number): Promise<NpcBankPolicySummary> {
@@ -349,17 +361,20 @@ export async function runNpcBankPolicy(db: Db, _turn: number): Promise<NpcBankPo
 
     const countryId = getCountryIdForCurrency(charter.currency);
     const corridors = await getRateCorridors(db, countryId);
-    const midDeposit = corridorMidpoint(corridors.deposit.minOffset, corridors.deposit.maxOffset);
+    const targetDeposit = corridorDepositTarget(
+      corridors.deposit.minOffset,
+      corridors.deposit.maxOffset
+    );
     const midLending = corridorMidpoint(corridors.lending.minOffset, corridors.lending.maxOffset);
 
     if (
-      offsetsMatch(charter.depositOffset, midDeposit) &&
+      offsetsMatch(charter.depositOffset, targetDeposit) &&
       offsetsMatch(charter.lendingOffset, midLending)
     ) {
       continue;
     }
 
-    const setResult = await setBankRates(db, corp._id, midDeposit, midLending);
+    const setResult = await setBankRates(db, corp._id, targetDeposit, midLending);
     if (setResult.ok) banksUpdated += 1;
   }
 
