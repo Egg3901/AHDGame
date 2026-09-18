@@ -122,17 +122,14 @@ const executiveSurface: ExecutiveSurfaceConfig = {
  */
 // (regionCensusLabels is deliberately absent for YU.)
 
-/** Region display names (STATE_DISPLAY_NAMES), used by the commodity map. */
-const stateDisplayNames: Record<string, string> = {
-  YU_SLO: "Slovenia",
-  YU_CRO: "Croatia",
-  YU_BIH: "Bosnia & Herzegovina",
-  YU_SRB: "Serbia",
-  YU_VOJ: "Vojvodina",
-  YU_KOS: "Kosovo",
-  YU_MNE: "Montenegro",
-  YU_MKD: "Macedonia",
-};
+/*
+ * ⚠️ NO `stateDisplayNames` HERE, AND THAT IS THE POINT. This country's
+ * display names are DERIVED at runtime in `commodityRegionMappings.ts` from
+ * `yuRegions`, under a comment that says "no hand-maintained copies to
+ * drift". Snapshotting that derivation into the folder created exactly such
+ * a copy: a frozen literal that would not follow a renamed or added region.
+ * The rosters are the single source; the folder must not restate them.
+ */
 
 /**
  * No historical NPC bank names.
@@ -152,5 +149,4 @@ export const YU_IDENTITY: CountryIdentity = {
   policyText,
   executiveSeal,
   executiveSurface,
-  stateDisplayNames,
 };

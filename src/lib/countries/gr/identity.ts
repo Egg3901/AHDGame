@@ -123,15 +123,14 @@ const executiveSurface: ExecutiveSurfaceConfig = {
  */
 // (regionCensusLabels is deliberately absent for GR.)
 
-/** Region display names (STATE_DISPLAY_NAMES), used by the commodity map. */
-const stateDisplayNames: Record<string, string> = {
-  GR_ATT: "Attica",
-  GR_MAC: "Macedonia & Thrace",
-  GR_THE: "Thessaly",
-  GR_EPC: "Epirus & Central Greece",
-  GR_PEL: "Peloponnese",
-  GR_ISL: "Islands & Crete",
-};
+/*
+ * ⚠️ NO `stateDisplayNames` HERE, AND THAT IS THE POINT. This country's
+ * display names are DERIVED at runtime in `commodityRegionMappings.ts` from
+ * `grRegions`, under a comment that says "no hand-maintained copies to
+ * drift". Snapshotting that derivation into the folder created exactly such
+ * a copy: a frozen literal that would not follow a renamed or added region.
+ * The rosters are the single source; the folder must not restate them.
+ */
 
 /** NPC bank names, pre-modernisation. */
 const historicalNames: readonly string[] = ["Aegean Merchants Bank", "Peloponnese Savings Bank"];
@@ -147,7 +146,6 @@ export const GR_IDENTITY: CountryIdentity = {
   policyText,
   executiveSeal,
   executiveSurface,
-  stateDisplayNames,
   historicalNames,
   modernNames,
 };

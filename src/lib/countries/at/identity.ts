@@ -123,14 +123,14 @@ const executiveSurface: ExecutiveSurfaceConfig = {
  */
 // (regionCensusLabels is deliberately absent for AT.)
 
-/** Region display names (STATE_DISPLAY_NAMES), used by the commodity map. */
-const stateDisplayNames: Record<string, string> = {
-  AT_VIE: "Vienna",
-  AT_NOE: "Lower Austria & Burgenland",
-  AT_OOE: "Upper Austria & Salzburg",
-  AT_STK: "Styria & Carinthia",
-  AT_TYR: "Tyrol & Vorarlberg",
-};
+/*
+ * ⚠️ NO `stateDisplayNames` HERE, AND THAT IS THE POINT. This country's
+ * display names are DERIVED at runtime in `commodityRegionMappings.ts` from
+ * `atRegions`, under a comment that says "no hand-maintained copies to
+ * drift". Snapshotting that derivation into the folder created exactly such
+ * a copy: a frozen literal that would not follow a renamed or added region.
+ * The rosters are the single source; the folder must not restate them.
+ */
 
 /** NPC bank names, pre-modernisation. */
 const historicalNames: readonly string[] = ["Alpine Credit Bank", "Danube Commercial Bank"];
@@ -146,7 +146,6 @@ export const AT_IDENTITY: CountryIdentity = {
   policyText,
   executiveSeal,
   executiveSurface,
-  stateDisplayNames,
   historicalNames,
   modernNames,
 };

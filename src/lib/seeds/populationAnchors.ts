@@ -1,34 +1,16 @@
 import type { CountryId } from "@/lib/constants/countries";
 import { selectPresetBundleOptional } from "@/lib/seeds/presetSelector";
 import type { ResetPresetId } from "@/lib/seeds/presetSelector";
-import {
-  iePopulationAnchors2019,
-  iePopulationAnchors1991,
-  type PopulationAnchor,
-} from "@/lib/seeds/ie/iePopulationAnchors";
-import {
-  dePopulationAnchors2019,
-  dePopulationAnchors1991,
-} from "@/lib/seeds/de/dePopulationAnchors";
+import { type PopulationAnchor } from "@/lib/seeds/ie/iePopulationAnchors";
 import {} from "@/lib/countries/jp/data/jpPopulationAnchors";
-import {
-  brPopulationAnchors2019,
-  brPopulationAnchors1991,
-} from "@/lib/seeds/br/brPopulationAnchors";
-import {
-  cnPopulationAnchors2019,
-  cnPopulationAnchors1991,
-} from "@/lib/seeds/cn/cnPopulationAnchors";
-import {
-  ukPopulationAnchors2019,
-  ukPopulationAnchors1991,
-} from "@/lib/seeds/uk/ukPopulationAnchors";
-import {
-  usPopulationAnchors2019,
-  usPopulationAnchors1991,
-} from "@/lib/seeds/reference/usPopulationAnchors";
 import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
 import { JP_GEOGRAPHY } from "@/lib/countries/jp/geography";
+import { US_GEOGRAPHY } from "@/lib/countries/us/geography";
+import { UK_GEOGRAPHY } from "@/lib/countries/uk/geography";
+import { DE_GEOGRAPHY } from "@/lib/countries/de/geography";
+import { CN_GEOGRAPHY } from "@/lib/countries/cn/geography";
+import { IE_GEOGRAPHY } from "@/lib/countries/ie/geography";
+import { BR_GEOGRAPHY } from "@/lib/countries/br/geography";
 
 export type { PopulationAnchor };
 export type AnchorBundle = Record<string, PopulationAnchor>;
@@ -41,13 +23,13 @@ type PresetBundles = Partial<Record<ResetPresetId, AnchorBundle>>;
  * bundle never throws for a 1991 world.
  */
 export const POPULATION_ANCHOR_BUNDLES: Partial<Record<CountryId, PresetBundles>> = {
-  IE: { "2019-default": iePopulationAnchors2019, "1991-default": iePopulationAnchors1991 },
-  DE: { "2019-default": dePopulationAnchors2019, "1991-default": dePopulationAnchors1991 },
+  IE: IE_GEOGRAPHY.populationAnchors,
+  DE: DE_GEOGRAPHY.populationAnchors,
   JP: JP_GEOGRAPHY.populationAnchors,
-  BR: { "2019-default": brPopulationAnchors2019, "1991-default": brPopulationAnchors1991 },
-  CN: { "2019-default": cnPopulationAnchors2019, "1991-default": cnPopulationAnchors1991 },
-  UK: { "2019-default": ukPopulationAnchors2019, "1991-default": ukPopulationAnchors1991 },
-  US: { "2019-default": usPopulationAnchors2019, "1991-default": usPopulationAnchors1991 },
+  BR: BR_GEOGRAPHY.populationAnchors,
+  CN: CN_GEOGRAPHY.populationAnchors,
+  UK: UK_GEOGRAPHY.populationAnchors,
+  US: US_GEOGRAPHY.populationAnchors,
 };
 
 /**

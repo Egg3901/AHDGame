@@ -88,6 +88,22 @@ import { POPULATION_MULTIPLIERS } from "../../src/lib/seeds/reference/era1991Pop
 import { CENSUS_BUNDLES } from "../../src/lib/seeds/regionCensusData";
 import { SPAWN_ELECTIONS_REGISTRY } from "../../src/lib/turn/perpetualElections/registry";
 import { COUNTRY_ELECTION_PHASES } from "../../src/lib/turn/countryPhases";
+import { COUNTRY_SECTOR_WEIGHTS_1979 } from "../../src/lib/seeds/reference/sectorSeedWeights1979";
+import { COUNTRY_SECTOR_WEIGHTS_1991 } from "../../src/lib/seeds/reference/sectorSeedWeights1991";
+import {
+  MONETARY_BASELINES_1953,
+  MONETARY_BASELINES_1971,
+  MONETARY_BASELINES_1979,
+  MONETARY_BASELINES_1991,
+} from "../../src/lib/constants/monetaryEra";
+import { SURFACES } from "../../src/lib/constants/parliamentaryExecutiveSurface";
+import { REGION_CENSUS_LABELS } from "../../src/lib/constants/regionCensusLabels";
+import { STATE_DISPLAY_NAMES } from "../../src/lib/commodity-map/commodityRegionMappings";
+import { METRIC_PRESET_BUNDLES } from "../../src/lib/seeds/metricPresets";
+import { POPULATION_ANCHOR_BUNDLES } from "../../src/lib/seeds/populationAnchors";
+import { FULL_ERA_REGION_BUNDLES } from "../../src/lib/admin/seedDiagnostic/regionBundles";
+import { REGION_NAME_MAPS } from "../../src/lib/admin/seed/seedSeats";
+import { M2_TO_GDP_1953 } from "../../src/lib/seeds/reference/moneySupply";
 import { CONVERTED } from "../../src/lib/countries/singleCountryData";
 
 type Dict = Record<string, unknown>;
@@ -148,6 +164,28 @@ const REGISTRIES: Record<string, Dict> = {
   POPULATION_MULTIPLIERS: d(POPULATION_MULTIPLIERS),
   CENSUS_BUNDLES: d(CENSUS_BUNDLES),
   SPAWN_ELECTIONS_REGISTRY: d(SPAWN_ELECTIONS_REGISTRY),
+  /*
+   * ⚠️ ADDED AFTER AN AUDIT FOUND 495 UNCHECKED COUNTRY-ENTRIES. The harness
+   * covered 53 of the 93 registries the snapshot captures, and most of the
+   * uncovered ones still held per-country values -- usually a WRAPPER object
+   * around the very objects the folder holds. Nothing had diverged yet, which
+   * is exactly why it was worth closing: a duplicate is harmless until the day
+   * one side is edited.
+   */
+  COUNTRY_SECTOR_WEIGHTS_1979: d(COUNTRY_SECTOR_WEIGHTS_1979),
+  COUNTRY_SECTOR_WEIGHTS_1991: d(COUNTRY_SECTOR_WEIGHTS_1991),
+  MONETARY_BASELINES_1953: d(MONETARY_BASELINES_1953),
+  MONETARY_BASELINES_1971: d(MONETARY_BASELINES_1971),
+  MONETARY_BASELINES_1979: d(MONETARY_BASELINES_1979),
+  MONETARY_BASELINES_1991: d(MONETARY_BASELINES_1991),
+  M2_TO_GDP_1953: d(M2_TO_GDP_1953),
+  SURFACES: d(SURFACES),
+  REGION_CENSUS_LABELS: d(REGION_CENSUS_LABELS),
+  STATE_DISPLAY_NAMES: d(STATE_DISPLAY_NAMES),
+  METRIC_PRESET_BUNDLES: d(METRIC_PRESET_BUNDLES),
+  POPULATION_ANCHOR_BUNDLES: d(POPULATION_ANCHOR_BUNDLES),
+  FULL_ERA_REGION_BUNDLES: d(FULL_ERA_REGION_BUNDLES),
+  REGION_NAME_MAPS: d(REGION_NAME_MAPS),
 };
 
 /**
@@ -352,6 +390,219 @@ const ABSENT_UPSTREAM: Record<string, Record<string, string>> = {
   },
 };
 
+/**
+ * Absences recorded REGISTRY-first, because these are facts about the registry.
+ *
+ * ⚠️ AN ERA TABLE IS NOT A COUNTRY TABLE. `MONETARY_BASELINES_1979` holds
+ * the countries whose 1979 world differs from their base; a country missing from
+ * it inherits, which is the point of the table. Listing these per country, in
+ * twenty-nine blocks, would bury that -- the shape of the fact is "this era has
+ * these countries", not "this country lacks these eras".
+ *
+ * Each list was computed from the live registry, not guessed, and each entry is
+ * still checked in BOTH directions per country.
+ */
+const ABSENT_BY_REGISTRY: Array<[string, string, readonly string[]]> = [
+  [
+    "COUNTRY_SECTOR_WEIGHTS_1979",
+    "no 1979 sector-weight override; the country inherits its base weights",
+    ["RU", "GR", "AT", "FI", "SCO", "WAL", "BLR"],
+  ],
+  [
+    "MONETARY_BASELINES_1953",
+    "no 1953 monetary override; the country inherits its base baseline",
+    ["US", "UK", "CN", "IE", "SCO", "WAL"],
+  ],
+  [
+    "MONETARY_BASELINES_1971",
+    "no 1971 monetary override; the country inherits its base baseline",
+    ["AT", "FI", "RO", "YU", "BG", "CS", "SCO", "WAL", "BLR", "UKR", "BAL"],
+  ],
+  [
+    "MONETARY_BASELINES_1979",
+    "no 1979 monetary override; the country inherits its base baseline",
+    [
+      "CN",
+      "DD",
+      "GR",
+      "AT",
+      "FI",
+      "PL",
+      "HU",
+      "RO",
+      "YU",
+      "BG",
+      "CS",
+      "SCO",
+      "WAL",
+      "BLR",
+      "UKR",
+      "BAL",
+    ],
+  ],
+  [
+    "MONETARY_BASELINES_1991",
+    "no 1991 monetary override; the country inherits its base baseline",
+    ["DD", "GR", "AT", "FI", "PL", "HU", "RO", "YU", "BG", "CS", "SCO", "WAL", "BLR", "UKR", "BAL"],
+  ],
+  [
+    "M2_TO_GDP_1953",
+    "no 1953 money-supply ratio is authored",
+    ["GR", "AT", "FI", "PL", "HU", "RO", "YU", "BG", "CS", "SCO", "WAL", "BLR", "UKR", "BAL"],
+  ],
+  [
+    "SURFACES",
+    "no parliamentary executive surface: presidential, one-party or not sovereign",
+    [
+      "US",
+      "CN",
+      "RU",
+      "DD",
+      "NG",
+      "BR",
+      "FR",
+      "IT",
+      "ES",
+      "SE",
+      "TR",
+      "GR",
+      "AT",
+      "FI",
+      "PL",
+      "HU",
+      "RO",
+      "YU",
+      "BG",
+      "CS",
+      "SCO",
+      "WAL",
+      "BLR",
+      "UKR",
+      "BAL",
+    ],
+  ],
+  [
+    "REGION_CENSUS_LABELS",
+    "no census label set; consumers fall back to the generic labels",
+    [
+      "US",
+      "RU",
+      "NG",
+      "FR",
+      "IT",
+      "ES",
+      "SE",
+      "TR",
+      "GR",
+      "AT",
+      "FI",
+      "PL",
+      "HU",
+      "RO",
+      "YU",
+      "BG",
+      "CS",
+      "BLR",
+      "UKR",
+      "BAL",
+    ],
+  ],
+  [
+    "STATE_DISPLAY_NAMES",
+    "no display-name map; the map falls back to compactRegionCode",
+    ["US", "RU", "DD", "NG", "SCO", "WAL", "UKR"],
+  ],
+  [
+    "METRIC_PRESET_BUNDLES",
+    "no metric presets are authored for any era",
+    ["DD", "PL", "HU", "RO", "YU", "BG", "CS", "SCO", "WAL", "BLR", "UKR", "BAL"],
+  ],
+  [
+    "POPULATION_ANCHOR_BUNDLES",
+    "no population anchors are authored for any era",
+    [
+      "RU",
+      "DD",
+      "NG",
+      "FR",
+      "IT",
+      "ES",
+      "SE",
+      "TR",
+      "GR",
+      "AT",
+      "FI",
+      "PL",
+      "HU",
+      "RO",
+      "YU",
+      "BG",
+      "CS",
+      "SCO",
+      "WAL",
+      "BLR",
+      "UKR",
+      "BAL",
+    ],
+  ],
+  [
+    "FULL_ERA_REGION_BUNDLES",
+    "no row in the seed-diagnostic registry; the seed runner is the authority",
+    [
+      "US",
+      "RU",
+      "DD",
+      "FR",
+      "IT",
+      "ES",
+      "SE",
+      "TR",
+      "GR",
+      "AT",
+      "FI",
+      "PL",
+      "HU",
+      "RO",
+      "YU",
+      "BG",
+      "CS",
+      "SCO",
+      "WAL",
+      "BLR",
+      "UKR",
+      "BAL",
+    ],
+  ],
+  [
+    "REGION_NAME_MAPS",
+    "no seat-seeder region-name map is authored",
+    [
+      "US",
+      "RU",
+      "DD",
+      "FR",
+      "IT",
+      "ES",
+      "SE",
+      "TR",
+      "GR",
+      "AT",
+      "FI",
+      "PL",
+      "HU",
+      "RO",
+      "YU",
+      "BG",
+      "CS",
+      "SCO",
+      "WAL",
+      "BLR",
+      "UKR",
+      "BAL",
+    ],
+  ],
+];
+
 for (const cc of ECONOMY_TIER) ABSENT_UPSTREAM[cc] = { ...ECONOMY_TIER_ABSENCES };
 for (const cc of EASTERN_BLOC) ABSENT_UPSTREAM[cc] = { ...EASTERN_BLOC_ABSENCES };
 for (const cc of SOVIET_REPUBLICS) ABSENT_UPSTREAM[cc] = { ...EASTERN_BLOC_ABSENCES };
@@ -363,8 +614,22 @@ for (const cc of BALTIC) {
   };
 }
 for (const cc of DEVOLVED_NATIONS) ABSENT_UPSTREAM[cc] = { ...DEVOLVED_ABSENCES };
+
 for (const cc of ECONOMY_TIER_NO_CENSUS) {
   ABSENT_UPSTREAM[cc] = { ...ECONOMY_TIER_ABSENCES, ...NO_CENSUS };
+}
+
+/*
+ * ⚠️ LAST, AND THAT ORDERING IS LOAD-BEARING. Each profile loop ASSIGNS a fresh
+ * object, so anything merged in before one runs is discarded. Placed earlier,
+ * this loop's entries for Greece, Austria and Finland were silently dropped by
+ * the ECONOMY_TIER_NO_CENSUS assignment and three registries reported as
+ * missing. Merging, rather than assigning, is what makes it safe here.
+ */
+for (const [registry, why, countries] of ABSENT_BY_REGISTRY) {
+  for (const cc of countries) {
+    ABSENT_UPSTREAM[cc] = { ...(ABSENT_UPSTREAM[cc] ?? {}), [registry]: why };
+  }
 }
 
 /**
@@ -457,6 +722,20 @@ const FOLDER_PATH: Record<string, string | null> = {
   POPULATION_MULTIPLIERS: "geography.populationMultipliers",
   CENSUS_BUNDLES: "geography.censusBundles",
   SPAWN_ELECTIONS_REGISTRY: "elections.spawn",
+  COUNTRY_SECTOR_WEIGHTS_1979: "economy.sectorWeights.byEra.1979",
+  COUNTRY_SECTOR_WEIGHTS_1991: "economy.sectorWeights.byEra.1991",
+  MONETARY_BASELINES_1953: "economy.monetary.byEra.1953",
+  MONETARY_BASELINES_1971: "economy.monetary.byEra.1971",
+  MONETARY_BASELINES_1979: "economy.monetary.byEra.1979",
+  MONETARY_BASELINES_1991: "economy.monetary.byEra.1991",
+  M2_TO_GDP_1953: "economy.m2ToGdp1953",
+  SURFACES: "identity.parliamentarySurface",
+  REGION_CENSUS_LABELS: "identity.regionCensusLabels",
+  STATE_DISPLAY_NAMES: "identity.stateDisplayNames",
+  METRIC_PRESET_BUNDLES: "geography.metricPresets",
+  POPULATION_ANCHOR_BUNDLES: "geography.populationAnchors",
+  FULL_ERA_REGION_BUNDLES: "geography.regionBundles",
+  REGION_NAME_MAPS: "geography.regionNames",
 };
 
 function at(root: unknown, path: string): unknown {
@@ -482,6 +761,59 @@ function at(root: unknown, path: string): unknown {
  * the Baltic States' `""` is not an ISO code, and a folder carrying it would be
  * asserting a code that does not exist.
  */
+/**
+ * Registries that are PARTIAL BY DESIGN, where a missing row says nothing about
+ * the folder.
+ *
+ * ⚠️ THE USUAL RULE IS THE RIGHT ONE ALMOST EVERYWHERE: if a registry has no row
+ * for a country, the folder must not supply one either, because a folder value
+ * with no registry behind it is a value somebody invented. These two are the
+ * exception. `FULL_ERA_REGION_BUNDLES` lives in `admin/seedDiagnostic/` and
+ * covers six countries; `REGION_NAME_MAPS` is the seat seeder's own map. The
+ * folder's regions come from the authored region modules by way of the SEED
+ * RUNNER, which is the authority -- so the folder being fuller than the registry
+ * is the normal state, not an invention.
+ */
+const PARTIAL_REGISTRY = new Set(["FULL_ERA_REGION_BUNDLES", "REGION_NAME_MAPS"]);
+
+/**
+ * Registry rows that are DERIVED elsewhere, so the folder must NOT restate them.
+ *
+ * ⚠️ THE FOLDER IS THE WRONG SOURCE HERE, WHICH IS THE OPPOSITE OF EVERY OTHER
+ * ENTRY IN THIS FILE. `commodityRegionMappings.ts` builds these sixteen
+ * countries' display names at runtime from their region rosters, under a comment
+ * reading "no hand-maintained copies to drift". The conversion snapshotted that
+ * derivation into each folder as a frozen literal -- so a renamed or added
+ * region would move the registry and leave the folder behind. The copies are
+ * removed; the rosters remain the single source.
+ *
+ * The check therefore inverts: the registry must resolve, and the folder must
+ * be silent.
+ */
+const DERIVED_UPSTREAM: Record<string, Record<string, string>> = {};
+for (const cc of [
+  "FR",
+  "IT",
+  "ES",
+  "SE",
+  "TR",
+  "GR",
+  "AT",
+  "FI",
+  "HU",
+  "PL",
+  "RO",
+  "YU",
+  "BG",
+  "CS",
+  "BLR",
+  "BAL",
+]) {
+  DERIVED_UPSTREAM[cc] = {
+    STATE_DISPLAY_NAMES: "derived from the region roster in commodityRegionMappings.ts",
+  };
+}
+
 const EMPTY_STRING_IS_ABSENCE = new Set(["COUNTRY_TO_ISO_NUMERIC"]);
 
 const NULL_IS_A_VALUE = new Set([
@@ -512,6 +844,7 @@ async function verify(cc: string): Promise<boolean> {
   }
   const exempt = ABSENT_UPSTREAM[cc] ?? {};
   const shared = SHARED_UPSTREAM[cc] ?? {};
+  const derived = DERIVED_UPSTREAM[cc] ?? {};
 
   let resolved = 0;
   let forwarders = 0;
@@ -523,6 +856,7 @@ async function verify(cc: string): Promise<boolean> {
     const why = exempt[name];
     const path = FOLDER_PATH[name];
     const sharedWhy = shared[name];
+    const derivedWhy = derived[name];
     /*
      * Declared HERE, not inside a branch: both the shared path below and the
      * ordinary path further down need it. The first version was scoped to the
@@ -549,6 +883,26 @@ async function verify(cc: string): Promise<boolean> {
       !(value === "" && EMPTY_STRING_IS_ABSENCE.has(name));
     const nullIsValue = NULL_IS_A_VALUE.has(name) && value === null && cc in registry;
 
+    if (derivedWhy) {
+      const side = path ? at(folder, path) : undefined;
+      if (!present) {
+        console.log(
+          `FAIL  ${name}.${cc} is listed as derived upstream ("${derivedWhy}") but the ` +
+            `registry no longer carries it.`
+        );
+        failed++;
+      } else if (!isEmpty(side)) {
+        console.log(
+          `FAIL  ${name}.${cc} is derived upstream ("${derivedWhy}"), but the folder restates ` +
+            `it at ${path}. A frozen copy of a derived value cannot follow its source.`
+        );
+        failed++;
+      } else {
+        resolved++;
+      }
+      continue;
+    }
+
     if (sharedWhy) {
       const side = path ? at(folder, path) : undefined;
 
@@ -574,7 +928,7 @@ async function verify(cc: string): Promise<boolean> {
     if (!present && !nullIsValue) {
       if (why) {
         const side = path ? at(folder, path) : undefined;
-        if (!isEmpty(side)) {
+        if (!isEmpty(side) && !PARTIAL_REGISTRY.has(name)) {
           console.log(
             `FAIL  ${name}.${cc} is exempt as "${why}", but the folder supplies a value at ` +
               `${path}. Either the exemption is stale or the folder invented the value.`

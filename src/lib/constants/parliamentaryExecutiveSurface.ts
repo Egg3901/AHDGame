@@ -6,10 +6,11 @@
  * so adding a country does not require a per-country hub rebuild.
  */
 import { getCountryConfig, type CountryId } from "./countries";
-import { getCountryFlagUrl } from "./flags";
 import { getExecutiveSurface } from "./executiveSurface";
 import { JP_IDENTITY } from "@/lib/countries/jp/identity";
 import { UK_IDENTITY } from "@/lib/countries/uk/identity";
+import { DE_IDENTITY } from "@/lib/countries/de/identity";
+import { IE_IDENTITY } from "@/lib/countries/ie/identity";
 
 export interface ParliamentaryExecutivePlaque {
   title: string;
@@ -42,62 +43,9 @@ export interface ParliamentaryExecutiveSurface {
 
 export const SURFACES: Partial<Record<CountryId, ParliamentaryExecutiveSurface>> = {
   UK: UK_IDENTITY.parliamentarySurface,
-  DE: {
-    executiveTitle: "Chancellor",
-    memberLabel: "Bundestag member",
-    headPlaque: {
-      title: "Chancellor",
-      sealGlyph: "BK",
-      vacancyNote: "A qualifying party or coalition chair may nominate a Chancellor.",
-    },
-    oppositionPlaque: {
-      title: "Opposition Leader",
-      sealGlyph: "OP",
-      vacancyNote: "The leader of the largest opposition bloc in the Bundestag.",
-    },
-    seatsPanel: {
-      title: "Bundestag seats by party",
-      emptyText: "No Bundestag members elected yet.",
-    },
-    hero: {
-      image: "/api/images/hero/reichstag",
-      alt: "Bundeskanzleramt and Reichstag in Berlin",
-      title: "Federal Government of Germany",
-      tagline: "Bundeskanzleramt · Chancellor, cabinet, and Bundestag confidence",
-      breadcrumbLast: "Federal Chancellery",
-    },
-  },
+  DE: DE_IDENTITY.parliamentarySurface,
   JP: JP_IDENTITY.parliamentarySurface,
-  IE: {
-    executiveTitle: "Taoiseach",
-    memberLabel: "TD",
-    headPlaque: {
-      title: "Taoiseach",
-      sealGlyph: "T",
-      vacancyNote: "A qualifying party or coalition chair may nominate a Taoiseach.",
-    },
-    deputyPlaque: {
-      title: "Tánaiste",
-      sealGlyph: "Tá",
-      vacancyNote: "The Taoiseach nominates a Tánaiste from cabinet ministers.",
-      cabinetPositionId: "tanaiste",
-    },
-    oppositionPlaque: {
-      title: "Opposition Leader",
-      sealGlyph: "FC",
-      vacancyNote: "The leader of the largest opposition bloc in the Dáil.",
-    },
-    seatsPanel: { title: "Dáil seats by party", emptyText: "No TDs elected yet." },
-    hero: {
-      // The flag stands in until a Government Buildings hero image is
-      // registered in /api/images/hero/[slug] (backlog polish item).
-      image: getCountryFlagUrl("IE"),
-      alt: "Government Buildings, Merrion Street, Dublin",
-      title: "Government of Ireland",
-      tagline: "Tithe an Rialtais · Taoiseach, Cabinet, and Dáil confidence",
-      breadcrumbLast: "Government Buildings",
-    },
-  },
+  IE: IE_IDENTITY.parliamentarySurface,
 };
 
 /** "Prime Minister" → "PM" — derived seal glyph for unconfigured countries. */

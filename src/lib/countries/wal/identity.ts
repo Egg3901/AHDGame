@@ -153,10 +153,18 @@ const regionCensusLabels: CensusLabelSet = {
   },
 };
 
-/** Region display names (STATE_DISPLAY_NAMES), used by the commodity map. */
-const stateDisplayNames: Record<string, string> = {
-  UK: "Wales",
-};
+/*
+ * ⚠️ NO `stateDisplayNames`, AND THE VALUE THAT WAS HERE WAS NONSENSE.
+ * The snapshot recorded `{ UK: "Wales" }` for this country -- an
+ * OUTER-KEYED slice, meaning the emitter found "WAL" as an INNER key of
+ * `STATE_DISPLAY_NAMES.UK`. It is the United Kingdom's display name for its
+ * WAL REGION, not Wales's name for a region called "UK". The generator
+ * wrote it straight into the folder, where it read as the latter.
+ *
+ * This is the SCO/WAL region-versus-country collision again, one layer down:
+ * the same two ids that made every UK region file look multi-country. The
+ * entry belongs to the UK's map and stays there.
+ */
 
 /**
  * No historical NPC bank names.
@@ -176,5 +184,4 @@ export const WAL_IDENTITY: CountryIdentity = {
   policyText,
   executiveSurface,
   regionCensusLabels,
-  stateDisplayNames,
 };

@@ -122,15 +122,14 @@ const executiveSurface: ExecutiveSurfaceConfig = {
  */
 // (regionCensusLabels is deliberately absent for BLR.)
 
-/** Region display names (STATE_DISPLAY_NAMES), used by the commodity map. */
-const stateDisplayNames: Record<string, string> = {
-  BLR_MIN: "Minsk",
-  BLR_HOM: "Gomel",
-  BLR_VIT: "Vitebsk",
-  BLR_MOG: "Mogilev",
-  BLR_BRE: "Brest",
-  BLR_GRO: "Grodno",
-};
+/*
+ * ⚠️ NO `stateDisplayNames` HERE, AND THAT IS THE POINT. This country's
+ * display names are DERIVED at runtime in `commodityRegionMappings.ts` from
+ * `blrRegions`, under a comment that says "no hand-maintained copies to
+ * drift". Snapshotting that derivation into the folder created exactly such
+ * a copy: a frozen literal that would not follow a renamed or added region.
+ * The rosters are the single source; the folder must not restate them.
+ */
 
 /**
  * No historical NPC bank names.
@@ -150,5 +149,4 @@ export const BLR_IDENTITY: CountryIdentity = {
   policyText,
   executiveSeal,
   executiveSurface,
-  stateDisplayNames,
 };

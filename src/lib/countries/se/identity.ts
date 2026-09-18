@@ -122,17 +122,14 @@ const executiveSurface: ExecutiveSurfaceConfig = {
  */
 // (regionCensusLabels is deliberately absent for SE.)
 
-/** Region display names (STATE_DISPLAY_NAMES), used by the commodity map. */
-const stateDisplayNames: Record<string, string> = {
-  SE_STH: "Stockholm",
-  SE_GOT: "Western Sweden",
-  SE_SKA: "Skåne",
-  SE_EAS: "Eastern Sweden",
-  SE_SML: "Småland",
-  SE_VML: "Bergslagen",
-  SE_NOR: "Norrland",
-  SE_UPP: "Uppland & Dalarna",
-};
+/*
+ * ⚠️ NO `stateDisplayNames` HERE, AND THAT IS THE POINT. This country's
+ * display names are DERIVED at runtime in `commodityRegionMappings.ts` from
+ * `seRegions`, under a comment that says "no hand-maintained copies to
+ * drift". Snapshotting that derivation into the folder created exactly such
+ * a copy: a frozen literal that would not follow a renamed or added region.
+ * The rosters are the single source; the folder must not restate them.
+ */
 
 /** NPC bank names, pre-modernisation. */
 const historicalNames: readonly string[] = ["Svea Merchants Bank", "Norrland Savings Bank"];
@@ -148,7 +145,6 @@ export const SE_IDENTITY: CountryIdentity = {
   policyText,
   executiveSeal,
   executiveSurface,
-  stateDisplayNames,
   historicalNames,
   modernNames,
 };

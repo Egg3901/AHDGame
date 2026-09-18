@@ -122,16 +122,14 @@ const executiveSurface: ExecutiveSurfaceConfig = {
  */
 // (regionCensusLabels is deliberately absent for RO.)
 
-/** Region display names (STATE_DISPLAY_NAMES), used by the commodity map. */
-const stateDisplayNames: Record<string, string> = {
-  RO_BUC: "Bucharest",
-  RO_MUN: "Muntenia",
-  RO_OLT: "Oltenia",
-  RO_TRA: "Transylvania",
-  RO_VST: "Banat & Crișana",
-  RO_MOL: "Moldavia",
-  RO_DOB: "Dobruja",
-};
+/*
+ * ⚠️ NO `stateDisplayNames` HERE, AND THAT IS THE POINT. This country's
+ * display names are DERIVED at runtime in `commodityRegionMappings.ts` from
+ * `roRegions`, under a comment that says "no hand-maintained copies to
+ * drift". Snapshotting that derivation into the folder created exactly such
+ * a copy: a frozen literal that would not follow a renamed or added region.
+ * The rosters are the single source; the folder must not restate them.
+ */
 
 /**
  * No historical NPC bank names.
@@ -151,5 +149,4 @@ export const RO_IDENTITY: CountryIdentity = {
   policyText,
   executiveSeal,
   executiveSurface,
-  stateDisplayNames,
 };

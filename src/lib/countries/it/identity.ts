@@ -122,17 +122,14 @@ const executiveSurface: ExecutiveSurfaceConfig = {
  */
 // (regionCensusLabels is deliberately absent for IT.)
 
-/** Region display names (STATE_DISPLAY_NAMES), used by the commodity map. */
-const stateDisplayNames: Record<string, string> = {
-  IT_NW: "Northwest",
-  IT_NE: "Northeast",
-  IT_TUS: "Central Italy",
-  IT_LAZ: "Lazio",
-  IT_CAM: "Campania",
-  IT_SUD: "Southern Italy",
-  IT_SIC: "Sicily",
-  IT_SAR: "Sardinia",
-};
+/*
+ * ⚠️ NO `stateDisplayNames` HERE, AND THAT IS THE POINT. This country's
+ * display names are DERIVED at runtime in `commodityRegionMappings.ts` from
+ * `itRegions`, under a comment that says "no hand-maintained copies to
+ * drift". Snapshotting that derivation into the folder created exactly such
+ * a copy: a frozen literal that would not follow a renamed or added region.
+ * The rosters are the single source; the folder must not restate them.
+ */
 
 /** NPC bank names, pre-modernisation. */
 const historicalNames: readonly string[] = ["Banca Adriatica", "Credito Tirreno"];
@@ -148,7 +145,6 @@ export const IT_IDENTITY: CountryIdentity = {
   policyText,
   executiveSeal,
   executiveSurface,
-  stateDisplayNames,
   historicalNames,
   modernNames,
 };

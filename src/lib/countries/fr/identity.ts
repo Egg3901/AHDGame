@@ -122,17 +122,14 @@ const executiveSurface: ExecutiveSurfaceConfig = {
  */
 // (regionCensusLabels is deliberately absent for FR.)
 
-/** Region display names (STATE_DISPLAY_NAMES), used by the commodity map. */
-const stateDisplayNames: Record<string, string> = {
-  FR_IDF: "Île-de-France",
-  FR_NOR: "North",
-  FR_EST: "East",
-  FR_OUE: "West",
-  FR_SOU: "Southwest",
-  FR_ARA: "Auvergne-Rhône-Alpes",
-  FR_MED: "Mediterranean",
-  FR_CEN: "Center",
-};
+/*
+ * ⚠️ NO `stateDisplayNames` HERE, AND THAT IS THE POINT. This country's
+ * display names are DERIVED at runtime in `commodityRegionMappings.ts` from
+ * `frRegions`, under a comment that says "no hand-maintained copies to
+ * drift". Snapshotting that derivation into the folder created exactly such
+ * a copy: a frozen literal that would not follow a renamed or added region.
+ * The rosters are the single source; the folder must not restate them.
+ */
 
 /** NPC bank names, pre-modernisation. */
 const historicalNames: readonly string[] = ["Banque du Littoral", "Comptoir des Provinces"];
@@ -148,7 +145,6 @@ export const FR_IDENTITY: CountryIdentity = {
   policyText,
   executiveSeal,
   executiveSurface,
-  stateDisplayNames,
   historicalNames,
   modernNames,
 };

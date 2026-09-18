@@ -64,65 +64,23 @@ import { ngRegions1999 } from "@/lib/seeds/ng/ngRegions1999";
 import { ngRegions2007 } from "@/lib/seeds/ng/ngRegions2007";
 import { ngRegions2023 } from "@/lib/seeds/ng/ngRegions2023";
 import { JP_GEOGRAPHY } from "@/lib/countries/jp/geography";
+import { UK_GEOGRAPHY } from "@/lib/countries/uk/geography";
+import { DE_GEOGRAPHY } from "@/lib/countries/de/geography";
+import { CN_GEOGRAPHY } from "@/lib/countries/cn/geography";
+import { IE_GEOGRAPHY } from "@/lib/countries/ie/geography";
+import { NG_GEOGRAPHY } from "@/lib/countries/ng/geography";
+import { BR_GEOGRAPHY } from "@/lib/countries/br/geography";
 
 export const FULL_ERA_REGION_BUNDLES: Partial<
   Record<CountryId, Partial<Record<ResetPresetId, State[]>>>
 > = {
-  DE: {
-    "1953-default": deRegions1953,
-    "1979-default": deRegions1979,
-    "1991-default": deRegions1991,
-    "1999-default": deRegions1999,
-    "2007-default": deRegions2007,
-    "2019-default": deRegions,
-    "2023-default": deRegions2023,
-  },
+  DE: DE_GEOGRAPHY.regionBundles,
   JP: JP_GEOGRAPHY.regionBundles,
-  BR: {
-    "1953-default": brRegions1953,
-    "1979-default": brRegions1979,
-    "1991-default": brRegions1991,
-    "1999-default": brRegions1999,
-    "2007-default": brRegions2007,
-    "2019-default": brRegions,
-    "2023-default": brRegions2023,
-  },
-  UK: {
-    "1953-default": ukRegions1953,
-    "1979-default": ukRegions1979,
-    "1991-default": ukRegions1991,
-    "1999-default": ukRegions1999,
-    "2007-default": ukRegions2007,
-    "2019-default": ukRegions,
-    "2023-default": ukRegions2023,
-  },
-  CN: {
-    "1953-default": cnRegions1953,
-    "1979-default": cnRegions1979,
-    "1991-default": cnRegions1991,
-    "1999-default": cnRegions1999,
-    "2007-default": cnRegions2007,
-    "2019-default": cnRegions,
-    "2023-default": cnRegions2023,
-  },
-  IE: {
-    "1953-default": ieRegions1953,
-    "1979-default": ieRegions1979,
-    "1991-default": ieRegions1991,
-    "1999-default": ieRegions1999,
-    "2007-default": ieRegions2007,
-    "2019-default": ieRegions,
-    "2023-default": ieRegions2023,
-  },
-  NG: {
-    "1953-default": ngRegions1953,
-    "1979-default": ngRegions1979,
-    "1991-default": ngRegions1991,
-    "1999-default": ngRegions1999,
-    "2007-default": ngRegions2007,
-    "2019-default": ngRegions,
-    "2023-default": ngRegions2023,
-  },
+  BR: BR_GEOGRAPHY.regionBundles,
+  UK: UK_GEOGRAPHY.regionBundles,
+  CN: CN_GEOGRAPHY.regionBundles,
+  IE: IE_GEOGRAPHY.regionBundles,
+  NG: NG_GEOGRAPHY.regionBundles,
 };
 
 /**

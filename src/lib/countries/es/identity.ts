@@ -122,17 +122,14 @@ const executiveSurface: ExecutiveSurfaceConfig = {
  */
 // (regionCensusLabels is deliberately absent for ES.)
 
-/** Region display names (STATE_DISPLAY_NAMES), used by the commodity map. */
-const stateDisplayNames: Record<string, string> = {
-  ES_MAD: "Madrid",
-  ES_CAT: "Catalonia",
-  ES_AND: "Andalusia",
-  ES_VAL: "Valencia & Murcia",
-  ES_PVB: "Basque Country & Navarre",
-  ES_GAL: "Galicia",
-  ES_NOR: "Northern Spain",
-  ES_CEN: "Central Spain & Islands",
-};
+/*
+ * ⚠️ NO `stateDisplayNames` HERE, AND THAT IS THE POINT. This country's
+ * display names are DERIVED at runtime in `commodityRegionMappings.ts` from
+ * `esRegions`, under a comment that says "no hand-maintained copies to
+ * drift". Snapshotting that derivation into the folder created exactly such
+ * a copy: a frozen literal that would not follow a renamed or added region.
+ * The rosters are the single source; the folder must not restate them.
+ */
 
 /** NPC bank names, pre-modernisation. */
 const historicalNames: readonly string[] = ["Banco del Ebro", "Caja Mercantil del Norte"];
@@ -148,7 +145,6 @@ export const ES_IDENTITY: CountryIdentity = {
   policyText,
   executiveSeal,
   executiveSurface,
-  stateDisplayNames,
   historicalNames,
   modernNames,
 };

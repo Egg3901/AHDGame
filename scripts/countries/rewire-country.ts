@@ -377,6 +377,112 @@ const R: Rewire[] = [
     "CC_GEOGRAPHY.censusBundles"
   ),
 
+  /* ---- era siblings and bundle wrappers ------------------------------------
+   *
+   * ⚠ THESE WERE DUPLICATES NOBODY WAS CHECKING. The harness covered 53
+   * registries; the snapshot captures 93. In the 40 it did not cover, 34 still
+   * held per-country values -- 495 country-entries. Most were WRAPPER-ONLY: the
+   * registry's `{ "1953-default": bundle }` object was a second container around
+   * the SAME inner objects the folder holds. `CN_ECONOMY.sectorWeights.byEra`
+   * and `COUNTRY_SECTOR_WEIGHTS_1953.CN` were deep-equal and not the same
+   * object, which is the exact state this whole rework exists to remove.
+   *
+   * Each row below was proved before it was written: the folder's value at the
+   * path was compared against the registry's for every converted country, by
+   * key set and then by reference per key. Nothing here differed.
+   */
+  r(
+    "COUNTRY_SECTOR_WEIGHTS_1979",
+    "src/lib/seeds/reference/sectorSeedWeights1979.ts",
+    "economy",
+    "CC_ECONOMY",
+    'CC_ECONOMY.sectorWeights.byEra["1979"]'
+  ),
+  r(
+    "COUNTRY_SECTOR_WEIGHTS_1991",
+    "src/lib/seeds/reference/sectorSeedWeights1991.ts",
+    "economy",
+    "CC_ECONOMY",
+    'CC_ECONOMY.sectorWeights.byEra["1991"]'
+  ),
+  r(
+    "MONETARY_BASELINES_1953",
+    "src/lib/constants/monetaryEra.ts",
+    "economy",
+    "CC_ECONOMY",
+    'CC_ECONOMY.monetary.byEra["1953"]'
+  ),
+  r(
+    "MONETARY_BASELINES_1971",
+    "src/lib/constants/monetaryEra.ts",
+    "economy",
+    "CC_ECONOMY",
+    'CC_ECONOMY.monetary.byEra["1971"]'
+  ),
+  r(
+    "MONETARY_BASELINES_1979",
+    "src/lib/constants/monetaryEra.ts",
+    "economy",
+    "CC_ECONOMY",
+    'CC_ECONOMY.monetary.byEra["1979"]'
+  ),
+  r(
+    "MONETARY_BASELINES_1991",
+    "src/lib/constants/monetaryEra.ts",
+    "economy",
+    "CC_ECONOMY",
+    'CC_ECONOMY.monetary.byEra["1991"]'
+  ),
+  r(
+    "SURFACES",
+    "src/lib/constants/parliamentaryExecutiveSurface.ts",
+    "identity",
+    "CC_IDENTITY",
+    "CC_IDENTITY.parliamentarySurface"
+  ),
+  r(
+    "REGION_CENSUS_LABELS",
+    "src/lib/constants/regionCensusLabels.ts",
+    "identity",
+    "CC_IDENTITY",
+    "CC_IDENTITY.regionCensusLabels"
+  ),
+  r(
+    "STATE_DISPLAY_NAMES",
+    "src/lib/commodity-map/commodityRegionMappings.ts",
+    "identity",
+    "CC_IDENTITY",
+    "CC_IDENTITY.stateDisplayNames"
+  ),
+  r(
+    "METRIC_PRESET_BUNDLES",
+    "src/lib/seeds/metricPresets.ts",
+    "geography",
+    "CC_GEOGRAPHY",
+    "CC_GEOGRAPHY.metricPresets"
+  ),
+  r(
+    "POPULATION_ANCHOR_BUNDLES",
+    "src/lib/seeds/populationAnchors.ts",
+    "geography",
+    "CC_GEOGRAPHY",
+    "CC_GEOGRAPHY.populationAnchors"
+  ),
+  r(
+    "FULL_ERA_REGION_BUNDLES",
+    "src/lib/admin/seedDiagnostic/regionBundles.ts",
+    "geography",
+    "CC_GEOGRAPHY",
+    "CC_GEOGRAPHY.regionBundles"
+  ),
+  r(
+    "REGION_NAME_MAPS",
+    "src/lib/admin/seed/seedSeats.ts",
+    "geography",
+    "CC_GEOGRAPHY",
+    "CC_GEOGRAPHY.regionNames"
+  ),
+
   // ---- elections ----------------------------------------------------------
   r(
     "SPAWN_ELECTIONS_REGISTRY",
