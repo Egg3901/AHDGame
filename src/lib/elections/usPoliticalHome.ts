@@ -1,44 +1,7 @@
-import type { Db } from "mongodb";
-import type { GameState } from "@/lib/db/types/gameState";
-import type { State } from "@/lib/db/types/state";
-import { getHouseSeats } from "@/lib/constants/states";
-import { admittedStateIdsAsOf, TERRITORY_ADMISSIONS } from "@/lib/elections/statehoodAdmission";
-import { NUMERIC_BSON_TYPE } from "@/lib/db/queryHelpers";
-
 /**
- * Load the set of US state ids that currently host full state politics
- * (era apportionment + mid-game admissions).
+ * Forwarder. Moved to the United States' country folder.
+ *
+ * ⚠️ A FORWARDER HOLDS NO COPY. Existing importers are untouched; there is
+ * exactly one definition, at `@/lib/countries/us/politicalHome`.
  */
-export async function loadUsPoliticalStateIds(db: Db): Promise<{
-  preset: string | undefined;
-  currentYear: number;
-  admittedIds: Set<string>;
-  politicalIds: Set<string>;
-  /** Full states plus playable US territories with territorial politics. */
-  residentPoliticalIds: Set<string>;
-}> {
-  const gameState = await db
-    .collection<GameState>("gameState")
-    .findOne({ _id: "current" }, { projection: { preset: 1, currentYear: 1 } });
-  const preset = gameState?.preset;
-  const currentYear = gameState?.currentYear ?? Number.POSITIVE_INFINITY;
-  const admissionBearing = (await db
-    .collection<State>("states")
-    .find(
-      { countryId: "US", admittedYear: { $type: NUMERIC_BSON_TYPE } },
-      { projection: { _id: 1, admittedYear: 1 } }
-    )
-    .toArray()) as unknown as Array<{ _id: string; admittedYear?: number }>;
-  const admittedIds = new Set(admittedStateIdsAsOf(admissionBearing, currentYear));
-  const politicalIds = new Set<string>([...Object.keys(getHouseSeats(preset)), ...admittedIds]);
-  const residentPoliticalIds = new Set<string>([
-    ...politicalIds,
-    ...TERRITORY_ADMISSIONS.map((territory) => territory.stateId),
-  ]);
-  return { preset, currentYear, admittedIds, politicalIds, residentPoliticalIds };
-}
-
-/** Player-facing reject copy for a US region without territorial or state politics. */
-export function unplayableTerritoryHomeError(stateName: string): string {
-  return `${stateName} cannot be chosen as a political home region.`;
-}
+export * from "@/lib/countries/us/politicalHome";

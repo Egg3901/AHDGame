@@ -182,7 +182,7 @@ export const WIKI_LAST_UPDATED: Record<string, string> = {
   "uk-overview": "2026-08-30",
   unions: "2026-08-30",
   "us-house-redistricting": "2026-09-06",
-  "us-overview": "2026-08-11",
+  "us-overview": "2026-08-30",
   "vote-factor-ledger": "2026-08-25",
   "voting-and-whips": "2026-08-30",
   "world-events": "2026-08-30",

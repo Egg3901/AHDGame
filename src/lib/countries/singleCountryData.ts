@@ -41,7 +41,7 @@
  */
 
 /** Countries whose folder is finished. Adding one turns the guard on for it. */
-export const CONVERTED: readonly string[] = ["JP"];
+export const CONVERTED: readonly string[] = ["JP", "US"];
 
 /**
  * Files that hold one country's data, are NOT in that country's folder, and are
@@ -88,6 +88,160 @@ export const ACKNOWLEDGED_OUTSIDE: ReadonlyArray<{
   // A file belongs here only while its country's slice genuinely cannot be
   // separated yet, and the reason must name the shared exports so the entry goes
   // false the day they part company.
+
+  // ---- Engine code that BRANCHES on the United States. Bucket F, not D. ----
+  //
+  // ⚠️ These are turn processors and election machinery, not tables of US facts.
+  // They mention the US because it is the default country or because the mechanic
+  // is American in origin; the logic is the file's content. Relocating a turn
+  // phase into a country folder would move CODE, not data, and leave the engine
+  // reaching into `us/` to run a turn.
+  {
+    file: "src/lib/turn/census.ts",
+    country: "US",
+    why: "The decennial census turn phase. Reapportionment logic that defaults to the US, not a census table -- those are in us/data/usStateCensusData*.ts.",
+  },
+  {
+    file: "src/lib/turn/statehood.ts",
+    country: "US",
+    why: "The statehood admission turn phase. Logic, defaulting to the US.",
+  },
+  {
+    file: "src/lib/turn/perpetualElections/engine.ts",
+    country: "US",
+    why: 'The perpetual-election engine every country\'s spawner runs through. It defaults to `countryId ?? "US"`, which is country-awareness, not ownership.',
+  },
+  {
+    file: "src/lib/turn/election/loadContingentElectionData.ts",
+    country: "US",
+    why: "Contingent-election loading (the House deciding a deadlocked presidential race). An American mechanic implemented as engine code.",
+  },
+  {
+    file: "src/lib/turn/scotusNominationLifecycle.ts",
+    country: "US",
+    why: "Supreme Court nomination lifecycle. A US institution modelled as turn logic; the seats and cases live in the database, not here.",
+  },
+  {
+    file: "src/lib/turn/scotusDocketTurn.ts",
+    country: "US",
+    why: "SCOTUS docket turn phase. Logic, same reasoning.",
+  },
+  {
+    file: "src/lib/turn/scotusTenureTurn.ts",
+    country: "US",
+    why: "SCOTUS tenure turn phase. Logic, same reasoning.",
+  },
+  {
+    file: "src/lib/turn/scotusSurpriseCaseTurn.ts",
+    country: "US",
+    why: "SCOTUS surprise-case turn phase. Logic, same reasoning.",
+  },
+
+  // ---- Wiki pages about the game, not about one country. ----
+  {
+    file: "src/lib/seeds/wiki/content/glossary.ts",
+    country: "US",
+    why: "The player glossary. It uses United States examples because the US is the default country; the page explains the game's vocabulary to everyone.",
+  },
+  {
+    file: "src/lib/seeds/wiki/content/createACharacter.ts",
+    country: "US",
+    why: "The character-creation guide, same reasoning: US examples in a page written for every player.",
+  },
+
+  // ---- Shared modules that CONTAIN United States data without BEING it. ----
+  //
+  // ⚠️ Each of these is bucket A, not bucket D: the country's VALUES could move,
+  // the FILE cannot, because its other half is machinery every country reads.
+  // The reason names the shared exports, so the entry goes false the day they
+  // part company.
+  {
+    file: "src/lib/demographics/countryDemographics.ts",
+    country: "US",
+    why: "Nine exports of cross-country machinery -- getDemographicCategoriesForCountry, resolveCanvassGroup, CanvassGroup, CanvassCategory -- which every country's canvassing reads. The US appears only as the default branch.",
+  },
+  {
+    file: "src/lib/constants/sectorSeedEra.ts",
+    country: "US",
+    why: "Mixed: US_NATIONAL_SEED_GDP_BY_ERA is United States data, while getEraNominalScale and MODERN_MIN_UNOWNED_SECTOR_REVENUE are the era-scaling machinery every country's sector seeding runs through. Bucket A: the GDP table moves, the scaler stays.",
+  },
+  {
+    file: "src/lib/constants/cabinetMetrics.ts",
+    country: "US",
+    why: "MetricFormat, CabinetMetricEntry and getCabinetMetrics are the cabinet metric machinery; CABINET_METRIC_MAPPINGS carries US rows inside it. Bucket A: the rows move once the reader is country-keyed, the types and the getter stay.",
+  },
+  {
+    file: "src/lib/demographics/granularCells.ts",
+    country: "US",
+    why: "Twelve exports defining the granular-cell vocabulary -- GRANULAR_DIMENSIONS, GranularDim, BaseGranularCell, GenericGranularCell -- shared by every country's granular electorate. US cells sit inside it.",
+  },
+  {
+    file: "src/lib/demographics/eraCheckpoints.ts",
+    country: "US",
+    why: "Twenty-one exports. EraCheckpointTarget, EraCheckpoint and DocketCaseLookupEntry are shared types; ALL_US_STATES, MIDWEST_STATES and SOUTH are United States groupings. Bucket A: the groupings move, the types stay.",
+  },
+  {
+    file: "src/lib/demographics/regionTurnout.ts",
+    country: "US",
+    why: "RegionTurnoutCell and RegionTurnoutResponse are the shared turnout response shape, read by every country's region pages.",
+  },
+  {
+    file: "src/lib/seeds/calibration/deriveRegionLeans.ts",
+    country: "US",
+    why: "One exported function, deriveRegionLeans. Engine code that happens to default to the US, not a table of US facts.",
+  },
+  {
+    file: "src/lib/seeds/calibration/electionBaselines.ts",
+    country: "US",
+    why: "ElectionBaseline, getElectionBaseline and leanToMargin are shared calibration machinery; ELECTION_BASELINES holds US rows. Bucket A.",
+  },
+  {
+    file: "src/lib/seeds/reference/sectorSeedWeights1999.ts",
+    country: "US",
+    why: "A COUNTRY-KEYED era registry (COUNTRY_SECTOR_WEIGHTS_1999 plus its getter) that currently happens to hold only a US entry. Its 1953, 1979 and 1991 siblings carry twenty-plus countries each; this is the same registry with a thinner era, not a United States file.",
+  },
+  {
+    file: "src/lib/seeds/reference/sectorSeedWeights2007.ts",
+    country: "US",
+    why: "Same registry, 2007 era. See the 1999 entry.",
+  },
+  {
+    file: "src/lib/seeds/reference/sectorSeedWeights2023.ts",
+    country: "US",
+    why: "Same registry, 2023 era. See the 1999 entry.",
+  },
+  {
+    file: "src/lib/seeds/reference/sectorSeedWeights2027.ts",
+    country: "US",
+    why: "Same registry, 2027 era. See the 1999 entry.",
+  },
+
+  // ---- United States client surfaces. Bucket E: they RENDER it, they do not own it. ----
+  {
+    file: "src/app/country/[code]/map/components/USMapWithModes.tsx",
+    country: "US",
+    why: "Client map component. Moving a React tree into a lib folder would put it behind the server-only barrel, and the folder's map DATA already lives in geographyFacts.",
+  },
+  {
+    file: "src/components/USAMapPaths.tsx",
+    country: "US",
+    why: "SVG path data for a client map component, beside the other countries' map components -- the same placement JapanMapPaths has.",
+  },
+  {
+    file: "src/components/admin/leadership/USLeadershipPanel.tsx",
+    country: "US",
+    why: "Admin client component. It renders US leadership from folder data.",
+  },
+  {
+    file: "src/app/guides/running-for-office/us/page.tsx",
+    country: "US",
+    why: "A player guide page. Prose about the United States, rendered by Next's router, not data the folder owns.",
+  },
+  {
+    file: "src/lib/maps/usaGeometry.ts",
+    country: "US",
+    why: "Projection parameters beside every other country's, so the map registry reads one directory rather than 24 folders. Same reasoning as japanGeometry.ts.",
+  },
 
   // ---- Client surfaces. Bucket E: these RENDER the country, they do not own it. ----
   {
