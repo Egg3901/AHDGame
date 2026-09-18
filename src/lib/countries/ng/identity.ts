@@ -1,3 +1,4 @@
+import type { CountryCommandFlavor } from "@/lib/military/theaters";
 import type { CabinetIdentity } from "@/lib/constants/cabinetIdentity";
 import type { EconomyIdentity } from "@/lib/constants/economyIdentity";
 import type { ExecutiveSeal } from "@/lib/constants/executiveSeals";
@@ -149,7 +150,16 @@ const historicalNames: readonly string[] = ["Niger Delta Trading Bank", "Savanna
 /** NPC bank names, post-modernisation. */
 const modernNames: readonly string[] = ["Niger Delta Banking Group", "Savannah Financial"];
 
+/** Situation-board dressing: high-command name, classification strip, accent. */
+const commandFlavor: CountryCommandFlavor = {
+  glyph: "NG",
+  command: "DEFENCE HEADQUARTERS",
+  strip: "◆ RESTRICTED",
+  acc: "#86d978",
+};
+
 export const NG_IDENTITY: CountryIdentity = {
+  commandFlavor,
   displayName: "Nigeria",
   cabinet,
   national,

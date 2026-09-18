@@ -22,13 +22,33 @@ import { join } from "node:path";
  * So: a folder module named here is one a client-reachable registry reads, and
  * it must contain NO value imports. `import type` is free -- it is erased.
  */
-const CLIENT_SAFE = [
-  "src/lib/countries/jp/geographyFacts.ts",
-  "src/lib/countries/jp/institutionsFacts.ts",
-  "src/lib/countries/jp/economy.ts",
-  "src/lib/countries/jp/identity.ts",
-  "src/lib/countries/jp/cabinet/positions.ts",
+const CLIENT_SAFE_MODULES = [
+  "geographyFacts.ts",
+  "institutionsFacts.ts",
+  "economy.ts",
+  "identity.ts",
+  "cabinet/positions.ts",
 ];
+
+/**
+ * ⚠️ DERIVED ACROSS EVERY COUNTRY, not listed for one. The MODULE NAMES above are
+ * the deliberate part -- each is a leaf a client-reachable registry reads. Which
+ * COUNTRIES are covered is not a judgement call: the registries forward all 29
+ * uniformly, so a list naming only Japan checked one twenty-ninth of the surface
+ * it claimed to. It went stale the moment the second country moved, and stayed
+ * that way until `COUNTRY_COMMAND_FLAVOR` -- read by `SituationBoardClient` --
+ * started importing all 29 `identity.ts` modules.
+ */
+const CLIENT_SAFE = readdirSync("src/lib/countries")
+  .filter((cc) => statSync(join("src/lib/countries", cc)).isDirectory())
+  .flatMap((cc) => CLIENT_SAFE_MODULES.map((m) => `src/lib/countries/${cc}/${m}`))
+  .filter((file) => {
+    try {
+      return statSync(file).isFile();
+    } catch {
+      return false;
+    }
+  });
 
 /**
  * Registries whose weight is INHERENT, not introduced by the country move.
@@ -68,7 +88,9 @@ describe("client-reachable country leaf modules carry no runtime imports", () =>
    * the real assertion pass while checking nothing.
    */
   it("checks every listed module, and every listed module exists", () => {
-    expect(CLIENT_SAFE.length).toBeGreaterThanOrEqual(3);
+    // 29 countries x 4 always-present modules; the floor catches a discovery
+    // walk that silently returns nothing.
+    expect(CLIENT_SAFE.length).toBeGreaterThanOrEqual(29 * 4);
     for (const file of CLIENT_SAFE) {
       expect(statSync(file).isFile(), `${file} is missing`).toBe(true);
     }
@@ -124,7 +146,7 @@ describe("client-reachable country leaf modules carry no runtime imports", () =>
       // nothing while reporting green. Mutation-testing the guard found it;
       // reading it did not.
       for (const match of source.matchAll(
-        /(?:^|\n)import\s+(?!type\s)[^;]*?from\s+["'](@\/lib\/countries\/[a-z]{2}\/[^"']+)["']/g
+        /(?:^|\n)import\s+(?!type\s)[^;]*?from\s+["'](@\/lib\/countries\/[a-z]{2,3}\/[^"']+)["']/g
       )) {
         const stmt = match[0];
         const spec = match[1];

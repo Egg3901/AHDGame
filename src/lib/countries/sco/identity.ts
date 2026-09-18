@@ -1,3 +1,4 @@
+import type { CountryCommandFlavor } from "@/lib/military/theaters";
 import type { ExecutiveSurfaceConfig } from "@/lib/constants/executiveSurface";
 import type { IdentityText } from "@/lib/constants/institutionIdentity";
 import type { NationalIdentity } from "@/lib/constants/nationalIdentity";
@@ -176,7 +177,16 @@ const regionCensusLabels: CensusLabelSet = {
  */
 // (modernNames is deliberately absent for SCO.)
 
+/** Situation-board dressing: high-command name, classification strip, accent. */
+const commandFlavor: CountryCommandFlavor = {
+  glyph: "SC",
+  command: "DEFENCE STAFF",
+  strip: "◆ RESTRICTED",
+  acc: "#86d978",
+};
+
 export const SCO_IDENTITY: CountryIdentity = {
+  commandFlavor,
   displayName: "Scotland",
   national,
   treasuryText,

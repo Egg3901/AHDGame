@@ -1,3 +1,4 @@
+import type { CountryCommandFlavor } from "@/lib/military/theaters";
 import type { CabinetIdentity } from "@/lib/constants/cabinetIdentity";
 import type { EconomyIdentity } from "@/lib/constants/economyIdentity";
 import type { ExecutiveSeal } from "@/lib/constants/executiveSeals";
@@ -164,7 +165,16 @@ const modernNames: readonly string[] = [
   "Prairie States Financial",
 ];
 
+/** Situation-board dressing: high-command name, classification strip, accent. */
+const commandFlavor: CountryCommandFlavor = {
+  glyph: "US",
+  command: "JOINT CHIEFS OF STAFF",
+  strip: "◆ EYES ONLY · ACTIVE THEATERS",
+  acc: "#9cc0f5",
+};
+
 export const US_IDENTITY: CountryIdentity = {
+  commandFlavor,
   displayName: "United States",
   cabinet,
   national,

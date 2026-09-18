@@ -25,6 +25,7 @@ import type { LegalStructureId } from "@/lib/constants/legalStructures";
 import type { GdpDenomination } from "@/lib/seeds/reference/gdpDenomination";
 import type { LegislationType } from "@/lib/db/types";
 import type { Branch } from "@/lib/constants/military";
+import type { CountryCommandFlavor } from "@/lib/military/theaters";
 import type { EraMonetaryBaseline } from "@/lib/constants/monetaryEra";
 import type { NationalIdentity } from "@/lib/constants/nationalIdentity";
 import type { StatsIdentity } from "@/lib/constants/nationalStatsIdentity";
@@ -65,6 +66,20 @@ import type { WorldEntityRegion } from "@/lib/world/worldEntityManifest";
  */
 export interface CountryIdentity {
   readonly displayName: string;
+  /**
+   * Situation-board dressing: high-command name, classification strip, accent.
+   *
+   * ⚠️ REQUIRED, and measured like the optional fields below it -- its registry
+   * covers all 29 playable countries, so there is no absence to record.
+   *
+   * ⚠️ THE ACCENT IS AN INLINE HEX, not the shared WEST_ACC/EAST_ACC constant it
+   * was written as. `identity.ts` is client-reachable through this very registry
+   * (`SituationBoardClient` imports it) and so must carry NO value imports --
+   * `clientSafeLeafModules.test.ts` enforces that. The accents had already
+   * diverged from the bloc before the move (DE and CN carry bespoke hexes), so
+   * this is per-country dressing, not a bloc fact being copied.
+   */
+  readonly commandFlavor: CountryCommandFlavor;
   /**
    * ⚠️ MEASURED, NOT GUESSED. `COUNTRY_CONFIGS` holds 29 playable countries.
    * This field's registry holds 9. The others relaxed alongside it hold 8, 10,

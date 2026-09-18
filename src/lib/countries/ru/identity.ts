@@ -1,3 +1,4 @@
+import type { CountryCommandFlavor } from "@/lib/military/theaters";
 import type { CabinetIdentity } from "@/lib/constants/cabinetIdentity";
 
 import type { ExecutiveSeal } from "@/lib/constants/executiveSeals";
@@ -145,7 +146,16 @@ const executiveSurface: ExecutiveSurfaceConfig = {
  */
 // (modernNames is deliberately absent for RU.)
 
+/** Situation-board dressing: high-command name, classification strip, accent. */
+const commandFlavor: CountryCommandFlavor = {
+  glyph: "RU",
+  command: "GENERAL STAFF",
+  strip: "◆ СЕКРЕТНО · ACTIVE THEATERS",
+  acc: "#f0a0a0",
+};
+
 export const RU_IDENTITY: CountryIdentity = {
+  commandFlavor,
   displayName: "Russia",
   cabinet,
   national,

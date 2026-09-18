@@ -1,3 +1,4 @@
+import type { CountryCommandFlavor } from "@/lib/military/theaters";
 import type { ExecutiveSeal } from "@/lib/constants/executiveSeals";
 import type { ExecutiveSurfaceConfig } from "@/lib/constants/executiveSurface";
 import type { IdentityText } from "@/lib/constants/institutionIdentity";
@@ -141,7 +142,16 @@ const executiveSurface: ExecutiveSurfaceConfig = {
  */
 // (modernNames is deliberately absent for YU.)
 
+/** Situation-board dressing: high-command name, classification strip, accent. */
+const commandFlavor: CountryCommandFlavor = {
+  glyph: "YU",
+  command: "GENERALŠTAB",
+  strip: "◆ DRŽAVNA TAJNA",
+  acc: "#86d978",
+};
+
 export const YU_IDENTITY: CountryIdentity = {
+  commandFlavor,
   displayName: "Yugoslavia",
   national,
   treasuryText,

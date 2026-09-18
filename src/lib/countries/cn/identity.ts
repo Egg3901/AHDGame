@@ -1,3 +1,4 @@
+import type { CountryCommandFlavor } from "@/lib/military/theaters";
 import type { CabinetIdentity } from "@/lib/constants/cabinetIdentity";
 import type { EconomyIdentity } from "@/lib/constants/economyIdentity";
 import type { ExecutiveSeal } from "@/lib/constants/executiveSeals";
@@ -204,7 +205,16 @@ const stateDisplayNames: Record<string, string> = {
  */
 // (modernNames is deliberately absent for CN.)
 
+/** Situation-board dressing: high-command name, classification strip, accent. */
+const commandFlavor: CountryCommandFlavor = {
+  glyph: "中",
+  command: "CENTRAL MILITARY COMMISSION",
+  strip: "◆ 机密",
+  acc: "#e0b352",
+};
+
 export const CN_IDENTITY: CountryIdentity = {
+  commandFlavor,
   displayName: "China",
   cabinet,
   national,

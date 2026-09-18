@@ -1,3 +1,4 @@
+import type { CountryCommandFlavor } from "@/lib/military/theaters";
 import type { ExecutiveSeal } from "@/lib/constants/executiveSeals";
 import type { ExecutiveSurfaceConfig } from "@/lib/constants/executiveSurface";
 import type { IdentityText } from "@/lib/constants/institutionIdentity";
@@ -137,7 +138,16 @@ const historicalNames: readonly string[] = ["Banco del Ebro", "Caja Mercantil de
 /** NPC bank names, post-modernisation. */
 const modernNames: readonly string[] = ["Banco del Ebro", "Grupo Mercantil del Norte"];
 
+/** Situation-board dressing: high-command name, classification strip, accent. */
+const commandFlavor: CountryCommandFlavor = {
+  glyph: "ES",
+  command: "ESTADO MAYOR DE LA DEFENSA",
+  strip: "◆ SECRETO",
+  acc: "#86d978",
+};
+
 export const ES_IDENTITY: CountryIdentity = {
+  commandFlavor,
   displayName: "Spain",
   national,
   treasuryText,

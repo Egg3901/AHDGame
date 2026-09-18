@@ -1,3 +1,4 @@
+import type { CountryCommandFlavor } from "@/lib/military/theaters";
 import type { EconomyIdentity } from "@/lib/constants/economyIdentity";
 import type { ExecutiveSeal } from "@/lib/constants/executiveSeals";
 import type { ExecutiveSurfaceConfig } from "@/lib/constants/executiveSurface";
@@ -180,7 +181,16 @@ const historicalNames: readonly string[] = ["Banco Paulista de Comercio", "Banco
 /** NPC bank names, post-modernisation. */
 const modernNames: readonly string[] = ["Banco Paulista de Comercio", "Atlantico Sul Financial"];
 
+/** Situation-board dressing: high-command name, classification strip, accent. */
+const commandFlavor: CountryCommandFlavor = {
+  glyph: "BR",
+  command: "ESTADO-MAIOR CONJUNTO",
+  strip: "◆ SECRETO",
+  acc: "#86d978",
+};
+
 export const BR_IDENTITY: CountryIdentity = {
+  commandFlavor,
   displayName: "Brazil",
   national,
   treasuryText,

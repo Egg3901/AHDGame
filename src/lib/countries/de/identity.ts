@@ -1,3 +1,4 @@
+import type { CountryCommandFlavor } from "@/lib/military/theaters";
 import type { CabinetIdentity } from "@/lib/constants/cabinetIdentity";
 import type { EconomyIdentity } from "@/lib/constants/economyIdentity";
 import type { ExecutiveSeal } from "@/lib/constants/executiveSeals";
@@ -228,7 +229,16 @@ const historicalNames: readonly string[] = ["Rhineland Credit Bank", "Hanseatic 
 /** NPC bank names, post-modernisation. */
 const modernNames: readonly string[] = ["Rhineland Credit Group", "Hanseatic Banking Group"];
 
+/** Situation-board dressing: high-command name, classification strip, accent. */
+const commandFlavor: CountryCommandFlavor = {
+  glyph: "DE",
+  command: "BUNDESWEHR COMMAND",
+  strip: "◆ NUR FÜR DEN DIENSTGEBRAUCH",
+  acc: "#d4af37",
+};
+
 export const DE_IDENTITY: CountryIdentity = {
+  commandFlavor,
   displayName: "Germany",
   cabinet,
   national,

@@ -1,3 +1,4 @@
+import type { CountryCommandFlavor } from "@/lib/military/theaters";
 import type { CabinetIdentity } from "@/lib/constants/cabinetIdentity";
 import type { EconomyIdentity } from "@/lib/constants/economyIdentity";
 import type { ExecutiveSeal } from "@/lib/constants/executiveSeals";
@@ -224,7 +225,16 @@ const historicalNames: readonly string[] = ["Hibernian Provincial Bank", "Shanno
 /** NPC bank names, post-modernisation. */
 const modernNames: readonly string[] = ["Hibernian Banking Group", "Shannon Valley Financial"];
 
+/** Situation-board dressing: high-command name, classification strip, accent. */
+const commandFlavor: CountryCommandFlavor = {
+  glyph: "IE",
+  command: "DEFENCE FORCES HQ",
+  strip: "◆ RESTRICTED",
+  acc: "#86d978",
+};
+
 export const IE_IDENTITY: CountryIdentity = {
+  commandFlavor,
   displayName: "Ireland",
   cabinet,
   national,

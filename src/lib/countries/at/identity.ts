@@ -1,3 +1,4 @@
+import type { CountryCommandFlavor } from "@/lib/military/theaters";
 import type { ExecutiveSeal } from "@/lib/constants/executiveSeals";
 import type { ExecutiveSurfaceConfig } from "@/lib/constants/executiveSurface";
 import type { IdentityText } from "@/lib/constants/institutionIdentity";
@@ -138,7 +139,16 @@ const historicalNames: readonly string[] = ["Alpine Credit Bank", "Danube Commer
 /** NPC bank names, post-modernisation. */
 const modernNames: readonly string[] = ["Alpine Credit Group", "Danube Banking Group"];
 
+/** Situation-board dressing: high-command name, classification strip, accent. */
+const commandFlavor: CountryCommandFlavor = {
+  glyph: "AT",
+  command: "BUNDESHEER",
+  strip: "◆ VERSCHLUSSSACHE",
+  acc: "#86d978",
+};
+
 export const AT_IDENTITY: CountryIdentity = {
+  commandFlavor,
   displayName: "Austria",
   national,
   treasuryText,

@@ -1,3 +1,4 @@
+import type { CountryCommandFlavor } from "@/lib/military/theaters";
 import type { CabinetIdentity } from "@/lib/constants/cabinetIdentity";
 
 import type { ExecutiveSeal } from "@/lib/constants/executiveSeals";
@@ -175,7 +176,16 @@ const regionCensusLabels: CensusLabelSet = {
  */
 // (modernNames is deliberately absent for DD.)
 
+/** Situation-board dressing: high-command name, classification strip, accent. */
+const commandFlavor: CountryCommandFlavor = {
+  glyph: "DD",
+  command: "NATIONALE VOLKSARMEE",
+  strip: "◆ VERTRAULICHE VERSCHLUSSSACHE",
+  acc: "#f0a0a0",
+};
+
 export const DD_IDENTITY: CountryIdentity = {
+  commandFlavor,
   displayName: "East Germany",
   cabinet,
   national,

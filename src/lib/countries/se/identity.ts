@@ -1,3 +1,4 @@
+import type { CountryCommandFlavor } from "@/lib/military/theaters";
 import type { ExecutiveSeal } from "@/lib/constants/executiveSeals";
 import type { ExecutiveSurfaceConfig } from "@/lib/constants/executiveSurface";
 import type { IdentityText } from "@/lib/constants/institutionIdentity";
@@ -137,7 +138,16 @@ const historicalNames: readonly string[] = ["Svea Merchants Bank", "Norrland Sav
 /** NPC bank names, post-modernisation. */
 const modernNames: readonly string[] = ["Svea Banking Group", "Norrland Financial"];
 
+/** Situation-board dressing: high-command name, classification strip, accent. */
+const commandFlavor: CountryCommandFlavor = {
+  glyph: "SE",
+  command: "FÖRSVARSMAKTEN",
+  strip: "◆ HEMLIG",
+  acc: "#86d978",
+};
+
 export const SE_IDENTITY: CountryIdentity = {
+  commandFlavor,
   displayName: "Sweden",
   national,
   treasuryText,

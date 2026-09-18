@@ -1,3 +1,4 @@
+import type { CountryCommandFlavor } from "@/lib/military/theaters";
 import type { ExecutiveSeal } from "@/lib/constants/executiveSeals";
 import type { ExecutiveSurfaceConfig } from "@/lib/constants/executiveSurface";
 import type { IdentityText } from "@/lib/constants/institutionIdentity";
@@ -141,7 +142,16 @@ const executiveSurface: ExecutiveSurfaceConfig = {
  */
 // (modernNames is deliberately absent for CS.)
 
+/** Situation-board dressing: high-command name, classification strip, accent. */
+const commandFlavor: CountryCommandFlavor = {
+  glyph: "CS",
+  command: "GENERÁLNÍ ŠTÁB",
+  strip: "◆ PŘÍSNĚ TAJNÉ",
+  acc: "#f0a0a0",
+};
+
 export const CS_IDENTITY: CountryIdentity = {
+  commandFlavor,
   displayName: "Czechoslovakia",
   national,
   treasuryText,

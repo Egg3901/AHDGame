@@ -1,3 +1,4 @@
+import type { CountryCommandFlavor } from "@/lib/military/theaters";
 import type { ExecutiveSeal } from "@/lib/constants/executiveSeals";
 import type { ExecutiveSurfaceConfig } from "@/lib/constants/executiveSurface";
 import type { IdentityText } from "@/lib/constants/institutionIdentity";
@@ -137,7 +138,16 @@ const historicalNames: readonly string[] = ["Banque du Littoral", "Comptoir des 
 /** NPC bank names, post-modernisation. */
 const modernNames: readonly string[] = ["Groupe Bancaire du Littoral", "Comptoir des Provinces"];
 
+/** Situation-board dressing: high-command name, classification strip, accent. */
+const commandFlavor: CountryCommandFlavor = {
+  glyph: "FR",
+  command: "ÉTAT-MAJOR DES ARMÉES",
+  strip: "◆ SECRET DÉFENSE",
+  acc: "#9cc0f5",
+};
+
 export const FR_IDENTITY: CountryIdentity = {
+  commandFlavor,
   displayName: "France",
   national,
   treasuryText,

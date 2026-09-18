@@ -1,3 +1,4 @@
+import type { CountryCommandFlavor } from "@/lib/military/theaters";
 import type { CabinetIdentity } from "@/lib/constants/cabinetIdentity";
 import type { EconomyIdentity } from "@/lib/constants/economyIdentity";
 import type { ExecutiveSeal } from "@/lib/constants/executiveSeals";
@@ -230,7 +231,16 @@ const modernNames: readonly string[] = [
   "Osaka Harbour Financial",
 ];
 
+/** Situation-board dressing: high-command name, classification strip, accent. */
+const commandFlavor: CountryCommandFlavor = {
+  glyph: "日",
+  command: "JOINT STAFF",
+  strip: "◆ 機密 · ACTIVE THEATERS",
+  acc: "#f0a0a0",
+};
+
 export const JP_IDENTITY: CountryIdentity = {
+  commandFlavor,
   displayName: "Japan",
   cabinet,
   national,
@@ -254,12 +264,6 @@ export const JP_IDENTITY: CountryIdentity = {
  *
  * Forwarded from `src/lib/military/theaters.ts`.
  */
-export const JP_THEATER_IDENTITY = {
-  glyph: "日",
-  command: "JOINT STAFF",
-  strip: "◆ 機密 · ACTIVE THEATERS",
-  acc: "#f0a0a0",
-};
 
 /**
  * Bank of Japan identity text, for the institution header.

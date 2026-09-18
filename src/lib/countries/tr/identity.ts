@@ -1,3 +1,4 @@
+import type { CountryCommandFlavor } from "@/lib/military/theaters";
 import type { ExecutiveSeal } from "@/lib/constants/executiveSeals";
 import type { ExecutiveSurfaceConfig } from "@/lib/constants/executiveSurface";
 import type { IdentityText } from "@/lib/constants/institutionIdentity";
@@ -137,7 +138,16 @@ const historicalNames: readonly string[] = ["Anatolian Commerce Bank", "Bosphoru
 /** NPC bank names, post-modernisation. */
 const modernNames: readonly string[] = ["Anatolian Commerce Group", "Bosphorus Financial"];
 
+/** Situation-board dressing: high-command name, classification strip, accent. */
+const commandFlavor: CountryCommandFlavor = {
+  glyph: "TR",
+  command: "GENELKURMAY",
+  strip: "◆ ÇOK GİZLİ",
+  acc: "#9cc0f5",
+};
+
 export const TR_IDENTITY: CountryIdentity = {
+  commandFlavor,
   displayName: "Turkey",
   national,
   treasuryText,

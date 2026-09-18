@@ -1,3 +1,4 @@
+import type { CountryCommandFlavor } from "@/lib/military/theaters";
 import type { ExecutiveSeal } from "@/lib/constants/executiveSeals";
 import type { ExecutiveSurfaceConfig } from "@/lib/constants/executiveSurface";
 import type { IdentityText } from "@/lib/constants/institutionIdentity";
@@ -137,7 +138,16 @@ const historicalNames: readonly string[] = ["Banca Adriatica", "Credito Tirreno"
 /** NPC bank names, post-modernisation. */
 const modernNames: readonly string[] = ["Banca Adriatica Group", "Credito Tirreno"];
 
+/** Situation-board dressing: high-command name, classification strip, accent. */
+const commandFlavor: CountryCommandFlavor = {
+  glyph: "IT",
+  command: "STATO MAGGIORE DIFESA",
+  strip: "◆ SEGRETO",
+  acc: "#9cc0f5",
+};
+
 export const IT_IDENTITY: CountryIdentity = {
+  commandFlavor,
   displayName: "Italy",
   national,
   treasuryText,

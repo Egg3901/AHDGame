@@ -107,6 +107,7 @@ import { M2_TO_GDP_1953 } from "../../src/lib/seeds/reference/moneySupply";
 import { GDP_DENOMINATION_1953 } from "../../src/lib/seeds/reference/gdpDenomination";
 import { RAW_BUNDLES } from "../../src/lib/states/conditions/seedMetricsLoader";
 import { NON_PARTY_BUCKET_INDEPENDENT_BIAS_BY_COUNTRY } from "../../src/lib/turn/partyOrg/pacingConstants";
+import { COUNTRY_COMMAND_FLAVOR } from "../../src/lib/military/theaters";
 import { COUNTRY_SECTOR_WEIGHTS_1953 } from "../../src/lib/seeds/reference/sectorSeedWeights1953";
 import { REGIONAL_BILL_ASSENT_OFFICE_KEY } from "../../src/lib/constants/countries";
 import { INCOME_ANCHORS } from "../../src/lib/era/metricCatalog";
@@ -193,6 +194,7 @@ const REGISTRIES: Record<string, Dict> = {
   GDP_DENOMINATION_1953: d(GDP_DENOMINATION_1953),
   RAW_BUNDLES: d(RAW_BUNDLES),
   NON_PARTY_BUCKET_INDEPENDENT_BIAS_BY_COUNTRY: d(NON_PARTY_BUCKET_INDEPENDENT_BIAS_BY_COUNTRY),
+  COUNTRY_COMMAND_FLAVOR: d(COUNTRY_COMMAND_FLAVOR),
   SURFACES: d(SURFACES),
   REGION_CENSUS_LABELS: d(REGION_CENSUS_LABELS),
   STATE_DISPLAY_NAMES: d(STATE_DISPLAY_NAMES),
@@ -941,6 +943,7 @@ const FOLDER_PATH: Record<string, string | null> = {
   GDP_DENOMINATION_1953: "economy.gdpDenomination1953",
   RAW_BUNDLES: "geography.rawMetrics",
   NON_PARTY_BUCKET_INDEPENDENT_BIAS_BY_COUNTRY: "geography.nonPartyIndependentBias",
+  COUNTRY_COMMAND_FLAVOR: "identity.commandFlavor",
   SURFACES: "identity.parliamentarySurface",
   REGION_CENSUS_LABELS: "identity.regionCensusLabels",
   STATE_DISPLAY_NAMES: "identity.stateDisplayNames",

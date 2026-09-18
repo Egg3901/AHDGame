@@ -1,3 +1,4 @@
+import type { CountryCommandFlavor } from "@/lib/military/theaters";
 import type { CabinetIdentity } from "@/lib/constants/cabinetIdentity";
 import type { EconomyIdentity } from "@/lib/constants/economyIdentity";
 import type { ExecutiveSeal } from "@/lib/constants/executiveSeals";
@@ -221,7 +222,16 @@ const historicalNames: readonly string[] = ["Midland Counties Bank", "Clydeside 
 /** NPC bank names, post-modernisation. */
 const modernNames: readonly string[] = ["Midland Counties Banking Group", "Clydeside Financial"];
 
+/** Situation-board dressing: high-command name, classification strip, accent. */
+const commandFlavor: CountryCommandFlavor = {
+  glyph: "UK",
+  command: "DEFENCE STAFF",
+  strip: "◆ UK EYES ONLY · ACTIVE THEATERS",
+  acc: "#9cc0f5",
+};
+
 export const UK_IDENTITY: CountryIdentity = {
+  commandFlavor,
   displayName: "United Kingdom",
   cabinet,
   national,
