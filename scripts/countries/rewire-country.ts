@@ -483,6 +483,55 @@ const R: Rewire[] = [
     "CC_GEOGRAPHY.regionNames"
   ),
 
+  r(
+    "COUNTRY_SECTOR_WEIGHTS_1953",
+    "src/lib/seeds/reference/sectorSeedWeights1953.ts",
+    "economy",
+    "CC_ECONOMY",
+    'CC_ECONOMY.sectorWeights.byEra["1953"]'
+  ),
+  r(
+    "REGIONAL_BILL_ASSENT_OFFICE_KEY",
+    "src/lib/constants/countries.ts",
+    "institutionsFacts",
+    "CC_REGIONAL_BILL_ASSENT_OFFICE_KEY"
+  ),
+  /*
+   * ⚠ THE FACTS MODULE, NOT THE GEOGRAPHY. `metricCatalog.ts` is
+   * CLIENT-REACHABLE. Pointing it at `CC_GEOGRAPHY` shipped seventeen countries'
+   * census, metric and region bundles to the browser, and
+   * `clientSafeLeafModules.test.ts` failed with all seventeen named.
+   */
+  r("INCOME_ANCHORS", "src/lib/era/metricCatalog.ts", "geographyFacts", "CC_INCOME_ANCHORS"),
+  r(
+    "TARGETS",
+    "src/lib/seeds/calibration/targets.ts",
+    "geography",
+    "CC_GEOGRAPHY",
+    "CC_GEOGRAPHY.calibrationTargets"
+  ),
+  r(
+    "COUNTRY_ERA1991_PATCHES",
+    "src/lib/states/conditions/countryEra1991Patches.ts",
+    "geography",
+    "CC_GEOGRAPHY",
+    "CC_GEOGRAPHY.era1991Patches"
+  ),
+  r(
+    "HAZARD_GROUPS",
+    "src/lib/crises/regionHazards.ts",
+    "geography",
+    "CC_GEOGRAPHY",
+    "CC_GEOGRAPHY.hazardGroups"
+  ),
+  r(
+    "REGION_DEMOGRAPHIC_CATEGORY_IDS",
+    "src/app/country/[code]/region/[id]/regionData.ts",
+    "geography",
+    "CC_GEOGRAPHY",
+    "CC_GEOGRAPHY.demographicCategoryIds"
+  ),
+
   // ---- elections ----------------------------------------------------------
   r(
     "SPAWN_ELECTIONS_REGISTRY",

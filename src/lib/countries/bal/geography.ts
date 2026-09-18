@@ -1,8 +1,8 @@
 import type { CountryGeography } from "../contract";
 import { balRegionCensusData } from "@/lib/seeds/bal/balRegionCensusData";
 import { balRegionCensusData1953 } from "@/lib/seeds/bal/balRegionCensusData1953";
-import { balRegions } from "@/lib/seeds/bal/balRegions";
-import { balRegions1953 } from "@/lib/seeds/bal/balRegions1953";
+import { balRegions } from "./data/balRegions";
+import { balRegions1953 } from "./data/balRegions1953";
 import {
   BAL_ADJACENCY_MAP,
   BAL_CONTINENT,

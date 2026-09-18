@@ -1,25 +1,23 @@
 import type { CountryGeography } from "../contract";
-import { brMetricPresets1953 } from "@/lib/seeds/br/brMetricPresets1953";
-import { brMetricPresets1979 } from "@/lib/seeds/br/brMetricPresets1979";
-import { brMetricPresets1991, brMetricPresets2019 } from "@/lib/seeds/br/brMetricPresets";
-import {
-  brPopulationAnchors1991,
-  brPopulationAnchors2019,
-} from "@/lib/seeds/br/brPopulationAnchors";
-import { brRegionCensusData } from "@/lib/seeds/br/brRegionCensusData";
-import { brRegionCensusData1953 } from "@/lib/seeds/br/brRegionCensusData1953";
-import { brRegionCensusData1979 } from "@/lib/seeds/br/brRegionCensusData1979";
-import { brRegionCensusData1991 } from "@/lib/seeds/br/brRegionCensusData1991";
-import { brRegions } from "@/lib/seeds/br/brRegions";
-import { brRegions1953 } from "@/lib/seeds/br/brRegions1953";
-import { brRegions1979 } from "@/lib/seeds/br/brRegions1979";
-import { brRegions1991 } from "@/lib/seeds/br/brRegions1991";
-import { brRegions1999 } from "@/lib/seeds/br/brRegions1999";
-import { brRegions2007 } from "@/lib/seeds/br/brRegions2007";
-import { brRegions2023 } from "@/lib/seeds/br/brRegions2023";
-import { brStateMetrics } from "@/lib/seeds/br/brStateMetrics";
+import { brMetricPresets1953 } from "./data/brMetricPresets1953";
+import { brMetricPresets1979 } from "./data/brMetricPresets1979";
+import { brMetricPresets1991, brMetricPresets2019 } from "./data/brMetricPresets";
+import { brPopulationAnchors1991, brPopulationAnchors2019 } from "./data/brPopulationAnchors";
+import { brRegionCensusData } from "./data/brRegionCensusData";
+import { brRegionCensusData1953 } from "./data/brRegionCensusData1953";
+import { brRegionCensusData1979 } from "./data/brRegionCensusData1979";
+import { brRegionCensusData1991 } from "./data/brRegionCensusData1991";
+import { brRegions } from "./data/brRegions";
+import { brRegions1953 } from "./data/brRegions1953";
+import { brRegions1979 } from "./data/brRegions1979";
+import { brRegions1991 } from "./data/brRegions1991";
+import { brRegions1999 } from "./data/brRegions1999";
+import { brRegions2007 } from "./data/brRegions2007";
+import { brRegions2023 } from "./data/brRegions2023";
+import { brStateMetrics } from "./data/brStateMetrics";
 import {
   BR_ADJACENCY_MAP,
+  BR_INCOME_ANCHORS,
   BR_CONSCRIPTION,
   BR_CONTINENT,
   BR_CORE5_NORMALS,
@@ -45,13 +43,13 @@ import {
  * equality passed and Japan had two sources for every region.
  *
  * ⚠ THE PRESET KEYS COME FROM THE SNAPSHOT. Brazil authors 4 census
- * eras, 4 metric eras, 2 anchor eras and 7 region eras. The gaps are real:
+ * eras, 4 metric eras, 2 anchor eras and 3 region eras. The gaps are real:
  * an unauthored era inherits, and inventing a key for it would turn a fallback
  * into an authored value.
  */
 
 const regionNames: Record<string, string> = Object.fromEntries(
-  brRegions2023.map((region) => [region._id, region.name])
+  brRegions.map((region) => [region._id, region.name])
 );
 
 const censusBundles = {
@@ -75,16 +73,13 @@ const populationAnchors = {
 
 const regionBundles = {
   "1953-default": brRegions1953,
-  "1979-default": brRegions1979,
-  "1991-default": brRegions1991,
-  "1999-default": brRegions1999,
-  "2007-default": brRegions2007,
+  "1979-default": brRegions,
   "2019-default": brRegions,
-  "2023-default": brRegions2023,
 };
 
 export const BR_GEOGRAPHY: CountryGeography = {
   continent: BR_CONTINENT,
+
   isoNumeric: BR_ISO_NUMERIC,
   unMemberSince: BR_UN_MEMBER_SINCE,
   worldRegion: BR_WORLD_REGION,
@@ -100,4 +95,95 @@ export const BR_GEOGRAPHY: CountryGeography = {
   regionBundles,
   rawMetrics: brStateMetrics,
   mapRegistry: BR_MAP_REGISTRY,
+  incomeAnchors: BR_INCOME_ANCHORS,
+  calibrationTargets: {
+    "1991": {
+      center: 0,
+      centerTol: 0.8,
+      minSpread: 1,
+      expectLeft: [],
+      expectRight: [],
+      election: "Brazil 1989 presidential (pre-Lula cleavage — center/spread only)",
+    },
+    "1999": {
+      center: 0,
+      centerTol: 0.8,
+      minSpread: 1,
+      expectLeft: [],
+      expectRight: [],
+      election: "Brazil 1998 presidential (center/spread only)",
+    },
+    "2007": {
+      center: 0,
+      centerTol: 0.7,
+      minSpread: 1.2,
+      expectLeft: ["NORDESTE"],
+      expectRight: ["SUL"],
+      election: "Brazil 2006 presidential (Lula; Nordeste left emerging)",
+    },
+    "2019": {
+      center: 0,
+      centerTol: 0.7,
+      minSpread: 1.3,
+      expectLeft: ["NORDESTE"],
+      expectRight: ["SUL", "CENTRO_OESTE"],
+      election: "Brazil 2018 presidential",
+    },
+    "2023": {
+      center: 0,
+      centerTol: 0.7,
+      minSpread: 1.3,
+      expectLeft: ["NORDESTE", "NORTE"],
+      expectRight: ["SUL", "CENTRO_OESTE"],
+      election: "Brazil 2022 presidential (Lula v Bolsonaro)",
+    },
+  },
+  era1991Patches: {
+    affordable_housing: {
+      conditions: [
+        {
+          category: "social",
+          metric: "housingAffordability",
+          op: "<=",
+          value: 34,
+        },
+      ],
+    },
+    high_poverty: {
+      conditions: [
+        {
+          category: "economic",
+          metric: "povertyRate",
+          op: ">=",
+          value: 22,
+        },
+      ],
+    },
+    slow_growth: {
+      conditions: [
+        {
+          category: "economic",
+          metric: "gdpGrowth",
+          op: "<=",
+          value: 1,
+        },
+      ],
+    },
+    research_hub: {
+      suppress: true,
+    },
+    low_life_expectancy: {
+      suppress: true,
+    },
+    infrastructure_crisis: {
+      suppress: true,
+    },
+  },
+  hazardGroups: {
+    coastal: ["NORTE", "NORDESTE", "SUDESTE", "SUL"],
+    flood: ["NORTE", "SUDESTE", "SUL"],
+    arid: ["NORDESTE"],
+    wildfire: ["CENTRO_OESTE", "NORTE"],
+  },
+  demographicCategoryIds: ["br_voterGroups"],
 };

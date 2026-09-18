@@ -1,7 +1,7 @@
 import type { CountryGeography } from "../contract";
 import { roRegionCensusData1953 } from "@/lib/seeds/ro/roRegionCensusData1953";
-import { roRegions } from "@/lib/seeds/ro/roRegions";
-import { roRegions1953 } from "@/lib/seeds/ro/roRegions1953";
+import { roRegions } from "./data/roRegions";
+import { roRegions1953 } from "./data/roRegions1953";
 import {
   RO_ADJACENCY_MAP,
   RO_CONTINENT,
@@ -51,6 +51,7 @@ const regionBundles = {
 
 export const RO_GEOGRAPHY: CountryGeography = {
   continent: RO_CONTINENT,
+
   isoNumeric: RO_ISO_NUMERIC,
   unMemberSince: RO_UN_MEMBER_SINCE,
   worldRegion: RO_WORLD_REGION,

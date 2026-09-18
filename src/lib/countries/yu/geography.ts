@@ -1,7 +1,7 @@
 import type { CountryGeography } from "../contract";
 import { yuRegionCensusData1953 } from "@/lib/seeds/yu/yuRegionCensusData1953";
-import { yuRegions } from "@/lib/seeds/yu/yuRegions";
-import { yuRegions1953 } from "@/lib/seeds/yu/yuRegions1953";
+import { yuRegions } from "./data/yuRegions";
+import { yuRegions1953 } from "./data/yuRegions1953";
 import {
   YU_ADJACENCY_MAP,
   YU_CONTINENT,
@@ -51,6 +51,7 @@ const regionBundles = {
 
 export const YU_GEOGRAPHY: CountryGeography = {
   continent: YU_CONTINENT,
+
   isoNumeric: YU_ISO_NUMERIC,
   unMemberSince: YU_UN_MEMBER_SINCE,
   worldRegion: YU_WORLD_REGION,

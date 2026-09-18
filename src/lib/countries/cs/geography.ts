@@ -1,7 +1,7 @@
 import type { CountryGeography } from "../contract";
 import { csRegionCensusData1953 } from "@/lib/seeds/cs/csRegionCensusData1953";
-import { csRegions } from "@/lib/seeds/cs/csRegions";
-import { csRegions1953 } from "@/lib/seeds/cs/csRegions1953";
+import { csRegions } from "./data/csRegions";
+import { csRegions1953 } from "./data/csRegions1953";
 import {
   CS_ADJACENCY_MAP,
   CS_CONTINENT,
@@ -51,6 +51,7 @@ const regionBundles = {
 
 export const CS_GEOGRAPHY: CountryGeography = {
   continent: CS_CONTINENT,
+
   isoNumeric: CS_ISO_NUMERIC,
   unMemberSince: CS_UN_MEMBER_SINCE,
   worldRegion: CS_WORLD_REGION,

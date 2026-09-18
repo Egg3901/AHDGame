@@ -1,6 +1,6 @@
 import type { CountryGeography } from "../contract";
 import { scoRegionCensusData, scoRegionCensusData1991 } from "@/lib/seeds/sco/scoRegionCensusData";
-import { scoRegions } from "@/lib/seeds/sco/scoRegions";
+import { scoRegions } from "./data/scoRegions";
 import {
   SCO_ADJACENCY_MAP,
   SCO_CONTINENT,
@@ -60,4 +60,5 @@ export const SCO_GEOGRAPHY: CountryGeography = {
   regionBundles,
   rawMetrics: [],
   mapRegistry: SCO_MAP_REGISTRY,
+  demographicCategoryIds: ["uk_voterGroups"],
 };

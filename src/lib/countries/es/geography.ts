@@ -7,6 +7,7 @@ import { esRegions1953 } from "./data/esRegions1953";
 import { esStateMetrics } from "./data/esStateMetrics";
 import {
   ES_ADJACENCY_MAP,
+  ES_INCOME_ANCHORS,
   ES_CONTINENT,
   ES_ISO_NUMERIC,
   ES_MAP_REGISTRY,
@@ -57,6 +58,7 @@ const regionBundles = {
 
 export const ES_GEOGRAPHY: CountryGeography = {
   continent: ES_CONTINENT,
+
   isoNumeric: ES_ISO_NUMERIC,
   unMemberSince: ES_UN_MEMBER_SINCE,
   worldRegion: ES_WORLD_REGION,
@@ -69,4 +71,5 @@ export const ES_GEOGRAPHY: CountryGeography = {
   regionBundles,
   rawMetrics: esStateMetrics,
   mapRegistry: ES_MAP_REGISTRY,
+  incomeAnchors: ES_INCOME_ANCHORS,
 };

@@ -1,11 +1,12 @@
 import type { CountryGeography } from "../contract";
 import { ddRegionCensusData } from "@/lib/seeds/dd/ddRegionCensusData";
 import { ddRegionCensusData1953 } from "@/lib/seeds/dd/ddRegionCensusData1953";
-import { ddRegions } from "@/lib/seeds/dd/ddRegions";
-import { ddRegions1953 } from "@/lib/seeds/dd/ddRegions1953";
-import { ddStateMetrics } from "@/lib/seeds/dd/ddStateMetrics";
+import { ddRegions } from "./data/ddRegions";
+import { ddRegions1953 } from "./data/ddRegions1953";
+import { ddStateMetrics } from "./data/ddStateMetrics";
 import {
   DD_ADJACENCY_MAP,
+  DD_INCOME_ANCHORS,
   DD_CONTINENT,
   DD_ISO_NUMERIC,
   DD_MAP_REGISTRY,
@@ -52,6 +53,7 @@ const regionBundles = {
 
 export const DD_GEOGRAPHY: CountryGeography = {
   continent: DD_CONTINENT,
+
   isoNumeric: DD_ISO_NUMERIC,
   worldRegion: DD_WORLD_REGION,
   nppCapitalState: DD_NPP_CAPITAL_STATE,
@@ -63,4 +65,23 @@ export const DD_GEOGRAPHY: CountryGeography = {
   regionBundles,
   rawMetrics: ddStateMetrics,
   mapRegistry: DD_MAP_REGISTRY,
+  incomeAnchors: DD_INCOME_ANCHORS,
+  calibrationTargets: {
+    "1953": {
+      center: 0,
+      centerTol: 5,
+      minSpread: 0,
+      expectLeft: [],
+      expectRight: [],
+      election:
+        "DDR 1953 — post-June-17; no competitive vote. Guards regional variation, not left/right.",
+      twoAxis: {
+        economicCenter: -0.6,
+        economicCenterTol: 0.6,
+        minEconomicSpread: 0.35,
+        minSocialSpread: 0.8,
+      },
+    },
+  },
+  demographicCategoryIds: ["dd_voterGroups"],
 };

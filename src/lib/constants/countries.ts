@@ -20,17 +20,35 @@ import {
   JP_CONFIG,
   JP_REGIONAL_BILL_ASSENT_OFFICE_KEY,
 } from "@/lib/countries/jp/institutionsFacts";
-import { US_CONFIG } from "@/lib/countries/us/institutionsFacts";
-import { UK_CONFIG } from "@/lib/countries/uk/institutionsFacts";
+import {
+  US_CONFIG,
+  US_REGIONAL_BILL_ASSENT_OFFICE_KEY,
+} from "@/lib/countries/us/institutionsFacts";
+import {
+  UK_CONFIG,
+  UK_REGIONAL_BILL_ASSENT_OFFICE_KEY,
+} from "@/lib/countries/uk/institutionsFacts";
 import { US_IDENTITY } from "@/lib/countries/us/identity";
 import { UK_IDENTITY } from "@/lib/countries/uk/identity";
-import { DE_CONFIG } from "@/lib/countries/de/institutionsFacts";
+import {
+  DE_CONFIG,
+  DE_REGIONAL_BILL_ASSENT_OFFICE_KEY,
+} from "@/lib/countries/de/institutionsFacts";
 import { DE_IDENTITY } from "@/lib/countries/de/identity";
 import { CN_CONFIG } from "@/lib/countries/cn/institutionsFacts";
-import { IE_CONFIG } from "@/lib/countries/ie/institutionsFacts";
+import {
+  IE_CONFIG,
+  IE_REGIONAL_BILL_ASSENT_OFFICE_KEY,
+} from "@/lib/countries/ie/institutionsFacts";
 import { IE_IDENTITY } from "@/lib/countries/ie/identity";
-import { RU_CONFIG } from "@/lib/countries/ru/institutionsFacts";
-import { DD_CONFIG } from "@/lib/countries/dd/institutionsFacts";
+import {
+  RU_CONFIG,
+  RU_REGIONAL_BILL_ASSENT_OFFICE_KEY,
+} from "@/lib/countries/ru/institutionsFacts";
+import {
+  DD_CONFIG,
+  DD_REGIONAL_BILL_ASSENT_OFFICE_KEY,
+} from "@/lib/countries/dd/institutionsFacts";
 import { NG_CONFIG } from "@/lib/countries/ng/institutionsFacts";
 import { BR_CONFIG } from "@/lib/countries/br/institutionsFacts";
 import { FR_CONFIG } from "@/lib/countries/fr/institutionsFacts";
@@ -2642,15 +2660,15 @@ export function getOfficeTypeConfig(
 
 /** Maps country to the office key used for regional executive assent on state bills. */
 export const REGIONAL_BILL_ASSENT_OFFICE_KEY: Partial<Record<CountryId, string>> = {
-  US: "governor",
-  UK: "governor",
+  US: US_REGIONAL_BILL_ASSENT_OFFICE_KEY,
+  UK: UK_REGIONAL_BILL_ASSENT_OFFICE_KEY,
   JP: JP_REGIONAL_BILL_ASSENT_OFFICE_KEY,
-  IE: "governor",
-  DE: "ministerPresident",
+  IE: IE_REGIONAL_BILL_ASSENT_OFFICE_KEY,
+  DE: DE_REGIONAL_BILL_ASSENT_OFFICE_KEY,
   // One-party regional executives — Republic / Land First Secretaries. Without
   // these entries the region pages fell back to the generic "Governor" label.
-  RU: "governor",
-  DD: "governor",
+  RU: RU_REGIONAL_BILL_ASSENT_OFFICE_KEY,
+  DD: DD_REGIONAL_BILL_ASSENT_OFFICE_KEY,
 };
 
 /**

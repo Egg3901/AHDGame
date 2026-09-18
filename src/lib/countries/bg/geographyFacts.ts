@@ -110,4 +110,13 @@ export const BG_MAP_REGISTRY: CountryMapConfig = {
  * nothing about any other preset, and a country missing from it passes through
  * unchanged at 1.0 rather than taking someone else's numbers.
  */
+/* No BG_INCOME_ANCHORS: the registry has no BG row. */
+
+/*
+ * ⚠ THESE TWO ARE INDEPENDENT, AND NESTING THEM COST ELEVEN COUNTRIES. The
+ * income-anchor block was first written INSIDE the population-multiplier
+ * ternary, so a country with anchors but no 1991 cohort row -- France, Austria,
+ * East Germany and eight others -- emitted neither. Typecheck caught it only
+ * because metricCatalog.ts had already been repointed at the missing export.
+ */
 /* No BG_POPULATION_MULTIPLIERS: the 1991 cohort table has no BG row, so that era passes through at 1.0. */

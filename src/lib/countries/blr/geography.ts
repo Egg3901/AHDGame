@@ -1,8 +1,8 @@
 import type { CountryGeography } from "../contract";
 import { blrRegionCensusData } from "@/lib/seeds/blr/blrRegionCensusData";
 import { blrRegionCensusData1953 } from "@/lib/seeds/blr/blrRegionCensusData1953";
-import { blrRegions } from "@/lib/seeds/blr/blrRegions";
-import { blrRegions1953 } from "@/lib/seeds/blr/blrRegions1953";
+import { blrRegions } from "./data/blrRegions";
+import { blrRegions1953 } from "./data/blrRegions1953";
 import {
   BLR_ADJACENCY_MAP,
   BLR_CONTINENT,
@@ -52,6 +52,7 @@ const regionBundles = {
 
 export const BLR_GEOGRAPHY: CountryGeography = {
   continent: BLR_CONTINENT,
+
   isoNumeric: BLR_ISO_NUMERIC,
   unMemberSince: BLR_UN_MEMBER_SINCE,
   worldRegion: BLR_WORLD_REGION,

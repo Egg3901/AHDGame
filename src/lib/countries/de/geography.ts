@@ -1,26 +1,24 @@
 import type { CountryGeography } from "../contract";
-import { deMetricPresets1953 } from "@/lib/seeds/de/deMetricPresets1953";
-import { deMetricPresets1979 } from "@/lib/seeds/de/deMetricPresets1979";
-import { deMetricPresets1991, deMetricPresets2019 } from "@/lib/seeds/de/deMetricPresets";
-import {
-  dePopulationAnchors1991,
-  dePopulationAnchors2019,
-} from "@/lib/seeds/de/dePopulationAnchors";
-import { deRegionCensusData } from "@/lib/seeds/de/deRegionCensusData";
-import { deRegionCensusData1953 } from "@/lib/seeds/de/deRegionCensusData1953";
-import { deRegionCensusData1979 } from "@/lib/seeds/de/deRegionCensusData1979";
-import { deRegionCensusData1991 } from "@/lib/seeds/de/deRegionCensusData1991";
-import { deRegionCensusData2027 } from "@/lib/seeds/de/deRegionCensusData2027";
-import { deRegions } from "@/lib/seeds/de/deRegions";
-import { deRegions1953 } from "@/lib/seeds/de/deRegions1953";
-import { deRegions1979 } from "@/lib/seeds/de/deRegions1979";
-import { deRegions1991 } from "@/lib/seeds/de/deRegions1991";
-import { deRegions1999 } from "@/lib/seeds/de/deRegions1999";
-import { deRegions2007 } from "@/lib/seeds/de/deRegions2007";
-import { deRegions2023 } from "@/lib/seeds/de/deRegions2023";
-import { deStateMetrics } from "@/lib/seeds/de/deStateMetrics";
+import { deMetricPresets1953 } from "./data/deMetricPresets1953";
+import { deMetricPresets1979 } from "./data/deMetricPresets1979";
+import { deMetricPresets1991, deMetricPresets2019 } from "./data/deMetricPresets";
+import { dePopulationAnchors1991, dePopulationAnchors2019 } from "./data/dePopulationAnchors";
+import { deRegionCensusData } from "./data/deRegionCensusData";
+import { deRegionCensusData1953 } from "./data/deRegionCensusData1953";
+import { deRegionCensusData1979 } from "./data/deRegionCensusData1979";
+import { deRegionCensusData1991 } from "./data/deRegionCensusData1991";
+import { deRegionCensusData2027 } from "./data/deRegionCensusData2027";
+import { deRegions } from "./data/deRegions";
+import { deRegions1953 } from "./data/deRegions1953";
+import { deRegions1979 } from "./data/deRegions1979";
+import { deRegions1991 } from "./data/deRegions1991";
+import { deRegions1999 } from "./data/deRegions1999";
+import { deRegions2007 } from "./data/deRegions2007";
+import { deRegions2023 } from "./data/deRegions2023";
+import { deStateMetrics } from "./data/deStateMetrics";
 import {
   DE_ADJACENCY_MAP,
+  DE_INCOME_ANCHORS,
   DE_CONSCRIPTION,
   DE_CONTINENT,
   DE_CORE5_NORMALS,
@@ -46,13 +44,13 @@ import { DE_MAP_REGISTRY } from "./data/deMapConfig";
  * equality passed and Japan had two sources for every region.
  *
  * ⚠ THE PRESET KEYS COME FROM THE SNAPSHOT. Germany authors 5 census
- * eras, 4 metric eras, 2 anchor eras and 7 region eras. The gaps are real:
+ * eras, 4 metric eras, 2 anchor eras and 3 region eras. The gaps are real:
  * an unauthored era inherits, and inventing a key for it would turn a fallback
  * into an authored value.
  */
 
 const regionNames: Record<string, string> = Object.fromEntries(
-  deRegions2023.map((region) => [region._id, region.name])
+  deRegions.map((region) => [region._id, region.name])
 );
 
 const censusBundles = {
@@ -77,29 +75,139 @@ const populationAnchors = {
 
 const regionBundles = {
   "1953-default": deRegions1953,
-  "1979-default": deRegions1979,
-  "1991-default": deRegions1991,
-  "1999-default": deRegions1999,
-  "2007-default": deRegions2007,
+  "1979-default": deRegions,
   "2019-default": deRegions,
-  "2023-default": deRegions2023,
 };
 
 export const DE_GEOGRAPHY: CountryGeography = {
   continent: DE_CONTINENT,
+
   isoNumeric: DE_ISO_NUMERIC,
   worldRegion: DE_WORLD_REGION,
   nppCapitalState: DE_NPP_CAPITAL_STATE,
   nonPartyIndependentBias: DE_NON_PARTY_INDEPENDENT_BIAS,
-  adjacency: DE_ADJACENCY_MAP,
-  regionNames,
   conscription: DE_CONSCRIPTION,
   populationMultipliers: DE_POPULATION_MULTIPLIERS,
+  core5Normals: DE_CORE5_NORMALS,
+  adjacency: DE_ADJACENCY_MAP,
+  regionNames,
   censusBundles,
   populationAnchors,
   metricPresets: metricPresetBundles,
   regionBundles,
   rawMetrics: deStateMetrics,
   mapRegistry: DE_MAP_REGISTRY,
-  core5Normals: DE_CORE5_NORMALS,
+  incomeAnchors: DE_INCOME_ANCHORS,
+  calibrationTargets: {
+    "1979": {
+      center: 0,
+      centerTol: 0.7,
+      minSpread: 1.5,
+      expectLeft: ["HH", "BRE", "NW", "SL"],
+      expectRight: ["BY", "BW"],
+      election: "West Germany 1980 (Schmidt SPD); West Länder only",
+    },
+    "1991": {
+      center: 0,
+      centerTol: 0.7,
+      minSpread: 1.5,
+      expectLeft: ["HH", "BRE", "NW"],
+      expectRight: ["BY", "BW"],
+      election: "Germany 1990 (first reunified; low confidence on East — review)",
+    },
+    "1999": {
+      center: 0,
+      centerTol: 0.7,
+      minSpread: 1.6,
+      expectLeft: ["HH", "BRE", "NW", "BB", "MV", "TH"],
+      expectRight: ["BY", "BW"],
+      election: "Germany 1998 (Schröder SPD win; East SPD/PDS strong)",
+    },
+    "2007": {
+      center: 0,
+      centerTol: 0.7,
+      minSpread: 1.5,
+      expectLeft: ["HH", "BRE", "BE"],
+      expectRight: ["BY", "BW"],
+      election: "Germany 2005 (grand coalition)",
+    },
+    "2019": {
+      center: 0,
+      centerTol: 0.7,
+      minSpread: 1.6,
+      expectLeft: ["BE", "HH", "BRE"],
+      expectRight: ["BY", "BW", "SN"],
+      election: "Germany 2017",
+    },
+    "2023": {
+      center: 0,
+      centerTol: 0.7,
+      minSpread: 1.6,
+      expectLeft: ["HH", "BRE", "BE", "BB", "MV"],
+      expectRight: ["BY", "BW", "SN"],
+      election: "Germany 2021 (Scholz SPD win)",
+    },
+    "2027": {
+      center: 0,
+      centerTol: 0.7,
+      minSpread: 1.6,
+      expectLeft: ["HH", "BRE", "BE", "BB"],
+      expectRight: ["BY", "MV"],
+      election: "Germany 2025 Bundestag",
+    },
+  },
+  era1991Patches: {
+    slow_growth: {
+      conditions: [
+        {
+          category: "economic",
+          metric: "gdpGrowth",
+          op: "<=",
+          value: -0.8,
+        },
+      ],
+    },
+    heavy_public_debt: {
+      suppress: true,
+    },
+    high_violent_crime: {
+      suppress: true,
+    },
+    affordable_housing: {
+      conditions: [
+        {
+          category: "social",
+          metric: "housingAffordability",
+          op: "<=",
+          value: 35,
+        },
+      ],
+    },
+    housing_stress: {
+      conditions: [
+        {
+          category: "social",
+          metric: "housingAffordability",
+          op: ">=",
+          value: 44,
+        },
+      ],
+    },
+    research_hub: {
+      conditions: [
+        {
+          category: "economic",
+          metric: "rdIntensity",
+          op: ">=",
+          value: 2.8,
+        },
+      ],
+    },
+  },
+  hazardGroups: {
+    coastal: ["SH", "HH", "BRE", "MV", "NI"],
+    flood: ["NW", "RP", "BW", "BY", "SN", "ST", "BB", "NI", "SH", "HE"],
+    wintry: ["BY", "BW", "SN", "TH", "ST"],
+  },
+  demographicCategoryIds: ["de_voterGroups"],
 };

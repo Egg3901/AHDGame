@@ -7,6 +7,7 @@ import { itRegions1953 } from "./data/itRegions1953";
 import { itStateMetrics } from "./data/itStateMetrics";
 import {
   IT_ADJACENCY_MAP,
+  IT_INCOME_ANCHORS,
   IT_CONTINENT,
   IT_ISO_NUMERIC,
   IT_MAP_REGISTRY,
@@ -57,6 +58,7 @@ const regionBundles = {
 
 export const IT_GEOGRAPHY: CountryGeography = {
   continent: IT_CONTINENT,
+
   isoNumeric: IT_ISO_NUMERIC,
   unMemberSince: IT_UN_MEMBER_SINCE,
   worldRegion: IT_WORLD_REGION,
@@ -69,4 +71,5 @@ export const IT_GEOGRAPHY: CountryGeography = {
   regionBundles,
   rawMetrics: itStateMetrics,
   mapRegistry: IT_MAP_REGISTRY,
+  incomeAnchors: IT_INCOME_ANCHORS,
 };

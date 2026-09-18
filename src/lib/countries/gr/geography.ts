@@ -5,6 +5,7 @@ import { grRegions1953 } from "./data/grRegions1953";
 import { grStateMetrics } from "./data/grStateMetrics";
 import {
   GR_ADJACENCY_MAP,
+  GR_INCOME_ANCHORS,
   GR_CONTINENT,
   GR_ISO_NUMERIC,
   GR_MAP_REGISTRY,
@@ -52,6 +53,7 @@ const regionBundles = {
 
 export const GR_GEOGRAPHY: CountryGeography = {
   continent: GR_CONTINENT,
+
   isoNumeric: GR_ISO_NUMERIC,
   unMemberSince: GR_UN_MEMBER_SINCE,
   worldRegion: GR_WORLD_REGION,
@@ -64,4 +66,5 @@ export const GR_GEOGRAPHY: CountryGeography = {
   regionBundles,
   rawMetrics: grStateMetrics,
   mapRegistry: GR_MAP_REGISTRY,
+  incomeAnchors: GR_INCOME_ANCHORS,
 };

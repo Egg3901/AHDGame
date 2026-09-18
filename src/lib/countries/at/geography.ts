@@ -5,6 +5,7 @@ import { atRegions1953 } from "./data/atRegions1953";
 import { atStateMetrics } from "./data/atStateMetrics";
 import {
   AT_ADJACENCY_MAP,
+  AT_INCOME_ANCHORS,
   AT_CONTINENT,
   AT_ISO_NUMERIC,
   AT_MAP_REGISTRY,
@@ -52,6 +53,7 @@ const regionBundles = {
 
 export const AT_GEOGRAPHY: CountryGeography = {
   continent: AT_CONTINENT,
+
   isoNumeric: AT_ISO_NUMERIC,
   unMemberSince: AT_UN_MEMBER_SINCE,
   worldRegion: AT_WORLD_REGION,
@@ -64,4 +66,5 @@ export const AT_GEOGRAPHY: CountryGeography = {
   regionBundles,
   rawMetrics: atStateMetrics,
   mapRegistry: AT_MAP_REGISTRY,
+  incomeAnchors: AT_INCOME_ANCHORS,
 };

@@ -104,6 +104,14 @@ import { POPULATION_ANCHOR_BUNDLES } from "../../src/lib/seeds/populationAnchors
 import { FULL_ERA_REGION_BUNDLES } from "../../src/lib/admin/seedDiagnostic/regionBundles";
 import { REGION_NAME_MAPS } from "../../src/lib/admin/seed/seedSeats";
 import { M2_TO_GDP_1953 } from "../../src/lib/seeds/reference/moneySupply";
+import { COUNTRY_SECTOR_WEIGHTS_1953 } from "../../src/lib/seeds/reference/sectorSeedWeights1953";
+import { REGIONAL_BILL_ASSENT_OFFICE_KEY } from "../../src/lib/constants/countries";
+import { INCOME_ANCHORS } from "../../src/lib/era/metricCatalog";
+import { TARGETS } from "../../src/lib/seeds/calibration/targets";
+import { COUNTRY_ERA1991_PATCHES } from "../../src/lib/states/conditions/countryEra1991Patches";
+import { HAZARD_GROUPS } from "../../src/lib/crises/regionHazards";
+import { REGION_DEMOGRAPHIC_CATEGORY_IDS } from "../../src/app/country/[code]/region/[id]/regionData";
+import { readFileSync } from "node:fs";
 import { CONVERTED } from "../../src/lib/countries/singleCountryData";
 
 type Dict = Record<string, unknown>;
@@ -186,6 +194,13 @@ const REGISTRIES: Record<string, Dict> = {
   POPULATION_ANCHOR_BUNDLES: d(POPULATION_ANCHOR_BUNDLES),
   FULL_ERA_REGION_BUNDLES: d(FULL_ERA_REGION_BUNDLES),
   REGION_NAME_MAPS: d(REGION_NAME_MAPS),
+  COUNTRY_SECTOR_WEIGHTS_1953: d(COUNTRY_SECTOR_WEIGHTS_1953),
+  REGIONAL_BILL_ASSENT_OFFICE_KEY: d(REGIONAL_BILL_ASSENT_OFFICE_KEY),
+  INCOME_ANCHORS: d(INCOME_ANCHORS),
+  TARGETS: d(TARGETS),
+  COUNTRY_ERA1991_PATCHES: d(COUNTRY_ERA1991_PATCHES),
+  HAZARD_GROUPS: d(HAZARD_GROUPS),
+  REGION_DEMOGRAPHIC_CATEGORY_IDS: d(REGION_DEMOGRAPHIC_CATEGORY_IDS),
 };
 
 /**
@@ -574,6 +589,153 @@ const ABSENT_BY_REGISTRY: Array<[string, string, readonly string[]]> = [
     ],
   ],
   [
+    "COUNTRY_SECTOR_WEIGHTS_1953",
+    "no 1953 sector-weight override; the country inherits its base weights",
+    ["RU", "SCO", "WAL", "BLR"],
+  ],
+  [
+    "REGIONAL_BILL_ASSENT_OFFICE_KEY",
+    "regional bills need no assent office in this country",
+    [
+      "CN",
+      "NG",
+      "BR",
+      "FR",
+      "IT",
+      "ES",
+      "SE",
+      "TR",
+      "GR",
+      "AT",
+      "FI",
+      "PL",
+      "HU",
+      "RO",
+      "YU",
+      "BG",
+      "CS",
+      "SCO",
+      "WAL",
+      "BLR",
+      "UKR",
+      "BAL",
+    ],
+  ],
+  [
+    "INCOME_ANCHORS",
+    "no authored income anchors; the metric catalog falls back",
+    ["PL", "HU", "RO", "YU", "BG", "CS", "SCO", "WAL", "BLR", "UKR", "BAL"],
+  ],
+  [
+    "TARGETS",
+    "no calibration targets are authored",
+    [
+      "CN",
+      "NG",
+      "FR",
+      "IT",
+      "ES",
+      "SE",
+      "TR",
+      "GR",
+      "AT",
+      "FI",
+      "PL",
+      "HU",
+      "RO",
+      "YU",
+      "BG",
+      "CS",
+      "SCO",
+      "WAL",
+      "BLR",
+      "UKR",
+      "BAL",
+    ],
+  ],
+  [
+    "COUNTRY_ERA1991_PATCHES",
+    "no 1991 condition patches are authored",
+    [
+      "RU",
+      "DD",
+      "NG",
+      "FR",
+      "IT",
+      "ES",
+      "SE",
+      "TR",
+      "GR",
+      "AT",
+      "FI",
+      "PL",
+      "HU",
+      "RO",
+      "YU",
+      "BG",
+      "CS",
+      "SCO",
+      "WAL",
+      "BLR",
+      "UKR",
+      "BAL",
+    ],
+  ],
+  [
+    "HAZARD_GROUPS",
+    "no regional hazard groups are authored",
+    [
+      "RU",
+      "DD",
+      "NG",
+      "FR",
+      "IT",
+      "ES",
+      "SE",
+      "TR",
+      "GR",
+      "AT",
+      "FI",
+      "PL",
+      "HU",
+      "RO",
+      "YU",
+      "BG",
+      "CS",
+      "SCO",
+      "WAL",
+      "BLR",
+      "UKR",
+      "BAL",
+    ],
+  ],
+  [
+    "REGION_DEMOGRAPHIC_CATEGORY_IDS",
+    "no country-specific demographic category ids; the shared set applies",
+    [
+      "US",
+      "RU",
+      "NG",
+      "FR",
+      "IT",
+      "ES",
+      "SE",
+      "TR",
+      "GR",
+      "AT",
+      "FI",
+      "PL",
+      "HU",
+      "RO",
+      "YU",
+      "BG",
+      "CS",
+      "BLR",
+      "UKR",
+      "BAL",
+    ],
+  ],
+  [
     "REGION_NAME_MAPS",
     "no seat-seeder region-name map is authored",
     [
@@ -736,6 +898,13 @@ const FOLDER_PATH: Record<string, string | null> = {
   POPULATION_ANCHOR_BUNDLES: "geography.populationAnchors",
   FULL_ERA_REGION_BUNDLES: "geography.regionBundles",
   REGION_NAME_MAPS: "geography.regionNames",
+  COUNTRY_SECTOR_WEIGHTS_1953: "economy.sectorWeights.byEra.1953",
+  REGIONAL_BILL_ASSENT_OFFICE_KEY: "institutions.regionalBillAssentOfficeKey",
+  INCOME_ANCHORS: "geography.incomeAnchors",
+  TARGETS: "geography.calibrationTargets",
+  COUNTRY_ERA1991_PATCHES: "geography.era1991Patches",
+  HAZARD_GROUPS: "geography.hazardGroups",
+  REGION_DEMOGRAPHIC_CATEGORY_IDS: "geography.demographicCategoryIds",
 };
 
 function at(root: unknown, path: string): unknown {
@@ -775,6 +944,29 @@ function at(root: unknown, path: string): unknown {
  * is the normal state, not an invention.
  */
 const PARTIAL_REGISTRY = new Set(["FULL_ERA_REGION_BUNDLES", "REGION_NAME_MAPS"]);
+
+/**
+ * Rows that forward into the country's folder at a module the CONTRACT does not
+ * surface, so there is no `FOLDER_PATH` to compare against.
+ *
+ * ⚠️ JAPAN'S 1953 SECTOR WEIGHTS LIVE IN `jp/data/jpSectorWeights1953.ts` and the
+ * registry already imports them from there -- single-sourced, just not reachable
+ * through `economy.sectorWeights.byEra`. Putting them on that object would need
+ * a value import in `jp/economy.ts`, which `clientSafeLeafModules.test.ts`
+ * forbids: that module is read by a client component through a forwarder, and a
+ * value import there ships the data module to the browser.
+ *
+ * ⚠️ THIS CHECK IS STATIC AND WEAKER THAN THE REST OF THE FILE. It reads the
+ * registry's source and asserts the import exists; it cannot prove the imported
+ * binding is the one the key resolves to. It is recorded here rather than left
+ * silent so the weakness is visible, and so the row is not mistaken for an
+ * absence -- which is what an ABSENT_UPSTREAM entry would have claimed.
+ */
+const FOLDER_MODULE_FORWARD: Record<string, Record<string, string>> = {
+  JP: {
+    COUNTRY_SECTOR_WEIGHTS_1953: "src/lib/seeds/reference/sectorSeedWeights1953.ts",
+  },
+};
 
 /**
  * Registry rows that are DERIVED elsewhere, so the folder must NOT restate them.
@@ -845,6 +1037,7 @@ async function verify(cc: string): Promise<boolean> {
   const exempt = ABSENT_UPSTREAM[cc] ?? {};
   const shared = SHARED_UPSTREAM[cc] ?? {};
   const derived = DERIVED_UPSTREAM[cc] ?? {};
+  const viaModule = FOLDER_MODULE_FORWARD[cc] ?? {};
 
   let resolved = 0;
   let forwarders = 0;
@@ -857,6 +1050,7 @@ async function verify(cc: string): Promise<boolean> {
     const path = FOLDER_PATH[name];
     const sharedWhy = shared[name];
     const derivedWhy = derived[name];
+    const viaModuleFile = viaModule[name];
     /*
      * Declared HERE, not inside a branch: both the shared path below and the
      * ordinary path further down need it. The first version was scoped to the
@@ -882,6 +1076,23 @@ async function verify(cc: string): Promise<boolean> {
       value !== null &&
       !(value === "" && EMPTY_STRING_IS_ABSENCE.has(name));
     const nullIsValue = NULL_IS_A_VALUE.has(name) && value === null && cc in registry;
+
+    if (viaModuleFile) {
+      const src = readFileSync(viaModuleFile, "utf8");
+      if (!present) {
+        console.log(`FAIL  ${name}.${cc} no longer resolves at all.`);
+        failed++;
+      } else if (!new RegExp(`from "@/lib/countries/${cc.toLowerCase()}/`).test(src)) {
+        console.log(
+          `FAIL  ${name}.${cc} is recorded as forwarding to a folder module, but ` +
+            `${viaModuleFile} imports nothing from ${cc.toLowerCase()}/. The forward is gone.`
+        );
+        failed++;
+      } else {
+        resolved++;
+      }
+      continue;
+    }
 
     if (derivedWhy) {
       const side = path ? at(folder, path) : undefined;

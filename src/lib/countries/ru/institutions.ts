@@ -10,6 +10,7 @@ import {
   RU_MILITARY_BRANCHES,
   RU_MILITARY_SCALE,
   RU_ORDERS_OF_BATTLE,
+  RU_REGIONAL_BILL_ASSENT_OFFICE_KEY,
 } from "./institutionsFacts";
 
 /**
@@ -24,6 +25,14 @@ import {
  */
 export const RU_INSTITUTIONS: CountryInstitutions = {
   config: RU_CONFIG,
+  /*
+   * ⚠️ OMITTED WHEN THIS FILE WAS HAND-WRITTEN, AND NOTHING NOTICED FOR SIX
+   * COUNTRIES. `institutionsFacts.ts` has exported `RU_REGIONAL_BILL_ASSENT_OFFICE_KEY`
+   * since the day it was generated; this composition simply left the field out,
+   * so the registry kept its own literal and the folder had nothing to forward
+   * to. Only extending the harness past its original 53 registries surfaced it.
+   */
+  regionalBillAssentOfficeKey: RU_REGIONAL_BILL_ASSENT_OFFICE_KEY,
   positions: RU_CABINET_SEAT_IDS,
   estatePortfolio: RU_ESTATE_PORTFOLIO,
   military: {

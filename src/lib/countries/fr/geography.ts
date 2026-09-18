@@ -7,6 +7,7 @@ import { frRegions1953 } from "./data/frRegions1953";
 import { frStateMetrics } from "./data/frStateMetrics";
 import {
   FR_ADJACENCY_MAP,
+  FR_INCOME_ANCHORS,
   FR_CONTINENT,
   FR_ISO_NUMERIC,
   FR_MAP_REGISTRY,
@@ -57,6 +58,7 @@ const regionBundles = {
 
 export const FR_GEOGRAPHY: CountryGeography = {
   continent: FR_CONTINENT,
+
   isoNumeric: FR_ISO_NUMERIC,
   unMemberSince: FR_UN_MEMBER_SINCE,
   worldRegion: FR_WORLD_REGION,
@@ -69,4 +71,5 @@ export const FR_GEOGRAPHY: CountryGeography = {
   regionBundles,
   rawMetrics: frStateMetrics,
   mapRegistry: FR_MAP_REGISTRY,
+  incomeAnchors: FR_INCOME_ANCHORS,
 };

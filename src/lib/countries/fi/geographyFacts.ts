@@ -1,6 +1,7 @@
 import type { AdjacencyMap } from "@/lib/constants/stateAdjacency";
 import type { CountryMapConfig } from "@/lib/commodity-map/commodityMapRegistry";
 import type { Continent } from "@/lib/constants/countryContinents";
+import type { NormalAnchor } from "@/lib/era/metricCatalog";
 
 import type { WorldEntityRegion } from "@/lib/world/worldEntityManifest";
 
@@ -110,5 +111,28 @@ export const FI_MAP_REGISTRY: CountryMapConfig = {
  * and describes how that era's cohorts differ from the modern ones. It says
  * nothing about any other preset, and a country missing from it passes through
  * unchanged at 1.0 rather than taking someone else's numbers.
+ */
+/**
+ * Income anchors by year.
+ *
+ * ⚠ IN THE LIGHT MODULE ON PURPOSE. `metricCatalog.ts` reads these and is
+ * CLIENT-REACHABLE. Pointing it at `geography.ts` instead shipped seventeen
+ * countries' census, metric and region bundles into the browser -- the same
+ * failure `countryContinents.ts` had when it started pulling 108 KB for one
+ * string.
+ */
+export const FI_INCOME_ANCHORS: NormalAnchor[] = [
+  {
+    year: 1953,
+    value: 292500,
+  },
+];
+
+/*
+ * ⚠ THESE TWO ARE INDEPENDENT, AND NESTING THEM COST ELEVEN COUNTRIES. The
+ * income-anchor block was first written INSIDE the population-multiplier
+ * ternary, so a country with anchors but no 1991 cohort row -- France, Austria,
+ * East Germany and eight others -- emitted neither. Typecheck caught it only
+ * because metricCatalog.ts had already been repointed at the missing export.
  */
 /* No FI_POPULATION_MULTIPLIERS: the 1991 cohort table has no FI row, so that era passes through at 1.0. */

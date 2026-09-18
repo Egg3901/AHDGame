@@ -236,6 +236,41 @@ export const BR_MAP_REGISTRY: CountryMapConfig = {
  * nothing about any other preset, and a country missing from it passes through
  * unchanged at 1.0 rather than taking someone else's numbers.
  */
+/**
+ * Income anchors by year.
+ *
+ * ⚠ IN THE LIGHT MODULE ON PURPOSE. `metricCatalog.ts` reads these and is
+ * CLIENT-REACHABLE. Pointing it at `geography.ts` instead shipped seventeen
+ * countries' census, metric and region bundles into the browser -- the same
+ * failure `countryContinents.ts` had when it started pulling 108 KB for one
+ * string.
+ */
+export const BR_INCOME_ANCHORS: NormalAnchor[] = [
+  {
+    year: 1953,
+    value: 7500,
+  },
+  {
+    year: 1979,
+    value: 6000,
+  },
+  {
+    year: 1991,
+    value: 14000,
+  },
+  {
+    year: 2019,
+    value: 27000,
+  },
+];
+
+/*
+ * ⚠ THESE TWO ARE INDEPENDENT, AND NESTING THEM COST ELEVEN COUNTRIES. The
+ * income-anchor block was first written INSIDE the population-multiplier
+ * ternary, so a country with anchors but no 1991 cohort row -- France, Austria,
+ * East Germany and eight others -- emitted neither. Typecheck caught it only
+ * because metricCatalog.ts had already been repointed at the missing export.
+ */
 export const BR_POPULATION_MULTIPLIERS: Record<string, number> = {
   evangelical_conservative: 0.5,
   working_class_pt: 1.15,

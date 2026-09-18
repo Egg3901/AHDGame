@@ -1,6 +1,6 @@
 import type { CountryGeography } from "../contract";
 import { walRegionCensusData, walRegionCensusData1991 } from "@/lib/seeds/wal/walRegionCensusData";
-import { walRegions } from "@/lib/seeds/wal/walRegions";
+import { walRegions } from "./data/walRegions";
 import {
   WAL_ADJACENCY_MAP,
   WAL_CONTINENT,
@@ -60,4 +60,5 @@ export const WAL_GEOGRAPHY: CountryGeography = {
   regionBundles,
   rawMetrics: [],
   mapRegistry: WAL_MAP_REGISTRY,
+  demographicCategoryIds: ["uk_voterGroups"],
 };

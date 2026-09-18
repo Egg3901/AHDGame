@@ -5,6 +5,7 @@ import { fiRegions1953 } from "./data/fiRegions1953";
 import { fiStateMetrics } from "./data/fiStateMetrics";
 import {
   FI_ADJACENCY_MAP,
+  FI_INCOME_ANCHORS,
   FI_CONTINENT,
   FI_ISO_NUMERIC,
   FI_MAP_REGISTRY,
@@ -52,6 +53,7 @@ const regionBundles = {
 
 export const FI_GEOGRAPHY: CountryGeography = {
   continent: FI_CONTINENT,
+
   isoNumeric: FI_ISO_NUMERIC,
   unMemberSince: FI_UN_MEMBER_SINCE,
   worldRegion: FI_WORLD_REGION,
@@ -64,4 +66,5 @@ export const FI_GEOGRAPHY: CountryGeography = {
   regionBundles,
   rawMetrics: fiStateMetrics,
   mapRegistry: FI_MAP_REGISTRY,
+  incomeAnchors: FI_INCOME_ANCHORS,
 };

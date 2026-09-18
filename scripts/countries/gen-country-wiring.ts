@@ -31,6 +31,13 @@ interface Entry {
 const COUNTRY = process.argv[2]?.toUpperCase();
 const DISPLAY = process.argv[3];
 const FORCE = process.argv.includes("--force");
+/*
+ * ⚠ `institutions.ts` AND `elections.ts` ARE HAND-WRITTEN FOR TEN COUNTRIES.
+ * Regenerating geography for all of them with `--force` would overwrite those
+ * too -- the seat tables, the spawner ordering, the reasoned omissions. This
+ * flag regenerates ONLY geography.ts and index.ts.
+ */
+const GEOGRAPHY_ONLY = process.argv.includes("--geography-only");
 
 if (!COUNTRY || !/^[A-Z]{2,3}$/.test(COUNTRY) || !DISPLAY) {
   console.error(
@@ -86,7 +93,14 @@ function eraStems(base: string, presets: string[]): Array<[string, string, strin
       const names = exportsOf(stem);
       // Prefer an export whose name carries the year, else the bare one.
       const exact = names.find((n) => n.endsWith(year));
-      const bare = names.find((n) => n === stem || n === base);
+      /*
+       * ⚠ THE EXPORT NEED NOT BE NAMED AFTER THE MODULE. `usStates.ts`
+       * exports `states`, not `usStates`, so matching only the stem found
+       * nothing for the bare (non-year) era and the US lost its 2019 bundle.
+       */
+      const unprefixed = stem.replace(/^[a-z]{2,3}/, "");
+      const lowered = unprefixed.charAt(0).toLowerCase() + unprefixed.slice(1);
+      const bare = names.find((n) => n === stem || n === base || n === lowered);
       const picked = stem.endsWith(year) ? (exact ?? bare) : (exact ?? bare);
       if (picked) {
         out.push([preset, mod, picked]);
@@ -108,10 +122,25 @@ const metricPresets = presetsOf("METRIC_PRESET_BUNDLES");
 const anchorPresets = presetsOf("POPULATION_ANCHOR_BUNDLES");
 const regionPresets = presetsOf("FULL_ERA_REGION_BUNDLES");
 
-const census = eraStems(`${seedPrefix}RegionCensusData`, censusPresets);
+/**
+ * Module-stem overrides, for countries that do not use `<cc>Regions` naming.
+ *
+ * ⚠ THE UNITED STATES CALLS THEM `usStates*` AND `usStateCensusData*`, and
+ * its EXPORTS drop the country prefix entirely -- `usStates1953.ts` exports
+ * `states1953`. Assuming the common naming made the generator derive zero region
+ * eras for the country with fifty-one of them, and the first version of the
+ * empty-regions guard did not fire because `usRegions.ts` does not exist. It
+ * wrote a US geography with empty censusBundles, regionBundles and regionNames.
+ */
+const STEM_OVERRIDE: Record<string, { regions?: string; census?: string }> = {
+  us: { regions: "usStates", census: "usStateCensusData" },
+};
+const stems = STEM_OVERRIDE[cc] ?? {};
+
+const census = eraStems(stems.census ?? `${seedPrefix}RegionCensusData`, censusPresets);
 const metrics = eraStems(`${seedPrefix}MetricPresets`, metricPresets);
 const anchors = eraStems(`${seedPrefix}PopulationAnchors`, anchorPresets);
-const regions = eraStems(`${seedPrefix}Regions`, regionPresets);
+const regions = eraStems(stems.regions ?? `${seedPrefix}Regions`, regionPresets);
 
 const rawStem = `${seedPrefix}StateMetrics`;
 const rawMod = findModule(rawStem);
@@ -127,6 +156,7 @@ if (rawMod && rawExport) addImport(rawMod, rawExport);
 
 const factsNames = [
   "ADJACENCY_MAP",
+  "INCOME_ANCHORS",
   "CONSCRIPTION",
   "CONTINENT",
   "CORE5_NORMALS",
@@ -212,15 +242,25 @@ if (REGION_OVERRIDE) {
   for (const [, mod, name] of REGION_OVERRIDE) addImport(mod, name);
 }
 
-if (regions.length === 0 && findModule(`${seedPrefix}Regions`)) {
+/*
+ * ⚠ THE FIRST VERSION ONLY REFUSED WHEN `<cc>Regions.ts` EXISTED, and that
+ * hole bit immediately. The United States names its modules `usStates*` and
+ * `usStateCensusData*`, so `findModule("usRegions")` returned null, the guard
+ * stayed quiet, and regenerating wrote a US geography with EMPTY censusBundles,
+ * regionBundles and regionNames -- for the country with fifty-one of them.
+ *
+ * Zero regions is now always a refusal. A country that genuinely has none must
+ * say so with `--no-regions`, which is a claim someone has to type.
+ */
+if (regions.length === 0 && !process.argv.includes("--no-regions")) {
   console.error(
-    `${cc}Regions.ts is on disk but no region eras were derived: FULL_ERA_REGION_BUNDLES
-` +
-      `has no ${COUNTRY} row. Emitting an empty regionNames map would be a stub for a
-` +
-      `country that has regions. Read src/lib/admin/seed/seed${COUNTRY}.ts and pass the
-` +
-      `mapping, e.g.  --regions "1953-default=${cc}Regions1953,2019-default=${cc}Regions"`
+    `No region eras were derived for ${COUNTRY}, so regionNames, regionBundles and\n` +
+      `censusBundles would all be written EMPTY. Either FULL_ERA_REGION_BUNDLES has no\n` +
+      `${COUNTRY} row, or this country does not use the ${seedPrefix}Regions naming --\n` +
+      `the United States calls its modules usStates* and usStateCensusData*.\n\n` +
+      `Read src/lib/admin/seed/seed${COUNTRY}.ts and pass the mapping:\n` +
+      `  --regions "1953-default=${seedPrefix}Regions1953,2019-default=${seedPrefix}Regions"\n` +
+      `or, if this country genuinely has no regions, say so with --no-regions.`
   );
   process.exit(1);
 }
@@ -236,6 +276,36 @@ if (regions.length === 0 && findModule(`${seedPrefix}Regions`)) {
  * eslint's `no-undef` is off for TypeScript and `tsc` sees the facts module's
  * missing export only where it is imported, which this template also omits.
  */
+/**
+ * Geography values that live in the SNAPSHOT rather than in the facts module.
+ *
+ * ⚠ THESE WERE JAPAN-ONLY FOR THE WHOLE ROLLOUT. `incomeAnchors`,
+ * `calibrationTargets`, `era1991Patches`, `hazardGroups` and
+ * `demographicCategoryIds` are all optional on the contract and all were carried
+ * by exactly one folder -- Japan's, written by hand -- because no generator
+ * emitted them. Every other country's values stayed in their registries,
+ * unchecked and unforwarded. They are values, not wiring, so they belong in the
+ * heavy module beside the bundles.
+ */
+function snapValue(name: string): string | null {
+  const e = snap[name];
+  if (!e || e.shape === "absent") return null;
+  if (e.value === null || e.value === undefined) return null;
+  if (e.shape === "function-valued") return null;
+  return JSON.stringify(e.value, null, 2);
+}
+
+const calibrationTargets = snapValue("TARGETS");
+const era1991Patches = snapValue("COUNTRY_ERA1991_PATCHES");
+const hazardGroups = snapValue("HAZARD_GROUPS");
+const demographicCategoryIds = snapValue("REGION_DEMOGRAPHIC_CATEGORY_IDS");
+
+const snapField = (field: string, value: string | null): string =>
+  value
+    ? `
+  ${field}: ${value},`
+    : "";
+
 const opt = (field: string, suffix: string): string =>
   factsNames.includes(`${COUNTRY}_${suffix}`) ? `\n  ${field}: ${COUNTRY}_${suffix},` : "";
 
@@ -302,7 +372,7 @@ ${opt("isoNumeric", "ISO_NUMERIC")}${opt("unMemberSince", "UN_MEMBER_SINCE")}
   metricPresets: metricPresetBundles,
   regionBundles,
   rawMetrics: ${rawExport ?? "[]"},
-  mapRegistry: ${COUNTRY}_MAP_REGISTRY,
+  mapRegistry: ${COUNTRY}_MAP_REGISTRY,${opt("incomeAnchors", "INCOME_ANCHORS")}${snapField("calibrationTargets", calibrationTargets)}${snapField("era1991Patches", era1991Patches)}${snapField("hazardGroups", hazardGroups)}${snapField("demographicCategoryIds", demographicCategoryIds)}
 };
 `;
 
@@ -436,7 +506,9 @@ export const ${COUNTRY}_INSTITUTIONS: CountryInstitutions = {${instField("config
 `;
 
 const OUT_INST = `${DIR}/institutions.ts`;
-if (!existsSync(OUT_INST) || FORCE) {
+if (GEOGRAPHY_ONLY) {
+  console.log(`${OUT_INST} left alone (--geography-only).`);
+} else if (!existsSync(OUT_INST) || FORCE) {
   writeFileSync(OUT_INST, institutions, "utf8");
   console.log(`wrote ${OUT_INST}`);
 } else {
@@ -494,7 +566,9 @@ const phases = phaseEntries();
 const hasSpawnRow = snap.SPAWN_ELECTIONS_REGISTRY?.shape !== "absent";
 const OUT_ELEC = `${DIR}/elections.ts`;
 
-if (existsSync(OUT_ELEC) && !FORCE) {
+if (GEOGRAPHY_ONLY) {
+  console.log(`${OUT_ELEC} left alone (--geography-only).`);
+} else if (existsSync(OUT_ELEC) && !FORCE) {
   console.log(`${OUT_ELEC} exists, left alone (pass --force to regenerate).`);
 } else if (hasSpawnRow || phases.length === 0) {
   console.log(

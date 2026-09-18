@@ -7,6 +7,7 @@ import { seRegions1953 } from "./data/seRegions1953";
 import { seStateMetrics } from "./data/seStateMetrics";
 import {
   SE_ADJACENCY_MAP,
+  SE_INCOME_ANCHORS,
   SE_CONTINENT,
   SE_ISO_NUMERIC,
   SE_MAP_REGISTRY,
@@ -58,6 +59,7 @@ const regionBundles = {
 
 export const SE_GEOGRAPHY: CountryGeography = {
   continent: SE_CONTINENT,
+
   isoNumeric: SE_ISO_NUMERIC,
   unMemberSince: SE_UN_MEMBER_SINCE,
   worldRegion: SE_WORLD_REGION,
@@ -70,4 +72,5 @@ export const SE_GEOGRAPHY: CountryGeography = {
   regionBundles,
   rawMetrics: seStateMetrics,
   mapRegistry: SE_MAP_REGISTRY,
+  incomeAnchors: SE_INCOME_ANCHORS,
 };

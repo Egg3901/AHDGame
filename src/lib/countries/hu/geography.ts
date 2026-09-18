@@ -1,7 +1,7 @@
 import type { CountryGeography } from "../contract";
 import { huRegionCensusData1953 } from "@/lib/seeds/hu/huRegionCensusData1953";
-import { huRegions } from "@/lib/seeds/hu/huRegions";
-import { huRegions1953 } from "@/lib/seeds/hu/huRegions1953";
+import { huRegions } from "./data/huRegions";
+import { huRegions1953 } from "./data/huRegions1953";
 import {
   HU_ADJACENCY_MAP,
   HU_CONTINENT,
@@ -51,6 +51,7 @@ const regionBundles = {
 
 export const HU_GEOGRAPHY: CountryGeography = {
   continent: HU_CONTINENT,
+
   isoNumeric: HU_ISO_NUMERIC,
   unMemberSince: HU_UN_MEMBER_SINCE,
   worldRegion: HU_WORLD_REGION,

@@ -7,6 +7,7 @@ import { trRegions1953 } from "./data/trRegions1953";
 import { trStateMetrics } from "./data/trStateMetrics";
 import {
   TR_ADJACENCY_MAP,
+  TR_INCOME_ANCHORS,
   TR_CONTINENT,
   TR_ISO_NUMERIC,
   TR_MAP_REGISTRY,
@@ -58,6 +59,7 @@ const regionBundles = {
 
 export const TR_GEOGRAPHY: CountryGeography = {
   continent: TR_CONTINENT,
+
   isoNumeric: TR_ISO_NUMERIC,
   unMemberSince: TR_UN_MEMBER_SINCE,
   worldRegion: TR_WORLD_REGION,
@@ -70,4 +72,5 @@ export const TR_GEOGRAPHY: CountryGeography = {
   regionBundles,
   rawMetrics: trStateMetrics,
   mapRegistry: TR_MAP_REGISTRY,
+  incomeAnchors: TR_INCOME_ANCHORS,
 };

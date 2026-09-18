@@ -1,8 +1,8 @@
 import type { CountryGeography } from "../contract";
 import { uaRegionCensusData } from "@/lib/seeds/ua/uaRegionCensusData";
 import { uaRegionCensusData1953 } from "@/lib/seeds/ua/uaRegionCensusData1953";
-import { uaRegions } from "@/lib/seeds/ua/uaRegions";
-import { uaRegions1953 } from "@/lib/seeds/ua/uaRegions1953";
+import { uaRegions } from "./data/uaRegions";
+import { uaRegions1953 } from "./data/uaRegions1953";
 import {
   UKR_ADJACENCY_MAP,
   UKR_CONTINENT,
@@ -52,6 +52,7 @@ const regionBundles = {
 
 export const UKR_GEOGRAPHY: CountryGeography = {
   continent: UKR_CONTINENT,
+
   isoNumeric: UKR_ISO_NUMERIC,
   unMemberSince: UKR_UN_MEMBER_SINCE,
   worldRegion: UKR_WORLD_REGION,

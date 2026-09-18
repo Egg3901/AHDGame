@@ -1,26 +1,24 @@
 import type { CountryGeography } from "../contract";
-import { cnMetricPresets1953 } from "@/lib/seeds/cn/cnMetricPresets1953";
-import { cnMetricPresets1979 } from "@/lib/seeds/cn/cnMetricPresets1979";
-import { cnMetricPresets1991, cnMetricPresets2019 } from "@/lib/seeds/cn/cnMetricPresets";
-import {
-  cnPopulationAnchors1991,
-  cnPopulationAnchors2019,
-} from "@/lib/seeds/cn/cnPopulationAnchors";
-import { cnRegionCensusData } from "@/lib/seeds/cn/cnRegionCensusData";
-import { cnRegionCensusData1953 } from "@/lib/seeds/cn/cnRegionCensusData1953";
-import { cnRegionCensusData1979 } from "@/lib/seeds/cn/cnRegionCensusData1979";
-import { cnRegionCensusData1991 } from "@/lib/seeds/cn/cnRegionCensusData1991";
-import { cnRegionCensusData2027 } from "@/lib/seeds/cn/cnRegionCensusData2027";
-import { cnRegions } from "@/lib/seeds/cn/cnRegions";
-import { cnRegions1953 } from "@/lib/seeds/cn/cnRegions1953";
-import { cnRegions1979 } from "@/lib/seeds/cn/cnRegions1979";
-import { cnRegions1991 } from "@/lib/seeds/cn/cnRegions1991";
-import { cnRegions1999 } from "@/lib/seeds/cn/cnRegions1999";
-import { cnRegions2007 } from "@/lib/seeds/cn/cnRegions2007";
-import { cnRegions2023 } from "@/lib/seeds/cn/cnRegions2023";
-import { cnStateMetrics } from "@/lib/seeds/cn/cnStateMetrics";
+import { cnMetricPresets1953 } from "./data/cnMetricPresets1953";
+import { cnMetricPresets1979 } from "./data/cnMetricPresets1979";
+import { cnMetricPresets1991, cnMetricPresets2019 } from "./data/cnMetricPresets";
+import { cnPopulationAnchors1991, cnPopulationAnchors2019 } from "./data/cnPopulationAnchors";
+import { cnRegionCensusData } from "./data/cnRegionCensusData";
+import { cnRegionCensusData1953 } from "./data/cnRegionCensusData1953";
+import { cnRegionCensusData1979 } from "./data/cnRegionCensusData1979";
+import { cnRegionCensusData1991 } from "./data/cnRegionCensusData1991";
+import { cnRegionCensusData2027 } from "./data/cnRegionCensusData2027";
+import { cnRegions } from "./data/cnRegions";
+import { cnRegions1953 } from "./data/cnRegions1953";
+import { cnRegions1979 } from "./data/cnRegions1979";
+import { cnRegions1991 } from "./data/cnRegions1991";
+import { cnRegions1999 } from "./data/cnRegions1999";
+import { cnRegions2007 } from "./data/cnRegions2007";
+import { cnRegions2023 } from "./data/cnRegions2023";
+import { cnStateMetrics } from "./data/cnStateMetrics";
 import {
   CN_ADJACENCY_MAP,
+  CN_INCOME_ANCHORS,
   CN_CONSCRIPTION,
   CN_CONTINENT,
   CN_CORE5_NORMALS,
@@ -46,13 +44,13 @@ import {
  * equality passed and Japan had two sources for every region.
  *
  * ⚠ THE PRESET KEYS COME FROM THE SNAPSHOT. China authors 5 census
- * eras, 4 metric eras, 2 anchor eras and 7 region eras. The gaps are real:
+ * eras, 4 metric eras, 2 anchor eras and 3 region eras. The gaps are real:
  * an unauthored era inherits, and inventing a key for it would turn a fallback
  * into an authored value.
  */
 
 const regionNames: Record<string, string> = Object.fromEntries(
-  cnRegions2023.map((region) => [region._id, region.name])
+  cnRegions.map((region) => [region._id, region.name])
 );
 
 const censusBundles = {
@@ -77,29 +75,81 @@ const populationAnchors = {
 
 const regionBundles = {
   "1953-default": cnRegions1953,
-  "1979-default": cnRegions1979,
-  "1991-default": cnRegions1991,
-  "1999-default": cnRegions1999,
-  "2007-default": cnRegions2007,
+  "1979-default": cnRegions,
   "2019-default": cnRegions,
-  "2023-default": cnRegions2023,
 };
 
 export const CN_GEOGRAPHY: CountryGeography = {
   continent: CN_CONTINENT,
+
   isoNumeric: CN_ISO_NUMERIC,
   unMemberSince: CN_UN_MEMBER_SINCE,
   worldRegion: CN_WORLD_REGION,
   nppCapitalState: CN_NPP_CAPITAL_STATE,
-  adjacency: CN_ADJACENCY_MAP,
-  regionNames,
   conscription: CN_CONSCRIPTION,
   populationMultipliers: CN_POPULATION_MULTIPLIERS,
+  core5Normals: CN_CORE5_NORMALS,
+  adjacency: CN_ADJACENCY_MAP,
+  regionNames,
   censusBundles,
   populationAnchors,
   metricPresets: metricPresetBundles,
   regionBundles,
   rawMetrics: cnStateMetrics,
   mapRegistry: CN_MAP_REGISTRY,
-  core5Normals: CN_CORE5_NORMALS,
+  incomeAnchors: CN_INCOME_ANCHORS,
+  era1991Patches: {
+    affordable_housing: {
+      suppress: true,
+    },
+    low_life_expectancy: {
+      suppress: true,
+    },
+    strong_growth: {
+      conditions: [
+        {
+          category: "economic",
+          metric: "gdpGrowth",
+          op: ">=",
+          value: 4.5,
+        },
+      ],
+    },
+    slow_growth: {
+      suppress: true,
+    },
+    research_hub: {
+      suppress: true,
+    },
+    heavy_public_debt: {
+      suppress: true,
+    },
+    low_social_mobility: {
+      suppress: true,
+    },
+    informed_society: {
+      conditions: [
+        {
+          category: "mediaInformation",
+          metric: "newsTrust",
+          op: ">=",
+          value: 68,
+        },
+        {
+          category: "mediaInformation",
+          metric: "mediaPolarization",
+          op: "<=",
+          value: 32,
+        },
+      ],
+    },
+  },
+  hazardGroups: {
+    coastal: ["DB", "HB", "HD", "HN"],
+    seismic: ["XN", "XB"],
+    flood: ["HD", "HZ", "HN", "DB"],
+    wintry: ["DB", "XB", "HB"],
+    arid: ["XB", "HB"],
+  },
+  demographicCategoryIds: ["cn_voterGroups"],
 };

@@ -7,12 +7,12 @@ import { UK_GEOGRAPHY } from "./geography";
 import { UK_ERAS } from "./eras";
 
 /**
- * The United Kingdom's country folder.
+ * the United Kingdom's country folder.
  *
- * ⚠️⚠️ SERVER-SIDE CONSUMERS ONLY. `./elections` reaches `getDb` through the
- * Westminster continuity spawners, so a `"use client"` component importing this
- * pulls the MongoDB driver into the browser. Client surfaces take `./identity`
- * or `./geographyFacts`, never this file and never `./geography`.
+ * ⚠⚠ SERVER-SIDE CONSUMERS ONLY. `./elections` reaches `getDb` through the
+ * continuity spawners, so a `"use client"` component importing this pulls the
+ * MongoDB driver into the browser. Client surfaces take `./identity` or
+ * `./geographyFacts`, never this file and never `./geography`.
  */
 export const UK: CountryFolder = {
   id: "UK",

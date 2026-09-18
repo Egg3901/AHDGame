@@ -1,12 +1,13 @@
 import type { CountryGeography } from "../contract";
-import { ruMetricPresets1953 } from "@/lib/seeds/ru/ruMetricPresets1953";
-import { ruRegionCensusData } from "@/lib/seeds/ru/ruRegionCensusData";
-import { ruRegionCensusData1953 } from "@/lib/seeds/ru/ruRegionCensusData1953";
-import { ruRegions } from "@/lib/seeds/ru/ruRegions";
-import { ruRegions1953 } from "@/lib/seeds/ru/ruRegions1953";
-import { ruStateMetrics } from "@/lib/seeds/ru/ruStateMetrics";
+import { ruMetricPresets1953 } from "./data/ruMetricPresets1953";
+import { ruRegionCensusData } from "./data/ruRegionCensusData";
+import { ruRegionCensusData1953 } from "./data/ruRegionCensusData1953";
+import { ruRegions } from "./data/ruRegions";
+import { ruRegions1953 } from "./data/ruRegions1953";
+import { ruStateMetrics } from "./data/ruStateMetrics";
 import {
   RU_ADJACENCY_MAP,
+  RU_INCOME_ANCHORS,
   RU_CONTINENT,
   RU_ISO_NUMERIC,
   RU_MAP_REGISTRY,
@@ -57,6 +58,7 @@ const regionBundles = {
 
 export const RU_GEOGRAPHY: CountryGeography = {
   continent: RU_CONTINENT,
+
   isoNumeric: RU_ISO_NUMERIC,
   unMemberSince: RU_UN_MEMBER_SINCE,
   worldRegion: RU_WORLD_REGION,
@@ -69,4 +71,22 @@ export const RU_GEOGRAPHY: CountryGeography = {
   regionBundles,
   rawMetrics: ruStateMetrics,
   mapRegistry: RU_MAP_REGISTRY,
+  incomeAnchors: RU_INCOME_ANCHORS,
+  calibrationTargets: {
+    "1953": {
+      center: 0,
+      centerTol: 5,
+      minSpread: 0,
+      expectLeft: [],
+      expectRight: [],
+      election:
+        "USSR 1953 — command economy; no competitive vote. Guards regional variation, not left/right.",
+      twoAxis: {
+        economicCenter: -2,
+        economicCenterTol: 0.6,
+        minEconomicSpread: 0.4,
+        minSocialSpread: 0.7,
+      },
+    },
+  },
 };

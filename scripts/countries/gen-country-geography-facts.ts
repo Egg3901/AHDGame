@@ -121,6 +121,7 @@ const medianIncome = maybe("MEDIAN_INCOME_THRESHOLDS");
 const core5 = maybe("CORE5_NORMALS");
 const popMultipliers = maybe("POPULATION_MULTIPLIERS");
 const conscription = maybe("CONSCRIPTION_SEED");
+const incomeAnchors = maybe("INCOME_ANCHORS");
 
 const out = `import type { AdjacencyMap } from "@/lib/constants/stateAdjacency";
 ${
@@ -132,7 +133,7 @@ ${
 import type { Continent } from "@/lib/constants/countryContinents";${
   conscription ? '\nimport type { ConscriptionPolicy } from "@/lib/demographics/conscription";' : ""
 }
-${core5 ? 'import type { NormalAnchor } from "@/lib/era/metricCatalog";' : ""}
+${core5 || incomeAnchors ? 'import type { NormalAnchor } from "@/lib/era/metricCatalog";' : ""}
 ${medianIncome ? 'import type { ScoreThreshold } from "@/lib/utils/metricScoring";' : ""}
 import type { WorldEntityRegion } from "@/lib/world/worldEntityManifest";
 
@@ -264,7 +265,33 @@ export const ${COUNTRY}_MAP_REGISTRY: CountryMapConfig = ${mapRegistry};`
  * nothing about any other preset, and a country missing from it passes through
  * unchanged at 1.0 rather than taking someone else's numbers.
  */
-${popMultipliers ? `export const ${COUNTRY}_POPULATION_MULTIPLIERS: Record<string, number> = ${popMultipliers};` : `/* No ${COUNTRY}_POPULATION_MULTIPLIERS: the 1991 cohort table has no ${COUNTRY} row, so that era passes through at 1.0. */`}
+${
+  incomeAnchors
+    ? `/**
+ * Income anchors by year.
+ *
+ * ⚠ IN THE LIGHT MODULE ON PURPOSE. \`metricCatalog.ts\` reads these and is
+ * CLIENT-REACHABLE. Pointing it at \`geography.ts\` instead shipped seventeen
+ * countries' census, metric and region bundles into the browser -- the same
+ * failure \`countryContinents.ts\` had when it started pulling 108 KB for one
+ * string.
+ */
+export const ${COUNTRY}_INCOME_ANCHORS: NormalAnchor[] = ${incomeAnchors};`
+    : `/* No ${COUNTRY}_INCOME_ANCHORS: the registry has no ${COUNTRY} row. */`
+}
+
+/*
+ * ⚠ THESE TWO ARE INDEPENDENT, AND NESTING THEM COST ELEVEN COUNTRIES. The
+ * income-anchor block was first written INSIDE the population-multiplier
+ * ternary, so a country with anchors but no 1991 cohort row -- France, Austria,
+ * East Germany and eight others -- emitted neither. Typecheck caught it only
+ * because metricCatalog.ts had already been repointed at the missing export.
+ */
+${
+  popMultipliers
+    ? `export const ${COUNTRY}_POPULATION_MULTIPLIERS: Record<string, number> = ${popMultipliers};`
+    : `/* No ${COUNTRY}_POPULATION_MULTIPLIERS: the 1991 cohort table has no ${COUNTRY} row, so that era passes through at 1.0. */`
+}
 `;
 
 mkdirSync(dirname(OUT), { recursive: true });

@@ -1,7 +1,7 @@
 import type { CountryGeography } from "../contract";
 import { bgRegionCensusData1953 } from "@/lib/seeds/bg/bgRegionCensusData1953";
-import { bgRegions } from "@/lib/seeds/bg/bgRegions";
-import { bgRegions1953 } from "@/lib/seeds/bg/bgRegions1953";
+import { bgRegions } from "./data/bgRegions";
+import { bgRegions1953 } from "./data/bgRegions1953";
 import {
   BG_ADJACENCY_MAP,
   BG_CONTINENT,
@@ -51,6 +51,7 @@ const regionBundles = {
 
 export const BG_GEOGRAPHY: CountryGeography = {
   continent: BG_CONTINENT,
+
   isoNumeric: BG_ISO_NUMERIC,
   unMemberSince: BG_UN_MEMBER_SINCE,
   worldRegion: BG_WORLD_REGION,

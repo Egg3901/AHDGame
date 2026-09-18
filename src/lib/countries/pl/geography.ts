@@ -1,7 +1,7 @@
 import type { CountryGeography } from "../contract";
-import { plRegionCensusData1953 } from "@/lib/seeds/pl/plRegionCensusData1953";
-import { plRegions } from "@/lib/seeds/pl/plRegions";
-import { plRegions1953 } from "@/lib/seeds/pl/plRegions1953";
+import { plRegionCensusData1953 } from "./data/plRegionCensusData1953";
+import { plRegions } from "./data/plRegions";
+import { plRegions1953 } from "./data/plRegions1953";
 import {
   PL_ADJACENCY_MAP,
   PL_CONTINENT,
@@ -51,6 +51,7 @@ const regionBundles = {
 
 export const PL_GEOGRAPHY: CountryGeography = {
   continent: PL_CONTINENT,
+
   isoNumeric: PL_ISO_NUMERIC,
   unMemberSince: PL_UN_MEMBER_SINCE,
   worldRegion: PL_WORLD_REGION,
