@@ -50,7 +50,7 @@ export function computeMarketIndex(input: MarketIndexInput): MarketIndexResult {
   // previous capitalization to derive the new divisor. This preserves the
   // index through deletion while still allowing later price changes to move it.
   const divisor =
-    removedMarketCap > 0 && previousSurvivorMarketCap! > 0
+    removedMarketCap > 0 && previousSurvivorMarketCap != null && previousSurvivorMarketCap > 0
       ? previousSurvivorMarketCap / previousIndex
       : previousDivisor;
   const index = divisor > 0 ? currentMarketCap / divisor : 0;
