@@ -122,6 +122,8 @@ export interface CommodityData {
 export interface MarketCapPoint {
   turn: number;
   marketCap: number;
+  /** Raw capitalization when `marketCap` is the continuity-adjusted index. */
+  rawMarketCap?: number;
   /** Simulated intra-turn high for candlestick charting (absent on old records) */
   high?: number;
   /** Simulated intra-turn low for candlestick charting (absent on old records) */

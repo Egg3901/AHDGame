@@ -498,8 +498,9 @@ export interface Corporation {
   lastRenameTurn?: number | null;
   /**
    * Cumulative proceeds from share issuances (public float, self-issue, IPO).
-   * Stored in the corp's home currency. Subtracted from liquidCapital in the
-   * share-price formula's tangible-book component so issuance dilutes price.
+   * Stored in the corp's home currency for cash-flow audit and reversal. The
+   * share-price formula values the retained liquidCapital directly; issuance
+   * dilution is applied when the share count changes.
    */
   shareIssuanceProceeds?: number;
   /** When the CEO last sent a shareholder address (12-hour cooldown). */
