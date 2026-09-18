@@ -54,25 +54,102 @@ export interface TradeAffinityFns {
   ) => number | undefined;
 }
 
-/** Does an embargo restrict the directed flow exporter→importer for `commodity`? */
-function embargoMatches(
-  em: TradeEmbargo,
-  exporter: string,
-  importer: string,
+/**
+ * Directed flow key — "who imposes it on whom". An embargo's `direction` is
+ * relative to `sourceCountry`, so both sides of the predicate collapse to a
+ * lookup on one of these keys. See `indexEmbargoes`.
+ */
+function flowKey(source: string, target: string): string {
+  return `${source}|${target}`;
+}
+
+type CommoditySet = Set<string>;
+type CapByCommodity = Map<string, number>;
+
+interface EmbargoIndex {
+  /** source|target → commodities blocked flowing source→target. */
+  blockExport: Map<string, CommoditySet>;
+  /** source|target → commodities blocked flowing target→source. */
+  blockImport: Map<string, CommoditySet>;
+  /** source|target → smallest cap per commodity, per direction. */
+  capExport: Map<string, CapByCommodity>;
+  capImport: Map<string, CapByCommodity>;
+}
+
+/**
+ * Resolve the embargo list once into directed `source|target` lookups.
+ *
+ * The clearing engine asks `affinityFor`/`capUnitsFor` once per
+ * (commodity, exporter, importer) triple, and the active embargo list runs to
+ * thousands of documents, so the old shape — a `some`/`for` over the whole
+ * list on every call — was the phase's hot spot. `direction: "both"`
+ * restricts both ways and so lands in both indexes. A `cap` embargo with no
+ * numeric cap restricts nothing, and is dropped here exactly as the old
+ * per-flow loop's `continue` did.
+ */
+function indexEmbargoes(embargoes: readonly TradeEmbargo[]): EmbargoIndex {
+  const index: EmbargoIndex = {
+    blockExport: new Map(),
+    blockImport: new Map(),
+    capExport: new Map(),
+    capImport: new Map(),
+  };
+
+  const addBlock = (map: Map<string, CommoditySet>, key: string, commodity: string): void => {
+    const set = map.get(key);
+    if (set) set.add(commodity);
+    else map.set(key, new Set([commodity]));
+  };
+  const addCap = (
+    map: Map<string, CapByCommodity>,
+    key: string,
+    commodity: string,
+    cap: number
+  ): void => {
+    const byCommodity = map.get(key);
+    if (!byCommodity) {
+      map.set(key, new Map([[commodity, cap]]));
+      return;
+    }
+    const existing = byCommodity.get(commodity);
+    if (existing === undefined || cap < existing) byCommodity.set(commodity, cap);
+  };
+
+  for (const em of embargoes) {
+    if (!em.sourceCountry || !em.targetCountry) continue;
+    const key = flowKey(em.sourceCountry, em.targetCountry);
+    const exportSide = em.direction !== "import";
+    const importSide = em.direction !== "export";
+    if (em.mode === "block") {
+      if (exportSide) addBlock(index.blockExport, key, em.commodity);
+      if (importSide) addBlock(index.blockImport, key, em.commodity);
+    } else if (em.cap !== undefined) {
+      if (exportSide) addCap(index.capExport, key, em.commodity, em.cap);
+      if (importSide) addCap(index.capImport, key, em.commodity, em.cap);
+    }
+  }
+  return index;
+}
+
+/** Is `commodity` in a blocked set, either by name or by an "all" entry? */
+function commodityBlocked(set: CommoditySet | undefined, commodity: CommodityType): boolean {
+  if (!set) return false;
+  return set.has(commodity) || set.has("all");
+}
+
+/** Smallest cap applying to `commodity` on one directed flow, if any. */
+function capFor(
+  map: Map<string, CapByCommodity>,
+  key: string,
   commodity: CommodityType
-): boolean {
-  if (em.commodity !== "all" && em.commodity !== commodity) return false;
-  // source imposes on target. "export": source won't export to target (flow source→target).
-  // "import": source won't import from target (flow target→source). "both": either.
-  const exportSide =
-    (em.direction === "export" || em.direction === "both") &&
-    em.sourceCountry === exporter &&
-    em.targetCountry === importer;
-  const importSide =
-    (em.direction === "import" || em.direction === "both") &&
-    em.sourceCountry === importer &&
-    em.targetCountry === exporter;
-  return exportSide || importSide;
+): number | undefined {
+  const byCommodity = map.get(key);
+  if (!byCommodity) return undefined;
+  const exact = byCommodity.get(commodity);
+  const all = byCommodity.get("all");
+  if (exact === undefined) return all;
+  if (all === undefined) return exact;
+  return Math.min(exact, all);
 }
 
 /**
@@ -97,13 +174,17 @@ export function buildTradeAffinity(ctx: TradeAffinityContext): TradeAffinityFns 
     return false;
   };
 
-  const blocking = embargoes.filter((e) => e.mode === "block");
-  const capping = embargoes.filter((e) => e.mode === "cap");
+  const embargoIndex = indexEmbargoes(embargoes);
 
   return {
     affinityFor: (commodity, exporter, importer) => {
       if (curtained(exporter, importer)) return 0;
-      const blocked = blocking.some((em) => embargoMatches(em, exporter, importer, commodity));
+      // Export side: this pair's own `source|target` entry. Import side: the
+      // same pair read the other way, because an "import" embargo names the
+      // imposing country as source too.
+      const blocked =
+        commodityBlocked(embargoIndex.blockExport.get(flowKey(exporter, importer)), commodity) ||
+        commodityBlocked(embargoIndex.blockImport.get(flowKey(importer, exporter)), commodity);
       if (blocked) return 0;
 
       // A blockade on EITHER end closes the flow: goods have to leave one coast and
@@ -129,13 +210,11 @@ export function buildTradeAffinity(ctx: TradeAffinityContext): TradeAffinityFns 
       return closure > 0 ? affinity * blockadeAffinityMultiplier(closure) : affinity;
     },
     capUnitsFor: (commodity, exporter, importer) => {
-      let cap: number | undefined;
-      for (const em of capping) {
-        if (em.cap === undefined) continue;
-        if (!embargoMatches(em, exporter, importer, commodity)) continue;
-        cap = cap === undefined ? em.cap : Math.min(cap, em.cap);
-      }
-      return cap;
+      const exportCap = capFor(embargoIndex.capExport, flowKey(exporter, importer), commodity);
+      const importCap = capFor(embargoIndex.capImport, flowKey(importer, exporter), commodity);
+      if (exportCap === undefined) return importCap;
+      if (importCap === undefined) return exportCap;
+      return Math.min(exportCap, importCap);
     },
   };
 }
