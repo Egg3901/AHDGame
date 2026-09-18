@@ -41,7 +41,7 @@
  */
 
 /** Countries whose folder is finished. Adding one turns the guard on for it. */
-export const CONVERTED: readonly string[] = ["JP", "US", "UK", "DE"];
+export const CONVERTED: readonly string[] = ["JP", "US", "UK", "DE", "CN"];
 
 /**
  * Files that hold one country's data, are NOT in that country's folder, and are
@@ -96,58 +96,8 @@ export const ACKNOWLEDGED_OUTSIDE: ReadonlyArray<{
   // is American in origin; the logic is the file's content. Relocating a turn
   // phase into a country folder would move CODE, not data, and leave the engine
   // reaching into `us/` to run a turn.
-  {
-    file: "src/lib/turn/census.ts",
-    country: "US",
-    why: "The decennial census turn phase. Reapportionment logic that defaults to the US, not a census table -- those are in us/data/usStateCensusData*.ts.",
-  },
-  {
-    file: "src/lib/turn/statehood.ts",
-    country: "US",
-    why: "The statehood admission turn phase. Logic, defaulting to the US.",
-  },
-  {
-    file: "src/lib/turn/perpetualElections/engine.ts",
-    country: "US",
-    why: 'The perpetual-election engine every country\'s spawner runs through. It defaults to `countryId ?? "US"`, which is country-awareness, not ownership.',
-  },
-  {
-    file: "src/lib/turn/election/loadContingentElectionData.ts",
-    country: "US",
-    why: "Contingent-election loading (the House deciding a deadlocked presidential race). An American mechanic implemented as engine code.",
-  },
-  {
-    file: "src/lib/turn/scotusNominationLifecycle.ts",
-    country: "US",
-    why: "Supreme Court nomination lifecycle. A US institution modelled as turn logic; the seats and cases live in the database, not here.",
-  },
-  {
-    file: "src/lib/turn/scotusDocketTurn.ts",
-    country: "US",
-    why: "SCOTUS docket turn phase. Logic, same reasoning.",
-  },
-  {
-    file: "src/lib/turn/scotusTenureTurn.ts",
-    country: "US",
-    why: "SCOTUS tenure turn phase. Logic, same reasoning.",
-  },
-  {
-    file: "src/lib/turn/scotusSurpriseCaseTurn.ts",
-    country: "US",
-    why: "SCOTUS surprise-case turn phase. Logic, same reasoning.",
-  },
 
   // ---- Wiki pages about the game, not about one country. ----
-  {
-    file: "src/lib/seeds/wiki/content/glossary.ts",
-    country: "US",
-    why: "The player glossary. It uses United States examples because the US is the default country; the page explains the game's vocabulary to everyone.",
-  },
-  {
-    file: "src/lib/seeds/wiki/content/createACharacter.ts",
-    country: "US",
-    why: "The character-creation guide, same reasoning: US examples in a page written for every player.",
-  },
 
   // ---- United Kingdom: shared machinery and engine code. ----
   {
@@ -161,31 +111,6 @@ export const ACKNOWLEDGED_OUTSIDE: ReadonlyArray<{
     why: "Region banner configuration read by every country's region pages; the UK entries sit inside a country-keyed map.",
   },
   {
-    file: "src/lib/turn/election/seatAllocation.ts",
-    country: "UK",
-    why: "Seat-allocation maths for every country's chambers. It names the UK because Westminster is the worked example, not because it holds UK data.",
-  },
-  {
-    file: "src/lib/turn/election/independenceDesireHook.ts",
-    country: "UK",
-    why: "The independence-desire election hook. Engine code for the devolution mechanic; the values it reads are on the regions.",
-  },
-  {
-    file: "src/lib/turn/independenceDesireDrift.ts",
-    country: "UK",
-    why: "Per-turn independence-desire drift. Engine code, same mechanic.",
-  },
-  {
-    file: "src/lib/turn/primaryResolution.ts",
-    country: "UK",
-    why: "Primary resolution for every country that runs primaries. The UK appears as a branch, which is country-awareness rather than ownership.",
-  },
-  {
-    file: "src/lib/turn/regionalBudget.ts",
-    country: "UK",
-    why: "The generic regional-budget processor. Its per-country siblings (cnRegionalBudget, deRegionalBudget, jpRegionalBudget, ruRegionalBudget) are the country-specific ones; this is the shared path.",
-  },
-  {
     file: "src/lib/migrations/entries/2026-08-26-uk-regional-party-org-backfill.ts",
     country: "UK",
     why: "A dated migration entry. Migrations are records of a change that happened, not facts about a country, and they stay where the migration runner reads them.",
@@ -194,11 +119,6 @@ export const ACKNOWLEDGED_OUTSIDE: ReadonlyArray<{
     file: "src/lib/remediation/defects/AHD-1102-uk-vat-revenue-gap.ts",
     country: "UK",
     why: "A remediation defect definition, registered by id with the remediation runner. Like a migration, it records an incident rather than describing the country.",
-  },
-  {
-    file: "src/lib/seeds/wiki/content/relocation.ts",
-    country: "UK",
-    why: "A player guide about relocating between countries. It uses UK examples; the page is written for every player.",
   },
 
   // ---- Shared modules that CONTAIN United States data without BEING it. ----

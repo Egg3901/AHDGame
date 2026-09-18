@@ -109,6 +109,16 @@ const sectorEntries = eraSectors
  * with no entry takes the shared default; inventing a number here would turn
  * that fallback into an authored value.
  */
+/*
+ * ⚠ THESE THREE ARE OPTIONAL IN THE CONTRACT, SO ABSENCE IS DATA. China has no
+ * row in `NEUTRAL_FEDERAL_SALES_TAX_BY_COUNTRY` -- a command economy with no
+ * federal sales tax is not a country whose rate is zero by oversight, and
+ * defaulting it to 0 would make those two indistinguishable forever.
+ */
+const strategicSectors = maybe("DEFAULT_STRATEGIC_SECTORS");
+const federalSalesTax = maybe("NEUTRAL_FEDERAL_SALES_TAX_BY_COUNTRY");
+const stateSalesTax = maybe("NEUTRAL_STATE_SALES_TAX_BY_COUNTRY");
+
 const payoutCap = maybe("PLAYER_PAYOUT_CAP_PER_TURN");
 const sovereignStructure = maybe("SOVEREIGN_CORP_LEGAL_STRUCTURE");
 const m2ToGdp = maybe("M2_TO_GDP_1953");
@@ -160,7 +170,11 @@ const costScaleAnchors = ${v("COST_SCALE_ANCHORS")};
  * JSON.parse widens each sector name to \`string\`, and \`CorporationType[]\` is a
  * union array. Caught by typecheck alone.
  */
-const strategicSectors = ${v("DEFAULT_STRATEGIC_SECTORS")} as CorporationType[];
+${
+  strategicSectors
+    ? `const strategicSectors = ${strategicSectors} as CorporationType[];`
+    : "const strategicSectors: CorporationType[] = [];"
+}
 const treasuryPsRate = ${v("TREASURY_PS_RATE_BY_COUNTRY")};
 
 export const ${COUNTRY}_ECONOMY: CountryEconomy = {
@@ -184,8 +198,17 @@ ${sectorEntries}
   repEcon,
   costScaleAnchors,
   tax: {
-    neutralFederalSalesTax: ${v("NEUTRAL_FEDERAL_SALES_TAX_BY_COUNTRY")},
-    neutralStateSalesTax: ${v("NEUTRAL_STATE_SALES_TAX_BY_COUNTRY")},
+${
+  federalSalesTax
+    ? `    neutralFederalSalesTax: ${federalSalesTax},
+`
+    : ""
+}${
+  stateSalesTax
+    ? `    neutralStateSalesTax: ${stateSalesTax},
+`
+    : ""
+}
     treasuryPsRate,
   },
 ${

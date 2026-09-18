@@ -334,6 +334,21 @@ const R: Rewire[] = [
     "geographyFacts",
     "CC_CONSCRIPTION"
   ),
+  /*
+   * ⚠ EASY TO FORGET, BECAUSE GERMANY FORWARDED WITHOUT IT. Germany's map
+   * config had to be RELOCATED as source (it carries a function), and relocating
+   * it forwarded the registry as a side effect -- so the absence of this row went
+   * unnoticed until China, whose config is plain data, came through and left
+   * `COUNTRY_MAP_REGISTRY.CN` as a second copy. The runtime harness is what said
+   * so; the rewire tool reported nothing, because a row that is not in this
+   * table cannot report anything.
+   */
+  r(
+    "COUNTRY_MAP_REGISTRY",
+    "src/lib/commodity-map/commodityMapRegistry.ts",
+    "geographyFacts",
+    "CC_MAP_REGISTRY"
+  ),
   r("COUNTRY_ANCHOR", "src/lib/maps/countryAnchors.ts", "geographyFacts", "CC_MAP_ANCHOR"),
   r(
     "MEDIAN_INCOME_THRESHOLDS",
@@ -734,6 +749,7 @@ for (const CC of countries) {
 }
 
 console.log(
-  `\n${changed} entries rewired, ${already} already forwarding, ${absent} absent from their registry.` +
+  `\n${changed} entries rewired, ${already} already forwarding, ${absent} absent from their ` +
+    `registry, ${orphans} orphaned declarations pruned.` +
     (DRY ? " (dry run, nothing written)" : "")
 );

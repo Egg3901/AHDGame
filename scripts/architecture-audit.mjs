@@ -197,6 +197,10 @@ const SIZE_CAP_EXEMPT = [
   // is exactly how `ukLaws.ts` blocked the gate one country ago.
   "src/lib/countries/de/data/",
   "src/lib/countries/de/cabinet/",
+  // China's, before the move as well. `cnLegislationTypes.ts` is 6,168 lines and
+  // rides on the bare "src/lib/seeds/" entry until it relocates.
+  "src/lib/countries/cn/data/",
+  "src/lib/countries/cn/cabinet/",
   "src/lib/constants/cnCabinetMechanics.ts",
   "src/lib/constants/historicalSeats.ts",
   "src/lib/constants/metricDefinitions.ts",

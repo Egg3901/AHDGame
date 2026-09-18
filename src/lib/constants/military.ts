@@ -20,6 +20,11 @@ import {
   DE_MILITARY_BRANCHES,
   DE_MILITARY_SCALE,
 } from "@/lib/countries/de/institutionsFacts";
+import {
+  CN_CABINET_SEAT_IDS,
+  CN_MILITARY_BRANCHES,
+  CN_MILITARY_SCALE,
+} from "@/lib/countries/cn/institutionsFacts";
 
 export interface Branch {
   id: string;
@@ -300,30 +305,7 @@ export const UNIT_TYPES: Record<UnitDomain, UnitArchetype[]> = {
 
 export const MILITARY_BRANCHES_BY_COUNTRY: Record<CountryId, Branch[]> = {
   US: US_MILITARY_BRANCHES,
-  CN: [
-    // PLA ground/navy/air services predate 1953 (PLAAF founded 11 Nov 1949; PLAN 23 Apr 1949).
-    { id: "pla", name: "PLA Ground Force", abbr: "PLAGF", domain: "ground" },
-    { id: "plan", name: "PLA Navy", abbr: "PLAN", domain: "naval" },
-    { id: "plaaf", name: "PLA Air Force", abbr: "PLAAF", domain: "air" },
-    // Second Artillery Corps founded 1 Jul 1966; renamed PLA Rocket Force 31 Dec 2015.
-    // Catalog keeps the modern label; gate on the 1966 force stand-up so 1979+ still seeds.
-    {
-      id: "rocket",
-      name: "PLA Rocket Force",
-      abbr: "PLARF",
-      domain: "rocket",
-      establishedYear: 1966,
-    },
-    // PLA Strategic Support Force stood up 31 Dec 2015 (catalog name "Aerospace Force"
-    // reflects the 2024 Space Systems Department successor — same space/cyber slot).
-    {
-      id: "ssf",
-      name: "Aerospace Force",
-      abbr: "PLAASF",
-      domain: "space",
-      establishedYear: 2016,
-    },
-  ],
+  CN: CN_MILITARY_BRANCHES,
   UK: UK_MILITARY_BRANCHES,
   // Bundeswehr: first volunteers sworn 12 Nov 1955 (bundeswehr.de). West Germany had
   // no armed forces in 1953 (demilitarized under occupation / Blank Office planning only),
@@ -504,7 +486,7 @@ export const MILITARY_BRANCHES_BY_COUNTRY: Record<CountryId, Branch[]> = {
  */
 export const MILITARY_COUNTRY_SCALE: Record<CountryId, number> = {
   US: US_MILITARY_SCALE,
-  CN: 2.0,
+  CN: CN_MILITARY_SCALE,
   JP: JP_MILITARY_SCALE,
   UK: UK_MILITARY_SCALE,
   DE: DE_MILITARY_SCALE,
@@ -541,7 +523,7 @@ export const MILITARY_COUNTRY_SCALE: Record<CountryId, number> = {
 export const DEFENSE_POSITION_BY_COUNTRY: Record<CountryId, string | null> = {
   US: US_CABINET_SEAT_IDS.defense,
   UK: UK_CABINET_SEAT_IDS.defense,
-  CN: "minister_of_defense",
+  CN: CN_CABINET_SEAT_IDS.defense,
   DE: DE_CABINET_SEAT_IDS.defense,
   JP: JP_CABINET_SEAT_IDS.defense,
   IE: "minister_for_defence",

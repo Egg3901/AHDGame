@@ -181,7 +181,15 @@ optional(
   `No modern NPC bank names.`
 );
 
-const addressName = v("NATIONAL_ADDRESS_NAME");
+/*
+ * ⚠ OPTIONAL, BECAUSE THE READER ALREADY HAS A FALLBACK. China has no entry
+ * in `NATIONAL_ADDRESS_NAME`, and its only consumer reads
+ * `NATIONAL_ADDRESS_NAME[countryId] ?? "Address to the Nation"`. Emitting the
+ * fallback into the folder would turn a country that DECLINES to name its
+ * address into one that names it "Address to the Nation" -- an invented value
+ * that reads as authored and can never be told from a real one again.
+ */
+const addressName = maybe("NATIONAL_ADDRESS_NAME");
 
 const out = `import type { CabinetIdentity } from "@/lib/constants/cabinetIdentity";
 import type { EconomyIdentity } from "@/lib/constants/economyIdentity";
@@ -220,7 +228,12 @@ ${lines.join("\n")}
 export const ${COUNTRY}_IDENTITY: CountryIdentity = {
   displayName: ${JSON.stringify(DISPLAY_NAME)},
 ${fields.join("\n")}
-  addressNames: { national: ${addressName} },
+${
+  addressName
+    ? `  addressNames: { national: ${addressName} },
+`
+    : ""
+}
 };
 `;
 

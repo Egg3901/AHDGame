@@ -99,10 +99,16 @@ if (isoCodes.length !== 1 || isoCodes[0] !== isoForward) {
 
 const unMemberSince = maybe("COUNTRY_UN_MEMBER_SINCE");
 const mapRegistry = maybe("COUNTRY_MAP_REGISTRY");
+const nonPartyBias = maybe("NON_PARTY_BUCKET_INDEPENDENT_BIAS_BY_COUNTRY");
 const conscription = maybe("CONSCRIPTION_SEED");
 
 const out = `import type { AdjacencyMap } from "@/lib/constants/stateAdjacency";
-import type { CountryMapConfig } from "@/lib/commodity-map/commodityMapRegistry";
+${
+  mapRegistry
+    ? 'import type { CountryMapConfig } from "@/lib/commodity-map/commodityMapRegistry";'
+    : "// No CountryMapConfig import: this country's map config is relocated source,\n" +
+      "// so nothing here is typed by it."
+}
 import type { Continent } from "@/lib/constants/countryContinents";${
   conscription ? '\nimport type { ConscriptionPolicy } from "@/lib/demographics/conscription";' : ""
 }
@@ -145,10 +151,14 @@ export const ${COUNTRY}_WORLD_REGION: WorldEntityRegion = ${v("COUNTRY_REGIONS")
 /** Where an NPP corporation is seated when it has no other home. */
 export const ${COUNTRY}_NPP_CAPITAL_STATE = ${v("NPP_CAPITAL_STATES")};
 
-/** Independent-bias nudge for the non-party bucket. */
-export const ${COUNTRY}_NON_PARTY_INDEPENDENT_BIAS = ${v(
-  "NON_PARTY_BUCKET_INDEPENDENT_BIAS_BY_COUNTRY"
-)};
+${
+  nonPartyBias
+    ? `/** Independent-bias nudge for the non-party bucket. */
+export const ${COUNTRY}_NON_PARTY_INDEPENDENT_BIAS = ${nonPartyBias};`
+    : `/* No ${COUNTRY}_NON_PARTY_INDEPENDENT_BIAS: the registry has no ${COUNTRY} entry, and
+   \`nonPartyIndependentBias\` is optional in the contract. A country with no nudge
+   is not a country nudged by zero. */`
+}
 
 /** Map centring for the commodity and world maps: [longitude, latitude]. */
 export const ${COUNTRY}_MAP_ANCHOR: [number, number] = ${v("COUNTRY_ANCHOR")};

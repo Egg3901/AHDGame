@@ -4,6 +4,7 @@ import { JP_ESTATE_PORTFOLIO } from "@/lib/countries/jp/institutionsFacts";
 import { US_ESTATE_PORTFOLIO } from "@/lib/countries/us/institutionsFacts";
 import { UK_ESTATE_PORTFOLIO } from "@/lib/countries/uk/institutionsFacts";
 import { DE_ESTATE_PORTFOLIO } from "@/lib/countries/de/institutionsFacts";
+import { CN_ESTATE_PORTFOLIO } from "@/lib/countries/cn/institutionsFacts";
 
 // ── Archetype catalog ────────────────────────────────────────────────────────
 export interface EstateArchetype {
@@ -663,17 +664,7 @@ export const ESTATE_PORTFOLIO_BY_COUNTRY: Partial<Record<CountryId, Record<strin
   US: US_ESTATE_PORTFOLIO,
   UK: UK_ESTATE_PORTFOLIO,
   DE: DE_ESTATE_PORTFOLIO,
-  CN: {
-    minister_of_foreign_affairs: "foreign",
-    minister_of_education: "education",
-    minister_of_health: "health",
-    minister_of_public_security: "homeland",
-    minister_of_commerce: "commerce",
-    minister_of_human_resources_social_security: "labor",
-    minister_of_ecology_environment: "interior",
-    minister_of_agriculture_rural_affairs: "agriculture",
-    minister_of_housing_urban_rural: "housing",
-  },
+  CN: CN_ESTATE_PORTFOLIO,
   JP: JP_ESTATE_PORTFOLIO,
   IE: {
     minister_for_foreign_affairs: "foreign",

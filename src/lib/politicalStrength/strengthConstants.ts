@@ -4,6 +4,7 @@ import { JP_STRENGTH_REGION_COUNT } from "@/lib/countries/jp/geographyFacts";
 import { US_ECONOMY } from "@/lib/countries/us/economy";
 import { UK_ECONOMY } from "@/lib/countries/uk/economy";
 import { DE_ECONOMY } from "@/lib/countries/de/economy";
+import { CN_ECONOMY } from "@/lib/countries/cn/economy";
 
 /**
  * Political Strength reserve and pressure-ladder constants for Phase 3.
@@ -57,7 +58,7 @@ export const TREASURY_PS_RATE_BY_COUNTRY: Record<CountryId, { national: number; 
   JP: JP_ECONOMY.tax.treasuryPsRate,
   IE: { national: 60_000, state: 30_000 },
   BR: { national: 350_000, state: 175_000 },
-  CN: { national: 500_000, state: 250_000 },
+  CN: CN_ECONOMY.tax.treasuryPsRate,
   NG: { national: 30_000_000, state: 15_000_000 },
   HU: { national: 50_000, state: 25_000 },
   PL: { national: 50_000, state: 25_000 },

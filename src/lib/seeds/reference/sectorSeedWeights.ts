@@ -16,6 +16,7 @@ import { getCountrySectorWeights2027 } from "./sectorSeedWeights2027";
 import { US_ECONOMY } from "@/lib/countries/us/economy";
 import { UK_ECONOMY } from "@/lib/countries/uk/economy";
 import { DE_ECONOMY } from "@/lib/countries/de/economy";
+import { CN_ECONOMY } from "@/lib/countries/cn/economy";
 
 type SectorWeightMap = Partial<Record<CorporationType, number>>;
 
@@ -98,25 +99,7 @@ export const COUNTRY_SECTOR_WEIGHTS: Record<CountryId, SectorWeightMap> = {
   },
   DE: DE_ECONOMY.sectorWeights.base,
   JP: JP_ECONOMY.sectorWeights.base,
-  CN: {
-    manufacturing: 18,
-    real_estate: 13,
-    construction: 9,
-    technology: 9,
-    financial: 8,
-    energy: 7,
-    chemical_industries: 6,
-    retail: 6,
-    logistics: 5,
-    healthcare: 4,
-    extraction: 4,
-    agriculture: 3,
-    telecommunications: 3,
-    automobiles: 2,
-    media: 1,
-    defense: 1,
-    entertainment: 1,
-  },
+  CN: CN_ECONOMY.sectorWeights.base,
   IE: {
     technology: 19,
     financial: 15,

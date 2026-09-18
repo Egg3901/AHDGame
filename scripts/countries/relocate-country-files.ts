@@ -21,7 +21,7 @@
  *     handler's registration side effect as a re-export drops the registration
  *     entirely, so those become a bare `import "<new>";`.
  */
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, basename } from "node:path";
 import { execFileSync } from "node:child_process";
 import { singleCountryFiles } from "./classifySingleCountryFiles";
@@ -37,6 +37,17 @@ import { ACKNOWLEDGED_OUTSIDE } from "../../src/lib/countries/singleCountryData"
  * anyone not passing `--follow`.
  */
 const RULES: ReadonlyArray<readonly [RegExp, (cc: string, base: string) => string]> = [
+  /*
+   * ⚠ `data/` IS THE SIZE-CAP-EXEMPT DIRECTORY, SO ONLY DATA MAY GO THERE.
+   * The fallback sent `cnRegionalBudget.ts` -- a 467-line turn processor -- to
+   * `cn/data/`, which would have quietly exempted a logic module from the 2,000
+   * line cap forever. Cabinet tables get `cabinet/` and logic keeps the folder
+   * root, matching what Japan, the United States and the United Kingdom did by
+   * hand.
+   */
+  [/\/constants\/[a-z]{2}Cabinet[A-Za-z]*\.ts$/, (_cc, b) => `cabinet/${b}`],
+  [/\/turn\/[a-z]{2}[A-Z][A-Za-z]*\.ts$/, (_cc, b) => b],
+  [/\/elections\//, (_cc, b) => `elections/${b}`],
   [/\/seeds\/[a-z]{2}\//, (_cc, b) => `data/${b}`],
   [/\/seeds\/international\//, () => "layer1Model.ts"],
   [/\/seeds\/wiki\/content\//, (_cc, b) => `wiki/${b}`],

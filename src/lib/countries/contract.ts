@@ -113,8 +113,15 @@ export interface CountryIdentity {
    * `regional` is OPTIONAL: Japan has no REGIONAL_ADDRESS_NAME entry and uses the
    * documented "State of the State" default. Requiring it would author a fallback
    * into an authored value and break the harness on `undefined` vs a string.
+   *
+   * ⚠️ AND SO IS THE WHOLE FIELD, for the same reason one level up. China has no
+   * `NATIONAL_ADDRESS_NAME` row at all, and that registry's only reader is
+   * `NATIONAL_ADDRESS_NAME[countryId] ?? "Address to the Nation"`. A country that
+   * declines to name its address and one whose address is named "Address to the
+   * Nation" are different facts, and writing the fallback into the folder would
+   * make them indistinguishable from that point on.
    */
-  readonly addressNames: { readonly national: string; readonly regional?: string };
+  readonly addressNames?: { readonly national: string; readonly regional?: string };
   readonly historicalNames?: readonly string[];
   readonly modernNames?: readonly string[];
   /**

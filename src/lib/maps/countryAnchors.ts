@@ -2,6 +2,7 @@ import { JP_MAP_ANCHOR } from "@/lib/countries/jp/geographyFacts";
 import { US_MAP_ANCHOR } from "@/lib/countries/us/geographyFacts";
 import { UK_MAP_ANCHOR } from "@/lib/countries/uk/geographyFacts";
 import { DE_MAP_ANCHOR } from "@/lib/countries/de/geographyFacts";
+import { CN_MAP_ANCHOR } from "@/lib/countries/cn/geographyFacts";
 
 /**
  * A rough interior lon/lat point per country, used to ORIENT a front: an invasion
@@ -38,7 +39,7 @@ export const COUNTRY_ANCHOR: Record<string, [number, number]> = {
   UKR: [31.0, 49.0],
   BLR: [27.9, 53.5],
   BAL: [24.5, 57.0],
-  CN: [104.2, 35.9],
+  CN: CN_MAP_ANCHOR,
   JP: JP_MAP_ANCHOR,
   NVN: [105.85, 21.03],
   SVN: [106.7, 10.78],

@@ -3,6 +3,7 @@ import { JP_IDENTITY } from "@/lib/countries/jp/identity";
 import { US_IDENTITY } from "@/lib/countries/us/identity";
 import { UK_IDENTITY } from "@/lib/countries/uk/identity";
 import { DE_IDENTITY } from "@/lib/countries/de/identity";
+import { CN_IDENTITY } from "@/lib/countries/cn/identity";
 
 /**
  * Per-country configuration for the shared executive shell (instrument strip
@@ -72,15 +73,7 @@ export const EXECUTIVE_SURFACE: Record<CountryId, ExecutiveSurfaceConfig> = {
     heroImage: "/api/images/hero/government-buildings-dublin",
     heroAlt: "Government Buildings, Dublin",
   },
-  CN: {
-    clock: { kind: "plenum", label: "Plenum Clock", countdownNoun: "next NPC session" },
-    actLabels: { ...PARLIAMENTARY_ACTS, order: "DIRECTIVE" },
-    deskKind: "orders",
-    deskLabel: "Directives",
-    rosterTitle: "State Council",
-    heroImage: "/api/images/hero/zhongnanhai",
-    heroAlt: "Zhongnanhai, Beijing",
-  },
+  CN: CN_IDENTITY.executiveSurface,
   BR: {
     clock: { kind: "election", label: "Term Clock", countdownNoun: "election" },
     actLabels: PRESIDENTIAL_ACTS,

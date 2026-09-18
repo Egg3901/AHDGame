@@ -1,11 +1,6 @@
 import { type CountryId } from "@/lib/constants/countries";
 import { ensureBRElections, ensureBRSenateElections } from "./countries/br";
 import {
-  ensureCNElections,
-  ensureCNGovernorElections,
-  ensureCNPeoplesCongressElections,
-} from "./countries/cn";
-import {
   ensureIECathaoirleachElections,
   ensureIEElections,
   ensureIELocalCouncilElections,
@@ -16,6 +11,7 @@ import { JP_ELECTIONS } from "@/lib/countries/jp/elections";
 import { UK_ELECTIONS } from "@/lib/countries/uk/elections";
 import { US_ELECTIONS } from "@/lib/countries/us/elections";
 import { DE_ELECTIONS } from "@/lib/countries/de/elections";
+import { CN_ELECTIONS } from "@/lib/countries/cn/elections";
 
 export interface SpawnElectionsResult {
   message: string;
@@ -30,13 +26,7 @@ export const SPAWN_ELECTIONS_REGISTRY: Partial<Record<CountryId, SpawnElectionsH
   UK: UK_ELECTIONS.spawn,
   DE: DE_ELECTIONS.spawn,
   JP: JP_ELECTIONS.spawn,
-  CN: async (now) => {
-    // National NPC Delegates + Provincial People's Congress + macro-region Governor.
-    await ensureCNElections(now);
-    await ensureCNPeoplesCongressElections(now);
-    await ensureCNGovernorElections(now);
-    return { message: "CN NPC / Provincial Congress / Governor continuity check complete." };
-  },
+  CN: CN_ELECTIONS.spawn,
   BR: async (now) => {
     await ensureBRElections(now);
     await ensureBRSenateElections(now);

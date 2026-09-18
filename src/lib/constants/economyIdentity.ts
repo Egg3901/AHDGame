@@ -15,6 +15,7 @@ import { JP_IDENTITY } from "@/lib/countries/jp/identity";
 import { US_IDENTITY } from "@/lib/countries/us/identity";
 import { UK_IDENTITY } from "@/lib/countries/uk/identity";
 import { DE_IDENTITY } from "@/lib/countries/de/identity";
+import { CN_IDENTITY } from "@/lib/countries/cn/identity";
 
 export interface EconomyIdentity {
   /** Watermark / chop glyph (经 / US / …). */
@@ -37,15 +38,7 @@ export interface EconomyIdentity {
 
 export const ECONOMY_TEXT: Partial<Record<CountryId, Omit<EconomyIdentity, "accent">>> = {
   US: US_IDENTITY.economyText,
-  CN: {
-    glyph: "经",
-    serif: "cjk",
-    title: "国民经济展望",
-    titleEn: "Economic Outlook",
-    office: "国家统计局 · 国民经济核算司",
-    officeEn: "National Accounts Office",
-    registry: "People's Republic of China · National Accounts Registry",
-  },
+  CN: CN_IDENTITY.economyText,
   UK: UK_IDENTITY.economyText,
   DE: DE_IDENTITY.economyText,
   JP: JP_IDENTITY.economyText,

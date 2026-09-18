@@ -23,6 +23,7 @@ import { JP_ERAS } from "@/lib/countries/jp/eras";
 import { US_ORDERS_OF_BATTLE } from "@/lib/countries/us/institutionsFacts";
 import { UK_ORDERS_OF_BATTLE } from "@/lib/countries/uk/institutionsFacts";
 import { DE_ORDERS_OF_BATTLE } from "@/lib/countries/de/institutionsFacts";
+import { CN_ORDERS_OF_BATTLE } from "@/lib/countries/cn/institutionsFacts";
 
 export interface OrderOfBattleEntry {
   /** Must match a Branch id for this country (`MILITARY_BRANCHES_BY_COUNTRY`). */
@@ -103,14 +104,7 @@ export const ORDERS_OF_BATTLE: Partial<Record<CountryId, OrderOfBattleEntry[]>> 
    * largest army on the board by headcount and one of the lowest in power per
    * man. The Second Artillery Corps is 1966, so no rocket branch here.
    */
-  CN: [
-    { branchId: "pla", type: "Infantry Division", count: 16 },
-    { branchId: "pla", type: "Artillery Regiment", count: 4 },
-    { branchId: "pla", type: "Mechanized Brigade", count: 2 },
-    { branchId: "plan", type: "Frigate Squadron", count: 2 },
-    { branchId: "plaaf", type: "Fighter Wing", count: 5 },
-    { branchId: "plaaf", type: "Bomber Squadron", count: 1 },
-  ],
+  CN: CN_ORDERS_OF_BATTLE,
   RU: [
     { branchId: "ground", type: "Infantry Division", count: 12 },
     { branchId: "ground", type: "Armored Division", count: 5 },

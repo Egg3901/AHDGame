@@ -4,6 +4,7 @@ import { JP_GEOGRAPHY } from "@/lib/countries/jp/geography";
 import { US_CONSCRIPTION } from "@/lib/countries/us/geographyFacts";
 import { UK_CONSCRIPTION } from "@/lib/countries/uk/geographyFacts";
 import { DE_CONSCRIPTION } from "@/lib/countries/de/geographyFacts";
+import { CN_CONSCRIPTION } from "@/lib/countries/cn/geographyFacts";
 
 export interface ConscriptionOption {
   label: string;
@@ -49,7 +50,7 @@ export const CONSCRIPTION_SEED: Partial<Record<CountryId, ConscriptionPolicy>> =
   JP: JP_GEOGRAPHY.conscription,
   IE: { eligibleBand: [18, 20], sexEnabled: { male: true, female: false }, option: 2 },
   BR: { eligibleBand: [18, 20], sexEnabled: { male: true, female: false }, option: 5 },
-  CN: { eligibleBand: [18, 22], sexEnabled: { male: true, female: false }, option: 6 },
+  CN: CN_CONSCRIPTION,
   NG: { eligibleBand: [18, 20], sexEnabled: { male: true, female: false }, option: 2 },
 };
 const DEFAULT_POLICY: ConscriptionPolicy = {

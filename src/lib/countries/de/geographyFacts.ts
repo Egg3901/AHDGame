@@ -1,5 +1,6 @@
 import type { AdjacencyMap } from "@/lib/constants/stateAdjacency";
-import type { CountryMapConfig } from "@/lib/commodity-map/commodityMapRegistry";
+// No CountryMapConfig import: this country's map config is relocated source,
+// so nothing here is typed by it.
 import type { Continent } from "@/lib/constants/countryContinents";
 import type { ConscriptionPolicy } from "@/lib/demographics/conscription";
 import type { NormalAnchor } from "@/lib/era/metricCatalog";

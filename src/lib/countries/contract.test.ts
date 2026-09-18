@@ -57,7 +57,9 @@ describe("Japan satisfies the country contract", () => {
   it("fills each member with real content rather than an empty shell", () => {
     expect(JP.identity.displayName).toBe("Japan");
     expect(JP.identity.cabinet.glyph).toBeTruthy();
-    expect(JP.identity.addressNames.national).toBeTruthy();
+    // Optional on the contract since China omits it, but Japan HAS one, and the
+    // point of this file is that a country's own fields are really filled.
+    expect(JP.identity.addressNames?.national).toBeTruthy();
 
     expect(JP.institutions.config.name).toBe("Japan");
     expect(JP.institutions.legislativeProcess.executive.title).toBeTruthy();

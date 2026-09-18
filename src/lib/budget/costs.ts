@@ -10,6 +10,7 @@ import { JP_ECONOMY } from "@/lib/countries/jp/economy";
 import { US_ECONOMY } from "@/lib/countries/us/economy";
 import { UK_ECONOMY } from "@/lib/countries/uk/economy";
 import { DE_ECONOMY } from "@/lib/countries/de/economy";
+import { CN_ECONOMY } from "@/lib/countries/cn/economy";
 
 export interface BudgetCostContext {
   budgetCapacity: number;
@@ -127,14 +128,7 @@ export const COST_SCALE_ANCHORS: Partial<Record<CountryId, CostScaleAnchor>> = {
     popHigh: 5_100_000,
     scaleHigh: 1.0,
   },
-  CN: {
-    gdpLow: 2_178_000_000_000,
-    popLow: 1_158_000_000,
-    scaleLow: 0.02,
-    gdpHigh: 126_000_000_000_000,
-    popHigh: 1_412_000_000,
-    scaleHigh: 1.0,
-  },
+  CN: CN_ECONOMY.costScaleAnchors,
   // BR had no legacy PRE_2000/MODERN scale entries, which used to be encoded as
   // scaleLow 1.0 — full modern-authored absolute costs charged against the 1991
   // PPP-normalized R$900B economy. scaleLow = gpcLow/gpcHigh ≈ 6,040/50,698 ≈ 0.12

@@ -211,7 +211,14 @@ const DATA_DIRS = [
   "src/lib/demographics/",
   "src/lib/maps/",
   "src/lib/events/pree/handlers/",
-  "src/lib/turn/",
+  // ⚠️ NOT a bare "src/lib/turn/": that is the engine, and the content path
+  // would claim any engine module that names one country's data. It claimed
+  // `npp/billSponsorship.ts` -- 763 lines of NPP sponsorship logic -- on the
+  // strength of one legislation id, `"cn_state_enterprises"`. Naming another
+  // country's row makes a file country-AWARE, which this guard has always said
+  // is not ownership. Only the per-country config directories belong here.
+  "src/lib/turn/billLifecycle/configs/",
+  "src/lib/turn/perpetualElections/countries/",
 ];
 
 /**
@@ -306,6 +313,47 @@ function stripComments(source: string): string {
   return source.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\n]*/g, " ");
 }
 
+/**
+ * The source with the CONTENTS of every string and template blanked, offsets kept.
+ *
+ * ⚠️ SLUGS STILL NEED THE STRINGS, so this is applied only where a match must
+ * be code. `"jp_ldp"` is evidence and lives inside a string literal; `(CN: CCP)`
+ * inside a markdown table is not, and lives inside one too. The difference is
+ * what the match MEANS, so the two scans get different inputs rather than one
+ * compromise that is wrong for both.
+ */
+function maskStrings(src: string): string {
+  let out = "";
+  let i = 0;
+  while (i < src.length) {
+    const c = src[i];
+    if (c === '"' || c === "'" || c === "`") {
+      const quote = c;
+      out += c;
+      i++;
+      while (i < src.length) {
+        if (src[i] === "\\") {
+          out += "  ";
+          i += 2;
+          continue;
+        }
+        if (src[i] === quote) break;
+        // Newlines are preserved so line-anchored patterns still see real lines.
+        out += src[i] === "\n" ? "\n" : " ";
+        i++;
+      }
+      if (i < src.length) {
+        out += quote;
+        i++;
+      }
+      continue;
+    }
+    out += c;
+    i++;
+  }
+  return out;
+}
+
 function declaredCountries(raw: string): Set<string> {
   const source = stripComments(raw);
   const found = new Set<string>();
@@ -318,7 +366,17 @@ function declaredCountries(raw: string): Set<string> {
   // flagged -- which is how 5,900 lines of stateMetrics went unseen. Only the
   // three ambiguous codes are discounted, and only when the file demonstrably
   // uses state keys; an unambiguous country key still counts.
-  const keys = new Set([...source.matchAll(REGISTRY_KEY)].map(([, cc]) => cc));
+  /*
+   * ⚠️ A REGISTRY KEY IS CODE. THIS HAD TO LEARN THAT FROM PROSE. The wiki page
+   * `onePartyStates.ts` is about one-party states in general, and its markdown
+   * table reads "The single party in government (CN: CCP; RU: CPSU; DD: SED)".
+   * The open parenthesis before `CN:` made it look exactly like a registry key
+   * while `RU:` and `DD:`, preceded by "; ", did not match -- so a page about
+   * three countries declared exactly one, passed the single-country test, and
+   * was one command away from being filed under `cn/`. Masking string and
+   * template contents first means prose can no longer nominate a country.
+   */
+  const keys = new Set([...maskStrings(source).matchAll(REGISTRY_KEY)].map(([, cc]) => cc));
   const stateKeyed = hasUsStateKeys(keys);
   for (const cc of keys) {
     if (!COUNTRY_IDS.has(cc)) continue;

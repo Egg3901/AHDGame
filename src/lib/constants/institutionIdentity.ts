@@ -6,6 +6,7 @@ import { JP_BANK_TEXT } from "@/lib/countries/jp/identity";
 import { US_IDENTITY } from "@/lib/countries/us/identity";
 import { UK_IDENTITY } from "@/lib/countries/uk/identity";
 import { DE_IDENTITY } from "@/lib/countries/de/identity";
+import { CN_IDENTITY } from "@/lib/countries/cn/identity";
 
 /**
  * Institution identity overlays for the country-pages masthead family
@@ -63,13 +64,7 @@ export const EXECUTIVE_TEXT: Record<CountryId, IdentityText> = {
     title: "Tithe an Rialtais",
     titleEn: "Government Buildings",
   },
-  CN: {
-    glyph: "政",
-    serif: "cjk",
-    registry: "People's Republic of China · Executive Organs",
-    title: "国务院",
-    titleEn: "State Council & Government",
-  },
+  CN: CN_IDENTITY.executiveText,
   BR: {
     glyph: "PR",
     serif: "mono",
@@ -233,13 +228,7 @@ export const POLICY_TEXT: Record<CountryId, IdentityText> = {
     registry: "Code of National Law · Ireland",
     title: "National Policy",
   },
-  CN: {
-    glyph: "法",
-    serif: "cjk",
-    registry: "Code of National Law · People's Republic of China",
-    title: "国家法律",
-    titleEn: "National Policy",
-  },
+  CN: CN_IDENTITY.policyText,
   BR: {
     glyph: "§",
     serif: "mono",

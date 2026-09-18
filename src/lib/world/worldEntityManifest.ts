@@ -28,6 +28,7 @@ import { expandManifestWithBackgroundCountries } from "./backgroundCountryRoster
 import { US_WORLD_REGION, US_UN_MEMBER_SINCE } from "@/lib/countries/us/geographyFacts";
 import { UK_WORLD_REGION, UK_UN_MEMBER_SINCE } from "@/lib/countries/uk/geographyFacts";
 import { DE_WORLD_REGION } from "@/lib/countries/de/geographyFacts";
+import { CN_WORLD_REGION, CN_UN_MEMBER_SINCE } from "@/lib/countries/cn/geographyFacts";
 
 export type WorldEntityId = string;
 export type WorldEntityStatus = "sovereign" | "dependent" | "emergent" | "dissolved";
@@ -230,7 +231,7 @@ export const COUNTRY_REGIONS: Record<CountryId, WorldEntityRegion> = {
   RU: "europe",
   TR: "europe",
   JP: JP_GEOGRAPHY.worldRegion,
-  CN: "asia",
+  CN: CN_WORLD_REGION,
   NG: "africa",
   AT: "europe",
   GR: "europe",
@@ -247,7 +248,7 @@ export const COUNTRY_UN_MEMBER_SINCE: Partial<Record<CountryId, number>> = {
   UK: UK_UN_MEMBER_SINCE,
   FR: 1945,
   RU: 1945,
-  CN: 1945,
+  CN: CN_UN_MEMBER_SINCE,
   BR: 1945,
   DE: undefined, // FRG admitted 1973
   DD: undefined, // GDR admitted 1973

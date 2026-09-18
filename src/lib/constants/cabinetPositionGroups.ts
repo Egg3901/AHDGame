@@ -11,6 +11,7 @@ import { JP_INSTITUTIONS } from "@/lib/countries/jp/institutions";
 import { US_CABINET_GROUPS } from "@/lib/countries/us/institutionsFacts";
 import { UK_CABINET_GROUPS } from "@/lib/countries/uk/institutionsFacts";
 import { DE_CABINET_GROUPS } from "@/lib/countries/de/institutionsFacts";
+import { CN_CABINET_GROUPS } from "@/lib/countries/cn/institutionsFacts";
 
 export const GROUPS: Record<string, Record<string, CabinetGroup>> = {
   US: US_CABINET_GROUPS,
@@ -38,24 +39,7 @@ export const GROUPS: Record<string, Record<string, CabinetGroup>> = {
     minister_for_rural_community: "Domestic",
   },
   DE: DE_CABINET_GROUPS,
-  CN: {
-    premier: "Centre",
-    vice_premier: "Centre",
-    state_councillor: "Centre",
-    minister_of_finance: "Economy",
-    pboc_governor: "Economy",
-    minister_of_commerce: "Economy",
-    minister_of_human_resources_social_security: "Economy",
-    minister_of_agriculture_rural_affairs: "Economy",
-    minister_of_foreign_affairs: "Security & Foreign",
-    minister_of_defense: "Security & Foreign",
-    minister_of_public_security: "Security & Foreign",
-    minister_of_education: "Society",
-    minister_of_health: "Society",
-    minister_of_housing_urban_rural: "Society",
-    minister_of_ecology_environment: "Domestic",
-    minister_of_transport: "Domestic",
-  },
+  CN: CN_CABINET_GROUPS,
   RU: {
     director_of_intelligence: "Security & Foreign",
     premier: "Centre",

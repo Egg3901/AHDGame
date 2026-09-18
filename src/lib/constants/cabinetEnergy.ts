@@ -4,6 +4,7 @@ import { JP_CABINET_SEAT_IDS } from "@/lib/countries/jp/institutionsFacts";
 import { US_CABINET_SEAT_IDS } from "@/lib/countries/us/institutionsFacts";
 import { UK_CABINET_SEAT_IDS } from "@/lib/countries/uk/institutionsFacts";
 import { DE_CABINET_SEAT_IDS } from "@/lib/countries/de/institutionsFacts";
+import { CN_CABINET_SEAT_IDS } from "@/lib/countries/cn/institutionsFacts";
 
 export interface EnergySourceDef {
   id: EnergySource;
@@ -99,7 +100,7 @@ export const ENERGY_POSITION_BY_COUNTRY: Partial<Record<CountryId, string>> = {
   US: US_CABINET_SEAT_IDS.energy,
   UK: UK_CABINET_SEAT_IDS.energy,
   DE: DE_CABINET_SEAT_IDS.energy,
-  CN: "minister_of_ecology_environment",
+  CN: CN_CABINET_SEAT_IDS.energy,
   JP: JP_CABINET_SEAT_IDS.energy,
   IE: "minister_for_environment_climate",
   // Power generation sat under heavy industry in the command-economy

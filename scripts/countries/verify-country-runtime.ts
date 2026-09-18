@@ -166,6 +166,13 @@ const ABSENT_UPSTREAM: Record<string, Record<string, string>> = {
     COUNTRY_UN_MEMBER_SINCE: "the FRG was admitted in 1973; the 1953 world has no entry",
     PLAYER_PAYOUT_CAP_PER_TURN: "no payout cap is configured for Germany",
   },
+  CN: {
+    NATIONAL_ADDRESS_NAME: 'no row; the reader falls back to "Address to the Nation"',
+    COUNTRY_HISTORICAL_NAMES: "no NPC bank names are seeded for China",
+    COUNTRY_MODERN_NAMES: "no NPC bank names are seeded for China",
+    NEUTRAL_FEDERAL_SALES_TAX_BY_COUNTRY: "a command economy with no federal sales tax row",
+    PLAYER_PAYOUT_CAP_PER_TURN: "no payout cap is configured for China",
+  },
 };
 
 /** Where each registry's value lives inside the folder. `null` = no folder side. */

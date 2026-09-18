@@ -5,6 +5,7 @@ import { JP_MEDIAN_INCOME_BAND } from "@/lib/countries/jp/economy";
 import { US_MEDIAN_INCOME_THRESHOLDS } from "@/lib/countries/us/geographyFacts";
 import { UK_MEDIAN_INCOME_THRESHOLDS } from "@/lib/countries/uk/geographyFacts";
 import { DE_MEDIAN_INCOME_THRESHOLDS } from "@/lib/countries/de/geographyFacts";
+import { CN_MEDIAN_INCOME_THRESHOLDS } from "@/lib/countries/cn/geographyFacts";
 
 /**
  * Absolute metric scoring — converts a raw metric value to a 0–100 score
@@ -172,7 +173,7 @@ export const MEDIAN_INCOME_THRESHOLDS: Record<string, ScoreThreshold> = {
   IE: { best: 52_000, worst: 19_000 },
   JP: JP_MEDIAN_INCOME_BAND,
   BR: { best: 35_000, worst: 13_000 },
-  CN: { best: 125_000, worst: 45_000 },
+  CN: CN_MEDIAN_INCOME_THRESHOLDS,
   NG: { best: 1_500_000, worst: 540_000 },
 };
 

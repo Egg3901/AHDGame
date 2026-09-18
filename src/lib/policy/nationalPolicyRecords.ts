@@ -27,6 +27,7 @@ import { JP_ECONOMY } from "@/lib/countries/jp/economy";
 import { US_ECONOMY } from "@/lib/countries/us/economy";
 import { UK_ECONOMY } from "@/lib/countries/uk/economy";
 import { DE_ECONOMY } from "@/lib/countries/de/economy";
+import { CN_ECONOMY } from "@/lib/countries/cn/economy";
 
 /**
  * Shared national policy-record assembly — extracted verbatim from
@@ -58,7 +59,7 @@ export const LEGISLATION_COUNTRY_SCOPES: Record<
   DE: DE_ECONOMY.legislationScope,
   IE: "ie",
   BR: "br",
-  CN: "cn",
+  CN: CN_ECONOMY.legislationScope,
   NG: "ng",
   HU: "hu",
   PL: "pl",

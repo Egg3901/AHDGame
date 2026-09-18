@@ -10,6 +10,7 @@ import { JP_GEOGRAPHY } from "@/lib/countries/jp/geography";
 import { US_MAP_REGISTRY } from "@/lib/countries/us/geographyFacts";
 import { UK_MAP_REGISTRY } from "@/lib/countries/uk/geographyFacts";
 import { DE_MAP_REGISTRY } from "@/lib/countries/de/data/deMapConfig";
+import { CN_MAP_REGISTRY } from "@/lib/countries/cn/geographyFacts";
 
 export interface CountryMapConfig {
   /** Country ID */
@@ -71,13 +72,7 @@ export const COUNTRY_MAP_REGISTRY: Record<CountryId, CountryMapConfig> = {
     mapPath: "/country/br/map",
     hasRegionMap: false,
   },
-  CN: {
-    countryId: "CN",
-    name: "China",
-    overviewPath: "/country/cn",
-    mapPath: "/country/cn/map",
-    hasRegionMap: false,
-  },
+  CN: CN_MAP_REGISTRY,
   NG: {
     countryId: "NG",
     name: "Nigeria",

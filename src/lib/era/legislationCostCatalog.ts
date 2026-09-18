@@ -12,6 +12,7 @@ import { JP_ECONOMY } from "@/lib/countries/jp/economy";
 import { US_ECONOMY } from "@/lib/countries/us/economy";
 import { UK_ECONOMY } from "@/lib/countries/uk/economy";
 import { DE_ECONOMY } from "@/lib/countries/de/economy";
+import { CN_ECONOMY } from "@/lib/countries/cn/economy";
 
 export type CostClass = "gdpFraction" | "perCapita" | "none";
 
@@ -920,7 +921,7 @@ export const REP_ECON: Record<string, { gdp: number; population: number }> = {
   DE: DE_ECONOMY.repEcon,
   JP: JP_ECONOMY.repEcon,
   IE: { gdp: 500_000_000_000, population: 5_100_000 },
-  CN: { gdp: 126_000_000_000_000, population: 1_412_000_000 },
+  CN: CN_ECONOMY.repEcon,
   NG: { gdp: 144_000_000_000_000, population: 200_000_000 },
 };
 

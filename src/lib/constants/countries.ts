@@ -32,6 +32,7 @@ import { US_IDENTITY } from "@/lib/countries/us/identity";
 import { UK_IDENTITY } from "@/lib/countries/uk/identity";
 import { DE_CONFIG } from "@/lib/countries/de/institutionsFacts";
 import { DE_IDENTITY } from "@/lib/countries/de/identity";
+import { CN_CONFIG } from "@/lib/countries/cn/institutionsFacts";
 
 export type CountryId =
   | "US"
@@ -1409,229 +1410,7 @@ export const COUNTRY_CONFIGS: Record<CountryId, CountryConfig> = {
     centralGovernmentLabel: "Federal Transfers",
   },
 
-  CN: {
-    id: "CN",
-    // Sector-supported identities (State-Capitalist EMERGES via the ≥67% state-
-    // ownership lever once the government actually nationalizes — sectors start
-    // unowned). 1991: a developing, largely agrarian/reforming economy; 2019: the
-    // world's manufacturing powerhouse.
-    seedEconomicModel: { "1991": "agrarian", "2019": "industrialPowerhouse" },
-    name: "China",
-    flagEmoji: "🇨🇳",
-    code: "CN",
-    socialAxisBaseline: 3.5,
-
-    regionLabel: "Province",
-    regionLabelPlural: "Provinces",
-
-    executiveTitle: "Premier",
-    headOfStateTitle: "President",
-    executiveRealmPhrase: "China",
-    governmentType: "onePartyState",
-    headOfStateSelection: "partyChairSync",
-    governmentTypeLabel: "One Party State",
-    discordWebhookNote: "PBoC rate decisions and chair changes.",
-    coalitionThreshold: 1491, // NPC majority (2980 seats / 2 + 1)
-    // CN is one-party by design: no-confidence votes are blocked at runtime by
-    // onePartyConstraints.canTriggerNoConfidence(), so the generic VONC path
-    // is skipped via this flag rather than fired and rejected.
-
-    legislature: {
-      name: "National People's Congress",
-      path: "/country/cn/legislature",
-      // CPPCC is advisory, not part of the player legislative loop.
-      bicameral: false,
-      upperChamber: {
-        key: "cppcc",
-        name: "CPPCC",
-        shortName: "CPPCC",
-        seats: 2169,
-        description:
-          "2,169 members of the Chinese People's Political Consultative Conference - an advisory body representing diverse social and economic constituencies.",
-      },
-      lowerChamber: {
-        key: "npc",
-        name: "National People's Congress",
-        shortName: "NPC",
-        seats: 2980,
-        description:
-          "2,980 delegates representing provinces, municipalities, autonomous regions, the armed forces, and special administrative regions. Five-year terms.",
-      },
-    },
-
-    subNationalChamber: {
-      key: "peoplesCongress",
-      name: "People's Congress",
-      shortName: "People's Congress",
-      // Sum of per-province seat allocations seeded in
-      // CN_PEOPLES_CONGRESS_2020. Mirrors real-world provincial
-      // people's congress sizes scaled for game playability.
-      seats: 4000,
-      description:
-        "Provincial People's Congresses - the elected legislatures of each macro-region, operating as the legislative arm of each Provincial People's Government. Members serve five-year terms.",
-      regionalModel: true,
-    },
-
-    lowerElectionSystem: {
-      termYears: 5,
-      seatsContested: "all",
-      singleMemberConstituencies: false,
-      snapElectionsAllowed: false,
-      // CN: up to 7 CCP candidates may advance from each region's primary
-      // so the multi-seat PR general phase distributes seats across the
-      // 7-NPP-per-region caucus instead of collapsing to a single
-      // delegate per region. Applies to both NPC and Provincial
-      // People's Congress primaries — same engine helper reads this
-      // override regardless of chamber.
-    },
-    upperElectionSystem: undefined, // CPPCC members are selected/appointed
-    electionSystems: {
-      lowerChamber: "pr_hareQuota", // NPC Delegate
-      subNationalChamber: "pr_hareQuota", // Provincial People's Congress
-      headOfGovernment: "parliamentary", // Premier — party-confidence formation
-      headOfState: "ceremonial", // President of the PRC = CCP chair (partyChairHeadOfState)
-    },
-
-    officeTypes: [
-      {
-        // Executive office for the CN parliamentary head of government.
-        // Renamed from "president" → "premier" in 2026-05-22. The matching
-        // migration (scripts/migrations/2026-05-22-cn-executive-key-rename.ts)
-        // updates characters/npps/electedOfficials docs with the old key.
-        // Must remain the FIRST executive entry so getExecutiveOfficeKey("CN")
-        // continues to return "premier" (head of government) — the new
-        // ceremonial "president" office below is keyed off CCP.chairId by
-        // partyChairHeadOfState, not by election or appointment.
-        key: "premier",
-        label: "Premier",
-        labelPlural: "Premiers",
-        isExecutive: true,
-        isSubNational: false,
-        termYears: 5,
-        actionBonus: 4,
-        partyStrengthWeight: 1.0,
-      },
-      {
-        // Ceremonial head of state. Auto-populated as whoever currently
-        // holds the CCP chair (party.chairId on the ruling party) by
-        // syncPartyChairHeadOfState in src/lib/turn/partyChairHeadOfState.ts. Not elected,
-        // not appointed through the Premier flow. actionBonus and
-        // partyStrengthWeight are intentionally 0 — the office carries no
-        // mechanical weight beyond its ceremonial label.
-        key: "president",
-        label: "President",
-        labelPlural: "Presidents",
-        isExecutive: true,
-        // Ceremonial President of the PRC — auto-populated as the sitting CCP
-        // chair by partyChairHeadOfState. This is CN's head of state.
-        isHeadOfState: true,
-        isSubNational: false,
-        actionBonus: 0,
-        partyStrengthWeight: 0,
-      },
-      {
-        key: "npcDelegate",
-        label: "NPC Delegate",
-        labelPlural: "NPC Delegates",
-        chamberKey: "npc",
-        isExecutive: false,
-        isSubNational: false,
-        termYears: 5,
-        actionBonus: 1,
-        partyStrengthWeight: 0.85,
-      },
-      {
-        key: "peoplesCongress",
-        label: "Provincial Delegate",
-        labelPlural: "Provincial Delegates",
-        chamberKey: "peoplesCongress",
-        isExecutive: false,
-        isSubNational: true,
-        termYears: 5,
-        actionBonus: 1,
-        partyStrengthWeight: 0.75,
-      },
-      {
-        key: "governor",
-        label: "Governor",
-        labelPlural: "Governors",
-        isExecutive: false,
-        isSubNational: true,
-        termYears: 5,
-        actionBonus: 2,
-        partyStrengthWeight: 1.0,
-      },
-      {
-        key: "centralBankChair",
-        label: "Governor of the PBoC",
-        labelPlural: "Governors of the PBoC",
-        isExecutive: false,
-        isSubNational: false,
-        termYears: 5,
-        actionBonus: 3,
-        partyStrengthWeight: 0,
-      },
-    ],
-
-    majorPartyIds: ["ccp"],
-    rulingPartyId: 1,
-    priorityProfile: DEFAULT_CN_PRIORITY_PROFILE,
-    popularMoodProfile: CN_POPULAR_MOOD_PROFILE,
-    factionDefectionName: "Democratic Faction of the CCP",
-    collapseTargetSystem: "parliamentaryRepublic",
-    collapseTargetAllowlist: ["parliamentaryRepublic", "presidential"],
-    legacyReservationDefault: 20,
-    electionDelayDefault: 24,
-    policyAxisEffects: DEFAULT_POLICY_AXIS_EFFECTS,
-    onePartyRegionalBudget: {
-      localTaxRetentionShare: 0.4,
-      corporateProfitRatio: 0.06,
-      centralTransferPerCapita: 35,
-      defaultTaxRate: 25,
-      primaryTaxLegislationKey: "cn_enterprise_income_tax",
-      resourceTaxLegislationKey: "cn_provincial_resource_tax",
-      resourceExtractionRatio: 0.03,
-      businessTaxConsumptionRatio: 0.5,
-      businessTaxRate: 24,
-    },
-    partyCreationNPPs: { statesRequired: 2, lockHomeState: false, nppsPerState: 1 },
-    partyRoleLabels: {
-      chair: "General Secretary",
-      viceChair: "Deputy General Secretary",
-      // treasurer intentionally left default ("National Treasurer") per design
-      committee: "Secretariat",
-    },
-    demographicProfileId: "cn_archetypes",
-    hasLeaderConfidenceModel: true,
-    mapOverlay: "partyOrg",
-
-    centralBank: {
-      name: "People's Bank of China",
-      abbreviation: "PBoC",
-      chairTitle: "Governor of the PBoC",
-      defaultPrimeRate: 4.0,
-      heroImage: "/api/images/hero/peoples-bank-of-china",
-    },
-
-    exchangeName: "SSE",
-    usdExchangeRate: 0.138, // 1 CNY ≈ USD 0.138
-    currencyCode: "CNY",
-    fiscalYearStartTurnInYear: 40,
-    financeMinisterCabinetId: "minister_of_finance",
-
-    status: "active",
-    tagline:
-      "The world's second-largest economy - seven geographic regions, a National People's Congress, and a central bank steering rapid development.",
-    descriptor:
-      "A unitary state governed by the Chinese Communist Party, where the Premier leads the State Council through confidence of the 2,980-seat National People's Congress across seven geographic regions.",
-    heroImage: getCountryFlagUrl("CN"),
-    entryPath: "/country/cn",
-    overviewPath: "/country/cn",
-    mapPath: "/country/cn/map",
-    executivePath: "/country/cn/executive",
-    executiveLabel: "State Council",
-    centralGovernmentLabel: "Central Government Transfers",
-  },
+  CN: CN_CONFIG,
 
   NG: {
     id: "NG",
@@ -6657,11 +6436,18 @@ export function getRegionalAddressName(countryId: CountryId): string {
   return REGIONAL_ADDRESS_NAME[countryId] ?? "State of the State";
 }
 
+/**
+ * ⚠️ `?.` IS LOAD-BEARING, NOT DEFENSIVE NOISE. The registry is `Partial`, and
+ * `addressNames` is optional in the country contract because China has no row
+ * here at all -- its reader below falls back to "Address to the Nation". A
+ * country that omits the field therefore stays omitted rather than acquiring
+ * someone else's phrase.
+ */
 export const NATIONAL_ADDRESS_NAME: Partial<Record<CountryId, string>> = {
-  US: US_IDENTITY.addressNames.national,
-  UK: UK_IDENTITY.addressNames.national,
-  DE: DE_IDENTITY.addressNames.national,
-  JP: JP_IDENTITY.addressNames.national,
+  US: US_IDENTITY.addressNames?.national,
+  UK: UK_IDENTITY.addressNames?.national,
+  DE: DE_IDENTITY.addressNames?.national,
+  JP: JP_IDENTITY.addressNames?.national,
   IE: "Address to the Oireachtas",
 };
 

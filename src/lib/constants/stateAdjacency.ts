@@ -24,6 +24,7 @@ import { JP_ADJACENCY_MAP } from "@/lib/countries/jp/geographyFacts";
 import { US_ADJACENCY_MAP } from "@/lib/countries/us/geographyFacts";
 import { UK_ADJACENCY_MAP } from "@/lib/countries/uk/geographyFacts";
 import { DE_ADJACENCY_MAP } from "@/lib/countries/de/geographyFacts";
+import { CN_ADJACENCY_MAP } from "@/lib/countries/cn/geographyFacts";
 
 export type AdjacencyMap = Record<string, readonly string[]>;
 
@@ -36,15 +37,6 @@ export type AdjacencyMap = Record<string, readonly string[]>;
  * CN 7 grouped regions. These are coarse macro-regions; each pair of
  * adjacent macro-regions has at least one provincial border touching.
  */
-const CN_ADJACENCY: AdjacencyMap = {
-  DB: ["HB"],
-  HB: ["DB", "XB", "HZ", "HD"],
-  HD: ["HB", "HZ", "HN"],
-  HZ: ["HB", "HD", "XB", "XN", "HN"],
-  HN: ["HZ", "HD", "XN"],
-  XN: ["HZ", "HN", "XB"],
-  XB: ["HB", "HZ", "XN"],
-};
 
 /**
  * RU (USSR) 17 macro-regions — ten RSFSR economic macro-regions plus seven
@@ -346,7 +338,7 @@ export const STATE_ADJACENCY: Readonly<Record<CountryId, AdjacencyMap>> = {
   UK: UK_ADJACENCY_MAP,
   DE: DE_ADJACENCY_MAP,
   JP: JP_ADJACENCY_MAP,
-  CN: CN_ADJACENCY,
+  CN: CN_ADJACENCY_MAP,
   IE: IE_ADJACENCY,
   BR: BR_ADJACENCY,
   NG: NG_ADJACENCY,

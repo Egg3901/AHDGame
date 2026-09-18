@@ -67,6 +67,25 @@ function v(name: string): string {
   return JSON.stringify(e.value, null, 2);
 }
 
+/**
+ * A registry entry the country may legitimately have no row in.
+ *
+ * ≠ `v()`. `v()` throws, which is right for a field the contract requires: a
+ * missing `COUNTRY_CONFIGS` row is a broken conversion, not a fact about the
+ * country. This is for the fields the contract marks optional, where absence is
+ * the data -- China has no `REGIONAL_BILL_ASSENT_OFFICE_KEY`, and a generator
+ * that defaulted it would write someone else's office into China's folder.
+ */
+function maybe(name: string): string | null {
+  const e = snap[name];
+  if (!e || e.shape === "absent") return null;
+  if (e.value === null || e.value === undefined) return null;
+  if (e.shape === "function-valued") return null;
+  return JSON.stringify(e.value, null, 2);
+}
+
+const assentKey = maybe("REGIONAL_BILL_ASSENT_OFFICE_KEY");
+
 /** A seat id that may legitimately be absent (ENERGY and INFRA are `Partial`). */
 function seat(name: string): string {
   const e = snap[name];
@@ -128,7 +147,14 @@ export const ${COUNTRY}_CABINET_SEAT_IDS = {
 export const ${COUNTRY}_MILITARY_SCALE = ${v("MILITARY_COUNTRY_SCALE")};
 
 /** Which office assents to regional bills. */
-export const ${COUNTRY}_REGIONAL_BILL_ASSENT_OFFICE_KEY = ${v("REGIONAL_BILL_ASSENT_OFFICE_KEY")};
+${
+  assentKey
+    ? `export const ${COUNTRY}_REGIONAL_BILL_ASSENT_OFFICE_KEY = ${assentKey};`
+    : `/* No ${COUNTRY}_REGIONAL_BILL_ASSENT_OFFICE_KEY: the registry has no ${COUNTRY} entry.
+   * \`regionalBillAssentOfficeKey\` is optional in the contract, and a country whose
+   * regional bills need no assent office is not the same as one defaulting to
+   * someone else’s. */`
+}
 
 /**
  * Which policy bucket each cabinet seat belongs to, for the cabinet UI.

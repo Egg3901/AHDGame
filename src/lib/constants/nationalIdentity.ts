@@ -3,6 +3,7 @@ import { JP_IDENTITY } from "@/lib/countries/jp/identity";
 import { US_IDENTITY } from "@/lib/countries/us/identity";
 import { UK_IDENTITY } from "@/lib/countries/uk/identity";
 import { DE_IDENTITY } from "@/lib/countries/de/identity";
+import { CN_IDENTITY } from "@/lib/countries/cn/identity";
 
 /**
  * National-identity layer for state-owned / National Corporation surfaces.
@@ -72,21 +73,7 @@ export interface NationalIdentity {
  * directed, BR/NG use the same component machinery with their own palette.
  */
 export const NATIONAL_IDENTITY: Record<CountryId, NationalIdentity> = {
-  CN: {
-    glyph: "国",
-    serif: "cjk",
-    motif: "gearStar",
-    name: "China National Corporation",
-    native: "中国国有企业总公司",
-    registry: "People's Republic of China · State Asset Registry",
-    ministry: "经济部 · ECONOMY MINISTRY",
-    publicSeal: "公开 · PUBLIC REGISTER",
-    hqCity: "Beijing",
-    palette: ["#4a1212", "#2a0e0e", "#160a0e"],
-    accent: "#d8b25e",
-    accentSoft: "#e7cd91",
-    accentName: "Crimson & gold",
-  },
+  CN: CN_IDENTITY.national,
   UK: UK_IDENTITY.national,
   US: US_IDENTITY.national,
   DE: DE_IDENTITY.national,

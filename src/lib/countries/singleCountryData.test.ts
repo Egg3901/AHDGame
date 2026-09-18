@@ -1,6 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { readFileSync, readdirSync, statSync } from "node:fs";
-import { basename, join } from "node:path";
 import { ACKNOWLEDGED_OUTSIDE, CONVERTED } from "./singleCountryData";
 import { singleCountryFiles } from "../../../scripts/countries/classifySingleCountryFiles";
 

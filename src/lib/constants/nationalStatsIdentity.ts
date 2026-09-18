@@ -16,6 +16,7 @@ import { JP_IDENTITY } from "@/lib/countries/jp/identity";
 import { US_IDENTITY } from "@/lib/countries/us/identity";
 import { UK_IDENTITY } from "@/lib/countries/uk/identity";
 import { DE_IDENTITY } from "@/lib/countries/de/identity";
+import { CN_IDENTITY } from "@/lib/countries/cn/identity";
 
 export interface StatsAccent {
   /** Accent gold/brass. */
@@ -52,17 +53,7 @@ export interface StatsIdentity {
 }
 
 export const NATIONAL_STATS_IDENTITY: Partial<Record<CountryId, StatsIdentity>> = {
-  CN: {
-    glyph: "统",
-    serif: "cjk",
-    office: "国家统计局",
-    officeEn: "National Bureau of Statistics",
-    title: "国家统计 (National Statistics)",
-    titleEn: "National Statistics",
-    registry: "People's Republic of China · National Bureau of Statistics",
-    seal: "统计局 · NBS",
-    accent: { stat: "#d8b25e", statSoft: "#e7cd91", g0: "#4a1212", g1: "#2a0e0e", g2: "#160a0e" },
-  },
+  CN: CN_IDENTITY.stats,
   US: US_IDENTITY.stats,
   UK: UK_IDENTITY.stats,
   DE: DE_IDENTITY.stats,

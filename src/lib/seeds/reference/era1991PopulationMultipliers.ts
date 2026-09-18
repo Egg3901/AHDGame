@@ -3,6 +3,7 @@ import { JP_GEOGRAPHY } from "@/lib/countries/jp/geography";
 import { US_POPULATION_MULTIPLIERS } from "@/lib/countries/us/geographyFacts";
 import { UK_POPULATION_MULTIPLIERS } from "@/lib/countries/uk/geographyFacts";
 import { DE_POPULATION_MULTIPLIERS } from "@/lib/countries/de/geographyFacts";
+import { CN_POPULATION_MULTIPLIERS } from "@/lib/countries/cn/geographyFacts";
 
 /**
  * 1991-era cohort multipliers, per country.
@@ -30,15 +31,7 @@ export const POPULATION_MULTIPLIERS: Partial<Record<CountryId, Record<string, nu
   UK: UK_POPULATION_MULTIPLIERS,
   JP: JP_GEOGRAPHY.populationMultipliers,
   DE: DE_POPULATION_MULTIPLIERS,
-  CN: {
-    party_cadre: 1.15, // Peak SOE party-state era
-    urban_professional: 0.5, // Pre-private-sector boom
-    rural_peasant: 1.6, // 1991 urbanization ~28% vs ~64% in 2020
-    industrial_worker: 1.2, // Peak SOE industrial workforce
-    migrant_worker: 0.4, // Hukou tightly controlled
-    entrepreneur: 0.2, // Private sector tiny pre-1992
-    youth: 1.1, // Post-Cultural-Revolution baby-boom echo
-  },
+  CN: CN_POPULATION_MULTIPLIERS,
   IE: {
     urban_professional: 0.4, // Pre-MNC FDI tech boom
     rural_traditional: 1.4, // Pre-Celtic-Tiger urban migration

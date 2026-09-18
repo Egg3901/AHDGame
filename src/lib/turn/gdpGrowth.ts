@@ -23,6 +23,7 @@ import { JP_ECONOMY } from "@/lib/countries/jp/economy";
 import { US_ECONOMY } from "@/lib/countries/us/economy";
 import { UK_ECONOMY } from "@/lib/countries/uk/economy";
 import { DE_ECONOMY } from "@/lib/countries/de/economy";
+import { CN_ECONOMY } from "@/lib/countries/cn/economy";
 
 /** Default daily growth rate for unowned sectors (background economy) */
 export const DEFAULT_UNOWNED_GROWTH_RATE = 0.5;
@@ -65,7 +66,7 @@ export const NEUTRAL_STATE_SALES_TAX_BY_COUNTRY: Partial<Record<CountryId, numbe
   DE: DE_ECONOMY.tax.neutralStateSalesTax,
   IE: 0,
   BR: 5,
-  CN: 4,
+  CN: CN_ECONOMY.tax.neutralStateSalesTax,
 };
 
 // ── Unemployment (simplified Okun's law) ────────────────────────────

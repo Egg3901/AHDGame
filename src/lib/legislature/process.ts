@@ -1,6 +1,7 @@
 import type { CountryId } from "@/lib/constants/countries";
 import { JP_LEGISLATIVE_PROCESS } from "@/lib/countries/jp/institutionsFacts";
 import { DE_LEGISLATIVE_PROCESS } from "@/lib/countries/de/institutionsFacts";
+import { CN_LEGISLATIVE_PROCESS } from "@/lib/countries/cn/institutionsFacts";
 import { US_LEGISLATIVE_PROCESS } from "@/lib/countries/us/institutionsFacts";
 import { UK_LEGISLATIVE_PROCESS } from "@/lib/countries/uk/institutionsFacts";
 
@@ -107,36 +108,7 @@ const SE_1953: LegislativeProcess = {
   seatingStyle: "hemicycle",
 };
 
-const CN: LegislativeProcess = {
-  executive: {
-    title: "President",
-    canVeto: false,
-    signLabel: "Promulgation",
-    signNote:
-      "Adopted laws are promulgated by the President by order. The NPC is the highest organ of state power.",
-    override: null,
-  },
-  upperNote: null,
-  dissolution: null,
-  quirks: [
-    {
-      icon: "building",
-      title: "NPC supremacy",
-      body: "The National People's Congress is constitutionally the highest organ of state power.",
-    },
-    {
-      icon: "users",
-      title: "Standing Committee",
-      body: "Between sessions, the NPC Standing Committee exercises legislative authority.",
-    },
-    {
-      icon: "shield",
-      title: "Party leadership",
-      body: "Legislation advances under the leadership of the Communist Party of China.",
-    },
-  ],
-  seatingStyle: "hemicycle",
-};
+const CN: LegislativeProcess = CN_LEGISLATIVE_PROCESS;
 
 const DEFAULT_PROCESS: LegislativeProcess = {
   executive: {

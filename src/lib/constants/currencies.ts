@@ -13,6 +13,7 @@ import { JP_ECONOMY } from "@/lib/countries/jp/economy";
 import { US_ECONOMY } from "@/lib/countries/us/economy";
 import { UK_ECONOMY } from "@/lib/countries/uk/economy";
 import { DE_ECONOMY } from "@/lib/countries/de/economy";
+import { CN_ECONOMY } from "@/lib/countries/cn/economy";
 
 /**
  * Currency codes for all countries — active and future.
@@ -85,7 +86,7 @@ export const COUNTRY_CURRENCY_MAP: Record<CountryId, CurrencyCode> = {
   // Display shows "€" when gameState.eurozoneEnabled (see getEraAwareCurrencySymbol).
   IE: "IEP",
   BR: "BRL",
-  CN: "CNY",
+  CN: CN_ECONOMY.currencyCode,
   NG: "NGN",
   HU: "HUF",
   PL: "PLZ",
@@ -749,7 +750,7 @@ export const ECONOMIC_BASELINES: Partial<Record<CountryId, EconomicBaseline>> = 
   DE: DE_ECONOMY.economicBaseline,
   IE: { gdpGrowth: 3.5, tradeGrowth: 2.5 },
   BR: { gdpGrowth: 2.5, tradeGrowth: 2.0 },
-  CN: { gdpGrowth: 5.0, tradeGrowth: 4.0 },
+  CN: CN_ECONOMY.economicBaseline,
   NG: { gdpGrowth: 3.0, tradeGrowth: 2.5 },
 };
 
@@ -773,7 +774,7 @@ export const MONETARY_BASELINES: Record<CountryId, MonetaryBaseline> = {
   DE: DE_ECONOMY.monetary.baseline,
   IE: { targetInflation: 2.0, neutralPrimeRate: 3.0 },
   BR: { targetInflation: 4.0, neutralPrimeRate: 8.0 },
-  CN: { targetInflation: 2.0, neutralPrimeRate: 4.0 },
+  CN: CN_ECONOMY.monetary.baseline,
   NG: { targetInflation: 6.0, neutralPrimeRate: 12.0 },
   HU: { targetInflation: 3.0, neutralPrimeRate: 5.0 },
   PL: { targetInflation: 4.0, neutralPrimeRate: 5.0 },
