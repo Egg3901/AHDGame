@@ -206,16 +206,32 @@ describe("recomputeSharePricesAfterBondTurn", () => {
     expect(newPrice).toBeGreaterThan(100);
   });
 
-  it("subtracts shareIssuanceProceeds from tangible book (mirrors corp-turn calc)", async () => {
-    // Bug #0772: recompute must subtract issuanceProceeds just like sectorCalculations
-    // does, otherwise corps that sold shares from their float get an inflated tangible
-    // book in the post-bond recompute → higher share price than the corp turn computed.
+  it("counts retained float-sale cash in tangible book", async () => {
+    // Float-sale cash is a real corporate asset. The share count already captures
+    // dilution, so subtracting the cash again makes a cash-rich issuer worth less
+    // than the money on its balance sheet.
     const issuanceCorp = {
       ...corp,
-      liquidCapital: 200_000_000, // 100M base + 100M from selling float shares
-      shareIssuanceProceeds: 100_000_000, // realized from selling own shares
+      liquidCapital: 200_000_000,
+      sharePrice: 0.5,
+      shareIssuanceProceeds: 100_000_000,
     } as unknown as Corporation;
+    const cashOnlyHistory = {
+      ...histDoc,
+      sharePrice: 0.5,
+      marketCap: 500_000,
+      liquidCapital: 200_000_000,
+      revenue: 0,
+      totalCosts: 0,
+      income: 0,
+      incomePreDividends: 0,
+      sectorNPV: 0,
+      perTurnBondCouponIncome: 0,
+      perTurnBondDragOnNetIncome: 0,
+    } as CorporationHistory;
     db.collectionMocks.corporations.find.mockReturnValue(makeCursor([issuanceCorp]));
+    db.collectionMocks.bonds.find.mockReturnValue(makeCursor([]));
+    db.collectionMocks.corporationHistory.find.mockReturnValue(makeCursor([cashOnlyHistory]));
 
     const { recomputeSharePricesAfterBondTurn } = await import("./recomputeSharePrices");
     await recomputeSharePricesAfterBondTurn(turn, db as unknown as Db);
@@ -225,13 +241,7 @@ describe("recomputeSharePricesAfterBondTurn", () => {
     }>;
     const newPrice = corpOps[0].updateOne.update.$set.sharePrice;
 
-    // With 200M liquid - 100M issuanceProceeds = 100M effective + 50M sectorNPV = 150M
-    // tangible book / 1M shares = 150 per share (plus earnings/growth components).
-    // If issuanceProceeds were NOT subtracted, tangible book would be 250M / 1M = 250.
-    expect(newPrice).toBeGreaterThan(0);
-    // The price should be based on 150M tangible book, not 250M.
-    // With earnings power and growth premium, expect something reasonable.
-    expect(newPrice).toBeLessThan(250); // proves issuanceProceeds was subtracted
+    expect(newPrice).toBe(200);
   });
 
   it("skips corps with no same-turn history snapshot (defensive)", async () => {
