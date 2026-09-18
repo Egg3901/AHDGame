@@ -74,6 +74,15 @@ const treasuryPsRate = {
   state: 15000000,
 };
 
+/**
+ * Whether this country's authored 1953 GDP figures are denominated in USD or in
+ * local currency.
+ *
+ * ⚠ 1953 ONLY. `GDP_DENOMINATION_1953` is an era table and holds no other
+ * preset, so this says nothing about any later era.
+ */
+export const NG_GDP_DENOMINATION_1953 = "usd";
+
 export const NG_ECONOMY: CountryEconomy = {
   currencyCode,
   nationalPolicyStateId,
@@ -170,13 +179,5 @@ export const NG_ECONOMY: CountryEconomy = {
   },
   sovereignCorpLegalStructure: "ng_plc" as LegalStructureId,
   m2ToGdp1953: 0.25,
+  gdpDenomination1953: NG_GDP_DENOMINATION_1953,
 };
-
-/**
- * Whether this country's authored 1953 GDP figures are denominated in USD or in
- * local currency.
- *
- * ⚠ 1953 ONLY. `GDP_DENOMINATION_1953` is an era table and holds no other
- * preset, so this says nothing about any later era.
- */
-export const NG_GDP_DENOMINATION_1953 = "usd";

@@ -45,13 +45,13 @@ import {
  * equality passed and Japan had two sources for every region.
  *
  * ⚠ THE PRESET KEYS COME FROM THE SNAPSHOT. the United Kingdom authors 5 census
- * eras, 4 metric eras, 2 anchor eras and 3 region eras. The gaps are real:
+ * eras, 4 metric eras, 2 anchor eras and 7 region eras. The gaps are real:
  * an unauthored era inherits, and inventing a key for it would turn a fallback
  * into an authored value.
  */
 
 const regionNames: Record<string, string> = Object.fromEntries(
-  ukRegions.map((region) => [region._id, region.name])
+  ukRegions2023.map((region) => [region._id, region.name])
 );
 
 const censusBundles = {
@@ -76,8 +76,12 @@ const populationAnchors = {
 
 const regionBundles = {
   "1953-default": ukRegions1953,
-  "1979-default": ukRegions,
+  "1979-default": ukRegions1979,
+  "1991-default": ukRegions1991,
+  "1999-default": ukRegions1999,
+  "2007-default": ukRegions2007,
   "2019-default": ukRegions,
+  "2023-default": ukRegions2023,
 };
 
 export const UK_GEOGRAPHY: CountryGeography = {

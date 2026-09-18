@@ -104,6 +104,7 @@ import { POPULATION_ANCHOR_BUNDLES } from "../../src/lib/seeds/populationAnchors
 import { FULL_ERA_REGION_BUNDLES } from "../../src/lib/admin/seedDiagnostic/regionBundles";
 import { REGION_NAME_MAPS } from "../../src/lib/admin/seed/seedSeats";
 import { M2_TO_GDP_1953 } from "../../src/lib/seeds/reference/moneySupply";
+import { GDP_DENOMINATION_1953 } from "../../src/lib/seeds/reference/gdpDenomination";
 import { COUNTRY_SECTOR_WEIGHTS_1953 } from "../../src/lib/seeds/reference/sectorSeedWeights1953";
 import { REGIONAL_BILL_ASSENT_OFFICE_KEY } from "../../src/lib/constants/countries";
 import { INCOME_ANCHORS } from "../../src/lib/era/metricCatalog";
@@ -187,6 +188,7 @@ const REGISTRIES: Record<string, Dict> = {
   MONETARY_BASELINES_1979: d(MONETARY_BASELINES_1979),
   MONETARY_BASELINES_1991: d(MONETARY_BASELINES_1991),
   M2_TO_GDP_1953: d(M2_TO_GDP_1953),
+  GDP_DENOMINATION_1953: d(GDP_DENOMINATION_1953),
   SURFACES: d(SURFACES),
   REGION_CENSUS_LABELS: d(REGION_CENSUS_LABELS),
   STATE_DISPLAY_NAMES: d(STATE_DISPLAY_NAMES),
@@ -589,6 +591,11 @@ const ABSENT_BY_REGISTRY: Array<[string, string, readonly string[]]> = [
     ],
   ],
   [
+    "GDP_DENOMINATION_1953",
+    "not a 1953 starting country; later presets are uniformly local-currency",
+    ["SCO", "WAL"],
+  ],
+  [
     "COUNTRY_SECTOR_WEIGHTS_1953",
     "no 1953 sector-weight override; the country inherits its base weights",
     ["RU", "SCO", "WAL", "BLR"],
@@ -891,6 +898,7 @@ const FOLDER_PATH: Record<string, string | null> = {
   MONETARY_BASELINES_1979: "economy.monetary.byEra.1979",
   MONETARY_BASELINES_1991: "economy.monetary.byEra.1991",
   M2_TO_GDP_1953: "economy.m2ToGdp1953",
+  GDP_DENOMINATION_1953: "economy.gdpDenomination1953",
   SURFACES: "identity.parliamentarySurface",
   REGION_CENSUS_LABELS: "identity.regionCensusLabels",
   STATE_DISPLAY_NAMES: "identity.stateDisplayNames",
@@ -962,6 +970,23 @@ const PARTIAL_REGISTRY = new Set(["FULL_ERA_REGION_BUNDLES", "REGION_NAME_MAPS"]
  * silent so the weakness is visible, and so the row is not mistaken for an
  * absence -- which is what an ABSENT_UPSTREAM entry would have claimed.
  */
+/**
+ * Registries deliberately OUT of scope for a country folder, with the reason.
+ *
+ * ⚠️ NOT A BACKLOG. An audit of the registries this harness does not cover will
+ * keep finding these, and without a note each re-audit re-opens a question the
+ * contract already answered. `INITIAL_RATES` is the clearest: a rate is a fact
+ * BETWEEN two currencies, so a per-country copy drifts by construction, and
+ * `CountryEconomy`'s own doc comment says so. `TREASURY_IDENTITY` is DERIVED --
+ * `treasuryIdentity.ts` composes it from TREASURY_TEXT plus the national
+ * palette, so a folder copy would be a second source of a computed value.
+ */
+const OUT_OF_SCOPE: Record<string, string> = {
+  INITIAL_RATES: "relational: a rate is a fact between two currencies, not a country's",
+  TREASURY_IDENTITY: "derived from TREASURY_TEXT plus the national palette",
+};
+void OUT_OF_SCOPE;
+
 const FOLDER_MODULE_FORWARD: Record<string, Record<string, string>> = {
   JP: {
     COUNTRY_SECTOR_WEIGHTS_1953: "src/lib/seeds/reference/sectorSeedWeights1953.ts",

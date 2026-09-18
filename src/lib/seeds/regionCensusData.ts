@@ -2,40 +2,7 @@ import type { CountryId } from "@/lib/constants/countries";
 import type { Layer1Config } from "@/lib/seeds/stateDemographics";
 import type { ResetPresetId } from "@/lib/seeds/presetSelector";
 import { selectPresetBundleOptional } from "@/lib/seeds/presetSelector";
-import { deRegionCensusData } from "@/lib/seeds/de/deRegionCensusData";
-import { deRegionCensusData1953 } from "@/lib/seeds/de/deRegionCensusData1953";
-import { deRegionCensusData1991 } from "@/lib/seeds/de/deRegionCensusData1991";
-import { deRegionCensusData2027 } from "@/lib/seeds/de/deRegionCensusData2027";
-import { ieRegionCensusData } from "@/lib/seeds/ie/ieRegionCensusData";
-import { ieRegionCensusData1953 } from "@/lib/seeds/ie/ieRegionCensusData1953";
-import { ieRegionCensusData1991 } from "@/lib/seeds/ie/ieRegionCensusData1991";
-import { cnRegionCensusData } from "@/lib/seeds/cn/cnRegionCensusData";
-import { cnRegionCensusData1953 } from "@/lib/seeds/cn/cnRegionCensusData1953";
-import { cnRegionCensusData1991 } from "@/lib/seeds/cn/cnRegionCensusData1991";
-import { cnRegionCensusData2027 } from "@/lib/seeds/cn/cnRegionCensusData2027";
-import { brRegionCensusData } from "@/lib/seeds/br/brRegionCensusData";
-import { brRegionCensusData1953 } from "@/lib/seeds/br/brRegionCensusData1953";
-import { brRegionCensusData1991 } from "@/lib/seeds/br/brRegionCensusData1991";
-import { seRegionCensusData } from "@/lib/seeds/se/seRegionCensusData";
-import { seRegionCensusData1953 } from "@/lib/seeds/se/seRegionCensusData1953";
-import { trRegionCensusData } from "@/lib/seeds/tr/trRegionCensusData";
-import { trRegionCensusData1953 } from "@/lib/seeds/tr/trRegionCensusData1953";
-import { frRegionCensusData1953 } from "@/lib/seeds/fr/frRegionCensusData1953";
-import { itRegionCensusData1953 } from "@/lib/seeds/it/itRegionCensusData1953";
-import { esRegionCensusData1953 } from "@/lib/seeds/es/esRegionCensusData1953";
-import { ruRegionCensusData1953 } from "@/lib/seeds/ru/ruRegionCensusData1953";
-import { ddRegionCensusData1953 } from "@/lib/seeds/dd/ddRegionCensusData1953";
-import { ngRegionCensusData1953 } from "@/lib/seeds/ng/ngRegionCensusData1953";
 // 1979-era census bundles (authored for the 1979 reset).
-import { deRegionCensusData1979 } from "@/lib/seeds/de/deRegionCensusData1979";
-import { ieRegionCensusData1979 } from "@/lib/seeds/ie/ieRegionCensusData1979";
-import { cnRegionCensusData1979 } from "@/lib/seeds/cn/cnRegionCensusData1979";
-import { brRegionCensusData1979 } from "@/lib/seeds/br/brRegionCensusData1979";
-import { frRegionCensusData1979 } from "@/lib/seeds/fr/frRegionCensusData1979";
-import { ngRegionCensusData1979 } from "@/lib/seeds/ng/ngRegionCensusData1979";
-import { ngRegionCensusData } from "@/lib/seeds/ng/ngRegionCensusData";
-import { scoRegionCensusData } from "@/lib/seeds/sco/scoRegionCensusData";
-import { walRegionCensusData } from "@/lib/seeds/wal/walRegionCensusData";
 
 /** Archetype-style Layer-1 census (UK/JP/DE/IE/CN/BR). */
 export interface ArchetypeRegionCensus {
@@ -55,18 +22,6 @@ type PresetBundles = Partial<Record<ResetPresetId, Record<string, RegionCensus>>
  * `selectPresetBundle` falls back to `2019-default` when a preset is absent,
  * so a country with only a 2019 bundle never throws for a 1991 world.
  */
-import { plRegionCensusData1953 } from "@/lib/seeds/pl/plRegionCensusData1953";
-import { csRegionCensusData1953 } from "@/lib/seeds/cs/csRegionCensusData1953";
-import { huRegionCensusData1953 } from "@/lib/seeds/hu/huRegionCensusData1953";
-import { roRegionCensusData1953 } from "@/lib/seeds/ro/roRegionCensusData1953";
-import { bgRegionCensusData1953 } from "@/lib/seeds/bg/bgRegionCensusData1953";
-import { yuRegionCensusData1953 } from "@/lib/seeds/yu/yuRegionCensusData1953";
-import { uaRegionCensusData1953 } from "@/lib/seeds/ua/uaRegionCensusData1953";
-import { uaRegionCensusData } from "@/lib/seeds/ua/uaRegionCensusData";
-import { blrRegionCensusData1953 } from "@/lib/seeds/blr/blrRegionCensusData1953";
-import { blrRegionCensusData } from "@/lib/seeds/blr/blrRegionCensusData";
-import { balRegionCensusData1953 } from "@/lib/seeds/bal/balRegionCensusData1953";
-import { balRegionCensusData } from "@/lib/seeds/bal/balRegionCensusData";
 import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
 import { JP_GEOGRAPHY } from "@/lib/countries/jp/geography";
 import { US_GEOGRAPHY } from "@/lib/countries/us/geography";

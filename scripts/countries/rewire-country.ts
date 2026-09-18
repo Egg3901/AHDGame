@@ -484,6 +484,13 @@ const R: Rewire[] = [
   ),
 
   r(
+    "GDP_DENOMINATION_1953",
+    "src/lib/seeds/reference/gdpDenomination.ts",
+    "economy",
+    "CC_ECONOMY",
+    "CC_ECONOMY.gdpDenomination1953"
+  ),
+  r(
     "COUNTRY_SECTOR_WEIGHTS_1953",
     "src/lib/seeds/reference/sectorSeedWeights1953.ts",
     "economy",
@@ -568,6 +575,38 @@ function r(registry: string, file: string, module: string, binding: string, expr
  * Blanking preserves offsets, so spans found here slice correctly out of the
  * original text.
  */
+/** The source with string CONTENTS blanked, offsets preserved. */
+function maskStrings(src: string): string {
+  let out = "";
+  let i = 0;
+  while (i < src.length) {
+    const c = src[i];
+    if (c === '"' || c === "'" || c === "`") {
+      const quote = c;
+      out += c;
+      i++;
+      while (i < src.length) {
+        if (src[i] === "\\") {
+          out += "  ";
+          i += 2;
+          continue;
+        }
+        if (src[i] === quote) break;
+        out += src[i] === "\n" ? "\n" : " ";
+        i++;
+      }
+      if (i < src.length) {
+        out += quote;
+        i++;
+      }
+      continue;
+    }
+    out += c;
+    i++;
+  }
+  return out;
+}
+
 function maskComments(src: string): string {
   let out = "";
   let i = 0;
@@ -742,7 +781,14 @@ function pruneOrphans(raw: string, _CC: string): [string, string[]] {
 
     let cut = false;
     for (const name of names) {
-      const uses = [...masked.matchAll(new RegExp(`\\b${name}\\b`, "g"))].length;
+      /*
+       * ⚠ STRINGS ARE MASKED TOO, BECAUSE A MODULE PATH CONTAINS ITS OWN BINDING.
+       * `import { walRegionCensusData } from "@/lib/seeds/wal/walRegionCensusData"`
+       * mentions the name TWICE -- once as the binding, once inside the path --
+       * so the one-occurrence rule never fired, and dozens of unused imports
+       * survived every prune. Lint found them; the prune never could.
+       */
+      const uses = [...maskStrings(masked).matchAll(new RegExp(`\\b${name}\\b`, "g"))].length;
       if (uses !== 1) continue;
 
       const declRe = new RegExp(`^(?:export\\s+)?(?:const|let)\\s+${name}\\b`, "m");

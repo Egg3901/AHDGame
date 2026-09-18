@@ -133,7 +133,7 @@ const absentSectors = eraSectors.filter(([, value]) => value === null).map(([era
 const out = `import type { CountryEconomy } from "../contract";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import type { CorporationType } from "@/lib/constants/corporations";
-import type { LegalStructureId } from "@/lib/constants/legalStructures";
+${sovereignStructure ? 'import type { LegalStructureId } from "@/lib/constants/legalStructures";' : ""}
 
 /**
  * ${COUNTRY}'s money.
@@ -180,6 +180,21 @@ ${
     : "const strategicSectors: CorporationType[] = [];"
 }
 const treasuryPsRate = ${v("TREASURY_PS_RATE_BY_COUNTRY")};
+
+/**
+ * Whether this country's authored 1953 GDP figures are denominated in USD or in
+ * local currency.
+ *
+ * ⚠ 1953 ONLY. \`GDP_DENOMINATION_1953\` is an era table and holds no other
+ * preset, so this says nothing about any later era.
+ */
+${
+  gdpDenomination1953
+    ? `export const ${COUNTRY}_GDP_DENOMINATION_1953 = ${gdpDenomination1953};`
+    : `/* No ${COUNTRY}_GDP_DENOMINATION_1953: the table lists only the countries the 1953
+   world starts with, and ${COUNTRY} is not one of them. Later presets are uniformly
+   local-currency by design, so there is nothing to denominate. */`
+}
 
 export const ${COUNTRY}_ECONOMY: CountryEconomy = {
   currencyCode,
@@ -242,22 +257,12 @@ ${
     ? `  m2ToGdp1953: ${m2ToGdp},
 `
     : ""
-}};
-
-/**
- * Whether this country's authored 1953 GDP figures are denominated in USD or in
- * local currency.
- *
- * ⚠ 1953 ONLY. \`GDP_DENOMINATION_1953\` is an era table and holds no other
- * preset, so this says nothing about any later era.
- */
-${
+}${
   gdpDenomination1953
-    ? `export const ${COUNTRY}_GDP_DENOMINATION_1953 = ${gdpDenomination1953};`
-    : `/* No ${COUNTRY}_GDP_DENOMINATION_1953: the table lists only the countries the 1953
-   world starts with, and ${COUNTRY} is not one of them. Later presets are uniformly
-   local-currency by design, so there is nothing to denominate. */`
-}
+    ? `  gdpDenomination1953: ${COUNTRY}_GDP_DENOMINATION_1953,
+`
+    : ""
+}};
 `;
 
 mkdirSync(dirname(OUT), { recursive: true });

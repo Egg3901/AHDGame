@@ -39,13 +39,13 @@ import {
  * equality passed and Japan had two sources for every region.
  *
  * ⚠ THE PRESET KEYS COME FROM THE SNAPSHOT. Nigeria authors 4 census
- * eras, 3 metric eras, 0 anchor eras and 3 region eras. The gaps are real:
+ * eras, 3 metric eras, 0 anchor eras and 7 region eras. The gaps are real:
  * an unauthored era inherits, and inventing a key for it would turn a fallback
  * into an authored value.
  */
 
 const regionNames: Record<string, string> = Object.fromEntries(
-  ngRegions.map((region) => [region._id, region.name])
+  ngRegions2023.map((region) => [region._id, region.name])
 );
 
 const censusBundles = {
@@ -65,8 +65,12 @@ const populationAnchors = {};
 
 const regionBundles = {
   "1953-default": ngRegions1953,
-  "1979-default": ngRegions,
+  "1979-default": ngRegions1979,
+  "1991-default": ngRegions1991,
+  "1999-default": ngRegions1999,
+  "2007-default": ngRegions2007,
   "2019-default": ngRegions,
+  "2023-default": ngRegions2023,
 };
 
 export const NG_GEOGRAPHY: CountryGeography = {

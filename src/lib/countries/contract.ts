@@ -22,6 +22,7 @@ import type { CabinetGroup } from "@/lib/constants/cabinetPositionGroups";
 import type { CorporationType } from "@/lib/constants/corporations";
 import type { CurrencyCode, MonetaryBaseline } from "@/lib/constants/currencies";
 import type { LegalStructureId } from "@/lib/constants/legalStructures";
+import type { GdpDenomination } from "@/lib/seeds/reference/gdpDenomination";
 import type { LegislationType } from "@/lib/db/types";
 import type { Branch } from "@/lib/constants/military";
 import type { EraMonetaryBaseline } from "@/lib/constants/monetaryEra";
@@ -350,6 +351,14 @@ export interface CountryEconomy {
   readonly payoutCapPerTurn?: number;
   readonly sovereignCorpLegalStructure?: LegalStructureId;
   readonly m2ToGdp1953?: number;
+  /**
+   * Whether the 1953 GDP figure is stated in local currency or USD.
+   *
+   * ⚠️ 1953 ONLY, and the table lists only the countries the 1953 world starts
+   * with. Later presets are uniformly local-currency by design, so a country
+   * absent from it has nothing to denominate rather than a missing value.
+   */
+  readonly gdpDenomination1953?: GdpDenomination;
 }
 
 /**

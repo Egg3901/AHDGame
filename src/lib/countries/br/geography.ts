@@ -43,13 +43,13 @@ import {
  * equality passed and Japan had two sources for every region.
  *
  * ⚠ THE PRESET KEYS COME FROM THE SNAPSHOT. Brazil authors 4 census
- * eras, 4 metric eras, 2 anchor eras and 3 region eras. The gaps are real:
+ * eras, 4 metric eras, 2 anchor eras and 7 region eras. The gaps are real:
  * an unauthored era inherits, and inventing a key for it would turn a fallback
  * into an authored value.
  */
 
 const regionNames: Record<string, string> = Object.fromEntries(
-  brRegions.map((region) => [region._id, region.name])
+  brRegions2023.map((region) => [region._id, region.name])
 );
 
 const censusBundles = {
@@ -73,8 +73,12 @@ const populationAnchors = {
 
 const regionBundles = {
   "1953-default": brRegions1953,
-  "1979-default": brRegions,
+  "1979-default": brRegions1979,
+  "1991-default": brRegions1991,
+  "1999-default": brRegions1999,
+  "2007-default": brRegions2007,
   "2019-default": brRegions,
+  "2023-default": brRegions2023,
 };
 
 export const BR_GEOGRAPHY: CountryGeography = {

@@ -151,8 +151,6 @@ const addImport = (mod: string, name: string) => {
   if (!imports.has(mod)) imports.set(mod, new Set());
   imports.get(mod)!.add(name);
 };
-for (const [, mod, name] of [...census, ...metrics, ...anchors, ...regions]) addImport(mod, name);
-if (rawMod && rawExport) addImport(rawMod, rawExport);
 
 const factsNames = [
   "ADJACENCY_MAP",
@@ -229,6 +227,27 @@ const REGION_OVERRIDE = (() => {
   }
   return out;
 })();
+
+/*
+ * ⚠ THE OVERRIDE IS A FALLBACK, NOT AN OVERRIDE. It exists for countries the
+ * diagnostic registry does not cover. Passing one to a country the registry DOES
+ * cover replaces the authoritative preset list with whatever was typed on the
+ * command line -- which is exactly what happened: a blanket
+ * `1953/1979/2019` was handed to all 29 during a mass regeneration and the
+ * United Kingdom went from SEVEN region eras to three, silently, in a commit
+ * about something else. `regionBundles` shrank and nothing failed, because three
+ * correct entries are not a type error.
+ */
+if (REGION_OVERRIDE && regions.length > 0) {
+  console.error(
+    `--regions was passed, but FULL_ERA_REGION_BUNDLES already declares ` +
+      `${regions.length} region era(s) for ${COUNTRY}: ` +
+      `${regions.map(([p]) => p).join(", ")}.
+` +
+      `The registry is authoritative where it has a row. Drop --regions.`
+  );
+  process.exit(1);
+}
 
 if (REGION_OVERRIDE) {
   /*
@@ -308,6 +327,15 @@ const snapField = (field: string, value: string | null): string =>
 
 const opt = (field: string, suffix: string): string =>
   factsNames.includes(`${COUNTRY}_${suffix}`) ? `\n  ${field}: ${COUNTRY}_${suffix},` : "";
+
+/*
+ * ⚠ BUILT AFTER THE OVERRIDE, NOT BEFORE. Adding the region imports first
+ * left the ORIGINAL modules imported when an override replaced the list --
+ * `ukRegions2007` and `ukRegions2023` sat unused in the UK's geography, which
+ * lint reported and which is the visible half of the preset regression above.
+ */
+for (const [, mod, name] of [...census, ...metrics, ...anchors, ...regions]) addImport(mod, name);
+if (rawMod && rawExport) addImport(rawMod, rawExport);
 
 const block = (entries: Array<[string, string, string]>) =>
   entries.map(([preset, , name]) => `  ${JSON.stringify(preset)}: ${name},`).join("\n");

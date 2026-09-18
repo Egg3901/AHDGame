@@ -158,6 +158,28 @@ const treasuryPsRate: { national: number; state: number } = {
   state: 2500000,
 };
 
+/*
+ * ⚠️ DECLARED ABOVE THE OBJECT, NOT BELOW IT. `JP_ECONOMY` now references
+ * this, and a `const` referenced before its declaration throws
+ * `ReferenceError` at module load -- which typecheck does not catch here
+ * because the reference is legal TypeScript; only running it fails.
+ */
+/**
+ * Whether Japan's authored 1953 GDP figures are denominated in USD or in yen.
+ *
+ * Forwarded from `GDP_DENOMINATION_1953` in
+ * `src/lib/seeds/reference/gdpDenomination.ts`.
+ *
+ * ⚠ 1953 ONLY. That registry is the era table and holds no other preset, so
+ * this says nothing about how Japan's 1979 or modern series are denominated.
+ * A later era needing its own answer gets its own const, not a widened one.
+ *
+ * ⚠ "usd" IS LOAD-BEARING. Japan's authored 1953 macro series are already in
+ * USD, so the seeder must NOT convert them again at the JPY rate. Flipping this
+ * to "local" silently multiplies Japan's 1953 GDP by roughly the yen rate.
+ */
+export const JP_GDP_DENOMINATION_1953 = "usd";
+
 export const JP_ECONOMY: CountryEconomy = {
   currencyCode,
   nationalPolicyStateId,
@@ -187,6 +209,7 @@ export const JP_ECONOMY: CountryEconomy = {
   payoutCapPerTurn: 10000000,
   sovereignCorpLegalStructure: "jp_kk" as LegalStructureId,
   m2ToGdp1953: 0.45,
+  gdpDenomination1953: JP_GDP_DENOMINATION_1953,
 };
 
 /**
@@ -210,22 +233,6 @@ export const JP_INDEX_FUND_NAMES: Record<number, string> = {
  * not "correct" it toward its neighbours.
  */
 export const JP_NPP_INVESTING_MINIMUM = 34000;
-
-/**
- * Whether Japan's authored 1953 GDP figures are denominated in USD or in yen.
- *
- * Forwarded from `GDP_DENOMINATION_1953` in
- * `src/lib/seeds/reference/gdpDenomination.ts`.
- *
- * ⚠ 1953 ONLY. That registry is the era table and holds no other preset, so
- * this says nothing about how Japan's 1979 or modern series are denominated.
- * A later era needing its own answer gets its own const, not a widened one.
- *
- * ⚠ "usd" IS LOAD-BEARING. Japan's authored 1953 macro series are already in
- * USD, so the seeder must NOT convert them again at the JPY rate. Flipping this
- * to "local" silently multiplies Japan's 1953 GDP by roughly the yen rate.
- */
-export const JP_GDP_DENOMINATION_1953 = "usd";
 
 /** Which budget field carries central-to-region transfers. */
 export const JP_REGIONAL_GRANT_FIELD = "nationalGrant";

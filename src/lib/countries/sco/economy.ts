@@ -1,7 +1,6 @@
 import type { CountryEconomy } from "../contract";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import type { CorporationType } from "@/lib/constants/corporations";
-import type { LegalStructureId } from "@/lib/constants/legalStructures";
 
 /**
  * SCO's money.
@@ -67,6 +66,17 @@ const treasuryPsRate = {
   state: 30000,
 };
 
+/**
+ * Whether this country's authored 1953 GDP figures are denominated in USD or in
+ * local currency.
+ *
+ * ⚠ 1953 ONLY. `GDP_DENOMINATION_1953` is an era table and holds no other
+ * preset, so this says nothing about any later era.
+ */
+/* No SCO_GDP_DENOMINATION_1953: the table lists only the countries the 1953
+   world starts with, and SCO is not one of them. Later presets are uniformly
+   local-currency by design, so there is nothing to denominate. */
+
 export const SCO_ECONOMY: CountryEconomy = {
   currencyCode,
   nationalPolicyStateId,
@@ -104,14 +114,3 @@ export const SCO_ECONOMY: CountryEconomy = {
     treasuryPsRate,
   },
 };
-
-/**
- * Whether this country's authored 1953 GDP figures are denominated in USD or in
- * local currency.
- *
- * ⚠ 1953 ONLY. `GDP_DENOMINATION_1953` is an era table and holds no other
- * preset, so this says nothing about any later era.
- */
-/* No SCO_GDP_DENOMINATION_1953: the table lists only the countries the 1953
-   world starts with, and SCO is not one of them. Later presets are uniformly
-   local-currency by design, so there is nothing to denominate. */

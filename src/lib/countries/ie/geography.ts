@@ -42,13 +42,13 @@ import {
  * equality passed and Japan had two sources for every region.
  *
  * ⚠ THE PRESET KEYS COME FROM THE SNAPSHOT. Ireland authors 4 census
- * eras, 3 metric eras, 2 anchor eras and 3 region eras. The gaps are real:
+ * eras, 3 metric eras, 2 anchor eras and 7 region eras. The gaps are real:
  * an unauthored era inherits, and inventing a key for it would turn a fallback
  * into an authored value.
  */
 
 const regionNames: Record<string, string> = Object.fromEntries(
-  ieRegions.map((region) => [region._id, region.name])
+  ieRegions2023.map((region) => [region._id, region.name])
 );
 
 const censusBundles = {
@@ -71,8 +71,12 @@ const populationAnchors = {
 
 const regionBundles = {
   "1953-default": ieRegions1953,
-  "1979-default": ieRegions,
+  "1979-default": ieRegions1979,
+  "1991-default": ieRegions1991,
+  "1999-default": ieRegions1999,
+  "2007-default": ieRegions2007,
   "2019-default": ieRegions,
+  "2023-default": ieRegions2023,
 };
 
 export const IE_GEOGRAPHY: CountryGeography = {
