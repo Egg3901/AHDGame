@@ -1,3 +1,5 @@
+import type { CountryModifierPatch } from "@/lib/states/conditions/countryPatches";
+import { condition as c } from "@/lib/states/conditions/condition";
 import type { CountryGeography } from "../contract";
 import { deMetricPresets1953 } from "./data/deMetricPresets1953";
 import { deMetricPresets1979 } from "./data/deMetricPresets1979";
@@ -83,6 +85,39 @@ const regionBundles = {
   "2023-default": deRegions2023,
 };
 
+/** Base-era per-modifier threshold overrides and suppressions. */
+const modifierPatches: Record<string, CountryModifierPatch> = {
+  universal_healthcare: { suppress: true },
+  safe_streets: { suppress: true },
+  falling_crime: { suppress: true },
+  high_broadband: { suppress: true },
+  low_broadband: { suppress: true },
+  infrastructure_boom: { suppress: true },
+  free_press: { suppress: true },
+  poor_air_quality: { suppress: true },
+  corruption_concerns: { suppress: true },
+  high_corruption: { suppress: true },
+  balanced_budget: { suppress: true },
+  high_voter_turnout: { suppress: true },
+  good_recycling: { suppress: true },
+  innovation_economy: { suppress: true },
+  high_immigration: { suppress: true },
+  brain_gain: { suppress: true },
+  crime_wave: { suppress: true },
+  high_violent_crime: { suppress: true },
+  heavy_public_debt: { conditions: [c("governance", "debtToGdp", ">=", 70)] },
+  high_poverty: { conditions: [c("economic", "povertyRate", ">=", 20)] },
+  low_poverty: { conditions: [c("economic", "povertyRate", "<=", 14)] },
+  housing_stress: { conditions: [c("social", "housingAffordability", ">=", 68)] },
+  affordable_housing: { conditions: [c("social", "housingAffordability", "<=", 48)] },
+  research_hub: { conditions: [c("economic", "rdIntensity", ">=", 3.5)] },
+  green_transition: { conditions: [c("environment", "renewableEnergy", ">=", 75)] },
+  slow_growth: { conditions: [c("economic", "gdpGrowth", "<=", 0.8)] },
+  strong_growth: { conditions: [c("economic", "gdpGrowth", ">=", 1.8)] },
+  government_deficit: { suppress: true },
+  aging_population: { suppress: true },
+};
+
 export const DE_GEOGRAPHY: CountryGeography = {
   continent: DE_CONTINENT,
 
@@ -160,6 +195,7 @@ export const DE_GEOGRAPHY: CountryGeography = {
       election: "Germany 2025 Bundestag",
     },
   },
+  modifierPatches: modifierPatches,
   era1991Patches: {
     slow_growth: {
       conditions: [

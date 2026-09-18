@@ -362,6 +362,8 @@ const mapRegistry = {
  * metric, and `global` stays where it is because it belongs to everyone.
  */
 
+import { JP_MODIFIER_PATCHES } from "@/lib/countries/jp/data/jpModifierPatches";
+
 export const JP_GEOGRAPHY: CountryGeography = {
   continent: JP_CONTINENT,
   isoNumeric: JP_ISO_NUMERIC,
@@ -377,6 +379,7 @@ export const JP_GEOGRAPHY: CountryGeography = {
   populationAnchors,
   incomeAnchors: JP_INCOME_ANCHORS,
   calibrationTargets,
+  modifierPatches: JP_MODIFIER_PATCHES,
   era1991Patches,
   hazardGroups,
   mapRegistry,

@@ -1,3 +1,5 @@
+import type { CountryModifierPatch } from "@/lib/states/conditions/countryPatches";
+import { condition as c } from "@/lib/states/conditions/condition";
 import type { CountryGeography } from "../contract";
 import { ukMetricPresets1953 } from "./data/ukMetricPresets1953";
 import { ukMetricPresets1979 } from "./data/ukMetricPresets1979";
@@ -82,6 +84,25 @@ const regionBundles = {
   "2007-default": ukRegions2007,
   "2019-default": ukRegions,
   "2023-default": ukRegions2023,
+};
+
+/** Base-era per-modifier threshold overrides and suppressions. */
+const modifierPatches: Record<string, CountryModifierPatch> = {
+  high_poverty: { conditions: [c("economic", "povertyRate", ">=", 20)] },
+  low_poverty: { conditions: [c("economic", "povertyRate", "<=", 11)] },
+  crime_wave: {
+    conditions: [
+      c("publicSafety", "violentCrimeRate", ">=", 380),
+      c("publicSafety", "publicSafetyConfidence", "<=", 52),
+    ],
+  },
+  high_violent_crime: { conditions: [c("publicSafety", "violentCrimeRate", ">=", 400)] },
+  affordable_housing: { conditions: [c("social", "housingAffordability", "<=", 8)] },
+  housing_stress: { conditions: [c("social", "housingAffordability", ">=", 12)] },
+  corruption_concerns: { conditions: [c("governance", "corruptionIndex", ">=", 34)] },
+  free_press: { conditions: [c("mediaInformation", "pressFreedom", ">=", 80)] },
+  heavy_public_debt: { conditions: [c("governance", "debtToGdp", ">=", 100)] },
+  research_hub: { conditions: [c("economic", "rdIntensity", ">=", 2.0)] },
 };
 
 export const UK_GEOGRAPHY: CountryGeography = {
@@ -190,6 +211,7 @@ export const UK_GEOGRAPHY: CountryGeography = {
       election: "UK 2024 general (Labour landslide)",
     },
   },
+  modifierPatches: modifierPatches,
   era1991Patches: {
     free_press: {
       suppress: true,

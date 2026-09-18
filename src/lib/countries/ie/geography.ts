@@ -1,3 +1,5 @@
+import type { CountryModifierPatch } from "@/lib/states/conditions/countryPatches";
+import { condition as c } from "@/lib/states/conditions/condition";
 import type { CountryGeography } from "../contract";
 import { ieMetricPresets1953 } from "./data/ieMetricPresets1953";
 import { ieMetricPresets1991, ieMetricPresets2019 } from "./data/ieMetricPresets";
@@ -79,6 +81,38 @@ const regionBundles = {
   "2023-default": ieRegions2023,
 };
 
+/** Base-era per-modifier threshold overrides and suppressions. */
+const modifierPatches: Record<string, CountryModifierPatch> = {
+  universal_healthcare: { suppress: true },
+  safe_streets: { suppress: true },
+  falling_crime: { suppress: true },
+  high_life_expectancy: { suppress: true },
+  longevity: { suppress: true },
+  low_unemployment: { suppress: true },
+  poor_air_quality: { suppress: true },
+  corruption_concerns: { suppress: true },
+  high_corruption: { suppress: true },
+  free_press: { suppress: true },
+  balanced_budget: { suppress: true },
+  strong_safety_net: { suppress: true },
+  clean_water: { suppress: true },
+  green_transition: { suppress: true },
+  educated_workforce: { suppress: true },
+  innovation_economy: { suppress: true },
+  high_immigration: { suppress: true },
+  population_boom: { suppress: true },
+  brain_gain: { suppress: true },
+  youth_surge: { suppress: true },
+  crime_wave: { suppress: true },
+  high_violent_crime: { suppress: true },
+  housing_stress: { conditions: [c("social", "housingAffordability", ">=", 80)] },
+  affordable_housing: { conditions: [c("social", "housingAffordability", "<=", 55)] },
+  research_hub: { conditions: [c("economic", "rdIntensity", ">=", 2.4)] },
+  strong_growth: { conditions: [c("economic", "gdpGrowth", ">=", 3.8)] },
+  slow_growth: { conditions: [c("economic", "gdpGrowth", "<=", 1.5)] },
+  heavy_public_debt: { conditions: [c("governance", "debtToGdp", ">=", 50)] },
+};
+
 export const IE_GEOGRAPHY: CountryGeography = {
   continent: IE_CONTINENT,
 
@@ -148,6 +182,7 @@ export const IE_GEOGRAPHY: CountryGeography = {
       election: "Ireland 2020 Dáil (low confidence)",
     },
   },
+  modifierPatches: modifierPatches,
   era1991Patches: {
     affordable_housing: {
       conditions: [

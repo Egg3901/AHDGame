@@ -1,3 +1,5 @@
+import type { CountryModifierPatch } from "@/lib/states/conditions/countryPatches";
+import { condition as c } from "@/lib/states/conditions/condition";
 import type { CountryGeography } from "../contract";
 import { cnMetricPresets1953 } from "./data/cnMetricPresets1953";
 import { cnMetricPresets1979 } from "./data/cnMetricPresets1979";
@@ -83,6 +85,49 @@ const regionBundles = {
   "2023-default": cnRegions2023,
 };
 
+/** Base-era per-modifier threshold overrides and suppressions. */
+const modifierPatches: Record<string, CountryModifierPatch> = {
+  low_poverty: { suppress: true },
+  universal_healthcare: { suppress: true },
+  safe_streets: { suppress: true },
+  falling_crime: { suppress: true },
+  low_recidivism: { suppress: true },
+  crime_wave: { suppress: true },
+  high_violent_crime: { suppress: true },
+  poor_air_quality: { suppress: true },
+  corruption_concerns: { suppress: true },
+  high_corruption: { suppress: true },
+  high_public_trust: { suppress: true },
+  high_voter_turnout: { suppress: true },
+  social_cohesion: { suppress: true },
+  strong_safety_net: { suppress: true },
+  civic_flourishing: { suppress: true },
+  declining_population: { suppress: true },
+  government_deficit: { suppress: true },
+  press_suppression: { suppress: true },
+  informed_society: { suppress: true },
+  free_press: { suppress: true },
+  strong_growth: { conditions: [c("economic", "gdpGrowth", ">=", 6.0)] },
+  slow_growth: { conditions: [c("economic", "gdpGrowth", "<=", 3.5)] },
+  housing_stress: { conditions: [c("social", "housingAffordability", ">=", 82)] },
+  affordable_housing: { conditions: [c("social", "housingAffordability", "<=", 62)] },
+  research_hub: { conditions: [c("economic", "rdIntensity", ">=", 3.3)] },
+  green_transition: { conditions: [c("environment", "renewableEnergy", ">=", 45)] },
+  heavy_public_debt: { conditions: [c("governance", "debtToGdp", ">=", 90)] },
+  low_social_mobility: { suppress: true },
+  high_social_mobility: { conditions: [c("social", "socialMobility", ">=", 82)] },
+  high_broadband: { suppress: true },
+  low_broadband: { suppress: true },
+  infrastructure_boom: { suppress: true },
+  infrastructure_crisis: { suppress: true },
+  educated_workforce: {
+    conditions: [
+      c("education", "highSchoolGradRate", ">=", 92),
+      c("education", "workforceSkill", ">=", 78),
+    ],
+  },
+};
+
 export const CN_GEOGRAPHY: CountryGeography = {
   continent: CN_CONTINENT,
 
@@ -102,6 +147,7 @@ export const CN_GEOGRAPHY: CountryGeography = {
   rawMetrics: cnStateMetrics,
   mapRegistry: CN_MAP_REGISTRY,
   incomeAnchors: CN_INCOME_ANCHORS,
+  modifierPatches: modifierPatches,
   era1991Patches: {
     affordable_housing: {
       suppress: true,

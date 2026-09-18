@@ -1,3 +1,5 @@
+import type { CountryModifierPatch } from "@/lib/states/conditions/countryPatches";
+import { condition as c } from "@/lib/states/conditions/condition";
 import type { CountryGeography } from "../contract";
 import { brMetricPresets1953 } from "./data/brMetricPresets1953";
 import { brMetricPresets1979 } from "./data/brMetricPresets1979";
@@ -81,6 +83,38 @@ const regionBundles = {
   "2023-default": brRegions2023,
 };
 
+/** Base-era per-modifier threshold overrides and suppressions. */
+const modifierPatches: Record<string, CountryModifierPatch> = {
+  universal_healthcare: { suppress: true },
+  crime_wave: { suppress: true },
+  high_violent_crime: { suppress: true },
+  poor_air_quality: { suppress: true },
+  corruption_concerns: { suppress: true },
+  high_corruption: { suppress: true },
+  low_public_trust: { suppress: true },
+  government_deficit: { suppress: true },
+  fiscal_crisis: { suppress: true },
+  green_transition: { suppress: true },
+  high_voter_turnout: { suppress: true },
+  civic_flourishing: { suppress: true },
+  information_disorder: { suppress: true },
+  media_polarization: { suppress: true },
+  free_press: { suppress: true },
+  high_poverty: { conditions: [c("economic", "povertyRate", ">=", 40)] },
+  low_poverty: { conditions: [c("economic", "povertyRate", "<=", 18)] },
+  housing_stress: { conditions: [c("social", "housingAffordability", ">=", 55)] },
+  affordable_housing: { conditions: [c("social", "housingAffordability", "<=", 42)] },
+  research_hub: { conditions: [c("economic", "rdIntensity", ">=", 1.6)] },
+  strong_growth: { conditions: [c("economic", "gdpGrowth", ">=", 4.0)] },
+  slow_growth: { conditions: [c("economic", "gdpGrowth", "<=", 2.5)] },
+  low_social_mobility: { suppress: true },
+  income_inequality: { suppress: true },
+  food_insecurity: { suppress: true },
+  social_breakdown: { suppress: true },
+  youth_surge: { suppress: true },
+  low_life_expectancy: { suppress: true },
+};
+
 export const BR_GEOGRAPHY: CountryGeography = {
   continent: BR_CONTINENT,
 
@@ -142,6 +176,7 @@ export const BR_GEOGRAPHY: CountryGeography = {
       election: "Brazil 2022 presidential (Lula v Bolsonaro)",
     },
   },
+  modifierPatches: modifierPatches,
   era1991Patches: {
     affordable_housing: {
       conditions: [

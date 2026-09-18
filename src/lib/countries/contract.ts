@@ -454,6 +454,16 @@ export interface CountryGeography {
   readonly incomeAnchors?: NormalAnchor[];
   /** TARGETS from seeds/calibration/targets.ts. D5 owns this, not the economy. */
   readonly calibrationTargets?: Partial<Record<EraId, CalibrationTarget>>;
+  /**
+   * Base-era per-modifier threshold overrides and suppressions, the sibling of
+   * `era1991Patches` below.
+   *
+   * ⚠️ THE TWO HALVES DRIFTED APART FOR NO REASON. The 1991 half has forwarded
+   * to the folder since the first conversion; the base half kept its literals in
+   * `countryPatches.ts` for every country but Japan, so the same country's
+   * patches lived in two places depending on the era. Both forward now.
+   */
+  readonly modifierPatches?: Record<string, CountryModifierPatch>;
   readonly era1991Patches?: Record<string, CountryModifierPatch>;
   readonly hazardGroups?: Partial<Record<HazardTag, string[]>>;
   readonly mapRegistry: CountryMapConfig;

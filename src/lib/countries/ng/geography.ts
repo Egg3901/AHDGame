@@ -1,3 +1,5 @@
+import type { CountryModifierPatch } from "@/lib/states/conditions/countryPatches";
+import { condition as c } from "@/lib/states/conditions/condition";
 import type { CountryGeography } from "../contract";
 import { ngMetricPresets1953 } from "./data/ngMetricPresets1953";
 import { ngMetricPresets1991, ngMetricPresets2019 } from "./data/ngMetricPresets";
@@ -73,7 +75,45 @@ const regionBundles = {
   "2023-default": ngRegions2023,
 };
 
+/** Base-era per-modifier threshold overrides and suppressions. */
+const modifierPatches: Record<string, CountryModifierPatch> = {
+  // Crisis baselines are high nationally — suppress flat metrics, keep spread.
+  universal_healthcare: { suppress: true },
+  crime_wave: { suppress: true },
+  high_violent_crime: { suppress: true },
+  poor_air_quality: { suppress: true },
+  corruption_concerns: { suppress: true },
+  high_corruption: { suppress: true },
+  low_public_trust: { suppress: true },
+  government_deficit: { suppress: true },
+  fiscal_crisis: { suppress: true },
+  information_disorder: { suppress: true },
+  media_polarization: { suppress: true },
+  free_press: { suppress: true },
+  low_broadband: { suppress: true },
+  healthcare_crisis: { suppress: true },
+  high_preventable_mortality: { suppress: true },
+  weak_healthcare_capacity: { suppress: true },
+  low_life_expectancy: { suppress: true },
+  high_unemployment: { suppress: true },
+  skills_gap: { suppress: true },
+  infrastructure_crisis: { suppress: true },
+  high_poverty: { conditions: [c("economic", "povertyRate", ">=", 50)] },
+  low_poverty: { conditions: [c("economic", "povertyRate", "<=", 30)] },
+  housing_stress: { conditions: [c("social", "housingAffordability", ">=", 58)] },
+  affordable_housing: { conditions: [c("social", "housingAffordability", "<=", 48)] },
+  research_hub: { conditions: [c("economic", "rdIntensity", ">=", 0.28)] },
+  strong_growth: { conditions: [c("economic", "gdpGrowth", ">=", 3.8)] },
+  slow_growth: { conditions: [c("economic", "gdpGrowth", "<=", 2.2)] },
+  food_insecurity: { suppress: true },
+  low_social_mobility: { suppress: true },
+  income_inequality: { suppress: true },
+  social_breakdown: { suppress: true },
+  youth_surge: { suppress: true },
+};
+
 export const NG_GEOGRAPHY: CountryGeography = {
+  modifierPatches,
   continent: NG_CONTINENT,
 
   isoNumeric: NG_ISO_NUMERIC,
