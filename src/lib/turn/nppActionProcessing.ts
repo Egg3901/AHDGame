@@ -1126,14 +1126,26 @@ async function foundNppCorporationsSurplus(
   const rng = makeSeededRng(`npp-found-corp:${currentTurn}${NPP_ACTION_RNG_SALT}`);
   const fxByCcy = await loadFxRatesByCurrency(db);
 
+  // Which candidates already sit in a CEO chair, in one read instead of a
+  // `findOne` per candidate. Same predicate as before; this is only a
+  // short-circuit — `nppFoundCorporation` re-checks for its other callers.
+  const seatedCeoIds = new Set(
+    (
+      await db
+        .collection<Corporation>("corporations")
+        .find(
+          { ceoId: { $in: candidates.map((npp) => npp._id) }, ceoVacant: { $ne: true } },
+          { projection: { ceoId: 1 } }
+        )
+        .toArray()
+    ).map((corp) => corp.ceoId.toString())
+  );
+
   for (const npp of candidates) {
     const archetype = deriveCeoArchetype(npp.personality);
     if (rng() >= NPP_FOUNDING_BASE_PROBABILITY_BY_ARCHETYPE[archetype]) continue;
 
-    const alreadyCeo = await db
-      .collection<Corporation>("corporations")
-      .findOne({ ceoId: npp._id, ceoVacant: { $ne: true } }, { projection: { _id: 1 } });
-    if (alreadyCeo) continue;
+    if (seatedCeoIds.has(npp._id.toString())) continue;
 
     const sectorType = CORPORATION_TYPES[
       Math.floor(rng() * CORPORATION_TYPES.length)
