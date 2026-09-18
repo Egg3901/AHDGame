@@ -117,6 +117,7 @@ function setupOpenSellOrder(opts: {
   orderLimitPrice: number;
   currentSharePrice: number;
   heldShares: number;
+  sharesDebitedAtCreation?: boolean;
 }) {
   const orderDoc = {
     _id: new ObjectId(),
@@ -128,6 +129,7 @@ function setupOpenSellOrder(opts: {
     pricePerShare: opts.orderLimitPrice,
     escrowAmount: 0,
     status: "open",
+    ...(opts.sharesDebitedAtCreation ? { sharesDebitedAtCreation: true } : {}),
   };
   db.collection("shareOrders").find.mockReturnValue({
     toArray: vi.fn().mockResolvedValue([orderDoc]),
@@ -363,6 +365,49 @@ describe("fillPendingShareOrders", () => {
         }),
       ])
     );
+  });
+
+  it("does not debit character holdings twice when the sell order reserved shares", async () => {
+    const { fillPendingShareOrders } = await import("./shareOrders");
+    const corpId = new ObjectId();
+    const sellerId = new ObjectId();
+    setupOpenSellOrder({
+      corpId,
+      characterId: sellerId,
+      shares: 10,
+      orderLimitPrice: 90,
+      currentSharePrice: 100,
+      heldShares: 0,
+      sharesDebitedAtCreation: true,
+    });
+    const pool = db.collection("equityMarketPools");
+    mockPoolRead(pool, {
+      _id: "USD",
+      cashLocal: 245,
+      targetCashLocal: 245,
+    });
+    pool.updateOne.mockResolvedValue({ matchedCount: 1, modifiedCount: 1 });
+
+    await fillPendingShareOrders(db as unknown as Db, new Date(), 258);
+
+    const corpOps = db.collection("corporations").bulkWrite.mock.calls[0][0];
+    expect(corpOps).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          updateOne: expect.objectContaining({
+            update: expect.objectContaining({
+              $inc: expect.objectContaining({ publicFloat: 2 }),
+            }),
+          }),
+        }),
+      ])
+    );
+    expect(
+      corpOps.some(
+        (op: { updateOne: { update: { $inc?: Record<string, number> } } }) =>
+          op.updateOne.update.$inc?.["shareholders.$.shares"] !== undefined
+      )
+    ).toBe(false);
   });
 
   it("stamps avgCostPerShare on newly-pushed shareholder entries at current market price", async () => {

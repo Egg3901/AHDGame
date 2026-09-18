@@ -138,7 +138,11 @@ export async function fillPendingShareOrders(db: Db, now: Date, turn: number): P
       }
 
       let shares = Math.max(0, order.sharesRemaining);
-      if (!order.placerCorporationId && order.characterId) {
+      if (
+        !order.placerCorporationId &&
+        order.characterId &&
+        order.sharesDebitedAtCreation !== true
+      ) {
         const sellerId = order.characterId.toString();
         const knownShares = remainingCharacterShares.has(sellerId)
           ? remainingCharacterShares.get(sellerId)!
@@ -362,7 +366,7 @@ export async function fillPendingShareOrders(db: Db, now: Date, turn: number): P
         // holding. Capping here stops the fill from driving the seller negative
         // and dumping a pre-split share count into the float (ticket #1154).
         let toFill = order.sharesRemaining;
-        if (!order.placerCorporationId && charIdStr) {
+        if (!order.placerCorporationId && charIdStr && order.sharesDebitedAtCreation !== true) {
           const held =
             (corp.shareholders ?? []).find((sh) => sh.characterId?.toString() === charIdStr)
               ?.shares ?? 0;
@@ -423,9 +427,10 @@ export async function fillPendingShareOrders(db: Db, now: Date, turn: number): P
         corpFloatDeltas.set(corpIdStr, (corpFloatDeltas.get(corpIdStr) ?? 0) + toFill);
 
         // Corp sell orders already debited shares from the corp's shareholder
-        // entry at order-creation time — do NOT debit again.
-        // Character sell orders only reserved shares, so debit now.
-        if (!order.placerCorporationId && charIdStr) {
+        // entry at order-creation time. New character sell orders do the same;
+        // legacy rows without the marker only reserved shares and still need a
+        // debit at fill time.
+        if (!order.placerCorporationId && charIdStr && order.sharesDebitedAtCreation !== true) {
           const delta = corpShareholderUpdates.get(corpIdStr) ?? new Map<string, ShareDelta>();
           const existing = delta.get(charIdStr) ?? { delta: 0 };
           delta.set(charIdStr, { delta: existing.delta - toFill });
