@@ -6,9 +6,14 @@ import {
 } from "./singleplayerFeatureFlags";
 
 describe("singleplayer creation feature catalog", () => {
-  it("covers every persisted boolean default except the derived autonomy compatibility flag", () => {
+  it("covers every player-facing boolean default and excludes internal experiment flags", () => {
     const expected = Object.entries(DEFAULT_GAME_STATE_FLAGS)
-      .filter(([key, value]) => typeof value === "boolean" && key !== "nppAutonomyEnabled")
+      .filter(
+        ([key, value]) =>
+          typeof value === "boolean" &&
+          key !== "nppAutonomyEnabled" &&
+          key !== "frontierEntryExperimentEnabled"
+      )
       .map(([key]) => key)
       .sort();
     expect(SINGLEPLAYER_FEATURE_FLAGS.map(({ key }) => key).sort()).toEqual(expected);

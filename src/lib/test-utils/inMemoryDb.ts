@@ -217,13 +217,50 @@ function evalExpr(expr: unknown, doc: Doc): unknown {
   }
 }
 
+/**
+ * Every value a dotted path can resolve to, expanding arrays Mongo-style: a
+ * segment against an array fans out to each element's traversal. Without this
+ * a filter like `{ "shareholders.corporationId": id }` silently matched
+ * nothing (the path dead-ended at the array), which is exactly the
+ * match-nothing-while-lying failure mode this harness exists to prevent.
+ */
+function getPathValues(doc: Doc, path: string): unknown[] {
+  let values: unknown[] = [doc];
+  for (const part of safePathParts(path)) {
+    const next: unknown[] = [];
+    for (const value of values) {
+      if (Array.isArray(value)) {
+        if (/^\d+$/.test(part)) {
+          const element = value[Number(part)];
+          if (element !== undefined) next.push(element);
+        } else {
+          for (const element of value) {
+            if (!isContainer(element)) continue;
+            const resolved = readPart(element, part);
+            if (resolved !== undefined) next.push(resolved);
+          }
+        }
+      } else if (isContainer(value)) {
+        const resolved = readPart(value, part);
+        if (resolved !== undefined) next.push(resolved);
+      }
+    }
+    values = next;
+  }
+  return values;
+}
+
 function matchesFilter(doc: Doc, filter: Doc): boolean {
   return Object.entries(filter).every(([key, condition]) => {
     if (key === "$or") return (condition as Doc[]).some((sub) => matchesFilter(doc, sub));
     if (key === "$and") return (condition as Doc[]).every((sub) => matchesFilter(doc, sub));
     if (key === "$nor") return !(condition as Doc[]).some((sub) => matchesFilter(doc, sub));
     if (key === "$expr") return Boolean(evalExpr(condition, doc));
-    return matchesCondition(getPath(doc, key), condition);
+    // The unexpanded read first, so whole-array equality keeps its current
+    // meaning; then every array-expanded traversal, so dotted paths into
+    // arrays match when ANY element does.
+    if (matchesCondition(getPath(doc, key), condition)) return true;
+    return getPathValues(doc, key).some((value) => matchesCondition(value, condition));
   });
 }
 
@@ -266,6 +303,30 @@ function applyUpdate(doc: Doc, update: Update): void {
         } else {
           setPath(doc, path, [...base, value]);
         }
+      }
+    } else if (op === "$pull") {
+      // Selector form only (`$pull: { path: { field: value } }`): drop every
+      // array element matching ALL selector fields. Pulling an absent element
+      // is a no-op, which is what makes pull-then-credit legs replay-safe.
+      for (const [path, selector] of Object.entries(fields as Doc)) {
+        const current = getPath(doc, path);
+        if (current === undefined) continue;
+        if (!Array.isArray(current)) {
+          throw new Error(`inMemoryDb: $pull target "${path}" is not an array`);
+        }
+        if (!isPlainObject(selector)) {
+          throw new Error(`inMemoryDb: $pull selector for "${path}" is not supported`);
+        }
+        setPath(
+          doc,
+          path,
+          current.filter(
+            (item) =>
+              !Object.entries(selector).every(([key, want]) =>
+                sameValue(isPlainObject(item) ? (item as Doc)[key] : undefined, want)
+              )
+          )
+        );
       }
     } else {
       throw new Error(`inMemoryDb: unsupported update operator ${op}`);

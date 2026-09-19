@@ -303,6 +303,28 @@ export interface CorporationLookups {
   eraUnitScale: number;
 }
 
+/**
+ * Per-turn SOE treasury-backing reconciliation (₳ anchor). Persisted to
+ * `corporationHistory.soeBacking` (re-denominated to the corp's currency) so
+ * charts and forensics can distinguish treasury-covered operating loss from
+ * the non-coverable residual. `cipHeldAnchor` only names the residual —
+ * capital construction never enters cover math.
+ */
+export interface SoeBackingSnapshot {
+  /** Total negative-liquidCapital hole at backing time. */
+  shortfallAnchor: number;
+  /** This turn's operating loss (positive = loss). */
+  realizedLossAnchor: number;
+  /** `snapshot` = this turn's realized snapshot; `estimate` = margin fallback. */
+  realizedSource: "snapshot" | "estimate";
+  /** What the treasury paid. */
+  coveredAnchor: number;
+  /** Outstanding construction-in-progress held off-cover. Explains the residual. */
+  cipHeldAnchor: number;
+  /** `shortfallAnchor − coveredAnchor`. */
+  residualAnchor: number;
+}
+
 /** Named type for the anonymous snapshot object that was inline in the original function. */
 export interface CorpSnapshot {
   corpId: ObjectId;
@@ -338,6 +360,12 @@ export interface CorpSnapshot {
   rdScore: number;
   dividendRate: number;
   liquidCapital: number;
+  /**
+   * SOE treasury-backing reconciliation for this turn (₳ anchor). Set by the
+   * backing fold before history persistence; absent on private corps and on
+   * SOEs with no shortfall. Older snapshots lack this field.
+   */
+  soeBacking?: SoeBackingSnapshot;
   /** Local-currency amount swept treasury → escrow this turn (0 unless escrow mode). */
   escrowFundingMove: number;
   /** Escrow balance after this turn's funding sweep, local currency. */

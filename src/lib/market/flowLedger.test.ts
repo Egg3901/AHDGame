@@ -1,5 +1,8 @@
 import { describe, it, expect } from "vitest";
 import type { CommodityType } from "@/lib/constants/commodities";
+import { clearAllCommodities } from "@/lib/trade/snapshot";
+import { applyTradeConvergence } from "@/lib/trade/convergence";
+import { TRADE_PRICE_CONVERGENCE_K } from "@/lib/trade/constants";
 import { buildCommodityFlowDocs } from "./flowLedger";
 
 type Balance = { supply: number; demand: number };
@@ -107,5 +110,28 @@ describe("buildCommodityFlowDocs", () => {
     expect(docs[0].supplyUnits).toBe(10.12);
     expect(docs[0].demandUnits).toBe(20.99);
     expect(docs[0].demandUnitsLedger).toBe(20.99);
+  });
+
+  it("records an importer gap from demand remaining after covered imports", () => {
+    const byCountry = new Map<string, Map<CommodityType, Balance>>([
+      ["US", new Map([["oil", { supply: 100, demand: 200 }]])],
+      ["UK", new Map([["oil", { supply: 300, demand: 100 }]])],
+    ]);
+    const clearing = clearAllCommodities(["US", "UK"], byCountry, () => 1);
+    const importsBeforeConvergence = clearing.get("oil")!.perCountry.US.imports;
+    expect(importsBeforeConvergence).toBeGreaterThan(0);
+
+    applyTradeConvergence(["US", "UK"], byCountry, clearing, TRADE_PRICE_CONVERGENCE_K);
+    const docs = buildCommodityFlowDocs(
+      args({
+        global: new Map([["oil", { supply: 400, demand: 300 }]]),
+        byCountry,
+        nationalPricesByCommodity: new Map([["oil", { US: 100, UK: 100 }]]),
+      })
+    );
+    const us = docs[0].byCountry.US;
+    expect(us.demand).toBeLessThan(200);
+    expect(us.demand).toBe(200 - importsBeforeConvergence * TRADE_PRICE_CONVERGENCE_K);
+    expect(us.supply).toBe(100);
   });
 });

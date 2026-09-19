@@ -630,6 +630,7 @@ export function electionToLarpYear(
       return years.governorStateSenate + (cycle - 1) * 4;
     case "commons":
     case "snap_commons":
+    case "special_commons":
     case "regionalCouncil":
       // 5-year UK Commons cycle
       return years.ukCommons + (cycle - 1) * 5;

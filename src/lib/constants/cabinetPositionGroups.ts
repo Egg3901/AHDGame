@@ -47,6 +47,7 @@ const GROUPS: Record<string, Record<string, CabinetGroup>> = {
     northern_ireland: "Nations",
     scotland: "Nations",
     wales: "Nations",
+    chief_whip: "Centre",
   },
   JP: {
     chief_cabinet_secretary: "Centre",

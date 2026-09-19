@@ -132,9 +132,10 @@ export async function launchGovernmentProspect(
   const costLocal = Math.round(costAnchor * fxRate);
 
   if (level === "national") {
-    // NO pre-check. `treasuryBalance` is the SIGNED national cash position, so
-    // a negative balance IS the national debt and `balance < cost` refused every
-    // survey for an already-indebted country. `spendFromTreasury` is built to
+    // NO pre-check. `treasuryBalance` is the SIGNED national cash position,
+    // separate from the bond-ledger `debt.principal` (refs #1975), so
+    // a `balance < cost` guard refused every survey for a country already
+    // carrying a cash hole. `spendFromTreasury` is built to
     // borrow — it splits the spend into fromSurplus and addedToDebt — and the
     // rest of the app spends into debt the same way.
     await spendFromTreasury(db, countryId, costLocal);

@@ -81,6 +81,7 @@ import { migration as centralBankPricingPhaseIn } from "./entries/2026-09-11-cen
 import { migration as providerIdentityIndexes } from "./entries/2026-09-10-provider-identity-indexes";
 import { migration as sourceFenceIndexes } from "./entries/2026-09-11-source-fence-indexes";
 import { migration as repriceCurrentSovereignRisk } from "./entries/2026-09-12-reprice-current-sovereign-risk";
+import { migration as playableRegionTextureResiduals } from "./entries/2026-09-17-playable-region-texture-residuals";
 import { migration as identityObservationsBackfill } from "./entries/2026-09-16-identity-observations-backfill";
 import { migration as repairDuplicateCorporationSequentialIds } from "./entries/2026-09-17-repair-duplicate-corporation-sequential-ids";
 import { migration as normalizeShareCorporateActions } from "./entries/2026-09-18-normalize-share-corporate-actions";
@@ -269,6 +270,10 @@ export const MIGRATIONS: Migration[] = [
   // Corporate actions remain available for cost-basis replay, but contribute
   // no executable volume or notional to share-market aggregates.
   normalizeShareCorporateActions,
+  // Issue #704: live 1953 worlds seeded flat playable boards (baseline +
+  // sparse modifiers). Fold the generated regional texture into residuals so
+  // regions glide to their textured equilibrium instead of lurching.
+  playableRegionTextureResiduals,
 ];
 
 // D13 rollback drill — registered but deliberately OUTSIDE the normal chain.

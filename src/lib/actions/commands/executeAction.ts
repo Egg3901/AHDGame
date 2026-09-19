@@ -176,6 +176,7 @@ export async function executeCharacterAction(
     const validation = canPerformAction(current, actionType, state || undefined, {
       forexEnabled,
       homeFxRate: campaignRate,
+      preset: gameState?.preset,
       rpgStatsEnabled,
     });
     if (!validation.canPerform) {
@@ -251,7 +252,12 @@ export async function executeCharacterAction(
         message: `Donated ${formatLocalFunds(convertAmount, homeCurrency)} personal funds — ${formatLocalFunds(convertedLocal, homeCurrency)} added to campaign coffers. +${infamy} Infamy.`,
       };
     } else {
-      effect = action.effect(current, state || undefined, { formatFunds: fundsFormatter });
+      effect = action.effect(current, state || undefined, {
+        formatFunds: fundsFormatter,
+        // GDP-baseline era for cost math: the world's reset preset, so
+        // historical worlds price in their own denomination (issue #798).
+        preset: gameState?.preset,
+      });
     }
 
     // effect.fundsChange and effect.cashOnHandChange are in ANCHOR units.

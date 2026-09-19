@@ -67,6 +67,10 @@ import {
 import { computeHoldingsValueAnchor } from "@/lib/indexFunds/fundAllocation";
 import { deployBondReserveFromCash } from "@/lib/indexFunds/fundBondReserve";
 import {
+  domesticCoverageEnabled,
+  ensureDomesticSovereignBondFunds,
+} from "@/lib/indexFunds/domesticSovereignCoverage/ensure";
+import {
   sumFundBondHoldingsByFundId,
   sumFundBondHoldingsValueAnchor,
 } from "@/lib/bonds/fundBondHoldings";
@@ -125,6 +129,8 @@ export type FundCronResult = {
   redemptionsPaid: number;
   redemptionsQueued: number;
   bondDeployments: number;
+  /** #1001: domestic sovereign-bond funds ensured this pass (gated, else 0). */
+  domesticCoverageFundsEnsured: number;
   nppsProcessed: number;
   nppInvested: number;
   /** A5: sponsored funds charged their expense fee this pass. */
@@ -1099,6 +1105,7 @@ export async function runIndexFundCron(
     redemptionsPaid: 0,
     redemptionsQueued: 0,
     bondDeployments: 0,
+    domesticCoverageFundsEnsured: 0,
     nppsProcessed: 0,
     nppInvested: 0,
     expenseFeesCharged: 0,
@@ -1149,11 +1156,24 @@ export async function runIndexFundCron(
     {
       projection: {
         indexFundBondLiquidityEnabled: 1,
+        domesticSovereignBondCoverageEnabled: 1,
         equityLiquidityFacilityEnabled: 1,
       },
     }
   );
   const bondLiquidityEnabled = liquidityConfig?.indexFundBondLiquidityEnabled === true;
+  // #1001 domestic coverage: off (or unset) skips the ensure entirely, so the
+  // pass is unchanged. On, missing home-sovereign funds are seeded before the
+  // serviceable-fund read so they deploy real cash into home paper this turn.
+  if (domesticCoverageEnabled(liquidityConfig)) {
+    try {
+      const coverage = await ensureDomesticSovereignBondFunds(db, { enabled: true });
+      result.domesticCoverageFundsEnsured += coverage.ensured.length;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      result.errors.push(`Domestic coverage ensure: ${message}`);
+    }
+  }
   const equityLiquidityEnabled = liquidityConfig?.equityLiquidityFacilityEnabled === true;
   const forexEnabled = await isForexEnabled();
   const exchangeRates = await loadExchangeRates(db);

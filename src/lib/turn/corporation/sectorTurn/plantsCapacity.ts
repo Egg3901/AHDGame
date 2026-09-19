@@ -11,6 +11,7 @@
  * under depreciation. No reads or writes here, only the turn inputs.
  */
 import { activeCapacityFraction } from "@/lib/corporations/investment/rules";
+import { getStrategy } from "@/lib/constants/sectorStrategies";
 import { seedCapitalStock } from "@/lib/market/capital";
 import { unitYieldForSupply } from "@/lib/constants/capacityEconomy";
 import type { CorporationType } from "@/lib/constants/corporations";
@@ -18,7 +19,7 @@ import { COMMODITY_BASE_PRICES, type CommodityType } from "@/lib/constants/commo
 import type { CorporateSector, Corporation } from "@/lib/db/types";
 import { advanceCapitalStock } from "@/lib/market/capital";
 import { advanceSectorPlantLedger } from "@/lib/corporations/plantLedger";
-import { healAutoRetoolOpexAnchor } from "@/lib/corporations/retoolRescale";
+import { healRetoolStockBasis, type RetoolStockBasisHeal } from "@/lib/corporations/retoolRescale";
 import {
   retoolOperatingCapacityRatio,
   retoolMeasurementRatio,
@@ -72,7 +73,7 @@ export interface PlantsCapacityResult {
   plantsMixPriceYield: number;
   plantsMixPrice: number;
   storedOtherOpexAnchor: number | null;
-  healedOpex: ReturnType<typeof healAutoRetoolOpexAnchor>;
+  healedOpex: RetoolStockBasisHeal | null;
   retoolCapacityRatio: number;
   priorProductionUnitRatio: number;
   plantsCapacity: number;
@@ -105,8 +106,65 @@ export function computePlantsCapacity(input: PlantsCapacityInput): PlantsCapacit
     embargoLegacyMothball,
   } = input;
 
+  // In-flight auto-retools historically rescaled capitalStock but left the
+  // per-unit residual on the old unit basis. Worse, transitions committed
+  // before the rescale existed (or under capital mode, where the RPU basis
+  // does not apply) surface under plants with source-basis stock and no
+  // (or explicitly false) rescale flag: stamping the flag there without
+  // converting the stock lets the blend ratio manufacture unsupported
+  // operating capacity (issue #2009 - 2,314.82 source units x ~390 blend =
+  // 903,166 operating units on an oil_gas to rare_earth_mining retool).
+  // Heal on the next sector-turn write while transitionFromStrategyId
+  // evidence remains; no mongo script.
+  const storedOtherOpexAnchor =
+    typeof sector.otherOpexPerUnitAnchor === "number" &&
+    Number.isFinite(sector.otherOpexPerUnitAnchor)
+      ? sector.otherOpexPerUnitAnchor
+      : null;
+  const healedOpex = healRetoolStockBasis({
+    plantsEnabled: plantsEnabled && !embargoLegacyMothball,
+    isAutoRetool: corp.ceoType === "npp" || sector.autoStrategyAdoptedAtTurn != null,
+    sectorType: sector.sectorType as CorporationType,
+    strategyId: sector.strategyId,
+    transitionFromStrategyId: sector.transitionFromStrategyId,
+    transitionStartTurn: sector.transitionStartTurn,
+    plantsStartTurn: sector.plantsStartTurn,
+    retoolRescaleApplied: sector.retoolRescaleApplied,
+    capitalStock:
+      typeof sector.capitalStock === "number" && Number.isFinite(sector.capitalStock)
+        ? sector.capitalStock
+        : undefined,
+    otherOpexPerUnitAnchor: storedOtherOpexAnchor ?? undefined,
+  });
+  // The capacity the advance starts from is on the destination basis: either
+  // it was converted at the retool boundary, or the heal above converted it
+  // just now. Running the advance off unconverted stock is what mints the
+  // unsupported capacity, so the working stock - not just the stamp - moves.
   const storedCapacity =
     typeof sector.capitalStock === "number" && sector.capitalStock > 0 ? sector.capitalStock : 0;
+  const workingCapacity =
+    healedOpex?.capitalStock != null ? Math.max(0, healedOpex.capitalStock) : storedCapacity;
+  const retoolBasis = {
+    sectorType: sector.sectorType,
+    strategyId: sector.strategyId,
+    transitionFromStrategyId: sector.transitionFromStrategyId,
+    transitionStartTurn: sector.transitionStartTurn,
+    retoolRescaleApplied: healedOpex?.retoolRescaleApplied ?? sector.retoolRescaleApplied,
+    operatingCapacityTurn: sector.operatingCapacityTurn,
+    currentTurn,
+  };
+  const retoolCapacityRatio = plantsEnabled ? retoolOperatingCapacityRatio(retoolBasis) : 1;
+  // Flip seed basis: owned stock converts to destination units at the retool
+  // boundary, so the seed arm must be destination-basis too while the blend
+  // ratio applies. Seeding from the blended recipe mixes bases in the max():
+  // the blended count can exceed the converted count and mint capacity the
+  // sector never built (measured ~2% on a manufacturing standard to premium
+  // flip, far more on extreme pairs). Off-transition the blended recipe is
+  // the destination recipe, so this is a no-op there.
+  const flipSeedSupply =
+    isFlipTurn && retoolCapacityRatio !== 1 && sector.transitionFromStrategyId
+      ? (getStrategy(sector.sectorType, sector.strategyId ?? "standard").supply ?? strategySupply)
+      : strategySupply;
 
   // D12: a mothballed sector's plants are cold — they produce nothing, offer
   // nothing (its persisted `producedUnits` is what the clearing pre-pass reads
@@ -120,15 +178,15 @@ export function computePlantsCapacity(input: PlantsCapacityInput): PlantsCapacit
   const plantsBaseStock = plantsEnabled
     ? isFlipTurn
       ? Math.max(
-          storedCapacity,
+          workingCapacity,
           seedCapitalStock(
             preFlipNameplateRevenue,
-            strategySupply ?? {},
+            flipSeedSupply ?? {},
             COMMODITY_BASE_PRICES,
             eraUnitScale
           )
         )
-      : storedCapacity
+      : workingCapacity
     : 0;
   const plantLedger = plantsEnabled
     ? advanceSectorPlantLedger(sector, plantsBaseStock, landedBuildUnits)
@@ -214,33 +272,6 @@ export function computePlantsCapacity(input: PlantsCapacityInput): PlantsCapacit
     ? unitYieldForSupply(strategySupply ?? {}, eraUnitScale)
     : 0;
   const plantsMixPrice = plantsMixPriceYield > 0 ? 1 / plantsMixPriceYield : 0;
-  // In-flight auto-retools historically rescaled capitalStock but left this
-  // per-unit residual on the old unit basis. Heal on the next sector-turn
-  // write while transitionFromStrategyId evidence remains; no mongo script.
-  const storedOtherOpexAnchor =
-    typeof sector.otherOpexPerUnitAnchor === "number" &&
-    Number.isFinite(sector.otherOpexPerUnitAnchor)
-      ? sector.otherOpexPerUnitAnchor
-      : null;
-  const healedOpex = healAutoRetoolOpexAnchor({
-    plantsEnabled: plantsEnabled && !embargoLegacyMothball,
-    isAutoRetool: corp.ceoType === "npp" || sector.autoStrategyAdoptedAtTurn != null,
-    transitionFromStrategyId: sector.transitionFromStrategyId,
-    strategyId: sector.strategyId,
-    sectorType: sector.sectorType as CorporationType,
-    retoolRescaleApplied: sector.retoolRescaleApplied,
-    otherOpexPerUnitAnchor: storedOtherOpexAnchor ?? undefined,
-  });
-  const retoolBasis = {
-    sectorType: sector.sectorType,
-    strategyId: sector.strategyId,
-    transitionFromStrategyId: sector.transitionFromStrategyId,
-    transitionStartTurn: sector.transitionStartTurn,
-    retoolRescaleApplied: healedOpex?.retoolRescaleApplied ?? sector.retoolRescaleApplied,
-    operatingCapacityTurn: sector.operatingCapacityTurn,
-    currentTurn,
-  };
-  const retoolCapacityRatio = plantsEnabled ? retoolOperatingCapacityRatio(retoolBasis) : 1;
   const plantsCapacity = plantsOwnedCapacity * retoolCapacityRatio;
   const priorProductionUnitRatio = plantsEnabled ? retoolMeasurementRatio(retoolBasis) : 1;
   // The nameplate plants writes back to `sector.revenue`: what the OWNED

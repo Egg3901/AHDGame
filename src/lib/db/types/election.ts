@@ -19,7 +19,13 @@ export type ElectionType = "senate" | "house" | "stateSenate" | "governor" | "pr
  * "regionalCouncil" — UK regional council elections (five annual cohorts)
  */
 export type UKElectionType =
-  "commons" | "primeMinister" | "holyrood" | "senedd" | "regionalCouncil";
+  | "commons"
+  | "snap_commons"
+  | "special_commons"
+  | "primeMinister"
+  | "holyrood"
+  | "senedd"
+  | "regionalCouncil";
 
 export type ElectionStatus = "upcoming" | "active" | "completed" | "resolved" | "cancelled";
 
@@ -83,6 +89,15 @@ export interface Election {
    * rescheduling every future election is not. Absent on every other election.
    */
   imposedSnap?: boolean;
+  /**
+   * Commons by-election carve (#860): fraction of the region's electorate this
+   * race contests (vacatedSeats / totalRegionSeats). Stored at spawn so tally
+   * invariants and the UI can prove the scaled pool. Present only on
+   * `special_commons` races.
+   */
+  byElectionCarve?: number;
+  /** Vacancy docs claimed by this by-election (one race may fill several). */
+  byElectionVacancyIds?: ObjectId[];
   createdAt: Date;
   updatedAt: Date;
 }

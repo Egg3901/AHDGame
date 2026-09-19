@@ -19,6 +19,7 @@ import {
 } from "@/lib/treasury/emit";
 import type { FinancialTxLogEntry } from "@/lib/db/types/financialTxLog";
 import { COUNTRY_CURRENCY_MAP, type CurrencyCode } from "@/lib/constants/currencies";
+import { getGameStatePresetOrDefault } from "@/lib/db/collections/gameState";
 
 /**
  * Process fund generation for all characters each turn.
@@ -49,6 +50,9 @@ export async function processFundGeneration(
     async () => {
       const db = await getDb();
       const campaignRates = await loadCampaignCurrencyRates(db);
+      // GDP-baseline era for income math: the world's reset preset, so
+      // historical worlds scale against their own denomination (issue #798).
+      const preset = await getGameStatePresetOrDefault(db);
 
       const stateMap =
         preloadedStateMap ??
@@ -99,6 +103,7 @@ export async function processFundGeneration(
           stateGdpMillions: state.gdp,
           countryId: character.countryId,
           politicalInfluence: character.politicalInfluence ?? 0,
+          preset,
         });
         const totalFundGeneration = campaignAnchorToLocal(
           totalFundGenerationAnchor,

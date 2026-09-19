@@ -137,7 +137,6 @@ export async function getEligibleCabinetCharacters(
 ): Promise<CabinetEligibleCharacter[]> {
   const runtime = await getCountryState(db, countryId);
   const isOps = runtime.governmentType === "onePartyState";
-  const config = getCountryConfig(countryId);
   const eligibleOfficeTypes = getCabinetEligibleOfficeTypes(countryId);
 
   // Eligible-chamber officials drive the non-OPS candidate set and supply
@@ -212,33 +211,43 @@ export async function getEligibleCabinetCharacters(
       .toArray();
   }
 
-  return characters
-    .filter((character) => !character._id.equals(pmCharacterId))
-    .filter((character) => {
-      const held = heldSlotsByCharacterId.get(character._id.toString());
-      // Outside the UK rows carry no slot, so any held row excludes.
-      if (countryId !== "UK") return held == null;
-      return isCandidateEligibleForVacancy(countryId, vacancySlot, held ?? []);
-    })
-    .filter((character) => {
-      if (!isOps) return true;
-      const party = partyBySeqId.get(String(character.party));
-      return !isBannedParty(config, party ?? null);
-    })
-    .map((character) => {
-      const official = officialByCharacterId.get(character._id.toString());
-      const partyId = official?.party ?? character.party;
+  return (
+    characters
+      .filter((character) => !character._id.equals(pmCharacterId))
+      .filter((character) => {
+        const held = heldSlotsByCharacterId.get(character._id.toString());
+        // Outside the UK rows carry no slot, so any held row excludes.
+        if (countryId !== "UK") return held == null;
+        return isCandidateEligibleForVacancy(countryId, vacancySlot, held ?? []);
+      })
+      // Party suspension (issue #859): a whip-withdrawn MP sits as an
+      // independent and is not offered for cabinet until restored. The appoint
+      // and reshuffle handlers enforce the same rule server-side.
+      .filter(
+        (character) => officialByCharacterId.get(character._id.toString())?.whipWithdrawn !== true
+      )
+      .filter((character) => {
+        if (!isOps) return true;
+        const party = partyBySeqId.get(String(character.party));
+        return !isBannedParty({ governmentType: runtime.governmentType }, party ?? null);
+      })
+      .map((character) => {
+        const official = officialByCharacterId.get(character._id.toString());
+        const partyId = official?.party ?? character.party;
 
-      return {
-        _id: character._id.toString(),
-        name: character.name,
-        party: partyId,
-        partyName: partyId ? partyNameBySeqId.get(String(partyId)) : undefined,
-        avatarUrl: character.avatarUrl,
-        constituency: official?.state ? `Constituency ${official.state}` : "Unknown Constituency",
-        chamberName: official ? getOfficialChamberName(countryId, official.officeType) : undefined,
-        sequentialId: character.sequentialId,
-      };
-    })
-    .sort((a, b) => a.name.localeCompare(b.name));
+        return {
+          _id: character._id.toString(),
+          name: character.name,
+          party: partyId,
+          partyName: partyId ? partyNameBySeqId.get(String(partyId)) : undefined,
+          avatarUrl: character.avatarUrl,
+          constituency: official?.state ? `Constituency ${official.state}` : "Unknown Constituency",
+          chamberName: official
+            ? getOfficialChamberName(countryId, official.officeType)
+            : undefined,
+          sequentialId: character.sequentialId,
+        };
+      })
+      .sort((a, b) => a.name.localeCompare(b.name))
+  );
 }

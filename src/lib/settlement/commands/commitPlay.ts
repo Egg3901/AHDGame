@@ -141,9 +141,9 @@ export async function commitSettlementPlay(
     }
 
     // NO treasury pre-check. `treasuryBalance` is the SIGNED national cash
-    // position — negative IS the national debt, and `debt.principal` mirrors
-    // max(0, -balance) — so a `balance < cost` guard refused every funded play
-    // for any country already carrying debt. That is what player suggestion
+    // position, separate from the bond-ledger `debt.principal` (refs #1975),
+    // so a `balance < cost` guard refused every funded play for any country
+    // already carrying a cash hole. That is what player suggestion
     // S#308 reported.
     //
     // `spendFromTreasury` is built to borrow: it splits a spend into

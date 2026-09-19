@@ -140,6 +140,19 @@ export const UK_CABINET_POSITIONS = [
     order: 17,
     yearEnabled: 1909,
   },
+  {
+    // The Government Chief Whip (formally the Parliamentary Secretary to the
+    // Treasury since the 1830s). A cabinet-attending post, not the general
+    // party-whip voting mechanics (BillWhipPanel / PlayerWhipPanel).
+    id: "chief_whip",
+    name: "Parliamentary Secretary to the Treasury (Chief Whip)",
+    order: 18,
+    yearEnabled: 1775,
+    namesByYear: [
+      { from: 1775, name: "Government Chief Whip" },
+      { from: 1830, name: "Parliamentary Secretary to the Treasury" },
+    ],
+  },
 ] as const;
 
 export type UKCabinetPositionId = (typeof UK_CABINET_POSITIONS)[number]["id"];
