@@ -16,7 +16,9 @@
  * that cached flag only refreshes on membership events and lags, which is the
  * same reason the Build Org foothold rule re-checks presence live.
  */
+import type { Db } from "mongodb";
 import { adjacentStates } from "@/lib/constants/stateAdjacency";
+import type { Character, ElectedOfficial, NPP, State } from "@/lib/db/types";
 import type { CountryId } from "@/lib/constants/countries";
 
 /**
@@ -53,4 +55,64 @@ export function isInFrontier(
   if (presence.size === 0) return true;
   if (!stateId) return true;
   return frontier.has(stateId);
+}
+
+/** Every region `_id` belonging to `countryId`. */
+export async function getCountryRegionIds(db: Db, countryId: CountryId): Promise<string[]> {
+  const rows = await db
+    .collection<State>("states")
+    .find({ countryId }, { projection: { _id: 1 } })
+    .toArray();
+  return rows.map((r) => r._id);
+}
+
+/**
+ * Live presence set for one party.
+ *
+ * Scoped by REGION SET, not by `countryId`: `NPP.countryId` and
+ * `ElectedOfficial.countryId` are both optional, so a countryId filter would
+ * silently drop legacy rows and wrongly shrink the frontier. Region scoping is
+ * correct either way, and it also excludes national offices (president, prime
+ * minister) that carry no `state`. It is load-bearing for correctness too —
+ * party `sequentialId` is per-country, so party "1" exists in both the US and
+ * the UK and an unscoped read would merge their presence.
+ */
+export async function getPartyPresenceStates(
+  db: Db,
+  countryId: CountryId,
+  partyId: string,
+  regionIds?: readonly string[]
+): Promise<Set<string>> {
+  const regions = regionIds ?? (await getCountryRegionIds(db, countryId));
+  const regionSet = new Set(regions);
+  const inCountry = { $in: [...regions] };
+
+  const [memberStates, officialStates, nppStates] = await Promise.all([
+    db
+      .collection<Character>("characters")
+      .distinct("homeState", { party: partyId, homeState: inCountry }),
+    db
+      .collection<ElectedOfficial>("electedOfficials")
+      .distinct("state", { party: partyId, state: inCountry }),
+    db
+      .collection<NPP>("npps")
+      .distinct("homeState", { party: partyId, retiredAt: null, homeState: inCountry }),
+  ]);
+
+  const presence = new Set<string>();
+  for (const value of [...memberStates, ...officialStates, ...nppStates]) {
+    if (typeof value === "string" && regionSet.has(value)) presence.add(value);
+  }
+  return presence;
+}
+
+/** `{ presence, frontier }` for one party. */
+export async function getPartyFrontier(
+  db: Db,
+  countryId: CountryId,
+  partyId: string,
+  regionIds?: readonly string[]
+): Promise<{ presence: Set<string>; frontier: Set<string> }> {
+  const presence = await getPartyPresenceStates(db, countryId, partyId, regionIds);
+  return { presence, frontier: expandFrontier(countryId, presence) };
 }
