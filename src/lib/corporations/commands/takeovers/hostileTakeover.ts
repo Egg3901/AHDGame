@@ -37,11 +37,19 @@ import {
 } from "@/lib/currency/characterFunds";
 import {
   anchorToCorpLiquidCapital,
+  corpCapitalToAnchor,
   corpLiquidCapitalToAnchor,
   fxRateForCorpFromMap,
   loadFxRatesByCurrency,
   resolveCorpLiquidCurrencyCode,
 } from "@/lib/currency/corporationCapital";
+import { loadBankingPolicy } from "@/lib/banking/policy";
+import { savingsReadsAuthoritative } from "@/lib/banking/rules/policy";
+import {
+  applyBankNavFloor,
+  bankNavFloorPerShareAnchor,
+  takeoverBankNav,
+} from "./rules/bankNavFloor";
 import { safeDistributeConversionSpread } from "@/lib/currency/marketMaker";
 import { sectorFxSpreadBetween } from "@/lib/currency/sectorFxSpread";
 import type { CurrencyCode } from "@/lib/constants/currencies";
@@ -239,7 +247,53 @@ export async function runHostileTakeover(request: Request, { params }: RoutePara
     const fxByCurrency = await loadFxRatesByCurrency(db);
     const targetFxPre = fxRateForCorpFromMap(target, fxByCurrency);
     const pricePerShareLocal = target.sharePrice * (1 + HOSTILE_TAKEOVER_PREMIUM_RATE);
-    const pricePerShareAnchor = corpLiquidCapitalToAnchor(pricePerShareLocal, target, targetFxPre);
+    const marketPricePerShareAnchor = corpLiquidCapitalToAnchor(
+      pricePerShareLocal,
+      target,
+      targetFxPre
+    );
+
+    // Bank-NAV floor (issue #1750): the quoted share price recognizes only a
+    // haircut of a subsidiary bank's book equity, so a bank-heavy target can
+    // otherwise be squeezed out for less than the realizable bank net assets
+    // the acquirer inherits (ring-fenced cash plus loans plus the marked
+    // bond/prop book, net of cash-backed deposits and borrowings). Floor the
+    // per-share consideration at full realizable NAV per share, so the implied
+    // whole-corp value can never underprice the bank the deal delivers. Inert
+    // for targets without an active charter.
+    const activeTakeoverCharter =
+      target.bankCharter?.status === "active" ? target.bankCharter : null;
+    let bankNavFloorApplied = false;
+    let pricePerShareAnchor = marketPricePerShareAnchor;
+    if (activeTakeoverCharter) {
+      const takeoverBankCurrency = activeTakeoverCharter.currency;
+      const takeoverBankFxRate = takeoverBankCurrency
+        ? (fxByCurrency.get(takeoverBankCurrency) ?? 1)
+        : 1;
+      let playerDepositsAreLiabilities = false;
+      try {
+        const takeoverBankingPolicy = await loadBankingPolicy(db);
+        playerDepositsAreLiabilities = takeoverBankCurrency
+          ? savingsReadsAuthoritative(takeoverBankingPolicy, takeoverBankCurrency)
+          : false;
+      } catch {
+        playerDepositsAreLiabilities = false;
+      }
+      const takeoverBankNavAnchor = corpCapitalToAnchor(
+        takeoverBankNav(activeTakeoverCharter, { playerDepositsAreLiabilities }),
+        takeoverBankCurrency,
+        takeoverBankFxRate
+      );
+      const floored = applyBankNavFloor(
+        marketPricePerShareAnchor,
+        bankNavFloorPerShareAnchor({
+          bankNavAnchor: takeoverBankNavAnchor,
+          totalShares: target.totalShares ?? 0,
+        })
+      );
+      pricePerShareAnchor = floored.pricePerShareAnchor;
+      bankNavFloorApplied = floored.floorApplied;
+    }
 
     const fundHeld = (target.shareholders ?? []).filter((sh) => sh.fundId && (sh.shares ?? 0) > 0);
 
@@ -829,6 +883,7 @@ export async function runHostileTakeover(request: Request, { params }: RoutePara
           bankCharterCurrency: bankTransfer.currency,
           minorityPayoutAnchorTotal: Math.round(totalAnchor * 100) / 100,
           premiumRate: HOSTILE_TAKEOVER_PREMIUM_RATE,
+          bankNavFloorApplied,
           spreadPaid: Math.round(
             anchorToCorpLiquidCapital(takeoverSpread.spreadAnchor, parent, parentFxPre)
           ),

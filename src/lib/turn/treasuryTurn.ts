@@ -5,7 +5,7 @@ import type { CentralBank } from "@/lib/db/types/centralBank";
 import type { GameState } from "@/lib/db/types/gameState";
 import type { CountryId } from "@/lib/constants/countries";
 import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
-import { deriveFiscalState } from "@/lib/budget/treasuryBalance";
+import { sovereignDebtTerms } from "@/lib/bonds/sovereignPrincipal";
 import { ensureFederalBudget } from "@/lib/turn/ensureFederalBudget";
 import { getCentralBankScope } from "@/lib/centralBank/helpers";
 import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
@@ -15,8 +15,11 @@ import { getRegisteredCountryIdSet } from "@/lib/country/registeredCountries";
  * Per-turn fiscal accrual (spec §4). For each country's federalBudget, move a
  * 1/TURNS_PER_YEAR slice of the current primary balance (revenue minus spending
  * excluding debt interest) into the signed treasuryBalance, then deduct live
- * debt-service while in the hole, and resync the derived fiscal fields. Replaces
- * the annual deficit jump that processFiscalYear/processAnnualDebt used to apply.
+ * debt-service on the bond-owned principal stock. This phase owns treasury cash
+ * only: `debt.principal` belongs to the bond ledger (see
+ * bonds/sovereignPrincipal.ts) and is never re-derived from the balance here
+ * (#1975). Replaces the annual deficit jump that
+ * processFiscalYear/processAnnualDebt used to apply.
  */
 export async function processTreasuryTurn(_turn: number): Promise<{ countriesProcessed: number }> {
   const db = await getDb();
@@ -53,15 +56,18 @@ export async function processTreasuryTurn(_turn: number): Promise<{ countriesPro
   let countriesProcessed = 0;
   for (const b of budgets) {
     // Invariant: every federalBudget carries a signed treasuryBalance (set at
-    // creation + backfilled). If one is still null, heal it in place from the
-    // canonical fiscal position (−debt.principal) so the country starts accruing
-    // this turn instead of freezing — and surface the gap in logs.
+    // creation + backfilled). If one is still null, heal it in place to zero so
+    // the country starts accruing this turn instead of freezing, and surface
+    // the gap in logs. The heal is zero, never bond debt: cash and
+    // `debt.principal` are separate positions, and fabricating a cash hole from
+    // the bond stock would invent an obligation payment that never happened
+    // (refs #1975).
     let current = b.treasuryBalance;
     if (current == null) {
-      current = -(b.debt?.principal ?? 0);
+      current = 0;
       console.warn(
         `[treasuryTurn] ${String(b._id)} had null treasuryBalance; ` +
-          `initializing to ${current} (=-debt.principal). Seed/backfill missed this budget.`
+          `initializing to 0 (cash unknown; bond stock untouched). Seed/backfill missed this budget.`
       );
     }
 
@@ -70,30 +76,21 @@ export async function processTreasuryTurn(_turn: number): Promise<{ countriesPro
     const debtInterest = b.spending?.debtInterest ?? 0;
     const primaryPerTurn = (revenue - (spendingTotal - debtInterest)) / TURNS_PER_YEAR;
 
-    // Live debt-service: only while negative. Use the PRE-slice debt so the rate
-    // reflects this turn's opening position.
-    const pre = deriveFiscalState({
-      treasuryBalance: current,
+    // Live debt-service on the bond-owned stock (the per-turn cash leg of coupon
+    // service). Uses the PRE-slice stock so the rate reflects this turn's opening
+    // position. Never touches `debt.principal` itself.
+    const bondPrincipal = Math.max(0, b.debt?.principal ?? 0);
+    const terms = sovereignDebtTerms(bondPrincipal, {
       gdp: b.gdp ?? 0,
       gdpSmoothed: b.gdpSmoothed,
-      ceiling: b.debt?.ceiling ?? 0,
       investorConfidence: b.investorConfidence,
       imfBailoutActive: b.imfSovereignBailoutActive,
       sovereignRiskAnchor: b.sovereignRiskAnchor,
     });
     const debtServiceTurn =
-      pre.principal > 0 ? (pre.principal * pre.interestRate) / TURNS_PER_YEAR : 0;
+      bondPrincipal > 0 ? (bondPrincipal * terms.interestRate) / TURNS_PER_YEAR : 0;
 
     const next = Math.round(current + primaryPerTurn - debtServiceTurn);
-    const derived = deriveFiscalState({
-      treasuryBalance: next,
-      gdp: b.gdp ?? 0,
-      gdpSmoothed: b.gdpSmoothed,
-      ceiling: b.debt?.ceiling ?? 0,
-      investorConfidence: b.investorConfidence,
-      imfBailoutActive: b.imfSovereignBailoutActive,
-      sovereignRiskAnchor: b.sovereignRiskAnchor,
-    });
 
     // Ticket #1102: walk any enacted tax-rate change one step toward its
     // target, so a large move arrives over several turns instead of shocking
@@ -119,10 +116,6 @@ export async function processTreasuryTurn(_turn: number): Promise<{ countriesPro
       {
         $set: {
           treasuryBalance: next,
-          "debt.principal": derived.principal,
-          "debt.interestRate": derived.interestRate,
-          debtToGdpRatio: derived.debtToGdpRatio,
-          creditRating: derived.creditRating,
           ...rampSet,
         },
         ...(Object.keys(rampUnset).length > 0 ? { $unset: rampUnset } : {}),

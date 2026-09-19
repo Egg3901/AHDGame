@@ -44,10 +44,13 @@ import { LABOUR_MODE_ORDER, type LabourSystemMode } from "@/lib/labour/modes";
 import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
 import { applyCloneControllerPolicy } from "@/lib/sim/cloneControllers";
 import {
+  allFeatureFlagsGameStateSet,
   economicExperimentConfigSet,
   isGameplayOverrideArg,
   parseEquityLiquidityFacilityEnabled,
+  parseFrontierEntryExperimentArg,
   parseOptionalBoolean,
+  SIM_ALL_FEATURE_FLAGS_EXCLUDE,
   type FreightSettlementExperimentMode,
 } from "@/lib/sim/economicExperiment";
 
@@ -86,6 +89,7 @@ interface SimRunDoc {
     nppMarketCoverageEnabled?: boolean;
     nppFragileMarketSupplyEnabled?: boolean;
   };
+  frontierEntryExperimentEnabled?: boolean;
   nppForeignPolicyMode?: NppForeignPolicyMode;
   nppForeignPolicyStage?: NppForeignPolicyStage;
   preservePlayerRail?: boolean;
@@ -229,6 +233,12 @@ const nppMarketCoverageEnabled = parseOptionalBoolean(
 const nppFragileMarketSupplyEnabled = parseOptionalBoolean(
   arg("npp-fragile-market-supply"),
   "npp-fragile-market-supply"
+);
+// Frontier-entry experiment gate (issue #991): gameState flag, not gameConfig.
+// Explicit true arms the capped trial, explicit false pins the control arm;
+// absent leaves the sandbox default untouched.
+const frontierEntryExperimentEnabled = parseFrontierEntryExperimentArg(
+  arg("frontier-entry-experiment")
 );
 // Clone mode: the sandbox DB was pre-loaded with a restore of the LIVE world
 // (mongorestore), so skip bootstrap AND the "real world" users guardrail, and
@@ -761,6 +771,24 @@ async function main() {
     log(`Economic experiment overrides: ${JSON.stringify(economicExperimentSet)}`);
   }
 
+  // Frontier-entry experiment gate (issue #991). gameState, not gameConfig:
+  // the turn path reads it from gameState. Explicit true AND explicit false
+  // are both written, so the on arm and the off control are distinguishable
+  // in the report; absent leaves the sandbox default (disabled) untouched.
+  // Runs for fresh, resumed, and clone worlds alike, mirroring the block above.
+  if (frontierEntryExperimentEnabled !== undefined) {
+    await db
+      .collection<GameState>("gameState")
+      .updateOne({ _id: "current" }, { $set: { frontierEntryExperimentEnabled } });
+    await simRuns.updateOne(
+      { _id: runId },
+      { $set: { frontierEntryExperimentEnabled, updatedAt: new Date() } }
+    );
+    log(
+      `Frontier-entry experiment gate: frontierEntryExperimentEnabled=${String(frontierEntryExperimentEnabled)} on sandbox gameState`
+    );
+  }
+
   await db
     .collection<{ _id: string; ledgerShadow?: boolean }>("gameConfig")
     .updateOne({ _id: "default" }, { $set: { ledgerShadow: true } }, { upsert: true });
@@ -866,15 +894,17 @@ async function main() {
 
   if (allFeatureFlags) {
     const { DEFAULT_GAME_STATE_FLAGS } = await import("@/lib/seeds/reference/featureFlagDefaults");
-    const enabledFlags = Object.fromEntries(
-      Object.entries(DEFAULT_GAME_STATE_FLAGS)
-        .filter(([, value]) => typeof value === "boolean")
-        .map(([key]) => [key, true])
+    // Experimental gates stay out: arming the frontier-entry trial as a side
+    // effect of a full-feature sweep would bypass its evidence gate.
+    const enabledFlags = allFeatureFlagsGameStateSet(
+      DEFAULT_GAME_STATE_FLAGS as unknown as Record<string, unknown>
     );
     await db
       .collection<GameState>("gameState")
       .updateOne({ _id: "current" }, { $set: enabledFlags });
-    log(`Enabled all ${Object.keys(enabledFlags).length} compatible gameplay boolean flags`);
+    log(
+      `Enabled all ${Object.keys(enabledFlags).length} compatible gameplay boolean flags (excluded experimental gates: ${[...SIM_ALL_FEATURE_FLAGS_EXCLUDE].join(", ")})`
+    );
   }
 
   // ── SIM-ONLY: elections-only turn profile + country scope ──────────────────
@@ -1110,6 +1140,7 @@ if (hasFlag("help") || hasFlag("h")) {
       "[--mode=full|elections-only|economy-only|macro-only] " +
       "[--npp-market-coverage=true|false] " +
       "[--npp-fragile-market-supply=true|false] " +
+      "[--frontier-entry-experiment=true|false] " +
       "[--macro-growth] [--pre-iteration|--no-pre-iteration] [--preserve-player-rail] [--preserve-live-config] [--sector-investment-snapshots=<directory>] [--quiet]"
   );
   process.exit(0);

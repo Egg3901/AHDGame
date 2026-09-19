@@ -408,6 +408,16 @@ export interface GameState {
   nppEntryViabilityMode?: NppEntryViabilityMode;
   nppEntryViabilityModeBy?: string;
   nppEntryViabilityModeAt?: string;
+  /**
+   * Capped frontier-entry experiment for state-sector coverage (issue #991).
+   * Absent resolves to false: the experiment is disabled by default and no
+   * entry mechanics may activate without the controlled 48-turn trial plus
+   * largest-supplier-failure stress evidence. The NPP entry funnel and
+   * state-sector coverage evidence layer runs regardless of this flag.
+   */
+  frontierEntryExperimentEnabled?: boolean;
+  frontierEntryExperimentEnabledBy?: string;
+  frontierEntryExperimentEnabledAt?: string;
   /** Turn the extraction auto-strategy phase last acted. Guards its cadence. */
   lastExtractionAutoStrategyTurn?: number;
   /** Master gate for the US House districted-redistricting system. Default off. */

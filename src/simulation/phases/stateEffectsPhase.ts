@@ -40,6 +40,7 @@ import { processFiscalBaseGrowth } from "@/lib/turn/fiscalBaseGrowth";
 import { processEconomicModelTurn } from "@/lib/turn/economicModelTurn";
 import { mirrorTradeGrowth } from "@/lib/turn/tradeGrowthMirror";
 import { recalculateInflationPerTurn } from "@/lib/turn/inflationRecalc";
+import { processBrettonWoodsTurn } from "@/lib/turn/brettonWoodsTurn";
 import { processCommandEconomyTurn } from "@/lib/turn/commandEconomyTurn";
 import { processForexTurn } from "@/lib/turn/forexTurn";
 import { isLedgerShadowEnabledFromConfig } from "@/lib/ledger/featureFlag";
@@ -468,6 +469,26 @@ export const stateEffectsAndNationalAggregationPhase: TurnPhaseAdapter = {
     await runtime.runPhase("commandEconomy", () =>
       processCommandEconomyTurn(db, newTurn, currentYear)
     );
+
+    // Bretton Woods exit tracker (gameConfig `brettonWoodsExitEnabled`, issue
+    // #7). Self-gates: flag off is a single config read and zero writes.
+    // Runs after inflationRecalc (the gold-cover drain reads this turn's
+    // settled US inflation gap) and before forexTurn (which applies the
+    // persisted regime's band and drift the same turn). Forex reads the
+    // stored regime off its own exchange-rate rows, so a resume that skips
+    // this already-applied phase still prices the regime in force.
+    const brettonWoodsResult = await runtime.runPhase("brettonWoodsTurn", () =>
+      processBrettonWoodsTurn(db, newTurn, currentYear)
+    );
+    if (brettonWoodsResult) {
+      phaseResults.brettonWoodsTurn = {
+        enabled: brettonWoodsResult.enabled,
+        goldCover: brettonWoodsResult.goldCover,
+        suspended: [...brettonWoodsResult.suspended],
+        floated: [...brettonWoodsResult.floated],
+        currenciesProcessed: brettonWoodsResult.currenciesProcessed,
+      };
+    }
 
     if (isLedgerShadowEnabledFromConfig(context.config)) {
       await runtime.runPhase("ledgerPreForexSnapshot", () =>

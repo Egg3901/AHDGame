@@ -21,7 +21,7 @@ interface NationalSectorBoardProps {
 
 /**
  * The state sector board aggregated one level up: every sector as a tile with
- * the national market size, owned-share fill, and a drill-down into the
+ * the national market potential, explicit owned share, and a drill-down into the
  * largest state's Economy tab via the existing `?sector=` deep link — no new
  * plumbing. Sectors without any market render as plain tiles.
  */
@@ -41,6 +41,7 @@ export function NationalSectorBoard({
             <div className="mt-1 font-mono text-[13px] font-bold tabular-nums text-foreground">
               {entry.totalMarketAnchor > 0 ? formatMarket(entry.totalMarketAnchor) : "—"}
             </div>
+            <div className="text-[9.5px] text-muted">market /day</div>
             <div
               className="mt-1.5 h-[3px] overflow-hidden rounded-full bg-track"
               title={`Owned share ${Math.round(entry.ownedPercent)}%`}
@@ -50,15 +51,22 @@ export function NationalSectorBoard({
                 style={{ width: `${Math.max(0, Math.min(100, entry.ownedPercent))}%` }}
               />
             </div>
-            <div className="mt-1 flex justify-between gap-1 text-[9.5px]">
+            <div className="mt-1 flex items-center justify-between gap-1 text-[9.5px]">
               <span className="truncate text-muted">
                 {entry.largestState ? `↳ ${entry.largestState.stateName}` : "no market"}
               </span>
-              <span
-                className={`font-mono tabular-nums ${TONE_CLASS[avgGrowthTone(entry.avgGrowth)]}`}
-                title="Average growth across this sector's corporations"
-              >
-                {formatAvgGrowth(entry.avgGrowth)}
+              <span className="flex shrink-0 gap-1.5">
+                <span
+                  title={`Owned share ${Math.round(entry.ownedPercent)}% of this national market`}
+                >
+                  {Math.round(entry.ownedPercent)}% owned
+                </span>
+                <span
+                  className={`font-mono tabular-nums ${TONE_CLASS[avgGrowthTone(entry.avgGrowth)]}`}
+                  title="Average measured growth across this sector's corporations; not applicable when the plants growth slider does not apply"
+                >
+                  {formatAvgGrowth(entry.avgGrowth)}
+                </span>
               </span>
             </div>
           </>

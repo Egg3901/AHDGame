@@ -94,7 +94,7 @@ describe("open market operations against the bond market pool", () => {
 });
 
 describe("non-QE monetary operations", () => {
-  it("creates Treasury money and immediately resyncs the derived debt position", async () => {
+  it("creates Treasury money as a cash-only credit; the bond-owned stock is untouched", async () => {
     db.collectionMocks.federalBudget.findOne.mockResolvedValue({
       _id: "federal",
       countryId: "US",
@@ -103,6 +103,7 @@ describe("non-QE monetary operations", () => {
       investorConfidence: 70,
       debt: { principal: 1_000, ceiling: 20_000 },
     });
+    db.collectionMocks.federalBudget.updateOne.mockResolvedValue({ modifiedCount: 1 });
 
     const result = await executeMonetaryOperation(db as unknown as Db, {
       countryId: "US",
@@ -115,13 +116,56 @@ describe("non-QE monetary operations", () => {
     expect(result.moneySupplyDelta).toBe(0);
     const update = db.collectionMocks.federalBudget.updateOne.mock.calls[0][1].$set;
     expect(update.treasuryBalance).toBe(-750);
-    expect(update["debt.principal"]).toBe(750);
+    // A cash advance is not a bond issuance or redemption (refs #1975).
+    expect(update).not.toHaveProperty("debt.principal");
     expect(db.collectionMocks.centralBanks.updateOne).toHaveBeenCalledWith(
       { _id: "US" },
       expect.objectContaining({
         $inc: expect.objectContaining({ netMoneyCreatedLifetime: 250 }),
       })
     );
+  });
+
+  it("treasury advance is a compare-and-swap: a concurrent move fails, the retry converges", async () => {
+    db.collectionMocks.federalBudget.findOne
+      .mockResolvedValueOnce({
+        _id: "federal",
+        countryId: "US",
+        treasuryBalance: -1_000,
+        debt: { principal: 1_000, ceiling: 20_000 },
+      })
+      .mockResolvedValueOnce({
+        _id: "federal",
+        countryId: "US",
+        treasuryBalance: -900,
+        debt: { principal: 1_000, ceiling: 20_000 },
+      });
+    // Another writer moved the balance between the read and the write, so the
+    // guarded write matches nothing; the retry re-reads and lands cleanly.
+    db.collectionMocks.federalBudget.updateOne
+      .mockResolvedValueOnce({ modifiedCount: 0 })
+      .mockResolvedValueOnce({ modifiedCount: 1 });
+
+    const attempt = {
+      countryId: "US",
+      type: "treasury_advance",
+      turn: 12,
+      actorName: "Chair",
+      amount: 250,
+    } as const;
+    await expect(executeMonetaryOperation(db as unknown as Db, attempt)).rejects.toThrow(
+      /changed concurrently/
+    );
+    const result = await executeMonetaryOperation(db as unknown as Db, attempt);
+
+    expect(result.moneySupplyDelta).toBe(0);
+    const calls = db.collectionMocks.federalBudget.updateOne.mock.calls;
+    expect(calls).toHaveLength(2);
+    // The retry credits the re-read balance, not the stale one: exactly once.
+    expect(calls[1][1].$set.treasuryBalance).toBe(-650);
+    expect(calls[1][1].$set).not.toHaveProperty("debt.principal");
+    // The failed first attempt wrote no ledger entry and booked no money.
+    expect(db.collectionMocks.centralBanks.updateOne).toHaveBeenCalledTimes(1);
   });
 
   it("lends an injection to the chartered banks, pro rata by deposits", async () => {
