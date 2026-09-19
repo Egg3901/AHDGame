@@ -154,9 +154,12 @@ export function getFundMultiplier(
   tier: number,
   gdpMillions: number,
   population: number,
-  countryId = "US"
+  countryId = "US",
+  // Optional (never defaulted): callers with no world pass nothing and get the
+  // modern-era baseline; runtime money paths pass the world's gameState.preset.
+  preset?: string
 ): number {
-  const baseline = getGdpBaseline(countryId);
+  const baseline = getGdpBaseline(countryId, preset);
   const gdpPerCapita = (gdpMillions * 1_000_000) / population;
   const gdpScalar = Math.max(0.85, Math.min(2.0, gdpPerCapita / baseline));
   return (1 + tier * 0.2) * gdpScalar;
@@ -197,10 +200,18 @@ export function getCampaignFundCost(
   influence: number,
   stateGdpMillions: number,
   statePopulation: number,
-  countryId = "US"
+  countryId = "US",
+  // Optional (never defaulted): see getFundMultiplier.
+  preset?: string
 ): number {
   const tier = getCampaignActionCost(influence); // 1-5
-  const multiplier = getFundMultiplier(tier - 1, stateGdpMillions, statePopulation, countryId);
+  const multiplier = getFundMultiplier(
+    tier - 1,
+    stateGdpMillions,
+    statePopulation,
+    countryId,
+    preset
+  );
   return Math.round((CAMPAIGN_BASE_FUND_COST * tier * multiplier) / 1_000) * 1_000;
 }
 
@@ -212,10 +223,12 @@ export function getAdvertiseFundCost(
   favorability: number,
   stateGdpMillions: number,
   statePopulation: number,
-  countryId = "US"
+  countryId = "US",
+  // Optional (never defaulted): see getFundMultiplier.
+  preset?: string
 ): number {
   const tier = getAdvertiseActionCost(favorability) - 5; // tier index 0-4
-  const multiplier = getFundMultiplier(tier, stateGdpMillions, statePopulation, countryId);
+  const multiplier = getFundMultiplier(tier, stateGdpMillions, statePopulation, countryId, preset);
   return Math.round((ADVERTISE_BASE_FUND_COST * multiplier) / 1_000) * 1_000;
 }
 
@@ -281,6 +294,12 @@ export interface CampaignQuoteTarget {
   gdpMillions?: number | null;
   population?: number | null;
   countryId?: string | null;
+  /**
+   * World reset preset selecting the GDP-baseline era. Absent (client previews
+   * that have no world to ask) the modern-era baseline applies; runtime callers
+   * pass the world's `gameState.preset`.
+   */
+  preset?: string | null;
 }
 
 /**
@@ -304,6 +323,12 @@ export interface AdvertiseQuoteTarget {
   gdpMillions?: number | null;
   population?: number | null;
   countryId?: string | null;
+  /**
+   * World reset preset selecting the GDP-baseline era. Absent (client previews
+   * that have no world to ask) the modern-era baseline applies; runtime callers
+   * pass the world's `gameState.preset`.
+   */
+  preset?: string | null;
 }
 
 /**
@@ -352,6 +377,7 @@ export function quoteCampaignAction(
     };
   }
   const { gdpMillions, population, countryId } = target;
+  const preset = target.preset ?? undefined;
   if (typeof gdpMillions !== "number" || !Number.isFinite(gdpMillions) || gdpMillions < 0) {
     return {
       ok: false,
@@ -369,7 +395,8 @@ export function quoteCampaignAction(
   }
   // Intellect softens the campaign cost-scaling curve (higher → cheaper).
   const fundCostAnchor = Math.round(
-    getCampaignFundCost(influence, gdpMillions, population, countryId) / statMultiplier(intellect)
+    getCampaignFundCost(influence, gdpMillions, population, countryId, preset) /
+      statMultiplier(intellect)
   );
   // Charisma scales the diminishing-returns gain (gentle ±20%).
   const influenceGain = campaignInfluenceGain(influence, statMultiplier(charisma));
@@ -409,6 +436,7 @@ export function quoteAdvertiseAction(
     };
   }
   const { gdpMillions, population, countryId } = target;
+  const preset = target.preset ?? undefined;
   if (typeof gdpMillions !== "number" || !Number.isFinite(gdpMillions) || gdpMillions < 0) {
     return {
       ok: false,
@@ -424,7 +452,13 @@ export function quoteAdvertiseAction(
   if (typeof countryId !== "string" || countryId.length === 0) {
     return { ok: false, error: "Advertise requires a country currency basis." };
   }
-  const fundCostAnchor = getAdvertiseFundCost(favorability, gdpMillions, population, countryId);
+  const fundCostAnchor = getAdvertiseFundCost(
+    favorability,
+    gdpMillions,
+    population,
+    countryId,
+    preset
+  );
   // Charisma scales the diminishing-returns gain (gentle ±20%).
   const favorabilityGain = advertiseFavorabilityGain(favorability, statMultiplier(charisma));
   return {
@@ -462,10 +496,12 @@ export function getBuildDonorBaseFundCost(
   donorBaseLevel: number,
   stateGdpMillions: number,
   statePopulation: number,
-  countryId = "US"
+  countryId = "US",
+  // Optional (never defaulted): see getFundMultiplier.
+  preset?: string
 ): number {
   const baseCost = BUILD_DONOR_BASE_FUND + donorBaseLevel * BUILD_DONOR_BASE_FUND_PER_LEVEL;
-  const baseline = getGdpBaseline(countryId);
+  const baseline = getGdpBaseline(countryId, preset);
   const gdpPerCapita = (stateGdpMillions * 1_000_000) / statePopulation;
   const gdpScalar = Math.max(0.85, Math.min(2.0, gdpPerCapita / baseline));
   return Math.round((baseCost * gdpScalar) / 1_000) * 1_000;
@@ -502,6 +538,12 @@ export interface BuildDonorBaseQuoteTarget {
   gdpMillions?: number | null;
   population?: number | null;
   countryId?: string | null;
+  /**
+   * World reset preset selecting the GDP-baseline era. Absent (client previews
+   * that have no world to ask) the modern-era baseline applies; runtime callers
+   * pass the world's `gameState.preset`.
+   */
+  preset?: string | null;
 }
 
 /**
@@ -537,6 +579,7 @@ export function quoteBuildDonorBaseAction(
     };
   }
   const { gdpMillions, population, countryId } = target;
+  const preset = target.preset ?? undefined;
   if (typeof gdpMillions !== "number" || !Number.isFinite(gdpMillions) || gdpMillions < 0) {
     return {
       ok: false,
@@ -554,7 +597,7 @@ export function quoteBuildDonorBaseAction(
   }
   // Fundraising softens the donor-network cost curve (higher → cheaper).
   const fundCostAnchor = Math.round(
-    getBuildDonorBaseFundCost(level, gdpMillions, population, countryId) /
+    getBuildDonorBaseFundCost(level, gdpMillions, population, countryId, preset) /
       statMultiplier(fundraising)
   );
   return {
