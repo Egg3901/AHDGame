@@ -13,6 +13,10 @@ import {
 } from "@/lib/currency/corporationCapital";
 import { createNotification } from "@/lib/notifications";
 import { executeAgreedAcquisition } from "./executeAgreedAcquisition";
+import {
+  compensateAcquisitionSettlement,
+  loadAcquisitionSettlement,
+} from "./acquisitionSettlement";
 import { loadWorldEraUnitScale } from "@/lib/currency/gdpAnchorRate";
 import { acquisitionsBarredByDivestiture } from "@/lib/corporations/mergerReview/gate";
 import {
@@ -293,12 +297,22 @@ export async function acceptAcquisitionOffer(
   try {
     result = await executeAgreedAcquisition({ db, offer, currentTurn });
   } catch (err) {
-    // Executor threw after refunding the acquirer — release the claim so it can be retried.
+    // Executor threw mid-flight. Execution is resumable from the settlement
+    // record, so release the claim and let the retry finish it.
     await offers.updateOne(
       { _id: offer._id },
       { $set: { status: "pending", updatedAt: new Date() }, $unset: { resolvedAtTurn: "" } }
     );
     throw err;
+  }
+  if (!result.ok && result.terminal) {
+    // Terminal compensation already ran inside the executor: the offer must
+    // NOT return to pending (a retry would re-debit and re-pay). It is closed.
+    await offers.updateOne(
+      { _id: offer._id },
+      { $set: { status: "failed", updatedAt: new Date() } }
+    );
+    return { ok: false, error: result.error, status: result.status };
   }
   if (!result.ok) {
     await offers.updateOne(
@@ -332,6 +346,26 @@ export async function resolveAcquisitionOfferStatus(
 ): Promise<Result> {
   if (offer.status !== "pending")
     return { ok: false, error: "This offer is no longer open", status: 409 };
+  // A settlement may hold acquirer money while the offer sits pending (a
+  // failed attempt reset the claim for a resumable retry). Withdrawing or
+  // rejecting past it would strand the debit with no executor left to run, so
+  // compensate first: refund exactly the undelivered remainder, close the
+  // record, and release the target claim. Idempotent via the leg stamps.
+  const settlement = await loadAcquisitionSettlement(db, offer._id);
+  if (settlement && settlement.status === "in_progress") {
+    await compensateAcquisitionSettlement(db, settlement, {
+      targetHex: offer.targetCorporationId.toString(),
+      turn: currentTurn,
+      now: new Date(),
+      reason: `offer ${status} while a settlement held funds`,
+    });
+    await db
+      .collection<Corporation>("corporations")
+      .updateOne(
+        { _id: offer.targetCorporationId, acquisitionSettlementId: offer._id },
+        { $unset: { acquisitionSettlementId: "" }, $set: { updatedAt: new Date() } }
+      );
+  }
   const claim = await db
     .collection<AcquisitionOffer>(OFFERS)
     .updateOne(
