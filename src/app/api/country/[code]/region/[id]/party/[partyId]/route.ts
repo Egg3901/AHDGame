@@ -21,6 +21,7 @@ import {
   calculateTaxAmount,
 } from "@/lib/utils/fundGeneration";
 import { campaignAnchorToLocal, campaignLocalRate } from "@/lib/campaigns/campaignCurrency";
+import { getGameStatePresetOrDefault } from "@/lib/db/collections/gameState";
 import { getPartyHex } from "@/lib/utils/politics";
 import { getPartyBudgetCollection } from "@/lib/db/collections";
 import {
@@ -221,6 +222,9 @@ export async function GET(_request: Request, { params }: RouteParams) {
     const campaignRate = campaignLocalRate(countryId, campaignRates);
     const toLocal = (anchor: number) => campaignAnchorToLocal(anchor, countryId, campaignRates);
 
+    // GDP-baseline era for income math: the world's reset preset, so
+    // historical worlds estimate in their own denomination (issue #798).
+    const preset = await getGameStatePresetOrDefault(db);
     // 1. Calculate for players
     for (const character of characters) {
       // Skip banned users (already filtered from members)
@@ -234,6 +238,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
         stateGdpMillions: stateGdp,
         countryId,
         politicalInfluence: character.politicalInfluence ?? 0,
+        preset,
       });
       expectedHourlyIncome += calculateTaxAmount(toLocal(totalFundRate), stateTaxRate);
     }

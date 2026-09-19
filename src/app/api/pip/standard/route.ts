@@ -8,6 +8,7 @@ import { getDb } from "@/lib/mongodb";
 import { requireAuth } from "@/lib/api/requireAuth";
 import { handleRouteError } from "@/lib/api/errors";
 import { calculateFullFundDistribution } from "@/lib/utils/fundGeneration";
+import { getGameStatePresetOrDefault } from "@/lib/db/collections/gameState";
 import { unionContributionIncomePerTurn } from "@/lib/unions/unionContributionIncome";
 import {
   projectInfluenceDecay,
@@ -87,6 +88,9 @@ export async function GET() {
     const fav = character.favorability ?? 50;
     const infamy = character.infamy ?? 0;
 
+    // GDP-baseline era for income math: the world's reset preset, so
+    // historical worlds project in their own denomination (issue #798).
+    const preset = await getGameStatePresetOrDefault(db);
     const fundDistribution = calculateFullFundDistribution(
       homeState?.population ?? 1_000_000,
       character.donorBaseLevel ?? 0,
@@ -94,7 +98,9 @@ export async function GET() {
       statePartyOrg?.stateTaxRate ?? 0,
       party?.nationalTaxRate ?? 0,
       homeState?.gdp,
-      character.countryId
+      character.countryId,
+      undefined,
+      preset
     );
 
     return NextResponse.json(

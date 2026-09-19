@@ -500,49 +500,45 @@ export function CampaignBlendClient({
                 +{vm.strength.boostPct}% votes
               </span>
             </div>
-            {canAct ? (
-              <>
-                <p
-                  style={{
-                    margin: "10px 0 14px",
-                    fontFamily: FONT.serif,
-                    fontSize: 13.5,
-                    lineHeight: 1.5,
-                    color: BLEND.muted,
-                  }}
-                >
-                  {vm.strength.strengthAdded > 0 ? (
-                    <>
-                      Contribute {vm.strength.strengthAdded.toFixed(2)} strength for{" "}
-                      {vm.strength.costText} and reach{" "}
-                      <span style={{ color: BLEND.accent }}>+{vm.strength.newBoostPct}%</span>.
-                    </>
-                  ) : (
-                    "You need national influence to contribute campaign strength."
-                  )}
-                </p>
-                <button
-                  type="button"
-                  disabled={!vm.strength.canContribute || busy === "strength"}
-                  onClick={() =>
-                    post("strength", `/api/campaigns/${campaign.id}/campaign-strength`)
-                  }
-                  style={{
-                    width: "100%",
-                    border: `1px solid rgba(220,38,38,.4)`,
-                    background: "transparent",
-                    padding: 9,
-                    fontFamily: FONT.mono,
-                    fontSize: 10.5,
-                    letterSpacing: ".08em",
-                    fontWeight: 700,
-                    color: vm.strength.canContribute ? BLEND.accent : BLEND.muted,
-                    cursor: vm.strength.canContribute ? "pointer" : "not-allowed",
-                  }}
-                >
-                  CONTRIBUTE STRENGTH
-                </button>
-              </>
+            {/* Open to every player, not just the campaign's own staff. See
+                the matching note in BlendSidebar. */}
+            <p
+              style={{
+                margin: "10px 0 14px",
+                fontFamily: FONT.serif,
+                fontSize: 13.5,
+                lineHeight: 1.5,
+                color: BLEND.muted,
+              }}
+            >
+              {vm.strength.blockedReason ?? (
+                <>
+                  Contribute {vm.strength.strengthAdded.toFixed(2)} strength for{" "}
+                  {vm.strength.costText} and reach{" "}
+                  <span style={{ color: BLEND.accent }}>+{vm.strength.newBoostPct}%</span>.
+                </>
+              )}
+            </p>
+            {vm.strength.blockedReason === null ? (
+              <button
+                type="button"
+                disabled={!vm.strength.canContribute || busy === "strength"}
+                onClick={() => post("strength", `/api/campaigns/${campaign.id}/campaign-strength`)}
+                style={{
+                  width: "100%",
+                  border: `1px solid rgba(220,38,38,.4)`,
+                  background: "transparent",
+                  padding: 9,
+                  fontFamily: FONT.mono,
+                  fontSize: 10.5,
+                  letterSpacing: ".08em",
+                  fontWeight: 700,
+                  color: vm.strength.canContribute ? BLEND.accent : BLEND.muted,
+                  cursor: vm.strength.canContribute ? "pointer" : "not-allowed",
+                }}
+              >
+                CONTRIBUTE STRENGTH
+              </button>
             ) : null}
           </div>
         ) : null}

@@ -111,6 +111,12 @@ export {
  */
 export interface ActionEffectContext {
   formatFunds: (anchorAmount: number) => string;
+  /**
+   * World reset preset selecting the GDP-baseline era for cost math.
+   * The execute route passes `gameState.preset`; absent (client batch
+   * previews, tests) the modern-era baseline applies.
+   */
+  preset?: string;
 }
 
 /**
@@ -304,7 +310,7 @@ export const ACTIONS: Record<ActionType, ActionDefinition> = {
       "Increase your political influence — up to +1%, with diminishing returns above 50% (cost scales with current influence and state GDP)",
     baseCost: 1, // dynamic — actual cost computed via getCampaignActionCost()
     requiresState: false,
-    effect: (character: Character, state?: State) => {
+    effect: (character: Character, state?: State, ctx?: ActionEffectContext) => {
       // Single source of truth: the UI card quotes this same quote, so the
       // advertised cost/gain can never drift from the debited/credited result.
       // canPerformAction runs the quote first; the throw below is a defensive
@@ -320,6 +326,7 @@ export const ACTIONS: Record<ActionType, ActionDefinition> = {
               gdpMillions: state.gdp,
               population: state.population,
               countryId: character.countryId,
+              preset: ctx?.preset,
             }
           : undefined
       );
@@ -353,6 +360,7 @@ export const ACTIONS: Record<ActionType, ActionDefinition> = {
               gdpMillions: state.gdp,
               population: state.population,
               countryId: character.countryId,
+              preset: ctx?.preset,
             }
           : undefined
       );
@@ -388,6 +396,7 @@ export const ACTIONS: Record<ActionType, ActionDefinition> = {
               gdpMillions: state.gdp,
               population: state.population,
               countryId: character.countryId,
+              preset: ctx?.preset,
             }
           : undefined
       );
@@ -537,6 +546,8 @@ export type CanPerformActionOptions = {
   forexEnabled?: boolean;
   /** Live home FX rate for converting stored local campaign funds back to internal units. */
   homeFxRate?: number;
+  /** World reset preset selecting the GDP-baseline era for cost validation. */
+  preset?: string;
   /**
    * Resolved RPG-stats feature flag for Debate Prep validation. The execute
    * shell always passes the resolved value; callers that cannot know it omit
@@ -578,6 +589,7 @@ export function canPerformAction(
             gdpMillions: state.gdp,
             population: state.population,
             countryId: character.countryId,
+            preset: options?.preset,
           }
         : undefined
     );
@@ -602,6 +614,7 @@ export function canPerformAction(
             gdpMillions: state.gdp,
             population: state.population,
             countryId: character.countryId,
+            preset: options?.preset,
           }
         : undefined
     );
@@ -688,6 +701,7 @@ export function canPerformAction(
             gdpMillions: state.gdp,
             population: state.population,
             countryId: character.countryId,
+            preset: options?.preset,
           }
         : undefined
     );
@@ -717,7 +731,10 @@ export function canPerformAction(
   // Check funds for actions that cost money. effect.fundsChange is ANCHOR; the
   // stored balance is LOCAL. Compare and report in LOCAL home currency — campaign
   // funds live in local and the UI must never surface anchor (₳) to the player.
-  const effect = action.effect(character, state);
+  const effect = action.effect(character, state, {
+    formatFunds: plainFunds,
+    preset: options?.preset,
+  });
   if (effect.fundsChange && effect.fundsChange < 0) {
     const costAnchor = Math.abs(effect.fundsChange);
     const balanceLocal = character.currencyBalances?.campaign ?? character.funds ?? 0;
