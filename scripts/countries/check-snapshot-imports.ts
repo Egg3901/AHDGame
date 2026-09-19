@@ -55,7 +55,7 @@ async function main() {
       missing.push(`${name} -- not imported by ${EMITTER}`);
       continue;
     }
-    const mod = (await import(from.replace(/^\.\.\/\.\.\//, "../../"))) as Record<string, unknown>;
+    const mod = (await import(from)) as Record<string, unknown>;
     const value = mod[name];
     if (value === undefined) {
       missing.push(`${name} -- imports as undefined from ${from} (declared without \`export\`?)`);

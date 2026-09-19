@@ -26,6 +26,7 @@
  * heavy module would ship 108 KB to the browser to read one string.
  */
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { escapeRegExp } from "./regexEscape";
 
 interface Rewire {
   /** The registry object literal to edit. */
@@ -740,7 +741,11 @@ function findEntry(raw: string, registry: string, key: string): [number, number]
 }
 
 function ensureImport(src: string, binding: string, from: string): string {
-  if (new RegExp(`\\b${binding}\\b[^\\n]*from "${from.replace(/\//g, "\\/")}"`).test(src))
+  if (
+    new RegExp(`\\b${escapeRegExp(binding)}\\b[^\\n]*from "${from.replace(/\//g, "\\/")}"`).test(
+      src
+    )
+  )
     return src;
   if (src.includes(`from "${from}"`)) {
     // Same module already imported: widen the existing clause.
@@ -810,10 +815,11 @@ function pruneOrphans(raw: string, _CC: string): [string, string[]] {
        * so the one-occurrence rule never fired, and dozens of unused imports
        * survived every prune. Lint found them; the prune never could.
        */
-      const uses = [...maskStrings(masked).matchAll(new RegExp(`\\b${name}\\b`, "g"))].length;
+      const uses = [...maskStrings(masked).matchAll(new RegExp(`\\b${escapeRegExp(name)}\\b`, "g"))]
+        .length;
       if (uses !== 1) continue;
 
-      const declRe = new RegExp(`^(?:export\\s+)?(?:const|let)\\s+${name}\\b`, "m");
+      const declRe = new RegExp(`^(?:export\\s+)?(?:const|let)\\s+${escapeRegExp(name)}\\b`, "m");
       const dm = declRe.exec(masked);
       if (dm) {
         if (/^export/.test(dm[0])) continue; // exported: other files may use it
@@ -823,16 +829,17 @@ function pruneOrphans(raw: string, _CC: string): [string, string[]] {
         cut = true;
         break;
       }
-      const im = new RegExp(`^import \\{[^}]*\\b${name}\\b[^}]*\\} from "[^"]+";\\n`, "m").exec(
-        masked
-      );
+      const im = new RegExp(
+        `^import \\{[^}]*\\b${escapeRegExp(name)}\\b[^}]*\\} from "[^"]+";\\n`,
+        "m"
+      ).exec(masked);
       if (im) {
         const clause = src.slice(im.index, im.index + im[0].length);
         const inner = /\{([^}]*)\}/.exec(clause)![1];
         const kept = inner
           .split(",")
           .map((s) => s.trim())
-          .filter((s) => s.length > 0 && !new RegExp(`\\b${name}$`).test(s));
+          .filter((s) => s.length > 0 && !new RegExp(`\\b${escapeRegExp(name)}$`).test(s));
         const next = kept.length === 0 ? "" : clause.replace(/\{[^}]*\}/, `{ ${kept.join(", ")} }`);
         src = src.slice(0, im.index) + next + src.slice(im.index + im[0].length);
         removed.push(name);
@@ -912,7 +919,7 @@ for (const CC of countries) {
          * `JP: ...` would orphan that const and break lint, so it is reported
          * for a human rather than guessed at.
          */
-        const shorthand = new RegExp(`\\n\\s*${CC},`).test(
+        const shorthand = new RegExp(`\\n\\s*${escapeRegExp(CC)},`).test(
           src.slice(src.search(new RegExp(`(const|let)\\s+${w.registry}\\b`)))
         );
         console.log(
@@ -937,9 +944,10 @@ for (const CC of countries) {
       const head = /^([A-Za-z0-9_$]+)/.exec(current)?.[1];
       const fromFolder =
         head !== undefined &&
-        new RegExp(`import \\{[^}]*\\b${head}\\b[^}]*\\} from "@/lib/countries/${cc}/`, "s").test(
-          src
-        );
+        new RegExp(
+          `import \\{[^}]*\\b${escapeRegExp(head)}\\b[^}]*\\} from "@/lib/countries/${escapeRegExp(cc)}/`,
+          "s"
+        ).test(src);
       if (current === expr || fromFolder) {
         already++;
         continue;

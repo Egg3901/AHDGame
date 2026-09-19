@@ -123,6 +123,7 @@ import { HAZARD_GROUPS } from "../../src/lib/crises/regionHazards";
 import { REGION_DEMOGRAPHIC_CATEGORY_IDS } from "../../src/app/country/[code]/region/[id]/regionData";
 import { readFileSync } from "node:fs";
 import { CONVERTED } from "../../src/lib/countries/singleCountryData";
+import { escapeRegExp } from "./regexEscape";
 
 type Dict = Record<string, unknown>;
 const d = (o: unknown) => o as Dict;
@@ -1390,7 +1391,9 @@ export async function verify(cc: string): Promise<boolean> {
       if (!present) {
         console.log(`FAIL  ${name}.${cc} no longer resolves at all.`);
         failed++;
-      } else if (!new RegExp(`from "(@/lib|\.)/countries/${cc.toLowerCase()}/`).test(src)) {
+      } else if (
+        !new RegExp(`from "(@/lib|\.)/countries/${escapeRegExp(cc.toLowerCase())}/`).test(src)
+      ) {
         console.log(
           `FAIL  ${name}.${cc} is recorded as forwarding to a folder module, but ` +
             `${viaModuleFile} imports nothing from ${cc.toLowerCase()}/. The forward is gone.`

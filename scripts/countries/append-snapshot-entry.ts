@@ -16,6 +16,7 @@
  * the case where the value would no longer be a pre-move one.
  */
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { escapeRegExp } from "./regexEscape";
 
 interface Entry {
   readonly shape: string;
@@ -54,7 +55,10 @@ async function main() {
   // the module path cannot drift apart.
   const emitter = readFileSync("scripts/countries/emit-country-snapshot.ts", "utf8");
   const match = emitter.match(
-    new RegExp(`^import\\s*\\{[^}]*\\b${REGISTRY}\\b[^}]*\\}\\s*from\\s*"([^"]+)";`, "m")
+    new RegExp(
+      `^import\\s*\\{[^}]*\\b${escapeRegExp(REGISTRY)}\\b[^}]*\\}\\s*from\\s*"([^"]+)";`,
+      "m"
+    )
   );
   if (!match) {
     console.error(
@@ -74,7 +78,7 @@ async function main() {
   // blocked a legitimate append and would have blocked one for every country
   // after the first.
   const source = readFileSync(from.replace(/^\.\.\/\.\.\//, "") + ".ts", "utf8");
-  if (new RegExp(`@/lib/countries/${lower}/`).test(source)) {
+  if (new RegExp(`@/lib/countries/${escapeRegExp(lower)}/`).test(source)) {
     console.error(
       `${from} already imports from ${lower}/, so ${REGISTRY} may already forward ` +
         `for ${COUNTRY} and its value would not be a PRE-move one. Snapshot this ` +

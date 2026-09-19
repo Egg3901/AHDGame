@@ -22,6 +22,7 @@
  * not eight with five inventions.
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { escapeRegExp } from "./regexEscape";
 
 interface Entry {
   readonly shape: string;
@@ -563,7 +564,7 @@ const PHASES_FILE = "src/lib/turn/countryPhases.ts";
 
 function phaseEntries(): Array<[string, string]> {
   const src = readFileSync(PHASES_FILE, "utf8");
-  const start = src.search(new RegExp(`^  ${COUNTRY}: \\[`, "m"));
+  const start = src.search(new RegExp(`^  ${escapeRegExp(COUNTRY)}: \\[`, "m"));
   if (start < 0) return [];
   /*
    * ⚠ BRACKET-MATCHED, BECAUSE A ONE-LINE ENTRY HAS NO `\n  ],` TO FIND. Poland
