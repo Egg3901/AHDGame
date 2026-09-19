@@ -188,16 +188,19 @@ export const REPUDIATE_TRUST_HIT = -0.3;
 export const REPUDIATE_BOND_MARKET_PRICE = 0.05;
 export const REPUDIATE_LOCKOUT_TURNS = 48;
 /**
- * Fraction of the sovereign's OWN debt ledger (`federalBudget.treasuryBalance`
- * / `debt.principal`) wiped by a repudiation (refs #3813). Mirrors the
+ * Fraction of the sovereign's OWN bond stock (`federalBudget.debt.principal`,
+ * the haircut-adjusted outstanding ledger in bonds/sovereignPrincipal.ts)
+ * wiped by a repudiation (refs #3813). Mirrors the
  * REPUDIATE_BOND_MARKET_PRICE haircut dealt to individual bondholders — the
  * country's own recognized liability should shrink by the same story (95%
  * gone, a small residual remains so a repudiating country isn't handed a
  * literal clean slate). Without this, `markCountryBondsRepudiated` haircuts
- * only the tradeable `bonds` collection; the aggregate ledger that drives the
- * interest-rate tier and debt/GDP ratio every turn (`deriveFiscalState`) never
- * shrinks, so the very next `processTreasuryTurn` tick recomputes the same
- * CCC/14% tier and the spiral resumes untouched by the "default."
+ * only the tradeable `bonds` collection; the aggregate stock that drives the
+ * interest-rate tier and debt/GDP ratio every turn
+ * (`sovereignDebtTerms`) never shrinks, so the very next
+ * `processTreasuryTurn` tick recomputes the same CCC/14% tier and the spiral
+ * resumes untouched by the "default." Treasury cash is separate and untouched:
+ * a haircut writes down obligations, never cash (refs #1975).
  */
 export const REPUDIATE_PRINCIPAL_WRITEDOWN = 1 - REPUDIATE_BOND_MARKET_PRICE;
 

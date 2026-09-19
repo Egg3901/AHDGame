@@ -860,7 +860,7 @@ describe("processMergeProposal (transfer semantics — seats + coalition)", () =
     expect((eo![1] as { $set: { party: string } }).$set.party).toBe("3");
   });
 
-  it("stamps partyJoinedTurn = currentTurn on absorbed members (tenure clock resets on merge)", async () => {
+  it("preserves absorbed members existing tenure and legacy missing join turns", async () => {
     const db = setup({ govDoc: null });
     await processMergeProposal(db as unknown as Db, proposal, 120);
 
@@ -869,7 +869,8 @@ describe("processMergeProposal (transfer semantics — seats + coalition)", () =
     expect(call![0]).toEqual({ party: "1", countryId: "IE" });
     const pipeline = call![1] as Array<{ $set: Record<string, unknown> }>;
     expect(pipeline[0].$set.party).toBe("3");
-    expect(pipeline[0].$set.partyJoinedTurn).toBe(120);
+    expect(pipeline[0].$set).not.toHaveProperty("partyJoinedTurn");
+    expect(pipeline[0].$set).not.toHaveProperty("partyJoinedAt");
   });
 
   it("drops the founder marker from absorbed members (their party no longer exists)", async () => {

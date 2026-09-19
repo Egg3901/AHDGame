@@ -17,7 +17,13 @@ import { getCurrencyFxRate } from "@/lib/currency/corporationCapital";
  * corp-side counterparty, so money is conserved — only the account changed.
  */
 
-/** Move `delta` (signed, country-local currency) on the country's treasury balance. */
+/**
+ * Move `delta` (signed, country-local currency) on the country's treasury balance.
+ *
+ * Every nationalization/SOE/privatization cash flow funnels through here as a
+ * cash-only `$inc` (concurrent-safe). `debt.principal` belongs to the bond
+ * ledger (see bonds/sovereignPrincipal.ts) and is correctly left alone (#1975).
+ */
 async function incTreasuryBalance(
   db: Db,
   countryId: CountryId,

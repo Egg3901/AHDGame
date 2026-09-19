@@ -238,15 +238,17 @@ export const bulkSectorOperationsSchema = z
     productionPolicy: z.number().min(-25).max(25).optional(),
     // Posted-price posture (−20%…+20% vs market); null = Auto. Requires clearing mode.
     pricingPosture: z.number().min(-0.2).max(0.2).nullable().optional(),
+    wageLevel: z.number().min(WAGE_LEVEL_MIN).max(WAGE_LEVEL_MAX).optional(),
     preview: z.boolean().optional().default(false),
   })
   .refine(
     (d) =>
       d.targetGrowthRate !== undefined ||
       d.productionPolicy !== undefined || // pragma: allowlist secret
-      d.pricingPosture !== undefined,
+      d.pricingPosture !== undefined ||
+      d.wageLevel !== undefined,
     {
-      message: "Need growth, production policy, and/or pricing", // pragma: allowlist secret
+      message: "Need growth, production policy, pricing or wages", // pragma: allowlist secret
     }
   );
 

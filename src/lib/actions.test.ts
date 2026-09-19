@@ -175,7 +175,11 @@ describe("canPerformAction — tiered costs", () => {
   });
 
   it("poll still uses base cost (2) regardless of stats", () => {
-    const char = makeCharacter({ actions: 2, funds: 1_000_000 });
+    const char = makeCharacter({
+      actions: 2,
+      funds: 1_000_000,
+      stats: { intellect: 5.5 } as Character["stats"],
+    });
     const result = canPerformAction(char, "poll");
     expect(result.canPerform).toBe(true);
   });

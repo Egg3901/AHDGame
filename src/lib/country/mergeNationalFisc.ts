@@ -3,8 +3,8 @@
  *
  * A dissolving country's regions carry their own budgets, laws and money across
  * with `transferRegion` — but the NATIONAL layer has no region to ride: the
- * treasury (signed; its debt is the mirror), the defence account, the sovereign
- * bonds real players hold, and the national law book. Left behind, the treasury
+ * treasury (signed cash, separate from bond debt), the defence account, the
+ * sovereign bonds real players hold, and the national law book. Left behind, the treasury
  * pays coupons from a ghost ledger until it defaults for a country that no
  * longer exists, and the survivor's budget forgets every national programme the
  * absorbed state ever legislated. This module is the assumption of state debts
@@ -30,7 +30,7 @@ import type { Bond } from "@/lib/db/types/bond";
 import type { EnactedLaw, FederalBudget } from "@/lib/db/types/budget";
 import type { GameState } from "@/lib/db/types/gameState";
 import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
-import { nationalDebtFromBalance } from "@/lib/budget/treasuryBalance";
+import { resyncSovereignPrincipalFromBonds } from "@/lib/bonds/sovereign";
 import { countryFiscalBase } from "@/lib/politicalLegislation/fiscalBase";
 import { resolveMergeFxScale } from "./mergeFxScale";
 
@@ -190,16 +190,16 @@ export async function mergeNationalFisc(
 
     // The survivor's book: signed add of the SAME number the caller records in
     // its audit trail (`treasuryMoved` — one expression, so the recorded amount
-    // is by construction the credited amount), with the debt mirror recomputed
-    // through the canonical derivation (`nationalDebtFromBalance`), never a
-    // local copy of it.
+    // is by construction the credited amount). Treasury cash crosses as cash:
+    // `debt.principal` belongs to the sovereign bond ledger (see
+    // bonds/sovereignPrincipal.ts) and is re-pointed at the rescoped bond stock
+    // below, never derived from the combined balance (#1975).
     const newToTreasury = (to.treasuryBalance ?? 0) + treasuryMoved;
     await budgets.updateOne(
       { _id: toCountryId },
       {
         $set: {
           treasuryBalance: newToTreasury,
-          "debt.principal": nationalDebtFromBalance(newToTreasury),
           ...lawSet,
           updatedAt: now,
         },
@@ -211,13 +211,13 @@ export async function mergeNationalFisc(
     // The absorbed book: zeroed, stamped. NOT deleted — history and the wiki
     // still read it (its levers stay in place as the record of the law that
     // crossed), and the fiscal loop stops visiting it via the dissolved guard
-    // rather than via absence.
+    // rather than via absence. Its principal is re-pointed at its remaining
+    // bond stock (matured paper stays behind) by the resync below.
     await budgets.updateOne(
       { _id: fromCountryId },
       {
         $set: {
           treasuryBalance: 0,
-          "debt.principal": nationalDebtFromBalance(0),
           ...(from.defenseAppropriation ? { "defenseAppropriation.balance": 0 } : {}),
           mergedInto: { countryId: toCountryId, turn: currentTurn },
           updatedAt: now,
@@ -268,6 +268,14 @@ export async function mergeNationalFisc(
       }))
     );
   }
+
+  // The bond stock moved (and was FX-scaled) above; re-point both budgets'
+  // stored principal at the ledger rather than at the combined cash. Runs
+  // unconditionally so a retry after a crash between the rescope and this step
+  // still converges: the resync is a pure function of the bonds read, and a
+  // re-run finds no bonds left to rescope, so both steps are no-ops (#1975).
+  await resyncSovereignPrincipalFromBonds(db, toCountryId);
+  await resyncSovereignPrincipalFromBonds(db, fromCountryId);
 
   // ── National enacted laws ──────────────────────────────────────────────────
   // Region law books rode their regions across; the NATIONAL book (scope

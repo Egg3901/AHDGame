@@ -17,6 +17,7 @@ import { archiveCampaignsForCandidates } from "@/lib/campaigns/archiveWithdrawnC
 import { getOfficeLabel } from "@/lib/utils/politics";
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
 import { vacateCommonsSeat } from "@/lib/uk/elections/commonsVacancyShell";
+import { preserveSurvivingCabinetRow } from "@/lib/uk/dualMinistry/survivor";
 import type {
   CabinetMember,
   Character,
@@ -495,7 +496,12 @@ async function resignCabinet(
     .collection<CabinetMember>("cabinetMembers")
     .deleteOne({ _id: member._id, characterId: character._id });
   if (result.deletedCount === 0) return false;
-  if (currentOfficeMatchesCabinet(character.currentOffice, member)) {
+  // A surviving second row keeps the holder in cabinet (issue #2049): repoint
+  // at it instead of clearing. Only a fully departed holder clears office.
+  if (
+    currentOfficeMatchesCabinet(character.currentOffice, member) &&
+    !(await preserveSurvivingCabinetRow(db, member.countryId, character._id, now))
+  ) {
     await clearCurrentOfficeForOffice(db, character._id, character.currentOffice, now);
   }
   return true;
