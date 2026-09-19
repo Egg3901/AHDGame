@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Input } from "@/components/ui";
 import type { PartyData, PartyMember } from "./types";
 import { getCountryConfig, type CountryId } from "@/lib/constants/countries";
@@ -6,6 +6,7 @@ import { getNationalPartyTransferTargets } from "@/lib/constants/transferTargets
 import type { TreasuryAction } from "./treasuryReducer";
 import { contrastTextColor } from "@/lib/utils/colorContrast";
 import { fmt } from "./helpers";
+import { partyApiUrl } from "@/lib/urls";
 import { getPlayerPayoutCap } from "@/lib/treasury/payoutCapValues";
 
 interface TreasuryTransferControlsProps {
@@ -39,6 +40,42 @@ export function TreasuryTransferControls({
   const regionLabel = countryConfig.regionLabel.toLowerCase();
 
   const payoutCap = getPlayerPayoutCap(countryId as CountryId);
+
+  /**
+   * What the SELECTED member may still receive this turn.
+   *
+   * The ceiling alone told an officer nothing about whether a payment
+   * would actually land: most of a member's allowance may already be
+   * gone, spent through a state party or a caucus rather than here.
+   * Refetched per selection, and null while unknown or unselected.
+   */
+  const [recipientRemaining, setRecipientRemaining] = useState<number | null>(null);
+  const selectedMemberId = sendForm.memberId;
+
+  useEffect(() => {
+    if (!selectedMemberId) {
+      setRecipientRemaining(null);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch(
+          `${partyApiUrl(countryId, party.id)}/treasury/payout-allowance?characterId=${encodeURIComponent(selectedMemberId)}`
+        );
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!cancelled && typeof data?.remaining === "number") {
+          setRecipientRemaining(data.remaining);
+        }
+      } catch {
+        // Non-critical: the card falls back to quoting the flat cap.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedMemberId, countryId, party.id]);
 
   return (
     <>
@@ -95,6 +132,24 @@ export function TreasuryTransferControls({
         <div className="mt-1 text-xs text-muted">
           Available: {fmt(party.treasury, party.countryId)} · Min. {fmt(1000, party.countryId)}
         </div>
+        {selectedMemberId && recipientRemaining != null && (
+          <div className="mt-1 text-xs">
+            {recipientRemaining === 0 ? (
+              <span className="text-error">
+                This member has already received their full {fmt(payoutCap, party.countryId)} this
+                turn. A payment now will be refused.
+              </span>
+            ) : (
+              <span className="text-muted">
+                They can still receive{" "}
+                <span className="font-semibold text-foreground">
+                  {fmt(recipientRemaining, party.countryId)}
+                </span>{" "}
+                this turn.
+              </span>
+            )}
+          </div>
+        )}
         <p className="mt-2 text-[11px] text-muted">
           No party funds move in the last two turns before a leadership election closes.
         </p>

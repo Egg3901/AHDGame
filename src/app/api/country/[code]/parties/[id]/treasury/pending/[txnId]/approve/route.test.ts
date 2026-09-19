@@ -124,6 +124,45 @@ describe("POST /api/country/[code]/parties/[id]/treasury/pending/[txnId]/approve
     expect(args.currentTurn).toBe(100);
   });
 
+  it("hands the signature back when the underlying transfer refuses", async () => {
+    // The slot is claimed BEFORE the execute so two approvers racing
+    // cannot both pay out. Without a release, a refusal left the
+    // signature on a still-open row: the panel showed an approved
+    // transaction, every further Approve burned the other slot the same
+    // way, and it sat there until the 48-turn expiry sweep.
+    const { executeSendToMember } = await import("@/lib/treasury/executeSendToMember");
+    vi.mocked(executeSendToMember).mockResolvedValue({
+      ok: false,
+      response: NextResponse.json({ error: "over the cap" }, { status: 400 }),
+    } as never);
+
+    const response = await call();
+    expect(response.status).toBe(400);
+
+    const unset = db.collectionMocks["pendingTreasuryTransactions"]!.updateOne.mock.calls.find(
+      (c) => (c[1] as { $unset?: unknown })?.$unset
+    );
+    expect(unset).toBeDefined();
+    expect(unset![0]).toMatchObject({ status: "open" });
+    expect(unset![1]).toEqual({ $unset: { treasurerApproval: "" } });
+  });
+
+  it("leaves the signature in place when the transfer succeeds", async () => {
+    // Set explicitly: `vi.clearAllMocks()` resets calls but not
+    // implementations, so the refusal above would otherwise leak here.
+    const { executeSendToMember } = await import("@/lib/treasury/executeSendToMember");
+    vi.mocked(executeSendToMember).mockResolvedValue({
+      ok: true,
+      response: NextResponse.json({ success: true }),
+    } as never);
+
+    await call();
+    const unset = db.collectionMocks["pendingTreasuryTransactions"]!.updateOne.mock.calls.find(
+      (c) => (c[1] as { $unset?: unknown })?.$unset
+    );
+    expect(unset).toBeUndefined();
+  });
+
   it("refuses to pay out a row queued before the leadership election freeze", async () => {
     // Otherwise a row queued earlier becomes a way through the window.
     db.collectionMocks["nationalPartyElections"]!.countDocuments.mockResolvedValue(1);

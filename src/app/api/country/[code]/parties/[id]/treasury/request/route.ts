@@ -14,6 +14,7 @@ import {
   LEADERSHIP_FREEZE_MESSAGE,
 } from "@/lib/parties/leadershipElectionFreeze";
 import { getGameTime } from "@/lib/time/gameTime";
+import { getPlayerPayoutCap } from "@/lib/treasury/payoutCapValues";
 import {
   canRequestFunds,
   createPendingTransaction,
@@ -102,7 +103,24 @@ export async function POST(request: Request, { params }: RouteParams) {
       );
     }
 
-    // With no seated Treasurer, double collapses to single so a single
+    // A request larger than the recipient's per-turn payout ceiling can
+    // never be paid. `checkPlayerPayoutCap` refuses when `amount >
+    // remaining`, and `remaining` is at most `cap`, so such a row is
+    // refused on every turn no matter how many officers sign it. It was
+    // still accepted here, and the refusal only surfaced at the end of
+    // the approve flow, after that route had already claimed an
+    // approver's slot. Refuse it at the door instead.
+    const payoutCap = getPlayerPayoutCap(countryId);
+    if (amount > payoutCap) {
+      return NextResponse.json(
+        {
+          error: `A single request cannot exceed the per-turn limit of $${payoutCap.toLocaleString()} per member.`,
+        },
+        { status: 400 }
+      );
+    }
+
+    // With too few officers seated, double collapses to single so a single
     // officer (Chair/VC acting Treasurer) can approve the request.
     const mode = resolveTransactionApprovalMode(party);
     const eligibility = canRequestFunds(party, mode);

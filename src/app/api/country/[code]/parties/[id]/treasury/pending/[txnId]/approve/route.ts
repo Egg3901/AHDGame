@@ -15,6 +15,7 @@ import { getGameTime } from "@/lib/time/gameTime";
 import { executeSendToMember } from "@/lib/treasury/executeSendToMember";
 import { executeTransferToStateParty } from "@/lib/treasury/executeTransferToStateParty";
 import {
+  approvalFieldForSlot,
   getApproverSlotForRow,
   isPendingTransactionComplete,
 } from "@/lib/parties/pendingTreasuryTransactions";
@@ -28,10 +29,11 @@ interface RouteParams {
 // Fills the missing approval slot on a pending treasury transaction
 // and executes the underlying transfer in one flow.
 //
-// Auth: must be the missing-slot's eligible role (Treasurer if
-// treasurerApproval is unfilled; Chair OR Vice-Chair if leadership
-// is unfilled). The atomic update guards on `status: "open"` AND on
-// the slot being empty, so double-clicks and races are no-ops, not
+// Auth: any officer of the party (Chair, Vice-Chair or Treasurer) who
+// has not already signed this row, and who is not the requester of a
+// Request Funds row. Slots are filled in order and are not tied to a
+// seat. The atomic update guards on `status: "open"` AND on the slot
+// being empty, so double-clicks and races are no-ops, not
 // double-executes.
 export async function POST(_request: Request, { params }: RouteParams) {
   try {
@@ -103,20 +105,16 @@ export async function POST(_request: Request, { params }: RouteParams) {
         {
           error: isSelfRequest
             ? "You can't approve your own Request Funds."
-            : "Only an officer (Treasurer / Chair / Vice-Chair) can approve treasury transactions.",
+            : "Only an officer (Treasurer / Chair / Vice-Chair) who has not already signed this transaction can approve it.",
         },
         { status: 403 }
       );
     }
 
-    const slotField = slot === "treasurer" ? "treasurerApproval" : "leadershipApproval";
-    const alreadyFilled =
-      slot === "treasurer" ? !!pending.treasurerApproval : !!pending.leadershipApproval;
+    const slotField = approvalFieldForSlot(slot);
+    const alreadyFilled = !!pending[slotField];
     if (alreadyFilled) {
-      return NextResponse.json(
-        { error: `The ${slot === "treasurer" ? "Treasurer" : "Chair/VC"} slot is already filled.` },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "That approval slot is already filled." }, { status: 400 });
     }
 
     // ─── Fill the matching slot atomically ───────────────────────────────
@@ -146,6 +144,25 @@ export async function POST(_request: Request, { params }: RouteParams) {
         { status: 409 }
       );
     }
+
+    /**
+     * Hand the slot back when the underlying transfer refuses.
+     *
+     * The claim above is deliberately written BEFORE the execute, so two
+     * approvers racing cannot both execute. The cost is that a refusal
+     * further down used to leave the signature behind on a still-open
+     * row: the panel then showed a transaction that looked approved,
+     * every further Approve click burned the other slot the same way,
+     * and the row sat there until the expiry sweep took it 48 turns
+     * later. Releasing restores exactly the state the approver clicked
+     * from, so a refusal is a refusal and not a corrupted row.
+     */
+    const releaseSlot = async (response: NextResponse): Promise<NextResponse> => {
+      await db
+        .collection<PendingTreasuryTransaction>("pendingTreasuryTransactions")
+        .updateOne({ _id: txnOid, status: "open" }, { $unset: { [slotField]: "" } });
+      return response;
+    };
 
     // Re-fetch and check completion (mode-aware: request+single may
     // complete on a single slot fill; send/transfer always require both).
@@ -212,7 +229,7 @@ export async function POST(_request: Request, { params }: RouteParams) {
         initiatorUserId: user.userId,
         currentTurn,
       });
-      if (!result.ok) return result.response;
+      if (!result.ok) return releaseSlot(result.response);
     } else if (ready.type === "transfer") {
       if (!ready.targetStateId) {
         return NextResponse.json({ error: "Pending row missing target state" }, { status: 500 });
@@ -235,7 +252,7 @@ export async function POST(_request: Request, { params }: RouteParams) {
         initiatorUserId: user.userId,
         isAdmin: !!user.isAdmin,
       });
-      if (!result.ok) return result.response;
+      if (!result.ok) return releaseSlot(result.response);
     } else {
       return NextResponse.json(
         { error: `Unknown pending txn type: ${ready.type}` },
