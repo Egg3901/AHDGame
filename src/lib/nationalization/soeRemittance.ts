@@ -26,12 +26,22 @@ import { cappedRemittanceLocal } from "./ceoFinance";
 import { remitToTreasury } from "./treasury";
 import { loadSoeGovernanceInputs } from "./soeGovernanceInputs";
 
-export async function processSoeRemittance(db: Db, now: Date): Promise<{ remitted: number }> {
+/** One corp's profit-remittance leg this turn, in the corp's own currency. */
+export interface SoeRemittedCorp {
+  corpId: Corporation["_id"];
+  countryId: CountryId;
+  amountLocal: number;
+}
+
+export async function processSoeRemittance(
+  db: Db,
+  now: Date
+): Promise<{ remitted: number; perCorp: SoeRemittedCorp[] }> {
   const corps = await db
     .collection<Corporation>("corporations")
     .find({ $or: [{ countryOwnerId: { $exists: true } }, { ownershipState: "stateOwned" }] })
     .toArray();
-  if (corps.length === 0) return { remitted: 0 };
+  if (corps.length === 0) return { remitted: 0, perCorp: [] };
 
   const corpIds = corps.map((c) => c._id);
   // PLANTS PARITY. `estimateNationalizedOperatingIncome` takes `plantsEnabled`
@@ -68,6 +78,7 @@ export async function processSoeRemittance(db: Db, now: Date): Promise<{ remitte
   }
 
   let remitted = 0;
+  const perCorp: SoeRemittedCorp[] = [];
   for (const corp of corps) {
     if (!isStateOwned(corp)) continue;
     const incomeAnchor = estimateNationalizedOperatingIncome(
@@ -104,8 +115,9 @@ export async function processSoeRemittance(db: Db, now: Date): Promise<{ remitte
 
     const countryId = (corp.countryOwnerId ?? corp.countryId) as CountryId;
     await remitToTreasury(db, { countryId, corpId: corp._id, amountLocal }, now);
+    perCorp.push({ corpId: corp._id, countryId, amountLocal });
     remitted++;
   }
 
-  return { remitted };
+  return { remitted, perCorp };
 }

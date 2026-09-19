@@ -158,9 +158,10 @@ async function convertRegime(
  * unconditionally rather than guarded; guarding is how a double conversion gets
  * written.
  *
- * `$inc` on `treasuryBalance` only. `debt.principal` is a DERIVED mirror
- * (`max(0, -treasuryBalance)`) that `treasuryTurn` owns; writing both would create
- * two sources of truth.
+ * `$inc` on `treasuryBalance` only. `debt.principal` belongs to the
+ * sovereign bond ledger (see bonds/sovereignPrincipal.ts) and is never
+ * re-derived from the balance here; writing both would create two sources of
+ * truth (refs #1975).
  *
  * No affordability check. A payment may push the payer negative, which is what
  * national debt is: requiring a surplus would mean a country already in debt could

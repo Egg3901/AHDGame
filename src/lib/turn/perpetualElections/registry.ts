@@ -31,50 +31,53 @@ export interface SpawnElectionsResult {
   created?: boolean;
 }
 
-export type SpawnElectionsHandler = (now: Date) => Promise<SpawnElectionsResult | void>;
+export type SpawnElectionsHandler = (
+  now: Date,
+  currentTurn?: number
+) => Promise<SpawnElectionsResult | void>;
 
 export const SPAWN_ELECTIONS_REGISTRY: Partial<Record<CountryId, SpawnElectionsHandler>> = {
-  US: ensurePresidentialElection,
-  UK: async (now) => {
+  US: (now, currentTurn) => ensurePresidentialElection(now, currentTurn),
+  UK: async (now, currentTurn) => {
     // Westminster Commons + devolved Regional Councils + Governor seats.
-    await ensureUKElections(now);
-    await ensureUKRegionalCouncilElections(now);
-    await ensureUKGovernorElections(now);
+    await ensureUKElections(now, currentTurn);
+    await ensureUKRegionalCouncilElections(now, currentTurn);
+    await ensureUKGovernorElections(now, currentTurn);
     return { message: "UK Commons / Regional Council / Governor continuity check complete." };
   },
-  DE: async (now) => {
-    await ensureDEElections(now);
+  DE: async (now, currentTurn) => {
+    await ensureDEElections(now, currentTurn);
     return { message: "DE Bundestag continuity check complete." };
   },
-  JP: async (now) => {
+  JP: async (now, currentTurn) => {
     // Shugiin (lower) + Sangiin (upper, classOverride omitted = natural class) +
     // prefectural Governor seats.
-    await ensureJPElections(now);
-    await ensureJPCouncillorElections(now);
-    await ensureJPGovernorElections(now);
+    await ensureJPElections(now, currentTurn);
+    await ensureJPCouncillorElections(now, undefined, currentTurn);
+    await ensureJPGovernorElections(now, currentTurn);
     return { message: "JP Shugiin / Sangiin / Governor continuity check complete." };
   },
-  CN: async (now) => {
+  CN: async (now, currentTurn) => {
     // National NPC Delegates + Provincial People's Congress + macro-region Governor.
-    await ensureCNElections(now);
-    await ensureCNPeoplesCongressElections(now);
-    await ensureCNGovernorElections(now);
+    await ensureCNElections(now, currentTurn);
+    await ensureCNPeoplesCongressElections(now, currentTurn);
+    await ensureCNGovernorElections(now, currentTurn);
     return { message: "CN NPC / Provincial Congress / Governor continuity check complete." };
   },
-  BR: async (now) => {
-    await ensureBRElections(now);
-    await ensureBRSenateElections(now);
+  BR: async (now, currentTurn) => {
+    await ensureBRElections(now, currentTurn);
+    await ensureBRSenateElections(now, currentTurn);
     return { message: "BR Câmara / Senate continuity check complete." };
   },
-  NG: async (now) => {
-    await ensureNGElections(now);
+  NG: async (now, currentTurn) => {
+    await ensureNGElections(now, currentTurn);
     return { message: "NG election continuity check complete." };
   },
-  IE: async (now) => {
-    await ensureIEElections(now);
-    await ensureIEUachtaranElections(now);
-    await ensureIELocalCouncilElections(now);
-    await ensureIECathaoirleachElections(now);
+  IE: async (now, currentTurn) => {
+    await ensureIEElections(now, currentTurn);
+    await ensureIEUachtaranElections(now, currentTurn);
+    await ensureIELocalCouncilElections(now, currentTurn);
+    await ensureIECathaoirleachElections(now, currentTurn);
     return {
       message: "IE Dáil, Uachtarán, Local Council, and Cathaoirleach continuity check complete.",
     };

@@ -60,7 +60,9 @@ export async function loadNppPlacementSignals(
 
   return {
     statePriceRatioOf,
-    extractionHeadroomOf: (stateId) => extractionHeadroomByState.get(stateId) ?? 0,
+    // No capacity document means an uncapped legacy state, not an exhausted
+    // deposit. A present document with no resources still resolves to 0.
+    extractionHeadroomOf: (stateId) => extractionHeadroomByState.get(stateId) ?? 1,
     preferEmptyMarkets: config?.nppMarketCoverageEnabled === true,
     preferFragileMarketSupply: config?.nppFragileMarketSupplyEnabled === true,
     fragileMarketCountryEligible: (countryId) =>
