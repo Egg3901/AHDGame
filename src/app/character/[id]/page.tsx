@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { ObjectId } from "mongodb";
 import Link from "next/link";
 import { cache } from "react";
+import { businessProfileView } from "@/lib/character/businessProfileView";
 import { ProfileTabs } from "@/components/profile/ProfileTabs";
 import { loadGeneralPosting, EMPTY_POSTING } from "@/lib/military/generalPosting";
 import { getNationalDoctrine } from "@/lib/db/collections/nationalDoctrine";
@@ -480,7 +481,12 @@ async function getCharacterById(characterId: string) {
             ]);
             return {
               doctrineAdopted: doctrine.adopted,
-              general: commission.commissioned ? commission.general : null,
+              general: commission.general,
+              militaryService: {
+                commissioned: commission.commissioned,
+                commissionedTurn: commission.commissionedTurn,
+                dismissedTurn: commission.dismissedTurn,
+              },
               generalPosting: commission.commissioned
                 ? await loadGeneralPosting(db, character._id.toString(), character.countryId)
                 : EMPTY_POSTING,
@@ -493,6 +499,11 @@ async function getCharacterById(characterId: string) {
         : {
             doctrineAdopted: {},
             general: null,
+            militaryService: {
+              commissioned: false,
+              commissionedTurn: undefined,
+              dismissedTurn: undefined,
+            },
             generalPosting: EMPTY_POSTING,
             generalEra: CUR_ERA_YEAR,
             isCommandingGeneral: false,
@@ -569,6 +580,7 @@ export default async function CharacterPage({ params }: PageProps) {
     conflictsEnabled,
     doctrineAdopted,
     general,
+    militaryService,
     generalEra,
     generalPosting,
     isCommandingGeneral,
@@ -935,6 +947,8 @@ export default async function CharacterPage({ params }: PageProps) {
           conflictsEnabled={conflictsEnabled}
           adopted={doctrineAdopted}
           general={general}
+          militaryService={militaryService}
+          business={businessProfileView(financialData, isOwnProfile)}
           editable={isOwnProfile}
           curEra={generalEra}
           posting={generalPosting}

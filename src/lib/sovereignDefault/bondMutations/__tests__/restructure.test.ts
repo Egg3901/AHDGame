@@ -2,7 +2,10 @@ import { describe, it, expect, vi } from "vitest";
 import { ObjectId } from "mongodb";
 import type { Db } from "mongodb";
 import { applyCountryBondRestructure } from "../restructure";
-import { RESTRUCTURE_BOND_MARKET_PRICE } from "../../constants";
+import { RESTRUCTURE_BOND_MARKET_PRICE, RESTRUCTURE_HAIRCUT } from "../../constants";
+import { createInMemoryDb } from "@/lib/test-utils/inMemoryDb";
+import type { Bond } from "@/lib/db/types/bond";
+import { sumOutstandingSovereignPrincipal } from "@/lib/bonds/sovereignPrincipal";
 
 interface FakeBond {
   _id: ObjectId;
@@ -69,5 +72,36 @@ describe("applyCountryBondRestructure", () => {
     const { db } = makeDb([]);
     const r = await applyCountryBondRestructure(db, "US", 0.4, 60);
     expect(r).toEqual({ bondsAffected: 0 });
+  });
+
+  it("re-entry changes no face and preserves the first run's originals (#1975)", async () => {
+    const memory = createInMemoryDb();
+    const db = memory as unknown as Db;
+    memory.seed("bonds", [
+      {
+        _id: "b1",
+        issuerType: "sovereign",
+        countryId: "US",
+        totalIssued: 10_000_000_000,
+        maturityTurn: 800,
+        matured: false,
+        defaulted: false,
+        originalMaturityTurn: null,
+        originalTotalIssued: null,
+      },
+    ]);
+    const first = await applyCountryBondRestructure(db, "US", RESTRUCTURE_HAIRCUT, 60);
+    expect(first).toEqual({ bondsAffected: 1 });
+    const second = await applyCountryBondRestructure(db, "US", RESTRUCTURE_HAIRCUT, 60);
+    // Still matches (restructure does not flip defaulted), but face is
+    // untouched and the first run's originals survive the second stamp.
+    expect(second).toEqual({ bondsAffected: 1 });
+    const bonds = await db.collection<Bond>("bonds").find({ countryId: "US" }).toArray();
+    expect(bonds).toHaveLength(1);
+    expect(bonds[0]?.totalIssued).toBe(10_000_000_000);
+    expect(bonds[0]?.originalTotalIssued).toBe(10_000_000_000);
+    expect(bonds[0]?.originalMaturityTurn).toBe(800);
+    expect(bonds[0]?.restructureHaircutPercent).toBe(RESTRUCTURE_HAIRCUT);
+    expect(sumOutstandingSovereignPrincipal(bonds)).toBe(6_000_000_000);
   });
 });

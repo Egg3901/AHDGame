@@ -1,13 +1,12 @@
 import type { Character, State, ActionType } from "@/lib/db/types";
 import { getHomeCurrency, getTotalPersonalLiquidWealth } from "@/lib/currency/characterFunds";
 import { CURRENCY_SYMBOLS, type CurrencyCode } from "@/lib/constants/currencies";
-import { statMultiplier } from "@/lib/stats/statMultiplier";
 import { campaignAnchorToLocal } from "@/lib/campaigns/campaignCurrency";
-import { DEBATE_PREP_ACTION_COST, NEUTRAL_STAT, type StatKey } from "@/lib/stats/statsConstants";
+import type { StatKey } from "@/lib/stats/statsConstants";
 import {
   FUNDRAISE_ACTION_COST,
   fundraiseYieldAnchor,
-  isFundraiseEligible,
+  quoteFundraiseAction,
   getCampaignActionCost,
   quoteCampaignAction,
   getAdvertiseActionCost,
@@ -17,14 +16,29 @@ import {
   CONVERT_CASH_ACTION_COST,
   calculateConvertCashInfamy,
   convertCashConversion,
+  POLL_ACTION_COST,
+  POLL_LARGE_ACTION_COST,
+  getPollActionCost,
+  quotePollAction,
+  type PollTier,
+  REST_ACTION_COST,
+  REST_RESULT_MESSAGE,
+  quoteRestAction,
+  DEBATE_PREP_ACTION_COST,
+  quoteDebatePrepAction,
+  describeDebatePrepAction,
 } from "./actions/rules";
 
 export {
   FUNDRAISE_ACTION_COST,
+  FUNDRAISE_NO_DONOR_ERROR,
   calculateFundraisingAmount,
   fundraiseYieldAnchor,
   isFundraiseEligible,
+  quoteFundraiseAction,
   type FundraiseActor,
+  type FundraiseQuoteActor,
+  type FundraiseQuote,
   CAMPAIGN_BASE_FUND_COST,
   CAMPAIGN_MAX_INFLUENCE,
   getFundMultiplier,
@@ -60,16 +74,33 @@ export {
   quoteConvertCashAction,
   type ConvertCashQuoteActor,
   type ConvertCashQuote,
+  POLL_BASE_FUND_COST,
+  POLL_LARGE_BASE_FUND_COST,
+  POLL_ACTION_COST,
+  POLL_LARGE_ACTION_COST,
+  getPollActionCost,
+  getPollBaseFundCost,
+  getPollFundCost,
+  quotePollAction,
+  type PollTier,
+  type PollQuoteActor,
+  type PollQuote,
+  REST_ACTION_COST,
+  REST_RESULT_MESSAGE,
+  quoteRestAction,
+  type RestQuote,
+  DEBATE_PREP_ACTION_COST,
+  DEBATE_PREP_SUCCESS_CHANCE,
+  DEBATE_PREP_DEBATE_GAIN,
+  DEBATE_PREP_DISABLED_ERROR,
+  DEBATE_PREP_UNALLOCATED_ERROR,
+  quoteDebatePrepAction,
+  describeDebatePrepAction,
+  describeDebatePrepEffect,
+  type DebatePrepQuoteActor,
+  type DebatePrepQuoteOptions,
+  type DebatePrepQuote,
 } from "./actions/rules";
-
-/**
- * Read a character's stat with a neutral fallback for characters that predate
- * the stat system (pre-grandfather migration). Neutral yields a 1.0× multiplier
- * so unmigrated characters are unaffected.
- */
-function statValue(character: Character, key: StatKey): number {
-  return character.stats?.[key] ?? NEUTRAL_STAT;
-}
 
 /**
  * Currency context the execute route supplies so action result messages render
@@ -246,10 +277,18 @@ export const ACTIONS: Record<ActionType, ActionDefinition> = {
     baseCost: FUNDRAISE_ACTION_COST,
     requiresState: false,
     effect: (character: Character, _state?: State, ctx?: ActionEffectContext) => {
-      // Fundraising stat scales the yield (gentle ±20%). Shared with every UI
-      // quote via fundraiseYieldAnchor so the card can never advertise a
-      // different number than the one credited.
-      const amount = fundraiseYieldAnchor(character);
+      // Single source of truth: the UI card, the advisor and the projection
+      // quote this same quote, so the advertised yield can never drift from
+      // the credited result. canPerformAction runs the quote first; the throw
+      // below is a defensive invariant for direct effect callers that skip
+      // validation.
+      const quote = quoteFundraiseAction({
+        donorBaseLevel: character.donorBaseLevel,
+        politicalInfluence: character.politicalInfluence,
+        fundraising: character.stats?.fundraising,
+      });
+      if (!quote.ok) throw new Error(quote.error);
+      const amount = quote.yieldAnchor;
       const fmt = ctx?.formatFunds ?? plainFunds;
       return {
         fundsChange: amount,
@@ -368,15 +407,20 @@ export const ACTIONS: Record<ActionType, ActionDefinition> = {
     name: "Quick Poll",
     description:
       "Commission a quick poll — see your topline appeal and best/worst demographic groups ($25,000)",
-    baseCost: 2,
+    baseCost: POLL_ACTION_COST,
     requiresState: false,
     effect: (character: Character, _state?: State, ctx?: ActionEffectContext) => {
-      // Intellect lowers polling cost (gentle ±20%).
-      const cost = Math.round(25_000 / statMultiplier(statValue(character, "intellect")));
+      // Single source of truth: the poll page quotes this same quote and the
+      // poll API route debits it, so the advertised cost can never drift from
+      // the charged result. canPerformAction runs the quote first; the throw
+      // below is a defensive invariant for direct effect callers that skip
+      // validation.
+      const quote = quotePollAction({ intellect: character.stats?.intellect }, "small");
+      if (!quote.ok) throw new Error(quote.error);
       const fmt = ctx?.formatFunds ?? plainFunds;
       return {
-        fundsChange: -cost,
-        message: `Quick poll commissioned (${fmt(cost)}). Topline results available.`,
+        fundsChange: -quote.fundCostAnchor,
+        message: `Quick poll commissioned (${fmt(quote.fundCostAnchor)}). Topline results available.`,
       };
     },
   },
@@ -386,15 +430,20 @@ export const ACTIONS: Record<ActionType, ActionDefinition> = {
     name: "Full Demographic Poll",
     description:
       "Commission a comprehensive poll — full breakdown across every demographic group and category ($75,000)",
-    baseCost: 6,
+    baseCost: POLL_LARGE_ACTION_COST,
     requiresState: false,
     effect: (character: Character, _state?: State, ctx?: ActionEffectContext) => {
-      // Intellect lowers polling cost (gentle ±20%).
-      const cost = Math.round(75_000 / statMultiplier(statValue(character, "intellect")));
+      // Single source of truth: the poll page quotes this same quote and the
+      // poll API route debits it, so the advertised cost can never drift from
+      // the charged result. canPerformAction runs the quote first; the throw
+      // below is a defensive invariant for direct effect callers that skip
+      // validation.
+      const quote = quotePollAction({ intellect: character.stats?.intellect }, "large");
+      if (!quote.ok) throw new Error(quote.error);
       const fmt = ctx?.formatFunds ?? plainFunds;
       return {
-        fundsChange: -cost,
-        message: `Full demographic poll commissioned (${fmt(cost)}). Detailed breakdown available.`,
+        fundsChange: -quote.fundCostAnchor,
+        message: `Full demographic poll commissioned (${fmt(quote.fundCostAnchor)}). Detailed breakdown available.`,
       };
     },
   },
@@ -435,11 +484,18 @@ export const ACTIONS: Record<ActionType, ActionDefinition> = {
     type: "rest",
     name: "Rest",
     description: "Take a break (does nothing)",
-    baseCost: 0,
+    baseCost: REST_ACTION_COST,
     requiresState: false,
     effect: () => {
+      // Single source of truth: the dashboard, the advisor and
+      // canPerformAction read this same quote, so the advertised (zero) cost
+      // can never drift from the charged result. canPerformAction runs the
+      // quote first; the throw below is a defensive invariant for direct
+      // effect callers that skip validation.
+      const quote = quoteRestAction();
+      if (!quote.ok) throw new Error(quote.error);
       return {
-        message: "You took a well-deserved break.",
+        message: REST_RESULT_MESSAGE,
       };
     },
   },
@@ -447,8 +503,10 @@ export const ACTIONS: Record<ActionType, ActionDefinition> = {
   debatePrep: {
     type: "debatePrep",
     name: "Debate Prep",
-    description:
-      "Study briefing books and rehearse. 10% chance to raise your Debate skill by 1. No fund cost.",
+    // Single source of truth: the card effect label quotes this same chance
+    // constant, so the advertised odds can never drift from the resolved roll
+    // (the text previously advertised 10% while the roll resolved 15%).
+    description: describeDebatePrepAction(),
     baseCost: DEBATE_PREP_ACTION_COST,
     requiresState: false,
     // The actual roll + Debate write is handled in the execute route (it needs
@@ -479,6 +537,12 @@ export type CanPerformActionOptions = {
   forexEnabled?: boolean;
   /** Live home FX rate for converting stored local campaign funds back to internal units. */
   homeFxRate?: number;
+  /**
+   * Resolved RPG-stats feature flag for Debate Prep validation. The execute
+   * shell always passes the resolved value; callers that cannot know it omit
+   * the field and skip the flag leg only (the stat-block leg still applies).
+   */
+  rpgStatsEnabled?: boolean;
 };
 
 /**
@@ -564,13 +628,49 @@ export function canPerformAction(
     };
   }
 
-  // Fundraising requires an established donor base
-  if (actionType === "fundraise" && !isFundraiseEligible(character.donorBaseLevel)) {
-    return {
-      canPerform: false,
-      reason:
-        "You have no donor base. Use 'Build Donor Network' first to establish one before fundraising.",
-    };
+  // Fundraise validates through the same rules quote the UI and the effect
+  // use: flat AP cost and the stat-scaled yield. A zero donor base rejects
+  // here with the quote reason instead of pricing a yield that cannot be
+  // earned.
+  if (actionType === "fundraise") {
+    const quote = quoteFundraiseAction({
+      donorBaseLevel: character.donorBaseLevel,
+      politicalInfluence: character.politicalInfluence,
+      fundraising: character.stats?.fundraising,
+    });
+    if (!quote.ok) {
+      return { canPerform: false, reason: quote.error };
+    }
+  }
+
+  // Polls validate through the same rules quote the poll page and the effect
+  // use: flat AP cost and the intellect-scaled fund cost. A missing intellect
+  // stat rejects here with the quote reason instead of falling back to the
+  // unscaled base.
+  if (actionType === "poll" || actionType === "pollLarge") {
+    const tier: PollTier = actionType === "pollLarge" ? "large" : "small";
+    const quote = quotePollAction({ intellect: character.stats?.intellect }, tier);
+    if (!quote.ok) {
+      return { canPerform: false, reason: quote.error };
+    }
+  }
+
+  // Debate Prep validates through the same rules quote the execute gate
+  // uses: flat AP cost, the fixed success chance and the flag + stat-block
+  // eligibility. A missing stat block rejects here with the quote reason
+  // instead of charging for a roll that cannot land. The flag leg applies
+  // only when the caller passes the resolved value (the execute shell does).
+  if (actionType === "debatePrep") {
+    const quote = quoteDebatePrepAction(
+      {
+        debate: character.stats?.debate,
+        hasStats: !!character.stats,
+      },
+      { rpgStatsEnabled: options?.rpgStatsEnabled }
+    );
+    if (!quote.ok) {
+      return { canPerform: false, reason: quote.error };
+    }
   }
 
   // Advertise validates through the same rules quote the UI and the effect use:
@@ -591,6 +691,16 @@ export function canPerformAction(
           }
         : undefined
     );
+    if (!quote.ok) {
+      return { canPerform: false, reason: quote.error };
+    }
+  }
+
+  // Rest validates through the same rules quote the effect uses: zero AP
+  // cost, zero fund cost, always eligible. The quote cannot reject; the gate
+  // keeps every action on one validation path with one failure shape.
+  if (actionType === "rest") {
+    const quote = quoteRestAction();
     if (!quote.ok) {
       return { canPerform: false, reason: quote.error };
     }
@@ -643,6 +753,15 @@ export function getActionPointCost(character: Character, actionType: ActionType)
   }
   if (actionType === "advertise") {
     return getAdvertiseActionCost(character.favorability ?? 0);
+  }
+  if (actionType === "rest") {
+    return REST_ACTION_COST;
+  }
+  if (actionType === "poll") {
+    return getPollActionCost("small");
+  }
+  if (actionType === "pollLarge") {
+    return getPollActionCost("large");
   }
   if (actionType === "fundraise") {
     return getDonorActionCost(character.donorBaseLevel ?? 0, "fundraise");

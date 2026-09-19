@@ -6,6 +6,7 @@ import {
   MAX_REPRESSION_LEGITIMACY_COST,
   accumulateOverhang,
   shortageIndexFrom,
+  countryPhysicalDemandSupplyGapPct,
   blackMarketPremiumFrom,
   updateSecondEconomy,
   overhangInjectionFromIssuance,
@@ -113,6 +114,15 @@ describe("overhangInjectionFromIssuance", () => {
 });
 
 describe("shortageIndexFrom", () => {
+  it("limits physical scarcity to a mild annual repression consequence", () => {
+    const addedShortage = shortageIndexFrom(20, 500) - shortageIndexFrom(20, 0);
+    expect(addedShortage).toBeGreaterThan(0);
+    expect(addedShortage).toBeLessThanOrEqual(6);
+    // At 60% repression, even maximum physical stress adds under two
+    // legitimacy points per 48-turn year, holding other drivers fixed.
+    expect((addedShortage / 100) * 0.6 * 48).toBeLessThan(2);
+  });
+
   it("stays finite and within [0, 100]", () => {
     const samples = [
       shortageIndexFrom(0),
@@ -147,6 +157,54 @@ describe("shortageIndexFrom", () => {
     const c = shortageIndexFrom(20, 400);
     expect(b).toBeGreaterThan(a);
     expect(c).toBeGreaterThan(b);
+  });
+});
+
+describe("countryPhysicalDemandSupplyGapPct", () => {
+  it("weights country rows and never pools another country's shortage", () => {
+    const us = countryPhysicalDemandSupplyGapPct([
+      { basis: "country_scoped_ledger", supply: 100, demand: 200, price: 1 },
+      { basis: "country_scoped_ledger", supply: 100, demand: 100, price: 1 },
+    ]);
+    const ru = countryPhysicalDemandSupplyGapPct([
+      { basis: "country_scoped_ledger", supply: 100, demand: 100, price: 1 },
+    ]);
+    expect(us).toBeGreaterThan(0);
+    expect(ru).toBe(0);
+  });
+
+  it("returns null for absent or non-explicit ledger observations", () => {
+    expect(countryPhysicalDemandSupplyGapPct([])).toBeNull();
+    expect(
+      countryPhysicalDemandSupplyGapPct([{ supply: 100, demand: 200, price: 1, basis: "global" }])
+    ).toBeNull();
+    expect(
+      countryPhysicalDemandSupplyGapPct([
+        { supply: Number.NaN, demand: 200, price: 1, basis: "country_scoped_ledger" },
+        { supply: -1, demand: 200, price: 1, basis: "country_scoped_ledger" },
+        { supply: 100, demand: 200, basis: "country_scoped_ledger" },
+      ])
+    ).toBeNull();
+  });
+
+  it("stays finite when valid ledger values would overflow value weighting", () => {
+    const gap = countryPhysicalDemandSupplyGapPct([
+      {
+        basis: "country_scoped_ledger",
+        supply: Number.MAX_VALUE,
+        demand: Number.MAX_VALUE,
+        price: Number.MAX_VALUE,
+      },
+      {
+        basis: "country_scoped_ledger",
+        supply: Number.MAX_VALUE / 2,
+        demand: Number.MAX_VALUE,
+        price: Number.MAX_VALUE,
+      },
+    ]);
+    expect(Number.isFinite(gap)).toBe(true);
+    expect(gap).toBeGreaterThan(0);
+    expect(gap).toBeLessThanOrEqual(500);
   });
 });
 

@@ -1,10 +1,13 @@
 import { describe, it, expect } from "vitest";
 import {
   advanceRevenueEma,
+  bracketRevenueBaselineTarget,
   computeConsumptionTaxAdjustedGrowthRate,
   computeRealizedRevenueGrowthRate,
   computeTrailingRevenueGrowthRate,
   computeWeightedGrowthRate,
+  interpolateRevenueBaselineValue,
+  sanitizeRevenueSnapshots,
   selectRevenueTrendBaseline,
   sumHostRealizedRevenue,
   sumRealizedRevenue,
@@ -13,6 +16,7 @@ import {
   REVENUE_SNAPSHOT_EVERY,
   REVENUE_SNAPSHOT_KEEP,
   REVENUE_TREND_MIN_SPAN,
+  REVENUE_TREND_TARGET_SPAN,
   SECTOR_SIGNAL_MAX,
   SECTOR_SIGNAL_MIN,
 } from "./gdpGrowth";
@@ -333,5 +337,182 @@ describe("computeTrailingRevenueGrowthRate", () => {
     const emaNow = advanceRevenueEma(1000, 1100); // 1015
     const out = computeTrailingRevenueGrowthRate(emaNow, { value: 1000, spanTurns: 48 }, 48);
     expect(Math.abs(out!)).toBeLessThan(2);
+  });
+});
+
+// ── Issue #2056: continuous baseline rollover ──────────────────────────────
+// The old nearest-snapshot selector flipped the denominator discretely when
+// the 52/44 age tie at turn 174 broke at turn 175, printing an artificial
+// +11.5pp to 0 sector-growth impulse on a flat EMA. The interpolated baseline
+// below must glide instead.
+
+describe("selectRevenueTrendBaseline interpolation (#2056)", () => {
+  const pair = [
+    { turn: 122, value: 8_000_000 },
+    { turn: 130, value: 9_000_000 },
+  ];
+
+  it("rolls continuously across the 174 to 175 midpoint handoff", () => {
+    expect(selectRevenueTrendBaseline(pair, 174)).toEqual({
+      value: 8_500_000,
+      spanTurns: REVENUE_TREND_TARGET_SPAN,
+    });
+    expect(selectRevenueTrendBaseline(pair, 175)).toEqual({
+      value: 8_625_000,
+      spanTurns: REVENUE_TREND_TARGET_SPAN,
+    });
+  });
+
+  it("gives a constant EMA no impulse at handoff (was +11.5pp to 0)", () => {
+    const g174 = computeTrailingRevenueGrowthRate(
+      9_000_000,
+      selectRevenueTrendBaseline(pair, 174),
+      48
+    )!;
+    const g175 = computeTrailingRevenueGrowthRate(
+      9_000_000,
+      selectRevenueTrendBaseline(pair, 175),
+      48
+    )!;
+    expect(g174).toBeCloseTo(5.88, 1);
+    expect(g175).toBeCloseTo(4.35, 1);
+    expect(Math.abs(g175 - g174)).toBeLessThan(2);
+  });
+
+  it("gives a smoothly changing EMA only a small step at handoff", () => {
+    const g174 = computeTrailingRevenueGrowthRate(
+      9_000_000,
+      selectRevenueTrendBaseline(pair, 174),
+      48
+    )!;
+    const g175 = computeTrailingRevenueGrowthRate(
+      9_050_000,
+      selectRevenueTrendBaseline(pair, 175),
+      48
+    )!;
+    expect(Math.abs(g175 - g174)).toBeLessThan(2);
+  });
+
+  it("is order-independent at the exact midpoint", () => {
+    const forward = selectRevenueTrendBaseline(pair, 174);
+    const reversed = selectRevenueTrendBaseline([...pair].reverse(), 174);
+    expect(reversed).toEqual(forward);
+    expect(forward!.value).toBe((8_000_000 + 9_000_000) / 2);
+  });
+
+  it("returns an exact snapshot hit with the target span", () => {
+    const log = [
+      { turn: 40, value: 900 },
+      { turn: 48, value: 950 },
+      { turn: 80, value: 990 },
+    ];
+    expect(selectRevenueTrendBaseline(log, 96)).toEqual({ value: 950, spanTurns: 48 });
+  });
+
+  it("holds the one-year horizon while mature: span stays 48 across turns", () => {
+    const log = [100, 108, 116, 124, 132, 140, 148].map((turn) => ({ turn, value: turn }));
+    for (let turn = 174; turn <= 182; turn++) {
+      expect(selectRevenueTrendBaseline(log, turn)!.spanTurns).toBe(REVENUE_TREND_TARGET_SPAN);
+    }
+  });
+
+  it("trimming the oldest snapshot outside the bracket does not move the baseline", () => {
+    const full = [{ turn: 70, value: 7_000_000 }, ...pair];
+    expect(selectRevenueTrendBaseline(full, 174)).toEqual(selectRevenueTrendBaseline(pair, 174));
+  });
+
+  it("interpolates across a sparse wide gap", () => {
+    const sparse = [
+      { turn: 50, value: 1000 },
+      { turn: 130, value: 2000 },
+    ];
+    // Target turn 126: weight (126 - 50) / 80 = 0.95 → 1950 over span 48.
+    expect(selectRevenueTrendBaseline(sparse, 174)).toEqual({
+      value: 1950,
+      spanTurns: REVENUE_TREND_TARGET_SPAN,
+    });
+  });
+
+  it("a single point falls back to its actual span and stays continuous", () => {
+    const single = [{ turn: 100, value: 1000 }];
+    expect(selectRevenueTrendBaseline(single, 160)).toEqual({ value: 1000, spanTurns: 60 });
+    expect(selectRevenueTrendBaseline(single, 161)).toEqual({ value: 1000, spanTurns: 61 });
+  });
+
+  it("duplicate turns keep the last write", () => {
+    const dupes = [
+      { turn: 122, value: 1 },
+      { turn: 122, value: 8_000_000 },
+      { turn: 130, value: 9_000_000 },
+    ];
+    expect(selectRevenueTrendBaseline(dupes, 174)).toEqual({
+      value: 8_500_000,
+      spanTurns: REVENUE_TREND_TARGET_SPAN,
+    });
+  });
+
+  it("ignores zero, non-finite, and current-or-future entries", () => {
+    const noisy = [
+      { turn: 122, value: 0 },
+      { turn: 124, value: NaN },
+      { turn: 126, value: Infinity },
+      { turn: 130, value: 9_000_000 },
+      { turn: 200, value: 1_000_000 },
+    ];
+    // Only turn 130 survives sanitize, so the nearest fallback applies.
+    expect(selectRevenueTrendBaseline(noisy, 174)).toEqual({
+      value: 9_000_000,
+      spanTurns: 44,
+    });
+  });
+
+  it("returns null while young, empty, or missing", () => {
+    expect(selectRevenueTrendBaseline([{ turn: 170, value: 1000 }], 174)).toBeNull();
+    expect(selectRevenueTrendBaseline([], 174)).toBeNull();
+    expect(selectRevenueTrendBaseline(undefined, 174)).toBeNull();
+    expect(selectRevenueTrendBaseline([{ turn: 0, value: 0 }], 48)).toBeNull();
+  });
+});
+
+describe("bracketRevenueBaselineTarget / interpolateRevenueBaselineValue", () => {
+  const log = sanitizeRevenueSnapshots(
+    [
+      { turn: 130, value: 9_000_000 },
+      { turn: 122, value: 8_000_000 },
+    ],
+    174
+  );
+
+  it("sanitize sorts ascending and drops unusable entries", () => {
+    expect(log).toEqual([
+      { turn: 122, value: 8_000_000 },
+      { turn: 130, value: 9_000_000 },
+    ]);
+  });
+
+  it("weights the midpoint at exactly one half", () => {
+    const bracket = bracketRevenueBaselineTarget(log, 126)!;
+    expect(bracket.weightNewer).toBeCloseTo(0.5, 12);
+    expect(interpolateRevenueBaselineValue(bracket)).toBe(8_500_000);
+  });
+
+  it("keeps weights convex and meets snapshots at crossings", () => {
+    for (const target of [122, 123, 126, 129, 130]) {
+      const bracket = bracketRevenueBaselineTarget(log, target)!;
+      expect(bracket.weightNewer).toBeGreaterThanOrEqual(0);
+      expect(bracket.weightNewer).toBeLessThanOrEqual(1);
+    }
+    expect(interpolateRevenueBaselineValue(bracketRevenueBaselineTarget(log, 122)!)).toBe(
+      8_000_000
+    );
+    expect(interpolateRevenueBaselineValue(bracketRevenueBaselineTarget(log, 130)!)).toBe(
+      9_000_000
+    );
+  });
+
+  it("returns null when the target falls outside the log", () => {
+    expect(bracketRevenueBaselineTarget(log, 100)).toBeNull();
+    expect(bracketRevenueBaselineTarget(log, 200)).toBeNull();
+    expect(bracketRevenueBaselineTarget([], 126)).toBeNull();
   });
 });

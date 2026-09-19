@@ -160,6 +160,18 @@ describe("decideNppSupplyAgreements", () => {
     }
   });
 
+  it("does not propose to a player-run buyer", () => {
+    const d = decideNppSupplyAgreements({
+      turn: TURN,
+      plantsEnabled: true,
+      parties: [mill({ corpId: "player-mill", isPlayer: true }), miner()],
+      agreements: [],
+      priceRatioOf: prices({ iron: 1.4 }),
+      staggerEligible: always,
+    });
+    expect(d.filter((x) => x.action === "propose")).toHaveLength(0);
+  });
+
   it("does not cross countries (1953 iron-curtain)", () => {
     const d = decideNppSupplyAgreements({
       turn: TURN,

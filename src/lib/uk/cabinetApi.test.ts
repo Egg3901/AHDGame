@@ -228,7 +228,7 @@ describe("appointCabinetMemberHandler", () => {
       countryId: "CN",
       regimeStatus: "ruling",
     });
-    // Seat appointed 10 turns ago — cooldown still active (124 > currentTurn 100),
+    // Seat appointed 10 turns ago, so cooldown is still active (124 > currentTurn 100),
     // even though the seat is now empty (the minister was fired).
     db.collection("ukCabinetCooldowns");
     db.collectionMocks.ukCabinetCooldowns.findOne.mockResolvedValue({
@@ -345,7 +345,7 @@ describe("appointCabinetMemberHandler", () => {
   it("rejects appointing to a seat not yet established in the current era", async () => {
     seedPrimeMinister(db, "UK");
     const targetId = new ObjectId();
-    // Live year 1953 — the Northern Ireland Office (yearEnabled 1972) does not
+    // Live year 1953: the Northern Ireland Office (yearEnabled 1972) does not
     // exist yet.
     db.collection("gameState");
     db.collectionMocks.gameState.findOne.mockResolvedValue({
@@ -485,5 +485,288 @@ describe("fireCabinetMemberHandler", () => {
     // Loser restores no office and records no confidence event.
     expect(db.collectionMocks.characters.updateOne).not.toHaveBeenCalled();
     expect(db.collectionMocks.ukGovernment.updateOne).not.toHaveBeenCalled();
+  });
+});
+
+describe("appointCabinetMemberHandler - UK dual ministry (issue #2049)", () => {
+  let db: MockDb;
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    db = createMockDb();
+    const { getDb } = await import("@/lib/mongodb");
+    vi.mocked(getDb).mockResolvedValue(db as unknown as Db);
+    const { requireAuth } = await import("@/lib/api/requireAuth");
+    vi.mocked(requireAuth).mockResolvedValue({
+      ok: true,
+      user: { userId: PM_USER_ID },
+    } as never);
+    db.collection("cabinetMembers");
+    db.collection("ukCabinetCooldowns");
+  });
+
+  function seedUkMp(pmCharacterId: ObjectId, targetId: ObjectId) {
+    db.collectionMocks.characters.findOne.mockImplementation(
+      async (query: Record<string, unknown>) => {
+        if (query.userId)
+          return { _id: pmCharacterId, name: "PM", userId: new ObjectId(PM_USER_ID) };
+        if (query._id)
+          return {
+            _id: targetId,
+            name: "Ambitious MP",
+            userId: new ObjectId(),
+            countryId: "UK",
+            party: "1",
+          };
+        return null;
+      }
+    );
+    db.collection("electedOfficials");
+    db.collectionMocks.electedOfficials.findOne.mockResolvedValue({
+      characterId: targetId,
+      officeType: "commons",
+      countryId: "UK",
+      party: "1",
+    });
+    // Vacant target seat, no appointment cooldown.
+    db.collectionMocks.cabinetMembers.findOne.mockResolvedValue(null);
+    db.collectionMocks.ukCabinetCooldowns.findOne.mockResolvedValue(null);
+  }
+
+  function seedHeldRows(rows: { positionId: string; roleSlot: string }[]) {
+    db.collectionMocks.cabinetMembers.find.mockReturnValue({
+      project: () => ({ toArray: async () => rows }),
+    } as never);
+  }
+
+  it("lets a departmental minister take a central title (department then central)", async () => {
+    const pmCharacterId = seedPrimeMinister(db, "UK");
+    const targetId = new ObjectId();
+    seedUkMp(pmCharacterId, targetId);
+    seedHeldRows([{ positionId: "chancellor", roleSlot: "departmental" }]);
+
+    const res = await appointCabinetMemberHandler(
+      makeRequest({ positionId: "deputy_prime_minister", characterId: targetId.toString() }),
+      "UK" as never
+    );
+
+    expect(res.status).toBe(200);
+    expect(db.collectionMocks.cabinetMembers.insertOne).toHaveBeenCalledWith(
+      expect.objectContaining({
+        countryId: "UK",
+        positionId: "deputy_prime_minister",
+        roleSlot: "central",
+        characterId: targetId,
+      })
+    );
+  });
+
+  it("lets a central title holder take a department (central then department)", async () => {
+    const pmCharacterId = seedPrimeMinister(db, "UK");
+    const targetId = new ObjectId();
+    seedUkMp(pmCharacterId, targetId);
+    seedHeldRows([{ positionId: "deputy_prime_minister", roleSlot: "central" }]);
+
+    const res = await appointCabinetMemberHandler(
+      makeRequest({ positionId: "chancellor", characterId: targetId.toString() }),
+      "UK" as never
+    );
+
+    expect(res.status).toBe(200);
+    expect(db.collectionMocks.cabinetMembers.insertOne).toHaveBeenCalledWith(
+      expect.objectContaining({
+        countryId: "UK",
+        positionId: "chancellor",
+        roleSlot: "departmental",
+        characterId: targetId,
+      })
+    );
+  });
+
+  it("rejects a second departmental portfolio for a UK minister", async () => {
+    const pmCharacterId = seedPrimeMinister(db, "UK");
+    const targetId = new ObjectId();
+    seedUkMp(pmCharacterId, targetId);
+    seedHeldRows([{ positionId: "chancellor", roleSlot: "departmental" }]);
+
+    const res = await appointCabinetMemberHandler(
+      makeRequest({ positionId: "foreign_secretary", characterId: targetId.toString() }),
+      "UK" as never
+    );
+
+    expect(res.status).toBe(403);
+    const json = await res.json();
+    expect(String(json.error)).toContain("two departmental portfolios");
+    expect(db.collectionMocks.cabinetMembers.insertOne).not.toHaveBeenCalled();
+  });
+
+  it("rejects both central titles for a UK minister", async () => {
+    const pmCharacterId = seedPrimeMinister(db, "UK");
+    const targetId = new ObjectId();
+    seedUkMp(pmCharacterId, targetId);
+    seedHeldRows([{ positionId: "deputy_prime_minister", roleSlot: "central" }]);
+
+    const res = await appointCabinetMemberHandler(
+      makeRequest({ positionId: "first_secretary_of_state", characterId: targetId.toString() }),
+      "UK" as never
+    );
+
+    expect(res.status).toBe(403);
+    const json = await res.json();
+    expect(String(json.error)).toContain("both central titles");
+    expect(db.collectionMocks.cabinetMembers.insertOne).not.toHaveBeenCalled();
+  });
+
+  it("keeps one seat per character outside the UK", async () => {
+    const pmCharacterId = seedPrimeMinister(db, "JP");
+    const targetId = new ObjectId();
+    db.collectionMocks.characters.findOne.mockImplementation(
+      async (query: Record<string, unknown>) => {
+        if (query.userId)
+          return { _id: pmCharacterId, name: "PM", userId: new ObjectId(PM_USER_ID) };
+        if (query._id)
+          return {
+            _id: targetId,
+            name: "Seated MP",
+            userId: new ObjectId(),
+            countryId: "JP",
+            party: "ldp",
+          };
+        return null;
+      }
+    );
+    db.collection("electedOfficials");
+    db.collectionMocks.electedOfficials.findOne.mockResolvedValue({
+      characterId: targetId,
+      officeType: "shugiin",
+      countryId: "JP",
+      party: "ldp",
+    });
+    db.collectionMocks.cabinetMembers.findOne.mockResolvedValue(null);
+    db.collectionMocks.cabinetMembers.find.mockReturnValue({
+      project: () => ({ toArray: async () => [{ positionId: "finance_minister" }] }),
+    } as never);
+
+    const res = await appointCabinetMemberHandler(
+      makeRequest({ positionId: "foreign_affairs_minister", characterId: targetId.toString() }),
+      "JP" as never
+    );
+
+    expect(res.status).toBe(403);
+    const json = await res.json();
+    expect(String(json.error)).toContain("already holds a cabinet position");
+    expect(db.collectionMocks.cabinetMembers.insertOne).not.toHaveBeenCalled();
+  });
+});
+
+describe("fireCabinetMemberHandler - UK dual ministry survivor (issue #2049)", () => {
+  let db: MockDb;
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    db = createMockDb();
+    const { getDb } = await import("@/lib/mongodb");
+    vi.mocked(getDb).mockResolvedValue(db as unknown as Db);
+    const { requireAuth } = await import("@/lib/api/requireAuth");
+    vi.mocked(requireAuth).mockResolvedValue({
+      ok: true,
+      user: { userId: PM_USER_ID },
+    } as never);
+    db.collection("cabinetMembers");
+  });
+
+  function fireRequest(positionId: string) {
+    return new Request("http://localhost/api/country/uk/executive/cabinet/fire", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ positionId }),
+    });
+  }
+
+  it("firing the department keeps the central title and skips the legislative restore", async () => {
+    const pmCharacterId = seedPrimeMinister(db, "UK");
+    const holderId = new ObjectId();
+    db.collectionMocks.cabinetMembers.findOne.mockResolvedValue({
+      _id: new ObjectId(),
+      countryId: "UK",
+      positionId: "chancellor",
+      characterId: holderId,
+      characterName: "Dual Holder",
+    });
+    // After the delete, one row survives.
+    db.collectionMocks.cabinetMembers.find.mockReturnValue({
+      project: () => ({
+        toArray: async () => [{ positionId: "deputy_prime_minister", roleSlot: "central" }],
+      }),
+    } as never);
+    db.collection("characters");
+    db.collectionMocks.characters.findOne.mockImplementation(
+      async (query: Record<string, unknown>) => {
+        if (query.userId)
+          return { _id: pmCharacterId, name: "PM", userId: new ObjectId(PM_USER_ID) };
+        return {
+          _id: holderId,
+          currentOffice: { type: "ukCabinet", positionId: "chancellor" },
+        };
+      }
+    );
+    db.collection("electedOfficials");
+
+    const res = await fireCabinetMemberHandler(fireRequest("chancellor"), "UK" as never);
+
+    expect(res.status).toBe(200);
+    expect(db.collectionMocks.cabinetMembers.deleteOne).toHaveBeenCalledOnce();
+    // Repointed at the surviving central title, never restored to the Commons seat.
+    expect(db.collectionMocks.characters.updateOne).toHaveBeenCalledWith(
+      { _id: holderId },
+      expect.objectContaining({
+        $set: expect.objectContaining({
+          currentOffice: { type: "ukCabinet", positionId: "deputy_prime_minister" },
+        }),
+      })
+    );
+    expect(db.collectionMocks.electedOfficials.findOne).not.toHaveBeenCalled();
+  });
+
+  it("firing the central title keeps the department", async () => {
+    const pmCharacterId = seedPrimeMinister(db, "UK");
+    const holderId = new ObjectId();
+    db.collectionMocks.cabinetMembers.findOne.mockResolvedValue({
+      _id: new ObjectId(),
+      countryId: "UK",
+      positionId: "deputy_prime_minister",
+      characterId: holderId,
+      characterName: "Dual Holder",
+    });
+    db.collectionMocks.cabinetMembers.find.mockReturnValue({
+      project: () => ({
+        toArray: async () => [{ positionId: "chancellor", roleSlot: "departmental" }],
+      }),
+    } as never);
+    db.collection("characters");
+    db.collectionMocks.characters.findOne.mockImplementation(
+      async (query: Record<string, unknown>) => {
+        if (query.userId)
+          return { _id: pmCharacterId, name: "PM", userId: new ObjectId(PM_USER_ID) };
+        return {
+          _id: holderId,
+          currentOffice: { type: "ukCabinet", positionId: "deputy_prime_minister" },
+        };
+      }
+    );
+    db.collection("electedOfficials");
+
+    const res = await fireCabinetMemberHandler(fireRequest("deputy_prime_minister"), "UK" as never);
+
+    expect(res.status).toBe(200);
+    expect(db.collectionMocks.characters.updateOne).toHaveBeenCalledWith(
+      { _id: holderId },
+      expect.objectContaining({
+        $set: expect.objectContaining({
+          currentOffice: { type: "ukCabinet", positionId: "chancellor" },
+        }),
+      })
+    );
+    expect(db.collectionMocks.electedOfficials.findOne).not.toHaveBeenCalled();
   });
 });

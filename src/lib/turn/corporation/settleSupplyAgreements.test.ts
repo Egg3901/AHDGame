@@ -154,6 +154,8 @@ describe("computeSupplyAgreementSettlements", () => {
         penaltyAnchor: 0,
         supplierCashDeltaLocal: Math.round(30 * base * 0.2),
         supplierCurrencyCode: "USD",
+        buyerCashDeltaLocal: -Math.round(30 * base * 0.2),
+        buyerCurrencyCode: "USD",
       },
     ]);
     expect(r.deltaByCorp.get(S)).toBe(Math.round(30 * base * 0.2));
@@ -507,6 +509,7 @@ describe("settleSupplyAgreements delivery persistence", () => {
               lastShortfallUnits: 0,
               lastShortfallPenaltyAnchor: 0,
               lastSupplierCashDelta: 0,
+              lastBuyerCashDelta: 0,
               lastUnpaidSettlementAnchor: 0,
               updatedAt: now,
             },
@@ -514,6 +517,7 @@ describe("settleSupplyAgreements delivery persistence", () => {
               lastAchievableUnits: "",
               lastCreditedProductionUnits: "",
               lastSupplierCashCurrency: "",
+              lastBuyerCashCurrency: "",
             },
           },
         },

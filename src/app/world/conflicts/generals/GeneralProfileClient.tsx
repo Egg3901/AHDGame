@@ -87,12 +87,12 @@ export function GeneralProfileClient({
   curEra,
   posting = EMPTY_POSTING,
   isCommandingGeneral = false,
+  serviceRecord,
 }: {
+  serviceRecord?: React.ReactNode;
   subject: CharacterSubject;
   adopted: Record<string, number>;
-  /** The commissioned general's profile, or null when the character is not a general
-   *  (never commissioned, or dismissed — a dismissed veteran's retained record is not
-   *  shown as active). */
+  /** Current or retained military profile. Former service must be passed read-only. */
   general: ProfileGeneral | null;
   editable: boolean;
   curEra: number;
@@ -735,52 +735,57 @@ export function GeneralProfileClient({
             </Section>
           )}
 
-          {state.tab === "history" && (
-            <Section title="SERVICE RECORD">
-              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                {[
-                  {
-                    title: `Commissioned · ${prof.branch}`,
-                    outcome: "SERVICE",
-                    c: MIL_COLOR.textMuted,
-                  },
-                  {
-                    title: `Specialized in ${specLabel.toLowerCase()}`,
-                    outcome: "TRAINED",
-                    c: MIL_COLOR.green,
-                  },
-                  { title: `Promoted to ${rank(g.level)}`, outcome: "PROMOTED", c: MIL_COLOR.gold },
-                ].map((h) => (
-                  <div
-                    key={h.title}
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      gap: 10,
-                      border: `1px solid ${MIL_COLOR.borderSoft}`,
-                      borderRadius: 8,
-                      padding: "8px 11px",
-                    }}
-                  >
-                    <span style={{ fontSize: 12, color: MIL_COLOR.text }}>{h.title}</span>
-                    <span
+          {state.tab === "history" &&
+            (serviceRecord ?? (
+              <Section title="SERVICE RECORD">
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  {[
+                    {
+                      title: `Commissioned · ${prof.branch}`,
+                      outcome: "SERVICE",
+                      c: MIL_COLOR.textMuted,
+                    },
+                    {
+                      title: `Specialized in ${specLabel.toLowerCase()}`,
+                      outcome: "TRAINED",
+                      c: MIL_COLOR.green,
+                    },
+                    {
+                      title: `Promoted to ${rank(g.level)}`,
+                      outcome: "PROMOTED",
+                      c: MIL_COLOR.gold,
+                    },
+                  ].map((h) => (
+                    <div
+                      key={h.title}
                       style={{
-                        font: `700 9px ${mono}`,
-                        color: h.c,
-                        border: `1px solid ${h.c}55`,
-                        borderRadius: 5,
-                        padding: "2px 7px",
-                        whiteSpace: "nowrap",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        gap: 10,
+                        border: `1px solid ${MIL_COLOR.borderSoft}`,
+                        borderRadius: 8,
+                        padding: "8px 11px",
                       }}
                     >
-                      {h.outcome}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </Section>
-          )}
+                      <span style={{ fontSize: 12, color: MIL_COLOR.text }}>{h.title}</span>
+                      <span
+                        style={{
+                          font: `700 9px ${mono}`,
+                          color: h.c,
+                          border: `1px solid ${h.c}55`,
+                          borderRadius: 5,
+                          padding: "2px 7px",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {h.outcome}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </Section>
+            ))}
         </div>
       </div>
     </div>

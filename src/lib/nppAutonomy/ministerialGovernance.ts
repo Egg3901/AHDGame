@@ -53,6 +53,18 @@ import { deriveGoverningArchetype, governingArchetypeModifiers } from "./governi
 import { loadDomainHealth } from "./governingMetrics";
 import { nppAutonomyAtLeast } from "./featureFlag";
 import { ministerialCommitmentHolds } from "./v5/rules/governingGoals";
+import {
+  evaluateReshuffleEligibility,
+  governmentKeyForReshuffle,
+  markPortfolioEscalated,
+  ministerTenureTurns,
+  nextPortfolioRecordOnReshuffle,
+  readReshuffleGuardState,
+  RESHUFFLE_GUARD_CONFIG,
+  type LastReplacementRecord,
+  type PortfolioReshuffleRecord,
+  type ReshuffleGuardConfig,
+} from "./rules/reshuffleGuard";
 import { loadNppBehaviorPolicy } from "@/lib/singleplayerDifficulty/loadBehaviorPolicy";
 import type { NppBehaviorPolicy } from "@/lib/singleplayerDifficulty/rules/behavior";
 import { loadTurnLengthMinutes } from "@/lib/financialTxLog/expiresAt";
@@ -440,7 +452,13 @@ export async function runMinisterialGovernance(
   db: Db,
   countryId: CountryId,
   currentTurn: number,
-  now: Date
+  now: Date,
+  /**
+   * Guard tuning override (#1994). Defaults to `RESHUFFLE_GUARD_CONFIG` so
+   * production runs the centralized constants; worldsim sensitivity sweeps
+   * and focused tests pass alternates without mutating shared state.
+   */
+  guardConfig: ReshuffleGuardConfig = RESHUFFLE_GUARD_CONFIG
 ): Promise<MinisterialGovernanceResult> {
   if (!(await nppAutonomyAtLeast(db, countryId, "v1"))) return INACTIVE;
 
@@ -477,12 +495,34 @@ export async function runMinisterialGovernance(
 
   // Reshuffle (V1.4 improvement): the head vacates ministers whose briefs are
   // badly missing target, scaled by the head's archetype reshuffle propensity.
-  // Vacated seats are refilled by formNppCabinet next turn.
+  // Vacated seats are refilled by formNppCabinet next turn. Since #1994 the
+  // threshold below is only the first gate; the tenure/cooldown/escalation
+  // guard further down decides whether the head may act on it this turn.
   const headNppId = gov.presidentNppId ?? gov.pmNppId ?? null;
   const headNpp = headNppId ? await db.collection<NPP>("npps").findOne({ _id: headNppId }) : null;
   const reshufflePropensity = headNpp
     ? governingArchetypeModifiers(headNpp.personality).reshufflePropensity
     : 0;
+
+  // Reshuffle guard (#1994): tenure, government/portfolio cooldowns, and the
+  // bounded structural-escalation path. Persisted on the governmentFormation
+  // doc, so it survives restarts; scoped by government key, so a transition
+  // starts clean. Player-country cabinets never reach this function
+  // (`processNppGovernment` routes them to `runCaretakerMinisters`), and a
+  // player-appointed seat that does reach it is excluded from dismissal below.
+  const governmentKey = governmentKeyForReshuffle({
+    cycle: gov.cycle,
+    formedTurn: gov.formedTurn,
+    headNppId,
+  });
+  const guardState = readReshuffleGuardState(gov.ministerialReshuffle, governmentKey);
+  let govLastReshuffleTurn = guardState.lastReshuffleTurn;
+  const portfolios: Record<string, PortfolioReshuffleRecord> = { ...guardState.portfolios };
+  let lastReplacement: LastReplacementRecord | null =
+    gov.ministerialReshuffle?.governmentKey === governmentKey
+      ? (gov.ministerialReshuffle.lastReplacement ?? null)
+      : null;
+  let guardStateDirty = false;
 
   let reshuffled = 0;
   const survivors: typeof ministers = [];
@@ -495,17 +535,104 @@ export async function runMinisterialGovernance(
       ? ministerShortfall(positionDomains(mechanics), agendaByDomain, domainHealth)
       : 0;
     shortfallByPosition.set(minister.positionId, shortfall);
-    if (mechanics && shouldReshuffleMinister(shortfall, reshufflePropensity)) {
-      await membersCol.deleteOne({ countryId, positionId: minister.positionId });
-      reshuffled++;
-      console.log(
-        `[nppAutonomy] ${countryId}: reshuffled ${minister.positionId} (shortfall ${shortfall.toFixed(2)})`
-      );
+    if (!mechanics || !shouldReshuffleMinister(shortfall, reshufflePropensity)) {
+      survivors.push(minister);
       continue;
     }
-    survivors.push(minister);
+    if (minister.appointedByCharacterId != null) {
+      // Player-appointed (caretaker) seat stranded in a non-player country:
+      // the appointing player dismisses or replaces it via the cabinet
+      // surface (`dismissCaretakerMinister`), never the autonomous guard.
+      // Steering below still applies; only dismissal is excluded.
+      survivors.push(minister);
+      continue;
+    }
+    const tenureTurns = ministerTenureTurns(
+      (minister as { appointedTurn?: unknown }).appointedTurn,
+      currentTurn
+    );
+    const eligibility = evaluateReshuffleEligibility({
+      thresholdMet: true,
+      tenureTurns,
+      turnsSinceGovernmentReshuffle:
+        govLastReshuffleTurn === null ? null : currentTurn - govLastReshuffleTurn,
+      portfolio: portfolios[minister.positionId] ?? null,
+      shortfall,
+      currentTurn,
+      config: guardConfig,
+    });
+    if (!eligibility.eligible) {
+      if (eligibility.reason === "escalated-structural") {
+        const prior = portfolios[minister.positionId];
+        if (prior && !prior.escalated) {
+          portfolios[minister.positionId] = markPortfolioEscalated(prior);
+          guardStateDirty = true;
+        }
+      }
+      survivors.push(minister);
+      continue;
+    }
+    await membersCol.deleteOne({ countryId, positionId: minister.positionId });
+    reshuffled++;
+    const record = nextPortfolioRecordOnReshuffle({
+      prior: portfolios[minister.positionId] ?? null,
+      shortfall,
+      currentTurn,
+      config: guardConfig,
+    });
+    portfolios[minister.positionId] = record;
+    govLastReshuffleTurn = currentTurn;
+    lastReplacement = {
+      positionId: minister.positionId,
+      turn: currentTurn,
+      reason: "underperformance",
+      priorTenureTurns: tenureTurns,
+      shortfall,
+      consecutiveReshuffles: record.consecutiveReshuffles,
+      escalated: record.escalated,
+    };
+    guardStateDirty = true;
+    console.log(
+      `[nppAutonomy] ${countryId}: reshuffled ${minister.positionId} ` +
+        `(shortfall ${shortfall.toFixed(2)}, tenure ${tenureTurns === null ? "legacy" : `${tenureTurns}t`}, ` +
+        `consecutive ${record.consecutiveReshuffles})`
+    );
   }
   ministers = survivors;
+
+  if (guardStateDirty) {
+    // Stale-government guard: only persist against the government this call
+    // read. A transition (or a duplicate turn worker) that landed in between
+    // must not have its fresh state clobbered by this call's older view — a
+    // missed filter surfaces as matchedCount 0 and the state is dropped, not
+    // misattributed. `formedTurn` is rewritten on every genuine NPP formation
+    // and preserved on confidence-motion survival (same government), so
+    // (cycle, formedTurn) is the continuity identity; absent parts degrade to
+    // an _id-only filter, matching the key's sentinel behavior.
+    const guardWriteFilter: Record<string, unknown> = { _id: countryId };
+    if (typeof gov.cycle === "number" && Number.isFinite(gov.cycle)) {
+      guardWriteFilter.cycle = gov.cycle;
+    }
+    if (typeof gov.formedTurn === "number" && Number.isFinite(gov.formedTurn)) {
+      guardWriteFilter.formedTurn = gov.formedTurn;
+    }
+    const guardWrite = await getGovernmentFormationsCollection(db).updateOne(guardWriteFilter, {
+      $set: {
+        ministerialReshuffle: {
+          governmentKey,
+          lastReshuffleTurn: govLastReshuffleTurn,
+          portfolios,
+          lastReplacement,
+        },
+        updatedAt: now,
+      },
+    });
+    if (guardWrite.matchedCount === 0) {
+      console.warn(
+        `[nppAutonomy] ${countryId}: reshuffle-guard state dropped (government changed mid-turn)`
+      );
+    }
+  }
 
   // Expire stale orders once before reading active sets / issuing new ones.
   await expireMinisterialOrders(db, currentTurn);

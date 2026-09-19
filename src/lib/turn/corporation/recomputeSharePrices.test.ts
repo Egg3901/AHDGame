@@ -206,16 +206,32 @@ describe("recomputeSharePricesAfterBondTurn", () => {
     expect(newPrice).toBeGreaterThan(100);
   });
 
-  it("subtracts shareIssuanceProceeds from tangible book (mirrors corp-turn calc)", async () => {
-    // Bug #0772: recompute must subtract issuanceProceeds just like sectorCalculations
-    // does, otherwise corps that sold shares from their float get an inflated tangible
-    // book in the post-bond recompute → higher share price than the corp turn computed.
+  it("counts retained float-sale cash in tangible book", async () => {
+    // Float-sale cash is a real corporate asset. The share count already captures
+    // dilution, so subtracting the cash again makes a cash-rich issuer worth less
+    // than the money on its balance sheet.
     const issuanceCorp = {
       ...corp,
-      liquidCapital: 200_000_000, // 100M base + 100M from selling float shares
-      shareIssuanceProceeds: 100_000_000, // realized from selling own shares
+      liquidCapital: 200_000_000,
+      sharePrice: 0.5,
+      shareIssuanceProceeds: 100_000_000,
     } as unknown as Corporation;
+    const cashOnlyHistory = {
+      ...histDoc,
+      sharePrice: 0.5,
+      marketCap: 500_000,
+      liquidCapital: 200_000_000,
+      revenue: 0,
+      totalCosts: 0,
+      income: 0,
+      incomePreDividends: 0,
+      sectorNPV: 0,
+      perTurnBondCouponIncome: 0,
+      perTurnBondDragOnNetIncome: 0,
+    } as CorporationHistory;
     db.collectionMocks.corporations.find.mockReturnValue(makeCursor([issuanceCorp]));
+    db.collectionMocks.bonds.find.mockReturnValue(makeCursor([]));
+    db.collectionMocks.corporationHistory.find.mockReturnValue(makeCursor([cashOnlyHistory]));
 
     const { recomputeSharePricesAfterBondTurn } = await import("./recomputeSharePrices");
     await recomputeSharePricesAfterBondTurn(turn, db as unknown as Db);
@@ -225,13 +241,63 @@ describe("recomputeSharePricesAfterBondTurn", () => {
     }>;
     const newPrice = corpOps[0].updateOne.update.$set.sharePrice;
 
-    // With 200M liquid - 100M issuanceProceeds = 100M effective + 50M sectorNPV = 150M
-    // tangible book / 1M shares = 150 per share (plus earnings/growth components).
-    // If issuanceProceeds were NOT subtracted, tangible book would be 250M / 1M = 250.
-    expect(newPrice).toBeGreaterThan(0);
-    // The price should be based on 150M tangible book, not 250M.
-    // With earnings power and growth premium, expect something reasonable.
-    expect(newPrice).toBeLessThan(250); // proves issuanceProceeds was subtracted
+    expect(newPrice).toBe(200);
+  });
+
+  it("under plants, trailing sector-NPV growth earns a premium over flat NPV", async () => {
+    // The CEO growth slider is dead under plants, so g comes from trailing
+    // sector-NPV growth. Same corp, same current snapshot; only the priors
+    // differ. Both priors anchor the smoothing term at $7 so the rate
+    // limiter does not mask the premium.
+    db.collection("gameConfig");
+    db.collectionMocks.gameConfig.findOne.mockResolvedValue({ marketSystemMode: "plants" });
+
+    const growthCorp = {
+      ...corp,
+      liquidCapital: 1_000_000,
+      sharePrice: 7,
+      totalShares: 1_000_000,
+      earningsHistory: [1_000_000, 1_000_000, 1_000_000],
+    } as unknown as Corporation;
+    const currentHist = {
+      ...histDoc,
+      sharePrice: 7,
+      sectorNPV: 500_000,
+      perTurnBondCouponIncome: 0,
+      perTurnBondDragOnNetIncome: 0,
+    };
+    const priorAt = (t: number, npv: number) => ({
+      _id: new ObjectId(),
+      corporationId: corp._id,
+      turn: t,
+      sharePrice: 7,
+      sectorNPV: npv,
+    });
+    const runWithPriors = async (npvs: number[]) => {
+      vi.clearAllMocks();
+      db.collectionMocks.gameConfig.findOne.mockResolvedValue({ marketSystemMode: "plants" });
+      db.collectionMocks.corporations.find.mockReturnValue(makeCursor([growthCorp]));
+      db.collectionMocks.bonds.find.mockReturnValue(makeCursor([]));
+      const priors = npvs.map((npv, i) => priorAt(turn - npvs.length + i, npv));
+      db.collectionMocks.corporationHistory.find.mockImplementation(
+        (filter: { turn?: number | object } | undefined) => {
+          if (filter?.turn !== turn) return makeCursor(priors);
+          return makeCursor([currentHist]);
+        }
+      );
+      const { recomputeSharePricesAfterBondTurn } = await import("./recomputeSharePrices");
+      await recomputeSharePricesAfterBondTurn(turn, db as unknown as Db);
+      const ops = db.collectionMocks.corporations.bulkWrite.mock.calls[0][0] as Array<{
+        updateOne: { update: { $set: { sharePrice: number } } };
+      }>;
+      return ops[0].updateOne.update.$set.sharePrice;
+    };
+
+    const growing = await runWithPriors([400_000, 400_000, 400_000]);
+    const flat = await runWithPriors([500_000, 500_000, 500_000]);
+    expect(growing).toBeGreaterThan(flat);
+    // Flat history pays no premium: price is book + earnings only.
+    expect(flat).toBeGreaterThan(0);
   });
 
   it("skips corps with no same-turn history snapshot (defensive)", async () => {
@@ -297,8 +363,10 @@ describe("recomputeSharePricesAfterBondTurn", () => {
     db.collectionMocks.corporations.find.mockReturnValue(makeCursor([splitCorp]));
     db.collectionMocks.bonds.find.mockReturnValue(makeCursor([])); // no bonds — keep equity simple
     db.collectionMocks.corporationHistory.find.mockImplementation(
-      (filter: { turn?: number } | undefined) => {
-        if (filter?.turn === turn - 1) return makeCursor([prevHistDoc]);
+      (filter: { turn?: number | object } | undefined) => {
+        // The priors query is a { turn: { $gte, $lt } } range; the same-turn
+        // query is an exact match. Serve the pre-split doc for the range.
+        if (filter?.turn !== turn) return makeCursor([prevHistDoc]);
         return makeCursor([splitHistDoc]);
       }
     );
@@ -324,8 +392,8 @@ describe("recomputeSharePricesAfterBondTurn", () => {
     db.collectionMocks.corporations.find.mockReturnValue(makeCursor([noCooldownCorp]));
     db.collectionMocks.bonds.find.mockReturnValue(makeCursor([]));
     db.collectionMocks.corporationHistory.find.mockImplementation(
-      (filter: { turn?: number } | undefined) => {
-        if (filter?.turn === turn - 1) return makeCursor([prevHistDoc]);
+      (filter: { turn?: number | object } | undefined) => {
+        if (filter?.turn !== turn) return makeCursor([prevHistDoc]);
         return makeCursor([splitHistDoc]);
       }
     );
