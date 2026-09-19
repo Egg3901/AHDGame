@@ -19,7 +19,7 @@ import {
 import { BlendOpsSection } from "./BlendOpsSection";
 import { BlendMoneySection } from "./BlendMoneySection";
 import { BlendLedger } from "./BlendLedger";
-import { BlendSidebar, RunningMateBlock, SupportBlock } from "./BlendSidebar";
+import { BlendSidebar, ManagersBlock, RunningMateBlock, SupportBlock } from "./BlendSidebar";
 import { BlendScopeInline } from "@/components/blend/BlendScope";
 import { StatePresencePanel } from "../components/StatePresencePanel";
 import { StateOperationsSection } from "../components/StateOperationsSection";
@@ -542,6 +542,28 @@ export function CampaignBlendClient({
             ) : null}
           </div>
         ) : null}
+
+        {/* Managers had no mobile copy at all: the list and the appoint
+            and remove controls lived only in the desktop rail, which is
+            `hidden lg:block`. Same gap #1806 closed for strength. */}
+        <div style={{ padding: "22px 16px 0" }}>
+          <ManagersBlock
+            vm={vm}
+            candidateId={campaign.candidateId}
+            canManageTicket={canManage}
+            busy={busy}
+            onAppointManager={(r: PickerResult) =>
+              post(`manager:${r.id}`, `/api/campaigns/${campaign.id}/manager`, {
+                managerCharacterId: r.id,
+              })
+            }
+            onRemoveManager={(characterId: string) =>
+              post(`manager:${characterId}`, `/api/campaigns/${campaign.id}/manager`, {
+                managerCharacterId: characterId,
+              })
+            }
+          />
+        </div>
 
         {presencePanel ? (
           <div style={{ padding: "18px 16px 0" }}>
