@@ -15,6 +15,7 @@ import {
   isFreePartyMoveWindowOpen,
 } from "@/lib/parties/antiAbuseGuards";
 import { applyCharacterPartyJoin } from "@/lib/parties/applyCharacterPartyJoin";
+import { canCharacterJoinParty } from "@/lib/parties/partyFrontier";
 import { getActingChairId } from "@/lib/parties/actingChair";
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
 
@@ -109,6 +110,16 @@ export async function POST(
         },
         { status: 429 }
       );
+    }
+
+    // Growth frontier: a player may only join a party already established in or
+    // next to their home region. Placed before the approval-mode branch below so
+    // an ineligible player cannot file a pending request either. Admins bypass.
+    if (!auth.isAdmin) {
+      const frontierCheck = await canCharacterJoinParty(db, auth.character, party, countryId);
+      if (!frontierCheck.ok) {
+        return NextResponse.json({ error: frontierCheck.error }, { status: 403 });
+      }
     }
 
     // Approval-gated parties (suggestion #72): instead of joining immediately,
