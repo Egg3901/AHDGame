@@ -15,6 +15,11 @@ import { createNotification } from "@/lib/notifications";
 import { executeAgreedAcquisition } from "./executeAgreedAcquisition";
 import { loadWorldEraUnitScale } from "@/lib/currency/gdpAnchorRate";
 import { acquisitionsBarredByDivestiture } from "@/lib/corporations/mergerReview/gate";
+import {
+  isNppAutoResolvableTarget,
+  meetsNppAcquisitionThreshold,
+  nppAcquisitionMinimumPrice,
+} from "./rules";
 
 export const ACQUISITION_OFFER_DURATION_TURNS = 24;
 const OFFERS = "acquisitionOffers";
@@ -60,6 +65,27 @@ export async function referenceValuationAnchor(db: Db, target: Corporation): Pro
   });
 }
 
+export type ProposeAcquisitionOfferResult =
+  | { ok: false; error: string; status: number }
+  | {
+      ok: true;
+      offerId: ObjectId;
+      targetValuationAnchor: number;
+      /** False for a human-run target: the offer is pending and waits for Accept. */
+      autoAccepted: false;
+    }
+  | {
+      ok: true;
+      offerId: ObjectId;
+      targetValuationAnchor: number;
+      /** True for an AI-run target that met the price gate: already executed. */
+      autoAccepted: true;
+      sectorsMoved: number;
+      priceAnchor: number;
+      acquirerName: string;
+      targetName: string;
+    };
+
 export async function proposeAcquisitionOffer(
   db: Db,
   input: {
@@ -70,7 +96,7 @@ export async function proposeAcquisitionOffer(
     proposerUserId?: ObjectId;
     currentTurn: number;
   }
-): Promise<Result<{ offerId: ObjectId; targetValuationAnchor: number }>> {
+): Promise<ProposeAcquisitionOfferResult> {
   const { acquirer, target, priceAnchor, proposerCharacterId, proposerUserId, currentTurn } = input;
 
   if (acquirer._id.equals(target._id))
@@ -94,40 +120,149 @@ export async function proposeAcquisitionOffer(
       status: 409,
     };
 
-  const targetValuationAnchor = await referenceValuationAnchor(db, target);
+  // Re-read the target: the caller's snapshot may predate a control change
+  // (player caretaker appointed, CEO flipped, nationalization, deletion).
+  // Auto-accept must never absorb a corp that is no longer genuinely AI-run,
+  // and the valuation must reflect current economics, not a stale read.
+  const freshTarget = await db.collection<Corporation>("corporations").findOne({ _id: target._id });
+  if (!freshTarget) return { ok: false, error: "Target corporation no longer exists", status: 404 };
+  if (freshTarget.countryOwnerId || freshTarget.ownershipState === "stateOwned")
+    return { ok: false, error: "State-owned corporations cannot be acquired", status: 400 };
+
+  const targetValuationAnchor = await referenceValuationAnchor(db, freshTarget);
+  const valuationAnchor = Math.round(targetValuationAnchor);
   const now = new Date();
-  const res = await db.collection<AcquisitionOffer>(OFFERS).insertOne({
+  const offers = db.collection<AcquisitionOffer>(OFFERS);
+
+  // Human-run target (including caretaker-run player corps): unchanged flow.
+  // The offer stays pending until the target's CEO accepts, and the target's
+  // controlling user is notified. A target that flipped out of AI-run control
+  // after search lands here too, so no player property is ever auto-absorbed
+  // without consent.
+  if (!isNppAutoResolvableTarget(freshTarget)) {
+    const res = await offers.insertOne({
+      acquirerCorporationId: acquirer._id,
+      targetCorporationId: freshTarget._id,
+      proposedByCharacterId: proposerCharacterId,
+      ...(proposerUserId ? { proposedByUserId: proposerUserId } : {}),
+      priceAnchor: Math.round(priceAnchor),
+      targetValuationAnchor: valuationAnchor,
+      status: "pending",
+      createdAtTurn: currentTurn,
+      expiresAtTurn: currentTurn + ACQUISITION_OFFER_DURATION_TURNS,
+      createdAt: now,
+      updatedAt: now,
+    } as AcquisitionOffer);
+
+    // Notify the target's CEO (if a player controls it).
+    if (freshTarget.userId) {
+      void createNotification({
+        userId: freshTarget.userId,
+        type: "corp_vote_opened",
+        title: "Acquisition offer received",
+        message: `${acquirer.name} has offered to acquire ${freshTarget.name}. Review it in the Deals tab.`,
+        metadata: {
+          acquisitionOfferId: res.insertedId.toHexString(),
+          corporationId: freshTarget._id.toHexString(),
+        },
+      });
+    }
+
+    return {
+      ok: true,
+      offerId: res.insertedId,
+      targetValuationAnchor: valuationAnchor,
+      autoAccepted: false,
+    };
+  }
+
+  // AI-run target (#217): no human can accept, so resolve deterministically
+  // against the asking price (reference valuation plus the NPP premium).
+  const askingPrice = nppAcquisitionMinimumPrice(valuationAnchor);
+  if (!meetsNppAcquisitionThreshold(priceAnchor, valuationAnchor)) {
+    await offers.insertOne({
+      acquirerCorporationId: acquirer._id,
+      targetCorporationId: target._id,
+      proposedByCharacterId: proposerCharacterId,
+      ...(proposerUserId ? { proposedByUserId: proposerUserId } : {}),
+      priceAnchor: Math.round(priceAnchor),
+      targetValuationAnchor: valuationAnchor,
+      status: "rejected",
+      createdAtTurn: currentTurn,
+      expiresAtTurn: currentTurn + ACQUISITION_OFFER_DURATION_TURNS,
+      resolvedAtTurn: currentTurn,
+      createdAt: now,
+      updatedAt: now,
+    } as AcquisitionOffer);
+    return {
+      ok: false,
+      error:
+        `This AI-run corporation only accepts offers at or above its asking price of ` +
+        `₳${askingPrice.toLocaleString("en-US")} (fair value ₳${valuationAnchor.toLocaleString("en-US")} plus a 10 percent premium).`,
+      status: 400,
+    };
+  }
+
+  const offer: AcquisitionOffer = {
+    _id: new ObjectId(),
     acquirerCorporationId: acquirer._id,
     targetCorporationId: target._id,
     proposedByCharacterId: proposerCharacterId,
     ...(proposerUserId ? { proposedByUserId: proposerUserId } : {}),
     priceAnchor: Math.round(priceAnchor),
-    targetValuationAnchor: Math.round(targetValuationAnchor),
-    status: "pending",
+    targetValuationAnchor: valuationAnchor,
+    status: "accepted",
     createdAtTurn: currentTurn,
     expiresAtTurn: currentTurn + ACQUISITION_OFFER_DURATION_TURNS,
+    resolvedAtTurn: currentTurn,
     createdAt: now,
     updatedAt: now,
-  } as AcquisitionOffer);
+  };
+  await offers.insertOne(offer);
 
-  // Notify the target's CEO (if a player controls it).
-  if (target.userId) {
-    void createNotification({
-      userId: target.userId,
-      type: "corp_vote_opened",
-      title: "Acquisition offer received",
-      message: `${acquirer.name} has offered to acquire ${target.name}. Review it in the Deals tab.`,
-      metadata: {
-        acquisitionOfferId: res.insertedId.toHexString(),
-        corporationId: target._id.toHexString(),
-      },
-    });
+  // No human to notify on the target side; the route response carries the outcome.
+  let result;
+  try {
+    result = await executeAgreedAcquisition({ db, offer, currentTurn });
+  } catch (err) {
+    // Executor threw after refunding the acquirer; nothing dangling stays
+    // pending since no human could ever resolve it.
+    await offers.updateOne(
+      { _id: offer._id },
+      { $set: { status: "rejected", updatedAt: new Date() } }
+    );
+    throw err;
   }
+  if (!result.ok) {
+    await offers.updateOne(
+      { _id: offer._id },
+      { $set: { status: "rejected", updatedAt: new Date() } }
+    );
+    return result;
+  }
+
+  // The target is gone — withdraw every other pending offer that referenced it.
+  await offers.updateMany(
+    {
+      _id: { $ne: offer._id },
+      status: "pending",
+      $or: [
+        { targetCorporationId: offer.targetCorporationId },
+        { acquirerCorporationId: offer.targetCorporationId },
+      ],
+    },
+    { $set: { status: "withdrawn", updatedAt: now } }
+  );
 
   return {
     ok: true,
-    offerId: res.insertedId,
-    targetValuationAnchor: Math.round(targetValuationAnchor),
+    offerId: offer._id,
+    targetValuationAnchor: valuationAnchor,
+    autoAccepted: true,
+    sectorsMoved: result.sectorsMoved,
+    priceAnchor: result.priceAnchor,
+    acquirerName: result.acquirerName,
+    targetName: result.targetName,
   };
 }
 
