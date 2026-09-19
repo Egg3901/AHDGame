@@ -4,6 +4,7 @@ import { handleRouteError } from "@/lib/api/errors";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
 import type { ExchangeRate } from "@/lib/db/types";
 import type { CurrencyCode } from "@/lib/constants/currencies";
+import { resolveMonetaryRegime, type MonetaryRegime } from "@/lib/monetary/brettonWoods";
 
 // GET /api/forex/rates — Returns current exchange rates as a simple map (local currency per 1 internal unit)
 // Auth: public
@@ -19,6 +20,8 @@ export async function GET() {
 
     const rates: Partial<Record<CurrencyCode, number>> = {};
     const baseRates: Partial<Record<CurrencyCode, number>> = {};
+    /** Stored Bretton Woods regime per currency (absent = the pegged legacy default). */
+    const regimes: Partial<Record<CurrencyCode, MonetaryRegime>> = {};
     /** Public intervention band info per currency — no reserve numbers. */
     const interventionBands: Partial<
       Record<
@@ -29,6 +32,7 @@ export async function GET() {
     for (const row of rateRows) {
       rates[row.currencyCode] = row.rate;
       baseRates[row.currencyCode] = row.baseRate;
+      regimes[row.currencyCode] = resolveMonetaryRegime(row.monetaryRegime);
       if (row.interventionPolicy) {
         const p = row.interventionPolicy;
         interventionBands[row.currencyCode] = {
@@ -41,7 +45,7 @@ export async function GET() {
     }
 
     return NextResponse.json(
-      { rates, baseRates, interventionBands },
+      { rates, baseRates, interventionBands, regimes },
       {
         headers: {
           "Cache-Control":

@@ -24,6 +24,7 @@ export const RACE_PRIORITY = [
   "sangiin",
   "house",
   "commons",
+  "special_commons",
   "senate",
   "shugiin",
   "npcDelegate",

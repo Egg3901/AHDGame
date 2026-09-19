@@ -138,6 +138,13 @@ const LeadershipPanel = dynamic(
     })),
   { loading: PanelFallback }
 );
+const ConferencePanel = dynamic(
+  () =>
+    import("./components/ConferencePanel").then((m) => ({
+      default: m.ConferencePanel,
+    })),
+  { loading: PanelFallback }
+);
 const ChairOfficeTab = dynamic(
   () => import("./components/ChairOfficeTab").then((m) => ({ default: m.ChairOfficeTab })),
   { loading: PanelFallback }
@@ -215,6 +222,7 @@ type NationalMainTab =
   | "discussion"
   | "chair-office"
   | "leadership"
+  | "conference"
   | "admin";
 type ElectionSubTab = "national" | "committee" | "state";
 type NppSubTab = "recruitment" | "management";
@@ -599,6 +607,8 @@ function NationalPartyHub({ scope }: { scope: Extract<PartyHubScope, { kind: "na
     if (canViewExtendedTabsEarly && canActAsChairEarly) allowed.add("chair-office");
     // UK party-leadership removal (#861): national hub only, UK parties only.
     if (canViewExtendedTabsEarly && party?.countryId === "UK") allowed.add("leadership");
+    // UK party conferences (#862): national hub only, UK parties only.
+    if (canViewExtendedTabsEarly && party?.countryId === "UK") allowed.add("conference");
     if (canViewExtendedTabsEarly && user?.isAdmin) allowed.add("admin");
     if (allowed.has(tabParam as NationalMainTab)) {
       setActiveTab(tabParam as NationalMainTab);
@@ -763,6 +773,9 @@ function NationalPartyHub({ scope }: { scope: Extract<PartyHubScope, { kind: "na
             : []),
           ...(party.countryId === "UK"
             ? [{ id: "leadership" as NationalMainTab, label: "Leadership" }]
+            : []),
+          ...(party.countryId === "UK"
+            ? [{ id: "conference" as NationalMainTab, label: "Conference" }]
             : []),
           ...(user?.isAdmin
             ? [{ id: "admin" as NationalMainTab, label: "Admin", className: "text-error" }]
@@ -1295,6 +1308,10 @@ function NationalPartyHub({ scope }: { scope: Extract<PartyHubScope, { kind: "na
 
       {activeTab === "leadership" && party.countryId === "UK" && (
         <LeadershipPanel countryCode={backCountry} partyId={id} />
+      )}
+
+      {activeTab === "conference" && party.countryId === "UK" && (
+        <ConferencePanel countryCode={backCountry} partyId={id} />
       )}
 
       {activeTab === "admin" && user?.isAdmin && (

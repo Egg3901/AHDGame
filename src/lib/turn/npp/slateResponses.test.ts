@@ -481,6 +481,143 @@ describe("fileAcceptedSlateRows", () => {
     expect(candidateRow.filedAt).toBeInstanceOf(Date);
   });
 
+  it("bars an in-state sitting Commons MP from a special_commons slate filing", async () => {
+    // A special_commons race fills only vacated seats and resolves additively
+    // (#860): seating a sitting MP double-seats them, so the chair's row for
+    // one is refused while a seatless challenger on the same race files.
+    const sitting = makeNPP({
+      name: "Sitting MP",
+      homeState: "LON",
+      countryId: "UK",
+      party: "1",
+    });
+    const challenger = makeNPP({
+      name: "Seatless Challenger",
+      homeState: "LON",
+      countryId: "UK",
+      party: "1",
+    });
+    const electionId = new ObjectId();
+    const election: Election = {
+      _id: electionId,
+      countryId: "UK",
+      electionType: "special_commons",
+      state: "LON",
+      cycle: 1,
+      status: "active",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    } as Election;
+    const rowFor = (candidate: NPP): SlateCandidate => ({
+      _id: new ObjectId(),
+      slateId: new ObjectId(),
+      electionId,
+      partyId: "1",
+      countryId: "UK",
+      candidateType: "npp",
+      candidateId: candidate._id,
+      candidateName: candidate.name,
+      homeState: candidate.homeState,
+      status: "accepted",
+      fitScore: 90,
+      refusalReason: null,
+      autoFilled: false,
+      invitedAt: new Date(),
+      respondedAt: new Date(),
+      filedAt: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    const sittingRow = rowFor(sitting);
+    const challengerRow = rowFor(challenger);
+
+    const inserted: ElectionCandidate[] = [];
+    const db = buildDb({
+      recruitmentSlates: [],
+      slateCandidates: [sittingRow, challengerRow],
+      nppRelationships: [],
+      elections: [election],
+      electionCandidates: inserted,
+    });
+
+    const officialsByNPP = new Map([
+      [
+        sitting._id.toString(),
+        [{ officeType: "commons", countryId: "UK", state: "LON" } as ElectedOfficial],
+      ],
+    ]);
+    const summary = await fileAcceptedSlateRows(
+      makeCtx(db, [sitting, challenger], { officialsByNPP })
+    );
+    expect(summary.filed).toBe(1);
+    expect(summary.skipped).toBe(1);
+    expect(inserted).toHaveLength(1);
+    expect(inserted[0].nppId).toEqual(challenger._id);
+    expect(sittingRow.status).toBe("withdrawn");
+    expect(sittingRow.refusalReason).toBe("seat_not_on_ballot");
+    expect(challengerRow.status).toBe("filed");
+  });
+
+  it("still files a sitting Commons MP slated into an ordinary commons race", async () => {
+    const sitting = makeNPP({
+      name: "Sitting MP",
+      homeState: "LON",
+      countryId: "UK",
+      party: "1",
+    });
+    const electionId = new ObjectId();
+    const election: Election = {
+      _id: electionId,
+      countryId: "UK",
+      electionType: "commons",
+      state: "LON",
+      cycle: 1,
+      status: "active",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    } as Election;
+    const candidateRow: SlateCandidate = {
+      _id: new ObjectId(),
+      slateId: new ObjectId(),
+      electionId,
+      partyId: "1",
+      countryId: "UK",
+      candidateType: "npp",
+      candidateId: sitting._id,
+      candidateName: sitting.name,
+      homeState: sitting.homeState,
+      status: "accepted",
+      fitScore: 90,
+      refusalReason: null,
+      autoFilled: false,
+      invitedAt: new Date(),
+      respondedAt: new Date(),
+      filedAt: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    const inserted: ElectionCandidate[] = [];
+    const db = buildDb({
+      recruitmentSlates: [],
+      slateCandidates: [candidateRow],
+      nppRelationships: [],
+      elections: [election],
+      electionCandidates: inserted,
+    });
+
+    const officialsByNPP = new Map([
+      [
+        sitting._id.toString(),
+        [{ officeType: "commons", countryId: "UK", state: "LON" } as ElectedOfficial],
+      ],
+    ]);
+    const summary = await fileAcceptedSlateRows(makeCtx(db, [sitting], { officialsByNPP }));
+    expect(summary.filed).toBe(1);
+    expect(inserted).toHaveLength(1);
+    expect(candidateRow.status).toBe("filed");
+  });
+
   it("skips filing a banned-party NPP in an RU one-party-state race", async () => {
     const npp = makeNPP({
       countryId: "RU",

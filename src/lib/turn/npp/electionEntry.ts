@@ -38,7 +38,7 @@ import {
   isElectionTypeEntryBlocked,
   isNationwideDirectExecutiveElection,
 } from "@/lib/elections/nationwideExecutive";
-import { officeKeyForElectionType } from "@/lib/utils/electionLabels";
+import { isSpecialCommonsElection, officeKeyForElectionType } from "@/lib/utils/electionLabels";
 import { DEFAULT_CANDIDATE_SUPPORT } from "@/lib/electionEngine/electionFormulaFactors";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import {
@@ -155,6 +155,12 @@ export async function processElectionEntry(ctx: NPPContext): Promise<number> {
   // regular counterpart - normalize the election type so a sitting "commons"
   // MP is recognized as incumbent for a snap_commons primary.
   const isIncumbentFor = (npp: NPP, primary: Election): boolean => {
+    // Commons by-elections (#860) fill only vacated seats: no sitting MP is
+    // the incumbent of a race their own seat is not on the ballot for. Without
+    // this, every same-state MP auto-defends the vacant seat and a sitting
+    // winner double-seats (additive resolution never sweeps). Seatless
+    // challengers still file through the generic fill below.
+    if (isSpecialCommonsElection(primary.electionType)) return false;
     const offices = ctx.officialsByNPP.get(npp._id.toString());
     if (!offices) return false;
     const primaryCountry = (primary.countryId ?? "US") as CountryId;

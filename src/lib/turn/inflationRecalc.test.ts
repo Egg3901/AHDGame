@@ -15,6 +15,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { Db } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import { createInMemoryDb } from "@/lib/test-utils/inMemoryDb";
+import { MONEY_ACCOUNTING_VERSION } from "@/lib/moneySupply/calculate";
 
 // ── Module mocks ──────────────────────────────────────────────────────────────
 
@@ -25,6 +26,7 @@ vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 const mockCalculateCountryInflation = vi.fn().mockResolvedValue(3.5);
 vi.mock("@/lib/budget/inflation", () => ({
   calculateCountryInflation: (...args: unknown[]) => mockCalculateCountryInflation(...args),
+  PEGGED_MONEY_GROWTH_COEFF: 0.08,
 }));
 
 // Minimal COUNTRY_CONFIGS with one presidential entry, one parliamentary entry,
@@ -239,10 +241,30 @@ describe("recalculateInflationPerTurn", () => {
     );
     const memory = createInMemoryDb();
     memory.seed("moneySupplySnapshots", [
-      { accountingVersion: 2, currencyCode: "USD", turn: 98, annualizedM2GrowthPct: 20 },
-      { accountingVersion: 2, currencyCode: "USD", turn: 99, annualizedM2GrowthPct: 4 },
-      { accountingVersion: 2, currencyCode: "USD", turn: 100, annualizedM2GrowthPct: 80 },
-      { accountingVersion: 2, currencyCode: "GBP", turn: 99, annualizedM2GrowthPct: 7 },
+      {
+        accountingVersion: MONEY_ACCOUNTING_VERSION,
+        currencyCode: "USD",
+        turn: 98,
+        annualizedM2GrowthPct: 20,
+      },
+      {
+        accountingVersion: MONEY_ACCOUNTING_VERSION,
+        currencyCode: "USD",
+        turn: 99,
+        annualizedM2GrowthPct: 4,
+      },
+      {
+        accountingVersion: MONEY_ACCOUNTING_VERSION,
+        currencyCode: "USD",
+        turn: 100,
+        annualizedM2GrowthPct: 80,
+      },
+      {
+        accountingVersion: MONEY_ACCOUNTING_VERSION,
+        currencyCode: "GBP",
+        turn: 99,
+        annualizedM2GrowthPct: 7,
+      },
     ]);
     db.collection("moneySupplySnapshots");
     db.collectionMocks.moneySupplySnapshots.aggregate.mockImplementation((pipeline) =>
@@ -266,7 +288,12 @@ describe("recalculateInflationPerTurn", () => {
       { currencyCode: "USD", turn: 98, annualizedM2GrowthPct: 20 },
       { currencyCode: "USD", turn: 99, annualizedM2GrowthPct: 4 },
       { currencyCode: "USD", turn: 100, annualizedM2GrowthPct: 80 },
-      { accountingVersion: 2, currencyCode: "GBP", turn: 99, annualizedM2GrowthPct: null },
+      {
+        accountingVersion: MONEY_ACCOUNTING_VERSION,
+        currencyCode: "GBP",
+        turn: 99,
+        annualizedM2GrowthPct: null,
+      },
     ]);
     db.collection("moneySupplySnapshots");
     db.collectionMocks.moneySupplySnapshots.aggregate.mockImplementation((pipeline) =>
@@ -416,6 +443,7 @@ describe("recalculateInflationPerTurn", () => {
       db,
       "US",
       expect.objectContaining({ _id: "federal" }),
+      expect.any(Number),
       expect.any(Number),
       expect.any(Number),
       expect.any(Number),

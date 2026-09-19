@@ -31,7 +31,7 @@ export interface ElectedOfficial {
   characterName?: string;
   party?: string;
   isNPP?: boolean;
-  nppId?: ObjectId;
+  nppId?: ObjectId | null;
   electedAt?: Date;
   termEnds?: Date;
   /** True if appointed (Senate only), false if elected */
@@ -55,6 +55,17 @@ export interface ElectedOfficial {
   vpActionsRemaining?: number;
   /** Eastern-time calendar day (`YYYY-MM-DD`) the VP action pool last reset. */
   lastVpActionResetDay?: string;
+  /**
+   * Westminster whip withdrawal (issue #859). True while the MP sits suspended
+   * from the parliamentary party: the whip is withdrawn, they sit as an
+   * independent, and they face elevated reselection risk. Set only by the
+   * sitting PM via the whip withdraw/restore endpoints; absent means whipped.
+   */
+  whipWithdrawn?: boolean;
+  /** When the whip was withdrawn. */
+  whipWithdrawnAt?: Date;
+  /** PM character that withdrew the whip. */
+  whipWithdrawnByCharacterId?: ObjectId;
   createdAt: Date;
   updatedAt: Date;
 }

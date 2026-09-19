@@ -1,9 +1,11 @@
 import { ObjectId } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
+import type { ReshuffleRecord } from "@/lib/uk/cabinet/reshuffleLimit";
 import type { WhippedFromVoteMap } from "./legislation";
 import type { GoverningAgenda } from "@/lib/nppAutonomy/governingAgenda";
 import type { PersistedCommandStance, PersistedFiscalStance } from "@/lib/nppAutonomy/fiscalStance";
 import type { GoverningGoalState } from "@/lib/nppAutonomy/v5/rules/governingGoals";
+import type { PersistedReshuffleGuardState } from "@/lib/nppAutonomy/rules/reshuffleGuard";
 
 // --- GovernmentFormation ---
 
@@ -54,6 +56,14 @@ export interface GovernmentFormation {
   collapsedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
+
+  // Cabinet reshuffle log (epic #856, ticket #859). Additive record of used
+  // once-per-parliament-per-government reshuffle tokens, read by
+  // `canReshuffle` in `src/lib/uk/cabinet/reshuffleLimit.ts`. Election-reset
+  // and vacate paths `$set` specific fields, so entries survive across
+  // parliaments and governments and are told apart by their ids. Runtime —
+  // wiped on world reset with the rest of this collection.
+  reshuffleLog?: ReshuffleRecord[];
 
   // Snap election tracking — applies to any parliamentary country
   // (resets on PM appointment).
@@ -120,6 +130,17 @@ export interface GovernmentFormation {
    * is what makes a v4 world load and run unchanged.
    */
   governingGoals?: GoverningGoalState | null;
+
+  /**
+   * NPP Autonomy reshuffle-guard state (#1994): government-level last
+   * reshuffle turn, per-portfolio consecutive-replacement history, and the
+   * most recent replacement's reason/tenure/shortfall for observability.
+   * Written only by `runMinisterialGovernance` on an actual replacement (or
+   * escalation marking); read scoped by `governmentKey`, so a government
+   * transition starts clean. Absent on older docs, which read as empty state.
+   * Never consulted by caretaker or player-controlled paths.
+   */
+  ministerialReshuffle?: PersistedReshuffleGuardState | null;
 }
 
 // --- PMAppointmentVote ---

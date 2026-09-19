@@ -21,6 +21,7 @@ import {
   narrowCandidateSlate,
   type NppBehaviorPolicy,
 } from "@/lib/singleplayerDifficulty/rules/behavior";
+import { canonicalizeLegislationTypeId } from "@/lib/legislationTypeAliases";
 
 // ── Urgency signal: macro + metrics → domain urgency map ──────────────────────
 
@@ -201,14 +202,37 @@ function platformFitForOption(npp: NPP, option: LegislationPolicyOption): number
 }
 
 /**
- * Best platform-fit score across all policy options in a legislation type.
+ * Normalized key for a country/type/option combination already present in an
+ * active bill. The legislation-type half is canonicalized so legacy/renamed
+ * type ids match the same in-flight provision `checkDuplicateProvisions`
+ * rejects at propose time; the option half is the raw policyOptionId, which
+ * that same guard compares verbatim.
+ */
+export function activeProposalKey(legislationTypeId: string, policyOptionId: string): string {
+  return `${canonicalizeLegislationTypeId(legislationTypeId) ?? legislationTypeId}:${policyOptionId}`;
+}
+
+/**
+ * True when this type/option combination is already carried by an active bill
+ * and would be rejected as a duplicate provision at propose time.
+ */
+function isActiveDuplicate(
+  legislationTypeId: string,
+  policyOptionId: string,
+  activeProposalKeys: ReadonlySet<string> | undefined
+): boolean {
+  if (!activeProposalKeys || activeProposalKeys.size === 0) return false;
+  return activeProposalKeys.has(activeProposalKey(legislationTypeId, policyOptionId));
+}
+
+/**
+ * Best platform-fit score across the given policy options.
  * Also returns the best-fit option (for use in the bill provision).
  */
 function bestPlatformFit(
   npp: NPP,
-  legType: LegislationType
+  options: LegislationPolicyOption[]
 ): { score: number; option: LegislationPolicyOption | null } {
-  const options = legType.policyOptions ?? [];
   if (options.length === 0) return { score: 0.5, option: null };
 
   let bestScore = -Infinity;
@@ -266,9 +290,11 @@ function urgencyForType(legType: LegislationType, signal: ConditionsSignal): num
 function urgencyDirectedOption(
   npp: NPP,
   legType: LegislationType,
-  signal: ConditionsSignal
+  signal: ConditionsSignal,
+  /** Pre-filtered to the valid (non-enacted, non-duplicate) options. */
+  validOptions?: LegislationPolicyOption[]
 ): LegislationPolicyOption | null {
-  const options = legType.policyOptions ?? [];
+  const options = validOptions ?? legType.policyOptions ?? [];
   if (options.length === 0) return null;
 
   const inflationRate = signal.inflationRate ?? 0;
@@ -304,7 +330,7 @@ function urgencyDirectedOption(
   }
 
   // Fallback: best platform-fit option
-  return bestPlatformFit(npp, legType).option;
+  return bestPlatformFit(npp, options).option;
 }
 
 // ── Agenda bias (V1.5) ────────────────────────────────────────────────────────
@@ -357,15 +383,18 @@ function agendaDirectedOption(
   npp: NPP,
   legType: LegislationType,
   signal: ConditionsSignal,
-  agendaItem: GoverningAgendaItem | null
+  agendaItem: GoverningAgendaItem | null,
+  /** Pre-filtered to the valid (non-enacted, non-duplicate) options. */
+  validOptions?: LegislationPolicyOption[]
 ): LegislationPolicyOption | null {
+  const options = validOptions ?? legType.policyOptions ?? [];
   if (agendaItem) {
     const preferred = agendaItem.direction === "raise" ? 1 : -1;
-    const directed = (legType.policyOptions ?? []).filter((o) => o.effectDirection === preferred);
+    const directed = options.filter((o) => o.effectDirection === preferred);
     const pick = bestFitAmong(npp, directed);
     if (pick) return pick;
   }
-  return urgencyDirectedOption(npp, legType, signal);
+  return urgencyDirectedOption(npp, legType, signal, options);
 }
 
 // ── Fiscal restraint on cost-bearing ladders (domain-agnostic) ───────────────
@@ -440,6 +469,38 @@ export interface FiscalRestraintPick {
    * re-ratchet the exact spending the stance exists to pull back.
    */
   hold: boolean;
+}
+
+/**
+ * Resolve a fiscal-restraint target against the valid options. A valid target
+ * is returned as-is; an invalid one (enacted rung or active duplicate) steps
+ * DOWN the cost ladder to the nearest valid cheaper rung. Returns null when no
+ * valid rung exists at or below the target's cost — restraint must never climb
+ * to a pricier rung to fill the slot.
+ */
+function nearestValidAtOrBelowCost(
+  allOptions: LegislationPolicyOption[],
+  validOptions: LegislationPolicyOption[],
+  target: LegislationPolicyOption | null
+): LegislationPolicyOption | null {
+  if (!target) return null;
+  const validIds = new Set(validOptions.map((o) => o.id));
+  if (validIds.has(target.id)) return target;
+  const field = ladderCostField(allOptions);
+  // No cost field means the restraint pick itself could not have been a cost
+  // interpolation (it returns null there), so there is no principled fallback.
+  if (!field) return null;
+  const targetCost = relativeCost(target, field);
+  let fallback: LegislationPolicyOption | null = null;
+  let fallbackCost = -Infinity;
+  for (const opt of validOptions) {
+    const cost = relativeCost(opt, field);
+    if (cost <= targetCost && cost > fallbackCost) {
+      fallbackCost = cost;
+      fallback = opt;
+    }
+  }
+  return fallback;
 }
 
 function fiscalRestraintOption(
@@ -520,8 +581,9 @@ export function selectNppBill(
   fiscalStance?: { direction: -1 | 0 | 1; intensity: number },
   /**
    * Currently enacted policy option per legislation type id (the country's
-   * national statePolicies rows). Lets the fiscal-restraint pick treat the
-   * enacted rung as a ceiling instead of choosing an absolute rung blind.
+   * national statePolicies rows). The enacted rung is excluded from candidacy
+   * on every scoring path (and still lets the fiscal-restraint pick treat it
+   * as a ceiling instead of choosing an absolute rung blind).
    */
   currentPolicyOptionIds?: ReadonlyMap<string, string>,
   /** Legislation types this sponsor party introduced inside the repeat window. */
@@ -546,6 +608,14 @@ export function selectNppBill(
      * deterministic per decision while still rotating between decisions.
      */
     slateSalt?: string;
+    /**
+     * Normalized country/type/option combinations already present in an active
+     * bill (`activeProposalKey` form), loaded once per sponsorship pass so
+     * selection costs no query per candidate. Options carrying one of these
+     * keys are excluded before scoring: proposing them would be rejected as a
+     * duplicate provision at propose time.
+     */
+    activeProposalKeys?: ReadonlySet<string>;
   }
 ): NppBillSelection | null {
   if (candidates.length === 0) return null;
@@ -563,12 +633,26 @@ export function selectNppBill(
   );
 
   const fiscalActive = !!fiscalStance && fiscalStance.direction !== 0;
+  const activeProposalKeys = options?.activeProposalKeys;
 
   let best: NppBillSelection | null = null;
 
   for (const legType of slate) {
     if (recentLegislationTypeIds?.has(legType._id)) continue;
     const options = legType.policyOptions ?? [];
+    // Validity filter shared by every scoring path below. The enacted rung is
+    // excluded: re-proposing it is rejected as a no-op at propose time, and no
+    // reaffirmation mechanic exists anywhere in the proposal path that would
+    // give such a bill meaning (checkCurrentPolicyLevel rejects unconditionally
+    // — if a genuine reaffirmation ladder is ever authored, it must arrive here
+    // as an explicit allowlist, never as an inferred exception). Active-duplicate
+    // type/option combos are excluded for the same reason (checkDuplicateProvisions).
+    // With no validity inputs supplied the filter is the identity, so scoring is
+    // byte-identical to the pre-filter path.
+    const enactedOptionId = currentPolicyOptionIds?.get(legType._id);
+    const validOptions = options.filter(
+      (o) => o.id !== enactedOptionId && !isActiveDuplicate(legType._id, o.id, activeProposalKeys)
+    );
     // Tax-slider laws carry no options ladder — synthesize a directional
     // stand-in so NPCs can sponsor rate moves (deferred-item fix).
     const isFiscalForSlider = FISCAL_TIGHTENING_DOMAINS.has(
@@ -589,11 +673,13 @@ export function selectNppBill(
           social: 0,
         }
       : null;
-    if (options.length === 0 && !sliderPseudoOption) continue;
+    // A type with no valid option left is not abandoned mid-scoring: it is
+    // skipped here so the next-best type can still win the sponsorship attempt.
+    if (validOptions.length === 0 && !sliderPseudoOption) continue;
 
     const { score: platScore } = sliderPseudoOption
       ? { score: platformFitForOption(npp, sliderPseudoOption) }
-      : bestPlatformFit(npp, legType);
+      : bestPlatformFit(npp, validOptions);
     const urgScore = urgencyForType(legType, signal);
     // Agenda bias (V1.5): 0 when no agenda is supplied, so non-governing/v0
     // sponsorship scores exactly as before.
@@ -631,9 +717,12 @@ export function selectNppBill(
         continue;
       }
       // Fiscal posture directs tax/spending options; otherwise the agenda does.
+      // Every directed subset below is drawn from the valid options, so the
+      // highest-scoring choice being invalid falls through to the next valid
+      // option instead of abandoning the attempt.
       let option: LegislationPolicyOption | null = null;
       if (fiscalActive && isFiscalBill) {
-        const directed = options.filter((o) => o.effectDirection === fiscalStance!.direction);
+        const directed = validOptions.filter((o) => o.effectDirection === fiscalStance!.direction);
         option = bestFitAmong(npp, directed);
       }
       // Fiscal restraint (domain-agnostic): an austere stance pulls any
@@ -650,18 +739,33 @@ export function selectNppBill(
       // wins even under maximum debt distress"), so restraint yields to the
       // agenda's crisis item instead of starving the crisis domain.
       if (!option && fiscalActive && fiscalStance!.direction === 1 && !agendaItem?.crisis) {
-        const restraint = fiscalRestraintOption(
-          options,
-          fiscalStance!.intensity,
-          currentPolicyOptionIds?.get(legType._id)
-        );
+        // Restraint interpolates on the full ladder (the hold ceiling is
+        // defined against the enacted rung's position in it), then the pick is
+        // resolved against the valid options: an invalid restraint target steps
+        // DOWN the cost ladder to the nearest valid cheaper rung, never up.
+        const restraint = fiscalRestraintOption(options, fiscalStance!.intensity, enactedOptionId);
         // Already at/below the desired rung: no bill on this ladder at all -
         // see FiscalRestraintPick.hold for why the agenda must not run here.
         if (restraint.hold) continue;
-        option = restraint.option;
+        // A null restraint pick means restraint does not apply to this ladder
+        // at all (no cost spread): fall through to the agenda/urgency paths.
+        // A non-null pick that resolves to no valid rung is the same as hold.
+        if (restraint.option) {
+          option = nearestValidAtOrBelowCost(options, validOptions, restraint.option);
+          if (!option) continue;
+        }
       }
-      if (!option) option = agendaDirectedOption(npp, legType, signal, agendaItem);
+      if (!option) option = agendaDirectedOption(npp, legType, signal, agendaItem, validOptions);
       if (!option) continue;
+      // Defensive: every path above already chooses among the valid options,
+      // but a selection that somehow still names an invalid rung must not beat
+      // a valid rival type — drop this type and let scoring continue.
+      if (
+        option.id === enactedOptionId ||
+        isActiveDuplicate(legType._id, option.id, activeProposalKeys)
+      ) {
+        continue;
+      }
       best = { legType, option, score: combined };
     }
   }

@@ -47,6 +47,10 @@ export const DEFAULT_DURATIONS: Record<
   // Governor by-election (mid-term vacancy fill) — general-only, no primary; the
   // spawner sets timing directly, this entry just registers the type.
   special_governor: { durationHours: 48, primaryDurationHours: 0, generalDurationHours: 48 },
+  // Commons by-election (#860) — compressed regular race like its governor
+  // cousin, but WITH a filing/primary window so candidates can file. Mirrors
+  // the regular Commons 24h + 24h split; the spawner sets timing directly.
+  special_commons: { durationHours: 48, primaryDurationHours: 24, generalDurationHours: 24 },
   // CN NPC Delegate elections (5-year cycle, 48h election window)
   npcDelegate: { durationHours: 48, primaryDurationHours: 24, generalDurationHours: 24 },
   // CN Provincial People's Congress elections — sub-national legislature

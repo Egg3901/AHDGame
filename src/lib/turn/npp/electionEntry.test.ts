@@ -155,6 +155,55 @@ describe("processElectionEntry", () => {
     await expect(processElectionEntry(ctx)).resolves.toBeTypeOf("number");
   });
 
+  it("does not auto-defend a Commons by-election for a sitting MP, but still files a seatless challenger", async () => {
+    const election = createTestElection({
+      electionType: "special_commons",
+      state: "LON",
+      countryId: "UK",
+    });
+    const mp = createTestNpp({
+      name: "Sitting MP",
+      countryId: "UK",
+      homeState: "LON",
+      party: "lab",
+    });
+    const challenger = createTestNpp({
+      name: "Challenger",
+      countryId: "UK",
+      homeState: "LON",
+      party: "lab",
+    });
+    const ctx = buildContext(db, election, [mp, challenger], [], [mp._id.toString()]);
+    // buildContext only maps house/senate/stateSenate/regionalCouncil/sangiin
+    // office types; correct the seat to a real Commons row.
+    ctx.officialsByNPP.set(mp._id.toString(), [
+      {
+        _id: new ObjectId(),
+        officeType: "commons",
+        countryId: "UK",
+        state: "LON",
+        characterId: mp._id,
+        characterName: mp.name,
+        party: mp.party,
+        isNPP: true,
+        nppId: mp._id,
+        electedAt: new Date(),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      } as ElectedOfficial,
+    ]);
+
+    const entered = await processElectionEntry(ctx);
+
+    expect(entered).toBe(1);
+    expect(db.collectionMocks.electionCandidates.insertOne).toHaveBeenCalledTimes(1);
+    expect(db.collectionMocks.electionCandidates.insertOne.mock.calls[0]?.[0]).toMatchObject({
+      electionId: election._id,
+      characterId: challenger._id,
+      characterName: "Challenger",
+    });
+  });
+
   it("lets an incumbent re-enter their defending primary despite cooldown and same-party player candidate", async () => {
     const election = createTestElection();
     const incumbent = createTestNpp({

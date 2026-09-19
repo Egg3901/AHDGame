@@ -3,6 +3,7 @@
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
+import { MONEY_ACCOUNTING_VERSION } from "@/lib/moneySupply/calculate";
 import type { MoneySupplyView } from "./centralBankTypes";
 import messages from "../../../../../messages/en/centralBank.json";
 import { CentralBankMoneySupplyTab } from "./CentralBankMoneySupplyTab";
@@ -20,7 +21,7 @@ vi.mock("next-intl", () => ({
 afterEach(cleanup);
 
 const data = {
-  accountingVersion: 2,
+  accountingVersion: MONEY_ACCOUNTING_VERSION,
   turn: 48,
   currencyCode: "USD",
   m1: 1_000,
@@ -43,7 +44,7 @@ const data = {
   netMoneyCreatedLifetime: 40,
   lastOperationTurn: 48,
   lastPolicyEvaluation: {
-    accountingVersion: 2,
+    accountingVersion: MONEY_ACCOUNTING_VERSION,
     turn: 48,
     decision: "qe",
     rationale: "Inflation is below target and growth is weak; support demand through QE",
@@ -108,7 +109,7 @@ describe("CentralBankMoneySupplyTab", () => {
   });
 });
 
-it.each([undefined, 2])(
+it.each([undefined, 2, MONEY_ACCOUNTING_VERSION])(
   "preserves an unavailable growth observation for accounting version %s",
   (accountingVersion) => {
     render(
@@ -120,6 +121,7 @@ it.each([undefined, 2])(
           annualizedM2GrowthPct: null,
           bankDeposits: 33,
           bondPoolCash: 44,
+          excludedBondPoolCash: 66,
           equityPoolCash: 55,
         }}
         canOperate={false}
@@ -129,6 +131,7 @@ it.each([undefined, 2])(
     expect(screen.getByText("Collecting 12 turns of comparable data")).toBeTruthy();
     expect(screen.getByText("NPC bank deposits")).toBeTruthy();
     expect(screen.getByText("Bond market cash")).toBeTruthy();
+    expect(screen.getByText("Bond settlement cash (outside M2)")).toBeTruthy();
     expect(screen.getByText("Equity market cash")).toBeTruthy();
   }
 );

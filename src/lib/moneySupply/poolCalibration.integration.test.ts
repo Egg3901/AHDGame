@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { Db } from "mongodb";
 import { createInMemoryDb } from "@/lib/test-utils/inMemoryDb";
 import { snapshotMoneySupply } from "./snapshot";
+import { MONEY_ACCOUNTING_VERSION } from "./calculate";
 import { processEquityMarketPoolTurn } from "@/lib/equities/marketPoolTurn";
 import { processBondMarketPoolTurn } from "@/lib/bonds/marketPoolTurn";
 
@@ -63,7 +64,7 @@ describe("market liquidity across money accounting changes", () => {
         cashLocal: 1000,
         targetCashLocal: 1000,
         m2Local: observed,
-        poolAccountingVersion: 2,
+        poolAccountingVersion: MONEY_ACCOUNTING_VERSION,
       });
       // Adding an equal amount of external cash doubles actual measured M2.
       await memory
