@@ -15,6 +15,21 @@ import { setBankRates } from "@/lib/banking/rates";
 import { getLegalCharterTypes } from "@/lib/banking/separationLaw";
 import { loadWorldEraUnitScale, loadWorldPreset } from "@/lib/currency/gdpAnchorRate";
 import { loadPrivateEnterpriseBlockedCountries } from "@/lib/economy/queries/privateEnterpriseGate";
+import { JP_IDENTITY } from "@/lib/countries/jp/identity";
+import { US_IDENTITY } from "@/lib/countries/us/identity";
+import { UK_IDENTITY } from "@/lib/countries/uk/identity";
+import { DE_IDENTITY } from "@/lib/countries/de/identity";
+import { IE_IDENTITY } from "@/lib/countries/ie/identity";
+import { NG_IDENTITY } from "@/lib/countries/ng/identity";
+import { BR_IDENTITY } from "@/lib/countries/br/identity";
+import { FR_IDENTITY } from "@/lib/countries/fr/identity";
+import { IT_IDENTITY } from "@/lib/countries/it/identity";
+import { ES_IDENTITY } from "@/lib/countries/es/identity";
+import { SE_IDENTITY } from "@/lib/countries/se/identity";
+import { TR_IDENTITY } from "@/lib/countries/tr/identity";
+import { GR_IDENTITY } from "@/lib/countries/gr/identity";
+import { AT_IDENTITY } from "@/lib/countries/at/identity";
+import { FI_IDENTITY } from "@/lib/countries/fi/identity";
 
 /** Provisional: how many NPP retail banks each eligible country seeds. */
 export const NPC_BANKS_PER_COUNTRY = 2;
@@ -93,40 +108,40 @@ const DEFAULT_MODERN_NAMES = ["Meridian Banking Group", "Harbourline Financial"]
  * Per-country display flavor. Patterns only; never real bank brands.
  * Absent countries fall back to the defaults above.
  */
-const COUNTRY_HISTORICAL_NAMES: Partial<Record<CountryId, readonly string[]>> = {
-  US: ["Continental Merchants Bank", "Prairie States Savings Bank"],
-  UK: ["Midland Counties Bank", "Clydeside Mercantile Bank"],
-  JP: ["Kanto Commercial Bank", "Osaka Harbour Trust"],
-  DE: ["Rhineland Credit Bank", "Hanseatic Merchants Bank"],
-  FR: ["Banque du Littoral", "Comptoir des Provinces"],
-  IT: ["Banca Adriatica", "Credito Tirreno"],
-  ES: ["Banco del Ebro", "Caja Mercantil del Norte"],
-  IE: ["Hibernian Provincial Bank", "Shannon Valley Bank"],
-  BR: ["Banco Paulista de Comercio", "Banco Atlantico do Sul"],
-  NG: ["Niger Delta Trading Bank", "Savannah Merchants Bank"],
-  SE: ["Svea Merchants Bank", "Norrland Savings Bank"],
-  TR: ["Anatolian Commerce Bank", "Bosphorus Trading Bank"],
-  GR: ["Aegean Merchants Bank", "Peloponnese Savings Bank"],
-  AT: ["Alpine Credit Bank", "Danube Commercial Bank"],
-  FI: ["Lakeland Savings Bank", "Bothnia Commercial Bank"],
+export const COUNTRY_HISTORICAL_NAMES: Partial<Record<CountryId, readonly string[]>> = {
+  US: US_IDENTITY.historicalNames,
+  UK: UK_IDENTITY.historicalNames,
+  JP: JP_IDENTITY.historicalNames,
+  DE: DE_IDENTITY.historicalNames,
+  FR: FR_IDENTITY.historicalNames,
+  IT: IT_IDENTITY.historicalNames,
+  ES: ES_IDENTITY.historicalNames,
+  IE: IE_IDENTITY.historicalNames,
+  BR: BR_IDENTITY.historicalNames,
+  NG: NG_IDENTITY.historicalNames,
+  SE: SE_IDENTITY.historicalNames,
+  TR: TR_IDENTITY.historicalNames,
+  GR: GR_IDENTITY.historicalNames,
+  AT: AT_IDENTITY.historicalNames,
+  FI: FI_IDENTITY.historicalNames,
 };
 
-const COUNTRY_MODERN_NAMES: Partial<Record<CountryId, readonly string[]>> = {
-  US: ["Continental Merchants Bancorp", "Prairie States Financial"],
-  UK: ["Midland Counties Banking Group", "Clydeside Financial"],
-  JP: ["Kanto Commercial Banking Group", "Osaka Harbour Financial"],
-  DE: ["Rhineland Credit Group", "Hanseatic Banking Group"],
-  FR: ["Groupe Bancaire du Littoral", "Comptoir des Provinces"],
-  IT: ["Banca Adriatica Group", "Credito Tirreno"],
-  ES: ["Banco del Ebro", "Grupo Mercantil del Norte"],
-  IE: ["Hibernian Banking Group", "Shannon Valley Financial"],
-  BR: ["Banco Paulista de Comercio", "Atlantico Sul Financial"],
-  NG: ["Niger Delta Banking Group", "Savannah Financial"],
-  SE: ["Svea Banking Group", "Norrland Financial"],
-  TR: ["Anatolian Commerce Group", "Bosphorus Financial"],
-  GR: ["Aegean Banking Group", "Peloponnese Financial"],
-  AT: ["Alpine Credit Group", "Danube Banking Group"],
-  FI: ["Lakeland Financial", "Bothnia Banking Group"],
+export const COUNTRY_MODERN_NAMES: Partial<Record<CountryId, readonly string[]>> = {
+  US: US_IDENTITY.modernNames,
+  UK: UK_IDENTITY.modernNames,
+  JP: JP_IDENTITY.modernNames,
+  DE: DE_IDENTITY.modernNames,
+  FR: FR_IDENTITY.modernNames,
+  IT: IT_IDENTITY.modernNames,
+  ES: ES_IDENTITY.modernNames,
+  IE: IE_IDENTITY.modernNames,
+  BR: BR_IDENTITY.modernNames,
+  NG: NG_IDENTITY.modernNames,
+  SE: SE_IDENTITY.modernNames,
+  TR: TR_IDENTITY.modernNames,
+  GR: GR_IDENTITY.modernNames,
+  AT: AT_IDENTITY.modernNames,
+  FI: FI_IDENTITY.modernNames,
 };
 
 function corridorMidpoint(minOffset: number, maxOffset: number): number {

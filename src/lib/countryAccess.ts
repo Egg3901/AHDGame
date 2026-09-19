@@ -159,7 +159,14 @@ export async function getCountryAccessFromDb(db: Db, countryId: CountryId): Prom
   // stays browsable "econ-only", its election gates read it as NPP-governed,
   // and per-country processing that consults access keeps simulating a state
   // that no longer exists.
-  if (doc?.dissolvedTurn != null) {
+  //
+  // A country ABSENT FROM THIS ERA is unregistered for the same reason and must
+  // take the same branch. The two causes stay distinct in the data (see
+  // `absentInEra` in gameState.ts — conflating them would break merge
+  // idempotency) but they produce the identical access answer, and splitting
+  // them here is what would let `/country/dd` keep rendering econ-only in a 1991
+  // world while every list path had already dropped it.
+  if (doc?.dissolvedTurn != null || doc?.absentInEra === true) {
     return {
       enabledForPlayers: false,
       // `dissolvedTurn` is deliberately NOT a `CountryStatus` member (see the
@@ -218,7 +225,12 @@ function registeredBase(docs: CountryGameState[]): CountryId[] {
   // downstream — the player list, the economy list, the simulated list — is
   // derived from this, so one filter retires it everywhere at once.
   const dissolved = new Set(docs.filter((d) => d.dissolvedTurn != null).map((d) => String(d._id)));
-  return [...COUNTRY_ORDER, ...activeExtra].filter((id) => !dissolved.has(id));
+  // Era absence is a SEPARATE exclusion from dissolution, deliberately kept in
+  // its own clause: a country absent from this era was never absorbed, and
+  // conflating the two would break merge idempotency (see CountryGameState).
+  // Undefined reads as registered, so rows predating the field are unaffected.
+  const absent = new Set(docs.filter((d) => d.absentInEra === true).map((d) => String(d._id)));
+  return [...COUNTRY_ORDER, ...activeExtra].filter((id) => !dissolved.has(id) && !absent.has(id));
 }
 
 /**

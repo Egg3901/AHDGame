@@ -1,0 +1,1848 @@
+{
+  "COUNTRY_ANCHOR": {
+    "shape": "country-first",
+    "value": [12.5, 42.8]
+  },
+  "COUNTRY_BUCKET_LABELS": {
+    "shape": "country-first",
+    "value": {
+      "dims": {
+        "ethnicity": "Origine",
+        "age": "Età",
+        "education": "Istruzione",
+        "income": "Reddito",
+        "urbanization": "Dove vivono"
+      },
+      "buckets": {
+        "ethnicity": {
+          "italian": "Italiani",
+          "immigrant": "Immigrati",
+          "other": "Altre origini"
+        },
+        "age": {
+          "young": "Sotto i 30",
+          "mid": "30-49 anni",
+          "mature": "50-64 anni",
+          "senior": "Over 65"
+        },
+        "education": {
+          "primary_or_below": "Licenza elementare",
+          "secondary": "Diploma",
+          "vocational": "Formazione professionale",
+          "university": "Laurea"
+        },
+        "income": {
+          "low": "Redditi bassi",
+          "middle": "Redditi medi",
+          "high": "Redditi alti"
+        },
+        "urbanization": {
+          "urban": "Città",
+          "suburban": "Periferie",
+          "rural": "Aree rurali"
+        }
+      }
+    }
+  },
+  "COUNTRY_COMMAND_FLAVOR": {
+    "shape": "country-first",
+    "value": {
+      "glyph": "IT",
+      "command": "STATO MAGGIORE DIFESA",
+      "strip": "◆ SEGRETO",
+      "acc": "#9cc0f5"
+    }
+  },
+  "COUNTRY_MODIFIER_PATCHES": {
+    "shape": "absent",
+    "value": null
+  },
+  "COUNTRY_READINESS_EXPECTATIONS": {
+    "shape": "absent",
+    "value": null
+  },
+  "COUNTRY_SECTOR_WEIGHTS_1953": {
+    "shape": "country-first",
+    "value": {
+      "manufacturing": 24,
+      "agriculture": 20,
+      "construction": 12,
+      "energy": 7,
+      "automobiles": 6,
+      "real_estate": 5,
+      "retail": 5,
+      "financial": 5,
+      "logistics": 4,
+      "chemical_industries": 4,
+      "defense": 2,
+      "healthcare": 2,
+      "telecommunications": 2,
+      "media": 2,
+      "extraction": 1,
+      "entertainment": 1,
+      "technology": 0
+    }
+  },
+  "DOMAIN_BUCKET_AFFINITIES": {
+    "shape": "absent",
+    "value": null
+  },
+  "GDP_DENOMINATION_1953": {
+    "shape": "country-first",
+    "value": "usd"
+  },
+  "GROUPS": {
+    "shape": "absent",
+    "value": null
+  },
+  "INITIAL_RATES": {
+    "shape": "country-first",
+    "value": 833
+  },
+  "MAJOR_DEFAULT_PARTIES": {
+    "shape": "absent",
+    "value": null
+  },
+  "MECHANICS_BY_COUNTRY": {
+    "shape": "country-first",
+    "value": {
+      "minister_of_finance": {
+        "positionId": "minister_of_finance",
+        "department": "Finance, Budget and National Planning",
+        "sealImage": "",
+        "nationalMetrics": [
+          {
+            "category": "governance",
+            "metricId": "budgetBalance",
+            "label": "Budget Balance",
+            "format": "percent",
+            "higherIsBetter": true
+          },
+          {
+            "category": "economic",
+            "metricId": "gdpGrowth",
+            "label": "GDP Growth",
+            "format": "percent",
+            "higherIsBetter": true
+          }
+        ],
+        "regionalMetrics": []
+      },
+      "minister_of_foreign_affairs": {
+        "positionId": "minister_of_foreign_affairs",
+        "department": "Foreign Affairs",
+        "sealImage": "",
+        "nationalMetrics": [
+          {
+            "category": "economic",
+            "metricId": "tradeBalance",
+            "label": "Trade Balance",
+            "format": "percent",
+            "higherIsBetter": true
+          }
+        ],
+        "regionalMetrics": []
+      },
+      "minister_of_defence": {
+        "positionId": "minister_of_defence",
+        "department": "Defence",
+        "sealImage": "",
+        "nationalMetrics": [
+          {
+            "category": "publicSafety",
+            "metricId": "publicSafetyConfidence",
+            "label": "Public Safety Confidence",
+            "format": "percent",
+            "higherIsBetter": true
+          },
+          {
+            "category": "publicSafety",
+            "metricId": "violentCrimeRate",
+            "label": "Violent Crime Rate",
+            "format": "number",
+            "higherIsBetter": false
+          }
+        ],
+        "regionalMetrics": []
+      },
+      "minister_of_interior": {
+        "positionId": "minister_of_interior",
+        "department": "Interior",
+        "sealImage": "",
+        "nationalMetrics": [
+          {
+            "category": "publicSafety",
+            "metricId": "crimeRate",
+            "label": "Crime Rate",
+            "format": "number",
+            "higherIsBetter": false
+          },
+          {
+            "category": "publicSafety",
+            "metricId": "publicSafetyConfidence",
+            "label": "Public Safety Confidence",
+            "format": "percent",
+            "higherIsBetter": true
+          }
+        ],
+        "regionalMetrics": []
+      },
+      "minister_of_justice": {
+        "positionId": "minister_of_justice",
+        "department": "Justice",
+        "sealImage": "",
+        "nationalMetrics": [
+          {
+            "category": "governance",
+            "metricId": "corruptionIndex",
+            "label": "Corruption Index",
+            "format": "index",
+            "higherIsBetter": false
+          },
+          {
+            "category": "publicSafety",
+            "metricId": "recidivismRate",
+            "label": "Recidivism Rate",
+            "format": "percent",
+            "higherIsBetter": false
+          }
+        ],
+        "regionalMetrics": []
+      },
+      "minister_of_health": {
+        "positionId": "minister_of_health",
+        "department": "Health",
+        "sealImage": "",
+        "nationalMetrics": [
+          {
+            "category": "healthcare",
+            "metricId": "lifeExpectancy",
+            "label": "Life Expectancy",
+            "format": "number",
+            "higherIsBetter": true
+          },
+          {
+            "category": "healthcare",
+            "metricId": "preventableMortality",
+            "label": "Preventable Mortality",
+            "format": "number",
+            "higherIsBetter": false
+          }
+        ],
+        "regionalMetrics": []
+      },
+      "minister_of_education": {
+        "positionId": "minister_of_education",
+        "department": "Education",
+        "sealImage": "",
+        "nationalMetrics": [
+          {
+            "category": "education",
+            "metricId": "literacyRate",
+            "label": "Literacy Rate",
+            "format": "percent",
+            "higherIsBetter": true
+          },
+          {
+            "category": "education",
+            "metricId": "testPerformance",
+            "label": "Test Performance",
+            "format": "index",
+            "higherIsBetter": true
+          }
+        ],
+        "regionalMetrics": []
+      },
+      "minister_of_works_housing": {
+        "positionId": "minister_of_works_housing",
+        "department": "Works and Housing",
+        "sealImage": "",
+        "nationalMetrics": [
+          {
+            "category": "infrastructure",
+            "metricId": "roadCondition",
+            "label": "Road Condition",
+            "format": "index",
+            "higherIsBetter": true
+          },
+          {
+            "category": "social",
+            "metricId": "housingAffordability",
+            "label": "Housing Affordability",
+            "format": "index",
+            "higherIsBetter": false
+          }
+        ],
+        "regionalMetrics": []
+      },
+      "minister_of_agriculture": {
+        "positionId": "minister_of_agriculture",
+        "department": "Agriculture and Rural Development",
+        "sealImage": "",
+        "nationalMetrics": [
+          {
+            "category": "social",
+            "metricId": "foodInsecurity",
+            "label": "Food Insecurity",
+            "format": "percent",
+            "higherIsBetter": false
+          },
+          {
+            "category": "economic",
+            "metricId": "povertyRate",
+            "label": "Poverty Rate",
+            "format": "percent",
+            "higherIsBetter": false
+          }
+        ],
+        "regionalMetrics": []
+      },
+      "minister_of_trade_industry": {
+        "positionId": "minister_of_trade_industry",
+        "department": "Industry, Trade and Investment",
+        "sealImage": "",
+        "nationalMetrics": [
+          {
+            "category": "economic",
+            "metricId": "smallBusinessFormation",
+            "label": "Small Business Formation",
+            "format": "percent",
+            "higherIsBetter": true
+          },
+          {
+            "category": "economic",
+            "metricId": "tradeBalance",
+            "label": "Trade Balance",
+            "format": "percent",
+            "higherIsBetter": true
+          }
+        ],
+        "regionalMetrics": []
+      },
+      "minister_of_labour": {
+        "positionId": "minister_of_labour",
+        "department": "Labour and Employment",
+        "sealImage": "",
+        "nationalMetrics": [
+          {
+            "category": "economic",
+            "metricId": "unemploymentRate",
+            "label": "Unemployment Rate",
+            "format": "percent",
+            "higherIsBetter": false
+          },
+          {
+            "category": "economic",
+            "metricId": "laborParticipation",
+            "label": "Labour Participation",
+            "format": "percent",
+            "higherIsBetter": true
+          }
+        ],
+        "regionalMetrics": []
+      },
+      "minister_of_environment": {
+        "positionId": "minister_of_environment",
+        "department": "Environment",
+        "sealImage": "",
+        "nationalMetrics": [
+          {
+            "category": "environment",
+            "metricId": "carbonEmissions",
+            "label": "Carbon Emissions",
+            "format": "number",
+            "higherIsBetter": false
+          },
+          {
+            "category": "environment",
+            "metricId": "renewableEnergy",
+            "label": "Renewable Energy",
+            "format": "percent",
+            "higherIsBetter": true
+          }
+        ],
+        "regionalMetrics": []
+      },
+      "director_of_intelligence": {
+        "positionId": "director_of_intelligence",
+        "department": "Intelligence Service",
+        "sealImage": "",
+        "nationalMetrics": [
+          {
+            "category": "governance",
+            "metricId": "publicTrust",
+            "label": "Public Trust",
+            "format": "index",
+            "higherIsBetter": true
+          },
+          {
+            "category": "publicSafety",
+            "metricId": "crimeRate",
+            "label": "Crime Rate",
+            "format": "rate",
+            "higherIsBetter": false
+          }
+        ],
+        "regionalMetrics": []
+      }
+    }
+  },
+  "MEDIAN_INCOME_THRESHOLDS": {
+    "shape": "absent",
+    "value": null
+  },
+  "POPULATION_MULTIPLIERS": {
+    "shape": "absent",
+    "value": null
+  },
+  "ORDERS_BY_COUNTRY": {
+    "shape": "absent",
+    "value": null
+  },
+  "UNION_NAMES_BY_ERA": {
+    "shape": "outer-keyed",
+    "value": {
+      "1953": {
+        "manufacturing": "FIOM-CGIL",
+        "automobiles": "FIOM-CGIL",
+        "technology": "FIOM-CGIL",
+        "defense": "FIOM-CGIL",
+        "chemical_industries": "FILCEA-CGIL",
+        "extraction": "FILCEA-CGIL",
+        "construction": "FILLEA-CGIL",
+        "real_estate": "FILLEA-CGIL",
+        "energy": "FLAEI-CISL",
+        "retail": "Filcams-CGIL",
+        "media": "FNSI",
+        "telecommunications": "FILPT-CGIL",
+        "agriculture": "Federbraccianti-CGIL"
+      },
+      "1979": {
+        "manufacturing": "FIOM-CGIL",
+        "automobiles": "FIOM-CGIL",
+        "technology": "FIOM-CGIL",
+        "defense": "FIOM-CGIL",
+        "chemical_industries": "FILCEA-CGIL",
+        "extraction": "FILCEA-CGIL",
+        "construction": "FILLEA-CGIL",
+        "real_estate": "FILLEA-CGIL",
+        "energy": "FLAEI-CISL",
+        "retail": "Filcams-CGIL",
+        "media": "FNSI",
+        "telecommunications": "FILPT-CGIL",
+        "agriculture": "Federbraccianti-CGIL"
+      },
+      "1991": {
+        "manufacturing": "FIOM-CGIL",
+        "automobiles": "FIOM-CGIL",
+        "technology": "FIOM-CGIL",
+        "defense": "FIOM-CGIL",
+        "chemical_industries": "FILCEA-CGIL",
+        "extraction": "FILCEA-CGIL",
+        "construction": "FILLEA-CGIL",
+        "real_estate": "FILLEA-CGIL",
+        "energy": "FLAEI-CISL",
+        "healthcare": "FP-CGIL",
+        "retail": "Filcams-CGIL",
+        "media": "FNSI",
+        "logistics": "FILT-CGIL",
+        "financial": "FISAC-CGIL",
+        "telecommunications": "FILPT-CGIL",
+        "agriculture": "FLAI-CGIL"
+      },
+      "1999": {
+        "manufacturing": "FIOM-CGIL",
+        "automobiles": "FIOM-CGIL",
+        "chemical_industries": "FILCEA-CGIL",
+        "construction": "FILLEA-CGIL",
+        "energy": "FLAEI-CISL",
+        "extraction": "FILCEA-CGIL",
+        "healthcare": "FP-CGIL",
+        "retail": "Filcams-CGIL",
+        "media": "FNSI",
+        "logistics": "FILT-CGIL",
+        "technology": "FIOM-CGIL",
+        "financial": "FISAC-CGIL",
+        "telecommunications": "SLC-CGIL",
+        "entertainment": "SLC-CGIL",
+        "defense": "FIOM-CGIL",
+        "agriculture": "FLAI-CGIL",
+        "real_estate": "FILLEA-CGIL"
+      },
+      "2007": {
+        "manufacturing": "FIOM-CGIL",
+        "automobiles": "FIOM-CGIL",
+        "chemical_industries": "FILCEM-CGIL",
+        "construction": "FILLEA-CGIL",
+        "energy": "FLAEI-CISL",
+        "extraction": "FILCEM-CGIL",
+        "healthcare": "FP-CGIL",
+        "retail": "Filcams-CGIL",
+        "media": "FNSI",
+        "logistics": "FILT-CGIL",
+        "technology": "FIOM-CGIL",
+        "financial": "FISAC-CGIL",
+        "telecommunications": "SLC-CGIL",
+        "entertainment": "SLC-CGIL",
+        "defense": "FIOM-CGIL",
+        "agriculture": "FLAI-CGIL",
+        "real_estate": "FILLEA-CGIL"
+      },
+      "2019": {
+        "manufacturing": "FIOM-CGIL",
+        "automobiles": "FIOM-CGIL",
+        "chemical_industries": "FILCTEM-CGIL",
+        "construction": "FILLEA-CGIL",
+        "energy": "FLAEI-CISL",
+        "extraction": "FILCTEM-CGIL",
+        "healthcare": "FP-CGIL",
+        "retail": "Filcams-CGIL",
+        "media": "FNSI",
+        "logistics": "FILT-CGIL",
+        "technology": "FIOM-CGIL",
+        "financial": "FISAC-CGIL",
+        "telecommunications": "SLC-CGIL",
+        "entertainment": "SLC-CGIL",
+        "defense": "FIOM-CGIL",
+        "agriculture": "FLAI-CGIL",
+        "real_estate": "FILLEA-CGIL"
+      },
+      "2023": {
+        "manufacturing": "FIOM-CGIL",
+        "automobiles": "FIOM-CGIL",
+        "chemical_industries": "FILCTEM-CGIL",
+        "construction": "FILLEA-CGIL",
+        "energy": "FLAEI-CISL",
+        "extraction": "FILCTEM-CGIL",
+        "healthcare": "FP-CGIL",
+        "retail": "Filcams-CGIL",
+        "media": "FNSI",
+        "logistics": "FILT-CGIL",
+        "technology": "FIOM-CGIL",
+        "financial": "FISAC-CGIL",
+        "telecommunications": "SLC-CGIL",
+        "entertainment": "SLC-CGIL",
+        "defense": "FIOM-CGIL",
+        "agriculture": "FLAI-CGIL",
+        "real_estate": "FILLEA-CGIL"
+      },
+      "2027": {
+        "manufacturing": "FIOM-CGIL",
+        "automobiles": "FIOM-CGIL",
+        "chemical_industries": "FILCTEM-CGIL",
+        "construction": "FILLEA-CGIL",
+        "energy": "FLAEI-CISL",
+        "extraction": "FILCTEM-CGIL",
+        "healthcare": "FP-CGIL",
+        "retail": "Filcams-CGIL",
+        "media": "FNSI",
+        "logistics": "FILT-CGIL",
+        "technology": "FIOM-CGIL",
+        "financial": "FISAC-CGIL",
+        "telecommunications": "SLC-CGIL",
+        "entertainment": "SLC-CGIL",
+        "defense": "FIOM-CGIL",
+        "agriculture": "FLAI-CGIL",
+        "real_estate": "FILLEA-CGIL"
+      }
+    }
+  },
+  "CABINET_IDENTITY": {
+    "shape": "absent",
+    "value": null
+  },
+  "CENSUS_BUNDLES": {
+    "shape": "country-first",
+    "value": {
+      "1953-default": {
+        "IT_NW": {
+          "ethnicity": {
+            "italian": 99,
+            "immigrant": 1,
+            "other": 0
+          },
+          "age": {
+            "young": 28,
+            "mid": 28,
+            "mature": 25,
+            "senior": 19
+          },
+          "education": {
+            "primary_or_below": 34,
+            "secondary": 22,
+            "vocational": 38,
+            "university": 6
+          },
+          "income": {
+            "low": 24,
+            "middle": 56,
+            "high": 20
+          },
+          "urbanization": {
+            "urban": 62,
+            "suburban": 20,
+            "rural": 18
+          }
+        },
+        "IT_NE": {
+          "ethnicity": {
+            "italian": 99,
+            "immigrant": 1,
+            "other": 0
+          },
+          "age": {
+            "young": 27,
+            "mid": 28,
+            "mature": 25,
+            "senior": 20
+          },
+          "education": {
+            "primary_or_below": 38,
+            "secondary": 18,
+            "vocational": 39,
+            "university": 5
+          },
+          "income": {
+            "low": 32,
+            "middle": 52,
+            "high": 16
+          },
+          "urbanization": {
+            "urban": 44,
+            "suburban": 22,
+            "rural": 34
+          }
+        },
+        "IT_TUS": {
+          "ethnicity": {
+            "italian": 99,
+            "immigrant": 1,
+            "other": 0
+          },
+          "age": {
+            "young": 26,
+            "mid": 27,
+            "mature": 26,
+            "senior": 21
+          },
+          "education": {
+            "primary_or_below": 40,
+            "secondary": 16,
+            "vocational": 39,
+            "university": 5
+          },
+          "income": {
+            "low": 36,
+            "middle": 51,
+            "high": 13
+          },
+          "urbanization": {
+            "urban": 44,
+            "suburban": 18,
+            "rural": 38
+          }
+        },
+        "IT_LAZ": {
+          "ethnicity": {
+            "italian": 99,
+            "immigrant": 1,
+            "other": 0
+          },
+          "age": {
+            "young": 27,
+            "mid": 28,
+            "mature": 25,
+            "senior": 20
+          },
+          "education": {
+            "primary_or_below": 30,
+            "secondary": 22,
+            "vocational": 40,
+            "university": 8
+          },
+          "income": {
+            "low": 28,
+            "middle": 53,
+            "high": 19
+          },
+          "urbanization": {
+            "urban": 60,
+            "suburban": 22,
+            "rural": 18
+          }
+        },
+        "IT_CAM": {
+          "ethnicity": {
+            "italian": 99,
+            "immigrant": 1,
+            "other": 0
+          },
+          "age": {
+            "young": 32,
+            "mid": 28,
+            "mature": 23,
+            "senior": 17
+          },
+          "education": {
+            "primary_or_below": 56,
+            "secondary": 8,
+            "vocational": 32,
+            "university": 4
+          },
+          "income": {
+            "low": 54,
+            "middle": 38,
+            "high": 8
+          },
+          "urbanization": {
+            "urban": 46,
+            "suburban": 16,
+            "rural": 38
+          }
+        },
+        "IT_SUD": {
+          "ethnicity": {
+            "italian": 99,
+            "immigrant": 1,
+            "other": 0
+          },
+          "age": {
+            "young": 33,
+            "mid": 27,
+            "mature": 23,
+            "senior": 17
+          },
+          "education": {
+            "primary_or_below": 62,
+            "secondary": 6,
+            "vocational": 28,
+            "university": 4
+          },
+          "income": {
+            "low": 60,
+            "middle": 34,
+            "high": 6
+          },
+          "urbanization": {
+            "urban": 28,
+            "suburban": 14,
+            "rural": 58
+          }
+        },
+        "IT_SIC": {
+          "ethnicity": {
+            "italian": 99,
+            "immigrant": 1,
+            "other": 0
+          },
+          "age": {
+            "young": 33,
+            "mid": 27,
+            "mature": 23,
+            "senior": 17
+          },
+          "education": {
+            "primary_or_below": 58,
+            "secondary": 7,
+            "vocational": 30,
+            "university": 5
+          },
+          "income": {
+            "low": 58,
+            "middle": 35,
+            "high": 7
+          },
+          "urbanization": {
+            "urban": 34,
+            "suburban": 16,
+            "rural": 50
+          }
+        },
+        "IT_SAR": {
+          "ethnicity": {
+            "italian": 99,
+            "immigrant": 0,
+            "other": 1
+          },
+          "age": {
+            "young": 31,
+            "mid": 28,
+            "mature": 24,
+            "senior": 17
+          },
+          "education": {
+            "primary_or_below": 54,
+            "secondary": 8,
+            "vocational": 32,
+            "university": 6
+          },
+          "income": {
+            "low": 55,
+            "middle": 37,
+            "high": 8
+          },
+          "urbanization": {
+            "urban": 26,
+            "suburban": 14,
+            "rural": 60
+          }
+        }
+      },
+      "1979-default": {
+        "IT_NW": {
+          "ethnicity": {
+            "italian": 99,
+            "immigrant": 1,
+            "other": 0
+          },
+          "age": {
+            "young": 28,
+            "mid": 28,
+            "mature": 25,
+            "senior": 19
+          },
+          "education": {
+            "primary_or_below": 34,
+            "secondary": 22,
+            "vocational": 38,
+            "university": 6
+          },
+          "income": {
+            "low": 24,
+            "middle": 56,
+            "high": 20
+          },
+          "urbanization": {
+            "urban": 62,
+            "suburban": 20,
+            "rural": 18
+          }
+        },
+        "IT_NE": {
+          "ethnicity": {
+            "italian": 99,
+            "immigrant": 1,
+            "other": 0
+          },
+          "age": {
+            "young": 27,
+            "mid": 28,
+            "mature": 25,
+            "senior": 20
+          },
+          "education": {
+            "primary_or_below": 38,
+            "secondary": 18,
+            "vocational": 39,
+            "university": 5
+          },
+          "income": {
+            "low": 32,
+            "middle": 52,
+            "high": 16
+          },
+          "urbanization": {
+            "urban": 44,
+            "suburban": 22,
+            "rural": 34
+          }
+        },
+        "IT_TUS": {
+          "ethnicity": {
+            "italian": 99,
+            "immigrant": 1,
+            "other": 0
+          },
+          "age": {
+            "young": 26,
+            "mid": 27,
+            "mature": 26,
+            "senior": 21
+          },
+          "education": {
+            "primary_or_below": 40,
+            "secondary": 16,
+            "vocational": 39,
+            "university": 5
+          },
+          "income": {
+            "low": 36,
+            "middle": 51,
+            "high": 13
+          },
+          "urbanization": {
+            "urban": 44,
+            "suburban": 18,
+            "rural": 38
+          }
+        },
+        "IT_LAZ": {
+          "ethnicity": {
+            "italian": 99,
+            "immigrant": 1,
+            "other": 0
+          },
+          "age": {
+            "young": 27,
+            "mid": 28,
+            "mature": 25,
+            "senior": 20
+          },
+          "education": {
+            "primary_or_below": 30,
+            "secondary": 22,
+            "vocational": 40,
+            "university": 8
+          },
+          "income": {
+            "low": 28,
+            "middle": 53,
+            "high": 19
+          },
+          "urbanization": {
+            "urban": 60,
+            "suburban": 22,
+            "rural": 18
+          }
+        },
+        "IT_CAM": {
+          "ethnicity": {
+            "italian": 99,
+            "immigrant": 1,
+            "other": 0
+          },
+          "age": {
+            "young": 32,
+            "mid": 28,
+            "mature": 23,
+            "senior": 17
+          },
+          "education": {
+            "primary_or_below": 56,
+            "secondary": 8,
+            "vocational": 32,
+            "university": 4
+          },
+          "income": {
+            "low": 54,
+            "middle": 38,
+            "high": 8
+          },
+          "urbanization": {
+            "urban": 46,
+            "suburban": 16,
+            "rural": 38
+          }
+        },
+        "IT_SUD": {
+          "ethnicity": {
+            "italian": 99,
+            "immigrant": 1,
+            "other": 0
+          },
+          "age": {
+            "young": 33,
+            "mid": 27,
+            "mature": 23,
+            "senior": 17
+          },
+          "education": {
+            "primary_or_below": 62,
+            "secondary": 6,
+            "vocational": 28,
+            "university": 4
+          },
+          "income": {
+            "low": 60,
+            "middle": 34,
+            "high": 6
+          },
+          "urbanization": {
+            "urban": 28,
+            "suburban": 14,
+            "rural": 58
+          }
+        },
+        "IT_SIC": {
+          "ethnicity": {
+            "italian": 99,
+            "immigrant": 1,
+            "other": 0
+          },
+          "age": {
+            "young": 33,
+            "mid": 27,
+            "mature": 23,
+            "senior": 17
+          },
+          "education": {
+            "primary_or_below": 58,
+            "secondary": 7,
+            "vocational": 30,
+            "university": 5
+          },
+          "income": {
+            "low": 58,
+            "middle": 35,
+            "high": 7
+          },
+          "urbanization": {
+            "urban": 34,
+            "suburban": 16,
+            "rural": 50
+          }
+        },
+        "IT_SAR": {
+          "ethnicity": {
+            "italian": 99,
+            "immigrant": 0,
+            "other": 1
+          },
+          "age": {
+            "young": 31,
+            "mid": 28,
+            "mature": 24,
+            "senior": 17
+          },
+          "education": {
+            "primary_or_below": 54,
+            "secondary": 8,
+            "vocational": 32,
+            "university": 6
+          },
+          "income": {
+            "low": 55,
+            "middle": 37,
+            "high": 8
+          },
+          "urbanization": {
+            "urban": 26,
+            "suburban": 14,
+            "rural": 60
+          }
+        }
+      }
+    }
+  },
+  "CONSCRIPTION_SEED": {
+    "shape": "absent",
+    "value": null
+  },
+  "CORE5_NORMALS": {
+    "shape": "absent",
+    "value": null
+  },
+  "COST_SCALE_ANCHORS": {
+    "shape": "absent",
+    "value": null
+  },
+  "COUNTRY_BILL_PHASES": {
+    "shape": "function-valued",
+    "value": null,
+    "functionKeys": ["fn"]
+  },
+  "COUNTRY_CONFIGS": {
+    "shape": "country-first",
+    "value": {
+      "id": "IT",
+      "name": "Italy",
+      "flagEmoji": "🇮🇹",
+      "code": "IT",
+      "socialAxisBaseline": 1,
+      "regionLabel": "Region",
+      "regionLabelPlural": "Regions",
+      "executiveTitle": "Prime Minister",
+      "headOfStateTitle": "President",
+      "executiveRealmPhrase": "Italy",
+      "governmentType": "parliamentaryRepublic",
+      "governmentTypeLabel": "Parliamentary Republic",
+      "coalitionThreshold": 316,
+      "legislature": {
+        "name": "Parliament",
+        "path": "/country/it/legislature",
+        "bicameral": true,
+        "upperChamber": {
+          "key": "senato",
+          "name": "Senate of the Republic",
+          "shortName": "Senato",
+          "seats": 315,
+          "description": "315 elected senators (plus a few senators-for-life), elected on a regional basis for five-year terms.",
+          "elected": true
+        },
+        "lowerChamber": {
+          "key": "cameraDeputati",
+          "name": "Chamber of Deputies",
+          "shortName": "Camera",
+          "seats": 630,
+          "description": "630 deputies elected by proportional representation for five-year terms.",
+          "elected": true
+        }
+      },
+      "lowerElectionSystem": {
+        "termYears": 5,
+        "seatsContested": "all",
+        "singleMemberConstituencies": false,
+        "snapElectionsAllowed": true
+      },
+      "upperElectionSystem": {
+        "termYears": 5,
+        "seatsContested": "all",
+        "singleMemberConstituencies": false,
+        "snapElectionsAllowed": true
+      },
+      "electionSystems": {
+        "lowerChamber": "pr_hareQuota",
+        "upperChamber": "pr_hareQuota",
+        "headOfGovernment": "parliamentary",
+        "headOfState": "ceremonial"
+      },
+      "officeTypes": [
+        {
+          "key": "primeMinister",
+          "label": "Prime Minister",
+          "labelPlural": "Prime Ministers",
+          "isExecutive": true,
+          "isSubNational": false,
+          "termYears": 5,
+          "actionBonus": 4,
+          "partyStrengthWeight": 1
+        },
+        {
+          "key": "president",
+          "label": "President",
+          "labelPlural": "Presidents",
+          "isExecutive": true,
+          "isHeadOfState": true,
+          "isSubNational": false,
+          "termYears": 7,
+          "actionBonus": 0,
+          "partyStrengthWeight": 0
+        },
+        {
+          "key": "deputy",
+          "label": "Deputy",
+          "labelPlural": "Deputies",
+          "chamberKey": "cameraDeputati",
+          "isExecutive": false,
+          "isSubNational": false,
+          "termYears": 5,
+          "actionBonus": 1,
+          "partyStrengthWeight": 0.9
+        },
+        {
+          "key": "senator",
+          "label": "Senator",
+          "labelPlural": "Senators",
+          "chamberKey": "senato",
+          "isExecutive": false,
+          "isSubNational": false,
+          "termYears": 5,
+          "actionBonus": 1,
+          "partyStrengthWeight": 0.8
+        },
+        {
+          "key": "centralBankChair",
+          "label": "Governor of the Banca d'Italia",
+          "labelPlural": "Governors of the Banca d'Italia",
+          "isExecutive": false,
+          "isSubNational": false,
+          "termYears": 6,
+          "actionBonus": 3,
+          "partyStrengthWeight": 0
+        }
+      ],
+      "majorPartyIds": ["it_dc", "it_pci"],
+      "partyCreationNPPs": {
+        "statesRequired": 2,
+        "lockHomeState": false,
+        "nppsPerState": 1
+      },
+      "demographicProfileId": "it_archetypes",
+      "centralBank": {
+        "name": "Banca d'Italia",
+        "abbreviation": "BdI",
+        "chairTitle": "Governor of the Banca d'Italia",
+        "defaultPrimeRate": 12,
+        "heroImage": "https://flagcdn.com/w640/it.png"
+      },
+      "usdExchangeRate": 0.0012,
+      "currencyCode": "ITL",
+      "fiscalYearStartTurnInYear": 40,
+      "financeMinisterCabinetId": "minister_of_finance",
+      "status": "coming-soon",
+      "tagline": "The First Republic - a ceremonial President and a fragile Prime Minister governing through a powerful bicameral Parliament, with Europe's largest Communist party in opposition.",
+      "descriptor": "A parliamentary republic where a Prime Minister governs at the confidence of a 630-seat Chamber and a 315-seat Senate, amid the unstable DC-led coalitions of the historic-compromise era.",
+      "heroImage": "https://flagcdn.com/w640/it.png",
+      "entryPath": "/country/it",
+      "overviewPath": "/country/it",
+      "mapPath": "/country/it/map",
+      "executivePath": "/country/it/executive",
+      "executiveLabel": "Palazzo Chigi",
+      "centralGovernmentLabel": "State Budget"
+    }
+  },
+  "COUNTRY_CONTINENT": {
+    "shape": "country-first",
+    "value": "Europe"
+  },
+  "COUNTRY_CURRENCY_MAP": {
+    "shape": "country-first",
+    "value": "ITL"
+  },
+  "COUNTRY_ELECTION_PHASES": {
+    "shape": "country-first",
+    "value": [
+      {
+        "name": "itElections"
+      },
+      {
+        "name": "itSenateElections"
+      }
+    ]
+  },
+  "COUNTRY_ERA1991_PATCHES": {
+    "shape": "absent",
+    "value": null
+  },
+  "COUNTRY_HISTORICAL_NAMES": {
+    "shape": "country-first",
+    "value": ["Banca Adriatica", "Credito Tirreno"]
+  },
+  "COUNTRY_MAP_REGISTRY": {
+    "shape": "country-first",
+    "value": {
+      "countryId": "IT",
+      "name": "Italy",
+      "overviewPath": "/country/it",
+      "mapPath": "/country/it/map",
+      "hasRegionMap": false
+    }
+  },
+  "COUNTRY_MODERN_NAMES": {
+    "shape": "country-first",
+    "value": ["Banca Adriatica Group", "Credito Tirreno"]
+  },
+  "COUNTRY_REGIONS": {
+    "shape": "country-first",
+    "value": "europe"
+  },
+  "COUNTRY_SECTOR_WEIGHTS": {
+    "shape": "country-first",
+    "value": {
+      "manufacturing": 18,
+      "real_estate": 11,
+      "retail": 9,
+      "automobiles": 8,
+      "agriculture": 8,
+      "entertainment": 7,
+      "financial": 6,
+      "construction": 6,
+      "energy": 6,
+      "healthcare": 6,
+      "chemical_industries": 5,
+      "logistics": 4,
+      "defense": 3,
+      "technology": 2,
+      "media": 1
+    }
+  },
+  "COUNTRY_SECTOR_WEIGHTS_1979": {
+    "shape": "country-first",
+    "value": {
+      "manufacturing": 22,
+      "retail": 10,
+      "agriculture": 6,
+      "construction": 8,
+      "chemical_industries": 5,
+      "energy": 6,
+      "automobiles": 6,
+      "real_estate": 7,
+      "healthcare": 4,
+      "defense": 3,
+      "financial": 3,
+      "logistics": 4,
+      "telecommunications": 2,
+      "extraction": 2,
+      "technology": 1,
+      "media": 5,
+      "entertainment": 6
+    }
+  },
+  "COUNTRY_SECTOR_WEIGHTS_1991": {
+    "shape": "country-first",
+    "value": {
+      "manufacturing": 18,
+      "real_estate": 11,
+      "retail": 9,
+      "automobiles": 8,
+      "agriculture": 8,
+      "entertainment": 7,
+      "financial": 6,
+      "construction": 6,
+      "energy": 6,
+      "healthcare": 6,
+      "chemical_industries": 5,
+      "logistics": 4,
+      "defense": 3,
+      "technology": 2,
+      "media": 1
+    }
+  },
+  "COUNTRY_TO_ISO_NUMERIC": {
+    "shape": "country-first",
+    "value": "380"
+  },
+  "COUNTRY_UN_MEMBER_SINCE": {
+    "shape": "country-first",
+    "value": 1955
+  },
+  "DEFAULT_STRATEGIC_SECTORS": {
+    "shape": "absent",
+    "value": null
+  },
+  "DEFENSE_POSITION_BY_COUNTRY": {
+    "shape": "country-first",
+    "value": "minister_of_defence"
+  },
+  "ECONOMIC_BASELINES": {
+    "shape": "absent",
+    "value": null
+  },
+  "ECONOMY_TEXT": {
+    "shape": "absent",
+    "value": null
+  },
+  "ENERGY_POSITION_BY_COUNTRY": {
+    "shape": "absent",
+    "value": null
+  },
+  "ERA_COUNTRY_CONFIG_OVERRIDES": {
+    "shape": "outer-keyed",
+    "value": {
+      "1953-default": {
+        "usdExchangeRate": 1,
+        "coalitionThreshold": 296,
+        "legislature": {
+          "name": "Parliament",
+          "path": "/country/it/legislature",
+          "bicameral": true,
+          "upperChamber": {
+            "key": "senato",
+            "name": "Senate of the Republic",
+            "shortName": "Senato",
+            "seats": 280,
+            "description": "280 elected senators on a regional basis for five-year terms (1953 First Republic apportionment).",
+            "elected": true
+          },
+          "lowerChamber": {
+            "key": "cameraDeputati",
+            "name": "Chamber of Deputies",
+            "shortName": "Camera",
+            "seats": 590,
+            "description": "590 deputies elected by proportional representation (Camera size in force 1948–1963).",
+            "elected": true
+          }
+        }
+      }
+    }
+  },
+  "ESTATE_PORTFOLIO_BY_COUNTRY": {
+    "shape": "absent",
+    "value": null
+  },
+  "EXECUTIVE_SEALS": {
+    "shape": "country-first",
+    "value": {
+      "src": "https://upload.wikimedia.org/wikipedia/commons/thumb/0/00/Emblem_of_Italy.svg/330px-Emblem_of_Italy.svg.png",
+      "alt": "Emblem of Italy"
+    }
+  },
+  "EXECUTIVE_SURFACE": {
+    "shape": "country-first",
+    "value": {
+      "clock": {
+        "kind": "election",
+        "label": "Term Clock",
+        "countdownNoun": "next general election"
+      },
+      "actLabels": {
+        "signed": "ENACTED",
+        "vetoed": "REJECTED",
+        "onDesk": "AWAITING",
+        "order": "ORDER",
+        "confirmed": "APPOINTED",
+        "nominated": "NOMINATED",
+        "acting": "ACTING"
+      },
+      "deskKind": "orders",
+      "deskLabel": "Orders in Force",
+      "rosterTitle": "Council of Ministers",
+      "heroImage": "/api/images/hero/palazzo-chigi",
+      "heroAlt": "Palazzo Chigi, Rome"
+    }
+  },
+  "EXECUTIVE_TEXT": {
+    "shape": "country-first",
+    "value": {
+      "glyph": "RI",
+      "serif": "mono",
+      "registry": "Italian Republic · Presidency of the Council",
+      "title": "Palazzo Chigi"
+    }
+  },
+  "FOREIGN_AFFAIRS_POSITION_BY_COUNTRY": {
+    "shape": "country-first",
+    "value": "minister_of_foreign_affairs"
+  },
+  "FULL_ERA_REGION_BUNDLES": {
+    "shape": "absent",
+    "value": null
+  },
+  "HAZARD_GROUPS": {
+    "shape": "absent",
+    "value": null
+  },
+  "INCOME_ANCHORS": {
+    "shape": "country-first",
+    "value": [
+      {
+        "year": 1953,
+        "value": 550
+      }
+    ]
+  },
+  "INFRA_POSITION_BY_COUNTRY": {
+    "shape": "absent",
+    "value": null
+  },
+  "ISO_NUMERIC_TO_COUNTRY": {
+    "shape": "value-keyed",
+    "value": {
+      "380": "IT"
+    }
+  },
+  "LEGISLATION_COUNTRY_SCOPES": {
+    "shape": "country-first",
+    "value": "it"
+  },
+  "LEGISLATIVE_PROCESS": {
+    "shape": "absent",
+    "value": null
+  },
+  "M2_TO_GDP_1953": {
+    "shape": "country-first",
+    "value": 0.42
+  },
+  "METRIC_PRESET_BUNDLES": {
+    "shape": "country-first",
+    "value": {
+      "1953-default": {
+        "IT_NW": {
+          "economic.medianIncome": 900,
+          "economic.gdpGrowth": 6.5,
+          "economic.unemploymentRate": 5,
+          "infrastructure.powerGridReliability": 94,
+          "infrastructure.roadCondition": 45,
+          "environment.protectedLand": 1.4,
+          "infrastructure.waterQuality": 70,
+          "infrastructure.broadbandAccess": 0,
+          "economic.povertyRate": 18,
+          "healthcare.lifeExpectancy": 66,
+          "healthcare.nhsWaitingTime": 15,
+          "population.urbanizationRate": 58,
+          "population.medianAge": 30,
+          "population.birthRate": 60
+        },
+        "IT_NE": {
+          "economic.medianIncome": 780,
+          "economic.gdpGrowth": 6.5,
+          "economic.unemploymentRate": 6,
+          "infrastructure.powerGridReliability": 94,
+          "infrastructure.roadCondition": 45,
+          "environment.protectedLand": 1.4,
+          "infrastructure.waterQuality": 70,
+          "infrastructure.broadbandAccess": 0,
+          "economic.povertyRate": 20,
+          "healthcare.lifeExpectancy": 66,
+          "healthcare.nhsWaitingTime": 15,
+          "population.urbanizationRate": 48,
+          "population.medianAge": 30,
+          "population.birthRate": 60
+        },
+        "IT_TUS": {
+          "economic.medianIncome": 650,
+          "economic.gdpGrowth": 6.5,
+          "economic.unemploymentRate": 7,
+          "infrastructure.powerGridReliability": 94,
+          "infrastructure.roadCondition": 45,
+          "environment.protectedLand": 1.4,
+          "infrastructure.waterQuality": 70,
+          "infrastructure.broadbandAccess": 0,
+          "economic.povertyRate": 24,
+          "healthcare.lifeExpectancy": 66,
+          "healthcare.nhsWaitingTime": 15,
+          "population.urbanizationRate": 42,
+          "population.medianAge": 30,
+          "population.birthRate": 60
+        },
+        "IT_LAZ": {
+          "economic.medianIncome": 700,
+          "economic.gdpGrowth": 6.5,
+          "economic.unemploymentRate": 6.5,
+          "infrastructure.powerGridReliability": 94,
+          "infrastructure.roadCondition": 45,
+          "environment.protectedLand": 1.4,
+          "infrastructure.waterQuality": 70,
+          "infrastructure.broadbandAccess": 0,
+          "economic.povertyRate": 28,
+          "healthcare.lifeExpectancy": 66,
+          "healthcare.nhsWaitingTime": 15,
+          "population.urbanizationRate": 55,
+          "population.medianAge": 30,
+          "population.birthRate": 60
+        },
+        "IT_CAM": {
+          "economic.medianIncome": 420,
+          "economic.gdpGrowth": 6.5,
+          "economic.unemploymentRate": 12,
+          "infrastructure.powerGridReliability": 94,
+          "infrastructure.roadCondition": 45,
+          "environment.protectedLand": 1.4,
+          "infrastructure.waterQuality": 70,
+          "infrastructure.broadbandAccess": 0,
+          "economic.povertyRate": 38,
+          "healthcare.lifeExpectancy": 66,
+          "healthcare.nhsWaitingTime": 15,
+          "population.urbanizationRate": 40,
+          "population.medianAge": 30,
+          "population.birthRate": 60
+        },
+        "IT_SUD": {
+          "economic.medianIncome": 380,
+          "economic.gdpGrowth": 6.5,
+          "economic.unemploymentRate": 14,
+          "infrastructure.powerGridReliability": 94,
+          "infrastructure.roadCondition": 45,
+          "environment.protectedLand": 1.4,
+          "infrastructure.waterQuality": 70,
+          "infrastructure.broadbandAccess": 0,
+          "economic.povertyRate": 42,
+          "healthcare.lifeExpectancy": 66,
+          "healthcare.nhsWaitingTime": 15,
+          "population.urbanizationRate": 32,
+          "population.medianAge": 30,
+          "population.birthRate": 60
+        },
+        "IT_SIC": {
+          "economic.medianIncome": 360,
+          "economic.gdpGrowth": 6.5,
+          "economic.unemploymentRate": 15,
+          "infrastructure.powerGridReliability": 94,
+          "infrastructure.roadCondition": 45,
+          "environment.protectedLand": 1.4,
+          "infrastructure.waterQuality": 70,
+          "infrastructure.broadbandAccess": 0,
+          "economic.povertyRate": 45,
+          "healthcare.lifeExpectancy": 66,
+          "healthcare.nhsWaitingTime": 15,
+          "population.urbanizationRate": 42,
+          "population.medianAge": 30,
+          "population.birthRate": 60
+        },
+        "IT_SAR": {
+          "economic.medianIncome": 340,
+          "economic.gdpGrowth": 6.5,
+          "economic.unemploymentRate": 13,
+          "infrastructure.powerGridReliability": 94,
+          "infrastructure.roadCondition": 45,
+          "environment.protectedLand": 1.4,
+          "infrastructure.waterQuality": 70,
+          "infrastructure.broadbandAccess": 0,
+          "economic.povertyRate": 40,
+          "healthcare.lifeExpectancy": 66,
+          "healthcare.nhsWaitingTime": 15,
+          "population.urbanizationRate": 28,
+          "population.medianAge": 30,
+          "population.birthRate": 60
+        }
+      }
+    }
+  },
+  "MILITARY_BRANCHES_BY_COUNTRY": {
+    "shape": "country-first",
+    "value": [
+      {
+        "id": "esercito",
+        "name": "Army",
+        "abbr": "EI",
+        "domain": "ground"
+      },
+      {
+        "id": "marina",
+        "name": "Navy",
+        "abbr": "MM",
+        "domain": "naval"
+      },
+      {
+        "id": "aeronautica",
+        "name": "Air Force",
+        "abbr": "AM",
+        "domain": "air"
+      }
+    ]
+  },
+  "MILITARY_COUNTRY_SCALE": {
+    "shape": "country-first",
+    "value": 1.2
+  },
+  "MONETARY_BASELINES": {
+    "shape": "country-first",
+    "value": {
+      "targetInflation": 15,
+      "neutralPrimeRate": 12
+    }
+  },
+  "MONETARY_BASELINES_1953": {
+    "shape": "country-first",
+    "value": {
+      "targetInflation": 2.5,
+      "neutralPrimeRate": 4,
+      "trendGdpGrowth": 6
+    }
+  },
+  "MONETARY_BASELINES_1971": {
+    "shape": "country-first",
+    "value": {
+      "targetInflation": 9,
+      "neutralPrimeRate": 10,
+      "trendGdpGrowth": 3
+    }
+  },
+  "MONETARY_BASELINES_1979": {
+    "shape": "country-first",
+    "value": {
+      "targetInflation": 15,
+      "neutralPrimeRate": 12,
+      "trendGdpGrowth": 3.5
+    }
+  },
+  "MONETARY_BASELINES_1991": {
+    "shape": "country-first",
+    "value": {
+      "targetInflation": 5.5,
+      "neutralPrimeRate": 9,
+      "trendGdpGrowth": 1.5
+    }
+  },
+  "NATIONAL_ADDRESS_NAME": {
+    "shape": "absent",
+    "value": null
+  },
+  "NATIONAL_IDENTITY": {
+    "shape": "country-first",
+    "value": {
+      "glyph": "RI",
+      "serif": "mono",
+      "motif": "gear",
+      "name": "Italian State Holdings",
+      "native": "Ente Pubblico (IRI/ENI)",
+      "registry": "Italian Republic · State Holdings Registry",
+      "ministry": "MINISTRY OF THE TREASURY",
+      "publicSeal": "PUBLIC REGISTER",
+      "hqCity": "Rome",
+      "palette": ["#0d3320", "#0a2618", "#06150d"],
+      "accent": "#cdb15a",
+      "accentSoft": "#e2cd8c",
+      "accentName": "Italian green & gold"
+    }
+  },
+  "NATIONAL_POLICY_STATE_IDS": {
+    "shape": "country-first",
+    "value": "it_national"
+  },
+  "NATIONAL_STATS_IDENTITY": {
+    "shape": "absent",
+    "value": null
+  },
+  "NEUTRAL_FEDERAL_SALES_TAX_BY_COUNTRY": {
+    "shape": "absent",
+    "value": null
+  },
+  "NEUTRAL_STATE_SALES_TAX_BY_COUNTRY": {
+    "shape": "absent",
+    "value": null
+  },
+  "NON_PARTY_BUCKET_INDEPENDENT_BIAS_BY_COUNTRY": {
+    "shape": "absent",
+    "value": null
+  },
+  "NPP_CAPITAL_STATES": {
+    "shape": "country-first",
+    "value": "IT_LAZ"
+  },
+  "ORDERS_OF_BATTLE": {
+    "shape": "country-first",
+    "value": [
+      {
+        "branchId": "esercito",
+        "type": "Infantry Division",
+        "count": 4
+      },
+      {
+        "branchId": "esercito",
+        "type": "Armored Division",
+        "count": 2
+      },
+      {
+        "branchId": "esercito",
+        "type": "Artillery Regiment",
+        "count": 2
+      },
+      {
+        "branchId": "marina",
+        "type": "Frigate Squadron",
+        "count": 3
+      },
+      {
+        "branchId": "marina",
+        "type": "Attack Submarine",
+        "count": 1
+      },
+      {
+        "branchId": "aeronautica",
+        "type": "Fighter Wing",
+        "count": 3
+      }
+    ]
+  },
+  "ORDERS_OF_BATTLE_BY_ERA": {
+    "shape": "absent",
+    "value": null
+  },
+  "PLAYER_PAYOUT_CAP_PER_TURN": {
+    "shape": "absent",
+    "value": null
+  },
+  "POLICY_TEXT": {
+    "shape": "country-first",
+    "value": {
+      "glyph": "§",
+      "serif": "mono",
+      "registry": "Code of Law · Italian Republic",
+      "title": "National Policy"
+    }
+  },
+  "POPULATION_ANCHOR_BUNDLES": {
+    "shape": "absent",
+    "value": null
+  },
+  "RAW_BUNDLES": {
+    "shape": "country-first",
+    "value": []
+  },
+  "REGIONAL_BILL_ASSENT_OFFICE_KEY": {
+    "shape": "absent",
+    "value": null
+  },
+  "REGION_CENSUS_LABELS": {
+    "shape": "absent",
+    "value": null
+  },
+  "REGION_DEMOGRAPHIC_CATEGORY_IDS": {
+    "shape": "absent",
+    "value": null
+  },
+  "REGION_NAME_MAPS": {
+    "shape": "absent",
+    "value": null
+  },
+  "REGION_ROSTERS": {
+    "shape": "function-valued",
+    "value": null,
+    "functionKeys": ["1953", "2019"]
+  },
+  "REP_ECON": {
+    "shape": "absent",
+    "value": null
+  },
+  "SOVEREIGN_CORP_LEGAL_STRUCTURE": {
+    "shape": "country-first",
+    "value": "generic_corp"
+  },
+  "SPAWN_ELECTIONS_REGISTRY": {
+    "shape": "absent",
+    "value": null
+  },
+  "STATE_ADJACENCY": {
+    "shape": "country-first",
+    "value": {
+      "IT_NW": ["IT_NE", "IT_TUS"],
+      "IT_NE": ["IT_NW", "IT_TUS"],
+      "IT_TUS": ["IT_NW", "IT_NE", "IT_LAZ", "IT_SUD"],
+      "IT_LAZ": ["IT_TUS", "IT_CAM", "IT_SUD", "IT_SAR"],
+      "IT_CAM": ["IT_LAZ", "IT_SUD"],
+      "IT_SUD": ["IT_TUS", "IT_LAZ", "IT_CAM", "IT_SIC"],
+      "IT_SIC": ["IT_SUD"],
+      "IT_SAR": ["IT_LAZ"]
+    }
+  },
+  "STATE_DISPLAY_NAMES": {
+    "shape": "country-first",
+    "value": {
+      "IT_NW": "Northwest",
+      "IT_NE": "Northeast",
+      "IT_TUS": "Central Italy",
+      "IT_LAZ": "Lazio",
+      "IT_CAM": "Campania",
+      "IT_SUD": "Southern Italy",
+      "IT_SIC": "Sicily",
+      "IT_SAR": "Sardinia"
+    }
+  },
+  "SURFACES": {
+    "shape": "absent",
+    "value": null
+  },
+  "TARGETS": {
+    "shape": "absent",
+    "value": null
+  },
+  "TRADE_MINISTER_POSITION_BY_COUNTRY": {
+    "shape": "country-first",
+    "value": "minister_of_trade_industry"
+  },
+  "TREASURY_IDENTITY": {
+    "shape": "country-first",
+    "value": {
+      "glyph": "RI",
+      "serif": "mono",
+      "budgetTitle": "State Budget",
+      "ministry": "MINISTRY OF THE TREASURY",
+      "publicSeal": "PUBLIC RECORD",
+      "registry": "Italian Republic · Ministry of the Treasury",
+      "native": "Repubblica Italiana · Ministero del Tesoro",
+      "palette": ["#0d3320", "#0a2618", "#06150d"],
+      "accent": "#cdb15a",
+      "accentSoft": "#e2cd8c"
+    }
+  },
+  "TREASURY_PS_RATE_BY_COUNTRY": {
+    "shape": "country-first",
+    "value": {
+      "national": 70000,
+      "state": 35000
+    }
+  },
+  "TREASURY_TEXT": {
+    "shape": "country-first",
+    "value": {
+      "glyph": "RI",
+      "serif": "mono",
+      "budgetTitle": "State Budget",
+      "ministry": "MINISTRY OF THE TREASURY",
+      "publicSeal": "PUBLIC RECORD",
+      "registry": "Italian Republic · Ministry of the Treasury",
+      "native": "Repubblica Italiana · Ministero del Tesoro"
+    }
+  }
+}

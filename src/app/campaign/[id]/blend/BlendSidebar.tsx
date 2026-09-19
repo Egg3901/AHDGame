@@ -309,6 +309,145 @@ export function SupportBlock({
 }
 
 /** The Blend right rail: your standing, and everything you can do about it. */
+
+/**
+ * Who may act for the campaign, and the controls to change that.
+ *
+ * Exported for the same reason `SupportBlock` and `RunningMateBlock`
+ * are: the sidebar this lives in is `hidden lg:block`, so a phone needs
+ * its own copy or the managers list is simply not there below the
+ * breakpoint. Rendering it twice is the established shape of this file.
+ */
+export function ManagersBlock({
+  vm,
+  candidateId,
+  canManageTicket,
+  busy,
+  onAppointManager,
+  onRemoveManager,
+}: {
+  vm: CampaignBlendVM;
+  candidateId: string;
+  canManageTicket: boolean;
+  busy: string | null;
+  onAppointManager: (result: PickerResult) => void;
+  onRemoveManager: (characterId: string, name: string) => void;
+}) {
+  return (
+    <>
+      <div
+        style={{
+          marginTop: 18,
+          display: "flex",
+          alignItems: "baseline",
+          justifyContent: "space-between",
+          gap: 10,
+        }}
+      >
+        <Eyebrow>Managers</Eyebrow>
+        <span
+          style={{
+            fontFamily: FONT.mono,
+            fontSize: 10,
+            color: BLEND.mutedDim,
+            fontVariantNumeric: "tabular-nums",
+          }}
+        >
+          {vm.managers.countText}
+        </span>
+      </div>
+      <p
+        style={{
+          margin: "6px 0 0",
+          fontFamily: FONT.serif,
+          fontSize: 12.5,
+          lineHeight: 1.5,
+          color: BLEND.mutedDim,
+        }}
+      >
+        A manager can take campaign actions alongside the candidate.
+      </p>
+
+      {vm.managers.list.length === 0 ? (
+        <p
+          style={{
+            margin: "8px 0 0",
+            fontFamily: FONT.serif,
+            fontStyle: "italic",
+            fontSize: 13,
+            color: BLEND.mutedDim,
+          }}
+        >
+          No managers appointed yet.
+        </p>
+      ) : (
+        <div style={{ marginTop: 9, display: "flex", flexWrap: "wrap", gap: 6 }}>
+          {vm.managers.list.map((m) => (
+            <span
+              key={m.characterId}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 8,
+                border: "1px solid rgba(220,38,38,.3)",
+                background: "rgba(220,38,38,.05)",
+                padding: "5px 9px",
+              }}
+            >
+              <span style={{ fontFamily: FONT.serif, fontSize: 13, fontWeight: 600 }}>
+                {m.name}
+              </span>
+              {canManageTicket ? (
+                <button
+                  type="button"
+                  aria-label={`Remove ${m.name} as manager`}
+                  disabled={busy === `manager:${m.characterId}`}
+                  onClick={() => onRemoveManager(m.characterId, m.name)}
+                  style={{
+                    border: 0,
+                    background: "transparent",
+                    padding: 0,
+                    font: "inherit",
+                    fontSize: 13,
+                    lineHeight: 1,
+                    color: BLEND.muted,
+                    cursor: "pointer",
+                  }}
+                >
+                  ×
+                </button>
+              ) : null}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {vm.managers.atCap && canManageTicket ? (
+        <p
+          style={{
+            margin: "9px 0 0",
+            fontFamily: FONT.mono,
+            fontSize: 10,
+            lineHeight: 1.5,
+            color: BLEND.mutedDim,
+          }}
+        >
+          Manager slots full. Remove one to appoint someone else.
+        </p>
+      ) : null}
+
+      {vm.managers.canAppoint && canManageTicket ? (
+        <BlendCharacterPicker
+          placeholder="Search a character to appoint…"
+          excludeIds={[candidateId, ...vm.managers.list.map((m) => m.characterId)]}
+          disabled={busy?.startsWith("manager") ?? false}
+          onPick={onAppointManager}
+        />
+      ) : null}
+    </>
+  );
+}
+
 export function BlendSidebar({
   vm,
   candidateId,
@@ -388,47 +527,48 @@ export function BlendSidebar({
             </span>
           </div>
 
-          {canAct ? (
-            <>
-              <p
-                style={{
-                  margin: "10px 0 14px",
-                  fontFamily: FONT.serif,
-                  fontSize: 13.5,
-                  lineHeight: 1.5,
-                  color: BLEND.muted,
-                }}
-              >
-                {vm.strength.strengthAdded > 0 ? (
-                  <>
-                    Contribute {vm.strength.strengthAdded.toFixed(2)} strength for{" "}
-                    {vm.strength.costText} and reach{" "}
-                    <span style={{ color: BLEND.accent }}>+{vm.strength.newBoostPct}%</span>.
-                  </>
-                ) : (
-                  "You need national influence to contribute campaign strength."
-                )}
-              </p>
-              <button
-                type="button"
-                disabled={!vm.strength.canContribute || busy === "strength"}
-                onClick={onContributeStrength}
-                style={{
-                  width: "100%",
-                  border: `1px solid rgba(220,38,38,.4)`,
-                  background: "transparent",
-                  padding: 9,
-                  fontFamily: FONT.mono,
-                  fontSize: 10.5,
-                  letterSpacing: ".08em",
-                  fontWeight: 700,
-                  color: vm.strength.canContribute ? BLEND.accent : BLEND.muted,
-                  cursor: vm.strength.canContribute ? "pointer" : "not-allowed",
-                }}
-              >
-                CONTRIBUTE STRENGTH
-              </button>
-            </>
+          {/* Not behind `canAct`. Strength is the one lever here that is open
+              to the whole country: the server takes a contribution from any
+              authenticated character in the race, which is how allied and
+              rival players fund a nominee. Gating it with the manage controls
+              left the nominee as the only player who could reach it. */}
+          <p
+            style={{
+              margin: "10px 0 14px",
+              fontFamily: FONT.serif,
+              fontSize: 13.5,
+              lineHeight: 1.5,
+              color: BLEND.muted,
+            }}
+          >
+            {vm.strength.blockedReason ?? (
+              <>
+                Contribute {vm.strength.strengthAdded.toFixed(2)} strength for{" "}
+                {vm.strength.costText} and reach{" "}
+                <span style={{ color: BLEND.accent }}>+{vm.strength.newBoostPct}%</span>.
+              </>
+            )}
+          </p>
+          {vm.strength.blockedReason === null ? (
+            <button
+              type="button"
+              disabled={!vm.strength.canContribute || busy === "strength"}
+              onClick={onContributeStrength}
+              style={{
+                width: "100%",
+                border: `1px solid rgba(220,38,38,.4)`,
+                background: "transparent",
+                padding: 9,
+                fontFamily: FONT.mono,
+                fontSize: 10.5,
+                letterSpacing: ".08em",
+                fontWeight: 700,
+                color: vm.strength.canContribute ? BLEND.accent : BLEND.muted,
+                cursor: vm.strength.canContribute ? "pointer" : "not-allowed",
+              }}
+            >
+              CONTRIBUTE STRENGTH
+            </button>
           ) : null}
         </Block>
       ) : null}
@@ -442,115 +582,14 @@ export function BlendSidebar({
           onNameRunningMate={onNameRunningMate}
         />
 
-        <div
-          style={{
-            marginTop: 18,
-            display: "flex",
-            alignItems: "baseline",
-            justifyContent: "space-between",
-            gap: 10,
-          }}
-        >
-          <Eyebrow>Managers</Eyebrow>
-          <span
-            style={{
-              fontFamily: FONT.mono,
-              fontSize: 10,
-              color: BLEND.mutedDim,
-              fontVariantNumeric: "tabular-nums",
-            }}
-          >
-            {vm.managers.countText}
-          </span>
-        </div>
-        <p
-          style={{
-            margin: "6px 0 0",
-            fontFamily: FONT.serif,
-            fontSize: 12.5,
-            lineHeight: 1.5,
-            color: BLEND.mutedDim,
-          }}
-        >
-          A manager can take campaign actions alongside the candidate.
-        </p>
-
-        {vm.managers.list.length === 0 ? (
-          <p
-            style={{
-              margin: "8px 0 0",
-              fontFamily: FONT.serif,
-              fontStyle: "italic",
-              fontSize: 13,
-              color: BLEND.mutedDim,
-            }}
-          >
-            No managers appointed yet.
-          </p>
-        ) : (
-          <div style={{ marginTop: 9, display: "flex", flexWrap: "wrap", gap: 6 }}>
-            {vm.managers.list.map((m) => (
-              <span
-                key={m.characterId}
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 8,
-                  border: "1px solid rgba(220,38,38,.3)",
-                  background: "rgba(220,38,38,.05)",
-                  padding: "5px 9px",
-                }}
-              >
-                <span style={{ fontFamily: FONT.serif, fontSize: 13, fontWeight: 600 }}>
-                  {m.name}
-                </span>
-                {canManageTicket ? (
-                  <button
-                    type="button"
-                    aria-label={`Remove ${m.name} as manager`}
-                    disabled={busy === `manager:${m.characterId}`}
-                    onClick={() => onRemoveManager(m.characterId, m.name)}
-                    style={{
-                      border: 0,
-                      background: "transparent",
-                      padding: 0,
-                      font: "inherit",
-                      fontSize: 13,
-                      lineHeight: 1,
-                      color: BLEND.muted,
-                      cursor: "pointer",
-                    }}
-                  >
-                    ×
-                  </button>
-                ) : null}
-              </span>
-            ))}
-          </div>
-        )}
-
-        {vm.managers.atCap && canManageTicket ? (
-          <p
-            style={{
-              margin: "9px 0 0",
-              fontFamily: FONT.mono,
-              fontSize: 10,
-              lineHeight: 1.5,
-              color: BLEND.mutedDim,
-            }}
-          >
-            Manager slots full. Remove one to appoint someone else.
-          </p>
-        ) : null}
-
-        {vm.managers.canAppoint && canManageTicket ? (
-          <BlendCharacterPicker
-            placeholder="Search a character to appoint…"
-            excludeIds={[candidateId, ...vm.managers.list.map((m) => m.characterId)]}
-            disabled={busy?.startsWith("manager") ?? false}
-            onPick={onAppointManager}
-          />
-        ) : null}
+        <ManagersBlock
+          vm={vm}
+          candidateId={candidateId}
+          canManageTicket={canManageTicket}
+          busy={busy}
+          onAppointManager={onAppointManager}
+          onRemoveManager={onRemoveManager}
+        />
       </Block>
     </aside>
   );

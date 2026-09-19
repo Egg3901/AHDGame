@@ -19,7 +19,7 @@ import { getPresetSeats } from "@/lib/constants/historicalSeats";
 import { stateMetrics1991, applyEra1991Adjustments } from "./stateMetrics1991";
 import { stateMetrics } from "./stateMetrics";
 import { ukRegions1991 } from "@/lib/seeds/uk/ukRegions1991";
-import { jpRegions1991 } from "@/lib/seeds/jp/jpRegions1991";
+import { jpRegions1991 } from "@/lib/countries/jp/data/jpRegions1991";
 import { deRegions1991 } from "@/lib/seeds/de/deRegions1991";
 import { brRegions1991 } from "@/lib/seeds/br/brRegions1991";
 import { cnRegions1991 } from "@/lib/seeds/cn/cnRegions1991";
@@ -432,7 +432,7 @@ describe("basePolicies — preset-aware (Gap #4)", () => {
   });
 
   it("seedStatePolicies threads preset into the upserted preset log line", async () => {
-    const { createMockDb, bulkOps } = await import("@/lib/test-utils/mockDb");
+    const { createMockDb } = await import("@/lib/test-utils/mockDb");
     const { seedStatePolicies } = await import("@/lib/admin/seed/seedStatePolicies");
     const db = createMockDb();
     const messages: string[] = [];
@@ -569,7 +569,7 @@ describe("applyEra1991BaselineAdjustments (Gap #3)", () => {
   });
 
   it("seedUKBaselines threads preset into the upserted preset log line", async () => {
-    const { createMockDb, bulkOps } = await import("@/lib/test-utils/mockDb");
+    const { createMockDb } = await import("@/lib/test-utils/mockDb");
     const { seedUKBaselines } = await import("@/lib/admin/seed/seedUK");
     const db = createMockDb();
     const messages: string[] = [];

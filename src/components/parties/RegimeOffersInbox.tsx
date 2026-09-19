@@ -59,7 +59,11 @@ export function RegimeOffersInbox({ countryCode, partySequentialId }: Props) {
     };
   }, [countryCode, partySequentialId]);
 
-  if (!data || data.offers.length === 0) return null;
+  // `offers` is read defensively rather than trusted: the value comes
+  // straight off a fetch, and a response that parses but carries no
+  // `offers` array (an error envelope, a truncated payload) used to
+  // throw here and take the whole party hub down with it.
+  if (!data || !Array.isArray(data.offers) || data.offers.length === 0) return null;
 
   return (
     <section

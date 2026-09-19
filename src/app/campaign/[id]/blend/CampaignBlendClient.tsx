@@ -19,7 +19,7 @@ import {
 import { BlendOpsSection } from "./BlendOpsSection";
 import { BlendMoneySection } from "./BlendMoneySection";
 import { BlendLedger } from "./BlendLedger";
-import { BlendSidebar, RunningMateBlock, SupportBlock } from "./BlendSidebar";
+import { BlendSidebar, ManagersBlock, RunningMateBlock, SupportBlock } from "./BlendSidebar";
 import { BlendScopeInline } from "@/components/blend/BlendScope";
 import { StatePresencePanel } from "../components/StatePresencePanel";
 import { StateOperationsSection } from "../components/StateOperationsSection";
@@ -500,52 +500,70 @@ export function CampaignBlendClient({
                 +{vm.strength.boostPct}% votes
               </span>
             </div>
-            {canAct ? (
-              <>
-                <p
-                  style={{
-                    margin: "10px 0 14px",
-                    fontFamily: FONT.serif,
-                    fontSize: 13.5,
-                    lineHeight: 1.5,
-                    color: BLEND.muted,
-                  }}
-                >
-                  {vm.strength.strengthAdded > 0 ? (
-                    <>
-                      Contribute {vm.strength.strengthAdded.toFixed(2)} strength for{" "}
-                      {vm.strength.costText} and reach{" "}
-                      <span style={{ color: BLEND.accent }}>+{vm.strength.newBoostPct}%</span>.
-                    </>
-                  ) : (
-                    "You need national influence to contribute campaign strength."
-                  )}
-                </p>
-                <button
-                  type="button"
-                  disabled={!vm.strength.canContribute || busy === "strength"}
-                  onClick={() =>
-                    post("strength", `/api/campaigns/${campaign.id}/campaign-strength`)
-                  }
-                  style={{
-                    width: "100%",
-                    border: `1px solid rgba(220,38,38,.4)`,
-                    background: "transparent",
-                    padding: 9,
-                    fontFamily: FONT.mono,
-                    fontSize: 10.5,
-                    letterSpacing: ".08em",
-                    fontWeight: 700,
-                    color: vm.strength.canContribute ? BLEND.accent : BLEND.muted,
-                    cursor: vm.strength.canContribute ? "pointer" : "not-allowed",
-                  }}
-                >
-                  CONTRIBUTE STRENGTH
-                </button>
-              </>
+            {/* Open to every player, not just the campaign's own staff. See
+                the matching note in BlendSidebar. */}
+            <p
+              style={{
+                margin: "10px 0 14px",
+                fontFamily: FONT.serif,
+                fontSize: 13.5,
+                lineHeight: 1.5,
+                color: BLEND.muted,
+              }}
+            >
+              {vm.strength.blockedReason ?? (
+                <>
+                  Contribute {vm.strength.strengthAdded.toFixed(2)} strength for{" "}
+                  {vm.strength.costText} and reach{" "}
+                  <span style={{ color: BLEND.accent }}>+{vm.strength.newBoostPct}%</span>.
+                </>
+              )}
+            </p>
+            {vm.strength.blockedReason === null ? (
+              <button
+                type="button"
+                disabled={!vm.strength.canContribute || busy === "strength"}
+                onClick={() => post("strength", `/api/campaigns/${campaign.id}/campaign-strength`)}
+                style={{
+                  width: "100%",
+                  border: `1px solid rgba(220,38,38,.4)`,
+                  background: "transparent",
+                  padding: 9,
+                  fontFamily: FONT.mono,
+                  fontSize: 10.5,
+                  letterSpacing: ".08em",
+                  fontWeight: 700,
+                  color: vm.strength.canContribute ? BLEND.accent : BLEND.muted,
+                  cursor: vm.strength.canContribute ? "pointer" : "not-allowed",
+                }}
+              >
+                CONTRIBUTE STRENGTH
+              </button>
             ) : null}
           </div>
         ) : null}
+
+        {/* Managers had no mobile copy at all: the list and the appoint
+            and remove controls lived only in the desktop rail, which is
+            `hidden lg:block`. Same gap #1806 closed for strength. */}
+        <div style={{ padding: "22px 16px 0" }}>
+          <ManagersBlock
+            vm={vm}
+            candidateId={campaign.candidateId}
+            canManageTicket={canManage}
+            busy={busy}
+            onAppointManager={(r: PickerResult) =>
+              post(`manager:${r.id}`, `/api/campaigns/${campaign.id}/manager`, {
+                managerCharacterId: r.id,
+              })
+            }
+            onRemoveManager={(characterId: string) =>
+              post(`manager:${characterId}`, `/api/campaigns/${campaign.id}/manager`, {
+                managerCharacterId: characterId,
+              })
+            }
+          />
+        </div>
 
         {presencePanel ? (
           <div style={{ padding: "18px 16px 0" }}>

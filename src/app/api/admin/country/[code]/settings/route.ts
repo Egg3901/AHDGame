@@ -20,6 +20,7 @@ import {
   PlayerOpenBlockedError,
   resolvePresetIdFromGameState,
 } from "@/lib/world/countryReadinessContract";
+import { isShippingPreset, tierFor } from "@/lib/world/eraRoster";
 import { enterCountryForPlayers, exitCountryForPlayers } from "@/lib/world/playerHandoff";
 
 interface RouteContext {
@@ -62,20 +63,28 @@ export async function GET(request: Request, { params }: RouteContext) {
     ]);
 
     const presetId = resolvePresetIdFromGameState(gameState);
-    const readiness = assessCountryReadiness(countryId, presetId);
+    // A country the era roster marks `absent` is not a world entity in this
+    // preset, so the readiness contract refuses to assess it rather than
+    // fabricating a verdict. Answer the admin explicitly instead of 500ing:
+    // "East Germany does not exist in a 2019 world" is the useful response.
+    const absentFromEra = isShippingPreset(presetId) && tierFor(presetId, countryId) === "absent";
+    const readiness = absentFromEra ? null : assessCountryReadiness(countryId, presetId);
 
     return NextResponse.json({
       enabledForPlayers: access.enabledForPlayers,
       status: access.status,
       economyPreview: access.economyPreview,
-      readiness: {
-        presetId: readiness.presetId,
-        archetypes: readiness.archetypes,
-        autonomous: readiness.autonomous,
-        player: readiness.player,
-        hardBlockers: readiness.hardBlockers,
-        flavorGaps: readiness.flavorGaps,
-      },
+      absentFromEra,
+      readiness: readiness
+        ? {
+            presetId: readiness.presetId,
+            archetypes: readiness.archetypes,
+            autonomous: readiness.autonomous,
+            player: readiness.player,
+            hardBlockers: readiness.hardBlockers,
+            flavorGaps: readiness.flavorGaps,
+          }
+        : null,
       stats: {
         currentTurn: gameState?.currentTurn ?? null,
         currentYear: gameState?.currentYear ?? null,

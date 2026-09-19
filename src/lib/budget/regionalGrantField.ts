@@ -1,5 +1,6 @@
 import type { CountryId } from "@/lib/constants/countries";
 import type { RegionalBudget } from "@/lib/db/types/regionalBudget";
+import { JP_REGIONAL_GRANT_FIELD } from "@/lib/countries/jp/economy";
 
 /**
  * Which `regionalBudgets` field holds a country's central-government grant.
@@ -27,7 +28,7 @@ export const REGIONAL_GRANT_FIELD: Partial<
     | "unionGrant"
   >
 > = {
-  JP: "nationalGrant",
+  JP: JP_REGIONAL_GRANT_FIELD,
   DE: "federalEqualizationGrant",
   CN: "centralTransferGrant",
   DD: "federalEqualizationGrant",

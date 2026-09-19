@@ -14,12 +14,12 @@ import {
   dePopulationAnchors2019,
   dePopulationAnchors1991,
 } from "@/lib/seeds/de/dePopulationAnchors";
-import { jpStateMetrics } from "@/lib/seeds/jp/jpStateMetrics";
-import { jpRegions1991 } from "@/lib/seeds/jp/jpRegions1991";
+import { jpStateMetrics } from "@/lib/countries/jp/data/jpStateMetrics";
+import { jpRegions1991 } from "@/lib/countries/jp/data/jpRegions1991";
 import {
   jpPopulationAnchors2019,
   jpPopulationAnchors1991,
-} from "@/lib/seeds/jp/jpPopulationAnchors";
+} from "@/lib/countries/jp/data/jpPopulationAnchors";
 import { brStateMetrics } from "@/lib/seeds/br/brStateMetrics";
 import { brRegions1991 } from "@/lib/seeds/br/brRegions1991";
 import {

@@ -1,15 +1,16 @@
 import { describe, it, expect, vi } from "vitest";
 import { ObjectId, type Db } from "mongodb";
 import {
-  canFillSlot,
   canProposePendingTransaction,
   canRequestFunds,
   cancelPendingTransaction,
+  countSeatedOfficers,
   createPendingTransaction,
   expirePendingTransactions,
   getApproverSlotForRow,
   getMissingSlot,
   getProposerSlot,
+  isPartyOfficer,
   isPendingTransactionComplete,
   resolveTransactionApprovalMode,
 } from "./pendingTreasuryTransactions";
@@ -30,53 +31,36 @@ function makeParty(
 }
 
 describe("getProposerSlot", () => {
-  it("returns 'treasurer' for the seated Treasurer", () => {
-    const cid = new ObjectId();
-    const party = makeParty({ treasurerId: cid });
-    expect(getProposerSlot(party, cid)).toBe("treasurer");
+  it("gives the first slot to any seated officer", () => {
+    // Both slots are empty on a brand-new row, so a proposer takes the
+    // first one whichever seat they hold.
+    for (const seat of ["chairId", "viceChairId", "treasurerId"] as const) {
+      const cid = new ObjectId();
+      expect(getProposerSlot(makeParty({ [seat]: cid }), cid)).toBe("first");
+    }
   });
 
-  it("returns 'leadership' for the seated Chair", () => {
-    const cid = new ObjectId();
-    const party = makeParty({ chairId: cid });
-    expect(getProposerSlot(party, cid)).toBe("leadership");
-  });
-
-  it("returns 'leadership' for the seated Vice-Chair", () => {
-    const cid = new ObjectId();
-    const party = makeParty({ viceChairId: cid });
-    expect(getProposerSlot(party, cid)).toBe("leadership");
-  });
-
-  it("returns null when the character holds none of the three roles", () => {
+  it("returns null when the character holds none of the three seats", () => {
     const party = makeParty({ chairId: new ObjectId() });
     expect(getProposerSlot(party, new ObjectId())).toBeNull();
-  });
-
-  it("prefers 'treasurer' when a character somehow holds both treasurer + chair (data anomaly)", () => {
-    const cid = new ObjectId();
-    const party = makeParty({ treasurerId: cid, chairId: cid });
-    expect(getProposerSlot(party, cid)).toBe("treasurer");
   });
 });
 
 describe("getMissingSlot", () => {
-  it("returns 'treasurer' when treasurerApproval is absent", () => {
+  it("returns 'first' when the first slot is empty", () => {
     expect(
       getMissingSlot({
-        treasurerApproval: undefined,
         leadershipApproval: { characterId: new ObjectId(), approvedAt: new Date() },
       })
-    ).toBe("treasurer");
+    ).toBe("first");
   });
 
-  it("returns 'leadership' when leadershipApproval is absent", () => {
+  it("returns 'second' when only the first is filled", () => {
     expect(
       getMissingSlot({
         treasurerApproval: { characterId: new ObjectId(), approvedAt: new Date() },
-        leadershipApproval: undefined,
       })
-    ).toBe("leadership");
+    ).toBe("second");
   });
 
   it("returns null when both slots are filled", () => {
@@ -89,119 +73,101 @@ describe("getMissingSlot", () => {
   });
 });
 
-describe("canFillSlot", () => {
-  it("treasurer slot: only the seated Treasurer qualifies", () => {
-    const treasurerId = new ObjectId();
-    const chairId = new ObjectId();
-    const party = makeParty({ treasurerId, chairId });
-    expect(canFillSlot(party, treasurerId, "treasurer")).toBe(true);
-    expect(canFillSlot(party, chairId, "treasurer")).toBe(false);
+describe("isPartyOfficer", () => {
+  it("accepts any of the three seats and rejects an outsider", () => {
+    for (const seat of ["chairId", "viceChairId", "treasurerId"] as const) {
+      const cid = new ObjectId();
+      expect(isPartyOfficer(makeParty({ [seat]: cid }), cid)).toBe(true);
+    }
+    expect(isPartyOfficer(makeParty({ chairId: new ObjectId() }), new ObjectId())).toBe(false);
   });
+});
 
-  it("leadership slot: Chair OR VC qualifies", () => {
-    const chairId = new ObjectId();
-    const vcId = new ObjectId();
-    const party = makeParty({ chairId, viceChairId: vcId });
-    expect(canFillSlot(party, chairId, "leadership")).toBe(true);
-    expect(canFillSlot(party, vcId, "leadership")).toBe(true);
-  });
-
-  it("leadership slot: outsider rejected", () => {
-    const party = makeParty({ chairId: new ObjectId() });
-    expect(canFillSlot(party, new ObjectId(), "leadership")).toBe(false);
-  });
-
-  it("leadership slot: VC qualifies even when chair seat vacant (acting capacity)", () => {
-    const vcId = new ObjectId();
-    const party = makeParty({ chairId: null, viceChairId: vcId });
-    expect(canFillSlot(party, vcId, "leadership")).toBe(true);
-  });
-
-  it("treasurer slot: Chair / VC act as Treasurer when the seat is vacant", () => {
-    const chairId = new ObjectId();
-    const vcId = new ObjectId();
-    const party = makeParty({ chairId, viceChairId: vcId, treasurerId: null });
-    expect(canFillSlot(party, chairId, "treasurer")).toBe(true);
-    expect(canFillSlot(party, vcId, "treasurer")).toBe(true);
-    // An outsider still cannot act as Treasurer.
-    expect(canFillSlot(party, new ObjectId(), "treasurer")).toBe(false);
-  });
-
-  it("treasurer slot: Chair cannot act as Treasurer while the seat is filled", () => {
-    const chairId = new ObjectId();
-    const treasurerId = new ObjectId();
-    const party = makeParty({ chairId, treasurerId });
-    expect(canFillSlot(party, chairId, "treasurer")).toBe(false);
+describe("countSeatedOfficers", () => {
+  it("counts distinct people, not seats", () => {
+    // One person wearing two hats is still one signature. Counting
+    // seats would let them satisfy a two-person approval alone.
+    const both = new ObjectId();
+    expect(countSeatedOfficers(makeParty({ chairId: both, treasurerId: both }))).toBe(1);
+    expect(
+      countSeatedOfficers(makeParty({ chairId: new ObjectId(), treasurerId: new ObjectId() }))
+    ).toBe(2);
+    expect(countSeatedOfficers(makeParty())).toBe(0);
   });
 });
 
 describe("resolveTransactionApprovalMode", () => {
-  it("double + seated Treasurer stays double", () => {
-    const party = makeParty({ transactionApprovalMode: "double", treasurerId: new ObjectId() });
+  it("stays double whenever two different officers are seated", () => {
+    // Including Chair + VC with NO Treasurer, which used to collapse to
+    // a single signature even though two people were sitting there.
+    expect(
+      resolveTransactionApprovalMode(
+        makeParty({ chairId: new ObjectId(), viceChairId: new ObjectId() })
+      )
+    ).toBe("double");
+    expect(
+      resolveTransactionApprovalMode(
+        makeParty({ treasurerId: new ObjectId(), chairId: new ObjectId() })
+      )
+    ).toBe("double");
+  });
+
+  it("collapses to single when fewer than two officers are seated", () => {
+    expect(resolveTransactionApprovalMode(makeParty({ chairId: new ObjectId() }))).toBe("single");
+    expect(resolveTransactionApprovalMode(makeParty())).toBe("single");
+  });
+
+  it("collapses when one person holds two seats", () => {
+    const both = new ObjectId();
+    expect(resolveTransactionApprovalMode(makeParty({ chairId: both, treasurerId: both }))).toBe(
+      "single"
+    );
+  });
+
+  it("absent mode (legacy) is treated as double", () => {
+    const party = {
+      ...makeParty({ chairId: new ObjectId(), viceChairId: new ObjectId() }),
+      transactionApprovalMode: undefined,
+    };
     expect(resolveTransactionApprovalMode(party)).toBe("double");
   });
 
-  it("double + vacant Treasurer collapses to single", () => {
-    const party = makeParty({ transactionApprovalMode: "double", treasurerId: null });
+  it("single mode is returned unchanged regardless of seats", () => {
+    const party = {
+      ...makeParty({ chairId: new ObjectId(), viceChairId: new ObjectId() }),
+      transactionApprovalMode: "single" as const,
+    };
     expect(resolveTransactionApprovalMode(party)).toBe("single");
-  });
-
-  it("absent mode (legacy) is treated as double, and collapses when vacant", () => {
-    expect(resolveTransactionApprovalMode(makeParty({ treasurerId: new ObjectId() }))).toBe(
-      "double"
-    );
-    expect(resolveTransactionApprovalMode(makeParty({ treasurerId: null }))).toBe("single");
-  });
-
-  it("single mode is returned unchanged regardless of Treasurer seat", () => {
-    expect(
-      resolveTransactionApprovalMode(
-        makeParty({ transactionApprovalMode: "single", treasurerId: null })
-      )
-    ).toBe("single");
-    expect(
-      resolveTransactionApprovalMode(
-        makeParty({ transactionApprovalMode: "single", treasurerId: new ObjectId() })
-      )
-    ).toBe("single");
   });
 });
 
 describe("canProposePendingTransaction", () => {
-  it("rejects when Treasurer slot is vacant", () => {
-    const party = makeParty({ chairId: new ObjectId(), treasurerId: null });
-    const result = canProposePendingTransaction(party);
-    expect(result.ok).toBe(false);
+  it("accepts any two different officers, in any combination of seats", () => {
+    expect(
+      canProposePendingTransaction(
+        makeParty({ chairId: new ObjectId(), viceChairId: new ObjectId() })
+      ).ok
+    ).toBe(true);
+    expect(
+      canProposePendingTransaction(
+        makeParty({ treasurerId: new ObjectId(), viceChairId: new ObjectId() })
+      ).ok
+    ).toBe(true);
   });
 
-  it("rejects when both Chair AND VC are vacant (even with Treasurer)", () => {
-    const party = makeParty({
-      chairId: null,
-      viceChairId: null,
-      treasurerId: new ObjectId(),
-    });
-    expect(canProposePendingTransaction(party).ok).toBe(false);
+  it("rejects when only one officer is seated", () => {
+    expect(canProposePendingTransaction(makeParty({ treasurerId: new ObjectId() })).ok).toBe(false);
   });
 
-  it("accepts when Treasurer + Chair are seated", () => {
-    const party = makeParty({
-      chairId: new ObjectId(),
-      treasurerId: new ObjectId(),
-    });
-    expect(canProposePendingTransaction(party).ok).toBe(true);
-  });
-
-  it("accepts when Treasurer + VC are seated (chair vacant)", () => {
-    const party = makeParty({
-      chairId: null,
-      viceChairId: new ObjectId(),
-      treasurerId: new ObjectId(),
-    });
-    expect(canProposePendingTransaction(party).ok).toBe(true);
+  it("rejects when one person holds two seats", () => {
+    const both = new ObjectId();
+    expect(canProposePendingTransaction(makeParty({ chairId: both, treasurerId: both })).ok).toBe(
+      false
+    );
   });
 });
 
-// ─── Mock Db stub for lifecycle writes ──────────────────────────────────────
+// ─── Mock Db stub for lifecycle writes ──────────────────────────
 
 type CapturedOp = {
   collection: string;
@@ -263,7 +229,7 @@ describe("createPendingTransaction", () => {
     expect(result.treasurerApproval?.characterId).toEqual(treasurerId);
   });
 
-  it("writes a row with proposer's leadership slot pre-filled when proposer is Chair", async () => {
+  it("puts a Chair proposer in the first slot, not a Chair-specific one", async () => {
     const chairId = new ObjectId();
     const party = makeParty({
       chairId,
@@ -282,14 +248,14 @@ describe("createPendingTransaction", () => {
       100
     );
     const doc = ops[0]!.doc as PendingTreasuryTransaction;
-    expect(doc.leadershipApproval?.characterId).toEqual(chairId);
-    expect(doc.treasurerApproval).toBeUndefined();
-    expect("treasurerApproval" in doc).toBe(false);
+    expect(doc.treasurerApproval?.characterId).toEqual(chairId);
+    expect(doc.leadershipApproval).toBeUndefined();
+    expect("leadershipApproval" in doc).toBe(false);
     expect(doc.type).toBe("transfer");
     expect(doc.targetStateId).toBe("CA");
   });
 
-  it("writes a row with leadership pre-filled when proposer is VC (chair vacant)", async () => {
+  it("puts a Vice-Chair proposer in the first slot too", async () => {
     const vcId = new ObjectId();
     const party = makeParty({
       chairId: null,
@@ -309,10 +275,10 @@ describe("createPendingTransaction", () => {
       0
     );
     const doc = ops[0]!.doc as PendingTreasuryTransaction;
-    expect(doc.leadershipApproval?.characterId).toEqual(vcId);
+    expect(doc.treasurerApproval?.characterId).toEqual(vcId);
   });
 
-  it("throws when Treasurer slot is vacant", async () => {
+  it("throws when only one officer is seated", async () => {
     const chairId = new ObjectId();
     const party = makeParty({ chairId, treasurerId: null });
     const { db } = makeDbStub();
@@ -328,30 +294,34 @@ describe("createPendingTransaction", () => {
         },
         0
       )
-    ).rejects.toThrow(/Treasurer/);
+    ).rejects.toThrow(/two different officers/);
   });
 
-  it("throws when both Chair AND VC are vacant", async () => {
-    const treasurerId = new ObjectId();
+  it("accepts a Chair plus a Vice-Chair with no Treasurer seated", async () => {
+    // Previously impossible: the propose gate demanded a seated
+    // Treasurer, so this party could not use two-person approval at all
+    // despite having two people able to sign.
+    const chairId = new ObjectId();
     const party = makeParty({
-      chairId: null,
-      viceChairId: null,
-      treasurerId,
+      chairId,
+      viceChairId: new ObjectId(),
+      treasurerId: null,
     });
-    const { db } = makeDbStub();
-    await expect(
-      createPendingTransaction(
-        db,
-        {
-          party,
-          proposerCharacterId: treasurerId,
-          type: "send",
-          amount: 1,
-          targetCharacterId: new ObjectId(),
-        },
-        0
-      )
-    ).rejects.toThrow(/Chair or Vice-Chair/);
+    const { db, ops } = makeDbStub();
+    await createPendingTransaction(
+      db,
+      {
+        party,
+        proposerCharacterId: chairId,
+        type: "send",
+        amount: 1,
+        targetCharacterId: new ObjectId(),
+      },
+      0
+    );
+    const doc = ops[0]!.doc as PendingTreasuryTransaction;
+    expect(doc.treasurerApproval?.characterId).toEqual(chairId);
+    expect("leadershipApproval" in doc).toBe(false);
   });
 
   it("throws when proposer holds none of the three approver roles", async () => {
@@ -436,6 +406,48 @@ describe("canRequestFunds", () => {
   });
 });
 
+describe("canRequestFunds excludes the requester", () => {
+  it("refuses a single-mode request when the only officer is the requester", () => {
+    // Nobody may approve their own Request Funds, so a party whose sole
+    // officer is the requester has no one who could ever sign it. The
+    // row used to be created anyway and sat until the expiry sweep.
+    const requesterId = new ObjectId();
+    const party = makeParty({ chairId: requesterId });
+    const result = canRequestFunds(party, "single", requesterId);
+    expect(result.ok).toBe(false);
+  });
+
+  it("allows a single-mode request when another officer could sign", () => {
+    const requesterId = new ObjectId();
+    const party = makeParty({ chairId: requesterId, treasurerId: new ObjectId() });
+    expect(canRequestFunds(party, "single", requesterId).ok).toBe(true);
+  });
+
+  it("refuses a double-mode request when only one officer besides the requester is seated", () => {
+    const requesterId = new ObjectId();
+    const party = makeParty({ chairId: requesterId, treasurerId: new ObjectId() });
+    expect(canRequestFunds(party, "double", requesterId).ok).toBe(false);
+  });
+
+  it("allows a double-mode request when two others could sign", () => {
+    const requesterId = new ObjectId();
+    const party = makeParty({
+      chairId: requesterId,
+      viceChairId: new ObjectId(),
+      treasurerId: new ObjectId(),
+    });
+    expect(canRequestFunds(party, "double", requesterId).ok).toBe(true);
+  });
+
+  it("counts a requester who holds two seats as one excluded person", () => {
+    const requesterId = new ObjectId();
+    const other = new ObjectId();
+    const party = makeParty({ chairId: requesterId, treasurerId: requesterId, viceChairId: other });
+    expect(countSeatedOfficers(party, requesterId)).toBe(1);
+    expect(canRequestFunds(party, "double", requesterId).ok).toBe(false);
+  });
+});
+
 describe("isPendingTransactionComplete", () => {
   it("send rows require both slots filled", () => {
     expect(
@@ -517,78 +529,92 @@ describe("isPendingTransactionComplete", () => {
 });
 
 describe("getApproverSlotForRow", () => {
-  it("send/transfer: returns the slot matching the character's role", () => {
-    const treasurerId = new ObjectId();
-    const party = makeParty({ treasurerId });
-    expect(
-      getApproverSlotForRow(party, { type: "send", proposedBy: new ObjectId() }, treasurerId)
-    ).toBe("treasurer");
-  });
-
-  it("request: returns null when caller is the requester (self-approval forbidden)", () => {
-    const requesterId = new ObjectId();
-    // Requester also happens to hold the Treasurer seat — still null
-    const party = makeParty({ treasurerId: requesterId });
-    expect(
-      getApproverSlotForRow(party, { type: "request", proposedBy: requesterId }, requesterId)
-    ).toBeNull();
-  });
-
-  it("request: returns the matching slot for a non-proposer officer", () => {
+  it("gives any officer the next empty slot, whatever seat they hold", () => {
     const chairId = new ObjectId();
-    const party = makeParty({ chairId });
-    expect(
-      getApproverSlotForRow(party, { type: "request", proposedBy: new ObjectId() }, chairId)
-    ).toBe("leadership");
-  });
-
-  it("returns null for an outsider (not an officer)", () => {
-    const party = makeParty({ chairId: new ObjectId() });
-    expect(
-      getApproverSlotForRow(party, { type: "send", proposedBy: new ObjectId() }, new ObjectId())
-    ).toBeNull();
-  });
-
-  it("acting-Treasurer: Chair fills the empty treasurer slot when the seat is vacant", () => {
-    const chairId = new ObjectId();
-    const party = makeParty({ chairId, treasurerId: null });
-    // Row proposed by the chair (leadership pre-filled), treasurer slot
-    // empty and now unfillable by a seated Treasurer — the chair acts as
-    // Treasurer to clear it.
+    const party = makeParty({ chairId, treasurerId: new ObjectId() });
     const row = {
       type: "send" as const,
-      proposedBy: new ObjectId(),
-      treasurerApproval: undefined,
-      leadershipApproval: { characterId: chairId, approvedAt: new Date() },
-    };
-    expect(getApproverSlotForRow(party, row, chairId)).toBe("treasurer");
-  });
-
-  it("acting-Treasurer: Chair does NOT take the treasurer slot while a Treasurer is seated", () => {
-    const chairId = new ObjectId();
-    const treasurerId = new ObjectId();
-    const party = makeParty({ chairId, treasurerId });
-    const row = {
-      type: "send" as const,
-      proposedBy: new ObjectId(),
-      treasurerApproval: undefined,
-      leadershipApproval: { characterId: chairId, approvedAt: new Date() },
-    };
-    // Leadership filled by the chair, treasurer slot reserved for the
-    // seated Treasurer — the chair cannot self-complete.
-    expect(getApproverSlotForRow(party, row, chairId)).toBeNull();
-  });
-
-  it("prefers the natural leadership slot when both slots are open (single-mode request)", () => {
-    const chairId = new ObjectId();
-    const party = makeParty({ chairId, treasurerId: null });
-    const row = {
-      type: "request" as const,
       proposedBy: new ObjectId(),
       treasurerApproval: undefined,
       leadershipApproval: undefined,
     };
-    expect(getApproverSlotForRow(party, row, chairId)).toBe("leadership");
+    expect(getApproverSlotForRow(party, row, chairId)).toBe("first");
+  });
+
+  it("lets a Chair and a Vice-Chair complete a row with no Treasurer seated", () => {
+    // The case the old slot model could not express at all: one slot
+    // demanded the Treasurer and the other demanded Chair-or-VC.
+    const chairId = new ObjectId();
+    const viceChairId = new ObjectId();
+    const party = makeParty({ chairId, viceChairId });
+    const afterChair = {
+      type: "send" as const,
+      proposedBy: chairId,
+      treasurerApproval: { characterId: chairId, approvedAt: new Date() },
+      leadershipApproval: undefined,
+    };
+    expect(getApproverSlotForRow(party, afterChair, viceChairId)).toBe("second");
+  });
+
+  it("refuses an officer who has already signed the other slot", () => {
+    // Two signatures has to mean two people. Nothing else enforces it
+    // once the slots stop being tied to separate seats.
+    const chairId = new ObjectId();
+    const party = makeParty({ chairId, treasurerId: new ObjectId() });
+    const row = {
+      type: "send" as const,
+      proposedBy: chairId,
+      treasurerApproval: { characterId: chairId, approvedAt: new Date() },
+      leadershipApproval: undefined,
+    };
+    expect(getApproverSlotForRow(party, row, chairId)).toBeNull();
+  });
+
+  it("refuses a second signature to a character holding two seats", () => {
+    const both = new ObjectId();
+    const party = makeParty({ chairId: both, treasurerId: both });
+    const row = {
+      type: "send" as const,
+      proposedBy: both,
+      treasurerApproval: { characterId: both, approvedAt: new Date() },
+      leadershipApproval: undefined,
+    };
+    expect(getApproverSlotForRow(party, row, both)).toBeNull();
+  });
+
+  it("request: returns null when caller is the requester (self-approval forbidden)", () => {
+    const requesterId = new ObjectId();
+    const party = makeParty({ treasurerId: requesterId, chairId: new ObjectId() });
+    const row = {
+      type: "request" as const,
+      proposedBy: requesterId,
+      treasurerApproval: undefined,
+      leadershipApproval: undefined,
+    };
+    expect(getApproverSlotForRow(party, row, requesterId)).toBeNull();
+  });
+
+  it("returns null for an outsider", () => {
+    const party = makeParty({ chairId: new ObjectId(), treasurerId: new ObjectId() });
+    const row = {
+      type: "send" as const,
+      proposedBy: new ObjectId(),
+      treasurerApproval: undefined,
+      leadershipApproval: undefined,
+    };
+    expect(getApproverSlotForRow(party, row, new ObjectId())).toBeNull();
+  });
+
+  it("returns null when both slots are filled", () => {
+    const chairId = new ObjectId();
+    const party = makeParty({ chairId, treasurerId: new ObjectId(), viceChairId: new ObjectId() });
+    const row = {
+      type: "send" as const,
+      proposedBy: new ObjectId(),
+      treasurerApproval: { characterId: new ObjectId(), approvedAt: new Date() },
+      leadershipApproval: { characterId: new ObjectId(), approvedAt: new Date() },
+    };
+    expect(getApproverSlotForRow(party, row, chairId)).toBeNull();
   });
 });
 
@@ -694,7 +720,7 @@ describe("createPendingTransaction — request type", () => {
         },
         100
       )
-    ).rejects.toThrow(/Chair or Vice-Chair/);
+    ).rejects.toThrow(/two different officers/);
   });
 
   it("request rejects when all three officer seats are vacant (even in single mode)", async () => {

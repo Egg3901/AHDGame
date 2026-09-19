@@ -23,6 +23,12 @@ import { bgRegions } from "@/lib/seeds/bg/bgRegions";
 import { csRegions } from "@/lib/seeds/cs/csRegions";
 import { blrRegions } from "@/lib/seeds/blr/blrRegions";
 import { balRegions } from "@/lib/seeds/bal/balRegions";
+import { JP_IDENTITY } from "@/lib/countries/jp/identity";
+import { UK_IDENTITY } from "@/lib/countries/uk/identity";
+import { DE_IDENTITY } from "@/lib/countries/de/identity";
+import { CN_IDENTITY } from "@/lib/countries/cn/identity";
+import { IE_IDENTITY } from "@/lib/countries/ie/identity";
+import { BR_IDENTITY } from "@/lib/countries/br/identity";
 
 // ISO-numeric ⇄ CountryId now live in the neutral countryIso module so non-commodity
 // surfaces (e.g. the IntOrg world map) can reuse them without depending on this file.
@@ -36,74 +42,12 @@ export { ISO_NUMERIC_TO_COUNTRY, COUNTRY_TO_ISO_NUMERIC } from "@/lib/constants/
  * country; see `getStateDisplayName(countryId, stateId)`.
  */
 export const STATE_DISPLAY_NAMES: Partial<Record<CountryId, Record<string, string>>> = {
-  UK: {
-    LON: "London",
-    SEE: "South East",
-    SWE: "South West",
-    EAE: "East of England",
-    EMI: "East Midlands",
-    WMI: "West Midlands",
-    YHU: "Yorkshire",
-    NWE: "North West",
-    NEE: "North East",
-    SCO: "Scotland",
-    WAL: "Wales",
-    NIR: "N. Ireland",
-  },
-  JP: {
-    HOK: "Hokkaido",
-    TOH: "Tohoku",
-    KAN: "Kanto",
-    CHU: "Chubu",
-    KNS: "Kansai",
-    CGK: "Chugoku",
-    SHI: "Shikoku",
-    KYU: "Kyushu & Okinawa",
-  },
-  DE: {
-    NW: "North Rhine-Westphalia",
-    BY: "Bavaria",
-    BW: "Baden-Württemberg",
-    NI: "Lower Saxony",
-    HE: "Hesse",
-    SN: "Saxony",
-    RP: "Rhineland-Palatinate",
-    ST: "Saxony-Anhalt",
-    SH: "Schleswig-Holstein",
-    TH: "Thuringia",
-    BB: "Brandenburg",
-    MV: "Mecklenburg-Vorpommern",
-    SL: "Saarland",
-    BE: "Berlin",
-    HH: "Hamburg",
-    BRE: "Bremen",
-  },
-  IE: {
-    DUB: "Dublin",
-    KIL: "Kildare",
-    MID: "Midlands",
-    LIM: "Limerick",
-    COR: "Cork",
-    WEX: "Wexford",
-    GAL: "Galway",
-    DON: "Donegal",
-  },
-  BR: {
-    NORTE: "Norte",
-    NORDESTE: "Nordeste",
-    CENTRO_OESTE: "Centro-Oeste",
-    SUDESTE: "Sudeste",
-    SUL: "Sul",
-  },
-  CN: {
-    DB: "Dongbei",
-    HB: "Huabei",
-    HD: "Huadong",
-    HZ: "Huazhong",
-    HN: "Huanan",
-    XN: "Xinan",
-    XB: "Xibei",
-  },
+  UK: UK_IDENTITY.stateDisplayNames,
+  JP: JP_IDENTITY.stateDisplayNames,
+  DE: DE_IDENTITY.stateDisplayNames,
+  IE: IE_IDENTITY.stateDisplayNames,
+  BR: BR_IDENTITY.stateDisplayNames,
+  CN: CN_IDENTITY.stateDisplayNames,
   // The prefixed-region countries derive their tables from the seed rosters
   // below — no hand-maintained copies to drift.
   ...Object.fromEntries(

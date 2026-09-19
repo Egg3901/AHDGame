@@ -1,13 +1,7 @@
-import type { Db } from "mongodb";
-import type { UKPartyConference } from "../../uk/conference/types";
-import type { UKPartyPlatform } from "../../uk/conference/types";
-
-/** Annual UK party-conference lifecycle rows (epic #856, ticket #862). */
-export function getUKPartyConferencesCollection(db: Db) {
-  return db.collection<UKPartyConference>("ukPartyConferences");
-}
-
-/** Ratified standing platforms, one row per UK party (ticket #862). */
-export function getUKPartyPlatformsCollection(db: Db) {
-  return db.collection<UKPartyPlatform>("ukPartyPlatforms");
-}
+/**
+ * Forwarder. Moved into UK's country folder.
+ *
+ * A forwarder holds no copy, so existing importers are untouched and there is
+ * still exactly one declaration.
+ */
+export * from "@/lib/countries/uk/db/ukPartyConferences";

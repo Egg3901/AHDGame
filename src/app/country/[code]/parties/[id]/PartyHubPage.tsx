@@ -682,6 +682,18 @@ function NationalPartyHub({ scope }: { scope: Extract<PartyHubScope, { kind: "na
     }
   };
 
+  // Growth frontier: a party can only be joined from a region it already
+  // reaches or borders. `frontierRegions === null` means the party has no
+  // presence anywhere and is open to all, mirroring the server's fail-open
+  // branch. A character with no home region is also allowed through, as the
+  // server does. The server remains the real gate; this only explains it.
+  const viewerHomeState = user?.character?.homeState ?? null;
+  const joinFrontierRegions = party?.frontierRegions ?? null;
+  const canJoinFromHomeRegion =
+    joinFrontierRegions == null ||
+    !viewerHomeState ||
+    joinFrontierRegions.includes(viewerHomeState);
+
   const handleJoin = async () => {
     setJoining(true);
     await apiPost(`${partyApiUrl(requestedCountry?.toLowerCase() ?? "us", id)}/join`, {});
@@ -856,7 +868,12 @@ function NationalPartyHub({ scope }: { scope: Extract<PartyHubScope, { kind: "na
           ) : (
             <button
               onClick={handleJoin}
-              disabled={joining}
+              disabled={joining || !canJoinFromHomeRegion}
+              title={
+                canJoinFromHomeRegion
+                  ? undefined
+                  : `${party.name} is not established in or next to your home region.`
+              }
               className="rounded-lg px-4 py-2 text-body-sm font-semibold transition-opacity hover:opacity-90 disabled:opacity-50"
               style={{
                 backgroundColor: party.color,

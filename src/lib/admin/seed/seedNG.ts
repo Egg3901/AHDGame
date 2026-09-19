@@ -67,7 +67,8 @@ export async function seedNGRegions(
 }
 
 export async function seedNGParties(db: Db, log: (msg: string) => void, preset?: string) {
-  const { selectPartyRosterForPreset } = await import("@/lib/seeds/ensureDefaultParties");
+  const { prunePresetMismatchedDefaultParties, selectPartyRosterForPreset } =
+    await import("@/lib/seeds/ensureDefaultParties");
   const { ngParties } = await import("@/lib/seeds/ng/ngParties");
 
   let activePreset = preset;
@@ -78,7 +79,13 @@ export async function seedNGParties(db: Db, log: (msg: string) => void, preset?:
     activePreset = gameState?.preset ?? DEFAULT_SEED_PRESET;
   }
 
-  const filtered = selectPartyRosterForPreset(ngParties as PartySeed[], activePreset!);
+  // Prune BEFORE selecting. Selecting alone stops the wrong parties being
+  // written but leaves the previous preset's behind, so a downgrade strands
+  // them (see partySeederPresetHygiene.test.ts). `selectPartyRosterForPreset`
+  // only chooses a roster -- it does not touch what is already in the db.
+  await prunePresetMismatchedDefaultParties(db, ngParties, activePreset!);
+
+  const filtered = selectPartyRosterForPreset(ngParties as PartySeed[], activePreset);
 
   const now = new Date();
   for (const party of filtered) {

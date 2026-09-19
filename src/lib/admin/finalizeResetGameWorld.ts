@@ -213,7 +213,7 @@ export async function finalizeResetGameWorld(
     const { ukParties } = await import("@/lib/seeds/uk/ukParties");
     const { politicalParties: usParties } = await import("@/lib/seeds/reference/politicalParties");
     const { deParties } = await import("@/lib/seeds/de/deParties");
-    const { jpParties } = await import("@/lib/seeds/jp/jpParties");
+    const { jpParties } = await import("@/lib/countries/jp/data/jpParties");
     const { brParties } = await import("@/lib/seeds/br/brParties");
     const { ieParties } = await import("@/lib/seeds/ie/ieParties");
     const { frParties } = await import("@/lib/seeds/fr/frParties");

@@ -26,7 +26,7 @@ import { frDemographicCategories } from "@/lib/seeds/fr/frDemographicCategories"
 import { grDemographicCategories } from "@/lib/seeds/gr/grDemographicCategories";
 import { ieDemographicCategories } from "@/lib/seeds/ie/ieDemographicCategories";
 import { itDemographicCategories } from "@/lib/seeds/it/itDemographicCategories";
-import { jpDemographicCategories } from "@/lib/seeds/jp/jpDemographicCategories";
+import { jpDemographicCategories } from "@/lib/countries/jp/data/jpDemographicCategories";
 import { ngDemographicCategories } from "@/lib/seeds/ng/ngDemographicCategories";
 import { ruDemographicCategories } from "@/lib/seeds/ru/ruDemographicCategories";
 import { seDemographicCategories } from "@/lib/seeds/se/seDemographicCategories";

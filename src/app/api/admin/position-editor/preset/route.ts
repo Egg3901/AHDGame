@@ -49,7 +49,7 @@ async function loadCountryCategories(countryId: string): Promise<DemographicCate
       return m.deDemographicCategories;
     }
     case "JP": {
-      const m = await import("@/lib/seeds/jp/jpDemographicCategories");
+      const m = await import("@/lib/countries/jp/data/jpDemographicCategories");
       return m.jpDemographicCategories;
     }
     case "IE": {

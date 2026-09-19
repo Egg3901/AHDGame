@@ -1,5 +1,13 @@
 import type { CountryId } from "./countries";
 import type { EnergyPlant, EnergySource } from "@/lib/db/types/energyPlant";
+import { JP_CABINET_SEAT_IDS } from "@/lib/countries/jp/institutionsFacts";
+import { US_CABINET_SEAT_IDS } from "@/lib/countries/us/institutionsFacts";
+import { UK_CABINET_SEAT_IDS } from "@/lib/countries/uk/institutionsFacts";
+import { DE_CABINET_SEAT_IDS } from "@/lib/countries/de/institutionsFacts";
+import { CN_CABINET_SEAT_IDS } from "@/lib/countries/cn/institutionsFacts";
+import { IE_CABINET_SEAT_IDS } from "@/lib/countries/ie/institutionsFacts";
+import { RU_CABINET_SEAT_IDS } from "@/lib/countries/ru/institutionsFacts";
+import { DD_CABINET_SEAT_IDS } from "@/lib/countries/dd/institutionsFacts";
 
 export interface EnergySourceDef {
   id: EnergySource;
@@ -92,18 +100,18 @@ export const ENERGY_SOURCES: EnergySourceDef[] = [
  * metric sits on the reserved transport seat → environment_secretary (net-zero home).
  */
 export const ENERGY_POSITION_BY_COUNTRY: Partial<Record<CountryId, string>> = {
-  US: "secretary_of_energy",
-  UK: "environment_secretary",
-  DE: "economy_minister",
-  CN: "minister_of_ecology_environment",
-  JP: "environment_minister",
-  IE: "minister_for_environment_climate",
+  US: US_CABINET_SEAT_IDS.energy,
+  UK: UK_CABINET_SEAT_IDS.energy,
+  DE: DE_CABINET_SEAT_IDS.energy,
+  CN: CN_CABINET_SEAT_IDS.energy,
+  JP: JP_CABINET_SEAT_IDS.energy,
+  IE: IE_CABINET_SEAT_IDS.energy,
   // Power generation sat under heavy industry in the command-economy
   // abstraction. This seat is also an estates seat, so FlagshipRouter renders it
   // with the existing `Estates | Generation` toggle (the UK environment_secretary
   // path). Era-appropriate sources are enforced by seedEnergyPlants.
-  RU: "minister_of_machine_building",
-  DD: "minister_of_machine_building",
+  RU: RU_CABINET_SEAT_IDS.energy,
+  DD: DD_CABINET_SEAT_IDS.energy,
 };
 
 export const TIER_MULTIPLIER = [1.0, 1.5, 2.0, 2.5] as const;

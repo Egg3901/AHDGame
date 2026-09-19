@@ -8,6 +8,13 @@
  */
 import { getIncomeAnchor } from "./metricCatalog";
 import { bankingSeparationLegislationTypes } from "@/lib/seeds/shared/bankingSeparationLegislation";
+import { JP_ECONOMY } from "@/lib/countries/jp/economy";
+import { US_ECONOMY } from "@/lib/countries/us/economy";
+import { UK_ECONOMY } from "@/lib/countries/uk/economy";
+import { DE_ECONOMY } from "@/lib/countries/de/economy";
+import { CN_ECONOMY } from "@/lib/countries/cn/economy";
+import { IE_ECONOMY } from "@/lib/countries/ie/economy";
+import { NG_ECONOMY } from "@/lib/countries/ng/economy";
 
 export type CostClass = "gdpFraction" | "perCapita" | "none";
 
@@ -910,14 +917,21 @@ export const CALIBRATION_SCALE = 1.5;
 // Representative modern (gdp, population) per playable country — from the 2019/2023
 // budget seed configs. Used to precompute the income-to-GDP ratio so a perCapita
 // share targets the same %GDP as a gdpFraction share.
-const REP_ECON: Record<string, { gdp: number; population: number }> = {
-  US: { gdp: 27_000_000_000_000, population: 333_000_000 },
-  UK: { gdp: 2_900_000_000_000, population: 68_000_000 },
-  DE: { gdp: 4_500_000_000_000, population: 84_400_000 },
-  JP: { gdp: 550_000_000_000_000, population: 126_000_000 },
-  IE: { gdp: 500_000_000_000, population: 5_100_000 },
-  CN: { gdp: 126_000_000_000_000, population: 1_412_000_000 },
-  NG: { gdp: 144_000_000_000_000, population: 200_000_000 },
+/*
+ * ⚠️ `Partial`, BECAUSE MOST COUNTRIES ARE NOT IN HERE. The map holds seven
+ * keys; `incomeToGdp` has always read `const e = REP_ECON[country]` and returned
+ * 0.8 when it came back undefined, so the guard was already written for an
+ * absence the TYPE denied. Saying so lets a country folder omit `repEcon`
+ * instead of inventing a representative economy for a country nobody measured.
+ */
+export const REP_ECON: Partial<Record<string, { gdp: number; population: number }>> = {
+  US: US_ECONOMY.repEcon,
+  UK: UK_ECONOMY.repEcon,
+  DE: DE_ECONOMY.repEcon,
+  JP: JP_ECONOMY.repEcon,
+  IE: IE_ECONOMY.repEcon,
+  CN: CN_ECONOMY.repEcon,
+  NG: NG_ECONOMY.repEcon,
 };
 
 /** incomeAnchor(2019) × population / GDP — the household-income-to-GDP ratio. */

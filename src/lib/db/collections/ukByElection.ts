@@ -1,10 +1,7 @@
-import type { Db } from "mongodb";
-import type { UkCommonsVacancy, UkRecallPetition } from "../types/ukByElection";
-
-export function getUkCommonsVacanciesCollection(db: Db) {
-  return db.collection<UkCommonsVacancy>("ukCommonsVacancies");
-}
-
-export function getUkRecallPetitionsCollection(db: Db) {
-  return db.collection<UkRecallPetition>("ukRecallPetitions");
-}
+/**
+ * Forwarder. Moved into UK's country folder.
+ *
+ * A forwarder holds no copy, so existing importers are untouched and there is
+ * still exactly one declaration.
+ */
+export * from "@/lib/countries/uk/db/ukByElection";

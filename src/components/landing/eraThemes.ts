@@ -3,6 +3,9 @@
  * Each era defines globe visual style, copy, seed access map, and nations list.
  */
 
+import { tierFor, type ShippingPreset } from "@/lib/world/eraRoster";
+import type { CountryId } from "@/lib/constants/countries";
+
 export type EraId = "1953" | "1979" | "1991" | "1999" | "2007" | "2019" | "2023" | "2027";
 
 export type EraAccess = {
@@ -60,13 +63,168 @@ export type EraConfig = {
   nations: EraNation[];
 };
 
-const P = (id: string, name: string): EraNation => ({ id, name, tier: "player" });
-const E = (id: string, name: string): EraNation => ({ id, name, tier: "econ" });
-const N = (id: string, name: string): EraNation => ({ id, name, tier: "npp" });
+/**
+ * A curated roster entry: the display NAME and the order it appears in.
+ *
+ * The tier is no longer written here. It is derived from `ERA_ROSTER`, because
+ * this file and the world-entity manifest used to disagree — the 1991 landing
+ * page advertised Germany as playable while the manifest had it economy-only.
+ * Names and ordering stay authored; access does not.
+ */
+const n = (id: string, name: string): { id: string; name: string } => ({ id, name });
 
 const PLAYER: EraAccess = { enabledForPlayers: true, economyPreview: false, status: "active" };
 const ECON: EraAccess = { enabledForPlayers: false, economyPreview: true, status: "beta" };
 const NPP: EraAccess = { enabledForPlayers: false, economyPreview: false, status: "coming-soon" };
+
+/** Access map for the curated roster, straight from `tierFor`. */
+function accessFor(
+  preset: ShippingPreset,
+  curated: ReadonlyArray<{ id: string }>
+): Record<string, EraAccess> {
+  const out: Record<string, EraAccess> = {};
+  for (const { id } of curated) {
+    const tier = tierFor(preset, id as CountryId);
+    if (tier === "player") out[id] = PLAYER;
+    else if (tier === "econ") out[id] = ECON;
+    else if (tier === "npp") out[id] = NPP;
+    // `latent` and `absent` are not shown on the landing page at all.
+  }
+  return out;
+}
+
+/** Display roster: curated name and order, derived tier, absent countries dropped. */
+function nationsFor(
+  preset: ShippingPreset,
+  curated: ReadonlyArray<{ id: string; name: string }>
+): EraNation[] {
+  const out: EraNation[] = [];
+  for (const { id, name } of curated) {
+    const tier = tierFor(preset, id as CountryId);
+    if (tier === "player" || tier === "econ" || tier === "npp") out.push({ id, name, tier });
+  }
+  return out;
+}
+
+/** Curated display roster for 1953: name and order only; tier is derived. */
+const NATIONS_1953 = [
+  n("US", "United States"),
+  n("UK", "United Kingdom"),
+  n("RU", "Soviet Union"),
+  n("DE", "West Germany"),
+  n("JP", "Japan"),
+  n("IT", "Italy"),
+  n("FR", "France"),
+  n("CN", "China"),
+  n("DD", "East Germany"),
+] as const;
+
+/** Curated display roster for 1979: name and order only; tier is derived. */
+const NATIONS_1979 = [
+  n("US", "United States"),
+  n("UK", "United Kingdom"),
+  n("RU", "Soviet Union"),
+  n("FR", "France"),
+  n("IT", "Italy"),
+  n("ES", "Spain"),
+  n("SE", "Sweden"),
+  n("TR", "Turkey"),
+  n("GR", "Greece"),
+  n("AT", "Austria"),
+  n("FI", "Finland"),
+  n("DE", "West Germany"),
+  n("JP", "Japan"),
+  n("CN", "China"),
+  n("BR", "Brazil"),
+  n("IE", "Ireland"),
+  n("DD", "East Germany"),
+  n("PL", "Poland"),
+  n("RO", "Romania"),
+  n("YU", "Yugoslavia"),
+  n("HU", "Hungary"),
+  n("CS", "Czechoslovakia"),
+  n("BG", "Bulgaria"),
+  n("UKR", "Ukraine"),
+  n("BLR", "Belarus"),
+  n("BAL", "Baltic Republics"),
+] as const;
+
+/** Curated display roster for 1991: name and order only; tier is derived. */
+const NATIONS_1991 = [
+  n("US", "United States"),
+  n("UK", "United Kingdom"),
+  n("DE", "Germany"),
+  n("RU", "Russia"),
+  n("FR", "France"),
+  n("JP", "Japan"),
+  n("CN", "China"),
+  n("PL", "Poland"),
+  n("CS", "Czechoslovakia"),
+  n("HU", "Hungary"),
+  n("RO", "Romania"),
+] as const;
+
+/** Curated display roster for 1999: name and order only; tier is derived. */
+const NATIONS_1999 = [
+  n("US", "United States"),
+  n("UK", "United Kingdom"),
+  n("DE", "Germany"),
+  n("FR", "France"),
+  n("JP", "Japan"),
+  n("CN", "China"),
+  n("IT", "Italy"),
+  n("RU", "Russia"),
+] as const;
+
+/** Curated display roster for 2007: name and order only; tier is derived. */
+const NATIONS_2007 = [
+  n("US", "United States"),
+  n("UK", "United Kingdom"),
+  n("DE", "Germany"),
+  n("FR", "France"),
+  n("JP", "Japan"),
+  n("CN", "China"),
+  n("BR", "Brazil"),
+  n("IN", "India"),
+  n("RU", "Russia"),
+] as const;
+
+/** Curated display roster for 2019: name and order only; tier is derived. */
+const NATIONS_2019 = [
+  n("US", "United States"),
+  n("UK", "United Kingdom"),
+  n("DE", "Germany"),
+  n("FR", "France"),
+  n("JP", "Japan"),
+  n("CN", "China"),
+  n("BR", "Brazil"),
+  n("IN", "India"),
+  n("RU", "Russia"),
+] as const;
+
+/** Curated display roster for 2023: name and order only; tier is derived. */
+const NATIONS_2023 = [
+  n("US", "United States"),
+  n("UK", "United Kingdom"),
+  n("DE", "Germany"),
+  n("FR", "France"),
+  n("JP", "Japan"),
+  n("CN", "China"),
+  n("BR", "Brazil"),
+  n("IN", "India"),
+  n("RU", "Russia"),
+] as const;
+
+/**
+ * Curated display roster for 2027: identical to 2023's, because the list is
+ * name and ORDER only.
+ *
+ * Upstream authored 2027 with per-nation tiers baked in (`P`/`E`/`N`). This
+ * branch derives the tier from `ERA_ROSTER` instead, so hard-coding one here
+ * would give the landing page a second opinion about who is playable -- and the
+ * landing page disagreeing with the world is the drift this roster removed.
+ */
+const NATIONS_2027 = NATIONS_2023;
 
 export const ERA_CONFIGS: Record<EraId, EraConfig> = {
   "1953": {
@@ -109,28 +267,8 @@ export const ERA_CONFIGS: Record<EraId, EraConfig> = {
     closingDek: "Pick a country, pick a role. The simulation runs whether you're in it or not.",
     closingCta: "Get started",
     footerTagline: "Persistent simulation. Multiple nations. No resets.",
-    accessMap: {
-      US: PLAYER,
-      UK: PLAYER,
-      RU: PLAYER,
-      DE: ECON,
-      JP: ECON,
-      IT: ECON,
-      FR: ECON,
-      CN: NPP,
-      DD: PLAYER,
-    },
-    nations: [
-      P("US", "United States"),
-      P("UK", "United Kingdom"),
-      P("RU", "Soviet Union"),
-      E("DE", "West Germany"),
-      E("JP", "Japan"),
-      E("IT", "Italy"),
-      E("FR", "France"),
-      N("CN", "China"),
-      P("DD", "East Germany"),
-    ],
+    accessMap: accessFor("1953-default", NATIONS_1953),
+    nations: nationsFor("1953-default", NATIONS_1953),
   },
 
   "1979": {
@@ -171,64 +309,8 @@ export const ERA_CONFIGS: Record<EraId, EraConfig> = {
     closingDek: "Pick a country, pick a role. The simulation runs whether you're in it or not.",
     closingCta: "Get started",
     footerTagline: "Persistent simulation. 22 nations. No resets.",
-    accessMap: {
-      US: PLAYER,
-      UK: PLAYER,
-      RU: PLAYER,
-      FR: ECON,
-      IT: ECON,
-      ES: ECON,
-      SE: ECON,
-      TR: ECON,
-      GR: ECON,
-      AT: ECON,
-      FI: ECON,
-      DE: ECON,
-      JP: ECON,
-      CN: ECON,
-      BR: ECON,
-      IE: ECON,
-      DD: PLAYER,
-      PL: NPP,
-      RO: NPP,
-      YU: NPP,
-      HU: NPP,
-      CS: NPP,
-      BG: NPP,
-      // Key is the CountryId, not the ISO alpha-2: this was "BY", which matches
-      // nothing in COUNTRY_CONFIGS, so Byelorussia silently had no access entry.
-      UKR: NPP,
-      BLR: NPP,
-      BAL: NPP,
-    },
-    nations: [
-      P("US", "United States"),
-      P("UK", "United Kingdom"),
-      P("RU", "Soviet Union"),
-      E("FR", "France"),
-      E("IT", "Italy"),
-      E("ES", "Spain"),
-      E("SE", "Sweden"),
-      E("TR", "Turkey"),
-      E("GR", "Greece"),
-      E("AT", "Austria"),
-      E("FI", "Finland"),
-      E("DE", "West Germany"),
-      E("JP", "Japan"),
-      E("CN", "China"),
-      E("BR", "Brazil"),
-      E("IE", "Ireland"),
-      P("DD", "East Germany"),
-      N("PL", "Poland"),
-      N("RO", "Romania"),
-      N("YU", "Yugoslavia"),
-      N("HU", "Hungary"),
-      N("CS", "Czechoslovakia"),
-      N("BG", "Bulgaria"),
-      N("UKR", "Ukraine"),
-      N("BLR", "Belarus"),
-      N("BAL", "Baltic Republics"),
-    ],
+    accessMap: accessFor("1979-default", NATIONS_1979),
+    nations: nationsFor("1979-default", NATIONS_1979),
   },
 
   "1991": {
@@ -260,32 +342,8 @@ export const ERA_CONFIGS: Record<EraId, EraConfig> = {
     closingDek: "Pick a country, pick a role. The simulation runs whether you're in it or not.",
     closingCta: "Get started",
     footerTagline: "Persistent simulation. Multiple nations. No resets.",
-    accessMap: {
-      US: PLAYER,
-      UK: PLAYER,
-      DE: PLAYER,
-      RU: ECON,
-      FR: ECON,
-      JP: ECON,
-      CN: ECON,
-      PL: NPP,
-      CS: NPP,
-      HU: NPP,
-      RO: NPP,
-    },
-    nations: [
-      P("US", "United States"),
-      P("UK", "United Kingdom"),
-      P("DE", "Germany"),
-      E("RU", "Russia"),
-      E("FR", "France"),
-      E("JP", "Japan"),
-      E("CN", "China"),
-      N("PL", "Poland"),
-      N("CS", "Czechoslovakia"),
-      N("HU", "Hungary"),
-      N("RO", "Romania"),
-    ],
+    accessMap: accessFor("1991-default", NATIONS_1991),
+    nations: nationsFor("1991-default", NATIONS_1991),
   },
 
   "1999": {
@@ -309,26 +367,8 @@ export const ERA_CONFIGS: Record<EraId, EraConfig> = {
     closingDek: "Pick a country, pick a role. The simulation runs whether you're in it or not.",
     closingCta: "Get started",
     footerTagline: "Persistent simulation. Multiple nations. No resets.",
-    accessMap: {
-      US: PLAYER,
-      UK: PLAYER,
-      DE: PLAYER,
-      FR: ECON,
-      JP: ECON,
-      CN: ECON,
-      IT: ECON,
-      RU: NPP,
-    },
-    nations: [
-      P("US", "United States"),
-      P("UK", "United Kingdom"),
-      P("DE", "Germany"),
-      E("FR", "France"),
-      E("JP", "Japan"),
-      E("CN", "China"),
-      E("IT", "Italy"),
-      N("RU", "Russia"),
-    ],
+    accessMap: accessFor("1999-default", NATIONS_1999),
+    nations: nationsFor("1999-default", NATIONS_1999),
   },
 
   "2007": {
@@ -359,28 +399,8 @@ export const ERA_CONFIGS: Record<EraId, EraConfig> = {
     closingDek: "Pick a country, pick a role. The simulation runs whether you're in it or not.",
     closingCta: "Get started",
     footerTagline: "Persistent simulation. Multiple nations. No resets.",
-    accessMap: {
-      US: PLAYER,
-      UK: PLAYER,
-      DE: PLAYER,
-      FR: ECON,
-      JP: ECON,
-      CN: ECON,
-      BR: ECON,
-      IN: ECON,
-      RU: NPP,
-    },
-    nations: [
-      P("US", "United States"),
-      P("UK", "United Kingdom"),
-      P("DE", "Germany"),
-      E("FR", "France"),
-      E("JP", "Japan"),
-      E("CN", "China"),
-      E("BR", "Brazil"),
-      E("IN", "India"),
-      N("RU", "Russia"),
-    ],
+    accessMap: accessFor("2007-default", NATIONS_2007),
+    nations: nationsFor("2007-default", NATIONS_2007),
   },
 
   "2019": {
@@ -404,28 +424,8 @@ export const ERA_CONFIGS: Record<EraId, EraConfig> = {
     closingDek: "Pick a country, pick a role. The simulation runs whether you're in it or not.",
     closingCta: "Get started",
     footerTagline: "Persistent simulation. Multiple nations. No resets.",
-    accessMap: {
-      US: PLAYER,
-      UK: PLAYER,
-      DE: PLAYER,
-      FR: ECON,
-      JP: ECON,
-      CN: ECON,
-      BR: ECON,
-      IN: ECON,
-      RU: NPP,
-    },
-    nations: [
-      P("US", "United States"),
-      P("UK", "United Kingdom"),
-      P("DE", "Germany"),
-      E("FR", "France"),
-      E("JP", "Japan"),
-      E("CN", "China"),
-      E("BR", "Brazil"),
-      E("IN", "India"),
-      N("RU", "Russia"),
-    ],
+    accessMap: accessFor("2019-default", NATIONS_2019),
+    nations: nationsFor("2019-default", NATIONS_2019),
   },
 
   "2023": {
@@ -456,28 +456,8 @@ export const ERA_CONFIGS: Record<EraId, EraConfig> = {
     closingDek: "Pick a country, pick a role. The simulation runs whether you're in it or not.",
     closingCta: "Get started",
     footerTagline: "Persistent simulation. Multiple nations. No resets.",
-    accessMap: {
-      US: PLAYER,
-      UK: PLAYER,
-      DE: PLAYER,
-      FR: ECON,
-      JP: ECON,
-      CN: ECON,
-      BR: ECON,
-      IN: ECON,
-      RU: NPP,
-    },
-    nations: [
-      P("US", "United States"),
-      P("UK", "United Kingdom"),
-      P("DE", "Germany"),
-      E("FR", "France"),
-      E("JP", "Japan"),
-      E("CN", "China"),
-      E("BR", "Brazil"),
-      E("IN", "India"),
-      N("RU", "Russia"),
-    ],
+    accessMap: accessFor("2023-default", NATIONS_2023),
+    nations: nationsFor("2023-default", NATIONS_2023),
   },
   "2027": {
     id: "2027",
@@ -507,28 +487,8 @@ export const ERA_CONFIGS: Record<EraId, EraConfig> = {
     closingDek: "Pick a country, pick a role. The simulation runs whether you're in it or not.",
     closingCta: "Get started",
     footerTagline: "Persistent simulation. Multiple nations. No resets.",
-    accessMap: {
-      US: PLAYER,
-      UK: PLAYER,
-      DE: PLAYER,
-      FR: ECON,
-      JP: PLAYER,
-      CN: PLAYER,
-      BR: ECON,
-      IN: ECON,
-      RU: NPP,
-    },
-    nations: [
-      P("US", "United States"),
-      P("UK", "United Kingdom"),
-      P("DE", "Germany"),
-      E("FR", "France"),
-      P("JP", "Japan"),
-      P("CN", "China"),
-      E("BR", "Brazil"),
-      E("IN", "India"),
-      N("RU", "Russia"),
-    ],
+    accessMap: accessFor("2027-default", NATIONS_2027),
+    nations: nationsFor("2027-default", NATIONS_2027),
   },
 };
 

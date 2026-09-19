@@ -15,7 +15,7 @@ import { adjacentStates } from "@/lib/constants/stateAdjacency";
 import { politicalParties as usParties } from "@/lib/seeds/reference/politicalParties";
 import { ukParties } from "@/lib/seeds/uk/ukParties";
 import { deParties } from "@/lib/seeds/de/deParties";
-import { jpParties } from "@/lib/seeds/jp/jpParties";
+import { jpParties } from "@/lib/countries/jp/data/jpParties";
 
 /**
  * Names + abbreviations reserved for preset-gated default parties (e.g.

@@ -131,4 +131,57 @@ describe("GET /api/country/[code]/parties/[id]/recruitment/states", () => {
       canRecruit: false,
     });
   });
+
+  // Growth frontier: the list must report reachability so the picker can grey
+  // out unreachable regions instead of failing the player on submit. Exercises
+  // the real partyFrontier module, and therefore real adjacency, so what is
+  // reported matches what the POST gate enforces.
+  describe("growth frontier", () => {
+    function seedRegions(presence: string[]) {
+      db.collection("states").find.mockReturnValue({
+        toArray: vi.fn().mockResolvedValue([
+          { _id: "NY", name: "New York" },
+          { _id: "PA", name: "Pennsylvania" },
+          { _id: "CA", name: "California" },
+        ]),
+      } as never);
+      db.collection("statePartyOrg").find.mockReturnValue({
+        toArray: vi.fn().mockResolvedValue([]),
+      } as never);
+      db.collection("npps").aggregate.mockReturnValue({
+        toArray: vi.fn().mockResolvedValue([]),
+      } as never);
+      db.collection("characters").distinct.mockResolvedValue(presence);
+    }
+
+    async function getStates() {
+      const { GET } = await import("./route");
+      const response = await GET(new Request("http://localhost"), {
+        params: Promise.resolve({ code: "us", id: "9" }),
+      });
+      const body = await response.json();
+      return Object.fromEntries(body.states.map((st: { stateId: string }) => [st.stateId, st]));
+    }
+
+    it("marks a region outside the frontier and clears its canRecruit", async () => {
+      seedRegions(["NY"]);
+      const byId = await getStates();
+      expect(byId.CA.inFrontier).toBe(false);
+      expect(byId.CA.canRecruit).toBe(false);
+    });
+
+    it("marks the presence region and its neighbour as reachable", async () => {
+      seedRegions(["NY"]);
+      const byId = await getStates();
+      expect(byId.NY.inFrontier).toBe(true);
+      expect(byId.PA.inFrontier).toBe(true);
+    });
+
+    it("marks every region reachable for a party with no presence anywhere", async () => {
+      seedRegions([]);
+      const byId = await getStates();
+      expect(byId.CA.inFrontier).toBe(true);
+      expect(byId.NY.inFrontier).toBe(true);
+    });
+  });
 });

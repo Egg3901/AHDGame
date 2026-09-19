@@ -412,3 +412,105 @@ describe("isCountryEnabledForPlayers()", () => {
     await expect(isCountryEnabledForPlayers(db as unknown as Db, "US")).resolves.toBe(false);
   });
 });
+
+// ---------------------------------------------------------------------------
+// absentInEra — era absence, kept distinct from dissolution
+// ---------------------------------------------------------------------------
+describe("registeredBase() — absentInEra", () => {
+  it("drops a country flagged absentInEra from the registered set", async () => {
+    await setupDb();
+    db.collectionMocks["countryGameStates"]!.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([{ _id: "DD", absentInEra: true }]),
+    } as never);
+
+    const { getAllCountryAccess } = await import("./countryAccess");
+    const access = await getAllCountryAccess(db as unknown as Db);
+
+    expect(access.DD).toBeUndefined();
+    expect(access.US).toBeDefined();
+  });
+
+  it("keeps a country whose absentInEra was cleared by a later reset", async () => {
+    // The flag is written true OR false on every reset, so a world moving
+    // 1991 -> 1953 brings East Germany back rather than stranding it.
+    await setupDb();
+    db.collectionMocks["countryGameStates"]!.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([{ _id: "DD", absentInEra: false }]),
+    } as never);
+
+    const { getAllCountryAccess } = await import("./countryAccess");
+    const access = await getAllCountryAccess(db as unknown as Db);
+
+    expect(access.DD).toBeDefined();
+  });
+
+  it("treats a missing flag as registered, so existing rows are unaffected", async () => {
+    // This is what makes the field a pure addition against the live database:
+    // every row written before it existed reads undefined -> falsy -> registered.
+    await setupDb();
+    db.collectionMocks["countryGameStates"]!.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([{ _id: "DD", status: "coming-soon" }]),
+    } as never);
+
+    const { getAllCountryAccess } = await import("./countryAccess");
+    const access = await getAllCountryAccess(db as unknown as Db);
+
+    expect(access.DD).toBeDefined();
+  });
+
+  it("keeps era absence and dissolution as separate exclusions", async () => {
+    // Both drop a country, but they must never be conflated: `dissolvedTurn`
+    // drives merge idempotency (mergeCountry returns retired:true for any row
+    // carrying it), so stamping it for era absence would silently no-op a
+    // genuine later merge.
+    await setupDb();
+    db.collectionMocks["countryGameStates"]!.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([
+        { _id: "DD", absentInEra: true },
+        { _id: "CS", dissolvedTurn: 42 },
+      ]),
+    } as never);
+
+    const { getAllCountryAccess } = await import("./countryAccess");
+    const access = await getAllCountryAccess(db as unknown as Db);
+
+    expect(access.DD).toBeUndefined();
+    expect(access.CS).toBeUndefined();
+  });
+});
+
+describe("getCountryAccessFromDb() — absentInEra matches the list paths", () => {
+  it("reports an era-absent country as unregistered, not econ-only", async () => {
+    // The single-country path must agree with registeredBase(). Without this,
+    // /country/dd renders econ-only in a 1991 world while every list path has
+    // already dropped it — the exact divergence the dissolvedTurn branch exists
+    // to prevent.
+    await setupDb();
+    db.collectionMocks["countryGameStates"]!.findOne.mockResolvedValue({
+      _id: "DD",
+      absentInEra: true,
+    });
+
+    const { getCountryAccessFromDb } = await import("./countryAccess");
+    const access = await getCountryAccessFromDb(db as unknown as Db, "DD");
+
+    expect(access.registered).toBe(false);
+    expect(access.econOnly).toBe(false);
+    expect(access.enabledForPlayers).toBe(false);
+    expect(access.nppGoverned).toBe(false);
+  });
+
+  it("leaves a country registered when the flag is cleared", async () => {
+    await setupDb();
+    db.collectionMocks["countryGameStates"]!.findOne.mockResolvedValue({
+      _id: "DD",
+      absentInEra: false,
+      status: "coming-soon",
+    });
+
+    const { getCountryAccessFromDb } = await import("./countryAccess");
+    const access = await getCountryAccessFromDb(db as unknown as Db, "DD");
+
+    expect(access.registered).toBe(true);
+  });
+});

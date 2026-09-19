@@ -23,4 +23,22 @@ describe("seedPerfIndexes", () => {
     expect(call, "no manifestos index is seeded").toBeTruthy();
     expect(call![2]).toEqual({ countryId: 1, electionId: 1, party: 1 });
   });
+
+  /**
+   * `electedOfficials` carried indexes on characterId, nppId and a text index,
+   * but nothing on `party`. The party growth frontier asks "which regions hold
+   * an office for this party" on every party hub load, every recruitment and
+   * relocation picker, and every join or recruit attempt, so without this each
+   * of those is a full collection scan.
+   */
+  it("indexes electedOfficials by party and region for the growth frontier", async () => {
+    const db = { collection: vi.fn() } as unknown as Db;
+    await seedPerfIndexes(db, () => {});
+
+    const call = ensureIndexMock.mock.calls.find(
+      (c) => c[1] === "electedOfficials" && c[3]?.name === "electedOfficials_party_state"
+    );
+    expect(call, "no electedOfficials party/state index is seeded").toBeTruthy();
+    expect(call![2]).toEqual({ party: 1, state: 1 });
+  });
 });

@@ -349,20 +349,6 @@ export const NG_REGIONAL_COUNCIL_SEATS: Record<string, number> = {
 
 // ── Japan seat counts ────────────────────────────────────────────────────────
 
-/** Shugiin (House of Representatives) seat counts per region. Total = 465. */
-export const JP_SHUGIIN_SEATS: Record<string, number> = {
-  HOK: 12,
-  TOH: 37,
-  KAN: 150,
-  CHU: 81,
-  KNS: 82,
-  CGK: 28,
-  SHI: 14,
-  KYU: 61,
-};
-
-export const TOTAL_JP_SHUGIIN_SEATS = 465;
-
 // ── China seat counts ────────────────────────────────────────────────────────
 
 /**
@@ -497,20 +483,6 @@ export function subNationalChamberSeats(
   return state.stateSenateSeats ?? 0;
 }
 
-/** Sangiin (House of Councillors) seat counts per region. Total = 248. */
-export const JP_SANGIIN_SEATS: Record<string, number> = {
-  HOK: 7,
-  TOH: 20,
-  KAN: 80,
-  CHU: 44,
-  KNS: 44,
-  CGK: 14,
-  SHI: 8,
-  KYU: 31,
-};
-
-export const TOTAL_JP_SANGIIN_SEATS = 248;
-
 // ── Germany seat counts ──────────────────────────────────────────────────────
 
 /**
@@ -564,18 +536,6 @@ export const DE_LANDTAG_SEATS: Record<string, number> = {
   ST: 97,
   SH: 73,
   TH: 88,
-};
-
-/** JP Governor seats per region. 1 governor per region. */
-export const JP_GOVERNOR_SEATS: Record<string, number> = {
-  HOK: 1,
-  TOH: 1,
-  KAN: 1,
-  CHU: 1,
-  KNS: 1,
-  CGK: 1,
-  SHI: 1,
-  KYU: 1,
 };
 
 /** Electoral votes per state (House seats + 2). DC = 3. Total = 538. */
@@ -952,3 +912,17 @@ export function getTravelActionCost(stateId: string, preset?: string): number {
   if (ev <= 20) return 7;
   return 10;
 }
+
+/**
+ * Japan's chamber seat tables, which now live in its country folder.
+ *
+ * ⚠️ A FORWARDER HOLDS NO COPY. They were duplicated between this file and
+ * `jp/elections.ts`; both now resolve to `jp/data/jpSeats.ts`.
+ */
+export {
+  JP_SHUGIIN_SEATS,
+  TOTAL_JP_SHUGIIN_SEATS,
+  JP_SANGIIN_SEATS,
+  TOTAL_JP_SANGIIN_SEATS,
+  JP_GOVERNOR_SEATS,
+} from "@/lib/countries/jp/data/jpSeats";

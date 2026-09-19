@@ -5,6 +5,7 @@ import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
 import { handleRouteError } from "@/lib/api/errors";
 import { findPartyBySequentialId } from "@/lib/db/partyLookup";
 import { calculateRecruitmentSlots } from "@/lib/npp/recruitment";
+import { getPartyFrontier, isInFrontier } from "@/lib/parties/partyFrontier";
 import {
   NPP_RECRUITMENT_AP_COST,
   nppActionPointCap,
@@ -93,15 +94,27 @@ export async function GET(
       statePartyOrgs.filter((o) => o.chairId || o.viceChairId).map((o) => o.stateId)
     );
 
+    // Growth frontier: reuse the already-loaded region list as `regionIds` so
+    // this does not re-read `states`. Reported per row so the picker can grey
+    // out unreachable regions instead of failing the player on submit.
+    const { presence, frontier } = await getPartyFrontier(
+      db,
+      countryId,
+      partyIdStr,
+      states.map((s) => s._id)
+    );
+
     const result = states.map((state) => {
       const org = orgByState.get(state._id);
       const stateOrg = org?.organization ?? 0;
       const currentNPPs = nppByState.get(state._id) ?? 0;
       const maxSlots = calculateRecruitmentSlots(stateOrg);
       const availableSlots = Math.max(0, maxSlots - currentNPPs);
+      const inFrontier = isInFrontier(presence, frontier, state._id);
 
       const hasStateLeadership = statesWithLeadership.has(state._id);
       const canRecruit =
+        inFrontier &&
         !capacityError &&
         availableSlots > 0 &&
         partyActionPoints >= recruitCost &&
@@ -115,6 +128,7 @@ export async function GET(
         maxSlots,
         availableSlots,
         actionCost: recruitCost,
+        inFrontier,
         canRecruit,
         hasStateLeadership,
       };

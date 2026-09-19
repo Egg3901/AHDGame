@@ -22,6 +22,7 @@ import {
 } from "@/lib/indexFunds/fundQueries";
 import type { CountryId } from "@/lib/constants/countries";
 import type { CurrencyCode } from "@/lib/constants/currencies";
+import { JP_NPP_INVESTING_MINIMUM } from "@/lib/countries/jp/economy";
 
 // ── GDP per capita by country (USD-equivalent, annual) ────────────────
 // These are approximate 2024 GDP per capita figures used to determine NPP
@@ -30,7 +31,7 @@ import type { CurrencyCode } from "@/lib/constants/currencies";
 const GDP_PER_CAPITA_ANCHOR: Record<string, number> = {
   US: 80000,
   UK: 46000,
-  JP: 34000,
+  JP: JP_NPP_INVESTING_MINIMUM,
   DE: 51000,
   IE: 103000,
   BR: 9000,

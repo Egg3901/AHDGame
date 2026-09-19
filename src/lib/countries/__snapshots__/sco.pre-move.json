@@ -1,0 +1,2403 @@
+{
+  "COUNTRY_ANCHOR": {
+    "shape": "country-first",
+    "value": [-4.2, 56.8]
+  },
+  "COUNTRY_BUCKET_LABELS": {
+    "shape": "country-first",
+    "value": {
+      "dims": {
+        "ethnicity": "Background",
+        "age": "Age",
+        "education": "Education",
+        "income": "Income",
+        "urbanization": "Where they live"
+      },
+      "buckets": {
+        "ethnicity": {
+          "white_british": "White British",
+          "asian_british": "Asian British",
+          "black_british": "Black British",
+          "mixed": "Mixed heritage",
+          "other": "Other backgrounds"
+        },
+        "age": {
+          "young": "Under 30s",
+          "mid": "30s and 40s",
+          "mature": "50s and 60s",
+          "senior": "Over 65s"
+        },
+        "education": {
+          "no_qualifications": "No qualifications",
+          "gcse_equivalent": "GCSEs",
+          "a_level_equivalent": "A-levels",
+          "degree_plus": "Degree or higher"
+        },
+        "income": {
+          "low": "Lower income",
+          "middle": "Middle income",
+          "high": "Higher income"
+        },
+        "urbanization": {
+          "urban": "Cities",
+          "suburban": "Suburbs",
+          "rural": "Countryside"
+        }
+      }
+    }
+  },
+  "COUNTRY_COMMAND_FLAVOR": {
+    "shape": "country-first",
+    "value": {
+      "glyph": "SC",
+      "command": "DEFENCE STAFF",
+      "strip": "◆ RESTRICTED",
+      "acc": "#86d978"
+    }
+  },
+  "COUNTRY_MODIFIER_PATCHES": {
+    "shape": "absent",
+    "value": null
+  },
+  "COUNTRY_READINESS_EXPECTATIONS": {
+    "shape": "absent",
+    "value": null
+  },
+  "COUNTRY_SECTOR_WEIGHTS_1953": {
+    "shape": "absent",
+    "value": null
+  },
+  "DOMAIN_BUCKET_AFFINITIES": {
+    "shape": "absent",
+    "value": null
+  },
+  "GDP_DENOMINATION_1953": {
+    "shape": "absent",
+    "value": null
+  },
+  "GROUPS": {
+    "shape": "absent",
+    "value": null
+  },
+  "INITIAL_RATES": {
+    "shape": "country-first",
+    "value": 0.75
+  },
+  "MAJOR_DEFAULT_PARTIES": {
+    "shape": "absent",
+    "value": null
+  },
+  "MECHANICS_BY_COUNTRY": {
+    "shape": "country-first",
+    "value": {
+      "deputyFirstMinister": {
+        "positionId": "deputyFirstMinister",
+        "department": "Office of the First Minister",
+        "sealImage": "https://upload.wikimedia.org/wikipedia/commons/9/98/Royal_Coat_of_Arms_of_the_United_Kingdom_%28HM_Government%29_%28Tudor_Crown%29.svg",
+        "nationalMetrics": [
+          {
+            "category": "governance",
+            "metricId": "governmentApproval",
+            "label": "Government Approval",
+            "format": "percent",
+            "higherIsBetter": true
+          },
+          {
+            "category": "governance",
+            "metricId": "publicTrust",
+            "label": "Public Trust",
+            "format": "percent",
+            "higherIsBetter": true
+          }
+        ],
+        "regionalMetrics": [
+          {
+            "category": "governance",
+            "metricId": "governmentApproval",
+            "label": "Government Approval",
+            "format": "percent",
+            "higherIsBetter": true
+          }
+        ],
+        "tierSetting": {
+          "name": "Government Coordination Level",
+          "description": "Set the national coordination stance. Efficiency focus streamlines decision-making; outreach focus broadens public engagement.",
+          "defaultTier": "balanced",
+          "options": [
+            {
+              "id": "efficiency",
+              "label": "Efficiency",
+              "description": "Streamline government operations. Slightly boosts public trust but may reduce outreach engagement.",
+              "effects": {
+                "publicTrust": 0.02,
+                "governmentApproval": -0.01
+              }
+            },
+            {
+              "id": "balanced",
+              "label": "Balanced",
+              "description": "Balanced coordination. No additional metric effects.",
+              "effects": {}
+            },
+            {
+              "id": "outreach",
+              "label": "Outreach",
+              "description": "Expand public engagement programmes. Slightly boosts government approval but may slow internal decision-making.",
+              "effects": {
+                "governmentApproval": 0.02,
+                "publicTrust": -0.01
+              }
+            }
+          ]
+        },
+        "regionalTarget": {
+          "name": "Regional Governance Boost",
+          "description": "Direct enhanced governance support to one region. That region receives accelerated government approval improvement.",
+          "effects": {
+            "governmentApproval": 0.05
+          }
+        },
+        "emergency": {
+          "name": "Crisis Coordination Response",
+          "description": "Deploy emergency crisis coordination to a target region, delivering a temporary boost to public trust and government approval.",
+          "cost": 1,
+          "duration": 24,
+          "effects": {
+            "governmentApproval": 0.06,
+            "publicTrust": 0.06
+          }
+        }
+      },
+      "financeSecretary": {
+        "positionId": "financeSecretary",
+        "department": "Finance and Economy Directorate",
+        "sealImage": "https://upload.wikimedia.org/wikipedia/commons/9/98/Royal_Coat_of_Arms_of_the_United_Kingdom_%28HM_Government%29_%28Tudor_Crown%29.svg",
+        "nationalMetrics": [
+          {
+            "category": "economic",
+            "metricId": "gdpGrowth",
+            "label": "GDP Growth",
+            "format": "percent",
+            "higherIsBetter": true
+          },
+          {
+            "category": "economic",
+            "metricId": "povertyRate",
+            "label": "Poverty Rate",
+            "format": "percent",
+            "higherIsBetter": false
+          },
+          {
+            "category": "economic",
+            "metricId": "unemploymentRate",
+            "label": "Unemployment Rate",
+            "format": "percent",
+            "higherIsBetter": false
+          },
+          {
+            "category": "economic",
+            "metricId": "medianIncome",
+            "label": "Median Income",
+            "format": "currency",
+            "higherIsBetter": true
+          },
+          {
+            "category": "economic",
+            "metricId": "costOfLiving",
+            "label": "Cost of Living",
+            "format": "index",
+            "higherIsBetter": false
+          }
+        ],
+        "regionalMetrics": [
+          {
+            "category": "economic",
+            "metricId": "gdpGrowth",
+            "label": "GDP Growth",
+            "format": "percent",
+            "higherIsBetter": true
+          },
+          {
+            "category": "economic",
+            "metricId": "povertyRate",
+            "label": "Poverty Rate",
+            "format": "percent",
+            "higherIsBetter": false
+          },
+          {
+            "category": "economic",
+            "metricId": "unemploymentRate",
+            "label": "Unemployment Rate",
+            "format": "percent",
+            "higherIsBetter": false
+          },
+          {
+            "category": "economic",
+            "metricId": "medianIncome",
+            "label": "Median Income",
+            "format": "currency",
+            "higherIsBetter": true
+          },
+          {
+            "category": "economic",
+            "metricId": "propertyValueIndex",
+            "label": "Property Value",
+            "format": "index",
+            "higherIsBetter": true
+          },
+          {
+            "category": "economic",
+            "metricId": "commercialValueIndex",
+            "label": "Commercial Value",
+            "format": "index",
+            "higherIsBetter": true
+          }
+        ],
+        "allocation": {
+          "name": "Regional Funding Allocation",
+          "description": "Allocate the national local government funding pool across all 12 UK regions. Each region receives a percentage of the total pool. Must sum to 100%.",
+          "poolLabel": "Westminster Funding Pool"
+        },
+        "bondProfile": {
+          "name": "Sovereign Bond Maturity Profile",
+          "description": "Set the split of quarterly sovereign debt issuance across 1-year, 2-year, and 5-year maturities."
+        }
+      },
+      "externalAffairsSecretary": {
+        "positionId": "externalAffairsSecretary",
+        "department": "External Affairs Directorate",
+        "sealImage": "https://upload.wikimedia.org/wikipedia/commons/9/98/Royal_Coat_of_Arms_of_the_United_Kingdom_%28HM_Government%29_%28Tudor_Crown%29.svg",
+        "nationalMetrics": [
+          {
+            "category": "economic",
+            "metricId": "gdpGrowth",
+            "label": "GDP Growth",
+            "format": "percent",
+            "higherIsBetter": true
+          },
+          {
+            "category": "economic",
+            "metricId": "costOfLiving",
+            "label": "Cost of Living",
+            "format": "index",
+            "higherIsBetter": false
+          }
+        ],
+        "regionalMetrics": [
+          {
+            "category": "economic",
+            "metricId": "gdpGrowth",
+            "label": "GDP Growth",
+            "format": "percent",
+            "higherIsBetter": true
+          }
+        ],
+        "comingSoon": true
+      },
+      "justiceSecretary": {
+        "positionId": "justiceSecretary",
+        "department": "Justice and Home Affairs Directorate",
+        "sealImage": "https://upload.wikimedia.org/wikipedia/commons/9/98/Royal_Coat_of_Arms_of_the_United_Kingdom_%28HM_Government%29_%28Tudor_Crown%29.svg",
+        "nationalMetrics": [
+          {
+            "category": "publicSafety",
+            "metricId": "crimeRate",
+            "label": "Crime Rate",
+            "format": "index",
+            "higherIsBetter": false
+          },
+          {
+            "category": "publicSafety",
+            "metricId": "publicSafetyConfidence",
+            "label": "Public Safety",
+            "format": "index",
+            "higherIsBetter": true
+          }
+        ],
+        "regionalMetrics": [
+          {
+            "category": "publicSafety",
+            "metricId": "crimeRate",
+            "label": "Crime Rate",
+            "format": "index",
+            "higherIsBetter": false
+          },
+          {
+            "category": "publicSafety",
+            "metricId": "publicSafetyConfidence",
+            "label": "Public Safety",
+            "format": "index",
+            "higherIsBetter": true
+          }
+        ],
+        "tierSetting": {
+          "name": "Border Security Level",
+          "description": "Set the national border security policy. Stricter controls reduce crime but increase the cost of living; relaxed controls lower costs but may allow more criminal activity.",
+          "defaultTier": "standard",
+          "options": [
+            {
+              "id": "relaxed",
+              "label": "Relaxed",
+              "description": "Lighter border controls. Reduces cost of living pressure but may allow increased criminal activity.",
+              "effects": {
+                "crimeRate": 0.02,
+                "costOfLiving": -0.03
+              }
+            },
+            {
+              "id": "standard",
+              "label": "Standard",
+              "description": "Balanced border enforcement. No additional metric effects.",
+              "effects": {}
+            },
+            {
+              "id": "strict",
+              "label": "Strict",
+              "description": "Enhanced border enforcement. Reduces crime but increases cost of living due to stricter import controls.",
+              "effects": {
+                "crimeRate": -0.02,
+                "costOfLiving": 0.03
+              }
+            }
+          ]
+        },
+        "regionalTarget": {
+          "name": "Regional Policing Priority",
+          "description": "Focus national policing resources on one region. That region receives an enhanced crime reduction, but other regions see a slight increase as resources are redistributed.",
+          "effects": {
+            "crimeRate": -0.05
+          },
+          "nonTargetEffects": {
+            "crimeRate": 0.005
+          }
+        },
+        "emergency": {
+          "name": "Emergency Powers Declaration",
+          "description": "Declare emergency powers in a region with critically high crime. Delivers a large temporary crime reduction but damages government approval in that region.",
+          "cost": 1,
+          "duration": 24,
+          "effects": {
+            "crimeRate": -0.15
+          },
+          "regionMetricThreshold": {
+            "metric": "publicSafety.crimeRate",
+            "above": 5500
+          },
+          "sideEffects": {
+            "governmentApproval": -0.1
+          }
+        }
+      },
+      "defenceSecretary": {
+        "positionId": "defenceSecretary",
+        "department": "Defence Directorate",
+        "sealImage": "https://upload.wikimedia.org/wikipedia/commons/0/06/Ministry_of_Defence_%28United_Kingdom%29_badge.svg",
+        "nationalMetrics": [
+          {
+            "category": "governance",
+            "metricId": "publicTrust",
+            "label": "Public Trust",
+            "format": "percent",
+            "higherIsBetter": true
+          },
+          {
+            "category": "economic",
+            "metricId": "unemploymentRate",
+            "label": "Unemployment Rate",
+            "format": "percent",
+            "higherIsBetter": false
+          }
+        ],
+        "regionalMetrics": [
+          {
+            "category": "economic",
+            "metricId": "unemploymentRate",
+            "label": "Unemployment Rate",
+            "format": "percent",
+            "higherIsBetter": false
+          },
+          {
+            "category": "economic",
+            "metricId": "gdpGrowth",
+            "label": "GDP Growth",
+            "format": "percent",
+            "higherIsBetter": true
+          }
+        ],
+        "tierSetting": {
+          "name": "Military Readiness Level",
+          "description": "Set the national military readiness posture. Elevated readiness boosts public confidence but increases fiscal pressure; reduced readiness saves money at the cost of approval.",
+          "defaultTier": "standard",
+          "options": [
+            {
+              "id": "reduced",
+              "label": "Reduced",
+              "description": "Scaled-back military activity. Lower force readiness and defence upkeep, but demobilised garrison towns lose the work.",
+              "effects": {
+                "economic.unemploymentRate": 0.02,
+                "governance.publicTrust": -0.01
+              }
+            },
+            {
+              "id": "standard",
+              "label": "Standard",
+              "description": "Normal operational readiness. No additional metric effects.",
+              "effects": {}
+            },
+            {
+              "id": "elevated",
+              "label": "Elevated",
+              "description": "Heightened military readiness. Raises the readiness every formation trains toward and keeps garrison towns in work, at greater upkeep that crowds out civilian growth.",
+              "effects": {
+                "governance.publicTrust": 0.02,
+                "economic.unemploymentRate": -0.02,
+                "economic.gdpGrowth": -0.01
+              }
+            }
+          ]
+        },
+        "regionalTarget": {
+          "name": "Regional Base Investment",
+          "description": "Expand military facilities in one region. That region benefits from reduced unemployment (military employment) and a small GDP boost funded from the defence budget envelope.",
+          "effects": {
+            "unemploymentRate": -0.03,
+            "gdpGrowth": 0.02
+          }
+        }
+      },
+      "healthSecretary": {
+        "positionId": "healthSecretary",
+        "department": "Health and Social Care Directorate",
+        "sealImage": "https://upload.wikimedia.org/wikipedia/commons/9/98/Royal_Coat_of_Arms_of_the_United_Kingdom_%28HM_Government%29_%28Tudor_Crown%29.svg",
+        "nationalMetrics": [
+          {
+            "category": "healthcare",
+            "metricId": "publicHealthPreparedness",
+            "label": "Healthcare Quality",
+            "format": "index",
+            "higherIsBetter": true
+          }
+        ],
+        "regionalMetrics": [
+          {
+            "category": "healthcare",
+            "metricId": "publicHealthPreparedness",
+            "label": "Healthcare Quality",
+            "format": "index",
+            "higherIsBetter": true
+          }
+        ],
+        "allocation": {
+          "name": "NHS Resource Allocation",
+          "description": "Allocate NHS funding across all 12 UK regions. Each region receives a percentage of the total healthcare pool. Must sum to 100%.",
+          "poolLabel": "NHS Funding Pool"
+        },
+        "regionalTarget": {
+          "name": "Public Health Campaign",
+          "description": "Launch a focused public health campaign in one region, delivering a targeted healthcare quality improvement.",
+          "effects": {
+            "healthcare.publicHealthPreparedness": 0.05
+          }
+        }
+      },
+      "educationSecretary": {
+        "positionId": "educationSecretary",
+        "department": "Education and Skills Directorate",
+        "sealImage": "https://upload.wikimedia.org/wikipedia/commons/9/98/Royal_Coat_of_Arms_of_the_United_Kingdom_%28HM_Government%29_%28Tudor_Crown%29.svg",
+        "nationalMetrics": [
+          {
+            "category": "education",
+            "metricId": "workforceSkill",
+            "label": "Workforce Skill",
+            "format": "index",
+            "higherIsBetter": true
+          },
+          {
+            "category": "economic",
+            "metricId": "unemploymentRate",
+            "label": "Unemployment Rate",
+            "format": "percent",
+            "higherIsBetter": false
+          }
+        ],
+        "regionalMetrics": [
+          {
+            "category": "education",
+            "metricId": "workforceSkill",
+            "label": "Workforce Skill",
+            "format": "index",
+            "higherIsBetter": true
+          }
+        ],
+        "tierSetting": {
+          "name": "Curriculum Reform Focus",
+          "description": "Set the national curriculum direction. Vocational focus improves near-term employment; academic focus builds long-term skill levels; balanced delivers steady improvement across both.",
+          "defaultTier": "balanced",
+          "options": [
+            {
+              "id": "vocational",
+              "label": "Vocational",
+              "description": "Prioritise trade and vocational training. Reduces unemployment faster but slows overall skill growth.",
+              "effects": {
+                "unemploymentRate": -0.02,
+                "workforceSkill": -0.01
+              }
+            },
+            {
+              "id": "balanced",
+              "label": "Balanced",
+              "description": "Balanced curriculum. No additional metric effects.",
+              "effects": {}
+            },
+            {
+              "id": "academic",
+              "label": "Academic",
+              "description": "Prioritise academic excellence. Accelerates workforce skill growth but does not directly help short-term employment.",
+              "effects": {
+                "workforceSkill": 0.03,
+                "unemploymentRate": 0.01
+              }
+            }
+          ]
+        },
+        "regionalTarget": {
+          "name": "Education Investment Priority",
+          "description": "Direct enhanced education funding to one region. That region receives accelerated workforce skill improvement.",
+          "effects": {
+            "workforceSkill": 0.05
+          }
+        },
+        "emergency": {
+          "name": "Skills Initiative",
+          "description": "Launch an emergency workforce development programme in a target region, delivering a significant temporary boost to workforce skill.",
+          "cost": 1,
+          "duration": 24,
+          "effects": {
+            "workforceSkill": 0.08
+          }
+        }
+      },
+      "economySecretary": {
+        "positionId": "economySecretary",
+        "department": "Economy Directorate",
+        "sealImage": "https://upload.wikimedia.org/wikipedia/commons/9/98/Royal_Coat_of_Arms_of_the_United_Kingdom_%28HM_Government%29_%28Tudor_Crown%29.svg",
+        "nationalMetrics": [
+          {
+            "category": "economic",
+            "metricId": "gdpGrowth",
+            "label": "GDP Growth",
+            "format": "percent",
+            "higherIsBetter": true
+          },
+          {
+            "category": "economic",
+            "metricId": "costOfLiving",
+            "label": "Cost of Living",
+            "format": "index",
+            "higherIsBetter": false
+          }
+        ],
+        "regionalMetrics": [
+          {
+            "category": "economic",
+            "metricId": "gdpGrowth",
+            "label": "GDP Growth",
+            "format": "percent",
+            "higherIsBetter": true
+          },
+          {
+            "category": "economic",
+            "metricId": "costOfLiving",
+            "label": "Cost of Living",
+            "format": "index",
+            "higherIsBetter": false
+          }
+        ],
+        "tierSetting": {
+          "name": "Trade Policy Focus",
+          "description": "Set the national trade stance. Protectionist policy supports domestic industry at the cost of higher consumer prices; free trade reduces prices but increases competitive pressure on domestic firms.",
+          "defaultTier": "balanced",
+          "options": [
+            {
+              "id": "protectionist",
+              "label": "Protectionist",
+              "description": "Domestic-first trade policy. Small GDP boost from sheltered industry but increases cost of living through import tariffs.",
+              "effects": {
+                "gdpGrowth": 0.01,
+                "costOfLiving": 0.02
+              }
+            },
+            {
+              "id": "balanced",
+              "label": "Balanced",
+              "description": "Balanced trade policy. No additional metric effects.",
+              "effects": {}
+            },
+            {
+              "id": "free_trade",
+              "label": "Free Trade",
+              "description": "Open trade policy. Reduces cost of living through cheaper imports but slightly reduces GDP as domestic firms face competition.",
+              "effects": {
+                "gdpGrowth": -0.01,
+                "costOfLiving": -0.02
+              }
+            }
+          ]
+        },
+        "regionalTarget": {
+          "name": "Enterprise Zone",
+          "description": "Designate one region as an enterprise zone. Corporations with sectors in that region receive investment benefits, delivering a GDP growth boost.",
+          "effects": {
+            "gdpGrowth": 0.04
+          }
+        },
+        "emergency": {
+          "name": "Small Business Grant",
+          "description": "Deploy emergency small business grants in a target region, delivering a temporary GDP boost and reducing cost of living pressure.",
+          "cost": 1,
+          "duration": 24,
+          "effects": {
+            "gdpGrowth": 0.06,
+            "costOfLiving": -0.05
+          }
+        }
+      },
+      "communitiesSecretary": {
+        "positionId": "communitiesSecretary",
+        "department": "Communities and Local Government Directorate",
+        "sealImage": "https://upload.wikimedia.org/wikipedia/commons/9/98/Royal_Coat_of_Arms_of_the_United_Kingdom_%28HM_Government%29_%28Tudor_Crown%29.svg",
+        "nationalMetrics": [
+          {
+            "category": "economic",
+            "metricId": "gdpGrowth",
+            "label": "GDP Growth",
+            "format": "percent",
+            "higherIsBetter": true
+          },
+          {
+            "category": "economic",
+            "metricId": "unemploymentRate",
+            "label": "Unemployment Rate",
+            "format": "percent",
+            "higherIsBetter": false
+          },
+          {
+            "category": "governance",
+            "metricId": "devolutionSatisfaction",
+            "label": "Devolution Satisfaction",
+            "format": "index",
+            "higherIsBetter": true
+          }
+        ],
+        "regionalMetrics": [
+          {
+            "category": "economic",
+            "metricId": "gdpGrowth",
+            "label": "GDP Growth",
+            "format": "percent",
+            "higherIsBetter": true
+          },
+          {
+            "category": "economic",
+            "metricId": "unemploymentRate",
+            "label": "Unemployment Rate",
+            "format": "percent",
+            "higherIsBetter": false
+          },
+          {
+            "category": "economic",
+            "metricId": "costOfLiving",
+            "label": "Cost of Living",
+            "format": "index",
+            "higherIsBetter": false
+          }
+        ],
+        "allocation": {
+          "name": "Levelling Up Fund",
+          "description": "Allocate the Levelling Up investment fund to regions below the national average. Funds boost GDP and reduce unemployment in target regions.",
+          "poolLabel": "Levelling Up Fund"
+        },
+        "regionalTarget": {
+          "name": "Devolution Grant",
+          "description": "Award enhanced local governance funding to one region. That region receives a boost to devolution satisfaction and government approval.",
+          "effects": {
+            "devolutionSatisfaction": 0.05,
+            "governmentApproval": 0.03
+          }
+        },
+        "emergency": {
+          "name": "Housing Development Order",
+          "description": "Issue an emergency housing development order in a target region, delivering a significant temporary reduction in cost of living.",
+          "cost": 1,
+          "duration": 24,
+          "effects": {
+            "costOfLiving": -0.08
+          }
+        }
+      },
+      "transportSecretary": {
+        "positionId": "transportSecretary",
+        "department": "Transport Scotland",
+        "sealImage": "https://upload.wikimedia.org/wikipedia/commons/9/98/Royal_Coat_of_Arms_of_the_United_Kingdom_%28HM_Government%29_%28Tudor_Crown%29.svg",
+        "nationalMetrics": [
+          {
+            "category": "infrastructure",
+            "metricId": "roadCondition",
+            "label": "Road Condition",
+            "format": "index",
+            "higherIsBetter": true
+          },
+          {
+            "category": "infrastructure",
+            "metricId": "broadbandAccess",
+            "label": "Broadband Access",
+            "format": "index",
+            "higherIsBetter": true
+          },
+          {
+            "category": "infrastructure",
+            "metricId": "powerGridReliability",
+            "label": "Power Grid Reliability",
+            "format": "index",
+            "higherIsBetter": true
+          }
+        ],
+        "regionalMetrics": [
+          {
+            "category": "infrastructure",
+            "metricId": "roadCondition",
+            "label": "Road Condition",
+            "format": "index",
+            "higherIsBetter": true
+          },
+          {
+            "category": "infrastructure",
+            "metricId": "broadbandAccess",
+            "label": "Broadband Access",
+            "format": "index",
+            "higherIsBetter": true
+          },
+          {
+            "category": "infrastructure",
+            "metricId": "powerGridReliability",
+            "label": "Power Grid Reliability",
+            "format": "index",
+            "higherIsBetter": true
+          }
+        ],
+        "tierSetting": {
+          "name": "National Infrastructure Programme",
+          "description": "Set the national infrastructure investment focus. Roads priority accelerates road condition improvement; digital priority accelerates broadband; balanced delivers steady improvement across both.",
+          "defaultTier": "balanced",
+          "options": [
+            {
+              "id": "roads",
+              "label": "Roads Priority",
+              "description": "Concentrate infrastructure spending on roads. Road conditions improve faster but broadband investment stalls.",
+              "effects": {
+                "roadCondition": 0.03,
+                "broadbandAccess": -0.01
+              }
+            },
+            {
+              "id": "balanced",
+              "label": "Balanced",
+              "description": "Even infrastructure investment. No additional metric effects.",
+              "effects": {}
+            },
+            {
+              "id": "digital",
+              "label": "Digital Priority",
+              "description": "Concentrate infrastructure spending on digital connectivity. Broadband access improves faster but road maintenance slows.",
+              "effects": {
+                "broadbandAccess": 0.03,
+                "roadCondition": -0.01
+              }
+            }
+          ]
+        },
+        "regionalTarget": {
+          "name": "Infrastructure Investment Priority",
+          "description": "Focus infrastructure spending on one region. That region receives accelerated road condition and broadband access improvement.",
+          "effects": {
+            "roadCondition": 0.05,
+            "broadbandAccess": 0.05
+          }
+        },
+        "emergency": {
+          "name": "Emergency Road Repair",
+          "description": "Dispatch emergency repair crews to a region with poor road conditions, delivering a large temporary improvement to road condition.",
+          "cost": 1,
+          "duration": 24,
+          "effects": {
+            "roadCondition": 0.12
+          }
+        }
+      },
+      "netZeroSecretary": {
+        "positionId": "netZeroSecretary",
+        "department": "Net Zero and Energy Directorate",
+        "sealImage": "https://upload.wikimedia.org/wikipedia/commons/9/98/Royal_Coat_of_Arms_of_the_United_Kingdom_%28HM_Government%29_%28Tudor_Crown%29.svg",
+        "nationalMetrics": [
+          {
+            "category": "environment",
+            "metricId": "carbonEmissions",
+            "label": "Carbon Emissions",
+            "format": "index",
+            "higherIsBetter": false
+          }
+        ],
+        "regionalMetrics": [
+          {
+            "category": "environment",
+            "metricId": "carbonEmissions",
+            "label": "Carbon Emissions",
+            "format": "index",
+            "higherIsBetter": false
+          }
+        ],
+        "tierSetting": {
+          "name": "Environmental Policy Stance",
+          "description": "Set the national environmental policy direction. Growth priority relaxes environmental constraints for short-term economic gain; green priority tightens constraints for faster emissions reduction at a slight economic cost.",
+          "defaultTier": "balanced",
+          "options": [
+            {
+              "id": "growth_priority",
+              "label": "Growth Priority",
+              "description": "Relax environmental constraints to stimulate economic activity. Small GDP boost but carbon emissions increase.",
+              "effects": {
+                "gdpGrowth": 0.02,
+                "carbonEmissions": 0.03
+              }
+            },
+            {
+              "id": "balanced",
+              "label": "Balanced",
+              "description": "Balanced environmental policy. No additional metric effects.",
+              "effects": {}
+            },
+            {
+              "id": "green_priority",
+              "label": "Green Priority",
+              "description": "Tighten environmental constraints to accelerate decarbonisation. Carbon emissions reduce faster but GDP growth slows slightly.",
+              "effects": {
+                "carbonEmissions": -0.03,
+                "gdpGrowth": -0.01
+              }
+            }
+          ]
+        },
+        "regionalTarget": {
+          "name": "Green Investment Zone",
+          "description": "Designate one region for enhanced environmental funding. That region receives accelerated carbon emissions reduction.",
+          "effects": {
+            "carbonEmissions": -0.06
+          }
+        },
+        "emergency": {
+          "name": "Environmental Emergency Response",
+          "description": "Deploy emergency environmental response teams to a region with high carbon emissions, delivering a large temporary reduction.",
+          "cost": 1,
+          "duration": 24,
+          "effects": {
+            "carbonEmissions": -0.15
+          }
+        }
+      },
+      "socialJusticeSecretary": {
+        "positionId": "socialJusticeSecretary",
+        "department": "Social Justice Directorate",
+        "sealImage": "https://upload.wikimedia.org/wikipedia/commons/9/98/Royal_Coat_of_Arms_of_the_United_Kingdom_%28HM_Government%29_%28Tudor_Crown%29.svg",
+        "nationalMetrics": [
+          {
+            "category": "economic",
+            "metricId": "unemploymentRate",
+            "label": "Unemployment Rate",
+            "format": "percent",
+            "higherIsBetter": false
+          },
+          {
+            "category": "economic",
+            "metricId": "costOfLiving",
+            "label": "Cost of Living",
+            "format": "index",
+            "higherIsBetter": false
+          }
+        ],
+        "regionalMetrics": [
+          {
+            "category": "economic",
+            "metricId": "unemploymentRate",
+            "label": "Unemployment Rate",
+            "format": "percent",
+            "higherIsBetter": false
+          },
+          {
+            "category": "economic",
+            "metricId": "costOfLiving",
+            "label": "Cost of Living",
+            "format": "index",
+            "higherIsBetter": false
+          }
+        ],
+        "tierSetting": {
+          "name": "Welfare Policy Stance",
+          "description": "Set the national welfare policy. Generous support reduces unemployment faster but increases the cost of living through higher public spending; austere policy cuts costs but slows unemployment reduction.",
+          "defaultTier": "standard",
+          "options": [
+            {
+              "id": "generous",
+              "label": "Generous",
+              "description": "Enhanced welfare support. Reduces unemployment faster but increases cost of living through higher benefit spending.",
+              "effects": {
+                "unemploymentRate": -0.02,
+                "costOfLiving": 0.02
+              }
+            },
+            {
+              "id": "standard",
+              "label": "Standard",
+              "description": "Standard welfare provision. No additional metric effects.",
+              "effects": {}
+            },
+            {
+              "id": "austere",
+              "label": "Austere",
+              "description": "Reduced welfare spending. Lowers cost of living but slows unemployment reduction as support is scaled back.",
+              "effects": {
+                "costOfLiving": -0.02,
+                "unemploymentRate": 0.01
+              }
+            }
+          ]
+        },
+        "regionalTarget": {
+          "name": "Jobs Programme Priority",
+          "description": "Focus employment support resources on one region. That region receives accelerated unemployment reduction.",
+          "effects": {
+            "unemploymentRate": -0.05
+          }
+        },
+        "emergency": {
+          "name": "Emergency Employment Scheme",
+          "description": "Launch an emergency employment scheme in a region with high unemployment, delivering a significant temporary reduction in the unemployment rate.",
+          "cost": 1,
+          "duration": 24,
+          "effects": {
+            "unemploymentRate": -0.12
+          }
+        }
+      }
+    }
+  },
+  "MEDIAN_INCOME_THRESHOLDS": {
+    "shape": "absent",
+    "value": null
+  },
+  "POPULATION_MULTIPLIERS": {
+    "shape": "absent",
+    "value": null
+  },
+  "ORDERS_BY_COUNTRY": {
+    "shape": "country-first",
+    "value": {
+      "deputyFirstMinister": [
+        {
+          "id": "government_coordination_drive",
+          "name": "Government Coordination Drive",
+          "description": "Launch a cross-government coordination drive to improve delivery, for a temporary boost to government approval.",
+          "duration": 24,
+          "effects": [
+            {
+              "metric": "governmentApproval",
+              "modifier": 0.04,
+              "scope": "national"
+            }
+          ]
+        },
+        {
+          "id": "public_trust_campaign",
+          "name": "Public Trust Campaign",
+          "description": "Lead a national campaign to rebuild public confidence in government, for a temporary boost to public trust.",
+          "duration": 24,
+          "effects": [
+            {
+              "metric": "publicTrust",
+              "modifier": 0.04,
+              "scope": "national"
+            }
+          ]
+        }
+      ],
+      "financeSecretary": [
+        {
+          "id": "emergency_budget_review",
+          "name": "Emergency Budget Review",
+          "description": "Conduct an emergency review of the national budget, unlocking efficiency gains for a temporary GDP growth bonus.",
+          "duration": 24,
+          "effects": [
+            {
+              "metric": "gdpGrowth",
+              "modifier": 0.03,
+              "scope": "national"
+            }
+          ]
+        },
+        {
+          "id": "fiscal_stimulus",
+          "name": "Fiscal Stimulus Package",
+          "description": "Deploy a targeted fiscal stimulus package to boost employment, for a temporary drop in unemployment.",
+          "duration": 24,
+          "effects": [
+            {
+              "metric": "unemploymentRate",
+              "modifier": -0.03,
+              "scope": "national"
+            }
+          ]
+        }
+      ],
+      "externalAffairsSecretary": [
+        {
+          "id": "diplomatic_summit",
+          "name": "Diplomatic Summit",
+          "description": "Host a major diplomatic summit to strengthen trade relationships, for an enhanced GDP growth bonus for the order duration.",
+          "duration": 24,
+          "effects": [
+            {
+              "metric": "gdpGrowth",
+              "modifier": 0.04,
+              "scope": "national"
+            }
+          ]
+        },
+        {
+          "id": "emergency_humanitarian_response",
+          "name": "Emergency Humanitarian Response",
+          "description": "Lead an emergency humanitarian response that raises the UK's international standing and boosts domestic government approval.",
+          "duration": 24,
+          "effects": [
+            {
+              "metric": "governmentApproval",
+              "modifier": 0.05,
+              "scope": "national"
+            }
+          ]
+        }
+      ],
+      "justiceSecretary": [
+        {
+          "id": "enhanced_policing_directive",
+          "name": "Enhanced Policing Directive",
+          "description": "Issue a national enhanced policing directive, for a temporary drop in crime.",
+          "duration": 24,
+          "effects": [
+            {
+              "metric": "crimeRate",
+              "modifier": -0.04,
+              "scope": "national"
+            }
+          ]
+        },
+        {
+          "id": "public_safety_initiative",
+          "name": "Public Safety Initiative",
+          "description": "Launch a national public safety campaign, for a temporary boost to the public safety index.",
+          "duration": 24,
+          "effects": [
+            {
+              "metric": "publicSafety",
+              "modifier": 0.04,
+              "scope": "national"
+            }
+          ]
+        }
+      ],
+      "defenceSecretary": [
+        {
+          "id": "national_defence_review",
+          "name": "National Defence Review",
+          "description": "Conduct a comprehensive national defence review that reassures the public, for a temporary boost to government approval.",
+          "duration": 24,
+          "effects": [
+            {
+              "metric": "governmentApproval",
+              "modifier": 0.03,
+              "scope": "national"
+            }
+          ]
+        },
+        {
+          "id": "veterans_support_programme",
+          "name": "Veterans Support Programme",
+          "description": "Launch a veterans employment support programme in the region with the primary military base, for a temporary regional drop in unemployment.",
+          "duration": 24,
+          "effects": [
+            {
+              "metric": "unemploymentRate",
+              "modifier": -0.04,
+              "scope": "regional"
+            }
+          ]
+        }
+      ],
+      "healthSecretary": [
+        {
+          "id": "nhs_emergency_funding",
+          "name": "NHS Emergency Funding",
+          "description": "Release emergency NHS funding to clear backlogs and improve service delivery, for a temporary boost to healthcare quality.",
+          "duration": 24,
+          "effects": [
+            {
+              "metric": "healthcareQuality",
+              "modifier": 0.05,
+              "scope": "national"
+            }
+          ]
+        },
+        {
+          "id": "social_care_investment",
+          "name": "Social Care Investment",
+          "description": "Deploy emergency social care investment to improve community support systems, for a temporary boost to social cohesion.",
+          "duration": 24,
+          "effects": [
+            {
+              "metric": "socialCohesion",
+              "modifier": 0.04,
+              "scope": "national"
+            }
+          ]
+        }
+      ],
+      "educationSecretary": [
+        {
+          "id": "national_education_review",
+          "name": "National Education Review",
+          "description": "Conduct a national education review that identifies and implements quick-win improvements, for a temporary boost to workforce skill.",
+          "duration": 24,
+          "effects": [
+            {
+              "metric": "workforceSkill",
+              "modifier": 0.04,
+              "scope": "national"
+            }
+          ]
+        },
+        {
+          "id": "teacher_recruitment_drive",
+          "name": "Teacher Recruitment Drive",
+          "description": "Launch an emergency teacher recruitment drive to address shortfalls, for a temporary boost to workforce skill.",
+          "duration": 24,
+          "effects": [
+            {
+              "metric": "workforceSkill",
+              "modifier": 0.03,
+              "scope": "national"
+            }
+          ]
+        }
+      ],
+      "economySecretary": [
+        {
+          "id": "trade_mission",
+          "name": "Trade Mission",
+          "description": "Lead a high-profile international trade mission to secure new commercial agreements, for a temporary national GDP boost.",
+          "duration": 24,
+          "effects": [
+            {
+              "metric": "gdpGrowth",
+              "modifier": 0.03,
+              "scope": "national"
+            }
+          ]
+        },
+        {
+          "id": "consumer_protection_initiative",
+          "name": "Consumer Protection Initiative",
+          "description": "Implement a consumer protection initiative targeting price gouging and market manipulation, for a temporary drop in cost of living.",
+          "duration": 24,
+          "effects": [
+            {
+              "metric": "costOfLiving",
+              "modifier": -0.04,
+              "scope": "national"
+            }
+          ]
+        }
+      ],
+      "communitiesSecretary": [
+        {
+          "id": "regional_investment_programme",
+          "name": "Regional Investment Programme",
+          "description": "Deploy a targeted regional investment programme to the lowest-performing regions, for a temporary regional GDP boost.",
+          "duration": 24,
+          "effects": [
+            {
+              "metric": "gdpGrowth",
+              "modifier": 0.05,
+              "scope": "regional"
+            }
+          ]
+        },
+        {
+          "id": "community_regeneration_fund",
+          "name": "Community Regeneration Fund",
+          "description": "Release a community regeneration fund for deprived regions, for a temporary regional boost to government approval.",
+          "duration": 24,
+          "effects": [
+            {
+              "metric": "governmentApproval",
+              "modifier": 0.04,
+              "scope": "regional"
+            }
+          ]
+        }
+      ],
+      "transportSecretary": [
+        {
+          "id": "national_infrastructure_review",
+          "name": "National Infrastructure Review",
+          "description": "Conduct a national infrastructure review that fast-tracks priority projects, for a temporary boost to road condition and broadband access.",
+          "duration": 24,
+          "effects": [
+            {
+              "metric": "roadCondition",
+              "modifier": 0.04,
+              "scope": "national"
+            },
+            {
+              "metric": "broadbandAccess",
+              "modifier": 0.04,
+              "scope": "national"
+            }
+          ]
+        },
+        {
+          "id": "transport_connectivity_programme",
+          "name": "Transport Connectivity Programme",
+          "description": "Launch a connectivity improvement programme in the infrastructure investment priority region, for a temporary regional GDP boost through better accessibility.",
+          "duration": 24,
+          "effects": [
+            {
+              "metric": "gdpGrowth",
+              "modifier": 0.04,
+              "scope": "regional"
+            }
+          ]
+        }
+      ],
+      "netZeroSecretary": [
+        {
+          "id": "green_energy_initiative",
+          "name": "Green Energy Initiative",
+          "description": "Launch a national green energy initiative accelerating the transition to clean power, for a temporary drop in carbon emissions.",
+          "duration": 24,
+          "effects": [
+            {
+              "metric": "carbonEmissions",
+              "modifier": -0.05,
+              "scope": "national"
+            }
+          ]
+        },
+        {
+          "id": "agricultural_support_package",
+          "name": "Agricultural Support Package",
+          "description": "Deploy an agricultural support package to stabilise food supply chains, for a temporary drop in cost of living.",
+          "duration": 24,
+          "effects": [
+            {
+              "metric": "costOfLiving",
+              "modifier": -0.03,
+              "scope": "national"
+            }
+          ]
+        }
+      ],
+      "socialJusticeSecretary": [
+        {
+          "id": "national_jobs_programme",
+          "name": "National Jobs Programme",
+          "description": "Launch a national jobs programme creating employment opportunities across all regions, for a temporary drop in unemployment.",
+          "duration": 24,
+          "effects": [
+            {
+              "metric": "unemploymentRate",
+              "modifier": -0.04,
+              "scope": "national"
+            }
+          ]
+        },
+        {
+          "id": "cost_of_living_support_package",
+          "name": "Cost of Living Support Package",
+          "description": "Deploy a targeted cost of living support package including energy bill relief and household grants, for a temporary reduction.",
+          "duration": 24,
+          "effects": [
+            {
+              "metric": "costOfLiving",
+              "modifier": -0.04,
+              "scope": "national"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "UNION_NAMES_BY_ERA": {
+    "shape": "absent",
+    "value": null
+  },
+  "CABINET_IDENTITY": {
+    "shape": "absent",
+    "value": null
+  },
+  "CENSUS_BUNDLES": {
+    "shape": "country-first",
+    "value": {
+      "2019-default": {
+        "GLA": {
+          "ethnicity": {
+            "white_british": 84,
+            "asian_british": 8,
+            "black_british": 3,
+            "mixed": 3,
+            "other": 2
+          },
+          "age": {
+            "young": 21,
+            "mid": 27,
+            "mature": 28,
+            "senior": 24
+          },
+          "education": {
+            "no_qualifications": 12,
+            "gcse_equivalent": 25,
+            "a_level_equivalent": 27,
+            "degree_plus": 36
+          },
+          "income": {
+            "low": 32,
+            "middle": 49,
+            "high": 19
+          },
+          "urbanization": {
+            "urban": 93,
+            "suburban": 5,
+            "rural": 2
+          }
+        },
+        "LOT": {
+          "ethnicity": {
+            "white_british": 89,
+            "asian_british": 6,
+            "black_british": 1,
+            "mixed": 2,
+            "other": 2
+          },
+          "age": {
+            "young": 20,
+            "mid": 27,
+            "mature": 28,
+            "senior": 25
+          },
+          "education": {
+            "no_qualifications": 6,
+            "gcse_equivalent": 19,
+            "a_level_equivalent": 27,
+            "degree_plus": 48
+          },
+          "income": {
+            "low": 19,
+            "middle": 51,
+            "high": 30
+          },
+          "urbanization": {
+            "urban": 82,
+            "suburban": 13,
+            "rural": 5
+          }
+        },
+        "HIG": {
+          "ethnicity": {
+            "white_british": 97,
+            "asian_british": 1,
+            "black_british": 0,
+            "mixed": 1,
+            "other": 1
+          },
+          "age": {
+            "young": 14,
+            "mid": 22,
+            "mature": 32,
+            "senior": 32
+          },
+          "education": {
+            "no_qualifications": 10,
+            "gcse_equivalent": 27,
+            "a_level_equivalent": 30,
+            "degree_plus": 33
+          },
+          "income": {
+            "low": 25,
+            "middle": 54,
+            "high": 21
+          },
+          "urbanization": {
+            "urban": 33,
+            "suburban": 17,
+            "rural": 50
+          }
+        },
+        "GRA": {
+          "ethnicity": {
+            "white_british": 92,
+            "asian_british": 3,
+            "black_british": 1,
+            "mixed": 2,
+            "other": 2
+          },
+          "age": {
+            "young": 16,
+            "mid": 27,
+            "mature": 30,
+            "senior": 27
+          },
+          "education": {
+            "no_qualifications": 8,
+            "gcse_equivalent": 23,
+            "a_level_equivalent": 28,
+            "degree_plus": 41
+          },
+          "income": {
+            "low": 20,
+            "middle": 51,
+            "high": 29
+          },
+          "urbanization": {
+            "urban": 58,
+            "suburban": 22,
+            "rural": 20
+          }
+        },
+        "TAY": {
+          "ethnicity": {
+            "white_british": 93,
+            "asian_british": 3,
+            "black_british": 1,
+            "mixed": 2,
+            "other": 1
+          },
+          "age": {
+            "young": 17,
+            "mid": 24,
+            "mature": 30,
+            "senior": 29
+          },
+          "education": {
+            "no_qualifications": 9,
+            "gcse_equivalent": 24,
+            "a_level_equivalent": 28,
+            "degree_plus": 39
+          },
+          "income": {
+            "low": 24,
+            "middle": 52,
+            "high": 24
+          },
+          "urbanization": {
+            "urban": 62,
+            "suburban": 19,
+            "rural": 19
+          }
+        },
+        "STH": {
+          "ethnicity": {
+            "white_british": 96,
+            "asian_british": 2,
+            "black_british": 0,
+            "mixed": 1,
+            "other": 1
+          },
+          "age": {
+            "young": 14,
+            "mid": 22,
+            "mature": 32,
+            "senior": 32
+          },
+          "education": {
+            "no_qualifications": 11,
+            "gcse_equivalent": 28,
+            "a_level_equivalent": 29,
+            "degree_plus": 32
+          },
+          "income": {
+            "low": 27,
+            "middle": 54,
+            "high": 19
+          },
+          "urbanization": {
+            "urban": 45,
+            "suburban": 22,
+            "rural": 33
+          }
+        },
+        "CSC": {
+          "ethnicity": {
+            "white_british": 95,
+            "asian_british": 2,
+            "black_british": 1,
+            "mixed": 1,
+            "other": 1
+          },
+          "age": {
+            "young": 17,
+            "mid": 24,
+            "mature": 31,
+            "senior": 28
+          },
+          "education": {
+            "no_qualifications": 12,
+            "gcse_equivalent": 28,
+            "a_level_equivalent": 28,
+            "degree_plus": 32
+          },
+          "income": {
+            "low": 27,
+            "middle": 52,
+            "high": 21
+          },
+          "urbanization": {
+            "urban": 81,
+            "suburban": 12,
+            "rural": 7
+          }
+        }
+      },
+      "1991-default": {
+        "GLA": {
+          "ethnicity": {
+            "white_british": 95,
+            "asian_british": 3,
+            "black_british": 1,
+            "mixed": 1,
+            "other": 0
+          },
+          "age": {
+            "young": 23,
+            "mid": 23,
+            "mature": 33,
+            "senior": 21
+          },
+          "education": {
+            "no_qualifications": 45,
+            "gcse_equivalent": 28,
+            "a_level_equivalent": 15,
+            "degree_plus": 12
+          },
+          "income": {
+            "low": 36,
+            "middle": 51,
+            "high": 13
+          },
+          "urbanization": {
+            "urban": 70,
+            "suburban": 18,
+            "rural": 12
+          }
+        },
+        "LOT": {
+          "ethnicity": {
+            "white_british": 97,
+            "asian_british": 2,
+            "black_british": 0,
+            "mixed": 1,
+            "other": 0
+          },
+          "age": {
+            "young": 22,
+            "mid": 24,
+            "mature": 31,
+            "senior": 23
+          },
+          "education": {
+            "no_qualifications": 28,
+            "gcse_equivalent": 27,
+            "a_level_equivalent": 22,
+            "degree_plus": 23
+          },
+          "income": {
+            "low": 22,
+            "middle": 54,
+            "high": 24
+          },
+          "urbanization": {
+            "urban": 58,
+            "suburban": 28,
+            "rural": 14
+          }
+        },
+        "HIG": {
+          "ethnicity": {
+            "white_british": 99,
+            "asian_british": 0,
+            "black_british": 0,
+            "mixed": 1,
+            "other": 0
+          },
+          "age": {
+            "young": 16,
+            "mid": 22,
+            "mature": 34,
+            "senior": 28
+          },
+          "education": {
+            "no_qualifications": 42,
+            "gcse_equivalent": 28,
+            "a_level_equivalent": 16,
+            "degree_plus": 14
+          },
+          "income": {
+            "low": 29,
+            "middle": 54,
+            "high": 17
+          },
+          "urbanization": {
+            "urban": 25,
+            "suburban": 23,
+            "rural": 52
+          }
+        },
+        "GRA": {
+          "ethnicity": {
+            "white_british": 98,
+            "asian_british": 1,
+            "black_british": 0,
+            "mixed": 1,
+            "other": 0
+          },
+          "age": {
+            "young": 18,
+            "mid": 24,
+            "mature": 34,
+            "senior": 24
+          },
+          "education": {
+            "no_qualifications": 35,
+            "gcse_equivalent": 28,
+            "a_level_equivalent": 20,
+            "degree_plus": 17
+          },
+          "income": {
+            "low": 24,
+            "middle": 54,
+            "high": 22
+          },
+          "urbanization": {
+            "urban": 44,
+            "suburban": 29,
+            "rural": 27
+          }
+        },
+        "TAY": {
+          "ethnicity": {
+            "white_british": 98,
+            "asian_british": 1,
+            "black_british": 0,
+            "mixed": 1,
+            "other": 0
+          },
+          "age": {
+            "young": 19,
+            "mid": 23,
+            "mature": 33,
+            "senior": 25
+          },
+          "education": {
+            "no_qualifications": 38,
+            "gcse_equivalent": 28,
+            "a_level_equivalent": 19,
+            "degree_plus": 15
+          },
+          "income": {
+            "low": 27,
+            "middle": 54,
+            "high": 19
+          },
+          "urbanization": {
+            "urban": 48,
+            "suburban": 29,
+            "rural": 23
+          }
+        },
+        "STH": {
+          "ethnicity": {
+            "white_british": 99,
+            "asian_british": 1,
+            "black_british": 0,
+            "mixed": 0,
+            "other": 0
+          },
+          "age": {
+            "young": 16,
+            "mid": 22,
+            "mature": 34,
+            "senior": 28
+          },
+          "education": {
+            "no_qualifications": 41,
+            "gcse_equivalent": 29,
+            "a_level_equivalent": 18,
+            "degree_plus": 12
+          },
+          "income": {
+            "low": 30,
+            "middle": 54,
+            "high": 16
+          },
+          "urbanization": {
+            "urban": 36,
+            "suburban": 30,
+            "rural": 34
+          }
+        },
+        "CSC": {
+          "ethnicity": {
+            "white_british": 98,
+            "asian_british": 1,
+            "black_british": 0,
+            "mixed": 1,
+            "other": 0
+          },
+          "age": {
+            "young": 20,
+            "mid": 23,
+            "mature": 33,
+            "senior": 24
+          },
+          "education": {
+            "no_qualifications": 44,
+            "gcse_equivalent": 29,
+            "a_level_equivalent": 15,
+            "degree_plus": 12
+          },
+          "income": {
+            "low": 30,
+            "middle": 54,
+            "high": 16
+          },
+          "urbanization": {
+            "urban": 60,
+            "suburban": 29,
+            "rural": 11
+          }
+        }
+      }
+    }
+  },
+  "CONSCRIPTION_SEED": {
+    "shape": "absent",
+    "value": null
+  },
+  "CORE5_NORMALS": {
+    "shape": "absent",
+    "value": null
+  },
+  "COST_SCALE_ANCHORS": {
+    "shape": "absent",
+    "value": null
+  },
+  "COUNTRY_BILL_PHASES": {
+    "shape": "absent",
+    "value": null
+  },
+  "COUNTRY_CONFIGS": {
+    "shape": "country-first",
+    "value": {
+      "id": "SCO",
+      "seedEconomicModel": {
+        "1991": "financialized",
+        "2019": "financialized"
+      },
+      "name": "Scotland",
+      "flagEmoji": "🏴󠁧󠁢󠁳󠁣󠁴󠁿",
+      "code": "SCO",
+      "socialAxisBaseline": -2,
+      "regionLabel": "Region",
+      "regionLabelPlural": "Regions",
+      "executiveTitle": "First Minister",
+      "executiveRealmPhrase": "Scotland",
+      "governmentType": "parliamentaryRepublic",
+      "governmentTypeLabel": "Parliamentary Republic",
+      "coalitionThreshold": 65,
+      "legislature": {
+        "name": "Scottish Parliament",
+        "path": "/country/sco/legislature",
+        "bicameral": false,
+        "lowerChamber": {
+          "key": "holyrood",
+          "name": "Scottish Parliament",
+          "shortName": "Holyrood",
+          "seats": 129,
+          "description": "129 MSPs elected by the Additional Member System - 73 constituency seats plus 56 regional list seats.",
+          "elected": true
+        }
+      },
+      "lowerElectionSystem": {
+        "termYears": 5,
+        "seatsContested": "all",
+        "singleMemberConstituencies": false,
+        "snapElectionsAllowed": true
+      },
+      "subNationalChamber": {
+        "key": "regionalCouncil",
+        "name": "Regional Council",
+        "shortName": "Council",
+        "seats": 32,
+        "description": "Elected councillors representing Scotland's council areas.",
+        "regionalModel": true
+      },
+      "regionalBillAssentTitle": "Provost",
+      "electionSystems": {
+        "lowerChamber": "ams",
+        "subNationalChamber": "pr_hareQuota",
+        "headOfGovernment": "parliamentary",
+        "headOfState": "ceremonial"
+      },
+      "officeTypes": [
+        {
+          "key": "firstMinister",
+          "label": "First Minister",
+          "labelPlural": "First Ministers",
+          "isExecutive": true,
+          "isSubNational": false,
+          "actionBonus": 4,
+          "partyStrengthWeight": 1
+        },
+        {
+          "key": "holyrood",
+          "label": "Member of the Scottish Parliament",
+          "labelPlural": "Members of the Scottish Parliament",
+          "chamberKey": "holyrood",
+          "isExecutive": false,
+          "isSubNational": false,
+          "termYears": 5,
+          "actionBonus": 1,
+          "partyStrengthWeight": 0.85
+        },
+        {
+          "key": "governor",
+          "label": "Provost",
+          "labelPlural": "Provosts",
+          "isExecutive": false,
+          "isSubNational": true,
+          "termYears": 4,
+          "actionBonus": 2,
+          "partyStrengthWeight": 1
+        },
+        {
+          "key": "regionalCouncil",
+          "label": "Regional Councillor",
+          "labelPlural": "Regional Councillors",
+          "chamberKey": "regionalCouncil",
+          "isExecutive": false,
+          "isSubNational": true,
+          "termYears": 5,
+          "actionBonus": 1,
+          "partyStrengthWeight": 0.85
+        },
+        {
+          "key": "centralBankChair",
+          "label": "Governor of the Bank of England",
+          "labelPlural": "Governors of the Bank of England",
+          "isExecutive": false,
+          "isSubNational": false,
+          "termYears": 4,
+          "actionBonus": 3,
+          "partyStrengthWeight": 0
+        }
+      ],
+      "majorPartyIds": ["SNP", "LAB"],
+      "partyCreationNPPs": {
+        "statesRequired": 2,
+        "lockHomeState": false,
+        "nppsPerState": 1
+      },
+      "demographicProfileId": "uk_archetypes",
+      "centralBank": {
+        "name": "Bank of England",
+        "abbreviation": "BoE",
+        "chairTitle": "Governor of the Bank of England",
+        "defaultPrimeRate": 3,
+        "sharedBankId": "UK",
+        "heroImage": "/api/images/hero/bank-of-england"
+      },
+      "exchangeName": "FTSE",
+      "usdExchangeRate": 1,
+      "currencyCode": "GBP",
+      "fiscalYearStartTurnInYear": 40,
+      "financeMinisterCabinetId": "financeSecretary",
+      "status": "coming-soon",
+      "tagline": "An independent Scotland - single-chamber Holyrood, Additional Member System elections, and a sterling-zone economy.",
+      "descriptor": "A parliamentary republic where the First Minister leads government through a Holyrood majority, elected by the Additional Member System across Scotland's regions.",
+      "heroImage": "https://flagcdn.com/w640/gb-sct.png",
+      "entryPath": "/country/sco",
+      "overviewPath": "/country/sco",
+      "mapPath": "/country/sco/map",
+      "executivePath": "/country/sco/executive",
+      "executiveLabel": "Bute House",
+      "centralGovernmentLabel": "Scottish Block Grant"
+    }
+  },
+  "COUNTRY_CONTINENT": {
+    "shape": "country-first",
+    "value": "Europe"
+  },
+  "COUNTRY_CURRENCY_MAP": {
+    "shape": "country-first",
+    "value": "GBP"
+  },
+  "COUNTRY_ELECTION_PHASES": {
+    "shape": "country-first",
+    "value": [
+      {
+        "name": "scoElections"
+      },
+      {
+        "name": "scoGovernorElections"
+      },
+      {
+        "name": "scoRegionalCouncilElections"
+      }
+    ]
+  },
+  "COUNTRY_ERA1991_PATCHES": {
+    "shape": "absent",
+    "value": null
+  },
+  "COUNTRY_HISTORICAL_NAMES": {
+    "shape": "absent",
+    "value": null
+  },
+  "COUNTRY_MAP_REGISTRY": {
+    "shape": "country-first",
+    "value": {
+      "countryId": "SCO",
+      "name": "Scotland",
+      "overviewPath": "/country/sco",
+      "mapPath": "/country/sco/map",
+      "hasRegionMap": false
+    }
+  },
+  "COUNTRY_MODERN_NAMES": {
+    "shape": "absent",
+    "value": null
+  },
+  "COUNTRY_REGIONS": {
+    "shape": "country-first",
+    "value": "europe"
+  },
+  "COUNTRY_SECTOR_WEIGHTS": {
+    "shape": "country-first",
+    "value": {
+      "real_estate": 14,
+      "financial": 13,
+      "manufacturing": 9,
+      "technology": 8,
+      "healthcare": 8,
+      "retail": 7,
+      "construction": 6,
+      "media": 5,
+      "chemical_industries": 5,
+      "entertainment": 4,
+      "telecommunications": 4,
+      "logistics": 4,
+      "energy": 3,
+      "automobiles": 3,
+      "defense": 3,
+      "extraction": 3,
+      "agriculture": 1
+    }
+  },
+  "COUNTRY_SECTOR_WEIGHTS_1979": {
+    "shape": "absent",
+    "value": null
+  },
+  "COUNTRY_SECTOR_WEIGHTS_1991": {
+    "shape": "country-first",
+    "value": {
+      "manufacturing": 16,
+      "financial": 11,
+      "retail": 9,
+      "construction": 8,
+      "real_estate": 10,
+      "healthcare": 6,
+      "chemical_industries": 6,
+      "energy": 5,
+      "defense": 5,
+      "automobiles": 4,
+      "extraction": 4,
+      "logistics": 3,
+      "telecommunications": 3,
+      "media": 4,
+      "entertainment": 2,
+      "technology": 2,
+      "agriculture": 2
+    }
+  },
+  "COUNTRY_TO_ISO_NUMERIC": {
+    "shape": "country-first",
+    "value": "826"
+  },
+  "COUNTRY_UN_MEMBER_SINCE": {
+    "shape": "absent",
+    "value": null
+  },
+  "DEFAULT_STRATEGIC_SECTORS": {
+    "shape": "absent",
+    "value": null
+  },
+  "DEFENSE_POSITION_BY_COUNTRY": {
+    "shape": "country-first",
+    "value": null
+  },
+  "ECONOMIC_BASELINES": {
+    "shape": "absent",
+    "value": null
+  },
+  "ECONOMY_TEXT": {
+    "shape": "absent",
+    "value": null
+  },
+  "ENERGY_POSITION_BY_COUNTRY": {
+    "shape": "absent",
+    "value": null
+  },
+  "ERA_COUNTRY_CONFIG_OVERRIDES": {
+    "shape": "absent",
+    "value": null
+  },
+  "ESTATE_PORTFOLIO_BY_COUNTRY": {
+    "shape": "absent",
+    "value": null
+  },
+  "EXECUTIVE_SEALS": {
+    "shape": "absent",
+    "value": null
+  },
+  "EXECUTIVE_SURFACE": {
+    "shape": "country-first",
+    "value": {
+      "clock": {
+        "kind": "election",
+        "label": "Term Clock",
+        "countdownNoun": "next Holyrood election"
+      },
+      "actLabels": {
+        "signed": "ENACTED",
+        "vetoed": "REJECTED",
+        "onDesk": "AWAITING",
+        "order": "ORDER IN COUNCIL",
+        "confirmed": "APPOINTED",
+        "nominated": "NOMINATED",
+        "acting": "ACTING"
+      },
+      "deskKind": "orders",
+      "deskLabel": "Orders in Force",
+      "rosterTitle": "Cabinet",
+      "heroImage": "/api/images/hero/bute-house",
+      "heroAlt": "Bute House, Edinburgh"
+    }
+  },
+  "EXECUTIVE_TEXT": {
+    "shape": "country-first",
+    "value": {
+      "glyph": "FM",
+      "serif": "mono",
+      "registry": "Scotland · Scottish Government",
+      "title": "Bute House"
+    }
+  },
+  "FOREIGN_AFFAIRS_POSITION_BY_COUNTRY": {
+    "shape": "country-first",
+    "value": null
+  },
+  "FULL_ERA_REGION_BUNDLES": {
+    "shape": "absent",
+    "value": null
+  },
+  "HAZARD_GROUPS": {
+    "shape": "absent",
+    "value": null
+  },
+  "INCOME_ANCHORS": {
+    "shape": "absent",
+    "value": null
+  },
+  "INFRA_POSITION_BY_COUNTRY": {
+    "shape": "absent",
+    "value": null
+  },
+  "ISO_NUMERIC_TO_COUNTRY": {
+    "shape": "absent",
+    "value": null
+  },
+  "LEGISLATION_COUNTRY_SCOPES": {
+    "shape": "country-first",
+    "value": "sco"
+  },
+  "LEGISLATIVE_PROCESS": {
+    "shape": "absent",
+    "value": null
+  },
+  "M2_TO_GDP_1953": {
+    "shape": "absent",
+    "value": null
+  },
+  "METRIC_PRESET_BUNDLES": {
+    "shape": "absent",
+    "value": null
+  },
+  "MILITARY_BRANCHES_BY_COUNTRY": {
+    "shape": "country-first",
+    "value": []
+  },
+  "MILITARY_COUNTRY_SCALE": {
+    "shape": "country-first",
+    "value": 1
+  },
+  "MONETARY_BASELINES": {
+    "shape": "country-first",
+    "value": {
+      "targetInflation": 2,
+      "neutralPrimeRate": 3
+    }
+  },
+  "MONETARY_BASELINES_1953": {
+    "shape": "absent",
+    "value": null
+  },
+  "MONETARY_BASELINES_1971": {
+    "shape": "absent",
+    "value": null
+  },
+  "MONETARY_BASELINES_1979": {
+    "shape": "absent",
+    "value": null
+  },
+  "MONETARY_BASELINES_1991": {
+    "shape": "absent",
+    "value": null
+  },
+  "NATIONAL_ADDRESS_NAME": {
+    "shape": "absent",
+    "value": null
+  },
+  "NATIONAL_IDENTITY": {
+    "shape": "country-first",
+    "value": {
+      "glyph": "AB",
+      "serif": "mono",
+      "motif": "laurel",
+      "name": "Scotland National Corporation",
+      "native": "Scottish National Enterprise",
+      "registry": "Scotland · National Asset Register",
+      "ministry": "SCOTTISH GOVERNMENT",
+      "publicSeal": "PUBLIC REGISTER",
+      "hqCity": "Edinburgh",
+      "palette": ["#16233f", "#101a30", "#0c1018"],
+      "accent": "#c9a24b",
+      "accentSoft": "#e1c382",
+      "accentName": "Saltire navy & gold"
+    }
+  },
+  "NATIONAL_POLICY_STATE_IDS": {
+    "shape": "country-first",
+    "value": "sco_national"
+  },
+  "NATIONAL_STATS_IDENTITY": {
+    "shape": "absent",
+    "value": null
+  },
+  "NEUTRAL_FEDERAL_SALES_TAX_BY_COUNTRY": {
+    "shape": "absent",
+    "value": null
+  },
+  "NEUTRAL_STATE_SALES_TAX_BY_COUNTRY": {
+    "shape": "absent",
+    "value": null
+  },
+  "NON_PARTY_BUCKET_INDEPENDENT_BIAS_BY_COUNTRY": {
+    "shape": "absent",
+    "value": null
+  },
+  "NPP_CAPITAL_STATES": {
+    "shape": "country-first",
+    "value": ""
+  },
+  "ORDERS_OF_BATTLE": {
+    "shape": "absent",
+    "value": null
+  },
+  "ORDERS_OF_BATTLE_BY_ERA": {
+    "shape": "absent",
+    "value": null
+  },
+  "PLAYER_PAYOUT_CAP_PER_TURN": {
+    "shape": "absent",
+    "value": null
+  },
+  "POLICY_TEXT": {
+    "shape": "country-first",
+    "value": {
+      "glyph": "§",
+      "serif": "mono",
+      "registry": "Statute Book · Scotland",
+      "title": "National Policy"
+    }
+  },
+  "POPULATION_ANCHOR_BUNDLES": {
+    "shape": "absent",
+    "value": null
+  },
+  "RAW_BUNDLES": {
+    "shape": "absent",
+    "value": null
+  },
+  "REGIONAL_BILL_ASSENT_OFFICE_KEY": {
+    "shape": "absent",
+    "value": null
+  },
+  "REGION_CENSUS_LABELS": {
+    "shape": "country-first",
+    "value": {
+      "cardTitles": {
+        "ethnicity": "Ethnicity",
+        "age": "Age Distribution",
+        "education": "Education (Highest)",
+        "income": "Household Income",
+        "urbanization": "Urbanization"
+      },
+      "ethnicity": {
+        "white_british": "White British / Irish",
+        "asian_british": "Asian British",
+        "black_british": "Black British",
+        "mixed": "Mixed",
+        "other": "Other"
+      },
+      "age": {
+        "young": "Young (18-29)",
+        "mid": "Mid (30-44)",
+        "mature": "Mature (45-64)",
+        "senior": "Senior (65+)"
+      },
+      "education": {
+        "no_qualifications": "No qualifications",
+        "gcse_equivalent": "GCSE / Level 2",
+        "a_level_equivalent": "A-Level / Level 3",
+        "degree_plus": "Degree or higher"
+      },
+      "income": {
+        "low": "Lower income",
+        "middle": "Middle income",
+        "high": "Upper income"
+      },
+      "urbanization": {
+        "urban": "Urban conurbation",
+        "suburban": "Suburban / town",
+        "rural": "Rural / village"
+      }
+    }
+  },
+  "REGION_DEMOGRAPHIC_CATEGORY_IDS": {
+    "shape": "country-first",
+    "value": ["uk_voterGroups"]
+  },
+  "REGION_NAME_MAPS": {
+    "shape": "outer-keyed",
+    "value": {
+      "UK": "Scotland"
+    }
+  },
+  "REGION_ROSTERS": {
+    "shape": "function-valued",
+    "value": null,
+    "functionKeys": ["2019"]
+  },
+  "REP_ECON": {
+    "shape": "absent",
+    "value": null
+  },
+  "SOVEREIGN_CORP_LEGAL_STRUCTURE": {
+    "shape": "absent",
+    "value": null
+  },
+  "SPAWN_ELECTIONS_REGISTRY": {
+    "shape": "absent",
+    "value": null
+  },
+  "STATE_ADJACENCY": {
+    "shape": "country-first",
+    "value": {
+      "GLA": ["HIG", "TAY", "CSC", "STH"],
+      "LOT": ["CSC", "STH"],
+      "HIG": ["GLA", "GRA", "TAY"],
+      "GRA": ["HIG", "TAY"],
+      "TAY": ["GLA", "HIG", "GRA", "CSC"],
+      "STH": ["GLA", "LOT", "CSC"],
+      "CSC": ["GLA", "LOT", "TAY", "STH"]
+    }
+  },
+  "STATE_DISPLAY_NAMES": {
+    "shape": "outer-keyed",
+    "value": {
+      "UK": "Scotland"
+    }
+  },
+  "SURFACES": {
+    "shape": "absent",
+    "value": null
+  },
+  "TARGETS": {
+    "shape": "absent",
+    "value": null
+  },
+  "TRADE_MINISTER_POSITION_BY_COUNTRY": {
+    "shape": "country-first",
+    "value": null
+  },
+  "TREASURY_IDENTITY": {
+    "shape": "country-first",
+    "value": {
+      "glyph": "AB",
+      "serif": "mono",
+      "budgetTitle": "Scottish Budget",
+      "ministry": "SCOTTISH GOVERNMENT",
+      "publicSeal": "PUBLIC RECORD",
+      "registry": "Scotland · Scottish Government Finance",
+      "native": "Scottish Government · Finance Directorate",
+      "palette": ["#16233f", "#101a30", "#0c1018"],
+      "accent": "#c9a24b",
+      "accentSoft": "#e1c382"
+    }
+  },
+  "TREASURY_PS_RATE_BY_COUNTRY": {
+    "shape": "country-first",
+    "value": {
+      "national": 60000,
+      "state": 30000
+    }
+  },
+  "TREASURY_TEXT": {
+    "shape": "country-first",
+    "value": {
+      "glyph": "AB",
+      "serif": "mono",
+      "budgetTitle": "Scottish Budget",
+      "ministry": "SCOTTISH GOVERNMENT",
+      "publicSeal": "PUBLIC RECORD",
+      "registry": "Scotland · Scottish Government Finance",
+      "native": "Scottish Government · Finance Directorate"
+    }
+  }
+}

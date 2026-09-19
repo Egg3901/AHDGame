@@ -92,7 +92,7 @@ import type { CountryPolicyConfig } from "./basePolicies";
 import { states1991 } from "./states1991";
 import { ukRegions1991 } from "@/lib/seeds/uk/ukRegions1991";
 import { deRegions1991 } from "@/lib/seeds/de/deRegions1991";
-import { jpRegions1991 } from "@/lib/seeds/jp/jpRegions1991";
+import { jpRegions1991 } from "@/lib/countries/jp/data/jpRegions1991";
 import { cnRegions1991 } from "@/lib/seeds/cn/cnRegions1991";
 import { ieRegions1991 } from "@/lib/seeds/ie/ieRegions1991";
 // FR/IT/ES/SE/TR have no dedicated 1991 region bundles — the 1991 preset seeds

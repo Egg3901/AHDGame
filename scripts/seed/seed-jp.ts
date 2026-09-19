@@ -32,18 +32,18 @@ async function main() {
 
   // This script is a placeholder for the admin seed tool integration.
   // The actual seed data files exist at:
-  //   src/lib/seeds/jp/jpRegions.ts
-  //   src/lib/seeds/jp/jpParties.ts
-  //   src/lib/seeds/jp/jpDemographicCategories.ts
-  //   src/lib/seeds/jp/jpRegionDemographics.ts
-  //   src/lib/seeds/jp/jpDemographicTurnout.ts
-  //   src/lib/seeds/jp/jpStateMetrics.ts
-  //   src/lib/seeds/jp/jpStateBaselines.ts
-  //   src/lib/seeds/jp/jpStatePartyOrgCalculations.ts
-  //   src/lib/seeds/jp/jpBudgets.ts
-  //   src/lib/seeds/jp/jpLegislationTypes.ts
-  //   src/lib/seeds/jp/jpGovernmentFormation.ts
-  //   src/lib/seeds/jp/jpCorporations.ts
+  //   src/lib/countries/jp/data/jpRegions.ts
+  //   src/lib/countries/jp/data/jpParties.ts
+  //   src/lib/countries/jp/data/jpDemographicCategories.ts
+  //   src/lib/countries/jp/data/jpRegionDemographics.ts
+  //   src/lib/countries/jp/data/jpDemographicTurnout.ts
+  //   src/lib/countries/jp/data/jpStateMetrics.ts
+  //   src/lib/countries/jp/data/jpStateBaselines.ts
+  //   src/lib/countries/jp/data/jpStatePartyOrgCalculations.ts
+  //   src/lib/countries/jp/data/jpBudgets.ts
+  //   src/lib/countries/jp/data/jpLegislationTypes.ts
+  //   src/lib/countries/jp/data/jpGovernmentFormation.ts
+  //   src/lib/countries/jp/data/jpCorporations.ts
   //
   // The admin seed tool at /api/admin/seed handles inserting these into the DB.
   // This script can be extended to call those seed functions directly

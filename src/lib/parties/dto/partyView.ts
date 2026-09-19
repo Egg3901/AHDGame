@@ -127,6 +127,13 @@ export interface PartyData {
    * immediately. "approval" — joins file a pending request for a party leader
    * to accept or decline.
    */
+  /**
+   * Regions this party may be joined from: its live presence plus one adjacency
+   * hop. `null` means unrestricted, i.e. the party has no presence anywhere and
+   * the first joiner re-anchors it. Mirrors the server's `isInFrontier`
+   * fail-open branch so the client does not re-derive the rule.
+   */
+  frontierRegions?: string[] | null;
   membershipMode?: "open" | "approval";
   /**
    * Pending join requests while `membershipMode` is "approval". Surfaced to
@@ -399,6 +406,8 @@ export interface NationalPartyInfluenceResponse {
     currentNPPs: number;
     maxSlots: number;
     full: boolean;
+    /** False when the party has no presence in or next to this region. */
+    inFrontier?: boolean;
   }>;
   nppsByState: Record<string, Array<Record<string, unknown>>>;
   context: {

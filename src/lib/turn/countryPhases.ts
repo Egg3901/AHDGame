@@ -44,10 +44,6 @@ import {
   ensureUKElections,
   ensureUKRegionalCouncilElections,
   ensureUKGovernorElections,
-  ensureJPElections,
-  ensureJPRegionalCouncilElections,
-  ensureJPCouncillorElections,
-  ensureJPGovernorElections,
   ensureIEElections,
   ensureIEUachtaranElections,
   ensureIELocalCouncilElections,
@@ -118,6 +114,8 @@ import { appointNppPrimeMinister } from "@/lib/nppAutonomy/appointNppPrimeMinist
 import { updateGovernmentSeats as updateUKGovernmentSeats } from "@/lib/turn/ukGovernmentFormation";
 import { getDb } from "@/lib/mongodb";
 import { getGameStatePreset } from "@/lib/db/collections/gameState";
+import { JP_ELECTIONS } from "@/lib/countries/jp/elections";
+import { JP_BILL_PHASE_SHAPE } from "@/lib/countries/jp/elections/billLifecycle";
 
 /** Countries that need a custom updateGovernmentSeats wrapper (e.g. for legacy seed). */
 const SEAT_UPDATE_OVERRIDES: Partial<Record<CountryId, () => Promise<void>>> = {
@@ -169,11 +167,7 @@ export const COUNTRY_BILL_PHASES: Partial<Record<CountryId, CountryBillPhaseEntr
     fn: (now) => runBillLifecycleForCountry(DE_NATIONAL_CONFIG, now),
     emptyResult: { enacted: 0, failed: 0 },
   },
-  JP: {
-    phaseName: "jpBillLifecycle",
-    fn: runBillLifecycleForJP,
-    emptyResult: { enacted: 0, failed: 0, overrides: 0, cabinetPassed: 0 },
-  },
+  JP: { ...JP_BILL_PHASE_SHAPE, fn: runBillLifecycleForJP },
   IE: {
     phaseName: "ieBillLifecycle",
     fn: (now) => runBillLifecycleForCountry(IE_NATIONAL_CONFIG, now),
@@ -319,23 +313,7 @@ export const COUNTRY_ELECTION_PHASES: Partial<Record<CountryId, CountryElectionP
     { name: "ukRegionalCouncilElections", fn: ensureUKRegionalCouncilElections },
     { name: "ukGovernorElections", fn: ensureUKGovernorElections },
   ],
-  JP: [
-    { name: "jpElections", fn: ensureJPElections },
-    // Regional Council mirrors live Shugiin timing. Listed after jpElections by
-    // convention (UK/DE pairs do the same), but these phases run concurrently
-    // via Promise.all, so the order is best-effort, not a guarantee: when a
-    // concurrently-created Shugiin race isn't yet visible (clean roll-over /
-    // bootstrap), the spawner's fallback recomputes the identical Shugiin
-    // canonical cycle, so the council still aligns with the Shugiin.
-    { name: "jpRegionalCouncilElections", fn: ensureJPRegionalCouncilElections },
-    // Sangiin spawner takes a class filter before the turn, so the registry
-    // passes both through: natural class selection plus the in-flight turn.
-    {
-      name: "jpCouncillorElections",
-      fn: (gameNow, currentTurn) => ensureJPCouncillorElections(gameNow, undefined, currentTurn),
-    },
-    { name: "jpGovernorElections", fn: ensureJPGovernorElections },
-  ],
+  JP: JP_ELECTIONS.electionPhases,
   IE: [
     { name: "ieElections", fn: ensureIEElections },
     { name: "ieUachtaranElections", fn: ensureIEUachtaranElections },

@@ -1,3 +1,4 @@
+import { tierFor } from "./eraRoster";
 import { describe, expect, it } from "vitest";
 import {
   defineWorldEntityPresetManifest,
@@ -287,11 +288,43 @@ describe("world entity manifest", () => {
     expect(ghana.countryId).toBeUndefined();
   });
 
-  it("classifies the fully seeded 2019 countries into explicit access tiers", () => {
+  it("no longer defers 2019 to the admin/config fallback seam", () => {
+    // DELIBERATE REVERSAL. 2019 used to be entirely `config-fallback`, which
+    // resolved access from the era-NEUTRAL CountryConfig status and meant
+    // `seedCountryGameStates` wrote no rows at all — so a reset inherited
+    // whatever the previous world's admin toggles had left behind. That is how
+    // 2019 came to open six player countries instead of three. The era roster
+    // now answers for every shipping preset.
     const manifest = getWorldEntityPresetManifest("2019-default");
     expect(manifest.entries.length).toBeGreaterThan(0);
-    expect(getWorldEntityOrThrow("2019-default", "UK").legacyAccess).toBe("player");
-    expect(getWorldEntityOrThrow("2019-default", "FR").legacyAccess).toBe("economy-preview");
+    expect(manifest.entries.some((entry) => entry.legacyAccess === "config-fallback")).toBe(false);
+    expect(getWorldEntityOrThrow("2019-default", "JP").legacyAccess).toBe("player");
+    expect(getWorldEntityOrThrow("2019-default", "DE").legacyAccess).toBe("economy-preview");
+  });
+
+  it("keeps a country the roster marks absent only as a dissolved record", () => {
+    // East Germany acceded to the Federal Republic on 3 October 1990, so it is
+    // not a LIVE entity in a modern preset. It is still a historical one.
+    //
+    // ⚠ THIS ASSERTS THE SUBSTANCE, NOT THE MECHANISM. An earlier revision
+    // required DD to be absent from the manifest entirely. Upstream's background
+    // roster needs every registered country to carry a classification in every
+    // preset -- otherwise `getWorldEntityOrThrow` throws for exactly the
+    // countries most likely to be misconfigured -- so the row now stays and
+    // says `dissolved`. What must never come back is a PLAYABLE East Germany,
+    // and that is what the three assertions below pin.
+    for (const preset of ["1991-default", "2019-default"] as const) {
+      const dd = getWorldEntityPresetManifest(preset).entries.find((e) => e.countryId === "DD");
+      expect(dd, `${preset} should still record DD`).toBeDefined();
+      expect(dd?.status, preset).toBe("dissolved");
+      expect(dd?.legacyAccess, preset).toBe("hidden");
+      expect(tierFor(preset, "DD"), preset).toBe("absent");
+    }
+    const early = getWorldEntityPresetManifest("1953-default").entries.find(
+      (e) => e.countryId === "DD"
+    );
+    expect(early?.status).toBe("sovereign");
+    expect(tierFor("1953-default", "DD")).toBe("player");
   });
 
   it("provides a manifest for every supported reset era", () => {
@@ -351,11 +384,21 @@ describe("world entity manifest", () => {
         legacyAccess: "economy-preview",
       });
     }
+    // 2019-default is roster-driven rather than config-fallback. Spain is `npp`
+    // there — not because of the 1953 sphere demotion, but because it has no
+    // authored modern data — so it reads `hidden`.
+    //
+    // ⚠ `background-macro`, not `historical-presence`. Upstream added that
+    // tier for a country that is hidden but still RUNS: an aggregate economy
+    // with no domestic offices, rather than an inert historical row. The point
+    // this test guards is unchanged and is the line below plus the loop above:
+    // Spain is sphere-macro in 1953 and in no other era.
     expect(getWorldEntityOrThrow("2019-default", "ES")).toMatchObject({
       countryId: "ES",
-      simulationTier: "full-autonomous",
-      legacyAccess: "economy-preview",
+      simulationTier: "background-macro",
+      legacyAccess: "hidden",
     });
+    expect(getWorldEntityOrThrow("2019-default", "ES").simulationTier).not.toBe("sphere-macro");
   });
 
   it("refuses an unknown preset instead of falling back to another era", () => {

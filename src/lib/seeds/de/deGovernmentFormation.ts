@@ -1,34 +1,7 @@
-import type { GovernmentFormation } from "@/lib/db/types/governmentFormation";
-
 /**
- * Initial DE governmentFormations seed document.
+ * Forwarder. Moved into DE's country folder.
  *
- * Created in "pending" status — no Chancellor appointed yet. The turn
- * processor (via runParliamentaryGovernmentPhases) will process Kanzler
- * appointment votes once this document exists.
- *
- * majorityThreshold and totalSeats match COUNTRY_CONFIGS.DE:
- *   - coalitionThreshold: 316 (630 / 2 + 1 under 2023 Wahlrechtsreform)
- *   - legislature.lowerChamber.seats: 630
+ * A forwarder holds no copy, so existing importers are untouched and there is
+ * still exactly one declaration.
  */
-export const deGovernmentFormation: Omit<GovernmentFormation, "createdAt" | "updatedAt"> = {
-  _id: "DE",
-  countryId: "DE",
-  cycle: 1,
-  status: "pending",
-  formationType: null,
-  lostMajority: false,
-  pmCharacterId: null,
-  pmName: null,
-  governingPartyId: null,
-  coalitionId: null,
-  coalitionPartyIds: null,
-  totalSeatsSupporting: 0,
-  majorityThreshold: 316,
-  seatsByParty: {},
-  totalSeats: 630,
-  activeVoteId: null,
-  formedAt: null,
-  formedTurn: null,
-  collapsedAt: null,
-};
+export * from "@/lib/countries/de/data/deGovernmentFormation";

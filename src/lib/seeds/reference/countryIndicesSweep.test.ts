@@ -4,7 +4,7 @@ import { legislationTypes } from "./legislationTypes";
 import { deLegislationTypes } from "../de/deLegislationTypes";
 import { cnLegislationTypes } from "../cn/cnLegislationTypes";
 import { ieLegislationTypes } from "../ie/ieLegislationTypes";
-import { jpLegislationTypes } from "../jp/jpLegislationTypes";
+import { jpLegislationTypes } from "@/lib/countries/jp/data/jpLegislationTypes";
 
 // NOTE: reference `legislationTypes` already spreads the country files — dedupe
 // by _id so count-sensitive checks (the socialCredit primaries) aren't doubled.

@@ -1,0 +1,180 @@
+/**
+ * SEED INDEPENDENCE — DO NOT DERIVE FROM ANOTHER ERA.
+ * Each era seed is self-contained. This file MUST NOT import and transform
+ * another era's region data. All values are authored for 1999 directly.
+ * Type-only imports are allowed.
+ *
+ * UK regions for the 1999-default preset (Blair's first term, post-1997
+ * landslide, the dawn of devolution). The 12 electoral regions are structurally
+ * stable; the era-specific values are late-1990s ONS mid-year population,
+ * ~1999 regional GVA (GBP millions, nominal), and the **659-seat** Westminster
+ * distribution in force 1997–2005 (England 529 / Scotland 72 / Wales 40 / NI 18).
+ * `stateSenateSeats` holds the devolved/regional-council seat count (the Scottish
+ * Parliament / Welsh Assembly were created in 1999; the NI Assembly in 1998).
+ */
+import type { State } from "@/lib/db/types";
+
+export const ukRegions1999: State[] = [
+  // ── England (529 Westminster seats) ──────────────────────────────────────
+  {
+    _id: "LON",
+    countryId: "UK",
+    regionType: "constituency",
+    parentRegionId: "ENG",
+    name: "London",
+    population: 7_200_000,
+    gdp: 180_000,
+    houseDistricts: 74,
+    stateSenateSeats: 32,
+    region: "London",
+    votingSystem: "fptp",
+  },
+  {
+    _id: "SEE",
+    countryId: "UK",
+    regionType: "constituency",
+    parentRegionId: "ENG",
+    name: "South East England",
+    population: 8_000_000,
+    gdp: 143_000,
+    houseDistricts: 83,
+    stateSenateSeats: 67,
+    region: "South East",
+    votingSystem: "fptp",
+  },
+  {
+    _id: "SWE",
+    countryId: "UK",
+    regionType: "constituency",
+    parentRegionId: "ENG",
+    name: "South West England",
+    population: 4_900_000,
+    gdp: 71_000,
+    houseDistricts: 51,
+    stateSenateSeats: 39,
+    region: "South West",
+    votingSystem: "fptp",
+  },
+  {
+    _id: "EAE",
+    countryId: "UK",
+    regionType: "constituency",
+    parentRegionId: "ENG",
+    name: "East of England",
+    population: 5_400_000,
+    gdp: 85_000,
+    houseDistricts: 56,
+    stateSenateSeats: 39,
+    region: "East of England",
+    votingSystem: "fptp",
+  },
+  {
+    _id: "EMI",
+    countryId: "UK",
+    regionType: "constituency",
+    parentRegionId: "ENG",
+    name: "East Midlands",
+    population: 4_200_000,
+    gdp: 60_000,
+    houseDistricts: 44,
+    stateSenateSeats: 39,
+    region: "East Midlands",
+    votingSystem: "fptp",
+  },
+  {
+    _id: "WMI",
+    countryId: "UK",
+    regionType: "constituency",
+    parentRegionId: "ENG",
+    name: "West Midlands",
+    population: 5_300_000,
+    gdp: 69_000,
+    houseDistricts: 59,
+    stateSenateSeats: 18,
+    region: "West Midlands",
+    votingSystem: "fptp",
+  },
+  {
+    _id: "YHU",
+    countryId: "UK",
+    regionType: "constituency",
+    parentRegionId: "ENG",
+    name: "Yorkshire & the Humber",
+    population: 5_000_000,
+    gdp: 65_000,
+    houseDistricts: 56,
+    stateSenateSeats: 21,
+    region: "Yorkshire",
+    votingSystem: "fptp",
+  },
+  {
+    _id: "NWE",
+    countryId: "UK",
+    regionType: "constituency",
+    parentRegionId: "ENG",
+    name: "North West England",
+    population: 6_850_000,
+    gdp: 92_000,
+    houseDistricts: 76,
+    stateSenateSeats: 27,
+    region: "North West",
+    votingSystem: "fptp",
+  },
+  {
+    _id: "NEE",
+    countryId: "UK",
+    regionType: "constituency",
+    parentRegionId: "ENG",
+    name: "North East England",
+    population: 2_580_000,
+    gdp: 32_000,
+    houseDistricts: 30,
+    stateSenateSeats: 17,
+    region: "North East",
+    votingSystem: "fptp",
+  },
+  // ── Scotland (72) ────────────────────────────────────────────────────────
+  {
+    _id: "SCO",
+    countryId: "UK",
+    regionType: "nation",
+    parentRegionId: "SCO",
+    name: "Scotland",
+    population: 5_120_000,
+    gdp: 76_000,
+    houseDistricts: 72,
+    stateSenateSeats: 129,
+    region: "Scotland",
+    votingSystem: "fptp",
+  },
+  // ── Wales (40) ───────────────────────────────────────────────────────────
+  {
+    _id: "WAL",
+    countryId: "UK",
+    regionType: "nation",
+    parentRegionId: "WAL",
+    name: "Wales",
+    population: 2_930_000,
+    gdp: 36_000,
+    houseDistricts: 40,
+    stateSenateSeats: 60,
+    region: "Wales",
+    votingSystem: "fptp",
+  },
+  // ── Northern Ireland (18) ────────────────────────────────────────────────
+  {
+    _id: "NIR",
+    countryId: "UK",
+    regionType: "nation",
+    parentRegionId: "NIR",
+    name: "Northern Ireland",
+    population: 1_690_000,
+    gdp: 22_000,
+    houseDistricts: 18,
+    stateSenateSeats: 90,
+    region: "Northern Ireland",
+    votingSystem: "fptp",
+  },
+];
+
+export default ukRegions1999;

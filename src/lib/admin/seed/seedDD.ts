@@ -93,8 +93,20 @@ export async function seedDDParties(
   preset: string
 ) {
   const { ddParties } = await import("@/lib/seeds/dd/ddParties");
+  const { isPartyValidForPreset, prunePresetMismatchedDefaultParties } =
+    await import("@/lib/seeds/ensureDefaultParties");
+
+  // ⚠️ This seeder previously did NEITHER of these. It destructured
+  // `validForPresets` away and wrote every East German party unconditionally,
+  // so a 1991 or 2019 world was handed the SED and its bloc parties whatever
+  // the era said, and a Cold-War world downgraded to 1991 kept them.
+  await prunePresetMismatchedDefaultParties(db, ddParties as PartySeed[], preset);
+  const eligible = (ddParties as PartySeed[]).filter((party) =>
+    isPartyValidForPreset(party, preset)
+  );
+
   const now = new Date();
-  for (const party of ddParties as PartySeed[]) {
+  for (const party of eligible) {
     const { seedOrder: _seedOrder, validForPresets: _validForPresets, ...partyData } = party;
     void _seedOrder;
     void _validForPresets;
@@ -119,7 +131,7 @@ export async function seedDDParties(
       await db.collection<PoliticalParty>("politicalParties").insertOne(doc);
     }
   }
-  log(`Seeded ${ddParties.length} DD parties`);
+  log(`Seeded ${eligible.length} DD parties (preset: ${preset})`);
 }
 
 export async function seedDDDemographics(
