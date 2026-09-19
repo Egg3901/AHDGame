@@ -4,6 +4,8 @@
 // env, safe to import eagerly.
 import { MARKET_MODE_ORDER, type MarketSystemMode } from "@/lib/market/modes";
 import { LABOUR_MODE_ORDER, type LabourSystemMode } from "@/lib/labour/modes";
+import { SIM_ACTOR_MODES } from "@/lib/sim/syntheticActors";
+import type { SimActorMode } from "@/lib/sim/actorCoverage";
 import { frontierEntryExperimentCliArgs } from "@/lib/sim/economicExperiment";
 
 /** Subset of a simJobs document that controls runWorld CLI emission. */
@@ -24,6 +26,9 @@ export interface SimJobExperimentFields {
   autonomyLevel?: string;
   mode?: string;
   countries?: string;
+  /** Simulation actor mode (#1993): "pure-npp" keeps full NPP autonomy,
+   * "synthetic" seeds deterministic simulation-only actors. */
+  actors?: string;
 }
 
 /** Pattern every job-derived value (id/seed/preset/dbName) must match before
@@ -55,6 +60,20 @@ function booleanFlag(
     }
     args.push(`--${flag}=${String(value)}`);
   }
+}
+
+/**
+ * Validate one actors-mode value shared by every job entry point (local MCP,
+ * box MCP, worker). Omitted means pure NPP autonomy, the harness default —
+ * so jobs written before the mode existed stay byte-identical. Throws on
+ * anything else so a typo can never silently run the wrong population.
+ */
+export function parseActorsField(value: unknown): SimActorMode | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== "string" || !SIM_ACTOR_MODES.includes(value as SimActorMode)) {
+    throw new Error(`invalid actors "${String(value)}"`);
+  }
+  return value as SimActorMode;
 }
 
 /** Pure builder for the conditional runWorld CLI args of one sim job.
@@ -121,6 +140,11 @@ export function buildRunWorldArgs(job: SimJobExperimentFields): string[] {
     }
     args.push(`--mode=${job.mode}`);
   }
+  // Simulation actor mode (#1993). Omitted means pure NPP autonomy (the
+  // harness default); an explicit value must be a known mode — a typo can
+  // never silently run the wrong population.
+  const actors = parseActorsField(job.actors);
+  if (actors) args.push(`--actors=${actors}`);
   if (job.countries) {
     // Comma-separated ids become part of a child-process argv — validate each.
     const ids = job.countries

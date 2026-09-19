@@ -44,6 +44,14 @@ import { LABOUR_MODE_ORDER, type LabourSystemMode } from "@/lib/labour/modes";
 import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
 import { applyCloneControllerPolicy } from "@/lib/sim/cloneControllers";
 import {
+  evaluateActorCoverage,
+  actorCoverageWarnings,
+  uncoveredEntries,
+  type ActorCoverageManifest,
+  type SimActorMode,
+} from "@/lib/sim/actorCoverage";
+import { parseSimActorMode } from "@/lib/sim/syntheticActors";
+import {
   allFeatureFlagsGameStateSet,
   economicExperimentConfigSet,
   isGameplayOverrideArg,
@@ -94,6 +102,10 @@ interface SimRunDoc {
   frontierEntryExperimentEnabled?: boolean;
   nppForeignPolicyMode?: NppForeignPolicyMode;
   nppForeignPolicyStage?: NppForeignPolicyStage;
+  /** Simulation actor mode (#1993): pure NPP autonomy vs synthetic actors. */
+  actorMode?: SimActorMode;
+  /** Effective-run actor-coverage manifest evaluated from live sandbox counts. */
+  actorCoverage?: ActorCoverageManifest;
   preservePlayerRail?: boolean;
   preserveLiveConfig?: boolean;
   /** Autonomy tier and local-world difficulty the run was configured with. */
@@ -309,6 +321,10 @@ if (modeRaw && !SIM_TURN_PHASE_MODES.includes(modeRaw)) {
 }
 const simTurnPhaseMode = modeRaw as
   "full" | "elections-only" | "economy-only" | "macro-only" | undefined;
+// Simulation actor mode (#1993). Omitted means pure NPP autonomy —
+// byte-identical to every harness run before this flag existed. Explicit
+// selection is validated here so a typo fails fast before any sandbox work.
+const actorMode = parseSimActorMode(arg("actors"));
 const electionsOnly = simTurnPhaseMode === "elections-only";
 const economyOnly = simTurnPhaseMode === "economy-only";
 const macroOnly = simTurnPhaseMode === "macro-only";
@@ -980,6 +996,7 @@ async function main() {
         electionScope: electionScope ? [...electionScope] : null,
         nppForeignPolicyMode: foreignPolicyMode,
         nppForeignPolicyStage: foreignPolicyStage,
+        actorMode,
         preservePlayerRail,
         preserveLiveConfig,
         effectiveConfigInitial: {
@@ -1003,6 +1020,47 @@ async function main() {
       },
     }
   );
+
+  // Actor-coverage manifest (#1993): in synthetic mode, materialize the
+  // deterministic population FIRST (idempotent sandbox upserts, before any
+  // turn advances), then evaluate every known actor-gated mechanic from the
+  // PERSISTED sandbox counts — never from the intended plan. Pure NPP runs
+  // skip seeding entirely and honestly report vacancies; synthetic mode
+  // without materialized synthetic characters degrades to unreachable
+  // (see SYNTHETIC_UNSEEDED_REASON) instead of claiming coverage from a flag.
+  // This pre-turn stamp proves the population exists; the manifest is
+  // re-stamped after the turn loop so reports carry executed evidence.
+  {
+    if (actorMode === "synthetic") {
+      const { materializeSyntheticActors } = await import("@/lib/sim/materializeSyntheticActors");
+      const gameStateTurn = await db.collection<GameState>("gameState").findOne({ _id: "current" });
+      const seeded = await materializeSyntheticActors(db, {
+        seed,
+        runId,
+        turn: (gameStateTurn?.currentTurn as number | undefined) ?? 0,
+      });
+      log(
+        `Seeded synthetic actors (seed=${seed}): ${seeded.characters} characters, ` +
+          `${seeded.users} users, ${seeded.officials} official(s), ` +
+          `${seeded.cabinetSeats} cabinet seat(s), ${seeded.statePartyCandidates} candidacies, ` +
+          `${seeded.statePartyVotes} state-party votes, ${seeded.fedNominations} Fed nomination(s), ` +
+          `${seeded.corporations} corporations`
+      );
+    }
+    const { readActorPopulation } = await import("@/lib/sim/materializeSyntheticActors");
+    const snapshot = await readActorPopulation(db, { mode: actorMode, preset });
+    const manifest = evaluateActorCoverage(snapshot, new Date().toISOString());
+    await simRuns.updateOne({ _id: runId }, { $set: { actorCoverage: manifest } });
+    log(
+      `Actor mode: ${actorMode} — ${manifest.mechanicCount - uncoveredEntries(manifest).length}` +
+        `/${manifest.mechanicCount} mechanics covered ` +
+        `(characters=${snapshot.characters} users=${snapshot.users} ` +
+        `synthetic=${snapshot.syntheticCharacters}/${snapshot.syntheticUsers} ` +
+        `candidates=${snapshot.statePartyCandidates} crisisDecided=${snapshot.crisisDecidedInteractions} ` +
+        `wealthRows=${snapshot.wealthListRows} playerCorps=${snapshot.playerFoundedCorps})`
+    );
+    for (const warning of actorCoverageWarnings(manifest)) log(warning);
+  }
 
   // Candidate-supply guard (#3253): some seeds (FR/IT/ES/SE/TR) ship no NPPs, so
   // their elections resolve empty. Flag scoped countries with no NPP supply so
@@ -1111,6 +1169,14 @@ async function main() {
       await snapshotParliamentSeats(db, lastTurn);
       await snapshotCorporationsByCountry(db, lastTurn);
 
+      // Synthetic-actor per-turn driver (#1993): crisis decisions, DD survey,
+      // and Fed-chair acceptance through the production seams. Synthetic mode
+      // only, bounded, and never throwing — a driver skip never fails a turn.
+      if (actorMode === "synthetic") {
+        const { driveSyntheticActors } = await import("@/lib/sim/driveSyntheticActors");
+        await driveSyntheticActors(db, { seed, turn: lastTurn, now: new Date() });
+      }
+
       if (iterations % checkpointEvery === 0 || lastTurn >= targetTurn) {
         log(
           `turn ${lastTurn} (${lastTurn - startTurn}/${turns})` +
@@ -1128,6 +1194,24 @@ async function main() {
           }
         );
       }
+    }
+
+    // Final actor-coverage re-stamp (#1993): the pre-turn manifest proves the
+    // population was materialized, but only this post-turn read proves which
+    // paths actually executed (crisis decisions, wealth rows, founded corps).
+    // Reports must never claim a covered path whose evidence counter is zero.
+    {
+      const { readActorPopulation } = await import("@/lib/sim/materializeSyntheticActors");
+      const snapshot = await readActorPopulation(db, { mode: actorMode, preset });
+      const manifest = evaluateActorCoverage(snapshot, new Date().toISOString());
+      await simRuns.updateOne({ _id: runId }, { $set: { actorCoverage: manifest } });
+      log(
+        `Actor coverage re-stamped: ${manifest.mechanicCount - uncoveredEntries(manifest).length}` +
+          `/${manifest.mechanicCount} covered ` +
+          `(crisisDecided=${snapshot.crisisDecidedInteractions} ` +
+          `wealthRows=${snapshot.wealthListRows} playerCorps=${snapshot.playerFoundedCorps})`
+      );
+      for (const warning of actorCoverageWarnings(manifest)) log(warning);
     }
 
     await simRuns.updateOne(
@@ -1153,7 +1237,7 @@ if (hasFlag("help") || hasFlag("h")) {
       "--seed=<id> [--preset=2019-default] [--turns=500] [--db=<name>] [--autonomy=v3|v4] " +
       "[--run-id=<id>] [--checkpoint-every=10] " +
       "[--foreign-policy=off|shadow|active] [--foreign-policy-stage=votes|proposals|trade|support|war] " +
-      "[--mode=full|elections-only|economy-only|macro-only] " +
+      "[--mode=full|elections-only|economy-only|macro-only] [--actors=pure-npp|synthetic] " +
       "[--npp-market-coverage=true|false] " +
       "[--npp-fragile-market-supply=true|false] " +
       "[--frontier-entry-experiment=true|false] " +

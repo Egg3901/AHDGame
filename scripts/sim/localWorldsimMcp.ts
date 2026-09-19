@@ -56,6 +56,8 @@ import { createInterface } from "readline";
 import { randomUUID } from "crypto";
 import { MongoClient, type Db } from "mongodb";
 import { MARKET_MODE_ORDER, type MarketSystemMode } from "@/lib/market/modes";
+import { SIM_ACTOR_MODES } from "@/lib/sim/syntheticActors";
+import { parseActorsField } from "./simJobArgs";
 import { assertSimSourceShape } from "./simSource";
 import { pickSovereignDemandExperimentFlags } from "./sovereignDemandExperimentFlags";
 
@@ -205,6 +207,12 @@ const TOOLS: ToolDef[] = [
         nppFragileMarketSupplyEnabled: bool(
           "Whether each existing eligible NPP entry slot prioritizes advertising, fertilizers, freight, or rare-earth supply when critically short."
         ),
+        actors: {
+          type: "string",
+          enum: [...SIM_ACTOR_MODES],
+          description:
+            'Simulation actor mode (#1993). Omit for pure NPP autonomy (the harness default: zero characters, actor-gated paths reported unreachable). "synthetic" seeds seven deterministic simulation-only actors so presidential nominations, the US Fed-chair route, state-party offices, campaigns, crisis decisions, wealth metrics, player corp founding, and the DD survey run through their representative paths.',
+        },
         sourceWorktree: str(
           "Pinned source (#1966): registered worktree name under /root/projects/AHDGame/worktrees to execute instead of the worker default. Requires sourceCommit."
         ),
@@ -278,6 +286,9 @@ const TOOLS: ToolDef[] = [
         sourceWorktree: a.sourceWorktree === undefined ? undefined : String(a.sourceWorktree),
         sourceCommit: a.sourceCommit === undefined ? undefined : String(a.sourceCommit),
       });
+      // Simulation actor mode (#1993): validated here so a typo fails at
+      // enqueue time, not after hours of turns on the wrong population.
+      const actors = parseActorsField(a.actors);
       if (
         a.frontierEntryExperimentEnabled !== undefined &&
         typeof a.frontierEntryExperimentEnabled !== "boolean"
@@ -289,6 +300,7 @@ const TOOLS: ToolDef[] = [
         turns,
         seed,
         dbName: `ahd_sim_${seed}`,
+        ...(actors ? { actors } : {}),
         ...(a.sourceWorktree !== undefined
           ? { sourceWorktree: safe(a.sourceWorktree, "sourceWorktree") }
           : {}),
@@ -324,6 +336,7 @@ const TOOLS: ToolDef[] = [
         preset,
         turns,
         seed,
+        actors: actors || "pure-npp (harness default)",
         sourceWorktree: a.sourceWorktree || "(worker default)",
         sourceCommit: a.sourceCommit || "(worker default)",
         marketSystemMode: a.marketSystemMode || "off (preset default)",
@@ -354,6 +367,12 @@ const TOOLS: ToolDef[] = [
         turns: int(`how many turns to advance (1..${MAX_SIM_TURNS})`, 1, MAX_SIM_TURNS),
         seed: str("RNG seed label — also derives the sandbox db name"),
         countries: str('comma-separated country ids to scope to, e.g. "US,UK,DE"; omit for global'),
+        actors: {
+          type: "string",
+          enum: [...SIM_ACTOR_MODES],
+          description:
+            'Simulation actor mode (#1993). Omit for pure NPP autonomy. "synthetic" seeds the deterministic actor population so nominations, offices, and campaigns resolve through player paths even with the economy frozen.',
+        },
         sourceWorktree: str(
           "Pinned source (#1966): registered worktree name to execute instead of the worker default. Requires sourceCommit."
         ),
@@ -381,6 +400,7 @@ const TOOLS: ToolDef[] = [
         sourceWorktree: a.sourceWorktree === undefined ? undefined : String(a.sourceWorktree),
         sourceCommit: a.sourceCommit === undefined ? undefined : String(a.sourceCommit),
       });
+      const actors = parseActorsField(a.actors);
       const res = await enqueue(db, {
         preset,
         turns,
@@ -388,6 +408,7 @@ const TOOLS: ToolDef[] = [
         dbName: `ahd_sim_${seed}`,
         mode: "elections-only",
         ...(countries ? { countries } : {}),
+        ...(actors ? { actors } : {}),
         ...(a.sourceWorktree !== undefined
           ? { sourceWorktree: safe(a.sourceWorktree, "sourceWorktree") }
           : {}),
@@ -400,6 +421,7 @@ const TOOLS: ToolDef[] = [
         turns,
         seed,
         countries: countries || "global",
+        actors: actors || "pure-npp (harness default)",
         sourceWorktree: a.sourceWorktree || "(worker default)",
         sourceCommit: a.sourceCommit || "(worker default)",
         note: "Poll with sim_election_status.",
@@ -419,6 +441,7 @@ const TOOLS: ToolDef[] = [
         preset: job.preset,
         turns: job.turns,
         seed: job.seed,
+        actors: job.actors || "pure-npp (harness default)",
         sourceWorktree: job.sourceWorktree || "(worker default)",
         sourceCommit: job.sourceCommit || "(worker default)",
         sourceRepoDir: job.sourceRepoDir,
@@ -450,6 +473,7 @@ const TOOLS: ToolDef[] = [
         turns: job.turns,
         seed: job.seed,
         countries: job.countries || "global",
+        actors: job.actors || "pure-npp (harness default)",
         sourceWorktree: job.sourceWorktree || "(worker default)",
         sourceCommit: job.sourceCommit || "(worker default)",
         sourceRepoDir: job.sourceRepoDir,

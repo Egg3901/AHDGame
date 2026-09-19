@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { assertSafeToken, buildRunWorldArgs, type SimJobExperimentFields } from "./simJobArgs";
+import {
+  assertSafeToken,
+  buildRunWorldArgs,
+  parseActorsField,
+  type SimJobExperimentFields,
+} from "./simJobArgs";
 
 describe("sim worker runWorld argument emission", () => {
   it("carries an explicit true equity override with the canonical flag", () => {
@@ -88,5 +93,35 @@ describe("sim worker runWorld argument emission", () => {
   it("validates safe tokens", () => {
     expect(assertSafeToken("run-1_seed", "_id")).toBe("run-1_seed");
     expect(() => assertSafeToken("a/b", "_id")).toThrow('Job field "_id" failed validation');
+  });
+
+  it("omits the actors flag for pre-mode jobs (backward-compatible pure NPP)", () => {
+    expect(buildRunWorldArgs({})).not.toContain("--actors=synthetic");
+    expect(buildRunWorldArgs({}).some((a) => a.startsWith("--actors="))).toBe(false);
+  });
+
+  it("emits the actors flag for explicit synthetic jobs", () => {
+    expect(buildRunWorldArgs({ actors: "synthetic" })).toContain("--actors=synthetic");
+    expect(buildRunWorldArgs({ actors: "pure-npp" })).toContain("--actors=pure-npp");
+  });
+
+  it("rejects unknown actors modes instead of running the wrong population", () => {
+    expect(() => buildRunWorldArgs({ actors: "all" })).toThrow('invalid actors "all"');
+  });
+});
+
+describe("parseActorsField", () => {
+  it("returns undefined when omitted (harness default)", () => {
+    expect(parseActorsField(undefined)).toBeUndefined();
+  });
+
+  it("accepts both known modes", () => {
+    expect(parseActorsField("pure-npp")).toBe("pure-npp");
+    expect(parseActorsField("synthetic")).toBe("synthetic");
+  });
+
+  it("throws on typos and non-strings", () => {
+    expect(() => parseActorsField("synthetc")).toThrow('invalid actors "synthetc"');
+    expect(() => parseActorsField(42)).toThrow("invalid actors");
   });
 });
