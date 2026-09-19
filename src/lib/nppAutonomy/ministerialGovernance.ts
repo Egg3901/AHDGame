@@ -67,6 +67,11 @@ import {
 } from "./rules/reshuffleGuard";
 import { loadNppBehaviorPolicy } from "@/lib/singleplayerDifficulty/loadBehaviorPolicy";
 import type { NppBehaviorPolicy } from "@/lib/singleplayerDifficulty/rules/behavior";
+import { loadTurnLengthMinutes } from "@/lib/financialTxLog/expiresAt";
+import {
+  readApprovalForResignation,
+  resignNppCaretakerMinister,
+} from "@/lib/uk/cabinet/nppResignation";
 
 /** Map a position metric to its agenda domain, or null if it has no mapping. */
 function domainForMetric(category: string, metricId: string): string | null {
@@ -696,9 +701,13 @@ export async function runCaretakerMinisters(
   db: Db,
   countryId: CountryId,
   currentTurn: number,
-  now: Date
+  now: Date,
+  opts?: { rng?: () => number }
 ): Promise<MinisterialGovernanceResult> {
   if (!(await nppAutonomyAtLeast(db, countryId, "v2"))) return INACTIVE;
+  // Injected for tests so resignation rolls are deterministic; production
+  // callers omit it and get the ambient source.
+  const rng = opts?.rng ?? Math.random;
 
   const membersCol = getCabinetMembersCollection(db);
   // Caretaker seats: NPP-held AND appointed by a human head of government.
@@ -722,11 +731,49 @@ export async function runCaretakerMinisters(
 
   let tiersSet = 0;
   let ordersIssued = 0;
+  let resignations = 0;
+  // Lazily loaded once per run: the resignation rule needs approval + turn
+  // length, but only the UK hook reads them.
+  let resignationApproval: number | null = null;
+  let resignationTurnMs: number | null = null;
   for (const minister of ministers) {
+    // Validate before anything else: a caretaker with no portfolio mechanics
+    // or no backing NPP doc is not a seat the hook may resign, steer, or
+    // count — skip it before the resignation roll below.
     const mechanics = getCabinetMechanics(countryId, minister.positionId);
     if (!mechanics) continue;
     const npp = nppById.get(minister.nppId.toString());
     if (!npp) continue;
+
+    // NPP resignation (issue #859, UK only): a caretaker whose government
+    // stands badly may quit of its own accord. The seat is left vacant for
+    // the player head to re-appoint; the flat gauge hit lands in the shell.
+    // eslint-disable-next-line local/no-country-literals -- the NPP resignation hook and confidence gauge are UK-specific structures
+    if (countryId === "UK") {
+      if (resignationApproval === null) {
+        resignationApproval = await readApprovalForResignation(db, countryId);
+      }
+      if (resignationTurnMs === null) {
+        resignationTurnMs = (await loadTurnLengthMinutes(db)) * 60_000;
+      }
+      const appointedAt = (minister as { appointedAt?: Date }).appointedAt;
+      const turnsInPost =
+        appointedAt instanceof Date && resignationTurnMs > 0
+          ? Math.max(0, Math.floor((now.getTime() - appointedAt.getTime()) / resignationTurnMs))
+          : Number.MAX_SAFE_INTEGER;
+      const { resigned } = await resignNppCaretakerMinister(db, {
+        countryId,
+        memberId: minister._id,
+        positionId: minister.positionId,
+        input: { approval: resignationApproval, turnsInPost },
+        rng,
+        now,
+      });
+      if (resigned) {
+        resignations += 1;
+        continue;
+      }
+    }
 
     // The caretaker's own portfolio agenda: conditions + its ideology, ranked
     // and clamped by its archetype. No crises (no NPP government owns them here).
@@ -752,9 +799,9 @@ export async function runCaretakerMinisters(
     ordersIssued += applied.ordersIssued;
   }
 
-  if (tiersSet > 0 || ordersIssued > 0) {
+  if (tiersSet > 0 || ordersIssued > 0 || resignations > 0) {
     console.log(
-      `[nppAutonomy] ${countryId}: caretaker ministers set ${tiersSet} tier(s), issued ${ordersIssued} order(s)`
+      `[nppAutonomy] ${countryId}: caretaker ministers set ${tiersSet} tier(s), issued ${ordersIssued} order(s), resigned ${resignations}`
     );
   }
   return { ran: true, tiersSet, ordersIssued, reshuffled: 0 };

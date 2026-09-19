@@ -379,4 +379,24 @@ export const UK_MINISTERIAL_ORDERS: Record<string, MinisterialOrderConfig[]> = {
       effects: [{ metric: "governmentApproval", modifier: 0.05, scope: "regional" }],
     },
   ],
+
+  // ── 18. Government Chief Whip ─────────────────────────────────────────────
+  chief_whip: [
+    {
+      id: "whip_panic_bill_support",
+      name: "Whipped Division",
+      description:
+        "Put the whips to work ahead of a major division, for a temporary boost to government approval.",
+      duration: 24,
+      effects: [{ metric: "governmentApproval", modifier: 0.05, scope: "national" }],
+    },
+    {
+      id: "whip_backbench_outreach",
+      name: "Backbench Outreach",
+      description:
+        "Send the whips out to listen to backbench concerns, for a temporary boost to public trust.",
+      duration: 24,
+      effects: [{ metric: "publicTrust", modifier: 0.05, scope: "national" }],
+    },
+  ],
 };
