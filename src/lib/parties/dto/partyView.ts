@@ -406,6 +406,8 @@ export interface NationalPartyInfluenceResponse {
     currentNPPs: number;
     maxSlots: number;
     full: boolean;
+    /** False when the party has no presence in or next to this region. */
+    inFrontier?: boolean;
   }>;
   nppsByState: Record<string, Array<Record<string, unknown>>>;
   context: {
