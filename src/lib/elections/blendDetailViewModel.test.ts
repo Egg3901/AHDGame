@@ -177,9 +177,10 @@ describe("buildBlendDetail — with the winner's bonus applied", () => {
 
   it("says instead that the leading parties were boosted", () => {
     const m = buildBlendDetail(bonusInput());
-    expect(m.standfirst).toContain("winner's bonus");
-    expect(m.hemiNote).toContain("winner's bonus");
-    expect(m.rows[0].mathNote).toMatch(/share/);
+    expect(m.standfirst).toContain("historical Westminster winner's bonus");
+    expect(m.standfirst).toContain("Party totals add across candidates");
+    expect(m.hemiNote).toContain("historical Westminster winner's bonus");
+    expect(m.rows[0].mathNote).toContain("candidate's percentage is not a direct seat conversion");
   });
 
   it("still keeps em and en dashes out of the generated copy", () => {

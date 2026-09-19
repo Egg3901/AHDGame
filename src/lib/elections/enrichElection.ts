@@ -83,7 +83,7 @@ import { getOrCreateVoteTally } from "@/lib/elections/voteTallyService";
 import { isRedistrictingEnabled } from "@/lib/redistricting/flag";
 import { districtedHouseResolution } from "@/lib/redistricting/districtedHouseResolution";
 import { buildPrimaryShareMap } from "@/lib/turn/election/generalResolutionHelpers";
-import { getMajoritarianBonus } from "@/lib/turn/election/seatAllocation";
+import { getMajoritarianBonusForRace } from "@/lib/turn/election/seatAllocation";
 import { selectEndedDisplayCandidates } from "@/lib/elections/endedResultsCandidates";
 import { selectGeneralPhaseDisplayCandidates } from "@/lib/elections/generalPhaseCandidates";
 import { computeElectoralVotes } from "@/lib/elections/electoralVoteService";
@@ -727,10 +727,16 @@ export async function _enrichElection(
   );
 
   // Seat estimates (always computed for multi-seat races — needed by both views)
-  // FPTP winner's bonus (#3244): UK Commons in historical in-game years
-  // projects with the same cube-law re-split the resolver applies; undefined
-  // (proportional) once the world's clock reaches 1999.
-  const majoritarianBonus = getMajoritarianBonus(election.electionType, gameState?.currentYear);
+  // FPTP winner's bonus (#3244): UK Commons in historical years projects with
+  // the same cube-law re-split the resolver applies. Live races use the world
+  // clock; resolved races use their election year so the historical result
+  // keeps the rule that actually governed it after the world reaches 1999.
+  const majoritarianBonus = getMajoritarianBonusForRace(
+    election.electionType,
+    gameState?.currentYear,
+    election.electionYear,
+    isEnded
+  );
   // #1277: a RESOLVED race must show the allocation it actually seated, never a
   // fresh recompute. Recomputing on every load meant a finished election
   // rendered a different result whenever an allocator input drifted underneath

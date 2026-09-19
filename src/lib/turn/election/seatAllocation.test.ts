@@ -6,6 +6,7 @@ import {
   allocateSeats,
   applyMajoritarianBonus,
   getMajoritarianBonus,
+  getMajoritarianBonusForRace,
   getMultiSeatMinShare,
   UK_COMMONS_FPTP_EXPONENT,
   UK_COMMONS_BONUS_TAPER,
@@ -621,7 +622,7 @@ describe("allocateSeats - party-aggregate eligibility threshold", () => {
 
 // ── FPTP winner's bonus (power law) — #3244 / ticket #1032 ──────────────────
 
-describe("getMajoritarianBonus — current-year/chamber gating", () => {
+describe("getMajoritarianBonus - current-year/chamber gating", () => {
   it("is OFF for commons at modern in-game years (1999+) and without a year", () => {
     expect(getMajoritarianBonus("commons", 1999)).toBeUndefined();
     expect(getMajoritarianBonus("commons", 2007)).toBeUndefined();
@@ -660,6 +661,16 @@ describe("getMajoritarianBonus — current-year/chamber gating", () => {
     for (const type of ["house", "stateSenate", "bundestag", "dail", "sangiin", "shugiin"]) {
       expect(getMajoritarianBonus(type, 1953)).toBeUndefined();
     }
+  });
+
+  it("uses the election year when explaining a resolved historical race", () => {
+    expect(getMajoritarianBonusForRace("commons", 2005, 1970, true)).toEqual({
+      exponent: UK_COMMONS_FPTP_EXPONENT,
+    });
+    expect(getMajoritarianBonusForRace("commons", 1970, 2005, true)).toBeUndefined();
+    expect(getMajoritarianBonusForRace("commons", 1970, 1953, false)).toEqual({
+      exponent: UK_COMMONS_FPTP_EXPONENT,
+    });
   });
 });
 
@@ -905,7 +916,7 @@ describe("applyMajoritarianBonus — power-law transform", () => {
   });
 });
 
-describe("allocateSeats — commons with FPTP winner's bonus", () => {
+describe("allocateSeats - commons with FPTP winner's bonus", () => {
   const bonus = { exponent: UK_COMMONS_FPTP_EXPONENT };
   // 1953-sim national shape: Con 47.6 / Lab 45.3 / Lib 6.7 in a 75-seat region.
   const ranked: RankedCandidate[] = [
@@ -913,6 +924,40 @@ describe("allocateSeats — commons with FPTP winner's bonus", () => {
     { id: "lab", votes: 453, party: "lab" },
     { id: "lib", votes: 67, party: "lib" },
   ];
+
+  it("replays ticket 1319's turn-869 SEE snapshot", () => {
+    const ticketRanked: RankedCandidate[] = [
+      { id: "monroe", votes: 66375, party: "con" },
+      { id: "viktoriya", votes: 53285, party: "lab" },
+      { id: "count", votes: 54426, party: "lab" },
+      { id: "liam", votes: 75367, party: "con" },
+      { id: "asif", votes: 68511, party: "ld" },
+      { id: "aaliyah", votes: 66634, party: "con" },
+      { id: "mihai", votes: 6351, party: "lab" },
+    ];
+    const result = allocateSeats(
+      "commons",
+      "SEE",
+      81,
+      ticketRanked,
+      390949,
+      undefined,
+      bonus,
+      undefined,
+      UK_COMMONS_SEATS_1953
+    );
+
+    expect(result.seatsEstimate).toEqual({
+      monroe: 16,
+      viktoriya: 12,
+      count: 13,
+      liam: 18,
+      asif: 5,
+      aaliyah: 16,
+      mihai: 1,
+    });
+    expect(Object.values(result.seatsEstimate).reduce((sum, seats) => sum + seats, 0)).toBe(81);
+  });
 
   it("gate off (undefined config) is byte-identical to the current proportional path", () => {
     const off = allocateSeats("commons", "LON", 75, ranked, 996, undefined, undefined);

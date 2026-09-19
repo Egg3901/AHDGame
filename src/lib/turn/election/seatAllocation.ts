@@ -199,6 +199,26 @@ export function getMajoritarianBonus(
 }
 
 /**
+ * Resolve the winner-bonus rule for an election display.
+ *
+ * Live races follow the current world clock. A resolved race must keep the
+ * rule that applied when its election happened, even after the world advances
+ * into the modern era.
+ */
+export function getMajoritarianBonusForRace(
+  electionType: string,
+  currentYear: number | null | undefined,
+  electionYear: number | null | undefined,
+  isEnded: boolean
+): MajoritarianBonusConfig | undefined {
+  const year =
+    isEnded && typeof electionYear === "number" && Number.isFinite(electionYear)
+      ? electionYear
+      : currentYear;
+  return getMajoritarianBonus(electionType, year);
+}
+
+/**
  * Applies the power-law winner's bonus to an allocation pool, returning
  * per-candidate EFFECTIVE vote weights (same total as the input votes).
  *
