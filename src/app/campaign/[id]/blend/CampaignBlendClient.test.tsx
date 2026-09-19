@@ -174,6 +174,22 @@ describe("manager view", () => {
     expect(screen.queryAllByRole("button", { name: "CONTRIBUTE STRENGTH" })).toHaveLength(0);
   });
 
+  it("offers the managers list and its controls on both layouts", () => {
+    // The managers block lived only in the desktop rail, which is
+    // `hidden lg:block`, so a phone had no way to see or change who runs
+    // the campaign. Both shells stay in the test DOM, so a count of two
+    // is what proves the mobile copy exists.
+    renderClient({
+      campaign: campaignFixture({
+        managers: [{ characterId: "m1", name: "First Manager" }],
+      }),
+    });
+    expect(screen.getAllByText("First Manager")).toHaveLength(2);
+    expect(screen.getAllByRole("button", { name: "Remove First Manager as manager" })).toHaveLength(
+      2
+    );
+  });
+
   it("names the running mate on the ticket, on both layouts", () => {
     // One copy was the fault, not the fixture: the sidebar this sits in is
     // `hidden lg:block`, so the phone had no ticket block at all.

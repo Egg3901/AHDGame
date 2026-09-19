@@ -26,6 +26,13 @@ Cut from development.
   offers a contribution it cannot take. Campaign strength only moves votes in
   presidential races, so those pages now say so instead of showing a button that
   fails.
+- Campaign strength is readable on a phone again. The figure and its
+  contributors tooltip sat in a column the race table drops on small screens,
+  so a phone showed the Support button with nothing to say what it was
+  supporting. The number now appears under the candidate's name instead.
+- The campaign desk's manager list, and the controls to appoint and remove
+  managers, now appear on a phone. They had only ever been built into the
+  desktop rail.
 - A signed out reader is asked to sign in rather than being shown a price, a
   reader from another country is told contributions stay inside their own, and
   a candidate who has suspended their campaign no longer collects one. Each of
