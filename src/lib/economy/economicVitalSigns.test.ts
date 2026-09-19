@@ -1,5 +1,6 @@
 import { ObjectId } from "mongodb";
 import { describe, expect, it } from "vitest";
+import { MONEY_ACCOUNTING_VERSION } from "@/lib/moneySupply/calculate";
 import type { Bond } from "@/lib/db/types";
 import { computeEconomicVitalSigns, summarizeLedgerTurnover } from "./economicVitalSigns";
 import type { VitalSignsHistoryRow } from "./economicVitalSigns";
@@ -339,7 +340,7 @@ describe("computeEconomicVitalSigns", () => {
           centralBankBondHoldings: 0,
           bondPoolCash: 0,
           annualizedM2GrowthPct: 5,
-          accountingVersion: 2,
+          accountingVersion: MONEY_ACCOUNTING_VERSION,
           netMoneyCreatedLifetime: 0,
           createdAt: new Date(),
         },
@@ -1266,9 +1267,88 @@ it("does not mix legacy money growth into the current median", () => {
   };
   const snapshot = computeEconomicVitalSigns({
     ...emptyInput,
-    money: [money, { ...money, _id: "new", accountingVersion: 2, annualizedM2GrowthPct: 4 }],
+    money: [
+      money,
+      {
+        ...money,
+        _id: "new",
+        accountingVersion: MONEY_ACCOUNTING_VERSION,
+        annualizedM2GrowthPct: 4,
+      },
+    ],
   });
   expect(snapshot.money.medianAnnualizedM2GrowthPct.value).toBe(4);
+});
+
+it("reports the bond-pool exclusion with per-currency observation versions", () => {
+  const row = (overrides: Record<string, unknown>) => ({
+    _id: "money",
+    turn: 100,
+    countryId: "US" as const,
+    bankId: "US",
+    currencyCode: "USD" as const,
+    m1: 50,
+    m2: 100,
+    householdLiquid: 50,
+    campaignLiquid: 0,
+    nppLiquid: 0,
+    corporateLiquid: 0,
+    partyLiquid: 0,
+    governmentLiquid: 0,
+    fundLiquid: 0,
+    organizationLiquid: 0,
+    householdSavings: 0,
+    externalBroadMoney: 50,
+    bankDeposits: 0,
+    bankReserves: 0,
+    creditOutstanding: 0,
+    sovereignBondsOutstanding: 0,
+    centralBankBondHoldings: 0,
+    bondPoolCash: 0,
+    annualizedM2GrowthPct: null,
+    netMoneyCreatedLifetime: 0,
+    createdAt: new Date(),
+    ...overrides,
+  });
+  const snapshot = computeEconomicVitalSigns({
+    ...emptyInput,
+    money: [
+      row({
+        _id: "usd",
+        accountingVersion: MONEY_ACCOUNTING_VERSION,
+        annualizedM2GrowthPct: 4,
+        excludedBondPoolCash: 100,
+      }),
+      // Current method but still warming up: no comparable growth yet.
+      row({
+        _id: "huf",
+        countryId: "HU" as const,
+        currencyCode: "HUF" as const,
+        accountingVersion: MONEY_ACCOUNTING_VERSION,
+        excludedBondPoolCash: 4_700_000_000,
+      }),
+      // Legacy v2 row: keeps its level, never feeds growth, contributes no exclusion.
+      row({
+        _id: "plz",
+        countryId: "PL" as const,
+        currencyCode: "PLZ" as const,
+        accountingVersion: 2,
+        annualizedM2GrowthPct: 500,
+      }),
+    ],
+  });
+  expect(snapshot.money.excludedBondPoolCash.value).toBe(4_700_000_100);
+  expect(snapshot.money.currentAccountingCurrencies).toBe(2);
+  expect(snapshot.money.comparableGrowthCurrencies).toBe(1);
+  expect(snapshot.money.medianAnnualizedM2GrowthPct.value).toBe(4);
+  expect(snapshot.money.observationVersions).toEqual({
+    USD: MONEY_ACCOUNTING_VERSION,
+    HUF: MONEY_ACCOUNTING_VERSION,
+    PLZ: 2,
+  });
+  expect(snapshot.money.observationConfidence).toEqual({ USD: "high", HUF: "medium", PLZ: "low" });
+  expect(snapshot.measurement.reasons).toContain("money_observation_version_transition");
+  expect(snapshot.measurement.reasons).toContain("money_growth_awaiting_comparable_window");
 });
 
 describe("ring-fenced bank and escrow money", () => {
