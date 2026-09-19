@@ -481,6 +481,27 @@ export async function snapshotMarketCap(
         })(),
         marketCap: Math.round(localPrice * s.totalShares),
         liquidCapital: Math.round(s.liquidCapital),
+        // SOE backing reconciliation (#2043): ₳-anchor snapshot fields to the
+        // row's local denomination, same as income/costs above. Absent unless
+        // the backing fold set it (SOE with a shortfall this turn).
+        ...(s.soeBacking
+          ? {
+              soeBacking: {
+                shortfall: Math.round(
+                  writeCorpEconomicLocal(s.soeBacking.shortfallAnchor, code, rate)
+                ),
+                realizedLoss: Math.round(
+                  writeCorpEconomicLocal(s.soeBacking.realizedLossAnchor, code, rate)
+                ),
+                realizedSource: s.soeBacking.realizedSource,
+                covered: Math.round(writeCorpEconomicLocal(s.soeBacking.coveredAnchor, code, rate)),
+                cipHeld: Math.round(writeCorpEconomicLocal(s.soeBacking.cipHeldAnchor, code, rate)),
+                residual: Math.round(
+                  writeCorpEconomicLocal(s.soeBacking.residualAnchor, code, rate)
+                ),
+              },
+            }
+          : {}),
         // Snapshot the market-making buyback escrow (already in local currency) so
         // trace_corp / forensics can chart true net cash (liquidCapital + escrow) and
         // detect escrow going negative — the driver behind "the merger only gave me a
