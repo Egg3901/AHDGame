@@ -28,6 +28,7 @@ import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
 import { emitTreasuryTransaction } from "@/lib/treasury/emit";
 import { checkPlayerPayoutCap } from "@/lib/treasury/payoutCap";
+import { TreasuryExecutionUncertainError } from "@/lib/treasury/executionUncertain";
 
 export interface ExecuteSendToMemberArgs {
   db: Db;
@@ -119,17 +120,57 @@ export async function executeSendToMember(
     if (debitResult.matchedCount === 0) {
       return NextResponse.json({ error: "Insufficient treasury funds" }, { status: 400 });
     }
-    const creditResult = await db
-      .collection<Character>("characters")
-      .updateOne({ _id: targetCharacter._id }, characterCredit);
-    if (creditResult.matchedCount === 0) {
-      // Refund the debit so we don't lose treasury funds.
-      await db
-        .collection<PoliticalParty>("politicalParties")
-        .updateOne(
-          { _id: party._id },
-          { $inc: { treasury: amount }, $set: { updatedAt: new Date() } }
+    // The debit has landed and there is no transaction to roll back, so
+    // every exit from here on must either complete the credit or put the
+    // money back. A THROWN credit was previously not compensated at all:
+    // it escaped with the treasury already short, and the approve route
+    // read that as "nothing happened" and reopened the row for a second
+    // debit.
+    const refundDebit = async (reason: string, cause?: unknown): Promise<void> => {
+      try {
+        await db
+          .collection<PoliticalParty>("politicalParties")
+          .updateOne(
+            { _id: party._id },
+            { $inc: { treasury: amount }, $set: { updatedAt: new Date() } }
+          );
+      } catch (refundError) {
+        console.error(
+          JSON.stringify({
+            error: "treasury_send_refund_failed",
+            operation: "execute_send_to_member",
+            partyId: partyIdStr,
+            countryId,
+            amount,
+            recipientId: targetCharacter._id.toString(),
+            reason,
+            message: refundError instanceof Error ? refundError.message : String(refundError),
+            // The failure that triggered the refund. Without it an
+            // operator reconciling this row sees only that the refund
+            // failed, not what went wrong first.
+            ...(cause !== undefined && {
+              causedBy: cause instanceof Error ? cause.message : String(cause),
+            }),
+          })
         );
+        throw new TreasuryExecutionUncertainError(
+          `Treasury debited but neither credited nor refunded (${reason}).`,
+          { cause: refundError }
+        );
+      }
+    };
+
+    let creditResult;
+    try {
+      creditResult = await db
+        .collection<Character>("characters")
+        .updateOne({ _id: targetCharacter._id }, characterCredit);
+    } catch (creditError) {
+      await refundDebit("credit threw", creditError);
+      throw creditError;
+    }
+    if (creditResult.matchedCount === 0) {
+      await refundDebit("recipient not found");
       return NextResponse.json({ error: "Character not found" }, { status: 404 });
     }
     return null;
@@ -239,24 +280,41 @@ export async function executeSendToMember(
   }
 
   // Fire-and-forget activity log row for the admin activity-tracking view.
-  void db.collection("activityLog").insertOne({
-    type: "fund_event",
-    timestamp: now,
-    userId: new ObjectId(args.initiatorUserId),
-    characterId: initiator._id,
-    characterName: initiator.name,
-    username: args.initiatorUsername,
-    countryId,
-    fundEventType: "party_transfer",
-    amount,
-    currencyCode: COUNTRY_CURRENCY_MAP[countryId] ?? "USD",
-    fromId: party._id,
-    fromName: party.name,
-    fromType: "party",
-    toId: targetCharacter._id,
-    toName: targetCharacter.name,
-    toType: "character",
-  });
+  // Guarded like the writes above: `new ObjectId(...)` throws
+  // SYNCHRONOUSLY on a malformed id, so even a call that is never
+  // awaited can escape this function with the money already moved.
+  try {
+    void db.collection("activityLog").insertOne({
+      type: "fund_event",
+      timestamp: now,
+      userId: new ObjectId(args.initiatorUserId),
+      characterId: initiator._id,
+      characterName: initiator.name,
+      username: args.initiatorUsername,
+      countryId,
+      fundEventType: "party_transfer",
+      amount,
+      currencyCode: COUNTRY_CURRENCY_MAP[countryId] ?? "USD",
+      fromId: party._id,
+      fromName: party.name,
+      fromType: "party",
+      toId: targetCharacter._id,
+      toName: targetCharacter.name,
+      toType: "character",
+    });
+  } catch (err) {
+    console.error(
+      JSON.stringify({
+        error: "treasury_send_activity_log_failed",
+        operation: "execute_send_to_member",
+        partyId: partyIdStr,
+        countryId,
+        amount,
+        recipientId: targetCharacter._id.toString(),
+        message: err instanceof Error ? err.message : String(err),
+      })
+    );
+  }
 
   return {
     ok: true,

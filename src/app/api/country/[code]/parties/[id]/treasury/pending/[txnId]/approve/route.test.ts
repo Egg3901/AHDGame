@@ -349,6 +349,66 @@ describe("POST /api/country/[code]/parties/[id]/treasury/pending/[txnId]/approve
     expect((await sendArgs())?.reserveWarning).toBeNull();
   });
 
+  it("does not reopen the row when the executor reports the treasury state as uncertain", async () => {
+    // Debited, not credited, refund failed. Reopening would put a free
+    // slot back on a row whose money is already gone.
+    const { executeSendToMember } = await import("@/lib/treasury/executeSendToMember");
+    const { TreasuryExecutionUncertainError } = await import("@/lib/treasury/executionUncertain");
+    vi.mocked(executeSendToMember).mockRejectedValue(
+      new TreasuryExecutionUncertainError("debited, not refunded") as never
+    );
+
+    const response = await call();
+
+    expect(response.status).toBeGreaterThanOrEqual(500);
+    expect(releaseCall()).toBeUndefined();
+  });
+
+  it("says the row expired rather than blaming another approver", async () => {
+    // The expiry sweep can take the row between the slot claim and the
+    // execution claim. Reporting that as "another approver is
+    // completing this" sends the player to wait for a payout that is
+    // never coming.
+    executionClaimResult = { matchedCount: 0, modifiedCount: 0 };
+    db.collectionMocks["pendingTreasuryTransactions"]!.findOne.mockReset();
+    db.collectionMocks["pendingTreasuryTransactions"]!.findOne.mockResolvedValueOnce(row())
+      .mockResolvedValueOnce(
+        row({ treasurerApproval: { characterId: treasurerId, approvedAt: new Date() } })
+      )
+      .mockResolvedValue(
+        row({
+          treasurerApproval: { characterId: treasurerId, approvedAt: new Date() },
+          status: "expired",
+        })
+      );
+
+    const response = await call();
+    const body = await response.json();
+
+    expect(body.message ?? body.error).toMatch(/expired/i);
+    expect(body.message ?? body.error).not.toMatch(/another approver/i);
+  });
+
+  it("still credits another approver when the row really is being executed", async () => {
+    executionClaimResult = { matchedCount: 0, modifiedCount: 0 };
+    db.collectionMocks["pendingTreasuryTransactions"]!.findOne.mockReset();
+    db.collectionMocks["pendingTreasuryTransactions"]!.findOne.mockResolvedValueOnce(row())
+      .mockResolvedValueOnce(
+        row({ treasurerApproval: { characterId: treasurerId, approvedAt: new Date() } })
+      )
+      .mockResolvedValue(
+        row({
+          treasurerApproval: { characterId: treasurerId, approvedAt: new Date() },
+          status: "executing",
+        })
+      );
+
+    const response = await call();
+    const body = await response.json();
+
+    expect(body.message).toMatch(/another approver/i);
+  });
+
   it("refuses to pay out a row queued before the leadership election freeze", async () => {
     // Otherwise a row queued earlier becomes a way through the window.
     db.collectionMocks["nationalPartyElections"]!.countDocuments.mockResolvedValue(1);

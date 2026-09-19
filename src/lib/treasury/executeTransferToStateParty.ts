@@ -23,6 +23,7 @@ import type { CountryId } from "@/lib/constants/countries";
 import { COUNTRY_CURRENCY_MAP, type CurrencyCode } from "@/lib/constants/currencies";
 import { emitTreasuryTransaction } from "@/lib/treasury/emit";
 import { emitTx } from "@/lib/financialTxLog/emit";
+import { TreasuryExecutionUncertainError } from "@/lib/treasury/executionUncertain";
 import { getGameState } from "@/lib/gameState";
 
 export interface ExecuteTransferToStateArgs {
@@ -98,13 +99,38 @@ export async function executeTransferToStateParty(
         .collection<StatePartyOrg>("statePartyOrg")
         .updateOne({ _id: statePartyKey }, statePartyCredit, { upsert: true });
     } catch (error) {
-      // Refund on failure.
-      await db
-        .collection<PoliticalParty>("politicalParties")
-        .updateOne(
-          { _id: party._id },
-          { $inc: { treasury: amount }, $set: { updatedAt: new Date() } }
+      // Refund on failure. If the refund ALSO fails the treasury is
+      // short with nothing credited, and this can no longer be reported
+      // as an ordinary refusal: the approve route would hand the
+      // signature back and reopen the row for a second debit.
+      try {
+        await db
+          .collection<PoliticalParty>("politicalParties")
+          .updateOne(
+            { _id: party._id },
+            { $inc: { treasury: amount }, $set: { updatedAt: new Date() } }
+          );
+      } catch (refundError) {
+        console.error(
+          JSON.stringify({
+            error: "treasury_state_transfer_refund_failed",
+            operation: "execute_transfer_to_state_party",
+            partyId: partyIdStr,
+            countryId,
+            stateId: upperStateId,
+            amount,
+            message: refundError instanceof Error ? refundError.message : String(refundError),
+            // The credit failure that triggered the refund. Without it
+            // an operator reconciling this row sees only that the refund
+            // failed, not what went wrong first.
+            causedBy: error instanceof Error ? error.message : String(error),
+          })
         );
+        throw new TreasuryExecutionUncertainError(
+          "Treasury debited but the state party was neither credited nor refunded.",
+          { cause: refundError }
+        );
+      }
       throw error;
     }
     return null;

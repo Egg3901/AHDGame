@@ -16,6 +16,7 @@ import { getPartyBudgetCollection } from "@/lib/db/collections";
 import { findPartyBudgetForScope } from "@/lib/partyBudgetGuards";
 import { wouldTriggerTreasuryReserveOverride } from "@/lib/partyTreasuryPlan";
 import { executeSendToMember } from "@/lib/treasury/executeSendToMember";
+import { isTreasuryExecutionUncertain } from "@/lib/treasury/executionUncertain";
 import { executeTransferToStateParty } from "@/lib/treasury/executeTransferToStateParty";
 import {
   approvalFieldForSlot,
@@ -245,10 +246,27 @@ export async function POST(_request: Request, { params }: RouteParams) {
         { $set: { status: "executing", executingAt: now } }
       );
     if (executionClaim.matchedCount === 0) {
-      // We lost the race (or a cancel landed first). Our signature is a
-      // real one and the winner is executing with it, so it stays put —
+      // Our signature is a real one either way, so it stays put —
       // releasing here would pull a signature out from under a transfer
       // already in flight.
+      //
+      // But "we lost the race" is only one reason the flip can miss.
+      // A cancel or the expiry sweep can take the row between the slot
+      // claim and here, and telling that player to wait for another
+      // approver sends them to wait for a payout that is never coming.
+      // Only cancelled and expired are reported as failures: they are
+      // the states that mean no payout is coming. Anything else is
+      // either the winner at work or a transient read, and the approval
+      // was genuinely recorded, so there is nothing to alarm about.
+      const current = await db
+        .collection<PendingTreasuryTransaction>("pendingTreasuryTransactions")
+        .findOne({ _id: txnOid });
+      if (current?.status === "cancelled" || current?.status === "expired") {
+        return NextResponse.json(
+          { error: `Transaction is ${current.status}, not open.` },
+          { status: 400 }
+        );
+      }
       return NextResponse.json({
         success: true,
         pending: false,
@@ -328,10 +346,20 @@ export async function POST(_request: Request, { params }: RouteParams) {
       // slot goes back before the error continues to the route handler.
       // A failure to release must not replace the failure that caused
       // it: the original is the one worth reporting.
-      try {
-        await releaseClaimedSlot();
-      } catch {
-        // Swallowed deliberately; `executionError` is rethrown below.
+      //
+      // UNLESS the executor says the treasury may already be debited.
+      // Production Mongo is standalone, so the executors debit and
+      // credit sequentially with no transaction to roll back; when the
+      // credit fails AND the compensating refund fails, the money is
+      // gone. Reopening the row there would put a free slot back on a
+      // transaction that has already spent funds. It stays `executing`
+      // for an operator instead.
+      if (!isTreasuryExecutionUncertain(executionError)) {
+        try {
+          await releaseClaimedSlot();
+        } catch {
+          // Swallowed deliberately; `executionError` is rethrown below.
+        }
       }
       throw executionError;
     }

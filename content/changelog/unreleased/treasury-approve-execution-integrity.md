@@ -22,12 +22,20 @@ Cut from development.
   each then saw a fully approved transaction, so both went on to move the
   money. Completing a transaction is now claimed by one approver before any
   funds move, and the other is told their approval was recorded and someone
-  else is finishing it.
+  else is finishing it. A transaction that was cancelled or that expired while
+  approvals were being collected now says so, instead of telling the approver
+  to wait for someone who is not coming.
 - A transfer that has already gone through is no longer reported as a failure.
   Writing the audit trail happens after the money moves, and a failure there
   used to unwind the approval and reopen the transaction, leaving it ready to
   spend the same funds a second time. The payment now stands and the audit
   failure is logged for staff instead.
+- A failed payment can no longer leave the party treasury short. The live
+  database applies the debit and the credit one after the other rather than as
+  one indivisible step, and a failure in between put the money back. A failure
+  in the putting back was itself unhandled, so the funds simply vanished from
+  the treasury and the transaction reopened for someone to spend a second time.
+  Those transactions now stop and are held for staff to reconcile.
 - Piercing the Treasurer reserve target is recorded as an emergency override
   again. Since any two officers can sign, a Chair and a Vice-Chair could empty
   the reserve with nothing in the record to show it, because the old rule

@@ -35,12 +35,12 @@ describe("executeTransferToStateParty", () => {
     vi.clearAllMocks();
     db = createMockDb();
     db.collection("politicalParties");
-    db.collection("statePartyOrgs");
+    db.collection("statePartyOrg");
     db.collection("adminLogs");
     db.collection("activityLog");
 
     db.collectionMocks["politicalParties"]!.updateOne.mockResolvedValue({ matchedCount: 1 });
-    db.collectionMocks["statePartyOrgs"]!.updateOne.mockResolvedValue({ matchedCount: 1 });
+    db.collectionMocks["statePartyOrg"]!.updateOne.mockResolvedValue({ matchedCount: 1 });
     db.collectionMocks["adminLogs"]!.insertOne.mockResolvedValue({ acknowledged: true });
     db.collectionMocks["activityLog"]!.insertOne.mockResolvedValue({ acknowledged: true });
   });
@@ -88,6 +88,35 @@ describe("executeTransferToStateParty", () => {
     expect(result.ok).toBe(true);
   });
 
+  it("reports the treasury state as uncertain when the refund itself fails", async () => {
+    // Debited, the state party not credited, and the compensating
+    // refund failed too. Reported as an ordinary failure this would
+    // reopen the pending row for a second debit.
+    db.collectionMocks["statePartyOrg"]!.updateOne.mockRejectedValue(new Error("credit failed"));
+    db.collectionMocks["politicalParties"]!.updateOne.mockResolvedValueOnce({
+      matchedCount: 1,
+    }).mockRejectedValue(new Error("refund failed"));
+
+    const { executeTransferToStateParty } = await import("./executeTransferToStateParty");
+    const { isTreasuryExecutionUncertain } = await import("./executionUncertain");
+
+    await expect(executeTransferToStateParty(args())).rejects.toSatisfy(
+      isTreasuryExecutionUncertain
+    );
+  });
+
+  it("does not claim uncertainty when the refund succeeds", async () => {
+    // Net zero, so the caller may unwind normally.
+    db.collectionMocks["statePartyOrg"]!.updateOne.mockRejectedValue(new Error("credit failed"));
+
+    const { executeTransferToStateParty } = await import("./executeTransferToStateParty");
+    const { isTreasuryExecutionUncertain } = await import("./executionUncertain");
+
+    await expect(executeTransferToStateParty(args())).rejects.not.toSatisfy(
+      isTreasuryExecutionUncertain
+    );
+  });
+
   it("still refuses before the debit when the treasury cannot cover the amount", async () => {
     db.collectionMocks["politicalParties"]!.updateOne.mockResolvedValue({ matchedCount: 0 });
 
@@ -95,6 +124,6 @@ describe("executeTransferToStateParty", () => {
     const result = await executeTransferToStateParty(args());
 
     expect(result.ok).toBe(false);
-    expect(db.collectionMocks["statePartyOrgs"]!.updateOne).not.toHaveBeenCalled();
+    expect(db.collectionMocks["statePartyOrg"]!.updateOne).not.toHaveBeenCalled();
   });
 });

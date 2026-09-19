@@ -84,6 +84,60 @@ describe("executeSendToMember", () => {
     expect(result.ok).toBe(true);
   });
 
+  it("refunds the debit when crediting the recipient throws", async () => {
+    // The standalone path is production Mongo: there is no transaction
+    // to roll back, so a throw between the debit and the credit leaves
+    // the treasury short unless this compensates. Only the
+    // matchedCount === 0 case was handled; an actual throw was not.
+    db.collectionMocks["characters"]!.updateOne.mockRejectedValue(new Error("mongo exploded"));
+
+    const { executeSendToMember } = await import("./executeSendToMember");
+    await expect(executeSendToMember(args())).rejects.toThrow();
+
+    const refund = db.collectionMocks["politicalParties"]!.updateOne.mock.calls.find(
+      (c) => ((c[1] as { $inc?: { treasury?: number } })?.$inc?.treasury ?? 0) > 0
+    );
+    expect(refund).toBeDefined();
+  });
+
+  it("reports the treasury state as uncertain when the refund itself fails", async () => {
+    // Debited, not credited, and the compensating refund also failed.
+    // The caller must NOT treat this as "nothing happened": the approve
+    // route would reopen the row and a retry would debit a second time.
+    db.collectionMocks["characters"]!.updateOne.mockRejectedValue(new Error("credit failed"));
+    db.collectionMocks["politicalParties"]!.updateOne.mockResolvedValueOnce({
+      matchedCount: 1,
+    }).mockRejectedValue(new Error("refund failed"));
+
+    const { executeSendToMember } = await import("./executeSendToMember");
+    const { isTreasuryExecutionUncertain } = await import("./executionUncertain");
+
+    await expect(executeSendToMember(args())).rejects.toSatisfy(isTreasuryExecutionUncertain);
+  });
+
+  it("does not claim uncertainty when the debit itself never landed", async () => {
+    // Nothing moved, so this is an ordinary failure and the caller is
+    // free to unwind the approval.
+    db.collectionMocks["politicalParties"]!.updateOne.mockRejectedValue(new Error("debit failed"));
+
+    const { executeSendToMember } = await import("./executeSendToMember");
+    const { isTreasuryExecutionUncertain } = await import("./executionUncertain");
+
+    await expect(executeSendToMember(args())).rejects.not.toSatisfy(isTreasuryExecutionUncertain);
+  });
+
+  it("still reports success when the activity-log row cannot be built", async () => {
+    // `new ObjectId(...)` throws SYNCHRONOUSLY on a malformed id, and
+    // the activity-log write sits after the money has moved. An escape
+    // here reads to the approve route as "the transfer did not happen".
+    const bad = { ...args(), initiatorUserId: "not-an-object-id" };
+
+    const { executeSendToMember } = await import("./executeSendToMember");
+    const result = await executeSendToMember(bad);
+
+    expect(result.ok).toBe(true);
+  });
+
   it("still refuses before the debit when the payout cap is exceeded", async () => {
     // The pre-debit guards must keep throwing/refusing normally — only
     // the post-debit side effects are made non-fatal.
