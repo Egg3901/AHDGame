@@ -207,6 +207,17 @@ describe("canCharacterJoinParty", () => {
     });
   });
 
+  // Regions get transferred, merged and dissolved. A character left homed in a
+  // region this country no longer has cannot be placed, and blocking would lock
+  // them out of every party rather than just the distant ones.
+  it("allows a joiner homed in a region this country no longer has", async () => {
+    const db = makeDb();
+    seedPresence(["NY"], ["NY", "PA"]);
+    await expect(
+      canCharacterJoinParty(db, { homeState: "DISSOLVED" }, party, "US")
+    ).resolves.toEqual({ ok: true });
+  });
+
   it("allows a joiner who has no home state", async () => {
     const db = makeDb();
     seedPresence(["NY"], ["NY", "CA"]);

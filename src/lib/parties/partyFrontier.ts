@@ -130,7 +130,24 @@ export async function canCharacterJoinParty(
   party: Pick<PoliticalParty, "sequentialId" | "name">,
   countryId: CountryId
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  const { presence, frontier } = await getPartyFrontier(db, countryId, String(party.sequentialId));
+  const regionIds = await getCountryRegionIds(db, countryId);
+  // Third fail-open case, alongside the two in `isInFrontier`. The recruitment
+  // and relocation paths hand us a region they just proved exists in `states`;
+  // a joiner's `homeState` is never validated that way, and regions do get
+  // transferred, merged and dissolved. A character left homed in a region that
+  // is no longer part of this country cannot be placed on the map at all, and
+  // blocking would lock them out of every party in the game rather than just
+  // the distant ones. Treat unplaceable the same as homeless: allow.
+  if (character.homeState && !regionIds.includes(character.homeState)) {
+    return { ok: true };
+  }
+
+  const { presence, frontier } = await getPartyFrontier(
+    db,
+    countryId,
+    String(party.sequentialId),
+    regionIds
+  );
   if (isInFrontier(presence, frontier, character.homeState)) return { ok: true };
   return {
     ok: false,
