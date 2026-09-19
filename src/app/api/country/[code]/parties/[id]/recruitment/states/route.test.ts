@@ -1,109 +1,187 @@
-/**
- * Growth-frontier eligibility on the recruitment states list.
- *
- * Exercises the real `partyFrontier` module (and therefore real adjacency) so
- * the reported `inFrontier` matches what the POST gate will actually enforce.
- */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ObjectId, type Db } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 vi.mock("@/lib/api/requireAuth", () => ({ requireAuthWithCharacter: vi.fn() }));
-vi.mock("@/lib/db/partyLookup", async () => {
-  const actual = await vi.importActual<object>("@/lib/db/partyLookup");
-  return { ...actual, findPartyBySequentialId: vi.fn() };
-});
-vi.mock("@/lib/npp/partyCapacity", () => ({
-  getPartyNppCapacity: vi.fn().mockResolvedValue({ maxNpps: 500 }),
-  partyNppCapacityError: vi.fn().mockReturnValue(null),
-}));
+vi.mock("@/lib/db/partyLookup", () => ({ findPartyBySequentialId: vi.fn() }));
 
 const chairId = new ObjectId();
+const stateChairId = new ObjectId();
+const baseParty = {
+  _id: new ObjectId(),
+  sequentialId: 9,
+  countryId: "US",
+  chairId,
+  viceChairId: null,
+  treasurerId: new ObjectId(),
+  name: "Reform",
+  treasury: 5_000_000,
+  politicalStrength: 50,
+};
 
-function makeRequest() {
-  return new Request("http://localhost/api/country/us/parties/7/recruitment/states");
+async function setupMocks(db: MockDb) {
+  const { getDb } = await import("@/lib/mongodb");
+  vi.mocked(getDb).mockResolvedValue(db as unknown as Db);
+  const { requireAuthWithCharacter } = await import("@/lib/api/requireAuth");
+  vi.mocked(requireAuthWithCharacter).mockResolvedValue({
+    ok: true,
+    user: {
+      userId: new ObjectId().toString(),
+      isAdmin: false,
+      character: { _id: chairId },
+    },
+  } as never);
+  const { findPartyBySequentialId } = await import("@/lib/db/partyLookup");
+  vi.mocked(findPartyBySequentialId).mockResolvedValue(baseParty as never);
 }
 
-const params = Promise.resolve({ code: "us", id: "7" });
-
-const REGIONS = [
-  { _id: "NY", countryId: "US", name: "New York" },
-  { _id: "PA", countryId: "US", name: "Pennsylvania" },
-  { _id: "CA", countryId: "US", name: "California" },
-];
-
-describe("GET recruitment states — frontier eligibility", () => {
+describe("GET /api/country/[code]/parties/[id]/recruitment/states", () => {
   let db: MockDb;
-
   beforeEach(async () => {
     vi.clearAllMocks();
     db = createMockDb();
+    await setupMocks(db);
+  });
 
-    const { getDb } = await import("@/lib/mongodb");
-    vi.mocked(getDb).mockResolvedValue(db as unknown as Db);
-
-    const { requireAuthWithCharacter } = await import("@/lib/api/requireAuth");
-    vi.mocked(requireAuthWithCharacter).mockResolvedValue({
-      ok: true,
-      user: {
-        userId: new ObjectId().toString(),
-        username: "chair",
-        isAdmin: false,
-        hasCharacter: true,
-        character: { _id: chairId, name: "Chair", countryId: "US", homeState: "NY" },
-      },
+  it("returns every state — including ones with active state leadership — so national chairs can recruit anywhere", async () => {
+    const activeUserId = new ObjectId();
+    db.collection("characters").find.mockReturnValue({
+      project: vi.fn().mockReturnValue({
+        toArray: vi.fn().mockResolvedValue([{ userId: activeUserId }]),
+      }),
     } as never);
-
-    const { findPartyBySequentialId } = await import("@/lib/db/partyLookup");
-    vi.mocked(findPartyBySequentialId).mockResolvedValue({
-      _id: new ObjectId(),
-      sequentialId: 7,
-      countryId: "US",
-      name: "Northeast Labor Party",
-      chairId,
-      treasury: 100_000_000,
-      nppActionPoints: 50,
+    db.collection("users").find.mockReturnValue({
+      project: vi.fn().mockReturnValue({
+        toArray: vi.fn().mockResolvedValue([{ _id: activeUserId }]),
+      }),
     } as never);
-
-    // `states.find` serves both the route's region list and getCountryRegionIds.
+    db.collection("activityLog").aggregate.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([{ _id: activeUserId }]),
+    } as never);
+    const states = [
+      { _id: "CA", name: "California" },
+      { _id: "TX", name: "Texas" },
+    ];
     db.collection("states").find.mockReturnValue({
-      toArray: vi.fn().mockResolvedValue(REGIONS),
-    });
+      toArray: vi.fn().mockResolvedValue(states),
+    } as never);
     db.collection("statePartyOrg").find.mockReturnValue({
-      toArray: vi.fn().mockResolvedValue([]),
-    });
+      toArray: vi.fn().mockResolvedValue([
+        { stateId: "CA", partyId: "9", organization: 80, chairId: stateChairId },
+        { stateId: "TX", partyId: "9", organization: 25 },
+      ]),
+    } as never);
     db.collection("npps").aggregate.mockReturnValue({
-      toArray: vi.fn().mockResolvedValue([]),
+      toArray: vi.fn().mockResolvedValue([{ _id: "TX", count: 1 }]),
+    } as never);
+
+    const { GET } = await import("./route");
+    const response = await GET(new Request("http://localhost"), {
+      params: Promise.resolve({ code: "us", id: "9" }),
     });
-    // Presence: NY only. PA is adjacent, CA is not.
-    db.collection("characters").distinct.mockResolvedValue(["NY"]);
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body).toMatchObject({
+      partyNPPCount: 1,
+      partyNPPMax: 5,
+      activeMemberCount: 1,
+      availablePartyNppSlots: 4,
+    });
+    expect(body.states).toHaveLength(2);
+    const ca = body.states.find((s: { stateId: string }) => s.stateId === "CA");
+    expect(ca).toMatchObject({
+      stateId: "CA",
+      hasStateLeadership: true,
+      // Slot cap and resource gate still apply, but the leadership flag does not
+      // by itself disable recruitment.
+      canRecruit: true,
+    });
+    const tx = body.states.find((s: { stateId: string }) => s.stateId === "TX");
+    expect(tx).toMatchObject({ stateId: "TX", hasStateLeadership: false });
   });
 
-  it("marks regions outside the frontier and clears canRecruit for them", async () => {
-    const { GET } = await import("./route");
-    const body = await (await GET(makeRequest(), { params })).json();
+  it("still respects the per-state slot cap", async () => {
+    db.collection("states").find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([{ _id: "CA", name: "California" }]),
+    } as never);
+    db.collection("statePartyOrg").find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([
+        // Org of 0 → only 2 slots per calculateRecruitmentSlots.
+        { stateId: "CA", partyId: "9", organization: 0, chairId: stateChairId },
+      ]),
+    } as never);
+    db.collection("npps").aggregate.mockReturnValue({
+      // Two NPPs already in the state — cap reached.
+      toArray: vi.fn().mockResolvedValue([{ _id: "CA", count: 2 }]),
+    } as never);
 
-    const byId = Object.fromEntries(body.states.map((s: { stateId: string }) => [s.stateId, s]));
-    expect(byId.CA.inFrontier).toBe(false);
-    expect(byId.CA.canRecruit).toBe(false);
+    const { GET } = await import("./route");
+    const response = await GET(new Request("http://localhost"), {
+      params: Promise.resolve({ code: "us", id: "9" }),
+    });
+    const body = await response.json();
+
+    const ca = body.states[0];
+    expect(ca).toMatchObject({
+      stateId: "CA",
+      hasStateLeadership: true,
+      availableSlots: 0,
+      canRecruit: false,
+    });
   });
 
-  it("marks the presence region and its neighbour as in frontier", async () => {
-    const { GET } = await import("./route");
-    const body = await (await GET(makeRequest(), { params })).json();
+  // Growth frontier: the list must report reachability so the picker can grey
+  // out unreachable regions instead of failing the player on submit. Exercises
+  // the real partyFrontier module, and therefore real adjacency, so what is
+  // reported matches what the POST gate enforces.
+  describe("growth frontier", () => {
+    function seedRegions(presence: string[]) {
+      db.collection("states").find.mockReturnValue({
+        toArray: vi.fn().mockResolvedValue([
+          { _id: "NY", name: "New York" },
+          { _id: "PA", name: "Pennsylvania" },
+          { _id: "CA", name: "California" },
+        ]),
+      } as never);
+      db.collection("statePartyOrg").find.mockReturnValue({
+        toArray: vi.fn().mockResolvedValue([]),
+      } as never);
+      db.collection("npps").aggregate.mockReturnValue({
+        toArray: vi.fn().mockResolvedValue([]),
+      } as never);
+      db.collection("characters").distinct.mockResolvedValue(presence);
+    }
 
-    const byId = Object.fromEntries(body.states.map((s: { stateId: string }) => [s.stateId, s]));
-    expect(byId.NY.inFrontier).toBe(true);
-    expect(byId.PA.inFrontier).toBe(true);
-  });
+    async function getStates() {
+      const { GET } = await import("./route");
+      const response = await GET(new Request("http://localhost"), {
+        params: Promise.resolve({ code: "us", id: "9" }),
+      });
+      const body = await response.json();
+      return Object.fromEntries(body.states.map((st: { stateId: string }) => [st.stateId, st]));
+    }
 
-  it("marks every region in frontier for a party with no presence at all", async () => {
-    db.collection("characters").distinct.mockResolvedValue([]);
+    it("marks a region outside the frontier and clears its canRecruit", async () => {
+      seedRegions(["NY"]);
+      const byId = await getStates();
+      expect(byId.CA.inFrontier).toBe(false);
+      expect(byId.CA.canRecruit).toBe(false);
+    });
 
-    const { GET } = await import("./route");
-    const body = await (await GET(makeRequest(), { params })).json();
+    it("marks the presence region and its neighbour as reachable", async () => {
+      seedRegions(["NY"]);
+      const byId = await getStates();
+      expect(byId.NY.inFrontier).toBe(true);
+      expect(byId.PA.inFrontier).toBe(true);
+    });
 
-    expect(body.states.every((s: { inFrontier: boolean }) => s.inFrontier)).toBe(true);
+    it("marks every region reachable for a party with no presence anywhere", async () => {
+      seedRegions([]);
+      const byId = await getStates();
+      expect(byId.CA.inFrontier).toBe(true);
+      expect(byId.NY.inFrontier).toBe(true);
+    });
   });
 });
