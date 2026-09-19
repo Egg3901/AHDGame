@@ -195,6 +195,15 @@ export interface TurnLog {
       removed: number;
     } | null;
 
+    ukPartyConferences: {
+      scheduled: number;
+      opened: number;
+      completed: number;
+      ratified: number;
+      expired: number;
+      payoffs: number;
+    } | null;
+
     perpetualElections: {
       electionsCreated: number;
     } | null;

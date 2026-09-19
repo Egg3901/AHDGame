@@ -12,6 +12,7 @@ import { processFomcNominationLifecycle } from "@/lib/fomcNominationLifecycle";
 import { processScotusTurn } from "@/lib/turn/scotusTurn";
 import { processUkJrSurpriseTurn } from "@/lib/turn/ukJrSurpriseTurn";
 import { processUkLeadershipChallengeTurn } from "@/lib/turn/ukLeadershipChallengeTurn";
+import { processUkPartyConferenceTurn } from "@/lib/turn/ukPartyConferenceTurn";
 import { processSocialAxisDrift } from "@/lib/turn/socialAxisDrift";
 import { processGovernorAPRegen } from "@/lib/turn/governorAPRegen";
 import { seedOfficeStates } from "@/lib/governorOffice/seedOfficeStates";
@@ -866,6 +867,12 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
           runtime.runPhase("ukLeadershipChallenges", () =>
             processUkLeadershipChallengeTurn(db, gameState.currentTurn, realNow)
           ),
+          // UK party conferences (#862): annual schedule/open/ratify/complete
+          // lifecycle per party. UK-gated no-op elsewhere; appended after the
+          // leadership phase so the index math above is unchanged.
+          runtime.runPhase("ukPartyConferences", () =>
+            processUkPartyConferenceTurn(db, gameState.currentTurn, realNow)
+          ),
         ]);
         const countryBillResultsStart = 1;
         const stateBillResultIndex = countryBillResultsStart + countryBillPhaseEntries.length;
@@ -902,6 +909,17 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
           expired: 0,
           resolved: 0,
           removed: 0,
+        };
+        const ukConferenceResult = billPhaseResults[ukJrSurpriseResultIndex + 3] as Awaited<
+          ReturnType<typeof processUkPartyConferenceTurn>
+        > | null;
+        phaseResults.ukPartyConferences = ukConferenceResult ?? {
+          scheduled: 0,
+          opened: 0,
+          completed: 0,
+          ratified: 0,
+          expired: 0,
+          payoffs: 0,
         };
 
         phaseResults.billLifecycle = billLifecycleResult ?? {

@@ -53,6 +53,7 @@ export const BASE_TURN_PHASE_NAMES = [
   "scotusTurn",
   "ukJrSurpriseTurn",
   "ukLeadershipChallenges",
+  "ukPartyConferences",
   "socialAxisDrift",
   "campaignTurn",
   "playerRandomEvents",
