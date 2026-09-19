@@ -5,6 +5,11 @@
  */
 
 import type { OfficeType } from "@/lib/db/types";
+import {
+  gdpBaselinePerCapita,
+  resolveCampaignGdpBaseline,
+} from "@/lib/campaigns/rules/gdpBaseline";
+import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
 
 // Population tier thresholds
 const SMALL_POPULATION_MAX = 2_000_000;
@@ -113,49 +118,40 @@ export function getOfficeFundBonus(currentOffice: OfficeType | null): number {
 }
 
 /**
- * Per-country GDP-per-capita baseline for income and cost scaling.
- * Each country's regions are evaluated relative to their own national average,
- * so a UK player in an average UK region gets the same scalar as a US player
- * in an average US state. London's premium over UK average mirrors NY's over US average.
+ * Per-country-era GDP-per-capita baseline for income and cost scaling.
+ * Resolved from the single authoritative table in
+ * `campaigns/rules/gdpBaseline.ts` (derived from the era's `State.gdp` seed
+ * bundle, so units match regional GDP). Each country's regions are evaluated
+ * relative to their own national average, so a UK player in an average UK
+ * region gets the same scalar as a US player in an average US state.
  *
- * Values are calibrated against the population-weighted average GDP/capita
- * across each country's regions as stored in the DB.
+ * `preset` selects the era (defaults to `DEFAULT_SEED_PRESET`, preserving the
+ * modern-era scale for callers with no world to ask). Runtime money paths
+ * MUST pass the world's `gameState.preset`.
+ *
+ * Throws for countries without an explicit baseline row — by design, so an
+ * unknown country can never silently inherit a mismatched US denomination.
  */
-export const GDP_PER_CAPITA_BASELINE: Record<string, number> = {
-  US: 65_000,
-  UK: 30_000,
-  CA: 55_000,
-  DE: 45_000,
-  // Baselines are expressed in each country's LOCAL currency, because state
-  // `gdp` is stored in local-currency millions (see getIncomeGdpScalar /
-  // getFundMultiplier). NG regions carry a naira per-capita of ~₦1.5M–4.4M, so
-  // without a naira baseline they fell through to the 65_000 USD default and
-  // gdpPerCapita/65_000 (~24–67×) pinned every NG region to the income (1.5)
-  // and cost (2.0) scaling ceilings — doubling all NG action costs. This value
-  // is Nigeria's nominal GDP per capita in naira (~$1,900 × ₦1,550/$), matching
-  // the population-weighted average across the seeded NG regions (~₦2.77M).
-  // NOTE: JP has the same latent issue (¥ per-capita ~¥4.47M also hits the
-  // ceilings); intentionally left for a separate branch (fix scoped to NG).
-  NG: 3_000_000,
-} as const;
-
-export function getGdpBaseline(countryId: string): number {
-  return GDP_PER_CAPITA_BASELINE[countryId] ?? 65_000;
+export function getGdpBaseline(countryId: string, preset?: string): number {
+  return gdpBaselinePerCapita(countryId, preset);
 }
+
+export { resolveCampaignGdpBaseline };
 
 /**
  * GDP-per-capita income scalar for fund generation.
  * Range 0.9–1.5: wealthy regions earn more, poorer regions earn slightly less.
- * Uses a per-country baseline so each country's regions are scaled relative to
+ * Uses a per-country-era baseline so each country's regions are scaled relative to
  * their own national average rather than the US average.
  * gdpMillions: state GDP stored in millions (e.g. 289_500 = $289.5B).
  */
 export function getIncomeGdpScalar(
   gdpMillions: number,
   population: number,
-  countryId = "US"
+  countryId = "US",
+  preset?: string
 ): number {
-  const baseline = getGdpBaseline(countryId);
+  const baseline = getGdpBaseline(countryId, preset);
   const gdpPerCapita = (gdpMillions * 1_000_000) / population;
   return Math.max(0.9, Math.min(1.5, gdpPerCapita / baseline));
 }
@@ -171,11 +167,12 @@ export function getTotalFundGeneration(
   currentOffice: OfficeType | null,
   stateGdpMillions?: number,
   countryId = "US",
-  stateInfluence?: number
+  stateInfluence?: number,
+  preset?: string
 ): number {
   const gdpScalar =
     stateGdpMillions !== undefined
-      ? getIncomeGdpScalar(stateGdpMillions, population, countryId)
+      ? getIncomeGdpScalar(stateGdpMillions, population, countryId, preset)
       : 1.0;
   const baseRate = getFundGenerationRate(population);
   const donorBonus = getDonorBaseBonus(donorBaseLevel, population, stateInfluence);
@@ -246,11 +243,12 @@ export function calculateFullFundDistribution(
   nationalTaxRate: number,
   stateGdpMillions?: number,
   countryId = "US",
-  stateInfluence?: number
+  stateInfluence?: number,
+  preset?: string
 ): FundDistribution {
   const gdpScalar =
     stateGdpMillions !== undefined
-      ? getIncomeGdpScalar(stateGdpMillions, statePopulation, countryId)
+      ? getIncomeGdpScalar(stateGdpMillions, statePopulation, countryId, preset)
       : 1.0;
   const baseGeneration = Math.round(getFundGenerationRate(statePopulation) * gdpScalar);
   const donorBaseBonus = Math.round(
@@ -337,6 +335,8 @@ export function projectCharacterGeneration(args: {
   stateGdpMillions?: number;
   countryId?: string;
   politicalInfluence?: number;
+  /** World reset preset selecting the baseline era; defaults to modern. */
+  preset?: string;
 }): number {
   return getTotalFundGeneration(
     args.population,
@@ -344,7 +344,8 @@ export function projectCharacterGeneration(args: {
     args.currentOffice,
     args.stateGdpMillions,
     args.countryId ?? "US",
-    args.politicalInfluence ?? 0
+    args.politicalInfluence ?? 0,
+    args.preset ?? DEFAULT_SEED_PRESET
   );
 }
 

@@ -42,6 +42,7 @@ import {
   calculateRegistrationDriveBoost,
   planRegistrationDriveSourcing,
 } from "./partyOrg/registrationDrive";
+import { getGameStatePresetOrDefault } from "@/lib/db/collections/gameState";
 import { DEFAULT_LEGACY_COUNTRY_ID, type CountryId } from "@/lib/constants/countries";
 import { REG_LAG_BELOW_ORG_PCT_BY_COUNTRY } from "./partyOrg/pacingConstants";
 import { loadTxThresholds, emitTxBulk } from "@/lib/financialTxLog/emit";
@@ -149,6 +150,8 @@ interface ProcessGOTVResult {
 
 /** Pre-fetched data for revenue calculation (avoids N+1 queries) */
 interface RevenueContext {
+  /** World reset preset selecting the GDP-baseline era (issue #798). */
+  preset: string;
   partyMap: Map<string, PoliticalParty>;
   statePartyOrgMap: Map<string, StatePartyOrg>;
   statePopMap: Map<string, number>;
@@ -202,6 +205,7 @@ function calculatePartyRevenueFromContext(
         stateGdpMillions: ctx.stateGdpMap.get(member.homeState),
         countryId,
         politicalInfluence: member.politicalInfluence ?? 0,
+        preset: ctx.preset,
       });
       revenue += calculateTaxAmount(totalFundRate, nationalTaxRate);
     }
@@ -239,6 +243,7 @@ function calculatePartyRevenueFromContext(
         stateGdpMillions: ctx.stateGdpMap.get(stateId),
         countryId,
         politicalInfluence: member.politicalInfluence ?? 0,
+        preset: ctx.preset,
       });
       revenue += calculateTaxAmount(totalFundRate, stateTaxRate);
     }
@@ -416,6 +421,9 @@ export async function processPartyGOTV(
     ]);
     const gameConfig = await db.collection<GameConfig>("gameConfig").findOne({ _id: "default" });
     const nppEconomyEnabled = gameConfig?.nppEconomyEnabled !== false;
+    // GDP-baseline era for revenue math: the world's reset preset, so
+    // historical worlds budget against their own denomination (issue #798).
+    const preset = await getGameStatePresetOrDefault(db);
     for (const spo of statePartyOrgs) {
       statePartyOrgMap.set(spo._id, spo);
     }
@@ -458,6 +466,7 @@ export async function processPartyGOTV(
     }
 
     revenueCtx = {
+      preset,
       partyMap: nationalPartyMap,
       statePartyOrgMap,
       // Donor base = adults: use the voting-age population (P1b-1c), falling back
