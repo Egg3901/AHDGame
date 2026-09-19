@@ -24,9 +24,25 @@ import { join } from "node:path";
  */
 const ROOTS = ["src/app", "src/components", "src/lib", "src/contexts", "src/hooks"];
 
+/**
+ * The country folder names, read off disk.
+ *
+ * ⚠️ DERIVED, BECAUSE BOTH HAND-WRITTEN FORMS OF THIS WENT STALE. The pattern
+ * used to match `[a-z]{2}`, so the five THREE-letter countries -- SCO, WAL,
+ * BLR, UKR, BAL -- could import a barrel from client code and this test would
+ * report green. The relative arm listed `jp|us|uk|de|ie|br|cn|ng`, the original
+ * eight, and never grew past them. Reading the directory cannot drift.
+ */
+const COUNTRY_DIRS = readdirSync("src/lib/countries")
+  .filter((entry) => statSync(join("src/lib/countries", entry)).isDirectory())
+  .filter((entry) => /^[a-z]{2,3}$/.test(entry));
+
 /** `@/lib/countries/<cc>` or a relative path ending there, with nothing after. */
-const BARREL_IMPORT =
-  /from\s+["'](?:@\/lib\/countries\/[a-z]{2}|(?:\.{1,2}\/)+countries\/[a-z]{2}|\.{1,2}\/(?:jp|us|uk|de|ie|br|cn|ng))["']/;
+const BARREL_IMPORT = new RegExp(
+  `from\\s+["'](?:@/lib/countries/(?:${COUNTRY_DIRS.join("|")})` +
+    `|(?:\\.{1,2}/)+countries/(?:${COUNTRY_DIRS.join("|")})` +
+    `|\\.{1,2}/(?:${COUNTRY_DIRS.join("|")}))["']`
+);
 
 function walk(dir: string): string[] {
   const out: string[] = [];
@@ -56,6 +72,16 @@ function clientModules(): { file: string; source: string }[] {
 }
 
 describe("country barrels are server-side only", () => {
+  it("covers every country folder, including the three-letter ones", () => {
+    // Guards the guard a second way: a directory read that came back short would
+    // narrow the pattern silently, which is exactly how the old one went stale.
+    expect(COUNTRY_DIRS.length).toBeGreaterThanOrEqual(29);
+    for (const cc of ["sco", "wal", "blr", "ukr", "bal"]) {
+      expect(COUNTRY_DIRS).toContain(cc);
+      expect(BARREL_IMPORT.test(`from "@/lib/countries/${cc}"`)).toBe(true);
+    }
+  });
+
   it("is checked against a non-trivial set of client modules", () => {
     // Guards the guard: a walk that silently found nothing would pass the real
     // assertion below while checking absolutely nothing.

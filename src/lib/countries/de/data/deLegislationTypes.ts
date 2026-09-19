@@ -65,7 +65,7 @@ import {
  * everything to Germany only.
  *
  * Helpers: shared `policyOptions` / `taxRateOptions` from
- * `../reference/policyOptionHelpers`. No DE-specific helper.
+ * `@/lib/seeds/reference/policyOptionHelpers`. No DE-specific helper.
  */
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

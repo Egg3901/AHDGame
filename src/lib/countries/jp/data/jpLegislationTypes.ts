@@ -15,7 +15,7 @@ import {
  * Spec: docs/plans/archive/2026-04/2026-04-10-jp-legislation-overhaul-design.md
  *
  * Helpers: shared `policyOptions(..., "both")` / `taxRateOptions` /
- * `withPerCapitaCosts` from `../reference/policyOptionHelpers`. Per-capita
+ * `withPerCapitaCosts` from `@/lib/seeds/reference/policyOptionHelpers`. Per-capita
  * costs are JPY amounts (helper is currency-neutral; UI display reads
  * `CountryConfig.currency`).
  */

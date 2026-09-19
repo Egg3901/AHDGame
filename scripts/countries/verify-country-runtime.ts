@@ -126,7 +126,7 @@ type Dict = Record<string, unknown>;
 const d = (o: unknown) => o as Dict;
 
 /** Every registry that carries a per-country key, by the name a reader greps for. */
-const REGISTRIES: Record<string, Dict> = {
+export const REGISTRIES: Record<string, Dict> = {
   COUNTRY_CONFIGS: d(COUNTRY_CONFIGS),
   NATIONAL_ADDRESS_NAME: d(NATIONAL_ADDRESS_NAME),
   CABINET_IDENTITY: d(CABINET_IDENTITY),
@@ -1291,7 +1291,7 @@ const isEmpty = (v: unknown) =>
   (Array.isArray(v) && v.length === 0) ||
   (typeof v === "object" && v !== null && Object.keys(v).length === 0);
 
-async function verify(cc: string): Promise<boolean> {
+export async function verify(cc: string): Promise<boolean> {
   const mod = (await import(`../../src/lib/countries/${cc.toLowerCase()}/index`)) as Dict;
   const folder = mod[cc];
   if (!folder) {
@@ -1502,11 +1502,20 @@ async function verify(cc: string): Promise<boolean> {
   return failed === 0;
 }
 
-const args = process.argv.slice(2);
-const targets = args.includes("--all") ? [...CONVERTED] : args.map((a) => a.toUpperCase());
-if (targets.length === 0) {
-  console.error("usage: npx tsx scripts/countries/verify-country-runtime.ts <CC>... | --all");
-  process.exit(1);
+/**
+ * ⚠️ THE CLI RUNS ONLY WHEN THIS FILE IS INVOKED AS ONE.
+ *
+ * `verify-country-runtime.test.ts` imports `verify` so this check runs inside
+ * `test:run` -- which is the only gate CI actually executes. CI runs lint,
+ * architecture:audit, format:check, tsc, test:run and verify:build, and never
+ * `npm run verify`, so a harness that only ran from the CLI was enforced by
+ * nothing. Without this guard the test's import would parse vitest's argv,
+ * find no country codes and exit the whole run.
+ */
+function invokedAsScript(): boolean {
+  // Basename, so the Windows/POSIX separator never enters into it. The test
+  // file is `verify-country-runtime.test.ts`, which does not end with this.
+  return process.argv.some((a) => a.endsWith("verify-country-runtime.ts"));
 }
 
 /*
@@ -1514,10 +1523,17 @@ if (targets.length === 0) {
  * where top-level await is a transform error rather than a runtime one.
  */
 async function main(): Promise<void> {
+  const args = process.argv.slice(2);
+  const targets = args.includes("--all") ? [...CONVERTED] : args.map((a) => a.toUpperCase());
+  if (targets.length === 0) {
+    console.error("usage: npx tsx scripts/countries/verify-country-runtime.ts <CC>... | --all");
+    process.exitCode = 1;
+    return;
+  }
   let ok = true;
   for (const cc of targets) ok = (await verify(cc)) && ok;
   if (ok) console.log(`\nEvery registry resolves, forwards and matches for ${targets.join(", ")}.`);
   process.exitCode = ok ? 0 : 1;
 }
 
-void main();
+if (invokedAsScript()) void main();
