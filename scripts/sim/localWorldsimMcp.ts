@@ -59,6 +59,7 @@ import { MARKET_MODE_ORDER, type MarketSystemMode } from "@/lib/market/modes";
 import { SIM_ACTOR_MODES } from "@/lib/sim/syntheticActors";
 import { parseActorsField } from "./simJobArgs";
 import { assertSimSourceShape } from "./simSource";
+import { pickSovereignDemandExperimentFlags } from "./sovereignDemandExperimentFlags";
 
 const SIM_CONTROL_URI = process.env.SIM_CONTROL_URI || "mongodb://127.0.0.1:27018";
 const SIM_CONTROL_DB = process.env.SIM_CONTROL_DB || "sim_control";
@@ -191,6 +192,12 @@ const TOOLS: ToolDef[] = [
         indexFundBondLiquidityEnabled: bool(
           "Whether index funds target 20 percent sovereign bonds while retaining a 5 percent cash buffer in this sandbox only."
         ),
+        sovereignIssuanceConsolidationEnabled: bool(
+          "Whether below-floor sovereign issuance rungs consolidate into the largest rung in this sandbox only (#1001). Explicit false pins the control arm."
+        ),
+        domesticSovereignBondCoverageEnabled: bool(
+          "Whether one home-sovereign bond fund per uncovered sovereign issuer is ensured in this sandbox only (#1001). Explicit false pins the control arm."
+        ),
         equityLiquidityFacilityEnabled: bool(
           "Whether index funds place bounded executable bid and ask quotes for listed equities in this sandbox only."
         ),
@@ -252,6 +259,9 @@ const TOOLS: ToolDef[] = [
       ) {
         throw new Error("indexFundBondLiquidityEnabled must be boolean");
       }
+      // #1001 dark gates share one validated mapping with the worker, so a
+      // queued scenario can never persist a value the worker cannot run.
+      const sovereignDemandFlags = pickSovereignDemandExperimentFlags(a);
       if (
         a.equityLiquidityFacilityEnabled !== undefined &&
         typeof a.equityLiquidityFacilityEnabled !== "boolean"
@@ -307,6 +317,7 @@ const TOOLS: ToolDef[] = [
         ...(a.indexFundBondLiquidityEnabled !== undefined
           ? { indexFundBondLiquidityEnabled: a.indexFundBondLiquidityEnabled }
           : {}),
+        ...sovereignDemandFlags,
         ...(a.equityLiquidityFacilityEnabled !== undefined
           ? { equityLiquidityFacilityEnabled: a.equityLiquidityFacilityEnabled }
           : {}),
@@ -334,6 +345,10 @@ const TOOLS: ToolDef[] = [
         canonicalFreightBillingEnabled: a.canonicalFreightBillingEnabled ?? "preset default",
         shortageResponsiveSourcingEnabled: a.shortageResponsiveSourcingEnabled ?? "preset default",
         indexFundBondLiquidityEnabled: a.indexFundBondLiquidityEnabled ?? "preset default",
+        sovereignIssuanceConsolidationEnabled:
+          a.sovereignIssuanceConsolidationEnabled ?? "preset default",
+        domesticSovereignBondCoverageEnabled:
+          a.domesticSovereignBondCoverageEnabled ?? "preset default",
         equityLiquidityFacilityEnabled: a.equityLiquidityFacilityEnabled ?? "preset default",
         nppMarketCoverageEnabled: a.nppMarketCoverageEnabled ?? "preset default",
         nppFragileMarketSupplyEnabled: a.nppFragileMarketSupplyEnabled ?? "preset default",

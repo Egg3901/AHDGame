@@ -21,6 +21,8 @@
 // ones (same issue hit earlier this session with runWorld.ts).
 export {};
 
+import { SOVEREIGN_DEMAND_EXPERIMENT_FIELDS } from "./sovereignDemandExperimentFlags";
+
 function arg(flag: string): string | undefined {
   const prefix = `--${flag}=`;
   const found = process.argv.find((v) => v.startsWith(prefix));
@@ -129,6 +131,7 @@ async function main() {
                 "canonicalFreightBillingEnabled",
                 "shortageResponsiveSourcingEnabled",
                 "indexFundBondLiquidityEnabled",
+                ...SOVEREIGN_DEMAND_EXPERIMENT_FIELDS,
                 "equityLiquidityFacilityEnabled",
                 "nppMarketCoverageEnabled",
                 "nppFragileMarketSupplyEnabled",

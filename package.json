@@ -1,6 +1,6 @@
 {
   "name": "a-house-divided",
-  "version": "1.8.3",
+  "version": "1.9.0",
   "private": true,
   "engines": {
     "node": ">=20"
