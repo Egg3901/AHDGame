@@ -16,6 +16,11 @@ vi.mock("@/lib/treasury/executeSendToMember", () => ({
     response: NextResponse.json({ success: true }),
   })),
 }));
+vi.mock("@/lib/db/collections", () => ({ getPartyBudgetCollection: vi.fn(async () => ({})) }));
+vi.mock("@/lib/partyBudgetGuards", () => ({ findPartyBudgetForScope: vi.fn(async () => null) }));
+vi.mock("@/lib/partyTreasuryPlan", () => ({
+  wouldTriggerTreasuryReserveOverride: vi.fn(() => false),
+}));
 vi.mock("@/lib/treasury/executeTransferToStateParty", () => ({
   executeTransferToStateParty: vi.fn(async () => ({
     ok: true,
@@ -25,13 +30,43 @@ vi.mock("@/lib/treasury/executeTransferToStateParty", () => ({
 
 describe("POST /api/country/[code]/parties/[id]/treasury/pending/[txnId]/approve", () => {
   let db: MockDb;
+  let executionClaimResult: { matchedCount: number; modifiedCount: number };
   const userId = new ObjectId();
   const chairId = new ObjectId();
   const treasurerId = new ObjectId();
+  const viceChairId = new ObjectId();
   const recipientId = new ObjectId();
   const partyOid = new ObjectId();
   const txnOid = new ObjectId();
   const partyId = "1";
+
+  type UpdateDoc = { $set?: Record<string, unknown>; $unset?: Record<string, unknown> };
+
+  /** The open -> executing flip that serialises who actually pays out. */
+  function isExecutionClaim(update: unknown): boolean {
+    return (update as UpdateDoc)?.$set?.status === "executing";
+  }
+
+  function updateCalls() {
+    return db.collectionMocks["pendingTreasuryTransactions"]!.updateOne.mock.calls as [
+      Record<string, unknown>,
+      UpdateDoc,
+    ][];
+  }
+
+  function executionClaim() {
+    return updateCalls().find((c) => isExecutionClaim(c[1]));
+  }
+
+  /**
+   * The release: the signature comes off AND the row goes back to
+   * "open". Matched on the status restore, not on `$unset` alone — the
+   * approved stamp also unsets `executingAt`, and treating that as a
+   * release would report the happy path as a rollback.
+   */
+  function releaseCall() {
+    return updateCalls().find((c) => c[1]?.$set?.status === "open");
+  }
 
   function row(overrides: Record<string, unknown> = {}) {
     return {
@@ -75,6 +110,11 @@ describe("POST /api/country/[code]/parties/[id]/treasury/pending/[txnId]/approve
       matchedCount: 1,
       modifiedCount: 1,
     });
+    executionClaimResult = { matchedCount: 1, modifiedCount: 1 };
+    db.collectionMocks["pendingTreasuryTransactions"]!.updateOne.mockImplementation(
+      async (_filter: unknown, update: unknown) =>
+        isExecutionClaim(update) ? executionClaimResult : { matchedCount: 1, modifiedCount: 1 }
+    );
     db.collectionMocks["characters"]!.findOne.mockResolvedValue({
       _id: recipientId,
       name: "Recipient",
@@ -105,6 +145,7 @@ describe("POST /api/country/[code]/parties/[id]/treasury/pending/[txnId]/approve
       name: "Test Party",
       treasury: 500_000,
       chairId,
+      viceChairId,
       treasurerId,
     } as never);
   });
@@ -139,12 +180,15 @@ describe("POST /api/country/[code]/parties/[id]/treasury/pending/[txnId]/approve
     const response = await call();
     expect(response.status).toBe(400);
 
-    const unset = db.collectionMocks["pendingTreasuryTransactions"]!.updateOne.mock.calls.find(
-      (c) => (c[1] as { $unset?: unknown })?.$unset
-    );
+    const unset = releaseCall();
     expect(unset).toBeDefined();
-    expect(unset![0]).toMatchObject({ status: "open" });
-    expect(unset![1]).toEqual({ $unset: { treasurerApproval: "" } });
+    // Both halves matter: the signature comes off AND the row goes back
+    // to "open" so the remaining approver can still act on it.
+    expect(unset![0]).toMatchObject({ status: "executing" });
+    expect(unset![1]).toEqual({
+      $unset: { treasurerApproval: "", executingAt: "" },
+      $set: { status: "open" },
+    });
   });
 
   it("hands the signature back when the recipient has vanished", async () => {
@@ -155,12 +199,9 @@ describe("POST /api/country/[code]/parties/[id]/treasury/pending/[txnId]/approve
     const response = await call();
     expect(response.status).toBe(404);
 
-    const unset = db.collectionMocks["pendingTreasuryTransactions"]!.updateOne.mock.calls.find(
-      (c) => (c[1] as { $unset?: unknown })?.$unset
-    );
-    expect(unset).toEqual([
-      { _id: expect.anything(), status: "open" },
-      { $unset: { treasurerApproval: "" } },
+    expect(releaseCall()).toEqual([
+      { _id: expect.anything(), status: "executing" },
+      { $unset: { treasurerApproval: "", executingAt: "" }, $set: { status: "open" } },
     ]);
   });
 
@@ -173,10 +214,7 @@ describe("POST /api/country/[code]/parties/[id]/treasury/pending/[txnId]/approve
     const response = await call();
     expect(response.status).toBeGreaterThanOrEqual(500);
 
-    const unset = db.collectionMocks["pendingTreasuryTransactions"]!.updateOne.mock.calls.find(
-      (c) => (c[1] as { $unset?: unknown })?.$unset
-    );
-    expect(unset).toBeDefined();
+    expect(releaseCall()).toBeDefined();
   });
 
   it("leaves the signature in place when the transfer succeeds", async () => {
@@ -189,10 +227,126 @@ describe("POST /api/country/[code]/parties/[id]/treasury/pending/[txnId]/approve
     } as never);
 
     await call();
-    const unset = db.collectionMocks["pendingTreasuryTransactions"]!.updateOne.mock.calls.find(
-      (c) => (c[1] as { $unset?: unknown })?.$unset
+    expect(releaseCall()).toBeUndefined();
+  });
+
+  it("claims the row for execution before it moves any money", async () => {
+    // Filling the last slot is not the same event as paying out. Both
+    // approvers of a double-mode row can observe a complete row at the
+    // same instant, so the open -> executing flip is what decides which
+    // ONE of them proceeds. It has to happen before the executor runs.
+    await call();
+
+    const claim = executionClaim();
+    expect(claim).toBeDefined();
+    expect(claim![0]).toMatchObject({ status: "open" });
+
+    const claimIndex = updateCalls().findIndex((c) => isExecutionClaim(c[1]));
+    const { executeSendToMember } = await import("@/lib/treasury/executeSendToMember");
+    expect(claimIndex).toBeGreaterThanOrEqual(0);
+    expect(executeSendToMember).toHaveBeenCalledTimes(1);
+    // The flip is guarded on `status: "open"`, so a second racer's flip
+    // matches nothing and it never reaches the executor at all.
+    expect(vi.mocked(executeSendToMember).mock.invocationCallOrder[0]).toBeGreaterThan(
+      db.collectionMocks["pendingTreasuryTransactions"]!.updateOne.mock.invocationCallOrder[
+        claimIndex
+      ]!
     );
-    expect(unset).toBeUndefined();
+  });
+
+  it("does not pay out when another approver already claimed the row for execution", async () => {
+    // The losing half of the race. Both approvers claimed DIFFERENT
+    // slots, so the `$exists: false` slot guard cannot separate them;
+    // both then re-read a complete row. Without the status flip both
+    // called the executor and the treasury paid twice.
+    executionClaimResult = { matchedCount: 0, modifiedCount: 0 };
+
+    const response = await call();
+
+    const { executeSendToMember } = await import("@/lib/treasury/executeSendToMember");
+    expect(executeSendToMember).not.toHaveBeenCalled();
+    expect(response.status).toBe(200);
+  });
+
+  it("keeps the signature when it loses the execution race", async () => {
+    // The loser's approval is a real, valid signature — the winner is
+    // executing WITH it. Handing it back would strip a signature out
+    // from under a transfer already in flight.
+    executionClaimResult = { matchedCount: 0, modifiedCount: 0 };
+
+    await call();
+
+    expect(releaseCall()).toBeUndefined();
+  });
+
+  it("leaves the row executing when the approved stamp cannot be written", async () => {
+    // The last gap: the money has moved and the row has not yet been
+    // stamped. It must not fall back to "open" — an open row with a
+    // free slot is one Approve click away from paying out again.
+    // "executing" is terminal for the approve path.
+    db.collectionMocks["pendingTreasuryTransactions"]!.updateOne.mockImplementation(
+      async (_filter: unknown, update: unknown) => {
+        if ((update as { $set?: { status?: string } })?.$set?.status === "approved") {
+          throw new Error("mongo exploded");
+        }
+        return { matchedCount: 1, modifiedCount: 1 };
+      }
+    );
+
+    const response = await call();
+
+    expect(response.status).toBeGreaterThanOrEqual(500);
+    expect(releaseCall()).toBeUndefined();
+  });
+
+  async function reserveIsPierced() {
+    const { wouldTriggerTreasuryReserveOverride } = await import("@/lib/partyTreasuryPlan");
+    vi.mocked(wouldTriggerTreasuryReserveOverride).mockReturnValue(true);
+  }
+
+  async function sendArgs() {
+    const { executeSendToMember } = await import("@/lib/treasury/executeSendToMember");
+    return vi.mocked(executeSendToMember).mock.calls[0]?.[0] as
+      { reserveWarning: string | null } | undefined;
+  }
+
+  it("flags the emergency override when two officers pierce the reserve without the treasurer", async () => {
+    // Before any two officers could sign, the treasurer was on every
+    // completed row by construction, so the reserve rule ("breach and
+    // not the treasurer") could never fire and the route hardcoded
+    // null. Chair + Vice-Chair can now complete a reserve-piercing send
+    // with no treasurer involved at all, and that has to reach the
+    // admin log and the response the same way the direct path does.
+    await reserveIsPierced();
+    db.collectionMocks["pendingTreasuryTransactions"]!.findOne.mockReset();
+    db.collectionMocks["pendingTreasuryTransactions"]!.findOne.mockResolvedValueOnce(
+      row({ leadershipApproval: { characterId: chairId, approvedAt: new Date() } })
+    ).mockResolvedValue(
+      row({
+        leadershipApproval: { characterId: chairId, approvedAt: new Date() },
+        treasurerApproval: { characterId: viceChairId, approvedAt: new Date() },
+      })
+    );
+
+    await call();
+
+    expect((await sendArgs())?.reserveWarning).toMatch(/Emergency override/i);
+  });
+
+  it("does not flag an override when the treasurer is one of the signatories", async () => {
+    // The default row in this suite is signed by the chair and the
+    // treasurer, which is exactly the case the rule exempts.
+    await reserveIsPierced();
+
+    await call();
+
+    expect((await sendArgs())?.reserveWarning).toBeNull();
+  });
+
+  it("does not flag an override when the reserve is untouched", async () => {
+    await call();
+
+    expect((await sendArgs())?.reserveWarning).toBeNull();
   });
 
   it("refuses to pay out a row queued before the leadership election freeze", async () => {

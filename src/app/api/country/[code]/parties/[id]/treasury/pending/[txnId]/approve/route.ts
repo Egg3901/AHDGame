@@ -12,6 +12,9 @@ import {
   LEADERSHIP_FREEZE_MESSAGE,
 } from "@/lib/parties/leadershipElectionFreeze";
 import { getGameTime } from "@/lib/time/gameTime";
+import { getPartyBudgetCollection } from "@/lib/db/collections";
+import { findPartyBudgetForScope } from "@/lib/partyBudgetGuards";
+import { wouldTriggerTreasuryReserveOverride } from "@/lib/partyTreasuryPlan";
 import { executeSendToMember } from "@/lib/treasury/executeSendToMember";
 import { executeTransferToStateParty } from "@/lib/treasury/executeTransferToStateParty";
 import {
@@ -158,9 +161,13 @@ export async function POST(_request: Request, { params }: RouteParams) {
      * from, so a refusal is a refusal and not a corrupted row.
      */
     const releaseClaimedSlot = async (): Promise<void> => {
-      await db
-        .collection<PendingTreasuryTransaction>("pendingTreasuryTransactions")
-        .updateOne({ _id: txnOid, status: "open" }, { $unset: { [slotField]: "" } });
+      await db.collection<PendingTreasuryTransaction>("pendingTreasuryTransactions").updateOne(
+        // Guarded on "executing", the state this request put the row
+        // into. A row that is no longer executing is not ours to
+        // reopen.
+        { _id: txnOid, status: "executing" },
+        { $unset: { [slotField]: "", executingAt: "" }, $set: { status: "open" } }
+      );
     };
     const releaseSlot = async (response: NextResponse): Promise<NextResponse> => {
       await releaseClaimedSlot();
@@ -191,13 +198,65 @@ export async function POST(_request: Request, { params }: RouteParams) {
       });
     }
 
-    // ─── Execute the underlying transfer ─────────────────────────────────
-    // Treasurer co-signed by definition (they're either the approver
-    // we just recorded OR they pre-approved at propose-time), so the
-    // reserve-warning rule "reserve breach && !isTreasurer" is by
-    // construction false — pass null.
-    const reserveWarning: string | null = null;
+    // ─── Reserve-target override ─────────────────────────────────────────
+    // Same rule the direct send/transfer routes apply: piercing the
+    // Treasurer's reserve target is allowed, but it is recorded as an
+    // emergency override unless the Treasurer is the one doing it.
+    //
+    // This used to be hardcoded null on the grounds that the Treasurer
+    // co-signed every completed row by definition. Once any two officers
+    // can complete one, that stopped being true: a Chair and a
+    // Vice-Chair can now empty the reserve with nothing in the admin log
+    // to say so.
+    const budgetCollection = await getPartyBudgetCollection();
+    const treasuryPlan = await findPartyBudgetForScope(budgetCollection, {
+      countryId,
+      partyId: String(party.sequentialId),
+      scope: "national",
+    });
+    // A vacant Treasurer seat makes the Chair/VC the reserve target's
+    // owners (see resolveTransactionApprovalMode), so they are not
+    // overriding anyone — this mirrors `actsAsTreasurer` in the send and
+    // transfer routes.
+    const treasurerSigned =
+      !party.treasurerId ||
+      [ready.treasurerApproval?.characterId, ready.leadershipApproval?.characterId].some(
+        (id) => !!id && party.treasurerId!.equals(id)
+      );
+    const reserveWarning: string | null =
+      !treasurerSigned &&
+      wouldTriggerTreasuryReserveOverride(party.treasury ?? 0, ready.amount, treasuryPlan)
+        ? ready.type === "transfer"
+          ? "Emergency override: transfer pierced the Treasurer reserve target."
+          : "Emergency override: send pierced the Treasurer reserve target."
+        : null;
 
+    // ─── Claim the row for execution ─────────────────────────────────────
+    // Having enough signatures is not the same event as paying out, and
+    // this flip is the only thing that separates them. Two approvers
+    // filling the two DIFFERENT slots both pass the `$exists: false`
+    // slot guard, and both then re-read a row that is complete — so
+    // before this, both went on to execute and the treasury paid twice.
+    // The `status: "open"` guard makes exactly one of them the winner.
+    const executionClaim = await db
+      .collection<PendingTreasuryTransaction>("pendingTreasuryTransactions")
+      .updateOne(
+        { _id: txnOid, status: "open" },
+        { $set: { status: "executing", executingAt: now } }
+      );
+    if (executionClaim.matchedCount === 0) {
+      // We lost the race (or a cancel landed first). Our signature is a
+      // real one and the winner is executing with it, so it stays put —
+      // releasing here would pull a signature out from under a transfer
+      // already in flight.
+      return NextResponse.json({
+        success: true,
+        pending: false,
+        message: "Approval recorded. Another approver is completing this transaction.",
+      });
+    }
+
+    // ─── Execute the underlying transfer ─────────────────────────────────
     // Needed both for the recipient's per-turn payout cap and for
     // stamping the row resolved below.
     const { currentTurn } = await getGameTime();
@@ -278,12 +337,16 @@ export async function POST(_request: Request, { params }: RouteParams) {
     }
 
     // ─── Mark the pending row approved ───────────────────────────────────
-    await db
-      .collection<PendingTreasuryTransaction>("pendingTreasuryTransactions")
-      .updateOne(
-        { _id: txnOid },
-        { $set: { status: "approved", resolvedAt: now, resolvedAtTurn: currentTurn } }
-      );
+    // The money has moved. If this stamp fails the row stays
+    // "executing" — never back to "open", which would leave a free slot
+    // one Approve click away from spending the same funds again.
+    await db.collection<PendingTreasuryTransaction>("pendingTreasuryTransactions").updateOne(
+      { _id: txnOid, status: "executing" },
+      {
+        $set: { status: "approved", resolvedAt: now, resolvedAtTurn: currentTurn },
+        $unset: { executingAt: "" },
+      }
+    );
 
     return NextResponse.json({ success: true, status: "approved" });
   } catch (error) {
