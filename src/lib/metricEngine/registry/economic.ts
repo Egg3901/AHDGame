@@ -33,6 +33,7 @@ import {
   labourUnemploymentWagePressure,
   labourUnemploymentAutomationPressure,
 } from "@/lib/labour/laborCost";
+import { labourUnemploymentTightnessPressure } from "@/lib/labour/labourMarket";
 
 /** Per-state payload the phase extracts from `sectorRevenueTaxProvider` for one state. */
 export interface SectorRevenueTaxPayload {
@@ -222,6 +223,14 @@ export const gdpGrowthNode: RegistryNode = {
  * reads `economic.labourWageIndexDelta` — the SAME signal medianIncomeNode
  * (v2-2) reads — instead of the wage LEVEL, and `labourUnemploymentAutomationPressure`
  * (3b) for the separate, sign-inverted automation signal.
+ *
+ * #791: the corp turn's MEASURED state tightness (`economic.labourTightness`,
+ * seeded by the phase from the prior turn's doc, same treatment as the Δ
+ * signals above — deliberately NOT a declared `inputs` edge, so the topo
+ * order is untouched and no cycle is possible) adds a LEVEL channel: a
+ * sustained tight market holds the target below Okun, sustained slack holds
+ * it above. Capped per turn so one extreme reading cannot whipsaw the EMA;
+ * absent (cold start) reads exactly 0, byte-identical to today.
  */
 export const unemploymentNode: RegistryNode = {
   id: "economic.unemploymentRate",
@@ -249,9 +258,11 @@ export const unemploymentNode: RegistryNode = {
     );
     const wageDelta = ctx.current["economic.labourWageIndexDelta"] ?? 0;
     const automationDelta = ctx.current["economic.automationIndexDelta"] ?? 0;
+    const tightness = ctx.current["economic.labourTightness"];
     const labourPressure =
       labourUnemploymentWagePressure(wageDelta) +
-      labourUnemploymentAutomationPressure(automationDelta);
+      labourUnemploymentAutomationPressure(automationDelta) +
+      labourUnemploymentTightnessPressure(typeof tightness === "number" ? tightness : undefined);
     return Math.max(UNEMPLOYMENT_MIN, Math.min(UNEMPLOYMENT_MAX, okunTarget + labourPressure));
   },
 };

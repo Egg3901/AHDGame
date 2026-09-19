@@ -745,6 +745,12 @@ export async function runMetricEngine(db: Db, turn: number): Promise<number> {
       if (automationDelta !== undefined) {
         seedCurrent["economic.automationIndexDelta"] = automationDelta;
       }
+      // #791: measured labour-market tightness — the corp turn's demand-over-
+      // supply reading from the PRIOR turn (same lag as the Δ signals above).
+      // Seeded, not a declared node input, so the topo order is untouched.
+      // Absent (cold start) ⇒ the node reads 0 pressure — today's behaviour.
+      const tightness = readMetricPath(prevDoc, "economic.labourTightness", "value");
+      if (tightness !== undefined) seedCurrent["economic.labourTightness"] = tightness;
     }
 
     // §6.3 (P7b): the country's LAGGED economic model nudges its synergy metrics'
