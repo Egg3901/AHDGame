@@ -73,7 +73,7 @@ function simulate(opts: {
   annualPrimaryDeficitFraction: (year: number) => number;
   annualGdpGrowth: number;
 }): SimResult {
-  let bonds: SimBond[] = [{ face: UK_SEED_DEBT_TO_GDP * GDP0, haircut: 0, defaulted: false }];
+  const bonds: SimBond[] = [{ face: UK_SEED_DEBT_TO_GDP * GDP0, haircut: 0, defaulted: false }];
   let treasuryBalance = 0;
   let gdp = GDP0;
   let state: SovereignCrisisState = "normal";
