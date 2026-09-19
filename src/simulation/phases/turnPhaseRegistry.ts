@@ -119,6 +119,7 @@ import { processPartyInfluenceTurn } from "@/lib/turn/partyInfluenceTurn";
 import { processPresidentialSuccession } from "@/lib/turn/presidentialSuccession";
 import { processImpeachmentLifecycle } from "@/lib/turn/impeachmentLifecycle";
 import { processByElectionWatcher } from "@/lib/turn/byElections";
+import { processCommonsByElectionWatcher } from "@/lib/turn/commonsByElections";
 import { detectPreIterationComplete } from "@/lib/turn/preIterationLifecycle";
 import { processActivityLogging } from "@/lib/turn/activityLogging";
 import { runFinancialSuspectScan } from "@/lib/financialTxLog/suspectScan";
@@ -1273,6 +1274,12 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
         if (!foundingActive) {
           await runtime.runPhase("byElectionWatcher", () =>
             processByElectionWatcher(db, newTurn, gameNow)
+          );
+          // Immediately after the governor watcher: same settled seat state,
+          // separate country scope (UK Commons), separate election type.
+          phaseResults.commonsByElectionWatcher = await runtime.runPhase(
+            "commonsByElectionWatcher",
+            () => processCommonsByElectionWatcher(db, newTurn, gameNow)
           );
         }
         phaseResults.perpetualElections = { electionsCreated: 0 };

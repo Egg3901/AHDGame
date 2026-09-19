@@ -208,6 +208,13 @@ export interface TurnLog {
       electionsCreated: number;
     } | null;
 
+    commonsByElectionWatcher: {
+      spawned: number;
+      vacanciesEnsured: number;
+      petitionsAdvanced: number;
+      reconciled: number;
+    } | null;
+
     leadershipElections: {
       electionsResolved: number;
     } | null;

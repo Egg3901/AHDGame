@@ -255,6 +255,17 @@ export type {
 } from "./coalition";
 export type { PlayerMail, PlayerMailReport } from "./playerMail";
 export type { UKCabinetCooldown } from "./ukCabinetCooldown";
+export type {
+  UkCommonsVacancy,
+  CommonsVacancyReason,
+  CommonsVacancyStatus,
+  UkRecallPetition,
+  RecallPetitionStatus,
+  RecallTrigger,
+  RecallSignature,
+  RecallDeclaration,
+  RecallSupportSample,
+} from "./ukByElection";
 export type { CabinetSetting } from "./cabinetSetting";
 export type { MinisterialOrder } from "./ministerialOrder";
 export type { UnifiedCabinetMember } from "./unifiedCabinetMember";

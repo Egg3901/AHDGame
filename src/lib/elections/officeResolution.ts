@@ -46,6 +46,15 @@ export interface ElectionOffice {
  */
 const SNAP_PREFIX = "snap_";
 
+/**
+ * By-election types seat as their regular counterpart (`special_commons` ->
+ * `commons`, mirroring `snap_` handling). Kept as an explicit map so a new
+ * special type cannot silently resolve to a wrong office.
+ */
+const SPECIAL_TO_REGULAR: Readonly<Record<string, string>> = {
+  special_commons: "commons",
+};
+
 function chambersOf(countryId: CountryId): ChamberConfig[] {
   const config = COUNTRY_CONFIGS[countryId];
   if (!config) return [];
@@ -113,9 +122,9 @@ export function resolveOfficeKeyForElectionType(
   const config = COUNTRY_CONFIGS[countryId];
   if (!config) return null;
 
-  const type = electionType.startsWith(SNAP_PREFIX)
-    ? electionType.slice(SNAP_PREFIX.length)
-    : electionType;
+  const type =
+    SPECIAL_TO_REGULAR[electionType] ??
+    (electionType.startsWith(SNAP_PREFIX) ? electionType.slice(SNAP_PREFIX.length) : electionType);
 
   const byOfficeKey = config.officeTypes.find((o) => o.key === type);
   if (byOfficeKey) return byOfficeKey.key;
