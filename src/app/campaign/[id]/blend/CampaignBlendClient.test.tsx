@@ -139,6 +139,19 @@ describe("manager view", () => {
     expect(screen.getAllByRole("button", { name: "CONTRIBUTE STRENGTH" })).toHaveLength(2);
   });
 
+  it("offers campaign strength to a viewer who does not run the campaign", () => {
+    // The Blend rebuild folded the contribution control in behind the manager
+    // gate, so the only player who could still fund a nominee's strength was
+    // the nominee. The server has never restricted it: any authenticated
+    // character in the race's country may contribute.
+    renderClient({
+      campaign: campaignFixture({ accessLevel: "public", funds: undefined, actions: undefined }),
+      canManage: false,
+      canSurrogate: false,
+    });
+    expect(screen.getAllByRole("button", { name: "CONTRIBUTE STRENGTH" })).toHaveLength(2);
+  });
+
   it("names the running mate on the ticket, on both layouts", () => {
     // One copy was the fault, not the fixture: the sidebar this sits in is
     // `hidden lg:block`, so the phone had no ticket block at all.

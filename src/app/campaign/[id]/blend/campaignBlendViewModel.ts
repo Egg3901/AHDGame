@@ -217,6 +217,17 @@ export interface StrengthVM {
   costText: string;
   newBoostPct: string;
   canContribute: boolean;
+  /**
+   * Why this viewer cannot contribute, or null when they can.
+   *
+   * Contribution is NOT a campaign-staff lever. `contributeCampaignStrength`
+   * accepts a contribution from any authenticated character in the race's
+   * country, which is how allied and rival players fund a nominee, so the
+   * control is gated on the race and the viewer's own resources rather than on
+   * their access to this campaign. Anything an affordability check already
+   * covers stays in `canContribute` and leaves this null.
+   */
+  blockedReason: string | null;
 }
 
 export interface CampaignBlendVM {
@@ -623,6 +634,24 @@ export function buildCampaignBlendViewModel(inp: CampaignBlendInput): CampaignBl
   );
   const costActions = campaignStrengthContributionActions(strengthAdded);
 
+  // Only the presidential engine reads `campaignStrength`; the down-ballot
+  // engines ignore it and the server rejects those contributions outright, so
+  // the desk says so rather than quoting a price for nothing. A campaign whose
+  // election row did not resolve falls in here too: the server cannot check
+  // the race, so it refuses, and the desk must not promise otherwise.
+  const strengthBlockedReason: string | null =
+    campaign.electionInfo?.electionType !== "president"
+      ? "Campaign strength only affects presidential races right now, so contributions to this race are closed."
+      : campaign.electionInfo?.isEnded
+        ? "This race has ended, so contributions are closed."
+        : campaign.isArchived
+          ? "This campaign is no longer running, so contributions are closed."
+          : me.nationalInfluence == null
+            ? "Sign in to contribute campaign strength."
+            : strengthAdded <= 0
+              ? "You need national influence to contribute campaign strength."
+              : null;
+
   const strength: StrengthVM | null =
     campaign.campaignStrength != null
       ? {
@@ -633,10 +662,9 @@ export function buildCampaignBlendViewModel(inp: CampaignBlendInput): CampaignBl
           costActions,
           costText: `${money(costFunds, symbol)} and ${costActions} action${costActions === 1 ? "" : "s"}`,
           newBoostPct: campaignStrengthBoostPercent(currentStrength + strengthAdded).toFixed(1),
+          blockedReason: strengthBlockedReason,
           canContribute:
-            !campaign.electionInfo?.isEnded &&
-            !campaign.isArchived &&
-            strengthAdded > 0 &&
+            strengthBlockedReason === null &&
             me.actions != null &&
             me.actions >= costActions &&
             me.funds != null &&

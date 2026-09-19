@@ -388,47 +388,48 @@ export function BlendSidebar({
             </span>
           </div>
 
-          {canAct ? (
-            <>
-              <p
-                style={{
-                  margin: "10px 0 14px",
-                  fontFamily: FONT.serif,
-                  fontSize: 13.5,
-                  lineHeight: 1.5,
-                  color: BLEND.muted,
-                }}
-              >
-                {vm.strength.strengthAdded > 0 ? (
-                  <>
-                    Contribute {vm.strength.strengthAdded.toFixed(2)} strength for{" "}
-                    {vm.strength.costText} and reach{" "}
-                    <span style={{ color: BLEND.accent }}>+{vm.strength.newBoostPct}%</span>.
-                  </>
-                ) : (
-                  "You need national influence to contribute campaign strength."
-                )}
-              </p>
-              <button
-                type="button"
-                disabled={!vm.strength.canContribute || busy === "strength"}
-                onClick={onContributeStrength}
-                style={{
-                  width: "100%",
-                  border: `1px solid rgba(220,38,38,.4)`,
-                  background: "transparent",
-                  padding: 9,
-                  fontFamily: FONT.mono,
-                  fontSize: 10.5,
-                  letterSpacing: ".08em",
-                  fontWeight: 700,
-                  color: vm.strength.canContribute ? BLEND.accent : BLEND.muted,
-                  cursor: vm.strength.canContribute ? "pointer" : "not-allowed",
-                }}
-              >
-                CONTRIBUTE STRENGTH
-              </button>
-            </>
+          {/* Not behind `canAct`. Strength is the one lever here that is open
+              to the whole country: the server takes a contribution from any
+              authenticated character in the race, which is how allied and
+              rival players fund a nominee. Gating it with the manage controls
+              left the nominee as the only player who could reach it. */}
+          <p
+            style={{
+              margin: "10px 0 14px",
+              fontFamily: FONT.serif,
+              fontSize: 13.5,
+              lineHeight: 1.5,
+              color: BLEND.muted,
+            }}
+          >
+            {vm.strength.blockedReason ?? (
+              <>
+                Contribute {vm.strength.strengthAdded.toFixed(2)} strength for{" "}
+                {vm.strength.costText} and reach{" "}
+                <span style={{ color: BLEND.accent }}>+{vm.strength.newBoostPct}%</span>.
+              </>
+            )}
+          </p>
+          {vm.strength.blockedReason === null ? (
+            <button
+              type="button"
+              disabled={!vm.strength.canContribute || busy === "strength"}
+              onClick={onContributeStrength}
+              style={{
+                width: "100%",
+                border: `1px solid rgba(220,38,38,.4)`,
+                background: "transparent",
+                padding: 9,
+                fontFamily: FONT.mono,
+                fontSize: 10.5,
+                letterSpacing: ".08em",
+                fontWeight: 700,
+                color: vm.strength.canContribute ? BLEND.accent : BLEND.muted,
+                cursor: vm.strength.canContribute ? "pointer" : "not-allowed",
+              }}
+            >
+              CONTRIBUTE STRENGTH
+            </button>
           ) : null}
         </Block>
       ) : null}
