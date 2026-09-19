@@ -26,4 +26,7 @@ Cut from development.
   offers a contribution it cannot take. Campaign strength only moves votes in
   presidential races, so those pages now say so instead of showing a button that
   fails.
-- A signed out reader is asked to sign in rather than being shown a price.
+- A signed out reader is asked to sign in rather than being shown a price, a
+  reader from another country is told contributions stay inside their own, and
+  a candidate who has suspended their campaign no longer collects one. Each of
+  those was a price quoted for a contribution the game would refuse.

@@ -89,6 +89,7 @@ function campaignFixture(over: Partial<CampaignData> = {}): CampaignData {
       rallyOneShotActionCost: 4,
       rallyTourTickActionCost: 2,
     },
+    countryId: "US",
     ...over,
   } as CampaignData;
 }
@@ -99,6 +100,7 @@ const ME = {
   actions: 20,
   nationalInfluence: 8,
   fundsCurrency: "USD" as const,
+  countryId: "US",
 };
 
 function renderClient(over: Partial<Parameters<typeof CampaignBlendClient>[0]> = {}) {
@@ -150,6 +152,26 @@ describe("manager view", () => {
       canSurrogate: false,
     });
     expect(screen.getAllByRole("button", { name: "CONTRIBUTE STRENGTH" })).toHaveLength(2);
+  });
+
+  it("shows no contribution control on a suspended campaign", () => {
+    // The suspension guard used to ride along on `canManage`/`canSurrogate`.
+    renderClient({
+      campaign: campaignFixture({ campaignSuspended: true }),
+      canManage: false,
+      canSurrogate: false,
+    });
+    expect(screen.queryAllByRole("button", { name: "CONTRIBUTE STRENGTH" })).toHaveLength(0);
+  });
+
+  it("shows no contribution control to a viewer from another country", () => {
+    renderClient({
+      campaign: campaignFixture({ accessLevel: "public", funds: undefined }),
+      me: { ...ME, fundsCurrency: "GBP" as const, countryId: "UK" },
+      canManage: false,
+      canSurrogate: false,
+    });
+    expect(screen.queryAllByRole("button", { name: "CONTRIBUTE STRENGTH" })).toHaveLength(0);
   });
 
   it("names the running mate on the ticket, on both layouts", () => {

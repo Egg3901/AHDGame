@@ -97,6 +97,7 @@ function campaignFixture(over: Partial<CampaignData> = {}): CampaignData {
       rallyOneShotActionCost: 4,
       rallyTourTickActionCost: 2,
     },
+    countryId: "US",
     ...over,
   } as CampaignData;
 }
@@ -110,6 +111,7 @@ function input(over: Partial<CampaignBlendInput> = {}): CampaignBlendInput {
       actions: 20,
       nationalInfluence: 8,
       fundsCurrency: "USD",
+      countryId: "US",
     },
     currentTurn: 4182,
     wire: [],
@@ -692,6 +694,7 @@ describe("strength contribution", () => {
           actions: 20,
           nationalInfluence: 0,
           fundsCurrency: "USD",
+          countryId: "US",
         },
       })
     );
@@ -724,6 +727,7 @@ describe("strength contribution", () => {
           actions: null,
           nationalInfluence: null,
           fundsCurrency: null,
+          countryId: null,
         },
       })
     );
@@ -752,6 +756,84 @@ describe("strength contribution", () => {
     expect(vm.strength?.canContribute).toBe(false);
     expect(vm.strength?.blockedReason).toBe(
       "Campaign strength only affects presidential races right now, so contributions to this race are closed."
+    );
+  });
+
+  it("closes contributions for a viewer in another country", () => {
+    // `contributeCampaignStrength` runs `assertSameCountry` and refuses. Worse
+    // than the refusal, the price quoted here is converted at the CAMPAIGN's
+    // rate while the affordability check reads the VIEWER's balance, so a
+    // foreign reader was being shown a figure in one currency tested against a
+    // balance in another. Currency alone cannot decide this: SUR is shared by
+    // RU / BLR / UKR / BAL and GBP by UK / SCO / WAL.
+    const vm = buildCampaignBlendViewModel(
+      input({
+        campaign: campaignFixture({ accessLevel: "public", funds: undefined }),
+        me: {
+          funds: 612_000,
+          storedFunds: 612_000,
+          actions: 20,
+          nationalInfluence: 8,
+          fundsCurrency: "GBP",
+          countryId: "UK",
+        },
+      })
+    );
+    expect(vm.strength?.canContribute).toBe(false);
+    expect(vm.strength?.blockedReason).toBe(
+      "You can only contribute to campaigns in your own country."
+    );
+  });
+
+  it("leaves contributions open for a viewer in the campaign's own country", () => {
+    const vm = buildCampaignBlendViewModel(
+      input({
+        campaign: campaignFixture({ accessLevel: "public", funds: undefined }),
+        me: {
+          funds: 612_000,
+          storedFunds: 612_000,
+          actions: 20,
+          nationalInfluence: 8,
+          fundsCurrency: "USD",
+          countryId: "US",
+        },
+      })
+    );
+    expect(vm.strength?.blockedReason).toBeNull();
+  });
+
+  it("does not block on country when the viewer's country is unknown", () => {
+    // Fails OPEN to the server's own `assertSameCountry`. Blocking on a missing
+    // value would lock out legitimate same-country players whenever the
+    // `/api/auth/me` fetch degrades, which it is written to tolerate.
+    const vm = buildCampaignBlendViewModel(
+      input({
+        campaign: campaignFixture({ accessLevel: "public", funds: undefined }),
+        me: {
+          funds: 612_000,
+          storedFunds: 612_000,
+          actions: 20,
+          nationalInfluence: 8,
+          fundsCurrency: "USD",
+          countryId: null,
+        },
+      })
+    );
+    expect(vm.strength?.blockedReason).toBeNull();
+  });
+
+  it("closes contributions once the candidate has suspended their campaign", () => {
+    // `canManage` and `canSurrogate` both carried `!campaignSuspended`, so
+    // gating the control on them hid it here for free. The server still
+    // refuses (getCampaignOrThrow -> assertCampaignActiveForManagement), so
+    // this is a dead button rather than a money leak, but it is still a button
+    // that cannot work.
+    const vm = buildCampaignBlendViewModel(
+      input({ campaign: campaignFixture({ campaignSuspended: true }) })
+    );
+    expect(vm.strength?.canContribute).toBe(false);
+    expect(vm.strength?.blockedReason).toBe(
+      "This candidate has suspended their campaign, so contributions are closed."
     );
   });
 
