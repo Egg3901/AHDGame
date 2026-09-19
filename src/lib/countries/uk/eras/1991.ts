@@ -30,9 +30,12 @@ export const UK_1991: CountryEraOverride = {
         key: "commons",
         name: "House of Commons",
         shortName: "Commons",
-        seats: 651,
+        // 650, not 651: this world opens in January 1991, and the 651-seat
+        // chamber is the one the 1992 boundary review created. See the header
+        // of `ukRegions1991.ts`, whose districts this total must equal.
+        seats: 650,
         description:
-          "651 elected MPs from single-member constituencies. The primary legislative chamber.",
+          "650 elected MPs from single-member constituencies. The primary legislative chamber.",
       },
     },
   },

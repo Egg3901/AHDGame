@@ -26,7 +26,7 @@ import {
   US_SENATE_1992,
   US_STATE_SENATE_1990,
   US_GOVERNORS_1992,
-  UK_COMMONS_1992,
+  UK_COMMONS_1987,
   UK_REGIONAL_COUNCIL_1992,
   UK_FIRST_MINISTERS_1992,
   JP_SHUGIIN_1990,
@@ -95,7 +95,7 @@ const COMPOSITION: Record<
       { country: "US", seats: US_SENATE_1992 },
       { country: "US", seats: US_STATE_SENATE_1990 },
       { country: "US", seats: US_GOVERNORS_1992 },
-      { country: "UK", seats: UK_COMMONS_1992 },
+      { country: "UK", seats: UK_COMMONS_1987 },
       { country: "UK", seats: UK_REGIONAL_COUNCIL_1992 },
       { country: "UK", seats: UK_FIRST_MINISTERS_1992 },
       { country: "JP", seats: JP_SHUGIIN_1990 },
@@ -159,6 +159,12 @@ const COMPOSITION: Record<
  * list is explicit so the gap stays visible and cannot quietly grow.
  */
 const ALLOWED_UNAUTHORED: Record<string, ReadonlySet<string>> = {
+  // Two seats the move from the 1992 Commons to the 1987 one brought in that
+  // the 1992 roster had no reason to name: an Alliance member in the South East,
+  // and the Sinn Féin seat for West Belfast, which SF held in 1987 and lost in
+  // 1992. Same rule as the 2019 four below — the seats are right, and authoring
+  // two more real MPs to name them would break CLAUDE.md to satisfy a test.
+  "1991-default": new Set(["UK|commons|SEE|uk_libdem|0", "UK|commons|NIR|uk_sf|0"]),
   "2019-default": new Set([
     "UK|commons|SEE|uk_green|0",
     "UK|commons|EAE|uk_libdem|0",

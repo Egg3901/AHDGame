@@ -277,6 +277,33 @@ export const UK_COMMONS_SEATS_1953: Record<string, number> = {
 
 export const TOTAL_UK_COMMONS_SEATS_1953 = 625;
 
+/**
+ * UK Commons seat counts by region — 1983 redistribution (in force for the
+ * `1991-default` preset). Mirrors `ukRegions1991.houseDistricts` exactly
+ * (England 523 / Scotland 72 / Wales 38 / Northern Ireland 17 = 650).
+ *
+ * Same defect `UK_COMMONS_SEATS_1953` was written for, one era over: without
+ * this map `getUkCommonsSeats` fell through to the modern table, so a 1991
+ * world spawned and allocated Commons elections on a regional split that
+ * matched neither its chamber config nor its seated roster.
+ */
+export const UK_COMMONS_SEATS_1991: Record<string, number> = {
+  LON: 81,
+  SEE: 89,
+  SWE: 50,
+  EAE: 53,
+  EMI: 41,
+  WMI: 56,
+  YHU: 52,
+  NWE: 72,
+  NEE: 29,
+  SCO: 72,
+  WAL: 38,
+  NIR: 17,
+};
+
+export const TOTAL_UK_COMMONS_SEATS_1991 = 650;
+
 /** RU (Soviet Union) region id → display name. Matches ruRegions seed names. */
 export const RU_REGION_NAMES: Record<string, string> = {
   CEN: "Central Russia",
@@ -819,12 +846,20 @@ export function getHouseSeats(preset: string | undefined): Record<string, number
  * redistribution; every other preset → the modern 650-seat map.
  */
 export function getUkCommonsSeats(preset: string | undefined): Record<string, number> {
-  return preset === "1953-default" ? UK_COMMONS_SEATS_1953 : UK_COMMONS_SEATS;
+  if (preset === "1953-default") return UK_COMMONS_SEATS_1953;
+  return preset === "1991-default" ? UK_COMMONS_SEATS_1991 : UK_COMMONS_SEATS;
 }
 
-/** National Commons size for the active preset (625 in 1953, else 650). */
+/**
+ * National Commons size for the active preset (625 in 1953, 650 in 1991, else
+ * 650).
+ *
+ * 1991 and the modern era agree on the total and disagree on the split, which
+ * is exactly why the map above is per-region rather than a single number.
+ */
 export function getTotalUkCommonsSeats(preset: string | undefined): number {
-  return preset === "1953-default" ? TOTAL_UK_COMMONS_SEATS_1953 : TOTAL_UK_COMMONS_SEATS;
+  if (preset === "1953-default") return TOTAL_UK_COMMONS_SEATS_1953;
+  return preset === "1991-default" ? TOTAL_UK_COMMONS_SEATS_1991 : TOTAL_UK_COMMONS_SEATS;
 }
 
 export function getElectoralVotes(preset: string | undefined): Record<string, number> {

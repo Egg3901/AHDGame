@@ -584,15 +584,19 @@ describe("S4 — player chambers agree with their era config", () => {
    * with the config while the regions that ELECT them sum to something else, and
    * that is what misallocates a general election.
    *
-   * Pinned per era. 1991 and 2019 now equal their chamber sizes exactly (651 and
-   * 650); the older eras still disagree and are recorded so they cannot drift
+   * Pinned per era. 1991 and 2019 equal their chamber sizes exactly (650 each);
+   * the older eras still disagree and are recorded so they cannot drift
    * unnoticed. 1979's 635 against a 650-seat config is the largest remaining
    * gap, and that preset seats no Commons at all.
+   *
+   * 1991 was 651 — the chamber the 1992 boundary review produced, in a world
+   * that opens in January 1991. It is 650 now, on the 1983 boundaries actually
+   * in force at the start.
    */
   const UK_DISTRICT_SUMS: Record<ShippingPreset, number> = {
     "1953-default": 625,
     "1979-default": 635,
-    "1991-default": 651,
+    "1991-default": 650,
     "1999-default": 659,
     "2007-default": 646,
     "2019-default": 650,
