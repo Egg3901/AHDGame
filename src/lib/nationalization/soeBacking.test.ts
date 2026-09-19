@@ -474,7 +474,7 @@ describe("corporationHistory persistence", () => {
           };
         }
         if (name === "marketCapHistory") {
-          return { replaceOne: async () => ({}) };
+          return { findOne: async () => null, replaceOne: async () => ({}) };
         }
         return {
           findOne: async () => null,

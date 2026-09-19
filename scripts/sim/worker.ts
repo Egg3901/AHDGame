@@ -33,6 +33,10 @@ import { MongoClient, type Db, type Collection } from "mongodb";
 import { claimFilterAt, parseClaimWindow } from "./claimWindow";
 import { assertSafeToken } from "./simJobArgs";
 import { defaultSimSourceDeps, planRunWorldSpawn, verifySimSource } from "./simSource";
+import {
+  pickSovereignDemandExperimentFlags,
+  sovereignDemandRunWorldArgs,
+} from "./sovereignDemandExperimentFlags";
 
 const OPS_MONGODB_URI = process.env.OPS_MONGODB_URI;
 const OPS_DB_NAME = process.env.OPS_DB_NAME || "a-house-divided";
@@ -109,6 +113,8 @@ interface SimJob {
   canonicalFreightBillingEnabled?: boolean;
   shortageResponsiveSourcingEnabled?: boolean;
   indexFundBondLiquidityEnabled?: boolean;
+  sovereignIssuanceConsolidationEnabled?: boolean;
+  domesticSovereignBondCoverageEnabled?: boolean;
   equityLiquidityFacilityEnabled?: boolean;
   nppMarketCoverageEnabled?: boolean;
   nppFragileMarketSupplyEnabled?: boolean;
@@ -313,6 +319,15 @@ async function processJob(jobsCol: Collection<SimJob>, job: SimJob, slotId: numb
         `Pinned source moved between validation and spawn for job ${job._id} - refusing to run`
       );
     }
+    // #1001 controlled comparison: both dark gates travel from the simJobs
+    // doc to runWorld CLI args through one shared, tested mapping. Absent
+    // stays absent (scheduler default off); explicit false pins the control
+    // arm; non-boolean values throw and fail the job, like every neighbor.
+    // They ride the spawn-plan base args so the pinned-source planner keeps
+    // owning cwd, experiment args, and provenance flags.
+    const sovereignDemandBaseArgs = sovereignDemandRunWorldArgs(
+      pickSovereignDemandExperimentFlags({ ...job })
+    );
     const spawnPlan = planRunWorldSpawn(
       job,
       [
@@ -322,6 +337,7 @@ async function processJob(jobsCol: Collection<SimJob>, job: SimJob, slotId: numb
         `--db=${job.dbName}`,
         `--run-id=${job._id}`,
         ...(job.cloneFromLive ? ["--clone-mode"] : []),
+        ...sovereignDemandBaseArgs,
       ],
       GAME_REPO_DIR,
       spawnSource

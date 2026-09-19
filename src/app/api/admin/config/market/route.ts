@@ -48,6 +48,10 @@ const patchSchema = z.object({
   intervention: economicInterventionPlanSchema.optional(),
   indexFundBondLiquidityEnabled: z.boolean().optional(),
   bondLiquidityIntervention: economicInterventionPlanSchema.optional(),
+  // #1001 dark gates: validation-known so invalid values 400, but sandbox-only
+  // (see PATCH: true is rejected, only explicit false persists).
+  sovereignIssuanceConsolidationEnabled: z.boolean().optional(),
+  domesticSovereignBondCoverageEnabled: z.boolean().optional(),
   equityLiquidityFacilityEnabled: z.boolean().optional(),
   equityLiquidityIntervention: economicInterventionPlanSchema.optional(),
   nppMarketCoverageEnabled: z.boolean().optional(),
@@ -91,6 +95,8 @@ export async function GET() {
           qualityPremiumPricingEnabled: 1,
           supplyAgreementsEnabled: 1,
           shortageResponsiveSourcingEnabled: 1,
+          sovereignIssuanceConsolidationEnabled: 1,
+          domesticSovereignBondCoverageEnabled: 1,
           indexFundBondLiquidityEnabled: 1,
           equityLiquidityFacilityEnabled: 1,
           nppMarketCoverageEnabled: 1,
@@ -113,6 +119,8 @@ export async function GET() {
       qualityPremiumPricingEnabled: config?.qualityPremiumPricingEnabled === true,
       supplyAgreementsEnabled: config?.supplyAgreementsEnabled === true,
       shortageResponsiveSourcingEnabled: config?.shortageResponsiveSourcingEnabled === true,
+      sovereignIssuanceConsolidationEnabled: config?.sovereignIssuanceConsolidationEnabled === true,
+      domesticSovereignBondCoverageEnabled: config?.domesticSovereignBondCoverageEnabled === true,
       indexFundBondLiquidityEnabled: config?.indexFundBondLiquidityEnabled === true,
       equityLiquidityFacilityEnabled: config?.equityLiquidityFacilityEnabled === true,
       nppMarketCoverageEnabled: config?.nppMarketCoverageEnabled === true,
@@ -162,6 +170,8 @@ export async function PATCH(request: Request) {
       supplyAgreementsEnabled,
       shortageResponsiveSourcingEnabled,
       intervention,
+      sovereignIssuanceConsolidationEnabled,
+      domesticSovereignBondCoverageEnabled,
       indexFundBondLiquidityEnabled,
       bondLiquidityIntervention,
       equityLiquidityFacilityEnabled,
@@ -190,6 +200,8 @@ export async function PATCH(request: Request) {
       supplyAgreementsEnabled?: boolean;
       shortageResponsiveSourcingEnabled?: boolean;
       intervention?: EconomicInterventionPlan;
+      sovereignIssuanceConsolidationEnabled?: boolean;
+      domesticSovereignBondCoverageEnabled?: boolean;
       indexFundBondLiquidityEnabled?: boolean;
       bondLiquidityIntervention?: EconomicInterventionPlan;
       equityLiquidityFacilityEnabled?: boolean;
@@ -241,6 +253,23 @@ export async function PATCH(request: Request) {
       if (activationError) {
         return NextResponse.json({ error: activationError }, { status: 400 });
       }
+    }
+    // #1001 dark gates are sandbox-only until the worldsim comparison and
+    // stress report land: enabling them on the live world is refused here.
+    // Explicit false (or absent) is fine and persists like any other flag.
+    if (
+      sovereignIssuanceConsolidationEnabled === true ||
+      domesticSovereignBondCoverageEnabled === true
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "Sovereign issuance consolidation and domestic sovereign-bond coverage " +
+            "are sandbox-only until #1001 worldsim evidence lands: queue a worldsim " +
+            "comparison instead of enabling them on the live world.",
+        },
+        { status: 400 }
+      );
     }
     if (indexFundBondLiquidityEnabled === true) {
       if (!bondLiquidityIntervention) {
@@ -327,6 +356,10 @@ export async function PATCH(request: Request) {
         governorSet.shortageResponsiveSourcingIntervention = intervention;
       }
     }
+    if (typeof sovereignIssuanceConsolidationEnabled === "boolean")
+      governorSet.sovereignIssuanceConsolidationEnabled = sovereignIssuanceConsolidationEnabled;
+    if (typeof domesticSovereignBondCoverageEnabled === "boolean")
+      governorSet.domesticSovereignBondCoverageEnabled = domesticSovereignBondCoverageEnabled;
     if (typeof indexFundBondLiquidityEnabled === "boolean") {
       governorSet.indexFundBondLiquidityEnabled = indexFundBondLiquidityEnabled;
       if (indexFundBondLiquidityEnabled && bondLiquidityIntervention) {
