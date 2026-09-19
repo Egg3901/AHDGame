@@ -62,9 +62,11 @@ const COUNTRIES: CountrySource[] = [
   {
     cc: "JP",
     loadDemographics: () =>
-      import("@/lib/seeds/jp/jpRegionDemographics").then((m) => m.jpRegionDemographics),
+      import("@/lib/countries/jp/data/jpRegionDemographics").then((m) => m.jpRegionDemographics),
     loadCategories: () =>
-      import("@/lib/seeds/jp/jpDemographicCategories").then((m) => m.jpDemographicCategories),
+      import("@/lib/countries/jp/data/jpDemographicCategories").then(
+        (m) => m.jpDemographicCategories
+      ),
   },
   {
     cc: "DE",

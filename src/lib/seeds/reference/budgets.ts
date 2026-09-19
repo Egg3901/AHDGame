@@ -37,7 +37,7 @@ import { COUNTRY_POLICY_CONFIGS_1999 } from "./basePolicies1999";
 import { COUNTRY_POLICY_CONFIGS_2007 } from "./basePolicies2007";
 import { COUNTRY_POLICY_CONFIGS_2023 } from "./basePolicies2023";
 import { legislationTypes } from "./legislationTypes";
-import { jpLegislationTypes } from "@/lib/seeds/jp/jpLegislationTypes";
+import { jpLegislationTypes } from "@/lib/countries/jp/data/jpLegislationTypes";
 import { deLegislationTypes } from "@/lib/seeds/de/deLegislationTypes";
 import { ieLegislationTypes } from "@/lib/seeds/ie/ieLegislationTypes";
 import { cnLegislationTypes } from "@/lib/seeds/cn/cnLegislationTypes";
@@ -116,47 +116,47 @@ import { getStateResourceCapacity, lookupStateResourceCapacity } from "./stateRe
  * the seed so a fresh world doesn't depend on the backfill migration ever
  * running.
  */
-const SOVEREIGN_CORP_LEGAL_STRUCTURE: Partial<Record<CountryId, LegalStructureId>> = {
-  US: "us_c_corp",
-  UK: "uk_plc",
-  JP: "jp_kk",
-  DE: "de_ag",
-  IE: "ie_plc",
-  BR: "br_sa_aberta",
-  CN: "cn_gufen",
-  NG: "ng_plc",
+export const SOVEREIGN_CORP_LEGAL_STRUCTURE: Partial<Record<CountryId, LegalStructureId>> = {
+  US: US_ECONOMY.sovereignCorpLegalStructure,
+  UK: UK_ECONOMY.sovereignCorpLegalStructure,
+  JP: JP_ECONOMY.sovereignCorpLegalStructure,
+  DE: DE_ECONOMY.sovereignCorpLegalStructure,
+  IE: IE_ECONOMY.sovereignCorpLegalStructure,
+  BR: BR_ECONOMY.sovereignCorpLegalStructure,
+  CN: CN_ECONOMY.sovereignCorpLegalStructure,
+  NG: NG_ECONOMY.sovereignCorpLegalStructure,
   // The USSR has no bespoke joint-stock legal form (Cold-War command economy);
   // the neutral fallback keeps corporationTurn able to process the RU state
   // enterprise. See GENERIC_LEGAL_STRUCTURE in constants/legalStructures.ts.
-  RU: "generic_corp",
+  RU: RU_ECONOMY.sovereignCorpLegalStructure,
   // Same reasoning as RU: a planned economy has no bespoke joint-stock form.
-  DD: "generic_corp",
+  DD: DD_ECONOMY.sovereignCorpLegalStructure,
   // Warsaw-Pact satellites (Command Economy v2 SOE stack, refs command-economy
   // seed-gap fix): none of these ran a bespoke joint-stock corporate form
   // either — same neutral fallback as RU/DD.
-  PL: "generic_corp",
-  HU: "generic_corp",
-  CS: "generic_corp",
-  BG: "generic_corp",
-  UKR: "generic_corp",
-  BLR: "generic_corp",
-  BAL: "generic_corp",
-  RO: "generic_corp",
+  PL: PL_ECONOMY.sovereignCorpLegalStructure,
+  HU: HU_ECONOMY.sovereignCorpLegalStructure,
+  CS: CS_ECONOMY.sovereignCorpLegalStructure,
+  BG: BG_ECONOMY.sovereignCorpLegalStructure,
+  UKR: UKR_ECONOMY.sovereignCorpLegalStructure,
+  BLR: BLR_ECONOMY.sovereignCorpLegalStructure,
+  BAL: BAL_ECONOMY.sovereignCorpLegalStructure,
+  RO: RO_ECONOMY.sovereignCorpLegalStructure,
   // Yugoslavia — command economy, no bespoke joint-stock form (see YU's SOE
   // note above on why it isn't grouped with the Warsaw-Pact five).
-  YU: "generic_corp",
+  YU: YU_ECONOMY.sovereignCorpLegalStructure,
   // Econ-tier market democracies (corporate-sector seed-gap fix): promoted
   // from the abstract sphere-macro tier to full-autonomous (seedEconTierRosters
   // #3253, seedManifest.ts) with no bespoke joint-stock legal form authored yet
   // — same neutral fallback used for every other country here without one.
-  FR: "generic_corp",
-  IT: "generic_corp",
-  ES: "generic_corp",
-  SE: "generic_corp",
-  TR: "generic_corp",
-  GR: "generic_corp",
-  AT: "generic_corp",
-  FI: "generic_corp",
+  FR: FR_ECONOMY.sovereignCorpLegalStructure,
+  IT: IT_ECONOMY.sovereignCorpLegalStructure,
+  ES: ES_ECONOMY.sovereignCorpLegalStructure,
+  SE: SE_ECONOMY.sovereignCorpLegalStructure,
+  TR: TR_ECONOMY.sovereignCorpLegalStructure,
+  GR: GR_ECONOMY.sovereignCorpLegalStructure,
+  AT: AT_ECONOMY.sovereignCorpLegalStructure,
+  FI: FI_ECONOMY.sovereignCorpLegalStructure,
 };
 
 const budgetLegislationTypes = [
@@ -495,6 +495,38 @@ function derivePolicyRevenueLines(
  * pipeline is year-driven rather than 1953-gated.
  */
 import { POLITICAL_LEGISLATION_EXCLUDED_SCOPES as POLITICAL_LEGISLATION_OLD_SCOPES } from "@/lib/politicalMetrics/pipelinePreset";
+import { JP_ECONOMY } from "@/lib/countries/jp/economy";
+import {
+  JP_DEFAULT_REGIONAL_TAX_RATES,
+  JP_EXTRA_OVERRIDE_CATEGORIES,
+  JP_GRANT_MULTIPLIER,
+} from "@/lib/countries/jp/economy";
+import { US_ECONOMY } from "@/lib/countries/us/economy";
+import { UK_ECONOMY } from "@/lib/countries/uk/economy";
+import { DE_ECONOMY } from "@/lib/countries/de/economy";
+import { CN_ECONOMY } from "@/lib/countries/cn/economy";
+import { IE_ECONOMY } from "@/lib/countries/ie/economy";
+import { RU_ECONOMY } from "@/lib/countries/ru/economy";
+import { DD_ECONOMY } from "@/lib/countries/dd/economy";
+import { NG_ECONOMY } from "@/lib/countries/ng/economy";
+import { BR_ECONOMY } from "@/lib/countries/br/economy";
+import { FR_ECONOMY } from "@/lib/countries/fr/economy";
+import { IT_ECONOMY } from "@/lib/countries/it/economy";
+import { ES_ECONOMY } from "@/lib/countries/es/economy";
+import { SE_ECONOMY } from "@/lib/countries/se/economy";
+import { TR_ECONOMY } from "@/lib/countries/tr/economy";
+import { GR_ECONOMY } from "@/lib/countries/gr/economy";
+import { AT_ECONOMY } from "@/lib/countries/at/economy";
+import { FI_ECONOMY } from "@/lib/countries/fi/economy";
+import { PL_ECONOMY } from "@/lib/countries/pl/economy";
+import { HU_ECONOMY } from "@/lib/countries/hu/economy";
+import { RO_ECONOMY } from "@/lib/countries/ro/economy";
+import { YU_ECONOMY } from "@/lib/countries/yu/economy";
+import { BG_ECONOMY } from "@/lib/countries/bg/economy";
+import { CS_ECONOMY } from "@/lib/countries/cs/economy";
+import { BLR_ECONOMY } from "@/lib/countries/blr/economy";
+import { UKR_ECONOMY } from "@/lib/countries/ukr/economy";
+import { BAL_ECONOMY } from "@/lib/countries/bal/economy";
 
 /**
  * Authored historical fiscal baselines for 1953 (Korean War defense shares,
@@ -570,7 +602,7 @@ const BASELINE_OVERRIDE_CATEGORIES = ["defense", "healthcare", "health"] as cons
  */
 const EXTRA_OVERRIDE_CATEGORIES_BY_COUNTRY: Partial<Record<string, readonly string[]>> = {
   CN: ["infrastructure"],
-  JP: ["infrastructure", "social"],
+  JP: JP_EXTRA_OVERRIDE_CATEGORIES,
   DE: ["welfare", "transport", "education", "other"],
   BR: ["socialSecurity", "infrastructure", "education", "other"],
   AT: ["socialSecurity", "education", "infrastructure", "other"],
@@ -6405,13 +6437,7 @@ export function generateStateBudgets(
         foreignCorporateTax: 1,
         propertyTax: 1.6,
       },
-      JP: {
-        incomeTax: 0,
-        salesTax: 0,
-        domesticCorporateTax: 1.5,
-        foreignCorporateTax: 1.5,
-        propertyTax: 1.4,
-      },
+      JP: JP_DEFAULT_REGIONAL_TAX_RATES,
       DE: {
         incomeTax: 0,
         salesTax: 0,
@@ -6448,7 +6474,7 @@ export function generateStateBudgets(
     const GRANT_MULTIPLIERS: Record<string, number> = {
       US: 0.012,
       UK: 0.022,
-      JP: 0.018,
+      JP: JP_GRANT_MULTIPLIER,
       DE: 0.02,
       IE: 0.022, // similar to UK — centralised parliamentary transfers
       BR: 0.015, // federal transfers to states

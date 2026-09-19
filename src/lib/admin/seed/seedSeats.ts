@@ -11,13 +11,19 @@ import {
   getHouseSeats,
   getUkCommonsSeats,
 } from "@/lib/constants/states";
-import { JP_REGIONS } from "@/lib/constants/japan";
 import { deRegions } from "@/lib/seeds/de/deRegions";
 import { brRegions } from "@/lib/seeds/br/brRegions";
 import { ngRegions } from "@/lib/seeds/ng/ngRegions";
 import { cnRegions } from "@/lib/seeds/cn/cnRegions";
 import { ieRegions } from "@/lib/seeds/ie/ieRegions";
 import { TERRITORY_ADMISSIONS } from "@/lib/elections/statehoodAdmission";
+import { JP_GEOGRAPHY } from "@/lib/countries/jp/geography";
+import { UK_GEOGRAPHY } from "@/lib/countries/uk/geography";
+import { DE_GEOGRAPHY } from "@/lib/countries/de/geography";
+import { CN_GEOGRAPHY } from "@/lib/countries/cn/geography";
+import { IE_GEOGRAPHY } from "@/lib/countries/ie/geography";
+import { NG_GEOGRAPHY } from "@/lib/countries/ng/geography";
+import { BR_GEOGRAPHY } from "@/lib/countries/br/geography";
 
 // State name lookup for display names
 const STATE_NAMES: Record<string, string> = {
@@ -73,40 +79,10 @@ const STATE_NAMES: Record<string, string> = {
   WY: "Wyoming",
 };
 
-const UK_REGION_NAMES: Record<string, string> = {
-  LON: "London",
-  SEE: "South East",
-  SWE: "South West",
-  EAE: "East of England",
-  WMI: "West Midlands",
-  EMI: "East Midlands",
-  YHU: "Yorkshire & Humber",
-  NWE: "North West",
-  NEE: "North East",
-  WAL: "Wales",
-  SCO: "Scotland",
-  NIR: "Northern Ireland",
-};
-
-const JP_REGION_NAMES: Record<string, string> = Object.fromEntries(
-  JP_REGIONS.map((r) => [r.id, r.name])
-);
-const DE_REGION_NAMES: Record<string, string> = Object.fromEntries(
-  deRegions.map((r) => [r._id, r.name])
-);
-
-const BR_REGION_NAMES: Record<string, string> = Object.fromEntries(
-  brRegions.map((r) => [r._id, r.name])
-);
-const NG_REGION_NAMES: Record<string, string> = Object.fromEntries(
-  ngRegions.map((r) => [r._id, r.name])
-);
-const CN_REGION_NAMES: Record<string, string> = Object.fromEntries(
-  cnRegions.map((r) => [r._id, r.name])
-);
-const IE_REGION_NAMES: Record<string, string> = Object.fromEntries(
-  ieRegions.map((r) => [r._id, r.name])
-);
+/**
+ * The United Kingdom's region names, forwarded to its country folder, where they
+ * are DERIVED from `UK_REGIONS` rather than written out a second time.
+ */
 
 /**
  * Per-region councillor seat allocation for the IE Local Council. Must mirror
@@ -126,14 +102,14 @@ const IE_LOCAL_COUNCIL_SEATS_LOCAL: Record<string, number> = {
   MID: 12,
 };
 
-const REGION_NAME_MAPS: Partial<Record<CountryId, Record<string, string>>> = {
-  UK: UK_REGION_NAMES,
-  JP: JP_REGION_NAMES,
-  DE: DE_REGION_NAMES,
-  BR: BR_REGION_NAMES,
-  NG: NG_REGION_NAMES,
-  CN: CN_REGION_NAMES,
-  IE: IE_REGION_NAMES,
+export const REGION_NAME_MAPS: Partial<Record<CountryId, Record<string, string>>> = {
+  UK: UK_GEOGRAPHY.regionNames,
+  JP: JP_GEOGRAPHY.regionNames,
+  DE: DE_GEOGRAPHY.regionNames,
+  BR: BR_GEOGRAPHY.regionNames,
+  NG: NG_GEOGRAPHY.regionNames,
+  CN: CN_GEOGRAPHY.regionNames,
+  IE: IE_GEOGRAPHY.regionNames,
 };
 
 function getStateName(state: string, ctryId: CountryId): string {

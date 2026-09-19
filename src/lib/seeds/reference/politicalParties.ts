@@ -20,43 +20,18 @@ export type PartySeed = Omit<PoliticalParty, "_id" | "sequentialId" | "createdAt
   validForPresets?: string[];
 };
 
-export const politicalParties: PartySeed[] = [
-  {
-    seedOrder: 1,
-    countryId: "US",
-    name: "Democratic Party",
-    abbreviation: "DEM",
-    color: "#3B82F6", // Blue
-    economicPosition: -2, // Center-left
-    socialPosition: -2, // Center-left
-    chairId: null,
-    viceChairId: null,
-    treasurerId: null,
-    committeeIds: [],
-    treasury: 1000000,
-    nationalTaxRate: 0,
-    politicalStrength: 0,
-    memberCount: 0,
-    isDefault: true,
-    createdBy: null,
-  },
-  {
-    seedOrder: 2,
-    countryId: "US",
-    name: "Republican Party",
-    abbreviation: "REP",
-    color: "#EF4444", // Red
-    economicPosition: 2, // Center-right
-    socialPosition: 2, // Center-right
-    chairId: null,
-    viceChairId: null,
-    treasurerId: null,
-    committeeIds: [],
-    treasury: 1000000,
-    nationalTaxRate: 0,
-    politicalStrength: 0,
-    memberCount: 0,
-    isDefault: true,
-    createdBy: null,
-  },
-];
+/**
+ * The United States' default parties.
+ *
+ * ⚠️ A FORWARDER, NOT A COPY. The rows now live in
+ * `@/lib/countries/us/data/usParties`, beside every other country's roster.
+ * This export stays so the wiki dashboard and `finalizeResetGameWorld` are
+ * untouched, and because dropping it would silently remove the US default
+ * parties from a reset.
+ *
+ * ⚠️ `PartySeed` ABOVE IS SHARED AND STAYS HERE. Every country's roster
+ * imports it, including `jp/data/jpParties.ts`. Moving the TYPE into one
+ * country's folder would make 23 other countries depend on the United States
+ * to describe a party, which is the mixing this split exists to undo.
+ */
+export { usParties as politicalParties } from "@/lib/countries/us/data/usParties";

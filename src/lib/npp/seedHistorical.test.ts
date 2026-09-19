@@ -14,7 +14,7 @@ import { SLUG_TO_NAME, INDEPENDENT_SLUGS, buildOfficeType } from "./seedHistoric
 import { getPresetSeats } from "@/lib/constants/historicalSeats";
 import { politicalParties as usParties } from "@/lib/seeds/reference/politicalParties";
 import { ukParties } from "@/lib/seeds/uk/ukParties";
-import { jpParties } from "@/lib/seeds/jp/jpParties";
+import { jpParties } from "@/lib/countries/jp/data/jpParties";
 import { deParties } from "@/lib/seeds/de/deParties";
 import { brParties } from "@/lib/seeds/br/brParties";
 import { ieParties } from "@/lib/seeds/ie/ieParties";
@@ -300,14 +300,33 @@ describe("1953-default US executive seed", () => {
     expect(vps).toEqual([{ state: "US", officeType: "vicePresident", party: "republican" }]);
   });
 
-  it("no other preset seeds a US president (democracies-start-vacant is preserved elsewhere)", () => {
-    for (const preset of ["1979-default", "1991-default", "2019-default"]) {
+  it("1991 and 2019 now seat a Republican executive too", () => {
+    // DELIBERATE CHANGE. This used to assert that no preset but 1953 seeded a US
+    // executive. "Democracies start vacant" was about LEGISLATURES: seeding an
+    // executive does not suppress the election cycle (see US_EXECUTIVE_1953),
+    // and leaving it empty meant the presidency sat vacant ~48 turns in 1991 and
+    // ~240 turns - about ten real days - in 2019.
+    for (const preset of ["1991-default", "2019-default"]) {
       const seats = getPresetSeats(preset);
       expect(
-        seats.filter((s) => s.officeType === "president" || s.officeType === "vicePresident"),
-        `${preset} should not seed an executive`
-      ).toEqual([]);
+        seats.filter((s) => s.officeType === "president" && s.state === "US"),
+        preset
+      ).toEqual([{ state: "US", officeType: "president", party: "republican" }]);
+      expect(
+        seats.filter((s) => s.officeType === "vicePresident" && s.state === "US"),
+        preset
+      ).toEqual([{ state: "US", officeType: "vicePresident", party: "republican" }]);
     }
+  });
+
+  it("1979 still starts vacant, because its US party slugs do not resolve", () => {
+    // Not an oversight. `democrat` has no SLUG_TO_NAME entry for 1979, so a
+    // seeded president would fold to "independent" - a fake independent
+    // president being worse than an empty chair.
+    const seats = getPresetSeats("1979-default");
+    expect(
+      seats.filter((s) => s.officeType === "president" || s.officeType === "vicePresident")
+    ).toEqual([]);
   });
 });
 

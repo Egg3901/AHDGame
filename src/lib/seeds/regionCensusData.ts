@@ -2,58 +2,7 @@ import type { CountryId } from "@/lib/constants/countries";
 import type { Layer1Config } from "@/lib/seeds/stateDemographics";
 import type { ResetPresetId } from "@/lib/seeds/presetSelector";
 import { selectPresetBundleOptional } from "@/lib/seeds/presetSelector";
-import { stateCensusData } from "@/lib/seeds/stateDemographics";
-import { stateCensusData1953 } from "@/lib/seeds/stateCensusData1953";
-import { stateCensusData1979 } from "@/lib/seeds/stateCensusData1979";
-import { stateCensusData1991 } from "@/lib/seeds/stateCensusData1991";
-import { stateCensusData1999 } from "@/lib/seeds/stateCensusData1999";
-import { stateCensusData2007 } from "@/lib/seeds/stateCensusData2007";
-import { stateCensusData2023 } from "@/lib/seeds/stateCensusData2023";
-import { stateCensusData2027 } from "@/lib/seeds/stateCensusData2027";
-import { ukRegionCensusData } from "@/lib/seeds/uk/ukRegionCensusData";
-import { ukRegionCensusData1953 } from "@/lib/seeds/uk/ukRegionCensusData1953";
-import { ukRegionCensusData1991 } from "@/lib/seeds/uk/ukRegionCensusData1991";
-import { ukRegionCensusData2027 } from "@/lib/seeds/uk/ukRegionCensusData2027";
-import { jpRegionCensusData } from "@/lib/seeds/jp/jpRegionCensusData";
-import { jpRegionCensusData1953 } from "@/lib/seeds/jp/jpRegionCensusData1953";
-import { jpRegionCensusData1991 } from "@/lib/seeds/jp/jpRegionCensusData1991";
-import { jpRegionCensusData2027 } from "@/lib/seeds/jp/jpRegionCensusData2027";
-import { deRegionCensusData } from "@/lib/seeds/de/deRegionCensusData";
-import { deRegionCensusData1953 } from "@/lib/seeds/de/deRegionCensusData1953";
-import { deRegionCensusData1991 } from "@/lib/seeds/de/deRegionCensusData1991";
-import { deRegionCensusData2027 } from "@/lib/seeds/de/deRegionCensusData2027";
-import { ieRegionCensusData } from "@/lib/seeds/ie/ieRegionCensusData";
-import { ieRegionCensusData1953 } from "@/lib/seeds/ie/ieRegionCensusData1953";
-import { ieRegionCensusData1991 } from "@/lib/seeds/ie/ieRegionCensusData1991";
-import { cnRegionCensusData } from "@/lib/seeds/cn/cnRegionCensusData";
-import { cnRegionCensusData1953 } from "@/lib/seeds/cn/cnRegionCensusData1953";
-import { cnRegionCensusData1991 } from "@/lib/seeds/cn/cnRegionCensusData1991";
-import { cnRegionCensusData2027 } from "@/lib/seeds/cn/cnRegionCensusData2027";
-import { brRegionCensusData } from "@/lib/seeds/br/brRegionCensusData";
-import { brRegionCensusData1953 } from "@/lib/seeds/br/brRegionCensusData1953";
-import { brRegionCensusData1991 } from "@/lib/seeds/br/brRegionCensusData1991";
-import { seRegionCensusData } from "@/lib/seeds/se/seRegionCensusData";
-import { seRegionCensusData1953 } from "@/lib/seeds/se/seRegionCensusData1953";
-import { trRegionCensusData } from "@/lib/seeds/tr/trRegionCensusData";
-import { trRegionCensusData1953 } from "@/lib/seeds/tr/trRegionCensusData1953";
-import { frRegionCensusData1953 } from "@/lib/seeds/fr/frRegionCensusData1953";
-import { itRegionCensusData1953 } from "@/lib/seeds/it/itRegionCensusData1953";
-import { esRegionCensusData1953 } from "@/lib/seeds/es/esRegionCensusData1953";
-import { ruRegionCensusData1953 } from "@/lib/seeds/ru/ruRegionCensusData1953";
-import { ddRegionCensusData1953 } from "@/lib/seeds/dd/ddRegionCensusData1953";
-import { ngRegionCensusData1953 } from "@/lib/seeds/ng/ngRegionCensusData1953";
 // 1979-era census bundles (authored for the 1979 reset).
-import { ukRegionCensusData1979 } from "@/lib/seeds/uk/ukRegionCensusData1979";
-import { jpRegionCensusData1979 } from "@/lib/seeds/jp/jpRegionCensusData1979";
-import { deRegionCensusData1979 } from "@/lib/seeds/de/deRegionCensusData1979";
-import { ieRegionCensusData1979 } from "@/lib/seeds/ie/ieRegionCensusData1979";
-import { cnRegionCensusData1979 } from "@/lib/seeds/cn/cnRegionCensusData1979";
-import { brRegionCensusData1979 } from "@/lib/seeds/br/brRegionCensusData1979";
-import { frRegionCensusData1979 } from "@/lib/seeds/fr/frRegionCensusData1979";
-import { ngRegionCensusData1979 } from "@/lib/seeds/ng/ngRegionCensusData1979";
-import { ngRegionCensusData } from "@/lib/seeds/ng/ngRegionCensusData";
-import { scoRegionCensusData, scoRegionCensusData1991 } from "@/lib/seeds/sco/scoRegionCensusData";
-import { walRegionCensusData, walRegionCensusData1991 } from "@/lib/seeds/wal/walRegionCensusData";
 
 /** Archetype-style Layer-1 census (UK/JP/DE/IE/CN/BR). */
 export interface ArchetypeRegionCensus {
@@ -73,162 +22,77 @@ type PresetBundles = Partial<Record<ResetPresetId, Record<string, RegionCensus>>
  * `selectPresetBundle` falls back to `2019-default` when a preset is absent,
  * so a country with only a 2019 bundle never throws for a 1991 world.
  */
-import { plRegionCensusData1953 } from "@/lib/seeds/pl/plRegionCensusData1953";
-import { csRegionCensusData1953 } from "@/lib/seeds/cs/csRegionCensusData1953";
-import { huRegionCensusData1953 } from "@/lib/seeds/hu/huRegionCensusData1953";
-import { roRegionCensusData1953 } from "@/lib/seeds/ro/roRegionCensusData1953";
-import { bgRegionCensusData1953 } from "@/lib/seeds/bg/bgRegionCensusData1953";
-import { yuRegionCensusData1953 } from "@/lib/seeds/yu/yuRegionCensusData1953";
-import { uaRegionCensusData1953 } from "@/lib/seeds/ua/uaRegionCensusData1953";
-import { uaRegionCensusData } from "@/lib/seeds/ua/uaRegionCensusData";
-import { blrRegionCensusData1953 } from "@/lib/seeds/blr/blrRegionCensusData1953";
-import { blrRegionCensusData } from "@/lib/seeds/blr/blrRegionCensusData";
-import { balRegionCensusData1953 } from "@/lib/seeds/bal/balRegionCensusData1953";
-import { balRegionCensusData } from "@/lib/seeds/bal/balRegionCensusData";
 import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
+import { JP_GEOGRAPHY } from "@/lib/countries/jp/geography";
+import { US_GEOGRAPHY } from "@/lib/countries/us/geography";
+import { UK_GEOGRAPHY } from "@/lib/countries/uk/geography";
+import { DE_GEOGRAPHY } from "@/lib/countries/de/geography";
+import { CN_GEOGRAPHY } from "@/lib/countries/cn/geography";
+import { IE_GEOGRAPHY } from "@/lib/countries/ie/geography";
+import { RU_GEOGRAPHY } from "@/lib/countries/ru/geography";
+import { DD_GEOGRAPHY } from "@/lib/countries/dd/geography";
+import { NG_GEOGRAPHY } from "@/lib/countries/ng/geography";
+import { BR_GEOGRAPHY } from "@/lib/countries/br/geography";
+import { FR_GEOGRAPHY } from "@/lib/countries/fr/geography";
+import { IT_GEOGRAPHY } from "@/lib/countries/it/geography";
+import { ES_GEOGRAPHY } from "@/lib/countries/es/geography";
+import { SE_GEOGRAPHY } from "@/lib/countries/se/geography";
+import { TR_GEOGRAPHY } from "@/lib/countries/tr/geography";
+import { PL_GEOGRAPHY } from "@/lib/countries/pl/geography";
+import { HU_GEOGRAPHY } from "@/lib/countries/hu/geography";
+import { RO_GEOGRAPHY } from "@/lib/countries/ro/geography";
+import { YU_GEOGRAPHY } from "@/lib/countries/yu/geography";
+import { BG_GEOGRAPHY } from "@/lib/countries/bg/geography";
+import { CS_GEOGRAPHY } from "@/lib/countries/cs/geography";
+import { SCO_GEOGRAPHY } from "@/lib/countries/sco/geography";
+import { WAL_GEOGRAPHY } from "@/lib/countries/wal/geography";
+import { BLR_GEOGRAPHY } from "@/lib/countries/blr/geography";
+import { UKR_GEOGRAPHY } from "@/lib/countries/ukr/geography";
+import { BAL_GEOGRAPHY } from "@/lib/countries/bal/geography";
 
-const CENSUS_BUNDLES: Partial<Record<CountryId, PresetBundles>> = {
-  PL: {
-    // Authored 1953 census existed but was never registered here, so
-    // getRegionCensusData returned null and seedCohortVectors silently skipped
-    // every PL region — no age pyramid at all for a demographic run.
-    "1953-default": plRegionCensusData1953,
-  },
-  CS: {
-    // Authored 1953 census existed but was never registered here, so
-    // getRegionCensusData returned null and seedCohortVectors silently skipped
-    // every CS region — no age pyramid at all for a demographic run.
-    "1953-default": csRegionCensusData1953,
-  },
-  HU: {
-    // Authored 1953 census existed but was never registered here, so
-    // getRegionCensusData returned null and seedCohortVectors silently skipped
-    // every HU region — no age pyramid at all for a demographic run.
-    "1953-default": huRegionCensusData1953,
-  },
-  RO: {
-    // Authored 1953 census existed but was never registered here, so
-    // getRegionCensusData returned null and seedCohortVectors silently skipped
-    // every RO region — no age pyramid at all for a demographic run.
-    "1953-default": roRegionCensusData1953,
-  },
-  BG: {
-    // Authored 1953 census existed but was never registered here, so
-    // getRegionCensusData returned null and seedCohortVectors silently skipped
-    // every BG region — no age pyramid at all for a demographic run.
-    "1953-default": bgRegionCensusData1953,
-  },
-  YU: {
-    // Authored 1953 census existed but was never registered here, so
-    // getRegionCensusData returned null and seedCohortVectors silently skipped
-    // every YU region — no age pyramid at all for a demographic run.
-    "1953-default": yuRegionCensusData1953,
-  },
+export const CENSUS_BUNDLES: Partial<Record<CountryId, PresetBundles>> = {
+  PL: PL_GEOGRAPHY.censusBundles,
+  CS: CS_GEOGRAPHY.censusBundles,
+  HU: HU_GEOGRAPHY.censusBundles,
+  RO: RO_GEOGRAPHY.censusBundles,
+  BG: BG_GEOGRAPHY.censusBundles,
+  YU: YU_GEOGRAPHY.censusBundles,
   // Soviet union republics promoted to their own countries. Unlike the
   // satellites above these carry BOTH Cold-War eras: the 1959 and 1979 all-Union
   // censuses are the best-documented demographic series in the bloc, and the
   // ethnic movement between them (Russification, in-migration to the Baltic
   // cities, the west of Ukraine staying Ukrainian) is a mechanic here rather
   // than flavour, so an era proxy would flatten the thing being modelled.
-  UKR: {
-    "1953-default": uaRegionCensusData1953,
-    "1979-default": uaRegionCensusData,
-  },
-  BLR: {
-    "1953-default": blrRegionCensusData1953,
-    "1979-default": blrRegionCensusData,
-  },
-  BAL: {
-    "1953-default": balRegionCensusData1953,
-    "1979-default": balRegionCensusData,
-  },
+  UKR: UKR_GEOGRAPHY.censusBundles,
+  BLR: BLR_GEOGRAPHY.censusBundles,
+  BAL: BAL_GEOGRAPHY.censusBundles,
 
-  US: {
-    "1953-default": stateCensusData1953, // 1979 shares proxy, 1979-authored positions stripped
-    "1979-default": stateCensusData1979,
-    "1991-default": stateCensusData1991,
-    "1999-default": stateCensusData1999,
-    "2007-default": stateCensusData2007,
-    "2019-default": stateCensusData,
-    "2023-default": stateCensusData2023,
-    "2027-default": stateCensusData2027,
-  },
-  UK: {
-    "1953-default": ukRegionCensusData1953,
-    "1979-default": ukRegionCensusData1979,
-    "2019-default": ukRegionCensusData,
-    "1991-default": ukRegionCensusData1991,
-    "2027-default": ukRegionCensusData2027,
-  },
-  JP: {
-    "1953-default": jpRegionCensusData1953,
-    "1979-default": jpRegionCensusData1979,
-    "2019-default": jpRegionCensusData,
-    "1991-default": jpRegionCensusData1991,
-    "2027-default": jpRegionCensusData2027,
-  },
-  DE: {
-    "1953-default": deRegionCensusData1953,
-    "1979-default": deRegionCensusData1979,
-    "2019-default": deRegionCensusData,
-    "1991-default": deRegionCensusData1991,
-    "2027-default": deRegionCensusData2027,
-  },
-  IE: {
-    "1953-default": ieRegionCensusData1953,
-    "1979-default": ieRegionCensusData1979,
-    "2019-default": ieRegionCensusData,
-    "1991-default": ieRegionCensusData1991,
-  },
-  CN: {
-    "1953-default": cnRegionCensusData1953,
-    "1979-default": cnRegionCensusData1979,
-    "2019-default": cnRegionCensusData,
-    "1991-default": cnRegionCensusData1991,
-    "2027-default": cnRegionCensusData2027,
-  },
-  BR: {
-    "1953-default": brRegionCensusData1953,
-    "1979-default": brRegionCensusData1979,
-    "2019-default": brRegionCensusData,
-    "1991-default": brRegionCensusData1991,
-  },
-  SE: {
-    "1953-default": seRegionCensusData1953,
-    "1979-default": seRegionCensusData,
-    "2019-default": seRegionCensusData,
-  },
-  TR: {
-    "1953-default": trRegionCensusData1953,
-    "1979-default": trRegionCensusData,
-    "2019-default": trRegionCensusData,
-  },
-  FR: { "1953-default": frRegionCensusData1953, "1979-default": frRegionCensusData1979 },
+  US: US_GEOGRAPHY.censusBundles,
+  UK: UK_GEOGRAPHY.censusBundles,
+  JP: JP_GEOGRAPHY.censusBundles,
+  DE: DE_GEOGRAPHY.censusBundles,
+  IE: IE_GEOGRAPHY.censusBundles,
+  CN: CN_GEOGRAPHY.censusBundles,
+  BR: BR_GEOGRAPHY.censusBundles,
+  SE: SE_GEOGRAPHY.censusBundles,
+  TR: TR_GEOGRAPHY.censusBundles,
+  FR: FR_GEOGRAPHY.censusBundles,
   // IT/ES/SU/DD have no authored 1979 census yet; route 1979 to the 1953 bundle as the
   // nearest-era proxy. Without an explicit 1979 entry selectPresetBundle would throw for
   // these (no 2019-default fallback exists), aborting the 1979 reset in seedCohortVectors.
-  IT: { "1953-default": itRegionCensusData1953, "1979-default": itRegionCensusData1953 },
-  ES: { "1953-default": esRegionCensusData1953, "1979-default": esRegionCensusData1953 },
-  RU: { "1953-default": ruRegionCensusData1953, "1979-default": ruRegionCensusData1953 },
-  DD: { "1953-default": ddRegionCensusData1953, "1979-default": ddRegionCensusData1953 },
+  IT: IT_GEOGRAPHY.censusBundles,
+  ES: ES_GEOGRAPHY.censusBundles,
+  RU: RU_GEOGRAPHY.censusBundles,
+  DD: DD_GEOGRAPHY.censusBundles,
   // 2019-default was missing here even though ngRegionCensusData (the NPC/NBS-based
   // 2019 bundle already used by seeds/international/ng.ts) has existed since NG
   // launched — any full bootstrap/reset to the default preset crashed in
   // seedCohortVectors for every NG state. Wiring gap, not missing data.
-  NG: {
-    "1953-default": ngRegionCensusData1953,
-    "1979-default": ngRegionCensusData1979,
-    // 1991-default was missing → seedCohortVectors skipped every NG state in a 1991
-    // world (no cohort vectors, so NG demographic metrics never computed). Alias to the
-    // 1979 census — the closest authored, era-appropriate for a 1991 world (NG's age
-    // structure is persistently young); NOT the 2019 bundle (would be a modern fallback).
-    "1991-default": ngRegionCensusData1979,
-    "2019-default": ngRegionCensusData,
-  },
+  NG: NG_GEOGRAPHY.censusBundles,
   // Seceded nations carry their own per-sub-region census (differentiated from
   // the former UK Scotland/Wales aggregate).
-  SCO: { "2019-default": scoRegionCensusData, "1991-default": scoRegionCensusData1991 },
-  WAL: { "2019-default": walRegionCensusData, "1991-default": walRegionCensusData1991 },
+  SCO: SCO_GEOGRAPHY.censusBundles,
+  WAL: WAL_GEOGRAPHY.censusBundles,
 };
 
 /**
