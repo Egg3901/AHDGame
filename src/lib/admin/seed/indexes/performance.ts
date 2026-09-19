@@ -104,6 +104,19 @@ export async function seedPerfIndexes(db: Db, log: (msg: string) => void) {
     log
   );
 
+  // electedOfficials — party presence by region, for the party growth frontier.
+  // `getPartyPresenceStates` asks "which regions hold an office for this party"
+  // on every party hub load, every recruitment/relocation picker, and every
+  // join or recruit attempt. Without this the collection has no `party` index at
+  // all and each of those is a full scan.
+  await ensureIndex(
+    db,
+    "electedOfficials",
+    { party: 1, state: 1 },
+    { name: "electedOfficials_party_state" },
+    log
+  );
+
   // nppEndorsements — endorsements per election
   await ensureIndex(
     db,

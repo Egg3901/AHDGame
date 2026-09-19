@@ -6,6 +6,7 @@ import { handleRouteError } from "@/lib/api/errors";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
 import { findPartyBySequentialId } from "@/lib/db/partyLookup";
 import { calculateRecruitmentSlots } from "@/lib/npp/recruitment";
+import { getPartyFrontier, isInFrontier } from "@/lib/parties/partyFrontier";
 import {
   NPP_RECRUITMENT_AP_COST,
   nppActionPointCap,
@@ -126,6 +127,11 @@ export async function GET(
     const maxSlots = calculateRecruitmentSlots(stateOrg);
     const availableSlots = Math.max(0, maxSlots - stateNPPCount);
 
+    // Growth frontier: report whether this region is reachable so the picker
+    // can grey it out rather than failing the player on submit.
+    const { presence, frontier } = await getPartyFrontier(db, countryId, partyIdStr);
+    const inFrontier = isInFrontier(presence, frontier, stateId);
+
     // NPP Recruitment spends a flat 5 Action Points from the state pool plus a
     // per-currency treasury cost. Legacy rows with an unset AP pool read as full.
     const apTier = resolvePartyTier(party);
@@ -136,6 +142,7 @@ export async function GET(
 
     const canRecruit =
       !cooldownRemaining &&
+      inFrontier &&
       isStateLeadership &&
       nppControl.ok &&
       !capacityError &&
@@ -144,6 +151,7 @@ export async function GET(
       stateTreasury >= recruitFund;
 
     return NextResponse.json({
+      inFrontier,
       cooldownUntil,
       cooldownRemaining,
       partyNPPCount,
@@ -267,6 +275,19 @@ export async function POST(
     if (stateNPPCount >= maxSlots) {
       return NextResponse.json(
         { error: `No recruitment slots available in ${state.name}. Max: ${maxSlots}` },
+        { status: 400 }
+      );
+    }
+
+    // Growth frontier: a party may only recruit into a region it already
+    // touches, or one adjacent to it. Read LIVE, never from the cached
+    // `statePartyOrg.hasPresence` flag, which lags membership events.
+    const { presence, frontier } = await getPartyFrontier(db, countryId, partyIdStr);
+    if (!isInFrontier(presence, frontier, stateId)) {
+      return NextResponse.json(
+        {
+          error: `${party.name} is not established in or next to ${state.name}. Recruit in a region the party already reaches first.`,
+        },
         { status: 400 }
       );
     }

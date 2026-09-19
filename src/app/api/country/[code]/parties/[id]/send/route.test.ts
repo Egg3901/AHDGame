@@ -181,6 +181,23 @@ describe("POST /api/country/[code]/parties/[id]/send", () => {
     );
   }
 
+  it("refuses a single payment larger than the ceiling before anything is queued", async () => {
+    // Distinct from the "over their remaining allowance" case below: a
+    // payment above the flat ceiling can never clear on any turn, so it
+    // is refused at the door rather than becoming a pending row that
+    // collects signatures and then fails at execution.
+    await richParty();
+    db.collectionMocks["treasuryTransactions"]!.aggregate.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([]),
+    });
+
+    const response = await send(9_000_000);
+    expect(response.status).toBe(400);
+    const body = await response.json();
+    expect(body.error).toMatch(/2,000,000/);
+    expect(db.collectionMocks["politicalParties"]!.updateOne).not.toHaveBeenCalled();
+  });
+
   it("refuses a send that would push the recipient over their per-turn cap", async () => {
     // US cap is 2,000,000 and 1,500,000 is already spent this turn.
     await richParty();

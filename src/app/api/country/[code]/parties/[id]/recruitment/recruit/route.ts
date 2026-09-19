@@ -8,6 +8,7 @@ import { parseJsonBody } from "@/lib/api/validate";
 import { recruitNPPSchema } from "@/lib/api/schemas/recruitment";
 import { findPartyBySequentialId } from "@/lib/db/partyLookup";
 import { calculateRecruitmentSlots } from "@/lib/npp/recruitment";
+import { getPartyFrontier, isInFrontier } from "@/lib/parties/partyFrontier";
 import {
   NPP_RECRUITMENT_AP_COST,
   nppActionPointCap,
@@ -142,6 +143,19 @@ export async function POST(
     if (currentNPPs >= maxSlots) {
       return NextResponse.json(
         { error: `No recruitment slots available in ${state.name}. Max: ${maxSlots}` },
+        { status: 400 }
+      );
+    }
+
+    // Growth frontier: a party may only recruit into a region it already
+    // touches, or one adjacent to it. Read LIVE, never from the cached
+    // `statePartyOrg.hasPresence` flag, which lags membership events.
+    const { presence, frontier } = await getPartyFrontier(db, countryId, partyIdStr);
+    if (!isInFrontier(presence, frontier, stateId)) {
+      return NextResponse.json(
+        {
+          error: `${party.name} is not established in or next to ${state.name}. Recruit in a region the party already reaches first.`,
+        },
         { status: 400 }
       );
     }

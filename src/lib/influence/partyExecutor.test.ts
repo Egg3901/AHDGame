@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ObjectId } from "mongodb";
 import type { Db } from "mongodb";
-import { createMockDb, getAccessedCollections, type MockDb } from "@/lib/test-utils/mockDb";
+import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import type { NPP, PoliticalParty, StatePartyOrg } from "@/lib/db/types";
 import {
   executeNationalPartyInfluence,
@@ -84,7 +84,14 @@ describe("getNationalPartyInfluenceOptions", () => {
         expect.objectContaining({ id: "TX", actionCost: 1, fundCost: 0 }),
       ])
     );
-    expect(getAccessedCollections(db)).not.toContain("characters");
+    // The NPP option list must never be derived by walking `characters` — that
+    // is the defect this guard exists for. Since the growth frontier landed,
+    // this function does legitimately read `characters.distinct` to compute
+    // party presence, so a blanket "never touches characters" assertion no
+    // longer expresses the rule. The guard is now method-level: a
+    // characters-derived NPP list would need find/aggregate, never distinct.
+    expect(db.collectionMocks.characters?.find).not.toHaveBeenCalled();
+    expect(db.collectionMocks.characters?.aggregate).not.toHaveBeenCalled();
   });
 
   it("bases party influence success on slate-style acceptance stats instead of extra funds", () => {

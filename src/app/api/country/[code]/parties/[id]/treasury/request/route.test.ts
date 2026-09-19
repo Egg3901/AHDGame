@@ -70,6 +70,32 @@ describe("POST /api/country/[code]/parties/[id]/treasury/request", () => {
     } as never);
   });
 
+  it("refuses a request above the per-turn payout ceiling", async () => {
+    // Nothing used to stop this. The cap was only consulted at the very
+    // end of the approve flow, by which point that route had already
+    // claimed an approver's signature on a row that could never pay.
+    const response = await import("./route").then(({ POST }) =>
+      // Within the 5,000,000 treasury but over the 2,000,000 ceiling, so
+      // the cap is what refuses it rather than the balance check above.
+      POST(makeRequest({ amount: 3_000_000 }), {
+        params: Promise.resolve({ code: "us", id: partyId }),
+      })
+    );
+    expect(response.status).toBe(400);
+    const body = await response.json();
+    expect(body.error).toMatch(/2,000,000/);
+    expect(db.collectionMocks["pendingTreasuryTransactions"]!.insertOne).not.toHaveBeenCalled();
+  });
+
+  it("accepts a request exactly at the ceiling", async () => {
+    const response = await import("./route").then(({ POST }) =>
+      POST(makeRequest({ amount: 2_000_000 }), {
+        params: Promise.resolve({ code: "us", id: partyId }),
+      })
+    );
+    expect(response.status).toBe(200);
+  });
+
   it("queues a request when nothing blocks it", async () => {
     const response = await call();
     expect(response.status).toBe(200);

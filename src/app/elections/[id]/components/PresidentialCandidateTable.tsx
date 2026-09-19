@@ -7,6 +7,24 @@ import { formatVotes } from "./ElectionDetailHelpers";
 import type { CandidateDetail } from "./ElectionDetailTypes";
 import { CsInfoIcon } from "./CsInfoIcon";
 
+/**
+ * A candidate's campaign strength as it stands right now: the value the
+ * payload arrived with, unless a contribution made on this page has
+ * already moved it.
+ *
+ * Shared so the desktop column and the mobile line under the candidate's
+ * name cannot drift apart. Null when the candidate has no campaign.
+ */
+function liveCampaignStrength(
+  candidate: CandidateDetail,
+  overrides: Record<string, number> | undefined
+): number | null {
+  if (candidate.campaignId != null && overrides?.[candidate.campaignId] != null) {
+    return overrides[candidate.campaignId]!;
+  }
+  return candidate.campaignStrength ?? null;
+}
+
 interface PresidentialCandidateTableProps {
   sorted: CandidateDetail[];
   colorMap: Map<string, string>;
@@ -178,6 +196,25 @@ export function PresidentialCandidateTable({
                         </div>
                       </div>
                     </div>
+                    {/* The CS column is `lg:table-cell`, so on a phone the
+                        figure and its contributors tooltip vanished entirely
+                        while the Support button stayed: you could fund a
+                        campaign without being shown what you were funding.
+                        Restoring the column would push the table into a
+                        sideways scroll, so the number rides under the name
+                        instead. */}
+                    {showCampaignStrength &&
+                      liveCampaignStrength(c, campaignStrengthOverrides) != null && (
+                        <div className="mt-1 text-[11px] text-muted lg:hidden">
+                          CS{" "}
+                          <span className="tabular-nums font-medium text-primary">
+                            {formatCompactNumber(
+                              liveCampaignStrength(c, campaignStrengthOverrides)!
+                            ).toLowerCase()}
+                          </span>{" "}
+                          <CsInfoIcon campaignId={c.campaignId} />
+                        </div>
+                      )}
                   </td>
 
                   <td className="hidden px-3 py-3 text-xs text-muted lg:table-cell">
@@ -234,21 +271,16 @@ export function PresidentialCandidateTable({
                   {showCampaignStrength && (
                     <td className="hidden px-3 py-3 text-right lg:table-cell">
                       <span className="tabular-nums text-xs text-primary font-medium inline-flex items-center gap-1">
-                        {(() => {
-                          const cs =
-                            c.campaignId != null &&
-                            campaignStrengthOverrides?.[c.campaignId] != null
-                              ? campaignStrengthOverrides[c.campaignId]
-                              : c.campaignStrength;
-                          return cs != null ? (
-                            <>
-                              {formatCompactNumber(cs).toLowerCase()}{" "}
-                              <CsInfoIcon campaignId={c.campaignId} />
-                            </>
-                          ) : (
-                            "—"
-                          );
-                        })()}
+                        {liveCampaignStrength(c, campaignStrengthOverrides) != null ? (
+                          <>
+                            {formatCompactNumber(
+                              liveCampaignStrength(c, campaignStrengthOverrides)!
+                            ).toLowerCase()}{" "}
+                            <CsInfoIcon campaignId={c.campaignId} />
+                          </>
+                        ) : (
+                          "—"
+                        )}
                       </span>
                     </td>
                   )}
