@@ -58,14 +58,15 @@ describe("UK cabinet year gating", () => {
   const uk = getCabinetPositions("UK");
   const byId = Object.fromEntries(uk.map((p) => [p.id, p]));
 
-  it("19 defined seats; active counts per preset year", () => {
+  it("20 defined seats; active counts per preset year", () => {
     // The Chief of the Secret Intelligence Service exists from 1909, so it is
-    // active in every preset year and lifts all four counts by one.
-    expect(uk).toHaveLength(19);
-    expect(resolveCabinetRoster(uk, 1953)).toHaveLength(15);
-    expect(resolveCabinetRoster(uk, 1979)).toHaveLength(18);
-    expect(resolveCabinetRoster(uk, 1991)).toHaveLength(18);
-    expect(resolveCabinetRoster(uk, 2019)).toHaveLength(18);
+    // active in every preset year and lifts all four counts by one. The Chief
+    // Whip (#859) is perpetual and lifts them by one more.
+    expect(uk).toHaveLength(20);
+    expect(resolveCabinetRoster(uk, 1953)).toHaveLength(16);
+    expect(resolveCabinetRoster(uk, 1979)).toHaveLength(19);
+    expect(resolveCabinetRoster(uk, 1991)).toHaveLength(19);
+    expect(resolveCabinetRoster(uk, 2019)).toHaveLength(19);
   });
 
   it("existence gates", () => {
@@ -164,6 +165,27 @@ describe("UK cabinet year gating", () => {
       const orders = resolveCabinetRoster(uk, year).map((p) => p.order);
       expect(new Set(orders).size).toBe(orders.length);
     }
+  });
+
+  it("Chief Whip seat exists in every preset year with era names (#859)", () => {
+    const whip = byId.chief_whip;
+    expect(whip).toBeDefined();
+    expect(whip.yearEnabled).toBe(1775);
+    expect(whip.order).toBe(18);
+    for (const year of PRESETS) {
+      expect(resolveCabinetRoster(uk, year).some((p) => p.id === "chief_whip")).toBe(true);
+    }
+    expect(resolveSeatName(whip, 1953)).toBe("Parliamentary Secretary to the Treasury");
+    expect(resolveSeatName(whip, 2019)).toBe("Parliamentary Secretary to the Treasury");
+    expect(resolveSeatName(whip, 1800)).toBe("Government Chief Whip");
+  });
+
+  it("Chief Whip has mechanics, orders, and the Centre group (#859)", async () => {
+    const { getCabinetMechanics, getCabinetPositionGroup } = await import("./cabinetMechanics");
+    expect(getCabinetMechanics("UK", "chief_whip")).toBeDefined();
+    expect(getCabinetPositionGroup("UK", "chief_whip")).toBe("Centre");
+    const { UK_MINISTERIAL_ORDERS } = await import("./ukCabinetOrders");
+    expect(UK_MINISTERIAL_ORDERS.chief_whip).toHaveLength(2);
   });
 });
 

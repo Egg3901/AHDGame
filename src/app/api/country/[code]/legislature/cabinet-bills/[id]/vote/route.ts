@@ -60,7 +60,9 @@ export async function POST(
       });
     }
 
-    // Check voter is PM or player-held cabinet member
+    // Check voter is PM or player-held cabinet member. The ballot below is
+    // keyed by character id (issue #2049), so a dual-office holder casts one
+    // vote no matter how many rows they hold.
     const gov = await getGovernmentFormationsCollection(db).findOne({ _id: countryId });
     const isPM = gov?.pmCharacterId?.toString() === character._id.toString();
 

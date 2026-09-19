@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { withNoStore } from "@/lib/api/withNoStore";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
@@ -7,7 +8,13 @@ import { getGameState } from "@/lib/gameState";
 import { getGameTime, type GameTimeContext } from "@/lib/time/gameTime";
 import { isPrimaryEnded } from "@/lib/elections/phases";
 import { calculateFullFundDistribution, type FundDistribution } from "@/lib/utils/fundGeneration";
-import { getCampaignActionCost, getAdvertiseActionCost, getDonorActionCost } from "@/lib/actions";
+import {
+  getCampaignActionCost,
+  getAdvertiseActionCost,
+  getDonorActionCost,
+  REST_ACTION_COST,
+  getPollActionCost,
+} from "@/lib/actions";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
 import { getTotalPersonalLiquidWealth } from "@/lib/currency/characterFunds";
 import { FAVORABILITY_NATURAL_DECAY_THRESHOLD } from "@shared/constants/formulas";
@@ -46,7 +53,7 @@ const MIN_BASE_ACTIONS_PER_TURN = 4;
  * - Nearest upcoming/active election with countdown info
  * - Game state (turn, date, next turn timer)
  */
-export async function GET() {
+async function handleGET() {
   try {
     const auth = await requireBasicAuth();
     if (!auth.ok) return auth.response;
@@ -146,9 +153,9 @@ export async function GET() {
       advertise: getAdvertiseActionCost(fav),
       fundraise: getDonorActionCost(donor, "fundraise"),
       buildDonorBase: getDonorActionCost(donor, "buildDonorBase"),
-      poll: 2,
-      pollLarge: 6,
-      rest: 0,
+      poll: getPollActionCost("small"),
+      pollLarge: getPollActionCost("large"),
+      rest: REST_ACTION_COST,
     };
 
     // --- Fund income projection ---
@@ -256,6 +263,8 @@ export async function GET() {
     return handleRouteError(error);
   }
 }
+
+export const GET = withNoStore(handleGET);
 
 /**
  * Find the nearest election relevant to this character.

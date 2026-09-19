@@ -30,6 +30,7 @@ interface RouteParams {
 }
 
 const appointSchema = z.object({ nppId: z.string().length(24).optional() });
+const mandateSchema = z.object({ mandate: z.enum(["active", "passive"]) });
 
 /** Map a caretaker-appointment error code to an HTTP response. */
 function appointmentErrorResponse(error: CaretakerAppointmentError): NextResponse {
@@ -136,6 +137,12 @@ export async function DELETE(_request: Request, { params }: RouteParams) {
     const turn = await getCurrentTurn(db);
     const result = await dismissCaretakerCeo(db, { corp: corporation, turn, now: new Date() });
     if (!result.ok) {
+      if (result.error === "one-person-rule") {
+        return NextResponse.json(
+          { error: "This player already operates another subsidiary of the same parent." },
+          { status: 403 }
+        );
+      }
       return NextResponse.json(
         { error: "This corporation does not have a caretaker CEO." },
         { status: 400 }
@@ -143,6 +150,47 @@ export async function DELETE(_request: Request, { params }: RouteParams) {
     }
 
     return NextResponse.json({ success: true, restoredCharacterId: result.restoredCharacterId });
+  } catch (error) {
+    return handleRouteError(error);
+  }
+}
+
+export async function PATCH(request: Request, { params }: RouteParams) {
+  try {
+    const auth = await requireBasicAuth();
+    if (!auth.ok) return auth.response;
+    const rateLimit = checkRateLimit(auth.user.userId, 20, 60000);
+    if (!rateLimit.ok) return rateLimitResponse(rateLimit.retryAfter);
+    const parsed = await parseJsonBody(request, mandateSchema);
+    if (!parsed.success)
+      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+
+    const db = await getDb();
+    const resolved = await resolveCorporation(db, (await params).id);
+    if (!resolved.ok) return resolved.response;
+    const { corporation } = resolved;
+    const ceoCheck = requireCeo(corporation, auth.user.userId);
+    if (ceoCheck) return ceoCheck;
+    if (!corporation.caretakerCeo) {
+      return NextResponse.json(
+        { error: "This corporation does not have a caretaker CEO." },
+        { status: 400 }
+      );
+    }
+
+    const update = await db
+      .collection("corporations")
+      .updateOne(
+        { _id: corporation._id, "caretakerCeo.underlyingUserId": corporation.userId },
+        { $set: { "caretakerCeo.mandate": parsed.data.mandate, updatedAt: new Date() } }
+      );
+    if (update.modifiedCount !== 1) {
+      return NextResponse.json(
+        { error: "Caretaker changed. Refresh and try again." },
+        { status: 409 }
+      );
+    }
+    return NextResponse.json({ success: true, mandate: parsed.data.mandate });
   } catch (error) {
     return handleRouteError(error);
   }

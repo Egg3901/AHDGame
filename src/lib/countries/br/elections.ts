@@ -19,9 +19,17 @@ import { ensureBRElections, ensureBRSenateElections } from "./elections/perpetua
  * A denormalised copy here would be a second source for a number the regions
  * already carry.
  */
-const spawn = async (now: Date): Promise<SpawnElectionsResult> => {
-  await ensureBRElections(now);
-  await ensureBRSenateElections(now);
+/*
+ * ⚠️ `currentTurn` IS THE IN-FLIGHT TURN AND MUST BE THREADED. The turn
+ * processor spawns elections before the turn counter is persisted, so a
+ * spawner that reads the stored turn instead lands a cycle one turn late.
+ * Upstream added this parameter to every `ensure*` spawner and to
+ * `SpawnElectionsHandler`; the registry now forwards to this function, so
+ * dropping it here would silently undo that for this country.
+ */
+const spawn = async (now: Date, currentTurn?: number): Promise<SpawnElectionsResult> => {
+  await ensureBRElections(now, currentTurn);
+  await ensureBRSenateElections(now, currentTurn);
   return { message: "BR Câmara / Senate continuity check complete." };
 };
 

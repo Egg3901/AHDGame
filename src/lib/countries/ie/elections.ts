@@ -32,11 +32,19 @@ const sum = (table: Readonly<Record<string, number>>): number =>
  * sums to 200 without NIR. Reporting 295 as the standing chamber size would
  * overstate it by nearly half, so the reunification seats are named separately.
  */
-const spawn = async (now: Date): Promise<SpawnElectionsResult> => {
-  await ensureIEElections(now);
-  await ensureIEUachtaranElections(now);
-  await ensureIELocalCouncilElections(now);
-  await ensureIECathaoirleachElections(now);
+/*
+ * ⚠️ `currentTurn` IS THE IN-FLIGHT TURN AND MUST BE THREADED. The turn
+ * processor spawns elections before the turn counter is persisted, so a
+ * spawner that reads the stored turn instead lands a cycle one turn late.
+ * Upstream added this parameter to every `ensure*` spawner and to
+ * `SpawnElectionsHandler`; the registry now forwards to this function, so
+ * dropping it here would silently undo that for this country.
+ */
+const spawn = async (now: Date, currentTurn?: number): Promise<SpawnElectionsResult> => {
+  await ensureIEElections(now, currentTurn);
+  await ensureIEUachtaranElections(now, currentTurn);
+  await ensureIELocalCouncilElections(now, currentTurn);
+  await ensureIECathaoirleachElections(now, currentTurn);
   return {
     message: "IE Dáil, Uachtarán, Local Council, and Cathaoirleach continuity check complete.",
   };

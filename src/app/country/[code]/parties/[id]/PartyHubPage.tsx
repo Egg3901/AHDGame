@@ -131,6 +131,20 @@ const NationalPartyAdminTab = dynamic(
     })),
   { loading: PanelFallback }
 );
+const LeadershipPanel = dynamic(
+  () =>
+    import("./components/LeadershipPanel").then((m) => ({
+      default: m.LeadershipPanel,
+    })),
+  { loading: PanelFallback }
+);
+const ConferencePanel = dynamic(
+  () =>
+    import("./components/ConferencePanel").then((m) => ({
+      default: m.ConferencePanel,
+    })),
+  { loading: PanelFallback }
+);
 const ChairOfficeTab = dynamic(
   () => import("./components/ChairOfficeTab").then((m) => ({ default: m.ChairOfficeTab })),
   { loading: PanelFallback }
@@ -207,6 +221,8 @@ type NationalMainTab =
   | "members"
   | "discussion"
   | "chair-office"
+  | "leadership"
+  | "conference"
   | "admin";
 type ElectionSubTab = "national" | "committee" | "state";
 type NppSubTab = "recruitment" | "management";
@@ -589,6 +605,10 @@ function NationalPartyHub({ scope }: { scope: Extract<PartyHubScope, { kind: "na
       : new Set<NationalMainTab>(["overview", "members"]);
     if (canViewExtendedTabsEarly && canManageNppsEarly) allowed.add("actions");
     if (canViewExtendedTabsEarly && canActAsChairEarly) allowed.add("chair-office");
+    // UK party-leadership removal (#861): national hub only, UK parties only.
+    if (canViewExtendedTabsEarly && party?.countryId === "UK") allowed.add("leadership");
+    // UK party conferences (#862): national hub only, UK parties only.
+    if (canViewExtendedTabsEarly && party?.countryId === "UK") allowed.add("conference");
     if (canViewExtendedTabsEarly && user?.isAdmin) allowed.add("admin");
     if (allowed.has(tabParam as NationalMainTab)) {
       setActiveTab(tabParam as NationalMainTab);
@@ -750,6 +770,12 @@ function NationalPartyHub({ scope }: { scope: Extract<PartyHubScope, { kind: "na
                   label: isActingChair ? "Chair Office (acting)" : "Chair Office",
                 },
               ]
+            : []),
+          ...(party.countryId === "UK"
+            ? [{ id: "leadership" as NationalMainTab, label: "Leadership" }]
+            : []),
+          ...(party.countryId === "UK"
+            ? [{ id: "conference" as NationalMainTab, label: "Conference" }]
             : []),
           ...(user?.isAdmin
             ? [{ id: "admin" as NationalMainTab, label: "Admin", className: "text-error" }]
@@ -1278,6 +1304,14 @@ function NationalPartyHub({ scope }: { scope: Extract<PartyHubScope, { kind: "na
             onUpdate={fetchParty}
           />
         </>
+      )}
+
+      {activeTab === "leadership" && party.countryId === "UK" && (
+        <LeadershipPanel countryCode={backCountry} partyId={id} />
+      )}
+
+      {activeTab === "conference" && party.countryId === "UK" && (
+        <ConferencePanel countryCode={backCountry} partyId={id} />
       )}
 
       {activeTab === "admin" && user?.isAdmin && (

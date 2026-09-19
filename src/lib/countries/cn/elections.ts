@@ -41,10 +41,18 @@ import {
  * office per region rather than a chamber, so there is no per-region seat count
  * to carry -- `ensureCNGovernorElections` works off the region roster.
  */
-const spawn = async (now: Date): Promise<SpawnElectionsResult> => {
-  await ensureCNElections(now);
-  await ensureCNPeoplesCongressElections(now);
-  await ensureCNGovernorElections(now);
+/*
+ * ⚠️ `currentTurn` IS THE IN-FLIGHT TURN AND MUST BE THREADED. The turn
+ * processor spawns elections before the turn counter is persisted, so a
+ * spawner that reads the stored turn instead lands a cycle one turn late.
+ * Upstream added this parameter to every `ensure*` spawner and to
+ * `SpawnElectionsHandler`; the registry now forwards to this function, so
+ * dropping it here would silently undo that for this country.
+ */
+const spawn = async (now: Date, currentTurn?: number): Promise<SpawnElectionsResult> => {
+  await ensureCNElections(now, currentTurn);
+  await ensureCNPeoplesCongressElections(now, currentTurn);
+  await ensureCNGovernorElections(now, currentTurn);
   return { message: "CN NPC / Provincial Congress / Governor continuity check complete." };
 };
 

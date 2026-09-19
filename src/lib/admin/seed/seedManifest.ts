@@ -262,6 +262,17 @@ const REFERENCE: CollectionEntry[] = [
 
 const RUNTIME: CollectionEntry[] = [
   {
+    name: "ukPartyLeadership",
+    category: "runtime",
+    notes:
+      "Per-party Westminster leadership rules, committee history, and active challenge pointer.",
+  },
+  {
+    name: "ukLeadershipChallenges",
+    category: "runtime",
+    notes: "Westminster leadership challenge gathering, ballot, and resolution state.",
+  },
+  {
     name: "sentNewsDedup",
     category: "runtime",
     notes:
@@ -318,6 +329,10 @@ const RUNTIME: CollectionEntry[] = [
   { name: "elections", category: "runtime" },
   { name: "electionCandidates", category: "runtime" },
   { name: "electionVoteTallies", category: "runtime" },
+  { name: "ukCommonsVacancies", category: "runtime" },
+  { name: "ukRecallPetitions", category: "runtime" },
+  { name: "ukPartyConferences", category: "runtime" },
+  { name: "ukPartyPlatforms", category: "runtime" },
   {
     name: "electedOfficials",
     category: "runtime",
@@ -522,6 +537,11 @@ const RUNTIME: CollectionEntry[] = [
     category: "runtime",
     notes:
       "Per-commodity aggregate quality state (sector-quality system), recomputed in the corp turn.",
+  },
+  {
+    name: "supplyListings",
+    category: "runtime",
+    notes: "Nonbinding supply offers; tied to corporations, which are wiped on reset.",
   },
   {
     name: "supplyAgreements",
@@ -1132,6 +1152,12 @@ const PRESERVED: CollectionEntry[] = [
     name: "altDigestState",
     category: "preserved",
     notes: "Alt-detection digest cursor/state. Resetting it would replay old alerts.",
+  },
+  {
+    name: "identityObservations",
+    category: "preserved",
+    notes:
+      "Per-value IP and fingerprint observation runs behind the Players panel's rotation history and historical duplicate grouping. Moderation evidence, like altLinks — an account that rotated an address to evade detection must not have that trail cleared by a world reset. Registered explicitly rather than left out of the manifest: omission happens to keep it out of the reset sweep today, but the sweep is driven by this list, so an unlisted collection is one nobody can reason about. Self-limiting regardless, via a 90-day TTL on lastSeen.",
   },
   {
     name: "altScoringRuns",

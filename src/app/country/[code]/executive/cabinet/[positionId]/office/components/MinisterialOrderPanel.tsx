@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui";
 import { useGameClock } from "@/contexts/useGameClock";
 import { getCabinetActionCopy } from "./actionCopy";
-import { MINISTERIAL_ACTION_RESET_HINT } from "@/lib/cabinet/ministerialActionPool";
+import { MINISTERIAL_ACTION_RESET_HINT } from "@/lib/cabinet/ministerialActionHint";
 
 interface Order {
   id: string;

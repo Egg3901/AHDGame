@@ -4,6 +4,8 @@ import type { Corporation, CorporateSector, SectorBuildOrder } from "@/lib/db/ty
 import type { CeoArchetypeModifiers } from "@/lib/turn/ceoArchetype";
 import type { NppStrategyState } from "./corpStrategy";
 import type { NppMarketEntryDiagnostic } from "./entryDiagnostics";
+import type { FrontierEntryTurnState } from "./frontierEntryCandidate";
+import type { CapacityDecisionObservation } from "@/lib/corporations/capacityDecisionTelemetry/rules";
 
 export interface NppCorpDecisionContext {
   corp: Corporation;
@@ -27,10 +29,27 @@ export interface NppCorpDecisionContext {
   strategyEligible?: boolean;
   ordinaryEntryEligible?: boolean;
   strategyLoopEnabled?: boolean;
+  /**
+   * Capped frontier-entry experiment state (issue #991), supplied by the turn
+   * shell only when `frontierEntryExperimentEnabled` resolves true. The sets
+   * are shared across the whole NPP cohort for the turn and enforce at most
+   * one entrant per state-country cohort and one per controlling entity.
+   * Absent (or disabled) reads as off and the decision is byte-identical to
+   * the legacy path.
+   */
+  frontierEntry?: FrontierEntryTurnState;
   shortageEntryEligible?: boolean;
   shortageEntryCreditLocal?: number;
   /** Pause new Retail entry/growth while fake supply-derived demand unwinds. */
   retailExpansionPaused?: boolean;
+  /**
+   * In-memory rival count per (state, sectorType) bucket, excluding the
+   * deciding corporation itself. Supplied by the turn shell from data it
+   * already holds; absent reads as 0 so pure unit tests stay db-free.
+   */
+  competitorCountOf?: (stateId: string, sectorType: string, ownCorporationId: string) => number;
+  /** Player-appointed caretaker mandate. NPP-owned corporations are always active. */
+  caretakerMandate?: "active" | "passive";
 }
 
 /** A composable sector write emitted by the NPP corporation decision engine. */
@@ -55,6 +74,8 @@ export interface NppCorpDecision {
    * `$inc` so it composes with the income credit instead of racing it.
    */
   liquidCapitalDelta: number;
+  /** Local-currency cash floor that later NPP operator passes must preserve. */
+  cashFloorLocal: number;
   sectorUpdates: Array<{
     filter: { _id: ObjectId };
     update: NppSectorUpdateDoc;
@@ -89,6 +110,12 @@ export interface NppCorpDecision {
     sectorType: CorporationType;
   };
   entryDiagnostic?: NppMarketEntryDiagnostic;
+  /**
+   * Capacity-decision telemetry for this corp this turn: one founding
+   * observation plus one per evaluated reinvestment candidate, in that order.
+   * Aggregated and flushed by the turn shell in a single bulk write.
+   */
+  capacityObservations?: CapacityDecisionObservation[];
 }
 
 /** World facts needed to price founding builds through the player-equivalent path. */

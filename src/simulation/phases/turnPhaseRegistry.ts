@@ -11,6 +11,8 @@ import { processCabinetNominationLifecycle } from "@/lib/cabinetNominationLifecy
 import { processFomcNominationLifecycle } from "@/lib/fomcNominationLifecycle";
 import { processScotusTurn } from "@/lib/turn/scotusTurn";
 import { processUkJrSurpriseTurn } from "@/lib/turn/ukJrSurpriseTurn";
+import { processUkLeadershipChallengeTurn } from "@/lib/turn/ukLeadershipChallengeTurn";
+import { processUkPartyConferenceTurn } from "@/lib/turn/ukPartyConferenceTurn";
 import { processSocialAxisDrift } from "@/lib/turn/socialAxisDrift";
 import { processGovernorAPRegen } from "@/lib/turn/governorAPRegen";
 import { seedOfficeStates } from "@/lib/governorOffice/seedOfficeStates";
@@ -43,7 +45,7 @@ import {
 } from "@/lib/turn/perpetualElections";
 import {
   resolveExpiredLeadershipElections,
-  vacateLeadershipAfterElections,
+  vacateLeadershipForLostSeats,
 } from "@/lib/congress/leadershipElections";
 import { reconcileAllLeadershipPartyEligibility } from "@/lib/congress/leadership/reconcilePartyEligibility";
 import { processAlignmentTurn } from "@/lib/turn/alignmentPhase";
@@ -117,6 +119,7 @@ import { processPartyInfluenceTurn } from "@/lib/turn/partyInfluenceTurn";
 import { processPresidentialSuccession } from "@/lib/turn/presidentialSuccession";
 import { processImpeachmentLifecycle } from "@/lib/turn/impeachmentLifecycle";
 import { processByElectionWatcher } from "@/lib/turn/byElections";
+import { processCommonsByElectionWatcher } from "@/lib/turn/commonsByElections";
 import { detectPreIterationComplete } from "@/lib/turn/preIterationLifecycle";
 import { processActivityLogging } from "@/lib/turn/activityLogging";
 import { runFinancialSuspectScan } from "@/lib/financialTxLog/suspectScan";
@@ -193,7 +196,17 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
     {
       key: "resourceAndFinanceStart",
       async execute(context, runtime) {
-        const { characters, config, gameNow, stateMap, gameState, newTurn, phaseResults } = context;
+        const {
+          characters,
+          config,
+          gameNow,
+          stateMap,
+          gameState,
+          newTurn,
+          currentYear,
+          phaseResults,
+          warnings,
+        } = context;
         // When an admin pauses corporation actions, the corporate turn phase
         // (sector revenue, operating income, dividends, market-cap/history
         // snapshots) is skipped entirely, this is what makes the admin toggle's
@@ -296,8 +309,11 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
         // Algeria 1962, Guyana 1966 and South Yemen 1967 all fall inside a
         // 1953 world's 1000-turn span and none of them happened. Runs on the
         // in-game year boundary only.
+        // Authoritative turn-context year, not the persisted gameState year which
+        // is only stamped at turn end and would fire boundary transitions one
+        // turn late (#2059).
         await runtime.runPhase("decolonization", () =>
-          processDecolonizationTurn(context.db, newTurn, gameState.currentYear)
+          processDecolonizationTurn(context.db, newTurn, currentYear)
         );
 
         await runtime.runPhase("partyInfluenceTurn", () =>
@@ -338,6 +354,13 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
             totalRevenueGenerated: corpTurnResults.totalRevenueGenerated,
             totalIncomeGenerated: corpTurnResults.totalIncomeGenerated,
           };
+          // Clearing book invariant breaches (issue #2054) join the turn
+          // warning channel here, so the completed-turn health snapshot
+          // counts them. The includes-guard keeps a retried or replayed
+          // corporation phase from recording the same breach twice.
+          for (const warning of corpTurnResults.turnWarnings ?? []) {
+            if (!warnings.includes(warning)) warnings.push(warning);
+          }
         }
 
         // Live fiscal accrual into the signed treasury balance. Runs after the
@@ -847,6 +870,18 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
           // FOMC seat confirmations, a like-shaped Senate-confirmation lifecycle,
           // appended last so the index math above is unchanged.
           runtime.runPhase("fomcNominations", () => processFomcNominationLifecycle(realNow)),
+          // UK party-leadership challenges (#861): expire stale gatherings and
+          // resolve closed ballots. UK-gated no-op elsewhere; appended last so
+          // the index math above is unchanged.
+          runtime.runPhase("ukLeadershipChallenges", () =>
+            processUkLeadershipChallengeTurn(db, gameState.currentTurn, realNow)
+          ),
+          // UK party conferences (#862): annual schedule/open/ratify/complete
+          // lifecycle per party. UK-gated no-op elsewhere; appended after the
+          // leadership phase so the index math above is unchanged.
+          runtime.runPhase("ukPartyConferences", () =>
+            processUkPartyConferenceTurn(db, gameState.currentTurn, realNow)
+          ),
         ]);
         const countryBillResultsStart = 1;
         const stateBillResultIndex = countryBillResultsStart + countryBillPhaseEntries.length;
@@ -876,6 +911,25 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
           ReturnType<typeof processFomcNominationLifecycle>
         > | null;
         phaseResults.fomcNominations = fomcNominationResult ?? null;
+        const ukLeadershipResult = billPhaseResults[ukJrSurpriseResultIndex + 2] as Awaited<
+          ReturnType<typeof processUkLeadershipChallengeTurn>
+        > | null;
+        phaseResults.ukLeadershipChallenges = ukLeadershipResult ?? {
+          expired: 0,
+          resolved: 0,
+          removed: 0,
+        };
+        const ukConferenceResult = billPhaseResults[ukJrSurpriseResultIndex + 3] as Awaited<
+          ReturnType<typeof processUkPartyConferenceTurn>
+        > | null;
+        phaseResults.ukPartyConferences = ukConferenceResult ?? {
+          scheduled: 0,
+          opened: 0,
+          completed: 0,
+          ratified: 0,
+          expired: 0,
+          payoffs: 0,
+        };
 
         phaseResults.billLifecycle = billLifecycleResult ?? {
           billsProcessed: 0,
@@ -1120,12 +1174,14 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
           phaseResults.clearResolvedSupport = clearedSupport;
         }
 
-        if (generalResolved && generalResolved > 0) {
-          const vacatedCount = await runtime.runPhase("leadershipVacate", () =>
-            vacateLeadershipAfterElections(db)
-          );
-          phaseResults.leadershipVacated = { positionsVacated: vacatedCount ?? 0 };
-        }
+        // Every turn, not only when a general resolved: a seat can be given up
+        // by a withdrawal, a resignation or a move to another chamber, and the
+        // only other thing watching was a lazy check on the congress page GETs.
+        // Still sequenced after resolution, so it reads settled seats.
+        const vacatedCount = await runtime.runPhase("leadershipVacate", () =>
+          vacateLeadershipForLostSeats(db)
+        );
+        phaseResults.leadershipVacated = { positionsVacated: vacatedCount ?? 0 };
 
         const govResult = await runtime.runPhase("parliamentaryGovernmentFormation", () =>
           runPostElectionGovernmentPhases(db, gameNow, generalResolved ?? 0)
@@ -1192,7 +1248,7 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
           countryElectionPhasePromises = Object.entries(COUNTRY_ELECTION_PHASES)
             .filter(([id]) => registeredForElections.has(id as CountryId))
             .flatMap(([, entries]) =>
-              entries.map(({ name, fn }) => runtime.runPhase(name, () => fn(gameNow)))
+              entries.map(({ name, fn }) => runtime.runPhase(name, () => fn(gameNow, newTurn)))
             );
         }
 
@@ -1226,6 +1282,12 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
         if (!foundingActive) {
           await runtime.runPhase("byElectionWatcher", () =>
             processByElectionWatcher(db, newTurn, gameNow)
+          );
+          // Immediately after the governor watcher: same settled seat state,
+          // separate country scope (UK Commons), separate election type.
+          phaseResults.commonsByElectionWatcher = await runtime.runPhase(
+            "commonsByElectionWatcher",
+            () => processCommonsByElectionWatcher(db, newTurn, gameNow)
           );
         }
         phaseResults.perpetualElections = { electionsCreated: 0 };

@@ -10,6 +10,10 @@ import type {
   NppMarketEntryFunnel,
   NppMarketEntryReason,
 } from "@/lib/db/types/marketFormation";
+import {
+  NPP_MARKET_ENTRY_FUNNEL_COLLECTION,
+  NPP_MARKET_ENTRY_FUNNEL_RETENTION_TURNS,
+} from "./entryFunnelSnapshot";
 
 export type {
   NppMarketEntryDiagnostic,
@@ -17,9 +21,48 @@ export type {
   NppMarketEntryReason,
 } from "@/lib/db/types/marketFormation";
 
-export const NPP_MARKET_ENTRY_FUNNEL_COLLECTION = "nppMarketEntryFunnels";
-export const NPP_MARKET_ENTRY_FUNNEL_RETENTION_TURNS = 48;
+export {
+  NPP_MARKET_ENTRY_FUNNEL_COLLECTION,
+  NPP_MARKET_ENTRY_FUNNEL_RETENTION_TURNS,
+  normalizeNppMarketEntryFunnel,
+} from "./entryFunnelSnapshot";
 
+/**
+ * Counts of candidate pools excluded by each `findBestUnownedSector` filter,
+ * so a null candidate still reports WHICH filter bound instead of collapsing
+ * every miss into `no_enterable_market`.
+ */
+export interface NppCandidateExclusions {
+  occupiedExcluded: number;
+  emptyPoolExcluded: number;
+  stateControlledExcluded: number;
+  depositExcluded: number;
+}
+
+export function blankNppCandidateExclusions(): NppCandidateExclusions {
+  return {
+    occupiedExcluded: 0,
+    emptyPoolExcluded: 0,
+    stateControlledExcluded: 0,
+    depositExcluded: 0,
+  };
+}
+
+/**
+ * One reproducible primary reason per NPP entry candidate, in the same
+ * evaluation order as the founding gates (see FOUNDING_GATE_PRECEDENCE in
+ * capacityDecisionTelemetry/rules, mirrored here for the entry funnel):
+ * strategy, profitability, margin, candidacy, logistics, cohort, retail pause,
+ * glut, per-turn cap, then the pre-pricing cash floor. Priced outcomes
+ * (entered, founding cost, credit, facility size) overwrite this afterwards
+ * via `resolveFoundingShortfallReason`.
+ *
+ * Frontier matching and corporation-type coverage are preferences with
+ * country-pool fallbacks, never hard gates, so they are reported as the
+ * `frontierFallback` / `openMarketTypeFallback` flags rather than reasons.
+ * Planned-economy restriction arrives as the state-controlled filter on
+ * nationalized buckets and reports as `state_controlled`.
+ */
 export function initialNppMarketEntryReason(args: {
   strategyAllowsExpansion: boolean;
   profitable: boolean;
@@ -28,14 +71,49 @@ export function initialNppMarketEntryReason(args: {
   hasCandidate: boolean;
   hasLogisticsCapacity: boolean;
   cohortEligible: boolean;
+  retailBlocked?: boolean;
+  targetGlutted?: boolean;
+  entryCapReached?: boolean;
+  candidateExclusions?: NppCandidateExclusions;
 }): NppMarketEntryReason {
   if (!args.strategyAllowsExpansion) return "strategy_disallowed";
   if (!args.profitable) return "unprofitable";
   if (args.marginPct < args.marginFloorPct) return "margin_below_floor";
-  if (!args.hasCandidate) return "no_enterable_market";
+  if (!args.hasCandidate) {
+    const exclusions = args.candidateExclusions;
+    const otherExcluded =
+      (exclusions?.occupiedExcluded ?? 0) +
+      (exclusions?.emptyPoolExcluded ?? 0) +
+      (exclusions?.depositExcluded ?? 0);
+    if ((exclusions?.stateControlledExcluded ?? 0) > 0 && otherExcluded === 0) {
+      return "state_controlled";
+    }
+    return "no_enterable_market";
+  }
   if (!args.hasLogisticsCapacity) return "logistics_capacity";
   if (!args.cohortEligible) return "cohort_ineligible";
+  if (args.retailBlocked === true) return "retail_paused";
+  if (args.targetGlutted === true) return "glutted_market";
+  if (args.entryCapReached === true) return "entry_cap";
   return "cash_floor";
+}
+
+/**
+ * Post-pricing reason for a candidate that reached the founding block but did
+ * not place: real founding-cost unaffordability is distinct from the
+ * pre-pricing cash floor (which only checks a nominal surplus band). Mirrors
+ * the priced branch order in `makeNppCorpDecision`: affordability, credit,
+ * facility size, then the state-owned/IMF credit restriction.
+ */
+export function resolveFoundingShortfallReason(args: {
+  creditPath: boolean;
+  sizeBlocked: boolean;
+  exceptionalShortageEntry: boolean;
+}): NppMarketEntryReason {
+  if (args.creditPath) return "credit_requested";
+  if (args.sizeBlocked) return "facility_size";
+  if (args.exceptionalShortageEntry) return "state_credit_restricted";
+  return "founding_cost";
 }
 
 export function buildNppMarketEntryDiagnostic(args: {
@@ -51,6 +129,10 @@ export function buildNppMarketEntryDiagnostic(args: {
   target?: { stateId: string; sectorType: CorporationType } | null;
   shortageScore?: number;
   frontierStates: ReadonlySet<string>;
+  retailBlocked?: boolean;
+  targetGlutted?: boolean;
+  entryCapReached?: boolean;
+  candidateExclusions?: NppCandidateExclusions;
 }): NppMarketEntryDiagnostic {
   const reason = initialNppMarketEntryReason({
     strategyAllowsExpansion: args.strategyAllowsExpansion,
@@ -60,6 +142,10 @@ export function buildNppMarketEntryDiagnostic(args: {
     hasCandidate: args.target != null,
     hasLogisticsCapacity: args.hasLogisticsCapacity,
     cohortEligible: args.cohortEligible,
+    retailBlocked: args.retailBlocked,
+    targetGlutted: args.targetGlutted,
+    entryCapReached: args.entryCapReached,
+    candidateExclusions: args.candidateExclusions,
   });
   return {
     corporationId: args.corporation._id.toString(),

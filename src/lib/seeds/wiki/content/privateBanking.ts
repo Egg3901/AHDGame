@@ -18,7 +18,7 @@ Charter types:
 | Investment | No | No | Yes |
 | Universal | Yes | Yes | Yes |
 
-Most nations start with a **banking separation** law that allows retail or investment, but not universal. A bill can switch the country to universal charters. Command economies do not offer private bank charters.
+Most nations start with a **banking separation** law that allows retail or investment, but not universal. To switch the country to universal charters, propose an economy bill on the **Banking Separation Act** law type and choose the **Universal Banking Charter Act** option. There is no standalone universal-charter bill: the switch lives inside the separation law. Command economies do not offer private bank charters.
 
 The central bank chair (or an admin) can revoke a charter. A revoke is not a delete: it runs the same wind-up every other ending runs. Household deposits go back into circulation out of the bank's own cash, player savings pointers return to the central bank with their balances untouched, and only what is genuinely left over, capped at book equity, is paid up to the owner.
 

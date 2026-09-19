@@ -88,6 +88,17 @@ export type ConsolePayload = {
     /** Realized net income from the most recent banking pass. */
     lastBankingIncome: number;
     lastBankingIncomeTurn: number | null;
+    /**
+     * Per-turn split behind the net, in charter currency. All magnitudes
+     * (>= 0); paid lines are expenses, collected/received lines are income.
+     */
+    lastBankingDepositInterest: number;
+    lastBankingLoanInterest: number;
+    lastBankingInterbankInterestPaid: number;
+    lastBankingInterbankInterestReceived: number;
+    lastBankingFacilityInterest: number;
+    lastBankingInsurancePremium: number;
+    lastBankingWriteoffs: number;
     requiredReserves: number;
     upstreamCapacity: number;
     lendingProfile: LendingProfileId;
@@ -144,6 +155,8 @@ export type ConsolePayload = {
       expectedDefaultRatePercent: number;
       demandShare: number;
       open: boolean;
+      /** Outstanding the next turns steer this band toward; null when not computable. */
+      target: number | null;
       isLegacy: boolean;
       tranches: number;
     }>;

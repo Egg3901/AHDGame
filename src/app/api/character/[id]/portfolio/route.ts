@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { withNoStore } from "@/lib/api/withNoStore";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireAuth } from "@/lib/api/requireAuth";
@@ -69,7 +70,7 @@ interface HistoryPoint {
   exchangeRatesSnapshot?: Partial<Record<CurrencyCode, number>>;
 }
 
-export async function GET(_request: Request, { params }: RouteParams) {
+async function handleGET(_request: Request, { params }: RouteParams) {
   try {
     const auth = await requireAuth();
     if (!auth.ok) return auth.response;
@@ -294,3 +295,5 @@ export async function GET(_request: Request, { params }: RouteParams) {
     return handleRouteError(error);
   }
 }
+
+export const GET = withNoStore(handleGET);

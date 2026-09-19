@@ -1,6 +1,11 @@
 import type { Db, ObjectId } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
-import { getManifesto, upsertManifestoDraft, lockManifesto } from "@/lib/db/collections/manifestos";
+import {
+  getManifesto,
+  upsertManifestoDraft,
+  lockManifesto,
+  validateManifestoPledges,
+} from "@/lib/db/collections/manifestos";
 import { pledgeCatalogFor } from "@/lib/countries/uk/manifesto/pledgeCatalog";
 import { selectNppPledges } from "@/lib/countries/uk/manifesto/nppManifesto";
 
@@ -43,6 +48,16 @@ export async function finaliseManifestosAtElectionCall(
     electionId: ObjectId;
     parties: ManifestoLifecycleParty[];
     now: Date;
+    /**
+     * Standing platforms by party key (ticket #862): the pledge sets each
+     * party's conference ratified between elections. The leader finalises
+     * the election manifesto FROM the platform at dissolution: a player
+     * party with NO draft of its own gets one seeded from its platform and
+     * locked; the leader's own draft always wins and is never overwritten.
+     * NPP parties use their platform when valid, else fall back to
+     * ideology-generated pledges.
+     */
+    standingPlatformByParty?: Map<string, string[]>;
   }
 ): Promise<ManifestoLifecycleResult> {
   const { countryId, electionId, now } = args;
@@ -55,6 +70,16 @@ export async function finaliseManifestosAtElectionCall(
     skipped: [],
   };
 
+  const platformOf = (party: string): string[] | null => {
+    const ids = args.standingPlatformByParty?.get(party);
+    if (!ids) return null;
+    const validation = validateManifestoPledges(
+      ids.map((catalogEntryId) => ({ catalogEntryId })),
+      validIds
+    );
+    return validation.ok ? ids : null;
+  };
+
   for (const p of args.parties) {
     const existing = await getManifesto(db, countryId, electionId, p.party);
     if (existing?.lockedAt) {
@@ -63,8 +88,10 @@ export async function finaliseManifestosAtElectionCall(
     }
 
     if (p.isNpp) {
-      // Generate from the party's ideology (default centrist if unknown).
-      const pledgeIds = selectNppPledges(catalog, p.economic ?? 0, p.social ?? 0);
+      // Prefer the conference-ratified standing platform; fall back to
+      // generating from the party's ideology (default centrist if unknown).
+      const pledgeIds =
+        platformOf(p.party) ?? selectNppPledges(catalog, p.economic ?? 0, p.social ?? 0);
       if (pledgeIds.length === 0) {
         result.skipped.push(p.party);
         continue;
@@ -90,7 +117,23 @@ export async function finaliseManifestosAtElectionCall(
       continue;
     }
 
-    // Player party: lock only a complete, valid existing draft; never invent pledges.
+    // Player party: the leader's own draft wins. With no draft at all, seed
+    // one from the conference-ratified standing platform (the leader
+    // finalises the election manifesto from the platform at dissolution);
+    // an incomplete leader draft is still left alone, never overwritten.
+    if (!existing) {
+      const platformIds = platformOf(p.party);
+      if (platformIds) {
+        await upsertManifestoDraft(db, {
+          countryId,
+          electionId,
+          party: p.party,
+          pledges: platformIds.map((id) => ({ catalogEntryId: id })),
+          authorCharacterId: null,
+          now,
+        });
+      }
+    }
     const locked = await lockManifesto(db, {
       countryId,
       electionId,
@@ -98,8 +141,11 @@ export async function finaliseManifestosAtElectionCall(
       validCatalogIds: validIds,
       now,
     });
-    if (locked.ok && existing) result.lockedPlayerParties.push(p.party);
-    else result.skipped.push(p.party);
+    if (locked.ok && (existing || platformOf(p.party))) {
+      result.lockedPlayerParties.push(p.party);
+    } else {
+      result.skipped.push(p.party);
+    }
   }
 
   return result;

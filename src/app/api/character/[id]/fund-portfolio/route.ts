@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { withNoStore } from "@/lib/api/withNoStore";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { getAuthUserWithCharacter } from "@/lib/auth";
@@ -13,7 +14,7 @@ import { INDEX_FUNDS_DISABLED_MESSAGE } from "@/lib/indexFunds/featureFlag";
 
 // GET /api/character/[id]/fund-portfolio — Character's fund positions and recent transactions
 // Auth: the character owner or admin
-export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+async function handleGET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const auth = await getAuthUserWithCharacter();
     if (!auth) return NextResponse.json({ error: "Authentication required" }, { status: 401 });
@@ -84,3 +85,5 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     return handleRouteError(error);
   }
 }
+
+export const GET = withNoStore(handleGET);

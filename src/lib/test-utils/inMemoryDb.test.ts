@@ -15,6 +15,40 @@ describe("inMemoryDb document paths", () => {
     });
   });
 
+  it("matches dotted paths into arrays when any element matches", async () => {
+    const db = createInMemoryDb();
+    db.seed("corps", [
+      { _id: "holder", shareholders: [{ corporationId: "tgt", shares: 10 }] },
+      { _id: "plain", shareholders: [{ corporationId: "other", shares: 5 }] },
+    ]);
+
+    expect(
+      await db.collection("corps").countDocuments({ "shareholders.corporationId": "tgt" })
+    ).toBe(1);
+    expect(
+      await db.collection("corps").countDocuments({ "shareholders.corporationId": "missing" })
+    ).toBe(0);
+  });
+
+  it("pulls array elements by selector and treats a missing element as a no-op", async () => {
+    const db = createInMemoryDb();
+    db.seed("funds", [
+      { _id: "f", holdings: [{ corporationId: "tgt" }, { corporationId: "kept" }] },
+    ]);
+
+    const pulled = await db
+      .collection("funds")
+      .updateOne({ _id: "f" }, { $pull: { holdings: { corporationId: "tgt" } } });
+    expect(pulled.matchedCount).toBe(1);
+    expect(db.collection("funds").docs[0]).toMatchObject({ holdings: [{ corporationId: "kept" }] });
+
+    const repulled = await db
+      .collection("funds")
+      .updateOne({ _id: "f" }, { $pull: { holdings: { corporationId: "tgt" } } });
+    expect(repulled.matchedCount).toBe(1);
+    expect(db.collection("funds").docs[0]).toMatchObject({ holdings: [{ corporationId: "kept" }] });
+  });
+
   it.each(["__proto__.polluted", "constructor.prototype.polluted"])(
     "rejects prototype-polluting update path %s",
     async (path) => {

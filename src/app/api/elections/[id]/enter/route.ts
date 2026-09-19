@@ -241,6 +241,26 @@ export async function POST(request: Request, { params }: RouteParams) {
       );
     }
 
+    // A sitting Commons MP already holds a seat that is not on the ballot in a
+    // by-election (#860): the race fills only vacated seats, and seating a
+    // holder would double-seat them (additive resolution never sweeps).
+    // Resign the seat first, then stand as a challenger.
+    if (
+      election.electionType === "special_commons" &&
+      heldOffice?.type === "commons" &&
+      "state" in heldOffice &&
+      heldOffice.state === election.state
+    ) {
+      logRequest("POST", path, 403, Date.now() - start);
+      return NextResponse.json(
+        {
+          error:
+            "You already hold a Commons seat in this region, which is not on the ballot in a by-election. Resign your seat first to stand as a challenger.",
+        },
+        { status: 403 }
+      );
+    }
+
     // Check if character is already in this race (any party, including different from current)
     const existingCandidate = await db.collection<ElectionCandidate>("electionCandidates").findOne({
       electionId: electionObjectId,

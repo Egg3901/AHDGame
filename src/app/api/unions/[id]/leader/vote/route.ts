@@ -3,6 +3,7 @@
  * Only organizers who funded a drive may vote once the union is organized enough.
  */
 import { NextResponse } from "next/server";
+import { withNoStore } from "@/lib/api/withNoStore";
 import { ObjectId, type Filter } from "mongodb";
 import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
@@ -39,7 +40,7 @@ const voteSchema = z.object({
   candidateCharacterId: schemas.objectId,
 });
 
-export async function GET(_request: Request, { params }: RouteParams) {
+async function handleGET(_request: Request, { params }: RouteParams) {
   try {
     if (!(await isLabourFullMode())) {
       return NextResponse.json({ error: "Player-run unions are not enabled." }, { status: 403 });
@@ -214,6 +215,8 @@ export async function GET(_request: Request, { params }: RouteParams) {
     return handleRouteError(error);
   }
 }
+
+export const GET = withNoStore(handleGET);
 
 export async function POST(request: Request, { params }: RouteParams) {
   try {

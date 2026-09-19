@@ -21,9 +21,10 @@ import {
  * that Land's Wahlkreise count). The AMS list-tier reconciliation in
  * germanyAMS.ts runs after all 16 Land elections complete per cycle.
  */
-export async function ensureDEElections(now: Date): Promise<void> {
+export async function ensureDEElections(now: Date, inFlightTurn?: number): Promise<void> {
   const db = await getDb();
-  const { currentTurn, ctx } = await getCurrentTurnAndCtx(db);
+  const { currentTurn: persistedTurn, ctx } = await getCurrentTurnAndCtx(db);
+  const currentTurn = inFlightTurn ?? persistedTurn;
 
   const deLaender = await db
     .collection<State>("states")

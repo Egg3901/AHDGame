@@ -21,6 +21,8 @@
 // ones (same issue hit earlier this session with runWorld.ts).
 export {};
 
+import { SOVEREIGN_DEMAND_EXPERIMENT_FIELDS } from "./sovereignDemandExperimentFlags";
+
 function arg(flag: string): string | undefined {
   const prefix = `--${flag}=`;
   const found = process.argv.find((v) => v.startsWith(prefix));
@@ -83,9 +85,8 @@ async function main() {
     // Enrich runConfig with provenance only reachable here: the control-plane
     // job doc (seed/turns) and the repo's git state. The worldsim MCP ships as
     // part of the ops-dashboard, so its version is that package's version.
-    const job = await opsDb
-      .collection("simJobs")
-      .findOne({ _id: runId as never }, { projection: { seed: 1, turns: 1 } });
+    const job = await opsDb.collection("simJobs").findOne({ _id: runId as never });
+    const sandboxRun = await sandboxDb.collection("simRuns").findOne({ _id: runId as never });
     let mcpVersion: string | undefined;
     try {
       const { readFileSync } = await import("fs");
@@ -98,9 +99,79 @@ async function main() {
       seed: (job as { seed?: string } | null)?.seed,
       turns: (job as { turns?: number } | null)?.turns,
       jobId: runId,
+      source: {
+        worktree: ((job as { sourceWorktree?: string } | null)?.sourceWorktree ??
+          (sandboxRun as { source?: { worktree?: string } } | null)?.source?.worktree ??
+          null) as string | null,
+        requestedCommit: ((job as { sourceCommit?: string } | null)?.sourceCommit ??
+          (sandboxRun as { source?: { requestedCommit?: string } } | null)?.source
+            ?.requestedCommit ??
+          null) as string | null,
+        executedPath: ((sandboxRun as { source?: { executedPath?: string } } | null)?.source
+          ?.executedPath ?? null) as string | null,
+        executedCommit: ((sandboxRun as { source?: { executedCommit?: string } } | null)?.source
+          ?.executedCommit ?? null) as string | null,
+      },
+      requestedConfig: job
+        ? Object.fromEntries(
+            Object.entries(job).filter(([key]) =>
+              [
+                "preset",
+                "turns",
+                "seed",
+                "sourceWorktree",
+                "sourceCommit",
+                "startPolicy",
+                "marketSystemMode",
+                "labourSystemMode",
+                "autonomyLevel",
+                "actors",
+                "allFeatureFlags",
+                "freightSettlementMode",
+                "canonicalFreightBillingEnabled",
+                "shortageResponsiveSourcingEnabled",
+                "indexFundBondLiquidityEnabled",
+                ...SOVEREIGN_DEMAND_EXPERIMENT_FIELDS,
+                "equityLiquidityFacilityEnabled",
+                "nppMarketCoverageEnabled",
+                "nppFragileMarketSupplyEnabled",
+                "frontierEntryExperimentEnabled",
+              ].includes(key)
+            )
+          )
+        : undefined,
+      effectiveConfigInitial: (
+        sandboxRun as { effectiveConfigInitial?: Record<string, unknown> } | null
+      )?.effectiveConfigInitial,
       mcpVersion,
       ...(await gitProvenance()),
     };
+
+    // Actor coverage (#1993): the sandbox run doc carries the manifest
+    // stamped by runWorld from live counts. Attach the report-ready section
+    // — including the prominent per-mechanic warnings — so conclusions that
+    // touch a partial/unreachable system warn inline instead of presenting
+    // vacancies as balance evidence.
+    const actorManifest = (
+      sandboxRun as {
+        actorCoverage?: import("@/lib/sim/actorCoverage").ActorCoverageManifest;
+      } | null
+    )?.actorCoverage;
+    {
+      const { buildActorCoverageSection, summarizeActorCoverageForVerdict } =
+        await import("@/lib/sim/actorReport");
+      // A run with no stamped manifest (predates coverage) must read UNKNOWN,
+      // never silently drop the section: vacancies are then indistinguishable
+      // from representative behavior.
+      const verdict = summarizeActorCoverageForVerdict(actorManifest ?? null);
+      const section = actorManifest ? buildActorCoverageSection(actorManifest) : null;
+      (report as { actorCoverage?: unknown }).actorCoverage = {
+        manifest: actorManifest ?? null,
+        verdict,
+        warnings: section?.warnings ?? [],
+        lines: section?.lines ?? [verdict.title, verdict.detail],
+      };
+    }
 
     await opsDb
       .collection("simExperimentReports")

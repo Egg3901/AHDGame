@@ -223,6 +223,22 @@ describe("processBankingTurn", () => {
               "bankCharter.lastBankingIncomeTurn"
             ] as number;
           }
+          // Per-turn earnings split (issue 1748): same stamp, same turn.
+          for (const key of [
+            "bankCharter.lastBankingDepositInterest",
+            "bankCharter.lastBankingLoanInterest",
+            "bankCharter.lastBankingInterbankInterestPaid",
+            "bankCharter.lastBankingInterbankInterestReceived",
+            "bankCharter.lastBankingFacilityInterest",
+            "bankCharter.lastBankingInsurancePremium",
+            "bankCharter.lastBankingWriteoffs",
+          ] as const) {
+            if (typeof u.$set[key] === "number") {
+              (liveCorp.bankCharter as unknown as Record<string, number>)[key.slice(12)] = u.$set[
+                key
+              ] as number;
+            }
+          }
           if (typeof u.$set["bankCharter.depositCeiling"] === "number") {
             liveCorp.bankCharter!.depositCeiling = u.$set["bankCharter.depositCeiling"] as number;
           }
@@ -460,8 +476,10 @@ describe("processBankingTurn", () => {
     const liqBefore = liveCorp.bankCharter!.cashReserves ?? 0;
     const savBefore = characterState.savings;
     const fundBefore = fundState.balance;
-    // deposit rate = max(0.05, 4+0) = 4%. Interest = 48000 * 0.04 / 48 = 40
-    const expectedInterest = (savBefore * 4) / 100 / TURNS_PER_YEAR;
+    // Pointer model: the bank pays only the premium over the CB base APY.
+    // deposit rate = max(0.05, 4+0) = 4%, base = max(0.5, 4-0)/2 = 2%,
+    // premium = 2%. Interest = 48000 * 0.02 / 48 = 20.
+    const expectedInterest = (savBefore * 2) / 100 / TURNS_PER_YEAR;
 
     const summary = await processBankingTurn(db as unknown as Db, TURN);
 
@@ -473,6 +491,65 @@ describe("processBankingTurn", () => {
     expect(liquidDebit).toBeCloseTo(expectedInterest + premiumPaid, 5);
     expect(liveCorp.bankCharter!.lastBankingIncome).toBeCloseTo(-expectedInterest - premiumPaid, 5);
     expect(liveCorp.bankCharter!.lastBankingIncomeTurn).toBe(TURN);
+  });
+
+  it("stamps the per-turn earnings split behind lastBankingIncome (issue 1748)", async () => {
+    liveCorp.bankCharter!.depositOffset = 0;
+    liveCorp.bankCharter!.npcDeposits = 0;
+    bankCorp.bankCharter!.npcDeposits = 0;
+    // Zero broad money → no NPC deposit flow; npc interest = 0
+    cbState.externalBroadMoney = 0;
+    db.collectionMocks.centralBanks!.find.mockReturnValue(
+      findCursor([
+        {
+          _id: "US",
+          primeRate: 4,
+          inflationHistory: [{ turn: 1, rate: 0 }],
+          externalBroadMoney: 0,
+          bankReserveRequirement: 0.1,
+        },
+      ])
+    );
+    db.collectionMocks.centralBanks!.findOne.mockResolvedValue({
+      _id: "US",
+      primeRate: 4,
+      inflationHistory: [{ turn: 1, rate: 0 }],
+      externalBroadMoney: 0,
+      bankReserveRequirement: 0.1,
+    });
+    // No NPC bulk income either
+    db.collectionMocks.states!.find.mockReturnValue(findCursor([{ _id: "CA", gdp: 0 }]));
+
+    const savBefore = characterState.savings;
+    const fundBefore = fundState.balance;
+    // Pointer model: the bank pays only the premium over the CB base APY.
+    // deposit rate = max(0.05, 4+0) = 4%, base = 2%, premium = 2%.
+    // Interest = 48000 * 0.02 / 48 = 20.
+    const expectedInterest = (savBefore * 2) / 100 / TURNS_PER_YEAR;
+
+    const summary = await processBankingTurn(db as unknown as Db, TURN);
+
+    const charter = liveCorp.bankCharter!;
+    const premiumPaid = fundState.balance - fundBefore;
+    expect(charter.lastBankingIncomeTurn).toBe(TURN);
+    // The split carries the same ledgered figures the summary reports.
+    expect(charter.lastBankingDepositInterest!).toBeCloseTo(expectedInterest, 5);
+    expect(charter.lastBankingDepositInterest!).toBeCloseTo(summary.depositInterestPaid, 5);
+    expect(charter.lastBankingLoanInterest!).toBeCloseTo(summary.loanInterestCollected, 5);
+    expect(charter.lastBankingInsurancePremium!).toBeCloseTo(premiumPaid, 5);
+    expect(charter.lastBankingWriteoffs!).toBeCloseTo(summary.defaultsWrittenOff, 5);
+    // No interbank or facility legs in this fixture: those lines stay zero.
+    expect(charter.lastBankingInterbankInterestPaid ?? -1).toBe(0);
+    expect(charter.lastBankingInterbankInterestReceived ?? -1).toBe(0);
+    expect(charter.lastBankingFacilityInterest ?? -1).toBe(0);
+    // The net reconciles exactly from the split: no hidden lines.
+    expect(charter.lastBankingIncome!).toBeCloseTo(
+      charter.lastBankingLoanInterest! -
+        charter.lastBankingDepositInterest! -
+        charter.lastBankingInsurancePremium! -
+        charter.lastBankingWriteoffs!,
+      5
+    );
   });
 
   it("conserves insurance premium: fund gain == bank cash debit", async () => {
@@ -600,7 +677,7 @@ describe("processBankingTurn", () => {
     // Skip NPC bulk income by zeroing GDP
     db.collectionMocks.states!.find.mockReturnValue(findCursor([{ _id: "CA", gdp: 0 }]));
 
-    characterState.savings = 480_000; // interest due = 480000*0.04/48 = 400
+    characterState.savings = 480_000; // premium due = 480000*0.02/48 = 200
     db.collectionMocks.characters!.aggregate.mockReturnValue({
       toArray: vi.fn().mockResolvedValue([{ total: 480_000 }]),
     });
@@ -612,6 +689,35 @@ describe("processBankingTurn", () => {
     expect(summary.depositInterestPaid).toBeLessThanOrEqual(10 + 1e-9);
     expect(characterState.savings - savBefore).toBeCloseTo(summary.depositInterestPaid, 5);
     expect(liveCorp.bankCharter!.cashReserves ?? 0).toBeGreaterThanOrEqual(0);
+  });
+
+  it("pays no player premium when the posted rate sits below the CB base APY", async () => {
+    // deposit rate floors at 0.05% while base is 2%: premium is zero, but NPC
+    // interest (funded deposits) is still paid.
+    liveCorp.bankCharter!.depositOffset = -4;
+    bankCorp.bankCharter!.depositOffset = -4;
+    liveCorp.bankCharter!.npcDeposits = 0;
+    bankCorp.bankCharter!.npcDeposits = 0;
+    cbState.externalBroadMoney = 0;
+    db.collectionMocks.centralBanks!.find.mockReturnValue(
+      findCursor([
+        {
+          _id: "US",
+          primeRate: 4,
+          inflationHistory: [{ turn: 1, rate: 0 }],
+          externalBroadMoney: 0,
+          bankReserveRequirement: 0.1,
+        },
+      ])
+    );
+    db.collectionMocks.states!.find.mockReturnValue(findCursor([{ _id: "CA", gdp: 0 }]));
+
+    const savBefore = characterState.savings;
+    const summary = await processBankingTurn(db as unknown as Db, TURN);
+
+    expect(characterState.savings - savBefore).toBe(0);
+    expect(summary.depositInterestPaid).toBe(0);
+    expect(summary.depositInterestShortfall).toBe(0);
   });
 
   it("conserves loan payment: borrower debit == bank credit; outstanding drops by principal", async () => {

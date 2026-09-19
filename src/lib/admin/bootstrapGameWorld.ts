@@ -777,7 +777,13 @@ export async function bootstrapGameWorld(options: BootstrapOptions) {
   await guarded("seedNpcBanks", async () => {
     const { seedNpcBanks } = await import("@/lib/admin/seed/seedNpcBanks");
     const r = await seedNpcBanks(db, log);
-    log(`NPC banks seeded: created=${r.created} existing=${r.skippedExisting}`);
+    log(
+      `NPC banks seeded: created=${r.created} existing=${r.skippedExisting} ` +
+        `excludedNoState=${r.excludedMissingState.length}` +
+        (r.excludedMissingState.length > 0
+          ? ` (${r.excludedMissingState.map((e) => `${e.countryId}:${e.reason}`).join(", ")})`
+          : "")
+    );
   });
 
   if (seedOnly) {

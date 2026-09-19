@@ -1,5 +1,6 @@
 "use client";
 
+import { SupplyOfferBoard } from "./SupplyOfferBoard";
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useLocale, useTranslations } from "next-intl";
@@ -46,6 +47,8 @@ interface SupplyAgreement {
   lastShortfallPenaltyAnchor?: number;
   lastSupplierCashDelta?: number;
   lastSupplierCashCurrency?: string;
+  lastBuyerCashDelta?: number;
+  lastBuyerCashCurrency?: string;
   lastUnpaidSettlementAnchor?: number;
 }
 
@@ -514,10 +517,13 @@ export default function SupplyAgreementsSection({
           </p>
         )}
 
-        {role === "supplier" &&
-          (a.status === "active" || a.status === "cancelling") &&
+        {(a.status === "active" || a.status === "cancelling") &&
           Number.isFinite(a.lastDeliveryTurn) &&
-          (a.lastAchievableUnits !== undefined || (a.lastShortfallUnits ?? 0) > 0) && (
+          (role === "buyer" ||
+            a.lastAchievableUnits !== undefined ||
+            (a.lastShortfallUnits ?? 0) > 0 ||
+            a.lastSupplierCashDelta !== undefined ||
+            a.lastBuyerCashDelta !== undefined) && (
             <div
               className={`rounded-lg border p-2.5 text-xs ${
                 (a.lastShortfallUnits ?? 0) > 0
@@ -561,7 +567,10 @@ export default function SupplyAgreementsSection({
                 </dd>
                 <dt>{t("settlement.netCash")}</dt>
                 <dd className="text-right font-medium text-foreground tabular-nums">
-                  {formatCash(a.lastSupplierCashDelta ?? 0, a.lastSupplierCashCurrency)}
+                  {formatCash(
+                    role === "buyer" ? (a.lastBuyerCashDelta ?? 0) : (a.lastSupplierCashDelta ?? 0),
+                    role === "buyer" ? a.lastBuyerCashCurrency : a.lastSupplierCashCurrency
+                  )}
                 </dd>
                 {(a.lastUnpaidSettlementAnchor ?? 0) > 0 && (
                   <>
@@ -728,8 +737,37 @@ export default function SupplyAgreementsSection({
         </button>
       </div>
 
+      <SupplyOfferBoard
+        key={corpId}
+        corpId={corpId}
+        onRespond={(listing) => {
+          setProposalRole(listing.side === "sell" ? "buyer" : "supplier");
+          setSelectedBuyer({
+            id: listing.corporationId,
+            name: listing.corporationName,
+            ticker: null,
+            countryId: null,
+          });
+          setCommodity(listing.commodity);
+          setStateId(listing.stateId ?? "");
+          setVolumeCap(String(listing.volumeCap));
+          setPremiumPct(listing.pricePremium * 100);
+          setDurationTurns(listing.durationTurns != null ? String(listing.durationTurns) : "");
+          setExclusive(false);
+          setShowForm(true);
+          window.setTimeout(
+            () =>
+              document
+                .getElementById(`supply-proposal-${corpId}`)
+                ?.scrollIntoView({ behavior: "smooth", block: "start" }),
+            0
+          );
+        }}
+      />
+
       {showForm && (
         <form
+          id={`supply-proposal-${corpId}`}
           onSubmit={handlePropose}
           className="rounded-xl border border-card-border bg-card p-4 space-y-4"
         >

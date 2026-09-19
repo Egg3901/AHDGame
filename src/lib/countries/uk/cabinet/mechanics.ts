@@ -1373,4 +1373,65 @@ export const UK_CABINET_MECHANICS: Record<string, CabinetPositionMechanics> = {
     ],
     regionalMetrics: [],
   },
+
+  // ── 18. Government Chief Whip ─────────────────────────────────────────────
+  chief_whip: {
+    positionId: "chief_whip",
+    department: "Whips' Office",
+    sealImage:
+      "https://upload.wikimedia.org/wikipedia/commons/9/98/Royal_Coat_of_Arms_of_the_United_Kingdom_%28HM_Government%29_%28Tudor_Crown%29.svg",
+    nationalMetrics: [
+      {
+        category: "governance",
+        metricId: "governmentApproval",
+        label: "Government Approval",
+        format: "percent",
+        higherIsBetter: true,
+      },
+      {
+        category: "governance",
+        metricId: "publicTrust",
+        label: "Public Trust",
+        format: "percent",
+        higherIsBetter: true,
+      },
+    ],
+    regionalMetrics: [],
+    tierSetting: {
+      name: "Party Discipline Level",
+      description:
+        "Set how hard the whips press the parliamentary party. Firmer discipline steadies the government's standing at the cost of backbench goodwill.",
+      defaultTier: "balanced",
+      options: [
+        {
+          id: "relaxed",
+          label: "Relaxed",
+          description:
+            "Give backbenchers a freer hand. Eases internal pressure but the government's standing slips.",
+          effects: { governmentApproval: -0.02, publicTrust: 0.01 },
+        },
+        {
+          id: "balanced",
+          label: "Balanced",
+          description: "Normal whipping operation. No additional metric effects.",
+          effects: {},
+        },
+        {
+          id: "strict",
+          label: "Strict",
+          description:
+            "Three-line whips as routine. Firms up the government's standing but strains public trust.",
+          effects: { governmentApproval: 0.02, publicTrust: -0.01 },
+        },
+      ],
+    },
+    emergency: {
+      name: "Whip Round",
+      description:
+        "Summon every available MP for a critical division, delivering a temporary boost to government approval.",
+      cost: 1,
+      duration: 24,
+      effects: { governmentApproval: 0.05 },
+    },
+  },
 };

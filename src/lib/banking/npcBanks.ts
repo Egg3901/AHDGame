@@ -1,5 +1,5 @@
 import { ObjectId, type Db } from "mongodb";
-import type { Corporation } from "@/lib/db/types";
+import type { Corporation, State } from "@/lib/db/types";
 import type { CountryId } from "@/lib/constants/countries";
 import { ALL_COUNTRY_IDS } from "@/lib/constants/countries";
 import {
@@ -13,7 +13,8 @@ import { isPrivateBankingEnabled } from "@/lib/banking/featureFlag";
 import { getRateCorridors } from "@/lib/banking/regulationQ";
 import { setBankRates } from "@/lib/banking/rates";
 import { getLegalCharterTypes } from "@/lib/banking/separationLaw";
-import { loadWorldEraUnitScale } from "@/lib/currency/gdpAnchorRate";
+import { loadWorldEraUnitScale, loadWorldPreset } from "@/lib/currency/gdpAnchorRate";
+import { loadPrivateEnterpriseBlockedCountries } from "@/lib/economy/queries/privateEnterpriseGate";
 import { JP_IDENTITY } from "@/lib/countries/jp/identity";
 import { US_IDENTITY } from "@/lib/countries/us/identity";
 import { UK_IDENTITY } from "@/lib/countries/uk/identity";
@@ -49,7 +50,29 @@ export type SeedNpcBanksResult = {
   skippedExisting: number;
   skippedIneligible: number;
   charterFailures: number;
+  /** Slots skipped because the configured HQ state is absent in this preset. */
+  skippedNoState: number;
+  /**
+   * Countries deliberately excluded for this preset: the configured HQ state
+   * does not exist (or belongs to another country), so no bank was attempted.
+   * Machine-readable so bootstrap diagnostics can tell "excluded by design"
+   * from "attempted and failed".
+   */
+  excludedMissingState: NpcBankHqExclusion[];
 };
+
+/**
+ * Machine-readable reason a country was excluded from NPC-bank seeding for a
+ * preset instead of being attempted.
+ */
+export type NpcBankHqExclusionReason = "no-state-in-preset" | "state-country-mismatch";
+
+export interface NpcBankHqExclusion {
+  countryId: CountryId;
+  hqState: string;
+  preset: string;
+  reason: NpcBankHqExclusionReason;
+}
 
 export type NpcBankPolicySummary = {
   banksChecked: number;
@@ -125,6 +148,17 @@ function corridorMidpoint(minOffset: number, maxOffset: number): number {
   return (minOffset + maxOffset) / 2;
 }
 
+/**
+ * Lower-quartile deposit target for NPC banks. Incumbents price deposits
+ * lazily: a player bank that merely matches the old midpoint still wins
+ * share, which leaves room for a lending margin instead of forcing every
+ * bank to overpay for the same base. Lending stays at the midpoint so NPC
+ * loan-book economics do not move with this.
+ */
+export function corridorDepositTarget(minOffset: number, maxOffset: number): number {
+  return minOffset + 0.25 * (maxOffset - minOffset);
+}
+
 function offsetsMatch(a: number, b: number): boolean {
   return Math.abs(a - b) <= OFFSET_DRIFT_EPSILON;
 }
@@ -133,10 +167,20 @@ function offsetsMatch(a: number, b: number): boolean {
  * Seed NPP-run retail banks for every non-command country that can host a
  * financial NPP corp (capital HQ configured). Idempotent via `npcBankSeedKey`.
  *
+ * The HQ state is verified against the world's seeded `states` before anything
+ * is attempted: presets that do not model a country with regions (e.g. the
+ * 1991/2019 presets seed no BLR/UKR/BAL states) exclude that country with a
+ * machine-readable {@link NpcBankHqExclusion} instead of attempting and
+ * logging failed bank creation for a deterministic missing reference.
+ *
  * Seeding is not gated on `privateBankingEnabled`: charters are written through
  * the real {@link issueCharter} path with the seed-time skipFlagCheck bypass
  * (gameConfig is never mutated). Runtime policy/turn behavior still requires
  * the flag.
+ *
+ * Throws when an expected bank (HQ verified, country eligible) cannot be
+ * seeded, so the bootstrap `guarded("seedNpcBanks", …)` step records it in the
+ * run's failure list instead of silently shipping a bankless country.
  */
 export async function seedNpcBanks(
   db: Db,
@@ -147,10 +191,23 @@ export async function seedNpcBanks(
     skippedExisting: 0,
     skippedIneligible: 0,
     charterFailures: 0,
+    skippedNoState: 0,
+    excludedMissingState: [],
   };
 
   const eraUnitScale = await loadWorldEraUnitScale(db);
   const historicalEra = eraUnitScale > 1;
+  const preset = await loadWorldPreset(db);
+
+  // Eligibility before attempts: a planned economy has no private banks to
+  // seed. `getLegalCharterTypes` below already returns [] there when the
+  // command-economy flag is on, but the creation gate deliberately ignores
+  // that flag (a flag flip must not mint private enterprise inside the USSR),
+  // so without this check a flag-off world attempts two doomed spawns per
+  // planned country and records them as charter failures. Resolved ONCE for
+  // the whole sweep against the same marketization-dial gate the spawn path
+  // enforces.
+  const blocked = await loadPrivateEnterpriseBlockedCountries(db);
 
   for (const countryId of ALL_COUNTRY_IDS) {
     const hqState = NPP_CAPITAL_STATES[countryId];
@@ -161,6 +218,34 @@ export async function seedNpcBanks(
 
     const currency = COUNTRY_CURRENCY_MAP[countryId] as CurrencyCode | undefined;
     if (!currency) {
+      result.skippedIneligible += NPC_BANKS_PER_COUNTRY;
+      continue;
+    }
+
+    // Preset check before any creation attempt: the configured HQ must exist
+    // in this preset's seeded states and belong to this country. A missing HQ
+    // is a deliberate exclusion (recorded with reason), never an attempted
+    // spawn that fails with `State "…" not found`.
+    const hqDoc = await db
+      .collection<State>("states")
+      .findOne({ _id: hqState }, { projection: { countryId: 1 } });
+    if (!hqDoc || hqDoc.countryId !== countryId) {
+      const reason: NpcBankHqExclusionReason = !hqDoc
+        ? "no-state-in-preset"
+        : "state-country-mismatch";
+      result.excludedMissingState.push({ countryId, hqState, preset, reason });
+      result.skippedNoState += NPC_BANKS_PER_COUNTRY;
+      result.skippedIneligible += NPC_BANKS_PER_COUNTRY;
+      log(
+        `[seedNpcBanks] ${countryId} excluded for preset ${preset}: HQ state "${hqState}" ${reason}`
+      );
+      continue;
+    }
+
+    // Keep the preset graph check above the economic-policy gate. A country
+    // can be ineligible for private enterprise and still carry a broken HQ
+    // reference that bootstrap health must report machine-readably.
+    if (blocked.has(countryId)) {
       result.skippedIneligible += NPC_BANKS_PER_COUNTRY;
       continue;
     }
@@ -239,8 +324,16 @@ export async function seedNpcBanks(
 
   log(
     `[seedNpcBanks] created=${result.created} existing=${result.skippedExisting} ` +
-      `ineligibleSlots=${result.skippedIneligible} charterFailures=${result.charterFailures}`
+      `ineligibleSlots=${result.skippedIneligible} noStateSlots=${result.skippedNoState} ` +
+      `excluded=${result.excludedMissingState.length} charterFailures=${result.charterFailures}`
   );
+  if (result.charterFailures > 0) {
+    throw new Error(
+      `[seedNpcBanks] ${result.charterFailures} expected bank slot(s) failed to seed ` +
+        `(created=${result.created}): ` +
+        `bootstrap health must record this rather than ship bankless countries`
+    );
+  }
   return result;
 }
 
@@ -261,7 +354,8 @@ async function issueCharterWithFlag(
 
 /**
  * For each active NPP-owned deposit-taking bank: if rate offsets have drifted
- * from corridor midpoints, push them back via {@link setBankRates}.
+ * from target, push them back via {@link setBankRates} - deposits to the
+ * lower quartile ({@link corridorDepositTarget}), lending to the midpoint.
  * Hold-reserve / lend-the-book behavior comes from bankingTurn's NPC flows.
  */
 export async function runNpcBankPolicy(db: Db, _turn: number): Promise<NpcBankPolicySummary> {
@@ -282,17 +376,20 @@ export async function runNpcBankPolicy(db: Db, _turn: number): Promise<NpcBankPo
 
     const countryId = getCountryIdForCurrency(charter.currency);
     const corridors = await getRateCorridors(db, countryId);
-    const midDeposit = corridorMidpoint(corridors.deposit.minOffset, corridors.deposit.maxOffset);
+    const targetDeposit = corridorDepositTarget(
+      corridors.deposit.minOffset,
+      corridors.deposit.maxOffset
+    );
     const midLending = corridorMidpoint(corridors.lending.minOffset, corridors.lending.maxOffset);
 
     if (
-      offsetsMatch(charter.depositOffset, midDeposit) &&
+      offsetsMatch(charter.depositOffset, targetDeposit) &&
       offsetsMatch(charter.lendingOffset, midLending)
     ) {
       continue;
     }
 
-    const setResult = await setBankRates(db, corp._id, midDeposit, midLending);
+    const setResult = await setBankRates(db, corp._id, targetDeposit, midLending);
     if (setResult.ok) banksUpdated += 1;
   }
 

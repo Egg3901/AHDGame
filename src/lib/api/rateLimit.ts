@@ -155,3 +155,16 @@ export const BOT_BLACKJACK_LIMITS = { maxRequests: 20, windowMs: 60_000 };
 
 /** First-party page-view ingest — generous per-IP cap for SPA navigations. */
 export const ANALYTICS_PAGE_VIEW_LIMITS = { maxRequests: 200, windowMs: 60_000 };
+
+/**
+ * Player ad view velocity — one page load shows at most one ad, so 60/min per
+ * viewer is generous for real browsing and fatal for POST-loop inflation.
+ */
+export const PLAYER_AD_VIEW_LIMITS = { maxRequests: 60, windowMs: 60_000 };
+
+/**
+ * Player ad impression idempotency window — one counted view per ad per viewer
+ * per hour. Repeat POSTs (StrictMode double-fire, refresh, inflation loops)
+ * return success without incrementing.
+ */
+export const PLAYER_AD_IMPRESSION_WINDOW_MS = 60 * 60 * 1000;

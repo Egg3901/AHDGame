@@ -14,7 +14,10 @@ export interface SpawnElectionsResult {
   created?: boolean;
 }
 
-export type SpawnElectionsHandler = (now: Date) => Promise<SpawnElectionsResult | void>;
+export type SpawnElectionsHandler = (
+  now: Date,
+  currentTurn?: number
+) => Promise<SpawnElectionsResult | void>;
 
 export const SPAWN_ELECTIONS_REGISTRY: Partial<Record<CountryId, SpawnElectionsHandler>> = {
   US: US_ELECTIONS.spawn,

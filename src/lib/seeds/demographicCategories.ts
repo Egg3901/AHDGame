@@ -1754,6 +1754,94 @@ export function hasStateOverrides(era: EraId, stateId: string): boolean {
   return (STATE_POSITION_OVERRIDES[era]?.[stateId]?.length ?? 0) > 0;
 }
 
+/**
+ * One identity-conditioned position correction. When a granular cell's
+ * `givenDim` bucket is `givenBucket`, the position it reads for (`dim`,
+ * `bucket`) shifts additively by (`economicLean`, `socialLean`) before the
+ * cell's lean is averaged. Structurally identical to `ConditionedLeanOffset`
+ * (`src/lib/demographics/granularCells.ts`) without importing it — this file
+ * is the bottom of the seed layer and must not depend on the derivation that
+ * consumes it.
+ */
+export interface ConditionedPositionOffset {
+  givenDim: string;
+  givenBucket: string;
+  dim: keyof DemographicTurnoutRates;
+  bucket: string;
+  economicLean: number;
+  socialLean: number;
+}
+
+/**
+ * 1953 Deep South, given race:black: class-bucket social corrections.
+ *
+ * WHY THIS EXISTS. A granular cell's lean is the mean of its buckets'
+ * positions, so every bucket in a Black cell except race:black itself pulls
+ * from tables authored overwhelmingly from white behavior. In the 1953 Deep
+ * South that misdescribes Black voters three-to-one: no_college (+2.9),
+ * wealth:low (+3.1) and their neighbours encode the white caste order's
+ * social traditionalism, and averaging them over a race:black (-2) base puts
+ * every Black cell at +0.5..+1.5 social — a uniformly right electorate with
+ * no liberal-social cells anywhere, which no per-bucket re-authoring can fix
+ * (white and Black cells share those buckets, so any shared move drags both;
+ * the race-bucket gap alone caps their spread at 2.5 on a 10-point axis).
+ *
+ * The correction neutralises that transfer for Black cells only (each -3.5
+ * moves a +2.6..+3.1 bucket to roughly neutral), leaving white cells on the
+ * base table byte-identical. It is data, not a code exception: the mechanism
+ * (`conditionedOffsets` in `granularCells.ts`) is general across dims, eras
+ * and states, and every other (era, state) resolves to no offsets. Later
+ * anchors author none — the 1979+ national tables already place Black cells
+ * left, so there is nothing to correct — and the year-blend fades these to
+ * zero by 1979 rather than carrying them forward.
+ */
+const BLACK_SOUTH_1953_CLASS_CORRECTION: Array<
+  [keyof DemographicTurnoutRates, string, number, number]
+> = [
+  ["education", "no_college", 0, -3.5],
+  ["education", "college", 0, -3.5],
+  ["education", "graduate", 0, -3.5],
+  ["wealth", "low", 0, -3.5],
+  ["wealth", "middle", 0, -3.5],
+  ["wealth", "high", 0, -3.5],
+];
+
+function blackSouth1953Offsets(): ConditionedPositionOffset[] {
+  return BLACK_SOUTH_1953_CLASS_CORRECTION.map(([dim, bucket, economicLean, socialLean]) => ({
+    givenDim: "race",
+    givenBucket: "black",
+    dim,
+    bucket,
+    economicLean,
+    socialLean,
+  }));
+}
+
+/**
+ * Per-era, per-state conditioned corrections, mirroring STATE_POSITION_OVERRIDES'
+ * sparse-anchor convention. Only the 1953 Deep South authors any today.
+ */
+const CONDITIONED_POSITION_OFFSETS: Partial<
+  Record<EraId, Record<string, ConditionedPositionOffset[]>>
+> = {
+  "1953": {
+    AL: blackSouth1953Offsets(),
+    MS: blackSouth1953Offsets(),
+    SC: blackSouth1953Offsets(),
+    LA: blackSouth1953Offsets(),
+    GA: blackSouth1953Offsets(),
+    AR: blackSouth1953Offsets(),
+  },
+};
+
+/** Conditioned corrections authored at one anchor era for a state (empty when none). */
+export function conditionedOffsetsAtAnchor(
+  era: EraId,
+  stateId: string
+): ConditionedPositionOffset[] {
+  return CONDITIONED_POSITION_OFFSETS[era]?.[stateId] ?? [];
+}
+
 export function getEraComposition(era: EraId): EraComposition {
   const comp = ERA_COMPOSITIONS[era];
   if (!comp) {

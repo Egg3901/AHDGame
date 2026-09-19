@@ -27,8 +27,16 @@ const sum = (table: Readonly<Record<string, number>>): number =>
  * Writing either number out by hand would create a second source that agrees
  * today and stops agreeing the first time a zone is reapportioned.
  */
-const spawn = async (now: Date): Promise<SpawnElectionsResult> => {
-  await ensureNGElections(now);
+/*
+ * ⚠️ `currentTurn` IS THE IN-FLIGHT TURN AND MUST BE THREADED. The turn
+ * processor spawns elections before the turn counter is persisted, so a
+ * spawner that reads the stored turn instead lands a cycle one turn late.
+ * Upstream added this parameter to every `ensure*` spawner and to
+ * `SpawnElectionsHandler`; the registry now forwards to this function, so
+ * dropping it here would silently undo that for this country.
+ */
+const spawn = async (now: Date, currentTurn?: number): Promise<SpawnElectionsResult> => {
+  await ensureNGElections(now, currentTurn);
   return { message: "NG election continuity check complete." };
 };
 

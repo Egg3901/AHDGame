@@ -21,11 +21,7 @@ import { isCorporateIssuerBond } from "@/lib/bonds/corporateCredit";
 import { netPerTurnDebtServiceAnchor } from "@/lib/bonds/corpBondCashflows";
 import {
   buildActiveMarketBuckets,
-  ESSENTIAL_SHORTAGE_SCORE,
-  expansionFrontierStates,
-  findBestUnownedSector,
   hasEnterableHeadroom,
-  sectorPeakShortageScore,
   sectorShortageScore,
   markMarketsActive,
   computeMacroProductionPolicy,
@@ -66,15 +62,12 @@ import {
   type CeoArchetype,
 } from "@/lib/turn/ceoArchetype";
 import type { CorporationType } from "@/lib/constants/corporations";
-import type { CountryId } from "@/lib/constants/countries";
 import { partitionOpenMarkets } from "@/lib/economy/queries/privateEnterpriseGate";
 import type { CommodityPrice } from "@/lib/db/types/commodityPrice";
-import type { CommodityType } from "@/lib/constants/commodities";
 import {
   STRANDED_DIVEST_TURNS,
   STRANDED_DIVEST_MAX_PER_TURN,
 } from "@/lib/corporations/strandedPlant";
-import { clampWageLevel } from "@/lib/labour/laborCost";
 import { labourAtLeast, isLabourSystemMode } from "@/lib/labour/modes";
 import { CHRONIC_LOW_FILL_THRESHOLD } from "@/lib/turn/npp/strategyExpectedRevenue";
 import {
@@ -85,10 +78,9 @@ import {
 import { isStateOwned } from "@/lib/nationalization/nationalCorporation";
 import { STARTING_YEAR, TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 import { CAPITAL_DEPRECIATION_PER_TURN } from "@/lib/market/capital";
-import { emitBuildCapexTxBulk } from "@/lib/corporations/capexTxLog";
+import type { BuildCapexTxInput } from "@/lib/corporations/capexTxLog";
 import { buildNppCorpUpdateOp } from "@/lib/turn/npp/nppCashWrite";
-import { getLogisticsSupportedSectorCount, TURNS_PER_DAY } from "@/lib/constants/corporations";
-import { sumStrengthGrants } from "@/lib/constants/techTree";
+import { getLogisticsSupportedSectorCount } from "@/lib/constants/corporations";
 import {
   CAPACITY_BUILD_TURNS,
   computeBuildCost,
@@ -98,13 +90,8 @@ import {
 import { foundingStarterUnits, sectorEntryFeeAnchor } from "@/lib/corporations/foundingPlant";
 import { unownedHeadroomUnitsOf } from "@/lib/corporations/marketShare";
 import { resolvePresetIdFromGameState } from "@/lib/world/countryReadinessContract";
-import {
-  unownedHeadroomBaseExpr,
-  unownedHeadroomUnitsPerAnchor,
-  unownedPoolTrailingSet,
-} from "@/lib/market/unownedHeadroom";
 import { getMarketSystemModeForDb, marketAtLeast } from "@/lib/market/featureFlag";
-import { latentAwareNationalRatio, latentAwareStateRatio } from "@/lib/market/latentShortageSignal";
+import { buildNppPriceSignals } from "@/lib/turn/npp/priceSignals";
 import { resolveCountryPrimeRate } from "@/lib/corporations/sectorGrowthCost";
 import { NEUTRAL_STAT } from "@/lib/stats/statsConstants";
 import {
@@ -112,23 +99,54 @@ import {
   resolveSectorHostCurrencyCode,
   resolveCorpLiquidCurrencyCode,
 } from "@/lib/currency/corporationCapital";
+import type { CapacityDecisionObservation } from "@/lib/corporations/capacityDecisionTelemetry/rules";
+import {
+  buildCapacityCompetitorIndex,
+  createFoundingCapacityOutcome,
+  createReinvestCapacityObserver,
+  evaluateReinvestPreSizingGate,
+  makeCapacityCashToAnchor,
+  makeCapacityCompetitorCounter,
+  mergeCapacityObservations,
+  noteFoundingCapacityOutcome,
+  pushFoundingCapacityObservation,
+  resolveCapacityCohort,
+} from "@/lib/turn/npp/capacityDecisionTelemetry";
+import {
+  createReinvestPoolLookup,
+  reinvestPoolHeadroomUnits,
+  type ReinvestCandidate,
+} from "@/lib/turn/npp/reinvestCandidatePool";
+import { pushNppWageUpdates } from "@/lib/turn/npp/nppWagePolicy";
+import {
+  appendNppReinvestCapexRows,
+  buildNppFoundedSectorInserts,
+  depleteUnownedPoolsForDraws,
+  drawFoundedCapacityFromPools,
+  flushNppCapacityWriteback,
+} from "@/lib/turn/npp/capacityWriteback";
 import { loadWorldEraUnitScale } from "@/lib/currency/gdpAnchorRate";
 import { readCorpEconomicAnchor } from "@/lib/currency/corpEconomyFields";
-import { getEraNominalAmount } from "@/lib/constants/sectorSeedEra";
+import { getNppCashFloorAnchor } from "@/lib/turn/npp/nppCashReserve";
 import { loadNppBehaviorConfig } from "@/lib/turn/npp/behaviorConfig";
-import { pickBestNppTechNode } from "@/lib/turn/npp/corpBehaviorConfig";
+import { maybePushNppTechUnlock } from "@/lib/turn/npp/corpBehaviorConfig";
+import type { TechUnlockLedgerInput } from "@/lib/corporations/techTree/techUnlockLedger";
 import {
   fragileReinvestmentPriority,
   loadNppPlacementSignals,
-  resolveFragileEntryTreatment,
 } from "@/lib/turn/npp/fragileMarketSupply";
 import {
-  buildNppMarketEntryDiagnostic,
-  persistNppMarketEntryFunnelBestEffort,
+  resolveFoundingShortfallReason,
   resolveNppMarketEntryCredit,
   setNppMarketEntryReason,
   type NppMarketEntryDiagnostic,
 } from "@/lib/turn/npp/entryDiagnostics";
+import { evaluateNppEntry } from "@/lib/turn/npp/entryEvaluation";
+import {
+  createFrontierEntryTurnState,
+  evaluateFrontierCandidate,
+  settleFrontierEntryPlacement,
+} from "@/lib/turn/npp/frontierEntryCandidate";
 import type {
   NppCorpDecision,
   NppCorpDecisionContext,
@@ -154,7 +172,6 @@ import {
   NPP_GROWTH_MAX_STEP_OF_RUN,
   NPP_REINVEST_MAX_SECTORS_PER_TURN,
   NPP_REINVEST_MAINTENANCE_CASH_SHARE,
-  CASH_FLOOR,
   EXPANSION_COST,
   EXPANSION_MIN_CASH,
   EXPANSION_MIN_MARGIN,
@@ -162,18 +179,12 @@ import {
   NPP_FOUNDING_DEPLOY_FRACTION,
   NPP_FOUNDING_HEADROOM_SHARE,
   NPP_EXTRACTION_FOUNDING_MAX_FACILITIES,
-  SAFE_CASH_FLOOR_MIN,
   MAX_DIVIDEND_RATE,
   DEFAULT_ARCHETYPE,
   GLUT_MOTHBALL_FILL_THRESHOLD,
   GLUT_MOTHBALL_PRICE_RATIO,
   GLUT_RESTART_PRICE_RATIO,
   COST_MOTHBALL_LOSS_TURNS,
-  ORDINARY_ENTRY_MIN_SHORTAGE,
-  NPP_WAGE_STEP,
-  NPP_WAGE_BASELINE,
-  NPP_WAGE_SHORTAGE_TARGET,
-  NPP_WAGE_GLUT_TARGET,
 } from "@/lib/turn/npp/nppCorporationTuning";
 
 export {
@@ -209,6 +220,11 @@ export async function processNppCorporationDecisions(
   }>;
   newSectors: Array<Omit<CorporateSector, "_id"> & { _id: ObjectId }>;
   divestedSectorIds: ObjectId[];
+  /**
+   * Tech-unlock ledger intents (ticket #1998). Verified and flushed by the
+   * caller after the corporation bulkWrite applies.
+   */
+  techLedger: TechUnlockLedgerInput[];
 }> {
   const nppCorps = await db
     .collection<Corporation>("corporations")
@@ -229,6 +245,7 @@ export async function processNppCorporationDecisions(
   }> = [];
   const newSectors: Array<Omit<CorporateSector, "_id"> & { _id: ObjectId }> = [];
   const allDivestedSectorIds: ObjectId[] = [];
+  const techLedger: TechUnlockLedgerInput[] = [];
 
   if (nppCorps.length === 0)
     return {
@@ -236,6 +253,7 @@ export async function processNppCorporationDecisions(
       sectorUpdates: allSectorUpdates,
       newSectors,
       divestedSectorIds: allDivestedSectorIds,
+      techLedger,
     };
 
   const corpIds = nppCorps.map((c) => c._id);
@@ -282,39 +300,7 @@ export async function processNppCorporationDecisions(
       priceByCommodity.set(doc.commodity, doc);
     }
   }
-  const priceRatioOf: CommodityPriceRatioFn = (commodity, countryId) => {
-    const doc = priceByCommodity.get(commodity);
-    if (!doc || !doc.basePrice) return null;
-    // Reachable-market price first (partition worlds): the NPP brain should
-    // chase the market its sectors actually clear in, not the planet-wide
-    // aggregate — same rationale as the reachable price/margin legs.
-    const price =
-      doc.reachablePrices?.[countryId] ?? doc.nationalPrices?.[countryId] ?? doc.globalPrice;
-    if (!price || !Number.isFinite(price)) return null;
-    const stored = price / doc.basePrice;
-    // Demand audit step 1: lift the build signal by the 1.5x-cap-hidden
-    // demand. `latentAwareNationalRatio` returns the stored ratio unchanged
-    // when nothing was truncated, so this is a no-op below the cap. The
-    // national book supplies the lift basis even when the price leg is the
-    // reachable one (the book has no persisted S/D on the doc); the stored
-    // reachable price itself is preserved via `storedOverride`.
-    return latentAwareNationalRatio(doc, countryId, stored) ?? stored;
-  };
-
-  // ── Placement signals (supply-dislocation remediation, t202) ──────────────
-  // State-resolution price ratios plus deposit headroom, so foundings route to
-  // the state that is actually starved / has room, not just the corp's HQ.
-  const statePriceRatioOf = (commodity: CommodityType, stateId: string): number | null => {
-    const doc = priceByCommodity.get(commodity);
-    if (!doc || !doc.basePrice) return null;
-    const price = doc.statePrices?.[stateId];
-    if (price == null || !Number.isFinite(price)) return null;
-    const stored = price / doc.basePrice;
-    // Demand audit step 1, state resolution: same hidden-demand lift against
-    // the state's own book, so within-country placement still routes to the
-    // state that is actually starved.
-    return latentAwareStateRatio(doc, stateId, stored) ?? stored;
-  };
+  const { priceRatioOf, statePriceRatioOf } = buildNppPriceSignals(priceByCommodity);
 
   const placementSignals = await loadNppPlacementSignals(db, turn, allSectors, statePriceRatioOf);
 
@@ -354,6 +340,10 @@ export async function processNppCorporationDecisions(
   ]);
   const stateControlled = computeStateControlledBuckets(globalSectors, nationalCorpIds);
   placementSignals.activeMarketBuckets = buildActiveMarketBuckets(globalSectors);
+
+  // Rival index for capacity-decision telemetry, off the already-loaded
+  // `globalSectors` snapshot: no turn-path reads. See capacityDecisionTelemetry.
+  const competitorsByBucket = buildCapacityCompetitorIndex(globalSectors);
 
   // Resolve the shared plants pricing context once for the cohort.
   const plantsEnabled = marketAtLeast(await getMarketSystemModeForDb(db), "plants");
@@ -399,10 +389,10 @@ export async function processNppCorporationDecisions(
     };
   }
   const unownedDraws: NonNullable<NppCorpDecision["unownedDraws"]> = [];
-  // Capex ledger legs for NPP capacity reinvestment, flushed in one insert
-  // below. A build is a cash → CIP RECLASS, and the shadow ledger drops rows
-  // with no anchor value, so every row carries both the local and ₳ magnitude.
-  const capexRows: Parameters<typeof emitBuildCapexTxBulk>[1] = [];
+  // Capacity-decision observations, aggregated in memory and flushed once for
+  // the whole cohort below: no per-row turn queries, no new reads.
+  const capacityObservations: CapacityDecisionObservation[] = [];
+  const capexRows: BuildCapexTxInput[] = [];
   const entryDiagnostics: NppMarketEntryDiagnostic[] = [];
 
   // Resolve the world's current decade once for NPP tech-tree auto-picks.
@@ -457,8 +447,16 @@ export async function processNppCorporationDecisions(
   // Cohort-wide kill switch, read once. Absent means ON.
   const strategyGate = await db
     .collection<GameState>("gameState")
-    .findOne({ _id: "current" }, { projection: { nppCorpStrategyEnabled: 1 } });
+    .findOne(
+      { _id: "current" },
+      { projection: { nppCorpStrategyEnabled: 1, frontierEntryExperimentEnabled: 1 } }
+    );
   const strategyLoopEnabled = strategyGate?.nppCorpStrategyEnabled !== false;
+  // Frontier-entry experiment turn state (issue #991). See
+  // createFrontierEntryTurnState: fail-closed, no new turn-path round trip.
+  const frontierEntryTurn = createFrontierEntryTurnState(
+    strategyGate?.frontierEntryExperimentEnabled
+  );
 
   const { labourMode, retailExpansionPaused } = await loadNppBehaviorConfig(db, turn);
   const labourWagesEnabled = isLabourSystemMode(labourMode) && labourAtLeast(labourMode, "wages");
@@ -476,12 +474,14 @@ export async function processNppCorporationDecisions(
       turn,
       now,
       fxRate: corpFxRate,
+      competitorCountOf: makeCapacityCompetitorCounter(competitorsByBucket),
       fxByCurrency,
       strategy: corp.nppStrategy,
       strategyEligible: entryCohortEligible,
       ordinaryEntryEligible: entryCohortEligible,
       shortageEntryEligible: entryCohortEligible,
       retailExpansionPaused,
+      caretakerMandate: corp.caretakerCeo?.mandate ?? "active",
       strategyLoopEnabled,
       debtServiceAnchor: netPerTurnDebtServiceAnchor({
         issuerBonds: issuerBondsByCorpId.get(corp._id.toString()),
@@ -495,6 +495,7 @@ export async function processNppCorporationDecisions(
       labourWagesEnabled,
       currentYear: techCurrentYear > 0 ? techCurrentYear : undefined,
       techTreesEnabled,
+      frontierEntry: frontierEntryTurn,
     };
     let decision = makeNppCorpDecision(
       decisionContext,
@@ -524,61 +525,26 @@ export async function processNppCorporationDecisions(
     });
     markMarketsActive(placementSignals, decision.newSectors);
     if (decision.entryDiagnostic) entryDiagnostics.push(decision.entryDiagnostic);
+    // Cohort telemetry aggregate (credit-rewrite included); see capacityDecisionTelemetry.
+    mergeCapacityObservations(
+      capacityObservations,
+      decision.capacityObservations,
+      decision.entryDiagnostic?.reason
+    );
     if (decision.reinvestments && corpCurrency) {
-      for (const r of decision.reinvestments) {
-        capexRows.push({
-          corporationId: corp._id,
-          corporationName: corp.name ?? "NPP corporation",
-          corporationSequentialId: corp.sequentialId,
-          direction: "build",
-          amountLocal: Math.abs(r.costLocal),
-          currencyCode: corpCurrency,
-          anchorAmount: Math.abs(r.costAnchor),
-          turn,
-          createdAt: now,
-          sectorId: r.sectorId,
-          sectorType: r.sectorType,
-          units: r.units,
-          meta: { source: "npp_reinvestment", onlineTurn: r.onlineTurn },
-        });
-      }
+      appendNppReinvestCapexRows(capexRows, {
+        corp,
+        corpCurrency,
+        reinvestments: decision.reinvestments,
+        turn,
+        now,
+      });
     }
 
     if (decision.unownedDraws) {
       unownedDraws.push(...decision.unownedDraws);
-      // ─── Deplete the in-memory pool BEFORE the next corp decides ───────────
-      //
-      // `unownedByCountry` is loaded once, above, and `makeNppCorpDecision` is
-      // pure: it sizes an entry at `headroomUnits × 0.25` off whatever snapshot
-      // it is handed. Without this mutation every NPP that picks the same
-      // (stateId, sectorType) bucket in one pass sizes off the SAME pre-draw
-      // pool, all of them are granted that capacity, and the bulk drawdown
-      // below clamps at 0 — so N entrants into one bucket mint N × 0.25 × pool
-      // units while at most `pool` is consumed. That is the very capacity mint
-      // the drawdown exists to close, reintroduced one loop iteration up.
-      //
-      // Depleting the snapshot in lockstep (units lead, `revenue` derived from
-      // the same quantity) makes each later corp in the pass see the pool the
-      // earlier ones actually left behind.
-      for (const draw of decision.unownedDraws) {
-        const pool = unownedIndex.get(bucketKey(draw.stateId, draw.sectorType));
-        if (!pool) continue;
-        const unitsPerAnchor = unownedHeadroomUnitsPerAnchor(
-          draw.sectorType,
-          plants?.eraUnitScale ?? 1
-        );
-        const remaining = Math.max(
-          0,
-          unownedHeadroomUnitsOf(
-            draw.sectorType,
-            pool.headroomUnits,
-            pool.revenue,
-            plants?.eraUnitScale ?? 1
-          ) - draw.units
-        );
-        pool.headroomUnits = remaining;
-        pool.revenue = unitsPerAnchor > 0 ? Math.round(remaining / unitsPerAnchor) : pool.revenue;
-      }
+      // Deplete the shared snapshot in lockstep so later corps see what is left.
+      depleteUnownedPoolsForDraws(unownedIndex, decision.unownedDraws, plants?.eraUnitScale ?? 1);
     }
 
     // Gated inside the builder, not on `updates` alone: the cash leg no longer
@@ -587,39 +553,19 @@ export async function processNppCorporationDecisions(
     const corpUpdateOp = buildNppCorpUpdateOp(decision);
     if (corpUpdateOp) corpUpdates.push(corpUpdateOp);
 
-    // Sector tech tree: auto-unlock one node per turn when affordable. Separate
-    // op from the budget decision above (same _id) — bulkWrite applies both.
-    if (techTreesEnabled) {
-      const dailyGrossRevenue =
-        sectors.reduce((sum, s) => sum + (s.revenue ?? 0), 0) * TURNS_PER_DAY;
-      const pick = pickBestNppTechNode(corp, techCurrentYear, dailyGrossRevenue);
-      if (pick) {
-        const { node: techNode, cashCost } = pick;
-        const grants = sumStrengthGrants(techNode.effects);
-        const techInc: Record<string, number> = {
-          rdScore: -techNode.cost,
-          liquidCapital: -cashCost,
-        };
-        if (grants.marketingStrength > 0) techInc.marketingStrength = grants.marketingStrength;
-        if (grants.logisticsStrength > 0) techInc.logisticsStrength = grants.logisticsStrength;
-        const committing = !(corp.techDecadeLane ?? {})[techNode.decadeId];
-        const techSet: Record<string, unknown> = { updatedAt: now };
-        if (committing) {
-          techSet[`techDecadeLane.${techNode.decadeId}`] = techNode.lane;
-          techSet[`techDecadeChosenTurn.${techNode.decadeId}`] = turn;
-        }
-        corpUpdates.push({
-          // $addToSet + not-already-owned filter mirror the player unlock's
-          // atomic guard: a concurrent write can no longer resurrect a stale
-          // unlockedTechNodeIds array or double-add the node.
-          filter: { _id: corp._id, unlockedTechNodeIds: { $ne: techNode.id } },
-          update: {
-            $set: techSet,
-            $inc: techInc,
-            $addToSet: { unlockedTechNodeIds: techNode.id },
-          },
-        });
-      }
+    // Budget tech from post-decision cash and preserve the same safety floor.
+    if (techTreesEnabled && decisionContext.caretakerMandate !== "passive") {
+      maybePushNppTechUnlock({
+        corp,
+        sectors,
+        techCurrentYear,
+        turn,
+        now,
+        corpUpdates,
+        liquidCapitalDelta: decision.liquidCapitalDelta,
+        cashReserve: decision.cashFloorLocal,
+        techLedger,
+      });
     }
 
     if (decision.strategy) {
@@ -632,39 +578,15 @@ export async function processNppCorporationDecisions(
     allSectorUpdates.push(...decision.sectorUpdates);
 
     if (decision.newSectors) {
-      for (const ns of decision.newSectors) {
-        if (blocked.has(ns.countryId as CountryId)) continue; // belt and braces
-        newSectors.push({
-          _id: new (await import("mongodb")).ObjectId(),
+      newSectors.push(
+        ...buildNppFoundedSectorInserts({
           corporationId: corp._id,
-          countryId: ns.countryId as CountryId,
-          stateId: ns.stateId,
-          sectorType: ns.sectorType,
-          // Plants births grow via build orders, never via the growth slider:
-          // stamp 0 (the turn zeroes it anyway) rather than the legacy default.
-          targetGrowthRate: ns.starterOrder ? 0 : 2,
-          currentGrowthRate: 0,
-          currentGrowthCost: 0,
-          revenue: ns.revenue,
-          profitMargin: ns.profitMargin,
-          ...(ns.strategyId ? { strategyId: ns.strategyId } : {}),
-          workers: 100,
-          createdAt: now,
-          updatedAt: now,
-          // Plants: born with nothing built and the founding order queued, the
-          // same shape `expandSector` gives a player's new sector. Stamping
-          // `plantsStartTurn` keeps `sectorTurn` from mistaking a zero-capacity
-          // newborn for a legacy sector awaiting the flip migration.
-          ...(ns.starterOrder
-            ? {
-                capitalStock: 0,
-                buildQueue: [ns.starterOrder],
-                constructionInProgressAnchor: Math.round(ns.starterOrder.costPaidAnchor),
-                plantsStartTurn: turn,
-              }
-            : {}),
-        });
-      }
+          newSectors: decision.newSectors,
+          blocked,
+          turn,
+          now,
+        })
+      );
     }
 
     if (decision.divestedSectorIds) {
@@ -672,76 +594,25 @@ export async function processNppCorporationDecisions(
     }
   }
 
-  // ─── Draw founded capacity out of the unowned pools (plants) ──────────────
-  //
-  // Written here rather than returned to the turn orchestrator because this is
-  // the same conservation fix `expandSector` applies inline: an NPP founding a
-  // sector consumes market headroom, and leaving the pool intact counted the
-  // same demand twice (owned capacity AND unowned headroom), inflating world
-  // capacity every time the AI expanded. Pipeline update so `headroomUnits` and
-  // the legacy `revenue` view move in lockstep; both clamp at 0.
-  if (unownedDraws.length > 0) {
-    await db.collection<UnownedSector>("unownedSectors").bulkWrite(
-      unownedDraws.map(({ stateId, sectorType, units, countryId }) => {
-        return {
-          updateOne: {
-            filter: { stateId, sectorType },
-            update: [
-              {
-                $set: {
-                  // UPSERT SCAFFOLDING — the twin of `expandSector`'s founding
-                  // drawdown, which this used to omit. A (state, type) bucket
-                  // with no pool doc is a legitimate state (the auto-seeder
-                  // creates them lazily), and without the upsert this bulk op
-                  // matched NOTHING: the draw was silently discarded and the NPP
-                  // took its starter capacity for free — the exact double-count
-                  // this block exists to prevent, surviving in the AI path only.
-                  stateId: { $ifNull: ["$stateId", stateId] },
-                  countryId: { $ifNull: ["$countryId", countryId] },
-                  sectorType: { $ifNull: ["$sectorType", sectorType] },
-                  createdAt: { $ifNull: ["$createdAt", now] },
-                  headroomUnits: {
-                    // Self-healing base, NOT a bare `$ifNull: [..., 0]`: a pool
-                    // doc that predates the `headroomUnits` backfill would
-                    // otherwise be wiped to zero by its own first drawdown. See
-                    // `unownedHeadroomBaseExpr`.
-                    $max: [
-                      0,
-                      {
-                        $subtract: [
-                          unownedHeadroomBaseExpr(sectorType, plants?.eraUnitScale ?? 1),
-                          units,
-                        ],
-                      },
-                    ],
-                  },
-                  updatedAt: now,
-                },
-              },
-              // Restate `revenue` FROM the post-draw units instead of subtracting
-              // from it independently. Two clamped-at-0 legs moving separately
-              // drift apart permanently once either one bottoms out; the shared
-              // trailing stage keeps them one quantity in two units.
-              { $set: unownedPoolTrailingSet(sectorType, true, plants?.eraUnitScale ?? 1) },
-            ],
-            upsert: true,
-          },
-        };
-      })
-    );
-  }
-
-  if (capexRows.length > 0) {
-    await emitBuildCapexTxBulk(db, capexRows);
-  }
-
-  await persistNppMarketEntryFunnelBestEffort(db, turn, now, entryDiagnostics);
+  // Founded-capacity drawdown, then the cohort flushes; see capacityWriteback.
+  await drawFoundedCapacityFromPools(db, unownedDraws, {
+    eraUnitScale: plants?.eraUnitScale ?? 1,
+    now,
+  });
+  await flushNppCapacityWriteback(db, {
+    turn,
+    now,
+    entryDiagnostics,
+    capexRows,
+    capacityObservations,
+  });
 
   return {
     corpUpdates,
     sectorUpdates: allSectorUpdates,
     newSectors,
     divestedSectorIds: allDivestedSectorIds,
+    techLedger,
   };
 }
 
@@ -764,6 +635,7 @@ export function makeNppCorpDecision(
   let entryDiagnostic: NppCorpDecision["entryDiagnostic"];
 
   const liquidCapital = corp.liquidCapital ?? 0;
+  const passive = ctx.caretakerMandate === "passive";
   // Running balance across the spending sections below (founding, then
   // reinvestment). Both charge the SAME `liquidCapital`, so a section that read
   // the opening balance after another had already committed would let the corp
@@ -777,6 +649,14 @@ export function makeNppCorpDecision(
   const corpFxRate = ctx.fxRate ?? 1;
   const toCorpLocal = (amountAnchor: number): number =>
     anchorToCorpCapital(amountAnchor, corpCurrencyCode, corpFxRate);
+  // Capacity-decision telemetry: cohort, observations, rival counts off the
+  // shell's in-memory index (no turn-path reads). See capacityDecisionTelemetry.
+  const cashToAnchor = makeCapacityCashToAnchor(corp, corpFxRate);
+  const capacityCohort = resolveCapacityCohort(corp);
+  const capacityObservations: CapacityDecisionObservation[] = [];
+  const ownCorporationId = corp._id.toString();
+  const rivalCount = (stateId: string, sectorType: string): number =>
+    ctx.competitorCountOf?.(stateId, sectorType, ownCorporationId) ?? 0;
   const sectorEconomicToCorpLocal = (amount: number, sector: CorporateSector): number => {
     const hostCurrency = resolveSectorHostCurrencyCode(sector, corp);
     const hostRate =
@@ -788,13 +668,8 @@ export function makeNppCorpDecision(
   // Archetype-adjusted levers, each clamped to a safe rail so no personality can
   // bankrupt a profitable corp. Clamped in ₳ (where the rails are authored),
   // then converted once into the currency `liquidCapital` is compared in.
-  const eraMoney = (amountAnchor: number): number =>
-    plants?.enabled ? getEraNominalAmount(amountAnchor, plants.preset) : amountAnchor;
   const effectiveCashFloor = toCorpLocal(
-    Math.max(
-      eraMoney(SAFE_CASH_FLOOR_MIN),
-      Math.round(eraMoney(CASH_FLOOR) * modifiers.cashFloorMult)
-    )
+    getNppCashFloorAnchor(plants?.enabled ? plants.preset : undefined, modifiers.cashFloorMult)
   );
   const effectiveExpansionMinMargin = EXPANSION_MIN_MARGIN * modifiers.expansionMinMarginMult;
   const effectiveExpansionMinCash = toCorpLocal(
@@ -1223,42 +1098,16 @@ export function makeNppCorpDecision(
   }
 
   // ── 2d. Wage policy (labour wages+) ───────────────────────────────────────
-  // Quality, unionization and labour cost all hang off wageLevel. Player CEOs
-  // set it; NPP CEOs never did, so every NPP plant sat at the 1.0 baseline
-  // even with labourSystemMode full. Shortage + healthy margins pay up for
-  // quality; glut or losses cut toward 0.95. Steps 0.02/turn so a shock does
-  // not rewrite the wage bill in one tick. Union floors are applied at cost
-  // time (collectiveAgreementEffects) and are not written here.
+  // Stepped toward shortage/glut targets one tick at a time; see nppWagePolicy.
   if (ctx.labourWagesEnabled) {
-    for (const sp of sectorProfits) {
-      if (divestedSectorIds.includes(sp.sector._id)) continue;
-      if (sp.sector.mothballed === true) continue;
-      const chronicLowFill =
-        sp.sector.soldFraction != null && sp.sector.soldFraction < CHRONIC_LOW_FILL_THRESHOLD;
-      const shortage = sectorShortageScore(
-        sp.sector.sectorType,
-        sp.sector.countryId ?? corp.countryId,
-        priceRatioOf
-      );
-      let target = NPP_WAGE_BASELINE;
-      if (chronicLowFill || sp.marginCategory === "loss" || shortage <= 0.85) {
-        target = NPP_WAGE_GLUT_TARGET;
-      } else if (
-        shortage >= 1.15 &&
-        (sp.marginCategory === "healthy" || sp.marginCategory === "strong")
-      ) {
-        target = NPP_WAGE_SHORTAGE_TARGET;
-      }
-      const current = sp.sector.wageLevel ?? NPP_WAGE_BASELINE;
-      const delta = Math.max(-NPP_WAGE_STEP, Math.min(NPP_WAGE_STEP, target - current));
-      const next = clampWageLevel(Math.round((current + delta) * 100) / 100);
-      if (next !== current) {
-        sectorUpdates.push({
-          filter: { _id: sp.sector._id },
-          update: { $set: { wageLevel: next, updatedAt: now } },
-        });
-      }
-    }
+    pushNppWageUpdates({
+      corp,
+      sectorProfits,
+      divestedSectorIds,
+      priceRatioOf,
+      now,
+      sectorUpdates,
+    });
   }
 
   // ── 3. Budget decisions (revenue-based, not cash-based) ───────────────────
@@ -1274,8 +1123,9 @@ export function makeNppCorpDecision(
   let marketingPct: number;
   let logisticsPct: number;
   let rdPct: number;
-  if (!isProfitable || totalRevenue === 0) {
-    // Losing money: cut everything to minimum
+  const isCashCrisis = liquidCapital <= effectiveCashFloor;
+  if (!isProfitable || totalRevenue === 0 || isCashCrisis) {
+    // Cash distress overrides accounting profit for discretionary budgets.
     marketingPct = 0.005;
     logisticsPct = 0.003;
     rdPct = 0;
@@ -1327,112 +1177,113 @@ export function makeNppCorpDecision(
     updates.dividendRate = targetDividendRate;
   }
 
+  if (passive) {
+    updates.marketingBudget = 0;
+    updates.logisticsBudget = 0;
+    updates.rdBudget = 0;
+    updates.dividendRate = 0;
+    return {
+      corpId: corp._id,
+      updates,
+      liquidCapitalDelta: 0,
+      cashFloorLocal: effectiveCashFloor,
+      sectorUpdates,
+      strategy: strategyDecision?.state,
+    };
+  }
+
   // ── 5. Sector expansion ───────────────────────────────────────────────────
-  // Expansion has no fixed corporation-size ceiling. It proceeds one site at a
-  // time on deterministic cohort slots, prefers the neighboring-state frontier,
-  // and pauses when the current logistics strength cannot support another site.
-  // A critical shortage may use corporate credit on that same cohort slot.
+  // Candidate search, ordinary entry gates, and the funnel diagnostic naming
+  // the first binding gate. See evaluateNppEntry. The frontier fallback (5b)
+  // overlays this evaluation; the shared priced founding block below prices
+  // whichever target survives.
   const surplusCash = liquidCapital - effectiveCashFloor;
-  const existingBuckets = new Set(sectors.map((s) => bucketKey(s.stateId, s.sectorType)));
-  const frontierStates = expansionFrontierStates(corp.countryId, corp.headquartersState, sectors);
-  const entryCandidate = findBestUnownedSector(
-    corp.countryId,
-    corp.headquartersState,
-    corp.type,
-    corp.secondaryType,
-    existingBuckets,
+  const entry = evaluateNppEntry({
+    corp,
+    sectors,
     unownedByCountry,
     stateControlled,
     priceRatioOf,
-    plants?.enabled === true,
-    plants?.eraUnitScale ?? 1,
     placementSignals,
-    frontierStates
-  );
-  const expansion =
-    levers.allowExpansion &&
-    isProfitable &&
-    corpMargin >= effectiveExpansionMinMargin &&
-    !(ctx.retailExpansionPaused && entryCandidate?.sectorType === "retail")
-      ? entryCandidate
-      : null;
-  const {
-    candidatePriceRatioOf: entryCandidatePriceRatioOf,
-    interventionTargetCommodity,
-    foundingStrategyId,
-  } = resolveFragileEntryTreatment(entryCandidate, placementSignals, priceRatioOf);
-  const entryCandidateShortageScore = entryCandidate
-    ? Math.max(
-        sectorPeakShortageScore(
-          entryCandidate.sectorType as CorporationType,
-          entryCandidate.countryId,
-          entryCandidatePriceRatioOf
-        ),
-        interventionTargetCommodity
-          ? (entryCandidatePriceRatioOf(interventionTargetCommodity, entryCandidate.countryId) ?? 0)
-          : 0
-      )
-    : undefined;
-  const expansionShortageScore = entryCandidateShortageScore ?? 1;
-  const hasLogisticsCapacity = effectiveSectors < logisticsSupportedSectors;
-  const marketEntryEligible = ctx.ordinaryEntryEligible !== false;
-  const exceptionalShortageEntry =
-    expansion !== null &&
-    expansionShortageScore >= ESSENTIAL_SHORTAGE_SCORE &&
-    ctx.shortageEntryEligible === true &&
-    marketEntryEligible &&
-    hasLogisticsCapacity;
-  // Demand audit step 5: never found an ordinary plant into a glutted
-  // market — the growth governor is trying to shrink out of ≤0.85, so
-  // building there manufactures the loser the corp would then have to shed.
-  // Peak score (not mean): a mixed plant with one healthy leg still founds.
-  // Score 0 means no leg was priced (early-world thin markets): fail open.
-  const ordinaryEntryTargetGlutted =
-    expansionShortageScore > 0 && expansionShortageScore <= ORDINARY_ENTRY_MIN_SHORTAGE;
-  const ordinaryEntry =
-    expansion !== null &&
-    hasLogisticsCapacity &&
-    marketEntryEligible &&
-    !ordinaryEntryTargetGlutted &&
-    (plants?.enabled === true || surplusCash > effectiveExpansionMinCash);
-  entryDiagnostic = buildNppMarketEntryDiagnostic({
-    corporation: corp,
-    sectorCount: effectiveSectors,
-    logisticsSupportedSectors,
+    plantsEnabled: plants?.enabled === true,
+    eraUnitScale: plants?.eraUnitScale ?? 1,
     profitable: isProfitable,
     marginPct: corpMargin,
     marginFloorPct: effectiveExpansionMinMargin,
-    cohortEligible: marketEntryEligible,
-    strategyAllowsExpansion: levers.allowExpansion,
-    hasLogisticsCapacity,
-    target: entryCandidate,
-    shortageScore: entryCandidateShortageScore,
-    frontierStates,
+    surplusCash,
+    minCash: effectiveExpansionMinCash,
+    sectorCount: effectiveSectors,
+    logisticsSupportedSectors,
+    allowExpansion: levers.allowExpansion,
+    ordinaryEntryEligible: ctx.ordinaryEntryEligible,
+    shortageEntryEligible: ctx.shortageEntryEligible,
+    retailExpansionPaused: ctx.retailExpansionPaused,
+    entryCapReached: newSectors.length >= NPP_SHORTAGE_ENTRIES_PER_TURN,
   });
-  if (interventionTargetCommodity) {
-    entryDiagnostic = { ...entryDiagnostic, interventionTargetCommodity };
-  }
-  if (
-    expansion &&
+  const {
+    entryCandidate,
+    expansion,
+    hasLogisticsCapacity,
+    marketEntryEligible,
+    exceptionalShortageEntry,
+    ordinaryEntryTargetGlutted,
+    ordinaryEntry,
+    foundingStrategyId,
+  } = entry;
+  entryDiagnostic = entry.diagnostic;
+  // Whether the founding evaluation below runs at all. Captured so the
+  // capacity observation can tell pre-evaluation gates (eligibility, demand)
+  // from affordability gates; `newSectors` is still empty here, so the cap
+  // term is trivially true and needs no gate of its own.
+  // ── 5b. Frontier-entry experiment fallback (issue #991) ───────────────────
+  // A policy-cleared candidate rejected only on an expectational gate gets
+  // one priced evaluation through the shared founding block below. See
+  // evaluateFrontierCandidate for the relaxable reasons, gate revalidation,
+  // and slot checks.
+  const frontier = evaluateFrontierCandidate({
+    turnState: ctx.frontierEntry,
+    corp,
+    candidate: entryCandidate,
+    diagnostic: entryDiagnostic,
+    gates: {
+      allowExpansion: levers.allowExpansion,
+      hasLogisticsCapacity,
+      marketEntryEligible,
+      retailBlocked: ctx.retailExpansionPaused === true && entryCandidate?.sectorType === "retail",
+      targetGlutted: ordinaryEntryTargetGlutted,
+    },
+  });
+  // The ordinary target when the corp earned it, else the experiment's
+  // second-chance target. `expansion` is the entry candidate itself whenever
+  // it is non-null, so the block below prices the same slot either way.
+  const foundingTarget = expansion ?? frontier?.target ?? null;
+  const foundingBlockEntered =
+    foundingTarget !== null &&
     newSectors.length < NPP_SHORTAGE_ENTRIES_PER_TURN &&
-    (ordinaryEntry || exceptionalShortageEntry)
-  ) {
+    (ordinaryEntry || exceptionalShortageEntry || frontier !== null);
+  // Founding outcome tracked across the priced branches for the capacity
+  // observation; see capacityDecisionTelemetry. Blank until a branch prices
+  // the candidate: pre-pricing gates observe explicit zeros, never a
+  // fabricated quote.
+  const foundingOutcome = createFoundingCapacityOutcome();
+  if (foundingBlockEntered) {
     if (plants?.enabled) {
       // NPPs and players found sectors on the same priced-capacity terms.
       const headroomUnits = unownedHeadroomUnitsOf(
-        expansion.sectorType as CorporationType,
-        expansion.headroomUnits,
-        expansion.revenue,
+        foundingTarget.sectorType as CorporationType,
+        foundingTarget.headroomUnits,
+        foundingTarget.revenue,
         plants.eraUnitScale
       );
-      const starterUnits = foundingStarterUnits(expansion.sectorType as CorporationType);
+      const starterUnits = foundingStarterUnits(foundingTarget.sectorType as CorporationType);
       // Per-unit founding price. computeBuildCost is linear in units and, at a
       // greenfield entry, the dominance multiplier is 1 (no presence yet), so a
-      // one-unit quote scales exactly to any order size.
-      const perUnitFoundingAnchor =
+      // one-unit quote scales exactly to any order size. The breakdown (not
+      // just the total) is kept for the capacity observation's price vocabulary.
+      const foundingUnitQuote =
         starterUnits > 0
           ? computeBuildCost({
-              sectorType: expansion.sectorType as CorporationType,
+              sectorType: foundingTarget.sectorType as CorporationType,
               units: 1,
               // Greenfield entry: the sector does not exist yet and is founded
               // on the sector-type default strategy.
@@ -1441,15 +1292,16 @@ export function makeNppCorpDecision(
               eraUnitScale: plants.eraUnitScale,
               // No presence in this bucket yet — dominance is 1 by construction.
               marketSharePercent: 0,
-              primeRate: plants.primeRateOf(expansion.countryId),
+              primeRate: plants.primeRateOf(foundingTarget.countryId),
               // An NPP CEO is an NPP, not a Character, so it has no Business
               // Acumen to read. Neutral is the honest value and matches what
               // `computeBuildCost` assumes for a vacant seat.
               acumen: NEUTRAL_STAT,
-              hostCostOfLivingIndex: plants.costOfLivingOf(expansion.stateId),
+              hostCostOfLivingIndex: plants.costOfLivingOf(foundingTarget.stateId),
               founding: true,
-            }).totalAnchor
-          : 0;
+            })
+          : null;
+      const perUnitFoundingAnchor = foundingUnitQuote?.totalAnchor ?? 0;
       // Charged in the corp's own currency: fee + build are ₳, liquidCapital is not.
       const entryFeeAnchor = sectorEntryFeeAnchor(plants.preset);
       const entryCapital =
@@ -1467,7 +1319,7 @@ export function makeNppCorpDecision(
       );
       const affordableUnits =
         perUnitFoundingLocal > 0 ? Math.floor(deployBudgetLocal / perUnitFoundingLocal) : 0;
-      const isExtraction = expansion.sectorType === "extraction";
+      const isExtraction = foundingTarget.sectorType === "extraction";
       // Extraction founds against a DEPOSIT, not local demand: its output is a
       // traded commodity sold wherever the commodity is short, so it has no
       // demand-headroom cap (headroomUnits is 0 for every extraction bucket by
@@ -1501,14 +1353,31 @@ export function makeNppCorpDecision(
       // itself under the cash floor. Demand-side sectors also require the market
       // have room for the facility; extraction is deposit-gated (candidacy)
       // rather than headroom-gated, so it skips that check.
-      if (
-        buildUnits > 0 &&
-        (isExtraction || headroomUnits >= buildUnits) &&
-        entryCapital - foundingCost >= effectiveCashFloor
-      ) {
+      // Named (not inlined) so the capacity observation below records the same
+      // first-rejecting-gate outcome the branch takes.
+      noteFoundingCapacityOutcome(foundingOutcome, {
+        affordable:
+          buildUnits > 0 &&
+          (isExtraction || headroomUnits >= buildUnits) &&
+          entryCapital - foundingCost >= effectiveCashFloor,
+        creditPath:
+          exceptionalShortageEntry &&
+          starterUnits > 0 &&
+          headroomUnits >= starterUnits &&
+          !isStateOwned(corp) &&
+          !corp.imfBailoutActive,
+        sizeBlocked: starterUnits <= 0 || headroomUnits < starterUnits,
+        quote: {
+          unitPriceAnchor: perUnitFoundingAnchor,
+          dominanceMultiplier: foundingUnitQuote?.dominanceMultiplier ?? 1,
+          requestedUnits: buildUnits,
+          cashHeadroomAnchor: cashToAnchor(entryCapital - foundingCost),
+        },
+      });
+      if (foundingOutcome.affordable) {
         const buildTurns = Math.max(
           1,
-          CAPACITY_BUILD_TURNS(expansion.sectorType as CorporationType, true)
+          CAPACITY_BUILD_TURNS(foundingTarget.sectorType as CorporationType, true)
         );
         // Legacy nameplate: demand-side sectors take the built share of the
         // pool; extraction has no pool, so it prices the nameplate off the units
@@ -1516,12 +1385,15 @@ export function makeNppCorpDecision(
         const nameplateShare = headroomUnits > 0 ? Math.min(1, buildUnits / headroomUnits) : 0;
         const nameplateAnchor = isExtraction
           ? buildUnits *
-            revenuePerCapacityUnit(expansion.sectorType as CorporationType, plants.eraUnitScale)
-          : expansion.revenue * nameplateShare;
+            revenuePerCapacityUnit(
+              foundingTarget.sectorType as CorporationType,
+              plants.eraUnitScale
+            )
+          : foundingTarget.revenue * nameplateShare;
         newSectors.push({
-          stateId: expansion.stateId,
-          countryId: expansion.countryId,
-          sectorType: expansion.sectorType,
+          stateId: foundingTarget.stateId,
+          countryId: foundingTarget.countryId,
+          sectorType: foundingTarget.sectorType,
           strategyId: foundingStrategyId,
           // Written in the corp's own currency, because that is what
           // `sectorTurn` reads it as (`readCorpEconomicAnchor` on the way in,
@@ -1542,56 +1414,123 @@ export function makeNppCorpDecision(
           },
         });
         unownedDraws.push({
-          stateId: expansion.stateId,
-          sectorType: expansion.sectorType as CorporationType,
+          stateId: foundingTarget.stateId,
+          sectorType: foundingTarget.sectorType as CorporationType,
           units: buildUnits,
-          countryId: expansion.countryId,
+          countryId: foundingTarget.countryId,
         });
         cashLocal = entryCapital - foundingCost;
         entryDiagnostic = setNppMarketEntryReason(entryDiagnostic, "entered");
-      } else if (
-        exceptionalShortageEntry &&
-        starterUnits > 0 &&
-        headroomUnits >= starterUnits &&
-        !isStateOwned(corp) &&
-        !corp.imfBailoutActive
-      ) {
-        shortageCreditRequest = {
-          amountLocal: Math.max(0, foundingCost + effectiveCashFloor - entryCapital),
-          sectorType: expansion.sectorType as CorporationType,
-        };
-        entryDiagnostic = setNppMarketEntryReason(entryDiagnostic, "credit_requested");
-      } else if (starterUnits <= 0 || headroomUnits < starterUnits) {
-        entryDiagnostic = setNppMarketEntryReason(entryDiagnostic, "facility_size");
-      } else if (exceptionalShortageEntry) {
-        entryDiagnostic = setNppMarketEntryReason(entryDiagnostic, "state_credit_restricted");
+      } else {
+        if (foundingOutcome.creditPath) {
+          shortageCreditRequest = {
+            amountLocal: Math.max(0, foundingCost + effectiveCashFloor - entryCapital),
+            sectorType: foundingTarget.sectorType as CorporationType,
+          };
+        }
+        // Names the priced shortfall explicitly. Previously an
+        // unaffordable candidate with no credit, size, or exceptional path
+        // kept its pre-pricing reason (usually the cash floor), so the
+        // funnel understated real founding-cost rejections.
+        entryDiagnostic = setNppMarketEntryReason(
+          entryDiagnostic,
+          resolveFoundingShortfallReason({
+            creditPath: foundingOutcome.creditPath,
+            sizeBlocked: foundingOutcome.sizeBlocked,
+            exceptionalShortageEntry,
+          })
+        );
       }
     } else {
       const foundingCost = toCorpLocal(EXPANSION_COST);
       const entryCapital =
         liquidCapital + (exceptionalShortageEntry ? (ctx.shortageEntryCreditLocal ?? 0) : 0);
-      if (entryCapital - foundingCost >= effectiveCashFloor) {
+      // Legacy (non-plants) founding has no per-unit quote; the observation
+      // records the affordability facts with an explicit zero price.
+      noteFoundingCapacityOutcome(foundingOutcome, {
+        affordable: entryCapital - foundingCost >= effectiveCashFloor,
+        creditPath: exceptionalShortageEntry && !isStateOwned(corp) && !corp.imfBailoutActive,
+        sizeBlocked: false,
+        quote: {
+          unitPriceAnchor: 0,
+          dominanceMultiplier: 1,
+          requestedUnits: 0,
+          cashHeadroomAnchor: cashToAnchor(entryCapital - foundingCost),
+        },
+      });
+      if (foundingOutcome.affordable) {
         newSectors.push({
-          stateId: expansion.stateId,
-          countryId: expansion.countryId,
-          sectorType: expansion.sectorType,
+          stateId: foundingTarget.stateId,
+          countryId: foundingTarget.countryId,
+          sectorType: foundingTarget.sectorType,
           strategyId: foundingStrategyId,
-          revenue: Math.round(expansion.revenue * 0.25),
+          revenue: Math.round(foundingTarget.revenue * 0.25),
           profitMargin: 35,
         });
         cashLocal = entryCapital - foundingCost;
         entryDiagnostic = setNppMarketEntryReason(entryDiagnostic, "entered");
-      } else if (exceptionalShortageEntry && !isStateOwned(corp) && !corp.imfBailoutActive) {
-        shortageCreditRequest = {
-          amountLocal: Math.max(0, foundingCost + effectiveCashFloor - entryCapital),
-          sectorType: expansion.sectorType as CorporationType,
-        };
-        entryDiagnostic = setNppMarketEntryReason(entryDiagnostic, "credit_requested");
-      } else if (exceptionalShortageEntry) {
-        entryDiagnostic = setNppMarketEntryReason(entryDiagnostic, "state_credit_restricted");
+      } else {
+        if (foundingOutcome.creditPath) {
+          shortageCreditRequest = {
+            amountLocal: Math.max(0, foundingCost + effectiveCashFloor - entryCapital),
+            sectorType: foundingTarget.sectorType as CorporationType,
+          };
+        }
+        entryDiagnostic = setNppMarketEntryReason(
+          entryDiagnostic,
+          resolveFoundingShortfallReason({
+            creditPath: foundingOutcome.creditPath,
+            sizeBlocked: foundingOutcome.sizeBlocked,
+            exceptionalShortageEntry,
+          })
+        );
       }
     }
   }
+
+  // Frontier experiment slot accounting: every placement consumes one
+  // cohort and one controller slot; experiment placements carry the trial
+  // marker. See settleFrontierEntryPlacement.
+  entryDiagnostic = settleFrontierEntryPlacement({
+    turnState: ctx.frontierEntry,
+    frontier,
+    diagnostic: entryDiagnostic,
+    corp,
+    fallbackCandidate: entryCandidate,
+    ordinaryEntry,
+    exceptionalShortageEntry,
+  });
+
+  // One founding observation per corp per turn; gate evaluation lives in
+  // capacityDecisionTelemetry.
+  pushFoundingCapacityObservation(capacityObservations, {
+    cohort: capacityCohort,
+    competitorCount: entryCandidate
+      ? rivalCount(entryCandidate.stateId, entryCandidate.sectorType)
+      : 0,
+    outcome: foundingOutcome,
+    fallbackCashHeadroomAnchor: cashToAnchor(cashLocal - effectiveCashFloor),
+    gates: {
+      allowExpansion: levers.allowExpansion,
+      isProfitable,
+      corpMargin,
+      minMargin: effectiveExpansionMinMargin,
+      entryCandidate: entryCandidate
+        ? { stateId: entryCandidate.stateId, sectorType: entryCandidate.sectorType }
+        : null,
+      hasLogisticsCapacity,
+      marketEntryEligible,
+      shortageEntryEligible: ctx.shortageEntryEligible === true,
+      retailExpansionPaused: ctx.retailExpansionPaused === true,
+      ordinaryEntryTargetGlutted,
+      exceptionalShortageEntry,
+      blockEntered: foundingBlockEntered,
+      plantsEnabled: plants?.enabled === true,
+      expansionPresent: expansion !== null,
+      surplusCash,
+      minCash: effectiveExpansionMinCash,
+    },
+  });
 
   // ── 6. Capacity reinvestment (plants only) ────────────────────────────────
   //
@@ -1618,69 +1557,56 @@ export function makeNppCorpDecision(
   // carry `countryOwnerId` and no `ownershipState`, so the old local check saw
   // them as private.
   if (plants?.enabled && !isStateOwned(corp)) {
-    // Pool lookup by (state, type), built lazily per country. These are the SAME
-    // object references the caller mutates after each corp's draws, so the
-    // headroom read here already reflects what earlier corps in this pass took.
-    const poolIndexByCountry = new Map<string, Map<string, UnownedSector>>();
-    const poolFor = (countryId: string, stateId: string, sectorType: string) => {
-      let index = poolIndexByCountry.get(countryId);
-      if (!index) {
-        index = new Map<string, UnownedSector>();
-        for (const us of unownedByCountry.get(countryId) ?? []) {
-          index.set(bucketKey(us.stateId, us.sectorType), us);
-        }
-        poolIndexByCountry.set(countryId, index);
-      }
-      return index.get(bucketKey(stateId, sectorType)) ?? null;
-    };
+    // Shared-snapshot pool lookup; see reinvestCandidatePool.
+    const poolFor = createReinvestPoolLookup(unownedByCountry);
 
-    type Candidate = {
-      sector: CorporateSector;
-      units: number;
-      /**
-       * The part of `units` that is genuine market ENTRY (the growth leg) and
-       * must therefore be drawn out of the unowned pool. The replacement leg is
-       * deliberately NOT in here — see the sizing block below.
-       */
-      growthUnits: number;
-      fill: number;
-      headroomUnits: number;
-      interventionPriority: number;
-    };
-    const candidates: Candidate[] = [];
+    const candidates: ReinvestCandidate[] = [];
+    // `plants` narrowing does not persist into the pool callback below.
+    const plantsEraUnitScale = plants.eraUnitScale;
+    // Observation for one evaluated reinvestment candidate; see
+    // capacityDecisionTelemetry. `readCashLocal` tracks the running balance so
+    // unpriced gates observe headroom as current cash.
+    const { observe: observeReinvestCandidate, observePriced: observePricedReinvestCandidate } =
+      createReinvestCapacityObserver({
+        cohort: capacityCohort,
+        competitorCountOf: rivalCount,
+        cashToAnchor,
+        readCashLocal: () => cashLocal,
+        poolHeadroomOf: (sector) =>
+          reinvestPoolHeadroomUnits(poolFor, sector, corp.countryId, plantsEraUnitScale),
+        push: (observation) => capacityObservations.push(observation),
+      });
 
     for (const sp of sectorProfits) {
       const sector = sp.sector;
-      if (divestedSectorIds.includes(sector._id)) continue;
-      // A mothballed plant is deliberately idle — buying it more capacity is the
-      // opposite of the decision that mothballed it.
-      if (sector.mothballed) continue;
       // Nothing built yet (a newborn founding, or a pre-flip sector still
       // awaiting its transition order): there is no capacity to maintain and no
       // fill telemetry to justify a build.
       const capitalStock = sector.capitalStock ?? 0;
-      if (!(capitalStock > 0)) continue;
       // Queue-array ceiling — see the constant for why this is not the
       // rationing dial.
       const queueDepth = sector.buildQueue?.length ?? 0;
-      if (queueDepth >= NPP_REINVEST_MAX_QUEUE_DEPTH) continue;
-
       // (a) Is it selling what it makes? Persisted units telemetry only — no
       // telemetry means no evidence, and no evidence means no build.
       const produced = sector.producedUnits ?? 0;
       const sold = sector.soldUnits ?? 0;
-      if (!(produced > 0)) continue;
-      const fill = sold / produced;
-      if (fill < NPP_REINVEST_MIN_FILL) continue;
-
+      const fill = produced > 0 ? sold / produced : 0;
       // (b) Is there room in the market to absorb more output? Same unowned
       // pool the founding path sizes and draws against.
       const sectorCountryId = sector.countryId ?? corp.countryId;
-      // Don't add private capacity into a bucket a National Corporation runs —
-      // the same gate `findBestUnownedSector` applies to expansion. Every corp
-      // reaching here is private — state-owned corps returned above — so this
-      // no longer needs the SOE carve-out it used to carry.
-      if (stateControlled.has(bucketKey(sector.stateId, sector.sectorType))) {
+      // Pre-sizing gates in precedence order; the first rejection is observed
+      // for the capacity funnel instead of silently skipped.
+      const preSizingGate = evaluateReinvestPreSizingGate({
+        divested: divestedSectorIds.includes(sector._id),
+        mothballed: sector.mothballed === true,
+        no_capacity: !(capitalStock > 0),
+        queue_full: queueDepth >= NPP_REINVEST_MAX_QUEUE_DEPTH,
+        no_telemetry: !(produced > 0),
+        fill_below_min: produced > 0 && fill < NPP_REINVEST_MIN_FILL,
+        state_controlled: stateControlled.has(bucketKey(sector.stateId, sector.sectorType)),
+      });
+      if (preSizingGate) {
+        observeReinvestCandidate(preSizingGate, sector, capitalStock, null, 0, null);
         continue;
       }
       // ─── Headroom is a gate on GROWTH, never on REPLACEMENT ────────────────
@@ -1706,15 +1632,12 @@ export function makeNppCorpDecision(
       //     quarter of the pool and drawn out of it, exactly as founding is.
       // It also matches the player path: `buildCapacity` (a top-up) is not
       // headroom-gated at all, while `expandSector` (an entry) draws the pool.
-      const pool = poolFor(sectorCountryId, sector.stateId, sector.sectorType);
-      const headroomUnits = pool
-        ? unownedHeadroomUnitsOf(
-            sector.sectorType,
-            pool.headroomUnits,
-            pool.revenue,
-            plants.eraUnitScale
-          )
-        : 0;
+      const headroomUnits = reinvestPoolHeadroomUnits(
+        poolFor,
+        sector,
+        corp.countryId,
+        plants.eraUnitScale
+      );
 
       // Sizing: replacement restores worn capacity; growth (below) is a
       // separate cash-and-demand decision that no longer reads targetGrowthRate.
@@ -1784,26 +1707,28 @@ export function makeNppCorpDecision(
         strandedDecayScale *
         NPP_REINVEST_AGGRESSION;
       // GROWTH — build from nothing, sized by cash and demand, exactly as a
-      // player tops up a plant with `buildCapacity`. NO unowned-pool gate or
-      // cap. Reaching here already means the plant is selling through its output
-      // (fill >= MIN_FILL, required above). If it is also profitable, allowed to
-      // grow, has queue room, and sits in a market that is not glutted, it grows
-      // to the scale its treasury supports — not one facility a turn. The old
-      // path sized growth off a 2%/yr target divided by 48 and queued capacity
-      // dust (median 0.00065 of a facility), then the pool capped even that to a
-      // quarter of a headroom number that is ~0 in every built-out market, so
-      // NPP plants never reached player scale. The per-sector affordability rail
-      // below and the cash floor bound the spend; a plant that overbuilds sees
-      // fill fall next turn and stops.
+      // player tops up a plant with `buildCapacity`. Demand-side sectors do not
+      // use the unowned pool as a hard cap: their proven sell-through is the
+      // demand signal and the affordability rail limits the order. Extraction
+      // is different. Its physical market is the state's finite deposit, so the
+      // deposit headroom signal gates and scales new growth. Without that second
+      // gate a rare-earth price spike could make a mine keep adding capacity
+      // after the state's geology was already exhausted; production was capped,
+      // but the balance sheet and national sector mix kept inflating.
       const facilityUnits = foundingStarterUnits(sector.sectorType);
       const utilization = capitalStock > 0 ? runUnits / capitalStock : 0;
+      const extractionHeadroom =
+        sector.sectorType === "extraction"
+          ? Math.max(0, Math.min(1, placementSignals?.extractionHeadroomOf?.(sector.stateId) ?? 1))
+          : 1;
       const canGrow =
         sp.isProfitable &&
         levers.allowGrowthCapex &&
         !(ctx.retailExpansionPaused && sector.sectorType === "retail") &&
         queueDepth < NPP_REINVEST_MAX_GROWTH_QUEUE_DEPTH &&
         stateShortage > NPP_GROWTH_MIN_SHORTAGE &&
-        utilization >= NPP_GROWTH_MIN_UTILIZATION;
+        utilization >= NPP_GROWTH_MIN_UTILIZATION &&
+        (sector.sectorType !== "extraction" || extractionHeadroom > 0);
       // The plant already exists, so its build is tolled at its own dominance
       // and pays the list price, not the founding discount — the same terms a
       // player's `buildCapacity` pays.
@@ -1830,12 +1755,14 @@ export function makeNppCorpDecision(
       const growthBudgetLocal =
         Math.max(0, cashLocal - effectiveCashFloor) * NPP_GROWTH_DEPLOY_FRACTION;
       // Demand anchor: grow by at most this share of proven throughput a turn
-      // (at least one facility), not the whole treasury at once. No headroom cap
-      // — the unowned pool does not ration this.
-      const growthCapUnits = Math.max(
-        facilityUnits,
-        Math.floor(runUnits * NPP_GROWTH_MAX_STEP_OF_RUN)
-      );
+      // (at least one facility for demand-side sectors), not the whole treasury
+      // at once. Extraction growth is additionally scaled by finite deposit
+      // headroom and never floors up to a facility when the deposit cannot
+      // support one.
+      const growthCapUnits =
+        sector.sectorType === "extraction"
+          ? Math.floor(runUnits * NPP_GROWTH_MAX_STEP_OF_RUN * extractionHeadroom)
+          : Math.max(facilityUnits, Math.floor(runUnits * NPP_GROWTH_MAX_STEP_OF_RUN));
       // Units the growth budget affords, bounded by that step. Growth only fires
       // if it clears one whole facility — below that the plant just replaces
       // depreciation, so a cash-poor corp keeps its maintenance rather than
@@ -1851,9 +1778,22 @@ export function makeNppCorpDecision(
               )
             )
           : 0;
-      const growthUnits = affordableGrowthUnits >= facilityUnits ? affordableGrowthUnits : 0;
+      const growthUnits =
+        affordableGrowthUnits >= facilityUnits && growthCapUnits >= facilityUnits
+          ? affordableGrowthUnits
+          : 0;
       const units = replacementUnits + growthUnits;
-      if (!(units > 0)) continue;
+      if (!(units > 0)) {
+        observeReinvestCandidate(
+          "below_minimum_order",
+          sector,
+          capitalStock,
+          headroomUnits,
+          units,
+          null
+        );
+        continue;
+      }
 
       candidates.push({
         sector,
@@ -1887,7 +1827,9 @@ export function makeNppCorpDecision(
       const bucketTotal = capitalStock + candidate.headroomUnits;
       const marketSharePercent = bucketTotal > 0 ? (100 * capitalStock) / bucketTotal : 0;
 
-      const costAnchor = computeBuildCost({
+      // Breakdown (not just the total) is kept for the capacity observation's
+      // price vocabulary: unit price, charged dominance multiplier, headroom.
+      const reinvestPrice = computeBuildCost({
         sectorType: sector.sectorType,
         units,
         strategyId: sector.strategyId ?? null,
@@ -1902,7 +1844,8 @@ export function makeNppCorpDecision(
         // discount does not apply. An NPP topping up capacity pays the same
         // list price a player pays through `buildCapacity`.
         founding: false,
-      }).totalAnchor;
+      });
+      const costAnchor = reinvestPrice.totalAnchor;
       const costLocal = toCorpLocal(costAnchor);
 
       // Affordability. Nobody builds free — this is also the SOE capex
@@ -1916,13 +1859,37 @@ export function makeNppCorpDecision(
       // rationed as a share of cash instead — see
       // NPP_REINVEST_MAINTENANCE_CASH_SHARE for why the entry floor applied to
       // maintenance is a death spiral rather than prudence.
-      if (!(costLocal > 0)) continue;
+      // A zero or negative charge is not a buildable quote: observe it as a
+      // sizing rejection, the same outcome as sizing to non-positive units.
+      if (!(costLocal > 0)) {
+        observeReinvestCandidate(
+          "below_minimum_order",
+          sector,
+          capitalStock,
+          candidate.headroomUnits,
+          units,
+          null
+        );
+        continue;
+      }
       const affordable =
         candidate.growthUnits > 0
           ? cashLocal - costLocal >= effectiveCashFloor
           : costLocal <= Math.max(0, cashLocal) * NPP_REINVEST_MAINTENANCE_CASH_SHARE &&
             cashLocal - costLocal > 0;
-      if (!affordable) continue;
+      if (!affordable) {
+        observePricedReinvestCandidate(
+          "insufficient_cash",
+          sector,
+          capitalStock,
+          candidate.headroomUnits,
+          units,
+          costAnchor,
+          reinvestPrice.dominanceMultiplier,
+          cashToAnchor(cashLocal - costLocal)
+        );
+        continue;
+      }
 
       const buildTurns = Math.max(1, CAPACITY_BUILD_TURNS(sector.sectorType));
       const order: SectorBuildOrder = {
@@ -1965,6 +1932,18 @@ export function makeNppCorpDecision(
         costLocal,
         onlineTurn: order.onlineTurn,
       });
+      // Observed after the spend: headroom is cash after the charged cost,
+      // the same post-cost headroom the player path records.
+      observePricedReinvestCandidate(
+        "placed",
+        sector,
+        capitalStock,
+        candidate.headroomUnits,
+        units,
+        costAnchor,
+        reinvestPrice.dominanceMultiplier,
+        cashToAnchor(cashLocal)
+      );
       placed += 1;
     }
   }
@@ -1987,6 +1966,7 @@ export function makeNppCorpDecision(
     // up, a founding cost or growth capex down — so this one subtraction is the
     // net movement whichever path ran. See `nppCashWrite.ts`.
     liquidCapitalDelta: cashLocal - liquidCapital,
+    cashFloorLocal: effectiveCashFloor,
     sectorUpdates,
     newSectors: newSectors.length > 0 ? newSectors : undefined,
     divestedSectorIds: divestedSectorIds.length > 0 ? divestedSectorIds : undefined,
@@ -1995,5 +1975,6 @@ export function makeNppCorpDecision(
     shortageCreditRequest,
     entryDiagnostic,
     strategy: strategyDecision?.state,
+    capacityObservations,
   };
 }

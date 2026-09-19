@@ -3,6 +3,7 @@
 // Errors: 401, 404
 
 import { NextResponse } from "next/server";
+import { withNoStore } from "@/lib/api/withNoStore";
 import { getDb } from "@/lib/mongodb";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { handleRouteError } from "@/lib/api/errors";
@@ -12,7 +13,7 @@ import type { RetiredCharacter } from "@/lib/db/types/retiredCharacter";
 import type { GameState } from "@/lib/db/types";
 import { gameDateAnchorFromState } from "@/lib/utils/gameDate";
 
-export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+async function handleGET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const auth = await requireBasicAuth();
     if (!auth.ok) return auth.response;
@@ -47,3 +48,5 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     return handleRouteError(error);
   }
 }
+
+export const GET = withNoStore(handleGET);

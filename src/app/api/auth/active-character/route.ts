@@ -3,6 +3,7 @@
 // Errors: 403 (not admin), 404 (character not found or not owned)
 
 import { NextResponse } from "next/server";
+import { withNoStore } from "@/lib/api/withNoStore";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
 import { handleRouteError } from "@/lib/api/errors";
@@ -37,7 +38,7 @@ function hashIp(ip: string): string | undefined {
 }
 
 // GET — Switch active character via URL (used by navbar link)
-export async function GET(request: Request) {
+async function handleGET(request: Request) {
   try {
     const admin = await requireAdmin();
     if (!admin.ok) return admin.response;
@@ -90,6 +91,8 @@ export async function GET(request: Request) {
     return handleRouteError(error);
   }
 }
+
+export const GET = withNoStore(handleGET);
 
 export async function PATCH(request: Request) {
   try {

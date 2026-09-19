@@ -4,7 +4,6 @@ import type { AppropriationSettlement } from "@/lib/military/appropriation";
 import type { CountryId } from "@/lib/constants/countries";
 import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
 import { resolveDefenseLineFrom } from "@/lib/turn/defenseEnvelope";
-import { deriveFiscalState } from "@/lib/budget/treasuryBalance";
 import { emitTx } from "@/lib/financialTxLog/emit";
 
 const EMPTY: DefenseAppropriation = { balance: 0, accruedThroughTurn: 0, arrearsRatio: 0 };
@@ -93,9 +92,14 @@ export async function applyAppropriationSettlement(
 
 /**
  * Commit the turn settlement and any upkeep overdraft against the same budget
- * document. The treasury and appropriation guards form a compare-and-swap:
- * callers must retry their calculation when another writer changed either
- * balance between the read and this write.
+ * document. The overdraft is a cash-only `$inc` on `treasuryBalance`:
+ * `debt.principal` belongs to the sovereign bond ledger (see
+ * bonds/sovereignPrincipal.ts) and an upkeep shortfall is not a bond issuance,
+ * so the cash debit never rewrites the stock (#1975). The treasury and
+ * appropriation guards form a compare-and-swap: callers must retry their
+ * calculation when another writer changed either balance between the read and
+ * this write. The `accruedThroughTurn` guard makes a replayed turn a no-op at
+ * the database, so crash/retry replay converges.
  */
 export async function applyAppropriationSettlementWithOverdraft(
   db: Db,
@@ -103,33 +107,13 @@ export async function applyAppropriationSettlementWithOverdraft(
   turn: number,
   settlement: AppropriationSettlement,
   expectedTreasury: number,
-  expectedAppropriation: number,
-  budget: FederalBudget
+  expectedAppropriation: number
 ): Promise<boolean> {
   const overdraft = Math.round(settlement.overdraftDrawn);
-  const nextTreasury = Math.round(expectedTreasury - overdraft);
-  const derived =
-    overdraft > 0
-      ? deriveFiscalState({
-          treasuryBalance: nextTreasury,
-          gdp: budget.gdp ?? 0,
-          gdpSmoothed: budget.gdpSmoothed,
-          ceiling: budget.debt?.ceiling ?? 0,
-          investorConfidence: budget.investorConfidence,
-          imfBailoutActive: budget.imfSovereignBailoutActive,
-          sovereignRiskAnchor: budget.sovereignRiskAnchor,
-        })
-      : null;
   const set: Record<string, unknown> = {
     "defenseAppropriation.accruedThroughTurn": turn,
     "defenseAppropriation.arrearsRatio": settlement.arrearsRatio,
   };
-  if (derived) {
-    set["debt.principal"] = derived.principal;
-    set["debt.interestRate"] = derived.interestRate;
-    set.debtToGdpRatio = derived.debtToGdpRatio;
-    set.creditRating = derived.creditRating;
-  }
   const inc: Record<string, number> = {
     "defenseAppropriation.balance": Math.round(settlement.delta),
   };

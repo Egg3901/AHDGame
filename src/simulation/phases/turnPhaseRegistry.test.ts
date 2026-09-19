@@ -163,6 +163,40 @@ describe("turn phase registry", () => {
     expect(timers).toBeLessThan(resolution);
   });
 
+  it("sweeps lost leadership seats every turn, not only after a general election", async () => {
+    // A seat can be given up at any time — a withdrawal, a resignation, a move
+    // to another chamber. Gating the sweep on a general meant the only other
+    // thing that would notice was a congress page GET, so a chair could stand
+    // empty for hours until somebody happened to open the page.
+    const registry = getTurnPhaseRegistry();
+    const adapter = registry.find((a) => a.key === "electionResolutionAndGovernment");
+    expect(adapter).toBeDefined();
+
+    const calledPhases: string[] = [];
+    const runPhase = vi.fn(async (name: string, _fn: () => unknown) => {
+      calledPhases.push(name);
+      // No general resolved this turn.
+      return name === "electionResolution" ? 0 : undefined;
+    });
+
+    const context = {
+      db: {} as never,
+      gameNow: new Date(),
+      newTurn: 2,
+      phaseResults: {} as Record<string, unknown>,
+    } as never;
+    const runtime = { runPhase, markPhaseSkipped: vi.fn() } as never;
+
+    await adapter!.execute(context, runtime);
+
+    expect(calledPhases).toContain("leadershipVacate");
+    // Still after resolution, so it reads settled seats rather than a chamber
+    // mid-rewrite.
+    expect(calledPhases.indexOf("electionResolution")).toBeLessThan(
+      calledPhases.indexOf("leadershipVacate")
+    );
+  });
+
   it("electionResolutionAndGovernment adapter calls primaryResolution before voteAccumulation before electionTimers before electionResolution", async () => {
     const registry = getTurnPhaseRegistry();
     const adapter = registry.find((a) => a.key === "electionResolutionAndGovernment");
@@ -291,6 +325,79 @@ describe("turn phase registry", () => {
         "manualPause",
         expect.any(String)
       );
+    });
+  });
+});
+
+describe("uk leadership challenges (#861) registration", () => {
+  it("registers ukLeadershipChallenges immediately after ukJrSurpriseTurn", () => {
+    const phaseIndex = new Map(TURN_PHASE_NAMES.map((name, index) => [name, index]));
+    expect(phaseIndex.get("ukJrSurpriseTurn"), "ukJrSurpriseTurn must be registered").not.toBe(
+      undefined
+    );
+    expect(
+      phaseIndex.get("ukLeadershipChallenges"),
+      "ukLeadershipChallenges must be registered"
+    ).toBe((phaseIndex.get("ukJrSurpriseTurn") ?? -1) + 1);
+  });
+
+  it("billsCampaignsAndActivity invokes ukLeadershipChallenges after the confirmation lifecycles", async () => {
+    const adapter = getTurnPhaseRegistry().find((a) => a.key === "billsCampaignsAndActivity");
+    expect(adapter).toBeDefined();
+
+    const calledPhases: string[] = [];
+    const runPhase = vi.fn(async (name: string, _fn: () => unknown) => {
+      calledPhases.push(name);
+      return undefined;
+    });
+    const markPhaseSkipped = vi.fn(async () => undefined);
+
+    const phaseResults = {} as Record<string, unknown>;
+    const context = {
+      realNow: new Date(),
+      gameNow: new Date(),
+      newTurn: 2,
+      db: {
+        collection: () => ({ find: () => ({ toArray: async () => [] }) }),
+      } as never,
+      config: {} as never,
+      gameState: { playerRandomEventsEnabled: false },
+      phaseResults,
+    } as never;
+    const runtime = { runPhase, markPhaseSkipped } as never;
+
+    await adapter!.execute(context, runtime);
+
+    const indexOf = (phase: string) => {
+      const i = calledPhases.indexOf(phase);
+      expect(i, `phase '${phase}' should have been invoked`).toBeGreaterThanOrEqual(0);
+      return i;
+    };
+
+    // Appended last in the parallel confirmation group so the result-index
+    // math above it is unchanged; the registry comment says as much. It is
+    // not last overall: the adapter keeps running sequential phases
+    // (socialAxisDrift first) after the parallel group settles.
+    expect(indexOf("ukLeadershipChallenges")).toBeGreaterThan(indexOf("fomcNominations"));
+    expect(indexOf("ukLeadershipChallenges")).toBeGreaterThan(indexOf("ukJrSurpriseTurn"));
+    expect(indexOf("ukLeadershipChallenges")).toBe(indexOf("fomcNominations") + 1);
+    // UK party conferences (#862) run immediately after the leadership phase.
+    expect(indexOf("ukPartyConferences")).toBe(indexOf("ukLeadershipChallenges") + 1);
+    expect(calledPhases[indexOf("ukPartyConferences") + 1]).toBe("socialAxisDrift");
+    // The recording stub returns undefined, so the adapter records the
+    // documented zero default rather than leaving the key absent.
+    expect(phaseResults.ukLeadershipChallenges).toEqual({
+      expired: 0,
+      resolved: 0,
+      removed: 0,
+    });
+    expect(phaseResults.ukPartyConferences).toEqual({
+      scheduled: 0,
+      opened: 0,
+      completed: 0,
+      ratified: 0,
+      expired: 0,
+      payoffs: 0,
     });
   });
 });

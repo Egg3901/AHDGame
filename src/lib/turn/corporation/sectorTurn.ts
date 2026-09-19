@@ -6,97 +6,22 @@ import {
   specializationMaintenance,
   specializationPayrollModifier,
 } from "@/lib/corporations/specialization/rules";
-import {
-  activeCapacityConstraintFactor,
-  activeCapacityFraction,
-} from "@/lib/corporations/investment/rules";
-import type { Corporation, CorporateSector, SectorBuildOrder } from "@/lib/db/types";
-import { freshMilitaryDiversion } from "@/lib/military/arsenal";
-import {
-  CAPACITY_ANCHOR_YEAR,
-  CAPACITY_BUILD_TURNS,
-  capacityPricePerUnit,
-  techOutputUnitsMultiplier,
-  unitYieldForSupply,
-} from "@/lib/constants/capacityEconomy";
+import type { Corporation, CorporateSector } from "@/lib/db/types";
 import type { CurrencyCode } from "@/lib/constants/currencies";
-import {
-  getForeignTariffMarginModifier,
-  getDomesticTariffMalus,
-  getTariffBlendWeights,
-} from "@/lib/tariffs/tariffEffects";
-import { getSubsidyMarginModifier } from "@/lib/subsidies/subsidyEffects";
-import { politicalSoeInputs } from "@/lib/politicalLegislation/marginAdapter";
-import { computeExportPremium, computeExportExposure } from "@/lib/trade/exportPremium";
-import { TRADE_EMBARGO_EXPORT_LOSS_SHARE } from "@/lib/trade/constants";
 import type { CommodityType } from "@/lib/constants/commodities";
-import {
-  capacityHaircutFactor,
-  CAPACITY_BINDING_THRESHOLD,
-} from "@/lib/extraction/capacityHaircut";
-import { computePriceRealization } from "@/lib/market/priceRealization";
-import { computeThroughput } from "@/lib/market/throughput";
-import {
-  MARKET_REALIZATION_DEVIATION_CAP,
-  advanceCapitalBookAnchor,
-  advanceCapitalStock,
-  capitalUtilizationFactor,
-  impliedOutputUnits,
-  seedCapitalStock,
-  softenedMarketRealization,
-  softenedMarketRealizationAmount,
-} from "@/lib/market/capital";
-import { COMMODITY_BASE_PRICES } from "@/lib/constants/commodities";
-import {
-  trendProductionPolicy,
-  getRevenueMultiplier,
-  getOutputMultiplier,
-  getInputMultiplier,
-} from "@/lib/utils/productionPolicy";
-import {
-  assemblePhysicalPnl,
-  computeFinancialLegs,
-  computeInputsCost,
-  otherOpexDriftFactor,
-  solveOtherOpexPerUnit,
-} from "@/lib/corporations/physicalPnl";
-import { healAutoRetoolOpexAnchor } from "@/lib/corporations/retoolRescale";
-import {
-  retoolOperatingCapacityRatio,
-  retoolMeasurementRatio,
-} from "@/lib/corporations/retooling/rules";
+import { trendProductionPolicy, getRevenueMultiplier } from "@/lib/utils/productionPolicy";
 import {
   calculateDailyGrowthCost,
   TURNS_PER_DAY,
-  NPV_ANNUAL_DISCOUNT_RATE,
-  getHomeLocationMarginBonus,
-  getStateSectorSpecializationMarginBonus,
-  getSectorTypeMatchModifier,
-  getSprawlModifier,
-  getDominanceMarginPenalty,
-  getDominanceRegulatoryBurden,
   getDominanceGrowthCostMultiplier,
-  getNationalDominanceMarginPenalty,
-  getNationalDominanceRegulatoryBurden,
   getNationalDominanceGrowthCostMultiplier,
   softCapEffectiveMargin,
-  getSustainedNegativeProductionPenalty,
   nextNegativeProductionCounter,
-  TYPE_SWITCH_MARGIN_PENALTY,
-  TYPE_SWITCH_PENALTY_TURNS,
 } from "@/lib/constants/corporations";
-import type { CorporationType } from "@/lib/constants/corporations";
-import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
-import { computeBlendedMarginModifiers } from "@/lib/constants/commodities";
 import { readCorpEconomicAnchor, writeCorpEconomicLocal } from "@/lib/currency/corpEconomyFields";
-import { computeSoeEfficiencyPenalty } from "@/lib/nationalization/soeEfficiency";
 import { isStateOwned } from "@/lib/nationalization/nationalCorporation";
 import { sociMultiplier } from "@/lib/nationalization/concentration";
-import { resolveSectorMandate } from "@/lib/nationalization/soeMandates";
 import { nationalizationProductivityFactor } from "@/lib/nationalization/transitionShock";
-import { corpAlignmentModifier } from "@/lib/economicModels/effects";
-import { getExpropriationRiskMarginModifier } from "@/lib/constants/corporations";
-import { commodityProductionCapacityScale } from "@/lib/banking/capacityAllocation";
 import {
   getSectorTechEffects,
   getSectorTechEffectsForYear,
@@ -107,29 +32,21 @@ import { NEUTRAL_STAT } from "@/lib/stats/statsConstants";
 import {
   getEffectiveStrategyRates,
   STRATEGY_TRANSITION_TURNS,
-  STRATEGY_TRANSITION_MARGIN_PENALTY,
 } from "@/lib/constants/sectorStrategies";
 import type { SectorUpdateOp } from "./types";
-import { applyExtractionResourceCapacityToSupply } from "@/lib/corporations/extractionResourceSupply";
-import { computeStateMetricMarginModifier } from "@/lib/corporations/sectorMetricMarginProfiles";
-import {
-  costReleasedThisTurn,
-  queueUndeliveredCost,
-  unitsDeliveredThisTurn,
-} from "@/lib/corporations/buildDelivery";
-import { advanceSectorPlantLedger } from "@/lib/corporations/plantLedger";
+import { computeMarketTiers } from "./sectorTurn/marketTiers";
+import { computePlantsCapacity } from "./sectorTurn/plantsCapacity";
+import { accumulateMarginModifiers } from "./sectorTurn/marginStack";
+import { resolvePlantsRevenue } from "./sectorTurn/plantsRevenue";
+import { computeGrowthAndRegulatory, decomposePhysicalCosts } from "./sectorTurn/sectorCosts";
+import { costReleasedThisTurn } from "@/lib/corporations/buildDelivery";
 import { resolveBuildQueueTurn } from "./sectorBuildQueueTurn";
-import {
-  computeDisasterPenaltySplit,
-  disasterProductionFactor,
-} from "@/lib/crises/disasterMarginPenalty";
 import { resolveSectorGrowthPolicy } from "./sectorGrowthPolicy";
 import {
   resolveSectorHeadcount,
   resolveSectorLabourEconomics,
   resolveSectorLabourProductionEffects,
 } from "./sectorLabour";
-import { computeContractProduction } from "./contractProduction";
 import { advanceSectorInventory } from "@/lib/corporations/sectorInventory";
 import type { SectorTurnEnv, SectorTurnResult } from "./sectorTurnTypes";
 import { legacyRevenueShadowTelemetry, marketTelemetry } from "./sectorTelemetry";
@@ -138,22 +55,6 @@ import { resolveSectorCapacityHaircut } from "./sectorCapacityHaircut";
 
 export { computeSectorOutputUnits } from "./sectorOutputUnits";
 export type { SectorTurnEnv, SectorTurnResult } from "./sectorTurnTypes";
-
-/** Shared empty export-intensity map for countries with no exports this turn. */
-const EMPTY_EXPORT_INTENSITY: ReadonlyMap<CommodityType, number> = new Map();
-
-/** Multiply selected commodity rates by per-commodity multipliers (new map). */
-function scaleCommodityRates<T extends Partial<Record<string, number>>>(
-  rates: T,
-  mult: Record<string, number>
-): T {
-  if (!mult || Object.keys(mult).length === 0) return rates;
-  const out: Record<string, number | undefined> = { ...rates };
-  for (const [commodity, m] of Object.entries(mult)) {
-    if (out[commodity] != null) out[commodity] = (out[commodity] as number) * m;
-  }
-  return out as T;
-}
 
 import { computeIdleUpkeep } from "./sectorTurn/idleUpkeep";
 
@@ -331,104 +232,38 @@ export function processSector(
     lookups.extractionCapacityUtilBySector,
     currentTurn
   );
-  // Business Acumen no longer scales revenue — it now lowers growth cost and
-  // softens high interest rates (see calculateDailyGrowthCost above).
-  // Price realization (marketSystemMode >= "realization", audit t806 Fix 1):
-  // realized revenue is scaled by the lagged market price of the sector's
-  // output mix, so shortages finally reward producers and gluts bleed them.
-  // Weighted by pre-clamp strategy supply rates (the mix the sector sells),
-  // lagged one turn via lookups.priceRatioByCommodity, damped + clamped in
-  // computePriceRealization. Exactly 1 when the mode is off.
-  // Clearing (marketSystemMode >= "clearing", Fix 2): the pre-pass factor
-  // (soldFraction × (1+posture) × price leg) SUBSUMES plain realization —
-  // when clearing is on it replaces the Tier-1 multiplier, ramped in per
-  // sector so posture/volume shocks fade in like every other constraint.
-  const clearing = market.clearingEnabled
-    ? market.clearingBySectorId?.get(sector._id.toString())
-    : undefined;
-  const clearingStartTurn =
-    market.clearingEnabled && clearing && clearing.factor < 1
-      ? (sector.clearingStartTurn ?? currentTurn)
-      : sector.clearingStartTurn;
-  // Ramp only softens sub-1 factors (capacityHaircutFactor returns 1 for
-  // factor >= 1); premium upside applies immediately — upside needs no
-  // bankruptcy protection.
-  const clearingFactor = clearing
-    ? clearing.factor >= 1
-      ? clearing.factor
-      : capacityHaircutFactor(clearing.factor, clearingStartTurn, currentTurn)
-    : 1;
-  const priceRealization =
-    market.realizationEnabled && !market.clearingEnabled
-      ? computePriceRealization(strategyRates.supply, lookups.priceRatioByCommodity)
-      : 1;
-  // Throughput coupling (marketSystemMode >= "clearing", audit t806 D1):
-  // realized output is throttled by the scarcest available input (Leontief),
-  // using lagged local delivery availability when freight settlement is active
-  // and lagged global balances otherwise. A throttled sector therefore cannot
-  // deepen the shortage that throttled it within the same turn. Ramped in per
-  // sector over the same 240-turn window as the capacity haircut.
-  const throughputRaw = market.throughputEnabled
-    ? computeThroughput(
-        strategyRates.demand,
-        wideCommodityBalances,
-        lookups.stateInputAvailabilityByState.get(sector.stateId)
-      )
-    : { throughput: 1, bindingInput: null };
-  const throughputStartTurn =
-    market.throughputEnabled && throughputRaw.throughput < 1
-      ? (sector.throughputStartTurn ?? currentTurn)
-      : sector.throughputStartTurn;
-  // capacityHaircutFactor already ramps throughput in from 1 (flip = no-op).
-  // The launch-safety governor adds only the downside floor: an input-starved
-  // sector's revenue can't be cut more than `cap` below the ledger baseline
-  // (throughput's baseline is 1 — ledger has no input gate). No second ramp.
-  const throughputRamped = capacityHaircutFactor(
-    throughputRaw.throughput,
+  // ─── Market-tier realization legs (clearing / throughput / capital) ──────
+  // Pure computation in `sectorTurn/marketTiers.ts`; the orchestrator only
+  // threads its inputs and consumes the legs. Names are unchanged, so every
+  // reader below sees exactly what it saw before.
+  const {
+    clearing,
+    clearingStartTurn,
+    clearingFactor,
+    priceRealization,
+    throughputRaw,
     throughputStartTurn,
-    currentTurn
-  );
-  const governorCap = market.governorCap ?? MARKET_REALIZATION_DEVIATION_CAP;
-  const throughputFactor = market.throughputEnabled
-    ? Math.max(throughputRamped, 1 - governorCap)
-    : throughputRamped;
-  // Capital tier (marketSystemMode >= "capital", Fix 4 v1): capacity is
-  // seeded with headroom at first exposure (mode flip = no-op), advances
-  // with the growth slider minus depreciation, and gates realized output
-  // like geological capacity gates extraction. No ramp needed — the seed
-  // headroom IS the grace period; only sustained non-investment bites.
-  // Nameplate output units of the sector's (pre-realization) revenue base, on
-  // the same DAILY basis as `newRevenue`. Computed unconditionally because the
-  // P1 units telemetry below reports it in every mode; the capital tier still
-  // only gates on it when capital mode is on (0 otherwise, as before).
-  // `preFlipNameplateRevenue === newRevenue` in every mode below "plants", so
-  // this whole block is byte-identical outside plants; under plants it computes
-  // the pre-flip baseline the governor anchors on, and the authoritative plants
-  // capacity is derived from it just below.
-  const nameplateUnits = impliedOutputUnits(
+    throughputFactor,
+    governorCap,
+    nameplateUnits,
+    newCapitalStock,
+    capitalFactor,
+  } = computeMarketTiers({
+    sector,
+    market,
+    priceRatioByCommodity: lookups.priceRatioByCommodity,
+    stateInputAvailabilityByState: lookups.stateInputAvailabilityByState,
+    strategySupply: strategyRates.supply,
+    strategyDemand: strategyRates.demand,
+    wideCommodityBalances,
+    stateId: sector.stateId,
+    currentTurn,
     preFlipNameplateRevenue,
-    strategyRates.supply ?? {},
-    COMMODITY_BASE_PRICES,
-    lookups.eraUnitScale
-  );
-  const impliedUnits = market.capitalEnabled ? nameplateUnits : 0;
-  const newCapitalStock = market.capitalEnabled
-    ? advanceCapitalStock({
-        prevStock:
-          typeof sector.capitalStock === "number"
-            ? sector.capitalStock
-            : seedCapitalStock(
-                preFlipNameplateRevenue,
-                strategyRates.supply ?? {},
-                COMMODITY_BASE_PRICES,
-                lookups.eraUnitScale
-              ),
-        currentGrowthRate: perTurnGrowthRate,
-      })
-    : 0;
-  const capitalFactor = market.capitalEnabled
-    ? capitalUtilizationFactor(newCapitalStock, impliedUnits)
-    : 1;
+    perTurnGrowthRate,
+    eraUnitScale: lookups.eraUnitScale,
+  });
+  // (moved to computeMarketTiers: throughput coupling + downside floor)
+  // (moved to computeMarketTiers: capital tier + P1 nameplate units)
   // Plants tier: capacity is AUTHORITATIVE, not a haircut.
   //
   // Lazy per-sector flip migration — the first plants turn adopts
@@ -438,8 +273,6 @@ export function processSector(
   // implied (which is what makes the derived-revenue identity below exact for
   // it). Capacity then only DEPRECIATES this phase — the growth slider no
   // longer builds it; build orders arrive in P3.
-  const storedCapacity =
-    typeof sector.capitalStock === "number" && sector.capitalStock > 0 ? sector.capitalStock : 0;
   // ─── P3a: build queue ─────────────────────────────────────────────────────
   // Extracted whole to `sectorBuildQueueTurn.ts`: it is a pure computation and
   // this file was over the 2000 LOC block threshold. The WRITES stay below,
@@ -450,7 +283,6 @@ export function processSector(
     landedBuildUnits,
     landedBuildCostAnchor,
     flipGrowthCreditOrder,
-    nextBuildQueue,
     constructionInProgressAnchor,
     capacityUnitPriceAnchor,
   } = resolveBuildQueueTurn({
@@ -482,746 +314,171 @@ export function processSector(
   const cipAnchorDelta = Math.round(
     existingQueue.reduce((sum, o) => sum + costReleasedThisTurn(o, currentTurn), 0)
   );
-  // D12: a mothballed sector's plants are cold — they produce nothing, offer
-  // nothing (its persisted `producedUnits` is what the clearing pre-pass reads
-  // as its offer under plants, so 0 produced ⇒ 0 offered, automatically), and
-  // pay only MOTHBALL_UPKEEP_FRACTION of running maintenance.
-  const mothballed = plantsEnabled && sector.mothballed === true;
-  const activeFraction = plantsEnabled ? activeCapacityFraction(sector) : 1;
-  // The capacity the advance starts from, hoisted out of the `advanceCapitalStock`
-  // call below so the P5 book basis can be scaled by exactly the same
-  // depreciation factor the stock takes. See the long comment inside the call.
-  const plantsBaseStock = plantsEnabled
-    ? isFlipTurn
-      ? Math.max(
-          storedCapacity,
-          seedCapitalStock(
-            preFlipNameplateRevenue,
-            strategyRates.supply ?? {},
-            COMMODITY_BASE_PRICES,
-            lookups.eraUnitScale
-          )
-        )
-      : storedCapacity
-    : 0;
-  const plantLedger = plantsEnabled
-    ? advanceSectorPlantLedger(sector, plantsBaseStock, landedBuildUnits)
-    : null;
-  const plantsPrevStock = plantsBaseStock + landedBuildUnits;
-  const plantsOwnedCapacity = plantsEnabled
-    ? advanceCapitalStock({
-        // The max() is a ONE-TIME migration, keyed off the absent ramp anchor.
-        // Applying it every turn would re-lift capacity back to whatever the
-        // current revenue implies, which is exactly the compounding-nameplate
-        // behaviour plants removes — and would silently cancel depreciation.
-        //
-        // CAPITAL_SEED_HEADROOM on the nameplate arm ONLY: capital-mode seeding
-        // (seedCapitalStock) gives a sector 1.1x its implied units so it starts
-        // with slack rather than pinned at 100% utilization. Without the same
-        // factor here, any sector created AFTER the flip was born at exactly
-        // 100% utilization and began depreciating on turn one, while an
-        // otherwise identical sector that predated the flip carried slack — the
-        // sector's economics depended on which side of the flip it was created.
-        // `storedCapacity` is deliberately NOT scaled: a real stored capitalStock
-        // already contains its own headroom history (it was seeded with 1.1x and
-        // has depreciated/invested since), so re-applying the factor would
-        // silently gift capacity on every flip.
-        //
-        // P3a: capacity delivered by build orders that came online this turn is
-        // added BEFORE the advance, so a landed plant produces the turn it
-        // lands (and takes that turn's depreciation like every other unit - a
-        // ~0.05% haircut, not worth a special case).
-        // `seedCapitalStock` IS `impliedOutputUnits(...) x CAPITAL_SEED_HEADROOM`
-        // - the same expression the capital-mode seeding arm above uses. The two
-        // seeding paths must agree or a sector's capacity changes depending on
-        // which tier it was born in. Hoisted to `plantsBaseStock` above.
-        prevStock: plantsPrevStock,
-        currentGrowthRate: 0,
-      })
-    : 0;
-  // ─── P5: the PAID BASIS of that capacity ──────────────────────────────────
-  //
-  //   book_next = (book_prev + cash of the orders that just landed) × (the same
-  //               depreciation factor the stock just took)
-  //
-  // Scaling by the stock's own factor is what keeps the PER-UNIT basis flat
-  // under depreciation: units and the cash that bought them fall off together,
-  // so a plant half worn out books at half what was paid for it — never at half
-  // the LIST price, which is the mint this closes.
-  //
-  // The seed for a sector with no recorded basis is the list value of the stock
-  // it starts the turn with. Pre-plants capacity was bought through the legacy
-  // growth stack at exactly `capacityPricePerUnit` (identity B), so those units
-  // really did cost list; it is only the P3a build path's discounts that make
-  // list wrong going forward. This is also the same number
-  // `sectorCapacityBookAnchor`'s fallback returns, so the stamp is a no-op for
-  // valuation on the turn it happens.
-  //
-  // Capacity granted for free (an R&D breakthrough, a world grant, an
-  // autoSectorSeed multiplier) adds units without adding cash, so it DILUTES
-  // the per-unit basis. That is deliberate: free capacity has no paid basis,
-  // and must not be exitable for cash it never cost.
-  const plantsCapacityDepreciationFactor =
-    plantsPrevStock > 0 ? plantsOwnedCapacity / plantsPrevStock : 1;
-  const priorCapacityBookAnchor =
-    typeof sector.capacityBookAnchor === "number" &&
-    Number.isFinite(sector.capacityBookAnchor) &&
-    sector.capacityBookAnchor >= 0
-      ? sector.capacityBookAnchor
-      : plantsBaseStock * capacityUnitPriceAnchor;
-  const capacityBookAnchor = plantsEnabled
-    ? Math.max(
-        0,
-        (priorCapacityBookAnchor + landedBuildCostAnchor) * plantsCapacityDepreciationFactor
-      )
-    : 0;
-  // Price per output unit of the sector's mix — the inverse of the Σ rate/base
-  // term impliedOutputUnits applies, so `units × mixPrice` recovers the revenue
-  // those units imply. 0 only for a sector whose output mix genuinely prices to
-  // nothing (no output commodity with a positive rate AND a positive base).
-  //
-  // Derived from unit yield, not `revenue / nameplateUnits`: that ratio is the
-  // same number whenever revenue > 0, but 0/0 at a founding sector (capitalStock
-  // 0 plus a starter build) is an absorbing zero. Yield is scale-free, so it
-  // matches the positive-revenue case and keeps working at revenue 0.
-  const plantsMixPriceYield = plantsEnabled
-    ? unitYieldForSupply(strategyRates.supply ?? {}, lookups.eraUnitScale)
-    : 0;
-  const plantsMixPrice = plantsMixPriceYield > 0 ? 1 / plantsMixPriceYield : 0;
-  const storedOtherOpexAnchor =
-    typeof sector.otherOpexPerUnitAnchor === "number" &&
-    Number.isFinite(sector.otherOpexPerUnitAnchor)
-      ? sector.otherOpexPerUnitAnchor
-      : null;
-  // In-flight auto-retools historically rescaled capitalStock but left this
-  // per-unit residual on the old unit basis. Heal on the next sector-turn
-  // write while transitionFromStrategyId evidence remains; no mongo script.
-  const healedOpex = healAutoRetoolOpexAnchor({
-    plantsEnabled: plantsEnabled && !embargoLegacyMothball,
-    isAutoRetool: corp.ceoType === "npp" || sector.autoStrategyAdoptedAtTurn != null,
-    transitionFromStrategyId: sector.transitionFromStrategyId,
-    strategyId: sector.strategyId,
-    sectorType: sector.sectorType as CorporationType,
-    retoolRescaleApplied: sector.retoolRescaleApplied,
-    otherOpexPerUnitAnchor: storedOtherOpexAnchor ?? undefined,
-  });
-  const retoolBasis = {
-    sectorType: sector.sectorType,
-    strategyId: sector.strategyId,
-    transitionFromStrategyId: sector.transitionFromStrategyId,
-    transitionStartTurn: sector.transitionStartTurn,
-    retoolRescaleApplied: healedOpex?.retoolRescaleApplied ?? sector.retoolRescaleApplied,
-    operatingCapacityTurn: sector.operatingCapacityTurn,
+  // ─── Plants capacity advance + P5 paid basis ──────────────────────────────
+  // Pure computation in `sectorTurn/plantsCapacity.ts`; the orchestrator only
+  // threads its inputs and consumes the legs. Names are unchanged, so every
+  // reader below sees exactly what it saw before.
+  const {
+    mothballed,
+    activeFraction,
+    plantLedger,
+    plantsOwnedCapacity,
+    capacityBookAnchor,
+    plantsMixPrice,
+    storedOtherOpexAnchor,
+    healedOpex,
+    retoolCapacityRatio,
+    priorProductionUnitRatio,
+    plantsCapacity,
+    plantsNameplateRevenue,
+    plantsStartTurn,
+    plantsRampLambda,
+  } = computePlantsCapacity({
+    sector,
+    corp,
+    plantsEnabled,
+    isFlipTurn,
+    preFlipNameplateRevenue,
+    strategySupply: strategyRates.supply,
+    eraUnitScale: lookups.eraUnitScale,
+    landedBuildUnits,
+    landedBuildCostAnchor,
+    capacityUnitPriceAnchor,
+    newRevenue,
     currentTurn,
-  };
-  const retoolCapacityRatio = plantsEnabled ? retoolOperatingCapacityRatio(retoolBasis) : 1;
-  const plantsCapacity = plantsOwnedCapacity * retoolCapacityRatio;
-  const priorProductionUnitRatio = plantsEnabled ? retoolMeasurementRatio(retoolBasis) : 1;
-  // The nameplate plants writes back to `sector.revenue`: what the OWNED
-  // capacity is worth at mix prices. This keeps `revenue` a potential/nameplate
-  // figure (exactly as every other mode treats it) while making capacity — not
-  // last turn's compounding — the only thing that moves it.
-  //
-  // It must NOT be the realized figure. `sector.revenue` is re-read as next
-  // turn's `sectorRevenueAnchor` AND is the base the commodity supply ledger
-  // derives world supply from (computeRawSupplyDemand: revenue × rate / base).
-  // Persisting realized revenue would multiply the anchor by every realization
-  // leg once per turn, compounding them: a sector running at a steady 0.93
-  // price realization loses ~7%/turn of its base for as long as the mode is on
-  // (measured: −94% over 50 turns with flat capacity and flat produced units),
-  // dragging world commodity supply down with it. Capacity-implied revenue is
-  // invariant under that feedback because `plantsMixPrice` is 1/Σ(rate/base),
-  // independent of the revenue it was measured from.
-  //
-  // Sectors with no priced output mix (nameplateUnits 0 ⇒ mixPrice 0) have no
-  // capacity to price, so they hold the un-compounded anchor instead of being
-  // zeroed.
-  //
-  // Owned stock stays on the destination strategy basis. Temporary operating
-  // capacity uses the blended recipe, so capacity times mix price retains the
-  // same nameplate throughout a retool. Neither basis is quantized.
-  const plantsNameplateRevenue =
-    plantsEnabled && plantsMixPrice > 0 ? plantsCapacity * plantsMixPrice : newRevenue;
-  // Governor ramp anchor: stamped on the sector's FIRST plants turn and never
-  // moved, mirroring clearingStartTurn.
-  const plantsStartTurn = plantsEnabled
-    ? (sector.plantsStartTurn ?? currentTurn)
-    : sector.plantsStartTurn;
-  /**
-   * THE plants transition ramp, λ ∈ [0, 1]. 0 on the flip turn, reaching 1 over
-   * `governorRampTurns`. Every P3a leg that CHANGES a sector's steady-state
-   * economics must fade in on this, or the flip turn is not a no-op.
-   *
-   * Hoisted to one definition because P3a originally grew two: the idle-upkeep
-   * charge computed its own λ (and was correctly ramped), while the dominance
-   * toll consolidation was applied as a hard switch. That combination broke the
-   * flip identity for any sector above the dominance threshold — its margin
-   * penalty and regulatory burden both vanished on flip day, an ~7.5% cost drop
-   * (see `sectorTurn.p3aFlipIdentity.test.ts`). One λ, one meaning.
-   *
-   * SINGLE SOURCE OF TRUTH for the plants ramp inside this function — the
-   * idle-upkeep charge further down reads THIS const. Do not re-fork it; the
-   * budget-side mirror is `plantsUpkeepRampLambda` in
-   * `src/lib/budget/publicEnterpriseRevenue.ts`, which must stay in step.
-   */
-  const plantsRampLambda =
-    !plantsEnabled || plantsStartTurn == null || market.governorRampTurns <= 0
-      ? 1
-      : Math.max(0, Math.min(1, (currentTurn - plantsStartTurn) / market.governorRampTurns));
-  // Launch-safety governor: the clearing price/volume leg (clearingFactor)
-  // replaces the ledger's priceRealization, but on thin-margin corps a
-  // few-percent gap between the two swings earnings (and share prices) by
-  // 50-80% on flip. Bound clearing to within ±CAP of the ledger baseline and
-  // ramp that divergence in from 0, so the flip is a no-op and valuations
-  // drift instead of cratering. Scoped to the clearing leg only — capitalFactor
-  // (the deliberate capacity-decay gate for non-investment) still applies in
-  // full. Off-mode this is the plain priceRealization path (clearingFactor 1).
-  const clearingRevenueLeg = market.clearingEnabled
-    ? softenedMarketRealization(
-        computePriceRealization(strategyRates.supply, lookups.priceRatioByCommodity),
-        clearingFactor,
-        clearingStartTurn,
-        currentTurn,
-        market.governorCap,
-        market.governorRampTurns
-      )
-    : priceRealization;
-  // Trade-exposure embargo: fraction of this sector's output that clears abroad,
-  // from the prior turn's trade snapshot (same one-turn-lagged intensity the
-  // export premium uses). 0 unless the new model is active for this sector.
-  const embargoExportExposure = embargoTradeExposureActive
-    ? computeExportExposure(
-        strategyRates.supply,
-        lookups.exportIntensityByCountry.get(sector.countryId ?? corp.countryId) ??
-          EMPTY_EXPORT_INTENSITY
-      )
-    : 0;
-  // Revenue kept after the embargo strips its export leg: 0 under the legacy
-  // mothball, else the domestic remainder (1 − exported share), else 1.
-  const embargoRevenueFactor = embargoLegacyMothball
-    ? 0
-    : 1 - embargoExportExposure * TRADE_EMBARGO_EXPORT_LOSS_SHARE;
-  // ─── P3b scoped touch: ONE capacity system for extraction ────────────────
-  // (definition hoisted above `baselineHourlyRevenue` - that anchor now reads it
-  // too, so it must be in scope there.)
-  //
-  // Below plants an extraction sector is gated by TWO capacity systems at once:
-  // its own capital stock (the capital tier) and the state's geology, and the
-  // geological leg arrives as a soft REVENUE haircut - floored at
-  // EXTRACTION_CAPACITY_HAIRCUT_FLOOR (0.5) and faded in over a 240-turn
-  // per-sector grace window.
-  //
-  // Under plants, capacity IS the production base, so the deposit is a HARD
-  // ceiling on the same quantity:
-  //
-  //     producedUnits = min(plant-driven produced, state resource remaining)
-  //
-  // No 0.5 floor, no 240-turn per-sector grace - the plants ramp below is the
-  // only fade-in, and it is the same one every other plants leg uses.
-  //
-  // FLIP IDENTITY: `plantsRampLambda` is 0 on the sector's first plants turn, so
-  // the factor is exactly 1 there. Non-extraction sectors have utilization 1 and
-  // are unaffected; non-plants worlds keep `capacityHaircut` (floor + 240-turn
-  // ramp) byte-identically.
-  const plantsExtractionHardMin =
-    plantsEnabled && sector.sectorType === "extraction"
-      ? 1 - plantsRampLambda * (1 - Math.max(0, Math.min(1, capacityUtil.utilization)))
-      : 1;
-  const activeExtractionHardMin = activeCapacityConstraintFactor(
+    governorRampTurns: market.governorRampTurns,
+    embargoLegacyMothball,
+  });
+  // (moved to computePlantsCapacity: plant ledger + owned-capacity advance)
+  // (moved to computePlantsCapacity: P5 paid basis of capacity)
+  // (moved to computePlantsCapacity: mix price, opex heal, retool ratios)
+  // (moved to computePlantsCapacity: nameplate revenue, ramp anchor + λ)
+  // ─── Margin stack (tariffs / subsidies / supply / policy) ────────────────
+  // Pure computation in `sectorTurn/marginStack.ts`; the orchestrator only
+  // threads its inputs and consumes the legs. Runs before the revenue
+  // resolution because the P3.5 disaster split it owns feeds tonnage.
+  const corpCountry = corp.countryId;
+  const politicalBoard = lookups.politicalBoardByState?.get(sector.stateId);
+  const {
+    disasterOutputFactor,
+    effectiveDemand,
+    commodityMod,
+    surplusMod,
+    exportPremiumMod,
+    sectorTypeMatchMod,
+    inflationMod,
+    debtToGdpMod,
+    deficitMod,
+    stateMetricMargin,
+    totalMarginMod,
+    disasterMarginMod,
+    nationalizedMarginPenalty,
+    effectiveMargin,
+  } = accumulateMarginModifiers({
+    corp,
+    sector,
+    lookups,
+    strategySupply: strategyRates.supply,
+    strategyDemand: strategyRates.demand,
+    strategyIsTransitioning: strategyRates.isTransitioning,
+    techEffects,
+    sectorMarketSharePct,
+    nationalDominanceSharePct,
+    sectorCountryId,
+    corpCountry,
+    turn,
+    currentTurn,
+    plantsEnabled,
+    plantsRampLambda,
+    newNegativeProductionTurns,
+    newPolicyLevel,
+    embargoTradeExposureActive,
+    soeConcentrationMultiplier,
+    corpSectorCount,
+    strikeMarginModifier,
+    wideCommodityBalances,
+    politicalBoard,
+  });
+  // ─── P3b extraction capacity + realized revenue ───────────────────────────
+  // Pure computation in `sectorTurn/plantsRevenue.ts`; the orchestrator only
+  // threads its inputs and consumes the legs. Names are unchanged.
+  const {
     plantsExtractionHardMin,
-    activeFraction
-  );
-  // `baselineHourlyRevenue` is the pre-plants COUNTERFACTUAL. Under plants it is
-  // the governor's clamp anchor, so it must carry the legs capital mode carried
-  // (`capacityHaircut` and `capitalFactor`). Gating them off here jumps the
-  // anchor on flip (λ = 0 returns the anchor verbatim). Do not "fix" the
-  // asymmetry. Not a compounding decay: under plants `sector.revenue` was
-  // restated as `plantsCapacity x plantsMixPrice`, so the haircut multiplies the
-  // anchor once per turn at a constant level. `governorEffectiveCap` drops the
-  // clamp at full ramp; after that `plantsExtractionHardMin` and capacity price
-  // it.
-  const baselineHourlyRevenue =
-    ((plantsEnabled && strategyRates.isTransitioning && retoolCapacityRatio !== 1
-      ? plantsNameplateRevenue
-      : preFlipNameplateRevenue) /
-      TURNS_PER_DAY) *
-    revenueMultiplier *
-    nationalizationTransition *
-    capacityHaircut *
-    clearingRevenueLeg *
-    throughputFactor *
-    capitalFactor *
-    labourOutputFactor *
-    // Embargo: legacy total mothball earns nothing (factor 0); the trade-exposure
-    // model keeps the domestic remainder (1 − exported share). 1 when unembargoed.
-    embargoRevenueFactor;
+    producedUnits,
+    soldUnits,
+    contractAchievableUnits,
+    demandThrottleFactor,
+    embargoExportExposure,
+    hourlyRevenue,
+    capacityBindingEvent,
+  } = resolvePlantsRevenue({
+    sector,
+    corp,
+    strategySupply: strategyRates.supply,
+    techEffects,
+    plantsEnabled,
+    mothballed,
+    nameplateUnits,
+    activeFraction,
+    plantsRampLambda,
+    capacityUtil,
+    capacityHaircut,
+    capitalFactor,
+    clearing,
+    clearingEnabled: market.clearingEnabled,
+    clearingFactor,
+    clearingStartTurn,
+    currentTurn,
+    priceRealization,
+    priceRatioByCommodity: lookups.priceRatioByCommodity,
+    embargoLegacyMothball,
+    embargoTradeExposureActive,
+    exportIntensityByCountry: lookups.exportIntensityByCountry,
+    preFlipNameplateRevenue,
+    plantsNameplateRevenue,
+    revenueMultiplier,
+    nationalizationTransition,
+    throughputFactor,
+    labourOutputFactor,
+    strategyIsTransitioning: strategyRates.isTransitioning,
+    retoolCapacityRatio,
+    priorProductionUnitRatio,
+    disasterOutputFactor,
+    newPolicyLevel,
+    plantsCapacity,
+    plantsMixPrice,
+    plantsStartTurn,
+    governorCap,
+    governorRampTurns: market.governorRampTurns,
+    privateBankingEnabled: env.privateBankingEnabled,
+    marketPlantsEnabled: market.plantsEnabled,
+    contractProductionTargetBySectorId: market.contractProductionTargetBySectorId,
+  });
+  if (capacityBindingEvent) {
+    pendingCapacityBindingEvents.push(capacityBindingEvent);
+  }
+  // (moved to resolvePlantsRevenue: trade-exposure embargo legs)
+  // (moved to resolvePlantsRevenue: P3b extraction hard min)
+  // (moved to resolvePlantsRevenue: pre-plants counterfactual baseline)
   // P1 units telemetry: the production-side legs of the chain above — the ones
   // that gate how much the sector can physically make. The remaining legs
   // (clearingRevenueLeg, embargoRevenueFactor) are sales-side and stay on the
   // dollar side of the identity documented on computeSectorOutputUnits.
-  // P3a scoped touch #1 — tech output rate reaches the PLANTS units chain.
-  //
-  // `techEffects.outputRateMult` is applied to the supply rates the sector
-  // reports to the commodity ledger (`effectiveSupply`, below). Under plants
-  // that left the effect half-wired: the world received the extra steel, but the
-  // sector's own `producedUnits` — hence its derived revenue — never moved,
-  // because units come from `capitalStock` rather than from the supply rates.
-  // `techOutputUnitsMultiplier` is the same scaling expressed in capacity units
-  // (a unit-contribution-weighted mean of the per-commodity multipliers), so the
-  // two statements agree.
-  //
-  // FLIP IDENTITY: the multiplier is exactly 1 for an empty `outputRateMult` —
-  // every corp without the tech, and every world with the tech tree off — so the
-  // flip turn is unchanged. Plants-gated so non-plants behaviour is byte-identical.
-  const plantsTechOutputMultiplier = plantsEnabled
-    ? techOutputUnitsMultiplier(strategyRates.supply, techEffects.outputRateMult)
-    : 1;
-  // P3.5 SEAM — active-disaster penalties are split at their source
-  // (disasterMarginPenalty.ts) into a financial leg and a physical leg. This is
-  // hoisted above `productionFactor` because the physical leg must gate TONNAGE:
-  // pre-P3.5 a blackout shipped a full load at a thinner margin. The financial
-  // leg is consumed unchanged further down, in `totalMarginMod`.
-  // FLIP IDENTITY: below plants, and for any crisis effect with no
-  // `physicality` (i.e. every crisis spawned before P3.5), the split puts the
-  // whole penalty in `marginPenalty` and `disasterProductionFactor` returns
-  // exactly 1 — non-plants behaviour is byte-identical.
-  const disasterPenalty = computeDisasterPenaltySplit(
-    lookups.activeDisasterEffectsByState.get(sector.stateId) ?? [],
-    { sectorType: sector.sectorType, strategyId: sector.strategyId ?? null },
-    currentTurn,
-    plantsEnabled
-  );
-  // FLIP-DAY HANDOVER. Fade the physical leg in on `plantsRampLambda`, same
-  // rule as every other plants leg. A partition, not a duplication: λ of the
-  // penalty drives tonnage, (1 - λ) stays in the margin stack, and the two
-  // always sum to the pre-P3.5 total. At λ = 0 that is `productionPenalty x 0
-  // === 0` and `marginPenalty + productionPenalty` - the old number, exactly.
-  // At λ = 1 the whole physical penalty is tonnage, which is the wave's intent.
-  const disasterPhysicalRamped = disasterPenalty.productionPenalty * plantsRampLambda;
-  const disasterPhysicalDeferred = disasterPenalty.productionPenalty - disasterPhysicalRamped;
-  const disasterOutputFactor = disasterProductionFactor(disasterPhysicalRamped);
-  // Ticket #1072: which production-policy curve throttles TONNAGE.
-  //
-  // The policy slider publishes two curves: an OUTPUT curve (−10%…+15%, what
-  // the UI labels as the units effect) and a REVENUE curve (−5%…+10%). Under
-  // plants, revenue is DERIVED from tonnage, so exactly one of them may gate
-  // `productionFactor` or the slider gets counted twice on the top line.
-  //
-  // It used to be the revenue curve, and the output curve was applied only
-  // where output LEFT the sector — the world-supply ledger and the clearing
-  // offer, both via `plantsSupplyScaledUnits`. Two things broke from that. The
-  // units on screen moved on the wrong curve (−4.4% at policy −22, against the
-  // −8.8% the panel promised), and, worse, the offer was the produced tonnage
-  // scaled AGAIN by the output curve, so ~9% of every throttled run was
-  // physically unsellable: built, paid for, never offered, piling up as unsold
-  // inventory the owner is charged to hold. With 100% market share no price
-  // move could clear it, because it was never on the book.
-  //
-  // So under plants the OUTPUT curve gates tonnage, the revenue curve steps
-  // aside, and `plantsSupplyScaledUnits` no longer re-applies output. The chain
-  // is applied exactly once and produced == offered.
-  //
-  // FLIP IDENTITY: at policy 0 both curves are 1.0, so nothing moves. Non-plants
-  // worlds are untouched — there `producedUnits` is the revenue nameplate and
-  // the ledger still owns the output curve on that path.
-  const policyTonnageMultiplier = plantsEnabled
-    ? getOutputMultiplier(newPolicyLevel)
-    : revenueMultiplier;
-  const productionFactor =
-    disasterOutputFactor *
-    policyTonnageMultiplier *
-    nationalizationTransition *
-    (plantsEnabled ? activeExtractionHardMin : capacityHaircut) *
-    throughputFactor *
-    // Under plants, capacity IS the production base (see plantsCapacity), so
-    // folding the capacity/implied-units haircut in here as well would gate the
-    // same constraint twice.
-    (plantsEnabled ? 1 : capitalFactor) *
-    plantsTechOutputMultiplier *
-    labourOutputFactor;
-  // Locked decision 18: chartered financial capacity is split between commodity
-  // financial_services output and the branch network (deposit ceiling). Scale
-  // only the capacity that enters production; stored capitalStock is untouched.
-  // Gated on privateBankingEnabled + ACTIVE charter — zero change otherwise.
-  const bankingCommodityScale =
-    sector.sectorType === "financial"
-      ? commodityProductionCapacityScale(corp.bankCharter, env.privateBankingEnabled === true)
-      : 1;
-  const productionNameplateUnits = plantsEnabled
-    ? mothballed
-      ? 0
-      : plantsCapacity * bankingCommodityScale * activeFraction
-    : nameplateUnits * bankingCommodityScale;
-  const production = computeContractProduction({
-    plantsEnabled,
-    actualNameplateUnits: productionNameplateUnits,
-    actualProductionFactor: productionFactor,
-    fullPolicyNameplateUnits: plantsCapacity * bankingCommodityScale,
-    involuntaryProductionFactor:
-      disasterOutputFactor *
-      nationalizationTransition *
-      plantsExtractionHardMin *
-      throughputFactor *
-      plantsTechOutputMultiplier *
-      labourOutputFactor,
-    priorSoldUnits:
-      sector.soldUnits == null ? sector.soldUnits : sector.soldUnits * priorProductionUnitRatio,
-    priorProducedUnits:
-      sector.producedUnits == null
-        ? sector.producedUnits
-        : sector.producedUnits * priorProductionUnitRatio,
-    guaranteedDemandUnits: market.plantsEnabled
-      ? market.contractProductionTargetBySectorId?.get(sector._id.toString())
-      : undefined,
-    soldFraction: market.clearingEnabled && clearing ? clearing.soldFraction : null,
-  });
-  const { producedUnits, soldUnits, contractAchievableUnits, demandThrottleFactor } = production;
-  // Plants: revenue is DERIVED from produced output, exactly inverting the P1
-  // identity (producedUnits × mixPrice × sales legs == realizedRevenue). At the
-  // flip, capacity == impliedOutputUnits(nameplate) and every leg is unchanged,
-  // so this reproduces the old realized revenue EXACTLY — which is why the
-  // migration above seeds capacity from implied units.
-  // Tech price-realization: multiplies realised revenue only, beside the
-  // clearing leg. Deliberately NOT on `plantsMixPrice` (which would inflate the
-  // nameplate, the world supply ledger and idle upkeep) and NOT on the
-  // clearing/priceRealization factor (which feeds the launch governor and
-  // would clamp the bonus during the ramp).
-  const plantsTechPriceLeg = 1 + techEffects.priceRealizationBonus;
-  const plantsDerivedHourlyRevenue = plantsEnabled
-    ? ((producedUnits * plantsMixPrice) / TURNS_PER_DAY) *
-      clearingRevenueLeg *
-      embargoRevenueFactor *
-      plantsTechPriceLeg
-    : 0;
-  // Launch-safety governor, same shape as the clearing leg: bound the derived
-  // revenue to within ±capEffective(λ) of the pre-flip baseline and fade that
-  // divergence in from zero over the ramp, anchored at the sector's first plants
-  // turn. λ = 0 on the flip turn ⇒ returns the baseline exactly, so a sector
-  // arriving with capital-mode headroom (capacity 1.1× implied units) does not
-  // jump 10% on day one — it drifts there over the ramp.
-  //
-  // C5: this is an AMOUNT, so it uses the AMOUNT variant. The factor variant
-  // substitutes the baseline whenever its market input is <= 0, which is right
-  // for a factor and catastrophic for an amount: a sector that produced nothing
-  // (halted, unstaffed, output-less) was handed its FULL baseline revenue with
-  // none of the costs — roughly a 6x profit pump — and the boundary was
-  // discontinuous, since an epsilon of production earned 85% of nameplate while
-  // exactly zero earned 100%. `softenedMarketRealizationAmount` takes zero
-  // literally, so the halt is continuous and, at full ramp, lands on 0.
-  //
-  // A zero BASELINE (legacy embargo mothball, dead sector) has no anchor to
-  // govern against, and the amount variant passes the derived value through.
-  //
-  // D12: a mothballed sector earns exactly 0. This stays an explicit bypass
-  // rather than relying on the general rule: it documents the intent, and it
-  // holds even mid-ramp, where the general rule would still blend a cold plant
-  // part-way toward its running baseline.
-  const marketHourlyRevenue = mothballed
-    ? 0
-    : plantsEnabled
-      ? softenedMarketRealizationAmount(
-          baselineHourlyRevenue * activeFraction,
-          plantsDerivedHourlyRevenue,
-          plantsStartTurn,
-          currentTurn,
-          market.governorCap,
-          market.governorRampTurns
-        )
-      : baselineHourlyRevenue;
-  // Final realization leg: output shipped to a government arsenal under a defence contract
-  // was already paid for per lot, and does not also get sold on the market. Without this the
-  // plant earned its full market revenue AND the contract price for the same production — one
-  // plant's output paid for twice, scaling with however many contracts a minister wrote.
-  // The matching deduction on the goods side lives in `computeRawSupplyDemand`.
-  const militaryDivertedFraction = freshMilitaryDiversion(sector, currentTurn);
-  const hourlyRevenue = marketHourlyRevenue * (1 - militaryDivertedFraction);
-  // Emit a notification event when a sector newly crosses into capacity-bound
-  // territory (was unbound/undefined last turn, now below the threshold).
-  if (
-    sector.sectorType === "extraction" &&
-    capacityUtil.bindingResource != null &&
-    capacityUtil.utilization < CAPACITY_BINDING_THRESHOLD &&
-    (sector.capacityUtilization == null || sector.capacityUtilization >= CAPACITY_BINDING_THRESHOLD)
-  ) {
-    pendingCapacityBindingEvents.push({
-      sectorId: sector._id.toString(),
-      corporationId: corp._id.toString(),
-      stateId: sector.stateId,
-      bindingResource: capacityUtil.bindingResource,
-      utilization: capacityUtil.utilization,
-    });
-  }
-  // Tariff modifiers: foreign corps pay a rate-proportional margin penalty;
-  // domestic corps absorb a smaller supply-chain friction malus from broad tariffs.
-  // Blend weights shift toward local commodity data when tariffs are in effect,
-  // reflecting that import costs push buyers toward domestic alternatives.
-  const corpCountry = corp.countryId;
-  const foreignTariffMod =
-    getForeignTariffMarginModifier(
-      lookups.allTariffs,
-      sectorCountryId,
-      sector.sectorType,
-      corpCountry,
-      corp._id,
-      lookups.activeFtaPairs
-    ) *
-    (1 - techEffects.tariffShield);
-  const domesticTariffMod = getDomesticTariffMalus(
-    lookups.allTariffs,
-    sectorCountryId,
-    sector.sectorType,
-    corpCountry,
-    lookups.ftaCoverage
-  );
-  // Subsidy bonus: +7.5pp of margin per qualifying active subsidy (federal and state stack freely)
-  const subsidyMod = getSubsidyMarginModifier(
-    lookups.activeSubsidies,
-    corp.headquartersState,
-    sector.sectorType,
-    sector.stateId,
-    sector.strategyId,
-    sectorCountryId,
-    corpCountry
-  );
-  const { globalWeight, nationalWeight, localWeight } = getTariffBlendWeights(
-    lookups.allTariffs,
-    sectorCountryId,
-    sector.sectorType,
-    lookups.sectorPresenceKeys,
-    lookups.ftaCoverage
-  );
-  const nationalBalances =
-    lookups.nationalCommodityBalancesByCountry.get(sectorCountryId) ?? new Map();
-  // Commodity shortage modifier: logarithmic penalty for input shortages.
-  // The blended modifier uses `strategyRates` (resolved above) so it
-  // reflects what the sector actually produces/consumes on its current
-  // strategy — without that override, sectors on non-standard strategies
-  // would be priced against SECTOR_DEMAND/SECTOR_SUPPLY (the "standard" recipe).
-  const stateBalances = lookups.rawStateBalances.get(sector.stateId) ?? new Map();
-  const baseSupply = applyExtractionResourceCapacityToSupply(
-    sector.sectorType,
-    strategyRates.supply,
-    lookups.stateResourceCapacityByState.get(sector.stateId)
-  );
-  // Tech production-method effects: scale specific commodity output up and
-  // input (demand) down. No-op for commodities a node doesn't target.
-  const effectiveSupply = scaleCommodityRates(baseSupply, techEffects.outputRateMult);
-  const effectiveDemand = scaleCommodityRates(strategyRates.demand, techEffects.inputRateMult);
-  const { inputMod: commodityMod, surplusMod } = computeBlendedMarginModifiers(
-    sector.sectorType,
-    wideCommodityBalances,
-    nationalBalances,
-    stateBalances,
-    globalWeight,
-    nationalWeight,
-    localWeight,
-    effectiveSupply,
-    effectiveDemand
-  );
-  // Export reward: a margin premium for producing a commodity this country
-  // actually exports into foreign deficits (export intensity from the prior
-  // turn's trade snapshot, one-turn lag like the commodity balances above).
-  // Empty map before the first trade turn → 0.
-  // Under the trade-exposure embargo the sector's remaining sales are domestic,
-  // so it no longer earns the export-reward margin premium.
-  const exportPremiumMod = embargoTradeExposureActive
-    ? 0
-    : computeExportPremium(
-        effectiveSupply,
-        lookups.exportIntensityByCountry.get(sectorCountryId) ?? EMPTY_EXPORT_INTENSITY
-      );
-  // Home state +10%, home nation +5%, international 0%
-  const homeLocationMod = getHomeLocationMarginBonus(
-    sector.stateId,
-    corp.headquartersState,
-    sector.countryId,
-    corp.countryId
-  );
-  const stateSectorSpecializationMod = getStateSectorSpecializationMarginBonus(
-    lookups.stateSectorSpecializationByState.get(sector.stateId),
-    sector.sectorType as CorporationType
-  );
-  // Sector type match: +10pp primary, +5pp secondary, -15pp mismatch. SOEs are
-  // exempt - a NatCorp is a diversified state holding company, not a
-  // specialized private firm (Bug #0775).
-  const sectorTypeMatchMod = isStateOwned(corp)
-    ? 0
-    : getSectorTypeMatchModifier(
-        sector.sectorType as CorporationType,
-        corp.type,
-        corp.secondaryType
-      );
-  // Logistical sprawl: -0.5% per 2 sectors over 15 for a single-type corp
-  // (-1.0% per pair if dual-type). Logistics spending raises the threshold
-  // (15 at LS 0, 30 at LS 200) and halves the rate at LS 200. SOEs are exempt
-  // - they accumulate sectors by nationalization.
-  const sprawlMod = isStateOwned(corp)
-    ? 0
-    : getSprawlModifier(corpSectorCount, corp.logisticsStrength ?? 0, !!corp.secondaryType);
-  // National-level macroeconomic modifiers (inflation, debt-to-GDP, deficit)
-  const inflationMod = lookups.macroInflationByCountry.get(sectorCountryId) ?? 0;
-  const debtToGdpMod = lookups.macroDebtToGdpByCountry.get(sectorCountryId) ?? 0;
-  const deficitMod = lookups.macroDeficitByCountry.get(sectorCountryId) ?? 0;
-  // Sovereign-default sector margin penalty (Phase 7) — local + global contagion
-  // already aggregated per-corp in buildLookups. Defaults to 0 outside a crisis.
-  const sovereignDefaultMod = lookups.sovereignDefaultMarginByCorpId.get(corp._id.toString()) ?? 0;
-  // Operating strategy: −5% margin penalty while transitioning between strategies.
-  // `strategyRates` was resolved once above (haircut / realization / modifier); reuse it.
-  // Penalty scales with progress: no disruption at turn 0, full −5% at turn 12.
-  // Falls back to full penalty if transitionStartTurn is missing (legacy safety).
-  const transitionProgress =
-    strategyRates.isTransitioning && sector.transitionStartTurn != null
-      ? Math.min(
-          1,
-          Math.max(0, ((turn ?? 0) - sector.transitionStartTurn) / STRATEGY_TRANSITION_TURNS)
-        )
-      : 0;
-  const strategyMarginMod = strategyRates.isTransitioning
-    ? sector.transitionStartTurn != null
-      ? transitionProgress * STRATEGY_TRANSITION_MARGIN_PENALTY
-      : STRATEGY_TRANSITION_MARGIN_PENALTY
-    : 0;
-  const stateMetricMargin = computeStateMetricMarginModifier({
-    sectorType: sector.sectorType as CorporationType,
-    strategyId: sector.strategyId ?? "standard",
-    transitionFromStrategyId: sector.transitionFromStrategyId,
-    transitionProgress,
-    stateMetrics: lookups.stateMetricsByState?.get(sector.stateId) ?? null,
-    countryId: sectorCountryId,
-    // Live year for the era existence gate; null while the flag is off.
-    year: lookups.eraYear ?? null,
-    // SP4 §4a: political margin overlay for playable regions.
-    politicalBaseModifiers: lookups.politicalBaseModifiersByState?.get(sector.stateId) ?? null,
-  });
-  // Type switch penalty: -10% for 24 turns after switching primary/secondary type
-  const typeSwitchPenaltyActive =
-    corp.typeSwitchTurn != null &&
-    turn != null &&
-    turn - corp.typeSwitchTurn < TYPE_SWITCH_PENALTY_TURNS;
-  const typeSwitchMod = typeSwitchPenaltyActive ? TYPE_SWITCH_MARGIN_PENALTY : 0;
-  // Dominance margin penalty: 0 at ≤50% share, scales to -15pp at 100%.
-  // Models regulatory pressure, customer backlash, and political risk that
-  // accumulate as a sector tightens its grip on its (state, sectorType).
-  // SOEs are exempt — a nationalized industry is a state monopoly by design,
-  // so anti-trust/political-risk dominance pressure doesn't fit (Bug #0775).
-  // P3a scoped touch #2a — DOMINANCE TOLL CONSOLIDATION (plants only).
-  // Under plants, dominance is charged ONCE, at build time, as a multiplier on
-  // the capacity price (`computeBuildCost`, which documents the design in full).
-  // Keeping this permanent margin penalty as well would triple-charge the same
-  // condition alongside the revenue tax below, on a tier where capacity is
-  // bought outright rather than accrued off a cheap slider. Dominance under
-  // plants is a barrier to EXPANSION, not a tax on operating.
-  // SOEs remain exempt in every mode (a nationalized industry is a state
-  // monopoly by design, Bug #0775). Non-plants worlds are unchanged.
-  // Under plants the toll is FADED OUT over `plantsRampLambda` rather than
-  // switched off: λ = 0 on the flip turn keeps flip-day numbers byte-identical
-  // for a dominant sector, rising to a full consolidation over the same ramp
-  // every other plants leg uses.
-  const dominanceMarginPenalty = isStateOwned(corp)
-    ? 0
-    : Math.min(
-        getDominanceMarginPenalty(sectorMarketSharePct),
-        getNationalDominanceMarginPenalty(nationalDominanceSharePct)
-      ) *
-      (1 - techEffects.dominanceShield) *
-      (plantsEnabled ? 1 - plantsRampLambda : 1);
-  // Sustained-negative-production margin penalty: counter-driven, see
-  // `getSustainedNegativeProductionPenalty`. Punishes long-term parking at
-  // negative production levels without preventing tactical short-term use.
-  const negativeProductionMarginPenalty = getSustainedNegativeProductionPenalty(
-    newNegativeProductionTurns,
-    newPolicyLevel
-  );
-  // ── Margin modifier accumulation ──────────────────────────────────────────────
-  // All modifiers are additive percentage-point adjustments to sector.profitMargin.
-  // Positive = boost to profitability; negative = drag.
-  // The total is uncapped here; effectiveMargin below clamps the result to ≤100,
-  // but negative effective margins are intentional — loss-making sectors drain cash.
-  // See docs/design/corporations.md for modifier magnitudes and balance rationale.
-  // Expropriation-risk drag (spec §12.4 feed 1): low investor confidence drags
-  // PRIVATE corp margins; SOEs are exempt (the state cannot expropriate itself).
-  const expropriationRiskMod = isStateOwned(corp)
-    ? 0
-    : getExpropriationRiskMarginModifier(
-        lookups.investorConfidenceByCountry?.get(sectorCountryId) ?? null
-      );
-  // §6.2 (P7b): corp alignment to the country's (lagged) economic model —
-  // favored sectors earn higher margins, off-model a mild penalty. 0 when no
-  // named model / mixed (parity). Applies to SOEs too: the state's identity favors its
-  // own strategic sectors.
-  const economicModelAlignmentMod = corpAlignmentModifier(
-    lookups.economicModelByCountry?.get(sectorCountryId),
-    sector.sectorType as string
-  );
-  // P3.5: financial leg only. The physical leg was consumed above as a
-  // production haircut (`disasterOutputFactor`); adding it here too would
-  // charge the same disaster twice. `disasterPhysicalDeferred` is the part of
-  // the physical leg the plants ramp has not taken over yet (all of it on the
-  // flip turn, none of it once λ reaches 1) — it stays a margin hit so the two
-  // legs partition the penalty instead of dropping a slice of it.
-  const disasterMarginMod = disasterPenalty.marginPenalty + disasterPhysicalDeferred;
-  const regionalConditionMarginMod =
-    lookups.regionalConditionMarginByState?.get(sector.stateId) ?? 0;
-  // v3 Phase 6: margin hit while a strike is active. The production leg was
-  // already consumed through the shared labour output factor above.
-  const strikeMarginMod = strikeMarginModifier;
-  const totalMarginMod =
-    stateMetricMargin.cappedTotal +
-    commodityMod +
-    surplusMod +
-    exportPremiumMod +
-    homeLocationMod +
-    stateSectorSpecializationMod +
-    sectorTypeMatchMod +
-    sprawlMod +
-    inflationMod +
-    debtToGdpMod +
-    deficitMod +
-    strategyMarginMod +
-    typeSwitchMod +
-    foreignTariffMod +
-    domesticTariffMod +
-    subsidyMod +
-    sovereignDefaultMod +
-    dominanceMarginPenalty +
-    expropriationRiskMod +
-    economicModelAlignmentMod +
-    negativeProductionMarginPenalty +
-    disasterMarginMod +
-    regionalConditionMarginMod +
-    techEffects.marginBonusPp +
-    strikeMarginMod;
-  // Dynamic SOE efficiency (spec §11.3) replaces the old flat −15%. Driven
-  // by state governance quality + the sector's price-control posture; private
-  // corps get 0. Same shared function feeds the budget estimate + display.
+  // (moved to resolvePlantsRevenue: tech output rate in capacity units)
+  // (moved to accumulateMarginModifiers: P3.5 disaster split partition)
+  // (moved to resolvePlantsRevenue: tonnage policy curve + production factor)
+  // (moved to resolvePlantsRevenue: banking split + contract production)
+  // (moved to resolvePlantsRevenue: derived revenue from produced output)
+  // (moved to resolvePlantsRevenue: launch-safety governor + arsenal leg)
+  // (moved to resolvePlantsRevenue: capacity-binding event, pushed above)
+  // (moved to accumulateMarginModifiers: tariffs, subsidies, supply scaling)
+  // (moved to accumulateMarginModifiers: export/macro/strategy/state metrics)
+  // (moved to accumulateMarginModifiers: dominance + negative-production)
+  // (moved to accumulateMarginModifiers: expropriation/alignment/disaster/total)
+  // (moved to accumulateMarginModifiers: SOE efficiency + effective margin)
+  // Labour telemetry below reads raw state metrics directly; the political
+  // board it also needs was hoisted next to the margin call above.
   const sectorMetrics = lookups.stateMetricsByState?.get(sector.stateId) ?? null;
-  // SP4: playable regions' governance reads come from the political board
-  // (their political stateMetrics are demolished) — legacy scales preserved,
-  // including the corruption inversion (politicalSoeInputs).
-  const politicalBoard = lookups.politicalBoardByState?.get(sector.stateId);
-  const politicalSoe = politicalBoard ? politicalSoeInputs(politicalBoard) : null;
-  const soeMandate = resolveSectorMandate(corp, sector);
-  const nationalizedMarginPenalty = isStateOwned(corp)
-    ? computeSoeEfficiencyPenalty({
-        corruptionIndex:
-          sectorMetrics?.governance?.corruptionIndex?.value ??
-          politicalSoe?.corruptionIndex ??
-          null,
-        governmentTransparency:
-          sectorMetrics?.governance?.governmentTransparency?.value ??
-          politicalSoe?.governmentTransparency ??
-          null,
-        priceControlled: soeMandate.priceControlled === true,
-        employmentGuaranteed: soeMandate.employmentGuaranteed === true,
-        concentrationMultiplier: soeConcentrationMultiplier,
-      })
-    : 0;
-  // Margin can go negative — sectors in terrible commodity markets drain cash.
-  // The high side is soft-capped (not a hard min(100)) so a stacked modifier
-  // pile asymptotes toward the ceiling instead of pinning it as free profit.
-  const effectiveMargin = softCapEffectiveMargin(
-    sector.profitMargin + totalMarginMod + nationalizedMarginPenalty
-  );
   // Ahead of the labor-cost split below, so labor is workers x wage-per-worker.
   const { desiredWorkers, workers: computedWorkers } = resolveSectorHeadcount({
     revenue: plantsEnabled ? plantsNameplateRevenue * activeFraction : newRevenue,
@@ -1274,42 +531,19 @@ export function processSector(
   });
   // Apply operating savings after payroll has been priced at its existing basis.
   const maintenance = maintenanceBeforeSpecialization - operatingSaving;
-  // Growth cost must be charged on the revenue the sector ACTUALLY realises, not
-  // on its nominal book revenue.
-  //
-  // `newGrowthCost` is derived from raw `newRevenue`, while `hourlyRevenue` is
-  // that same figure after seven realisation factors (capacity haircut, price
-  // realisation, clearing, throughput, capital utilisation, strike throttle,
-  // embargo). Measured on the completed 1000-turn run, realisation averaged
-  // 0.417 while growth cost ran at 0.246 of nominal revenue — so expansion
-  // consumed 59% of the income it was paid from, and NO firm could stay solvent
-  // regardless of margin. It is the single largest driver of the corporate
-  // collapse (432 firms to 88, 89% loss-making).
-  //
-  // Scaling by the realisation ratio keeps the economics honest in both
-  // directions: a firm that cannot sell its output also is not billed as though
-  // it had, but a badly-run firm still fails, because its realised revenue is
-  // genuinely low.
-  const nominalHourlyRevenue = preFlipNameplateRevenue / TURNS_PER_DAY;
-  const realizationRatio =
-    nominalHourlyRevenue > 0 ? Math.max(0, Math.min(1, hourlyRevenue / nominalHourlyRevenue)) : 1;
-  const hourlyGrowthCost = (newGrowthCost / TURNS_PER_DAY) * realizationRatio;
-  // Dominance regulatory burden: passive revenue tax on dominant sectors
-  // (compliance, antitrust legal, lobbying). Deducted before profit so it
-  // hits both yearly profit (→ sectorNPV) and corp earnings.
-  // Revenue-side twin of the dominance margin penalty — same SOE exemption.
-  // P3a scoped touch #2b — the revenue-side twin of the margin penalty above,
-  // gated off for the same reason (dominance is tolled once, at build time).
-  // See `computeBuildCost` for the design; SOEs stay exempt in every mode.
-  const regulatoryBurdenRate = isStateOwned(corp)
-    ? 0
-    : Math.max(
-        getDominanceRegulatoryBurden(sectorMarketSharePct),
-        getNationalDominanceRegulatoryBurden(nationalDominanceSharePct)
-      ) *
-      (1 - techEffects.dominanceShield) *
-      (plantsEnabled ? 1 - plantsRampLambda : 1);
-  const regulatoryBurden = hourlyRevenue * regulatoryBurdenRate;
+  // ─── Growth cost (on realized revenue) + regulatory burden ────────────────
+  // Pure computation in `sectorTurn/sectorCosts.ts`; names are unchanged.
+  const { hourlyGrowthCost, regulatoryBurden } = computeGrowthAndRegulatory({
+    corp,
+    newGrowthCost,
+    preFlipNameplateRevenue,
+    hourlyRevenue,
+    sectorMarketSharePct,
+    nationalDominanceSharePct,
+    dominanceShield: techEffects.dominanceShield,
+    plantsEnabled,
+    plantsRampLambda,
+  });
 
   // ─── P3a: idle / mothball upkeep (plants only) ────────────────────────────
   //
@@ -1380,172 +614,51 @@ export function processSector(
     });
 
   // ─── P3.5: physical cost decomposition (plants only) ──────────────────────
-  //
-  // `maintenance` above is the margin formula: revenue × (1 − margin/100). It
-  // says nothing about what the plant buys, so a sector's cost cannot move with
-  // the price of its inputs. Under plants the cost stack is rebuilt out of
-  // physical lines instead — see `@/lib/corporations/physicalPnl` for the full
-  // rationale and the calibration identity.
-  //
-  // DISPOSITION of the old margin-modifier stack under plants:
-  //  • commodity INPUT modifier  → DELETED, replaced by `inputsCost` (the real
-  //    bill). Keeping both would double-count the same condition.
-  //  • commodity SURPLUS modifier → DELETED outright. Clearing and price
-  //    realization already price a glut on the REVENUE side; the modifier was
-  //    the original double-count this wave exists to remove.
-  //  • disaster margin penalty  → financial leg, ₳ passthrough (a flood does
-  //    not change the price of steel; it imposes a loss). Consumed here as an
-  //    input; the disaster files themselves are another wave's territory.
-  //  • tech `inputCost` effects → already scale `effectiveDemand`, so they now
-  //    reduce UNITS BOUGHT rather than granting margin.
-  //  • tech `laborCostReduction` → already the labor wage multiplier.
-  //  • tech `growthCostReduction` → already its own line.
-  //  • tech `marginBonus` (+ strategy-transition penalty, subsidies, tariffs,
-  //    macro, state metrics, home location, sprawl, SOE efficiency, …) → these
-  //    are not claims about physical consumption, so they ride ONE named
-  //    channel: `policyCredit`, a revenue-proportional P&L line
-  //    (`hourlyRevenue × pp/100`, soft-capped with the same discipline as the
-  //    legacy margin). They previously rode the drift factor on the calibrated
-  //    residual, which INVERTED whenever the residual anchor was negative (a
-  //    bonus shrank the credit and raised cost — live on 82% of prod sectors
-  //    when found). A revenue leg is monotone in the modifier by construction.
-  //    The residual anchor is now held at its policy-NEUTRAL basis and no
-  //    longer responds to the modifier stack; legacy anchors are rebased onto
-  //    that basis through the drift ratio itself (see `otherOpexDriftFactor`).
-  //  • dominance → already consolidated to the build price in P3a.
-  //
-  // KNOWN RESIDUALS (deliberate, documented, not silently dropped): the labor
-  // carve-out's clamp basis and the P3a idle-upkeep unit price still read the
-  // full margin-formula margin. Both are prior waves' lines and both are
-  // second-order; moving them is a follow-up, not a flip-day change.
-  const plantsPhysicalEnabled = plantsEnabled && !embargoLegacyMothball;
-  // The margin stack MINUS the modifiers the physical model now owns
-  // (commodity input → `inputsCost`, surplus → deleted, disaster → financial
-  // leg). This is the POLICY stack: everything that is a claim about policy,
-  // tech or environment rather than physical consumption.
-  const plantsPolicyPpRaw =
-    totalMarginMod - commodityMod - surplusMod - disasterMarginMod + nationalizedMarginPenalty;
-  // Same cap discipline as the legacy margin path (`effectiveMargin` above):
-  // soft-capped against the base margin so a stacked pile asymptotes instead
-  // of pinning. The old residual basis used a hard `Math.min(100, …)` here —
-  // a second, different cap on the same stack; unified now.
-  const plantsPolicyPp =
-    softCapEffectiveMargin(sector.profitMargin + plantsPolicyPpRaw) - sector.profitMargin;
-  // The residual's basis with NO policy stack in it. Constant per sector (the
-  // base margin is a seed constant), so the anchor no longer responds to
-  // modifiers — the `policyCredit` line below is the only carrier.
-  const plantsPolicyNeutralBasis = 1 - sector.profitMargin / 100;
-  // The policy stack as money: ₳/turn credit (negative = charge). Enters the
-  // P&L as a named line, NOT via `hourlyRevenue` itself, so world ledgers,
-  // revenue-share taxes and the launch governor see unmodified revenue.
-  const plantsPolicyCredit = plantsPhysicalEnabled ? (hourlyRevenue * plantsPolicyPp) / 100 : 0;
-  const inputsCostResult = plantsPhysicalEnabled
-    ? computeInputsCost({
-        // The recipe rates are expressed against the sector's NOMINAL nameplate,
-        // and `plantsNameplateRevenue` is capacity × mixPrice — so multiplying
-        // by utilization below gives producedUnits × mixPrice, i.e. inputs are
-        // bought for what the plant actually made, and `producedUnits` already
-        // carries the physical-disaster haircut, so a halted plant buys less.
-        // Matches the units the world ledger books as this sector's demand
-        // (`computeRawSupplyDemand`) up to four audited divergences — see the
-        // list on `computeInputsCost`; all four are level effects the
-        // calibration solve absorbs.
-        nominalDailyRevenue: plantsNameplateRevenue,
-        rates: effectiveDemand,
-        basePrices: COMMODITY_BASE_PRICES,
-        // Partition worlds: inputs are BOUGHT in the sector country's
-        // reachable market, so they are billed at its price level. The world
-        // map stays the fallback for countries/commodities without a book —
-        // `reachableInputPriceRatios` overlays reachable ratios on the world
-        // map per country, so absent entries fall back to world, not to base.
-        priceRatios:
-          lookups.reachableInputPriceRatiosByCountry?.get(sectorCountryId) ??
-          lookups.priceRatioByCommodity,
-        utilization: plantsCapacity > 0 ? producedUnits / plantsCapacity : 1,
-        inputMultiplier: getInputMultiplier(newPolicyLevel),
-        turnsPerDay: TURNS_PER_DAY,
-        mothballed,
-        // Money wiring (step 5, phase A): empty map when the flag is off, so
-        // this is a no-op until interstateMoneyWiringEnabled is flipped on.
-        statePremiums: lookups.landedPremiumByState?.get(sector.stateId),
-      })
-    : { total: 0, lines: [] };
-  const inputsCost = inputsCostResult.total;
-  const financialLegs = plantsPhysicalEnabled
-    ? computeFinancialLegs({ hourlyRevenue, marginPenaltyPp: disasterMarginMod })
-    : 0;
-  // Calibration. On the sector's first physical-P&L turn the residual is SOLVED
-  // so the physical lines reproduce `maintenance` — the margin formula's answer
-  // at this exact state — to the last bit. Then it is persisted per output unit
-  // and held, and the physical lines start moving on their own.
-  //
-  // A sector with no production yet cannot be calibrated per-unit (nothing to
-  // divide by), so calibration is DEFERRED: the residual is charged directly for
-  // that turn, which is exact anyway, and the anchor is stamped on the first
-  // turn the plant actually runs.
-  const otherOpexAnchorForPnl = healedOpex?.otherOpexPerUnitAnchor ?? storedOtherOpexAnchor;
-  const otherOpexCalibrated = plantsPhysicalEnabled && storedOtherOpexAnchor == null;
-  // Calibration solves against the policy-NEUTRAL margin cost: `maintenance`
-  // includes the policy stack, and `policyCredit` re-applies that same stack on
-  // the revenue side, so the residual must exclude it or the calibration turn
-  // double-counts. `maintenance + policyCredit` is the margin formula's answer
-  // with the policy stack backed out (credit is revenue × pp/100 with the sign
-  // that removes it from cost). Total cost on the calibration turn is then
-  // `… + otherOpex − policyCredit = maintenance` — the flip identity holds
-  // exactly, as before.
-  const solvedOtherOpexPerUnit = otherOpexCalibrated
-    ? solveOtherOpexPerUnit({
-        marginFormulaCost: maintenance + plantsPolicyCredit,
-        laborCost: sectorLaborCost,
-        inputsCost,
-        financialLegs,
-        producedUnits: producedUnits / retoolCapacityRatio,
-      })
-    : null;
-  const otherOpex = !plantsPhysicalEnabled
-    ? 0
-    : otherOpexCalibrated
-      ? // Exact by construction, whether or not the per-unit anchor could be
-        // solved this turn.
-        maintenance + plantsPolicyCredit - sectorLaborCost - inputsCost - financialLegs
-      : (otherOpexAnchorForPnl ?? 0) *
-        (producedUnits / retoolCapacityRatio) *
-        // One-time rebase of legacy anchors onto the neutral basis; 1 for
-        // anchors stamped after the policyCredit change. See the docblock on
-        // `otherOpexDriftFactor` for why this stopped tracking the live stack.
-        otherOpexDriftFactor({
-          currentMarginBasis: plantsPolicyNeutralBasis,
-          anchorMarginBasis: sector.otherOpexAnchorMarginBasis,
-        });
-  const physicalPnl = plantsPhysicalEnabled
-    ? assemblePhysicalPnl({
-        hourlyRevenue,
-        inputsCost,
-        laborCost: sectorLaborCost,
-        // The SAME P3a line, consumed — not a second upkeep charge alongside it.
-        upkeep: plantsUpkeepCost,
-        complianceCost: regulatoryBurden,
-        otherOpex,
-        financialLegs,
-        growthCost: hourlyGrowthCost,
-        policyCredit: plantsPolicyCredit,
-      })
-    : null;
-  const hourlyProfit = physicalPnl
-    ? physicalPnl.profit
-    : hourlyRevenue - maintenance - plantsUpkeepCost - hourlyGrowthCost - regulatoryBurden;
-  // NPV on a yearly basis: 1 game year = TURNS_PER_YEAR turns (48h)
-  const yearlyProfit = hourlyProfit * TURNS_PER_YEAR;
-  const sectorNPV = yearlyProfit > 0 ? Math.round(yearlyProfit / NPV_ANNUAL_DISCOUNT_RATE) : 0;
-  // Capital book anchor: under capital mode, a sector that owns productive
-  // capacity is valued at its depreciated peak going-concern value, not just
-  // this turn's (transiently depressed) NPV — so building real capacity isn't
-  // valued as if the corp owns nothing. Seeded at current NPV on the flip
-  // turn (no-op), ratchets up with NPV, decays slowly when NPV falls, never
-  // exceeds its own historical peak (no over-crediting).
-  const capitalBookAnchor = market.capitalEnabled
-    ? advanceCapitalBookAnchor({ prevAnchor: sector.capitalBookAnchor, sectorNPV })
-    : 0;
+  // Pure computation in `sectorTurn/sectorCosts.ts`; names are unchanged.
+  const {
+    plantsPhysicalEnabled,
+    plantsPolicyPp,
+    plantsPolicyNeutralBasis,
+    solvedOtherOpexPerUnit,
+    physicalPnl,
+    sectorNPV,
+    capitalBookAnchor,
+  } = decomposePhysicalCosts({
+    plantsEnabled,
+    embargoLegacyMothball,
+    profitMargin: sector.profitMargin,
+    totalMarginMod,
+    commodityMod,
+    surplusMod,
+    disasterMarginMod,
+    nationalizedMarginPenalty,
+    hourlyRevenue,
+    maintenance,
+    sectorLaborCost,
+    plantsUpkeepCost,
+    regulatoryBurden,
+    hourlyGrowthCost,
+    plantsNameplateRevenue,
+    effectiveDemand,
+    sectorCountryId,
+    priceRatioByCommodity: lookups.priceRatioByCommodity,
+    reachableInputPriceRatiosByCountry: lookups.reachableInputPriceRatiosByCountry,
+    plantsCapacity,
+    producedUnits,
+    retoolCapacityRatio,
+    newPolicyLevel,
+    mothballed,
+    stateId: sector.stateId,
+    landedPremiumByState: lookups.landedPremiumByState,
+    storedOtherOpexAnchor,
+    healedOtherOpexPerUnitAnchor: healedOpex?.otherOpexPerUnitAnchor,
+    otherOpexAnchorMarginBasis: sector.otherOpexAnchorMarginBasis,
+    capitalEnabled: market.capitalEnabled,
+    prevCapitalBookAnchor: sector.capitalBookAnchor,
+  });
+  // (moved to decomposePhysicalCosts: inputs bill + financial legs)
+  // (moved to decomposePhysicalCosts: calibration solve + residual)
+  // (moved to decomposePhysicalCosts: P&L assembly, profit, NPV, book anchor)
 
   // Build sector update — include transition advancement if applicable.
   // ── Inventory of unsold storable output (design-realization-legs §6 v1) ────

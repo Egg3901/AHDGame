@@ -93,7 +93,23 @@ export async function processGameHealthSnapshot(
     ([, telemetry]) => telemetry.status === "skipped"
   );
 
+  // Turn warnings (issue #2054): every entry of the turn warning channel
+  // persists here exactly once. Entries follow the `"<phase>: <message>"`
+  // convention (see the failureMessages parse above); entries without a
+  // prefix land under "unknown". Identical phase+message pairs collapse to
+  // one record, so a retried or replayed turn that re-pushes the same
+  // deterministic warning cannot inflate warningCount.
+  const seenWarnings = new Set<string>();
   const turnWarnings: TurnWarning[] = [];
+  for (const warning of warnings) {
+    const colonIdx = warning.indexOf(": ");
+    const phase = colonIdx > 0 ? warning.slice(0, colonIdx) : "unknown";
+    const message = colonIdx > 0 ? warning.slice(colonIdx + 2) : warning;
+    const key = phase + "\n" + message;
+    if (seenWarnings.has(key)) continue;
+    seenWarnings.add(key);
+    turnWarnings.push({ phase, message, turn, timestamp: now });
+  }
   const turnErrors: TurnError[] = countedPhaseEntries
     .filter(([, telemetry]) => telemetry.status === "failed" || telemetry.status === "notReached")
     .map(([phase, telemetry]) => ({

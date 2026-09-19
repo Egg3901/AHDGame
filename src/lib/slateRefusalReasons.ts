@@ -25,6 +25,7 @@ export const SLATE_REFUSAL_LABEL: Record<SlateRefusalReason, string> = {
   npp_unavailable: "No Longer Available",
   already_slated_elsewhere: "Slated in Another Race",
   slate_full: "Race Slate Full",
+  seat_not_on_ballot: "Seat Not on Ballot",
 };
 
 /**
@@ -38,6 +39,7 @@ export const SLATE_FILING_FAILURE_REASONS: ReadonlySet<SlateRefusalReason> = new
   "npp_unavailable",
   "already_slated_elsewhere",
   "slate_full",
+  "seat_not_on_ballot",
 ]);
 
 export function isSlateFilingFailure(reason: SlateRefusalReason | null | undefined): boolean {

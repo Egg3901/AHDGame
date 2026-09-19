@@ -163,6 +163,55 @@ export interface Corporation {
    * at least one financial sector; one bank per corp. See src/lib/db/types/bank.ts.
    */
   bankCharter?: import("./bank").BankCharter;
+  /**
+   * Crash-recovery plan for an in-flight bank-charter transfer
+   * (transferCharter.ts, issue #2014). Stamped on the absorbed shell before
+   * its charter slot is claimed, cleared once every satellite record is
+   * re-keyed. A surviving marker after a crash tells the next attempt where
+   * the charter went and which currency the depositor pointers use, so the
+   * retry resumes instead of reporting "no transfer required" over split
+   * records. Dies with the shell when the merge completes.
+   */
+  bankCharterTransfer?: {
+    /** Corporation the charter is moving (or moved) to. */
+    to: ObjectId;
+    /** Charter currency, for the legacy savingsHolder pointer path. */
+    currency: CurrencyCode;
+    /**
+     * Unique token of the attempt that stamped this plan (PR #2016). Created
+     * once, claimed atomically, and required by every resume, release,
+     * cleanup, re-key, and plan-clear decision so concurrent transfers of one
+     * shell to different acquirers cannot mistake each other's writes for
+     * their own. Absent on plans stamped before tokens existed: those are
+     * never resumed once the charter has left the shell.
+     */
+    attemptId?: string;
+    /**
+     * Charter copies that may have been orphaned by superseded attempts and
+     * still need removal (review of PR #2016). Each supersession appends the
+     * replaced plan's owner plus the fingerprint it may have claimed; every
+     * owner and every same-pair joiner drains the list with
+     * fingerprint-guarded removals before claiming, so a crash between the
+     * plan compare-and-swap and the cleanup cannot strand a ghost bank. The
+     * list is append-only across supersessions (deduplicated) so chained
+     * adopts keep every pending cleanup, and it dies with the plan on clear.
+     */
+    orphans?: {
+      /** Corporation that may hold the orphaned copy. */
+      to: ObjectId;
+      /** Fingerprint of the charter copy to remove. */
+      fingerprint: string;
+    }[];
+    /**
+     * Ownership fingerprint of the charter being moved
+     * (`charterFingerprint` in transferCharter.ts): identity plus economic
+     * fields, so a genuinely different bank sharing currency/turn/type/status
+     * never reads as this attempt's claimed copy.
+     */
+    fingerprint?: string;
+    /** When the plan was stamped. */
+    startedAt: Date;
+  };
   /** Character who owns/runs this corporation */
   ceoId: ObjectId;
   /** Whether the CEO is a regular character, imperial character, or NPP. Defaults to "character". */
@@ -335,10 +384,9 @@ export interface Corporation {
   /**
    * Set while an NPP caretaker runs this player-owned corp (NPP-autonomy V2.1).
    * The autonomy brain operates the corp through `ceoType:"npp"` + `ceoId` (the
-   * NPP), but `userId` deliberately stays the appointing owner so they keep CEO
-   * authorization (`requireCeo`) and private-data access, that retained control
-   * is precisely what makes this a *caretaker* (player-appointed, player-revoked)
-   * rather than a full handover to an autonomous NPP corp. Stores the displaced
+   * NPP), but `userId` deliberately stays the appointing owner for private-data
+   * access and immediate reclaim. Operational commands reject NPP-run corps, so
+   * retained ownership is not retained operational control. Stores the displaced
    * human CEO so dismissal restores them. Absent ⇒ the corp is not caretaker-run.
    */
   caretakerCeo?: {
@@ -356,6 +404,8 @@ export interface Corporation {
     appointedTurn: number;
     /** Whether the owner chose the caretaker or the turn loop filled a vacancy. */
     appointmentSource?: "owner" | "vacancy";
+    /** Owner-selected operating mandate. Legacy caretakers default to active. */
+    mandate?: "active" | "passive";
   };
   /**
    * Turn until which a new caretaker may NOT be installed, stamped when the owner
@@ -448,8 +498,9 @@ export interface Corporation {
   lastRenameTurn?: number | null;
   /**
    * Cumulative proceeds from share issuances (public float, self-issue, IPO).
-   * Stored in the corp's home currency. Subtracted from liquidCapital in the
-   * share-price formula's tangible-book component so issuance dilutes price.
+   * Stored in the corp's home currency for cash-flow audit and reversal. The
+   * share-price formula values the retained liquidCapital directly; issuance
+   * dilution is applied when the share count changes.
    */
   shareIssuanceProceeds?: number;
   /** When the CEO last sent a shareholder address (12-hour cooldown). */
@@ -606,6 +657,14 @@ export interface Corporation {
    * every turn and bars it from opening new acquisitions.
    */
   pendingDivestiture?: import("./mergerReview").PendingDivestiture;
+  /**
+   * Offer id currently executing an agreed acquisition against this
+   * corporation as the target. Atomic claim: only the owning offer's executor
+   * may move money or sectors, which is what stops two concurrently accepted
+   * offers for one corporation from both paying out. Dies with the shell on
+   * success; released on terminal compensation.
+   */
+  acquisitionSettlementId?: ObjectId;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -1226,8 +1285,11 @@ export interface CorporateSector {
    * scaled: a permanent mint or burn of the whole RPU ratio, which reaches
    * 327x for a coal to rare-earth pair. Persisting the decision makes the
    * inverse conditional on the forward step having happened, so the pair can
-   * never come apart across a mode change. Absent on legacy rows, which
-   * predate plants and were therefore never rescaled: treat as false.
+   * never come apart across a mode change. Absent on legacy rows: the sector
+   * turn converts a provably unconverted stock (committed before the sector's
+   * first plants turn, issue #2009) and stamps true; a legacy row committed
+   * under plants converted its stock at the boundary and only ever needs the
+   * opex-anchor heal.
    */
   retoolRescaleApplied?: boolean;
   /** Turn after which a new strategy change is allowed (transition end + cooldown) */

@@ -4,6 +4,7 @@ import { ObjectId } from "mongodb";
 import { randomBytes, randomUUID } from "crypto";
 import { SignJWT } from "jose";
 import { getDb } from "@/lib/mongodb";
+import { recordIdentitySignals } from "@/lib/identityHistory/recordObservation";
 import {
   getAuthUser,
   getJwtSecret,
@@ -266,6 +267,17 @@ async function handleGoogleLogin(
       })
       .catch(() => {});
 
+    // Identity history. IP only: the OAuth login path never carries a
+    // fingerprint (the OAuth fingerprint cookie is read only on the new-user
+    // branch). The fingerprint arrives moments later via the result page's
+    // call to /api/auth/record-fingerprint, which records its own run.
+    recordIdentitySignals(db, {
+      userId: existingUser._id,
+      ip: clientIp,
+      observedAt,
+      source: "oauth",
+    });
+
     // Prefer a stashed Lakeside SSO continuation (ops dash) over the in-game default.
     const next = loginDestination(
       takeOAuthReturnUrlCookie(cookieStore, GOOGLE_OAUTH_RETURN_URL_COOKIE),
@@ -402,6 +414,16 @@ async function handleGoogleLogin(
     action: "account_created",
     username,
     details: `Registered via Google (${googleUser.email})`,
+  });
+
+  // Identity history runs. Recorded after the insert so the run carries the
+  // real user id.
+  recordIdentitySignals(db, {
+    userId: result.insertedId,
+    ip: clientIp,
+    fingerprint: oauthFingerprint,
+    observedAt: newUserObservedAt,
+    source: "oauth",
   });
 
   if (gateDecision.softAllow) {

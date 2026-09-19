@@ -104,6 +104,33 @@ export function isPartyEligible(
   }
 }
 
+/**
+ * Whether the holder of a role under `policy` still qualifies for it after
+ * moving to `newParty` — the question a party switch asks, which is narrower
+ * than {@link isPartyEligible}.
+ *
+ * `any-seated` roles (Speaker, Bundestagspräsident, the NG chairs) are held on
+ * the strength of a seat, not a party, so a switch never costs them the office;
+ * losing the seat does, and that is `vacateSpeakerIfLostSeat`'s job. Note this
+ * deliberately differs from `isPartyEligible`, which additionally requires the
+ * party to hold a chamber seat — a distinction that matters the instant a
+ * Speaker founds or joins a party that has yet to win one.
+ *
+ * With no `ctx` the question cannot be answered (a role outside the two US
+ * chambers, or a composition read that came back empty), so it returns false
+ * and the caller falls back to vacating, which is what it did before this gate
+ * existed.
+ */
+export function qualifiesAfterPartySwitch(
+  policy: RoleEligibilityPolicy,
+  newParty: string | null | undefined,
+  ctx: ChamberLeadershipContext | null
+): boolean {
+  if (policy.kind === "any-seated") return true;
+  if (!ctx) return false;
+  return isPartyEligible(policy, newParty, ctx);
+}
+
 /** Set of party slugs eligible under `policy` given the chamber state. */
 export function eligiblePartySlugsFor(
   policy: RoleEligibilityPolicy,

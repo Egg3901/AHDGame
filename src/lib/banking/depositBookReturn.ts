@@ -505,6 +505,10 @@ export async function returnDepositBook(
     return { ...EMPTY, depositorsFlipped };
   }
 
+  // The journaled treasury-backstop projection moves cash (plus the
+  // spending/surplus legs); `debt.principal` belongs to the bond ledger (see
+  // bonds/sovereignPrincipal.ts) and is correctly left alone (#1975).
+
   const result: DepositBookReturnResult = {
     returned: true,
     depositorsFlipped,
@@ -732,6 +736,10 @@ function depositAggregateClearProjection(
 /**
  * Debit treasuryBalance and book the spend on spending.byCategory.depositInsurance.
  * Unconditional: an unaffordable backstop pushes the treasury into debt.
+ *
+ * The balance/spending/surplus legs stay `$inc` (concurrent-safe).
+ * `debt.principal` belongs to the bond ledger (see bonds/sovereignPrincipal.ts)
+ * and is correctly left alone (#1975).
  */
 export async function debitTreasuryDepositInsurance(
   db: Db,

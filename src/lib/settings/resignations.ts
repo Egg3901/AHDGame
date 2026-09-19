@@ -15,6 +15,9 @@ import { notifyGovernorOfSenateVacancy } from "@/lib/governors/senateVacancy";
 import { resignExecutiveOffice } from "@/lib/elections/resignExecutiveOffice";
 import { archiveCampaignsForCandidates } from "@/lib/campaigns/archiveWithdrawnCampaigns";
 import { getOfficeLabel } from "@/lib/utils/politics";
+import { getCurrentTurn } from "@/lib/turn/currentTurn";
+import { vacateCommonsSeat } from "@/lib/uk/elections/commonsVacancyShell";
+import { preserveSurvivingCabinetRow } from "@/lib/uk/dualMinistry/survivor";
 import type {
   CabinetMember,
   Character,
@@ -395,6 +398,20 @@ async function resignOfficial(
 ): Promise<boolean> {
   if (!official.characterId?.equals(character._id)) return false;
 
+  // UK Commons seats (#860) are tombstoned, never deleted: the holder-less row
+  // anchors the durable vacancy the by-election watcher fills. `vacate` is
+  // idempotent (one live vacancy per row), so retries converge. Every other
+  // country and office keeps the delete/tombstone path below.
+  if (official.officeType === "commons" && (official.countryId ?? character.countryId) === "UK") {
+    const currentTurn = await getCurrentTurn(db);
+    const vacancy = await vacateCommonsSeat(db, official, "resignation", currentTurn, now);
+    if (!vacancy) return false;
+    if (currentOfficeMatchesOfficial(character.currentOffice, official)) {
+      await clearCurrentOfficeForOffice(db, character._id, character.currentOffice, now);
+    }
+    return true;
+  }
+
   if (official.officeType === "president" || official.officeType === "vicePresident") {
     await resignExecutiveOffice(db, official, character, now);
   } else {
@@ -479,7 +496,12 @@ async function resignCabinet(
     .collection<CabinetMember>("cabinetMembers")
     .deleteOne({ _id: member._id, characterId: character._id });
   if (result.deletedCount === 0) return false;
-  if (currentOfficeMatchesCabinet(character.currentOffice, member)) {
+  // A surviving second row keeps the holder in cabinet (issue #2049): repoint
+  // at it instead of clearing. Only a fully departed holder clears office.
+  if (
+    currentOfficeMatchesCabinet(character.currentOffice, member) &&
+    !(await preserveSurvivingCabinetRow(db, member.countryId, character._id, now))
+  ) {
     await clearCurrentOfficeForOffice(db, character._id, character.currentOffice, now);
   }
   return true;

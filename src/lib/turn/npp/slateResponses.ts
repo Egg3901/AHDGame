@@ -34,6 +34,7 @@ import { DEFAULT_CANDIDATE_SUPPORT } from "@/lib/electionEngine/electionFormulaF
 import { materializeSlateAssignmentsFromTemplate } from "@/lib/db/recruitmentSlateLookup";
 import { isElectionTypeEntryBlocked } from "@/lib/elections/nationwideExecutive";
 import { isPrimaryClosed } from "@/lib/elections/electionDeadlineFilters";
+import { isSpecialCommonsElection } from "@/lib/utils/electionLabels";
 import { removeWithdrawnCandidateFromTally } from "@/lib/electionEngine/tallyCleaner";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { SLATE_ASSIGNMENT_CAP, isLiveSlateStatus } from "@/lib/slateAssignmentCap";
@@ -618,6 +619,24 @@ export async function fileAcceptedSlateRows(ctx: NPPContext): Promise<SlateFilin
       if (election.state && npp.homeState !== election.state) {
         queueSkipped(row, "ineligible_region");
         continue;
+      }
+      // Commons by-elections (#860) fill only vacated seats and resolve
+      // additively: a sitting MP holding an in-state Commons seat is never
+      // filed into a special_commons race, since a sitting winner would
+      // double-seat. Seatless challengers file normally below. Seat data comes
+      // from the shared context load, so this adds no per-row round trip.
+      if (isSpecialCommonsElection(election.electionType)) {
+        const offices = ctx.officialsByNPP.get(candidateKey) ?? [];
+        const holdsInStateCommonsSeat = offices.some(
+          (office) =>
+            office.officeType === "commons" &&
+            (office.countryId ?? electionCountry) === "UK" &&
+            office.state === election.state
+        );
+        if (holdsInStateCommonsSeat) {
+          queueSkipped(row, "seat_not_on_ballot");
+          continue;
+        }
       }
       const slateParty = ctx.partyByCompositeKey.get(`${electionCountry}:${row.partyId}`);
       const opsConfig = COUNTRY_CONFIGS[electionCountry as CountryId];

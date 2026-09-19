@@ -25,6 +25,7 @@ import type {
   BankCharterSnapshot,
   BankCommand,
   BankingSnapshot,
+  BorrowerSnapshot,
 } from "@/lib/banking/rules/boundary";
 
 const BANK = "a".repeat(24);
@@ -58,7 +59,18 @@ function randomCharter(random: SeededRandom): BankCharterSnapshot | null {
 
 function randomCommand(random: SeededRandom): BankCommand {
   const amount = random.chance(0.1) ? random.money(-1_000, 0) : random.money(0.01, 3_000_000);
-  switch (random.int(0, 8)) {
+  // The shape `decide` reads. An older revision of this generator used stale
+  // field names here, which refused every loan on currency mismatch and left
+  // the allowed loan path unexercised.
+  const borrower: BorrowerSnapshot = {
+    type: random.chance(0.5) ? "corporation" : "character",
+    id: OTHER,
+    incomePerTurn: random.money(0, 500_000),
+    committedPaymentPerTurn: random.money(0, 100_000),
+    blocked: random.chance(0.1),
+    currencyMatches: !random.chance(0.1),
+  };
+  switch (random.int(0, 10)) {
     case 0:
       return { type: "inject_capital", amount } as BankCommand;
     case 1:
@@ -96,18 +108,33 @@ function randomCommand(random: SeededRandom): BankCommand {
       return {
         type: "originate_named_loan",
         loanId: "d".repeat(24),
-        borrower: {
-          type: "corporation",
-          id: OTHER,
-          income: random.money(0, 500_000),
-          existingDebtService: random.money(0, 100_000),
-          creditScore: random.int(300, 850),
-        },
+        borrower,
         principal: amount,
         termTurns: random.int(1, 120),
-      } as unknown as BankCommand;
+      };
+    case 8:
+      return {
+        type: "disburse_pending_loan",
+        loanId: "d".repeat(24),
+        borrower,
+        principal: amount,
+        ratePercent: random.money(0.5, 12),
+        termTurns: random.int(1, 120),
+      };
+    case 9:
+      return {
+        type: "reject_pending_loan",
+        loanId: "d".repeat(24),
+        ...(random.chance(0.5) ? { reason: "not a fit for the book" } : {}),
+      };
     default:
-      return { type: "repay_interbank", loanId: "e".repeat(24), amount } as BankCommand;
+      return {
+        type: "repay_interbank",
+        loanId: "e".repeat(24),
+        lenderBankId: OTHER,
+        outstanding: random.money(0, 1_000_000),
+        amount,
+      };
   }
 }
 
@@ -167,9 +194,12 @@ describe("bank command rules, property", () => {
 
         // The lifecycle table: what a stage refuses, the rules never allow.
         if (stage === "impaired") {
-          expect(["originate_named_loan", "lend_interbank", "upstream_cash"]).not.toContain(
-            command.type
-          );
+          expect([
+            "originate_named_loan",
+            "disburse_pending_loan",
+            "lend_interbank",
+            "upstream_cash",
+          ]).not.toContain(command.type);
         }
         if (stage === "watch") expect(command.type).not.toBe("upstream_cash");
         if (

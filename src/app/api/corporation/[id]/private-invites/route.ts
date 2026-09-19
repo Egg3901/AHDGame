@@ -14,6 +14,7 @@
  *  - Current shareholder count + outstanding pending invites < maxShareholders.
  */
 import { NextResponse } from "next/server";
+import { withNoStore } from "@/lib/api/withNoStore";
 import { ObjectId } from "mongodb";
 import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
@@ -42,7 +43,7 @@ function shareholderCount(corp: Corporation): number {
   return (corp.shareholders ?? []).filter((sh) => (sh.shares ?? 0) > 0).length;
 }
 
-export async function GET(_request: Request, { params }: RouteParams) {
+async function handleGET(_request: Request, { params }: RouteParams) {
   try {
     const { id } = await params;
     const auth = await requireBasicAuth();
@@ -100,6 +101,8 @@ export async function GET(_request: Request, { params }: RouteParams) {
     return handleRouteError(error);
   }
 }
+
+export const GET = withNoStore(handleGET);
 
 export async function POST(request: Request, { params }: RouteParams) {
   try {

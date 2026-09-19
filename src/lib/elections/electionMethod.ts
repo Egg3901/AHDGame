@@ -16,6 +16,7 @@ export const POSITION_BY_ELECTION_TYPE: Readonly<Record<string, ElectionPosition
   house: "lowerChamber",
   commons: "lowerChamber",
   snap_commons: "lowerChamber",
+  special_commons: "lowerChamber", // Commons by-election — same seat as `commons`
   bundestag: "lowerChamber",
   snap_bundestag: "lowerChamber",
   shugiin: "lowerChamber",

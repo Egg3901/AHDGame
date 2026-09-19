@@ -51,9 +51,11 @@
  */
 import type { EraId } from "./presetSelector";
 import {
+  conditionedOffsetsAtAnchor,
   getEraPositions,
   hasStateOverrides,
   STATE_OVERRIDE_ANCHOR_ERAS,
+  type ConditionedPositionOffset,
   type DemographicPosition,
   type DemographicTurnoutRates,
 } from "./demographicCategories";
@@ -178,6 +180,56 @@ export function resolveEraPositionsAtAnchor(
   opts: EraPositionYearOptions = {}
 ): PositionTable {
   return getEraPositionsForYear(ERA_ANCHOR_YEARS[era], stateId, opts);
+}
+
+/**
+ * Identity-conditioned lean corrections for `stateId` at the live `year`.
+ *
+ * Blends the bracketing anchors' authored tables with union semantics: an
+ * offset present on one side only holds its authored value on that side and
+ * zero on the other, so a correction authored at 1953 and nowhere later fades
+ * out by the next anchor instead of freezing. That fade is authored truth, not
+ * a missing value read as zero — later national tables already place the
+ * conditioned cells correctly, so there is nothing to carry forward (see the
+ * authoring comment on `BLACK_SOUTH_1953_CLASS_CORRECTION`). At an anchor year
+ * this returns that anchor's table exactly.
+ */
+export function getConditionedOffsetsForYear(
+  year: number,
+  stateId: string
+): ConditionedPositionOffset[] {
+  const { lo, hi, t } = resolveEraBlend(year);
+  const atLo = conditionedOffsetsAtAnchor(lo, stateId);
+  if (t === 0 || lo === hi) return atLo;
+  const atHi = conditionedOffsetsAtAnchor(hi, stateId);
+  if (atLo.length === 0 && atHi.length === 0) return atLo;
+
+  const keyOf = (o: ConditionedPositionOffset): string =>
+    `${o.givenDim}:${o.givenBucket}|${String(o.dim)}:${o.bucket}`;
+  const byKey = new Map<
+    string,
+    { tpl: ConditionedPositionOffset; loE: number; loS: number; hiE: number; hiS: number }
+  >();
+  for (const o of atLo) {
+    byKey.set(keyOf(o), { tpl: o, loE: o.economicLean, loS: o.socialLean, hiE: 0, hiS: 0 });
+  }
+  for (const o of atHi) {
+    const rec = byKey.get(keyOf(o));
+    if (rec) {
+      rec.hiE = o.economicLean;
+      rec.hiS = o.socialLean;
+    } else {
+      byKey.set(keyOf(o), { tpl: o, loE: 0, loS: 0, hiE: o.economicLean, hiS: o.socialLean });
+    }
+  }
+  const out: ConditionedPositionOffset[] = [];
+  for (const rec of byKey.values()) {
+    const economicLean = rec.loE + (rec.hiE - rec.loE) * t;
+    const socialLean = rec.loS + (rec.hiS - rec.loS) * t;
+    if (economicLean === 0 && socialLean === 0) continue;
+    out.push({ ...rec.tpl, economicLean, socialLean });
+  }
+  return out;
 }
 
 /**

@@ -1,7 +1,9 @@
 // src/lib/actions/recommendations.test.ts
 import { describe, it, expect } from "vitest";
 import { ObjectId } from "mongodb";
+import { REST_ACTION_COST } from "@/lib/actions";
 import type { Character, PartyBudget, PoliticalParty, StatePartyOrg } from "@/lib/db/types";
+import { fundraiseYieldAnchor } from "@/lib/actions/rules";
 import { orgBuildCashPrice } from "@/lib/politicalStrength/buildOrgFunding";
 import { BUILD_ORG_BASE_PS_COST } from "@/lib/politicalStrength/strengthConstants";
 import {
@@ -66,6 +68,9 @@ describe("checkStatThresholds", () => {
     const lowRec = recs.find((r) => r.id.includes("actions-low"));
     expect(lowRec).toBeDefined();
     expect(lowRec?.priority).toBe("critical");
+    // The advisor quotes the same zero rest cost the effect charges.
+    expect(lowRec?.action.type).toBe("rest");
+    expect(lowRec?.action.estimatedCost).toEqual({ ap: REST_ACTION_COST, funds: 0 });
   });
 
   it("flags low favorability", () => {
@@ -101,6 +106,26 @@ describe("checkStatThresholds", () => {
     expect(fundsRec?.action.type).toBe("fundraise");
   });
 
+  it("quotes the shared stat-scaled fundraise yield", () => {
+    const character = createCharacter({ funds: 10_000, donorBaseLevel: 2 });
+    const recs = checkStatThresholds(character, "GA");
+    const fundsRec = recs.find((r) => r.id.includes("funds-critical"));
+    expect(fundsRec?.action.estimatedBenefit).toBe(
+      `+$${fundraiseYieldAnchor(character).toLocaleString()}`
+    );
+    const strong = createCharacter({
+      funds: 10_000,
+      donorBaseLevel: 2,
+      stats: { fundraising: 10 } as Character["stats"],
+    });
+    const strongRecs = checkStatThresholds(strong, "GA");
+    const strongRec = strongRecs.find((r) => r.id.includes("funds-critical"));
+    expect(strongRec?.action.estimatedBenefit).toBe(
+      `+$${fundraiseYieldAnchor(strong).toLocaleString()}`
+    );
+    expect(strongRec?.action.estimatedBenefit).not.toBe(fundsRec?.action.estimatedBenefit);
+  });
+
   it("flags critically low funds without donor base", () => {
     const character = createCharacter({ funds: 10_000, donorBaseLevel: 0 });
     const recs = checkStatThresholds(character, "GA");
@@ -132,6 +157,25 @@ describe("checkStatThresholds", () => {
     const recs = checkStatThresholds(character, "GA");
     const convertRec = recs.find((r) => r.id.includes("convert-cash"));
     expect(convertRec).toBeUndefined();
+  });
+
+  it("quotes the shared conversion and capped infamy legs", () => {
+    const character = createCharacter({ cashOnHand: 500_000, funds: 50_000 });
+    const recs = checkStatThresholds(character, "GA");
+    const convertRec = recs.find((r) => r.id.includes("convert-cash"));
+    expect(convertRec?.why).toContain("+$250,000");
+    expect(convertRec?.why).toContain("+10 infamy");
+    expect(convertRec?.action.estimatedBenefit).toBe("+$250,000 campaign funds");
+  });
+
+  it("caps whale infamy at 100 like the execution does", () => {
+    // The old inline formula omitted the cap and printed +136 here.
+    const character = createCharacter({ cashOnHand: 50_000_000, funds: 50_000 });
+    const recs = checkStatThresholds(character, "GA");
+    const convertRec = recs.find((r) => r.id.includes("convert-cash"));
+    expect(convertRec?.why).toContain("+100 infamy");
+    expect(convertRec?.why).not.toContain("+136 infamy");
+    expect(convertRec?.action.estimatedBenefit).toBe("+$25,000,000 campaign funds");
   });
 });
 

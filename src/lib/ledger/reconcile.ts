@@ -256,7 +256,10 @@ export async function reconcileTurn(
   try {
     const entries = await db
       .collection<LedgerEntry>(LEDGER_ENTRIES_COLLECTION)
-      .find({ turn })
+      // Reconciliation is intentionally shadow-only. Its three checks need
+      // the entry identity, origin and legs, not the write timestamp/source
+      // reference or denormalized `balanced` flag on every entry this turn.
+      .find({ turn }, { projection: { _id: 1, txType: 1, emitSite: 1, legs: 1 } })
       .toArray();
 
     const closing = await loadBalanceSnapshot(db, turn);

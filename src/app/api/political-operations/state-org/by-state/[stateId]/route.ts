@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { withNoStore } from "@/lib/api/withNoStore";
 import { getDb } from "@/lib/mongodb";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { handleRouteError, badRequest } from "@/lib/api/errors";
@@ -32,7 +33,7 @@ interface RouteParams {
  *   cross-character but not public-internet readable)
  * Errors: 400 (invalid state), 401 (no auth)
  */
-export async function GET(_req: Request, { params }: RouteParams) {
+async function handleGET(_req: Request, { params }: RouteParams) {
   try {
     const auth = await requireBasicAuth();
     if (!auth.ok) return auth.response;
@@ -89,3 +90,5 @@ export async function GET(_req: Request, { params }: RouteParams) {
     return handleRouteError(error);
   }
 }
+
+export const GET = withNoStore(handleGET);

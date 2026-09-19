@@ -4,6 +4,7 @@
 // Errors: 400 (invalid id), 401
 
 import { NextResponse } from "next/server";
+import { withNoStore } from "@/lib/api/withNoStore";
 import { ObjectId } from "mongodb";
 import { requireAuth } from "@/lib/api/requireAuth";
 import { getDb } from "@/lib/mongodb";
@@ -17,7 +18,7 @@ interface RouteParams {
   params: Promise<{ id: string }>;
 }
 
-export async function GET(_req: Request, { params }: RouteParams) {
+async function handleGET(_req: Request, { params }: RouteParams) {
   const auth = await requireAuth();
   if (!auth.ok) return auth.response;
 
@@ -71,3 +72,5 @@ export async function GET(_req: Request, { params }: RouteParams) {
 
   return NextResponse.json({ characterId: id, currentTurn, holdings });
 }
+
+export const GET = withNoStore(handleGET);

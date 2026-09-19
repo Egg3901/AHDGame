@@ -50,6 +50,28 @@ export interface CorporationHistory {
   marketCap: number;
   liquidCapital: number;
   /**
+   * SOE treasury-backing reconciliation for this turn, in `currencyCode` (same
+   * denomination as every other money field on this row). Mirrors
+   * `CorpSnapshot.soeBacking` (which is ₳-denominated). Absent on private
+   * corps, on SOEs with no shortfall, and on rows written before this field
+   * was added. `cipHeld` only names the residual — capital construction is
+   * never coverable.
+   */
+  soeBacking?: {
+    /** Total negative-liquidCapital hole at backing time. */
+    shortfall: number;
+    /** This turn's operating loss (positive = loss). */
+    realizedLoss: number;
+    /** `snapshot` = this turn's realized snapshot; `estimate` = margin fallback. */
+    realizedSource: "snapshot" | "estimate";
+    /** What the treasury paid. */
+    covered: number;
+    /** Outstanding construction-in-progress held off-cover. Explains the residual. */
+    cipHeld: number;
+    /** `shortfall − covered`. */
+    residual: number;
+  };
+  /**
    * Market-making buyback escrow balance at snapshot time, in liquidCurrencyCode
    * units. May be negative (a tracked buyback debt). Snapshotted so forensics can
    * see true net cash (`liquidCapital + shareEscrowBalance`) per turn and catch

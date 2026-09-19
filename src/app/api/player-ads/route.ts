@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { withNoStore } from "@/lib/api/withNoStore";
 import { ObjectId } from "mongodb";
 import type { Db } from "mongodb";
 import { getDb } from "@/lib/mongodb";
@@ -66,7 +67,7 @@ async function computeAverageCost(db: Db, forexEnabled: boolean): Promise<number
 }
 
 // GET /api/player-ads — returns cost info and rate-limit state for the upload form.
-export async function GET() {
+async function handleGET() {
   try {
     const auth = await requireAuthWithCharacter();
     if (!auth.ok) return auth.response;
@@ -131,6 +132,8 @@ export async function GET() {
     return handleRouteError(error);
   }
 }
+
+export const GET = withNoStore(handleGET);
 
 // POST /api/player-ads — submit a new player banner ad. Accepts multipart/form-data.
 // Fields: file (required), linkUrl (optional), altText (optional)

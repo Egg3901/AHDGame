@@ -16,13 +16,20 @@ import { updatePoliticianPagesAfterElection } from "@/lib/wiki/updatePoliticianP
 import {
   ELECTION_TYPE_SHORT_LABEL,
   MULTI_SEAT_TYPES,
+  isSpecialCommonsElection,
   officeKeyForElectionType,
 } from "@/lib/utils/electionLabels";
 import { getOfficeLabel } from "@/lib/utils/politics";
 import { triggerLeadershipElectionsAfterChamberVote } from "@/lib/congress/leadershipElections";
 import { resolvePresidentElection } from "@/lib/turn/election/presidentResolution";
 import { resolveNGPresidentElection } from "@/lib/turn/election/ngPresidentResolution";
-import { COUNTRIES_WITH_BESPOKE_PRESIDENTIAL_ELECTIONS } from "@/lib/constants/countries";
+import {
+  COUNTRIES_WITH_BESPOKE_PRESIDENTIAL_ELECTIONS,
+  COUNTRY_CONFIGS,
+  isPresidentialGovernmentType,
+  type CountryId,
+} from "@/lib/constants/countries";
+import { isExecutiveOffice } from "@/lib/elections/executiveOffice";
 import { spawnHouseElection, spawnCommonsElection } from "@/lib/turn/election/electionSpawning";
 import {
   allocateSeats,
@@ -219,13 +226,71 @@ export async function resolveOneGeneralElection(
         .filter((c) => !!c.isNPP && !!c.nppId && !liveCandidateNppIds.has(c.nppId.toString()))
         .map((c) => c._id.toString())
     );
-    if (retiredNppCandidateIds.size > 0) {
-      console.warn(
-        `[Turn] Election ${election._id} (${election.electionType}/${election.state}): ` +
-          `excluding ${retiredNppCandidateIds.size} retired or missing NPP candidate(s)`
-      );
+    // A sitting national executive in a presidential system cannot take a
+    // legislative (or any non-executive) seat (#2038). The resolver usually
+    // seats the executive after the legislature, but a delayed executive
+    // seating retry or a filing after the seating can produce the reverse
+    // order. Exclude such winners before allocation so the seat falls to the
+    // next eligible candidate (or the vacancy path when none remains).
+    // Parliamentary heads of government legitimately sit in the legislature,
+    // so this applies only where the country config is presidential.
+    const executiveIneligibleCandidateIds = new Set<string>();
+    if (
+      election.electionType !== "president" &&
+      isPresidentialGovernmentType(
+        COUNTRY_CONFIGS[(election.countryId ?? "US") as CountryId]?.governmentType
+      )
+    ) {
+      const holderCharIds = candidates
+        .filter((c): c is typeof c & { characterId: ObjectId } => !c.isNPP && !!c.characterId)
+        .map((c) => c.characterId);
+      const holderNppIds = candidates
+        .filter((c): c is typeof c & { nppId: ObjectId } => !!c.isNPP && !!c.nppId)
+        .map((c) => c.nppId);
+      const [holderChars, holderMpps] = await Promise.all([
+        holderCharIds.length > 0
+          ? db
+              .collection<Character>("characters")
+              .find({ _id: { $in: holderCharIds } }, { projection: { currentOffice: 1 } })
+              .toArray()
+          : Promise.resolve([]),
+        holderNppIds.length > 0
+          ? db
+              .collection<NPP>("npps")
+              // Seat resolution reads the office, never the 30KB stance map.
+              .find({ _id: { $in: holderNppIds } }, { projection: { currentOffice: 1 } })
+              .toArray()
+          : Promise.resolve([]),
+      ]);
+      const holderOfficeById = new Map<string, Character["currentOffice"] | NPP["currentOffice"]>();
+      for (const h of holderChars) holderOfficeById.set(h._id.toString(), h.currentOffice);
+      for (const h of holderMpps) holderOfficeById.set(h._id.toString(), h.currentOffice);
+      for (const c of candidates) {
+        const holderId = c.isNPP ? c.nppId?.toString() : c.characterId?.toString();
+        if (holderId && isExecutiveOffice(holderOfficeById.get(holderId) ?? null)) {
+          executiveIneligibleCandidateIds.add(c._id.toString());
+        }
+      }
+      if (executiveIneligibleCandidateIds.size > 0) {
+        console.warn(
+          `[Turn] Election ${election._id} (${election.electionType}/${election.state}): ` +
+            `excluding ${executiveIneligibleCandidateIds.size} sitting-executive candidate(s) ineligible for a non-executive seat`
+        );
+      }
+    }
+    const droppedCandidateIds = new Set([
+      ...retiredNppCandidateIds,
+      ...executiveIneligibleCandidateIds,
+    ]);
+    if (droppedCandidateIds.size > 0) {
+      if (retiredNppCandidateIds.size > 0) {
+        console.warn(
+          `[Turn] Election ${election._id} (${election.electionType}/${election.state}): ` +
+            `excluding ${retiredNppCandidateIds.size} retired or missing NPP candidate(s)`
+        );
+      }
       effectiveVotes = Object.fromEntries(
-        Object.entries(effectiveVotes).filter(([id]) => !retiredNppCandidateIds.has(id))
+        Object.entries(effectiveVotes).filter(([id]) => !droppedCandidateIds.has(id))
       );
       totalVotesCast = Object.values(effectiveVotes).reduce((sum, votes) => sum + votes, 0);
     }
@@ -301,7 +366,11 @@ export async function resolveOneGeneralElection(
       }
     }
 
-    const ineligibleCandidateIds = new Set([...deletedCandidateIds, ...retiredNppCandidateIds]);
+    const ineligibleCandidateIds = new Set([
+      ...deletedCandidateIds,
+      ...retiredNppCandidateIds,
+      ...executiveIneligibleCandidateIds,
+    ]);
     const ranked = candidateIds
       // `party` lets allocateSeats compute its minimum-share eligibility on the
       // PARTY aggregate share (same-party candidates pooled) instead of the
@@ -354,7 +423,11 @@ export async function resolveOneGeneralElection(
     // in-game year — resolves to undefined (proportional behavior) from 1999
     // on, so a world graduates back to proportional as its clock advances.
     let majoritarianBonus: MajoritarianBonusConfig | undefined;
-    if (election.electionType === "commons" || election.electionType === "snap_commons") {
+    if (
+      election.electionType === "commons" ||
+      election.electionType === "snap_commons" ||
+      isSpecialCommonsElection(election.electionType)
+    ) {
       const gsForCommons = await (await getGameStateCollection(db)).findOne({ _id: "current" });
       commonsSeats = getUkCommonsSeats(gsForCommons?.preset);
       majoritarianBonus = getMajoritarianBonus(election.electionType, gsForCommons?.currentYear);
@@ -430,9 +503,38 @@ export async function resolveOneGeneralElection(
       );
 
     if (isMultiSeat) {
-      await db
-        .collection<ElectedOfficial>("electedOfficials")
-        .deleteMany(multiSeatOfficialFilter(election));
+      if (isSpecialCommonsElection(election.electionType)) {
+        // ADDITIVE seating (#860): a by-election fills only its claimed
+        // vacancies. Remove holder-less `commons` rows (the tombstones the
+        // watcher recorded vacancies for) up to the seats this race filled,
+        // and leave every seated MP untouched. Sitting MPs keep their rows;
+        // the winner loop below inserts fresh rows for the filled seats.
+        const seatsFilled = winners.reduce((n, [, s]) => n + s, 0);
+        if (seatsFilled > 0) {
+          const vacantRows = await db
+            .collection<ElectedOfficial>("electedOfficials")
+            .find(
+              {
+                officeType: "commons",
+                state: election.state,
+                ...(election.countryId ? { countryId: election.countryId } : {}),
+                characterId: null,
+                nppId: null,
+              },
+              { projection: { _id: 1 }, sort: { _id: 1 }, limit: seatsFilled }
+            )
+            .toArray();
+          if (vacantRows.length > 0) {
+            await db
+              .collection<ElectedOfficial>("electedOfficials")
+              .deleteMany({ _id: { $in: vacantRows.map((r) => r._id) } });
+          }
+        }
+      } else {
+        await db
+          .collection<ElectedOfficial>("electedOfficials")
+          .deleteMany(multiSeatOfficialFilter(election));
+      }
       // Class-scoped multi-seat chambers (JP Sangiin): the filter above keys on
       // chamberClass, so councillors seeded WITHOUT a class are invisible to it
       // — every class election inserted winners beside the seeded roster and
@@ -593,7 +695,10 @@ export async function resolveOneGeneralElection(
           break;
         case "commons":
         case "snap_commons":
-          // Snap winners become regular Commons MPs — same seat, same officeType.
+        case "special_commons":
+          // Snap and by-election winners become regular Commons MPs — same
+          // seat, same officeType. By-election winners serve out the remainder
+          // of the vacated term until the next regular cycle.
           officeType = { type: "commons", state: election.state, seatsHeld: seats };
           break;
         case "regionalCouncil":
@@ -1035,8 +1140,14 @@ export async function resolveOneGeneralElection(
       await triggerLeadershipElectionsAfterChamberVote(db, "senate", now);
     }
     // Sweep stale currentOffice for any multi-seat election type — losers and
-    // non-runners who still claim this constituency get cleared.
-    if (MULTI_SEAT_TYPES.has(election.electionType) && election.state) {
+    // non-runners who still claim this constituency get cleared. Skipped for
+    // Commons by-elections (#860): the rest of the delegation was not on the
+    // ballot, so sitting MPs keep their seats and their currentOffice.
+    if (
+      MULTI_SEAT_TYPES.has(election.electionType) &&
+      !isSpecialCommonsElection(election.electionType) &&
+      election.state
+    ) {
       await sweepStaleOffice(
         db,
         election.electionType,

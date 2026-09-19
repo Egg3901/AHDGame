@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui";
 import type { EmergencyMechanicConfig } from "@/lib/constants/cabinetMechanicsTypes";
 import { getCabinetActionCopy } from "./actionCopy";
-import { MINISTERIAL_ACTION_RESET_HINT } from "@/lib/cabinet/ministerialActionPool";
+import { MINISTERIAL_ACTION_RESET_HINT } from "@/lib/cabinet/ministerialActionHint";
 
 interface RegionRow {
   regionId: string;

@@ -6,8 +6,8 @@ import type { CorporationDetail } from "../CorporationPageTypes";
 /**
  * Hand day-to-day operation of the corp to an autonomous NPP caretaker, or
  * reclaim it (NPP-autonomy V2.1). Only rendered where caretakers are enabled for
- * the corp's country (v2). The owner keeps control throughout — this just swaps
- * who runs the turns.
+ * the corp's country (v2). The owner keeps ownership and reclaim access while
+ * the NPP controls operations.
  */
 export function CaretakerCeoCard({
   corporation,
@@ -93,13 +93,34 @@ export function CaretakerCeoCard({
     }
   }
 
+  async function setMandate(mandate: "active" | "passive") {
+    setBusy(true);
+    setError("");
+    try {
+      const res = await fetch(`/api/corporations/${corpId}/ceo/caretaker`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mandate }),
+      });
+      const data = await res.json();
+      if (!res.ok)
+        throw new Error((data as { error?: string }).error ?? "Failed to update mandate");
+      setSuccess(mandate === "passive" ? "Caretaker is now passive." : "Caretaker is now active.");
+      onRefresh();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Network error");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <div className="rounded-xl border border-card-border bg-card p-6">
       <h2 className="text-lg font-bold text-foreground mb-2">NPP Caretaker</h2>
       <p className="text-sm text-muted mb-4">
         {isCaretakerRun
-          ? "An autonomous NPP caretaker is running this corporation on your behalf. You remain the owner and can resume control at any time."
-          : "Hand day-to-day operation to an autonomous NPP caretaker. It runs the corporation under the same bounded rules as any AI-run corp; you stay the owner and can reclaim it anytime."}
+          ? "An autonomous NPP caretaker is running this corporation on your behalf. You remain the owner and can resume control immediately. After an owner-initiated handoff, a cooldown of three real days applies before you can hand it back to a caretaker."
+          : "Hand day-to-day operation to an autonomous NPP caretaker. It runs the corporation under the same bounded rules as any AI-run corp. You stay the owner and can resume control immediately. After this owner-initiated handoff, a cooldown of three real days applies before you can hand it back to a caretaker."}
       </p>
       {error && (
         <div className="rounded-lg border border-error/30 bg-error/10 p-3 text-sm text-error mb-3">
@@ -118,13 +139,32 @@ export function CaretakerCeoCard({
         </p>
       )}
       {isCaretakerRun ? (
-        <button
-          onClick={dismiss}
-          disabled={busy}
-          className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90 transition-colors disabled:opacity-50"
-        >
-          {busy ? "Resuming…" : "Resume Control"}
-        </button>
+        <div className="space-y-4">
+          <label className="block text-sm text-muted">
+            Caretaker mandate
+            <select
+              aria-label="Caretaker mandate"
+              value={corporation.caretakerMandate ?? "active"}
+              disabled={busy}
+              onChange={(event) => void setMandate(event.target.value as "active" | "passive")}
+              className="mt-2 block w-full rounded-lg border border-card-border bg-card-elevated px-3 py-2 text-foreground"
+            >
+              <option value="active">Active: pursue guarded profitable opportunities</option>
+              <option value="passive">Passive: make no new discretionary commitments</option>
+            </select>
+          </label>
+          <p className="text-xs text-muted">
+            Passive stops new plants, capacity, technology, marketing, logistics, R&amp;D,
+            dividends, and bond investments. Existing debt and operating costs still settle.
+          </p>
+          <button
+            onClick={dismiss}
+            disabled={busy}
+            className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90 transition-colors disabled:opacity-50"
+          >
+            {busy ? "Updating…" : "Resume Control"}
+          </button>
+        </div>
       ) : (
         <button
           onClick={appoint}

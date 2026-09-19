@@ -76,3 +76,125 @@ describe("GET /api/search/universal query length limits", () => {
     expect(await getDbMock()).not.toHaveBeenCalled();
   });
 });
+
+describe("GET /api/search/universal proposable legislation", () => {
+  async function setEnabledCountries(ids: string[]) {
+    const { getEnabledCountryIds } = await import("@/lib/countryAccess");
+    vi.mocked(getEnabledCountryIds).mockResolvedValue(ids as never);
+  }
+
+  function seedLegislationTypes(docs: unknown[]) {
+    const cursor = db.collection("legislationTypes").find({});
+    vi.mocked(cursor.toArray).mockResolvedValue(docs);
+  }
+
+  async function billResults(query: string) {
+    const res = await GET(req(`q=${encodeURIComponent(query)}`));
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      results: { type: string; id: string; title: string; subtitle: string; href: string }[];
+    };
+    return body.results.filter((r) => r.type === "bill");
+  }
+
+  it("surfaces the Universal Banking Charter Act option by its own name (#1751)", async () => {
+    const { bankingSeparationLegislationTypes } =
+      await import("@/lib/seeds/shared/bankingSeparationLegislation");
+    await setEnabledCountries(["US"]);
+    seedLegislationTypes(
+      bankingSeparationLegislationTypes.filter((t) => t._id === "us_banking_separation")
+    );
+
+    const bills = await billResults("universal charter");
+
+    expect(bills).toHaveLength(1);
+    expect(bills[0].title).toBe("Universal Banking Charter Act");
+    expect(bills[0].subtitle).toContain("Banking Separation Act");
+    expect(bills[0].subtitle).toContain("propose in the legislature");
+    expect(bills[0].href).toBe("/congress");
+  });
+
+  it("matches a law type by its own name when no option matches", async () => {
+    await setEnabledCountries(["US"]);
+    seedLegislationTypes([
+      {
+        _id: "us_test_charter_law",
+        name: "Test Charter Law",
+        description: "A synthetic charter statute.",
+        countryScope: "us",
+        policyOptions: [{ id: "us_test_charter_law_keep", name: "Leave Things" }],
+      },
+    ]);
+
+    const bills = await billResults("charter law");
+
+    expect(bills).toHaveLength(1);
+    expect(bills[0].title).toBe("Test Charter Law");
+    expect(bills[0].subtitle).toContain("Proposable law");
+    expect(bills[0].href).toBe("/congress");
+  });
+
+  it("scopes legislation to enabled countries and links non-US legislatures", async () => {
+    const { bankingSeparationLegislationTypes } =
+      await import("@/lib/seeds/shared/bankingSeparationLegislation");
+    await setEnabledCountries(["UK"]);
+    // Seed what the scoped DB query would return (MockDb does not filter).
+    seedLegislationTypes(
+      bankingSeparationLegislationTypes.filter((t) => t._id === "uk_banking_separation")
+    );
+
+    const bills = await billResults("universal charter");
+
+    expect(bills).toHaveLength(1);
+    expect(bills[0].title).toBe("Universal Banking Charter Act");
+    expect(bills[0].href).toBe("/country/uk/legislature");
+
+    // And the query itself carries the scope gate so Mongo filters in prod.
+    const findArg = db.collectionMocks.legislationTypes!.find.mock.calls.at(-1)?.[0] as {
+      $and: unknown[];
+    };
+    expect(JSON.stringify(findArg.$and)).toContain('"countryScope":{"$in":["uk"]}');
+    expect(JSON.stringify(findArg.$and)).not.toContain("$exists");
+  });
+
+  it("treats legacy types without a countryScope as US law", async () => {
+    await setEnabledCountries(["US"]);
+    seedLegislationTypes([
+      {
+        _id: "legacy_charter_law",
+        name: "Legacy Charter Law",
+        description: "A pre-scope charter statute.",
+        policyOptions: [],
+      },
+    ]);
+
+    expect((await billResults("legacy charter"))[0]?.href).toBe("/congress");
+
+    const findArg = db.collectionMocks.legislationTypes!.find.mock.calls.at(-1)?.[0] as {
+      $and: unknown[];
+    };
+    expect(JSON.stringify(findArg.$and)).toContain("$exists");
+  });
+
+  it("hides legislation that is not active in the current era", async () => {
+    await setEnabledCountries(["US"]);
+    seedLegislationTypes([
+      {
+        _id: "us_paid_family_leave",
+        name: "Paid Family Leave",
+        description: "A synthetic family leave statute.",
+        countryScope: "us",
+        policyOptions: [],
+      },
+    ]);
+    // us_paid_family_leave unlocks in 1993; the world is still in 1950.
+    db.collection("gameState");
+    db.collectionMocks.gameState!.findOne.mockResolvedValue({
+      _id: "current",
+      eraSystemEnabled: true,
+      currentYear: 1950,
+    });
+
+    expect(await billResults("family leave")).toHaveLength(0);
+  });
+});

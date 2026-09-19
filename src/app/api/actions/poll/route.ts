@@ -1,4 +1,5 @@
 import { loadCampaignCurrencyRates } from "@/lib/campaigns/campaignCurrency";
+import { withNoStore } from "@/lib/api/withNoStore";
 import { turnoutForElection } from "@/lib/campaignTargeting/rules";
 import { projectCampaignPoll } from "@/lib/campaignTargeting/poll";
 import { NextResponse } from "next/server";
@@ -12,7 +13,13 @@ import { requireBasicAuth, requireHumanSession } from "@/lib/api/requireAuth";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { parseJsonBody } from "@/lib/api/validate";
 import { pollCommissionSchema } from "@/lib/api/schemas/poll";
-import { ACTIONS, canPerformAction } from "@/lib/actions";
+import { canPerformAction } from "@/lib/actions";
+import {
+  getPollActionCost,
+  getPollBaseFundCost,
+  quotePollAction,
+  type PollTier,
+} from "@/lib/actions/rules";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
 import { localCampaignBalance } from "@/lib/currency/campaignBalance";
 import { campaignLocalRate } from "@/lib/campaigns/campaignCurrency";
@@ -42,15 +49,15 @@ import { buildLiveTurnouts } from "@/lib/electionEngine/resolvedTurnout";
 import { getAllVoterArchetypeIds } from "@/lib/demographics/countryDemographics";
 import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
 
-const SMALL_POLL_COST = 25000;
-const LARGE_POLL_COST = 75000;
-const SMALL_POLL_ACTIONS = 2;
-const LARGE_POLL_ACTIONS = 6;
+// Poll pricing lives in the shared rules module: quotePollAction is the single
+// source of truth the effect, validation and this route's debit all call.
+// getPollBaseFundCost below is display-only fallback when the quote rejects
+// (unallocated intellect); execution never prices from it.
 
 // GET /api/actions/poll — Returns poll eligibility, stored poll results, and demographic context for the authenticated character's home state
 // Auth: requireBasicAuth
 // Errors: 400, 401, 404
-export async function GET(request: NextRequest) {
+async function handleGET(request: NextRequest) {
   try {
     const auth = await requireBasicAuth();
     if (!auth.ok) return auth.response;
@@ -99,12 +106,23 @@ export async function GET(request: NextRequest) {
     const favorability = character.favorability;
     const politicalInfluence = character.politicalInfluence ?? 0;
 
+    // Same rules quote the server debits on POST: intellect-scaled fund cost
+    // per tier. When the quote rejects (unallocated intellect) the unscaled
+    // base keeps the price displayable; commissioning is still blocked and
+    // POST rejects with the quote reason.
+    const pollTier: PollTier = pollType === "large" ? "large" : "small";
+    const smallQuote = quotePollAction({ intellect: character.stats?.intellect }, "small");
+    const largeQuote = quotePollAction({ intellect: character.stats?.intellect }, "large");
+
     // Look up party organization for the character's party in their home state
     const partyOrgRecord = statePartyOrgs.find((po) => po.partyId === character.party);
     const partyOrgValue = partyOrgRecord?.organization;
 
-    const fundCost = pollType === "large" ? LARGE_POLL_COST : SMALL_POLL_COST;
-    const actionCost = pollType === "large" ? LARGE_POLL_ACTIONS : SMALL_POLL_ACTIONS;
+    const tierQuote = pollTier === "large" ? largeQuote : smallQuote;
+    const fundCost = tierQuote.ok ? tierQuote.fundCostAnchor : getPollBaseFundCost(pollTier);
+    const actionCost = getPollActionCost(pollTier);
+    const smallFundCost = smallQuote.ok ? smallQuote.fundCostAnchor : getPollBaseFundCost("small");
+    const largeFundCost = largeQuote.ok ? largeQuote.fundCostAnchor : getPollBaseFundCost("large");
 
     // Retrieve the stored poll (if any) so the UI can display it without re-commissioning
     const storedPollKey = pollType === "large" ? "lastPollLarge" : "lastPoll";
@@ -207,16 +225,22 @@ export async function GET(request: NextRequest) {
       },
       fundCost,
       actionCost,
-      // SMALL/LARGE_POLL_COST are ANCHOR constants; the character balance is
-      // LOCAL. Convert at the boundary for comparison.
+      fundCostSmall: smallFundCost,
+      fundCostLarge: largeFundCost,
+      // Flat canonical AP cost per tier, same owner as hasActions* below, so
+      // the page tier cards can never restate a stale literal.
+      actionCostSmall: getPollActionCost("small"),
+      actionCostLarge: getPollActionCost("large"),
+      // Quoted costs are ANCHOR; the character balance is LOCAL. Convert at
+      // the boundary for comparison.
       canAffordSmall:
         localCampaignBalance(character, forexEnabled) >=
-        (forexEnabled ? SMALL_POLL_COST * campaignRate : SMALL_POLL_COST),
+        (forexEnabled ? smallFundCost * campaignRate : smallFundCost),
       canAffordLarge:
         localCampaignBalance(character, forexEnabled) >=
-        (forexEnabled ? LARGE_POLL_COST * campaignRate : LARGE_POLL_COST),
-      hasActionsSmall: character.actions >= SMALL_POLL_ACTIONS,
-      hasActionsLarge: character.actions >= LARGE_POLL_ACTIONS,
+        (forexEnabled ? largeFundCost * campaignRate : largeFundCost),
+      hasActionsSmall: character.actions >= getPollActionCost("small"),
+      hasActionsLarge: character.actions >= getPollActionCost("large"),
       // Stored results from the last commissioned poll
       storedPoll: storedPoll
         ? {
@@ -237,6 +261,8 @@ export async function GET(request: NextRequest) {
   }
 }
 
+export const GET = withNoStore(handleGET);
+
 // POST /api/actions/poll — Commissions a quick or full demographic poll, deducts funds and actions, and persists the results
 // Auth: requireHumanSession (bot tokens rejected)
 // Errors: 400, 401, 403, 404, 429
@@ -255,7 +281,7 @@ export async function POST(request: NextRequest) {
     }
     const pollType = parsed.data.type;
     const actionKey = pollType === "large" ? "pollLarge" : "poll";
-    const fundCost = pollType === "large" ? LARGE_POLL_COST : SMALL_POLL_COST;
+    const tier: PollTier = pollType === "large" ? "large" : "small";
 
     const db = await getDb();
     const campaignRates = await loadCampaignCurrencyRates(db);
@@ -273,6 +299,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Character not found" }, { status: 404 });
     }
 
+    // Price the debit from the same quote the effect and validation use. A
+    // missing intellect rejects here before any state is read or charged.
+    const quote = quotePollAction({ intellect: character.stats?.intellect }, tier);
+    if (!quote.ok) {
+      return NextResponse.json({ error: quote.error }, { status: 400 });
+    }
+    const fundCost = quote.fundCostAnchor;
+    const actionCost = quote.apCost;
+
     const gameState = await getGameState();
     // Campaign funds are decoupled from live forex — poll costs convert at the
     // frozen world-seeded currency basis, never the live exchangeRates.
@@ -287,8 +322,6 @@ export async function POST(request: NextRequest) {
     if (!validation.canPerform) {
       return NextResponse.json({ error: validation.reason }, { status: 400 });
     }
-
-    const action = ACTIONS[actionKey];
 
     // Compute the poll results now so we can persist them
     const [state, demographics, categories, statePartyOrgs, turnoutDoc] = await Promise.all([
@@ -481,12 +514,12 @@ export async function POST(request: NextRequest) {
     const campaignFundsField = forexEnabled ? "currencyBalances.campaign" : "funds";
     const spendFilter = {
       _id: character._id,
-      actions: { $gte: action.baseCost },
+      actions: { $gte: actionCost },
       [campaignFundsField]: { $gte: fundCostLocal },
     };
     const spendResult = await db.collection("characters").updateOne(spendFilter, {
       $inc: {
-        actions: -action.baseCost,
+        actions: -actionCost,
         [campaignFundsField]: -fundCostLocal,
       },
       $set: {
@@ -505,7 +538,7 @@ export async function POST(request: NextRequest) {
       characterId: character._id,
       userId: new ObjectId(user.userId),
       actionType: actionKey,
-      actionCost: action.baseCost,
+      actionCost,
       result: {
         success: true,
         fundsChange: -fundCost,

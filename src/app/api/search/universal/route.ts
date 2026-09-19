@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { withNoStore } from "@/lib/api/withNoStore";
 import { getDb } from "@/lib/mongodb";
 import { getGameStateCollection } from "@/lib/db/collections";
 import { handleRouteError } from "@/lib/api/errors";
@@ -25,8 +26,12 @@ import type {
   StateBill,
   WikiPage,
   Bond,
+  LegislationType,
 } from "@/lib/db/types";
 import { BOND_MATURITY_LABELS } from "@/lib/db/types/bond";
+import { getEraContext } from "@/lib/era/context";
+import { isLegislationTypeActive } from "@/lib/era/legislationCatalog";
+import { legislatureUrl } from "@/lib/urls";
 
 /**
  * Maximum accepted `q` length (after trimming). Longer queries are rejected
@@ -134,7 +139,7 @@ function resolveOfficialSearchTarget(
 // GET /api/search/universal — Searches across politicians, NPPs, elected seats, and active elections by query string.
 // Auth: public
 // Errors: 400 when q exceeds 200 characters
-export async function GET(request: Request) {
+async function handleGET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const query = searchParams.get("q")?.trim() || "";
@@ -419,6 +424,95 @@ export async function GET(request: Request) {
         title: bill.title,
         subtitle: `${statusLabel} · ${bill.stateId || "State"} · Sponsor: ${bill.sponsorName}`,
         href: `/country/us/region/${bill.stateId || "national"}/legislature/bills/${bill._id.toString()}`,
+        icon: "📜",
+      });
+    }
+
+    // Search proposable legislation (law types and their policy options), so a
+    // bill nobody has proposed yet is still discoverable by the name players
+    // know it by. The Universal Banking Charter Act, for example, is a policy
+    // option inside the Banking Separation Act type: bill-title search can
+    // never match it until someone proposes one (#1751).
+    // The name match and the scope match are separate $or branches, so they
+    // combine under $and (spreading a second $or would silently overwrite the
+    // first and match every law type in scope). Matching is per-word: the
+    // option players search for ("universal charter") is not a contiguous
+    // substring of its indexed name ("Universal Banking Charter Act"), so a
+    // whole-phrase regex would miss exactly the case this section exists for.
+    const legislationTokens = query
+      .split(/\s+/)
+      .map((token) => token.trim())
+      .filter((token) => token.length >= 2);
+    const legislationTokenRegexes = (
+      legislationTokens.length > 0 ? legislationTokens : [query]
+    ).map((token) => new RegExp(token.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"));
+    const legislationTokenBranches = legislationTokenRegexes.map((tokenRegex) => ({
+      $or: [
+        { name: tokenRegex },
+        { description: tokenRegex },
+        { "policyOptions.name": tokenRegex },
+        { "policyOptions.explanation": tokenRegex },
+      ],
+    }));
+    const enabledLegislationScopes = (enabledCountries ?? []).map(
+      (country) => String(country).toLowerCase() as NonNullable<LegislationType["countryScope"]>
+    );
+    const legislationScopeOr =
+      enabledCountries === undefined
+        ? null
+        : [
+            { countryScope: { $in: enabledLegislationScopes } },
+            // Legacy types carry no countryScope and read as US law in the
+            // legislation-types API; mirror that here.
+            ...(enabledLegislationScopes.includes("us")
+              ? [{ countryScope: { $exists: false } }]
+              : []),
+          ];
+    const legislationMatches = await db
+      .collection<LegislationType>("legislationTypes")
+      .find({
+        $and: [
+          ...legislationTokenBranches,
+          ...(legislationScopeOr ? [{ $or: legislationScopeOr }] : []),
+        ],
+      })
+      .project<LegislationType>({ _id: 1, name: 1, countryScope: 1, policyOptions: 1 })
+      .limit(5)
+      .toArray();
+
+    // Era gate runs outside the query (same reason as the legislation-types
+    // route: availability is world-state-dependent, not a stored field).
+    const { year: legislationEraYear } = await getEraContext(db);
+    for (const legislation of legislationMatches) {
+      if (!isLegislationTypeActive(String(legislation._id), legislationEraYear)) continue;
+      const scope = String(legislation.countryScope ?? "us").toLowerCase();
+      const countryId = scope.toUpperCase() as CountryId;
+      const countryName = COUNTRY_CONFIGS[countryId]?.name ?? countryId;
+      // Name matches outrank explanation matches: the separated option's
+      // explanation mentions "one universal charter", so a single pass would
+      // surface the wrong direction first.
+      const options = legislation.policyOptions ?? [];
+      const matchedOption =
+        options.find((option) =>
+          legislationTokenRegexes.every((tokenRegex) => tokenRegex.test(option.name))
+        ) ??
+        options.find((option) =>
+          legislationTokenRegexes.every(
+            (tokenRegex) =>
+              tokenRegex.test(option.name) ||
+              (option.explanation ? tokenRegex.test(option.explanation) : false)
+          )
+        );
+      results.push({
+        type: "bill",
+        id: matchedOption
+          ? `${String(legislation._id)}:${matchedOption.id}`
+          : String(legislation._id),
+        title: matchedOption?.name ?? legislation.name,
+        subtitle: matchedOption
+          ? `${legislation.name} option · ${countryName} · propose in the legislature`
+          : `Proposable law · ${countryName} · propose in the legislature`,
+        href: scope === "us" ? "/congress" : legislatureUrl(countryId),
         icon: "📜",
       });
     }
@@ -919,3 +1013,5 @@ export async function GET(request: Request) {
     return handleRouteError(error);
   }
 }
+
+export const GET = withNoStore(handleGET);

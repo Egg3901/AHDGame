@@ -357,4 +357,5 @@ export const UK_CABINET_GROUPS: Record<string, CabinetGroup> = {
   northern_ireland: "Nations",
   scotland: "Nations",
   wales: "Nations",
+  chief_whip: "Centre",
 };

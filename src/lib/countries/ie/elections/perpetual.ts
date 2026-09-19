@@ -19,9 +19,10 @@ import {
  * region, anchored to the preset's `ieDail` cycle anchor. A region that joins
  * mid-cycle (NI reunifying) syncs to the live Republic race instead.
  */
-export async function ensureIEElections(now: Date): Promise<void> {
+export async function ensureIEElections(now: Date, inFlightTurn?: number): Promise<void> {
   const db = await getDb();
-  const { currentTurn, ctx } = await getCurrentTurnAndCtx(db);
+  const { currentTurn: persistedTurn, ctx } = await getCurrentTurnAndCtx(db);
+  const currentTurn = inFlightTurn ?? persistedTurn;
 
   const ieRegions = await db
     .collection<State>("states")
@@ -128,9 +129,10 @@ export async function ensureIEElections(now: Date): Promise<void> {
  * is nationwide rather than per-region). Term limit (2 terms) enforced via
  * `executiveTermLimits.ts` reading the IE config's `executiveTermLimit`.
  */
-export async function ensureIEUachtaranElections(now: Date): Promise<void> {
+export async function ensureIEUachtaranElections(now: Date, inFlightTurn?: number): Promise<void> {
   const db = await getDb();
-  const { currentTurn, ctx } = await getCurrentTurnAndCtx(db);
+  const { currentTurn: persistedTurn, ctx } = await getCurrentTurnAndCtx(db);
+  const currentTurn = inFlightTurn ?? persistedTurn;
 
   const liveElections = await db
     .collection<Election>("elections")
@@ -189,9 +191,13 @@ export async function ensureIEUachtaranElections(now: Date): Promise<void> {
  * the preset's `ieLocalCouncil` year (2024 for 2019-default, 1991 for
  * 1991-default).
  */
-export async function ensureIELocalCouncilElections(now: Date): Promise<void> {
+export async function ensureIELocalCouncilElections(
+  now: Date,
+  inFlightTurn?: number
+): Promise<void> {
   const db = await getDb();
-  const { currentTurn, ctx } = await getCurrentTurnAndCtx(db);
+  const { currentTurn: persistedTurn, ctx } = await getCurrentTurnAndCtx(db);
+  const currentTurn = inFlightTurn ?? persistedTurn;
 
   const ieRegions = await db
     .collection<State>("states")
@@ -292,6 +298,9 @@ export async function ensureIELocalCouncilElections(now: Date): Promise<void> {
  * `getRegionalExecutive` (Lord Mayor of Dublin/Cork, Mayor of Limerick/
  * Galway, Cathaoirleach elsewhere) — see regionalExecutive.ts.
  */
-export async function ensureIECathaoirleachElections(now: Date): Promise<void> {
-  await ensureRegionalGovernorElections("IE", now);
+export async function ensureIECathaoirleachElections(
+  now: Date,
+  inFlightTurn?: number
+): Promise<void> {
+  await ensureRegionalGovernorElections("IE", now, undefined, inFlightTurn);
 }

@@ -9,7 +9,11 @@ import {
   getCampaignActionCost,
   getAdvertiseActionCost,
   getDonorActionCost,
-  calculateFundraisingAmount,
+  fundraiseYieldAnchor,
+  CONVERT_CASH_ACTION_COST,
+  calculateConvertCashInfamy,
+  convertCashConversion,
+  REST_ACTION_COST,
 } from "../actions";
 import {
   ACTION_HOARDING_THRESHOLD,
@@ -209,7 +213,7 @@ export function checkStatThresholds(
       why: `You have only ${character.actions} AP. Focus on free or low-cost actions and save your AP for next turn.`,
       action: {
         type: "rest",
-        estimatedCost: { ap: 0, funds: 0 },
+        estimatedCost: { ap: REST_ACTION_COST, funds: 0 },
         estimatedBenefit: "Save AP for next turn",
       },
       link: "/actions",
@@ -261,7 +265,9 @@ export function checkStatThresholds(
   if (funds < FUNDS_CRITICAL_THRESHOLD) {
     const donorLevel = character.donorBaseLevel ?? 0;
     if (donorLevel > 0) {
-      const raiseAmount = calculateFundraisingAmount(donorLevel, character.politicalInfluence ?? 0);
+      // Single source of truth: the same stat-scaled yield the execute shell
+      // credits, so the preview can never understate what fundraising pays.
+      const raiseAmount = fundraiseYieldAnchor(character);
       const cost = getDonorActionCost(donorLevel, "fundraise");
       recommendations.push({
         id: `funds-critical-${character._id.toString()}`,
@@ -294,7 +300,9 @@ export function checkStatThresholds(
   } else if (funds < FUNDS_LOW_THRESHOLD && funds >= FUNDS_CRITICAL_THRESHOLD) {
     const donorLevel = character.donorBaseLevel ?? 0;
     if (donorLevel > 0) {
-      const raiseAmount = calculateFundraisingAmount(donorLevel, character.politicalInfluence ?? 0);
+      // Single source of truth: the same stat-scaled yield the execute shell
+      // credits, so the preview can never understate what fundraising pays.
+      const raiseAmount = fundraiseYieldAnchor(character);
       const cost = getDonorActionCost(donorLevel, "fundraise");
       recommendations.push({
         id: `funds-low-${character._id.toString()}`,
@@ -315,8 +323,11 @@ export function checkStatThresholds(
   // ── Cash on Hand: High (Convert Cash opportunity) ─────────────────────────
   const cashOnHand = getTotalPersonalLiquidWealth(character, forexEnabled);
   if (cashOnHand > 100_000 && funds < 200_000) {
-    const converted = Math.floor(cashOnHand * 0.5);
-    const infamy = Math.round(15 * Math.pow(cashOnHand / 1_000_000, 0.564));
+    // Single source of truth: the shared conversion and infamy legs, so the
+    // preview can never drift from the debited result. The old inline infamy
+    // omitted the 100 cap the execution applies.
+    const converted = convertCashConversion(cashOnHand);
+    const infamy = calculateConvertCashInfamy(cashOnHand);
     recommendations.push({
       id: `convert-cash-${character._id.toString()}`,
       priority: "medium",
@@ -325,7 +336,7 @@ export function checkStatThresholds(
       why: `You have $${cashOnHand.toLocaleString()} personal cash. Convert to campaign funds at 50% rate (+$${converted.toLocaleString()}, +${infamy} infamy).`,
       action: {
         type: "convertCash",
-        estimatedCost: { ap: 2, funds: 0 },
+        estimatedCost: { ap: CONVERT_CASH_ACTION_COST, funds: 0 },
         estimatedBenefit: `+$${converted.toLocaleString()} campaign funds`,
       },
       link: "/actions",

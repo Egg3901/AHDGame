@@ -35,10 +35,18 @@ import {
  * only `ensureUKElections` would silently stop spawning two of the three, and
  * nothing would fail -- the elections would simply never appear.
  */
-const spawn = async (now: Date): Promise<SpawnElectionsResult> => {
-  await ensureUKElections(now);
-  await ensureUKRegionalCouncilElections(now);
-  await ensureUKGovernorElections(now);
+/*
+ * ⚠️ `currentTurn` IS THE IN-FLIGHT TURN AND MUST BE THREADED. The turn
+ * processor spawns elections before the turn counter is persisted, so a
+ * spawner that reads the stored turn instead lands a cycle one turn late.
+ * Upstream added this parameter to every `ensure*` spawner and to
+ * `SpawnElectionsHandler`; the registry now forwards to this function, so
+ * dropping it here would silently undo that for this country.
+ */
+const spawn = async (now: Date, currentTurn?: number): Promise<SpawnElectionsResult> => {
+  await ensureUKElections(now, currentTurn);
+  await ensureUKRegionalCouncilElections(now, currentTurn);
+  await ensureUKGovernorElections(now, currentTurn);
   return { message: "UK Commons / Regional Council / Governor continuity check complete." };
 };
 

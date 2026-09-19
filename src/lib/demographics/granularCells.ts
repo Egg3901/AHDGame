@@ -45,7 +45,46 @@ export type DeriveGranularCellsOpts = {
   /** Optional override of the association-prior table. Used by tests to compare
    *  against the pure-independence baseline without mutating the global table. */
   priors?: Record<string, number>;
+  /**
+   * Race/identity-conditioned lean corrections, applied additively to a cell's
+   * bucket positions when the cell matches `givenDim:givenBucket` (see
+   * {@link ConditionedLeanOffset}). Models interaction effects the additive
+   * bucket mean cannot express: e.g. in the 1953 Deep South the social
+   * traditionalism authored on class buckets describes the white caste order,
+   * not Black voters who share those buckets, so Black cells read corrected
+   * class positions while white cells read the base table untouched. Empty /
+   * omitted = pure bucket mean, byte-identical to the unconditioned behavior.
+   */
+  conditionedOffsets?: ConditionedLeanOffset[];
+  /**
+   * Representation guard for pruning: after the `pruneFloor` cut, every bucket
+   * with a nonzero marginal keeps at least this fraction of its marginal mass
+   * (largest pruned cells reprieved first) before renormalization. Prevents the
+   * floor from silently erasing a whole demographic counterweight — e.g. every
+   * college/graduate cell in a 1953 Southern state sits below a 0.25% absolute
+   * floor, which would delete the entire educated bloc. A mass fraction, not a
+   * per-cell size: small-but-real groups survive, nonexistent ones (zero
+   * marginal) still prune fully. 0 / omitted = floor-only pruning, unchanged.
+   */
+  preserveBucketRepresentation?: number;
 };
+
+/**
+ * One identity-conditioned lean correction: when a cell's `givenDim` bucket is
+ * `givenBucket`, the position it reads for (`dim`, `bucket`) shifts by
+ * (`economicLean`, `socialLean`), additively, before the cell's lean is
+ * averaged. Pure data — no state, clock, or I/O — so it blends and caches like
+ * any other authored table. Offsets modify positions that exist; a bucket
+ * missing from its dimension's positions table still contributes nothing.
+ */
+export interface ConditionedLeanOffset {
+  givenDim: string;
+  givenBucket: string;
+  dim: string;
+  bucket: string;
+  economicLean: number;
+  socialLean: number;
+}
 
 /** Pairwise association priors that nudge the joint distribution away from pure
  *  independence. Stored with dimensions sorted alphabetically so order of lookup
@@ -160,6 +199,76 @@ function buildCombinations(dimNames: string[], buckets: Record<string, string[]>
   return combos;
 }
 
+/**
+ * Reprieve pruned cells so no present bucket is erased by the absolute floor.
+ * For every bucket with nonzero marginal mass, the largest pruned cells
+ * carrying it rejoin `kept` until the bucket's kept mass reaches
+ * `fraction` of its marginal — or no pruned cell carrying it remains. Buckets
+ * already above the guarantee (typical majorities) reprieve nothing, and zero-
+ * marginal buckets (groups genuinely absent from the census) still prune
+ * fully. Deterministic: pruned cells are considered largest-first, ties broken
+ * by id. Mutates `kept` in place; callers renormalize afterwards.
+ */
+function reprievePrunedCells(
+  cells: GenericGranularCell[],
+  kept: GenericGranularCell[],
+  targets: Record<string, Record<string, number>>,
+  fraction: number
+): void {
+  const keptSet = new Set(kept);
+  const pruned = cells
+    .filter((c) => !keptSet.has(c))
+    .sort((a, b) => b.share - a.share || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  if (pruned.length === 0) return;
+
+  const bucketKey = (dim: string, bucket: string): string => `${dim}:${bucket}`;
+  const keptMass = new Map<string, number>();
+  for (const c of kept) {
+    for (const [dim, bucket] of Object.entries(c.buckets)) {
+      const k = bucketKey(dim, bucket);
+      keptMass.set(k, (keptMass.get(k) ?? 0) + c.share);
+    }
+  }
+
+  const remaining = [...pruned];
+  let progressed = true;
+  while (progressed && remaining.length > 0) {
+    progressed = false;
+    // Most-deficient bucket first: lowest kept/marginal ratio below the guarantee.
+    let worstKey: string | null = null;
+    let worstRatio = Infinity;
+    for (const [dim, buckets] of Object.entries(targets)) {
+      for (const [bucket, marginal] of Object.entries(buckets)) {
+        if (marginal <= 0) continue;
+        const ratio = (keptMass.get(bucketKey(dim, bucket)) ?? 0) / marginal;
+        if (ratio < fraction && ratio < worstRatio) {
+          worstRatio = ratio;
+          worstKey = bucketKey(dim, bucket);
+        }
+      }
+    }
+    if (worstKey === null) return;
+    const sep = worstKey.indexOf(":");
+    const dim = worstKey.slice(0, sep);
+    const bucket = worstKey.slice(sep + 1);
+    const idx = remaining.findIndex((c) => c.buckets[dim] === bucket);
+    if (idx < 0) {
+      // No pruned cell carries this bucket and it is still below guarantee —
+      // mark it satisfied so the loop terminates instead of spinning.
+      keptMass.set(worstKey, fraction * (targets[dim]?.[bucket] ?? 0));
+      progressed = true;
+      continue;
+    }
+    const [cell] = remaining.splice(idx, 1);
+    kept.push(cell);
+    for (const [d, b] of Object.entries(cell.buckets)) {
+      const k = bucketKey(d, b);
+      keptMass.set(k, (keptMass.get(k) ?? 0) + cell.share);
+    }
+    progressed = true;
+  }
+}
+
 /** Derive a full set of granular electorate cells from arbitrary Layer-1 census marginals.
  *
  *  Share derivation:
@@ -167,13 +276,16 @@ function buildCombinations(dimNames: string[], buckets: Record<string, string[]>
  *    2. Multiply by the product of applicable pairwise priors.
  *    3. Normalize to sum to 1.
  *    4. Run IPF rake passes so each dimension's marginal totals match the inputs.
- *    5. Drop cells below pruneFloor and renormalize.
+ *    5. Drop cells below pruneFloor, reprieve per `preserveBucketRepresentation`,
+ *       and renormalize.
  *
  *  Lean derivation:
  *    For each cell, average the economic/social positions of every bucket that has
  *    an entry in its dimension's positions table. Dimensions without positions, or
  *    buckets missing from a positions table, contribute nothing. If no positions
  *    are available for a cell, both leans default to 0. Result is clamped to [-5, 5].
+ *    `conditionedOffsets` adjust the averaged positions additively for matching
+ *    cells only (see `ConditionedLeanOffset`).
  *
  *  Turnout derivation:
  *    For each cell, take the geometric mean of the turnout rates for every dimension
@@ -193,6 +305,8 @@ export function deriveGranularCellsGeneric(input: {
   const priors = input.priors ?? {};
   const pruneFloor = input.opts?.pruneFloor ?? 0.001;
   const rakePasses = input.opts?.rakePasses ?? 3;
+  const conditionedOffsets = input.opts?.conditionedOffsets ?? [];
+  const preserveFraction = input.opts?.preserveBucketRepresentation ?? 0;
 
   const dimNames = dims.map((d) => d.name);
 
@@ -239,8 +353,12 @@ export function deriveGranularCellsGeneric(input: {
   }
   rakeCellsGeneric(cells, targets, dimNames, rakePasses);
 
-  // Prune and renormalize.
+  // Prune, then reprieve each present bucket's largest pruned cells until it
+  // keeps its guaranteed fraction of marginal mass (see `reprievePrunedCells`).
   const kept = cells.filter((c) => c.share >= pruneFloor);
+  if (preserveFraction > 0) {
+    reprievePrunedCells(cells, kept, targets, preserveFraction);
+  }
   const keptTotal = kept.reduce((s, c) => s + c.share, 0);
   if (keptTotal > 0) {
     for (const c of kept) c.share /= keptTotal;
@@ -250,12 +368,27 @@ export function deriveGranularCellsGeneric(input: {
   const dimsWithPositions = dims.filter((d) => d.positions);
   const dimsWithTurnout = dims.filter((d) => d.turnoutRates);
 
-  // Compute leans for remaining cells.
+  // Compute leans for remaining cells. Identity-conditioned offsets adjust the
+  // position a matching cell reads for a bucket before averaging; all other
+  // cells read the base table, so the offsets move only the conditioned group.
   for (const c of kept) {
     const bucketPositions: { economicLean: number; socialLean: number }[] = [];
     for (const dim of dimsWithPositions) {
       const pos = dim.positions![c.buckets[dim.name]];
-      if (pos) bucketPositions.push(pos);
+      if (!pos) continue;
+      let economicLean = pos.economicLean;
+      let socialLean = pos.socialLean;
+      for (const o of conditionedOffsets) {
+        if (
+          o.dim === dim.name &&
+          o.bucket === c.buckets[dim.name] &&
+          c.buckets[o.givenDim] === o.givenBucket
+        ) {
+          economicLean += o.economicLean;
+          socialLean += o.socialLean;
+        }
+      }
+      bucketPositions.push({ economicLean, socialLean });
     }
 
     if (bucketPositions.length === 0) {

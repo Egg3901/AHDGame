@@ -29,7 +29,6 @@ import {
 import {
   ARREARS_DEFAULT_TURNS,
   MAX_NPC_FLOW_PER_TURN_FRACTION,
-  computeNpcLoanBook,
   npcFlowDelta,
   fundedNpcFlowDelta,
   perTurnInterest,
@@ -39,7 +38,7 @@ import { interbankServiceTransition } from "@/lib/banking/rules/interbankServici
 import { settleTransition } from "@/lib/banking/settlementJournal";
 import { oid, type TransitionLeg, type TransitionProjection } from "@/lib/banking/rules/boundary";
 import { cbMarginRatePercent } from "@/lib/banking/interbank";
-import { effectiveBankRatesFromPrime } from "@/lib/banking/rates";
+import { effectiveBankRatesFromPrime, playerDepositRatePercent } from "@/lib/banking/rates";
 import { getReserveRequirement } from "@/lib/banking/reserves";
 import { getBankDepositCeiling } from "@/lib/banking/capacityAllocation";
 import { roundSavingsAmount, savingsApyPercent } from "@/lib/currency/savingsInterest";
@@ -58,10 +57,8 @@ import {
   type MoneyTarget,
 } from "@/lib/banking/moneyMove";
 import {
-  CREDIT_BANDS,
   DEFAULT_LENDING_PROFILE,
-  bandRatePercent,
-  bandsForProfile,
+  bandOriginationTargets,
   getCreditBand,
   type CreditBandId,
   type LendingProfileId,
@@ -524,13 +521,30 @@ async function processOneBank(
   stageDone("funding");
 
   // (c) Deposit interest - player balances + npcDeposits, paid from cashReserves
+  //
+  // Pointer-model pricing: player savings never arrived as vault cash, so the
+  // bank pays only the premium over the CB base APY; the base accrues to the
+  // saver in savingsInterestTurn. Authoritative currencies keep the full rate
+  // because the backing cash is in the vault and the liability is real.
+  const cbApyDoc = caches.cbById.get(cbDocId);
+  const cbApyPrime =
+    typeof cbApyDoc?.primeRate === "number" && Number.isFinite(cbApyDoc.primeRate)
+      ? cbApyDoc.primeRate
+      : 0;
+  const cbApyInflation = cbApyDoc?.inflationHistory?.at(-1)?.rate ?? 0;
+  const playerRatePercent = playerDepositRatePercent(
+    rates.depositRatePercent,
+    playerDepositsAreLiabilities,
+    cbApyPrime,
+    cbApyInflation
+  );
   type PlayerCredit = { characterId: ObjectId; interest: number };
   const playerCredits: PlayerCredit[] = [];
   let playerInterestDue = 0;
   for (const ch of depositors) {
     const bal = ch.currencyBalances?.savings?.[currency] ?? 0;
     if (!(bal > 0)) continue;
-    const interest = perTurnInterest(bal, rates.depositRatePercent, currency);
+    const interest = perTurnInterest(bal, playerRatePercent, currency);
     if (interest <= 0) continue;
     playerCredits.push({ characterId: ch._id, interest });
     playerInterestDue += interest;
@@ -647,7 +661,7 @@ async function processOneBank(
           counterpartyType: "corporation" as const,
           counterpartyId: corp._id,
           counterpartyName: corp.name,
-          meta: { ratePercent: rates.depositRatePercent, retainedAsBacking: true },
+          meta: { ratePercent: playerRatePercent, retainedAsBacking: true },
         })),
         thresholds
       );
@@ -721,7 +735,7 @@ async function processOneBank(
               counterpartyType: "corporation" as const,
               counterpartyId: corp._id,
               counterpartyName: corp.name,
-              meta: { ratePercent: rates.depositRatePercent },
+              meta: { ratePercent: playerRatePercent },
             })),
           thresholds
         );
@@ -913,6 +927,17 @@ async function processOneBank(
           result.insurancePremiumPaid -
           result.defaultsWrittenOff,
         "bankCharter.lastBankingIncomeTurn": turn,
+        // The per-turn split behind the net above, so the console can show
+        // interest paid vs earned from the ledger instead of estimating.
+        // Interbank / facility legs land after this stamp and $inc both the
+        // net and their own lines below, starting from zero here.
+        "bankCharter.lastBankingDepositInterest": result.depositInterestPaid,
+        "bankCharter.lastBankingLoanInterest": result.loanInterestCollected,
+        "bankCharter.lastBankingInterbankInterestPaid": 0,
+        "bankCharter.lastBankingInterbankInterestReceived": 0,
+        "bankCharter.lastBankingFacilityInterest": 0,
+        "bankCharter.lastBankingInsurancePremium": result.insurancePremiumPaid,
+        "bankCharter.lastBankingWriteoffs": result.defaultsWrittenOff,
         updatedAt: new Date(),
       },
     }
@@ -1033,6 +1058,15 @@ async function processLoanBookOnlyBank(
         "bankCharter.lastBankingTurn": turn,
         "bankCharter.lastBankingIncome": serviced.interestCollected - serviced.writtenOff,
         "bankCharter.lastBankingIncomeTurn": turn,
+        // No deposit base, so no deposit interest and no premium; the loan
+        // split still applies for the console breakdown.
+        "bankCharter.lastBankingDepositInterest": 0,
+        "bankCharter.lastBankingLoanInterest": serviced.interestCollected,
+        "bankCharter.lastBankingInterbankInterestPaid": 0,
+        "bankCharter.lastBankingInterbankInterestReceived": 0,
+        "bankCharter.lastBankingFacilityInterest": 0,
+        "bankCharter.lastBankingInsurancePremium": 0,
+        "bankCharter.lastBankingWriteoffs": serviced.writtenOff,
         updatedAt: new Date(),
       },
     }
@@ -1303,7 +1337,6 @@ async function serviceNpcBulkBook(
   const nonNpcLoans = Math.max(0, totalLoans - currentTotal);
   const npcFundingCapacity = Math.max(0, state.loanFundingCapacity - nonNpcLoans);
 
-  const openBands = bandsForProfile(state.lendingProfile);
   const byBand = new Map<string, BankLoan>();
   const legacy: BankLoan[] = [];
   for (const loan of existing) {
@@ -1321,27 +1354,28 @@ async function serviceNpcBulkBook(
 
   const work: TrancheWork[] = [];
 
-  for (const band of CREDIT_BANDS) {
-    const open = openBands.some((b) => b.id === band.id);
-    const loan = byBand.get(band.id) ?? null;
-    if (!open && !loan) continue;
-
-    const rate = bandRatePercent(band, lendingRatePercent);
-    // Demand for a band is its share of the bank's funding capacity, taken at
-    // the rate that band is actually charged: price still moves volume, it just
-    // moves it per band now instead of across the whole book at once.
-    const target = open
-      ? Math.max(0, computeNpcLoanBook(npcFundingCapacity * band.demandShare, rate).volume)
-      : 0;
+  // Targets come from the shared rules helper, so the console shows the same
+  // numbers this loop steers toward. Demand for a band is its share of the
+  // bank's funding capacity, taken at the rate that band is actually charged:
+  // price still moves volume, it just moves it per band now instead of across
+  // the whole book at once.
+  const targets = bandOriginationTargets({
+    fundingCapacity: npcFundingCapacity,
+    lendingRatePercent,
+    profile: state.lendingProfile,
+  });
+  for (const entry of targets) {
+    const loan = byBand.get(entry.band) ?? null;
+    if (!entry.open && !loan) continue;
 
     work.push({
       loan,
-      band: band.id,
-      target,
+      band: entry.band,
+      target: entry.target,
       // An existing tranche keeps its originated rate; only a fresh one prices
       // at today's rate.
-      ratePercent: loan ? (loan.ratePercent ?? rate) : rate,
-      defaultRatePercent: band.defaultRatePercent,
+      ratePercent: loan ? (loan.ratePercent ?? entry.ratePercent) : entry.ratePercent,
+      defaultRatePercent: getCreditBand(entry.band).defaultRatePercent,
     });
   }
 
@@ -1554,14 +1588,20 @@ async function serviceInterbankAndCbMargin(
         db.collection<Corporation>("corporations").updateOne(
           { _id: loan.borrowerCorporationId, "bankCharter.status": "active" },
           {
-            $inc: { "bankCharter.lastBankingIncome": -result.interestPaid },
+            $inc: {
+              "bankCharter.lastBankingIncome": -result.interestPaid,
+              "bankCharter.lastBankingInterbankInterestPaid": result.interestPaid,
+            },
             $set: { "bankCharter.lastBankingIncomeTurn": turn, updatedAt: new Date() },
           }
         ),
         db.collection<Corporation>("corporations").updateOne(
           { _id: loan.lenderCorporationId, "bankCharter.status": "active" },
           {
-            $inc: { "bankCharter.lastBankingIncome": result.interestPaid },
+            $inc: {
+              "bankCharter.lastBankingIncome": result.interestPaid,
+              "bankCharter.lastBankingInterbankInterestReceived": result.interestPaid,
+            },
             $set: { "bankCharter.lastBankingIncomeTurn": turn, updatedAt: new Date() },
           }
         ),
@@ -1768,7 +1808,10 @@ async function serviceInterbankAndCbMargin(
       await db.collection<Corporation>("corporations").updateOne(
         { _id: corp._id, "bankCharter.status": "active" },
         {
-          $inc: { "bankCharter.lastBankingIncome": -facilityInterestDue },
+          $inc: {
+            "bankCharter.lastBankingIncome": -facilityInterestDue,
+            "bankCharter.lastBankingFacilityInterest": facilityInterestDue,
+          },
           $set: { "bankCharter.lastBankingIncomeTurn": turn, updatedAt: new Date() },
         }
       );

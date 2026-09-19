@@ -7,7 +7,11 @@ import { campaignAnchorToLocal } from "@/lib/campaigns/rules/currency";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import { formatCurrencyFaceAmount } from "@/lib/currency/formatCurrencyFaceAmount";
 import { bypassNextImageOptimization } from "@/lib/images/bypassImageOptimization";
-import { calculateConvertCashInfamy } from "@/lib/actions";
+import {
+  calculateConvertCashInfamy,
+  convertCashConversion,
+  isFundraiseEligible,
+} from "@/lib/actions";
 import { CARD_PHOTO_SCRIM, CATEGORY_ACCENTS, CATEGORY_LABELS } from "../actionsConstants";
 import type { ActionCardProps } from "../actionsTypes";
 import ActionExecuteRow from "./ActionExecuteRow";
@@ -99,7 +103,7 @@ const ActionCard = memo(function ActionCard({
   } else effectiveFundLabel = card.fundLabel(character);
 
   const didFlash = flash?.type === card.type;
-  const noDonor = card.requiresDonorBase && (character.donorBaseLevel ?? 0) === 0;
+  const noDonor = card.requiresDonorBase && !isFundraiseEligible(character.donorBaseLevel);
   const noCash = isConvertCash && displayPersonalWealth <= 0;
   const fundNeeded = effectiveFundCost;
   // When forex rates are loaded, convert the ₳ cost to home currency so the
@@ -368,7 +372,8 @@ const ActionCard = memo(function ActionCard({
                   // Post-Phase-6: the route reads/writes convertCash in the
                   // player's LOCAL home currency, so the preview math stays in
                   // local. Infamy still scales off the anchor magnitude.
-                  const previewFunds = valid ? Math.floor(parsed * 0.5) : 0;
+                  // Shared conversion leg: the preview credits exactly what execution debits.
+                  const previewFunds = valid ? convertCashConversion(parsed) : 0;
                   const previewInfamy = valid
                     ? calculateConvertCashInfamy(Math.round(toInternal(parsed)))
                     : 0;
