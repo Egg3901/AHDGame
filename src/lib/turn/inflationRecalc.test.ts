@@ -25,6 +25,7 @@ vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 const mockCalculateCountryInflation = vi.fn().mockResolvedValue(3.5);
 vi.mock("@/lib/budget/inflation", () => ({
   calculateCountryInflation: (...args: unknown[]) => mockCalculateCountryInflation(...args),
+  PEGGED_MONEY_GROWTH_COEFF: 0.08,
 }));
 
 // Minimal COUNTRY_CONFIGS with one presidential entry, one parliamentary entry,
@@ -416,6 +417,7 @@ describe("recalculateInflationPerTurn", () => {
       db,
       "US",
       expect.objectContaining({ _id: "federal" }),
+      expect.any(Number),
       expect.any(Number),
       expect.any(Number),
       expect.any(Number),

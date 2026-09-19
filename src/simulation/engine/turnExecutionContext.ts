@@ -164,6 +164,7 @@ function createInitialTurnLogPhases(): TurnLog["phases"] {
     activityLogging: null,
     suspiciousDetection: null,
     tradeGrowthMirror: null,
+    brettonWoodsTurn: null,
     forexTurn: null,
   };
 }
