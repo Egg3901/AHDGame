@@ -8,6 +8,7 @@ import {
   eligibleIdentitySignals,
   type IdentitySignalEligibility,
 } from "@/lib/auth/identitySignals";
+import { loadRecentIdentityValues } from "@/lib/identityHistory/recentValues";
 
 export interface UserWithCharacter {
   id: string;
@@ -26,6 +27,10 @@ export interface UserWithCharacter {
   registrationFingerprint: string | null;
   lastFingerprint: string | null;
   fingerprintCount: number;
+  /** Values seen in the last 90 days, including ones this account has rotated
+   * away from. Consumed by the duplicate grouper so rotation stops defeating it. */
+  historicalIps: string[];
+  historicalFingerprints: string[];
   trackingId: string | null;
   deviceKey: string | null;
   lastDevice: "mobile" | "tablet" | "desktop" | null;
@@ -98,8 +103,15 @@ export const GET = withAdminAuth(async (_auth, request: Request) => {
     }
 
     // One instant for the whole page so every row is judged against the same
-    // cutoff boundary.
+    // cutoff boundary — both the scalar eligibility below and the identity
+    // history window.
     const now = new Date();
+
+    const recentIdentity = await loadRecentIdentityValues(
+      db,
+      users.map((u) => u._id),
+      now
+    );
 
     // Combine user and character data
     const usersWithCharacters: UserWithCharacter[] = users.map((user) => {
@@ -121,6 +133,8 @@ export const GET = withAdminAuth(async (_auth, request: Request) => {
         registrationFingerprint: user.registrationFingerprint || null,
         lastFingerprint: user.lastFingerprint || null,
         fingerprintCount: user.fingerprintHistory?.length || 0,
+        historicalIps: recentIdentity.get(user._id.toString())?.ips ?? [],
+        historicalFingerprints: recentIdentity.get(user._id.toString())?.fingerprints ?? [],
         trackingId: user.trackingId || null,
         deviceKey: user.deviceKey || null,
         lastDevice: user.lastDevice ?? null,

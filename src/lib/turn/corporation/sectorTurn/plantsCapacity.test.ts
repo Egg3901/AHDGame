@@ -3,7 +3,9 @@ import { ObjectId } from "mongodb";
 import { computePlantsCapacity, type PlantsCapacityInput } from "./plantsCapacity";
 import { seedCapitalStock, impliedOutputUnits } from "@/lib/market/capital";
 import { COMMODITY_BASE_PRICES } from "@/lib/constants/commodities";
-import { CAPITAL_SEED_HEADROOM } from "@/lib/market/capital";
+import { CAPITAL_SEED_HEADROOM, CAPITAL_DEPRECIATION_PER_TURN } from "@/lib/market/capital";
+import { getEffectiveStrategyRates, getStrategy } from "@/lib/constants/sectorStrategies";
+import { revenuePerCapacityUnitForStrategy } from "@/lib/constants/capacityEconomy";
 
 const CURRENT_TURN = 1000;
 const GOVERNOR_RAMP_TURNS = 240;
@@ -179,5 +181,46 @@ describe("computePlantsCapacity — plants capacity advance + P5 basis (#588)", 
   it("uses the sector id only through typed picks (smoke)", () => {
     void new ObjectId();
     expect(() => computePlantsCapacity(input())).not.toThrow();
+  });
+
+  // Flip-turn retool basis: owned stock converts to destination units at the
+  // retool boundary, so the flip seed must be destination-basis too while
+  // the blend ratio applies. Seeding from the blended recipe mixed bases in
+  // the max() and minted ~2% on a manufacturing standard to premium flip
+  // (far more on extreme pairs).
+  it("seeds a flip-turn transition in destination units", () => {
+    const from = "standard";
+    const to = "premium";
+    const startTurn = CURRENT_TURN - 5;
+    const effective = getEffectiveStrategyRates("manufacturing", to, from, startTurn, CURRENT_TURN);
+    expect(effective.isTransitioning).toBe(true);
+    const sourceSupply = getStrategy("manufacturing", from).supply;
+    const sourceSeed = seedCapitalStock(
+      PRE_FLIP_REVENUE,
+      { ...sourceSupply },
+      COMMODITY_BASE_PRICES,
+      1
+    );
+    const r = computePlantsCapacity(
+      input({
+        sector: {
+          ...input().sector,
+          capitalStock: sourceSeed,
+          strategyId: to,
+          transitionFromStrategyId: from,
+          transitionStartTurn: startTurn,
+        } as PlantsCapacityInput["sector"],
+        strategySupply: { ...effective.supply },
+        preFlipNameplateRevenue: PRE_FLIP_REVENUE,
+      })
+    );
+    expect(r.retoolCapacityRatio).not.toBe(1);
+    // The invariant, modulo one turn of depreciation: converted stock at
+    // destination productivity. Never the blended seed times the blend.
+    const sourceValue = sourceSeed * revenuePerCapacityUnitForStrategy("manufacturing", from, 1);
+    expect(r.plantsNameplateRevenue / sourceValue).toBeCloseTo(
+      1 - CAPITAL_DEPRECIATION_PER_TURN,
+      3
+    );
   });
 });

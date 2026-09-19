@@ -356,9 +356,10 @@ export async function processCabinetNominationLifecycle(
           .deleteOne({ countryId: nom.countryId, positionId: nom.positionId });
 
         // Vacate any seat the nominee already holds in this cabinet. The
-        // cabinetMembers_countryId_characterId unique index allows one seat
-        // per character, so without this a sitting secretary confirmed to a
-        // new position makes the insert below throw E11000 every turn and the
+        // cabinetMembers_countryId_characterId_roleSlot unique index allows
+        // one seat per character outside the UK (non-UK rows carry no
+        // roleSlot), so without this a sitting secretary confirmed to a new
+        // position makes the insert below throw E11000 every turn and the
         // nomination stays active forever, failing the whole phase. A
         // Senate-confirmed move vacates the old office.
         if (nom.nomineeCharacterId) {

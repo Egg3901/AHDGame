@@ -6,9 +6,16 @@ import { ObjectId, type Db } from "mongodb";
  * $lte / $gte filters (including dotted paths), $set / $setOnInsert / $push /
  * $pull / $inc / $unset updates (dotted), findOneAndUpdate with
  * returnDocument "after", and the vote-tally aggregation-pipeline update
- * emitted by buildEmbeddedVoteTallyUpdate ($getField / $ifNull /
- * $mergeObjects / $add / $cond / $eq only — anything else throws so a
- * divergence surfaces loudly instead of silently passing).
+ * emitted by buildEmbeddedVoteTallyUpdate / buildMotionVoteTallyUpdate
+ * ($getField / $ifNull / $mergeObjects / $add / $cond / $eq / $and / $map
+ * with $$ variables only — anything else throws so a divergence surfaces
+ * loudly instead of silently passing).
+ *
+ * Two server matching semantics matter to conference code and are
+ * implemented faithfully here: `{ field: null }` matches rows where the
+ * field is null OR missing, and scalar equality against an array field
+ * matches when any element equals the value (how the frozen-roll write
+ * filters test membership).
  */
 
 type Doc = Record<string, unknown>;
@@ -69,7 +76,12 @@ function matches(doc: Doc, query: Doc): boolean {
         } else if (op === "$exists") {
           if ((docVal !== undefined) !== (arg as boolean)) return false;
         } else if (op === "$ne") {
-          if (valuesEqual(docVal, arg)) return false;
+          // Server semantics: an array field matches $ne only when NO
+          // element equals the value (missing field still matches).
+          const hit = Array.isArray(docVal)
+            ? docVal.some((v) => valuesEqual(v, arg))
+            : valuesEqual(docVal, arg);
+          if (hit) return false;
         } else if (op === "$lte") {
           if (!((docVal as number) <= (arg as number))) return false;
         } else if (op === "$gte") {
@@ -78,6 +90,13 @@ function matches(doc: Doc, query: Doc): boolean {
           throw new Error(`fakeDb: unsupported query operator ${op}`);
         }
       }
+    } else if (cond === null) {
+      // Server semantics: `{ field: null }` matches null AND missing.
+      if (docVal !== undefined && docVal !== null) return false;
+    } else if (Array.isArray(docVal) && !Array.isArray(cond)) {
+      // Server semantics: scalar equality on an array field matches when
+      // any element equals the value (conference roll-membership filters).
+      if (!docVal.some((v) => valuesEqual(v, cond))) return false;
     } else if (!valuesEqual(docVal, cond)) {
       return false;
     }
@@ -86,48 +105,66 @@ function matches(doc: Doc, query: Doc): boolean {
 }
 
 /** Evaluate the vote-tally pipeline expression subset. */
-function evalExpr(expr: unknown, doc: Doc): unknown {
+function evalExpr(expr: unknown, doc: Doc, vars: Doc = {}): unknown {
+  if (typeof expr === "string") {
+    if (expr.startsWith("$$")) {
+      const rest = expr.slice(2);
+      const dot = rest.indexOf(".");
+      if (dot < 0) return vars[rest];
+      return getPath((vars[rest.slice(0, dot)] ?? {}) as Doc, rest.slice(dot + 1));
+    }
+    if (expr.startsWith("$")) return getPath(doc, expr.slice(1));
+    return expr;
+  }
   if (expr == null || typeof expr !== "object" || Array.isArray(expr)) {
-    if (typeof expr === "string" && expr.startsWith("$")) return getPath(doc, expr.slice(1));
     return expr;
   }
   const obj = expr as Record<string, unknown>;
   if ("$ifNull" in obj) {
     const [a, b] = obj.$ifNull as [unknown, unknown];
-    const va = evalExpr(a, doc);
-    return va == null ? evalExpr(b, doc) : va;
+    const va = evalExpr(a, doc, vars);
+    return va == null ? evalExpr(b, doc, vars) : va;
   }
   if ("$getField" in obj) {
     const { field, input } = obj.$getField as { field: string; input: unknown };
-    const target = evalExpr(input, doc) as Doc;
+    const target = evalExpr(input, doc, vars) as Doc;
     return target?.[field];
   }
   if ("$mergeObjects" in obj) {
     const out: Doc = {};
     for (const part of obj.$mergeObjects as unknown[]) {
-      Object.assign(out, evalExpr(part, doc) as Doc);
+      Object.assign(out, evalExpr(part, doc, vars) as Doc);
     }
     return out;
   }
   if ("$add" in obj) {
     return (obj.$add as unknown[]).reduce<number>(
-      (sum, part) => sum + (evalExpr(part, doc) as number),
+      (sum, part) => sum + (evalExpr(part, doc, vars) as number),
       0
     );
   }
   if ("$cond" in obj) {
     const [cond, yes, no] = obj.$cond as [unknown, unknown, unknown];
-    return evalExpr(cond, doc) ? evalExpr(yes, doc) : evalExpr(no, doc);
+    return evalExpr(cond, doc, vars) ? evalExpr(yes, doc, vars) : evalExpr(no, doc, vars);
   }
   if ("$eq" in obj) {
     const [a, b] = obj.$eq as [unknown, unknown];
-    return valuesEqual(evalExpr(a, doc), evalExpr(b, doc));
+    return valuesEqual(evalExpr(a, doc, vars), evalExpr(b, doc, vars));
+  }
+  if ("$and" in obj) {
+    return (obj.$and as unknown[]).every((part) => evalExpr(part, doc, vars));
+  }
+  if ("$map" in obj) {
+    const { input, as, in: inner } = obj.$map as { input: unknown; as: string; in: unknown };
+    const arr = evalExpr(input, doc, vars) as unknown[];
+    if (!Array.isArray(arr)) throw new Error("fakeDb: $map input is not an array");
+    return arr.map((item) => evalExpr(inner, doc, { ...vars, [as]: item }));
   }
   // Plain literal subdocument (e.g. the `{ [voteKey]: vote }` merge fragment
   // in the vote-tally update): no operator keys, so evaluate each value.
   if (!Object.keys(obj).some((k) => k.startsWith("$"))) {
     const out: Doc = {};
-    for (const [k, v] of Object.entries(obj)) out[k] = evalExpr(v, doc);
+    for (const [k, v] of Object.entries(obj)) out[k] = evalExpr(v, doc, vars);
     return out;
   }
   throw new Error(`fakeDb: unsupported pipeline expression ${JSON.stringify(obj).slice(0, 80)}`);
@@ -170,13 +207,33 @@ function applyPipeline(doc: Doc, pipeline: Doc[]): void {
     if (!("$set" in stage)) throw new Error("fakeDb: only $set pipeline stages are supported");
     const sets = (stage as { $set: Record<string, unknown> }).$set;
     // Evaluate against a snapshot so sibling fields read pre-stage values,
-    // matching server $set semantics within a single stage.
-    const snapshot: Doc = JSON.parse(
-      JSON.stringify(doc, (_k, v) => (v instanceof ObjectId ? { $__oid: v.toString() } : v))
-    );
+    // matching server $set semantics within a single stage. ObjectIds are
+    // marked BEFORE stringify because ObjectId.toJSON() would otherwise turn
+    // them into plain strings before the replacer ever sees them.
+    const mark = (v: unknown): unknown => {
+      if (v instanceof ObjectId) return { $__oid: v.toString() };
+      if (Array.isArray(v)) return v.map(mark);
+      if (v != null && typeof v === "object" && !(v instanceof Date)) {
+        const out: Doc = {};
+        for (const [k, x] of Object.entries(v as Doc)) out[k] = mark(x);
+        return out;
+      }
+      return v;
+    };
+    const snapshot: Doc = JSON.parse(JSON.stringify(mark(doc)));
+    // Deep revive: $map pipelines round-trip whole subdocuments (motions)
+    // through the snapshot, so nested ObjectIds must come back as ObjectIds
+    // or the write would corrupt them into plain marker objects.
     const revive = (v: unknown): unknown => {
-      if (v != null && typeof v === "object" && !Array.isArray(v) && "$__oid" in (v as Doc)) {
-        return new ObjectId((v as Doc).$__oid as string);
+      if (Array.isArray(v)) return v.map(revive);
+      if (v != null && typeof v === "object") {
+        const entries = Object.entries(v as Doc);
+        if (entries.length === 1 && entries[0][0] === "$__oid") {
+          return new ObjectId(entries[0][1] as string);
+        }
+        const out: Doc = {};
+        for (const [k, x] of entries) out[k] = revive(x);
+        return out;
       }
       return v;
     };
@@ -190,6 +247,60 @@ function applyPipeline(doc: Doc, pipeline: Doc[]): void {
 
 export interface FakeLeadershipSeed {
   [collection: string]: Doc[];
+}
+
+/**
+ * Fault-injection wrapper for crash-recovery tests: throws `Error` on the
+ * matching collection/method calls (after `skip` matching calls, `times`
+ * times) to simulate a process crash between two persisted writes. Calls
+ * that do not match pass through to the inner db, so the faulted db stays
+ * usable for the retry that must heal the row. Only for tests using
+ * `createFakeLeadershipDb` (its collections are plain objects, so wrapping
+ * preserves every method).
+ */
+export interface CollectionFaultSpec {
+  collection: string;
+  method: "updateOne" | "findOneAndUpdate" | "insertOne";
+  /** Matching calls to let through before faulting starts. Defaults to 0. */
+  skip?: number;
+  /** Matching calls to fail once faulting starts. Defaults to 1. */
+  times?: number;
+  /** Narrow the fault to calls whose args match (e.g. a specific filter). */
+  match?: (args: unknown[]) => boolean;
+}
+
+export function withCollectionFaults(db: Db, specs: CollectionFaultSpec[]): Db {
+  const calls = specs.map(() => 0);
+  return {
+    ...db,
+    collection: (name: string) => {
+      const inner = db.collection(name) as unknown as Record<
+        string,
+        (...args: unknown[]) => Promise<unknown>
+      >;
+      const relevant = specs
+        .map((spec, index) => ({ spec, index }))
+        .filter(({ spec }) => spec.collection === name);
+      if (relevant.length === 0) return inner;
+      const wrapped: Record<string, unknown> = { ...inner };
+      for (const method of new Set(relevant.map(({ spec }) => spec.method))) {
+        const fn = inner[method] as (...args: unknown[]) => Promise<unknown>;
+        wrapped[method] = async (...args: unknown[]) => {
+          for (const { spec, index } of relevant) {
+            if (spec.method !== method) continue;
+            if (spec.match && !spec.match(args)) continue;
+            calls[index] += 1;
+            const at = calls[index] - (spec.skip ?? 0);
+            if (at >= 1 && at <= (spec.times ?? 1)) {
+              throw new Error(`injected ${method} fault on ${name} (call ${calls[index]})`);
+            }
+          }
+          return fn(...args);
+        };
+      }
+      return wrapped;
+    },
+  } as unknown as Db;
 }
 
 export function createFakeLeadershipDb(seed: FakeLeadershipSeed = {}): Db {

@@ -165,6 +165,71 @@ describe("appointNppPresident", () => {
     expect(govUpdate[1].$set.presidentNppId).toEqual(winnerId);
   });
 
+  it("vacates the appointee's legislative seat through the vacancy mechanism (#2038)", async () => {
+    atLeastMock.mockResolvedValue(true);
+    const winnerRow = {
+      _id: new ObjectId(),
+      officeType: "chamber",
+      countryId: "BR",
+      state: "SP",
+      party: "5",
+      seatsHeld: 1,
+      nppId: winnerId,
+      characterName: "Top Pol",
+      isNPP: true,
+    };
+    const otherRow = {
+      _id: new ObjectId(),
+      officeType: "chamber",
+      countryId: "BR",
+      state: "RJ",
+      party: "9",
+      seatsHeld: 1,
+      nppId: runnerUpId,
+      characterName: "Runner Up",
+      isNPP: true,
+    };
+    setup({ gov: pendingGov, npps, electedOfficials: [winnerRow, otherRow] });
+    db.collection("statePartyOrg");
+
+    expect(await appointNppPresident(db as unknown as Db, "BR", 100, now)).toBe(true);
+
+    // The appointee's incompatible row is reduced to an unheld vacancy record.
+    const vacateCalls = (
+      db.collectionMocks["electedOfficials"].updateMany as ReturnType<typeof vi.fn>
+    ).mock.calls.filter(
+      (c) => (c[0] as Record<string, unknown>)?.nppId?.toString() === winnerId.toString()
+    );
+    expect(vacateCalls).toHaveLength(1);
+    expect(vacateCalls[0][1].$set).toMatchObject({
+      nppId: null,
+      characterName: null,
+      party: null,
+      isNPP: false,
+    });
+    expect(vacateCalls[0][1].$unset).toMatchObject({ seatsHeld: "" });
+
+    // Negative control: the unrelated NPP's row is never targeted.
+    const otherCalls = (
+      db.collectionMocks["electedOfficials"].updateMany as ReturnType<typeof vi.fn>
+    ).mock.calls.filter(
+      (c) => (c[0] as Record<string, unknown>)?.nppId?.toString() === runnerUpId.toString()
+    );
+    expect(otherCalls).toHaveLength(0);
+
+    // Presence is recounted for the vacated state/party.
+    expect(db.collectionMocks["statePartyOrg"].updateOne).toHaveBeenCalledWith(
+      { _id: "SP_5" },
+      expect.anything()
+    );
+
+    // The executive seating itself is unchanged.
+    expect(db.collectionMocks["npps"].updateOne).toHaveBeenCalledWith(
+      { _id: winnerId },
+      { $set: { currentOffice: { type: "president" }, updatedAt: now } }
+    );
+  });
+
   it("derives totalSeatsSupporting live, ignoring a stale/wrong gov.seatsByParty", async () => {
     // Regression for the stale-cache defect: `governmentFormations.seatsByParty`
     // is a write-triggered cache that can drift arbitrarily far from the real

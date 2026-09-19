@@ -4,6 +4,7 @@ import type { WhippedFromVoteMap } from "./legislation";
 import type { GoverningAgenda } from "@/lib/nppAutonomy/governingAgenda";
 import type { PersistedCommandStance, PersistedFiscalStance } from "@/lib/nppAutonomy/fiscalStance";
 import type { GoverningGoalState } from "@/lib/nppAutonomy/v5/rules/governingGoals";
+import type { PersistedReshuffleGuardState } from "@/lib/nppAutonomy/rules/reshuffleGuard";
 
 // --- GovernmentFormation ---
 
@@ -120,6 +121,17 @@ export interface GovernmentFormation {
    * is what makes a v4 world load and run unchanged.
    */
   governingGoals?: GoverningGoalState | null;
+
+  /**
+   * NPP Autonomy reshuffle-guard state (#1994): government-level last
+   * reshuffle turn, per-portfolio consecutive-replacement history, and the
+   * most recent replacement's reason/tenure/shortfall for observability.
+   * Written only by `runMinisterialGovernance` on an actual replacement (or
+   * escalation marking); read scoped by `governmentKey`, so a government
+   * transition starts clean. Absent on older docs, which read as empty state.
+   * Never consulted by caretaker or player-controlled paths.
+   */
+  ministerialReshuffle?: PersistedReshuffleGuardState | null;
 }
 
 // --- PMAppointmentVote ---

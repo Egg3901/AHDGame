@@ -196,7 +196,7 @@ describe("settlement crash recovery", () => {
     expect(failures).toEqual([]);
   });
 
-  it("degrades safely (no compounding) on the pre-#2016 charter-claim window", async () => {
+  it("resumes exactly once through the #2016 charter-claim window", async () => {
     const log = await referenceLog({ charter: true });
     const claim = log.findIndex(
       (e, i) =>
@@ -207,22 +207,10 @@ describe("settlement crash recovery", () => {
     );
     expect(claim).toBeGreaterThanOrEqual(0);
     const { world, second } = await crashThenRetry({ charter: true }, crashAfter(claim));
-    // Retryable, never terminal: only the debit landed, nobody was paid.
-    expect(second).toMatchObject({ ok: false, status: 500 });
-    expect((second as { terminal?: boolean }).terminal).not.toBe(true);
-    const firstBalances = await readBalances(world);
-    expect(firstBalances.acquirer).toBe(ACQUIRER_CASH - world.price);
-    expect(firstBalances.charA).toBe(0);
-    // A further retry reports the same error and moves no more money.
-    const again = await executeAgreedAcquisition({
-      db: world.db,
-      offer: world.offer as never,
-      currentTurn: 200,
-    });
-    expect(again).toMatchObject({ ok: false, status: 500 });
-    expect(await readBalances(world)).toEqual(firstBalances);
-    const settlement = await loadAcquisitionSettlement(world.db, world.offerId);
-    expect(settlement?.status).toBe("in_progress");
+    // PR #2016 is now merged, so its charter-claim recovery completes the
+    // handoff before this acquisition retry resumes the money settlement.
+    expect(second).toMatchObject({ ok: true });
+    await expectExactlyOnceSuccess(world, 1);
   });
 
   it("refuses the bypass for a genuinely new bank conflict on a live settlement", async () => {

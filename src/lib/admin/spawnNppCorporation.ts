@@ -8,7 +8,10 @@ import {
 } from "./nppCorpCeoSelection";
 import type { State } from "@/lib/db/types/state";
 import type { CountryId } from "@/lib/constants/countries";
-import { assertPrivateEnterprisePermitted } from "@/lib/economy/queries/privateEnterpriseGate";
+import {
+  assertPrivateEnterprisePermitted,
+  isPrivateEnterpriseBlocked,
+} from "@/lib/economy/queries/privateEnterpriseGate";
 import {
   getGdpAnchorRate,
   loadWorldEraUnitScale,
@@ -558,6 +561,18 @@ export async function batchSpawnNppCorporations(
   if (!defaultHq) {
     throw new Error(`No capital state configured for country "${countryId}"`);
   }
+
+  // Eligibility before attempts: a planned economy has no private sector to
+  // spawn into, and without this check every sector/slot below throws
+  // PrivateEnterpriseBlockedError inside the loop (51 console.errors for a
+  // 3/sector batch across 17 sectors) while spawning nothing. The check reads
+  // the same marketization-dial gate the single-spawn path enforces, so a
+  // country converting either direction is honoured with no caller change.
+  // Returns [] so callers treat blocked like already-seeded: nothing to do.
+  if (await isPrivateEnterpriseBlocked(db, countryId)) {
+    return [];
+  }
+
   const hqState = options?.headquartersState ?? defaultHq;
 
   const sectorTypes = options?.sectorTypes ?? [...CORPORATION_TYPES];

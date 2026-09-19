@@ -107,6 +107,16 @@ export async function POST(request: Request, { params }: RouteParams) {
         currentTurn,
       });
       if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status });
+      if (result.autoAccepted) {
+        return NextResponse.json({
+          ok: true,
+          offerId: result.offerId.toString(),
+          autoAccepted: true,
+          sectorsMoved: result.sectorsMoved,
+          acquirerName: result.acquirerName,
+          targetName: result.targetName,
+        });
+      }
       return NextResponse.json({ ok: true, offerId: result.offerId.toString() });
     }
 

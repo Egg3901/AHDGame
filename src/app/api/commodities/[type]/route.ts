@@ -33,7 +33,6 @@ import {
   GOVT_HEALTHCARE_DEMAND_RATE,
   GOVT_HEALTHCARE_BUDGET_CATEGORIES,
   govtSpendForCategory,
-  NATCORP_COMMODITY_MULTIPLIER,
   dollarsToUnits,
   getCommodityStabilizer,
   computeMarketPrice,
@@ -44,62 +43,26 @@ import type { StateResourceCapacity } from "@/lib/db/types/stateResourceCapacity
 import type { CommodityType } from "@/lib/constants/commodities";
 import { CORPORATION_TYPE_LABELS } from "@/lib/constants/corporations";
 import type { CorporationType } from "@/lib/constants/corporations";
-import { getEffectiveStrategyRates, SECTOR_STRATEGIES } from "@/lib/constants/sectorStrategies";
-import {
-  computeExtractionCapacityMultipliers,
-  type ExtractionSectorInput,
-} from "@/lib/turn/extraction/extractionCapacity";
+import { SECTOR_STRATEGIES } from "@/lib/constants/sectorStrategies";
 import { getStateResourceCapacityCollection } from "@/lib/db/collections/stateResourceCapacity";
-import {
-  getExtractionContractsCollection,
-  activeExtractionContractFilter,
-} from "@/lib/db/collections/extractionContracts";
 import { computeRollingAnnualizedPercentChange } from "@/lib/utils/rollingAnnualizedChange";
 import {
-  fxRateForCorpFromMap,
+  fxRateForSectorHostFromMap,
   loadFxRatesByCurrency,
-  resolveCorpLiquidCurrencyCode,
+  resolveSectorHostCurrencyCode,
 } from "@/lib/currency/corporationCapital";
 import { readCorpEconomicAnchor } from "@/lib/currency/corpEconomyFields";
+import { COUNTRY_CURRENCY_MAP, eraRateForCurrency } from "@/lib/constants/currencies";
 import type { CurrencyCode } from "@/lib/constants/currencies";
-import { getOutputMultiplier, getInputMultiplier } from "@/lib/utils/productionPolicy";
-
-/**
- * Effective per-revenue supply or demand rate for one commodity, matching
- * `computeRawSupplyDemand` (operating strategies override base SECTOR_* tables).
- */
-function getEffectiveCommodityRate(
-  sector: CorporateSector,
-  commodity: CommodityType,
-  kind: "supply" | "demand",
-  currentTurn: number
-): number {
-  const st = sector.sectorType as CorporationType;
-  const hasStrategy = sector.strategyId && sector.strategyId !== "standard";
-  const strategyRates =
-    hasStrategy || sector.transitionFromStrategyId
-      ? getEffectiveStrategyRates(
-          st,
-          sector.strategyId ?? "standard",
-          sector.transitionFromStrategyId,
-          sector.transitionStartTurn,
-          currentTurn
-        )
-      : null;
-
-  if (strategyRates) {
-    const map = kind === "supply" ? strategyRates.supply : strategyRates.demand;
-    return map[commodity] ?? 0;
-  }
-
-  const flows = kind === "supply" ? SECTOR_SUPPLY[st] : SECTOR_DEMAND[st];
-  if (!flows) return 0;
-  let sum = 0;
-  for (const f of flows) {
-    if (f.commodity === commodity) sum += f.rate;
-  }
-  return sum;
-}
+import { loadWorldPreset } from "@/lib/currency/gdpAnchorRate";
+import { getEraUnitScale } from "@/lib/constants/sectorSeedEra";
+import {
+  aggregateRealizedCommodityVolumes,
+  isExtractionExceptionCommodity,
+  REALIZED_COMMODITY_ROUNDING_DECIMALS,
+  REALIZED_COMMODITY_ROUNDING_UNIT,
+} from "@/lib/commodities/realizedCommodityBasis";
+import type { RealizedLeaderboardSector } from "@/lib/commodities/realizedCommodityBasis";
 
 /** Sector-type flow rows for the Production Flow panel: base tables plus strategies that add commodities not present in the base map. */
 function buildSectorFlowRows(
@@ -341,10 +304,54 @@ export async function getCommodityDetailData(
     const fxByCorpId = new Map<string, { code: CurrencyCode | undefined; rate: number }>();
     for (const c of allCorps) {
       fxByCorpId.set(c._id.toString(), {
-        code: resolveCorpLiquidCurrencyCode(c),
-        rate: fxRateForCorpFromMap(c, fxByCurrency),
+        code: resolveSectorHostCurrencyCode(
+          { countryId: (c.countryId ?? c.countryOwnerId) as string | null },
+          c
+        ),
+        rate: fxRateForSectorHostFromMap(
+          { countryId: (c.countryId ?? c.countryOwnerId) as string | null },
+          c,
+          fxByCurrency
+        ),
       });
     }
+    // NOTE: fxByCorpId intentionally uses sector-host resolution (home country
+    // fallback), matching the corporation commodities route, so the retail
+    // synthetic leg and the realized leaderboard below normalize on the same
+    // anchor basis the world supply ledger uses.
+
+    // World context for the realized physical-unit basis (same turn, same
+    // scope as the corporation tab). Loaded once; the leaderboard aggregation
+    // below runs every sector through `computeSectorCommodityUnits`, the exact
+    // chain `computeCorpCommodityFlows` uses.
+    const worldPreset = includeHeavy ? await loadWorldPreset(db) : "modern";
+    const eraUnitScale = getEraUnitScale(worldPreset);
+    const [gameConfigDoc, gameStateDoc, stateResourceDocs] = includeHeavy
+      ? await Promise.all([
+          db
+            .collection<{ _id: string; commandEconomyEnabled?: boolean }>("gameConfig")
+            .findOne({ _id: "default" }, { projection: { commandEconomyEnabled: 1 } }),
+          db
+            .collection<{ _id: string; currentYear?: number }>("gameState")
+            .findOne({ _id: "current" }, { projection: { currentYear: 1 } }),
+          (await getStateResourceCapacityCollection(db))
+            .find({}, { projection: { stateId: 1, resources: 1 } })
+            .toArray(),
+        ])
+      : [null, null, [] as { stateId: string; resources?: Record<string, number> | null }[]];
+    // Command-economy currencies are deliberately untraded and have no
+    // exchangeRates row; fill only the absent ones from the authored preset,
+    // exactly like the corporation commodities route. Live rates win.
+    if (includeHeavy) {
+      for (const code of Object.values(COUNTRY_CURRENCY_MAP) as CurrencyCode[]) {
+        if (fxByCurrency.has(code)) continue;
+        const authoredRate = eraRateForCurrency(code, worldPreset);
+        if (authoredRate !== undefined) fxByCurrency.set(code, authoredRate);
+      }
+    }
+    const stateResourcesByState = new Map(
+      (stateResourceDocs ?? []).map((doc) => [doc.stateId, doc.resources ?? null])
+    );
 
     // Sector-type supply/demand (base tables + operating strategies that add inputs/outputs not in base)
     const suppliers = buildSectorFlowRows(commodity, "supply");
@@ -404,171 +411,116 @@ export async function getCommodityDetailData(
       >
     > = {};
 
-    if (includeHeavy) {
-      // Group sectors by corporation
-      const sectorsByCorp = new Map<string, CorporateSector[]>();
-      for (const sector of allSectors) {
-        const key = sector.corporationId.toString();
-        const list = sectorsByCorp.get(key) ?? [];
-        list.push(sector);
-        sectorsByCorp.set(key, list);
-      }
+    // Advertising-budget demand, kept OUT of corporate input consumption and
+    // reported as its own labelled row (see below). It is market-level demand
+    // generated from marketing budgets, not plant input use.
+    const advertisingBudgetByCorp = new Map<string, number>();
+    let advertisingBudgetTotal = 0;
 
-      // Natcorps (country-owned enterprises) contribute only NATCORP_COMMODITY_MULTIPLIER
-      // of their revenue-implied commodity flows — mirror commodityPriceTurn.ts so per-corp
-      // totals reconcile with globalSupply / globalDemand.
+    if (includeHeavy) {
+      // Realized physical-unit basis, shared with the corporation tab: every
+      // sector runs through `computeSectorCommodityUnits` (measured production
+      // + utilization-scaled inputs), the exact chain behind
+      // `computeCorpCommodityFlows`. Revenue / price never masquerades as
+      // realized output. Extraction keeps the documented exception (nameplate
+      // plus state-capacity filter; unpersisted turn factors are not
+      // reconstructed).
       const natcorpIds = new Set(
         allCorps.filter((c) => !!c.countryOwnerId).map((c) => c._id.toString())
       );
-
-      // For extractable commodities, mirror the turn engine's capacity cap so a producer
-      // whose state-level revenue would exceed the available capacity is shown at its
-      // actual capped output, not its uncapped revenue-implied projection. Without this,
-      // a single producer can appear to "out-produce" the entire global supply.
-      const isExtractable = (EXTRACTABLE_RESOURCES as readonly string[]).includes(commodity);
-      let extractionMultipliers:
-        Map<string, Partial<Record<ExtractableResource, number>>> | undefined;
-      if (isExtractable) {
-        const extractionSectors = allSectors.filter((s) => s.sectorType === "extraction");
-        if (extractionSectors.length > 0) {
-          const stateIds = [...new Set(extractionSectors.map((s) => s.stateId))];
-          const [capacityDocs, activeContracts] = await Promise.all([
-            (await getStateResourceCapacityCollection(db))
-              .find({ stateId: { $in: stateIds } })
-              .toArray(),
-            (await getExtractionContractsCollection(db))
-              .find({ stateId: { $in: stateIds }, ...activeExtractionContractFilter() })
-              .toArray(),
-          ]);
-
-          const extractionInputs: ExtractionSectorInput[] = extractionSectors.map((sector) => {
-            const hasStrategy = sector.strategyId && sector.strategyId !== "standard";
-            const strategyRates =
-              hasStrategy || sector.transitionFromStrategyId
-                ? getEffectiveStrategyRates(
-                    "extraction",
-                    sector.strategyId ?? "standard",
-                    sector.transitionFromStrategyId,
-                    sector.transitionStartTurn,
-                    currentTurn
-                  )
-                : null;
-
-            const sectorFx = fxByCorpId.get(sector.corporationId.toString());
-            const sectorRevenueAnchor = readCorpEconomicAnchor(
-              sector.revenue,
-              sectorFx?.code,
-              sectorFx?.rate ?? 1
-            );
-
-            const revenueBasedOutput: Partial<Record<ExtractableResource, number>> = {};
-            for (const resource of EXTRACTABLE_RESOURCES) {
-              const rate = strategyRates
-                ? (strategyRates.supply[resource] ?? 0)
-                : ((SECTOR_SUPPLY["extraction"] ?? []).find((f) => f.commodity === resource)
-                    ?.rate ?? 0);
-              if (rate > 0) {
-                revenueBasedOutput[resource] =
-                  (sectorRevenueAnchor * rate) / COMMODITY_BASE_PRICES[resource];
-              }
-            }
-
-            return {
-              sectorId: sector._id.toString(),
-              stateId: sector.stateId,
-              corporationId: sector.corporationId,
-              revenueBasedOutput,
-            };
-          });
-
-          extractionMultipliers = computeExtractionCapacityMultipliers(
-            extractionInputs,
-            activeContracts,
-            capacityDocs
-          );
-        }
-      }
-
-      // Calculate per-corporation supply and demand in units
-      // (fxByCorpId hoisted above the first includeHeavy block so it's also
-      // available to the retail-demand synthetic block below.)
-      const corpSupply = new Map<string, number>(); // corpId -> units/day
-      const corpDemand = new Map<string, number>(); // corpId -> units/day
-      const corpSupplyByCountry = new Map<CountryId, Map<string, number>>();
-      const corpDemandByCountry = new Map<CountryId, Map<string, number>>();
-
-      const addCountryUnits = (
-        target: Map<CountryId, Map<string, number>>,
-        countryId: CountryId | undefined,
-        corpId: string,
-        units: number
-      ) => {
-        if (!countryId || units <= 0) return;
-        const existing = target.get(countryId) ?? new Map<string, number>();
-        existing.set(corpId, (existing.get(corpId) ?? 0) + units);
-        target.set(countryId, existing);
-      };
-
-      for (const [corpId, sectors] of sectorsByCorp) {
-        let supplyUnits = 0;
-        let demandUnits = 0;
-        const fx = fxByCorpId.get(corpId);
-        const natcorpScale = natcorpIds.has(corpId) ? NATCORP_COMMODITY_MULTIPLIER : 1;
-
-        for (const sector of sectors) {
-          const sectorRevenueAnchor = readCorpEconomicAnchor(
+      const mode = await getMarketSystemMode();
+      const realizedSectors: RealizedLeaderboardSector[] = allSectors.map((sector) => {
+        const corpId = sector.corporationId.toString();
+        const corp = corpMap.get(corpId);
+        const hostCurrencyCode = resolveSectorHostCurrencyCode(
+          {
+            countryId:
+              (sector.countryId as string | null | undefined) ??
+              stateCountryMap[sector.stateId] ??
+              corp?.countryId ??
+              corp?.countryOwnerId ??
+              null,
+          },
+          corp ?? null
+        );
+        return {
+          sectorType: sector.sectorType,
+          stateId: sector.stateId,
+          countryId:
+            (sector.countryId as string | null | undefined) ??
+            stateCountryMap[sector.stateId] ??
+            null,
+          revenue: sector.revenue,
+          strategyId: sector.strategyId,
+          transitionFromStrategyId: sector.transitionFromStrategyId,
+          transitionStartTurn: sector.transitionStartTurn,
+          revenueAnchor: readCorpEconomicAnchor(
             sector.revenue,
+            hostCurrencyCode,
+            fxRateForSectorHostFromMap(
+              {
+                countryId:
+                  (sector.countryId as string | null | undefined) ??
+                  stateCountryMap[sector.stateId] ??
+                  corp?.countryId ??
+                  corp?.countryOwnerId ??
+                  null,
+              },
+              corp ?? null,
+              fxByCurrency
+            )
+          ),
+          producedUnits: sector.producedUnits,
+          capacityUnits: sector.operatingCapacityUnits ?? sector.capitalStock ?? null,
+          mothballed: sector.mothballed,
+          productionPolicyLevel: sector.productionPolicyLevel,
+          embargoSuspended: sector.embargoSuspended,
+          embargoExportExposure: sector.embargoExportExposure,
+          militaryDivertedFraction: sector.militaryDivertedFraction,
+          militaryDivertedTurn: sector.militaryDivertedTurn,
+          corporationId: corpId,
+          isNatcorp: natcorpIds.has(corpId),
+        };
+      });
+      const realized = aggregateRealizedCommodityVolumes(
+        realizedSectors,
+        commodity,
+        currentTurn,
+        {
+          plantsEnabled: marketAtLeast(mode, "plants"),
+          eraUnitScale,
+          currentYear: gameStateDoc?.currentYear ?? null,
+          commandEconomyEnabled: gameConfigDoc?.commandEconomyEnabled === true,
+          stateResourcesByState,
+        },
+        (stateId) => stateCountryMap[stateId]
+      );
+      const corpSupply = realized.supplyByCorp;
+      const corpDemand = realized.demandByCorp;
+      const corpSupplyByCountry = realized.supplyByCountry as Map<CountryId, Map<string, number>>;
+      const corpDemandByCountry = realized.demandByCountry as Map<CountryId, Map<string, number>>;
+
+      // Advertising-budget demand is computed but NOT folded into corporate
+      // consumption: it stays a separately labelled market-level row.
+      if (commodity === "advertising") {
+        for (const corp of allCorps) {
+          if (!(corp.marketingBudget > 0)) continue;
+          const corpId = corp._id.toString();
+          const fx = fxByCorpId.get(corpId);
+          const budgetAnchor = readCorpEconomicAnchor(
+            corp.marketingBudget,
             fx?.code,
             fx?.rate ?? 1
           );
-          const sectorCountryId = stateCountryMap[sector.stateId] as CountryId | undefined;
-          const supplyRate = getEffectiveCommodityRate(sector, commodity, "supply", currentTurn);
-          if (supplyRate > 0) {
-            let units =
-              dollarsToUnits(sectorRevenueAnchor * supplyRate, basePrice) *
-              getOutputMultiplier(sector.productionPolicyLevel ?? 0) *
-              natcorpScale;
-            if (sector.sectorType === "extraction" && isExtractable && extractionMultipliers) {
-              const sectorMults = extractionMultipliers.get(sector._id.toString());
-              const mult = sectorMults?.[commodity as ExtractableResource] ?? 1;
-              units *= mult;
-            }
-            supplyUnits += units;
-            addCountryUnits(corpSupplyByCountry, sectorCountryId, corpId, units);
-          }
-
-          const demandRate = getEffectiveCommodityRate(sector, commodity, "demand", currentTurn);
-          if (demandRate > 0) {
-            const units =
-              dollarsToUnits(sectorRevenueAnchor * demandRate, basePrice) *
-              getInputMultiplier(sector.productionPolicyLevel ?? 0) *
-              natcorpScale;
-            demandUnits += units;
-            addCountryUnits(corpDemandByCountry, sectorCountryId, corpId, units);
+          const msUnits = dollarsToUnits(
+            budgetAnchor * MARKETING_ADVERTISING_DEMAND_RATE,
+            basePrice
+          );
+          if (msUnits > 0) {
+            advertisingBudgetByCorp.set(corpId, msUnits);
+            advertisingBudgetTotal += msUnits;
           }
         }
-
-        // For advertising: add marketing budget demand (normalized to ₳).
-        if (commodity === "advertising") {
-          const corp = corpMap.get(corpId);
-          if (corp && corp.marketingBudget > 0) {
-            const budgetAnchor = readCorpEconomicAnchor(
-              corp.marketingBudget,
-              fx?.code,
-              fx?.rate ?? 1
-            );
-            const msUnits = dollarsToUnits(
-              budgetAnchor * MARKETING_ADVERTISING_DEMAND_RATE,
-              basePrice
-            );
-            demandUnits += msUnits;
-            const corpCountryId = (corp.countryId ?? corp.countryOwnerId) as CountryId | undefined;
-            addCountryUnits(corpDemandByCountry, corpCountryId, corpId, msUnits);
-          }
-        }
-
-        if (supplyUnits > 0) corpSupply.set(corpId, supplyUnits);
-        if (demandUnits > 0) corpDemand.set(corpId, demandUnits);
       }
 
       // Sort all producers and consumers (client handles pagination)
@@ -601,7 +553,15 @@ export async function getCommodityDetailData(
       demandDriver = {
         type: "corporate",
         label: "Corporate Demand",
-        description: `Driven by marketing spending. Corporations allocate marketing budgets that convert to advertising commodity demand at a ${(MARKETING_ADVERTISING_DEMAND_RATE * 100).toFixed(0)}% rate.`,
+        description: `Driven by marketing spending. Corporations allocate marketing budgets that convert to advertising commodity demand at a ${(MARKETING_ADVERTISING_DEMAND_RATE * 100).toFixed(0)}% rate. That budget demand is market-level demand reported separately below. Top Consumers shows plant input demand only, on the same realized basis as corporation commodity pages.`,
+        ...(includeHeavy && advertisingBudgetTotal > 0
+          ? {
+              sourceLabel: "Marketing-budget demand (separate from corporate consumption)",
+              sourceUnits: Math.round(advertisingBudgetTotal * 100) / 100,
+              consumerNote:
+                "Top Consumers shows realized plant input demand only. Marketing-budget demand is listed separately under system demand, not as corporation consumption.",
+            }
+          : {}),
       };
     } else if (commodity === "financial_services") {
       demandDriver = {
@@ -642,6 +602,19 @@ export async function getCommodityDetailData(
         description: "Baseline market activity representing background economic demand",
       },
     ];
+
+    // Advertising-budget demand is market-level demand, not corporation input
+    // consumption: it stays visible here as a labelled system row instead of
+    // inflating any corporation's Top Consumers figure.
+    if (includeHeavy && commodity === "advertising" && advertisingBudgetTotal > 0) {
+      syntheticDemandSources.push({
+        name: "Corporate Marketing Budgets",
+        type: "system",
+        units: Math.round(advertisingBudgetTotal * 100) / 100,
+        description:
+          "Market-level advertising demand generated from corporation marketing budgets. Reported separately: it is not plant input consumption and never appears in a corporation's Top Consumers figure.",
+      });
+    }
 
     const retailDemandFlows = includeHeavy ? SECTOR_DEMAND["retail"] : undefined;
     if (retailDemandFlows) {
@@ -875,6 +848,27 @@ export async function getCommodityDetailData(
       topConsumers,
       topProducersByCountry,
       topConsumersByCountry,
+      // Documented realized physical-unit basis shared with the corporation
+      // commodity tab (see `realizedCommodityBasis`). Same turn, same
+      // geographic scope; per-corp volumes round to
+      // REALIZED_COMMODITY_ROUNDING_DECIMALS decimals.
+      volumeBasis: {
+        basis: "realized_physical_units" as const,
+        turn: currentTurn,
+        roundingDecimals: REALIZED_COMMODITY_ROUNDING_DECIMALS,
+        roundingTolerance: REALIZED_COMMODITY_ROUNDING_UNIT,
+        extractionException: isExtractionExceptionCommodity(commodity),
+        advertisingBudgetSeparate: commodity === "advertising",
+      },
+      // Marketing-budget demand per corporation, deliberately NOT part of Top
+      // Consumers. Null when the commodity is not advertising.
+      advertisingBudgetDemand:
+        commodity === "advertising"
+          ? {
+              total: Math.round(advertisingBudgetTotal * 100) / 100,
+              byCorp: buildCorpVolumeRows(advertisingBudgetByCorp.entries(), corpMap),
+            }
+          : null,
       demandDriver,
       syntheticDemandSources,
       capacityByState,
