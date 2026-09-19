@@ -509,6 +509,7 @@ async function getCharacterById(characterId: string) {
             isCommandingGeneral: false,
           }),
       gameDateAnchor: gameState ? gameDateAnchorFromState(gameState) : undefined,
+      gamePreset: gameState?.preset,
     };
   } catch (error) {
     // redirect() throws NEXT_REDIRECT internally — it must propagate, never be caught
@@ -585,6 +586,7 @@ export default async function CharacterPage({ params }: PageProps) {
     generalPosting,
     isCommandingGeneral,
     gameDateAnchor,
+    gamePreset,
   } = data;
 
   const campaignRates = await loadCampaignCurrencyRates(await getDb());
@@ -744,7 +746,7 @@ export default async function CharacterPage({ params }: PageProps) {
     homeState?.gdp,
     character.countryId,
     character.politicalInfluence ?? 0,
-    gameState?.preset
+    gamePreset
   );
   const populationTier = getPopulationTier(statePopulation);
 
