@@ -14,21 +14,35 @@ export async function seedCabinetIndexes(db: Db, log: (msg: string) => void) {
     { unique: true, name: "cabinetMembers_countryId_positionId" },
     log
   );
-  // One cabinet seat per character (per country). Partial so the many NPP-held
-  // seats — which carry `characterId: null` — are exempt and don't collide on a
-  // shared null value. Ported from the retired ukCabinetMembers collection,
-  // where this constraint (plain-unique, player-only) lived.
+  // One departmental plus one central appointment per UK player (issue #2049);
+  // every other country keeps one seat per character. The replacement index is
+  // created BEFORE the legacy one-seat index below is dropped, so the
+  // collection is never without a player-holder guard. Partial so the many
+  // NPP-held seats (which carry `characterId: null`) are exempt and don't
+  // collide on a shared null value. Legacy rows without `roleSlot` index as
+  // null; at most one row per character can exist while the legacy index is
+  // still enforced, so creation cannot conflict.
   await ensureIndex(
     db,
     "cabinetMembers",
-    { countryId: 1, characterId: 1 },
+    { countryId: 1, characterId: 1, roleSlot: 1 },
     {
       unique: true,
-      name: "cabinetMembers_countryId_characterId",
+      name: "cabinetMembers_countryId_characterId_roleSlot",
       partialFilterExpression: { characterId: { $type: "objectId" } },
     },
     log
   );
+  // Superseded by the role-slot index above: one seat per character would
+  // reject a UK minister's complementary second title. Dropped after the
+  // replacement exists (never before). Absent on fresh bootstraps; the catch
+  // is the normal path there.
+  try {
+    await db.collection("cabinetMembers").dropIndex("cabinetMembers_countryId_characterId");
+    log("  - cabinetMembers.cabinetMembers_countryId_characterId (dropped, superseded)");
+  } catch {
+    log("  = cabinetMembers.cabinetMembers_countryId_characterId (already absent)");
+  }
 
   // ukCabinetCooldowns — keyed uniquely by country+position. NO TTL index: the
   // cooldown lifetime is turn-based (`cooldownUntilTurn`, checked at appoint

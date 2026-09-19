@@ -1252,16 +1252,6 @@ export function processSectors(
     const riskPremium = SECTOR_RISK_PREMIUM[corp.type as string] ?? SECTOR_RISK_PREMIUM.default;
     const growthNumer = corpGrowthNumerByCorpId.get(id) ?? 0;
     const growthDenom = corpGrowthDenomByCorpId.get(id) ?? 0;
-    // `shareIssuanceProceeds` tracks cash the corp has realized from selling its
-    // OWN shares out of the public float (incremented on float buys, decremented
-    // on float sells; issuance itself no longer moves it — Bug #0624). Exclude it
-    // from the tangible-book numerator so realized issuance proceeds don't prop up
-    // the book-value floor and dilution genuinely reduces share price — the cash is
-    // still available for operations, just not for the floor. The field may run
-    // negative (float sold back for more than was realized); `Math.max(0, …)` below
-    // bounds the effect, so a negative value only raises the floor toward true
-    // liquidCapital, which is benign.
-    const issuanceProceedsAnchor = corpCapitalToAnchor(corp.shareIssuanceProceeds ?? 0, code, rate);
     const activeBankCharter = corp.bankCharter?.status === "active" ? corp.bankCharter : null;
     const bankFxRate = activeBankCharter
       ? (lookups.exchangeRatesByCurrency.get(activeBankCharter.currency) ?? 1)
@@ -1274,7 +1264,10 @@ export function processSectors(
       : 0;
     return {
       corpId: id,
-      liquidCapitalAnchor: Math.max(0, s.liquidCapitalAnchorAfterIncome - issuanceProceedsAnchor),
+      // Issuance already scales the per-share price when new shares are created.
+      // Cash that subsequently arrives is a real retained asset and belongs in
+      // tangible book; subtracting it again double-counts dilution.
+      liquidCapitalAnchor: Math.max(0, s.liquidCapitalAnchorAfterIncome),
       bankEquityAnchor,
       sectorNPVAnchor: s.sectorNPV + bankNpvAnchor,
       issuedBondDebt: lookups.issuedBondDebtByCorpId.get(id) ?? 0,

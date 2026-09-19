@@ -8,7 +8,7 @@ import { ensureRegionalDelegateElections, ensureRegionalGovernorElections } from
  * Each region gets one multi-seat election with all seats contested.
  * Uses `buildCanonicalSpawn` for cycle computation and timing.
  */
-export async function ensureCNElections(now: Date): Promise<void> {
+export async function ensureCNElections(now: Date, inFlightTurn?: number): Promise<void> {
   await ensureRegionalDelegateElections(
     {
       countryId: "CN",
@@ -20,7 +20,8 @@ export async function ensureCNElections(now: Date): Promise<void> {
       openPrimaryImmediately: true,
       label: "NPC Delegate",
     },
-    now
+    now,
+    inFlightTurn
   );
 }
 
@@ -34,7 +35,10 @@ export async function ensureCNElections(now: Date): Promise<void> {
  * the NPC end turn so national and provincial elections fire on the same
  * turn (matches real-world quinquennial cadence).
  */
-export async function ensureCNPeoplesCongressElections(now: Date): Promise<void> {
+export async function ensureCNPeoplesCongressElections(
+  now: Date,
+  inFlightTurn?: number
+): Promise<void> {
   await ensureRegionalDelegateElections(
     {
       countryId: "CN",
@@ -43,7 +47,8 @@ export async function ensureCNPeoplesCongressElections(now: Date): Promise<void>
       openPrimaryImmediately: true,
       label: "People's Congress",
     },
-    now
+    now,
+    inFlightTurn
   );
 }
 
@@ -58,6 +63,6 @@ export async function ensureCNPeoplesCongressElections(now: Date): Promise<void>
  * path (term expiry, retirement, scandal removal) rather than sitting
  * frozen on the seeded NPP forever.
  */
-export async function ensureCNGovernorElections(now: Date): Promise<void> {
-  await ensureRegionalGovernorElections("CN", now);
+export async function ensureCNGovernorElections(now: Date, inFlightTurn?: number): Promise<void> {
+  await ensureRegionalGovernorElections("CN", now, undefined, inFlightTurn);
 }

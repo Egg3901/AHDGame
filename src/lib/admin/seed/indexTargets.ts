@@ -187,6 +187,12 @@ export const INDEX_TARGETS = [
       "settlementPlays drain + per-turn indexes, the UNIQUE partial index that holds each character to one use of a personal play per turn, and the UNIQUE partial index on settlementCrises that stops two live German Questions. Required before the crisis is opened on a world that was never reset.",
   },
   {
+    id: "indexesIdentityHistory",
+    label: "Indexes — Identity History",
+    description:
+      "identityObservations: the 90-day TTL on lastSeen that enforces the retention period, the per-user paged read that also serves the open-run lookup on every write, and the cross-user (track, value) lookup behind duplicate grouping and the shared-account counts. Without the TTL this collection grows without bound and outlives its stated retention.",
+  },
+  {
     id: "indexesIntelligence",
     label: "Indexes — Intelligence",
     description:

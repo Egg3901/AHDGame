@@ -5,10 +5,13 @@ import type {
   Bond,
   CommodityPrice,
   CorporateSector,
+  Corporation,
   EconomicMetric,
   EconomicVitalSigns,
   ExchangeRate,
+  GameConfig,
   GameHealthSnapshot,
+  IndexFund,
   MoneySupplySnapshot,
   ShareOrder,
   ShareTradeHistory,
@@ -28,6 +31,26 @@ import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
 import type { CommodityType } from "@/lib/constants/commodities";
 import { loadWorldEraUnitScale } from "@/lib/currency/gdpAnchorRate";
 import { computeMarketFormationSnapshot } from "@/lib/economy/marketFormation";
+import {
+  classifySovereignDemandGap,
+  summarizeSovereignIssuanceByCountry,
+} from "@/lib/bonds/sovereignIssueDiagnostics";
+import type {
+  SovereignDemandGapFund,
+  SovereignDiagnosticBond,
+} from "@/lib/bonds/sovereignIssueDiagnostics";
+import {
+  computeFundAllocationBreakdown,
+  INDEX_FUND_RESERVE_CASH_BUFFER_FRACTION,
+} from "@/lib/indexFunds/fundAllocation";
+import { getAllFundDefinitions } from "@/lib/indexFunds/fundDefinitions";
+import { corpCapitalToAnchor } from "@/lib/currency/corporationCapital";
+import { BOND_UNIT_FACE_VALUE } from "@/lib/db/types/bond";
+import {
+  clampShare,
+  isTradableListing,
+  tradableListingIds,
+} from "@/lib/stockExchange/listingEligibility";
 import { NPP_MARKET_ENTRY_FUNNEL_COLLECTION } from "@/lib/turn/npp/entryDiagnostics";
 
 export const ECONOMIC_VITAL_SIGNS_COLLECTION = "economicVitalSigns";
@@ -54,11 +77,38 @@ type Inputs = {
   ledgerTurnover: LedgerTurnoverRow[];
   /** How many ledger entries the window covered; a sample-size input only. */
   ledgerEntryCount: number;
+  /** One row per corporation carrying ring-fenced money (see summarizeRingFencedCash). */
+  ringFenced?: RingFencedCashRow[];
+  /** Anchor rates by currency code; unknown currencies convert 1:1. */
+  anchorRates?: Record<string, number>;
   commodityParticipants: CommodityParticipant[];
   unownedSectors?: UnownedSector[];
   entryFunnel?: NppMarketEntryFunnel | null;
   eraUnitScale?: number;
   history?: VitalSignsHistoryRow[];
+  /**
+   * Fund demand snapshot for the #1001 sovereign demand-gap cross-section.
+   * Assembled by `snapshotEconomicVitalSigns` from projected reads; absent in
+   * unit tests and older callers, in which case the per-country rows carry no
+   * `demandGapByReason` and read exactly as before.
+   */
+  sovereignDemand?: SovereignFundDemandInput;
+};
+
+/**
+ * Everything `classifySovereignDemandGap` needs beyond the bonds themselves:
+ * plain data, resolved by the caller from projected `indexFunds`,
+ * `federalBudget`, `exchangeRates`, and `gameConfig` reads.
+ */
+export type SovereignFundDemandInput = {
+  funds: SovereignDemandGapFund[];
+  /** Bond holder `fundId` (string) to classifier fund key (slug). */
+  fundIdToKey: ReadonlyMap<string, string>;
+  tradableCurrencies: readonly string[];
+  controlledCurrencies: readonly string[];
+  ratingByCountry: ReadonlyMap<string, string | undefined>;
+  /** `indexFundBondLiquidityEnabled`: the cross-border equity demand flag. */
+  crossBorderEnabled: boolean;
 };
 
 /**
@@ -71,6 +121,7 @@ export type VitalSignsHistoryRow = {
   twoSidedListingShare: number | null;
   activeTradedListingShare: number | null;
   sovereignNoHolderBondShare: number | null;
+  corporateNoHolderBondShare: number | null;
 };
 
 type ProjectedMetric = { value: number | null } | undefined;
@@ -82,6 +133,7 @@ type HistoryProjection = {
     twoSidedListingShare?: ProjectedMetric;
     activeTradedListingShare?: ProjectedMetric;
     sovereignNoHolderBondShare?: ProjectedMetric;
+    corporateNoHolderBondShare?: ProjectedMetric;
   };
 };
 
@@ -98,6 +150,31 @@ const finite = (value: unknown): value is number =>
 
 function ratio(numerator: number, denominator: number): number | null {
   return denominator > 0 ? numerator / denominator : null;
+}
+
+/**
+ * Per-issue holder-cap input for the demand-gap classifier: whole units each
+ * candidate fund already holds, keyed by fund slug. Holder rows without a
+ * fund id (characters, corps, NPPs) do not consume fund cap.
+ */
+function fundUnitsByKey(
+  holders: Bond["holders"],
+  fundIdToKey: ReadonlyMap<string, string>
+): Map<string, number> {
+  const byKey = new Map<string, number>();
+  for (const holder of holders ?? []) {
+    const fundId = holder.fundId?.toString();
+    if (!fundId) continue;
+    const key = fundIdToKey.get(fundId);
+    if (!key) continue;
+    const units =
+      typeof holder.units === "number" && Number.isFinite(holder.units)
+        ? Math.max(0, Math.floor(holder.units))
+        : 0;
+    if (units <= 0) continue;
+    byKey.set(key, (byKey.get(key) ?? 0) + units);
+  }
+  return byKey;
 }
 
 function metric(value: number | null, observations: number, basis: string): EconomicMetric {
@@ -286,6 +363,35 @@ function marketQuality(
     return [Math.abs(listing.priceChange48h) / (notional / 1_000_000)];
   });
 
+  // Per-listing inventory concentration: each economic trade's notional is
+  // split evenly across its distinct named counterparties, so a float-only
+  // leg attributes fully to the trader on the other side. Rows with no named
+  // party are unattributable and narrow the sample instead of diluting it.
+  const notionalByListingParty = new Map<string, Map<string, number>>();
+  for (const trade of trades) {
+    const notional = nonnegative(trade.totalAnchor);
+    if (notional <= 0) continue;
+    const parties = new Set(
+      [trade.from, trade.to].map(tradePartyKey).filter((key): key is string => key != null)
+    );
+    if (parties.size === 0) continue;
+    const share = notional / parties.size;
+    const key = trade.corporationId.toString();
+    let byParty = notionalByListingParty.get(key);
+    if (!byParty) {
+      byParty = new Map();
+      notionalByListingParty.set(key, byParty);
+    }
+    for (const party of parties) byParty.set(party, (byParty.get(party) ?? 0) + share);
+  }
+  const topTraderShares: number[] = [];
+  for (const [listingId, byParty] of notionalByListingParty) {
+    if (!listingById.has(listingId)) continue;
+    const total = [...byParty.values()].reduce((sum, value) => sum + value, 0);
+    if (total <= 0) continue;
+    topTraderShares.push(Math.max(...byParty.values()) / total);
+  }
+
   return {
     openBuyOrders: open.filter((order) => order.type === "buy").length,
     openSellOrders: open.filter((order) => order.type === "sell").length,
@@ -297,7 +403,16 @@ function marketQuality(
     organicDepthAnchor,
     executionHours,
     amihud,
+    topTraderShares,
   };
+}
+
+function tradePartyKey(party: ShareTradeHistory["from"]): string | null {
+  if (!party) return null;
+  if (party.characterId) return `character:${party.characterId.toString()}`;
+  if (party.imperialCharacterId) return `imperial:${party.imperialCharacterId.toString()}`;
+  if (party.corporationId) return `corporation:${party.corporationId.toString()}`;
+  return party.name ? `name:${party.name}` : null;
 }
 
 function relevantMarketDiagnostics(
@@ -453,6 +568,74 @@ export function summarizeLedgerTurnover(entries: LedgerEntry[]): LedgerTurnoverR
   return [...byAccount.entries()].map(([account, turnover]) => ({ account, turnover }));
 }
 
+/**
+ * One corporation's ring-fenced money: bank cash reserves plus share escrow.
+ *
+ * Both sit outside the shadow ledger. The bank's `cashReserves` are
+ * ring-fenced from the parent's `liquidCapital` (see `banking/bankCash.ts`),
+ * so the corporation ledger account never sees them; `shareEscrowBalance`
+ * settles float trades in escrow mode and likewise emits no ledger legs.
+ * Only active charters count as banks: revoked or failed charters hold no
+ * spendable bank money, and their cash is in recovery or already returned.
+ */
+export interface RingFencedCashRow {
+  charterActive: boolean;
+  charterCurrency: string;
+  /** Absent on charters written before the ring-fence: unclassified, not zero. */
+  cashReserves: number | undefined;
+  liquidCurrency: string;
+  /** Absent in instant settlement mode, which holds no escrow: zero, not unknown. */
+  escrowBalance: number | undefined;
+}
+
+export interface RingFencedCashSummary {
+  banksTotal: number;
+  banksReported: number;
+  bankCashAnchor: number;
+  escrowAnchor: number;
+  escrowContributors: number;
+}
+
+/**
+ * Aggregate ring-fenced money into anchor stocks.
+ *
+ * Conversion mirrors the balance snapshot's `toAnchor`: a missing or
+ * non-positive rate converts 1:1 rather than dropping the row. Negative
+ * escrow rows are buyback debt, not money, and floor per row exactly like the
+ * modeled balance stocks in `monetaryActivity`.
+ */
+export function summarizeRingFencedCash(
+  rows: RingFencedCashRow[],
+  rates: Record<string, number>
+): RingFencedCashSummary {
+  const toAnchor = (local: number, currency: string): number => {
+    const rate = rates[currency];
+    return rate && rate > 0 ? local / rate : local;
+  };
+  let banksTotal = 0;
+  let banksReported = 0;
+  let bankCashAnchor = 0;
+  let escrowAnchor = 0;
+  let escrowContributors = 0;
+  for (const row of rows) {
+    if (row.charterActive) {
+      banksTotal += 1;
+      if (typeof row.cashReserves === "number" && Number.isFinite(row.cashReserves)) {
+        banksReported += 1;
+        bankCashAnchor += toAnchor(nonnegative(row.cashReserves), row.charterCurrency);
+      }
+    }
+    if (typeof row.escrowBalance === "number" && Number.isFinite(row.escrowBalance)) {
+      const anchor = toAnchor(nonnegative(row.escrowBalance), row.liquidCurrency);
+      if (anchor > 0) {
+        escrowAnchor += anchor;
+        escrowContributors += 1;
+      }
+    }
+  }
+  return { banksTotal, banksReported, bankCashAnchor, escrowAnchor, escrowContributors };
+}
+
 function monetaryActivity(
   balanceSnapshot: BalanceSnapshot | null,
   turnoverRows: LedgerTurnoverRow[]
@@ -476,6 +659,7 @@ function monetaryActivity(
   let total = 0;
   let active = 0;
   const balanceByKind = new Map<string, number>();
+  const accountCountByKind = new Map<string, number>();
   for (const [account, rawBalance] of Object.entries(balances)) {
     if (!isRealAccount(account)) continue;
     const balance = nonnegative(rawBalance);
@@ -483,6 +667,7 @@ function monetaryActivity(
     if (activeAccounts.has(account)) active += balance;
     const kind = accountKind(account);
     balanceByKind.set(kind, (balanceByKind.get(kind) ?? 0) + balance);
+    accountCountByKind.set(kind, (accountCountByKind.get(kind) ?? 0) + 1);
   }
 
   const velocity = (kinds: readonly string[]): number | null => {
@@ -490,6 +675,16 @@ function monetaryActivity(
     const flow = kinds.reduce((sum, kind) => sum + (turnoverByKind.get(kind) ?? 0), 0);
     return ratio(flow, stock);
   };
+  const householdStock =
+    (balanceByKind.get("character") ?? 0) + (balanceByKind.get("character_savings") ?? 0);
+  const householdAccountCount =
+    (accountCountByKind.get("character") ?? 0) + (accountCountByKind.get("character_savings") ?? 0);
+  // An absent savings class is unmeasured, not zero: a 0/600 share would claim
+  // the economy holds no savings when savings accounts simply do not exist.
+  const savingsShare =
+    (accountCountByKind.get("character_savings") ?? 0) === 0
+      ? null
+      : ratio(balanceByKind.get("character_savings") ?? 0, householdStock);
   return {
     total,
     active,
@@ -498,6 +693,10 @@ function monetaryActivity(
     accountCount: Object.keys(balances).filter((account) => isRealAccount(account)).length,
     grossVelocity: ratio(grossTurnover, total),
     householdVelocity: velocity(["character", "character_savings"]),
+    transactionalVelocity: velocity(["character"]),
+    savingsVelocity: velocity(["character_savings"]),
+    savingsShare,
+    householdAccountCount,
     corporateVelocity: velocity(["corporation"]),
     partyVelocity: velocity(["party"]),
     governmentVelocity: velocity(["government"]),
@@ -650,9 +849,20 @@ export function computeEconomicVitalSigns(input: Inputs): EconomicVitalSigns {
     "takeover_buyout",
   ]);
   const economicTrades = input.trades.filter((trade) => economicTradeKinds.has(trade.kind));
-  const quality = marketQuality(listings, input.shareOrders, economicTrades);
+  // The eligible tradable set (#2033): zero-share / zero-float rows stay
+  // visible as firms but leave every breadth denominator, and the retained
+  // 48-turn window is intersected with it so dissolved/delisted corporations
+  // cannot linger in a numerator after leaving the current listings.
+  const tradable = listings.filter(isTradableListing);
+  const tradableIds = tradableListingIds(listings);
+  const quality = marketQuality(tradable, input.shareOrders, economicTrades);
   const competition = relevantMarketDiagnostics(input.commodityParticipants, input.currentFlows);
-  const tradedCorporations = new Set(economicTrades.map((trade) => trade.corporationId.toString()));
+  const tradedCorporations = new Set(
+    economicTrades
+      .map((trade) => trade.corporationId.toString())
+      .filter((id) => tradableIds.has(id))
+  );
+  const tradableCount = tradable.length;
   const activeBonds = input.bonds.filter((bond) => !bond.matured);
   const sovereignBonds = activeBonds.filter((bond) => bond.issuerType === "sovereign");
   const corporateBonds = activeBonds.filter((bond) => bond.issuerType !== "sovereign");
@@ -708,6 +918,15 @@ export function computeEconomicVitalSigns(input: Inputs): EconomicVitalSigns {
   }
   const sovereignMaturityValues = [...sovereignFaceByMaturity.values()];
   const sovereignMaturityConcentration = concentration(sovereignMaturityValues);
+  const corporateFaceByMaturity = new Map<number, number>();
+  for (const bond of corporateBonds) {
+    corporateFaceByMaturity.set(
+      bond.maturityTurn,
+      (corporateFaceByMaturity.get(bond.maturityTurn) ?? 0) + nonnegative(bond.totalIssued)
+    );
+  }
+  const corporateMaturityValues = [...corporateFaceByMaturity.values()];
+  const corporateMaturityConcentration = concentration(corporateMaturityValues);
 
   const wealth = input.globalWealth?.entries.map((entry) => Math.max(0, entry.totalWealth)) ?? [];
   const aggregateWealth = wealth.reduce((sum, value) => sum + value, 0);
@@ -767,9 +986,17 @@ export function computeEconomicVitalSigns(input: Inputs): EconomicVitalSigns {
           : "low";
   }
   const activity = monetaryActivity(input.balanceSnapshot, input.ledgerTurnover);
+  const ring = summarizeRingFencedCash(input.ringFenced ?? [], input.anchorRates ?? {});
+  const ringBankIncomplete = ring.banksTotal > ring.banksReported;
+  const ringTotal = ring.bankCashAnchor + ring.escrowAnchor;
   const history = input.history ?? [];
   const coverage = computeCoverage(input.turn, history);
   const measurementReasons: string[] = [];
+  if (ringBankIncomplete) {
+    measurementReasons.push(
+      `bank_cash_incomplete_${ring.banksReported}_of_${ring.banksTotal}_reporting`
+    );
+  }
   if (coverage.missingTurns.length > 0) {
     measurementReasons.push(`window_missing_${coverage.missingTurns.length}_turns`);
   }
@@ -950,9 +1177,9 @@ export function computeEconomicVitalSigns(input: Inputs): EconomicVitalSigns {
         0
       ),
       activeTradedListingShare: metric(
-        ratio(tradedCorporations.size, listings.length),
-        listings.length,
-        "listed_firm_count_48_turns"
+        clampShare(ratio(tradedCorporations.size, tradableCount)),
+        tradableCount,
+        "tradable_listing_count_48_turns"
       ),
       activeBonds: activeBonds.length,
       noHolderBondShare: metric(
@@ -997,23 +1224,59 @@ export function computeEconomicVitalSigns(input: Inputs): EconomicVitalSigns {
         sovereignMaturityValues.length,
         "sovereign_face_by_maturity_turn"
       ),
+      corporateMaturityHhi: metric(
+        corporateMaturityConcentration.hhi,
+        corporateMaturityValues.length,
+        "corporate_face_by_maturity_turn"
+      ),
       sovereignMedianPriceToParSpreadPct: metric(
         median(sovereignBonds.map((bond) => (1 - bond.marketPrice) * 100)),
         sovereignBonds.length,
         "unmatured_sovereign_issue_count"
       ),
+      sovereignIssuanceByCountry: summarizeSovereignIssuanceByCountry(
+        activeBonds,
+        input.sovereignDemand
+          ? (issue: SovereignDiagnosticBond) =>
+              classifySovereignDemandGap(
+                {
+                  countryId: issue.countryId ?? null,
+                  currencyCode: issue.currencyCode ?? null,
+                  totalIssued: issue.totalIssued,
+                  faceValue: issue.faceValue,
+                  publicFloat: issue.publicFloat,
+                  heldUnitsByFundKey: fundUnitsByKey(
+                    issue.holders,
+                    input.sovereignDemand!.fundIdToKey
+                  ),
+                },
+                input.sovereignDemand!.funds,
+                {
+                  tradableCurrencies: input.sovereignDemand!.tradableCurrencies,
+                  controlledCurrencies: input.sovereignDemand!.controlledCurrencies,
+                },
+                input.sovereignDemand!.ratingByCountry,
+                input.sovereignDemand!.crossBorderEnabled
+              )
+          : undefined
+      ),
+      corporateMedianPriceToParSpreadPct: metric(
+        median(corporateBonds.map((bond) => (1 - bond.marketPrice) * 100)),
+        corporateBonds.length,
+        "unmatured_corporate_issue_count"
+      ),
       openBuyOrders: quality.openBuyOrders,
       openSellOrders: quality.openSellOrders,
       twoSidedListingShare: metric(
-        ratio(quality.twoSidedListings, listings.length),
-        listings.length,
-        "listed_firm_count_open_order_books"
+        clampShare(ratio(quality.twoSidedListings, tradableCount)),
+        tradableCount,
+        "tradable_listing_count_open_order_books"
       ),
       facilityQuotedListings: quality.facilityQuotedListings,
       organicTwoSidedListingShare: metric(
-        ratio(quality.organicTwoSidedListings, listings.length),
-        listings.length,
-        "listed_firm_count_open_order_books_excluding_liquidity_facility"
+        clampShare(ratio(quality.organicTwoSidedListings, tradableCount)),
+        tradableCount,
+        "tradable_listing_count_open_order_books_excluding_liquidity_facility"
       ),
       medianQuotedSpreadPct: metric(
         median(quality.spreads),
@@ -1043,6 +1306,11 @@ export function computeEconomicVitalSigns(input: Inputs): EconomicVitalSigns {
         quality.amihud.length,
         "absolute_48h_return_pct_per_million_anchor_notional"
       ),
+      medianTopTraderNotionalShare48: metric(
+        median(quality.topTraderShares),
+        quality.topTraderShares.length,
+        "named_counterparty_share_of_listing_notional_48_turns"
+      ),
     },
     coverage,
     securitiesRecent12: {
@@ -1056,16 +1324,16 @@ export function computeEconomicVitalSigns(input: Inputs): EconomicVitalSigns {
       twoSidedListingShareMedian: recent12Median(
         input.turn,
         history,
-        ratio(quality.twoSidedListings, listings.length),
+        clampShare(ratio(quality.twoSidedListings, tradableCount)),
         (row) => row.twoSidedListingShare,
-        "listed_firm_count_open_order_books_median_12"
+        "tradable_listing_count_open_order_books_median_12"
       ),
       activeTradedListingShareMedian: recent12Median(
         input.turn,
         history,
-        ratio(tradedCorporations.size, listings.length),
+        clampShare(ratio(tradedCorporations.size, tradableCount)),
         (row) => row.activeTradedListingShare,
-        "listed_firm_count_48_turns_median_12"
+        "tradable_listing_count_48_turns_median_12"
       ),
       sovereignNoHolderBondShareMedian: recent12Median(
         input.turn,
@@ -1073,6 +1341,13 @@ export function computeEconomicVitalSigns(input: Inputs): EconomicVitalSigns {
         noHolderShare(sovereignBonds).value,
         (row) => row.sovereignNoHolderBondShare,
         "unmatured_sovereign_issue_count_median_12"
+      ),
+      corporateNoHolderBondShareMedian: recent12Median(
+        input.turn,
+        history,
+        noHolderShare(corporateBonds).value,
+        (row) => row.corporateNoHolderBondShare,
+        "unmatured_corporate_issue_count_median_12"
       ),
     },
     households: {
@@ -1151,6 +1426,21 @@ export function computeEconomicVitalSigns(input: Inputs): EconomicVitalSigns {
         activity.activeAccounts,
         "character_primary_ledger_flow_to_closing_balance"
       ),
+      householdTransactionalVelocity48: metric(
+        activity.transactionalVelocity,
+        activity.activeAccounts,
+        "character_primary_ledger_flow_to_closing_balance"
+      ),
+      householdSavingsVelocity48: metric(
+        activity.savingsVelocity,
+        activity.activeAccounts,
+        "character_savings_primary_ledger_flow_to_closing_balance"
+      ),
+      savingsShareOfHouseholdBalances: metric(
+        activity.savingsShare,
+        activity.householdAccountCount,
+        "character_savings_share_of_household_closing_balance"
+      ),
       corporateGrossVelocity48: metric(
         activity.corporateVelocity,
         activity.activeAccounts,
@@ -1171,6 +1461,24 @@ export function computeEconomicVitalSigns(input: Inputs): EconomicVitalSigns {
         activity.activeAccounts,
         "fund_org_npp_primary_ledger_flow_to_closing_balance"
       ),
+      bankCashReservesAnchor: metric(
+        ring.banksTotal === 0 || ring.banksReported > 0 ? ring.bankCashAnchor : null,
+        ring.banksReported,
+        "active_chartered_bank_cash_reserves_anchor"
+      ),
+      escrowCashAnchor: metric(
+        ring.escrowAnchor,
+        ring.escrowContributors,
+        "corporation_share_escrow_nonnegative_anchor"
+      ),
+      ringFencedShareOfLiquid: metric(
+        !input.balanceSnapshot || ringBankIncomplete || activity.total + ringTotal <= 0
+          ? null
+          : ratio(ringTotal, activity.total + ringTotal),
+        ring.banksReported + ring.escrowContributors,
+        "ring_fenced_to_ledger_backed_plus_ring_fenced_closing_stock"
+      ),
+      bankGrossVelocity48: metric(null, 0, "bank_turnover_not_in_ledger"),
     },
     measurement: { confidence: measurementConfidence, reasons: measurementReasons },
     reconciliation: {
@@ -1180,6 +1488,131 @@ export function computeEconomicVitalSigns(input: Inputs): EconomicVitalSigns {
       stockVsFlowSkipped: input.reconciliation?.stockVsFlow.skipped ?? null,
       moneySupplyFindingCount: input.reconciliation?.moneySupply.findings.length ?? null,
     },
+  };
+}
+
+/**
+ * Mirror of `resolveFundBondCountryId` (fundBondReserve): the country whose
+ * paper a fund buys when restricted to home paper. Kept local so the
+ * diagnostics path does not import the deploy shell.
+ */
+function resolveGapFundHome(fund: Pick<IndexFund, "countryId" | "anchorCurrencyCode">): string {
+  if (fund.countryId) return fund.countryId;
+  const byCurrency = (Object.entries(COUNTRY_CURRENCY_MAP) as [string, string][]).find(
+    ([, currency]) => currency === fund.anchorCurrencyCode
+  );
+  if (byCurrency) return byCurrency[0]!;
+  return "US";
+}
+
+/**
+ * Assemble the #1001 demand-gap input from the loader's projected reads plus
+ * the already-loaded bonds. All reads are batched; the per-fund bond
+ * principal is valued in memory from the `bonds` read the securities section
+ * already performs, so this adds no per-row query.
+ */
+function assembleSovereignFundDemand(
+  bonds: Bond[],
+  funds: IndexFund[],
+  ratings: { _id: string; creditRating?: string }[],
+  fxRows: ExchangeRate[],
+  crossBorderEnabled: boolean
+): SovereignFundDemandInput {
+  const rateByCurrency = new Map(fxRows.map((row) => [row.currencyCode, row.rate]));
+  const tradableCurrencies = fxRows.flatMap((row) =>
+    row.currencyCode && typeof row.rate === "number" && row.rate > 0 ? [row.currencyCode] : []
+  );
+  const controlledCurrencies = fxRows.flatMap((row) =>
+    row.currencyCode && row.capitalControls === true ? [row.currencyCode] : []
+  );
+  const ratingByCountry = new Map<string, string | undefined>();
+  for (const row of ratings) {
+    ratingByCountry.set(row._id === "federal" ? "US" : row._id, row.creditRating);
+  }
+  const universeBySlug = new Map(
+    getAllFundDefinitions().flatMap((def) =>
+      def.bondUniverse ? [[def.slug, def.bondUniverse] as const] : []
+    )
+  );
+  // A position in a currency with no live rate contributes nothing instead of
+  // failing the snapshot; the issue itself then classifies as
+  // `currency_mismatch`, which is the actionable reading.
+  const principalByFundId = new Map<string, number>();
+  for (const bond of bonds) {
+    const currencyCode =
+      bond.currencyCode ??
+      (bond.countryId && bond.countryId in COUNTRY_CURRENCY_MAP
+        ? COUNTRY_CURRENCY_MAP[bond.countryId as keyof typeof COUNTRY_CURRENCY_MAP]
+        : "USD");
+    const rate = rateByCurrency.get(currencyCode) ?? 0;
+    if (!(rate > 0)) continue;
+    const price = Number.isFinite(bond.marketPrice) ? bond.marketPrice : 1;
+    for (const holder of bond.holders ?? []) {
+      const fundId = holder.fundId?.toString();
+      const units =
+        typeof holder.units === "number" && Number.isFinite(holder.units)
+          ? Math.floor(holder.units)
+          : 0;
+      if (!fundId || units <= 0) continue;
+      const local = units * BOND_UNIT_FACE_VALUE * price;
+      principalByFundId.set(
+        fundId,
+        (principalByFundId.get(fundId) ?? 0) + corpCapitalToAnchor(local, currencyCode, rate)
+      );
+    }
+  }
+  const gapFunds: SovereignDemandGapFund[] = [];
+  const fundIdToKey = new Map<string, string>();
+  for (const fund of funds) {
+    const id = fund._id.toString();
+    fundIdToKey.set(id, fund.slug);
+    // Same serviceability as the deploy pass (`listServiceableFunds`).
+    const serviceable =
+      fund.status === "active" ||
+      (fund.status === "paused" && fund.pauseReason === "backing_ratio");
+    const breakdown = computeFundAllocationBreakdown(
+      {
+        cashAnchor: fund.cashAnchor ?? 0,
+        holdings: fund.holdings ?? [],
+        bondAllocations: [],
+        kind: fund.kind,
+      },
+      { bondPrincipalAnchor: principalByFundId.get(id) ?? 0 }
+    );
+    gapFunds.push({
+      key: fund.slug,
+      homeCountryId: resolveGapFundHome(fund),
+      scope: fund.scope,
+      kind: fund.kind,
+      active: serviceable,
+      deployableCashAnchor: breakdown.cashAvailableForBondDeployAnchor,
+      cashAboveBufferAnchor: Math.max(
+        0,
+        breakdown.cashAnchor -
+          Math.min(
+            breakdown.cashAnchor,
+            INDEX_FUND_RESERVE_CASH_BUFFER_FRACTION * breakdown.totalBackingAnchor
+          )
+      ),
+      // Coverage funds ensured under the #1001 domestic gate carry no standing
+      // definition entry; like the deploy path (`deployBondReserveFromCash`),
+      // a country bond fund with a home country means its home-sovereign
+      // mandate. Without this the classifier skips the fund and reports its
+      // home issues as `no_domestic_fund` after coverage ensured it.
+      bondUniverse:
+        fund.kind === "bond"
+          ? (universeBySlug.get(fund.slug) ??
+            (fund.countryId ? ({ issuerType: "sovereign", homeOnly: true } as const) : undefined))
+          : undefined,
+    });
+  }
+  return {
+    funds: gapFunds,
+    fundIdToKey,
+    tradableCurrencies,
+    controlledCurrencies,
+    ratingByCountry,
+    crossBorderEnabled,
   };
 }
 
@@ -1216,10 +1649,14 @@ export async function snapshotEconomicVitalSigns(
     ledgerEntryCount,
     groupMembership,
     exchangeRates,
+    ringFencedCorps,
     unownedSectors,
     entryFunnel,
     eraUnitScale,
     historyDocs,
+    demandFunds,
+    demandRatings,
+    demandLiquidity,
   ] = await Promise.all([
     db.collection<CommodityFlow>("commodityFlows").find({ turn }).toArray(),
     db
@@ -1300,6 +1737,24 @@ export async function snapshotEconomicVitalSigns(
       .countDocuments({ turn: { $gte: windowStart, $lte: turn } }),
     resolveFormalizedGroups(db),
     db.collection<ExchangeRate>("exchangeRates").find({}).toArray(),
+    // Ring-fenced money lives on corporations, outside the ledger: active bank
+    // charter reserves plus share-escrow balances. Narrow projection on
+    // purpose: only the classification and balance fields below are read.
+    db
+      .collection<Corporation>("corporations")
+      .find(
+        { $or: [{ bankCharter: { $exists: true } }, { shareEscrowBalance: { $exists: true } }] },
+        {
+          projection: {
+            "bankCharter.status": 1,
+            "bankCharter.currency": 1,
+            "bankCharter.cashReserves": 1,
+            liquidCurrencyCode: 1,
+            shareEscrowBalance: 1,
+          },
+        }
+      )
+      .toArray(),
     db.collection<UnownedSector>("unownedSectors").find({}).toArray(),
     db
       .collection<NppMarketEntryFunnel>(NPP_MARKET_ENTRY_FUNNEL_COLLECTION)
@@ -1315,12 +1770,53 @@ export async function snapshotEconomicVitalSigns(
         "securities.twoSidedListingShare.value": 1,
         "securities.activeTradedListingShare.value": 1,
         "securities.sovereignNoHolderBondShare.value": 1,
+        "securities.corporateNoHolderBondShare.value": 1,
       })
       .sort({ turn: 1 })
       .toArray(),
+    // #1001 demand-gap inputs: three batched projected reads, no per-row
+    // loop. Fund holdings arrays stay out of the projection; the bond
+    // principal comes from the `bonds` read above, computed in memory below.
+    db
+      .collection<IndexFund>("indexFunds")
+      .find(
+        {},
+        {
+          projection: {
+            slug: 1,
+            countryId: 1,
+            scope: 1,
+            kind: 1,
+            status: 1,
+            pauseReason: 1,
+            anchorCurrencyCode: 1,
+            cashAnchor: 1,
+            "holdings.shares": 1,
+            "holdings.avgCostPerShareAnchor": 1,
+            "holdings.lastValueAnchor": 1,
+          },
+        }
+      )
+      .toArray(),
+    db
+      .collection<{ _id: string; creditRating?: string }>("federalBudget")
+      .find({}, { projection: { creditRating: 1 } })
+      .toArray(),
+    db
+      .collection<GameConfig>("gameConfig")
+      .findOne({ _id: "default" }, { projection: { indexFundBondLiquidityEnabled: 1 } }),
   ]);
   const fxByCurrency = new Map(exchangeRates.map((row) => [row.currencyCode, row.rate]));
   if (!fxByCurrency.has("USD")) fxByCurrency.set("USD", 1);
+  const ringFenced: RingFencedCashRow[] = ringFencedCorps.map((corp) => ({
+    charterActive: corp.bankCharter?.status === "active",
+    charterCurrency: corp.bankCharter?.currency ?? "USD",
+    cashReserves: corp.bankCharter?.cashReserves,
+    // Absent on pre-forex corps: home currency, same fallback the
+    // corporation type documents for liquidCapital.
+    liquidCurrency: corp.liquidCurrencyCode ?? "USD",
+    escrowBalance: corp.shareEscrowBalance,
+  }));
   const commodityParticipants: CommodityParticipant[] = [];
   for (const sector of sectors) {
     const corporationId = sector.corporationId.toString();
@@ -1352,7 +1848,15 @@ export async function snapshotEconomicVitalSigns(
     twoSidedListingShare: doc.securities?.twoSidedListingShare?.value ?? null,
     activeTradedListingShare: doc.securities?.activeTradedListingShare?.value ?? null,
     sovereignNoHolderBondShare: doc.securities?.sovereignNoHolderBondShare?.value ?? null,
+    corporateNoHolderBondShare: doc.securities?.corporateNoHolderBondShare?.value ?? null,
   }));
+  const sovereignDemand = assembleSovereignFundDemand(
+    bonds,
+    demandFunds,
+    demandRatings,
+    exchangeRates,
+    demandLiquidity?.indexFundBondLiquidityEnabled === true
+  );
   const snapshot = computeEconomicVitalSigns({
     turn,
     now: new Date(),
@@ -1373,10 +1877,13 @@ export async function snapshotEconomicVitalSigns(
     balanceSnapshot,
     ledgerTurnover,
     ledgerEntryCount,
+    ringFenced,
+    anchorRates: Object.fromEntries(fxByCurrency),
     commodityParticipants,
     unownedSectors,
     entryFunnel,
     eraUnitScale,
+    sovereignDemand,
   });
   await db
     .collection<EconomicVitalSigns>(ECONOMIC_VITAL_SIGNS_COLLECTION)

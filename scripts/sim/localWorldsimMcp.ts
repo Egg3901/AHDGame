@@ -57,6 +57,7 @@ import { randomUUID } from "crypto";
 import { MongoClient, type Db } from "mongodb";
 import { MARKET_MODE_ORDER, type MarketSystemMode } from "@/lib/market/modes";
 import { assertSimSourceShape } from "./simSource";
+import { pickSovereignDemandExperimentFlags } from "./sovereignDemandExperimentFlags";
 
 const SIM_CONTROL_URI = process.env.SIM_CONTROL_URI || "mongodb://127.0.0.1:27018";
 const SIM_CONTROL_DB = process.env.SIM_CONTROL_DB || "sim_control";
@@ -189,6 +190,12 @@ const TOOLS: ToolDef[] = [
         indexFundBondLiquidityEnabled: bool(
           "Whether index funds target 20 percent sovereign bonds while retaining a 5 percent cash buffer in this sandbox only."
         ),
+        sovereignIssuanceConsolidationEnabled: bool(
+          "Whether below-floor sovereign issuance rungs consolidate into the largest rung in this sandbox only (#1001). Explicit false pins the control arm."
+        ),
+        domesticSovereignBondCoverageEnabled: bool(
+          "Whether one home-sovereign bond fund per uncovered sovereign issuer is ensured in this sandbox only (#1001). Explicit false pins the control arm."
+        ),
         equityLiquidityFacilityEnabled: bool(
           "Whether index funds place bounded executable bid and ask quotes for listed equities in this sandbox only."
         ),
@@ -203,6 +210,9 @@ const TOOLS: ToolDef[] = [
         ),
         sourceCommit: str(
           "Pinned source (#1966): full 40-hex commit SHA that must equal the worktree HEAD. Requires sourceWorktree."
+        ),
+        frontierEntryExperimentEnabled: bool(
+          "Whether the capped frontier-entry experiment (#991) may place entrants in facility-ready empty state-sector cells in this sandbox only. Explicit false pins the control arm; omit for the disabled default."
         ),
       },
       ["preset", "turns", "seed"]
@@ -241,6 +251,9 @@ const TOOLS: ToolDef[] = [
       ) {
         throw new Error("indexFundBondLiquidityEnabled must be boolean");
       }
+      // #1001 dark gates share one validated mapping with the worker, so a
+      // queued scenario can never persist a value the worker cannot run.
+      const sovereignDemandFlags = pickSovereignDemandExperimentFlags(a);
       if (
         a.equityLiquidityFacilityEnabled !== undefined &&
         typeof a.equityLiquidityFacilityEnabled !== "boolean"
@@ -265,6 +278,12 @@ const TOOLS: ToolDef[] = [
         sourceWorktree: a.sourceWorktree === undefined ? undefined : String(a.sourceWorktree),
         sourceCommit: a.sourceCommit === undefined ? undefined : String(a.sourceCommit),
       });
+      if (
+        a.frontierEntryExperimentEnabled !== undefined &&
+        typeof a.frontierEntryExperimentEnabled !== "boolean"
+      ) {
+        throw new Error("frontierEntryExperimentEnabled must be boolean");
+      }
       const res = await enqueue(db, {
         preset,
         turns,
@@ -286,6 +305,7 @@ const TOOLS: ToolDef[] = [
         ...(a.indexFundBondLiquidityEnabled !== undefined
           ? { indexFundBondLiquidityEnabled: a.indexFundBondLiquidityEnabled }
           : {}),
+        ...sovereignDemandFlags,
         ...(a.equityLiquidityFacilityEnabled !== undefined
           ? { equityLiquidityFacilityEnabled: a.equityLiquidityFacilityEnabled }
           : {}),
@@ -294,6 +314,9 @@ const TOOLS: ToolDef[] = [
           : {}),
         ...(a.nppFragileMarketSupplyEnabled !== undefined
           ? { nppFragileMarketSupplyEnabled: a.nppFragileMarketSupplyEnabled }
+          : {}),
+        ...(a.frontierEntryExperimentEnabled !== undefined
+          ? { frontierEntryExperimentEnabled: a.frontierEntryExperimentEnabled }
           : {}),
       });
       return {
@@ -309,9 +332,14 @@ const TOOLS: ToolDef[] = [
         canonicalFreightBillingEnabled: a.canonicalFreightBillingEnabled ?? "preset default",
         shortageResponsiveSourcingEnabled: a.shortageResponsiveSourcingEnabled ?? "preset default",
         indexFundBondLiquidityEnabled: a.indexFundBondLiquidityEnabled ?? "preset default",
+        sovereignIssuanceConsolidationEnabled:
+          a.sovereignIssuanceConsolidationEnabled ?? "preset default",
+        domesticSovereignBondCoverageEnabled:
+          a.domesticSovereignBondCoverageEnabled ?? "preset default",
         equityLiquidityFacilityEnabled: a.equityLiquidityFacilityEnabled ?? "preset default",
         nppMarketCoverageEnabled: a.nppMarketCoverageEnabled ?? "preset default",
         nppFragileMarketSupplyEnabled: a.nppFragileMarketSupplyEnabled ?? "preset default",
+        frontierEntryExperimentEnabled: a.frontierEntryExperimentEnabled ?? "preset default",
         note: 'Poll with sim_run_status. The local worker claims queued jobs within ~15s — if status stays "queued" for minutes, the worker is not running (check sim_worker_health).',
       };
     },

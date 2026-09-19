@@ -41,9 +41,10 @@ import { UK_GOVERNOR_REGIONS, ensureRegionalGovernorElections } from "../shared"
  *
  * Called from turnSystem after ensurePerpetualElections.
  */
-export async function ensureUKElections(now: Date): Promise<void> {
+export async function ensureUKElections(now: Date, inFlightTurn?: number): Promise<void> {
   const db = await getDb();
-  const { currentTurn, ctx } = await getCurrentTurnAndCtx(db);
+  const { currentTurn: persistedTurn, ctx } = await getCurrentTurnAndCtx(db);
+  const currentTurn = inFlightTurn ?? persistedTurn;
   const commonsSeatsByRegion = getUkCommonsSeats(ctx.preset);
 
   const ukRegions = await db
@@ -202,9 +203,13 @@ export async function ensureUKElections(now: Date): Promise<void> {
  * uses the region's cohort anchor. Cohort 5 lands with the next Commons
  * election while cohorts 1-4 form the annual midterms.
  */
-export async function ensureUKRegionalCouncilElections(now: Date): Promise<void> {
+export async function ensureUKRegionalCouncilElections(
+  now: Date,
+  inFlightTurn?: number
+): Promise<void> {
   const db = await getDb();
-  const { currentTurn, ctx } = await getCurrentTurnAndCtx(db);
+  const { currentTurn: persistedTurn, ctx } = await getCurrentTurnAndCtx(db);
+  const currentTurn = inFlightTurn ?? persistedTurn;
 
   // Self-heal stale stateSenateSeats (e.g. 1991 seed drift) so legislature pages
   // and elections agree on regional council chamber sizes.
@@ -339,6 +344,6 @@ export async function ensureUKRegionalCouncilElections(now: Date): Promise<void>
  * 4-year cycle anchored to the preset's `governorStateSenate` year.
  * English non-London regions have no devolved executive and are skipped.
  */
-export async function ensureUKGovernorElections(now: Date): Promise<void> {
-  await ensureRegionalGovernorElections("UK", now, UK_GOVERNOR_REGIONS);
+export async function ensureUKGovernorElections(now: Date, inFlightTurn?: number): Promise<void> {
+  await ensureRegionalGovernorElections("UK", now, UK_GOVERNOR_REGIONS, inFlightTurn);
 }

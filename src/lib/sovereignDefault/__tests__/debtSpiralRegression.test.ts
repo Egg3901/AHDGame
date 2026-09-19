@@ -1,58 +1,40 @@
 /**
- * Long-horizon regression for the #3813 sovereign-debt spiral.
+ * Long-horizon regression for the #3813 sovereign-debt spiral, re-pointed at
+ * the #1975 bond-ledger world.
  *
- * Root cause (traced in the #3813 investigation):
- *   - `processTreasuryTurn` (src/lib/turn/treasuryTurn.ts) derives
- *     `debt.principal` / `debt.interestRate` / `debtToGdpRatio` fresh every
- *     turn from the signed `treasuryBalance`, via
- *     `deriveFiscalState` (src/lib/budget/treasuryBalance.ts) which reads the
- *     debt/GDP tier straight off `DEBT_THRESHOLDS` (src/lib/budget/debt.ts).
- *     The top tier is a flat, uncapped 14% (`maxRatio: Infinity`).
- *   - The three sovereign-crisis resolution paths
- *     (`resolution/{restructure,repudiate,bailout}.ts`) used to mutate ONLY
- *     the tradeable `bonds` collection (haircut individual instruments) and
- *     never touched `federalBudget.treasuryBalance` / `debt.principal` — the
- *     aggregate ledger `deriveFiscalState` actually reads. So a "default"
- *     was cosmetic: the very next `processTreasuryTurn` tick recomputed the
- *     identical CCC/14% tier off the untouched principal, and the spiral
- *     resumed exactly where it left off. Live sandbox evidence: the UK
- *     repudiated at turn 448, exited "recovering" at turn 496, and was back
- *     in a SECOND crisis by turn 616 with the exact same 119.8B principal it
- *     had before the first "default" — repudiating had reduced nothing.
- *   - Bailouts had the same gap: the IMF facility bolted a small side-loan
- *     alongside the legacy debt, which kept accruing at the market tier rate
- *     in parallel — no genuine relief.
+ * History: the #3813 investigation traced the spiral to `processTreasuryTurn`
+ * deriving `debt.principal` fresh every turn from the signed `treasuryBalance`
+ * while the crisis resolutions mutated only the tradeable `bonds` collection.
+ * A "default" was cosmetic: the next tick recomputed the identical tier off
+ * the untouched balance and the spiral resumed. Production no longer works
+ * that way: `debt.principal` IS the haircut-adjusted active non-defaulted
+ * sovereign face (see bonds/sovereignPrincipal.ts), treasury cash is a
+ * separate position, and restructure/repudiate re-point the stock at the
+ * post-mutation ledger.
  *
- * The fix (src/lib/sovereignDefault/resolution/{restructure,repudiate}.ts,
- * src/lib/budget/debt.ts, src/lib/budget/treasuryBalance.ts):
- *   - Restructure/repudiate now write down `treasuryBalance`/`debt.principal`
- *     by the SAME haircut fraction dealt to bondholders
- *     (RESTRUCTURE_HAIRCUT / REPUDIATE_PRINCIPAL_WRITEDOWN), so a default
- *     durably shrinks the ledger the interest engine reads.
- *   - `calculateInterestRate` now caps the tier rate at the concessional IMF
- *     rate while `imfSovereignBailoutActive` — a bailout provides genuine
- *     payment relief instead of stacking a second liability atop an
- *     unchanged 14% debt mountain.
- *
- * This file drives the SAME production functions (`calculateInterestRate`,
- * `deriveFiscalState`, `computeMarketDemand`, `classifyAuctionOutcome`,
- * `computeNextCrisisState`, `isInGoodFiscalStanding`,
- * `computeRecoveryTransition`, and the write-down constants) through a
- * lightweight in-memory multi-decade loop that mirrors
- * `processTreasuryTurn`'s per-turn accrual and the annual crisis-detection
- * cadence, without standing up the full Mongo-backed turn engine.
+ * This file drives the SAME production functions the new world runs
+ * (`sumOutstandingSovereignPrincipal`, `sovereignDebtTerms`,
+ * `computeMarketDemand`, `classifyAuctionOutcome`, `computeNextCrisisState`,
+ * `isInGoodFiscalStanding`, `computeRecoveryTransition`) through a
+ * lightweight in-memory multi-decade loop that mirrors the production turn:
+ * deficit-driven issuance mints new bond face, per-turn service accrues off
+ * the bond-owned stock, crisis detection runs at the annual cadence, and a
+ * fired crisis applies the SAME ledger mutation the fixed resolutions
+ * perform. No database, no clock, no randomness.
  */
 
 import { describe, it, expect } from "vitest";
 import { EXTREME_DISTRESS_DEBT_TO_GDP } from "@/lib/budget/debt";
-import { deriveFiscalState, nationalDebtFromBalance } from "@/lib/budget/treasuryBalance";
+import {
+  sumOutstandingSovereignPrincipal,
+  sovereignDebtTerms,
+} from "@/lib/bonds/sovereignPrincipal";
 import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 import { computeMarketDemand } from "../marketDemand";
 import { classifyAuctionOutcome } from "../auctionOutcome";
 import { computeNextCrisisState } from "../crisisState";
 import { isInGoodFiscalStanding } from "../recovery/fiscalStanding";
 import { computeRecoveryTransition } from "../recovery/computeTransition";
-import { REPUDIATE_PRINCIPAL_WRITEDOWN } from "../constants";
 import type { SovereignCrisisState } from "@/lib/db/types/budget";
 import type { SovereignDemandSnapshot } from "../types";
 
@@ -61,35 +43,55 @@ const UK_SEED_DEBT_TO_GDP = 1.88;
 const GDP0 = 17_000_000_000;
 const SIM_YEARS = 60;
 
+interface SimBond {
+  face: number;
+  haircut: number;
+  defaulted: boolean;
+}
+
 interface SimResult {
   /** Debt/GDP ratio sampled at every year boundary. */
   ratioByYear: number[];
-  /** Turns at which a crisis fired and was resolved (write-down applied). */
+  /** Turns at which a crisis fired and was resolved (ledger wipe applied). */
   defaultTurns: number[];
   finalRatio: number;
   peakRatio: number;
 }
 
 /**
- * Drives `deriveFiscalState` (the exact function `processTreasuryTurn` calls
- * every turn) turn-by-turn, with the real crisis-detection + recovery-exit
- * pipeline evaluated at the real cadence (crisis detection once a year at
- * fiscal-year close; recovery-transition every turn, matching
- * `processSovereignRecoveryTurn`). On every crisis fire, applies the SAME
- * write-down the fixed `applyRepudiateResolution` performs — this is the
- * behavior under test, not a reimplementation of it.
+ * Drives the production bond-ledger math turn-by-turn: the outstanding stock
+ * is always `sumOutstandingSovereignPrincipal` over live bond paper, the
+ * interest tier always `sovereignDebtTerms` off that stock, and the deficit
+ * (primary shortfall plus debt service, mirroring quarterly deficit-driven
+ * sovereign issuance) mints new face. Treasury cash accrues alongside but
+ * nothing reads principal from it. On every crisis fire, applies the SAME
+ * ledger mutation the fixed `applyRepudiateResolution` performs (every
+ * active bond flips to defaulted, so the outstanding stock reads back as
+ * zero) — this is the behavior under test, not a reimplementation of it.
  */
 function simulate(opts: {
   annualPrimaryDeficitFraction: (year: number) => number;
   annualGdpGrowth: number;
 }): SimResult {
-  let treasuryBalance = -(UK_SEED_DEBT_TO_GDP * GDP0);
+  const bonds: SimBond[] = [{ face: UK_SEED_DEBT_TO_GDP * GDP0, haircut: 0, defaulted: false }];
+  let treasuryBalance = 0;
   let gdp = GDP0;
   let state: SovereignCrisisState = "normal";
   let failedAuctionCount = 0;
   let lastDefaultTurn: number | null = null;
   let recoveryStartedAtTurn: number | null = null;
   let fiscalDisciplineStreak = 0;
+
+  const outstanding = () =>
+    sumOutstandingSovereignPrincipal(
+      bonds.map((b) => ({
+        issuerType: "sovereign" as const,
+        matured: false,
+        defaulted: b.defaulted,
+        totalIssued: b.face,
+        restructureHaircutPercent: b.haircut,
+      }))
+    );
 
   const ratioByYear: number[] = [];
   const defaultTurns: number[] = [];
@@ -99,19 +101,19 @@ function simulate(opts: {
     const year = Math.floor((turn - 1) / TURNS_PER_YEAR);
     const deficitFraction = opts.annualPrimaryDeficitFraction(year);
 
-    // --- Per-turn accrual, mirroring processTreasuryTurn exactly ---
-    const pre = deriveFiscalState({
-      treasuryBalance,
-      gdp,
-      ceiling: Number.POSITIVE_INFINITY,
-    });
+    // --- Per-turn accrual, mirroring the production turn ---
+    const pre = sovereignDebtTerms(outstanding(), { gdp });
     const debtServiceTurn =
-      pre.principal > 0 ? (pre.principal * pre.interestRate) / TURNS_PER_YEAR : 0;
+      pre.debtToGdpRatio > 0 ? (outstanding() * pre.interestRate) / TURNS_PER_YEAR : 0;
     const primaryPerTurn = -(deficitFraction * gdp) / TURNS_PER_YEAR;
+    // The deficit becomes new bond paper (deficit-driven issuance). Cash only
+    // records the flow; the stock is whatever the ledger holds.
+    const issueThisTurn = Math.max(0, -primaryPerTurn + debtServiceTurn);
+    if (issueThisTurn > 0) bonds.push({ face: issueThisTurn, haircut: 0, defaulted: false });
     treasuryBalance = treasuryBalance + primaryPerTurn - debtServiceTurn;
     gdp = gdp * (1 + opts.annualGdpGrowth / TURNS_PER_YEAR);
 
-    const post = deriveFiscalState({ treasuryBalance, gdp, ceiling: Number.POSITIVE_INFINITY });
+    const post = sovereignDebtTerms(outstanding(), { gdp });
     peakRatio = Math.max(peakRatio, post.debtToGdpRatio);
 
     // --- Recovery-exit check, every turn (matches processSovereignRecoveryTurn cadence) ---
@@ -173,34 +175,28 @@ function simulate(opts: {
       if (transition.firedThisEvaluation) {
         // Genuine write-down under test — mirrors applyRepudiateResolution's
         // fixed behavior exactly (the auto-Repudiate safety net is what a
-        // passive/NPC-governed country actually falls through to).
-        const priorPrincipal = nationalDebtFromBalance(treasuryBalance);
-        treasuryBalance = -(priorPrincipal * (1 - REPUDIATE_PRINCIPAL_WRITEDOWN));
+        // passive/NPC-governed country actually falls through to): every
+        // active bond flips to defaulted, so the canonical outstanding stock
+        // reads back as zero and the spiral restarts from a clean ledger.
+        for (const bond of bonds) bond.defaulted = true;
         lastDefaultTurn = turn;
         defaultTurns.push(turn);
         state = "recovering";
         recoveryStartedAtTurn = turn;
         fiscalDisciplineStreak = 0;
       }
-      ratioByYear.push(
-        deriveFiscalState({ treasuryBalance, gdp, ceiling: Number.POSITIVE_INFINITY })
-          .debtToGdpRatio
-      );
+      ratioByYear.push(sovereignDebtTerms(outstanding(), { gdp }).debtToGdpRatio);
     } else if (turn % TURNS_PER_YEAR === 0) {
       ratioByYear.push(post.debtToGdpRatio);
     }
   }
 
-  const finalRatio = deriveFiscalState({
-    treasuryBalance,
-    gdp,
-    ceiling: Number.POSITIVE_INFINITY,
-  }).debtToGdpRatio;
+  const finalRatio = sovereignDebtTerms(outstanding(), { gdp }).debtToGdpRatio;
 
   return { ratioByYear, defaultTurns, finalRatio, peakRatio };
 }
 
-describe("#3813 sovereign-debt spiral — long-horizon regression", () => {
+describe("#3813 sovereign-debt spiral — long-horizon regression (bond-ledger world)", () => {
   it("a UK-shaped country (188% seed) under passive play does not reach an unrecoverable ratio over 60 years", () => {
     // "Passive play": a modest, UNCHANGING 2%-of-GDP structural deficit —
     // the player never touches fiscal policy, for better or worse. Realistic

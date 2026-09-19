@@ -365,48 +365,62 @@ export async function amendLeadershipRules(
   const validation = validateRulesetAmendment(patch);
   if (!validation.ok) throw badRequest(validation.errors.join("; "));
 
-  const leadership = await getOrSeedPartyLeadership(db, countryId, party, now, currentTurn);
-  const sinceAmend = turnsSince(currentTurn, leadership.lastAmendedTurn);
-  if (sinceAmend !== undefined && sinceAmend < LEADERSHIP_AMENDMENT_COOLDOWN_TURNS) {
-    throw conflict(
-      `Leadership rules were amended recently and cannot be changed for ${LEADERSHIP_AMENDMENT_COOLDOWN_TURNS - sinceAmend} more turn(s)`
-    );
-  }
-
-  const before = leadership.ruleset;
-  const ruleset = { ...before, ...patch };
-  const changes = (Object.keys(patch) as (keyof RulesetAmendmentPatch)[])
-    .map((k) => `${k}: ${String(before[k])} -> ${String(patch[k])}`)
-    .join("; ");
-  const history = pushHistoryEntry(
-    leadership.history,
-    historyEntry(currentTurn, "rulesAmended", `Committee amended removal rules (${changes})`, {
-      characterId: actor._id,
-      actorName: actor.name,
-    })
-  );
-  await getUKPartyLeadershipCollection(db).updateOne(
-    { _id: leadership._id },
-    {
-      $set: {
-        ruleset,
-        lastAmendedTurn: currentTurn,
-        lastAmendedByCharacterId: actor._id,
-        history,
-        updatedAt: now,
-      },
+  // Durable serialization with conference motion applies (ticket #862): the
+  // cooldown travels with the write as a compare-and-swap on the observed
+  // lastAmendedTurn, so a concurrent winner (motion or amendment) that moved
+  // it first makes this write miss instead of landing a second patch inside
+  // the window. `{ lastAmendedTurn: null }` matches null AND missing, so a
+  // legacy row without the field amends cleanly the first time.
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const leadership = await getOrSeedPartyLeadership(db, countryId, party, now, currentTurn);
+    const sinceAmend = turnsSince(currentTurn, leadership.lastAmendedTurn);
+    if (sinceAmend !== undefined && sinceAmend < LEADERSHIP_AMENDMENT_COOLDOWN_TURNS) {
+      throw conflict(
+        `Leadership rules were amended recently and cannot be changed for ${LEADERSHIP_AMENDMENT_COOLDOWN_TURNS - sinceAmend} more turn(s)`
+      );
     }
-  );
-  recordAudit({
-    source: "api",
-    category: "party",
-    action: "uk.leadership.rulesAmended",
-    outcome: "ok",
-    actor: { kind: "player", characterId: actor._id, name: actor.name },
-    subject: { type: "party", id: partySeqId, name: party.name },
-    meta: { patch },
-  });
-  return { success: true, ruleset };
+
+    const before = leadership.ruleset;
+    const ruleset = { ...before, ...patch };
+    const changes = (Object.keys(patch) as (keyof RulesetAmendmentPatch)[])
+      .map((k) => `${k}: ${String(before[k])} -> ${String(patch[k])}`)
+      .join("; ");
+    const history = pushHistoryEntry(
+      leadership.history,
+      historyEntry(currentTurn, "rulesAmended", `Committee amended removal rules (${changes})`, {
+        characterId: actor._id,
+        actorName: actor.name,
+      })
+    );
+    const written = await getUKPartyLeadershipCollection(db).updateOne(
+      { _id: leadership._id, lastAmendedTurn: leadership.lastAmendedTurn ?? null },
+      {
+        $set: {
+          ruleset,
+          lastAmendedTurn: currentTurn,
+          lastAmendedByCharacterId: actor._id,
+          history,
+          updatedAt: now,
+        },
+      }
+    );
+    if (written.matchedCount === 1) {
+      recordAudit({
+        source: "api",
+        category: "party",
+        action: "uk.leadership.rulesAmended",
+        outcome: "ok",
+        actor: { kind: "player", characterId: actor._id, name: actor.name },
+        subject: { type: "party", id: partySeqId, name: party.name },
+        meta: { patch },
+      });
+      return { success: true, ruleset };
+    }
+    // Miss: a concurrent writer moved lastAmendedTurn first. The loop
+    // re-reads fresh: an active cooldown now reports its conflict, so the
+    // loser can never land a second patch in the winner's window.
+  }
+  throw conflict("Leadership rules changed concurrently; retry the amendment");
 }
 
 /**

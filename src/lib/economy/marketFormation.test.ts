@@ -5,6 +5,7 @@ import type { CorporationType } from "@/lib/constants/corporations";
 import type { CommodityType } from "@/lib/constants/commodities";
 import { foundingStarterUnits } from "@/lib/corporations/foundingPlant";
 import { computeMarketFormationSnapshot } from "./marketFormation";
+import { normalizeMarketFormationSnapshot } from "./marketFormationSnapshot";
 import { summarizeNppMarketEntryFunnel } from "@/lib/turn/npp/entryDiagnostics";
 
 const now = new Date("2026-08-28T00:00:00Z");
@@ -225,5 +226,194 @@ describe("empty-cell sampling", () => {
     if (firstNotReady !== -1) {
       expect(readyFlags.slice(firstNotReady).some(Boolean)).toBe(false);
     }
+  });
+});
+
+describe("state-sector coverage", () => {
+  it("names an unserved positive-use cell without hiding it", () => {
+    const snapshot = computeMarketFormationSnapshot({
+      sectors: [],
+      unownedSectors: [pool("PA", "manufacturing")],
+      prices: [price("steel", "PA", 100, 0, 0), price("building_materials", "PA", 100, 0, 0)],
+      eraUnitScale: 1,
+    });
+
+    expect(snapshot.classificationCounts.unserved).toBe(1);
+    expect(snapshot.emptyMarketCells[0]).toMatchObject({
+      classification: "unserved",
+      activeFirms: 0,
+      activeCorps: 0,
+    });
+  });
+
+  it("treats unobserved cells as unknown rather than fundamental zeros", () => {
+    const snapshot = computeMarketFormationSnapshot({
+      sectors: [],
+      unownedSectors: [pool("AK", "media", 0)],
+      prices: [],
+      eraUnitScale: 1,
+    });
+
+    expect(snapshot.classificationCounts.data_zero).toBe(1);
+    expect(snapshot.emptyMarketCells[0]?.classificationBasis).toMatch(/no.*demand observation/i);
+  });
+
+  it("separates resident demand from local-producer demand and output", () => {
+    const snapshot = computeMarketFormationSnapshot({
+      sectors: [],
+      unownedSectors: [pool("PA", "manufacturing")],
+      prices: [price("steel", "PA", 100, 0, 80), price("building_materials", "PA", 100, 0, 80)],
+      eraUnitScale: 1,
+    });
+
+    const cell = snapshot.emptyMarketCells[0]!;
+    expect(cell.localDemandValueAnchor).toBeGreaterThan(0);
+    expect(cell.inboundSupplyValueAnchor).toBeGreaterThan(0);
+    // Contestable demand is gross use minus the import-served part.
+    expect(cell.localProducerDemandValueAnchor).toBe(
+      cell.localDemandValueAnchor! - cell.inboundSupplyValueAnchor!
+    );
+    // Nothing placed: no statePlacedSupply on the book.
+    expect(cell.outputValueAnchor).toBe(0);
+  });
+
+  it("covers active cells with firms, corps, and demand anchors", () => {
+    const corpId = new ObjectId();
+    const live = (id: ObjectId): CorporateSector => ({
+      ...sector("NY", "manufacturing"),
+      corporationId: id,
+    });
+    const snapshot = computeMarketFormationSnapshot({
+      sectors: [live(corpId), live(corpId), live(new ObjectId())],
+      unownedSectors: [pool("NY", "manufacturing"), pool("PA", "manufacturing")],
+      prices: [price("steel", "PA", 100, 0, 0), price("building_materials", "PA", 100, 0, 0)],
+      eraUnitScale: 1,
+    });
+
+    const ny = snapshot.coverageByState.find((row) => row.stateId === "NY")!;
+    expect(ny).toMatchObject({ cells: 1, activeCells: 1, emptyCells: 0, activeFirms: 3 });
+    expect(ny.activeCorps).toBe(2);
+    const pa = snapshot.coverageByState.find((row) => row.stateId === "PA")!;
+    expect(pa.emptyCells).toBe(1);
+    expect(pa.facilityReadyEmptyCells).toBe(1);
+    const us = snapshot.coverageByCountry.find((row) => row.countryId === "US")!;
+    expect(us).toMatchObject({ states: 2, cells: 2, activeCells: 1, emptyCells: 1 });
+    expect(us.activeCorps).toBe(2);
+  });
+
+  it("reports per-commodity seller and buyer breadth", () => {
+    const steel = price("steel", "PA", 100, 60, 60);
+    steel.stateSupply.NY = 40;
+    steel.stateDemand.NY = 50;
+    steel.globalSupply = 100;
+    const snapshot = computeMarketFormationSnapshot({
+      sectors: [],
+      unownedSectors: [],
+      prices: [steel],
+      eraUnitScale: 1,
+    });
+
+    expect(snapshot.commodityBreadth).toHaveLength(1);
+    expect(snapshot.commodityBreadth[0]).toMatchObject({
+      commodity: "steel",
+      sellerStates: 2,
+      buyerStates: 2,
+    });
+    expect(snapshot.commodityBreadth[0]!.topSellerShare).toBeCloseTo(0.6, 5);
+  });
+});
+
+describe("empty-cell classification invariants", () => {
+  const classifications = [
+    "fundamental_zero",
+    "import_served",
+    "unserved",
+    "entry_gap",
+    "coordination_gap",
+    "data_zero",
+  ];
+
+  it("gives every empty cell exactly one known classification", () => {
+    const snapshot = computeMarketFormationSnapshot({
+      sectors: [sector("NY", "manufacturing")],
+      unownedSectors: [
+        pool("NY", "manufacturing"),
+        pool("PA", "manufacturing"),
+        pool("PA", "retail", 0),
+        pool("OH", "retail"),
+      ],
+      prices: [price("steel", "PA", 100, 0, 80), price("building_materials", "PA", 100, 0, 80)],
+      eraUnitScale: 1,
+    });
+
+    expect(snapshot.emptyCells).toBeGreaterThan(0);
+    for (const cell of snapshot.emptyMarketCells) {
+      expect(classifications).toContain(cell.classification);
+      expect(cell.classificationBasis.length).toBeGreaterThan(0);
+    }
+    const counted = Object.values(snapshot.classificationCounts).reduce((a, b) => a + b, 0);
+    expect(counted).toBe(snapshot.emptyCells);
+  });
+
+  it("never calls a positive-use facility-ready cell fundamental or data zero", () => {
+    const snapshot = computeMarketFormationSnapshot({
+      sectors: [],
+      unownedSectors: [pool("PA", "manufacturing")],
+      prices: [price("steel", "PA", 100, 0, 0), price("building_materials", "PA", 100, 0, 0)],
+      eraUnitScale: 1,
+    });
+
+    expect(snapshot.emptyMarketCells).toHaveLength(1);
+    const cell = snapshot.emptyMarketCells[0]!;
+    expect(cell.facilityReady).toBe(true);
+    expect(cell.localDemandValueAnchor).toBeGreaterThan(0);
+    expect(["import_served", "entry_gap", "coordination_gap", "unserved"]).toContain(
+      cell.classification
+    );
+  });
+});
+
+describe("normalizeMarketFormationSnapshot", () => {
+  it("serves a pre-coverage snapshot with empty evidence sections", () => {
+    const normalized = normalizeMarketFormationSnapshot({
+      cellsObserved: 10,
+      activeCells: 6,
+      emptyCells: 4,
+      emptyShare: 0.4,
+      classificationCounts: { unserved: 4 },
+      entryFunnel: { corporationsObserved: 3, entered: 1, rejected: 2 },
+      basis: "legacy",
+    });
+
+    expect(normalized).toMatchObject({
+      cellsObserved: 10,
+      emptyCells: 4,
+      emptyShare: 0.4,
+      basis: "legacy",
+    });
+    expect(normalized?.coverageByState).toEqual([]);
+    expect(normalized?.coverageByCountry).toEqual([]);
+    expect(normalized?.commodityBreadth).toEqual([]);
+    expect(normalized?.emptyMarketCells).toEqual([]);
+    expect(normalized?.classificationCounts).toEqual({
+      fundamental_zero: 0,
+      import_served: 0,
+      unserved: 4,
+      entry_gap: 0,
+      coordination_gap: 0,
+      data_zero: 0,
+    });
+    expect(normalized?.entryFunnel).toMatchObject({
+      corporationsObserved: 3,
+      entered: 1,
+      rejected: 2,
+      explainedOutcomeShare: null,
+      reasonCounts: {},
+    });
+  });
+
+  it("rejects non-documents", () => {
+    expect(normalizeMarketFormationSnapshot(null)).toBeNull();
+    expect(normalizeMarketFormationSnapshot([])).toBeNull();
   });
 });

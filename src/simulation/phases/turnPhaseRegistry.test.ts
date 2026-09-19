@@ -381,13 +381,23 @@ describe("uk leadership challenges (#861) registration", () => {
     expect(indexOf("ukLeadershipChallenges")).toBeGreaterThan(indexOf("fomcNominations"));
     expect(indexOf("ukLeadershipChallenges")).toBeGreaterThan(indexOf("ukJrSurpriseTurn"));
     expect(indexOf("ukLeadershipChallenges")).toBe(indexOf("fomcNominations") + 1);
-    expect(calledPhases[indexOf("ukLeadershipChallenges") + 1]).toBe("socialAxisDrift");
+    // UK party conferences (#862) run immediately after the leadership phase.
+    expect(indexOf("ukPartyConferences")).toBe(indexOf("ukLeadershipChallenges") + 1);
+    expect(calledPhases[indexOf("ukPartyConferences") + 1]).toBe("socialAxisDrift");
     // The recording stub returns undefined, so the adapter records the
     // documented zero default rather than leaving the key absent.
     expect(phaseResults.ukLeadershipChallenges).toEqual({
       expired: 0,
       resolved: 0,
       removed: 0,
+    });
+    expect(phaseResults.ukPartyConferences).toEqual({
+      scheduled: 0,
+      opened: 0,
+      completed: 0,
+      ratified: 0,
+      expired: 0,
+      payoffs: 0,
     });
   });
 });

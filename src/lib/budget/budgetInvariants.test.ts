@@ -7,7 +7,24 @@ const clean = {
   surplus: -400,
   treasuryBalance: -5000,
   debt: { principal: 5000 },
+  gdp: 100_000,
+  // Bond ledger backs the stored stock: 5000 face, no haircut.
+  outstandingSovereignPrincipal: 5000,
 };
+
+function bondDocs(face: number) {
+  return [
+    {
+      _id: "b1",
+      countryId: "BAL",
+      issuerType: "sovereign",
+      matured: false,
+      defaulted: false,
+      totalIssued: face,
+      restructureHaircutPercent: null,
+    },
+  ];
+}
 
 describe("checkFederalBudgetInvariants", () => {
   it("reports nothing for a consistent budget", () => {
@@ -23,7 +40,7 @@ describe("checkFederalBudgetInvariants", () => {
     expect(breaches[0].absDelta).toBe(50);
   });
 
-  it("reports a stale debt principal mirror", () => {
+  it("reports stored principal that disagrees with the bond ledger", () => {
     const breaches = checkFederalBudgetInvariants({
       ...clean,
       debt: { principal: 4900 },
@@ -33,13 +50,27 @@ describe("checkFederalBudgetInvariants", () => {
     expect(breaches[0].derived).toBe(5000);
   });
 
-  it("floors debt principal at zero when the treasury is in surplus", () => {
+  it("ignores treasury cash when checking principal: cash cannot overwrite the bond stock", () => {
+    // A 4000 cash swing with the same bond stock is not a breach.
+    expect(checkFederalBudgetInvariants({ ...clean, treasuryBalance: -1000 })).toEqual([]);
+    expect(checkFederalBudgetInvariants({ ...clean, treasuryBalance: 250 })).toEqual([]);
+  });
+
+  it("expects zero principal when the ledger is empty, even for a negative balance", () => {
     const breaches = checkFederalBudgetInvariants({
       ...clean,
-      treasuryBalance: 250,
-      debt: { principal: 0 },
+      treasuryBalance: -5000,
+      debt: { principal: 5000 },
+      outstandingSovereignPrincipal: 0,
     });
-    expect(breaches).toEqual([]);
+    expect(breaches).toHaveLength(1);
+    expect(breaches[0].field).toBe("debtPrincipal");
+    expect(breaches[0].derived).toBe(0);
+  });
+
+  it("skips the debt leg when no ledger sum is supplied", () => {
+    const { outstandingSovereignPrincipal: _dropped, ...blind } = clean;
+    expect(checkFederalBudgetInvariants({ ...blind, debt: { principal: 999_999 } })).toEqual([]);
   });
 
   it("tolerates sub-unit floating point noise", () => {
@@ -64,45 +95,84 @@ describe("checkFederalBudgetInvariants", () => {
 });
 
 describe("reconcileFederalBudgetInvariants", () => {
-  type Op = { updateOne: { filter: { _id: unknown }; update: { $set: Record<string, number> } } };
+  type Op = {
+    updateOne: { filter: { _id: unknown }; update: { $set: Record<string, number | string> } };
+  };
 
-  function stubDb(docs: unknown[], onWrite?: (ops: Op[]) => void) {
+  function stubDb(
+    budgetDocs: unknown[],
+    bondDocsList: unknown[],
+    onWrite?: (ops: Op[]) => void,
+    onBondsFind?: (filter: unknown, options: unknown) => void
+  ) {
     return {
-      collection: () => ({
-        find: () => ({ toArray: async () => docs }),
-        bulkWrite: async (ops: Op[]) => {
-          onWrite?.(ops);
-          return { ok: 1 };
-        },
-      }),
+      collection: (name: string) => {
+        if (name === "bonds") {
+          return {
+            find: (filter: unknown, options: unknown) => {
+              onBondsFind?.(filter, options);
+              return { toArray: async () => bondDocsList };
+            },
+          };
+        }
+        return {
+          find: () => ({ toArray: async () => budgetDocs }),
+          bulkWrite: async (ops: Op[]) => {
+            onWrite?.(ops);
+            return { ok: 1 };
+          },
+        };
+      },
     } as unknown as Parameters<typeof reconcileFederalBudgetInvariants>[0];
   }
 
   it("writes a drifted surplus back to its own definition", async () => {
     const ops: Op[] = [];
-    const db = stubDb([{ _id: "IE", countryId: "IE", ...clean, surplus: -450 }], (o) =>
-      ops.push(...o)
+    const db = stubDb(
+      [{ _id: "IE", countryId: "IE", ...clean, surplus: -450 }],
+      bondDocs(5000).map((b) => ({ ...b, countryId: "IE" })),
+      (o) => ops.push(...o)
     );
     const r = await reconcileFederalBudgetInvariants(db, 673);
     expect(r.corrected).toBe(1);
     expect(ops[0].updateOne.update.$set).toEqual({ surplus: -400 });
   });
 
-  it("writes a drifted debt principal back to the treasury balance", async () => {
+  it("re-points a drifted principal at the bond ledger and refreshes its terms", async () => {
     const ops: Op[] = [];
     const db = stubDb(
       [{ _id: "BAL", countryId: "BAL", ...clean, debt: { principal: 5400 } }],
+      bondDocs(5000),
       (o) => ops.push(...o)
     );
     await reconcileFederalBudgetInvariants(db, 673);
-    expect(ops[0].updateOne.update.$set).toEqual({ "debt.principal": 5000 });
+    expect(ops[0].updateOne.update.$set).toMatchObject({ "debt.principal": 5000 });
+    expect(ops[0].updateOne.update.$set["debt.interestRate"]).toBeGreaterThan(0);
+    expect(ops[0].updateOne.update.$set.debtToGdpRatio).toBeCloseTo(0.05, 10);
+    expect(typeof ops[0].updateOne.update.$set.creditRating).toBe("string");
+  });
+
+  it("zeroes principal when the ledger is empty, without touching cash", async () => {
+    const ops: Op[] = [];
+    const db = stubDb(
+      [{ _id: "BAL", countryId: "BAL", ...clean, treasuryBalance: -5000 }],
+      [],
+      (o) => ops.push(...o)
+    );
+    await reconcileFederalBudgetInvariants(db, 673);
+    expect(ops[0].updateOne.update.$set).toMatchObject({ "debt.principal": 0 });
+    expect(ops[0].updateOne.update.$set).not.toHaveProperty("treasuryBalance");
   });
 
   it("does not write at all when every budget already agrees", async () => {
     let wrote = false;
-    const db = stubDb([{ _id: "US", countryId: "US", ...clean }], () => {
-      wrote = true;
-    });
+    const db = stubDb(
+      [{ _id: "US", countryId: "US", ...clean }],
+      bondDocs(5000).map((b) => ({ ...b, countryId: "US" })),
+      () => {
+        wrote = true;
+      }
+    );
     const r = await reconcileFederalBudgetInvariants(db, 673);
     expect(wrote).toBe(false);
     expect(r).toEqual({ checked: 1, corrected: 0, skipped: 0 });
@@ -111,15 +181,67 @@ describe("reconcileFederalBudgetInvariants", () => {
   it("refuses to launder an implausible drift into the cache", async () => {
     // The whole safety argument for writing is that the derived expression is the
     // truth. A drift this large means a SOURCE field is broken, and quietly writing
-    // the cache from it would turn a reportable fault into a plausible-looking number.
+    // the stored value from it would turn a reportable fault into a plausible-looking number.
     const ops: Op[] = [];
-    const db = stubDb([{ _id: "XX", countryId: "XX", ...clean, surplus: 999_999 }], (o) =>
-      ops.push(...o)
+    const db = stubDb(
+      [{ _id: "XX", countryId: "XX", ...clean, surplus: 999_999 }],
+      bondDocs(5000).map((b) => ({ ...b, countryId: "XX" })),
+      (o) => ops.push(...o)
     );
     const r = await reconcileFederalBudgetInvariants(db, 673);
     expect(r.skipped).toBe(1);
     expect(r.corrected).toBe(0);
     expect(ops).toHaveLength(0);
+  });
+
+  it("projects the bond fields the outstanding helper re-checks", async () => {
+    // Mocks ignore projections and return full docs, but production applies
+    // them: a doc arriving without `issuerType` reads as non-sovereign and
+    // contributes 0, which would re-point every stored principal at zero.
+    let seen: { filter: unknown; options: unknown } | null = null;
+    const db = stubDb(
+      [{ _id: "US", countryId: "US", ...clean }],
+      bondDocs(5000),
+      undefined,
+      (filter, options) => {
+        seen = { filter, options };
+      }
+    );
+    await reconcileFederalBudgetInvariants(db, 673);
+    expect(seen!.filter).toEqual({ issuerType: "sovereign", matured: false, defaulted: false });
+    expect(seen!.options).toEqual({
+      projection: {
+        countryId: 1,
+        issuerType: 1,
+        matured: 1,
+        defaulted: 1,
+        totalIssued: 1,
+        restructureHaircutPercent: 1,
+      },
+    });
+  });
+
+  it("converges on bonds in as-projected shape (only projected fields present)", async () => {
+    // What production actually returns under the projection above: no holders,
+    // no coupon, no currency. The outstanding sum must still count full face.
+    const ops: Op[] = [];
+    const db = stubDb(
+      [{ _id: "BAL", countryId: "BAL", ...clean, debt: { principal: 5400 } }],
+      [
+        {
+          _id: "b1",
+          countryId: "BAL",
+          issuerType: "sovereign",
+          matured: false,
+          defaulted: false,
+          totalIssued: 5000,
+          restructureHaircutPercent: null,
+        },
+      ],
+      (o) => ops.push(...o)
+    );
+    await reconcileFederalBudgetInvariants(db, 673);
+    expect(ops[0].updateOne.update.$set).toMatchObject({ "debt.principal": 5000 });
   });
 
   it("never throws, so a hygiene pass cannot fail a turn", async () => {
@@ -132,10 +254,7 @@ describe("reconcileFederalBudgetInvariants", () => {
         }),
       }),
     } as unknown as Parameters<typeof reconcileFederalBudgetInvariants>[0];
-    await expect(reconcileFederalBudgetInvariants(db, 673)).resolves.toEqual({
-      checked: 0,
-      corrected: 0,
-      skipped: 0,
-    });
+    const r = await reconcileFederalBudgetInvariants(db, 673);
+    expect(r).toEqual({ checked: 0, corrected: 0, skipped: 0 });
   });
 });

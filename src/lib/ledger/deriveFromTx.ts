@@ -76,6 +76,10 @@ const REASON_BY_TX_TYPE: Partial<Record<FinancialTxLogEntry["type"], string>> = 
   // Attribute the sink so the money-supply check reports them per-reason instead
   // of pooling them in `unattributed`.
   corp_prospecting_cost: "prospecting_cost",
+  // Sector tech-tree unlocks. Same shape as prospecting: the cash leaves the
+  // corp into R&D spend with no ledger-backed recipient account, so the debit
+  // is an attributed sink rather than `unattributed` backlog.
+  corp_tech_unlock: "tech_research",
   govt_prospecting_cost: "prospecting_cost",
   contract_signing_fee: "extraction_contract_fee",
   contract_royalty_payment: "extraction_royalty",
