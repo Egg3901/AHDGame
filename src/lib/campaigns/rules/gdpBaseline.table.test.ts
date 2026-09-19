@@ -88,6 +88,9 @@ import { ukRegions1999 } from "@/lib/seeds/uk/ukRegions1999";
 import { ukRegions2007 } from "@/lib/seeds/uk/ukRegions2007";
 import { ukRegions2023 } from "@/lib/seeds/uk/ukRegions2023";
 import { ukRegions2027 } from "@/lib/seeds/uk/ukRegions2027";
+// DD seeds only two bundles: 1953, and the Länder model used for 1979.
+import { ddRegions } from "@/lib/seeds/dd/ddRegions";
+import { ddRegions1953 } from "@/lib/seeds/dd/ddRegions1953";
 import {
   gdpBaselinePerCapita,
   getGdpBaselineTable,
@@ -180,7 +183,38 @@ const BUNDLES: Record<GdpBaselineCountry, Record<EraId, RegionRow[]>> = {
     // Unlike IE/NG, CN seeds an explicit 2027 bundle (see `seedCNRegions`).
     "2027": cnRegions2027,
   },
+  DD: {
+    "1953": ddRegions1953,
+    // `seedDDRegions` wires `ddRegions` to 1979, not to 2019.
+    "1979": ddRegions,
+    // DD dissolves at reunification: `seedDDRegions` maps 2019 to an EMPTY
+    // bundle, so every unified era seeds no DD regions at all. These entries
+    // repeat the 1979 bundle to match the table's repeated cells; they are not
+    // recomputed (see NON_DERIVABLE_ERAS) because there is no authored national
+    // GDP to reconcile against, and an empty bundle has no mean to take.
+    "1991": ddRegions,
+    "1999": ddRegions,
+    "2007": ddRegions,
+    "2019": ddRegions,
+    "2023": ddRegions,
+    "2027": ddRegions,
+  },
 };
+
+/**
+ * Eras a country seeds no regions for, so its cell is a documented repeat
+ * rather than a derivation. Asserted as a repeat below instead of being
+ * recomputed — `recomputeBaseline` would divide an empty bundle by an absent
+ * national GDP.
+ */
+const NON_DERIVABLE_ERAS: Partial<Record<GdpBaselineCountry, { eras: EraId[]; repeats: EraId }>> = {
+  DD: { eras: ["1991", "1999", "2007", "2019", "2023", "2027"], repeats: "1979" },
+};
+
+function derivableEras(country: GdpBaselineCountry): EraId[] {
+  const skip = new Set(NON_DERIVABLE_ERAS[country]?.eras ?? []);
+  return ERAS.filter((era) => !skip.has(era));
+}
 
 interface RecomputedCell {
   /** Math.round(rawMean * reconcileScalar): the value the table must hold. */
@@ -221,7 +255,7 @@ describe("gdpBaseline table derivation (issue #798)", () => {
   it("recomputes every cell from the era seed bundles", () => {
     const table = getGdpBaselineTable();
     for (const country of Object.keys(BUNDLES) as GdpBaselineCountry[]) {
-      for (const era of ERAS) {
+      for (const era of derivableEras(country)) {
         const recomputed = recomputeBaseline(country, era);
         expect(
           table[country][era],
@@ -231,6 +265,45 @@ describe("gdpBaseline table derivation (issue #798)", () => {
         ).toBe(recomputed.value);
       }
     }
+  });
+
+  it("holds a documented repeat for eras a country seeds no regions in", () => {
+    const table = getGdpBaselineTable();
+    for (const [country, { eras, repeats }] of Object.entries(NON_DERIVABLE_ERAS) as Array<
+      [GdpBaselineCountry, { eras: EraId[]; repeats: EraId }]
+    >) {
+      for (const era of eras) {
+        expect(
+          table[country][era],
+          `${country} ${era}: no region bundle for this era, so the cell must repeat ` +
+            `${repeats} (${table[country][repeats]}) rather than hold a value of its own`
+        ).toBe(table[country][repeats]);
+      }
+    }
+  });
+
+  it("resolves DD's post-reunification cells from the 1979 bundle", () => {
+    // The repeat is only honest if the resolution says where the number came
+    // from: a 2019 DD lookup must not claim a 2019-default bundle it never had.
+    expect(resolveCampaignGdpBaseline("DD", "1953-default").bundlePreset).toBe("1953-default");
+    expect(resolveCampaignGdpBaseline("DD", "1979-default").bundlePreset).toBe("1979-default");
+    expect(resolveCampaignGdpBaseline("DD", "2019-default").bundlePreset).toBe("1979-default");
+    expect(resolveCampaignGdpBaseline("DD", "2027-default").bundlePreset).toBe("1979-default");
+    // DDM, not USD: DD is `local` in GDP_DENOMINATION_1953.
+    expect(resolveCampaignGdpBaseline("DD", "1953-default").unit).toBe("local");
+  });
+
+  it("prices a DD region without throwing — the regression this row fixes", () => {
+    // `/profile` renders this for every character: `calculateFullFundDistribution`
+    // -> `getIncomeGdpScalar` -> the resolver. Before the DD row it threw, and
+    // the thrown error surfaced as a Next.js digest on an error page.
+    const region = ddRegions1953[0];
+    expect(() =>
+      getIncomeGdpScalar(region.gdp ?? 0, region.population, "DD", "1953-default")
+    ).not.toThrow();
+    const scalar = getIncomeGdpScalar(region.gdp ?? 0, region.population, "DD", "1953-default");
+    expect(scalar).toBeGreaterThanOrEqual(0.9);
+    expect(scalar).toBeLessThanOrEqual(1.5);
   });
 
   it("pins absolute values for the cross-era anchors", () => {
@@ -280,7 +353,7 @@ describe("gdpBaseline table derivation (issue #798)", () => {
   it("keeps the average region at a neutral scalar in every era", () => {
     const table = getGdpBaselineTable();
     for (const country of Object.keys(BUNDLES) as GdpBaselineCountry[]) {
-      for (const era of ERAS) {
+      for (const era of derivableEras(country)) {
         const preset = `${era}-default`;
         const { rawMean, scalar } = recomputeBaseline(country, era);
         // The reconcile scales every region equally, so the population-weighted
@@ -307,9 +380,17 @@ describe("gdpBaseline table derivation (issue #798)", () => {
         const res = resolveCampaignGdpBaseline(country, preset);
         expect(res.era).toBe(era);
         expect(res.baseline).toBe(getGdpBaselineTable()[country][era]);
-        expect(res.bundlePreset).toBe(
-          (country === "IE" || country === "NG") && era === "2027" ? "2019-default" : preset
-        );
+        // A repeated cell must name the bundle it was actually derived from:
+        // IE/NG fall back to 2019 in 2027, and DD's post-reunification cells
+        // all come from its 1979 Länder bundle.
+        const repeats = NON_DERIVABLE_ERAS[country];
+        const expectedBundle =
+          (country === "IE" || country === "NG") && era === "2027"
+            ? "2019-default"
+            : repeats?.eras.includes(era)
+              ? `${repeats.repeats}-default`
+              : preset;
+        expect(res.bundlePreset).toBe(expectedBundle);
         expect(res.unit).toBe(
           era === "1953" ? (GDP_DENOMINATION_1953[country] ?? "local") : "local"
         );

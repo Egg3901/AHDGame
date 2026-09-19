@@ -34,6 +34,15 @@
  * ACTIVATING A NEW COUNTRY: add its per-era row here. Until then the resolver
  * throws for it — deliberately, so a new playable country can never silently
  * inherit a mismatched US denomination.
+ *
+ * ⚠️ THAT THROW REACHES PAGE RENDERS. It is not confined to money endpoints:
+ * `/profile` calls `calculateFullFundDistribution` for every character, so a
+ * country that seeds regions without a row 500s the page for its players
+ * instead of failing somewhere diagnosable. DD shipped that way and the bug
+ * arrived as "cannot log in via Discord", because the OAuth round-trip
+ * redirects onto the page that threw. `gdpBaselineCoverage.guard.test.ts` now
+ * pins the row set against the 1953 seed bundles on disk, so the next country
+ * fails a test rather than a player's page.
  */
 
 import type { EraId } from "@/lib/seeds/presetSelector";
@@ -46,11 +55,18 @@ export type GdpBaselineUnit = "local" | "usd";
 /**
  * Playable countries with an explicit baseline. Matches the `status: "active"`
  * country configs (US/UK/DE/JP/IE/CN), plus coming-soon NG so its calibration
- * lands before activation. Other coming-soon countries (BR, …) are
+ * lands before activation, plus DD, which a 1953 world seeds and plays
+ * regardless of its `status` marker. Other coming-soon countries (BR, …) are
  * intentionally absent: resolving one throws (see below) instead of silently
  * pricing in USD.
+ *
+ * ⚠️ `status` IS NOT THE GATE. DD carries `status: "coming-soon"` and still has
+ * live players, because a historical preset seeds the countries that existed in
+ * its era, not the ones marked active for the modern world. Whether a country
+ * needs a row is decided by whether a world can seed regions for it — pinned in
+ * `gdpBaselineCoverage.guard.test.ts`, which reads the seed bundles off disk.
  */
-export type GdpBaselineCountry = "US" | "UK" | "DE" | "JP" | "IE" | "NG" | "CN";
+export type GdpBaselineCountry = "US" | "UK" | "DE" | "JP" | "IE" | "NG" | "CN" | "DD";
 
 export interface GdpBaselineResolution {
   /** National GDP per capita in the same unit as the era's `State.gdp`. */
@@ -152,11 +168,36 @@ const GDP_BASELINE_TABLE: Record<GdpBaselineCountry, Record<EraId, number>> = {
     "2023": 98_268,
     "2027": 110_339,
   },
+  DD: {
+    // The GDR exists only in the divided-Germany eras. `seedDDRegions` wires a
+    // bundle for exactly two presets — 1953 (`ddRegions1953`) and 1979
+    // (`ddRegions`, the Länder model) — and an EMPTY bundle for 2019, which is
+    // what every unified era falls back to. Both live cells are DDM (local),
+    // per `GDP_DENOMINATION_1953`.
+    "1953": 2_717,
+    "1979": 10_976,
+    // Reunification: no region bundle and no authored national GDP from 1991
+    // on, so there is nothing to derive these from. They repeat the 1979 cell
+    // rather than being absent, for the same reason IE/NG spell out their 2027
+    // repeat: every (country, era) must resolve to a literal. A DD character
+    // row that outlives a reseed into a unified era then prices against the
+    // last era DD actually had, instead of throwing on a page render — the
+    // failure this row was added for.
+    "1991": 10_976,
+    "1999": 10_976,
+    "2007": 10_976,
+    "2019": 10_976,
+    "2023": 10_976,
+    "2027": 10_976,
+  },
 };
 
 /** Preset id of the region bundle behind each (country, era) cell. */
 function bundlePresetFor(country: GdpBaselineCountry, era: EraId): string {
   if ((country === "IE" || country === "NG") && era === "2027") return "2019-default";
+  // DD seeds regions in the divided-Germany eras only; every later cell repeats
+  // 1979, so that is the bundle the value actually came from.
+  if (country === "DD" && era !== "1953" && era !== "1979") return "1979-default";
   return `${era}-default`;
 }
 
