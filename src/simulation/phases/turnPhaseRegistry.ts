@@ -205,6 +205,7 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
           newTurn,
           currentYear,
           phaseResults,
+          warnings,
         } = context;
         // When an admin pauses corporation actions, the corporate turn phase
         // (sector revenue, operating income, dividends, market-cap/history
@@ -353,6 +354,13 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
             totalRevenueGenerated: corpTurnResults.totalRevenueGenerated,
             totalIncomeGenerated: corpTurnResults.totalIncomeGenerated,
           };
+          // Clearing book invariant breaches (issue #2054) join the turn
+          // warning channel here, so the completed-turn health snapshot
+          // counts them. The includes-guard keeps a retried or replayed
+          // corporation phase from recording the same breach twice.
+          for (const warning of corpTurnResults.turnWarnings ?? []) {
+            if (!warnings.includes(warning)) warnings.push(warning);
+          }
         }
 
         // Live fiscal accrual into the signed treasury balance. Runs after the
