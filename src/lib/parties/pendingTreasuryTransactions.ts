@@ -73,11 +73,14 @@ export function isPartyOfficer(party: OfficerSeats, characterId: ObjectId): bool
  * Counted by identity, not by seat: one person holding both Chair and
  * Treasurer is one available signature, not two, and a rule that
  * counted seats would let them satisfy a two-person approval alone.
+ *
+ * `excluding` drops one character from the count, which is how Request
+ * Funds asks "who could actually sign this?" - the requester never can.
  */
-export function countSeatedOfficers(party: OfficerSeats): number {
+export function countSeatedOfficers(party: OfficerSeats, excluding?: ObjectId): number {
   const ids = new Set<string>();
   for (const id of [party.chairId, party.viceChairId, party.treasurerId]) {
-    if (id) ids.add(id.toString());
+    if (id && !(excluding && id.equals(excluding))) ids.add(id.toString());
   }
   return ids.size;
 }
@@ -126,9 +129,11 @@ export function canProposePendingTransaction(
 
 /**
  * Validates the party has the seats required to legitimately run a
- * Request Funds workflow. Single mode needs >= 1 officer seated (the
- * single approver). Double mode is stricter: two different officers,
- * same as send/transfer.
+ * Request Funds workflow: one eligible approver in single mode, two in
+ * double. "Eligible" excludes the requester, who may never sign their
+ * own request. Counting them used to let a party queue a request that
+ * no combination of officers could ever complete, leaving it to sit
+ * until the expiry sweep.
  *
  * Request Funds (per the 2026-05-23 spec) is open to any party member;
  * eligibility is about whether there's ANYONE who could approve, not
@@ -136,17 +141,23 @@ export function canProposePendingTransaction(
  */
 export function canRequestFunds(
   party: OfficerSeats,
-  mode: "single" | "double"
+  mode: "single" | "double",
+  /**
+   * The requester. Excluded from the count of who could approve, since
+   * nobody may sign their own Request Funds. Omitted by legacy callers,
+   * which then get the old "is anyone seated at all" answer.
+   */
+  requesterCharacterId?: ObjectId
 ): { ok: true } | { ok: false; reason: string } {
-  if (mode === "double") {
-    return canProposePendingTransaction(party);
-  }
-  // Single mode: any one officer seated is enough.
-  if (countSeatedOfficers(party) < 1) {
+  const eligibleApprovers = countSeatedOfficers(party, requesterCharacterId);
+  const needed = mode === "double" ? 2 : 1;
+  if (eligibleApprovers < needed) {
     return {
       ok: false,
       reason:
-        "Request Funds requires at least one of Treasurer, Chair, or Vice-Chair to be seated.",
+        mode === "double"
+          ? "This request needs two different officers to approve it, and this party does not have two who could. Ask an officer to send the funds directly, or wait until another seat is filled."
+          : "Request Funds needs an officer other than you to approve it. None of the Treasurer, Chair or Vice-Chair seats is filled by someone else.",
     };
   }
   return { ok: true };
@@ -281,7 +292,7 @@ export async function createPendingTransaction(
   //   - send/transfer (always double mode): need Treasurer + (Chair OR VC)
   //   - request: need ≥ 1 officer (single mode) or full set (double mode)
   const eligibility = isRequest
-    ? canRequestFunds(input.party, mode)
+    ? canRequestFunds(input.party, mode, input.proposerCharacterId)
     : canProposePendingTransaction(input.party);
   if (!eligibility.ok) {
     throw new Error(eligibility.reason);

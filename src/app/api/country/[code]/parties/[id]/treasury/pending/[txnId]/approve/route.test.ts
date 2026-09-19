@@ -147,6 +147,38 @@ describe("POST /api/country/[code]/parties/[id]/treasury/pending/[txnId]/approve
     expect(unset![1]).toEqual({ $unset: { treasurerApproval: "" } });
   });
 
+  it("hands the signature back when the recipient has vanished", async () => {
+    // Every exit after the claim strands the signature the same way, not
+    // just the executor's refusal. This one never reaches the executor.
+    db.collectionMocks["characters"]!.findOne.mockResolvedValue(null);
+
+    const response = await call();
+    expect(response.status).toBe(404);
+
+    const unset = db.collectionMocks["pendingTreasuryTransactions"]!.updateOne.mock.calls.find(
+      (c) => (c[1] as { $unset?: unknown })?.$unset
+    );
+    expect(unset).toEqual([
+      { _id: expect.anything(), status: "open" },
+      { $unset: { treasurerApproval: "" } },
+    ]);
+  });
+
+  it("hands the signature back when the executor throws", async () => {
+    const { executeSendToMember } = await import("@/lib/treasury/executeSendToMember");
+    vi.mocked(executeSendToMember).mockRejectedValue(new Error("mongo exploded") as never);
+
+    // handleRouteError turns the throw into a 500; what matters is that
+    // the row is not left carrying a signature it cannot spend.
+    const response = await call();
+    expect(response.status).toBeGreaterThanOrEqual(500);
+
+    const unset = db.collectionMocks["pendingTreasuryTransactions"]!.updateOne.mock.calls.find(
+      (c) => (c[1] as { $unset?: unknown })?.$unset
+    );
+    expect(unset).toBeDefined();
+  });
+
   it("leaves the signature in place when the transfer succeeds", async () => {
     // Set explicitly: `vi.clearAllMocks()` resets calls but not
     // implementations, so the refusal above would otherwise leak here.

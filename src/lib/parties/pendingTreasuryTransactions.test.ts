@@ -406,6 +406,48 @@ describe("canRequestFunds", () => {
   });
 });
 
+describe("canRequestFunds excludes the requester", () => {
+  it("refuses a single-mode request when the only officer is the requester", () => {
+    // Nobody may approve their own Request Funds, so a party whose sole
+    // officer is the requester has no one who could ever sign it. The
+    // row used to be created anyway and sat until the expiry sweep.
+    const requesterId = new ObjectId();
+    const party = makeParty({ chairId: requesterId });
+    const result = canRequestFunds(party, "single", requesterId);
+    expect(result.ok).toBe(false);
+  });
+
+  it("allows a single-mode request when another officer could sign", () => {
+    const requesterId = new ObjectId();
+    const party = makeParty({ chairId: requesterId, treasurerId: new ObjectId() });
+    expect(canRequestFunds(party, "single", requesterId).ok).toBe(true);
+  });
+
+  it("refuses a double-mode request when only one officer besides the requester is seated", () => {
+    const requesterId = new ObjectId();
+    const party = makeParty({ chairId: requesterId, treasurerId: new ObjectId() });
+    expect(canRequestFunds(party, "double", requesterId).ok).toBe(false);
+  });
+
+  it("allows a double-mode request when two others could sign", () => {
+    const requesterId = new ObjectId();
+    const party = makeParty({
+      chairId: requesterId,
+      viceChairId: new ObjectId(),
+      treasurerId: new ObjectId(),
+    });
+    expect(canRequestFunds(party, "double", requesterId).ok).toBe(true);
+  });
+
+  it("counts a requester who holds two seats as one excluded person", () => {
+    const requesterId = new ObjectId();
+    const other = new ObjectId();
+    const party = makeParty({ chairId: requesterId, treasurerId: requesterId, viceChairId: other });
+    expect(countSeatedOfficers(party, requesterId)).toBe(1);
+    expect(canRequestFunds(party, "double", requesterId).ok).toBe(false);
+  });
+});
+
 describe("isPendingTransactionComplete", () => {
   it("send rows require both slots filled", () => {
     expect(

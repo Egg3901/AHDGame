@@ -43,19 +43,28 @@ export function RequestFundsCard({
    */
   const [remaining, setRemaining] = useState<number | null>(null);
 
-  const loadAllowance = useCallback(async () => {
-    try {
-      const res = await fetch(`${partyApiUrl(countryCode, party.id)}/treasury/payout-allowance`);
-      if (!res.ok) return;
-      const data = await res.json();
-      if (typeof data?.remaining === "number") setRemaining(data.remaining);
-    } catch {
-      // Non-critical: the card falls back to quoting the flat cap.
-    }
-  }, [countryCode, party.id]);
+  const loadAllowance = useCallback(
+    async (isCancelled?: () => boolean) => {
+      try {
+        const res = await fetch(`${partyApiUrl(countryCode, party.id)}/treasury/payout-allowance`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (isCancelled?.()) return;
+        if (typeof data?.remaining === "number") setRemaining(data.remaining);
+      } catch {
+        // Non-critical: the card falls back to quoting the flat cap.
+        // A server mid-rollout without this endpoint lands here too.
+      }
+    },
+    [countryCode, party.id]
+  );
 
   useEffect(() => {
-    void loadAllowance();
+    let cancelled = false;
+    void loadAllowance(() => cancelled);
+    return () => {
+      cancelled = true;
+    };
   }, [loadAllowance]);
 
   const handleSubmit = async () => {

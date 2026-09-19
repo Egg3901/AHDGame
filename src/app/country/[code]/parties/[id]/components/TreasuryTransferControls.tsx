@@ -57,6 +57,11 @@ export function TreasuryTransferControls({
       setRecipientRemaining(null);
       return;
     }
+    // Cleared before the refetch, or the previous member's allowance
+    // stays on screen under the new member's name until the request
+    // comes back. A figure attached to the wrong person is worse than
+    // no figure, and this control exists to stop exactly that error.
+    setRecipientRemaining(null);
     let cancelled = false;
     void (async () => {
       try {

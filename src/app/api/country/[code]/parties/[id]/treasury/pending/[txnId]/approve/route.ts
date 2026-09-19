@@ -146,7 +146,7 @@ export async function POST(_request: Request, { params }: RouteParams) {
     }
 
     /**
-     * Hand the slot back when the underlying transfer refuses.
+     * Hand the slot back on ANY failure exit below.
      *
      * The claim above is deliberately written BEFORE the execute, so two
      * approvers racing cannot both execute. The cost is that a refusal
@@ -157,10 +157,13 @@ export async function POST(_request: Request, { params }: RouteParams) {
      * later. Releasing restores exactly the state the approver clicked
      * from, so a refusal is a refusal and not a corrupted row.
      */
-    const releaseSlot = async (response: NextResponse): Promise<NextResponse> => {
+    const releaseClaimedSlot = async (): Promise<void> => {
       await db
         .collection<PendingTreasuryTransaction>("pendingTreasuryTransactions")
         .updateOne({ _id: txnOid, status: "open" }, { $unset: { [slotField]: "" } });
+    };
+    const releaseSlot = async (response: NextResponse): Promise<NextResponse> => {
+      await releaseClaimedSlot();
       return response;
     };
 
@@ -199,65 +202,79 @@ export async function POST(_request: Request, { params }: RouteParams) {
     // stamping the row resolved below.
     const { currentTurn } = await getGameTime();
 
-    if (ready.type === "send" || ready.type === "request") {
-      // Both flows execute via the same send-to-member path — for
-      // "request" the recipient is the proposer themselves.
-      if (!ready.targetCharacterId) {
-        return NextResponse.json(
-          { error: "Pending row missing target character" },
-          { status: 500 }
+    try {
+      if (ready.type === "send" || ready.type === "request") {
+        // Both flows execute via the same send-to-member path — for
+        // "request" the recipient is the proposer themselves.
+        if (!ready.targetCharacterId) {
+          return releaseSlot(
+            NextResponse.json({ error: "Pending row missing target character" }, { status: 500 })
+          );
+        }
+        const targetCharacter = await db
+          .collection<Character>("characters")
+          .findOne({ _id: ready.targetCharacterId });
+        if (!targetCharacter) {
+          return releaseSlot(
+            NextResponse.json({ error: "Recipient character no longer exists." }, { status: 404 })
+          );
+        }
+        const result = await executeSendToMember({
+          db,
+          countryId,
+          party,
+          targetCharacter,
+          amount: ready.amount,
+          reserveWarning,
+          initiator: { _id: user.character._id, name: user.character.name },
+          initiatorUsername: user.username,
+          initiatorUserId: user.userId,
+          currentTurn,
+        });
+        if (!result.ok) return releaseSlot(result.response);
+      } else if (ready.type === "transfer") {
+        if (!ready.targetStateId) {
+          return releaseSlot(
+            NextResponse.json({ error: "Pending row missing target state" }, { status: 500 })
+          );
+        }
+        const state = await db
+          .collection<State>("states")
+          .findOne({ _id: ready.targetStateId, countryId });
+        if (!state) {
+          return releaseSlot(
+            NextResponse.json({ error: "Region no longer exists." }, { status: 404 })
+          );
+        }
+        const result = await executeTransferToStateParty({
+          db,
+          countryId,
+          party,
+          state,
+          amount: ready.amount,
+          reserveWarning,
+          initiator: { _id: user.character._id, name: user.character.name },
+          initiatorUsername: user.username,
+          initiatorUserId: user.userId,
+          isAdmin: !!user.isAdmin,
+        });
+        if (!result.ok) return releaseSlot(result.response);
+      } else {
+        return releaseSlot(
+          NextResponse.json({ error: `Unknown pending txn type: ${ready.type}` }, { status: 500 })
         );
       }
-      const targetCharacter = await db
-        .collection<Character>("characters")
-        .findOne({ _id: ready.targetCharacterId });
-      if (!targetCharacter) {
-        return NextResponse.json(
-          { error: "Recipient character no longer exists." },
-          { status: 404 }
-        );
+    } catch (executionError) {
+      // A throw strands the signature exactly as a refusal would, so the
+      // slot goes back before the error continues to the route handler.
+      // A failure to release must not replace the failure that caused
+      // it: the original is the one worth reporting.
+      try {
+        await releaseClaimedSlot();
+      } catch {
+        // Swallowed deliberately; `executionError` is rethrown below.
       }
-      const result = await executeSendToMember({
-        db,
-        countryId,
-        party,
-        targetCharacter,
-        amount: ready.amount,
-        reserveWarning,
-        initiator: { _id: user.character._id, name: user.character.name },
-        initiatorUsername: user.username,
-        initiatorUserId: user.userId,
-        currentTurn,
-      });
-      if (!result.ok) return releaseSlot(result.response);
-    } else if (ready.type === "transfer") {
-      if (!ready.targetStateId) {
-        return NextResponse.json({ error: "Pending row missing target state" }, { status: 500 });
-      }
-      const state = await db
-        .collection<State>("states")
-        .findOne({ _id: ready.targetStateId, countryId });
-      if (!state) {
-        return NextResponse.json({ error: "Region no longer exists." }, { status: 404 });
-      }
-      const result = await executeTransferToStateParty({
-        db,
-        countryId,
-        party,
-        state,
-        amount: ready.amount,
-        reserveWarning,
-        initiator: { _id: user.character._id, name: user.character.name },
-        initiatorUsername: user.username,
-        initiatorUserId: user.userId,
-        isAdmin: !!user.isAdmin,
-      });
-      if (!result.ok) return releaseSlot(result.response);
-    } else {
-      return NextResponse.json(
-        { error: `Unknown pending txn type: ${ready.type}` },
-        { status: 500 }
-      );
+      throw executionError;
     }
 
     // ─── Mark the pending row approved ───────────────────────────────────

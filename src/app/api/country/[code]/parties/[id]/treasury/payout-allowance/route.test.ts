@@ -53,6 +53,12 @@ describe("GET /api/country/[code]/parties/[id]/treasury/payout-allowance", () =>
     vi.clearAllMocks();
     db = createMockDb();
     db.collection("treasuryTransactions");
+    db.collection("characters");
+    db.collectionMocks["characters"]!.findOne.mockResolvedValue({
+      _id: otherId,
+      party: partyId,
+      countryId: "US",
+    });
     alreadyDrawn(null);
 
     const { getDb } = await import("@/lib/mongodb");
@@ -101,6 +107,27 @@ describe("GET /api/country/[code]/parties/[id]/treasury/payout-allowance", () =>
     await signInAs({ _id: chairId, name: "Chair" });
     const response = await call(otherId.toString());
     expect(response.status).toBe(200);
+  });
+
+  it("refuses an officer reading a character outside their own party", async () => {
+    // The send route this figure serves only ever pays a member of THIS
+    // party, so reading any character in the country would be a wider
+    // window into other players' treasury intake than pricing needs.
+    await signInAs({ _id: chairId, name: "Chair" });
+    db.collectionMocks["characters"]!.findOne.mockResolvedValue({
+      _id: otherId,
+      party: "7",
+      countryId: "US",
+    });
+    const response = await call(otherId.toString());
+    expect(response.status).toBe(400);
+  });
+
+  it("404s when an officer asks about a character that does not exist", async () => {
+    await signInAs({ _id: chairId, name: "Chair" });
+    db.collectionMocks["characters"]!.findOne.mockResolvedValue(null);
+    const response = await call(otherId.toString());
+    expect(response.status).toBe(404);
   });
 
   it("refuses an ordinary member reading someone else's allowance", async () => {

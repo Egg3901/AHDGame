@@ -8,6 +8,7 @@ import { findPartyBySequentialId } from "@/lib/db/partyLookup";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { isSameCountry } from "@/lib/api/sameCountry";
 import { parseObjectId } from "@/lib/utils/objectId";
+import type { Character } from "@/lib/db/types";
 import { isPartyOfficer } from "@/lib/parties/pendingTreasuryTransactions";
 import { getPlayerPayoutThisTurn } from "@/lib/treasury/payoutCap";
 import { getPlayerPayoutCap } from "@/lib/treasury/payoutCapValues";
@@ -36,10 +37,11 @@ const querySchema = z.object({
 // at execution, so the number shown is the number enforced.
 //
 // Auth: requireAuthWithCharacter. A member may ask about THEMSELVES
-// (that is the Request Funds case); anyone else asking must hold an
-// officer seat on this party (the Send case, where the officer is
-// pricing a payment to a member). Without that split this would let any
-// player read any other player's treasury intake.
+// (that is the Request Funds case). Asking about anyone else requires
+// an officer seat on this party AND that the subject is a member of it,
+// matching the send route this figure serves. Without both halves any
+// player could read any other player's treasury intake, or an officer
+// could read a rival party's.
 // Errors: 400, 401, 403, 404, 429
 export async function GET(request: Request, { params }: RouteParams) {
   try {
@@ -77,11 +79,29 @@ export async function GET(request: Request, { params }: RouteParams) {
     }
 
     const isSelf = user.character._id.equals(targetId);
-    if (!isSelf && !isPartyOfficer(party, user.character._id)) {
-      return NextResponse.json(
-        { error: "Only an officer can read another member's payout allowance." },
-        { status: 403 }
-      );
+    if (!isSelf) {
+      if (!isPartyOfficer(party, user.character._id)) {
+        return NextResponse.json(
+          { error: "Only an officer can read another member's payout allowance." },
+          { status: 403 }
+        );
+      }
+      // Scoped to this party's own members, matching the send route this
+      // figure exists to serve. Without it an officer could read the
+      // treasury intake of anyone in the country, rival parties included,
+      // which is a good deal more than pricing a payment needs.
+      const target = await db
+        .collection<Character>("characters")
+        .findOne({ _id: targetId }, { projection: { party: 1, countryId: 1 } });
+      if (!target) {
+        return NextResponse.json({ error: "Character not found" }, { status: 404 });
+      }
+      if (target.party !== String(party.sequentialId) || !isSameCountry(target, { countryId })) {
+        return NextResponse.json(
+          { error: "Character is not a member of this party" },
+          { status: 400 }
+        );
+      }
     }
 
     const { currentTurn } = await getGameTime();

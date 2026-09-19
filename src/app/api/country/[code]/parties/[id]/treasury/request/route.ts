@@ -123,7 +123,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     // With too few officers seated, double collapses to single so a single
     // officer (Chair/VC acting Treasurer) can approve the request.
     const mode = resolveTransactionApprovalMode(party);
-    const eligibility = canRequestFunds(party, mode);
+    const eligibility = canRequestFunds(party, mode, user.character._id);
     if (!eligibility.ok) {
       return NextResponse.json({ error: eligibility.reason }, { status: 400 });
     }

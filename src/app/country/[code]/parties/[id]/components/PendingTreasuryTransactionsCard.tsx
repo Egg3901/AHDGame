@@ -237,6 +237,11 @@ export function PendingTreasuryTransactionsCard({ countryCode, partyId, onActed 
                             <span className="text-muted"> (auto)</span>
                           )}
                         </span>
+                      ) : row.approvalMode === "single" ? (
+                        // A single-mode row completes on one signature, so a
+                        // second "Awaiting approval" here read as an approval
+                        // that was still owed and never came.
+                        <span className="text-muted/60">Not required</span>
                       ) : (
                         <span className="text-muted">⏳ Awaiting approval</span>
                       )}
