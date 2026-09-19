@@ -1128,6 +1128,45 @@ const PARTIAL_REGISTRY = new Set(["FULL_ERA_REGION_BUNDLES", "REGION_NAME_MAPS"]
 const OUT_OF_SCOPE: Record<string, string> = {
   INITIAL_RATES: "relational: a rate is a fact between two currencies, not a country's",
   TREASURY_IDENTITY: "derived from TREASURY_TEXT plus the national palette",
+
+  /*
+   * ⚠️ MOVING THIS WOULD CREATE DUPLICATION, NOT REMOVE IT -- measured, not
+   * assumed. Of the three fields in a bill-phase entry:
+   *   - `phaseName` is `<cc>BillLifecycle` for 26 of 26, derivable from the id;
+   *   - `emptyResult` is the same `{ enacted: 0, failed: 0 }` for 25 of 26;
+   *   - `fn` is the only per-country part, and it CANNOT move. Japan's folder
+   *     says why: `turn/billLifecycle/dispatch` reaches back into the folder
+   *     through `configs/jp`, so naming the fn there is a real runtime cycle.
+   * Japan's distinctive `emptyResult` (it also reports `overrides` and
+   * `cabinetPassed`) is ALREADY in its folder, as `JP_BILL_PHASE_SHAPE`. That is
+   * the one genuinely per-country fact, and it is where it belongs. Moving the
+   * other 25 would write one derivable string and one shared literal into 25
+   * folders.
+   */
+  COUNTRY_BILL_PHASES:
+    "a dispatch table, not country data: phaseName is derivable and emptyResult is shared by 25 of 26; the fn cannot move without a runtime cycle",
+
+  /*
+   * ⚠️ THE LAZINESS IS THE POINT. `substrateCoverage.ts` holds these as thunks
+   * because the rosters together pull in every country seed module, and only
+   * tests and scripts import it. `geography.regionBundles` is eager, so
+   * forwarding would load every country's bundles for any importer -- defeating
+   * the documented reason the registry is shaped this way.
+   */
+  REGION_ROSTERS:
+    "deliberately lazy thunks; forwarding to geography.regionBundles would load every country's bundles eagerly",
+
+  /*
+   * ⚠️ NOT "IMPOSSIBLE", DELIBERATE -- and Japan is the counterexample that
+   * proves it. `JP_READINESS_EXPECTATIONS` already lives in `jp/data/`, so the
+   * pattern exists. It is left alone because the entries are async closures that
+   * take a `Db` and run checks against it: this is an admin diagnostic about
+   * whether a country is seeded, not a fact about the country. Spreading
+   * DB-touching closures across 29 folders would put query code in the one place
+   * the contract keeps free of it.
+   */
+  COUNTRY_READINESS_EXPECTATIONS:
+    "admin diagnostic: async Db-taking closures that check seed state, not country data (Japan's is moved; the rest deliberately are not)",
 };
 void OUT_OF_SCOPE;
 
