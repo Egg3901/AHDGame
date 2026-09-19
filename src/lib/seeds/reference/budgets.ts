@@ -6121,7 +6121,11 @@ export function generateCountryOwnedSeedData(
       oid: `00000000000000000000a${(index * 3 + 1).toString(16).padStart(3, "0")}`,
       ceoOid: `00000000000000000000a${(index * 3 + 2).toString(16).padStart(3, "0")}`,
       userOid: `00000000000000000000a${(index * 3 + 3).toString(16).padStart(3, "0")}`,
-      sequentialId: 900_009 + index,
+      // Own block (900_019-900_026), disjoint from the sovereign sequence
+      // US 900_001 through DD 900_010 AND from the 1953 market state-enterprise
+      // block 900_011-900_018 below. The previous 900_009 base reused seven ids
+      // across both blocks (issue #2028), which blocked unique-index creation.
+      sequentialId: 900_019 + index,
       name,
       headquartersState,
     })),

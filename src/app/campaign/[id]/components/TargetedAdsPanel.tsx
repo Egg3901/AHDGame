@@ -7,6 +7,8 @@ import { useTranslations } from "next-intl";
 interface Target {
   dimension: string;
   bucket: string;
+  label?: string;
+  dimLabel?: string;
   eligibleAudience: number;
   cohesion: number;
   cost: number;
@@ -29,6 +31,26 @@ interface Quote {
 }
 
 const label = (value: string) => value.replaceAll("_", " ");
+
+function audienceSections(targets: Target[]) {
+  const groups: { dim: string; dimLabel: string; options: Target[] }[] = [];
+  for (const target of targets) {
+    const last = groups[groups.length - 1];
+    if (last?.dim === target.dimension) last.options.push(target);
+    else {
+      groups.push({
+        dim: target.dimension,
+        dimLabel: target.dimLabel ?? label(target.dimension),
+        options: [target],
+      });
+    }
+  }
+  return groups;
+}
+
+function audienceLabel(target: Target) {
+  return target.label ?? `${label(target.dimension)}: ${label(target.bucket)}`;
+}
 
 export function TargetedAdsPanel({
   campaignId,
@@ -150,13 +172,17 @@ export function TargetedAdsPanel({
               }}
             >
               <option value="">{t("chooseTarget")}</option>
-              {quote.targets.map((value) => (
-                <option
-                  key={`${value.dimension}:${value.bucket}`}
-                  value={`${value.dimension}:${value.bucket}`}
-                >
-                  {label(value.dimension)}: {label(value.bucket)}
-                </option>
+              {audienceSections(quote.targets).map((section) => (
+                <optgroup key={section.dim} label={section.dimLabel}>
+                  {section.options.map((value) => (
+                    <option
+                      key={`${value.dimension}:${value.bucket}`}
+                      value={`${value.dimension}:${value.bucket}`}
+                    >
+                      {audienceLabel(value)}
+                    </option>
+                  ))}
+                </optgroup>
               ))}
             </select>
           </label>

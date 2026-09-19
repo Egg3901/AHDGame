@@ -44,10 +44,13 @@ import { LABOUR_MODE_ORDER, type LabourSystemMode } from "@/lib/labour/modes";
 import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
 import { applyCloneControllerPolicy } from "@/lib/sim/cloneControllers";
 import {
+  allFeatureFlagsGameStateSet,
   economicExperimentConfigSet,
   isGameplayOverrideArg,
   parseEquityLiquidityFacilityEnabled,
+  parseFrontierEntryExperimentArg,
   parseOptionalBoolean,
+  SIM_ALL_FEATURE_FLAGS_EXCLUDE,
   type FreightSettlementExperimentMode,
 } from "@/lib/sim/economicExperiment";
 
@@ -86,6 +89,7 @@ interface SimRunDoc {
     nppMarketCoverageEnabled?: boolean;
     nppFragileMarketSupplyEnabled?: boolean;
   };
+  frontierEntryExperimentEnabled?: boolean;
   nppForeignPolicyMode?: NppForeignPolicyMode;
   nppForeignPolicyStage?: NppForeignPolicyStage;
   preservePlayerRail?: boolean;
@@ -229,6 +233,12 @@ const nppMarketCoverageEnabled = parseOptionalBoolean(
 const nppFragileMarketSupplyEnabled = parseOptionalBoolean(
   arg("npp-fragile-market-supply"),
   "npp-fragile-market-supply"
+);
+// Frontier-entry experiment gate (issue #991): gameState flag, not gameConfig.
+// Explicit true arms the capped trial, explicit false pins the control arm;
+// absent leaves the sandbox default untouched.
+const frontierEntryExperimentEnabled = parseFrontierEntryExperimentArg(
+  arg("frontier-entry-experiment")
 );
 // Clone mode: the sandbox DB was pre-loaded with a restore of the LIVE world
 // (mongorestore), so skip bootstrap AND the "real world" users guardrail, and
@@ -403,8 +413,7 @@ async function main() {
   const { bootstrapGameWorld } = await import("@/lib/admin/bootstrapGameWorld");
   const { forceFullAutonomy, stampInitialGameClock } = await import("@/lib/sim/forceFullAutonomy");
   const { backfillMissingSeats } = await import("@/lib/sim/backfillMissingSeats");
-  const { batchSpawnNppCorporations, NPP_CAPITAL_STATES } =
-    await import("@/lib/admin/spawnNppCorporation");
+  const { bootstrapWorldsimCorporations } = await import("@/lib/sim/worldsimCorporationBootstrap");
   const { processTurn, initializeGameState } = await import("@/lib/turnSystem");
   const { presetDefaultsToFoundingPhase } = await import("@/lib/seeds/presetSelector");
   const { ALL_COUNTRY_IDS } = await import("@/lib/constants/countries");
@@ -688,27 +697,15 @@ async function main() {
       log(
         "Spawning NPP-owned corporations (bootstrap seeds none — needed for stock/index-fund investing)"
       );
-      let countriesSpawned = 0;
-      for (const countryId of ALL_COUNTRY_IDS) {
-        if (!inSimScope(countryId)) continue;
-        if (!NPP_CAPITAL_STATES[countryId]) continue; // coming-soon: no seeded capital state
-        const existing = await db
-          .collection("corporations")
-          .countDocuments({ ceoType: "npp", countryId });
-        if (existing > 0) continue;
-        try {
-          const spawned = await batchSpawnNppCorporations(db, countryId, { perSectorCount: 3 });
-          if (spawned.length > 0) {
-            log(`  ${countryId}: spawned ${spawned.length} NPP corporations`);
-            countriesSpawned++;
-          }
-        } catch (error) {
-          log(
-            `  ${countryId}: corp spawn failed — ${error instanceof Error ? error.message : String(error)}`
-          );
-        }
-      }
-      log(`Corporation spawn complete: ${countriesSpawned} countries seeded`);
+      // Eligibility (planned economies keep their SOEs, zero private attempts)
+      // is determined inside, against the marketization-dial gate, before any
+      // creation attempt.
+      const corpBootstrap = await bootstrapWorldsimCorporations(db, {
+        countryIds: ALL_COUNTRY_IDS.filter(inSimScope),
+        perSectorCount: 3,
+        log,
+      });
+      log(`Corporation spawn complete: ${corpBootstrap.countriesSeeded} countries seeded`);
     }
 
     await simRuns.updateOne(
@@ -772,6 +769,24 @@ async function main() {
       { $set: { economicExperiment: economicExperimentSet, updatedAt: new Date() } }
     );
     log(`Economic experiment overrides: ${JSON.stringify(economicExperimentSet)}`);
+  }
+
+  // Frontier-entry experiment gate (issue #991). gameState, not gameConfig:
+  // the turn path reads it from gameState. Explicit true AND explicit false
+  // are both written, so the on arm and the off control are distinguishable
+  // in the report; absent leaves the sandbox default (disabled) untouched.
+  // Runs for fresh, resumed, and clone worlds alike, mirroring the block above.
+  if (frontierEntryExperimentEnabled !== undefined) {
+    await db
+      .collection<GameState>("gameState")
+      .updateOne({ _id: "current" }, { $set: { frontierEntryExperimentEnabled } });
+    await simRuns.updateOne(
+      { _id: runId },
+      { $set: { frontierEntryExperimentEnabled, updatedAt: new Date() } }
+    );
+    log(
+      `Frontier-entry experiment gate: frontierEntryExperimentEnabled=${String(frontierEntryExperimentEnabled)} on sandbox gameState`
+    );
   }
 
   await db
@@ -879,15 +894,17 @@ async function main() {
 
   if (allFeatureFlags) {
     const { DEFAULT_GAME_STATE_FLAGS } = await import("@/lib/seeds/reference/featureFlagDefaults");
-    const enabledFlags = Object.fromEntries(
-      Object.entries(DEFAULT_GAME_STATE_FLAGS)
-        .filter(([, value]) => typeof value === "boolean")
-        .map(([key]) => [key, true])
+    // Experimental gates stay out: arming the frontier-entry trial as a side
+    // effect of a full-feature sweep would bypass its evidence gate.
+    const enabledFlags = allFeatureFlagsGameStateSet(
+      DEFAULT_GAME_STATE_FLAGS as unknown as Record<string, unknown>
     );
     await db
       .collection<GameState>("gameState")
       .updateOne({ _id: "current" }, { $set: enabledFlags });
-    log(`Enabled all ${Object.keys(enabledFlags).length} compatible gameplay boolean flags`);
+    log(
+      `Enabled all ${Object.keys(enabledFlags).length} compatible gameplay boolean flags (excluded experimental gates: ${[...SIM_ALL_FEATURE_FLAGS_EXCLUDE].join(", ")})`
+    );
   }
 
   // ── SIM-ONLY: elections-only turn profile + country scope ──────────────────
@@ -1123,6 +1140,7 @@ if (hasFlag("help") || hasFlag("h")) {
       "[--mode=full|elections-only|economy-only|macro-only] " +
       "[--npp-market-coverage=true|false] " +
       "[--npp-fragile-market-supply=true|false] " +
+      "[--frontier-entry-experiment=true|false] " +
       "[--macro-growth] [--pre-iteration|--no-pre-iteration] [--preserve-player-rail] [--preserve-live-config] [--sector-investment-snapshots=<directory>] [--quiet]"
   );
   process.exit(0);
