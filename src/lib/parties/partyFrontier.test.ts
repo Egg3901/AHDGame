@@ -5,7 +5,6 @@ import {
   isInFrontier,
   getPartyPresenceStates,
   getPartyFrontier,
-  getCountryPartyPresence,
   canCharacterJoinParty,
 } from "@/lib/parties/partyFrontier";
 
@@ -168,72 +167,6 @@ describe("getPartyFrontier", () => {
     expect([...presence]).toEqual(["NY"]);
     expect(frontier.has("PA")).toBe(true);
     expect(frontier.has("CA")).toBe(false);
-  });
-});
-
-describe("getCountryPartyPresence", () => {
-  beforeEach(resetMocks);
-
-  it("groups presence by party in a single pass", async () => {
-    const db = makeDb();
-    seedRegions(["NY", "CA"]);
-    setMockCollection("characters", {
-      aggregate: vi.fn(() => ({
-        toArray: vi
-          .fn()
-          .mockResolvedValue([
-            { _id: { party: "1", state: "NY" } },
-            { _id: { party: "2", state: "CA" } },
-          ]),
-      })),
-    });
-
-    const map = await getCountryPartyPresence(db, "US");
-    expect([...(map.get("1") ?? [])]).toEqual(["NY"]);
-    expect([...(map.get("2") ?? [])]).toEqual(["CA"]);
-  });
-
-  it("merges the three signals into one set per party", async () => {
-    const db = makeDb();
-    seedRegions(["NY", "PA", "MD"]);
-    setMockCollection("characters", {
-      aggregate: vi.fn(() => ({
-        toArray: vi.fn().mockResolvedValue([{ _id: { party: "1", state: "NY" } }]),
-      })),
-    });
-    setMockCollection("electedOfficials", {
-      aggregate: vi.fn(() => ({
-        toArray: vi.fn().mockResolvedValue([{ _id: { party: "1", state: "PA" } }]),
-      })),
-    });
-    setMockCollection("npps", {
-      aggregate: vi.fn(() => ({
-        toArray: vi.fn().mockResolvedValue([{ _id: { party: "1", state: "MD" } }]),
-      })),
-    });
-
-    const map = await getCountryPartyPresence(db, "US");
-    expect([...(map.get("1") ?? [])].sort()).toEqual(["MD", "NY", "PA"]);
-  });
-
-  it("ignores independents and malformed rows", async () => {
-    const db = makeDb();
-    seedRegions(["NY"]);
-    setMockCollection("characters", {
-      aggregate: vi.fn(() => ({
-        toArray: vi
-          .fn()
-          .mockResolvedValue([
-            { _id: { party: "independent", state: "NY" } },
-            { _id: { party: null, state: "NY" } },
-            { _id: { party: "1", state: null } },
-            { _id: null },
-          ]),
-      })),
-    });
-
-    const map = await getCountryPartyPresence(db, "US");
-    expect(map.size).toBe(0);
   });
 });
 

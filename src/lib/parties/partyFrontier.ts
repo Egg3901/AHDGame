@@ -118,66 +118,6 @@ export async function getPartyFrontier(
 }
 
 /**
- * Bulk presence for every party in a country, in three aggregations total.
- *
- * For list surfaces that need many parties' frontiers at once (the party list /
- * join UI, the recruitment states list). The single-party helpers above serve
- * the write paths, which resolve one party each.
- */
-export async function getCountryPartyPresence(
-  db: Db,
-  countryId: CountryId,
-  regionIds?: readonly string[]
-): Promise<Map<string, Set<string>>> {
-  const regions = regionIds ?? (await getCountryRegionIds(db, countryId));
-  const inCountry = { $in: [...regions] };
-  const regionSet = new Set(regions);
-  const byParty = new Map<string, Set<string>>();
-
-  const record = (partyId: unknown, stateId: unknown) => {
-    if (typeof partyId !== "string" || typeof stateId !== "string") return;
-    if (!partyId || partyId === "independent" || !stateId) return;
-    if (!regionSet.has(stateId)) return;
-    let set = byParty.get(partyId);
-    if (!set) {
-      set = new Set<string>();
-      byParty.set(partyId, set);
-    }
-    set.add(stateId);
-  };
-
-  const notIndependent = { $nin: [null, "independent"] };
-  const [members, officials, npps] = await Promise.all([
-    db
-      .collection<Character>("characters")
-      .aggregate<{ _id: { party: string; state: string } | null }>([
-        { $match: { party: notIndependent, homeState: inCountry } },
-        { $group: { _id: { party: "$party", state: "$homeState" } } },
-      ])
-      .toArray(),
-    db
-      .collection<ElectedOfficial>("electedOfficials")
-      .aggregate<{ _id: { party: string; state: string } | null }>([
-        { $match: { party: notIndependent, state: inCountry } },
-        { $group: { _id: { party: "$party", state: "$state" } } },
-      ])
-      .toArray(),
-    db
-      .collection<NPP>("npps")
-      .aggregate<{ _id: { party: string; state: string } | null }>([
-        { $match: { party: notIndependent, retiredAt: null, homeState: inCountry } },
-        { $group: { _id: { party: "$party", state: "$homeState" } } },
-      ])
-      .toArray(),
-  ]);
-
-  for (const row of [...members, ...officials, ...npps]) {
-    record(row?._id?.party, row?._id?.state);
-  }
-  return byParty;
-}
-
-/**
  * Shared join guard.
  *
  * Lives here rather than inside `applyCharacterPartyJoin` because that function
