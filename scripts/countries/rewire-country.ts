@@ -741,16 +741,12 @@ function findEntry(raw: string, registry: string, key: string): [number, number]
 }
 
 function ensureImport(src: string, binding: string, from: string): string {
-  if (
-    new RegExp(`\\b${escapeRegExp(binding)}\\b[^\\n]*from "${from.replace(/\//g, "\\/")}"`).test(
-      src
-    )
-  )
+  if (new RegExp(`\\b${escapeRegExp(binding)}\\b[^\\n]*from "${escapeRegExp(from)}"`).test(src))
     return src;
   if (src.includes(`from "${from}"`)) {
     // Same module already imported: widen the existing clause.
     return src.replace(
-      new RegExp(`import \\{([^}]*)\\} from "${from.replace(/\//g, "\\/")}";`),
+      new RegExp(`import \\{([^}]*)\\} from "${escapeRegExp(from)}";`),
       (_m, names: string) =>
         `import { ${names.trim().replace(/,$/, "")}, ${binding} } from "${from}";`
     );

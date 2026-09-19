@@ -1392,7 +1392,7 @@ export async function verify(cc: string): Promise<boolean> {
         console.log(`FAIL  ${name}.${cc} no longer resolves at all.`);
         failed++;
       } else if (
-        !new RegExp(`from "(@/lib|\.)/countries/${escapeRegExp(cc.toLowerCase())}/`).test(src)
+        !new RegExp(`from "(@/lib|\\.)/countries/${escapeRegExp(cc.toLowerCase())}/`).test(src)
       ) {
         console.log(
           `FAIL  ${name}.${cc} is recorded as forwarding to a folder module, but ` +
