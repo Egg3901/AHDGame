@@ -1,5 +1,6 @@
 "use client";
 
+import { BulkWageControl } from "./BulkWageControl";
 import { useMemo, useState } from "react";
 import Image from "next/image";
 import { Slider } from "@/components/ui";
@@ -38,6 +39,14 @@ export interface BulkOperationsResult {
     currentTotalCostPerTurn: number;
     costDeltaPerTurn: number;
   };
+  wages?: {
+    wageLevel: number;
+    currentTotalCostPerTurn: number;
+    projectedTotalCostPerTurn: number;
+    costDeltaPerTurn: number;
+    missingCostCount: number;
+    protectedCount: number;
+  };
   error?: string;
 }
 
@@ -48,6 +57,7 @@ export type BulkOperationsFn = (
     targetGrowthRate?: number;
     productionPolicy?: number; // pragma: allowlist secret
     pricingPosture?: number | null;
+    wageLevel?: number;
     preview?: boolean;
   }
 ) => Promise<BulkOperationsResult>;
@@ -118,6 +128,7 @@ function BulkGroupCard({
   onBulkOperations,
   fmtMoney,
   plantsMode = false,
+  labourEnabled = false,
 }: {
   country: string;
   sectorType: CorporationType | null;
@@ -127,6 +138,7 @@ function BulkGroupCard({
   fmtMoney: (val: number) => string;
   /** Plants tier: the bulk growth lever is retired, so it is not offered. */
   plantsMode?: boolean;
+  labourEnabled?: boolean;
 }) {
   const [growthDraft, setGrowthDraft] = useState(0);
   const [productionDraft, setProductionDraft] = useState(0);
@@ -343,6 +355,14 @@ function BulkGroupCard({
         </div>
       </div>
 
+      {labourEnabled && (
+        <BulkWageControl
+          country={country}
+          sectorType={sectorType}
+          onBulkOperations={onBulkOperations}
+          fmtMoney={fmtMoney}
+        />
+      )}
       {message && (
         <p className={`mt-2 text-xs ${message.startsWith("Set") ? "text-success" : "text-error"}`}>
           {message}
@@ -962,6 +982,7 @@ export default function CeoProductionSubtab({
                             onBulkOperations={onBulkOperations}
                             fmtMoney={fmtMoney}
                             plantsMode={plantsMode}
+                            labourEnabled={corporation.labourEnabled}
                             label={
                               <span
                                 className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-medium ${getTypeColor(sectorType)}`}
@@ -991,6 +1012,7 @@ export default function CeoProductionSubtab({
                   onBulkOperations={onBulkOperations}
                   fmtMoney={fmtMoney}
                   plantsMode={plantsMode}
+                  labourEnabled={corporation.labourEnabled}
                   label={
                     <span className="text-sm font-semibold text-foreground">
                       Corporate-Wide{corpSpansCountries ? ` · ${country}` : ""}

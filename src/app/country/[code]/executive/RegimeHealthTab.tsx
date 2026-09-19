@@ -17,6 +17,7 @@
  * the country overview is the non-leader fallback.
  */
 import { useCallback, useEffect, useState } from "react";
+import { RegimeChangeHistory } from "./RegimeChangeHistory";
 import { governmentSystemLabel } from "@/lib/military/peaceTerm";
 
 interface Scalars {
@@ -883,6 +884,9 @@ function ScalarCard({
           )}
         </svg>
       )}
+      <dd className="mt-3">
+        <RegimeChangeHistory entries={history} />
+      </dd>
       {deltaLabel && (
         <dd className="mt-1 text-xs text-muted" data-testid={`${testId}-projection-label`}>
           {deltaLabel}

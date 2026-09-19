@@ -54,6 +54,7 @@ import { checkPassiveProfileAchievements } from "@/lib/achievements/triggers";
 import { DiscordBadge } from "./DiscordBadge";
 import { getOnlineStatus } from "@/lib/utils/onlineStatus";
 import { ProfileHeader } from "./components/ProfileHeader";
+import { businessProfileView } from "@/lib/character/businessProfileView";
 import { ProfileTabs } from "@/components/profile/ProfileTabs";
 import { loadGeneralPosting, EMPTY_POSTING } from "@/lib/military/generalPosting";
 import { getNationalDoctrine } from "@/lib/db/collections/nationalDoctrine";
@@ -302,8 +303,13 @@ async function getCharacterData() {
         ]);
         return {
           doctrineAdopted: doctrine.adopted,
-          // A dismissed general's retained record is not surfaced as an active profile.
-          general: commission.commissioned ? commission.general : null,
+          // Retain former service for the read-only military profile.
+          general: commission.general,
+          militaryService: {
+            commissioned: commission.commissioned,
+            commissionedTurn: commission.commissionedTurn,
+            dismissedTurn: commission.dismissedTurn,
+          },
           generalPosting: commission.commissioned
             ? await loadGeneralPosting(db, character._id.toString(), charCountryId ?? "US")
             : EMPTY_POSTING,
@@ -316,6 +322,11 @@ async function getCharacterData() {
     : {
         doctrineAdopted: {},
         general: null,
+        militaryService: {
+          commissioned: false,
+          commissionedTurn: undefined,
+          dismissedTurn: undefined,
+        },
         generalPosting: EMPTY_POSTING,
         generalEra: CUR_ERA_YEAR,
         isCommandingGeneral: false,
@@ -424,6 +435,7 @@ export default async function ProfilePage() {
     conflictsEnabled,
     doctrineAdopted,
     general,
+    militaryService,
     generalEra,
     generalPosting,
     isCommandingGeneral,
@@ -658,6 +670,8 @@ export default async function ProfilePage() {
           conflictsEnabled={conflictsEnabled}
           adopted={doctrineAdopted}
           general={general}
+          militaryService={militaryService}
+          business={businessProfileView(financialData, true)}
           editable={true}
           curEra={generalEra}
           posting={generalPosting}

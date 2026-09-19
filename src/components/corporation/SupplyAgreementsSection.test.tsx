@@ -7,6 +7,8 @@ import { NextIntlClientProvider } from "next-intl";
 import SupplyAgreementsSection from "./SupplyAgreementsSection";
 import enCorporations from "../../../messages/en/corporations.json";
 
+vi.mock("./SupplyOfferBoard", () => ({ SupplyOfferBoard: () => null }));
+
 vi.mock("@/contexts/ToastContext", () => ({
   useToast: () => ({ showToast: vi.fn() }),
 }));
@@ -47,6 +49,8 @@ beforeEach(() => {
             lastShortfallPenaltyAnchor: 250,
             lastSupplierCashDelta: -250,
             lastSupplierCashCurrency: "USD",
+            lastBuyerCashDelta: 250,
+            lastBuyerCashCurrency: "USD",
           },
           {
             _id: "agreement-2",
@@ -161,6 +165,14 @@ describe("SupplyAgreementsSection delivery outcome", () => {
     await waitFor(() => expect(screen.getByText("As buyer")).toBeTruthy());
     expect(screen.getAllByRole("link", { name: /Gridworks \(GRID\)/ }).length).toBeGreaterThan(0);
     expect(screen.getByText(/60 MWh on turn 296/)).toBeTruthy();
+  });
+
+  it("shows the buyer last-turn contract cash", async () => {
+    render(<SupplyAgreementsSection corpId="buyer" />);
+
+    await waitFor(() => expect(screen.getByText("As buyer")).toBeTruthy());
+    expect(screen.getByText("Net contract cash")).toBeTruthy();
+    expect(screen.getByText("+$250")).toBeTruthy();
   });
 
   it("shows the buyer name on the supplier's agreement card", async () => {

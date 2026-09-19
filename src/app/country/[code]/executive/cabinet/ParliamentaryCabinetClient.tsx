@@ -176,10 +176,13 @@ export default function ParliamentaryCabinetClient({ config }: Props) {
     fetchData();
   }, [fetchData]);
 
-  const fetchEligibleCharacters = async () => {
+  // The vacant position rides along (issue #2049) so a UK minister holding the
+  // complementary slot stays eligible: one department plus one central title.
+  const fetchEligibleCharacters = async (vacantPositionId?: string) => {
     dispatch({ type: "SET_CHARACTERS_LOADING", payload: true });
     try {
-      const res = await fetch(`${executiveApiUrl(countryId)}/cabinet/characters`);
+      const query = vacantPositionId ? `?positionId=${encodeURIComponent(vacantPositionId)}` : "";
+      const res = await fetch(`${executiveApiUrl(countryId)}/cabinet/characters${query}`);
       if (res.ok) {
         const data = await res.json();
         dispatch({ type: "SET_CHARACTERS", payload: data.characters });
@@ -194,7 +197,7 @@ export default function ParliamentaryCabinetClient({ config }: Props) {
 
   const handleOpenAppointModal = async (position: Position) => {
     dispatch({ type: "OPEN_APPOINT_MODAL", payload: position });
-    await fetchEligibleCharacters();
+    await fetchEligibleCharacters(position.id);
   };
 
   const handleCloseAppointModal = () => {

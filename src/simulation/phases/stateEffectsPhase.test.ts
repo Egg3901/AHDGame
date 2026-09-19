@@ -21,6 +21,17 @@ function makeHarness() {
       events.push(`start:${name}`);
       await new Promise((resolve) => setTimeout(resolve, 0));
       events.push(`end:${name}`);
+      // The Bretton Woods shell reports what it did; the adapter records it
+      // on phaseResults for turn logs. Other phases return null here.
+      if (name === "brettonWoodsTurn") {
+        return {
+          enabled: true,
+          goldCover: 1,
+          suspended: [],
+          floated: [],
+          currenciesProcessed: 0,
+        };
+      }
       return null;
     }),
     markPhaseSkipped: vi.fn(async () => {}),
@@ -30,7 +41,7 @@ function makeHarness() {
     newTurn: 1000,
     currentYear: 2025,
     phaseResults: {} as Record<string, unknown>,
-    gameState: { forexEnabled: false, startingYear: 2019 },
+    gameState: { forexEnabled: true, startingYear: 2019 },
     gameNow: new Date("2025-01-01T00:00:00Z"),
     startTimeMs: Date.now(),
     warnings: [] as string[],
@@ -72,5 +83,37 @@ describe("stateEffectsAndNationalAggregation phase ordering", () => {
     const crisisEnd = events.indexOf("end:crisisTurn");
     expect(demoStart).toBeGreaterThanOrEqual(0);
     expect(demoStart).toBeLessThan(crisisEnd);
+  });
+
+  // Issue #7: the Bretton Woods exit is built, tested and flagged on, but the
+  // turn never reaches it — no phase in this sequence invokes the mechanic, so
+  // a flagged-on world can never suspend convertibility. The exit must run on
+  // the real player-facing entry path: after inflationRecalc (which settles
+  // the US inflation gap the gold-cover drain reads) and before forexTurn
+  // (which applies the regime's band and drift the same turn).
+  it("reaches the Bretton Woods exit between inflationRecalc and forexTurn", async () => {
+    const { events, runtime, context } = makeHarness();
+
+    await stateEffectsAndNationalAggregationPhase.execute(context as never, runtime as never);
+
+    const idx = (event: string) => {
+      const i = events.indexOf(event);
+      expect(i, `${event} must be recorded`).toBeGreaterThanOrEqual(0);
+      return i;
+    };
+
+    expect(idx("end:inflationRecalc")).toBeLessThan(idx("start:brettonWoodsTurn"));
+    expect(idx("end:brettonWoodsTurn")).toBeLessThan(idx("start:forexTurn"));
+
+    // The adapter records the shell's report on phaseResults for turn logs.
+    expect(context.phaseResults).toMatchObject({
+      brettonWoodsTurn: {
+        enabled: true,
+        goldCover: 1,
+        suspended: [],
+        floated: [],
+        currenciesProcessed: 0,
+      },
+    });
   });
 });

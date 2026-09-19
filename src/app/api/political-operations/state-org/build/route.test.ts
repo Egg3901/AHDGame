@@ -300,7 +300,20 @@ describe("POST /api/political-operations/state-org/build", () => {
     expect(body.error).toMatch(/actions/i);
   });
 
-  it("increments level on success and debits actions + funds (pre-forex)", async () => {
+  it.each([
+    { fallback: false, rate: 1 },
+    { fallback: true, rate: 1.75 },
+  ])("records the actual debit with the successful build: %j", async ({ fallback, rate }) => {
+    const { runWithOptionalTransaction } = await import("@/lib/db/runWithOptionalTransaction");
+    vi.mocked(runWithOptionalTransaction).mockImplementationOnce(async (tx, withoutTransaction) =>
+      fallback ? withoutTransaction() : tx({} as never)
+    );
+    vi.mocked((await import("@/lib/currency/featureFlag")).isForexEnabled).mockResolvedValueOnce(
+      true
+    );
+    vi.mocked(
+      (await import("@/lib/currency/characterFunds")).loadCharacterFxRate
+    ).mockResolvedValueOnce({ rate, ok: true });
     const orgFindOneAndUpdate = vi.fn().mockResolvedValue({
       _id: new ObjectId(),
       characterId: mockCharacterId,
@@ -349,7 +362,8 @@ describe("POST /api/political-operations/state-org/build", () => {
     // Debit lands on the CAMPAIGN, not the character. The org doc reports
     // level 1 pre-build, so the price is the level-1→2 rung of the escalating
     // curve, asserted through the helper rather than a literal.
-    const expectedCost = stateOrgLevelCost(1);
+    const expectedCost = stateOrgLevelCost(1) * rate;
+    expect(body.spentThisTurn).toBe(expectedCost);
     const campCall = campaignUpdateOne.mock.calls[0];
     expect(campCall[0]).toMatchObject({
       _id: mockCampaignId,
@@ -369,6 +383,10 @@ describe("POST /api/political-operations/state-org/build", () => {
     expect(orgCall[0]).toMatchObject({ characterId: mockCharacterId, stateId: "PA" });
     expect(orgCall[0].$or).toBeDefined();
     expect(orgCall[1].$inc).toMatchObject({ level: 1, totalInvested: 3 });
+    expect(orgCall[1].$set).toMatchObject({
+      lastBuildAt: expect.any(Date),
+      lastBuildFunds: expectedCost,
+    });
     expect(orgCall[2]).toMatchObject({ upsert: true, returnDocument: "after" });
   });
 
@@ -449,7 +467,8 @@ describe("POST /api/political-operations/state-org/build", () => {
       stateId: "PA",
     });
     const throttleCondition = orgCall[0].$or?.find(
-      (clause: Record<string, unknown>) => clause.updatedAt && (clause.updatedAt as { $lt?: Date }).$lt
+      (clause: Record<string, unknown>) =>
+        clause.updatedAt && (clause.updatedAt as { $lt?: Date }).$lt
     );
     expect(throttleCondition).toBeDefined();
     expect((throttleCondition.updatedAt as { $lt: Date }).$lt.getTime()).toBe(turnStart.getTime());

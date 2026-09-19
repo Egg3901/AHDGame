@@ -35,6 +35,8 @@ describe("seedCoreIndexes", () => {
     const db = {
       collection: vi.fn(() => ({
         indexes,
+        find: vi.fn(() => ({ toArray: vi.fn().mockResolvedValue([]) })),
+        createIndex: vi.fn().mockResolvedValue("corporations_sequentialId"),
       })),
     } as unknown as Db;
 
@@ -66,6 +68,8 @@ describe("seedCoreIndexes", () => {
     const db = {
       collection: vi.fn(() => ({
         indexes,
+        find: vi.fn(() => ({ toArray: vi.fn().mockResolvedValue([]) })),
+        createIndex: vi.fn().mockResolvedValue("corporations_sequentialId"),
       })),
     } as unknown as Db;
 

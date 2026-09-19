@@ -20,7 +20,7 @@ import type { CurrencyCode } from "@/lib/constants/currencies";
 export async function getFinancialData(characterId: ObjectId) {
   const db = await getDb();
 
-  const [corporation, corporationsWithShares, activeBonds] = await Promise.all([
+  const [corporation, corporationsWithShares, activeBonds, fundPosition] = await Promise.all([
     db.collection<Corporation>("corporations").findOne({
       ceoId: characterId,
       ceoVacant: { $ne: true },
@@ -43,6 +43,12 @@ export async function getFinancialData(characterId: ObjectId) {
       .find({ matured: false, defaulted: false, "holders.characterId": characterId })
       .project({ couponRate: 1, currencyCode: 1, countryId: 1, holders: 1 })
       .toArray(),
+    db
+      .collection("indexFundPositions")
+      .findOne(
+        { holderKind: "character", characterId, units: { $gt: 0 } },
+        { projection: { _id: 1 } }
+      ),
   ]);
 
   const latestHistByCorp = await fetchLatestCorpHistoryDividendRows(
@@ -62,6 +68,8 @@ export async function getFinancialData(characterId: ObjectId) {
   // EQUITIES ONLY, matching `investorRankingSnapshot.portfolioValue`. The wealth
   // list's same-named field is stocks PLUS bonds (see wealthListSnapshot.ts), so
   // the two are not comparable. Bonds surface here via `bondIncomePerTurn`.
+  let equityHoldingCount = 0;
+  let bondHoldingCount = 0;
   let portfolioValue = 0;
   let dividendIncomePerTurn = 0;
   for (const corp of corporationsWithShares) {
@@ -69,6 +77,7 @@ export async function getFinancialData(characterId: ObjectId) {
       (s) => s.characterId?.toString() === characterId.toString()
     );
     if (sh && sh.shares > 0) {
+      equityHoldingCount++;
       const corpFxRate = fxRateForCorpFromMap(corp, fxByCurrencyProfile);
       portfolioValue += corpLiquidCapitalToAnchor(
         sh.shares * getPublicShareQuote(corp),
@@ -103,6 +112,7 @@ export async function getFinancialData(characterId: ObjectId) {
         h.characterId?.toString() === characterId.toString()
     );
     if (!holder || holder.units <= 0) continue;
+    bondHoldingCount++;
     const bondCcy = (bond.currencyCode ??
       (bond.countryId && bond.countryId in COUNTRY_CURRENCY_MAP
         ? COUNTRY_CURRENCY_MAP[bond.countryId as keyof typeof COUNTRY_CURRENCY_MAP]
@@ -132,6 +142,10 @@ export async function getFinancialData(characterId: ObjectId) {
   >;
 
   return {
+    isInvestor: equityHoldingCount > 0 || bondHoldingCount > 0 || !!fundPosition,
+    equityHoldingCount,
+    bondHoldingCount,
+    hasFundHoldings: !!fundPosition,
     bondIncomePerTurn,
     dividendIncomePerTurn,
     portfolioValue,
