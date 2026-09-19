@@ -231,9 +231,10 @@ describe("processUkPartyConferenceTurn", () => {
     // year 1 with a window closing on turn 59, flipped open like the driver
     // would once its opening turn passes.
     await getOrSeedConference(db, "UK", world.party, 1, 41, 59, NOW(), 40);
-    await db
-      .collection("ukPartyConferences")
-      .updateOne({ _id: "UK:2:1" }, { $set: { status: "open", openedAtTurn: 41 } });
+    await getUKPartyConferencesCollection(db).updateOne(
+      { _id: "UK:2:1" },
+      { $set: { status: "open", openedAtTurn: 41 } }
+    );
     const rolled = await processUkPartyConferenceTurn(db, YEAR2_START, NOW());
     expect(rolled.expired).toBe(0);
     expect(await getUKPartyConferencesCollection(db).findOne({ _id: "UK:2:1" })).toMatchObject({
@@ -368,9 +369,9 @@ describe("processUkPartyConferenceTurn", () => {
     // the motion after the winner's receipt landed and the winner crashed
     // before marking: void label + live receipt, no applied mark.
     const decided = (await getUKPartyConferencesCollection(db).findOne({ _id: "UK:2:1" }))!;
-    const voidedMotions = (decided.motions as Array<Record<string, unknown>>).map((motion) =>
+    const voidedMotions = decided.motions.map((motion) =>
       motion.motionId === motionId
-        ? { ...motion, status: "void", voidReason: CONFERENCE_RACE_VOID_REASON }
+        ? { ...motion, status: "void" as const, voidReason: CONFERENCE_RACE_VOID_REASON }
         : motion
     );
     await getUKPartyConferencesCollection(db).updateOne(

@@ -209,9 +209,16 @@ export async function deployBondReserveFromCash(
   }
 
   const countryId = resolveFundBondCountryId(fund);
+  // Coverage funds ensured under the #1001 domestic gate carry no standing
+  // definition entry (definitions only list the broad-fund countries); a
+  // country bond fund with a home country always means its home-sovereign
+  // mandate, so it deploys exactly like a seeded home-only fund. Funds that
+  // exist today all resolve through definitions, so this fallback never fires
+  // for them and gate-off behavior is unchanged.
   const bondUniverse =
     fund.kind === "bond"
-      ? getAllFundDefinitions().find((d) => d.slug === fund.slug)?.bondUniverse
+      ? (getAllFundDefinitions().find((d) => d.slug === fund.slug)?.bondUniverse ??
+        (fund.countryId ? ({ issuerType: "sovereign", homeOnly: true } as const) : undefined))
       : undefined;
   if (fund.kind === "bond" && !bondUniverse) {
     return { deployedAnchor: 0, unitsPurchased: 0, countryId };

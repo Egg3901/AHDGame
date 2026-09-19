@@ -64,7 +64,6 @@ import {
 import type { CorporationType } from "@/lib/constants/corporations";
 import { partitionOpenMarkets } from "@/lib/economy/queries/privateEnterpriseGate";
 import type { CommodityPrice } from "@/lib/db/types/commodityPrice";
-import type { CommodityType } from "@/lib/constants/commodities";
 import {
   STRANDED_DIVEST_TURNS,
   STRANDED_DIVEST_MAX_PER_TURN,
@@ -92,7 +91,7 @@ import { foundingStarterUnits, sectorEntryFeeAnchor } from "@/lib/corporations/f
 import { unownedHeadroomUnitsOf } from "@/lib/corporations/marketShare";
 import { resolvePresetIdFromGameState } from "@/lib/world/countryReadinessContract";
 import { getMarketSystemModeForDb, marketAtLeast } from "@/lib/market/featureFlag";
-import { latentAwareNationalRatio, latentAwareStateRatio } from "@/lib/market/latentShortageSignal";
+import { buildNppPriceSignals } from "@/lib/turn/npp/priceSignals";
 import { resolveCountryPrimeRate } from "@/lib/corporations/sectorGrowthCost";
 import { NEUTRAL_STAT } from "@/lib/stats/statsConstants";
 import {
@@ -301,39 +300,7 @@ export async function processNppCorporationDecisions(
       priceByCommodity.set(doc.commodity, doc);
     }
   }
-  const priceRatioOf: CommodityPriceRatioFn = (commodity, countryId) => {
-    const doc = priceByCommodity.get(commodity);
-    if (!doc || !doc.basePrice) return null;
-    // Reachable-market price first (partition worlds): the NPP brain should
-    // chase the market its sectors actually clear in, not the planet-wide
-    // aggregate — same rationale as the reachable price/margin legs.
-    const price =
-      doc.reachablePrices?.[countryId] ?? doc.nationalPrices?.[countryId] ?? doc.globalPrice;
-    if (!price || !Number.isFinite(price)) return null;
-    const stored = price / doc.basePrice;
-    // Demand audit step 1: lift the build signal by the 1.5x-cap-hidden
-    // demand. `latentAwareNationalRatio` returns the stored ratio unchanged
-    // when nothing was truncated, so this is a no-op below the cap. The
-    // national book supplies the lift basis even when the price leg is the
-    // reachable one (the book has no persisted S/D on the doc); the stored
-    // reachable price itself is preserved via `storedOverride`.
-    return latentAwareNationalRatio(doc, countryId, stored) ?? stored;
-  };
-
-  // ── Placement signals (supply-dislocation remediation, t202) ──────────────
-  // State-resolution price ratios plus deposit headroom, so foundings route to
-  // the state that is actually starved / has room, not just the corp's HQ.
-  const statePriceRatioOf = (commodity: CommodityType, stateId: string): number | null => {
-    const doc = priceByCommodity.get(commodity);
-    if (!doc || !doc.basePrice) return null;
-    const price = doc.statePrices?.[stateId];
-    if (price == null || !Number.isFinite(price)) return null;
-    const stored = price / doc.basePrice;
-    // Demand audit step 1, state resolution: same hidden-demand lift against
-    // the state's own book, so within-country placement still routes to the
-    // state that is actually starved.
-    return latentAwareStateRatio(doc, stateId, stored) ?? stored;
-  };
+  const { priceRatioOf, statePriceRatioOf } = buildNppPriceSignals(priceByCommodity);
 
   const placementSignals = await loadNppPlacementSignals(db, turn, allSectors, statePriceRatioOf);
 
