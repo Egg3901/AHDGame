@@ -27,12 +27,19 @@ import type { CountryId } from "@/lib/constants/countries";
 import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
 import { emitTreasuryTransaction } from "@/lib/treasury/emit";
-import { checkPlayerPayoutCap } from "@/lib/treasury/payoutCap";
+import { checkPlayerPayoutCap, countDistinctOfficers } from "@/lib/treasury/payoutCap";
 
 export interface ExecuteSendToMemberArgs {
   db: Db;
   countryId: CountryId;
-  party: Pick<PoliticalParty, "_id" | "name" | "sequentialId" | "treasury">;
+  /**
+   * Officer seats are included because the recipient's per-turn ceiling
+   * rises once two different officers are seated on the paying body.
+   */
+  party: Pick<
+    PoliticalParty,
+    "_id" | "name" | "sequentialId" | "treasury" | "chairId" | "viceChairId" | "treasurerId"
+  >;
   targetCharacter: Pick<Character, "_id" | "name">;
   amount: number;
   /** Pre-formatted reserve warning, or null. Folded into log + response. */
@@ -78,6 +85,11 @@ export async function executeSendToMember(
       countryId,
       currentTurn: args.currentTurn,
       amount,
+      seatedOfficers: countDistinctOfficers([
+        party.chairId?.toString(),
+        party.viceChairId?.toString(),
+        party.treasurerId?.toString(),
+      ]),
     });
     if (!cap.ok) {
       return { ok: false, response: NextResponse.json({ error: cap.reason }, { status: 400 }) };

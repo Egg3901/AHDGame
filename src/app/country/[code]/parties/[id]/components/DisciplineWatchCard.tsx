@@ -34,6 +34,15 @@ interface Props {
 
 export function DisciplineWatchCard({ countryCode, partyId }: Props) {
   const [data, setData] = useState<WatchResponse | null>(null);
+  /**
+   * `items` read defensively rather than trusted.
+   *
+   * The value comes straight off a fetch, and a response that parses but
+   * carries no `items` array (an error envelope, a truncated payload)
+   * used to throw on `.length` here and take the whole party hub down
+   * with it, not just this card.
+   */
+  const items = Array.isArray(data?.items) ? data.items : null;
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -92,15 +101,15 @@ export function DisciplineWatchCard({ countryCode, partyId }: Props) {
       )}
       {error && <p className="text-xs text-error">{error}</p>}
 
-      {data && data.items.length === 0 && (
+      {items && items.length === 0 && (
         <p className="text-xs text-muted">
           No NPPs below the threshold. Caucus discipline is solid for now.
         </p>
       )}
 
-      {data && data.items.length > 0 && (
+      {items && items.length > 0 && (
         <ul className="divide-y divide-card-border/40">
-          {data.items.map((row) => (
+          {items.map((row) => (
             <li
               key={row.id}
               className="grid gap-2 py-3 text-xs md:grid-cols-[minmax(0,1fr)_auto] md:items-center"

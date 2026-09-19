@@ -125,7 +125,7 @@ describe("POST /api/country/[code]/parties/[id]/caucuses/[slug]/send", () => {
     const response = await call(100_000);
     expect(response.status).toBe(400);
     const body = await response.json();
-    expect(body.error).toMatch(/already received the maximum/);
+    expect(body.error).toMatch(/already received \$/);
     expect(db.collectionMocks["caucuses"]!.updateOne).not.toHaveBeenCalled();
   });
 

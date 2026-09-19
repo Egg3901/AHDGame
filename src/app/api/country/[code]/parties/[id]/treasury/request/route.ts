@@ -14,7 +14,7 @@ import {
   LEADERSHIP_FREEZE_MESSAGE,
 } from "@/lib/parties/leadershipElectionFreeze";
 import { getGameTime } from "@/lib/time/gameTime";
-import { getPlayerPayoutCap } from "@/lib/treasury/payoutCapValues";
+import { countDistinctOfficers, getEffectivePlayerPayoutCap } from "@/lib/treasury/payoutCapValues";
 import {
   canRequestFunds,
   createPendingTransaction,
@@ -110,7 +110,14 @@ export async function POST(request: Request, { params }: RouteParams) {
     // still accepted here, and the refusal only surfaced at the end of
     // the approve flow, after that route had already claimed an
     // approver's slot. Refuse it at the door instead.
-    const payoutCap = getPlayerPayoutCap(countryId);
+    const payoutCap = getEffectivePlayerPayoutCap(
+      countryId,
+      countDistinctOfficers([
+        party.chairId?.toString(),
+        party.viceChairId?.toString(),
+        party.treasurerId?.toString(),
+      ])
+    );
     if (amount > payoutCap) {
       return NextResponse.json(
         {

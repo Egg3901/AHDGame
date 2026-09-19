@@ -181,6 +181,30 @@ describe("POST /api/country/[code]/parties/[id]/send", () => {
     );
   }
 
+  it("raises the ceiling five times once a second officer is seated", async () => {
+    // `richParty` seats only a Chair, so the base ceiling applies there.
+    // A seated Treasurer is a second pair of eyes on the ledger and buys
+    // the party a larger single payment.
+    await richParty();
+    const { findPartyBySequentialId } = await import("@/lib/db/partyLookup");
+    vi.mocked(findPartyBySequentialId).mockResolvedValue({
+      _id: partyOid,
+      sequentialId: Number(partyId),
+      countryId: "US",
+      name: "Test Party",
+      treasury: 50_000_000,
+      chairId,
+      treasurerId: new ObjectId(),
+      transactionApprovalMode: "single",
+    } as never);
+    db.collectionMocks["treasuryTransactions"]!.aggregate.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([]),
+    });
+
+    const response = await send(9_000_000);
+    expect(response.status).toBe(200);
+  });
+
   it("refuses a single payment larger than the ceiling before anything is queued", async () => {
     // Distinct from the "over their remaining allowance" case below: a
     // payment above the flat ceiling can never clear on any turn, so it
@@ -234,7 +258,7 @@ describe("POST /api/country/[code]/parties/[id]/send", () => {
     const response = await send(1_000);
     expect(response.status).toBe(400);
     const body = await response.json();
-    expect(body.error).toMatch(/already received the maximum/);
+    expect(body.error).toMatch(/already received \$/);
   });
 
   it("refuses any send in the closing turns of a leadership election", async () => {

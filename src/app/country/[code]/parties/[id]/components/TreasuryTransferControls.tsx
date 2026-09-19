@@ -7,7 +7,10 @@ import type { TreasuryAction } from "./treasuryReducer";
 import { contrastTextColor } from "@/lib/utils/colorContrast";
 import { fmt } from "./helpers";
 import { partyApiUrl } from "@/lib/urls";
-import { getPlayerPayoutCap } from "@/lib/treasury/payoutCapValues";
+import {
+  getEffectivePlayerPayoutCap,
+  PAYOUT_CAP_MULTI_OFFICER_MULTIPLIER,
+} from "@/lib/treasury/payoutCapValues";
 
 interface TreasuryTransferControlsProps {
   party: PartyData;
@@ -39,7 +42,9 @@ export function TreasuryTransferControls({
 
   const regionLabel = countryConfig.regionLabel.toLowerCase();
 
-  const payoutCap = getPlayerPayoutCap(countryId as CountryId);
+  // Server-counted off the raw seat ids; see the note on PartyData.
+  const seatedOfficers = party.seatedOfficers;
+  const payoutCap = getEffectivePlayerPayoutCap(countryId as CountryId, seatedOfficers);
 
   /**
    * What the SELECTED member may still receive this turn.
@@ -70,9 +75,8 @@ export function TreasuryTransferControls({
         );
         if (!res.ok) return;
         const data = await res.json();
-        if (!cancelled && typeof data?.remaining === "number") {
-          setRecipientRemaining(data.remaining);
-        }
+        if (cancelled) return;
+        if (typeof data?.remaining === "number") setRecipientRemaining(data.remaining);
       } catch {
         // Non-critical: the card falls back to quoting the flat cap.
       }
@@ -183,7 +187,10 @@ export function TreasuryTransferControls({
         <p className="text-[11px] text-muted mb-3">
           A member can receive up to {fmt(payoutCap, party.countryId)} per turn from party funds.
           That ceiling counts the national treasury, every state party and every caucus together. No
-          party funds move at all in the last two turns before a leadership election closes.
+          party funds move at all in the last two turns before a leadership election closes.{" "}
+          {seatedOfficers >= 2
+            ? `It is ${PAYOUT_CAP_MULTI_OFFICER_MULTIPLIER} times the base ceiling, because two or more officers are seated here.`
+            : `A second seated officer would raise it to ${fmt(payoutCap * PAYOUT_CAP_MULTI_OFFICER_MULTIPLIER, party.countryId)}.`}
         </p>
         <div className="flex flex-wrap items-center gap-2">
           <select

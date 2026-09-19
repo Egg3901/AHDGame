@@ -16,7 +16,7 @@ import { requirePlayerTransfersEnabled } from "@/lib/api/requirePlayerTransfers"
 import { isForexEnabled } from "@/lib/currency/featureFlag";
 import { emitTreasuryTransaction } from "@/lib/treasury/emit";
 import { isSameCountry } from "@/lib/api/sameCountry";
-import { checkPlayerPayoutCap } from "@/lib/treasury/payoutCap";
+import { checkPlayerPayoutCap, countDistinctOfficers } from "@/lib/treasury/payoutCap";
 import {
   isLeadershipElectionFreezeActive,
   LEADERSHIP_FREEZE_MESSAGE,
@@ -118,6 +118,13 @@ export async function POST(request: Request, { params }: RouteParams) {
         countryId,
         currentTurn,
         amount: sendAmount,
+        // A caucus has only the two seats, so "two officers" here means
+        // both are filled. Counted on the paying body itself, as every
+        // treasury is judged on its own oversight.
+        seatedOfficers: countDistinctOfficers([
+          caucus.chairId?.toString(),
+          caucus.viceChairId?.toString(),
+        ]),
       });
       if (!cap.ok) {
         return NextResponse.json({ error: cap.reason }, { status: 400 });

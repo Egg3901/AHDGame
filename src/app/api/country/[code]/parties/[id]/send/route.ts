@@ -26,7 +26,7 @@ import {
   LEADERSHIP_FREEZE_MESSAGE,
 } from "@/lib/parties/leadershipElectionFreeze";
 import { getGameTime } from "@/lib/time/gameTime";
-import { getPlayerPayoutCap } from "@/lib/treasury/payoutCapValues";
+import { countDistinctOfficers, getEffectivePlayerPayoutCap } from "@/lib/treasury/payoutCapValues";
 
 interface RouteParams {
   params: Promise<{ code: string; id: string }>;
@@ -137,7 +137,14 @@ export async function POST(request: Request, { params }: RouteParams) {
     // `executeSendToMember` on every turn, and in double mode it would
     // first sit as a pending row collecting signatures that can never
     // pay out.
-    const sendPayoutCap = getPlayerPayoutCap(countryId);
+    const sendPayoutCap = getEffectivePlayerPayoutCap(
+      countryId,
+      countDistinctOfficers([
+        party.chairId?.toString(),
+        party.viceChairId?.toString(),
+        party.treasurerId?.toString(),
+      ])
+    );
     if (sendAmount > sendPayoutCap) {
       return NextResponse.json(
         {

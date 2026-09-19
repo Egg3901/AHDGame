@@ -12,7 +12,11 @@ import type {
 import { apiBase, relationshipBadge, recruitStatusTone, formatHoursMinutes } from "./caucusUtils";
 import { useChairSubtabState } from "./useChairSubtabState";
 import type { CountryId } from "@/lib/constants/countries";
-import { getPlayerPayoutCap } from "@/lib/treasury/payoutCapValues";
+import {
+  countDistinctOfficers,
+  getEffectivePlayerPayoutCap,
+  PAYOUT_CAP_MULTI_OFFICER_MULTIPLIER,
+} from "@/lib/treasury/payoutCapValues";
 
 export function ChairSubtab({
   countryCode,
@@ -503,9 +507,15 @@ export function ChairSubtab({
           </p>
           <p className="text-[11px] text-muted">
             Caucus funds count towards the same per-turn ceiling as party funds: $
-            {getPlayerPayoutCap(countryCode.toUpperCase() as CountryId).toLocaleString("en-US")} per
-            member per turn across the national treasury, state parties and caucuses combined.
-            Nothing moves in the last two turns before a party leadership election closes.
+            {getEffectivePlayerPayoutCap(
+              countryCode.toUpperCase() as CountryId,
+              countDistinctOfficers([caucus.chairId, caucus.viceChairId])
+            ).toLocaleString("en-US")}{" "}
+            per member per turn across the national treasury, state parties and caucuses combined.
+            Nothing moves in the last two turns before a party leadership election closes.{" "}
+            {countDistinctOfficers([caucus.chairId, caucus.viceChairId]) >= 2
+              ? `The ceiling is ${PAYOUT_CAP_MULTI_OFFICER_MULTIPLIER} times the base one while this caucus has both a Chair and a Vice-Chair seated.`
+              : `Seating both a Chair and a Vice-Chair would raise it ${PAYOUT_CAP_MULTI_OFFICER_MULTIPLIER} times.`}
           </p>
           <label className="block text-[11px] uppercase tracking-widest text-muted">
             Member
