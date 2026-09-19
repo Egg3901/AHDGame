@@ -5,6 +5,8 @@ import {
   isInFrontier,
   getPartyPresenceStates,
   getPartyFrontier,
+  getCountryPartyPresence,
+  canCharacterJoinParty,
 } from "@/lib/parties/partyFrontier";
 
 describe("expandFrontier", () => {
@@ -166,5 +168,117 @@ describe("getPartyFrontier", () => {
     expect([...presence]).toEqual(["NY"]);
     expect(frontier.has("PA")).toBe(true);
     expect(frontier.has("CA")).toBe(false);
+  });
+});
+
+describe("getCountryPartyPresence", () => {
+  beforeEach(resetMocks);
+
+  it("groups presence by party in a single pass", async () => {
+    const db = makeDb();
+    seedRegions(["NY", "CA"]);
+    setMockCollection("characters", {
+      aggregate: vi.fn(() => ({
+        toArray: vi
+          .fn()
+          .mockResolvedValue([
+            { _id: { party: "1", state: "NY" } },
+            { _id: { party: "2", state: "CA" } },
+          ]),
+      })),
+    });
+
+    const map = await getCountryPartyPresence(db, "US");
+    expect([...(map.get("1") ?? [])]).toEqual(["NY"]);
+    expect([...(map.get("2") ?? [])]).toEqual(["CA"]);
+  });
+
+  it("merges the three signals into one set per party", async () => {
+    const db = makeDb();
+    seedRegions(["NY", "PA", "MD"]);
+    setMockCollection("characters", {
+      aggregate: vi.fn(() => ({
+        toArray: vi.fn().mockResolvedValue([{ _id: { party: "1", state: "NY" } }]),
+      })),
+    });
+    setMockCollection("electedOfficials", {
+      aggregate: vi.fn(() => ({
+        toArray: vi.fn().mockResolvedValue([{ _id: { party: "1", state: "PA" } }]),
+      })),
+    });
+    setMockCollection("npps", {
+      aggregate: vi.fn(() => ({
+        toArray: vi.fn().mockResolvedValue([{ _id: { party: "1", state: "MD" } }]),
+      })),
+    });
+
+    const map = await getCountryPartyPresence(db, "US");
+    expect([...(map.get("1") ?? [])].sort()).toEqual(["MD", "NY", "PA"]);
+  });
+
+  it("ignores independents and malformed rows", async () => {
+    const db = makeDb();
+    seedRegions(["NY"]);
+    setMockCollection("characters", {
+      aggregate: vi.fn(() => ({
+        toArray: vi
+          .fn()
+          .mockResolvedValue([
+            { _id: { party: "independent", state: "NY" } },
+            { _id: { party: null, state: "NY" } },
+            { _id: { party: "1", state: null } },
+            { _id: null },
+          ]),
+      })),
+    });
+
+    const map = await getCountryPartyPresence(db, "US");
+    expect(map.size).toBe(0);
+  });
+});
+
+describe("canCharacterJoinParty", () => {
+  beforeEach(resetMocks);
+
+  const party = { sequentialId: 7, name: "Northeast Labor Party" };
+
+  function seedPresence(states: string[], regions: string[]) {
+    seedRegions(regions);
+    setMockCollection("characters", { distinct: vi.fn().mockResolvedValue(states) });
+  }
+
+  it("allows a joiner inside the frontier", async () => {
+    const db = makeDb();
+    seedPresence(["NY"], ["NY", "PA", "CA"]);
+    await expect(canCharacterJoinParty(db, { homeState: "PA" }, party, "US")).resolves.toEqual({
+      ok: true,
+    });
+  });
+
+  it("blocks a joiner outside the frontier with copy free of dashes", async () => {
+    const db = makeDb();
+    seedPresence(["NY"], ["NY", "PA", "CA"]);
+    const result = await canCharacterJoinParty(db, { homeState: "CA" }, party, "US");
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toContain("Northeast Labor Party");
+      expect(result.error).not.toMatch(/[\u2013\u2014]/);
+    }
+  });
+
+  it("allows any joiner into a party with no presence at all", async () => {
+    const db = makeDb();
+    seedPresence([], ["NY", "CA"]);
+    await expect(canCharacterJoinParty(db, { homeState: "CA" }, party, "US")).resolves.toEqual({
+      ok: true,
+    });
+  });
+
+  it("allows a joiner who has no home state", async () => {
+    const db = makeDb();
+    seedPresence(["NY"], ["NY", "CA"]);
+    await expect(canCharacterJoinParty(db, { homeState: "" }, party, "US")).resolves.toEqual({
+      ok: true,
+    });
   });
 });
