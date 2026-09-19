@@ -15,6 +15,14 @@ import type { CountryEraOverride } from "../../contract";
 export const TR_1953: CountryEraOverride = {
   preset: "1953-default",
   config: {
+    /*
+     * ⚠️ EXPLICITLY `undefined`, AND THE KEY MUST BE PRESENT. `getCountryConfig`
+     * shallow-merges this over the base config, so an explicit `undefined`
+     * CLEARS the base's upper-chamber election system while simply omitting the
+     * key leaves it in place. This era has no elected upper chamber; dropping
+     * the key silently restores one.
+     */
+    upperElectionSystem: undefined,
     usdExchangeRate: 0.35714285714285715,
     majorPartyIds: ["tr_dp", "tr_chp"],
     coalitionThreshold: 244,

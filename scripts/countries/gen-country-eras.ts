@@ -10,6 +10,16 @@
  * then added 2027 and every hard-coded "seven" had to be hunted down. This reads
  * the roster, so a new preset produces a new file instead of a silent gap.
  *
+ * ⚠ THE SNAPSHOT IS JSON, SO IT CANNOT CARRY AN EXPLICITLY-`undefined` KEY, AND
+ * THAT LOSS IS SILENT AND LOAD-BEARING. `JSON.stringify` drops
+ * `upperElectionSystem: undefined` entirely, so a generated era file omits the
+ * key -- and because `getCountryConfig` shallow-merges, an omitted key LEAVES
+ * THE BASE VALUE IN PLACE where the explicit `undefined` CLEARED it. Spain,
+ * Sweden and Turkey each lost their 1953 "no elected upper chamber" that way and
+ * silently regained one; only `countries.test.ts` caught it. After generating,
+ * diff the era override against the registry with KEY PRESENCE compared, not
+ * just values -- a JSON-canonicalising diff reports them identical.
+ *
  * ⚠ AN ERA WITH NO OVERRIDE SAYS SO BY ABSENCE OF THE FIELD, NOT BY AN EMPTY
  * OBJECT. `getCountryConfig` is a SHALLOW merge, so `config: {}` is not "no
  * override" -- it is an override supplying nothing, and any field the base had

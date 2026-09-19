@@ -109,6 +109,8 @@ import { RAW_BUNDLES } from "../../src/lib/states/conditions/seedMetricsLoader";
 import { NON_PARTY_BUCKET_INDEPENDENT_BIAS_BY_COUNTRY } from "../../src/lib/turn/partyOrg/pacingConstants";
 import { COUNTRY_COMMAND_FLAVOR } from "../../src/lib/military/theaters";
 import { COUNTRY_BUCKET_LABELS } from "../../src/lib/demographics/bucketLabelsByCountry";
+import { ERA_COUNTRY_CONFIG_OVERRIDES } from "../../src/lib/constants/countries";
+import { CORE5_NORMALS } from "../../src/lib/era/metricCatalog";
 import { COUNTRY_MODIFIER_PATCHES } from "../../src/lib/states/conditions/countryPatches";
 import { DOMAIN_BUCKET_AFFINITIES } from "../../src/lib/bucketAffinities";
 import { MAJOR_DEFAULT_PARTIES } from "../../src/lib/seeds/defaultPartyTiers";
@@ -1170,6 +1172,29 @@ const OUT_OF_SCOPE: Record<string, string> = {
 };
 void OUT_OF_SCOPE;
 
+/**
+ * Registries whose OUTER key is not the country -- an era, a preset, a metric --
+ * with the country one level in.
+ *
+ * ⚠️ THE MAIN LOOP IS BLIND TO THESE, AND THAT IS WHERE THE DUPLICATION SURVIVED.
+ * `REGISTRIES` is `Record<countryId, value>`, so a registry shaped
+ * `Record<preset, Record<countryId, value>>` matched nothing and was checked by
+ * nothing. `ERA_COUNTRY_CONFIG_OVERRIDES` sat like that holding 25 countries'
+ * era overrides as literals while each folder's `eras/<preset>.ts` held the same
+ * values -- and `getCountryConfig` read the REGISTRY, so the folder copy was the
+ * dead one. Same shape, same story, for `UNION_NAMES_BY_ERA`.
+ *
+ * Each entry compares `registry[outer][cc]` to the folder path with `<outer>`
+ * substituted, by reference.
+ */
+const OUTER_KEYED: Record<string, { registry: Dict; path: string }> = {
+  ERA_COUNTRY_CONFIG_OVERRIDES: {
+    registry: d(ERA_COUNTRY_CONFIG_OVERRIDES),
+    path: "eras.<outer>.config",
+  },
+  CORE5_NORMALS: { registry: d(CORE5_NORMALS), path: "geography.core5Normals.<outer>" },
+};
+
 const FOLDER_MODULE_FORWARD: Record<string, Record<string, string>> = {
   JP: {
     COUNTRY_SECTOR_WEIGHTS_1953: "src/lib/seeds/reference/sectorSeedWeights1953.ts",
@@ -1229,6 +1254,25 @@ for (const cc of ["US", "UK", "IE", "JP", "DE", "CN"]) {
   FOLDER_MODULE_FORWARD[cc] = {
     ...(FOLDER_MODULE_FORWARD[cc] ?? {}),
     DOMAIN_BUCKET_AFFINITIES: "src/lib/bucketAffinities.ts",
+  };
+}
+
+/*
+ * The last three outer-keyed registries. Each forwards to a folder module, but
+ * none can be compared by reference the way OUTER_KEYED does:
+ *   - UNION_NAMES_BY_ERA's country slices are data modules, not contract fields;
+ *   - ORDERS_OF_BATTLE_BY_ERA keys era-first over a field that also exists on the
+ *     base institutions and on era overrides, so there is no single folder path;
+ *   - ISO_NUMERIC_TO_COUNTRY holds the country as its VALUE, not its key -- its
+ *     inverse, COUNTRY_TO_ISO_NUMERIC, is checked by reference above.
+ * The static check is weaker and is recorded here rather than left silent.
+ */
+for (const cc of CONVERTED) {
+  FOLDER_MODULE_FORWARD[cc] = {
+    ...(FOLDER_MODULE_FORWARD[cc] ?? {}),
+    UNION_NAMES_BY_ERA: "src/lib/seeds/reference/unionNames.ts",
+    ORDERS_OF_BATTLE_BY_ERA: "src/lib/seeds/reference/ordersOfBattle.ts",
+    ISO_NUMERIC_TO_COUNTRY: "src/lib/constants/countryIso.ts",
   };
 }
 
@@ -1491,6 +1535,34 @@ export async function verify(cc: string): Promise<boolean> {
           );
           failed++;
         }
+      }
+    }
+  }
+
+  /*
+   * Outer-keyed registries: the country sits one level inside an era, preset or
+   * metric key. Only outer keys that actually carry this country are checked --
+   * a registry naming three presets says nothing about the other five.
+   */
+  for (const [name, { registry, path }] of Object.entries(OUTER_KEYED)) {
+    for (const [outer, row] of Object.entries(registry)) {
+      const value = (row as Dict)?.[cc];
+      if (value === undefined) continue;
+      const side = at(folder, path.replace("<outer>", outer));
+      if (side === undefined) {
+        console.log(
+          `FAIL  ${name}["${outer}"].${cc} resolves, but the folder supplies nothing at ` +
+            `${path.replace("<outer>", outer)}.`
+        );
+        failed++;
+      } else if (side !== value) {
+        console.log(
+          `FAIL  ${name}["${outer}"].${cc} is a SECOND COPY: equal values, different ` +
+            `object. It does not forward.`
+        );
+        failed++;
+      } else {
+        forwarders++;
       }
     }
   }
