@@ -85,6 +85,8 @@ interface SimRunDoc {
     canonicalFreightBillingEnabled?: boolean;
     shortageResponsiveSourcingEnabled?: boolean;
     indexFundBondLiquidityEnabled?: boolean;
+    sovereignIssuanceConsolidationEnabled?: boolean;
+    domesticSovereignBondCoverageEnabled?: boolean;
     equityLiquidityFacilityEnabled?: boolean;
     nppMarketCoverageEnabled?: boolean;
     nppFragileMarketSupplyEnabled?: boolean;
@@ -222,6 +224,18 @@ const shortageResponsiveSourcingEnabled = parseOptionalBoolean(
 const indexFundBondLiquidityEnabled = parseOptionalBoolean(
   arg("index-fund-bond-liquidity"),
   "index-fund-bond-liquidity"
+);
+// #1001 controlled comparison: seeds the gated tranche-consolidation flag on
+// the sandbox gameConfig. Absent keeps the scheduler default (off).
+const sovereignIssuanceConsolidationEnabled = parseOptionalBoolean(
+  arg("sovereign-issuance-consolidation"),
+  "sovereign-issuance-consolidation"
+);
+// #1001 controlled comparison: seeds the gated domestic-coverage flag on the
+// sandbox gameConfig. Absent keeps the scheduler default (off).
+const domesticSovereignBondCoverageEnabled = parseOptionalBoolean(
+  arg("domestic-sovereign-bond-coverage"),
+  "domestic-sovereign-bond-coverage"
 );
 // Canonical flag is --equity-liquidity-facility; the deprecated
 // --equity-liquidity alias still parses so older scripts keep working.
@@ -755,6 +769,8 @@ async function main() {
     canonicalFreightBillingEnabled,
     shortageResponsiveSourcingEnabled,
     indexFundBondLiquidityEnabled,
+    sovereignIssuanceConsolidationEnabled,
+    domesticSovereignBondCoverageEnabled,
     equityLiquidityFacilityEnabled,
     nppMarketCoverageEnabled,
     nppFragileMarketSupplyEnabled,

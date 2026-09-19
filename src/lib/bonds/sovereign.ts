@@ -28,8 +28,14 @@ import type {
   CreditRating,
   Corporation,
   FederalBudget,
+  GameConfig,
 } from "@/lib/db/types";
 import { BOND_UNIT_FACE_VALUE } from "@/lib/db/types/bond";
+import {
+  consolidateSovereignTranches,
+  planSovereignTranches,
+  SOVEREIGN_MIN_TRANCHE_UNITS,
+} from "@/lib/bonds/sovereignIssueDiagnostics";
 import { COUNTRY_CONFIGS, getCountryConfig, type CountryId } from "@/lib/constants/countries";
 import { getRegisteredCountryIds } from "@/lib/country/registeredCountries";
 import { getBankId } from "@/lib/centralBank/helpers";
@@ -446,6 +452,13 @@ export async function issueScheduledSovereignBondSeries(
     return 0;
   }
 
+  // One read per scheduled quarter: the #1001 tranche-consolidation dark
+  // gate. Absent or false keeps the historical ladder exactly as issued.
+  const issuanceGate = await db
+    .collection<GameConfig>("gameConfig")
+    .findOne({ _id: "default" }, { projection: { sovereignIssuanceConsolidationEnabled: 1 } });
+  const consolidationEnabled = issuanceGate?.sovereignIssuanceConsolidationEnabled === true;
+
   // Registered, not the raw static list: a country dissolved by a merge keeps
   // its budget doc, and the scheduler would otherwise keep rolling its debt
   // over — issuing fresh paper for a state that no longer exists.
@@ -530,12 +543,15 @@ export async function issueScheduledSovereignBondSeries(
     let requestedUnitsTotal = 0;
     let placedUnitsTotal = 0;
 
-    for (const [maturityStr, fraction] of Object.entries(distribution)) {
-      if (!fraction || fraction <= 0) continue;
-      const maturityTurns = Number(maturityStr) as BondMaturityTurns;
-      const trancheAmount =
-        Math.floor((issueAmount * fraction) / BOND_UNIT_FACE_VALUE) * BOND_UNIT_FACE_VALUE;
-      if (trancheAmount < BOND_UNIT_FACE_VALUE) continue;
+    // Plan the ladder first so the gated consolidation (#1001) reshapes rungs
+    // before pool underwriting sees them. Gate off: the same rungs, same order.
+    const tranchePlans = consolidateSovereignTranches(
+      planSovereignTranches(distribution, issueAmount),
+      consolidationEnabled ? SOVEREIGN_MIN_TRANCHE_UNITS : 0
+    );
+    for (const tranche of tranchePlans) {
+      const maturityTurns = tranche.maturityTurns;
+      const trancheAmount = tranche.amount;
 
       const { bondDoc } = buildSovereignBondDoc({
         countryId,
