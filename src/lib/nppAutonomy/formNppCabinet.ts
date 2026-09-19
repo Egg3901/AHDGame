@@ -204,7 +204,14 @@ const INACTIVE: FormNppCabinetResult = { ran: false, filled: 0, filledPositionId
 export async function formNppCabinet(
   db: Db,
   countryId: CountryId,
-  now: Date
+  now: Date,
+  /**
+   * Game-clock turn the appointments seat on (#1994). Persisted per seat as
+   * `appointedTurn` so the reshuffle guard can enforce minimum tenure.
+   * Optional so older callers keep compiling; omitted means unstamped
+   * (legacy behavior — the guard waives tenure for unstamped seats).
+   */
+  currentTurn?: number
 ): Promise<FormNppCabinetResult> {
   // V1 gate — also enforces the player rail (false below v2 in player countries).
   if (!(await nppAutonomyAtLeast(db, countryId, "v1"))) return INACTIVE;
@@ -321,6 +328,7 @@ export async function formNppCabinet(
           appointedByCharacterId: null,
           appointedByNppId: headNppId,
           appointedAt: now,
+          ...(typeof currentTurn === "number" ? { appointedTurn: currentTurn } : null),
           confirmedAt: now,
           ...initialMinisterialActionFields(now),
           updatedAt: now,

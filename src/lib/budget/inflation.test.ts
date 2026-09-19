@@ -8,8 +8,10 @@ import {
   getInflationTarget,
   getNeutralPrimeRate,
   MAX_INFLATION,
+  PEGGED_MONEY_GROWTH_COEFF,
   type InflationInputs,
 } from "./inflation";
+import { moneyGrowthCoefficient } from "../monetary/brettonWoods";
 import { computeMacroTarget, applyDrift } from "../currency/rateCalculation";
 
 /** Baseline "healthy economy" inputs — should produce ~2% (target) inflation */
@@ -863,5 +865,33 @@ describe("commodity cost-push is a rate, not a level", () => {
       rate = calculateInflation({ ...base, commodityPressure: 0, previousInflation: rate });
     }
     expect(rate).toBeCloseTo(2.0, 1);
+  });
+});
+
+describe("Bretton Woods money-growth coefficient (issue #7)", () => {
+  // Excess M2 growth of 8pp over GDP growth: pegged 8 * 0.08 = 0.64pp,
+  // post-exit 8 * 0.15 = 1.2pp.
+  const excessMoney = {
+    ...baseline,
+    moneySupplyGrowthPct: 10.0,
+    gdpGrowth: 2.0,
+  };
+
+  it("keeps the pegged coefficient by default (legacy worlds)", () => {
+    const { breakdown } = calculateInflationWithBreakdown(excessMoney);
+    expect(breakdown.moneySupply).toBeCloseTo((10.0 - 2.0) * PEGGED_MONEY_GROWTH_COEFF, 10);
+  });
+
+  it("loosens the money-growth term once the peg is gone", () => {
+    const postExit = moneyGrowthCoefficient("floating", PEGGED_MONEY_GROWTH_COEFF);
+    expect(postExit).toBeGreaterThan(PEGGED_MONEY_GROWTH_COEFF);
+    const pegged = calculateInflationWithBreakdown(excessMoney);
+    const floated = calculateInflationWithBreakdown({ ...excessMoney, moneyGrowthCoeff: postExit });
+    expect(floated.breakdown.moneySupply).toBeDefined();
+    expect(pegged.breakdown.moneySupply).toBeDefined();
+    expect(floated.breakdown.moneySupply!).toBeGreaterThan(pegged.breakdown.moneySupply!);
+    expect(calculateInflation({ ...excessMoney, moneyGrowthCoeff: postExit })).toBeGreaterThan(
+      calculateInflation(excessMoney)
+    );
   });
 });

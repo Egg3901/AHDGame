@@ -68,6 +68,7 @@ import { getCountryState, updateCountryState } from "@/lib/countryState";
 import { logger } from "../observability/logger";
 import { resolveGoverningPartyIdsFromDocuments } from "@/lib/government/governingPartyIds";
 import { getGameStatePreset } from "@/lib/db/collections/gameState";
+import { hasRequiredPrimeMinisterSeat } from "@/lib/uk/pmSeatEligibility";
 import { isSingleplayer } from "@/lib/singleplayer";
 
 export { resolveGoverningPartyIdsFromDocuments };
@@ -288,6 +289,38 @@ export async function updateParliamentaryGovernmentSeats(
   const seatsByParty = await tallySeatsByParty(db, countryId, preset);
   const now = new Date();
 
+  if (
+    existing.status === "formed" &&
+    (existing.pmCharacterId || existing.pmNppId) &&
+    !(await hasRequiredPrimeMinisterSeat(db, countryId, existing.pmCharacterId, existing.pmNppId))
+  ) {
+    await unformGovernmentAndVacatePM(db, countryId, now, { reason: "lost-seat" });
+    await Promise.all([
+      govCol.updateOne(
+        { _id: countryId },
+        {
+          $set: {
+            seatsByParty,
+            governingPartyId: getLargestParty(seatsByParty),
+            totalSeatsSupporting: 0,
+            majorityThreshold,
+            totalSeats,
+            updatedAt: now,
+          },
+        }
+      ),
+      getPMAppointmentVotesCollection(db).updateMany(
+        { countryId, status: "active" },
+        { $set: { status: "cancelled", closedAt: now, updatedAt: now } }
+      ),
+      getNoConfidenceVotesCollection(db).updateMany(
+        { countryId, status: "active" },
+        { $set: { status: "cancelled", closedAt: now, updatedAt: now } }
+      ),
+    ]);
+    return;
+  }
+
   // Safety net: if government is "formed" but PM is vacant, collapse to "pending"
   if (existing.status === "formed" && existing.pmCharacterId) {
     const pmStillExists = await db
@@ -317,10 +350,12 @@ export async function updateParliamentaryGovernmentSeats(
           },
         }
       );
-      // Clear cabinet (clearCabinetOnTransition handles all parliamentary/OPS
-      // countries; the extra cabinetMembers sweep catches any stray positions).
+      // Restore former cabinet holders before the broad cleanup. The restore
+      // pass reads cabinetMembers to find their character ids; running the
+      // safety-net delete concurrently can erase those rows first and strand a
+      // player with a null currentOffice despite a live electedOfficials seat.
+      await clearCabinetOnTransition(db, countryId);
       await Promise.all([
-        clearCabinetOnTransition(db, countryId),
         db.collection("ukCabinetCooldowns").deleteMany({ countryId }),
         db.collection("cabinetMembers").deleteMany({ countryId }),
       ]);
@@ -415,7 +450,10 @@ export async function resetParliamentaryGovernmentAfterElection(
     ),
   ]);
 
-  const hasSittingPM = existing?.status === "formed" && existing.pmCharacterId;
+  const hasSittingPM =
+    existing?.status === "formed" &&
+    existing.pmCharacterId &&
+    (await hasRequiredPrimeMinisterSeat(db, countryId, existing.pmCharacterId, existing.pmNppId));
 
   if (hasSittingPM) {
     let totalSeatsSupporting: number;
@@ -1565,7 +1603,7 @@ export async function unformGovernmentAndVacatePM(
   countryId: CountryId,
   now: Date,
   opts?: {
-    reason?: "snap" | "no-confidence" | "post-election" | "confidence-motion-failed";
+    reason?: "snap" | "no-confidence" | "post-election" | "confidence-motion-failed" | "lost-seat";
     collapsedAt?: Date | null;
   }
 ): Promise<void> {
@@ -1588,6 +1626,7 @@ export async function unformGovernmentAndVacatePM(
       $set: {
         status: "pending",
         pmCharacterId: null,
+        pmNppId: null,
         pmName: null,
         formationType: null,
         lostMajority: false,
@@ -1606,11 +1645,14 @@ export async function unformGovernmentAndVacatePM(
     }
   );
 
+  // Restore former cabinet holders before the broad cleanup. The restore pass
+  // reads cabinetMembers to find their character ids; running the safety-net
+  // delete concurrently can erase those rows first and strand a player with a
+  // null currentOffice despite a live electedOfficials seat.
+  await clearCabinetOnTransition(db, countryId);
   await Promise.all([
-    clearCabinetOnTransition(db, countryId),
     db.collection("ukCabinetCooldowns").deleteMany({ countryId }),
-    // Extra cabinetMembers sweep catches any position not in the country's
-    // position map (clearCabinetOnTransition is scoped to known positions).
+    // Extra sweep catches any position not in the country's position map.
     db.collection("cabinetMembers").deleteMany({ countryId }),
   ]);
 

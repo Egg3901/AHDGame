@@ -26,7 +26,8 @@ import type { CommodityPriceHistory } from "@/lib/db/types/commodityPriceHistory
 import type { ExchangeRate } from "@/lib/db/types/exchangeRate";
 import type { StateMetrics } from "@/lib/db/types/stateMetrics";
 import type { GameState } from "@/lib/db/types/gameState";
-import { calculateCountryInflation } from "@/lib/budget/inflation";
+import { calculateCountryInflation, PEGGED_MONEY_GROWTH_COEFF } from "@/lib/budget/inflation";
+import { moneyGrowthCoefficient, resolveMonetaryRegime } from "@/lib/monetary/brettonWoods";
 import { savingsFlowPressureRatio } from "@/lib/budget/savingsFlowPressure";
 import { getCentralBankScope } from "@/lib/centralBank/helpers";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
@@ -354,6 +355,18 @@ export async function recalculateInflationPerTurn(db: Db, turn: number): Promise
           const policyStancePressure = finiteOr(bank.policyInflationPressure, 0);
           const moneySupplyGrowthPct = finiteOr(moneyGrowthByCurrency.get(currencyCode), gdpGrowth);
 
+          // Bretton Woods exit (issue #7): post-float money growth is no longer
+          // disciplined by convertibility. The regime is this turn's stored
+          // value — brettonWoodsTurn runs after this phase, so a same-turn
+          // suspension prices through starting next turn. Absent/pegged keeps
+          // the pegged default, so flag-off worlds compute byte-identically.
+          // Members without their own doc inherit the anchor's regime with the
+          // rate above.
+          const bwMoneyGrowthCoeff = moneyGrowthCoefficient(
+            resolveMonetaryRegime(fxDoc?.monetaryRegime),
+            PEGGED_MONEY_GROWTH_COEFF
+          );
+
           const newInflation = await calculateCountryInflation(
             db,
             countryId,
@@ -362,7 +375,8 @@ export async function recalculateInflationPerTurn(db: Db, turn: number): Promise
             forexPressure,
             savingsPressure,
             policyStancePressure,
-            moneySupplyGrowthPct
+            moneySupplyGrowthPct,
+            bwMoneyGrowthCoeff
           );
           // Household prices trail the newly settled CPI, but never feed back
           // into its calculation. This gives inflation a visible purchasing-

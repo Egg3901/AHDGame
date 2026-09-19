@@ -89,9 +89,17 @@ describe("ModifiersPanel cabinet attribution (ticket #1142)", () => {
     expect(screen.getByText("Energy estates")).toBeTruthy();
   });
 
-  it("marks a channel sitting at its own ceiling", () => {
+  it("marks a channel sitting near its own ceiling", () => {
     render(<ModifiersPanel modifiers={MODIFIERS} />);
-    expect(screen.getByText("at ceiling")).toBeTruthy();
+    expect(screen.getByText("near ceiling")).toBeTruthy();
+  });
+
+  it("never tells the player that more cabinet effort buys nothing", () => {
+    // Issue #703: channels approach the asymptote without ever touching it,
+    // so a saturated board still gains a little from more effort.
+    render(<ModifiersPanel modifiers={{ ...MODIFIERS, cabinetAtCap: true }} />);
+    expect(screen.queryByText(/adds nothing/)).toBeNull();
+    expect(screen.getByText(/buys only a little/)).toBeTruthy();
   });
 
   it("omits channels that contribute nothing", () => {

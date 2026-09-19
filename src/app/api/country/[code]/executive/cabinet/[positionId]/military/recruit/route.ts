@@ -11,6 +11,11 @@ import { handleRouteError } from "@/lib/api/errors";
 import { getGameState } from "@/lib/gameState";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { getCabinetMembersCollection } from "@/lib/db/collections/cabinetMembers";
+import {
+  refundMinisterialAction,
+  resolveMinisterialRemaining,
+  spendMinisterialAction,
+} from "@/lib/cabinet/ministerialActionPool";
 import { getMilitaryUnitsCollection } from "@/lib/db/collections/militaryUnits";
 import {
   DEFENSE_POSITION_BY_COUNTRY,
@@ -110,12 +115,8 @@ export async function POST(request: Request, { params }: RouteParams) {
       );
     }
 
-    // Backfill legacy members missing the action fields (mirrors the order route).
-    if (member && member.ministerialActions == null) {
-      await membersCol.updateOne({ _id: member._id }, { $set: { ministerialActions: 2 } });
-      member.ministerialActions = 2;
-    }
-    const actions = member?.ministerialActions ?? 2;
+    // Shared UK pool: both offices of a dual holder spend one balance (issue #2049).
+    const actions = await resolveMinisterialRemaining(db, countryId, member!);
     if (actions < 1) {
       return NextResponse.json({ error: "No ministerial actions remaining" }, { status: 400 });
     }
@@ -128,16 +129,12 @@ export async function POST(request: Request, { params }: RouteParams) {
       );
     }
 
-    const spend = await membersCol.updateOne(
-      { _id: member!._id, ministerialActions: { $gte: 1 } },
-      { $inc: { ministerialActions: -1 } }
-    );
-    if (spend.modifiedCount === 0) {
+    const spend = await spendMinisterialAction(db, countryId, member!);
+    if (!spend.ok) {
       return NextResponse.json({ error: "No ministerial actions remaining" }, { status: 409 });
     }
 
-    const refundAction = () =>
-      membersCol.updateOne({ _id: member!._id }, { $inc: { ministerialActions: 1 } });
+    const refundAction = () => refundMinisterialAction(db, countryId, member!);
 
     // Budget existence is checked FIRST, before any resource moves. It is a
     // read/heal, not a spend, so it has no ordering constraint with manpower —
@@ -288,7 +285,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     const { balance: appropriationRemaining } = await getDefenseAppropriation(db, countryId);
     return NextResponse.json({
       success: true,
-      actionsRemaining: actions - 1,
+      actionsRemaining: spend.remaining,
       price,
       appropriationRemaining,
       // Derived from poolBefore — re-reading would repeat the stance and

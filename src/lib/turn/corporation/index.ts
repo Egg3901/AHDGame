@@ -51,11 +51,14 @@ import { loadExchangeRatesMap } from "@/lib/lineOfCredit/netWorth";
 import { toInternalUnits } from "@/lib/lineOfCredit/locMath";
 import { garnishLocFromIncome } from "@/lib/lineOfCredit/garnishment";
 import { loadTxThresholds } from "@/lib/financialTxLog/emit";
-import { processSoeOperations } from "@/lib/nationalization/soeOperations";
-import { processSoeRemittance } from "@/lib/nationalization/soeRemittance";
+import { runSoeBackingSweep } from "./soeBackingSweep";
 import { processPendingNationalizations } from "@/lib/nationalization/pendingNationalizations";
 import { processNationalizationAuctions } from "@/lib/nationalization/privatizationAuction";
 import { processNppCorporationDecisions } from "@/lib/turn/nppCorporationBehavior";
+import {
+  buildTechUnlockFlushAudit,
+  flushNppTechUnlockLedger,
+} from "@/lib/corporations/techTree/techUnlockLedger";
 import { processNppSupplyAgreements } from "@/lib/turn/npp/nppSupplyAgreements";
 import { processNppProspecting } from "@/lib/turn/npp/nppProspecting";
 import { processNppCorpTreasury } from "@/lib/turn/npp/nppCorpTreasury";
@@ -516,6 +519,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     sectorUpdates: nppSectorUpdates,
     newSectors: nppNewSectors,
     divestedSectorIds: nppDivestedSectorIds,
+    techLedger: nppTechLedger,
   } = await processNppCorporationDecisions(db, turn ?? 0, now, techTreesEnabled);
   mark("nppCorpDecisions");
 
@@ -601,6 +605,13 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     // bulkWrite op array type doesn't satisfy AnyBulkWriteOperation narrowing, runtime shape is valid
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await db.collection("corporations").bulkWrite(corpOps as any[]);
+  }
+  // Emit only for NPP unlocks proven applied above; the flush dedupes and
+  // refunds any debit whose ledger row cannot be persisted (ticket #1998).
+  if (nppTechLedger.length > 0) {
+    const techFlush = await flushNppTechUnlockLedger(db, nppTechLedger);
+    const techAudit = buildTechUnlockFlushAudit(techFlush);
+    if (techAudit) corpAuditEntries.push(techAudit);
   }
   // One read plus one bulk write, instead of two serial round trips per
   // accrual against a collection holding one document per currency. Missing
@@ -735,20 +746,21 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     );
   }
 
-  // Phase 3a: SOE operations, apply public-service mandate metric contributions
-  // and back operating losses from the treasury (spec §11.1/§11.2). Runs after
-  // sector/corp writes so liquidCapital reflects this turn's result, and within
-  // the corp turn so the metric writes precede the late state-metrics phase.
+  // Phase 3a/3a': SOE loss backing plus profit remittance (spec §11.1/§11.2,
+  // spec P6g §5.1), folded into snapshots before history persistence. See
+  // runSoeBackingSweep: runs after sector/corp writes so liquidCapital
+  // reflects this turn's result, within the corp turn so metric writes
+  // precede the late state-metrics phase.
   mark("acumen+fxSpread+newSectors");
-  await processSoeOperations(db, now, currentYear);
-
-  // Phase 3a': NatCorp profit remittance, split this turn's SOE operating profit
-  // between CEO retention (stays in liquidCapital) and remittance to the treasury
-  // reserve (spec P6g §5.1). Runs after loss-backing so it only acts on a positive
-  // balance, and reuses the same estimate the budget revenue line scales by.
-  mark("soeOperations");
-  await processSoeRemittance(db, now);
-  mark("soeRemittance");
+  const soeSweepAudit = await runSoeBackingSweep({
+    db,
+    now,
+    currentYear,
+    corpSnapshots,
+    corpById: lookups.corpById,
+    mark,
+  });
+  if (soeSweepAudit) corpAuditEntries.push(soeSweepAudit);
 
   // Phase 3b: R&D innovation, every 6 turns, corps with accumulated R&D score
   // have a chance to boost a sector's revenue. Extraction corps also boost state

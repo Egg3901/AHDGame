@@ -27,6 +27,7 @@ import {
   migratePasswordLoginToUnified,
 } from "@/lib/auth/unifiedMigration";
 import { issueUnifiedGameSession } from "@/lib/auth/unifiedGameSession";
+import { recordIdentitySignals } from "@/lib/identityHistory/recordObservation";
 
 /** Partially redact an IP for display in forensic surfaces — never store the
  * raw address in `actionAuditLog.net` (plan §3.1 "net" doc-comment). */
@@ -332,6 +333,17 @@ export async function POST(request: Request) {
         deviceKey: deviceKey || undefined,
       })
       .catch(() => {});
+
+    // Identity history runs. A login is the best-sourced observation there is,
+    // so it records both tracks. Fire-and-forget, like the activityLog insert
+    // above: history is evidence, never part of the login contract.
+    recordIdentitySignals(db, {
+      userId: user._id,
+      ip: clientIp,
+      fingerprint,
+      observedAt,
+      source: "login",
+    });
 
     recordAudit({
       source: "api",

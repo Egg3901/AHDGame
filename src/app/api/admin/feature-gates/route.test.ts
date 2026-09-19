@@ -113,4 +113,15 @@ describe("admin feature gates foreign policy mode", () => {
     });
     expect(update.$set.nppEntryViabilityModeAt).toBeTruthy();
   });
+
+  it("refuses the frontier-entry experiment gate: no admin path may arm it (#991)", async () => {
+    const { POST } = await import("./route");
+
+    const response = await POST(
+      request({ kind: "boolean", key: "frontierEntryExperimentEnabled", value: true })
+    );
+
+    expect(response.status).toBe(400);
+    expect(db.collection("gameState").updateOne).not.toHaveBeenCalled();
+  });
 });

@@ -5,7 +5,11 @@ import Link from "next/link";
 import { campaignAnchorToLocal } from "@/lib/campaigns/rules/currency";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import { formatCurrencyFaceAmount } from "@/lib/currency/formatCurrencyFaceAmount";
-import { calculateConvertCashInfamy, convertCashConversion } from "@/lib/actions";
+import {
+  calculateConvertCashInfamy,
+  convertCashConversion,
+  isFundraiseEligible,
+} from "@/lib/actions";
 import { CATEGORY_ACCENTS, CATEGORY_LABELS } from "../actionsConstants";
 import type { ActionCardProps } from "../actionsTypes";
 import ActionExecuteRow from "./ActionExecuteRow";
@@ -94,7 +98,7 @@ const ActionCardCompact = memo(function ActionCardCompact({
       displayPersonalWealth > 0 ? `${formatAmount(displayPersonalWealth)} available` : "No cash";
   } else effectiveFundLabel = card.fundLabel(character);
 
-  const noDonor = card.requiresDonorBase && (character.donorBaseLevel ?? 0) === 0;
+  const noDonor = card.requiresDonorBase && !isFundraiseEligible(character.donorBaseLevel);
   const noCash = isConvertCash && displayPersonalWealth <= 0;
   const fundNeeded = effectiveFundCost;
   const fundNeededConverted = fundNeeded !== null ? politicalLocal(fundNeeded) : fundNeeded;
