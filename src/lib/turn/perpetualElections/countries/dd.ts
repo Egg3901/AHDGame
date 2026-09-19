@@ -18,10 +18,7 @@ import {
  * electing to its old magnitude (#1262). Mirrors `ensureRUSupremeSovietElections`
  * — the sibling one-party command state.
  */
-export async function ensureDDVolkskammerElections(
-  now: Date,
-  inFlightTurn?: number
-): Promise<void> {
+export async function ensureDDVolkskammerElections(now: Date): Promise<void> {
   await ensureRegionalDelegateElections(
     {
       countryId: "DD",
@@ -31,8 +28,7 @@ export async function ensureDDVolkskammerElections(
       statusGated: true,
       label: "Volkskammer",
     },
-    now,
-    inFlightTurn
+    now
   );
 }
 
@@ -42,10 +38,10 @@ export async function ensureDDVolkskammerElections(
  * republic-soviet ride-along). The shared helper has no status gate, so the
  * DD wrapper adds it (the RU pattern).
  */
-export async function ensureDDGovernorElections(now: Date, inFlightTurn?: number): Promise<void> {
+export async function ensureDDGovernorElections(now: Date): Promise<void> {
   const db = await getDb();
   if (!(await ddElectionsLive(db))) return;
-  await ensureRegionalGovernorElections("DD", now, undefined, inFlightTurn);
+  await ensureRegionalGovernorElections("DD", now);
 }
 
 /**
@@ -54,10 +50,7 @@ export async function ensureDDGovernorElections(now: Date, inFlightTurn?: number
  * First Secretaries have no same-party legislature NPPs to queue state bills
  * through (ticket #1044). Mirrors `ensureRURepublicSovietElections`.
  */
-export async function ensureDDLandAssemblyElections(
-  now: Date,
-  inFlightTurn?: number
-): Promise<void> {
+export async function ensureDDLandAssemblyElections(now: Date): Promise<void> {
   await ensureRegionalDelegateElections(
     {
       countryId: "DD",
@@ -68,7 +61,6 @@ export async function ensureDDLandAssemblyElections(
       electionsLiveGate: ddElectionsLive,
       label: "Landtag",
     },
-    now,
-    inFlightTurn
+    now
   );
 }

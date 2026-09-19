@@ -1,6 +1,5 @@
 import { describe, it, expect } from "vitest";
 import {
-  annualizedTrailingGrowthRate,
   clampSplitCooldownPrevAnchor,
   computeSharePrices,
   type SharePriceInput,
@@ -111,48 +110,5 @@ describe("split-cooldown previous-price anchor clamp (2026-08-20 incident)", () 
     const fundamental = price({ previousSharePrice: 1 });
     const expected = Math.round((W * 55 + (1 - W) * fundamental) * 100) / 100;
     expect(inCooldown).toBeCloseTo(expected, 2);
-  });
-});
-
-describe("annualizedTrailingGrowthRate — plants growth-premium input", () => {
-  const TPY = 48;
-
-  it("annualizes geometric growth from the oldest usable prior", () => {
-    // 100 -> 121 over 2 turns = 10%/turn -> 4.8/yr.
-    const g = annualizedTrailingGrowthRate(
-      121,
-      [
-        { turn: 98, sectorNpv: 100 },
-        { turn: 99, sectorNpv: 110 },
-      ],
-      100,
-      TPY
-    );
-    expect(g).toBeCloseTo(0.1 * TPY, 10);
-  });
-
-  it("returns 0 for flat, shrinking, or history-less corps (premium neutral)", () => {
-    expect(annualizedTrailingGrowthRate(100, [{ turn: 99, sectorNpv: 100 }], 100, TPY)).toBe(0);
-    expect(annualizedTrailingGrowthRate(90, [{ turn: 99, sectorNpv: 100 }], 100, TPY)).toBe(0);
-    expect(annualizedTrailingGrowthRate(100, [], 100, TPY)).toBe(0);
-  });
-
-  it("fail-closes on non-positive or non-finite inputs", () => {
-    expect(annualizedTrailingGrowthRate(0, [{ turn: 99, sectorNpv: 100 }], 100, TPY)).toBe(0);
-    expect(annualizedTrailingGrowthRate(-5, [{ turn: 99, sectorNpv: 100 }], 100, TPY)).toBe(0);
-    expect(annualizedTrailingGrowthRate(120, [{ turn: 99, sectorNpv: 0 }], 100, TPY)).toBe(0);
-    expect(annualizedTrailingGrowthRate(120, [{ turn: 99, sectorNpv: -40 }], 100, TPY)).toBe(0);
-    expect(annualizedTrailingGrowthRate(120, [{ turn: 100, sectorNpv: 100 }], 100, TPY)).toBe(0);
-    expect(annualizedTrailingGrowthRate(Number.NaN, [{ turn: 99, sectorNpv: 100 }], 100, TPY)).toBe(
-      0
-    );
-  });
-
-  it("a growing corp earns a premium over an identical flat corp", () => {
-    const flat = price({ sectorGrowthRate: 0 });
-    const growing = price({
-      sectorGrowthRate: annualizedTrailingGrowthRate(121, [{ turn: 98, sectorNpv: 100 }], 100, TPY),
-    });
-    expect(growing).toBeGreaterThan(flat);
   });
 });

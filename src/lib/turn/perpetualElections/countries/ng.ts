@@ -15,11 +15,10 @@ import {
  * Representatives election. Mirrors `ensureBRElections` — one multi-seat
  * regional election per zone, anchored to the canonical `house` cycle.
  */
-export async function ensureNGElections(now: Date, inFlightTurn?: number): Promise<void> {
+export async function ensureNGElections(now: Date): Promise<void> {
   const db = await getDb();
   if (!(await ngElectionsLive(db))) return;
-  const { currentTurn: persistedTurn, ctx } = await getCurrentTurnAndCtx(db);
-  const currentTurn = inFlightTurn ?? persistedTurn;
+  const { currentTurn, ctx } = await getCurrentTurnAndCtx(db);
 
   const ngRegions = await db
     .collection<State>("states")
@@ -123,13 +122,11 @@ export async function ensureNGElections(now: Date, inFlightTurn?: number): Promi
  */
 export async function ensureNGZoneElections(
   now: Date,
-  electionType: "senate" | "governor",
-  inFlightTurn?: number
+  electionType: "senate" | "governor"
 ): Promise<void> {
   const db = await getDb();
   if (!(await ngElectionsLive(db))) return;
-  const { currentTurn: persistedTurn, ctx } = await getCurrentTurnAndCtx(db);
-  const currentTurn = inFlightTurn ?? persistedTurn;
+  const { currentTurn, ctx } = await getCurrentTurnAndCtx(db);
 
   const ngRegions = await db
     .collection<State>("states")
@@ -213,12 +210,12 @@ export async function ensureNGZoneElections(
   }
 }
 
-export async function ensureNGSenateElections(now: Date, inFlightTurn?: number): Promise<void> {
-  await ensureNGZoneElections(now, "senate", inFlightTurn);
+export async function ensureNGSenateElections(now: Date): Promise<void> {
+  await ensureNGZoneElections(now, "senate");
 }
 
-export async function ensureNGGovernorElections(now: Date, inFlightTurn?: number): Promise<void> {
-  await ensureNGZoneElections(now, "governor", inFlightTurn);
+export async function ensureNGGovernorElections(now: Date): Promise<void> {
+  await ensureNGZoneElections(now, "governor");
 }
 
 /**
@@ -226,14 +223,10 @@ export async function ensureNGGovernorElections(now: Date, inFlightTurn?: number
  * (regionalCouncil) election. Mirrors ensureNGElections; per-zone multi-seat,
  * anchored to the concurrent general cycle. Seats from NG_REGIONAL_COUNCIL_SEATS.
  */
-export async function ensureNGRegionalCouncilElections(
-  now: Date,
-  inFlightTurn?: number
-): Promise<void> {
+export async function ensureNGRegionalCouncilElections(now: Date): Promise<void> {
   const db = await getDb();
   if (!(await ngElectionsLive(db))) return;
-  const { currentTurn: persistedTurn, ctx } = await getCurrentTurnAndCtx(db);
-  const currentTurn = inFlightTurn ?? persistedTurn;
+  const { currentTurn, ctx } = await getCurrentTurnAndCtx(db);
 
   const ngRegions = await db
     .collection<State>("states")
@@ -311,14 +304,10 @@ export async function ensureNGRegionalCouncilElections(
  * `nigeriaPresidentialElectionEngine` (national popular vote + federal-character
  * spread + run-off). Gated until NG is activated.
  */
-export async function ensureNGPresidentialElection(
-  now: Date,
-  inFlightTurn?: number
-): Promise<void> {
+export async function ensureNGPresidentialElection(now: Date): Promise<void> {
   const db = await getDb();
   if (!(await ngElectionsLive(db))) return;
-  const { currentTurn: persistedTurn, ctx } = await getCurrentTurnAndCtx(db);
-  const currentTurn = inFlightTurn ?? persistedTurn;
+  const { currentTurn, ctx } = await getCurrentTurnAndCtx(db);
 
   const live = await db.collection<Election>("elections").findOne({
     countryId: "NG",

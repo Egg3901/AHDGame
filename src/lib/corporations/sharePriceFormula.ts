@@ -1,7 +1,7 @@
 /**
  * Why a share price can fall while book value is high. computeSharePrices prices a
  * corp at tangible book per share (cash + 0.75x bank equity + sector/banking NPV + builds in progress
- * + tech assets + 0.75x bonds held, minus bond debt) plus 0.5x earnings power and 0.15x a
+ * + tech assets + 0.75x bonds held, minus bond debt) plus 0.4x earnings power and 0.1x a
  * growth premium; weak earnings, living off bond coupons (bondRelianceValuationPenalty) or a
  * CEO holding over 65% (insiderConcentrationMultiplier) all cut the price.
  * rateLimitPrice caps the move at 35% per turn.
@@ -340,46 +340,4 @@ export function bondRelianceValuationPenalty(reliance: number): number {
   const over = Math.min(reliance, 1) - BOND_INCOME_RELIANCE_THRESHOLD;
   const t = span > 0 ? over / span : 1;
   return 1 - t * (1 - BOND_INCOME_MAX_RELIANCE_PENALTY);
-}
-
-/** One prior sector-NPV observation for the trailing-growth estimator. */
-export interface SectorNpvPrior {
-  turn: number;
-  /** Same currency as `currentSectorNpv` — only the ratio is used. */
-  sectorNpv: number;
-}
-
-/**
- * Annualized trailing growth rate for the Gordon-growth premium input.
- *
- * Under plants mode the CEO growth slider no longer buys capacity, so feeding
- * it to the premium pays a permanent unearned premium for a dead setting.
- * This estimates g from what actually happened instead: the geometric
- * per-turn growth of sector NPV from the oldest usable prior to the current
- * turn, scaled to an annual rate. The formula's own cap
- * (g <= costOfCapital - {@link GROWTH_PREMIUM_CAP_BUFFER}) still binds
- * downstream, and the ±35% per-turn rate limiter damps single-turn noise.
- *
- * Fail-closed: missing/non-positive history, a non-positive current value,
- * or a non-positive span all return 0, which is the premium's neutral value.
- */
-export function annualizedTrailingGrowthRate(
-  currentSectorNpv: number,
-  priorsOldestFirst: SectorNpvPrior[],
-  currentTurn: number,
-  turnsPerYear: number
-): number {
-  if (!Number.isFinite(currentSectorNpv) || currentSectorNpv <= 0) return 0;
-  if (!Number.isFinite(currentTurn) || !Number.isFinite(turnsPerYear) || turnsPerYear <= 0)
-    return 0;
-  const usable = priorsOldestFirst.filter(
-    (p) => Number.isFinite(p.turn) && Number.isFinite(p.sectorNpv) && p.sectorNpv > 0
-  );
-  if (usable.length === 0) return 0;
-  const oldest = usable[0];
-  const span = currentTurn - oldest.turn;
-  if (!(span >= 1)) return 0;
-  const perTurn = Math.pow(currentSectorNpv / oldest.sectorNpv, 1 / span) - 1;
-  if (!Number.isFinite(perTurn) || perTurn <= 0) return 0;
-  return perTurn * turnsPerYear;
 }

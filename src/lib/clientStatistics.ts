@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { z } from "zod";
 import { DEFAULT_GAME_STATE_FLAGS } from "@/lib/seeds/reference/featureFlagDefaults";
 import { CORPORATION_TYPES } from "@/lib/constants/corporations";
@@ -29,16 +28,6 @@ import { CORPORATION_TYPES } from "@/lib/constants/corporations";
 
 /** Schema version stamped on every accepted report. Matches the client. */
 export const REPORT_VERSION = 1 as const;
-
-/**
- * Metric-definition version. Bump when the allowlisted metric set or units
- * change so cohort series are not connected across incompatible definitions.
- * Missing on legacy uploads, which the materializer treats as 1.
- */
-export const METRIC_DEFINITION_VERSION = 2 as const;
-
-/** Bounded client release string, for example "2.3.19". Not a git revision. */
-export const APP_RELEASE_PATTERN = /^\d{1,3}\.\d{1,3}\.\d{1,3}$/;
 
 /** Collection holding sanitized aggregates. No db/types entry by design. */
 export const COLLECTION_NAME = "clientSimulationStatistics" as const;
@@ -110,24 +99,13 @@ const metricsSchema = z
     revenueBySector: sectorRevenueSchema.optional(),
     gdpTotal: z.number().finite().min(0).max(1e15).optional(),
     gdpPerCapita: z.number().finite().min(0).max(1e9).optional(),
-    gdpGrowthPercent: z.number().finite().min(-100).max(1000).optional(),
     tradeVolume: z.number().finite().min(0).max(1e15).optional(),
     unemploymentRatePercent: z.number().finite().min(0).max(100).optional(),
     inflationRatePercent: z.number().finite().min(-100).max(1000).optional(),
     totalPopulation: z.number().int().finite().min(0).max(2e10).optional(),
-    populationGrowthPercent: z.number().finite().min(-100).max(1000).optional(),
     averageStability: z.number().finite().min(0).max(100).optional(),
     minStability: z.number().finite().min(0).max(100).optional(),
     maxStability: z.number().finite().min(0).max(100).optional(),
-    governmentApprovalPercent: z.number().finite().min(0).max(100).optional(),
-    electionCountUpcoming: z.number().int().finite().min(0).max(1_000_000).optional(),
-    electionCountActive: z.number().int().finite().min(0).max(1_000_000).optional(),
-    electionCountCompleted: z.number().int().finite().min(0).max(1_000_000).optional(),
-    electionCountResolved: z.number().int().finite().min(0).max(1_000_000).optional(),
-    electionCountCancelled: z.number().int().finite().min(0).max(1_000_000).optional(),
-    governmentFormationCount: z.number().int().finite().min(0).max(1_000_000).optional(),
-    legislativeSeatTotal: z.number().int().finite().min(0).max(1_000_000).optional(),
-    executiveControlSharePercent: z.number().finite().min(0).max(100).optional(),
     lastTurnDurationMs: z.number().int().finite().min(0).max(3_600_000).optional(),
     lastTurnWarningCount: z.number().int().finite().min(0).max(100_000).optional(),
   })
@@ -148,8 +126,6 @@ export const clientStatisticsReportSchema = z.strictObject({
   version: z.literal(REPORT_VERSION),
   createdAt: z.string().min(1).max(128).optional(),
   appMajorVersion: z.number().int().finite().min(0).max(999).nullable(),
-  appRelease: z.string().regex(APP_RELEASE_PATTERN).max(16).optional(),
-  metricDefinitionVersion: z.number().int().finite().min(1).max(999).optional(),
   setup: setupSchema,
   metrics: metricsSchema,
   turn: z.number().int().finite().min(0).max(1_000_000).nullable(),
@@ -168,40 +144,9 @@ export interface ClientSimulationStatisticsDoc {
   /** createdAt + RETENTION_MS. Backed by the registered TTL migration. */
   expiresAt: Date;
   appMajorVersion: number | null;
-  appRelease?: string;
-  metricDefinitionVersion?: number;
   setup: ClientStatisticsReport["setup"];
   metrics: ClientStatisticsReport["metrics"];
   turn: number | null;
-}
-
-/** Bounded turn buckets used for cohort comparison. Inclusive on both ends. */
-export const TURN_BUCKETS = ["0-11", "12-47", "48-95", "96-239", "240+", "unknown"] as const;
-export type TurnBucket = (typeof TURN_BUCKETS)[number];
-
-/** Map a turn number to a bounded bucket. Null/invalid turns are "unknown". */
-export function turnBucket(turn: number | null | undefined): TurnBucket {
-  if (turn === null || turn === undefined || !Number.isInteger(turn) || turn < 0) return "unknown";
-  if (turn <= 11) return "0-11";
-  if (turn <= 47) return "12-47";
-  if (turn <= 95) return "48-95";
-  if (turn <= 239) return "96-239";
-  return "240+";
-}
-
-/**
- * Stable hash of allowlisted effective flags. Missing or empty maps hash to
- * "none" so legacy reports do not mix with flagged ones. Only present
- * allowlisted keys participate, sorted by name.
- */
-export function hashFeatureFlags(flags: Record<string, boolean> | null | undefined): string {
-  if (!flags) return "none";
-  const parts = Object.keys(flags)
-    .filter((key) => ALLOWED_FEATURE_FLAGS.includes(key) && typeof flags[key] === "boolean")
-    .sort()
-    .map((key) => `${key}:${flags[key] ? "1" : "0"}`);
-  if (parts.length === 0) return "none";
-  return createHash("sha256").update(parts.join("|")).digest("hex").slice(0, 16);
 }
 
 /** Truncate an epoch timestamp to UTC midnight. Pure. */
@@ -220,7 +165,7 @@ export function toStoredDocument(
   nowMs: number
 ): ClientSimulationStatisticsDoc {
   const createdAt = coarseDayUtc(nowMs);
-  const doc: ClientSimulationStatisticsDoc = {
+  return {
     version: REPORT_VERSION,
     createdAt,
     expiresAt: new Date(createdAt.getTime() + RETENTION_MS),
@@ -229,8 +174,4 @@ export function toStoredDocument(
     metrics: report.metrics,
     turn: report.turn,
   };
-  if (report.appRelease) doc.appRelease = report.appRelease;
-  if (report.metricDefinitionVersion !== undefined)
-    doc.metricDefinitionVersion = report.metricDefinitionVersion;
-  return doc;
 }

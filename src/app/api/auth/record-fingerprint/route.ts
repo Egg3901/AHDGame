@@ -3,7 +3,6 @@ import { z } from "zod";
 import { ObjectId } from "mongodb";
 import { getAuthUser } from "@/lib/auth";
 import { getDb } from "@/lib/mongodb";
-import { recordIdentitySignals } from "@/lib/identityHistory/recordObservation";
 import { parseJsonBody } from "@/lib/api/validate";
 import { handleRouteError, internalError, unauthorized } from "@/lib/api/errors";
 import type { User } from "@/lib/db/types";
@@ -156,22 +155,6 @@ export async function POST(request: Request) {
     );
 
     const clientIp = await getClientIp();
-
-    // Identity history: the FINGERPRINT only, deliberately.
-    //
-    // This route is called by the session beacon on every authenticated page,
-    // and so is /api/auth/me, which records the session IP. If both recorded
-    // the IP they would race on the first page load after an address change:
-    // each reads "no open run for this value" before either has inserted, and
-    // both insert, leaving two identical rows in the panel a moderator reads.
-    // Splitting the tracks by owner removes the race and halves the writes.
-    recordIdentitySignals(db, {
-      userId,
-      fingerprint,
-      observedAt: now,
-      source: "record-fingerprint",
-    });
-
     recordAudit({
       source: "api",
       category: "auth",

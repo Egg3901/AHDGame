@@ -17,7 +17,6 @@ import {
   SAVINGS_CREDIT_INTERVAL_TURNS,
 } from "@/lib/currency/savingsInterest";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
-import { savingsReadsAuthoritative } from "@/lib/banking/rules/policy";
 import { buildSavingsInterestAccrualBulkOp } from "@/lib/currency/characterFunds";
 import { getNppAutonomyLevel, nppAutonomyLevelAtLeast } from "@/lib/nppAutonomy/featureFlag";
 import { processNppSavingsInterest } from "@/lib/turn/nppSavingsInterest";
@@ -82,8 +81,7 @@ export async function processSavingsInterestTurn(
   // Once accounts are authoritative every accrual and credit below is
   // mirrored onto the account record; the character fields stay as the
   // projection existing readers use.
-  const bankingPolicy = await loadBankingPolicy(db);
-  const accountsAuthoritative = bankingPolicy.savingsAccounts === "authoritative";
+  const accountsAuthoritative = (await loadBankingPolicy(db)).savingsAccounts === "authoritative";
 
   const banks = await db
     .collection<CentralBank>("centralBanks")
@@ -161,13 +159,9 @@ export async function processSavingsInterestTurn(
         // Accumulate balance under the currency's country jurisdiction
         const cid = getCountryIdForCurrency(currency) as CountryId;
         nationalSavingsBalance.set(cid, (nationalSavingsBalance.get(cid) ?? 0) + oldBalance);
-        // A bank-held balance in an authoritative currency is paid in full
-        // from the bank's vault in bankingTurn: do not mint base here. Any
-        // other bank-held balance earns only the over-CB premium from the
-        // bank, so the CB base APY accrues here exactly like CB-held savings.
+        // Bank-held deposits earn from the bank's cash in bankingTurn — do not mint.
         const holder = holders[currency];
-        const bankPaysFull = savingsReadsAuthoritative(bankingPolicy, currency);
-        if (holder != null && holder !== "centralBank" && bankPaysFull) continue;
+        if (holder != null && holder !== "centralBank") continue;
         const prime = resolvePrime(currency);
         // Interest accrues on the REAL rate (prime − inflation) and only on up to
         // SAVINGS_POOL_SHARE_CAP of the national pool, so no single account can farm
@@ -262,17 +256,9 @@ export async function processSavingsInterestTurn(
           const amount = typeof pendingAmt === "number" ? pendingAmt : 0;
           if (amount <= 0) continue;
           const currency = code as CurrencyCode;
-          // Pending base for a bank-held balance in an authoritative currency
-          // is never accrued (see above); the bank pays the full rate there,
-          // so do not flush it here. Any other bank-held pending is base the
-          // bank never paid and flushes like any other savings.
+          // Bank-held deposits are paid by bankingTurn; do not flush minted pending.
           const holder = holders[currency];
-          if (
-            holder != null &&
-            holder !== "centralBank" &&
-            savingsReadsAuthoritative(bankingPolicy, currency)
-          )
-            continue;
+          if (holder != null && holder !== "centralBank") continue;
           totalInterest += amount;
           const payingCountry = getCountryIdForCurrency(currency) as CountryId;
           interestPaidByCountry.set(

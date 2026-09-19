@@ -9,7 +9,6 @@ import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { useCountryDisplayName } from "@/contexts/RegisteredCountriesContext";
 import type { StockListing, SortField, SortDir } from "../types";
 import type { CurrencyCode } from "@/lib/constants/currencies";
-import { finitePriceChange, isTradableListing } from "@/lib/stockExchange/listingEligibility";
 
 export type PriceChangeTimeframe = "1h" | "24h" | "48h";
 
@@ -48,17 +47,6 @@ interface SoEGroup {
   priceChange1h: number;
   priceChange24h: number;
   priceChange48h: number;
-  /** Tradable members in the group; 0 means the whole group is non-tradable. */
-  tradableCount: number;
-}
-
-/**
- * Canonical tradability read (#2033): the persisted snapshot flag wins, and
- * pre-flag legacy rows fall back to the same canonical predicate, never a
- * local re-derivation.
- */
-function listingTradable(listing: StockListing): boolean {
-  return listing.isTradable ?? isTradableListing(listing);
 }
 
 type Row = { kind: "listing"; listing: StockListing } | SoEGroup;
@@ -104,9 +92,6 @@ function buildRows(
       rows.push({ kind: "listing", listing: members[0] });
       continue;
     }
-    // Group return aggregates cover tradable members only: non-tradable
-    // firms have no measured return and must not dilute the basket.
-    const tradableMembers = members.filter(listingTradable);
     rows.push({
       kind: "soeGroup",
       countryId,
@@ -121,10 +106,9 @@ function buildRows(
       incomeAnchor: members.reduce((s, m) => s + (m.incomeAnchor ?? m.income), 0),
       publicFloat: members.reduce((s, m) => s + (m.publicFloat ?? 0), 0),
       totalShares: members.reduce((s, m) => s + m.totalShares, 0),
-      priceChange1h: weightedAverage(tradableMembers, (m) => finitePriceChange(m.priceChange1h)),
-      priceChange24h: weightedAverage(tradableMembers, (m) => finitePriceChange(m.priceChange24h)),
-      priceChange48h: weightedAverage(tradableMembers, (m) => finitePriceChange(m.priceChange48h)),
-      tradableCount: tradableMembers.length,
+      priceChange1h: weightedAverage(members, (m) => m.priceChange1h ?? 0),
+      priceChange24h: weightedAverage(members, (m) => m.priceChange24h ?? 0),
+      priceChange48h: weightedAverage(members, (m) => m.priceChange48h ?? 0),
     });
   }
 
@@ -161,7 +145,7 @@ function getSortValue(row: Row, field: SortField, timeframe: PriceChangeTimefram
       case "revenue":
         return row.totalRevenueAnchor;
       case "priceChange":
-        return finitePriceChange(getPriceChangeForTimeframe(row, timeframe));
+        return getPriceChangeForTimeframe(row, timeframe);
       case "publicFloat":
         return row.publicFloat;
       default:
@@ -177,7 +161,7 @@ function getSortValue(row: Row, field: SortField, timeframe: PriceChangeTimefram
     case "revenue":
       return l.totalRevenueAnchor ?? l.totalRevenue;
     case "priceChange":
-      return finitePriceChange(getPriceChangeForTimeframe(l, timeframe));
+      return getPriceChangeForTimeframe(l, timeframe);
     case "publicFloat":
       return l.publicFloat ?? 0;
     default:
@@ -298,35 +282,22 @@ export function StockList({
   };
 
   const getPriceChangeValue = (listing: StockListing, tf: PriceChangeTimeframe): number =>
-    finitePriceChange(getPriceChangeForTimeframe(listing, tf));
+    getPriceChangeForTimeframe(listing, tf);
 
-  const renderNonTradableBadge = () => (
+  const renderPriceChangeBadge = (value: number) => (
     <div
-      className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-bold bg-amber-500/15 text-amber-400"
-      title="State enterprise with no tradable shares"
+      className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-bold ${
+        value > 0
+          ? "bg-success/10 text-success"
+          : value < 0
+            ? "bg-error/10 text-error"
+            : "bg-muted/10 text-muted"
+      }`}
     >
-      Non-tradable
+      {value > 0 ? "+" : ""}
+      {value.toFixed(2)}%
     </div>
   );
-
-  const renderPriceChangeBadge = (value: number, tradable: boolean) => {
-    if (!tradable) return renderNonTradableBadge();
-    const safe = finitePriceChange(value);
-    return (
-      <div
-        className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-bold ${
-          safe > 0
-            ? "bg-success/10 text-success"
-            : safe < 0
-              ? "bg-error/10 text-error"
-              : "bg-muted/10 text-muted"
-        }`}
-      >
-        {safe > 0 ? "+" : ""}
-        {safe.toFixed(2)}%
-      </div>
-    );
-  };
 
   const renderListingRow = (listing: StockListing, nested: boolean) => (
     <tr
@@ -401,7 +372,7 @@ export function StockList({
         </div>
       </td>
       <td className="px-4 py-3 text-right">
-        {renderPriceChangeBadge(getPriceChangeValue(listing, timeframe), listingTradable(listing))}
+        {renderPriceChangeBadge(getPriceChangeValue(listing, timeframe))}
       </td>
       <td className="px-4 py-3 text-right hidden sm:table-cell">
         <div className="font-medium tabular-nums text-foreground">
@@ -431,7 +402,7 @@ export function StockList({
         </div>
       </td>
       <td className="px-4 py-3 text-right hidden lg:table-cell">
-        {(listing.publicFloat ?? 0) > 0 && listing.totalShares > 0 ? (
+        {(listing.publicFloat ?? 0) > 0 ? (
           <div className="inline-flex items-center gap-1.5">
             <span className="font-medium tabular-nums text-foreground">
               {(listing.publicFloat ?? 0).toLocaleString("en-US")}
@@ -508,10 +479,7 @@ export function StockList({
             <span className="text-xs text-muted">—</span>
           </td>
           <td className="px-4 py-3 text-right">
-            {renderPriceChangeBadge(
-              finitePriceChange(getPriceChangeForTimeframe(group, timeframe)),
-              group.tradableCount > 0
-            )}
+            {renderPriceChangeBadge(getPriceChangeForTimeframe(group, timeframe))}
           </td>
           <td className="px-4 py-3 text-right hidden sm:table-cell">
             <div className="font-medium tabular-nums text-foreground">
@@ -532,7 +500,7 @@ export function StockList({
             </div>
           </td>
           <td className="px-4 py-3 text-right hidden lg:table-cell">
-            {group.publicFloat > 0 && group.totalShares > 0 ? (
+            {group.publicFloat > 0 ? (
               <div className="inline-flex items-center gap-1.5">
                 <span className="font-medium tabular-nums text-foreground">
                   {group.publicFloat.toLocaleString("en-US")}

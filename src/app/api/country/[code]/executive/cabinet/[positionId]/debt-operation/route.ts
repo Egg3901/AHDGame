@@ -10,11 +10,6 @@ import { requireConfirmedSecretary } from "@/lib/api/requireConfirmedSecretary";
 import { getGameState } from "@/lib/gameState";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { getCabinetMembersCollection } from "@/lib/db/collections/cabinetMembers";
-import {
-  refundMinisterialAction,
-  resolveMinisterialRemaining,
-  spendMinisterialAction,
-} from "@/lib/cabinet/ministerialActionPool";
 import { getTreasuryOperationsCollection } from "@/lib/db/collections/treasuryOperations";
 import {
   resolveFinancePosition,
@@ -75,14 +70,20 @@ export async function POST(_request: Request, { params }: RouteParams) {
       );
     }
 
-    // Shared UK pool: both offices of a dual holder spend one balance (issue #2049).
-    const actions = await resolveMinisterialRemaining(db, countryId, member!);
+    if (member && member.ministerialActions == null) {
+      await membersCol.updateOne({ _id: member._id }, { $set: { ministerialActions: 2 } });
+      member.ministerialActions = 2;
+    }
+    const actions = member?.ministerialActions ?? 2;
     if (actions < 1) {
       return NextResponse.json({ error: "No ministerial actions remaining" }, { status: 400 });
     }
 
-    const spend = await spendMinisterialAction(db, countryId, member!);
-    if (!spend.ok) {
+    const spend = await membersCol.updateOne(
+      { _id: member!._id, ministerialActions: { $gte: 1 } },
+      { $inc: { ministerialActions: -1 } }
+    );
+    if (spend.modifiedCount === 0) {
       return NextResponse.json({ error: "No ministerial actions remaining" }, { status: 409 });
     }
 
@@ -109,11 +110,11 @@ export async function POST(_request: Request, { params }: RouteParams) {
         { upsert: true }
       );
     } catch (error) {
-      await refundMinisterialAction(db, countryId, member!);
+      await membersCol.updateOne({ _id: member!._id }, { $inc: { ministerialActions: 1 } });
       throw error;
     }
 
-    return NextResponse.json({ success: true, expiresTurn, actionsRemaining: spend.remaining });
+    return NextResponse.json({ success: true, expiresTurn, actionsRemaining: actions - 1 });
   } catch (error) {
     return handleRouteError(error);
   }

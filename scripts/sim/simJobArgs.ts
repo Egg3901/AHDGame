@@ -4,7 +4,6 @@
 // env, safe to import eagerly.
 import { MARKET_MODE_ORDER, type MarketSystemMode } from "@/lib/market/modes";
 import { LABOUR_MODE_ORDER, type LabourSystemMode } from "@/lib/labour/modes";
-import { frontierEntryExperimentCliArgs } from "@/lib/sim/economicExperiment";
 
 /** Subset of a simJobs document that controls runWorld CLI emission. */
 export interface SimJobExperimentFields {
@@ -17,9 +16,6 @@ export interface SimJobExperimentFields {
   equityLiquidityFacilityEnabled?: boolean;
   nppMarketCoverageEnabled?: boolean;
   nppFragileMarketSupplyEnabled?: boolean;
-  /** Frontier-entry experiment gate (#991). Explicit false is a pinned control
-   * arm, not an omission: it must reach runWorld. */
-  frontierEntryExperimentEnabled?: boolean;
   allFeatureFlags?: boolean;
   autonomyLevel?: string;
   mode?: string;
@@ -88,15 +84,6 @@ export function buildRunWorldArgs(job: SimJobExperimentFields): string[] {
   booleanFlag(job, "equityLiquidityFacilityEnabled", "equity-liquidity-facility", args);
   booleanFlag(job, "nppMarketCoverageEnabled", "npp-market-coverage", args);
   booleanFlag(job, "nppFragileMarketSupplyEnabled", "npp-fragile-market-supply", args);
-  // Frontier-entry experiment gate (#991): spelling owned by
-  // frontierEntryExperimentCliArgs, so the worker cannot drift from runWorld's
-  // parser. Explicit false survives (control arm); absent emits nothing.
-  if (job.frontierEntryExperimentEnabled !== undefined) {
-    if (typeof job.frontierEntryExperimentEnabled !== "boolean") {
-      throw new Error("frontierEntryExperimentEnabled must be boolean");
-    }
-    args.push(...frontierEntryExperimentCliArgs(job.frontierEntryExperimentEnabled));
-  }
   if (job.allFeatureFlags !== undefined) {
     if (typeof job.allFeatureFlags !== "boolean") {
       throw new Error("allFeatureFlags must be boolean");

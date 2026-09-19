@@ -71,7 +71,6 @@
     "sim:setup": "bash scripts/sim/local-setup.sh",
     "sim:worker": "bash scripts/sim/start-worker.sh",
     "sim:mcp": "npx tsx scripts/sim/localWorldsimMcp.ts",
-    "sim:takeover-evidence": "npx tsx scripts/sim/takeoverBankNavEvidence.ts",
     "audit:sector-viability": "npx tsx scripts/sim/sectorStrategyViability.ts",
     "ops:corporation-balance": "npx tsx scripts/ops/corporationBalanceAudit.ts --pretty",
     "architecture:audit": "node scripts/architecture-audit.mjs",

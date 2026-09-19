@@ -204,9 +204,6 @@ const TOOLS: ToolDef[] = [
         sourceCommit: str(
           "Pinned source (#1966): full 40-hex commit SHA that must equal the worktree HEAD. Requires sourceWorktree."
         ),
-        frontierEntryExperimentEnabled: bool(
-          "Whether the capped frontier-entry experiment (#991) may place entrants in facility-ready empty state-sector cells in this sandbox only. Explicit false pins the control arm; omit for the disabled default."
-        ),
       },
       ["preset", "turns", "seed"]
     ),
@@ -268,12 +265,6 @@ const TOOLS: ToolDef[] = [
         sourceWorktree: a.sourceWorktree === undefined ? undefined : String(a.sourceWorktree),
         sourceCommit: a.sourceCommit === undefined ? undefined : String(a.sourceCommit),
       });
-      if (
-        a.frontierEntryExperimentEnabled !== undefined &&
-        typeof a.frontierEntryExperimentEnabled !== "boolean"
-      ) {
-        throw new Error("frontierEntryExperimentEnabled must be boolean");
-      }
       const res = await enqueue(db, {
         preset,
         turns,
@@ -304,9 +295,6 @@ const TOOLS: ToolDef[] = [
         ...(a.nppFragileMarketSupplyEnabled !== undefined
           ? { nppFragileMarketSupplyEnabled: a.nppFragileMarketSupplyEnabled }
           : {}),
-        ...(a.frontierEntryExperimentEnabled !== undefined
-          ? { frontierEntryExperimentEnabled: a.frontierEntryExperimentEnabled }
-          : {}),
       });
       return {
         ...res,
@@ -324,7 +312,6 @@ const TOOLS: ToolDef[] = [
         equityLiquidityFacilityEnabled: a.equityLiquidityFacilityEnabled ?? "preset default",
         nppMarketCoverageEnabled: a.nppMarketCoverageEnabled ?? "preset default",
         nppFragileMarketSupplyEnabled: a.nppFragileMarketSupplyEnabled ?? "preset default",
-        frontierEntryExperimentEnabled: a.frontierEntryExperimentEnabled ?? "preset default",
         note: 'Poll with sim_run_status. The local worker claims queued jobs within ~15s — if status stays "queued" for minutes, the worker is not running (check sim_worker_health).',
       };
     },

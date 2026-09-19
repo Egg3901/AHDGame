@@ -68,17 +68,11 @@ export function buildCensusContent(year: number, deltas: SeatDelta[]): string {
  * apportionment now drives EC + House from), stamp `gameState.lastCensusYear`, and
  * post a National Wire census event. No-op otherwise.
  */
-export async function runCensus(
-  db: Db,
-  _turn: number,
-  currentYearOverride?: number
-): Promise<CensusResult> {
+export async function runCensus(db: Db, _turn: number): Promise<CensusResult> {
   const gameState = await db
     .collection<GameState>("gameState")
     .findOne({ _id: "current" } as Partial<GameState>);
-  // Prefer the turn context's authoritative year: the persisted
-  // gameState.currentYear is only stamped at turn end (#2059).
-  const currentYear = currentYearOverride ?? gameState?.currentYear;
+  const currentYear = gameState?.currentYear;
   if (currentYear === undefined || !shouldRunCensus(currentYear, gameState?.lastCensusYear)) {
     return { ran: false };
   }

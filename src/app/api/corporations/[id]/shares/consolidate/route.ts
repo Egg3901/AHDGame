@@ -408,10 +408,9 @@ export async function POST(request: Request, { params }: RouteParams) {
         corporationId: corporation._id,
         kind: isReverse ? "reverse_split" : "stock_split",
         turn: currentTurn,
-        // A structure change is not a trade. Keep executable volume at zero;
-        // the full before/after share movement is in structureChange. This
-        // prevents reverse splits from becoming negative tape volume.
-        shares: 0,
+        // Signed delta so downstream consumers can tell forward from reverse
+        // without re-deriving from kind (net change in outstanding shares).
+        shares: targetTotalShares - oldTotal,
         pricePerShareAnchor: 0,
         from: null,
         to: null,

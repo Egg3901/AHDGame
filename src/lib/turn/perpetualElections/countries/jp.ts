@@ -33,10 +33,9 @@ import { ensureRegionalGovernorElections } from "../shared";
  * next canonical window, the spawner walks forward to the following cycle
  * rather than producing a stub race.
  */
-export async function ensureJPElections(now: Date, inFlightTurn?: number): Promise<void> {
+export async function ensureJPElections(now: Date): Promise<void> {
   const db = await getDb();
-  const { currentTurn: persistedTurn, ctx } = await getCurrentTurnAndCtx(db);
-  const currentTurn = inFlightTurn ?? persistedTurn;
+  const { currentTurn, ctx } = await getCurrentTurnAndCtx(db);
 
   const jpRegions = await db
     .collection<State>("states")
@@ -177,14 +176,9 @@ export async function ensureJPElections(now: Date, inFlightTurn?: number): Promi
  *
  * `advanceElectionTimers` flips "upcoming" → "active" once startTime ≤ now.
  */
-export async function ensureJPCouncillorElections(
-  now: Date,
-  classOverride?: 1 | 2,
-  inFlightTurn?: number
-): Promise<void> {
+export async function ensureJPCouncillorElections(now: Date, classOverride?: 1 | 2): Promise<void> {
   const db = await getDb();
-  const { currentTurn: persistedTurn, ctx } = await getCurrentTurnAndCtx(db);
-  const currentTurn = inFlightTurn ?? persistedTurn;
+  const { currentTurn, ctx } = await getCurrentTurnAndCtx(db);
 
   // Process both classes unless a specific override is given
   const classesToProcess: (1 | 2)[] = classOverride ? [classOverride] : [1, 2];
@@ -339,13 +333,9 @@ export async function ensureJPCouncillorElections(
  * and at clean roll-over/bootstrap the fallback recomputes the identical
  * Shugiin canonical cycle, so both land on the same schedule either way.
  */
-export async function ensureJPRegionalCouncilElections(
-  now: Date,
-  inFlightTurn?: number
-): Promise<void> {
+export async function ensureJPRegionalCouncilElections(now: Date): Promise<void> {
   const db = await getDb();
-  const { currentTurn: persistedTurn, ctx } = await getCurrentTurnAndCtx(db);
-  const currentTurn = inFlightTurn ?? persistedTurn;
+  const { currentTurn, ctx } = await getCurrentTurnAndCtx(db);
 
   const jpRegions = await db
     .collection<State>("states")
@@ -509,6 +499,6 @@ export async function ensureJPRegionalCouncilElections(
  * Spawn perpetual governor elections for all 8 JP regions on a
  * preset-anchored 4-year cycle.
  */
-export async function ensureJPGovernorElections(now: Date, inFlightTurn?: number): Promise<void> {
-  await ensureRegionalGovernorElections("JP", now, undefined, inFlightTurn);
+export async function ensureJPGovernorElections(now: Date): Promise<void> {
+  await ensureRegionalGovernorElections("JP", now);
 }

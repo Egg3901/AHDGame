@@ -80,9 +80,9 @@ export interface ShareTradeHistory {
   /** Wall-clock insertion time. */
   createdAt: Date;
   shares: number;
-  /** ₳-anchored price per share at trade time; zero for corporate actions. */
+  /** ₳-anchored price per share at trade time. */
   pricePerShareAnchor: number;
-  /** Total ₳-anchored notional; zero for corporate actions. */
+  /** Total ₳-anchored notional (shares × pricePerShareAnchor, rounded to 2dp). */
   totalAnchor: number;
   /** Corp operating currency at trade time, for UI presentation. */
   corpCurrencyCode?: CurrencyCode;

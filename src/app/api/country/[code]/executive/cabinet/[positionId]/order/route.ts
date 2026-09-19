@@ -7,11 +7,7 @@ import { requireAuth } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
 import { handleRouteError } from "@/lib/api/errors";
 import { getCabinetMechanics } from "@/lib/constants/cabinetMechanics";
-import {
-  resolveMinisterialRemaining,
-  refundMinisterialAction,
-  spendMinisterialAction,
-} from "@/lib/cabinet/ministerialActionPool";
+import { initialMinisterialActionFields } from "@/lib/cabinet/ministerialActionPool";
 import { getMinisterialOrders } from "@/lib/constants/cabinetOrders";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { resolveMetricPath } from "@/lib/cabinet/resolveMetricPath";
@@ -111,9 +107,27 @@ export async function POST(request: Request, { params }: RouteParams) {
       );
     }
 
-    // Shared UK pool: both offices of a dual holder spend one balance (issue
-    // #2049). The legacy per-row backfill lives inside the resolver.
-    const actions = await resolveMinisterialRemaining(db, countryId, member!);
+    // Backfill missing action fields on legacy members. Pre-fix nominations and
+    // admin force-confirms inserted cabinetMembers without ministerialActions /
+    // lastMinisterialActionResetDay, which makes the atomic `$gte: 1` spend below
+    // silently fail (MongoDB doesn't match $gte against missing fields).
+    if (
+      member &&
+      (member.ministerialActions == null || member.lastMinisterialActionResetDay == null)
+    ) {
+      const backfill = {
+        ...initialMinisterialActionFields(),
+        ...(member.ministerialActions != null
+          ? { ministerialActions: member.ministerialActions }
+          : {}),
+      };
+      await membersCol.updateOne({ _id: member._id }, { $set: backfill });
+      member.ministerialActions = backfill.ministerialActions;
+      member.lastMinisterialActionResetDay = backfill.lastMinisterialActionResetDay;
+    }
+
+    // Check action pool
+    const actions = member?.ministerialActions ?? 2;
     if (actions < 1) {
       return NextResponse.json({ error: "No ministerial actions remaining" }, { status: 400 });
     }
@@ -146,8 +160,11 @@ export async function POST(request: Request, { params }: RouteParams) {
       regionId: e.scope === "regional" ? targetRegionId : undefined,
     }));
 
-    const spend = await spendMinisterialAction(db, countryId, member!);
-    if (!spend.ok) {
+    const spendResult = await membersCol.updateOne(
+      { _id: member!._id, ministerialActions: { $gte: 1 } },
+      { $inc: { ministerialActions: -1 } }
+    );
+    if (spendResult.modifiedCount === 0) {
       return NextResponse.json({ error: "No ministerial actions remaining" }, { status: 409 });
     }
 
@@ -168,11 +185,11 @@ export async function POST(request: Request, { params }: RouteParams) {
         createdAt: new Date(),
       });
     } catch (error) {
-      await refundMinisterialAction(db, countryId, member!);
+      await membersCol.updateOne({ _id: member!._id }, { $inc: { ministerialActions: 1 } });
       throw error;
     }
 
-    return NextResponse.json({ success: true, actionsRemaining: spend.remaining });
+    return NextResponse.json({ success: true, actionsRemaining: actions - 1 });
   } catch (error) {
     return handleRouteError(error);
   }

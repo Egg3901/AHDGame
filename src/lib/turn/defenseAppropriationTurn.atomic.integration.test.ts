@@ -57,7 +57,8 @@ suite("defense appropriation same-document CAS", () => {
         5,
         settlement,
         budget!.treasuryBalance as number,
-        budget!.defenseAppropriation.balance as number
+        budget!.defenseAppropriation.balance as number,
+        budget as never
       ),
       applyAppropriationSettlementWithOverdraft(
         db,
@@ -65,7 +66,8 @@ suite("defense appropriation same-document CAS", () => {
         5,
         settlement,
         budget!.treasuryBalance as number,
-        budget!.defenseAppropriation.balance as number
+        budget!.defenseAppropriation.balance as number,
+        budget as never
       ),
     ]);
     expect(results.filter(Boolean)).toHaveLength(1);

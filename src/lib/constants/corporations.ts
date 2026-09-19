@@ -880,15 +880,10 @@ export const NPV_ANNUAL_DISCOUNT_RATE = 0.15;
 
 /**
  * Fraction of a sector's NPV used as the asking price when a CEO lists it
- * for sale. Sellers accept a 15% discount on fair value to attract buyers
+ * for sale. Sellers accept a 25% discount on fair value to attract buyers
  * (and avoid having to operate a sector outside their specialization).
- *
- * Raised from 0.75: the deeper haircut priced sound sectors below what their
- * own earnings justified and widened the gap between operating value and
- * market value with no anti-exploit purpose (this fraction only moves
- * player-to-player asking prices, never payouts or borrowing capacity).
  */
-export const SECTOR_FOR_SALE_PRICE_FRACTION = 0.85;
+export const SECTOR_FOR_SALE_PRICE_FRACTION = 0.75;
 
 /**
  * P/E multiple used to convert annual income to share price.
@@ -917,18 +912,10 @@ export const FUNDAMENTAL_TANGIBLE_BOOK_WEIGHT = 1.0;
  * dollar as immediately liquid.
  */
 export const BANK_EQUITY_VALUATION_WEIGHT = 0.75;
-/**
- * Weight for earnings-power-per-share in the fundamental value formula.
- * Raised from 0.4: profitable corps priced almost entirely on liquidation
- * book, so operating performance barely moved the quote.
- */
-export const FUNDAMENTAL_EARNINGS_POWER_WEIGHT = 0.5;
-/**
- * Weight for growth-premium-per-share in the fundamental value formula.
- * Raised from 0.1 alongside the plants trailing-growth estimator, which
- * gives this component an honest input under plants mode.
- */
-export const FUNDAMENTAL_GROWTH_PREMIUM_WEIGHT = 0.15;
+/** Weight for earnings-power-per-share in the fundamental value formula. */
+export const FUNDAMENTAL_EARNINGS_POWER_WEIGHT = 0.4;
+/** Weight for growth-premium-per-share in the fundamental value formula. */
+export const FUNDAMENTAL_GROWTH_PREMIUM_WEIGHT = 0.1;
 
 /** Number of political turns used to compute the rolling-average earnings. */
 export const FUNDAMENTAL_ROLLING_AVG_TURNS = 3;
@@ -970,11 +957,7 @@ export const GROWTH_PREMIUM_CAP_BUFFER = 0.02;
  * keyed by CorporationType. Higher-volatility sectors demand a higher premium.
  */
 export const SECTOR_RISK_PREMIUM: Record<string, number> = {
-  // financial/energy/extraction trimmed 0.07 -> 0.06: the top premium band
-  // discounted exactly the capital-intensive corps whose earnings the
-  // valuation revamp is meant to recognize. This only feeds share-price
-  // cost of capital, never loan or coupon pricing.
-  financial: 0.06,
+  financial: 0.07,
   media: 0.05,
   manufacturing: 0.04,
   chemical_industries: 0.05,
@@ -982,7 +965,7 @@ export const SECTOR_RISK_PREMIUM: Record<string, number> = {
   retail: 0.04,
   automobiles: 0.05,
   technology: 0.06,
-  energy: 0.06,
+  energy: 0.07,
   agriculture: 0.03,
   real_estate: 0.04,
   construction: 0.04,
@@ -990,7 +973,7 @@ export const SECTOR_RISK_PREMIUM: Record<string, number> = {
   telecommunications: 0.04,
   entertainment: 0.06,
   logistics: 0.04,
-  extraction: 0.06,
+  extraction: 0.07,
   default: 0.05,
 };
 

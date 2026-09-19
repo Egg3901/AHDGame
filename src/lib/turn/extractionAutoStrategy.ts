@@ -26,7 +26,6 @@ import {
   spawnNppCorporation,
   NPP_CAPITAL_STATES,
 } from "@/lib/admin/spawnNppCorporation";
-import { loadPrivateEnterpriseBlockedCountries } from "@/lib/economy/queries/privateEnterpriseGate";
 
 const NPC_CORPORATION_USER_ID = new ObjectId("000000000000000000000000");
 
@@ -585,12 +584,10 @@ export async function processExtractionAutoStrategy(
   const placementBlockedCountries = new Set<string>();
   const placementObservedNonviableCountries = new Set<string>();
   for (const capDoc of caps) {
-    // Latent nations cannot spawn pre-activation (no seeded capital region).
-    // Planned-economy exclusion is NOT this filter's job: the authored
-    // capital-state list carries real capitals for several planned economies
-    // (CN, UKR, BLR, BAL), whose mining comes from the budget seeders as
-    // SOEs. That exclusion happens below against the marketization-dial gate,
-    // before any spawn attempt.
+    // Market NPP corps only exist where the authored capital-state list says
+    // they can: planned economies seed SOEs through the budget seeders and
+    // latent nations cannot spawn pre-activation. Founding a market miner in
+    // East Germany or the USSR would be a category error, not a supply fix.
     if (!NPP_CAPITAL_STATES[capDoc.countryId as CountryId]) continue;
     for (const [resource, info] of placementShortage) {
       const cap = capDoc.resources?.[resource] ?? 0;
@@ -618,22 +615,6 @@ export async function processExtractionAutoStrategy(
     }
   }
   placementCandidates.sort((a, b) => b.score - a.score);
-
-  // Eligibility before attempts: a placement sited in a planned economy can
-  // only ever be rejected by the command-economy rule, so drop those
-  // candidates before the spawn loop rather than catching the refusal per
-  // candidate. Loaded lazily - no placement candidates, no extra reads, so
-  // the common turn pays nothing for this gate.
-  if (placementCandidates.length > 0) {
-    const placementBlocked = await loadPrivateEnterpriseBlockedCountries(db);
-    if (placementBlocked.size > 0) {
-      for (let i = placementCandidates.length - 1; i >= 0; i--) {
-        if (placementBlocked.has(placementCandidates[i]!.countryId as CountryId)) {
-          placementCandidates.splice(i, 1);
-        }
-      }
-    }
-  }
 
   const placedByResource: Record<string, number> = {};
   const placedNames: string[] = [];

@@ -27,7 +27,6 @@ import {
   canPerformAction,
   getActionPointCost,
   quoteConvertCashAction,
-  quoteDebatePrepAction,
   makeFundsFormatter,
   formatLocalFunds,
   buildBatchResultMessage,
@@ -149,12 +148,6 @@ export async function executeCharacterAction(
     }
   }
 
-  // Debate Prep eligibility needs the RPG-stats flag, which the rules cannot
-  // read themselves (async host state). Resolve once up front — the flag is
-  // world state, not per-iteration state — and hand the resolved value to both
-  // the shared validation and the gate below so all three read one source.
-  const rpgStatsEnabled = actionType === "debatePrep" ? await isRpgStatsEnabled() : undefined;
-
   let lastMessage = "";
   let updatedCharacter: Character | null = null;
   // One audit envelope per executed iteration (batch/convert can run count>1,
@@ -176,7 +169,6 @@ export async function executeCharacterAction(
     const validation = canPerformAction(current, actionType, state || undefined, {
       forexEnabled,
       homeFxRate: campaignRate,
-      rpgStatsEnabled,
     });
     if (!validation.canPerform) {
       return { ok: false, error: validation.reason ?? "Action not allowed", status: 400 };
@@ -201,16 +193,13 @@ export async function executeCharacterAction(
     }
 
     // Debate Prep: gated behind the RPG-stats flag and requires an allocated
-    // stat block (Debate lives in stats). Single source of truth: the same
-    // rules quote canPerformAction above validates through, so the gate and
-    // the validation reject with the same reason.
+    // stat block (Debate lives in stats).
     if (actionType === "debatePrep") {
-      const quote = quoteDebatePrepAction(
-        { debate: current.stats?.debate, hasStats: !!current.stats },
-        { rpgStatsEnabled }
-      );
-      if (!quote.ok) {
-        return { ok: false, error: quote.error, status: 400 };
+      if (!(await isRpgStatsEnabled())) {
+        return { ok: false, error: "The stat system is not currently enabled.", status: 400 };
+      }
+      if (!current.stats) {
+        return { ok: false, error: "Allocate your stats before using Debate Prep.", status: 400 };
       }
     }
 

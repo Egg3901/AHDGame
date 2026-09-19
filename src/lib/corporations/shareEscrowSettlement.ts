@@ -50,10 +50,11 @@ type EscrowSettlementOptions = {
 /**
  * Credit the issuer for a float BUY.
  * - escrow mode: credit shareEscrowBalance.
- * - instant mode: credit liquidCapital AND track issuance proceeds for the
- *   reversible cash-flow audit. Escrow mode does NOT track issuance proceeds;
- *   the cash lands in the off-book escrow, which is not a share-price valuation
- *   input.
+ * - instant mode: credit liquidCapital AND track issuance proceeds (so dilution
+ *   reduces the share-price book floor). Escrow mode does NOT track issuance
+ *   proceeds — the cash lands in the off-book escrow (the escrow is not a
+ *   share-price valuation input, decoupled 2026-06-07), so liquidCapital never
+ *   inflates and there is nothing to offset.
  */
 export async function applyFloatBuyCredit(
   db: Db,
@@ -174,8 +175,9 @@ export async function reverseFloatSellDebit(
 
 /**
  * Best-effort side effect after a float SELL commits. Instant mode backs out
- * realized issuance proceeds in the cash-flow audit marker. Escrow mode is a
- * no-op because it never tracked issuance proceeds.
+ * realized issuance proceeds so the book floor tracks the float shrinking.
+ * Escrow mode is a no-op (it never tracked issuance proceeds — see
+ * `applyFloatBuyCredit`).
  */
 export async function onFloatSellCommitted(
   db: Db,
@@ -192,7 +194,7 @@ export async function onFloatSellCommitted(
   // Self-contained capture: this is invoked fire-and-forget (`void
   // onFloatSellCommitted(...)`) from the trade paths, so a rejection here would
   // otherwise be an unhandled promise rejection AND silently drift the corp
-  // issuance-proceeds audit marker from reality.
+  // issuance-proceeds book (the share-price floor lever) from reality.
   try {
     await decrementCorpIssuanceProceeds(db, corp._id, amountLocal, options);
   } catch (error) {

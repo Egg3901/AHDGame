@@ -76,33 +76,6 @@ describe("recordShareTrade", () => {
     expect(doc.totalAnchor).toBe(1755.13);
   });
 
-  it("keeps structure changes out of executable share volume", async () => {
-    const { recordShareTrade } = await import("./shareTradeHistory");
-    await recordShareTrade(db as unknown as Db, {
-      corporationId: new ObjectId(),
-      kind: "reverse_split",
-      turn: 1,
-      shares: -100,
-      pricePerShareAnchor: 0,
-      from: null,
-      to: null,
-      structureChange: {
-        oldTotalShares: 200,
-        newTotalShares: 100,
-        oldSharePriceLocal: 5,
-        newSharePriceLocal: 10,
-        oldPublicFloat: 200,
-        newPublicFloat: 100,
-        before: [],
-        after: [],
-      },
-    });
-    const doc = db.collectionMocks["shareTradeHistory"]!.insertOne.mock.calls[0][0];
-    expect(doc.shares).toBe(0);
-    expect(doc.pricePerShareAnchor).toBe(0);
-    expect(doc.totalAnchor).toBe(0);
-  });
-
   it("swallows insert errors and reports them to Sentry", async () => {
     const { recordShareTrade } = await import("./shareTradeHistory");
     // Trigger lazy-creation of the collection mock, then make insertOne reject.

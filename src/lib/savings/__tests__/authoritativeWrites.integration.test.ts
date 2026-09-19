@@ -209,13 +209,12 @@ describe("authoritative savings writes", () => {
   it("mirrors bank-paid deposit interest onto the account and the bank's liability", async () => {
     await moveCharacterSavings(db as unknown as Db, OWNER, "USD", BANK.toString());
     const summary = await processBankingTurn(db as unknown as Db, TURN + 1);
-    // Pointer model (USD is not in the read cohort): the bank pays only the
-    // premium over the CB base APY. 1_000 at (4% - 2%) over 48 turns = 0.42
-    // for the player; the summary also carries whatever the household book
-    // earned, so the player's part is read off the account.
-    expect(summary.depositInterestPaid).toBeGreaterThanOrEqual(0.42);
+    // 1_000 at 4% over 48 turns = 0.83 for the player; the summary also
+    // carries whatever the household book earned, so the player's part is
+    // read off the account.
+    expect(summary.depositInterestPaid).toBeGreaterThanOrEqual(0.83);
     const earned = account(db).interestEarned;
-    expect(earned).toBeCloseTo(0.42, 6);
+    expect(earned).toBeCloseTo(0.83, 6);
     expect(account(db).balance).toBeCloseTo(1_000 + earned, 6);
     expect(owner(db).currencyBalances.savings.USD).toBeCloseTo(1_000 + earned, 6);
     expect(bank(db).bankCharter.playerDeposits).toBeCloseTo(1_000 + earned, 6);

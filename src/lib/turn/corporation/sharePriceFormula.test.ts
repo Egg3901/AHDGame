@@ -283,10 +283,10 @@ describe("computeSharePrices — bond-income interest-rate-risk adjustments", ()
     // All-bond corp also trips the reliance ramp at 100% (extra 0.5x), so it's
     // strictly cheaper than the discount alone would imply.
     expect(allBond).toBeLessThan(operating);
-    // Earnings-power contribution: operating = 0.5 * 1.00 = 0.50.
-    // all-bond = 0.5 * (0.75 * 1.00) * 0.5 (reliance floor) = 0.1875.
-    expect(operating).toBeCloseTo(0.5, 2);
-    expect(allBond).toBeCloseTo(0.19, 2);
+    // Earnings-power contribution: operating = 0.4 * 1.00 = 0.40.
+    // all-bond = 0.4 * (0.75 * 1.00) * 0.5 (reliance floor) = 0.15.
+    expect(operating).toBeCloseTo(0.4, 2);
+    expect(allBond).toBeCloseTo(0.15, 2);
   });
 
   it("haircuts bond holdings in tangible book (0.75x)", () => {
@@ -313,9 +313,9 @@ describe("computeSharePrices — bond-income interest-rate-risk adjustments", ()
       ],
       TEST_TURN
     ).get("corpA")!;
-    // earnings = 25k operating + 0.75*75k bond = 81.25k → power 0.8125 → 0.5*0.8125 = 0.40625,
-    // rounded to cents = 0.41.
-    expect(r).toBeCloseTo(0.41, 2);
+    // earnings = 25k operating + 0.75*75k bond = 81.25k → power 0.8125 → 0.4*0.8125 = 0.325,
+    // rounded to cents = 0.33.
+    expect(r).toBeCloseTo(0.33, 2);
   });
 });
 
@@ -481,10 +481,8 @@ describe("computeSharePrices — construction in progress (P3a)", () => {
   });
 
   it("pays NO growth premium at g = 0 — the plants-mode neutral value", () => {
-    // recomputeSharePrices feeds trailing sector-NPV growth under plants (never
-    // the frozen growth slider), and the estimator returns 0 for flat, shrinking
-    // or history-less corps — so g = 0 stays the neutral value that pays no
-    // Gordon premium.
+    // recomputeSharePrices substitutes sectorGrowthRate = 0 under plants so a
+    // frozen growth slider cannot buy a permanent unearned Gordon premium.
     const withGrowth = computeSharePrices(
       [input({ normalizedEarningsAnchor: 1_000_000, sectorGrowthRate: 0.05 })],
       TEST_TURN

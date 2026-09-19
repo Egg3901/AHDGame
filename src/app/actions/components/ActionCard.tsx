@@ -7,11 +7,7 @@ import { campaignAnchorToLocal } from "@/lib/campaigns/rules/currency";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import { formatCurrencyFaceAmount } from "@/lib/currency/formatCurrencyFaceAmount";
 import { bypassNextImageOptimization } from "@/lib/images/bypassImageOptimization";
-import {
-  calculateConvertCashInfamy,
-  convertCashConversion,
-  isFundraiseEligible,
-} from "@/lib/actions";
+import { calculateConvertCashInfamy, convertCashConversion } from "@/lib/actions";
 import { CARD_PHOTO_SCRIM, CATEGORY_ACCENTS, CATEGORY_LABELS } from "../actionsConstants";
 import type { ActionCardProps } from "../actionsTypes";
 import ActionExecuteRow from "./ActionExecuteRow";
@@ -103,7 +99,7 @@ const ActionCard = memo(function ActionCard({
   } else effectiveFundLabel = card.fundLabel(character);
 
   const didFlash = flash?.type === card.type;
-  const noDonor = card.requiresDonorBase && !isFundraiseEligible(character.donorBaseLevel);
+  const noDonor = card.requiresDonorBase && (character.donorBaseLevel ?? 0) === 0;
   const noCash = isConvertCash && displayPersonalWealth <= 0;
   const fundNeeded = effectiveFundCost;
   // When forex rates are loaded, convert the ₳ cost to home currency so the

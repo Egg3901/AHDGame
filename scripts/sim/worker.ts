@@ -14,8 +14,8 @@
  * raw MongoClient here keeps this process's own DB connection independent of
  * whatever the children do in their own processes.
  *
- * Runs a small bounded pool. Each slot is a separate child process and database;
- * admission remains conservative because this shares a production host.
+ * Single job at a time, on purpose — this runs on the same shared box as the
+ * live game; one sim job's turn processing is already CPU-heavy.
  *
  * Required env:
  *   OPS_MONGODB_URI   — control-plane DB (simJobs collection)
@@ -28,7 +28,6 @@
 
 import { spawn } from "child_process";
 import { dirname, join } from "path";
-import { cpus, freemem, hostname, loadavg } from "os";
 import { MongoClient, type Db, type Collection } from "mongodb";
 import { claimFilterAt, parseClaimWindow } from "./claimWindow";
 import { assertSafeToken } from "./simJobArgs";
@@ -39,13 +38,6 @@ const OPS_DB_NAME = process.env.OPS_DB_NAME || "a-house-divided";
 const SIM_MONGODB_URI = process.env.SIM_MONGODB_URI;
 const GAME_REPO_DIR = process.env.GAME_REPO_DIR || process.cwd();
 const TICK_MS = Number(process.env.SIM_WORKER_TICK_MS || "15000");
-const CONCURRENCY = Math.max(1, Math.min(2, Number(process.env.SIM_WORKER_CONCURRENCY || "2")));
-const MIN_FREE_BYTES = Number(process.env.SIM_WORKER_MIN_FREE_BYTES || String(16 * 1024 ** 3));
-const MAX_LOAD_RATIO = Number(process.env.SIM_WORKER_MAX_LOAD_RATIO || "0.7");
-// Collection/report phases do not mirror sandbox turns. Ten minutes avoids
-// reclaiming a live collector while still recovering a dead worker durably.
-const LEASE_STALE_MS = Number(process.env.SIM_WORKER_LEASE_STALE_MS || "600000");
-const WORKER_INSTANCE_ID = `${hostname()}:${process.pid}`;
 // The LIVE game DB — required only for cloneFromLive jobs. NOT the same thing
 // as OPS_MONGODB_URI: on the ops box the control-plane (simJobs) lives on the
 // local Mongo while the live game lives on the hosted prod cluster. Cloning
@@ -112,9 +104,6 @@ interface SimJob {
   equityLiquidityFacilityEnabled?: boolean;
   nppMarketCoverageEnabled?: boolean;
   nppFragileMarketSupplyEnabled?: boolean;
-  // Frontier-entry experiment gate (issue #991, gameState flag). Explicit
-  // false is a pinned control arm, not an omission: it must reach runWorld.
-  frontierEntryExperimentEnabled?: boolean;
   allFeatureFlags?: boolean;
   autonomyLevel?: string;
   /** Sim turn-phase profile: "elections-only" skips the economy phases. Default full. */
@@ -136,10 +125,6 @@ interface SimJob {
   workerStartedAt?: Date;
   currentTurn?: number;
   error?: string | null;
-  workerInstanceId?: string;
-  workerSlotId?: number;
-  heartbeatAt?: Date;
-  workerPhase?: string;
 }
 
 function log(msg: string) {
@@ -206,16 +191,9 @@ async function mirrorSandboxStatus(jobsCol: Collection<SimJob>, job: SimJob) {
             currentTurn: doc.currentTurn,
             lastMessage: doc.lastMessage,
             lastWarnings: doc.lastWarnings,
-            heartbeatAt: new Date(),
-            workerPhase: "turns",
             updatedAt: new Date(),
           },
         }
-      );
-    } else {
-      await jobsCol.updateOne(
-        { _id: job._id, status: "running", workerInstanceId: WORKER_INSTANCE_ID },
-        { $set: { heartbeatAt: new Date(), updatedAt: new Date() } }
       );
     }
   } catch (err) {
@@ -226,7 +204,7 @@ async function mirrorSandboxStatus(jobsCol: Collection<SimJob>, job: SimJob) {
   }
 }
 
-async function processJob(jobsCol: Collection<SimJob>, job: SimJob, slotId: number) {
+async function processJob(jobsCol: Collection<SimJob>, job: SimJob) {
   // Validate before this job's fields touch a Mongo db name or a child-process
   // argv — see SAFE_TOKEN above. A job document only ever comes from this
   // worker's own findOneAndUpdate claim (tick()) or the worldsim MCP's
@@ -260,9 +238,7 @@ async function processJob(jobsCol: Collection<SimJob>, job: SimJob, slotId: numb
     );
   }
 
-  log(
-    `[slot ${slotId}] Claimed job ${job._id} (preset=${job.preset}, turns=${job.turns}, db=${job.dbName})`
-  );
+  log(`Claimed job ${job._id} (preset=${job.preset}, turns=${job.turns}, db=${job.dbName})`);
 
   const statusMirror = setInterval(() => {
     mirrorSandboxStatus(jobsCol, job).catch(() => {});
@@ -354,11 +330,7 @@ async function processJob(jobsCol: Collection<SimJob>, job: SimJob, slotId: numb
       return;
     }
 
-    await jobsCol.updateOne(
-      { _id: job._id },
-      { $set: { workerPhase: "metrics", heartbeatAt: new Date(), updatedAt: new Date() } }
-    );
-    log(`[slot ${slotId}] Job ${job._id} turn processing complete — collecting metrics`);
+    log(`Job ${job._id} turn processing complete — collecting metrics`);
     const metricsEnv = {
       ...baseChildEnv(),
       SIM_MONGODB_URI: SIM_MONGODB_URI as string,
@@ -388,11 +360,7 @@ async function processJob(jobsCol: Collection<SimJob>, job: SimJob, slotId: numb
       return;
     }
 
-    await jobsCol.updateOne(
-      { _id: job._id },
-      { $set: { workerPhase: "experiments", heartbeatAt: new Date(), updatedAt: new Date() } }
-    );
-    log(`[slot ${slotId}] Job ${job._id} metrics collected — collecting experiments report`);
+    log(`Job ${job._id} metrics collected — collecting experiments report`);
     const experimentsResult = await run(
       "scripts/sim/collectExperimentReport.ts",
       [`--db=${job.dbName}`, `--run-id=${job._id}`],
@@ -418,13 +386,7 @@ async function processJob(jobsCol: Collection<SimJob>, job: SimJob, slotId: numb
       return;
     }
 
-    await jobsCol.updateOne(
-      { _id: job._id },
-      { $set: { workerPhase: "elections", heartbeatAt: new Date(), updatedAt: new Date() } }
-    );
-    log(
-      `[slot ${slotId}] Job ${job._id} experiments report collected — collecting election report`
-    );
+    log(`Job ${job._id} experiments report collected — collecting election report`);
     const electionResult = await run(
       "scripts/sim/collectElectionReport.ts",
       [`--db=${job.dbName}`, `--run-id=${job._id}`],
@@ -452,14 +414,7 @@ async function processJob(jobsCol: Collection<SimJob>, job: SimJob, slotId: numb
 
     await jobsCol.updateOne(
       { _id: job._id },
-      {
-        $set: {
-          status: "completed",
-          completedAt: new Date(),
-          workerPhase: "complete",
-          updatedAt: new Date(),
-        },
-      }
+      { $set: { status: "completed", completedAt: new Date(), updatedAt: new Date() } }
     );
     log(`Job ${job._id} COMPLETE`);
   } catch (err) {
@@ -475,38 +430,21 @@ async function processJob(jobsCol: Collection<SimJob>, job: SimJob, slotId: numb
   }
 }
 
-function hasCapacity(): boolean {
-  return freemem() >= MIN_FREE_BYTES && loadavg()[0] < cpus().length * MAX_LOAD_RATIO;
-}
-
-async function tick(jobsCol: Collection<SimJob>, slotId: number, activeDbNames: string[]) {
+async function tick(jobsCol: Collection<SimJob>) {
   // A running simulation is never interrupted at the window boundary. The
   // window controls admission of the next queued job only.
-  if (!hasCapacity()) return null;
   const claimFilter = claimFilterAt(new Date(), CLAIM_WINDOW);
   const job = await jobsCol.findOneAndUpdate(
-    { $and: [claimFilter, { dbName: { $nin: activeDbNames } }] },
-    {
-      $set: {
-        status: "running",
-        workerStartedAt: new Date(),
-        updatedAt: new Date(),
-        heartbeatAt: new Date(),
-        workerInstanceId: WORKER_INSTANCE_ID,
-        workerSlotId: slotId,
-        workerPhase: "starting",
-      },
-    },
+    claimFilter,
+    { $set: { status: "running", workerStartedAt: new Date(), updatedAt: new Date() } },
     { sort: { createdAt: 1 }, returnDocument: "after" }
   );
-  if (!job) return null;
-  return job;
+  if (!job) return;
+  await processJob(jobsCol, job);
 }
 
 async function main() {
-  log(
-    `Starting — control-plane DB=${OPS_DB_NAME}, game repo=${GAME_REPO_DIR}, tick=${TICK_MS}ms, slots=${CONCURRENCY}`
-  );
+  log(`Starting — control-plane DB=${OPS_DB_NAME}, game repo=${GAME_REPO_DIR}, tick=${TICK_MS}ms`);
   if (CLAIM_WINDOW) {
     log(`Claim window=${process.env.SIM_WORKER_CLAIM_WINDOW} ${CLAIM_WINDOW.timeZone}`);
   }
@@ -514,33 +452,22 @@ async function main() {
   await client.connect();
   const jobsCol = getSimJobsCollection(client.db(OPS_DB_NAME));
 
-  const active = new Map<number, { job: SimJob; promise: Promise<void> }>();
+  // Recover any job this worker was mid-processing when last restarted (Restart=always
+  // means a crash mid-job leaves it stuck at status:"running" forever otherwise).
+  await jobsCol.updateMany(
+    { status: "running" },
+    {
+      $set: {
+        status: "queued",
+        error: "worker restarted mid-run, re-queued",
+        updatedAt: new Date(),
+      },
+    }
+  );
 
   for (;;) {
     try {
-      const staleBefore = new Date(Date.now() - LEASE_STALE_MS);
-      await jobsCol.updateMany(
-        {
-          status: "running",
-          workerInstanceId: { $exists: true },
-          heartbeatAt: { $lt: staleBefore },
-        },
-        {
-          $set: { status: "queued", error: "stale worker lease recovered", updatedAt: new Date() },
-          $unset: { workerInstanceId: "", workerSlotId: "", workerPhase: "" },
-        }
-      );
-      for (let slotId = 1; slotId <= CONCURRENCY; slotId += 1) {
-        if (active.has(slotId)) continue;
-        const job = await tick(
-          jobsCol,
-          slotId,
-          [...active.values()].map((entry) => entry.job.dbName)
-        );
-        if (!job) continue;
-        const promise = processJob(jobsCol, job, slotId).finally(() => active.delete(slotId));
-        active.set(slotId, { job, promise });
-      }
+      await tick(jobsCol);
     } catch (err) {
       log(`tick error (non-fatal): ${err instanceof Error ? err.message : String(err)}`);
     }

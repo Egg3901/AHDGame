@@ -98,15 +98,6 @@ export interface BlendRaceCard {
   primaryGroups: BlendPrimaryGroup[];
   /** Declared candidates, shown before any ballots exist. */
   slate: BlendCandidateRow[];
-  /**
-   * Ids the card's rows cannot list: present in this race's polling or tally
-   * but absent from its roster (a withdrawal banking votes, a legacy id the
-   * roster no longer carries). The rows, groups and slate all derive from the
-   * roster, so these ids are omitted from every phase of this card.
-   */
-  omittedCount: number;
-  /** "+N more candidate(s)" label for the omitted ids, null when none. */
-  omittedLabel: string | null;
   showSeats: boolean;
   /**
    * Whether any row has a turn-on-turn delta to report. False on the first
@@ -283,31 +274,6 @@ function countedVotes(election: ElectionDisplay): number {
   const totals = election.generalTally?.totalVotes;
   if (!totals) return 0;
   return election.candidates.reduce((sum, c) => sum + (totals[c.id] ?? 0), 0);
-}
-
-/**
- * Ids this race's data names that its roster does not, and that the card's
- * rows therefore cannot list. Reads only this race's own roster, polling and
- * tally, so one race's ids can never leak into another race's count. Missing
- * maps (legacy or summary-mode records) contribute nothing rather than
- * throwing, and an id seen in several maps counts once.
- */
-export function omittedCandidateCount(election: ElectionDisplay): number {
-  const roster = new Set((election.candidates ?? []).map((c) => c.id));
-  const extra = new Set<string>();
-  for (const id of Object.keys(election.polling?.sharesPct ?? {})) {
-    if (!roster.has(id)) extra.add(id);
-  }
-  for (const id of Object.keys(election.generalTally?.totalVotes ?? {})) {
-    if (!roster.has(id)) extra.add(id);
-  }
-  return extra.size;
-}
-
-/** "+N more candidate(s)" for the omitted ids, null when the field is whole. */
-export function omittedCandidateLabel(count: number): string | null {
-  if (count <= 0) return null;
-  return count === 1 ? "+1 more candidate" : `+${count} more candidates`;
 }
 
 /**
@@ -784,9 +750,6 @@ export function buildBlendRegionCards(input: BlendRegionInput): BlendRaceCard[] 
     const isPresident = election.electionType === "president";
     const tier: BlendTier = tierById[election.id] ?? (isPresident ? "presidential" : "regional");
 
-    // Counted off the region-scoped election, so a nationwide race measured
-    // by this region's own votes names only ids this region's data carries.
-    const omittedCount = omittedCandidateCount(election);
     const rows = buildRows(election, parties, viewerCharacterId, multiSeat, phase);
     const groups =
       phase === "primary" ? buildPrimaryGroups(election, parties, viewerCharacterId) : [];
@@ -873,8 +836,6 @@ export function buildBlendRegionCards(input: BlendRegionInput): BlendRaceCard[] 
       rows,
       primaryGroups: groups,
       slate: phase === "upcoming" ? rows : [],
-      omittedCount,
-      omittedLabel: omittedCandidateLabel(omittedCount),
       showSeats: multiSeat && phase !== "upcoming",
       showDelta: rows.some((r) => r.deltaPts !== null),
       showTally: phase === "general" || phase === "final",

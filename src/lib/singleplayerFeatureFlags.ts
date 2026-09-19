@@ -5,10 +5,7 @@ type BooleanDefaultKey = {
     ? K
     : never;
 }[keyof typeof DEFAULT_GAME_STATE_FLAGS];
-export type SingleplayerFeatureFlagKey = Exclude<
-  BooleanDefaultKey,
-  "nppAutonomyEnabled" | "frontierEntryExperimentEnabled"
->;
+export type SingleplayerFeatureFlagKey = Exclude<BooleanDefaultKey, "nppAutonomyEnabled">;
 
 export interface SingleplayerFeatureFlagOption {
   key: SingleplayerFeatureFlagKey;
@@ -66,8 +63,7 @@ export const SINGLEPLAYER_FEATURE_FLAGS: readonly SingleplayerFeatureFlagOption[
 )
   .filter((entry): entry is [BooleanDefaultKey, boolean] => typeof entry[1] === "boolean")
   .filter(
-    (entry): entry is [SingleplayerFeatureFlagKey, boolean] =>
-      entry[0] !== "nppAutonomyEnabled" && entry[0] !== "frontierEntryExperimentEnabled"
+    (entry): entry is [SingleplayerFeatureFlagKey, boolean] => entry[0] !== "nppAutonomyEnabled"
   )
   .map(([key, defaultEnabled]) => ({
     key,

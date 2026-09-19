@@ -4,7 +4,6 @@ import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
 import { getExecutiveOfficialFilter } from "@/lib/elections/executiveOfficeFilters";
 import { getOfficeLabel } from "@/lib/utils/politics";
 import { createNotifications } from "@/lib/notifications";
-import { vacateNonExecutiveOfficesForExecutive } from "@/lib/elections/vacateOfficesForExecutive";
 import {
   hasReachedExecutiveTermLimit,
   incrementExecutiveTermsServedUpdate,
@@ -130,14 +129,6 @@ export async function processPresidentialSuccession(db: Db): Promise<boolean> {
       $set: { characterId: null, countryId: usCountryId, isNPP: false, updatedAt: now },
       $unset: { characterName: "", party: "", nppId: "" },
     });
-
-  // The ascender moves between executive offices, but must not carry a
-  // legislative seat into the presidency (#2038).
-  if (vpRecord.characterId) {
-    await vacateNonExecutiveOfficesForExecutive(db, { characterId: vpRecord.characterId }, now);
-  } else if (vpRecord.nppId) {
-    await vacateNonExecutiveOfficesForExecutive(db, { nppId: vpRecord.nppId }, now);
-  }
 
   return true;
 }

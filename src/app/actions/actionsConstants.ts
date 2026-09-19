@@ -1,13 +1,5 @@
 import { formatFundsCompact } from "@/lib/utils/formatters";
 import { getHomeCurrency } from "@/lib/currency/characterFunds";
-import { getPollActionCost, getPollBaseFundCost } from "@/lib/actions";
-import {
-  CONVERT_CASH_ACTION_COST,
-  DEBATE_PREP_ACTION_COST,
-  describeDebatePrepEffect,
-  FUNDRAISE_ACTION_COST,
-  fundraiseYieldAnchor,
-} from "@/lib/actions/rules";
 import type { ActionCard } from "./actionsTypes";
 
 export const CARDS: ActionCard[] = [
@@ -47,12 +39,9 @@ export const CARDS: ActionCard[] = [
     tagline: "Work the room",
     flavor:
       "Your network picks up the telephone. The cheques follow. A formidable war chest doesn't just fund campaigns — it keeps opponents from running.",
-    // Single source of truth: the same rules quote the execute shell credits,
-    // so the advertised yield (influence + fundraising-stat scaled) can never
-    // drift from the credited result.
-    actionCost: FUNDRAISE_ACTION_COST,
+    actionCost: 3,
     fundCost: () => null,
-    fundLabel: (c) => `+${formatFundsCompact(fundraiseYieldAnchor(c))}`,
+    fundLabel: (c) => `+${formatFundsCompact(50_000 + (c.donorBaseLevel ?? 0) * 2_000)}`,
     effect: "Earn campaign funds",
     imageSlug: "fundraise",
     imageAlt: "Political fundraising dinner",
@@ -79,12 +68,7 @@ export const CARDS: ActionCard[] = [
     tagline: "Write yourself a cheque",
     flavor:
       "Funnel your personal fortune into the campaign war chest. The ethics board won't love it, and the press will have questions — but money talks louder than headlines.",
-    // Canonical ConvertCash owner: the flat AP cost the shared rules quote
-    // execution debits (quoteConvertCashAction). This card's actionCost
-    // renders live (no page-level prop shadows it, unlike the
-    // state-dependent campaign/advertise/buildDonorBase costs), so it reads
-    // the const directly.
-    actionCost: CONVERT_CASH_ACTION_COST,
+    actionCost: 2,
     fundCost: () => null,
     fundLabel: (c) => {
       // Post-Phase-8 (cashOnHand removed): read the home-currency personal
@@ -106,13 +90,9 @@ export const CARDS: ActionCard[] = [
     tagline: "Topline intelligence",
     flavor:
       "A quick read of the electorate — overall appeal and the five groups you're strongest and weakest with. Adjust before it costs you.",
-    // Canonical Poll owner: flat AP cost and unscaled ANCHOR base fund cost
-    // from the shared rules quote execution debits (quotePollAction). The
-    // card preview stays display-only: the intellect-scaled debit is quoted
-    // by the poll route, not recomputed here.
-    actionCost: getPollActionCost("small"),
-    fundCost: () => getPollBaseFundCost("small"),
-    fundLabel: () => formatFundsCompact(getPollBaseFundCost("small")),
+    actionCost: 2,
+    fundCost: () => 25_000,
+    fundLabel: () => formatFundsCompact(25_000),
     effect: "Topline + best/worst groups",
     imageSlug: "poll",
     imageAlt: "Survey data being tabulated",
@@ -125,10 +105,9 @@ export const CARDS: ActionCard[] = [
     tagline: "The complete picture",
     flavor:
       "A comprehensive breakdown across every demographic category in your state. Know who you're winning and losing — and exactly why.",
-    // Same canonical owner as the quick poll, large tier.
-    actionCost: getPollActionCost("large"),
-    fundCost: () => getPollBaseFundCost("large"),
-    fundLabel: () => formatFundsCompact(getPollBaseFundCost("large")),
+    actionCost: 6,
+    fundCost: () => 75_000,
+    fundLabel: () => formatFundsCompact(75_000),
     effect: "Full demographic breakdown",
     imageSlug: "pollLarge",
     imageAlt: "Large-scale tabulation machinery",
@@ -185,13 +164,10 @@ export const CARDS: ActionCard[] = [
     tagline: "Study the briefing books",
     flavor:
       "Briefing binders, mock questions, and rehearsal. No war chest required — just focus. A sharp performance on stage starts here, one quiet evening at a time.",
-    // Single source of truth: the same rules quote the execute shell gates
-    // on, so the advertised cost and odds can never drift from the resolved
-    // roll (the label previously advertised 10% while the roll resolved 15%).
-    actionCost: DEBATE_PREP_ACTION_COST,
+    actionCost: 1,
     fundCost: () => null,
     fundLabel: () => "Free",
-    effect: describeDebatePrepEffect(),
+    effect: "10% chance: +1 Debate",
     imageSlug: "debatePrep",
     imageAlt: "A private study set out for briefing work",
     category: "research",

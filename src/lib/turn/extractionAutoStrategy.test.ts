@@ -16,10 +16,9 @@ import { capacityRescaleRatio } from "@/lib/constants/capacityEconomy";
 vi.mock("@/lib/admin/spawnNppCorporation", () => ({
   generateNppCorpName: vi.fn(() => "Shortage Mining"),
   spawnNppCorporation: vi.fn(),
-  // The capital-state list gates latent nations (DD/RU map to ""), not planned
-  // economies: CN carries a real capital here, as do UKR/BLR/BAL upstream.
-  // Planned-economy exclusion is the marketization-dial gate inside the
-  // strategy, exercised below with a 1953 gameState year.
+  // Placement is gated on the authored capital-state list so market corps are
+  // never founded inside a planned economy. US/BR are market countries here;
+  // DD stands in for the planned economies, which map to "" upstream.
   NPP_CAPITAL_STATES: {
     US: "DC",
     BR: "SUDESTE",
@@ -278,64 +277,6 @@ describe("processExtractionAutoStrategy", () => {
     // has no business being founded there.
     expect(res.placed).toBe(0);
     expect(spawnNppCorporation).not.toHaveBeenCalled();
-  });
-
-  it("drops a placement candidate sited in a planned economy before attempting", async () => {
-    db.collectionMocks.gameState!.findOne.mockResolvedValue({
-      _id: "current",
-      currentYear: 1953,
-    });
-    db.collectionMocks.commodityPrices.find.mockReturnValue(
-      cursor([
-        {
-          commodity: "iron",
-          globalSupply: 200,
-          globalDemand: 1000,
-          stateSupply: { BEI: 0 },
-        },
-      ])
-    );
-    db.collectionMocks.stateResourceCapacity.find.mockReturnValue(
-      cursor([{ stateId: "BEI", countryId: "CN", resources: { iron: 10_000 } }])
-    );
-    db.collectionMocks.corporateSectors.find.mockReturnValue(cursor([]));
-
-    const res = await processExtractionAutoStrategy(db as unknown as Db, 10, ENABLED);
-
-    // CN carries a real capital in the map above but is command in 1953: the
-    // dial gate drops the candidate, so no spawn is attempted and no refusal
-    // is caught.
-    expect(res.placed).toBe(0);
-    expect(spawnNppCorporation).not.toHaveBeenCalled();
-  });
-
-  it("places the same candidate once its economy permits private enterprise", async () => {
-    db.collectionMocks.gameState!.findOne.mockResolvedValue({
-      _id: "current",
-      currentYear: 2019,
-    });
-    db.collectionMocks.commodityPrices.find.mockReturnValue(
-      cursor([
-        {
-          commodity: "iron",
-          globalSupply: 200,
-          globalDemand: 1000,
-          stateSupply: { BEI: 0 },
-        },
-      ])
-    );
-    db.collectionMocks.stateResourceCapacity.find.mockReturnValue(
-      cursor([{ stateId: "BEI", countryId: "CN", resources: { iron: 10_000 } }])
-    );
-    db.collectionMocks.corporateSectors.find.mockReturnValue(cursor([]));
-
-    const res = await processExtractionAutoStrategy(db as unknown as Db, 10, ENABLED);
-
-    expect(res.placed).toBe(1);
-    expect(spawnNppCorporation).toHaveBeenCalledWith(
-      db,
-      expect.objectContaining({ countryId: "CN", headquartersState: "BEI" })
-    );
   });
 
   it("blocks another mine only when the viability rollout is enforced", async () => {

@@ -38,13 +38,10 @@ function runtimeFixture(): string {
   touch(root, "README.txt");
   touch(root, "LICENSE.md");
   touch(root, ".next/static/chunks/app.js");
-  touch(root, ".next/static/chunks/app.js.map", "{}");
   touch(root, ".next/server/app.js");
   touch(root, ".next/server/chunks/ssr.js", 'require("mongodb-438b504308ffa4be");\n');
   touch(root, "public/ahd-logo.png");
   touch(root, "node_modules/mongodb/package.json", "{}");
-  touch(root, "node_modules/mongodb/README.md", "drop me");
-  touch(root, "node_modules/mongodb/LICENSE.md", "keep me");
   touch(root, ".next/node_modules/mongodb-traced/README.md", "Dependency documentation");
   touch(root, ".next/node_modules/mongodb-traced/LICENSE.md", "Dependency license");
   touch(root, "node_modules/sharp/package.json", "{}");
@@ -76,17 +73,12 @@ describe("payload allowlist classifier", () => {
     expect(shouldKeepPayloadPath("node_modules/mongodb-438b504308ffa4be/lib/index.js")).toBe(true);
     expect(shouldKeepPayloadPath("src/data/counties/CA.json")).toBe(true);
     expect(shouldKeepPayloadPath("content/changelog/public/1.8.0.md")).toBe(true);
-    expect(shouldKeepPayloadPath(".next/static/chunks/app.js.map")).toBe(false);
-    expect(shouldKeepPayloadPath(".next/server/app.js.map")).toBe(false);
     expect(shouldKeepPayloadPath("AGENTS.md")).toBe(false);
     expect(shouldKeepPayloadPath("docs/DESIGN.md")).toBe(false);
     expect(shouldKeepPayloadPath("src/app/cdn/route.ts")).toBe(false);
     expect(shouldKeepPayloadPath("src/app/cdn/route.test.ts")).toBe(false);
     expect(shouldKeepPayloadPath("content/changelog/unreleased/temp-sp-access.md")).toBe(false);
     expect(shouldKeepPayloadPath("scripts/sim/reports/plan.md")).toBe(false);
-    expect(shouldKeepPayloadPath(".next/static/chunks/app.js.map")).toBe(false);
-    expect(shouldKeepPayloadPath("node_modules/mongodb/README.md")).toBe(false);
-    expect(shouldKeepPayloadPath("node_modules/mongodb/LICENSE.md")).toBe(true);
   });
 
   it("matches the recorded 2.3.0 payload inventory", () => {
@@ -108,17 +100,10 @@ describe("payload allowlist apply", () => {
     expect(
       existsSync(path.join(root, "node_modules", "mongodb-438b504308ffa4be", "package.json"))
     ).toBe(true);
-    touch(root, ".next/static/chunks/app.js.map", "{}");
-    touch(root, "node_modules/mongodb/README.md", "docs");
     applyPayloadAllowlist(root);
     expect(existsSync(path.join(root, "server.js"))).toBe(true);
     expect(existsSync(path.join(root, "launch.mjs"))).toBe(true);
-    expect(existsSync(path.join(root, ".next/static/chunks/app.js.map"))).toBe(false);
-    expect(existsSync(path.join(root, "node_modules/mongodb/README.md"))).toBe(false);
     expect(existsSync(path.join(root, "src", "data", "npp-images.json"))).toBe(true);
-    expect(existsSync(path.join(root, ".next", "static", "chunks", "app.js.map"))).toBe(false);
-    expect(existsSync(path.join(root, "node_modules", "mongodb", "README.md"))).toBe(false);
-    expect(existsSync(path.join(root, "node_modules", "mongodb", "LICENSE.md"))).toBe(true);
     expect(existsSync(path.join(root, "AGENTS.md"))).toBe(false);
     expect(existsSync(path.join(root, "docs"))).toBe(false);
     expect(existsSync(path.join(root, "src", "app"))).toBe(false);

@@ -34,13 +34,6 @@ export interface StockListing {
   /** Shares available in the public float (0 = no shares on market) */
   publicFloat: number;
   /**
-   * Canonical tradability flag (#2033), persisted on the snapshot listing.
-   * Absent on pre-#2033 snapshots; readers fall back to the canonical
-   * `isTradableListing` predicate. False rows render a non-tradable state,
-   * never a return badge.
-   */
-  isTradable?: boolean;
-  /**
    * Venue this corporation lists on. `null` when its country has no configured
    * venue — those corps surface on the global board only. Mirrors
    * `StockExchangeListing.exchange`; keep the two in sync.
@@ -122,8 +115,6 @@ export interface CommodityData {
 export interface MarketCapPoint {
   turn: number;
   marketCap: number;
-  /** Raw capitalization when `marketCap` is the continuity-adjusted index. */
-  rawMarketCap?: number;
   /** Simulated intra-turn high for candlestick charting (absent on old records) */
   high?: number;
   /** Simulated intra-turn low for candlestick charting (absent on old records) */

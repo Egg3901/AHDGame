@@ -113,7 +113,6 @@ function createInitialTurnLogPhases(): TurnLog["phases"] {
     electionResolution: null,
     ukGovernment: null,
     ukLeadershipChallenges: null,
-    ukPartyConferences: null,
     perpetualElections: null,
     leadershipElections: null,
     leadershipVacated: null,
@@ -164,7 +163,6 @@ function createInitialTurnLogPhases(): TurnLog["phases"] {
     activityLogging: null,
     suspiciousDetection: null,
     tradeGrowthMirror: null,
-    brettonWoodsTurn: null,
     forexTurn: null,
   };
 }

@@ -1462,19 +1462,6 @@ describe("share price calculation", () => {
     expect(snapshot.actualSharePrice).toBe(Math.round(snapshot.actualSharePrice * 100) / 100);
   });
 
-  it("counts retained float-sale cash in the normal turn valuation", () => {
-    const corp = makeCorp({
-      liquidCapital: 200_000_000,
-      shareIssuanceProceeds: 100_000_000,
-      sharePrice: 0.5,
-      totalShares: 1_000_000,
-    });
-
-    const result = processSectors(baseLookups([corp], []), 1, new Date());
-
-    expect(result.corpSnapshots[0].actualSharePrice).toBe(200);
-  });
-
   it("subtracts issuedBondDebtByCorpId from balance-sheet equity (bond issuance neutral)", () => {
     // Two corps, identical sectors. corpB has $50M of issued bonds (proceeds already
     // reflected in its higher liquidCapital). After debt subtraction, prices match.

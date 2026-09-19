@@ -16,7 +16,6 @@ import {
   sanitizeStateTaxBases,
   type TaxBaseGravityContext,
 } from "@/lib/budget/revenue";
-import { federalSurplus } from "@/lib/budget/federalSurplus";
 
 /**
  * Per-turn fiscal base growth (the dynamic wage/trade application). The metric
@@ -184,15 +183,9 @@ export async function processFiscalBaseGrowth(
         const normalized = normalizeFederalTaxRates(budget.taxRates);
         if (normalized) {
           const revenue = await calculateFederalRevenue(db, normalized, String(budget._id));
-          // `surplus` is a cache of revenue.total - spending.total (see
-          // federalSurplus): a revenue-only write leaves it stale by exactly
-          // the grown amount every turn, which the end-of-turn invariant check
-          // reports as source drift (#1975). Persist the canonical value in
-          // the same guarded write; spending is untouched by this phase.
-          const surplus = federalSurplus({ revenue, spending: budget.spending });
           await db
             .collection<FederalBudget>("federalBudget")
-            .updateOne({ _id: budget._id }, { $set: { revenue, surplus } });
+            .updateOne({ _id: budget._id }, { $set: { revenue } });
         }
       }
       countriesProcessed += 1;

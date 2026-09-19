@@ -303,14 +303,7 @@ export const COUNTRY_BILL_PHASES: Partial<Record<CountryId, CountryBillPhaseEntr
 
 export interface CountryElectionPhaseEntry {
   name: string;
-  /**
-   * The turn registry passes the authoritative in-flight turn (`newTurn`)
-   * as `currentTurn`. Spawners must use it instead of the persisted
-   * `gameState.currentTurn`, which still holds the prior turn until the end
-   * of `processTurn` (#2060). Optional so bootstrap and admin callers that
-   * run outside a turn keep working: they fall back to the persisted turn.
-   */
-  fn: (gameNow: Date, currentTurn?: number) => Promise<unknown>;
+  fn: (gameNow: Date) => Promise<unknown>;
 }
 
 export const COUNTRY_ELECTION_PHASES: Partial<Record<CountryId, CountryElectionPhaseEntry[]>> = {
@@ -328,12 +321,7 @@ export const COUNTRY_ELECTION_PHASES: Partial<Record<CountryId, CountryElectionP
     // bootstrap), the spawner's fallback recomputes the identical Shugiin
     // canonical cycle, so the council still aligns with the Shugiin.
     { name: "jpRegionalCouncilElections", fn: ensureJPRegionalCouncilElections },
-    // Sangiin spawner takes a class filter before the turn, so the registry
-    // passes both through: natural class selection plus the in-flight turn.
-    {
-      name: "jpCouncillorElections",
-      fn: (gameNow, currentTurn) => ensureJPCouncillorElections(gameNow, undefined, currentTurn),
-    },
+    { name: "jpCouncillorElections", fn: ensureJPCouncillorElections },
     { name: "jpGovernorElections", fn: ensureJPGovernorElections },
   ],
   IE: [

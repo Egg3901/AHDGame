@@ -1,17 +1,14 @@
+import { createHash } from "crypto";
 import { NextResponse } from "next/server";
 import { handleRouteError } from "@/lib/api/errors";
 import { getDb } from "@/lib/mongodb";
 import { requireModerator } from "@/lib/api/requireModerator";
 import type { User, PoliticalParty } from "@/lib/db/types";
 import { eligibleIdentitySignals } from "@/lib/auth/identitySignals";
-import { loadRecentIdentityValues } from "@/lib/identityHistory/recentValues";
-import { hashSensitiveSignal } from "@/lib/utils/hashSignal";
 
-/** Hash a list of identity values, dropping any that hash to null. The client
- * grouper matches on these hashes, so a hash of one value must equal a hash of
- * the same value anywhere else on this route — which it does, same function. */
-function hashSignalList(values: string[] | undefined): string[] {
-  return (values ?? []).map(hashSensitiveSignal).filter((value): value is string => value !== null);
+function hashSensitiveSignal(value: string | null | undefined): string | null {
+  if (!value) return null;
+  return createHash("sha256").update(value).digest("hex").slice(0, 16);
 }
 
 // GET /api/moderator/users — List all non-admin users.
@@ -42,15 +39,8 @@ export async function GET() {
     );
 
     // One instant for the whole list so every row is judged against the same
-    // cutoff boundary — both the scalar eligibility below and the identity
-    // history window.
+    // cutoff boundary.
     const now = new Date();
-
-    const recentIdentity = await loadRecentIdentityValues(
-      db,
-      users.map((u) => u._id),
-      now
-    );
 
     return NextResponse.json({
       users: users.map((u) => {
@@ -81,14 +71,6 @@ export async function GET() {
           registrationFingerprintKey: hashSensitiveSignal(u.registrationFingerprint),
           lastFingerprintKey: hashSensitiveSignal(u.lastFingerprint),
           fingerprintCount: u.fingerprintHistory?.length ?? 0,
-          // Hashed, exactly like every other signal on this route. The raw
-          // arrays stay null so a moderator bundle has no path to a real IP.
-          historicalIps: null,
-          historicalFingerprints: null,
-          historicalIpKeys: hashSignalList(recentIdentity.get(u._id.toString())?.ips),
-          historicalFingerprintKeys: hashSignalList(
-            recentIdentity.get(u._id.toString())?.fingerprints
-          ),
           trackingId: null,
           trackingIdKey: hashSensitiveSignal(u.trackingId),
           deviceKey: null,

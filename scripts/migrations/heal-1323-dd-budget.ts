@@ -1,7 +1,7 @@
 /**
  * Heal for #1323 — the live corrections the code fixes cannot make on their own.
  *
- * The engine changes stop the bleeding going forward; four things are already
+ * The engine changes stop the bleeding going forward; three things are already
  * wrong in the database and stay wrong until they are written:
  *
  *   1. DD's `otherRevenueGdpShareBaseline`. The self-heal in `fiscalBaseGrowth`
@@ -29,25 +29,8 @@
  *      these itself, so this is belt-and-braces: it makes the repair immediate
  *      and verifiable rather than waiting for the next turn.
  *
- *   4. Stale persisted `annualRevenueV2` on DD's national enacted laws. The
- *      revenue side reprices `costModelV2.gdpRevenueFraction` against live GDP
- *      every turn, but the stored per-law figure is frozen at whatever base it
- *      was last written against (pre-reunification East Germany for the
- *      rescoped rows). Any reader of the stored field sees the stale number,
- *      so this rewrites each v2 law's figure as fraction x live base GDP -
- *      the same arithmetic `billEnactment` writes on enactment. Legacy laws
- *      with no `costModelV2` keep their persisted value; there is nothing to
- *      recompute them from.
- *
- * GUARDS. This script refuses to run against the wrong world: it aborts unless
- * the DD `federalBudget` carries currency DDM (EUR rows are pre-merger DE
- * snapshots, not the unified Germany) and unless DD owns at least one state.
- * It is idempotent: when every figure already matches, `--apply` writes
- * nothing and says so.
- *
- * DRY RUN BY DEFAULT. Pass `--apply` to write. Prints stored (before) and
- * projected (after) revenue, spending and deficit so the result can be checked
- * before anything is committed to.
+ * DRY RUN BY DEFAULT. Pass `--apply` to write. Prints the resulting budget so
+ * the deficit can be checked before anything is committed to.
  *
  *   npx tsx scripts/migrations/heal-1323-dd-budget.ts
  *   npx tsx scripts/migrations/heal-1323-dd-budget.ts --apply
@@ -58,7 +41,6 @@ import * as path from "path";
 import type { Db } from "mongodb";
 import type {
   EconomicGrowthFactors,
-  EnactedLaw,
   FederalBudget,
   FederalTaxBases,
   StateBudget,
@@ -73,7 +55,6 @@ import {
   sanitizeStateTaxBases,
   type TaxBaseGravityContext,
 } from "@/lib/budget/revenue";
-import { keepLatestActiveLawPerType } from "@/lib/budget/keepLatestActiveLawPerType";
 
 dotenv.config({ path: path.resolve(process.cwd(), ".env.local") });
 
@@ -95,19 +76,11 @@ async function main() {
   const db: Db = client.db();
   try {
     console.log(APPLY ? "=== APPLY ===" : "=== DRY RUN (pass --apply to write) ===");
-    console.log(`    database              ${db.databaseName}`);
 
     const budget = await db.collection<FederalBudget>("federalBudget").findOne({
       countryId: COUNTRY,
     });
     if (!budget) throw new Error("no DD federalBudget");
-    // Wrong-world guard: EUR rows are pre-merger DE snapshots rescoped onto the
-    // DD country id, not the unified Germany. Only a DDM book is healable.
-    if (budget.currencyCode !== "DDM") {
-      throw new Error(
-        `refusing: DD federalBudget carries currency ${budget.currencyCode ?? "(none)"}, expected DDM`
-      );
-    }
     const states = await db
       .collection<State>("states")
       .find({ countryId: COUNTRY })
@@ -118,26 +91,7 @@ async function main() {
         population: 1,
       })
       .toArray();
-    if (states.length === 0) throw new Error("refusing: DD owns no states in this world");
     const liveGdp = states.reduce((sum, s) => sum + (s.gdp ?? 0), 0) * 1_000_000;
-    console.log(`    DD states             ${states.length}`);
-
-    // ── 0. stored book (before) ─────────────────────────────────────────────
-    // The reconciliation baseline: what the ledger says right now, before any
-    // write. Section [projection] below prints the same three lines after the
-    // heal so the two can be compared directly.
-    const beforeRevenue = budget.revenue?.total ?? 0;
-    const beforeSpending = budget.spending?.total ?? 0;
-    const beforeGdp = budget.gdp ?? liveGdp;
-    console.log(`\n[0] stored book (before)`);
-    console.log(`    revenue               ${B(beforeRevenue)}`);
-    console.log(`    spending              ${B(beforeSpending)}`);
-    console.log(
-      `    deficit               ${B(beforeRevenue - beforeSpending)}  (${(
-        ((beforeRevenue - beforeSpending) / beforeGdp) *
-        100
-      ).toFixed(1)}% of GDP)`
-    );
 
     // ── 1. non-tax share ────────────────────────────────────────────────────
     const currentOther = budget.revenue?.other ?? 0;
@@ -174,13 +128,6 @@ async function main() {
       lastUpdated: new Date(),
     };
     const keys = Object.keys(shareBaseline) as (keyof FederalTaxBases)[];
-    // No baseline, no target: the fixed point is computed FROM these shares, so
-    // with none recorded there is nothing to re-anchor to. This happens when the
-    // heal runs before `fiscalBaseGrowth` has ever self-healed the field (it
-    // snapshots the current shares on the first turn it finds it absent). Heal
-    // the other three items now, run one turn, then re-run this heal - do not
-    // report the book healed while the drift is still in it.
-    const basesBlocked = keys.length === 0;
     let probe: FederalTaxBases = { ...(budget.taxBases as FederalTaxBases) };
     for (const key of keys) {
       const share = shareBaseline[key];
@@ -199,10 +146,6 @@ async function main() {
         ` (live GDP ${B(liveGdp)}, rates w/t/g ` +
         `${factors.wageGrowth.toFixed(1)}/${factors.tradeGrowth.toFixed(1)}/${factors.gdpGrowth.toFixed(1)})`
     );
-    let basesStale = false;
-    if (basesBlocked) {
-      console.log("    no taxBaseGdpShareBaseline on this book - skipping; re-run after one turn");
-    }
     for (const key of keys) {
       const share = shareBaseline[key];
       if (share == null || !(share > 0)) continue;
@@ -210,9 +153,6 @@ async function main() {
       const settled = probe[key] / probeGdp / share;
       const after = liveGdp * share * settled;
       healedBases[key] = after;
-      if (Math.abs(after - before) > Math.max(1_000_000, 0.001 * Math.abs(after))) {
-        basesStale = true;
-      }
       console.log(
         `    ${String(key).padEnd(26)} ${B(before).padStart(9)} -> ${B(after).padStart(9)}  (${(
           before /
@@ -249,75 +189,13 @@ async function main() {
     }
     if (stateFixes.length === 0) console.log("    (none)");
 
-    // ── 4. stale persisted annualRevenueV2 ───────────────────────────────────
-    // Same read the revenue side does, so the stored per-law figures can be
-    // compared against exactly what the next turn will compute from them.
-    // Fresh value is fraction x live base GDP - the arithmetic `billEnactment`
-    // writes on enactment (`computeLawCost(...).revenue` with a null band
-    // index prices revenue as pure fraction x GDP).
-    const lawDocs = await db
-      .collection<EnactedLaw>("enactedLaws")
-      .find(
-        {
-          scope: "national",
-          countryId: COUNTRY,
-          repealedAt: { $exists: false },
-          $or: [{ annualRevenueV2: { $gt: 0 } }, { "costModelV2.gdpRevenueFraction": { $gt: 0 } }],
-        },
-        {
-          projection: {
-            annualRevenueV2: 1,
-            costModelV2: 1,
-            legislationTypeId: 1,
-            stateId: 1,
-            enactedAt: 1,
-          },
-        }
-      )
-      .toArray();
-    const lawFixes: { _id: unknown; type: string; before: number; after: number }[] = [];
-    for (const law of keepLatestActiveLawPerType(lawDocs)) {
-      const fraction = law.costModelV2?.gdpRevenueFraction;
-      if (fraction == null || !(fraction > 0)) continue; // legacy: nothing to recompute from
-      const fresh = fraction * liveGdp;
-      const stored = law.annualRevenueV2 ?? 0;
-      if (Math.abs(fresh - stored) > Math.max(1_000_000, 0.001 * Math.abs(fresh))) {
-        lawFixes.push({
-          _id: law._id,
-          type: law.legislationTypeId ?? "(untyped)",
-          before: stored,
-          after: fresh,
-        });
-      }
-    }
-    // Engine-equivalent aggregate: deduped v2 fractions repriced on the live
-    // base, plus persisted values for legacy laws the engine cannot reprice.
-    const lawRevenue = keepLatestActiveLawPerType(lawDocs).reduce((sum, law) => {
-      const fraction = law.costModelV2?.gdpRevenueFraction;
-      if (fraction != null) return sum + fraction * liveGdp;
-      return sum + (law.annualRevenueV2 ?? 0);
-    }, 0);
-    console.log(`\n[4] stale persisted annualRevenueV2 (${lawDocs.length} national laws read)`);
-    console.log(`    lawRevenue repriced    ${B(lawRevenue)}`);
-    if (lawFixes.length === 0) {
-      console.log("    (none stale)");
-    } else {
-      const staleBefore = lawFixes.reduce((sum, f) => sum + f.before, 0);
-      const staleAfter = lawFixes.reduce((sum, f) => sum + f.after, 0);
-      console.log(`    ${lawFixes.length} stale v2 laws  ${B(staleBefore)} -> ${B(staleAfter)}`);
-      for (const fix of lawFixes) {
-        console.log(
-          `      ${fix.type.padEnd(40)} ${B(fix.before).padStart(9)} -> ${B(fix.after).padStart(9)}`
-        );
-      }
-    }
-
     // ── projected budget ────────────────────────────────────────────────────
     // What the next turn's recompute will produce off the healed figures, so the
     // deficit can be judged BEFORE anything is written. Mirrors
     // calculateFederalRevenue's tax lines and applyEraRevenueCap.
     const rates = budget.taxRates;
     const rate = (k: keyof NonNullable<typeof rates>) => (Number(rates?.[k] ?? 0) || 0) / 100;
+    const lawRevenue = 0.0112 * liveGdp; // Sigma gdpRevenueFraction over DD's active v2 laws
     const rawTake =
       healedBases.taxableIncome * rate("incomeTax") +
       healedBases.domesticCorporateProfits * rate("domesticCorporateTax") +
@@ -341,7 +219,7 @@ async function main() {
     const spending = budget.spending?.total ?? 0;
     const grantPool =
       100 * states.reduce((sum, s) => sum + ((s as { population?: number }).population ?? 0), 0);
-    console.log(`\n[projection] next turn's recompute off these figures (after)`);
+    console.log(`\n[projection] next turn's recompute off these figures`);
     console.log(
       `    raw tax take          ${B(rawTake)}  (${(share * 100).toFixed(1)}% of GDP, knee ${(KNEE * 100).toFixed(0)}%)`
     );
@@ -359,57 +237,29 @@ async function main() {
     );
     console.log(`    treasury              ${B(budget.treasuryBalance)}`);
 
-    const shareStale =
-      budget.otherRevenueGdpShareBaseline == null ||
-      Math.abs(budget.otherRevenueGdpShareBaseline - DD_AUTHORED_OTHER_SHARE) > 1e-9;
-    const federalStale = shareStale || basesStale;
-    const writesPending = (federalStale ? 1 : 0) + stateFixes.length + lawFixes.length;
-
     if (!APPLY) {
-      console.log(
-        `\nNothing written. ${writesPending} document(s) would change. Re-run with --apply.` +
-          (basesBlocked ? " (plus the blocked base re-anchor once a baseline exists)" : "")
-      );
-      return;
-    }
-    if (writesPending === 0 && !basesBlocked) {
-      console.log("\nAlready healed: every figure matches. Wrote nothing.");
-      return;
-    }
-    if (writesPending === 0) {
-      console.log("\nNot healed: tax bases still drifted with no baseline to re-anchor to.");
-      console.log("Run one turn, then re-run this heal.");
+      console.log("\nNothing written. Re-run with --apply.");
       return;
     }
 
-    if (federalStale) {
-      await db.collection<FederalBudget>("federalBudget").updateOne(
-        { _id: budget._id },
-        {
-          $set: {
-            otherRevenueGdpShareBaseline: DD_AUTHORED_OTHER_SHARE,
-            taxBases: healedBases,
-            updatedAt: new Date(),
-          },
-        }
-      );
-    }
+    await db.collection<FederalBudget>("federalBudget").updateOne(
+      { _id: budget._id },
+      {
+        $set: {
+          otherRevenueGdpShareBaseline: DD_AUTHORED_OTHER_SHARE,
+          taxBases: healedBases,
+          updatedAt: new Date(),
+        },
+      }
+    );
     for (const fix of stateFixes) {
       await db
         .collection<StateBudget>("stateBudgets")
         .updateOne({ stateId: fix.stateId, countryId: COUNTRY }, { $set: { taxBases: fix.bases } });
     }
-    for (const fix of lawFixes) {
-      await db
-        .collection<EnactedLaw>("enactedLaws")
-        .updateOne(
-          { _id: fix._id as object },
-          { $set: { annualRevenueV2: fix.after, updatedAt: new Date() } }
-        );
-    }
     console.log(
-      `\nWrote: ${federalStale ? 1 : 0} federalBudget, ${stateFixes.length} stateBudgets, ` +
-        `${lawFixes.length} enactedLaws. Revenue and spending recompute on the next turn.`
+      `\nWrote: 1 federalBudget, ${stateFixes.length} stateBudgets. ` +
+        `Revenue and spending recompute on the next turn.`
     );
   } finally {
     await client.close();

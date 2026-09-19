@@ -2,7 +2,6 @@ import type { ObjectId } from "mongodb";
 import type { AltSignal } from "@/lib/db/types/altDetection";
 import type { StoredFingerprintComponents } from "@/lib/utils/fingerprint";
 import { isCloudflareEdgeIp } from "@/lib/utils/cloudflareIpRanges";
-import { maskIp } from "@/lib/utils/maskIp";
 import { isDegenerateFingerprint } from "@/lib/utils/degenerateFingerprints";
 import { anchorComponentsMatch } from "@/lib/turn/suspiciousDetection";
 import {
@@ -202,12 +201,15 @@ export { isDegenerateFingerprint } from "@/lib/utils/degenerateFingerprints";
  * VPN-classified (datacenter/CGNAT stand-in) rather than residential/mobile. */
 export const IP_DATACENTER_CGNAT_CAP = 0.15;
 
-// Re-exported from a leaf module. Consumers that need ONLY the mask (the
-// identity-history reader) import `@/lib/utils/maskIp` directly, so they do not
-// pull this module's `@/lib/turn/suspiciousDetection` value import with them.
-// Imported rather than bare-re-exported because this module calls it internally,
-// and `export ... from` does not bind the name in local scope.
-export { maskIp };
+export function maskIp(ip: string): string {
+  if (ip.includes(":")) {
+    const parts = ip.split(":");
+    return `${parts[0] ?? ""}:${parts[1] ?? ""}::xxxx`;
+  }
+  const parts = ip.split(".");
+  if (parts.length === 4) return `${parts[0]}.${parts[1]}.${parts[2]}.xxx`;
+  return "xxx.xxx.xxx.xxx";
+}
 
 /** First three IPv4 octets, for the `/24` subnet fallback signal. `null` for
  * non-IPv4 (IPv6, malformed) addresses — subnet sharing isn't evaluated there. */

@@ -143,7 +143,6 @@ export type FinancialTxType =
 
   // Resource prospecting + extraction contracts
   | "corp_prospecting_cost" // corp pays to launch a geological survey
-  | "corp_tech_unlock" // corp cash spent unlocking a sector-tech-tree node
   | "govt_prospecting_cost" // national/state government funds a survey
   | "contract_signing_fee" // corp pays a one-time fee on accepting a contract
   | "contract_royalty_payment" // corp pays a per-turn extraction royalty

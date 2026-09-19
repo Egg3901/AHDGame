@@ -945,6 +945,59 @@ export function plantsCapacityScaledUnits(args: {
 }
 
 /**
+ * Scalar half of the canonical plants basis: measured output through the
+ * shared scale chain plus the arsenal-retained share.
+ *
+ * The world supply ledger multiplies diverted output out of supply, so an
+ * offer built without the same leg sits in a larger unit basis and trips the
+ * clearing invariant while depressing fills. Defaults retain everything, so
+ * callers that do not pass the leg are unchanged.
+ */
+export function scaleMeasuredProducedUnits(args: {
+  producedUnits: number | null | undefined;
+  isNatcorp: boolean;
+  embargoSupplyFactor?: number | null;
+  militaryRetainedFraction?: number | null;
+}): number | null {
+  const scaled = plantsSupplyScaledUnits({
+    producedUnits: args.producedUnits,
+    isNatcorp: args.isNatcorp,
+    embargoSupplyFactor: args.embargoSupplyFactor,
+  });
+  if (scaled == null) return null;
+  // Raw multiply, like the ledger leg this replaces: callers pass a [0,1]
+  // retained share (the ledger builds 1 - clamped diversion), and absent
+  // retains everything. NaN propagates to NaN so downstream `> 0` guards skip
+  // exactly as before.
+  return scaled * (args.militaryRetainedFraction ?? 1);
+}
+
+/**
+ * THE canonical plants basis: measured output to per-commodity market units
+ * through one chain (scale legs, mix split, arsenal retention).
+ *
+ * The world supply ledger and the clearing offer MUST both build plants units
+ * through this function (or its scalar half plus commodityMixWeight on a
+ * uniformly scaled base table) or the book and the ledger sit in different
+ * units. Mix weights are ratios of rate/base terms, so any uniformly scaled
+ * base table yields identical weights; callers pass their era table and the
+ * basis stays one by construction.
+ */
+export function canonicalPlantsUnitsForCommodity(args: {
+  producedUnits: number | null | undefined;
+  isNatcorp: boolean;
+  embargoSupplyFactor?: number | null;
+  militaryRetainedFraction?: number | null;
+  supplyRates: Partial<Record<CommodityType, number>>;
+  basePrices: Record<CommodityType, number>;
+  commodity: CommodityType;
+}): number {
+  const scaled = scaleMeasuredProducedUnits(args);
+  if (!(scaled != null && scaled > 0)) return 0;
+  return scaled * commodityMixWeight(args.supplyRates, args.basePrices, args.commodity);
+}
+
+/**
  * One commodity's share of a sector's output mix, by the same rate/basePrice
  * weights `impliedOutputUnits` (capacityEconomy) uses.
  *
@@ -2039,7 +2092,16 @@ export function computeRawSupplyDemand(
    * transition. Production passes a factor that reaches exactly 0, after which
    * adding Retail supply can never create Retail demand.
    */
-  retailLegacyDemandFactor = 1
+  retailLegacyDemandFactor = 1,
+  /**
+   * Base-price table for the plants measured-production mix split (issue
+   * #2054). This is the ONE canonical basis the clearing offer splits on as
+   * well: mix weights are ratios of rate/base terms, so any uniformly scaled
+   * table gives identical weights, and passing the era table here keeps the
+   * ledger and the book on literally the same table. Defaults to the modern
+   * table, which is weight-identical, so every existing caller is unchanged.
+   */
+  ledgerBasePrices: Record<CommodityType, number> = COMMODITY_BASE_PRICES
 ): {
   global: Map<CommodityType, { supply: number; demand: number }>;
   byState: Map<string, Map<CommodityType, { supply: number; demand: number }>>;
@@ -2194,10 +2256,19 @@ export function computeRawSupplyDemand(
       // D12: a mothballed plant is cold — it supplies nothing to the world.
       if (plantsMothballed) continue;
       if (plantsSupplyUnits != null && plantsSupplyRates) {
-        const units =
-          plantsSupplyUnits *
-          commodityMixWeight(plantsSupplyRates, COMMODITY_BASE_PRICES, commodity) *
-          militaryRetained;
+        // Canonical plants basis (issue #2054): the same chain the clearing
+        // offer builds through, so the book and the ledger cannot sit in
+        // different units. Numerically identical to the leg it replaces (mix
+        // weights are scale-free and the military leg matches).
+        const units = canonicalPlantsUnitsForCommodity({
+          producedUnits: sector.producedUnits,
+          isNatcorp: sector.isNatcorp === true,
+          embargoSupplyFactor: sector.embargoSupplyFactor,
+          militaryRetainedFraction: militaryRetained,
+          supplyRates: plantsSupplyRates,
+          basePrices: ledgerBasePrices,
+          commodity,
+        });
         if (units > 0) {
           global.get(commodity)!.supply += units;
           stateMap.get(commodity)!.supply += units;

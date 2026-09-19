@@ -141,38 +141,3 @@ describe("NppRosterPanel", () => {
     expect(screen.getByText("2 selected")).toBeTruthy();
   });
 });
-
-it("opens the linked NPP in its region and preserves a closed drawer on refresh", () => {
-  const npps = NPPS.map((n) => ({ ...n, homeState: n.id === "a" ? "CA" : "NY" }));
-  const props = {
-    scope: "national" as const,
-    npps,
-    actions: ACTIONS,
-    onExecute: vi.fn(),
-    initialNppId: "b",
-    initialState: "CA",
-  };
-  const { rerender } = render(<NppRosterPanel {...props} />);
-  expect((screen.getByRole("combobox", { name: "State" }) as HTMLSelectElement).value).toBe("NY");
-  expect(screen.getByRole("button", { name: "Close" })).toBeTruthy();
-  expect(screen.queryByRole("link", { name: "Ada Low" })).toBeNull();
-  fireEvent.click(screen.getByRole("button", { name: "Close" }));
-  rerender(<NppRosterPanel {...props} npps={[...npps]} />);
-  expect(screen.queryByRole("button", { name: "Close" })).toBeNull();
-  rerender(<NppRosterPanel {...props} initialNppId="a" />);
-  expect(screen.getByRole("button", { name: "Close" })).toBeTruthy();
-  expect((screen.getByRole("combobox", { name: "State" }) as HTMLSelectElement).value).toBe("CA");
-});
-
-it("does not open an NPP outside the authorized roster", () => {
-  render(
-    <NppRosterPanel
-      scope="state"
-      npps={NPPS.map((n) => ({ ...n, homeState: "CA" }))}
-      actions={ACTIONS}
-      onExecute={vi.fn()}
-      initialNppId="missing"
-    />
-  );
-  expect(screen.queryByRole("button", { name: "Close" })).toBeNull();
-});

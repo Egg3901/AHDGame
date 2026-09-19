@@ -31,8 +31,6 @@
     "content/changelog/dev/1.8.0.md",
     "scripts/seeds/legislationTypes.admin.ts",
     "scripts/sim/reports/atomic-defense-appropriation.md",
-    "shared/constants/README.md",
-    ".next/static/chunks/app.js.map",
-    ".next/server/app.js.map"
+    "shared/constants/README.md"
   ]
 }

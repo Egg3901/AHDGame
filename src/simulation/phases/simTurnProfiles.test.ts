@@ -93,12 +93,6 @@ describe("simTurnProfiles — elections-only turn-phase gate", () => {
     expect(ELECTIONS_SKIP_PHASES.has("nppUnionBehavior")).toBe(true);
     expect(getSimTurnPhasePredicate("elections-only")!("nppUnionBehavior")).toBe(false);
   });
-
-  it("skips the Bretton Woods tracker with the frozen forex economy", () => {
-    expect(BASE_TURN_PHASE_NAMES).toContain("brettonWoodsTurn");
-    expect(ELECTIONS_SKIP_PHASES.has("brettonWoodsTurn")).toBe(true);
-    expect(getSimTurnPhasePredicate("elections-only")!("brettonWoodsTurn")).toBe(false);
-  });
 });
 
 describe("simTurnProfiles: economy-only turn-phase gate", () => {
@@ -112,7 +106,6 @@ describe("simTurnProfiles: economy-only turn-phase gate", () => {
       "economicModel",
       "inflationRecalc",
       "commandEconomy",
-      "brettonWoodsTurn",
       "forexTurn",
       "indexFunds",
       "ledgerReconcile",
@@ -147,7 +140,6 @@ describe("simTurnProfiles: macro-only turn-phase gate", () => {
       "economicModel",
       "inflationRecalc",
       "commandEconomy",
-      "brettonWoodsTurn",
       "forexTurn",
     ]) {
       expect(MACRO_ONLY_PHASES.has(phase)).toBe(true);

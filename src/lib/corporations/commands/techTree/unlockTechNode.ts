@@ -1,15 +1,6 @@
-import * as Sentry from "@sentry/nextjs";
 import type { Db } from "mongodb";
 import type { Corporation } from "@/lib/db/types";
-import type { CurrencyCode } from "@/lib/constants/currencies";
 import { corpDailyGrossRevenueLocal } from "@/lib/corporations/dailyGrossRevenue";
-import { resolveCorpLiquidCurrencyCode } from "@/lib/currency/corporationCapital";
-import { emitTxStrict } from "@/lib/financialTxLog/emit";
-import {
-  buildTechUnlockRefundUpdate,
-  buildTechUnlockTxEntry,
-  refundSpecForNode,
-} from "@/lib/corporations/techTree/techUnlockLedger";
 import {
   canUnlock,
   getCommittedLane,
@@ -145,65 +136,6 @@ export async function unlockTechNode(
       ok: false,
       status: 409,
       error: "Unlock could not be completed — the tech state changed. Please retry.",
-    };
-  }
-
-  // The cash debit above committed: record the matching finance-history debit
-  // in the same turn and currency (ticket #1998). The strict emit retries
-  // transient insert failures and adopts an applied-but-unacknowledged row;
-  // a persistent failure rolls the unlock back so a successful debit can
-  // never be left with no visible entry.
-  const currencyCode: CurrencyCode = resolveCorpLiquidCurrencyCode(corporation) ?? "USD";
-  try {
-    await emitTxStrict(
-      db,
-      buildTechUnlockTxEntry({
-        corporationId: corporation._id,
-        corporationName: corporation.name ?? "Corporation",
-        corporationSequentialId: corporation.sequentialId,
-        nodeId: node.id,
-        nodeName: node.name,
-        decadeId: node.decadeId,
-        lane: node.lane,
-        slot: node.slot,
-        rdCost: node.cost,
-        cashCost,
-        currencyCode,
-        turn,
-        createdAt: new Date(),
-        alreadyOwned: [...(corporation.unlockedTechNodeIds ?? [])],
-      })
-    );
-  } catch (err) {
-    Sentry.captureException(err, {
-      extra: {
-        phase: "unlockTechNode.ledger",
-        corpId: corporation._id.toString(),
-        nodeId: node.id,
-        turn,
-      },
-    });
-    try {
-      await db
-        .collection<Corporation>("corporations")
-        .updateOne(
-          { _id: corporation._id },
-          buildTechUnlockRefundUpdate(refundSpecForNode(node, cashCost, committing))
-        );
-    } catch (refundErr) {
-      Sentry.captureException(refundErr, {
-        extra: {
-          phase: "unlockTechNode.ledgerRefund",
-          corpId: corporation._id.toString(),
-          nodeId: node.id,
-          turn,
-        },
-      });
-    }
-    return {
-      ok: false,
-      status: 500,
-      error: "Unlock could not be recorded - no cash was charged. Please retry.",
     };
   }
 

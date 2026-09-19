@@ -5,7 +5,7 @@ import { ensureRegionalDelegateElections, seatsFromRegionField } from "../shared
  * election. Mirrors `ensureCNElections` — one multi-seat regional election
  * per region, anchored to the preset's `brChamber` cycle anchor.
  */
-export async function ensureBRElections(now: Date, inFlightTurn?: number): Promise<void> {
+export async function ensureBRElections(now: Date): Promise<void> {
   await ensureRegionalDelegateElections(
     {
       countryId: "BR",
@@ -14,8 +14,7 @@ export async function ensureBRElections(now: Date, inFlightTurn?: number): Promi
       openPrimaryImmediately: true,
       label: "Câmara",
     },
-    now,
-    inFlightTurn
+    now
   );
 }
 
@@ -36,7 +35,7 @@ export async function ensureBRElections(now: Date, inFlightTurn?: number): Promi
  * SEATS every 4 years; this elects every seat in a region together every 4
  * years instead, for lack of per-seat class data at the seed layer).
  */
-export async function ensureBRSenateElections(now: Date, inFlightTurn?: number): Promise<void> {
+export async function ensureBRSenateElections(now: Date): Promise<void> {
   await ensureRegionalDelegateElections(
     {
       countryId: "BR",
@@ -45,8 +44,7 @@ export async function ensureBRSenateElections(now: Date, inFlightTurn?: number):
       openPrimaryImmediately: true,
       label: "Senate",
     },
-    now,
-    inFlightTurn
+    now
   );
 }
 

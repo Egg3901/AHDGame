@@ -111,11 +111,11 @@ export async function GET(request: Request) {
       points: history.map((h) => {
         let marketCap: number;
         if (exchange === "global") {
-          marketCap = h.globalMarketIndex ?? h.globalMarketCap;
+          marketCap = h.globalMarketCap;
         } else {
           const exData = h.exchangeCaps?.[exchange];
           if (exData) {
-            marketCap = exData.marketIndex ?? exData.marketCap;
+            marketCap = exData.marketCap;
           } else {
             // Legacy fallback
             const LEGACY: Record<string, number> = {

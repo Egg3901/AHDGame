@@ -138,16 +138,14 @@ export function buildDelegateSeatHealOps(
  */
 export async function ensureRegionalDelegateElections(
   spec: RegionalDelegateSpec,
-  now: Date,
-  inFlightTurn?: number
+  now: Date
 ): Promise<void> {
   const db = await getDb();
   if (spec.statusGated) {
     const gate = spec.electionsLiveGate ?? countryElectionsLive;
     if (!(await gate(db, spec.countryId))) return;
   }
-  const { currentTurn: persistedTurn, ctx } = await getCurrentTurnAndCtx(db);
-  const currentTurn = inFlightTurn ?? persistedTurn;
+  const { currentTurn, ctx } = await getCurrentTurnAndCtx(db);
 
   const regions = await db
     .collection<State>("states")
@@ -286,8 +284,7 @@ export async function ensureEasternBlocAssemblyElections(
   countryId: CountryId,
   electionType: string,
   label: string,
-  now: Date,
-  inFlightTurn?: number
+  now: Date
 ): Promise<void> {
   await ensureRegionalDelegateElections(
     {
@@ -299,8 +296,7 @@ export async function ensureEasternBlocAssemblyElections(
       electionsLiveGate: easternBlocElectionsLive,
       label,
     },
-    now,
-    inFlightTurn
+    now
   );
 }
 
@@ -395,13 +391,11 @@ export async function ruElectionsLive(db: Db, _countryId: CountryId = "RU"): Pro
 export async function ensureBetaParliamentElections(
   countryId: CountryId,
   electionType: string,
-  now: Date,
-  inFlightTurn?: number
+  now: Date
 ): Promise<void> {
   const db = await getDb();
   if (!(await countryElectionsLive(db, countryId))) return;
-  const { currentTurn: persistedTurn, ctx } = await getCurrentTurnAndCtx(db);
-  const currentTurn = inFlightTurn ?? persistedTurn;
+  const { currentTurn, ctx } = await getCurrentTurnAndCtx(db);
 
   const regions = await db
     .collection<State>("states")
@@ -570,13 +564,11 @@ export async function ensureBetaParliamentElections(
 export async function ensureBetaSenateElections(
   countryId: CountryId,
   electionType: string,
-  now: Date,
-  inFlightTurn?: number
+  now: Date
 ): Promise<void> {
   const db = await getDb();
   if (!(await countryElectionsLive(db, countryId))) return;
-  const { currentTurn: persistedTurn, ctx } = await getCurrentTurnAndCtx(db);
-  const currentTurn = inFlightTurn ?? persistedTurn;
+  const { currentTurn, ctx } = await getCurrentTurnAndCtx(db);
 
   const regions = await db
     .collection<State>("states")
@@ -700,12 +692,10 @@ export async function ensureSecededChamberElections(
   countryId: CountryId,
   electionType: string,
   now: Date,
-  opts?: { seatsByRegion?: Record<string, number>; seatsPerRegion?: number },
-  inFlightTurn?: number
+  opts?: { seatsByRegion?: Record<string, number>; seatsPerRegion?: number }
 ): Promise<void> {
   const db = await getDb();
-  const { currentTurn: persistedTurn, ctx } = await getCurrentTurnAndCtx(db);
-  const currentTurn = inFlightTurn ?? persistedTurn;
+  const { currentTurn, ctx } = await getCurrentTurnAndCtx(db);
 
   const regions = await db
     .collection<State>("states")
@@ -857,12 +847,10 @@ export const IE_LOCAL_COUNCIL_SEATS: Record<string, number> = {
 export async function ensureRegionalGovernorElections(
   countryId: CountryId,
   now: Date,
-  allowedStateIds?: ReadonlySet<string>,
-  inFlightTurn?: number
+  allowedStateIds?: ReadonlySet<string>
 ): Promise<void> {
   const db = await getDb();
-  const { currentTurn: persistedTurn, ctx } = await getCurrentTurnAndCtx(db);
-  const currentTurn = inFlightTurn ?? persistedTurn;
+  const { currentTurn, ctx } = await getCurrentTurnAndCtx(db);
 
   const states = await db
     .collection<State>("states")
@@ -1003,8 +991,7 @@ export const UK_GOVERNOR_REGIONS: ReadonlySet<string> = new Set(["SCO", "WAL", "
  * the existing doc with created=false.
  */
 export async function ensurePresidentialElection(
-  now: Date,
-  inFlightTurn?: number
+  now: Date
 ): Promise<{ message: string; electionId: string; created: boolean }> {
   const db = await getDb();
   const elections = db.collection<Election>("elections");
@@ -1024,8 +1011,7 @@ export async function ensurePresidentialElection(
   // Resolve canonical LARP timing for the next cycle. Falls back to a
   // now-anchored doc when the canonical window is unreachable (heavy admin
   // acceleration, far-past gate failure) so the recovery button still works.
-  const { currentTurn: persistedTurn, ctx } = await getCurrentTurnAndCtx(db);
-  const currentTurn = inFlightTurn ?? persistedTurn;
+  const { currentTurn, ctx } = await getCurrentTurnAndCtx(db);
   const canonical = pickNextCanonicalCycle({
     electionType: "president",
     prevCycle,

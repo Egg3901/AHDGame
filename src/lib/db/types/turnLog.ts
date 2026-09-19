@@ -195,15 +195,6 @@ export interface TurnLog {
       removed: number;
     } | null;
 
-    ukPartyConferences: {
-      scheduled: number;
-      opened: number;
-      completed: number;
-      ratified: number;
-      expired: number;
-      payoffs: number;
-    } | null;
-
     perpetualElections: {
       electionsCreated: number;
     } | null;
@@ -643,20 +634,6 @@ export interface TurnLog {
     } | null;
 
     tradeGrowthMirror?: { countriesUpdated: number } | null;
-
-    /**
-     * Bretton Woods exit tracker (issue #7). Runs after inflationRecalc (whose
-     * settled US rate the gold-cover drain reads) and before forexTurn (which
-     * applies the persisted regime's band and drift). Zeroes when the gate is
-     * off: disabled, full cover, nothing suspended or floated.
-     */
-    brettonWoodsTurn?: {
-      enabled: boolean;
-      goldCover: number | null;
-      suspended: string[];
-      floated: string[];
-      currenciesProcessed: number;
-    } | null;
 
     forexTurn?: {
       countriesUpdated: number;

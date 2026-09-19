@@ -40,7 +40,6 @@ import { processFiscalBaseGrowth } from "@/lib/turn/fiscalBaseGrowth";
 import { processEconomicModelTurn } from "@/lib/turn/economicModelTurn";
 import { mirrorTradeGrowth } from "@/lib/turn/tradeGrowthMirror";
 import { recalculateInflationPerTurn } from "@/lib/turn/inflationRecalc";
-import { processBrettonWoodsTurn } from "@/lib/turn/brettonWoodsTurn";
 import { processCommandEconomyTurn } from "@/lib/turn/commandEconomyTurn";
 import { processForexTurn } from "@/lib/turn/forexTurn";
 import { isLedgerShadowEnabledFromConfig } from "@/lib/ledger/featureFlag";
@@ -110,11 +109,8 @@ export const stateEffectsAndNationalAggregationPhase: TurnPhaseAdapter = {
     //    always meant to compose with, not race, the policy recompute).
     // Write mechanics ($set vs $inc) are deliberately unchanged in this fix.
     const serializedStateMetricsWriters = (async () => {
-      // Pass the authoritative turn-context year: the persisted
-      // gameState.currentYear is only stamped at turn end, so reloading it
-      // inside would gate year-boundary openings one turn late (#2059).
       const crisisResult = await runtime.runPhase("crisisTurn", () =>
-        processCrisisTurn(db, newTurn, currentYear)
+        processCrisisTurn(db, newTurn)
       );
       // Intelligence upkeep resolves before navair, so a later phase's sabotage
       // lands on the dispositions this turn actually fights on. Note the honest
@@ -341,7 +337,7 @@ export const stateEffectsAndNationalAggregationPhase: TurnPhaseAdapter = {
     // to be counted. No-op for every preset whose apportionment map already
     // carries Alaska and Hawaii (1979 onward).
     const statehoodResult = await runtime.runPhase("statehood", () =>
-      runStatehoodAdmission(db, newTurn, currentYear)
+      runStatehoodAdmission(db, newTurn)
     );
     phaseResults.statehood = {
       ran: statehoodResult?.ran ?? false,
@@ -353,9 +349,7 @@ export const stateEffectsAndNationalAggregationPhase: TurnPhaseAdapter = {
     // reapportions US House seats from the now-updated populations; no-op
     // otherwise. Runs after demographicFlows (reads state.population) and
     // before elections consume the new state.houseDistricts.
-    const censusResult = await runtime.runPhase("census", () =>
-      runCensus(db, newTurn, currentYear)
-    );
+    const censusResult = await runtime.runPhase("census", () => runCensus(db, newTurn));
     phaseResults.census = {
       ran: censusResult?.ran ?? false,
       ...(censusResult?.year !== undefined ? { year: censusResult.year } : {}),
@@ -367,9 +361,7 @@ export const stateEffectsAndNationalAggregationPhase: TurnPhaseAdapter = {
     // the decade rolls over once, both fire). Whole phase is gated on
     // eraSystemEnabled; on mid-decade enable it self-heals the marker
     // quietly (healed: true, no news).
-    const eraCrossingResult = await runtime.runPhase("eraCrossing", () =>
-      runEraCrossing(db, currentYear)
-    );
+    const eraCrossingResult = await runtime.runPhase("eraCrossing", () => runEraCrossing(db));
     phaseResults.eraCrossing = {
       ran: eraCrossingResult?.ran ?? false,
       ...(eraCrossingResult?.eraId ? { eraId: eraCrossingResult.eraId } : {}),
@@ -380,7 +372,7 @@ export const stateEffectsAndNationalAggregationPhase: TurnPhaseAdapter = {
     // news-channel webhook when the live year crosses a metric's window.
     // Flag-gated inside; quiet self-heal on first flag-on run (no burst).
     const metricActivationResult = await runtime.runPhase("metricActivation", () =>
-      runMetricActivation(db, currentYear)
+      runMetricActivation(db)
     );
     phaseResults.metricActivation = {
       posted: metricActivationResult?.posted.length ?? 0,
@@ -392,7 +384,7 @@ export const stateEffectsAndNationalAggregationPhase: TurnPhaseAdapter = {
     // data exists; news is gated on eraSystemEnabled inside. First run
     // self-heals quietly (no news burst).
     const cabinetYearResult = await runtime.runPhase("cabinetYearCrossing", () =>
-      runCabinetYearCrossing(db, currentYear)
+      runCabinetYearCrossing(db)
     );
     phaseResults.cabinetYearCrossing = {
       ran: cabinetYearResult?.ran ?? false,
@@ -407,7 +399,7 @@ export const stateEffectsAndNationalAggregationPhase: TurnPhaseAdapter = {
     // never gets an army at all. First run stands up active-but-empty branches
     // silently; later runs post one item per service raised.
     const militaryBranchResult = await runtime.runPhase("militaryBranchYearCrossing", () =>
-      runMilitaryBranchYearCrossing(db, currentYear)
+      runMilitaryBranchYearCrossing(db)
     );
     phaseResults.militaryBranchYearCrossing = {
       ran: militaryBranchResult?.ran ?? false,
@@ -469,26 +461,6 @@ export const stateEffectsAndNationalAggregationPhase: TurnPhaseAdapter = {
     await runtime.runPhase("commandEconomy", () =>
       processCommandEconomyTurn(db, newTurn, currentYear)
     );
-
-    // Bretton Woods exit tracker (gameConfig `brettonWoodsExitEnabled`, issue
-    // #7). Self-gates: flag off is a single config read and zero writes.
-    // Runs after inflationRecalc (the gold-cover drain reads this turn's
-    // settled US inflation gap) and before forexTurn (which applies the
-    // persisted regime's band and drift the same turn). Forex reads the
-    // stored regime off its own exchange-rate rows, so a resume that skips
-    // this already-applied phase still prices the regime in force.
-    const brettonWoodsResult = await runtime.runPhase("brettonWoodsTurn", () =>
-      processBrettonWoodsTurn(db, newTurn, currentYear)
-    );
-    if (brettonWoodsResult) {
-      phaseResults.brettonWoodsTurn = {
-        enabled: brettonWoodsResult.enabled,
-        goldCover: brettonWoodsResult.goldCover,
-        suspended: [...brettonWoodsResult.suspended],
-        floated: [...brettonWoodsResult.floated],
-        currenciesProcessed: brettonWoodsResult.currenciesProcessed,
-      };
-    }
 
     if (isLedgerShadowEnabledFromConfig(context.config)) {
       await runtime.runPhase("ledgerPreForexSnapshot", () =>

@@ -4,7 +4,6 @@ import type { Corporation, CorporateSector, SectorBuildOrder } from "@/lib/db/ty
 import type { CeoArchetypeModifiers } from "@/lib/turn/ceoArchetype";
 import type { NppStrategyState } from "./corpStrategy";
 import type { NppMarketEntryDiagnostic } from "./entryDiagnostics";
-import type { FrontierEntryTurnState } from "./frontierEntryCandidate";
 import type { CapacityDecisionObservation } from "@/lib/corporations/capacityDecisionTelemetry/rules";
 
 export interface NppCorpDecisionContext {
@@ -29,15 +28,6 @@ export interface NppCorpDecisionContext {
   strategyEligible?: boolean;
   ordinaryEntryEligible?: boolean;
   strategyLoopEnabled?: boolean;
-  /**
-   * Capped frontier-entry experiment state (issue #991), supplied by the turn
-   * shell only when `frontierEntryExperimentEnabled` resolves true. The sets
-   * are shared across the whole NPP cohort for the turn and enforce at most
-   * one entrant per state-country cohort and one per controlling entity.
-   * Absent (or disabled) reads as off and the decision is byte-identical to
-   * the legacy path.
-   */
-  frontierEntry?: FrontierEntryTurnState;
   shortageEntryEligible?: boolean;
   shortageEntryCreditLocal?: number;
   /** Pause new Retail entry/growth while fake supply-derived demand unwinds. */

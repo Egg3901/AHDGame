@@ -1,9 +1,7 @@
 /**
  * Split a treasury spend into the part funded from accumulated surplus and the
- * part that pushes cash negative (a cash hole, financed at the next bond
- * issuance; bond-ledger `debt.principal` itself is never derived here, see
- * bonds/sovereignPrincipal.ts and refs #1975).
- * `treasuryBalance` is signed cash (positive = surplus, negative = hole).
+ * part that becomes new national debt (financed at the next bond issuance).
+ * `treasuryBalance` is the signed SSOT (positive = surplus, negative = debt).
  * Pure — drives the slider/contribution fiscal badge with no DB access.
  */
 export function computeFiscalImpact(

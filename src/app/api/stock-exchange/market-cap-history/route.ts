@@ -52,22 +52,19 @@ export async function GET(request: Request) {
 
     const points = history.map((h) => {
       let marketCap: number;
-      let rawMarketCap: number;
       let high: number | undefined;
       let low: number | undefined;
       if (exchange === "global") {
-        rawMarketCap = h.globalMarketCap;
-        marketCap = h.globalMarketIndex ?? rawMarketCap;
-        high = h.globalMarketIndexHigh ?? h.globalHigh;
-        low = h.globalMarketIndexLow ?? h.globalLow;
+        marketCap = h.globalMarketCap;
+        high = h.globalHigh;
+        low = h.globalLow;
       } else {
         // Prefer new exchangeCaps format, fall back to legacy named fields
         const exData = h.exchangeCaps?.[exchange];
         if (exData) {
-          rawMarketCap = exData.marketCap;
-          marketCap = exData.marketIndex ?? rawMarketCap;
-          high = exData.marketIndexHigh ?? exData.high;
-          low = exData.marketIndexLow ?? exData.low;
+          marketCap = exData.marketCap;
+          high = exData.high;
+          low = exData.low;
         } else {
           // Legacy fallback for pre-migration data
           const LEGACY: Record<string, { cap: number; high?: number; low?: number }> = {
@@ -75,8 +72,7 @@ export async function GET(request: Request) {
             ftse: { cap: h.ftseMarketCap, high: h.ftseHigh, low: h.ftseLow },
           };
           const legacy = LEGACY[exchange];
-          rawMarketCap = legacy?.cap ?? 0;
-          marketCap = rawMarketCap;
+          marketCap = legacy?.cap ?? 0;
           high = legacy?.high;
           low = legacy?.low;
         }
@@ -84,8 +80,7 @@ export async function GET(request: Request) {
 
       // If filtering by sector, use sector-specific value (no stored spread for sectors)
       if (sector && h.bySector) {
-        rawMarketCap = h.bySector[sector as keyof typeof h.bySector] ?? 0;
-        marketCap = rawMarketCap;
+        marketCap = h.bySector[sector as keyof typeof h.bySector] ?? 0;
         high = undefined;
         low = undefined;
       }
@@ -93,7 +88,6 @@ export async function GET(request: Request) {
       return {
         turn: h.turn,
         marketCap,
-        rawMarketCap,
         high,
         low,
         // Include sector breakdown for the chart filter

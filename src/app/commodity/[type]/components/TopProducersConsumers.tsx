@@ -134,7 +134,7 @@ export default function TopProducersConsumers({
           <h2 className="text-lg font-bold text-foreground mb-1">Top Consumers</h2>
           <p className="text-xs text-muted mb-3">
             Largest corporations by input demand
-            {commodity === "advertising" && " (excludes marketing spend, shown separately)"}
+            {commodity === "advertising" && " (includes marketing spend)"}
             {marketLabel ? ` in the ${marketLabel.toLowerCase()}` : ""}
           </p>
           {consumerNote && <p className="text-xs text-muted mb-3">{consumerNote}</p>}

@@ -12,16 +12,6 @@ export interface MarketCapHistory {
   listingUniverse?: "public-only";
   /** Total market cap across all exchanges (close value for the turn) */
   globalMarketCap: number;
-  /** Continuity-adjusted index level; raw capitalization remains above. */
-  globalMarketIndex?: number;
-  /** Simulated intra-turn peak for the continuity-adjusted index. */
-  globalMarketIndexHigh?: number;
-  /** Simulated intra-turn trough for the continuity-adjusted index. */
-  globalMarketIndexLow?: number;
-  /** Divisor used to absorb listed-constituent removals. */
-  globalMarketIndexDivisor?: number;
-  /** Raw capitalization removed from the prior index universe this turn. */
-  removedMarketCap?: number;
   /** Simulated intra-turn peak for candlestick charting */
   globalHigh?: number;
   /** Simulated intra-turn trough for candlestick charting */
@@ -35,19 +25,7 @@ export interface MarketCapHistory {
   ftseHigh?: number;
   ftseLow?: number;
   /** Per-exchange market cap data (new format — preferred over named fields above) */
-  exchangeCaps?: Record<
-    string,
-    {
-      marketCap: number;
-      high: number;
-      low: number;
-      marketIndex?: number;
-      marketIndexDivisor?: number;
-      removedMarketCap?: number;
-      marketIndexHigh?: number;
-      marketIndexLow?: number;
-    }
-  >;
+  exchangeCaps?: Record<string, { marketCap: number; high: number; low: number }>;
   /** Market cap broken down by sector type */
   bySector: Partial<Record<CorporationType, number>>;
   createdAt: Date;

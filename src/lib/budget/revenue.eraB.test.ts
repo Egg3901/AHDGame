@@ -57,20 +57,5 @@ describe("era revenue Laffer soft-cap", () => {
       // knee 0.55, compress 0.4: 0.55 + (0.60-0.55)×0.4 = 0.57
       expect(applyEraRevenueCap(0.6 * GDP, GDP, 1953, "HU") / GDP).toBeCloseTo(0.57);
     });
-
-    it("DD rides the command-economy knee like the rest of the bloc (#1323)", () => {
-      // The unified Germany is still centrally planned, so reunification must
-      // not change its classification: at or below 55% nothing is compressed.
-      expect(applyEraRevenueCap(0.521 * GDP, GDP, 1963, "DD") / GDP).toBeCloseTo(0.521);
-      expect(applyEraRevenueCap(0.6 * GDP, GDP, 1963, "DD") / GDP).toBeCloseTo(0.57);
-      // Lookup is case-insensitive; a lowercase id must classify identically.
-      expect(applyEraRevenueCap(0.521 * GDP, GDP, 1963, "dd") / GDP).toBeCloseTo(0.521);
-    });
-
-    it("the later-joining planned economies share the knee", () => {
-      for (const cc of ["UKR", "BLR", "BAL"]) {
-        expect(applyEraRevenueCap(0.521 * GDP, GDP, 1953, cc) / GDP).toBeCloseTo(0.521);
-      }
-    });
   });
 });

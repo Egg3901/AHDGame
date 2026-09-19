@@ -187,25 +187,17 @@ export interface MarketAccessMetrics {
   bondSubscriptionRate: number | null;
   corporateMedianHolders: number | null;
   corporateSubscriptionRate: number | null;
-  corporateMedianPriceToParSpreadPct: number | null;
-  corporateMaturityHhi: number | null;
   twoSidedListingShare: number | null;
   medianQuotedSpreadPct: number | null;
   depthToMarketCap: number | null;
   medianFilledOrderExecutionHours: number | null;
   medianAmihudIlliquidity48: number | null;
-  medianTopTraderNotionalShare48: number | null;
   wealthGini: number | null;
   annualizedM2GrowthPct: number | null;
   transactionalMoneyShare: number | null;
   externalBroadMoneyShare: number | null;
   activeModeledBalanceShare48: number | null;
   modeledGrossVelocity48: number | null;
-  householdTransactionalVelocity48: number | null;
-  householdSavingsVelocity48: number | null;
-  savingsShareOfHouseholdBalances: number | null;
-  bankCashReservesAnchor: number | null;
-  ringFencedShareOfLiquid: number | null;
   measurementConfidence: string;
   reconciliationStatus: string;
 }
@@ -248,29 +240,18 @@ export function marketAccessMetricsFromSnapshot(
     bondSubscriptionRate: snapshot?.securities.bondSubscriptionRate.value ?? null,
     corporateMedianHolders: snapshot?.securities.corporateMedianHolders?.value ?? null,
     corporateSubscriptionRate: snapshot?.securities.corporateSubscriptionRate?.value ?? null,
-    corporateMedianPriceToParSpreadPct:
-      snapshot?.securities.corporateMedianPriceToParSpreadPct?.value ?? null,
-    corporateMaturityHhi: snapshot?.securities.corporateMaturityHhi?.value ?? null,
     twoSidedListingShare: snapshot?.securities.twoSidedListingShare.value ?? null,
     medianQuotedSpreadPct: snapshot?.securities.medianQuotedSpreadPct.value ?? null,
     depthToMarketCap: snapshot?.securities.depthToMarketCap.value ?? null,
     medianFilledOrderExecutionHours:
       snapshot?.securities.medianFilledOrderExecutionHours.value ?? null,
     medianAmihudIlliquidity48: snapshot?.securities.medianAmihudIlliquidity48.value ?? null,
-    medianTopTraderNotionalShare48:
-      snapshot?.securities.medianTopTraderNotionalShare48?.value ?? null,
     wealthGini: snapshot?.households.wealthGini.value ?? null,
     annualizedM2GrowthPct: snapshot?.money.medianAnnualizedM2GrowthPct.value ?? null,
     transactionalMoneyShare: snapshot?.money.transactionalMoneyShare.value ?? null,
     externalBroadMoneyShare: snapshot?.money.externalBroadMoneyShare.value ?? null,
     activeModeledBalanceShare48: snapshot?.money.activeModeledBalanceShare48.value ?? null,
     modeledGrossVelocity48: snapshot?.money.modeledGrossVelocity48.value ?? null,
-    householdTransactionalVelocity48:
-      snapshot?.money.householdTransactionalVelocity48?.value ?? null,
-    householdSavingsVelocity48: snapshot?.money.householdSavingsVelocity48?.value ?? null,
-    savingsShareOfHouseholdBalances: snapshot?.money.savingsShareOfHouseholdBalances?.value ?? null,
-    bankCashReservesAnchor: snapshot?.money.bankCashReservesAnchor?.value ?? null,
-    ringFencedShareOfLiquid: snapshot?.money.ringFencedShareOfLiquid?.value ?? null,
     measurementConfidence: snapshot?.measurement.confidence ?? "unavailable",
     reconciliationStatus: snapshot?.reconciliation.status ?? "unavailable",
   };

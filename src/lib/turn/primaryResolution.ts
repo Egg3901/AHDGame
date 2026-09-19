@@ -112,7 +112,6 @@ import { buildNationwideElectoratePreload } from "@/lib/electionEngine/nationwid
 import { resolveGoverningPartyIds } from "@/lib/government/governingPartyIds";
 import { isMidtermOppositionBoostEligible } from "@/lib/electionEngine/midtermOppositionBoost";
 import { finaliseManifestosAtElectionCall } from "@/lib/uk/manifesto/manifestoLifecycle";
-import { getStandingPlatformsForCountry } from "@/lib/uk/conference/conferenceCommands";
 
 /**
  * Optional restriction of a turn sweep to specific elections. Absent (the
@@ -337,13 +336,11 @@ export async function resolvePrimariesIfNeeded(
           social: party?.socialPosition ?? 0,
         };
       });
-      const standingPlatformByParty = await getStandingPlatformsForCountry(db, "UK");
       await finaliseManifestosAtElectionCall(db, {
         countryId: "UK",
         electionId,
         parties: manifestoParties,
         now,
-        standingPlatformByParty,
       });
     }
 

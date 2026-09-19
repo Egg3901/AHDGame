@@ -9,11 +9,10 @@ import {
   getCampaignActionCost,
   getAdvertiseActionCost,
   getDonorActionCost,
-  fundraiseYieldAnchor,
+  calculateFundraisingAmount,
   CONVERT_CASH_ACTION_COST,
   calculateConvertCashInfamy,
   convertCashConversion,
-  REST_ACTION_COST,
 } from "../actions";
 import {
   ACTION_HOARDING_THRESHOLD,
@@ -213,7 +212,7 @@ export function checkStatThresholds(
       why: `You have only ${character.actions} AP. Focus on free or low-cost actions and save your AP for next turn.`,
       action: {
         type: "rest",
-        estimatedCost: { ap: REST_ACTION_COST, funds: 0 },
+        estimatedCost: { ap: 0, funds: 0 },
         estimatedBenefit: "Save AP for next turn",
       },
       link: "/actions",
@@ -265,9 +264,7 @@ export function checkStatThresholds(
   if (funds < FUNDS_CRITICAL_THRESHOLD) {
     const donorLevel = character.donorBaseLevel ?? 0;
     if (donorLevel > 0) {
-      // Single source of truth: the same stat-scaled yield the execute shell
-      // credits, so the preview can never understate what fundraising pays.
-      const raiseAmount = fundraiseYieldAnchor(character);
+      const raiseAmount = calculateFundraisingAmount(donorLevel, character.politicalInfluence ?? 0);
       const cost = getDonorActionCost(donorLevel, "fundraise");
       recommendations.push({
         id: `funds-critical-${character._id.toString()}`,
@@ -300,9 +297,7 @@ export function checkStatThresholds(
   } else if (funds < FUNDS_LOW_THRESHOLD && funds >= FUNDS_CRITICAL_THRESHOLD) {
     const donorLevel = character.donorBaseLevel ?? 0;
     if (donorLevel > 0) {
-      // Single source of truth: the same stat-scaled yield the execute shell
-      // credits, so the preview can never understate what fundraising pays.
-      const raiseAmount = fundraiseYieldAnchor(character);
+      const raiseAmount = calculateFundraisingAmount(donorLevel, character.politicalInfluence ?? 0);
       const cost = getDonorActionCost(donorLevel, "fundraise");
       recommendations.push({
         id: `funds-low-${character._id.toString()}`,

@@ -22,14 +22,8 @@ export interface PartyGroupFavorability {
   groupId: string;
   /** Additive favorability points applied while active. Positive = bonus. */
   favorabilityDelta: number;
-  /**
-   * Source address (audit + correlation). Optional since ticket #862: UK
-   * party-conference payoffs write rows sourced from a conference instead.
-   * Exactly one of sourceAddressId / sourceConferenceId is set.
-   */
-  sourceAddressId?: ObjectId;
-  /** Source conference id (`ukPartyConferences._id`) for conference payoffs. */
-  sourceConferenceId?: string;
+  /** Source address (audit + correlation). */
+  sourceAddressId: ObjectId;
   /** Turn at which this boost stops applying (inclusive). Read-side filter
    *  uses `expiresAtTurn > currentTurn`. */
   expiresAtTurn: number;

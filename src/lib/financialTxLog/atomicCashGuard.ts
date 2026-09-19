@@ -159,10 +159,11 @@ export async function refundCorpLiquidCapital(
  * null if the corp was not found.
  *
  * When `alsoTrackIssuanceProceeds` is true, the same atomic write also increments
- * `shareIssuanceProceeds` by `amount` as the issuer realizes proceeds from its
- * OWN float. Issuance itself no longer pre-credits either field; see Bug #0624.
- * Callers that debit/credit a BUYER corp (corp-buys-bond, corp-buys-other-corp-
- * shares, escrow) must leave this false so the field is untouched.
+ * `shareIssuanceProceeds` by `amount`. This is how the issuer realizes — and the
+ * share-price book-floor lever records — proceeds from its OWN float as that float
+ * is actually bought (issuance itself no longer pre-credits either field; see Bug
+ * #0624). Callers that debit/credit a BUYER corp (corp-buys-bond, corp-buys-other-
+ * corp-shares, escrow) must leave this false so the field is untouched.
  */
 export async function creditCorpLiquidCapital(
   db: Db,
@@ -190,8 +191,8 @@ export async function creditCorpLiquidCapital(
 /**
  * Decrement a corp's `shareIssuanceProceeds` by `amount` (the corp's own currency
  * units) when float shares are sold back INTO the issuer's float. Mirrors the
- * `alsoTrackIssuanceProceeds` credit on the buy side so the realized cash-flow
- * marker remains reversible.
+ * `alsoTrackIssuanceProceeds` credit on the buy side so the share-price book-floor
+ * lever tracks realized proceeds symmetrically.
  *
  * Deliberately does NOT touch `liquidCapital` — the seller's cash and the issuer
  * buyback debit are handled by the existing `atomicallyDebitCorpLiquidCapital` /
@@ -199,8 +200,10 @@ export async function creditCorpLiquidCapital(
  * best-effort, fire-and-forget side write: call it AFTER a sell has committed so a
  * hiccup here can never break a committed sell or mint cash.
  *
- * The field is allowed to go negative (no floor); keeping a plain `$inc`
- * preserves exact reversibility against the buy-side credit.
+ * The field is allowed to go negative (no floor): the price formula already does
+ * `Math.max(0, liquidCapital - shareIssuanceProceeds)`, so a negative value only
+ * raises the book floor toward true liquidCapital (bounded, benign), and keeping a
+ * plain `$inc` preserves exact reversibility against the buy-side credit.
  */
 export async function decrementCorpIssuanceProceeds(
   db: Db,

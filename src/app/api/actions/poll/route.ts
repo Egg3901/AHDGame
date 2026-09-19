@@ -227,10 +227,6 @@ async function handleGET(request: NextRequest) {
       actionCost,
       fundCostSmall: smallFundCost,
       fundCostLarge: largeFundCost,
-      // Flat canonical AP cost per tier, same owner as hasActions* below, so
-      // the page tier cards can never restate a stale literal.
-      actionCostSmall: getPollActionCost("small"),
-      actionCostLarge: getPollActionCost("large"),
       // Quoted costs are ANCHOR; the character balance is LOCAL. Convert at
       // the boundary for comparison.
       canAffordSmall:

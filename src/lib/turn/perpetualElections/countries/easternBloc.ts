@@ -1,63 +1,43 @@
 import { ensureEasternBlocAssemblyElections } from "../shared";
 
 /** Poland Sejm — unicameral one-party assembly (DD regional-delegate pattern). */
-export async function ensurePLElections(now: Date, inFlightTurn?: number): Promise<void> {
-  await ensureEasternBlocAssemblyElections("PL", "sejm", "Sejm", now, inFlightTurn);
+export async function ensurePLElections(now: Date): Promise<void> {
+  await ensureEasternBlocAssemblyElections("PL", "sejm", "Sejm", now);
 }
 
 /** Czechoslovakia Chamber of the People. */
-export async function ensureCSElections(now: Date, inFlightTurn?: number): Promise<void> {
+export async function ensureCSElections(now: Date): Promise<void> {
   await ensureEasternBlocAssemblyElections(
     "CS",
     "chamberOfThePeople",
     "Chamber of the People",
-    now,
-    inFlightTurn
+    now
   );
 }
 
 /** Hungary National Assembly. */
-export async function ensureHUElections(now: Date, inFlightTurn?: number): Promise<void> {
-  await ensureEasternBlocAssemblyElections(
-    "HU",
-    "nationalAssembly",
-    "National Assembly",
-    now,
-    inFlightTurn
-  );
+export async function ensureHUElections(now: Date): Promise<void> {
+  await ensureEasternBlocAssemblyElections("HU", "nationalAssembly", "National Assembly", now);
 }
 
 /** Romania Grand National Assembly. */
-export async function ensureROElections(now: Date, inFlightTurn?: number): Promise<void> {
+export async function ensureROElections(now: Date): Promise<void> {
   await ensureEasternBlocAssemblyElections(
     "RO",
     "grandNationalAssembly",
     "Grand National Assembly",
-    now,
-    inFlightTurn
+    now
   );
 }
 
 /** Bulgaria National Assembly. */
-export async function ensureBGElections(now: Date, inFlightTurn?: number): Promise<void> {
-  await ensureEasternBlocAssemblyElections(
-    "BG",
-    "nationalAssembly",
-    "National Assembly",
-    now,
-    inFlightTurn
-  );
+export async function ensureBGElections(now: Date): Promise<void> {
+  await ensureEasternBlocAssemblyElections("BG", "nationalAssembly", "National Assembly", now);
 }
 
 /** Yugoslavia Federal Assembly. */
-export async function ensureYUElections(now: Date, inFlightTurn?: number): Promise<void> {
-  await ensureEasternBlocAssemblyElections(
-    "YU",
-    "federalAssembly",
-    "Federal Assembly",
-    now,
-    inFlightTurn
-  );
+export async function ensureYUElections(now: Date): Promise<void> {
+  await ensureEasternBlocAssemblyElections("YU", "federalAssembly", "Federal Assembly", now);
 }
 
 // ─── Union republics: republican Supreme Soviets ────────────────────────────
@@ -75,36 +55,18 @@ export async function ensureYUElections(now: Date, inFlightTurn?: number): Promi
 // does the same job for the republics RU still owns as regions.
 
 /** Ukrainian SSR Supreme Soviet (435 deputies). */
-export async function ensureUKRElections(now: Date, inFlightTurn?: number): Promise<void> {
-  await ensureEasternBlocAssemblyElections(
-    "UKR",
-    "supremeSoviet",
-    "Supreme Soviet",
-    now,
-    inFlightTurn
-  );
+export async function ensureUKRElections(now: Date): Promise<void> {
+  await ensureEasternBlocAssemblyElections("UKR", "supremeSoviet", "Supreme Soviet", now);
 }
 
 /** Byelorussian SSR Supreme Soviet (360 deputies). */
-export async function ensureBLRElections(now: Date, inFlightTurn?: number): Promise<void> {
-  await ensureEasternBlocAssemblyElections(
-    "BLR",
-    "supremeSoviet",
-    "Supreme Soviet",
-    now,
-    inFlightTurn
-  );
+export async function ensureBLRElections(now: Date): Promise<void> {
+  await ensureEasternBlocAssemblyElections("BLR", "supremeSoviet", "Supreme Soviet", now);
 }
 
 /** Baltic republican Supreme Soviets, modelled as one 300-seat chamber. */
-export async function ensureBALElections(now: Date, inFlightTurn?: number): Promise<void> {
-  await ensureEasternBlocAssemblyElections(
-    "BAL",
-    "supremeSoviet",
-    "Supreme Soviet",
-    now,
-    inFlightTurn
-  );
+export async function ensureBALElections(now: Date): Promise<void> {
+  await ensureEasternBlocAssemblyElections("BAL", "supremeSoviet", "Supreme Soviet", now);
 }
 
 // ─── Nigeria: House of Representatives ──────────────────────────────────────

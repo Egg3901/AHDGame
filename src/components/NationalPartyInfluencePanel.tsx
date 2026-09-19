@@ -1,7 +1,5 @@
 "use client";
 
-import { useSearchParams } from "next/navigation";
-
 import { useState, useEffect, useCallback, useMemo } from "react";
 import Link from "next/link";
 import { partyApiUrl } from "@/lib/urls";
@@ -98,7 +96,6 @@ export function NationalPartyInfluencePanel({
   country,
   onPartyRefresh,
 }: NationalPartyInfluencePanelProps) {
-  const searchParams = useSearchParams();
   const { showToast } = useToast();
   const countryUpper = country.toUpperCase() as CountryId;
   const regionLabel = COUNTRY_CONFIGS[countryUpper]?.regionLabel ?? "State";
@@ -438,8 +435,6 @@ export function NationalPartyInfluencePanel({
         <>
           <NppRosterPanel
             scope="national"
-            initialNppId={searchParams?.get("npp")}
-            initialState={searchParams?.get("state")}
             npps={rosterNpps}
             actions={rosterActions}
             currency={currencyCode}

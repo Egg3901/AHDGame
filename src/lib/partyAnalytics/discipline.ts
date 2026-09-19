@@ -1,4 +1,3 @@
-import { regionPartyUrl } from "@/lib/urls";
 import { ObjectId } from "mongodb";
 import type { Db } from "mongodb";
 import type { Caucus, CaucusMembership, NPP, NPPRelationship, Character } from "@/lib/db/types";
@@ -30,23 +29,9 @@ function getCaucusExitRiskLabel(relationshipWithChair: number): "Critical" | "El
   return "Watch";
 }
 
-export function buildNppManagementHref(
-  countryId: CountryId,
-  partyId: string,
-  nppId: string,
-  homeState: string,
-  stateId?: string
-): string {
-  const base = stateId
-    ? regionPartyUrl(countryId, stateId, partyId)
-    : `/country/${countryId.toLowerCase()}/parties/${encodeURIComponent(partyId)}`;
-  const params = new URLSearchParams({
-    tab: "actions",
-    sub: "management",
-    state: homeState,
-    npp: nppId,
-  });
-  return `${base}?${params}`;
+function buildNppHref(countryId: CountryId, nppId: ObjectId): string {
+  void countryId;
+  return `/politicians/npp/${nppId.toString()}`;
 }
 
 function formatCurrentOfficeLabel(
@@ -58,12 +43,7 @@ function formatCurrentOfficeLabel(
   return getOfficeTypeConfig(countryId, officeType)?.label ?? officeType;
 }
 
-function toRiskItem(
-  countryId: CountryId,
-  npp: NPP,
-  partyId: string,
-  stateId?: string
-): PartyAnalyticsRiskItem {
+function toRiskItem(countryId: CountryId, npp: NPP): PartyAnalyticsRiskItem {
   const loyalty = npp.personality?.loyalty ?? 0;
   const stubbornness = npp.personality?.stubbornness ?? 0;
   const ambition = npp.personality?.ambition ?? 0;
@@ -78,7 +58,7 @@ function toRiskItem(
     ambition,
     riskScore,
     riskLabel: getRiskLabel(riskScore),
-    href: buildNppManagementHref(countryId, partyId, npp._id.toString(), npp.homeState, stateId),
+    href: buildNppHref(countryId, npp._id),
   };
 }
 
@@ -115,7 +95,7 @@ export async function buildPartyDisciplineAnalytics(
     })
     .toArray();
 
-  const riskItems = npps.map((npp) => toRiskItem(countryId, npp, partyId, stateId));
+  const riskItems = npps.map((npp) => toRiskItem(countryId, npp));
 
   const caucuses = await db
     .collection<Caucus>("caucuses")
@@ -200,13 +180,7 @@ export async function buildPartyDisciplineAnalytics(
           Math.round((relationshipWithChair - CAUCUS_NPP_RETENTION_MIN_RELATIONSHIP) * 10) / 10,
         exitRiskLabel: getCaucusExitRiskLabel(relationshipWithChair),
         chairName: chairNameById.get(chairId) ?? null,
-        href: buildNppManagementHref(
-          countryId,
-          partyId,
-          npp._id.toString(),
-          npp.homeState,
-          stateId
-        ),
+        href: buildNppHref(countryId, npp._id),
       } satisfies PartyAnalyticsCaucusRiskItem;
     })
     .filter((item): item is PartyAnalyticsCaucusRiskItem => item !== null)

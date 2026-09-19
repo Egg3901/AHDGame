@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useRef } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { buildNppHref } from "@/lib/utils/profileUrls";
 import { formatLocalFunds } from "@/lib/actions";
@@ -20,8 +20,6 @@ import {
 
 export interface NppRosterPanelProps {
   scope: "state" | "national";
-  initialNppId?: string | null;
-  initialState?: string | null;
   /** NPPs to manage; each carries a homeState (state scope shares one state). */
   npps: Array<NPPOption & { homeState: string }>;
   actions: ActionOption[];
@@ -90,8 +88,6 @@ function StatBar({ value, invert }: { value: number; invert?: boolean }) {
 
 export function NppRosterPanel({
   scope,
-  initialNppId,
-  initialState,
   npps,
   actions,
   currency = "USD",
@@ -105,22 +101,6 @@ export function NppRosterPanel({
   const [drawerId, setDrawerId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [confirmAction, setConfirmAction] = useState<ActionOption | null>(null);
-
-  const appliedLink = useRef<string | null>(null);
-  useEffect(() => {
-    const key = `${initialNppId ?? ""}:${initialState ?? ""}`;
-    if (appliedLink.current === key) return;
-    const target = npps.find((npp) => npp.id === initialNppId);
-    if (initialNppId && !target) return;
-    appliedLink.current = key;
-    setStateFilter(
-      target?.homeState ??
-        (npps.some((npp) => npp.homeState === initialState) ? initialState! : "all")
-    );
-    setDrawerId(target?.id ?? null);
-    setQ("");
-    setFilter("all");
-  }, [initialNppId, initialState, npps]);
 
   const rows = useMemo(
     () => sortRoster(filterRoster(npps, { filter, state: stateFilter, q }), sortKey),

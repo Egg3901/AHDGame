@@ -12,7 +12,6 @@ import { getGovernmentFormationsCollection } from "@/lib/db/collections/governme
 import { getCharacterByUserId } from "@/lib/db/characterLookup";
 import { checkLegislationFreeze } from "@/lib/api/parliamentaryFreeze";
 import { getCabinetMechanics } from "@/lib/constants/cabinetMechanics";
-import { unionLegislativeDomains } from "@/lib/uk/dualMinistry/rules";
 import type { BillDisplay } from "@/lib/legislature/dto/billDisplay";
 import { getPartyHex, formatBillPositionLabel } from "@/lib/utils/politics";
 import {
@@ -130,30 +129,24 @@ export async function GET(_request: Request, { params }: { params: Promise<{ cod
             canPropose = !existingActiveBill;
             allowedPolicyDomains = null;
           } else {
-            // A dual-office holder proposes from the union of both portfolios
-            // (issue #2049): every row they hold contributes its domains, so the
-            // second title widens what they may propose but never votes twice.
-            const cabinetRows = await db
-              .collection("cabinetMembers")
-              .find({ characterId: character._id, countryId })
-              .project({ positionId: 1 })
-              .toArray();
-            if (cabinetRows.length > 0 && !existingActiveBill) {
+            const cabinetMember = await db.collection("cabinetMembers").findOne({
+              characterId: character._id,
+              countryId,
+            });
+            if (cabinetMember && !existingActiveBill) {
               canPropose = true;
-              allowedPolicyDomains = unionLegislativeDomains(
-                cabinetRows.map((row) => {
-                  const positionId = (row as { positionId?: string }).positionId;
-                  const mechanics = positionId
-                    ? getCabinetMechanics(countryId, positionId)
-                    : undefined;
-                  return mechanics
-                    ? (mechanics.legislativeDomains ??
-                        mechanics.nationalMetrics.map((metric) => metric.category))
-                    : [];
-                })
-              );
+              const positionId = (cabinetMember as { positionId?: string }).positionId;
+              const mechanics = positionId ? getCabinetMechanics(countryId, positionId) : undefined;
+              allowedPolicyDomains = mechanics
+                ? [
+                    ...new Set(
+                      mechanics.legislativeDomains ??
+                        mechanics.nationalMetrics.map((metric) => metric.category)
+                    ),
+                  ]
+                : [];
             }
-            canVoteCabinetReview = cabinetRows.length > 0;
+            canVoteCabinetReview = Boolean(cabinetMember);
           }
         }
       }
@@ -388,18 +381,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
 
     // Cabinet member lookup — the unified cabinetMembers collection is the
     // single source across all countries. A player queries by their own id, so
-    // NPP-held seats (null characterId) never match. All rows are loaded (not
-    // findOne) so a dual-office holder proposes from the union of both
-    // portfolios (issue #2049).
-    const cabinetRows = !isPM
-      ? await db
-          .collection("cabinetMembers")
-          .find({ characterId: character._id, countryId })
-          .project({ positionId: 1 })
-          .toArray()
-      : [];
+    // NPP-held seats (null characterId) never match.
+    const cabinetMember = !isPM
+      ? await db.collection("cabinetMembers").findOne({ characterId: character._id, countryId })
+      : null;
 
-    if (!auth.user.isAdmin && !isPM && cabinetRows.length === 0) {
+    if (!auth.user.isAdmin && !isPM && !cabinetMember) {
       return NextResponse.json(
         forbidden("Only the PM or cabinet members can propose cabinet bills").toJson(),
         { status: 403 }
@@ -424,37 +411,30 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
       }
     }
 
-    // Category restriction: cabinet members can only propose bills in their
-    // positions' domains (union across both offices for a dual holder).
+    // Category restriction: cabinet members can only propose bills in their position's domains
     // PM can propose any category
-    if (!isPM && cabinetRows.length > 0) {
-      const domainLists: string[][] = [];
-      let mechanicsFound = false;
-      for (const row of cabinetRows) {
-        const positionId = (row as { positionId?: string }).positionId;
-        const mechanics = positionId ? getCabinetMechanics(countryId, positionId) : undefined;
+    if (!isPM && cabinetMember) {
+      const positionId = (cabinetMember as { positionId?: string }).positionId;
+      if (positionId) {
+        const mechanics = getCabinetMechanics(countryId, positionId);
         if (mechanics) {
-          mechanicsFound = true;
-          domainLists.push(
+          const allowedDomains = new Set(
             mechanics.legislativeDomains ?? mechanics.nationalMetrics.map((m) => m.category)
           );
-        }
-      }
-      if (mechanicsFound) {
-        const allowedDomains = new Set(unionLegislativeDomains(domainLists));
-        // Look up the legislation type to check its category
-        const legType = await db
-          .collection<LegislationType>("legislationTypes")
-          .findOne({ _id: legislationTypeId });
-        if (legType) {
-          const billDomain = legType.policyDomain;
-          if (!allowedDomains.has(billDomain)) {
-            return NextResponse.json(
-              forbidden(
-                `Your cabinet position only covers: ${[...allowedDomains].join(", ")}. This bill's domain (${billDomain}) is outside your portfolio.`
-              ).toJson(),
-              { status: 403 }
-            );
+          // Look up the legislation type to check its category
+          const legType = await db
+            .collection<LegislationType>("legislationTypes")
+            .findOne({ _id: legislationTypeId });
+          if (legType) {
+            const billDomain = legType.policyDomain;
+            if (!allowedDomains.has(billDomain)) {
+              return NextResponse.json(
+                forbidden(
+                  `Your cabinet position only covers: ${[...allowedDomains].join(", ")}. This bill's domain (${billDomain}) is outside your portfolio.`
+                ).toJson(),
+                { status: 403 }
+              );
+            }
           }
         }
       }
@@ -470,17 +450,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
       });
     }
 
-    // Check minimum 2 player-held cabinet positions (PM + at least 1 minister).
-    // Counted as distinct characters (issue #2049): a dual-office holder's two
-    // rows are one minister, and votes are keyed by character id, so a second
-    // title never buys a second vote toward this quorum either.
-    const playerHolderIds = await db
+    // Check minimum 2 player-held cabinet positions (PM + at least 1 minister)
+    const playerCabinetCount = await db
       .collection("cabinetMembers")
-      .distinct("characterId", { countryId, characterId: { $ne: null } });
-    const distinctPlayerHolders = new Set(
-      playerHolderIds.filter((id) => id != null).map((id) => String(id))
-    ).size;
-    const totalPlayerPositions = (isPM ? 1 : 0) + distinctPlayerHolders;
+      .countDocuments({ countryId, characterId: { $ne: null } });
+    const totalPlayerPositions = (isPM ? 1 : 0) + playerCabinetCount;
     if (totalPlayerPositions < 2) {
       return NextResponse.json(
         badRequest("At least 2 player-held cabinet positions (including PM) are required").toJson(),

@@ -161,38 +161,4 @@ describe("TAX_BASE_GROWTH_PREMIUM_CAP", () => {
     const { multipleOfBaseline } = runYears(DD_LIVE, 30);
     expect(multipleOfBaseline.taxableIncome).toBeGreaterThan(1.05);
   });
-
-  it("settles a planned economy with flat GDP near its analytic equilibrium (#1323)", () => {
-    // PL-like: ~0% GDP growth against ~2% wage growth. The issue's equilibrium
-    // overshoot for this wedge is ~1.30x; the multi-turn run must land beside
-    // it rather than climbing past it the way DD's wedge did.
-    const planned: EconomicGrowthFactors = {
-      gdpGrowth: 0,
-      wageGrowth: 2,
-      tradeGrowth: 2,
-      inflationRate: 2,
-      lastUpdated: new Date(),
-    };
-    const { multipleOfBaseline } = runYears(planned, 30);
-    expect(multipleOfBaseline.taxableIncome).toBeGreaterThan(1.0);
-    expect(multipleOfBaseline.taxableIncome).toBeLessThan(1.4);
-    expect(multipleOfBaseline.wagesAndSalaries).toBeLessThan(1.4);
-  });
-
-  it("leaves an ordinary market economy near baseline over the same horizon", () => {
-    // DE-like: 4% GDP growth, wage growth inside the premium. Thirty years
-    // must not move the share materially - the ordinary case the gravity
-    // change must not destabilize.
-    const market: EconomicGrowthFactors = {
-      gdpGrowth: 4,
-      wageGrowth: 5,
-      tradeGrowth: 4.5,
-      inflationRate: 2,
-      lastUpdated: new Date(),
-    };
-    const { multipleOfBaseline } = runYears(market, 30);
-    expect(multipleOfBaseline.taxableIncome).toBeGreaterThan(1.0);
-    expect(multipleOfBaseline.taxableIncome).toBeLessThan(1.3);
-    expect(multipleOfBaseline.taxableSales).toBeLessThan(1.3);
-  });
 });

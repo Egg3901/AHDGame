@@ -1,8 +1,7 @@
-import { constantPriceOutput } from "./rules/outputVolume";
 import type { Db } from "mongodb";
 import type { ConflictDoc } from "@/lib/db/types/conflict";
 import { warDamageByCountry, type WarDamage } from "@/lib/military/warDamage";
-import type { CorporateSector, UnownedSector, Corporation, Bond } from "@/lib/db/types";
+import type { CorporateSector, UnownedSector, Corporation } from "@/lib/db/types";
 import type { FederalBudget, StateBudget } from "@/lib/db/types/budget";
 import type { CorporationType } from "@/lib/constants/corporations";
 import {
@@ -11,8 +10,7 @@ import {
   resolveSectorHostCurrencyCode,
 } from "@/lib/currency/corporationCapital";
 import { readCorpEconomicAnchor } from "@/lib/currency/corpEconomyFields";
-import { sovereignBondOutstanding } from "@/lib/bonds/sovereignPrincipal";
-import { resolveRatioGdp } from "@/lib/budget/gdpDenominator";
+import { deriveFiscalState } from "@/lib/budget/treasuryBalance";
 import { loadActiveFtaPairs } from "@/lib/tariffs/ftaOverrides";
 import type { OrganizationMembership } from "@/lib/db/types/internationalOrganization";
 import type { ExchangeRate } from "@/lib/db/types/exchangeRate";
@@ -44,7 +42,6 @@ export interface SectorRevenueTax {
       hostRevenue: number;
       /** Host-currency realized revenue when the sector has one. */
       hostRealizedRevenue?: number;
-      outputVolume?: number;
     }>
   >;
   /** Per-state unowned-sector revenue (₳-native). */
@@ -72,7 +69,7 @@ function finiteRate(value: unknown): number {
  * node consumes it instead of reading collections itself. Behavior-preserving:
  * the golden-master fixtures (R2) assert identical downstream results.
  */
-export async function sectorRevenueTaxProvider(db: Db, turn = 0): Promise<SectorRevenueTax> {
+export async function sectorRevenueTaxProvider(db: Db): Promise<SectorRevenueTax> {
   const [
     ownedSectors,
     unownedSectors,
@@ -92,10 +89,6 @@ export async function sectorRevenueTaxProvider(db: Db, turn = 0): Promise<Sector
           | "stateId"
           | "revenue"
           | "realizedRevenue"
-          | "producedUnits"
-          | "strategyId"
-          | "transitionFromStrategyId"
-          | "transitionStartTurn"
           | "currentGrowthRate"
           | "growthRate"
           | "corporationId"
@@ -112,10 +105,6 @@ export async function sectorRevenueTaxProvider(db: Db, turn = 0): Promise<Sector
         // capacity only depreciates, so a nameplate-based delta reads a
         // permanent ~-2.4%/yr recession that no player action caused.
         realizedRevenue: 1,
-        producedUnits: 1,
-        strategyId: 1,
-        transitionFromStrategyId: 1,
-        transitionStartTurn: 1,
         currentGrowthRate: 1,
         // P3c: the environment tier derives the carbon mix from sector types.
         sectorType: 1,
@@ -185,7 +174,6 @@ export async function sectorRevenueTaxProvider(db: Db, turn = 0): Promise<Sector
       realizedRevenue?: number;
       hostRevenue: number;
       hostRealizedRevenue?: number;
-      outputVolume?: number;
       currentGrowthRate: number;
       sectorType?: CorporationType;
     }>
@@ -211,7 +199,6 @@ export async function sectorRevenueTaxProvider(db: Db, turn = 0): Promise<Sector
       hostRealized !== undefined
         ? readCorpEconomicAnchor(hostRealized, hostCode, hostRate)
         : undefined;
-    const outputVolume = plantsEnabled ? constantPriceOutput(sector, turn) : null;
     const list = ownedByState.get(sector.stateId) ?? [];
     // Fallback chain: new field → legacy field → 0 (undefined would propagate NaN).
     const growth = sector.currentGrowthRate ?? sector.growthRate ?? 0;
@@ -220,7 +207,6 @@ export async function sectorRevenueTaxProvider(db: Db, turn = 0): Promise<Sector
       ...(realizedAnchor !== undefined ? { realizedRevenue: realizedAnchor } : {}),
       hostRevenue,
       ...(hostRealized !== undefined ? { hostRealizedRevenue: hostRealized } : {}),
-      ...(outputVolume !== null ? { outputVolume } : {}),
       currentGrowthRate: growth,
       sectorType: sector.sectorType,
     });
@@ -292,83 +278,54 @@ const clampRange = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(
  * Provider #3 (📊 budget-sync): per-country real fiscal ratios from
  * `federalBudget`, so the readout metrics (debtToGdp / budgetBalance /
  * schuldenbremseHeadroom) MIRROR reality instead of drifting from a seed.
- * debtToGdp reads the canonical outstanding sovereign stock (haircut-adjusted
- * active non-defaulted face, see bonds/sovereignPrincipal.ts), never
- * `treasuryBalance` and never `deriveFiscalState`: cash and bond debt are
- * separate positions, so a negative balance is not debt (refs #1975). The
- * ratio basis is `resolveRatioGdp` (smoothed GDP), the same denominator the
- * stored `debtToGdpRatio` uses. Clamped to the metric bounds here;
- * `fiscalMirror` only rounds + persist-gates downstream.
- *
- * Empty-ledger rule: a country with no bond rows holds no stock (repudiated,
- * merged away, or never indebted), so its debtToGdp is 0 even when the budget
- * still carries a stored principal or a negative cash balance. Those are
- * drift the end-of-turn reconcile heals, not debt, and the readout must agree
- * with the stored value AFTER the reconcile, not mirror the drift. There is
- * deliberately no fallback to the stored `debt.principal`: a second source
- * for the same number is what #1975 removes.
+ * debtToGdp uses the canonical `deriveFiscalState` math (smoothed GDP), so it
+ * doesn't depend on `treasuryTurn` field freshness or phase order. Clamped to the
+ * metric bounds here; `fiscalMirror` only rounds + persist-gates downstream.
  */
 export async function fiscalRatiosProvider(db: Db): Promise<Map<string, FiscalRatios>> {
-  const [budgets, bonds] = await Promise.all([
-    db
-      .collection<FederalBudget>("federalBudget")
-      .find({})
-      .project<
-        Pick<FederalBudget, "_id" | "countryId" | "gdp" | "gdpSmoothed" | "revenue" | "spending">
-      >({
-        countryId: 1,
-        gdp: 1,
-        gdpSmoothed: 1,
-        revenue: 1,
-        spending: 1,
-      })
-      .toArray(),
-    db
-      .collection<Bond>("bonds")
-      .find({ issuerType: "sovereign", matured: false, defaulted: false })
-      .project<
-        Pick<
-          Bond,
-          | "countryId"
-          | "issuerType"
-          | "matured"
-          | "defaulted"
-          | "totalIssued"
-          | "restructureHaircutPercent"
-        >
-      >({
-        countryId: 1,
-        // The outstanding helper re-checks these query-filtered fields, so
-        // they must be projected: a doc arriving without `issuerType` reads
-        // as non-sovereign and contributes 0 (refs #1975).
-        issuerType: 1,
-        matured: 1,
-        defaulted: 1,
-        totalIssued: 1,
-        restructureHaircutPercent: 1,
-      })
-      .toArray(),
-  ]);
-
-  const outstandingByCountry = new Map<string, number>();
-  for (const bond of bonds) {
-    if (!bond.countryId) continue;
-    const key = String(bond.countryId);
-    outstandingByCountry.set(
-      key,
-      (outstandingByCountry.get(key) ?? 0) + sovereignBondOutstanding(bond)
-    );
-  }
+  const budgets = await db
+    .collection<FederalBudget>("federalBudget")
+    .find({})
+    .project<
+      Pick<
+        FederalBudget,
+        | "_id"
+        | "countryId"
+        | "treasuryBalance"
+        | "gdp"
+        | "gdpSmoothed"
+        | "debt"
+        | "revenue"
+        | "spending"
+        | "investorConfidence"
+      >
+    >({
+      countryId: 1,
+      treasuryBalance: 1,
+      gdp: 1,
+      gdpSmoothed: 1,
+      debt: 1,
+      revenue: 1,
+      spending: 1,
+      investorConfidence: 1,
+    })
+    .toArray();
 
   const byCountry = new Map<string, FiscalRatios>();
   for (const b of budgets) {
     const countryId = b.countryId || (String(b._id) === "federal" ? "US" : String(b._id));
-    const gdpForRatio = resolveRatioGdp({ gdp: b.gdp, gdpSmoothed: b.gdpSmoothed });
+    const gdp = b.gdp ?? 0;
+    const gdpForRatio = b.gdpSmoothed && b.gdpSmoothed > 0 ? b.gdpSmoothed : gdp;
     const revenue = b.revenue?.total ?? 0;
     const spending = b.spending?.total ?? 0;
 
-    const outstanding = outstandingByCountry.get(countryId) ?? 0;
-    const debtToGdpRatio = gdpForRatio > 0 ? outstanding / gdpForRatio : 0;
+    const { debtToGdpRatio } = deriveFiscalState({
+      treasuryBalance: b.treasuryBalance ?? -(b.debt?.principal ?? 0),
+      gdp,
+      gdpSmoothed: b.gdpSmoothed,
+      ceiling: b.debt?.ceiling ?? 0,
+      investorConfidence: b.investorConfidence,
+    });
 
     const budgetBalance = gdpForRatio > 0 ? ((revenue - spending) / gdpForRatio) * 100 : 0;
     const structuralDeficitPctGdp =

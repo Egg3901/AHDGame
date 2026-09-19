@@ -132,16 +132,6 @@ describe("POST /api/corporations/[id]/shares/consolidate", () => {
         }),
       })
     );
-
-    const { recordShareTrade } = await import("@/lib/corporations/shareTradeHistory");
-    expect(recordShareTrade).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.objectContaining({
-        kind: "reverse_split",
-        shares: 0,
-        pricePerShareAnchor: 0,
-      })
-    );
   });
 
   it("scales fundamentalSharePrice down on a forward stock split", async () => {

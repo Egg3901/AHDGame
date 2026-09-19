@@ -10,8 +10,6 @@ import type { CurrencyCode } from "@/lib/constants/currencies";
 
 const COLL = "shareTradeHistory";
 
-const STRUCTURE_CHANGE_KINDS = new Set<ShareTradeKind>(["stock_split", "reverse_split"]);
-
 export interface RecordShareTradeInput {
   corporationId: ShareTradeHistory["corporationId"];
   kind: ShareTradeKind;
@@ -32,19 +30,14 @@ export interface RecordShareTradeInput {
  * than throwing so it can never roll back the share-movement it audits.
  */
 export async function recordShareTrade(db: Db, input: RecordShareTradeInput): Promise<void> {
-  const isStructureChange = STRUCTURE_CHANGE_KINDS.has(input.kind);
   const doc: Omit<ShareTradeHistory, "_id"> = {
     corporationId: input.corporationId,
     kind: input.kind,
     turn: input.turn,
     createdAt: input.createdAt ?? new Date(),
-    // Corporate actions stay on this audit surface for cost-basis replay, but
-    // they are not executable trades and must contribute no volume/notional.
-    shares: isStructureChange ? 0 : input.shares,
-    pricePerShareAnchor: isStructureChange ? 0 : input.pricePerShareAnchor,
-    totalAnchor: isStructureChange
-      ? 0
-      : Math.round(input.shares * input.pricePerShareAnchor * 100) / 100,
+    shares: input.shares,
+    pricePerShareAnchor: input.pricePerShareAnchor,
+    totalAnchor: Math.round(input.shares * input.pricePerShareAnchor * 100) / 100,
     from: input.from,
     to: input.to,
     ...(input.corpCurrencyCode ? { corpCurrencyCode: input.corpCurrencyCode } : {}),

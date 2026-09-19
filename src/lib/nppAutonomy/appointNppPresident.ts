@@ -28,7 +28,6 @@ import {
   COUNTRIES_WITH_PRESIDENTIAL_ELECTION_CYCLES,
 } from "@/lib/constants/countries";
 import type { ElectedOfficial, NPP } from "@/lib/db/types";
-import { vacateNonExecutiveOfficesForExecutive } from "@/lib/elections/vacateOfficesForExecutive";
 import { getGovernmentFormationsCollection } from "@/lib/db/collections/governmentFormation";
 import { getExecutiveOfficialFilter } from "@/lib/elections/executiveOfficeFilters";
 import { tallySeatsByParty } from "@/lib/turn/parliamentaryGovernment";
@@ -122,11 +121,6 @@ export async function appointNppPresident(
     },
     { upsert: true }
   );
-
-  // A newly-seated executive holds no other office (#2038): vacate any
-  // legislative seat the appointee already holds through the real vacancy
-  // mechanism before stamping the executive office.
-  await vacateNonExecutiveOfficesForExecutive(db, { nppId: president._id }, now);
 
   // Seat the NPP as head of state.
   await db

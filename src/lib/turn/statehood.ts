@@ -287,17 +287,11 @@ export async function seedAdmittedStatePolitics(
   }
 }
 
-export async function runStatehoodAdmission(
-  db: Db,
-  _turn: number,
-  currentYearOverride?: number
-): Promise<StatehoodResult> {
+export async function runStatehoodAdmission(db: Db, _turn: number): Promise<StatehoodResult> {
   const gameState = await db
     .collection<GameState>("gameState")
     .findOne({ _id: "current" } as Partial<GameState>);
-  // Prefer the turn context's authoritative year: the persisted
-  // gameState.currentYear is only stamped at turn end (#2059).
-  const currentYear = currentYearOverride ?? gameState?.currentYear;
+  const currentYear = gameState?.currentYear;
   if (
     currentYear === undefined ||
     !shouldEvaluateStatehood(currentYear, gameState?.lastStatehoodYear)

@@ -12,7 +12,6 @@ export {
   MIN_DEPOSIT_RATE_PERCENT,
   MIN_LENDING_RATE_PERCENT,
   effectiveBankRatesFromPrime,
-  playerDepositRatePercent,
 } from "@/lib/banking/rules/rates";
 import { effectiveBankRatesFromPrime } from "@/lib/banking/rules/rates";
 

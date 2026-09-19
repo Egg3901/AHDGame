@@ -54,20 +54,11 @@ export function toPosix(rel) {
   return rel.split(path.sep).join("/");
 }
 
-function isLicenseMarkdown(relPosix) {
-  return /(?:^|\/)LICENSE(?:\.[A-Za-z0-9]+)?$/i.test(relPosix);
-}
-
 export function shouldKeepPayloadPath(relPosix) {
   if (!relPosix || relPosix === ".") return true;
   if (TOP_FILES.has(relPosix)) return true;
   const top = relPosix.split("/")[0];
-  if (TOP_DIRS.has(top)) {
-    // Runtime trees still ship dead weight: source maps and package docs.
-    if (relPosix.endsWith(".map")) return false;
-    if (/\.(md|markdown)$/i.test(relPosix) && !isLicenseMarkdown(relPosix)) return false;
-    return true;
-  }
+  if (TOP_DIRS.has(top)) return true;
   for (const rule of NESTED_KEEP) {
     if (relPosix.startsWith(rule.prefix) && relPosix.endsWith(rule.suffix)) return true;
   }

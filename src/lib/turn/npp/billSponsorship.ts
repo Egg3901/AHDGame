@@ -43,7 +43,6 @@ import {
 import {
   selectNppBill,
   buildConditionsSignal,
-  activeProposalKey,
   type ConditionsSignal,
 } from "@/lib/nppAutonomy/selectNppBill";
 import { loadPoliticalConditionsDomains } from "@/lib/politicalLegislation/conditionsSignal";
@@ -58,9 +57,6 @@ import type { PersistedFiscalStance } from "@/lib/nppAutonomy/fiscalStance";
 import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
 import { isPlannedEconomy } from "@/lib/constants/commandEconomy";
 import { getNationalDocId } from "@/lib/constants/nationalScope";
-import { buildActiveNationalBillFilter } from "@/lib/legislature/nationalBillScope";
-import { NATIONAL_TERMINAL_STATUSES } from "@/lib/congress/billProposalLimits";
-import { isPolicyProvision, type BillStatus } from "@/lib/db/types/legislation";
 import { getLowerChamberOfficeType } from "@/lib/legislature/chamberOfficeType";
 import { getEraContext } from "@/lib/era/context";
 import { isLegislationTypeActive } from "@/lib/era/legislationCatalog";
@@ -173,34 +169,6 @@ async function recentNppSponsoredLegislationTypeIds(
       .map((bill) => bill.legislationTypeId)
       .filter((id): id is string => typeof id === "string")
   );
-}
-
-/**
- * Normalized type/option combos already proposed by active national bills in
- * this country (any sponsor, including players — the duplicate-provision guard
- * rejects those too). One projected query per country per turn, passed into
- * selection so no per-candidate query is needed.
- */
-async function loadActiveProposalKeys(db: Db, countryId: CountryId): Promise<Set<string>> {
-  const filter = buildActiveNationalBillFilter(
-    countryId,
-    NATIONAL_TERMINAL_STATUSES as BillStatus[]
-  );
-  const bills = await db
-    .collection<Bill>("bills")
-    .find(filter as import("mongodb").Filter<Bill>, { projection: { provisions: 1 } })
-    .toArray();
-  const keys = new Set<string>();
-  for (const bill of bills) {
-    for (const provision of bill.provisions ?? []) {
-      // Mirror checkDuplicateProvisions: only policy provisions collide.
-      if (!isPolicyProvision(provision)) continue;
-      if (provision.legislationTypeId && provision.policyOptionId) {
-        keys.add(activeProposalKey(provision.legislationTypeId, provision.policyOptionId));
-      }
-    }
-  }
-  return keys;
 }
 
 // ── Sponsor selection ─────────────────────────────────────────────────────────
@@ -442,8 +410,6 @@ interface PartySponsorshipAttempt {
   signal: ConditionsSignal;
   /** Enacted national policy rung per legislation type (fiscal-restraint ceiling). */
   currentPolicyOptionIds: ReadonlyMap<string, string>;
-  /** Type/option combos already carried by active bills (excluded in selection). */
-  activeProposalKeys: ReadonlySet<string>;
   agenda?: GoverningAgendaItem[];
   fiscalStance?: PersistedFiscalStance;
   /** V5: domains carrying a standing government goal; biases selection toward them. */
@@ -542,7 +508,6 @@ async function attemptPartySponsorship(a: PartySponsorshipAttempt): Promise<numb
       // Country + party + turn: one slate per decision, a different one next
       // decision, and identical on a replay of the same turn.
       slateSalt: `${countryId}:${party}:${currentTurn}`,
-      activeProposalKeys: a.activeProposalKeys,
     }
   );
   if (!selection) {
@@ -686,20 +651,18 @@ export async function processNppBillSponsorship(ctx: NPPContext): Promise<number
     // enacted national policy rungs for the fiscal-restraint ceiling).
     const nationalPolicyStoreId =
       getNationalDocId(countryId) ?? `${countryId.toLowerCase()}_national`;
-    const [legTypesRaw, signal, directives, nationalPolicies, activeProposalKeys] =
-      await Promise.all([
-        loadNationalLegislationTypes(db, countryId),
-        loadConditionsSignal(db, countryId),
-        loadGovernmentDirectives(db, countryId),
-        db
-          .collection<StatePolicy>("statePolicies")
-          .find(
-            { stateId: nationalPolicyStoreId },
-            { projection: { legislationTypeId: 1, policyOptionId: 1 } }
-          )
-          .toArray(),
-        loadActiveProposalKeys(db, countryId),
-      ]);
+    const [legTypesRaw, signal, directives, nationalPolicies] = await Promise.all([
+      loadNationalLegislationTypes(db, countryId),
+      loadConditionsSignal(db, countryId),
+      loadGovernmentDirectives(db, countryId),
+      db
+        .collection<StatePolicy>("statePolicies")
+        .find(
+          { stateId: nationalPolicyStoreId },
+          { projection: { legislationTypeId: 1, policyOptionId: 1 } }
+        )
+        .toArray(),
+    ]);
     // Keyed by every equivalent legislation-type id so selectNppBill can look
     // up by whichever alias the catalog row carries.
     const currentPolicyOptionIds = new Map<string, string>();
@@ -733,7 +696,6 @@ export async function processNppBillSponsorship(ctx: NPPContext): Promise<number
       legTypes,
       signal,
       currentPolicyOptionIds,
-      activeProposalKeys,
       v3Active,
       isPlayerCountry,
       policy: behaviorPolicy,

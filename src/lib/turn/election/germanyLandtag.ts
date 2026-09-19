@@ -65,10 +65,9 @@ async function getCurrentTurnAndCtx(db: Db): Promise<{
  * canonical anchors come from getLandtagAnchor() (real-world election years
  * rounded to year boundaries). Cycle period is 240 turns (5 game-years).
  */
-export async function ensureDELandtagElections(now: Date, inFlightTurn?: number): Promise<void> {
+export async function ensureDELandtagElections(now: Date): Promise<void> {
   const db = await getDb();
-  const { currentTurn: persistedTurn, ctx, preset } = await getCurrentTurnAndCtx(db);
-  const currentTurn = inFlightTurn ?? persistedTurn;
+  const { currentTurn, ctx, preset } = await getCurrentTurnAndCtx(db);
 
   const deLaender = await db
     .collection<State>("states")
@@ -192,13 +191,9 @@ export async function ensureDELandtagElections(now: Date, inFlightTurn?: number)
  * Must run AFTER `ensureDELandtagElections` in the turn-phase registry so
  * the Landtag election is already in the DB to mirror.
  */
-export async function ensureDEMinisterPresidentElections(
-  now: Date,
-  inFlightTurn?: number
-): Promise<void> {
+export async function ensureDEMinisterPresidentElections(now: Date): Promise<void> {
   const db = await getDb();
-  const { currentTurn: persistedTurn, ctx, preset } = await getCurrentTurnAndCtx(db);
-  const currentTurn = inFlightTurn ?? persistedTurn;
+  const { currentTurn, ctx, preset } = await getCurrentTurnAndCtx(db);
 
   const deLaender = await db
     .collection<State>("states")

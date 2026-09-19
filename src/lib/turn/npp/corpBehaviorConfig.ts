@@ -8,8 +8,6 @@ import {
   type TechTreeNode,
 } from "@/lib/constants/techTree";
 import { TURNS_PER_DAY } from "@/lib/constants/corporations";
-import { resolveCorpLiquidCurrencyCode } from "@/lib/currency/corporationCapital";
-import type { TechUnlockLedgerInput } from "@/lib/corporations/techTree/techUnlockLedger";
 
 /**
  * Pick one deterministic, affordable node per turn. Sector-lane nodes win ties
@@ -65,13 +63,6 @@ export function maybePushNppTechUnlock(args: {
   corpUpdates: NppTechCorpUpdate[];
   liquidCapitalDelta?: number;
   cashReserve?: number;
-  /**
-   * Ledger intents for `flushNppTechUnlockLedger` (ticket #1998). The cash
-   * op above still owns the debit; this records what to verify and log
-   * after the corporation bulkWrite applies, so autonomous unlocks get the
-   * same finance-history debit as manual ones.
-   */
-  techLedger?: TechUnlockLedgerInput[];
 }): void {
   const { corp, sectors, techCurrentYear, turn, now } = args;
   const dailyGrossRevenue = sectors.reduce((sum, s) => sum + (s.revenue ?? 0), 0) * TURNS_PER_DAY;
@@ -104,24 +95,5 @@ export function maybePushNppTechUnlock(args: {
       $inc: techInc,
       $addToSet: { unlockedTechNodeIds: techNode.id },
     },
-  });
-  args.techLedger?.push({
-    corporationId: corp._id,
-    corporationName: corp.name ?? "Corporation",
-    corporationSequentialId: corp.sequentialId,
-    nodeId: techNode.id,
-    nodeName: techNode.name,
-    decadeId: techNode.decadeId,
-    lane: techNode.lane,
-    slot: techNode.slot,
-    rdCost: techNode.cost,
-    cashCost,
-    currencyCode: resolveCorpLiquidCurrencyCode(corp) ?? "USD",
-    turn,
-    createdAt: now,
-    alreadyOwned: [...(corp.unlockedTechNodeIds ?? [])],
-    marketingGrant: grants.marketingStrength,
-    logisticsGrant: grants.logisticsStrength,
-    committing,
   });
 }

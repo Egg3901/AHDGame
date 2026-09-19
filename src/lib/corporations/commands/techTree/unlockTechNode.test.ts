@@ -31,22 +31,8 @@ function makeCorp(overrides: Partial<Corporation> = {}): Corporation {
  * for free). Returning null makes `getMarketSystemModeForDb` fall back to the
  * default mode, which keeps every assertion in this file on the legacy basis.
  */
-vi.mock("@/lib/ledger/featureFlag", () => ({
-  isLedgerShadowEnabled: vi.fn().mockResolvedValue(false),
-}));
-vi.mock("@/lib/audit/recordAudit", () => ({
-  recordAudit: vi.fn(),
-  recordAuditBulk: vi.fn(),
-}));
-
 function mockDb({ revenues = [24_000], modifiedCount = 1 } = {}) {
   const updateOne = vi.fn().mockResolvedValue({ modifiedCount });
-  // Ledger rows land here via the strict emit (ticket #1998).
-  const txInserts: Record<string, unknown>[] = [];
-  const insertOne = vi.fn((doc: Record<string, unknown>) => {
-    txInserts.push(doc);
-    return Promise.resolve({ insertedId: doc._id });
-  });
   const db = {
     collection: (name: string) => {
       if (name === "corporateSectors") {
@@ -62,13 +48,10 @@ function mockDb({ revenues = [24_000], modifiedCount = 1 } = {}) {
         // stays the plain sum these assertions were written against.
         return { find: () => ({ toArray: () => Promise.resolve([]) }) };
       }
-      if (name === "financialTxLog") {
-        return { insertOne, findOne: () => Promise.resolve(null) };
-      }
-      return { updateOne, insertOne, findOne: () => Promise.resolve(null) };
+      return { updateOne, findOne: () => Promise.resolve(null) };
     },
   } as unknown as Db;
-  return { db, updateOne, insertOne, txInserts };
+  return { db, updateOne };
 }
 
 describe("unlockTechNode (v2 dual cost + lane)", () => {

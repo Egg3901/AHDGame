@@ -25,7 +25,6 @@ import {
 import { getCabinetMechanics } from "@/lib/constants/cabinetMechanics";
 import { MINISTERIAL_ACTION_CAP } from "@/lib/constants/cabinetMechanicsTypes";
 import { getCalendarDayInTimezone, shouldApplyDailyReset } from "@/lib/time/dailyReset";
-import { ukSharedPoolIdsNeedingReset } from "@/lib/cabinet/ministerialActionPool";
 import { resolveMetricPath } from "@/lib/cabinet/resolveMetricPath";
 import { applyMilitaryForceEffects } from "./militaryForceEffects";
 import { resolveBattleDeclarations } from "./battleResolution";
@@ -667,16 +666,11 @@ export async function processMinisterialOrders(currentTurn: number): Promise<{
   const allMembers = await membersCol
     .find({})
     .project<
-      Pick<
-        UnifiedCabinetMember,
-        "_id" | "ministerialActions" | "lastMinisterialActionResetDay" | "characterId" | "countryId"
-      >
+      Pick<UnifiedCabinetMember, "_id" | "ministerialActions" | "lastMinisterialActionResetDay">
     >({
       _id: 1,
       ministerialActions: 1,
       lastMinisterialActionResetDay: 1,
-      characterId: 1,
-      countryId: 1,
     })
     .toArray();
   const membersBulkOps: AnyBulkWriteOperation<UnifiedCabinetMember>[] = [];
@@ -699,28 +693,6 @@ export async function processMinisterialOrders(currentTurn: number): Promise<{
 
   if (membersBulkOps.length > 0) {
     await membersCol.bulkWrite(membersBulkOps);
-  }
-
-  // 6b. Shared UK pools (issue #2049): refill the per-player pool wherever it
-  // is missing or stale, so both offices of a dual holder reset together at
-  // the existing cap. One projected read plus one bulk write, both bounded by
-  // the UK holder count.
-  const ukPoolResetIds = await ukSharedPoolIdsNeedingReset(db, allMembers, todayEastern);
-  if (ukPoolResetIds.length > 0) {
-    await db.collection<Character>("characters").bulkWrite(
-      ukPoolResetIds.map((id) => ({
-        updateOne: {
-          filter: { _id: new ObjectId(id) },
-          update: {
-            $set: {
-              sharedMinisterialActions: MINISTERIAL_ACTION_CAP,
-              sharedMinisterialActionResetDay: todayEastern,
-              updatedAt: new Date(),
-            },
-          },
-        },
-      }))
-    );
   }
 
   return {

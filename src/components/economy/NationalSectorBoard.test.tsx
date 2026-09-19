@@ -44,12 +44,11 @@ describe("NationalSectorBoard", () => {
     expect(links[0].getAttribute("title")).toMatch(/Texas.*largest Energy market/);
     expect(screen.getByText("↳ Texas")).toBeTruthy();
     expect(screen.getByText("$58.9M")).toBeTruthy();
-    expect(screen.getAllByText("market /day")).toHaveLength(3);
   });
 
-  it("shows the owned percentage and colored average growth", () => {
+  it("shows colored average growth instead of the owned percentage", () => {
     render(<NationalSectorBoard countryId="US" sectorMix={mix} formatMarket={fmt} />);
-    expect(screen.getByText("74% owned")).toBeTruthy();
+    expect(screen.queryByText("74%")).toBeNull();
     const pos = screen.getByText("+2.45%");
     expect(pos.className).toContain("text-success");
     const neg = screen.getByText("-1.30%");

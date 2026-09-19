@@ -9,11 +9,6 @@ import { handleRouteError } from "@/lib/api/errors";
 import { requireConfirmedSecretary } from "@/lib/api/requireConfirmedSecretary";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { getCabinetMembersCollection } from "@/lib/db/collections/cabinetMembers";
-import {
-  refundMinisterialAction,
-  resolveMinisterialRemaining,
-  spendMinisterialAction,
-} from "@/lib/cabinet/ministerialActionPool";
 import { getEnergyPlantsCollection } from "@/lib/db/collections/energyPlants";
 import { resolveEnergyPosition } from "@/lib/constants/cabinetEnergy";
 
@@ -66,14 +61,20 @@ export async function POST(_request: Request, { params }: RouteParams) {
       return NextResponse.json({ error: "Plant is already at the highest tier" }, { status: 400 });
     }
 
-    // Shared UK pool: both offices of a dual holder spend one balance (issue #2049).
-    const actions = await resolveMinisterialRemaining(db, countryId, member!);
+    if (member && member.ministerialActions == null) {
+      await membersCol.updateOne({ _id: member._id }, { $set: { ministerialActions: 2 } });
+      member.ministerialActions = 2;
+    }
+    const actions = member?.ministerialActions ?? 2;
     if (actions < 1) {
       return NextResponse.json({ error: "No ministerial actions remaining" }, { status: 400 });
     }
 
-    const spend = await spendMinisterialAction(db, countryId, member!);
-    if (!spend.ok) {
+    const spend = await membersCol.updateOne(
+      { _id: member!._id, ministerialActions: { $gte: 1 } },
+      { $inc: { ministerialActions: -1 } }
+    );
+    if (spend.modifiedCount === 0) {
       return NextResponse.json({ error: "No ministerial actions remaining" }, { status: 409 });
     }
 
@@ -83,14 +84,14 @@ export async function POST(_request: Request, { params }: RouteParams) {
         { $set: { tier: (plant.tier + 1) as 0 | 1 | 2 | 3 } }
       );
     } catch (error) {
-      await refundMinisterialAction(db, countryId, member!);
+      await membersCol.updateOne({ _id: member!._id }, { $inc: { ministerialActions: 1 } });
       throw error;
     }
 
     return NextResponse.json({
       success: true,
       tier: plant.tier + 1,
-      actionsRemaining: spend.remaining,
+      actionsRemaining: actions - 1,
     });
   } catch (error) {
     return handleRouteError(error);

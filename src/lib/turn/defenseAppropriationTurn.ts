@@ -97,7 +97,8 @@ export async function applyDefenseAppropriation(
       turn,
       settlement,
       budget.treasuryBalance ?? 0,
-      pot.balance
+      pot.balance,
+      budget
     );
     if (settled) break;
   }

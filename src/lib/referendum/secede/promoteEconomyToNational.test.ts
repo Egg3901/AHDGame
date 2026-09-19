@@ -2,7 +2,6 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import type { Db } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import { promoteEconomyToNational } from "./promoteEconomyToNational";
-import { sovereignDebtTerms } from "@/lib/bonds/sovereignPrincipal";
 
 const cursorOf = <T>(docs: T[]) => ({ toArray: vi.fn().mockResolvedValue(docs) });
 
@@ -36,19 +35,6 @@ describe("promoteEconomyToNational", () => {
           }
         : null
     );
-    // The bond ledger backs the seeded stock: one sovereign series at 500
-    // face, so each side's principal splits off the ledger, never the cash.
-    db.collection("bonds").find.mockReturnValue(
-      cursorOf([
-        {
-          issuerType: "sovereign",
-          countryId: "UK",
-          totalIssued: 500,
-          matured: false,
-          defaulted: false,
-        },
-      ])
-    );
   }
 
   it("stands up the new budget at the GDP-share weight and debits the UK", async () => {
@@ -69,11 +55,8 @@ describe("promoteEconomyToNational", () => {
     expect(newBudget.taxBases.income).toBeCloseTo(200, 6); // 0.2 × 1000
     expect(newBudget.taxBases.corporate).toBeCloseTo(100, 6);
     expect(newBudget.treasuryBalance).toBeCloseTo(-100, 6);
-    // Principal is the GDP-share slice of the split bond stock (0.2 x 500
-    // face), not of the cash balance; the service terms refresh off the new
-    // stock rather than copying the UK rate.
     expect(newBudget.debt.principal).toBeCloseTo(100, 6);
-    expect(newBudget.debt.interestRate).toBe(sovereignDebtTerms(100, { gdp: 200 }).interestRate);
+    expect(newBudget.debt.interestRate).toBe(3); // copied, not scaled
     expect(newBudget.taxRates.income).toBe(20); // rate copied
 
     const [, update] = db.collectionMocks["federalBudget"]!.updateOne.mock.calls[0];
@@ -105,23 +88,5 @@ describe("promoteEconomyToNational", () => {
     db.collection("federalBudget").findOne.mockResolvedValue({ _id: "SCO", countryId: "SCO" });
     await promoteEconomyToNational(db as unknown as Db, "UK", "SCO");
     expect(db.collectionMocks["federalBudget"]!.insertOne).not.toHaveBeenCalled();
-  });
-
-  it("a replay after a completed split converges without a second insert or debit", async () => {
-    seedUkBudget();
-    await promoteEconomyToNational(db as unknown as Db, "UK", "SCO");
-    const inserted = db.collectionMocks["federalBudget"]!.insertOne.mock.calls[0][0];
-    const updatesAfterFirst = db.collectionMocks["federalBudget"]!.updateOne.mock.calls.length;
-
-    // The crash landed after every write: the SCO budget now exists.
-    db.collection("federalBudget").findOne.mockImplementation(async (q: { _id: string }) =>
-      q._id === "SCO" ? inserted : null
-    );
-    await promoteEconomyToNational(db as unknown as Db, "UK", "SCO");
-
-    expect(db.collectionMocks["federalBudget"]!.insertOne).toHaveBeenCalledTimes(1);
-    expect(db.collectionMocks["federalBudget"]!.updateOne.mock.calls).toHaveLength(
-      updatesAfterFirst
-    );
   });
 });

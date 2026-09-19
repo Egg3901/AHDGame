@@ -9,7 +9,6 @@ import { Tooltip } from "@/components/ui";
 import { resolveListingColor } from "../stockMarketColors";
 import type { BondListing, CommodityData, MarketCapPoint, StockListing } from "../types";
 import { SectorPieChart } from "./SectorPieChart";
-import { finitePriceChange } from "@/lib/stockExchange/listingEligibility";
 
 const CHART_W = 700;
 const CHART_H = 240;
@@ -161,8 +160,7 @@ export function MarketStats({
       const weightedRoi =
         marketCap > 0
           ? ls.reduce(
-              (s, x) =>
-                s + finitePriceChange(x.priceChange24h) * (x.marketCapAnchor ?? x.marketCap),
+              (s, x) => s + (x.priceChange24h ?? 0) * (x.marketCapAnchor ?? x.marketCap),
               0
             ) / marketCap
           : 0;

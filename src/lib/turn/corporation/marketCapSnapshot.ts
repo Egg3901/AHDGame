@@ -21,7 +21,6 @@ import {
 } from "@/lib/currency/corporationCapital";
 import { readCorpEconomicAnchor, writeCorpEconomicLocal } from "@/lib/currency/corpEconomyFields";
 import { runLaunchGuard } from "@/lib/market/launchGuard";
-import { computeMarketIndex } from "./marketIndex";
 
 /**
  * Currency to DENOMINATE a corp's history rows in. Returns a `code` ONLY when
@@ -179,127 +178,6 @@ export async function snapshotMarketCap(
     }
   }
 
-  // Market capitalization is a balance-sheet total, but the chart is an index:
-  // removing a listed corporation must not look like a price crash. Read the
-  // latest prior cap row and the latest prior history for corporations that
-  // still survive. One grouped query gives us the prior survivor universe
-  // without a query per corporation.
-  const indexCorpIds = corporations.map((corp) => corp._id);
-  const [previousMarketCapRow, previousSurvivorRows] = await Promise.all([
-    db.collection<MarketCapHistory>("marketCapHistory").findOne(
-      { turn: { $lt: turn } },
-      {
-        projection: {
-          globalMarketCap: 1,
-          globalMarketIndex: 1,
-          globalMarketIndexDivisor: 1,
-          exchangeCaps: 1,
-          nyseMarketCap: 1,
-          ftseMarketCap: 1,
-          nyseHigh: 1,
-          ftseHigh: 1,
-        },
-        sort: { turn: -1 },
-      }
-    ),
-    indexCorpIds.length > 0
-      ? db
-          .collection<CorporationHistory>("corporationHistory")
-          .aggregate<{
-            _id: ObjectId;
-            marketCap: number;
-            currencyCode?: CurrencyCode;
-            fxRateAtWrite?: number;
-          }>([
-            {
-              $match: {
-                corporationId: { $in: indexCorpIds },
-                turn: { $lt: turn },
-              },
-            },
-            { $sort: { turn: -1 } },
-            {
-              $group: {
-                _id: "$corporationId",
-                marketCap: { $first: "$marketCap" },
-                currencyCode: { $first: "$currencyCode" },
-                fxRateAtWrite: { $first: "$fxRateAtWrite" },
-              },
-            },
-          ])
-          .toArray()
-      : Promise.resolve([]),
-  ]);
-
-  const previousSurvivorCapsByExchange: Record<string, number> = {};
-  const previousSurvivorHistoryByExchange: Record<string, boolean> = {};
-  for (const ex of ALL_EXCHANGES) previousSurvivorCapsByExchange[ex.apiKey] = 0;
-  for (const ex of ALL_EXCHANGES) previousSurvivorHistoryByExchange[ex.apiKey] = false;
-  let previousSurvivorGlobalCap = 0;
-  let previousSurvivorHistoryAvailable = false;
-  for (const row of previousSurvivorRows) {
-    const corp = corpById.get(row._id.toString());
-    if (!corp || !isStockMarketCorporation(corp)) continue;
-    const capAnchor = readCorpEconomicAnchor(
-      row.marketCap,
-      row.currencyCode,
-      row.fxRateAtWrite ?? 1
-    );
-    if (!(capAnchor > 0)) continue;
-    previousSurvivorHistoryAvailable = true;
-    previousSurvivorGlobalCap += capAnchor;
-    const apiKey = corp.countryId ? getExchangeApiKey(corp.countryId) : undefined;
-    if (apiKey && previousSurvivorCapsByExchange[apiKey] !== undefined) {
-      previousSurvivorCapsByExchange[apiKey] += capAnchor;
-      previousSurvivorHistoryByExchange[apiKey] = true;
-    }
-  }
-
-  const globalIndex = computeMarketIndex({
-    currentMarketCap: globalCap,
-    previousMarketCap: previousMarketCapRow?.globalMarketCap,
-    previousSurvivorMarketCap: previousSurvivorHistoryAvailable
-      ? previousSurvivorGlobalCap
-      : undefined,
-    previousIndex: previousMarketCapRow?.globalMarketIndex,
-    previousDivisor: previousMarketCapRow?.globalMarketIndexDivisor,
-  });
-
-  function previousExchangeCap(apiKey: string): {
-    marketCap?: number;
-    marketIndex?: number;
-    marketIndexDivisor?: number;
-  } {
-    const stored = previousMarketCapRow?.exchangeCaps?.[apiKey];
-    if (stored) {
-      return {
-        marketCap: stored.marketCap,
-        marketIndex: stored.marketIndex,
-        marketIndexDivisor: stored.marketIndexDivisor,
-      };
-    }
-    if (apiKey === "nyse") return { marketCap: previousMarketCapRow?.nyseMarketCap };
-    if (apiKey === "ftse") return { marketCap: previousMarketCapRow?.ftseMarketCap };
-    return {};
-  }
-
-  const exchangeIndexes = new Map<string, ReturnType<typeof computeMarketIndex>>();
-  for (const [apiKey, cap] of Object.entries(exchangeCaps)) {
-    const previous = previousExchangeCap(apiKey);
-    exchangeIndexes.set(
-      apiKey,
-      computeMarketIndex({
-        currentMarketCap: cap,
-        previousMarketCap: previous.marketCap,
-        previousSurvivorMarketCap: previousSurvivorHistoryByExchange[apiKey]
-          ? previousSurvivorCapsByExchange[apiKey]
-          : undefined,
-        previousIndex: previous.marketIndex,
-        previousDivisor: previous.marketIndexDivisor,
-      })
-    );
-  }
-
   // Launch guard: automated kill switch for the clearing/capital flip. Cheap
   // no-op unless opt-in (marketGuardEnabled) and the mode is clearing/capital.
   await runLaunchGuard(
@@ -327,24 +205,13 @@ export async function snapshotMarketCap(
   }
 
   const globalSpread = candleSpread(globalCap);
-  const globalIndexSpread = candleSpread(globalIndex.index);
 
   // Build per-exchange candlestick data
-  const exchangeCapsFormatted: NonNullable<MarketCapHistory["exchangeCaps"]> = {};
+  const exchangeCapsFormatted: Record<string, { marketCap: number; high: number; low: number }> =
+    {};
   for (const [key, cap] of Object.entries(exchangeCaps)) {
     const spread = candleSpread(cap);
-    const index = exchangeIndexes.get(key)!;
-    const indexSpread = candleSpread(index.index);
-    exchangeCapsFormatted[key] = {
-      marketCap: Math.round(cap),
-      high: spread.high,
-      low: spread.low,
-      marketIndex: Math.round(index.index),
-      marketIndexDivisor: index.divisor,
-      removedMarketCap: Math.round(index.removedMarketCap),
-      marketIndexHigh: indexSpread.high,
-      marketIndexLow: indexSpread.low,
-    };
+    exchangeCapsFormatted[key] = { marketCap: Math.round(cap), high: spread.high, low: spread.low };
   }
 
   // Legacy fields for backward compat (NYSE/FTSE)
@@ -357,11 +224,6 @@ export async function snapshotMarketCap(
     globalMarketCap: Math.round(globalCap),
     globalHigh: globalSpread.high,
     globalLow: globalSpread.low,
-    globalMarketIndex: Math.round(globalIndex.index),
-    globalMarketIndexHigh: globalIndexSpread.high,
-    globalMarketIndexLow: globalIndexSpread.low,
-    globalMarketIndexDivisor: globalIndex.divisor,
-    removedMarketCap: Math.round(globalIndex.removedMarketCap),
     // Legacy named fields (preserved for backward compat)
     nyseMarketCap: nyseData.marketCap,
     nyseHigh: nyseData.high,
@@ -481,27 +343,6 @@ export async function snapshotMarketCap(
         })(),
         marketCap: Math.round(localPrice * s.totalShares),
         liquidCapital: Math.round(s.liquidCapital),
-        // SOE backing reconciliation (#2043): ₳-anchor snapshot fields to the
-        // row's local denomination, same as income/costs above. Absent unless
-        // the backing fold set it (SOE with a shortfall this turn).
-        ...(s.soeBacking
-          ? {
-              soeBacking: {
-                shortfall: Math.round(
-                  writeCorpEconomicLocal(s.soeBacking.shortfallAnchor, code, rate)
-                ),
-                realizedLoss: Math.round(
-                  writeCorpEconomicLocal(s.soeBacking.realizedLossAnchor, code, rate)
-                ),
-                realizedSource: s.soeBacking.realizedSource,
-                covered: Math.round(writeCorpEconomicLocal(s.soeBacking.coveredAnchor, code, rate)),
-                cipHeld: Math.round(writeCorpEconomicLocal(s.soeBacking.cipHeldAnchor, code, rate)),
-                residual: Math.round(
-                  writeCorpEconomicLocal(s.soeBacking.residualAnchor, code, rate)
-                ),
-              },
-            }
-          : {}),
         // Snapshot the market-making buyback escrow (already in local currency) so
         // trace_corp / forensics can chart true net cash (liquidCapital + escrow) and
         // detect escrow going negative — the driver behind "the merger only gave me a

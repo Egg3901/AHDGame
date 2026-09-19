@@ -38,7 +38,7 @@ import { interbankServiceTransition } from "@/lib/banking/rules/interbankServici
 import { settleTransition } from "@/lib/banking/settlementJournal";
 import { oid, type TransitionLeg, type TransitionProjection } from "@/lib/banking/rules/boundary";
 import { cbMarginRatePercent } from "@/lib/banking/interbank";
-import { effectiveBankRatesFromPrime, playerDepositRatePercent } from "@/lib/banking/rates";
+import { effectiveBankRatesFromPrime } from "@/lib/banking/rates";
 import { getReserveRequirement } from "@/lib/banking/reserves";
 import { getBankDepositCeiling } from "@/lib/banking/capacityAllocation";
 import { roundSavingsAmount, savingsApyPercent } from "@/lib/currency/savingsInterest";
@@ -521,30 +521,13 @@ async function processOneBank(
   stageDone("funding");
 
   // (c) Deposit interest - player balances + npcDeposits, paid from cashReserves
-  //
-  // Pointer-model pricing: player savings never arrived as vault cash, so the
-  // bank pays only the premium over the CB base APY; the base accrues to the
-  // saver in savingsInterestTurn. Authoritative currencies keep the full rate
-  // because the backing cash is in the vault and the liability is real.
-  const cbApyDoc = caches.cbById.get(cbDocId);
-  const cbApyPrime =
-    typeof cbApyDoc?.primeRate === "number" && Number.isFinite(cbApyDoc.primeRate)
-      ? cbApyDoc.primeRate
-      : 0;
-  const cbApyInflation = cbApyDoc?.inflationHistory?.at(-1)?.rate ?? 0;
-  const playerRatePercent = playerDepositRatePercent(
-    rates.depositRatePercent,
-    playerDepositsAreLiabilities,
-    cbApyPrime,
-    cbApyInflation
-  );
   type PlayerCredit = { characterId: ObjectId; interest: number };
   const playerCredits: PlayerCredit[] = [];
   let playerInterestDue = 0;
   for (const ch of depositors) {
     const bal = ch.currencyBalances?.savings?.[currency] ?? 0;
     if (!(bal > 0)) continue;
-    const interest = perTurnInterest(bal, playerRatePercent, currency);
+    const interest = perTurnInterest(bal, rates.depositRatePercent, currency);
     if (interest <= 0) continue;
     playerCredits.push({ characterId: ch._id, interest });
     playerInterestDue += interest;
@@ -661,7 +644,7 @@ async function processOneBank(
           counterpartyType: "corporation" as const,
           counterpartyId: corp._id,
           counterpartyName: corp.name,
-          meta: { ratePercent: playerRatePercent, retainedAsBacking: true },
+          meta: { ratePercent: rates.depositRatePercent, retainedAsBacking: true },
         })),
         thresholds
       );
@@ -735,7 +718,7 @@ async function processOneBank(
               counterpartyType: "corporation" as const,
               counterpartyId: corp._id,
               counterpartyName: corp.name,
-              meta: { ratePercent: playerRatePercent },
+              meta: { ratePercent: rates.depositRatePercent },
             })),
           thresholds
         );

@@ -112,24 +112,6 @@ export interface CommodityDetail {
   topConsumers: CorpVolume[];
   topProducersByCountry?: Partial<Record<CountryId, CorpVolume[]>>;
   topConsumersByCountry?: Partial<Record<CountryId, CorpVolume[]>>;
-  /**
-   * Documented realized physical-unit basis shared with corporation commodity
-   * pages (issue #1999). Top Consumers excludes marketing-budget demand for
-   * advertising; that demand ships separately below.
-   */
-  volumeBasis?: {
-    basis: "realized_physical_units";
-    turn: number;
-    roundingDecimals: number;
-    roundingTolerance: number;
-    extractionException: boolean;
-    advertisingBudgetSeparate: boolean;
-  };
-  /** Marketing-budget demand per corporation. Null unless commodity is advertising. */
-  advertisingBudgetDemand?: {
-    total: number;
-    byCorp: CorpVolume[];
-  } | null;
   demandDriver: DemandDriver | null;
   syntheticDemandSources: SyntheticDemandSource[];
 }
