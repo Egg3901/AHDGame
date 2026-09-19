@@ -63,6 +63,26 @@ const RULES: ReadonlyArray<readonly [RegExp, (cc: string, base: string) => strin
   [/\/constituencies\//, (_cc, b) => `data/${b}`],
   [/\/npp\/rosters\//, (_cc, b) => `data/${b}`],
   [/\/commodity-map\//, (_cc, b) => `data/${b}`],
+  /*
+   * ⚠ UPSTREAM KEEPS AUTHORING PER-COUNTRY FEATURES UNDER `src/lib/<cc>/`, and
+   * they are LOGIC, not data. Without these rules the fallback below sends them
+   * to `data/` -- the size-cap-exempt directory -- which is exactly the misfile
+   * the `cnRegionalBudget.ts` note above records. Each feature keeps its own
+   * subdirectory inside the folder so the upstream shape survives the move and
+   * a later merge still lines up.
+   *
+   * `cabinet/rules/` MUST precede `cabinet/`: `uk/cabinet/nppResignation.ts` and
+   * `uk/cabinet/rules/nppResignation.ts` share a basename, and a single
+   * `cabinet/` rule collapses both onto one destination. The tool aborts on that
+   * collision rather than silently overwriting, which is how it was found.
+   */
+  [/\/lib\/[a-z]{2}\/cabinet\/rules\//, (_cc, b) => `cabinet/rules/${b}`],
+  [/\/lib\/[a-z]{2}\/cabinet\//, (_cc, b) => `cabinet/${b}`],
+  [/\/lib\/[a-z]{2}\/conference\//, (_cc, b) => `conference/${b}`],
+  [/\/lib\/[a-z]{2}\/leadership\//, (_cc, b) => `leadership/${b}`],
+  [/\/lib\/[a-z]{2}\/dualMinistry\//, (_cc, b) => `dualMinistry/${b}`],
+  /* A bare `src/lib/<cc>/<file>.ts` is country logic: folder root, not data/. */
+  [/\/lib\/[a-z]{2}\/[A-Za-z0-9]+\.ts$/, (_cc, b) => b],
 ];
 
 function destination(cc: string, file: string): string {
