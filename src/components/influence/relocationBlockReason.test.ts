@@ -82,4 +82,65 @@ describe("getRelocationBlockReason", () => {
       })
     ).toBeNull();
   });
+
+  // Growth frontier. A region out of the party's reach must not be reported as
+  // merely "at capacity" — it is a different, harder wall with a different fix.
+  describe("growth frontier", () => {
+    const reachable = {
+      id: "PA",
+      name: "Pennsylvania",
+      currentNPPs: 0,
+      maxSlots: 4,
+      full: false,
+      inFrontier: true,
+    };
+    const unreachable = {
+      id: "CA",
+      name: "California",
+      currentNPPs: 0,
+      maxSlots: 4,
+      full: false,
+      inFrontier: false,
+    };
+
+    it("names the frontier when every target is out of reach", () => {
+      expect(
+        getRelocationBlockReason({
+          targetOptions: [unreachable],
+          selectedTargetId: "",
+          regionLabelLower: "state",
+        })
+      ).toMatch(/within your party's reach/i);
+    });
+
+    it("names the frontier for a selected out-of-reach target", () => {
+      const reason = getRelocationBlockReason({
+        targetOptions: [reachable, unreachable],
+        selectedTargetId: "CA",
+        regionLabelLower: "state",
+      });
+      expect(reason).toContain("California");
+      expect(reason).toMatch(/outside your party's reach/i);
+      expect(reason).not.toMatch(/capacity/i);
+    });
+
+    it("stays silent when the selected target is reachable and free", () => {
+      expect(
+        getRelocationBlockReason({
+          targetOptions: [reachable, unreachable],
+          selectedTargetId: "PA",
+          regionLabelLower: "state",
+        })
+      ).toBeNull();
+    });
+
+    it("prefers the frontier reason over capacity when both apply", () => {
+      const reason = getRelocationBlockReason({
+        targetOptions: [{ ...unreachable, full: true }],
+        selectedTargetId: "CA",
+        regionLabelLower: "state",
+      });
+      expect(reason).toMatch(/reach/i);
+    });
+  });
 });
