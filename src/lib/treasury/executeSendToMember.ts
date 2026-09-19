@@ -162,6 +162,12 @@ export async function executeSendToMember(
   }
 
   // ─── Audit + activity logs ──────────────────────────────────────────────
+  // PAST THIS POINT THE MONEY HAS MOVED. Nothing below may throw: the
+  // callers treat an exception as "the transfer did not happen" and
+  // unwind accordingly — the two-person approve route hands the
+  // approver's signature back, reopening a row whose funds are already
+  // gone, which a second Approve click then spends again. A lost audit
+  // row is a reporting gap; a thrown audit row was a double payout.
   const adminLog: AdminLog = {
     _id: new ObjectId(),
     createdAt: now,
@@ -173,36 +179,64 @@ export async function executeSendToMember(
       reserveWarning ? ` (${reserveWarning})` : ""
     }`,
   };
-  await db.collection<AdminLog>("adminLogs").insertOne(adminLog);
+  try {
+    await db.collection<AdminLog>("adminLogs").insertOne(adminLog);
+  } catch (err) {
+    console.error(
+      JSON.stringify({
+        error: "treasury_send_admin_log_failed",
+        operation: "execute_send_to_member",
+        partyId: partyIdStr,
+        countryId,
+        amount,
+        recipientId: targetCharacter._id.toString(),
+        message: err instanceof Error ? err.message : String(err),
+      })
+    );
+  }
 
-  await emitTreasuryTransaction({
-    db,
-    countryId,
-    partyId: partyIdStr,
-    holderType: "party",
-    holderId: partyIdStr,
-    category: "transfers",
-    direction: "debit",
-    amount,
-    memo: `Send to ${targetCharacter.name}`,
-    counterparty: {
-      type: "character",
-      id: targetCharacter._id.toString(),
-      label: targetCharacter.name,
-    },
-    initiatedBy: {
-      type: "character",
-      id: initiator._id.toString(),
-      label: initiator.name,
-    },
-    // Stamp the SAME turn the payout cap was checked against. Left to
-    // its fallback the emit re-reads gameState, and getGameTime is cached
-    // for 5s, so around a turn boundary the check could count turn N
-    // while the row landed in turn N+1 — handing the recipient a second
-    // full allowance.
-    turn: args.currentTurn,
-    now,
-  });
+  try {
+    await emitTreasuryTransaction({
+      db,
+      countryId,
+      partyId: partyIdStr,
+      holderType: "party",
+      holderId: partyIdStr,
+      category: "transfers",
+      direction: "debit",
+      amount,
+      memo: `Send to ${targetCharacter.name}`,
+      counterparty: {
+        type: "character",
+        id: targetCharacter._id.toString(),
+        label: targetCharacter.name,
+      },
+      initiatedBy: {
+        type: "character",
+        id: initiator._id.toString(),
+        label: initiator.name,
+      },
+      // Stamp the SAME turn the payout cap was checked against. Left to
+      // its fallback the emit re-reads gameState, and getGameTime is cached
+      // for 5s, so around a turn boundary the check could count turn N
+      // while the row landed in turn N+1 — handing the recipient a second
+      // full allowance.
+      turn: args.currentTurn,
+      now,
+    });
+  } catch (err) {
+    console.error(
+      JSON.stringify({
+        error: "treasury_send_emit_failed",
+        operation: "execute_send_to_member",
+        partyId: partyIdStr,
+        countryId,
+        amount,
+        recipientId: targetCharacter._id.toString(),
+        message: err instanceof Error ? err.message : String(err),
+      })
+    );
+  }
 
   // Fire-and-forget activity log row for the admin activity-tracking view.
   void db.collection("activityLog").insertOne({

@@ -133,111 +133,132 @@ export async function executeTransferToStateParty(
   }
 
   // ─── Audit + activity logs ──────────────────────────────────────────────
-  await db.collection("adminLogs").insertOne({
-    category: "system",
-    action: "funds_transferred",
-    username: args.initiatorUsername,
-    characterName: initiator.name,
-    adminUsername: args.isAdmin ? args.initiatorUsername : undefined,
-    details: `Transferred $${amount.toLocaleString()} from ${party.name} national treasury to ${state.name}${
-      reserveWarning ? ` (${reserveWarning})` : ""
-    }`,
-    createdAt: now,
-  });
+  // PAST THIS POINT THE MONEY HAS MOVED: the national treasury is
+  // debited and the state party credited. Nothing below may throw —
+  // callers read an exception as "the transfer did not happen", and
+  // the two-person approve route responds by handing the approver's
+  // signature back, reopening a row whose funds are already gone for a
+  // second Approve click to spend again. Losing an audit row is a
+  // reporting gap; throwing one was a double payout.
+  try {
+    await db.collection("adminLogs").insertOne({
+      category: "system",
+      action: "funds_transferred",
+      username: args.initiatorUsername,
+      characterName: initiator.name,
+      adminUsername: args.isAdmin ? args.initiatorUsername : undefined,
+      details: `Transferred $${amount.toLocaleString()} from ${party.name} national treasury to ${state.name}${
+        reserveWarning ? ` (${reserveWarning})` : ""
+      }`,
+      createdAt: now,
+    });
 
-  await emitTreasuryTransaction({
-    db,
-    countryId,
-    partyId: partyIdStr,
-    holderType: "party",
-    holderId: partyIdStr,
-    category: "transfers",
-    direction: "debit",
-    amount,
-    memo: `Transfer to ${state.name} state party`,
-    counterparty: { type: "state_party", id: statePartyKey, label: state.name },
-    initiatedBy: {
-      type: "character",
-      id: initiator._id.toString(),
-      label: initiator.name,
-    },
-    now,
-  });
-  await emitTreasuryTransaction({
-    db,
-    countryId,
-    partyId: partyIdStr,
-    holderType: "state_party",
-    holderId: statePartyKey,
-    category: "transfers",
-    direction: "credit",
-    amount,
-    memo: `Transfer from ${party.name} national treasury`,
-    counterparty: { type: "party", id: partyIdStr, label: party.name },
-    initiatedBy: {
-      type: "character",
-      id: initiator._id.toString(),
-      label: initiator.name,
-    },
-    now,
-  });
-
-  const gameState = await getGameState();
-  const txCurrency = (COUNTRY_CURRENCY_MAP[countryId as keyof typeof COUNTRY_CURRENCY_MAP] ??
-    "USD") as CurrencyCode;
-  void emitTx(db, {
-    type: "party_transfer",
-    turn: gameState?.currentTurn ?? 0,
-    createdAt: now,
-    subjectType: "party",
-    subjectName: party.name,
-    amount: -amount,
-    currencyCode: txCurrency,
-    counterpartyType: "party",
-    counterpartyName: `${state.name} state party`,
-    meta: {
-      partyId: String(party._id),
-      stateId: upperStateId,
+    await emitTreasuryTransaction({
+      db,
       countryId,
-      side: "national_outflow",
-    },
-  });
-  void emitTx(db, {
-    type: "party_transfer",
-    turn: gameState?.currentTurn ?? 0,
-    createdAt: now,
-    subjectType: "party",
-    subjectName: `${state.name} state party`,
-    amount,
-    currencyCode: txCurrency,
-    counterpartyType: "party",
-    counterpartyName: party.name,
-    meta: {
-      partyId: String(party._id),
-      stateId: upperStateId,
+      partyId: partyIdStr,
+      holderType: "party",
+      holderId: partyIdStr,
+      category: "transfers",
+      direction: "debit",
+      amount,
+      memo: `Transfer to ${state.name} state party`,
+      counterparty: { type: "state_party", id: statePartyKey, label: state.name },
+      initiatedBy: {
+        type: "character",
+        id: initiator._id.toString(),
+        label: initiator.name,
+      },
+      now,
+    });
+    await emitTreasuryTransaction({
+      db,
       countryId,
-      side: "state_inflow",
-    },
-  });
+      partyId: partyIdStr,
+      holderType: "state_party",
+      holderId: statePartyKey,
+      category: "transfers",
+      direction: "credit",
+      amount,
+      memo: `Transfer from ${party.name} national treasury`,
+      counterparty: { type: "party", id: partyIdStr, label: party.name },
+      initiatedBy: {
+        type: "character",
+        id: initiator._id.toString(),
+        label: initiator.name,
+      },
+      now,
+    });
 
-  void db.collection("activityLog").insertOne({
-    type: "fund_event",
-    timestamp: new Date(),
-    userId: new ObjectId(args.initiatorUserId),
-    characterId: initiator._id,
-    characterName: initiator.name,
-    username: args.initiatorUsername,
-    countryId,
-    fundEventType: "party_transfer",
-    amount,
-    currencyCode: COUNTRY_CURRENCY_MAP[countryId] ?? "USD",
-    fromId: party._id,
-    fromName: party.name,
-    fromType: "party",
-    toId: party._id, // statePartyOrg has no ObjectId; use national party _id as proxy
-    toName: `${state.name} ${party.name}`,
-    toType: "party",
-  });
+    const gameState = await getGameState();
+    const txCurrency = (COUNTRY_CURRENCY_MAP[countryId as keyof typeof COUNTRY_CURRENCY_MAP] ??
+      "USD") as CurrencyCode;
+    void emitTx(db, {
+      type: "party_transfer",
+      turn: gameState?.currentTurn ?? 0,
+      createdAt: now,
+      subjectType: "party",
+      subjectName: party.name,
+      amount: -amount,
+      currencyCode: txCurrency,
+      counterpartyType: "party",
+      counterpartyName: `${state.name} state party`,
+      meta: {
+        partyId: String(party._id),
+        stateId: upperStateId,
+        countryId,
+        side: "national_outflow",
+      },
+    });
+    void emitTx(db, {
+      type: "party_transfer",
+      turn: gameState?.currentTurn ?? 0,
+      createdAt: now,
+      subjectType: "party",
+      subjectName: `${state.name} state party`,
+      amount,
+      currencyCode: txCurrency,
+      counterpartyType: "party",
+      counterpartyName: party.name,
+      meta: {
+        partyId: String(party._id),
+        stateId: upperStateId,
+        countryId,
+        side: "state_inflow",
+      },
+    });
+
+    void db.collection("activityLog").insertOne({
+      type: "fund_event",
+      timestamp: new Date(),
+      userId: new ObjectId(args.initiatorUserId),
+      characterId: initiator._id,
+      characterName: initiator.name,
+      username: args.initiatorUsername,
+      countryId,
+      fundEventType: "party_transfer",
+      amount,
+      currencyCode: COUNTRY_CURRENCY_MAP[countryId] ?? "USD",
+      fromId: party._id,
+      fromName: party.name,
+      fromType: "party",
+      toId: party._id, // statePartyOrg has no ObjectId; use national party _id as proxy
+      toName: `${state.name} ${party.name}`,
+      toType: "party",
+    });
+  } catch (err) {
+    console.error(
+      JSON.stringify({
+        error: "treasury_state_transfer_audit_failed",
+        operation: "execute_transfer_to_state_party",
+        partyId: partyIdStr,
+        countryId,
+        stateId: upperStateId,
+        amount,
+        message: err instanceof Error ? err.message : String(err),
+      })
+    );
+  }
 
   return {
     ok: true,
