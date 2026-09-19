@@ -174,13 +174,13 @@ export async function processAnnualDebt(
   interestRate: number;
   ceilingExceeded: boolean;
 }> {
-  // The per-turn treasury engine (processTreasuryTurn) owns deficit/surplus
-  // accumulation continuously; the annual rollover no longer jumps principal by
-  // the deficit. It just derives the debt stock from the signed treasury balance
-  // (legacy docs without one fall back to −principal, i.e. unchanged).
-  const balance = federalBudget.treasuryBalance ?? -federalBudget.debt.principal;
-  const newPrincipal = Math.max(0, -balance);
-  const interestPayment = newPrincipal * federalBudget.debt.interestRate;
+  // The bond ledger owns the debt stock (see bonds/sovereignPrincipal.ts):
+  // issuance, maturity, and default/resolution mutations maintain
+  // `debt.principal` incrementally, and the annual rollover must not re-derive
+  // it from the treasury balance (that clobber overwrote same-turn bond state
+  // every fiscal boundary, refs #1975). Treasury cash is a separate field.
+  const newPrincipal = Math.max(0, federalBudget.debt?.principal ?? 0);
+  const interestPayment = newPrincipal * (federalBudget.debt?.interestRate ?? 0);
 
   const debtToGdpRatio = newPrincipal / nationalGDP;
   const creditRating = calculateCreditRating(debtToGdpRatio, federalBudget.sovereignRiskAnchor);
