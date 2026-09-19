@@ -36,7 +36,7 @@ import type { PoliticalMetricId } from "../types";
 export interface CabinetSourceContribution {
   source: CabinetSourceId;
   value: number;
-  /** True when this channel sits at its own ceiling. */
+  /** True when this channel sits within 0.01 of its own ceiling (effectively maxed). */
   atCap: boolean;
 }
 
@@ -77,9 +77,10 @@ export interface MetricModifiersInfo {
    */
   cabinetBySource: CabinetSourceContribution[];
   /**
-   * True when EVERY cabinet channel for this metric is pinned at
-   * ±CABINET_RESIDUAL_CAP_PER_SOURCE. Only then does a further order or estate
-   * contribute exactly nothing.
+   * True when EVERY cabinet channel for this metric sits within 0.01 of
+   * ±CABINET_RESIDUAL_CAP_PER_SOURCE. Since issue #703 channels approach the
+   * asymptote without ever touching it, this means "effectively maxed": a
+   * further order or estate still buys a little more, but only just.
    */
   cabinetAtCap: boolean;
   /** The per-channel cap, so the UI can name the ceiling rather than hard-code it. */

@@ -134,6 +134,7 @@ async function main() {
                 "equityLiquidityFacilityEnabled",
                 "nppMarketCoverageEnabled",
                 "nppFragileMarketSupplyEnabled",
+                "frontierEntryExperimentEnabled",
               ].includes(key)
             )
           )

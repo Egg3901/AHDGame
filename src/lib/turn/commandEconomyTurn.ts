@@ -3,6 +3,7 @@ import type { FederalBudget } from "@/lib/db/types/budget";
 import type { GameConfig } from "@/lib/db/types/gameConfig";
 import type { GovernmentFormation } from "@/lib/db/types/governmentFormation";
 import type { Corporation, CorporateSector, SoeState } from "@/lib/db/types/corporation";
+import type { CommodityFlow } from "@/lib/db/types/commodityFlow";
 import {
   isPlannedEconomy,
   plannedShare,
@@ -28,6 +29,7 @@ import {
   blackMarketPressure,
   overhangInjectionFromIssuance,
   repressionLegitimacyCost,
+  countryPhysicalDemandSupplyGapPct,
 } from "@/lib/economy/commandEconomyState";
 import {
   aggregatePlanFulfillment,
@@ -177,7 +179,27 @@ export async function processCommandEconomyTurn(
   // P3b: under the plants tier directed credit must buy REAL capacity, and the
   // overlay's `capacity` must be read off the sectors' capital stock rather than
   // carried forward as a free-floating number.
-  const plantsEnabled = marketAtLeast(await getMarketSystemModeForDb(db), "plants");
+  const marketSystemMode = await getMarketSystemModeForDb(db);
+  const plantsEnabled = marketAtLeast(marketSystemMode, "plants");
+  const physicalGapByCountry = new Map<string, number>();
+  if (marketAtLeast(marketSystemMode, "ledger") && _turn > 0) {
+    const flowDocs = await db
+      .collection<CommodityFlow>("commodityFlows")
+      .find({ turn: _turn - 1 }, { projection: { byCountry: 1 } })
+      .toArray();
+    const rowsByCountry = new Map<string, CommodityFlow["byCountry"][string][]>();
+    for (const doc of flowDocs) {
+      for (const [countryId, row] of Object.entries(doc.byCountry ?? {})) {
+        const rows = rowsByCountry.get(countryId) ?? [];
+        rows.push(row);
+        rowsByCountry.set(countryId, rows);
+      }
+    }
+    for (const [countryId, rows] of rowsByCountry) {
+      const gap = countryPhysicalDemandSupplyGapPct(rows);
+      if (gap != null) physicalGapByCountry.set(countryId, gap);
+    }
+  }
   const {
     byCountry: soeStatesByCountry,
     finalStateByCorp,
@@ -385,7 +407,8 @@ export async function processCommandEconomyTurn(
       creditInjection,
       soeFulfillment
     );
-    const shortageIndex = shortageIndexFrom(overhang);
+    const physicalGap = physicalGapByCountry.get(countryId);
+    const shortageIndex = shortageIndexFrom(overhang, physicalGap ?? 0);
     const blackMarketPremium = blackMarketPremiumFrom(shortageIndex, overhang, tolerance);
     const secondEconomyShare = updateSecondEconomy(
       prevSecondShare,
@@ -430,6 +453,9 @@ export async function processCommandEconomyTurn(
         $set: {
           "economicFactors.monetaryOverhang": overhang,
           "economicFactors.shortageIndex": shortageIndex,
+          ...(physicalGap != null
+            ? { "economicFactors.physicalDemandSupplyGapPct": physicalGap }
+            : {}),
           "economicFactors.blackMarketPremium": blackMarketPremium,
           "economicFactors.secondEconomyShare": secondEconomyShare,
           "economicFactors.wageGrowth": constrainedWageGrowth,
@@ -448,6 +474,9 @@ export async function processCommandEconomyTurn(
           // is the whole of the bill at a zero-aggressiveness posture.
           "economicFactors.directedCreditUpkeep": Math.round(upkeepTotal),
         },
+        ...(physicalGap == null
+          ? { $unset: { "economicFactors.physicalDemandSupplyGapPct": "" } }
+          : {}),
       }
     );
     countriesUpdated += 1;

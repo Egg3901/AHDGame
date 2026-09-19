@@ -6,6 +6,7 @@ import {
   shouldFloat,
   participatesInFloat,
   moneyGrowthCoefficient,
+  resolveMonetaryRegime,
   BW_EARLIEST_EXIT_YEAR,
   BW_COVER_SUSPENSION_THRESHOLD,
   BW_SUSPENSION_TURNS,
@@ -141,6 +142,20 @@ describe("command economies are excluded", () => {
 
   it("participates once the country is no longer command-run", () => {
     expect(participatesInFloat("RU", false)).toBe(true);
+  });
+});
+
+describe("stored regime resolution", () => {
+  it("defaults absent or unrecognized values to pegged", () => {
+    expect(resolveMonetaryRegime(undefined)).toBe("pegged");
+    expect(resolveMonetaryRegime(null)).toBe("pegged");
+    expect(resolveMonetaryRegime("pegged")).toBe("pegged");
+    expect(resolveMonetaryRegime("fixed")).toBe("pegged");
+  });
+
+  it("passes through the post-exit regimes", () => {
+    expect(resolveMonetaryRegime("suspended")).toBe("suspended");
+    expect(resolveMonetaryRegime("floating")).toBe("floating");
   });
 });
 

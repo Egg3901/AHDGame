@@ -188,4 +188,17 @@ describe("processSoeRemittance", () => {
       now
     );
   });
+
+  it("returns per-corp remitted amounts for the snapshot fold (#2043)", async () => {
+    seed(40);
+    const { estimateNationalizedOperatingIncome } =
+      await import("@/lib/budget/publicEnterpriseRevenue");
+    vi.mocked(estimateNationalizedOperatingIncome).mockReturnValue(1000);
+
+    const { processSoeRemittance } = await import("./soeRemittance");
+    const result = await processSoeRemittance(db as unknown as Db, now);
+
+    expect(result.remitted).toBe(1);
+    expect(result.perCorp).toEqual([{ corpId, countryId: "CN", amountLocal: 600 }]);
+  });
 });

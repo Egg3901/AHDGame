@@ -22,6 +22,15 @@ export interface UserData {
   registrationFingerprintKey?: string | null;
   lastFingerprintKey?: string | null;
   fingerprintCount: number;
+  /** Values observed in the last 90 days (`identityObservations`), including
+   * ones the account has since rotated away from. Raw on the admin route,
+   * sha256-truncated into the `*Keys` pair on the moderator route, exactly like
+   * the scalar signals above. Optional so a stale client bundle degrades to
+   * "no historical signals" rather than throwing. */
+  historicalIps?: string[] | null;
+  historicalFingerprints?: string[] | null;
+  historicalIpKeys?: string[];
+  historicalFingerprintKeys?: string[];
   trackingId: string | null;
   trackingIdKey?: string | null;
   deviceKey: string | null;
@@ -59,14 +68,35 @@ export interface UserData {
   } | null;
 }
 
-export type MatchReason = "ip" | "fingerprint" | "tracking" | "device";
-export type GroupMember = UserData & { matchReasons: MatchReason[] };
+/** `*-past` means the value was shared within the 90-day history window but is
+ * no longer either account's current value. A moderator has to be able to tell
+ * "these two share a fingerprint right now" from "these two shared one six
+ * weeks ago"; collapsing the two would make the cards less trustworthy. */
+export type MatchReason =
+  "ip" | "fingerprint" | "tracking" | "device" | "ip-past" | "fingerprint-past";
+export type GroupMember = UserData & {
+  matchReasons: MatchReason[];
+  /** True when this member's ONLY link to the group is a shared IP, current or
+   * historical. Shared IPs are the least reliable signal (cgNAT, VPNs, DHCP
+   * reassignment, household networks), so a member joined by nothing else needs
+   * a caveat even when OTHER members of the group are strongly linked. The
+   * group-level `cgnatSuspect` cannot say this: it requires EVERY member to be
+   * IP-only, so it goes quiet on exactly the mixed groups that mislead. */
+  weakMatch: boolean;
+};
 
 export interface DuplicateGroup {
   members: GroupMember[];
   sharedIps: string[];
   sharedFingerprints: string[];
   sharedDevices: string[];
+  /** Values shared within the 90-day window that are no longer any member's
+   * current value. Kept separate from the lists above so the header never
+   * presents a rotated-away match as live evidence — but present, because a
+   * group formed ONLY by a rotated fingerprint would otherwise render with an
+   * empty header and read as having no evidence behind it at all. */
+  sharedHistoricalIps: string[];
+  sharedHistoricalFingerprints: string[];
   cgnatSuspect: boolean;
   /** Age in ms of the most recently observed eligible signal anywhere in this
    * group. Undefined when no member carried an age (e.g. a stale client

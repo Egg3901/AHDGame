@@ -868,3 +868,48 @@ describe("currency pressure cycles", () => {
     expect($set.cyclePressureUntilTurn).toBe(50 + CYCLE_PRESSURE_TURNS);
   });
 });
+
+describe("Bretton Woods float band (issue #7)", () => {
+  const base = 0.75;
+
+  function seedPegBreak(regime?: { monetaryRegime: string; monetaryRegimeSetAtTurn: number }) {
+    db.collectionMocks.exchangeRates.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([
+        makeExchangeRate("US", "USD", 1.0, 1.0),
+        {
+          ...makeExchangeRate("UK", "GBP", base * 2, base),
+          ...regime,
+          cyclePressureRegime: "neutral",
+          cyclePressureUntilTurn: 9999,
+        },
+        makeExchangeRate("JP", "JPY", 106.0, 106.0),
+      ]),
+      sort: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockReturnThis(),
+      skip: vi.fn().mockReturnThis(),
+      project: vi.fn().mockReturnThis(),
+    });
+  }
+
+  function ukRate() {
+    const ukCall = db.collectionMocks.exchangeRates.updateOne.mock.calls.find(
+      (call: Array<{ _id: string }>) => call[0]._id === "UK"
+    );
+    return (ukCall![1].$set as { rate: number }).rate;
+  }
+
+  it("holds a pegged currency to the historical guardrail", async () => {
+    seedPegBreak();
+    await processForexTurn(db as unknown as Db, 50);
+    // One turn of drift and noise cannot escape the +/-50% guardrail.
+    expect(ukRate()).toBeCloseTo(base * 1.5, 10);
+  });
+
+  it("lets a floating currency use the widened band", async () => {
+    seedPegBreak({ monetaryRegime: "floating", monetaryRegimeSetAtTurn: 0 });
+    await processForexTurn(db as unknown as Db, 50);
+    // The float widens the guardrail to +/-80%, so the same dislocation
+    // settles on the wider ceiling instead of the pegged one.
+    expect(ukRate()).toBeCloseTo(base * 1.8, 10);
+  });
+});

@@ -64,6 +64,20 @@ export function netMarginPct(
  * what stays with the corp after the payout, which is what the masthead and
  * Overview report.
  */
+/** Retained P&L plus last-turn supply-agreement CFD cash, in daily display units. */
+export function cashAfterContracts(
+  f: Pick<
+    Financials,
+    | "income"
+    | "realizedIncome"
+    | "realizedDividendPaid"
+    | "dividendDistribution"
+    | "supplyAgreementSettlementDaily"
+  >
+): number {
+  return corpIncomeBasis(f).retained + (f.supplyAgreementSettlementDaily ?? 0);
+}
+
 export function corpIncomeBasis(
   f: Pick<Financials, "income" | "realizedIncome" | "realizedDividendPaid" | "dividendDistribution">
 ): { netIncome: number; retained: number; dividendPaid: number; isRealized: boolean } {

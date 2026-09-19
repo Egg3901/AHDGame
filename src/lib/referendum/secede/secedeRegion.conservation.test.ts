@@ -61,6 +61,18 @@ function seedWorld() {
         currencyCode: "GBP",
       },
     ],
+    // The bond ledger backs the seeded stock: each side's post-split
+    // principal is its share of this face, never of the cash balance.
+    bonds: [
+      {
+        _id: "uk-bond-1",
+        issuerType: "sovereign",
+        countryId: "UK",
+        totalIssued: 500,
+        matured: false,
+        defaulted: false,
+      },
+    ],
     politicalParties: [
       { _id: "snp", sequentialId: 20, countryId: "UK", name: "SNP", abbreviation: "SNP" },
       { _id: "lab", sequentialId: 21, countryId: "UK", name: "Labour", abbreviation: "LAB" },

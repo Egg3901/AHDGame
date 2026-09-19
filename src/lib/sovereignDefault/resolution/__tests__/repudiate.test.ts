@@ -60,9 +60,12 @@ interface BudgetRow {
   _id: string;
   countryId: string;
   sovereignCrisisState?: string;
+  treasuryBalance?: number;
+  debt?: { principal: number; interestRate: number; ceiling: number };
+  gdp?: number;
 }
 
-function makeMockDb(initial: BudgetRow | null) {
+function makeMockDb(initial: BudgetRow | null, bonds: Array<Record<string, unknown>> = []) {
   const sets: Array<Record<string, unknown>> = [];
   const decisionUpdates: Array<Record<string, unknown>> = [];
   let row = initial ? { ...initial } : null;
@@ -70,7 +73,7 @@ function makeMockDb(initial: BudgetRow | null) {
     collection: vi.fn((name: string) => {
       if (name === "federalBudget") {
         return {
-          findOne: vi.fn().mockResolvedValue(row),
+          findOne: vi.fn(async () => (row ? { ...row } : null)),
           updateOne: vi.fn(async (_f, u: Record<string, unknown>) => {
             sets.push(u.$set as Record<string, unknown>);
             row = row ? { ...row, ...(u.$set as object) } : null;
@@ -94,15 +97,28 @@ function makeMockDb(initial: BudgetRow | null) {
       }
       if (name === "bonds") {
         return {
-          find: vi.fn().mockReturnValue({
-            toArray: vi.fn().mockResolvedValue([]),
-          }),
+          // Production Mongo applies the options.projection, so the mock
+          // must too: docs arriving without the query-filtered fields read
+          // as non-sovereign to the outstanding helper (refs #1975).
+          find: vi.fn((_q: unknown, opts?: { projection?: Record<string, number> }) => ({
+            toArray: vi.fn(async () =>
+              bonds.map((b) => {
+                if (!opts?.projection) return { ...b };
+                const out: Record<string, unknown> = {};
+                for (const [k, v] of Object.entries(b)) {
+                  if (k === "_id" || opts.projection[k] === 1) out[k] = v;
+                }
+                return out;
+              })
+            ),
+          })),
         };
       }
       throw new Error(`unexpected: ${name}`);
     }),
   } as unknown as Db;
-  return { db, sets, decisionUpdates };
+  const getRow = () => (row ? { ...row } : null);
+  return { db, sets, decisionUpdates, getRow };
 }
 
 beforeEach(() => {
@@ -197,6 +213,52 @@ describe("applyRepudiateResolution — happy path", () => {
     expect(decisionUpdates[0].state).toBe("ratified");
     expect(decisionUpdates[0].executiveChoice).toBe("repudiate");
     expect(emitRepudiatedNews).toHaveBeenCalledWith("US", 600, 5);
+  });
+});
+
+describe("applyRepudiateResolution — ledger re-point and re-entry (#1975)", () => {
+  function crisisRow(): BudgetRow {
+    return {
+      _id: "federal",
+      countryId: "US",
+      sovereignCrisisState: "crisisPending",
+      treasuryBalance: -10_000_000_000,
+      debt: { principal: 10_000_000_000, interestRate: 0.05, ceiling: 20_000_000_000 },
+      gdp: 27_000_000_000_000,
+    };
+  }
+
+  const input = {
+    countryCode: "US" as const,
+    currentTurn: 600,
+    realtimeMs: 1_700_000_000_000,
+    decisionId: new ObjectId(),
+    executiveCharacterId: null,
+  };
+
+  it("re-points principal at the emptied ledger and leaves cash alone", async () => {
+    // The mocked mutator already flipped every active bond: the ledger reads back empty.
+    const { db, sets, getRow } = makeMockDb(crisisRow(), []);
+    const r = await applyRepudiateResolution(db, input);
+    expect(r.ok).toBe(true);
+    const written = sets[0].debt as { principal: number };
+    expect(written.principal).toBe(0);
+    expect(sets[0]).not.toHaveProperty("treasuryBalance");
+    expect(getRow()?.treasuryBalance).toBe(-10_000_000_000);
+  });
+
+  it("re-entry after success is rejected by the state guard with no duplicate changes", async () => {
+    const { db, sets, getRow } = makeMockDb(crisisRow(), []);
+    const first = await applyRepudiateResolution(db, input);
+    expect(first.ok).toBe(true);
+    const writesAfterFirst = sets.length;
+    const second = await applyRepudiateResolution(db, input);
+    expect(second.ok).toBe(false);
+    expect(second.reason).toBe("not-in-crisisPending");
+    // No second budget write and no cash movement.
+    expect(sets).toHaveLength(writesAfterFirst);
+    expect(getRow()?.treasuryBalance).toBe(-10_000_000_000);
+    expect(getRow()?.debt?.principal).toBe(0);
   });
 });
 

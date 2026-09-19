@@ -46,9 +46,19 @@ vi.mock(
     };
   }
 );
-vi.mock("@/lib/nationalization/soeOperations", () => ({
-  processSoeOperations: vi.fn().mockResolvedValue({ soeCorps: 0 }),
-}));
+vi.mock(
+  "@/lib/nationalization/soeOperations",
+  // Partial mock: only the DB-touching orchestrator is stubbed. The pure
+  // fold and audit builders stay real so the turn fold under test is the
+  // shipped code, not a stub.
+  async (importOriginal) => {
+    const actual = await importOriginal<typeof import("@/lib/nationalization/soeOperations")>();
+    return {
+      ...actual,
+      processSoeOperations: vi.fn().mockResolvedValue({ soeCorps: 0, backing: [] }),
+    };
+  }
+);
 vi.mock("@/lib/nationalization/pendingNationalizations", () => ({
   processPendingNationalizations: vi.fn().mockResolvedValue({ completed: 0, cancelled: 0 }),
 }));

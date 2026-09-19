@@ -28,10 +28,21 @@ describe("POST /api/country/[code]/executive/cabinet/[positionId]/order", () => 
 
     db.collection("cabinetMembers");
     db.collection("ministerialOrders");
+    db.collection("characters");
     db.collectionMocks.cabinetMembers.findOne.mockResolvedValue({
       _id: "member_1",
       characterId: "char_1",
       ministerialActions: 1,
+    });
+    // UK seats spend from the shared per-player pool on the character doc
+    // (issue #2049): model a seated holder with one action left, and an
+    // atomic spend that lands at zero.
+    db.collectionMocks.characters.findOne.mockResolvedValue({
+      sharedMinisterialActions: 1,
+      sharedMinisterialActionResetDay: "2026-09-17",
+    });
+    db.collectionMocks.characters.findOneAndUpdate.mockResolvedValue({
+      sharedMinisterialActions: 0,
     });
     db.collectionMocks.ministerialOrders.insertOne.mockResolvedValue({
       acknowledged: true,
