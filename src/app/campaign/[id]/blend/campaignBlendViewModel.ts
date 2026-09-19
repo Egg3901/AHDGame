@@ -46,6 +46,12 @@ export interface ViewerResources {
   actions: number | null;
   nationalInfluence: number | null;
   fundsCurrency: CurrencyCode | null;
+  /**
+   * The viewer's own country, used to close contributions the server would
+   * refuse across a border. Null when it is not known (signed out, or the
+   * `/api/auth/me` fetch degraded), in which case nothing is blocked on it.
+   */
+  countryId: string | null;
 }
 
 export interface CampaignBlendInput {
@@ -217,6 +223,72 @@ export interface StrengthVM {
   costText: string;
   newBoostPct: string;
   canContribute: boolean;
+  /**
+   * Why this viewer cannot contribute, or null when they can.
+   *
+   * Contribution is NOT a campaign-staff lever. `contributeCampaignStrength`
+   * accepts a contribution from any authenticated character in the race's
+   * country, which is how allied and rival players fund a nominee, so the
+   * control is gated on the race and the viewer's own resources rather than on
+   * their access to this campaign. Anything an affordability check already
+   * covers stays in `canContribute` and leaves this null.
+   */
+  blockedReason: string | null;
+}
+
+/**
+ * Why this viewer may not contribute campaign strength, or null when they may.
+ *
+ * Only the presidential engine reads `campaignStrength`; the down-ballot
+ * engines ignore it and the server rejects those contributions outright, so
+ * the desk says so rather than quoting a price for nothing. A campaign whose
+ * election row did not resolve falls in here too: the server cannot check the
+ * race, so it refuses, and the desk must not promise otherwise.
+ *
+ * Suspension and the cross-border rule used to be carried for free by the
+ * `canAct` gate this control no longer sits behind: `canManage` and
+ * `canSurrogate` both require `!campaignSuspended`, and both are only ever
+ * true for someone in the race's own country. Opening the control to every
+ * player means stating those two rules here instead of inheriting them.
+ *
+ * Affordability is NOT decided here. It stays in `canContribute`, which
+ * disables the button while leaving the price on screen, so a player who is
+ * merely short of funds still sees what they are short of.
+ */
+function campaignStrengthBlockedReason(
+  campaign: CampaignData,
+  me: ViewerResources,
+  /** What one contribution would add, already derived from the viewer's influence. */
+  strengthAdded: number
+): string | null {
+  if (campaign.electionInfo?.electionType !== "president") {
+    return "Campaign strength only affects presidential races right now, so contributions to this race are closed.";
+  }
+  if (campaign.electionInfo.isEnded) {
+    return "This race has ended, so contributions are closed.";
+  }
+  if (campaign.isArchived) {
+    return "This campaign is no longer running, so contributions are closed.";
+  }
+  if (campaign.campaignSuspended) {
+    return "This candidate has suspended their campaign, so contributions are closed.";
+  }
+  if (me.nationalInfluence == null) {
+    return "Sign in to contribute campaign strength.";
+  }
+  // Compared on `countryId`, never on currency: SUR is shared by RU / BLR /
+  // UKR / BAL and GBP by UK / SCO / WAL, so equal currencies do not mean
+  // `assertSameCountry` will pass. An unknown country on either side blocks
+  // nothing and falls through to the server's own check, because failing
+  // closed would lock out legitimate players whenever the `/api/auth/me`
+  // fetch degrades, which the page is written to tolerate.
+  if (me.countryId != null && campaign.countryId != null && me.countryId !== campaign.countryId) {
+    return "You can only contribute to campaigns in your own country.";
+  }
+  if (strengthAdded <= 0) {
+    return "You need national influence to contribute campaign strength.";
+  }
+  return null;
 }
 
 export interface CampaignBlendVM {
@@ -623,6 +695,8 @@ export function buildCampaignBlendViewModel(inp: CampaignBlendInput): CampaignBl
   );
   const costActions = campaignStrengthContributionActions(strengthAdded);
 
+  const strengthBlockedReason = campaignStrengthBlockedReason(campaign, me, strengthAdded);
+
   const strength: StrengthVM | null =
     campaign.campaignStrength != null
       ? {
@@ -633,10 +707,9 @@ export function buildCampaignBlendViewModel(inp: CampaignBlendInput): CampaignBl
           costActions,
           costText: `${money(costFunds, symbol)} and ${costActions} action${costActions === 1 ? "" : "s"}`,
           newBoostPct: campaignStrengthBoostPercent(currentStrength + strengthAdded).toFixed(1),
+          blockedReason: strengthBlockedReason,
           canContribute:
-            !campaign.electionInfo?.isEnded &&
-            !campaign.isArchived &&
-            strengthAdded > 0 &&
+            strengthBlockedReason === null &&
             me.actions != null &&
             me.actions >= costActions &&
             me.funds != null &&
