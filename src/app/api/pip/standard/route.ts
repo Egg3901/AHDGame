@@ -1,3 +1,4 @@
+import { notificationTypeFilter } from "@/lib/notifications/visibility";
 // GET /api/pip/standard — Returns decay projections, income summary, and recent notifications for the Standard PiP view.
 // Auth: requireAuth
 // Errors: 401, 404
@@ -14,7 +15,14 @@ import {
   projectFavorabilityDecay,
   projectInfamyDecay,
 } from "@/lib/utils/decayProjections";
-import type { Character, Notification, PoliticalParty, State, StatePartyOrg } from "@/lib/db/types";
+import type {
+  User,
+  Character,
+  Notification,
+  PoliticalParty,
+  State,
+  StatePartyOrg,
+} from "@/lib/db/types";
 
 export async function GET() {
   try {
@@ -30,6 +38,10 @@ export async function GET() {
     }
 
     const userId = new ObjectId(auth.user.userId);
+    const user = await db
+      .collection<User>("users")
+      .findOne({ _id: userId }, { projection: { notificationPreferences: 1 } });
+    const visibility = notificationTypeFilter(user?.notificationPreferences, new Date());
 
     const [
       homeState,
@@ -59,11 +71,13 @@ export async function GET() {
         : null,
       db
         .collection<Notification>("notifications")
-        .find({ userId, read: false })
+        .find({ userId, ...visibility, read: false })
         .sort({ createdAt: -1 })
         .limit(3)
         .toArray(),
-      db.collection<Notification>("notifications").countDocuments({ userId, read: false }),
+      db
+        .collection<Notification>("notifications")
+        .countDocuments({ userId, ...visibility, read: false }),
       db
         .collection("playerMail")
         .countDocuments({ toUserId: userId, read: false, deletedByRecipient: false }),
@@ -107,7 +121,7 @@ export async function GET() {
         },
         notifications: {
           unreadCount,
-          unreadMailCount,
+          unreadMailCount: user?.notificationPreferences?.muteMail ? 0 : unreadMailCount,
           recent: recentNotifications.map((n) => ({
             id: n._id.toString(),
             message: n.message,

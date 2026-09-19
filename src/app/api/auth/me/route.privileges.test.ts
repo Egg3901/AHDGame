@@ -9,6 +9,11 @@ import { GET } from "./route";
 
 vi.mock("next/headers", () => ({
   cookies: vi.fn(),
+  // The route resolves the client IP (for identity-history capture) on every
+  // request, which reads `headers()`. Returning an empty header set makes
+  // `getClientIp` fall through to its "unknown" sentinel, which the identity
+  // guards then drop — so these privilege assertions stay unaffected by it.
+  headers: vi.fn(async () => new Headers()),
 }));
 
 vi.mock("@/lib/mongodb", () => ({

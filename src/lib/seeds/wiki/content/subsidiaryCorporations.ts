@@ -12,7 +12,7 @@ To formalize a subsidiary, you (as CEO of the parent) need:
 - The target must not already be a formalized subsidiary of anyone, and must not be state-owned.
 - Your own corporation must not be national/state-owned or itself already a subsidiary. **No chains**: a subsidiary can never be a parent.
 - **No ownership cycles**: you can't formalize a subsidiary that, through some other holding, already controls you.
-- **A different human must run it.** The subsidiary's CEO can't be you, the parent's own CEO, or the CEO of any of your other subsidiaries. If it currently is, you need to seat someone else first, a player or an NPP caretaker.
+- **A different human must run it.** The subsidiary's sitting CEO can't be you, the parent's own CEO, or the sitting CEO of any of your other subsidiaries. An NPP caretaker counts as a different operator, so you can formalize or reseat even if the previous human is still attached for reclaim. If they later try to reclaim while already running another of your subsidiaries, that reclaim is refused.
 
 Once formalized, the relationship isn't permanent by default: if your voting control ever drops back to 50% or below (dilution, selling down), the game automatically clears the formalization the next turn. Nobody has to do anything for it to end that way.
 
@@ -24,7 +24,7 @@ You can release a subsidiary yourself too, but not immediately: there's a **24-t
 
 **Dividend floor.** Set a minimum dividend rate the subsidiary must pay out, which its own CEO cannot undercut (though they can still pay more if they choose). If you stop controlling it, the floor stops applying automatically, it isn't a lever you keep after losing control.
 
-**CEO appointment.** Reseat the subsidiary's CEO, either with an NPP caretaker (the underlying human stays formally attached but a computer runs it day to day) or with a different human character, subject to the same one-person rule above.
+**CEO appointment.** Reseat the subsidiary's CEO, either with an NPP caretaker (the previous human stays attached so they can reclaim later, but a computer runs it day to day) or with a different human character. The one-person rule applies to sitting human CEOs, not to a caretaker stash. Reclaim is blocked if that human already runs another of your subsidiaries.
 
 **Spinning off a piece of your own business.** Rather than formalizing an existing corporation, you can carve one of your own sector types out into a brand-new, wholly-owned subsidiary. All the sectors of that type move to the new corp with their plant capacity intact; nothing is lost in the move. Costs a base fee plus a per-sector fee, paid to your country's treasury, and is on a **168-turn (roughly 7 real-day) cooldown** per parent. The new corp starts private, 100% owned by you, and is immediately a formalized subsidiary from the moment it's created.
 

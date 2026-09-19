@@ -253,4 +253,64 @@ describe("empty-market coverage treatment", () => {
     markMarketsActive(signals, [us("logistics", "AZ")]);
     expect(signals.activeMarketBuckets).toContain("AZ:logistics");
   });
+
+  it("reports which filter bound when no candidate survives", () => {
+    const pool = new Map([
+      ["US", [us("manufacturing", "PA", 0), us("manufacturing", "NY", 100_000)]],
+    ]);
+    const stats = {};
+    const pick = findBestUnownedSector(
+      "US",
+      "PA",
+      "manufacturing",
+      null,
+      new Set(),
+      pool,
+      new Set(["NY:manufacturing"]),
+      ratios({}),
+      false,
+      1,
+      undefined,
+      undefined,
+      stats
+    );
+
+    expect(pick).toBeNull();
+    expect(stats).toMatchObject({
+      occupiedExcluded: 0,
+      emptyPoolExcluded: 1,
+      stateControlledExcluded: 1,
+      depositExcluded: 0,
+    });
+  });
+
+  it("counts exclusions without changing the pick", () => {
+    const pool = new Map([
+      ["US", [us("manufacturing", "PA", 0), us("manufacturing", "NY", 100_000)]],
+    ]);
+    const stats = {};
+    const pick = findBestUnownedSector(
+      "US",
+      "PA",
+      "manufacturing",
+      null,
+      new Set(),
+      pool,
+      new Set(),
+      ratios({}),
+      false,
+      1,
+      undefined,
+      undefined,
+      stats
+    );
+
+    expect(pick).toMatchObject({ stateId: "NY", sectorType: "manufacturing" });
+    expect(stats).toMatchObject({
+      occupiedExcluded: 0,
+      emptyPoolExcluded: 1,
+      stateControlledExcluded: 0,
+      depositExcluded: 0,
+    });
+  });
 });

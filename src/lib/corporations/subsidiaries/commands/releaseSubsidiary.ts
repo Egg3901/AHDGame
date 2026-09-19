@@ -36,12 +36,6 @@ export async function releaseSubsidiary(
     return fail(`A subsidiary cannot be released for another ${remaining} turn(s).`);
   }
 
-  let caretakerDismissed = false;
-  if (dismissCaretaker && sub.caretakerCeo) {
-    const dismiss = await dismissCaretakerCeo(db, { corp: sub, turn, now });
-    caretakerDismissed = dismiss.ok;
-  }
-
   await db.collection<Corporation>("corporations").updateOne(
     { _id: sub._id },
     {
@@ -53,6 +47,15 @@ export async function releaseSubsidiary(
       $set: { updatedAt: now },
     }
   );
+
+  // Clear the relationship first so restoring the stashed human is not judged
+  // as reclaiming a second subsidiary seat in the same group.
+  let caretakerDismissed = false;
+  if (dismissCaretaker && sub.caretakerCeo) {
+    const released = { ...sub, subsidiaryFormalizedAtTurn: undefined };
+    const dismiss = await dismissCaretakerCeo(db, { corp: released, turn, now });
+    caretakerDismissed = dismiss.ok;
+  }
 
   return { ok: true, caretakerDismissed };
 }

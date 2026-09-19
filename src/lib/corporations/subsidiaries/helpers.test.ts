@@ -7,6 +7,8 @@ import {
   isEligibleAsSubsidiary,
   isEligibleAsSubsidiaryParent,
   isFormalizedSubsidiary,
+  subsidiaryCeoBlockMessage,
+  subsidiaryCeoBlockReason,
   wouldCreateOwnershipCycle,
 } from "./helpers";
 
@@ -74,6 +76,26 @@ describe("humanBlockedFromSubsidiaryCeo (one-person rule)", () => {
         siblingSubsidiaryCeoUserIds: [sibling],
       })
     ).toBe(false);
+  });
+  it("names the parent vs sibling reason so callers can split the error", () => {
+    expect(
+      subsidiaryCeoBlockReason({
+        candidateUserId: parentOwner,
+        parentOwnerUserId: parentOwner,
+        parentCeoUserId: parentCeo,
+        siblingSubsidiaryCeoUserIds: [sibling],
+      })
+    ).toBe("parent");
+    expect(
+      subsidiaryCeoBlockReason({
+        candidateUserId: sibling,
+        parentOwnerUserId: parentOwner,
+        parentCeoUserId: parentCeo,
+        siblingSubsidiaryCeoUserIds: [sibling],
+      })
+    ).toBe("sibling");
+    expect(subsidiaryCeoBlockMessage("parent")).toMatch(/parent/);
+    expect(subsidiaryCeoBlockMessage("sibling")).toMatch(/another subsidiary/);
   });
 });
 
