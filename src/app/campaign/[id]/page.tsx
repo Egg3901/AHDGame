@@ -337,6 +337,7 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
           actions: myActions,
           nationalInfluence: myNationalInfluence,
           fundsCurrency: myFundsCurrency,
+          countryId: myCountryId,
         }}
         currentTurn={currentTurn}
         wire={wire}
