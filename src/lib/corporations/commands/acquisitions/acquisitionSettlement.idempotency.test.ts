@@ -520,6 +520,7 @@ describe("terminal failure and compensation", () => {
       acquirerCurrency: "USD",
       shellCashTargetLocal: 0,
       targetCurrency: "USD",
+      sectorTotal: 0,
       plan: { key: "k", legs: [], unpayable: [] },
     };
     const first = await claimAcquisitionSettlement(w.db, spec);
