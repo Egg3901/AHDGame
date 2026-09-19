@@ -5,6 +5,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { NationalPartyInfluencePanel } from "./NationalPartyInfluencePanel";
 
+vi.mock("next/navigation", () => ({
+  useSearchParams: () => new URLSearchParams("npp=n2&state=AK"),
+}));
+
 const fakeStats = {
   favorability: 50,
   politicalInfluence: 50,
@@ -175,4 +179,10 @@ describe("NationalPartyInfluencePanel cascade", () => {
     expect(screen.queryByText(/Select Race/i)).toBeNull();
     expect(screen.queryByText(/Select NPP to Influence/i)).toBeNull();
   });
+});
+
+it("opens the analytics target after the management data loads", async () => {
+  render(<NationalPartyInfluencePanel partyId="9" partyColor="#ff0000" country="us" />);
+  await waitFor(() => expect(screen.getByRole("button", { name: "Close" })).toBeTruthy());
+  expect(screen.getAllByText("Bravo").length).toBeGreaterThan(1);
 });

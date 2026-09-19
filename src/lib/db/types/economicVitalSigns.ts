@@ -93,7 +93,10 @@ export interface EconomicVitalSigns {
     corporateMedianHolders: EconomicMetric;
     corporateSubscriptionRate: EconomicMetric;
     sovereignMaturityHhi: EconomicMetric;
+    corporateMaturityHhi: EconomicMetric;
     sovereignMedianPriceToParSpreadPct: EconomicMetric;
+    /** Median discount to par across unmatured corporate issues; the corporate mirror of the sovereign spread. */
+    corporateMedianPriceToParSpreadPct: EconomicMetric;
     openBuyOrders: number;
     openSellOrders: number;
     twoSidedListingShare: EconomicMetric;
@@ -109,6 +112,13 @@ export interface EconomicVitalSigns {
     organicDepthToMarketCap: EconomicMetric;
     medianFilledOrderExecutionHours: EconomicMetric;
     medianAmihudIlliquidity48: EconomicMetric;
+    /**
+     * Median across traded listings of the largest named counterparty's share
+     * of that listing's 48-turn economic trade notional. Float-only and
+     * non-economic rows are unattributable, so they narrow the sample instead
+     * of reading as dispersed trading.
+     */
+    medianTopTraderNotionalShare48: EconomicMetric;
   };
   households: {
     householdsObserved: number;
@@ -143,11 +153,45 @@ export interface EconomicVitalSigns {
     dormantModeledBalanceShare48: EconomicMetric;
     modeledGrossVelocity48: EconomicMetric;
     householdGrossVelocity48: EconomicMetric;
+    /** Wallet (`character`) turnover over wallet closing stock; null when the class is absent. */
+    householdTransactionalVelocity48: EconomicMetric;
+    /** Savings (`character_savings`) turnover over savings closing stock; null when absent. */
+    householdSavingsVelocity48: EconomicMetric;
+    /** Savings share of household (`character` + `character_savings`) closing stock. */
+    savingsShareOfHouseholdBalances: EconomicMetric;
     corporateGrossVelocity48: EconomicMetric;
     partyGrossVelocity48: EconomicMetric;
     governmentGrossVelocity48: EconomicMetric;
     /** Turnover over closing balances for pooled vehicles (fund, org, npp legs). */
     intermediatedGrossVelocity48: EconomicMetric;
+    /**
+     * Ring-fenced bank cash reserves in anchor, summed over reporting active
+     * charters. Null when active charters exist but none reports reserves, so
+     * an unclassified stock never reads as zero. Outside the shadow ledger:
+     * neither stock-checked nor part of the modeled velocity denominators.
+     */
+    bankCashReservesAnchor: EconomicMetric;
+    /**
+     * Nonnegative share-escrow balances in anchor. Absent means instant
+     * settlement mode, which holds no escrow, so empty reads as zero rather
+     * than unknown. Negative rows are buyback debt, not money, and are floored
+     * per row like the modeled balance stocks.
+     */
+    escrowCashAnchor: EconomicMetric;
+    /**
+     * Ring-fenced (bank plus escrow) share of ledger-backed plus ring-fenced
+     * closing stock. Null without a balance snapshot, with an incomplete bank
+     * classification, or on a non-positive denominator: a stated allocation
+     * ratio must never rest on a partial stock.
+     */
+    ringFencedShareOfLiquid: EconomicMetric;
+    /**
+     * Persisted null seam: bank accounts emit no ledger legs, so no
+     * authoritative 48-turn turnover exists for the bank holder class. The
+     * numerator is unavailable, not zero; estimating it from unrelated flows
+     * would manufacture a velocity.
+     */
+    bankGrossVelocity48: EconomicMetric;
   };
   /** How much of the 48 turn window actually produced a snapshot, and which turns did not. */
   coverage: {
@@ -164,6 +208,7 @@ export interface EconomicVitalSigns {
     twoSidedListingShareMedian: EconomicMetric;
     activeTradedListingShareMedian: EconomicMetric;
     sovereignNoHolderBondShareMedian: EconomicMetric;
+    corporateNoHolderBondShareMedian: EconomicMetric;
   };
   measurement: {
     confidence: "low" | "medium" | "high";

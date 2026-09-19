@@ -39,10 +39,10 @@ import type {
  * across the window. It was not measured and cannot be: the snapshots are
  * annual, and no per-turn record of the counterfactual exists.
  *
- * The credit lands on `treasuryBalance`. `treasuryTurn` derives debt from that
- * balance (`nationalDebtFromBalance` = `max(0, -treasuryBalance)`), so the debt
- * figure follows on the next turn without this heal writing to `debt` directly
- * and racing the engine for the same field.
+ * The credit lands on `treasuryBalance` only. `debt.principal` belongs to
+ * the sovereign bond ledger (see bonds/sovereignPrincipal.ts) and is never
+ * re-derived from the balance, so this heal leaves `debt` alone rather than
+ * racing the engine for the same field (refs #1975).
  *
  * This heal MINTS MONEY on purpose. It is recreating revenue a country should
  * have collected and did not, so `moneyDelta` is deliberately non-zero and the
@@ -157,7 +157,7 @@ async function plan(db: Db): Promise<HealPlan> {
     summary: `AHD-1102: credit GBP ${credit.toLocaleString("en-US")} to the UK treasury for ${GAP_TURNS} turns of sales tax and tariffs the Poon Choi Act should have collected`,
     notes: [
       `estimate = (${REFERENCE_SNAPSHOT_ID} annual salesTax + tariffs) / ${TURNS_PER_YEAR} x ${GAP_TURNS} turns`,
-      "credited to treasuryBalance; treasuryTurn derives debt.principal from it on the next turn",
+      "credited to treasuryBalance only; debt.principal belongs to the bond ledger and is untouched",
       "MINTS MONEY deliberately: this recreates revenue that was never collected",
     ],
     payload: { credit, budgetId: String(budget._id) },

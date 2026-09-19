@@ -3,6 +3,7 @@ import { handleRouteError } from "@/lib/api/errors";
 import { ObjectId } from "mongodb";
 import type { User } from "@/lib/db/types";
 import { getDb } from "@/lib/mongodb";
+import { IDENTITY_OBSERVATIONS_COLLECTION } from "@/lib/db/types/identityObservation";
 import { clearAuthCookie, verifyAuth } from "@/lib/auth";
 import { credentialSessionIsCurrent } from "@/lib/auth/credentialSession";
 import { withNoStore } from "@/lib/api/withNoStore";
@@ -171,6 +172,12 @@ export const DELETE = withNoStore(async () => {
     // Delete retired characters and achievements for this user
     await db.collection("retiredCharacters").deleteMany({ userId: objectId });
     await db.collection("characterAchievements").deleteMany({ userId: objectId });
+
+    // Identity history lives in its own collection, so deleting the user row
+    // does NOT take it with it. Purged here so account deletion actually
+    // removes the account's IP and fingerprint evidence rather than orphaning
+    // 90 days of it.
+    await db.collection(IDENTITY_OBSERVATIONS_COLLECTION).deleteMany({ userId: objectId });
 
     // Delete the user
     await usersCollection.deleteOne({ _id: objectId });
