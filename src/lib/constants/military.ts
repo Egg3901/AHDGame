@@ -1,5 +1,150 @@
 import type { CountryId } from "./countries";
 import type { UnitDomain, Posture, MilitaryUnit, UnitEquipment } from "@/lib/db/types/militaryUnit";
+import {
+  JP_CABINET_SEAT_IDS,
+  JP_MILITARY_BRANCHES,
+  JP_MILITARY_SCALE,
+} from "@/lib/countries/jp/institutionsFacts";
+import {
+  US_MILITARY_BRANCHES,
+  US_CABINET_SEAT_IDS,
+  US_MILITARY_SCALE,
+} from "@/lib/countries/us/institutionsFacts";
+import {
+  UK_MILITARY_BRANCHES,
+  UK_CABINET_SEAT_IDS,
+  UK_MILITARY_SCALE,
+} from "@/lib/countries/uk/institutionsFacts";
+import {
+  DE_CABINET_SEAT_IDS,
+  DE_MILITARY_BRANCHES,
+  DE_MILITARY_SCALE,
+} from "@/lib/countries/de/institutionsFacts";
+import {
+  CN_CABINET_SEAT_IDS,
+  CN_MILITARY_BRANCHES,
+  CN_MILITARY_SCALE,
+} from "@/lib/countries/cn/institutionsFacts";
+import {
+  IE_CABINET_SEAT_IDS,
+  IE_MILITARY_BRANCHES,
+  IE_MILITARY_SCALE,
+} from "@/lib/countries/ie/institutionsFacts";
+import {
+  RU_CABINET_SEAT_IDS,
+  RU_MILITARY_BRANCHES,
+  RU_MILITARY_SCALE,
+} from "@/lib/countries/ru/institutionsFacts";
+import {
+  DD_CABINET_SEAT_IDS,
+  DD_MILITARY_BRANCHES,
+  DD_MILITARY_SCALE,
+} from "@/lib/countries/dd/institutionsFacts";
+import {
+  NG_CABINET_SEAT_IDS,
+  NG_MILITARY_BRANCHES,
+  NG_MILITARY_SCALE,
+} from "@/lib/countries/ng/institutionsFacts";
+import {
+  BR_CABINET_SEAT_IDS,
+  BR_MILITARY_BRANCHES,
+  BR_MILITARY_SCALE,
+} from "@/lib/countries/br/institutionsFacts";
+import {
+  FR_CABINET_SEAT_IDS,
+  FR_MILITARY_BRANCHES,
+  FR_MILITARY_SCALE,
+} from "@/lib/countries/fr/institutionsFacts";
+import {
+  IT_CABINET_SEAT_IDS,
+  IT_MILITARY_BRANCHES,
+  IT_MILITARY_SCALE,
+} from "@/lib/countries/it/institutionsFacts";
+import {
+  ES_CABINET_SEAT_IDS,
+  ES_MILITARY_BRANCHES,
+  ES_MILITARY_SCALE,
+} from "@/lib/countries/es/institutionsFacts";
+import {
+  SE_CABINET_SEAT_IDS,
+  SE_MILITARY_BRANCHES,
+  SE_MILITARY_SCALE,
+} from "@/lib/countries/se/institutionsFacts";
+import {
+  TR_CABINET_SEAT_IDS,
+  TR_MILITARY_BRANCHES,
+  TR_MILITARY_SCALE,
+} from "@/lib/countries/tr/institutionsFacts";
+import {
+  GR_CABINET_SEAT_IDS,
+  GR_MILITARY_BRANCHES,
+  GR_MILITARY_SCALE,
+} from "@/lib/countries/gr/institutionsFacts";
+import {
+  AT_CABINET_SEAT_IDS,
+  AT_MILITARY_BRANCHES,
+  AT_MILITARY_SCALE,
+} from "@/lib/countries/at/institutionsFacts";
+import {
+  FI_CABINET_SEAT_IDS,
+  FI_MILITARY_BRANCHES,
+  FI_MILITARY_SCALE,
+} from "@/lib/countries/fi/institutionsFacts";
+import {
+  PL_CABINET_SEAT_IDS,
+  PL_MILITARY_BRANCHES,
+  PL_MILITARY_SCALE,
+} from "@/lib/countries/pl/institutionsFacts";
+import {
+  HU_CABINET_SEAT_IDS,
+  HU_MILITARY_BRANCHES,
+  HU_MILITARY_SCALE,
+} from "@/lib/countries/hu/institutionsFacts";
+import {
+  RO_CABINET_SEAT_IDS,
+  RO_MILITARY_BRANCHES,
+  RO_MILITARY_SCALE,
+} from "@/lib/countries/ro/institutionsFacts";
+import {
+  YU_CABINET_SEAT_IDS,
+  YU_MILITARY_BRANCHES,
+  YU_MILITARY_SCALE,
+} from "@/lib/countries/yu/institutionsFacts";
+import {
+  BG_CABINET_SEAT_IDS,
+  BG_MILITARY_BRANCHES,
+  BG_MILITARY_SCALE,
+} from "@/lib/countries/bg/institutionsFacts";
+import {
+  CS_CABINET_SEAT_IDS,
+  CS_MILITARY_BRANCHES,
+  CS_MILITARY_SCALE,
+} from "@/lib/countries/cs/institutionsFacts";
+import {
+  SCO_CABINET_SEAT_IDS,
+  SCO_MILITARY_BRANCHES,
+  SCO_MILITARY_SCALE,
+} from "@/lib/countries/sco/institutionsFacts";
+import {
+  WAL_CABINET_SEAT_IDS,
+  WAL_MILITARY_BRANCHES,
+  WAL_MILITARY_SCALE,
+} from "@/lib/countries/wal/institutionsFacts";
+import {
+  BLR_CABINET_SEAT_IDS,
+  BLR_MILITARY_BRANCHES,
+  BLR_MILITARY_SCALE,
+} from "@/lib/countries/blr/institutionsFacts";
+import {
+  UKR_CABINET_SEAT_IDS,
+  UKR_MILITARY_BRANCHES,
+  UKR_MILITARY_SCALE,
+} from "@/lib/countries/ukr/institutionsFacts";
+import {
+  BAL_CABINET_SEAT_IDS,
+  BAL_MILITARY_BRANCHES,
+  BAL_MILITARY_SCALE,
+} from "@/lib/countries/bal/institutionsFacts";
 
 export interface Branch {
   id: string;
@@ -279,174 +424,25 @@ export const UNIT_TYPES: Record<UnitDomain, UnitArchetype[]> = {
 };
 
 export const MILITARY_BRANCHES_BY_COUNTRY: Record<CountryId, Branch[]> = {
-  US: [
-    { id: "army", name: "U.S. Army", abbr: "USA", domain: "ground" },
-    { id: "navy", name: "U.S. Navy", abbr: "USN", domain: "naval" },
-    // National Security Act of 1947 (effective 18 Sep 1947) — valid in 1953.
-    {
-      id: "airforce",
-      name: "U.S. Air Force",
-      abbr: "USAF",
-      domain: "air",
-      establishedYear: 1947,
-    },
-    { id: "marines", name: "U.S. Marine Corps", abbr: "USMC", domain: "marine" },
-    // FY2020 NDAA / spaceforce.mil: established 20 Dec 2019.
-    {
-      id: "space",
-      name: "U.S. Space Force",
-      abbr: "USSF",
-      domain: "space",
-      establishedYear: 2019,
-    },
-  ],
-  CN: [
-    // PLA ground/navy/air services predate 1953 (PLAAF founded 11 Nov 1949; PLAN 23 Apr 1949).
-    { id: "pla", name: "PLA Ground Force", abbr: "PLAGF", domain: "ground" },
-    { id: "plan", name: "PLA Navy", abbr: "PLAN", domain: "naval" },
-    { id: "plaaf", name: "PLA Air Force", abbr: "PLAAF", domain: "air" },
-    // Second Artillery Corps founded 1 Jul 1966; renamed PLA Rocket Force 31 Dec 2015.
-    // Catalog keeps the modern label; gate on the 1966 force stand-up so 1979+ still seeds.
-    {
-      id: "rocket",
-      name: "PLA Rocket Force",
-      abbr: "PLARF",
-      domain: "rocket",
-      establishedYear: 1966,
-    },
-    // PLA Strategic Support Force stood up 31 Dec 2015 (catalog name "Aerospace Force"
-    // reflects the 2024 Space Systems Department successor — same space/cyber slot).
-    {
-      id: "ssf",
-      name: "Aerospace Force",
-      abbr: "PLAASF",
-      domain: "space",
-      establishedYear: 2016,
-    },
-  ],
-  UK: [
-    { id: "army", name: "British Army", abbr: "Army", domain: "ground" },
-    { id: "navy", name: "Royal Navy", abbr: "RN", domain: "naval" },
-    { id: "raf", name: "Royal Air Force", abbr: "RAF", domain: "air" },
-  ],
+  US: US_MILITARY_BRANCHES,
+  CN: CN_MILITARY_BRANCHES,
+  UK: UK_MILITARY_BRANCHES,
   // Bundeswehr: first volunteers sworn 12 Nov 1955 (bundeswehr.de). West Germany had
   // no armed forces in 1953 (demilitarized under occupation / Blank Office planning only),
   // so a 1953 world correctly seeds DE with zero branches — no invented predecessor.
-  DE: [
-    {
-      id: "heer",
-      name: "Heer",
-      abbr: "Heer",
-      domain: "ground",
-      establishedYear: 1955,
-    },
-    {
-      id: "marine",
-      name: "Marine",
-      abbr: "Marine",
-      domain: "naval",
-      establishedYear: 1955,
-    },
-    {
-      id: "luftwaffe",
-      name: "Luftwaffe",
-      abbr: "Lw",
-      domain: "air",
-      establishedYear: 1955,
-    },
-  ],
-  JP: [
-    // National Safety Force (保安隊, Hoantai): NPR renamed 15 Oct 1952; became JGSDF
-    // 1 Jul 1954 (National Archives of Japan; Self-Defense Forces Act 1954).
-    {
-      id: "nsf",
-      name: "National Safety Force",
-      abbr: "NSF",
-      domain: "ground",
-      establishedYear: 1952,
-      dissolvedYear: 1954,
-    },
-    // Safety Security Force / Coastal Safety Force (警備隊): under National Safety
-    // Agency from 1 Aug 1952; became JMSDF 1 Jul 1954.
-    {
-      id: "csf",
-      name: "Coastal Safety Force",
-      abbr: "CSF",
-      domain: "naval",
-      establishedYear: 1952,
-      dissolvedYear: 1954,
-    },
-    // JSDF branches: Self-Defense Forces Act, 1 Jul 1954.
-    {
-      id: "jgsdf",
-      name: "Ground Self-Defense Force",
-      abbr: "JGSDF",
-      domain: "ground",
-      establishedYear: 1954,
-    },
-    {
-      id: "jmsdf",
-      name: "Maritime Self-Defense Force",
-      abbr: "JMSDF",
-      domain: "naval",
-      establishedYear: 1954,
-    },
-    {
-      id: "jasdf",
-      name: "Air Self-Defense Force",
-      abbr: "JASDF",
-      domain: "air",
-      establishedYear: 1954,
-    },
-  ],
-  IE: [
-    { id: "army", name: "Irish Army", abbr: "Army", domain: "ground" },
-    { id: "navy", name: "Naval Service", abbr: "NS", domain: "naval" },
-    { id: "aircorps", name: "Air Corps", abbr: "AC", domain: "air" },
-  ],
-  BR: [
-    { id: "exercito", name: "Army", abbr: "EB", domain: "ground" },
-    { id: "marinha", name: "Navy", abbr: "MB", domain: "naval" },
-    { id: "aerea", name: "Air Force", abbr: "FAB", domain: "air" },
-  ],
+  DE: DE_MILITARY_BRANCHES,
+  JP: JP_MILITARY_BRANCHES,
+  IE: IE_MILITARY_BRANCHES,
+  BR: BR_MILITARY_BRANCHES,
   // Nigeria: Navy from the 1956 Nigerian Naval Force; Army on independence
   // (1 Oct 1960); Air Force established 1964.
-  NG: [
-    { id: "army", name: "Nigerian Army", abbr: "NA", domain: "ground", establishedYear: 1960 },
-    { id: "navy", name: "Nigerian Navy", abbr: "NN", domain: "naval", establishedYear: 1956 },
-    {
-      id: "airforce",
-      name: "Nigerian Air Force",
-      abbr: "NAF",
-      domain: "air",
-      establishedYear: 1964,
-    },
-  ],
-  HU: [
-    { id: "ground", name: "Ground Forces", abbr: "MH", domain: "ground" },
-    { id: "airforce", name: "Air Force", abbr: "MHL", domain: "air" },
-  ],
-  PL: [
-    { id: "ground", name: "Land Forces", abbr: "WL", domain: "ground" },
-    { id: "navy", name: "Navy", abbr: "MW", domain: "naval" },
-    { id: "airforce", name: "Air Force", abbr: "SP", domain: "air" },
-  ],
-  RO: [
-    { id: "ground", name: "Land Forces", abbr: "FT", domain: "ground" },
-    { id: "navy", name: "Naval Forces", abbr: "FN", domain: "naval" },
-    { id: "airforce", name: "Air Force", abbr: "FA", domain: "air" },
-  ],
+  NG: NG_MILITARY_BRANCHES,
+  HU: HU_MILITARY_BRANCHES,
+  PL: PL_MILITARY_BRANCHES,
+  RO: RO_MILITARY_BRANCHES,
   // Yugoslav People's Army — dissolved with the SFRY in 1992.
-  YU: [
-    { id: "ground", name: "Ground Forces", abbr: "KoV", domain: "ground", dissolvedYear: 1992 },
-    { id: "navy", name: "Navy", abbr: "JRM", domain: "naval", dissolvedYear: 1992 },
-    { id: "airforce", name: "Air Force", abbr: "JRV", domain: "air", dissolvedYear: 1992 },
-  ],
-  BG: [
-    { id: "ground", name: "Land Forces", abbr: "SV", domain: "ground" },
-    { id: "navy", name: "Navy", abbr: "VMS", domain: "naval" },
-    { id: "airforce", name: "Air Force", abbr: "VVS", domain: "air" },
-  ],
+  YU: YU_MILITARY_BRANCHES,
+  BG: BG_MILITARY_BRANCHES,
   // Union-republic forces. Constitutionally these existed: the February 1944
   // amendment gave each union republic its own People's Commissariat of Defence,
   // which is the legal fiction that put the Ukrainian and Byelorussian SSRs in
@@ -455,115 +451,32 @@ export const MILITARY_BRANCHES_BY_COUNTRY: Record<CountryId, Branch[]> = {
   // relative to the satellites - these are garrison and territorial forces, not
   // national armies. Ukraine gets a navy (Odesa, Sevastopol, Mykolaiv) and
   // Byelorussia does not, because Byelorussia is landlocked.
-  UKR: [
-    { id: "ground", name: "Ground Forces", abbr: "SV", domain: "ground" },
-    { id: "navy", name: "Naval Forces", abbr: "VMS", domain: "naval" },
-    { id: "airforce", name: "Air Force", abbr: "VPS", domain: "air" },
-  ],
-  BLR: [
-    { id: "ground", name: "Ground Forces", abbr: "SV", domain: "ground" },
-    { id: "airforce", name: "Air Force", abbr: "VVS", domain: "air" },
-  ],
+  UKR: UKR_MILITARY_BRANCHES,
+  BLR: BLR_MILITARY_BRANCHES,
   // Czechoslovakia dissolved 1 Jan 1993 — landlocked, no naval branch.
-  CS: [
-    { id: "ground", name: "Ground Forces", abbr: "PV", domain: "ground", dissolvedYear: 1993 },
-    { id: "airforce", name: "Air Force", abbr: "CSL", domain: "air", dissolvedYear: 1993 },
-  ],
+  CS: CS_MILITARY_BRANCHES,
   // The Baltic republics are one country here, so one set of branches. The naval
   // branch matters more than the ground branch: Tallinn, Riga and Liepaja were
   // the Baltic Fleet's home ports.
-  BAL: [
-    { id: "ground", name: "Ground Forces", abbr: "SV", domain: "ground" },
-    { id: "navy", name: "Naval Forces", abbr: "VMS", domain: "naval" },
-    { id: "airforce", name: "Air Force", abbr: "VVS", domain: "air" },
-  ],
+  BAL: BAL_MILITARY_BRANCHES,
   // ── Soviet Union / Russia ────────────────────────────────────────────────
   // Era-neutral service names: one row serves both a 1953 Soviet and a 2019
   // Russian game (Branch has no namesByYear). PVO Strany became a separate
   // service 1948; RVSN stood up 17 Dec 1959; Military Space Forces 1992.
-  RU: [
-    { id: "ground", name: "Ground Forces", abbr: "SV", domain: "ground" },
-    { id: "navy", name: "Navy", abbr: "VMF", domain: "naval" },
-    { id: "airforce", name: "Air Force", abbr: "VVS", domain: "air" },
-    { id: "pvo", name: "Air Defence Forces", abbr: "PVO", domain: "air", establishedYear: 1948 },
-    {
-      id: "rocket",
-      name: "Strategic Rocket Forces",
-      abbr: "RVSN",
-      domain: "rocket",
-      establishedYear: 1959,
-    },
-    { id: "space", name: "Space Forces", abbr: "VKS", domain: "space", establishedYear: 1992 },
-  ],
-  FR: [
-    { id: "terre", name: "Army", abbr: "AdT", domain: "ground" },
-    { id: "marine", name: "Navy", abbr: "MN", domain: "naval" },
-    { id: "air", name: "Air Force", abbr: "AdA", domain: "air" },
-  ],
-  IT: [
-    { id: "esercito", name: "Army", abbr: "EI", domain: "ground" },
-    { id: "marina", name: "Navy", abbr: "MM", domain: "naval" },
-    { id: "aeronautica", name: "Air Force", abbr: "AM", domain: "air" },
-  ],
-  ES: [
-    { id: "tierra", name: "Army", abbr: "ET", domain: "ground" },
-    { id: "armada", name: "Navy", abbr: "AE", domain: "naval" },
-    { id: "aire", name: "Air Force", abbr: "EA", domain: "air" },
-  ],
-  SE: [
-    { id: "army", name: "Army", abbr: "Armén", domain: "ground" },
-    { id: "navy", name: "Navy", abbr: "Marinen", domain: "naval" },
-    { id: "airforce", name: "Air Force", abbr: "Flygvapnet", domain: "air" },
-  ],
-  TR: [
-    { id: "ground", name: "Land Forces", abbr: "KKK", domain: "ground" },
-    { id: "navy", name: "Naval Forces", abbr: "DzKK", domain: "naval" },
-    { id: "airforce", name: "Air Force", abbr: "HvKK", domain: "air" },
-  ],
-  GR: [
-    { id: "army", name: "Hellenic Army", abbr: "ES", domain: "ground" },
-    { id: "navy", name: "Hellenic Navy", abbr: "PN", domain: "naval" },
-    { id: "airforce", name: "Hellenic Air Force", abbr: "PA", domain: "air" },
-  ],
+  RU: RU_MILITARY_BRANCHES,
+  FR: FR_MILITARY_BRANCHES,
+  IT: IT_MILITARY_BRANCHES,
+  ES: ES_MILITARY_BRANCHES,
+  SE: SE_MILITARY_BRANCHES,
+  TR: TR_MILITARY_BRANCHES,
+  GR: GR_MILITARY_BRANCHES,
   // Bundesheer: re-established under the Austrian State Treaty, 1955. Landlocked.
-  AT: [
-    { id: "heer", name: "Land Forces", abbr: "ÖBH", domain: "ground", establishedYear: 1955 },
-    { id: "luft", name: "Air Forces", abbr: "ÖLK", domain: "air", establishedYear: 1955 },
-  ],
-  FI: [
-    { id: "army", name: "Army", abbr: "MAAV", domain: "ground" },
-    { id: "navy", name: "Navy", abbr: "MERIV", domain: "naval" },
-    { id: "airforce", name: "Air Force", abbr: "ILMAV", domain: "air" },
-  ],
+  AT: AT_MILITARY_BRANCHES,
+  FI: FI_MILITARY_BRANCHES,
   // Nationale Volksarmee: stood up 1 Mar 1956; dissolved with the GDR 3 Oct 1990.
-  DD: [
-    {
-      id: "landstreitkraefte",
-      name: "Land Forces",
-      abbr: "LaSK",
-      domain: "ground",
-      establishedYear: 1956,
-      dissolvedYear: 1990,
-    },
-    {
-      id: "volksmarine",
-      name: "People's Navy",
-      abbr: "VM",
-      domain: "naval",
-      establishedYear: 1956,
-      dissolvedYear: 1990,
-    },
-    {
-      id: "luftstreitkraefte",
-      name: "Air Force / Air Defence",
-      abbr: "LSK/LV",
-      domain: "air",
-      establishedYear: 1956,
-      dissolvedYear: 1990,
-    },
-  ],
-  SCO: [],
-  WAL: [],
+  DD: DD_MILITARY_BRANCHES,
+  SCO: SCO_MILITARY_BRANCHES,
+  WAL: WAL_MILITARY_BRANCHES,
 };
 
 /**
@@ -572,74 +485,74 @@ export const MILITARY_BRANCHES_BY_COUNTRY: Record<CountryId, Branch[]> = {
  * authored order of battle. (Ported from prototype: US 2.6, CN 2.0, JP 1.4.)
  */
 export const MILITARY_COUNTRY_SCALE: Record<CountryId, number> = {
-  US: 2.6,
-  CN: 2.0,
-  JP: 1.4,
-  UK: 1.7,
-  DE: 1.0,
-  IE: 1.0,
-  BR: 1.0,
-  NG: 0.85,
-  HU: 0.9,
-  PL: 1.0,
-  RO: 0.9,
-  YU: 0.95,
-  BG: 0.85,
+  US: US_MILITARY_SCALE,
+  CN: CN_MILITARY_SCALE,
+  JP: JP_MILITARY_SCALE,
+  UK: UK_MILITARY_SCALE,
+  DE: DE_MILITARY_SCALE,
+  IE: IE_MILITARY_SCALE,
+  BR: BR_MILITARY_SCALE,
+  NG: NG_MILITARY_SCALE,
+  HU: HU_MILITARY_SCALE,
+  PL: PL_MILITARY_SCALE,
+  RO: RO_MILITARY_SCALE,
+  YU: YU_MILITARY_SCALE,
+  BG: BG_MILITARY_SCALE,
   // Union republics buy at all-Union prices, so no discount against RU's scale;
   // their force is small because the order of battle is small, not because
   // equipment is cheap.
-  UKR: 1.1,
-  BLR: 1.0,
-  CS: 1.0,
-  BAL: 1.0,
-  RU: 2.4,
-  FR: 1.5,
-  IT: 1.2,
-  ES: 1.0,
-  SE: 1.1,
-  TR: 1.0,
-  GR: 0.9,
-  AT: 0.85,
-  FI: 0.9,
-  DD: 1.2,
-  SCO: 1.0,
-  WAL: 1.0,
+  UKR: UKR_MILITARY_SCALE,
+  BLR: BLR_MILITARY_SCALE,
+  CS: CS_MILITARY_SCALE,
+  BAL: BAL_MILITARY_SCALE,
+  RU: RU_MILITARY_SCALE,
+  FR: FR_MILITARY_SCALE,
+  IT: IT_MILITARY_SCALE,
+  ES: ES_MILITARY_SCALE,
+  SE: SE_MILITARY_SCALE,
+  TR: TR_MILITARY_SCALE,
+  GR: GR_MILITARY_SCALE,
+  AT: AT_MILITARY_SCALE,
+  FI: FI_MILITARY_SCALE,
+  DD: DD_MILITARY_SCALE,
+  SCO: SCO_MILITARY_SCALE,
+  WAL: WAL_MILITARY_SCALE,
 };
 
 /** Defense cabinet position per country. */
 export const DEFENSE_POSITION_BY_COUNTRY: Record<CountryId, string | null> = {
-  US: "secretary_of_defense",
-  UK: "defence_secretary",
-  CN: "minister_of_defense",
-  DE: "defense_minister",
-  JP: "defense_minister",
-  IE: "minister_for_defence",
-  BR: "minister_of_defence",
-  NG: "minister_of_defence",
-  HU: "minister_of_defence",
-  PL: "minister_of_defence",
-  RO: "minister_of_defence",
-  YU: "minister_of_defence",
-  BG: "minister_of_defence",
+  US: US_CABINET_SEAT_IDS.defense,
+  UK: UK_CABINET_SEAT_IDS.defense,
+  CN: CN_CABINET_SEAT_IDS.defense,
+  DE: DE_CABINET_SEAT_IDS.defense,
+  JP: JP_CABINET_SEAT_IDS.defense,
+  IE: IE_CABINET_SEAT_IDS.defense,
+  BR: BR_CABINET_SEAT_IDS.defense,
+  NG: NG_CABINET_SEAT_IDS.defense,
+  HU: HU_CABINET_SEAT_IDS.defense,
+  PL: PL_CABINET_SEAT_IDS.defense,
+  RO: RO_CABINET_SEAT_IDS.defense,
+  YU: YU_CABINET_SEAT_IDS.defense,
+  BG: BG_CABINET_SEAT_IDS.defense,
   // Republican defence commissariats/ministries existed on paper from 1944 (see
   // MILITARY_BRANCHES_BY_COUNTRY), so the post is real even though the Soviet
   // General Staff held the actual command authority.
-  UKR: "minister_of_defence",
-  BLR: "minister_of_defence",
-  CS: "minister_of_defence",
-  BAL: "minister_of_defence",
-  RU: "minister_of_defence",
-  FR: "minister_of_defence",
-  IT: "minister_of_defence",
-  ES: "minister_of_defence",
-  SE: "minister_of_defence",
-  TR: "minister_of_defence",
-  GR: "minister_of_defence",
-  AT: "minister_of_defence",
-  FI: "minister_of_defence",
-  DD: "minister_of_defence",
-  SCO: null,
-  WAL: null,
+  UKR: UKR_CABINET_SEAT_IDS.defense,
+  BLR: BLR_CABINET_SEAT_IDS.defense,
+  CS: CS_CABINET_SEAT_IDS.defense,
+  BAL: BAL_CABINET_SEAT_IDS.defense,
+  RU: RU_CABINET_SEAT_IDS.defense,
+  FR: FR_CABINET_SEAT_IDS.defense,
+  IT: IT_CABINET_SEAT_IDS.defense,
+  ES: ES_CABINET_SEAT_IDS.defense,
+  SE: SE_CABINET_SEAT_IDS.defense,
+  TR: TR_CABINET_SEAT_IDS.defense,
+  GR: GR_CABINET_SEAT_IDS.defense,
+  AT: AT_CABINET_SEAT_IDS.defense,
+  FI: FI_CABINET_SEAT_IDS.defense,
+  DD: DD_CABINET_SEAT_IDS.defense,
+  SCO: SCO_CABINET_SEAT_IDS.defense,
+  WAL: WAL_CABINET_SEAT_IDS.defense,
 };
 
 /** National readiness tier → global force modifier. */

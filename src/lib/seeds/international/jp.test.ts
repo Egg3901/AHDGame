@@ -28,7 +28,7 @@ import {
   deriveCountryGroupLean,
   deriveCountryGroupTurnout,
 } from "./derive";
-import { jpDemographicCategories } from "@/lib/seeds/jp/jpDemographicCategories";
+import { jpDemographicCategories } from "@/lib/countries/jp/data/jpDemographicCategories";
 import { calculateStateLean, getDisplayLean } from "@/lib/utils/demographics";
 import type { StateDemographics } from "@/lib/db/types";
 import type { EraId } from "@/lib/seeds/presetSelector";

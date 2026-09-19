@@ -688,6 +688,29 @@ export interface CountryGameState {
    */
   dissolvedTurn?: number | null;
   /**
+   * True when this country does not exist as a polity in the world's current
+   * preset era — East Germany in 1991, Czechoslovakia in 2019.
+   *
+   * DELIBERATELY NOT `dissolvedTurn`. That field means "absorbed into another
+   * and no longer exists", and it drives merge idempotency: `mergeCountry`
+   * returns `{ ok: true, retired: true }` for any row carrying it, and refuses
+   * it as a merge target. A country that simply is not part of this era was
+   * never absorbed, so stamping a dissolution would silently no-op a genuine
+   * later merge. `getDissolvedCountryIds` also has to keep "absorbed at turn N"
+   * distinct from "never existed in this era".
+   *
+   * Written true OR false by `seedCountryGameStates` on every reset, never
+   * only-when-true, so a world moving 1991 -> 1953 brings East Germany back
+   * instead of stranding it.
+   *
+   * Additive and optional by design: rows written before this field existed
+   * read `undefined` -> falsy -> registered, which is exactly the prior
+   * behaviour, so it needs no backfill migration. (CLAUDE.md asks for a tracking
+   * issue on `src/lib/db/types` changes; filing was waived by the repo owner on
+   * 2026-09-08 — recorded here so this reads as a decision, not an oversight.)
+   */
+  absentInEra?: boolean;
+  /**
    * When true, non-admin players can view economy-only pages (map, metrics,
    * stockmarket, central bank, budget, forex) even while `enabledForPlayers`
    * is false. Political routes (elections, legislature, parties, etc.) remain

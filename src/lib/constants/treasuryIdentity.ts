@@ -1,5 +1,34 @@
 import type { CountryId } from "@/lib/constants/countries";
 import { getNationalIdentity, type NationalIdentity } from "@/lib/constants/nationalIdentity";
+import { JP_IDENTITY } from "@/lib/countries/jp/identity";
+import { US_IDENTITY } from "@/lib/countries/us/identity";
+import { UK_IDENTITY } from "@/lib/countries/uk/identity";
+import { DE_IDENTITY } from "@/lib/countries/de/identity";
+import { CN_IDENTITY } from "@/lib/countries/cn/identity";
+import { IE_IDENTITY } from "@/lib/countries/ie/identity";
+import { RU_IDENTITY } from "@/lib/countries/ru/identity";
+import { DD_IDENTITY } from "@/lib/countries/dd/identity";
+import { NG_IDENTITY } from "@/lib/countries/ng/identity";
+import { BR_IDENTITY } from "@/lib/countries/br/identity";
+import { FR_IDENTITY } from "@/lib/countries/fr/identity";
+import { IT_IDENTITY } from "@/lib/countries/it/identity";
+import { ES_IDENTITY } from "@/lib/countries/es/identity";
+import { SE_IDENTITY } from "@/lib/countries/se/identity";
+import { TR_IDENTITY } from "@/lib/countries/tr/identity";
+import { GR_IDENTITY } from "@/lib/countries/gr/identity";
+import { AT_IDENTITY } from "@/lib/countries/at/identity";
+import { FI_IDENTITY } from "@/lib/countries/fi/identity";
+import { PL_IDENTITY } from "@/lib/countries/pl/identity";
+import { HU_IDENTITY } from "@/lib/countries/hu/identity";
+import { RO_IDENTITY } from "@/lib/countries/ro/identity";
+import { YU_IDENTITY } from "@/lib/countries/yu/identity";
+import { BG_IDENTITY } from "@/lib/countries/bg/identity";
+import { CS_IDENTITY } from "@/lib/countries/cs/identity";
+import { SCO_IDENTITY } from "@/lib/countries/sco/identity";
+import { WAL_IDENTITY } from "@/lib/countries/wal/identity";
+import { BLR_IDENTITY } from "@/lib/countries/blr/identity";
+import { UKR_IDENTITY } from "@/lib/countries/ukr/identity";
+import { BAL_IDENTITY } from "@/lib/countries/bal/identity";
 
 /**
  * Treasury / Finance-Ministry identity overlay for the National Budget surface.
@@ -44,281 +73,39 @@ export interface TreasuryIdentity {
 }
 
 /** Finance-ministry text overlay; brand colors are composed from NATIONAL_IDENTITY. */
-const TREASURY_TEXT: Record<
+export const TREASURY_TEXT: Record<
   CountryId,
   Omit<TreasuryIdentity, "palette" | "accent" | "accentSoft">
 > = {
-  CN: {
-    glyph: "财",
-    serif: "cjk",
-    budgetTitle: "国家预算",
-    budgetTitleEn: "National Budget",
-    ministry: "财政部 · MOF",
-    publicSeal: "公开 · PUBLIC",
-    registry: "People's Republic of China · Ministry of Finance",
-    native: "中华人民共和国 · 财政部",
-    nativeEn: "People's Republic of China · Ministry of Finance",
-  },
-  US: {
-    glyph: "US",
-    serif: "mono",
-    budgetTitle: "Federal Budget",
-    ministry: "U.S. TREASURY",
-    publicSeal: "PUBLIC RECORD",
-    registry: "United States · Department of the Treasury",
-    native: "Department of the Treasury",
-  },
-  UK: {
-    glyph: "HM",
-    serif: "mono",
-    budgetTitle: "HM Treasury Budget",
-    ministry: "HM TREASURY",
-    publicSeal: "PUBLIC RECORD",
-    registry: "United Kingdom · HM Treasury",
-    native: "His Majesty's Treasury",
-  },
-  DE: {
-    glyph: "BU",
-    serif: "mono",
-    budgetTitle: "Bundeshaushalt",
-    budgetTitleEn: "Federal Budget",
-    ministry: "BMF · FINANZEN",
-    publicSeal: "ÖFFENTLICH · PUBLIC",
-    registry: "Federal Republic of Germany · Federal Ministry of Finance",
-    native: "Bundesrepublik Deutschland · Bundesfinanzministerium",
-    nativeEn: "Federal Republic of Germany · Federal Ministry of Finance",
-  },
-  JP: {
-    glyph: "日",
-    serif: "cjk",
-    budgetTitle: "国家予算",
-    budgetTitleEn: "National Budget",
-    ministry: "財務省 · MOF",
-    publicSeal: "公開 · PUBLIC",
-    registry: "Japan · Ministry of Finance",
-    native: "日本国 · 財務省",
-    nativeEn: "Japan · Ministry of Finance",
-  },
-  IE: {
-    glyph: "ÉN",
-    serif: "mono",
-    budgetTitle: "Buiséad Náisiúnta",
-    budgetTitleEn: "National Budget",
-    ministry: "AN ROINN · FINANCE",
-    publicSeal: "POIBLÍ · PUBLIC",
-    registry: "Ireland · Department of Finance",
-    native: "Éire · An Roinn Airgeadais",
-    nativeEn: "Ireland · Department of Finance",
-  },
-  BR: {
-    glyph: "BR",
-    serif: "mono",
-    budgetTitle: "Orçamento Nacional",
-    budgetTitleEn: "National Budget",
-    ministry: "TESOURO NACIONAL",
-    publicSeal: "PÚBLICO · PUBLIC",
-    registry: "Federative Republic of Brazil · National Treasury",
-    native: "República Federativa do Brasil · Tesouro Nacional",
-    nativeEn: "Federative Republic of Brazil · National Treasury",
-  },
-  NG: {
-    glyph: "NG",
-    serif: "mono",
-    budgetTitle: "National Budget",
-    ministry: "FEDERAL TREASURY",
-    publicSeal: "PUBLIC RECORD",
-    registry: "Federal Republic of Nigeria · Federal Treasury",
-    native: "Federal Republic of Nigeria · Office of the Accountant-General",
-  },
-  HU: {
-    glyph: "HU",
-    serif: "mono",
-    budgetTitle: "State Plan Budget",
-    ministry: "MINISTRY OF FINANCE",
-    publicSeal: "PUBLIC RECORD",
-    registry: "Hungarian People's Republic · Ministry of Finance",
-    native: "Magyar Népköztársaság · Pénzügyminisztérium",
-  },
-  PL: {
-    glyph: "PL",
-    serif: "mono",
-    budgetTitle: "State Plan Budget",
-    ministry: "MINISTRY OF FINANCE",
-    publicSeal: "PUBLIC RECORD",
-    registry: "Polish People's Republic · Ministry of Finance",
-    native: "Polska Rzeczpospolita Ludowa · Ministerstwo Finansów",
-  },
-  RO: {
-    glyph: "RO",
-    serif: "mono",
-    budgetTitle: "State Plan Budget",
-    ministry: "MINISTRY OF FINANCE",
-    publicSeal: "PUBLIC RECORD",
-    registry: "Socialist Republic of Romania · Ministry of Finance",
-    native: "Republica Socialistă România · Ministerul Finanțelor",
-  },
-  YU: {
-    glyph: "YU",
-    serif: "mono",
-    budgetTitle: "Federal Budget",
-    ministry: "FEDERAL SECRETARIAT FOR FINANCE",
-    publicSeal: "PUBLIC RECORD",
-    registry: "SFR Yugoslavia · Federal Secretariat for Finance",
-    native: "SFR Jugoslavija · Savezni sekretarijat za finansije",
-  },
-  BG: {
-    glyph: "BG",
-    serif: "mono",
-    budgetTitle: "State Plan Budget",
-    ministry: "MINISTRY OF FINANCE",
-    publicSeal: "PUBLIC RECORD",
-    registry: "People's Republic of Bulgaria · Ministry of Finance",
-    native: "Народна република България · Министерство на финансите",
-  },
-  BLR: {
-    glyph: "BLR",
-    serif: "mono",
-    budgetTitle: "State Plan Budget",
-    ministry: "MINISTRY OF FINANCE",
-    publicSeal: "PUBLIC RECORD",
-    registry: "Byelorussian SSR · Ministry of Finance",
-    native: "Беларуская ССР · Міністэрства фінансаў",
-  },
-  UKR: {
-    glyph: "UKR",
-    serif: "mono",
-    budgetTitle: "State Plan Budget",
-    ministry: "MINISTRY OF FINANCE",
-    publicSeal: "PUBLIC RECORD",
-    registry: "Ukrainian SSR · Ministry of Finance",
-    native: "Українська РСР · Міністерство фінансів",
-  },
-  CS: {
-    glyph: "CS",
-    serif: "mono",
-    budgetTitle: "State Plan Budget",
-    ministry: "FEDERAL MINISTRY OF FINANCE",
-    publicSeal: "PUBLIC RECORD",
-    registry: "Czechoslovak Socialist Republic · Federal Ministry of Finance",
-    native: "Československá socialistická republika · Federální ministerstvo financí",
-  },
-  BAL: {
-    glyph: "BAL",
-    serif: "mono",
-    budgetTitle: "State Plan Budget",
-    ministry: "MINISTRY OF FINANCE",
-    publicSeal: "PUBLIC RECORD",
-    registry: "Baltic Soviet Republics · Ministries of Finance",
-    native: "Baltijas PSR · Finanšu ministrijas",
-  },
-  RU: {
-    glyph: "СССР",
-    serif: "mono",
-    budgetTitle: "State Plan Budget",
-    ministry: "MINISTRY OF FINANCE",
-    publicSeal: "PUBLIC RECORD",
-    registry: "Union of Soviet Socialist Republics · Ministry of Finance",
-    native: "СССР · Министерство финансов",
-  },
-  FR: {
-    glyph: "RF",
-    serif: "mono",
-    budgetTitle: "State Budget",
-    ministry: "MINISTRY OF ECONOMY AND FINANCE",
-    publicSeal: "PUBLIC RECORD",
-    registry: "French Republic · Ministry of Economy and Finance",
-    native: "République française · Ministère de l'Économie et des Finances",
-  },
-  IT: {
-    glyph: "RI",
-    serif: "mono",
-    budgetTitle: "State Budget",
-    ministry: "MINISTRY OF THE TREASURY",
-    publicSeal: "PUBLIC RECORD",
-    registry: "Italian Republic · Ministry of the Treasury",
-    native: "Repubblica Italiana · Ministero del Tesoro",
-  },
-  ES: {
-    glyph: "RE",
-    serif: "mono",
-    budgetTitle: "State Budget",
-    ministry: "MINISTRY OF FINANCE",
-    publicSeal: "PUBLIC RECORD",
-    registry: "Kingdom of Spain · Ministry of Finance",
-    native: "Reino de España · Ministerio de Hacienda",
-  },
-  SE: {
-    glyph: "SE",
-    serif: "mono",
-    budgetTitle: "State Budget",
-    ministry: "MINISTRY OF FINANCE",
-    publicSeal: "PUBLIC RECORD",
-    registry: "Kingdom of Sweden · Ministry of Finance",
-    native: "Konungariket Sverige · Finansdepartementet",
-  },
-  TR: {
-    glyph: "TC",
-    serif: "mono",
-    budgetTitle: "State Budget",
-    ministry: "MINISTRY OF FINANCE",
-    publicSeal: "PUBLIC RECORD",
-    registry: "Republic of Turkey · Ministry of Finance",
-    native: "Türkiye Cumhuriyeti · Maliye Bakanlığı",
-  },
-  GR: {
-    glyph: "ΕΔ",
-    serif: "mono",
-    budgetTitle: "State Budget",
-    ministry: "MINISTRY OF FINANCE",
-    publicSeal: "PUBLIC RECORD",
-    registry: "Hellenic Republic · Ministry of Finance",
-    native: "Ελληνική Δημοκρατία · Υπουργείο Οικονομικών",
-  },
-  AT: {
-    glyph: "BM",
-    serif: "mono",
-    budgetTitle: "Federal Budget",
-    ministry: "MINISTRY OF FINANCE",
-    publicSeal: "PUBLIC RECORD",
-    registry: "Republic of Austria · Federal Ministry of Finance",
-    native: "Republik Österreich · Bundesministerium für Finanzen",
-  },
-  FI: {
-    glyph: "VM",
-    serif: "mono",
-    budgetTitle: "State Budget",
-    ministry: "MINISTRY OF FINANCE",
-    publicSeal: "PUBLIC RECORD",
-    registry: "Republic of Finland · Ministry of Finance",
-    native: "Suomen Tasavalta · Valtiovarainministeriö",
-  },
-  DD: {
-    glyph: "DDR",
-    serif: "mono",
-    budgetTitle: "State Plan Budget",
-    ministry: "MINISTRY OF FINANCE",
-    publicSeal: "PUBLIC RECORD",
-    registry: "German Democratic Republic · Ministry of Finance",
-    native: "Deutsche Demokratische Republik · Ministerium der Finanzen",
-  },
-  SCO: {
-    glyph: "AB",
-    serif: "mono",
-    budgetTitle: "Scottish Budget",
-    ministry: "SCOTTISH GOVERNMENT",
-    publicSeal: "PUBLIC RECORD",
-    registry: "Scotland · Scottish Government Finance",
-    native: "Scottish Government · Finance Directorate",
-  },
-  WAL: {
-    glyph: "CY",
-    serif: "mono",
-    budgetTitle: "Welsh Budget",
-    ministry: "WELSH GOVERNMENT",
-    publicSeal: "PUBLIC RECORD",
-    registry: "Wales · Welsh Government Finance",
-    native: "Welsh Government · Finance Directorate",
-  },
+  CN: CN_IDENTITY.treasuryText,
+  US: US_IDENTITY.treasuryText,
+  UK: UK_IDENTITY.treasuryText,
+  DE: DE_IDENTITY.treasuryText,
+  JP: JP_IDENTITY.treasuryText,
+  IE: IE_IDENTITY.treasuryText,
+  BR: BR_IDENTITY.treasuryText,
+  NG: NG_IDENTITY.treasuryText,
+  HU: HU_IDENTITY.treasuryText,
+  PL: PL_IDENTITY.treasuryText,
+  RO: RO_IDENTITY.treasuryText,
+  YU: YU_IDENTITY.treasuryText,
+  BG: BG_IDENTITY.treasuryText,
+  BLR: BLR_IDENTITY.treasuryText,
+  UKR: UKR_IDENTITY.treasuryText,
+  CS: CS_IDENTITY.treasuryText,
+  BAL: BAL_IDENTITY.treasuryText,
+  RU: RU_IDENTITY.treasuryText,
+  FR: FR_IDENTITY.treasuryText,
+  IT: IT_IDENTITY.treasuryText,
+  ES: ES_IDENTITY.treasuryText,
+  SE: SE_IDENTITY.treasuryText,
+  TR: TR_IDENTITY.treasuryText,
+  GR: GR_IDENTITY.treasuryText,
+  AT: AT_IDENTITY.treasuryText,
+  FI: FI_IDENTITY.treasuryText,
+  DD: DD_IDENTITY.treasuryText,
+  SCO: SCO_IDENTITY.treasuryText,
+  WAL: WAL_IDENTITY.treasuryText,
 };
 
 export const TREASURY_IDENTITY: Record<CountryId, TreasuryIdentity> = Object.fromEntries(

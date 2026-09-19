@@ -26,6 +26,15 @@ type CollMock = {
    * one threw for 14 unrelated tests before it was implemented.
    */
   distinct: ReturnType<typeof vi.fn>;
+  /**
+   * Needed by the readiness report, which SUMS seats rather than counting rows:
+   * `seats` and `electedOfficials` each store one row per constituency or party
+   * bloc carrying a seat count, so it aggregates `totalSeats` / `seatsHeld`.
+   * Added to the FAKE for the same reason `distinct` was -- without it the
+   * report throws and the same 14 unrelated tests fail on a missing mock rather
+   * than on anything they assert.
+   */
+  aggregate: ReturnType<typeof vi.fn>;
 };
 
 function cursorOf(rows: unknown[]) {
@@ -74,6 +83,12 @@ function makeDb(opts: {
       insertOne: vi.fn().mockResolvedValue({ insertedId: "x" }),
       deleteMany: vi.fn().mockResolvedValue({ deletedCount: 0 }),
       distinct: vi.fn().mockResolvedValue(opts.distinct?.[name] ?? []),
+      // Answers the seat-sum with the same figure `countDocuments` would give,
+      // so a collection configured through `counts` behaves consistently
+      // whichever way the code under test asks for it.
+      aggregate: vi.fn().mockImplementation(() => ({
+        toArray: async () => [{ seats: counts[name] ?? 0 }],
+      })),
     };
     collections[name] = coll;
     return coll;
@@ -358,6 +373,10 @@ describe("runConformanceChecks", () => {
         insertOne: vi.fn(),
         deleteMany: vi.fn(),
         distinct: vi.fn().mockResolvedValue([]),
+        // The readiness report sums seats instead of counting rows; this
+        // catch-all has to answer that too or it throws before the sector
+        // checks this case is actually about.
+        aggregate: vi.fn().mockReturnValue({ toArray: async () => [{ seats: 0 }] }),
       };
     });
 

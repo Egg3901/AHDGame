@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { applyEra1953Adjustments } from "./stateMetricsEra1953";
 import { ngStateMetrics } from "@/lib/seeds/ng/ngStateMetrics";
 import { ukStateMetrics } from "@/lib/seeds/uk/ukStateMetrics";
-import { jpStateMetrics } from "@/lib/seeds/jp/jpStateMetrics";
+import { jpStateMetrics } from "@/lib/countries/jp/data/jpStateMetrics";
 import { brStateMetrics } from "@/lib/seeds/br/brStateMetrics";
 import type { StateMetrics } from "@/lib/db/types";
 

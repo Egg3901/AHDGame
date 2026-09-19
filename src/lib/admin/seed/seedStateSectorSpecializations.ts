@@ -2,6 +2,7 @@ import type { Db } from "mongodb";
 import type { State } from "@/lib/db/types";
 import type { CorporationType, StateSectorSpecialization } from "@/lib/constants/corporations";
 import { CORPORATION_TYPES } from "@/lib/constants/corporations";
+import { JP_SECTOR_SPECIALIZATION } from "@/lib/countries/jp/economy";
 
 const US_OVERRIDES: Record<string, StateSectorSpecialization> = {
   AL: { primary: "manufacturing", secondary: "defense" },
@@ -60,7 +61,7 @@ const US_OVERRIDES: Record<string, StateSectorSpecialization> = {
 const COUNTRY_DEFAULTS: Record<string, StateSectorSpecialization> = {
   US: { primary: "manufacturing", secondary: "retail" },
   UK: { primary: "financial", secondary: "media" },
-  JP: { primary: "automobiles", secondary: "technology" },
+  JP: JP_SECTOR_SPECIALIZATION,
   DE: { primary: "manufacturing", secondary: "automobiles" },
   IE: { primary: "technology", secondary: "financial" },
   BR: { primary: "agriculture", secondary: "energy" },

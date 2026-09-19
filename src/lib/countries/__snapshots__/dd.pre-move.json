@@ -1,0 +1,3521 @@
+{
+  "COUNTRY_ANCHOR": {
+    "shape": "country-first",
+    "value": [13.4, 52.5]
+  },
+  "COUNTRY_BUCKET_LABELS": {
+    "shape": "country-first",
+    "value": {
+      "dims": {
+        "ethnicity": "Background",
+        "age": "Age",
+        "education": "Education",
+        "income": "Income",
+        "urbanization": "Where they live"
+      },
+      "buckets": {
+        "ethnicity": {
+          "german": "German",
+          "other": "Other"
+        },
+        "age": {
+          "young": "Under 30s",
+          "mid": "30s and 40s",
+          "mature": "50s and 60s",
+          "senior": "Over 65s"
+        },
+        "education": {
+          "primary_or_below": "Primary or below",
+          "secondary": "Secondary",
+          "vocational": "Vocational",
+          "university": "University"
+        },
+        "income": {
+          "low": "Lower income",
+          "middle": "Middle income",
+          "high": "Higher income"
+        },
+        "urbanization": {
+          "urban": "Cities",
+          "suburban": "Suburbs",
+          "rural": "Countryside"
+        }
+      }
+    }
+  },
+  "COUNTRY_COMMAND_FLAVOR": {
+    "shape": "country-first",
+    "value": {
+      "glyph": "DD",
+      "command": "NATIONALE VOLKSARMEE",
+      "strip": "◆ VERTRAULICHE VERSCHLUSSSACHE",
+      "acc": "#f0a0a0"
+    }
+  },
+  "COUNTRY_MODIFIER_PATCHES": {
+    "shape": "absent",
+    "value": null
+  },
+  "COUNTRY_READINESS_EXPECTATIONS": {
+    "shape": "country-first",
+    "value": {
+      "regionCount": 6,
+      "partyMin": 5,
+      "partyRoster": "SED, CDU, LDPD, NDPD, DBD (National Front)",
+      "statePartyOrgMin": 30,
+      "seatMin": 0,
+      "seatNote": "Volkskammer (500) seeds from historicalSeats + backfills from resolved elections",
+      "nppMin": 0,
+      "nppNote": "One-party National Front — no separate NPP roster requirement",
+      "officialMin": 15,
+      "demographicsCount": 6,
+      "stateMetricsFilter": {
+        "_id": {
+          "$in": ["BEO", "MV", "BB", "ST", "SN", "TH"]
+        }
+      },
+      "stateMetricsCount": 6,
+      "legislationTypesMin": 1,
+      "extras": [null]
+    }
+  },
+  "COUNTRY_SECTOR_WEIGHTS_1953": {
+    "shape": "country-first",
+    "value": {
+      "manufacturing": 28,
+      "chemical_industries": 8,
+      "extraction": 8,
+      "defense": 12,
+      "energy": 6,
+      "agriculture": 8,
+      "construction": 6,
+      "logistics": 4,
+      "healthcare": 4,
+      "automobiles": 2,
+      "technology": 1,
+      "retail": 2,
+      "media": 1,
+      "financial": 1,
+      "real_estate": 1,
+      "telecommunications": 1,
+      "entertainment": 1
+    }
+  },
+  "DOMAIN_BUCKET_AFFINITIES": {
+    "shape": "absent",
+    "value": null
+  },
+  "GDP_DENOMINATION_1953": {
+    "shape": "country-first",
+    "value": "local"
+  },
+  "GROUPS": {
+    "shape": "absent",
+    "value": null
+  },
+  "INITIAL_RATES": {
+    "shape": "country-first",
+    "value": 2.22
+  },
+  "MAJOR_DEFAULT_PARTIES": {
+    "shape": "absent",
+    "value": null
+  },
+  "MECHANICS_BY_COUNTRY": {
+    "shape": "country-first",
+    "value": {
+      "generalSecretary": {
+        "positionId": "generalSecretary",
+        "department": "Council of Ministers",
+        "sealImage": "",
+        "legislativeDomains": ["governance"],
+        "nationalMetrics": [
+          {
+            "category": "governance",
+            "metricId": "publicTrust",
+            "label": "Public Trust",
+            "format": "percent",
+            "higherIsBetter": true
+          },
+          {
+            "category": "governance",
+            "metricId": "governmentTransparency",
+            "label": "Government Transparency",
+            "format": "index",
+            "higherIsBetter": true
+          }
+        ],
+        "regionalMetrics": [],
+        "tierSetting": {
+          "name": "Council Posture",
+          "description": "Set how the Council of Ministers presses the union republics. Centralization drives execution at the cost of trust; devolution does the reverse.",
+          "defaultTier": "collegial",
+          "options": [
+            {
+              "id": "devolution",
+              "label": "Republic Latitude",
+              "description": "Loosen central direction. Trust rises; plan execution slips.",
+              "effects": {
+                "publicTrust": 0.025,
+                "industrialPolicyExecution": -0.02
+              }
+            },
+            {
+              "id": "collegial",
+              "label": "Collegial",
+              "description": "Govern to precedent.",
+              "effects": {}
+            },
+            {
+              "id": "centralization",
+              "label": "Centralization",
+              "description": "Direct the republics from the centre. Execution sharpens; trust erodes.",
+              "effects": {
+                "industrialPolicyExecution": 0.025,
+                "publicTrust": -0.02
+              }
+            }
+          ]
+        }
+      },
+      "first_deputy_premier": {
+        "positionId": "first_deputy_premier",
+        "department": "Council of Ministers",
+        "sealImage": "",
+        "legislativeDomains": ["governance", "economic"],
+        "nationalMetrics": [
+          {
+            "category": "governance",
+            "metricId": "publicTrust",
+            "label": "Public Trust",
+            "format": "percent",
+            "higherIsBetter": true
+          },
+          {
+            "category": "economic",
+            "metricId": "gdpGrowth",
+            "label": "GDP Growth",
+            "format": "percent",
+            "higherIsBetter": true
+          }
+        ],
+        "regionalMetrics": [],
+        "tierSetting": {
+          "name": "Coordination Priority",
+          "description": "Choose what the deputy chairmanship pushes across the ministries: output, or clean administration.",
+          "defaultTier": "balanced",
+          "options": [
+            {
+              "id": "output_first",
+              "label": "Output First",
+              "description": "Push production above all. Growth rises; graft goes unchecked.",
+              "effects": {
+                "gdpGrowth": 0.02,
+                "corruptionIndex": 0.015
+              }
+            },
+            {
+              "id": "balanced",
+              "label": "Balanced",
+              "description": "Coordinate to plan.",
+              "effects": {}
+            },
+            {
+              "id": "discipline_first",
+              "label": "Discipline First",
+              "description": "Police the ministries. Graft falls; output slows.",
+              "effects": {
+                "corruptionIndex": -0.025,
+                "gdpGrowth": -0.012
+              }
+            }
+          ]
+        }
+      },
+      "minister_of_foreign_affairs": {
+        "positionId": "minister_of_foreign_affairs",
+        "department": "Ministry of Foreign Affairs",
+        "sealImage": "",
+        "legislativeDomains": ["foreign_policy"],
+        "nationalMetrics": [
+          {
+            "category": "economic",
+            "metricId": "gdpGrowth",
+            "label": "GDP Growth",
+            "format": "percent",
+            "higherIsBetter": true
+          },
+          {
+            "category": "governance",
+            "metricId": "governmentTransparency",
+            "label": "Government Transparency",
+            "format": "index",
+            "higherIsBetter": true
+          }
+        ],
+        "regionalMetrics": [],
+        "tierSetting": {
+          "name": "Diplomatic Line",
+          "description": "Set the union's posture abroad. Détente opens trade at the cost of prestige at home; confrontation does the reverse.",
+          "defaultTier": "coexistence",
+          "options": [
+            {
+              "id": "detente",
+              "label": "Détente",
+              "description": "Seek accommodation. Trade widens; hard-line prestige suffers.",
+              "effects": {
+                "tradeGrowth": 0.025,
+                "nationalPride": -0.015
+              }
+            },
+            {
+              "id": "coexistence",
+              "label": "Peaceful Coexistence",
+              "description": "Hold the standing line.",
+              "effects": {}
+            },
+            {
+              "id": "confrontation",
+              "label": "Confrontation",
+              "description": "Press the union's claims. Pride rises; trade narrows.",
+              "effects": {
+                "nationalPride": 0.025,
+                "tradeGrowth": -0.02
+              }
+            }
+          ]
+        }
+      },
+      "minister_of_defence": {
+        "positionId": "minister_of_defence",
+        "department": "Ministry of National Defence",
+        "sealImage": "",
+        "legislativeDomains": ["defense"],
+        "nationalMetrics": [
+          {
+            "category": "publicSafety",
+            "metricId": "publicSafetyConfidence",
+            "label": "Safety Confidence",
+            "format": "index",
+            "higherIsBetter": true
+          },
+          {
+            "category": "governance",
+            "metricId": "publicTrust",
+            "label": "Public Trust",
+            "format": "percent",
+            "higherIsBetter": true
+          }
+        ],
+        "regionalMetrics": [],
+        "tierSetting": {
+          "name": "Force Posture",
+          "description": "Set the standing posture of the armed forces. Mobilization buys readiness with labour drawn out of the plan.",
+          "defaultTier": "standing",
+          "options": [
+            {
+              "id": "demobilization",
+              "label": "Demobilization",
+              "description": "Return conscripts to industry. Hiring improves; readiness falls.",
+              "effects": {
+                "unemploymentRate": -0.02,
+                "militaryReadiness": -0.03
+              }
+            },
+            {
+              "id": "standing",
+              "label": "Standing Forces",
+              "description": "Hold establishment.",
+              "effects": {}
+            },
+            {
+              "id": "mobilization",
+              "label": "Mobilization",
+              "description": "Call up reserves. Readiness rises; industry loses labour.",
+              "effects": {
+                "militaryReadiness": 0.035,
+                "unemploymentRate": 0.015
+              }
+            }
+          ]
+        },
+        "regionalTarget": {
+          "name": "Military District Focus",
+          "description": "Concentrate garrisons and civil defence in one republic.",
+          "effects": {
+            "publicSafetyConfidence": 0.04,
+            "militaryReadiness": 0.03
+          }
+        },
+        "emergency": {
+          "name": "Emergency Mobilization",
+          "description": "Call up the reserves in one republic under acute threat, sharply raising readiness and confidence.",
+          "cost": 1,
+          "duration": 24,
+          "effects": {
+            "militaryReadiness": 0.09,
+            "publicSafetyConfidence": 0.06
+          }
+        }
+      },
+      "minister_of_finance": {
+        "positionId": "minister_of_finance",
+        "department": "Ministry of Finance",
+        "sealImage": "",
+        "legislativeDomains": ["tax", "economic"],
+        "nationalMetrics": [
+          {
+            "category": "economic",
+            "metricId": "gdpGrowth",
+            "label": "GDP Growth",
+            "format": "percent",
+            "higherIsBetter": true
+          },
+          {
+            "category": "economic",
+            "metricId": "unemploymentRate",
+            "label": "Unemployment Rate",
+            "format": "percent",
+            "higherIsBetter": false
+          },
+          {
+            "category": "economic",
+            "metricId": "costOfLiving",
+            "label": "Cost of Living",
+            "format": "index",
+            "higherIsBetter": false
+          }
+        ],
+        "regionalMetrics": [
+          {
+            "category": "economic",
+            "metricId": "gdpGrowth",
+            "label": "GDP Growth",
+            "format": "percent",
+            "higherIsBetter": true
+          },
+          {
+            "category": "economic",
+            "metricId": "unemploymentRate",
+            "label": "Unemployment Rate",
+            "format": "percent",
+            "higherIsBetter": false
+          }
+        ],
+        "tierSetting": {
+          "name": "Budget Discipline",
+          "description": "Set the Ministry's stance on plan financing. Expansion accelerates output and hiring at the cost of price pressure; retrenchment cools costs but slows the plan.",
+          "defaultTier": "planned",
+          "options": [
+            {
+              "id": "retrenchment",
+              "label": "Retrenchment",
+              "description": "Tighten plan financing. Costs ease, but growth and hiring slow.",
+              "effects": {
+                "costOfLiving": -0.02,
+                "gdpGrowth": -0.015,
+                "unemploymentRate": 0.01
+              }
+            },
+            {
+              "id": "planned",
+              "label": "Planned Balance",
+              "description": "Hold financing to the plan targets.",
+              "effects": {}
+            },
+            {
+              "id": "expansion",
+              "label": "Plan Expansion",
+              "description": "Accelerate financing of plan targets. Output and hiring improve; prices run hotter.",
+              "effects": {
+                "gdpGrowth": 0.02,
+                "unemploymentRate": -0.015,
+                "costOfLiving": 0.015
+              }
+            }
+          ]
+        },
+        "regionalTarget": {
+          "name": "Republic Financing Priority",
+          "description": "Direct plan financing to one republic, lifting growth and hiring there.",
+          "effects": {
+            "gdpGrowth": 0.04,
+            "unemploymentRate": -0.03
+          }
+        },
+        "emergency": {
+          "name": "Emergency Plan Correction",
+          "description": "Deploy an emergency correction for a republic under acute economic stress, sharply lifting output and employment for one window.",
+          "cost": 1,
+          "duration": 24,
+          "effects": {
+            "gdpGrowth": 0.08,
+            "unemploymentRate": -0.06
+          }
+        }
+      },
+      "minister_of_internal_affairs": {
+        "positionId": "minister_of_internal_affairs",
+        "department": "Ministry of Internal Affairs",
+        "sealImage": "",
+        "legislativeDomains": ["law_justice", "publicSafety"],
+        "nationalMetrics": [
+          {
+            "category": "publicSafety",
+            "metricId": "publicSafetyConfidence",
+            "label": "Safety Confidence",
+            "format": "index",
+            "higherIsBetter": true
+          },
+          {
+            "category": "governance",
+            "metricId": "publicTrust",
+            "label": "Public Trust",
+            "format": "percent",
+            "higherIsBetter": true
+          }
+        ],
+        "regionalMetrics": [],
+        "tierSetting": {
+          "name": "Internal Security Posture",
+          "description": "Set how hard the security organs press. Repression buys order at the cost of civil liberties.",
+          "defaultTier": "routine",
+          "options": [
+            {
+              "id": "thaw",
+              "label": "Thaw",
+              "description": "Relax the organs. Liberties widen; crime creeps up.",
+              "effects": {
+                "civilLiberties": 0.03,
+                "crimeRate": 0.015
+              }
+            },
+            {
+              "id": "routine",
+              "label": "Routine Vigilance",
+              "description": "Standing posture.",
+              "effects": {}
+            },
+            {
+              "id": "crackdown",
+              "label": "Crackdown",
+              "description": "Press the organs hard. Crime falls; liberties narrow.",
+              "effects": {
+                "crimeRate": -0.03,
+                "civilLiberties": -0.025
+              }
+            }
+          ]
+        },
+        "regionalTarget": {
+          "name": "Militia Concentration",
+          "description": "Concentrate militia strength in one republic, cutting crime there.",
+          "effects": {
+            "crimeRate": -0.04,
+            "publicSafetyConfidence": 0.03
+          }
+        },
+        "emergency": {
+          "name": "State of Emergency",
+          "description": "Impose emergency powers in one republic, sharply cutting crime at a cost to civil liberties.",
+          "cost": 1,
+          "duration": 24,
+          "effects": {
+            "crimeRate": -0.09,
+            "violentCrimeRate": -0.07
+          },
+          "sideEffects": {
+            "civilLiberties": -0.05
+          }
+        }
+      },
+      "chairman_of_gosplan": {
+        "positionId": "chairman_of_gosplan",
+        "department": "State Planning Commission",
+        "sealImage": "",
+        "legislativeDomains": ["economic", "governance"],
+        "nationalMetrics": [
+          {
+            "category": "economic",
+            "metricId": "gdpGrowth",
+            "label": "GDP Growth",
+            "format": "percent",
+            "higherIsBetter": true
+          },
+          {
+            "category": "economic",
+            "metricId": "unemploymentRate",
+            "label": "Unemployment Rate",
+            "format": "percent",
+            "higherIsBetter": false
+          },
+          {
+            "category": "governance",
+            "metricId": "governmentTransparency",
+            "label": "Government Transparency",
+            "format": "index",
+            "higherIsBetter": true
+          }
+        ],
+        "regionalMetrics": [
+          {
+            "category": "economic",
+            "metricId": "gdpGrowth",
+            "label": "GDP Growth",
+            "format": "percent",
+            "higherIsBetter": true
+          }
+        ],
+        "tierSetting": {
+          "name": "Plan Emphasis",
+          "description": "Weight the control figures between heavy industry (Group A) and consumer goods (Group B).",
+          "defaultTier": "balanced_plan",
+          "options": [
+            {
+              "id": "group_b",
+              "label": "Group B Priority",
+              "description": "Favour consumer goods. Household costs ease; industrial output slows.",
+              "effects": {
+                "costOfLiving": -0.025,
+                "manufacturingCompetitiveness": -0.015
+              }
+            },
+            {
+              "id": "balanced_plan",
+              "label": "Balanced Plan",
+              "description": "Hold the control figures.",
+              "effects": {}
+            },
+            {
+              "id": "group_a",
+              "label": "Group A Priority",
+              "description": "Favour heavy industry. Competitiveness rises; household costs climb.",
+              "effects": {
+                "manufacturingCompetitiveness": 0.025,
+                "costOfLiving": 0.02
+              }
+            }
+          ]
+        },
+        "regionalTarget": {
+          "name": "Priority Development Region",
+          "description": "Name one republic a priority development region in the control figures.",
+          "effects": {
+            "gdpGrowth": 0.04,
+            "industrialPolicyExecution": 0.03
+          }
+        },
+        "emergency": {
+          "name": "Emergency Plan Reallocation",
+          "description": "Reallocate plan resources to one republic in crisis, sharply lifting output and execution.",
+          "cost": 1,
+          "duration": 24,
+          "effects": {
+            "gdpGrowth": 0.08,
+            "industrialPolicyExecution": 0.06
+          }
+        }
+      },
+      "gosbank_liaison": {
+        "positionId": "gosbank_liaison",
+        "department": "Staatsbank der DDR",
+        "sealImage": "",
+        "legislativeDomains": ["economic"],
+        "nationalMetrics": [
+          {
+            "category": "economic",
+            "metricId": "inflationPressure",
+            "label": "Inflation Pressure",
+            "format": "percent",
+            "higherIsBetter": false
+          },
+          {
+            "category": "economic",
+            "metricId": "interestRate",
+            "label": "Gosbank Prime Rate",
+            "format": "percent",
+            "higherIsBetter": false
+          },
+          {
+            "category": "economic",
+            "metricId": "gdpGrowth",
+            "label": "GDP Growth",
+            "format": "percent",
+            "higherIsBetter": true
+          }
+        ],
+        "regionalMetrics": [],
+        "tierSetting": {
+          "name": "Credit Plan",
+          "description": "Set Gosbank's credit issuance stance. Loose credit funds the plan faster but builds price pressure; tight credit cools prices at the cost of output.",
+          "defaultTier": "plan_neutral",
+          "options": [
+            {
+              "id": "tight_credit",
+              "label": "Tight Credit",
+              "description": "Restrict enterprise credit. Price pressure eases; output slows.",
+              "effects": {
+                "inflationPressure": -0.05,
+                "gdpGrowth": -0.01
+              }
+            },
+            {
+              "id": "plan_neutral",
+              "label": "Plan Neutral",
+              "description": "Issue credit to plan targets.",
+              "effects": {}
+            },
+            {
+              "id": "loose_credit",
+              "label": "Loose Credit",
+              "description": "Expand enterprise credit beyond plan. Output rises; prices pressure up.",
+              "effects": {
+                "inflationPressure": 0.05,
+                "gdpGrowth": 0.012
+              }
+            }
+          ]
+        },
+        "departmentByYear": [
+          {
+            "from": 1775,
+            "name": "Deutsche Notenbank"
+          },
+          {
+            "from": 1968,
+            "name": "Staatsbank der DDR"
+          }
+        ]
+      },
+      "minister_of_foreign_trade": {
+        "positionId": "minister_of_foreign_trade",
+        "department": "Ministry of Foreign Trade",
+        "sealImage": "",
+        "legislativeDomains": ["foreign_policy", "economic"],
+        "nationalMetrics": [
+          {
+            "category": "economic",
+            "metricId": "gdpGrowth",
+            "label": "GDP Growth",
+            "format": "percent",
+            "higherIsBetter": true
+          },
+          {
+            "category": "economic",
+            "metricId": "costOfLiving",
+            "label": "Cost of Living",
+            "format": "index",
+            "higherIsBetter": false
+          }
+        ],
+        "regionalMetrics": [
+          {
+            "category": "economic",
+            "metricId": "gdpGrowth",
+            "label": "GDP Growth",
+            "format": "percent",
+            "higherIsBetter": true
+          }
+        ],
+        "tierSetting": {
+          "name": "Trade Monopoly Posture",
+          "description": "Direct the state foreign-trade monopoly. An export drive earns growth abroad but tightens goods at home; autarky insulates prices at the cost of growth.",
+          "defaultTier": "managed_exchange",
+          "options": [
+            {
+              "id": "autarky",
+              "label": "Autarky",
+              "description": "Minimize foreign exchange. Prices insulate; growth slows.",
+              "effects": {
+                "gdpGrowth": -0.02,
+                "costOfLiving": -0.005
+              }
+            },
+            {
+              "id": "managed_exchange",
+              "label": "Managed Exchange",
+              "description": "Trade to plan requirements.",
+              "effects": {}
+            },
+            {
+              "id": "export_drive",
+              "label": "Export Drive",
+              "description": "Push exports for hard currency. Growth accelerates; domestic goods tighten.",
+              "effects": {
+                "gdpGrowth": 0.025,
+                "costOfLiving": 0.012
+              }
+            }
+          ]
+        },
+        "regionalTarget": {
+          "name": "Export Zone Designation",
+          "description": "Designate one republic as an export production zone.",
+          "effects": {
+            "tradeGrowth": 0.04,
+            "gdpGrowth": 0.02
+          }
+        }
+      },
+      "minister_of_internal_trade": {
+        "positionId": "minister_of_internal_trade",
+        "department": "Ministry of Trade and Supply",
+        "sealImage": "",
+        "legislativeDomains": ["economic", "social"],
+        "nationalMetrics": [
+          {
+            "category": "economic",
+            "metricId": "costOfLiving",
+            "label": "Cost of Living",
+            "format": "index",
+            "higherIsBetter": false
+          },
+          {
+            "category": "economic",
+            "metricId": "unemploymentRate",
+            "label": "Unemployment Rate",
+            "format": "percent",
+            "higherIsBetter": false
+          }
+        ],
+        "regionalMetrics": [
+          {
+            "category": "economic",
+            "metricId": "costOfLiving",
+            "label": "Cost of Living",
+            "format": "index",
+            "higherIsBetter": false
+          }
+        ],
+        "tierSetting": {
+          "name": "Goods Distribution Priority",
+          "description": "Set the priority of domestic goods distribution. Consumer priority eases household costs but diverts labour from heavy industry; producer priority does the reverse.",
+          "defaultTier": "plan_allocation",
+          "options": [
+            {
+              "id": "producer_priority",
+              "label": "Producer Priority",
+              "description": "Divert goods to industry. Household costs rise; hiring strengthens.",
+              "effects": {
+                "costOfLiving": 0.015,
+                "unemploymentRate": -0.01
+              }
+            },
+            {
+              "id": "plan_allocation",
+              "label": "Plan Allocation",
+              "description": "Distribute goods to plan quotas.",
+              "effects": {}
+            },
+            {
+              "id": "consumer_priority",
+              "label": "Consumer Priority",
+              "description": "Prioritize household goods. Costs ease; industrial hiring softens.",
+              "effects": {
+                "costOfLiving": -0.02,
+                "unemploymentRate": 0.008
+              }
+            }
+          ]
+        },
+        "regionalTarget": {
+          "name": "Supply Priority Republic",
+          "description": "Move one republic to the head of the goods distribution queue.",
+          "effects": {
+            "costOfLiving": -0.04,
+            "consumerConfidence": 0.03
+          }
+        },
+        "emergency": {
+          "name": "Emergency Goods Airlift",
+          "description": "Airlift consumer stocks into one republic facing acute shortage, sharply cutting costs.",
+          "cost": 1,
+          "duration": 24,
+          "effects": {
+            "costOfLiving": -0.08,
+            "consumerConfidence": 0.06
+          }
+        }
+      },
+      "minister_of_agriculture": {
+        "positionId": "minister_of_agriculture",
+        "department": "Ministry of Agriculture, Forestry and Food",
+        "sealImage": "",
+        "legislativeDomains": ["agriculture", "economic"],
+        "nationalMetrics": [
+          {
+            "category": "economic",
+            "metricId": "costOfLiving",
+            "label": "Cost of Living",
+            "format": "index",
+            "higherIsBetter": false
+          },
+          {
+            "category": "economic",
+            "metricId": "gdpGrowth",
+            "label": "GDP Growth",
+            "format": "percent",
+            "higherIsBetter": true
+          }
+        ],
+        "regionalMetrics": [
+          {
+            "category": "economic",
+            "metricId": "gdpGrowth",
+            "label": "GDP Growth",
+            "format": "percent",
+            "higherIsBetter": true
+          }
+        ],
+        "tierSetting": {
+          "name": "Procurement Quotas",
+          "description": "Set collective-farm procurement quotas. Heavy quotas feed the cities cheaply but sap rural output; light quotas do the reverse.",
+          "defaultTier": "standard_quotas",
+          "options": [
+            {
+              "id": "light_quotas",
+              "label": "Light Quotas",
+              "description": "Ease procurement. Rural output improves; urban costs rise.",
+              "effects": {
+                "gdpGrowth": 0.012,
+                "costOfLiving": 0.01
+              }
+            },
+            {
+              "id": "standard_quotas",
+              "label": "Standard Quotas",
+              "description": "Procure to plan.",
+              "effects": {}
+            },
+            {
+              "id": "heavy_quotas",
+              "label": "Heavy Quotas",
+              "description": "Raise procurement. Urban costs ease; rural output saps.",
+              "effects": {
+                "costOfLiving": -0.015,
+                "gdpGrowth": -0.012
+              }
+            }
+          ]
+        },
+        "regionalTarget": {
+          "name": "Agricultural Priority Region",
+          "description": "Direct machinery and fertilizer to one republic's farms.",
+          "effects": {
+            "foodSecurity": 0.04,
+            "ruralRevitalization": 0.03
+          }
+        },
+        "emergency": {
+          "name": "Emergency Grain Release",
+          "description": "Release state grain reserves to one republic facing shortage, sharply cutting food insecurity.",
+          "cost": 1,
+          "duration": 24,
+          "effects": {
+            "foodInsecurity": -0.09,
+            "foodSecurity": 0.06
+          }
+        }
+      },
+      "minister_of_machine_building": {
+        "positionId": "minister_of_machine_building",
+        "department": "Ministry of Heavy Industry and Machine Building",
+        "sealImage": "",
+        "legislativeDomains": ["economic", "infrastructure"],
+        "nationalMetrics": [
+          {
+            "category": "economic",
+            "metricId": "gdpGrowth",
+            "label": "GDP Growth",
+            "format": "percent",
+            "higherIsBetter": true
+          },
+          {
+            "category": "economic",
+            "metricId": "unemploymentRate",
+            "label": "Unemployment Rate",
+            "format": "percent",
+            "higherIsBetter": false
+          }
+        ],
+        "regionalMetrics": [
+          {
+            "category": "economic",
+            "metricId": "gdpGrowth",
+            "label": "GDP Growth",
+            "format": "percent",
+            "higherIsBetter": true
+          },
+          {
+            "category": "economic",
+            "metricId": "unemploymentRate",
+            "label": "Unemployment Rate",
+            "format": "percent",
+            "higherIsBetter": false
+          }
+        ],
+        "tierSetting": {
+          "name": "Combine Output Setting",
+          "description": "Set how hard the heavy combines are driven. Over-fulfilment buys output with dirtier air.",
+          "defaultTier": "quota",
+          "options": [
+            {
+              "id": "modernization",
+              "label": "Modernization",
+              "description": "Retool rather than run flat out. Air cleans; output dips.",
+              "effects": {
+                "airQuality": -0.02,
+                "manufacturingCompetitiveness": -0.012
+              }
+            },
+            {
+              "id": "quota",
+              "label": "Quota Output",
+              "description": "Produce to plan.",
+              "effects": {}
+            },
+            {
+              "id": "overfulfilment",
+              "label": "Over-Fulfilment",
+              "description": "Drive the combines past quota. Output rises; air worsens.",
+              "effects": {
+                "manufacturingCompetitiveness": 0.025,
+                "airQuality": 0.02
+              }
+            }
+          ]
+        },
+        "regionalTarget": {
+          "name": "Industrial Concentration",
+          "description": "Site new combine capacity in one republic: hiring and competitiveness rise, air worsens.",
+          "effects": {
+            "manufacturingCompetitiveness": 0.04,
+            "unemploymentRate": -0.03,
+            "airQuality": 0.02
+          }
+        },
+        "emergency": {
+          "name": "Emergency Production Order",
+          "description": "Order the combines in one republic onto emergency shifts. Output surges; the air pays for it.",
+          "cost": 1,
+          "duration": 24,
+          "effects": {
+            "manufacturingCompetitiveness": 0.08,
+            "unemploymentRate": -0.05
+          },
+          "sideEffects": {
+            "airQuality": 0.04
+          }
+        }
+      },
+      "minister_of_railways": {
+        "positionId": "minister_of_railways",
+        "department": "Ministry of Transport",
+        "sealImage": "",
+        "legislativeDomains": ["infrastructure"],
+        "nationalMetrics": [
+          {
+            "category": "economic",
+            "metricId": "gdpGrowth",
+            "label": "GDP Growth",
+            "format": "percent",
+            "higherIsBetter": true
+          },
+          {
+            "category": "economic",
+            "metricId": "unemploymentRate",
+            "label": "Unemployment Rate",
+            "format": "percent",
+            "higherIsBetter": false
+          }
+        ],
+        "regionalMetrics": [],
+        "tierSetting": {
+          "name": "Network Priority",
+          "description": "Set what the network carries first. Freight priority serves the plan; passenger service serves households.",
+          "defaultTier": "mixed_traffic",
+          "options": [
+            {
+              "id": "passenger_priority",
+              "label": "Passenger Priority",
+              "description": "Run passenger service first. Transit improves; freight slows.",
+              "effects": {
+                "publicTransit": 0.025,
+                "transportEfficiency": -0.015
+              }
+            },
+            {
+              "id": "mixed_traffic",
+              "label": "Mixed Traffic",
+              "description": "Run to timetable.",
+              "effects": {}
+            },
+            {
+              "id": "freight_priority",
+              "label": "Freight Priority",
+              "description": "Clear the line for plan freight. Efficiency rises; transit suffers.",
+              "effects": {
+                "transportEfficiency": 0.025,
+                "publicTransit": -0.02
+              }
+            }
+          ]
+        },
+        "regionalTarget": {
+          "name": "Line Modernization Priority",
+          "description": "Concentrate track and rolling-stock investment in one republic.",
+          "effects": {
+            "transportEfficiency": 0.04,
+            "roadCondition": 0.02
+          }
+        },
+        "emergency": {
+          "name": "Emergency Line Repair",
+          "description": "Rush repair crews to one republic's network after a failure, sharply restoring efficiency.",
+          "cost": 1,
+          "duration": 24,
+          "effects": {
+            "transportEfficiency": 0.09,
+            "roadCondition": 0.05
+          }
+        }
+      },
+      "minister_of_culture": {
+        "positionId": "minister_of_culture",
+        "department": "Ministry of Culture",
+        "sealImage": "",
+        "legislativeDomains": ["social"],
+        "nationalMetrics": [
+          {
+            "category": "governance",
+            "metricId": "publicTrust",
+            "label": "Public Trust",
+            "format": "percent",
+            "higherIsBetter": true
+          }
+        ],
+        "regionalMetrics": [],
+        "tierSetting": {
+          "name": "Cultural Line",
+          "description": "Set how tightly cultural output is supervised. A liberal line builds participation; orthodoxy builds pride.",
+          "defaultTier": "supervised",
+          "options": [
+            {
+              "id": "liberal",
+              "label": "Liberal Line",
+              "description": "Loosen supervision. Participation and cohesion rise; orthodoxy weakens.",
+              "effects": {
+                "civicParticipation": 0.025,
+                "nationalPride": -0.015
+              }
+            },
+            {
+              "id": "supervised",
+              "label": "Supervised",
+              "description": "Standing editorial line.",
+              "effects": {}
+            },
+            {
+              "id": "orthodox",
+              "label": "Orthodox Line",
+              "description": "Tighten supervision. Pride rises; participation narrows.",
+              "effects": {
+                "nationalPride": 0.025,
+                "civicParticipation": -0.02
+              }
+            }
+          ]
+        },
+        "regionalTarget": {
+          "name": "Cultural Investment Priority",
+          "description": "Build houses of culture and cinemas in one republic.",
+          "effects": {
+            "civicParticipation": 0.04,
+            "socialCohesion": 0.03
+          }
+        },
+        "emergency": {
+          "name": "Emergency Agitation Campaign",
+          "description": "Flood one republic with agitators and press, sharply lifting cohesion and pride.",
+          "cost": 1,
+          "duration": 24,
+          "effects": {
+            "socialCohesion": 0.08,
+            "nationalPride": 0.06
+          }
+        }
+      },
+      "minister_of_health": {
+        "positionId": "minister_of_health",
+        "department": "Ministry of Health",
+        "sealImage": "",
+        "legislativeDomains": ["healthcare", "social"],
+        "nationalMetrics": [
+          {
+            "category": "healthcare",
+            "metricId": "lifeExpectancy",
+            "label": "Life Expectancy",
+            "format": "number",
+            "higherIsBetter": true
+          },
+          {
+            "category": "governance",
+            "metricId": "publicTrust",
+            "label": "Public Trust",
+            "format": "percent",
+            "higherIsBetter": true
+          }
+        ],
+        "regionalMetrics": [],
+        "tierSetting": {
+          "name": "Health Service Emphasis",
+          "description": "Weight the health service between prevention and hospital capacity.",
+          "defaultTier": "standard_service",
+          "options": [
+            {
+              "id": "prevention",
+              "label": "Prevention Emphasis",
+              "description": "Fund sanitation and screening. Preventable deaths fall; physician coverage thins.",
+              "effects": {
+                "preventableMortality": -0.03,
+                "physicianRate": -0.012
+              }
+            },
+            {
+              "id": "standard_service",
+              "label": "Standard Service",
+              "description": "Fund to norm.",
+              "effects": {}
+            },
+            {
+              "id": "hospital_buildout",
+              "label": "Hospital Buildout",
+              "description": "Fund beds and staff. Physician coverage rises; prevention slips.",
+              "effects": {
+                "physicianRate": 0.03,
+                "preventableMortality": 0.012
+              }
+            }
+          ]
+        },
+        "regionalTarget": {
+          "name": "Health District Priority",
+          "description": "Concentrate physicians and clinics in one republic.",
+          "effects": {
+            "physicianRate": 0.04,
+            "preventableMortality": -0.03
+          }
+        },
+        "emergency": {
+          "name": "Epidemic Response",
+          "description": "Deploy mobile medical brigades to one republic in an outbreak, sharply cutting deaths.",
+          "cost": 1,
+          "duration": 24,
+          "effects": {
+            "preventableMortality": -0.09,
+            "publicHealthPreparedness": 0.06
+          }
+        }
+      },
+      "minister_of_higher_education": {
+        "positionId": "minister_of_higher_education",
+        "department": "Ministry of Higher and Technical Education",
+        "sealImage": "",
+        "legislativeDomains": ["education"],
+        "nationalMetrics": [
+          {
+            "category": "education",
+            "metricId": "workforceSkill",
+            "label": "Workforce Skill",
+            "format": "index",
+            "higherIsBetter": true
+          },
+          {
+            "category": "governance",
+            "metricId": "publicTrust",
+            "label": "Public Trust",
+            "format": "percent",
+            "higherIsBetter": true
+          }
+        ],
+        "regionalMetrics": [],
+        "tierSetting": {
+          "name": "Institute Intake",
+          "description": "Weight institute intake between broad enrolment and narrow technical specialization.",
+          "defaultTier": "standard_intake",
+          "options": [
+            {
+              "id": "mass_intake",
+              "label": "Mass Intake",
+              "description": "Widen enrolment. Enrolment rises; average skill dilutes.",
+              "effects": {
+                "universityEnrollment": 0.03,
+                "workforceSkill": -0.012
+              }
+            },
+            {
+              "id": "standard_intake",
+              "label": "Standard Intake",
+              "description": "Admit to plan.",
+              "effects": {}
+            },
+            {
+              "id": "technical_specialization",
+              "label": "Technical Specialization",
+              "description": "Narrow intake to plan priorities. Skill rises; enrolment falls.",
+              "effects": {
+                "workforceSkill": 0.03,
+                "universityEnrollment": -0.02
+              }
+            }
+          ]
+        },
+        "regionalTarget": {
+          "name": "Institute Siting Priority",
+          "description": "Site new technical institutes in one republic.",
+          "effects": {
+            "workforceSkill": 0.04,
+            "universityEnrollment": 0.03
+          }
+        },
+        "emergency": {
+          "name": "Emergency Cadre Programme",
+          "description": "Run an accelerated technical training programme in one republic, sharply lifting skill.",
+          "cost": 1,
+          "duration": 24,
+          "effects": {
+            "workforceSkill": 0.08,
+            "universityEnrollment": 0.05
+          }
+        }
+      },
+      "director_of_intelligence": {
+        "positionId": "director_of_intelligence",
+        "department": "Ministry for State Security",
+        "sealImage": "",
+        "tierSetting": {
+          "name": "Collection Posture",
+          "description": "Set how hard the service is run. Pressing harder buys reach and cleaner files, and costs the liberties of the people it watches.",
+          "defaultTier": "standing",
+          "options": [
+            {
+              "id": "restrained",
+              "label": "Restrained",
+              "description": "Keep the service on a short leash. Liberties widen; less is learned.",
+              "effects": {
+                "civilLiberties": 0.025,
+                "publicTrust": 0.01
+              }
+            },
+            {
+              "id": "standing",
+              "label": "Standing Watch",
+              "description": "The service's ordinary peacetime footing.",
+              "effects": {}
+            },
+            {
+              "id": "aggressive",
+              "label": "Aggressive Collection",
+              "description": "Run the service hard at home and abroad. Corruption is rooted out; liberties narrow.",
+              "effects": {
+                "corruptionIndex": -0.025,
+                "civilLiberties": -0.03
+              }
+            }
+          ]
+        },
+        "nationalMetrics": [
+          {
+            "category": "governance",
+            "metricId": "publicTrust",
+            "label": "Public Trust",
+            "format": "index",
+            "higherIsBetter": true
+          },
+          {
+            "category": "publicSafety",
+            "metricId": "crimeRate",
+            "label": "Crime Rate",
+            "format": "rate",
+            "higherIsBetter": false
+          }
+        ],
+        "regionalMetrics": []
+      }
+    }
+  },
+  "MEDIAN_INCOME_THRESHOLDS": {
+    "shape": "absent",
+    "value": null
+  },
+  "POPULATION_MULTIPLIERS": {
+    "shape": "absent",
+    "value": null
+  },
+  "ORDERS_BY_COUNTRY": {
+    "shape": "country-first",
+    "value": {
+      "generalSecretary": [
+        {
+          "id": "council_authority_campaign",
+          "name": "Council Authority Campaign",
+          "description": "Reassert the Council of Ministers' standing across the union republics through the party press.",
+          "duration": 24,
+          "effects": [
+            {
+              "metric": "publicTrust",
+              "modifier": 0.04,
+              "scope": "national"
+            }
+          ]
+        },
+        {
+          "id": "ministerial_discipline_drive",
+          "name": "Ministerial Discipline Drive",
+          "description": "Audit ministry reporting and tighten inter-ministry coordination across the Council.",
+          "duration": 24,
+          "effects": [
+            {
+              "metric": "governmentTransparency",
+              "modifier": 0.03,
+              "scope": "national"
+            },
+            {
+              "metric": "corruptionIndex",
+              "modifier": -0.02,
+              "scope": "national"
+            }
+          ]
+        }
+      ],
+      "first_deputy_premier": [
+        {
+          "id": "plan_coordination_push",
+          "name": "Plan Coordination Push",
+          "description": "Convene the industrial ministries to unblock plan bottlenecks and pull hiring forward.",
+          "duration": 24,
+          "effects": [
+            {
+              "metric": "gdpGrowth",
+              "modifier": 0.02,
+              "scope": "national"
+            },
+            {
+              "metric": "unemploymentRate",
+              "modifier": -0.02,
+              "scope": "national"
+            }
+          ]
+        },
+        {
+          "id": "cadre_review",
+          "name": "Cadre Review",
+          "description": "Review ministry appointments for competence and loyalty, cutting graft and steadying confidence.",
+          "duration": 24,
+          "effects": [
+            {
+              "metric": "corruptionIndex",
+              "modifier": -0.03,
+              "scope": "national"
+            },
+            {
+              "metric": "publicTrust",
+              "modifier": 0.02,
+              "scope": "national"
+            }
+          ]
+        }
+      ],
+      "minister_of_foreign_affairs": [
+        {
+          "id": "diplomatic_offensive",
+          "name": "Diplomatic Offensive",
+          "description": "Open simultaneous negotiations abroad to widen trade access and raise the union's standing.",
+          "duration": 24,
+          "effects": [
+            {
+              "metric": "tradeGrowth",
+              "modifier": 0.03,
+              "scope": "national"
+            },
+            {
+              "metric": "nationalPride",
+              "modifier": 0.02,
+              "scope": "national"
+            }
+          ]
+        },
+        {
+          "id": "peace_congress",
+          "name": "Peace Congress",
+          "description": "Host an international peace congress, lifting national pride and public confidence.",
+          "duration": 24,
+          "effects": [
+            {
+              "metric": "nationalPride",
+              "modifier": 0.03,
+              "scope": "national"
+            },
+            {
+              "metric": "publicTrust",
+              "modifier": 0.02,
+              "scope": "national"
+            }
+          ]
+        }
+      ],
+      "minister_of_defence": [
+        {
+          "id": "readiness_exercise",
+          "name": "Readiness Exercise",
+          "description": "Run union-wide manoeuvres, raising military readiness and public confidence in defence.",
+          "duration": 24,
+          "effects": [
+            {
+              "metric": "militaryReadiness",
+              "modifier": 0.04,
+              "scope": "national"
+            },
+            {
+              "metric": "publicSafetyConfidence",
+              "modifier": 0.02,
+              "scope": "national"
+            }
+          ]
+        },
+        {
+          "id": "frontier_reinforcement",
+          "name": "Frontier Reinforcement",
+          "description": "Reinforce the western frontier districts, hardening the border.",
+          "duration": 24,
+          "effects": [
+            {
+              "metric": "borderSecurity",
+              "modifier": 0.04,
+              "scope": "national"
+            },
+            {
+              "metric": "militaryReadiness",
+              "modifier": 0.02,
+              "scope": "national"
+            }
+          ]
+        }
+      ],
+      "minister_of_finance": [
+        {
+          "id": "turnover_tax_adjustment",
+          "name": "Turnover Tax Adjustment",
+          "description": "Reweight the turnover tax toward consumer goods, easing household costs for a period.",
+          "duration": 24,
+          "effects": [
+            {
+              "metric": "costOfLiving",
+              "modifier": -0.03,
+              "scope": "national"
+            },
+            {
+              "metric": "consumerConfidence",
+              "modifier": 0.02,
+              "scope": "national"
+            }
+          ]
+        },
+        {
+          "id": "plan_financing_surge",
+          "name": "Plan Financing Surge",
+          "description": "Release reserve financing to the industrial ministries, lifting output and hiring.",
+          "duration": 24,
+          "effects": [
+            {
+              "metric": "gdpGrowth",
+              "modifier": 0.03,
+              "scope": "national"
+            },
+            {
+              "metric": "unemploymentRate",
+              "modifier": -0.02,
+              "scope": "national"
+            }
+          ]
+        }
+      ],
+      "minister_of_internal_affairs": [
+        {
+          "id": "public_order_sweep",
+          "name": "Public Order Sweep",
+          "description": "Deploy the militia in force, cutting crime and steadying public confidence.",
+          "duration": 24,
+          "effects": [
+            {
+              "metric": "crimeRate",
+              "modifier": -0.04,
+              "scope": "national"
+            },
+            {
+              "metric": "publicSafetyConfidence",
+              "modifier": 0.02,
+              "scope": "national"
+            }
+          ]
+        },
+        {
+          "id": "internal_passport_audit",
+          "name": "Internal Passport Audit",
+          "description": "Audit residence and workplace registration, cutting corruption and violent crime.",
+          "duration": 24,
+          "effects": [
+            {
+              "metric": "corruptionIndex",
+              "modifier": -0.03,
+              "scope": "national"
+            },
+            {
+              "metric": "violentCrimeRate",
+              "modifier": -0.02,
+              "scope": "national"
+            }
+          ]
+        }
+      ],
+      "chairman_of_gosplan": [
+        {
+          "id": "plan_revision",
+          "name": "Mid-Plan Revision",
+          "description": "Reopen the control figures mid-plan, sharpening execution and lifting productivity.",
+          "duration": 24,
+          "effects": [
+            {
+              "metric": "industrialPolicyExecution",
+              "modifier": 0.04,
+              "scope": "national"
+            },
+            {
+              "metric": "productivityGrowth",
+              "modifier": 0.02,
+              "scope": "national"
+            }
+          ]
+        },
+        {
+          "id": "shock_work_campaign",
+          "name": "Shock Work Campaign",
+          "description": "Launch a union-wide production drive: output and hiring surge on mobilized labour.",
+          "duration": 24,
+          "effects": [
+            {
+              "metric": "gdpGrowth",
+              "modifier": 0.03,
+              "scope": "national"
+            },
+            {
+              "metric": "unemploymentRate",
+              "modifier": -0.02,
+              "scope": "national"
+            }
+          ]
+        }
+      ],
+      "gosbank_liaison": [
+        {
+          "id": "currency_reform_tranche",
+          "name": "Currency Reform Tranche",
+          "description": "Withdraw excess currency from circulation, cooling price pressure.",
+          "duration": 24,
+          "effects": [
+            {
+              "metric": "inflationPressure",
+              "modifier": -0.05,
+              "scope": "national"
+            },
+            {
+              "metric": "consumerConfidence",
+              "modifier": 0.02,
+              "scope": "national"
+            }
+          ]
+        },
+        {
+          "id": "enterprise_credit_release",
+          "name": "Enterprise Credit Release",
+          "description": "Release working-capital credit to enterprises, lifting growth and investment.",
+          "duration": 24,
+          "effects": [
+            {
+              "metric": "gdpGrowth",
+              "modifier": 0.02,
+              "scope": "national"
+            },
+            {
+              "metric": "investorConfidence",
+              "modifier": 0.03,
+              "scope": "national"
+            }
+          ]
+        }
+      ],
+      "minister_of_foreign_trade": [
+        {
+          "id": "hard_currency_drive",
+          "name": "Hard Currency Drive",
+          "description": "Push raw-material exports for convertible currency, improving the trade balance.",
+          "duration": 24,
+          "effects": [
+            {
+              "metric": "tradeBalance",
+              "modifier": 0.04,
+              "scope": "national"
+            },
+            {
+              "metric": "tradeGrowth",
+              "modifier": 0.02,
+              "scope": "national"
+            }
+          ]
+        },
+        {
+          "id": "technology_import_programme",
+          "name": "Technology Import Programme",
+          "description": "Buy foreign industrial plant, raising manufacturing competitiveness and productivity.",
+          "duration": 24,
+          "effects": [
+            {
+              "metric": "manufacturingCompetitiveness",
+              "modifier": 0.03,
+              "scope": "national"
+            },
+            {
+              "metric": "productivityGrowth",
+              "modifier": 0.02,
+              "scope": "national"
+            }
+          ]
+        }
+      ],
+      "minister_of_internal_trade": [
+        {
+          "id": "consumer_goods_release",
+          "name": "Consumer Goods Release",
+          "description": "Release reserve stocks to the shops, cutting costs and lifting confidence.",
+          "duration": 24,
+          "effects": [
+            {
+              "metric": "costOfLiving",
+              "modifier": -0.04,
+              "scope": "national"
+            },
+            {
+              "metric": "consumerConfidence",
+              "modifier": 0.03,
+              "scope": "national"
+            }
+          ]
+        },
+        {
+          "id": "retail_network_expansion",
+          "name": "Retail Network Expansion",
+          "description": "Open new state retail outlets, absorbing labour and easing shortages.",
+          "duration": 24,
+          "effects": [
+            {
+              "metric": "unemploymentRate",
+              "modifier": -0.03,
+              "scope": "national"
+            },
+            {
+              "metric": "costOfLiving",
+              "modifier": -0.015,
+              "scope": "national"
+            }
+          ]
+        }
+      ],
+      "minister_of_agriculture": [
+        {
+          "id": "land_reclamation_drive",
+          "name": "Land Reclamation Drive",
+          "description": "Bring marginal land under the plough, raising food security and rural standing.",
+          "duration": 24,
+          "effects": [
+            {
+              "metric": "foodSecurity",
+              "modifier": 0.04,
+              "scope": "national"
+            },
+            {
+              "metric": "ruralRevitalization",
+              "modifier": 0.02,
+              "scope": "national"
+            }
+          ]
+        },
+        {
+          "id": "procurement_price_rise",
+          "name": "Procurement Price Rise",
+          "description": "Raise what the state pays collective farms, cutting food insecurity at some cost to prices.",
+          "duration": 24,
+          "effects": [
+            {
+              "metric": "foodInsecurity",
+              "modifier": -0.04,
+              "scope": "national"
+            },
+            {
+              "metric": "costOfLiving",
+              "modifier": 0.015,
+              "scope": "national"
+            }
+          ]
+        }
+      ],
+      "minister_of_machine_building": [
+        {
+          "id": "combine_output_drive",
+          "name": "Combine Output Drive",
+          "description": "Drive the heavy combines to over-fulfil quota: competitiveness and hiring rise, air quality suffers.",
+          "duration": 24,
+          "effects": [
+            {
+              "metric": "manufacturingCompetitiveness",
+              "modifier": 0.04,
+              "scope": "national"
+            },
+            {
+              "metric": "unemploymentRate",
+              "modifier": -0.02,
+              "scope": "national"
+            },
+            {
+              "metric": "airQuality",
+              "modifier": 0.02,
+              "scope": "national"
+            }
+          ]
+        },
+        {
+          "id": "machine_tool_retooling",
+          "name": "Machine Tool Retooling",
+          "description": "Retool the machine-tool plants, lifting productivity and plan execution.",
+          "duration": 24,
+          "effects": [
+            {
+              "metric": "productivityGrowth",
+              "modifier": 0.03,
+              "scope": "national"
+            },
+            {
+              "metric": "industrialPolicyExecution",
+              "modifier": 0.02,
+              "scope": "national"
+            }
+          ]
+        }
+      ],
+      "minister_of_railways": [
+        {
+          "id": "trunk_line_electrification",
+          "name": "Trunk Line Electrification",
+          "description": "Electrify the main trunk lines, improving transport efficiency and growth.",
+          "duration": 24,
+          "effects": [
+            {
+              "metric": "transportEfficiency",
+              "modifier": 0.04,
+              "scope": "national"
+            },
+            {
+              "metric": "gdpGrowth",
+              "modifier": 0.02,
+              "scope": "national"
+            }
+          ]
+        },
+        {
+          "id": "freight_priority_order",
+          "name": "Freight Priority Order",
+          "description": "Give plan freight absolute priority on the network, closing the infrastructure gap.",
+          "duration": 24,
+          "effects": [
+            {
+              "metric": "infrastructureInvestmentGap",
+              "modifier": -0.04,
+              "scope": "national"
+            },
+            {
+              "metric": "transportEfficiency",
+              "modifier": 0.02,
+              "scope": "national"
+            }
+          ]
+        }
+      ],
+      "minister_of_culture": [
+        {
+          "id": "mass_literacy_campaign",
+          "name": "Mass Literacy Campaign",
+          "description": "Run a union-wide literacy drive through the houses of culture.",
+          "duration": 24,
+          "effects": [
+            {
+              "metric": "literacyRate",
+              "modifier": 0.04,
+              "scope": "national"
+            },
+            {
+              "metric": "civicParticipation",
+              "modifier": 0.02,
+              "scope": "national"
+            }
+          ]
+        },
+        {
+          "id": "cultural_festival",
+          "name": "Union Cultural Festival",
+          "description": "Stage a festival of the peoples, building cohesion and national pride.",
+          "duration": 24,
+          "effects": [
+            {
+              "metric": "socialCohesion",
+              "modifier": 0.03,
+              "scope": "national"
+            },
+            {
+              "metric": "nationalPride",
+              "modifier": 0.03,
+              "scope": "national"
+            }
+          ]
+        }
+      ],
+      "minister_of_health": [
+        {
+          "id": "sanitation_campaign",
+          "name": "Sanitation Campaign",
+          "description": "Run a union-wide sanitation and vaccination drive, cutting preventable deaths.",
+          "duration": 24,
+          "effects": [
+            {
+              "metric": "preventableMortality",
+              "modifier": -0.04,
+              "scope": "national"
+            },
+            {
+              "metric": "publicHealthPreparedness",
+              "modifier": 0.03,
+              "scope": "national"
+            }
+          ]
+        },
+        {
+          "id": "rural_physician_posting",
+          "name": "Rural Physician Posting",
+          "description": "Post newly qualified physicians to rural districts, widening coverage.",
+          "duration": 24,
+          "effects": [
+            {
+              "metric": "physicianRate",
+              "modifier": 0.04,
+              "scope": "national"
+            },
+            {
+              "metric": "lifeExpectancy",
+              "modifier": 0.02,
+              "scope": "national"
+            }
+          ]
+        }
+      ],
+      "minister_of_higher_education": [
+        {
+          "id": "technical_cadre_intake",
+          "name": "Technical Cadre Intake",
+          "description": "Expand technical institute intake, building workforce skill for the plan.",
+          "duration": 24,
+          "effects": [
+            {
+              "metric": "workforceSkill",
+              "modifier": 0.04,
+              "scope": "national"
+            },
+            {
+              "metric": "universityEnrollment",
+              "modifier": 0.03,
+              "scope": "national"
+            }
+          ]
+        },
+        {
+          "id": "research_priority_order",
+          "name": "Research Priority Order",
+          "description": "Direct institute research toward plan priorities, lifting productivity and test performance.",
+          "duration": 24,
+          "effects": [
+            {
+              "metric": "productivityGrowth",
+              "modifier": 0.02,
+              "scope": "national"
+            },
+            {
+              "metric": "testPerformance",
+              "modifier": 0.03,
+              "scope": "national"
+            }
+          ]
+        }
+      ],
+      "director_of_intelligence": [
+        {
+          "id": "counter_intelligence_sweep",
+          "name": "Counter-Intelligence Sweep",
+          "description": "Turn the service inward for a season, rolling up foreign networks and the officials who shielded them.",
+          "duration": 24,
+          "effects": [
+            {
+              "metric": "corruptionIndex",
+              "modifier": -0.03,
+              "scope": "national"
+            },
+            {
+              "metric": "publicTrust",
+              "modifier": 0.02,
+              "scope": "national"
+            }
+          ]
+        },
+        {
+          "id": "informant_network_expansion",
+          "name": "Informant Network Expansion",
+          "description": "Widen the informant rolls. Violent crime falls where the files reach, and so do civil liberties.",
+          "duration": 24,
+          "effects": [
+            {
+              "metric": "violentCrimeRate",
+              "modifier": -0.025,
+              "scope": "national"
+            },
+            {
+              "metric": "civilLiberties",
+              "modifier": -0.02,
+              "scope": "national"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "UNION_NAMES_BY_ERA": {
+    "shape": "outer-keyed",
+    "value": {
+      "1953": {
+        "financial": "Free German Trade Union Federation",
+        "media": "Free German Trade Union Federation",
+        "manufacturing": "Free German Trade Union Federation",
+        "chemical_industries": "Free German Trade Union Federation",
+        "healthcare": "Free German Trade Union Federation",
+        "retail": "Free German Trade Union Federation",
+        "automobiles": "Free German Trade Union Federation",
+        "technology": "Free German Trade Union Federation",
+        "energy": "Free German Trade Union Federation",
+        "agriculture": "Free German Trade Union Federation",
+        "real_estate": "Free German Trade Union Federation",
+        "construction": "Free German Trade Union Federation",
+        "defense": "Free German Trade Union Federation",
+        "telecommunications": "Free German Trade Union Federation",
+        "entertainment": "Free German Trade Union Federation",
+        "logistics": "Free German Trade Union Federation",
+        "extraction": "Free German Trade Union Federation"
+      },
+      "1979": {
+        "financial": "Free German Trade Union Federation",
+        "media": "Free German Trade Union Federation",
+        "manufacturing": "Free German Trade Union Federation",
+        "chemical_industries": "Free German Trade Union Federation",
+        "healthcare": "Free German Trade Union Federation",
+        "retail": "Free German Trade Union Federation",
+        "automobiles": "Free German Trade Union Federation",
+        "technology": "Free German Trade Union Federation",
+        "energy": "Free German Trade Union Federation",
+        "agriculture": "Free German Trade Union Federation",
+        "real_estate": "Free German Trade Union Federation",
+        "construction": "Free German Trade Union Federation",
+        "defense": "Free German Trade Union Federation",
+        "telecommunications": "Free German Trade Union Federation",
+        "entertainment": "Free German Trade Union Federation",
+        "logistics": "Free German Trade Union Federation",
+        "extraction": "Free German Trade Union Federation"
+      },
+      "1991": {
+        "financial": "Free German Trade Union Federation",
+        "media": "Free German Trade Union Federation",
+        "manufacturing": "Free German Trade Union Federation",
+        "chemical_industries": "Free German Trade Union Federation",
+        "healthcare": "Free German Trade Union Federation",
+        "retail": "Free German Trade Union Federation",
+        "automobiles": "Free German Trade Union Federation",
+        "technology": "Free German Trade Union Federation",
+        "energy": "Free German Trade Union Federation",
+        "agriculture": "Free German Trade Union Federation",
+        "real_estate": "Free German Trade Union Federation",
+        "construction": "Free German Trade Union Federation",
+        "defense": "Free German Trade Union Federation",
+        "telecommunications": "Free German Trade Union Federation",
+        "entertainment": "Free German Trade Union Federation",
+        "logistics": "Free German Trade Union Federation",
+        "extraction": "Free German Trade Union Federation"
+      },
+      "1999": {
+        "financial": "Free German Trade Union Federation",
+        "media": "Free German Trade Union Federation",
+        "manufacturing": "Free German Trade Union Federation",
+        "chemical_industries": "Free German Trade Union Federation",
+        "healthcare": "Free German Trade Union Federation",
+        "retail": "Free German Trade Union Federation",
+        "automobiles": "Free German Trade Union Federation",
+        "technology": "Free German Trade Union Federation",
+        "energy": "Free German Trade Union Federation",
+        "agriculture": "Free German Trade Union Federation",
+        "real_estate": "Free German Trade Union Federation",
+        "construction": "Free German Trade Union Federation",
+        "defense": "Free German Trade Union Federation",
+        "telecommunications": "Free German Trade Union Federation",
+        "entertainment": "Free German Trade Union Federation",
+        "logistics": "Free German Trade Union Federation",
+        "extraction": "Free German Trade Union Federation"
+      },
+      "2007": {
+        "financial": "Free German Trade Union Federation",
+        "media": "Free German Trade Union Federation",
+        "manufacturing": "Free German Trade Union Federation",
+        "chemical_industries": "Free German Trade Union Federation",
+        "healthcare": "Free German Trade Union Federation",
+        "retail": "Free German Trade Union Federation",
+        "automobiles": "Free German Trade Union Federation",
+        "technology": "Free German Trade Union Federation",
+        "energy": "Free German Trade Union Federation",
+        "agriculture": "Free German Trade Union Federation",
+        "real_estate": "Free German Trade Union Federation",
+        "construction": "Free German Trade Union Federation",
+        "defense": "Free German Trade Union Federation",
+        "telecommunications": "Free German Trade Union Federation",
+        "entertainment": "Free German Trade Union Federation",
+        "logistics": "Free German Trade Union Federation",
+        "extraction": "Free German Trade Union Federation"
+      },
+      "2019": {
+        "financial": "Free German Trade Union Federation",
+        "media": "Free German Trade Union Federation",
+        "manufacturing": "Free German Trade Union Federation",
+        "chemical_industries": "Free German Trade Union Federation",
+        "healthcare": "Free German Trade Union Federation",
+        "retail": "Free German Trade Union Federation",
+        "automobiles": "Free German Trade Union Federation",
+        "technology": "Free German Trade Union Federation",
+        "energy": "Free German Trade Union Federation",
+        "agriculture": "Free German Trade Union Federation",
+        "real_estate": "Free German Trade Union Federation",
+        "construction": "Free German Trade Union Federation",
+        "defense": "Free German Trade Union Federation",
+        "telecommunications": "Free German Trade Union Federation",
+        "entertainment": "Free German Trade Union Federation",
+        "logistics": "Free German Trade Union Federation",
+        "extraction": "Free German Trade Union Federation"
+      },
+      "2023": {
+        "financial": "Free German Trade Union Federation",
+        "media": "Free German Trade Union Federation",
+        "manufacturing": "Free German Trade Union Federation",
+        "chemical_industries": "Free German Trade Union Federation",
+        "healthcare": "Free German Trade Union Federation",
+        "retail": "Free German Trade Union Federation",
+        "automobiles": "Free German Trade Union Federation",
+        "technology": "Free German Trade Union Federation",
+        "energy": "Free German Trade Union Federation",
+        "agriculture": "Free German Trade Union Federation",
+        "real_estate": "Free German Trade Union Federation",
+        "construction": "Free German Trade Union Federation",
+        "defense": "Free German Trade Union Federation",
+        "telecommunications": "Free German Trade Union Federation",
+        "entertainment": "Free German Trade Union Federation",
+        "logistics": "Free German Trade Union Federation",
+        "extraction": "Free German Trade Union Federation"
+      },
+      "2027": {
+        "financial": "Free German Trade Union Federation",
+        "media": "Free German Trade Union Federation",
+        "manufacturing": "Free German Trade Union Federation",
+        "chemical_industries": "Free German Trade Union Federation",
+        "healthcare": "Free German Trade Union Federation",
+        "retail": "Free German Trade Union Federation",
+        "automobiles": "Free German Trade Union Federation",
+        "technology": "Free German Trade Union Federation",
+        "energy": "Free German Trade Union Federation",
+        "agriculture": "Free German Trade Union Federation",
+        "real_estate": "Free German Trade Union Federation",
+        "construction": "Free German Trade Union Federation",
+        "defense": "Free German Trade Union Federation",
+        "telecommunications": "Free German Trade Union Federation",
+        "entertainment": "Free German Trade Union Federation",
+        "logistics": "Free German Trade Union Federation",
+        "extraction": "Free German Trade Union Federation"
+      }
+    }
+  },
+  "CABINET_IDENTITY": {
+    "shape": "country-first",
+    "value": {
+      "glyph": "DDR",
+      "serif": "mono",
+      "gov": "#d9a93e",
+      "govSoft": "#eccb7d",
+      "g0": "#4d0f0f",
+      "g1": "#320b0b",
+      "g2": "#1a0707"
+    }
+  },
+  "CENSUS_BUNDLES": {
+    "shape": "country-first",
+    "value": {
+      "1953-default": {
+        "BEO": {
+          "ethnicity": {
+            "german": 98,
+            "other": 2
+          },
+          "age": {
+            "young": 30,
+            "mid": 24,
+            "mature": 26,
+            "senior": 20
+          },
+          "education": {
+            "primary_or_below": 32,
+            "secondary": 28,
+            "vocational": 30,
+            "university": 10
+          },
+          "income": {
+            "low": 28,
+            "middle": 60,
+            "high": 12
+          },
+          "urbanization": {
+            "urban": 95,
+            "suburban": 5,
+            "rural": 0
+          }
+        },
+        "MV": {
+          "ethnicity": {
+            "german": 98,
+            "other": 2
+          },
+          "age": {
+            "young": 29,
+            "mid": 24,
+            "mature": 26,
+            "senior": 21
+          },
+          "education": {
+            "primary_or_below": 48,
+            "secondary": 27,
+            "vocational": 22,
+            "university": 3
+          },
+          "income": {
+            "low": 42,
+            "middle": 53,
+            "high": 5
+          },
+          "urbanization": {
+            "urban": 32,
+            "suburban": 12,
+            "rural": 56
+          }
+        },
+        "BB": {
+          "ethnicity": {
+            "german": 98,
+            "other": 2
+          },
+          "age": {
+            "young": 28,
+            "mid": 25,
+            "mature": 26,
+            "senior": 21
+          },
+          "education": {
+            "primary_or_below": 44,
+            "secondary": 28,
+            "vocational": 24,
+            "university": 4
+          },
+          "income": {
+            "low": 38,
+            "middle": 56,
+            "high": 6
+          },
+          "urbanization": {
+            "urban": 38,
+            "suburban": 16,
+            "rural": 46
+          }
+        },
+        "ST": {
+          "ethnicity": {
+            "german": 98,
+            "other": 2
+          },
+          "age": {
+            "young": 28,
+            "mid": 25,
+            "mature": 26,
+            "senior": 21
+          },
+          "education": {
+            "primary_or_below": 40,
+            "secondary": 28,
+            "vocational": 27,
+            "university": 5
+          },
+          "income": {
+            "low": 34,
+            "middle": 59,
+            "high": 7
+          },
+          "urbanization": {
+            "urban": 48,
+            "suburban": 14,
+            "rural": 38
+          }
+        },
+        "SN": {
+          "ethnicity": {
+            "german": 98,
+            "other": 2
+          },
+          "age": {
+            "young": 28,
+            "mid": 25,
+            "mature": 27,
+            "senior": 20
+          },
+          "education": {
+            "primary_or_below": 34,
+            "secondary": 28,
+            "vocational": 31,
+            "university": 7
+          },
+          "income": {
+            "low": 28,
+            "middle": 63,
+            "high": 9
+          },
+          "urbanization": {
+            "urban": 66,
+            "suburban": 14,
+            "rural": 20
+          }
+        },
+        "TH": {
+          "ethnicity": {
+            "german": 98,
+            "other": 2
+          },
+          "age": {
+            "young": 28,
+            "mid": 25,
+            "mature": 27,
+            "senior": 20
+          },
+          "education": {
+            "primary_or_below": 38,
+            "secondary": 28,
+            "vocational": 28,
+            "university": 6
+          },
+          "income": {
+            "low": 32,
+            "middle": 60,
+            "high": 8
+          },
+          "urbanization": {
+            "urban": 52,
+            "suburban": 15,
+            "rural": 33
+          }
+        }
+      },
+      "1979-default": {
+        "BEO": {
+          "ethnicity": {
+            "german": 98,
+            "other": 2
+          },
+          "age": {
+            "young": 30,
+            "mid": 24,
+            "mature": 26,
+            "senior": 20
+          },
+          "education": {
+            "primary_or_below": 32,
+            "secondary": 28,
+            "vocational": 30,
+            "university": 10
+          },
+          "income": {
+            "low": 28,
+            "middle": 60,
+            "high": 12
+          },
+          "urbanization": {
+            "urban": 95,
+            "suburban": 5,
+            "rural": 0
+          }
+        },
+        "MV": {
+          "ethnicity": {
+            "german": 98,
+            "other": 2
+          },
+          "age": {
+            "young": 29,
+            "mid": 24,
+            "mature": 26,
+            "senior": 21
+          },
+          "education": {
+            "primary_or_below": 48,
+            "secondary": 27,
+            "vocational": 22,
+            "university": 3
+          },
+          "income": {
+            "low": 42,
+            "middle": 53,
+            "high": 5
+          },
+          "urbanization": {
+            "urban": 32,
+            "suburban": 12,
+            "rural": 56
+          }
+        },
+        "BB": {
+          "ethnicity": {
+            "german": 98,
+            "other": 2
+          },
+          "age": {
+            "young": 28,
+            "mid": 25,
+            "mature": 26,
+            "senior": 21
+          },
+          "education": {
+            "primary_or_below": 44,
+            "secondary": 28,
+            "vocational": 24,
+            "university": 4
+          },
+          "income": {
+            "low": 38,
+            "middle": 56,
+            "high": 6
+          },
+          "urbanization": {
+            "urban": 38,
+            "suburban": 16,
+            "rural": 46
+          }
+        },
+        "ST": {
+          "ethnicity": {
+            "german": 98,
+            "other": 2
+          },
+          "age": {
+            "young": 28,
+            "mid": 25,
+            "mature": 26,
+            "senior": 21
+          },
+          "education": {
+            "primary_or_below": 40,
+            "secondary": 28,
+            "vocational": 27,
+            "university": 5
+          },
+          "income": {
+            "low": 34,
+            "middle": 59,
+            "high": 7
+          },
+          "urbanization": {
+            "urban": 48,
+            "suburban": 14,
+            "rural": 38
+          }
+        },
+        "SN": {
+          "ethnicity": {
+            "german": 98,
+            "other": 2
+          },
+          "age": {
+            "young": 28,
+            "mid": 25,
+            "mature": 27,
+            "senior": 20
+          },
+          "education": {
+            "primary_or_below": 34,
+            "secondary": 28,
+            "vocational": 31,
+            "university": 7
+          },
+          "income": {
+            "low": 28,
+            "middle": 63,
+            "high": 9
+          },
+          "urbanization": {
+            "urban": 66,
+            "suburban": 14,
+            "rural": 20
+          }
+        },
+        "TH": {
+          "ethnicity": {
+            "german": 98,
+            "other": 2
+          },
+          "age": {
+            "young": 28,
+            "mid": 25,
+            "mature": 27,
+            "senior": 20
+          },
+          "education": {
+            "primary_or_below": 38,
+            "secondary": 28,
+            "vocational": 28,
+            "university": 6
+          },
+          "income": {
+            "low": 32,
+            "middle": 60,
+            "high": 8
+          },
+          "urbanization": {
+            "urban": 52,
+            "suburban": 15,
+            "rural": 33
+          }
+        }
+      }
+    }
+  },
+  "CONSCRIPTION_SEED": {
+    "shape": "absent",
+    "value": null
+  },
+  "CORE5_NORMALS": {
+    "shape": "absent",
+    "value": null
+  },
+  "COST_SCALE_ANCHORS": {
+    "shape": "absent",
+    "value": null
+  },
+  "COUNTRY_BILL_PHASES": {
+    "shape": "function-valued",
+    "value": null,
+    "functionKeys": ["fn"]
+  },
+  "COUNTRY_CONFIGS": {
+    "shape": "country-first",
+    "value": {
+      "id": "DD",
+      "name": "East Germany",
+      "flagEmoji": "🇩🇩",
+      "code": "DD",
+      "socialAxisBaseline": 2,
+      "regionLabel": "Region",
+      "regionLabelPlural": "Regions",
+      "executiveTitle": "General Secretary",
+      "headOfStateTitle": "Chairman of the Council of State",
+      "executiveRealmPhrase": "the German Democratic Republic",
+      "governmentType": "onePartyState",
+      "rulingPartyId": 1,
+      "governmentTypeLabel": "One Party State",
+      "coalitionThreshold": 251,
+      "legislature": {
+        "name": "Volkskammer",
+        "path": "/country/dd/legislature",
+        "bicameral": false,
+        "upperChamber": {
+          "key": "staatsrat",
+          "name": "Council of State",
+          "shortName": "Staatsrat",
+          "seats": 25,
+          "description": "The Staatsrat - a collective head of state exercising standing authority between Volkskammer sessions.",
+          "elected": false
+        },
+        "lowerChamber": {
+          "key": "volkskammer",
+          "name": "People's Chamber",
+          "shortName": "Volkskammer",
+          "seats": 500,
+          "description": "500 deputies of the Volkskammer elected on the single National Front list, led by the ruling SED.",
+          "elected": true
+        }
+      },
+      "subNationalChamber": {
+        "key": "landAssembly",
+        "name": "Landtag",
+        "shortName": "Landtag",
+        "seats": 80,
+        "description": "The Landtage of the GDR's eastern Länder — the legislative arm of each Land government under the SED First Secretary. Four-year terms on the Volkskammer cycle.",
+        "regionalModel": true
+      },
+      "lowerElectionSystem": {
+        "termYears": 5,
+        "seatsContested": "all",
+        "singleMemberConstituencies": true,
+        "snapElectionsAllowed": false
+      },
+      "electionSystems": {
+        "lowerChamber": "fptp",
+        "subNationalChamber": "pr_hareQuota",
+        "subNationalExecutive": "fptp",
+        "headOfGovernment": "parliamentary",
+        "headOfState": "ceremonial"
+      },
+      "headOfStateSelection": "partyChairSync",
+      "officeTypes": [
+        {
+          "key": "generalSecretary",
+          "label": "General Secretary",
+          "labelPlural": "General Secretaries",
+          "isExecutive": true,
+          "isSubNational": false,
+          "termYears": 5,
+          "actionBonus": 4,
+          "partyStrengthWeight": 1
+        },
+        {
+          "key": "chairmanOfStateCouncil",
+          "label": "Chairman of the Council of State",
+          "labelPlural": "Chairmen of the Council of State",
+          "isExecutive": true,
+          "isHeadOfState": true,
+          "isSubNational": false,
+          "actionBonus": 0,
+          "partyStrengthWeight": 0
+        },
+        {
+          "key": "volkskammerDeputy",
+          "label": "Deputy",
+          "labelPlural": "Deputies",
+          "chamberKey": "volkskammer",
+          "isExecutive": false,
+          "isSubNational": false,
+          "termYears": 5,
+          "actionBonus": 1,
+          "partyStrengthWeight": 0.9
+        },
+        {
+          "key": "landAssembly",
+          "label": "Landtag Deputy",
+          "labelPlural": "Landtag Deputies",
+          "chamberKey": "landAssembly",
+          "isExecutive": false,
+          "isSubNational": true,
+          "termYears": 4,
+          "actionBonus": 1,
+          "partyStrengthWeight": 0.75
+        },
+        {
+          "key": "governor",
+          "label": "Land First Secretary",
+          "labelPlural": "Land First Secretaries",
+          "isExecutive": false,
+          "isSubNational": true,
+          "termYears": 4,
+          "actionBonus": 2,
+          "partyStrengthWeight": 1
+        },
+        {
+          "key": "centralBankChair",
+          "label": "President of the Staatsbank",
+          "labelPlural": "Presidents of the Staatsbank",
+          "isExecutive": false,
+          "isSubNational": false,
+          "termYears": 6,
+          "actionBonus": 3,
+          "partyStrengthWeight": 0
+        }
+      ],
+      "majorPartyIds": ["sed"],
+      "partyCreationNPPs": {
+        "statesRequired": 1,
+        "lockHomeState": true,
+        "nppsPerState": 2
+      },
+      "partyRoleLabels": {
+        "chair": "General Secretary",
+        "viceChair": "Second Secretary",
+        "committee": "Politburo"
+      },
+      "demographicProfileId": "dd_archetypes",
+      "hasLeaderConfidenceModel": true,
+      "priorityProfile": {
+        "countryId": "CN",
+        "version": 1,
+        "axes": [
+          {
+            "id": "party_control",
+            "name": "Party Control",
+            "weight": 0.2,
+            "description": "Maintaining CPC dominance over state and society"
+          },
+          {
+            "id": "social_stability",
+            "name": "Social Stability",
+            "weight": 0.15,
+            "description": "Preventing unrest and maintaining order"
+          },
+          {
+            "id": "state_sector",
+            "name": "State-Sector Strength",
+            "weight": 0.12,
+            "description": "SOE dominance in strategic industries"
+          },
+          {
+            "id": "industrial_policy",
+            "name": "Industrial Policy",
+            "weight": 0.12,
+            "description": "Directed investment in key sectors"
+          },
+          {
+            "id": "economic_growth",
+            "name": "Economic Growth",
+            "weight": 0.15,
+            "description": "GDP growth and development targets"
+          },
+          {
+            "id": "national_security",
+            "name": "National Security",
+            "weight": 0.12,
+            "description": "Military, intelligence, and territorial integrity"
+          },
+          {
+            "id": "regional_balance",
+            "name": "Regional Balance",
+            "weight": 0.07,
+            "description": "Reducing coastal-inland inequality"
+          },
+          {
+            "id": "market_openness",
+            "name": "Managed Market Openness",
+            "weight": 0.04,
+            "description": "Controlled foreign investment and trade"
+          },
+          {
+            "id": "anti_corruption",
+            "name": "Anti-Corruption Legitimacy",
+            "weight": 0.03,
+            "description": "Public perception of CPC discipline"
+          }
+        ]
+      },
+      "policyAxisEffects": {
+        "market-liberalization": [
+          {
+            "axisId": "state_sector",
+            "delta": -40
+          },
+          {
+            "axisId": "party_control",
+            "delta": -20
+          },
+          {
+            "axisId": "economic_growth",
+            "delta": 30
+          },
+          {
+            "axisId": "market_openness",
+            "delta": 25
+          }
+        ],
+        "privatization": [
+          {
+            "axisId": "state_sector",
+            "delta": -50
+          },
+          {
+            "axisId": "party_control",
+            "delta": -15
+          },
+          {
+            "axisId": "economic_growth",
+            "delta": 20
+          },
+          {
+            "axisId": "anti_corruption",
+            "delta": 10
+          }
+        ],
+        "industrial-investment": [
+          {
+            "axisId": "industrial_policy",
+            "delta": 45
+          },
+          {
+            "axisId": "state_sector",
+            "delta": 25
+          },
+          {
+            "axisId": "economic_growth",
+            "delta": 20
+          },
+          {
+            "axisId": "regional_balance",
+            "delta": 15
+          }
+        ],
+        "infrastructure": [
+          {
+            "axisId": "industrial_policy",
+            "delta": 30
+          },
+          {
+            "axisId": "economic_growth",
+            "delta": 25
+          },
+          {
+            "axisId": "regional_balance",
+            "delta": 35
+          },
+          {
+            "axisId": "social_stability",
+            "delta": 10
+          }
+        ],
+        "security-expansion": [
+          {
+            "axisId": "national_security",
+            "delta": 40
+          },
+          {
+            "axisId": "party_control",
+            "delta": 15
+          },
+          {
+            "axisId": "economic_growth",
+            "delta": -10
+          }
+        ],
+        "social-welfare": [
+          {
+            "axisId": "social_stability",
+            "delta": 25
+          },
+          {
+            "axisId": "regional_balance",
+            "delta": 20
+          },
+          {
+            "axisId": "economic_growth",
+            "delta": -10
+          },
+          {
+            "axisId": "anti_corruption",
+            "delta": 10
+          }
+        ],
+        "anti-corruption": [
+          {
+            "axisId": "anti_corruption",
+            "delta": 50
+          },
+          {
+            "axisId": "party_control",
+            "delta": 20
+          },
+          {
+            "axisId": "social_stability",
+            "delta": 10
+          }
+        ],
+        "censorship": [
+          {
+            "axisId": "party_control",
+            "delta": 30
+          },
+          {
+            "axisId": "social_stability",
+            "delta": 15
+          },
+          {
+            "axisId": "market_openness",
+            "delta": -20
+          }
+        ],
+        "trade-protection": [
+          {
+            "axisId": "state_sector",
+            "delta": 20
+          },
+          {
+            "axisId": "market_openness",
+            "delta": -30
+          },
+          {
+            "axisId": "economic_growth",
+            "delta": -10
+          },
+          {
+            "axisId": "national_security",
+            "delta": 15
+          }
+        ],
+        "foreign-engagement": [
+          {
+            "axisId": "national_security",
+            "delta": 10
+          },
+          {
+            "axisId": "market_openness",
+            "delta": 25
+          },
+          {
+            "axisId": "economic_growth",
+            "delta": 15
+          }
+        ],
+        "labor-rights": [
+          {
+            "axisId": "social_stability",
+            "delta": 20
+          },
+          {
+            "axisId": "party_control",
+            "delta": -15
+          },
+          {
+            "axisId": "economic_growth",
+            "delta": -10
+          }
+        ],
+        "default": []
+      },
+      "factionDefectionName": "Reform Wing of the SED",
+      "legacyReservationDefault": 20,
+      "electionDelayDefault": 24,
+      "mapOverlay": "partyOrg",
+      "centralBank": {
+        "name": "Staatsbank der DDR",
+        "abbreviation": "SBD",
+        "chairTitle": "President of the Staatsbank",
+        "defaultPrimeRate": 5,
+        "heroImage": "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a1/Flag_of_East_Germany.svg/500px-Flag_of_East_Germany.svg.png"
+      },
+      "exchangeName": "VVB",
+      "exchangeKind": "stateRegister",
+      "usdExchangeRate": 0.45,
+      "currencyCode": "DDM",
+      "fiscalYearStartTurnInYear": 40,
+      "financeMinisterCabinetId": "minister_of_finance",
+      "collapseTargetSystem": "parliamentaryRepublic",
+      "popularMoodProfile": {
+        "economicProsperity": 0.9,
+        "civilLiberties": 0.7,
+        "anticorruption": 0.8,
+        "publicServices": 0.5,
+        "nationalism": 0.3,
+        "culturalTradition": 0.4,
+        "internationalStanding": 0.3,
+        "environmentalProtection": 0.2,
+        "lawAndOrder": 0.5
+      },
+      "federalEqualizationGrantPerCapita": 100,
+      "status": "coming-soon",
+      "tagline": "The other Germany - a hard-line SED state and Warsaw-Pact linchpin, its planned economy and Wall holding back the pull of the West.",
+      "descriptor": "A one-party socialist republic where the SED General Secretary governs through the National Front and the Volkskammer; the economy is centrally planned until reform or reunification.",
+      "heroImage": "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a1/Flag_of_East_Germany.svg/500px-Flag_of_East_Germany.svg.png",
+      "entryPath": "/country/dd",
+      "overviewPath": "/country/dd",
+      "mapPath": "/country/dd/map",
+      "executivePath": "/country/dd/executive",
+      "executiveLabel": "Council of Ministers",
+      "centralGovernmentLabel": "Central Plan"
+    }
+  },
+  "COUNTRY_CONTINENT": {
+    "shape": "country-first",
+    "value": "Europe"
+  },
+  "COUNTRY_CURRENCY_MAP": {
+    "shape": "country-first",
+    "value": "DDM"
+  },
+  "COUNTRY_ELECTION_PHASES": {
+    "shape": "country-first",
+    "value": [
+      {
+        "name": "ddVolkskammerElections"
+      },
+      {
+        "name": "ddLandAssemblyElections"
+      },
+      {
+        "name": "ddGovernorElections"
+      }
+    ]
+  },
+  "COUNTRY_ERA1991_PATCHES": {
+    "shape": "absent",
+    "value": null
+  },
+  "COUNTRY_HISTORICAL_NAMES": {
+    "shape": "absent",
+    "value": null
+  },
+  "COUNTRY_MAP_REGISTRY": {
+    "shape": "country-first",
+    "value": {
+      "countryId": "DD",
+      "name": "East Germany",
+      "overviewPath": "/country/dd",
+      "mapPath": "/country/dd/map",
+      "hasRegionMap": false
+    }
+  },
+  "COUNTRY_MODERN_NAMES": {
+    "shape": "absent",
+    "value": null
+  },
+  "COUNTRY_REGIONS": {
+    "shape": "country-first",
+    "value": "europe"
+  },
+  "COUNTRY_SECTOR_WEIGHTS": {
+    "shape": "country-first",
+    "value": {
+      "manufacturing": 24,
+      "chemical_industries": 10,
+      "energy": 9,
+      "automobiles": 7,
+      "agriculture": 9,
+      "construction": 7,
+      "extraction": 6,
+      "defense": 5,
+      "logistics": 5,
+      "healthcare": 4,
+      "retail": 3,
+      "real_estate": 2,
+      "technology": 2,
+      "entertainment": 1
+    }
+  },
+  "COUNTRY_SECTOR_WEIGHTS_1979": {
+    "shape": "country-first",
+    "value": {
+      "manufacturing": 25,
+      "chemical_industries": 15,
+      "extraction": 12,
+      "energy": 10,
+      "agriculture": 10,
+      "defense": 10,
+      "construction": 7,
+      "healthcare": 4,
+      "retail": 3,
+      "logistics": 4,
+      "telecommunications": 1,
+      "technology": 1,
+      "automobiles": 1,
+      "real_estate": 0,
+      "financial": 0,
+      "media": 1,
+      "entertainment": 1
+    }
+  },
+  "COUNTRY_SECTOR_WEIGHTS_1991": {
+    "shape": "country-first",
+    "value": {
+      "manufacturing": 24,
+      "chemical_industries": 10,
+      "energy": 9,
+      "automobiles": 7,
+      "agriculture": 9,
+      "construction": 7,
+      "extraction": 6,
+      "defense": 5,
+      "logistics": 5,
+      "healthcare": 4,
+      "retail": 3,
+      "real_estate": 2,
+      "technology": 2,
+      "entertainment": 1
+    }
+  },
+  "COUNTRY_TO_ISO_NUMERIC": {
+    "shape": "country-first",
+    "value": "278"
+  },
+  "COUNTRY_UN_MEMBER_SINCE": {
+    "shape": "country-first",
+    "value": null
+  },
+  "DEFAULT_STRATEGIC_SECTORS": {
+    "shape": "absent",
+    "value": null
+  },
+  "DEFENSE_POSITION_BY_COUNTRY": {
+    "shape": "country-first",
+    "value": "minister_of_defence"
+  },
+  "ECONOMIC_BASELINES": {
+    "shape": "absent",
+    "value": null
+  },
+  "ECONOMY_TEXT": {
+    "shape": "absent",
+    "value": null
+  },
+  "ENERGY_POSITION_BY_COUNTRY": {
+    "shape": "country-first",
+    "value": "minister_of_machine_building"
+  },
+  "ERA_COUNTRY_CONFIG_OVERRIDES": {
+    "shape": "outer-keyed",
+    "value": {
+      "1953-default": {
+        "usdExchangeRate": 0.23809523809523808
+      }
+    }
+  },
+  "ESTATE_PORTFOLIO_BY_COUNTRY": {
+    "shape": "country-first",
+    "value": {
+      "minister_of_foreign_affairs": "foreign",
+      "minister_of_internal_affairs": "state_security",
+      "chairman_of_gosplan": "planning",
+      "gosbank_liaison": "state_bank",
+      "minister_of_foreign_trade": "trade_mission",
+      "minister_of_internal_trade": "distribution",
+      "minister_of_agriculture": "collective_farming",
+      "minister_of_machine_building": "heavy_industry",
+      "minister_of_culture": "culture",
+      "minister_of_health": "socialized_health",
+      "minister_of_higher_education": "education"
+    }
+  },
+  "EXECUTIVE_SEALS": {
+    "shape": "country-first",
+    "value": {
+      "src": "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a1/Coat_of_arms_of_East_Germany.svg/330px-Coat_of_arms_of_East_Germany.svg.png",
+      "alt": "Coat of arms of East Germany (GDR)"
+    }
+  },
+  "EXECUTIVE_SURFACE": {
+    "shape": "country-first",
+    "value": {
+      "clock": {
+        "kind": "plenum",
+        "label": "Plenum Clock",
+        "countdownNoun": "next Volkskammer session"
+      },
+      "actLabels": {
+        "signed": "ENACTED",
+        "vetoed": "REJECTED",
+        "onDesk": "AWAITING",
+        "order": "DECREE",
+        "confirmed": "APPOINTED",
+        "nominated": "NOMINATED",
+        "acting": "ACTING"
+      },
+      "deskKind": "orders",
+      "deskLabel": "Decrees",
+      "rosterTitle": "Council of Ministers",
+      "heroImage": "/api/images/hero/altes-stadthaus",
+      "heroAlt": "Altes Stadthaus, Berlin"
+    }
+  },
+  "EXECUTIVE_TEXT": {
+    "shape": "country-first",
+    "value": {
+      "glyph": "DDR",
+      "serif": "mono",
+      "registry": "German Democratic Republic · Council of Ministers",
+      "title": "Altes Stadthaus"
+    }
+  },
+  "FOREIGN_AFFAIRS_POSITION_BY_COUNTRY": {
+    "shape": "country-first",
+    "value": "minister_of_foreign_affairs"
+  },
+  "FULL_ERA_REGION_BUNDLES": {
+    "shape": "absent",
+    "value": null
+  },
+  "HAZARD_GROUPS": {
+    "shape": "absent",
+    "value": null
+  },
+  "INCOME_ANCHORS": {
+    "shape": "country-first",
+    "value": [
+      {
+        "year": 1953,
+        "value": 4900
+      },
+      {
+        "year": 1979,
+        "value": 14000
+      }
+    ]
+  },
+  "INFRA_POSITION_BY_COUNTRY": {
+    "shape": "country-first",
+    "value": "minister_of_railways"
+  },
+  "ISO_NUMERIC_TO_COUNTRY": {
+    "shape": "value-keyed",
+    "value": {
+      "278": "DD"
+    }
+  },
+  "LEGISLATION_COUNTRY_SCOPES": {
+    "shape": "country-first",
+    "value": "dd"
+  },
+  "LEGISLATIVE_PROCESS": {
+    "shape": "absent",
+    "value": null
+  },
+  "M2_TO_GDP_1953": {
+    "shape": "country-first",
+    "value": 0.4
+  },
+  "METRIC_PRESET_BUNDLES": {
+    "shape": "absent",
+    "value": null
+  },
+  "MILITARY_BRANCHES_BY_COUNTRY": {
+    "shape": "country-first",
+    "value": [
+      {
+        "id": "landstreitkraefte",
+        "name": "Land Forces",
+        "abbr": "LaSK",
+        "domain": "ground",
+        "establishedYear": 1956,
+        "dissolvedYear": 1990
+      },
+      {
+        "id": "volksmarine",
+        "name": "People's Navy",
+        "abbr": "VM",
+        "domain": "naval",
+        "establishedYear": 1956,
+        "dissolvedYear": 1990
+      },
+      {
+        "id": "luftstreitkraefte",
+        "name": "Air Force / Air Defence",
+        "abbr": "LSK/LV",
+        "domain": "air",
+        "establishedYear": 1956,
+        "dissolvedYear": 1990
+      }
+    ]
+  },
+  "MILITARY_COUNTRY_SCALE": {
+    "shape": "country-first",
+    "value": 1.2
+  },
+  "MONETARY_BASELINES": {
+    "shape": "country-first",
+    "value": {
+      "targetInflation": 2,
+      "neutralPrimeRate": 5
+    }
+  },
+  "MONETARY_BASELINES_1953": {
+    "shape": "country-first",
+    "value": {
+      "targetInflation": 0.5,
+      "neutralPrimeRate": 3.5,
+      "trendGdpGrowth": 3
+    }
+  },
+  "MONETARY_BASELINES_1971": {
+    "shape": "country-first",
+    "value": {
+      "targetInflation": 1.5,
+      "neutralPrimeRate": 2.5,
+      "trendGdpGrowth": 3
+    }
+  },
+  "MONETARY_BASELINES_1979": {
+    "shape": "absent",
+    "value": null
+  },
+  "MONETARY_BASELINES_1991": {
+    "shape": "absent",
+    "value": null
+  },
+  "NATIONAL_ADDRESS_NAME": {
+    "shape": "absent",
+    "value": null
+  },
+  "NATIONAL_IDENTITY": {
+    "shape": "country-first",
+    "value": {
+      "glyph": "DDR",
+      "serif": "mono",
+      "motif": "gearStar",
+      "name": "Volkseigener Betrieb",
+      "native": "VEB Kombinat",
+      "registry": "German Democratic Republic · State Asset Registry",
+      "ministry": "STATE PLANNING COMMISSION",
+      "publicSeal": "PUBLIC REGISTER",
+      "hqCity": "East Berlin",
+      "palette": ["#3a0d0d", "#2a0a0a", "#150606"],
+      "accent": "#cdb15a",
+      "accentSoft": "#e2cd8c",
+      "accentName": "Socialist red & gold"
+    }
+  },
+  "NATIONAL_POLICY_STATE_IDS": {
+    "shape": "country-first",
+    "value": "dd_national"
+  },
+  "NATIONAL_STATS_IDENTITY": {
+    "shape": "absent",
+    "value": null
+  },
+  "NEUTRAL_FEDERAL_SALES_TAX_BY_COUNTRY": {
+    "shape": "absent",
+    "value": null
+  },
+  "NEUTRAL_STATE_SALES_TAX_BY_COUNTRY": {
+    "shape": "absent",
+    "value": null
+  },
+  "NON_PARTY_BUCKET_INDEPENDENT_BIAS_BY_COUNTRY": {
+    "shape": "absent",
+    "value": null
+  },
+  "NPP_CAPITAL_STATES": {
+    "shape": "country-first",
+    "value": ""
+  },
+  "ORDERS_OF_BATTLE": {
+    "shape": "country-first",
+    "value": [
+      {
+        "branchId": "landstreitkraefte",
+        "type": "Infantry Division",
+        "count": 3
+      },
+      {
+        "branchId": "landstreitkraefte",
+        "type": "Mechanized Brigade",
+        "count": 2
+      },
+      {
+        "branchId": "landstreitkraefte",
+        "type": "Artillery Regiment",
+        "count": 1
+      },
+      {
+        "branchId": "volksmarine",
+        "type": "Frigate Squadron",
+        "count": 1
+      },
+      {
+        "branchId": "luftstreitkraefte",
+        "type": "Fighter Wing",
+        "count": 2
+      },
+      {
+        "branchId": "luftstreitkraefte",
+        "type": "Air Defense Wing",
+        "count": 1
+      }
+    ]
+  },
+  "ORDERS_OF_BATTLE_BY_ERA": {
+    "shape": "absent",
+    "value": null
+  },
+  "PLAYER_PAYOUT_CAP_PER_TURN": {
+    "shape": "country-first",
+    "value": 1500000
+  },
+  "POLICY_TEXT": {
+    "shape": "country-first",
+    "value": {
+      "glyph": "§",
+      "serif": "mono",
+      "registry": "Code of Law · German Democratic Republic",
+      "title": "National Policy"
+    }
+  },
+  "POPULATION_ANCHOR_BUNDLES": {
+    "shape": "absent",
+    "value": null
+  },
+  "RAW_BUNDLES": {
+    "shape": "country-first",
+    "value": []
+  },
+  "REGIONAL_BILL_ASSENT_OFFICE_KEY": {
+    "shape": "country-first",
+    "value": "governor"
+  },
+  "REGION_CENSUS_LABELS": {
+    "shape": "country-first",
+    "value": {
+      "cardTitles": {
+        "ethnicity": "Ethnicity",
+        "age": "Age Distribution",
+        "education": "Education (Highest)",
+        "income": "Household Income",
+        "urbanization": "Urbanization"
+      },
+      "ethnicity": {
+        "german": "German",
+        "other": "Other"
+      },
+      "age": {
+        "young": "Young (18-29)",
+        "mid": "Mid (30-44)",
+        "mature": "Mature (45-64)",
+        "senior": "Senior (65+)"
+      },
+      "education": {
+        "primary_or_below": "Primary or below",
+        "secondary": "Secondary",
+        "vocational": "Vocational",
+        "university": "University"
+      },
+      "income": {
+        "low": "Lower income",
+        "middle": "Middle income",
+        "high": "Upper income"
+      },
+      "urbanization": {
+        "urban": "Urban",
+        "suburban": "Suburban / town",
+        "rural": "Rural"
+      }
+    }
+  },
+  "REGION_DEMOGRAPHIC_CATEGORY_IDS": {
+    "shape": "country-first",
+    "value": ["dd_voterGroups"]
+  },
+  "REGION_NAME_MAPS": {
+    "shape": "absent",
+    "value": null
+  },
+  "REGION_ROSTERS": {
+    "shape": "function-valued",
+    "value": null,
+    "functionKeys": ["1953", "2019"]
+  },
+  "REP_ECON": {
+    "shape": "absent",
+    "value": null
+  },
+  "SOVEREIGN_CORP_LEGAL_STRUCTURE": {
+    "shape": "country-first",
+    "value": "generic_corp"
+  },
+  "SPAWN_ELECTIONS_REGISTRY": {
+    "shape": "absent",
+    "value": null
+  },
+  "STATE_ADJACENCY": {
+    "shape": "country-first",
+    "value": {
+      "BEO": ["BB"],
+      "MV": ["BB"],
+      "BB": ["BEO", "MV", "ST", "SN"],
+      "ST": ["BB", "SN", "TH"],
+      "SN": ["BB", "ST", "TH"],
+      "TH": ["ST", "SN"]
+    }
+  },
+  "STATE_DISPLAY_NAMES": {
+    "shape": "absent",
+    "value": null
+  },
+  "SURFACES": {
+    "shape": "absent",
+    "value": null
+  },
+  "TARGETS": {
+    "shape": "country-first",
+    "value": {
+      "1953": {
+        "center": 0,
+        "centerTol": 5,
+        "minSpread": 0,
+        "expectLeft": [],
+        "expectRight": [],
+        "election": "DDR 1953 — post-June-17; no competitive vote. Guards regional variation, not left/right.",
+        "twoAxis": {
+          "economicCenter": -0.6,
+          "economicCenterTol": 0.6,
+          "minEconomicSpread": 0.35,
+          "minSocialSpread": 0.8
+        }
+      }
+    }
+  },
+  "TRADE_MINISTER_POSITION_BY_COUNTRY": {
+    "shape": "country-first",
+    "value": "minister_of_foreign_affairs"
+  },
+  "TREASURY_IDENTITY": {
+    "shape": "country-first",
+    "value": {
+      "glyph": "DDR",
+      "serif": "mono",
+      "budgetTitle": "State Plan Budget",
+      "ministry": "MINISTRY OF FINANCE",
+      "publicSeal": "PUBLIC RECORD",
+      "registry": "German Democratic Republic · Ministry of Finance",
+      "native": "Deutsche Demokratische Republik · Ministerium der Finanzen",
+      "palette": ["#3a0d0d", "#2a0a0a", "#150606"],
+      "accent": "#cdb15a",
+      "accentSoft": "#e2cd8c"
+    }
+  },
+  "TREASURY_PS_RATE_BY_COUNTRY": {
+    "shape": "country-first",
+    "value": {
+      "national": 90000,
+      "state": 45000
+    }
+  },
+  "TREASURY_TEXT": {
+    "shape": "country-first",
+    "value": {
+      "glyph": "DDR",
+      "serif": "mono",
+      "budgetTitle": "State Plan Budget",
+      "ministry": "MINISTRY OF FINANCE",
+      "publicSeal": "PUBLIC RECORD",
+      "registry": "German Democratic Republic · Ministry of Finance",
+      "native": "Deutsche Demokratische Republik · Ministerium der Finanzen"
+    }
+  }
+}

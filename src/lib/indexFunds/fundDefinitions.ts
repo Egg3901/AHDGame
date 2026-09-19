@@ -2,6 +2,7 @@ import type { CorporationType } from "@/lib/constants/corporations";
 import type { CountryId } from "@/lib/constants/countries";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import type { CreditRating } from "@/lib/db/types/centralBank";
+import { JP_INDEX_FUND_NAMES } from "@/lib/countries/jp/economy";
 
 /**
  * Sector fund mapping: every CorporationType gets its own standalone sector fund.
@@ -81,7 +82,7 @@ function countryFundName(countryId: CountryId, topN: number): string {
   const names: Record<string, Record<number, string>> = {
     US: { 25: "US Large-Cap 25 Index", 50: "US Broad Market 50 Index" },
     UK: { 25: "FTSE 25 Index", 50: "FTSE 50 Index" },
-    JP: { 25: "Nikkei 25 Index", 50: "Nikkei 50 Index" },
+    JP: JP_INDEX_FUND_NAMES,
     DE: { 25: "DAX 25 Index", 50: "DAX 50 Index" },
     IE: { 25: "ISEQ 25 Index", 50: "ISEQ 50 Index" },
     BR: { 25: "B3 25 Index", 50: "B3 50 Index" },

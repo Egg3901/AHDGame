@@ -54,14 +54,17 @@ import { ieRegions1991 } from "@/lib/seeds/ie/ieRegions1991";
 import { ieRegions1999 } from "@/lib/seeds/ie/ieRegions1999";
 import { ieRegions2007 } from "@/lib/seeds/ie/ieRegions2007";
 import { ieRegions2023 } from "@/lib/seeds/ie/ieRegions2023";
-import { jpRegions } from "@/lib/seeds/jp/jpRegions";
-import { jpRegions1953 } from "@/lib/seeds/jp/jpRegions1953";
-import { jpRegions1979 } from "@/lib/seeds/jp/jpRegions1979";
-import { jpRegions1991 } from "@/lib/seeds/jp/jpRegions1991";
-import { jpRegions1999 } from "@/lib/seeds/jp/jpRegions1999";
-import { jpRegions2007 } from "@/lib/seeds/jp/jpRegions2007";
-import { jpRegions2023 } from "@/lib/seeds/jp/jpRegions2023";
-import { jpRegions2027 } from "@/lib/seeds/jp/jpRegions2027";
+// Japan's seed data lives in its country folder; `src/lib/seeds/jp/` was
+// emptied by the conversion and left no forwarder, because the whole
+// directory moved rather than individual files.
+import { jpRegions } from "@/lib/countries/jp/data/jpRegions";
+import { jpRegions1953 } from "@/lib/countries/jp/data/jpRegions1953";
+import { jpRegions1979 } from "@/lib/countries/jp/data/jpRegions1979";
+import { jpRegions1991 } from "@/lib/countries/jp/data/jpRegions1991";
+import { jpRegions1999 } from "@/lib/countries/jp/data/jpRegions1999";
+import { jpRegions2007 } from "@/lib/countries/jp/data/jpRegions2007";
+import { jpRegions2023 } from "@/lib/countries/jp/data/jpRegions2023";
+import { jpRegions2027 } from "@/lib/countries/jp/data/jpRegions2027";
 import { ngRegions } from "@/lib/seeds/ng/ngRegions";
 import { ngRegions1953 } from "@/lib/seeds/ng/ngRegions1953";
 import { ngRegions1979 } from "@/lib/seeds/ng/ngRegions1979";

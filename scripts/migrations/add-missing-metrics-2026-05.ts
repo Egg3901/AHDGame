@@ -16,7 +16,7 @@ import type { StateMetrics } from "../../src/lib/db/types";
 import type { StateMetricBaseline } from "../../src/lib/db/types/statePolicy";
 import { stateMetrics as usStateMetrics } from "../../src/lib/seeds/reference/stateMetrics";
 import { ukStateMetrics } from "../../src/lib/seeds/uk/ukStateMetrics";
-import { jpStateMetrics } from "../../src/lib/seeds/jp/jpStateMetrics";
+import { jpStateMetrics } from "../../src/lib/countries/jp/data/jpStateMetrics";
 import { deStateMetrics } from "../../src/lib/seeds/de/deStateMetrics";
 import { ieStateMetrics } from "../../src/lib/seeds/ie/ieStateMetrics";
 import { brStateMetrics } from "../../src/lib/seeds/br/brStateMetrics";

@@ -1,6 +1,36 @@
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { COUNTRY_CURRENCY_MAP, CURRENCY_SYMBOLS } from "@/lib/constants/currencies";
 import { getNationalIdentity, type NationalIdentity } from "@/lib/constants/nationalIdentity";
+import { JP_IDENTITY } from "@/lib/countries/jp/identity";
+import { JP_BANK_TEXT } from "@/lib/countries/jp/identity";
+import { US_IDENTITY } from "@/lib/countries/us/identity";
+import { UK_IDENTITY } from "@/lib/countries/uk/identity";
+import { DE_IDENTITY } from "@/lib/countries/de/identity";
+import { CN_IDENTITY } from "@/lib/countries/cn/identity";
+import { IE_IDENTITY } from "@/lib/countries/ie/identity";
+import { RU_IDENTITY } from "@/lib/countries/ru/identity";
+import { DD_IDENTITY } from "@/lib/countries/dd/identity";
+import { NG_IDENTITY } from "@/lib/countries/ng/identity";
+import { BR_IDENTITY } from "@/lib/countries/br/identity";
+import { FR_IDENTITY } from "@/lib/countries/fr/identity";
+import { IT_IDENTITY } from "@/lib/countries/it/identity";
+import { ES_IDENTITY } from "@/lib/countries/es/identity";
+import { SE_IDENTITY } from "@/lib/countries/se/identity";
+import { TR_IDENTITY } from "@/lib/countries/tr/identity";
+import { GR_IDENTITY } from "@/lib/countries/gr/identity";
+import { AT_IDENTITY } from "@/lib/countries/at/identity";
+import { FI_IDENTITY } from "@/lib/countries/fi/identity";
+import { PL_IDENTITY } from "@/lib/countries/pl/identity";
+import { HU_IDENTITY } from "@/lib/countries/hu/identity";
+import { RO_IDENTITY } from "@/lib/countries/ro/identity";
+import { YU_IDENTITY } from "@/lib/countries/yu/identity";
+import { BG_IDENTITY } from "@/lib/countries/bg/identity";
+import { CS_IDENTITY } from "@/lib/countries/cs/identity";
+import { SCO_IDENTITY } from "@/lib/countries/sco/identity";
+import { WAL_IDENTITY } from "@/lib/countries/wal/identity";
+import { BLR_IDENTITY } from "@/lib/countries/blr/identity";
+import { UKR_IDENTITY } from "@/lib/countries/ukr/identity";
+import { BAL_IDENTITY } from "@/lib/countries/bal/identity";
 
 /**
  * Institution identity overlays for the country-pages masthead family
@@ -32,7 +62,7 @@ export interface InstitutionIdentity {
   accentSoft: string;
 }
 
-type IdentityText = Omit<InstitutionIdentity, "palette" | "accent" | "accentSoft">;
+export type IdentityText = Omit<InstitutionIdentity, "palette" | "accent" | "accentSoft">;
 
 function composeFromNational(countryId: CountryId, text: IdentityText): InstitutionIdentity {
   const national = getNationalIdentity(countryId);
@@ -46,191 +76,36 @@ function composeFromNational(countryId: CountryId, text: IdentityText): Institut
 
 // ── Executive ────────────────────────────────────────────────────────────────
 
-const EXECUTIVE_TEXT: Record<CountryId, IdentityText> = {
-  US: {
-    glyph: "★",
-    serif: "mono",
-    registry: "Executive Office of the President",
-    title: "The White House",
-  },
-  UK: {
-    glyph: "HM",
-    serif: "mono",
-    registry: "United Kingdom · His Majesty's Government",
-    title: "10 Downing Street",
-  },
-  DE: {
-    glyph: "BK",
-    serif: "mono",
-    registry: "Federal Republic of Germany · Federal Government",
-    title: "Bundeskanzleramt",
-    titleEn: "Federal Chancellery",
-  },
-  JP: {
-    glyph: "閣",
-    serif: "cjk",
-    registry: "Japan · Cabinet of the Government",
-    title: "首相官邸",
-    titleEn: "Office of the Prime Minister",
-  },
-  IE: {
-    glyph: "DT",
-    serif: "mono",
-    registry: "Ireland · Government of Ireland",
-    title: "Tithe an Rialtais",
-    titleEn: "Government Buildings",
-  },
-  CN: {
-    glyph: "政",
-    serif: "cjk",
-    registry: "People's Republic of China · Executive Organs",
-    title: "国务院",
-    titleEn: "State Council & Government",
-  },
-  BR: {
-    glyph: "PR",
-    serif: "mono",
-    registry: "Federative Republic of Brazil · Presidency",
-    title: "Palácio do Planalto",
-    titleEn: "Presidential Palace",
-  },
-  NG: {
-    glyph: "FG",
-    serif: "mono",
-    registry: "Federal Republic of Nigeria · Presidency",
-    title: "Aso Rock Villa",
-  },
-  HU: {
-    glyph: "MT",
-    serif: "mono",
-    registry: "Hungarian People's Republic · Council of Ministers",
-    title: "Parliament House",
-  },
-  PL: {
-    glyph: "RM",
-    serif: "mono",
-    registry: "Polish People's Republic · Council of Ministers",
-    title: "Sejm",
-  },
-  RO: {
-    glyph: "CM",
-    serif: "mono",
-    registry: "Socialist Republic of Romania · Council of Ministers",
-    title: "Grand National Assembly",
-  },
-  YU: {
-    glyph: "SK",
-    serif: "mono",
-    registry: "SFR Yugoslavia · Federal Executive Council",
-    title: "Federal Assembly",
-  },
-  BG: {
-    glyph: "MS",
-    serif: "mono",
-    registry: "People's Republic of Bulgaria · Council of Ministers",
-    title: "National Assembly",
-  },
-  BLR: {
-    glyph: "CK",
-    serif: "mono",
-    registry: "Byelorussian SSR · Council of Ministers",
-    title: "Supreme Soviet",
-  },
-  UKR: {
-    glyph: "YK",
-    serif: "mono",
-    registry: "Ukrainian SSR · Council of Ministers",
-    title: "Supreme Soviet",
-  },
-  CS: {
-    glyph: "FV",
-    serif: "mono",
-    registry: "Czechoslovak Socialist Republic · Federal Government",
-    title: "Federal Assembly",
-  },
-  BAL: {
-    glyph: "CK",
-    serif: "mono",
-    registry: "Baltic Soviet Republics · Councils of Ministers",
-    title: "Supreme Soviet",
-  },
-  RU: {
-    glyph: "CCCP",
-    serif: "mono",
-    registry: "Union of Soviet Socialist Republics · Council of Ministers",
-    title: "The Kremlin",
-  },
-  FR: {
-    glyph: "RF",
-    serif: "mono",
-    registry: "French Republic · Presidency of the Republic",
-    title: "Élysée Palace",
-  },
-  IT: {
-    glyph: "RI",
-    serif: "mono",
-    registry: "Italian Republic · Presidency of the Council",
-    title: "Palazzo Chigi",
-  },
-  ES: {
-    glyph: "RE",
-    serif: "mono",
-    registry: "Kingdom of Spain · Presidency of the Government",
-    title: "La Moncloa",
-  },
-  SE: {
-    glyph: "SE",
-    serif: "mono",
-    registry: "Kingdom of Sweden · Government Offices",
-    title: "Rosenbad",
-  },
-  TR: {
-    glyph: "TC",
-    serif: "mono",
-    registry: "Republic of Turkey · Prime Ministry",
-    title: "Çankaya",
-  },
-  GR: {
-    glyph: "ΕΔ",
-    serif: "mono",
-    registry: "Hellenic Republic · Government",
-    title: "Μέγαρο Μαξίμου",
-    titleEn: "Maximos Mansion",
-  },
-  AT: {
-    glyph: "BK",
-    serif: "mono",
-    registry: "Republic of Austria · Federal Government",
-    title: "Ballhausplatz",
-    titleEn: "Federal Chancellery",
-  },
-  FI: {
-    glyph: "VN",
-    serif: "mono",
-    registry: "Republic of Finland · Council of State",
-    title: "Valtioneuvosto",
-    titleEn: "Government Palace",
-  },
-  DD: {
-    glyph: "DDR",
-    serif: "mono",
-    registry: "German Democratic Republic · Council of Ministers",
-    // Seat-of-government place name (the RU "The Kremlin" convention) — the
-    // Volkskammer is the LEGISLATURE and titles that page instead.
-    title: "Altes Stadthaus",
-  },
-  SCO: {
-    glyph: "FM",
-    serif: "mono",
-    registry: "Scotland · Scottish Government",
-    title: "Bute House",
-  },
-  WAL: {
-    glyph: "FM",
-    serif: "mono",
-    registry: "Wales · Welsh Government",
-    title: "Welsh Government",
-  },
+export const EXECUTIVE_TEXT: Record<CountryId, IdentityText> = {
+  US: US_IDENTITY.executiveText,
+  UK: UK_IDENTITY.executiveText,
+  DE: DE_IDENTITY.executiveText,
+  JP: JP_IDENTITY.executiveText,
+  IE: IE_IDENTITY.executiveText,
+  CN: CN_IDENTITY.executiveText,
+  BR: BR_IDENTITY.executiveText,
+  NG: NG_IDENTITY.executiveText,
+  HU: HU_IDENTITY.executiveText,
+  PL: PL_IDENTITY.executiveText,
+  RO: RO_IDENTITY.executiveText,
+  YU: YU_IDENTITY.executiveText,
+  BG: BG_IDENTITY.executiveText,
+  BLR: BLR_IDENTITY.executiveText,
+  UKR: UKR_IDENTITY.executiveText,
+  CS: CS_IDENTITY.executiveText,
+  BAL: BAL_IDENTITY.executiveText,
+  RU: RU_IDENTITY.executiveText,
+  FR: FR_IDENTITY.executiveText,
+  IT: IT_IDENTITY.executiveText,
+  ES: ES_IDENTITY.executiveText,
+  SE: SE_IDENTITY.executiveText,
+  TR: TR_IDENTITY.executiveText,
+  GR: GR_IDENTITY.executiveText,
+  AT: AT_IDENTITY.executiveText,
+  FI: FI_IDENTITY.executiveText,
+  DD: DD_IDENTITY.executiveText,
+  SCO: SCO_IDENTITY.executiveText,
+  WAL: WAL_IDENTITY.executiveText,
 };
 
 export function getExecutiveIdentity(countryId: CountryId): InstitutionIdentity {
@@ -239,185 +114,36 @@ export function getExecutiveIdentity(countryId: CountryId): InstitutionIdentity 
 
 // ── National Policy (code of law) ────────────────────────────────────────────
 
-const POLICY_TEXT: Record<CountryId, IdentityText> = {
-  US: {
-    glyph: "§",
-    serif: "mono",
-    registry: "Code of National Law · United States",
-    title: "National Policy",
-  },
-  UK: {
-    glyph: "§",
-    serif: "mono",
-    registry: "Statute Book · United Kingdom",
-    title: "National Policy",
-  },
-  DE: {
-    glyph: "§",
-    serif: "mono",
-    registry: "Code of National Law · Federal Republic of Germany",
-    title: "Bundesrecht",
-    titleEn: "National Policy",
-  },
-  JP: {
-    glyph: "法",
-    serif: "cjk",
-    registry: "Code of National Law · Japan",
-    title: "国家法令",
-    titleEn: "National Policy",
-  },
-  IE: {
-    glyph: "§",
-    serif: "mono",
-    registry: "Code of National Law · Ireland",
-    title: "National Policy",
-  },
-  CN: {
-    glyph: "法",
-    serif: "cjk",
-    registry: "Code of National Law · People's Republic of China",
-    title: "国家法律",
-    titleEn: "National Policy",
-  },
-  BR: {
-    glyph: "§",
-    serif: "mono",
-    registry: "Code of National Law · Federative Republic of Brazil",
-    title: "Direito Nacional",
-    titleEn: "National Policy",
-  },
-  NG: {
-    glyph: "§",
-    serif: "mono",
-    registry: "Code of National Law · Federal Republic of Nigeria",
-    title: "National Policy",
-  },
-  HU: {
-    glyph: "§",
-    serif: "mono",
-    registry: "Code of Law · Hungarian People's Republic",
-    title: "National Policy",
-  },
-  PL: {
-    glyph: "§",
-    serif: "mono",
-    registry: "Code of Law · Polish People's Republic",
-    title: "National Policy",
-  },
-  RO: {
-    glyph: "§",
-    serif: "mono",
-    registry: "Code of Law · Socialist Republic of Romania",
-    title: "National Policy",
-  },
-  YU: {
-    glyph: "§",
-    serif: "mono",
-    registry: "Code of Law · SFR Yugoslavia",
-    title: "National Policy",
-  },
-  BG: {
-    glyph: "§",
-    serif: "mono",
-    registry: "Code of Law · People's Republic of Bulgaria",
-    title: "National Policy",
-  },
-  BLR: {
-    glyph: "§",
-    serif: "mono",
-    registry: "Code of Law · Byelorussian SSR",
-    title: "National Policy",
-  },
-  UKR: {
-    glyph: "§",
-    serif: "mono",
-    registry: "Code of Law · Ukrainian SSR",
-    title: "National Policy",
-  },
-  CS: {
-    glyph: "§",
-    serif: "mono",
-    registry: "Code of Law · Czechoslovak Socialist Republic",
-    title: "National Policy",
-  },
-  BAL: {
-    glyph: "§",
-    serif: "mono",
-    registry: "Code of Law · Baltic Soviet Republics",
-    title: "National Policy",
-  },
-  RU: {
-    glyph: "§",
-    serif: "mono",
-    registry: "Code of Law · Union of Soviet Socialist Republics",
-    title: "National Policy",
-  },
-  FR: {
-    glyph: "§",
-    serif: "mono",
-    registry: "Code of Law · French Republic",
-    title: "National Policy",
-  },
-  IT: {
-    glyph: "§",
-    serif: "mono",
-    registry: "Code of Law · Italian Republic",
-    title: "National Policy",
-  },
-  ES: {
-    glyph: "§",
-    serif: "mono",
-    registry: "Code of Law · Kingdom of Spain",
-    title: "National Policy",
-  },
-  SE: {
-    glyph: "§",
-    serif: "mono",
-    registry: "Code of Law · Kingdom of Sweden",
-    title: "National Policy",
-  },
-  TR: {
-    glyph: "§",
-    serif: "mono",
-    registry: "Code of Law · Republic of Turkey",
-    title: "National Policy",
-  },
-  GR: {
-    glyph: "§",
-    serif: "mono",
-    registry: "Code of Law · Hellenic Republic",
-    title: "National Policy",
-  },
-  AT: {
-    glyph: "§",
-    serif: "mono",
-    registry: "Code of Law · Republic of Austria",
-    title: "National Policy",
-  },
-  FI: {
-    glyph: "§",
-    serif: "mono",
-    registry: "Code of Law · Republic of Finland",
-    title: "National Policy",
-  },
-  DD: {
-    glyph: "§",
-    serif: "mono",
-    registry: "Code of Law · German Democratic Republic",
-    title: "National Policy",
-  },
-  SCO: {
-    glyph: "§",
-    serif: "mono",
-    registry: "Statute Book · Scotland",
-    title: "National Policy",
-  },
-  WAL: {
-    glyph: "§",
-    serif: "mono",
-    registry: "Statute Book · Wales",
-    title: "National Policy",
-  },
+export const POLICY_TEXT: Record<CountryId, IdentityText> = {
+  US: US_IDENTITY.policyText,
+  UK: UK_IDENTITY.policyText,
+  DE: DE_IDENTITY.policyText,
+  JP: JP_IDENTITY.policyText,
+  IE: IE_IDENTITY.policyText,
+  CN: CN_IDENTITY.policyText,
+  BR: BR_IDENTITY.policyText,
+  NG: NG_IDENTITY.policyText,
+  HU: HU_IDENTITY.policyText,
+  PL: PL_IDENTITY.policyText,
+  RO: RO_IDENTITY.policyText,
+  YU: YU_IDENTITY.policyText,
+  BG: BG_IDENTITY.policyText,
+  BLR: BLR_IDENTITY.policyText,
+  UKR: UKR_IDENTITY.policyText,
+  CS: CS_IDENTITY.policyText,
+  BAL: BAL_IDENTITY.policyText,
+  RU: RU_IDENTITY.policyText,
+  FR: FR_IDENTITY.policyText,
+  IT: IT_IDENTITY.policyText,
+  ES: ES_IDENTITY.policyText,
+  SE: SE_IDENTITY.policyText,
+  TR: TR_IDENTITY.policyText,
+  GR: GR_IDENTITY.policyText,
+  AT: AT_IDENTITY.policyText,
+  FI: FI_IDENTITY.policyText,
+  DD: DD_IDENTITY.policyText,
+  SCO: SCO_IDENTITY.policyText,
+  WAL: WAL_IDENTITY.policyText,
 };
 
 export function getPolicyIdentity(countryId: CountryId): InstitutionIdentity {
@@ -461,16 +187,7 @@ const BANK_TEXT: Record<string, { countryId: CountryId; text: IdentityText }> = 
       title: "Bank of England",
     },
   },
-  JP: {
-    countryId: "JP",
-    text: {
-      glyph: "¥",
-      serif: "cjk",
-      registry: "Monetary Authority · Japan",
-      title: "日本銀行",
-      titleEn: "Bank of Japan",
-    },
-  },
+  JP: { countryId: "JP", text: JP_BANK_TEXT },
   CN: {
     countryId: "CN",
     text: {

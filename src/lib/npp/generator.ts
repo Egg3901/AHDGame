@@ -24,6 +24,7 @@ import { NPP_ECONOMY_DEFAULTS } from "./economyDefaults";
 import { NPP_POLITICAL_INFLUENCE_FLOOR } from "@shared/constants/formulas";
 import fs from "fs";
 import path from "path";
+import { JP_ETHNICITY_WEIGHTS } from "@/lib/countries/jp/data/jpNppEthnicity";
 
 // ── Politician image pool (country/gender/ethnicity-gated) ───────────────────
 
@@ -264,13 +265,7 @@ const ETHNICITY_WEIGHTS: Record<string, Array<[NPPEthnicity, number]>> = {
     ["black", 1],
     ["hispanic", 0],
   ],
-  JP: [
-    ["asian", 97],
-    ["other", 2],
-    ["white", 1],
-    ["black", 0],
-    ["hispanic", 0],
-  ],
+  JP: JP_ETHNICITY_WEIGHTS,
   CN: [
     ["asian", 98],
     ["other", 2],
