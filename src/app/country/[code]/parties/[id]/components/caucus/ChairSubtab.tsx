@@ -506,6 +506,14 @@ export function ChairSubtab({
             Move caucus funds directly to an active player member&apos;s campaign account.
           </p>
           <p className="text-[11px] text-muted">
+            {/* Counted here rather than sent from the server, which is safe
+                ONLY because the caucus payload carries raw `chairId` /
+                `viceChairId` with no ban filtering, so it matches what the
+                send route counts. The party and state party payloads DO drop
+                a banned holder, which is why those two read a server-sent
+                `seatedOfficers` instead. If ban filtering is ever added here,
+                switch this to a server-sent count or it will quietly show a
+                lower ceiling than the server enforces. */}
             Caucus funds count towards the same per-turn ceiling as party funds: $
             {getEffectivePlayerPayoutCap(
               countryCode.toUpperCase() as CountryId,
