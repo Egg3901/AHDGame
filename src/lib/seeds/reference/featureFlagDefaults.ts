@@ -100,6 +100,12 @@ export const DEFAULT_GAME_STATE_FLAGS = {
   // Existing and fresh worlds start by recording decisions only. Promotion to
   // enforce is an explicit admin action after the observation gate passes.
   nppEntryViabilityMode: "observe",
+  // Frontier-entry experiment (issue #991). DISABLED for fresh worlds: no
+  // entry mechanics may activate without the controlled 48-turn trial plus
+  // largest-supplier-failure stress evidence the issue gates require. The
+  // funnel and coverage evidence layer is always on; this flag only arms the
+  // capped entry experiment defined in economy/frontierEntryExperiment.
+  frontierEntryExperimentEnabled: false,
   seasonRecapEnabled: true,
   // Corporate M&A / deal-making subsystem (agreed corp-to-corp acquisitions).
   // Runtime helper is fail-closed (absent = off); default on for fresh worlds.
