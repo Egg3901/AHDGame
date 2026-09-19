@@ -113,7 +113,7 @@ export function ModifiersPanel({ modifiers }: { modifiers: MetricModifiersInfo }
                   >
                     <span>
                       {CABINET_SOURCE_LABEL[row.source]}
-                      {row.atCap && <span className="ml-1 text-warning">at ceiling</span>}
+                      {row.atCap && <span className="ml-1 text-warning">near ceiling</span>}
                     </span>
                     <span
                       className={`shrink-0 tabular-nums ${
@@ -155,10 +155,10 @@ export function ModifiersPanel({ modifiers }: { modifiers: MetricModifiersInfo }
       </div>
       {modifiers.cabinetAtCap && (
         <p className="mt-2 text-body-xs text-warning">
-          Every cabinet channel for this metric is at its {modifiers.cabinetCap} point ceiling in
-          most of the country. Orders, tier settings, estates, energy and infrastructure each carry
-          their own ceiling, and all of them are full, so more of any of them adds nothing here
-          until something pulls one back below its ceiling.
+          Every cabinet channel for this metric is effectively at its {modifiers.cabinetCap} point
+          ceiling in most of the country. Orders, tier settings, estates, energy and infrastructure
+          each carry their own ceiling, and all of them are effectively full, so more of any of them
+          buys only a little here until something pulls one back below its ceiling.
         </p>
       )}
       {modifiers.driftHalfLifeTurns > 0 && (

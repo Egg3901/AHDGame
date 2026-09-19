@@ -520,10 +520,7 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
     // plants, and on modern worlds (eraUnitScale 1), this is a pure no-op.
     plantsLedgerEnabled ? ledgerEraUnitScale : 1,
     sectorOutputDemandModifierPct,
-    retailSelfLoopFactor,
-    // Issue #2054: the same era table the clearing offer splits on, so the
-    // measured-production mix split is weight-identical on both sides.
-    LEDGER_BASE_PRICES
+    retailSelfLoopFactor
   );
 
   // Plants-tier produced/sold units for the inventory advance (see module).

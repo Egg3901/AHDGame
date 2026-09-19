@@ -1,11 +1,16 @@
 import { describe, expect, it } from "vitest";
 import {
   LABOUR_STAFFING_MAX_TURN_MOVE,
+  LABOUR_UNEMPLOYMENT_TIGHTNESS_CAP_PP,
+  LABOUR_UNEMPLOYMENT_TIGHTNESS_K,
   accumulateLabourDemand,
   computeLabourTightness,
   filledWorkers,
   glideStaffingFactor,
+  labourTightnessScoreFromTightness,
+  labourUnemploymentTightnessPressure,
   makeLabourDemandByState,
+  nationalTightnessWorkerWeighted,
   nextLabourParticipationBonus,
   roundTightness,
   staffingFactorFromTightness,
@@ -221,5 +226,106 @@ describe("glideStaffingFactor", () => {
     expect(glideStaffingFactor(1, 5)).toBe(1);
     expect(glideStaffingFactor(0, -2)).toBe(0);
     expect(glideStaffingFactor(0.5, Number.NaN)).toBeCloseTo(0.9, 8);
+  });
+});
+
+describe("labourUnemploymentTightnessPressure (#791)", () => {
+  it("pushes the target down when firms want more workers than exist", () => {
+    expect(labourUnemploymentTightnessPressure(2)).toBeLessThan(0);
+    expect(labourUnemploymentTightnessPressure(2)).toBeCloseTo(
+      -LABOUR_UNEMPLOYMENT_TIGHTNESS_K * Math.log(2),
+      9
+    );
+  });
+
+  it("pushes the target up when the market has slack", () => {
+    expect(labourUnemploymentTightnessPressure(0.5)).toBeGreaterThan(0);
+  });
+
+  it("treats a doubling and a halving symmetrically", () => {
+    expect(labourUnemploymentTightnessPressure(2)).toBeCloseTo(
+      -labourUnemploymentTightnessPressure(0.5),
+      9
+    );
+  });
+
+  it("reads exactly 0 at a balanced market", () => {
+    expect(labourUnemploymentTightnessPressure(1)).toBeCloseTo(0, 9);
+  });
+
+  it("caps an extreme reading instead of letting one turn whipsaw the target", () => {
+    expect(labourUnemploymentTightnessPressure(200)).toBe(-LABOUR_UNEMPLOYMENT_TIGHTNESS_CAP_PP);
+    expect(labourUnemploymentTightnessPressure(0.001)).toBe(LABOUR_UNEMPLOYMENT_TIGHTNESS_CAP_PP);
+  });
+
+  it("reads 0 on missing or corrupt input so cold start matches today exactly", () => {
+    expect(labourUnemploymentTightnessPressure(undefined)).toBe(0);
+    expect(labourUnemploymentTightnessPressure(null)).toBe(0);
+    expect(labourUnemploymentTightnessPressure(Number.NaN)).toBe(0);
+    expect(labourUnemploymentTightnessPressure(0)).toBe(0);
+    expect(labourUnemploymentTightnessPressure(-3)).toBe(0);
+  });
+});
+
+describe("labourTightnessScoreFromTightness (#791)", () => {
+  it("scores a balanced market at 50", () => {
+    expect(labourTightnessScoreFromTightness(1)).toBe(50);
+  });
+
+  it("scores a doubling above and a halving below by the same distance", () => {
+    // 50 + 25 * ln 2 = 67.33, rounded to 1dp like every other bargaining score.
+    expect(labourTightnessScoreFromTightness(2)).toBe(67.3);
+    expect(labourTightnessScoreFromTightness(2) - 50).toBeCloseTo(
+      50 - labourTightnessScoreFromTightness(0.5),
+      9
+    );
+  });
+
+  it("saturates at the bounds instead of stretching the scale for 200x readings", () => {
+    expect(labourTightnessScoreFromTightness(200)).toBe(100);
+    expect(labourTightnessScoreFromTightness(0.001)).toBe(0);
+  });
+
+  it("returns neutral 50, never maximum slack, on corrupt input", () => {
+    expect(labourTightnessScoreFromTightness(Number.NaN)).toBe(50);
+    expect(labourTightnessScoreFromTightness(0)).toBe(50);
+    expect(labourTightnessScoreFromTightness(-2)).toBe(50);
+  });
+});
+
+describe("nationalTightnessWorkerWeighted (#791)", () => {
+  it("weights by labour force so a tiny state cannot swing the national number", () => {
+    const national = nationalTightnessWorkerWeighted([
+      { tightness: 1.0, workers: 900 },
+      { tightness: 8.0, workers: 100 },
+    ]);
+    // Weighted 1.7; a flat mean would read 4.5.
+    expect(national).toBeCloseTo(1.7, 9);
+  });
+
+  it("equals total demand over total supply", () => {
+    // State A: 200 demand / 100 supply; state B: 150 demand / 300 supply.
+    const national = nationalTightnessWorkerWeighted([
+      { tightness: 2, workers: 100 },
+      { tightness: 0.5, workers: 300 },
+    ]);
+    expect(national).toBeCloseTo(350 / 400, 9);
+  });
+
+  it("skips states missing tightness or a usable weight", () => {
+    const national = nationalTightnessWorkerWeighted([
+      { tightness: undefined, workers: 500 },
+      { tightness: 2, workers: undefined },
+      { tightness: 2, workers: 0 },
+      { tightness: 1.5, workers: 200 },
+    ]);
+    expect(national).toBeCloseTo(1.5, 9);
+  });
+
+  it("returns undefined when nothing is measurable, so the caller falls back", () => {
+    expect(nationalTightnessWorkerWeighted([])).toBeUndefined();
+    expect(
+      nationalTightnessWorkerWeighted([{ tightness: undefined, workers: undefined }])
+    ).toBeUndefined();
   });
 });

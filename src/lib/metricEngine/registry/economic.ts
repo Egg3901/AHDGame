@@ -1,3 +1,4 @@
+import { blendOutputGrowthSignal } from "../rules/outputVolume";
 import {
   computeConsumptionTaxAdjustedGrowthRate,
   computeRealizedRevenueGrowthRate,
@@ -32,6 +33,7 @@ import {
   labourUnemploymentWagePressure,
   labourUnemploymentAutomationPressure,
 } from "@/lib/labour/laborCost";
+import { labourUnemploymentTightnessPressure } from "@/lib/labour/labourMarket";
 
 /** Per-state payload the phase extracts from `sectorRevenueTaxProvider` for one state. */
 export interface SectorRevenueTaxPayload {
@@ -76,6 +78,10 @@ export interface SectorRevenueTaxPayload {
    * the node measures growth over the baseline span instead of annualizing one
    * turn's delta by 48 — the one-turn path stays as the cold-start fallback.
    */
+  /** Constant-price production trend, preferred once a baseline matures. */
+  outputEmaNow?: number;
+  outputHistorySpanTurns?: number;
+  outputTrendBaseline?: RevenueTrendBaseline | null;
   revenueEmaNow?: number;
   revenueTrendBaseline?: RevenueTrendBaseline | null;
 }
@@ -130,6 +136,9 @@ export const sectorGrowthNode: RegistryNode = {
     const trailingSignal = p.plantsEnabled
       ? computeTrailingRevenueGrowthRate(p.revenueEmaNow, p.revenueTrendBaseline, TURNS_PER_YEAR)
       : null;
+    const outputSignal = p.plantsEnabled
+      ? computeTrailingRevenueGrowthRate(p.outputEmaNow, p.outputTrendBaseline, TURNS_PER_YEAR)
+      : null;
     const plantsSignal =
       trailingSignal ??
       (p.plantsEnabled
@@ -140,7 +149,11 @@ export const sectorGrowthNode: RegistryNode = {
             TURNS_PER_YEAR
           )
         : null);
-    const sector = plantsSignal ?? legacySector;
+    const sector = blendOutputGrowthSignal(
+      plantsSignal ?? legacySector,
+      outputSignal,
+      p.outputHistorySpanTurns ?? p.outputTrendBaseline?.spanTurns ?? 0
+    );
     const taxAdjusted = computeConsumptionTaxAdjustedGrowthRate(
       sector,
       p.federalSalesTax,
@@ -210,6 +223,14 @@ export const gdpGrowthNode: RegistryNode = {
  * reads `economic.labourWageIndexDelta` — the SAME signal medianIncomeNode
  * (v2-2) reads — instead of the wage LEVEL, and `labourUnemploymentAutomationPressure`
  * (3b) for the separate, sign-inverted automation signal.
+ *
+ * #791: the corp turn's MEASURED state tightness (`economic.labourTightness`,
+ * seeded by the phase from the prior turn's doc, same treatment as the Δ
+ * signals above — deliberately NOT a declared `inputs` edge, so the topo
+ * order is untouched and no cycle is possible) adds a LEVEL channel: a
+ * sustained tight market holds the target below Okun, sustained slack holds
+ * it above. Capped per turn so one extreme reading cannot whipsaw the EMA;
+ * absent (cold start) reads exactly 0, byte-identical to today.
  */
 export const unemploymentNode: RegistryNode = {
   id: "economic.unemploymentRate",
@@ -237,9 +258,11 @@ export const unemploymentNode: RegistryNode = {
     );
     const wageDelta = ctx.current["economic.labourWageIndexDelta"] ?? 0;
     const automationDelta = ctx.current["economic.automationIndexDelta"] ?? 0;
+    const tightness = ctx.current["economic.labourTightness"];
     const labourPressure =
       labourUnemploymentWagePressure(wageDelta) +
-      labourUnemploymentAutomationPressure(automationDelta);
+      labourUnemploymentAutomationPressure(automationDelta) +
+      labourUnemploymentTightnessPressure(typeof tightness === "number" ? tightness : undefined);
     return Math.max(UNEMPLOYMENT_MIN, Math.min(UNEMPLOYMENT_MAX, okunTarget + labourPressure));
   },
 };

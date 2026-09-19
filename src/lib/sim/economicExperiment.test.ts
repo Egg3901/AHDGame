@@ -1,11 +1,15 @@
 import { describe, expect, it } from "vitest";
 import {
+  allFeatureFlagsGameStateSet,
   DEPRECATED_EQUITY_LIQUIDITY_CLI_FLAG,
-  EQUITY_LIQUIDITY_FACILITY_CLI_FLAG,
   economicExperimentCliArgs,
   economicExperimentConfigSet,
+  EQUITY_LIQUIDITY_FACILITY_CLI_FLAG,
+  FRONTIER_ENTRY_SIM_CLI_FLAG,
+  frontierEntryExperimentCliArgs,
   isGameplayOverrideArg,
   parseEquityLiquidityFacilityEnabled,
+  parseFrontierEntryExperimentArg,
   parseOptionalBoolean,
 } from "./economicExperiment";
 
@@ -115,5 +119,68 @@ describe("economic experiment configuration", () => {
     expect(isGameplayOverrideArg("--brand-loyalty")).toBe(true);
     expect(isGameplayOverrideArg("--seed=run1")).toBe(false);
     expect(isGameplayOverrideArg("--equity-liquidity-facility")).toBe(false);
+  });
+});
+
+describe("frontier-entry experiment sim wiring (#991)", () => {
+  it("preserves explicit true and false end to end through one spelling", () => {
+    expect(frontierEntryExperimentCliArgs(true)).toEqual([`--${FRONTIER_ENTRY_SIM_CLI_FLAG}=true`]);
+    expect(frontierEntryExperimentCliArgs(false)).toEqual([
+      `--${FRONTIER_ENTRY_SIM_CLI_FLAG}=false`,
+    ]);
+    expect(frontierEntryExperimentCliArgs(undefined)).toEqual([]);
+    // The worker emits with the helper and runWorld parses with the helper:
+    // both values round-trip, so the off control is never dropped to absent.
+    for (const value of [true, false] as const) {
+      const [emitted] = frontierEntryExperimentCliArgs(value);
+      const raw = emitted.slice(`--${FRONTIER_ENTRY_SIM_CLI_FLAG}=`.length);
+      expect(parseFrontierEntryExperimentArg(raw)).toBe(value);
+    }
+  });
+
+  it("parses only explicit frontier booleans", () => {
+    expect(parseFrontierEntryExperimentArg(undefined)).toBeUndefined();
+    expect(parseFrontierEntryExperimentArg("true")).toBe(true);
+    expect(parseFrontierEntryExperimentArg("false")).toBe(false);
+    expect(() => parseFrontierEntryExperimentArg("yes")).toThrow("must be true or false");
+  });
+
+  it("guards the frontier flag under preserve-live-config", () => {
+    expect(isGameplayOverrideArg("--frontier-entry-experiment=true")).toBe(true);
+    expect(isGameplayOverrideArg("--frontier-entry-experiment=false")).toBe(true);
+    expect(isGameplayOverrideArg("--frontier-entry-experiment")).toBe(false);
+  });
+
+  it("keeps the experimental gate out of the all-feature-flags sweep", () => {
+    const set = allFeatureFlagsGameStateSet({
+      forexEnabled: true,
+      autoSectorSeedEnabled: false,
+      nppAutonomyLevel: "v4",
+      frontierEntryExperimentEnabled: false,
+    });
+    expect(set).toEqual({ forexEnabled: true, autoSectorSeedEnabled: true });
+    expect(set).not.toHaveProperty("frontierEntryExperimentEnabled");
+    expect(set).not.toHaveProperty("nppAutonomyLevel");
+  });
+
+  it("builds off/on trial arms that differ only in the frontier gate", () => {
+    // Controlled 48-turn evaluation identity: identical preset/seed/turn
+    // count, one field apart. The queue payloads below mirror what
+    // sim_run_world enqueues for each arm.
+    const base = { preset: "2019-default", seed: "frontier-991", turns: 48 };
+    const off = { ...base, frontierEntryExperimentEnabled: false };
+    const on = { ...base, frontierEntryExperimentEnabled: true };
+    const { frontierEntryExperimentEnabled: _offGate, ...offRest } = off;
+    const { frontierEntryExperimentEnabled: _onGate, ...onRest } = on;
+    expect(onRest).toEqual(offRest);
+    expect(off.frontierEntryExperimentEnabled).toBe(false);
+    expect(on.frontierEntryExperimentEnabled).toBe(true);
+    // Each arm survives the worker emission step distinctly.
+    expect(frontierEntryExperimentCliArgs(off.frontierEntryExperimentEnabled)).toEqual([
+      `--${FRONTIER_ENTRY_SIM_CLI_FLAG}=false`,
+    ]);
+    expect(frontierEntryExperimentCliArgs(on.frontierEntryExperimentEnabled)).toEqual([
+      `--${FRONTIER_ENTRY_SIM_CLI_FLAG}=true`,
+    ]);
   });
 });

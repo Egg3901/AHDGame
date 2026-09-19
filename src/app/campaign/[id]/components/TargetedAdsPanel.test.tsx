@@ -20,6 +20,8 @@ const quote = {
     {
       dimension: "race",
       bucket: "white",
+      label: "White voters",
+      dimLabel: "Background",
       eligibleAudience: 100_000,
       cohesion: 0.75,
       cost: 200,
@@ -106,6 +108,77 @@ describe("targeted ad campaign controls", () => {
     await screen.findByText("Original campaign rules apply.");
     expect(screen.queryByRole("button", { name: "Run targeted ads" })).toBeNull();
   });
+});
+
+it("groups shuffled demographic buckets under dimension headings", async () => {
+  fetchMock.mockResolvedValue(
+    response({
+      ...quote,
+      targets: [
+        {
+          dimension: "age",
+          bucket: "young",
+          label: "Under 30s",
+          dimLabel: "Age",
+          eligibleAudience: 10_000,
+          cohesion: 0.5,
+          cost: 200,
+          currentBonus: 0,
+          afterBonus: 0.01,
+          available: true,
+        },
+        {
+          dimension: "age",
+          bucket: "mature",
+          label: "50s and 60s",
+          dimLabel: "Age",
+          eligibleAudience: 20_000,
+          cohesion: 0.5,
+          cost: 200,
+          currentBonus: 0,
+          afterBonus: 0.01,
+          available: true,
+        },
+        {
+          dimension: "income",
+          bucket: "low",
+          label: "Lower income",
+          dimLabel: "Income",
+          eligibleAudience: 15_000,
+          cohesion: 0.5,
+          cost: 200,
+          currentBonus: 0,
+          afterBonus: 0.01,
+          available: true,
+        },
+        {
+          dimension: "income",
+          bucket: "high",
+          label: "Higher income",
+          dimLabel: "Income",
+          eligibleAudience: 8_000,
+          cohesion: 0.5,
+          cost: 200,
+          currentBonus: 0,
+          afterBonus: 0.01,
+          available: true,
+        },
+      ],
+    })
+  );
+  mount();
+  const select = (await screen.findByLabelText("Audience")) as HTMLSelectElement;
+  expect([...select.querySelectorAll("optgroup")].map((group) => group.label)).toEqual([
+    "Age",
+    "Income",
+  ]);
+  expect([...select.options].map((option) => option.textContent)).toEqual([
+    "Choose an audience",
+    "Under 30s",
+    "50s and 60s",
+    "Lower income",
+    "Higher income",
+  ]);
 });
 
 it("buys from the standing Actions endpoint without a campaign", async () => {

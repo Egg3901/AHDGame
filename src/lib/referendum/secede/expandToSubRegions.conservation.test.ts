@@ -77,6 +77,27 @@ function makeStore(seed: Record<string, Doc[]>): { db: Db; cols: Record<string, 
       }
       return { deletedCount: 0 };
     },
+    bulkWrite: async (ops: Array<{ updateOne?: { filter: Doc; update: Doc } }>) => {
+      let n = 0;
+      for (const op of ops) {
+        if (!op.updateOne) continue;
+        const hit = col(name).find((d) => matches(d, op.updateOne!.filter));
+        if (hit && op.updateOne.update.$set) {
+          for (const [k, v] of Object.entries(op.updateOne.update.$set as Doc)) {
+            if (k.includes(".")) {
+              const parts = k.split(".");
+              let cur = hit;
+              for (let i = 0; i < parts.length - 1; i++) cur = cur[parts[i]] as Doc;
+              cur[parts[parts.length - 1]] = v;
+            } else {
+              hit[k] = v;
+            }
+          }
+          n++;
+        }
+      }
+      return { matchedCount: n, modifiedCount: n };
+    },
   });
   return { db: { collection } as unknown as Db, cols };
 }
@@ -124,6 +145,18 @@ function seedWorld() {
         debt: { principal: 500, interestRate: 3 },
         gdp: 1000,
         currencyCode: "GBP",
+      },
+    ],
+    // The bond ledger backs the seeded stock: each side's post-split
+    // principal is its share of this face, never of the cash balance.
+    bonds: [
+      {
+        _id: "uk-bond-1",
+        issuerType: "sovereign",
+        countryId: "UK",
+        totalIssued: 500,
+        matured: false,
+        defaulted: false,
       },
     ],
   });

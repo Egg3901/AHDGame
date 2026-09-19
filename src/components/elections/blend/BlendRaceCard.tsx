@@ -325,6 +325,19 @@ export function BlendRaceCard({
             ))}
           </>
         )}
+
+        {/* ── Ids the rows cannot list (withdrawals, legacy records) ── */}
+        {/* One link per card, to the full race the footer already points at. */}
+        {card.omittedLabel && (
+          <div className="mt-3">
+            <Link
+              href={card.href}
+              className="block text-xs font-medium text-primary hover:underline"
+            >
+              {card.omittedLabel}
+            </Link>
+          </div>
+        )}
       </div>
 
       {/* ── Footer: the clock, and the way through to the full count ── */}
