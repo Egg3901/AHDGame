@@ -148,13 +148,21 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
   // A concluded presidential race renders the Blend results screen, which is
   // built over the live-results payload (it carries the called flags and the
   // EV threshold the detail payload does not).
+  //
+  // Keyed on `election.id`, NOT the route param. A Previous/Next link carries
+  // the seat-id form ("/elections/US-president?cycle=3"), so on a historical
+  // race the param is "US-president" and the results route rejects it with a
+  // 400 — which silently dropped every past presidential race back to the
+  // legacy view. `election.id` is always the resolved ObjectId. Same rule the
+  // sub-region maps in GeneralPhaseView already follow.
+  const resultsId = election?.id ?? null;
   const needsResults = election?.electionType === "president" && election?.isEnded === true;
   useEffect(() => {
-    if (!needsResults) return;
+    if (!needsResults || !resultsId) return;
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch(`/api/elections/${id}/results`);
+        const res = await fetch(`/api/elections/${resultsId}/results`);
         if (!res.ok) return;
         const payload = await res.json();
         if (!cancelled) setResults(payload);
@@ -165,7 +173,7 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
     return () => {
       cancelled = true;
     };
-  }, [id, needsResults]);
+  }, [resultsId, needsResults]);
 
   useEffect(() => {
     let visibilityTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -295,12 +303,29 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
   // without the field fall back to 1.
   const advancingCount = election.primaryAdvanceCount ?? 1;
 
+  // Previous/Next for the three Blend screens below.
+  //
+  // Each of them is an early return that bypasses the legacy layout at the
+  // bottom of this file, which is the only place ElectionNavigation was ever
+  // rendered. That is how presidential races lost their history: the buttons
+  // went with the rebuild, and /elections lists only upcoming and active races,
+  // so a concluded cycle had no route in at all.
+  //
+  // Toned for the dark Blend page rather than reusing the light card styling
+  // the legacy layout gives it.
+  const blendNav = (
+    <div className="mx-auto max-w-6xl px-4 pt-4 sm:px-6" style={{ color: BLEND.ink }}>
+      <ElectionNavigation election={election} />
+    </div>
+  );
+
   // Concluded presidential race: the same Blend results screen the live
   // dashboard uses, chipped "Concluded". Falls through to the existing view
   // until the results payload arrives, or if it fails to load.
   if (election.electionType === "president" && localIsEnded && results) {
     return (
       <div className="min-h-screen" style={{ background: BLEND.page, color: BLEND.ink }}>
+        {blendNav}
         <ResultsBlendView data={results} route="concluded" />
 
         <BlendScope title="Also on this race">
@@ -340,6 +365,7 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
   ) {
     return (
       <div className="min-h-screen" style={{ background: BLEND.page, color: BLEND.ink }}>
+        {blendNav}
         <GeneralBlendView
           election={election}
           electionId={id}
@@ -416,6 +442,7 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
   if (election.electionType === "president" && localInPrimary && !localIsUpcoming) {
     return (
       <div className="min-h-screen" style={{ background: BLEND.page, color: BLEND.ink }}>
+        {blendNav}
         <PrimaryBlendView election={election} wire={wire} />
 
         <BlendScope
