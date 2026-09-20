@@ -2,10 +2,12 @@
  * Sim job-queue worker. Polls the control-plane `simJobs` collection (the SAME
  * production Mongo the live game and the ops-dashboard's worldsim MCP use —
  * orchestration metadata only, alongside the existing `sim_scenarios`
- * collection) for queued runs, and drives each one through two child
- * processes: scripts/sim/runWorld.ts (turn engine) then
- * scripts/sim/collectMetrics.ts (balance report), both against an isolated
- * sandbox MongoDB — never the control-plane DB and never production game data.
+ * collection) for queued runs, and drives each one through child processes:
+ * scripts/sim/runWorld.ts (turn engine) then the report collectors
+ * (collectMetrics, collectExperimentReport, collectElectionReport), all
+ * against an isolated sandbox MongoDB — never the control-plane DB and
+ * never production game data. Pinned jobs (#1966, #2083) run every child
+ * from the same validated source worktree.
  *
  * Deliberately NOT using @/lib/mongodb's getDb() singleton for the
  * control-plane connection: that singleton gets permanently pinned to
@@ -34,6 +36,7 @@ import { spawnWithPrefixedLogs, type ChildRunIdentity } from "./childLogPrefix";
 import { assertSafeToken } from "./simJobArgs";
 import { resolveSimPreset } from "./simPreset";
 import { defaultSimSourceDeps, planRunWorldSpawn, verifySimSource } from "./simSource";
+import { planCollectorSpawns } from "./collectorSource";
 import {
   pickSovereignDemandExperimentFlags,
   sovereignDemandRunWorldArgs,
@@ -403,6 +406,26 @@ async function processJob(jobsCol: Collection<SimJob>, job: SimJob, slotId: numb
       return;
     }
 
+    // #2083: revalidate the pinned worktree immediately before collection —
+    // the tree is shared, so HEAD may have moved or dirtied during the turn
+    // run. Fail closed, exactly like the pre-spawn check above. Collectors
+    // then execute from this same validated cwd and re-check HEAD themselves.
+    const collectSource = verifySimSource(job, defaultSimSourceDeps());
+    if (verifiedSource && (!collectSource || collectSource.commit !== verifiedSource.commit)) {
+      throw new Error(
+        `Pinned source moved between spawn and collection for job ${job._id} - refusing to collect`
+      );
+    }
+    const collectorPlans = planCollectorSpawns(
+      { dbName: job.dbName, runId: job._id },
+      GAME_REPO_DIR,
+      collectSource
+    );
+    if (collectSource) {
+      log(
+        `Collecting reports from pinned source ${collectSource.repoDir} @ ${collectSource.commit}`
+      );
+    }
     await jobsCol.updateOne(
       { _id: job._id },
       { $set: { workerPhase: "metrics", heartbeatAt: new Date(), updatedAt: new Date() } }
@@ -415,10 +438,10 @@ async function processJob(jobsCol: Collection<SimJob>, job: SimJob, slotId: numb
       OPS_DB_NAME,
     };
     const metricsResult = await run(
-      "scripts/sim/collectMetrics.ts",
-      [`--db=${job.dbName}`, `--run-id=${job._id}`],
+      collectorPlans[0].script,
+      collectorPlans[0].args,
       metricsEnv,
-      GAME_REPO_DIR,
+      collectorPlans[0].cwd,
       childIdentity
     );
 
@@ -445,10 +468,10 @@ async function processJob(jobsCol: Collection<SimJob>, job: SimJob, slotId: numb
     );
     log(`[slot ${slotId}] Job ${job._id} metrics collected — collecting experiments report`);
     const experimentsResult = await run(
-      "scripts/sim/collectExperimentReport.ts",
-      [`--db=${job.dbName}`, `--run-id=${job._id}`],
+      collectorPlans[1].script,
+      collectorPlans[1].args,
       metricsEnv, // same env shape (SIM_MONGODB_URI + OPS_MONGODB_URI + OPS_DB_NAME)
-      GAME_REPO_DIR,
+      collectorPlans[1].cwd,
       childIdentity
     );
     if (experimentsResult.code !== 0) {
@@ -479,10 +502,10 @@ async function processJob(jobsCol: Collection<SimJob>, job: SimJob, slotId: numb
       `[slot ${slotId}] Job ${job._id} experiments report collected — collecting election report`
     );
     const electionResult = await run(
-      "scripts/sim/collectElectionReport.ts",
-      [`--db=${job.dbName}`, `--run-id=${job._id}`],
+      collectorPlans[2].script,
+      collectorPlans[2].args,
       metricsEnv, // same env shape (SIM_MONGODB_URI + OPS_MONGODB_URI + OPS_DB_NAME)
-      GAME_REPO_DIR,
+      collectorPlans[2].cwd,
       childIdentity
     );
     if (electionResult.code !== 0) {
