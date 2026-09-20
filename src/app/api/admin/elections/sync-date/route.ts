@@ -45,7 +45,7 @@ import type { Election, State, ElectedOfficial, GameState } from "@/lib/db/types
 import { SENATE_CLASSES, STATE_SENATE_SEATS, UK_REGIONAL_COUNCIL_SEATS } from "@/lib/constants";
 import {
   getJpShugiinSeats,
-  getJpSangiinSeats,
+  getJpSangiinClassSeats,
   JP_GOVERNOR_SEATS,
   DE_WAHLKREIS_SEATS,
   DE_LANDTAG_SEATS,
@@ -478,7 +478,7 @@ export async function POST() {
             chamberClass: sangiinClass,
             cycle: 1,
             status: "active",
-            totalSeats: Math.ceil((getJpSangiinSeats(preset)[regionId] ?? 2) / 2),
+            totalSeats: getJpSangiinClassSeats(preset, regionId, sangiinClass),
             startTime: now,
             primaryEndTime: sangiinPrimaryEndTime,
             endTime: sangiinEndTime,

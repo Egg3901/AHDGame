@@ -1324,7 +1324,7 @@ export const UK_FIRST_MINISTERS_1992: HistoricalSeat[] = [
 // (3 MPs after 1992 GE) but still secondary to Labour in Scottish local
 // councils.
 //
-// SDLP / Alliance are not seeded as default parties — like UK_COMMONS_1992,
+// SDLP / Alliance are not seeded as default parties — like UK_COMMONS_1987,
 // we keep `uk_sdlp` / `uk_alliance` slugs to preserve historical attribution
 // (they fall back to `independent` via `seedHistorical`'s resolver until
 // those parties are seeded).

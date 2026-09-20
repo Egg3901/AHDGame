@@ -373,6 +373,7 @@ export {
   TOTAL_JP_SANGIIN_SEATS_1991,
   getJpShugiinSeats,
   getJpSangiinSeats,
+  getJpSangiinClassSeats,
   getTotalJpShugiinSeats,
   getTotalJpSangiinSeats,
   DE_WAHLKREIS_SEATS,

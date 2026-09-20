@@ -1,7 +1,7 @@
 import { withCampaignRules } from "@/lib/campaignTargeting/rules";
 import { getDb } from "@/lib/mongodb";
 import type { Election, ElectionStatus, State } from "@/lib/db/types";
-import { getJpShugiinSeats, getJpSangiinSeats } from "@/lib/constants/states";
+import { getJpShugiinSeats, getJpSangiinClassSeats } from "@/lib/constants/states";
 import { DEFAULT_DURATIONS } from "@/lib/constants/electionDurations";
 import { pickNextCanonicalCycle, turnToWallClock } from "@/lib/elections/canonicalCycle";
 import { electionToLarpYear } from "@/lib/utils/formatters";
@@ -158,10 +158,10 @@ export async function ensureJPElections(now: Date, inFlightTurn?: number): Promi
 
 /**
  * Ensure Sangiin elections exist for JP regions in BOTH classes.
- * Half of the 248 seats are contested every 3 game years (144 turns) per class;
- * each class runs on its own 6-year (288-turn) cycle anchored to its real-world
- * election date (JP_SANGIIN_CYCLE1_END_TURN). Each class is processed
- * independently.
+ * Half of the active era's Sangiin seats (252 in 1991, otherwise 248) are
+ * contested every 3 game years (144 turns) per class; each class runs on its
+ * own 6-year (288-turn) cycle anchored to its real-world election date
+ * (JP_SANGIIN_CYCLE1_END_TURN). Each class is processed independently.
  *
  * Spawned cycles anchor to the **canonical LARP schedule** via
  * {@link pickNextCanonicalCycle}. A new cycle's `endTime` is derived from the
@@ -190,9 +190,6 @@ export async function ensureJPCouncillorElections(
 
   // Process both classes unless a specific override is given
   const classesToProcess: (1 | 2)[] = classOverride ? [classOverride] : [1, 2];
-  // 252 seats before the 1998 reduction, 248 after.
-  const sangiinSeatsByRegion = getJpSangiinSeats(ctx.preset);
-
   // Find ALL JP regions — each region participates in both classes (half seats per class)
   const jpRegions = await db
     .collection<State>("states")
@@ -263,9 +260,9 @@ export async function ensureJPCouncillorElections(
       const endTime = turnToWallClock(spawn.endTurn, now, currentTurn);
       const status: "active" | "upcoming" = "active";
 
-      // Each class contests half the region's total Sangiin seats
-      const totalRegionSeats = sangiinSeatsByRegion[regionId] ?? 2;
-      const classSeats = Math.ceil(totalRegionSeats / 2);
+      // Each class contests half the region's total Sangiin seats. Class 1
+      // receives the extra seat when the modern regional total is odd.
+      const classSeats = getJpSangiinClassSeats(ctx.preset, regionId, chamberClass);
 
       toInsert.push({
         countryId: "JP",

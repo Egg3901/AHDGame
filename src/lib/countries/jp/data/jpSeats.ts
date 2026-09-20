@@ -102,6 +102,23 @@ export function getJpSangiinSeats(preset: string | undefined): Record<string, nu
   return preset === "1991-default" ? JP_SANGIIN_SEATS_1991 : JP_SANGIIN_SEATS;
 }
 
+/**
+ * Seats contested by one Sangiin class in a region.
+ *
+ * Class 1 receives the extra seat when a modern regional total is odd; class 2
+ * receives the remainder. Computing `ceil(total / 2)` for both classes creates
+ * phantom seats in Hokkaido and Kyushu (250 contested against a 248-seat
+ * chamber), while the 1991 map's all-even totals conceal the error.
+ */
+export function getJpSangiinClassSeats(
+  preset: string | undefined,
+  regionId: string,
+  chamberClass: 1 | 2
+): number {
+  const totalSeats = getJpSangiinSeats(preset)[regionId] ?? 2;
+  return chamberClass === 1 ? Math.ceil(totalSeats / 2) : Math.floor(totalSeats / 2);
+}
+
 /** National Shugiin size for the active preset. */
 export function getTotalJpShugiinSeats(preset: string | undefined): number {
   return preset === "1991-default" ? TOTAL_JP_SHUGIIN_SEATS_1991 : TOTAL_JP_SHUGIIN_SEATS;

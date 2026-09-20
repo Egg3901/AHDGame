@@ -843,7 +843,8 @@ export function getHouseSeats(preset: string | undefined): Record<string, number
 
 /**
  * Preset-aware UK Commons seat map. `1953-default` → 625-seat 1950–55
- * redistribution; every other preset → the modern 650-seat map.
+ * redistribution; `1991-default` → the 650-seat 1983-boundary map; every
+ * other preset → the modern 650-seat map.
  */
 export function getUkCommonsSeats(preset: string | undefined): Record<string, number> {
   if (preset === "1953-default") return UK_COMMONS_SEATS_1953;
@@ -963,6 +964,7 @@ export {
   TOTAL_JP_SANGIIN_SEATS_1991,
   getJpShugiinSeats,
   getJpSangiinSeats,
+  getJpSangiinClassSeats,
   getTotalJpShugiinSeats,
   getTotalJpSangiinSeats,
   JP_SANGIIN_SEATS,

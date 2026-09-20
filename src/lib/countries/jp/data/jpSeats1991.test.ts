@@ -10,6 +10,7 @@ import {
   TOTAL_JP_SANGIIN_SEATS_1991,
   getJpShugiinSeats,
   getJpSangiinSeats,
+  getJpSangiinClassSeats,
   getTotalJpShugiinSeats,
   getTotalJpSangiinSeats,
 } from "./jpSeats";
@@ -68,6 +69,22 @@ describe("JP Diet, 1991-default", () => {
     expect(getTotalJpShugiinSeats("2019-default")).toBe(465);
     expect(getTotalJpSangiinSeats("2019-default")).toBe(248);
     expect(getTotalJpShugiinSeats(undefined)).toBe(465);
+  });
+
+  it("splits odd modern Sangiin totals without creating phantom seats", () => {
+    expect(getJpSangiinClassSeats("2019-default", "HOK", 1)).toBe(4);
+    expect(getJpSangiinClassSeats("2019-default", "HOK", 2)).toBe(3);
+    expect(getJpSangiinClassSeats("2019-default", "KYU", 1)).toBe(16);
+    expect(getJpSangiinClassSeats("2019-default", "KYU", 2)).toBe(15);
+
+    const splitTotal = Object.keys(getJpSangiinSeats("2019-default")).reduce(
+      (total, regionId) =>
+        total +
+        getJpSangiinClassSeats("2019-default", regionId, 1) +
+        getJpSangiinClassSeats("2019-default", regionId, 2),
+      0
+    );
+    expect(splitTotal).toBe(248);
   });
 
   it("matches the chamber sizes the 1991 era override declares", () => {
