@@ -68,6 +68,9 @@ describe("planEquityUnderwriting", () => {
 describe("pendingEquityPlacementBudget", () => {
   it("spends ten percent of cash above half-target reserve", () => {
     expect(pendingEquityPlacementBudget(150_000, 100_000)).toBe(10_000);
-    expect(pendingEquityPlacementBudget(40_000, 100_000)).toBe(0);
+  });
+
+  it("preserves a fraction of attainable cash when the long-run target is out of reach", () => {
+    expect(pendingEquityPlacementBudget(40_000, 100_000)).toBe(2_000);
   });
 });

@@ -64,8 +64,13 @@ export function planEquityUnderwriting(input: {
 export function pendingEquityPlacementBudget(cashLocal: number, targetCashLocal: number): number {
   const cash = Math.max(0, Number.isFinite(cashLocal) ? cashLocal : 0);
   const target = Math.max(0, Number.isFinite(targetCashLocal) ? targetCashLocal : 0);
+  // The calibrated target is a long-run liquidity goal. When the pool is below
+  // it, reserving a fraction of that unattainable target makes every pending
+  // placement wait forever. Reserve against the cash we actually have instead.
+  const attainableTarget = Math.min(cash, target);
   return (
-    Math.max(0, cash - target * EQUITY_PENDING_RESERVE_SHARE) * EQUITY_PENDING_CASH_SHARE_PER_TURN
+    Math.max(0, cash - attainableTarget * EQUITY_PENDING_RESERVE_SHARE) *
+    EQUITY_PENDING_CASH_SHARE_PER_TURN
   );
 }
 
