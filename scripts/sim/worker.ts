@@ -215,6 +215,9 @@ async function mirrorSandboxStatus(jobsCol: Collection<SimJob>, job: SimJob) {
             currentTurn: doc.currentTurn,
             lastMessage: doc.lastMessage,
             lastWarnings: doc.lastWarnings,
+            // #1992: surface the fresh-bootstrap conformance summary on the
+            // job manifest so the queue shows seed provenance, not just turns.
+            ...(doc.bootstrapConformance ? { bootstrapConformance: doc.bootstrapConformance } : {}),
             heartbeatAt: new Date(),
             workerPhase: "turns",
             updatedAt: new Date(),
