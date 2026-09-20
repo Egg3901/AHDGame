@@ -29,6 +29,7 @@ vi.mock("@/lib/npp/generator", () => ({
 
 interface WorldFixture {
   currentTurn: number;
+  founding?: boolean;
   elections: Election[];
   parties: PoliticalParty[];
   freeNpps: NPP[];
@@ -40,7 +41,10 @@ interface WorldFixture {
 function mountWorld(db: MockDb, w: WorldFixture) {
   const insertedCandidates: Record<string, unknown>[] = [];
 
-  db.collection("gameState").findOne = vi.fn().mockResolvedValue({ currentTurn: w.currentTurn });
+  db.collection("gameState").findOne = vi.fn().mockResolvedValue({
+    currentTurn: w.currentTurn,
+    preIteration: { active: w.founding === true },
+  });
 
   db.collection("elections").find = vi
     .fn()
@@ -183,5 +187,65 @@ describe("processChallengerGeneration — CN one-party People's Congress floor (
     const filed = await processChallengerGeneration(new Date());
     expect(filed).toBe(0);
     expect(insertedCandidates).toHaveLength(0);
+  });
+});
+
+describe("processChallengerGeneration — founding coverage (#2072)", () => {
+  let db: MockDb;
+
+  beforeEach(async () => {
+    db = createMockDb();
+    const { getDb } = await import("@/lib/mongodb");
+    vi.mocked(getDb).mockResolvedValue(db as unknown as Db);
+  });
+
+  it("files candidates in a cycle-0 presidential race", async () => {
+    const election = {
+      ...cnPeoplesCongress("US"),
+      countryId: "US",
+      state: "US",
+      electionType: "president",
+      cycle: 0,
+    } as Election;
+    const party = {
+      ...cnParty(1, "ruling"),
+      countryId: "US",
+    } as PoliticalParty;
+    const { insertedCandidates } = mountWorld(db, {
+      currentTurn: 1,
+      founding: true,
+      elections: [election],
+      parties: [party],
+      freeNpps: [],
+      officials: [],
+      statePartyOrgs: [],
+    });
+
+    expect(await processChallengerGeneration(new Date())).toBe(1);
+    expect(db.collection("elections").find).toHaveBeenCalledWith(
+      expect.objectContaining({ status: "active", cycle: 0 }),
+      expect.anything()
+    );
+    expect(db.collection("elections").find.mock.calls[0]?.[0]).not.toHaveProperty("electionType");
+    expect(insertedCandidates).toEqual([
+      expect.objectContaining({ electionId: election._id, countryId: "US", party: "1" }),
+    ]);
+  });
+
+  it("gives a wholly-empty founding race one fallback when org presence blocks every party", async () => {
+    const election = { ...cnPeoplesCongress("DUB"), countryId: "IE", cycle: 0 } as Election;
+    const party = { ...cnParty(1, "ruling"), countryId: "IE" } as PoliticalParty;
+    const { insertedCandidates } = mountWorld(db, {
+      currentTurn: 1,
+      founding: true,
+      elections: [election],
+      parties: [party],
+      freeNpps: [],
+      officials: [],
+      statePartyOrgs: [{ ...spo("DUB", "1"), hasPresence: false } as unknown as StatePartyOrg],
+    });
+
+    expect(await processChallengerGeneration(new Date())).toBe(1);
+    expect(insertedCandidates).toHaveLength(1);
   });
 });
