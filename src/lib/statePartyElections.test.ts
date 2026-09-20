@@ -782,11 +782,9 @@ describe("election opening recipient batching", () => {
     setMockCollection("statePartyElections", {
       insertMany: vi.fn().mockResolvedValue({ insertedCount: 6 }),
     });
-    const find = vi
-      .fn()
-      .mockReturnValue({
-        project: vi.fn().mockReturnValue({ toArray: async () => [us, uk, unrelated] }),
-      });
+    const find = vi.fn().mockReturnValue({
+      project: vi.fn().mockReturnValue({ toArray: async () => [us, uk, unrelated] }),
+    });
     setMockCollection("characters", { find });
     const { createMissingElections } = await import("./statePartyElections");
     expect(await createMissingElections(74)).toBe(6);
