@@ -48,10 +48,10 @@ describe("foundNppCorporationsSurplus read budget", () => {
         },
         sort(spec: Record<string, 1 | -1>) {
           const [field, dir] = Object.entries(spec)[0] ?? [];
-          if (field) {
+          if (field === "nppInvestmentCashAnchor") {
             ordered = [...ordered].sort((a, b) => {
-              const av = (a as Record<string, number>)[field];
-              const bv = (b as Record<string, number>)[field];
+              const av = a[field];
+              const bv = b[field];
               return av < bv ? -1 * (dir ?? 1) : av > bv ? 1 * (dir ?? 1) : 0;
             });
           }
