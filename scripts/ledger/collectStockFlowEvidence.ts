@@ -61,6 +61,9 @@ if (!SIM_MONGODB_URI || !dbName || !runId || !expectedRevision) {
   );
   process.exit(2);
 }
+const requiredDbName = dbName as string;
+const requiredRunId = runId as string;
+const requiredExpectedRevision = expectedRevision as string;
 const lookback = Number(lookbackRaw);
 if (!Number.isInteger(lookback) || lookback < 12 || lookback > 500) {
   console.error("--lookback must be an integer 12..500");
@@ -69,7 +72,7 @@ if (!Number.isInteger(lookback) || lookback < 12 || lookback > 500) {
 
 (process.env as { NODE_ENV: string }).NODE_ENV = "test";
 process.env.MONGODB_URI = SIM_MONGODB_URI;
-process.env.MONGODB_DB = dbName as string;
+process.env.MONGODB_DB = requiredDbName;
 
 async function main() {
   const { writeFileSync } = await import("node:fs");
@@ -89,9 +92,11 @@ async function main() {
   const docs = await recons.find({}).sort({ turn: -1 }).limit(lookback).toArray();
   const ordered = [...docs].sort((a, b) => a.turn - b.turn);
 
-  const simRun = await db.collection("simRuns").findOne({ _id: runId as never });
+  const simRun = await db.collection("simRuns").findOne({ _id: requiredRunId as never });
   if (!simRun) {
-    console.error(`No simRuns doc for runId ${runId} in ${dbName}: cannot pin evidence to a run.`);
+    console.error(
+      `No simRuns doc for runId ${requiredRunId} in ${requiredDbName}: cannot pin evidence to a run.`
+    );
     process.exit(2);
   }
   // Machine-recorded pinned-source identity lives in the control-plane
@@ -215,8 +220,8 @@ async function main() {
 
   const evidence = {
     provenance: {
-      runId,
-      dbName,
+      runId: requiredRunId,
+      dbName: requiredDbName,
       codeRevision,
       codeRevisionSource,
       gitDirty,
@@ -225,7 +230,7 @@ async function main() {
       sourceExecutedPath,
       sourceExecutedCommit,
     },
-    expectedCodeRevision: expectedRevision,
+    expectedCodeRevision: requiredExpectedRevision,
     turns: ordered.map((doc) => ({
       turn: doc.turn,
       // Per-turn post-activation proof, machine-stamped by reconcileTurn.

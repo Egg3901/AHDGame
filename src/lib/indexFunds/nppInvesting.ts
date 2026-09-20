@@ -24,7 +24,6 @@ import {
 } from "@/lib/indexFunds/fundQueries";
 import type { CountryId } from "@/lib/constants/countries";
 import type { CurrencyCode } from "@/lib/constants/currencies";
-import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
 import { JP_NPP_INVESTING_MINIMUM } from "@/lib/countries/jp/economy";
 import type { GameConfig } from "@/lib/db/types";
 import { accountId } from "@/lib/ledger/accounts";
