@@ -868,6 +868,16 @@ async function moveLivingConflictTrajectory(ctx: CrisisActionContext): Promise<v
   }
 }
 
+async function introduceLivingConflictRatification(ctx: CrisisActionContext): Promise<void> {
+  const action = ctx.option.action;
+  if (!action || action.kind !== "livingConflictRatificationBill") return;
+  await concessionBill(ctx, action.title, action.summary, action.category);
+  const def = livingConflictDef(action.conflictKey);
+  if (!def) throw new Error(`Unknown living conflict: ${action.conflictKey}`);
+  const current = await loadConflictState(ctx.db, def.key);
+  await saveConflictState(ctx.db, applyConflictOutcome(def, current, action));
+}
+
 /**
  * Dispatch a crisis decision option's real-subsystem action, if it has one.
  * Called by `submitCrisisDecision` after the option's flat effects apply and
@@ -927,6 +937,9 @@ export async function runCrisisOptionAction(ctx: CrisisActionContext): Promise<C
         break;
       case "livingConflictTrajectory":
         await moveLivingConflictTrajectory(ctx);
+        break;
+      case "livingConflictRatificationBill":
+        await introduceLivingConflictRatification(ctx);
         break;
     }
   } catch (err) {

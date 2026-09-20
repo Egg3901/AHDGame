@@ -183,6 +183,81 @@ function negotiationTree(): CrisisDecisionNode[] {
   ];
 }
 
+function ratificationTree(): CrisisDecisionNode[] {
+  return [
+    {
+      nodeId: "uk_ratification",
+      type: "choice",
+      title: "Westminster ratification",
+      description:
+        "The UK government must decide whether to place the negotiated settlement before Parliament.",
+      requiredRoles: ["headOfState", "cabinet"],
+      requiredCountryIds: ["UK"],
+      timeLimitMinutes: 24 * 60,
+      options: [
+        trajectory(
+          "uk_withhold_ratification",
+          "Withhold the settlement bill",
+          "Keep the agreement out of Parliament and return the process to uncertainty.",
+          { settlementMomentum: -10, legitimacy: -8, domesticConsent: -5 },
+          "irish_ratification"
+        ),
+        {
+          optionId: "uk_introduce_ratification",
+          label: "Introduce the settlement bill",
+          description: "Put the agreement to a real, contestable vote in Westminster.",
+          effects: [cfx("tick", "approval", "government", "overall", 0.01, "Peace legislation")],
+          nextNodeId: "irish_ratification",
+          action: {
+            kind: "livingConflictRatificationBill",
+            conflictKey: KEY,
+            title: "Northern Ireland Settlement and Institutions Bill",
+            summary:
+              "A bill to ratify the negotiated Northern Ireland settlement and authorize its devolved and cross-border institutions.",
+            category: "northern_ireland_peace",
+            trackDeltas: { settlementMomentum: 8, domesticConsent: 5, legitimacy: 4 },
+          },
+        },
+      ],
+    },
+    {
+      nodeId: "irish_ratification",
+      type: "choice",
+      title: "Dáil ratification",
+      description:
+        "The Irish government must decide whether to place its constitutional and institutional commitments before the Dáil.",
+      requiredRoles: ["headOfState", "cabinet"],
+      requiredCountryIds: ["IE"],
+      timeLimitMinutes: 24 * 60,
+      options: [
+        trajectory(
+          "ie_withhold_ratification",
+          "Withhold the ratification bill",
+          "Decline to bind Ireland to the negotiated institutions and guarantees.",
+          { settlementMomentum: -10, legitimacy: -8, nationalistConsent: -5 },
+          null
+        ),
+        {
+          optionId: "ie_introduce_ratification",
+          label: "Introduce the ratification bill",
+          description: "Put Ireland's commitments to a real, contestable vote in the Dáil.",
+          effects: [cfx("tick", "approval", "government", "overall", 0.01, "Peace legislation")],
+          nextNodeId: null,
+          action: {
+            kind: "livingConflictRatificationBill",
+            conflictKey: KEY,
+            title: "British-Irish Agreement Ratification Bill",
+            summary:
+              "A bill to ratify Ireland's commitments under the negotiated Northern Ireland settlement and its cross-border institutions.",
+            category: "northern_ireland_peace",
+            trackDeltas: { settlementMomentum: 8, domesticConsent: 5, legitimacy: 4 },
+          },
+        },
+      ],
+    },
+  ];
+}
+
 const negotiationEvent: ConflictEvent = {
   key: "peace_initiative",
   kind: "authored" as const,
@@ -192,6 +267,17 @@ const negotiationEvent: ConflictEvent = {
   headline: "A Northern Ireland peace initiative opens",
   body: "London, Dublin, and Northern Ireland's political traditions face linked choices over security, consent, and negotiation.",
   negotiation: { windowTurns: 8, decisionTree: negotiationTree() },
+};
+
+const ratificationEvent: ConflictEvent = {
+  key: "agreement_ratification",
+  kind: "authored",
+  severity: "major",
+  affects: ["belligerent"],
+  trigger: { onPhaseEnter: true, everyTurns: 24 },
+  headline: "The Northern Ireland settlement faces ratification",
+  body: "The negotiated text now requires separate, contestable authorization in Westminster and the Dáil.",
+  negotiation: { windowTurns: 8, decisionTree: ratificationTree() },
 };
 
 const passive: RoleEffects = {
@@ -382,7 +468,7 @@ export const NORTHERN_IRELAND_DEF: LivingConflictDef = {
       advancePressure: 100,
       decisionTrees: {},
       passiveEffects: passive,
-      events: [negotiationEvent],
+      events: [ratificationEvent],
     },
     {
       level: 6,

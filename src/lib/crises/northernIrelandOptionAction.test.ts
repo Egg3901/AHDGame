@@ -73,4 +73,70 @@ describe("Northern Ireland option actions", () => {
       (stores.politicalMetrics.values as Record<string, number>)["governance.localAutonomy"]
     ).toBe(44);
   });
+
+  it("introduces ratification through the real national bill collection", async () => {
+    const insertedBills: Record<string, unknown>[] = [];
+    let conflict: Record<string, unknown> = {
+      defKey: "northern_ireland",
+      hasOpened: true,
+      status: "settled",
+      phaseLevel: 5,
+      intensity: 20,
+      openedYear: 1991,
+      pressure: { a: 0, b: 0 },
+      tracks: { settlementMomentum: 70 },
+      phaseTurns: 0,
+      totalTurns: 200,
+    };
+    const db = {
+      collection: (name: string) => ({
+        findOne: async () =>
+          name === "livingConflicts"
+            ? conflict
+            : name === "characters"
+              ? { name: "Prime Minister" }
+              : null,
+        updateOne: async (_filter: unknown, update: { $set: Record<string, unknown> }) => {
+          if (name === "livingConflicts") conflict = { ...conflict, ...update.$set };
+        },
+        insertOne: async (doc: Record<string, unknown>) => {
+          if (name === "bills") insertedBills.push(doc);
+          return { insertedId: new ObjectId() };
+        },
+      }),
+    } as unknown as Db;
+    const option: CrisisDecisionOption = {
+      optionId: "ratify",
+      label: "Ratify",
+      description: "",
+      effects: [],
+      nextNodeId: null,
+      action: {
+        kind: "livingConflictRatificationBill",
+        conflictKey: "northern_ireland",
+        title: "Northern Ireland Settlement Bill",
+        summary: "Ratifies the settlement.",
+        category: "northern_ireland_peace",
+        trackDeltas: { settlementMomentum: 8 },
+      },
+    };
+
+    await runCrisisOptionAction({
+      db,
+      crisis: { _id: new ObjectId() } as Crisis,
+      interaction: {} as CrisisInteraction,
+      option,
+      characterId: new ObjectId(),
+      countryId: "UK",
+      currentTurn: 200,
+    });
+
+    expect(insertedBills).toHaveLength(1);
+    expect(insertedBills[0]).toMatchObject({
+      countryId: "UK",
+      status: "active",
+      category: "northern_ireland_peace",
+    });
+    expect((conflict.tracks as Record<string, number>).settlementMomentum).toBe(78);
+  });
 });

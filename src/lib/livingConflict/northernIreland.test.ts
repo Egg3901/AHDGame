@@ -38,6 +38,14 @@ describe("Northern Ireland peace process", () => {
     expect(nodes.at(-1)?.requiredRegionIds).toEqual(["NIR"]);
   });
 
+  it("uses separate real-bill ratification decisions in the agreement phase", () => {
+    const agreement = NORTHERN_IRELAND_DEF.phases.find((phase) => phase.key === "agreement");
+    const nodes = agreement?.events[0].negotiation?.decisionTree ?? [];
+    expect(nodes.map((node) => node.requiredCountryIds?.[0])).toEqual(["UK", "IE"]);
+    expect(nodes[0].options?.[1].action?.kind).toBe("livingConflictRatificationBill");
+    expect(nodes[1].options?.[1].action?.kind).toBe("livingConflictRatificationBill");
+  });
+
   it("can reach a broadly historical settlement without scripting it", () => {
     let state = opened();
     state = advance(state, { settlementMomentum: 25, legitimacy: 10 });

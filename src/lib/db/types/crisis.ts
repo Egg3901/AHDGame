@@ -158,6 +158,16 @@ export type CrisisOptionAction =
         independenceDesireDelta?: number;
         devolutionSatisfactionDelta?: number;
       };
+    }
+  /** Introduce a real national ratification bill and record the resulting
+   * movement in a negotiated living conflict. Passage remains contestable. */
+  | {
+      kind: "livingConflictRatificationBill";
+      conflictKey: string;
+      title: string;
+      summary: string;
+      category: string;
+      trackDeltas?: Record<string, number>;
     };
 
 export interface CrisisDecisionOption {
