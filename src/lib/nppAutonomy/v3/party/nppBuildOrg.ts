@@ -72,7 +72,7 @@ export type NppBuildOrgResult =
  * and per-state price multipliers (no population writes on this path).
  *
  * Deliberately NOT cached: state-party organization/PS/treasury rows, PS
- * pressure, and ownership gates — every action re-reads those live because an
+ * pressure, and ownership gates; every action re-reads those live because an
  * earlier action in the same sweep may have moved them.
  */
 export interface NppBuildOrgSweepCache {
@@ -101,7 +101,7 @@ function sizeCacheKey(countryId: CountryId, stateId: string): string {
 /**
  * Preload one sweep's worth of immutable build-org inputs. One
  * `politicalParties` scan plus one `characters`/`users` pair for shields plus
- * two `states` reads per country — replacing per-action party lookups, rival
+ * two `states` reads per country, replacing per-action party lookups, rival
  * `$in` queries, per-rival shield chair/user reads, and per-action state
  * population reads.
  */
@@ -137,7 +137,7 @@ export async function preloadNppBuildOrgSweepCache(
 
   // Shields replicate `isActiveHumanChair`: vacant seat, NPP-held (no userId),
   // or banned-user chair reads as unmanned. Bulk the same two lookups with the
-  // raw id values (never stringified — `$in` must match ObjectId `_id`s).
+  // raw id values (never stringified; `$in` must match ObjectId `_id`s).
   const chairIds: ObjectId[] = [];
   {
     const seen = new Set<string>();
@@ -399,8 +399,8 @@ export async function nppBuildPartyOrg(
   // Completed receipts flush as ONE `insertMany` in `finally`, in the same
   // poaches-then-own order the per-write `insertOne`s used. Organization
   // mutations stay sequential above; if a rival write throws, the receipts
-  // completed before it still persist — exactly as the old per-write inserts
-  // did — and the error propagates the same way.
+  // completed before it still persist as with the old per-write inserts.
+  // The original write error propagates when the receipt flush succeeds.
   const receipts: OrgRegLedger[] = [];
   try {
     await db
