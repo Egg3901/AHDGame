@@ -144,6 +144,12 @@ export type CrisisOptionAction =
         | "protests_march"
         | "protests_crackdown";
     }
+  /** Apply a financial-crisis choice to live bank charters after the option's
+   *  GDP-scaled treasury charge has been booked. */
+  | {
+      kind: "financialCrisisResponse";
+      response: "recapitalize" | "guarantee" | "resolve";
+    }
   /** Move a negotiated living conflict through its persistent tracks and
    * lifecycle. The definition owns track bounds and valid phase keys. */
   | {

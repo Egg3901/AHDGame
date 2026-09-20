@@ -301,6 +301,32 @@ describe("driver", () => {
     expect(res.events).toHaveLength(0);
   });
 
+  it("holds a condition-gated conflict dormant until live pressure clears its threshold", async () => {
+    const gated: LivingConflictDef = {
+      ...PANDEMIC_DEF,
+      key: "gated",
+      minimumOpeningPressure: 60,
+      tracks: { fragility: { initial: 20 } },
+    };
+    const db = fakeDb();
+    const gatedParticipants: ConflictParticipants = {
+      belligerents: [],
+      neighbors: [],
+      blocMembers: [],
+    };
+
+    const quiet = await driveConflictTurn(db, gated, gatedParticipants, 1, 2000, 59, {
+      fragility: 15,
+    });
+    expect(quiet.state.hasOpened).toBe(false);
+
+    const opened = await driveConflictTurn(db, gated, gatedParticipants, 2, 2000, 60, {
+      fragility: 15,
+    });
+    expect(opened.state.hasOpened).toBe(true);
+    expect(opened.state.tracks?.fragility).toBe(35);
+  });
+
   it("opens in window and emits the phase-entry beat with its audience", async () => {
     const db = fakeDb();
     const res = await driveConflictTurn(db, VIETNAM_DEF, participants, 10, 1955);
