@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   ComposableMap,
   Geographies,
@@ -357,9 +357,7 @@ export function RegionalGeoMap({
   const [geojson, setGeojson] = useState<GeoFC | null>(null);
   const [hovered, setHovered] = useState<string | null>(null);
   const [tooltipContent, setTooltipContent] = useState<string[]>([]);
-  const [tooltipPos, setTooltipPos] = useState<{ x: number; y: number; yRatio: number } | null>(
-    null
-  );
+  const [tooltipPos, setTooltipPos] = useState<{ x: number; y: number } | null>(null);
   const [gradients, setGradients] = useState<
     Record<string, { x1: number; y1: number; x2: number; y2: number }>
   >({});
@@ -438,11 +436,20 @@ export function RegionalGeoMap({
     setPanCenter(null);
   }, [resetKey]);
 
+  const handleMoveEnd = useCallback(
+    ({ coordinates, zoom: nextZoom }: { coordinates: [number, number]; zoom: number }) => {
+      setPanCenter(coordinates);
+      setLocalZoom(nextZoom);
+      onZoomChange?.(nextZoom);
+    },
+    [onZoomChange]
+  );
+
   const handleMouseMove = (e: React.MouseEvent) => {
     const rect = containerRef.current?.getBoundingClientRect();
     if (rect) {
       const y = e.clientY - rect.top;
-      setTooltipPos({ x: e.clientX - rect.left, y, yRatio: rect.height > 0 ? y / rect.height : 0 });
+      setTooltipPos({ x: e.clientX - rect.left, y });
     }
   };
   useLayoutEffect(() => {
@@ -490,7 +497,6 @@ export function RegionalGeoMap({
                     setTooltipPos({
                       x: box.left - container.left + box.width / 2,
                       y: box.top - container.top,
-                      yRatio: (box.top - container.top) / container.height,
                     });
                   setTooltipContent([data?.label ?? code, ...(data?.tooltip ?? [])]);
                 }}
@@ -511,7 +517,7 @@ export function RegionalGeoMap({
               >
                 <Geography
                   geography={geo}
-                  tabIndex={-1}
+                  tabIndex={onRegionClick ? -1 : 0}
                   fill={fill}
                   fillOpacity={isHov ? 0.95 : hasData ? 0.85 : 0.4}
                   stroke={isHov ? "#ffffff" : isHighlighted ? highlightColor : "#334155"}
@@ -637,20 +643,16 @@ export function RegionalGeoMap({
           </defs>
         )}
         {zoomable ? (
-          // Self-positioning projections (AlbersUsa, via projectionConfig) sit at
-          // [0,0]; an auto-fit Mercator map must start centred on its own geometry,
-          // else the ZoomableGroup pans it off to lon/lat 0.
+          // AlbersUsa cannot project [0, 0]. A valid continental center keeps
+          // controlled zoom and reset from dereferencing a null projection.
+          // Auto-fit Mercator maps remain centered on their own geometry.
           <ZoomableGroup
             center={
               panCenter ??
               (projection === "geoAlbersUsa" ? [-96, 38] : projectionConfig ? [0, 0] : fit.center)
             }
             zoom={zoom}
-            onMoveEnd={({ coordinates, zoom: nextZoom }) => {
-              setPanCenter(coordinates);
-              setLocalZoom(nextZoom);
-              onZoomChange?.(nextZoom);
-            }}
+            onMoveEnd={handleMoveEnd}
             minZoom={1}
             maxZoom={4}
             translateExtent={[
