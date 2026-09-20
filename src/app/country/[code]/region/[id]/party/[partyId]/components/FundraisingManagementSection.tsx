@@ -15,7 +15,10 @@ import { getMessageStyle } from "@/lib/utils/formatters";
 import type { StatePartyData } from "./types";
 import { fmt } from "./helpers";
 import type { CountryId } from "@/lib/constants/countries";
-import { getPlayerPayoutCap } from "@/lib/treasury/payoutCapValues";
+import {
+  getEffectivePlayerPayoutCap,
+  PAYOUT_CAP_MULTI_OFFICER_MULTIPLIER,
+} from "@/lib/treasury/payoutCapValues";
 
 interface FundraisingManagementSectionProps {
   stateParty: StatePartyData;
@@ -119,6 +122,11 @@ export function FundraisingManagementSection({
   sortedMembers,
   totalBudgetPct,
 }: FundraisingManagementSectionProps) {
+  // Distinct officers on THIS state party. The per-turn payout ceiling
+  // rises once two are seated, and each treasury is judged on its own
+  // oversight rather than the national party's.
+  const statePartyOfficers = stateParty.seatedOfficers;
+
   // Country-aware demographics
   const targetableDemos = getTargetableDemographics(countryId);
   const targetableCategories = getTargetableCategories(countryId);
@@ -573,9 +581,15 @@ export function FundraisingManagementSection({
         </div>
         <p className="text-[11px] text-muted mb-3">
           State party funds count towards the same per-turn ceiling as national funds:{" "}
-          {fmt(getPlayerPayoutCap(countryId.toUpperCase() as CountryId), countryId)} per member per
-          turn across the national treasury, state parties and caucuses combined. Nothing moves in
-          the last two turns before a party leadership election closes.
+          {fmt(
+            getEffectivePlayerPayoutCap(countryId.toUpperCase() as CountryId, statePartyOfficers),
+            countryId
+          )}{" "}
+          per member per turn across the national treasury, state parties and caucuses combined.
+          Nothing moves in the last two turns before a party leadership election closes.{" "}
+          {statePartyOfficers >= 2
+            ? `This ceiling is ${PAYOUT_CAP_MULTI_OFFICER_MULTIPLIER} times the base one because two or more officers are seated on this state party.`
+            : `Seating a second officer on this state party would raise it ${PAYOUT_CAP_MULTI_OFFICER_MULTIPLIER} times.`}
         </p>
         <div className="flex flex-wrap items-center gap-2">
           <select

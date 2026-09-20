@@ -31,6 +31,7 @@ import { getGameStatePresetOrDefault } from "@/lib/db/collections/gameState";
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
 import { isUserActive } from "@/lib/players/playerActivity";
 import { DEFAULT_LEGACY_COUNTRY_ID } from "@/lib/constants/countries";
+import { countDistinctOfficers } from "@/lib/treasury/payoutCapValues";
 
 async function resolveLeader(
   db: Db,
@@ -322,6 +323,11 @@ export async function getPartyDetail(db: Db, party: PoliticalParty): Promise<Par
     discordInviteUrl: party.discordInviteUrl ?? null,
     economicPosition: party.economicPosition,
     socialPosition: party.socialPosition,
+    seatedOfficers: countDistinctOfficers([
+      party.chairId?.toString(),
+      party.viceChairId?.toString(),
+      party.treasurerId?.toString(),
+    ]),
     chair,
     viceChair,
     treasurer,

@@ -9,7 +9,10 @@ import { getMessageStyle } from "@/lib/utils/formatters";
 import { contrastTextColor } from "@/lib/utils/colorContrast";
 import type { PartyData } from "./types";
 import type { CountryId } from "@/lib/constants/countries";
-import { getPlayerPayoutCap } from "@/lib/treasury/payoutCapValues";
+import {
+  getEffectivePlayerPayoutCap,
+  PAYOUT_CAP_MULTI_OFFICER_MULTIPLIER,
+} from "@/lib/treasury/payoutCapValues";
 
 /**
  * Member-initiated Request Funds card. Any party member can request
@@ -35,7 +38,11 @@ export function RequestFundsCard({
   const [msg, setMsg] = useState("");
   const partyCurrencyCode = COUNTRY_CURRENCY_MAP[party.countryId];
   const partySymbol = CURRENCY_SYMBOLS[partyCurrencyCode];
-  const cap = getPlayerPayoutCap(party.countryId as CountryId);
+  // `seatedOfficers` comes from the server, counted off the raw seat ids.
+  // Deriving it from `chair`/`viceChair`/`treasurer` here would be wrong:
+  // those are null for a banned holder whose seat still counts.
+  const seatedOfficers = party.seatedOfficers;
+  const cap = getEffectivePlayerPayoutCap(party.countryId as CountryId, seatedOfficers);
   /**
    * What this member may still receive this turn. The flat cap alone
    * was misleading: most of it may already be spent, and the player
@@ -132,7 +139,10 @@ export function RequestFundsCard({
           Vice-Chair. You can receive up to {partySymbol}
           {cap.toLocaleString()} per turn from party funds in total, counting the national treasury,
           state parties and caucuses together, and nothing at all in the last two turns before a
-          leadership election closes.
+          leadership election closes.{" "}
+          {seatedOfficers >= 2
+            ? `That ceiling is ${PAYOUT_CAP_MULTI_OFFICER_MULTIPLIER} times the base one, because this party has two or more officers seated to sign payments off.`
+            : `Seating a second officer would raise it to ${partySymbol}${(cap * PAYOUT_CAP_MULTI_OFFICER_MULTIPLIER).toLocaleString()}.`}
         </p>
         <p className="text-[11px] mb-3 text-muted">
           {remaining == null ? (

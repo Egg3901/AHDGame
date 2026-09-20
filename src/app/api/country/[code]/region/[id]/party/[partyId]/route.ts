@@ -44,6 +44,7 @@ import { isUserActive } from "@/lib/players/playerActivity";
 import { primaryOpenFilter } from "@/lib/elections/electionDeadlineFilters";
 import { findPartyBudgetForScope, getEffectivePartyBudgetSpending } from "@/lib/partyBudgetGuards";
 import { getTreasuryForecast, getTreasuryReserveSummary } from "@/lib/partyTreasuryPlan";
+import { countDistinctOfficers } from "@/lib/treasury/payoutCapValues";
 
 interface RouteParams {
   params: Promise<{ code: string; id: string; partyId: string }>;
@@ -131,6 +132,12 @@ export async function GET(_request: Request, { params }: RouteParams) {
         avatarUrl: character.avatarUrl,
       };
     };
+
+    const seatedOfficers = countDistinctOfficers([
+      statePartyOrg?.chairId?.toString(),
+      statePartyOrg?.viceChairId?.toString(),
+      statePartyOrg?.treasurerId?.toString(),
+    ]);
 
     const [chair, viceChair, treasurer, campaigner] = await Promise.all([
       resolveLeader(statePartyOrg?.chairId),
@@ -412,6 +419,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
         turnsUntilZero: treasuryForecast.turnsUntilZero,
         turnsUntilReserveFloor: treasuryForecast.turnsUntilReserveFloor,
         turnsToReachReserveFloor: treasuryForecast.turnsToReachReserveFloor,
+        seatedOfficers,
         chair,
         viceChair,
         treasurer,

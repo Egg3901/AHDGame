@@ -23,6 +23,10 @@ import { findPartyBudgetForScope } from "@/lib/partyBudgetGuards";
 import { wouldTriggerTreasuryReserveOverride } from "@/lib/partyTreasuryPlan";
 import { emitTreasuryTransaction } from "@/lib/treasury/emit";
 import { checkPlayerPayoutCap } from "@/lib/treasury/payoutCap";
+// Imported from the values module, not the re-export on `payoutCap`: it is a
+// pure helper with no database dependency, and tests that mock the
+// database-facing module should not have to stub it.
+import { countDistinctOfficers } from "@/lib/treasury/payoutCapValues";
 import {
   isLeadershipElectionFreezeActive,
   LEADERSHIP_FREEZE_MESSAGE,
@@ -143,6 +147,13 @@ export async function POST(request: Request, { params }: RouteParams) {
         countryId,
         currentTurn,
         amount: sendAmount,
+        // The STATE org's own seats, not the national party's: each
+        // treasury is judged on the oversight actually watching it.
+        seatedOfficers: countDistinctOfficers([
+          statePartyOrg?.chairId?.toString(),
+          statePartyOrg?.viceChairId?.toString(),
+          statePartyOrg?.treasurerId?.toString(),
+        ]),
       });
       if (!cap.ok) {
         return NextResponse.json({ error: cap.reason }, { status: 400 });

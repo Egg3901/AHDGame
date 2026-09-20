@@ -24,7 +24,18 @@ describe("executeSendToMember", () => {
     return {
       db: db as unknown as Db,
       countryId: "US" as const,
-      party: { _id: partyOid, name: "Test Party", sequentialId: 1, treasury: 500_000 },
+      // One seated officer, so the base per-turn ceiling applies. The
+      // seats are part of the argument now because two distinct officers
+      // raise that ceiling.
+      party: {
+        _id: partyOid,
+        name: "Test Party",
+        sequentialId: 1,
+        treasury: 500_000,
+        chairId: initiatorId,
+        viceChairId: null,
+        treasurerId: null,
+      },
       targetCharacter: { _id: recipientId, name: "Recipient" },
       amount: 5_000,
       reserveWarning: null,

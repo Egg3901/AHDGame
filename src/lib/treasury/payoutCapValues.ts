@@ -45,6 +45,53 @@ export function getPlayerPayoutCap(countryId: CountryId | string): number {
 }
 
 /**
+ * How much the ceiling rises once a second officer is seated on the
+ * paying body.
+ *
+ * The cap exists to rate-limit a lone officer paying themselves: with
+ * nobody else in the room, the only brake is the size of a single
+ * transfer. A second officer is a second pair of eyes on the ledger, so
+ * the body is trusted with a larger figure. Applied as a multiplier on
+ * each country's own tuned base rather than a flat number, so a cheaper
+ * economy keeps its proportions instead of inheriting a US figure.
+ */
+export const PAYOUT_CAP_MULTI_OFFICER_MULTIPLIER = 5;
+
+/** Seated officers needed before the multiplier applies. */
+export const PAYOUT_CAP_MULTI_OFFICER_MIN_SEATS = 2;
+
+/**
+ * Distinct people among a set of officer seats.
+ *
+ * Counts identities, not filled seats: one person holding both Chair
+ * and Treasurer is a single pair of eyes, and counting seats would hand
+ * them the two-officer allowance on their own. Takes plain id strings so
+ * this module stays free of any database import and the client cards can
+ * work the figure out from the data they already hold.
+ */
+export function countDistinctOfficers(officerIds: Array<string | null | undefined>): number {
+  const seated = new Set<string>();
+  for (const id of officerIds) {
+    if (id) seated.add(id);
+  }
+  return seated.size;
+}
+
+/**
+ * The per-turn ceiling actually in force for a payment from a body with
+ * `seatedOfficers` distinct officers.
+ */
+export function getEffectivePlayerPayoutCap(
+  countryId: CountryId | string,
+  seatedOfficers: number
+): number {
+  const base = getPlayerPayoutCap(countryId);
+  return seatedOfficers >= PAYOUT_CAP_MULTI_OFFICER_MIN_SEATS
+    ? base * PAYOUT_CAP_MULTI_OFFICER_MULTIPLIER
+    : base;
+}
+
+/**
  * The cap rendered for a player, in that country's own currency.
  *
  * The cap is a LOCAL-currency figure, so the symbol has to come from the
