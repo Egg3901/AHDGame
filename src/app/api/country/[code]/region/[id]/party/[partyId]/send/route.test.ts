@@ -187,7 +187,7 @@ describe("POST /api/country/[code]/region/[id]/party/[partyId]/send", () => {
     const response = await send(2_500);
     expect(response.status).toBe(400);
     const body = await response.json();
-    expect(body.error).toMatch(/already received the maximum/);
+    expect(body.error).toMatch(/already received \$/);
     expect(db.collectionMocks["statePartyOrg"]!.updateOne).not.toHaveBeenCalled();
   });
 

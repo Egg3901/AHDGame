@@ -85,6 +85,40 @@ describe("GET /api/country/[code]/parties/[id]/treasury/payout-allowance", () =>
     expect(body).toMatchObject({ cap: 2_000_000, used: 0, remaining: 2_000_000 });
   });
 
+  it("reports the raised ceiling once a second officer is seated", async () => {
+    // The readout has to agree with what the send and request routes
+    // enforce, or the card promises a figure the server refuses.
+    const { findPartyBySequentialId } = await import("@/lib/db/partyLookup");
+    vi.mocked(findPartyBySequentialId).mockResolvedValue({
+      _id: partyOid,
+      sequentialId: Number(partyId),
+      countryId: "US",
+      name: "Test Party",
+      chairId,
+      viceChairId: null,
+      treasurerId: new ObjectId(),
+    } as never);
+    const response = await call(memberId.toString());
+    const body = await response.json();
+    expect(body).toMatchObject({ cap: 10_000_000, seatedOfficers: 2, remaining: 10_000_000 });
+  });
+
+  it("does not count one person holding two seats as two officers", async () => {
+    const { findPartyBySequentialId } = await import("@/lib/db/partyLookup");
+    vi.mocked(findPartyBySequentialId).mockResolvedValue({
+      _id: partyOid,
+      sequentialId: Number(partyId),
+      countryId: "US",
+      name: "Test Party",
+      chairId,
+      viceChairId: null,
+      treasurerId: chairId,
+    } as never);
+    const response = await call(memberId.toString());
+    const body = await response.json();
+    expect(body).toMatchObject({ cap: 2_000_000, seatedOfficers: 1 });
+  });
+
   it("subtracts what the member has already drawn this turn", async () => {
     alreadyDrawn(1_500_000);
     const response = await call(memberId.toString());

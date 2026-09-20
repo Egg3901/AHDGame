@@ -26,7 +26,11 @@ import {
   LEADERSHIP_FREEZE_MESSAGE,
 } from "@/lib/parties/leadershipElectionFreeze";
 import { getGameTime } from "@/lib/time/gameTime";
-import { formatPayoutCap, getPlayerPayoutCap } from "@/lib/treasury/payoutCapValues";
+import {
+  countDistinctOfficers,
+  formatPayoutCap,
+  getEffectivePlayerPayoutCap,
+} from "@/lib/treasury/payoutCapValues";
 
 interface RouteParams {
   params: Promise<{ code: string; id: string }>;
@@ -143,7 +147,14 @@ export async function POST(request: Request, { params }: RouteParams) {
     // so refusing them here would make that exemption unreachable for
     // any amount big enough to need it.
     if (!isAdmin) {
-      const sendPayoutCap = getPlayerPayoutCap(countryId);
+      const sendPayoutCap = getEffectivePlayerPayoutCap(
+        countryId,
+        countDistinctOfficers([
+          party.chairId?.toString(),
+          party.viceChairId?.toString(),
+          party.treasurerId?.toString(),
+        ])
+      );
       if (sendAmount > sendPayoutCap) {
         return NextResponse.json(
           {

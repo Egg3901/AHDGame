@@ -39,9 +39,9 @@
  *   npx tsx scripts/debug/cancel-uncapped-pending-treasury-rows.ts
  *   npx tsx scripts/debug/cancel-uncapped-pending-treasury-rows.ts --apply
  */
-import { MongoClient, type ObjectId } from "mongodb";
+import { MongoClient, ObjectId } from "mongodb";
 import { config } from "dotenv";
-import { getPlayerPayoutCap } from "@/lib/treasury/payoutCapValues";
+import { countDistinctOfficers, getEffectivePlayerPayoutCap } from "@/lib/treasury/payoutCapValues";
 
 config({ path: ".env.local" });
 
@@ -88,7 +88,45 @@ async function main() {
       .find({ status: "open", type: { $in: ["send", "request"] } })
       .toArray();
 
-    const unpayable = open.filter((row) => row.amount > getPlayerPayoutCap(row.countryId));
+    // The ceiling is NOT the flat country value: a body with two or more
+    // distinct officers seated is allowed a multiple of it. Filtering on
+    // the base figure would mark a perfectly payable row unpayable and
+    // cancel it, which on this collection means destroying a live
+    // request somebody is waiting on.
+    //
+    // `pendingTreasuryTransactions` only ever holds NATIONAL party rows
+    // (state-party and caucus sends execute immediately and never queue),
+    // so the party's own three seats are the ones that count.
+    const partyDocs = await db
+      .collection<{
+        _id: ObjectId;
+        name?: string;
+        sequentialId?: number;
+        chairId?: ObjectId | null;
+        viceChairId?: ObjectId | null;
+        treasurerId?: ObjectId | null;
+      }>("politicalParties")
+      .find({
+        _id: {
+          $in: [...new Set(open.map((r) => String(r.partyId)))].map((id) => new ObjectId(id)),
+        },
+      })
+      .toArray();
+    const partyById = new Map(partyDocs.map((p) => [String(p._id), p]));
+
+    const capForRow = (row: PendingRow): number => {
+      const party = partyById.get(String(row.partyId));
+      return getEffectivePlayerPayoutCap(
+        row.countryId,
+        countDistinctOfficers([
+          party?.chairId?.toString(),
+          party?.viceChairId?.toString(),
+          party?.treasurerId?.toString(),
+        ])
+      );
+    };
+
+    const unpayable = open.filter((row) => row.amount > capForRow(row));
 
     console.log(`Current turn: ${currentTurn}`);
     console.log(`Open send/request rows: ${open.length}`);
@@ -118,15 +156,6 @@ async function main() {
       .project<{ _id: ObjectId; name?: string }>({ name: 1 })
       .toArray();
     const nameById = new Map(characters.map((c) => [String(c._id), c.name ?? "(unnamed)"]));
-    const parties = await db
-      .collection<{ _id: ObjectId; name?: string; sequentialId?: number }>("politicalParties")
-      .find({ _id: { $in: unpayable.map((r) => r.partyId) } })
-      .project<{ _id: ObjectId; name?: string; sequentialId?: number }>({
-        name: 1,
-        sequentialId: 1,
-      })
-      .toArray();
-    const partyById = new Map(parties.map((p) => [String(p._id), p]));
 
     for (const row of unpayable) {
       const party = partyById.get(String(row.partyId));
@@ -143,7 +172,7 @@ async function main() {
           `  ${row._id.toString()}`,
           `${row.countryId} ${party?.name ?? "(unknown party)"} #${party?.sequentialId ?? "?"}`,
           `${row.type}${row.approvalModeAtPropose ? `/${row.approvalModeAtPropose}` : ""}`,
-          `${fmt(row.amount)} vs cap ${fmt(getPlayerPayoutCap(row.countryId))}`,
+          `${fmt(row.amount)} vs cap ${fmt(capForRow(row))}`,
           `by ${nameById.get(String(row.proposedBy)) ?? "(unknown)"}`,
           `turn ${row.proposedAtTurn} expires ${row.expiresAtTurn}`,
           approvals,
