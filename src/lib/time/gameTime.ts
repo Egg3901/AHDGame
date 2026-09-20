@@ -8,6 +8,8 @@ export interface GameTimeContext {
   lastTurnProcessed: Date;
   isActive: boolean;
   pausedAt: Date | null;
+  pauseReason?: string | null;
+  pauseKind?: GameState["pauseKind"] | null;
   /** The effective "now" for game calculations */
   effectiveNow: Date;
   /**
@@ -35,6 +37,8 @@ export interface GameTimeContext {
 
 let cachedGameTime: GameTimeContext | null = null;
 let cacheExpiry: number = 0;
+let pendingGameTime: Promise<GameTimeContext> | null = null;
+let cacheGeneration = 0;
 const CACHE_TTL_MS = 5000; // 5 second cache
 
 function createTurnLogRepairFilter(gameState: GameState): Record<string, unknown> {
@@ -60,9 +64,11 @@ export async function reconcileGameStateClock(
 ): Promise<Pick<GameTimeContext, "currentTurn" | "lastTurnProcessed"> & { currentYear: number }> {
   const db = await getDb();
   const turnLogCollection = db.collection<TurnLog>("turnLogs") as {
-    find: (filter: Record<string, unknown>) => unknown;
+    find: (filter: Record<string, unknown>, options: Record<string, unknown>) => unknown;
   };
-  const turnLogCursor = turnLogCollection.find(createTurnLogRepairFilter(gameState)) as {
+  const turnLogCursor = turnLogCollection.find(createTurnLogRepairFilter(gameState), {
+    projection: { turn: 1, gameTime: 1 },
+  }) as {
     sort?: (value: Record<string, number>) => unknown;
     limit?: (value: number) => unknown;
     toArray?: () => Promise<TurnLog[]>;
@@ -140,8 +146,42 @@ export async function getGameTime(): Promise<GameTimeContext> {
     return cachedGameTime;
   }
 
+  if (pendingGameTime) return pendingGameTime;
+  const generation = cacheGeneration;
+  const pending = loadGameTime();
+  pendingGameTime = pending;
+  try {
+    const ctx = await pending;
+    if (generation === cacheGeneration) {
+      cachedGameTime = ctx;
+      cacheExpiry = Date.now() + CACHE_TTL_MS;
+    }
+    return ctx;
+  } finally {
+    if (pendingGameTime === pending) pendingGameTime = null;
+  }
+}
+
+async function loadGameTime(): Promise<GameTimeContext> {
   const db = await getDb();
-  const gameState = await db.collection<GameState>("gameState").findOne({ _id: "current" });
+  const gameState = await db.collection<GameState>("gameState").findOne(
+    { _id: "current" },
+    {
+      projection: {
+        currentTurn: 1,
+        currentYear: 1,
+        startingYear: 1,
+        lastTurnProcessed: 1,
+        isActive: 1,
+        pausedAt: 1,
+        pauseReason: 1,
+        pauseKind: 1,
+        iteration: 1,
+        "preIteration.active": 1,
+        preIterationTurns: 1,
+      },
+    }
+  );
 
   if (!gameState) {
     throw new Error("GameState not found");
@@ -163,6 +203,8 @@ export async function getGameTime(): Promise<GameTimeContext> {
     lastTurnProcessed: new Date(repairedClock.lastTurnProcessed),
     isActive: gameState.isActive,
     pausedAt: gameState.pausedAt ? new Date(gameState.pausedAt) : null,
+    pauseReason: gameState.pauseReason ?? null,
+    pauseKind: gameState.pauseKind ?? null,
     effectiveNow,
     startingYear: gameState.startingYear ?? STARTING_YEAR,
     // Offset-aware pinned year (from reconcileGameStateClock) + the raw offset,
@@ -171,13 +213,12 @@ export async function getGameTime(): Promise<GameTimeContext> {
     preIterationTurns: gameState.preIterationTurns ?? 0,
   };
 
-  cachedGameTime = ctx;
-  cacheExpiry = now + CACHE_TTL_MS;
-
   return ctx;
 }
 
 export function invalidateGameTimeCache(): void {
+  cacheGeneration++;
+  pendingGameTime = null;
   cachedGameTime = null;
   cacheExpiry = 0;
 }
