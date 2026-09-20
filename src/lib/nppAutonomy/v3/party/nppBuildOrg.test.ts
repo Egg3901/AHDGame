@@ -105,6 +105,7 @@ describe("nppBuildPartyOrg", () => {
     if (!result.ok) throw new Error("expected ok result");
     expect(result.orgGain).toBeGreaterThan(0);
     expect(result.newOrg).toBeGreaterThan(20);
+    expect(db.collectionMocks["orgRegLedger"]!.insertMany).toHaveBeenCalledTimes(1);
 
     const { spendPoliticalStrength } =
       await import("@/lib/parties/commands/spendPoliticalStrength");
@@ -119,11 +120,12 @@ describe("nppBuildPartyOrg", () => {
     );
     expect(ownUpdate).toBeDefined();
 
-    const insertCalls = db.collectionMocks["orgRegLedger"]!.insertOne.mock.calls;
-    const gainLog = insertCalls.find(
-      (c: unknown[]) => (c[0] as { source: string }).source === "action"
+    const insertCalls = db.collectionMocks["orgRegLedger"]!.insertMany.mock.calls.flatMap(
+      (c: unknown[]) => c[0] as unknown[]
     );
-    expect(gainLog?.[0]).toMatchObject({
+    expect(db.collectionMocks["orgRegLedger"]!.insertOne).not.toHaveBeenCalled();
+    const gainLog = insertCalls.find((d: unknown) => (d as { source: string }).source === "action");
+    expect(gainLog).toMatchObject({
       countryId,
       stateId,
       partyId: String(partySeq),
@@ -138,14 +140,14 @@ describe("nppBuildPartyOrg", () => {
     const { nppBuildPartyOrg } = await import("./nppBuildOrg");
     await nppBuildPartyOrg(db as unknown as Db, actorNppId, countryId, stateId, partySeq, 100);
 
-    const insertCalls = db.collectionMocks["orgRegLedger"]!.insertOne.mock.calls;
-    const poachLog = insertCalls.find(
-      (c: unknown[]) => (c[0] as { source: string }).source === "poach"
+    const insertCalls = db.collectionMocks["orgRegLedger"]!.insertMany.mock.calls.flatMap(
+      (c: unknown[]) => c[0] as unknown[]
     );
+    const poachLog = insertCalls.find((d: unknown) => (d as { source: string }).source === "poach");
     // Pool alone (100 - 50 = 50 available) generally satisfies gain at these
     // inputs, so a poach may or may not fire — assert shape only if it did.
     if (poachLog) {
-      expect(poachLog[0]).toMatchObject({
+      expect(poachLog).toMatchObject({
         countryId,
         stateId,
         source: "poach",

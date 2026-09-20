@@ -37,7 +37,10 @@ import { nppBuyBond } from "@/lib/nppAutonomy/v3/finance/nppBonds";
 import { nppBuyShares, nppSellShares } from "@/lib/nppAutonomy/v3/finance/nppShares";
 import { nppFoundCorporation } from "@/lib/nppAutonomy/v3/finance/nppFoundCorporation";
 import { loadPrivateEnterpriseBlockedCountries } from "@/lib/economy/queries/privateEnterpriseGate";
-import { nppBuildPartyOrg } from "@/lib/nppAutonomy/v3/party/nppBuildOrg";
+import {
+  nppBuildPartyOrg,
+  preloadNppBuildOrgSweepCache,
+} from "@/lib/nppAutonomy/v3/party/nppBuildOrg";
 import { BOND_UNIT_FACE_VALUE } from "@/lib/db/types/bond";
 import type { Corporation } from "@/lib/db/types/corporation";
 import type { CorporationType } from "@/lib/constants/corporations";
@@ -931,6 +934,12 @@ async function buildNppPartyOrgSurplus(
 
   const rng = makeSeededRng(`npp-build-org:${currentTurn}${NPP_ACTION_RNG_SALT}`);
 
+  // Immutable per-sweep inputs (national party docs, chair shields, state
+  // price multipliers) loaded once; mutable state-party org/PS/treasury,
+  // pressure, and gates stay live per action inside `nppBuildPartyOrg`.
+  const sweepCountries = [...new Set(rows.map((r) => r.countryId as CountryId))];
+  const sweepCache = await preloadNppBuildOrgSweepCache(db, sweepCountries);
+
   for (const row of rows) {
     const countryId = row.countryId as CountryId;
     const partySeq = Number(row.partyId);
@@ -958,7 +967,15 @@ async function buildNppPartyOrgSurplus(
     const { campaignAggressionMult } = careerArchetypeModifiersContinuous(actor.personality);
     if (rng() >= NPP_BUILD_ORG_BASE_PROBABILITY * campaignAggressionMult) continue;
 
-    await nppBuildPartyOrg(db, actor._id, countryId, row.stateId, partySeq, currentTurn);
+    await nppBuildPartyOrg(
+      db,
+      actor._id,
+      countryId,
+      row.stateId,
+      partySeq,
+      currentTurn,
+      sweepCache
+    );
   }
 }
 
