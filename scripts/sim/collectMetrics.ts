@@ -65,7 +65,10 @@ async function main() {
     `[metrics:${runId}] turn=${report.turn} npps=${report.wealth.nppCount} ` +
       `wealthGini=${report.wealth.gini.toFixed(3)} top1%=${(report.wealth.top1PctShare * 100).toFixed(1)}% ` +
       `contested=${(report.electoral.contestedPct * 100).toFixed(1)}% effectiveParties=${report.electoral.effectivePartyCount.toFixed(2)} ` +
-      `inflation=${report.economy.inflationIndex.toFixed(3)} crisesActive=${report.crises.active} ` +
+      `householdCpiIndex=${report.economy.inflationIndex.toFixed(3)} ` +
+      `householdCpiRate=${report.economy.inflationRate.toFixed(2)}% ` +
+      `commodityPriceLevelP90=${report.economy.commodityPriceLevelP90.toFixed(2)} ` +
+      `crisesActive=${report.crises.active} ` +
       `capStock=${report.capacity.totalCapitalStock.toFixed(0)} meanUtil=${report.capacity.meanCapitalUtilization.toFixed(3)} ` +
       `produced=${report.capacity.totalProducedUnits.toFixed(0)} sold=${report.capacity.totalSoldUnits.toFixed(0)} ` +
       `plantsMigrated=${report.capacity.plantsMigratedSectors}/${report.capacity.sectorCount}`
