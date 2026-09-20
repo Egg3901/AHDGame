@@ -55,6 +55,10 @@ import { processReferendumLifecycle } from "@/lib/referendum/processReferendumLi
 import { reconcilePartyMemberCounts } from "@/lib/turn/partyOrg";
 import { snapshotMetricHistory } from "@/lib/metricHistory";
 import { snapshotApprovalsForTurn } from "@/lib/utils/approvalSnapshotRun";
+import {
+  appendMacroTelemetry,
+  resolveLongHorizonContext,
+} from "@/lib/telemetry/longHorizon/telemetry";
 import { snapshotInterestRateHistory } from "@/lib/turn/interestRateSnapshot";
 import { snapshotPartyHistory } from "@/lib/turn/partyHistorySnapshot";
 import {
@@ -619,14 +623,27 @@ export const stateEffectsAndNationalAggregationPhase: TurnPhaseAdapter = {
       phaseResults.partyMemberCountReconcile = memberCountReconcileResult;
     }
 
+    // Durable long-horizon provenance (#2099/#2100), resolved once per turn and
+    // shared by both writers below: world/run identity, in-game year, and the
+    // governing actor per country. Three round trips; a null result (phase
+    // failure) skips telemetry while the operational snapshots still run.
+    const longHorizonCtx = await runtime.runPhase("longHorizonContext", () =>
+      resolveLongHorizonContext(db, newTurn)
+    );
+
     const [metricHistResult, approvalSnapshotResult] = await Promise.all([
-      runtime.runPhase("metricHistory", () => snapshotMetricHistory(db, newTurn)),
+      runtime.runPhase("metricHistory", async () => {
+        await snapshotMetricHistory(db, newTurn);
+        if (longHorizonCtx) await appendMacroTelemetry(db, longHorizonCtx, newTurn);
+      }),
       // Covers the active countries plus any belligerent that is not one of
       // them, so a war block is computed for every country actually fighting.
       // The count is read back off the run rather than recomputed here: the
       // roster is now turn-dependent, and a recomputed constant would report a
       // number the phase did not do.
-      runtime.runPhase("approvalSnapshot", () => snapshotApprovalsForTurn(db, newTurn)),
+      runtime.runPhase("approvalSnapshot", () =>
+        snapshotApprovalsForTurn(db, newTurn, longHorizonCtx ?? undefined)
+      ),
       runtime.runPhase("interestRateSnapshot", () => snapshotInterestRateHistory(db, newTurn)),
       runtime.runPhase("partyHistorySnapshot", () => snapshotPartyHistory(db, newTurn)),
     ]);

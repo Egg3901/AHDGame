@@ -51,6 +51,7 @@ import {
   type SimActorMode,
 } from "@/lib/sim/actorCoverage";
 import { parseSimActorMode } from "@/lib/sim/syntheticActors";
+import { completedTurnProgress } from "./simStatusMirror";
 import {
   allFeatureFlagsGameStateSet,
   economicExperimentConfigSet,
@@ -1248,18 +1249,17 @@ async function main() {
           `turn ${lastTurn} (${lastTurn - startTurn}/${turns})` +
             (result.warnings.length ? ` — ${result.warnings.length} warning(s)` : "")
         );
-        await simRuns.updateOne(
-          { _id: runId },
-          {
-            $set: {
-              currentTurn: lastTurn,
-              lastMessage: result.message,
-              lastWarnings: result.warnings,
-              updatedAt: new Date(),
-            },
-          }
-        );
       }
+      // Persist every completed turn. Console checkpoints may stay sparse,
+      // but the worker status mirror must never attach a fresh heartbeat to
+      // progress that is up to `checkpointEvery` turns old (#2074).
+      const progressUpdatedAt = new Date();
+      await simRuns.updateOne(
+        { _id: runId },
+        {
+          $set: completedTurnProgress(lastTurn, result, progressUpdatedAt),
+        }
+      );
     }
 
     // Final actor-coverage re-stamp (#1993): the pre-turn manifest proves the

@@ -70,7 +70,8 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
           optionId,
           character._id,
           character.countryId,
-          characterRoles
+          characterRoles,
+          character.homeState
         );
         return NextResponse.json({
           success: true,
@@ -113,7 +114,8 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
       optionId,
       character._id,
       character.countryId,
-      characterRoles
+      characterRoles,
+      character.homeState
     );
 
     return NextResponse.json({

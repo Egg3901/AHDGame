@@ -173,6 +173,7 @@ describe("bootstrap contract: seed manifest", () => {
     expect(getCollectionCategory("politicalParties")).toBe("reference");
     expect(getCollectionCategory("federalBudget")).toBe("reference");
     expect(getCollectionCategory("elections")).toBe("runtime");
+    expect(getCollectionCategory("electionResultSnapshots")).toBe("runtime");
     expect(getCollectionCategory("bills")).toBe("runtime");
     expect(getCollectionCategory("corporations")).toBe("runtime");
     expect(getCollectionCategory("indexFunds")).toBe("runtime");

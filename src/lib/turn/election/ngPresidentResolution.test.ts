@@ -10,9 +10,13 @@ import {
 } from "./ngPresidentResolution";
 import { seatPresidentialExecutive } from "@/lib/turn/election/presidentExecutiveSeating";
 import { NG_ZONES } from "@/lib/nigeriaPresidentialElectionEngine";
+import { captureElectionResultSnapshot } from "@/lib/elections/liveResults/captureResultSnapshot";
 
 vi.mock("@/lib/turn/election/presidentExecutiveSeating", () => ({
   seatPresidentialExecutive: vi.fn().mockResolvedValue(undefined),
+}));
+vi.mock("@/lib/elections/liveResults/captureResultSnapshot", () => ({
+  captureElectionResultSnapshot: vi.fn().mockResolvedValue(undefined),
 }));
 
 // Helper: build totalVotesByUnit (zone → candidateId → votes) from a
@@ -121,6 +125,7 @@ describe("resolveNGPresidentElection (DB wrapper)", () => {
 
   it("seats the outright winner and finalizes the tally", async () => {
     vi.mocked(seatPresidentialExecutive).mockClear();
+    vi.mocked(captureElectionResultSnapshot).mockClear();
     const a = new ObjectId(); // apc
     const b = new ObjectId(); // pdp
     const mate = new ObjectId();
@@ -149,6 +154,7 @@ describe("resolveNGPresidentElection (DB wrapper)", () => {
       (c) => c[1]?.$set?.finalized === true
     );
     expect(finalizeCall).toBeDefined();
+    expect(captureElectionResultSnapshot).toHaveBeenCalledWith(db, election, NOW);
   });
 
   it("seats the leading finalist when no party clears the zone spread", async () => {

@@ -18,6 +18,11 @@ import {
   fxRateForCorpFromMap,
   loadFxRatesByCurrency,
 } from "@/lib/currency/corporationCapital";
+import { buildWorldId, longHorizonReportTurnRange } from "@/lib/telemetry/longHorizon/rules";
+import {
+  readLongHorizonTelemetryReport,
+  type LongHorizonTelemetryReport,
+} from "@/lib/telemetry/longHorizon/telemetry";
 
 // Static sim-harness parameters — the "conditions we specified" for a run.
 // Source-of-truth lives in scripts/sim/runWorld.ts (country allowlist,
@@ -226,6 +231,9 @@ export interface ExperimentsReport {
   wealthLeaders: WealthLeader[];
   topCorporations: TopCorporation[];
   finalMetrics: BalanceReport;
+  /** Durable full-run approval and GDP/population telemetry. Optional keeps
+   * old direct collector callers and persisted reports backward compatible. */
+  longHorizonTelemetry?: LongHorizonTelemetryReport;
 }
 
 const WEALTH_LEADER_COUNT = 25;
@@ -448,35 +456,55 @@ async function collectTopCorporations(db: Db): Promise<TopCorporation[]> {
   }));
 }
 
-export async function collectExperimentsReport(db: Db): Promise<ExperimentsReport> {
-  const [seatsRows, partyOrgRows, corpRows, partyRows, finalMetrics, gameStateDoc, gameConfigDoc] =
-    await Promise.all([
-      db
-        .collection("parliamentSeatsHistory")
-        .find({}, { projection: { _id: 0, createdAt: 0 } })
-        .sort({ turn: 1 })
-        .toArray(),
-      db
-        .collection("partyHistory")
-        .find({}, { projection: { _id: 0, createdAt: 0 } })
-        .sort({ turn: 1 })
-        .toArray(),
-      db
-        .collection("corporationCountryHistory")
-        .find({}, { projection: { _id: 0, createdAt: 0 } })
-        .sort({ turn: 1 })
-        .toArray(),
-      db
-        .collection<PoliticalParty>("politicalParties")
-        .find(
-          {},
-          { projection: { sequentialId: 1, countryId: 1, name: 1, abbreviation: 1, color: 1 } }
+export async function collectExperimentsReport(
+  db: Db,
+  options: { runId?: string } = {}
+): Promise<ExperimentsReport> {
+  const [
+    seatsRows,
+    partyOrgRows,
+    corpRows,
+    partyRows,
+    finalMetrics,
+    gameStateDoc,
+    gameConfigDoc,
+    simRunDoc,
+  ] = await Promise.all([
+    db
+      .collection("parliamentSeatsHistory")
+      .find({}, { projection: { _id: 0, createdAt: 0 } })
+      .sort({ turn: 1 })
+      .toArray(),
+    db
+      .collection("partyHistory")
+      .find({}, { projection: { _id: 0, createdAt: 0 } })
+      .sort({ turn: 1 })
+      .toArray(),
+    db
+      .collection("corporationCountryHistory")
+      .find({}, { projection: { _id: 0, createdAt: 0 } })
+      .sort({ turn: 1 })
+      .toArray(),
+    db
+      .collection<PoliticalParty>("politicalParties")
+      .find(
+        {},
+        { projection: { sequentialId: 1, countryId: 1, name: 1, abbreviation: 1, color: 1 } }
+      )
+      .toArray(),
+    collectBalanceMetrics(db),
+    db.collection<GameState>("gameState").findOne({ _id: "current" }),
+    db.collection("gameConfig").findOne({ _id: "default" as never }),
+    options.runId
+      ? db.collection<Record<string, unknown>>("simRuns").findOne(
+          {
+            dbName: db.databaseName,
+            $or: [{ runId: options.runId }, { _id: options.runId as never }],
+          },
+          { projection: { "effectiveConfigInitial.capturedAtTurn": 1 } }
         )
-        .toArray(),
-      collectBalanceMetrics(db),
-      db.collection<GameState>("gameState").findOne({ _id: "current" }),
-      db.collection("gameConfig").findOne({ _id: "default" as never }),
-    ]);
+      : Promise.resolve(null),
+  ]);
 
   const parties: PartyInfo[] = partyRows.map((p) => ({
     countryId: p.countryId,
@@ -502,9 +530,30 @@ export async function collectExperimentsReport(db: Db): Promise<ExperimentsRepor
 
   // Wealth leaders + top corporations read live end-state (not history) — run
   // concurrently, independent of the timeline reshaping above.
-  const [wealthLeaders, topCorporations] = await Promise.all([
+  const worldId = gameStateDoc
+    ? buildWorldId({
+        preset: gameStateDoc.preset,
+        iterationType: gameStateDoc.iteration?.type,
+        iterationNumber: gameStateDoc.iteration?.number,
+      })
+    : null;
+  const capturedAtTurn = (
+    simRunDoc as { effectiveConfigInitial?: { capturedAtTurn?: unknown } } | null
+  )?.effectiveConfigInitial?.capturedAtTurn;
+  const telemetryTurnRange =
+    typeof capturedAtTurn === "number"
+      ? longHorizonReportTurnRange(capturedAtTurn, finalMetrics.turn)
+      : null;
+  const [wealthLeaders, topCorporations, longHorizonTelemetry] = await Promise.all([
     collectWealthLeaders(db, parties),
     collectTopCorporations(db),
+    options.runId && worldId && telemetryTurnRange
+      ? readLongHorizonTelemetryReport(db, {
+          worldId,
+          runId: options.runId,
+          turnRange: telemetryTurnRange,
+        })
+      : Promise.resolve(undefined),
   ]);
 
   return {
@@ -518,5 +567,6 @@ export async function collectExperimentsReport(db: Db): Promise<ExperimentsRepor
     wealthLeaders,
     topCorporations,
     finalMetrics,
+    ...(longHorizonTelemetry ? { longHorizonTelemetry } : {}),
   };
 }

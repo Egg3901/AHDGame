@@ -76,7 +76,7 @@ async function main() {
 
   const sandboxDb = await getDb();
   console.log(`[experiments:${runId}] Collecting experiments report from ${dbName}`);
-  const report = await collectExperimentsReport(sandboxDb);
+  const report = await collectExperimentsReport(sandboxDb, { runId });
   // #2083: a pinned job runs this collector from the validated pinned
   // worktree (worker passes --source-*). Prove it: the collector's own HEAD
   // must equal both the request and the SHA runWorld stamped, else exit
@@ -86,6 +86,11 @@ async function main() {
   console.log(
     `[experiments:${runId}] turn=${report.turn} seatsPoints=${report.seatsTimeline.length} ` +
       `partyOrgPoints=${report.partyOrgTimeline.length} corpPoints=${report.corporationsTimeline.length}`
+  );
+  console.log(
+    `[experiments:${runId}] longHorizon=${report.longHorizonTelemetry?.availability ?? "unavailable"} ` +
+      `approvalPoints=${report.longHorizonTelemetry?.approval.points.length ?? 0} ` +
+      `macroPoints=${report.longHorizonTelemetry?.macro.points.length ?? 0}`
   );
 
   const opsClient = new MongoClient(OPS_MONGODB_URI as string);
