@@ -1,6 +1,7 @@
 import type { LivingConflictDef } from "./types";
 import { VIETNAM_DEF } from "./defs/vietnam";
 import { PANDEMIC_DEF } from "./defs/pandemic";
+import { NORTHERN_IRELAND_DEF } from "./defs/northernIreland";
 import {
   BERLIN_DEF,
   CONGO_DEF,
@@ -13,6 +14,7 @@ import {
 export const LIVING_CONFLICT_DEFS: Record<string, LivingConflictDef> = {
   [VIETNAM_DEF.key]: VIETNAM_DEF,
   [PANDEMIC_DEF.key]: PANDEMIC_DEF,
+  [NORTHERN_IRELAND_DEF.key]: NORTHERN_IRELAND_DEF,
   [BERLIN_DEF.key]: BERLIN_DEF,
   [CONGO_DEF.key]: CONGO_DEF,
   [SUEZ_AFTERMATH_DEF.key]: SUEZ_AFTERMATH_DEF,

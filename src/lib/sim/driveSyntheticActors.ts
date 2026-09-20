@@ -89,7 +89,7 @@ async function driveCrisisDecision(
       const node = tree.find((n) => n.nodeId === interaction.currentNodeId);
       const option = node?.options?.[0];
       if (!node || !option) continue;
-      if (!canCharacterInteract(node as never, roles)) continue;
+      if (!canCharacterInteract(node as never, roles, character.countryId as string)) continue;
       const crisis = interaction.crisisId
         ? await db.collection("crises").findOne({ _id: interaction.crisisId })
         : null;

@@ -52,6 +52,9 @@ import { createCrisisFromTemplate } from "@/lib/crises/createCrisisFromTemplate"
 import { WARSAW_PACT_SATELLITE_COUNTRY_IDS } from "@/lib/crises/warsawPactSatellites";
 import { runUnionBanStrikeResponse } from "@/lib/crises/unionBanStrike";
 import { applyWarEmergencyResponse } from "@/lib/crises/warEmergencyResponse";
+import { livingConflictDef } from "@/lib/livingConflict/registry";
+import { loadConflictState, saveConflictState } from "@/lib/livingConflict/driver";
+import { applyConflictOutcome } from "@/lib/livingConflict/engine";
 
 /**
  * Context handed to every crisis option-action handler. The crisis is
@@ -809,6 +812,16 @@ export interface CrisisActionResult {
   nextNodeId?: string;
 }
 
+async function moveLivingConflictTrajectory(ctx: CrisisActionContext): Promise<void> {
+  const action = ctx.option.action;
+  if (!action || action.kind !== "livingConflictTrajectory") return;
+  const def = livingConflictDef(action.conflictKey);
+  if (!def) throw new Error(`Unknown living conflict: ${action.conflictKey}`);
+
+  const current = await loadConflictState(ctx.db, def.key);
+  await saveConflictState(ctx.db, applyConflictOutcome(def, current, action));
+}
+
 /**
  * Dispatch a crisis decision option's real-subsystem action, if it has one.
  * Called by `submitCrisisDecision` after the option's flat effects apply and
@@ -865,6 +878,9 @@ export async function runCrisisOptionAction(ctx: CrisisActionContext): Promise<C
       }
       case "warEmergencyResponse":
         await applyWarEmergencyResponse(ctx, action.response);
+        break;
+      case "livingConflictTrajectory":
+        await moveLivingConflictTrajectory(ctx);
         break;
     }
   } catch (err) {

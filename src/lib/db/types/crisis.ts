@@ -143,6 +143,16 @@ export type CrisisOptionAction =
         | "protests_address"
         | "protests_march"
         | "protests_crackdown";
+    }
+  /** Move a negotiated living conflict through its persistent tracks and
+   * lifecycle. The definition owns track bounds and valid phase keys. */
+  | {
+      kind: "livingConflictTrajectory";
+      conflictKey: string;
+      trackDeltas?: Record<string, number>;
+      nextConflictPhase?: string;
+      nextConflictStatus?:
+        "dormant" | "active" | "ceasefire" | "negotiating" | "settled" | "closed";
     };
 
 export interface CrisisDecisionOption {
@@ -225,6 +235,8 @@ export interface CrisisDecisionNode {
   outcomeEffects?: CrisisEffect[];
   outcomeMessage?: string;
   requiredRoles: ("headOfState" | "cabinet" | "stateGovernor" | "partyLeader" | "any")[];
+  /** Optional national allow-list for sequential cross-government negotiations. */
+  requiredCountryIds?: string[];
   /**
    * Optional allow-list applied when `partyLeader` is required. Abbreviations
    * are used because authored conflict definitions cannot depend on per-world

@@ -402,7 +402,17 @@ export async function getCrisisInteraction(
 /**
  * Check if a character has the required role to interact with a node.
  */
-export function canCharacterInteract(node: CrisisDecisionNode, characterRoles: string[]): boolean {
+export function canCharacterInteract(
+  node: CrisisDecisionNode,
+  characterRoles: string[],
+  countryId?: string
+): boolean {
+  if (
+    node.requiredCountryIds?.length &&
+    (!countryId || !node.requiredCountryIds.includes(countryId))
+  ) {
+    return false;
+  }
   if (node.requiredRoles.includes("any")) return true;
   const roleMatches = node.requiredRoles.some((role) => characterRoles.includes(role));
   if (!roleMatches) return false;
@@ -447,7 +457,7 @@ export async function submitCrisisDecision(
   const currentNode = interaction.decisionTree.find((n) => n.nodeId === interaction.currentNodeId);
   if (!currentNode) throw conflict("No active decision node");
 
-  if (!canCharacterInteract(currentNode, characterRoles)) {
+  if (!canCharacterInteract(currentNode, characterRoles, countryId)) {
     throw forbidden("You are not authorized to make this decision");
   }
 
