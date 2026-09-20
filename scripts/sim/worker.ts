@@ -33,6 +33,7 @@ import { claimFilterAt, parseClaimWindow } from "./claimWindow";
 import { spawnWithPrefixedLogs, type ChildRunIdentity } from "./childLogPrefix";
 import { assertSafeToken } from "./simJobArgs";
 import { resolveSimPreset } from "./simPreset";
+import { buildStatusMirrorUpdate } from "./simStatusMirror";
 import { defaultSimSourceDeps, planRunWorldSpawn, verifySimSource } from "./simSource";
 import {
   pickSovereignDemandExperimentFlags,
@@ -147,10 +148,14 @@ interface SimJob {
   updatedAt: Date;
   workerStartedAt?: Date;
   currentTurn?: number;
+  lastMessage?: string;
+  lastWarnings?: string[];
   error?: string | null;
   workerInstanceId?: string;
   workerSlotId?: number;
   heartbeatAt?: Date;
+  workerHeartbeatAt?: Date;
+  progressUpdatedAt?: Date;
   workerPhase?: string;
 }
 
@@ -210,26 +215,25 @@ async function mirrorSandboxStatus(jobsCol: Collection<SimJob>, job: SimJob) {
       .collection("simRuns")
       .findOne({ _id: job._id as never });
     if (doc) {
+      const now = new Date();
+      const mirrored = buildStatusMirrorUpdate(job, doc, now);
       await jobsCol.updateOne(
         { _id: job._id },
         {
           $set: {
-            currentTurn: doc.currentTurn,
-            lastMessage: doc.lastMessage,
-            lastWarnings: doc.lastWarnings,
+            ...mirrored,
             // #1992: surface the fresh-bootstrap conformance summary on the
             // job manifest so the queue shows seed provenance, not just turns.
             ...(doc.bootstrapConformance ? { bootstrapConformance: doc.bootstrapConformance } : {}),
-            heartbeatAt: new Date(),
-            workerPhase: "turns",
-            updatedAt: new Date(),
           },
         }
       );
+      Object.assign(job, mirrored);
     } else {
+      const now = new Date();
       await jobsCol.updateOne(
         { _id: job._id, status: "running", workerInstanceId: WORKER_INSTANCE_ID },
-        { $set: { heartbeatAt: new Date(), updatedAt: new Date() } }
+        { $set: { heartbeatAt: now, workerHeartbeatAt: now } }
       );
     }
   } catch (err) {
