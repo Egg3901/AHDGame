@@ -14,7 +14,7 @@ import type {
 } from "@/lib/db/types";
 import { getUkCommonsSeats } from "@/lib/constants/states";
 import { getGameStatePreset } from "@/lib/db/collections/gameState";
-import { allocateSeats, getMajoritarianBonus } from "@/lib/turn/election/seatAllocation";
+import { allocateSeats } from "@/lib/turn/election/seatAllocation";
 
 interface RegionDiagnostic {
   region: string;
@@ -195,14 +195,6 @@ export async function POST() {
       countryId: "UK",
     });
 
-    // FPTP winner's bonus (#3244): heal must reallocate with the exact rules
-    // the resolver used — cube-law while the CURRENT in-game year is pre-1999,
-    // proportional from 1999 on (getMajoritarianBonus returns undefined there).
-    const gsForYear = await db
-      .collection<{ _id: string; currentYear?: number }>("gameState")
-      .findOne({ _id: "current" }, { projection: { currentYear: 1 } });
-    const majoritarianBonus = getMajoritarianBonus("commons", gsForYear?.currentYear);
-
     // Recreate from election results
     const toInsert: ElectedOfficial[] = [];
     let regionsHealed = 0;
@@ -235,8 +227,6 @@ export async function POST() {
         totalSeats,
         ranked,
         totalVotesCast,
-        undefined,
-        majoritarianBonus,
         undefined,
         commonsSeats
       );

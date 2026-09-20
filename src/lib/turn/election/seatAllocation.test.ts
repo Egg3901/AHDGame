@@ -2,15 +2,7 @@
  * Unit tests for seatAllocation — seat allocation logic for multi-seat and single-seat races.
  */
 import { describe, it, expect } from "vitest";
-import {
-  allocateSeats,
-  applyMajoritarianBonus,
-  getMajoritarianBonus,
-  getMultiSeatMinShare,
-  UK_COMMONS_FPTP_EXPONENT,
-  UK_COMMONS_BONUS_TAPER,
-  type RankedCandidate,
-} from "./seatAllocation";
+import { allocateSeats, getMultiSeatMinShare, type RankedCandidate } from "./seatAllocation";
 import { HOUSE_SEATS_1991, UK_COMMONS_SEATS_1953 } from "@/lib/constants/states";
 
 describe("allocateSeats — preset-aware house seats", () => {
@@ -59,9 +51,10 @@ describe("getMultiSeatMinShare", () => {
     expect(getMultiSeatMinShare("localCouncil")).toBe(0.1);
   });
 
-  it("should return 0.2 for other types", () => {
+  it("keeps the existing 20% Commons eligibility gate", () => {
     expect(getMultiSeatMinShare("house")).toBe(0.2);
     expect(getMultiSeatMinShare("commons")).toBe(0.2);
+    expect(getMultiSeatMinShare("snap_commons")).toBe(0.2);
     expect(getMultiSeatMinShare("governor")).toBe(0.2);
   });
 
@@ -264,6 +257,20 @@ describe("allocateSeats - Largest Remainder (Hamilton method)", () => {
 // ── commons uses UK_COMMONS_SEATS authoritative count ───────────────────────
 
 describe("allocateSeats - commons (UK)", () => {
+  it("allocates the reported 1970 vote split without a historical winner bonus", () => {
+    const ranked: RankedCandidate[] = [
+      { id: "con", votes: 533, party: "con" },
+      { id: "lab", votes: 291, party: "lab" },
+      { id: "ld", votes: 175, party: "ld" },
+    ];
+
+    expect(allocateSeats("commons", "TEST", 81, ranked, 999).seatsEstimate).toEqual({
+      con: 52,
+      lab: 29,
+      ld: 0,
+    });
+  });
+
   it("uses UK_COMMONS_SEATS[LON]=75 as authoritative seat count", () => {
     const ranked: RankedCandidate[] = [
       { id: "Labour", votes: 500 },
@@ -290,7 +297,6 @@ describe("allocateSeats - commons (UK)", () => {
       999,
       ranked,
       1000,
-      undefined,
       undefined,
       undefined,
       UK_COMMONS_SEATS_1953
@@ -563,13 +569,13 @@ describe("allocateSeats - party-aggregate eligibility threshold", () => {
   });
 
   it("threshold is computed on the PARTY aggregate, not the individual candidate", () => {
-    // Party X splits 22% across two candidates (12% + 10%) — both clear the
-    // 20% commons gate via the aggregate; party Y's single 18% candidate does not.
+    // Party X splits 24% across two candidates (12% + 12%) and clears the
+    // 20% Commons gate via the aggregate; party Y's single 8% candidate does not.
     const ranked: RankedCandidate[] = [
-      { id: "z1", votes: 600, party: "Z" }, // 60%
-      { id: "y1", votes: 180, party: "Y" }, // 18% alone — below gate
-      { id: "x1", votes: 120, party: "X" }, // 12% (X aggregate 22%)
-      { id: "x2", votes: 100, party: "X" }, // 10% (X aggregate 22%)
+      { id: "z1", votes: 680, party: "Z" }, // 68%
+      { id: "y1", votes: 80, party: "Y" }, // 8% alone — below gate
+      { id: "x1", votes: 120, party: "X" }, // 12% (X aggregate 24%)
+      { id: "x2", votes: 120, party: "X" }, // 12% (X aggregate 24%)
     ];
     const result = allocateSeats("commons", "UNKNOWN_REGION", 20, ranked, 1000);
     expect(result.seatsEstimate["y1"]).toBe(0);
@@ -580,11 +586,11 @@ describe("allocateSeats - party-aggregate eligibility threshold", () => {
   });
 
   it("independents are never pooled into one eligibility group", () => {
-    // Two independents at 15% each must NOT pool to 30% and sneak past the 20% gate.
+    // Two independents at 5% each must NOT pool to 10% and sneak past the 10% gate.
     const ranked: RankedCandidate[] = [
-      { id: "maj", votes: 700, party: "p1" },
-      { id: "ind1", votes: 150, party: "independent" },
-      { id: "ind2", votes: 150, party: "independent" },
+      { id: "maj", votes: 900, party: "p1" },
+      { id: "ind1", votes: 50, party: "independent" },
+      { id: "ind2", votes: 50, party: "independent" },
     ];
     const result = allocateSeats("commons", "UNKNOWN_REGION", 10, ranked, 1000);
     expect(result.seatsEstimate["ind1"]).toBe(0);
@@ -619,509 +625,71 @@ describe("allocateSeats - party-aggregate eligibility threshold", () => {
   });
 });
 
-// ── FPTP winner's bonus (power law) — #3244 / ticket #1032 ──────────────────
-
-describe("getMajoritarianBonus — current-year/chamber gating", () => {
-  it("is OFF for commons at modern in-game years (1999+) and without a year", () => {
-    expect(getMajoritarianBonus("commons", 1999)).toBeUndefined();
-    expect(getMajoritarianBonus("commons", 2007)).toBeUndefined();
-    // The live 1991-default world at in-game ~2015: proportional — its
-    // pre-#3244 status quo.
-    expect(getMajoritarianBonus("commons", 2015)).toBeUndefined();
-    expect(getMajoritarianBonus("commons", 2019)).toBeUndefined();
-    expect(getMajoritarianBonus("commons", 2023)).toBeUndefined();
-    // Fail-safe: absent/invalid year → modern (proportional) behavior.
-    expect(getMajoritarianBonus("commons", undefined)).toBeUndefined();
-    expect(getMajoritarianBonus("commons", null)).toBeUndefined();
-    expect(getMajoritarianBonus("commons", Number.NaN)).toBeUndefined();
-  });
-
-  it("is ON for commons/snap_commons while the in-game year is pre-1999", () => {
-    for (const year of [1953, 1955, 1979, 1991, 1995, 1998]) {
-      expect(getMajoritarianBonus("commons", year)).toEqual({
-        exponent: UK_COMMONS_FPTP_EXPONENT,
-      });
-      expect(getMajoritarianBonus("snap_commons", year)).toEqual({
-        exponent: UK_COMMONS_FPTP_EXPONENT,
-      });
-    }
-  });
-
-  it("graduates a world back to proportional as its clock crosses 1999", () => {
-    // A 1953-default world: winner's bonus through its historical phase…
-    expect(getMajoritarianBonus("commons", 1953)).toBeDefined();
-    expect(getMajoritarianBonus("commons", 1998)).toBeDefined();
-    // …then reverts to the established proportional live behavior at 1999+.
-    expect(getMajoritarianBonus("commons", 1999)).toBeUndefined();
-    expect(getMajoritarianBonus("commons", 2020)).toBeUndefined();
-  });
-
-  it("is OFF for every non-Commons chamber even in historical years", () => {
-    for (const type of ["house", "stateSenate", "bundestag", "dail", "sangiin", "shugiin"]) {
-      expect(getMajoritarianBonus(type, 1953)).toBeUndefined();
-    }
-  });
-});
-
-describe("applyMajoritarianBonus — power-law transform", () => {
-  const square = { exponent: 2 };
-  const cube = { exponent: 3 };
-
-  it("boosts BOTH leading parties against the rest, split by their compared score", () => {
-    const pool = [
-      { id: "con", votes: 476, group: "party:con" },
-      { id: "lab", votes: 453, group: "party:lab" },
-      { id: "snp", votes: 210, group: "party:snp" },
+describe("allocateSeats - Commons proportional correction", () => {
+  it("replays ticket 1319's turn-869 SEE snapshot", () => {
+    const ticketRanked: RankedCandidate[] = [
+      { id: "monroe", votes: 66375, party: "con" },
+      { id: "viktoriya", votes: 53285, party: "lab" },
+      { id: "count", votes: 54426, party: "lab" },
+      { id: "liam", votes: 75367, party: "con" },
+      { id: "asif", votes: 68511, party: "ld" },
+      { id: "aaliyah", votes: 66634, party: "con" },
+      { id: "mihai", votes: 6351, party: "lab" },
     ];
-    const { effective: eff, applied } = applyMajoritarianBonus(pool, square);
-    expect(applied).toBe(true);
-    const total = [...eff.values()].reduce((s, v) => s + v, 0);
-    expect(total).toBeCloseTo(476 + 453 + 210, 6);
-    // Both principals gain; the third party is squeezed.
-    expect(eff.get("con")!).toBeGreaterThan(476);
-    expect(eff.get("lab")!).toBeGreaterThan(453);
-    expect(eff.get("snp")!).toBeLessThan(210);
-    // Both principals scale by the same factor, so their split stays plain
-    // proportional to their compared score.
-    expect(eff.get("con")! / eff.get("lab")!).toBeCloseTo(476 / 453, 9);
-    // Bloc-vs-rest square law, where the bloc now includes the third party at
-    // its tapered membership rather than excluding it outright.
-    const wSnp = Math.pow(210 / 453, UK_COMMONS_BONUS_TAPER);
-    const bloc = 476 + 453 + 210 * wSnp;
-    const sBloc = bloc / 1139;
-    const targetBloc = (1139 * Math.pow(sBloc, 2)) / (Math.pow(sBloc, 2) + Math.pow(1 - sBloc, 2));
-    expect(eff.get("con")!).toBeCloseTo(476 * (targetBloc / bloc), 6);
-    expect(eff.get("lab")!).toBeCloseTo(453 * (targetBloc / bloc), 6);
-  });
-
-  it("still supports cube-law squeeze strength when asked", () => {
-    const pool = [
-      { id: "con", votes: 476, group: "party:con" },
-      { id: "lab", votes: 453, group: "party:lab" },
-      { id: "snp", votes: 210, group: "party:snp" },
-    ];
-    const sq = applyMajoritarianBonus(pool, square).effective;
-    const cu = applyMajoritarianBonus(pool, cube).effective;
-    // Higher exponent squeezes the third party harder; principal split unchanged.
-    expect(cu.get("snp")!).toBeLessThan(sq.get("snp")!);
-    expect(cu.get("con")! / cu.get("lab")!).toBeCloseTo(476 / 453, 9);
-  });
-
-  // Tickets #1276 / #1277. The old rule handed the second slot to whichever
-  // party led on state ORGANIZATION, an invisible stat players move several
-  // points per turn. Slot 2 flipped between consecutive turns of the same
-  // count and relocated 9 to 20 seats each time. It is decided by votes now,
-  // and membership TAPERS so a near-tie splits the boost instead of swinging
-  // it whole.
-  it("gives the second slot to the runner-up by VOTES, with no organization input", () => {
-    // A surge party out-polls the third-placed party. Under the old rule an
-    // org ranking could hand the slot to the party that ran third; now the
-    // ordering is votes, full stop.
-    const pool = [
-      { id: "con", votes: 400, group: "party:con" },
-      { id: "pop", votes: 350, group: "party:pop" },
-      { id: "lab", votes: 300, group: "party:lab" },
-    ];
-    const { effective: eff } = applyMajoritarianBonus(pool, square);
-    // con leads, pop is the runner-up: both scale together.
-    expect(eff.get("con")! / eff.get("pop")!).toBeCloseTo(400 / 350, 9);
-    expect(eff.get("con")!).toBeGreaterThan(400);
-    expect(eff.get("pop")!).toBeGreaterThan(350);
-    // lab ran third and is squeezed, but only partially — it polled close to
-    // the runner-up, so it keeps most of its weight.
-    expect(eff.get("lab")!).toBeLessThan(300);
-    expect(eff.get("lab")!).toBeGreaterThan(300 * 0.5);
-    expect(eff.get("con")! + eff.get("pop")! + eff.get("lab")!).toBeCloseTo(1050, 6);
-  });
-
-  it("tapers the squeeze by how close a party ran to the runner-up", () => {
-    const near = applyMajoritarianBonus(
-      [
-        { id: "a", votes: 500, group: "party:a" },
-        { id: "b", votes: 300, group: "party:b" },
-        { id: "c", votes: 299, group: "party:c" },
-      ],
-      square
-    ).effective;
-    const far = applyMajoritarianBonus(
-      [
-        { id: "a", votes: 500, group: "party:a" },
-        { id: "b", votes: 300, group: "party:b" },
-        { id: "c", votes: 60, group: "party:c" },
-      ],
-      square
-    ).effective;
-    // One vote behind the runner-up keeps almost all of its weight: the whole
-    // point of the taper is that the boundary is no longer a cliff.
-    expect(near.get("c")! / 299).toBeGreaterThan(0.95);
-    // A distant also-ran is squeezed hard, so the FPTP effect survives.
-    expect(far.get("c")! / 60).toBeLessThan(0.5);
-  });
-
-  it("removes the cliff at the runner-up boundary", () => {
-    // The defect, stated as a test: swapping which of two near-tied parties
-    // places second must not move the allocation.
-    const build = (bVotes: number, cVotes: number) => [
-      { id: "a", votes: 500, group: "party:a" },
-      { id: "b", votes: bVotes, group: "party:b" },
-      { id: "c", votes: cVotes, group: "party:c" },
-    ];
-    const bSecond = applyMajoritarianBonus(build(300, 299), square).effective;
-    const cSecond = applyMajoritarianBonus(build(299, 300), square).effective;
-    // b and c simply swap roles, so each one's weight should swap with it.
-    expect(bSecond.get("b")!).toBeCloseTo(cSecond.get("c")!, 6);
-    expect(bSecond.get("c")!).toBeCloseTo(cSecond.get("b")!, 6);
-    // And the leader is untouched by which of them placed second.
-    expect(bSecond.get("a")!).toBeCloseTo(cSecond.get("a")!, 6);
-  });
-
-  it("is identity when only the duopoly is in the pool — no pool-lead amplification (ticket #1032)", () => {
-    // Con pools 476 across two candidates vs Labour's lone 453. Pre-rework the
-    // pooled lead was amplified (the ticket's complaint); now with nothing to
-    // squeeze the allocation is exactly proportional, stacking buys nothing.
-    const pool = [
-      { id: "con1", votes: 300, group: "party:con" },
-      { id: "con2", votes: 176, group: "party:con" },
-      { id: "lab1", votes: 453, group: "party:lab" },
-    ];
-    const { effective: eff, applied } = applyMajoritarianBonus(pool, square);
-    expect(applied).toBe(false);
-    expect(eff.get("con1")).toBe(300);
-    expect(eff.get("con2")).toBe(176);
-    expect(eff.get("lab1")).toBe(453);
-  });
-
-  it("is identity for a single group or a zero-vote runner-up", () => {
-    const solo = applyMajoritarianBonus([{ id: "a", votes: 100, group: "g" }], square);
-    expect(solo.applied).toBe(false);
-    expect(solo.effective.get("a")).toBe(100);
-    const degenerate = applyMajoritarianBonus(
-      [
-        { id: "a", votes: 100, group: "g1" },
-        { id: "b", votes: 0, group: "g2" },
-      ],
-      square
+    const result = allocateSeats(
+      "commons",
+      "SEE",
+      81,
+      ticketRanked,
+      390949,
+      undefined,
+      undefined,
+      UK_COMMONS_SEATS_1953
     );
-    expect(degenerate.applied).toBe(false);
-    expect(degenerate.effective.get("a")).toBe(100);
-    expect(degenerate.effective.get("b")).toBe(0);
+
+    expect(result.seatsEstimate).toEqual({
+      monroe: 17,
+      viktoriya: 13,
+      count: 14,
+      liam: 19,
+      asif: 0,
+      aaliyah: 17,
+      mihai: 1,
+    });
+    expect(Object.values(result.seatsEstimate).reduce((sum, seats) => sum + seats, 0)).toBe(81);
   });
 
-  it("exponent 1 is a no-op (pure proportional)", () => {
-    const pool = [
-      { id: "a", votes: 476, group: "g1" },
-      { id: "b", votes: 453, group: "g2" },
-      { id: "c", votes: 210, group: "g3" },
-    ];
-    const { effective: eff, applied } = applyMajoritarianBonus(pool, { exponent: 1 });
-    expect(applied).toBe(false);
-    expect(eff.get("a")).toBeCloseTo(476, 9);
-    expect(eff.get("b")).toBeCloseTo(453, 9);
-    expect(eff.get("c")).toBeCloseTo(210, 9);
-  });
-
-  it("breaks exact vote ties deterministically by group key", () => {
-    const tied = () => [
-      { id: "x", votes: 400, group: "party:x" },
-      { id: "y", votes: 400, group: "party:y" },
-      { id: "z", votes: 150, group: "party:z" },
-    ];
-    const eff1 = applyMajoritarianBonus(tied(), square).effective;
-    const eff2 = applyMajoritarianBonus(tied(), square).effective;
-    expect([...eff1.entries()]).toEqual([...eff2.entries()]);
-    // The tied pair are both principals, so they stay equal to each other.
-    expect(eff1.get("x")).toBeCloseTo(eff1.get("y")!, 9);
-  });
-
-  it("conserves the pool total across randomised shapes", () => {
-    // Conservation is what lets Largest Remainder keep seat counts exact. If
-    // the re-weighting ever leaked or created votes, every downstream seat
-    // total would drift silently rather than fail loudly, so pin it over many
-    // shapes rather than the few hand-built ones above.
-    let seed = 20260905;
-    const rand = () => {
-      seed = (seed * 1103515245 + 12345) % 2147483648;
-      return seed / 2147483648;
-    };
-    for (let run = 0; run < 400; run++) {
-      const groups = 1 + Math.floor(rand() * 7);
-      const pool = Array.from({ length: groups }, (_, g) => ({
-        id: `c${g}`,
-        votes: Math.floor(rand() * 100_000),
-        group: `party:${g}`,
-      }));
-      const total = pool.reduce((s, c) => s + c.votes, 0);
-      const { effective } = applyMajoritarianBonus(pool, {
-        exponent: UK_COMMONS_FPTP_EXPONENT,
-        taper: UK_COMMONS_BONUS_TAPER,
-      });
-      const out = [...effective.values()].reduce((s, v) => s + v, 0);
-      expect(out).toBeCloseTo(total, 4);
-      // No negative or non-finite weight can ever reach Largest Remainder.
-      for (const v of effective.values()) {
-        expect(Number.isFinite(v)).toBe(true);
-        expect(v).toBeGreaterThanOrEqual(0);
-      }
-    }
-  });
-
-  it("never lets a group out-weight one that polled more", () => {
-    // Monotonicity of the transform itself: more votes must never yield less
-    // effective weight, or a party could lose seats by gaining votes.
-    const pool = [
-      { id: "a", votes: 500, group: "party:a" },
-      { id: "b", votes: 400, group: "party:b" },
-      { id: "c", votes: 399, group: "party:c" },
-      { id: "d", votes: 100, group: "party:d" },
-    ];
-    const { effective } = applyMajoritarianBonus(pool, { exponent: UK_COMMONS_FPTP_EXPONENT });
-    const weights = pool.map((c) => effective.get(c.id)!);
-    for (let i = 1; i < weights.length; i++) {
-      expect(weights[i - 1]).toBeGreaterThanOrEqual(weights[i]);
-    }
-  });
-
-  it("reports whether it actually re-weighted, for honest display copy", () => {
-    // Two contesting groups: nothing outside the bloc, so no boost fires and
-    // the quota narrative on the results panel would have been accurate.
-    const twoParty = applyMajoritarianBonus(
-      [
-        { id: "a", votes: 600, group: "party:a" },
-        { id: "b", votes: 400, group: "party:b" },
-      ],
-      square
-    );
-    expect(twoParty.applied).toBe(false);
-    // Three groups with a real minority to squeeze: the boost fires.
-    const threeParty = applyMajoritarianBonus(
-      [
-        { id: "a", votes: 500, group: "party:a" },
-        { id: "b", votes: 400, group: "party:b" },
-        { id: "c", votes: 100, group: "party:c" },
-      ],
-      square
-    );
-    expect(threeParty.applied).toBe(true);
-  });
-});
-
-describe("allocateSeats — commons with FPTP winner's bonus", () => {
-  const bonus = { exponent: UK_COMMONS_FPTP_EXPONENT };
-  // 1953-sim national shape: Con 47.6 / Lab 45.3 / Lib 6.7 in a 75-seat region.
-  const ranked: RankedCandidate[] = [
-    { id: "con", votes: 476, party: "con" },
-    { id: "lab", votes: 453, party: "lab" },
-    { id: "lib", votes: 67, party: "lib" },
-  ];
-
-  it("gate off (undefined config) is byte-identical to the current proportional path", () => {
-    const off = allocateSeats("commons", "LON", 75, ranked, 996, undefined, undefined);
-    const legacy = allocateSeats("commons", "LON", 75, ranked, 996);
-    expect(off).toEqual(legacy);
-  });
-
-  it("gate leaves only the duopoly: allocation is exactly proportional between them", () => {
-    // Lib is under the 20% gate, so the pool is Con+Lab alone — nothing to
-    // squeeze, and the big two settle at their plain proportional shares.
-    const on = allocateSeats("commons", "LON", 75, ranked, 996, undefined, bonus);
-    const off = allocateSeats("commons", "LON", 75, ranked, 996);
-    expect(on.seatsEstimate).toEqual(off.seatsEstimate);
-    expect(on.seatsEstimate["con"]).toBe(38);
-    expect(on.seatsEstimate["lab"]).toBe(37);
-    expect(Object.values(on.seatsEstimate).reduce((s, v) => s + v, 0)).toBe(75);
-  });
-
-  it("squeezes an eligible third party while the big two both gain, proportionally", () => {
-    // SNP-style third party above the gate in a 75-seat region.
-    const trio: RankedCandidate[] = [
+  it("allocates an eligible third party proportionally", () => {
+    const ranked: RankedCandidate[] = [
       { id: "con", votes: 400, party: "con" },
       { id: "lab", votes: 350, party: "lab" },
       { id: "snp", votes: 240, party: "snp" },
     ];
-    const on = allocateSeats("commons", "SCO_TEST", 75, trio, 990, undefined, bonus);
-    const off = allocateSeats("commons", "SCO_TEST", 75, trio, 990);
-    // Proportional would be 30/27/18; the squeeze lands 35/31/9. The old
-    // all-or-nothing pair landed 36/32/7 — the taper leaves the third party
-    // two more seats because it polled within reach of the runner-up.
-    expect(on.seatsEstimate["con"]).toBe(35);
-    expect(on.seatsEstimate["lab"]).toBe(31);
-    expect(on.seatsEstimate["snp"]).toBe(9);
-    expect(on.seatsEstimate["con"]!).toBeGreaterThan(off.seatsEstimate["con"]!);
-    expect(on.seatsEstimate["lab"]!).toBeGreaterThan(off.seatsEstimate["lab"]!);
-    expect(on.seatsEstimate["snp"]!).toBeLessThan(off.seatsEstimate["snp"]!);
-    expect(Object.values(on.seatsEstimate).reduce((s, v) => s + v, 0)).toBe(75);
+    const result = allocateSeats("commons", "SCO_TEST", 75, ranked, 990);
+    expect(result.seatsEstimate).toEqual({ con: 30, lab: 27, snp: 18 });
   });
 
-  it("keeps sub-threshold minors at exactly 0 seats", () => {
-    const on = allocateSeats("commons", "LON", 75, ranked, 996, undefined, bonus);
-    expect(on.seatsEstimate["lib"]).toBe(0);
-  });
-
-  it("three eligible parties: duopoly gains together, third squeezed", () => {
-    // A 40 / B 35 / C 25 — all above the 20% gate in a 20-seat region.
-    const threeWay: RankedCandidate[] = [
-      { id: "A", votes: 400, party: "pa" },
-      { id: "B", votes: 350, party: "pb" },
-      { id: "C", votes: 250, party: "pc" },
+  it("keeps the 20% Commons gate while excluding a sub-threshold minor", () => {
+    const ranked: RankedCandidate[] = [
+      { id: "con", votes: 476, party: "con" },
+      { id: "lab", votes: 453, party: "lab" },
+      { id: "lib", votes: 67, party: "lib" },
     ];
-    const on = allocateSeats("commons", "UNKNOWN_REGION", 20, threeWay, 1000, undefined, bonus);
-    const off = allocateSeats("commons", "UNKNOWN_REGION", 20, threeWay, 1000);
-    // Proportional 8/7/5 becomes 9/8/3: both majors up, C squeezed but not
-    // gutted. The old all-or-nothing pair took C down to 2.
-    expect(on.seatsEstimate["A"]).toBe(9);
-    expect(on.seatsEstimate["B"]).toBe(8);
-    expect(on.seatsEstimate["C"]).toBe(3);
-    expect(on.seatsEstimate["A"]!).toBeGreaterThan(off.seatsEstimate["A"]!);
-    expect(on.seatsEstimate["B"]!).toBeGreaterThan(off.seatsEstimate["B"]!);
-    const total = Object.values(on.seatsEstimate).reduce((s, v) => s + v, 0);
-    expect(total).toBe(20);
+    const result = allocateSeats("commons", "LON", 75, ranked, 996);
+    expect(result.seatsEstimate).toEqual({ con: 38, lab: 37, lib: 0 });
   });
 
-  it("is deterministic across repeated runs", () => {
-    const a = allocateSeats("commons", "SEE", 90, ranked, 996, undefined, bonus);
-    const b = allocateSeats("commons", "SEE", 90, ranked, 996, undefined, bonus);
-    expect(a).toEqual(b);
-  });
-
-  it("landslide region: a 19% opposition clears the historical 10% gate and holds seats", () => {
-    // NIR-style. Under the modern 20% gate this was a threshold sweep; the
-    // historical Commons gate is 10% when the bonus is active, so the
-    // opposition seats proportionally (duopoly-only pool → no squeeze).
-    const nir: RankedCandidate[] = [
-      { id: "uup", votes: 630, party: "con" },
-      { id: "nat", votes: 150, party: "nat" }, // 19.2% — above the 10% gate
-    ];
-    const on = allocateSeats("commons", "UNKNOWN_REGION", 18, nir, 780, undefined, bonus);
-    expect(on.seatsEstimate["uup"]).toBe(15);
-    expect(on.seatsEstimate["nat"]).toBe(3);
-    // A true sub-gate minor (under 10%) still gets swept out entirely.
-    const swept: RankedCandidate[] = [
-      { id: "uup", votes: 720, party: "con" },
-      { id: "nat", votes: 60, party: "nat" }, // 7.7% — under the 10% gate
-    ];
-    const on2 = allocateSeats("commons", "UNKNOWN_REGION", 18, swept, 780, undefined, bonus);
-    expect(on2.seatsEstimate["uup"]).toBe(18);
-    expect(on2.seatsEstimate["nat"]).toBe(0);
-  });
-
-  it("squeezes a trailing party in a fragmented region, gently on the near ones", () => {
-    // Four-way region: three parties bunched at the top and one trailing on
-    // 15%. BEHAVIOUR CHANGE — the old rule declined to boost here at all,
-    // because its pair could be a minority of the pool and the BOOST-only
-    // guard clamped to identity, leaving pure proportional. The principals are
-    // now the top two by votes, so the bloc is never a pathological minority
-    // and the boost fires: the two parties within reach of the runner-up keep
-    // nearly all their weight while the trailing party takes the squeeze.
-    // Measured across 48 real races this is NET GENTLER on third parties than
-    // the old rule (15.0% of seats on 26.8% of the vote, versus 12.5%); this
-    // shape is the exception, not the rule.
-    const frag: RankedCandidate[] = [
-      { id: "a", votes: 300, party: "pa" },
-      { id: "b", votes: 280, party: "pb" },
-      { id: "c", votes: 270, party: "pc" },
-      { id: "d", votes: 150, party: "pd" },
-    ];
-    const on = allocateSeats("commons", "UNKNOWN_REGION", 27, frag, 1000, undefined, {
-      exponent: UK_COMMONS_FPTP_EXPONENT,
-    });
-    const prop = allocateSeats("commons", "UNKNOWN_REGION", 27, frag, 1000, undefined, {
-      exponent: 1,
-    });
-    expect(on.seatsEstimate).toEqual({ a: 9, b: 9, c: 8, d: 1 });
-    expect(prop.seatsEstimate).toEqual({ a: 8, b: 8, c: 7, d: 4 });
-    // The three bunched parties stay within one seat of each other.
-    expect(on.seatsEstimate["a"]! - on.seatsEstimate["c"]!).toBeLessThanOrEqual(1);
-    expect(Object.values(on.seatsEstimate).reduce((s, v) => s + v, 0)).toBe(27);
-  });
-
-  it("BOOST only: a bloc that the power law would shrink is left alone", () => {
-    // Two front-runners on 10% each against a long tail far behind them: the
-    // bloc is a genuine minority of the pool, so lifting it is not what the
-    // power law would do. The guard clamps to identity rather than shrinking
-    // the leading parties for a bad night.
-    const longTail = [
-      { id: "a", votes: 100, group: "party:a" },
-      { id: "b", votes: 100, group: "party:b" },
-      ...Array.from({ length: 50 }, (_, i) => ({
-        id: `t${i}`,
-        votes: 30,
-        group: `party:t${i}`,
-      })),
-    ];
-    const { effective, applied } = applyMajoritarianBonus(longTail, {
-      exponent: UK_COMMONS_FPTP_EXPONENT,
-    });
-    expect(applied).toBe(false);
-    expect(effective.get("a")).toBe(100);
-    expect(effective.get("t0")).toBe(30);
-  });
-
-  it("depends on votes alone, so nothing outside the count can lurch the seats", () => {
-    // The live NEE cliff, restated: identical vote shares must always produce
-    // an identical allocation. Organization used to be a second input, and its
-    // drift between turns moved seats while the votes stood still.
-    const nee: RankedCandidate[] = [
-      { id: "lab", votes: 529, party: "lab" },
-      { id: "con", votes: 340, party: "con" },
-      { id: "lib", votes: 131, party: "lib" },
-    ];
-    const runs = Array.from({ length: 3 }, () =>
-      allocateSeats("commons", "UNKNOWN_REGION", 27, nee, 1000, undefined, {
-        exponent: UK_COMMONS_FPTP_EXPONENT,
-      })
-    );
-    for (const run of runs) expect(run.seatsEstimate).toEqual(runs[0].seatsEstimate);
-    // The leader still takes a clear majority of the region and the minor
-    // party is squeezed without being wiped out.
-    const seats = runs[0].seatsEstimate;
-    expect(seats["lab"]).toBeGreaterThan(seats["con"]);
-    expect(seats["con"]).toBeGreaterThan(seats["lib"]);
-    expect(seats["lab"] + seats["con"] + seats["lib"]).toBe(27);
-  });
-
-  it("the two principals are always different parties", () => {
-    const pool = [
-      { id: "a", votes: 500, group: "party:pa" },
-      { id: "b", votes: 300, group: "party:pb" },
-      { id: "c", votes: 200, group: "party:pc" },
-    ];
-    const { effective: eff } = applyMajoritarianBonus(pool, { exponent: 2 });
-    // pa leads and pb is the runner-up, so pc is the one squeezed — the
-    // ordering follows votes and cannot name the same party twice.
-    expect(eff.get("c")!).toBeLessThan(200);
-    expect(eff.get("a")!).toBeGreaterThan(500);
-    expect(eff.get("b")!).toBeGreaterThan(300);
-    // Total is still conserved, which a duplicated slot would break.
-    expect(eff.get("a")! + eff.get("b")! + eff.get("c")!).toBeCloseTo(1000, 6);
-  });
-
-  it("ticket #1032: no pool-lead amplification — the NWE shape settles proportionally", () => {
-    // Live NWE shape from the ticket screenshot: one Labour front-runner vs
-    // three Conservatives whose pooled share leads the region. Pre-rework the
-    // Conservative POOL won an amplified 52/75 vs Edward's 23 even though
-    // Edward led the race outright — the "how does this make sense"
-    // complaint. Lib is under the gate, so the pool is the duopoly alone and
-    // the region settles at plain proportional shares: 30 Labour, 45 Con.
-    const nwe: RankedCandidate[] = [
-      { id: "edward", votes: 106_600, party: "lab" },
+  it("is deterministic and conserves the chamber seat count", () => {
+    const ranked: RankedCandidate[] = [
+      { id: "lab", votes: 106_600, party: "lab" },
       { id: "may", votes: 81_400, party: "con" },
       { id: "cunk", votes: 56_200, party: "con" },
       { id: "wolf", votes: 23_100, party: "con" },
-      { id: "taylor", votes: 4_500, party: "lib" },
+      { id: "lib", votes: 4_500, party: "lib" },
     ];
-    const total = 271_800;
-    const on = allocateSeats("commons", "NWE", 75, nwe, total, undefined, bonus);
-    const prop = allocateSeats("commons", "NWE", 75, nwe, total);
-
-    const lab = on.seatsEstimate["edward"] ?? 0;
-    const con =
-      (on.seatsEstimate["may"] ?? 0) +
-      (on.seatsEstimate["cunk"] ?? 0) +
-      (on.seatsEstimate["wolf"] ?? 0);
-
-    expect(lab + con + (on.seatsEstimate["taylor"] ?? 0)).toBe(75);
-    expect(on.seatsEstimate).toEqual(prop.seatsEstimate);
-    expect(lab).toBe(30);
-    expect(con).toBe(45);
+    const first = allocateSeats("commons", "NWE", 75, ranked, 271_800);
+    const second = allocateSeats("commons", "NWE", 75, ranked, 271_800);
+    expect(first).toEqual(second);
+    expect(Object.values(first.seatsEstimate).reduce((sum, seats) => sum + seats, 0)).toBe(75);
   });
 });

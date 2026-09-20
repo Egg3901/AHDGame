@@ -88,18 +88,16 @@ describe("largestRemainderSeats — the one apportionment rule (#585)", () => {
     expect(seats.z).toBe(0);
   });
 
-  it("still conserves seats when the winner's bonus re-weights the pool", () => {
+  it("still conserves seats for a proportional pool", () => {
     const { seats } = largestRemainderSeats(
       [c("a", 45, "1"), c("b", 35, "2"), c("d", 20, "3")],
       20,
       {
         minShare: 0,
         totalVotesForShare: 100,
-        majoritarianBonus: { exponent: 1.6, taper: 0 } as never,
       }
     );
     expect(Object.values(seats).reduce((s, v) => s + v, 0)).toBe(20);
-    // The bonus boosts the plurality party; it must never shrink it.
-    expect(seats.a).toBeGreaterThanOrEqual(9);
+    expect(seats.a).toBe(9);
   });
 });

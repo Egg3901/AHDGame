@@ -10,7 +10,7 @@ import {
   assignByLeanOrdering,
   type CandidateDistributionInfo,
 } from "@/lib/utils/subdivisionResults";
-import { allocateSeats, getMajoritarianBonus } from "@/lib/turn/election/seatAllocation";
+import { allocateSeats } from "@/lib/turn/election/seatAllocation";
 import type { ElectionVoteTally, PoliticalParty } from "@/lib/db/types";
 import { getPartyHex } from "@/lib/utils/politics";
 
@@ -150,20 +150,13 @@ export async function GET(
           .map(([cid, votes]) => ({ id: cid, votes, party: tally.candidateParties?.[cid] }))
           .sort((a, b) => b.votes - a.votes);
         const totalVotesCast = ranked.reduce((s, r) => s + r.votes, 0);
-        // FPTP winner's bonus (#3244): recompute with the resolver's exact
-        // rules — cube-law while the current in-game year is pre-1999, else
-        // proportional.
-        const gsForYear = await db
-          .collection<{ _id: string; currentYear?: number }>("gameState")
-          .findOne({ _id: "current" }, { projection: { currentYear: 1 } });
         seatsByCandidate = allocateSeats(
           String(election.electionType),
           regionId,
           election.totalSeats ?? data.subdivisions.length,
           ranked,
           totalVotesCast,
-          undefined,
-          getMajoritarianBonus(String(election.electionType), gsForYear?.currentYear)
+          undefined
         ).seatsEstimate;
       }
       results = assignSeatConsistentWinners(distributed, seatsByCandidate);
