@@ -92,15 +92,19 @@ async function materializeEvent(
     .collection<Crisis>("crises")
     .findOne({ livingConflictEventId: driven.fired.id }, { projection: { _id: 1 } });
   if (existing) return { opened: false, blockedByActiveWindow: false };
-  const activeGlobalWindow = await db.collection<Crisis>("crises").findOne(
-    { "globalResponse.conflictKey": def.key, status: "active" },
-    { projection: { _id: 1, startTurn: 1, durationTurns: 1 } }
-  );
+  const activeGlobalWindow = await db
+    .collection<Crisis>("crises")
+    .findOne(
+      { "globalResponse.conflictKey": def.key, status: "active" },
+      { projection: { _id: 1, startTurn: 1, durationTurns: 1 } }
+    );
   const activeNegotiationWindow = driven.fired.event.negotiation
-    ? await db.collection<Crisis>("crises").findOne(
-        { livingConflictEventId: { $regex: `^${def.key}:` }, status: "active" },
-        { projection: { _id: 1, startTurn: 1, durationTurns: 1 } }
-      )
+    ? await db
+        .collection<Crisis>("crises")
+        .findOne(
+          { livingConflictEventId: { $regex: `^${def.key}:` }, status: "active" },
+          { projection: { _id: 1, startTurn: 1, durationTurns: 1 } }
+        )
     : null;
   const activeWindow = activeGlobalWindow ?? activeNegotiationWindow;
   // Crisis lifecycle closure happens later in the same turn. Do not let a
