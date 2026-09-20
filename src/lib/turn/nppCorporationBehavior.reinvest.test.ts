@@ -216,6 +216,18 @@ describe("NPP capacity reinvestment — a selling-out, fully-utilized plant grow
     expect(JSON.stringify(write.update)).not.toContain('"unitsOrdered":5,');
   });
 
+  it("does not clog growth slots with replacement-only orders", () => {
+    const existing = Array.from({ length: 2 }, (_, index) => ({
+      unitsOrdered: 5,
+      costPaidAnchor: 1_000,
+      startTurn: TURN - index,
+      onlineTurn: TURN + 10 + index,
+    }));
+    const decision = decide(corp(), [sector({ buildQueue: existing })], [pool()]);
+
+    expect(queueWrites(decision)).toHaveLength(0);
+  });
+
   it("expands several owned plants in one turn, as a player would", () => {
     const a = sector({ stateId: "CA", producedUnits: 1_000, soldUnits: 1_000 });
     const b = sector({ stateId: "NY", producedUnits: 1_000, soldUnits: 1_000 });
