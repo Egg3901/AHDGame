@@ -26,12 +26,13 @@
  * Usage: npx tsx scripts/sim/worker.ts
  */
 
-import { spawn } from "child_process";
 import { dirname, join } from "path";
 import { cpus, freemem, hostname, loadavg } from "os";
 import { MongoClient, type Db, type Collection } from "mongodb";
 import { claimFilterAt, parseClaimWindow } from "./claimWindow";
+import { spawnWithPrefixedLogs, type ChildRunIdentity } from "./childLogPrefix";
 import { assertSafeToken } from "./simJobArgs";
+import { resolveSimPreset } from "./simPreset";
 import { defaultSimSourceDeps, planRunWorldSpawn, verifySimSource } from "./simSource";
 import {
   pickSovereignDemandExperimentFlags,
@@ -103,6 +104,8 @@ interface SimJob {
   _id: string;
   status: "queued" | "running" | "completed" | "failed";
   preset: string;
+  presetNormalizedFrom?: string;
+  presetNormalizedAt?: Date;
   turns: number;
   seed: string;
   dbName: string;
@@ -186,16 +189,15 @@ function run(
   script: string,
   args: string[],
   env: NodeJS.ProcessEnv,
-  cwd: string = GAME_REPO_DIR
+  cwd: string,
+  identity: ChildRunIdentity
 ): Promise<{ code: number | null }> {
-  return new Promise((resolve, reject) => {
-    const child = spawn(NPX_PATH, ["tsx", script, ...args], {
-      cwd,
-      env,
-      stdio: "inherit",
-    });
-    child.on("error", reject);
-    child.on("exit", (code) => resolve({ code }));
+  // #2071: pipe (never inherit) so every child line is prefixed with the run
+  // identity at ingestion time. Covers the whole child lifetime, not just
+  // startup helpers, so slots sharing one journal stay attributable.
+  return spawnWithPrefixedLogs(NPX_PATH, ["tsx", script, ...args], identity, undefined, {
+    cwd,
+    env,
   });
 }
 
@@ -243,6 +245,21 @@ async function processJob(jobsCol: Collection<SimJob>, job: SimJob, slotId: numb
   assertSafeToken(job._id, "_id");
   assertSafeToken(job.seed, "seed");
   assertSafeToken(job.preset, "preset");
+  const resolvedPreset = resolveSimPreset(job.preset);
+  if (resolvedPreset !== job.preset) {
+    await jobsCol.updateOne(
+      { _id: job._id },
+      {
+        $set: {
+          preset: resolvedPreset,
+          presetNormalizedFrom: job.preset,
+          presetNormalizedAt: new Date(),
+          updatedAt: new Date(),
+        },
+      }
+    );
+    job.preset = resolvedPreset;
+  }
   assertSafeToken(job.dbName, "dbName");
   if (job.dbName === OPS_DB_NAME) {
     throw new Error(
@@ -268,6 +285,16 @@ async function processJob(jobsCol: Collection<SimJob>, job: SimJob, slotId: numb
       }
     );
   }
+
+  // #2071: stable identity stamped onto every line of every child this job
+  // spawns (clone, turns, metrics, experiments, elections).
+  const childIdentity: ChildRunIdentity = {
+    runId: job._id,
+    seed: job.seed,
+    dbName: job.dbName,
+    slot: slotId,
+    workerInstance: WORKER_INSTANCE_ID,
+  };
 
   log(
     `[slot ${slotId}] Claimed job ${job._id} (preset=${job.preset}, turns=${job.turns}, db=${job.dbName})`
@@ -307,7 +334,9 @@ async function processJob(jobsCol: Collection<SimJob>, job: SimJob, slotId: numb
       const cloneResult = await run(
         "scripts/sim/cloneWorld.ts",
         [`--db=${job.dbName}`, "--drop"],
-        cloneEnv
+        cloneEnv,
+        GAME_REPO_DIR,
+        childIdentity
       );
       if (cloneResult.code !== 0) {
         throw new Error(`cloneWorld exited with code ${cloneResult.code}`);
@@ -352,7 +381,8 @@ async function processJob(jobsCol: Collection<SimJob>, job: SimJob, slotId: numb
       "scripts/sim/runWorld.ts",
       spawnPlan.args,
       runWorldEnv,
-      spawnPlan.cwd
+      spawnPlan.cwd,
+      childIdentity
     );
 
     clearInterval(statusMirror);
@@ -387,7 +417,9 @@ async function processJob(jobsCol: Collection<SimJob>, job: SimJob, slotId: numb
     const metricsResult = await run(
       "scripts/sim/collectMetrics.ts",
       [`--db=${job.dbName}`, `--run-id=${job._id}`],
-      metricsEnv
+      metricsEnv,
+      GAME_REPO_DIR,
+      childIdentity
     );
 
     if (metricsResult.code !== 0) {
@@ -415,7 +447,9 @@ async function processJob(jobsCol: Collection<SimJob>, job: SimJob, slotId: numb
     const experimentsResult = await run(
       "scripts/sim/collectExperimentReport.ts",
       [`--db=${job.dbName}`, `--run-id=${job._id}`],
-      metricsEnv // same env shape (SIM_MONGODB_URI + OPS_MONGODB_URI + OPS_DB_NAME)
+      metricsEnv, // same env shape (SIM_MONGODB_URI + OPS_MONGODB_URI + OPS_DB_NAME)
+      GAME_REPO_DIR,
+      childIdentity
     );
     if (experimentsResult.code !== 0) {
       // Same non-fatal treatment as the metrics step — the job's core work
@@ -447,7 +481,9 @@ async function processJob(jobsCol: Collection<SimJob>, job: SimJob, slotId: numb
     const electionResult = await run(
       "scripts/sim/collectElectionReport.ts",
       [`--db=${job.dbName}`, `--run-id=${job._id}`],
-      metricsEnv // same env shape (SIM_MONGODB_URI + OPS_MONGODB_URI + OPS_DB_NAME)
+      metricsEnv, // same env shape (SIM_MONGODB_URI + OPS_MONGODB_URI + OPS_DB_NAME)
+      GAME_REPO_DIR,
+      childIdentity
     );
     if (electionResult.code !== 0) {
       // Same non-fatal treatment as the other collectors — the run + balance
