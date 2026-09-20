@@ -142,13 +142,40 @@ function negotiationTree(): CrisisDecisionNode[] {
           "Withhold participation",
           "Reject the terms and retain pressure outside the talks.",
           { nationalistConsent: -6, settlementMomentum: -4, violence: 4 },
-          null
+          "regional_executive_position"
         ),
         trajectory(
           "nationalist_join",
           "Commit to constitutional talks",
           "Pursue equality, cross-border institutions, and consent through negotiation.",
           { nationalistConsent: 12, settlementMomentum: 8, violence: -5, legitimacy: 4 },
+          "regional_executive_position"
+        ),
+      ],
+    },
+    {
+      nodeId: "regional_executive_position",
+      type: "choice",
+      title: "Northern Ireland executive implementation",
+      description:
+        "Where a regional executive exists, its First Minister must decide whether devolved institutions will carry the settlement into practice.",
+      requiredRoles: ["stateGovernor"],
+      requiredCountryIds: ["UK"],
+      requiredRegionIds: ["NIR"],
+      timeLimitMinutes: 24 * 60,
+      options: [
+        trajectory(
+          "executive_unavailable",
+          "No functioning executive commits",
+          "The process continues without a functioning regional executive behind implementation.",
+          { institutionalStability: -2 },
+          null
+        ),
+        trajectory(
+          "executive_implement",
+          "Commit the executive to implementation",
+          "Use devolved institutions to build policing, administrative, and cross-community confidence.",
+          { institutionalStability: 14, domesticConsent: 6, legitimacy: 4 },
           null
         ),
       ],

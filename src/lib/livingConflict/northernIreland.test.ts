@@ -33,7 +33,9 @@ describe("Northern Ireland peace process", () => {
       "irish_position",
       "unionist_position",
       "nationalist_position",
+      "regional_executive_position",
     ]);
+    expect(nodes.at(-1)?.requiredRegionIds).toEqual(["NIR"]);
   });
 
   it("can reach a broadly historical settlement without scripting it", () => {

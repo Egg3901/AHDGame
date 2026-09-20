@@ -242,6 +242,8 @@ export interface CrisisDecisionNode {
   requiredRoles: ("headOfState" | "cabinet" | "stateGovernor" | "partyLeader" | "any")[];
   /** Optional national allow-list for sequential cross-government negotiations. */
   requiredCountryIds?: string[];
+  /** Optional regional allow-list, used with stateGovernor for devolved executives. */
+  requiredRegionIds?: string[];
   /**
    * Optional allow-list applied when `partyLeader` is required. Abbreviations
    * are used because authored conflict definitions cannot depend on per-world
