@@ -109,6 +109,7 @@ export async function buildTurnExecutionContext(input: {
     config,
     activeIteration,
     newTurn,
+    calendarTurn: calTurn,
     currentYear,
     gameNow,
     realNow,

@@ -126,4 +126,25 @@ describe("buildTurnExecutionContext reads", () => {
     expect(context.states).toEqual(states);
     expect(context.stateMap.get("CA")).toEqual(states[0]);
   });
+
+  it("exposes the founding-adjusted canonical calendar turn and year", async () => {
+    const context = await buildTurnExecutionContext({
+      db: makeDb(),
+      gameState: {
+        ...makeGameState(),
+        currentTurn: 87,
+        startingYear: 1953,
+        preIteration: { active: false },
+        preIterationTurns: 48,
+      } as GameState,
+      config: null,
+      warnings: [],
+      phaseStatuses: {},
+      startTimeMs: 0,
+    });
+
+    expect(context.newTurn).toBe(88);
+    expect(context.calendarTurn).toBe(40);
+    expect(context.currentYear).toBe(1953);
+  });
 });
