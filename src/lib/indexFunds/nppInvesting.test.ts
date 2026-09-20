@@ -193,6 +193,7 @@ describe("nppInvesting", () => {
       positionsCol.find.mockImplementation((filter: Record<string, unknown>) =>
         createAsyncIterableCursor(filter && "nppId" in filter ? [] : nppPositions)
       );
+      db.collection("gameConfig").findOne.mockResolvedValue({ ledgerShadow: true });
       return db;
     }
 
@@ -221,6 +222,68 @@ describe("nppInvesting", () => {
       expect(result.nppsProcessed).toBe(1);
       const incs = accrualIncsFrom(dbm);
       expect(incs).toContain(666); // floor(80000/48 × 0.4)
+    });
+
+    it("records the NPP investment-cash accrual in the reconciliation ledger", async () => {
+      const npp = makeNppDoc();
+      const dbm = await setup([npp], []);
+
+      await processNPPFundInvestments(dbm as never, { currentTurn: 10 });
+
+      const ledger = dbm.collectionMocks["ledgerEntries"];
+      expect(ledger.insertMany).toHaveBeenCalledOnce();
+      const entries = ledger.insertMany.mock.calls[0][0];
+      expect(entries).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            turn: 10,
+            txType: "npp_investment_income",
+            balanced: true,
+            emitSite: "indexFunds/nppInvesting.ts:income_accrual",
+            sourceRef: { collection: "npps", id: npp._id },
+            legs: [
+              expect.objectContaining({
+                account: `npp:${npp._id}:USD`,
+                anchorAmount: 666,
+                role: "primary",
+              }),
+              expect.objectContaining({
+                account: "mint:npp_investment_income:USD",
+                anchorAmount: -666,
+                role: "contra",
+              }),
+            ],
+          }),
+          expect.objectContaining({
+            turn: 10,
+            txType: "index_fund_subscribe",
+            balanced: true,
+            emitSite: "indexFunds/nppInvesting.ts:subscription_debit",
+            sourceRef: { collection: "npps", id: npp._id },
+            legs: [
+              expect.objectContaining({
+                account: `npp:${npp._id}:USD`,
+                anchorAmount: -400,
+                role: "primary",
+              }),
+              expect.objectContaining({
+                account: "sink:fund_subscription:USD",
+                anchorAmount: 400,
+                role: "contra",
+              }),
+            ],
+          }),
+        ])
+      );
+    });
+
+    it("does not emit reconciliation entries when the shadow ledger is disabled", async () => {
+      const dbm = await setup([makeNppDoc()], []);
+      dbm.collection("gameConfig").findOne.mockResolvedValue({ ledgerShadow: false });
+
+      await processNPPFundInvestments(dbm as never, { currentTurn: 10 });
+
+      expect(dbm.collectionMocks["ledgerEntries"]).toBeUndefined();
     });
 
     it("halves the accrual at half the saturation cap", async () => {

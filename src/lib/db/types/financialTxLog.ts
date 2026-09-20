@@ -89,6 +89,7 @@ export type FinancialTxType =
   | "index_fund_subscribe"
   | "index_fund_redeem"
   | "index_fund_dividend"
+  | "npp_investment_income"
   | "stock_order_escrow"
   | "stock_self_issue"
   | "stock_order_refund"
