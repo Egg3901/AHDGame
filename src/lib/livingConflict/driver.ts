@@ -111,7 +111,8 @@ export async function driveConflictTurn(
   participants: ConflictParticipants,
   turn: number,
   year: number | null | undefined,
-  externalPressure = 0
+  externalPressure = 0,
+  openingTrackDeltas: Record<string, number> = {}
 ): Promise<DriveResult> {
   let state = normalizeConflictState(def, await loadConflictState(db, def.key));
   if (state.lastProcessedTurn === turn) return { state, events: [] };
@@ -122,7 +123,13 @@ export async function driveConflictTurn(
     if (!inWindow(def, year)) {
       return { state, events: [] };
     }
+    if (def.minimumOpeningPressure !== undefined && externalPressure < def.minimumOpeningPressure) {
+      return { state, events: [] };
+    }
     state = openConflict(state, typeof year === "number" ? year : null);
+    if (Object.keys(openingTrackDeltas).length > 0) {
+      state = applyTrackDeltas(def, state, openingTrackDeltas);
+    }
   } else if (state.emitPhaseEntryNextTurn) {
     state = {
       ...state,
