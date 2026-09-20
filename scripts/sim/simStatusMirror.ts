@@ -11,6 +11,16 @@ export interface SandboxProgress {
   lastWarnings?: string[];
   progressUpdatedAt?: Date;
   updatedAt?: Date;
+  bootstrapConformance?: {
+    status: "reported" | "skipped-existing" | "diagnostic-error";
+    summary: string;
+    baselineCaptured: boolean;
+    reportId?: unknown;
+    ranAt?: Date | null;
+    ok?: number | null;
+    warn?: number | null;
+    critical?: number | null;
+  };
 }
 
 export function completedTurnProgress(

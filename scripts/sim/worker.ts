@@ -33,7 +33,7 @@ import { claimFilterAt, parseClaimWindow } from "./claimWindow";
 import { spawnWithPrefixedLogs, type ChildRunIdentity } from "./childLogPrefix";
 import { assertSafeToken } from "./simJobArgs";
 import { resolveSimPreset } from "./simPreset";
-import { buildStatusMirrorUpdate } from "./simStatusMirror";
+import { buildStatusMirrorUpdate, type SandboxProgress } from "./simStatusMirror";
 import { defaultSimSourceDeps, planRunWorldSpawn, verifySimSource } from "./simSource";
 import {
   pickSovereignDemandExperimentFlags,
@@ -212,7 +212,7 @@ async function mirrorSandboxStatus(jobsCol: Collection<SimJob>, job: SimJob) {
     await client.connect();
     const doc = await client
       .db(job.dbName)
-      .collection("simRuns")
+      .collection<SandboxProgress & { _id: string }>("simRuns")
       .findOne({ _id: job._id as never });
     if (doc) {
       const now = new Date();
