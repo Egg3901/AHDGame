@@ -30,6 +30,13 @@ describe("global financial crisis living conflict", () => {
   it("uses a broad window and refuses to open from the date alone", () => {
     expect(GLOBAL_FINANCIAL_CRISIS_DEF.fromYear).toBe(2007);
     expect(GLOBAL_FINANCIAL_CRISIS_DEF.minimumOpeningPressure).toBe(60);
+    const exposedOptions =
+      GLOBAL_FINANCIAL_CRISIS_DEF.phases[0].events[0].response?.decisionTrees.belligerent?.options;
+    expect(exposedOptions?.map((option) => option.action)).toEqual([
+      { kind: "financialCrisisResponse", response: "recapitalize" },
+      { kind: "financialCrisisResponse", response: "guarantee" },
+      { kind: "financialCrisisResponse", response: "resolve" },
+    ]);
   });
 
   it("allows early coordinated containment", () => {

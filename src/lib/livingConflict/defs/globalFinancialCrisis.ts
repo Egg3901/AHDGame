@@ -27,28 +27,37 @@ function trees(key: string): RoleDecisionTrees {
       "The financial system is under stress",
       "The most exposed governments must choose who bears losses and how much public capacity to commit.",
       [
-        responseOpt(
-          "recapitalize",
-          "Recapitalize distressed banks",
-          "Inject public capital with ownership and oversight conditions.",
-          { rescue: 4, coordination: 2 },
-          [cfx("tick", "approval", "government", "overall", -0.01, "Bank rescue backlash")],
-          0.02
-        ),
-        responseOpt(
-          "guarantee",
-          "Guarantee bank liabilities",
-          "Backstop funding markets while leaving institutions in private hands.",
-          { rescue: 3, liquidity: 4 },
-          [],
-          0.012
-        ),
-        responseOpt(
-          "resolve",
-          "Resolve failed institutions",
-          "Impose losses on shareholders and creditors while protecting insured depositors.",
-          { restructuring: 4, restraint: 2 }
-        ),
+        {
+          ...responseOpt(
+            "recapitalize",
+            "Recapitalize distressed banks",
+            "Inject public capital with ownership and oversight conditions.",
+            { rescue: 4, coordination: 2 },
+            [cfx("tick", "approval", "government", "overall", -0.01, "Bank rescue backlash")],
+            0.02
+          ),
+          action: { kind: "financialCrisisResponse", response: "recapitalize" },
+        },
+        {
+          ...responseOpt(
+            "guarantee",
+            "Guarantee bank liabilities",
+            "Backstop funding markets while leaving institutions in private hands.",
+            { rescue: 3, liquidity: 4 },
+            [],
+            0.012
+          ),
+          action: { kind: "financialCrisisResponse", response: "guarantee" },
+        },
+        {
+          ...responseOpt(
+            "resolve",
+            "Resolve failed institutions",
+            "Impose losses on shareholders and creditors while protecting insured depositors.",
+            { restructuring: 4, restraint: 2 }
+          ),
+          action: { kind: "financialCrisisResponse", response: "resolve" },
+        },
       ]
     ),
     backer_a: choiceNode(
