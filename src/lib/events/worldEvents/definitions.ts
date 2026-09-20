@@ -655,8 +655,8 @@ export const WORLD_EVENT_SEED_DEFINITIONS: Omit<
     body: "Backyard shelters, evacuation maps, and duck-and-cover drills are the national obsession. Local officials are begging for guidance and funding. The executive must decide how far to lean in.",
     eligibility: ["all"],
     baseWeight: 8,
-    cooldownTurnsMin: 12,
-    cooldownTurnsMax: 28,
+    cooldownTurnsMin: 36,
+    cooldownTurnsMax: 60,
     deciderRole: "executive",
     defaultOptionId: "drills",
     options: [
@@ -680,7 +680,9 @@ export const WORLD_EVENT_SEED_DEFINITIONS: Omit<
       },
     ],
     minTension: 50,
-    schedule: { kind: "window", minGapTurns: 12, maxGapTurns: 28 },
+    // Standalone crises have a 24-turn minimum lifetime. Keep this event from
+    // retriggering as soon as that lifetime ends while high tension persists.
+    schedule: { kind: "window", minGapTurns: 36, maxGapTurns: 60 },
   },
   {
     kind: "worldEvents.warScareProtests",

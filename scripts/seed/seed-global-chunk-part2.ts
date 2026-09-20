@@ -67,7 +67,7 @@ async function run() {
     log("Elections ensured");
 
     // JP Sangiin
-    const { JP_SANGIIN_SEATS } = await import("@/lib/constants/states");
+    const { getJpSangiinClassSeats } = await import("@/lib/constants/states");
     const { JP_SANGIIN_CYCLE1_END_TURN, MS_PER_TURN } = await import("@/lib/constants/turnTime");
     const jpRegions = await db
       .collection("states")
@@ -78,10 +78,8 @@ async function run() {
 
     for (const region of jpRegions) {
       const regionId = String(region._id);
-      const totalRegionSeats = JP_SANGIIN_SEATS[regionId] ?? 2;
-      const classSeats = Math.ceil(totalRegionSeats / 2);
-
       for (const chamberClass of [1, 2] as const) {
+        const classSeats = getJpSangiinClassSeats(undefined, regionId, chamberClass);
         const existing = await db.collection("elections").findOne({
           electionType: "sangiin",
           countryId: "JP",

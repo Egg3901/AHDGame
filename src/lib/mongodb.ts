@@ -1,6 +1,9 @@
 import { MongoClient, Db } from "mongodb";
 import { getValidatedEnv } from "@/lib/env";
-import { attachMongoCommandMonitor } from "@/lib/observability/mongoMonitor";
+import {
+  attachMongoCommandMonitor,
+  mongoCommandMonitoringWanted,
+} from "@/lib/observability/mongoMonitor";
 
 declare global {
   var _mongoClientPromise: Promise<MongoClient> | undefined;
@@ -53,7 +56,7 @@ function getClientPromise(): Promise<MongoClient> {
       maxIdleTimeMS: 0, // Never idle-timeout pooled connections; proxy handles its own lifecycle
       serverSelectionTimeoutMS: 10_000, // Fail fast in serverless rather than blocking for 30 s
       socketTimeoutMS: 60_000, // Prevent individual operations from hanging indefinitely
-      monitorCommands: process.env.NODE_ENV !== "test", // emit command events for observability
+      monitorCommands: mongoCommandMonitoringWanted(),
     });
     // Instrument every query (breadcrumbs + slow-query/failure capture) centrally.
     attachMongoCommandMonitor(client);

@@ -16,6 +16,7 @@ import { loadConflictState, saveConflictState } from "./driver";
 import { normalizeCampaignState } from "./campaign";
 import { migrateLegacyVietnamState } from "./vietnamCompat";
 import { vietnamWorldPressure } from "./worldPressure";
+import { resolveConflictParticipants } from "./engine";
 import {
   allParticipants,
   driveConflictTurn,
@@ -158,6 +159,15 @@ export async function processLivingConflictsTurn(
     db.collection<{ _id: string; value?: number }>("coldWarTension").findOne({ _id: "current" }),
     getConflictsCollection(db).find({ status: "active" }).toArray(),
   ]);
+  const countryRows = await db
+    .collection<{ countryId?: string }>("states")
+    .find({}, { projection: { countryId: 1 } })
+    .toArray();
+  const availableCountryIds = new Set(
+    countryRows.length > 0
+      ? countryRows.map((row) => row.countryId).filter((id): id is string => Boolean(id))
+      : Object.keys(COUNTRY_CONFIGS)
+  );
   const vietnamExternalPressure = vietnamWorldPressure(tension?.value ?? 0, activeWars);
   let eventsOpened = 0;
   const defs = allLivingConflictDefs().filter((def) => def.autoOpen !== false);
@@ -172,7 +182,10 @@ export async function processLivingConflictsTurn(
       }
     }
     conflictsProcessed++;
-    const participants: ConflictParticipants = def.participants;
+    const participants: ConflictParticipants = resolveConflictParticipants(
+      def,
+      availableCountryIds
+    );
     const result = await driveConflictTurn(
       db,
       def,

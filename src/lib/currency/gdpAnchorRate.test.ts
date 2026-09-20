@@ -13,9 +13,17 @@ import {
   type CountryId,
 } from "@/lib/constants/countries";
 
+/**
+ * Presets that author NO anchor override, so every country falls through to its
+ * base config rate.
+ *
+ * ⚠️ 1991 LEFT THIS LIST. It used to sit here, which was true only because the
+ * era authored no rates: the UK then read as a $433B economy in a 1991 world
+ * against a real ~$1.03T. UK/JP/DE/IE/CN now carry authored 1991 anchors and are
+ * asserted below instead.
+ */
 const MODERN_AND_ALIAS_PRESETS = [
   "1979-default",
-  "1991-default",
   "1999-default",
   "2007-default",
   "2019-default",
@@ -56,6 +64,23 @@ describe("getGdpAnchorRate", () => {
         overrides[countryId]!.usdExchangeRate
       );
     }
+  });
+
+  it("returns the 1991 override where the era table authors one", () => {
+    const overrides = ERA_COUNTRY_CONFIG_OVERRIDES["1991-default"];
+    const authored = (Object.keys(overrides) as CountryId[]).filter(
+      (c) => overrides[c]?.usdExchangeRate !== undefined
+    );
+    // Guard the guard, as above: an empty set would pass vacuously.
+    expect(authored.length).toBe(5);
+    for (const countryId of authored) {
+      expect(getGdpAnchorRate(countryId, "1991-default"), countryId).toBe(
+        overrides[countryId]!.usdExchangeRate
+      );
+    }
+    // A 1991 country with no authored anchor still falls through to its base.
+    expect(getGdpAnchorRate("US", "1991-default")).toBe(COUNTRY_CONFIGS.US.usdExchangeRate);
+    expect(getGdpAnchorRate("BR", "1991-default")).toBe(COUNTRY_CONFIGS.BR.usdExchangeRate);
   });
 
   it("falls back to an anchor passthrough for an unrecognized country", () => {

@@ -1384,6 +1384,28 @@ async function main(): Promise<void> {
   )[0] as { actorCoverage?: ActorCoverageManifest } | undefined;
   const { summarizeActorCoverageForVerdict } = await import("@/lib/sim/actorReport");
   const actorCoverageVerdict = summarizeActorCoverageForVerdict(simRunDoc?.actorCoverage ?? null);
+  // Seed provenance (#1992): the fresh-bootstrap conformance report plus the
+  // drift baseline, so the report distinguishes seed defects (pre-turn) from
+  // later mechanical drift. Worlds bootstrapped before #1992 have neither;
+  // drift checks on those worlds compare against a reconstructed baseline.
+  const bootstrapConformanceDoc = (
+    await db
+      .collection("seedDiagnostics")
+      .find({ mode: "conformance", trigger: "worldsim-post-bootstrap" })
+      .sort({ ranAt: -1 })
+      .limit(1)
+      .toArray()
+  )[0] as Record<string, unknown> | undefined;
+  const seedBaselineDoc = (await db
+    .collection<{ _id: string; turn?: number; metrics?: Record<string, unknown> }>(
+      "seedDiagnosticBaselines"
+    )
+    .findOne({ _id: "current" })) as Record<string, unknown> | null;
+  const seedProvenance = summarizeSeedProvenance(
+    bootstrapConformanceDoc ?? null,
+    seedBaselineDoc,
+    maxTurn
+  );
   const verdict = buildVerdict({
     health,
     market,
@@ -1448,6 +1470,7 @@ async function main(): Promise<void> {
     verdict,
     auditFindings,
     auditSelfCheck,
+    seedProvenance,
     commandEconomy,
     scotus,
     labour,
@@ -1507,6 +1530,65 @@ export interface SeedAuditSelfCheck {
 export interface SeedAuditResult {
   findings: AuditFinding[];
   selfCheck: SeedAuditSelfCheck;
+}
+
+/**
+ * Seed provenance for the report header (#1992).
+ *
+ * Distinguishes bootstrap conformance findings (pre-turn seed defects, from
+ * the worldsim-post-bootstrap report) from later mechanical drift (the
+ * checkpoint audit findings, after N simulated turns). Worlds bootstrapped
+ * before #1992 have no bootstrap report; their drift baseline is
+ * reconstructed from seed files and cannot separate the two.
+ */
+export interface SeedProvenance {
+  hasBootstrapReport: boolean;
+  preset: string | null;
+  seed: string | null;
+  runId: string | null;
+  sourceRevision: string | null;
+  ranAt: string | null;
+  turn: number | null;
+  ok: number;
+  warn: number;
+  critical: number;
+  baselineSource: "captured" | "reconstructed";
+  baselineTurn: number | null;
+  checkpointTurn: number | null;
+}
+
+function provenanceStr(v: unknown): string | null {
+  return typeof v === "string" && v.length > 0 ? v : null;
+}
+
+function provenanceNum(v: unknown): number | null {
+  return typeof v === "number" && Number.isFinite(v) ? v : null;
+}
+
+export function summarizeSeedProvenance(
+  conformance: Record<string, unknown> | null | undefined,
+  baseline: Record<string, unknown> | null | undefined,
+  checkpointTurn?: number
+): SeedProvenance {
+  const summary = (conformance?.summary ?? {}) as Record<string, unknown>;
+  const metrics = (baseline?.metrics ?? {}) as Record<string, unknown>;
+  const ranAt = conformance?.ranAt;
+  return {
+    hasBootstrapReport: conformance != null,
+    preset: provenanceStr(conformance?.preset),
+    seed: provenanceStr(conformance?.seed),
+    runId: provenanceStr(conformance?.runId),
+    sourceRevision: provenanceStr(conformance?.sourceRevision),
+    ranAt: ranAt instanceof Date ? ranAt.toISOString() : provenanceStr(ranAt),
+    turn: provenanceNum(conformance?.turn),
+    ok: provenanceNum(summary.ok) ?? 0,
+    warn: provenanceNum(summary.warn) ?? 0,
+    critical: provenanceNum(summary.critical) ?? 0,
+    baselineSource:
+      baseline != null && Object.keys(metrics).length > 0 ? "captured" : "reconstructed",
+    baselineTurn: provenanceNum(baseline?.turn),
+    checkpointTurn: checkpointTurn ?? null,
+  };
 }
 
 /** Per-country fiscal-year series backing the staleness/trajectory checks. */
@@ -2724,6 +2806,23 @@ function render() {
     }
     if (D.auditSelfCheck.skipped && D.auditSelfCheck.skipped.length) {
       html += '<div class="note"><b>Not examined:</b><ul>'+D.auditSelfCheck.skipped.map((s)=>'<li>'+esc(s.reason)+'</li>').join('')+'</ul></div>';
+    }
+  }
+
+  // Seed provenance (#1992): bootstrap conformance vs later drift.
+  if (D.seedProvenance) {
+    html += '<h3 style="margin:22px 0 8px;font-size:16px">Seed provenance</h3>';
+    if (D.seedProvenance.hasBootstrapReport) {
+      const sp = D.seedProvenance;
+      html += '<div class="note"><b>Bootstrap conformance</b> (pre-turn): '+sp.ok+' ok, '+sp.warn+' warn, '+sp.critical+' critical'
+        + ' · preset '+esc(sp.preset || "unknown")+' · seed '+esc(sp.seed || "unknown")+' · run '+esc(sp.runId || "unknown")
+        + (sp.sourceRevision ? ' · source <code>'+esc(sp.sourceRevision)+'</code>' : '')
+        + (sp.ranAt ? ' · ran '+esc(sp.ranAt) : '')
+        + ' · drift baseline '+esc(sp.baselineSource)+(sp.baselineTurn != null ? ' (turn '+sp.baselineTurn+')' : '')
+        + '. Findings in this report reflect '+(sp.checkpointTurn != null ? sp.checkpointTurn+' turns of simulation change on top of that baseline' : 'simulation change on top of that baseline')
+        + ' — consult the bootstrap report to separate seed defects from mechanical drift.</div>';
+    } else {
+      html += '<div class="warnbox"><b>No bootstrap conformance record.</b> This world bootstrapped before fresh-bootstrap diagnostics landed, so drift checks compare against a reconstructed baseline that cannot separate seed defects from mechanical drift.</div>';
     }
   }
 

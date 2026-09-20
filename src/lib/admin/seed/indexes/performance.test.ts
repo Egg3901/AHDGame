@@ -10,6 +10,24 @@ import { seedPerfIndexes } from "./performance";
 describe("seedPerfIndexes", () => {
   beforeEach(() => ensureIndexMock.mockReset());
 
+  it("supports iteration-scoped successful clock repair without a blocking sort", async () => {
+    const db = { collection: vi.fn() } as unknown as Db;
+    await seedPerfIndexes(db, () => {});
+    expect(ensureIndexMock).toHaveBeenCalledWith(
+      db,
+      "turnLogs",
+      {
+        success: 1,
+        "iteration.type": 1,
+        "iteration.number": 1,
+        turn: -1,
+        gameTime: -1,
+      },
+      expect.any(Object),
+      expect.any(Function)
+    );
+  });
+
   /**
    * `manifestos` shipped with no index beyond `_id`, so every read — the point
    * lookup on save/lock and the batch `$in` behind the elections page — was a

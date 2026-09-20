@@ -19,7 +19,7 @@
  * logic in isolation so a future edit can't silently regress it.
  */
 import { describe, it, expect } from "vitest";
-import { runSeedAudit, type AuditFinding } from "./checkpointReport";
+import { runSeedAudit, summarizeSeedProvenance, type AuditFinding } from "./checkpointReport";
 
 /** A baseline input that produces zero findings from the pre-existing A-family checks. */
 function baseInput(): Parameters<typeof runSeedAudit>[0] {
@@ -350,5 +350,52 @@ describe("runSeedAudit — existing A-family + sorting regression", () => {
     }
     expect(severities).toContain("critical");
     expect(severities).toContain("medium");
+  });
+});
+
+describe("summarizeSeedProvenance — bootstrap vs drift (#1992)", () => {
+  const conformance = {
+    mode: "conformance",
+    trigger: "worldsim-post-bootstrap",
+    preset: "1953-default",
+    seed: "seed-1",
+    runId: "run-1",
+    sourceRevision: "abc123",
+    ranAt: new Date("2026-09-20T00:00:00Z"),
+    turn: 1,
+    summary: { ok: 10, warn: 1, critical: 2 },
+  };
+  const baseline = {
+    _id: "current",
+    preset: "1953-default",
+    turn: 1,
+    metrics: { "budget.US.gdp": 100 },
+  };
+
+  it("carries the bootstrap report and a captured baseline", () => {
+    const out = summarizeSeedProvenance(conformance, baseline, 68);
+    expect(out.hasBootstrapReport).toBe(true);
+    expect(out.preset).toBe("1953-default");
+    expect(out.seed).toBe("seed-1");
+    expect(out.runId).toBe("run-1");
+    expect(out.sourceRevision).toBe("abc123");
+    expect(out.ok).toBe(10);
+    expect(out.critical).toBe(2);
+    expect(out.baselineSource).toBe("captured");
+    expect(out.baselineTurn).toBe(1);
+    expect(out.checkpointTurn).toBe(68);
+  });
+
+  it("marks the baseline reconstructed when no snapshot was captured", () => {
+    expect(summarizeSeedProvenance(conformance, null, 68).baselineSource).toBe("reconstructed");
+    expect(
+      summarizeSeedProvenance(conformance, { _id: "current", metrics: {} }, 68).baselineSource
+    ).toBe("reconstructed");
+  });
+
+  it("flags a missing bootstrap report so the reader knows drift is reconstructed", () => {
+    const out = summarizeSeedProvenance(null, null, 68);
+    expect(out.hasBootstrapReport).toBe(false);
+    expect(out.baselineSource).toBe("reconstructed");
   });
 });

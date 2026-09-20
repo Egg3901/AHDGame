@@ -224,7 +224,13 @@ export interface CrisisDecisionNode {
   nextNodeId?: string;
   outcomeEffects?: CrisisEffect[];
   outcomeMessage?: string;
-  requiredRoles: ("headOfState" | "cabinet" | "stateGovernor" | "any")[];
+  requiredRoles: ("headOfState" | "cabinet" | "stateGovernor" | "partyLeader" | "any")[];
+  /**
+   * Optional allow-list applied when `partyLeader` is required. Abbreviations
+   * are used because authored conflict definitions cannot depend on per-world
+   * Mongo ObjectIds.
+   */
+  requiredPartyAbbreviations?: string[];
   timeLimitMinutes: number | null;
 }
 
@@ -270,6 +276,12 @@ export interface GlobalResponseOutcome {
   /** Persistent living-conflict trajectory changes applied at resolution. */
   intensityDelta?: number;
   pressureDelta?: Partial<Record<"a" | "b", number>>;
+  /** Named negotiated-crisis progress changes applied at resolution. */
+  trackDeltas?: Record<string, number>;
+  /** Optional explicit phase jump for ceasefires, breakdowns, and settlements. */
+  nextConflictPhase?: string;
+  /** Optional durable lifecycle change independent of campaign stage. */
+  nextConflictStatus?: "dormant" | "active" | "ceasefire" | "negotiating" | "settled" | "closed";
   /** Persistent campaign damage, settlement progress, and stage transition. */
   campaignDelta?: CampaignConsequencesDelta;
   nextCampaignStage?: CampaignStage;

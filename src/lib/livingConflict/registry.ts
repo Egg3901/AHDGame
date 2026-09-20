@@ -1,6 +1,8 @@
 import type { LivingConflictDef } from "./types";
 import { VIETNAM_DEF } from "./defs/vietnam";
 import { PANDEMIC_DEF } from "./defs/pandemic";
+import { TRANSNATIONAL_TERRORISM_DEF } from "./defs/transnationalTerrorism";
+import { YUGOSLAVIA_DEF } from "./defs/yugoslavia";
 import {
   BERLIN_DEF,
   CONGO_DEF,
@@ -13,6 +15,8 @@ import {
 export const LIVING_CONFLICT_DEFS: Record<string, LivingConflictDef> = {
   [VIETNAM_DEF.key]: VIETNAM_DEF,
   [PANDEMIC_DEF.key]: PANDEMIC_DEF,
+  [TRANSNATIONAL_TERRORISM_DEF.key]: TRANSNATIONAL_TERRORISM_DEF,
+  [YUGOSLAVIA_DEF.key]: YUGOSLAVIA_DEF,
   [BERLIN_DEF.key]: BERLIN_DEF,
   [CONGO_DEF.key]: CONGO_DEF,
   [SUEZ_AFTERMATH_DEF.key]: SUEZ_AFTERMATH_DEF,

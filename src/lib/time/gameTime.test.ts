@@ -17,6 +17,34 @@ describe("gameTime", () => {
     invalidateGameTimeCache();
   });
 
+  it("projects clock fields and shares simultaneous cache misses", async () => {
+    db.collection("gameState").findOne.mockResolvedValue({
+      _id: "current",
+      currentTurn: 1,
+      currentYear: 2027,
+      startingYear: 2027,
+      isActive: false,
+      pausedAt: new Date("2026-09-20T10:00:00Z"),
+      lastTurnProcessed: new Date("2026-09-20T10:00:00Z"),
+      pauseReason: "maintenance",
+      pauseKind: "manual",
+    });
+    db.collection("turnLogs").find.mockReturnValue({
+      sort: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockReturnThis(),
+      toArray: vi.fn().mockResolvedValue([]),
+    });
+    const { getGameTime } = await import("./gameTime");
+    const clocks = await Promise.all(Array.from({ length: 50 }, () => getGameTime()));
+    expect(db.collectionMocks.gameState.findOne).toHaveBeenCalledTimes(1);
+    expect(db.collectionMocks.turnLogs.find).toHaveBeenCalledTimes(1);
+    expect(db.collectionMocks.gameState.findOne).toHaveBeenCalledWith(
+      { _id: "current" },
+      { projection: expect.objectContaining({ currentTurn: 1, pauseReason: 1, pauseKind: 1 }) }
+    );
+    expect(clocks[0]).toMatchObject({ pauseReason: "maintenance", pauseKind: "manual" });
+  });
+
   it("repairs stale gameState clock fields from the latest successful turn log", async () => {
     db.collection("gameState").findOne.mockResolvedValue({
       _id: "current",
@@ -49,10 +77,13 @@ describe("gameTime", () => {
     expect(result.currentTurn).toBe(452);
     expect(result.lastTurnProcessed.toISOString()).toBe("2026-04-29T21:00:00.000Z");
     expect(result.effectiveNow.toISOString()).toBe("2026-04-29T21:00:00.000Z");
-    expect(db.collectionMocks.turnLogs.find).toHaveBeenCalledWith({
-      success: true,
-      $or: [{ iteration: { $exists: false } }, { iteration: null }],
-    });
+    expect(db.collectionMocks.turnLogs.find).toHaveBeenCalledWith(
+      {
+        success: true,
+        $or: [{ iteration: { $exists: false } }, { iteration: null }],
+      },
+      { projection: { turn: 1, gameTime: 1 } }
+    );
     expect(db.collectionMocks.gameState.updateOne).toHaveBeenCalledWith(
       { _id: "current" },
       expect.objectContaining({
@@ -110,11 +141,14 @@ describe("gameTime", () => {
 
     expect(result.currentTurn).toBe(12);
     expect(result.lastTurnProcessed.toISOString()).toBe("2026-04-29T15:00:00.000Z");
-    expect(db.collectionMocks.turnLogs.find).toHaveBeenCalledWith({
-      success: true,
-      "iteration.type": "Iteration",
-      "iteration.number": 2,
-    });
+    expect(db.collectionMocks.turnLogs.find).toHaveBeenCalledWith(
+      {
+        success: true,
+        "iteration.type": "Iteration",
+        "iteration.number": 2,
+      },
+      { projection: { turn: 1, gameTime: 1 } }
+    );
     expect(db.collectionMocks.gameState.updateOne).not.toHaveBeenCalled();
   });
 

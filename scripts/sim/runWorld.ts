@@ -111,6 +111,17 @@ interface SimRunDoc {
   /** Autonomy tier and local-world difficulty the run was configured with. */
   autonomyLevel?: string;
   difficulty?: string;
+  /** Fresh-bootstrap seed conformance summary (#1992). */
+  bootstrapConformance?: {
+    status: "reported" | "skipped-existing" | "diagnostic-error";
+    summary: string;
+    baselineCaptured: boolean;
+    reportId?: unknown;
+    ranAt?: Date | null;
+    ok?: number | null;
+    warn?: number | null;
+    critical?: number | null;
+  };
 }
 
 function arg(flag: string): string | undefined {
@@ -408,6 +419,8 @@ if (!Number.isFinite(turns) || turns <= 0) {
 // Must happen before any @/lib import that might transitively touch mongodb.ts.
 // NODE_ENV is typed read-only by @types/node; this is the standard escape hatch.
 (process.env as { NODE_ENV: string }).NODE_ENV = "test";
+// Simulations skip server env validation, but still measure real phase query work.
+process.env.AHD_TURN_ROUNDTRIP_MONITOR = "1";
 process.env.MONGODB_URI = SIM_MONGODB_URI;
 process.env.MONGODB_DB = dbName;
 process.env.SIM_RNG_SALT = seed;
@@ -576,6 +589,49 @@ async function main() {
       `Bootstrapping world (preset=${preset}, db=${dbName}${preIteration ? ", pre-iteration" : ""})`
     );
     await bootstrapGameWorld({ db, mode: "historical", preset, log, preIteration });
+
+    // #1992: persist fresh-bootstrap seed conformance BEFORE sim-only state
+    // mutation (the tier patches, autonomy, backfill, and corp spawn below)
+    // or the first turn can obscure seed provenance. Findings never abort the
+    // run; a diagnostic throw is recorded on the sim manifest, not rethrown.
+    const { runWorldsimBootstrapConformance, buildWorldsimFeatureManifest } =
+      await import("@/lib/sim/worldsimBootstrapConformance");
+    const bootstrapConformance = await runWorldsimBootstrapConformance(db, {
+      runId,
+      seed,
+      preset,
+      sourceRevision: executedCommit,
+      sourceWorktree: sourceWorktree ?? null,
+      featureManifest: buildWorldsimFeatureManifest({
+        autonomyLevel: AUTONOMY_LEVEL,
+        actorMode,
+        simTurnPhaseMode: simTurnPhaseMode ?? "full",
+        preIteration,
+        preservePlayerRail,
+        commandEconomy,
+        scarcityDrift,
+        brandLoyalty,
+        brandLoyaltySlice,
+        sectorQuality,
+        demographicsDemand,
+        macroGrowth,
+        allFeatureFlags,
+        marketMode,
+        labourMode,
+        freightSettlementMode,
+        canonicalFreightBillingEnabled,
+        shortageResponsiveSourcingEnabled,
+        indexFundBondLiquidityEnabled,
+        sovereignIssuanceConsolidationEnabled,
+        domesticSovereignBondCoverageEnabled,
+        equityLiquidityFacilityEnabled,
+        nppMarketCoverageEnabled,
+        nppFragileMarketSupplyEnabled,
+        frontierEntryExperimentEnabled,
+        difficulty,
+      }),
+    });
+    log(`Bootstrap seed conformance: ${bootstrapConformance.summary}`);
 
     // Apply the structural-market rollout tier for this run (if requested).
     // Sim-only: patches the sandbox gameConfig so every turn resolves
@@ -749,6 +805,16 @@ async function main() {
           source,
           autonomyLevel: AUTONOMY_LEVEL,
           ...(difficulty ? { difficulty } : {}),
+          bootstrapConformance: {
+            status: bootstrapConformance.status,
+            summary: bootstrapConformance.summary,
+            baselineCaptured: bootstrapConformance.baselineCaptured,
+            reportId: bootstrapConformance.report?._id ?? null,
+            ranAt: bootstrapConformance.report?.ranAt ?? null,
+            ok: bootstrapConformance.report?.summary.ok ?? null,
+            warn: bootstrapConformance.report?.summary.warn ?? null,
+            critical: bootstrapConformance.report?.summary.critical ?? null,
+          },
           updatedAt: new Date(),
         },
       },
