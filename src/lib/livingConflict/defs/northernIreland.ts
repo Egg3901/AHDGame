@@ -22,13 +22,23 @@ function trajectory(
   nextNodeId: string | null,
   effects: CrisisDecisionOption["effects"] = []
 ): CrisisDecisionOption {
+  const constructive = (trackDeltas.settlementMomentum ?? 0) > 0;
   return {
     optionId,
     label,
     description,
     effects,
     nextNodeId,
-    action: { kind: "livingConflictTrajectory", conflictKey: KEY, trackDeltas },
+    action: {
+      kind: "livingConflictTrajectory",
+      conflictKey: KEY,
+      trackDeltas,
+      regionalEffects: {
+        regionId: "NIR",
+        independenceDesireDelta: constructive ? -1 : 2,
+        devolutionSatisfactionDelta: constructive ? 2 : -2,
+      },
+    },
   };
 }
 

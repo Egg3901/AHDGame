@@ -55,6 +55,8 @@ import { applyWarEmergencyResponse } from "@/lib/crises/warEmergencyResponse";
 import { livingConflictDef } from "@/lib/livingConflict/registry";
 import { loadConflictState, saveConflictState } from "@/lib/livingConflict/driver";
 import { applyConflictOutcome } from "@/lib/livingConflict/engine";
+import type { MacroMetricsDoc } from "@/lib/db/types/macroMetrics";
+import type { PoliticalMetricsDoc } from "@/lib/db/types/politicalMetrics";
 
 /**
  * Context handed to every crisis option-action handler. The crisis is
@@ -820,6 +822,49 @@ async function moveLivingConflictTrajectory(ctx: CrisisActionContext): Promise<v
 
   const current = await loadConflictState(ctx.db, def.key);
   await saveConflictState(ctx.db, applyConflictOutcome(def, current, action));
+
+  const regional = action.regionalEffects;
+  if (!regional) return;
+  if (regional.independenceDesireDelta) {
+    const metrics = ctx.db.collection<MacroMetricsDoc>("macroMetrics");
+    const doc = await metrics.findOne({ _id: regional.regionId });
+    if (doc?.independenceDesire) {
+      await metrics.updateOne(
+        { _id: regional.regionId },
+        {
+          $set: {
+            "independenceDesire.value": Math.max(
+              0,
+              Math.min(100, doc.independenceDesire.value + regional.independenceDesireDelta)
+            ),
+            lastUpdated: new Date(),
+          },
+        }
+      );
+    }
+  }
+  if (regional.devolutionSatisfactionDelta) {
+    const metrics = ctx.db.collection<PoliticalMetricsDoc>("politicalMetrics");
+    const doc = await metrics.findOne({ _id: regional.regionId });
+    const currentSatisfaction = doc?.values["governance.localAutonomy"];
+    if (currentSatisfaction !== undefined) {
+      await metrics.updateOne(
+        { _id: regional.regionId },
+        {
+          $set: {
+            values: {
+              ...doc.values,
+              "governance.localAutonomy": Math.max(
+                0,
+                Math.min(100, currentSatisfaction + regional.devolutionSatisfactionDelta)
+              ),
+            },
+            lastUpdated: new Date(),
+          },
+        }
+      );
+    }
+  }
 }
 
 /**

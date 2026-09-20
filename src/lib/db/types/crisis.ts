@@ -153,6 +153,11 @@ export type CrisisOptionAction =
       nextConflictPhase?: string;
       nextConflictStatus?:
         "dormant" | "active" | "ceasefire" | "negotiating" | "settled" | "closed";
+      regionalEffects?: {
+        regionId: string;
+        independenceDesireDelta?: number;
+        devolutionSatisfactionDelta?: number;
+      };
     };
 
 export interface CrisisDecisionOption {
