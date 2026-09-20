@@ -68,7 +68,7 @@ async function setupQuietWorld() {
     mockCount(name, 0);
   }
   for (const name of ["corporations", "corporateSectors", "characters", "states", "bonds"]) {
-    if (db.collectionMocks[name]?.aggregate) mockAggregate(name, []);
+    mockAggregate(name, []);
   }
   mockFind("centralBanks", []);
   mockFind("macroMetrics", []);
