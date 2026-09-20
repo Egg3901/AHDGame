@@ -22,6 +22,12 @@
 export {};
 
 import { SOVEREIGN_DEMAND_EXPERIMENT_FIELDS } from "./sovereignDemandExperimentFlags";
+import {
+  assertCollectorSourceMatch,
+  attachActorCoverageSection,
+  parseCollectorSourceArgs,
+  resolveCollectorCommit,
+} from "./collectorSource";
 
 function arg(flag: string): string | undefined {
   const prefix = `--${flag}=`;
@@ -70,11 +76,21 @@ async function main() {
 
   const sandboxDb = await getDb();
   console.log(`[experiments:${runId}] Collecting experiments report from ${dbName}`);
-  const report = await collectExperimentsReport(sandboxDb);
+  const report = await collectExperimentsReport(sandboxDb, { runId });
+  // #2083: a pinned job runs this collector from the validated pinned
+  // worktree (worker passes --source-*). Prove it: the collector's own HEAD
+  // must equal both the request and the SHA runWorld stamped, else exit
+  // nonzero and write nothing.
+  const { sourceCommit } = parseCollectorSourceArgs(process.argv);
 
   console.log(
     `[experiments:${runId}] turn=${report.turn} seatsPoints=${report.seatsTimeline.length} ` +
       `partyOrgPoints=${report.partyOrgTimeline.length} corpPoints=${report.corporationsTimeline.length}`
+  );
+  console.log(
+    `[experiments:${runId}] longHorizon=${report.longHorizonTelemetry?.availability ?? "unavailable"} ` +
+      `approvalPoints=${report.longHorizonTelemetry?.approval.points.length ?? 0} ` +
+      `macroPoints=${report.longHorizonTelemetry?.macro.points.length ?? 0}`
   );
 
   const opsClient = new MongoClient(OPS_MONGODB_URI as string);
@@ -87,6 +103,23 @@ async function main() {
     // part of the ops-dashboard, so its version is that package's version.
     const job = await opsDb.collection("simJobs").findOne({ _id: runId as never });
     const sandboxRun = await sandboxDb.collection("simRuns").findOne({ _id: runId as never });
+    const simSource = (
+      sandboxRun as {
+        source?: {
+          worktree?: string | null;
+          requestedCommit?: string | null;
+          executedPath?: string | null;
+          executedCommit?: string | null;
+        };
+      } | null
+    )?.source;
+    const requestedCommit = sourceCommit ?? simSource?.requestedCommit ?? null;
+    const collectorCommit = resolveCollectorCommit(process.cwd());
+    assertCollectorSourceMatch({
+      requestedCommit,
+      simExecutedCommit: simSource?.executedCommit ?? null,
+      collectorCommit,
+    });
     let mcpVersion: string | undefined;
     try {
       const { readFileSync } = await import("fs");
@@ -111,6 +144,9 @@ async function main() {
           ?.executedPath ?? null) as string | null,
         executedCommit: ((sandboxRun as { source?: { executedCommit?: string } } | null)?.source
           ?.executedCommit ?? null) as string | null,
+        // #2083: the collector's own SHA, proven equal to executedCommit
+        // above. Pin-only: legacy unpinned reports keep their exact shape.
+        ...(requestedCommit ? { collectorPath: process.cwd(), collectorCommit } : {}),
       },
       requestedConfig: job
         ? Object.fromEntries(
@@ -148,30 +184,17 @@ async function main() {
     };
 
     // Actor coverage (#1993): the sandbox run doc carries the manifest
-    // stamped by runWorld from live counts. Attach the report-ready section
-    // — including the prominent per-mechanic warnings — so conclusions that
-    // touch a partial/unreachable system warn inline instead of presenting
-    // vacancies as balance evidence.
+    // stamped by runWorld from live counts. Shared attach helper so the
+    // branch-only section (#2040) survives collection exactly as the
+    // regression test proves — including the prominent per-mechanic warnings,
+    // so conclusions that touch a partial/unreachable system warn inline
+    // instead of presenting vacancies as balance evidence.
     const actorManifest = (
       sandboxRun as {
         actorCoverage?: import("@/lib/sim/actorCoverage").ActorCoverageManifest;
       } | null
     )?.actorCoverage;
-    {
-      const { buildActorCoverageSection, summarizeActorCoverageForVerdict } =
-        await import("@/lib/sim/actorReport");
-      // A run with no stamped manifest (predates coverage) must read UNKNOWN,
-      // never silently drop the section: vacancies are then indistinguishable
-      // from representative behavior.
-      const verdict = summarizeActorCoverageForVerdict(actorManifest ?? null);
-      const section = actorManifest ? buildActorCoverageSection(actorManifest) : null;
-      (report as { actorCoverage?: unknown }).actorCoverage = {
-        manifest: actorManifest ?? null,
-        verdict,
-        warnings: section?.warnings ?? [],
-        lines: section?.lines ?? [verdict.title, verdict.detail],
-      };
-    }
+    attachActorCoverageSection(report as unknown as Record<string, unknown>, actorManifest);
 
     await opsDb
       .collection("simExperimentReports")

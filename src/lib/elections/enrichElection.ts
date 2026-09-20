@@ -137,6 +137,10 @@ import {
   summarizePrimaryProjection,
 } from "./presidentialPrimaryDisplay";
 import { buildActiveVisibleNppEndorsementFilter } from "@/lib/nppEndorsements";
+import {
+  ELECTION_SUMMARY_CHARACTER_PROJECTION,
+  ELECTION_SUMMARY_NPP_PROJECTION,
+} from "./electionSummaryProjections";
 import { parseSeatId } from "@/lib/seats/seatId";
 import { buildPartyDisplayById, buildPresidentialRegByStateInput } from "./presidentialRegByState";
 import { ballotSharesWithinParty } from "@/lib/turn/primaryBallots";
@@ -1497,7 +1501,10 @@ export async function fetchDepsForElection(
   ].map((s) => new ObjectId(s));
   const nppIds = candidates.filter((c) => c.isNPP && c.nppId).map((c) => c.nppId!);
 
-  // Parallel fetches (core data always; endorsements/campaigns only for full view)
+  // Parallel fetches (core data always; endorsements/campaigns only for full view).
+  // Summary views project the candidate-batch reads (#2168): NPPs drop the
+  // ~30KB stance map, characters keep the closed display/scoring set, and
+  // full view keeps whole documents. See electionSummaryProjections.ts.
   const [
     characters,
     npps,
@@ -1512,13 +1519,19 @@ export async function fetchDepsForElection(
     allCharIds.length > 0
       ? db
           .collection<Character>("characters")
-          .find({ _id: { $in: allCharIds } })
+          .find(
+            { _id: { $in: allCharIds } },
+            isFull ? undefined : { projection: ELECTION_SUMMARY_CHARACTER_PROJECTION }
+          )
           .toArray()
       : Promise.resolve([] as Character[]),
     nppIds.length > 0
       ? db
           .collection<NPP>("npps")
-          .find({ _id: { $in: nppIds } })
+          .find(
+            { _id: { $in: nppIds } },
+            isFull ? undefined : { projection: ELECTION_SUMMARY_NPP_PROJECTION }
+          )
           .toArray()
       : Promise.resolve([] as NPP[]),
     db.collection<PoliticalParty>("politicalParties").find({ countryId }).toArray(),

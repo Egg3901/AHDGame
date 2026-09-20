@@ -1,7 +1,10 @@
 import type { ObjectId } from "mongodb";
 
 export type SeedDiagnosticMode = "conformance" | "drift";
-export type SeedDiagnosticTrigger = "post-reset" | "manual";
+export type SeedDiagnosticTrigger = "post-reset" | "worldsim-post-bootstrap" | "manual";
+
+/** Flat effective-configuration record stamped on worldsim bootstrap reports. */
+export type SeedDiagnosticFeatureManifest = Record<string, boolean | number | string | null>;
 export type SeedDiagnosticSeverity = "ok" | "warn" | "critical";
 
 export interface SeedDiagnosticCheck {
@@ -28,6 +31,12 @@ export interface SeedDiagnosticReport {
   checks: SeedDiagnosticCheck[];
   /** Present when Mode B reconstructed baseline from seed files. */
   note?: string;
+  /** Worldsim bootstrap provenance (#1992). Present on worldsim-post-bootstrap reports. */
+  runId?: string;
+  seed?: string;
+  sourceRevision?: string | null;
+  sourceWorktree?: string | null;
+  featureManifest?: SeedDiagnosticFeatureManifest;
 }
 
 export interface RunSeedDiagnosticOptions {
@@ -39,6 +48,12 @@ export interface RunSeedDiagnosticOptions {
   now?: Date;
   /** When false, skip persisting the report (tests). Default true. */
   persist?: boolean;
+  /** Worldsim bootstrap provenance (#1992), persisted on the report. */
+  runId?: string;
+  seed?: string;
+  sourceRevision?: string | null;
+  sourceWorktree?: string | null;
+  featureManifest?: SeedDiagnosticFeatureManifest;
 }
 
 /**

@@ -19,11 +19,15 @@
  *     npx tsx scripts/sim/collectMetrics.ts --db=ahd_sim_run1 --run-id=run1
  */
 
-// Forces module scope — otherwise this file (no top-level import/export,
-// only dynamic imports inside main()) is treated as a global script, and its
-// top-level const/function names collide with any other script under the
-// same pattern (e.g. collectExperimentReport.ts).
+// Forces module scope so top-level names don't collide with the other
+// collector scripts (same reason collectExperimentReport.ts does this).
 export {};
+
+import {
+  assertCollectorSourceMatch,
+  parseCollectorSourceArgs,
+  resolveCollectorCommit,
+} from "./collectorSource";
 
 function arg(flag: string): string | undefined {
   const prefix = `--${flag}=`;
@@ -60,12 +64,37 @@ async function main() {
   const sandboxDb = await getDb();
   console.log(`[metrics:${runId}] Collecting balance metrics from ${dbName}`);
   const report = await collectBalanceMetrics(sandboxDb);
+  // #2083: a pinned job runs this collector from the validated pinned
+  // worktree (worker passes --source-*). Prove it: the collector's own HEAD
+  // must equal both the request and the SHA runWorld stamped, else exit
+  // nonzero and write nothing.
+  const { sourceWorktree, sourceCommit } = parseCollectorSourceArgs(process.argv);
+  const sandboxRun = await sandboxDb.collection("simRuns").findOne({ _id: runId as never });
+  const simSource = (
+    sandboxRun as {
+      source?: {
+        worktree?: string | null;
+        requestedCommit?: string | null;
+        executedCommit?: string | null;
+      };
+    } | null
+  )?.source;
+  const requestedCommit = sourceCommit ?? simSource?.requestedCommit ?? null;
+  const collectorCommit = resolveCollectorCommit(process.cwd());
+  assertCollectorSourceMatch({
+    requestedCommit,
+    simExecutedCommit: simSource?.executedCommit ?? null,
+    collectorCommit,
+  });
 
   console.log(
     `[metrics:${runId}] turn=${report.turn} npps=${report.wealth.nppCount} ` +
       `wealthGini=${report.wealth.gini.toFixed(3)} top1%=${(report.wealth.top1PctShare * 100).toFixed(1)}% ` +
       `contested=${(report.electoral.contestedPct * 100).toFixed(1)}% effectiveParties=${report.electoral.effectivePartyCount.toFixed(2)} ` +
-      `inflation=${report.economy.inflationIndex.toFixed(3)} crisesActive=${report.crises.active} ` +
+      `householdCpiIndex=${report.economy.inflationIndex.toFixed(3)} ` +
+      `householdCpiRate=${report.economy.inflationRate.toFixed(2)}% ` +
+      `commodityPriceLevelP90=${report.economy.commodityPriceLevelP90.toFixed(2)} ` +
+      `crisesActive=${report.crises.active} ` +
       `capStock=${report.capacity.totalCapitalStock.toFixed(0)} meanUtil=${report.capacity.meanCapitalUtilization.toFixed(3)} ` +
       `produced=${report.capacity.totalProducedUnits.toFixed(0)} sold=${report.capacity.totalSoldUnits.toFixed(0)} ` +
       `plantsMigrated=${report.capacity.plantsMigratedSectors}/${report.capacity.sectorCount}`
@@ -77,7 +106,26 @@ async function main() {
     const simJobs = opsClient.db(opsDbName).collection("simJobs");
     await simJobs.updateOne(
       { _id: runId as never },
-      { $set: { metrics: report, metricsCollectedAt: new Date(), updatedAt: new Date() } }
+      {
+        $set: {
+          metrics: report,
+          metricsCollectedAt: new Date(),
+          updatedAt: new Date(),
+          // #2083: simulation + collector SHAs, proven equal above.
+          // Pin-only: legacy unpinned docs keep their exact shape.
+          ...(requestedCommit
+            ? {
+                metricsSource: {
+                  worktree: sourceWorktree ?? simSource?.worktree ?? null,
+                  requestedCommit,
+                  simExecutedCommit: simSource?.executedCommit ?? null,
+                  collectorPath: process.cwd(),
+                  collectorCommit,
+                },
+              }
+            : {}),
+        },
+      }
     );
     console.log(`[metrics:${runId}] Report written to control-plane simJobs.`);
   } finally {

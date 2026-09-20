@@ -23,6 +23,8 @@ import {
   buildActiveMarketBuckets,
   hasEnterableHeadroom,
   sectorShortageScore,
+  sectorPeakShortageScore,
+  ESSENTIAL_SHORTAGE_SCORE,
   markMarketsActive,
   computeMacroProductionPolicy,
   type CommodityPriceRatioFn,
@@ -1691,6 +1693,14 @@ export function makeNppCorpDecision(
           placementSignals?.statePriceRatioOf?.(commodity, sector.stateId) ??
           priceRatioOf(commodity, cid)
       );
+      const peakStateShortage = sectorPeakShortageScore(
+        sector.sectorType,
+        sectorCountryId,
+        (commodity, cid) =>
+          placementSignals?.statePriceRatioOf?.(commodity, sector.stateId) ??
+          priceRatioOf(commodity, cid)
+      );
+      const criticalShortage = peakStateShortage >= ESSENTIAL_SHORTAGE_SCORE;
       const interventionPriority = fragileReinvestmentPriority(
         sector,
         sectorCountryId,
@@ -1699,13 +1709,20 @@ export function makeNppCorpDecision(
         ctx.turn
       );
       const strandedDecayScale = stateShortage <= 0.85 ? 0.5 : 1;
-      const replacementUnits =
+      const accruedReplacementUnits =
         runUnits *
         CAPITAL_DEPRECIATION_PER_TURN *
         accrualTurns *
         fillScale *
         strandedDecayScale *
         NPP_REINVEST_AGGRESSION;
+      // Two pending builds already cover this plant's current investment
+      // cadence. Do not fill the larger storage-only queue with a tiny
+      // replacement order every turn: those orders occupied all 20 slots in
+      // chronic shortages and prevented the meaningful growth leg from ever
+      // reopening. Replacement accrual catches up when a slot lands.
+      const replacementUnits =
+        queueDepth >= NPP_REINVEST_MAX_GROWTH_QUEUE_DEPTH ? 0 : accruedReplacementUnits;
       // GROWTH — build from nothing, sized by cash and demand, exactly as a
       // player tops up a plant with `buildCapacity`. Demand-side sectors do not
       // use the unowned pool as a hard cap: their proven sell-through is the
@@ -1722,7 +1739,7 @@ export function makeNppCorpDecision(
           ? Math.max(0, Math.min(1, placementSignals?.extractionHeadroomOf?.(sector.stateId) ?? 1))
           : 1;
       const canGrow =
-        sp.isProfitable &&
+        (sp.isProfitable || criticalShortage) &&
         levers.allowGrowthCapex &&
         !(ctx.retailExpansionPaused && sector.sectorType === "retail") &&
         queueDepth < NPP_REINVEST_MAX_GROWTH_QUEUE_DEPTH &&

@@ -4,6 +4,7 @@ import { getConflictsCollection } from "@/lib/db/collections/conflicts";
 import { WAR_DEFEAT_WINDOW_TURNS } from "@/lib/military/rules/warDefeat";
 import type { GovernmentApproval } from "@/lib/db/types/governmentApproval";
 import { snapshotApprovalHistory } from "@/lib/utils/governmentApproval";
+import type { LongHorizonContext } from "@/lib/telemetry/longHorizon/telemetry";
 import {
   belligerentsOf,
   guestsToRelease,
@@ -45,7 +46,11 @@ export interface ApprovalSnapshotRun {
  * is over AND their exhaustion has finished healing, which can be many hundreds
  * of turns after the last shot. See `releaseApprovalGuests` for why that matters.
  */
-export async function snapshotApprovalsForTurn(db: Db, turn: number): Promise<ApprovalSnapshotRun> {
+export async function snapshotApprovalsForTurn(
+  db: Db,
+  turn: number,
+  telemetryCtx?: LongHorizonContext
+): Promise<ApprovalSnapshotRun> {
   const activeIds = COUNTRY_ORDER.filter((id) => COUNTRY_CONFIGS[id].status === "active");
   const approvals = db.collection<GovernmentApproval>("governmentApprovals");
 
@@ -81,7 +86,7 @@ export async function snapshotApprovalsForTurn(db: Db, turn: number): Promise<Ap
   const seeded = seededStateCountries.filter(known);
 
   const plan = planApprovalSnapshot(activeIds, belligerents, documented, seeded);
-  await Promise.all(plan.ids.map((id) => snapshotApprovalHistory(db, id, turn)));
+  await Promise.all(plan.ids.map((id) => snapshotApprovalHistory(db, id, turn, telemetryCtx)));
 
   return {
     countriesProcessed: plan.ids.length,

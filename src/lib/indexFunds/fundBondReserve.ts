@@ -5,12 +5,13 @@
  */
 
 import { ObjectId, type Db } from "mongodb";
-import type { Bond, IndexFund } from "@/lib/db/types";
+import type { Bond, IndexFund, IndexFundTransaction } from "@/lib/db/types";
 import type { CountryId } from "@/lib/constants/countries";
 import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
 import { BOND_UNIT_FACE_VALUE } from "@/lib/db/types/bond";
 import { corpCapitalToAnchor, loadFxRatesRecord } from "@/lib/currency/corporationCapital";
 import { loadBondPoolsByCurrency } from "@/lib/bonds/marketPool";
+import { insertFundTransactionsBulk } from "@/lib/indexFunds/fundQueries";
 import { purchaseBondUnitsForFund } from "@/lib/bonds/purchaseBondUnitsForFund";
 import { computeFundAllocationBreakdown } from "@/lib/indexFunds/fundAllocation";
 import { sovereignBondRemainingCapacityUnits } from "@/lib/bonds/holderCap";
@@ -274,31 +275,42 @@ export async function deployBondReserveFromCash(
   let deployedAnchor = 0;
   let unitsPurchased = 0;
 
-  for (let index = 0; index < bonds.length; index++) {
-    const bond = bonds[index]!;
-    if (budgetAnchor <= 0) break;
+  const transactions: Omit<IndexFundTransaction, "_id">[] = [];
+  try {
+    for (let index = 0; index < bonds.length; index++) {
+      const bond = bonds[index]!;
+      if (budgetAnchor <= 0) break;
 
-    const unitCostAnchor = costPerUnitAnchor(bond, fxRates);
-    if (unitCostAnchor <= 0) continue;
+      const unitCostAnchor = costPerUnitAnchor(bond, fxRates);
+      if (unitCostAnchor <= 0) continue;
 
-    const issueBudgetAnchor =
-      options?.liquidityTargetEnabled || bondUniverse
-        ? bondAllocationBudgetForIssue(budgetAnchor, bonds.length - index)
-        : budgetAnchor;
-    const maxUnitsByBudget = Math.floor(issueBudgetAnchor / unitCostAnchor);
-    const maxUnitsByFloat = Math.floor(bond.publicFloat ?? 0);
-    const maxUnitsByPosition = sovereignBondRemainingCapacityUnits(bond, "fundId", fund._id);
-    const units = Math.min(maxUnitsByBudget, maxUnitsByFloat, maxUnitsByPosition);
-    if (units <= 0) continue;
+      const issueBudgetAnchor =
+        options?.liquidityTargetEnabled || bondUniverse
+          ? bondAllocationBudgetForIssue(budgetAnchor, bonds.length - index)
+          : budgetAnchor;
+      const maxUnitsByBudget = Math.floor(issueBudgetAnchor / unitCostAnchor);
+      const maxUnitsByFloat = Math.floor(bond.publicFloat ?? 0);
+      const maxUnitsByPosition = sovereignBondRemainingCapacityUnits(bond, "fundId", fund._id);
+      const units = Math.min(maxUnitsByBudget, maxUnitsByFloat, maxUnitsByPosition);
+      if (units <= 0) continue;
 
-    const purchase = await purchaseBondUnitsForFund(db, fund, bond, units, { bondPools });
-    if (!purchase.ok) continue;
+      const purchase = await purchaseBondUnitsForFund(db, fund, bond, units, {
+        bondPools,
+        fxRates,
+        txSink: transactions,
+      });
+      if (!purchase.ok) continue;
 
-    deployedAnchor += purchase.costAnchor;
-    unitsPurchased += purchase.units;
-    budgetAnchor -= purchase.costAnchor;
-    // The purchase debits fund cash atomically; nothing below reads the
-    // fund's cash, so no re-read per bond. `budgetAnchor` is the running cap.
+      deployedAnchor += purchase.costAnchor;
+      unitsPurchased += purchase.units;
+      budgetAnchor -= purchase.costAnchor;
+      // The purchase debits fund cash atomically; nothing below reads the
+      // fund's cash, so no re-read per bond. `budgetAnchor` is the running cap.
+    }
+  } finally {
+    // Preserve receipts for purchases already committed if a later issue fails.
+    // Balance gates, reservations and pool credits remain sequential per purchase.
+    await insertFundTransactionsBulk(db, transactions);
   }
 
   return { deployedAnchor, unitsPurchased, countryId };

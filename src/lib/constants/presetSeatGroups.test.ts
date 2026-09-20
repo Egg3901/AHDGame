@@ -38,7 +38,7 @@ import {
   splitCNNPCDelegates,
   SU_SUPREME_SOVIET_1953,
   SU_SUPREME_SOVIET_1979,
-  UK_COMMONS_1992,
+  UK_COMMONS_1987,
   UK_COMMONS_2020,
   UK_FIRST_MINISTERS_1992,
   UK_FIRST_MINISTERS_2020,
@@ -93,7 +93,7 @@ const SOURCE_1992 =
   US_SENATE_1992.length +
   US_STATE_SENATE_1990.length +
   US_GOVERNORS_1992.length +
-  UK_COMMONS_1992.length +
+  UK_COMMONS_1987.length +
   UK_REGIONAL_COUNCIL_1992.length +
   UK_FIRST_MINISTERS_1992.length +
   JP_SHUGIIN_1990.length +
@@ -185,9 +185,14 @@ describe("preset seat groups", () => {
   it("reports the measured mismatches for the player countries", () => {
     // Pinned so the data fixes later in Plan C are visible as changes here.
     expect(seatCountFor("1953-default", "US", "senate")).toBe(96);
-    expect(seatCountFor("1991-default", "UK", "commons")).toBe(651);
+    // 650, not 651: the 1991 Commons is the one elected in June 1987 on the
+    // 1983 boundaries. 651 was the April 1992 chamber, seated into a world that
+    // opens fifteen months before it existed. See UK_COMMONS_1987.
+    expect(seatCountFor("1991-default", "UK", "commons")).toBe(650);
     expect(seatCountFor("1991-default", "JP", "shugiin")).toBe(512);
-    expect(seatCountFor("1991-default", "JP", "sangiin")).toBe(206);
+    // 252, not 206: the Sangiin used to stop 46 seats short of its own config
+    // with nothing declaring the gap. See JP_SANGIIN_1989.
+    expect(seatCountFor("1991-default", "JP", "sangiin")).toBe(252);
   });
 
   it("returns nothing for a country the preset does not seat", () => {

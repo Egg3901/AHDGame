@@ -7,9 +7,22 @@ import type { State } from "@/lib/db/types";
  * GDP: 1991 prefectural GDP, summed to game regions.
  *   Source: Cabinet Office annual prefectural GDP series (1990-91 nominal).
  * House districts and stateSenateSeats track the 1986-94 medium-constituency
- * (chuusenkyoku) Shugiin system — 511 total seats in 1990, distributed
- * proportionally to game regions. Modern stateSenateSeats values are
- * preserved (no separate 1990 prefectural-assembly seat count is modeled).
+ * (chuusenkyoku) Shugiin system — 512 total seats, distributed proportionally
+ * to game regions. Modern stateSenateSeats values are preserved (no separate
+ * 1990 prefectural-assembly seat count is modeled).
+ *
+ * ⚠️ THESE SUMMED TO 511 AGAINST A 512-SEAT CHAMBER. The 1986 reapportionment
+ * ("8増7減") put the Shugiin at 512 and the February 1990 election returned
+ * that many; 511 is the figure from the 1992 revision, two years after this
+ * world starts. The missing seat went to Kanto, by some distance the most
+ * under-represented region on this file's own 1990 populations — 267,361
+ * people per seat against Shikoku's 209,750, which is the malapportionment the
+ * Supreme Court's vote-value rulings were about and is deliberately preserved
+ * rather than evened out.
+ *
+ * `JP_SHUGIIN_SEATS_1991` mirrors these numbers and `JP_SHUGIIN_1990` seats
+ * them, so the chamber config, the districts, the roster and the election
+ * allocator agree region by region.
  */
 export const jpRegions1991: State[] = [
   {
@@ -43,7 +56,7 @@ export const jpRegions1991: State[] = [
     name: "Kanto",
     population: 38_500_000,
     gdp: 168_000_000, // ~36% of national bubble-peak GDP
-    houseDistricts: 144,
+    houseDistricts: 145,
     stateSenateSeats: 581,
     region: "Kanto",
     votingSystem: "fptp",

@@ -97,7 +97,7 @@ describe("UK_REGIONAL_COUNCIL_1992", () => {
     //    uk_libdem, uk_snp, uk_plaid, uk_dup, uk_uup, uk_sf, uk_independent)
     //  - Slugs preserved as historical attribution even if not seeded as default
     //    parties (uk_sdlp, uk_alliance — fall back to independent via the
-    //    seedHistorical resolver, matching UK_COMMONS_1992's convention)
+    //    seedHistorical resolver, matching UK_COMMONS_1987's convention)
     const allowed = new Set([
       "uk_labour",
       "uk_conservative",

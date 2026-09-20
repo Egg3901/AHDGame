@@ -1,5 +1,5 @@
 import type { Db, ObjectId } from "mongodb";
-import type { BondMarketPool, Bond, IndexFund } from "@/lib/db/types";
+import type { BondMarketPool, Bond, IndexFund, IndexFundTransaction } from "@/lib/db/types";
 import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import { corpCapitalToAnchor, loadFxRatesRecord } from "@/lib/currency/corporationCapital";
@@ -56,6 +56,10 @@ export async function purchaseBondUnitsForFund(
   options?: {
     /** Preloaded bond pools for a pass of many purchases; advanced as each credits its pool. */
     bondPools?: Map<CurrencyCode, BondMarketPool>;
+    /** Stable FX snapshot for the reserve deployment pass. */
+    fxRates?: Partial<Record<CurrencyCode, number>>;
+    /** Caller must flush completed purchase receipts even if a later purchase fails. */
+    txSink?: Omit<IndexFundTransaction, "_id">[];
   }
 ): Promise<PurchaseBondUnitsForFundResult> {
   const wholeUnits = Math.floor(units);
@@ -67,7 +71,7 @@ export async function purchaseBondUnitsForFund(
   }
 
   const bondCurrency = resolveBondCurrency(bond);
-  const fxRates = await loadFxRatesRecord(db);
+  const fxRates = options?.fxRates ?? (await loadFxRatesRecord(db));
   const bondFxRate =
     fxRates[bondCurrency] && fxRates[bondCurrency]! > 0 ? fxRates[bondCurrency]! : 1;
   const quote = await loadBondQuote(db, bond, { pools: options?.bondPools });
@@ -98,14 +102,16 @@ export async function purchaseBondUnitsForFund(
     await creditBondPool(db, bondCurrency, costLocal, "purchasesIn", now);
     advanceBondPoolSnapshot(options?.bondPools, bondCurrency, costLocal);
 
-    await insertFundTransaction(db, {
+    const transaction: Omit<IndexFundTransaction, "_id"> = {
       fundId: fund._id,
       kind: "bond_allocation",
       amountAnchor: costAnchor,
       navAnchor: fund.quotedNav,
       note: `Purchased ${wholeUnits} bond units (${bond.issuerName ?? "sovereign"})`,
       createdAt: now,
-    });
+    };
+    if (options?.txSink) options.txSink.push(transaction);
+    else await insertFundTransaction(db, transaction);
 
     return { ok: true, units: wholeUnits, costAnchor, bondId: bond._id };
   } catch (err) {

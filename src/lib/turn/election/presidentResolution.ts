@@ -36,6 +36,7 @@ import {
 } from "@/lib/elections/presidentialResolutionDisplay";
 import { getGameStateCollection } from "@/lib/db/collections";
 import { loadApportionment } from "@/lib/elections/apportionment";
+import { captureElectionResultSnapshot } from "@/lib/elections/liveResults/captureResultSnapshot";
 import { logger } from "../../observability/logger";
 
 function recoverUnitVotesFromSnapshots(
@@ -253,6 +254,36 @@ async function runPostFinalizeCleanup(
       `[Turn] President election ${election._id}: partial-25% state-org reset applied to ${orgReset.modifiedCount} row(s)`
     );
   }
+
+  // `finalizePresidentTally` has now written the decided college. Capturing
+  // earlier would freeze a result whose electoral votes were still projected.
+  await captureElectionResultSnapshot(db, election, now);
+}
+
+async function terminalizeMissingWinner(
+  db: Awaited<ReturnType<typeof import("@/lib/mongodb").getDb>>,
+  election: Election,
+  electoralVotesByCandidate: Record<string, number>,
+  resolutionMode: PresidentialResolutionMode,
+  contingentResult: ContingentElectionResult | undefined,
+  now: Date
+): Promise<void> {
+  await db.collection<ElectionVoteTally>("electionVoteTallies").updateOne(
+    { electionId: election._id },
+    {
+      $set: {
+        electoralVotesByCandidate,
+        finalized: true,
+        updatedAt: now,
+        resolutionMode,
+        contingentResolutionPending: false,
+        executiveSeatingPending: false,
+        resolutionTerminalReason: "winner_candidate_missing",
+        resolutionTerminalAt: now,
+        ...(contingentResult && { contingentResult }),
+      },
+    }
+  );
 }
 
 /**
@@ -402,9 +433,18 @@ export async function resolvePresidentElection(
     const winnerCandidateCheck = candidateMap.get(winnerId);
     if (!winnerCandidateCheck) {
       console.error(
-        `[Turn] President election ${election._id}: winner ${winnerId} has no ElectionCandidate document — resolution skipped. Data may be corrupt; will retry next turn.`
+        `[Turn] President election ${election._id}: winner ${winnerId} has no ElectionCandidate document — recording terminal resolution failure.`
       );
-      return false;
+      await terminalizeMissingWinner(
+        db,
+        election,
+        electoralVotesByCandidate,
+        resolutionMode,
+        contingentResult,
+        now
+      );
+      await runPostFinalizeCleanup(db, election, electoralVotesByCandidate, now);
+      return true;
     }
 
     const { finalized, concurrentWinner } = await finalizePresidentTally(
@@ -429,9 +469,17 @@ export async function resolvePresidentElection(
   const winnerCandidate = candidateMap.get(winnerId);
   if (!winnerCandidate) {
     console.error(
-      `[Turn] President election ${election._id}: winner ${winnerId} has no ElectionCandidate document`
+      `[Turn] President election ${election._id}: winner ${winnerId} has no ElectionCandidate document — recording terminal resolution failure.`
     );
-    return false;
+    await terminalizeMissingWinner(
+      db,
+      election,
+      electoralVotesByCandidate,
+      resolutionMode,
+      contingentResult,
+      now
+    );
+    return true;
   }
 
   const { vpCharId, vpNppId } = await resolveVpIds(db, election, winnerCandidate, contingentResult);
