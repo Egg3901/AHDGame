@@ -48,6 +48,7 @@ interface RegionalGeoMapProps {
   regionData: Record<string, RegionCell>;
   onRegionClick?: (code: string) => void;
   highlightedRegions?: Set<string> | string[];
+  highlightColor?: string;
   /**
    * Compact on-map text per region code (e.g. BR's N/NE/CO/SE/S), used only for
    * the drawn `<text>` label; the tooltip still shows the full `regionData.label`.
@@ -331,6 +332,7 @@ export function RegionalGeoMap({
   regionData,
   onRegionClick,
   highlightedRegions,
+  highlightColor = "#a855f7",
   labelOverrides,
   labelOffsets,
   width = W,
@@ -512,7 +514,7 @@ export function RegionalGeoMap({
                   tabIndex={-1}
                   fill={fill}
                   fillOpacity={isHov ? 0.95 : hasData ? 0.85 : 0.4}
-                  stroke={isHov ? "#ffffff" : isHighlighted ? "#a855f7" : "#334155"}
+                  stroke={isHov ? "#ffffff" : isHighlighted ? highlightColor : "#334155"}
                   strokeWidth={isHov ? 1.5 : isHighlighted ? 2.5 : 0.5}
                   style={{
                     outline: "none",

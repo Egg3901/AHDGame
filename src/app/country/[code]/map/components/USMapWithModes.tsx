@@ -695,6 +695,7 @@ export function USMapWithModes({
                       showLabels={showLabels}
                       splitMode={senateSplitMode}
                       splitData={splitData}
+                      highlightColor="var(--primary)"
                       highlightedRegions={
                         selectedId ? [selectedId] : search ? regions.map((r) => r.id) : []
                       }
