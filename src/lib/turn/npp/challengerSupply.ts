@@ -39,8 +39,20 @@ const CONTESTABLE_SINGLE_SEAT = ["governor", "special_governor", "senate"] as co
  */
 const CONTESTABLE_MULTI_SEAT_ONEPARTY = ["peoplesCongress", "landAssembly"] as const;
 
+/**
+ * Regional chambers whose concurrent cycles can exhaust the whole local NPP
+ * pool. These need the same per-party floor as single-seat races even in
+ * multi-party countries. Without it, a higher-priority or older overlapping
+ * race can claim every eligible NPP and leave the residual chamber empty.
+ */
+const CONTESTABLE_CONCURRENT_CHAMBERS = ["house", "milletMeclisi", "senato"] as const;
+
 /** All election types this phase files a floor candidate into. */
-const CONTESTABLE = [...CONTESTABLE_SINGLE_SEAT, ...CONTESTABLE_MULTI_SEAT_ONEPARTY] as const;
+const CONTESTABLE = [
+  ...CONTESTABLE_SINGLE_SEAT,
+  ...CONTESTABLE_MULTI_SEAT_ONEPARTY,
+  ...CONTESTABLE_CONCURRENT_CHAMBERS,
+] as const;
 
 /** Circuit breaker against malformed data — real turns file a handful. */
 const MAX_CHALLENGERS_PER_TURN = 400;
@@ -74,7 +86,8 @@ const MAX_CHALLENGERS_PER_TURN = 400;
  * File bench "challenger" candidates into open primaries that would otherwise
  * resolve UNCONTESTED / EMPTY:
  *   - directly-elected single-seat offices (governor, senate), and
- *   - one-party multi-seat sub-national congresses (CN peoplesCongress).
+ *   - one-party multi-seat sub-national congresses (CN peoplesCongress), and
+ *   - regional chambers vulnerable to concurrent-cycle pool exhaustion.
  *
  * Single-winner races seat exactly one incumbent, so to be a contest the OTHER
  * major party needs a candidate. The generic NPP entry (nppBehavior Phase 2)
@@ -112,7 +125,7 @@ export async function processChallengerGeneration(now: Date): Promise<number> {
   const currentTurn = gs?.currentTurn;
   const founding = gs?.preIteration?.active === true;
 
-  // Open single-seat primaries: active AND still in the primary window
+  // Open covered primaries: active AND still in the primary window
   // (turn-first, drift-immune — mirrors loadNPPContext's electionFilter).
   const primaryOpen =
     typeof currentTurn === "number"
@@ -314,7 +327,7 @@ export async function processChallengerGeneration(now: Date): Promise<number> {
 
   if (filed > 0) {
     console.log(
-      `[Turn] generateChallengers: filed ${filed} floor candidate(s) into uncontested single-seat / one-party congress primaries`
+      `[Turn] generateChallengers: filed ${filed} floor candidate(s) into uncovered primaries`
     );
   }
   return filed;
