@@ -36,6 +36,16 @@ export interface PartyData {
   discordInviteUrl?: string | null;
   economicPosition: number;
   socialPosition: number;
+  /**
+   * Distinct people holding this party's officer seats, counted on the
+   * server from the raw seat ids.
+   *
+   * Sent rather than derived from `chair`/`viceChair`/`treasurer`,
+   * because those are null for a BANNED holder while the seat is still
+   * filled as far as the payout ceiling is concerned. Counting the
+   * visible three would quietly disagree with what the server enforces.
+   */
+  seatedOfficers: number;
   chair: PartyLeader | null;
   viceChair: PartyLeader | null;
   treasurer: PartyLeader | null;

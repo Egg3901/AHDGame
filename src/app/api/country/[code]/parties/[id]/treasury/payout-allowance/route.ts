@@ -11,7 +11,7 @@ import { parseObjectId } from "@/lib/utils/objectId";
 import type { Character } from "@/lib/db/types";
 import { isPartyOfficer } from "@/lib/parties/pendingTreasuryTransactions";
 import { getPlayerPayoutThisTurn } from "@/lib/treasury/payoutCap";
-import { getPlayerPayoutCap } from "@/lib/treasury/payoutCapValues";
+import { countDistinctOfficers, getEffectivePlayerPayoutCap } from "@/lib/treasury/payoutCapValues";
 import { getGameTime } from "@/lib/time/gameTime";
 
 interface RouteParams {
@@ -105,7 +105,12 @@ export async function GET(request: Request, { params }: RouteParams) {
     }
 
     const { currentTurn } = await getGameTime();
-    const cap = getPlayerPayoutCap(countryId);
+    const seatedOfficers = countDistinctOfficers([
+      party.chairId?.toString(),
+      party.viceChairId?.toString(),
+      party.treasurerId?.toString(),
+    ]);
+    const cap = getEffectivePlayerPayoutCap(countryId, seatedOfficers);
     const used = await getPlayerPayoutThisTurn(db, targetId, countryId, currentTurn);
 
     return NextResponse.json({
@@ -113,6 +118,10 @@ export async function GET(request: Request, { params }: RouteParams) {
       cap,
       used,
       remaining: Math.max(0, cap - used),
+      // Sent so the cards can explain WHY the ceiling is what it is
+      // rather than just printing a number that changes when a seat is
+      // filled or vacated.
+      seatedOfficers,
       currentTurn,
     });
   } catch (error) {

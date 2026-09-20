@@ -2,9 +2,12 @@ import { describe, it, expect, vi } from "vitest";
 import { ObjectId, type Db } from "mongodb";
 import {
   checkPlayerPayoutCap,
+  countDistinctOfficers,
+  getEffectivePlayerPayoutCap,
   getPlayerPayoutThisTurn,
   getPlayerPayoutCap,
   DEFAULT_PLAYER_PAYOUT_CAP_PER_TURN,
+  PAYOUT_CAP_MULTI_OFFICER_MULTIPLIER,
 } from "./payoutCap";
 
 function makeDb(alreadyPaid: number | null) {
@@ -38,6 +41,56 @@ describe("getPlayerPayoutCap", () => {
     // 2,000,000 instead of 1,500,000 with no error anywhere.
     expect(getPlayerPayoutCap("ru")).toBe(1_500_000);
     expect(getPlayerPayoutCap("jp")).toBe(10_000_000);
+  });
+});
+
+describe("countDistinctOfficers", () => {
+  it("counts people, not seats", () => {
+    // One person holding two seats is one officer. Counting seats would
+    // hand a lone chair-and-treasurer the two-officer allowance.
+    expect(countDistinctOfficers(["a", "a", "b"])).toBe(2);
+    expect(countDistinctOfficers(["a", "a", null])).toBe(1);
+  });
+
+  it("ignores empty seats in any shape", () => {
+    expect(countDistinctOfficers([null, undefined, ""])).toBe(0);
+    expect(countDistinctOfficers([])).toBe(0);
+  });
+});
+
+describe("getEffectivePlayerPayoutCap", () => {
+  it("leaves the base cap alone below two officers", () => {
+    expect(getEffectivePlayerPayoutCap("US", 0)).toBe(2_000_000);
+    expect(getEffectivePlayerPayoutCap("US", 1)).toBe(2_000_000);
+  });
+
+  it("multiplies once two officers are seated", () => {
+    expect(getEffectivePlayerPayoutCap("US", 2)).toBe(
+      2_000_000 * PAYOUT_CAP_MULTI_OFFICER_MULTIPLIER
+    );
+  });
+
+  it("does not scale further with a third officer", () => {
+    expect(getEffectivePlayerPayoutCap("US", 3)).toBe(getEffectivePlayerPayoutCap("US", 2));
+  });
+
+  it("raises every country off its own base, not just the US", () => {
+    // The multiplier rides on whatever the country is tuned to, so a
+    // cheaper economy keeps its proportion rather than being levelled up
+    // to a dollar figure borrowed from somewhere else.
+    for (const country of ["US", "UK", "RU", "DD", "JP", "FR"]) {
+      const base = getPlayerPayoutCap(country);
+      expect(getEffectivePlayerPayoutCap(country, 1)).toBe(base);
+      expect(getEffectivePlayerPayoutCap(country, 2)).toBe(
+        base * PAYOUT_CAP_MULTI_OFFICER_MULTIPLIER
+      );
+    }
+  });
+
+  it("falls back to the default base for an unknown country", () => {
+    expect(getEffectivePlayerPayoutCap("ZZ", 2)).toBe(
+      DEFAULT_PLAYER_PAYOUT_CAP_PER_TURN * PAYOUT_CAP_MULTI_OFFICER_MULTIPLIER
+    );
   });
 });
 
@@ -98,7 +151,19 @@ describe("checkPlayerPayoutCap", () => {
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error("expected refusal");
     expect(result.remaining).toBe(0);
-    expect(result.reason).toMatch(/already received the maximum/);
+    expect(result.reason).toMatch(/already received £2,000,000/);
+  });
+
+  it("names what the member actually drew, not this treasury's ceiling", async () => {
+    // A member paid up to a well staffed party's raised ceiling then
+    // runs into a lone officer's lower one. Reporting "the maximum of
+    // $2,000,000" would name a figure they never hit.
+    const { db } = makeDb(10_000_000);
+    const result = await checkPlayerPayoutCap(db, { ...base, amount: 1, seatedOfficers: 1 });
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("expected refusal");
+    expect(result.reason).toContain("already received £10,000,000");
+    expect(result.reason).toContain("£2,000,000 this treasury may pay");
   });
 
   it("never reports a negative allowance when past payouts exceed the cap", async () => {
