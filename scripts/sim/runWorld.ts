@@ -23,6 +23,9 @@
  *   SIM_MONGODB_URI=mongodb://127.0.0.1:27018 \
  *     npx tsx scripts/sim/runWorld.ts --seed=run1 --preset=2019-default --turns=500
  *
+ * Add --profile-queries for per-phase Mongo command counts. Diagnostic runs
+ * incur driver reply-decoding overhead and should not be used as clean timings.
+ *
  * Re-running the same --seed/--db against a DB that already has a
  * bootstrapped world SKIPS bootstrap and CONTINUES from the current turn —
  * safe to re-run after a crash, and how you extend a run past its original
@@ -37,6 +40,7 @@ import type {
   NppForeignPolicyMode,
   NppForeignPolicyStage,
 } from "@/lib/db/types/gameState";
+import { worldsimQueryMonitoringRequested } from "./queryMonitoring";
 import type { GameConfig } from "@/lib/db/types/gameConfig";
 import type { TurnLog } from "@/lib/db/types/turnLog";
 import { MARKET_MODE_ORDER, type MarketSystemMode } from "@/lib/market/modes";
@@ -419,8 +423,11 @@ if (!Number.isFinite(turns) || turns <= 0) {
 // Must happen before any @/lib import that might transitively touch mongodb.ts.
 // NODE_ENV is typed read-only by @types/node; this is the standard escape hatch.
 (process.env as { NODE_ENV: string }).NODE_ENV = "test";
-// Simulations skip server env validation, but still measure real phase query work.
-process.env.AHD_TURN_ROUNDTRIP_MONITOR = "1";
+// Query diagnostics force extra BSON decoding in the driver. Keep them opt-in;
+// phase wall timings remain available during ordinary runs.
+process.env.AHD_TURN_ROUNDTRIP_MONITOR = worldsimQueryMonitoringRequested(process.argv, process.env)
+  ? "1"
+  : "0";
 process.env.MONGODB_URI = SIM_MONGODB_URI;
 process.env.MONGODB_DB = dbName;
 process.env.SIM_RNG_SALT = seed;
