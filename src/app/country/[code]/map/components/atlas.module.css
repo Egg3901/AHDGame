@@ -105,6 +105,7 @@
 /* Geographic fills come from party/data colors. White label outlines remain
    within the map so labels are legible across the data palette in every theme. */
 .mapStage svg path {
+  outline: none;
   cursor: pointer;
   transition:
     fill 0.35s ease,

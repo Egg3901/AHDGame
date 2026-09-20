@@ -311,7 +311,8 @@
       "pageTitle": "{country} Map",
       "view": "View",
       "selected": "State details",
-      "seatCount": "{count, plural, one {# seat} other {# seats}}"
+      "seatCount": "{count, plural, one {# seat} other {# seats}}",
+      "governorCount": "{count, plural, one {# governor} other {# governors}}"
     }
   }
 }

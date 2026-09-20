@@ -55,9 +55,11 @@ export function AtlasTooltip({
         <span className="font-mono text-muted">{id}</span>
       </div>
       <h3 className="mt-1 text-lg font-semibold text-foreground">{region?.name ?? id}</h3>
-      <p className="mt-1 text-sm text-muted">
-        {cell?.label === id ? t(mode as "house") : (cell?.label ?? t("noData"))}
-      </p>
+      {mode !== "governor" && mode !== "senate" && (
+        <p className="mt-1 text-sm text-muted">
+          {cell?.label === id ? t(mode as "house") : (cell?.label ?? t("noData"))}
+        </p>
+      )}
       {relevant.slice(0, 2).map((h) => (
         <OfficeholderCard key={h.id} holder={h} />
       ))}
@@ -83,7 +85,9 @@ export function AtlasBars({ rows, unit }: { rows: AtlasBar[]; unit: string }) {
             <span className="shrink-0 font-mono text-muted">
               {unit === t("seats")
                 ? t("seatCount", { count: row.value })
-                : `${compact(row.value)} ${unit}`}
+                : unit === t("governor")
+                  ? t("governorCount", { count: row.value })
+                  : `${compact(row.value)} ${unit}`}
             </span>
           </div>
           <div className={styles.track}>
@@ -274,7 +278,7 @@ export function AtlasInspector({
             : (cells[id]?.label ?? t("noData"))}
         </div>
       )}
-      {seats.length > 0 && (
+      {seats.length > 0 && politicalMode !== "governor" && (
         <div className="mb-5">
           <h3 className="mb-3 text-sm font-semibold">
             {t(politicalMode as "house" | "senate" | "governor")}
