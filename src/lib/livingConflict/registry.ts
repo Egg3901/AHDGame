@@ -4,6 +4,7 @@ import { PANDEMIC_DEF } from "./defs/pandemic";
 import { NORTHERN_IRELAND_DEF } from "./defs/northernIreland";
 import { TRANSNATIONAL_TERRORISM_DEF } from "./defs/transnationalTerrorism";
 import { YUGOSLAVIA_DEF } from "./defs/yugoslavia";
+import { RUSSIA_UKRAINE_DEF } from "./defs/russiaUkraine";
 import {
   BERLIN_DEF,
   CONGO_DEF,
@@ -19,6 +20,7 @@ export const LIVING_CONFLICT_DEFS: Record<string, LivingConflictDef> = {
   [NORTHERN_IRELAND_DEF.key]: NORTHERN_IRELAND_DEF,
   [TRANSNATIONAL_TERRORISM_DEF.key]: TRANSNATIONAL_TERRORISM_DEF,
   [YUGOSLAVIA_DEF.key]: YUGOSLAVIA_DEF,
+  [RUSSIA_UKRAINE_DEF.key]: RUSSIA_UKRAINE_DEF,
   [BERLIN_DEF.key]: BERLIN_DEF,
   [CONGO_DEF.key]: CONGO_DEF,
   [SUEZ_AFTERMATH_DEF.key]: SUEZ_AFTERMATH_DEF,
