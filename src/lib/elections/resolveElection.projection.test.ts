@@ -136,16 +136,21 @@ function setupSummaryWorld() {
   col("electionCandidates").find.mockReturnValue({
     toArray: async () => [playerCandidate, nppCandidate],
   });
-  col("characters").find.mockImplementation((_filter, options) => ({
-    toArray: async () => [projectFixture(char, options?.projection)],
-  }));
-  col("npps").find.mockImplementation((_filter, options) => ({
-    toArray: async () => [projectFixture(npp, options?.projection)],
-  }));
+  col("characters").find.mockImplementation(
+    (_filter: unknown, options?: { projection?: Record<string, number> }) => ({
+      toArray: async () => [projectFixture(char, options?.projection)],
+    })
+  );
+  col("npps").find.mockImplementation(
+    (_filter: unknown, options?: { projection?: Record<string, number> }) => ({
+      toArray: async () => [projectFixture(npp, options?.projection)],
+    })
+  );
   col("politicalParties").find.mockReturnValue({ toArray: async () => [party] });
   col("electionVoteTallies").find.mockReturnValue({ toArray: async () => [] });
-  col("gameState").findOne.mockImplementation(async (_filter, options) =>
-    projectFixture(gameStateDoc, options?.projection)
+  col("gameState").findOne.mockImplementation(
+    async (_filter: unknown, options?: { projection?: Record<string, number> }) =>
+      projectFixture(gameStateDoc, options?.projection)
   );
   col("elections").findOne.mockResolvedValue(election);
 
