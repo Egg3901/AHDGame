@@ -16,7 +16,11 @@ import { requirePlayerTransfersEnabled } from "@/lib/api/requirePlayerTransfers"
 import { isForexEnabled } from "@/lib/currency/featureFlag";
 import { emitTreasuryTransaction } from "@/lib/treasury/emit";
 import { isSameCountry } from "@/lib/api/sameCountry";
-import { checkPlayerPayoutCap, countDistinctOfficers } from "@/lib/treasury/payoutCap";
+import { checkPlayerPayoutCap } from "@/lib/treasury/payoutCap";
+// Imported from the values module, not the re-export on `payoutCap`: it is a
+// pure helper with no database dependency, and tests that mock the
+// database-facing module should not have to stub it.
+import { countDistinctOfficers } from "@/lib/treasury/payoutCapValues";
 import {
   isLeadershipElectionFreezeActive,
   LEADERSHIP_FREEZE_MESSAGE,

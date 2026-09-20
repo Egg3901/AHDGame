@@ -151,7 +151,7 @@ describe("checkPlayerPayoutCap", () => {
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error("expected refusal");
     expect(result.remaining).toBe(0);
-    expect(result.reason).toMatch(/already received \$2,000,000/);
+    expect(result.reason).toMatch(/already received £2,000,000/);
   });
 
   it("names what the member actually drew, not this treasury's ceiling", async () => {
@@ -162,8 +162,8 @@ describe("checkPlayerPayoutCap", () => {
     const result = await checkPlayerPayoutCap(db, { ...base, amount: 1, seatedOfficers: 1 });
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error("expected refusal");
-    expect(result.reason).toContain("already received $10,000,000");
-    expect(result.reason).toContain("$2,000,000 this treasury may pay");
+    expect(result.reason).toContain("already received £10,000,000");
+    expect(result.reason).toContain("£2,000,000 this treasury may pay");
   });
 
   it("never reports a negative allowance when past payouts exceed the cap", async () => {

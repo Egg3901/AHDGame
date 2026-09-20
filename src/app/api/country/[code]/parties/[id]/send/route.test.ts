@@ -181,6 +181,43 @@ describe("POST /api/country/[code]/parties/[id]/send", () => {
     );
   }
 
+  async function asAdmin() {
+    const { requireAuthWithCharacter } = await import("@/lib/api/requireAuth");
+    vi.mocked(requireAuthWithCharacter).mockResolvedValue({
+      ok: true,
+      user: {
+        userId: userId.toString(),
+        username: "admin",
+        isAdmin: true,
+        character: { _id: new ObjectId(), name: "Admin" },
+      },
+    } as never);
+  }
+
+  it("lets an admin send above the per-turn ceiling", async () => {
+    // Admins bypass the payout cap by design — the executor takes
+    // `skipPayoutCap` for exactly this. Placing the flat-ceiling refusal
+    // ahead of the admin branch made that bypass unreachable for any
+    // amount large enough to need it, which is the only kind of amount
+    // it exists for. The leadership-election freeze right above is
+    // correctly gated on `!isAdmin`; this guard was not.
+    await asAdmin();
+    await richParty();
+
+    const response = await send(9_000_000);
+
+    expect(response.status).toBe(200);
+    expect(db.collectionMocks["politicalParties"]!.updateOne).toHaveBeenCalled();
+  });
+
+  it("still refuses a player send above the per-turn ceiling", async () => {
+    // (kept alongside the admin case above so the two cannot drift)
+    await richParty();
+    const response = await send(9_000_000);
+    expect(response.status).toBe(400);
+    expect(db.collectionMocks["politicalParties"]!.updateOne).not.toHaveBeenCalled();
+  });
+
   it("raises the ceiling five times once a second officer is seated", async () => {
     // `richParty` seats only a Chair, so the base ceiling applies there.
     // A seated Treasurer is a second pair of eyes on the ledger and buys

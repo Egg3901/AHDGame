@@ -14,6 +14,7 @@ import { useChairSubtabState } from "./useChairSubtabState";
 import type { CountryId } from "@/lib/constants/countries";
 import {
   countDistinctOfficers,
+  formatPayoutCap,
   getEffectivePlayerPayoutCap,
   PAYOUT_CAP_MULTI_OFFICER_MULTIPLIER,
 } from "@/lib/treasury/payoutCapValues";
@@ -514,11 +515,14 @@ export function ChairSubtab({
                 `seatedOfficers` instead. If ban filtering is ever added here,
                 switch this to a server-sent count or it will quietly show a
                 lower ceiling than the server enforces. */}
-            Caucus funds count towards the same per-turn ceiling as party funds: $
-            {getEffectivePlayerPayoutCap(
+            Caucus funds count towards the same per-turn ceiling as party funds:{" "}
+            {formatPayoutCap(
               countryCode.toUpperCase() as CountryId,
-              countDistinctOfficers([caucus.chairId, caucus.viceChairId])
-            ).toLocaleString("en-US")}{" "}
+              getEffectivePlayerPayoutCap(
+                countryCode.toUpperCase() as CountryId,
+                countDistinctOfficers([caucus.chairId, caucus.viceChairId])
+              )
+            )}{" "}
             per member per turn across the national treasury, state parties and caucuses combined.
             Nothing moves in the last two turns before a party leadership election closes.{" "}
             {countDistinctOfficers([caucus.chairId, caucus.viceChairId]) >= 2

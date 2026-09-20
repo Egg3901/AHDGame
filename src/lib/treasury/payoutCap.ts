@@ -22,7 +22,7 @@
 import type { Db } from "mongodb";
 import type { ObjectId } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
-import { getEffectivePlayerPayoutCap } from "@/lib/treasury/payoutCapValues";
+import { formatPayoutCap, getEffectivePlayerPayoutCap } from "@/lib/treasury/payoutCapValues";
 
 export {
   countDistinctOfficers,
@@ -118,8 +118,8 @@ export async function checkPlayerPayoutCap(
       // figure they never hit. State what they actually drew.
       reason:
         remaining === 0
-          ? `This member has already received $${used.toLocaleString()} from party funds this turn, which is at or over the $${cap.toLocaleString()} this treasury may pay one member. Try again next turn.`
-          : `This member can receive $${remaining.toLocaleString()} more from party funds this turn, out of the $${cap.toLocaleString()} this treasury may pay one member.`,
+          ? `This member has already received ${formatPayoutCap(args.countryId, used)} from party funds this turn, which is at or over the ${formatPayoutCap(args.countryId, cap)} this treasury may pay one member. Try again next turn.`
+          : `This member can receive ${formatPayoutCap(args.countryId, remaining)} more from party funds this turn, out of the ${formatPayoutCap(args.countryId, cap)} this treasury may pay one member.`,
     };
   }
   return { ok: true, cap, used, remaining };

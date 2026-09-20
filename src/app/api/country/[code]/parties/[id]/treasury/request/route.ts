@@ -14,7 +14,11 @@ import {
   LEADERSHIP_FREEZE_MESSAGE,
 } from "@/lib/parties/leadershipElectionFreeze";
 import { getGameTime } from "@/lib/time/gameTime";
-import { countDistinctOfficers, getEffectivePlayerPayoutCap } from "@/lib/treasury/payoutCapValues";
+import {
+  countDistinctOfficers,
+  formatPayoutCap,
+  getEffectivePlayerPayoutCap,
+} from "@/lib/treasury/payoutCapValues";
 import {
   canRequestFunds,
   createPendingTransaction,
@@ -121,7 +125,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     if (amount > payoutCap) {
       return NextResponse.json(
         {
-          error: `A single request cannot exceed the per-turn limit of $${payoutCap.toLocaleString()} per member.`,
+          error: `A single request cannot exceed the per-turn limit of ${formatPayoutCap(countryId, payoutCap)} per member.`,
         },
         { status: 400 }
       );
