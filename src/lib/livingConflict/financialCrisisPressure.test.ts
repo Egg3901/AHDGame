@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { financialCrisisSignal } from "./financialCrisisPressure";
+import type { Db } from "mongodb";
+import { financialCrisisSignal, loadFinancialCrisisSignal } from "./financialCrisisPressure";
 
 const metric = (value: number | null) => ({ value });
 
@@ -58,5 +59,36 @@ describe("financial crisis opening pressure", () => {
         sovereignSpreads: 0,
       },
     });
+  });
+
+  it("loads only the latest snapshot at or before the current turn", async () => {
+    let seenFilter: unknown;
+    let seenOptions: unknown;
+    const db = {
+      collection() {
+        return {
+          async findOne(filter: unknown, options: unknown) {
+            seenFilter = filter;
+            seenOptions = options;
+            return {
+              turn: 40,
+              firms: { lossMakingShare: metric(0.65) },
+              money: { creditToM2: metric(1.1) },
+              securities: {
+                corporateNoHolderBondShare: metric(0.65),
+                sovereignNoHolderBondShare: metric(0.5),
+                organicTwoSidedListingShare: metric(0.15),
+              },
+            };
+          },
+        };
+      },
+    } as unknown as Db;
+
+    const signal = await loadFinancialCrisisSignal(db, 42);
+
+    expect(seenFilter).toEqual({ turn: { $lte: 42 } });
+    expect(seenOptions).toMatchObject({ sort: { turn: -1 } });
+    expect(signal.pressure).toBeGreaterThanOrEqual(80);
   });
 });
