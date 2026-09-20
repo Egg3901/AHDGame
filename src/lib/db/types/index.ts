@@ -375,3 +375,5 @@ export type { PartyGroupFavorability } from "./partyGroupFavorability";
 export type { GovernorQueuedBill } from "./governorQueuedBill";
 export type { DemographicConfigOverride } from "./demographicConfigOverride";
 export * from "./supporterRequests";
+export type { ElectionResultSnapshot } from "./electionResultSnapshot";
+export { ELECTION_RESULT_SNAPSHOT_VERSION } from "./electionResultSnapshot";
