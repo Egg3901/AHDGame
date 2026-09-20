@@ -846,14 +846,15 @@ async function moveLivingConflictTrajectory(ctx: CrisisActionContext): Promise<v
   if (regional.devolutionSatisfactionDelta) {
     const metrics = ctx.db.collection<PoliticalMetricsDoc>("politicalMetrics");
     const doc = await metrics.findOne({ _id: regional.regionId });
-    const currentSatisfaction = doc?.values["governance.localAutonomy"];
-    if (currentSatisfaction !== undefined) {
+    const values = doc?.values;
+    const currentSatisfaction = values?.["governance.localAutonomy"];
+    if (values && currentSatisfaction !== undefined) {
       await metrics.updateOne(
         { _id: regional.regionId },
         {
           $set: {
             values: {
-              ...doc.values,
+              ...values,
               "governance.localAutonomy": Math.max(
                 0,
                 Math.min(100, currentSatisfaction + regional.devolutionSatisfactionDelta)
