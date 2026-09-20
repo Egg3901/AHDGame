@@ -85,6 +85,7 @@ export async function buildTurnExecutionContext(input: {
           currentOffice: 1,
           politicalInfluence: 1,
           nationalInfluence: 1,
+          partyInfluence: 1,
           favorability: 1,
           infamy: 1,
           actions: 1,

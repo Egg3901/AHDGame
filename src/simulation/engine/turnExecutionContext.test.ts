@@ -41,6 +41,7 @@ const REQUIRED_CHARACTER_FIELDS = [
   "currentOffice",
   "politicalInfluence",
   "nationalInfluence",
+  "partyInfluence",
   "favorability",
   "infamy",
   "actions",

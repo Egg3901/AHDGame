@@ -118,6 +118,9 @@ describe("gameHealthSnapshot bounded reads (#2166)", () => {
         (stage) => typeof stage === "object" && stage !== null && "$lookup" in stage
       );
       expect(lookupIdx, `${collection}: pipeline must contain a $lookup`).toBeGreaterThan(-1);
+      expect(pipeline[lookupIdx]).toMatchObject({
+        $lookup: { pipeline: [{ $project: { _id: 1 } }, { $limit: 1 }] },
+      });
       const before = pipeline.slice(0, lookupIdx);
       expect(
         before.some((stage) => typeof stage === "object" && stage !== null && "$project" in stage),

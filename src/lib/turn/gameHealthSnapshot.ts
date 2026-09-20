@@ -186,6 +186,8 @@ async function runIntegrityChecks(
           localField: "electionId",
           foreignField: "_id",
           as: "election",
+          // Only existence matters; never materialize the matching documents.
+          pipeline: [{ $project: { _id: 1 } }, { $limit: 1 }],
         },
       },
       { $match: { election: { $size: 0 } } },
@@ -240,6 +242,8 @@ async function runIntegrityChecks(
           localField: "partyId",
           foreignField: "_id",
           as: "party",
+          // Only existence matters; never materialize the matching documents.
+          pipeline: [{ $project: { _id: 1 } }, { $limit: 1 }],
         },
       },
       { $match: { party: { $size: 0 } } },
@@ -270,6 +274,8 @@ async function runIntegrityChecks(
           localField: "_id",
           foreignField: "electionId",
           as: "candidates",
+          // Only existence matters; never materialize the matching documents.
+          pipeline: [{ $project: { _id: 1 } }, { $limit: 1 }],
         },
       },
       { $match: { candidates: { $size: 0 } } },
