@@ -119,6 +119,14 @@ export type {
 } from "./parliamentaryGovernment";
 export type { GovernmentApproval } from "./governmentApproval";
 export type { StateApprovalHistory } from "./stateApproval";
+export type {
+  ApprovalTelemetryPoint,
+  MacroTelemetryPoint,
+  LongHorizonSourceClass,
+  TelemetryGoverningActor,
+  TelemetryEffectiveManifest,
+  TelemetryActorConfiguration,
+} from "./longHorizonTelemetry";
 export type { Task, TaskType, TaskPriority, TaskStatus } from "./task";
 export type { TaskLesson, LessonCategory } from "./taskLesson";
 export type { TaskComment, CommentAuthor } from "./taskComment";
