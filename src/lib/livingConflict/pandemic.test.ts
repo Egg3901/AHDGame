@@ -72,7 +72,7 @@ describe("pandemic living conflict", () => {
 
     expect(result.appliedTransitionKey).toBe("global_spread");
     expect(result.state.phaseLevel).toBe(3);
-    expect(result.state.tracks.healthCapacity).toBe(38);
+    expect(result.state.tracks?.healthCapacity).toBe(38);
   });
 
   it("distinguishes cooperative research from an unequal rollout", () => {
@@ -89,8 +89,8 @@ describe("pandemic living conflict", () => {
 
     expect(researched.tracks).toMatchObject({ vaccineResearch: 38, manufacturing: 22 });
     expect(nationalized.tracks).toMatchObject({ vaccineResearch: 46, manufacturing: 29 });
-    expect(nationalized.tracks.distributionEquity).toBe(2);
-    expect(nationalized.tracks.transmission).toBe(32);
+    expect(nationalized.tracks?.distributionEquity).toBe(2);
+    expect(nationalized.tracks?.transmission).toBe(32);
   });
 
   it("supports an equitable endemic transition and a later immune-escape wave", () => {
