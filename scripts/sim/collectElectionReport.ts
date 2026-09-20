@@ -18,6 +18,12 @@
 // scripts (same reason collectExperimentReport.ts / runWorld.ts do this).
 export {};
 
+import {
+  assertCollectorSourceMatch,
+  parseCollectorSourceArgs,
+  resolveCollectorCommit,
+} from "./collectorSource";
+
 function arg(flag: string): string | undefined {
   const prefix = `--${flag}=`;
   const found = process.argv.find((v) => v.startsWith(prefix));
@@ -53,6 +59,29 @@ async function main() {
   const sandboxDb = await getDb();
   console.log(`[electionReport:${runId}] Collecting election report from ${dbName}`);
   const report = await collectElectionReport(sandboxDb);
+  // #2083: a pinned job runs this collector from the validated pinned
+  // worktree (worker passes --source-*). Prove it: the collector's own HEAD
+  // must equal both the request and the SHA runWorld stamped, else exit
+  // nonzero and write nothing.
+  const { sourceWorktree, sourceCommit } = parseCollectorSourceArgs(process.argv);
+  const sandboxRun = await sandboxDb.collection("simRuns").findOne({ _id: runId as never });
+  const simSource = (
+    sandboxRun as {
+      source?: {
+        worktree?: string | null;
+        requestedCommit?: string | null;
+        executedPath?: string | null;
+        executedCommit?: string | null;
+      };
+    } | null
+  )?.source;
+  const requestedCommit = sourceCommit ?? simSource?.requestedCommit ?? null;
+  const collectorCommit = resolveCollectorCommit(process.cwd());
+  assertCollectorSourceMatch({
+    requestedCommit,
+    simExecutedCommit: simSource?.executedCommit ?? null,
+    collectorCommit,
+  });
 
   const resolved = report.totals.resolved;
   console.log(
@@ -72,9 +101,30 @@ async function main() {
   try {
     await opsClient.connect();
     const opsDb = opsClient.db(opsDbName);
-    await opsDb
-      .collection("simElectionReports")
-      .updateOne({ _id: runId as never }, { $set: { runId, ...report } }, { upsert: true });
+    await opsDb.collection("simElectionReports").updateOne(
+      { _id: runId as never },
+      {
+        $set: {
+          runId,
+          ...report,
+          // #2083: simulation + collector SHAs, proven equal above.
+          // Pin-only: legacy unpinned reports keep their exact shape.
+          ...(requestedCommit
+            ? {
+                source: {
+                  worktree: sourceWorktree ?? simSource?.worktree ?? null,
+                  requestedCommit,
+                  executedPath: simSource?.executedPath ?? null,
+                  simExecutedCommit: simSource?.executedCommit ?? null,
+                  collectorPath: process.cwd(),
+                  collectorCommit,
+                },
+              }
+            : {}),
+        },
+      },
+      { upsert: true }
+    );
     console.log(`[electionReport:${runId}] Report written to simElectionReports.`);
   } finally {
     await opsClient.close();
