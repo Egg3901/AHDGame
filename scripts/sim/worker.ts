@@ -32,6 +32,7 @@ import { cpus, freemem, hostname, loadavg } from "os";
 import { MongoClient, type Db, type Collection } from "mongodb";
 import { claimFilterAt, parseClaimWindow } from "./claimWindow";
 import { assertSafeToken } from "./simJobArgs";
+import { resolveSimPreset } from "./simPreset";
 import { defaultSimSourceDeps, planRunWorldSpawn, verifySimSource } from "./simSource";
 import {
   pickSovereignDemandExperimentFlags,
@@ -103,6 +104,8 @@ interface SimJob {
   _id: string;
   status: "queued" | "running" | "completed" | "failed";
   preset: string;
+  presetNormalizedFrom?: string;
+  presetNormalizedAt?: Date;
   turns: number;
   seed: string;
   dbName: string;
@@ -243,6 +246,21 @@ async function processJob(jobsCol: Collection<SimJob>, job: SimJob, slotId: numb
   assertSafeToken(job._id, "_id");
   assertSafeToken(job.seed, "seed");
   assertSafeToken(job.preset, "preset");
+  const resolvedPreset = resolveSimPreset(job.preset);
+  if (resolvedPreset !== job.preset) {
+    await jobsCol.updateOne(
+      { _id: job._id },
+      {
+        $set: {
+          preset: resolvedPreset,
+          presetNormalizedFrom: job.preset,
+          presetNormalizedAt: new Date(),
+          updatedAt: new Date(),
+        },
+      }
+    );
+    job.preset = resolvedPreset;
+  }
   assertSafeToken(job.dbName, "dbName");
   if (job.dbName === OPS_DB_NAME) {
     throw new Error(
