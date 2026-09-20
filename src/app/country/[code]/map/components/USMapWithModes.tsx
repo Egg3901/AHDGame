@@ -304,7 +304,11 @@ export function USMapWithModes({
       for (const stateId of allStateIds) {
         const d = partyOrg[stateId];
         if (d) {
-          stateData[stateId] = { color: d.leadColor, label: d.leadingParty, tooltip: d.tooltip };
+          stateData[stateId] = {
+            color: d.leadColor,
+            label: d.leadingPartyName ?? d.leadingParty,
+            tooltip: d.tooltip,
+          };
         } else {
           stateData[stateId] = {
             color: "#334155",
@@ -330,7 +334,11 @@ export function USMapWithModes({
         }
         stateData[stateId] =
           s?.seat1 || s?.seat2
-            ? { color: "#334155", label: stateId, tooltip: [stateId, "Senate split view"] }
+            ? {
+                color: "#334155",
+                label: `${s.seat1?.name ?? t("vacant")} / ${s.seat2?.name ?? t("vacant")}`,
+                tooltip: [stateId, "Senate split view"],
+              }
             : { color: "#334155", label: stateId, tooltip: [stateId, "No senators"] };
       }
     } else if (mode === "house") {
@@ -339,7 +347,7 @@ export function USMapWithModes({
         if (d) {
           stateData[stateId] = {
             color: d.leadColor,
-            label: `${d.seats}/${d.total}`,
+            label: d.tooltip[0] ?? `${d.seats}/${d.total}`,
             tooltip: d.tooltip,
           };
         } else {

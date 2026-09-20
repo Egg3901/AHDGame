@@ -312,7 +312,8 @@
       "view": "View",
       "selected": "State details",
       "seatCount": "{count, plural, one {# seat} other {# seats}}",
-      "governorCount": "{count, plural, one {# governor} other {# governors}}"
+      "governorCount": "{count, plural, one {# governor} other {# governors}}",
+      "vacant": "Vacant"
     }
   }
 }

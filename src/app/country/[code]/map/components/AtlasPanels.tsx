@@ -181,7 +181,7 @@ export function AtlasBreakdown({
     const grouped = new Map<string, AtlasBar>();
     for (const r of regions) {
       const cell = cells[r.id];
-      if (!cell) continue;
+      if (!cell || cell.label === r.id) continue;
       const label = cell.label ?? t("noData");
       const row = grouped.get(label) ?? { id: label, label, color: cell.color, value: 0 };
       row.value++;
