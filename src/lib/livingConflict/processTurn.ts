@@ -24,6 +24,7 @@ import {
   type ConflictParticipants,
   type DrivenEvent,
 } from "./driver";
+import { GLOBAL_FINANCIAL_CRISIS_KEY, loadFinancialCrisisSignal } from "./financialCrisisPressure";
 
 function roleMapForEvent(
   def: ReturnType<typeof allLivingConflictDefs>[number],
@@ -202,13 +203,22 @@ export async function processLivingConflictsTurn(
       def,
       availableCountryIds
     );
+    let externalPressure =
+      def.key === "vietnam" && typeof currentYear === "number" ? vietnamExternalPressure : 0;
+    let openingTrackDeltas: Record<string, number> = {};
+    if (def.key === GLOBAL_FINANCIAL_CRISIS_KEY) {
+      const signal = await loadFinancialCrisisSignal(db, currentTurn);
+      externalPressure = signal.pressure;
+      openingTrackDeltas = signal.openingTrackDeltas;
+    }
     const result = await driveConflictTurn(
       db,
       def,
       participants,
       currentTurn,
       currentYear,
-      def.key === "vietnam" && typeof currentYear === "number" ? vietnamExternalPressure : 0
+      externalPressure,
+      openingTrackDeltas
     );
     if (def.key === "northern_ireland") {
       result.state = await reconcileNorthernIrelandRatification(

@@ -52,6 +52,7 @@ import { createCrisisFromTemplate } from "@/lib/crises/createCrisisFromTemplate"
 import { WARSAW_PACT_SATELLITE_COUNTRY_IDS } from "@/lib/crises/warsawPactSatellites";
 import { runUnionBanStrikeResponse } from "@/lib/crises/unionBanStrike";
 import { applyWarEmergencyResponse } from "@/lib/crises/warEmergencyResponse";
+import { applyFinancialCrisisBankResponse } from "@/lib/crises/financialCrisisBankResponse";
 import { livingConflictDef } from "@/lib/livingConflict/registry";
 import { loadConflictState, saveConflictState } from "@/lib/livingConflict/driver";
 import { applyConflictOutcome } from "@/lib/livingConflict/engine";
@@ -934,6 +935,9 @@ export async function runCrisisOptionAction(ctx: CrisisActionContext): Promise<C
       }
       case "warEmergencyResponse":
         await applyWarEmergencyResponse(ctx, action.response);
+        break;
+      case "financialCrisisResponse":
+        await applyFinancialCrisisBankResponse(ctx, action.response);
         break;
       case "livingConflictTrajectory":
         await moveLivingConflictTrajectory(ctx);

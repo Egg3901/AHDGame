@@ -504,6 +504,18 @@ const RUNTIME: CollectionEntry[] = [
       "Authoritative savings accounts, one per owner and currency; legacy character savings fields are projections of these.",
   },
   { name: "bankCharterHistory", category: "runtime" },
+  {
+    name: "bankGuarantees",
+    category: "runtime",
+    notes:
+      "Government guarantees created during financial-crisis responses. Tied to the current world's banks and treasury commitments; wiped on reset.",
+  },
+  {
+    name: "financialCrisisBankActions",
+    category: "runtime",
+    notes:
+      "Idempotency records for crisis recapitalization, guarantee, and resolution actions. Wiped with the crisis and bank state they reference.",
+  },
   { name: "depositInsuranceFunds", category: "runtime" },
   {
     name: "interbankLoans",
