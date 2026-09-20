@@ -14,10 +14,17 @@
  *
  * Bundle selection mirrors each country's seeder dispatch (`seedStates`,
  * `seedUKRegions`, `seedDERegions`, `seedJPRegions`, `seedIERegions`,
- * `seedNGRegions`, `seedCNRegions`): a missing era bundle falls back to the 2019 bundle, and
- * that fallback is written out explicitly here (IE/NG 2027), matching the
- * table's explicit cells. If a seeder wires a new era bundle, update the map
- * below — the recompute loop will fail until the table is recalibrated.
+ * `seedNGRegions`, `seedCNRegions`, `seedDDRegions`, `seedRURegions`): a
+ * missing era bundle falls back to the 2019 bundle, and that fallback is
+ * written out explicitly here (IE/NG 2027; DD and RU outside their authored
+ * eras), matching the table's explicit cells. If a seeder wires a new era
+ * bundle, update the map below — the recompute loop will fail until the table
+ * is recalibrated.
+ *
+ * Not every cell is derivable. A country can seed no regions for an era (DD
+ * after reunification) or seed regions with no authored national GDP to
+ * reconcile against (RU in 1991). Those are listed in NON_DERIVABLE_ERAS and
+ * asserted as documented repeats instead of being recomputed.
  */
 import { describe, expect, it } from "vitest";
 import { NATIONAL_SCOPE_IDS } from "@/lib/constants/nationalScope";
@@ -91,6 +98,10 @@ import { ukRegions2027 } from "@/lib/seeds/uk/ukRegions2027";
 // DD seeds only two bundles: 1953, and the Länder model used for 1979.
 import { ddRegions } from "@/lib/seeds/dd/ddRegions";
 import { ddRegions1953 } from "@/lib/seeds/dd/ddRegions1953";
+// RU likewise authors two: 1953, and `ruRegions` for 1979 plus every era that
+// takes the 2019-default fallback (`seedRURegions`).
+import { ruRegions } from "@/lib/seeds/ru/ruRegions";
+import { ruRegions1953 } from "@/lib/seeds/ru/ruRegions1953";
 import {
   gdpBaselinePerCapita,
   getGdpBaselineTable,
@@ -199,21 +210,79 @@ const BUNDLES: Record<GdpBaselineCountry, Record<EraId, RegionRow[]>> = {
     "2023": ddRegions,
     "2027": ddRegions,
   },
+  RU: {
+    "1953": ruRegions1953,
+    // `seedRURegions` keys 1979 explicitly at `ruRegions`; every era below
+    // outside 1953 lands on the same bundle via the 2019-default fallback.
+    // All are derived from it EXCEPT 1991, which has no authored national GDP
+    // to reconcile against and is listed in NON_DERIVABLE_ERAS.
+    "1979": ruRegions,
+    "1991": ruRegions,
+    "1999": ruRegions,
+    "2007": ruRegions,
+    "2019": ruRegions,
+    "2023": ruRegions,
+    "2027": ruRegions,
+  },
 };
 
 /**
- * Eras a country seeds no regions for, so its cell is a documented repeat
- * rather than a derivation. Asserted as a repeat below instead of being
- * recomputed — `recomputeBaseline` would divide an empty bundle by an absent
- * national GDP.
+ * Eras whose cell cannot be recomputed, so it is a documented repeat instead.
+ * Asserted as a repeat below rather than run through `recomputeBaseline`, which
+ * would need a bundle to average and an authored national GDP to reconcile
+ * against. Two different reasons land here:
+ *
+ * - DD seeds NO REGIONS after reunification (`seedDDRegions` maps 2019, and so
+ *   every unified era, to an empty bundle). Nothing to average.
+ * - RU seeds regions in 1991 via the 2019-default fallback, but the USSR has no
+ *   AUTHORED NATIONAL GDP for 1991 — `getNationalBudgetSeedConfigsForPreset`
+ *   builds that era from `NATIONAL_BUDGET_SEED_CONFIGS_1991` plus only AT/FI/GR
+ *   carried forward. The reconcile gate covers 1991 (`era < 1999`), so there is
+ *   nothing to reconcile against. Its bundle is byte-identical to 2019's and
+ *   2019 takes no reconcile, so the honest value is exactly the 2019 cell.
  */
 const NON_DERIVABLE_ERAS: Partial<Record<GdpBaselineCountry, { eras: EraId[]; repeats: EraId }>> = {
   DD: { eras: ["1991", "1999", "2007", "2019", "2023", "2027"], repeats: "1979" },
+  RU: { eras: ["1991"], repeats: "2019" },
 };
 
 function derivableEras(country: GdpBaselineCountry): EraId[] {
   const skip = new Set(NON_DERIVABLE_ERAS[country]?.eras ?? []);
   return ERAS.filter((era) => !skip.has(era));
+}
+
+/**
+ * Which bundle each (country, era) cell actually came from, spelled out here
+ * rather than imported from the module under test — importing the production
+ * override map would make the assertion compare it against itself.
+ *
+ * Read off the seeder dispatch: `seedDDRegions` and `seedRURegions` key only
+ * some presets and let `selectPresetBundle` fall through to `2019-default`;
+ * IE/NG seed no 2027 bundle.
+ */
+const EXPECTED_BUNDLE_PRESET: Partial<Record<GdpBaselineCountry, Partial<Record<EraId, string>>>> =
+  {
+    IE: { "2027": "2019-default" },
+    NG: { "2027": "2019-default" },
+    DD: {
+      "1991": "1979-default",
+      "1999": "1979-default",
+      "2007": "1979-default",
+      "2019": "1979-default",
+      "2023": "1979-default",
+      "2027": "1979-default",
+    },
+    RU: {
+      "1991": "2019-default",
+      "1999": "2019-default",
+      "2007": "2019-default",
+      "2023": "2019-default",
+      "2027": "2019-default",
+    },
+  };
+
+function expectedBundlePreset(country: GdpBaselineCountry, era: EraId): string {
+  return EXPECTED_BUNDLE_PRESET[country]?.[era] ?? `${era}-default`;
 }
 
 interface RecomputedCell {
@@ -380,17 +449,9 @@ describe("gdpBaseline table derivation (issue #798)", () => {
         const res = resolveCampaignGdpBaseline(country, preset);
         expect(res.era).toBe(era);
         expect(res.baseline).toBe(getGdpBaselineTable()[country][era]);
-        // A repeated cell must name the bundle it was actually derived from:
-        // IE/NG fall back to 2019 in 2027, and DD's post-reunification cells
-        // all come from its 1979 Länder bundle.
-        const repeats = NON_DERIVABLE_ERAS[country];
-        const expectedBundle =
-          (country === "IE" || country === "NG") && era === "2027"
-            ? "2019-default"
-            : repeats?.eras.includes(era)
-              ? `${repeats.repeats}-default`
-              : preset;
-        expect(res.bundlePreset).toBe(expectedBundle);
+        expect(res.bundlePreset, `${country} ${era} bundlePreset`).toBe(
+          expectedBundlePreset(country, era)
+        );
         expect(res.unit).toBe(
           era === "1953" ? (GDP_DENOMINATION_1953[country] ?? "local") : "local"
         );
@@ -429,6 +490,21 @@ describe("gdpBaseline table derivation (issue #798)", () => {
     expect(hasGdpBaseline("XX")).toBe(false);
     expect(hasGdpBaseline("CA")).toBe(false);
     expect(hasGdpBaseline("BR")).toBe(false);
+  });
+
+  it("refuses country ids that collide with Object.prototype keys", () => {
+    // A plain `countryId in TABLE` / `TABLE[countryId]` answers for inherited
+    // members, so these ids used to sail past the unknown-country guard and
+    // return `baseline: undefined` — a NaN scalar the money paths then persist,
+    // rather than the loud throw the table promises. Fail closed instead.
+    for (const id of ["constructor", "toString", "valueOf", "hasOwnProperty", "__proto__"]) {
+      expect(hasGdpBaseline(id), `hasGdpBaseline(${id})`).toBe(false);
+      expect(() => resolveCampaignGdpBaseline(id, "1953-default"), id).toThrow(/no GDP baseline/);
+    }
+    // The NaN this prevented, stated as the behaviour that matters downstream.
+    expect(() => getIncomeGdpScalar(1_000, 1_000_000, "constructor", "1953-default")).toThrow(
+      /no GDP baseline/
+    );
   });
 
   it("defaults to the modern era for callers with no world to ask", () => {

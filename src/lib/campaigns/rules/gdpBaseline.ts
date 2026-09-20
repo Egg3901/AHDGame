@@ -35,14 +35,21 @@
  * throws for it — deliberately, so a new playable country can never silently
  * inherit a mismatched US denomination.
  *
- * ⚠️ THAT THROW REACHES PAGE RENDERS. It is not confined to money endpoints:
- * `/profile` calls `calculateFullFundDistribution` for every character, so a
- * country that seeds regions without a row 500s the page for its players
- * instead of failing somewhere diagnosable. DD shipped that way and the bug
- * arrived as "cannot log in via Discord", because the OAuth round-trip
- * redirects onto the page that threw. `gdpBaselineCoverage.guard.test.ts` now
- * pins the row set against the 1953 seed bundles on disk, so the next country
- * fails a test rather than a player's page.
+ * ⚠️ THAT THROW IS NOT CONTAINED TO THE COUNTRY THAT CAUSES IT. Two surfaces
+ * make a missing row far more expensive than a loud error:
+ *
+ * - `/profile` calls `calculateFullFundDistribution` for every character, so a
+ *   country with no row 500s the page for its own players. DD shipped that way,
+ *   and the bug arrived as "cannot log in via Discord" — OAuth succeeds and
+ *   redirects onto the page that threw.
+ * - The turn processor is worse. `processFundGeneration` loops every character
+ *   with no per-character catch and writes only after the loop, and `runPhase`
+ *   turns a throw into an aborted phase. One RU character therefore cost EVERY
+ *   player that turn's campaign income, plus `partyGOTV` and `caucusTax`.
+ *
+ * `gdpBaselineCoverage.guard.test.ts` now pins the row set against the region
+ * bundles on disk — any era, not just 1953 — so the next country fails a test
+ * rather than a player's page and everyone else's payout.
  */
 
 import type { EraId } from "@/lib/seeds/presetSelector";
@@ -55,18 +62,19 @@ export type GdpBaselineUnit = "local" | "usd";
 /**
  * Playable countries with an explicit baseline. Matches the `status: "active"`
  * country configs (US/UK/DE/JP/IE/CN), plus coming-soon NG so its calibration
- * lands before activation, plus DD, which a 1953 world seeds and plays
- * regardless of its `status` marker. Other coming-soon countries (BR, …) are
+ * lands before activation, plus DD and RU, which a 1953 world seeds and plays
+ * regardless of their `status` marker. Other coming-soon countries (BR, …) are
  * intentionally absent: resolving one throws (see below) instead of silently
  * pricing in USD.
  *
- * ⚠️ `status` IS NOT THE GATE. DD carries `status: "coming-soon"` and still has
- * live players, because a historical preset seeds the countries that existed in
- * its era, not the ones marked active for the modern world. Whether a country
- * needs a row is decided by whether a world can seed regions for it — pinned in
- * `gdpBaselineCoverage.guard.test.ts`, which reads the seed bundles off disk.
+ * ⚠️ `status` IS NOT THE GATE. DD and RU both carry `status: "coming-soon"` and
+ * both have live players, because a historical preset seeds the countries that
+ * existed in its era, not the ones marked active for the modern world. Whether
+ * a country needs a row is decided by whether a world can seed regions for it —
+ * pinned in `gdpBaselineCoverage.guard.test.ts`, which reads the seed bundles
+ * off disk. SCO and WAL are still missing and listed there as pending.
  */
-export type GdpBaselineCountry = "US" | "UK" | "DE" | "JP" | "IE" | "NG" | "CN" | "DD";
+export type GdpBaselineCountry = "US" | "UK" | "DE" | "JP" | "IE" | "NG" | "CN" | "DD" | "RU";
 
 export interface GdpBaselineResolution {
   /** National GDP per capita in the same unit as the era's `State.gdp`. */
@@ -82,9 +90,13 @@ export interface GdpBaselineResolution {
 /**
  * Authoritative baseline table: national GDP per capita per playable country
  * and era, derived from the era's `State.gdp` seed bundle (see module doc).
- * IE/NG have no 2027 region bundle, so their seeders fall back to the 2019
- * bundle — the 2027 cells repeat the 2019 value explicitly rather than via a
- * runtime fallback, so every (country, era) resolves to a literal.
+ *
+ * Every (country, era) resolves to a LITERAL, including the cells a seeder has
+ * no distinct bundle for: IE/NG repeat 2019 in 2027, DD repeats 1979 after
+ * reunification, RU repeats 2019 in 1991. Those are written out here rather
+ * than left to a runtime fallback, so a lookup can never return `undefined` and
+ * turn into a NaN scalar downstream. `gdpBaseline.table.test.ts` recomputes the
+ * derivable cells and asserts the repeats.
  */
 const GDP_BASELINE_TABLE: Record<GdpBaselineCountry, Record<EraId, number>> = {
   US: {
@@ -190,21 +202,80 @@ const GDP_BASELINE_TABLE: Record<GdpBaselineCountry, Record<EraId, number>> = {
     "2023": 10_976,
     "2027": 10_976,
   },
+  RU: {
+    // `seedRURegions` wires `ruRegions1953` to 1953 and `ruRegions` to 1979, with
+    // every remaining era taking the `2019-default` fallback — the same
+    // `ruRegions` bundle. So 1991 onward are bundle-identical to 2019, and all
+    // but 1991 are derived from it directly; only the pre-1999 reconcile makes
+    // 1979 differ. 1991 is the one repeat, for the reason noted on its cell.
+    //
+    // ⚠️ THE 1953 CELL IS NOT COMPARABLE TO THE LATER ONES. 1953 is authored in
+    // pre-1961 rubles (national 1.029T SUR) and the modern bundle in post-1961
+    // rubles (439.5B in 1979), which is why the 1953 per-capita is ~3x the
+    // 1979 one rather than a third of it. Both are `local`; the revaluation is
+    // in the seeds, not a transcription slip here. Do not "fix" 1953 upward.
+    "1953": 6_930,
+    // Seed-time reconcile uplift (scalar ~1.249) of undersized regional
+    // authoring against the authored national GDP — calibration review
+    // required on any reseed.
+    "1979": 2_264,
+    // 1991 is a repeat of 2019, not a derivation: the USSR has no authored
+    // national GDP for 1991 (that era's budget set carries only AT/FI/GR
+    // forward from 1979) while the reconcile gate still covers `era < 1999`.
+    // The bundle is the same `ruRegions` 2019 uses and 2019 takes no
+    // reconcile, so the 2019 cell is the honest value.
+    "1991": 1_813,
+    "1999": 1_813,
+    "2007": 1_813,
+    "2019": 1_813,
+    "2023": 1_813,
+    "2027": 1_813,
+  },
 };
+
+/**
+ * Eras whose cell was derived from a bundle other than `<era>-default`,
+ * because the seeder maps that era onto a different bundle.
+ *
+ * Keeping this as data rather than a chain of `if`s is what stopped RU being
+ * mis-reported: RU takes the `2019-default` fallback for five separate eras,
+ * and a hand-written condition for each is where a wrong answer hides.
+ */
+const BUNDLE_PRESET_OVERRIDES: Partial<Record<GdpBaselineCountry, Partial<Record<EraId, string>>>> =
+  {
+    // No 2027 bundle: the seeder falls back to 2019 (see module doc).
+    IE: { "2027": "2019-default" },
+    NG: { "2027": "2019-default" },
+    // DD seeds regions in the divided-Germany eras only; every later cell
+    // repeats 1979, so that is the bundle the value actually came from.
+    DD: {
+      "1991": "1979-default",
+      "1999": "1979-default",
+      "2007": "1979-default",
+      "2019": "1979-default",
+      "2023": "1979-default",
+      "2027": "1979-default",
+    },
+    // RU authors two bundles; everything outside 1953/1979 takes the
+    // `2019-default` fallback.
+    RU: {
+      "1991": "2019-default",
+      "1999": "2019-default",
+      "2007": "2019-default",
+      "2023": "2019-default",
+      "2027": "2019-default",
+    },
+  };
 
 /** Preset id of the region bundle behind each (country, era) cell. */
 function bundlePresetFor(country: GdpBaselineCountry, era: EraId): string {
-  if ((country === "IE" || country === "NG") && era === "2027") return "2019-default";
-  // DD seeds regions in the divided-Germany eras only; every later cell repeats
-  // 1979, so that is the bundle the value actually came from.
-  if (country === "DD" && era !== "1953" && era !== "1979") return "1979-default";
-  return `${era}-default`;
+  return BUNDLE_PRESET_OVERRIDES[country]?.[era] ?? `${era}-default`;
 }
 
 /**
  * Resolve the campaign GDP-per-capita baseline for a country in a world's era.
  *
- * @param countryId playable country id (US/UK/DE/JP/IE/NG/CN).
+ * @param countryId playable country id (US/UK/DE/JP/IE/NG/CN/DD/RU).
  * @param preset world reset preset (e.g. "1953-default"); defaults to
  *   `DEFAULT_SEED_PRESET` ("2019-default"). Callers without a world to ask
  *   (client previews, unit tests) get modern-era behavior — the same scale
@@ -221,7 +292,14 @@ export function resolveCampaignGdpBaseline(
   preset?: string
 ): GdpBaselineResolution {
   const eraPreset = preset ?? DEFAULT_SEED_PRESET;
-  const row = (GDP_BASELINE_TABLE as Record<string, Record<EraId, number> | undefined>)[countryId];
+  // Own-property lookup, not `[countryId]`: a country id that collides with an
+  // Object.prototype key ("constructor", "toString", "valueOf", "__proto__")
+  // otherwise resolves the inherited member, sails past the guard below with a
+  // truthy `row`, and returns `baseline: undefined` — which turns into a NaN
+  // scalar the callers happily persist. Fail closed on anything not authored.
+  const row = Object.hasOwn(GDP_BASELINE_TABLE, countryId)
+    ? (GDP_BASELINE_TABLE as Record<string, Record<EraId, number> | undefined>)[countryId]
+    : undefined;
   if (!row) {
     throw new Error(
       `resolveCampaignGdpBaseline: no GDP baseline for country "${countryId}" ` +
@@ -243,9 +321,15 @@ export function gdpBaselinePerCapita(countryId: string, preset?: string): number
   return resolveCampaignGdpBaseline(countryId, preset ?? DEFAULT_SEED_PRESET).baseline;
 }
 
-/** True when the country has an explicit baseline row (i.e. playable). */
+/**
+ * True when the country has an explicit baseline row (i.e. playable).
+ *
+ * Own-property only: `in` also answers true for inherited Object.prototype
+ * keys, which would make this disagree with `resolveCampaignGdpBaseline` for
+ * exactly the ids that resolver refuses.
+ */
 export function hasGdpBaseline(countryId: string): boolean {
-  return countryId in GDP_BASELINE_TABLE;
+  return Object.hasOwn(GDP_BASELINE_TABLE, countryId);
 }
 
 /** Read-only view of the table for tests and diagnostics. */
