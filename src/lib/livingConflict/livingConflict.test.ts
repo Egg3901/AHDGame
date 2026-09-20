@@ -61,7 +61,7 @@ describe("living-conflict engine", () => {
     });
 
     it("uses health tracks rather than commitment pressure on the pandemic", () => {
-      let s = openConflict(emptyConflictState("pandemic"), 2019, PANDEMIC_DEF);
+      let s = openConflict(emptyConflictState("pandemic"), 2019);
       s = applyCommitment(PANDEMIC_DEF, s, "a", 200);
       expect(s.phaseLevel).toBe(1);
 
