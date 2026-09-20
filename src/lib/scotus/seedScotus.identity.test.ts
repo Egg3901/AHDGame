@@ -36,4 +36,27 @@ describe("seedScotus Original Roster", () => {
     }
     expect(log).toHaveBeenCalledWith(expect.stringContaining("9 Original Roster seat(s)"));
   });
+
+  it("seeds the 2027 roster and accepts its explicit empty curated docket", async () => {
+    const db = createMockDb();
+    const seats = db.collection("supremeCourtSeats");
+    const cases = db.collection("docketCases");
+    const nominations = db.collection("scotusNominations");
+    db.collectionMocks.supremeCourtSeats = seats;
+    db.collectionMocks.docketCases = cases;
+    db.collectionMocks.scotusNominations = nominations;
+
+    const log = vi.fn();
+    const result = await seedScotus(db as unknown as Db, log, "2027-default", true);
+
+    expect(result).toEqual({ seatsSeeded: 9, casesSeeded: 0 });
+    expect(seats.updateOne).toHaveBeenCalledTimes(9);
+    expect(cases.updateOne).not.toHaveBeenCalled();
+    expect(log).not.toHaveBeenCalledWith(expect.stringContaining("skipping"));
+    expect(log).toHaveBeenCalledWith(
+      expect.stringContaining(
+        '9 Original Roster seat(s) + 0 docket case(s) for preset "2027-default"'
+      )
+    );
+  });
 });

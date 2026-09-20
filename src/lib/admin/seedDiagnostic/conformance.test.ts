@@ -8,7 +8,11 @@ import {
   seededCountryIdsForPreset,
   readinessCountryIds,
 } from "./expectations";
-import { runConformanceChecks } from "./conformance";
+import {
+  checkMissingScotusSeedDefinition,
+  checkScotusSeed,
+  runConformanceChecks,
+} from "./conformance";
 import { runSeedDiagnostic, diagnosticErrorReport, formatDiagnosticSummary } from "./index";
 import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
 
@@ -172,6 +176,74 @@ describe("era-derived expectations", () => {
     expect(expectedPrimeRate("JP")).toBe(COUNTRY_CONFIGS.JP.centralBank.defaultPrimeRate);
     expect(expectedPrimeRate("JP")).toBe(1);
     expect(expectedPrimeRate("TR")).toBe(COUNTRY_CONFIGS.TR.centralBank.defaultPrimeRate);
+  });
+});
+
+describe("Supreme Court seed conformance", () => {
+  it("rejects missing content for the required 2027 court preset", () => {
+    expect(checkMissingScotusSeedDefinition("2027-default", undefined)).toEqual([
+      expect.objectContaining({
+        id: "institutions.US.scotus.definition",
+        severity: "critical",
+        actual: null,
+      }),
+    ]);
+  });
+
+  it("does not impose the court contract on an older unsupported preset", async () => {
+    const { db } = makeDb({});
+
+    const checks = await checkScotusSeed(db, "2023-default");
+
+    expect(checks).toEqual([]);
+  });
+
+  it("accepts the explicit 2027 procedural-only docket fallback", async () => {
+    const { db } = makeDb({
+      countByFilter: [
+        {
+          name: "supremeCourtSeats",
+          match: (filter) => JSON.stringify(filter) === JSON.stringify({ countryId: "US" }),
+          count: 9,
+        },
+        {
+          name: "supremeCourtSeats",
+          match: (filter) =>
+            JSON.stringify(filter) ===
+            JSON.stringify({
+              countryId: "US",
+              justiceMode: null,
+              justiceCharacterId: null,
+              justiceNppId: null,
+            }),
+          count: 0,
+        },
+        {
+          name: "docketCases",
+          match: (filter) =>
+            JSON.stringify(filter) === JSON.stringify({ countryId: "US", preset: "2027-default" }),
+          count: 0,
+        },
+      ],
+    });
+
+    const checks = await checkScotusSeed(db, "2027-default");
+
+    expect(checks).toHaveLength(4);
+    expect(checks.every((check) => check.severity === "ok")).toBe(true);
+    expect(checks.find((check) => check.id.endsWith(".docket"))).toMatchObject({
+      expected: "explicit procedural-only fallback",
+      actual: 0,
+      severity: "ok",
+    });
+  });
+
+  it("rejects a missing persisted 2027 roster", async () => {
+    const { db } = makeDb({});
+
+    const checks = await checkScotusSeed(db, "2027-default");
+
+    expect(checks.find((check) => check.id.endsWith(".roster"))?.severity).toBe("critical");
   });
 });
 
