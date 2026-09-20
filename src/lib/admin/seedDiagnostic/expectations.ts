@@ -32,7 +32,10 @@ import {
 import { ERA_COMPOSITIONS, getEraComposition } from "@/lib/seeds/demographicCategories";
 import { getStateSectorWeights } from "@/lib/seeds/reference/sectorSeedWeights";
 import { CORPORATION_TYPES } from "@/lib/constants/corporations";
-import type { State } from "@/lib/db/types";
+import {
+  getPresetMonetaryScope,
+  type MonetaryCoverageExclusion,
+} from "@/lib/monetaryPolicy/presetMonetaryScope";
 import { states } from "@/lib/seeds/reference/states";
 import { states1953 } from "@/lib/seeds/reference/states1953";
 import { states1979 } from "@/lib/seeds/reference/states1979";
@@ -148,6 +151,11 @@ export interface SeedExpectations {
   seededCountryIds: CountryId[];
   forexRates: Partial<Record<CountryId, number>>;
   forexActiveCountries: readonly CountryId[];
+  /** Effective central-bank coverage and explicit currency-only exclusions. */
+  monetaryCoverage: {
+    centralBankCountries: CountryId[];
+    exclusions: MonetaryCoverageExclusion[];
+  };
   /** Domains where selectPresetBundle would silently fall back to 2019. */
   bundleFallbacks: Array<{ domain: string; note: string }>;
   /** True when ERA_COMPOSITIONS has an explicit entry for this era. */
@@ -321,6 +329,7 @@ export function buildSeedExpectations(preset: string): SeedExpectations {
   const configs = getNationalBudgetSeedConfigsForPreset(preset).filter((c) =>
     seededSet.has(c.countryId)
   );
+  const monetaryScope = getPresetMonetaryScope(preset);
 
   let eraCompositionOk = false;
   try {
@@ -349,6 +358,10 @@ export function buildSeedExpectations(preset: string): SeedExpectations {
     seededCountryIds,
     forexRates: getInitialRates(preset),
     forexActiveCountries: FOREX_ACTIVE_COUNTRIES,
+    monetaryCoverage: {
+      centralBankCountries: monetaryScope.centralBankCountries,
+      exclusions: monetaryScope.exclusions,
+    },
     bundleFallbacks: collectBundleFallbacks(preset),
     eraCompositionOk,
   };

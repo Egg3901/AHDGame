@@ -326,6 +326,27 @@ describe("runConformanceChecks", () => {
     expect(gdp?.severity).toBe("critical");
   });
 
+  it("flags a central bank outside the preset's authored fiscal coverage", async () => {
+    const { db } = makeDb({
+      gameState: {
+        _id: "current",
+        preset: "2019-default",
+        startingYear: 2019,
+        currentTurn: 1,
+        currentYear: 2019,
+        iteration: { type: "Alpha", number: 1 },
+      },
+      gameConfig: { _id: "default", maintenanceMode: true },
+      centralBanks: [{ _id: "RU", countryId: "RU", primeRate: 5 }],
+    });
+
+    const { checks } = await runConformanceChecks(db, { preset: "2019-default" });
+    expect(checks.find((check) => check.id === "centralBank.RU.fiscalCoverage")).toMatchObject({
+      severity: "critical",
+      actual: null,
+    });
+  });
+
   it("does not emit budget.exists for latent BLR/BAL on 1953", async () => {
     const { db } = makeDb({
       gameState: {
