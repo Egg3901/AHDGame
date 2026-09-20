@@ -129,7 +129,7 @@ export async function resolveCharacterRoles(
     }
   }
   const ledParty = await db
-    .collection<{ abbreviation: string }>("parties")
+    .collection<{ abbreviation: string }>("politicalParties")
     .findOne({ chairId: character._id }, { projection: { abbreviation: 1 } });
   if (ledParty?.abbreviation) {
     roles.push("partyLeader", `partyLeader:${ledParty.abbreviation}`);
