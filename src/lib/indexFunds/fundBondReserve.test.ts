@@ -269,6 +269,7 @@ describe("deployBondReserveFromCash ledger threading (#992 tranche 6)", () => {
     expect(purchaseMock).toHaveBeenCalledTimes(1);
     expect(purchaseMock.mock.calls[0]![4]).toMatchObject({ turn: 7 });
     expect(purchaseMock.mock.calls[0]![4].thresholds).toBeDefined();
+    expect(systemSettingsFindOne).toHaveBeenCalledTimes(1);
   });
 
   it("passes no turn through when absent, so purchases emit nothing", async () => {
@@ -281,6 +282,7 @@ describe("deployBondReserveFromCash ledger threading (#992 tranche 6)", () => {
 
     expect(purchaseMock).toHaveBeenCalledTimes(1);
     expect(purchaseMock.mock.calls[0]![4].turn).toBeUndefined();
+    expect(systemSettingsFindOne).not.toHaveBeenCalled();
   });
 });
 
