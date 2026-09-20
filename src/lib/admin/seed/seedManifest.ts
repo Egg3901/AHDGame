@@ -946,6 +946,18 @@ const RUNTIME: CollectionEntry[] = [
       "SP5: the macro slice of the per-turn metric history (formerly stateMetricHistory's economic/population series). Wiped on reset, rebuilt by play.",
   },
   {
+    name: "approvalTelemetry",
+    category: "runtime",
+    notes:
+      "Durable long-horizon approval series (#2099): one doc per (world, country, region, turn), every turn retained under the world-raw-full policy. Wiped on reset, rebuilt by play.",
+  },
+  {
+    name: "macroTelemetry",
+    category: "runtime",
+    notes:
+      "Durable long-horizon GDP/population series (#2100): one doc per (world, country, region, metric, turn), every turn retained under the world-raw-full policy. Wiped on reset, rebuilt by play.",
+  },
+  {
     name: "parliamentSeatsHistory",
     category: "runtime",
     notes: "Per-turn parliament composition snapshots (capped history), written by the turn phase.",
