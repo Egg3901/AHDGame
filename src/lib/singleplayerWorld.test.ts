@@ -26,7 +26,16 @@ function report(): BalanceReport {
     },
     officeTurnover: { officeCount: 10, nppHeldPct: 0.7, meanTenureDays: 0 },
     crises: { totalSpawned: 4, active: 2, resolved: 2, meanResolutionHours: 0 },
-    economy: { commodityCount: 3, inflationIndex: 1.2, priceVolatility: 0 },
+    economy: {
+      commodityCount: 3,
+      inflationIndex: 1.2,
+      inflationRate: 4,
+      householdCpiCountries: 1,
+      commodityPriceLevelMean: 2,
+      commodityPriceLevelMedian: 2,
+      commodityPriceLevelP90: 3,
+      priceVolatility: 0,
+    },
     capacity: {
       sectorCount: 0,
       totalCapitalStock: 0,
