@@ -86,6 +86,8 @@ import { migration as identityObservationsBackfill } from "./entries/2026-09-16-
 import { migration as repairDuplicateCorporationSequentialIds } from "./entries/2026-09-17-repair-duplicate-corporation-sequential-ids";
 import { migration as normalizeShareCorporateActions } from "./entries/2026-09-18-normalize-share-corporate-actions";
 
+import { migration as turnClockIndexes } from "./entries/2026-09-20-turn-clock-indexes";
+
 export const MIGRATIONS: Migration[] = [
   // v0.2.6 currency cutover (declarative — shipped via standalone scripts)
   bondCurrencyStamp,
@@ -274,6 +276,7 @@ export const MIGRATIONS: Migration[] = [
   // sparse modifiers). Fold the generated regional texture into residuals so
   // regions glide to their textured equilibrium instead of lurching.
   playableRegionTextureResiduals,
+  turnClockIndexes,
 ];
 
 // D13 rollback drill — registered but deliberately OUTSIDE the normal chain.
