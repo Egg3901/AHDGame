@@ -16,14 +16,14 @@ A bounded read-only production query examined 3,588 resolved non-presidential el
 
 The largest player-participating families show real turnover:
 
-| Election family | Player cycles | Consecutive player cycles | Seat/winner changes | Unique control flips |
-| --- | ---: | ---: | ---: | ---: |
-| US/other governor | 129 | 72 | 13 | 13 of 72 |
-| US House | 143 | 104 | 86 | 25 of 81 uniquely led comparisons |
-| US/other senate | 152 | 84 | 25 | 25 of 84 |
-| State senate | 11 | 3 | 3 | 1 of 3 |
-| Regional council | 18 | 6 | 6 | 1 of 5 uniquely led comparisons |
-| UK Commons | 56 | 42 | 40 | 17 of 40 uniquely led comparisons |
+| Election family   | Player cycles | Consecutive player cycles | Seat/winner changes |              Unique control flips |
+| ----------------- | ------------: | ------------------------: | ------------------: | --------------------------------: |
+| US/other governor |           129 |                        72 |                  13 |                          13 of 72 |
+| US House          |           143 |                       104 |                  86 | 25 of 81 uniquely led comparisons |
+| US/other senate   |           152 |                        84 |                  25 |                          25 of 84 |
+| State senate      |            11 |                         3 |                   3 |                            1 of 3 |
+| Regional council  |            18 |                         6 |                   6 |   1 of 5 uniquely led comparisons |
+| UK Commons        |            56 |                        42 |                  40 | 17 of 40 uniquely led comparisons |
 
 This rejects a blanket claim that multiplayer seats rarely or never change hands. It does not establish that every election family is healthy. Several systems recorded no leading-party turnover in the retained window, including Supreme Soviet deputy families, the PRC NPC/people's-congress families, and several national chambers. Some may be intentionally regime-constrained, while others may expose the same calibration problem as the autonomous House run. They require system-specific expectations rather than being silently combined with competitive elections.
 
@@ -62,14 +62,14 @@ Primary source: [`generalResolution.ts`](https://github.com/Egg3901/AHDGame/blob
 
 The live world retained six resolved US presidential elections from 1953 through 1972. Every field contained player candidates and no NPP candidates. Party `1` won all six:
 
-| Election year | Player candidates | Stored EV result |
-| --- | ---: | --- |
-| 1953 | 4 | 498 to 33 |
-| 1956 | 3 | 501 to 30 |
-| 1960 | 10 | 530 for the sole EV-winning candidate |
-| 1964 | 15 | 446 to 42 to 42 |
-| 1968 | 18 | 280 to 190 to 69 |
-| 1972 | 8 | 286 to 252 |
+| Election year | Player candidates | Stored EV result                      |
+| ------------- | ----------------: | ------------------------------------- |
+| 1953          |                 4 | 498 to 33                             |
+| 1956          |                 3 | 501 to 30                             |
+| 1960          |                10 | 530 for the sole EV-winning candidate |
+| 1964          |                15 | 446 to 42 to 42                       |
+| 1968          |                18 | 280 to 190 to 69                      |
+| 1972          |                 8 | 286 to 252                            |
 
 This is not enough to call the winner calculation defective. It is enough to require controlled multiplayer turnover qualification before reset.
 
