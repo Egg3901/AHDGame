@@ -60,9 +60,47 @@ export async function buildTurnExecutionContext(input: {
     nextTurnTime.setHours(nextTurnTime.getHours() + 1);
   }
 
+  // Turn-init projections (#2166): the full character/state documents are never
+  // needed here. The turn path reads only:
+  // - characters: processActionRefresh (currentOffice, countryId, actions,
+  //   stats, statXp, debateDecayAnchor, politicalInfluence, nationalInfluence,
+  //   infamy, favorability, party), processFundGeneration (homeState,
+  //   donorBaseLevel, currentOffice, countryId, politicalInfluence, party,
+  //   name), processPartyInfluenceTurn (countryId, party, policies,
+  //   partyInfluence, infamy, stats). turnSystem.ts uses characters.length.
+  // - states: processFundGeneration (population, gdp, countryId),
+  //   processNppFundGeneration (population, countryId), processPartyGOTV
+  //   (population, gdp, votingEligiblePopulation).
   const charactersCollection = await getCharactersCollection(db);
-  const characters = await charactersCollection.find({}).toArray();
-  const states = await db.collection<State>("states").find({}).toArray();
+  const characters = await charactersCollection
+    .find(
+      {},
+      {
+        projection: {
+          countryId: 1,
+          homeState: 1,
+          name: 1,
+          party: 1,
+          donorBaseLevel: 1,
+          currentOffice: 1,
+          politicalInfluence: 1,
+          nationalInfluence: 1,
+          partyInfluence: 1,
+          favorability: 1,
+          infamy: 1,
+          actions: 1,
+          stats: 1,
+          statXp: 1,
+          debateDecayAnchor: 1,
+          policies: 1,
+        },
+      }
+    )
+    .toArray();
+  const states = await db
+    .collection<State>("states")
+    .find({}, { projection: { countryId: 1, population: 1, gdp: 1, votingEligiblePopulation: 1 } })
+    .toArray();
   const stateMap = new Map(states.map((state) => [state._id, state]));
 
   return {
