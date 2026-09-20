@@ -16,7 +16,7 @@
  */
 
 import { ObjectId } from "mongodb";
-import type { ClientSession, Db } from "mongodb";
+import type { ClientSession, Db, UpdateFilter } from "mongodb";
 import type {
   Corporation,
   ExchangeRate,
@@ -116,7 +116,13 @@ import {
   loadQueuedRedemptionUnitsByFundId,
 } from "@/lib/indexFunds/fundValuation";
 import { refreshEquityLiquidityFacility } from "@/lib/indexFunds/equityLiquidityFacility";
-import { loadEquityPoolsByCurrency, loadEquityQuote } from "@/lib/equities/marketPool";
+import {
+  equityPoolCurrency,
+  loadEquityPoolsByCurrency,
+  loadEquityQuote,
+} from "@/lib/equities/marketPool";
+import { EQUITY_MARKET_POOLS_COLLECTION } from "@/lib/db/types/equityMarketPool";
+import { getShareBuybackMode } from "@/lib/corporations/shareBuybackMode";
 
 // ── Types ─────────────────────────────────────────────────────────────
 
@@ -353,14 +359,98 @@ export function recomputeNav(
  */
 /**
  * Shared state for a pass that executes many buys: the pool table read once,
- * and a sink that collects fund transactions for one insertMany at the end
- * instead of an insert per buy. Both are optional; without them a buy is
- * self-contained.
+ * and completed audit rows collected for one post-loop insert. Without it a
+ * buy is self-contained and inserts its own audit row.
  */
 export interface FundShareBuyBatch {
   /** Mutable: each credited buy advances the snapshot's cash so later quotes see it. */
   pools?: Map<CurrencyCode, EquityMarketPool>;
+  /** Post-loop evidence for completed buys. The caller inserts the batch once. */
   txSink?: Omit<IndexFundTransaction, "_id">[];
+}
+
+async function reverseFloatBuyCredit(
+  db: Db,
+  corp: EligibleCorpRow,
+  amountLocal: number,
+  pools?: Map<CurrencyCode, EquityMarketPool>
+): Promise<void> {
+  const currency = equityPoolCurrency(corp);
+  const snapshot = pools?.get(currency);
+  const poolExists = pools
+    ? snapshot !== undefined
+    : Boolean(
+        await db
+          .collection<EquityMarketPool>(EQUITY_MARKET_POOLS_COLLECTION)
+          .findOne({ _id: currency }, { projection: { _id: 1 } })
+      );
+
+  if (poolExists) {
+    const amount = Math.round(amountLocal * 100) / 100;
+    const result = await db.collection<EquityMarketPool>(EQUITY_MARKET_POOLS_COLLECTION).updateOne(
+      { _id: currency, cashLocal: { $gte: amount } },
+      {
+        $inc: { cashLocal: -amount, "lifetime.purchasesIn": -amount },
+        $set: { updatedAt: new Date() },
+      }
+    );
+    if (result.matchedCount !== 1) throw new Error("Failed to reverse equity-pool buy credit");
+    if (snapshot) snapshot.cashLocal = Math.max(0, (snapshot.cashLocal ?? 0) - amount);
+    return;
+  }
+
+  const increment =
+    getShareBuybackMode(corp) === "escrow"
+      ? { shareEscrowBalance: -amountLocal }
+      : { liquidCapital: -amountLocal, shareIssuanceProceeds: -amountLocal };
+  const result = await db
+    .collection<Corporation>("corporations")
+    .updateOne({ _id: corp._id }, { $inc: increment, $set: { updatedAt: new Date() } });
+  if (result.matchedCount !== 1) throw new Error("Failed to reverse issuer buy credit");
+}
+
+async function reverseFundShareCredit(
+  db: Db,
+  corp: EligibleCorpRow,
+  fundId: IndexFund["_id"],
+  shares: number,
+  orderFlowBuyValue: number,
+  previous: { shares: number; avgCostPerShare?: number } | undefined
+): Promise<void> {
+  const expectedShares = (previous?.shares ?? 0) + shares;
+  const update = (previous
+    ? {
+        $inc: {
+          "shareholders.$.shares": -shares,
+          publicFloat: shares,
+          ...(orderFlowBuyValue > 0 ? { orderFlowWindowBuyValue: -orderFlowBuyValue } : {}),
+        },
+        $set: {
+          ...(previous.avgCostPerShare !== undefined
+            ? { "shareholders.$.avgCostPerShare": previous.avgCostPerShare }
+            : {}),
+          updatedAt: new Date(),
+        },
+        ...(previous.avgCostPerShare === undefined
+          ? { $unset: { "shareholders.$.avgCostPerShare": "" } }
+          : {}),
+      }
+    : {
+        $pull: { shareholders: { fundId, shares: expectedShares } },
+        $inc: {
+          publicFloat: shares,
+          ...(orderFlowBuyValue > 0 ? { orderFlowWindowBuyValue: -orderFlowBuyValue } : {}),
+        },
+        $set: { updatedAt: new Date() },
+      }) as unknown as UpdateFilter<Corporation>;
+  const result = await db.collection<Corporation>("corporations").updateOne(
+    {
+      _id: corp._id,
+      shareholders: { $elemMatch: { fundId, shares: expectedShares } },
+    },
+    update
+  );
+  if (result.matchedCount !== 1) throw new Error("Failed to reverse fund share credit");
 }
 
 export async function executeFundShareBuy(
@@ -384,69 +474,138 @@ export async function executeFundShareBuy(
 
   // Runs both inside a transaction (replica set) and as sequential writes
   // (standalone mongod) — every step is individually guarded/refunded.
-  const applyPurchase = async (session?: ClientSession): Promise<boolean> => {
+  const applyPurchase = async (
+    session?: ClientSession,
+    compensateStandaloneFailure = false
+  ): Promise<boolean> => {
     const sessionOpts = session ? { session } : undefined;
+    let debitedFund: Pick<IndexFund, "_id" | "cashAnchor" | "holdings"> | null = null;
+    let shareCreditApplied = false;
+    let issuerCreditApplied = false;
+    let holdingsUpdated = false;
+    let purchasedHoldings: IndexFundHolding[] | undefined;
+    const shareholderSnapshot = await db
+      .collection<Corporation>("corporations")
+      .findOne({ _id: corp._id }, { projection: { shareholders: 1 }, ...sessionOpts });
+    const previousShareholder = shareholderSnapshot?.shareholders?.find(
+      (holder) => holder.fundId?.toString() === fund._id.toString()
+    );
 
-    const debitedFund = await atomicallyDebitFundCashAnchor(db, fund._id, actualCost, sessionOpts);
-    if (!debitedFund) return false;
+    try {
+      debitedFund = await atomicallyDebitFundCashAnchor(db, fund._id, actualCost, sessionOpts);
+      if (!debitedFund) return false;
 
-    const creditOk = await creditSharesToFund(
-      db,
-      corp._id,
-      fund._id,
-      shares,
-      executionPrice,
-      {
-        $inc: {
-          publicFloat: -shares,
-          ...(orderFlowEligible ? { orderFlowWindowBuyValue: actualIssuerCreditLocal } : {}),
+      const creditOk = await creditSharesToFund(
+        db,
+        corp._id,
+        fund._id,
+        shares,
+        executionPrice,
+        {
+          $inc: {
+            publicFloat: -shares,
+            ...(orderFlowEligible ? { orderFlowWindowBuyValue: actualIssuerCreditLocal } : {}),
+          },
+          $set: { updatedAt: new Date() },
         },
-        $set: { updatedAt: new Date() },
-      },
-      {
-        guardFilter: { publicFloat: { $gte: shares } },
-        ...(session ? { session } : {}),
+        {
+          guardFilter: { publicFloat: { $gte: shares } },
+          knownShareholders: shareholderSnapshot?.shareholders,
+          ...(session ? { session } : {}),
+        }
+      );
+
+      if (!creditOk) {
+        await refundFundCashAnchor(db, fund._id, actualCost, sessionOpts);
+        return false;
       }
-    );
+      shareCreditApplied = true;
 
-    if (!creditOk) {
-      await refundFundCashAnchor(db, fund._id, actualCost, sessionOpts);
-      return false;
+      await applyFloatBuyCredit(db, corp, actualIssuerCreditLocal, {
+        ...sessionOpts,
+        pools: batch?.pools,
+      });
+      issuerCreditApplied = true;
+
+      purchasedHoldings = updateHoldingAfterPurchase(
+        debitedFund.holdings ?? [],
+        corp._id,
+        shares,
+        executionPriceAnchor
+      );
+      await updateFundHoldings(db, fund._id, purchasedHoldings, sessionOpts);
+      holdingsUpdated = true;
+
+      const tx = {
+        fundId: fund._id,
+        kind: "public_float_buy" as const,
+        corporationId: corp._id,
+        shares,
+        navAnchor: executionPriceAnchor,
+        amountAnchor: actualCost,
+        createdAt: new Date(),
+      };
+      if (batch?.txSink) batch.txSink.push(tx);
+      else await insertFundTransaction(db, tx, sessionOpts);
+
+      return true;
+    } catch (error) {
+      if (!compensateStandaloneFailure || !debitedFund) throw error;
+      const debitedSnapshot = debitedFund;
+      const compensationErrors: unknown[] = [];
+      const compensate = async (revert: () => Promise<void>) => {
+        try {
+          await revert();
+        } catch (compensationError) {
+          compensationErrors.push(compensationError);
+        }
+      };
+      if (holdingsUpdated && purchasedHoldings) {
+        await compensate(async () => {
+          const holdingsRollback = await db
+            .collection<IndexFund>("indexFunds")
+            .updateOne(
+              { _id: fund._id, holdings: purchasedHoldings },
+              { $set: { holdings: debitedSnapshot.holdings ?? [], updatedAt: new Date() } }
+            );
+          if (holdingsRollback.matchedCount !== 1) {
+            throw new Error("Failed to reverse fund holdings update");
+          }
+        });
+      }
+      if (issuerCreditApplied) {
+        await compensate(async () => {
+          await reverseFloatBuyCredit(db, corp, actualIssuerCreditLocal, batch?.pools);
+        });
+      }
+      if (shareCreditApplied) {
+        await compensate(async () => {
+          await reverseFundShareCredit(
+            db,
+            corp,
+            fund._id,
+            shares,
+            orderFlowEligible ? actualIssuerCreditLocal : 0,
+            previousShareholder
+          );
+        });
+      }
+      await compensate(async () => {
+        await refundFundCashAnchor(db, fund._id, actualCost);
+      });
+      if (compensationErrors.length > 0) {
+        throw new AggregateError(
+          [error, ...compensationErrors],
+          `Index fund public-float buy failed and ${compensationErrors.length} compensation step(s) were incomplete`
+        );
+      }
+      throw error;
     }
-
-    await applyFloatBuyCredit(db, corp, actualIssuerCreditLocal, {
-      ...sessionOpts,
-      pools: batch?.pools,
-    });
-
-    const updatedHoldings = updateHoldingAfterPurchase(
-      debitedFund.holdings ?? [],
-      corp._id,
-      shares,
-      executionPriceAnchor
-    );
-    await updateFundHoldings(db, fund._id, updatedHoldings, sessionOpts);
-
-    const tx = {
-      fundId: fund._id,
-      kind: "public_float_buy" as const,
-      corporationId: corp._id,
-      shares,
-      navAnchor: executionPriceAnchor,
-      amountAnchor: actualCost,
-      createdAt: new Date(),
-    };
-    // The transaction row is a log, not a balance: a batching caller writes
-    // the pass's rows in one insertMany after the loop.
-    if (batch?.txSink) batch.txSink.push(tx);
-    else await insertFundTransaction(db, tx, sessionOpts);
-
-    return true;
   };
 
   const purchaseApplied = await runWithOptionalTransaction(
     (session) => applyPurchase(session),
-    () => applyPurchase()
+    () => applyPurchase(undefined, true)
   );
 
   if (!purchaseApplied) {
