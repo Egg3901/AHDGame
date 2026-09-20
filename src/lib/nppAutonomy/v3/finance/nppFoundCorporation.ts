@@ -33,6 +33,7 @@
 
 import { ObjectId, type Db } from "mongodb";
 import type { Corporation, NPP } from "@/lib/db/types";
+import type { CountryId } from "@/lib/constants/countries";
 import type { CorporationType } from "@/lib/constants/corporations";
 import { generateNppCorpName, spawnNppCorporation } from "@/lib/admin/spawnNppCorporation";
 import { nppHomeFxRate, localToAnchor } from "./nppEconomicAccount";
@@ -57,7 +58,13 @@ export async function nppFoundCorporation(
   foundingFeeLocal: number,
   currentTurn: number,
   /** Pre-loaded home FX rate (local per ₳); loaded on demand when omitted. */
-  homeRate?: number
+  homeRate?: number,
+  /**
+   * Pre-loaded command-economy blocked set (same turn, same source as the
+   * sweep's own load); falls back to the on-demand lookup when omitted so
+   * every other caller keeps the defence-in-depth check.
+   */
+  blockedCountries?: ReadonlySet<CountryId>
 ): Promise<NppFoundCorporationResult> {
   if (!npp.homeState) {
     return { ok: false, reason: "NPP has no home state to headquarter a corporation in." };
@@ -68,7 +75,10 @@ export async function nppFoundCorporation(
   // economies from the candidate pool, but this is a creation path and must not
   // depend on every future caller remembering to filter. Reads the dial, so a
   // country converting either direction is honoured without touching this code.
-  if (await isPrivateEnterpriseBlocked(db, countryId)) {
+  const blocked = blockedCountries
+    ? blockedCountries.has(countryId as CountryId)
+    : await isPrivateEnterpriseBlocked(db, countryId);
+  if (blocked) {
     return {
       ok: false,
       reason: "Private corporations cannot be founded in a command economy.",
@@ -77,7 +87,7 @@ export async function nppFoundCorporation(
 
   const alreadyCeo = await db
     .collection<Corporation>("corporations")
-    .findOne({ ceoId: npp._id, ceoVacant: { $ne: true } });
+    .findOne({ ceoId: npp._id, ceoVacant: { $ne: true } }, { projection: { _id: 1 } });
   if (alreadyCeo) {
     return { ok: false, reason: "NPP already runs a corporation." };
   }
