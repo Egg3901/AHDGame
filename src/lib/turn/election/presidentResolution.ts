@@ -36,6 +36,11 @@ import {
 } from "@/lib/elections/presidentialResolutionDisplay";
 import { getGameStateCollection } from "@/lib/db/collections";
 import { loadApportionment } from "@/lib/elections/apportionment";
+import {
+  buildResultsPayload,
+  snapshotFromPayload,
+} from "@/lib/elections/liveResults/buildResultsPayload";
+import type { GameState } from "@/lib/db/types";
 import { logger } from "../../observability/logger";
 
 function recoverUnitVotesFromSnapshots(
@@ -251,6 +256,52 @@ async function runPostFinalizeCleanup(
   if (orgReset.modifiedCount > 0) {
     console.log(
       `[Turn] President election ${election._id}: partial-25% state-org reset applied to ${orgReset.modifiedCount} row(s)`
+    );
+  }
+
+  await captureResultSnapshot(db, election, now);
+}
+
+/**
+ * Freeze the night's result so history stops being recomputed.
+ *
+ * Runs after `finalizePresidentTally`, which is what puts the decided electoral
+ * votes on the tally — capturing any earlier would freeze a payload whose
+ * college had not been settled yet.
+ *
+ * The year is pinned to the race's own, not the world's. Apportionment is
+ * era-gated, so scoring a 1960 race against a 1995 map invents a college that
+ * was never in force.
+ *
+ * Every failure is swallowed on purpose. A snapshot is an optimisation for
+ * reading history; an uncaught throw inside a turn phase aborts that phase for
+ * every country, not just this race. A missing snapshot costs a reader the
+ * era-correct totals, a thrown one would cost everybody a turn.
+ */
+async function captureResultSnapshot(
+  db: Awaited<ReturnType<typeof import("@/lib/mongodb").getDb>>,
+  election: Election,
+  now: Date
+): Promise<void> {
+  try {
+    const gameState = await db
+      .collection<GameState>("gameState")
+      .findOne(
+        { _id: "current" },
+        { projection: { currentTurn: 1, currentYear: 1, preset: 1, fastMode: 1 } }
+      );
+    const payload = await buildResultsPayload(db, election, gameState, {
+      apportionmentYear: election.electionYear ?? null,
+      isAdmin: false,
+    });
+    await db.collection("electionResultSnapshots").insertOne({
+      _id: new ObjectId(),
+      ...snapshotFromPayload(payload, election, gameState?.currentTurn ?? 0, now),
+    });
+  } catch (err) {
+    logger.error(
+      `[Turn] President election ${election._id}: result snapshot capture failed`,
+      err as Error
     );
   }
 }
