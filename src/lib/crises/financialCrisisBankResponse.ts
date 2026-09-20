@@ -50,7 +50,10 @@ export async function applyFinancialCrisisBankResponse(
     await ctx.db
       .collection<Corporation>("corporations")
       .find(
-        { countryId: ctx.countryId, "bankCharter.status": "active" },
+        {
+          countryId: ctx.countryId as Corporation["countryId"],
+          "bankCharter.status": "active",
+        },
         { projection: { bankCharter: 1 } }
       )
       .toArray()
