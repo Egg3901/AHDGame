@@ -10,6 +10,12 @@ import type {
 import { cfx } from "../effects";
 import { choiceNode, opt, responseOpt } from "../authoring";
 
+// Primary historical anchors: WHO's dated response timeline covers emergence,
+// PHEIC and pandemic declarations, research, variants, COVAX, and vaccine
+// distribution, https://www.who.int/emergencies/diseases/novel-coronavirus-2019/interactive-timeline,
+// with the archived early chronology at
+// https://www.who.int/news/item/27-04-2020-who-timeline---covid-19
+
 /**
  * Pandemic: the proof that the living-conflict engine is not war-specific.
  *
