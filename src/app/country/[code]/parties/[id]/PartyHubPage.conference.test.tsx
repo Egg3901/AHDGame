@@ -2,7 +2,7 @@
  * @vitest-environment happy-dom
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { PartyHubPage } from "./PartyHubPage";
 
 let query = "";
@@ -138,6 +138,8 @@ function stubHub(opts: {
 }
 
 afterEach(() => {
+  // Unmount effects before restoring fetch so delayed work stays isolated.
+  cleanup();
   query = "";
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
@@ -177,11 +179,15 @@ describe("PartyHubPage conference tab (issue #862)", () => {
     });
     render(<PartyHubPage scope={{ kind: "national", countryCode: "us", partyId: "2" }} />);
 
-    expect(await screen.findByRole("button", { name: "Overview" })).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Conference" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Leadership" })).toBeNull();
-    expect(screen.getByRole("button", { name: "Elections" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Treasury" })).toBeTruthy();
+    // Observe the complete expected tab state in one retryable assertion
+    // rather than treating a single tab as readiness for all the others (#2190).
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Overview" })).toBeTruthy();
+      expect(screen.queryByRole("button", { name: "Conference" })).toBeNull();
+      expect(screen.queryByRole("button", { name: "Leadership" })).toBeNull();
+      expect(screen.getByRole("button", { name: "Elections" })).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Treasury" })).toBeTruthy();
+    });
   });
 
   it("hides the Conference tab from viewers outside the UK party", async () => {
