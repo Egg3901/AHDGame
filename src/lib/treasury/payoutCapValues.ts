@@ -13,6 +13,7 @@
  */
 
 import type { CountryId } from "@/lib/constants/countries";
+import { COUNTRY_CURRENCY_MAP, CURRENCY_SYMBOLS } from "@/lib/constants/currencies";
 import { JP_ECONOMY } from "@/lib/countries/jp/economy";
 import { US_ECONOMY } from "@/lib/countries/us/economy";
 import { UK_ECONOMY } from "@/lib/countries/uk/economy";
@@ -41,4 +42,23 @@ export const DEFAULT_PLAYER_PAYOUT_CAP_PER_TURN = 2_000_000;
 export function getPlayerPayoutCap(countryId: CountryId | string): number {
   const key = String(countryId).toUpperCase() as CountryId;
   return PLAYER_PAYOUT_CAP_PER_TURN[key] ?? DEFAULT_PLAYER_PAYOUT_CAP_PER_TURN;
+}
+
+/**
+ * The cap rendered for a player, in that country's own currency.
+ *
+ * The cap is a LOCAL-currency figure, so the symbol has to come from the
+ * country rather than from a hardcoded "$". The Treasury tab's Request
+ * Funds card already renders amounts through `CURRENCY_SYMBOLS`; the
+ * refusal messages that quote the same number were printing dollars at
+ * every country, telling a UK player their limit was $2,000,000.
+ *
+ * Normalises the country id for the same reason `getPlayerPayoutCap`
+ * does: a lowercase code would otherwise fall through to the USD symbol
+ * while the cap lookup fell through to the default value.
+ */
+export function formatPayoutCap(countryId: CountryId | string, amount: number): string {
+  const key = String(countryId).toUpperCase() as CountryId;
+  const symbol = CURRENCY_SYMBOLS[COUNTRY_CURRENCY_MAP[key]] ?? "$";
+  return `${symbol}${amount.toLocaleString()}`;
 }
