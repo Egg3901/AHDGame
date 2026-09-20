@@ -6,6 +6,7 @@ import type { NppStrategyState } from "./corpStrategy";
 import type { NppMarketEntryDiagnostic } from "./entryDiagnostics";
 import type { FrontierEntryTurnState } from "./frontierEntryCandidate";
 import type { CapacityDecisionObservation } from "@/lib/corporations/capacityDecisionTelemetry/rules";
+import type { NppOperatorObservation } from "@/lib/corporations/nppOperatorTelemetry/rules";
 
 export interface NppCorpDecisionContext {
   corp: Corporation;
@@ -116,6 +117,8 @@ export interface NppCorpDecision {
    * Aggregated and flushed by the turn shell in a single bulk write.
    */
   capacityObservations?: CapacityDecisionObservation[];
+  /** Aggregate-safe summary of this turn's full NPP operator decision. */
+  operatorObservation?: NppOperatorObservation;
 }
 
 /** World facts needed to price founding builds through the player-equivalent path. */
