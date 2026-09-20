@@ -13,6 +13,7 @@ import type { CountryId } from "@/lib/constants/countries";
 import { loadExchangeRatesMap } from "@/lib/lineOfCredit/netWorth";
 import { toInternalUnits } from "@/lib/lineOfCredit/locMath";
 import type { EconomicVitalSigns } from "@/lib/db/types/economicVitalSigns";
+import type { LivingConflictState } from "@/lib/livingConflict/types";
 
 /**
  * Read-only balance-metric aggregations over a (sandbox) world DB, for the
@@ -130,6 +131,70 @@ export interface CrisisMetrics {
   active: number;
   resolved: number;
   meanResolutionHours: number;
+  living: LivingConflictMetrics;
+}
+
+export interface LivingConflictMetricRow {
+  defKey: string;
+  status: string;
+  phaseLevel: number;
+  openedYear: number | null;
+  totalTurns: number;
+  tracks: Record<string, number>;
+  consequences: {
+    civilianStrain: number;
+    refugees: number;
+    infrastructureDamage: number;
+    regionalSpillover: number;
+    casualties: number;
+    settlementMomentum: number;
+  };
+}
+
+export interface LivingConflictMetrics {
+  total: number;
+  opened: number;
+  byStatus: Record<string, number>;
+  pendingDecisions: number;
+  resolvedDecisions: number;
+  byDefinition: LivingConflictMetricRow[];
+}
+
+export function summarizeLivingConflicts(
+  livingConflicts: LivingConflictState[],
+  pendingDecisions: number,
+  resolvedDecisions: number
+): LivingConflictMetrics {
+  const byStatus: Record<string, number> = {};
+  for (const conflict of livingConflicts) {
+    const status = conflict.status ?? (conflict.hasOpened ? "active" : "dormant");
+    byStatus[status] = (byStatus[status] ?? 0) + 1;
+  }
+  return {
+    total: livingConflicts.length,
+    opened: livingConflicts.filter((conflict) => conflict.hasOpened).length,
+    byStatus,
+    pendingDecisions,
+    resolvedDecisions,
+    byDefinition: livingConflicts
+      .map((conflict) => ({
+        defKey: conflict.defKey,
+        status: conflict.status ?? (conflict.hasOpened ? "active" : "dormant"),
+        phaseLevel: conflict.phaseLevel,
+        openedYear: conflict.openedYear ?? null,
+        totalTurns: conflict.totalTurns,
+        tracks: conflict.tracks ?? {},
+        consequences: {
+          civilianStrain: conflict.campaign?.consequences.civilianStrain ?? 0,
+          refugees: conflict.campaign?.consequences.refugees ?? 0,
+          infrastructureDamage: conflict.campaign?.consequences.infrastructureDamage ?? 0,
+          regionalSpillover: conflict.campaign?.consequences.regionalSpillover ?? 0,
+          casualties: conflict.campaign?.consequences.casualties ?? 0,
+          settlementMomentum: conflict.campaign?.consequences.settlementMomentum ?? 0,
+        },
+      }))
+      .sort((a, b) => a.defKey.localeCompare(b.defKey)),
+  };
 }
 
 /**
@@ -604,22 +669,27 @@ async function collectOfficeTurnoverMetrics(db: Db): Promise<OfficeTurnoverMetri
 }
 
 async function collectCrisisMetrics(db: Db): Promise<CrisisMetrics> {
-  const crises = await db
-    .collection<Crisis>("crises")
-    .find({}, { projection: { status: 1, createdAt: 1, resolvedAt: 1 } })
-    .toArray();
+  const [crises, livingConflicts, pendingDecisions, resolvedDecisions] = await Promise.all([
+    db
+      .collection<Crisis>("crises")
+      .find({}, { projection: { status: 1, createdAt: 1, resolvedAt: 1 } })
+      .toArray(),
+    db.collection<LivingConflictState>("livingConflicts").find({}).toArray(),
+    db.collection("crisisInteractions").countDocuments({ resolvedAt: null }),
+    db.collection("crisisInteractions").countDocuments({ resolvedAt: { $ne: null } }),
+  ]);
   const totalSpawned = crises.length;
   const active = crises.filter((c) => c.status === "active").length;
   const resolvedCrises = crises.filter((c) => c.status === "resolved" && c.resolvedAt);
   const resolutionHours = resolvedCrises.map(
     (c) => (new Date(c.resolvedAt as Date).getTime() - new Date(c.createdAt).getTime()) / 3_600_000
   );
-
   return {
     totalSpawned,
     active,
     resolved: resolvedCrises.length,
     meanResolutionHours: mean(resolutionHours),
+    living: summarizeLivingConflicts(livingConflicts, pendingDecisions, resolvedDecisions),
   };
 }
 
