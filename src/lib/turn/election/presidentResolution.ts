@@ -36,6 +36,7 @@ import {
 } from "@/lib/elections/presidentialResolutionDisplay";
 import { getGameStateCollection } from "@/lib/db/collections";
 import { loadApportionment } from "@/lib/elections/apportionment";
+import { captureElectionResultSnapshot } from "@/lib/elections/liveResults/captureResultSnapshot";
 import { logger } from "../../observability/logger";
 
 function recoverUnitVotesFromSnapshots(
@@ -253,6 +254,10 @@ async function runPostFinalizeCleanup(
       `[Turn] President election ${election._id}: partial-25% state-org reset applied to ${orgReset.modifiedCount} row(s)`
     );
   }
+
+  // `finalizePresidentTally` has now written the decided college. Capturing
+  // earlier would freeze a result whose electoral votes were still projected.
+  await captureElectionResultSnapshot(db, election, now);
 }
 
 async function terminalizeMissingWinner(

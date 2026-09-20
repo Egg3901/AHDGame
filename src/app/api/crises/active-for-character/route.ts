@@ -131,7 +131,7 @@ export async function GET(request: Request) {
 
         const canInteract =
           currentNode && !interaction?.resolvedAt
-            ? canCharacterInteract(currentNode, characterRoles) &&
+            ? canCharacterInteract(currentNode, characterRoles, countryId, character.homeState) &&
               !alreadyResponded &&
               (currentNode.type !== "aid" || (await aidBillsEnabled())) &&
               (!crisis.globalResponse || !!globalResponseRoleFor(crisis, countryId))

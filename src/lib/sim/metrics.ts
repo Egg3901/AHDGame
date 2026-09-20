@@ -155,7 +155,15 @@ export interface CapacityMetrics {
 
 export interface EconomyMetrics {
   commodityCount: number;
+  /** GDP-weighted persisted household price index across reporting countries. */
   inflationIndex: number;
+  /** GDP-weighted persisted annual household CPI rate, in percentage points. */
+  inflationRate: number;
+  householdCpiCountries: number;
+  /** Commodity price-level diagnostics. These are shortage signals, not CPI. */
+  commodityPriceLevelMean: number;
+  commodityPriceLevelMedian: number;
+  commodityPriceLevelP90: number;
   /** Population stdev of (globalPrice/basePrice) across commodities — cross-sectional price dispersion, not a time series. */
   priceVolatility: number;
 }
@@ -615,21 +623,78 @@ async function collectCrisisMetrics(db: Db): Promise<CrisisMetrics> {
   };
 }
 
-async function collectEconomyMetrics(db: Db): Promise<EconomyMetrics> {
-  const commodities = await db
-    .collection("commodityPrices")
-    .find({ basePrice: { $gt: 0 } }, { projection: { basePrice: 1, globalPrice: 1 } })
-    .toArray();
-  if (commodities.length === 0) {
-    return { commodityCount: 0, inflationIndex: 1, priceVolatility: 0 };
-  }
-  const ratios = commodities.map((c) => (c.globalPrice ?? c.basePrice) / c.basePrice);
+type EconomyCommodityRow = { basePrice?: number; globalPrice?: number };
+type EconomyBudgetRow = {
+  gdp?: number;
+  economicFactors?: { householdPriceIndex?: number; inflationRate?: number };
+};
 
+function weightedMean(
+  rows: EconomyBudgetRow[],
+  pick: (row: EconomyBudgetRow) => number | undefined,
+  fallback: number
+): number {
+  const eligible = rows
+    .map((row) => ({ value: pick(row), gdp: row.gdp }))
+    .filter((row): row is { value: number; gdp: number | undefined } => Number.isFinite(row.value));
+  if (!eligible.length) return fallback;
+  const hasPositiveGdp = eligible.some((row) => Number.isFinite(row.gdp) && row.gdp! > 0);
+  const weighted = eligible.map((row) => ({
+    value: row.value,
+    weight: hasPositiveGdp && Number.isFinite(row.gdp) ? Math.max(0, row.gdp!) : 1,
+  }));
+  const totalWeight = weighted.reduce((sum, row) => sum + row.weight, 0);
+  return totalWeight > 0
+    ? weighted.reduce((sum, row) => sum + row.value * row.weight, 0) / totalWeight
+    : mean(weighted.map((row) => row.value));
+}
+
+export function summarizeEconomyMetrics(
+  commodities: EconomyCommodityRow[],
+  budgets: EconomyBudgetRow[]
+): EconomyMetrics {
+  const ratios = commodities
+    .filter((row) => Number.isFinite(row.basePrice) && row.basePrice! > 0)
+    .map((row) => (row.globalPrice ?? row.basePrice!) / row.basePrice!)
+    .filter(Number.isFinite);
+  const sortedRatios = [...ratios].sort((a, b) => a - b);
+  const p90Index = Math.max(0, Math.ceil(sortedRatios.length * 0.9) - 1);
+  const householdRows = budgets.filter((row) =>
+    Number.isFinite(row.economicFactors?.householdPriceIndex)
+  );
   return {
-    commodityCount: commodities.length,
-    inflationIndex: mean(ratios),
+    commodityCount: ratios.length,
+    inflationIndex: weightedMean(budgets, (row) => row.economicFactors?.householdPriceIndex, 1),
+    inflationRate: weightedMean(budgets, (row) => row.economicFactors?.inflationRate, 0),
+    householdCpiCountries: householdRows.length,
+    commodityPriceLevelMean: mean(ratios),
+    commodityPriceLevelMedian: median(ratios),
+    commodityPriceLevelP90: sortedRatios[p90Index] ?? 0,
     priceVolatility: stdev(ratios),
   };
+}
+
+async function collectEconomyMetrics(db: Db): Promise<EconomyMetrics> {
+  const [commodities, budgets] = await Promise.all([
+    db
+      .collection<EconomyCommodityRow>("commodityPrices")
+      .find({ basePrice: { $gt: 0 } }, { projection: { basePrice: 1, globalPrice: 1 } })
+      .toArray(),
+    db
+      .collection<EconomyBudgetRow>("federalBudget")
+      .find(
+        {},
+        {
+          projection: {
+            gdp: 1,
+            "economicFactors.householdPriceIndex": 1,
+            "economicFactors.inflationRate": 1,
+          },
+        }
+      )
+      .toArray(),
+  ]);
+  return summarizeEconomyMetrics(commodities, budgets);
 }
 
 /**

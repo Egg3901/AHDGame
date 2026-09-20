@@ -329,6 +329,12 @@ const RUNTIME: CollectionEntry[] = [
   { name: "elections", category: "runtime" },
   { name: "electionCandidates", category: "runtime" },
   { name: "electionVoteTallies", category: "runtime" },
+  {
+    name: "electionResultSnapshots",
+    category: "runtime",
+    notes:
+      "Frozen results for ended races. Tied to the world election records, wiped on reset, and rebuilt by the migration or by election resolution.",
+  },
   { name: "ukCommonsVacancies", category: "runtime" },
   { name: "ukRecallPetitions", category: "runtime" },
   { name: "ukPartyConferences", category: "runtime" },

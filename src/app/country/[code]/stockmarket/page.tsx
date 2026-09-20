@@ -394,9 +394,12 @@ function StockMarketPageInner({ params }: { params: Promise<{ code: string }> })
   }, [fetchData]);
 
   // Open privatization auctions for the selected exchange (global ⇒ all countries).
-  // Tiny payload, fetched on every exchange change so the tab badge + content are
-  // ready without visiting the tab. See /api/stock-exchange/auctions.
+  // Fetched only while the auctions tab is active (#2168), avoiding an extra
+  // request on every default stocks-page visit. The tab badge populates once the
+  // tab is visited; cached rows persist across tab switches in-session.
+  const isAuctionsTab = activeTab === "auctions";
   useEffect(() => {
+    if (!isAuctionsTab) return;
     const exchangeApi = exchangeMeta[exchangeFilter]?.exchangeApi ?? "global";
     let cancelled = false;
     void fetch(`/api/stock-exchange/auctions?exchange=${exchangeApi}`, { cache: "no-store" })
@@ -412,7 +415,7 @@ function StockMarketPageInner({ params }: { params: Promise<{ code: string }> })
     return () => {
       cancelled = true;
     };
-  }, [exchangeFilter, exchangeMeta]);
+  }, [exchangeFilter, exchangeMeta, isAuctionsTab]);
 
   // Check if user is CEO of a corporation.
   useEffect(() => {

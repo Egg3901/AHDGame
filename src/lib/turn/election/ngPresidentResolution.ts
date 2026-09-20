@@ -21,6 +21,7 @@ import {
   resolveNigeriaPresidentialResult,
   NG_ZONES,
 } from "@/lib/nigeriaPresidentialElectionEngine";
+import { captureElectionResultSnapshot } from "@/lib/elections/liveResults/captureResultSnapshot";
 
 /** Minimal candidate shape the decision needs (id + party key). */
 export interface NGPresidentCandidate {
@@ -207,6 +208,8 @@ export async function resolveNGPresidentElection(
       { $set: { status: "withdrawn", withdrawnAt: now } }
     );
   await db.collection<Campaign>("campaigns").deleteMany({ electionId: election._id });
+
+  await captureElectionResultSnapshot(db, election, now);
 
   console.log(
     `[Turn] NG president election ${election._id} resolved — candidate ${winnerCandidateId} seated`

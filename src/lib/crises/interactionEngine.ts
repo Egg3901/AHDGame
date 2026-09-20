@@ -402,7 +402,21 @@ export async function getCrisisInteraction(
 /**
  * Check if a character has the required role to interact with a node.
  */
-export function canCharacterInteract(node: CrisisDecisionNode, characterRoles: string[]): boolean {
+export function canCharacterInteract(
+  node: CrisisDecisionNode,
+  characterRoles: string[],
+  countryId?: string,
+  regionId?: string
+): boolean {
+  if (
+    node.requiredCountryIds?.length &&
+    (!countryId || !node.requiredCountryIds.includes(countryId))
+  ) {
+    return false;
+  }
+  if (node.requiredRegionIds?.length && (!regionId || !node.requiredRegionIds.includes(regionId))) {
+    return false;
+  }
   if (node.requiredRoles.includes("any")) return true;
   const roleMatches = node.requiredRoles.some((role) => characterRoles.includes(role));
   if (!roleMatches) return false;
@@ -431,7 +445,8 @@ export async function submitCrisisDecision(
   optionId: string,
   characterId: ObjectId,
   countryId: string,
-  characterRoles: string[] = ["any"]
+  characterRoles: string[] = ["any"],
+  regionId?: string
 ): Promise<{
   interaction: CrisisInteraction;
   nextNode: CrisisDecisionNode | null;
@@ -447,7 +462,7 @@ export async function submitCrisisDecision(
   const currentNode = interaction.decisionTree.find((n) => n.nodeId === interaction.currentNodeId);
   if (!currentNode) throw conflict("No active decision node");
 
-  if (!canCharacterInteract(currentNode, characterRoles)) {
+  if (!canCharacterInteract(currentNode, characterRoles, countryId, regionId)) {
     throw forbidden("You are not authorized to make this decision");
   }
 

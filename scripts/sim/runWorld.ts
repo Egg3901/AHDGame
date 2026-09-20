@@ -51,6 +51,7 @@ import {
   type SimActorMode,
 } from "@/lib/sim/actorCoverage";
 import { parseSimActorMode } from "@/lib/sim/syntheticActors";
+import { completedTurnProgress } from "./simStatusMirror";
 import {
   allFeatureFlagsGameStateSet,
   economicExperimentConfigSet,
@@ -419,6 +420,8 @@ if (!Number.isFinite(turns) || turns <= 0) {
 // Must happen before any @/lib import that might transitively touch mongodb.ts.
 // NODE_ENV is typed read-only by @types/node; this is the standard escape hatch.
 (process.env as { NODE_ENV: string }).NODE_ENV = "test";
+// Simulations skip server env validation, but still measure real phase query work.
+process.env.AHD_TURN_ROUNDTRIP_MONITOR = "1";
 process.env.MONGODB_URI = SIM_MONGODB_URI;
 process.env.MONGODB_DB = dbName;
 process.env.SIM_RNG_SALT = seed;
@@ -1246,18 +1249,17 @@ async function main() {
           `turn ${lastTurn} (${lastTurn - startTurn}/${turns})` +
             (result.warnings.length ? ` — ${result.warnings.length} warning(s)` : "")
         );
-        await simRuns.updateOne(
-          { _id: runId },
-          {
-            $set: {
-              currentTurn: lastTurn,
-              lastMessage: result.message,
-              lastWarnings: result.warnings,
-              updatedAt: new Date(),
-            },
-          }
-        );
       }
+      // Persist every completed turn. Console checkpoints may stay sparse,
+      // but the worker status mirror must never attach a fresh heartbeat to
+      // progress that is up to `checkpointEvery` turns old (#2074).
+      const progressUpdatedAt = new Date();
+      await simRuns.updateOne(
+        { _id: runId },
+        {
+          $set: completedTurnProgress(lastTurn, result, progressUpdatedAt),
+        }
+      );
     }
 
     // Final actor-coverage re-stamp (#1993): the pre-turn manifest proves the
