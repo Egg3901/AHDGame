@@ -4,7 +4,6 @@ const { findOne } = vi.hoisted(() => ({ findOne: vi.fn() }));
 vi.mock("@/lib/db/collections", () => ({
   getGameStateCollection: vi.fn(async () => ({ findOne })),
 }));
-vi.mock("@/lib/turn/countryPhases", () => ({ COUNTRY_ELECTION_PHASES: {} }));
 vi.mock("@/lib/api/errors", () => ({
   handleRouteError: (error: unknown) => Response.json({ error: String(error) }, { status: 500 }),
 }));
