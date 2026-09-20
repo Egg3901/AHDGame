@@ -1,6 +1,4 @@
 import { getGameTime } from "./gameTime";
-import { getDb } from "@/lib/mongodb";
-import type { GameState } from "@/lib/db/types";
 import {
   formatTimeRemaining,
   formatTimeUntilCompact,
@@ -75,19 +73,13 @@ export async function getGameClock(): Promise<GameClock> {
     return new Date(d + driftMs);
   };
 
-  // getGameTime() doesn't expose pauseReason/pauseKind — read them directly.
-  const db = await getDb();
-  const gs = await db
-    .collection<GameState>("gameState")
-    .findOne({ _id: "current" }, { projection: { pauseReason: 1, pauseKind: 1 } });
-
   return {
     now,
     realNow,
     lastTurnProcessed,
     pausedAt,
-    pauseReason: gs?.pauseReason ?? null,
-    pauseKind: gs?.pauseKind ?? null,
+    pauseReason: time.pauseReason ?? null,
+    pauseKind: time.pauseKind ?? null,
     currentTurn: time.currentTurn,
     driftMs,
     driftHours: driftMs / 3_600_000,

@@ -28,6 +28,24 @@ describe("getGameClock", () => {
     mockDbWithPauseFields(null, null);
   });
 
+  it("reuses pause metadata from the clock read without another database query", async () => {
+    vi.mocked(mongoMod.getDb).mockClear();
+    vi.mocked(gameTimeMod.getGameTime).mockResolvedValue({
+      currentTurn: 1,
+      lastTurnProcessed: fixedNow,
+      isActive: false,
+      pausedAt: fixedNow,
+      effectiveNow: fixedNow,
+      startingYear: 2027,
+      pauseReason: "maintenance",
+      pauseKind: "manual",
+    });
+    const clock = await getGameClock();
+    expect(mongoMod.getDb).not.toHaveBeenCalled();
+    expect(clock.pauseReason).toBe("maintenance");
+    expect(clock.pauseKind).toBe("manual");
+  });
+
   it("returns now = lastTurnProcessed when not paused", async () => {
     vi.mocked(gameTimeMod.getGameTime).mockResolvedValue({
       currentTurn: 943,
@@ -52,6 +70,8 @@ describe("getGameClock", () => {
       lastTurnProcessed: new Date("2026-05-19T23:00:00Z"),
       isActive: false,
       pausedAt,
+      pauseReason: "manual stop",
+      pauseKind: "manual",
       effectiveNow: pausedAt,
       startingYear: 2019,
     });
@@ -212,6 +232,8 @@ describe("getGameClock.formatAbsoluteDeadline / toAbsoluteWallClock", () => {
       lastTurnProcessed,
       isActive: false,
       pausedAt,
+      pauseReason: "manual stop",
+      pauseKind: "manual",
       effectiveNow: pausedAt,
       startingYear: 2019,
     });
