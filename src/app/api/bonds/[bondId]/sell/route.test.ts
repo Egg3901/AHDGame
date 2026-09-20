@@ -209,6 +209,60 @@ describe("POST /api/bonds/[bondId]/sell", () => {
     );
   });
 
+  it("keeps a completed fallback sale when zero-unit holder cleanup fails", async () => {
+    const bondId = new ObjectId();
+    const characterId = new ObjectId();
+    const userId = new ObjectId();
+
+    const { getDb } = await import("@/lib/mongodb");
+    vi.mocked(getDb).mockResolvedValue(db as unknown as Db);
+    const { requireBasicAuth } = await import("@/lib/api/requireAuth");
+    vi.mocked(requireBasicAuth).mockResolvedValue({
+      ok: true,
+      user: { userId: userId.toString() },
+    } as never);
+
+    db.collectionMocks.bonds.findOne.mockResolvedValueOnce({
+      _id: bondId,
+      defaulted: false,
+      marketPrice: 1,
+      currencyCode: "USD",
+      holders: [{ characterId, units: 3 }],
+    });
+    db.collectionMocks.users.findOne.mockResolvedValue({
+      _id: userId,
+      activeCharacterId: characterId,
+    });
+    db.collectionMocks.characters.findOne.mockResolvedValue({
+      _id: characterId,
+      userId,
+      name: "Seller",
+      countryId: "US",
+    });
+    db.collectionMocks.bonds.updateOne
+      .mockResolvedValueOnce({ matchedCount: 1, modifiedCount: 1 })
+      .mockRejectedValueOnce(new Error("cleanup unavailable"));
+    db.collectionMocks.characters.updateOne.mockResolvedValue({
+      matchedCount: 1,
+      modifiedCount: 1,
+    });
+
+    const { POST } = await import("./route");
+    const response = await POST(
+      new Request("http://localhost/api/bonds/x/sell", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ units: 3 }),
+      }),
+      { params: Promise.resolve({ bondId: bondId.toString() }) }
+    );
+
+    expect(response.status).toBe(200);
+    expect(db.collectionMocks.characters.updateOne).toHaveBeenCalledOnce();
+    expect(db.collectionMocks.bondMarketPools.updateOne).not.toHaveBeenCalled();
+    expect(db.collectionMocks.bonds.updateOne).toHaveBeenCalledTimes(2);
+  });
+
   it("emits a bond_sell ledger row after a successful character sale", async () => {
     const bondId = new ObjectId();
     const characterId = new ObjectId();
