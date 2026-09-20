@@ -16,9 +16,8 @@ import { REGIONAL_TEXTURE_1953 } from "@/lib/politicalMetrics/seeds/regionalText
 import { NON_PLAYABLE_BOARDS } from "@/lib/politicalMetrics/seeds/nonPlayableBoards";
 
 /**
- * The only preset carrying playable-region texture (issue #704). The anchor
- * table holds a single 1953 anchor, so any other preset's texture would sit
- * unused — and applying 1953 texture to another era's baselines would dress
+ * The only preset carrying playable-region texture and modifiers (issue #704).
+ * Applying either 1953 regional input to another era's baselines would dress
  * it in the wrong year's regional character.
  */
 const TEXTURE_PRESET = "1953-default";
@@ -48,9 +47,7 @@ const clampScore = (v: number) => Math.max(0, Math.min(100, v));
  * generated 1953 texture deviation otherwise (issue #704).
  *
  * Baselines resolve by in-game YEAR through the anchor table, never by seed
- * preset. With the current single-1953-anchor table every year yields the
- * authored 1953 value, so this is byte-identical to the pre-era behavior;
- * authoring additional anchors is what gives other eras their own values.
+ * preset. Authored era anchors give later presets their own national values.
  *
  * Texture resolves by seed PRESET, never by year: it exists only for
  * 1953-default, and a null modifier entry means "no authored statement",
@@ -104,7 +101,8 @@ export async function seedPoliticalMetrics(
       // outright over texture (deliberate history is not diluted), which the
       // generator also guarantees by emitting zero there — belt and braces.
       const countryId = state.countryId as PoliticalMetricsCountryId;
-      const modifiers = REGIONAL_MODIFIERS_1953[countryId][state._id] ?? {};
+      const modifiers =
+        preset === TEXTURE_PRESET ? (REGIONAL_MODIFIERS_1953[countryId][state._id] ?? {}) : {};
       const texture =
         preset === TEXTURE_PRESET ? (REGIONAL_TEXTURE_1953[countryId]?.[state._id] ?? {}) : {};
       for (const metricId of Object.keys(

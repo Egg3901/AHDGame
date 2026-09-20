@@ -4,6 +4,7 @@ import { bulkOps, createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import { NATIONAL_BASELINES_1953 } from "@/lib/politicalMetrics/seeds/nationalBaselines1953";
 import { REGIONAL_MODIFIERS_1953 } from "@/lib/politicalMetrics/seeds/regionalModifiers1953";
 import { REGIONAL_TEXTURE_1953 } from "@/lib/politicalMetrics/seeds/regionalTexture1953";
+import { NATIONAL_BASELINES_1979 } from "@/lib/politicalMetrics/seeds/nationalBaselines1979";
 import type { PoliticalMetricsDoc } from "@/lib/db/types/politicalMetrics";
 import type { PoliticalMetricId, PoliticalMetricsCountryId } from "@/lib/politicalMetrics/types";
 import { seedPoliticalMetrics } from "./seedPoliticalMetrics";
@@ -104,24 +105,37 @@ describe("seedPoliticalMetrics", () => {
     );
   });
 
-  it("applies no texture outside the 1953-default preset", async () => {
-    // The texture was derived against 1953 baselines; any other preset keeps
-    // the previous baseline+modifier shape. AL carries no workerSecurity
-    // modifier, so it lands on the bare baseline; MI's modifier still wins.
-    await seedPoliticalMetrics(db as unknown as Db, false, () => {}, 2027, "2027-default");
+  it("applies no 1953 modifiers or texture outside the 1953-default preset", async () => {
+    await seedPoliticalMetrics(db as unknown as Db, false, () => {}, 1979, "1979-default");
     const calls = bulkOps(db.collectionMocks["politicalMetrics"]!.bulkWrite);
     const get = (id: string) =>
       (calls.find((c) => (c[0] as { _id: string })._id === id)![1] as { $set: PoliticalMetricsDoc })
         .$set.values;
     expect(get("AL")["economy.workerSecurity"]).toBe(
-      expectedPlayable("US", "AL", "economy.workerSecurity", "2027-default")
-    );
-    expect(get("AL")["economy.workerSecurity"]).toBe(
-      NATIONAL_BASELINES_1953.US["economy.workerSecurity"].value
+      NATIONAL_BASELINES_1979.US["economy.workerSecurity"]
     );
     expect(get("MI")["economy.workerSecurity"]).toBe(
-      expectedPlayable("US", "MI", "economy.workerSecurity", "2027-default")
+      NATIONAL_BASELINES_1979.US["economy.workerSecurity"]
     );
+  });
+
+  it("seeds a different playable board in 1979 than in 1953", async () => {
+    await seedPoliticalMetrics(db as unknown as Db, false, () => {}, 1953, "1953-default");
+    const values1953 = (
+      bulkOps(db.collectionMocks["politicalMetrics"]!.bulkWrite).find(
+        (call) => (call[0] as { _id: string })._id === "MI"
+      )![1] as { $set: PoliticalMetricsDoc }
+    ).$set.values;
+
+    db.collectionMocks["politicalMetrics"]!.bulkWrite.mockClear();
+    await seedPoliticalMetrics(db as unknown as Db, false, () => {}, 1979, "1979-default");
+    const values1979 = (
+      bulkOps(db.collectionMocks["politicalMetrics"]!.bulkWrite).find(
+        (call) => (call[0] as { _id: string })._id === "MI"
+      )![1] as { $set: PoliticalMetricsDoc }
+    ).$set.values;
+
+    expect(values1979).not.toEqual(values1953);
   });
 
   it("seeds non-playable regions from the committed board file", async () => {
