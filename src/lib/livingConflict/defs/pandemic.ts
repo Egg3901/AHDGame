@@ -416,6 +416,11 @@ export const PANDEMIC_DEF: LivingConflictDef = {
     blocMembers: ["US", "UK", "DE", "FR", "IT"],
     bystanders: ["IE", "BR", "NG", "IN", "SE", "TR", "GR", "AT", "FI"],
   },
+  participantFallbacks: {
+    CN: ["IN", "JP"],
+    US: ["UK", "DE", "FR"],
+    RU: ["IN", "TR"],
+  },
   roleResolver: pandemicRole,
   tracks: {
     transmission: { initial: 28 },
