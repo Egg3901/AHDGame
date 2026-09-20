@@ -164,8 +164,10 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
       try {
         const res = await fetch(`/api/elections/${resultsId}/results`);
         if (!res.ok) return;
-        const payload = await res.json();
-        if (!cancelled) setResults(payload);
+        const payload = (await res.json()) as ElectionResultsResponse;
+        // Defensive against a stale proxy/cache response as well as client
+        // navigation races: a payload may render only the race it names.
+        if (!cancelled && payload.election.id === resultsId) setResults(payload);
       } catch {
         // non-critical: the page falls back to the existing concluded view
       }
@@ -319,14 +321,16 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
     </div>
   );
 
+  const currentResults = results?.election.id === election.id ? results : null;
+
   // Concluded presidential race: the same Blend results screen the live
   // dashboard uses, chipped "Concluded". Falls through to the existing view
   // until the results payload arrives, or if it fails to load.
-  if (election.electionType === "president" && localIsEnded && results) {
+  if (election.electionType === "president" && localIsEnded && currentResults) {
     return (
       <div className="min-h-screen" style={{ background: BLEND.page, color: BLEND.ink }}>
         {blendNav}
-        <ResultsBlendView data={results} route="concluded" />
+        <ResultsBlendView data={currentResults} route="concluded" />
 
         <BlendScope title="Also on this race">
           <GeneralPhaseView

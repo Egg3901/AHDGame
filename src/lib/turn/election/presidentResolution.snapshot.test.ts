@@ -205,16 +205,19 @@ describe("capturing the result snapshot at resolution", () => {
 
   it("writes a snapshot for the resolved race", async () => {
     await resolve();
-    expect(db.collectionMocks.electionResultSnapshots!.insertOne).toHaveBeenCalledTimes(1);
-    const doc = db.collectionMocks.electionResultSnapshots!.insertOne.mock.calls[0][0];
+    expect(db.collectionMocks.electionResultSnapshots!.updateOne).toHaveBeenCalledTimes(1);
+    const [, update, options] = db.collectionMocks.electionResultSnapshots!.updateOne.mock.calls[0];
+    const doc = update.$setOnInsert;
     expect(doc.electionId).toEqual(electionId);
     expect(doc.schemaVersion).toBe(1);
     expect(doc.capturedAtTurn).toBe(412);
+    expect(options).toEqual({ upsert: true });
   });
 
   it("freezes the college that governed the race, not the one in force now", async () => {
     await resolve();
-    const doc = db.collectionMocks.electionResultSnapshots!.insertOne.mock.calls[0][0];
+    const [, update] = db.collectionMocks.electionResultSnapshots!.updateOne.mock.calls[0];
+    const doc = update.$setOnInsert;
     expect(doc.totalEv).toBe(531);
     expect(doc.evNeeded).toBe(266);
   });
@@ -232,7 +235,7 @@ describe("capturing the result snapshot at resolution", () => {
   });
 
   it("does not take the turn down when the capture throws", async () => {
-    db.collectionMocks.electionResultSnapshots!.insertOne.mockRejectedValue(new Error("boom"));
+    db.collectionMocks.electionResultSnapshots!.updateOne.mockRejectedValue(new Error("boom"));
     await expect(resolve()).resolves.toBe(true);
   });
 

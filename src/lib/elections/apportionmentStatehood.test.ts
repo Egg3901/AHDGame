@@ -89,4 +89,21 @@ describe("loadApportionment — statehood admission", () => {
     const a = await loadApportionment(db as unknown as Db, "1953-default");
     expect(a.houseSeats.AK).toBeUndefined();
   });
+
+  it("uses an explicit historical seat map instead of today's live districts", async () => {
+    const db = createMockDb();
+    withUsStates(db, [
+      { _id: "CA", houseDistricts: 60 },
+      { _id: "TX", houseDistricts: 50 },
+    ]);
+
+    const a = await loadApportionment(db as unknown as Db, "2019-default", 2020, {
+      CA: 52,
+      TX: 38,
+    });
+    expect(a.houseSeats.CA).toBe(52);
+    expect(a.houseSeats.TX).toBe(38);
+    expect(a.electoralVotes.CA).toBe(54);
+    expect(a.electoralVotes.TX).toBe(40);
+  });
 });

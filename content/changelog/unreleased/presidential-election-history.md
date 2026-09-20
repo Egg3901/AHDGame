@@ -19,5 +19,5 @@ Cut from development.
 
 ## Changed
 
-- A finished race is now stored as it was decided. Results used to be rebuilt on every visit from the present day's electoral map and the present day's party list, so an old race could show a vote total and a winning line that were never in force when it was run, and a party that had since been renamed or wound up would rewrite its own past.
-- Every race already on record has been captured, so history reads correctly from the moment this ships.
+- A finished presidential race is now stored as it was decided. Results used to be rebuilt on every visit from the present day's electoral map and the present day's party list, so an old race could show a vote total and a winning line that were never in force when it was run, and a party that had since been renamed or wound up would rewrite its own past.
+- Every presidential race already on record has been captured, so history reads correctly from the moment this ships.

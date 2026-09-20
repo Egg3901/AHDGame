@@ -69,6 +69,25 @@ export const migration: Migration = {
       .sort({ cycle: 1 })
       .toArray();
 
+    // The live states collection only retains today's delegation sizes. Ended
+    // House races retain the size each state actually elected in their year,
+    // which lets an old presidential map survive one or many later censuses.
+    const houseSeatsByYear = new Map<number, Record<string, number>>();
+    for (const election of ended) {
+      if (
+        election.countryId !== "US" ||
+        election.electionType !== "house" ||
+        typeof election.electionYear !== "number" ||
+        typeof election.totalSeats !== "number" ||
+        election.totalSeats <= 0
+      ) {
+        continue;
+      }
+      const seats = houseSeatsByYear.get(election.electionYear) ?? {};
+      seats[election.state] = election.totalSeats;
+      houseSeatsByYear.set(election.electionYear, seats);
+    }
+
     const already = new Set(
       (await snapshots.find({}).project<{ electionId: ObjectId }>({ electionId: 1 }).toArray()).map(
         (s) => s.electionId.toString()
@@ -117,16 +136,25 @@ export const migration: Migration = {
       for (const election of batch) {
         try {
           const payload = await buildResultsPayload(db, election, gameState, {
-            // The map in force when the race ran, not the one in force today.
+            // The map and allocation rules in force when the race ran, not
+            // the ones in force today.
             apportionmentYear: election.electionYear ?? null,
+            ...(election.countryId === "US" &&
+            election.electionType === "president" &&
+            election.electionYear !== undefined
+              ? { houseSeatsByState: houseSeatsByYear.get(election.electionYear) }
+              : {}),
             isAdmin: false,
           });
+          const document = {
+            _id: new ObjectId(),
+            ...snapshotFromPayload(payload, election, currentTurn, now),
+          } as ElectionResultSnapshot;
           ops.push({
-            insertOne: {
-              document: {
-                _id: new ObjectId(),
-                ...snapshotFromPayload(payload, election, currentTurn, now),
-              } as ElectionResultSnapshot,
+            updateOne: {
+              filter: { electionId: election._id },
+              update: { $setOnInsert: document },
+              upsert: true,
             },
           });
         } catch (err) {
@@ -136,9 +164,11 @@ export const migration: Migration = {
         }
       }
       if (ops.length > 0) {
-        // ordered:false so one duplicate or one bad row cannot abort the batch.
+        // Upsert + $setOnInsert makes a concurrent capture a clean no-op rather
+        // than a duplicate-key BulkWriteError. ordered:false still lets
+        // independent rows proceed when Mongo rejects one malformed operation.
         const res = await snapshots.bulkWrite(ops, { ordered: false });
-        inserted += res.insertedCount ?? 0;
+        inserted += res.upsertedCount ?? 0;
       }
     }
 

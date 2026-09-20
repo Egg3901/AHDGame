@@ -9,8 +9,9 @@
  *
  * The only behavioural seam added during the lift is `opts.apportionmentYear`.
  * The route passes null and gets the current year, exactly as before; a capture
- * passes the race's own year so the electoral-vote map it freezes is the one
- * that was in force when the race ran.
+ * passes the race's own year so every year-sensitive result rule, including
+ * the electoral-vote map and majoritarian bonuses, is the one that governed
+ * when the race ran.
  */
 import type { Db } from "mongodb";
 import type { ObjectId } from "mongodb";
@@ -100,13 +101,19 @@ function unitDisplayName(unitId: string, stateNames: Map<string, string>): strin
 /** Per-call knobs the route and the capture set differently. */
 export interface BuildResultsPayloadOptions {
   /**
-   * Year whose apportionment map to score the race against. Null means the
-   * live game year, which is what every polling read wants. A capture passes
-   * the race's own year, because apportionment is era-gated: DC gains three
-   * electoral votes from 1961, Maine splits by district from 1972, Nebraska
-   * from 1992, and states are admitted over time.
+   * Year whose result rules to apply. Null means the live game year, which is
+   * what every polling read wants. A capture passes the race's own year,
+   * because apportionment and some seat-allocation bonuses are era-gated: DC
+   * gains three electoral votes from 1961, Maine splits by district from 1972,
+   * Nebraska from 1992, and states are admitted over time.
    */
   apportionmentYear: number | null;
+  /**
+   * Historical House delegation sizes for that year. Capture omits this and
+   * reads the live map used by resolution; the backfill supplies it from the
+   * ended House races so a later census cannot rewrite old state weights.
+   */
+  houseSeatsByState?: Readonly<Record<string, number>>;
   /** Viewer is an admin. Unlocks the simulation controls client-side. */
   isAdmin: boolean;
 }
@@ -173,7 +180,8 @@ export async function buildResultsPayload(
       const apportionment = await loadApportionment(
         db,
         gameState?.preset,
-        opts.apportionmentYear ?? gameState?.currentYear
+        opts.apportionmentYear ?? gameState?.currentYear,
+        opts.houseSeatsByState
       );
       for (const u of apportionment.electoralVoteUnits) evByUnit.set(u.unitId, u.ev);
       unitIds = [
@@ -260,6 +268,10 @@ export async function buildResultsPayload(
   // `resolvedSeatsEstimate(tally, null)` first so a finalized race
   // short-circuits before the org-ranking round-trip, exactly as the old
   // `??` did.
+  // Captures and backfills must apply every year-sensitive result rule to the
+  // race's own year, not only the presidential apportionment map. Live reads
+  // pass null and retain the previous current-year behaviour.
+  const resultYear = opts.apportionmentYear ?? gameState?.currentYear;
   const seatsEstimate =
     !isPresident && tally
       ? (resolvedSeatsEstimate(tally, null) ??
@@ -268,7 +280,7 @@ export async function buildResultsPayload(
           election.totalSeats,
           tally,
           rosterIds,
-          getMajoritarianBonus(election.electionType, gameState?.currentYear)
+          getMajoritarianBonus(election.electionType, resultYear)
         ))
       : null;
 
@@ -314,7 +326,7 @@ export async function buildResultsPayload(
   ].sort((a, b) => b.totalVotes - a.totalVotes);
 
   // ── National Westminster-style aggregation ────────────────────────────
-  const nationalBonus = getMajoritarianBonus(election.electionType, gameState?.currentYear);
+  const nationalBonus = getMajoritarianBonus(election.electionType, resultYear);
   const national = await buildNationalElectionNight(
     db,
     election,

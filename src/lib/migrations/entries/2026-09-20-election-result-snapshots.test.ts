@@ -42,6 +42,18 @@ const noTally = {
   electionYear: 1968,
 };
 
+/** Delegation size retained by the House race that ran alongside 1960. */
+const historicalHouse = {
+  _id: new ObjectId(),
+  countryId: "US",
+  electionType: "house",
+  state: "CA",
+  status: "resolved",
+  cycle: 3,
+  electionYear: 1960,
+  totalSeats: 30,
+};
+
 function payloadFor(id: ObjectId) {
   return {
     election: {
@@ -87,8 +99,8 @@ function cursor(rows: unknown[]) {
 function mockDb() {
   const createIndex = vi.fn().mockResolvedValue("ok");
   const bulkWrite = vi.fn().mockImplementation(async (ops: unknown[]) => ({
-    insertedCount: ops.length,
-    upsertedCount: 0,
+    insertedCount: 0,
+    upsertedCount: ops.length,
   }));
   const db = {
     collection: (name: string) => {
@@ -100,7 +112,9 @@ function mockDb() {
             find: () => cursor([{ electionId: alreadyCaptured._id }]),
           };
         case "elections":
-          return { find: () => cursor([presidential, alreadyCaptured, noTally]) };
+          return {
+            find: () => cursor([presidential, alreadyCaptured, noTally, historicalHouse]),
+          };
         case "electionVoteTallies":
           return {
             find: () =>
@@ -171,13 +185,24 @@ describe("2026-09-20-election-result-snapshots migration", () => {
     );
   });
 
+  it("reconstructs presidential state weights from that year's House races", async () => {
+    const { db } = mockDb();
+    await migration.execute(db, { dryRun: false });
+    expect(buildResultsPayload).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ _id: presidential._id }),
+      expect.anything(),
+      expect.objectContaining({ houseSeatsByState: { CA: 30 } })
+    );
+  });
+
   it("skips a race that already has a snapshot", async () => {
     const { db, bulkWrite } = mockDb();
     await migration.execute(db, { dryRun: false });
     const inserted = bulkWrite.mock.calls[0][0] as Array<{
-      insertOne: { document: { electionId: ObjectId } };
+      updateOne: { update: { $setOnInsert: { electionId: ObjectId } } };
     }>;
-    const ids = inserted.map((op) => op.insertOne.document.electionId.toString());
+    const ids = inserted.map((op) => op.updateOne.update.$setOnInsert.electionId.toString());
     expect(ids).not.toContain(alreadyCaptured._id.toString());
   });
 
@@ -185,9 +210,9 @@ describe("2026-09-20-election-result-snapshots migration", () => {
     const { db, bulkWrite } = mockDb();
     await migration.execute(db, { dryRun: false });
     const inserted = bulkWrite.mock.calls[0][0] as Array<{
-      insertOne: { document: { electionId: ObjectId } };
+      updateOne: { update: { $setOnInsert: { electionId: ObjectId } } };
     }>;
-    const ids = inserted.map((op) => op.insertOne.document.electionId.toString());
+    const ids = inserted.map((op) => op.updateOne.update.$setOnInsert.electionId.toString());
     expect(ids).toEqual([presidential._id.toString()]);
   });
 
@@ -195,6 +220,17 @@ describe("2026-09-20-election-result-snapshots migration", () => {
     const { db, bulkWrite } = mockDb();
     await migration.execute(db, { dryRun: false });
     expect(bulkWrite.mock.calls[0][1]).toMatchObject({ ordered: false });
+  });
+
+  it("upserts with setOnInsert so a concurrent capture is a no-op", async () => {
+    const { db, bulkWrite } = mockDb();
+    await migration.execute(db, { dryRun: false });
+    const [op] = bulkWrite.mock.calls[0][0];
+    expect(op.updateOne).toMatchObject({
+      filter: { electionId: presidential._id },
+      upsert: true,
+      update: { $setOnInsert: { electionId: presidential._id } },
+    });
   });
 
   it("keeps going when one race fails to rebuild, and says which", async () => {

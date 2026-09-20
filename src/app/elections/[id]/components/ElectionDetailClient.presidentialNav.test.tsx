@@ -89,6 +89,7 @@ function election(over: Partial<ElectionDetail> = {}): ElectionDetail {
  * of the screen under test.
  */
 let currentElection: ElectionDetail = election();
+let resultsElectionId = ELECTION_OID;
 
 /** The route param is the seat-id form a Previous/Next link produces. */
 function renderPage(over: Partial<ElectionDetail> = {}) {
@@ -99,6 +100,7 @@ function renderPage(over: Partial<ElectionDetail> = {}) {
 let fetchMock: ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
+  resultsElectionId = ELECTION_OID;
   // URL-aware on purpose. The page hits three endpoints with three different
   // shapes, and a single blanket stub hands the detail endpoint a results-
   // shaped body, so `election.allCandidates` comes back undefined and the
@@ -111,7 +113,7 @@ beforeEach(() => {
         ok: true,
         status: 200,
         json: async () => ({
-          election: { id: ELECTION_OID, electionType: "president", status: "resolved" },
+          election: { id: resultsElectionId, electionType: "president", status: "resolved" },
           candidates: [],
           units: [],
           national: null,
@@ -179,5 +181,14 @@ describe("loading a historical race's results", () => {
     const urls = fetchMock.mock.calls.map((c) => String(c[0]));
     expect(urls).toContain(`/api/elections/${ELECTION_OID}/results`);
     expect(urls).not.toContain("/api/elections/US-president/results");
+  });
+
+  it("does not render a stale results payload for a different race", async () => {
+    resultsElectionId = "69b5b04bdf051bb43fc957b8";
+    const { queryByTestId } = renderPage();
+    await waitFor(() =>
+      expect(fetchMock.mock.calls.some((c) => String(c[0]).includes("/results"))).toBe(true)
+    );
+    expect(queryByTestId("blend-results")).toBeNull();
   });
 });
