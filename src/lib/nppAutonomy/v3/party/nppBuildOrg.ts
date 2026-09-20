@@ -36,7 +36,7 @@ import type {
   PartyStrengthPressure,
 } from "@/lib/db/types";
 import type { CountryId } from "@/lib/constants/countries";
-import { isNonElectoralUsRegion } from "@/lib/constants/states";
+import { isNonPartyOrganizationUsRegion } from "@/lib/constants/states";
 import { findPartyBySequentialId } from "@/lib/db/partyLookup";
 import { checkPartyPresence } from "@/lib/turn/partyOrg/presence";
 import { ensureStatePartyOrgRow } from "@/lib/turn/partyOrg/ensureStatePartyOrgRow";
@@ -71,10 +71,10 @@ export async function nppBuildPartyOrg(
   if (!spenderParty) return { ok: false, reason: "Party not found." };
 
   const partyIdStr = String(spenderParty.sequentialId);
-  // Federal districts like DC host no state party organization — skip cleanly
-  // so the SSOT chokepoint never throws inside the turn engine.
-  if (isNonElectoralUsRegion(countryId, stateId)) {
-    return { ok: false, reason: "Federal district has no state party organization." };
+  // Reject US regions outside the party-organization jurisdiction set before
+  // reaching the SSOT chokepoint. DC is a supported jurisdiction.
+  if (isNonPartyOrganizationUsRegion(countryId, stateId)) {
+    return { ok: false, reason: "US region does not support a party organization." };
   }
   const hasPresence = await checkPartyPresence(db, stateId, partyIdStr);
   if (!hasPresence) return { ok: false, reason: "No presence in this state." };

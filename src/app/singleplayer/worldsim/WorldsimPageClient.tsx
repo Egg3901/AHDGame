@@ -144,7 +144,7 @@ export function WorldsimPageClient() {
               ["Active crises", formatNumber(headline.activeCrises)],
               ["NPP office share", `${headline.nppOfficeSharePct.toFixed(1)}%`],
               ["NPP organizations", formatNumber(headline.nppCount)],
-              ["Inflation index", headline.inflationIndex.toFixed(2)],
+              ["Household price index", headline.inflationIndex.toFixed(2)],
               ["Total wealth", formatNumber(headline.totalWealth)],
               ["Effective parties", headline.effectivePartyCount.toFixed(2)],
             ].map(([label, value]) => (

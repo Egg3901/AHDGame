@@ -34,6 +34,37 @@ import { expectedRegionCount } from "@/lib/admin/seedDiagnostic/regionBundles";
 import { partyRosterLabel, partySeedsForPreset } from "@/lib/seeds/partySeedRegistry";
 
 /**
+ * Era overrides for `seatMin`, where a country's chambers are a different size
+ * than the authored entry assumes.
+ *
+ * ⚠️ AN OVERRIDE TABLE RATHER THAN A DERIVATION, deliberately. The header above
+ * explains why `seatMin` stays authored: it is a judgment about what a healthy
+ * fresh world looks like, not a chamber-size sum, and RU's floor of 0 is the
+ * case that makes arithmetic wrong. Overriding the two eras where the authored
+ * number is measured against the wrong chamber keeps that judgment intact.
+ *
+ * ⚠️ THIS EXISTS BECAUSE THE DIAGNOSTIC COULD NOT SEE A 46-SEAT HOLE. Japan's
+ * authored floor is 713 with the note "465 Shugiin + 248 Sangiin" — the modern
+ * Diet. The 1991 Diet is 512 + 252 = 764, and a 1991 world seating 512 + 206
+ * reported 718, cleared 713, and passed while a fifth of its upper house was
+ * missing.
+ *
+ * Only Japan needs an entry. The US floor of 535 is right in both eras (435 +
+ * 100 did not change), and the UK's 650 is right in both now that 1991 seats
+ * the 1987 Commons rather than the 651-seat 1992 one.
+ */
+const SEAT_MIN_BY_PRESET: Partial<
+  Record<string, Partial<Record<CountryId, { seatMin: number; seatNote: string }>>>
+> = {
+  "1991-default": {
+    JP: {
+      seatMin: 764,
+      seatNote: "Expected ≥764 (512 Shugiin + 252 Sangiin, pre-1994 Diet)",
+    },
+  },
+};
+
+/**
  * What this country should look like in this preset, or null when no entry is
  * authored for it at all.
  */
@@ -48,9 +79,11 @@ export function getReadinessExpectations(
   // entry already carries rather than collapsing the expectation to zero.
   const regions = expectedRegionCount(countryId, preset);
   const parties = partySeedsForPreset(countryId, preset);
+  const seats = SEAT_MIN_BY_PRESET[preset]?.[countryId];
 
   return {
     ...authored,
+    ...(seats ?? {}),
     regionCount: regions ?? authored.regionCount,
     // Both track the region count, and both are era-varying for the same reason.
     // Where an entry deliberately differs (RU: 17 regions but 14 demographic

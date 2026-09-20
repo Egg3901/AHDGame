@@ -39,6 +39,8 @@ function evaluate(args: {
   marginPct?: number;
   retailExpansionPaused?: boolean;
   entryCapReached?: boolean;
+  prices?: () => number;
+  entryEligible?: boolean;
 }) {
   const byCountry = new Map<string, UnownedSector[]>();
   for (const item of args.pools ?? [pool()]) {
@@ -51,7 +53,7 @@ function evaluate(args: {
     sectors: [] as unknown as CorporateSector[],
     unownedByCountry: byCountry,
     stateControlled: new Set<string>(),
-    priceRatioOf: () => 1,
+    priceRatioOf: args.prices ?? (() => 1),
     placementSignals: undefined,
     plantsEnabled: false,
     eraUnitScale: 1,
@@ -63,8 +65,8 @@ function evaluate(args: {
     sectorCount: 3,
     logisticsSupportedSectors: 10,
     allowExpansion: true,
-    ordinaryEntryEligible: true,
-    shortageEntryEligible: true,
+    ordinaryEntryEligible: args.entryEligible ?? true,
+    shortageEntryEligible: args.entryEligible ?? true,
     retailExpansionPaused: args.retailExpansionPaused,
     entryCapReached: args.entryCapReached ?? false,
   });
@@ -91,6 +93,27 @@ describe("entryEvaluation seam", () => {
     expect(entry.expansion).toBeNull();
     expect(entry.ordinaryEntry).toBe(false);
     expect(entry.diagnostic.reason).toBe("unprofitable");
+  });
+
+  it("lets a critical shortage bypass profitability without bypassing the cohort", () => {
+    const open = evaluate({
+      corporation: corp(),
+      profitable: false,
+      marginPct: -20,
+      prices: () => 2,
+    });
+    const cohortBlocked = evaluate({
+      corporation: corp(),
+      profitable: false,
+      marginPct: -20,
+      prices: () => 2,
+      entryEligible: false,
+    });
+
+    expect(open.expansion).not.toBeNull();
+    expect(open.exceptionalShortageEntry).toBe(true);
+    expect(cohortBlocked.marketEntryEligible).toBe(false);
+    expect(cohortBlocked.exceptionalShortageEntry).toBe(false);
   });
 
   it("names the retail pause on the candidate instead of the cash floor", () => {

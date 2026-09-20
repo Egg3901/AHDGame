@@ -4,6 +4,7 @@ import { SCOTUS_2019_DEFAULT_SEED } from "./2019Default";
 import { SCOTUS_1991_PRESET_DATA } from "./1991";
 import { SCOTUS_1979_PRESET_SEED } from "./1979";
 import { SCOTUS_1953_SEED } from "./1953";
+import { SCOTUS_2027_DEFAULT_SEED } from "./2027";
 
 /**
  * SCOTUS content extension point (#3598 core mechanics).
@@ -24,6 +25,7 @@ export const SCOTUS_PRESET_DATA: Partial<Record<ResetPresetId, ScotusPresetSeed>
   "1979-default": SCOTUS_1979_PRESET_SEED, // #3600: 1979 Original Roster + Docket
   "1991-default": SCOTUS_1991_PRESET_DATA, // #3601: 1991 Original Roster + Docket
   "2019-default": SCOTUS_2019_DEFAULT_SEED, // #3602: 2019-default Original Roster + Docket
+  "2027-default": SCOTUS_2027_DEFAULT_SEED, // #2170: reviewed roster + procedural docket fallbacks
 };
 
 export function getScotusPresetSeed(preset: string): ScotusPresetSeed | undefined {

@@ -1079,7 +1079,7 @@ async function sellNppStockSurplus(
  * over CORPORATION_TYPES) — no diversification logic needed here, that's
  * organic across many independent founding events over a long run.
  */
-async function foundNppCorporationsSurplus(
+export async function foundNppCorporationsSurplus(
   db: Db,
   currentTurn: number,
   countryScope: CountryId[] | null = null
@@ -1094,7 +1094,8 @@ async function foundNppCorporationsSurplus(
   // command-economy gate. Resolve the live blocked set from the marketization
   // dial so a country converting in either direction is honoured with no code
   // change. One gameState read plus one federalBudget $in, once per sweep.
-  const blockedCountries = [...(await loadPrivateEnterpriseBlockedCountries(db))];
+  const blockedSet = await loadPrivateEnterpriseBlockedCountries(db);
+  const blockedCountries = [...blockedSet];
   const candidates = await db
     .collection<NPP>("npps")
     .find(
@@ -1123,6 +1124,26 @@ async function foundNppCorporationsSurplus(
     .toArray();
   if (candidates.length === 0) return;
 
+  // Already-CEO exclusion, batched: one $in query over the whole pool instead
+  // of one findOne per RNG-passing candidate (pool up to 300). Same filter
+  // semantics as the per-row check it replaces, ids-only projection. The
+  // command core keeps its own guarded check, so a founding between preload
+  // and write stays excluded. No RNG consumed here, so the per-candidate
+  // stream below is untouched.
+  const alreadyCeoIds = new Set<string>();
+  {
+    const rows = await db
+      .collection<Corporation>("corporations")
+      .find(
+        { ceoId: { $in: candidates.map((c) => c._id) }, ceoVacant: { $ne: true } },
+        { projection: { ceoId: 1 } }
+      )
+      .toArray();
+    for (const row of rows) {
+      if (row.ceoId) alreadyCeoIds.add(row.ceoId.toString());
+    }
+  }
+
   const rng = makeSeededRng(`npp-found-corp:${currentTurn}${NPP_ACTION_RNG_SALT}`);
   const fxByCcy = await loadFxRatesByCurrency(db);
 
@@ -1130,10 +1151,7 @@ async function foundNppCorporationsSurplus(
     const archetype = deriveCeoArchetype(npp.personality);
     if (rng() >= NPP_FOUNDING_BASE_PROBABILITY_BY_ARCHETYPE[archetype]) continue;
 
-    const alreadyCeo = await db
-      .collection<Corporation>("corporations")
-      .findOne({ ceoId: npp._id, ceoVacant: { $ne: true } }, { projection: { _id: 1 } });
-    if (alreadyCeo) continue;
+    if (alreadyCeoIds.has(npp._id.toString())) continue;
 
     const sectorType = CORPORATION_TYPES[
       Math.floor(rng() * CORPORATION_TYPES.length)
@@ -1141,6 +1159,14 @@ async function foundNppCorporationsSurplus(
 
     const homeRate =
       fxByCcy.get(COUNTRY_CURRENCY_MAP[(npp.countryId ?? "US") as CountryId] ?? "USD") ?? 1;
-    await nppFoundCorporation(db, npp, sectorType, NPP_FOUNDING_FEE, currentTurn, homeRate);
+    await nppFoundCorporation(
+      db,
+      npp,
+      sectorType,
+      NPP_FOUNDING_FEE,
+      currentTurn,
+      homeRate,
+      blockedSet
+    );
   }
 }

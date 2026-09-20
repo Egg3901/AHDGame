@@ -37,7 +37,7 @@ import {
   DEFAULT_DURATIONS,
   withElectionGameStateSnapshot,
 } from "@/lib/turn/perpetualElections";
-import { JP_SANGIIN_SEATS } from "@/lib/constants/states";
+import { getJpSangiinClassSeats } from "@/lib/constants/states";
 import { MS_PER_TURN, getStartingYearForPreset } from "@/lib/constants/turnTime";
 import { getCycleAnchors } from "@/lib/elections/cycleAnchorContext";
 import { electionToLarpYear } from "@/lib/utils/formatters";
@@ -979,7 +979,7 @@ export async function bootstrapGameWorld(options: BootstrapOptions) {
     // (#3253) in exactly the two presets getPresetSeats() documents it as
     // vacant: "1953-default" ("Democratic legislatures (US/UK/...) start
     // vacant") and "1979-default" ("The multiparty players (US/UK)... start
-    // vacant"). historicalSeats.ts authors UK_COMMONS_1992/2020 for every
+    // vacant"). historicalSeats.ts authors UK_COMMONS_1987/2020 for every
     // other preset via the earlier historical gate, so calling this
     // unconditionally would fabricate duplicate incumbents on top of those
     // already-correct historical rosters. (`seedFromSeats` now skips chambers
@@ -1148,8 +1148,6 @@ export async function bootstrapGameWorld(options: BootstrapOptions) {
 
     for (const region of jpRegions) {
       const regionId = String(region._id);
-      const totalRegionSeats = JP_SANGIIN_SEATS[regionId] ?? 2;
-      const classSeats = Math.ceil(totalRegionSeats / 2);
 
       for (const chamberClass of [1, 2] as const) {
         // Check if election already exists for this region + class
@@ -1195,7 +1193,7 @@ export async function bootstrapGameWorld(options: BootstrapOptions) {
             preset,
           }),
           status: "active",
-          totalSeats: classSeats,
+          totalSeats: getJpSangiinClassSeats(preset, regionId, chamberClass),
           startTime: now,
           primaryEndTime,
           endTime,

@@ -101,13 +101,6 @@ export function evaluateNppEntry(input: NppEntryEvaluationInput): NppEntryEvalua
     frontierStates,
     candidateExclusions
   );
-  const expansion =
-    input.allowExpansion &&
-    input.profitable &&
-    input.marginPct >= input.marginFloorPct &&
-    !(input.retailExpansionPaused && entryCandidate?.sectorType === "retail")
-      ? entryCandidate
-      : null;
   const {
     candidatePriceRatioOf: entryCandidatePriceRatioOf,
     interventionTargetCommodity,
@@ -126,11 +119,23 @@ export function evaluateNppEntry(input: NppEntryEvaluationInput): NppEntryEvalua
       )
     : undefined;
   const expansionShortageScore = entryCandidateShortageScore ?? 1;
+  const criticalShortage = expansionShortageScore >= ESSENTIAL_SHORTAGE_SCORE;
+  // A measured critical shortage is demand evidence in its own right. Let it
+  // bypass the backward-looking profit and margin screen, but none of the
+  // entry rails below: cohort, logistics, cash, build sizing and queue pacing
+  // remain authoritative. This is deliberately limited to the same threshold
+  // used by the exceptional-shortage credit path.
+  const expansion =
+    input.allowExpansion &&
+    ((input.profitable && input.marginPct >= input.marginFloorPct) || criticalShortage) &&
+    !(input.retailExpansionPaused && entryCandidate?.sectorType === "retail")
+      ? entryCandidate
+      : null;
   const hasLogisticsCapacity = input.sectorCount < input.logisticsSupportedSectors;
   const marketEntryEligible = input.ordinaryEntryEligible !== false;
   const exceptionalShortageEntry =
     expansion !== null &&
-    expansionShortageScore >= ESSENTIAL_SHORTAGE_SCORE &&
+    criticalShortage &&
     input.shortageEntryEligible === true &&
     marketEntryEligible &&
     hasLogisticsCapacity;

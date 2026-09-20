@@ -24,6 +24,9 @@ vi.mock("@/lib/turn/electionCalculations", () => ({
   allocateElectoralVotes: vi.fn(),
   determinePresidentialWinner: vi.fn(),
 }));
+vi.mock("@/lib/elections/apportionment", () => ({
+  loadApportionment: vi.fn().mockResolvedValue({ electoralVoteUnits: [] }),
+}));
 vi.mock("@/lib/turn/election/loadContingentElectionData", () => ({
   loadContingentElectionData: vi.fn(),
 }));
@@ -463,7 +466,7 @@ describe("resolvePresidentElection", () => {
     expect(pipeline[0].$set.totalInvested).toBeUndefined();
   });
 
-  it("returns false when winner candidate document is missing", async () => {
+  it("terminalizes the election when winner candidate document is missing", async () => {
     const election = { _id: electionId, electionType: "president" };
     const tally = {
       electionId,
@@ -491,8 +494,18 @@ describe("resolvePresidentElection", () => {
       NOW
     );
 
-    // Should return false (retry next turn)
-    expect(result).toBe(false);
+    expect(result).toBe(true);
+    expect(db.collectionMocks["electionVoteTallies"]!.updateOne).toHaveBeenCalledWith(
+      { electionId },
+      {
+        $set: expect.objectContaining({
+          finalized: true,
+          executiveSeatingPending: false,
+          resolutionTerminalReason: "winner_candidate_missing",
+          resolutionTerminalAt: NOW,
+        }),
+      }
+    );
   });
 
   it("auto-selects highest-PI same-party NPP as VP when NPP wins with no running mate", async () => {

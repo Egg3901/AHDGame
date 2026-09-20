@@ -174,15 +174,20 @@ async function runIntegrityChecks(
   const issues: IntegrityIssue[] = [];
 
   // 1. Orphaned candidates — electionCandidates where electionId has no matching election
+  // (#2166): project to the join key before the $lookup so full candidate
+  // documents never cross the join. The count is unchanged.
   const orphanedCandidates = await db
     .collection("electionCandidates")
     .aggregate([
+      { $project: { electionId: 1 } },
       {
         $lookup: {
           from: "elections",
           localField: "electionId",
           foreignField: "_id",
           as: "election",
+          // Only existence matters; never materialize the matching documents.
+          pipeline: [{ $project: { _id: 1 } }, { $limit: 1 }],
         },
       },
       { $match: { election: { $size: 0 } } },
@@ -225,15 +230,20 @@ async function runIntegrityChecks(
   }
 
   // 4. Party members referencing deleted parties
+  // (#2166): project to the join key before the $lookup so full member
+  // documents never cross the join. The count is unchanged.
   const membersInDeletedParties = await db
     .collection("partyMembers")
     .aggregate([
+      { $project: { partyId: 1 } },
       {
         $lookup: {
           from: "politicalParties",
           localField: "partyId",
           foreignField: "_id",
           as: "party",
+          // Only existence matters; never materialize the matching documents.
+          pipeline: [{ $project: { _id: 1 } }, { $limit: 1 }],
         },
       },
       { $match: { party: { $size: 0 } } },
@@ -251,16 +261,21 @@ async function runIntegrityChecks(
   }
 
   // 5. Active elections with zero candidates
+  // (#2166): project to the join key after the status match so full
+  // election documents never cross the $lookup. The count is unchanged.
   const electionsWithoutCandidates = await db
     .collection("elections")
     .aggregate([
       { $match: { status: "active" } },
+      { $project: { _id: 1 } },
       {
         $lookup: {
           from: "electionCandidates",
           localField: "_id",
           foreignField: "electionId",
           as: "candidates",
+          // Only existence matters; never materialize the matching documents.
+          pipeline: [{ $project: { _id: 1 } }, { $limit: 1 }],
         },
       },
       { $match: { candidates: { $size: 0 } } },
@@ -536,7 +551,11 @@ async function collectPopulationStats(db: Db): Promise<PopulationStats> {
 async function collectEconomyStats(db: Db): Promise<EconomyStats> {
   // Read central banks for interest rates, and stateMetrics national docs for GDP/economic data.
   // National metrics are stored as stateMetrics docs with national scope IDs (e.g., "federal" for US).
-  const centralBanks = await db.collection<CentralBank>("centralBanks").find({}).toArray();
+  // (#2166): only the join key and the rate flow into the snapshot.
+  const centralBanks = await db
+    .collection<CentralBank>("centralBanks")
+    .find({}, { projection: { countryId: 1, primeRate: 1 } })
+    .toArray();
   const centralBankMap = new Map(centralBanks.map((b) => [String(b.countryId ?? b._id), b]));
 
   const nationalIds = Object.keys(NATIONAL_SCOPE);
@@ -588,7 +607,8 @@ async function collectEconomyStats(db: Db): Promise<EconomyStats> {
   ] = await Promise.all([
     db
       .collection<StateMetrics>("macroMetrics")
-      .find({ _id: { $in: nationalIds } })
+      // (#2166): only the gdpGrowth value is read below.
+      .find({ _id: { $in: nationalIds } }, { projection: { "economic.gdpGrowth.value": 1 } })
       .toArray(),
     db
       .collection<FederalBudget>("federalBudget")
@@ -597,7 +617,8 @@ async function collectEconomyStats(db: Db): Promise<EconomyStats> {
       // the byCountry loop below uses this list to discover them. Scoping it to
       // `budgetIds` made that discovery impossible, so the bloc produced no
       // economy row and could not be charted individually.
-      .find({})
+      // (#2166): only the discovery key and the inflation rate are read below.
+      .find({}, { projection: { countryId: 1, "economicFactors.inflationRate": 1 } })
       .toArray(),
     db
       .collection("bonds")

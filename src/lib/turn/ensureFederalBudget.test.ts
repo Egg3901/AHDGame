@@ -6,6 +6,8 @@
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { Db } from "mongodb";
+// Transform the dependency graph outside individual test timeouts.
+import "./ensureFederalBudget";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 
 // Same stub as inflationRecalc.test.ts: ensureFederalBudget() lazily imports
@@ -87,10 +89,15 @@ describe("findCountriesMissingFederalBudget", () => {
         Promise.resolve(filter._id === "UK" ? 1 : 0)
       );
 
+    db.collectionMocks.federalBudget.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([{ _id: "UK" }]),
+    });
     const { findCountriesMissingFederalBudget } = await import("./ensureFederalBudget");
     const result = await findCountriesMissingFederalBudget(db as unknown as Db);
 
     expect(result).toEqual(["US"]);
+    expect(db.collectionMocks.federalBudget.countDocuments).not.toHaveBeenCalled();
+    expect(db.collectionMocks.federalBudget.find).toHaveBeenCalledTimes(1);
   });
 
   it("returns an empty array when every central bank has a matching budget", async () => {
@@ -101,10 +108,42 @@ describe("findCountriesMissingFederalBudget", () => {
     db.collection("federalBudget");
     db.collectionMocks["federalBudget"]!.countDocuments = vi.fn().mockResolvedValue(1);
 
+    db.collectionMocks.federalBudget.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([{ _id: "UK" }]),
+    });
     const { findCountriesMissingFederalBudget } = await import("./ensureFederalBudget");
     const result = await findCountriesMissingFederalBudget(db as unknown as Db);
 
     expect(result).toEqual([]);
+  });
+  it("uses one projected budget read for many countries and preserves legacy IDs", async () => {
+    db.collection("centralBanks").find.mockReturnValue({
+      toArray: vi
+        .fn()
+        .mockResolvedValue([
+          { countryId: "US" },
+          { countryId: "UK" },
+          { countryId: "FR" },
+          { countryId: "DE" },
+        ]),
+    });
+    db.collection("federalBudget").find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([{ _id: "federal" }, { _id: "FR" }]),
+    });
+    const { findCountriesMissingFederalBudget } = await import("./ensureFederalBudget");
+    expect(await findCountriesMissingFederalBudget(db as unknown as Db)).toEqual(["UK", "DE"]);
+    expect(db.collectionMocks.federalBudget.find).toHaveBeenCalledExactlyOnceWith(
+      { _id: { $in: ["federal", "UK", "FR", "DE"] } },
+      { projection: { _id: 1 } }
+    );
+    expect(db.collectionMocks.federalBudget.countDocuments).not.toHaveBeenCalled();
+  });
+
+  it("does not query budgets when no central banks exist", async () => {
+    db.collection("centralBanks").find.mockReturnValue({ toArray: vi.fn().mockResolvedValue([]) });
+    const { findCountriesMissingFederalBudget } = await import("./ensureFederalBudget");
+    expect(await findCountriesMissingFederalBudget(db as unknown as Db)).toEqual([]);
+    expect(db.collectionMocks.federalBudget).toBeUndefined();
   });
 });
 

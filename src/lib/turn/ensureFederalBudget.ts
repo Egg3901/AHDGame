@@ -146,16 +146,16 @@ export async function findCountriesMissingFederalBudget(db: Db): Promise<string[
     .collection("centralBanks")
     .find({}, { projection: { countryId: 1 } })
     .toArray();
-  const missing: string[] = [];
-  for (const bank of banks) {
-    const countryId = bank.countryId as CountryId;
-    const budgetId = getNationalBudgetId(countryId);
-    const exists = await db
-      .collection<FederalBudget>("federalBudget")
-      .countDocuments({ _id: budgetId }, { limit: 1 });
-    if (!exists) missing.push(countryId);
-  }
-  return missing;
+  if (banks.length === 0) return [];
+  const budgetIds = banks.map((bank) => getNationalBudgetId(bank.countryId as CountryId));
+  const budgets = await db
+    .collection<FederalBudget>("federalBudget")
+    .find({ _id: { $in: budgetIds } }, { projection: { _id: 1 } })
+    .toArray();
+  const present = new Set(budgets.map((budget) => String(budget._id)));
+  return banks
+    .filter((_, index) => !present.has(budgetIds[index]))
+    .map((bank) => bank.countryId as string);
 }
 
 /**

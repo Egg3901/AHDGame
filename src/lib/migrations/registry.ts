@@ -14,6 +14,7 @@
 
 import { migration as supplyListingIndexes } from "./entries/2026-09-17-supply-listing-indexes";
 import { migration as ukDualMinistryRoleSlot } from "./entries/2026-09-17-uk-dual-ministry-role-slot";
+import { migration as electionResultSnapshots } from "./entries/2026-09-20-election-result-snapshots";
 import type { Migration } from "./types";
 
 import { migration as bondCurrencyStamp } from "./entries/2026-04-15-bond-currency-stamp";
@@ -85,6 +86,8 @@ import { migration as playableRegionTextureResiduals } from "./entries/2026-09-1
 import { migration as identityObservationsBackfill } from "./entries/2026-09-16-identity-observations-backfill";
 import { migration as repairDuplicateCorporationSequentialIds } from "./entries/2026-09-17-repair-duplicate-corporation-sequential-ids";
 import { migration as normalizeShareCorporateActions } from "./entries/2026-09-18-normalize-share-corporate-actions";
+
+import { migration as turnClockIndexes } from "./entries/2026-09-20-turn-clock-indexes";
 
 export const MIGRATIONS: Migration[] = [
   // v0.2.6 currency cutover (declarative — shipped via standalone scripts)
@@ -274,6 +277,13 @@ export const MIGRATIONS: Migration[] = [
   // sparse modifiers). Fold the generated regional texture into residuals so
   // regions glide to their textured equilibrium instead of lurching.
   playableRegionTextureResiduals,
+  // An ended race used to be recomputed on every visit, against the CURRENT
+  // year's electoral map and the CURRENT party list. Apportionment is era-gated
+  // and parties rename, so history drifted. Freeze every finished race, each
+  // scored against its own year. Additive: a new collection, nothing existing
+  // is rewritten, and rollback is dropping it.
+  electionResultSnapshots,
+  turnClockIndexes,
 ];
 
 // D13 rollback drill — registered but deliberately OUTSIDE the normal chain.

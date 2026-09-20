@@ -65,6 +65,8 @@ type Inputs = {
   sourcing: CommoditySourcingDoc[];
   sectors: CorporateSector[];
   globalExchange: StockExchangeSnapshot | null;
+  /** Realized same-turn corporation results used for firm profitability. */
+  firmIncome?: Array<{ corporationId: string; income: number }>;
   trades: ShareTradeHistory[];
   shareOrders: ShareOrder[];
   bonds: Bond[];
@@ -828,6 +830,10 @@ export function computeEconomicVitalSigns(input: Inputs): EconomicVitalSigns {
   );
 
   const listings = input.globalExchange?.listings ?? [];
+  const listedCorporationIds = new Set(listings.map((listing) => listing._id.toString()));
+  const listedFirmIncome = (input.firmIncome ?? []).filter((row) =>
+    listedCorporationIds.has(row.corporationId)
+  );
   const marketCaps = listings.map((listing) => listing.marketCapAnchor ?? listing.marketCap ?? 0);
   const firmConcentration = concentration(marketCaps);
   const marketCapTotal = marketCaps.reduce((sum, value) => sum + Math.max(0, value), 0);
@@ -1154,12 +1160,9 @@ export function computeEconomicVitalSigns(input: Inputs): EconomicVitalSigns {
       revenueAnchor: revenueTotal,
       incomeAnchor: incomeTotal,
       lossMakingShare: metric(
-        ratio(
-          listings.filter((listing) => (listing.incomeAnchor ?? listing.income) < 0).length,
-          listings.length
-        ),
-        listings.length,
-        "listed_firm_count"
+        ratio(listedFirmIncome.filter((row) => row.income < 0).length, listedFirmIncome.length),
+        listedFirmIncome.length,
+        "same_turn_listed_corporation_history_income"
       ),
       marketCapHhi: metric(firmConcentration.hhi, listings.length, "market_cap_anchor"),
       topFourMarketCapShare: metric(
@@ -1637,6 +1640,7 @@ export async function snapshotEconomicVitalSigns(
     sourcing,
     sectors,
     globalExchange,
+    firmIncome,
     trades,
     shareOrders,
     bonds,
@@ -1720,6 +1724,10 @@ export async function snapshotEconomicVitalSigns(
       )
       .toArray(),
     db.collection<StockExchangeSnapshot>("stockExchangeSnapshots").findOne({ _id: "global" }),
+    db
+      .collection<{ corporationId: { toString(): string }; income: number }>("corporationHistory")
+      .find({ turn }, { projection: { corporationId: 1, income: 1 } })
+      .toArray(),
     db
       .collection<ShareTradeHistory>("shareTradeHistory")
       .find({ turn: { $gte: windowStart, $lte: turn } })
@@ -1867,6 +1875,10 @@ export async function snapshotEconomicVitalSigns(
     sourcing,
     sectors,
     globalExchange,
+    firmIncome: firmIncome.map((row) => ({
+      corporationId: row.corporationId.toString(),
+      income: row.income,
+    })),
     trades,
     shareOrders,
     bonds,

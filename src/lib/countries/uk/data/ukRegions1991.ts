@@ -6,24 +6,36 @@ import type { State } from "@/lib/db/types";
  * Population: 1991 Census of England + 1991 NI Census + 1991 GROS Scotland.
  * GDP: ONS Workplace-Based Gross Value Added 1991 (approximate; ONS revised
  * the regional series in 2004 and 2010 — figures here are pre-revision).
- * House district counts follow the 1992 GE constituency boundaries (651 total
- * across 12 game regions).
+ * House district counts follow the 1983 GE constituency boundaries (650 total
+ * across 12 game regions) — the ones in force in January 1991, when this world
+ * opens.
  * stateSenateSeats follow the modern Regional Council configuration —
  * regional councils didn't exist in 1992 (anachronistic compromise).
  */
 /**
- * ⚠️ House districts total 651, matching the 1992 Commons exactly.
+ * ⚠️ House districts total 650, matching the January 1991 Commons exactly.
  *
- * They summed to 665 before, which would have elected 665 members into a
- * 651-seat chamber. Scotland (72), Wales (38) and Northern Ireland (17) were
- * already correct, so the entire 14-seat excess sat in England, which held 538
- * against its real 524.
+ * They summed to 665 before, which would have elected 665 members into the
+ * chamber. Scotland (72), Wales (38) and Northern Ireland (17) were already
+ * correct, so the entire excess sat in England.
  *
- * ⚠️ The English total of 524 is exact; the split of it across the nine English
- * regions is a largest-remainder apportionment of the previous figures, NOT the
- * historical per-region constituency counts, which would need the 1983 boundary
- * review to establish. Anyone holding that data should replace these nine
- * numbers; the total, and the three non-English figures, are already right.
+ * ⚠️ THIS WAS 651, WHICH IS THE WRONG PARLIAMENT. 651 is the chamber the 1992
+ * boundary review produced, and a `1991-default` world opens in January 1991 —
+ * fifteen months before that review took effect and before the April 1992
+ * election that first filled it. The 1983 boundaries in force at the start
+ * give 650, England 523. `UK_COMMONS_SEATS_1991` mirrors these numbers and
+ * `UK_COMMONS_1987` seats them, so the chamber config, the districts, the
+ * roster and the election allocator now agree region by region.
+ *
+ * ⚠️ The English total of 523 is exact; the split of it across the nine English
+ * regions is NOT the historical per-region constituency count, which would need
+ * the 1983 boundary review to establish. It descends from the previous modelled
+ * split, less one seat in London — the most over-represented English region on
+ * this file's own 1991 populations (84,012 per seat against East Midlands'
+ * 98,341), and the one region whose seat count really did fall across this
+ * period (92 in 1979, 74 by 1999). Anyone holding the real 1983 review data
+ * should replace these nine numbers; the total, and the three non-English
+ * figures, are already right.
  */
 export const ukRegions1991: State[] = [
   {
@@ -34,7 +46,7 @@ export const ukRegions1991: State[] = [
     name: "London",
     population: 6_889_000,
     gdp: 80_000,
-    houseDistricts: 82,
+    houseDistricts: 81,
     stateSenateSeats: 32,
     region: "London",
     votingSystem: "fptp",

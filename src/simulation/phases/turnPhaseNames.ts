@@ -1,4 +1,4 @@
-import { COUNTRY_ELECTION_PHASES } from "@/lib/turn/countryPhases";
+import { COUNTRY_ELECTION_PHASE_NAMES } from "./countryElectionPhaseNames";
 
 export const BASE_TURN_PHASE_NAMES = [
   "bannedShareholderRelease",
@@ -148,9 +148,7 @@ export const BASE_TURN_PHASE_NAMES = [
   "economicVitalSigns",
 ] as const;
 
-export const TURN_PHASE_NAMES = [
+export const TURN_PHASE_NAMES: string[] = [
   ...BASE_TURN_PHASE_NAMES,
-  ...Object.values(COUNTRY_ELECTION_PHASES ?? {}).flatMap((entries) =>
-    entries.map(({ name }) => name)
-  ),
+  ...COUNTRY_ELECTION_PHASE_NAMES,
 ];

@@ -49,6 +49,47 @@ export const ALL_CONFLICT_ROLES: readonly ConflictRole[] = [
 /** What kind of living conflict this is. Drives framing and default surfaces. */
 export type LivingConflictType = "proxy_war" | "pandemic" | "disaster" | "geopolitical";
 
+/** Durable lifecycle independent of a conflict's authored phase. */
+export type LivingConflictStatus =
+  "dormant" | "active" | "ceasefire" | "negotiating" | "settled" | "closed";
+
+/** Bounds and legacy-safe initial value for one authored progress track. */
+export interface ConflictTrackDefinition {
+  initial: number;
+  min?: number;
+  max?: number;
+}
+
+/** Every condition on a transition must match before it may fire. */
+export interface ConflictTrackCondition {
+  track: string;
+  min?: number;
+  max?: number;
+}
+
+/** Declarative forward, backward, settlement, or closure transition. */
+export interface ConflictTransition {
+  key: string;
+  fromPhase: string;
+  toPhase: string;
+  priority?: number;
+  earliestYear?: number;
+  latestYear?: number;
+  fromStatus?: LivingConflictStatus;
+  toStatus?: LivingConflictStatus;
+  conditions: ConflictTrackCondition[];
+}
+
+/** Deterministic historical pressure without a forced historical outcome. */
+export interface ScheduledConflictPressure {
+  key: string;
+  fromYear?: number;
+  untilYear?: number;
+  everyTurns?: number;
+  phaseKeys?: string[];
+  trackDeltas: Record<string, number>;
+}
+
 /** How loud an event is, which decides how far it broadcasts. */
 export type EventSeverity = "minor" | "major" | "critical";
 
@@ -73,6 +114,13 @@ export interface EventResponseDefinition {
   defaultOptionIdByRole: Partial<Record<ConflictRole, string>>;
   outcomes: GlobalResponseOutcome[];
   defaultOutcomeId: string;
+}
+
+/** A sequential multi-actor negotiation. Unlike a global response, this keeps
+ * the authored nodes intact so each stage can name its country and office. */
+export interface ConflictNegotiationDefinition {
+  windowTurns: number;
+  decisionTree: CrisisDecisionNode[];
 }
 
 /**
@@ -108,6 +156,8 @@ export interface ConflictEvent {
   effects?: RoleEffects;
   /** Optional shared response window materialized as an interactive crisis. */
   response?: EventResponseDefinition;
+  /** Optional ordered negotiation materialized as an interactive crisis. */
+  negotiation?: ConflictNegotiationDefinition;
 }
 
 /** One rung/stage of the conflict. Advancing swaps the tree, effects and events. */
@@ -167,6 +217,11 @@ export interface LivingConflictDef {
   untilYear?: number;
   /** False for conflicts that require an explicit trigger rather than a date. */
   autoOpen?: boolean;
+  /**
+   * Optional live-world pressure required before the conflict opens inside its
+   * calendar window. Omitted preserves date-only opening for existing defs.
+   */
+  minimumOpeningPressure?: number;
   /** The map anchor / host, for surfaces that need one. */
   hostCountry?: string;
   /** Authored world participants. The role resolver may reinterpret them. */
@@ -178,6 +233,14 @@ export interface LivingConflictDef {
     blocMembers: string[];
     bystanders: string[];
   };
+  /** Ordered substitutes for historical participants absent from this world. */
+  participantFallbacks?: Record<string, string[]>;
+  /** Optional named progress tracks. Absent keeps legacy ladder behavior. */
+  tracks?: Record<string, ConflictTrackDefinition>;
+  /** Optional declarative phase transitions. Absent keeps legacy pressure behavior. */
+  transitions?: ConflictTransition[];
+  /** Calendar-bounded background pressure applied by the turn driver. */
+  scheduledPressures?: ScheduledConflictPressure[];
   phases: ConflictPhase[];
   /** Classify a nation's role. Pure; reads only RoleContext. */
   roleResolver: (ctx: RoleContext) => ConflictRole;
@@ -191,12 +254,16 @@ export interface LivingConflictDef {
 export interface LivingConflictState {
   defKey: string;
   hasOpened: boolean;
+  /** Absent on legacy documents and normalized on read. */
+  status?: LivingConflictStatus;
   phaseLevel: number;
   /** 0..100 running intensity, moved by events and phase. */
   intensity: number;
   openedYear: number | null;
   /** Accumulated commitment pressure per side bucket ("a" | "b"). */
   pressure: Record<string, number>;
+  /** Named negotiated-crisis tracks. Absent on legacy documents and normalized on read. */
+  tracks?: Record<string, number>;
   /** Turns spent on the current phase (drives minDwellTurns). */
   phaseTurns: number;
   /** Turns since the conflict opened (drives everyTurns cadences). */
