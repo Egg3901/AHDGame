@@ -217,6 +217,12 @@ describe("computeEconomicVitalSigns", () => {
         listings,
         createdAt: new Date(),
       },
+      firmIncome: listings.map((listing, index) => ({
+        corporationId: listing._id.toString(),
+        // Deliberately disagree with the reconstructed listing sign: the
+        // persisted same-turn result is authoritative for this metric.
+        income: index === 0 ? -50 : index === 2 ? 0 : 50,
+      })),
       trades: [
         {
           _id: new ObjectId(),
@@ -447,6 +453,10 @@ describe("computeEconomicVitalSigns", () => {
 
     expect(snapshot.firms.marketCapHhi.value).toBe(4200);
     expect(snapshot.firms.lossMakingShare.value).toBe(0.25);
+    expect(snapshot.firms.lossMakingShare.observations).toBe(4);
+    expect(snapshot.firms.lossMakingShare.basis).toBe(
+      "same_turn_listed_corporation_history_income"
+    );
     expect(snapshot.securities.activeTradedListingShare.value).toBe(0.25);
     expect(snapshot.securities.noHolderBondShare.value).toBe(1);
     expect(snapshot.securities.bondSubscriptionRate.value).toBe(0);
