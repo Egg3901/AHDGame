@@ -722,3 +722,50 @@ it("shares standing exposure across current and future candidacies without copyi
   expect(races.every((candidate) => candidate.targetedAds === undefined)).toBe(true);
   expect(db.collection("electionCandidates").updateOne).not.toHaveBeenCalled();
 });
+
+describe("candidate enrichment sweep preload", () => {
+  it("loads shared candidate inputs once and preserves per-election endorsements", async () => {
+    const nppId = new ObjectId();
+    const first = makeNPPCandidate({ nppId, characterId: nppId });
+    const second = makeNPPCandidate({ nppId, characterId: nppId });
+    setupNPPs(db, [
+      {
+        _id: nppId,
+        policies: { economic: 32, social: 61 },
+        favorability: 45,
+        politicalInfluence: 37,
+      },
+    ]);
+    setupParties(db, []);
+    setupEndorsements(db, [{ electionId: first.electionId, candidateId: nppId }]);
+    const { fetchEnrichedCandidates, loadCandidateEnrichmentData } =
+      await import("./candidateEnrichment");
+    const expected = [
+      await fetchEnrichedCandidates([first]),
+      await fetchEnrichedCandidates([second]),
+    ];
+    vi.clearAllMocks();
+    const preload = await loadCandidateEnrichmentData(db as unknown as Db, [first, second]);
+    const actual = [
+      await fetchEnrichedCandidates([first], { preload }),
+      await fetchEnrichedCandidates([second], { preload }),
+    ];
+    expect(actual).toEqual(expected);
+    expect(actual[0][0].favorability).toBeGreaterThan(actual[1][0].favorability);
+    expect(db.collectionMocks.npps.find).toHaveBeenCalledTimes(1);
+    expect(db.collectionMocks.nppEndorsements.find).toHaveBeenCalledTimes(1);
+  });
+
+  it("treats an empty preload as authoritative and retains missing-candidate defaults", async () => {
+    const { fetchEnrichedCandidates, loadCandidateEnrichmentData } =
+      await import("./candidateEnrichment");
+    const preload = await loadCandidateEnrichmentData(db as unknown as Db, []);
+    expect(db.collection).not.toHaveBeenCalled();
+    setupParties(db, []);
+    const candidate = makeNPPCandidate();
+    const [actual] = await fetchEnrichedCandidates([candidate], { preload });
+    expect(actual.favorability).toBe(50);
+    expect(db.collectionMocks.npps).toBeUndefined();
+    expect(db.collectionMocks.nppEndorsements).toBeUndefined();
+  });
+});

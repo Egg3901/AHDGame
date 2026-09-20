@@ -740,3 +740,68 @@ describe("createMissingElections — shared default-cycle alignment", () => {
     }
   });
 });
+
+describe("election opening recipient batching", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    for (const key of Object.keys(mockCollections)) delete mockCollections[key];
+  });
+
+  it("reads recipients once across chapters without crossing country or party boundaries", async () => {
+    const us = {
+      _id: new ObjectId(),
+      userId: new ObjectId(),
+      homeState: "CA",
+      party: "1",
+      countryId: "US",
+    };
+    const uk = {
+      _id: new ObjectId(),
+      userId: new ObjectId(),
+      homeState: "CA",
+      party: "1",
+      countryId: "UK",
+    };
+    const unrelated = { ...us, _id: new ObjectId(), userId: new ObjectId(), party: "2" };
+    setMockCollection("politicalParties", {
+      find: vi.fn().mockReturnValue({
+        toArray: async () => [
+          { sequentialId: 1, countryId: "US" },
+          { sequentialId: 1, countryId: "UK" },
+        ],
+      }),
+    });
+    setMockCollection("statePartyOrg", {
+      find: vi.fn().mockReturnValue({
+        toArray: async () => [
+          { _id: "US:CA_1", stateId: "CA", partyId: "1", countryId: "US" },
+          { _id: "UK:CA_1", stateId: "CA", partyId: "1", countryId: "UK" },
+        ],
+      }),
+    });
+    setMockCollection("statePartyElections", {
+      insertMany: vi.fn().mockResolvedValue({ insertedCount: 6 }),
+    });
+    const find = vi
+      .fn()
+      .mockReturnValue({
+        project: vi.fn().mockReturnValue({ toArray: async () => [us, uk, unrelated] }),
+      });
+    setMockCollection("characters", { find });
+    const { createMissingElections } = await import("./statePartyElections");
+    expect(await createMissingElections(74)).toBe(6);
+    expect(find.mock.calls.filter(([query]) => query.$or)).toHaveLength(1);
+    expect(find.mock.calls.filter(([query]) => typeof query.homeState === "string")).toHaveLength(
+      0
+    );
+    const { createNotifications } = await import("@/lib/notifications");
+    const notices = vi.mocked(createNotifications).mock.calls.flatMap(([rows]) => rows);
+    expect(notices).toHaveLength(2);
+    expect(notices.map((n) => n.metadata?.recipientCharacterId).sort()).toEqual(
+      [us._id.toString(), uk._id.toString()].sort()
+    );
+    expect(notices.every((n) => n.title === "Leadership Elections Open")).toBe(true);
+    for (const notice of notices)
+      expect(notice.metadata?.positions).toEqual(["chair", "viceChair", "treasurer"]);
+  });
+});

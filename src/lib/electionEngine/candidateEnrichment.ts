@@ -82,10 +82,90 @@ async function loadPartiesViaCache(
   return pending;
 }
 
+export interface CandidateEnrichmentData {
+  charMap: Map<string, Character>;
+  nppMap: Map<string, NPP>;
+  statePartyChairRows: Pick<StatePartyOrg, "chairId" | "stateId">[];
+  endorsementCountByKey: Map<string, number>;
+}
+
+/** Load immutable scoring inputs once for all candidates in an election sweep. */
+export async function loadCandidateEnrichmentData(
+  db: Db,
+  candidates: ElectionCandidate[]
+): Promise<CandidateEnrichmentData> {
+  if (candidates.length === 0) {
+    return {
+      charMap: new Map(),
+      nppMap: new Map(),
+      statePartyChairRows: [],
+      endorsementCountByKey: new Map(),
+    };
+  }
+  const characterIds = candidates.filter((c) => !c.isNPP).map((c) => c.characterId);
+  const nppIds = candidates.filter((c) => c.isNPP && c.nppId).map((c) => c.nppId!);
+  const [characters, npps, statePartyChairRows] = await Promise.all([
+    characterIds.length > 0
+      ? db
+          .collection<Character>("characters")
+          .find({ _id: { $in: characterIds } })
+          .toArray()
+      : Promise.resolve([] as Character[]),
+    nppIds.length > 0
+      ? db
+          .collection<NPP>("npps")
+          // Enrichment reads the ideology pair, never the 30KB stance map.
+          .find({ _id: { $in: nppIds } }, { projection: { "policies.domainPositions": 0 } })
+          .toArray()
+      : Promise.resolve([] as NPP[]),
+    characterIds.length > 0
+      ? db
+          .collection<StatePartyOrg>("statePartyOrg")
+          .find({ chairId: { $in: characterIds } }, { projection: { chairId: 1, stateId: 1 } })
+          .toArray()
+      : Promise.resolve([] as Pick<StatePartyOrg, "chairId" | "stateId">[]),
+  ]);
+
+  const electionIds = [
+    ...new Set(candidates.map((candidate) => candidate.electionId.toString())),
+  ].map((id) => new ObjectId(id));
+  const candidateTargetIds = [
+    ...new Set(candidates.map((candidate) => candidate.characterId.toString())),
+  ].map((id) => new ObjectId(id));
+  const endorsementCollection = db.collection("nppEndorsements") as {
+    find?: (filter: Record<string, unknown>) => { toArray: () => Promise<NPPEndorsement[]> };
+  };
+  const endorsementCounts =
+    electionIds.length > 0 &&
+    candidateTargetIds.length > 0 &&
+    typeof endorsementCollection.find === "function"
+      ? await endorsementCollection
+          .find(
+            buildActiveVisibleNppEndorsementFilter({
+              electionId: { $in: electionIds },
+              candidateId: { $in: candidateTargetIds },
+            })
+          )
+          .toArray()
+      : [];
+
+  const charMap = new Map(characters.map((c) => [c._id.toString(), c]));
+  const nppMap = new Map(npps.map((n) => [n._id.toString(), n]));
+  const endorsementCountByKey = new Map<string, number>();
+  for (const endorsement of endorsementCounts) {
+    const key = `${endorsement.electionId.toString()}:${endorsement.candidateId.toString()}`;
+    endorsementCountByKey.set(key, (endorsementCountByKey.get(key) ?? 0) + 1);
+  }
+
+  return { charMap, nppMap, statePartyChairRows, endorsementCountByKey };
+}
+
 export async function fetchEnrichedCandidates(
   candidates: ElectionCandidate[],
   options?: {
     includePartyPositions?: boolean;
+    /** Sweep-local inputs; an empty preload must not trigger per-election reads. */
+    preload?: CandidateEnrichmentData;
     countryId?: CountryId;
     /** Preloaded `loadEnrichmentParties(db, countryId)`; skips the per-call read. */
     parties?: EnrichmentParty[];
@@ -101,9 +181,6 @@ export async function fetchEnrichedCandidates(
   }
 
   const db = await getDb();
-
-  const characterIds = candidates.filter((c) => !c.isNPP).map((c) => c.characterId);
-  const nppIds = candidates.filter((c) => c.isNPP && c.nppId).map((c) => c.nppId!);
 
   const parties = options?.parties ?? (await loadPartiesViaCache(db, options));
 
@@ -186,60 +263,9 @@ export async function fetchEnrichedCandidates(
     }
   }
 
-  const [characters, npps, statePartyChairRows] = await Promise.all([
-    characterIds.length > 0
-      ? db
-          .collection<Character>("characters")
-          .find({ _id: { $in: characterIds } })
-          .toArray()
-      : Promise.resolve([] as Character[]),
-    nppIds.length > 0
-      ? db
-          .collection<NPP>("npps")
-          // Enrichment reads the ideology pair, never the 30KB stance map.
-          .find({ _id: { $in: nppIds } }, { projection: { "policies.domainPositions": 0 } })
-          .toArray()
-      : Promise.resolve([] as NPP[]),
-    characterIds.length > 0
-      ? db
-          .collection<StatePartyOrg>("statePartyOrg")
-          .find({ chairId: { $in: characterIds } }, { projection: { chairId: 1, stateId: 1 } })
-          .toArray()
-      : Promise.resolve([] as Pick<StatePartyOrg, "chairId" | "stateId">[]),
-  ]);
-
+  const { charMap, nppMap, statePartyChairRows, endorsementCountByKey } =
+    options?.preload ?? (await loadCandidateEnrichmentData(db, candidates));
   const partyChairMaps = buildPartyChairMaps(parties, statePartyChairRows);
-
-  const electionIds = [
-    ...new Set(candidates.map((candidate) => candidate.electionId.toString())),
-  ].map((id) => new ObjectId(id));
-  const candidateTargetIds = [
-    ...new Set(candidates.map((candidate) => candidate.characterId.toString())),
-  ].map((id) => new ObjectId(id));
-  const endorsementCollection = db.collection("nppEndorsements") as {
-    find?: (filter: Record<string, unknown>) => { toArray: () => Promise<NPPEndorsement[]> };
-  };
-  const endorsementCounts =
-    electionIds.length > 0 &&
-    candidateTargetIds.length > 0 &&
-    typeof endorsementCollection.find === "function"
-      ? await endorsementCollection
-          .find(
-            buildActiveVisibleNppEndorsementFilter({
-              electionId: { $in: electionIds },
-              candidateId: { $in: candidateTargetIds },
-            })
-          )
-          .toArray()
-      : [];
-
-  const charMap = new Map(characters.map((c) => [c._id.toString(), c]));
-  const nppMap = new Map(npps.map((n) => [n._id.toString(), n]));
-  const endorsementCountByKey = new Map<string, number>();
-  for (const endorsement of endorsementCounts) {
-    const key = `${endorsement.electionId.toString()}:${endorsement.candidateId.toString()}`;
-    endorsementCountByKey.set(key, (endorsementCountByKey.get(key) ?? 0) + 1);
-  }
 
   return candidates.map((c) => {
     let charEP = 0,

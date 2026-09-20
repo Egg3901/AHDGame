@@ -426,6 +426,10 @@ export interface AppealWeightTrace {
 }
 
 export interface AccumulateVoteTurnPreload {
+  /** Immutable candidate inputs loaded once for the sweep; regime state stays live. */
+  candidateEnrichment?: import("./candidateEnrichment").CandidateEnrichmentData;
+  /** An absent election in a supplied map has no active executive endorsements. */
+  executiveEndorsementsByElection?: Map<string, Set<string>>;
   /** gameState.preset — selects the era-correct census bundle for Layer-1 turnout derivation. */
   preset?: string;
   /**

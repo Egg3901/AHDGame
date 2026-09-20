@@ -32,6 +32,7 @@ import type {
   DemographicCategory,
 } from "@/lib/db/types";
 import type { EnrichedCandidate } from "./types";
+import { accumulateVoteTurn, createVoteTurnMemo } from "./tallyManagement";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 vi.mock("./candidateEnrichment", () => ({ fetchEnrichedCandidates: vi.fn() }));
@@ -260,7 +261,6 @@ describe("accumulateVoteTurn parallel dispatch", () => {
       })
     );
 
-    const { accumulateVoteTurn } = await import("./tallyManagement");
     const pending = accumulateVoteTurn(electionId, 1, new Date());
     await flushMicrotasks();
 
@@ -297,7 +297,6 @@ describe("accumulateVoteTurn parallel dispatch", () => {
     );
     vi.mocked(getFundsByPartyForElection).mockResolvedValue(new Map());
 
-    const { accumulateVoteTurn } = await import("./tallyManagement");
     const pending = accumulateVoteTurn(electionId, 5, new Date());
     await flushMicrotasks();
 
@@ -308,5 +307,72 @@ describe("accumulateVoteTurn parallel dispatch", () => {
 
     releaseSeatShare(new Map());
     await pending;
+  });
+});
+
+describe("vote sweep read reuse", () => {
+  it("reuses country favorability and supplied empty executive endorsements across races", async () => {
+    const { loadPartyGroupFavorability } =
+      await import("@/lib/governorOffice/address/partyGroupFavorabilityLoader");
+    const first = makeElection();
+    const { candidate } = await setupHappyPath(first._id, first);
+    const preload = {
+      categories: [makeCategory()],
+      stateMap: new Map([["PA", makeState()]]),
+      demographicsMap: new Map([["PA", makeDemographics()]]),
+      statePartyOrgsByState: new Map(),
+      turnoutByState: new Map(),
+      turnMemo: createVoteTurnMemo(),
+      executiveEndorsementsByElection: new Map(),
+    };
+    for (const turn of [1, 1, 2]) {
+      const election = makeElection();
+      await accumulateVoteTurn(election._id, turn, new Date("2024-01-01T00:00:00Z"), {
+        preload,
+        election,
+        tally: makeTally(election._id),
+        candidates: [{ ...candidate, electionId: election._id }],
+      });
+    }
+    expect(loadPartyGroupFavorability).toHaveBeenCalledTimes(2);
+    expect(db.collectionMocks.executiveEndorsements.find).not.toHaveBeenCalled();
+  });
+});
+
+describe("executive endorsement preload equivalence", () => {
+  it("preserves the vote bonus and keeps endorsements scoped to their election", async () => {
+    const election = makeElection();
+    const { candidate } = await setupHappyPath(election._id, election);
+    db.collectionMocks.executiveEndorsements.find.mockReturnValue({
+      project: () => ({ toArray: async () => [{ candidateId: candidate._id }] }),
+    });
+    const now = new Date("2024-01-01T00:00:00Z");
+    const options = { election, tally: makeTally(election._id), candidates: [candidate] };
+    await accumulateVoteTurn(election._id, 1, now, options);
+    const writes = db.collectionMocks.electionVoteTallies.updateOne;
+    const original = writes.mock.calls.at(-1)?.[1];
+    expect(original.$set.totalVotes[candidate._id.toString()]).toBe(5075);
+    const preload = {
+      categories: [makeCategory()],
+      stateMap: new Map([["PA", makeState()]]),
+      demographicsMap: new Map([["PA", makeDemographics()]]),
+      statePartyOrgsByState: new Map(),
+      turnoutByState: new Map(),
+      executiveEndorsementsByElection: new Map([
+        [election._id.toString(), new Set([candidate._id.toString()])],
+      ]),
+    };
+    db.collectionMocks.executiveEndorsements.find.mockClear();
+    await accumulateVoteTurn(election._id, 1, now, { ...options, preload });
+    expect(writes.mock.calls.at(-1)?.[1]).toEqual(original);
+    const other = makeElection();
+    await accumulateVoteTurn(other._id, 1, now, {
+      ...options,
+      election: other,
+      tally: makeTally(other._id),
+      preload,
+    });
+    expect(writes.mock.calls.at(-1)?.[1].$set.totalVotes[candidate._id.toString()]).toBe(5000);
+    expect(db.collectionMocks.executiveEndorsements.find).not.toHaveBeenCalled();
   });
 });

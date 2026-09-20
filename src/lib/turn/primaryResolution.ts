@@ -3,6 +3,8 @@
  * recordPrimarySnapshots includes versioned turnout and standing character ads;
  * resolvePrimariesIfNeeded preserves counted ballots when selecting nominees.
  */
+import { loadCandidateEnrichmentData } from "@/lib/electionEngine/candidateEnrichment";
+import type { ExecutiveEndorsement } from "@/lib/db/types";
 import { applyStandingAds } from "@/lib/campaignTargeting/standingAds";
 import { buildGranularElectorateSubstrate } from "@/lib/demographics/granularElectorate";
 import {
@@ -1906,10 +1908,34 @@ export async function accumulateGeneralElectionVotes(
   // Money driver inputs for every general election in one read; the per
   // election path stays for callers without a preload.
   if (preload) {
-    preload.fundsByPartyByElection = await loadFundsByPartyForElections(
-      generalElections.filter((e) => e.electionType !== "president").map((e) => e._id),
+    const stateElectionIds = stateElections.map((e) => e._id);
+    const stateElectionKeys = new Set(stateElectionIds.map(String));
+    const [fundsByParty, candidateEnrichment, endorsements] = await Promise.all([
+      loadFundsByPartyForElections(stateElectionIds, db),
+      loadCandidateEnrichmentData(
+        db,
+        allActiveCandidates.filter((candidate) =>
+          stateElectionKeys.has(candidate.electionId.toString())
+        )
+      ),
       db
-    );
+        .collection<ExecutiveEndorsement>("executiveEndorsements")
+        .find(
+          { electionId: { $in: stateElectionIds }, isActive: true },
+          { projection: { electionId: 1, candidateId: 1 } }
+        )
+        .toArray(),
+    ]);
+    preload.fundsByPartyByElection = fundsByParty;
+    preload.candidateEnrichment = candidateEnrichment;
+    const executiveEndorsementsByElection = new Map<string, Set<string>>();
+    for (const endorsement of endorsements) {
+      const key = endorsement.electionId.toString();
+      const candidates = executiveEndorsementsByElection.get(key) ?? new Set<string>();
+      candidates.add(endorsement.candidateId.toString());
+      executiveEndorsementsByElection.set(key, candidates);
+    }
+    preload.executiveEndorsementsByElection = executiveEndorsementsByElection;
   }
   const candidatesByElection = new Map<string, ElectionCandidate[]>();
   for (const c of allActiveCandidates) {

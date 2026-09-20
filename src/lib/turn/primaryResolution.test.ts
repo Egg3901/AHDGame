@@ -1495,6 +1495,7 @@ describe("accumulateGeneralElectionVotes", () => {
       _id: new ObjectId(),
       electionId,
       characterName: "Alice",
+      characterId: new ObjectId(),
       status: "active",
     };
 

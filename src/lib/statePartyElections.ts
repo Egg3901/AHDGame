@@ -388,9 +388,43 @@ export async function createMissingElections(
       });
     }
   }
+  // One recipient read for the entire opening sweep, including empty NPP worlds.
+  // Keep the country in both the query and key: chapter identifiers overlap.
+  const chapterMembers = await db
+    .collection<Character>("characters")
+    .find({
+      $or: Array.from(byParty.values(), ({ stateId, partyId, countryId }) => ({
+        homeState: stateId,
+        party: partyId,
+        countryId,
+      })),
+    })
+    .project<Pick<Character, "_id" | "userId" | "homeState" | "party" | "countryId">>({
+      _id: 1,
+      userId: 1,
+      homeState: 1,
+      party: 1,
+      countryId: 1,
+    })
+    .toArray();
+  const membersByChapter = new Map<string, typeof chapterMembers>();
+  for (const member of chapterMembers) {
+    const key = `${member.countryId}:${member.homeState}_${member.party}`;
+    const members = membersByChapter.get(key) ?? [];
+    members.push(member);
+    membersByChapter.set(key, members);
+  }
   await Promise.all(
-    Array.from(byParty.values()).map(({ stateId, partyId, countryId, positions, durationTurns }) =>
-      notifyMembersElectionsOpenedBatch(stateId, partyId, countryId, positions, durationTurns)
+    Array.from(byParty.entries()).map(
+      ([key, { stateId, partyId, countryId, positions, durationTurns }]) =>
+        notifyMembersElectionsOpenedBatch(
+          stateId,
+          partyId,
+          countryId,
+          positions,
+          durationTurns,
+          membersByChapter.get(key) ?? []
+        )
     )
   );
 
@@ -936,14 +970,17 @@ async function notifyMembersElectionsOpenedBatch(
   partyId: string,
   countryId: CountryId,
   positions: StatePartyElectionPosition[],
-  durationTurns: number
+  durationTurns: number,
+  preloadedMembers?: Pick<Character, "_id" | "userId">[]
 ): Promise<void> {
   const db = await getDb();
-  const members = await db
-    .collection<Character>("characters")
-    .find({ homeState: stateId, party: partyId, countryId })
-    .project<{ _id: ObjectId; userId: ObjectId }>({ _id: 1, userId: 1 })
-    .toArray();
+  const members =
+    preloadedMembers ??
+    (await db
+      .collection<Character>("characters")
+      .find({ homeState: stateId, party: partyId, countryId })
+      .project<{ _id: ObjectId; userId: ObjectId }>({ _id: 1, userId: 1 })
+      .toArray());
 
   const labels = positions.map((p) => POSITION_LABELS[p]);
   const positionList =
