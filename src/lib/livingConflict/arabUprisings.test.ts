@@ -58,7 +58,7 @@ describe("Arab uprisings living crisis", () => {
     );
     const result = evaluateConflictTransitions(ARAB_UPRISINGS_DEF, changed, 2012);
     expect(result.appliedTransitionKey).toBe("restored_control");
-    expect(result.state.tracks.legitimacy).toBe(24);
+    expect(result.state.tracks?.legitimacy).toBe(24);
   });
 
   it("allows a negotiated transition", () => {
@@ -80,7 +80,7 @@ describe("Arab uprisings living crisis", () => {
     );
     const result = evaluateConflictTransitions(ARAB_UPRISINGS_DEF, changed, 2013);
     expect(result.appliedTransitionKey).toBe("war_begins");
-    expect(result.state.tracks.displacement).toBe(15);
+    expect(result.state.tracks?.displacement).toBe(15);
   });
 
   it("permits a frozen conflict and preserves reconstruction obligations", () => {
@@ -96,6 +96,6 @@ describe("Arab uprisings living crisis", () => {
     );
     expect(result.appliedTransitionKey).toBe("frozen_conflict");
     expect(result.state.status).toBe("ceasefire");
-    expect(result.state.tracks.displacement).toBe(44);
+    expect(result.state.tracks?.displacement).toBe(44);
   });
 });
