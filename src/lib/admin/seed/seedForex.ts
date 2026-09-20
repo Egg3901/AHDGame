@@ -35,7 +35,7 @@ export async function seedForex(db: Db, log: (msg: string) => void, preset: stri
   await seedExchangeRates(db, preset);
   log("  ✓ exchangeRates rows ensured");
 
-  await updateCentralBanks(db);
+  await updateCentralBanks(db, preset);
   log("  ✓ centralBanks rows ensured");
 
   // Populate the FOMC committee for each bank (chair + governors as technocrat

@@ -478,7 +478,7 @@ async function checkMonetary(db: Db, expect: SeedExpectations): Promise<SeedDiag
   const byId = new Map(banks.map((b) => [String(b._id), b]));
   const checks: SeedDiagnosticCheck[] = [];
 
-  for (const countryId of expect.forexActiveCountries) {
+  for (const countryId of expect.monetaryCoverage.centralBankCountries) {
     const bankId = getBankId(countryId);
     const bank = byId.get(bankId);
     if (!bank) {
@@ -536,6 +536,22 @@ async function checkMonetary(db: Db, expect: SeedExpectations): Promise<SeedDiag
             inflHistLen
           )
     );
+  }
+
+  const budgetedCountries = new Set(expect.nationalBudgets.map(({ countryId }) => countryId));
+  for (const bank of banks) {
+    if (bank.countryId && !budgetedCountries.has(bank.countryId)) {
+      checks.push(
+        critical(
+          `centralBank.${bank.countryId}.fiscalCoverage`,
+          bank.countryId,
+          "federalBudget",
+          "authored budget",
+          null,
+          "central bank exists outside the preset's authored fiscal coverage"
+        )
+      );
+    }
   }
   return checks;
 }

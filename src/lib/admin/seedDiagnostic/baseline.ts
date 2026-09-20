@@ -126,7 +126,7 @@ export async function collectLiveMetrics(
     .toArray();
   const bankById = new Map(banks.map((b) => [String(b._id), b]));
 
-  for (const countryId of expect.forexActiveCountries) {
+  for (const countryId of expect.monetaryCoverage.centralBankCountries) {
     const bank = bankById.get(getBankId(countryId));
     if (!bank) continue;
     setMetric(metrics, `centralBank.${countryId}.primeRate`, bank.primeRate);
@@ -176,14 +176,17 @@ export function reconstructMetricsFromExpectations(
     setMetric(metrics, `budget.${cfg.countryId}.treasuryBalance`, -cfg.debtPrincipal);
   }
 
-  for (const countryId of expect.forexActiveCountries) {
-    const rate = expect.forexRates[countryId];
-    if (rate != null) setMetric(metrics, `forex.${countryId}.rate`, rate);
+  for (const countryId of expect.monetaryCoverage.centralBankCountries) {
     setMetric(metrics, `centralBank.${countryId}.primeRate`, expectedPrimeRate(countryId));
     const budget = expect.nationalBudgets.find((b) => b.countryId === countryId);
     if (budget) {
       setMetric(metrics, `centralBank.${countryId}.inflation`, budget.inflationRate);
     }
+  }
+
+  for (const countryId of expect.forexActiveCountries) {
+    const rate = expect.forexRates[countryId];
+    if (rate != null) setMetric(metrics, `forex.${countryId}.rate`, rate);
   }
 
   return metrics;
