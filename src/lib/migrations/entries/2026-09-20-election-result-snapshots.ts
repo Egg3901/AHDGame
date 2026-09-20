@@ -8,7 +8,7 @@ import {
 import type { ElectionResultSnapshot } from "@/lib/db/types/electionResultSnapshot";
 import type { Election, GameState } from "@/lib/db/types";
 
-const ENDED = ["completed", "resolved"];
+const ENDED = ["completed", "resolved"] as const;
 
 /** Races per bulkWrite. Small enough that a failure loses little work. */
 const BATCH = 50;

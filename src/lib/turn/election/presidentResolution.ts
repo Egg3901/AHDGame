@@ -300,8 +300,9 @@ async function captureResultSnapshot(
     });
   } catch (err) {
     logger.error(
+      "elections",
       `[Turn] President election ${election._id}: result snapshot capture failed`,
-      err as Error
+      err
     );
   }
 }
