@@ -5,13 +5,13 @@ import { buildSeatId, getLocalRegionId } from "@/lib/seats";
 import { SENATE_CLASSES, getCnPeoplesCongressSeats } from "@/lib/constants";
 import {
   STATE_IDS,
-  JP_SHUGIIN_SEATS,
-  JP_SANGIIN_SEATS,
   DE_WAHLKREIS_SEATS,
   getHouseSeats,
   getUkCommonsSeats,
+  getJpShugiinSeats,
+  getJpSangiinSeats,
+  getJpSangiinClassSeats,
 } from "@/lib/constants/states";
-import { deRegions } from "@/lib/seeds/de/deRegions";
 import { brRegions } from "@/lib/seeds/br/brRegions";
 import { ngRegions } from "@/lib/seeds/ng/ngRegions";
 import { cnRegions } from "@/lib/seeds/cn/cnRegions";
@@ -330,8 +330,12 @@ export async function seedSeats(
   const now = new Date();
   // House seat counts per state depend on the preset's apportionment era.
   const houseSeatsByState = getHouseSeats(preset);
-  // Commons likewise — 625 in 1953-default, else the modern 650 map (#1058).
+  // Commons likewise uses era-specific regional maps for 1953 and 1991.
   const ukCommonsSeatsByRegion = getUkCommonsSeats(preset);
+  // Japan's Diet was two sizes larger before the 1994 reform (512/252 against
+  // the modern 465/248) and had no era map at all until this branch.
+  const jpShugiinSeatsByRegion = getJpShugiinSeats(preset);
+  const jpSangiinSeatsByRegion = getJpSangiinSeats(preset);
 
   // States admitted mid-game are absent from that frozen map, so read their
   // live delegation size off the state docs. Without this a reset of a world
@@ -431,13 +435,13 @@ export async function seedSeats(
   }
 
   // JP Shugiin (House of Representatives)
-  for (const regionId of Object.keys(JP_SHUGIIN_SEATS)) {
+  for (const regionId of Object.keys(jpShugiinSeatsByRegion)) {
     seats.push({
       _id: buildSeatId("JP", "shugiin", regionId),
       countryId: "JP",
       electionType: "shugiin",
       state: regionId,
-      totalSeats: JP_SHUGIIN_SEATS[regionId],
+      totalSeats: jpShugiinSeatsByRegion[regionId],
       displayName: buildDisplayName("JP", "shugiin", regionId),
       shortName: buildShortName("JP", "shugiin", regionId),
       createdAt: now,
@@ -448,12 +452,7 @@ export async function seedSeats(
   // JP Sangiin (House of Councillors) — half-elections every 3 game-years; each
   // region gets one Seat per class so Class 1 and Class 2 elections route to
   // distinct seatIds. Total regional seats split with Class 1 = ceil, Class 2 = floor.
-  for (const regionId of Object.keys(JP_SANGIIN_SEATS)) {
-    const totalSeats = JP_SANGIIN_SEATS[regionId];
-    const seatsByClass: Record<1 | 2, number> = {
-      1: Math.ceil(totalSeats / 2),
-      2: Math.floor(totalSeats / 2),
-    };
+  for (const regionId of Object.keys(jpSangiinSeatsByRegion)) {
     for (const cls of [1, 2] as const) {
       seats.push({
         _id: buildSeatId("JP", "sangiin", regionId, cls),
@@ -461,7 +460,7 @@ export async function seedSeats(
         electionType: "sangiin",
         state: regionId,
         chamberClass: cls,
-        totalSeats: seatsByClass[cls],
+        totalSeats: getJpSangiinClassSeats(preset, regionId, cls),
         displayName: buildDisplayName("JP", "sangiin", regionId, cls),
         shortName: buildShortName("JP", "sangiin", regionId, cls),
         createdAt: now,
@@ -471,7 +470,7 @@ export async function seedSeats(
   }
 
   // JP Governors
-  for (const regionId of Object.keys(JP_SHUGIIN_SEATS)) {
+  for (const regionId of Object.keys(jpShugiinSeatsByRegion)) {
     seats.push({
       _id: buildSeatId("JP", "governor", regionId),
       countryId: "JP",

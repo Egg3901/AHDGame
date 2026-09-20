@@ -1199,9 +1199,22 @@ export const ERA_COUNTRY_CONFIG_OVERRIDES: Record<
 > = {
   // First non-1953 era to use this table. The lookup was always generic; nothing
   // had exercised it.
+  //
+  // ⚠️ THIS TABLE IS THE WIRING, NOT THE DATA. A country's era file can define
+  // `config` and have it silently ignored, because only the entries listed here
+  // are ever consulted. DE/IE/CN each carried a `1991-default` config that
+  // reached nothing until they were added below — the folder looked right and
+  // the value never applied. Adding an era override means editing BOTH places.
   "1991-default": {
     UK: UK_ERAS["1991-default"]?.config,
     JP: JP_ERAS["1991-default"]?.config,
+    // GDP→anchor normalization (see each era file's header): their regional GDP
+    // is authored in local currency, so the anchor is the reciprocal of
+    // `INITIAL_RATES_1991`. RU and NG are deliberately absent — see
+    // `gdpAnchorRate1991.test.ts`.
+    DE: DE_ERAS["1991-default"]?.config,
+    IE: IE_ERAS["1991-default"]?.config,
+    CN: CN_ERAS["1991-default"]?.config,
   },
   "1953-default": {
     US: US_ERAS["1953-default"]?.config,
