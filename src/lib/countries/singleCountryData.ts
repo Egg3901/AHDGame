@@ -135,6 +135,11 @@ export const ACKNOWLEDGED_OUTSIDE: ReadonlyArray<{
     country: "UK",
     why: "The devolution and secession machinery. It is written around the UK because the UK is the game's devolved state, but Scotland and Wales are separate countries in it -- SCO and WAL have their own ids -- so this is a multi-entity mechanic, not one country's table.",
   },
+  {
+    file: "src/lib/livingConflict/northernIrelandRatification.ts",
+    country: "IE",
+    why: "The bilateral ratification reconciler reads British and Irish legislation into one shared peace-process state. It is conflict-engine code jointly owned by both governments, not Ireland-only data.",
+  },
 
   // ---- Shared modules that CONTAIN United States data without BEING it. ----
   //
