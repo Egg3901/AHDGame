@@ -20,6 +20,7 @@ export interface MapSectorSpecializationState {
 }
 
 export interface MapOverviewResponse {
+  officeholders?: Record<string, import("./officeholderService").MapOfficeholder[]>;
   partyOrg: Record<string, MapPartyOrgState>;
   senate: Record<string, MapSenateState>;
   house: Record<string, MapHouseState>;

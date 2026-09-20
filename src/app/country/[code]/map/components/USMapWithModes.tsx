@@ -1,9 +1,16 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import dynamic from "next/dynamic";
+import { useTranslations } from "next-intl";
+import { AtlasTooltip, AtlasInspector, AtlasBreakdown } from "./AtlasPanels";
+import { ATLAS_STORAGE_KEY, readAtlasPreferences, type AtlasView } from "./atlasModel";
+import styles from "./atlas.module.css";
 import Link from "next/link";
 import BackButton from "@/components/BackButton";
+import { Card } from "@/components/ui/Card";
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
 import { getCountryConfig } from "@/lib/constants/countries";
 import { STATE_IDS } from "@/lib/constants/states";
 import { EXTRACTABLE_RESOURCES, COMMODITY_LABELS } from "@/lib/constants/commodities";
@@ -23,7 +30,6 @@ import { MapFallback } from "./MapFallback";
 import { useResourceMapData } from "./useResourceMapData";
 import { useFreightDemandData } from "./useFreightDemandData";
 import {
-  FREIGHT_HAUL_LOAD_MODE_DESCRIPTION,
   freightHaulLoadCaption,
   freightHaulLoadLabel,
   freightHaulLoadTooltip,
@@ -37,6 +43,8 @@ const RegionalGeoMap = dynamic(
 );
 
 type USMapMode =
+  | "population"
+  | "representation"
   | "partyOrg"
   | "senate"
   | "house"
@@ -47,31 +55,6 @@ type USMapMode =
   | "resources"
   | "sectorBonuses"
   | "logistics";
-
-const US_MODE_CONFIG: { id: USMapMode; label: string; description: string }[] = [
-  { id: "partyOrg", label: "Party Org", description: "Leading party organization per state" },
-  { id: "senate", label: "Senate", description: "Two senators per state (split view)" },
-  { id: "house", label: "House", description: "House delegation leader by seats" },
-  { id: "governor", label: "Governor", description: "Governor's party" },
-  { id: "approval", label: "Approval", description: "Government approval heatmap" },
-  { id: "lean", label: "Lean", description: "Economic or social lean (toggle below)" },
-  {
-    id: "presidential",
-    label: "Presidential",
-    description: "Electoral votes by leading candidate",
-  },
-  { id: "resources", label: "Resources", description: "Extractable resource capacity by state" },
-  {
-    id: "sectorBonuses",
-    label: "Sector Bonus",
-    description: "Primary sector profit margin bonus by state",
-  },
-  {
-    id: "logistics",
-    label: "Logistics",
-    description: FREIGHT_HAUL_LOAD_MODE_DESCRIPTION,
-  },
-];
 
 // Fallback when the server didn't supply a colour for a candidate (matches the
 // map's own `partyColor` fallback so the bar and map stay visually consistent).
@@ -170,6 +153,39 @@ export function USMapWithModes({
   config: ReturnType<typeof getCountryConfig>;
   onRegionClick: (id: string) => void;
 }) {
+  const t = useTranslations("elections.atlas");
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [view, setView] = useState<AtlasView>("atlas");
+  const [showLabels, setShowLabels] = useState(true);
+  const [showCharts, setShowCharts] = useState(true);
+  const [preferencesReady, setPreferencesReady] = useState(false);
+  const [search, setSearch] = useState("");
+  const [sort, setSort] = useState<"name" | "population" | "seats" | "approval">("name");
+  const [descending, setDescending] = useState(false);
+  const [zoom, setZoom] = useState(1);
+  const [resetKey, setResetKey] = useState(0);
+  useEffect(() => {
+    try {
+      const saved = readAtlasPreferences(localStorage.getItem(ATLAS_STORAGE_KEY));
+      setView(saved.view);
+      setShowLabels(saved.labels);
+      setShowCharts(saved.charts);
+    } catch {
+      /* Storage can be unavailable in private browsing. */
+    }
+    setPreferencesReady(true);
+  }, []);
+  useEffect(() => {
+    if (!preferencesReady) return;
+    try {
+      localStorage.setItem(
+        ATLAS_STORAGE_KEY,
+        JSON.stringify({ view, labels: showLabels, charts: showCharts })
+      );
+    } catch {
+      /* Preferences remain usable without storage. */
+    }
+  }, [preferencesReady, view, showLabels, showCharts]);
   const [mode, setMode] = useState<USMapMode>("house");
   const [leanAxis, setLeanAxis] = useState<LeanAxis>("display");
   // State whose demographic breakdown is open (lean mode click; null = closed).
@@ -199,6 +215,25 @@ export function USMapWithModes({
       | undefined;
     let senateSplitMode = false;
 
+    if (mode === "population" || mode === "representation") {
+      const regions = mapData?.regions ?? [];
+      const max = Math.max(
+        ...regions.map((r) => (mode === "population" ? r.population : r.seats)),
+        1
+      );
+      for (const r of regions) {
+        const value = mode === "population" ? r.population : r.seats;
+        stateData[r.id] = {
+          color: interpolateGreen(value / max),
+          label: value.toLocaleString("en-US"),
+          tooltip: [
+            r.name,
+            `${value.toLocaleString("en-US")} ${mode === "population" ? t("people") : t("seats")}`,
+          ],
+        };
+      }
+      return { stateData, senateSplitData: undefined, senateSplitMode: false };
+    }
     if (mode === "resources") {
       const maxCap = Math.max(...Object.values(resourceData).map((e) => e.capacity), 1);
       for (const [stateId, entry] of Object.entries(resourceData)) {
@@ -250,10 +285,7 @@ export function USMapWithModes({
     // Prefer the live political roster from /api/map/overview so unadmitted
     // territories (AK/HI in 1953) and DC are not painted as vacant states.
     // Fall back to the modern 50 only while the overview is still loading.
-    const rosterIds =
-      mapData?.regions && mapData.regions.length > 0
-        ? mapData.regions.map((r) => r.id)
-        : [...STATE_IDS];
+    const rosterIds = mapData?.regions ? mapData.regions.map((r) => r.id) : [...STATE_IDS];
     const allStateIds = new Set([
       ...rosterIds,
       ...Object.keys(partyOrg),
@@ -391,16 +423,11 @@ export function USMapWithModes({
     }
 
     return { stateData, senateSplitData, senateSplitMode };
-  }, [mapData, mode, leanAxis, resourceData, resourceToggle, freightData]);
-
-  const modeConfig = US_MODE_CONFIG.find((m) => m.id === mode);
+  }, [mapData, mode, leanAxis, resourceData, resourceToggle, freightData, t]);
 
   // Live political roster — earlier eras with fewer states (48 under 1953)
   // render correctly. Falls back to the modern 50 while the overview loads.
-  const liveUSCodes =
-    mapData?.regions && mapData.regions.length > 0
-      ? mapData.regions.map((r) => r.id)
-      : [...US_REGION_CODES];
+  const liveUSCodes = mapData?.regions ? mapData.regions.map((r) => r.id) : [...US_REGION_CODES];
 
   // Adapt the Senate two-seat split to RegionalGeoMap's splitData shape.
   const splitData = senateSplitData
@@ -419,153 +446,400 @@ export function USMapWithModes({
       )
     : undefined;
 
+  const regions = (mapData?.regions ?? [])
+    .filter((r) => `${r.name} ${r.id}`.toLowerCase().includes(search.toLowerCase()))
+    .sort((a, b) => {
+      const value =
+        sort === "name"
+          ? a.name.localeCompare(b.name)
+          : sort === "approval"
+            ? (mapData?.approval[a.id]?.approval ?? -1) - (mapData?.approval[b.id]?.approval ?? -1)
+            : a[sort] - b[sort];
+      return descending ? -value : value;
+    });
+  const selectRegion = (id: string) => {
+    setSelectedId(id);
+    setLeanDetailId(mode === "lean" ? id : null);
+  };
+  const sortBy = (key: typeof sort) => {
+    if (sort === key) setDescending(!descending);
+    else {
+      setSort(key);
+      setDescending(key !== "name");
+    }
+  };
+
   return (
-    <div className="min-h-screen bg-background">
-      <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-10 lg:px-12">
-        <div className="mb-4 sm:mb-6 flex items-center gap-3">
-          <BackButton iconOnly />
-          <div className="min-w-0">
-            <h1 className="text-xl sm:text-2xl font-bold tracking-tight truncate">
-              {config.name} Map
+    <div className={styles.atlas}>
+      <main className={styles.main}>
+        <header className="mb-5 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <BackButton iconOnly />
+            <h1 className="text-xl sm:text-2xl font-bold tracking-tight">
+              {t("pageTitle", { country: config.name })}
             </h1>
-            <p className="mt-0.5 text-xs sm:text-sm text-muted">{modeConfig?.description}</p>
           </div>
-        </div>
-
-        <div className="mb-4 sm:mb-6 overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
-          <div className="flex gap-2 min-w-max sm:flex-wrap sm:min-w-0 pb-1">
-            {US_MODE_CONFIG.map((m) => (
-              <button
-                key={m.id}
-                onClick={() => {
-                  setMode(m.id);
-                  setLeanDetailId(null);
-                }}
-                className={`shrink-0 rounded-lg border px-3 py-1.5 sm:px-4 sm:py-2 text-xs sm:text-sm font-medium transition-colors ${
-                  mode === m.id
-                    ? "border-primary bg-primary/10 text-primary"
-                    : "border-card-border bg-card text-muted hover:border-primary/50 hover:text-foreground"
-                }`}
-              >
-                {m.label}
-              </button>
-            ))}
-          </div>
-          {mode === "resources" && (
-            <div className="mt-3 flex flex-wrap gap-3">
-              <div className="flex flex-wrap gap-1">
-                {EXTRACTABLE_RESOURCES.map((r) => (
-                  <button
-                    key={r}
-                    onClick={() => setResourceType(r)}
-                    className={`rounded px-2 py-1 text-xs font-medium transition-colors ${
-                      resourceType === r
-                        ? "bg-primary text-white"
-                        : "bg-card-elevated text-muted hover:text-foreground"
-                    }`}
-                  >
-                    {COMMODITY_LABELS[r]}
-                  </button>
-                ))}
-              </div>
-              <div className="flex gap-1">
-                {(["capacity", "contractedPct", "openAccessPct"] as const).map((tog) => (
-                  <button
-                    key={tog}
-                    onClick={() => setResourceToggle(tog)}
-                    className={`rounded px-2 py-1 text-xs font-medium transition-colors ${
-                      resourceToggle === tog
-                        ? "bg-primary text-white"
-                        : "bg-card-elevated text-muted hover:text-foreground"
-                    }`}
-                  >
-                    {tog === "capacity"
-                      ? "Capacity"
-                      : tog === "contractedPct"
-                        ? "Contracted %"
-                        : "Open-access %"}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-          {mode === "logistics" && (
-            <p className="mt-3 text-xs text-muted">
-              {freightHaulLoadCaption(Object.keys(freightData.states).length > 0)}
-            </p>
-          )}
-        </div>
-
-        {/* Outside the horizontally-scrolling mode-chip strip: on mobile the
-            strip scrolls to reach "Lean", which pushed this toggle off-screen. */}
-        {mode === "lean" && (
-          <div className="-mt-2 mb-4 flex gap-2 sm:-mt-4 sm:mb-6">
-            {(["display", "economic", "social"] as const).map((ax) => (
-              <button
-                key={ax}
-                onClick={() => setLeanAxis(ax)}
-                className={`rounded border px-2 py-1 text-xs font-medium transition-colors ${
-                  leanAxis === ax
-                    ? "border-primary bg-primary/10 text-primary"
-                    : "border-card-border bg-card text-muted hover:text-foreground"
-                }`}
-              >
-                {ax === "display" ? "Combined" : ax === "economic" ? "Economic" : "Social"}
-              </button>
-            ))}
-          </div>
-        )}
-
-        <div className="rounded-xl border border-card-border bg-card p-4 sm:p-6">
-          <div
-            className="w-full rounded-lg bg-background p-2 overflow-hidden"
-            style={{ aspectRatio: "960/600", minHeight: 320 }}
-          >
-            <RegionalGeoMap
-              sourceUrl={USA_GEO_URL}
-              regionCodes={liveUSCodes}
-              regionData={stateData}
-              labelOverrides={US_LABEL_OVERRIDES}
-              projection="geoAlbersUsa"
-              projectionConfig={{ scale: 1000 }}
-              width={800}
-              height={600}
-              zoomable
-              splitMode={senateSplitMode}
-              splitData={splitData}
-              onRegionClick={(id) => (mode === "lean" ? setLeanDetailId(id) : onRegionClick(id))}
-            />
-          </div>
-          {mode === "lean" && mapData?.lean && (
-            <LeanMapLegend axis={leanAxis} halfRange={leanHalfRange(mapData.lean, leanAxis)} />
-          )}
-        </div>
-
-        {mode === "lean" && leanDetailId && (
-          <StateLeanPanel
-            key={leanDetailId}
-            countryCode={config.id}
-            stateId={leanDetailId}
-            onClose={() => setLeanDetailId(null)}
-          />
-        )}
-
-        {mode === "presidential" && mapData?.presidentialElectoralVotes && (
-          <PresidentialResultsPanel
-            electoralVotes={mapData.presidentialElectoralVotes}
-            candidateNames={mapData.presidentialCandidateNames ?? {}}
-            candidateColors={mapData.presidentialCandidateColors ?? {}}
-            totalElectoralVotes={mapData.totalElectoralVotes}
-          />
-        )}
-
-        <div className="mt-6 flex flex-wrap items-center gap-3 pt-4 border-t border-card-border/40">
           <Link
             href={config.overviewPath}
-            className="rounded-lg border border-card-border bg-card px-4 py-2 text-sm font-medium text-muted hover:text-foreground transition-colors"
+            className="text-body-sm text-muted hover:text-foreground"
           >
-            ← {config.name} Overview
+            {t("overview")}
           </Link>
+        </header>
+        <div className={styles.toolbar}>
+          <label className="flex items-center gap-2 text-body-sm text-muted">
+            <span>{t("layer")}</span>
+            <select
+              className={styles.layerSelect}
+              value={mode}
+              aria-label={t("layer")}
+              onChange={(e) => {
+                const next = e.target.value as USMapMode;
+                setMode(next);
+                setLeanDetailId(next === "lean" ? selectedId : null);
+              }}
+            >
+              {(
+                [
+                  {
+                    label: "politics",
+                    modes: ["house", "senate", "governor", "presidential", "partyOrg"],
+                  },
+                  { label: "society", modes: ["approval", "lean", "population", "representation"] },
+                  { label: "economy", modes: ["resources", "sectorBonuses", "logistics"] },
+                ] as const
+              ).map((group) => (
+                <optgroup key={group.label} label={t(group.label)}>
+                  {group.modes.map((id) => (
+                    <option key={id} value={id}>
+                      {t(id)}
+                    </option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
+          </label>
+          <div className={styles.segment} aria-label={t("view")}>
+            <Button
+              variant={view !== "table" ? "secondary" : "ghost"}
+              size="sm"
+              aria-pressed={view !== "table"}
+              onClick={() => setView(view === "focus" ? "focus" : "atlas")}
+            >
+              {t("atlas")}
+            </Button>
+            <Button
+              variant={view === "table" ? "secondary" : "ghost"}
+              size="sm"
+              aria-pressed={view === "table"}
+              onClick={() => setView("table")}
+            >
+              {t("table")}
+            </Button>
+          </div>
+          <Input
+            className="!w-full sm:!w-52 !py-2 !text-body-sm"
+            type="search"
+            aria-label={t("search")}
+            placeholder={t("searchPlaceholder")}
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+          <details
+            className={styles.displayMenu}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") {
+                event.currentTarget.open = false;
+                event.currentTarget.querySelector("summary")?.focus();
+              }
+            }}
+          >
+            <summary>{t("display")}</summary>
+            <div className={styles.display}>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={showLabels}
+                  onChange={(e) => setShowLabels(e.target.checked)}
+                />
+                {t("labels")}
+              </label>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={showCharts}
+                  onChange={(e) => setShowCharts(e.target.checked)}
+                />
+                {t("charts")}
+              </label>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={view === "focus"}
+                  onChange={(e) => setView(e.target.checked ? "focus" : "atlas")}
+                />
+                {t("focus")}
+              </label>
+            </div>
+          </details>
+        </div>
+        {mode === "resources" && (
+          <div className="mb-4 flex flex-wrap gap-3">
+            <select
+              className={styles.search}
+              aria-label={t("resources")}
+              value={resourceType}
+              onChange={(e) => setResourceType(e.target.value as ExtractableResource)}
+            >
+              {EXTRACTABLE_RESOURCES.map((r) => (
+                <option key={r} value={r}>
+                  {COMMODITY_LABELS[r]}
+                </option>
+              ))}
+            </select>
+            <div className={styles.segment}>
+              {(["capacity", "contractedPct", "openAccessPct"] as const).map((tog) => (
+                <button
+                  key={tog}
+                  aria-pressed={resourceToggle === tog}
+                  onClick={() => setResourceToggle(tog)}
+                >
+                  {t(tog)}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+        {mode === "lean" && (
+          <div className="mb-4">
+            <div className={styles.segment}>
+              {(["display", "economic", "social"] as const).map((ax) => (
+                <button key={ax} aria-pressed={leanAxis === ax} onClick={() => setLeanAxis(ax)}>
+                  {t(ax === "display" ? "combined" : ax)}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+        <div className={`${styles.workspace} ${view === "focus" ? styles.focus : ""}`}>
+          <div className="min-w-0">
+            <Card padding="none" className="min-w-0">
+              <div className="border-b border-card-border px-4 py-3 text-body-sm text-muted">
+                {t(`description.${mode}`)}
+              </div>
+              {view === "table" ? (
+                <div className={styles.tableWrap}>
+                  <table className={styles.table}>
+                    <thead>
+                      <tr>
+                        {(["name", "population", "seats", "approval"] as const).map((key) => (
+                          <th
+                            key={key}
+                            aria-sort={
+                              sort === key ? (descending ? "descending" : "ascending") : "none"
+                            }
+                          >
+                            <button onClick={() => sortBy(key)}>
+                              {t(
+                                key === "name" ? "state" : key === "seats" ? "representation" : key
+                              )}{" "}
+                              {sort === key ? (descending ? "↓" : "↑") : "↕"}
+                            </button>
+                          </th>
+                        ))}
+                        <th>{t("layerValue")}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {regions.map((r) => (
+                        <tr key={r.id} aria-selected={selectedId === r.id}>
+                          <td>
+                            <button onClick={() => selectRegion(r.id)}>
+                              <span
+                                className={styles.dot}
+                                style={{ background: stateData[r.id]?.color }}
+                              />{" "}
+                              {r.name}
+                            </button>
+                          </td>
+                          <td>{r.population.toLocaleString("en-US")}</td>
+                          <td>{r.seats}</td>
+                          <td>
+                            {mapData?.approval[r.id]
+                              ? `${mapData.approval[r.id].approval.toFixed(1)}%`
+                              : t("noData")}
+                          </td>
+                          <td>{stateData[r.id]?.label ?? t("noData")}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {!regions.length && <p className="p-6 text-sm text-muted">{t("noResults")}</p>}
+                </div>
+              ) : (
+                <>
+                  <div className={styles.mapStage}>
+                    <RegionalGeoMap
+                      sourceUrl={USA_GEO_URL}
+                      regionCodes={liveUSCodes}
+                      regionData={stateData}
+                      labelOverrides={US_LABEL_OVERRIDES}
+                      projection="geoAlbersUsa"
+                      projectionConfig={{ scale: 1000 }}
+                      width={960}
+                      height={600}
+                      zoomable
+                      zoom={zoom}
+                      onZoomChange={setZoom}
+                      resetKey={resetKey}
+                      showLabels={showLabels}
+                      splitMode={senateSplitMode}
+                      splitData={splitData}
+                      highlightedRegions={
+                        selectedId ? [selectedId] : search ? regions.map((r) => r.id) : []
+                      }
+                      renderTooltip={(id) => (
+                        <AtlasTooltip id={id} data={mapData} cell={stateData[id]} mode={mode} />
+                      )}
+                      onRegionClick={selectRegion}
+                    />
+                  </div>
+                  <div className={styles.mapFooter}>
+                    <span>
+                      {selectedId ? (
+                        <a
+                          className="text-foreground underline underline-offset-4"
+                          href="#us-atlas-inspector"
+                        >
+                          {t("inspect")}: {selectedId} ↓
+                        </a>
+                      ) : (
+                        t("mapHint")
+                      )}
+                    </span>
+                    <div className={styles.zoomControls}>
+                      <button
+                        className={styles.iconButton}
+                        aria-label={t("zoomOut")}
+                        onClick={() => setZoom((z) => Math.max(1, z - 0.5))}
+                      >
+                        −
+                      </button>
+                      <span className="w-10 text-center font-mono">{zoom.toFixed(1)}×</span>
+                      <button
+                        className={styles.iconButton}
+                        aria-label={t("zoomIn")}
+                        onClick={() => setZoom((z) => Math.min(4, z + 0.5))}
+                      >
+                        +
+                      </button>
+                      <button
+                        className="ml-2 text-xs"
+                        onClick={() => {
+                          setZoom(1);
+                          setResetKey((k) => k + 1);
+                        }}
+                      >
+                        {t("reset")}
+                      </button>
+                    </div>
+                  </div>
+                  {search && (
+                    <div className={styles.regionList} aria-label={t("allStates")}>
+                      {regions.map((r) => (
+                        <button
+                          key={r.id}
+                          aria-pressed={selectedId === r.id}
+                          onClick={() => selectRegion(r.id)}
+                          title={r.name}
+                        >
+                          {search ? r.name : r.id}
+                        </button>
+                      ))}
+                      {!regions.length && <p className="text-xs text-muted">{t("noResults")}</p>}
+                    </div>
+                  )}
+                </>
+              )}
+              {mode === "lean" && mapData?.lean && (
+                <div className="px-5 pb-4">
+                  <LeanMapLegend
+                    axis={leanAxis}
+                    halfRange={leanHalfRange(mapData.lean, leanAxis)}
+                  />
+                </div>
+              )}
+              {mode === "logistics" && (
+                <p className="px-5 pb-4 text-xs text-muted">
+                  {freightHaulLoadCaption(Object.keys(freightData.states).length > 0)}
+                </p>
+              )}
+            </Card>
+            {mode === "lean" && leanDetailId && (
+              <StateLeanPanel
+                key={leanDetailId}
+                countryCode={config.id}
+                stateId={leanDetailId}
+                onClose={() => setLeanDetailId(null)}
+              />
+            )}
+            {mode === "presidential" && mapData?.presidentialElectoralVotes && (
+              <PresidentialResultsPanel
+                electoralVotes={mapData.presidentialElectoralVotes}
+                candidateNames={mapData.presidentialCandidateNames ?? {}}
+                candidateColors={mapData.presidentialCandidateColors ?? {}}
+                totalElectoralVotes={mapData.totalElectoralVotes}
+              />
+            )}
+          </div>
+          {mapData && (view !== "focus" || selectedId) && (
+            <aside id="us-atlas-inspector" className={styles.sidebar} aria-label={t("inspect")}>
+              <AtlasInspector
+                id={selectedId}
+                data={mapData}
+                cells={stateData}
+                mode={mode}
+                onOpen={onRegionClick}
+                onClear={() => {
+                  setSelectedId(null);
+                  setLeanDetailId(null);
+                }}
+              />
+              {showCharts && (
+                <AtlasBreakdown
+                  data={mapData}
+                  mode={mode}
+                  cells={stateData}
+                  values={
+                    mode === "resources"
+                      ? Object.fromEntries(
+                          Object.entries(resourceData).map(([id, entry]) => [
+                            id,
+                            resourceToggle === "capacity"
+                              ? entry.capacity
+                              : entry[resourceToggle] * 100,
+                          ])
+                        )
+                      : mode === "logistics"
+                        ? Object.fromEntries(
+                            Object.entries(freightData.states).map(([id, entry]) => [
+                              id,
+                              entry.capacity ?? entry.total,
+                            ])
+                          )
+                        : undefined
+                  }
+                  valueUnit={
+                    mode === "resources"
+                      ? resourceToggle === "capacity"
+                        ? t("unitsPerTurn")
+                        : "%"
+                      : t("freightUnits")
+                  }
+                />
+              )}
+            </aside>
+          )}
         </div>
       </main>
     </div>

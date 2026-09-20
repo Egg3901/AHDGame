@@ -85,6 +85,11 @@ interface RegionalGeoMapProps {
   splitData?: Record<string, RegionSplitCell>;
   /** Enable pan/zoom (1×–4×). Default off (static map). */
   zoomable?: boolean;
+  showLabels?: boolean;
+  renderTooltip?: (code: string) => React.ReactNode;
+  zoom?: number;
+  onZoomChange?: (zoom: number) => void;
+  resetKey?: number;
 }
 
 /**
@@ -335,8 +340,18 @@ export function RegionalGeoMap({
   splitMode = false,
   splitData,
   zoomable = false,
+  showLabels = true,
+  renderTooltip,
+  zoom: controlledZoom,
+  onZoomChange,
+  resetKey = 0,
 }: RegionalGeoMapProps) {
+  const [localZoom, setLocalZoom] = useState(1);
+  const zoom = controlledZoom ?? localZoom;
+  const [panCenter, setPanCenter] = useState<[number, number] | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const tooltipRef = useRef<HTMLDivElement>(null);
+  const [tooltipHeight, setTooltipHeight] = useState(300);
   const [geojson, setGeojson] = useState<GeoFC | null>(null);
   const [hovered, setHovered] = useState<string | null>(null);
   const [tooltipContent, setTooltipContent] = useState<string[]>([]);
@@ -417,15 +432,26 @@ export function RegionalGeoMap({
     return () => el.removeEventListener("dblclick", stop, true);
   }, [zoomable]);
 
+  useEffect(() => {
+    setPanCenter(null);
+  }, [resetKey]);
+
   const handleMouseMove = (e: React.MouseEvent) => {
-    const svg = (e.currentTarget as SVGGElement).closest("svg");
-    const rect = svg?.getBoundingClientRect();
+    const rect = containerRef.current?.getBoundingClientRect();
     if (rect) {
       const y = e.clientY - rect.top;
       setTooltipPos({ x: e.clientX - rect.left, y, yRatio: rect.height > 0 ? y / rect.height : 0 });
     }
   };
-  const flipTooltip = tooltipPos ? tooltipPos.yRatio > 0.5 : false;
+  useLayoutEffect(() => {
+    if (hovered && tooltipRef.current) setTooltipHeight(tooltipRef.current.offsetHeight);
+  }, [hovered, tooltipContent, renderTooltip]);
+  const mapBounds = containerRef.current?.getBoundingClientRect();
+  const visibleTop = Math.max(8, -(mapBounds?.top ?? 0) + 8);
+  const visibleBottom =
+    mapBounds && typeof window !== "undefined"
+      ? Math.min(mapBounds.height, window.innerHeight - mapBounds.top) - 8
+      : height - 8;
 
   const geoLayers = (
     <Geographies geography={shown}>
@@ -448,9 +474,42 @@ export function RegionalGeoMap({
                     ? data.color
                     : "#1e293b";
             return (
-              <g key={geo.rsmKey} data-region-code={code}>
+              <g
+                key={geo.rsmKey}
+                data-region-code={code}
+                role={onRegionClick ? "button" : undefined}
+                tabIndex={onRegionClick ? 0 : undefined}
+                aria-label={`${code}: ${data?.label ?? ""}`}
+                onFocus={(event) => {
+                  setHovered(code);
+                  const box = event.currentTarget.getBoundingClientRect();
+                  const container = containerRef.current?.getBoundingClientRect();
+                  if (container)
+                    setTooltipPos({
+                      x: box.left - container.left + box.width / 2,
+                      y: box.top - container.top,
+                      yRatio: (box.top - container.top) / container.height,
+                    });
+                  setTooltipContent([data?.label ?? code, ...(data?.tooltip ?? [])]);
+                }}
+                onBlur={() => {
+                  setHovered(null);
+                  setTooltipPos(null);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    onRegionClick?.(code);
+                  }
+                  if (e.key === "Escape") {
+                    setHovered(null);
+                    setTooltipPos(null);
+                  }
+                }}
+              >
                 <Geography
                   geography={geo}
+                  tabIndex={-1}
                   fill={fill}
                   fillOpacity={isHov ? 0.95 : hasData ? 0.85 : 0.4}
                   stroke={isHov ? "#ffffff" : isHighlighted ? "#a855f7" : "#334155"}
@@ -484,42 +543,43 @@ export function RegionalGeoMap({
                     setTooltipPos(null);
                   }}
                   onMouseMove={handleMouseMove}
-                  onClick={() => hasData && onRegionClick?.(code)}
+                  onClick={() => onRegionClick?.(code)}
                 />
               </g>
             );
           })}
           {/* Labels in a second pass so a later region's fill never paints
               over an earlier region's label (e.g. NI over Donegal). */}
-          {geographies.map((geo) => {
-            const code = geo.properties?.regionCode;
-            if (!code) return null;
-            const data = regionData[code];
-            const hasData = splitMode ? !!splitData?.[code] : !!data;
-            if (!hasData) return null;
-            const isHov = hovered === code;
-            const [dx, dy] = labelOffsets?.[code] ?? [0, 0];
-            return (
-              <Annotation
-                key={`label-${geo.rsmKey}`}
-                subject={featureCentroid(geo)}
-                dx={dx}
-                dy={dy}
-                connectorProps={{ stroke: "none" }}
-              >
-                <text
-                  textAnchor="middle"
-                  dominantBaseline="middle"
-                  fontSize={code === "LON" || code === "DC" ? 4 : 6}
-                  fontWeight={700}
-                  fill={isHov ? "#ffffff" : "rgba(255,255,255,0.9)"}
-                  style={{ pointerEvents: "none", userSelect: "none" }}
+          {showLabels &&
+            geographies.map((geo) => {
+              const code = geo.properties?.regionCode;
+              if (!code) return null;
+              const data = regionData[code];
+              const hasData = splitMode ? !!splitData?.[code] : !!data;
+              if (!hasData) return null;
+              const isHov = hovered === code;
+              const [dx, dy] = labelOffsets?.[code] ?? [0, 0];
+              return (
+                <Annotation
+                  key={`label-${geo.rsmKey}`}
+                  subject={featureCentroid(geo)}
+                  dx={dx}
+                  dy={dy}
+                  connectorProps={{ stroke: "none" }}
                 >
-                  {regionLabelText(code, labelOverrides, data?.label)}
-                </text>
-              </Annotation>
-            );
-          })}
+                  <text
+                    textAnchor="middle"
+                    dominantBaseline="middle"
+                    fontSize={code === "LON" || code === "DC" ? 4 : 6}
+                    fontWeight={700}
+                    fill={isHov ? "#ffffff" : "rgba(255,255,255,0.9)"}
+                    style={{ pointerEvents: "none", userSelect: "none" }}
+                  >
+                    {regionLabelText(code, labelOverrides, data?.label)}
+                  </text>
+                </Annotation>
+              );
+            })}
         </>
       )}
     </Geographies>
@@ -579,10 +639,22 @@ export function RegionalGeoMap({
           // [0,0]; an auto-fit Mercator map must start centred on its own geometry,
           // else the ZoomableGroup pans it off to lon/lat 0.
           <ZoomableGroup
-            center={projectionConfig ? [0, 0] : fit.center}
-            zoom={1}
+            center={
+              panCenter ??
+              (projection === "geoAlbersUsa" ? [-96, 38] : projectionConfig ? [0, 0] : fit.center)
+            }
+            zoom={zoom}
+            onMoveEnd={({ coordinates, zoom: nextZoom }) => {
+              setPanCenter(coordinates);
+              setLocalZoom(nextZoom);
+              onZoomChange?.(nextZoom);
+            }}
             minZoom={1}
             maxZoom={4}
+            translateExtent={[
+              [0, 0],
+              [width, height],
+            ]}
           >
             {geoLayers}
           </ZoomableGroup>
@@ -591,21 +663,31 @@ export function RegionalGeoMap({
         )}
       </ComposableMap>
 
-      {hovered && tooltipPos && tooltipContent.length > 0 && (
+      {hovered && tooltipPos && (renderTooltip || tooltipContent.length > 0) && (
         <div
-          className="pointer-events-none absolute z-10 max-w-[200px] rounded border border-slate-600 bg-slate-900 px-2 py-1.5 text-xs shadow-lg"
+          ref={tooltipRef}
+          role="tooltip"
+          className={`pointer-events-none absolute z-10 w-[260px] max-w-full rounded-xl border p-3 text-xs ${renderTooltip ? "border-card-border bg-card text-foreground shadow-panel" : "border-slate-600 bg-slate-950/95 shadow-2xl backdrop-blur"}`}
           style={{
-            left: tooltipPos.x + 12,
-            top: tooltipPos.y + (flipTooltip ? -12 : -8),
-            transform: flipTooltip ? "translateY(-100%)" : undefined,
+            left: Math.max(
+              0,
+              Math.min(tooltipPos.x + 12, (containerRef.current?.clientWidth ?? 280) - 272)
+            ),
+            top: Math.max(visibleTop, Math.min(tooltipPos.y + 12, visibleBottom - tooltipHeight)),
           }}
         >
-          <div className="font-semibold text-slate-100">{tooltipContent[0]}</div>
-          {tooltipContent.slice(1).map((line, i) => (
-            <div key={i} className="mt-0.5 text-slate-400">
-              {line}
-            </div>
-          ))}
+          {renderTooltip ? (
+            renderTooltip(hovered)
+          ) : (
+            <>
+              <div className="font-semibold text-slate-100">{tooltipContent[0]}</div>
+              {tooltipContent.slice(1).map((line, i) => (
+                <div key={i} className="mt-0.5 text-slate-400">
+                  {line}
+                </div>
+              ))}
+            </>
+          )}
         </div>
       )}
     </div>

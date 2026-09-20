@@ -41,6 +41,7 @@ declare module "react-simple-maps" {
   }
 
   export interface GeographyProps {
+    tabIndex?: number;
     geography: object;
     fill?: string;
     fillOpacity?: number;
@@ -62,6 +63,7 @@ declare module "react-simple-maps" {
   }
 
   export interface ZoomableGroupProps {
+    onMoveEnd?: (position: { coordinates: [number, number]; zoom: number }) => void;
     center?: [number, number];
     zoom?: number;
     minZoom?: number;

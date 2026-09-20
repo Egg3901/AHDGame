@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { GET } from "./route";
 
 // Robust cursor: supports both `.find(...).toArray()` and
 // `.find(...).project(...).toArray()`.
@@ -33,11 +34,30 @@ vi.mock("@/lib/map/presidentialService", () => ({
   computePresidentialMap: vi.fn().mockResolvedValue({}),
 }));
 
+vi.mock("@/lib/elections/usPoliticalHome", () => ({
+  loadUsPoliticalStateIds: vi.fn().mockResolvedValue({ politicalIds: new Set(["CA"]) }),
+}));
+vi.mock("@/lib/map/officeholderService", () => ({
+  computeMapOfficeholders: vi.fn().mockResolvedValue({
+    CA: [
+      {
+        id: "seat",
+        name: "Example official",
+        office: "governor",
+        party: "1",
+        partyName: "Example party",
+        color: "#123456",
+        avatarUrl: "/portrait.png",
+        seats: 1,
+      },
+    ],
+  }),
+}));
+
 describe("GET /api/map/overview?countryId=NG", () => {
   beforeEach(() => vi.clearAllMocks());
 
   it("returns the JP-shape overlay maps for NG (partyOrg/house/lean populated; senate/governor present)", async () => {
-    const { GET } = await import("./route");
     const res = await GET(new Request("http://t/api/map/overview?countryId=NG"));
     const body = await res.json();
     expect(body.partyOrg.NORTH_WEST).toBeDefined();
@@ -46,5 +66,22 @@ describe("GET /api/map/overview?countryId=NG", () => {
     expect(body).toHaveProperty("senate");
     expect(body).toHaveProperty("governor");
     expect(body).toHaveProperty("presidential");
+  });
+});
+
+describe("GET /api/map/overview?countryId=US", () => {
+  it("includes the seated officeholder payload for atlas portraits", async () => {
+    const response = await GET(new Request("http://t/api/map/overview?countryId=US"));
+    const body = await response.json();
+    expect(response.status).toBe(200);
+    expect(body.officeholders.CA[0]).toMatchObject({
+      office: "governor",
+      avatarUrl: "/portrait.png",
+    });
+  });
+  it("rejects unsupported countries", async () => {
+    expect((await GET(new Request("http://t/api/map/overview?countryId=invalid"))).status).toBe(
+      400
+    );
   });
 });
