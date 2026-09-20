@@ -925,14 +925,21 @@ export function isUsElectoralState(id: string): boolean {
 }
 
 /**
- * True when `region` is a US federal district (e.g. DC) that elects no offices
- * and hosts no state party organization. Only the US has such regions, so this
- * is a no-op for every other country. Callers use it to short-circuit
- * state-party-org paths with a clean response instead of reaching the
- * `ensureStatePartyOrgRow` chokepoint, which throws for these regions.
+ * True when `id` is a US jurisdiction that hosts a party organization.
+ *
+ * This is deliberately broader than {@link isUsElectoralState}. DC elects no
+ * House, Senate, governor, or state-legislature seats, but it does have party
+ * committees, presidential registration, and party recruitment. Public-office
+ * election code must continue to use `isUsElectoralState`; party-organization
+ * code uses this predicate instead.
  */
-export function isNonElectoralUsRegion(country: string, region: string): boolean {
-  return country === "US" && !isUsElectoralState(region);
+export function isUsPartyOrganizationJurisdiction(id: string): boolean {
+  return isUsElectoralState(id) || id === "DC";
+}
+
+/** True when a US region cannot host a party organization. */
+export function isNonPartyOrganizationUsRegion(country: string, region: string): boolean {
+  return country === "US" && !isUsPartyOrganizationJurisdiction(region);
 }
 
 /**
