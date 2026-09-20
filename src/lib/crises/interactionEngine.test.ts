@@ -156,7 +156,7 @@ describe("deriveCharacterRoles", () => {
 describe("resolveCharacterRoles", () => {
   it("grants a party-specific leader role to the sitting party chair", async () => {
     const chairId = new ObjectId();
-    db.collection("parties").findOne.mockResolvedValue({ abbreviation: "DUP" });
+    db.collection("politicalParties").findOne.mockResolvedValue({ abbreviation: "DUP" });
 
     const roles = await resolveCharacterRoles(mdb(), {
       _id: chairId,
