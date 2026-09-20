@@ -315,12 +315,12 @@ describe("driver", () => {
       blocMembers: [],
     };
 
-    const quiet = await driveConflictTurn(db, gated, gatedParticipants, 1, 2000, 59, {
+    const quiet = await driveConflictTurn(db, gated, gatedParticipants, 1, 2019, 59, {
       fragility: 15,
     });
     expect(quiet.state.hasOpened).toBe(false);
 
-    const opened = await driveConflictTurn(db, gated, gatedParticipants, 2, 2000, 60, {
+    const opened = await driveConflictTurn(db, gated, gatedParticipants, 2, 2019, 60, {
       fragility: 15,
     });
     expect(opened.state.hasOpened).toBe(true);
