@@ -112,6 +112,15 @@ function spo(state: string, partyId: string): StatePartyOrg {
   } as unknown as StatePartyOrg;
 }
 
+function defaultParty(countryId: string, sequentialId: number): PoliticalParty {
+  return {
+    _id: new ObjectId(),
+    sequentialId,
+    countryId,
+    isDefault: true,
+  } as unknown as PoliticalParty;
+}
+
 describe("processChallengerGeneration — CN one-party People's Congress floor (#3388)", () => {
   let db: MockDb;
 
@@ -247,5 +256,75 @@ describe("processChallengerGeneration — founding coverage (#2072)", () => {
 
     expect(await processChallengerGeneration(new Date())).toBe(1);
     expect(insertedCandidates).toHaveLength(1);
+  });
+});
+
+describe("processChallengerGeneration: concurrent regional chamber floor (#2098)", () => {
+  let db: MockDb;
+
+  beforeEach(async () => {
+    db = createMockDb();
+    const { getDb } = await import("@/lib/mongodb");
+    vi.mocked(getDb).mockResolvedValue(db as unknown as Db);
+  });
+
+  it("covers overlapping Turkish chambers after the four-member Istanbul pool is exhausted", async () => {
+    const assembly = {
+      ...cnPeoplesCongress("TR_IST"),
+      electionType: "milletMeclisi",
+      countryId: "TR",
+    } as Election;
+    const senate = {
+      ...cnPeoplesCongress("TR_IST"),
+      _id: new ObjectId(),
+      electionType: "senato",
+      countryId: "TR",
+    } as Election;
+    const exhaustedRoster = Array.from({ length: 4 }, () => new ObjectId());
+    const { insertedCandidates } = mountWorld(db, {
+      currentTurn: 3,
+      elections: [senate, assembly],
+      parties: [defaultParty("TR", 1), defaultParty("TR", 2)],
+      freeNpps: [],
+      officials: exhaustedRoster.map((nppId) => ({ nppId })),
+      statePartyOrgs: [spo("TR_IST", "1"), spo("TR_IST", "2")],
+      activeCandidateGroups: exhaustedRoster.map((nppId, index) => ({
+        _id: { e: senate._id, p: String((index % 2) + 1) },
+        nppIds: [nppId],
+      })),
+    });
+
+    const filed = await processChallengerGeneration(new Date());
+
+    expect(filed).toBe(2);
+    expect(insertedCandidates).toHaveLength(2);
+    expect(insertedCandidates.map((candidate) => candidate.electionId)).toStrictEqual([
+      assembly._id,
+      assembly._id,
+    ]);
+    expect(new Set(insertedCandidates.map((candidate) => candidate.party))).toStrictEqual(
+      new Set(["1", "2"])
+    );
+  });
+
+  it("supplies both major parties to an empty US House race when every local NPP is busy", async () => {
+    const house = {
+      ...cnPeoplesCongress("VT"),
+      electionType: "house",
+      countryId: "US",
+    } as Election;
+    const { insertedCandidates } = mountWorld(db, {
+      currentTurn: 3,
+      elections: [house],
+      parties: [defaultParty("US", 1), defaultParty("US", 2)],
+      freeNpps: [],
+      officials: [],
+      statePartyOrgs: [spo("VT", "1"), spo("VT", "2")],
+    });
+
+    expect(await processChallengerGeneration(new Date())).toBe(2);
+    expect(new Set(insertedCandidates.map((candidate) => candidate.party))).toStrictEqual(
+      new Set(["1", "2"])
+    );
   });
 });
