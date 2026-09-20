@@ -70,13 +70,6 @@ const MAX_CHALLENGERS_PER_TURN = 400;
  * are unaffected: they have exactly one default party, so they still found with
  * a single-party ballot, which is the correct 1953 behaviour.
  */
-const FOUNDING_ENTRY_BLOCKED_TYPES: ReadonlySet<string> = new Set([
-  // NPPs are barred from presidential races engine-wide because a player should
-  // always be able to contest the presidency. Autonomous economy-only countries
-  // receive presidential candidates through electionEntry's national pass.
-  "president",
-]);
-
 /**
  * File bench "challenger" candidates into open primaries that would otherwise
  * resolve UNCONTESTED / EMPTY:
@@ -135,7 +128,6 @@ export async function processChallengerGeneration(now: Date): Promise<number> {
         ? {
             status: "active",
             cycle: 0,
-            electionType: { $nin: [...FOUNDING_ENTRY_BLOCKED_TYPES] },
             $or: primaryOpen,
           }
         : {
@@ -176,9 +168,11 @@ export async function processChallengerGeneration(now: Date): Promise<number> {
     ])
     .toArray();
   const hasCandidate = new Set<string>();
+  const electionsWithCandidate = new Set<string>();
   const nppsInActiveCandidacy = new Set<string>();
   for (const c of cands) {
     hasCandidate.add(`${String(c._id.e)}_${c._id.p}`);
+    electionsWithCandidate.add(String(c._id.e));
     for (const id of c.nppIds) if (id != null) nppsInActiveCandidacy.add(String(id));
   }
 
@@ -228,7 +222,9 @@ export async function processChallengerGeneration(now: Date): Promise<number> {
     if (filed >= MAX_CHALLENGERS_PER_TURN) break;
     const country = String(primary.countryId ?? "US");
     const state = primary.state;
-    for (const party of majorsByCountry.get(country) ?? []) {
+    const countryParties = majorsByCountry.get(country) ?? [];
+    let raceHasCandidate = electionsWithCandidate.has(String(primary._id));
+    for (const party of countryParties) {
       if (filed >= MAX_CHALLENGERS_PER_TURN) break;
       if (hasCandidate.has(`${String(primary._id)}_${party}`)) continue; // party already contesting
       const spo = spoByKey.get(`${state}:${party}`);
@@ -264,12 +260,54 @@ export async function processChallengerGeneration(now: Date): Promise<number> {
           .collection<ElectionCandidate>("electionCandidates")
           .insertOne(candidateDoc as ElectionCandidate);
         hasCandidate.add(`${String(primary._id)}_${party}`);
+        electionsWithCandidate.add(String(primary._id));
         nppsInActiveCandidacy.add(String(npp._id));
+        raceHasCandidate = true;
         filed++;
       } catch (error) {
         // Partial unique index: one active candidacy per character. A reused free
         // NPP that was claimed elsewhere this pass just gets skipped for this race.
         if (!isActiveElectionCandidateDuplicateKey(error)) throw error;
+      }
+    }
+
+    // Founding cannot converge while a cycle-0 race has no candidate or vote
+    // coverage. Regional presence still controls which parties normally field,
+    // but incomplete seed org data must not strand the office forever. Give a
+    // wholly-empty founding race one fallback candidate from the country's first
+    // default party. This also covers national executive races, whose state is
+    // the country code and therefore has no statePartyOrg row by design.
+    if (founding && !raceHasCandidate && filed < MAX_CHALLENGERS_PER_TURN) {
+      const party = countryParties[0];
+      if (party) {
+        const bucket = `${country}:${party}:${state}`;
+        let npp = freeByBucket.get(bucket)?.pop();
+        if (!npp) {
+          npp = await createNPP({ state, party, countryId: country as CountryId, quality: 0 });
+        }
+        const candidateDoc: Omit<ElectionCandidate, "_id"> = {
+          electionId: primary._id,
+          countryId: (primary.countryId ?? npp.countryId ?? "US") as ElectionCandidate["countryId"],
+          characterId: npp._id,
+          characterName: npp.name,
+          party: npp.party,
+          status: "active",
+          support: DEFAULT_CANDIDATE_SUPPORT,
+          enteredAt: now,
+          isNPP: true,
+          nppId: npp._id,
+        };
+        try {
+          await db
+            .collection<ElectionCandidate>("electionCandidates")
+            .insertOne(candidateDoc as ElectionCandidate);
+          hasCandidate.add(`${String(primary._id)}_${party}`);
+          electionsWithCandidate.add(String(primary._id));
+          nppsInActiveCandidacy.add(String(npp._id));
+          filed++;
+        } catch (error) {
+          if (!isActiveElectionCandidateDuplicateKey(error)) throw error;
+        }
       }
     }
   }
