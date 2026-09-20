@@ -63,6 +63,33 @@ async function countryNormalizer(db: Db, countryId: CountryId): Promise<number |
 }
 
 /**
+ * Price multipliers for every state in a country in two reads (the cached
+ * country normalizer plus one bulk population query), for sweeps that would
+ * otherwise pay one `states.findOne` per action. Values match
+ * `resolveOrgBuildSizeMultiplier` exactly: a state with no population row
+ * prices neutrally, same as the single-state `!state` fallback.
+ */
+export async function resolveAllOrgBuildSizeMultipliers(
+  db: Db,
+  countryId: CountryId
+): Promise<Map<string, number>> {
+  const multipliers = new Map<string, number>();
+  const normalizer = await countryNormalizer(db, countryId);
+  const rows = await db
+    .collection<State>("states")
+    .find({ countryId }, { projection: { population: 1 } })
+    .toArray();
+  for (const row of rows) {
+    const id = String(row._id);
+    multipliers.set(
+      id,
+      normalizer === null ? 1 : orgBuildSizeMultiplier(row.population, normalizer)
+    );
+  }
+  return multipliers;
+}
+
+/**
  * Price multiplier for organizing `stateId`. Returns a neutral `1` whenever the
  * data cannot support a ratio, so a world with no demographics seeded prices
  * exactly as it did before per-state scaling existed.
