@@ -54,6 +54,7 @@
 
 import { createInterface } from "readline";
 import { randomUUID } from "crypto";
+import { resolveSimPreset } from "./simPreset";
 import { MongoClient, type Db } from "mongodb";
 import { MARKET_MODE_ORDER, type MarketSystemMode } from "@/lib/market/modes";
 import { SIM_ACTOR_MODES } from "@/lib/sim/syntheticActors";
@@ -226,7 +227,7 @@ const TOOLS: ToolDef[] = [
       ["preset", "turns", "seed"]
     ),
     handler: async (a, db) => {
-      const preset = safe(a.preset, "preset");
+      const preset = resolveSimPreset(safe(a.preset, "preset"));
       const seed = safe(a.seed, "seed");
       const turns = turnsOf(a.turns);
       if (a.marketSystemMode && !MARKET_MODES.includes(a.marketSystemMode as MarketSystemMode)) {
@@ -383,7 +384,7 @@ const TOOLS: ToolDef[] = [
       ["preset", "turns", "seed"]
     ),
     handler: async (a, db) => {
-      const preset = safe(a.preset, "preset");
+      const preset = resolveSimPreset(safe(a.preset, "preset"));
       const seed = safe(a.seed, "seed");
       const turns = turnsOf(a.turns);
       let countries: string | undefined;
