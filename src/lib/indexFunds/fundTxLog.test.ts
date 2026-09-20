@@ -75,5 +75,6 @@ describe("fundTxLog", () => {
     expect(ALL_TX_TYPES).toContain("index_fund_subscribe");
     expect(ALL_TX_TYPES).toContain("index_fund_redeem");
     expect(ALL_TX_TYPES).toContain("index_fund_dividend");
+    expect(ALL_TX_TYPES).toContain("npp_investment_income");
   });
 });

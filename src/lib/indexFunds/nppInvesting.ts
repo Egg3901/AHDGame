@@ -22,7 +22,13 @@ import {
 } from "@/lib/indexFunds/fundQueries";
 import type { CountryId } from "@/lib/constants/countries";
 import type { CurrencyCode } from "@/lib/constants/currencies";
+import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
 import { JP_NPP_INVESTING_MINIMUM } from "@/lib/countries/jp/economy";
+import type { GameConfig } from "@/lib/db/types";
+import { accountId } from "@/lib/ledger/accounts";
+import { emitLedgerEntries } from "@/lib/ledger/emit";
+import { isLedgerShadowEnabledFromConfig } from "@/lib/ledger/featureFlag";
+import type { LedgerEntryInput } from "@/lib/ledger/types";
 
 // ── GDP per capita by country (USD-equivalent, annual) ────────────────
 // These are approximate 2024 GDP per capita figures used to determine NPP
@@ -342,6 +348,7 @@ export async function processNPPFundInvestments(
   const accrualOps: AnyBulkWriteOperation<Document>[] = [];
   const debitOps: AnyBulkWriteOperation<Document>[] = [];
   const planned: PlannedSubscription[] = [];
+  const ledgerEntries: LedgerEntryInput[] = [];
   let nppsProcessed = 0;
   let totalInvested = 0;
 
@@ -383,6 +390,32 @@ export async function processNPPFundInvestments(
         },
       });
 
+      const currency = COUNTRY_CURRENCY_MAP[npp.countryId] ?? "USD";
+      const nppAccount = accountId("npp", npp._id.toString(), currency);
+      ledgerEntries.push({
+        turn: currentTurn,
+        createdAt: now,
+        txType: "npp_investment_income",
+        legs: [
+          {
+            account: nppAccount,
+            amount: budget,
+            currencyCode: currency,
+            anchorAmount: budget,
+            role: "primary",
+          },
+          {
+            account: accountId("mint", "npp_investment_income", currency),
+            amount: -budget,
+            currencyCode: currency,
+            anchorAmount: -budget,
+            role: "contra",
+          },
+        ],
+        sourceRef: { collection: "npps", id: npp._id },
+        emitSite: "indexFunds/nppInvesting.ts:income_accrual",
+      });
+
       const subscriptions = buildNppSubscriptions(npp, archetype, budget, activeFunds);
       let investedThisNPP = 0;
       const nppPlanned: PlannedSubscription[] = [];
@@ -417,6 +450,29 @@ export async function processNPPFundInvestments(
         });
         planned.push(...nppPlanned);
         totalInvested += investedThisNPP;
+        ledgerEntries.push({
+          turn: currentTurn,
+          createdAt: now,
+          txType: "index_fund_subscribe",
+          legs: [
+            {
+              account: nppAccount,
+              amount: -investedThisNPP,
+              currencyCode: currency,
+              anchorAmount: -investedThisNPP,
+              role: "primary",
+            },
+            {
+              account: accountId("sink", "fund_subscription", currency),
+              amount: investedThisNPP,
+              currencyCode: currency,
+              anchorAmount: investedThisNPP,
+              role: "contra",
+            },
+          ],
+          sourceRef: { collection: "npps", id: npp._id },
+          emitSite: "indexFunds/nppInvesting.ts:subscription_debit",
+        });
       }
 
       nppsProcessed++;
@@ -434,6 +490,14 @@ export async function processNPPFundInvestments(
   }
   if (debitOps.length > 0) {
     await db.collection("npps").bulkWrite(debitOps, { ordered: false });
+  }
+  if (ledgerEntries.length > 0) {
+    const config = await db
+      .collection<GameConfig>("gameConfig")
+      .findOne({ _id: "default" }, { projection: { ledgerShadow: 1 } });
+    if (isLedgerShadowEnabledFromConfig(config)) {
+      await emitLedgerEntries(db, ledgerEntries);
+    }
   }
 
   if (planned.length === 0) {
