@@ -14,6 +14,7 @@ const state = {
   tracks: { ratificationAuthorization: 0 },
   phaseTurns: 0,
   totalTurns: 200,
+  updatedAt: new Date(0),
 } satisfies LivingConflictState;
 
 describe("Northern Ireland ratification reconciliation", () => {

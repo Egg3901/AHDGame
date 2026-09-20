@@ -213,7 +213,9 @@ describe("1.3 authored catalog", () => {
   });
 
   it("authors every 1.3 geopolitical chain through response-bearing events", () => {
-    const defs = allLivingConflictDefs().filter((def) => def.key !== "pandemic");
+    const defs = allLivingConflictDefs().filter((def) =>
+      def.phases.some((phase) => phase.events.some((event) => event.response))
+    );
     expect(defs.map((def) => def.key)).toEqual(
       expect.arrayContaining([
         "vietnam",
