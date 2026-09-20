@@ -121,7 +121,12 @@ function negotiationTree(): CrisisDecisionNode[] {
           "unionist_join",
           "Enter talks with safeguards",
           "Seek consent, decommissioning, and institutional guarantees from inside the process.",
-          { unionistConsent: 12, settlementMomentum: 8, legitimacy: 4 },
+          {
+            unionistConsent: 12,
+            settlementMomentum: 8,
+            legitimacy: 4,
+            institutionalStability: 6,
+          },
           "nationalist_position"
         ),
       ],
@@ -148,7 +153,13 @@ function negotiationTree(): CrisisDecisionNode[] {
           "nationalist_join",
           "Commit to constitutional talks",
           "Pursue equality, cross-border institutions, and consent through negotiation.",
-          { nationalistConsent: 12, settlementMomentum: 8, violence: -5, legitimacy: 4 },
+          {
+            nationalistConsent: 12,
+            settlementMomentum: 8,
+            violence: -5,
+            legitimacy: 4,
+            decommissioning: 12,
+          },
           "regional_executive_position"
         ),
       ],
@@ -312,6 +323,8 @@ export const NORTHERN_IRELAND_DEF: LivingConflictDef = {
     decommissioning: { initial: 5 },
     institutionalStability: { initial: 10 },
     domesticConsent: { initial: 30 },
+    ratificationAuthorization: { initial: 0, min: 0, max: 2 },
+    ratificationFailureCount: { initial: 0, min: 0, max: 2 },
   },
   scheduledPressures: [
     {
@@ -378,6 +391,7 @@ export const NORTHERN_IRELAND_DEF: LivingConflictDef = {
       toPhase: "power_sharing",
       toStatus: "settled",
       conditions: [
+        { track: "ratificationAuthorization", min: 2 },
         { track: "decommissioning", min: 45 },
         { track: "institutionalStability", min: 45 },
       ],

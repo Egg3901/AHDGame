@@ -17,6 +17,7 @@ import { normalizeCampaignState } from "./campaign";
 import { migrateLegacyVietnamState } from "./vietnamCompat";
 import { vietnamWorldPressure } from "./worldPressure";
 import { resolveConflictParticipants } from "./engine";
+import { reconcileNorthernIrelandRatification } from "./northernIrelandRatification";
 import {
   allParticipants,
   driveConflictTurn,
@@ -209,6 +210,14 @@ export async function processLivingConflictsTurn(
       currentYear,
       def.key === "vietnam" && typeof currentYear === "number" ? vietnamExternalPressure : 0
     );
+    if (def.key === "northern_ireland") {
+      result.state = await reconcileNorthernIrelandRatification(
+        db,
+        def,
+        result.state,
+        currentYear ?? undefined
+      );
+    }
     let retryPhaseEntry = false;
     for (const event of result.events) {
       const materialized = await materializeEvent(db, def, participants, event, currentTurn);
