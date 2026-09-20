@@ -108,6 +108,23 @@ export async function seedPerfIndexes(db: Db, log: (msg: string) => void) {
     { name: "electionVoteTallies_electionId" },
     log
   );
+  // Runtime reset drops electionResultSnapshots, including its indexes, while
+  // migration markers intentionally survive. Bootstrap must therefore restore
+  // both indexes; the one-off migration alone cannot protect the new world.
+  await ensureIndex(
+    db,
+    "electionResultSnapshots",
+    { electionId: 1 },
+    { unique: true, name: "election_result_snapshot_election" },
+    log
+  );
+  await ensureIndex(
+    db,
+    "electionResultSnapshots",
+    { countryId: 1, electionType: 1, cycle: -1 },
+    { name: "election_result_snapshot_history" },
+    log
+  );
 
   // electedOfficials — lookup a character's offices
   await ensureIndex(

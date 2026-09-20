@@ -455,6 +455,8 @@ const TOOLS: ToolDef[] = [
         metricsError: job.metricsError,
         createdAt: job.createdAt,
         updatedAt: job.updatedAt,
+        workerHeartbeatAt: job.workerHeartbeatAt ?? job.heartbeatAt,
+        progressUpdatedAt: job.progressUpdatedAt,
         completedAt: job.completedAt,
       };
     },

@@ -233,6 +233,26 @@ describe("canCharacterInteract", () => {
     expect(canCharacterInteract(node, ["any", "partyLeader", "partyLeader:DUP"])).toBe(true);
     expect(canCharacterInteract(node, ["any", "partyLeader", "partyLeader:LAB"])).toBe(false);
   });
+  it("can restrict a negotiation node to one country's office-holder", () => {
+    const node: CrisisDecisionNode = {
+      ...TREE[0],
+      requiredCountryIds: ["IE"],
+    };
+    expect(canCharacterInteract(node, ["any", "headOfState"], "IE")).toBe(true);
+    expect(canCharacterInteract(node, ["any", "headOfState"], "UK")).toBe(false);
+    expect(canCharacterInteract(node, ["any", "headOfState"])).toBe(false);
+  });
+  it("can restrict a devolved-executive node to one region", () => {
+    const node: CrisisDecisionNode = {
+      ...TREE[0],
+      requiredRoles: ["stateGovernor"],
+      requiredCountryIds: ["UK"],
+      requiredRegionIds: ["NIR"],
+    };
+    expect(canCharacterInteract(node, ["any", "stateGovernor"], "UK", "NIR")).toBe(true);
+    expect(canCharacterInteract(node, ["any", "stateGovernor"], "UK", "SCO")).toBe(false);
+    expect(canCharacterInteract(node, ["any", "stateGovernor"], "UK")).toBe(false);
+  });
 });
 
 describe("createCrisisInteraction", () => {

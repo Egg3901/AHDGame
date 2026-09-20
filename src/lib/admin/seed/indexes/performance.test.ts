@@ -59,4 +59,27 @@ describe("seedPerfIndexes", () => {
     expect(call, "no electedOfficials party/state index is seeded").toBeTruthy();
     expect(call![2]).toEqual({ party: 1, state: 1 });
   });
+
+  it("recreates election result snapshot indexes after a world reset", async () => {
+    const db = { collection: vi.fn() } as unknown as Db;
+    await seedPerfIndexes(db, () => {});
+
+    const calls = ensureIndexMock.mock.calls.filter((c) => c[1] === "electionResultSnapshots");
+    expect(calls).toEqual(
+      expect.arrayContaining([
+        expect.arrayContaining([
+          db,
+          "electionResultSnapshots",
+          { electionId: 1 },
+          { unique: true, name: "election_result_snapshot_election" },
+        ]),
+        expect.arrayContaining([
+          db,
+          "electionResultSnapshots",
+          { countryId: 1, electionType: 1, cycle: -1 },
+          { name: "election_result_snapshot_history" },
+        ]),
+      ])
+    );
+  });
 });

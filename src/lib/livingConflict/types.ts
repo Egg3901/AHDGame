@@ -116,6 +116,13 @@ export interface EventResponseDefinition {
   defaultOutcomeId: string;
 }
 
+/** A sequential multi-actor negotiation. Unlike a global response, this keeps
+ * the authored nodes intact so each stage can name its country and office. */
+export interface ConflictNegotiationDefinition {
+  windowTurns: number;
+  decisionTree: CrisisDecisionNode[];
+}
+
 /**
  * How a procedural event decides to fire. Declarative and deterministic: the
  * engine evaluates these against live state and the turn number, never a clock
@@ -149,6 +156,8 @@ export interface ConflictEvent {
   effects?: RoleEffects;
   /** Optional shared response window materialized as an interactive crisis. */
   response?: EventResponseDefinition;
+  /** Optional ordered negotiation materialized as an interactive crisis. */
+  negotiation?: ConflictNegotiationDefinition;
 }
 
 /** One rung/stage of the conflict. Advancing swaps the tree, effects and events. */

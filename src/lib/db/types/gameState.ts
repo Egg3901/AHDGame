@@ -48,6 +48,8 @@ export interface SingleplayerConfig {
   featureFlags: Record<string, boolean>;
   /** Whether the local character is locked to the head-of-state career path. */
   permanentHeadOfState: boolean;
+  /** Explicit consent for durable, per-turn long-horizon telemetry. */
+  longHorizonTelemetryEnabled?: boolean;
   configuredAt: Date;
 }
 
