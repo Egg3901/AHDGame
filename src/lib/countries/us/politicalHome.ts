@@ -14,7 +14,7 @@ export async function loadUsPoliticalStateIds(db: Db): Promise<{
   currentYear: number;
   admittedIds: Set<string>;
   politicalIds: Set<string>;
-  /** Full states plus playable US territories with territorial politics. */
+  /** Full states, DC, and playable US territories with resident party politics. */
   residentPoliticalIds: Set<string>;
 }> {
   const gameState = await db
@@ -33,6 +33,7 @@ export async function loadUsPoliticalStateIds(db: Db): Promise<{
   const politicalIds = new Set<string>([...Object.keys(getHouseSeats(preset)), ...admittedIds]);
   const residentPoliticalIds = new Set<string>([
     ...politicalIds,
+    "DC",
     ...TERRITORY_ADMISSIONS.map((territory) => territory.stateId),
   ]);
   return { preset, currentYear, admittedIds, politicalIds, residentPoliticalIds };

@@ -57,10 +57,10 @@ describe("generateStatePartyOrg", () => {
     expect(noArg).toEqual(explicit);
   });
 
-  it("excludes DC — a federal district with no electoral state party organization", () => {
-    for (const preset of ["2019-default", "1991-default", "1953-default"]) {
+  it("includes DC party organizations without treating the district as a state", () => {
+    for (const preset of ["2019-default", "1991-default", "1953-default", "2027-default"]) {
       const entries = generateStatePartyOrg(preset);
-      expect(entries.some((e) => e.stateId === "DC")).toBe(false);
+      expect(entries.filter((e) => e.stateId === "DC").map((e) => e._id)).toEqual(["DC_1", "DC_2"]);
     }
   });
 
@@ -68,7 +68,7 @@ describe("generateStatePartyOrg", () => {
     const entries = generateStatePartyOrg("1953-default");
     expect(entries.some((e) => e.stateId === "AK" && e.partyId === "1")).toBe(true);
     expect(entries.some((e) => e.stateId === "HI" && e.partyId === "2")).toBe(true);
-    expect(new Set(entries.map((e) => e.stateId)).size).toBe(50);
+    expect(new Set(entries.map((e) => e.stateId)).size).toBe(51);
   });
 
   it("includes Alaska and Hawaii under modern presets", () => {
@@ -77,14 +77,14 @@ describe("generateStatePartyOrg", () => {
     expect(entries.some((e) => e.stateId === "HI" && e.partyId === "2")).toBe(true);
   });
 
-  it("covers all 50 electoral states under the draft 2027 preset", () => {
+  it("covers all 50 states plus DC under the draft 2027 preset", () => {
     const entries = generateStatePartyOrg("2027-default");
-    expect(new Set(entries.map((entry) => entry.stateId)).size).toBe(50);
-    expect(entries).toHaveLength(100);
+    expect(new Set(entries.map((entry) => entry.stateId)).size).toBe(51);
+    expect(entries).toHaveLength(102);
   });
 
-  it("covers all 50 electoral states under the default (2019) preset", () => {
+  it("covers all 50 states plus DC under the default (2019) preset", () => {
     const states = new Set(generateStatePartyOrg().map((e) => e.stateId));
-    expect(states.size).toBe(50);
+    expect(states.size).toBe(51);
   });
 });

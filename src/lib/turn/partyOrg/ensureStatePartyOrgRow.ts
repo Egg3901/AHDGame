@@ -6,7 +6,7 @@ import {
   getPartyIdString,
   getStatePartyOrgDocumentId,
 } from "@/lib/db/partyLookup";
-import { isUsElectoralState } from "@/lib/constants/states";
+import { isUsPartyOrganizationJurisdiction } from "@/lib/constants/states";
 import { loadUsPoliticalStateIds } from "@/lib/elections/usPoliticalHome";
 
 export interface EnsureStatePartyOrgRowArgs {
@@ -42,13 +42,12 @@ export async function ensureStatePartyOrgRow(
   db: Db,
   args: EnsureStatePartyOrgRowArgs
 ): Promise<StatePartyOrg> {
-  // Federal districts like DC are not organizable US states — they elect no
-  // offices and host no state party organization. Alaska and Hawaii, however,
-  // are playable territories with their own party chapters before admission.
+  // DC is organizable even though it elects no state or congressional offices.
+  // Alaska and Hawaii also have party chapters before admission.
   if (args.countryId === "US") {
-    if (!isUsElectoralState(args.stateId)) {
+    if (!isUsPartyOrganizationJurisdiction(args.stateId)) {
       throw new Error(
-        `Cannot create a state party org for non-electoral US region "${args.stateId}".`
+        `Cannot create a state party org for unsupported US region "${args.stateId}".`
       );
     }
     const { residentPoliticalIds } = await loadUsPoliticalStateIds(db);

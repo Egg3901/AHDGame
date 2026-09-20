@@ -15,7 +15,7 @@ import {
   getStatePartyOrgDocumentId,
 } from "@/lib/db/partyLookup";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
-import { isNonElectoralUsRegion } from "@/lib/constants/states";
+import { isNonPartyOrganizationUsRegion } from "@/lib/constants/states";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import {
   isPartyTreasuryNegative,
@@ -111,13 +111,12 @@ export async function POST(request: Request, { params }: RouteParams) {
       }
     }
 
-    // Federal districts like DC host no state party organization — block the
-    // budget set for every role (admins included) so no path reaches the SSOT
-    // chokepoint and throws an uncaught 500.
-    if (isNonElectoralUsRegion(countryId, stateId)) {
+    // Reject US regions outside the party-organization jurisdiction set. DC
+    // is supported even though it elects no congressional or state offices.
+    if (isNonPartyOrganizationUsRegion(countryId, stateId)) {
       return NextResponse.json(
         {
-          error: "This region is a federal district with no state party organization.",
+          error: "This US region does not support a party organization.",
         },
         { status: 400 }
       );

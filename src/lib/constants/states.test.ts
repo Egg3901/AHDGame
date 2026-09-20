@@ -17,6 +17,8 @@ import {
   getElectoralVoteUnits,
   getTravelActionCost,
   isUsElectoralState,
+  isUsPartyOrganizationJurisdiction,
+  isNonPartyOrganizationUsRegion,
   subNationalChamberSeats,
   CN_PEOPLES_CONGRESS_SEATS,
 } from "./states";
@@ -55,6 +57,22 @@ describe("isUsElectoralState", () => {
     expect(isUsElectoralState("PR")).toBe(false);
     expect(isUsElectoralState("")).toBe(false);
     expect(isUsElectoralState("ENG")).toBe(false);
+  });
+});
+
+describe("isUsPartyOrganizationJurisdiction", () => {
+  it("includes all 50 states and DC without making DC an electoral state", () => {
+    for (const id of STATE_IDS) {
+      expect(isUsPartyOrganizationJurisdiction(id)).toBe(true);
+    }
+    expect(isUsPartyOrganizationJurisdiction("DC")).toBe(true);
+    expect(isUsElectoralState("DC")).toBe(false);
+  });
+
+  it("rejects unsupported US regions without affecting other countries", () => {
+    expect(isUsPartyOrganizationJurisdiction("PR")).toBe(false);
+    expect(isNonPartyOrganizationUsRegion("US", "PR")).toBe(true);
+    expect(isNonPartyOrganizationUsRegion("UK", "ENG")).toBe(false);
   });
 });
 

@@ -1,6 +1,6 @@
 import type { StatePartyOrg } from "@/lib/db/types";
 import { states } from "./usStates";
-import { isUsElectoralState } from "@/lib/constants/states";
+import { isUsPartyOrganizationJurisdiction } from "@/lib/constants/states";
 import { ELECTION_2020_MARGIN, marginToLean } from "@/lib/data/2020ElectionResults";
 import { ELECTION_1988_MARGIN } from "@/lib/data/1988ElectionResults";
 import { ELECTION_1980_MARGIN } from "@/lib/data/1980ElectionResults";
@@ -134,9 +134,10 @@ export function generateStatePartyOrg(
   const entries: Omit<StatePartyOrg, "createdAt" | "updatedAt">[] = [];
 
   for (const state of states) {
-    // Federal districts like DC do not host a state party organization. Alaska
-    // and Hawaii do: territorial party governance is distinct from statehood.
-    if (!isUsElectoralState(state._id)) continue;
+    // DC hosts party committees and presidential registration despite having
+    // no congressional or gubernatorial seats. Public-office election code
+    // applies the narrower `isUsElectoralState` predicate separately.
+    if (!isUsPartyOrganizationJurisdiction(state._id)) continue;
     entries.push(...buildMajorPartyOrgsForState(state._id, presetId, margins));
   }
 
@@ -152,7 +153,7 @@ export function buildMajorPartyOrgsForState(
   presetId: string = "2019-default",
   margins: Record<string, number> = marginsForPreset(presetId)
 ): Omit<StatePartyOrg, "createdAt" | "updatedAt">[] {
-  if (!isUsElectoralState(stateId)) return [];
+  if (!isUsPartyOrganizationJurisdiction(stateId)) return [];
   const lean = stateLean(stateId, margins);
   return MAJOR_PARTY_SEQ_IDS.map((partyId) => ({
     _id: `${stateId}_${partyId}`,

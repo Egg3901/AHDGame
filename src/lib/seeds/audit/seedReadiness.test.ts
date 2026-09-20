@@ -435,7 +435,7 @@ describe("[3] Org ↔ lean coupling — favored party gets the bonus, loser keep
       for (const [stateId, margin] of Object.entries(baseline.margins)) {
         const dem = byKey.get(`${stateId}_${US_DEM}`);
         const rep = byKey.get(`${stateId}_${US_REP}`);
-        if (dem === undefined || rep === undefined) continue; // DC etc. host no org
+        if (dem === undefined || rep === undefined) continue;
         scored++;
 
         // Both parties must retain baseline organizing capacity so a region's
