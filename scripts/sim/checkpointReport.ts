@@ -1397,7 +1397,9 @@ async function main(): Promise<void> {
       .toArray()
   )[0] as Record<string, unknown> | undefined;
   const seedBaselineDoc = (await db
-    .collection("seedDiagnosticBaselines")
+    .collection<{ _id: string; turn?: number; metrics?: Record<string, unknown> }>(
+      "seedDiagnosticBaselines"
+    )
     .findOne({ _id: "current" })) as Record<string, unknown> | null;
   const seedProvenance = summarizeSeedProvenance(
     bootstrapConformanceDoc ?? null,
