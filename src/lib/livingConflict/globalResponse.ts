@@ -24,7 +24,12 @@ import { logWireEvent } from "@/lib/wireEvent";
 import { applyTensionEvent, tensionFloor } from "@/lib/coldwar/tension";
 import { readStandingPressureSnapshot } from "@/lib/coldwar/standingPressure";
 import { EQUIPMENT_TRACK_MAX } from "@/lib/military/arsenal";
-import { adjustIntensity, applyCommitment, relieveCommitment } from "./engine";
+import {
+  adjustIntensity,
+  applyCommitment,
+  applyConflictOutcome,
+  relieveCommitment,
+} from "./engine";
 import { livingConflictDef } from "./registry";
 import { loadConflictState, saveConflictState } from "./driver";
 import {
@@ -412,6 +417,7 @@ async function applyOutcomeTrajectory(
         ? applyCommitment(def, state, side, amount, gameState?.currentYear)
         : relieveCommitment(def, state, side, Math.abs(amount));
   }
+  state = applyConflictOutcome(def, state, outcome);
   await saveConflictState(db, state);
   if (campaignResult.applied && outcome.tensionDelta) {
     const minimumValue =

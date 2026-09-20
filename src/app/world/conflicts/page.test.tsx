@@ -40,6 +40,20 @@ const domesticCrisis = {
   globalResponse: undefined,
 } as Crisis;
 
+const livingConflict = {
+  defKey: "pandemic",
+  hasOpened: true,
+  status: "negotiating",
+  phaseLevel: 2,
+  intensity: 40,
+  openedYear: 2020,
+  pressure: {},
+  tracks: { public_trust: 63 },
+  phaseTurns: 2,
+  totalTurns: 5,
+  updatedAt: new Date(),
+};
+
 vi.mock("./_coldwar/gate", () => ({ requireConflictsEnabled: vi.fn() }));
 vi.mock("@/lib/time/gameTime", () => ({
   getGameTime: vi.fn(async () => ({
@@ -51,13 +65,13 @@ vi.mock("@/lib/time/gameTime", () => ({
 }));
 vi.mock("@/lib/mongodb", () => ({
   getDb: vi.fn(async () => ({
-    collection: () => ({
+    collection: (name: string) => ({
       countDocuments: vi.fn(async () => 2),
       find: () => ({
         sort: () => ({ toArray: vi.fn(async () => [internationalCrisis, domesticCrisis]) }),
         // The page resolves runtime country renames, which reads `countryState`
         // straight through `.find().toArray()` with no `.sort()` in between.
-        toArray: vi.fn(async () => []),
+        toArray: vi.fn(async () => (name === "livingConflicts" ? [livingConflict] : [])),
       }),
     }),
   })),
@@ -184,5 +198,14 @@ describe("ConflictsPage global response feed", () => {
 
     expect(screen.getByText("Strategic forces raised on an ambiguous warning")).toBeTruthy();
     expect(screen.queryByText("Nationwide Steel Strike")).toBeNull();
+  });
+
+  it("shows the phase, lifecycle, and named tracks of an open living crisis", async () => {
+    render(await ConflictsPage());
+
+    expect(screen.getByText("Novel Pandemic")).toBeTruthy();
+    expect(screen.getByText(/Outbreak · NEGOTIATING/)).toBeTruthy();
+    expect(screen.getByText("Public Trust")).toBeTruthy();
+    expect(screen.getByText("63")).toBeTruthy();
   });
 });

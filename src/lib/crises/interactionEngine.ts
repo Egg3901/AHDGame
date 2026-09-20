@@ -128,6 +128,12 @@ export async function resolveCharacterRoles(
       }
     }
   }
+  const ledParty = await db
+    .collection<{ abbreviation: string }>("politicalParties")
+    .findOne({ chairId: character._id }, { projection: { abbreviation: 1 } });
+  if (ledParty?.abbreviation) {
+    roles.push("partyLeader", `partyLeader:${ledParty.abbreviation}`);
+  }
   return roles;
 }
 
@@ -398,7 +404,14 @@ export async function getCrisisInteraction(
  */
 export function canCharacterInteract(node: CrisisDecisionNode, characterRoles: string[]): boolean {
   if (node.requiredRoles.includes("any")) return true;
-  return node.requiredRoles.some((role) => characterRoles.includes(role));
+  const roleMatches = node.requiredRoles.some((role) => characterRoles.includes(role));
+  if (!roleMatches) return false;
+  if (node.requiredRoles.includes("partyLeader") && node.requiredPartyAbbreviations?.length) {
+    return node.requiredPartyAbbreviations.some((abbreviation) =>
+      characterRoles.includes(`partyLeader:${abbreviation}`)
+    );
+  }
+  return true;
 }
 
 function deadlineForNode(node: CrisisDecisionNode | null): Date | null {

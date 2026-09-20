@@ -2,9 +2,13 @@ import type { Db } from "mongodb";
 import type { ConflictRole, FiredEvent, LivingConflictDef, LivingConflictState } from "./types";
 import {
   applyCommitment,
+  applyTrackDeltas,
   emptyConflictState,
+  evaluateConflictTransitions,
+  normalizeConflictState,
   openConflict,
   phaseFor,
+  scheduledPressureDeltas,
   selectEvents,
   tickConflict,
 } from "./engine";
@@ -109,8 +113,9 @@ export async function driveConflictTurn(
   year: number | null | undefined,
   externalPressure = 0
 ): Promise<DriveResult> {
-  let state = await loadConflictState(db, def.key);
+  let state = normalizeConflictState(def, await loadConflictState(db, def.key));
   if (state.lastProcessedTurn === turn) return { state, events: [] };
+  if (state.status === "closed") return { state, events: [] };
   const wasOpen = state.hasOpened;
 
   if (!state.hasOpened) {
@@ -144,6 +149,20 @@ export async function driveConflictTurn(
   if (wasOpen && state.hasOpened) {
     state = { ...state, campaign: advanceCampaignTurn(state.campaign) };
   }
+
+  const trackDeltas = scheduledPressureDeltas(
+    def,
+    state,
+    typeof year === "number" ? year : undefined
+  );
+  if (Object.keys(trackDeltas).length > 0) {
+    state = applyTrackDeltas(def, state, trackDeltas);
+  }
+  state = evaluateConflictTransitions(
+    def,
+    state,
+    typeof year === "number" ? year : undefined
+  ).state;
 
   const fired = selectEvents(def, state, turn);
   const events: DrivenEvent[] = fired.map((f) => ({
