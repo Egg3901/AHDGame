@@ -217,6 +217,11 @@ export interface LivingConflictDef {
   untilYear?: number;
   /** False for conflicts that require an explicit trigger rather than a date. */
   autoOpen?: boolean;
+  /**
+   * Optional live-world pressure required before the conflict opens inside its
+   * calendar window. Omitted preserves date-only opening for existing defs.
+   */
+  minimumOpeningPressure?: number;
   /** The map anchor / host, for surfaces that need one. */
   hostCountry?: string;
   /** Authored world participants. The role resolver may reinterpret them. */
