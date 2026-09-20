@@ -49,7 +49,7 @@ function createFakeDb(seeds: Record<string, FakeSeed>, ops: RecordedOp[]): Db {
       return { toArray: async () => rows };
     },
   });
-  return { collection: collection as never } as Db;
+  return { collection } as unknown as Db;
 }
 
 const ENRICHMENT_COLLECTIONS = [

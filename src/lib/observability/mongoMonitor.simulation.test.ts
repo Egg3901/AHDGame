@@ -16,6 +16,13 @@ vi.mock("@sentry/nextjs", () => ({
   startInactiveSpan: vi.fn(),
 }));
 
+const eventContext = {
+  address: "127.0.0.1:27018",
+  databaseName: "simulation",
+  serverConnectionId: null,
+  hasServiceId: false,
+};
+
 describe("simulation command monitoring", () => {
   beforeEach(() => {
     vi.stubEnv("NODE_ENV", "test");
@@ -33,11 +40,13 @@ describe("simulation command monitoring", () => {
     attachMongoCommandMonitor(client);
     beginPhaseProfiling("indexFunds");
     client.emit("commandStarted", {
+      ...eventContext,
       commandName: "find",
       requestId: 1,
       command: { find: "indexFunds" },
     });
     client.emit("commandSucceeded", {
+      ...eventContext,
       commandName: "find",
       requestId: 1,
       duration: 2,
@@ -57,11 +66,13 @@ describe("simulation command monitoring", () => {
       const client = new MongoClient("mongodb://127.0.0.1:27018");
       attachMongoCommandMonitor(client);
       client.emit("commandStarted", {
+        ...eventContext,
         commandName: "find",
         requestId: 1,
         command: { find: "indexFunds" },
       });
       client.emit("commandSucceeded", {
+        ...eventContext,
         commandName: "find",
         requestId: 1,
         duration: 1,
