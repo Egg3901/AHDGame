@@ -9,8 +9,10 @@ describe("era country config overrides", () => {
     expect(getCountryConfig("US", "2019-default").legislature.upperChamber?.seats).toBe(100);
   });
 
-  it("gives the 1992 Commons 651 seats", () => {
-    expect(getCountryConfig("UK", "1991-default").legislature.lowerChamber.seats).toBe(651);
+  it("gives the 1991 Commons the 650 seats the 1983 boundaries drew", () => {
+    // 650, not 651. A 1991 world opens in January 1991; 651 is the chamber the
+    // 1992 boundary review produced and the April 1992 election first filled.
+    expect(getCountryConfig("UK", "1991-default").legislature.lowerChamber.seats).toBe(650);
     expect(getCountryConfig("UK", "2019-default").legislature.lowerChamber.seats).toBe(650);
   });
 

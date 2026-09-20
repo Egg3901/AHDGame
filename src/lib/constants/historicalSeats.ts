@@ -1834,165 +1834,228 @@ export const JP_REGIONAL_COUNCIL_1991: HistoricalSeat[] = [
 // Party slugs: jp_ldp (LDP), jp_jsp (JSP — 1991-only default), jp_komeito,
 // jp_jcp, jp_dsp (DSP — 1991-only default), jp_independent (SDF + independents).
 // CDP / DPFP / Ishin are 2019-era parties and don't appear here.
+//
+// ⚠️ THE REGIONAL SPLIT WAS RE-AGGREGATED; the national totals above are
+// unchanged and are the real result. The previous split was authored against a
+// different regional taxonomy than `jpRegions1991`: it put 85 seats in Kyushu
+// against that bundle's 62 and 78 in Kansai against its 92, inverting the real
+// ordering of the two — Kansai was the more populous by some margin. Seven of
+// the eight regions disagreed. Each region now sums to its `houseDistricts`,
+// which `JP_SHUGIIN_SEATS_1991` also mirrors, so the chamber config, the
+// districts, this roster and the election allocator finally agree.
+//
+// Within that constraint the distribution follows the real 1990 pattern: the
+// LDP's share is lowest in urban Kanto and Kansai and highest in Chugoku,
+// Shikoku and Kyushu; Komeito concentrates in Kansai and Tokyo; the JCP is
+// almost entirely urban; the DSP sits in Kansai and industrial Aichi. It is
+// not a claim of per-prefecture precision.
 
 export const JP_SHUGIIN_1990: HistoricalSeat[] = [
-  // HOK (23 seats): LDP rural + JSP labor-union strongholds. LDP 11, JSP 6,
-  // Komeito 1, JCP 1, DSP 0, Ind 4 = 23.
+  // HOK (23 seats): Hokkaido: LDP rural seats alongside JSP labour-union strongholds.
+  // LDP 11, JSP 6, Komeito 1, JCP 1, Ind 4 = 23.
   { state: "HOK", officeType: "shugiin", party: "jp_ldp", seatsHeld: 11 },
   { state: "HOK", officeType: "shugiin", party: "jp_jsp", seatsHeld: 6 },
   { state: "HOK", officeType: "shugiin", party: "jp_komeito", seatsHeld: 1 },
   { state: "HOK", officeType: "shugiin", party: "jp_jcp", seatsHeld: 1 },
   { state: "HOK", officeType: "shugiin", party: "jp_independent", seatsHeld: 4 },
 
-  // TOH (62 seats): rural LDP heartland, JSP holds industrial Niigata + Miyagi.
-  // LDP 32, JSP 18, Komeito 3, JCP 1, DSP 1, Ind 7 = 62.
-  { state: "TOH", officeType: "shugiin", party: "jp_ldp", seatsHeld: 32 },
-  { state: "TOH", officeType: "shugiin", party: "jp_jsp", seatsHeld: 18 },
+  // TOH (50 seats): Tohoku: rural LDP heartland, with the JSP holding industrial Niigata
+  // and Miyagi.
+  // LDP 30, JSP 14, Komeito 3, Ind 3 = 50.
+  { state: "TOH", officeType: "shugiin", party: "jp_ldp", seatsHeld: 30 },
+  { state: "TOH", officeType: "shugiin", party: "jp_jsp", seatsHeld: 14 },
   { state: "TOH", officeType: "shugiin", party: "jp_komeito", seatsHeld: 3 },
-  { state: "TOH", officeType: "shugiin", party: "jp_jcp", seatsHeld: 1 },
-  { state: "TOH", officeType: "shugiin", party: "jp_dsp", seatsHeld: 1 },
-  { state: "TOH", officeType: "shugiin", party: "jp_independent", seatsHeld: 7 },
+  { state: "TOH", officeType: "shugiin", party: "jp_independent", seatsHeld: 3 },
 
-  // KAN (143 seats): Tokyo metro — JSP's industrial-labor base + Komeito
-  // Soka Gakkai concentration + JCP urban strongholds. LDP 70, JSP 44,
-  // Komeito 16, JCP 7, DSP 5, Ind 1 = 143.
+  // KAN (145 seats): Kanto: proportionally the LDP's weakest region. Komeito's Tokyo
+  // organisation, the JCP's best result and the DSP's Rengo-aligned seats all
+  // sit here. This region also carries the seat that brings the chamber to 512.
+  // LDP 70, JSP 44, Komeito 15, JCP 7, DSP 6, Ind 3 = 145.
   { state: "KAN", officeType: "shugiin", party: "jp_ldp", seatsHeld: 70 },
   { state: "KAN", officeType: "shugiin", party: "jp_jsp", seatsHeld: 44 },
-  { state: "KAN", officeType: "shugiin", party: "jp_komeito", seatsHeld: 16 },
+  { state: "KAN", officeType: "shugiin", party: "jp_komeito", seatsHeld: 15 },
   { state: "KAN", officeType: "shugiin", party: "jp_jcp", seatsHeld: 7 },
-  { state: "KAN", officeType: "shugiin", party: "jp_dsp", seatsHeld: 5 },
-  { state: "KAN", officeType: "shugiin", party: "jp_independent", seatsHeld: 1 },
+  { state: "KAN", officeType: "shugiin", party: "jp_dsp", seatsHeld: 6 },
+  { state: "KAN", officeType: "shugiin", party: "jp_independent", seatsHeld: 3 },
 
-  // CHU (75 seats): industrial Aichi (Toyota/Nagoya) blunts LDP dominance.
-  // LDP 41, JSP 17, Komeito 7, JCP 2, DSP 3, Ind 5 = 75.
-  { state: "CHU", officeType: "shugiin", party: "jp_ldp", seatsHeld: 41 },
-  { state: "CHU", officeType: "shugiin", party: "jp_jsp", seatsHeld: 17 },
-  { state: "CHU", officeType: "shugiin", party: "jp_komeito", seatsHeld: 7 },
+  // CHU (86 seats): Chubu: LDP-dominant, and home to the DSP's Aichi manufacturing base.
+  // LDP 52, JSP 20, Komeito 6, JCP 2, DSP 2, Ind 4 = 86.
+  { state: "CHU", officeType: "shugiin", party: "jp_ldp", seatsHeld: 52 },
+  { state: "CHU", officeType: "shugiin", party: "jp_jsp", seatsHeld: 20 },
+  { state: "CHU", officeType: "shugiin", party: "jp_komeito", seatsHeld: 6 },
   { state: "CHU", officeType: "shugiin", party: "jp_jcp", seatsHeld: 2 },
-  { state: "CHU", officeType: "shugiin", party: "jp_dsp", seatsHeld: 3 },
-  { state: "CHU", officeType: "shugiin", party: "jp_independent", seatsHeld: 5 },
+  { state: "CHU", officeType: "shugiin", party: "jp_dsp", seatsHeld: 2 },
+  { state: "CHU", officeType: "shugiin", party: "jp_independent", seatsHeld: 4 },
 
-  // KNS (78 seats): Osaka metro — JSP industrial Sōhyō unions, strong
-  // Komeito + DSP urban presence. LDP 33, JSP 22, Komeito 11, JCP 3,
-  // DSP 4, Ind 5 = 78.
-  { state: "KNS", officeType: "shugiin", party: "jp_ldp", seatsHeld: 33 },
+  // KNS (92 seats): Kansai: Komeito's founding base in Osaka, strong JCP and DSP showings,
+  // and the LDP below its national share.
+  // LDP 41, JSP 22, Komeito 14, JCP 5, DSP 6, Ind 4 = 92.
+  { state: "KNS", officeType: "shugiin", party: "jp_ldp", seatsHeld: 41 },
   { state: "KNS", officeType: "shugiin", party: "jp_jsp", seatsHeld: 22 },
-  { state: "KNS", officeType: "shugiin", party: "jp_komeito", seatsHeld: 11 },
-  { state: "KNS", officeType: "shugiin", party: "jp_jcp", seatsHeld: 3 },
-  { state: "KNS", officeType: "shugiin", party: "jp_dsp", seatsHeld: 4 },
-  { state: "KNS", officeType: "shugiin", party: "jp_independent", seatsHeld: 5 },
+  { state: "KNS", officeType: "shugiin", party: "jp_komeito", seatsHeld: 14 },
+  { state: "KNS", officeType: "shugiin", party: "jp_jcp", seatsHeld: 5 },
+  { state: "KNS", officeType: "shugiin", party: "jp_dsp", seatsHeld: 6 },
+  { state: "KNS", officeType: "shugiin", party: "jp_independent", seatsHeld: 4 },
 
-  // CGK (30 seats): rural LDP heartland. LDP 19, JSP 6, Komeito 2, JCP 1,
-  // DSP 0, Ind 2 = 30.
-  { state: "CGK", officeType: "shugiin", party: "jp_ldp", seatsHeld: 19 },
-  { state: "CGK", officeType: "shugiin", party: "jp_jsp", seatsHeld: 6 },
+  // CGK (34 seats): Chugoku: rural and conservative, the LDP's strongest regional share.
+  // LDP 22, JSP 8, Komeito 2, Ind 2 = 34.
+  { state: "CGK", officeType: "shugiin", party: "jp_ldp", seatsHeld: 22 },
+  { state: "CGK", officeType: "shugiin", party: "jp_jsp", seatsHeld: 8 },
   { state: "CGK", officeType: "shugiin", party: "jp_komeito", seatsHeld: 2 },
-  { state: "CGK", officeType: "shugiin", party: "jp_jcp", seatsHeld: 1 },
   { state: "CGK", officeType: "shugiin", party: "jp_independent", seatsHeld: 2 },
 
-  // SHI (16 seats): smallest region, LDP dominant. LDP 11, JSP 3, Komeito 1,
-  // Ind 1 = 16.
-  { state: "SHI", officeType: "shugiin", party: "jp_ldp", seatsHeld: 11 },
-  { state: "SHI", officeType: "shugiin", party: "jp_jsp", seatsHeld: 3 },
-  { state: "SHI", officeType: "shugiin", party: "jp_komeito", seatsHeld: 1 },
-  { state: "SHI", officeType: "shugiin", party: "jp_independent", seatsHeld: 1 },
+  // SHI (20 seats): Shikoku: the smallest region, and solidly LDP.
+  // LDP 12, JSP 5, Ind 3 = 20.
+  { state: "SHI", officeType: "shugiin", party: "jp_ldp", seatsHeld: 12 },
+  { state: "SHI", officeType: "shugiin", party: "jp_jsp", seatsHeld: 5 },
+  { state: "SHI", officeType: "shugiin", party: "jp_independent", seatsHeld: 3 },
 
-  // KYU (85 seats): LDP mainland dominance plus JSP union strength in
-  // Fukuoka coal-belt + Okinawa anti-base opposition. LDP 58, JSP 20,
-  // Komeito 4, JCP 1, DSP 1, Ind 1 = 85.
-  { state: "KYU", officeType: "shugiin", party: "jp_ldp", seatsHeld: 58 },
-  { state: "KYU", officeType: "shugiin", party: "jp_jsp", seatsHeld: 20 },
+  // KYU (62 seats): Kyushu and Okinawa: LDP-dominant, with JSP strength in the old Fukuoka
+  // coalfield. Okinawa's anti-base parties fold into `jp_independent`.
+  // LDP 37, JSP 17, Komeito 4, JCP 1, Ind 3 = 62.
+  { state: "KYU", officeType: "shugiin", party: "jp_ldp", seatsHeld: 37 },
+  { state: "KYU", officeType: "shugiin", party: "jp_jsp", seatsHeld: 17 },
   { state: "KYU", officeType: "shugiin", party: "jp_komeito", seatsHeld: 4 },
   { state: "KYU", officeType: "shugiin", party: "jp_jcp", seatsHeld: 1 },
-  { state: "KYU", officeType: "shugiin", party: "jp_dsp", seatsHeld: 1 },
-  { state: "KYU", officeType: "shugiin", party: "jp_independent", seatsHeld: 1 },
+  { state: "KYU", officeType: "shugiin", party: "jp_independent", seatsHeld: 3 },
 ];
 // Totals: LDP 275, JSP 136, Komeito 45, JCP 16, DSP 14, Ind 26 = 512 ✓
 // (Independent total includes Social Democratic Federation's 4 seats + 22 true independents.)
 
+// ─── JP July 1989: the Sangiin after the 15th ordinary election ──────────────
+// Sangiin: 252 seats — the size the chamber held from 1983 until the 1998
+// reduction. LDP 109, JSP 66, Komeito 21, JCP 14, DSP 10, others 32.
+//
+// ⚠️ THIS SEATED 206 OF 252, AND NOTHING SAID SO. The 46-seat hole was not
+// declared through `vacantSeats` either, so it was indistinguishable from a
+// roster someone had truncated — the exact ambiguity that field exists to
+// resolve. The admin readiness diagnostic could not see it: `seatMin` was
+// pinned to the 2019 Diet at 713, and 512 + 206 = 718 cleared it.
+//
+// ⚠️ THE OLD 206 WAS NOT A SCALED-DOWN 1989 RESULT, so it is not what the fill
+// was built from. It ran Komeito at 13.6% against a real 8.3% and the JSP at
+// 19.4% against a real 26.2%; scaling it would have preserved that distortion
+// and buried the thing that makes 1989 worth modelling. The national totals
+// above are the real ones, distributed regionally the same way the Shugiin is.
+//
+// LDP 109 is below the 127 needed for a majority. Losing control of the upper
+// house for the first time is the defining fact of this Diet, and it is what
+// makes a 1991 Japan interesting to play: the governing party cannot pass
+// legislation on its own.
+//
+// ⚠️ THE TWO CLASSES ARE DELIBERATELY ASYMMETRIC. Half the Sangiin is elected
+// every three years, so this chamber holds one cohort from 1986 — an LDP
+// landslide — and one from 1989, its worst result to that point. Class 1 is
+// LDP 72 / JSP 18; class 2 is LDP 37 / JSP 48. Splitting each region evenly
+// between the classes would have erased the stagger that makes the next
+// election (July 1992, when the 1986 cohort comes up) consequential.
 export const JP_SANGIIN_1989: HistoricalSeat[] = [
+  // HOK (8 seats, 4 per class): Hokkaido.
+  // Class 1 (1986): LDP 2, JSP 1, Komeito 1 = 4.
   { state: "HOK", officeType: "sangiin", party: "jp_ldp", seatsHeld: 2, chamberClass: 1 },
   { state: "HOK", officeType: "sangiin", party: "jp_jsp", seatsHeld: 1, chamberClass: 1 },
   { state: "HOK", officeType: "sangiin", party: "jp_komeito", seatsHeld: 1, chamberClass: 1 },
+  // Class 2 (1989): LDP 1, JSP 2, JCP 1 = 4.
   { state: "HOK", officeType: "sangiin", party: "jp_ldp", seatsHeld: 1, chamberClass: 2 },
-  { state: "HOK", officeType: "sangiin", party: "jp_jsp", seatsHeld: 1, chamberClass: 2 },
+  { state: "HOK", officeType: "sangiin", party: "jp_jsp", seatsHeld: 2, chamberClass: 2 },
   { state: "HOK", officeType: "sangiin", party: "jp_jcp", seatsHeld: 1, chamberClass: 2 },
 
-  { state: "TOH", officeType: "sangiin", party: "jp_ldp", seatsHeld: 4, chamberClass: 1 },
+  // TOH (22 seats, 11 per class): Tohoku: rural, and the clearest 1989 swing — the LDP's farm vote broke
+  // over the beef and citrus liberalisation and the new consumption tax.
+  // Class 1 (1986): LDP 7, JSP 2, Komeito 1, JCP 1 = 11.
+  { state: "TOH", officeType: "sangiin", party: "jp_ldp", seatsHeld: 7, chamberClass: 1 },
   { state: "TOH", officeType: "sangiin", party: "jp_jsp", seatsHeld: 2, chamberClass: 1 },
   { state: "TOH", officeType: "sangiin", party: "jp_komeito", seatsHeld: 1, chamberClass: 1 },
-  { state: "TOH", officeType: "sangiin", party: "jp_dsp", seatsHeld: 1, chamberClass: 1 },
   { state: "TOH", officeType: "sangiin", party: "jp_jcp", seatsHeld: 1, chamberClass: 1 },
+  // Class 2 (1989): LDP 4, JSP 5, Komeito 1, Ind 1 = 11.
   { state: "TOH", officeType: "sangiin", party: "jp_ldp", seatsHeld: 4, chamberClass: 2 },
-  { state: "TOH", officeType: "sangiin", party: "jp_jsp", seatsHeld: 2, chamberClass: 2 },
+  { state: "TOH", officeType: "sangiin", party: "jp_jsp", seatsHeld: 5, chamberClass: 2 },
   { state: "TOH", officeType: "sangiin", party: "jp_komeito", seatsHeld: 1, chamberClass: 2 },
-  { state: "TOH", officeType: "sangiin", party: "jp_dsp", seatsHeld: 1, chamberClass: 2 },
-  // Ishin entry dropped — Nippon Ishin no Kai didn't exist until 2010.
+  { state: "TOH", officeType: "sangiin", party: "jp_independent", seatsHeld: 1, chamberClass: 2 },
 
-  { state: "KAN", officeType: "sangiin", party: "jp_ldp", seatsHeld: 16, chamberClass: 1 },
-  { state: "KAN", officeType: "sangiin", party: "jp_jsp", seatsHeld: 6, chamberClass: 1 },
-  { state: "KAN", officeType: "sangiin", party: "jp_komeito", seatsHeld: 4, chamberClass: 1 },
+  // KAN (78 seats, 39 per class): Kanto.
+  // Class 1 (1986): LDP 20, JSP 7, Komeito 3, JCP 3, DSP 2, Ind 4 = 39.
+  { state: "KAN", officeType: "sangiin", party: "jp_ldp", seatsHeld: 20, chamberClass: 1 },
+  { state: "KAN", officeType: "sangiin", party: "jp_jsp", seatsHeld: 7, chamberClass: 1 },
+  { state: "KAN", officeType: "sangiin", party: "jp_komeito", seatsHeld: 3, chamberClass: 1 },
+  { state: "KAN", officeType: "sangiin", party: "jp_jcp", seatsHeld: 3, chamberClass: 1 },
   { state: "KAN", officeType: "sangiin", party: "jp_dsp", seatsHeld: 2, chamberClass: 1 },
-  { state: "KAN", officeType: "sangiin", party: "jp_jcp", seatsHeld: 2, chamberClass: 1 },
-  { state: "KAN", officeType: "sangiin", party: "jp_independent", seatsHeld: 2, chamberClass: 1 },
-  { state: "KAN", officeType: "sangiin", party: "jp_ldp", seatsHeld: 16, chamberClass: 2 },
-  { state: "KAN", officeType: "sangiin", party: "jp_jsp", seatsHeld: 6, chamberClass: 2 },
-  { state: "KAN", officeType: "sangiin", party: "jp_komeito", seatsHeld: 4, chamberClass: 2 },
-  { state: "KAN", officeType: "sangiin", party: "jp_jcp", seatsHeld: 2, chamberClass: 2 },
-  { state: "KAN", officeType: "sangiin", party: "jp_dsp", seatsHeld: 2, chamberClass: 2 },
-  { state: "KAN", officeType: "sangiin", party: "jp_independent", seatsHeld: 2, chamberClass: 2 },
+  { state: "KAN", officeType: "sangiin", party: "jp_independent", seatsHeld: 4, chamberClass: 1 },
+  // Class 2 (1989): LDP 11, JSP 15, Komeito 3, JCP 3, DSP 1, Ind 6 = 39.
+  { state: "KAN", officeType: "sangiin", party: "jp_ldp", seatsHeld: 11, chamberClass: 2 },
+  { state: "KAN", officeType: "sangiin", party: "jp_jsp", seatsHeld: 15, chamberClass: 2 },
+  { state: "KAN", officeType: "sangiin", party: "jp_komeito", seatsHeld: 3, chamberClass: 2 },
+  { state: "KAN", officeType: "sangiin", party: "jp_jcp", seatsHeld: 3, chamberClass: 2 },
+  { state: "KAN", officeType: "sangiin", party: "jp_dsp", seatsHeld: 1, chamberClass: 2 },
+  { state: "KAN", officeType: "sangiin", party: "jp_independent", seatsHeld: 6, chamberClass: 2 },
 
-  { state: "CHU", officeType: "sangiin", party: "jp_ldp", seatsHeld: 9, chamberClass: 1 },
+  // CHU (44 seats, 22 per class): Chubu.
+  // Class 1 (1986): LDP 13, JSP 3, Komeito 2, JCP 1, DSP 1, Ind 2 = 22.
+  { state: "CHU", officeType: "sangiin", party: "jp_ldp", seatsHeld: 13, chamberClass: 1 },
   { state: "CHU", officeType: "sangiin", party: "jp_jsp", seatsHeld: 3, chamberClass: 1 },
   { state: "CHU", officeType: "sangiin", party: "jp_komeito", seatsHeld: 2, chamberClass: 1 },
   { state: "CHU", officeType: "sangiin", party: "jp_jcp", seatsHeld: 1, chamberClass: 1 },
   { state: "CHU", officeType: "sangiin", party: "jp_dsp", seatsHeld: 1, chamberClass: 1 },
-  { state: "CHU", officeType: "sangiin", party: "jp_independent", seatsHeld: 1, chamberClass: 1 },
-  { state: "CHU", officeType: "sangiin", party: "jp_ldp", seatsHeld: 9, chamberClass: 2 },
-  { state: "CHU", officeType: "sangiin", party: "jp_jsp", seatsHeld: 3, chamberClass: 2 },
+  { state: "CHU", officeType: "sangiin", party: "jp_independent", seatsHeld: 2, chamberClass: 1 },
+  // Class 2 (1989): LDP 6, JSP 8, Komeito 2, JCP 1, DSP 1, Ind 4 = 22.
+  { state: "CHU", officeType: "sangiin", party: "jp_ldp", seatsHeld: 6, chamberClass: 2 },
+  { state: "CHU", officeType: "sangiin", party: "jp_jsp", seatsHeld: 8, chamberClass: 2 },
   { state: "CHU", officeType: "sangiin", party: "jp_komeito", seatsHeld: 2, chamberClass: 2 },
   { state: "CHU", officeType: "sangiin", party: "jp_jcp", seatsHeld: 1, chamberClass: 2 },
-  { state: "CHU", officeType: "sangiin", party: "jp_independent", seatsHeld: 2, chamberClass: 2 },
+  { state: "CHU", officeType: "sangiin", party: "jp_dsp", seatsHeld: 1, chamberClass: 2 },
+  { state: "CHU", officeType: "sangiin", party: "jp_independent", seatsHeld: 4, chamberClass: 2 },
 
-  { state: "KNS", officeType: "sangiin", party: "jp_ldp", seatsHeld: 8, chamberClass: 1 },
+  // KNS (46 seats, 23 per class): Kansai.
+  // Class 1 (1986): LDP 12, JSP 3, Komeito 2, JCP 2, DSP 2, Ind 2 = 23.
+  { state: "KNS", officeType: "sangiin", party: "jp_ldp", seatsHeld: 12, chamberClass: 1 },
   { state: "KNS", officeType: "sangiin", party: "jp_jsp", seatsHeld: 3, chamberClass: 1 },
-  { state: "KNS", officeType: "sangiin", party: "jp_komeito", seatsHeld: 3, chamberClass: 1 },
-  { state: "KNS", officeType: "sangiin", party: "jp_jcp", seatsHeld: 1, chamberClass: 1 },
-  { state: "KNS", officeType: "sangiin", party: "jp_dsp", seatsHeld: 1, chamberClass: 1 },
+  { state: "KNS", officeType: "sangiin", party: "jp_komeito", seatsHeld: 2, chamberClass: 1 },
+  { state: "KNS", officeType: "sangiin", party: "jp_jcp", seatsHeld: 2, chamberClass: 1 },
+  { state: "KNS", officeType: "sangiin", party: "jp_dsp", seatsHeld: 2, chamberClass: 1 },
   { state: "KNS", officeType: "sangiin", party: "jp_independent", seatsHeld: 2, chamberClass: 1 },
-  { state: "KNS", officeType: "sangiin", party: "jp_ldp", seatsHeld: 8, chamberClass: 2 },
-  { state: "KNS", officeType: "sangiin", party: "jp_jsp", seatsHeld: 3, chamberClass: 2 },
-  { state: "KNS", officeType: "sangiin", party: "jp_komeito", seatsHeld: 3, chamberClass: 2 },
+  // Class 2 (1989): LDP 6, JSP 9, Komeito 2, JCP 1, DSP 1, Ind 4 = 23.
+  { state: "KNS", officeType: "sangiin", party: "jp_ldp", seatsHeld: 6, chamberClass: 2 },
+  { state: "KNS", officeType: "sangiin", party: "jp_jsp", seatsHeld: 9, chamberClass: 2 },
+  { state: "KNS", officeType: "sangiin", party: "jp_komeito", seatsHeld: 2, chamberClass: 2 },
   { state: "KNS", officeType: "sangiin", party: "jp_jcp", seatsHeld: 1, chamberClass: 2 },
-  { state: "KNS", officeType: "sangiin", party: "jp_independent", seatsHeld: 2, chamberClass: 2 },
+  { state: "KNS", officeType: "sangiin", party: "jp_dsp", seatsHeld: 1, chamberClass: 2 },
+  { state: "KNS", officeType: "sangiin", party: "jp_independent", seatsHeld: 4, chamberClass: 2 },
 
-  { state: "CGK", officeType: "sangiin", party: "jp_ldp", seatsHeld: 3, chamberClass: 1 },
+  // CGK (16 seats, 8 per class): Chugoku.
+  // Class 1 (1986): LDP 5, JSP 1, Komeito 1, Ind 1 = 8.
+  { state: "CGK", officeType: "sangiin", party: "jp_ldp", seatsHeld: 5, chamberClass: 1 },
   { state: "CGK", officeType: "sangiin", party: "jp_jsp", seatsHeld: 1, chamberClass: 1 },
   { state: "CGK", officeType: "sangiin", party: "jp_komeito", seatsHeld: 1, chamberClass: 1 },
-  { state: "CGK", officeType: "sangiin", party: "jp_jcp", seatsHeld: 1, chamberClass: 1 },
+  { state: "CGK", officeType: "sangiin", party: "jp_independent", seatsHeld: 1, chamberClass: 1 },
+  // Class 2 (1989): LDP 3, JSP 3, JCP 1, Ind 1 = 8.
   { state: "CGK", officeType: "sangiin", party: "jp_ldp", seatsHeld: 3, chamberClass: 2 },
-  { state: "CGK", officeType: "sangiin", party: "jp_jsp", seatsHeld: 1, chamberClass: 2 },
-  { state: "CGK", officeType: "sangiin", party: "jp_komeito", seatsHeld: 1, chamberClass: 2 },
+  { state: "CGK", officeType: "sangiin", party: "jp_jsp", seatsHeld: 3, chamberClass: 2 },
+  { state: "CGK", officeType: "sangiin", party: "jp_jcp", seatsHeld: 1, chamberClass: 2 },
   { state: "CGK", officeType: "sangiin", party: "jp_independent", seatsHeld: 1, chamberClass: 2 },
 
-  { state: "SHI", officeType: "sangiin", party: "jp_ldp", seatsHeld: 2, chamberClass: 1 },
-  { state: "SHI", officeType: "sangiin", party: "jp_jsp", seatsHeld: 1, chamberClass: 1 },
-  { state: "SHI", officeType: "sangiin", party: "jp_komeito", seatsHeld: 1, chamberClass: 1 },
-  { state: "SHI", officeType: "sangiin", party: "jp_ldp", seatsHeld: 2, chamberClass: 2 },
-  { state: "SHI", officeType: "sangiin", party: "jp_jsp", seatsHeld: 1, chamberClass: 2 },
-  { state: "SHI", officeType: "sangiin", party: "jp_jcp", seatsHeld: 1, chamberClass: 2 },
+  // SHI (10 seats, 5 per class): Shikoku.
+  // Class 1 (1986): LDP 4, Ind 1 = 5.
+  { state: "SHI", officeType: "sangiin", party: "jp_ldp", seatsHeld: 4, chamberClass: 1 },
+  { state: "SHI", officeType: "sangiin", party: "jp_independent", seatsHeld: 1, chamberClass: 1 },
+  // Class 2 (1989): LDP 1, JSP 2, Komeito 1, Ind 1 = 5.
+  { state: "SHI", officeType: "sangiin", party: "jp_ldp", seatsHeld: 1, chamberClass: 2 },
+  { state: "SHI", officeType: "sangiin", party: "jp_jsp", seatsHeld: 2, chamberClass: 2 },
+  { state: "SHI", officeType: "sangiin", party: "jp_komeito", seatsHeld: 1, chamberClass: 2 },
+  { state: "SHI", officeType: "sangiin", party: "jp_independent", seatsHeld: 1, chamberClass: 2 },
 
-  { state: "KYU", officeType: "sangiin", party: "jp_ldp", seatsHeld: 7, chamberClass: 1 },
-  { state: "KYU", officeType: "sangiin", party: "jp_jsp", seatsHeld: 3, chamberClass: 1 },
-  { state: "KYU", officeType: "sangiin", party: "jp_komeito", seatsHeld: 2, chamberClass: 1 },
-  { state: "KYU", officeType: "sangiin", party: "jp_jcp", seatsHeld: 1, chamberClass: 1 },
-  { state: "KYU", officeType: "sangiin", party: "jp_independent", seatsHeld: 1, chamberClass: 1 },
-  { state: "KYU", officeType: "sangiin", party: "jp_ldp", seatsHeld: 7, chamberClass: 2 },
-  { state: "KYU", officeType: "sangiin", party: "jp_jsp", seatsHeld: 3, chamberClass: 2 },
-  { state: "KYU", officeType: "sangiin", party: "jp_komeito", seatsHeld: 2, chamberClass: 2 },
-  { state: "KYU", officeType: "sangiin", party: "jp_jcp", seatsHeld: 1, chamberClass: 2 },
+  // KYU (28 seats, 14 per class): Kyushu and Okinawa.
+  // Class 1 (1986): LDP 9, JSP 1, Komeito 1, DSP 1, Ind 2 = 14.
+  { state: "KYU", officeType: "sangiin", party: "jp_ldp", seatsHeld: 9, chamberClass: 1 },
+  { state: "KYU", officeType: "sangiin", party: "jp_jsp", seatsHeld: 1, chamberClass: 1 },
+  { state: "KYU", officeType: "sangiin", party: "jp_komeito", seatsHeld: 1, chamberClass: 1 },
+  { state: "KYU", officeType: "sangiin", party: "jp_dsp", seatsHeld: 1, chamberClass: 1 },
+  { state: "KYU", officeType: "sangiin", party: "jp_independent", seatsHeld: 2, chamberClass: 1 },
+  // Class 2 (1989): LDP 5, JSP 4, Komeito 1, DSP 1, Ind 3 = 14.
+  { state: "KYU", officeType: "sangiin", party: "jp_ldp", seatsHeld: 5, chamberClass: 2 },
+  { state: "KYU", officeType: "sangiin", party: "jp_jsp", seatsHeld: 4, chamberClass: 2 },
+  { state: "KYU", officeType: "sangiin", party: "jp_komeito", seatsHeld: 1, chamberClass: 2 },
   { state: "KYU", officeType: "sangiin", party: "jp_dsp", seatsHeld: 1, chamberClass: 2 },
-  { state: "KYU", officeType: "sangiin", party: "jp_independent", seatsHeld: 1, chamberClass: 2 },
+  { state: "KYU", officeType: "sangiin", party: "jp_independent", seatsHeld: 3, chamberClass: 2 },
 ];
 
 // Source data is the 1990 prefectural baseline (all eight macro-regions held

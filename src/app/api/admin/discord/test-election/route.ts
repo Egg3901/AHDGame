@@ -22,8 +22,8 @@ import { generateDiscordEventCard } from "@/lib/discord/eventCard";
 import { ELECTION_TYPE_SHORT_LABEL } from "@/lib/utils/electionLabels";
 import {
   HOUSE_SEATS,
-  TOTAL_JP_SHUGIIN_SEATS,
-  TOTAL_JP_SANGIIN_SEATS,
+  getTotalJpShugiinSeats,
+  getTotalJpSangiinSeats,
   TOTAL_DE_BUNDESTAG_SEATS,
 } from "@/lib/constants";
 import { getTotalUkCommonsSeats } from "@/lib/constants/states";
@@ -225,13 +225,14 @@ export async function POST(request: Request) {
     const now = new Date();
 
     // Chart generation for national chambers only (no regionalCouncil)
-    const ukCommonsTotal = getTotalUkCommonsSeats(await getGameStatePreset(db));
+    const chartPreset = await getGameStatePreset(db);
+    const ukCommonsTotal = getTotalUkCommonsSeats(chartPreset);
     const chartSeatTotals: Record<string, number> = {
       house: HOUSE_SEATS ? Object.values(HOUSE_SEATS).reduce((a, b) => a + b, 0) : 435,
       senate: 100,
       commons: ukCommonsTotal,
-      shugiin: TOTAL_JP_SHUGIIN_SEATS,
-      sangiin: TOTAL_JP_SANGIIN_SEATS,
+      shugiin: getTotalJpShugiinSeats(chartPreset),
+      sangiin: getTotalJpSangiinSeats(chartPreset),
       bundestag: TOTAL_DE_BUNDESTAG_SEATS,
     };
     const chartCountryMap: Record<string, string> = {

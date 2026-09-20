@@ -147,12 +147,15 @@ const COMPOSITION: Record<
 /**
  * Seats that are deliberately left without an authored identity.
  *
- * These four exist because this branch completed the 2019 Commons to the real
- * 650 and moved the Speaker to Chorley. The seats are right; what is missing is
- * a NAME for each, and the project rule is that era seeds anchor on structures
- * rather than people -- CLAUDE.md forbids seeding named real officeholders, for
- * any country, in any era. Authoring four more real MPs to turn this green
- * would break that rule to satisfy a test.
+ * Each of these is a seat some change completed or corrected, where what is
+ * missing is a NAME rather than the seat: the 2019 set came from completing
+ * that Commons to the real 650 and moving the Speaker to Chorley; the 1991 set
+ * from dating its Commons to 1987 and filling its Sangiin to 252.
+ *
+ * The project rule is that era seeds anchor on structures rather than people --
+ * CLAUDE.md forbids seeding named real officeholders, for any country, in any
+ * era. Authoring more real legislators to turn this green would break that rule
+ * to satisfy a test.
  *
  * A seat with no entry here is not broken: the seeder generates a
  * non-player politician for it, which is the outcome the rule asks for. The
@@ -164,7 +167,20 @@ const ALLOWED_UNAUTHORED: Record<string, ReadonlySet<string>> = {
   // and the Sinn Féin seat for West Belfast, which SF held in 1987 and lost in
   // 1992. Same rule as the 2019 four below — the seats are right, and authoring
   // two more real MPs to name them would break CLAUDE.md to satisfy a test.
-  "1991-default": new Set(["UK|commons|SEE|uk_libdem|0", "UK|commons|NIR|uk_sf|0"]),
+  "1991-default": new Set([
+    "UK|commons|SEE|uk_libdem|0",
+    "UK|commons|NIR|uk_sf|0",
+    // Sangiin seats the old 206-seat roster never reached. Filling the chamber
+    // to its real 252 introduced these seven party/class slots; same rule as
+    // above, so the seeder generates a politician for each.
+    "JP|sangiin|TOH|jp_independent|0",
+    "JP|sangiin|CHU|jp_dsp|1",
+    "JP|sangiin|KNS|jp_dsp|1",
+    "JP|sangiin|CGK|jp_independent|1",
+    "JP|sangiin|SHI|jp_independent|0",
+    "JP|sangiin|SHI|jp_independent|1",
+    "JP|sangiin|KYU|jp_dsp|1",
+  ]),
   "2019-default": new Set([
     "UK|commons|SEE|uk_green|0",
     "UK|commons|EAE|uk_libdem|0",

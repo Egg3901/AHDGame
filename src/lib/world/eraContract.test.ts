@@ -558,14 +558,14 @@ describe("S4 — player chambers agree with their era config", () => {
     // (Task C3): the seeded rosters were right and the base config was
     // era-blind, so the config moved to meet them.
     //
-    // The 1991 Sangiin is the one case where BOTH sides were wrong. The real
-    // House of Councillors held 252 seats in 1991; the base config carried the
-    // modern 248 and the seeded roster totals 206 across its two classes. The
-    // override sets the historically correct 252, which leaves the roster 46
-    // short - a genuine authoring gap (the 1989 half-election results per
-    // prefecture), recorded rather than papered over by bending the config down
-    // to match an incomplete roster.
-    "1991-default": ["JP.sangiin: seeded 206 + vacant 0 != config 252"],
+    // The 1991 Sangiin was the one case where BOTH sides were wrong, and it is
+    // FIXED too. It is recorded here rather than deleted because the reasoning
+    // that kept it open is worth keeping: the roster totalled 206 against a
+    // correct 252, and bending the config down to match an incomplete roster
+    // was rightly refused. What changed is that the roster was completed to 252
+    // instead — see JP_SANGIIN_1989, which now also splits its two staggered
+    // classes 126/126 rather than leaving the stagger implicit.
+    //
     // 2027 arrived with upstream's preset and its Sangiin roster totals 247
     // against a 248-seat config. Recorded, not papered over: the same choice as
     // 1991 above. Bending the config to 247 would make the game agree with an

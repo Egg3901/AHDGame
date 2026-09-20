@@ -1,7 +1,7 @@
 import { withCampaignRules } from "@/lib/campaignTargeting/rules";
 import { getDb } from "@/lib/mongodb";
 import type { Election, ElectionStatus, State } from "@/lib/db/types";
-import { JP_SHUGIIN_SEATS, JP_SANGIIN_SEATS } from "@/lib/constants/states";
+import { getJpShugiinSeats, getJpSangiinSeats } from "@/lib/constants/states";
 import { DEFAULT_DURATIONS } from "@/lib/constants/electionDurations";
 import { pickNextCanonicalCycle, turnToWallClock } from "@/lib/elections/canonicalCycle";
 import { electionToLarpYear } from "@/lib/utils/formatters";
@@ -37,6 +37,8 @@ export async function ensureJPElections(now: Date, inFlightTurn?: number): Promi
   const db = await getDb();
   const { currentTurn: persistedTurn, ctx } = await getCurrentTurnAndCtx(db);
   const currentTurn = inFlightTurn ?? persistedTurn;
+  // 512 seats under the pre-1994 medium-constituency system, 465 after it.
+  const shugiinSeatsByRegion = getJpShugiinSeats(ctx.preset);
 
   const jpRegions = await db
     .collection<State>("states")
@@ -112,7 +114,7 @@ export async function ensureJPElections(now: Date, inFlightTurn?: number): Promi
       cycle: spawn.cycle,
       electionYear: electionToLarpYear("shugiin", spawn.cycle, undefined, undefined, ctx),
       status,
-      totalSeats: prev?.totalSeats ?? JP_SHUGIIN_SEATS[regionId] ?? 1,
+      totalSeats: prev?.totalSeats ?? shugiinSeatsByRegion[regionId] ?? 1,
       startTime,
       primaryEndTime,
       endTime,
@@ -188,6 +190,8 @@ export async function ensureJPCouncillorElections(
 
   // Process both classes unless a specific override is given
   const classesToProcess: (1 | 2)[] = classOverride ? [classOverride] : [1, 2];
+  // 252 seats before the 1998 reduction, 248 after.
+  const sangiinSeatsByRegion = getJpSangiinSeats(ctx.preset);
 
   // Find ALL JP regions — each region participates in both classes (half seats per class)
   const jpRegions = await db
@@ -260,7 +264,7 @@ export async function ensureJPCouncillorElections(
       const status: "active" | "upcoming" = "active";
 
       // Each class contests half the region's total Sangiin seats
-      const totalRegionSeats = JP_SANGIIN_SEATS[regionId] ?? 2;
+      const totalRegionSeats = sangiinSeatsByRegion[regionId] ?? 2;
       const classSeats = Math.ceil(totalRegionSeats / 2);
 
       toInsert.push({

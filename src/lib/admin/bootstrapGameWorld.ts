@@ -37,7 +37,7 @@ import {
   DEFAULT_DURATIONS,
   withElectionGameStateSnapshot,
 } from "@/lib/turn/perpetualElections";
-import { JP_SANGIIN_SEATS } from "@/lib/constants/states";
+import { getJpSangiinSeats } from "@/lib/constants/states";
 import { MS_PER_TURN, getStartingYearForPreset } from "@/lib/constants/turnTime";
 import { getCycleAnchors } from "@/lib/elections/cycleAnchorContext";
 import { electionToLarpYear } from "@/lib/utils/formatters";
@@ -1148,7 +1148,7 @@ export async function bootstrapGameWorld(options: BootstrapOptions) {
 
     for (const region of jpRegions) {
       const regionId = String(region._id);
-      const totalRegionSeats = JP_SANGIIN_SEATS[regionId] ?? 2;
+      const totalRegionSeats = getJpSangiinSeats(preset)[regionId] ?? 2;
       const classSeats = Math.ceil(totalRegionSeats / 2);
 
       for (const chamberClass of [1, 2] as const) {

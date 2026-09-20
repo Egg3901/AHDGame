@@ -44,9 +44,18 @@ describe("getReadinessExpectations", () => {
         expect(derived.demographicsCount, where).toBe(eraRegions ?? authored.demographicsCount);
         expect(derived.stateMetricsCount, where).toBe(eraRegions ?? authored.stateMetricsCount);
 
-        // Everything else is judgment, not a count, and passes through untouched.
-        expect(derived.seatMin, where).toBe(authored.seatMin);
-        expect(derived.seatNote, where).toBe(authored.seatNote);
+        // Everything else is judgment, not a count, and passes through
+        // untouched — except where SEAT_MIN_BY_PRESET records that an era's
+        // chambers are a different size than the authored entry assumes. Japan
+        // in 1991 is the only such case: a 764-seat Diet measured against the
+        // modern 713 could not see a missing fifth of its upper house.
+        const seatOverride = preset === "1991-default" && id === "JP";
+        expect(derived.seatMin, where).toBe(seatOverride ? 764 : authored.seatMin);
+        expect(derived.seatNote, where).toBe(
+          seatOverride
+            ? "Expected ≥764 (512 Shugiin + 252 Sangiin, pre-1994 Diet)"
+            : authored.seatNote
+        );
         expect(derived.nppMin, where).toBe(authored.nppMin);
         expect(derived.officialMin, where).toBe(authored.officialMin);
         expect(derived.statePartyOrgMin, where).toBe(authored.statePartyOrgMin);

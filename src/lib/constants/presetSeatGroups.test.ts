@@ -190,7 +190,9 @@ describe("preset seat groups", () => {
     // opens fifteen months before it existed. See UK_COMMONS_1987.
     expect(seatCountFor("1991-default", "UK", "commons")).toBe(650);
     expect(seatCountFor("1991-default", "JP", "shugiin")).toBe(512);
-    expect(seatCountFor("1991-default", "JP", "sangiin")).toBe(206);
+    // 252, not 206: the Sangiin used to stop 46 seats short of its own config
+    // with nothing declaring the gap. See JP_SANGIIN_1989.
+    expect(seatCountFor("1991-default", "JP", "sangiin")).toBe(252);
   });
 
   it("returns nothing for a country the preset does not seat", () => {
