@@ -6,6 +6,10 @@ import type {
   RoleContext,
   RoleEffects,
 } from "../types";
+
+// Primary historical anchor: the UK government's published Belfast Agreement,
+// including consent, institutions, decommissioning, policing, prisoners, and
+// British-Irish machinery: https://www.gov.uk/government/publications/the-belfast-agreement
 import { cfx } from "../effects";
 
 const KEY = "northern_ireland";

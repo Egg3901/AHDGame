@@ -11,6 +11,14 @@ import type {
   RoleDecisionTrees,
 } from "../types";
 
+// Primary historical anchors constrain the stress and policy menu rather than
+// forcing Lehman or an exact trigger: Federal Reserve accounts of the 2007-10
+// crisis and coordinated response,
+// https://www.federalreserve.gov/newsevents/speech/yellen20170825a.htm and
+// https://www.federalreserve.gov/newsevents/speech/20100407a.htm, plus the ECB's
+// sovereign-stress commitment,
+// https://www.ecb.europa.eu/press/key/date/2012/html/sp120726.en.html
+
 function role(ctx: RoleContext): ConflictRole {
   if (ctx.belligerents.includes(ctx.countryId)) return "belligerent";
   if (ctx.countryId === ctx.backerA) return "backer_a";
