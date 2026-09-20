@@ -4,6 +4,7 @@ import {
   applyCommitment,
   canAdvance,
   emptyConflictState,
+  evaluateConflictTransitions,
   governingPressure,
   maxPhaseLevel,
   openConflict,
@@ -59,20 +60,17 @@ describe("living-conflict engine", () => {
       expect(governingPressure(s)).toBeLessThanOrEqual(phaseFor(VIETNAM_DEF, 1)!.advancePressure);
     });
 
-    it("respects minDwellTurns on the pandemic", () => {
-      // outbreak (phase 2) requires 3 dwell turns on emergence; pandemic (phase 3)
-      // requires 4 dwell turns on outbreak. Pressure alone does not advance.
-      let s = openConflict(emptyConflictState("pandemic"), 2000);
-      s = applyCommitment(PANDEMIC_DEF, s, "a", 20); // pressure met, but 0 dwell
+    it("uses health tracks rather than commitment pressure on the pandemic", () => {
+      let s = openConflict(emptyConflictState("pandemic"), 2019);
+      s = applyCommitment(PANDEMIC_DEF, s, "a", 200);
       expect(s.phaseLevel).toBe(1);
-      s = { ...s, phaseTurns: 3 };
-      s = applyCommitment(PANDEMIC_DEF, s, "a", 20); // now dwell met -> phase 2
-      expect(s.phaseLevel).toBe(2);
-      s = applyCommitment(PANDEMIC_DEF, s, "a", 28); // pressure met, 0 dwell on outbreak
-      expect(s.phaseLevel).toBe(2);
-      s = { ...s, phaseTurns: 4 };
-      s = applyCommitment(PANDEMIC_DEF, s, "a", 28);
-      expect(s.phaseLevel).toBe(3);
+
+      const result = evaluateConflictTransitions(
+        PANDEMIC_DEF,
+        { ...s, tracks: { ...s.tracks, transmission: 45 } },
+        2020
+      );
+      expect(result.state.phaseLevel).toBe(2);
     });
 
     it("descends only after a side's own pressure is drained", () => {
@@ -317,12 +315,12 @@ describe("driver", () => {
       blocMembers: [],
     };
 
-    const quiet = await driveConflictTurn(db, gated, gatedParticipants, 1, 2000, 59, {
+    const quiet = await driveConflictTurn(db, gated, gatedParticipants, 1, 2019, 59, {
       fragility: 15,
     });
     expect(quiet.state.hasOpened).toBe(false);
 
-    const opened = await driveConflictTurn(db, gated, gatedParticipants, 2, 2000, 60, {
+    const opened = await driveConflictTurn(db, gated, gatedParticipants, 2, 2019, 60, {
       fragility: 15,
     });
     expect(opened.state.hasOpened).toBe(true);
@@ -339,24 +337,24 @@ describe("driver", () => {
     expect(beat!.affectedNations.length).toBeGreaterThan(0);
   });
 
-  it("lets a pandemic climb on its own momentum over turns", async () => {
+  it("lets scheduled transmission pressure advance a pandemic", async () => {
     const db = fakeDb();
-    // Open, then drive enough turns that naturalPressure clears emergence.
+    // Open, then drive enough turns for deterministic zoonotic-pressure beats.
     let res = await driveConflictTurn(
       db,
       PANDEMIC_DEF,
       { belligerents: ["CN"], neighbors: [], blocMembers: [] },
       1,
-      2000
+      2019
     );
     expect(res.state.phaseLevel).toBe(1);
-    for (let turn = 2; turn <= 6; turn++) {
+    for (let turn = 2; turn <= 50; turn++) {
       res = await driveConflictTurn(
         db,
         PANDEMIC_DEF,
         { belligerents: ["CN"], neighbors: [], blocMembers: [] },
         turn,
-        2000
+        2019
       );
     }
     expect(res.state.phaseLevel).toBeGreaterThanOrEqual(2);
