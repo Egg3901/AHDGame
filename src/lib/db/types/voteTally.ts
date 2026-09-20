@@ -160,6 +160,10 @@ export interface ElectionVoteTally {
   contingentResolutionPending?: boolean;
   /** President only: tally finalized but executive seating failed; retry seating only. */
   executiveSeatingPending?: boolean;
+  /** President only: irrecoverable resolution failure recorded to prevent endless retries. */
+  resolutionTerminalReason?: "winner_candidate_missing";
+  /** President only: when an irrecoverable resolution failure became terminal. */
+  resolutionTerminalAt?: Date;
 
   /**
    * President-primary-only: per-state intra-party votes accumulated during the final 6 turns.
