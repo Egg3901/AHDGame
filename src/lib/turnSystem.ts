@@ -56,6 +56,7 @@ import { getAnomalyScanCadencePredicate } from "@/simulation/phases/anomalyScanC
 import { isSingleplayer } from "@/lib/singleplayer";
 import { reconcileFederalBudgetInvariants } from "@/lib/budget/budgetInvariants";
 import type { CompletedTurnPhaseObservation } from "@/simulation/engine/types";
+import { completedTurnStatus } from "@/simulation/engine/turnCompletion";
 
 // Re-export public helpers consumed by other modules
 export {
@@ -565,6 +566,7 @@ export async function processTurn(
 
     healthSnapshotWritten = context.phaseResults.gameHealthSnapshot !== null;
 
+    const completion = completedTurnStatus(warnings);
     const compactPhaseTimings = Object.entries(phaseStatuses)
       .flatMap(([phase, status]) => {
         if (!status.startedAt || !status.completedAt) return [];
@@ -599,8 +601,8 @@ export async function processTurn(
                 singleplayerTurnMetrics: {
                   turn: context.newTurn,
                   durationMs: Date.now() - startTime,
-                  success: warnings.length === 0,
-                  warningCount: warnings.length,
+                  success: completion.success,
+                  warningCount: completion.warningCount,
                   slowestPhases: compactPhaseTimings,
                 },
               }
@@ -620,7 +622,7 @@ export async function processTurn(
       gameTime: context.gameNow,
       realTime: context.realNow,
       durationMs: Date.now() - startTime,
-      success: warnings.length === 0,
+      success: completion.success,
       warnings,
       phaseStatuses,
       phases: context.phaseResults,
@@ -688,7 +690,7 @@ export async function processTurn(
     });
 
     return {
-      success: warnings.length === 0,
+      success: completion.success,
       turn: context.newTurn,
       message:
         warnings.length === 0
