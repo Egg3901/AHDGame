@@ -396,22 +396,25 @@ export function detectWashTrade(
       .sort((a, b) => a.ts.getTime() - b.ts.getTime());
     if (buys.length === 0 || sells.length === 0) continue;
 
-    let sellIndex = 0;
+    const sellFlagDeltas = new Int32Array(sells.length + 1);
+    let sellStart = 0;
+    let sellEnd = 0;
     for (const b of buys) {
-      while (
-        sellIndex < sells.length &&
-        sells[sellIndex].ts.getTime() < b.ts.getTime() - windowMs
-      ) {
-        sellIndex++;
+      const minTime = b.ts.getTime() - windowMs;
+      const maxTime = b.ts.getTime() + windowMs;
+      while (sellStart < sells.length && sells[sellStart].ts.getTime() < minTime) sellStart++;
+      if (sellEnd < sellStart) sellEnd = sellStart;
+      while (sellEnd < sells.length && sells[sellEnd].ts.getTime() <= maxTime) sellEnd++;
+      if (sellStart < sellEnd) {
+        flaggedIds.add(b.id);
+        sellFlagDeltas[sellStart]++;
+        sellFlagDeltas[sellEnd]--;
       }
-      for (let k = sellIndex; k < sells.length; k++) {
-        const deltaMs = sells[k].ts.getTime() - b.ts.getTime();
-        if (deltaMs > windowMs) break;
-        if (Math.abs(deltaMs) <= windowMs) {
-          flaggedIds.add(b.id);
-          flaggedIds.add(sells[k].id);
-        }
-      }
+    }
+    let activeRanges = 0;
+    for (let index = 0; index < sells.length; index++) {
+      activeRanges += sellFlagDeltas[index];
+      if (activeRanges > 0) flaggedIds.add(sells[index].id);
     }
   }
 
@@ -462,19 +465,48 @@ export function detectPreElectionFundingSurge(
   let surges = 0;
   for (const group of byRecipient.values()) {
     const sorted = [...group].sort((a, b) => a.ts.getTime() - b.ts.getTime());
+    const payerCounts = new Map<string, number>();
+    const flagDeltas = new Int32Array(sorted.length + 1);
     let start = 0;
+    let distinctPayers = 0;
+    let total = 0;
     for (let end = 0; end < sorted.length; end++) {
-      while (sorted[end].ts.getTime() - sorted[start].ts.getTime() > windowMs) start++;
-      const windowRows = sorted.slice(start, end + 1);
-      const distinctPayers = new Set(windowRows.map((r) => r.subjectId));
-      const total = windowRows.reduce((sum, r) => sum + Math.abs(r.amount ?? 0), 0);
+      const addedPayer = sorted[end].subjectId!;
+      const addedCount = payerCounts.get(addedPayer) ?? 0;
+      if (addedCount === 0) distinctPayers++;
+      payerCounts.set(addedPayer, addedCount + 1);
+      total += Math.abs(sorted[end].amount ?? 0);
+
+      while (sorted[end].ts.getTime() - sorted[start].ts.getTime() > windowMs) {
+        const removed = sorted[start];
+        const removedPayer = removed.subjectId!;
+        const remainingCount = (payerCounts.get(removedPayer) ?? 1) - 1;
+        if (remainingCount === 0) {
+          payerCounts.delete(removedPayer);
+          distinctPayers--;
+        } else {
+          payerCounts.set(removedPayer, remainingCount);
+        }
+        total -= Math.abs(removed.amount ?? 0);
+        start++;
+      }
       if (
-        distinctPayers.size >= opts.preElectionMinDistinctPayers &&
+        distinctPayers >= opts.preElectionMinDistinctPayers &&
         total >= opts.preElectionMinTotalAmount
       ) {
         surges++;
-        for (const r of windowRows) flaggedIds.add(r.id);
+        // Mark the qualifying range and materialize ids once after the scan.
+        // Repeated overlapping surge windows used to slice, allocate a Set,
+        // reduce, and revisit every row for every endpoint, making this O(n²)
+        // for large party-funding groups.
+        flagDeltas[start]++;
+        flagDeltas[end + 1]--;
       }
+    }
+    let activeRanges = 0;
+    for (let index = 0; index < sorted.length; index++) {
+      activeRanges += flagDeltas[index];
+      if (activeRanges > 0) flaggedIds.add(sorted[index].id);
     }
   }
 
