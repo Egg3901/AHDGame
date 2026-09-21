@@ -14,7 +14,7 @@
 /**
  * 1953-era national sector weights, US only.
  *
- * Relative percentage-of-GDP allocations across the 17 game sectors, calibrated
+ * Relative percentage-of-GDP allocations across the 16 game sectors, calibrated
  * to ~1953 BEA value-added shares — a *peak-manufacturing, defense-dominant,
  * pre-service-economy* era. Relative to the 1979 and later bundles:
  *   - manufacturing at its absolute PEAK (~25-30% of GDP; WWII-built capacity
@@ -101,14 +101,13 @@ export const COUNTRY_SECTOR_WEIGHTS_1953: Record<string, SectorWeightMap> = {
     chemical_industries: 5, // synthetic rubber; explosives; fertilizer for collectivized farms
     logistics: 5, // Soviet Railways; Volga-Don Canal (1952); limited trucks
     telecommunications: 2, // state monopoly; party/military priority; scarce for civilians
-    media: 2, // Pravda; Izvestia; TASS; purely state propaganda
+    media_entertainment: 2, // Pravda; Izvestia; TASS; purely state propaganda; Bolshoi; socialist realism cinema; approved culture only
     financial: 1, // Gosbank monopoly; no private finance
     real_estate: 1, // state-allocated housing; kommunalka; no market
     healthcare: 1, // Semashko system; free universal; underfunded
     retail: 1, // state shops; queuing; black market
     automobiles: 0, // Moskvitch; GAZ Pobeda; elite Zil; negligible consumer auto
     technology: 0, // BESM-1 (1953); no commercial market
-    entertainment: 0, // Bolshoi; socialist realism cinema; approved culture only
   },
 
   DD: DD_ECONOMY.sectorWeights.byEra["1953"],
@@ -147,12 +146,11 @@ export const COUNTRY_SECTOR_WEIGHTS_1953: Record<string, SectorWeightMap> = {
     chemical_industries: 4, // potash fertilizers starting; defence chemicals
     healthcare: 4, // Soviet polyclinics; Minsk Medical Institute
     retail: 2, // state shops; reconstruction priority over consumer goods
-    media: 1, // Zvezda; Belarusian Radio; censored
+    media_entertainment: 2, // Zvezda; Belarusian Radio; censored; Kupala National Theatre; folk music
     financial: 1, // Gosbank branch; no autonomy
     real_estate: 1,
     telecommunications: 1,
     automobiles: 2, // MAZ/BELAZ early trucks; no private cars
-    entertainment: 1, // Kupala National Theatre; folk music
     technology: 0,
   },
 

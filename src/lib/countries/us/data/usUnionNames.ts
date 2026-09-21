@@ -22,9 +22,8 @@ export const US_UNION_NAMES_MODERN: Partial<Record<CorporationType, string>> = {
   healthcare: "National Nurses United",
   retail: "United Food and Commercial Workers",
   logistics: "International Brotherhood of Teamsters",
-  media: "NewsGuild-CWA",
+  media_entertainment: "SAG-AFTRA",
   defense: "International Association of Machinists and Aerospace Workers",
-  entertainment: "SAG-AFTRA",
   telecommunications: "Communications Workers of America",
   chemical_industries: "United Steelworkers",
   technology: "Communications Workers of America",
@@ -33,18 +32,16 @@ export const US_UNION_NAMES_MODERN: Partial<Record<CorporationType, string>> = {
 export const US_UNION_NAMES_2007: Partial<Record<CorporationType, string>> = {
   ...US_UNION_NAMES_MODERN,
   healthcare: "Service Employees International Union",
-  media: "The Newspaper Guild",
-  entertainment: "Screen Actors Guild",
+  media_entertainment: "Screen Actors Guild",
 };
 
 export const US_UNION_NAMES_1991: Partial<Record<CorporationType, string>> = {
   ...US_UNION_NAMES_MODERN,
   manufacturing: "United Steelworkers of America",
   chemical_industries: "Oil, Chemical and Atomic Workers Union",
-  media: "The Newspaper Guild",
+  media_entertainment: "Screen Actors Guild",
   healthcare: "Service Employees International Union",
   technology: "International Brotherhood of Electrical Workers",
-  entertainment: "Screen Actors Guild",
 };
 
 export const US_UNION_NAMES_1979: Partial<Record<CorporationType, string>> = {
@@ -59,10 +56,9 @@ export const US_UNION_NAMES_1953: Partial<Record<CorporationType, string>> = {
   energy: "Utility Workers Union of America",
   construction: "United Brotherhood of Carpenters and Joiners",
   logistics: "International Brotherhood of Teamsters",
-  media: "American Newspaper Guild",
+  media_entertainment: "Screen Actors Guild",
   defense: "International Association of Machinists",
   telecommunications: "Communications Workers of America",
   chemical_industries: "Oil Workers International Union",
-  entertainment: "Screen Actors Guild",
   retail: "Retail Clerks International Association",
 };
