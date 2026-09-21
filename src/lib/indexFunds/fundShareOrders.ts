@@ -2,6 +2,7 @@ import { ObjectId, type Db } from "mongodb";
 import type { Corporation, IndexFund, IndexFundTransaction, ShareOrder } from "@/lib/db/types";
 import { corpLiquidCapitalToAnchor } from "@/lib/currency/corporationCapital";
 import { insertFundTransaction } from "@/lib/indexFunds/fundQueries";
+import { emitTx } from "@/lib/financialTxLog/emit";
 
 /**
  * Index-fund-owned order-book buy orders.
@@ -57,6 +58,8 @@ export interface PlaceFundShareBuyOrderInput {
   limitPriceLocal: number;
   /** FX rate (local per 1 ₳) for the target corp's home currency. */
   fxRate: number;
+  /** Game turn stamped on the ledger escrow row (#992 tranche 4). */
+  turn: number;
   liquidityQuote?: { turn: number; referencePrice: number };
   /**
    * When set, the escrow transaction row is pushed here instead of inserted,
@@ -136,6 +139,31 @@ export async function placeFundShareBuyOrder(
     };
     if (input.txSink) input.txSink.push(escrowTx);
     else await insertFundTransaction(db, escrowTx);
+
+    // #992 tranche 4: fund-subject escrow leg. The debit above already moved
+    // cashAnchor, so this row evidences it (same order_escrow reason as the
+    // character/corporation placement rows; the refund shares it so a
+    // placement nets against its own cancel per currency). Fund-subject rows
+    // never mirror, so this is the only ledger row for the debit.
+    await emitTx(db, {
+      type: "stock_order_escrow",
+      turn: input.turn,
+      createdAt: now,
+      subjectType: "fund",
+      subjectId: fund._id,
+      subjectName: fund.name,
+      amount: -escrowAnchor,
+      anchorAmount: -escrowAnchor,
+      currencyCode: fund.anchorCurrencyCode,
+      counterpartyType: "system",
+      counterpartyName: "Order book escrow",
+      meta: {
+        orderId: orderId.toString(),
+        orderType: "buy",
+        targetCorporationId: corp._id.toString(),
+        escrowAmountAnchor: escrowAnchor,
+      },
+    });
   } catch (err) {
     // Roll the escrow back if we couldn't persist the order.
     await refundFundCashAnchor(db, fund._id, escrowAnchor);
@@ -221,7 +249,11 @@ export async function placeFundShareSellOrder(
  * the stored value is exactly the un-filled escrow at cancel time — refund it
  * verbatim. No-op if the order is missing, not a fund order, or already closed.
  */
-export async function cancelFundShareOrder(db: Db, orderId: ObjectId): Promise<void> {
+export async function cancelFundShareOrder(
+  db: Db,
+  orderId: ObjectId,
+  turn?: number
+): Promise<void> {
   // Atomically claim the order so a concurrent fill/cancel can't double-refund.
   const claimed = await db
     .collection<ShareOrder>("shareOrders")
@@ -243,5 +275,37 @@ export async function cancelFundShareOrder(db: Db, orderId: ObjectId): Promise<v
   const refundAnchor = claimed.escrowAnchor ?? 0;
   if (refundAnchor > 0) {
     await refundFundCashAnchor(db, claimed.placerFundId, refundAnchor);
+    // #992 tranche 4: fund-subject refund leg for the cash just credited back.
+    // Same order_escrow reason as the placement row so the pair nets per
+    // currency. The claim above guarantees exactly one refund per order, so
+    // exactly one row. No-op refunds (fully-filled escrow already zeroed)
+    // move no cash and emit nothing.
+    if (turn !== undefined) {
+      const fund = await db
+        .collection<IndexFund>("indexFunds")
+        .findOne({ _id: claimed.placerFundId }, { projection: { name: 1, anchorCurrencyCode: 1 } });
+      if (fund) {
+        const now = new Date();
+        await emitTx(db, {
+          type: "stock_order_refund",
+          turn,
+          createdAt: now,
+          subjectType: "fund",
+          subjectId: claimed.placerFundId,
+          subjectName: fund.name,
+          amount: refundAnchor,
+          anchorAmount: refundAnchor,
+          currencyCode: fund.anchorCurrencyCode,
+          counterpartyType: "system",
+          counterpartyName: "Order book escrow",
+          meta: {
+            orderId: orderId.toString(),
+            orderType: claimed.type,
+            targetCorporationId: claimed.corporationId.toString(),
+            escrowAmountAnchor: refundAnchor,
+          },
+        });
+      }
+    }
   }
 }

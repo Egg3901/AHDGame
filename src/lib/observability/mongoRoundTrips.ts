@@ -20,10 +20,10 @@
  * every frame is driver internals with no application code on it. Take the
  * phase+collection pair and grep for that collection within the phase.
  *
- * Round trips and documents are ALWAYS counted: two map increments per
- * command, which is what lets `runPhase` compare every phase against its
- * budget (src/simulation/engine/turnPhaseBudgets.ts) on every turn, in
- * production, with nothing switched on. Only the BSON byte accounting and
+ * Round trips and documents are counted when command monitoring is enabled.
+ * The map increments are cheap, but the driver also materializes reply objects
+ * for monitoring, so normal worldsims leave diagnostics off. Unmeasured phases
+ * omit counts and budget status. Only the BSON byte accounting and
  * the printed report sit behind AHD_TURN_ROUNDTRIP_PROFILE=1, because sizing
  * every returned document is far too expensive for the hot path.
  */
@@ -51,6 +51,7 @@ interface ProfilerState {
   counts: Map<string, PhaseCounts>;
   currentPhase: string | null;
   enabled: boolean | null;
+  monitoringObserved: boolean;
 }
 
 declare global {
@@ -71,6 +72,7 @@ function state(): ProfilerState {
     counts: new Map(),
     currentPhase: null,
     enabled: null,
+    monitoringObserved: false,
   };
   return globalThis._ahdRoundTripProfiler;
 }
@@ -96,6 +98,7 @@ export function resetRoundTripCounts(): void {
 export function resetRoundTripProfiler(): void {
   const s = state();
   s.enabled = null;
+  s.monitoringObserved = false;
   s.currentPhase = null;
   s.counts.clear();
 }
@@ -115,9 +118,15 @@ export function endPhaseProfiling(phase: string): void {
   if (s.currentPhase === phase) s.currentPhase = null;
 }
 
+/** Whether this process has observed actual command-monitor events. */
+export function roundTripCountsAvailable(): boolean {
+  return state().monitoringObserved === true;
+}
+
 /** Called by the driver command monitor for every non-ignored command. */
 export function recordRoundTrip(collection: string): void {
   const s = state();
+  s.monitoringObserved = true;
   const entry = phaseEntry(s);
   entry.total += 1;
   collectionEntry(entry, collection).roundTrips += 1;

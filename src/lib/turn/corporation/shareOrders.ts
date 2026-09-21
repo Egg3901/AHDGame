@@ -1,6 +1,7 @@
 import { ObjectId } from "mongodb";
 import type { Db } from "mongodb";
-import type { Character, Corporation } from "@/lib/db/types";
+import type { Character, Corporation, IndexFund } from "@/lib/db/types";
+import { emitTxBulk, loadTxThresholds } from "@/lib/financialTxLog/emit";
 import { buildPersonalBalanceBulkOp } from "@/lib/currency/characterFunds";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
 import {
@@ -720,6 +721,57 @@ export async function fillPendingShareOrders(db: Db, now: Date, turn: number): P
       }));
     if (fundRefundOps.length > 0) {
       await db.collection("indexFunds").bulkWrite(fundRefundOps);
+    }
+    // #992 tranche 4: one aggregate stock_order_refund row per fund for the
+    // unused-escrow refunds just credited above (partial fills execute below
+    // the limit price). Aggregated per fund because the map already nets every
+    // fill in this pass; the placement escrow rows (stock_order_escrow, same
+    // order_escrow reason) net against these per currency. One batched fund
+    // read supplies the currency map — no per-fund round trip. A fund with no
+    // doc moves no cash and emits nothing.
+    const refundedFundIds = [...fundCashAdjustments.entries()]
+      .filter(([, amount]) => amount > 0)
+      .map(([fundIdStr]) => fundIdStr);
+    if (refundedFundIds.length > 0) {
+      const refundedFunds = await db
+        .collection<IndexFund>("indexFunds")
+        .find({ _id: { $in: refundedFundIds.map((id) => new ObjectId(id)) } })
+        .project<{ _id: ObjectId; name: string; anchorCurrencyCode: string }>({
+          _id: 1,
+          name: 1,
+          anchorCurrencyCode: 1,
+        })
+        .toArray();
+      const fundById = new Map(refundedFunds.map((f) => [f._id.toString(), f]));
+      const thresholds = await loadTxThresholds(db);
+      await emitTxBulk(
+        db,
+        refundedFundIds.flatMap((fundIdStr) => {
+          const fund = fundById.get(fundIdStr);
+          const amount = fundCashAdjustments.get(fundIdStr) ?? 0;
+          if (!fund || !(amount > 0)) return [];
+          return [
+            {
+              type: "stock_order_refund" as const,
+              turn,
+              createdAt: now,
+              subjectType: "fund" as const,
+              subjectId: new ObjectId(fundIdStr),
+              subjectName: fund.name,
+              amount,
+              anchorAmount: amount,
+              currencyCode: fund.anchorCurrencyCode as IndexFund["anchorCurrencyCode"],
+              counterpartyType: "system" as const,
+              counterpartyName: "Order book escrow",
+              meta: {
+                source: "turn-fill-partial-refund",
+                escrowAmountAnchor: amount,
+              },
+            },
+          ];
+        }),
+        thresholds
+      );
     }
   }
 
