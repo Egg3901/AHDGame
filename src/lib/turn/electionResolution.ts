@@ -13,6 +13,7 @@ import { logger } from "../observability/logger";
 import { recordAuditBulk } from "@/lib/audit/recordAudit";
 import type { ActionAuditInput } from "@/lib/db/types/actionAuditLog";
 import { resolvePresidentialWinnerCandidateId } from "@/lib/elections/presidentialResolutionDisplay";
+import { TALLY_WITH_LATEST_SNAPSHOT_ONLY } from "@/lib/electionEngine/tallyProjections";
 
 export { HOUSE_SEATS, UK_COMMONS_SEATS };
 export { spawnHouseElection, spawnCommonsElection };
@@ -55,7 +56,7 @@ export async function resolveGeneralElections(
   const [tallies, gameStateDoc] = await Promise.all([
     db
       .collection<ElectionVoteTally>("electionVoteTallies")
-      .find({ electionId: { $in: electionIds } })
+      .find({ electionId: { $in: electionIds } }, { projection: TALLY_WITH_LATEST_SNAPSHOT_ONLY })
       .toArray(),
     db.collection<GameState>("gameState").findOne({ _id: "current" }),
   ]);
