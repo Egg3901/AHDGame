@@ -20,7 +20,10 @@ import {
 import { buildPersonalBalanceBulkOp, getHomeCurrency } from "@/lib/currency/characterFunds";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
 import { getGameState } from "@/lib/gameState";
-import { executeMarketMakerTrade, distributeConversionSpread } from "@/lib/currency/marketMaker";
+import {
+  executeMarketMakerTrade,
+  distributeConversionSpreadsBatch,
+} from "@/lib/currency/marketMaker";
 import { garnishLocFromIncome } from "@/lib/lineOfCredit/garnishment";
 import {
   anchorToCorpCapital,
@@ -1135,15 +1138,19 @@ export async function processBondTurn(turn: number): Promise<BondTurnResult> {
   }
 
   if (fundPaymentsAnchor.size > 0) {
-    for (const [fundIdStr, amountAnchor] of fundPaymentsAnchor) {
-      if (amountAnchor <= 0) continue;
-      await db.collection("indexFunds").updateOne(
-        { _id: new ObjectId(fundIdStr) },
-        {
-          $inc: { cashAnchor: Math.round(amountAnchor * 100) / 100 },
-          $set: { updatedAt: now },
-        }
-      );
+    const fundPaymentOps = [...fundPaymentsAnchor]
+      .filter(([, amountAnchor]) => amountAnchor > 0)
+      .map(([fundIdStr, amountAnchor]) => ({
+        updateOne: {
+          filter: { _id: new ObjectId(fundIdStr) },
+          update: {
+            $inc: { cashAnchor: Math.round(amountAnchor * 100) / 100 },
+            $set: { updatedAt: now },
+          },
+        },
+      }));
+    if (fundPaymentOps.length > 0) {
+      await db.collection("indexFunds").bulkWrite(fundPaymentOps);
     }
   }
 
@@ -1261,9 +1268,14 @@ export async function processBondTurn(turn: number): Promise<BondTurnResult> {
   // Route the FX spreads skimmed from corp foreign-coupon income into the CB
   // system (reserve slice → recipient corp's CB; revenue → bond-currency CB),
   // matching how player auto_coupon conversions build reserves.
-  for (const { fromCurrency, toCurrency, fee } of corpCouponSpreadFees) {
-    await distributeConversionSpread(db, Math.round(fee), fromCurrency, toCurrency);
-  }
+  await distributeConversionSpreadsBatch(
+    db,
+    corpCouponSpreadFees.map(({ fromCurrency, toCurrency, fee }) => ({
+      fromCurrency,
+      toCurrency,
+      fee: Math.round(fee),
+    }))
+  );
 
   // ── Phase 7: Auto-resolve lingering corporate defaults ─────────────────────
   // See autoResolveLingeringDefaults in ./bondTurnAutoResolve for the

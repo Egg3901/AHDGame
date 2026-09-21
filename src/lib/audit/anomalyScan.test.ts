@@ -541,6 +541,30 @@ describe("detectWashTrade", () => {
     ];
     expect(detectWashTrade(rows, config).flaggedIds.size).toBe(0);
   });
+
+  it("matches dense buy and sell windows without comparing every pair", () => {
+    const rows: AnomalyAuditRow[] = [];
+    for (let index = 0; index < 5_000; index++) {
+      rows.push(
+        row({
+          ts: new Date(base + index),
+          actorKey: "c:char1",
+          subjectId: "corpA",
+          orderSide: "buy",
+          pricePerShare: 10,
+        }),
+        row({
+          ts: new Date(base + index),
+          actorKey: "c:char1",
+          subjectId: "corpA",
+          orderSide: "sell",
+          pricePerShare: 10,
+        })
+      );
+    }
+
+    expect(detectWashTrade(rows, config).flaggedIds.size).toBe(10_000);
+  });
 });
 
 describe("detectPreElectionFundingSurge", () => {
@@ -598,6 +622,28 @@ describe("detectPreElectionFundingSurge", () => {
       isPreElectionWindow: true,
     });
     expect(flaggedIds.size).toBe(0);
+  });
+
+  it("handles a large overlapping surge window in one linear scan", () => {
+    const rows = Array.from({ length: 10_000 }, (_, index) =>
+      row({
+        ts: new Date(base + index),
+        category: "money",
+        action: "party.donate",
+        subjectId: `payer-${index % 10}`,
+        counterpartyId: "partyA",
+        amount: -100,
+      })
+    );
+
+    const { flaggedIds } = detectPreElectionFundingSurge(rows, {
+      isPreElectionWindow: true,
+      preElectionFundingWindowSeconds: 3600,
+      preElectionMinDistinctPayers: 10,
+      preElectionMinTotalAmount: 1_000,
+    });
+
+    expect(flaggedIds.size).toBe(10_000);
   });
 });
 
