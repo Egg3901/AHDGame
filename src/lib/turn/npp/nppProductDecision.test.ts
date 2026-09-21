@@ -126,7 +126,7 @@ describe("decideNppProduct one-active-product invariant", () => {
   it("never acquires an operating model while a product is active", () => {
     const action = decideNppProduct(
       base({
-        corporationType: "media",
+        corporationType: "media_entertainment",
         operatingModels: [],
         activeProduct: activeProduct({ kindId: "news_story" }),
       })
@@ -182,7 +182,9 @@ describe("decideNppProduct legal selection", () => {
   });
 
   it("acquires the first model that unlocks a product for a model-less media corp", () => {
-    const action = decideNppProduct(base({ corporationType: "media", operatingModels: [] }));
+    const action = decideNppProduct(
+      base({ corporationType: "media_entertainment", operatingModels: [] })
+    );
     expect(action).toEqual({
       kind: "acquire_operating_model",
       operatingModel: "newspaper",
@@ -192,7 +194,7 @@ describe("decideNppProduct legal selection", () => {
 
   it("starts a model-legal product for a single-model media corp", () => {
     const action = decideNppProduct(
-      base({ corporationType: "media", operatingModels: ["newspaper"] })
+      base({ corporationType: "media_entertainment", operatingModels: ["newspaper"] })
     );
     expect(action).toEqual({
       kind: "start_product",
@@ -205,7 +207,7 @@ describe("decideNppProduct legal selection", () => {
   it("unions legal products across several owned models", () => {
     const action = decideNppProduct(
       base({
-        corporationType: "entertainment",
+        corporationType: "media_entertainment",
         operatingModels: ["music_label", "publishing_house"],
       })
     );
@@ -216,7 +218,7 @@ describe("decideNppProduct legal selection", () => {
 
   it("ignores unknown operating model names and acquires a real one", () => {
     const action = decideNppProduct(
-      base({ corporationType: "media", operatingModels: ["bogus_model"] })
+      base({ corporationType: "media_entertainment", operatingModels: ["bogus_model"] })
     );
     expect(action.kind).toBe("acquire_operating_model");
   });
@@ -227,7 +229,7 @@ describe("decideNppProduct legal selection", () => {
     // requirements need every required id present.
     const action = decideNppProduct(
       base({
-        corporationType: "media",
+        corporationType: "media_entertainment",
         operatingModels: ["newspaper"],
         unlockedTechnologyIds: [],
       })
@@ -241,7 +243,7 @@ describe("decideNppProduct legal selection", () => {
     // A radio-only media corp with no research cannot start its gated kind.
     const action = decideNppProduct(
       base({
-        corporationType: "media",
+        corporationType: "media_entertainment",
         operatingModels: ["radio_network"],
         unlockedTechnologyIds: [],
       })
@@ -254,9 +256,9 @@ describe("decideNppProduct legal selection", () => {
     // alongside it (pinned directly in the media rules tests).
     const action = decideNppProduct(
       base({
-        corporationType: "media",
+        corporationType: "media_entertainment",
         operatingModels: ["radio_network"],
-        unlockedTechnologyIds: ["media-1940-1"],
+        unlockedTechnologyIds: ["media_entertainment-1940-1"],
       })
     );
     expect(action.kind).toBe("start_product");
@@ -267,9 +269,9 @@ describe("decideNppProduct legal selection", () => {
   it("withholds era-locked kinds before their decade", () => {
     const action = decideNppProduct(
       base({
-        corporationType: "entertainment",
+        corporationType: "media_entertainment",
         operatingModels: ["live_entertainment"],
-        unlockedTechnologyIds: ["entertainment-1960-1"],
+        unlockedTechnologyIds: ["media_entertainment-1960-2"],
         currentYear: 1955,
       })
     );
@@ -277,14 +279,14 @@ describe("decideNppProduct legal selection", () => {
   });
 
   it("never acquires a model unfitting the corporation type", () => {
-    // An entertainment corp skips newspaper (a media-only model) and takes
-    // the publishing house instead.
+    // The merged type owns every real model, so a model-less corp takes the
+    // first catalog model (newspaper) rather than skipping to a later one.
     const action = decideNppProduct(
-      base({ corporationType: "entertainment", operatingModels: [] })
+      base({ corporationType: "media_entertainment", operatingModels: [] })
     );
     expect(action).toEqual({
       kind: "acquire_operating_model",
-      operatingModel: "publishing_house",
+      operatingModel: "newspaper",
       maxSpendLocal: Math.floor((10_000_000 - 250_000) * 0.5),
     });
   });
@@ -386,7 +388,7 @@ describe("decideNppProduct numeric safety", () => {
 describe("decideNppProduct determinism", () => {
   it("replays identically for identical inputs", () => {
     const input = base({
-      corporationType: "media",
+      corporationType: "media_entertainment",
       operatingModels: ["radio_network", "newspaper"],
       unlockedTechnologyIds: ["tech-b", "tech-a"],
     });
@@ -397,14 +399,14 @@ describe("decideNppProduct determinism", () => {
   it("ignores operating-model and technology ordering", () => {
     const left = decideNppProduct(
       base({
-        corporationType: "media",
+        corporationType: "media_entertainment",
         operatingModels: ["radio_network", "newspaper"],
         unlockedTechnologyIds: ["tech-b", "tech-a"],
       })
     );
     const right = decideNppProduct(
       base({
-        corporationType: "media",
+        corporationType: "media_entertainment",
         operatingModels: ["newspaper", "radio_network", "newspaper"],
         unlockedTechnologyIds: ["tech-a", "tech-b"],
       })

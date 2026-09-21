@@ -364,7 +364,7 @@ describe("computeCorpCommodityFlows — ledger parity legs (ticket #1177 audit)"
 
   it("derates media supply the way the world ledger and the clearing offer do", () => {
     const { commodities } = computeCorpCommodityFlows(
-      [mkSector({ sectorType: "media", producedUnits: 1_000, capacityUnits: 1_000 })],
+      [mkSector({ sectorType: "media_entertainment", producedUnits: 1_000, capacityUnits: 1_000 })],
       10,
       new Map(),
       stateInfo,
@@ -382,7 +382,7 @@ describe("computeCorpCommodityFlows — ledger parity legs (ticket #1177 audit)"
     const { commodities } = computeCorpCommodityFlows(
       [
         mkSector({
-          sectorType: "media",
+          sectorType: "media_entertainment",
           countryId: "RU",
           producedUnits: 1_000,
           capacityUnits: 1_000,

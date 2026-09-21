@@ -314,7 +314,12 @@ describe("computeBlendedMarginModifiers", () => {
     const national = bal("electronics", 5_000, 10_000);
     const state = bal("electronics", 200, 500);
     const retailResult = computeBlendedMarginModifiers("retail", global, national, state);
-    const mediaResult = computeBlendedMarginModifiers("media", global, national, state);
+    const mediaResult = computeBlendedMarginModifiers(
+      "media_entertainment",
+      global,
+      national,
+      state
+    );
     expect(retailResult.inputMod).toBeLessThan(0);
     expect(Math.abs(retailResult.inputMod)).toBeLessThan(Math.abs(mediaResult.inputMod) * 0.5);
   });
@@ -470,7 +475,7 @@ describe("computeRawSupplyDemand — building materials macro buyer (demand audi
 describe("computeRawSupplyDemand — sectorDemandModifierPct (World Events v1 Phase 1)", () => {
   it("is a pure no-op when the map is omitted (existing callers unaffected)", () => {
     const sector = {
-      sectorType: "entertainment",
+      sectorType: "media_entertainment",
       revenue: 1_000_000,
       stateId: "S1",
       countryId: "UK",
@@ -494,7 +499,7 @@ describe("computeRawSupplyDemand — sectorDemandModifierPct (World Events v1 Ph
 
   it("scales a matching sector's demand contribution by the modifier pct (royal-event tourism bump)", () => {
     const sector = {
-      sectorType: "entertainment",
+      sectorType: "media_entertainment",
       revenue: 1_000_000,
       stateId: "S1",
       countryId: "UK",
@@ -508,7 +513,7 @@ describe("computeRawSupplyDemand — sectorDemandModifierPct (World Events v1 Ph
       undefined,
       undefined,
       false,
-      new Map([["UK:entertainment", 5]])
+      new Map([["UK:media_entertainment", 5]])
     );
 
     const baseDemand = baseline.byState.get("S1")?.get("software")?.demand ?? 0;
@@ -520,7 +525,7 @@ describe("computeRawSupplyDemand — sectorDemandModifierPct (World Events v1 Ph
 
   it("only affects the matching country — a modifier for UK does not touch a US sector of the same type", () => {
     const sector = {
-      sectorType: "entertainment",
+      sectorType: "media_entertainment",
       revenue: 1_000_000,
       stateId: "S1",
       countryId: "US",
@@ -534,7 +539,7 @@ describe("computeRawSupplyDemand — sectorDemandModifierPct (World Events v1 Ph
       undefined,
       undefined,
       false,
-      new Map([["UK:entertainment", 5]])
+      new Map([["UK:media_entertainment", 5]])
     );
 
     const baseDemand = baseline.byState.get("S1")?.get("software")?.demand ?? 0;
@@ -542,7 +547,7 @@ describe("computeRawSupplyDemand — sectorDemandModifierPct (World Events v1 Ph
     expect(unaffectedDemand).toBeCloseTo(baseDemand, 6);
   });
 
-  it("only affects the matching sectorType — a modifier for entertainment does not touch energy", () => {
+  it("only affects the matching sectorType — a modifier for media_entertainment does not touch energy", () => {
     const sector = { sectorType: "energy", revenue: 1_000_000, stateId: "S1", countryId: "UK" };
     const baseline = computeRawSupplyDemand([sector]);
     const withEntertainmentModifier = computeRawSupplyDemand(
@@ -553,7 +558,7 @@ describe("computeRawSupplyDemand — sectorDemandModifierPct (World Events v1 Ph
       undefined,
       undefined,
       false,
-      new Map([["UK:entertainment", 50]])
+      new Map([["UK:media_entertainment", 50]])
     );
     const sumDemand = (res: ReturnType<typeof computeRawSupplyDemand>): number => {
       let total = 0;
@@ -565,7 +570,7 @@ describe("computeRawSupplyDemand — sectorDemandModifierPct (World Events v1 Ph
   });
 
   it("has no effect when the sector has no countryId (older callers that don't thread it)", () => {
-    const sector = { sectorType: "entertainment", revenue: 1_000_000, stateId: "S1" };
+    const sector = { sectorType: "media_entertainment", revenue: 1_000_000, stateId: "S1" };
     const baseline = computeRawSupplyDemand([sector]);
     const withMap = computeRawSupplyDemand(
       [sector],
@@ -575,7 +580,7 @@ describe("computeRawSupplyDemand — sectorDemandModifierPct (World Events v1 Ph
       undefined,
       undefined,
       false,
-      new Map([["UK:entertainment", 50]])
+      new Map([["UK:media_entertainment", 50]])
     );
     const baseDemand = baseline.byState.get("S1")?.get("software")?.demand ?? 0;
     const withMapDemand = withMap.byState.get("S1")?.get("software")?.demand ?? 0;

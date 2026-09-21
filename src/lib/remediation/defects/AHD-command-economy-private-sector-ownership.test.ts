@@ -26,7 +26,7 @@ describe("command-economy ownership repair valuation", () => {
   it("uses the larger of recorded CIP and the queue total", () => {
     expect(
       administrativeBookValueAnchor({
-        sectorType: "media",
+        sectorType: "media_entertainment",
         capacityBookAnchor: 12_403.610080694778,
         constructionInProgressAnchor: 3,
         buildQueue: [],
