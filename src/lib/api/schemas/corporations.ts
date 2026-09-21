@@ -285,6 +285,21 @@ export const hostileTakeoverSchema = z.object({
   parentCorporationId: schemas.objectId,
 });
 
+/** Product Studio: start a product project for the corporation. */
+export const startProductSchema = z.object({
+  kindId: z.string().trim().min(1, "Product kind is required").max(64, "Invalid product kind"),
+  name: moderatedNameSchema("Product name", 2, 60),
+});
+
+/** Product Studio: attach a Media and Entertainment operating model. */
+export const addOperatingModelSchema = z.object({
+  operatingModel: z
+    .string()
+    .trim()
+    .min(1, "Operating model is required")
+    .max(64, "Invalid operating model"),
+});
+
 export const parentBondPayoffSchema = z.object({
   parentCorporationId: schemas.objectId,
 });
