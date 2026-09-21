@@ -680,6 +680,7 @@ export async function accumulatePresidentVoteTurn(
           currentRulerPenaltyPct: incumbentExec
             ? democraticHealthPressureValue.currentRulerPenalty * 100
             : 0,
+          economicDragPctPoints: democraticHealthPressureValue.gdpGrowthDrag,
           currentRulerReliefPct: democraticHealthReliefPct,
           currentRulerInRace,
           recordedTurn: turnNumber,
