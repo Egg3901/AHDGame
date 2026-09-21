@@ -119,6 +119,7 @@
       "scaleNote": "The election drag starts below 60 and grows as health falls.",
       "partyEffect": "Ruling party drag",
       "rulerEffect": "Sitting President drag",
+      "economicEffect": "Annual GDP growth drag",
       "rulerNotRunning": "The sitting President is not in this race, so the larger personal drag is not active.",
       "relief": "A temporary constitutional measure reduces the extra presidential drag by {percent}%.",
       "recordedTurn": "Read on turn {turn}."

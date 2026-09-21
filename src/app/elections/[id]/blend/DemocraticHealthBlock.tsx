@@ -64,6 +64,12 @@ export function DemocraticHealthBlock({
             -{Math.max(0, data.currentRulerPenaltyPct).toFixed(1)}%
           </span>
         </div>
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+          <span style={{ fontFamily: FONT.serif, fontSize: 13.5 }}>Annual GDP growth drag</span>
+          <span style={{ fontFamily: FONT.mono, fontSize: 12, color: BLEND.negative }}>
+            -{Math.max(0, data.economicDragPctPoints).toFixed(2)} pts
+          </span>
+        </div>
       </div>
       {!data.currentRulerInRace ? (
         <p

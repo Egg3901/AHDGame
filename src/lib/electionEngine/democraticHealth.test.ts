@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  democraticHealthEconomicDrag,
   democraticHealthMultiplierForCandidate,
   democraticHealthPressure,
   DEMOCRATIC_HEALTH_PARTY_PENALTY_MAX,
@@ -13,8 +14,18 @@ describe("democratic health pressure", () => {
       severity: 0,
       partyPenalty: 0,
       currentRulerPenalty: 0,
+      gdpGrowthDrag: 0,
       reliefPct: 0,
     });
+  });
+
+  it("imposes a bounded economic drag only below the failure threshold", () => {
+    expect(democraticHealthEconomicDrag(80)).toBe(0);
+    expect(democraticHealthEconomicDrag(60)).toBe(0);
+    expect(democraticHealthEconomicDrag(40)).toBeGreaterThan(0);
+    expect(democraticHealthEconomicDrag(20)).toBeGreaterThan(democraticHealthEconomicDrag(40));
+    expect(democraticHealthEconomicDrag(0)).toBe(4);
+    expect(democraticHealthEconomicDrag(Number.NaN)).toBeGreaterThan(0);
   });
 
   it("gets progressively harsher as health falls", () => {
