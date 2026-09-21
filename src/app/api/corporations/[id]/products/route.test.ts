@@ -39,7 +39,7 @@ async function authAsCeo() {
   vi.mocked(requireCeo).mockReturnValue(null);
 }
 
-async function setCorporationType(type: "media" | "manufacturing" | "retail") {
+async function setCorporationType(type: "media" | "manufacturing" | "automobiles" | "retail") {
   const { resolveCorporation } = await import("@/lib/api/corporations/resolveQuery");
   vi.mocked(resolveCorporation).mockResolvedValue({
     ok: true,
@@ -285,12 +285,18 @@ describe("POST corporation products", () => {
   });
 
   it("returns 409 when a second product contends for the one slot", async () => {
-    await setCorporationType("manufacturing");
+    await setCorporationType("automobiles");
     flagOn();
     ownedModels([]);
     db.collection("corporationProducts");
     db.collection("gameState");
-    db.collectionMocks.gameState.findOne.mockResolvedValue({ currentTurn: 120 });
+    db.collectionMocks.gameState.findOne.mockResolvedValue({ currentTurn: 120, currentYear: 2027 });
+    db.collection("corporateSectors");
+    db.collectionMocks.corporateSectors.find.mockReturnValue(
+      createAsyncIterableCursor([
+        { sectorType: "automobiles", strategyId: "standard", capacity: 100 },
+      ])
+    );
     db.collectionMocks.corporationProducts.insertOne.mockRejectedValue(
       Object.assign(
         new Error(
