@@ -43,7 +43,10 @@ import { processImfBailoutPayments } from "@/lib/turn/imfBailoutTurn";
 import { buildPersonalBalanceBulkOp, getHomeCurrency } from "@/lib/currency/characterFunds";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
 import { isSectorTechTreesEnabled } from "@/lib/corporations/techTree/featureFlag";
-import { executeMarketMakerTrade, distributeConversionSpread } from "@/lib/currency/marketMaker";
+import {
+  executeMarketMakerTrade,
+  distributeConversionSpreadsBatch,
+} from "@/lib/currency/marketMaker";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import type { CountryId } from "@/lib/constants/countries";
 
@@ -719,9 +722,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
   // Route the reduced FX spreads skimmed from foreign operating income into the
   // CB system (reserve slice → corp's home CB in the source currency; revenue →
   // source-currency CB). Already deducted from the corp's credited income above.
-  for (const { fromCurrency, toCurrency, fee } of sectorFxSpreadFees) {
-    await distributeConversionSpread(db, fee, fromCurrency, toCurrency);
-  }
+  await distributeConversionSpreadsBatch(db, sectorFxSpreadFees);
 
   // v3 Phase 6: translate this turn's strike trigger/resolution events into
   // sentiment pulses. Fired after the bulk writes above, on the now-persisted
