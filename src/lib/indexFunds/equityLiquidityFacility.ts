@@ -10,6 +10,9 @@ import {
   planEquityLiquidityQuoteRules,
   type EquityLiquidityRuleQuotePlan,
 } from "@/lib/indexFunds/equityLiquidity/rules";
+import { boundedParallelMap } from "@/lib/indexFunds/boundedParallelMap";
+
+export const EQUITY_LIQUIDITY_FUND_CONCURRENCY = 4;
 
 export {
   EQUITY_LIQUIDITY_HALF_SPREAD,
@@ -138,9 +141,22 @@ export async function refreshEquityLiquidityFacility(input: {
     .collection<ShareOrder>("shareOrders")
     .find({ liquidityProvider: true, status: "open" })
     .toArray();
+  const cancellationsByFund = new Map<string, ShareOrder[]>();
   for (const order of priorQuotes) {
-    await cancelFundShareOrder(db, order._id, turn);
+    // Preserve order within a fund because every cancellation refunds that
+    // fund's escrow. Different funds do not share cash or inventory.
+    const key = order.placerFundId?.toString() ?? "unknown";
+    const group = cancellationsByFund.get(key) ?? [];
+    group.push(order);
+    cancellationsByFund.set(key, group);
   }
+  await boundedParallelMap(
+    [...cancellationsByFund.values()],
+    EQUITY_LIQUIDITY_FUND_CONCURRENCY,
+    async (orders) => {
+      for (const order of orders) await cancelFundShareOrder(db, order._id, turn);
+    }
+  );
 
   const snapshot: EquityLiquidityFacilitySnapshot = {
     _id: new ObjectId(),
@@ -173,49 +189,83 @@ export async function refreshEquityLiquidityFacility(input: {
     );
     const participatingFunds = new Set<string>();
 
+    const plansByFund = new Map<string, EquityLiquidityQuotePlan[]>();
     for (const plan of plans) {
-      const fund = fundById.get(plan.fundId.toString());
-      const listing = listingById.get(plan.corporationId.toString());
-      if (!fund || !listing) {
-        snapshot.quotePairsFailed++;
-        continue;
-      }
-      const liquidityQuote = { turn, referencePrice: plan.referencePriceLocal };
-      const bid = await placeFundShareBuyOrder(db, {
-        fund,
-        corp: listing.corporation,
-        shares: plan.bidShares,
-        limitPriceLocal: plan.bidPriceLocal,
-        fxRate: listing.fxRate,
-        turn,
-        liquidityQuote,
-      });
-      if (!bid.ok || !bid.orderId) {
-        snapshot.quotePairsFailed++;
-        continue;
-      }
-      snapshot.bidQuotesPlaced++;
-      snapshot.bidDepthAnchor += (plan.bidShares * plan.bidPriceLocal) / listing.fxRate;
+      const key = plan.fundId.toString();
+      const group = plansByFund.get(key) ?? [];
+      group.push(plan);
+      plansByFund.set(key, group);
+    }
+    const outcomes = await boundedParallelMap(
+      [...plansByFund.values()],
+      EQUITY_LIQUIDITY_FUND_CONCURRENCY,
+      async (fundPlans) => {
+        const outcome = {
+          quotePairsPlaced: 0,
+          quotePairsFailed: 0,
+          bidQuotesPlaced: 0,
+          askQuotesPlaced: 0,
+          bidDepthAnchor: 0,
+          askDepthAnchor: 0,
+          stressLossAtRiskAnchor: 0,
+          participatingFundId: null as string | null,
+        };
+        for (const plan of fundPlans) {
+          const fund = fundById.get(plan.fundId.toString());
+          const listing = listingById.get(plan.corporationId.toString());
+          if (!fund || !listing) {
+            outcome.quotePairsFailed++;
+            continue;
+          }
+          const liquidityQuote = { turn, referencePrice: plan.referencePriceLocal };
+          const bid = await placeFundShareBuyOrder(db, {
+            fund,
+            corp: listing.corporation,
+            shares: plan.bidShares,
+            limitPriceLocal: plan.bidPriceLocal,
+            fxRate: listing.fxRate,
+            turn,
+            liquidityQuote,
+          });
+          if (!bid.ok || !bid.orderId) {
+            outcome.quotePairsFailed++;
+            continue;
+          }
+          outcome.bidQuotesPlaced++;
+          outcome.bidDepthAnchor += (plan.bidShares * plan.bidPriceLocal) / listing.fxRate;
 
-      if (plan.askShares > 0) {
-        const ask = await placeFundShareSellOrder(db, {
-          fund,
-          corp: listing.corporation,
-          shares: plan.askShares,
-          limitPriceLocal: plan.askPriceLocal,
-          liquidityQuote,
-        });
-        if (!ask.ok) {
-          snapshot.quotePairsFailed++;
-        } else {
-          snapshot.quotePairsPlaced++;
-          snapshot.askQuotesPlaced++;
-          snapshot.askDepthAnchor += (plan.askShares * plan.askPriceLocal) / listing.fxRate;
+          if (plan.askShares > 0) {
+            const ask = await placeFundShareSellOrder(db, {
+              fund,
+              corp: listing.corporation,
+              shares: plan.askShares,
+              limitPriceLocal: plan.askPriceLocal,
+              liquidityQuote,
+            });
+            if (!ask.ok) {
+              outcome.quotePairsFailed++;
+            } else {
+              outcome.quotePairsPlaced++;
+              outcome.askQuotesPlaced++;
+              outcome.askDepthAnchor += (plan.askShares * plan.askPriceLocal) / listing.fxRate;
+            }
+          }
+
+          outcome.stressLossAtRiskAnchor += plan.stressLossAnchor;
+          outcome.participatingFundId = plan.fundId.toString();
         }
+        return outcome;
       }
-
-      snapshot.stressLossAtRiskAnchor += plan.stressLossAnchor;
-      participatingFunds.add(plan.fundId.toString());
+    );
+    for (const outcome of outcomes) {
+      snapshot.quotePairsPlaced += outcome.quotePairsPlaced;
+      snapshot.quotePairsFailed += outcome.quotePairsFailed;
+      snapshot.bidQuotesPlaced += outcome.bidQuotesPlaced;
+      snapshot.askQuotesPlaced += outcome.askQuotesPlaced;
+      snapshot.bidDepthAnchor += outcome.bidDepthAnchor;
+      snapshot.askDepthAnchor += outcome.askDepthAnchor;
+      snapshot.stressLossAtRiskAnchor += outcome.stressLossAtRiskAnchor;
+      if (outcome.participatingFundId) participatingFunds.add(outcome.participatingFundId);
     }
     snapshot.participatingFunds = participatingFunds.size;
   }
