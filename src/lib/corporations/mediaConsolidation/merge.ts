@@ -113,9 +113,7 @@ export function planMediaSectorMerge(rows: readonly MediaMergeRow[]): MediaMerge
     if (totalRevenue <= 0) return pick(survivor);
     return legacy.reduce((sum, row) => sum + pick(row) * finite(row.revenue), 0) / totalRevenue;
   };
-  const canonicalStrategies = legacy.map((row) =>
-    canonicalMediaStrategyForLegacy(row.strategyId)
-  );
+  const canonicalStrategies = legacy.map((row) => canonicalMediaStrategyForLegacy(row.strategyId));
   return {
     corporationId: survivor.corporationId,
     stateId: survivor.stateId,
@@ -185,7 +183,9 @@ export function planMediaUnownedMerges(rows: readonly MediaUnownedRow[]): MediaU
   const plans: MediaUnownedMergePlan[] = [];
   for (const group of groups.values()) {
     if (group.length < 2) continue;
-    const [survivor, ...losers] = [...group].sort((a, b) => (a.createdAtMs ?? 0) - (b.createdAtMs ?? 0));
+    const [survivor, ...losers] = [...group].sort(
+      (a, b) => (a.createdAtMs ?? 0) - (b.createdAtMs ?? 0)
+    );
     plans.push({
       stateId: survivor.stateId,
       countryId: survivor.countryId,

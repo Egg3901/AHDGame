@@ -87,7 +87,11 @@ function orderEntertainment<T>(specs: readonly T[], decadeId: string, segment: L
   return picked;
 }
 
-function interleaveMediaFirst<T>(media: readonly T[], entertainment: readonly T[], length: number): T[] {
+function interleaveMediaFirst<T>(
+  media: readonly T[],
+  entertainment: readonly T[],
+  length: number
+): T[] {
   const out: T[] = [];
   const rounds = Math.max(media.length, entertainment.length);
   for (let i = 0; i < rounds && out.length < length; i++) {
@@ -142,7 +146,10 @@ export function mergeLaneSegment<T extends LaneSpec>(
  * positionally to slots 10-15, so slot 13 caps slot 10, 14 caps 11, 15 caps
  * 12 — each surviving capstone still follows its own entry.
  */
-export function mergeV3Decade<T extends LaneSpec>(media: readonly T[], entertainment: readonly T[]): T[] {
+export function mergeV3Decade<T extends LaneSpec>(
+  media: readonly T[],
+  entertainment: readonly T[]
+): T[] {
   const picks = [media[0], entertainment[0], media[1], media[3], entertainment[3], media[4]].filter(
     (spec) => spec !== undefined
   );
@@ -237,6 +244,8 @@ export function mapLegacyMediaTechId(nodeId: unknown): string | null {
     }
   }
   const mergedIndex =
-    lane === "media" ? Math.min(2 * index, layout.length - 1) : Math.min(2 * index + 1, layout.length - 1);
+    lane === "media"
+      ? Math.min(2 * index, layout.length - 1)
+      : Math.min(2 * index + 1, layout.length - 1);
   return `${MEDIA_ENTERTAINMENT_LANE}-${decadeId}-${layout.start + mergedIndex}`;
 }

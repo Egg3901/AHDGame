@@ -20,10 +20,7 @@ import type {
 } from "@/lib/db/types";
 import type { ElectionCandidate } from "@/lib/db/types/election";
 import { type CountryId } from "@/lib/constants/countries";
-import {
-  CORPORATION_TYPE_LABELS,
-  type CorporationType,
-} from "@/lib/constants/corporations";
+import { CORPORATION_TYPE_LABELS, type CorporationType } from "@/lib/constants/corporations";
 import { findPartyBudgetForScope } from "@/lib/partyBudgetGuards";
 import {
   fxRateForCorpFromMap,

@@ -49,7 +49,12 @@ export const GENERIC_FACILITY: FacilityVocabulary = {
 
 const VOCABULARY: Record<CorporationType, FacilityVocabulary> = {
   financial: { singular: "branch", plural: "branches", buildVerb: "open", runNoun: "the desk" },
-  media_entertainment: { singular: "studio", plural: "studios", buildVerb: "open", runNoun: "the lot" },
+  media_entertainment: {
+    singular: "studio",
+    plural: "studios",
+    buildVerb: "open",
+    runNoun: "the lot",
+  },
   manufacturing: { singular: "plant", plural: "plants", buildVerb: "build", runNoun: "the line" },
   chemical_industries: {
     singular: "works",

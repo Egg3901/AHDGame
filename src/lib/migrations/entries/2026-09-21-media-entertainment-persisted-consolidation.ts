@@ -775,14 +775,16 @@ export async function consolidateMediaEntertainment(
     ]);
     for (const model of models) {
       if (!dry) {
-        await db.collection<CorporationOperatingModelDocument>("corporationOperatingModels").updateOne(
-          { _id: `${corpId}:${model}` },
-          {
-            $set: { corporationId: corpId, operatingModel: model },
-            $setOnInsert: { acquiredTurn: turn },
-          },
-          { upsert: true }
-        );
+        await db
+          .collection<CorporationOperatingModelDocument>("corporationOperatingModels")
+          .updateOne(
+            { _id: `${corpId}:${model}` },
+            {
+              $set: { corporationId: corpId, operatingModel: model },
+              $setOnInsert: { acquiredTurn: turn },
+            },
+            { upsert: true }
+          );
       }
       counts.operatingModels += 1;
     }

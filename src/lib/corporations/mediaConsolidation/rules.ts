@@ -44,7 +44,9 @@ export function isMediaEntertainmentSectorType(value: unknown): boolean {
  * Canonicalize one sector-type value. Returns the canonical type for the
  * canonical value and both retired labels, null for anything else.
  */
-export function canonicalizeMediaSectorType(value: unknown): typeof MEDIA_ENTERTAINMENT_SECTOR_TYPE | null {
+export function canonicalizeMediaSectorType(
+  value: unknown
+): typeof MEDIA_ENTERTAINMENT_SECTOR_TYPE | null {
   return isMediaEntertainmentSectorType(value) ? MEDIA_ENTERTAINMENT_SECTOR_TYPE : null;
 }
 
@@ -53,7 +55,9 @@ export function canonicalizeMediaSectorType(value: unknown): typeof MEDIA_ENTERT
  * API ingestion). Legacy labels become the canonical type; every other
  * value passes through untouched so unrelated types never remap.
  */
-export function canonicalizeSectorTypeInput<T>(value: T): T | typeof MEDIA_ENTERTAINMENT_SECTOR_TYPE {
+export function canonicalizeSectorTypeInput<T>(
+  value: T
+): T | typeof MEDIA_ENTERTAINMENT_SECTOR_TYPE {
   return isLegacyMediaSectorType(value)
     ? (MEDIA_ENTERTAINMENT_SECTOR_TYPE as T | typeof MEDIA_ENTERTAINMENT_SECTOR_TYPE)
     : value;
@@ -132,7 +136,13 @@ const MEDIA_OPERATING_MODELS_BY_LEGACY_TYPE: Record<
   LegacyMediaSectorType,
   readonly MediaOperatingModel[]
 > = {
-  media: ["newspaper", "publishing_house", "television_network", "radio_network", "streaming_platform"],
+  media: [
+    "newspaper",
+    "publishing_house",
+    "television_network",
+    "radio_network",
+    "streaming_platform",
+  ],
   entertainment: [
     "film_studio",
     "music_label",
@@ -161,8 +171,8 @@ export function unionInferredOperatingModels(types: readonly unknown[]): MediaOp
     if (!isLegacyMediaSectorType(type)) continue;
     for (const model of MEDIA_OPERATING_MODELS_BY_LEGACY_TYPE[type]) union.add(model);
   }
-  return (MEDIA_OPERATING_MODELS as readonly string[]).filter((model): model is MediaOperatingModel =>
-    union.has(model as MediaOperatingModel)
+  return (MEDIA_OPERATING_MODELS as readonly string[]).filter(
+    (model): model is MediaOperatingModel => union.has(model as MediaOperatingModel)
   );
 }
 
@@ -214,9 +224,9 @@ export function consolidateMediaTechUnlocks(
  * are shares normalized downstream, so summing preserves every other
  * sector's share exactly. Non-legacy keys pass through by reference value.
  */
-export function canonicalizeSectorWeightMap<T extends Partial<Record<string, number | null | undefined>>>(
-  weights: T
-): Partial<Record<string, number>> {
+export function canonicalizeSectorWeightMap<
+  T extends Partial<Record<string, number | null | undefined>>,
+>(weights: T): Partial<Record<string, number>> {
   const out: Partial<Record<string, number>> = {};
   let merged = 0;
   let hasMerged = false;
@@ -258,9 +268,7 @@ export function planCorporationTypeMigration(
   type: unknown,
   secondaryType: unknown
 ): CorporationTypeMigrationPlan {
-  const nextType = isMediaEntertainmentSectorType(type)
-    ? MEDIA_ENTERTAINMENT_SECTOR_TYPE
-    : type;
+  const nextType = isMediaEntertainmentSectorType(type) ? MEDIA_ENTERTAINMENT_SECTOR_TYPE : type;
   const nextSecondaryRaw = isMediaEntertainmentSectorType(secondaryType)
     ? MEDIA_ENTERTAINMENT_SECTOR_TYPE
     : secondaryType;

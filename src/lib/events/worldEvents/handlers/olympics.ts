@@ -42,7 +42,12 @@ registerEventHandler({
           effects: [
             { type: "approvalDelta", delta: 6 },
             { type: "sectorDemandModifier", sectorType: "construction", pct: 8, durationTurns: 6 },
-            { type: "sectorDemandModifier", sectorType: "media_entertainment", pct: 8, durationTurns: 6 },
+            {
+              type: "sectorDemandModifier",
+              sectorType: "media_entertainment",
+              pct: 8,
+              durationTurns: 6,
+            },
             { type: "wireOnly" },
           ],
           newsWire: {

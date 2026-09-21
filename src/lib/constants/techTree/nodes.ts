@@ -403,455 +403,455 @@ const CORPORATE: Record<string, NodeSpec[]> = {
 // Legacy lane sources for the media_entertainment merge (issue #2234).
 // Authored content below is unchanged; the merge rule lives in ./mediaMerge.
 const MEDIA_SECTOR: Record<string, NodeSpec[]> = {
-    "1940": [
-      {
-        name: "Radio Network Dominance",
-        description: "National radio networks lock in mass advertising revenue.",
-        effects: [{ kind: "marginBonus", pp: 1 }],
-      },
-      {
-        name: "Wartime Press Partnerships",
-        description: "Government media access builds institutional relationships.",
-        effects: [{ kind: "marketingStrength", flat: 15 }],
-      },
-    ],
-    "1950": [
-      {
-        name: "Television Broadcasting",
-        description: "TV network affiliates lock in prime-time advertising revenue.",
-        effects: [{ kind: "marginBonus", pp: 2 }],
-      },
-      {
-        name: "Magazine Publishing Scale",
-        description: "Glossy magazines capture consumer brand advertising spend.",
-        effects: [{ kind: "marketingStrength", flat: 20 }],
-      },
-    ],
-    "1960": [
-      {
-        name: "Color Television",
-        description: "Color programming commands significantly higher advertising rates.",
-        effects: [{ kind: "marginBonus", pp: 1.5 }],
-      },
-      {
-        name: "Cable Access Pilots",
-        description: "Early cable wiring builds subscriber infrastructure.",
-        effects: [{ kind: "marketingStrength", flat: 20 }],
-      },
-    ],
-    "1970": [
-      {
-        name: "Cable Television Rollout",
-        description: "HBO and cable channels add subscription revenue to ad income.",
-        effects: [{ kind: "marginBonus", pp: 2 }],
-      },
-      {
-        name: "Satellite Distribution",
-        description: "Uplink capability reaches a national content footprint.",
-        effects: [{ kind: "logisticsStrength", flat: 20 }],
-      },
-    ],
-    "1979": [
-      {
-        name: "Network Broadcasting",
-        description: "Mass reach builds ad franchises.",
-        effects: [{ kind: "marketingStrength", flat: 60 }],
-      },
-      {
-        name: "Color Production",
-        description: "Color content commands premium rates.",
-        effects: [{ kind: "marginBonus", pp: 2 }],
-      },
-      {
-        name: "Syndication Deals",
-        description: "Library licensing adds recurring income.",
-        effects: [{ kind: "marginBonus", pp: 1.5 }],
-      },
-      {
-        name: "Satellite Uplinks",
-        description: "Satellite distribution widens reach.",
-        effects: [{ kind: "logisticsStrength", flat: 15 }],
-      },
-      {
-        name: "Ratings Analytics",
-        description: "Audience measurement lifts ad yield.",
-        effects: [{ kind: "marginBonus", pp: 1.5 }],
-      },
-    ],
-    "1989": [
-      {
-        name: "Cable Syndication",
-        description: "Niche channels multiply revenue.",
-        effects: [
-          { kind: "marginBonus", pp: 2 },
-          { kind: "marketingStrength", flat: 50 },
-        ],
-      },
-      {
-        name: "Home Video",
-        description: "Tape and disc create a second window.",
-        effects: [{ kind: "marginBonus", pp: 2 }],
-      },
-      {
-        name: "Niche Channels",
-        description: "Targeted programming raises CPMs.",
-        effects: [{ kind: "marginBonus", pp: 1.5 }],
-      },
-      {
-        name: "Desktop Production",
-        description: "Digital editing cuts production cost.",
-        effects: [{ kind: "growthCostReduction", pct: 0.06 }],
-      },
-      {
-        name: "Ad Sales Networks",
-        description: "Bundled inventory lifts sell-through.",
-        effects: [{ kind: "marketingStrength", flat: 40 }],
-      },
-    ],
-    "1999": [
-      {
-        name: "Digital Publishing",
-        description: "Web distribution collapses print cost.",
-        effects: [{ kind: "marginBonus", pp: 2.5 }],
-      },
-      {
-        name: "Web Portals",
-        description: "Portals aggregate audience and ads.",
-        effects: [{ kind: "marketingStrength", flat: 50 }],
-      },
-      {
-        name: "Online Advertising",
-        description: "Banner and search ads add yield.",
-        effects: [
-          { kind: "marginBonus", pp: 2 },
-          { kind: "marketingStrength", flat: 30 },
-        ],
-      },
-      {
-        name: "Content Management",
-        description: "CMS speeds publishing at scale.",
-        effects: [{ kind: "growthCostReduction", pct: 0.06 }],
-      },
-      {
-        name: "Streaming Pilots",
-        description: "Early streaming tests new formats.",
-        effects: [{ kind: "marginBonus", pp: 1.5 }],
-      },
-    ],
-    "2009": [
-      {
-        name: "Streaming Platforms",
-        description: "Direct subscriptions unlock streaming platforms.",
-        effects: [
-          { kind: "unlockStrategy", strategyId: "streaming" },
-          { kind: "marketingStrength", flat: 70 },
-        ],
-      },
-      {
-        name: "Mobile Content",
-        description: "On-the-go formats grow consumption.",
-        effects: [{ kind: "marginBonus", pp: 2 }],
-      },
-      {
-        name: "Programmatic Ads",
-        description: "Automated buying lifts ad efficiency.",
-        effects: [{ kind: "marginBonus", pp: 2.5 }],
-      },
-      {
-        name: "Social Distribution",
-        description: "Social sharing amplifies reach.",
-        effects: [{ kind: "marketingStrength", flat: 60 }],
-      },
-      {
-        name: "Cloud Production",
-        description: "Remote workflows cut production cost.",
-        effects: [{ kind: "growthCostReduction", pct: 0.06 }],
-      },
-    ],
-    "2019": [
-      {
-        name: "Social & Programmatic",
-        description: "Targeted ad tech lifts yield per view.",
-        effects: [{ kind: "marginBonus", pp: 3.5 }],
-      },
-      {
-        name: "Influencer Networks",
-        description: "Creator partnerships extend reach.",
-        effects: [{ kind: "marketingStrength", flat: 70 }],
-      },
-      {
-        name: "Short-Form Video",
-        description: "Snackable video boosts engagement.",
-        effects: [
-          { kind: "marginBonus", pp: 2 },
-          { kind: "marketingStrength", flat: 40 },
-        ],
-      },
-      {
-        name: "Subscription Bundles",
-        description: "Bundled services raise lifetime value.",
-        effects: [{ kind: "marginBonus", pp: 2.5 }],
-      },
-      {
-        name: "Audience Analytics",
-        description: "First-party data sharpens monetization.",
-        effects: [{ kind: "marginBonus", pp: 2 }],
-      },
-    ],
-    "2029": [
-      {
-        name: "AI-Generated Content",
-        description: "Generative pipelines slash production cost.",
-        effects: [
-          { kind: "marginBonus", pp: 3 },
-          { kind: "growthCostReduction", pct: 0.1 },
-        ],
-      },
-      {
-        name: "Personalized Media AI",
-        description: "AI curation maximizes engagement.",
-        effects: [{ kind: "marketingStrength", flat: 90 }],
-      },
-      {
-        name: "Immersive AR/VR",
-        description: "Immersive formats open premium tiers.",
-        effects: [{ kind: "marginBonus", pp: 2.5 }],
-      },
-      {
-        name: "Synthetic Voices",
-        description: "Synthetic talent scales localization.",
-        effects: [{ kind: "growthCostReduction", pct: 0.08 }],
-      },
-      {
-        name: "Real-Time Localization",
-        description: "Instant translation widens markets.",
-        effects: [{ kind: "marginBonus", pp: 2 }],
-      },
-    ],
+  "1940": [
+    {
+      name: "Radio Network Dominance",
+      description: "National radio networks lock in mass advertising revenue.",
+      effects: [{ kind: "marginBonus", pp: 1 }],
+    },
+    {
+      name: "Wartime Press Partnerships",
+      description: "Government media access builds institutional relationships.",
+      effects: [{ kind: "marketingStrength", flat: 15 }],
+    },
+  ],
+  "1950": [
+    {
+      name: "Television Broadcasting",
+      description: "TV network affiliates lock in prime-time advertising revenue.",
+      effects: [{ kind: "marginBonus", pp: 2 }],
+    },
+    {
+      name: "Magazine Publishing Scale",
+      description: "Glossy magazines capture consumer brand advertising spend.",
+      effects: [{ kind: "marketingStrength", flat: 20 }],
+    },
+  ],
+  "1960": [
+    {
+      name: "Color Television",
+      description: "Color programming commands significantly higher advertising rates.",
+      effects: [{ kind: "marginBonus", pp: 1.5 }],
+    },
+    {
+      name: "Cable Access Pilots",
+      description: "Early cable wiring builds subscriber infrastructure.",
+      effects: [{ kind: "marketingStrength", flat: 20 }],
+    },
+  ],
+  "1970": [
+    {
+      name: "Cable Television Rollout",
+      description: "HBO and cable channels add subscription revenue to ad income.",
+      effects: [{ kind: "marginBonus", pp: 2 }],
+    },
+    {
+      name: "Satellite Distribution",
+      description: "Uplink capability reaches a national content footprint.",
+      effects: [{ kind: "logisticsStrength", flat: 20 }],
+    },
+  ],
+  "1979": [
+    {
+      name: "Network Broadcasting",
+      description: "Mass reach builds ad franchises.",
+      effects: [{ kind: "marketingStrength", flat: 60 }],
+    },
+    {
+      name: "Color Production",
+      description: "Color content commands premium rates.",
+      effects: [{ kind: "marginBonus", pp: 2 }],
+    },
+    {
+      name: "Syndication Deals",
+      description: "Library licensing adds recurring income.",
+      effects: [{ kind: "marginBonus", pp: 1.5 }],
+    },
+    {
+      name: "Satellite Uplinks",
+      description: "Satellite distribution widens reach.",
+      effects: [{ kind: "logisticsStrength", flat: 15 }],
+    },
+    {
+      name: "Ratings Analytics",
+      description: "Audience measurement lifts ad yield.",
+      effects: [{ kind: "marginBonus", pp: 1.5 }],
+    },
+  ],
+  "1989": [
+    {
+      name: "Cable Syndication",
+      description: "Niche channels multiply revenue.",
+      effects: [
+        { kind: "marginBonus", pp: 2 },
+        { kind: "marketingStrength", flat: 50 },
+      ],
+    },
+    {
+      name: "Home Video",
+      description: "Tape and disc create a second window.",
+      effects: [{ kind: "marginBonus", pp: 2 }],
+    },
+    {
+      name: "Niche Channels",
+      description: "Targeted programming raises CPMs.",
+      effects: [{ kind: "marginBonus", pp: 1.5 }],
+    },
+    {
+      name: "Desktop Production",
+      description: "Digital editing cuts production cost.",
+      effects: [{ kind: "growthCostReduction", pct: 0.06 }],
+    },
+    {
+      name: "Ad Sales Networks",
+      description: "Bundled inventory lifts sell-through.",
+      effects: [{ kind: "marketingStrength", flat: 40 }],
+    },
+  ],
+  "1999": [
+    {
+      name: "Digital Publishing",
+      description: "Web distribution collapses print cost.",
+      effects: [{ kind: "marginBonus", pp: 2.5 }],
+    },
+    {
+      name: "Web Portals",
+      description: "Portals aggregate audience and ads.",
+      effects: [{ kind: "marketingStrength", flat: 50 }],
+    },
+    {
+      name: "Online Advertising",
+      description: "Banner and search ads add yield.",
+      effects: [
+        { kind: "marginBonus", pp: 2 },
+        { kind: "marketingStrength", flat: 30 },
+      ],
+    },
+    {
+      name: "Content Management",
+      description: "CMS speeds publishing at scale.",
+      effects: [{ kind: "growthCostReduction", pct: 0.06 }],
+    },
+    {
+      name: "Streaming Pilots",
+      description: "Early streaming tests new formats.",
+      effects: [{ kind: "marginBonus", pp: 1.5 }],
+    },
+  ],
+  "2009": [
+    {
+      name: "Streaming Platforms",
+      description: "Direct subscriptions unlock streaming platforms.",
+      effects: [
+        { kind: "unlockStrategy", strategyId: "streaming" },
+        { kind: "marketingStrength", flat: 70 },
+      ],
+    },
+    {
+      name: "Mobile Content",
+      description: "On-the-go formats grow consumption.",
+      effects: [{ kind: "marginBonus", pp: 2 }],
+    },
+    {
+      name: "Programmatic Ads",
+      description: "Automated buying lifts ad efficiency.",
+      effects: [{ kind: "marginBonus", pp: 2.5 }],
+    },
+    {
+      name: "Social Distribution",
+      description: "Social sharing amplifies reach.",
+      effects: [{ kind: "marketingStrength", flat: 60 }],
+    },
+    {
+      name: "Cloud Production",
+      description: "Remote workflows cut production cost.",
+      effects: [{ kind: "growthCostReduction", pct: 0.06 }],
+    },
+  ],
+  "2019": [
+    {
+      name: "Social & Programmatic",
+      description: "Targeted ad tech lifts yield per view.",
+      effects: [{ kind: "marginBonus", pp: 3.5 }],
+    },
+    {
+      name: "Influencer Networks",
+      description: "Creator partnerships extend reach.",
+      effects: [{ kind: "marketingStrength", flat: 70 }],
+    },
+    {
+      name: "Short-Form Video",
+      description: "Snackable video boosts engagement.",
+      effects: [
+        { kind: "marginBonus", pp: 2 },
+        { kind: "marketingStrength", flat: 40 },
+      ],
+    },
+    {
+      name: "Subscription Bundles",
+      description: "Bundled services raise lifetime value.",
+      effects: [{ kind: "marginBonus", pp: 2.5 }],
+    },
+    {
+      name: "Audience Analytics",
+      description: "First-party data sharpens monetization.",
+      effects: [{ kind: "marginBonus", pp: 2 }],
+    },
+  ],
+  "2029": [
+    {
+      name: "AI-Generated Content",
+      description: "Generative pipelines slash production cost.",
+      effects: [
+        { kind: "marginBonus", pp: 3 },
+        { kind: "growthCostReduction", pct: 0.1 },
+      ],
+    },
+    {
+      name: "Personalized Media AI",
+      description: "AI curation maximizes engagement.",
+      effects: [{ kind: "marketingStrength", flat: 90 }],
+    },
+    {
+      name: "Immersive AR/VR",
+      description: "Immersive formats open premium tiers.",
+      effects: [{ kind: "marginBonus", pp: 2.5 }],
+    },
+    {
+      name: "Synthetic Voices",
+      description: "Synthetic talent scales localization.",
+      effects: [{ kind: "growthCostReduction", pct: 0.08 }],
+    },
+    {
+      name: "Real-Time Localization",
+      description: "Instant translation widens markets.",
+      effects: [{ kind: "marginBonus", pp: 2 }],
+    },
+  ],
 };
 const ENTERTAINMENT_SECTOR: Record<string, NodeSpec[]> = {
-    "1940": [
-      {
-        name: "Hollywood Studio System",
-        description: "Vertically integrated studios maximize film revenue and control.",
-        effects: [{ kind: "marginBonus", pp: 1.5 }],
-      },
-      {
-        name: "Radio Entertainment Networks",
-        description: "Sponsored radio dramas and variety shows reach mass audiences.",
-        effects: [{ kind: "marketingStrength", flat: 20 }],
-      },
-    ],
-    "1950": [
-      {
-        name: "Television Studios",
-        description: "TV production migrates entertainment spending from radio.",
-        effects: [{ kind: "marginBonus", pp: 2 }],
-      },
-      {
-        name: "Record Labels",
-        description: "LP records monetize music at consumer scale.",
-        effects: [{ kind: "marketingStrength", flat: 25 }],
-      },
-    ],
-    "1960": [
-      {
-        name: "Concert Touring",
-        description: "Live music touring adds a high-margin revenue stream.",
-        effects: [{ kind: "marginBonus", pp: 1.5 }],
-      },
-      {
-        name: "Theme Parks",
-        description: "Disneyland-era destination parks create branded experiences.",
-        effects: [{ kind: "marketingStrength", flat: 25 }],
-      },
-    ],
-    "1970": [
-      {
-        name: "Home Video",
-        description: "VHS and Betamax open catalog licensing and retail channels.",
-        effects: [{ kind: "marginBonus", pp: 2 }],
-      },
-      {
-        name: "Blockbuster Film Economics",
-        description: "Tent-pole films raise per-release financial returns.",
-        effects: [{ kind: "marketingStrength", flat: 25 }],
-      },
-    ],
-    "1979": [
-      {
-        name: "Home Video Distribution",
-        description: "Tape licensing creates a second window.",
-        effects: [{ kind: "marginBonus", pp: 2 }],
-      },
-      {
-        name: "Multiplex Theaters",
-        description: "Multi-screen venues lift utilization.",
-        effects: [{ kind: "marketingStrength", flat: 40 }],
-      },
-      {
-        name: "Arcade Games",
-        description: "Coin-op machines add cash revenue.",
-        effects: [{ kind: "marginBonus", pp: 1.5 }],
-      },
-      {
-        name: "Record Distribution",
-        description: "Distribution scale lowers cost.",
-        effects: [{ kind: "logisticsStrength", flat: 15 }],
-      },
-      {
-        name: "Theme Parks",
-        description: "Destination parks build the brand.",
-        effects: [{ kind: "marketingStrength", flat: 40 }],
-      },
-    ],
-    "1989": [
-      {
-        name: "Console Gaming",
-        description: "Console platforms capture recurring spend.",
-        effects: [
-          { kind: "marginBonus", pp: 2 },
-          { kind: "marketingStrength", flat: 40 },
-        ],
-      },
-      {
-        name: "Cable Premium",
-        description: "Premium channels add subscription revenue.",
-        effects: [{ kind: "marginBonus", pp: 2 }],
-      },
-      {
-        name: "CD Production",
-        description: "Optical media lifts music margin.",
-        effects: [{ kind: "marginBonus", pp: 2 }],
-      },
-      {
-        name: "Animation Studios",
-        description: "Owned animation builds durable IP.",
-        effects: [{ kind: "marginBonus", pp: 1.5 }],
-      },
-      {
-        name: "Licensing & Merch",
-        description: "Merchandising compounds franchise value.",
-        effects: [{ kind: "marketingStrength", flat: 50 }],
-      },
-    ],
-    "1999": [
-      {
-        name: "Digital Production",
-        description: "CGI and editing cut production cost.",
-        effects: [{ kind: "marginBonus", pp: 2.5 }],
-      },
-      {
-        name: "DVD & Home Cinema",
-        description: "DVD sales expand the home window.",
-        effects: [{ kind: "marginBonus", pp: 2 }],
-      },
-      {
-        name: "Online Gaming",
-        description: "Multiplayer adds recurring revenue.",
-        effects: [{ kind: "marketingStrength", flat: 40 }],
-      },
-      {
-        name: "Music Downloads",
-        description: "Digital sales bypass physical cost.",
-        effects: [{ kind: "marginBonus", pp: 1.5 }],
-      },
-      {
-        name: "Franchise IP",
-        description: "Tentpole franchises drive demand.",
-        effects: [{ kind: "marketingStrength", flat: 50 }],
-      },
-    ],
-    "2009": [
-      {
-        name: "Streaming Distribution",
-        description: "Direct subscribers capture recurring revenue.",
-        effects: [
-          { kind: "marginBonus", pp: 3 },
-          { kind: "marketingStrength", flat: 70 },
-        ],
-      },
-      {
-        name: "Mobile Gaming",
-        description: "Mobile titles reach mass audiences.",
-        effects: [{ kind: "marginBonus", pp: 2.5 }],
-      },
-      {
-        name: "Social Games",
-        description: "Viral games monetize networks.",
-        effects: [{ kind: "marketingStrength", flat: 50 }],
-      },
-      {
-        name: "Digital Storefronts",
-        description: "Owned stores cut distribution cost.",
-        effects: [{ kind: "growthCostReduction", pct: 0.06 }],
-      },
-      {
-        name: "Live Events Platforms",
-        description: "Ticketing and live add high-margin revenue.",
-        effects: [{ kind: "marketingStrength", flat: 40 }],
-      },
-    ],
-    "2019": [
-      {
-        name: "Mobile & Live-Service Gaming",
-        description: "Live-ops monetization unlocks streaming platforms.",
-        effects: [
-          { kind: "unlockStrategy", strategyId: "streaming" },
-          { kind: "marginBonus", pp: 2.5 },
-        ],
-      },
-      {
-        name: "Esports",
-        description: "Competitive gaming opens sponsorship revenue.",
-        effects: [{ kind: "marketingStrength", flat: 60 }],
-      },
-      {
-        name: "Subscription Bundles",
-        description: "Bundled services raise retention.",
-        effects: [{ kind: "marginBonus", pp: 2.5 }],
-      },
-      {
-        name: "Cloud Gaming",
-        description: "Streamed games lower hardware barriers.",
-        effects: [{ kind: "growthCostReduction", pct: 0.06 }],
-      },
-      {
-        name: "Creator Platforms",
-        description: "Creator ecosystems scale content cheaply.",
-        effects: [{ kind: "marketingStrength", flat: 60 }],
-      },
-    ],
-    "2029": [
-      {
-        name: "Immersive & AI Experiences",
-        description: "Generative content scales at low cost.",
-        effects: [
-          { kind: "marginBonus", pp: 3 },
-          { kind: "growthCostReduction", pct: 0.1 },
-        ],
-      },
-      {
-        name: "VR Worlds",
-        description: "Persistent VR opens premium tiers.",
-        effects: [{ kind: "marginBonus", pp: 2.5 }],
-      },
-      {
-        name: "Generative Game Content",
-        description: "AI-built worlds slash production cost.",
-        effects: [{ kind: "growthCostReduction", pct: 0.08 }],
-      },
-      {
-        name: "Holographic Entertainment",
-        description: "Holographic shows command premiums.",
-        effects: [{ kind: "marketingStrength", flat: 90 }],
-      },
-      {
-        name: "Persistent Metaverse",
-        description: "Always-on worlds add recurring revenue.",
-        effects: [{ kind: "marginBonus", pp: 2.5 }],
-      },
-    ],
+  "1940": [
+    {
+      name: "Hollywood Studio System",
+      description: "Vertically integrated studios maximize film revenue and control.",
+      effects: [{ kind: "marginBonus", pp: 1.5 }],
+    },
+    {
+      name: "Radio Entertainment Networks",
+      description: "Sponsored radio dramas and variety shows reach mass audiences.",
+      effects: [{ kind: "marketingStrength", flat: 20 }],
+    },
+  ],
+  "1950": [
+    {
+      name: "Television Studios",
+      description: "TV production migrates entertainment spending from radio.",
+      effects: [{ kind: "marginBonus", pp: 2 }],
+    },
+    {
+      name: "Record Labels",
+      description: "LP records monetize music at consumer scale.",
+      effects: [{ kind: "marketingStrength", flat: 25 }],
+    },
+  ],
+  "1960": [
+    {
+      name: "Concert Touring",
+      description: "Live music touring adds a high-margin revenue stream.",
+      effects: [{ kind: "marginBonus", pp: 1.5 }],
+    },
+    {
+      name: "Theme Parks",
+      description: "Disneyland-era destination parks create branded experiences.",
+      effects: [{ kind: "marketingStrength", flat: 25 }],
+    },
+  ],
+  "1970": [
+    {
+      name: "Home Video",
+      description: "VHS and Betamax open catalog licensing and retail channels.",
+      effects: [{ kind: "marginBonus", pp: 2 }],
+    },
+    {
+      name: "Blockbuster Film Economics",
+      description: "Tent-pole films raise per-release financial returns.",
+      effects: [{ kind: "marketingStrength", flat: 25 }],
+    },
+  ],
+  "1979": [
+    {
+      name: "Home Video Distribution",
+      description: "Tape licensing creates a second window.",
+      effects: [{ kind: "marginBonus", pp: 2 }],
+    },
+    {
+      name: "Multiplex Theaters",
+      description: "Multi-screen venues lift utilization.",
+      effects: [{ kind: "marketingStrength", flat: 40 }],
+    },
+    {
+      name: "Arcade Games",
+      description: "Coin-op machines add cash revenue.",
+      effects: [{ kind: "marginBonus", pp: 1.5 }],
+    },
+    {
+      name: "Record Distribution",
+      description: "Distribution scale lowers cost.",
+      effects: [{ kind: "logisticsStrength", flat: 15 }],
+    },
+    {
+      name: "Theme Parks",
+      description: "Destination parks build the brand.",
+      effects: [{ kind: "marketingStrength", flat: 40 }],
+    },
+  ],
+  "1989": [
+    {
+      name: "Console Gaming",
+      description: "Console platforms capture recurring spend.",
+      effects: [
+        { kind: "marginBonus", pp: 2 },
+        { kind: "marketingStrength", flat: 40 },
+      ],
+    },
+    {
+      name: "Cable Premium",
+      description: "Premium channels add subscription revenue.",
+      effects: [{ kind: "marginBonus", pp: 2 }],
+    },
+    {
+      name: "CD Production",
+      description: "Optical media lifts music margin.",
+      effects: [{ kind: "marginBonus", pp: 2 }],
+    },
+    {
+      name: "Animation Studios",
+      description: "Owned animation builds durable IP.",
+      effects: [{ kind: "marginBonus", pp: 1.5 }],
+    },
+    {
+      name: "Licensing & Merch",
+      description: "Merchandising compounds franchise value.",
+      effects: [{ kind: "marketingStrength", flat: 50 }],
+    },
+  ],
+  "1999": [
+    {
+      name: "Digital Production",
+      description: "CGI and editing cut production cost.",
+      effects: [{ kind: "marginBonus", pp: 2.5 }],
+    },
+    {
+      name: "DVD & Home Cinema",
+      description: "DVD sales expand the home window.",
+      effects: [{ kind: "marginBonus", pp: 2 }],
+    },
+    {
+      name: "Online Gaming",
+      description: "Multiplayer adds recurring revenue.",
+      effects: [{ kind: "marketingStrength", flat: 40 }],
+    },
+    {
+      name: "Music Downloads",
+      description: "Digital sales bypass physical cost.",
+      effects: [{ kind: "marginBonus", pp: 1.5 }],
+    },
+    {
+      name: "Franchise IP",
+      description: "Tentpole franchises drive demand.",
+      effects: [{ kind: "marketingStrength", flat: 50 }],
+    },
+  ],
+  "2009": [
+    {
+      name: "Streaming Distribution",
+      description: "Direct subscribers capture recurring revenue.",
+      effects: [
+        { kind: "marginBonus", pp: 3 },
+        { kind: "marketingStrength", flat: 70 },
+      ],
+    },
+    {
+      name: "Mobile Gaming",
+      description: "Mobile titles reach mass audiences.",
+      effects: [{ kind: "marginBonus", pp: 2.5 }],
+    },
+    {
+      name: "Social Games",
+      description: "Viral games monetize networks.",
+      effects: [{ kind: "marketingStrength", flat: 50 }],
+    },
+    {
+      name: "Digital Storefronts",
+      description: "Owned stores cut distribution cost.",
+      effects: [{ kind: "growthCostReduction", pct: 0.06 }],
+    },
+    {
+      name: "Live Events Platforms",
+      description: "Ticketing and live add high-margin revenue.",
+      effects: [{ kind: "marketingStrength", flat: 40 }],
+    },
+  ],
+  "2019": [
+    {
+      name: "Mobile & Live-Service Gaming",
+      description: "Live-ops monetization unlocks streaming platforms.",
+      effects: [
+        { kind: "unlockStrategy", strategyId: "streaming" },
+        { kind: "marginBonus", pp: 2.5 },
+      ],
+    },
+    {
+      name: "Esports",
+      description: "Competitive gaming opens sponsorship revenue.",
+      effects: [{ kind: "marketingStrength", flat: 60 }],
+    },
+    {
+      name: "Subscription Bundles",
+      description: "Bundled services raise retention.",
+      effects: [{ kind: "marginBonus", pp: 2.5 }],
+    },
+    {
+      name: "Cloud Gaming",
+      description: "Streamed games lower hardware barriers.",
+      effects: [{ kind: "growthCostReduction", pct: 0.06 }],
+    },
+    {
+      name: "Creator Platforms",
+      description: "Creator ecosystems scale content cheaply.",
+      effects: [{ kind: "marketingStrength", flat: 60 }],
+    },
+  ],
+  "2029": [
+    {
+      name: "Immersive & AI Experiences",
+      description: "Generative content scales at low cost.",
+      effects: [
+        { kind: "marginBonus", pp: 3 },
+        { kind: "growthCostReduction", pct: 0.1 },
+      ],
+    },
+    {
+      name: "VR Worlds",
+      description: "Persistent VR opens premium tiers.",
+      effects: [{ kind: "marginBonus", pp: 2.5 }],
+    },
+    {
+      name: "Generative Game Content",
+      description: "AI-built worlds slash production cost.",
+      effects: [{ kind: "growthCostReduction", pct: 0.08 }],
+    },
+    {
+      name: "Holographic Entertainment",
+      description: "Holographic shows command premiums.",
+      effects: [{ kind: "marketingStrength", flat: 90 }],
+    },
+    {
+      name: "Persistent Metaverse",
+      description: "Always-on worlds add recurring revenue.",
+      effects: [{ kind: "marginBonus", pp: 2.5 }],
+    },
+  ],
 };
 
 const SECTOR: Partial<Record<CorporationType, Record<string, NodeSpec[]>>> = {
@@ -4427,152 +4427,152 @@ const CORPORATE_EXTRA: Record<string, NodeSpec[]> = {
 
 // Legacy extra-slot (6-7) sources for the media_entertainment merge (issue #2234).
 const MEDIA_SECTOR_EXTRA: Record<string, NodeSpec[]> = {
-    "1979": [
-      {
-        name: "First-Run Syndication",
-        description: "Direct-to-station sales bypass networks.",
-        effects: [{ kind: "marginBonus", pp: 1.5 }],
-      },
-      {
-        name: "Affiliate Networks",
-        description: "Station groups widen ad reach.",
-        effects: [{ kind: "marketingStrength", flat: 40 }],
-      },
-    ],
-    "1989": [
-      {
-        name: "Pay-Per-View",
-        description: "Event pricing captures premium demand.",
-        effects: [{ kind: "marginBonus", pp: 2 }],
-      },
-      {
-        name: "Music Video Channels",
-        description: "Youth channels build durable brands.",
-        effects: [{ kind: "marketingStrength", flat: 50 }],
-      },
-    ],
-    "1999": [
-      {
-        name: "Ad Servers",
-        description: "Targeted serving lifts ad yield.",
-        effects: [{ kind: "marginBonus", pp: 2 }],
-      },
-      {
-        name: "Subscription Walls",
-        description: "Paywalls add recurring revenue.",
-        effects: [{ kind: "marginBonus", pp: 2 }],
-      },
-    ],
-    "2009": [
-      {
-        name: "Recommendation Engines",
-        description: "Personalized feeds boost engagement.",
-        effects: [{ kind: "marketingStrength", flat: 60 }],
-      },
-      {
-        name: "Original Programming",
-        description: "Owned hits drive subscriber growth.",
-        effects: [{ kind: "marginBonus", pp: 2.5 }],
-      },
-    ],
-    "2019": [
-      {
-        name: "Creator Monetization",
-        description: "Revenue-share keeps creators on-platform.",
-        effects: [{ kind: "marketingStrength", flat: 70 }],
-      },
-      {
-        name: "Dynamic Ad Insertion",
-        description: "Server-side ads raise fill and yield.",
-        effects: [{ kind: "marginBonus", pp: 2 }],
-      },
-    ],
-    "2029": [
-      {
-        name: "AI Dubbing",
-        description: "Instant localization cuts versioning cost.",
-        effects: [{ kind: "growthCostReduction", pct: 0.08 }],
-      },
-      {
-        name: "Interactive Narratives",
-        description: "Branching content commands premiums.",
-        effects: [{ kind: "marginBonus", pp: 2.5 }],
-      },
-    ],
+  "1979": [
+    {
+      name: "First-Run Syndication",
+      description: "Direct-to-station sales bypass networks.",
+      effects: [{ kind: "marginBonus", pp: 1.5 }],
+    },
+    {
+      name: "Affiliate Networks",
+      description: "Station groups widen ad reach.",
+      effects: [{ kind: "marketingStrength", flat: 40 }],
+    },
+  ],
+  "1989": [
+    {
+      name: "Pay-Per-View",
+      description: "Event pricing captures premium demand.",
+      effects: [{ kind: "marginBonus", pp: 2 }],
+    },
+    {
+      name: "Music Video Channels",
+      description: "Youth channels build durable brands.",
+      effects: [{ kind: "marketingStrength", flat: 50 }],
+    },
+  ],
+  "1999": [
+    {
+      name: "Ad Servers",
+      description: "Targeted serving lifts ad yield.",
+      effects: [{ kind: "marginBonus", pp: 2 }],
+    },
+    {
+      name: "Subscription Walls",
+      description: "Paywalls add recurring revenue.",
+      effects: [{ kind: "marginBonus", pp: 2 }],
+    },
+  ],
+  "2009": [
+    {
+      name: "Recommendation Engines",
+      description: "Personalized feeds boost engagement.",
+      effects: [{ kind: "marketingStrength", flat: 60 }],
+    },
+    {
+      name: "Original Programming",
+      description: "Owned hits drive subscriber growth.",
+      effects: [{ kind: "marginBonus", pp: 2.5 }],
+    },
+  ],
+  "2019": [
+    {
+      name: "Creator Monetization",
+      description: "Revenue-share keeps creators on-platform.",
+      effects: [{ kind: "marketingStrength", flat: 70 }],
+    },
+    {
+      name: "Dynamic Ad Insertion",
+      description: "Server-side ads raise fill and yield.",
+      effects: [{ kind: "marginBonus", pp: 2 }],
+    },
+  ],
+  "2029": [
+    {
+      name: "AI Dubbing",
+      description: "Instant localization cuts versioning cost.",
+      effects: [{ kind: "growthCostReduction", pct: 0.08 }],
+    },
+    {
+      name: "Interactive Narratives",
+      description: "Branching content commands premiums.",
+      effects: [{ kind: "marginBonus", pp: 2.5 }],
+    },
+  ],
 };
 const ENTERTAINMENT_SECTOR_EXTRA: Record<string, NodeSpec[]> = {
-    "1979": [
-      {
-        name: "Stereo Sound Systems",
-        description: "Premium audio lifts venue revenue.",
-        effects: [{ kind: "marginBonus", pp: 1.5 }],
-      },
-      {
-        name: "Touring Productions",
-        description: "Live tours build franchise reach.",
-        effects: [{ kind: "marketingStrength", flat: 40 }],
-      },
-    ],
-    "1989": [
-      {
-        name: "Computer Animation",
-        description: "CGI opens premium production lines.",
-        effects: [{ kind: "marginBonus", pp: 2 }],
-      },
-      {
-        name: "Premium Cable Bundles",
-        description: "Tiered channels add subscription revenue.",
-        effects: [{ kind: "marginBonus", pp: 2 }],
-      },
-    ],
-    "1999": [
-      {
-        name: "Motion Capture",
-        description: "Performance capture cuts animation cost.",
-        effects: [{ kind: "marginBonus", pp: 2 }],
-      },
-      {
-        name: "Massively Multiplayer",
-        description: "Persistent worlds drive recurring revenue.",
-        effects: [{ kind: "marketingStrength", flat: 40 }],
-      },
-    ],
-    "2009": [
-      {
-        name: "Free-to-Play Monetization",
-        description: "In-app purchases scale lifetime value.",
-        effects: [{ kind: "marginBonus", pp: 2.5 }],
-      },
-      {
-        name: "Second-Screen Apps",
-        description: "Companion apps deepen engagement.",
-        effects: [{ kind: "marketingStrength", flat: 50 }],
-      },
-    ],
-    "2019": [
-      {
-        name: "Live-Service Worlds",
-        description: "Persistent updates sustain spend.",
-        effects: [{ kind: "marginBonus", pp: 2.5 }],
-      },
-      {
-        name: "Battle Pass Models",
-        description: "Seasonal passes lift retention.",
-        effects: [{ kind: "marketingStrength", flat: 60 }],
-      },
-    ],
-    "2029": [
-      {
-        name: "Generative NPCs",
-        description: "AI characters cut content cost.",
-        effects: [{ kind: "growthCostReduction", pct: 0.08 }],
-      },
-      {
-        name: "Volumetric Capture",
-        description: "Holographic capture opens new formats.",
-        effects: [{ kind: "marginBonus", pp: 2.5 }],
-      },
-    ],
+  "1979": [
+    {
+      name: "Stereo Sound Systems",
+      description: "Premium audio lifts venue revenue.",
+      effects: [{ kind: "marginBonus", pp: 1.5 }],
+    },
+    {
+      name: "Touring Productions",
+      description: "Live tours build franchise reach.",
+      effects: [{ kind: "marketingStrength", flat: 40 }],
+    },
+  ],
+  "1989": [
+    {
+      name: "Computer Animation",
+      description: "CGI opens premium production lines.",
+      effects: [{ kind: "marginBonus", pp: 2 }],
+    },
+    {
+      name: "Premium Cable Bundles",
+      description: "Tiered channels add subscription revenue.",
+      effects: [{ kind: "marginBonus", pp: 2 }],
+    },
+  ],
+  "1999": [
+    {
+      name: "Motion Capture",
+      description: "Performance capture cuts animation cost.",
+      effects: [{ kind: "marginBonus", pp: 2 }],
+    },
+    {
+      name: "Massively Multiplayer",
+      description: "Persistent worlds drive recurring revenue.",
+      effects: [{ kind: "marketingStrength", flat: 40 }],
+    },
+  ],
+  "2009": [
+    {
+      name: "Free-to-Play Monetization",
+      description: "In-app purchases scale lifetime value.",
+      effects: [{ kind: "marginBonus", pp: 2.5 }],
+    },
+    {
+      name: "Second-Screen Apps",
+      description: "Companion apps deepen engagement.",
+      effects: [{ kind: "marketingStrength", flat: 50 }],
+    },
+  ],
+  "2019": [
+    {
+      name: "Live-Service Worlds",
+      description: "Persistent updates sustain spend.",
+      effects: [{ kind: "marginBonus", pp: 2.5 }],
+    },
+    {
+      name: "Battle Pass Models",
+      description: "Seasonal passes lift retention.",
+      effects: [{ kind: "marketingStrength", flat: 60 }],
+    },
+  ],
+  "2029": [
+    {
+      name: "Generative NPCs",
+      description: "AI characters cut content cost.",
+      effects: [{ kind: "growthCostReduction", pct: 0.08 }],
+    },
+    {
+      name: "Volumetric Capture",
+      description: "Holographic capture opens new formats.",
+      effects: [{ kind: "marginBonus", pp: 2.5 }],
+    },
+  ],
 };
 
 const SECTOR_EXTRA: Partial<Record<CorporationType, Record<string, NodeSpec[]>>> = {
@@ -5823,152 +5823,152 @@ const CORPORATE_EXTRA2: Record<string, NodeSpec[]> = {
 
 // Legacy extra-slot (8-9) sources for the media_entertainment merge (issue #2234).
 const MEDIA_SECTOR_EXTRA2: Record<string, NodeSpec[]> = {
-    "1979": [
-      {
-        name: "Audience Research Panels",
-        description: "Better ratings raise ad pricing power.",
-        effects: [{ kind: "marginBonus", pp: 1.5 }],
-      },
-      {
-        name: "Barter Syndication",
-        description: "Ad-for-content deals widen distribution.",
-        effects: [{ kind: "marketingStrength", flat: 40 }],
-      },
-    ],
-    "1989": [
-      {
-        name: "Premium Sports Rights",
-        description: "Marquee sports anchor subscriptions.",
-        effects: [{ kind: "marginBonus", pp: 2.5 }],
-      },
-      {
-        name: "Home Shopping",
-        description: "Transactional TV adds a revenue line.",
-        effects: [{ kind: "marketingStrength", flat: 50 }],
-      },
-    ],
-    "1999": [
-      {
-        name: "Banner Ad Networks",
-        description: "Aggregated inventory lifts fill.",
-        effects: [{ kind: "marketingStrength", flat: 50 }],
-      },
-      {
-        name: "Metered Paywalls",
-        description: "Soft paywalls convert loyal readers.",
-        effects: [{ kind: "marginBonus", pp: 2 }],
-      },
-    ],
-    "2009": [
-      {
-        name: "Adaptive Bitrate Streaming",
-        description: "Smooth playback lowers churn.",
-        effects: [{ kind: "growthCostReduction", pct: 0.05 }],
-      },
-      {
-        name: "Franchise Universes",
-        description: "Shared IP universes compound demand.",
-        effects: [{ kind: "marketingStrength", flat: 60 }],
-      },
-    ],
-    "2019": [
-      {
-        name: "First-Party Data Graphs",
-        description: "Owned data sharpens targeting.",
-        effects: [{ kind: "marginBonus", pp: 2.5 }],
-      },
-      {
-        name: "Shoppable Video",
-        description: "In-stream commerce lifts revenue.",
-        effects: [{ kind: "marketingStrength", flat: 70 }],
-      },
-    ],
-    "2029": [
-      {
-        name: "Real-Time Personalization AI",
-        description: "Per-viewer curation maximizes time spent.",
-        effects: [{ kind: "marketingStrength", flat: 90 }],
-      },
-      {
-        name: "Synthetic Production",
-        description: "AI sets and actors slash production cost.",
-        effects: [{ kind: "growthCostReduction", pct: 0.1 }],
-      },
-    ],
+  "1979": [
+    {
+      name: "Audience Research Panels",
+      description: "Better ratings raise ad pricing power.",
+      effects: [{ kind: "marginBonus", pp: 1.5 }],
+    },
+    {
+      name: "Barter Syndication",
+      description: "Ad-for-content deals widen distribution.",
+      effects: [{ kind: "marketingStrength", flat: 40 }],
+    },
+  ],
+  "1989": [
+    {
+      name: "Premium Sports Rights",
+      description: "Marquee sports anchor subscriptions.",
+      effects: [{ kind: "marginBonus", pp: 2.5 }],
+    },
+    {
+      name: "Home Shopping",
+      description: "Transactional TV adds a revenue line.",
+      effects: [{ kind: "marketingStrength", flat: 50 }],
+    },
+  ],
+  "1999": [
+    {
+      name: "Banner Ad Networks",
+      description: "Aggregated inventory lifts fill.",
+      effects: [{ kind: "marketingStrength", flat: 50 }],
+    },
+    {
+      name: "Metered Paywalls",
+      description: "Soft paywalls convert loyal readers.",
+      effects: [{ kind: "marginBonus", pp: 2 }],
+    },
+  ],
+  "2009": [
+    {
+      name: "Adaptive Bitrate Streaming",
+      description: "Smooth playback lowers churn.",
+      effects: [{ kind: "growthCostReduction", pct: 0.05 }],
+    },
+    {
+      name: "Franchise Universes",
+      description: "Shared IP universes compound demand.",
+      effects: [{ kind: "marketingStrength", flat: 60 }],
+    },
+  ],
+  "2019": [
+    {
+      name: "First-Party Data Graphs",
+      description: "Owned data sharpens targeting.",
+      effects: [{ kind: "marginBonus", pp: 2.5 }],
+    },
+    {
+      name: "Shoppable Video",
+      description: "In-stream commerce lifts revenue.",
+      effects: [{ kind: "marketingStrength", flat: 70 }],
+    },
+  ],
+  "2029": [
+    {
+      name: "Real-Time Personalization AI",
+      description: "Per-viewer curation maximizes time spent.",
+      effects: [{ kind: "marketingStrength", flat: 90 }],
+    },
+    {
+      name: "Synthetic Production",
+      description: "AI sets and actors slash production cost.",
+      effects: [{ kind: "growthCostReduction", pct: 0.1 }],
+    },
+  ],
 };
 const ENTERTAINMENT_SECTOR_EXTRA2: Record<string, NodeSpec[]> = {
-    "1979": [
-      {
-        name: "Surround Sound",
-        description: "Premium audio lifts ticket value.",
-        effects: [{ kind: "marginBonus", pp: 1.5 }],
-      },
-      {
-        name: "Merchandise Licensing",
-        description: "Character licensing compounds revenue.",
-        effects: [{ kind: "marketingStrength", flat: 40 }],
-      },
-    ],
-    "1989": [
-      {
-        name: "Direct-to-Video",
-        description: "Sell-through video adds a window.",
-        effects: [{ kind: "marginBonus", pp: 2 }],
-      },
-      {
-        name: "Theme Park Attractions",
-        description: "Marquee rides drive gate revenue.",
-        effects: [{ kind: "marketingStrength", flat: 50 }],
-      },
-    ],
-    "1999": [
-      {
-        name: "Real-Time 3D Engines",
-        description: "Reusable engines cut game cost.",
-        effects: [{ kind: "marginBonus", pp: 2 }],
-      },
-      {
-        name: "Digital Rights Management",
-        description: "DRM protects distribution revenue.",
-        effects: [{ kind: "marginBonus", pp: 1.5 }],
-      },
-    ],
-    "2009": [
-      {
-        name: "Cloud Save Sync",
-        description: "Cross-device saves boost retention.",
-        effects: [{ kind: "growthCostReduction", pct: 0.05 }],
-      },
-      {
-        name: "Microtransactions",
-        description: "In-game purchases lift lifetime value.",
-        effects: [{ kind: "marginBonus", pp: 2.5 }],
-      },
-    ],
-    "2019": [
-      {
-        name: "Cross-Play Networks",
-        description: "Unified play grows the audience.",
-        effects: [{ kind: "marketingStrength", flat: 60 }],
-      },
-      {
-        name: "Live Events Streaming",
-        description: "Streamed events open new revenue.",
-        effects: [{ kind: "marketingStrength", flat: 60 }],
-      },
-    ],
-    "2029": [
-      {
-        name: "Procedural Worlds",
-        description: "Generated content slashes build cost.",
-        effects: [{ kind: "growthCostReduction", pct: 0.08 }],
-      },
-      {
-        name: "Haptic Immersion",
-        description: "Full-body feedback commands premiums.",
-        effects: [{ kind: "marginBonus", pp: 2.5 }],
-      },
-    ],
+  "1979": [
+    {
+      name: "Surround Sound",
+      description: "Premium audio lifts ticket value.",
+      effects: [{ kind: "marginBonus", pp: 1.5 }],
+    },
+    {
+      name: "Merchandise Licensing",
+      description: "Character licensing compounds revenue.",
+      effects: [{ kind: "marketingStrength", flat: 40 }],
+    },
+  ],
+  "1989": [
+    {
+      name: "Direct-to-Video",
+      description: "Sell-through video adds a window.",
+      effects: [{ kind: "marginBonus", pp: 2 }],
+    },
+    {
+      name: "Theme Park Attractions",
+      description: "Marquee rides drive gate revenue.",
+      effects: [{ kind: "marketingStrength", flat: 50 }],
+    },
+  ],
+  "1999": [
+    {
+      name: "Real-Time 3D Engines",
+      description: "Reusable engines cut game cost.",
+      effects: [{ kind: "marginBonus", pp: 2 }],
+    },
+    {
+      name: "Digital Rights Management",
+      description: "DRM protects distribution revenue.",
+      effects: [{ kind: "marginBonus", pp: 1.5 }],
+    },
+  ],
+  "2009": [
+    {
+      name: "Cloud Save Sync",
+      description: "Cross-device saves boost retention.",
+      effects: [{ kind: "growthCostReduction", pct: 0.05 }],
+    },
+    {
+      name: "Microtransactions",
+      description: "In-game purchases lift lifetime value.",
+      effects: [{ kind: "marginBonus", pp: 2.5 }],
+    },
+  ],
+  "2019": [
+    {
+      name: "Cross-Play Networks",
+      description: "Unified play grows the audience.",
+      effects: [{ kind: "marketingStrength", flat: 60 }],
+    },
+    {
+      name: "Live Events Streaming",
+      description: "Streamed events open new revenue.",
+      effects: [{ kind: "marketingStrength", flat: 60 }],
+    },
+  ],
+  "2029": [
+    {
+      name: "Procedural Worlds",
+      description: "Generated content slashes build cost.",
+      effects: [{ kind: "growthCostReduction", pct: 0.08 }],
+    },
+    {
+      name: "Haptic Immersion",
+      description: "Full-body feedback commands premiums.",
+      effects: [{ kind: "marginBonus", pp: 2.5 }],
+    },
+  ],
 };
 
 const SECTOR_EXTRA2: Partial<Record<CorporationType, Record<string, NodeSpec[]>>> = {

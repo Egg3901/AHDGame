@@ -96,9 +96,7 @@ describe("fundDefinitions", () => {
     });
 
     it("covers the merged media & entertainment domain with one fund", () => {
-      const merged = SECTOR_FUND_DEFINITIONS.filter(
-        (f) => f.sectorType === "media_entertainment"
-      );
+      const merged = SECTOR_FUND_DEFINITIONS.filter((f) => f.sectorType === "media_entertainment");
       expect(merged).toHaveLength(1);
       expect(merged[0].ticker).toBe("GLBMEA");
     });

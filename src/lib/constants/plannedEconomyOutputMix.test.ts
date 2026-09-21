@@ -87,6 +87,9 @@ describe("plannedEconomyMediaSupplyFactor", () => {
     // the re-map and is not broken by the derate.
     const priceStep =
       COMMODITY_BASE_PRICES.entertainment_services / COMMODITY_BASE_PRICES.advertising;
-    expect(priceStep * plannedEconomyMediaSupplyFactor("media_entertainment", true)).toBeCloseTo(1, 12);
+    expect(priceStep * plannedEconomyMediaSupplyFactor("media_entertainment", true)).toBeCloseTo(
+      1,
+      12
+    );
   });
 });
