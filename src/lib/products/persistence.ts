@@ -93,7 +93,7 @@ export async function ensureCorporationProductIndexes(db: Db): Promise<string[]>
 
 function isDuplicateKey(error: unknown): boolean {
   return (
-    error instanceof MongoServerError ||
+    (error instanceof MongoServerError && error.code === 11000) ||
     (typeof error === "object" && error !== null && "code" in error
       ? (error as { code?: unknown }).code === 11000
       : false)
@@ -162,22 +162,19 @@ export async function retireProductPersistent(
   args: { productId: string; turn: number }
 ): Promise<RetireProductResult> {
   const collection = db.collection<CorporationProductDocument>(CORPORATION_PRODUCTS_COLLECTION);
-  const existing = await collection.findOne({ _id: args.productId } as never);
-  if (!existing) return { ok: false, reason: "not_found" };
-  if (existing.stage === "retired") return { ok: false, reason: "already_retired" };
-  await collection.updateOne({ _id: args.productId } as never, {
-    $set: { stage: "retired", retiredTurn: args.turn },
-    $unset: { activeCorporationId: "" },
-  });
-  return {
-    ok: true,
-    product: {
-      ...existing,
-      stage: "retired",
-      retiredTurn: args.turn,
-      activeCorporationId: undefined,
-    },
-  };
+  const result = await collection.updateOne(
+    { _id: args.productId, activeCorporationId: { $exists: true } } as never,
+    {
+      $set: { stage: "retired", retiredTurn: args.turn },
+      $unset: { activeCorporationId: "" },
+    }
+  );
+  if (result.matchedCount === 0) {
+    const existing = await collection.findOne({ _id: args.productId } as never);
+    return existing ? { ok: false, reason: "already_retired" } : { ok: false, reason: "not_found" };
+  }
+  const retired = await collection.findOne({ _id: args.productId } as never);
+  return retired ? { ok: true, product: retired } : { ok: false, reason: "not_found" };
 }
 
 /** Reads the corporation's current non-retired product, if any. */

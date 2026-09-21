@@ -36,6 +36,13 @@ function fakeDb(opts?: { explodeOnUse?: boolean }): {
   const models: FakeCollection = { docs: new Map(), createdIndexes: [], enforceSlot: false };
 
   function collectionFor(table: FakeCollection, name: string) {
+    const matches = (doc: Record<string, unknown>, filter: Record<string, unknown>) =>
+      Object.entries(filter).every(([key, expected]) => {
+        if (typeof expected === "object" && expected !== null && "$exists" in expected) {
+          return key in doc === Boolean((expected as { $exists: unknown }).$exists);
+        }
+        return doc[key] === expected;
+      });
     return {
       createIndex: async (key: unknown, options: unknown) => {
         table.createdIndexes.push({ key, options });
@@ -69,7 +76,7 @@ function fakeDb(opts?: { explodeOnUse?: boolean }): {
       },
       findOne: async (filter: Record<string, unknown> = {}) => {
         for (const doc of table.docs.values()) {
-          if (Object.entries(filter).every(([k, v]) => doc[k] === v)) return { ...doc };
+          if (matches(doc, filter)) return { ...doc };
         }
         return null;
       },
@@ -78,7 +85,7 @@ function fakeDb(opts?: { explodeOnUse?: boolean }): {
         update: Record<string, Record<string, unknown>>
       ) => {
         for (const [id, doc] of table.docs) {
-          if (!Object.entries(filter).every(([k, v]) => doc[k] === v)) continue;
+          if (!matches(doc, filter)) continue;
           const next = { ...doc, ...(update.$set ?? {}) };
           for (const k of Object.keys(update.$unset ?? {})) delete next[k];
           table.docs.set(id, next);
@@ -240,6 +247,21 @@ describe("one active product per corporation", () => {
       ok: false,
       reason: "already_retired",
     });
+  });
+
+  it("lets only one concurrent retirement free the active slot", async () => {
+    const { db } = fakeDb();
+    await startProductPersistent(db, { enabled: true, draft: draft() });
+
+    const results = await Promise.all([
+      retireProductPersistent(db, { productId: "product-1", turn: 120 }),
+      retireProductPersistent(db, { productId: "product-1", turn: 121 }),
+    ]);
+
+    expect(results.filter((result) => result.ok)).toHaveLength(1);
+    expect(results.filter((result) => !result.ok)).toEqual([
+      { ok: false, reason: "already_retired" },
+    ]);
   });
 });
 
