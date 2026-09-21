@@ -438,7 +438,7 @@ export const STATE_SECTOR_WEIGHT_OVERRIDES: Partial<Record<string, SectorWeightM
   CO: { technology: 15, energy: 8, defense: 7, real_estate: 11 },
   CT: { financial: 16, healthcare: 11, defense: 6, technology: 7 },
   DE: { financial: 17, chemical_industries: 12, logistics: 7, healthcare: 7 },
-  GA: { logistics: 12, media: 9, financial: 9, manufacturing: 8 },
+  GA: { logistics: 12, media_entertainment: 9, financial: 9, manufacturing: 8 },
   IA: { agriculture: 18, energy: 8, financial: 7, manufacturing: 7 },
   ID: { agriculture: 14, technology: 7, construction: 7, extraction: 5 },
   IN: { manufacturing: 16, automobiles: 10, logistics: 7, agriculture: 5 },
@@ -458,9 +458,9 @@ export const STATE_SECTOR_WEIGHT_OVERRIDES: Partial<Record<string, SectorWeightM
   OK: { energy: 16, agriculture: 8, extraction: 8, construction: 7 },
   OR: { technology: 12, agriculture: 8, logistics: 7, manufacturing: 7 },
   PA: { healthcare: 13, manufacturing: 10, energy: 8, financial: 8, extraction: 4 },
-  RI: { healthcare: 12, financial: 11, media: 6, technology: 6 },
+  RI: { healthcare: 12, financial: 11, media_entertainment: 6, technology: 6 },
   SC: { manufacturing: 15, automobiles: 10, logistics: 8, agriculture: 5 },
-  TN: { healthcare: 11, entertainment: 8, logistics: 8, automobiles: 6 },
+  TN: { healthcare: 11, media_entertainment: 8, logistics: 8, automobiles: 6 },
   UT: { technology: 14, financial: 9, construction: 8, real_estate: 10 },
   VA: { defense: 14, technology: 10, financial: 9, logistics: 6 },
   VT: { agriculture: 13, healthcare: 9, energy: 5, retail: 7 },
@@ -506,12 +506,12 @@ export const STATE_SECTOR_WEIGHT_OVERRIDES: Partial<Record<string, SectorWeightM
   },
   // UK regional additions
   SEE: { technology: 12, financial: 10, real_estate: 13, defense: 6, healthcare: 8 },
-  SWE: { technology: 10, defense: 8, agriculture: 6, entertainment: 6, logistics: 6 },
+  SWE: { technology: 10, defense: 8, agriculture: 6, media_entertainment: 6, logistics: 6 },
   EAE: { technology: 11, agriculture: 8, manufacturing: 9, logistics: 7, defense: 5 },
   EMI: { manufacturing: 14, logistics: 9, automobiles: 6, construction: 7 },
   WMI: { automobiles: 15, manufacturing: 14, logistics: 8, healthcare: 7 },
   YHU: { manufacturing: 12, logistics: 9, healthcare: 8, energy: 5 },
-  NWE: { media: 16, healthcare: 9, manufacturing: 9, financial: 8, technology: 8 },
+  NWE: { media_entertainment: 16, healthcare: 9, manufacturing: 9, financial: 8, technology: 8 },
   NEE: { energy: 12, extraction: 8, manufacturing: 11, chemical_industries: 7 },
   WAL: { manufacturing: 10, energy: 9, agriculture: 7, logistics: 6 },
   NIR: { agriculture: 16, manufacturing: 8, logistics: 7, healthcare: 8 },
@@ -560,10 +560,10 @@ export const STATE_SECTOR_WEIGHT_OVERRIDES: Partial<Record<string, SectorWeightM
   SL: { automobiles: 15, manufacturing: 14, energy: 7, extraction: 3 },
   NI: { automobiles: 10, manufacturing: 11, agriculture: 8, energy: 8, logistics: 7 },
   SH: { energy: 15, logistics: 10, agriculture: 6 },
-  HH: { logistics: 16, media: 10, financial: 10, technology: 8 },
+  HH: { logistics: 16, media_entertainment: 10, financial: 10, technology: 8 },
   BRE: { logistics: 14, automobiles: 10, manufacturing: 9, defense: 5 },
   BB: { energy: 12, agriculture: 8, logistics: 6, manufacturing: 6 },
-  MV: { agriculture: 10, energy: 8, logistics: 6, entertainment: 5 },
+  MV: { agriculture: 10, energy: 8, logistics: 6, media_entertainment: 5 },
   SN: { technology: 12, manufacturing: 13, automobiles: 8, chemical_industries: 7 },
   ST: { chemical_industries: 12, energy: 9, agriculture: 7, manufacturing: 9 },
   TH: { manufacturing: 12, technology: 9, automobiles: 8, healthcare: 7 },
@@ -605,7 +605,7 @@ export const STATE_SECTOR_WEIGHT_OVERRIDES: Partial<Record<string, SectorWeightM
     media_entertainment: 2,
     extraction: 1,
   },
-  HOK: { agriculture: 16, energy: 10, healthcare: 8, entertainment: 5 },
+  HOK: { agriculture: 16, energy: 10, healthcare: 8, media_entertainment: 5 },
   TOH: { manufacturing: 11, energy: 8, agriculture: 8, technology: 7 },
   CHU: { automobiles: 18, manufacturing: 15, technology: 10, energy: 5 },
   KNS: { manufacturing: 11, technology: 10, financial: 10, healthcare: 8, real_estate: 10 },
@@ -623,7 +623,7 @@ export const STATE_SECTOR_WEIGHT_OVERRIDES: Partial<Record<string, SectorWeightM
   // HD, etc.) collide with German Bundesländer (DE HB = Bremen). The lookup
   // function tries the compound key first, then falls back to the bare key.
   "CN:DB": { manufacturing: 17, energy: 10, extraction: 8, agriculture: 6 },
-  "CN:HB": { financial: 13, technology: 13, media: 5, defense: 5, energy: 8 },
+  "CN:HB": { financial: 13, technology: 13, media_entertainment: 5, defense: 5, energy: 8 },
   "CN:HD": {
     technology: 14,
     manufacturing: 16,
@@ -637,7 +637,7 @@ export const STATE_SECTOR_WEIGHT_OVERRIDES: Partial<Record<string, SectorWeightM
   "CN:XB": { energy: 15, extraction: 12, agriculture: 8, defense: 5, chemical_industries: 6 },
 
   // Ireland
-  DUB: { technology: 24, financial: 18, media: 5, real_estate: 11, logistics: 7 },
+  DUB: { technology: 24, financial: 18, media_entertainment: 5, real_estate: 11, logistics: 7 },
   KIL: { construction: 14, real_estate: 16, logistics: 8, technology: 6 },
   MID: { agriculture: 9, energy: 5, construction: 9, healthcare: 9 },
   WEX: { manufacturing: 9, agriculture: 7, logistics: 7, retail: 7 },
@@ -648,7 +648,7 @@ export const STATE_SECTOR_WEIGHT_OVERRIDES: Partial<Record<string, SectorWeightM
 
   // Brazil
   NORTE: { extraction: 18, energy: 12, agriculture: 12, logistics: 6, manufacturing: 6 },
-  NORDESTE: { energy: 14, agriculture: 9, retail: 8, manufacturing: 8, entertainment: 5 },
+  NORDESTE: { energy: 14, agriculture: 9, retail: 8, manufacturing: 8, media_entertainment: 5 },
   CENTRO_OESTE: { agriculture: 24, logistics: 10, energy: 8, extraction: 7 },
   SUDESTE: {
     financial: 13,
