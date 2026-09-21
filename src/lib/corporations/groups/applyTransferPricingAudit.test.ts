@@ -32,9 +32,7 @@ describe("applyTransferPricingAudit accrual batching", () => {
     }));
     const db = {
       collection: vi.fn((name: string) =>
-        name === "corporations"
-          ? { find: corporationFind }
-          : { bulkWrite, find: agreementFind }
+        name === "corporations" ? { find: corporationFind } : { bulkWrite, find: agreementFind }
       ),
     } as unknown as Db;
 

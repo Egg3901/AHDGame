@@ -269,7 +269,8 @@ export async function processMinisterialOrders(currentTurn: number): Promise<{
         advocacyActive: 1,
       })
       .toArray(),
-    db.collection<{ _id: string; countryId: string }>("states")
+    db
+      .collection<{ _id: string; countryId: string }>("states")
       .find({}, { projection: { _id: 1, countryId: 1 } })
       .toArray(),
   ]);

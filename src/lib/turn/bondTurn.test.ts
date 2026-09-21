@@ -3,7 +3,7 @@
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
-import type { AnyBulkWriteOperation, Db } from "mongodb";
+import type { Db } from "mongodb";
 import { ObjectId } from "mongodb";
 import { resetCorpFxRateCacheForTests } from "@/lib/currency/corporationCapital";
 // Static imports on purpose: bondTurn pulls a large transitive graph whose
@@ -310,10 +310,14 @@ describe("processBondTurn", () => {
     expect(db.collectionMocks["indexFunds"]!.bulkWrite).toHaveBeenCalled();
     const fundUpdate = vi
       .mocked(db.collectionMocks["indexFunds"]!.bulkWrite)
-      .mock.calls.flatMap((call) => call[0] as AnyBulkWriteOperation[])
+      .mock.calls.flatMap(
+        (call) =>
+          call[0] as Array<{
+            updateOne?: { filter: { _id: ObjectId }; update: unknown };
+          }>
+      )
       .find((op) => {
-        const filter = op.updateOne?.filter as { _id?: ObjectId } | undefined;
-        return filter?._id?.toString() === fundId.toString();
+        return op.updateOne?.filter._id.toString() === fundId.toString();
       })?.updateOne;
     expect(fundUpdate).toBeDefined();
     const update = fundUpdate!.update as { $inc: { cashAnchor: number } };
