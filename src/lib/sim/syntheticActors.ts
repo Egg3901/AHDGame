@@ -118,6 +118,8 @@ export interface ActorPopulationCounts {
   crisisDecidedInteractions?: number;
   wealthListRows?: number;
   playerFoundedCorps?: number;
+  /** Retained full opposition-research command sequence (flow driver). */
+  oppoFlowSucceeded?: boolean;
 }
 
 /**
@@ -137,5 +139,6 @@ export function snapshotActorPopulation(counts: ActorPopulationCounts): ActorPop
     wealthListRows: counts.wealthListRows ?? 0,
     playerFoundedCorps: counts.playerFoundedCorps ?? 0,
     preset: counts.preset,
+    oppoFlowSucceeded: counts.oppoFlowSucceeded ?? false,
   };
 }

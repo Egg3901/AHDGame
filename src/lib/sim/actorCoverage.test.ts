@@ -116,13 +116,39 @@ describe("evaluateActorCoverage", () => {
   it("covers every mechanic but campaigns once synthetic actors are materialized", () => {
     const manifest = evaluateActorCoverage(syntheticSnapshot(), "1953-01-01T00:00:00.000Z");
     // 11 covered + 1 partial: campaigns accrue through the production rule
-    // but no entry/spend driver exists, so the manifest stays honest.
+    // and a flow driver exists, but this run retained no full-sequence
+    // purchase, so the manifest stays honest.
     expect(manifest.entries.filter((e) => e.status === "covered")).toHaveLength(11);
     expect(uncoveredEntries(manifest)).toHaveLength(1);
     const campaigns = manifest.entries.find((e) => e.id === "campaigns-player-actions");
     expect(campaigns?.status).toBe("partial");
-    expect(campaigns?.reason).toContain("no campaign-entry or action-spend driver exists");
+    expect(campaigns?.reason).toContain("no successful full-sequence purchase");
     expect(actorCoverageWarnings(manifest)).toHaveLength(1);
+  });
+
+  it("marks campaigns covered only on retained flow-driver evidence", () => {
+    const snapshot = snapshotActorPopulation({
+      mode: "synthetic",
+      preset: "1953-default",
+      characters: 7,
+      users: 7,
+      syntheticCharacters: 7,
+      syntheticUsers: 7,
+      statePartyCandidates: 3,
+      crisisDecidedInteractions: 1,
+      wealthListRows: 2,
+      playerFoundedCorps: 2,
+      oppoFlowSucceeded: true,
+    });
+    const manifest = evaluateActorCoverage(snapshot, "1953-01-01T00:00:00.000Z");
+    expect(manifest.registryVersion).toBe(ACTOR_COVERAGE_REGISTRY_VERSION);
+    expect(manifest.entries.filter((e) => e.status === "covered")).toHaveLength(12);
+    expect(uncoveredEntries(manifest)).toHaveLength(0);
+    const campaigns = manifest.entries.find((e) => e.id === "campaigns-player-actions");
+    expect(campaigns?.status).toBe("covered");
+    expect(campaigns?.reason).toContain("opposition-research flow driver");
+    expect(campaigns?.evidence).toContain("oppoFlowSucceeded=true");
+    expect(actorCoverageWarnings(manifest)).toHaveLength(0);
   });
 
   it("degrades synthetic mode without materialized actors to unreachable, never covered", () => {
