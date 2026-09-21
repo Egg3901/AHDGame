@@ -139,6 +139,14 @@ export function getGdpBaseline(countryId: string, preset?: string): number {
 export { resolveCampaignGdpBaseline };
 
 /**
+ * Era price level (#2119) is re-exported here so the income shell — the turn
+ * phase that already imports `projectCharacterGeneration` from this module —
+ * can resolve the flag-gated scalar from one import:
+ * `resolveCampaignPriceLevel(gameConfig.campaignEraPriceLevelEnabled, preset)`.
+ */
+export { eraPriceLevelFor, resolveCampaignPriceLevel } from "@/lib/campaigns/rules/priceLevel";
+
+/**
  * GDP-per-capita income scalar for fund generation.
  * Range 0.9–1.5: wealthy regions earn more, poorer regions earn slightly less.
  * Uses a per-country-era baseline so each country's regions are scaled relative to
@@ -160,6 +168,11 @@ export function getIncomeGdpScalar(
  * Get the total fund generation rate for a character (before taxes).
  * Combines base rate + donor base bonus (both GDP-scaled) + flat office bonus.
  * When stateGdpMillions is omitted, defaults to country average (scalar = 1.0).
+ *
+ * `priceLevel` (#2119) is the between-era deflator resolved at the shell from
+ * the world's era; it scales the nominal income legs (base + donor bonus and
+ * the flat office bonus) so a 1953 world's income deflates with its costs. It
+ * defaults to 1, so an omitted/1 scalar reproduces today's arithmetic exactly.
  */
 export function getTotalFundGeneration(
   population: number,
@@ -168,7 +181,8 @@ export function getTotalFundGeneration(
   stateGdpMillions?: number,
   countryId = "US",
   stateInfluence?: number,
-  preset?: string
+  preset?: string,
+  priceLevel = 1
 ): number {
   const gdpScalar =
     stateGdpMillions !== undefined
@@ -177,8 +191,12 @@ export function getTotalFundGeneration(
   const baseRate = getFundGenerationRate(population);
   const donorBonus = getDonorBaseBonus(donorBaseLevel, population, stateInfluence);
   const officeBonus = getOfficeFundBonus(currentOffice);
-  // Base and donor bonus scale with state wealth; office bonus is flat (tied to the office)
-  return Math.round((baseRate + donorBonus) * gdpScalar) + officeBonus;
+  // Base and donor bonus scale with state wealth; office bonus is flat (tied to
+  // the office). Every leg is nominal, so all scale with the era price level.
+  return (
+    Math.round((baseRate + donorBonus) * gdpScalar * priceLevel) +
+    Math.round(officeBonus * priceLevel)
+  );
 }
 
 /**
@@ -234,6 +252,11 @@ export interface FundDistribution {
  * Base rate and donor bonus are scaled by state GDP per capita using a per-country
  * baseline; office bonus is flat. When stateGdpMillions is omitted, defaults to
  * country average (scalar = 1.0).
+ *
+ * `priceLevel` (#2119): the between-era deflator resolved at the shell. Scaling
+ * every nominal income leg by the same scalar keeps the tax split proportional
+ * and preserves within-era regional variance (a uniform factor). Defaults to 1,
+ * so an omitted/1 scalar is byte-identical to today.
  */
 export function calculateFullFundDistribution(
   statePopulation: number,
@@ -244,17 +267,20 @@ export function calculateFullFundDistribution(
   stateGdpMillions?: number,
   countryId = "US",
   stateInfluence?: number,
-  preset?: string
+  preset?: string,
+  priceLevel = 1
 ): FundDistribution {
   const gdpScalar =
     stateGdpMillions !== undefined
       ? getIncomeGdpScalar(stateGdpMillions, statePopulation, countryId, preset)
       : 1.0;
-  const baseGeneration = Math.round(getFundGenerationRate(statePopulation) * gdpScalar);
-  const donorBaseBonus = Math.round(
-    getDonorBaseBonus(donorBaseLevel, statePopulation, stateInfluence) * gdpScalar
+  const baseGeneration = Math.round(
+    getFundGenerationRate(statePopulation) * gdpScalar * priceLevel
   );
-  const officeBonus = getOfficeFundBonus(currentOffice);
+  const donorBaseBonus = Math.round(
+    getDonorBaseBonus(donorBaseLevel, statePopulation, stateInfluence) * gdpScalar * priceLevel
+  );
+  const officeBonus = Math.round(getOfficeFundBonus(currentOffice) * priceLevel);
   const totalGeneration = baseGeneration + donorBaseBonus + officeBonus;
 
   // Taxes are applied to total generation
@@ -337,6 +363,12 @@ export function projectCharacterGeneration(args: {
   politicalInfluence?: number;
   /** World reset preset selecting the baseline era; defaults to modern. */
   preset?: string;
+  /**
+   * Resolved era price level (#2119) from the shell; undefined/1 = modern and
+   * byte-identical to today. The turn phase passes
+   * `resolveCampaignPriceLevel(gameConfig.campaignEraPriceLevelEnabled, preset)`.
+   */
+  priceLevel?: number;
 }): number {
   return getTotalFundGeneration(
     args.population,
@@ -345,7 +377,8 @@ export function projectCharacterGeneration(args: {
     args.stateGdpMillions,
     args.countryId ?? "US",
     args.politicalInfluence ?? 0,
-    args.preset ?? DEFAULT_SEED_PRESET
+    args.preset ?? DEFAULT_SEED_PRESET,
+    args.priceLevel ?? 1
   );
 }
 
