@@ -89,8 +89,11 @@ import {
   resolveCorpLiquidCurrencyCode,
 } from "@/lib/currency/corporationCapital";
 import type { CapacityDecisionObservation } from "@/lib/corporations/capacityDecisionTelemetry/rules";
-import type { NppOperatorObservation } from "@/lib/corporations/nppOperatorTelemetry/rules";
-import { buildNppOperatorObservation } from "@/lib/corporations/nppOperatorTelemetry/rules";
+import {
+  buildNppOperatorObservation,
+  type NppDecisionConstraint,
+  type NppOperatorObservation,
+} from "@/lib/corporations/nppOperatorTelemetry/rules";
 import {
   buildCapacityCompetitorIndex,
   createFoundingCapacityOutcome,
@@ -614,6 +617,9 @@ export function makeNppCorpDecision(
   const cashToAnchor = makeCapacityCashToAnchor(corp, corpFxRate);
   const capacityCohort = resolveCapacityCohort(corp);
   const capacityObservations: CapacityDecisionObservation[] = [];
+  // Which of the four operator decision legs bound this corp this turn (#2122);
+  // sections below flag the branch they take and the resolver picks the first.
+  const constraintFlags: Partial<Record<NppDecisionConstraint, boolean>> = {};
   const ownCorporationId = corp._id.toString();
   const rivalCount = (stateId: string, sectorType: string): number =>
     ctx.competitorCountOf?.(stateId, sectorType, ownCorporationId) ?? 0;
@@ -647,44 +653,26 @@ export function makeNppCorpDecision(
 
   // `totalIncome`/`totalRevenue`/`corpMargin`/`isProfitable` below feed ONLY
   // sections 3-5 (budgets, dividends, expansion) — never sections 1-2, which
-  // read sp.income/sp.margin (nominal, per-sector) directly and are unaffected
-  // by this block.
+  // read sp.income/sp.margin directly. Three compounding bugs made those
+  // sections spend a corp into the ground while reading it as healthy:
   //
-  // Two compounding bugs made those three sections spend a corp into the
-  // ground while reading it as healthy the entire time:
+  // (1) Blind to its own overhead. The old figures were pure SECTOR income —
+  //     before the very marketing/logistics/R&D/CEO-salary spend section 3 was
+  //     about to size — so an NPP kept raising overhead while real income fell.
+  //     Measured on a stopped 657-turn world: totalCosts/revenue rose 0.49 →
+  //     1.19 and 89% of corps were loss-making, while sector
+  //     effectiveProfitMargin held flat at 45-60. Fix: subtract last turn's
+  //     ACTUAL spend (below) before judging profitability.
   //
-  // (1) Blind to its own overhead. The old totalIncome/corpMargin were pure
-  //     SECTOR income — before marketing, logistics, R&D and CEO-salary spend,
-  //     i.e. before the very overhead section 3 was about to size. So an NPP
-  //     read a "healthy" sector margin and kept raising marketing/R&D every
-  //     turn, oblivious that its own accumulated overhead was what was
-  //     dragging real income to a loss: the margin it re-read next turn never
-  //     moved, because nothing ever wrote the overhead back into it. Measured
-  //     on a stopped 657-turn world: world-wide totalCosts/revenue rose from
-  //     0.49 (turn 2) to 1.19 (turn 657) — 89% of corps loss-making by the end
-  //     — while sector-level effectiveProfitMargin held flat in the 45-60
-  //     band for a sampled corp across the whole run. The signal genuinely
-  //     never moved.
+  // (2) Sized off the wrong revenue. `sector.revenue` is NOMINAL (book) revenue;
+  //     the corp collects `realizedRevenue` and pays overhead out of it. Sizing
+  //     budgets off nominal while charging them against realized multiplies the
+  //     true burden by 1/realizationRatio (measured ~3×). Use realizedRevenue.
   //
-  //     Fix: subtract last turn's ACTUAL marketing+logistics+R&D+CEO-salary
-  //     spend (corp.marketingBudget/logisticsBudget/rdBudget/ceoSalary — the
-  //     very budgets this section is about to re-decide) from sector income
-  //     before judging profitability, so the signal includes the overhead it
-  //     drives.
-  //
-  // (2) Sized off the wrong revenue. `sector.revenue` is NOMINAL (book)
-  //     revenue — what a sector would earn if every unit sold at full price.
-  //     What the corp actually collects, and what its overhead is actually
-  //     paid out of, is `realizedRevenue` (post capacity/price/clearing/
-  //     throughput/strike realization) — see sectorTurn.ts's realization
-  //     chain. Sizing marketing/logistics/R&D as a % of NOMINAL revenue while
-  //     the resulting $ budget is charged against REALIZED revenue silently
-  //     multiplies the true overhead burden by 1/realizationRatio: on the
-  //     same sampled corp, realizedRevenue ran ~34% of nominal revenue, so a
-  //     "sane" 3-5% marketing/logistics/R&D budget was actually landing at
-  //     ~9-15% of what the corp truly earned. Sizing off realizedRevenue
-  //     instead restores this module's own stated intent — "spend only what
-  //     you earn."
+  // (3) Blind to its own debt. Bond interest is contracted, not discretionary,
+  //     and was absent, so an operating-profitable corp could lose money every
+  //     turn while reading healthy. See NppCorpDecisionContext.debtServiceAnchor.
+  //     Charged in the corp's own currency, like every other money constant here.
   const realizedOrNominal = (sp: SectorProfitInfo) =>
     sectorEconomicToCorpLocal(sp.sector.realizedRevenue ?? sp.sector.revenue ?? 0, sp.sector);
   const totalRevenue = sectorProfits.reduce((sum, sp) => sum + realizedOrNominal(sp), 0);
@@ -697,17 +685,6 @@ export function makeNppCorpDecision(
     (corp.logisticsBudget ?? 0) +
     (corp.rdBudget ?? 0) +
     (corp.ceoSalary ?? 0);
-  // (3) Blind to its own debt. `priorOverhead` covers what the corp CHOOSES to
-  //     spend; it says nothing about what the corp is CONTRACTED to pay. Bond
-  //     interest is not discretionary, is often the largest single line on a
-  //     levered corp's books, and was entirely absent from this signal, so a
-  //     corp could be comfortably operating-profitable and still losing money
-  //     every turn with the brain reading it as healthy. See
-  //     `NppCorpDecisionContext.debtServiceAnchor` for the measured case.
-  //
-  //     Charged in the corp's own currency, because `priorOverhead` and
-  //     `grossRealizedIncome` are already corp-local and `debtServiceAnchor` is
-  //     ₳, the same conversion every other money constant in this module takes.
   const debtServiceLocal = toCorpLocal(ctx.debtServiceAnchor ?? 0);
   const totalIncome = grossRealizedIncome - priorOverhead - debtServiceLocal;
   const corpMargin = totalRevenue > 0 ? (totalIncome / totalRevenue) * 100 : 0;
@@ -771,11 +748,16 @@ export function makeNppCorpDecision(
         sp.margin <= modifiers.divestMarginFloor + levers.divestMarginFloorDelta
       ) {
         // Protect the corp's primary sector type — that's its core business
-        if (sp.sector.sectorType === corp.type) continue;
+        if (sp.sector.sectorType === corp.type) {
+          constraintFlags.divest_core_protected = true;
+          continue;
+        }
 
         const remainingProfitable = profitableSectors;
         if (remainingProfitable > 0) {
           divestedSectorIds.push(sp.sector._id);
+        } else {
+          constraintFlags.divest_no_other_income = true;
         }
       }
     }
@@ -810,6 +792,10 @@ export function makeNppCorpDecision(
       strandedDivests += 1;
     }
   }
+
+  // Divest-leg flag (section 1): a completed shed; blocked-shed flags are set
+  // inside the margin-divest loop above.
+  if (divestedSectorIds.length > 0) constraintFlags.divested = true;
 
   // Effective sector count after divestiture
   const effectiveSectors = numSectors - divestedSectorIds.length;
@@ -870,8 +856,10 @@ export function makeNppCorpDecision(
     const growthUnaffordable = growthCostShare >= sp.margin * GROWTH_COST_MARGIN_SHARE;
 
     if (growthUnaffordable) {
+      constraintFlags.growth_unaffordable = true;
       targetGrowth = Math.max(0, targetGrowth - 1);
     } else if (sp.marginCategory === "loss") {
+      constraintFlags.loss_margin = true;
       targetGrowth = Math.max(0, targetGrowth - 2);
     } else if (sp.marginCategory === "strong") {
       targetGrowth = Math.min(5, targetGrowth + 2 + modifiers.growthDelta + levers.growthDelta);
@@ -894,12 +882,14 @@ export function makeNppCorpDecision(
     if (shortage >= 1.15 && sp.marginCategory !== "loss" && !growthUnaffordable) {
       targetGrowth = Math.min(5, targetGrowth + 1);
     } else if (shortage <= 0.85) {
+      constraintFlags.glut_signal = true;
       targetGrowth = Math.max(0, targetGrowth - 1);
     }
 
     // Chronic low fill overrides every upward signal: never grow a sector
     // that can't sell what it already makes.
     if (chronicLowFill) {
+      constraintFlags.chronic_low_fill = true;
       targetGrowth = Math.min(targetGrowth, sp.sector.targetGrowthRate ?? 2, 1);
     }
 
@@ -1071,12 +1061,8 @@ export function makeNppCorpDecision(
   }
 
   // ── 3. Budget decisions (revenue-based, not cash-based) ───────────────────
-  // Budgets scale on what the corp EARNS, not what it has in the bank.
-  // This prevents a cash-rich but unprofitable corp from burning reserves.
-  // `totalRevenue`/`corpMargin`/`isProfitable` are the realized-revenue,
-  // net-of-overhead figures computed above — see the profitability-analysis
-  // block's comment for why gross/nominal figures let this section spend a
-  // corp into the ground while reading it as healthy.
+  // Budgets scale on what the corp EARNS, not what it holds. `totalRevenue`/
+  // `corpMargin`/`isProfitable` are the net-of-overhead figures computed above.
 
   // Base budget shares by margin band, then scaled by archetype (marketing/R&D).
   // Logistics is an operational lever, not a personality one, so it's unscaled.
@@ -1106,6 +1092,11 @@ export function makeNppCorpDecision(
     rdPct = 0.02;
   }
 
+  // Budget-leg flag (section 3), in the code's own branch order.
+  if (isCashCrisis) constraintFlags.budget_cash_crisis = true;
+  else if (!isProfitable || totalRevenue === 0) constraintFlags.budget_unprofitable = true;
+  else if (corpMargin < 10) constraintFlags.budget_thin_margin = true;
+
   const marketingBudget = Math.round(
     totalRevenue * marketingPct * modifiers.marketingMult * levers.marketingMult
   );
@@ -1131,6 +1122,12 @@ export function makeNppCorpDecision(
       MAX_DIVIDEND_RATE,
       Math.round(targetDividendRate * modifiers.dividendMult * levers.dividendMult)
     );
+  }
+  // Dividend-leg flag (section 4): why the payout was withheld.
+  if (targetDividendRate === 0) {
+    if (!isProfitable) constraintFlags.dividend_unprofitable = true;
+    if (!(liquidCapital > effectiveCashFloor)) constraintFlags.dividend_cash_floor = true;
+    if (corpMargin < 15) constraintFlags.dividend_margin_below_min = true;
   }
   if (targetDividendRate !== (corp.dividendRate ?? 0)) {
     updates.dividendRate = targetDividendRate;
@@ -1158,6 +1155,7 @@ export function makeNppCorpDecision(
         divestedSectors: divestedSectorIds.length,
         reinvestments: 0,
         cashHeadroomAnchor: cashToAnchor(cashLocal - effectiveCashFloor),
+        constraintFlags,
       }),
     };
   }
@@ -1992,6 +1990,7 @@ export function makeNppCorpDecision(
       divestedSectors: divestedSectorIds.length,
       reinvestments: reinvestments.length,
       cashHeadroomAnchor: cashToAnchor(cashLocal - effectiveCashFloor),
+      constraintFlags,
     }),
   };
 }

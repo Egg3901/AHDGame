@@ -437,4 +437,85 @@ describe("convertCorpCurrency", () => {
     >;
     expect("ceoSalary" in setPayload).toBe(false);
   });
+
+  // ─── Standalone-Mongo compensation ─────────────────────────────────────
+
+  function primeSectors(sectors: CorporateSector[]) {
+    db.collectionMocks.corporateSectors = db.collection("corporateSectors") as never;
+    db.collectionMocks.corporateSectors!.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue(sectors),
+      sort: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockReturnThis(),
+      skip: vi.fn().mockReturnThis(),
+      project: vi.fn().mockReturnThis(),
+    });
+  }
+
+  it("reverts the corp document when the sector bulkWrite throws on standalone", async () => {
+    const corp = makeCorp(); // JPY-denominated
+    primeSectors([
+      {
+        _id: new ObjectId(),
+        corporationId: corp._id,
+        revenue: 1_000_000,
+        currentGrowthCost: 50_000,
+      } as CorporateSector,
+    ]);
+    db.collectionMocks
+      .corporateSectors!.bulkWrite.mockRejectedValueOnce(new Error("bulk boom"))
+      .mockResolvedValueOnce({ matchedCount: 1 });
+    const rates = fxMap([
+      ["JPY", 130],
+      ["GBP", 0.8],
+    ]);
+
+    await expect(
+      convertCorpCurrency(db as unknown as Db, corp, "GBP", rates, new Date(), true)
+    ).rejects.toThrow(/bulk boom/);
+
+    const corpsUpdateOne = db.collectionMocks.corporations!.updateOne;
+    // First write flips the corp; the second reverts it after the sector failure.
+    expect(corpsUpdateOne).toHaveBeenCalledTimes(2);
+    const revertSet = corpsUpdateOne.mock.calls[1]![1].$set as Record<string, unknown>;
+    expect(revertSet.liquidCurrencyCode).toBe("JPY");
+    expect(revertSet.liquidCapital).toBe(10_000_000);
+    expect(revertSet.sharePrice).toBe(500);
+    expect(revertSet.marketingBudget).toBe(500_000);
+    expect(revertSet.logisticsBudget).toBe(250_000);
+    expect(revertSet.ceoSalary).toBe(100_000);
+    expect(db.collectionMocks.corporateSectors!.bulkWrite).toHaveBeenCalledTimes(2);
+    const restoreOp = db.collectionMocks.corporateSectors!.bulkWrite.mock.calls[1]![0][0].updateOne
+      .update.$set as Record<string, unknown>;
+    expect(restoreOp).toMatchObject({ revenue: 1_000_000, currentGrowthCost: 50_000 });
+  });
+
+  it("reports an uncertain state when the revert itself also fails", async () => {
+    const corp = makeCorp();
+    primeSectors([
+      {
+        _id: new ObjectId(),
+        corporationId: corp._id,
+        revenue: 1_000_000,
+        currentGrowthCost: 50_000,
+      } as CorporateSector,
+    ]);
+    db.collectionMocks
+      .corporateSectors!.bulkWrite.mockRejectedValueOnce(new Error("bulk boom"))
+      .mockResolvedValueOnce({ matchedCount: 1 });
+
+    db.collection("corporations");
+    db.collectionMocks
+      .corporations!.updateOne.mockResolvedValueOnce({ matchedCount: 1, modifiedCount: 1 })
+      .mockRejectedValueOnce(new Error("revert boom"));
+
+    const rates = fxMap([
+      ["JPY", 130],
+      ["GBP", 0.8],
+    ]);
+
+    await expect(
+      convertCorpCurrency(db as unknown as Db, corp, "GBP", rates, new Date(), true)
+    ).rejects.toMatchObject({ corpCurrencyStateUncertain: true });
+    expect(db.collectionMocks.corporations!.updateOne).toHaveBeenCalledTimes(2);
+  });
 });

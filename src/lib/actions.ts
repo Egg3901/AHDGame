@@ -117,6 +117,8 @@ export interface ActionEffectContext {
    * previews, tests) the modern-era baseline applies.
    */
   preset?: string;
+  /** Resolved between-era campaign price level; 1 preserves current behavior. */
+  priceLevel?: number;
 }
 
 /**
@@ -288,11 +290,14 @@ export const ACTIONS: Record<ActionType, ActionDefinition> = {
       // the credited result. canPerformAction runs the quote first; the throw
       // below is a defensive invariant for direct effect callers that skip
       // validation.
-      const quote = quoteFundraiseAction({
-        donorBaseLevel: character.donorBaseLevel,
-        politicalInfluence: character.politicalInfluence,
-        fundraising: character.stats?.fundraising,
-      });
+      const quote = quoteFundraiseAction(
+        {
+          donorBaseLevel: character.donorBaseLevel,
+          politicalInfluence: character.politicalInfluence,
+          fundraising: character.stats?.fundraising,
+        },
+        ctx?.priceLevel
+      );
       if (!quote.ok) throw new Error(quote.error);
       const amount = quote.yieldAnchor;
       const fmt = ctx?.formatFunds ?? plainFunds;
@@ -328,7 +333,8 @@ export const ACTIONS: Record<ActionType, ActionDefinition> = {
               countryId: character.countryId,
               preset: ctx?.preset,
             }
-          : undefined
+          : undefined,
+        ctx?.priceLevel
       );
       if (!quote.ok) throw new Error(quote.error);
       return {
@@ -362,7 +368,8 @@ export const ACTIONS: Record<ActionType, ActionDefinition> = {
               countryId: character.countryId,
               preset: ctx?.preset,
             }
-          : undefined
+          : undefined,
+        ctx?.priceLevel
       );
       if (!quote.ok) throw new Error(quote.error);
       const fmt = ctx?.formatFunds ?? plainFunds;
@@ -398,7 +405,8 @@ export const ACTIONS: Record<ActionType, ActionDefinition> = {
               countryId: character.countryId,
               preset: ctx?.preset,
             }
-          : undefined
+          : undefined,
+        ctx?.priceLevel
       );
       if (!quote.ok) throw new Error(quote.error);
       const fmt = ctx?.formatFunds ?? plainFunds;
@@ -424,7 +432,11 @@ export const ACTIONS: Record<ActionType, ActionDefinition> = {
       // the charged result. canPerformAction runs the quote first; the throw
       // below is a defensive invariant for direct effect callers that skip
       // validation.
-      const quote = quotePollAction({ intellect: character.stats?.intellect }, "small");
+      const quote = quotePollAction(
+        { intellect: character.stats?.intellect },
+        "small",
+        ctx?.priceLevel
+      );
       if (!quote.ok) throw new Error(quote.error);
       const fmt = ctx?.formatFunds ?? plainFunds;
       return {
@@ -447,7 +459,11 @@ export const ACTIONS: Record<ActionType, ActionDefinition> = {
       // the charged result. canPerformAction runs the quote first; the throw
       // below is a defensive invariant for direct effect callers that skip
       // validation.
-      const quote = quotePollAction({ intellect: character.stats?.intellect }, "large");
+      const quote = quotePollAction(
+        { intellect: character.stats?.intellect },
+        "large",
+        ctx?.priceLevel
+      );
       if (!quote.ok) throw new Error(quote.error);
       const fmt = ctx?.formatFunds ?? plainFunds;
       return {
@@ -548,6 +564,8 @@ export type CanPerformActionOptions = {
   homeFxRate?: number;
   /** World reset preset selecting the GDP-baseline era for cost validation. */
   preset?: string;
+  /** Resolved between-era campaign price level; 1 preserves current behavior. */
+  priceLevel?: number;
   /**
    * Resolved RPG-stats feature flag for Debate Prep validation. The execute
    * shell always passes the resolved value; callers that cannot know it omit
@@ -591,7 +609,8 @@ export function canPerformAction(
             countryId: character.countryId,
             preset: options?.preset,
           }
-        : undefined
+        : undefined,
+      options?.priceLevel
     );
     if (!quote.ok) {
       return { canPerform: false, reason: quote.error };
@@ -616,7 +635,8 @@ export function canPerformAction(
             countryId: character.countryId,
             preset: options?.preset,
           }
-        : undefined
+        : undefined,
+      options?.priceLevel
     );
     if (!quote.ok) {
       return { canPerform: false, reason: quote.error };
@@ -646,11 +666,14 @@ export function canPerformAction(
   // here with the quote reason instead of pricing a yield that cannot be
   // earned.
   if (actionType === "fundraise") {
-    const quote = quoteFundraiseAction({
-      donorBaseLevel: character.donorBaseLevel,
-      politicalInfluence: character.politicalInfluence,
-      fundraising: character.stats?.fundraising,
-    });
+    const quote = quoteFundraiseAction(
+      {
+        donorBaseLevel: character.donorBaseLevel,
+        politicalInfluence: character.politicalInfluence,
+        fundraising: character.stats?.fundraising,
+      },
+      options?.priceLevel
+    );
     if (!quote.ok) {
       return { canPerform: false, reason: quote.error };
     }
@@ -662,7 +685,11 @@ export function canPerformAction(
   // unscaled base.
   if (actionType === "poll" || actionType === "pollLarge") {
     const tier: PollTier = actionType === "pollLarge" ? "large" : "small";
-    const quote = quotePollAction({ intellect: character.stats?.intellect }, tier);
+    const quote = quotePollAction(
+      { intellect: character.stats?.intellect },
+      tier,
+      options?.priceLevel
+    );
     if (!quote.ok) {
       return { canPerform: false, reason: quote.error };
     }
@@ -703,7 +730,8 @@ export function canPerformAction(
             countryId: character.countryId,
             preset: options?.preset,
           }
-        : undefined
+        : undefined,
+      options?.priceLevel
     );
     if (!quote.ok) {
       return { canPerform: false, reason: quote.error };

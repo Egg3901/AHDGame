@@ -340,6 +340,8 @@ async function executeSingleTransfer(
       sellerCashCredited: false,
       sellerHoldingsUpdated: false,
       buyerHoldingsUpdated: false,
+      sellerAppliedHoldings: undefined as IndexFund["holdings"] | undefined,
+      buyerAppliedHoldings: undefined as IndexFund["holdings"] | undefined,
       sellerTransactionId: undefined as ObjectId | undefined,
       buyerTransactionId: undefined as ObjectId | undefined,
     };
@@ -374,14 +376,26 @@ async function executeSingleTransfer(
         });
       }
       if (completed.buyerHoldingsUpdated) {
-        await attempt("restore buyer holdings", () =>
-          updateFundHoldings(db, plan.buyerFundId, buyerFund.holdings)
-        );
+        await attempt("restore buyer holdings", async () => {
+          const result = await db
+            .collection<IndexFund>("indexFunds")
+            .updateOne(
+              { _id: plan.buyerFundId, holdings: completed.buyerAppliedHoldings },
+              { $set: { holdings: buyerFund.holdings, updatedAt: new Date() } }
+            );
+          return result.matchedCount === 1;
+        });
       }
       if (completed.sellerHoldingsUpdated) {
-        await attempt("restore seller holdings", () =>
-          updateFundHoldings(db, plan.sellerFundId, sellerFund.holdings)
-        );
+        await attempt("restore seller holdings", async () => {
+          const result = await db
+            .collection<IndexFund>("indexFunds")
+            .updateOne(
+              { _id: plan.sellerFundId, holdings: completed.sellerAppliedHoldings },
+              { $set: { holdings: sellerFund.holdings, updatedAt: new Date() } }
+            );
+          return result.matchedCount === 1;
+        });
       }
       if (completed.sellerCashCredited) {
         await attempt("debit seller compensation cash", async () => {
@@ -528,8 +542,10 @@ async function executeSingleTransfer(
       // 5. Persist holdings arrays.
       await updateFundHoldings(db, plan.sellerFundId, updatedSellerHoldings, sessionOpts);
       completed.sellerHoldingsUpdated = true;
+      completed.sellerAppliedHoldings = updatedSellerHoldings;
       await updateFundHoldings(db, plan.buyerFundId, updatedBuyerHoldings, sessionOpts);
       completed.buyerHoldingsUpdated = true;
+      completed.buyerAppliedHoldings = updatedBuyerHoldings;
 
       // 6. Log transactions.
       completed.sellerTransactionId = await insertFundTransaction(

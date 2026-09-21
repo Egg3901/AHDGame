@@ -5,7 +5,7 @@
 
 import type { ClientSession, Db, ObjectId } from "mongodb";
 import type { Corporation, IndexFund, IndexFundHolding } from "@/lib/db/types";
-import { debitSharesFromFund } from "@/lib/corporations/shareholderOps";
+import { creditSharesToFund, debitSharesFromFund } from "@/lib/corporations/shareholderOps";
 import {
   isOrderFlowPriceEligible,
   resolveShareExecutionPrice,
@@ -162,6 +162,8 @@ export type SellHoldingsForRedemptionResult = {
   cashRaisedAnchor: number;
   sharesSold: number;
   salesExecuted: number;
+  /** Standalone-only economic reversal for completed sales, in reverse order. */
+  undo?: () => Promise<void>;
 };
 
 type CorpQuoteRow = Pick<
@@ -263,6 +265,7 @@ export async function sellFundHoldingsForRedemptionCash(
   let cashRaisedAnchor = 0;
   let sharesSold = 0;
   let salesExecuted = 0;
+  const saleUndos: Array<() => Promise<void>> = [];
   const turn = await getCurrentTurn(db);
   const now = new Date();
   // #992 tranche 6: one thresholds read for the whole sale loop; the FX map
@@ -287,9 +290,34 @@ export async function sellFundHoldingsForRedemptionCash(
     sharesSold += sale.sharesToSell;
     salesExecuted++;
     holdings = saleResult.updatedHoldings;
+    if (saleResult.undo) saleUndos.push(saleResult.undo);
   }
 
-  return { cashRaisedAnchor, sharesSold, salesExecuted };
+  return {
+    cashRaisedAnchor,
+    sharesSold,
+    salesExecuted,
+    ...(saleUndos.length > 0 && !options?.session
+      ? {
+          undo: async () => {
+            const errors: unknown[] = [];
+            for (const revert of saleUndos.reverse()) {
+              try {
+                await revert();
+              } catch (error) {
+                errors.push(error);
+              }
+            }
+            if (errors.length > 0) {
+              throw new AggregateError(
+                errors,
+                "One or more redemption liquidity sales could not be reversed"
+              );
+            }
+          },
+        }
+      : {}),
+  };
 }
 
 // ── Shared per-sale execution helper ─────────────────────────────────────────
@@ -310,6 +338,7 @@ type OneHoldingSaleOptions = {
 type OneHoldingSaleResult = {
   proceedsAnchor: number;
   updatedHoldings: IndexFundHolding[];
+  undo?: () => Promise<void>;
 };
 
 /**
@@ -392,7 +421,7 @@ async function executeOneHoldingSale(
 
   await updateFundHoldings(db, fund._id, updatedHoldings, { session: options?.session });
 
-  await insertFundTransaction(
+  const transactionId = await insertFundTransaction(
     db,
     {
       fundId: fund._id,
@@ -456,7 +485,60 @@ async function executeOneHoldingSale(
     counterparty: options?.settlementCounterparty,
   });
 
-  return { proceedsAnchor, updatedHoldings };
+  const undo = options?.session
+    ? undefined
+    : async () => {
+        const errors: unknown[] = [];
+        const reverse = async (work: () => Promise<unknown>) => {
+          try {
+            await work();
+          } catch (error) {
+            errors.push(error);
+          }
+        };
+        await reverse(() =>
+          db.collection("indexFundTransactions").deleteOne({ _id: transactionId })
+        );
+        await reverse(() => updateFundHoldings(db, fund._id, currentHoldings));
+        await reverse(() =>
+          db
+            .collection("indexFunds")
+            .updateOne(
+              { _id: fund._id },
+              { $inc: { cashAnchor: -proceedsAnchor }, $set: { updatedAt: new Date() } }
+            )
+        );
+        await reverse(async () => {
+          const restored = await creditSharesToFund(
+            db,
+            corp._id,
+            fund._id,
+            sale.sharesToSell,
+            sale.pricePerShareAnchor,
+            {
+              $inc: {
+                publicFloat: -sale.sharesToSell,
+                ...(orderFlowEligible
+                  ? { orderFlowWindowSellValue: -sale.sharesToSell * executionPrice }
+                  : {}),
+              },
+              $set: { updatedAt: new Date() },
+            }
+          );
+          if (!restored) throw new Error("Failed to restore fund shares after liquidity sale");
+        });
+        await reverse(() =>
+          reverseFloatSellDebit(db, corp, issuerBuyback, {
+            split: issuerDebit.split,
+            counterparty: options?.settlementCounterparty,
+          })
+        );
+        if (errors.length > 0) {
+          throw new AggregateError(errors, "Redemption liquidity sale compensation was incomplete");
+        }
+      };
+
+  return { proceedsAnchor, updatedHoldings, undo };
 }
 
 // ── sellFundHoldingShares ─────────────────────────────────────────────────────

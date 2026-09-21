@@ -12,7 +12,13 @@
  * Gated behind isIndexFundsEnabled (indexFundsMode).
  */
 
-import { ObjectId, type AnyBulkWriteOperation, type Db, type Document } from "mongodb";
+import {
+  ObjectId,
+  type AnyBulkWriteOperation,
+  type Db,
+  type Document,
+  type UpdateOneModel,
+} from "mongodb";
 import type { NPP, IndexFund, IndexFundPosition, IndexFundTransaction } from "@/lib/db/types";
 import { isIndexFundsEnabled } from "@/lib/indexFunds/featureFlag";
 import { emitTxBulk, loadTxThresholds } from "@/lib/financialTxLog/emit";
@@ -22,6 +28,7 @@ import {
   FUND_TRANSACTION_COLLECTION,
   listActiveFunds,
 } from "@/lib/indexFunds/fundQueries";
+import { processNppFundRedemptions, type NppRiskArchetype } from "@/lib/indexFunds/nppRedemption";
 import type { CountryId } from "@/lib/constants/countries";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import { JP_NPP_INVESTING_MINIMUM } from "@/lib/countries/jp/economy";
@@ -188,6 +195,29 @@ interface PlannedSubscription {
   archetype: NPRiskArchetype;
 }
 
+interface AppliedNppDebit {
+  nppId: ObjectId;
+  amount: number;
+  balanceAfter: number;
+}
+
+function assertBulkWriteCount(label: string, actual: number, expected: number): void {
+  if (actual !== expected) {
+    throw new Error(`${label}: expected ${expected} writes, MongoDB reported ${actual}`);
+  }
+}
+
+function assertCompensationCount(
+  label: string,
+  actual: number,
+  expected: number,
+  requireAll: boolean
+): void {
+  if ((requireAll && actual !== expected) || actual > expected) {
+    throw new Error(`${label}: expected at most ${expected} writes, MongoDB reported ${actual}`);
+  }
+}
+
 /**
  * Pure (no IO) fund selection for one NPP's budget — split out unchanged from
  * the original per-NPP loop so the batched rewrite below can call it without
@@ -281,12 +311,28 @@ function buildNppSubscriptions(
  * that math is ever wrong, this NPP's subscriptions are dropped and logged as
  * an error rather than risking an over-debit.
  */
+export type NPPFundInvestingResult = {
+  nppsProcessed: number;
+  totalInvested: number;
+  errors: string[];
+  /** Autonomous NPP redemptions queued this pass (0 unless the flag is on). */
+  redemptionsQueued: number;
+  /** Units queued for autonomous redemption this pass. */
+  unitsRedeemed: number;
+};
+
 export async function processNPPFundInvestments(
   db: Db,
   options?: { currentTurn?: number; budgetMultiplier?: number }
-): Promise<{ nppsProcessed: number; totalInvested: number; errors: string[] }> {
+): Promise<NPPFundInvestingResult> {
   if (!(await isIndexFundsEnabled())) {
-    return { nppsProcessed: 0, totalInvested: 0, errors: [] };
+    return {
+      nppsProcessed: 0,
+      totalInvested: 0,
+      errors: [],
+      redemptionsQueued: 0,
+      unitsRedeemed: 0,
+    };
   }
 
   const errors: string[] = [];
@@ -298,13 +344,29 @@ export async function processNPPFundInvestments(
   // drops to 1/N. Defaults to 1 (every-turn behavior).
   const budgetMultiplier = Math.max(1, Math.floor(options?.budgetMultiplier ?? 1));
   if (currentTurn <= 0) {
-    return { nppsProcessed: 0, totalInvested: 0, errors: [] };
+    return {
+      nppsProcessed: 0,
+      totalInvested: 0,
+      errors: [],
+      redemptionsQueued: 0,
+      unitsRedeemed: 0,
+    };
   }
 
   const activeFunds = await listActiveFunds(db);
   if (activeFunds.length === 0) {
-    return { nppsProcessed: 0, totalInvested: 0, errors: [] };
+    return {
+      nppsProcessed: 0,
+      totalInvested: 0,
+      errors: [],
+      redemptionsQueued: 0,
+      unitsRedeemed: 0,
+    };
   }
+
+  // Per-turn counters for the gated autonomous redemption pass (Step 6b).
+  let redemptionsQueued = 0;
+  let unitsRedeemed = 0;
 
   const npps = await db
     .collection<NPP>("npps")
@@ -319,6 +381,35 @@ export async function processNPPFundInvestments(
       lastIndexFundInvestmentTurn: 1,
     })
     .toArray();
+
+  // Archetypes for the gated autonomous redemption pass (Step 6b). Computed
+  // once here from the roster already in hand — no extra NPP read.
+  const archetypesByNppId = new Map<string, NppRiskArchetype>();
+  for (const npp of npps) {
+    archetypesByNppId.set(String(npp._id), determineNPPRiskArchetype(npp as NPP));
+  }
+
+  // ── Step 6b: gated autonomous NPP redemptions (#2120) ────────────────────
+  // Runs after the subscription writes settle so the planner sees this pass's
+  // post-subscribe positions and cash. With the flag absent/false the executor
+  // returns with zero writes, so the pass is byte-identical to its pre-flag
+  // behavior. Called from both the "nothing subscribed" and the normal exit so
+  // a passive NPP that already holds units still rebalances.
+  const runNppRedemptionPass = async (): Promise<void> => {
+    try {
+      const result = await processNppFundRedemptions(db, {
+        currentTurn,
+        activeFunds,
+        archetypesByNppId,
+      });
+      redemptionsQueued += result.redemptionsQueued;
+      unitsRedeemed += result.unitsRedeemed;
+      if (result.errors.length > 0) errors.push(...result.errors);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      errors.push(`NPP redemptions: ${message}`);
+    }
+  };
 
   // ── Wealth valuation for saturation damping (#3245) ──────────────────────
   // One batched pass over NPP fund positions, valued at the active funds'
@@ -351,6 +442,7 @@ export async function processNPPFundInvestments(
   const debitOps: AnyBulkWriteOperation<Document>[] = [];
   const planned: PlannedSubscription[] = [];
   const ledgerEntries: LedgerEntryInput[] = [];
+  const plannedDebits: AppliedNppDebit[] = [];
   let nppsProcessed = 0;
   let totalInvested = 0;
 
@@ -456,6 +548,11 @@ export async function processNPPFundInvestments(
             },
           },
         });
+        plannedDebits.push({
+          nppId: npp._id,
+          amount: investedThisNPP,
+          balanceAfter: (npp.nppInvestmentCashAnchor ?? 0) + budget - investedThisNPP,
+        });
         planned.push(...nppPlanned);
         totalInvested += investedThisNPP;
         ledgerEntries.push({
@@ -497,7 +594,38 @@ export async function processNPPFundInvestments(
     await db.collection("npps").bulkWrite(accrualOps, { ordered: false });
   }
   if (debitOps.length > 0) {
-    await db.collection("npps").bulkWrite(debitOps, { ordered: false });
+    try {
+      const result = await db.collection("npps").bulkWrite(debitOps, { ordered: false });
+      assertBulkWriteCount("NPP subscription debits", result.modifiedCount, debitOps.length);
+    } catch (originalError) {
+      try {
+        const undoOps: AnyBulkWriteOperation<Document>[] = plannedDebits.map((debit) => ({
+          updateOne: {
+            filter: { _id: debit.nppId, nppInvestmentCashAnchor: debit.balanceAfter },
+            update: { $inc: { nppInvestmentCashAnchor: debit.amount }, $set: { updatedAt: now } },
+          },
+        }));
+        const result = await db.collection("npps").bulkWrite(undoOps, { ordered: false });
+        // A zero count is valid when the failed debit batch applied nothing.
+        if (result.modifiedCount > undoOps.length) {
+          throw new Error(
+            `NPP debit compensation: MongoDB reported ${result.modifiedCount} writes for ${undoOps.length} operations`
+          );
+        }
+      } catch (compensationError) {
+        const original =
+          originalError instanceof Error ? originalError : new Error(String(originalError));
+        const compensation =
+          compensationError instanceof Error
+            ? compensationError
+            : new Error(String(compensationError));
+        throw new AggregateError(
+          [original, compensation],
+          `${original.message}; compensation failed: ${compensation.message}`
+        );
+      }
+      throw originalError;
+    }
   }
   if (ledgerEntries.length > 0) {
     const config = await db
@@ -509,7 +637,8 @@ export async function processNPPFundInvestments(
   }
 
   if (planned.length === 0) {
-    return { nppsProcessed, totalInvested: 0, errors };
+    await runNppRedemptionPass();
+    return { nppsProcessed, totalInvested: 0, errors, redemptionsQueued, unitsRedeemed };
   }
 
   // ── Pass 3: fund-level unitSupply/cashAnchor — ONE op per distinct fund, ──
@@ -533,9 +662,15 @@ export async function processNPPFundInvestments(
       },
     })
   );
-  if (fundOps.length > 0) {
-    await db.collection("indexFunds").bulkWrite(fundOps, { ordered: false });
-  }
+  const completed: Record<
+    "funds" | "positionUpdates" | "positionInserts" | "transactions",
+    "none" | "uncertain" | "confirmed"
+  > = {
+    funds: "none",
+    positionUpdates: "none",
+    positionInserts: "none",
+    transactions: "none",
+  };
 
   // ── Pass 4: position credits. Existing positions get the SAME weighted- ──
   // avgNavAnchor aggregation-pipeline update creditFundPosition uses (just
@@ -553,8 +688,8 @@ export async function processNPPFundInvestments(
     .toArray();
   const existingByKey = new Map(existingPositions.map((p) => [`${p.fundId}:${p.nppId}`, p]));
 
-  const positionUpdateOps: AnyBulkWriteOperation<Document>[] = [];
-  const positionInsertDocs: Omit<IndexFundPosition, "_id">[] = [];
+  const positionUpdateOps: Array<{ updateOne: UpdateOneModel<Document> }> = [];
+  const positionInsertDocs: IndexFundPosition[] = [];
   for (const p of planned) {
     const key = `${p.fund._id}:${p.nppId}`;
     const existing = existingByKey.get(key);
@@ -581,6 +716,7 @@ export async function processNPPFundInvestments(
       });
     } else {
       positionInsertDocs.push({
+        _id: new ObjectId(),
         fundId: p.fund._id,
         holderKind: "npp",
         nppId: p.nppId,
@@ -591,20 +727,9 @@ export async function processNPPFundInvestments(
       });
     }
   }
-  if (positionUpdateOps.length > 0) {
-    await db.collection(FUND_POSITION_COLLECTION).bulkWrite(positionUpdateOps, { ordered: false });
-  }
-  if (positionInsertDocs.length > 0) {
-    // Two NPPs never share an identity (nppId is part of the unique key), so
-    // no intra-batch duplicate-key risk here the way creditFundPosition's
-    // single-caller retry path guards against.
-    await db
-      .collection<IndexFundPosition>(FUND_POSITION_COLLECTION)
-      .insertMany(positionInsertDocs as IndexFundPosition[]);
-  }
-
   // ── Pass 5: transaction log — pure inserts, no contention. ────────────────
-  const txDocs: Omit<IndexFundTransaction, "_id">[] = planned.map((p) => ({
+  const txDocs: IndexFundTransaction[] = planned.map((p) => ({
+    _id: new ObjectId(),
     fundId: p.fund._id,
     kind: "subscription",
     holderKind: "npp",
@@ -615,47 +740,210 @@ export async function processNPPFundInvestments(
     note: `NPP ${p.nppId} subscription (${p.archetype})`,
     createdAt: now,
   }));
-  if (txDocs.length > 0) {
-    await db
-      .collection<IndexFundTransaction>(FUND_TRANSACTION_COLLECTION)
-      .insertMany(txDocs as IndexFundTransaction[]);
-  }
+  const compensateAndThrow = async (originalError: unknown): Promise<never> => {
+    const failures: Error[] = [];
+    const attempt = async (label: string, fn: () => Promise<void>): Promise<void> => {
+      try {
+        await fn();
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : String(error);
+        failures.push(new Error(`${label}: ${detail}`));
+      }
+    };
 
-  // ── Pass 6 (#992 tranche 4): financialTxLog legs for the same subscriptions.
-  // One index_fund_subscribe row per subscription, subject NPP in the NPP home
-  // currency with fundId/fundCurrency meta. The shadow ledger mirrors the fund
-  // side off that meta when the currencies match (same convention as the
-  // player subscribe rows in fundTxLog.ts); a cross-currency pair stays
-  // single-sided under the fund_subscription reason, never guessed. Bulk path:
-  // every row carries an explicit anchorAmount so no per-row FX read happens.
-  if (planned.length > 0) {
-    const thresholds = await loadTxThresholds(db);
-    await emitTxBulk(
-      db,
-      planned.map((p) => ({
-        type: "index_fund_subscribe" as const,
-        turn: currentTurn,
-        createdAt: now,
-        subjectType: "npp" as const,
-        subjectId: p.nppId,
-        subjectName: `NPP ${p.nppId.toString()}`,
-        // NPP investment cash is anchor-denominated; state the ₳ value
-        // outright in both fields so the flow equals the modeled debit exactly.
-        amount: -p.costAnchor,
-        anchorAmount: -p.costAnchor,
-        currencyCode: p.nppCurrency,
-        counterpartyType: "system" as const,
-        counterpartyName: p.fund.name,
-        meta: {
-          fundId: p.fund._id.toString(),
-          fundCurrency: p.fund.anchorCurrencyCode,
-          units: p.units,
-          source: "npp-investing",
+    if (completed.transactions !== "none") {
+      await attempt("remove subscription transactions", async () => {
+        const result = await db
+          .collection(FUND_TRANSACTION_COLLECTION)
+          .deleteMany({ _id: { $in: txDocs.map((doc) => doc._id) } });
+        assertCompensationCount(
+          "transaction compensation",
+          result.deletedCount,
+          txDocs.length,
+          completed.transactions === "confirmed"
+        );
+      });
+    }
+    if (completed.positionInserts !== "none") {
+      await attempt("remove inserted NPP positions", async () => {
+        const result = await db
+          .collection(FUND_POSITION_COLLECTION)
+          .deleteMany({ _id: { $in: positionInsertDocs.map((doc) => doc._id) } });
+        assertCompensationCount(
+          "inserted-position compensation",
+          result.deletedCount,
+          positionInsertDocs.length,
+          completed.positionInserts === "confirmed"
+        );
+      });
+    }
+    if (completed.positionUpdates !== "none") {
+      await attempt("restore updated NPP positions", async () => {
+        const undoOps: AnyBulkWriteOperation<Document>[] = positionUpdateOps.map((op) => {
+          const updateOne = op.updateOne;
+          const key = `${String(updateOne.filter.fundId)}:${String(updateOne.filter.nppId)}`;
+          const prior = existingByKey.get(key)!;
+          const creditedUnits = Number((updateOne.update as Document).$inc.units);
+          const creditedAverage = Number((updateOne.update as Document).$set.avgNavAnchor);
+          return {
+            updateOne: {
+              filter: {
+                ...updateOne.filter,
+                units: (prior.units ?? 0) + creditedUnits,
+                avgNavAnchor: creditedAverage,
+              },
+              update: {
+                $set: {
+                  units: prior.units ?? 0,
+                  avgNavAnchor: prior.avgNavAnchor,
+                  updatedAt: prior.updatedAt,
+                },
+              },
+            },
+          };
+        });
+        const result = await db
+          .collection(FUND_POSITION_COLLECTION)
+          .bulkWrite(undoOps, { ordered: false });
+        assertCompensationCount(
+          "position compensation",
+          result.modifiedCount,
+          undoOps.length,
+          completed.positionUpdates === "confirmed"
+        );
+      });
+    }
+    if (completed.funds !== "none") {
+      await attempt("restore fund totals", async () => {
+        const undoOps: AnyBulkWriteOperation<Document>[] = [...perFundTotals.entries()].map(
+          ([fundId, totals]) => {
+            const prior = activeFunds.find((fund) => String(fund._id) === fundId);
+            return {
+              updateOne: {
+                filter: {
+                  _id: new ObjectId(fundId),
+                  unitSupply: (prior?.unitSupply ?? 0) + totals.units,
+                  cashAnchor: (prior?.cashAnchor ?? 0) + totals.cashAnchor,
+                },
+                update: {
+                  $inc: { unitSupply: -totals.units, cashAnchor: -totals.cashAnchor },
+                  $set: { updatedAt: now },
+                },
+              },
+            };
+          }
+        );
+        const result = await db.collection("indexFunds").bulkWrite(undoOps, { ordered: false });
+        assertCompensationCount(
+          "fund compensation",
+          result.modifiedCount,
+          undoOps.length,
+          completed.funds === "confirmed"
+        );
+      });
+    }
+    await attempt("refund NPP subscription debits", async () => {
+      const undoOps: AnyBulkWriteOperation<Document>[] = plannedDebits.map((debit) => ({
+        updateOne: {
+          filter: { _id: debit.nppId, nppInvestmentCashAnchor: debit.balanceAfter },
+          update: { $inc: { nppInvestmentCashAnchor: debit.amount }, $set: { updatedAt: now } },
         },
-      })),
-      thresholds
-    );
+      }));
+      const result = await db.collection("npps").bulkWrite(undoOps, { ordered: false });
+      assertBulkWriteCount("NPP debit compensation", result.modifiedCount, undoOps.length);
+    });
+
+    const original =
+      originalError instanceof Error ? originalError : new Error(String(originalError));
+    if (failures.length > 0) {
+      throw new AggregateError(
+        [original, ...failures],
+        `${original.message}; compensation failed: ${failures.map((error) => error.message).join("; ")}`
+      );
+    }
+    throw original;
+  };
+
+  try {
+    if (fundOps.length > 0) {
+      completed.funds = "uncertain";
+      const result = await db.collection("indexFunds").bulkWrite(fundOps, { ordered: false });
+      assertBulkWriteCount("fund subscription credits", result.modifiedCount, fundOps.length);
+      completed.funds = "confirmed";
+    }
+    if (positionUpdateOps.length > 0) {
+      completed.positionUpdates = "uncertain";
+      const result = await db
+        .collection(FUND_POSITION_COLLECTION)
+        .bulkWrite(positionUpdateOps, { ordered: false });
+      assertBulkWriteCount("NPP position credits", result.modifiedCount, positionUpdateOps.length);
+      completed.positionUpdates = "confirmed";
+    }
+    if (positionInsertDocs.length > 0) {
+      completed.positionInserts = "uncertain";
+      const result = await db
+        .collection<IndexFundPosition>(FUND_POSITION_COLLECTION)
+        .insertMany(positionInsertDocs);
+      assertBulkWriteCount(
+        "NPP position inserts",
+        Object.keys(result.insertedIds).length,
+        positionInsertDocs.length
+      );
+      completed.positionInserts = "confirmed";
+    }
+    if (txDocs.length > 0) {
+      completed.transactions = "uncertain";
+      const result = await db
+        .collection<IndexFundTransaction>(FUND_TRANSACTION_COLLECTION)
+        .insertMany(txDocs);
+      assertBulkWriteCount(
+        "NPP transaction inserts",
+        Object.keys(result.insertedIds).length,
+        txDocs.length
+      );
+      completed.transactions = "confirmed";
+    }
+
+    // ── Pass 6 (#992 tranche 4): financialTxLog legs for the same subscriptions.
+    // One index_fund_subscribe row per subscription, subject NPP in the NPP home
+    // currency with fundId/fundCurrency meta. The shadow ledger mirrors the fund
+    // side off that meta when the currencies match (same convention as the
+    // player subscribe rows in fundTxLog.ts); a cross-currency pair stays
+    // single-sided under the fund_subscription reason, never guessed. Bulk path:
+    // every row carries an explicit anchorAmount so no per-row FX read happens.
+    if (planned.length > 0) {
+      const thresholds = await loadTxThresholds(db);
+      await emitTxBulk(
+        db,
+        planned.map((p) => ({
+          type: "index_fund_subscribe" as const,
+          turn: currentTurn,
+          createdAt: now,
+          subjectType: "npp" as const,
+          subjectId: p.nppId,
+          subjectName: `NPP ${p.nppId.toString()}`,
+          // NPP investment cash is anchor-denominated; state the ₳ value
+          // outright in both fields so the flow equals the modeled debit exactly.
+          amount: -p.costAnchor,
+          anchorAmount: -p.costAnchor,
+          currencyCode: p.nppCurrency,
+          counterpartyType: "system" as const,
+          counterpartyName: p.fund.name,
+          meta: {
+            fundId: p.fund._id.toString(),
+            fundCurrency: p.fund.anchorCurrencyCode,
+            units: p.units,
+            source: "npp-investing",
+          },
+        })),
+        thresholds
+      );
+    }
+  } catch (error) {
+    await compensateAndThrow(error);
   }
 
-  return { nppsProcessed, totalInvested, errors };
+  await runNppRedemptionPass();
+
+  return { nppsProcessed, totalInvested, errors, redemptionsQueued, unitsRedeemed };
 }
