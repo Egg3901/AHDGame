@@ -1,4 +1,5 @@
 ---
+date: 2026-09-21
 title: State metrics and electoral votes on the US map
 badges: [minor]
 areas: [frontend, backend]
