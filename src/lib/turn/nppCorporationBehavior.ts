@@ -6,10 +6,8 @@ import type {
   StateMetrics,
   GameState,
   ExchangeRate,
-  Bond,
 } from "@/lib/db/types";
 import type { CurrencyCode } from "@/lib/constants/currencies";
-import { isCorporateIssuerBond } from "@/lib/bonds/corporateCredit";
 import { netPerTurnDebtServiceAnchor } from "@/lib/bonds/corpBondCashflows";
 import {
   buildActiveMarketBuckets,
@@ -151,6 +149,10 @@ import type {
 import type { NppAutonomyLevel } from "@/lib/db/types/gameState";
 import { decideNppProduct } from "@/lib/turn/npp/nppProductDecision";
 import { executeNppProductDecision } from "@/lib/turn/npp/nppProductExecutor";
+import {
+  loadNppCorporationBondLookups,
+  type NppCorporationDecisionPreload,
+} from "@/lib/turn/npp/nppCorporationBondLookups";
 import { loadNppProductCohort } from "@/lib/turn/npp/nppProductCohort";
 import { indexLatestCommodityPrices, indexNppCohort } from "@/lib/turn/npp/nppCohortIndexes";
 
@@ -199,11 +201,7 @@ export async function processNppCorporationDecisions(
   turn: number,
   now: Date,
   techTreesEnabled: boolean = false,
-  preloaded?: {
-    corporations: readonly Corporation[];
-    issuerBondsByCorpId: ReadonlyMap<string, Bond[]>;
-    heldBondsByCorpId: ReadonlyMap<string, { bond: Bond; units: number }[]>;
-  }
+  preloaded?: NppCorporationDecisionPreload
 ): Promise<NppCorporationTurnResult> {
   const nppCorps = preloaded
     ? preloaded.corporations.filter((corp) => corp.ceoType === "npp" && corp.suspended !== true)
@@ -383,30 +381,10 @@ export async function processNppCorporationDecisions(
   // actually bills rather than an approximation of it. Issuer side is corporate
   // bonds only; holder side keeps sovereigns, because a corp parking cash in
   // treasuries genuinely collects that coupon.
-  let issuerBondsByCorpId = preloaded?.issuerBondsByCorpId;
-  let heldBondsByCorpId = preloaded?.heldBondsByCorpId;
-  if (!issuerBondsByCorpId || !heldBondsByCorpId) {
-    const activeBonds = await db.collection<Bond>("bonds").find({ matured: false }).toArray();
-    const issuers = new Map<string, Bond[]>();
-    const holders = new Map<string, { bond: Bond; units: number }[]>();
-    for (const b of activeBonds) {
-      if (isCorporateIssuerBond(b)) {
-        const cid = b.corporationId.toString();
-        const list = issuers.get(cid) ?? [];
-        list.push(b);
-        issuers.set(cid, list);
-      }
-      for (const h of b.holders ?? []) {
-        const holderCorpId = h.corporationId?.toString();
-        if (!holderCorpId) continue;
-        const held = holders.get(holderCorpId) ?? [];
-        held.push({ bond: b, units: h.units });
-        holders.set(holderCorpId, held);
-      }
-    }
-    issuerBondsByCorpId = issuers;
-    heldBondsByCorpId = holders;
-  }
+  const { issuerBondsByCorpId, heldBondsByCorpId } = await loadNppCorporationBondLookups(
+    db,
+    preloaded
+  );
 
   // Cohort-wide kill switch, read once. Absent means ON.
   const strategyGate = await db.collection<GameState>("gameState").findOne(
