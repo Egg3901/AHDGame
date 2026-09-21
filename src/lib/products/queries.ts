@@ -27,12 +27,13 @@ export function queryProductCatalog(query: ProductCatalogQuery): ProductKindDefi
   const unlockedTech = query.unlockedTechnologyIds ? new Set(query.unlockedTechnologyIds) : null;
   return PRODUCT_KINDS.filter((catalogKind) => {
     const kind: ProductKindDefinition = catalogKind;
+    const operatingModels = kind.operatingModels ?? [];
     if (kind.family !== query.family) return false;
     if (
       kind.family === "media_entertainment" &&
       selectedModels !== null &&
-      (kind.operatingModels?.length ?? 0) > 0 &&
-      !kind.operatingModels.some((model) => selectedModels.has(model))
+      operatingModels.length > 0 &&
+      !operatingModels.some((model) => selectedModels.has(model))
     ) {
       return false;
     }
