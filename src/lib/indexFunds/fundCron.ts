@@ -1511,14 +1511,16 @@ export async function runIndexFundCron(
 
       result.navUpdates++;
 
-      const refreshedFund = await getFundById(db, workingFund._id);
-      if (!refreshedFund) continue;
-
-      const bondPrincipalAfterNav = await sumFundBondHoldingsValueAnchor(
-        db,
-        refreshedFund,
-        exchangeRates
-      );
+      // NAV persistence only changes fields already known in this pass. Keep
+      // the in-memory fund in sync instead of reading the full document back,
+      // and reuse the bond-principal snapshot loaded for every fund above.
+      // No bond mutation occurs between that snapshot and this deployment.
+      const refreshedFund: IndexFund = {
+        ...workingFund,
+        quotedNav: newNav,
+        backingRatio: backing.backingRatio,
+      };
+      const bondPrincipalAfterNav = bondPrincipalAnchor;
       if (queuedRedemptionUnits <= 0) {
         const bondDeploy = await deployBondReserveFromCash(
           db,
