@@ -71,6 +71,9 @@ const patchSchema = z.object({
   // fields when toggled. Tolerance lever is 0 (full repression) → 1 (tolerated).
   commandEconomyEnabled: z.boolean().optional(),
   commandEconomySecondEconomyTolerance: z.number().min(0).max(1).optional(),
+  // Corporation products (#2125/#2238). Dark gate: off or unset keeps every
+  // existing sector, turn, and market path unchanged.
+  corporationProductsEnabled: z.boolean().optional(),
 });
 
 // GET /api/admin/config/market — Structural market rework mode + feature flags
@@ -104,6 +107,7 @@ export async function GET() {
           extractionOutputScaleEnabled: 1,
           commandEconomyEnabled: 1,
           commandEconomySecondEconomyTolerance: 1,
+          corporationProductsEnabled: 1,
         },
       }
     );
@@ -126,6 +130,7 @@ export async function GET() {
       nppMarketCoverageEnabled: config?.nppMarketCoverageEnabled === true,
       nppFragileMarketSupplyEnabled: config?.nppFragileMarketSupplyEnabled === true,
       extractionOutputScaleEnabled: config?.extractionOutputScaleEnabled === true,
+      corporationProductsEnabled: config?.corporationProductsEnabled === true,
       commandEconomyEnabled: config?.commandEconomyEnabled === true,
       commandEconomySecondEconomyTolerance:
         typeof config?.commandEconomySecondEconomyTolerance === "number"
@@ -186,6 +191,7 @@ export async function PATCH(request: Request) {
       extractionOutputScaleEnabled,
       commandEconomyEnabled,
       commandEconomySecondEconomyTolerance,
+      corporationProductsEnabled,
     } = parsed.data as {
       mode: MarketSystemMode;
       allowNonLive?: boolean;
@@ -216,6 +222,7 @@ export async function PATCH(request: Request) {
       extractionOutputScaleEnabled?: boolean;
       commandEconomyEnabled?: boolean;
       commandEconomySecondEconomyTolerance?: number;
+      corporationProductsEnabled?: boolean;
     };
 
     // Server-side launch gate. MARKET_MODE_INFO[mode].live is the single source
@@ -392,6 +399,8 @@ export async function PATCH(request: Request) {
       governorSet.nppCorporateAttacksEnabled = nppCorporateAttacksEnabled;
     if (typeof extractionOutputScaleEnabled === "boolean")
       governorSet.extractionOutputScaleEnabled = extractionOutputScaleEnabled;
+    if (typeof corporationProductsEnabled === "boolean")
+      governorSet.corporationProductsEnabled = corporationProductsEnabled;
     if (typeof commandEconomyEnabled === "boolean") {
       governorSet.commandEconomyEnabled = commandEconomyEnabled;
       governorSet.commandEconomyEnabledBy = auth.admin.username;
