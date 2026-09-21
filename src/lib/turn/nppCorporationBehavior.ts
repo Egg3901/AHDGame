@@ -148,6 +148,16 @@ import type {
   NppPlantsContext,
   NppSectorUpdateDoc,
 } from "@/lib/turn/npp/corpDecisionTypes";
+import type { NppAutonomyLevel } from "@/lib/db/types/gameState";
+import { decideNppProduct } from "@/lib/turn/npp/nppProductDecision";
+import { isCorporationProductsEnabled } from "@/lib/products/featureFlag";
+import {
+  CORPORATION_OPERATING_MODELS_COLLECTION,
+  CORPORATION_PRODUCTS_COLLECTION,
+  type CorporationOperatingModelDocument,
+  type CorporationProductDocument,
+} from "@/lib/products/persistence";
+import type { CorporationProduct } from "@/lib/products/types";
 
 export type { NppPlantsContext } from "@/lib/turn/npp/corpDecisionTypes";
 
@@ -250,9 +260,18 @@ export async function processNppCorporationDecisions(
   // Resolve each corp's CEO NPP so its personality can shape the corp's behavior.
   // ceoId holds the NPP _id when ceoType === "npp".
   const ceoNppIds = nppCorps.filter((c) => c.ceoType === "npp" && c.ceoId).map((c) => c.ceoId);
-  // All four reads depend only on the NPP cohort. Start them together rather
+  // All cohort reads depend only on the NPP cohort. Start them together rather
   // than making the decision phase wait for each collection in sequence.
-  const [allSectors, ceoNpps, commodityPriceDocs, unownedSectors] = await Promise.all([
+  const corpIdStrings = nppCorps.map((c) => c._id.toString());
+  const [
+    allSectors,
+    ceoNpps,
+    commodityPriceDocs,
+    unownedSectors,
+    productsEnabled,
+    productDocs,
+    modelDocs,
+  ] = await Promise.all([
     db
       // full-read(corporateSectors): buildQueue and plantsPnl drive NPP build and divest decisions
       .collection<CorporateSector>("corporateSectors")
@@ -266,6 +285,41 @@ export async function processNppCorporationDecisions(
       : Promise.resolve([]),
     db.collection<CommodityPrice>("commodityPrices").find({}).toArray(),
     db.collection<UnownedSector>("unownedSectors").find({}).toArray(),
+    // Corporation products (#2236): one projected gameConfig read plus two
+    // bulk `$in` reads over the NPP cohort, all parallel with the reads
+    // above. No per-row queries, no writes; the intents are executed later
+    // through the product persistence commands.
+    isCorporationProductsEnabled(db),
+    db
+      .collection<CorporationProductDocument>(CORPORATION_PRODUCTS_COLLECTION)
+      .find(
+        { activeCorporationId: { $in: corpIdStrings } },
+        {
+          projection: {
+            corporationId: 1,
+            kindId: 1,
+            name: 1,
+            stage: 1,
+            startedTurn: 1,
+            lastProcessedTurn: 1,
+            launchedTurn: 1,
+            retiredTurn: 1,
+            developmentSpendAnchor: 1,
+            developmentAdvertisingAnchor: 1,
+            developmentAdvertisingTurns: 1,
+            productBrand: 1,
+            launchQuality: 1,
+          },
+        }
+      )
+      .toArray(),
+    db
+      .collection<CorporationOperatingModelDocument>(CORPORATION_OPERATING_MODELS_COLLECTION)
+      .find(
+        { corporationId: { $in: corpIdStrings } },
+        { projection: { corporationId: 1, operatingModel: 1 } }
+      )
+      .toArray(),
   ]);
   const archetypeByNppId = new Map<string, CeoArchetype>();
   for (const npp of ceoNpps) {
@@ -279,6 +333,36 @@ export async function processNppCorporationDecisions(
     const cid = sector.corporationId.toString();
     if (!sectorsByCorp.has(cid)) sectorsByCorp.set(cid, []);
     sectorsByCorp.get(cid)!.push(sector);
+  }
+
+  // Corporation products (#2236): index the cohort's active products and
+  // owned operating models by corporation id string for the per-corp loop
+  // below. First active wins; the unique slot index prevents real duplicates.
+  const activeProductByCorp = new Map<string, CorporationProduct>();
+  for (const doc of productDocs) {
+    if (activeProductByCorp.has(doc.corporationId)) continue;
+    activeProductByCorp.set(doc.corporationId, {
+      id: doc._id,
+      corporationId: doc.corporationId,
+      kindId: doc.kindId,
+      name: doc.name,
+      stage: doc.stage,
+      startedTurn: doc.startedTurn,
+      lastProcessedTurn: doc.lastProcessedTurn,
+      launchedTurn: doc.launchedTurn,
+      retiredTurn: doc.retiredTurn,
+      developmentSpendAnchor: doc.developmentSpendAnchor,
+      developmentAdvertisingAnchor: doc.developmentAdvertisingAnchor,
+      developmentAdvertisingTurns: doc.developmentAdvertisingTurns,
+      productBrand: doc.productBrand,
+      launchQuality: doc.launchQuality,
+    });
+  }
+  const operatingModelsByCorp = new Map<string, string[]>();
+  for (const doc of modelDocs) {
+    const list = operatingModelsByCorp.get(doc.corporationId) ?? [];
+    list.push(doc.operatingModel);
+    operatingModelsByCorp.set(doc.corporationId, list);
   }
 
   // Commodity price snapshot for macro-aware production policy (SP5). One doc
@@ -435,13 +519,22 @@ export async function processNppCorporationDecisions(
   }
 
   // Cohort-wide kill switch, read once. Absent means ON.
-  const strategyGate = await db
-    .collection<GameState>("gameState")
-    .findOne(
-      { _id: "current" },
-      { projection: { nppCorpStrategyEnabled: 1, frontierEntryExperimentEnabled: 1 } }
-    );
+  const strategyGate = await db.collection<GameState>("gameState").findOne(
+    { _id: "current" },
+    {
+      projection: {
+        nppCorpStrategyEnabled: 1,
+        frontierEntryExperimentEnabled: 1,
+        nppAutonomyLevel: 1,
+        nppAutonomyEnabled: 1,
+      },
+    }
+  );
   const strategyLoopEnabled = strategyGate?.nppCorpStrategyEnabled !== false;
+  // Product autonomy acts at V4 and above only. Same back-compat as
+  // `getNppAutonomyLevel`: a pre-level row with the legacy boolean reads v0.
+  const autonomyLevel: NppAutonomyLevel =
+    strategyGate?.nppAutonomyLevel ?? (strategyGate?.nppAutonomyEnabled === true ? "v0" : "off");
   // Frontier-entry experiment turn state (issue #991). See
   // createFrontierEntryTurnState: fail-closed, no new turn-path round trip.
   const frontierEntryTurn = createFrontierEntryTurnState(
@@ -482,6 +575,10 @@ export async function processNppCorporationDecisions(
         isNationalEnterprise: !!corp.countryOwnerId,
       }),
       modifiers: ceoArchetypeModifiers(archetype),
+      productsEnabled,
+      autonomyLevel,
+      operatingModels: operatingModelsByCorp.get(corp._id.toString()) ?? [],
+      activeProduct: activeProductByCorp.get(corp._id.toString()) ?? null,
       labourWagesEnabled,
       currentYear: techCurrentYear > 0 ? techCurrentYear : undefined,
       techTreesEnabled,
@@ -1963,9 +2060,32 @@ export function makeNppCorpDecision(
   // section 4 applies only to positive after-tax income at settlement time, so
   // it cannot spend the operating reserve or distribute a loss.
 
+  // ── 6. Corporation product intent (issues #2236/#2238) ─────────────────────
+  // V4+ and flag-gated only; the pure module returns `none` for every older
+  // tier, every missing input, and every ineligible corp. The intent is data
+  // for the turn orchestration layer to execute later through the product
+  // persistence commands: this decision performs no product write, spends no
+  // product cash, and carries the field only when actionable, so older tiers
+  // serialize exactly as before.
+  const productDecision = decideNppProduct({
+    enabled: ctx.productsEnabled === true,
+    autonomyLevel: ctx.autonomyLevel,
+    corporationId: ownCorporationId,
+    corporationType: corp.type,
+    operatingModels: ctx.operatingModels,
+    unlockedTechnologyIds: corp.unlockedTechNodeIds,
+    activeProduct: ctx.activeProduct ?? null,
+    failingTurns: ctx.productFailingTurns,
+    cashLocal,
+    cashFloorLocal: effectiveCashFloor,
+    minStartSurplusLocal: effectiveExpansionMinCash,
+    expansionAllowed: levers.allowExpansion,
+  });
+
   return {
     corpId: corp._id,
     updates,
+    ...(productDecision.kind !== "none" ? { productDecision } : {}),
     // Ticket #1260: the cash leg travels as a DELTA, never as an absolute write.
     // These ops are appended to the corporation bulkWrite AFTER this turn's
     // income `$inc`, so a `$set` of the balance overwrote the credit and the

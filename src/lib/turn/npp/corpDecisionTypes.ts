@@ -1,7 +1,10 @@
 import type { ObjectId } from "mongodb";
 import type { CorporationType } from "@/lib/constants/corporations";
 import type { Corporation, CorporateSector, SectorBuildOrder } from "@/lib/db/types";
+import type { NppAutonomyLevel } from "@/lib/db/types/gameState";
+import type { CorporationProduct } from "@/lib/products/types";
 import type { CeoArchetypeModifiers } from "@/lib/turn/ceoArchetype";
+import type { NppProductAction } from "./nppProductDecision";
 import type { NppStrategyState } from "./corpStrategy";
 import type { NppMarketEntryDiagnostic } from "./entryDiagnostics";
 import type { FrontierEntryTurnState } from "./frontierEntryCandidate";
@@ -51,6 +54,32 @@ export interface NppCorpDecisionContext {
   competitorCountOf?: (stateId: string, sectorType: string, ownCorporationId: string) => number;
   /** Player-appointed caretaker mandate. NPP-owned corporations are always active. */
   caretakerMandate?: "active" | "passive";
+  /**
+   * Corporation-products gate (`corporationProductsEnabled` on gameConfig).
+   * Absent reads as off: no product action.
+   */
+  productsEnabled?: boolean;
+  /**
+   * Effective NPP autonomy level for this corp's country. Absent reads as
+   * below V4: no product action, so callers that do not thread it get the
+   * pre-products brain byte-identically.
+   */
+  autonomyLevel?: NppAutonomyLevel;
+  /**
+   * Owned media operating models. Absent reads as none (the decision may
+   * recommend acquiring the first legal model).
+   */
+  operatingModels?: readonly string[];
+  /**
+   * Current non-retired product, when the shell has loaded it. Absent reads
+   * as no active product.
+   */
+  activeProduct?: CorporationProduct | null;
+  /**
+   * Sustained-failure evidence for the active product, in turns. Absent reads
+   * as healthy: the product continues and is never retired.
+   */
+  productFailingTurns?: number;
 }
 
 /** A composable sector write emitted by the NPP corporation decision engine. */
@@ -111,6 +140,14 @@ export interface NppCorpDecision {
     sectorType: CorporationType;
   };
   entryDiagnostic?: NppMarketEntryDiagnostic;
+  /**
+   * Product-system intent for the turn orchestration layer to execute later
+   * through the product persistence commands (issues #2236/#2238). Present
+   * only when actionable; absent means no product action, which is what keeps
+   * pre-V4 and flag-off brains byte-identical. Never executed here and never
+   * written to the corporation document by this decision.
+   */
+  productDecision?: NppProductAction;
   /**
    * Capacity-decision telemetry for this corp this turn: one founding
    * observation plus one per evaluated reinvestment candidate, in that order.
