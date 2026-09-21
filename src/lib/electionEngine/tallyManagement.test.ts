@@ -1108,10 +1108,10 @@ describe("accumulateVoteTurn — Hamilton seat allocation for multi-seat races",
 
 describe("accumulateVoteTurn — preload option", () => {
   it("uses preloaded state and demographics instead of DB queries", async () => {
-    const { accumulateVoteTurn } = await import("./tallyManagement");
+    const { accumulateVoteTurn, createVoteTurnMemo } = await import("./tallyManagement");
     const { fetchEnrichedCandidates } = await import("./candidateEnrichment");
     const { distributeVotesByGroupLevelAllocation } = await import("./voteDistribution");
-    await import("./voteDistributionSwingFlow");
+    const { distributeVotesBySwingFlow } = await import("./voteDistributionSwingFlow");
     const { resolveTurnout } = await import("./resolvedTurnout");
     const { getStateApprovalForElection } = await import("@/lib/utils/getStateApprovalForElection");
 
@@ -1137,7 +1137,15 @@ describe("accumulateVoteTurn — preload option", () => {
       votesPerCandidate: { [candidateId]: 2_000 },
       sharesPct: { [candidateId]: 100 },
     });
+    vi.mocked(distributeVotesBySwingFlow).mockReturnValue({
+      votesPerCandidate: { [candidateId]: 2_000 },
+      sharesPct: { [candidateId]: 100 },
+    });
 
+    const turnMemo = createVoteTurnMemo();
+    turnMemo.executiveEndorsedCandidateIdsByElection = new Map([
+      [electionId.toString(), new Set()],
+    ]);
     await accumulateVoteTurn(electionId, 1, new Date(), {
       preload: {
         stateMap: new Map([["PA", preloadedState]]),
@@ -1145,12 +1153,14 @@ describe("accumulateVoteTurn — preload option", () => {
         categories: preloadedCategories,
         statePartyOrgsByState: new Map(),
         turnoutByState: new Map(),
+        turnMemo,
       },
     });
 
     // State and stateDemographics should NOT have been queried from DB
     expect(db.collectionMocks.states.findOne).not.toHaveBeenCalled();
     expect(db.collectionMocks.stateDemographics.findOne).not.toHaveBeenCalled();
+    expect(db.collectionMocks.executiveEndorsements).toBeUndefined();
     // But updateOne should still have been called (accumulation succeeded)
     expect(db.collectionMocks.electionVoteTallies.updateOne).toHaveBeenCalledOnce();
   });
