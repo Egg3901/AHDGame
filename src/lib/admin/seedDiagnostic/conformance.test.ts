@@ -291,6 +291,24 @@ describe("runConformanceChecks", () => {
     expect(checks.find((c) => c.id === "gameState.startingYear")?.severity).toBe("ok");
   });
 
+  it("passes the exact preset-relative clock for an arbitrary reset date", async () => {
+    const { db } = makeDb({
+      gameState: {
+        _id: "current",
+        preset: "1991-default",
+        startingYear: 1991,
+        currentTurn: 161,
+        currentYear: 1994,
+        resetStartDate: { year: 1994, week: 17 },
+        iteration: { type: "Alpha", number: 1 },
+      },
+      gameConfig: { _id: "default", maintenanceMode: true },
+    });
+    const { checks } = await runConformanceChecks(db, { preset: "1991-default" });
+    expect(checks.find((c) => c.id === "gameState.currentTurn")?.severity).toBe("ok");
+    expect(checks.find((c) => c.id === "gameState.currentYear")?.severity).toBe("ok");
+  });
+
   it("flags wrong GDP on a national budget as critical", async () => {
     const seedExpect = buildSeedExpectations("2019-default");
     const us = seedExpect.nationalBudgets.find((b) => b.countryId === "US");
