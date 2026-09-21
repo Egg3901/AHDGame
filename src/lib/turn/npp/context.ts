@@ -24,7 +24,14 @@ import type {
   GameState,
 } from "@/lib/db/types";
 import type { CountryId } from "@/lib/constants/countries";
+import { getSubNationalLegislatureKey } from "@/lib/constants/countries";
 import { buildNppElectionEligiblePartyKeys } from "@/lib/parties/antiAbuseGuards";
+import {
+  getJointSittingOfficeTypes,
+  getOfficeTypeForChamber,
+} from "@/lib/legislature/chamberOfficeType";
+import { resolveBillVoteField } from "@/lib/congress/billVoteField";
+import { isVotingDeadlinePassed } from "@/lib/legislature/billVotingWindow";
 
 // ─── Context Types ─────────────────────────────────────────────────────────────
 
@@ -177,7 +184,7 @@ export function buildActiveBillFilter(opts: {
 async function hydrateDomainPositions(
   db: Db,
   nppMap: Map<string, NPP>,
-  nppOfficials: ElectedOfficial[],
+  voterIds: ObjectId[],
   bills: ReadonlyArray<Pick<Bill, "legislationTypeId" | "provisions">>
 ): Promise<void> {
   const legislationTypeIds = new Set<string>();
@@ -188,11 +195,6 @@ async function hydrateDomainPositions(
       if (typeof id === "string" && id) legislationTypeIds.add(id);
     }
   }
-  const voterIds = [
-    ...new Set(
-      nppOfficials.flatMap((o) => (o.nppId && nppMap.has(o.nppId.toString()) ? [o.nppId] : []))
-    ),
-  ];
   if (legislationTypeIds.size === 0 || voterIds.length === 0) return;
 
   const rows = await db
@@ -223,6 +225,88 @@ async function hydrateDomainPositions(
       domainPositions: row.domainPositions ?? {},
     };
   }
+}
+
+export function collectPendingNppVoterIds(opts: {
+  officials: ElectedOfficial[];
+  bills: Bill[];
+  stateBills: StateBill[];
+  states: State[];
+  preset?: string;
+  now: Date;
+  currentTurn: number;
+}): ObjectId[] {
+  const pending = new Map<string, ObjectId>();
+  const officialsByCountryAndOffice = new Map<string, ElectedOfficial[]>();
+  const officialsByStateAndOffice = new Map<string, ElectedOfficial[]>();
+  for (const official of opts.officials) {
+    if (!official.nppId) continue;
+    const countryId = official.countryId ?? "US";
+    const countryKey = `${countryId}|${official.officeType}`;
+    const countryRows = officialsByCountryAndOffice.get(countryKey) ?? [];
+    countryRows.push(official);
+    officialsByCountryAndOffice.set(countryKey, countryRows);
+    if (official.state) {
+      const stateKey = `${official.state}|${official.officeType}`;
+      const stateRows = officialsByStateAndOffice.get(stateKey) ?? [];
+      stateRows.push(official);
+      officialsByStateAndOffice.set(stateKey, stateRows);
+    }
+  }
+
+  for (const bill of opts.bills) {
+    const countryId = (bill.countryId ?? "US") as CountryId;
+    let officeTypes: string[];
+    if (bill.status === "veto_override") {
+      officeTypes = ["house", "senate"];
+    } else if (bill.status === "override_shugiin") {
+      officeTypes = ["shugiin"];
+    } else if (bill.status === "active_both") {
+      officeTypes = getJointSittingOfficeTypes(countryId, opts.preset);
+    } else {
+      officeTypes = [
+        getOfficeTypeForChamber(countryId, bill.currentChamber ?? "house", opts.preset),
+      ];
+    }
+    const lowerOfficeType = bill.status === "active_both" ? (officeTypes[0] ?? "") : "";
+    for (const officeType of officeTypes) {
+      const voteField = resolveBillVoteField(bill, {
+        voterOfficeType: officeType,
+        lowerOfficeType,
+      });
+      if (
+        bill.status === "active_both" &&
+        isVotingDeadlinePassed(
+          voteField === "otherChamberVotes" ? bill.otherChamberVotingEndsAt : bill.votingEndsAt,
+          opts.now,
+          voteField === "otherChamberVotes"
+            ? bill.otherChamberVotingEndsOnTurn
+            : bill.votingEndsOnTurn,
+          opts.currentTurn
+        )
+      ) {
+        continue;
+      }
+      const votes = bill[voteField] ?? {};
+      for (const official of officialsByCountryAndOffice.get(`${countryId}|${officeType}`) ?? []) {
+        const id = official.nppId!;
+        if (!votes[`npp_${id.toString()}`]) pending.set(id.toString(), id);
+      }
+    }
+  }
+
+  const countryByState = new Map(opts.states.map((state) => [state._id, state.countryId]));
+  for (const bill of opts.stateBills) {
+    const countryId = countryByState.get(bill.stateId);
+    if (!countryId) continue;
+    const officeType = getSubNationalLegislatureKey(countryId);
+    const votes = bill.status === "veto_override" ? (bill.overrideVotes ?? {}) : (bill.votes ?? {});
+    for (const official of officialsByStateAndOffice.get(`${bill.stateId}|${officeType}`) ?? []) {
+      const id = official.nppId!;
+      if (!votes[`npp_${id.toString()}`]) pending.set(id.toString(), id);
+    }
+  }
+  return [...pending.values()];
 }
 
 export async function loadNPPContext(now: Date, options?: NPPContextOptions): Promise<NPPContext> {
@@ -367,7 +451,19 @@ export async function loadNPPContext(now: Date, options?: NPPContextOptions): Pr
   const preset = typeof gameStateDoc?.preset === "string" ? gameStateDoc.preset : undefined;
 
   const nppMap = new Map(allNPPs.map((n) => [n._id.toString(), n]));
-  await hydrateDomainPositions(db, nppMap, nppOfficials, [...activeBills, ...activeStateBills]);
+  const pendingNppVoterIds = collectPendingNppVoterIds({
+    officials: nppOfficials,
+    bills: activeBills,
+    stateBills: activeStateBills,
+    states: allStates,
+    preset,
+    now,
+    currentTurn,
+  }).filter((id) => nppMap.has(id.toString()));
+  await hydrateDomainPositions(db, nppMap, pendingNppVoterIds, [
+    ...activeBills,
+    ...activeStateBills,
+  ]);
   const statePartyOrgs = new Map(statePartyOrgsArr.map((o) => [o._id, o]));
   const legislationTypeMap = new Map(allLegislationTypes.map((t) => [t._id, t]));
   const stateDemographicsMap = new Map(allStateDemographics.map((s) => [s._id, s]));
