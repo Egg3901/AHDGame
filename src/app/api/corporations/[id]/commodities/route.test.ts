@@ -1,8 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ObjectId, type Db } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
-import { COMMODITY_BASE_PRICES, dollarsToUnits } from "@/lib/constants/commodities";
-import { MARKET_ECONOMY_MEDIA_SUPPLY_FACTOR } from "@/lib/constants/sectorStrategies";
+import {
+  COMMODITY_BASE_PRICES,
+  commodityMixWeight,
+  dollarsToUnits,
+} from "@/lib/constants/commodities";
+import {
+  MARKET_ECONOMY_MEDIA_SUPPLY_FACTOR,
+  SECTOR_STRATEGIES,
+} from "@/lib/constants/sectorStrategies";
 import { getEraUnitScale } from "@/lib/constants/sectorSeedEra";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
@@ -240,12 +247,19 @@ describe("GET /api/corporations/[id]/commodities world context", () => {
     });
     const body = await res.json();
 
-    // Measured production (1,000 units), carrying the market-economy media
-    // supply factor the world ledger and the clearing offer both apply.
+    // Measured production carries the market-economy media supply factor and
+    // is split across the unified strategy's advertising and entertainment
+    // outputs by the same value-weighted mix as the ledger and clearing book.
     const advertising = body.commodities.find(
       (c: { commodity: string }) => c.commodity === "advertising"
     );
-    expect(advertising.outputUnits).toBeCloseTo(4_000 * MARKET_ECONOMY_MEDIA_SUPPLY_FACTOR, 1);
+    const standard = SECTOR_STRATEGIES.media_entertainment.find(({ id }) => id === "standard")!;
+    expect(advertising.outputUnits).toBeCloseTo(
+      4_000 *
+        MARKET_ECONOMY_MEDIA_SUPPLY_FACTOR *
+        commodityMixWeight(standard.supply, COMMODITY_BASE_PRICES, "advertising"),
+      1
+    );
   });
 
   it("normalizes a foreign sector's host-currency revenue before deriving output", async () => {
