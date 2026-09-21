@@ -27,6 +27,9 @@ import { getPublicShareQuote, getRoundedPublicMarketCap } from "@/lib/corporatio
 import { CEO_INITIAL_SHARES } from "@/lib/constants/corporations";
 import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
 import { roundCurrency } from "@/lib/wealth/computeCharacterWealth";
+import { getOppoDrainPerTurn } from "@/lib/campaigns/opsEffects";
+import { getEffectiveBranchCost } from "@/lib/campaigns/upgradeCosts";
+import type { Campaign } from "@/lib/db/types";
 import {
   UNCOVERED_PRESIDENTIAL_NOMINATION,
   assertKnownActorMechanic,
@@ -281,9 +284,10 @@ export interface CampaignProbeResult {
 }
 
 /** Per-turn accrual for one unendorsed synthetic player candidate, through the
- * REAL production rule (`campaignActionsPerTurn`). No entry/action driver
- * exists, so this is accrued capacity, not spent actions — the registry reads
- * this mechanic `partial` in synthetic mode for exactly that reason. */
+ * REAL production rule (`campaignActionsPerTurn`). This is accrued capacity,
+ * not spent actions — spend is covered only through the retained
+ * opposition-research flow driver, and the registry reads this mechanic
+ * `partial` in synthetic mode until that driver retains a full sequence. */
 export function syntheticCampaignActionsPerActor(): number {
   return campaignActionsPerTurn({
     nppEndorsements: 0,
@@ -328,9 +332,70 @@ export function probeCampaignsAndActions(mode: SimActorMode, seed: string): Camp
     mode,
     result:
       `${campaigns} synthetic campaigners accrue ${perActor} actions each ` +
-      `(${playerActions}/turn unspent: no entry/spend driver)`,
+      `(${playerActions}/turn unspent here: spend is covered only through ` +
+      `the retained opposition-research flow driver)`,
     campaigns,
     playerActions,
+  };
+}
+
+// ─── Opposition-research purchase (pure rules slice) ─────────────────────────
+
+export interface OppositionResearchProbeResult {
+  mechanicId: string;
+  mode: SimActorMode;
+  /** Exact uncovered string in pure NPP mode, else the priced drain. */
+  result: string;
+  /** Per-turn drain of a starter-only tree through the production rule. */
+  drainPerTurn: number | null;
+  starterFunds: number | null;
+  starterActions: number | null;
+}
+
+/**
+ * Price the opposition-research starter through the REAL rules: the per-turn
+ * drain via `getOppoDrainPerTurn` (the exact reader `campaignTurn` uses) and
+ * the purchase cost via `getEffectiveBranchCost` (the exact helper the
+ * purchase command gates on). The end-to-end entry/query/purchase/debit
+ * sequence with retained evidence lives in the flow driver
+ * (`oppositionResearchDriver.ts`); this probe covers the pure rules slice.
+ */
+export function probeOppositionResearch(
+  mode: SimActorMode,
+  seed: string
+): OppositionResearchProbeResult {
+  const mechanicId = assertKnownActorMechanic("campaigns-player-actions");
+  if (mode === "pure-npp") {
+    return {
+      mechanicId,
+      mode,
+      result: "zero campaigns, zero player actions",
+      drainPerTurn: null,
+      starterFunds: null,
+      starterActions: null,
+    };
+  }
+  const plan = buildSyntheticActorPlan(seed);
+  const buyer = plan.actors.find((a) => a.role === "us-state-party-member") ?? plan.actors[0];
+  const starterCampaign = {
+    oppositionResearchTree: { starter: true, a: 0, b: 0, c: 0 },
+    oppositionResearchLevel: 0,
+  } as Campaign;
+  const drainPerTurn = getOppoDrainPerTurn(starterCampaign);
+  const cost = getEffectiveBranchCost("oppositionResearch", null, 0, "president", false);
+  if (!cost) {
+    throw new Error("opposition-research probe: starter cost helper returned null");
+  }
+  return {
+    mechanicId,
+    mode,
+    result:
+      `synthetic ${buyer.characterIdHex} starter drains ${drainPerTurn}/turn ` +
+      `for ${cost.funds} funds + ${cost.actions} actions ` +
+      `(retained end-to-end only by the opposition-research flow driver)`,
+    drainPerTurn,
+    starterFunds: cost.funds,
+    starterActions: cost.actions,
   };
 }
 

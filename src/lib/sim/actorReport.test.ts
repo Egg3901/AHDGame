@@ -49,8 +49,9 @@ describe("buildActorCoverageSection", () => {
       "1953-01-01T00:00:00.000Z"
     );
     const section = buildActorCoverageSection(manifest);
-    // 11 covered + 1 partial (campaigns: accrual without an entry/spend
-    // driver), so the section warns exactly once instead of reading clean.
+    // 11 covered + 1 partial (campaigns: accrual but no retained
+    // full-sequence purchase), so the section warns exactly once instead of
+    // reading clean.
     expect(section.coveredCount).toBe(11);
     expect(section.uncoveredCount).toBe(1);
     expect(section.warnings).toHaveLength(1);
