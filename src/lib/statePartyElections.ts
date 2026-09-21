@@ -388,11 +388,7 @@ export async function createMissingElections(
       });
     }
   }
-  await Promise.all(
-    Array.from(byParty.values()).map(({ stateId, partyId, countryId, positions, durationTurns }) =>
-      notifyMembersElectionsOpenedBatch(stateId, partyId, countryId, positions, durationTurns)
-    )
-  );
+  await notifyMembersElectionsOpenedBatch(Array.from(byParty.values()));
 
   if (toCreate.length > 0) {
     console.log(
@@ -932,36 +928,69 @@ async function notifyMembersElectionOpened(
 }
 
 async function notifyMembersElectionsOpenedBatch(
-  stateId: string,
-  partyId: string,
-  countryId: CountryId,
-  positions: StatePartyElectionPosition[],
-  durationTurns: number
+  openings: {
+    stateId: string;
+    partyId: string;
+    countryId: CountryId;
+    positions: StatePartyElectionPosition[];
+    durationTurns: number;
+  }[]
 ): Promise<void> {
+  if (openings.length === 0) return;
+
   const db = await getDb();
   const members = await db
     .collection<Character>("characters")
-    .find({ homeState: stateId, party: partyId, countryId })
-    .project<{ _id: ObjectId; userId: ObjectId }>({ _id: 1, userId: 1 })
+    .find({
+      $or: openings.map(({ stateId, partyId, countryId }) => ({
+        homeState: stateId,
+        party: partyId,
+        countryId,
+      })),
+    })
+    .project<Pick<Character, "_id" | "userId" | "homeState" | "party" | "countryId">>({
+      _id: 1,
+      userId: 1,
+      homeState: 1,
+      party: 1,
+      countryId: 1,
+    })
     .toArray();
 
-  const labels = positions.map((p) => POSITION_LABELS[p]);
-  const positionList =
-    labels.length === 1
-      ? labels[0]
-      : `${labels.slice(0, -1).join(", ")} and ${labels[labels.length - 1]}`;
-  const title = positions.length === 1 ? `${labels[0]} Election Open` : "Leadership Elections Open";
+  const membersByChapter = new Map<string, typeof members>();
+  for (const member of members) {
+    const key = `${member.countryId ?? DEFAULT_LEGACY_COUNTRY_ID}:${member.homeState}_${member.party}`;
+    const chapterMembers = membersByChapter.get(key) ?? [];
+    chapterMembers.push(member);
+    membersByChapter.set(key, chapterMembers);
+  }
 
   await createNotifications(
-    members.map((m) => ({
-      userId: m.userId,
-      type: "leadership_election_opened",
-      title,
-      message:
-        `New ${positionList} elections have opened for the ${stateId} party. ` +
-        `Voting is open for ${durationTurns} turns. Declare your candidacy or cast your vote on the state party page.`,
-      metadata: { stateId, partyId, positions, recipientCharacterId: m._id.toString() },
-    }))
+    openings.flatMap(({ stateId, partyId, countryId, positions, durationTurns }) => {
+      const labels = positions.map((position) => POSITION_LABELS[position]);
+      const positionList =
+        labels.length === 1
+          ? labels[0]
+          : `${labels.slice(0, -1).join(", ")} and ${labels[labels.length - 1]}`;
+      const title =
+        positions.length === 1 ? `${labels[0]} Election Open` : "Leadership Elections Open";
+      const chapterMembers = membersByChapter.get(`${countryId}:${stateId}_${partyId}`) ?? [];
+
+      return chapterMembers.map((member) => ({
+        userId: member.userId,
+        type: "leadership_election_opened",
+        title,
+        message:
+          `New ${positionList} elections have opened for the ${stateId} party. ` +
+          `Voting is open for ${durationTurns} turns. Declare your candidacy or cast your vote on the state party page.`,
+        metadata: {
+          stateId,
+          partyId,
+          positions,
+          recipientCharacterId: member._id.toString(),
+        },
+      }));
+    })
   );
 }
 
