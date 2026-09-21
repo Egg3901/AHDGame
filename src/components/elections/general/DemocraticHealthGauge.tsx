@@ -10,6 +10,7 @@ export interface DemocraticHealthData {
   rulingPartyColor?: string;
   partyPenaltyPct: number;
   currentRulerPenaltyPct: number;
+  economicDragPctPoints: number;
   currentRulerReliefPct: number;
   currentRulerInRace: boolean;
   recordedTurn: number;
@@ -70,6 +71,12 @@ export function DemocraticHealthGauge({ data }: { data?: DemocraticHealthData | 
           <span className="font-semibold">{t("democraticHealth.rulerEffect")}</span>
           <span className="tabular-nums font-bold text-negative">
             {signedPenalty(data.currentRulerPenaltyPct)}
+          </span>
+        </div>
+        <div className="flex items-baseline justify-between gap-3">
+          <span className="font-semibold">{t("democraticHealth.economicEffect")}</span>
+          <span className="tabular-nums font-bold text-negative">
+            -{Math.max(0, data.economicDragPctPoints).toFixed(2)} pts
           </span>
         </div>
       </div>

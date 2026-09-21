@@ -116,6 +116,7 @@ describe("GeneralBlendView", () => {
             rulingPartyName: "Democratic Party",
             partyPenaltyPct: 4.2,
             currentRulerPenaltyPct: 6.3,
+            economicDragPctPoints: 1.25,
             currentRulerReliefPct: 40,
             currentRulerInRace: true,
             recordedTurn: 412,
