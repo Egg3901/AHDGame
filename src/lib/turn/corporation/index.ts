@@ -545,7 +545,11 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     newSectors: nppNewSectors,
     divestedSectorIds: nppDivestedSectorIds,
     techLedger: nppTechLedger,
-  } = await processNppCorporationDecisions(db, turn ?? 0, now, techTreesEnabled);
+  } = await processNppCorporationDecisions(db, turn ?? 0, now, techTreesEnabled, {
+    corporations: lookups.corporations,
+    issuerBondsByCorpId: lookups.bondsByCorpId,
+    heldBondsByCorpId: lookups.bondsHeldByCorpId,
+  });
   mark("nppCorpDecisions");
 
   // Merge NPP corp updates into the main corpOps

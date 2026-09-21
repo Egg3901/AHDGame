@@ -198,12 +198,19 @@ export async function processNppCorporationDecisions(
   db: Db,
   turn: number,
   now: Date,
-  techTreesEnabled: boolean = false
+  techTreesEnabled: boolean = false,
+  preloaded?: {
+    corporations: readonly Corporation[];
+    issuerBondsByCorpId: ReadonlyMap<string, Bond[]>;
+    heldBondsByCorpId: ReadonlyMap<string, { bond: Bond; units: number }[]>;
+  }
 ): Promise<NppCorporationTurnResult> {
-  const nppCorps = await db
-    .collection<Corporation>("corporations")
-    .find({ ceoType: "npp", suspended: { $ne: true } })
-    .toArray();
+  const nppCorps = preloaded
+    ? preloaded.corporations.filter((corp) => corp.ceoType === "npp" && corp.suspended !== true)
+    : await db
+        .collection<Corporation>("corporations")
+        .find({ ceoType: "npp", suspended: { $ne: true } })
+        .toArray();
 
   const corpUpdates: Array<{
     filter: { _id: ObjectId; unlockedTechNodeIds?: { $ne: string } };
@@ -376,23 +383,29 @@ export async function processNppCorporationDecisions(
   // actually bills rather than an approximation of it. Issuer side is corporate
   // bonds only; holder side keeps sovereigns, because a corp parking cash in
   // treasuries genuinely collects that coupon.
-  const activeBonds = await db.collection<Bond>("bonds").find({ matured: false }).toArray();
-  const issuerBondsByCorpId = new Map<string, Bond[]>();
-  const heldBondsByCorpId = new Map<string, { bond: Bond; units: number }[]>();
-  for (const b of activeBonds) {
-    if (isCorporateIssuerBond(b)) {
-      const cid = b.corporationId.toString();
-      const list = issuerBondsByCorpId.get(cid) ?? [];
-      list.push(b);
-      issuerBondsByCorpId.set(cid, list);
+  let issuerBondsByCorpId = preloaded?.issuerBondsByCorpId;
+  let heldBondsByCorpId = preloaded?.heldBondsByCorpId;
+  if (!issuerBondsByCorpId || !heldBondsByCorpId) {
+    const activeBonds = await db.collection<Bond>("bonds").find({ matured: false }).toArray();
+    const issuers = new Map<string, Bond[]>();
+    const holders = new Map<string, { bond: Bond; units: number }[]>();
+    for (const b of activeBonds) {
+      if (isCorporateIssuerBond(b)) {
+        const cid = b.corporationId.toString();
+        const list = issuers.get(cid) ?? [];
+        list.push(b);
+        issuers.set(cid, list);
+      }
+      for (const h of b.holders ?? []) {
+        const holderCorpId = h.corporationId?.toString();
+        if (!holderCorpId) continue;
+        const held = holders.get(holderCorpId) ?? [];
+        held.push({ bond: b, units: h.units });
+        holders.set(holderCorpId, held);
+      }
     }
-    for (const h of b.holders ?? []) {
-      const holderCorpId = h.corporationId?.toString();
-      if (!holderCorpId) continue;
-      const held = heldBondsByCorpId.get(holderCorpId) ?? [];
-      held.push({ bond: b, units: h.units });
-      heldBondsByCorpId.set(holderCorpId, held);
-    }
+    issuerBondsByCorpId = issuers;
+    heldBondsByCorpId = holders;
   }
 
   // Cohort-wide kill switch, read once. Absent means ON.
