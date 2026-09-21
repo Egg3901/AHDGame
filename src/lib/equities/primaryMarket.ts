@@ -181,11 +181,21 @@ export async function placePendingShareIssuances(
       1,
       Math.floor(pending.requestedShares * EQUITY_PENDING_PLACEMENT_SHARE_PER_TURN)
     );
-    const shares = Math.min(
+    const pacedShares = Math.min(
       wholeShares(pending.remainingShares),
       perTurnCap,
       Math.floor(budget / price)
     );
+    // A thin pool budget below the price of one share would pace this
+    // remainder at zero shares per turn forever, while the issuance guards
+    // keep rejecting every new share proposal as "awaiting market placement".
+    // Guarantee one share of progress whenever the pool has any placement
+    // budget; the gated debit below still refuses when pool cash cannot cover
+    // that share, so pool solvency is unchanged.
+    const shares =
+      pacedShares > 0 || budget <= 0
+        ? pacedShares
+        : Math.min(1, wholeShares(pending.remainingShares));
     if (shares <= 0) continue;
     const paidLocal = Math.round(shares * price * 100) / 100;
     const debit = await debitEquityPoolGated(db, currency, paidLocal, "issuanceOut", now);

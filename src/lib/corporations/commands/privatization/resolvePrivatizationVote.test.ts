@@ -216,4 +216,57 @@ describe("resolvePrivatizationVote — atomic claim", () => {
     expect(update.$inc.cashAnchor).toBeCloseTo(1_100_000, 0);
     expect(update.$pull.holdings.corporationId).toBe(corpId);
   });
+
+  it("#2114: on pass, clears a stale pendingShareIssuance going private", async () => {
+    const ceoId = new ObjectId();
+    const voterId = new ObjectId();
+    const corpId = new ObjectId();
+    const vote = makeVote({
+      corporationId: corpId,
+      lockedBuyoutPrice: 1.1,
+      lockedBuyoutCurrency: "USD",
+      votes: [{ characterId: voterId, voteShares: 1_000_000, vote: "yes", castAt: new Date() }],
+    });
+    const updateOne = vi.fn().mockResolvedValue({ matchedCount: 1, modifiedCount: 1 });
+    const corpUpdateOne = vi.fn().mockResolvedValue({ matchedCount: 1, modifiedCount: 1 });
+    const corp = {
+      _id: corpId,
+      ceoId,
+      name: "TestCo",
+      sequentialId: 1,
+      publicFloat: 0,
+      totalShares: 10_000_000,
+      shareholders: [
+        { characterId: ceoId, shares: 9_000_000 },
+        { characterId: voterId, shares: 1_000_000 },
+      ],
+      pendingShareIssuance: {
+        remainingShares: 500,
+        requestedShares: 1000,
+        source: "vote",
+        createdAtTurn: 100,
+        initialPriceLocal: 1.1,
+      },
+    };
+    const db = {
+      collection: vi.fn().mockImplementation((name: string) => {
+        if (name === "corporationPrivatizationVotes") return { updateOne };
+        if (name === "corporations")
+          return { findOne: vi.fn().mockResolvedValue(corp), updateOne: corpUpdateOne };
+        return { findOne: vi.fn(), updateOne: vi.fn() };
+      }),
+    } as unknown as Db;
+
+    const result = await resolvePrivatizationVote({
+      db,
+      vote: vote as never,
+      currentTurn: 200,
+      forexEnabled: true,
+    });
+
+    expect(result.resolved).toBe(true);
+    if (result.resolved) expect(result.status).toBe("passed");
+    expect(corpUpdateOne).toHaveBeenCalledTimes(1);
+    expect(corpUpdateOne.mock.calls[0][1].$unset.pendingShareIssuance).toBe("");
+  });
 });
