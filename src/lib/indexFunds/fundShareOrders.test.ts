@@ -12,6 +12,10 @@ vi.mock("@/lib/indexFunds/fundQueries", () => ({
   insertFundTransaction: vi.fn().mockResolvedValue(new ObjectId()),
 }));
 
+vi.mock("@/lib/financialTxLog/emit", () => ({
+  emitTx: vi.fn().mockResolvedValue(undefined),
+}));
+
 let db: MockDb;
 
 beforeEach(() => {
@@ -42,6 +46,7 @@ describe("placeFundShareBuyOrder", () => {
       shares: 10,
       limitPriceLocal: 50,
       fxRate: 1,
+      turn: 44,
     });
 
     expect(result.ok).toBe(true);
@@ -78,6 +83,7 @@ describe("placeFundShareBuyOrder", () => {
       shares: 10,
       limitPriceLocal: 50,
       fxRate: 1,
+      turn: 44,
     });
 
     expect(result.ok).toBe(false);

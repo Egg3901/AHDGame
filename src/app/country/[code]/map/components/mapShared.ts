@@ -45,7 +45,7 @@ export const NATION_COLORS: Record<string, string> = {
 
 const SECTOR_MAP_COLORS: Record<CorporationType, string> = {
   financial: "#10b981",
-  media: "#3b82f6",
+  media_entertainment: "#3b82f6",
   manufacturing: "#f97316",
   chemical_industries: "#22c55e",
   healthcare: "#f43f5e",
@@ -58,7 +58,6 @@ const SECTOR_MAP_COLORS: Record<CorporationType, string> = {
   construction: "#fb923c",
   defense: "#64748b",
   telecommunications: "#6366f1",
-  entertainment: "#ec4899",
   logistics: "#78716c",
   extraction: "#737373",
 };

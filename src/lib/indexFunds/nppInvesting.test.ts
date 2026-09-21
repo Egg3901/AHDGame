@@ -177,21 +177,41 @@ describe("nppInvesting", () => {
 
     async function setup(
       nppDocs: Record<string, unknown>[],
-      nppPositions: { nppId: ObjectId; fundId: ObjectId; units: number }[]
+      nppPositions: {
+        nppId: ObjectId;
+        fundId: ObjectId;
+        units: number;
+        avgNavAnchor?: number;
+      }[]
     ) {
       const { createMockDb, createAsyncIterableCursor } = await import("@/lib/test-utils/mockDb");
       db = createMockDb();
       // Active funds for listActiveFunds.
       const fundsCol = db.collection("indexFunds");
       fundsCol.find.mockReturnValue(createAsyncIterableCursor([activeFund]));
+      fundsCol.bulkWrite.mockImplementation(async (ops: unknown[]) => ({
+        modifiedCount: ops.length,
+      }));
       // NPP roster.
       const nppsCol = db.collection("npps");
       nppsCol.find.mockReturnValue(createAsyncIterableCursor(nppDocs));
+      nppsCol.bulkWrite.mockImplementation(async (ops: unknown[]) => ({
+        modifiedCount: ops.length,
+      }));
       // Positions: the wealth-valuation query has no nppId clause; the pass-4
       // existing-position query filters nppId: { $in }. Dispatch on the filter.
       const positionsCol = db.collection("indexFundPositions");
-      positionsCol.find.mockImplementation((filter: Record<string, unknown>) =>
-        createAsyncIterableCursor(filter && "nppId" in filter ? [] : nppPositions)
+      positionsCol.find.mockImplementation(() => createAsyncIterableCursor(nppPositions));
+      positionsCol.bulkWrite.mockImplementation(async (ops: unknown[]) => ({
+        modifiedCount: ops.length,
+      }));
+      positionsCol.insertMany.mockImplementation(async (docs: unknown[]) => ({
+        insertedIds: Object.fromEntries(docs.map((_, index) => [index, new ObjectId()])),
+      }));
+      db.collection("indexFundTransactions").insertMany.mockImplementation(
+        async (docs: unknown[]) => ({
+          insertedIds: Object.fromEntries(docs.map((_, index) => [index, new ObjectId()])),
+        })
       );
       db.collection("gameConfig").findOne.mockResolvedValue({ ledgerShadow: true });
       return db;
@@ -334,6 +354,145 @@ describe("nppInvesting", () => {
         .calls[0][0] as Record<string, unknown>;
       expect(firstFindFilter).toMatchObject({ holderKind: "npp" });
       expect(dbm.collectionMocks["characters"]).toBeUndefined();
+    });
+
+    it("credits an existing position with a plain update and the same weighted average", async () => {
+      const npp = makeNppDoc();
+      const dbm = await setup(
+        [npp],
+        [
+          {
+            nppId: npp._id as ObjectId,
+            fundId: FUND_ID,
+            units: 2,
+            avgNavAnchor: 50,
+          },
+        ]
+      );
+
+      await processNPPFundInvestments(dbm as never, { currentTurn: 10 });
+
+      const positionOps = dbm.collectionMocks["indexFundPositions"].bulkWrite.mock.calls[0][0];
+      expect(positionOps).toEqual([
+        {
+          updateOne: {
+            filter: { fundId: FUND_ID, holderKind: "npp", nppId: npp._id },
+            update: {
+              $inc: { units: 4 },
+              $set: {
+                avgNavAnchor: 500 / 6,
+                updatedAt: expect.any(Date),
+              },
+            },
+          },
+        },
+      ]);
+    });
+
+    it("refunds confirmed NPP debits when the fund batch fails", async () => {
+      const npp = makeNppDoc();
+      const dbm = await setup([npp], []);
+      dbm
+        .collection("indexFunds")
+        .bulkWrite.mockRejectedValueOnce(new Error("fund write failed"))
+        .mockResolvedValueOnce({ modifiedCount: 0 });
+
+      await expect(processNPPFundInvestments(dbm as never, { currentTurn: 10 })).rejects.toThrow(
+        "fund write failed"
+      );
+
+      const nppCalls = dbm.collectionMocks.npps.bulkWrite.mock.calls;
+      const refundOps = nppCalls.at(-1)?.[0];
+      expect(refundOps).toEqual([
+        {
+          updateOne: {
+            filter: { _id: npp._id, nppInvestmentCashAnchor: 266 },
+            update: {
+              $inc: { nppInvestmentCashAnchor: 400 },
+              $set: { updatedAt: expect.any(Date) },
+            },
+          },
+        },
+      ]);
+      expect(dbm.collectionMocks.indexFundPositions.insertMany).not.toHaveBeenCalled();
+      expect(dbm.collectionMocks.indexFundTransactions.insertMany).not.toHaveBeenCalled();
+    });
+
+    it("surfaces both the write error and a failed debit refund", async () => {
+      const dbm = await setup([makeNppDoc()], []);
+      dbm.collection("indexFunds").bulkWrite.mockRejectedValueOnce(new Error("fund write failed"));
+      dbm
+        .collection("npps")
+        .bulkWrite.mockResolvedValueOnce({ modifiedCount: 1 })
+        .mockResolvedValueOnce({ modifiedCount: 1 })
+        .mockRejectedValueOnce(new Error("refund failed"));
+
+      const failure = await processNPPFundInvestments(dbm as never, { currentTurn: 10 }).catch(
+        (error: unknown) => error
+      );
+
+      expect(failure).toBeInstanceOf(AggregateError);
+      expect((failure as Error).message).toContain("fund write failed");
+      expect((failure as Error).message).toContain("refund failed");
+    });
+
+    // ── Gated autonomous redemption (#2120): flag-off byte-identical proof ──
+    // A structural fingerprint of every write the subscription pass makes,
+    // with timestamps dropped so two runs are directly comparable.
+    function writeSummary(dbm: MockDb) {
+      type Update = { $inc?: Record<string, number>; $set?: Record<string, unknown> };
+      const bulkUpdates = (name: string): Update[] =>
+        (dbm.collectionMocks[name]?.bulkWrite.mock.calls ?? []).flatMap((call) =>
+          (call[0] as { updateOne: { update: Update } }[]).map((op) => op.updateOne.update)
+        );
+      const nppsBulk = bulkUpdates("npps").map((update) => ({
+        inc: update.$inc ?? null,
+        turn: update.$set?.lastIndexFundInvestmentTurn ?? null,
+      }));
+      const fundBulk = bulkUpdates("indexFunds").map((update) => update.$inc ?? null);
+      const positions = (dbm.collectionMocks["indexFundPositions"]?.insertMany.mock.calls ?? [])
+        .flatMap((call) => call[0] as Record<string, unknown>[])
+        .map((doc) => ({ units: doc.units, avgNavAnchor: doc.avgNavAnchor }));
+      const txs = (dbm.collectionMocks["indexFundTransactions"]?.insertMany.mock.calls ?? [])
+        .flatMap((call) => call[0] as Record<string, unknown>[])
+        .map((doc) => ({ kind: doc.kind, units: doc.units, amountAnchor: doc.amountAnchor }));
+      return { nppsBulk, fundBulk, positions, txs };
+    }
+
+    it("creates no redemption rows and leaves subscriptions unchanged when the flag is off", async () => {
+      const dbm = await setup([makeNppDoc()], []);
+      dbm.collection("gameConfig").findOne.mockResolvedValue({ ledgerShadow: true });
+
+      const result = await processNPPFundInvestments(dbm as never, { currentTurn: 10 });
+
+      expect(result.redemptionsQueued).toBe(0);
+      expect(result.unitsRedeemed).toBe(0);
+      // The redemption passes never ran: no queue collection was opened and the
+      // position debit (its atomic findOneAndUpdate) was never called.
+      expect(dbm.collectionMocks["indexFundRedemptionQueue"]).toBeUndefined();
+      expect(dbm.collectionMocks["indexFundPositions"].findOneAndUpdate).not.toHaveBeenCalled();
+
+      // Subscriptions are exactly the documented pre-flag behavior: undamped
+      // accrual of 666 and a fresh 4-unit position.
+      expect(accrualIncsFrom(dbm)).toContain(666);
+      const summary = writeSummary(dbm);
+      expect(summary.positions).toEqual([{ units: 4, avgNavAnchor: 100 }]);
+      expect(summary.txs).toEqual([{ kind: "subscription", units: 4, amountAnchor: 400 }]);
+    });
+
+    it("is byte-identical for an absent vs an explicit-false flag", async () => {
+      const run = async (config: Record<string, unknown>) => {
+        const dbm = await setup([makeNppDoc()], []);
+        dbm.collection("gameConfig").findOne.mockResolvedValue(config);
+        const result = await processNPPFundInvestments(dbm as never, { currentTurn: 10 });
+        expect(result.redemptionsQueued).toBe(0);
+        expect(dbm.collectionMocks["indexFundRedemptionQueue"]).toBeUndefined();
+        return writeSummary(dbm);
+      };
+
+      const absent = await run({ ledgerShadow: true });
+      const explicitlyFalse = await run({ ledgerShadow: true, nppFundRedemptionEnabled: false });
+      expect(absent).toEqual(explicitlyFalse);
     });
   });
 

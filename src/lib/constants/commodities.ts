@@ -1615,7 +1615,10 @@ export const SECTOR_SUPPLY: Partial<Record<CorporationType, CommodityFlow[]>> = 
   agriculture: [{ commodity: "food", rate: 0.5 }],
   automobiles: [{ commodity: "vehicles", rate: 0.5 }],
   financial: [{ commodity: "financial_services", rate: 0.5 }],
-  media: [{ commodity: "advertising", rate: 0.5 }],
+  media_entertainment: [
+    { commodity: "advertising", rate: 0.35 },
+    { commodity: "entertainment_services", rate: 0.3 },
+  ],
   defense: [
     { commodity: "vehicles", rate: 0.2 },
     { commodity: "electronics", rate: 0.15 },
@@ -1626,10 +1629,6 @@ export const SECTOR_SUPPLY: Partial<Record<CorporationType, CommodityFlow[]>> = 
   telecommunications: [
     { commodity: "software", rate: 0.2 },
     { commodity: "network_services", rate: 0.4 },
-  ],
-  entertainment: [
-    { commodity: "advertising", rate: 0.2 },
-    { commodity: "entertainment_services", rate: 0.4 },
   ],
   retail: [{ commodity: "retail", rate: 0.5 }],
   logistics: [
@@ -1746,13 +1745,13 @@ export const SECTOR_DEMAND: Partial<Record<CorporationType, CommodityFlow[]>> = 
     { commodity: "real_estate_services", rate: 0.04 },
     { commodity: "network_services", rate: 0.06 },
   ],
-  media: [
+  media_entertainment: [
     { commodity: "software", rate: 0.15 },
     { commodity: "electronics", rate: 0.1 },
+    { commodity: "energy", rate: 0.06 },
     { commodity: "consulting_services", rate: 0.06 },
     { commodity: "real_estate_services", rate: 0.03 },
     { commodity: "network_services", rate: 0.1 },
-    { commodity: "entertainment_services", rate: 0.06 },
   ],
   defense: [
     { commodity: "steel", rate: 0.2 },
@@ -1800,13 +1799,6 @@ export const SECTOR_DEMAND: Partial<Record<CorporationType, CommodityFlow[]>> = 
     { commodity: "construction_services", rate: 0.08 },
     { commodity: "real_estate_services", rate: 0.03 },
     { commodity: "rare_earth", rate: 0.09 },
-  ],
-  entertainment: [
-    { commodity: "software", rate: 0.15 },
-    { commodity: "electronics", rate: 0.1 },
-    { commodity: "energy", rate: 0.06 },
-    { commodity: "real_estate_services", rate: 0.03 },
-    { commodity: "network_services", rate: 0.08 },
   ],
   logistics: [
     { commodity: "vehicles", rate: 0.2 },

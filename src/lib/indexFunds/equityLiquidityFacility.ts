@@ -139,7 +139,7 @@ export async function refreshEquityLiquidityFacility(input: {
     .find({ liquidityProvider: true, status: "open" })
     .toArray();
   for (const order of priorQuotes) {
-    await cancelFundShareOrder(db, order._id);
+    await cancelFundShareOrder(db, order._id, turn);
   }
 
   const snapshot: EquityLiquidityFacilitySnapshot = {
@@ -187,6 +187,7 @@ export async function refreshEquityLiquidityFacility(input: {
         shares: plan.bidShares,
         limitPriceLocal: plan.bidPriceLocal,
         fxRate: listing.fxRate,
+        turn,
         liquidityQuote,
       });
       if (!bid.ok || !bid.orderId) {

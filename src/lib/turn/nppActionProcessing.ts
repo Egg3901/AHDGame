@@ -111,20 +111,20 @@ const NPP_BOND_MIN_YIELD_PCT = 1.0;
 const NPP_STOCK_MIN_VALUE_RATIO = 0.8;
 const NPP_STOCK_VALUE_FLOOR_MIN = 0.5;
 const NPP_STOCK_VALUE_FLOOR_MAX = 1.0;
-// How many corps (by market cap) enter the weighted sample. Wider than the bond
-// pool because equity is where the herding was worst — every NPP in a country
-// previously bought the one largest corp.
-const NPP_STOCK_CANDIDATE_POOL = 8;
+// How many corps (by market cap) enter the weighted sample. The live iteration-4
+// market put 70% of tradable capitalization in five firms while profitable
+// smaller issuers received little autonomous demand. Thirty-two keeps the query
+// bounded while giving the long tail a real chance to attract capital.
+const NPP_STOCK_CANDIDATE_POOL = 32;
 // v3 stock investment: same shape as the bond sweep above, run as a separate
 // gate immediately after it so an NPP can end up allocating to both in one
 // cycle (each draws from whatever savings remain above the floor at the time
-// it runs — sequential, same document, no double-count risk). Picks the
-// single largest eligible home-currency corp by market cap (blue-chip bias,
-// same "always highest X" simplicity as the bond sweep's highest-couponRate
-// pick) rather than diversifying across a basket — that's index funds' job.
+// it runs — sequential, same document, no double-count risk). A modestly
+// stronger buy cadence than the bond sweep gives equities a structural expansion
+// bias, but every purchase remains funded from accumulated investment cash.
 const NPP_STOCK_INVEST_RESERVE_FLOOR = 5_000;
-const NPP_STOCK_INVEST_BASE_PROBABILITY = 0.05;
-const NPP_STOCK_INVEST_FRACTION = 0.25;
+const NPP_STOCK_INVEST_BASE_PROBABILITY = 0.075;
+const NPP_STOCK_INVEST_FRACTION = 0.3;
 // v3 party-org building: counteracts processPartyOrgTurn's unconditional
 // per-turn Org decay, which nothing has ever offset autonomously (growth was
 // player-`/build-org`-only). Runs over EXISTING statePartyOrg rows with
@@ -140,8 +140,20 @@ const NPP_BUILD_ORG_BASE_PROBABILITY = 0.15;
 // hold a position at any point. Flat base probability (portfolio rebalancing
 // isn't strongly personality-driven the way investing IN is) rather than
 // archetype-scaled.
-const NPP_STOCK_SELL_BASE_PROBABILITY = 0.03;
-const NPP_STOCK_SELL_FRACTION = 0.5; // sells half the position when it fires
+const NPP_STOCK_SELL_BASE_PROBABILITY = 0.02;
+const NPP_STOCK_SELL_FRACTION = 0.4;
+
+/** Score an equity candidate without letting mega-cap size swamp value. */
+export function nppStockCandidateWeight(
+  marketCap: number,
+  valueRatio: number,
+  riskToleranceMult: number
+): number {
+  const safeMarketCap = Number.isFinite(marketCap) ? Math.max(marketCap, 1) : 1;
+  const safeValueRatio = Number.isFinite(valueRatio) ? Math.max(valueRatio, 0) : 1;
+  const safeRiskTolerance = Number.isFinite(riskToleranceMult) ? Math.max(riskToleranceMult, 0) : 1;
+  return Math.pow(safeMarketCap, 0.25) * Math.pow(safeValueRatio, safeRiskTolerance);
+}
 // v3 corporation founding: the natural next step after buy/sell — a
 // sufficiently wealthy, entrepreneurial NPP starts their own company. Gated
 // on ceoArchetype (aggressive/innovator — high ambition — found more often
@@ -844,8 +856,8 @@ async function investNppStockSurplus(
     // Everything on offer is overvalued for this NPP's taste — hold the cash.
     if (scoredCorps.length === 0) continue;
 
-    const corpWeights = scoredCorps.map(
-      (s) => Math.sqrt(Math.max(s.marketCap, 1)) * Math.pow(s.valueRatio, riskToleranceMult)
+    const corpWeights = scoredCorps.map((s) =>
+      nppStockCandidateWeight(s.marketCap, s.valueRatio, riskToleranceMult)
     );
     const corpTotal = corpWeights.reduce((sum, w) => sum + w, 0);
     let corpRoll = rng() * corpTotal;

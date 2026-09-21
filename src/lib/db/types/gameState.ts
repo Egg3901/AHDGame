@@ -96,6 +96,8 @@ export interface GameState {
   coldWarEndedTurn?: number | null;
   currentTurn: number;
   currentYear: number;
+  /** Exact operator-selected date of this iteration's reset. */
+  resetStartDate?: { year: number; week: number };
   /**
    * Calendar year of turn 1 for the active reset preset (1991, 2019, etc.).
    * Set by `resetGameWorld` at bootstrap from the preset's mapping in

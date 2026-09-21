@@ -1,3 +1,5 @@
+import { buildApportionment } from "@/lib/elections/apportionment";
+import { computeMapOfficeholders } from "@/lib/map/officeholderService";
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { handleRouteError } from "@/lib/api/errors";
@@ -77,7 +79,13 @@ export async function GET(request: Request) {
       // Era gate: Alaska/Hawaii under 1953-default are owned territories with
       // zero House seats. Leaving them on the roster paints vacant "states" on
       // the nation map; keep only political states (48 until admission).
-      const { politicalIds } = await loadUsPoliticalStateIds(db);
+      const { politicalIds, admittedIds, preset, currentYear } = await loadUsPoliticalStateIds(db);
+      const electoralVotesByState = buildApportionment(
+        Object.fromEntries(rosterStates.map((s) => [s._id, s.houseDistricts])),
+        preset,
+        currentYear,
+        admittedIds
+      ).electoralVotes;
       regions = filterPoliticalUsRoster(regions, politicalIds);
 
       const [
@@ -89,6 +97,7 @@ export async function GET(request: Request) {
         lean,
         presidentialData,
         sectorSpecializations,
+        officeholders,
       ] = await Promise.all([
         computePartyOrgMap(db, "US"),
         computeSenateMap(db, "US"),
@@ -98,6 +107,11 @@ export async function GET(request: Request) {
         computeLeanMap(db, "US"),
         computePresidentialMap(db, "US"),
         computeSectorSpecializationMap(db, "US"),
+        computeMapOfficeholders(
+          db,
+          countryId,
+          regions.map((r) => r.id)
+        ),
       ]);
 
       const {
@@ -110,6 +124,8 @@ export async function GET(request: Request) {
       } = presidentialData;
 
       return NextResponse.json({
+        officeholders,
+        electoralVotesByState,
         partyOrg,
         senate,
         house,

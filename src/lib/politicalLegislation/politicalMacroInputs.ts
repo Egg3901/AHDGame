@@ -53,6 +53,8 @@ export interface PoliticalMacroInputs {
   ): number | null;
   /** Raw 0-100 family score by family id, or null when unavailable. */
   score(stateId: string, familyId: string): number | null;
+  /** Complete raw board values for national consequence aggregation. */
+  values(stateId: string): Readonly<Partial<Record<PoliticalMetricId, number>>> | null;
 }
 
 export async function loadPoliticalMacroInputs(db: Db): Promise<PoliticalMacroInputs> {
@@ -87,5 +89,6 @@ export async function loadPoliticalMacroInputs(db: Db): Promise<PoliticalMacroIn
       const v = values[familyId as PoliticalMetricId];
       return typeof v === "number" && Number.isFinite(v) ? v : null;
     },
+    values: (stateId) => valuesById.get(stateId) ?? null,
   };
 }

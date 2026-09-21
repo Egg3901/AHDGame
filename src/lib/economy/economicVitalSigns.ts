@@ -1490,6 +1490,10 @@ export function computeEconomicVitalSigns(input: Inputs): EconomicVitalSigns {
       stockVsFlowDivergentCount: input.reconciliation?.stockVsFlow.divergentCount ?? null,
       stockVsFlowSkipped: input.reconciliation?.stockVsFlow.skipped ?? null,
       moneySupplyFindingCount: input.reconciliation?.moneySupply.findings.length ?? null,
+      stockVsFlowByKind:
+        input.reconciliation && !input.reconciliation.stockVsFlow.skipped
+          ? (input.reconciliation.stockVsFlow.byKind ?? null)
+          : null,
     },
   };
 }

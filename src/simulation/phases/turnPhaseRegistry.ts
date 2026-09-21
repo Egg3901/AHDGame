@@ -1450,7 +1450,12 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
           );
           return;
         }
-        const report = await runtime.runPhase("ledgerReconcile", () => reconcileTurn(db, newTurn));
+        // Stamp the turn's banking mode from the already-loaded turn config:
+        // zero extra round trips, and the persisted doc carries per-turn
+        // banking history for the #992 evidence gate.
+        const report = await runtime.runPhase("ledgerReconcile", () =>
+          reconcileTurn(db, newTurn, { savingsAccountsMode: config?.savingsAccountsMode ?? null })
+        );
         if (report) {
           phaseResults.ledgerReconcile = {
             status: report.status,

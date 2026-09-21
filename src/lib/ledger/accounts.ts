@@ -46,34 +46,33 @@ export type LedgerAccountKind =
 
 /**
  * The real (balance-backed) kinds the reconciler stock-checks. System kinds
- * (mint/sink/fx) are not stock-checked.
+ * (mint/sink/fx) are not stock-checked. Every kind listed here MUST have
+ * opening/closing snapshot coverage in balanceSnapshot.ts; a listed kind with
+ * no snapshot reads every leg as a divergence against a zero balance.
  *
- * `state_party` is a DEFINED real-money account (statePartyOrg.treasury) but is
- * intentionally NOT listed here yet: its treasury is also mutated by
- * still-uninstrumented flows (PS-investment debits, NPP influence spend), so
- * stock-checking it now would manufacture divergences. Phase 3 captures the
- * inbound `party_dues_received` legs against it so the tx rows derive and the
- * money-supply view attributes them; adding it to the stock-check waits on a
- * dedicated PR that instruments the outbound state-party treasury flows too.
- * See docs/plans/2026-07-05-shadow-ledger-plan.md §3.
- */
-/**
- * `pension_scheme` is a DEFINED real-money account (PensionScheme.assetsAnchor)
- * and is deliberately NOT stock-checked yet, for the same reason `state_party`
- * is not: its assets will also move through fund subscriptions and benefit
- * payments that are not instrumented yet, so stock-checking it now would
- * manufacture divergences. Defining the account is what makes the employer's
- * contribution derive to a real counterparty instead of reading as a leak;
- * adding it to the stock-check waits on the PR that instruments the rest.
+ * `state_party` (statePartyOrg.treasury) and `pension_scheme`
+ * (PensionScheme.assetsAnchor) are stock-checked since #992 tranche 2. Their
+ * still-uninstrumented flows (org-build debits, dividend-reinvest fund
+ * inflows, NPP fund investing, secession deletes, transfer currency
+ * rescaling) report as honest amber findings with a lifecycle hint, not as
+ * hidden backlog — see the StockVsFlowFinding lifecycleHint.
+ *
+ * `org` stays listed but uncovered: no FinancialSubjectType, no counterparty
+ * mapping, and no stored treasury field produce `org:` accounts anywhere, so
+ * it contributes zero findings. It is dead but harmless, kept so a future
+ * org-funds feature has a defined kind to back. See
+ * docs/plans/2026-07-05-shadow-ledger-plan.md §3.
  */
 export const REAL_ACCOUNT_KINDS: readonly LedgerAccountKind[] = [
   "character",
   "character_savings",
   "corporation",
   "party",
+  "state_party",
   "government",
   "fund",
   "org",
+  "pension_scheme",
   "npp",
 ] as const;
 
@@ -116,12 +115,19 @@ export function subjectAccount(
       // National party rows carry an ObjectId subjectId → party treasury account.
       // State-party rows have no ObjectId identity (statePartyOrg is keyed by a
       // composite string in `meta.statePartyKey`) → route to a state_party
-      // account so the row still derives. See REAL_ACCOUNT_KINDS note.
+      // account so the row still derives. state_party is stock-checked with
+      // snapshot coverage in balanceSnapshot.ts.
       if (ids.subjectId) return accountId("party", ids.subjectId, currency);
       if (ids.statePartyKey) return accountId("state_party", ids.statePartyKey, currency);
       return null;
     case "government":
       return ids.countryId ? accountId("government", ids.countryId, currency) : null;
+    case "fund":
+      // #992 tranche 6: fund-subject rows (bond purchases/sales, holding
+      // sales, order-fill seller legs, float buys) evidence the fund cash
+      // side directly, so they derive here against the cashAnchor snapshot
+      // below. They never mirror (see fundMirrorAccount).
+      return ids.subjectId ? accountId("fund", ids.subjectId, currency) : null;
     case "pension_scheme":
       return ids.subjectId ? accountId("pension_scheme", ids.subjectId, currency) : null;
     case "npp":

@@ -100,6 +100,7 @@ import {
   remainingRedemptionUnits,
 } from "@/lib/indexFunds/fundRedemptionQueue";
 import { logIndexFundRedeem, resolveIndexFundHolder } from "@/lib/indexFunds/fundTxLog";
+import { emitTx, emitTxBulk, loadTxThresholds } from "@/lib/financialTxLog/emit";
 import { runWithOptionalTransaction } from "@/lib/db/runWithOptionalTransaction";
 import { TURNS_PER_DAY, MS_PER_TURN } from "@/lib/constants/turnTime";
 import { placeFundShareBuyOrder, cancelFundShareOrder } from "@/lib/indexFunds/fundShareOrders";
@@ -108,7 +109,7 @@ import {
   INDEX_FUND_BID_MAX_OPEN_TURNS,
 } from "@/lib/indexFunds/fundBidPolicy";
 import { fxRateForCorpFromMap } from "@/lib/currency/corporationCapital";
-import type { CurrencyCode } from "@/lib/constants/currencies";
+import { COUNTRY_CURRENCY_MAP, type CurrencyCode } from "@/lib/constants/currencies";
 import type { EquityMarketPool, IndexFundTransaction } from "@/lib/db/types";
 import type { ShareOrder } from "@/lib/db/types";
 import {
@@ -280,13 +281,16 @@ async function refundFundCashAnchor(
   options?: { session?: ClientSession }
 ): Promise<void> {
   if (!Number.isFinite(amountAnchor) || amountAnchor <= 0) return;
-  await db
+  const result = await db
     .collection<IndexFund>("indexFunds")
     .updateOne(
       { _id: fundId },
       { $inc: { cashAnchor: amountAnchor }, $set: { updatedAt: new Date() } },
       options?.session ? { session: options.session } : undefined
     );
+  if (result.matchedCount !== 1) {
+    throw new Error("Failed to restore fund cash after public-float buy failure");
+  }
 }
 
 // ── Pass 2 / Pass 3b cadence (financial-day boundary) ─────────────────
@@ -367,6 +371,8 @@ export interface FundShareBuyBatch {
   pools?: Map<CurrencyCode, EquityMarketPool>;
   /** Post-loop evidence for completed buys. The caller inserts the batch once. */
   txSink?: Omit<IndexFundTransaction, "_id">[];
+  /** Fund-subject ledger rows collected per buy and flushed after the pass. */
+  ledgerSink?: Parameters<typeof emitTxBulk>[1];
 }
 
 async function reverseFloatBuyCredit(
@@ -536,6 +542,7 @@ export async function executeFundShareBuy(
       await updateFundHoldings(db, fund._id, purchasedHoldings, sessionOpts);
       holdingsUpdated = true;
 
+      const now = new Date();
       const tx = {
         fundId: fund._id,
         kind: "public_float_buy" as const,
@@ -543,10 +550,32 @@ export async function executeFundShareBuy(
         shares,
         navAnchor: executionPriceAnchor,
         amountAnchor: actualCost,
-        createdAt: new Date(),
+        createdAt: now,
       };
       if (batch?.txSink) batch.txSink.push(tx);
       else await insertFundTransaction(db, tx, sessionOpts);
+
+      const ledgerRow = {
+        type: "stock_trade_buy" as const,
+        turn: currentTurn,
+        createdAt: now,
+        subjectType: "fund" as const,
+        subjectId: fund._id,
+        subjectName: fund.name,
+        amount: -actualCost,
+        anchorAmount: -actualCost,
+        currencyCode: fund.anchorCurrencyCode,
+        counterpartyType: "system" as const,
+        counterpartyName: "Public float",
+        meta: {
+          corporationId: corp._id.toString(),
+          shares,
+          pricePerShareAnchor: executionPriceAnchor,
+          source: "fund-cron-float-buy",
+        },
+      };
+      if (batch) (batch.ledgerSink ??= []).push(ledgerRow);
+      else await emitTx(db, ledgerRow);
 
       return true;
     } catch (error) {
@@ -681,6 +710,9 @@ export async function rebalanceFundToTarget(
     if (res.ok) buys++;
   }
   await insertFundTransactionsBulk(db, buyBatch.txSink ?? []);
+  if (buyBatch.ledgerSink && buyBatch.ledgerSink.length > 0) {
+    await emitTxBulk(db, buyBatch.ledgerSink, await loadTxThresholds(db));
+  }
 
   // Place/refresh standing premium bids for residual deficit not satisfiable from float.
   let bidsPlaced = 0;
@@ -706,7 +738,7 @@ export async function rebalanceFundToTarget(
 
     if (isOffBasket || isStale) {
       try {
-        await cancelFundShareOrder(db, order._id);
+        await cancelFundShareOrder(db, order._id, currentTurn);
         bidsCancelled++;
       } catch (err) {
         console.error(
@@ -759,6 +791,7 @@ export async function rebalanceFundToTarget(
         shares: leg.shares,
         limitPriceLocal,
         fxRate,
+        turn: currentTurn,
         txSink: bidTxSink,
       });
 
@@ -950,6 +983,23 @@ export async function processQueuedRedemptions(
   const pending = await listPendingRedemptions(db, fund._id);
   if (pending.length === 0) return 0;
 
+  // #992 tranche 6: one batched NPP lookup for the pass so each NPP
+  // redemption below can be denominated in the NPP home currency (the
+  // npp:<id>:<homeCurrency> snapshot key) without a per-entry read.
+  const nppCurrencyById = new Map<string, CurrencyCode>();
+  const queuedNppObjectIds = pending.flatMap((e) => (e.nppId ? [e.nppId] : []));
+  if (queuedNppObjectIds.length > 0) {
+    const nppDocs = await db
+      .collection<{ _id: ObjectId; countryId?: string }>("npps")
+      .find({ _id: { $in: queuedNppObjectIds } })
+      .project({ countryId: 1 })
+      .toArray();
+    for (const doc of nppDocs) {
+      const cur = COUNTRY_CURRENCY_MAP[doc.countryId as keyof typeof COUNTRY_CURRENCY_MAP] ?? "USD";
+      nppCurrencyById.set(doc._id.toString(), cur);
+    }
+  }
+
   // Wallet credits are in the fund's native currency; the ₳ → native multiplier
   // is stamped on each queue entry at request time (entry.redeemFxRate, ticket
   // #857 grandfather) — 1 for pre-fix legacy units, the fund rate for post-fix
@@ -969,6 +1019,9 @@ export async function processQueuedRedemptions(
   let paid = 0;
   let fundState = fund;
   let availableCash = fund.cashAnchor;
+  // #992 tranche 6: thresholds for the bond-sale ledger rows below, loaded
+  // at most once per redemption pass and only when a bond sale actually runs.
+  let bondSaleThresholds: Awaited<ReturnType<typeof loadTxThresholds>> | undefined;
 
   // Units still unserved in this pass. Decremented as each entry is handled so
   // the share is measured against who is still waiting, not the original queue.
@@ -1043,11 +1096,13 @@ export async function processQueuedRedemptions(
     // Bonds are the next line of liquidity: sold to the market pool at its
     // bid, as far as the pool can pay. The only line for a bond fund.
     if (availableCash < entryObligation) {
+      bondSaleThresholds ??= await loadTxThresholds(db);
       const bondSale = await sellFundBondHoldingsForCash(
         db,
         fundState,
         entryObligation - availableCash,
-        new Date()
+        new Date(),
+        { turn: currentTurn, thresholds: bondSaleThresholds }
       );
       if (bondSale.proceedsAnchor > 0) {
         fundState = (await getFundById(db, fund._id)) ?? fundState;
@@ -1218,6 +1273,39 @@ export async function processQueuedRedemptions(
       createdAt: new Date(),
     });
 
+    // #992 tranche 6: the NPP credit above moved nppInvestmentCashAnchor, and
+    // unlike the character/imperial legs (which logIndexFundRedeem evidences)
+    // it had no ledger row, so every queue-paid NPP redemption read as an
+    // unexplained NPP inflow. One npp-subject index_fund_redeem row per paid
+    // NPP entry, denominated in the NPP home currency from the batched lookup
+    // with the ₳ value stated outright. The shadow ledger mirrors the fund
+    // cash side off meta when the currencies match (same convention as the
+    // NPP subscribe rows); a cross-currency pair stays single-sided under
+    // fund_redemption, never guessed. Emitted here, after the queue row and
+    // the fund transaction both landed, so a retry can never double-book it.
+    if (entry.nppId) {
+      const nppCurrency = nppCurrencyById.get(entry.nppId.toString()) ?? "USD";
+      await emitTx(db, {
+        type: "index_fund_redeem",
+        turn: currentTurn,
+        createdAt: new Date(),
+        subjectType: "npp",
+        subjectId: entry.nppId,
+        subjectName: `NPP ${entry.nppId.toString()}`,
+        amount: paidAmount,
+        anchorAmount: paidAmount,
+        currencyCode: nppCurrency,
+        counterpartyType: "system",
+        counterpartyName: fund.name,
+        meta: {
+          fundId: fund._id.toString(),
+          fundCurrency: fund.anchorCurrencyCode,
+          units: quote.redeemableUnits,
+          source: "cron_queue",
+        },
+      });
+    }
+
     if (entry.holderKind === "character" || entry.holderKind === "imperial_character") {
       const holder = await resolveIndexFundHolder(db, entry);
       if (holder) {
@@ -1355,6 +1443,9 @@ export async function runIndexFundCron(
   const openOrdersEscrowByFundId = await loadOpenOrdersEscrowByFundId(db, fundIds);
   const queuedUnitsByFundId = await loadQueuedRedemptionUnitsByFundId(db, fundIds);
   const initialBondPrincipalByFundId = await sumFundBondHoldingsByFundId(db, funds, exchangeRates);
+  // #992 tranche 6: one thresholds read for every bond-reserve purchase row
+  // this turn; threaded through each deploy so N funds share it.
+  const bondDeployThresholds = await loadTxThresholds(db);
 
   // Pass 1: mark holdings, recompute NAV, deploy bond reserve.
   const navReadyFundIds: IndexFund["_id"][] = [];
@@ -1423,14 +1514,16 @@ export async function runIndexFundCron(
 
       result.navUpdates++;
 
-      const refreshedFund = await getFundById(db, workingFund._id);
-      if (!refreshedFund) continue;
-
-      const bondPrincipalAfterNav = await sumFundBondHoldingsValueAnchor(
-        db,
-        refreshedFund,
-        exchangeRates
-      );
+      // NAV persistence only changes fields already known in this pass. Keep
+      // the in-memory fund in sync instead of reading the full document back,
+      // and reuse the bond-principal snapshot loaded for every fund above.
+      // No bond mutation occurs between that snapshot and this deployment.
+      const refreshedFund: IndexFund = {
+        ...workingFund,
+        quotedNav: newNav,
+        backingRatio: backing.backingRatio,
+      };
+      const bondPrincipalAfterNav = bondPrincipalAnchor;
       if (queuedRedemptionUnits <= 0) {
         const bondDeploy = await deployBondReserveFromCash(
           db,
@@ -1438,6 +1531,8 @@ export async function runIndexFundCron(
           bondPrincipalAfterNav,
           {
             liquidityTargetEnabled: bondLiquidityEnabled,
+            turn: currentTurn,
+            thresholds: bondDeployThresholds,
           }
         );
         if (bondDeploy.deployedAnchor > 0) {

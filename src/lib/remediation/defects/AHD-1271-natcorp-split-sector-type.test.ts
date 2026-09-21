@@ -83,7 +83,7 @@ function productionIncidentDb(): { db: Db; corps: Corp[] } {
       name: "Player Switched Enterprise",
       countryOwnerId: "DD",
       type: "technology",
-      assignedSectorTypes: ["media"],
+      assignedSectorTypes: ["media_entertainment"],
       typeSwitchTurn: 600,
     },
     {

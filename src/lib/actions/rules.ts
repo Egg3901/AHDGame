@@ -57,6 +57,13 @@
  * `../stats/debatePrep` (injected rng, already pure); the quote owns the
  * chance constant both sides compare against. Hosts own the rng, the flag
  * read and persistence.
+ *
+ * Era price level (#2119): every money quote and fund-cost helper below takes a
+ * trailing `priceLevel` scalar — the between-era deflator resolved at the SHELL
+ * boundary (`campaigns/rules/priceLevel.ts` + `gameConfig.campaignEraPriceLevelEnabled`)
+ * — and multiplies it into the anchor result. It defaults to 1, so omitting it
+ * (every pre-#2119 caller) is byte-identical to today; the pure formulas never
+ * read the flag themselves.
  */
 import { statMultiplier } from "../stats/statMultiplier";
 import {
@@ -87,15 +94,20 @@ export interface FundraiseActor {
  * $50K floor + $2K per donor base level (calibrated for 0-75 range),
  * scaled by state influence multiplier (1.0x at 0% to 2.0x at 100%).
  * L0/0%: $50K, L50/50%: $225K, L75/100%: $400K.
+ *
+ * `priceLevel` (issue #2119) is the between-era deflator resolved at the shell
+ * from the world's era; it defaults to 1, so a caller that omits it — every
+ * pre-#2119 call site — gets today's arithmetic byte-for-byte.
  */
 export function calculateFundraisingAmount(
   donorBaseLevel: number,
-  stateInfluence?: number
+  stateInfluence?: number,
+  priceLevel = 1
 ): number {
   const base = 50_000 + donorBaseLevel * 2_000;
-  if (stateInfluence === undefined) return base;
+  if (stateInfluence === undefined) return Math.round(base * priceLevel);
   const multiplier = 1 + Math.max(0, Math.min(100, stateInfluence)) / 100;
-  return Math.round(base * multiplier);
+  return Math.round(base * multiplier * priceLevel);
 }
 
 /**
@@ -103,9 +115,16 @@ export function calculateFundraisingAmount(
  * stat multiplier. The single source of truth: the Fundraise action effect
  * and every UI that quotes the yield must call this, or the quote and the
  * credit drift apart (ticket 1107).
+ *
+ * `priceLevel` (issue #2119): the shell passes the world-era price level so a
+ * 1953 world's yield deflates with its costs. Omitted/1 is today's behavior.
  */
-export function fundraiseYieldAnchor(actor: FundraiseActor): number {
-  const base = calculateFundraisingAmount(actor.donorBaseLevel, actor.politicalInfluence ?? 0);
+export function fundraiseYieldAnchor(actor: FundraiseActor, priceLevel = 1): number {
+  const base = calculateFundraisingAmount(
+    actor.donorBaseLevel,
+    actor.politicalInfluence ?? 0,
+    priceLevel
+  );
   const stat = actor.stats?.fundraising ?? NEUTRAL_STAT;
   return Math.round(base * statMultiplier(stat));
 }
@@ -146,9 +165,13 @@ export const ADVERTISE_BASE_FUND_COST = 100_000;
 
 /**
  * Shared fund-cost multiplier for actions that spend money.
- * multiplier = (1 + tier × 0.2) × gdpScalar
+ * multiplier = (1 + tier × 0.2) × gdpScalar × priceLevel
  * gdpScalar = clamp(gdpPerCapita / countryBaseline, 0.85, 2.0)
  * gdpMillions: state GDP stored in millions (e.g. 289_500 = $289.5B)
+ *
+ * `priceLevel` (issue #2119) is the between-era deflator resolved at the shell
+ * from the world's era; it defaults to 1 so every pre-#2119 call site is
+ * unchanged. Passing 1 explicitly is identical to omitting it.
  */
 export function getFundMultiplier(
   tier: number,
@@ -157,12 +180,14 @@ export function getFundMultiplier(
   countryId = "US",
   // Optional (never defaulted): callers with no world pass nothing and get the
   // modern-era baseline; runtime money paths pass the world's gameState.preset.
-  preset?: string
+  preset?: string,
+  // Optional (never defaulted): the resolved era price level; 1 = modern.
+  priceLevel = 1
 ): number {
   const baseline = getGdpBaseline(countryId, preset);
   const gdpPerCapita = (gdpMillions * 1_000_000) / population;
   const gdpScalar = Math.max(0.85, Math.min(2.0, gdpPerCapita / baseline));
-  return (1 + tier * 0.2) * gdpScalar;
+  return (1 + tier * 0.2) * gdpScalar * priceLevel;
 }
 
 /**
@@ -193,7 +218,8 @@ export function getAdvertiseActionCost(favorability: number): number {
 
 /**
  * Fund cost for the Campaign action.
- * Base $20,000 × tier, scaled by state GDP per capita relative to country baseline.
+ * Base $20,000 × tier, scaled by state GDP per capita relative to country baseline
+ * and (when threaded) the world-era price level (#2119).
  * GDP is stored in millions of dollars (e.g. CT = 289,500 → $289.5B).
  */
 export function getCampaignFundCost(
@@ -202,7 +228,9 @@ export function getCampaignFundCost(
   statePopulation: number,
   countryId = "US",
   // Optional (never defaulted): see getFundMultiplier.
-  preset?: string
+  preset?: string,
+  // Optional (never defaulted): resolved era price level; 1 = modern.
+  priceLevel = 1
 ): number {
   const tier = getCampaignActionCost(influence); // 1-5
   const multiplier = getFundMultiplier(
@@ -210,14 +238,16 @@ export function getCampaignFundCost(
     stateGdpMillions,
     statePopulation,
     countryId,
-    preset
+    preset,
+    priceLevel
   );
   return Math.round((CAMPAIGN_BASE_FUND_COST * tier * multiplier) / 1_000) * 1_000;
 }
 
 /**
  * Fund cost for the Advertise action.
- * Base $100,000 scaled by favorability tier and state GDP per capita.
+ * Base $100,000 scaled by favorability tier, state GDP per capita and (when
+ * threaded) the world-era price level (#2119).
  */
 export function getAdvertiseFundCost(
   favorability: number,
@@ -225,10 +255,19 @@ export function getAdvertiseFundCost(
   statePopulation: number,
   countryId = "US",
   // Optional (never defaulted): see getFundMultiplier.
-  preset?: string
+  preset?: string,
+  // Optional (never defaulted): resolved era price level; 1 = modern.
+  priceLevel = 1
 ): number {
   const tier = getAdvertiseActionCost(favorability) - 5; // tier index 0-4
-  const multiplier = getFundMultiplier(tier, stateGdpMillions, statePopulation, countryId, preset);
+  const multiplier = getFundMultiplier(
+    tier,
+    stateGdpMillions,
+    statePopulation,
+    countryId,
+    preset,
+    priceLevel
+  );
   return Math.round((ADVERTISE_BASE_FUND_COST * multiplier) / 1_000) * 1_000;
 }
 
@@ -343,7 +382,10 @@ export type CampaignQuote =
 
 export function quoteCampaignAction(
   actor: CampaignQuoteActor,
-  target?: CampaignQuoteTarget | null
+  target?: CampaignQuoteTarget | null,
+  // Optional (never defaulted): the resolved era price level from the shell
+  // (#2119); 1 = modern, byte-identical to today.
+  priceLevel = 1
 ): CampaignQuote {
   const influence = actor.politicalInfluence;
   if (typeof influence !== "number" || !Number.isFinite(influence)) {
@@ -395,7 +437,7 @@ export function quoteCampaignAction(
   }
   // Intellect softens the campaign cost-scaling curve (higher → cheaper).
   const fundCostAnchor = Math.round(
-    getCampaignFundCost(influence, gdpMillions, population, countryId, preset) /
+    getCampaignFundCost(influence, gdpMillions, population, countryId, preset, priceLevel) /
       statMultiplier(intellect)
   );
   // Charisma scales the diminishing-returns gain (gentle ±20%).
@@ -415,7 +457,10 @@ export type AdvertiseQuote =
 
 export function quoteAdvertiseAction(
   actor: AdvertiseQuoteActor,
-  target?: AdvertiseQuoteTarget | null
+  target?: AdvertiseQuoteTarget | null,
+  // Optional (never defaulted): the resolved era price level from the shell
+  // (#2119); 1 = modern, byte-identical to today.
+  priceLevel = 1
 ): AdvertiseQuote {
   const favorability = actor.favorability;
   if (typeof favorability !== "number" || !Number.isFinite(favorability)) {
@@ -457,7 +502,8 @@ export function quoteAdvertiseAction(
     gdpMillions,
     population,
     countryId,
-    preset
+    preset,
+    priceLevel
   );
   // Charisma scales the diminishing-returns gain (gentle ±20%).
   const favorabilityGain = advertiseFavorabilityGain(favorability, statMultiplier(charisma));
@@ -488,7 +534,8 @@ export const BUILD_DONOR_BASE_LEVEL_GAIN = 1;
 
 /**
  * Fund cost for the BuildDonorBase action (0–75 level range).
- * Linear base: $3K + $1.5K/level, scaled by state GDP per capita (0.85–2.0×) vs country baseline.
+ * Linear base: $3K + $1.5K/level, scaled by state GDP per capita (0.85–2.0×) vs
+ * country baseline and (when threaded) the world-era price level (#2119).
  * Early levels are cheap (~$3K); L75 costs ~$116K (before GDP scaling).
  * Total 0→75 ≈ $4.4M at national-average GDP.
  */
@@ -498,13 +545,15 @@ export function getBuildDonorBaseFundCost(
   statePopulation: number,
   countryId = "US",
   // Optional (never defaulted): see getFundMultiplier.
-  preset?: string
+  preset?: string,
+  // Optional (never defaulted): resolved era price level; 1 = modern.
+  priceLevel = 1
 ): number {
   const baseCost = BUILD_DONOR_BASE_FUND + donorBaseLevel * BUILD_DONOR_BASE_FUND_PER_LEVEL;
   const baseline = getGdpBaseline(countryId, preset);
   const gdpPerCapita = (stateGdpMillions * 1_000_000) / statePopulation;
   const gdpScalar = Math.max(0.85, Math.min(2.0, gdpPerCapita / baseline));
-  return Math.round((baseCost * gdpScalar) / 1_000) * 1_000;
+  return Math.round((baseCost * gdpScalar * priceLevel) / 1_000) * 1_000;
 }
 
 /**
@@ -558,7 +607,10 @@ export type BuildDonorBaseQuote =
 
 export function quoteBuildDonorBaseAction(
   actor: BuildDonorBaseQuoteActor,
-  target?: BuildDonorBaseQuoteTarget | null
+  target?: BuildDonorBaseQuoteTarget | null,
+  // Optional (never defaulted): the resolved era price level from the shell
+  // (#2119); 1 = modern, byte-identical to today.
+  priceLevel = 1
 ): BuildDonorBaseQuote {
   const level = actor.donorBaseLevel;
   if (typeof level !== "number" || !Number.isFinite(level) || level < 0) {
@@ -597,7 +649,7 @@ export function quoteBuildDonorBaseAction(
   }
   // Fundraising softens the donor-network cost curve (higher → cheaper).
   const fundCostAnchor = Math.round(
-    getBuildDonorBaseFundCost(level, gdpMillions, population, countryId, preset) /
+    getBuildDonorBaseFundCost(level, gdpMillions, population, countryId, preset, priceLevel) /
       statMultiplier(fundraising)
   );
   return {
@@ -726,10 +778,11 @@ export function getPollBaseFundCost(tier: PollTier): number {
 /**
  * Fund cost for one poll of the given tier, in ANCHOR units.
  * Intellect lowers polling cost (gentle ±20%), matching the historical
- * `../actions` effect math exactly.
+ * `../actions` effect math exactly. `priceLevel` (#2119) applies the world-era
+ * deflator; 1 (the default) is today's behavior.
  */
-export function getPollFundCost(tier: PollTier, intellect: number): number {
-  return Math.round(getPollBaseFundCost(tier) / statMultiplier(intellect));
+export function getPollFundCost(tier: PollTier, intellect: number, priceLevel = 1): number {
+  return Math.round((getPollBaseFundCost(tier) / statMultiplier(intellect)) * priceLevel);
 }
 
 /**
@@ -788,22 +841,30 @@ export interface FundraiseQuoteActor {
 export type FundraiseQuote =
   { ok: true; apCost: number; yieldAnchor: number } | { ok: false; error: string };
 
-export function quoteFundraiseAction(actor: FundraiseQuoteActor): FundraiseQuote {
+export function quoteFundraiseAction(actor: FundraiseQuoteActor, priceLevel = 1): FundraiseQuote {
   const { donorBaseLevel } = actor;
   if (!isFundraiseEligible(donorBaseLevel ?? undefined)) {
     return { ok: false, error: FUNDRAISE_NO_DONOR_ERROR };
   }
   // Eligible ⟹ non-zero; the mapping below preserves the effect's historical
   // neutral fallbacks exactly (missing influence → 0, missing stat → neutral).
-  const yieldAnchor = fundraiseYieldAnchor({
-    donorBaseLevel: donorBaseLevel as number,
-    politicalInfluence: actor.politicalInfluence ?? undefined,
-    stats: actor.fundraising == null ? undefined : { fundraising: actor.fundraising },
-  });
+  const yieldAnchor = fundraiseYieldAnchor(
+    {
+      donorBaseLevel: donorBaseLevel as number,
+      politicalInfluence: actor.politicalInfluence ?? undefined,
+      stats: actor.fundraising == null ? undefined : { fundraising: actor.fundraising },
+    },
+    priceLevel
+  );
   return { ok: true, apCost: FUNDRAISE_ACTION_COST, yieldAnchor };
 }
 
-export function quotePollAction(actor: PollQuoteActor, tier: PollTier): PollQuote {
+export function quotePollAction(
+  actor: PollQuoteActor,
+  tier: PollTier,
+  // Optional (never defaulted): resolved era price level; 1 = modern.
+  priceLevel = 1
+): PollQuote {
   const { intellect } = actor;
   if (typeof intellect !== "number" || !Number.isFinite(intellect)) {
     return {
@@ -815,7 +876,7 @@ export function quotePollAction(actor: PollQuoteActor, tier: PollTier): PollQuot
   return {
     ok: true,
     apCost: getPollActionCost(tier),
-    fundCostAnchor: getPollFundCost(tier, intellect),
+    fundCostAnchor: getPollFundCost(tier, intellect, priceLevel),
   };
 }
 

@@ -15,6 +15,7 @@
 import { migration as supplyListingIndexes } from "./entries/2026-09-17-supply-listing-indexes";
 import { migration as ukDualMinistryRoleSlot } from "./entries/2026-09-17-uk-dual-ministry-role-slot";
 import { migration as electionResultSnapshots } from "./entries/2026-09-20-election-result-snapshots";
+import { migration as mediaEntertainmentPersistedConsolidation } from "./entries/2026-09-21-media-entertainment-persisted-consolidation";
 import type { Migration } from "./types";
 
 import { migration as bondCurrencyStamp } from "./entries/2026-04-15-bond-currency-stamp";
@@ -286,6 +287,11 @@ export const MIGRATIONS: Migration[] = [
   electionResultSnapshots,
   turnClockIndexes,
   legislativeAdministrationMetadata,
+  // Issue #2234: persisted-data consolidation for the media/entertainment
+  // merge. Rekeys corps, sectors, unions, campaigns, agreements, designations,
+  // funds, and type-keyed histories onto media_entertainment with
+  // deterministic collision folds. Idempotent, dry-run safe.
+  mediaEntertainmentPersistedConsolidation,
 ];
 
 // D13 rollback drill — registered but deliberately OUTSIDE the normal chain.

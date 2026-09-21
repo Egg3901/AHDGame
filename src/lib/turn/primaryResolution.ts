@@ -113,6 +113,7 @@ import { resolveGoverningPartyIds } from "@/lib/government/governingPartyIds";
 import { isMidtermOppositionBoostEligible } from "@/lib/electionEngine/midtermOppositionBoost";
 import { finaliseManifestosAtElectionCall } from "@/lib/uk/manifesto/manifestoLifecycle";
 import { getStandingPlatformsForCountry } from "@/lib/uk/conference/conferenceCommands";
+import { hydrateVoteTurnMemo } from "@/lib/turn/voteAccumulationPreload";
 
 /**
  * Optional restriction of a turn sweep to specific elections. Absent (the
@@ -1903,6 +1904,9 @@ export async function accumulateGeneralElectionVotes(
       .toArray(),
   ]);
   const tallyByElection = new Map(existingTallies.map((t) => [t.electionId.toString(), t]));
+  if (preload?.turnMemo) {
+    await hydrateVoteTurnMemo(db, preload.turnMemo, allActiveCandidates, electionIds);
+  }
   // Money driver inputs for every general election in one read; the per
   // election path stays for callers without a preload.
   if (preload) {

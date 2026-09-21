@@ -1,6 +1,7 @@
 import type { Db } from "mongodb";
 import type { Character, GameState, User } from "@/lib/db/types";
 import { getStartingYearForPreset } from "@/lib/constants/turnTime";
+import { resolveResetStartDate, type ResetStartDate } from "@/lib/admin/resetStartDate";
 import { seedHistoricalOfficials } from "@/lib/npp/seedHistorical";
 import { retireCharacter } from "@/lib/retireCharacter";
 import { freezeOfficeHistoryIterations } from "@/lib/turn/history/freezeOfficeHistoryIterations";
@@ -104,6 +105,8 @@ interface ResetGameWorldOptions {
   seedHistorical?: boolean;
   adminUsername?: string;
   iteration?: import("@/lib/db/types/gameState").GameIteration;
+  /** Optional arbitrary game-calendar date within the selected authored era. */
+  startDate?: ResetStartDate;
   /**
    * When true, start the world in a live pre-iteration "founding" phase: seed
    * chambers VACANT ("priors" seed mode) and stamp `preIteration.active` so the
@@ -328,10 +331,12 @@ export async function resetGameWorld(
     });
   }
 
-  const startingYear = getStartingYearForPreset(preset);
+  const resetDate = resolveResetStartDate(preset, options.startDate);
+  const { startingYear } = resetDate;
   const gameStateUpdate: Record<string, unknown> = {
-    currentTurn: 1,
-    currentYear: startingYear,
+    currentTurn: resetDate.currentTurn,
+    currentYear: resetDate.currentYear,
+    resetStartDate: { year: resetDate.year, week: resetDate.week },
     startingYear,
     preset,
     isActive: false,

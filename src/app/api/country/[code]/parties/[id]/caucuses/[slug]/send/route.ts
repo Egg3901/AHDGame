@@ -26,6 +26,7 @@ import {
   LEADERSHIP_FREEZE_MESSAGE,
 } from "@/lib/parties/leadershipElectionFreeze";
 import { getGameTime } from "@/lib/time/gameTime";
+import { TreasuryExecutionUncertainError } from "@/lib/treasury/executionUncertain";
 
 interface RouteParams {
   params: Promise<{ code: string; id: string; slug: string }>;
@@ -180,18 +181,56 @@ export async function POST(request: Request, { params }: RouteParams) {
         return NextResponse.json({ error: "Insufficient caucus funds" }, { status: 400 });
       }
 
-      const creditResult = await db
-        .collection<Character>("characters")
-        .updateOne({ _id: targetCharacterOid }, characterCredit);
+      // The debit has landed and there is no transaction to roll back, so
+      // every exit from here on must either complete the credit or put the
+      // money back. A THROWN credit was previously not compensated at all:
+      // it escaped with the caucus treasury already short.
+      const refundDebit = async (reason: string, cause?: unknown): Promise<void> => {
+        try {
+          const refundResult = await db
+            .collection<Caucus>("caucuses")
+            .updateOne(
+              { _id: caucus._id },
+              { $inc: { treasury: sendAmount }, $set: { updatedAt: new Date() } }
+            );
+          if (refundResult.matchedCount !== 1) {
+            throw new Error("Caucus treasury no longer exists during refund");
+          }
+        } catch (refundError) {
+          console.error(
+            JSON.stringify({
+              error: "caucus_send_refund_failed",
+              operation: "caucus_send",
+              caucusId: caucus._id.toString(),
+              countryId,
+              amount: sendAmount,
+              recipientId: targetCharacterOid.toString(),
+              reason,
+              message: refundError instanceof Error ? refundError.message : String(refundError),
+              ...(cause !== undefined && {
+                causedBy: cause instanceof Error ? cause.message : String(cause),
+              }),
+            })
+          );
+          throw new TreasuryExecutionUncertainError(
+            `Caucus treasury debited but neither credited nor refunded (${reason}).`,
+            { cause: refundError }
+          );
+        }
+      };
+
+      let creditResult;
+      try {
+        creditResult = await db
+          .collection<Character>("characters")
+          .updateOne({ _id: targetCharacterOid }, characterCredit);
+      } catch (creditError) {
+        await refundDebit("credit threw", creditError);
+        throw creditError;
+      }
 
       if (creditResult.matchedCount === 0) {
-        await db.collection<Caucus>("caucuses").updateOne(
-          { _id: caucus._id },
-          {
-            $inc: { treasury: sendAmount },
-            $set: { updatedAt: new Date() },
-          }
-        );
+        await refundDebit("recipient not found");
         return NextResponse.json({ error: "Character not found" }, { status: 404 });
       }
 

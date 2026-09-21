@@ -214,4 +214,36 @@ describe("POST /api/country/[code]/region/[id]/party/[partyId]/send", () => {
     expect(call?.initiatedBy).toMatchObject({ type: "character", id: chairId.toString() });
     expect(call?.turn).toBe(100);
   });
+
+  it("refunds the state treasury when the recipient credit throws after the debit", async () => {
+    // An earlier test leaves getMongoClient mocked to run a transaction; force
+    // the standalone fallback so the route's own compensation runs.
+    const { getMongoClient } = await import("@/lib/mongodb");
+    vi.mocked(getMongoClient).mockResolvedValue({
+      startSession: () => ({
+        withTransaction: vi.fn(async () => {
+          const err = new Error("no tx") as Error & { code?: number };
+          err.code = 20;
+          throw err;
+        }),
+        endSession: vi.fn(async () => {}),
+      }),
+    } as never);
+
+    db.collectionMocks["characters"]!.updateOne.mockRejectedValueOnce(new Error("credit down"));
+
+    const response = await send(2_500);
+
+    expect(response.status).toBeGreaterThanOrEqual(500);
+    expect(db.collectionMocks["statePartyOrg"]!.updateOne).toHaveBeenCalledTimes(2);
+    const debit = db.collectionMocks["statePartyOrg"]!.updateOne.mock.calls[0]![1] as {
+      $inc: Record<string, number>;
+    };
+    const refund = db.collectionMocks["statePartyOrg"]!.updateOne.mock.calls[1]![1] as {
+      $inc: Record<string, number>;
+    };
+    expect(debit.$inc).toMatchObject({ treasury: -2_500 });
+    expect(refund.$inc).toMatchObject({ treasury: 2_500 });
+    expect(db.collectionMocks["adminLogs"]!.insertOne).not.toHaveBeenCalled();
+  });
 });

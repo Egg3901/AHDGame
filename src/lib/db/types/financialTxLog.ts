@@ -90,6 +90,15 @@ export type FinancialTxType =
   | "index_fund_redeem"
   | "index_fund_dividend"
   | "npp_investment_income"
+  // #992: the fund's own retained slice of a constituent dividend (75%
+  // reinvest + undistributed pass-through remainder). Subject is the fund;
+  // the corp payer evidences net-of-dividend revenue, so this completes the
+  // earnings to gross as an attributed mint rather than backlog.
+  | "dividend_reinvest"
+  // #992: one index fund buying a constituent position from another
+  // (cross-fund rebalancing). Subject is the buyer fund; the seller fund is
+  // carried in meta and mirrored, so the pair nets as a transfer.
+  | "fund_transfer"
   | "stock_order_escrow"
   | "stock_self_issue"
   | "stock_order_refund"
@@ -161,6 +170,10 @@ export type FinancialSubjectType =
   | "corporation"
   | "party"
   | "government"
+  // #992: an index fund's cash leg. Fund cash (cashAnchor) is a
+  // stock-checked money balance, so fund-credited/debited movements carry
+  // fund-subject rows and mirror like any other holder transfer.
+  | "fund"
   // Non-player politicians have an investment account distinct
   // from characters, corporations, and the national treasury.
   | "npp"

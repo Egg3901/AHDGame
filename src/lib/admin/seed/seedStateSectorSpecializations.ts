@@ -9,13 +9,13 @@ const US_OVERRIDES: Record<string, StateSectorSpecialization> = {
   AK: { primary: "energy", secondary: "extraction" },
   AZ: { primary: "technology", secondary: "real_estate" },
   AR: { primary: "agriculture", secondary: "retail" },
-  CA: { primary: "technology", secondary: "entertainment" },
+  CA: { primary: "technology", secondary: "media_entertainment" },
   CO: { primary: "technology", secondary: "energy" },
   CT: { primary: "financial", secondary: "healthcare" },
   DE: { primary: "financial", secondary: "chemical_industries" },
-  FL: { primary: "real_estate", secondary: "entertainment" },
+  FL: { primary: "real_estate", secondary: "media_entertainment" },
   GA: { primary: "logistics", secondary: "telecommunications" },
-  HI: { primary: "entertainment", secondary: "agriculture" },
+  HI: { primary: "media_entertainment", secondary: "agriculture" },
   ID: { primary: "agriculture", secondary: "technology" },
   IL: { primary: "financial", secondary: "logistics" },
   IN: { primary: "manufacturing", secondary: "automobiles" },
@@ -32,11 +32,11 @@ const US_OVERRIDES: Record<string, StateSectorSpecialization> = {
   MO: { primary: "logistics", secondary: "agriculture" },
   MT: { primary: "agriculture", secondary: "extraction" },
   NE: { primary: "agriculture", secondary: "financial" },
-  NV: { primary: "entertainment", secondary: "real_estate" },
+  NV: { primary: "media_entertainment", secondary: "real_estate" },
   NH: { primary: "technology", secondary: "financial" },
   NJ: { primary: "chemical_industries", secondary: "telecommunications" },
   NM: { primary: "energy", secondary: "defense" },
-  NY: { primary: "financial", secondary: "media" },
+  NY: { primary: "financial", secondary: "media_entertainment" },
   NC: { primary: "financial", secondary: "technology" },
   ND: { primary: "energy", secondary: "agriculture" },
   OH: { primary: "manufacturing", secondary: "healthcare" },
@@ -46,7 +46,7 @@ const US_OVERRIDES: Record<string, StateSectorSpecialization> = {
   RI: { primary: "healthcare", secondary: "financial" },
   SC: { primary: "manufacturing", secondary: "automobiles" },
   SD: { primary: "financial", secondary: "agriculture" },
-  TN: { primary: "healthcare", secondary: "entertainment" },
+  TN: { primary: "healthcare", secondary: "media_entertainment" },
   TX: { primary: "energy", secondary: "technology" },
   UT: { primary: "technology", secondary: "financial" },
   VT: { primary: "agriculture", secondary: "healthcare" },
@@ -55,12 +55,12 @@ const US_OVERRIDES: Record<string, StateSectorSpecialization> = {
   WV: { primary: "extraction", secondary: "energy" },
   WI: { primary: "manufacturing", secondary: "agriculture" },
   WY: { primary: "energy", secondary: "extraction" },
-  DC: { primary: "media", secondary: "financial" },
+  DC: { primary: "media_entertainment", secondary: "financial" },
 };
 
 const COUNTRY_DEFAULTS: Record<string, StateSectorSpecialization> = {
   US: { primary: "manufacturing", secondary: "retail" },
-  UK: { primary: "financial", secondary: "media" },
+  UK: { primary: "financial", secondary: "media_entertainment" },
   JP: JP_SECTOR_SPECIALIZATION,
   DE: { primary: "manufacturing", secondary: "automobiles" },
   IE: { primary: "technology", secondary: "financial" },
@@ -70,14 +70,14 @@ const COUNTRY_DEFAULTS: Record<string, StateSectorSpecialization> = {
 };
 
 const REGIONAL_OVERRIDES: Record<string, StateSectorSpecialization> = {
-  "UK:LON": { primary: "financial", secondary: "media" },
+  "UK:LON": { primary: "financial", secondary: "media_entertainment" },
   "UK:SEE": { primary: "technology", secondary: "financial" },
   "UK:SWE": { primary: "technology", secondary: "defense" },
   "UK:EAE": { primary: "technology", secondary: "agriculture" },
   "UK:EMI": { primary: "manufacturing", secondary: "logistics" },
   "UK:WMI": { primary: "automobiles", secondary: "manufacturing" },
   "UK:YHU": { primary: "manufacturing", secondary: "logistics" },
-  "UK:NWE": { primary: "media", secondary: "manufacturing" },
+  "UK:NWE": { primary: "media_entertainment", secondary: "manufacturing" },
   "UK:NEE": { primary: "energy", secondary: "manufacturing" },
   "UK:SCO": { primary: "extraction", secondary: "energy" },
   "UK:WAL": { primary: "manufacturing", secondary: "energy" },
@@ -93,7 +93,7 @@ const REGIONAL_OVERRIDES: Record<string, StateSectorSpecialization> = {
   "DE:SH": { primary: "energy", secondary: "logistics" },
   "DE:HH": { primary: "logistics", secondary: "financial" },
   "DE:HB": { primary: "logistics", secondary: "automobiles" },
-  "DE:BE": { primary: "technology", secondary: "media" },
+  "DE:BE": { primary: "technology", secondary: "media_entertainment" },
   "DE:BB": { primary: "energy", secondary: "agriculture" },
   "DE:MV": { primary: "agriculture", secondary: "energy" },
   "DE:SN": { primary: "technology", secondary: "manufacturing" },
@@ -154,7 +154,7 @@ function byKeyword(state: State): StateSectorSpecialization | null {
   const match = (terms: string[]) => terms.some((term) => haystack.includes(term));
 
   if (match(["london", "new york", "tokyo", "frankfurt"])) {
-    return { primary: "financial", secondary: "media" };
+    return { primary: "financial", secondary: "media_entertainment" };
   }
   if (match(["bavaria", "baden", "aichi", "osaka", "são paulo", "sao paulo"])) {
     return { primary: "manufacturing", secondary: "automobiles" };
@@ -163,7 +163,7 @@ function byKeyword(state: State): StateSectorSpecialization | null {
     return { primary: "energy", secondary: "extraction" };
   }
   if (match(["california", "washington", "berlin", "leinster", "shanghai", "beijing"])) {
-    return { primary: "technology", secondary: "media" };
+    return { primary: "technology", secondary: "media_entertainment" };
   }
   if (match(["midwest", "plains", "wales", "scotland", "ireland", "rural"])) {
     return { primary: "agriculture", secondary: "energy" };

@@ -1,7 +1,6 @@
 import {
   Building2,
   Car,
-  Clapperboard,
   Cpu,
   Factory,
   FlaskConical,
@@ -34,8 +33,7 @@ const SECTOR_ICON: Partial<Record<CorporationType, LucideIcon>> = {
   manufacturing: Factory,
   construction: HardHat,
   real_estate: Building2,
-  media: Newspaper,
-  entertainment: Clapperboard,
+  media_entertainment: Newspaper,
   extraction: Pickaxe,
   retail: ShoppingCart,
   chemical_industries: FlaskConical,

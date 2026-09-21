@@ -464,4 +464,42 @@ describe("openPrivatizationVote — bank-NAV floor (issue #1750)", () => {
     expect(result.bankNavFloorApplied).toBe(false);
     expect(result.lockedBuyoutPrice).toBeCloseTo(11, 4);
   });
+
+  it("#2114: immediate privatization clears a stale pendingShareIssuance", async () => {
+    const ceoId = new ObjectId();
+    const corp = makeCorp({
+      ceoId,
+      totalShares: 10_000_000,
+      shareholders: [{ characterId: ceoId, shares: 10_000_000 }],
+      pendingShareIssuance: {
+        remainingShares: 500,
+        requestedShares: 1000,
+        source: "vote",
+        createdAtTurn: 100,
+        initialPriceLocal: 1.0,
+      },
+    });
+    const character = makeCharacter(ceoId);
+    const updateOne = vi.fn().mockResolvedValue({ matchedCount: 1, modifiedCount: 1 });
+    const db = {
+      collection: vi.fn().mockReturnValue({
+        findOne: vi.fn().mockResolvedValue(null),
+        insertOne: vi.fn(),
+        updateOne,
+      }),
+    } as unknown as Db;
+
+    const result = await openPrivatizationVote({
+      db,
+      corporation: corp as never,
+      character: character as never,
+      currentTurn: 1000,
+      forexEnabled: false,
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.immediate).toBe(true);
+    expect(updateOne).toHaveBeenCalledTimes(1);
+    expect(updateOne.mock.calls[0][1].$unset.pendingShareIssuance).toBe("");
+  });
 });

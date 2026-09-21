@@ -34,6 +34,24 @@ export interface ConvertCorpCurrencyError {
 }
 
 /**
+ * Signals that the on-standalone-Mongo conversion flipped the corp's currency
+ * fields but the follow-up sector write failed AND the compensating revert of
+ * the corp document also failed. In that state the corp is left holding the new
+ * currency with unconverted sectors — an explicitly uncertain state that an
+ * operator must reconcile by hand. Never swallowed: callers surface it as a 500
+ * rather than reporting a clean abort.
+ */
+export class CorpCurrencyConversionUncertainError extends Error {
+  /** Discriminator, so a structured-clone or cross-realm copy still matches. */
+  readonly corpCurrencyStateUncertain = true;
+
+  constructor(message: string, options?: { cause?: unknown }) {
+    super(message, options);
+    this.name = "CorpCurrencyConversionUncertainError";
+  }
+}
+
+/**
  * Convert every corp-economic money field from the corp's current
  * `liquidCurrencyCode` to `toCurrencyCode` at the supplied FX rates, and
  * update `liquidCurrencyCode` to match. Used by HQ-relocation paths when a
@@ -180,6 +198,27 @@ export async function convertCorpCurrency(
     corpSet.ceoSalary = round2(corp.ceoSalary * scale);
   }
 
+  // Exact pre-write values, captured so a standalone-Mongo failure after the
+  // corp write can be undone. `liquidCurrencyCode` was absent on pre-forex
+  // corps (the write backfills it), so it is `$unset` again rather than set to
+  // a placeholder; `ceoSalary` is only reverted when the write touched it.
+  const revertCorpSet: Record<string, unknown> = {
+    liquidCapital: corp.liquidCapital ?? 0,
+    sharePrice: corp.sharePrice ?? 0,
+    marketingBudget: corp.marketingBudget ?? 0,
+    logisticsBudget: corp.logisticsBudget ?? 0,
+    updatedAt: now,
+  };
+  const revertCorpUnset: Record<string, ""> = {};
+  if (fromCurrency === undefined) {
+    revertCorpUnset.liquidCurrencyCode = "";
+  } else {
+    revertCorpSet.liquidCurrencyCode = fromCurrency;
+  }
+  if (corp.ceoSalary !== undefined) {
+    revertCorpSet.ceoSalary = corp.ceoSalary;
+  }
+
   const sectors = await db
     .collection<CorporateSector>("corporateSectors")
     .find({ corporationId: corp._id })
@@ -217,37 +256,99 @@ export async function convertCorpCurrency(
       },
     },
   }));
+  const restoreSectorOps: AnyBulkWriteOperation<CorporateSector>[] = sectors.map((sector) => {
+    const $set: Record<string, unknown> = {};
+    const $unset: Record<string, ""> = {};
+    for (const field of ["revenue", "currentGrowthCost", "updatedAt"] as const) {
+      if (sector[field] === undefined) $unset[field] = "";
+      else $set[field] = sector[field];
+    }
+    return {
+      updateOne: {
+        filter: { _id: sector._id },
+        update: {
+          ...(Object.keys($set).length > 0 ? { $set } : {}),
+          ...(Object.keys($unset).length > 0 ? { $unset } : {}),
+        },
+      },
+    };
+  });
 
-  const applyCorpAndSectors = async (sessionOpts: { session?: ClientSession } = {}) => {
-    await db
-      .collection<Corporation>("corporations")
-      .updateOne({ _id: corp._id }, { $set: corpSet }, sessionOpts);
-    if (sectorOps.length > 0) {
-      const bulkResult = await db
-        .collection<CorporateSector>("corporateSectors")
-        .bulkWrite(sectorOps, sessionOpts);
-      // A matchedCount shortfall means sectors exist in the DB that we fetched
-      // but the bulkWrite didn't touch — the corp's liquidCurrencyCode would be
-      // flipped while those sectors retain old-currency revenue values, inflating
-      // sectorNPV and share price by the FX cross rate on the next turn.
-      if (bulkResult.matchedCount !== sectorOps.length) {
-        const msg =
-          `convertCorpCurrency: sector count mismatch for corp ${corp._id.toString()} ` +
-          `(${fromCurrency ?? "₳"}→${toCurrencyCode}, scale=${scale.toFixed(6)}): ` +
-          `expected ${sectorOps.length} matched, got ${bulkResult.matchedCount}`;
-        Sentry.captureException(new Error(msg));
-        // Throw so the transaction (if active) aborts before committing the corp update.
-        // In the non-transaction fallback the corp write has already landed, but
-        // surfacing the error here ensures the relocate route returns 500 rather
-        // than silently handing the caller a converted-but-broken corp.
-        throw new Error(msg);
+  const applyCorpAndSectors = async (
+    sessionOpts: { session?: ClientSession } = {},
+    compensateStandaloneFailure = false
+  ) => {
+    let corpWriteApplied = false;
+    try {
+      await db
+        .collection<Corporation>("corporations")
+        .updateOne({ _id: corp._id }, { $set: corpSet }, sessionOpts);
+      corpWriteApplied = true;
+      if (sectorOps.length > 0) {
+        const bulkResult = await db
+          .collection<CorporateSector>("corporateSectors")
+          .bulkWrite(sectorOps, sessionOpts);
+        // A matchedCount shortfall means sectors exist in the DB that we fetched
+        // but the bulkWrite didn't touch — the corp's liquidCurrencyCode would be
+        // flipped while those sectors retain old-currency revenue values, inflating
+        // sectorNPV and share price by the FX cross rate on the next turn.
+        if (bulkResult.matchedCount !== sectorOps.length) {
+          const msg =
+            `convertCorpCurrency: sector count mismatch for corp ${corp._id.toString()} ` +
+            `(${fromCurrency ?? "₳"}→${toCurrencyCode}, scale=${scale.toFixed(6)}): ` +
+            `expected ${sectorOps.length} matched, got ${bulkResult.matchedCount}`;
+          Sentry.captureException(new Error(msg));
+          // Throw so the transaction (if active) aborts before committing the corp update.
+          // In the non-transaction fallback the corp write has already landed, so
+          // the catch below reverts it before surfacing the error to the caller.
+          throw new Error(msg);
+        }
       }
+    } catch (error) {
+      // Only the standalone/sequential path (no session) leaves a partially
+      // applied write behind: with an active transaction the throw aborts the
+      // whole unit and there is nothing to compensate.
+      if (!compensateStandaloneFailure || !corpWriteApplied) throw error;
+      const revertErrors: unknown[] = [];
+      if (restoreSectorOps.length > 0) {
+        try {
+          // An ordered bulkWrite can apply an arbitrary prefix before throwing.
+          // Restore every fetched sector, not just the reported matched count.
+          await db.collection<CorporateSector>("corporateSectors").bulkWrite(restoreSectorOps);
+        } catch (revertError) {
+          revertErrors.push(revertError);
+          Sentry.captureException(revertError as Error);
+        }
+      }
+      try {
+        await db.collection<Corporation>("corporations").updateOne(
+          { _id: corp._id },
+          {
+            $set: revertCorpSet,
+            ...(Object.keys(revertCorpUnset).length > 0 ? { $unset: revertCorpUnset } : {}),
+          }
+        );
+      } catch (revertError) {
+        revertErrors.push(revertError);
+        Sentry.captureException(revertError as Error);
+      }
+      if (revertErrors.length > 0) {
+        throw new CorpCurrencyConversionUncertainError(
+          `convertCorpCurrency: corp ${corp._id.toString()} was flipped ` +
+            `${fromCurrency ?? "₳"}→${toCurrencyCode} but the sector write failed and ` +
+            `${revertErrors.length} compensation step(s) could not be completed.`,
+          { cause: new AggregateError([error, ...revertErrors]) }
+        );
+      }
+      throw error;
     }
   };
 
   try {
     await runTransactionWithSessionRetry(getMongoClient, async (session) => {
-      await applyCorpAndSectors({ session });
+      // `session` is undefined on the standalone fallback path (topology probe
+      // returned false), where a partial write must be compensated by hand.
+      await applyCorpAndSectors({ session }, !session);
     });
   } catch (err) {
     // Standalone mongods report TransactionNotSupported (code 20). Fall back
@@ -255,7 +356,7 @@ export async function convertCorpCurrency(
     // Atlas always runs a replica set and gets the atomicity guarantee.
     const code = (err as MongoServerError | undefined)?.code;
     if (code === 20 || code === 263 /* IllegalOperation for sessions */) {
-      await applyCorpAndSectors();
+      await applyCorpAndSectors({}, true);
     } else {
       throw err;
     }

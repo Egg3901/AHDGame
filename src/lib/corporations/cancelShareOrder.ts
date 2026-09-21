@@ -146,7 +146,7 @@ export async function cancelShareOrderAndRefund(db: Db, order: ShareOrder): Prom
 
     // Index-fund-owned buy orders refund anchor escrow to the fund cashAnchor.
     if (order.placerFundId) {
-      await cancelFundShareOrder(db, order._id);
+      await cancelFundShareOrder(db, order._id, currentTurn);
       return { ok: true };
     }
 

@@ -119,6 +119,7 @@
       "scaleNote": "Der Wahlmalus beginnt unter 60 und wächst mit sinkender Gesundheit.",
       "partyEffect": "Malus der Regierungspartei",
       "rulerEffect": "Malus des amtierenden Präsidenten",
+      "economicEffect": "Jährlicher BIP-Wachstumsverlust",
       "rulerNotRunning": "Der amtierende Präsident tritt in diesem Rennen nicht an, daher ist der größere persönliche Malus nicht aktiv.",
       "relief": "Eine zeitweilige verfassungsrechtliche Maßnahme senkt den zusätzlichen Präsidentenmalus um {percent}%.",
       "recordedTurn": "Stand von Zug {turn}."

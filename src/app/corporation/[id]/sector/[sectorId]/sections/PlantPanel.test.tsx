@@ -94,7 +94,7 @@ describe("PlantPanel workforce", () => {
             priceImpact: 0,
           },
         ]}
-        sectorType="media"
+        sectorType="media_entertainment"
         averageWageLevel={1}
         isCeo={false}
         busy={false}

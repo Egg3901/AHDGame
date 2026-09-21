@@ -22,6 +22,7 @@ import {
 import { recordShareTrade } from "@/lib/corporations/shareTradeHistory";
 import { resolveCorpLiquidCurrencyCode } from "@/lib/currency/corporationCapital";
 import { runWithOptionalTransaction } from "@/lib/db/runWithOptionalTransaction";
+import { emitTx } from "@/lib/financialTxLog/emit";
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -339,6 +340,8 @@ async function executeSingleTransfer(
       sellerCashCredited: false,
       sellerHoldingsUpdated: false,
       buyerHoldingsUpdated: false,
+      sellerAppliedHoldings: undefined as IndexFund["holdings"] | undefined,
+      buyerAppliedHoldings: undefined as IndexFund["holdings"] | undefined,
       sellerTransactionId: undefined as ObjectId | undefined,
       buyerTransactionId: undefined as ObjectId | undefined,
     };
@@ -373,14 +376,26 @@ async function executeSingleTransfer(
         });
       }
       if (completed.buyerHoldingsUpdated) {
-        await attempt("restore buyer holdings", () =>
-          updateFundHoldings(db, plan.buyerFundId, buyerFund.holdings)
-        );
+        await attempt("restore buyer holdings", async () => {
+          const result = await db
+            .collection<IndexFund>("indexFunds")
+            .updateOne(
+              { _id: plan.buyerFundId, holdings: completed.buyerAppliedHoldings },
+              { $set: { holdings: buyerFund.holdings, updatedAt: new Date() } }
+            );
+          return result.matchedCount === 1;
+        });
       }
       if (completed.sellerHoldingsUpdated) {
-        await attempt("restore seller holdings", () =>
-          updateFundHoldings(db, plan.sellerFundId, sellerFund.holdings)
-        );
+        await attempt("restore seller holdings", async () => {
+          const result = await db
+            .collection<IndexFund>("indexFunds")
+            .updateOne(
+              { _id: plan.sellerFundId, holdings: completed.sellerAppliedHoldings },
+              { $set: { holdings: sellerFund.holdings, updatedAt: new Date() } }
+            );
+          return result.matchedCount === 1;
+        });
       }
       if (completed.sellerCashCredited) {
         await attempt("debit seller compensation cash", async () => {
@@ -527,8 +542,10 @@ async function executeSingleTransfer(
       // 5. Persist holdings arrays.
       await updateFundHoldings(db, plan.sellerFundId, updatedSellerHoldings, sessionOpts);
       completed.sellerHoldingsUpdated = true;
+      completed.sellerAppliedHoldings = updatedSellerHoldings;
       await updateFundHoldings(db, plan.buyerFundId, updatedBuyerHoldings, sessionOpts);
       completed.buyerHoldingsUpdated = true;
+      completed.buyerAppliedHoldings = updatedBuyerHoldings;
 
       // 6. Log transactions.
       completed.sellerTransactionId = await insertFundTransaction(
@@ -559,6 +576,32 @@ async function executeSingleTransfer(
         },
         sessionOpts
       );
+
+      // Emit one cash-transfer row after both fund balances and holdings have
+      // moved. The ledger derives the seller mirror from metadata, so a second
+      // row would double-count the transfer.
+      await emitTx(db, {
+        type: "fund_transfer",
+        turn: currentTurn,
+        createdAt: new Date(),
+        subjectType: "fund",
+        subjectId: plan.buyerFundId,
+        subjectName: buyerFund.name,
+        amount: -plan.valueAnchor,
+        anchorAmount: -plan.valueAnchor,
+        currencyCode: buyerFund.anchorCurrencyCode,
+        counterpartyType: "fund",
+        counterpartyId: plan.sellerFundId,
+        counterpartyName: sellerFund.name,
+        meta: {
+          fundId: plan.sellerFundId.toString(),
+          fundCurrency: buyerFund.anchorCurrencyCode,
+          corporationId: plan.corporationId.toString(),
+          shares: plan.shares,
+          pricePerShareAnchor: plan.pricePerShareAnchor,
+          source: "cross-fund-rebalancing",
+        },
+      });
 
       // 7. Record public trade history (the cross-fund market is still a trade).
       void recordShareTrade(db, {
