@@ -17,9 +17,9 @@ import type { TechEffect } from "./effects";
  *    interleave (media[0], entertainment[0], media[1]); capstones follow in
  *    entry order (media[3], entertainment[3], media[4]), so each surviving
  *    capstone still requires its own entry under the slot N → N-3 prereq.
- * 4. Rewrite unlock effects: `streaming_media` repoints to the canonical
- *    `streaming` strategy; `live_service` unlocks are dropped (that method
- *    is retired, not aliased).
+ * 4. Rewrite unlock effects: `streaming_media` and `live_service` both
+ *    repoint to the canonical `streaming` strategy, matching
+ *    `canonicalMediaStrategyForLegacy`.
  *
  * Anchor pinning exists for exactly one segment: 1950 base takes Record
  * Labels (entertainment index 1) over Television Studios (index 0), because
@@ -90,14 +90,19 @@ function interleaveMediaFirst<T>(media: readonly T[], entertainment: readonly T[
   return out;
 }
 
-/** Repoint `streaming_media` to `streaming`; drop retired `live_service` unlocks. */
+/**
+ * Repoint legacy strategy unlocks to the canonical catalog, matching
+ * `canonicalMediaStrategyForLegacy` in mediaConsolidation/rules: both
+ * `streaming_media` and `live_service` unlock `streaming`.
+ */
 function rewriteUnlockEffects(effects: readonly TechEffect[]): TechEffect[] {
   const out: TechEffect[] = [];
   for (const effect of effects) {
-    if (effect.kind === "unlockStrategy" && effect.strategyId === "streaming_media") {
+    if (
+      effect.kind === "unlockStrategy" &&
+      (effect.strategyId === "streaming_media" || effect.strategyId === "live_service")
+    ) {
       out.push({ ...effect, strategyId: "streaming" });
-    } else if (effect.kind === "unlockStrategy" && effect.strategyId === "live_service") {
-      continue;
     } else {
       out.push(effect);
     }

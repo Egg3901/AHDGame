@@ -541,9 +541,9 @@ const MEDIA_SECTOR: Record<string, NodeSpec[]> = {
     "2009": [
       {
         name: "Streaming Platforms",
-        description: "Direct subscriptions unlock the Streaming Media method.",
+        description: "Direct subscriptions unlock streaming platforms.",
         effects: [
-          { kind: "unlockStrategy", strategyId: "streaming_media" },
+          { kind: "unlockStrategy", strategyId: "streaming" },
           { kind: "marketingStrength", flat: 70 },
         ],
       },
@@ -795,9 +795,9 @@ const ENTERTAINMENT_SECTOR: Record<string, NodeSpec[]> = {
     "2019": [
       {
         name: "Mobile & Live-Service Gaming",
-        description: "Live-ops monetization unlocks the Live-Service Platforms method.",
+        description: "Live-ops monetization unlocks streaming platforms.",
         effects: [
-          { kind: "unlockStrategy", strategyId: "live_service" },
+          { kind: "unlockStrategy", strategyId: "streaming" },
           { kind: "marginBonus", pp: 2.5 },
         ],
       },

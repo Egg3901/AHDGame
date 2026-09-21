@@ -111,7 +111,7 @@ export interface NppProductDecisionInput {
 }
 
 /** Corporation types that may run Media & Entertainment products. */
-const MEDIA_CORP_TYPES: ReadonlySet<CorporationType> = new Set(["media", "entertainment"]);
+const MEDIA_CORP_TYPES: ReadonlySet<CorporationType> = new Set(["media_entertainment"]);
 
 /** Corporation types that may run industrial-manufacturing products. */
 const INDUSTRIAL_CORP_TYPES: ReadonlySet<CorporationType> = new Set([
@@ -185,7 +185,7 @@ export function decideNppProduct(input: NppProductDecisionInput): NppProductActi
   if (MEDIA_CORP_TYPES.has(input.corporationType)) {
     const owned = normalizeList(input.operatingModels).filter((m) => KNOWN_MODELS.has(m));
     // A corporation only acquires models fitting its own sector type: a
-    // newspaper model is dead weight on an entertainment corporation.
+    // newspaper model is dead weight on a live-entertainment-heavy slate.
     const acquirable = MEDIA_OPERATING_MODELS.filter((model) =>
       mediaModelFitsCorporation(model, input.corporationType)
     );
