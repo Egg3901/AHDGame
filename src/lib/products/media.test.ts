@@ -144,9 +144,11 @@ describe("media technology gates use real tech-tree nodes", () => {
       for (const id of Object.values(profile.technologyIdBySector ?? {})) referenced.add(id);
     }
     for (const kind of PRODUCT_KINDS) {
-      for (const id of kind.requiredTechnologyIds ?? []) referenced.add(id);
+      if ("requiredTechnologyIds" in kind) {
+        for (const id of kind.requiredTechnologyIds ?? []) referenced.add(id);
+      }
     }
-    const known = new Set(EXPECTED_NODES.map((node) => node.id));
+    const known = new Set<string>(EXPECTED_NODES.map((node) => node.id));
     for (const id of referenced) expect(known.has(id)).toBe(true);
   });
 });
