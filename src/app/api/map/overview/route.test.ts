@@ -35,14 +35,12 @@ vi.mock("@/lib/map/presidentialService", () => ({
 }));
 
 vi.mock("@/lib/elections/usPoliticalHome", () => ({
-  loadUsPoliticalStateIds: vi
-    .fn()
-    .mockResolvedValue({
-      politicalIds: new Set(["CA"]),
-      preset: "1953-default",
-      currentYear: 1953,
-      admittedIds: new Set(),
-    }),
+  loadUsPoliticalStateIds: vi.fn().mockResolvedValue({
+    politicalIds: new Set(["CA"]),
+    preset: "1953-default",
+    currentYear: 1953,
+    admittedIds: new Set(),
+  }),
 }));
 vi.mock("@/lib/map/officeholderService", () => ({
   computeMapOfficeholders: vi.fn().mockResolvedValue({
