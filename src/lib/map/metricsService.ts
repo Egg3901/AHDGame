@@ -150,7 +150,7 @@ export function buildMapMetrics(
 }
 
 export async function loadMapMetrics(db: Db, stateIds: string[]): Promise<MapMetricsResponse> {
-  const filter = { countryId: "US", _id: { $in: stateIds } };
+  const filter = { countryId: "US" as const, _id: { $in: stateIds } };
   const [states, macros, boards] = await Promise.all([
     db
       .collection<State>("states")
