@@ -32,6 +32,7 @@ import type {
   DemographicCategory,
 } from "@/lib/db/types";
 import type { EnrichedCandidate } from "./types";
+import { accumulateVoteTurn } from "./tallyManagement";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 vi.mock("./candidateEnrichment", () => ({ fetchEnrichedCandidates: vi.fn() }));
@@ -260,7 +261,6 @@ describe("accumulateVoteTurn parallel dispatch", () => {
       })
     );
 
-    const { accumulateVoteTurn } = await import("./tallyManagement");
     const pending = accumulateVoteTurn(electionId, 1, new Date());
     await flushMicrotasks();
 
@@ -297,7 +297,6 @@ describe("accumulateVoteTurn parallel dispatch", () => {
     );
     vi.mocked(getFundsByPartyForElection).mockResolvedValue(new Map());
 
-    const { accumulateVoteTurn } = await import("./tallyManagement");
     const pending = accumulateVoteTurn(electionId, 5, new Date());
     await flushMicrotasks();
 
