@@ -150,6 +150,7 @@ import type {
 } from "@/lib/turn/npp/corpDecisionTypes";
 import type { NppAutonomyLevel } from "@/lib/db/types/gameState";
 import { decideNppProduct } from "@/lib/turn/npp/nppProductDecision";
+import { executeNppProductDecision } from "@/lib/turn/npp/nppProductExecutor";
 import { isCorporationProductsEnabled } from "@/lib/products/featureFlag";
 import {
   CORPORATION_OPERATING_MODELS_COLLECTION,
@@ -287,8 +288,8 @@ export async function processNppCorporationDecisions(
     db.collection<UnownedSector>("unownedSectors").find({}).toArray(),
     // Corporation products (#2236): one projected gameConfig read plus two
     // bulk `$in` reads over the NPP cohort, all parallel with the reads
-    // above. No per-row queries, no writes; the intents are executed later
-    // through the product persistence commands.
+    // above. No per-row reads; actionable intents are executed later in this
+    // cohort loop through the product persistence commands.
     isCorporationProductsEnabled(db),
     db
       .collection<CorporationProductDocument>(CORPORATION_PRODUCTS_COLLECTION)
@@ -619,6 +620,12 @@ export async function processNppCorporationDecisions(
       decision.entryDiagnostic?.reason
     );
     if (decision.operatorObservation) operatorObservations.push(decision.operatorObservation);
+    await executeNppProductDecision(db, {
+      enabled: productsEnabled,
+      corporationId: corp._id.toString(),
+      turn,
+      decision: decision.productDecision,
+    });
     if (decision.reinvestments && corpCurrency) {
       appendNppReinvestCapexRows(capexRows, {
         corp,
@@ -2062,11 +2069,9 @@ export function makeNppCorpDecision(
 
   // ── 6. Corporation product intent (issues #2236/#2238) ─────────────────────
   // V4+ and flag-gated only; the pure module returns `none` for every older
-  // tier, every missing input, and every ineligible corp. The intent is data
-  // for the turn orchestration layer to execute later through the product
-  // persistence commands: this decision performs no product write, spends no
-  // product cash, and carries the field only when actionable, so older tiers
-  // serialize exactly as before.
+  // tier, every missing input, and every ineligible corp. The decision remains
+  // pure; the surrounding turn shell executes actionable intents through the
+  // product persistence commands. Older tiers serialize exactly as before.
   const productDecision = decideNppProduct({
     enabled: ctx.productsEnabled === true,
     autonomyLevel: ctx.autonomyLevel,
