@@ -109,6 +109,21 @@ export function canonicalMediaStrategyForLegacy(strategyId: unknown): CanonicalM
   return LEGACY_MEDIA_STRATEGY_MAP[strategyId] ?? "standard";
 }
 
+/**
+ * Input-boundary canonicalizer for strategy id fields (zod preprocess).
+ * Retired media/entertainment ids become their canonical catalog id;
+ * every other value passes through untouched, so other sectors' strategies
+ * never remap. Unlike canonicalMediaStrategyForLegacy there is no
+ * lossy fallback: unknown ids stay unknown and fail validation downstream.
+ */
+export function canonicalizeMediaStrategyIdInput<T>(value: T): T | CanonicalMediaStrategy {
+  if (typeof value === "string") {
+    const mapped = LEGACY_MEDIA_STRATEGY_MAP[value];
+    if (mapped !== undefined) return mapped;
+  }
+  return value;
+}
+
 // ─── Operating-model inference ──────────────────────────────────────────────
 // Inferred from each old type BEFORE it is erased; a collision receives the
 // union. Mirrors the model profiles in lib/products/media.ts.

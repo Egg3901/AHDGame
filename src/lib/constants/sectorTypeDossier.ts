@@ -77,8 +77,8 @@ export function hexAlpha(hex: string, alpha: number): string {
 /**
  * Period photograph for the type's dossier banner.
  *
- * Six types ship no photo (chemical industries, automobiles, real estate,
- * construction, telecommunications, entertainment). Their banners render the
+ * Five types ship no photo (chemical industries, automobiles, real estate,
+ * construction, telecommunications). Their banners render the
  * type tint and gradient with no image layer, which reads as deliberate rather
  * than broken, and the dossier needs no other special case.
  */
@@ -209,7 +209,8 @@ export const SECTOR_TYPE_PROPOSED_ACTIONS: Partial<
       help: "Apply for a state banking charter, unlocking deposit-taking and the Bank console for this corporation.",
     },
   ],
-  media: [
+  // issue #2234: merged newsroom and venue levers in one entry.
+  media_entertainment: [
     {
       label: "Set editorial stance",
       help: "Choose an editorial lean. Shifts approval for aligned politicians in the state and changes which advertisers buy inventory.",
@@ -217,6 +218,14 @@ export const SECTOR_TYPE_PROPOSED_ACTIONS: Partial<
     {
       label: "Sell ad inventory",
       help: "Offer this newsroom's advertising to a campaign or party for a fixed number of turns.",
+    },
+    {
+      label: "Greenlight production",
+      help: "Commit a title or show to the release slate. Costs upfront, pays out over the following 24 turns.",
+    },
+    {
+      label: "Book headline act",
+      help: "Book a headline event at these venues. Spikes attendance and advertising output for 6 turns.",
     },
   ],
   technology: [
@@ -317,16 +326,6 @@ export const SECTOR_TYPE_PROPOSED_ACTIONS: Partial<
     {
       label: "Upgrade backbone",
       help: "Invest in backbone capacity for this hub, raising uptime and unlocking cloud / 5G strategies sooner.",
-    },
-  ],
-  entertainment: [
-    {
-      label: "Greenlight production",
-      help: "Commit a title or show to the release slate. Costs upfront, pays out over the following 24 turns.",
-    },
-    {
-      label: "Book headline act",
-      help: "Book a headline event at these venues. Spikes attendance and advertising output for 6 turns.",
     },
   ],
 };
