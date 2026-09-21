@@ -42,6 +42,7 @@ import {
   resolveHouseIncumbentTenures,
 } from "./singleSeatIncumbency";
 import { getFundsByPartyForElection } from "./fundsByParty";
+import { TALLY_WITH_SNAPSHOT_TURNS_ONLY } from "./tallyProjections";
 import {
   isHeadOfGovernmentRace,
   resolvePresidentApproval,
@@ -137,7 +138,9 @@ export async function accumulateVoteTurn(
 
   const [tally, candidates]: [ElectionVoteTally | null, ElectionCandidate[]] = await Promise.all([
     options?.tally ??
-      db.collection<ElectionVoteTally>("electionVoteTallies").findOne({ electionId }),
+      db
+        .collection<ElectionVoteTally>("electionVoteTallies")
+        .findOne({ electionId }, { projection: TALLY_WITH_SNAPSHOT_TURNS_ONLY }),
     options?.candidates ??
       db
         .collection<ElectionCandidate>("electionCandidates")
