@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ObjectId } from "mongodb";
 import type { Db } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
+import { aggregateCountrySectorMix } from "./sectorMix";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 
@@ -69,7 +70,6 @@ describe("aggregateCountrySectorMix", () => {
     mockFind("corporations", [{ _id: corpId, liquidCurrencyCode: "USD", countryId: "US" }]);
     mockFind("exchangeRates", [{ _id: "US", currencyCode: "USD", rate: 1 }]);
 
-    const { aggregateCountrySectorMix } = await import("./sectorMix");
     const mix = await aggregateCountrySectorMix(db as unknown as Db, "US");
 
     const energy = mix.find((s) => s.type === "energy");
@@ -103,7 +103,6 @@ describe("aggregateCountrySectorMix", () => {
     mockFind("corporations", []);
     mockFind("exchangeRates", []);
 
-    const { aggregateCountrySectorMix } = await import("./sectorMix");
     const mix = await aggregateCountrySectorMix(db as unknown as Db, "US");
 
     expect(mix.length).toBeGreaterThan(0);
@@ -173,7 +172,6 @@ describe("aggregateCountrySectorMix", () => {
     mockFind("exchangeRates", []);
     db.collectionMocks.gameConfig!.findOne.mockResolvedValue({ marketSystemMode: "plants" });
 
-    const { aggregateCountrySectorMix } = await import("./sectorMix");
     const mix = await aggregateCountrySectorMix(db as unknown as Db, "US");
     const automobiles = mix.find((s) => s.type === "automobiles")!;
 
@@ -241,7 +239,6 @@ describe("aggregateCountrySectorMix", () => {
     mockFind("exchangeRates", []);
     db.collectionMocks.gameConfig!.findOne.mockResolvedValue({ marketSystemMode: "plants" });
 
-    const { aggregateCountrySectorMix } = await import("./sectorMix");
     const mix = await aggregateCountrySectorMix(db as unknown as Db, "US");
     const automobiles = mix.find((s) => s.type === "automobiles")!;
 
