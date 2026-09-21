@@ -166,11 +166,11 @@ export type RebalanceOutcome = {
 };
 
 /**
- * NAV preparation only touches the current fund document. Four concurrent
+ * NAV preparation only touches the current fund document. Eight concurrent
  * workers hide independent Mongo latency without racing the later bond and
  * equity allocation passes, whose ordering is economically significant.
  */
-export const INDEX_FUND_NAV_CONCURRENCY = 4;
+export const INDEX_FUND_NAV_CONCURRENCY = 8;
 
 const NO_REBALANCE: RebalanceOutcome = {
   rebalanced: false,

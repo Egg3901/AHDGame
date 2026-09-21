@@ -12,7 +12,10 @@ import {
 } from "@/lib/indexFunds/equityLiquidity/rules";
 import { boundedParallelMap } from "@/lib/indexFunds/boundedParallelMap";
 
-export const EQUITY_LIQUIDITY_FUND_CONCURRENCY = 4;
+// Each worker owns one fund's cash, escrow and inventory. Eight overlaps the
+// remote Mongo waits while remaining far below the driver's connection pool;
+// operations within an individual fund stay sequential and deterministic.
+export const EQUITY_LIQUIDITY_FUND_CONCURRENCY = 8;
 
 export {
   EQUITY_LIQUIDITY_HALF_SPREAD,
