@@ -19,6 +19,7 @@ import {
   type StockVsFlowKindRow,
 } from "@/lib/economy/marketAccessVisibility";
 import type { LivingConflictState } from "@/lib/livingConflict/types";
+import { collectEconomyTelemetry, type EconomyTelemetry } from "@/lib/sim/economyTelemetry";
 
 /**
  * Read-only balance-metric aggregations over a (sandbox) world DB, for the
@@ -48,6 +49,8 @@ export interface BalanceReport {
   inflationByCountry: InflationCountryMetrics[];
   corporateCashFlow: CorporateCashFlowMetrics;
   military: MilitaryMetrics;
+  /** Post-run #2159 acceptance telemetry for the economy issue cluster. */
+  telemetry?: EconomyTelemetry;
 }
 
 export interface FiscalCountryMetrics {
@@ -873,6 +876,7 @@ export async function collectBalanceMetrics(db: Db): Promise<BalanceReport> {
     inflationByCountry,
     corporateCashFlow,
     military,
+    telemetry,
   ] = await Promise.all([
     collectWealthMetrics(db),
     collectElectoralMetrics(db),
@@ -888,6 +892,7 @@ export async function collectBalanceMetrics(db: Db): Promise<BalanceReport> {
     collectInflationMetrics(db),
     collectCorporateCashFlowMetrics(db, turn),
     collectMilitaryMetrics(db),
+    collectEconomyTelemetry(db),
   ]);
 
   return {
@@ -904,6 +909,7 @@ export async function collectBalanceMetrics(db: Db): Promise<BalanceReport> {
     inflationByCountry,
     corporateCashFlow,
     military,
+    telemetry,
   };
 }
 

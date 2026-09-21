@@ -97,7 +97,8 @@ async function main() {
       `crisesActive=${report.crises.active} ` +
       `capStock=${report.capacity.totalCapitalStock.toFixed(0)} meanUtil=${report.capacity.meanCapitalUtilization.toFixed(3)} ` +
       `produced=${report.capacity.totalProducedUnits.toFixed(0)} sold=${report.capacity.totalSoldUnits.toFixed(0)} ` +
-      `plantsMigrated=${report.capacity.plantsMigratedSectors}/${report.capacity.sectorCount}`
+      `plantsMigrated=${report.capacity.plantsMigratedSectors}/${report.capacity.sectorCount} ` +
+      `telemetry=${report.telemetry ? "yes" : "no"}`
   );
 
   const opsClient = new MongoClient(OPS_MONGODB_URI as string);
