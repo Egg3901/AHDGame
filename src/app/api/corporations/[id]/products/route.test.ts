@@ -1,11 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ObjectId, type Db } from "mongodb";
-import {
-  ACTIVE_PRODUCT_INDEX_NAME,
-  createAsyncIterableCursor,
-  createMockDb,
-  type MockDb,
-} from "@/lib/test-utils/mockDb";
+import { createAsyncIterableCursor, createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
+import { ACTIVE_PRODUCT_INDEX_NAME } from "@/lib/products/persistence";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 vi.mock("@/lib/api/requireAuth", () => ({ requireBasicAuth: vi.fn() }));

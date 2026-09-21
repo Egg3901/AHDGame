@@ -455,6 +455,16 @@ const RUNTIME: CollectionEntry[] = [
 
   // Corporations + markets
   { name: "corporations", category: "runtime" },
+  {
+    name: "corporationProducts",
+    category: "runtime",
+    notes: "Feature-gated corporation product projects and their persisted lifecycle state.",
+  },
+  {
+    name: "corporationOperatingModels",
+    category: "runtime",
+    notes: "Feature-gated Media & Entertainment operating models owned by corporations.",
+  },
   { name: "corporationCeoVotes", category: "runtime" },
   { name: "corporationHistory", category: "runtime" },
   { name: "corporationPortfolioHistory", category: "runtime" },

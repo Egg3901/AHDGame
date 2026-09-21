@@ -25,7 +25,8 @@ export interface ProductCatalogQuery {
 export function queryProductCatalog(query: ProductCatalogQuery): ProductKindDefinition[] {
   const selectedModels = query.operatingModels ? new Set(query.operatingModels) : null;
   const unlockedTech = query.unlockedTechnologyIds ? new Set(query.unlockedTechnologyIds) : null;
-  return PRODUCT_KINDS.filter((kind) => {
+  return PRODUCT_KINDS.filter((catalogKind) => {
+    const kind: ProductKindDefinition = catalogKind;
     if (kind.family !== query.family) return false;
     if (
       kind.family === "media_entertainment" &&

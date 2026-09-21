@@ -26,7 +26,7 @@
  *   update `$set`s `stage: "retired"` and `$unset`s `activeCorporationId`.
  * - No transactions, no sessions, no new balance constants, no market reads.
  */
-import type { Db } from "mongodb";
+import type { AnyBulkWriteOperation, Db } from "mongodb";
 import type { Corporation } from "@/lib/db/types";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import { TURNS_PER_DAY } from "@/lib/constants/corporations";
@@ -89,7 +89,7 @@ const ZERO_RESULT = {
 export function buildProductLifecycleCorpInput(
   corp: Corporation,
   fxByCurrency: ReadonlyMap<CurrencyCode, number>
-): ProductLifecycleCorpInput {
+): ProductLifecycleTurnCorpInput {
   const corpId = corp._id.toString();
   const code = resolveCorpLiquidCurrencyCode(corp);
   const fx = fxRateForCorpFromMap(corp, fxByCurrency);
@@ -131,7 +131,7 @@ export async function processCorporationProductTurn(
     .toArray();
   if (active.length === 0) return { enabled: true, ...ZERO_RESULT };
 
-  const ops: Parameters<typeof collection.bulkWrite>[0] = [];
+  const ops: AnyBulkWriteOperation<CorporationProductDocument>[] = [];
   let retired = 0;
   let skippedMissingCorp = 0;
   for (const doc of active) {

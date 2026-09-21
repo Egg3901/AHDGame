@@ -10,6 +10,7 @@ import type { NppMarketEntryDiagnostic } from "./entryDiagnostics";
 import type { FrontierEntryTurnState } from "./frontierEntryCandidate";
 import type { CapacityDecisionObservation } from "@/lib/corporations/capacityDecisionTelemetry/rules";
 import type { NppOperatorObservation } from "@/lib/corporations/nppOperatorTelemetry/rules";
+import type { TechUnlockLedgerInput } from "@/lib/corporations/techTree/techUnlockLedger";
 
 export interface NppCorpDecisionContext {
   corp: Corporation;
@@ -156,6 +157,25 @@ export interface NppCorpDecision {
   capacityObservations?: CapacityDecisionObservation[];
   /** Aggregate-safe summary of this turn's full NPP operator decision. */
   operatorObservation?: NppOperatorObservation;
+}
+
+export interface NppCorporationTurnResult {
+  corpUpdates: Array<{
+    filter: { _id: ObjectId; unlockedTechNodeIds?: { $ne: string } };
+    update: {
+      $set?: Record<string, unknown>;
+      $inc?: Record<string, number>;
+      $addToSet?: { unlockedTechNodeIds: string };
+    };
+  }>;
+  sectorUpdates: Array<{
+    filter: { _id: ObjectId };
+    update: NppSectorUpdateDoc;
+  }>;
+  newSectors: Array<Omit<CorporateSector, "_id"> & { _id: ObjectId }>;
+  divestedSectorIds: ObjectId[];
+  /** Tech-unlock ledger intents verified and flushed by the caller. */
+  techLedger: TechUnlockLedgerInput[];
 }
 
 /** World facts needed to price founding builds through the player-equivalent path. */
