@@ -52,6 +52,7 @@ import { computeCurrencyVolumes } from "@/lib/currency/volumeTracker";
 import { computeInterventionPressure, isInBand } from "@/lib/currency/interventionCalculator";
 import { interventionAdherenceMultiplier } from "@/lib/centralBank/marketEffects";
 import { buildPersonalBalanceInc } from "@/lib/currency/characterFunds";
+import { recoverStaleFillClaims } from "@/lib/forex/fillRecovery";
 import { sendSystemMail } from "@/lib/mail/systemMail";
 import { getBankId } from "@/lib/centralBank/helpers";
 import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
@@ -814,13 +815,19 @@ async function processTriggeredLimitOrders(
   // Orders left in "processing" from a prior crash are safe to re-attempt:
   // they were claimed but never completed. Reset them to "open" so they are
   // picked up in this turn's scan below. 2-turn window = 2 real-time hours.
+  //
+  // Claims carrying a peer-fill intent are EXCLUDED from the blind reset: a
+  // fill may already have moved money, and resetting to open would strand it.
+  // Those go through intent recovery (finish or undo) instead.
   await db.collection<CurrencyOrder>("currencyOrders").updateMany(
     {
       status: "processing",
       updatedAt: { $lt: new Date(now.getTime() - 2 * MS_PER_TURN) },
+      processingFillKey: { $exists: false },
     },
     { $set: { status: "open" as const, updatedAt: now } }
   );
+  await recoverStaleFillClaims(db, now);
 
   // Load current rates into a map for quick lookup
   const rates = await db.collection<ExchangeRate>("exchangeRates").find({}).toArray();

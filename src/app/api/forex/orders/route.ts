@@ -48,10 +48,12 @@ async function handleGET(request: Request) {
     const view = searchParams.get("view"); // "history" for filled/cancelled/expired
 
     const db = await getDb();
+    // `processing` orders are included so a fill that crashed mid-claim stays
+    // visible to its owner instead of vanishing until recovery resolves it.
     const statusFilter =
       view === "history"
         ? { $in: ["filled", "cancelled", "expired"] as CurrencyOrderStatus[] }
-        : { $in: ["open", "partial"] as CurrencyOrderStatus[] };
+        : { $in: ["open", "partial", "processing"] as CurrencyOrderStatus[] };
 
     const orders = await db
       .collection<CurrencyOrder>("currencyOrders")
