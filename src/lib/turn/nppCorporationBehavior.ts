@@ -1952,6 +1952,7 @@ export function makeNppCorpDecision(
     corporationType: corp.type,
     operatingModels: ctx.operatingModels,
     unlockedTechnologyIds: corp.unlockedTechNodeIds,
+    currentYear: ctx.currentYear,
     activeProduct: ctx.activeProduct ?? null,
     failingTurns: ctx.productFailingTurns,
     cashLocal,

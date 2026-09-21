@@ -42,6 +42,7 @@ import {
   type CorporationProductDocument,
 } from "@/lib/products/persistence";
 import { processProductLifecycle } from "@/lib/products/lifecycle";
+import { mediaLifecycleSchedule } from "@/lib/products/media";
 import { POST_LAUNCH_PRODUCT_STAGES } from "@/lib/products/productMarketEffects";
 
 export interface ProductLifecycleTurnCorpInput {
@@ -167,6 +168,9 @@ export async function processCorporationProductTurn(
       productRnDAnchor: input.productRnDAnchor,
       deliveredAdvertisingAnchor: input.deliveredAdvertisingAnchor,
       unlockedTechnologyIds: input.unlockedTechnologyIds,
+      // Media content kinds run their own cadence; every other kind reads
+      // as the shared industrial default.
+      schedule: mediaLifecycleSchedule(doc.kindId),
     });
     if (!result.advanced) continue;
     const next = result.product;

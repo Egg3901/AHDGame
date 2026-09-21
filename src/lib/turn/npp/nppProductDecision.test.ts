@@ -215,20 +215,71 @@ describe("decideNppProduct legal selection", () => {
   });
 
   it("passes requirement-free kinds through technology filtering", () => {
-    // No catalog kind declares requiredTechnologyIds yet, so filtering is
-    // currently a seam, not a gate: an explicit empty unlock list still
-    // yields the same legal product. Kinds with requirements will need every
-    // required id present once the tech tree lands.
+    // Requirement-free kinds (news, books) ignore the unlock list: an
+    // explicit empty list still yields the same legal product. Kinds with
+    // requirements need every required id present.
     const action = decideNppProduct(
       base({
         corporationType: "media",
-        operatingModels: ["music_label"],
+        operatingModels: ["newspaper"],
         unlockedTechnologyIds: [],
       })
     );
     expect(action.kind).toBe("start_product");
     if (action.kind !== "start_product") return;
-    expect(action.kindId).toBe("music_release");
+    expect(action.kindId).toBe("news_story");
+  });
+
+  it("withholds technology-locked kinds from an empty unlock list", () => {
+    // A radio-only media corp with no research cannot start its gated kind.
+    const action = decideNppProduct(
+      base({
+        corporationType: "media",
+        operatingModels: ["radio_network"],
+        unlockedTechnologyIds: [],
+      })
+    );
+    expect(action).toEqual({ kind: "none", reason: "no_legal_product" });
+  });
+
+  it("unlocks the model slate once its research lands", () => {
+    // News sorts first in catalog order; the gated radio kind becomes legal
+    // alongside it (pinned directly in the media rules tests).
+    const action = decideNppProduct(
+      base({
+        corporationType: "media",
+        operatingModels: ["radio_network"],
+        unlockedTechnologyIds: ["media-1940-1"],
+      })
+    );
+    expect(action.kind).toBe("start_product");
+    if (action.kind !== "start_product") return;
+    expect(action.kindId).toBe("news_story");
+  });
+
+  it("withholds era-locked kinds before their decade", () => {
+    const action = decideNppProduct(
+      base({
+        corporationType: "entertainment",
+        operatingModels: ["live_entertainment"],
+        unlockedTechnologyIds: ["entertainment-1960-1"],
+        currentYear: 1955,
+      })
+    );
+    expect(action).toEqual({ kind: "none", reason: "no_legal_product" });
+  });
+
+  it("never acquires a model unfitting the corporation type", () => {
+    // An entertainment corp skips newspaper (a media-only model) and takes
+    // the publishing house instead.
+    const action = decideNppProduct(
+      base({ corporationType: "entertainment", operatingModels: [] })
+    );
+    expect(action).toEqual({
+      kind: "acquire_operating_model",
+      operatingModel: "publishing_house",
+      maxSpendLocal: Math.floor((10_000_000 - 250_000) * 0.5),
+    });
   });
 
   it.each(["financial", "retail", "technology", "energy", "healthcare"] as const)(

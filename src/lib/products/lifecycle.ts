@@ -55,6 +55,69 @@ export const PRODUCT_DECLINE_TURNS = 12;
 export const PRODUCT_POST_LAUNCH_TURNS =
   PRODUCT_LAUNCH_TURNS + PRODUCT_GROWTH_TURNS + PRODUCT_MATURE_TURNS + PRODUCT_DECLINE_TURNS;
 
+/**
+ * Per-kind lifecycle schedule (issue #2237). Media content kinds override the
+ * shared durations above: a daily edition develops in 2 turns while a film
+ * needs 10, and catalog tails run longer than live tours. Industrial kinds
+ * use the default. Schedules only change WHEN a product advances; the bounded
+ * demand/price effects per stage are unchanged.
+ */
+export interface ProductLifecycleSchedule {
+  developmentTurns: number;
+  launchTurns: number;
+  growthTurns: number;
+  matureTurns: number;
+  declineTurns: number;
+}
+
+export const DEFAULT_PRODUCT_LIFECYCLE_SCHEDULE: ProductLifecycleSchedule = {
+  developmentTurns: PRODUCT_DEVELOPMENT_TURNS,
+  launchTurns: PRODUCT_LAUNCH_TURNS,
+  growthTurns: PRODUCT_GROWTH_TURNS,
+  matureTurns: PRODUCT_MATURE_TURNS,
+  declineTurns: PRODUCT_DECLINE_TURNS,
+};
+
+/** Post-launch turns of one schedule, for the amortization denominator. */
+export function postLaunchTurnsForSchedule(schedule: ProductLifecycleSchedule): number {
+  return schedule.launchTurns + schedule.growthTurns + schedule.matureTurns + schedule.declineTurns;
+}
+
+function sanitizeDuration(value: unknown, fallback: number): number {
+  return typeof value === "number" && Number.isFinite(value) && value > 0
+    ? Math.floor(value)
+    : fallback;
+}
+
+/** Fills non-positive or non-finite schedule fields with the shared defaults. */
+export function sanitizeProductLifecycleSchedule(
+  schedule: Partial<ProductLifecycleSchedule> | undefined
+): ProductLifecycleSchedule {
+  if (!schedule) return { ...DEFAULT_PRODUCT_LIFECYCLE_SCHEDULE };
+  return {
+    developmentTurns: sanitizeDuration(
+      schedule.developmentTurns,
+      DEFAULT_PRODUCT_LIFECYCLE_SCHEDULE.developmentTurns
+    ),
+    launchTurns: sanitizeDuration(
+      schedule.launchTurns,
+      DEFAULT_PRODUCT_LIFECYCLE_SCHEDULE.launchTurns
+    ),
+    growthTurns: sanitizeDuration(
+      schedule.growthTurns,
+      DEFAULT_PRODUCT_LIFECYCLE_SCHEDULE.growthTurns
+    ),
+    matureTurns: sanitizeDuration(
+      schedule.matureTurns,
+      DEFAULT_PRODUCT_LIFECYCLE_SCHEDULE.matureTurns
+    ),
+    declineTurns: sanitizeDuration(
+      schedule.declineTurns,
+      DEFAULT_PRODUCT_LIFECYCLE_SCHEDULE.declineTurns
+    ),
+  };
+}
+
 /** Sector quality used when the corp has no quality-bearing result. */
 export const PRODUCT_NEUTRAL_QUALITY = 50;
 /** Cap on the launch-quality lift from product-specific R&D (quality points). */
@@ -113,6 +176,11 @@ export interface ProcessProductLifecycleArgs {
   deliveredAdvertisingAnchor?: number;
   /** Technology ids the corporation has unlocked; only kind-relevant ones count. */
   unlockedTechnologyIds?: readonly string[];
+  /**
+   * Per-kind lifecycle schedule. Absent reads as the shared industrial
+   * default, so every existing caller stays byte-identical.
+   */
+  schedule?: Partial<ProductLifecycleSchedule>;
 }
 
 export interface ProductAccountingDeltas {
@@ -223,15 +291,18 @@ export function computeProductBrand(advertisingAnchor: number, contributingTurns
   return round2(total / turns);
 }
 
-function stageForTurnsSinceLaunch(turnsSinceLaunch: number): ProductLifecycleStage {
+function stageForTurnsSinceLaunch(
+  turnsSinceLaunch: number,
+  schedule: ProductLifecycleSchedule
+): ProductLifecycleStage {
   let rest = turnsSinceLaunch;
-  if (rest < PRODUCT_LAUNCH_TURNS) return "launch";
-  rest -= PRODUCT_LAUNCH_TURNS;
-  if (rest < PRODUCT_GROWTH_TURNS) return "growth";
-  rest -= PRODUCT_GROWTH_TURNS;
-  if (rest < PRODUCT_MATURE_TURNS) return "mature";
-  rest -= PRODUCT_MATURE_TURNS;
-  if (rest < PRODUCT_DECLINE_TURNS) return "decline";
+  if (rest < schedule.launchTurns) return "launch";
+  rest -= schedule.launchTurns;
+  if (rest < schedule.growthTurns) return "growth";
+  rest -= schedule.growthTurns;
+  if (rest < schedule.matureTurns) return "mature";
+  rest -= schedule.matureTurns;
+  if (rest < schedule.declineTurns) return "decline";
   return "retired";
 }
 
@@ -314,6 +385,8 @@ export function processProductLifecycle(
   const ads = toNonNegative(args.deliveredAdvertisingAnchor);
   const next: CorporationProduct = { ...args.product };
   const accounting = zeroAccounting();
+  const schedule = sanitizeProductLifecycleSchedule(args.schedule);
+  const postLaunchTurns = postLaunchTurnsForSchedule(schedule);
 
   if (next.stage === "development") {
     if (rnd > 0) {
@@ -329,7 +402,7 @@ export function processProductLifecycle(
       next.developmentAdvertisingTurns += 1;
       accounting.developmentAdvertisingDelta = round2(accepted);
     }
-    if (args.turn >= next.startedTurn + PRODUCT_DEVELOPMENT_TURNS) {
+    if (args.turn >= next.startedTurn + schedule.developmentTurns) {
       next.launchQuality = computeLaunchQuality({
         sectorQuality: args.sectorQuality,
         developmentSpendAnchor: next.developmentSpendAnchor,
@@ -343,9 +416,10 @@ export function processProductLifecycle(
       next.launchedTurn = args.turn;
       next.stage = "launch";
       // The launch turn is post-launch: it carries its amortization share so
-      // the full capitalized spend is recognized over PRODUCT_POST_LAUNCH_TURNS.
-      if (PRODUCT_POST_LAUNCH_TURNS > 0 && next.developmentSpendAnchor > 0) {
-        accounting.amortizationDelta = next.developmentSpendAnchor / PRODUCT_POST_LAUNCH_TURNS;
+      // the full capitalized spend is recognized over the schedule's
+      // post-launch turns.
+      if (postLaunchTurns > 0 && next.developmentSpendAnchor > 0) {
+        accounting.amortizationDelta = next.developmentSpendAnchor / postLaunchTurns;
       }
     }
   } else {
@@ -353,14 +427,14 @@ export function processProductLifecycle(
       next.launchedTurn != null && Number.isFinite(next.launchedTurn)
         ? next.launchedTurn
         : args.turn;
-    const stage = stageForTurnsSinceLaunch(Math.max(0, args.turn - launchedTurn));
+    const stage = stageForTurnsSinceLaunch(Math.max(0, args.turn - launchedTurn), schedule);
     if (stage === "retired") {
       next.stage = "retired";
       next.retiredTurn = args.turn;
     } else {
       next.stage = stage;
-      if (PRODUCT_POST_LAUNCH_TURNS > 0 && next.developmentSpendAnchor > 0) {
-        accounting.amortizationDelta = next.developmentSpendAnchor / PRODUCT_POST_LAUNCH_TURNS;
+      if (postLaunchTurns > 0 && next.developmentSpendAnchor > 0) {
+        accounting.amortizationDelta = next.developmentSpendAnchor / postLaunchTurns;
       }
     }
   }

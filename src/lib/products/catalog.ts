@@ -100,6 +100,11 @@ export const PRODUCT_KINDS = [
     label: "Radio Program",
     outputCommodity: "advertising",
     operatingModels: ["radio_network"],
+    minDecade: "1940",
+    // Single model, single research lane: every owner researches the media
+    // tree, so ALL semantics hold. Multi-lane kinds (television_show, film)
+    // gate per lane in the media rules module instead.
+    requiredTechnologyIds: ["media-1940-1"],
   },
   {
     id: "television_show",
@@ -107,6 +112,7 @@ export const PRODUCT_KINDS = [
     label: "Television Show",
     outputCommodity: "entertainment_services",
     operatingModels: ["television_network", "streaming_platform"],
+    minDecade: "1950",
   },
   {
     id: "film",
@@ -114,6 +120,7 @@ export const PRODUCT_KINDS = [
     label: "Film",
     outputCommodity: "entertainment_services",
     operatingModels: ["film_studio", "streaming_platform"],
+    minDecade: "1940",
   },
   {
     id: "music_release",
@@ -121,6 +128,8 @@ export const PRODUCT_KINDS = [
     label: "Music Release",
     outputCommodity: "entertainment_services",
     operatingModels: ["music_label"],
+    minDecade: "1950",
+    requiredTechnologyIds: ["entertainment-1950-2"],
   },
   {
     id: "live_production",
@@ -128,6 +137,8 @@ export const PRODUCT_KINDS = [
     label: "Live Production",
     outputCommodity: "entertainment_services",
     operatingModels: ["live_entertainment"],
+    minDecade: "1960",
+    requiredTechnologyIds: ["entertainment-1960-1"],
   },
 ] as const satisfies readonly ProductKindDefinition[];
 

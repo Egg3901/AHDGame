@@ -19,6 +19,39 @@ export interface StudioCatalogKind {
   label: string;
   outputCommodity: string;
   operatingModels?: string[];
+  minDecade?: string;
+  requiredTechnologyIds?: string[];
+  cadence?: {
+    developmentTurns: number;
+    launchTurns: number;
+    growthTurns: number;
+    matureTurns: number;
+    declineTurns: number;
+    tail: string;
+    tailBlurb: string;
+  };
+}
+
+export interface StudioModelProfile {
+  model: string;
+  corporationTypes: string[];
+  coverage: {
+    pattern: string;
+    addressableShare: number;
+    blurb: string;
+  };
+  minDecade?: string;
+  technologyIdBySector?: Record<string, string>;
+  cadenceBlurb: string;
+  tailBlurb: string;
+  kinds: { id: string; label: string }[];
+}
+
+export interface StudioExplainer {
+  quality: string;
+  brand: string;
+  coverage: string;
+  tail: string;
 }
 
 export interface StudioActiveProduct {
@@ -39,6 +72,8 @@ export interface StudioState {
   operatingModels: string[];
   activeProduct: StudioActiveProduct | null;
   catalog: StudioCatalogKind[];
+  modelProfiles?: StudioModelProfile[];
+  explainer?: StudioExplainer;
 }
 
 interface ProductStudioProps {
@@ -284,6 +319,55 @@ export default function ProductStudio({ corpId, onUpdate }: ProductStudioProps) 
                 Add model
               </Button>
             </form>
+          )}
+        </Card>
+      )}
+
+      {usesOperatingModels && (studio.explainer || (studio.modelProfiles ?? []).length > 0) && (
+        <Card title="How content products work">
+          {studio.explainer && (
+            <ul className="space-y-1 text-sm text-muted" aria-label="Product rules">
+              <li>Quality: {studio.explainer.quality}</li>
+              <li>Brand: {studio.explainer.brand}</li>
+              <li>Coverage: {studio.explainer.coverage}</li>
+              <li>Tail: {studio.explainer.tail}</li>
+            </ul>
+          )}
+          {(studio.modelProfiles ?? []).length > 0 && (
+            <ul className="mt-3 space-y-3" aria-label="Operating model details">
+              {(studio.modelProfiles ?? []).map((profile) => (
+                <li
+                  key={profile.model}
+                  className="rounded-lg border border-card-border p-3"
+                  aria-label={formatModel(profile.model)}
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="font-medium text-foreground">
+                      {formatModel(profile.model)}
+                    </span>
+                    <span className="text-xs text-muted">
+                      {Math.round(profile.coverage.addressableShare * 100)}% reach
+                    </span>
+                  </div>
+                  <p className="mt-1 text-xs text-muted">{profile.coverage.blurb}</p>
+                  <p className="mt-1 text-xs text-muted">{profile.cadenceBlurb}</p>
+                  <p className="mt-1 text-xs text-muted">{profile.tailBlurb}</p>
+                  <p className="mt-1 text-xs text-muted">
+                    Requires:{" "}
+                    {[
+                      `a ${profile.corporationTypes.map(formatModel).join(" or ")} corporation`,
+                      profile.minDecade ? `the ${profile.minDecade}s` : null,
+                      profile.technologyIdBySector
+                        ? Object.values(profile.technologyIdBySector).join(", ")
+                        : null,
+                    ]
+                      .filter(Boolean)
+                      .join(", ") || "nothing beyond the model"}
+                    . Makes: {profile.kinds.map((kind) => kind.label).join(", ") || "nothing yet"}.
+                  </p>
+                </li>
+              ))}
+            </ul>
           )}
         </Card>
       )}

@@ -26,9 +26,22 @@ export type ProductLifecycleStage = (typeof PRODUCT_LIFECYCLE_STAGES)[number];
 
 export type ProductFamily = "media_entertainment" | "industrial_manufacturing";
 
+/**
+ * Canonical Media & Entertainment sector type for issue #2234. No writer
+ * persists it yet: corporations still carry the legacy `media` and
+ * `entertainment` types, which read through the same alias. New writes must
+ * keep using the legacy types until the collision-conserving migration lands.
+ */
+export const CANONICAL_MEDIA_SECTOR_TYPE = "media_entertainment";
+
+/** Legacy sector types retired by the canonical Media & Entertainment sector. */
+export const LEGACY_MEDIA_SECTOR_TYPES = ["media", "entertainment"] as const;
+
 /** Existing sector types eligible for the gated product iteration. */
 export function productFamilyForCorporationType(type: string): ProductFamily | null {
-  if (type === "media" || type === "entertainment") return "media_entertainment";
+  if (type === "media" || type === "entertainment" || type === CANONICAL_MEDIA_SECTOR_TYPE) {
+    return "media_entertainment";
+  }
   if (type === "manufacturing" || type === "automobiles") {
     return "industrial_manufacturing";
   }
@@ -42,6 +55,12 @@ export interface ProductKindDefinition {
   outputCommodity: CommodityType;
   operatingModels?: readonly MediaOperatingModel[];
   requiredTechnologyIds?: readonly string[];
+  /**
+   * Era floor for catalog filtering (minimum over the kind's operating
+   * models). Finer per-model gates live in the media rules module; absent
+   * means producible in any era.
+   */
+  minDecade?: string;
 }
 
 export interface CorporationProduct {

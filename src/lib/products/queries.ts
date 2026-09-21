@@ -1,3 +1,4 @@
+import { isDecadeReached } from "@/lib/constants/techTree/decades";
 import { PRODUCT_KINDS } from "./catalog";
 import type { ProductFamily, ProductKindDefinition } from "./types";
 
@@ -11,10 +12,14 @@ export interface ProductCatalogQuery {
   /**
    * Technology ids the corporation has unlocked. Kinds without requirements
    * always pass; kinds with requirements need every required id present.
-   * Absent disables technology filtering. No technology nodes exist yet, so
-   * this is currently a representable seam, not an active gate.
+   * Absent disables technology filtering.
    */
   unlockedTechnologyIds?: readonly string[];
+  /**
+   * World year for era filtering. Kinds with a minDecade below the current
+   * decade are withheld. Absent (or non-finite) disables era filtering.
+   */
+  currentYear?: number | null;
 }
 
 /**
@@ -25,6 +30,10 @@ export interface ProductCatalogQuery {
 export function queryProductCatalog(query: ProductCatalogQuery): ProductKindDefinition[] {
   const selectedModels = query.operatingModels ? new Set(query.operatingModels) : null;
   const unlockedTech = query.unlockedTechnologyIds ? new Set(query.unlockedTechnologyIds) : null;
+  const year =
+    typeof query.currentYear === "number" && Number.isFinite(query.currentYear)
+      ? query.currentYear
+      : null;
   return PRODUCT_KINDS.filter((catalogKind) => {
     const kind: ProductKindDefinition = catalogKind;
     const operatingModels = kind.operatingModels ?? [];
@@ -39,6 +48,7 @@ export function queryProductCatalog(query: ProductCatalogQuery): ProductKindDefi
     }
     const required = kind.requiredTechnologyIds ?? [];
     if (unlockedTech !== null && !required.every((id) => unlockedTech.has(id))) return false;
+    if (year !== null && kind.minDecade && !isDecadeReached(kind.minDecade, year)) return false;
     return true;
   });
 }

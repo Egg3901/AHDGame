@@ -16,6 +16,13 @@ import {
   manufacturingStrategyLabels,
   validateManufacturingProductStart,
 } from "@/lib/products/manufacturing";
+import {
+  MEDIA_STUDIO_EXPLAINER,
+  coverageAddressableShare,
+  mediaKindProfile,
+  mediaModelProfile,
+  validateMediaProductStart,
+} from "@/lib/products/media";
 import { PRODUCT_POST_LAUNCH_TURNS, effectsForStage } from "@/lib/products/lifecycle";
 import { isSectorTechTreesEnabled } from "@/lib/corporations/techTree/featureFlag";
 import {
@@ -65,12 +72,30 @@ function serializeProduct(product: CorporationProductDocument) {
 
 function serializeKind(kind: ProductKindDefinition) {
   const manufacturing = manufacturingKindRequirements(kind.id);
+  const mediaProfile = mediaKindProfile(kind.id);
   return {
     id: kind.id,
     family: kind.family,
     label: kind.label,
     outputCommodity: kind.outputCommodity,
     ...(kind.operatingModels ? { operatingModels: [...kind.operatingModels] } : {}),
+    ...(kind.minDecade ? { minDecade: kind.minDecade } : {}),
+    ...(kind.requiredTechnologyIds
+      ? { requiredTechnologyIds: [...kind.requiredTechnologyIds] }
+      : {}),
+    ...(mediaProfile
+      ? {
+          cadence: {
+            developmentTurns: mediaProfile.schedule.developmentTurns,
+            launchTurns: mediaProfile.schedule.launchTurns,
+            growthTurns: mediaProfile.schedule.growthTurns,
+            matureTurns: mediaProfile.schedule.matureTurns,
+            declineTurns: mediaProfile.schedule.declineTurns,
+            tail: mediaProfile.tail,
+            tailBlurb: mediaProfile.tailBlurb,
+          },
+        }
+      : {}),
     ...(manufacturing
       ? {
           requirements: {
@@ -81,6 +106,34 @@ function serializeKind(kind: ProductKindDefinition) {
           },
         }
       : {}),
+  };
+}
+
+function serializeModelProfile(model: string) {
+  const profile = mediaModelProfile(model);
+  if (!profile) return null;
+  const kinds = queryProductCatalog({
+    family: "media_entertainment",
+    operatingModels: [model],
+  }).map((kind) => ({
+    id: kind.id,
+    label: kind.label,
+  }));
+  return {
+    model: profile.model,
+    corporationTypes: [...profile.corporationTypes],
+    coverage: {
+      pattern: profile.coverage.pattern,
+      addressableShare: coverageAddressableShare(profile.model),
+      blurb: profile.coverage.blurb,
+    },
+    ...(profile.minDecade ? { minDecade: profile.minDecade } : {}),
+    ...(profile.technologyIdBySector
+      ? { technologyIdBySector: { ...profile.technologyIdBySector } }
+      : {}),
+    cadenceBlurb: profile.cadenceBlurb,
+    tailBlurb: profile.tailBlurb,
+    kinds,
   };
 }
 
@@ -117,14 +170,26 @@ export async function GET(request: Request, { params }: RouteParams) {
       );
     }
 
-    const [owned, active] = await Promise.all([
+    const [owned, active, gameState] = await Promise.all([
       listOperatingModels(db, corporationId),
       getActiveProduct(db, corporationId),
+      getGameState(db),
     ]);
     const ownedModels = owned.map((model) => model.operatingModel);
     const catalog = family
-      ? queryProductCatalog({ family, operatingModels: ownedModels }).map(serializeKind)
+      ? queryProductCatalog({
+          family,
+          operatingModels: ownedModels,
+          unlockedTechnologyIds: corporation.unlockedTechNodeIds,
+          currentYear: gameState?.currentYear,
+        }).map(serializeKind)
       : [];
+    const modelProfiles =
+      family === "media_entertainment"
+        ? ownedModels
+            .map((model) => serializeModelProfile(model))
+            .filter((profile) => profile !== null)
+        : [];
 
     return NextResponse.json(
       {
@@ -134,6 +199,9 @@ export async function GET(request: Request, { params }: RouteParams) {
         operatingModels: ownedModels,
         activeProduct: active ? serializeProduct(active) : null,
         catalog,
+        ...(family === "media_entertainment"
+          ? { modelProfiles, explainer: { ...MEDIA_STUDIO_EXPLAINER } }
+          : {}),
       },
       { headers: NO_STORE }
     );
@@ -237,6 +305,23 @@ export async function POST(request: Request, { params }: RouteParams) {
       });
       if (!compatibility.ok) {
         return NextResponse.json({ error: compatibility.message }, { status: 400 });
+      }
+    }
+
+    // Media products additionally need an owned operating model fitting the
+    // corporation, in the right era with the right research. The messages
+    // name the blocker so the Studio can show it directly.
+    if (kind.family === "media_entertainment") {
+      const gameState = await getGameState(db);
+      const media = validateMediaProductStart({
+        kindId: kind.id,
+        corporationType: corporation.type,
+        operatingModels: owned.map((model) => model.operatingModel),
+        currentYear: gameState?.currentYear,
+        unlockedTechnologyIds: corporation.unlockedTechNodeIds,
+      });
+      if (!media.ok) {
+        return NextResponse.json({ error: media.message }, { status: 400 });
       }
     }
 

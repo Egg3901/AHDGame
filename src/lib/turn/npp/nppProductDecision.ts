@@ -4,6 +4,7 @@ import type { NppAutonomyLevel } from "@/lib/db/types/gameState";
 import { nppAutonomyLevelAtLeast } from "@/lib/nppAutonomy/featureFlag";
 import { getProductKind } from "@/lib/products/catalog";
 import { queryProductCatalog } from "@/lib/products/queries";
+import { mediaKindLegalForModels, mediaModelFitsCorporation } from "@/lib/products/media";
 import {
   MEDIA_OPERATING_MODELS,
   type CorporationProduct,
@@ -81,6 +82,8 @@ export interface NppProductDecisionInput {
   operatingModels?: readonly string[];
   /** Unlocked technology ids. Absent disables technology filtering. */
   unlockedTechnologyIds?: readonly string[];
+  /** World year. Absent disables era filtering in the media legality check. */
+  currentYear?: number | null;
   /** Current non-retired product, when the caller has loaded it. */
   activeProduct?: CorporationProduct | null;
   /**
@@ -175,13 +178,27 @@ export function decideNppProduct(input: NppProductDecisionInput): NppProductActi
 
   if (MEDIA_CORP_TYPES.has(input.corporationType)) {
     const owned = normalizeList(input.operatingModels).filter((m) => KNOWN_MODELS.has(m));
+    // A corporation only acquires models fitting its own sector type: a
+    // newspaper model is dead weight on an entertainment corporation.
+    const acquirable = MEDIA_OPERATING_MODELS.filter((model) =>
+      mediaModelFitsCorporation(model, input.corporationType)
+    );
     if (owned.length === 0) {
-      for (const model of MEDIA_OPERATING_MODELS) {
+      for (const model of acquirable) {
         const kinds = queryProductCatalog({
           family: "media_entertainment",
           operatingModels: [model],
           unlockedTechnologyIds: techFilter,
-        });
+          currentYear: input.currentYear,
+        }).filter((kind) =>
+          mediaKindLegalForModels({
+            kindId: kind.id,
+            corporationType: input.corporationType,
+            operatingModels: [model],
+            currentYear: input.currentYear,
+            unlockedTechnologyIds: input.unlockedTechnologyIds,
+          })
+        );
         if (kinds.length > 0) {
           return { kind: "acquire_operating_model", operatingModel: model, maxSpendLocal };
         }
@@ -192,7 +209,16 @@ export function decideNppProduct(input: NppProductDecisionInput): NppProductActi
       family: "media_entertainment",
       operatingModels: owned,
       unlockedTechnologyIds: techFilter,
-    });
+      currentYear: input.currentYear,
+    }).filter((kind) =>
+      mediaKindLegalForModels({
+        kindId: kind.id,
+        corporationType: input.corporationType,
+        operatingModels: owned,
+        currentYear: input.currentYear,
+        unlockedTechnologyIds: input.unlockedTechnologyIds,
+      })
+    );
     if (kinds.length === 0) {
       return { kind: "none", reason: "no_legal_product" };
     }
