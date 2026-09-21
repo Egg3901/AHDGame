@@ -114,6 +114,8 @@ export interface DepartmentProgramClaimInput {
   periodDemand: number;
   requestedOutlay: number;
   requestedEncumbrance: number;
+  /** Outstanding protected arrears already attributed to this program. */
+  openingArrears?: number;
   openingEncumbered?: number;
   capacity: CapacityPoolInput;
   coverageRatio: number;
@@ -154,10 +156,12 @@ export interface DepartmentProgramClaimSettlement {
   requested: number;
   allocated: number;
   outlaid: number;
+  arrearsPaid: number;
   encumbrancePaid: number;
   newEncumbrance: number;
   closingEncumbered: number;
   newArrears: number;
+  closingArrears: number;
   implementation: ImplementationSettlement;
   capacity: CapacitySettlement;
   jurisdictionMode?: import("@/lib/db/types/legislation").JurisdictionMode;
@@ -169,6 +173,11 @@ export interface DepartmentAccountSettlement {
   departmentId: string;
   turn: number;
   replayed: boolean;
+  /** Annualized enacted authority represented by this account plan. */
+  annualAuthority?: number;
+  operatingAuthority?: number;
+  capitalAuthority?: number;
+  transferAuthority?: number;
   authorityAccrued: number;
   arrearsPaid: number;
   encumbrancePaid: number;

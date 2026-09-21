@@ -73,11 +73,23 @@ export function buildCountryDepartmentSettlementPlan(
     const type = types.get(law.legislationTypeId);
     const option = type && optionFor(type, law);
     const implementation = option?.implementation;
-    if (!type?.administration || !option || !implementation) {
+    if (!type?.administration || !option) {
       skippedPrograms.push({
         legislationTypeId: law.legislationTypeId,
-        reason: "missing administration or program metadata",
+        reason: "missing administration or selected option metadata",
       });
+      continue;
+    }
+    if (!implementation) {
+      // Revenue rules and other non-program laws legitimately have no delivery
+      // account. A positive cost without program metadata is instead a failed
+      // migration and remains visible in settlement telemetry.
+      if (amount > 0) {
+        skippedPrograms.push({
+          legislationTypeId: law.legislationTypeId,
+          reason: "cost-bearing option is missing program metadata",
+        });
+      }
       continue;
     }
     const jurisdictionMode = law.jurisdictionMode ?? type.administration.defaultJurisdictionMode;
@@ -110,7 +122,7 @@ export function buildCountryDepartmentSettlementPlan(
       createdDepartmentIds.push(department.id);
     }
     const annualDemand = Math.max(0, Math.round(amount));
-    const periodDemand = includedAuthorityPerTurn(annualDemand);
+    const periodDemand = includedAuthorityPerTurn(annualDemand, input.turn);
     const capacityEntries = Object.entries(
       implementation.capacityDemand ??
         (implementation.capacityType ? { [implementation.capacityType]: 100 } : {})
@@ -138,6 +150,12 @@ export function buildCountryDepartmentSettlementPlan(
 
   const settlements: DepartmentAccountSettlement[] = [];
   for (const [departmentId, account] of Object.entries(openings)) {
+    // These ledgers are owned by their established subsystem. They may be
+    // present beside ordinary department accounts, but generalized settlement
+    // must never wind down or rewrite their programs.
+    if (account.accountPolicyId === "defense" || account.accountPolicyId === "intelligence") {
+      continue;
+    }
     const active = draftsByDepartment.get(departmentId) ?? [];
     const allocationIsComplete =
       active.length > 0 &&
@@ -191,6 +209,7 @@ export function buildCountryDepartmentSettlementPlan(
         periodDemand: draft.periodDemand,
         requestedOutlay,
         requestedEncumbrance,
+        openingArrears: previous?.arrears ?? 0,
         openingEncumbered: previous?.encumbered ?? 0,
         capacity,
         coverageRatio: 1,
@@ -207,7 +226,11 @@ export function buildCountryDepartmentSettlementPlan(
     });
 
     for (const previous of Object.values(account.programs)) {
-      if (activeProgramIds.has(previous.programId) || previous.status === "closed") continue;
+      if (
+        activeProgramIds.has(previous.programId) ||
+        (previous.status === "closed" && previous.arrears <= 0)
+      )
+        continue;
       programs.push({
         programId: previous.programId,
         legislationTypeId: previous.legislationTypeId,
@@ -218,6 +241,7 @@ export function buildCountryDepartmentSettlementPlan(
         periodDemand: 0,
         requestedOutlay: 0,
         requestedEncumbrance: 0,
+        openingArrears: previous.arrears,
         openingEncumbered: previous.encumbered ?? 0,
         capacity: {
           capacityType: "wind_down",
@@ -228,6 +252,8 @@ export function buildCountryDepartmentSettlementPlan(
         coverageRatio: 0,
         rampFactor: 0,
         createsArrearsOnShortfall: false,
+        ...(previous.jurisdictionMode ? { jurisdictionMode: previous.jurisdictionMode } : {}),
+        ...(previous.implementationMode ? { implementationMode: previous.implementationMode } : {}),
         repealTurn: previous.repealTurn ?? input.turn,
       });
     }
@@ -237,9 +263,28 @@ export function buildCountryDepartmentSettlementPlan(
       const semantics = draft.option.implementation!.fundingSemantics;
       return semantics === "authorization_only" ? sum : sum + draft.periodDemand;
     }, 0);
+    const annualAuthorityByClass = active.reduce(
+      (totals, draft) => {
+        const implementation = draft.option.implementation!;
+        if (implementation.fundingSemantics === "authorization_only") return totals;
+        totals.annual += draft.annualDemand;
+        if (implementation.appropriationClass === "capital") {
+          totals.capital += draft.annualDemand;
+        } else if (
+          implementation.appropriationClass === "transfer" ||
+          implementation.appropriationClass === "demand_led"
+        ) {
+          totals.transfer += draft.annualDemand;
+        } else {
+          totals.operating += draft.annualDemand;
+        }
+        return totals;
+      },
+      { annual: 0, operating: 0, capital: 0, transfer: 0 }
+    );
     const policy = getDepartmentAccountPolicy(account.accountPolicyId ?? "civil_operating");
-    settlements.push(
-      settleDepartmentAccount({
+    settlements.push({
+      ...settleDepartmentAccount({
         departmentId,
         turn: input.turn,
         accruedThroughTurn: account.accruedThroughTurn,
@@ -249,8 +294,12 @@ export function buildCountryDepartmentSettlementPlan(
         authority,
         policy,
         programs,
-      })
-    );
+      }),
+      annualAuthority: annualAuthorityByClass.annual,
+      operatingAuthority: annualAuthorityByClass.operating,
+      capitalAuthority: annualAuthorityByClass.capital,
+      transferAuthority: annualAuthorityByClass.transfer,
+    });
   }
 
   return { openings, createdDepartmentIds, settlements, skippedPrograms };

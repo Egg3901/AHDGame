@@ -48,6 +48,10 @@ describe("generalized country department settlement plan", () => {
     expect(plan.settlements).toHaveLength(1);
     expect(plan.settlements[0]).toMatchObject({
       departmentId: "uk_health_department",
+      annualAuthority: 9_600,
+      operatingAuthority: 9_600,
+      capitalAuthority: 0,
+      transferAuthority: 0,
       authorityAccrued: 200,
       programOutlays: 50,
       closingBalance: 150,
@@ -132,5 +136,45 @@ describe("generalized country department settlement plan", () => {
       closingEncumbered: 0,
       newEncumbrance: 0,
     });
+  });
+
+  it("does not rewrite programs owned by specialized account systems", () => {
+    const opening = createEmptyDepartmentAccount(department("uk_defence_ministry"));
+    const account: DepartmentAccount = {
+      ...opening,
+      programs: {
+        specialized: {
+          programId: "specialized",
+          legislationTypeId: "specialized-law",
+          policyOptionId: "current",
+          status: "operating",
+          annualDemand: 100,
+          periodDemand: 2,
+          authorityThisTurn: 2,
+          obligated: 2,
+          outlaid: 2,
+          arrears: 0,
+          fundingRatio: 1,
+          capacityRatio: 1,
+          coverageRatio: 1,
+          rampFactor: 1,
+          implementationFactor: 1,
+          bindingConstraint: "none",
+          lastSettledTurn: 1,
+        },
+      },
+    };
+
+    const plan = buildCountryDepartmentSettlementPlan({
+      countryId: "UK",
+      turn: 2,
+      year: 2027,
+      accounts: { [account.departmentId]: account },
+      activeLawCosts: [],
+      legislationTypes,
+    });
+
+    expect(account.accountPolicyId).toBe("defense");
+    expect(plan.settlements).toEqual([]);
   });
 });

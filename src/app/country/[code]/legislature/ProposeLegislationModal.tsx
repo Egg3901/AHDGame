@@ -58,6 +58,11 @@ import { TaxRateSliderControl } from "@/components/legislation/TaxRateSliderCont
 import { useEnabledCountryIds } from "@/lib/hooks/useEnabledCountryIds";
 import type { BillProposalAutoFailWarning } from "@/lib/legislature/billAutoFailWarning";
 import { fetchJson } from "@/lib/observability/fetchJson";
+import type { JurisdictionMode } from "@/lib/db/types/legislation";
+import {
+  commonJurisdictionChoices,
+  JURISDICTION_MODE_LABELS,
+} from "@/lib/legislature/jurisdiction";
 
 interface LegislationTypeOption {
   _id: string;
@@ -84,6 +89,10 @@ interface LegislationTypeOption {
   estimatesGdp?: number;
   /** New-generation catalog laws: political-metric targets (registry family ids). */
   politicalMetricTargets?: { metricId: string; weight: number }[];
+  administration?: {
+    defaultJurisdictionMode: JurisdictionMode;
+    allowedJurisdictionModes: JurisdictionMode[];
+  };
   /** New-generation tax laws: API-attached live slider state (rate range + current rate). */
   taxSliderEstimate?: {
     minRate: number;
@@ -172,8 +181,29 @@ export function ProposeLegislationModal({
   );
   const [legislationTypes, setLegislationTypes] = useState<LegislationTypeOption[]>([]);
   const [rows, setRows] = useState<ProvisionRow[]>([{ ...EMPTY_PROVISION_ROW }]);
+  const [jurisdictionMode, setJurisdictionMode] = useState<JurisdictionMode | "">("");
   const [submitting, setSubmitting] = useState(false);
   const [currentPolicies, setCurrentPolicies] = useState<Record<string, number>>({});
+  const jurisdictionChoices = useMemo(
+    () =>
+      commonJurisdictionChoices(
+        rows
+          .filter((row) => row.legislationTypeId)
+          .map(
+            (row) =>
+              legislationTypes.find((type) => type._id === row.legislationTypeId)?.administration
+          )
+      ),
+    [legislationTypes, rows]
+  );
+  const jurisdictionChoiceKey = jurisdictionChoices.modes.join("|");
+  useEffect(() => {
+    setJurisdictionMode((current) =>
+      current && jurisdictionChoices.modes.includes(current)
+        ? current
+        : (jurisdictionChoices.defaultMode ?? "")
+    );
+  }, [jurisdictionChoiceKey, jurisdictionChoices.defaultMode, jurisdictionChoices.modes]);
   const [tariffRows, setTariffRows] = useState<TariffProvisionInput[]>([
     { scopeType: "economy_wide", rate: 10 },
   ]);
@@ -443,6 +473,7 @@ export function ProposeLegislationModal({
           chamber: billChamber,
           category: cat,
           provisions: provisionsPayload,
+          ...(jurisdictionMode ? { jurisdictionMode } : {}),
         },
       });
       if (cancelled) {
@@ -1137,6 +1168,27 @@ export function ProposeLegislationModal({
                     ]
                       .filter(Boolean)
                       .join(" ")}
+              </p>
+            </div>
+          )}
+          {jurisdictionChoices.modes.length > 0 && (
+            <div className="rounded-lg border border-card-border bg-background/50 p-3">
+              <label className="mb-1 block text-xs font-medium text-muted">
+                Responsibility model
+              </label>
+              <select
+                className="w-full rounded-lg border border-card-border bg-card px-3 py-2 text-sm text-foreground"
+                value={jurisdictionMode}
+                onChange={(event) => setJurisdictionMode(event.target.value as JurisdictionMode)}
+              >
+                {jurisdictionChoices.modes.map((mode) => (
+                  <option key={mode} value={mode}>
+                    {JURISDICTION_MODE_LABELS[mode]}
+                  </option>
+                ))}
+              </select>
+              <p className="mt-1 text-[11px] text-muted">
+                This selects which level administers every policy provision in this bill.
               </p>
             </div>
           )}

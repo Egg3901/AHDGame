@@ -15,8 +15,12 @@ import type {
   PriorityClaim,
 } from "./types";
 
-const ARREARS_CLAIM = "__protected_arrears__";
+const UNATTRIBUTED_ARREARS_CLAIM = "__protected_arrears__";
 const UNATTRIBUTED_ENCUMBRANCE_CLAIM = "__protected_encumbrance__";
+
+function arrearsClaimId(programId: string): string {
+  return `__protected_arrears__:${programId}`;
+}
 
 function encumbranceClaimId(programId: string): string {
   return `__protected_encumbrance__:${programId}`;
@@ -56,6 +60,15 @@ function emptyReplay(input: DepartmentAccountSettlementInput): DepartmentAccount
 function assertUniquePrograms(programs: DepartmentProgramClaimInput[]): void {
   const ids = new Set<string>();
   for (const program of programs) {
+    if (!program.programId) throw new Error("department program id cannot be empty");
+    if (
+      program.programId === UNATTRIBUTED_ARREARS_CLAIM ||
+      program.programId === UNATTRIBUTED_ENCUMBRANCE_CLAIM ||
+      program.programId.startsWith(`${UNATTRIBUTED_ARREARS_CLAIM}:`) ||
+      program.programId.startsWith(`${UNATTRIBUTED_ENCUMBRANCE_CLAIM}:`)
+    ) {
+      throw new Error(`department program id uses a reserved prefix: ${program.programId}`);
+    }
     if (ids.has(program.programId))
       throw new Error(`duplicate department program: ${program.programId}`);
     ids.add(program.programId);
@@ -84,6 +97,10 @@ export function settleDepartmentAccount(
     );
     return {
       program,
+      openingArrears: currencyAmount(
+        program.openingArrears ?? 0,
+        `${program.programId}.openingArrears`
+      ),
       openingEncumbered: currencyAmount(
         program.openingEncumbered ?? 0,
         `${program.programId}.openingEncumbered`
@@ -92,6 +109,14 @@ export function settleDepartmentAccount(
       status,
     };
   });
+  const attributedArrears = programRequests.reduce(
+    (sum, program) => sum + program.openingArrears,
+    0
+  );
+  if (attributedArrears > openingArrears) {
+    throw new Error("program arrears exceed the department arrears");
+  }
+  const unattributedArrears = openingArrears - attributedArrears;
   const attributedEncumbrance = programRequests.reduce(
     (sum, program) => sum + program.openingEncumbered,
     0
@@ -105,7 +130,12 @@ export function settleDepartmentAccount(
   );
 
   const claims: PriorityClaim[] = [
-    { id: ARREARS_CLAIM, priority: 1, requested: openingArrears },
+    ...programRequests.map(({ program, openingArrears: amount }) => ({
+      id: arrearsClaimId(program.programId),
+      priority: 1 as const,
+      requested: amount,
+    })),
+    { id: UNATTRIBUTED_ARREARS_CLAIM, priority: 1, requested: unattributedArrears },
     ...programRequests.map(({ program, openingEncumbered: amount }) => ({
       id: encumbranceClaimId(program.programId),
       priority: 2 as const,
@@ -132,7 +162,13 @@ export function settleDepartmentAccount(
     : 0;
   const allocations = allocateByPriority(availableWithoutOverdraft + overdraft, claims);
   const allocationById = new Map(allocations.map((allocation) => [allocation.id, allocation]));
-  const arrearsPaid = allocationById.get(ARREARS_CLAIM)?.allocated ?? 0;
+  const arrearsPaid =
+    (allocationById.get(UNATTRIBUTED_ARREARS_CLAIM)?.allocated ?? 0) +
+    programRequests.reduce(
+      (sum, { program }) =>
+        sum + (allocationById.get(arrearsClaimId(program.programId))?.allocated ?? 0),
+      0
+    );
   const encumbrancePaid =
     (allocationById.get(UNATTRIBUTED_ENCUMBRANCE_CLAIM)?.allocated ?? 0) +
     programRequests.reduce(
@@ -142,8 +178,16 @@ export function settleDepartmentAccount(
     );
 
   const programs: DepartmentProgramClaimSettlement[] = programRequests.map(
-    ({ program, openingEncumbered: programOpeningEncumbered, requested, status }) => {
+    ({
+      program,
+      openingArrears: programOpeningArrears,
+      openingEncumbered: programOpeningEncumbered,
+      requested,
+      status,
+    }) => {
       const allocated = allocationById.get(program.programId)?.allocated ?? 0;
+      const programArrearsPaid =
+        allocationById.get(arrearsClaimId(program.programId))?.allocated ?? 0;
       const programEncumbrancePaid =
         allocationById.get(encumbranceClaimId(program.programId))?.allocated ?? 0;
       const requestedOutlay = currencyAmount(
@@ -174,10 +218,12 @@ export function settleDepartmentAccount(
         requested,
         allocated,
         outlaid,
+        arrearsPaid: programArrearsPaid,
         encumbrancePaid: programEncumbrancePaid,
         newEncumbrance,
         closingEncumbered: programOpeningEncumbered - programEncumbrancePaid + newEncumbrance,
         newArrears,
+        closingArrears: programOpeningArrears - programArrearsPaid + newArrears,
         implementation: settleImplementation({
           fundingRatio,
           capacityRatio: capacity.ratio,

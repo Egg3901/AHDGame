@@ -32,7 +32,6 @@ import {
 } from "@/lib/legislationTypeAliases";
 import { billRequiresExecutiveAction } from "@/lib/internationalOrganizations/withdrawalBills";
 import type { Bill, BillStatus, LegislationType, Character } from "@/lib/db/types";
-import type { EnactedLaw } from "@/lib/db/types/budget";
 import { isPolicyProvision } from "@/lib/db/types/legislation";
 import {
   BILL_PROPOSE_ACTION_COST,
@@ -47,7 +46,7 @@ import {
 import { z } from "zod";
 import { moderatedBillTitle, moderatedBillText } from "@/lib/api/schemas/congress";
 import { JURISDICTION_MODES, resolveBillJurisdiction } from "@/lib/legislature/jurisdiction";
-import { resolveAdministrationConflicts } from "@/lib/legislature/administrationConflicts";
+import { findAdministrationConflict } from "@/lib/legislature/administrationConflictCheck";
 import { getGameState } from "@/lib/gameState";
 
 const CABINET_VOTE_DURATION_MS = 24 * 3_600_000; // 24 hours
@@ -643,25 +642,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
       );
     }
     if (administrationEnabled) {
-      const activeLaws = await db
-        .collection<EnactedLaw>("enactedLaws")
-        .find(
-          { countryId, scope: "national", repealedAt: { $exists: false } },
-          { projection: { legislationTypeId: 1 } }
-        )
-        .toArray();
-      const activeTypeIds = [...new Set(activeLaws.map((law) => law.legislationTypeId))];
-      const activeTypes =
-        activeTypeIds.length === 0
-          ? []
-          : await db
-              .collection<LegislationType>("legislationTypes")
-              .find({ _id: { $in: activeTypeIds } }, { projection: { _id: 1, administration: 1 } })
-              .toArray();
-      const conflict = resolveAdministrationConflicts({
-        proposed: [selectedLegislationType],
-        existing: activeTypes,
-      }).conflicts[0];
+      const conflict = await findAdministrationConflict(db, countryId, [selectedLegislationType]);
       if (conflict) {
         return NextResponse.json(
           {

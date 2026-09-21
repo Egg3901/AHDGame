@@ -142,6 +142,49 @@ describe("department account settlement", () => {
     expect(result.closingArrears).toBe(30);
   });
 
+  it("retains and pays program-attributed arrears without diverging from the account", () => {
+    const retained = settleDepartmentAccount(
+      fixture({
+        openingArrears: 30,
+        authority: 0,
+        programs: [
+          program("mandatory", 4, 40, {
+            openingArrears: 30,
+            createsArrearsOnShortfall: true,
+          }),
+        ],
+      })
+    );
+    expect(retained.programs[0]).toMatchObject({
+      arrearsPaid: 0,
+      newArrears: 40,
+      closingArrears: 70,
+    });
+    expect(retained.closingArrears).toBe(70);
+
+    const paid = settleDepartmentAccount(
+      fixture({
+        turn: 11,
+        accruedThroughTurn: 10,
+        openingBalance: 20,
+        openingArrears: retained.closingArrears,
+        authority: 0,
+        programs: [
+          program("mandatory", 4, 0, {
+            openingArrears: retained.programs[0]!.closingArrears,
+            createsArrearsOnShortfall: true,
+          }),
+        ],
+      })
+    );
+    expect(paid.programs[0]).toMatchObject({
+      arrearsPaid: 20,
+      newArrears: 0,
+      closingArrears: 50,
+    });
+    expect(paid).toMatchObject({ arrearsPaid: 20, closingArrears: 50, closingBalance: 0 });
+  });
+
   it("pays retained encumbrances during repeal and accepts no new obligation", () => {
     const result = settleDepartmentAccount(
       fixture({
@@ -196,6 +239,20 @@ describe("department account settlement", () => {
       })
     );
     expect(result).toMatchObject({ overdraft: 90, programOutlays: 100, closingBalance: 0 });
+  });
+
+  it("rejects empty program ids and out-of-range priority tiers", () => {
+    expect(() => settleDepartmentAccount(fixture({ programs: [program("", 5, 10)] }))).toThrow(
+      "department program id cannot be empty"
+    );
+    expect(() =>
+      settleDepartmentAccount(
+        fixture({ programs: [program("__protected_arrears__:collision", 5, 10)] })
+      )
+    ).toThrow("department program id uses a reserved prefix");
+    expect(() =>
+      settleDepartmentAccount(fixture({ programs: [program("invalid-priority", 8 as never, 10)] }))
+    ).toThrow("invalid priority claim tier");
   });
 
   it("conserves money and remains monotone over bounded funding inputs", () => {

@@ -109,6 +109,7 @@ function generalizedProgramStateFrom(
   existing: DepartmentProgramState | undefined,
   turn: number
 ): DepartmentProgramState {
+  const cashOutlaid = settlement.outlaid + settlement.encumbrancePaid + settlement.arrearsPaid;
   return {
     programId: settlement.programId,
     legislationTypeId: settlement.legislationTypeId,
@@ -117,11 +118,11 @@ function generalizedProgramStateFrom(
     annualDemand: settlement.annualDemand,
     periodDemand: settlement.requested,
     authorityThisTurn: settlement.allocated,
-    obligated: settlement.outlaid + settlement.closingEncumbered,
+    obligated: cashOutlaid + settlement.closingEncumbered,
     encumbered: settlement.closingEncumbered,
-    outlaid: settlement.outlaid,
-    cumulativeOutlays: (existing?.cumulativeOutlays ?? 0) + settlement.outlaid,
-    arrears: settlement.newArrears,
+    outlaid: cashOutlaid,
+    cumulativeOutlays: (existing?.cumulativeOutlays ?? 0) + cashOutlaid,
+    arrears: settlement.closingArrears,
     fundingRatio: settlement.implementation.fundingRatio,
     capacityRatio: settlement.implementation.capacityRatio,
     coverageRatio: settlement.implementation.coverageRatio,
@@ -133,40 +134,6 @@ function generalizedProgramStateFrom(
     lastSettledTurn: turn,
     ...(settlement.repealTurn !== undefined ? { repealTurn: settlement.repealTurn } : {}),
   };
-}
-
-export async function applyDepartmentAccountSettlement(
-  db: Db,
-  countryId: string,
-  opening: DepartmentAccount,
-  settlement: DepartmentAccountSettlement
-): Promise<boolean> {
-  if (settlement.replayed) return false;
-  const base = `departmentAccounts.${opening.departmentId}`;
-  const updates: Record<string, number | DepartmentProgramState> = {
-    [`${base}.balance`]: settlement.closingBalance,
-    [`${base}.encumbered`]: settlement.closingEncumbered,
-    [`${base}.arrears`]: settlement.closingArrears,
-    [`${base}.accruedThroughTurn`]: settlement.turn,
-  };
-  for (const program of settlement.programs) {
-    updates[`${base}.programs.${program.programId}`] = generalizedProgramStateFrom(
-      program,
-      opening.programs[program.programId],
-      settlement.turn
-    );
-  }
-  const result = await budgets(db).updateOne(
-    {
-      countryId,
-      [`${base}.accruedThroughTurn`]: { $lt: settlement.turn },
-      [`${base}.balance`]: opening.balance,
-      [`${base}.encumbered`]: opening.encumbered,
-      [`${base}.arrears`]: opening.arrears ?? 0,
-    },
-    { $set: updates }
-  );
-  return result.modifiedCount > 0;
 }
 
 function accountAfterSettlement(
@@ -183,12 +150,49 @@ function accountAfterSettlement(
   }
   return {
     ...opening,
+    ...(settlement.annualAuthority !== undefined
+      ? { annualAuthority: settlement.annualAuthority }
+      : {}),
+    ...(settlement.operatingAuthority !== undefined
+      ? { operatingAuthority: settlement.operatingAuthority }
+      : {}),
+    ...(settlement.capitalAuthority !== undefined
+      ? { capitalAuthority: settlement.capitalAuthority }
+      : {}),
+    ...(settlement.transferAuthority !== undefined
+      ? { transferAuthority: settlement.transferAuthority }
+      : {}),
     balance: settlement.closingBalance,
     encumbered: settlement.closingEncumbered,
     arrears: settlement.closingArrears,
     accruedThroughTurn: settlement.turn,
     programs,
   };
+}
+
+export async function applyDepartmentAccountSettlement(
+  db: Db,
+  countryId: string,
+  opening: DepartmentAccount,
+  settlement: DepartmentAccountSettlement
+): Promise<boolean> {
+  if (settlement.replayed) return false;
+  const base = `departmentAccounts.${opening.departmentId}`;
+  const filter: Record<string, unknown> = {
+    countryId,
+    [`${base}.accruedThroughTurn`]: { $lt: settlement.turn },
+    [`${base}.balance`]: opening.balance,
+    [`${base}.encumbered`]: opening.encumbered,
+  };
+  filter[`${base}.arrears`] = opening.arrears === undefined ? { $exists: false } : opening.arrears;
+  filter[`${base}.lastAllocationChangedTurn`] =
+    opening.lastAllocationChangedTurn === undefined
+      ? { $exists: false }
+      : opening.lastAllocationChangedTurn;
+  const result = await budgets(db).updateOne(filter, {
+    $set: { [base]: accountAfterSettlement(opening, settlement) },
+  });
+  return result.modifiedCount > 0;
 }
 
 export async function applyCountryDepartmentSettlements(
@@ -211,6 +215,12 @@ export async function applyCountryDepartmentSettlements(
       filter[`${base}.accruedThroughTurn`] = { $lt: settlement.turn };
       filter[`${base}.balance`] = opening.balance;
       filter[`${base}.encumbered`] = opening.encumbered;
+      filter[`${base}.arrears`] =
+        opening.arrears === undefined ? { $exists: false } : opening.arrears;
+      filter[`${base}.lastAllocationChangedTurn`] =
+        opening.lastAllocationChangedTurn === undefined
+          ? { $exists: false }
+          : opening.lastAllocationChangedTurn;
     }
     updates[base] = accountAfterSettlement(opening, settlement);
   }

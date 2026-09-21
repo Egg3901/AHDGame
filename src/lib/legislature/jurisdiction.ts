@@ -8,6 +8,42 @@ export const JURISDICTION_MODES = [
   "regional_discretion",
 ] as const satisfies readonly JurisdictionMode[];
 
+export const JURISDICTION_MODE_LABELS: Record<JurisdictionMode, string> = {
+  national_direct: "National administration",
+  national_floor: "National minimum standard",
+  concurrent: "Shared national and regional administration",
+  grant_supported_regional: "National grants with regional administration",
+  regional_discretion: "Leave administration to regions",
+};
+
+export interface JurisdictionAdministrationChoice {
+  allowedJurisdictionModes: JurisdictionMode[];
+  defaultJurisdictionMode: JurisdictionMode;
+}
+
+export function commonJurisdictionChoices(
+  administrations: Array<JurisdictionAdministrationChoice | undefined>
+): { modes: JurisdictionMode[]; defaultMode?: JurisdictionMode } {
+  if (administrations.length === 0 || administrations.some((value) => !value)) {
+    return { modes: [] };
+  }
+  const complete = administrations as JurisdictionAdministrationChoice[];
+  const modes = JURISDICTION_MODES.filter((mode) =>
+    complete.every((administration) => administration.allowedJurisdictionModes.includes(mode))
+  );
+  const authoredDefaults = new Set(
+    complete.map((administration) => administration.defaultJurisdictionMode)
+  );
+  const authoredDefault = authoredDefaults.size === 1 ? [...authoredDefaults][0] : undefined;
+  const defaultMode =
+    authoredDefault && modes.includes(authoredDefault)
+      ? authoredDefault
+      : modes.includes("national_direct")
+        ? "national_direct"
+        : modes[0];
+  return { modes: [...modes], ...(defaultMode ? { defaultMode } : {}) };
+}
+
 export interface BillJurisdictionResolution {
   ok: boolean;
   mode?: JurisdictionMode;

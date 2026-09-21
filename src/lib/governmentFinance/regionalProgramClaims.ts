@@ -2,6 +2,25 @@ import type { LegislationType } from "@/lib/db/types/legislation";
 import type { StatePolicy } from "@/lib/db/types/statePolicy";
 import type { RegionalProgramClaim } from "./rules/regionalSettlement";
 
+/**
+ * Defensive compatibility for legacy duplicate StatePolicy rows. Regional
+ * finance must price and settle one current option per legislation type.
+ */
+export function latestRegionalPoliciesByType(policies: readonly StatePolicy[]): StatePolicy[] {
+  const latest = new Map<string, StatePolicy>();
+  for (const policy of policies) {
+    const existing = latest.get(policy.legislationTypeId);
+    if (
+      !existing ||
+      policy.enactedTurn > existing.enactedTurn ||
+      (policy.enactedTurn === existing.enactedTurn && policy.enactedAt > existing.enactedAt)
+    ) {
+      latest.set(policy.legislationTypeId, policy);
+    }
+  }
+  return [...latest.values()];
+}
+
 export function buildRegionalProgramClaims(input: {
   policies: StatePolicy[];
   legislationTypes: LegislationType[];
@@ -20,7 +39,6 @@ export function buildRegionalProgramClaims(input: {
       0,
       Math.round(input.annualCostByLegislationTypeId.get(policy.legislationTypeId) ?? 0)
     );
-    if (authorizedCost <= 0) return [];
     const implementation = option?.implementation;
     const programId =
       implementation?.programId ??

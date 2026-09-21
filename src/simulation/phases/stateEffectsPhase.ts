@@ -103,7 +103,7 @@ export const stateEffectsAndNationalAggregationPhase: TurnPhaseAdapter = {
     // outcomes nondeterministic: crisis shocks or cabinet-order effects could
     // vanish, or clobber bill effects, depending on scheduling.
     //
-    // Serialize ONLY these three writers; everything else stays parallel.
+    // Serialize ONLY these writers; everything else stays parallel.
     // Chosen order: crisisTurn → ministerialOrders → policyEffects.
     //  - crisisTurn and ministerialOrders are pure $inc writers (commutative
     //    with each other), kept in their previous registry order.
@@ -113,7 +113,7 @@ export const stateEffectsAndNationalAggregationPhase: TurnPhaseAdapter = {
     //    TOP of the shocked state — the intended semantics ($inc deltas were
     //    always meant to compose with, not race, the policy recompute).
     // Write mechanics ($set vs $inc) are deliberately unchanged in this fix.
-    const serializedStateMetricsWriters = (async () => {
+    const serializedStateMetricsPrerequisites = (async () => {
       // Pass the authoritative turn-context year: the persisted
       // gameState.currentYear is only stamped at turn end, so reloading it
       // inside would gate year-boundary openings one turn late (#2059).
@@ -140,15 +140,11 @@ export const stateEffectsAndNationalAggregationPhase: TurnPhaseAdapter = {
       const ministerialOrdersResult = await runtime.runPhase("ministerialOrders", () =>
         processMinisterialOrders(newTurn)
       );
-      const policyResult = await runtime.runPhase("policyEffects", () =>
-        processStatePolicyEffects(db)
-      );
       return {
         intelligenceResult,
         crisisResult,
         navairResult,
         ministerialOrdersResult,
-        policyResult,
       };
     })();
     // Regional budgets alternate turns (see regionalBudgetCadence.ts). A phase
@@ -173,8 +169,24 @@ export const stateEffectsAndNationalAggregationPhase: TurnPhaseAdapter = {
       )
     );
     const jpRegionalBudgetPromise = runRegionalBudgetPhase("jpRegionalBudgetProcessing", () =>
-      processJPRegionalBudgets(db, newTurn, gameState.regionalLegislationFinanceEnabled === true)
+      processJPRegionalBudgets(
+        db,
+        newTurn,
+        gameState.regionalLegislationFinanceEnabled === true,
+        regionalBudgetCadence
+      )
     );
+    const policyEffectsPromise = (async () => {
+      const prerequisiteResults = await serializedStateMetricsPrerequisites;
+      // Policy effects consume regional delivery multipliers. On a settlement
+      // turn, wait for both migrated regional processors so their new validity
+      // windows are visible instead of treating the prior settlement as stale.
+      await Promise.all([ukRegionalBudgetPromise, jpRegionalBudgetPromise]);
+      const policyResult = await runtime.runPhase("policyEffects", () =>
+        processStatePolicyEffects(db)
+      );
+      return { ...prerequisiteResults, policyResult };
+    })();
     const [
       { crisisResult, navairResult, ministerialOrdersResult, policyResult },
       demoEffectResult,
@@ -191,7 +203,7 @@ export const stateEffectsAndNationalAggregationPhase: TurnPhaseAdapter = {
       cnPresidentSyncResult,
       topSectorsResult,
     ] = await Promise.all([
-      serializedStateMetricsWriters,
+      policyEffectsPromise,
       // Era checkpoints (src/lib/demographics/eraCheckpoints.ts) write the SAME
       // stateDemographics.groups.<id>.<axis> fields processAllStateDemographics
       // does, so it runs strictly AFTER that call completes (never concurrently

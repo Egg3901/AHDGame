@@ -249,7 +249,10 @@ export function buildLawAdministration(type: LegislationType): LegislationAdmini
 
 export function withLawAdministration(types: LegislationType[]): LegislationType[] {
   return types.map((type) => {
-    if (!type.countryScope || !INITIAL_COUNTRY_SCOPES.has(type.countryScope)) return type;
+    // Unscoped legislation types are legacy US records throughout the existing
+    // policy pipeline. Materialize them too so enabling administration does not
+    // make long-lived US laws suddenly unproposable.
+    if (type.countryScope && !INITIAL_COUNTRY_SCOPES.has(type.countryScope)) return type;
     const administration = buildLawAdministration(type);
     return {
       ...type,

@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { legislationTypes } from "@/lib/seeds/reference/legislationTypes";
 import { resolvePortfolioDepartment, type DepartmentCountryId } from "./departmentCatalog";
-import { buildLawAdministration, resolvePrimaryPortfolio } from "./lawAdministrationCatalog";
+import {
+  buildLawAdministration,
+  resolvePrimaryPortfolio,
+  withLawAdministration,
+} from "./lawAdministrationCatalog";
 
 const countryIdByScope: Record<string, DepartmentCountryId> = {
   us: "US",
@@ -127,5 +131,35 @@ describe("law administration catalog", () => {
       lawKind: "regulation",
       defaultJurisdictionMode: "national_direct",
     });
+  });
+
+  it("materializes legacy unscoped records using the established US compatibility rule", () => {
+    const [materialized] = withLawAdministration([
+      {
+        _id: "legacy_fixture",
+        name: "Legacy fixture",
+        description: "Legacy US law without a countryScope field.",
+        policyDomain: "healthcare",
+        subCategory: "Health",
+        positions: [],
+        policyOptions: [
+          {
+            id: "funded",
+            name: "Funded",
+            stance: "center",
+            effectDirection: 1,
+            economic: 0,
+            social: 0,
+            annualCostPerCapita: 1,
+          },
+        ],
+      },
+    ]);
+    expect(materialized?.administration).toMatchObject({
+      primaryPortfolioId: "health",
+      defaultJurisdictionMode: "national_direct",
+    });
+    expect(materialized?.policyOptions?.[0]?.implementation).toBeDefined();
+    expect(materialized?.countryScope).toBeUndefined();
   });
 });

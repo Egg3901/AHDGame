@@ -77,7 +77,11 @@ export function allocateByPriority(
   let remaining = currencyAmount(authority, "authority");
   const result = new Map<string, PriorityAllocation & { allocationWeight?: number }>();
   for (const claim of claims) {
+    if (!claim.id) throw new Error("priority claim id cannot be empty");
     if (result.has(claim.id)) throw new Error(`duplicate priority claim: ${claim.id}`);
+    if (!Number.isInteger(claim.priority) || claim.priority < 1 || claim.priority > 7) {
+      throw new Error(`invalid priority claim tier: ${claim.id}`);
+    }
     result.set(claim.id, {
       id: claim.id,
       priority: claim.priority,

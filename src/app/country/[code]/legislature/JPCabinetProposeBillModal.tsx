@@ -28,6 +28,7 @@ import {
 } from "@/components/bills/BillAutoFailWarning";
 import type { BillProposalAutoFailWarning } from "@/lib/legislature/billAutoFailWarning";
 import type { JurisdictionMode } from "@/lib/db/types/legislation";
+import { JURISDICTION_MODE_LABELS } from "@/lib/legislature/jurisdiction";
 
 interface LegislationPolicyOption {
   id: string;
@@ -55,14 +56,6 @@ interface LegislationTypeOption {
     allowedJurisdictionModes: JurisdictionMode[];
   };
 }
-
-const JURISDICTION_LABELS: Record<JurisdictionMode, string> = {
-  national_direct: "National administration",
-  national_floor: "National minimum standard",
-  concurrent: "Shared national and regional administration",
-  grant_supported_regional: "National grants with regional administration",
-  regional_discretion: "Leave administration to regions",
-};
 
 export function JPCabinetProposeBillModal({
   countryId,
@@ -394,7 +387,7 @@ export function JPCabinetProposeBillModal({
                       {selectedLegislationType.administration.allowedJurisdictionModes.map(
                         (mode) => (
                           <option key={mode} value={mode}>
-                            {JURISDICTION_LABELS[mode]}
+                            {JURISDICTION_MODE_LABELS[mode]}
                           </option>
                         )
                       )}

@@ -143,9 +143,9 @@ describe("department account persistence", () => {
       policy: { canOverdraft: false, usesEncumbrance: true, arrearsMode: "record" },
       programs: [
         {
-          programId: "uk_health_fixture",
-          legislationTypeId: "uk_nhs_funding",
-          policyOptionId: "uk_nhs_funding_opt_3",
+          programId: "uk.health.fixture:option.l4",
+          legislationTypeId: "uk.health.fixture",
+          policyOptionId: "option.l4",
           status: "authorized",
           priority: 5,
           annualDemand: 4_800,
@@ -179,14 +179,59 @@ describe("department account persistence", () => {
       encumbered: 20,
       arrears: 0,
       accruedThroughTurn: 1,
-      programs: {
-        uk_health_fixture: {
-          status: "operating",
-          annualDemand: 4_800,
-          encumbered: 20,
-          cumulativeOutlays: 60,
-        },
+    });
+    expect(
+      budget?.departmentAccounts?.uk_health_department.programs["uk.health.fixture:option.l4"]
+    ).toMatchObject({
+      status: "operating",
+      annualDemand: 4_800,
+      encumbered: 20,
+      cumulativeOutlays: 60,
+    });
+  });
+
+  it("upgrades a legacy account whose arrears field is absent", async () => {
+    const memory = createInMemoryDb();
+    const definition = DEPARTMENT_DEFINITIONS.find(
+      (candidate) => candidate.id === "uk_health_department"
+    )!;
+    const opening = createEmptyDepartmentAccount(definition);
+    delete opening.arrears;
+    memory.seed("federalBudget", [
+      {
+        _id: "UK",
+        countryId: "UK",
+        departmentAccounts: { uk_health_department: opening },
       },
+    ]);
+    const settlement = settleDepartmentAccount({
+      departmentId: opening.departmentId,
+      turn: 1,
+      accruedThroughTurn: 0,
+      openingBalance: 0,
+      openingEncumbered: 0,
+      openingArrears: 0,
+      authority: 1,
+      policy: { canOverdraft: false, usesEncumbrance: true, arrearsMode: "record" },
+      programs: [],
+    });
+
+    expect(
+      await applyCountryDepartmentSettlements(
+        memory as unknown as Db,
+        "UK",
+        { uk_health_department: opening },
+        new Set(),
+        [settlement]
+      )
+    ).toBe(true);
+    const budget = await (memory as unknown as Db)
+      .collection<FederalBudget>("federalBudget")
+      .findOne({ countryId: "UK" });
+    expect(budget?.departmentAccounts?.uk_health_department).toMatchObject({
+      balance: 1,
+      arrears: 0,
+      accruedThroughTurn: 1,
     });
   });
 
@@ -254,5 +299,133 @@ describe("department account persistence", () => {
       "jp_health_labor_ministry",
       "jp_land_ministry",
     ]);
+  });
+
+  it("attributes paid prior encumbrances to program cash outlays", async () => {
+    const memory = createInMemoryDb();
+    const definition = DEPARTMENT_DEFINITIONS.find(
+      (candidate) => candidate.id === "uk_transport_department"
+    )!;
+    const opening = createEmptyDepartmentAccount(definition);
+    opening.balance = 10;
+    opening.encumbered = 10;
+    opening.accruedThroughTurn = 1;
+    opening.programs.project = {
+      programId: "project",
+      legislationTypeId: "uk.transport.project",
+      policyOptionId: "l4",
+      status: "winding_down",
+      annualDemand: 0,
+      periodDemand: 0,
+      authorityThisTurn: 0,
+      obligated: 10,
+      encumbered: 10,
+      outlaid: 0,
+      cumulativeOutlays: 5,
+      arrears: 0,
+      fundingRatio: 1,
+      capacityRatio: 1,
+      coverageRatio: 0,
+      rampFactor: 0,
+      implementationFactor: 0,
+      bindingConstraint: "coverage",
+      lastSettledTurn: 1,
+      repealTurn: 1,
+    };
+    memory.seed("federalBudget", [
+      {
+        _id: "UK",
+        countryId: "UK",
+        departmentAccounts: { uk_transport_department: opening },
+      },
+    ]);
+    const settlement = settleDepartmentAccount({
+      departmentId: opening.departmentId,
+      turn: 2,
+      accruedThroughTurn: 1,
+      openingBalance: 10,
+      openingEncumbered: 10,
+      openingArrears: 0,
+      authority: 0,
+      policy: { canOverdraft: false, usesEncumbrance: true, arrearsMode: "record" },
+      programs: [
+        {
+          programId: "project",
+          legislationTypeId: "uk.transport.project",
+          policyOptionId: "l4",
+          status: "winding_down",
+          priority: 2,
+          annualDemand: 0,
+          periodDemand: 0,
+          requestedOutlay: 0,
+          requestedEncumbrance: 0,
+          openingEncumbered: 10,
+          capacity: {
+            capacityType: "wind_down",
+            maintenanceDemand: 0,
+            programDemand: 0,
+            sourceBreakdown: { workforce: 0, facilities: 0, systems: 0, efficiency: 0 },
+          },
+          coverageRatio: 0,
+          rampFactor: 0,
+          createsArrearsOnShortfall: false,
+          repealTurn: 1,
+        },
+      ],
+    });
+    expect(
+      await applyCountryDepartmentSettlements(
+        memory as unknown as Db,
+        "UK",
+        { uk_transport_department: opening },
+        new Set(),
+        [settlement]
+      )
+    ).toBe(true);
+    const budget = await (memory as unknown as Db)
+      .collection<FederalBudget>("federalBudget")
+      .findOne({ countryId: "UK" });
+    expect(budget?.departmentAccounts?.uk_transport_department.programs.project).toMatchObject({
+      outlaid: 10,
+      cumulativeOutlays: 15,
+      encumbered: 0,
+    });
+  });
+
+  it("rejects a stale settlement after Cabinet allocation changed", async () => {
+    const memory = createInMemoryDb();
+    const definition = DEPARTMENT_DEFINITIONS.find(
+      (candidate) => candidate.id === "uk_health_department"
+    )!;
+    const opening = createEmptyDepartmentAccount(definition);
+    opening.lastAllocationChangedTurn = 1;
+    const stored = { ...opening, lastAllocationChangedTurn: 2 };
+    memory.seed("federalBudget", [
+      {
+        _id: "UK",
+        countryId: "UK",
+        departmentAccounts: { uk_health_department: stored },
+      },
+    ]);
+    const settlement = settleDepartmentAccount({
+      departmentId: opening.departmentId,
+      turn: 1,
+      accruedThroughTurn: 0,
+      openingBalance: 0,
+      openingEncumbered: 0,
+      openingArrears: 0,
+      authority: 1,
+      policy: { canOverdraft: false, usesEncumbrance: true, arrearsMode: "record" },
+      programs: [],
+    });
+    expect(
+      await applyCountryDepartmentSettlements(
+        memory as unknown as Db,
+        "UK",
+        { uk_health_department: opening },
+        new Set(),
+        [settlement]
+      )
+    ).toBe(false);
   });
 });

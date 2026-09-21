@@ -49,12 +49,16 @@ export function DepartmentFinancePanel({
     );
   }, [allocatablePrograms, defaultShare]);
   const allocationTotal = Object.values(allocations).reduce((sum, value) => sum + value, 0);
+  const allocationsValid =
+    Object.values(allocations).every(
+      (value) => Number.isFinite(value) && value >= 0 && value <= 100
+    ) && Math.abs(allocationTotal - 100) <= 0.1;
   const allocationLocked =
     currentTurn !== undefined && department.lastAllocationChangedTurn === currentTurn;
 
   async function saveAllocations() {
     if (!countryCode || !positionId) return;
-    if (Math.abs(allocationTotal - 100) > 0.1) {
+    if (!allocationsValid) {
       showToast(
         `Program allocations must total 100%. Current total: ${allocationTotal.toFixed(1)}%.`,
         "error"
@@ -102,7 +106,11 @@ export function DepartmentFinancePanel({
         </div>
         <p className="mt-3 text-sm text-muted">{department.explanation}</p>
         {department.balance !== undefined && (
-          <dl className="mt-4 grid gap-x-5 gap-y-3 border-t border-card-border pt-4 text-sm sm:grid-cols-4">
+          <dl className="mt-4 grid gap-x-5 gap-y-3 border-t border-card-border pt-4 text-sm sm:grid-cols-5">
+            <div>
+              <dt className="text-muted">Annual authority</dt>
+              <dd>{money(department.annualAuthority ?? 0, currencySymbol)}</dd>
+            </div>
             <div>
               <dt className="text-muted">Account balance</dt>
               <dd>{money(department.balance, currencySymbol)}</dd>
@@ -133,11 +141,7 @@ export function DepartmentFinancePanel({
                 funds. Existing commitments and arrears are paid first.
               </p>
             </div>
-            <span
-              className={
-                Math.abs(allocationTotal - 100) <= 0.1 ? "text-sm text-muted" : "text-sm text-error"
-              }
-            >
+            <span className={allocationsValid ? "text-sm text-muted" : "text-sm text-error"}>
               {allocationTotal.toFixed(1)}%
             </span>
           </div>
@@ -173,7 +177,7 @@ export function DepartmentFinancePanel({
             <button
               type="button"
               className="mt-4 rounded-md bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-50"
-              disabled={allocationLocked || saving || Math.abs(allocationTotal - 100) > 0.1}
+              disabled={allocationLocked || saving || !allocationsValid}
               onClick={saveAllocations}
             >
               {allocationLocked ? "Updated this turn" : saving ? "Saving..." : "Save allocation"}
@@ -184,7 +188,7 @@ export function DepartmentFinancePanel({
 
       {department.programs.map((program) => (
         <DepartmentProgramPanel
-          key={`${department.departmentId}:${program.programName}`}
+          key={`${department.departmentId}:${program.programId ?? program.programName}`}
           program={program}
           currencySymbol={currencySymbol}
         />

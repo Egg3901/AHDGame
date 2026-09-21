@@ -80,6 +80,8 @@ export interface RegionalBudget {
       implementationFactor: number;
       obligationPriority: number;
       lastSettledTurn: number;
+      /** Inclusive turn through which this cadence-based settlement is current. */
+      validThroughTurn?: number;
     }
   >;
   subsidyCosts?: number;

@@ -38,8 +38,7 @@ import { getEraContext } from "@/lib/era/context";
 import { resolveTaxSliderProvisionFields } from "@/lib/politicalLegislation/taxSlider";
 import { isLegislationTypeActive } from "@/lib/era/legislationCatalog";
 import { resolveBillJurisdiction } from "@/lib/legislature/jurisdiction";
-import { resolveAdministrationConflicts } from "@/lib/legislature/administrationConflicts";
-import type { EnactedLaw } from "@/lib/db/types/budget";
+import { findAdministrationConflict } from "@/lib/legislature/administrationConflictCheck";
 
 // snapshotBillPolicyProvisions now lives in the shared provision-enrichment core
 // so the regional bill paths can call it too. Re-exported for existing importers.
@@ -493,26 +492,7 @@ export async function validateBillProvisions(
   }
 
   if (administration?.enabled === true && sourceCountry && validatedLegislationTypes.length > 0) {
-    const activeLaws = await db
-      .collection<EnactedLaw>("enactedLaws")
-      .find(
-        { countryId: sourceCountry, scope: "national", repealedAt: { $exists: false } },
-        { projection: { legislationTypeId: 1 } }
-      )
-      .toArray();
-    const activeTypeIds = [...new Set(activeLaws.map((law) => law.legislationTypeId))];
-    const activeTypes =
-      activeTypeIds.length === 0
-        ? []
-        : await db
-            .collection<LegislationType>("legislationTypes")
-            .find({ _id: { $in: activeTypeIds } }, { projection: { _id: 1, administration: 1 } })
-            .toArray();
-    const administrationConflicts = resolveAdministrationConflicts({
-      proposed: validatedLegislationTypes,
-      existing: activeTypes,
-    });
-    const conflict = administrationConflicts.conflicts[0];
+    const conflict = await findAdministrationConflict(db, sourceCountry, validatedLegislationTypes);
     if (conflict) {
       return {
         ok: false,

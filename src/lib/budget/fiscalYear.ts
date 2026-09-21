@@ -41,6 +41,12 @@ import { applyAusterityCap } from "@/lib/sovereignDefault/austerity";
 import { loadFxRatesByCurrency } from "@/lib/currency/corporationCapital";
 import { ensureBudgetDraftForFiscalYear } from "@/lib/db/collections/ukBudgets";
 import { settleRegionalBudget } from "@/lib/governmentFinance/rules/regionalSettlement";
+import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
+import {
+  distributeAnnualRegionalGrantPool,
+  resolveAnnualRegionalGrantPool,
+} from "@/lib/governmentFinance/grantTransfers";
+import { withLawAdministration } from "@/lib/governmentFinance/lawAdministrationCatalog";
 
 // The current turn engine still processes fiscal-year rollover as one shared phase.
 // Pulling the anchor from country-systems makes the rule source explicit now, while
@@ -106,13 +112,21 @@ export async function processFiscalYear(
     ? await db
         .collection<LegislationType>("legislationTypes")
         .find(
-          { countryScope: { $in: ["us", "uk", "jp"] } },
+          {
+            $or: [
+              { countryScope: { $in: ["us", "uk", "jp"] } },
+              // Legacy records without a countryScope are US laws throughout
+              // the existing policy pipeline and receive administration
+              // metadata from the same compatibility rule.
+              { countryScope: { $exists: false } },
+            ],
+          },
           { projection: { _id: 1, name: 1, administration: 1, policyOptions: 1 } }
         )
         .toArray()
     : [];
   const regionalLegislationTypeMap = new Map(
-    regionalLegislationTypes.map((type) => [type._id, type])
+    withLawAdministration(regionalLegislationTypes).map((type) => [type._id, type])
   );
 
   // Open the UK's annual authoring window only in worlds with a UK ledger. The
@@ -282,9 +296,36 @@ export async function processFiscalYear(
     // which is folded into spending.stateGrants by calculateFederalSpending
     // via the isGrant flag on enacted laws.
     const isUS = countryId === COUNTRY_CONFIGS.US.id;
-    const grantDistribution = isUS
+    const formulaGrantDistribution = isUS
       ? await processFormulaGrants(db, federalRevenue.total, countryId)
       : {};
+    const departmentGrant =
+      isUS && regionalFinanceEnabled
+        ? resolveAnnualRegionalGrantPool({
+            accounts: federalBudget.departmentAccounts ?? {},
+            currentTurn,
+          })
+        : { hasProgram: false, annualPool: 0 };
+    const departmentGrantDistribution = departmentGrant.hasProgram
+      ? distributeAnnualRegionalGrantPool(
+          departmentGrant.annualPool,
+          states
+            .filter(
+              (state) => state.countryId === countryId && !NATIONAL_SCOPE_IDS.has(String(state._id))
+            )
+            .map((state) => ({ id: String(state._id), population: state.population ?? 0 }))
+        )
+      : {};
+    const grantStateIds = new Set([
+      ...Object.keys(formulaGrantDistribution),
+      ...Object.keys(departmentGrantDistribution),
+    ]);
+    const grantDistribution = Object.fromEntries(
+      [...grantStateIds].map((stateId) => [
+        stateId,
+        (formulaGrantDistribution[stateId] ?? 0) + (departmentGrantDistribution[stateId] ?? 0),
+      ])
+    );
 
     if (isUS) {
       for (const [stateId, grantAmount] of Object.entries(grantDistribution)) {
@@ -308,7 +349,9 @@ export async function processFiscalYear(
       // US still uses the formulaGrants pool for state grants and overrides
       // the enacted-law-derived total. Non-US countries already populated
       // stateGrants from isGrant=true enacted laws inside calculateFederalSpending.
-      const totalStateGrants = Object.values(grantDistribution).reduce((a, b) => a + b, 0);
+      // The department-delivered pool is already charged in byCategory through
+      // its enacted law. Only the legacy formula-grant line is added here.
+      const totalStateGrants = Object.values(formulaGrantDistribution).reduce((a, b) => a + b, 0);
       federalSpending.stateGrants = totalStateGrants;
       federalSpending.total += totalStateGrants;
     }
@@ -536,7 +579,6 @@ async function processStateFiscalYear(
   if (regionalFinanceEnabled) {
     const previousIds = new Set(Object.keys(stateBudget.regionalProgramSettlements ?? {}));
     const claims = spendingDetail.lawCosts.flatMap(({ law, annualCost }) => {
-      if (annualCost <= 0) return [];
       const type = legislationTypeMap.get(law.legislationTypeId);
       const option =
         typeof law.policyOptionIndex === "number"
@@ -551,8 +593,8 @@ async function processStateFiscalYear(
           programId,
           legislationTypeId: law.legislationTypeId,
           policyOptionId: option?.id ?? String(law.policyOptionIndex ?? "current"),
-          authorizedCost: annualCost,
-          obligationPriority: 5,
+          authorizedCost: Math.max(0, annualCost),
+          obligationPriority: implementation?.obligationPriority ?? 5,
           fundingSemantics: implementation?.fundingSemantics ?? "appropriation_included",
           continuing: previousIds.has(programId),
         } as const,
@@ -586,7 +628,11 @@ async function processStateFiscalYear(
     regionalProgramSettlements = Object.fromEntries(
       settlement.programs.map((program) => [
         program.programId,
-        { ...program, lastSettledTurn: currentTurn },
+        {
+          ...program,
+          lastSettledTurn: currentTurn,
+          validThroughTurn: currentTurn + TURNS_PER_YEAR - 1,
+        },
       ])
     );
   }

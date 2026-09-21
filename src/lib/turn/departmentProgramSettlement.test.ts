@@ -31,10 +31,23 @@ const legislationType = {
     primaryPortfolioId: "health",
     primaryDepartmentId: "us_health_department",
     responsiblePositionId: "secretary_of_health",
-    jurisdictionMode: "national_direct",
+    lawKind: "service_program",
+    implementationMode: "direct",
+    allowedJurisdictionModes: ["national_direct"],
+    defaultJurisdictionMode: "national_direct",
+    policyFamilyId: "us_public_health",
   },
   policyOptions: [
-    { id: "public_health_opt_0" },
+    {
+      id: "public_health_opt_0",
+      implementation: {
+        programId: "us_public_health_zero_cost",
+        fundingSemantics: "appropriation_included",
+        appropriationClass: "operating",
+        obligationPriority: 6,
+        capacityType: "public_health_operations",
+      },
+    },
     {
       id: "public_health_opt_1",
       implementation: {
@@ -74,6 +87,7 @@ describe("processDepartmentProgramSettlement", () => {
   beforeEach(() => {
     vi.mocked(calculateFederalLawAnnualCosts).mockResolvedValue({
       items: [{ law: law as never, amount: 9_300 }],
+      activeLaws: [law as never],
       eraYear: null,
       commandEconomyEnabled: false,
     });
@@ -122,12 +136,35 @@ describe("processDepartmentProgramSettlement", () => {
     );
   });
 
+  it("settles an active zero-cost administered option instead of dropping its delivery", async () => {
+    const memory = seedDb();
+    const db = memory as unknown as Db;
+    const zeroCostLaw = { ...law, policyOptionIndex: 0 };
+    vi.mocked(calculateFederalLawAnnualCosts).mockResolvedValue({
+      items: [],
+      activeLaws: [zeroCostLaw as never],
+      eraYear: null,
+      commandEconomyEnabled: false,
+    });
+
+    const result = await processDepartmentProgramSettlement(db, 10, {
+      departmentFinanceEnabled: true,
+    });
+
+    expect(result).toMatchObject({ programsSettled: 1, authorityAccrued: 0 });
+    const after = await db.collection<FederalBudget>("federalBudget").findOne({ countryId: "US" });
+    expect(
+      after?.departmentAccounts?.us_health_department?.programs.us_public_health_zero_cost
+    ).toMatchObject({ annualDemand: 0, fundingRatio: 1, lastSettledTurn: 10 });
+  });
+
   it("winds down when the selected law is no longer active", async () => {
     const memory = seedDb();
     const db = memory as unknown as Db;
     await processDepartmentProgramSettlement(db, 10, { departmentProgramSliceEnabled: true });
     vi.mocked(calculateFederalLawAnnualCosts).mockResolvedValue({
       items: [],
+      activeLaws: [],
       eraYear: null,
       commandEconomyEnabled: false,
     });

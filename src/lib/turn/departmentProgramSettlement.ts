@@ -121,7 +121,7 @@ export async function processDepartmentProgramSettlement(
   if (!active && !previous) return emptyResult(true);
 
   const annualDemand = Math.max(0, Math.round(active?.amount ?? previous?.annualDemand ?? 0));
-  const periodDemand = includedAuthorityPerTurn(annualDemand);
+  const periodDemand = includedAuthorityPerTurn(annualDemand, turn);
   const authority = active ? periodDemand : 0;
   const repealTurn = !active ? (previous?.repealTurn ?? turn) : undefined;
 
@@ -190,26 +190,34 @@ export async function processDepartmentProgramSettlement(
 }
 
 const GENERALIZED_COUNTRIES: DepartmentCountryId[] = ["US", "UK", "JP"];
+const GENERALIZED_BUDGET_PROJECTION = {
+  _id: 1,
+  countryId: 1,
+  gdp: 1,
+  revenue: 1,
+  spending: 1,
+  baselineSpendingByCategory: 1,
+  baselineStateGrants: 1,
+  departmentAccounts: 1,
+} as const;
 
 async function loadGeneralizedBudgets(db: Db): Promise<FederalBudget[]> {
   return db
     .collection<FederalBudget>("federalBudget")
     .find(
       { countryId: { $in: GENERALIZED_COUNTRIES } },
-      {
-        projection: {
-          _id: 1,
-          countryId: 1,
-          gdp: 1,
-          revenue: 1,
-          spending: 1,
-          baselineSpendingByCategory: 1,
-          baselineStateGrants: 1,
-          departmentAccounts: 1,
-        },
-      }
+      { projection: GENERALIZED_BUDGET_PROJECTION }
     )
     .toArray();
+}
+
+async function loadGeneralizedBudget(
+  db: Db,
+  countryId: DepartmentCountryId
+): Promise<FederalBudget | null> {
+  return db
+    .collection<FederalBudget>("federalBudget")
+    .findOne({ countryId }, { projection: GENERALIZED_BUDGET_PROJECTION });
 }
 
 async function processGeneralizedDepartmentSettlement(
@@ -227,7 +235,7 @@ async function processGeneralizedDepartmentSettlement(
   );
   const legislationTypeIds = [
     ...new Set(
-      costResults.flatMap(({ costs }) => costs.items.map(({ law }) => law.legislationTypeId))
+      costResults.flatMap(({ costs }) => costs.activeLaws.map((law) => law.legislationTypeId))
     ),
   ];
   const storedTypes =
@@ -266,37 +274,61 @@ async function processGeneralizedDepartmentSettlement(
   let encumbered = 0;
   let skippedPrograms = 0;
 
-  for (const { budget, costs } of costResults) {
-    const countryId = budget.countryId as DepartmentCountryId;
+  for (const { budget: initialBudget, costs } of costResults) {
+    const countryId = initialBudget.countryId as DepartmentCountryId;
     if (!GENERALIZED_COUNTRIES.includes(countryId)) continue;
-    const plan = buildCountryDepartmentSettlementPlan({
-      countryId,
-      turn,
-      year: costs.eraYear,
-      enabledSeats,
-      accounts: budget.departmentAccounts ?? {},
-      activeLawCosts: costs.items,
-      legislationTypes: types,
-    });
-    if (plan.settlements.length === 0) {
-      skippedPrograms += plan.skippedPrograms.length;
-      continue;
+    let budget = initialBudget;
+    let finalPlan: ReturnType<typeof buildCountryDepartmentSettlementPlan> | null = null;
+    let currentTurnSettlements:
+      ReturnType<typeof buildCountryDepartmentSettlementPlan>["settlements"] | null = null;
+    for (let attempt = 0; attempt < MAX_COMMIT_ATTEMPTS; attempt += 1) {
+      const annualCostByLawId = new Map(
+        costs.items.map(({ law, amount }) => [law._id.toString(), amount])
+      );
+      const plan = buildCountryDepartmentSettlementPlan({
+        countryId,
+        turn,
+        year: costs.eraYear,
+        enabledSeats,
+        accounts: budget.departmentAccounts ?? {},
+        // Zero-cost options can still require administrative capacity and
+        // produce delivered outcomes. Keep every active law in the plan while
+        // leaving the sovereign spending calculation's zero-cost filtering
+        // unchanged.
+        activeLawCosts: costs.activeLaws.map((law) => ({
+          law,
+          amount: annualCostByLawId.get(law._id.toString()) ?? 0,
+        })),
+        legislationTypes: types,
+      });
+      finalPlan = plan;
+      const pending = plan.settlements.filter((settlement) => !settlement.replayed);
+      if (pending.length === 0) {
+        currentTurnSettlements = [];
+        break;
+      }
+      const committed = await applyCountryDepartmentSettlements(
+        db,
+        countryId,
+        plan.openings,
+        new Set(plan.createdDepartmentIds),
+        pending
+      );
+      if (committed) {
+        currentTurnSettlements = pending;
+        break;
+      }
+      const reloaded = await loadGeneralizedBudget(db, countryId);
+      if (!reloaded) break;
+      budget = reloaded;
     }
-    const currentTurnSettlements = plan.settlements.filter((settlement) => !settlement.replayed);
-    if (currentTurnSettlements.length === 0) {
-      skippedPrograms += plan.skippedPrograms.length;
-      continue;
+    if (!finalPlan || currentTurnSettlements === null) {
+      throw new Error(
+        `department settlement could not commit after concurrent budget changes for ${countryId}`
+      );
     }
-    const committed = await applyCountryDepartmentSettlements(
-      db,
-      countryId,
-      plan.openings,
-      new Set(plan.createdDepartmentIds),
-      currentTurnSettlements
-    );
-    if (!committed) {
-      throw new Error(`department settlement could not commit for ${countryId}`);
-    }
+    skippedPrograms += finalPlan.skippedPrograms.length;
+    if (currentTurnSettlements.length === 0) continue;
     countriesProcessed += 1;
     departmentsSettled += currentTurnSettlements.length;
     programsSettled += currentTurnSettlements.reduce(
@@ -312,7 +344,6 @@ async function processGeneralizedDepartmentSettlement(
       (sum, settlement) => sum + settlement.closingEncumbered,
       0
     );
-    skippedPrograms += plan.skippedPrograms.length;
   }
 
   return {

@@ -14,7 +14,7 @@ import { stateEffectsAndNationalAggregationPhase } from "@/simulation/phases/sta
  * parallel Promise.all, their starts interleave and these assertions fail.
  * Phase fns are never invoked, so no DB access happens.
  */
-function makeHarness() {
+function makeHarness(newTurn = 1000) {
   const events: string[] = [];
   const runtime = {
     runPhase: vi.fn(async (name: string, _fn: () => Promise<unknown>) => {
@@ -38,7 +38,7 @@ function makeHarness() {
   };
   const context = {
     db: {},
-    newTurn: 1000,
+    newTurn,
     currentYear: 2025,
     phaseResults: {} as Record<string, unknown>,
     gameState: { forexEnabled: true, startingYear: 2019 },
@@ -65,10 +65,21 @@ describe("stateEffectsAndNationalAggregation phase ordering", () => {
     // Strict serialization: each writer fully completes before the next starts.
     expect(idx("end:crisisTurn")).toBeLessThan(idx("start:ministerialOrders"));
     expect(idx("end:ministerialOrders")).toBeLessThan(idx("start:policyEffects"));
+    expect(idx("end:regionalBudgetProcessing")).toBeLessThan(idx("start:policyEffects"));
 
     // The metric engine consumes the settled metric values and must run after
     // the last writer finishes.
     expect(idx("end:policyEffects")).toBeLessThan(idx("start:metricEngine"));
+  });
+
+  it("waits for the due JP regional settlement before applying policy effects", async () => {
+    const { events, runtime, context } = makeHarness(1001);
+
+    await stateEffectsAndNationalAggregationPhase.execute(context as never, runtime as never);
+
+    expect(events.indexOf("end:jpRegionalBudgetProcessing")).toBeLessThan(
+      events.indexOf("start:policyEffects")
+    );
   });
 
   it("keeps non-conflicting phases parallel with the serialized writer chain", async () => {

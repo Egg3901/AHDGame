@@ -111,6 +111,8 @@ export async function POST(request: Request, { params }: RouteParams) {
     const result = await db.collection<FederalBudget>("federalBudget").updateOne(
       {
         countryId,
+        [accountPath]: { $exists: true },
+        [`${accountPath}.accruedThroughTurn`]: account.accruedThroughTurn,
         $or: [
           { [lastChangedPath]: { $exists: false } },
           { [lastChangedPath]: { $lt: currentTurn } },

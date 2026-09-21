@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { LegislationType } from "@/lib/db/types/legislation";
-import { resolveBillJurisdiction } from "./jurisdiction";
+import { commonJurisdictionChoices, resolveBillJurisdiction } from "./jurisdiction";
 
 function type(
   id: string,
@@ -62,5 +62,26 @@ describe("resolveBillJurisdiction", () => {
       ],
     });
     expect(result.ok).toBe(false);
+  });
+});
+
+describe("commonJurisdictionChoices", () => {
+  it("intersects multi-provision choices and prefers a shared authored default", () => {
+    expect(
+      commonJurisdictionChoices([
+        {
+          allowedJurisdictionModes: ["national_direct", "concurrent"],
+          defaultJurisdictionMode: "concurrent",
+        },
+        {
+          allowedJurisdictionModes: ["concurrent", "regional_discretion"],
+          defaultJurisdictionMode: "concurrent",
+        },
+      ])
+    ).toEqual({ modes: ["concurrent"], defaultMode: "concurrent" });
+  });
+
+  it("hides choices when any selected type lacks administration metadata", () => {
+    expect(commonJurisdictionChoices([undefined])).toEqual({ modes: [] });
   });
 });

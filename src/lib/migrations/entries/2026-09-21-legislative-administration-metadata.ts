@@ -11,7 +11,11 @@ export const migration: Migration = {
   idempotent: true,
   async execute(db, ctx) {
     const collection = db.collection<LegislationType>("legislationTypes");
-    const rows = await collection.find({ countryScope: { $in: [...COUNTRY_SCOPES] } }).toArray();
+    const rows = await collection
+      .find({
+        $or: [{ countryScope: { $in: [...COUNTRY_SCOPES] } }, { countryScope: { $exists: false } }],
+      })
+      .toArray();
     const materialized = withLawAdministration(rows);
     if (ctx.dryRun) {
       return {

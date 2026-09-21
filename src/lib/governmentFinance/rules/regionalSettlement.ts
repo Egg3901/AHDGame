@@ -39,18 +39,31 @@ function allocateProRata(claims: RegionalProgramClaim[], available: number): Map
     return allocations;
   }
 
-  let used = 0;
   const ordered = [...claims].sort((a, b) => a.programId.localeCompare(b.programId));
-  for (let index = 0; index < ordered.length; index += 1) {
-    const claim = ordered[index];
-    const amount =
-      index === ordered.length - 1
-        ? Math.max(0, available - used)
-        : Math.min(claim.authorizedCost, Math.floor((available * claim.authorizedCost) / demand));
+  const provisional = ordered.map((claim) => {
+    const exact = (available * claim.authorizedCost) / demand;
+    const amount = Math.min(claim.authorizedCost, Math.floor(exact));
     allocations.set(claim.programId, amount);
-    used += amount;
+    return { claim, remainder: exact - amount };
+  });
+  let residual = available - [...allocations.values()].reduce((sum, amount) => sum + amount, 0);
+  provisional.sort(
+    (a, b) => b.remainder - a.remainder || a.claim.programId.localeCompare(b.claim.programId)
+  );
+  for (const { claim } of provisional) {
+    if (residual === 0) break;
+    const allocated = allocations.get(claim.programId) ?? 0;
+    if (allocated < claim.authorizedCost) {
+      allocations.set(claim.programId, allocated + 1);
+      residual -= 1;
+    }
   }
   return allocations;
+}
+
+function amount(value: number, field: string): number {
+  if (!Number.isFinite(value)) throw new Error(`${field} must be finite`);
+  return Math.max(0, Math.round(value));
 }
 
 /**
@@ -63,30 +76,62 @@ export function settleRegionalBudget(input: {
   reservedNonProgramSpending?: number;
   claims: RegionalProgramClaim[];
 }): RegionalBudgetSettlement {
-  const availableBudget = Math.max(0, Math.round(input.availableBudget));
+  const availableBudget = amount(input.availableBudget, "availableBudget");
   const reservedNonProgramSpending = Math.min(
     availableBudget,
-    Math.max(0, Math.round(input.reservedNonProgramSpending ?? 0))
+    amount(input.reservedNonProgramSpending ?? 0, "reservedNonProgramSpending")
   );
   let remaining = availableBudget - reservedNonProgramSpending;
-  const validClaims = input.claims
-    .filter((claim) => claim.authorizedCost > 0)
-    .map((claim) => ({ ...claim, authorizedCost: Math.round(claim.authorizedCost) }));
-  const grouped = new Map<string, RegionalProgramClaim[]>();
+  const ids = new Set<string>();
+  const validClaims = input.claims.flatMap((claim): RegionalProgramClaim[] => {
+    if (!claim.programId) throw new Error("regional program id cannot be empty");
+    if (ids.has(claim.programId)) {
+      throw new Error(`duplicate regional program: ${claim.programId}`);
+    }
+    ids.add(claim.programId);
+    if (
+      !Number.isInteger(claim.obligationPriority) ||
+      claim.obligationPriority < 1 ||
+      claim.obligationPriority > 7
+    ) {
+      throw new Error(`invalid obligation priority: ${claim.programId}`);
+    }
+    const authorizedCost = amount(claim.authorizedCost, `${claim.programId}.authorizedCost`);
+    return [{ ...claim, authorizedCost }];
+  });
+  const grouped = new Map<
+    string,
+    {
+      mandatory: number;
+      obligationPriority: number;
+      continuity: number;
+      claims: RegionalProgramClaim[];
+    }
+  >();
   for (const claim of validClaims) {
     const mandatory = claim.fundingSemantics === "standing_mandatory" ? 0 : 1;
     const continuity = claim.continuing ? 0 : 1;
-    const key = `${mandatory}:${continuity}`;
-    const tier = grouped.get(key) ?? [];
-    tier.push(claim);
+    const key = `${mandatory}:${claim.obligationPriority}:${continuity}`;
+    const tier = grouped.get(key) ?? {
+      mandatory,
+      obligationPriority: claim.obligationPriority,
+      continuity,
+      claims: [],
+    };
+    tier.claims.push(claim);
     grouped.set(key, tier);
   }
 
   const allocations = new Map<string, number>();
-  for (const key of [...grouped.keys()].sort()) {
-    const tier = grouped.get(key)!;
-    const demand = tier.reduce((sum, claim) => sum + claim.authorizedCost, 0);
-    const tierAllocations = allocateProRata(tier, Math.min(remaining, demand));
+  const tiers = [...grouped.values()].sort(
+    (a, b) =>
+      a.mandatory - b.mandatory ||
+      a.obligationPriority - b.obligationPriority ||
+      a.continuity - b.continuity
+  );
+  for (const tier of tiers) {
+    const demand = tier.claims.reduce((sum, claim) => sum + claim.authorizedCost, 0);
+    const tierAllocations = allocateProRata(tier.claims, Math.min(remaining, demand));
     let spent = 0;
     for (const [programId, amount] of tierAllocations) {
       allocations.set(programId, amount);

@@ -22,7 +22,10 @@ import type { RegionalBudget } from "@/lib/db/types/regionalBudget";
 import type { CabinetSetting } from "@/lib/db/types/cabinetSetting";
 import { loadAnnualSubsidyCostMaps } from "@/lib/subsidies/subsidyBudgetCosts";
 import { withLawAdministration } from "@/lib/governmentFinance/lawAdministrationCatalog";
-import { buildRegionalProgramClaims } from "@/lib/governmentFinance/regionalProgramClaims";
+import {
+  buildRegionalProgramClaims,
+  latestRegionalPoliciesByType,
+} from "@/lib/governmentFinance/regionalProgramClaims";
 import { settleRegionalBudget } from "@/lib/governmentFinance/rules/regionalSettlement";
 import { resolveAnnualRegionalGrantPool } from "@/lib/governmentFinance/grantTransfers";
 import type { FederalBudget } from "@/lib/db/types/budget";
@@ -119,7 +122,8 @@ function getOptionCostPerCapita(
 export async function processJPRegionalBudgets(
   db: import("mongodb").Db,
   turnNumber: number,
-  regionalFinanceEnabled = false
+  regionalFinanceEnabled = false,
+  settlementCadence = 1
 ): Promise<{ regionsProcessed: number }> {
   const jpRegions = await db.collection<State>("states").find({ countryId: "JP" }).toArray();
   if (jpRegions.length === 0) return { regionsProcessed: 0 };
@@ -182,6 +186,9 @@ export async function processJPRegionalBudgets(
     const existing = policiesByRegion.get(policy.stateId) ?? [];
     existing.push(policy);
     policiesByRegion.set(policy.stateId, existing);
+  }
+  for (const [regionId, policies] of policiesByRegion) {
+    policiesByRegion.set(regionId, latestRegionalPoliciesByType(policies));
   }
 
   // Fetch existing budget documents
@@ -352,7 +359,11 @@ export async function processJPRegionalBudgets(
             programSettlements: Object.fromEntries(
               (regionalSettlement?.programs ?? []).map((program) => [
                 program.programId,
-                { ...program, lastSettledTurn: turnNumber },
+                {
+                  ...program,
+                  lastSettledTurn: turnNumber,
+                  validThroughTurn: turnNumber + Math.max(1, settlementCadence) - 1,
+                },
               ])
             ),
           }

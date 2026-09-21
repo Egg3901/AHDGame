@@ -190,6 +190,7 @@ export async function calculateFederalLawAnnualCosts(
   hoistedEraContext?: EraContext
 ): Promise<{
   items: FederalLawAnnualCost[];
+  activeLaws: EnactedLaw[];
   eraYear: number | null;
   commandEconomyEnabled: boolean;
 }> {
@@ -218,8 +219,10 @@ export async function calculateFederalLawAnnualCosts(
   const { year: eraYear, incomeBandIndexByCountry } = eraContext;
   const nationalGdpPerCapita = population > 0 ? budget.gdp / population : undefined;
   const incomeBandIndex = incomeBandIndexByCountry?.[budgetCountryId] ?? null;
-  const items = keepLatestActiveLawPerType(rawLaws)
-    .filter((law) => isLegislationTypeActive(law.legislationTypeId, eraYear))
+  const activeLaws = keepLatestActiveLawPerType(rawLaws).filter((law) =>
+    isLegislationTypeActive(law.legislationTypeId, eraYear)
+  );
+  const items = activeLaws
     .map((law) => ({
       law,
       amount: calculateEnactedLawAnnualCost(law, {
@@ -236,7 +239,12 @@ export async function calculateFederalLawAnnualCosts(
     }))
     .filter((item) => Number.isFinite(item.amount) && item.amount !== 0);
 
-  return { items, eraYear, commandEconomyEnabled: gameConfig?.commandEconomyEnabled === true };
+  return {
+    items,
+    activeLaws,
+    eraYear,
+    commandEconomyEnabled: gameConfig?.commandEconomyEnabled === true,
+  };
 }
 
 export async function calculateFederalSpending(
@@ -343,10 +351,12 @@ export async function calculateStateSpendingDetail(
   spending: StateBudget["spending"];
   lawCosts: Array<{ law: EnactedLaw; annualCost: number; category: string }>;
 }> {
-  const enactedLaws = await db
-    .collection<EnactedLaw>("enactedLaws")
-    .find({ scope: "state", stateId, repealedAt: { $exists: false } })
-    .toArray();
+  const enactedLaws = keepLatestActiveLawPerType(
+    await db
+      .collection<EnactedLaw>("enactedLaws")
+      .find({ scope: "state", stateId, repealedAt: { $exists: false } })
+      .toArray()
+  );
 
   const state = await db.collection<State>("states").findOne({ _id: stateId, countryId });
   // The cost-scale ramp is a national-era factor, so it uses the country's national

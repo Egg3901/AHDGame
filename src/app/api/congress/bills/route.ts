@@ -76,6 +76,7 @@ import {
   type BillProposalOriginChamber,
 } from "@/lib/legislature/billAutoFailWarning";
 import { resolveBillJurisdiction } from "@/lib/legislature/jurisdiction";
+import { findAdministrationConflict } from "@/lib/legislature/administrationConflictCheck";
 export type { BillDisplay, BillsResponse } from "@/lib/legislature/dto/billDisplay";
 
 const VOTING_DURATION_MS = 24 * 60 * 60 * 1000; // 24 hours
@@ -963,6 +964,25 @@ export async function POST(request: Request) {
         { error: jurisdiction.error ?? "Invalid jurisdiction mode." },
         { status: 400 }
       );
+    }
+
+    if (administrationEnabled) {
+      const conflict = await findAdministrationConflict(
+        db,
+        "US",
+        validatedPolicyProvisions
+          .map((provision) => legislationTypeById.get(provision.legislationTypeId))
+          .filter((type): type is LegislationType => type !== undefined)
+      );
+      if (conflict) {
+        logRequest("POST", path, 409, Date.now() - start);
+        return NextResponse.json(
+          {
+            error: `This bill conflicts with active law ${conflict.existingLegislationTypeId} through ${conflict.conflictSetId}. Repeal or replace that regime first.`,
+          },
+          { status: 409 }
+        );
+      }
     }
 
     // Constraint 2: no duplicate provision at same policy level across active US Congress bills

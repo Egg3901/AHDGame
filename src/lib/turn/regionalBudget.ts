@@ -38,7 +38,10 @@ import { getNationalBudgetId } from "@/lib/bonds/sovereign";
 import { getLaw } from "@/lib/politicalLegislation/catalog";
 import { computeLawCost } from "@/lib/politicalLegislation/costEngine";
 import { withLawAdministration } from "@/lib/governmentFinance/lawAdministrationCatalog";
-import { buildRegionalProgramClaims } from "@/lib/governmentFinance/regionalProgramClaims";
+import {
+  buildRegionalProgramClaims,
+  latestRegionalPoliciesByType,
+} from "@/lib/governmentFinance/regionalProgramClaims";
 import { settleRegionalBudget } from "@/lib/governmentFinance/rules/regionalSettlement";
 import { resolveAnnualRegionalGrantPool } from "@/lib/governmentFinance/grantTransfers";
 
@@ -335,6 +338,9 @@ export async function processRegionalBudgets(
     existing.push(policy);
     policiesByRegion.set(policy.stateId, existing);
   }
+  for (const [regionId, policies] of policiesByRegion) {
+    policiesByRegion.set(regionId, latestRegionalPoliciesByType(policies));
+  }
 
   // 5. Fetch existing budget documents for all regions
   const regionIds = ukRegions.map((r) => r._id);
@@ -518,7 +524,11 @@ export async function processRegionalBudgets(
             programSettlements: Object.fromEntries(
               (regionalSettlement?.programs ?? []).map((program) => [
                 program.programId,
-                { ...program, lastSettledTurn: turnNumber },
+                {
+                  ...program,
+                  lastSettledTurn: turnNumber,
+                  validThroughTurn: turnNumber + Math.max(1, turnsElapsed) - 1,
+                },
               ])
             ),
           }

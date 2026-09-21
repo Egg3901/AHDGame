@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { DepartmentAccount } from "@/lib/db/types/budget";
-import { resolveAnnualRegionalGrantPool } from "./grantTransfers";
+import {
+  distributeAnnualRegionalGrantPool,
+  resolveAnnualRegionalGrantPool,
+} from "./grantTransfers";
 
 function account(): DepartmentAccount {
   return {
@@ -47,5 +50,29 @@ describe("regional grant transfer", () => {
     expect(
       resolveAnnualRegionalGrantPool({ accounts: { department: account() }, currentTurn: 11 })
     ).toEqual({ hasProgram: true, annualPool: 0 });
+  });
+
+  it("conserves integer currency with deterministic population shares", () => {
+    const result = distributeAnnualRegionalGrantPool(10, [
+      { id: "small", population: 1 },
+      { id: "large", population: 2 },
+    ]);
+    expect(result).toEqual({ large: 7, small: 3 });
+    expect(Object.values(result).reduce((sum, amount) => sum + amount, 0)).toBe(10);
+  });
+
+  it("uses equal shares for zero-population fixtures and rejects duplicate ids", () => {
+    expect(
+      distributeAnnualRegionalGrantPool(5, [
+        { id: "b", population: 0 },
+        { id: "a", population: 0 },
+      ])
+    ).toEqual({ a: 3, b: 2 });
+    expect(() =>
+      distributeAnnualRegionalGrantPool(1, [
+        { id: "same", population: 1 },
+        { id: "same", population: 2 },
+      ])
+    ).toThrow("unique ids");
   });
 });

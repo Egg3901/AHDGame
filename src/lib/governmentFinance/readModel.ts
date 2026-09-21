@@ -48,6 +48,7 @@ export interface DepartmentFinanceReadModel {
   kind: DepartmentDefinition["kind"];
   accountPolicyId?: string;
   explanation: string;
+  annualAuthority?: number;
   balance?: number;
   availableBalance?: number;
   encumbered?: number;
@@ -102,7 +103,9 @@ export function buildDepartmentFinanceReadModel(input: {
       const option = type?.policyOptions?.find(
         (candidate) => candidate.id === program.policyOptionId
       );
-      const capacityType = option?.implementation?.capacityType;
+      const capacityType =
+        option?.implementation?.capacityType ??
+        Object.keys(option?.implementation?.capacityDemand ?? {})[0];
       const capacity = capacityType ? input.account?.capacityPools[capacityType] : undefined;
       const outcome = option?.implementation?.outcome;
       return {
@@ -158,6 +161,7 @@ export function buildDepartmentFinanceReadModel(input: {
     ...base,
     explanation:
       "The account is a sub-ledger of enacted national spending. Public money remains with the institution when the officeholder changes.",
+    annualAuthority: input.account.annualAuthority ?? 0,
     balance: input.account.balance,
     availableBalance: Math.max(0, input.account.balance - input.account.encumbered),
     encumbered: input.account.encumbered,
