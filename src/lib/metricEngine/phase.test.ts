@@ -6,6 +6,7 @@ import { resetCorpFxRateCacheForTests } from "@/lib/currency/corporationCapital"
 import { GDP_GROWTH_SCENARIOS, captureGoldenOutput } from "./__fixtures__/gdpGrowthGolden";
 import { runMetricEngine } from "./phase";
 import { applyCrisisEffects } from "@/lib/crises/applyEffects";
+import { POLITICAL_METRIC_FAMILIES } from "@/lib/politicalMetrics/families";
 
 describe("runMetricEngine — golden-master parity with updateGdpGrowth", () => {
   let db: MockDb;
@@ -270,6 +271,59 @@ describe("runMetricEngine — phase behavior", () => {
     // growing workforce (358 → 360) + steady capital → potential above the TFP baseline
     const { TFP_BASELINE } = await import("./potentialGrowth");
     expect(set["economic.potentialGrowth.value"]).toBeGreaterThan(TFP_BASELINE);
+  });
+
+  it("subtracts failing-democracy drag from a democratic country's potential growth", async () => {
+    setupCollection("states", [
+      {
+        _id: "s1",
+        name: "s1",
+        countryId: "US",
+        population: 1000,
+        gdp: 1000,
+        capitalStock: 3000,
+        workingAgePopulation: 600,
+        militaryServicePopulation: 0,
+      },
+    ]);
+    setupCollection("corporateSectors", [
+      { _id: "secA", stateId: "s1", revenue: 1000, currentGrowthRate: 3 },
+    ]);
+    setupCollection("unownedSectors", []);
+    setupCollection("stateMetrics", [
+      { _id: "s1", economic: { laborParticipation: { value: 60 }, laborForce: { value: 360 } } },
+    ]);
+    db.collectionMocks.macroMetrics = db.collectionMocks.stateMetrics!;
+    setupCollection("politicalMetrics", [
+      {
+        _id: "s1",
+        countryId: "US",
+        values: Object.fromEntries(POLITICAL_METRIC_FAMILIES.map((family) => [family.id, 0])),
+      },
+    ]);
+    setupCollection("corporations", []);
+    setupCollection("exchangeRates", []);
+    setupCollection("centralBanks", []);
+    setupCollection("federalBudget", [
+      { _id: "federal", countryId: "US", taxRates: { salesTax: 0 } },
+    ]);
+    setupCollection("stateBudgets", []);
+
+    const metricOps: Array<{
+      updateOne: { filter: { _id: string }; update: { $set: Record<string, number> } };
+    }> = [];
+    db.collectionMocks.stateMetrics!.bulkWrite = vi
+      .fn()
+      .mockImplementation((ops: typeof metricOps) => {
+        metricOps.push(...ops);
+        return Promise.resolve({ ok: 1 });
+      });
+    db.collectionMocks.states!.bulkWrite = vi.fn().mockResolvedValue({ ok: 1 });
+
+    await runMetricEngine(db as unknown as Db, 10);
+
+    const set = metricOps[0].updateOne.update.$set;
+    expect(set["economic.potentialGrowth.value"]).toBeLessThan(-2);
   });
 
   it("integrates gdpGrowth via the output gap + persists state.outputGap (P1c-2)", async () => {

@@ -8,23 +8,16 @@
  * erases the broader ruling-party accountability.
  */
 
-export const DEMOCRATIC_HEALTH_FALLOUT_THRESHOLD = 60;
-export const DEMOCRATIC_HEALTH_PARTY_PENALTY_MAX = 0.1;
-export const DEMOCRATIC_HEALTH_CURRENT_RULER_EXTRA_MAX = 0.05;
-export const DEMOCRATIC_HEALTH_RELIEF_CAP_PCT = 75;
-const DEMOCRATIC_HEALTH_SEVERITY_EXPONENT = 1.35;
-
-export interface DemocraticHealthPressure {
-  value: number;
-  /** 0 at the threshold, 1 at zero health. */
-  severity: number;
-  /** Base multiplier reduction for every candidate in the ruling party. */
-  partyPenalty: number;
-  /** Total multiplier reduction for the current ruler. */
-  currentRulerPenalty: number;
-  /** Relief after clamping to the supported temporary-relief range. */
-  reliefPct: number;
-}
+export {
+  DEMOCRATIC_HEALTH_CURRENT_RULER_EXTRA_MAX,
+  DEMOCRATIC_HEALTH_FALLOUT_THRESHOLD,
+  DEMOCRATIC_HEALTH_GDP_DRAG_MAX,
+  DEMOCRATIC_HEALTH_PARTY_PENALTY_MAX,
+  DEMOCRATIC_HEALTH_RELIEF_CAP_PCT,
+  democraticHealthEconomicDrag,
+  democraticHealthSovereignSpread,
+  democraticHealthPressure,
+} from "@/lib/governanceStyle/rules/democraticConsequences";
 
 export interface DemocraticHealthCandidateInput {
   candidateParty: string;
@@ -42,6 +35,8 @@ export interface DemocraticHealthElectionSnapshot {
   rulingPartyId?: string;
   partyPenaltyPct: number;
   currentRulerPenaltyPct: number;
+  /** Annual GDP-growth percentage points lost at this health score. */
+  economicDragPctPoints: number;
   currentRulerReliefPct: number;
   currentRulerInRace: boolean;
   recordedTurn: number;
@@ -49,39 +44,6 @@ export interface DemocraticHealthElectionSnapshot {
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
-}
-
-/**
- * Convert the displayed 0..100 health score into election pressure.
- *
- * Health at or above 60 is neutral. Below 60, the normalized shortfall is
- * raised to an exponent greater than one so the first signs of institutional
- * strain are moderate while deeper failures become increasingly costly.
- */
-export function democraticHealthPressure(value: number, reliefPct = 0): DemocraticHealthPressure {
-  const safeValue = clamp(Number.isFinite(value) ? value : 50, 0, 100);
-  const safeReliefPct = clamp(
-    Number.isFinite(reliefPct) ? reliefPct : 0,
-    0,
-    DEMOCRATIC_HEALTH_RELIEF_CAP_PCT
-  );
-  const shortfall = clamp(
-    (DEMOCRATIC_HEALTH_FALLOUT_THRESHOLD - safeValue) / DEMOCRATIC_HEALTH_FALLOUT_THRESHOLD,
-    0,
-    1
-  );
-  const severity = Math.pow(shortfall, DEMOCRATIC_HEALTH_SEVERITY_EXPONENT);
-  const partyPenalty = DEMOCRATIC_HEALTH_PARTY_PENALTY_MAX * severity;
-  const currentRulerPenalty =
-    partyPenalty + DEMOCRATIC_HEALTH_CURRENT_RULER_EXTRA_MAX * severity * (1 - safeReliefPct / 100);
-
-  return {
-    value: safeValue,
-    severity,
-    partyPenalty,
-    currentRulerPenalty,
-    reliefPct: safeReliefPct,
-  };
 }
 
 /** Return the candidate's nominal-share multiplier for the health channel. */
