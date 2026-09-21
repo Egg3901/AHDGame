@@ -77,7 +77,7 @@ export async function GET(request: Request, { params }: RouteParams) {
 
     if (!(await isCorporationProductsEnabled(db))) {
       return NextResponse.json(
-        { enabled: false, isCeo, operatingModels: [], activeProduct: null, catalog: [] },
+        { enabled: false, family, isCeo, operatingModels: [], activeProduct: null, catalog: [] },
         { headers: NO_STORE }
       );
     }
@@ -94,6 +94,7 @@ export async function GET(request: Request, { params }: RouteParams) {
     return NextResponse.json(
       {
         enabled: true,
+        family,
         isCeo,
         operatingModels: ownedModels,
         activeProduct: active ? serializeProduct(active) : null,

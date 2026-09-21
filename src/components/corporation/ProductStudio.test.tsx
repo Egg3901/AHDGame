@@ -8,6 +8,7 @@ afterEach(cleanup);
 function studio(over: Partial<StudioState> = {}): StudioState {
   return {
     enabled: true,
+    family: "media_entertainment",
     isCeo: true,
     operatingModels: [],
     activeProduct: null,
@@ -100,6 +101,30 @@ describe("ProductStudio", () => {
     expect(list.textContent).toContain("Newspaper");
     expect(list.textContent).toContain("Television Network");
     expect(list.textContent).toContain("Radio Network");
+  });
+
+  it("hides media operating-model controls for Industrial Manufacturing", async () => {
+    vi.stubGlobal(
+      "fetch",
+      mockGet(
+        studio({
+          family: "industrial_manufacturing",
+          catalog: [
+            {
+              id: "truck",
+              family: "industrial_manufacturing",
+              label: "Truck",
+              outputCommodity: "vehicles",
+            },
+          ],
+        })
+      )
+    );
+    render(<ProductStudio corpId="corp1" />);
+
+    expect(await screen.findByRole("listitem", { name: "Truck" })).toBeTruthy();
+    expect(screen.queryByText("Operating models")).toBeNull();
+    expect(screen.queryByLabelText("Add an operating model")).toBeNull();
   });
 
   it("groups legal product cards by output", async () => {

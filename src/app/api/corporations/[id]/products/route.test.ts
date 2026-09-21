@@ -119,6 +119,7 @@ describe("GET corporation products", () => {
     expect(response.status).toBe(200);
     expect(body).toEqual({
       enabled: false,
+      family: "media_entertainment",
       isCeo: true,
       operatingModels: [],
       activeProduct: null,

@@ -34,6 +34,7 @@ export interface StudioActiveProduct {
 
 export interface StudioState {
   enabled: boolean;
+  family: "media_entertainment" | "industrial_manufacturing" | null;
   isCeo: boolean;
   operatingModels: string[];
   activeProduct: StudioActiveProduct | null;
@@ -220,6 +221,7 @@ export default function ProductStudio({ corpId, onUpdate }: ProductStudioProps) 
 
   const canAct = studio.isCeo;
   const hasActive = studio.activeProduct !== null;
+  const usesOperatingModels = studio.family === "media_entertainment";
 
   return (
     <div className="space-y-4">
@@ -234,55 +236,57 @@ export default function ProductStudio({ corpId, onUpdate }: ProductStudioProps) 
         )}
       </div>
 
-      <Card
-        title="Operating models"
-        action={<Badge color="secondary">{studio.operatingModels.length}</Badge>}
-      >
-        {studio.operatingModels.length === 0 ? (
-          <p className="text-sm text-muted">
-            This corporation owns no operating models yet. Media products unlock once a model is
-            added.
-          </p>
-        ) : (
-          <ul className="flex flex-wrap gap-2" aria-label="Owned operating models">
-            {studio.operatingModels.map((model) => (
-              <li key={model}>
-                <Badge color="primary">{formatModel(model)}</Badge>
-              </li>
-            ))}
-          </ul>
-        )}
-        {canAct && (
-          <form
-            onSubmit={(e) => void handleAddModel(e)}
-            className="mt-3 flex flex-wrap items-end gap-2"
-          >
-            <div>
-              <label
-                htmlFor="product-studio-model"
-                className="mb-1 block text-xs font-medium text-muted"
-              >
-                Add an operating model
-              </label>
-              <select
-                id="product-studio-model"
-                value={selectedModel}
-                onChange={(e) => setSelectedModel(e.target.value)}
-                className="h-9 rounded-lg border border-card-border bg-card px-2.5 text-[13px] text-foreground"
-              >
-                {MEDIA_OPERATING_MODELS.map((model) => (
-                  <option key={model} value={model}>
-                    {formatModel(model)}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <Button type="submit" variant="secondary" size="sm" isLoading={addingModel}>
-              Add model
-            </Button>
-          </form>
-        )}
-      </Card>
+      {usesOperatingModels && (
+        <Card
+          title="Operating models"
+          action={<Badge color="secondary">{studio.operatingModels.length}</Badge>}
+        >
+          {studio.operatingModels.length === 0 ? (
+            <p className="text-sm text-muted">
+              This corporation owns no operating models yet. Media products unlock once a model is
+              added.
+            </p>
+          ) : (
+            <ul className="flex flex-wrap gap-2" aria-label="Owned operating models">
+              {studio.operatingModels.map((model) => (
+                <li key={model}>
+                  <Badge color="primary">{formatModel(model)}</Badge>
+                </li>
+              ))}
+            </ul>
+          )}
+          {canAct && (
+            <form
+              onSubmit={(e) => void handleAddModel(e)}
+              className="mt-3 flex flex-wrap items-end gap-2"
+            >
+              <div>
+                <label
+                  htmlFor="product-studio-model"
+                  className="mb-1 block text-xs font-medium text-muted"
+                >
+                  Add an operating model
+                </label>
+                <select
+                  id="product-studio-model"
+                  value={selectedModel}
+                  onChange={(e) => setSelectedModel(e.target.value)}
+                  className="h-9 rounded-lg border border-card-border bg-card px-2.5 text-[13px] text-foreground"
+                >
+                  {MEDIA_OPERATING_MODELS.map((model) => (
+                    <option key={model} value={model}>
+                      {formatModel(model)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <Button type="submit" variant="secondary" size="sm" isLoading={addingModel}>
+                Add model
+              </Button>
+            </form>
+          )}
+        </Card>
+      )}
 
       <Card title="Active product">
         {!studio.activeProduct ? (
@@ -334,9 +338,11 @@ export default function ProductStudio({ corpId, onUpdate }: ProductStudioProps) 
           <EmptyState
             title="No legal products yet"
             description={
-              canAct
+              usesOperatingModels && canAct
                 ? "Add an operating model above to unlock media products."
-                : "This corporation owns no operating models, so no media product is legal yet."
+                : usesOperatingModels
+                  ? "This corporation owns no operating models, so no media product is legal yet."
+                  : "No products are available for this industrial corporation yet."
             }
           />
         ) : (
