@@ -37,6 +37,7 @@ import { checkRegionDerivedCoverage } from "./regionDerivedCoverage";
 import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
 import { getScotusPresetSeed } from "@/lib/scotus/presetData";
 import type { ScotusPresetSeed } from "@/lib/scotus/presetData/types";
+import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 
 /** Readiness check names that are expected-empty pre-founding / pre-seat. */
 const PRE_FOUNDING_READINESS = new Set(["NPPs", "ElectedOfficials", "GovernmentFormation"]);
@@ -185,10 +186,13 @@ async function checkGameStateClock(
   );
 
   const currentTurn = typeof gs.currentTurn === "number" ? gs.currentTurn : null;
+  const resetYear = gs.resetStartDate?.year ?? expect.startingYear;
+  const resetWeek = gs.resetStartDate?.week ?? 1;
+  const expectedResetTurn = (resetYear - expect.startingYear) * TURNS_PER_YEAR + resetWeek;
   checks.push(
-    currentTurn === 1
-      ? ok("gameState.currentTurn", "global", "currentTurn", 1, currentTurn)
-      : critical("gameState.currentTurn", "global", "currentTurn", 1, currentTurn)
+    currentTurn === expectedResetTurn
+      ? ok("gameState.currentTurn", "global", "currentTurn", expectedResetTurn, currentTurn)
+      : critical("gameState.currentTurn", "global", "currentTurn", expectedResetTurn, currentTurn)
   );
 
   const currentYear = typeof gs.currentYear === "number" ? gs.currentYear : null;
@@ -215,15 +219,9 @@ async function checkGameStateClock(
     );
   } else {
     checks.push(
-      currentYear === expect.startingYear
-        ? ok("gameState.currentYear", "global", "currentYear", expect.startingYear, currentYear)
-        : critical(
-            "gameState.currentYear",
-            "global",
-            "currentYear",
-            expect.startingYear,
-            currentYear
-          )
+      currentYear === resetYear
+        ? ok("gameState.currentYear", "global", "currentYear", resetYear, currentYear)
+        : critical("gameState.currentYear", "global", "currentYear", resetYear, currentYear)
     );
   }
 
