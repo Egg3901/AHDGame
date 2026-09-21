@@ -39,12 +39,25 @@ async function authAsCeo() {
   vi.mocked(requireCeo).mockReturnValue(null);
 }
 
-async function setCorporationType(type: "media" | "manufacturing" | "automobiles" | "retail") {
+async function setCorporationType(
+  type: "media" | "manufacturing" | "automobiles" | "retail",
+  extra: Record<string, unknown> = {}
+) {
   const { resolveCorporation } = await import("@/lib/api/corporations/resolveQuery");
   vi.mocked(resolveCorporation).mockResolvedValue({
     ok: true,
-    corporation: { _id: corpId, userId: "ceo-user", type },
+    corporation: { _id: corpId, userId: "ceo-user", type, ...extra },
   } as never);
+}
+
+function gameState(state: Record<string, unknown>) {
+  db.collection("gameState");
+  db.collectionMocks.gameState.findOne.mockResolvedValue({ _id: "current", ...state });
+}
+
+function sectors(docs: Record<string, unknown>[]) {
+  db.collection("corporateSectors");
+  db.collectionMocks.corporateSectors.find.mockReturnValue(createAsyncIterableCursor(docs));
 }
 
 async function denyCeo() {
@@ -195,6 +208,80 @@ describe("GET corporation products", () => {
     );
     expect(response.status).toBe(400);
   });
+
+  it("exposes quality, brand, demand, price-defense, and amortization on the active product", async () => {
+    flagOn();
+    ownedModels(["television_network"]);
+    activeProduct({
+      _id: "product-9",
+      id: "product-9",
+      corporationId: CORP_ID,
+      kindId: "television_show",
+      name: "Nightly",
+      stage: "launch",
+      startedTurn: 100,
+      launchedTurn: 110,
+      developmentSpendAnchor: 5200,
+      developmentAdvertisingAnchor: 800,
+      developmentAdvertisingTurns: 4,
+      launchQuality: 70,
+      productBrand: 10000,
+      activeCorporationId: CORP_ID,
+    });
+
+    const response = await GET(new Request("http://localhost/api/corporations/601/products"), {
+      params: Promise.resolve({ id: "601" }),
+    });
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.activeProduct).toMatchObject({
+      id: "product-9",
+      kindId: "television_show",
+      stage: "launch",
+      launchedTurn: 110,
+      developmentSpendAnchor: 5200,
+      developmentAdvertisingAnchor: 800,
+      developmentAdvertisingTurns: 4,
+      launchQuality: 70,
+      productBrand: 10000,
+    });
+    expect(typeof body.activeProduct.demandMultiplier).toBe("number");
+    expect(typeof body.activeProduct.priceDefenseMultiplier).toBe("number");
+    expect(body.activeProduct.amortizationPerTurnAnchor).toBe(Math.round((5200 / 52) * 100) / 100);
+    expect(body.activeProduct).not.toHaveProperty("activeCorporationId");
+  });
+
+  it("exposes industrial plant and strategy requirements in the catalog", async () => {
+    await setCorporationType("manufacturing");
+    flagOn();
+    ownedModels([]);
+    activeProduct(null);
+
+    const response = await GET(new Request("http://localhost/api/corporations/601/products"), {
+      params: Promise.resolve({ id: "601" }),
+    });
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    const truck = body.catalog.find((kind: { id: string }) => kind.id === "truck");
+    expect(truck).toMatchObject({
+      family: "industrial_manufacturing",
+      outputCommodity: "vehicles",
+      requirements: {
+        sectorTypes: ["automobiles"],
+        strategyIds: ["heavy_machinery", "standard"],
+      },
+    });
+    expect(truck.requirements.strategyLabels.length).toBeGreaterThan(0);
+    const electronics = body.catalog.find(
+      (kind: { id: string }) => kind.id === "consumer_electronics"
+    );
+    expect(electronics.requirements).toMatchObject({
+      sectorTypes: ["manufacturing"],
+      minDecade: "1979",
+    });
+  });
 });
 
 describe("POST corporation products", () => {
@@ -322,6 +409,110 @@ describe("POST corporation products", () => {
     });
 
     expect(response.status).toBe(400);
+    expect(db.collection).not.toHaveBeenCalledWith("corporationProducts");
+  });
+
+  it("rejects a manufactured product with no compatible plant", async () => {
+    await setCorporationType("automobiles");
+    flagOn();
+    ownedModels([]);
+    gameState({ currentTurn: 120, currentYear: 2027 });
+    sectors([]);
+
+    const response = await POST(postRequest({ kindId: "truck", name: "Hauler" }), {
+      params: Promise.resolve({ id: "601" }),
+    });
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({
+      error: expect.stringContaining("needs an active automobiles plant"),
+    });
+    expect(db.collection).not.toHaveBeenCalledWith("corporationProducts");
+  });
+
+  it("rejects a manufactured product on an incompatible strategy", async () => {
+    await setCorporationType("automobiles");
+    flagOn();
+    ownedModels([]);
+    gameState({ currentTurn: 120, currentYear: 2027 });
+    sectors([{ sectorType: "automobiles", strategyId: "ev", capacity: 100 }]);
+
+    const response = await POST(postRequest({ kindId: "truck", name: "Hauler" }), {
+      params: Promise.resolve({ id: "601" }),
+    });
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({
+      error: expect.stringContaining("compatible process"),
+    });
+    expect(db.collection).not.toHaveBeenCalledWith("corporationProducts");
+  });
+
+  it("rejects a manufactured product the era has not reached", async () => {
+    await setCorporationType("manufacturing");
+    flagOn();
+    ownedModels([]);
+    gameState({ currentTurn: 120, currentYear: 1900 });
+    sectors([
+      { sectorType: "manufacturing", strategyId: "electronics_manufacturing", capacity: 100 },
+    ]);
+
+    const response = await POST(postRequest({ kindId: "consumer_electronics", name: "Radio" }), {
+      params: Promise.resolve({ id: "601" }),
+    });
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({
+      error: expect.stringContaining("1979"),
+    });
+    expect(db.collection).not.toHaveBeenCalledWith("corporationProducts");
+  });
+
+  it("rejects a media product with no fitting owned model", async () => {
+    flagOn();
+    ownedModels(["newspaper"]);
+
+    const response = await POST(postRequest({ kindId: "television_show", name: "Nightly" }), {
+      params: Promise.resolve({ id: "601" }),
+    });
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({
+      error: expect.stringContaining("not legal"),
+    });
+    expect(db.collection).not.toHaveBeenCalledWith("corporationProducts");
+  });
+
+  it("rejects a media product the era has not reached", async () => {
+    flagOn();
+    ownedModels(["television_network"]);
+    gameState({ currentTurn: 120, currentYear: 1900 });
+
+    const response = await POST(postRequest({ kindId: "television_show", name: "Nightly" }), {
+      params: Promise.resolve({ id: "601" }),
+    });
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({
+      error: expect.stringContaining("1950"),
+    });
+    expect(db.collection).not.toHaveBeenCalledWith("corporationProducts");
+  });
+
+  it("rejects a media product without the anchor research", async () => {
+    await setCorporationType("media", { unlockedTechNodeIds: [] });
+    flagOn();
+    ownedModels(["television_network"]);
+    gameState({ currentTurn: 120, currentYear: 2027 });
+
+    const response = await POST(postRequest({ kindId: "television_show", name: "Nightly" }), {
+      params: Promise.resolve({ id: "601" }),
+    });
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({
+      error: expect.stringContaining("research"),
+    });
     expect(db.collection).not.toHaveBeenCalledWith("corporationProducts");
   });
 });

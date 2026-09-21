@@ -269,6 +269,47 @@ describe("processAdvertisingTurn", () => {
     expect(result.effectiveAnchorByCorpId.get("buyer")).toBe(100);
   });
 
+  it("leaves cash, output, and inventory untouched by itself", async () => {
+    const store = newStore();
+    store.agreements.set("ad1", activeAgreement() as unknown as Record<string, unknown>);
+    store.models.push({ corporationId: "supplier", operatingModel: "television_network" });
+    const buyer = corp("buyer", { liquidCapital: 1_000_000, marketingBudget: 2400 });
+    const supplier = corp("supplier", { liquidCapital: 500_000, marketingBudget: 0 });
+    const sectorsByCorp = new Map<string, { stateId: string; revenue: number }[]>([
+      ["buyer", [{ stateId: "US-CA", revenue: 1000, countryId: "US" }]],
+      ["supplier", [{ stateId: "US-CA", revenue: 1000, countryId: "US" }]],
+    ]);
+    const before = JSON.stringify({
+      buyer,
+      supplier,
+      sectors: [...sectorsByCorp],
+    });
+    await processAdvertisingTurn(modelsDb(store), {
+      enabled: true,
+      turn: 100,
+      corpsById: new Map([
+        ["buyer", buyer],
+        ["supplier", supplier],
+      ]),
+      sectorsByCorp,
+      fxByCurrency: FX,
+      deliveredAnchorBySellerId: new Map([["supplier", 100]]),
+      settledSpendAnchorByBuyerId: new Map([["buyer", 100]]),
+    });
+    // The phase attributes already-settled spend only: corp cash, sector
+    // output, and inventory read back byte-identical.
+    expect(JSON.stringify({ buyer, supplier, sectors: [...sectorsByCorp] })).toBe(before);
+    expect((buyer as unknown as Record<string, unknown>).liquidCapital).toBe(1_000_000);
+    expect((supplier as unknown as Record<string, unknown>).liquidCapital).toBe(500_000);
+    for (const name of store.touched) {
+      expect([
+        "advertisingAgreements",
+        "advertisingSettlements",
+        "corporationOperatingModels",
+      ]).toContain(name);
+    }
+  });
+
   it("finalizes expiry and is replay-safe", async () => {
     const store = newStore();
     store.agreements.set(

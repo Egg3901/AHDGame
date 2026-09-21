@@ -118,6 +118,43 @@ describe("applyProductClearingEffect", () => {
     ).toEqual({ brandLoyalty: 20, outputQuality: 60 });
   });
 
+  it("moves no cash, output, or inventory by itself", () => {
+    const input = [product({ launchQuality: 80, productBrand: 5000 })];
+    const before = JSON.stringify(input);
+    const effects = resolveProductClearingEffects(input, true);
+    expect(JSON.stringify(input)).toBe(before);
+
+    // The effect carries only quality/loyalty adjustments for output that
+    // was already produced: no cash, output, capacity, or inventory fields.
+    const effect = effects.get("corp1")!;
+    expect(Object.keys(effect).sort()).toEqual(
+      [
+        "corporationId",
+        "productId",
+        "kindId",
+        "outputCommodity",
+        "launchQuality",
+        "loyaltyBonus",
+        "demandMultiplier",
+        "priceDefenseMultiplier",
+        "stage",
+      ].sort()
+    );
+
+    const applyArgs = {
+      effect,
+      supplyRates: vehicles,
+      brandLoyalty: 20,
+      outputQuality: 60,
+      loyaltyEnabled: true,
+      qualityEnabled: true,
+    };
+    const argsBefore = JSON.stringify(applyArgs);
+    const adjusted = applyProductClearingEffect(applyArgs);
+    expect(JSON.stringify(applyArgs)).toBe(argsBefore);
+    expect(Object.keys(adjusted).sort()).toEqual(["brandLoyalty", "outputQuality"]);
+  });
+
   it("applies launch quality and a bounded loyalty bonus on the product output", () => {
     const effect = resolveProductClearingEffects(
       [product({ launchQuality: 80, productBrand: PRODUCT_BRAND_REF })],

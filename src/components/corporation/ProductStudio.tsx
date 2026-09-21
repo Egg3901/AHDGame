@@ -22,6 +22,12 @@ export interface StudioCatalogKind {
   operatingModels?: string[];
   minDecade?: string;
   requiredTechnologyIds?: string[];
+  requirements?: {
+    sectorTypes: string[];
+    strategyIds: string[];
+    strategyLabels: string[];
+    minDecade?: string;
+  };
   cadence?: {
     developmentTurns: number;
     launchTurns: number;
@@ -64,6 +70,14 @@ export interface StudioActiveProduct {
   startedTurn: number;
   launchedTurn?: number;
   retiredTurn?: number;
+  developmentSpendAnchor?: number;
+  developmentAdvertisingAnchor?: number;
+  developmentAdvertisingTurns?: number;
+  launchQuality?: number;
+  productBrand?: number;
+  demandMultiplier?: number;
+  priceDefenseMultiplier?: number;
+  amortizationPerTurnAnchor?: number;
 }
 
 export interface StudioState {
@@ -389,6 +403,28 @@ export default function ProductStudio({ corpId, onUpdate }: ProductStudioProps) 
               </Badge>
             </div>
             <p className="text-sm text-muted">Started on turn {studio.activeProduct.startedTurn}</p>
+            {studio.activeProduct.developmentSpendAnchor !== undefined && (
+              <p className="text-sm text-muted">
+                Development spend {studio.activeProduct.developmentSpendAnchor} anchor
+                {studio.activeProduct.developmentAdvertisingAnchor !== undefined &&
+                  `, advertising ${studio.activeProduct.developmentAdvertisingAnchor} anchor over ${studio.activeProduct.developmentAdvertisingTurns ?? 0} turns`}
+              </p>
+            )}
+            {studio.activeProduct.launchQuality !== undefined && (
+              <p className="text-sm text-muted">
+                Launch quality {studio.activeProduct.launchQuality} of 100
+                {studio.activeProduct.productBrand !== undefined &&
+                  `, brand ${studio.activeProduct.productBrand}`}
+              </p>
+            )}
+            {studio.activeProduct.demandMultiplier !== undefined && (
+              <p className="text-sm text-muted">
+                Realized effect: demand x{studio.activeProduct.demandMultiplier}, price defense x
+                {studio.activeProduct.priceDefenseMultiplier ?? 1}
+                {studio.activeProduct.amortizationPerTurnAnchor !== undefined &&
+                  `, amortization ${studio.activeProduct.amortizationPerTurnAnchor} anchor per turn`}
+              </p>
+            )}
             {canAct &&
               (confirmingRetire ? (
                 <div className="flex flex-wrap items-center gap-2">
@@ -451,6 +487,25 @@ export default function ProductStudio({ corpId, onUpdate }: ProductStudioProps) 
                       {kind.operatingModels && (
                         <p className="mt-1 text-xs text-muted">
                           Needs: {kind.operatingModels.map(formatModel).join(", ")}
+                        </p>
+                      )}
+                      {kind.requirements && (
+                        <p className="mt-1 text-xs text-muted">
+                          Needs a {kind.requirements.sectorTypes.join(" or ")} plant running{" "}
+                          {(kind.requirements.strategyLabels.length > 0
+                            ? kind.requirements.strategyLabels
+                            : kind.requirements.strategyIds
+                          ).join(" or ")}
+                          {kind.requirements.minDecade &&
+                            `, from the ${kind.requirements.minDecade}s`}
+                        </p>
+                      )}
+                      {kind.minDecade && (
+                        <p className="mt-1 text-xs text-muted">Unlocks in the {kind.minDecade}s</p>
+                      )}
+                      {kind.requiredTechnologyIds && kind.requiredTechnologyIds.length > 0 && (
+                        <p className="mt-1 text-xs text-muted">
+                          Needs research: {kind.requiredTechnologyIds.join(", ")}
                         </p>
                       )}
                       {canAct &&

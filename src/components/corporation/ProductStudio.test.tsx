@@ -281,6 +281,98 @@ describe("ProductStudio", () => {
     });
   });
 
+  it("renders development, quality, and realized-effect fields on the active product", async () => {
+    vi.stubGlobal(
+      "fetch",
+      mockGet(
+        studio({
+          family: "industrial_manufacturing",
+          operatingModels: [],
+          catalog: [
+            {
+              id: "truck",
+              family: "industrial_manufacturing",
+              label: "Truck",
+              outputCommodity: "vehicles",
+              requirements: {
+                sectorTypes: ["automobiles"],
+                strategyIds: ["heavy_machinery", "standard"],
+                strategyLabels: ["Heavy Machinery", "Standard"],
+              },
+            },
+          ],
+          activeProduct: {
+            id: "product-1",
+            kindId: "truck",
+            kindLabel: "Truck",
+            name: "Hauler",
+            stage: "growth",
+            startedTurn: 100,
+            launchedTurn: 110,
+            developmentSpendAnchor: 5200,
+            developmentAdvertisingAnchor: 800,
+            developmentAdvertisingTurns: 4,
+            launchQuality: 70,
+            productBrand: 10000,
+            demandMultiplier: 1.1,
+            priceDefenseMultiplier: 1.05,
+            amortizationPerTurnAnchor: 100,
+          },
+        })
+      )
+    );
+    render(<ProductStudio corpId="corp1" />);
+
+    expect(await screen.findByText("Hauler")).toBeTruthy();
+    expect(screen.getByText(/development spend 5200 anchor/i)).toBeTruthy();
+    expect(screen.getByText(/advertising 800 anchor over 4 turns/i)).toBeTruthy();
+    expect(screen.getByText(/launch quality 70 of 100/i)).toBeTruthy();
+    expect(screen.getByText(/brand 10000/i)).toBeTruthy();
+    expect(screen.getByText(/realized effect: demand x1\.1/i)).toBeTruthy();
+    expect(screen.getByText(/price defense x1\.05/i)).toBeTruthy();
+    expect(screen.getByText(/amortization 100 anchor per turn/i)).toBeTruthy();
+  });
+
+  it("renders industrial plant and strategy requirements in the catalog", async () => {
+    vi.stubGlobal(
+      "fetch",
+      mockGet(
+        studio({
+          family: "industrial_manufacturing",
+          catalog: [
+            {
+              id: "truck",
+              family: "industrial_manufacturing",
+              label: "Truck",
+              outputCommodity: "vehicles",
+              requirements: {
+                sectorTypes: ["automobiles"],
+                strategyIds: ["heavy_machinery", "standard"],
+                strategyLabels: ["Heavy Machinery", "Standard"],
+              },
+            },
+            {
+              id: "radio_program",
+              family: "media_entertainment",
+              label: "Radio Program",
+              outputCommodity: "advertising",
+              operatingModels: ["radio_network"],
+              minDecade: "1940",
+              requiredTechnologyIds: ["media-1940-1"],
+            },
+          ],
+        })
+      )
+    );
+    render(<ProductStudio corpId="corp1" />);
+
+    await screen.findByRole("listitem", { name: "Truck" });
+    expect(screen.getByText(/needs a automobiles plant running/i)).toBeTruthy();
+    expect(screen.getByText(/heavy machinery or standard/i)).toBeTruthy();
+    expect(screen.getByText(/unlocks in the 1940s/i)).toBeTruthy();
+    expect(screen.getByText(/needs research: media-1940-1/i)).toBeTruthy();
+  });
+
   it("hides every mutation control from a non-CEO viewer", async () => {
     vi.stubGlobal("fetch", mockGet(studio({ isCeo: false })));
     render(<ProductStudio corpId="corp1" />);
