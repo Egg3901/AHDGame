@@ -33,6 +33,7 @@ import {
 } from "@/lib/products/persistence";
 import { queryProductCatalog } from "@/lib/products/queries";
 import { productFamilyForCorporationType, type ProductKindDefinition } from "@/lib/products/types";
+import type { CorporationType } from "@/lib/constants/corporations";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -289,7 +290,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       const compatibility = validateManufacturingProductStart({
         kindId: kind.id,
         corporationTypes: [corporation.type, corporation.secondaryType].filter(
-          (type): type is string => typeof type === "string"
+          (type): type is CorporationType => typeof type === "string"
         ),
         plants: sectors.map((sector) => ({
           sectorType: (sector as { sectorType?: unknown }).sectorType,

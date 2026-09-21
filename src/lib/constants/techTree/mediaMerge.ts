@@ -72,10 +72,17 @@ const ENTERTAINMENT_PICK_ORDER: Record<string, readonly number[]> = {
 function orderEntertainment<T>(specs: readonly T[], decadeId: string, segment: LaneSegment): T[] {
   const order = ENTERTAINMENT_PICK_ORDER[`${decadeId}:${segment}`];
   if (!order) return [...specs];
-  const picked = order.map((index) => specs[index]).filter((spec) => spec !== undefined);
+  const picked: T[] = [];
+  for (const pick of order) {
+    const spec: T | undefined = specs[pick];
+    if (spec !== undefined) picked.push(spec);
+  }
   // Any index the override does not name keeps its authored relative order.
+  const pickedIndexes = new Set(order);
   for (let index = 0; index < specs.length; index++) {
-    if (!order.includes(index)) picked.push(specs[index] as T);
+    if (pickedIndexes.has(index)) continue;
+    const spec: T | undefined = specs[index];
+    if (spec !== undefined) picked.push(spec);
   }
   return picked;
 }

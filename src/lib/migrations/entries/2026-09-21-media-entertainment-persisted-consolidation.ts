@@ -31,6 +31,9 @@ import type {
   IndexFundPosition,
   IndexFundTargetConstituent,
 } from "@/lib/db/types";
+import type { SectorBuildOrder } from "@/lib/db/types/corporation";
+import type { CountryId } from "@/lib/constants/countries";
+import type { CorporationOperatingModelDocument } from "@/lib/products/persistence";
 import type { Migration, MigrationContext, MigrationResult } from "../types";
 
 const CANON = MEDIA_ENTERTAINMENT_SECTOR_TYPE;
@@ -71,32 +74,52 @@ interface CorporationDoc {
   unlockedTechNodeIds?: unknown;
 }
 
+/**
+ * Owned-sector rows as processed below. Fields are concrete (matching the
+ * CorporateSector shapes the plant helpers consume) except `sectorType`,
+ * which still carries the retired `media`/`entertainment` labels on legacy
+ * rows: the `$in` scans filter on it as persisted, guards narrow it, and the
+ * plant read below canonicalizes it before typed use.
+ */
 interface SectorDoc {
   _id: ObjectId;
-  corporationId?: unknown;
-  countryId?: unknown;
-  stateId?: unknown;
+  corporationId?: ObjectId;
+  countryId?: CountryId;
+  stateId?: string;
   sectorType?: unknown;
-  strategyId?: unknown;
-  transitionFromStrategyId?: unknown;
-  revenue?: unknown;
-  workers?: unknown;
-  workersDesired?: unknown;
-  profitMargin?: unknown;
-  productionPolicyLevel?: unknown;
-  negativeProductionSustainedTurns?: unknown;
-  laborCost?: unknown;
-  wagePerWorker?: unknown;
-  inventoryUnits?: unknown;
-  inventoryValueAnchor?: unknown;
-  inventoryDrainedUnits?: unknown;
-  inventorySpoiledUnits?: unknown;
-  realizedRevenue?: unknown;
-  producedUnits?: unknown;
-  soldUnits?: unknown;
-  contractAchievableUnits?: unknown;
-  representingUnionId?: unknown;
-  createdAt?: unknown;
+  strategyId?: string;
+  transitionFromStrategyId?: string | null;
+  revenue?: number;
+  workers?: number;
+  workersDesired?: number;
+  profitMargin?: number;
+  productionPolicyLevel?: number;
+  negativeProductionSustainedTurns?: number;
+  laborCost?: number;
+  wagePerWorker?: number;
+  inventoryUnits?: Partial<Record<string, number>>;
+  inventoryValueAnchor?: number;
+  inventoryDrainedUnits?: number;
+  inventorySpoiledUnits?: number;
+  realizedRevenue?: number;
+  producedUnits?: number;
+  soldUnits?: number;
+  contractAchievableUnits?: number;
+  representingUnionId?: ObjectId | null;
+  createdAt?: Date;
+  capitalStock?: number;
+  operatingCapacityUnits?: number;
+  operatingCapacityTurn?: number | null;
+  plantCount?: number;
+  plantUnitRemainder?: number;
+  capacityBookAnchor?: number;
+  buildQueue?: SectorBuildOrder[];
+  constructionInProgressAnchor?: number;
+  mothballed?: boolean;
+  activeCapacityPercent?: number;
+  plantsStartTurn?: number | null;
+  legacyRevenueShadow?: number | null;
+  otherOpexPerUnitAnchor?: number;
   [key: string]: unknown;
 }
 
@@ -173,6 +196,14 @@ export interface MediaEntertainmentConsolidationCounts {
   positionsMoved: number;
   historiesRekeyed: number;
 }
+
+/**
+ * Index-fund rows as persisted before consolidation. `sectorType` may still
+ * carry the retired `media`/`entertainment` labels, so the legacy scan reads
+ * through this boundary type instead of claiming those strings are
+ * CorporationType. Every other leg keeps its IndexFund shape.
+ */
+type LegacyIndexFund = Omit<IndexFund, "sectorType"> & { sectorType?: unknown };
 
 function holderKey(position: IndexFundPosition): string {
   return [
@@ -266,7 +297,7 @@ async function foldLegacyIndexFunds(
   }
 
   const legacy = await db
-    .collection<IndexFund>("indexFunds")
+    .collection<LegacyIndexFund>("indexFunds")
     .find({
       $or: [
         { sectorType: { $in: ["media", "entertainment"] } },
@@ -744,7 +775,7 @@ export async function consolidateMediaEntertainment(
     ]);
     for (const model of models) {
       if (!dry) {
-        await db.collection("corporationOperatingModels").updateOne(
+        await db.collection<CorporationOperatingModelDocument>("corporationOperatingModels").updateOne(
           { _id: `${corpId}:${model}` },
           {
             $set: { corporationId: corpId, operatingModel: model },
@@ -806,12 +837,7 @@ export async function consolidateMediaEntertainment(
     const retooled = plantsEnabled
       ? ordered.map((row, index) => {
           const ratio = capacityRescaleRatio(CANON, strategies[index], DIVERSIFIED);
-          const queue = rescaleBuildQueueForStrategyChange(
-            (Array.isArray(row.buildQueue) ? row.buildQueue : []) as {
-              unitsOrdered: number;
-            }[],
-            ratio
-          );
+          const queue = rescaleBuildQueueForStrategyChange(row.buildQueue, ratio);
           const opex =
             typeof row.otherOpexPerUnitAnchor === "number" &&
             Number.isFinite(row.otherOpexPerUnitAnchor) &&
@@ -827,7 +853,10 @@ export async function consolidateMediaEntertainment(
           return {
             row,
             plant: {
-              ...readSectorPlantFields(row),
+              // Persisted rows may still carry a retired label here; read the
+              // plant legs off the canonicalized row so the typed helper never
+              // sees one. The merge below stamps CANON either way.
+              ...readSectorPlantFields({ ...row, sectorType: CANON }),
               sectorType: CANON,
               capitalStock: positive(row.capitalStock) * ratio,
               operatingCapacityUnits: operatingUnits,
