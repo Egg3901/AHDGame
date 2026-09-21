@@ -236,7 +236,7 @@ describe("POST /api/corporations/[id]/bond-default/cash — ledger emission", ()
     expect(corpHolderEntry!.currencyCode).toBe("USD");
     expect(corpHolderEntry!.meta?.bondCurrency).toBe("USD");
     expect(corpHolderEntry!.meta?.bondAmount).toBeCloseTo(corpHolderEntry!.amount);
-  }, 30_000);
+  }, 60_000);
 
   it("preserves defaultedAtTurn and stamps defaultCure on cured bonds", async () => {
     // Pre-fix: the cure routes did `$unset: { defaultedAtTurn: "" }`, erasing

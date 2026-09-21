@@ -281,13 +281,16 @@ async function refundFundCashAnchor(
   options?: { session?: ClientSession }
 ): Promise<void> {
   if (!Number.isFinite(amountAnchor) || amountAnchor <= 0) return;
-  await db
+  const result = await db
     .collection<IndexFund>("indexFunds")
     .updateOne(
       { _id: fundId },
       { $inc: { cashAnchor: amountAnchor }, $set: { updatedAt: new Date() } },
       options?.session ? { session: options.session } : undefined
     );
+  if (result.matchedCount !== 1) {
+    throw new Error("Failed to restore fund cash after public-float buy failure");
+  }
 }
 
 // ── Pass 2 / Pass 3b cadence (financial-day boundary) ─────────────────

@@ -48,12 +48,14 @@ describe("executeFundCrossRebalancing standalone compensation", () => {
 
   let cashUpdates: Array<{ filter: unknown; update: unknown }>;
   let capTableUpdates: Array<{ filter: unknown; update: unknown }>;
+  let failBuyerHoldingsRestore: boolean;
   let db: Db;
 
   beforeEach(() => {
     vi.clearAllMocks();
     cashUpdates = [];
     capTableUpdates = [];
+    failBuyerHoldingsRestore = false;
     const seller = {
       _id: sellerFundId,
       name: "Seller",
@@ -102,6 +104,13 @@ describe("executeFundCrossRebalancing standalone compensation", () => {
           return {
             updateOne: vi.fn(async (filter, update) => {
               cashUpdates.push({ filter, update });
+              if (
+                failBuyerHoldingsRestore &&
+                (filter as { _id?: ObjectId; holdings?: unknown })._id?.equals(buyerFundId) &&
+                "holdings" in (filter as object)
+              ) {
+                throw new Error("buyer restore failed");
+              }
               return { matchedCount: 1 };
             }),
           };
@@ -119,19 +128,16 @@ describe("executeFundCrossRebalancing standalone compensation", () => {
 
     expect(result.transfers).toBe(0);
     expect(result.errors).toEqual([expect.stringContaining("buyer log failed")]);
-    expect(mocks.updateFundHoldings).toHaveBeenNthCalledWith(
-      3,
-      db,
-      buyerFundId,
-      originalBuyerHoldings
-    );
-    expect(mocks.updateFundHoldings).toHaveBeenNthCalledWith(
-      4,
-      db,
-      sellerFundId,
-      originalSellerHoldings
-    );
-    expect(cashUpdates).toHaveLength(4);
+    expect(mocks.updateFundHoldings).toHaveBeenCalledTimes(2);
+    expect(cashUpdates).toHaveLength(6);
+    expect(cashUpdates[2]).toMatchObject({
+      filter: { _id: buyerFundId, holdings: expect.any(Array) },
+      update: { $set: { holdings: originalBuyerHoldings } },
+    });
+    expect(cashUpdates[3]).toMatchObject({
+      filter: { _id: sellerFundId, holdings: expect.any(Array) },
+      update: { $set: { holdings: originalSellerHoldings } },
+    });
     expect(capTableUpdates).toHaveLength(2);
     expect(capTableUpdates[0]).toMatchObject({
       filter: { shareholders: { $elemMatch: { fundId: buyerFundId, shares: 15 } } },
@@ -154,17 +160,13 @@ describe("executeFundCrossRebalancing standalone compensation", () => {
   });
 
   it("attempts all reversals and reports aggregate failure when compensation is incomplete", async () => {
-    mocks.updateFundHoldings
-      .mockResolvedValueOnce(undefined)
-      .mockResolvedValueOnce(undefined)
-      .mockRejectedValueOnce(new Error("buyer restore failed"))
-      .mockResolvedValueOnce(undefined);
+    failBuyerHoldingsRestore = true;
 
     const result = await executeFundCrossRebalancing(db, [plan], 7);
 
     expect(result.errors[0]).toContain("buyer log failed");
     expect(result.errors[0]).toContain("buyer restore failed");
-    expect(cashUpdates).toHaveLength(4);
+    expect(cashUpdates).toHaveLength(6);
     expect(capTableUpdates).toHaveLength(2);
   });
 });

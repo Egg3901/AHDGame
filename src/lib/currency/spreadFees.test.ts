@@ -2,6 +2,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import type { Db } from "mongodb";
+import { calculateSpreadFee, distributeSpreadFee } from "./spreadFees";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 
@@ -15,20 +16,17 @@ beforeEach(async () => {
 
 describe("calculateSpreadFee", () => {
   it("calculates spread amount from trade amount and spread rate", async () => {
-    const { calculateSpreadFee } = await import("./spreadFees");
     // 10,000 USD at 0.275% spread = 27.50 → rounded to 28
     expect(calculateSpreadFee(10_000, 0.00275)).toBe(28);
   });
 
   it("returns 0 for zero amount", async () => {
-    const { calculateSpreadFee } = await import("./spreadFees");
     expect(calculateSpreadFee(0, 0.00275)).toBe(0);
   });
 });
 
 describe("distributeSpreadFee", () => {
   it("splits 25% destroy / 25% forexRevenue / 50% collected-currency reserves", async () => {
-    const { distributeSpreadFee } = await import("./spreadFees");
     (db as unknown as Db).collection("centralBanks");
     db.collectionMocks.centralBanks.updateOne.mockResolvedValue({ modifiedCount: 1 });
 
@@ -45,7 +43,6 @@ describe("distributeSpreadFee", () => {
   });
 
   it("routes the foreign reserve slice to the destination CB while forexRevenue stays at source", async () => {
-    const { distributeSpreadFee } = await import("./spreadFees");
     (db as unknown as Db).collection("centralBanks");
     db.collectionMocks.centralBanks.updateOne.mockResolvedValue({ modifiedCount: 1 });
 
@@ -64,8 +61,55 @@ describe("distributeSpreadFee", () => {
     ]);
   });
 
+  it("enlists every central-bank write in the supplied transaction session", async () => {
+    (db as unknown as Db).collection("centralBanks");
+    db.collectionMocks.centralBanks.updateOne.mockResolvedValue({ modifiedCount: 1 });
+    const session = { id: "fee-session" };
+
+    await distributeSpreadFee(db as unknown as Db, 100, "US", "USD", "JP", {
+      session: session as never,
+    });
+
+    expect(db.collectionMocks.centralBanks.updateOne).toHaveBeenCalledTimes(2);
+    for (const call of db.collectionMocks.centralBanks.updateOne.mock.calls) {
+      expect(call[2]).toEqual({ upsert: true, session });
+    }
+  });
+
+  it("reverses a completed revenue leg when the reserve leg fails without a transaction", async () => {
+    (db as unknown as Db).collection("centralBanks");
+    db.collectionMocks.centralBanks.updateOne
+      .mockResolvedValueOnce({ modifiedCount: 1 })
+      .mockRejectedValueOnce(new Error("reserve write failed"))
+      .mockResolvedValueOnce({ modifiedCount: 1 });
+
+    await expect(distributeSpreadFee(db as unknown as Db, 100, "US", "USD", "JP")).rejects.toThrow(
+      "reserve write failed"
+    );
+    expect(db.collectionMocks.centralBanks.updateOne).toHaveBeenLastCalledWith(
+      { _id: "US" },
+      { $inc: { forexRevenue: -25 } }
+    );
+  });
+
+  it("surfaces an uncertain state when partial-fee compensation also fails", async () => {
+    (db as unknown as Db).collection("centralBanks");
+    db.collectionMocks.centralBanks.updateOne
+      .mockResolvedValueOnce({ modifiedCount: 1 })
+      .mockRejectedValueOnce(new Error("reserve write failed"))
+      .mockRejectedValueOnce(new Error("revenue reversal failed"));
+
+    const error = await distributeSpreadFee(db as unknown as Db, 100, "US", "USD", "JP").catch(
+      (caught: unknown) => caught
+    );
+    expect(error).toBeInstanceOf(AggregateError);
+    expect((error as AggregateError).errors).toEqual([
+      expect.objectContaining({ message: "reserve write failed" }),
+      expect.objectContaining({ message: "revenue reversal failed" }),
+    ]);
+  });
+
   it("uses a single home-currency write when destination is omitted (legacy)", async () => {
-    const { distributeSpreadFee } = await import("./spreadFees");
     (db as unknown as Db).collection("centralBanks");
     db.collectionMocks.centralBanks.updateOne.mockResolvedValue({ modifiedCount: 1 });
 
@@ -79,7 +123,6 @@ describe("distributeSpreadFee", () => {
   });
 
   it("handles odd amounts so the three slices sum back to the total fee", async () => {
-    const { distributeSpreadFee } = await import("./spreadFees");
     (db as unknown as Db).collection("centralBanks");
     db.collectionMocks.centralBanks.updateOne.mockResolvedValue({ modifiedCount: 1 });
 

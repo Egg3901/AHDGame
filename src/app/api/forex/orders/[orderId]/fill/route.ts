@@ -11,7 +11,11 @@ import { handleRouteError, forbidden, notFound, badRequest } from "@/lib/api/err
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
 import { buildPersonalBalanceInc, getPersonalBalance } from "@/lib/currency/characterFunds";
-import { calculateSpreadFee, distributeSpreadFee } from "@/lib/currency/spreadFees";
+import {
+  calculateSpreadFee,
+  distributeSpreadFee,
+  reverseSpreadFee,
+} from "@/lib/currency/spreadFees";
 import { getCountryForCurrency } from "@/lib/currency/marketMaker";
 import { LIMIT_ORDER_SPREAD } from "@/lib/constants/currencies";
 import {
@@ -149,6 +153,74 @@ export async function POST(request: Request, { params }: RouteParams) {
       source: "limit_order",
     } as TradeHistoryEntry;
 
+    // The spread fee is part of the fill, not a post-fill side effect. It runs
+    // INSIDE the transition, after both balances settle and BEFORE the order's
+    // filledAmount flips — so a fee failure aborts/rolls back the fill instead
+    // of leaving both parties credited with the fee uncollected. It is invoked
+    // exactly once per closure and never retried (the transaction helper does
+    // not re-run a started transaction sequentially).
+    const spreadFeeLegs = [
+      fromCountryId
+        ? ([posterSpreadFromCurrency, fromCountryId, order.fromCurrency, toCountryId] as const)
+        : null,
+      toCountryId
+        ? ([fillerSpreadToCurrency, toCountryId, order.toCurrency, fromCountryId] as const)
+        : null,
+    ].filter((leg): leg is NonNullable<typeof leg> => leg !== null);
+    const distributeSpreadFees = async (session?: import("mongodb").ClientSession) => {
+      let applied = 0;
+      try {
+        for (const [fee, source, currency, destination] of spreadFeeLegs) {
+          await distributeSpreadFee(db, fee, source, currency, destination ?? undefined, {
+            session,
+          });
+          applied++;
+        }
+      } catch (error) {
+        if (session || applied === 0) throw error;
+        const compensationErrors = await reverseAppliedSpreadFees(applied);
+        if (compensationErrors.length > 0) {
+          throw new AggregateError(
+            [error, ...compensationErrors],
+            "Spread-fee distribution failed and completed legs could not all be reversed"
+          );
+        }
+        throw error;
+      }
+      return applied;
+    };
+    const reverseAppliedSpreadFees = async (count: number) => {
+      const errors: unknown[] = [];
+      for (const [fee, source, currency, destination] of spreadFeeLegs.slice(0, count).reverse()) {
+        try {
+          await reverseSpreadFee(db, fee, source, currency, destination ?? undefined);
+        } catch (error) {
+          errors.push(error);
+        }
+      }
+      return errors;
+    };
+    const restoreClaimedOrder = async () => {
+      const completedResult = await db.collection<CurrencyOrder>("currencyOrders").updateOne(
+        { _id: order._id, status: newStatus, filledAmount: newFilledAmount },
+        {
+          $set: { status: order.status, updatedAt: new Date() },
+          $inc: { filledAmount: -fillAmount, spreadCharged: -posterSpreadFromCurrency },
+        }
+      );
+      if (completedResult.matchedCount > 0) return;
+
+      const processingResult = await db
+        .collection<CurrencyOrder>("currencyOrders")
+        .updateOne(
+          { _id: order._id, status: "processing" },
+          { $set: { status: order.status, updatedAt: new Date() } }
+        );
+      if (processingResult.matchedCount === 0) {
+        throw new Error("Forex order status could not be restored after a failed fill");
+      }
+    };
+
     await runWithOptionalTransaction(
       async (session) => {
         const claimedOrder = await db
@@ -181,6 +253,8 @@ export async function POST(request: Request, { params }: RouteParams) {
           throw notFound("Order owner not found");
         }
 
+        await distributeSpreadFees(session);
+
         const fillResult = await db.collection<CurrencyOrder>("currencyOrders").updateOne(
           { _id: order._id, status: "processing" },
           {
@@ -211,6 +285,7 @@ export async function POST(request: Request, { params }: RouteParams) {
 
         let fillerSettled = false;
         let posterCredited = false;
+        let spreadFeesApplied = 0;
 
         try {
           const fillerResult = await db.collection("characters").updateOne(
@@ -233,6 +308,8 @@ export async function POST(request: Request, { params }: RouteParams) {
           }
           posterCredited = true;
 
+          spreadFeesApplied = await distributeSpreadFees();
+
           const fillResult = await db.collection<CurrencyOrder>("currencyOrders").updateOne(
             { _id: order._id, status: "processing" },
             {
@@ -245,51 +322,42 @@ export async function POST(request: Request, { params }: RouteParams) {
           }
           await db.collection<TradeHistoryEntry>("tradeHistory").insertOne(tradeHistoryEntry);
         } catch (error) {
+          const compensationErrors = await reverseAppliedSpreadFees(spreadFeesApplied);
           if (posterCredited) {
-            await db
-              .collection("characters")
-              .updateOne(
-                { _id: order.characterId },
-                { $inc: buildPersonalBalanceInc(-toCurrencyAmount, order.toCurrency, true) }
-              );
+            try {
+              await db
+                .collection("characters")
+                .updateOne(
+                  { _id: order.characterId },
+                  { $inc: buildPersonalBalanceInc(-toCurrencyAmount, order.toCurrency, true) }
+                );
+            } catch (compensationError) {
+              compensationErrors.push(compensationError);
+            }
           }
           if (fillerSettled) {
-            await db
-              .collection("characters")
-              .updateOne({ _id: auth.user.character._id }, { $inc: fillerRollbackInc });
+            try {
+              await db
+                .collection("characters")
+                .updateOne({ _id: auth.user.character._id }, { $inc: fillerRollbackInc });
+            } catch (compensationError) {
+              compensationErrors.push(compensationError);
+            }
           }
-          await db
-            .collection<CurrencyOrder>("currencyOrders")
-            .updateOne(
-              { _id: order._id, status: "processing" },
-              { $set: { status: order.status, updatedAt: new Date() } }
+          try {
+            await restoreClaimedOrder();
+          } catch (compensationError) {
+            compensationErrors.push(compensationError);
+          }
+          if (compensationErrors.length > 0) {
+            throw new AggregateError(
+              [error, ...compensationErrors],
+              "Forex fill failed and one or more compensation steps were incomplete"
             );
+          }
           throw error;
         }
       }
-    );
-
-    await Promise.all(
-      [
-        fromCountryId
-          ? distributeSpreadFee(
-              db,
-              posterSpreadFromCurrency,
-              fromCountryId,
-              order.fromCurrency,
-              toCountryId ?? undefined
-            )
-          : null,
-        toCountryId
-          ? distributeSpreadFee(
-              db,
-              fillerSpreadToCurrency,
-              toCountryId,
-              order.toCurrency,
-              fromCountryId ?? undefined
-            )
-          : null,
-      ].filter(Boolean)
     );
 
     recordAudit({
