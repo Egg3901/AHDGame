@@ -19,10 +19,15 @@ import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 export const DIVERGENT_TENURE_FLOOR_TURNS = 2 * TURNS_PER_YEAR;
 
 /**
- * Flat per-turn probability of departure once the floor has passed. Order of
- * magnitude ~1-2%/turn per spec; tunable against playtesting.
+ * Target median tenure after the grace period. Fifteen game-years keeps Court
+ * membership durable while still allowing meaningful turnover in long games.
  */
-export const DIVERGENT_TENURE_HAZARD_PER_TURN = 0.015;
+export const DIVERGENT_TENURE_MEDIAN_YEARS = 15;
+export const DIVERGENT_TENURE_MEDIAN_TURNS = DIVERGENT_TENURE_MEDIAN_YEARS * TURNS_PER_YEAR;
+
+/** Flat per-turn departure probability calibrated to the target median. */
+export const DIVERGENT_TENURE_HAZARD_PER_TURN =
+  1 - Math.pow(0.5, 1 / DIVERGENT_TENURE_MEDIAN_TURNS);
 
 /** Player-facing death chance for an occupied Divergent seat. */
 export interface DivergentDeathChance {
@@ -64,7 +69,7 @@ export function divergentDeathChance(
   };
 }
 
-/** Percent label for the live hazard, e.g. "1.5%". */
+/** Percent label for the live hazard, e.g. "0.1%". */
 export function formatDeathChancePercent(
   chancePerTurn: number = DIVERGENT_TENURE_HAZARD_PER_TURN
 ): string {
@@ -79,7 +84,9 @@ export function formatDivergentDeathChance(
   chance: DivergentDeathChance,
   style: "compact" | "full" = "full"
 ): string {
-  const livePct = formatDeathChancePercent();
+  const livePct = formatDeathChancePercent(
+    chance.turnsUntilActive > 0 ? DIVERGENT_TENURE_HAZARD_PER_TURN : chance.chancePerTurn
+  );
   if (chance.turnsUntilActive > 0) {
     const n = chance.turnsUntilActive;
     const unit = n === 1 ? "turn" : "turns";

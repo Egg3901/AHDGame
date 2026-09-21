@@ -17,8 +17,9 @@ describe("rollSurpriseCaseSpawn", () => {
     expect(rollSurpriseCaseSpawn(0.999)).toBe(false);
   });
 
-  it("is tuned rarer than the Divergent Justice tenure hazard (0.015/turn)", () => {
-    expect(SURPRISE_CASE_SPAWN_PROBABILITY_PER_TURN).toBeLessThan(0.015);
+  it("remains a low per-turn probability", () => {
+    expect(SURPRISE_CASE_SPAWN_PROBABILITY_PER_TURN).toBeGreaterThan(0);
+    expect(SURPRISE_CASE_SPAWN_PROBABILITY_PER_TURN).toBeLessThan(0.01);
   });
 
   it("accepts an explicit probability override", () => {
