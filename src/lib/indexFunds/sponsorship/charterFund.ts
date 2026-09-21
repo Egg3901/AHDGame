@@ -228,8 +228,58 @@ export async function charterFund(db: Db, input: CharterFundInput): Promise<Char
   }
 
   const feeLocal = Math.round(anchorToCorpLiquidCapital(FUND_CHARTER_FEE_ANCHOR, sponsor, fxRate));
-  if (sponsor.countryId) {
-    await creditTreasuryProceeds(db, sponsor.countryId as CountryId, feeLocal, now);
+  // The charter fee is government revenue, not destroyed money: it lands in
+  // the sponsor country's treasury (same incorporation-fee treatment as the
+  // spin-off path). Capture the credited amount so the treasury leg below is
+  // booked for exactly what moved.
+  const feeToTreasury = sponsor.countryId
+    ? await creditTreasuryProceeds(db, sponsor.countryId as CountryId, feeLocal, now)
+    : 0;
+
+  // #992 tranche 3: the corp debit below covers seed + fee while the fund
+  // receives the seed alone, so the debit row can never mirror the fund side.
+  // Book the fund's seed receipt as its own fund-subject row: single-sided by
+  // construction (the sponsor evidences the debit), netting against the debit
+  // under the shared seed_capital reason instead of pooling in `unattributed`.
+  const charterLegs: Promise<unknown>[] = [
+    emitTx(db, {
+      type: "corp_capital_seed",
+      turn: currentTurn,
+      createdAt: now,
+      subjectType: "fund",
+      subjectId: fundId,
+      subjectName: name,
+      amount: input.seedCapitalAnchor,
+      anchorAmount: input.seedCapitalAnchor,
+      currencyCode: anchorCurrencyCode,
+      counterpartyType: "system",
+      counterpartyName: sponsor.name,
+      meta: {
+        kind: "fund_charter_seed",
+        fundId: fundId.toString(),
+        fundCurrency: anchorCurrencyCode,
+        seedCapitalAnchor: input.seedCapitalAnchor,
+        charterFeeAnchor: FUND_CHARTER_FEE_ANCHOR,
+      },
+    }),
+  ];
+  if (feeToTreasury > 0 && sponsor.countryId) {
+    charterLegs.push(
+      emitTx(db, {
+        type: "gov_tax_revenue",
+        turn: currentTurn,
+        createdAt: now,
+        subjectType: "government",
+        countryId: sponsor.countryId,
+        subjectName: `${sponsor.countryId} treasury`,
+        amount: feeToTreasury,
+        currencyCode,
+        counterpartyType: "corporation",
+        counterpartyId: sponsor._id,
+        counterpartyName: sponsor.name,
+        meta: { kind: "fund_charter", side: "charter_fee", fundId: fundId.toString() },
+      })
+    );
   }
 
   await Promise.all([
@@ -262,6 +312,7 @@ export async function charterFund(db: Db, input: CharterFundInput): Promise<Char
       note: `Seed capital from ${sponsor.name}`,
       createdAt: now,
     } as IndexFundTransaction),
+    ...charterLegs,
   ]);
 
   recordAudit({

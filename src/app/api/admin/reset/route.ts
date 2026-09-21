@@ -9,6 +9,7 @@ import type { BootstrapMode } from "@/lib/admin/bootstrapGameWorld";
 import { resetAndBootstrapGameWorld } from "@/lib/admin/resetAndBootstrapGameWorld";
 import { isKnownPreset } from "@/lib/seeds/presetSelector";
 import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
+import { RESET_DATE_MAX_YEAR, RESET_DATE_MIN_YEAR } from "@/lib/admin/resetStartDate";
 
 const resetSchema = z.object({
   bootstrap: z.boolean().optional(),
@@ -28,6 +29,12 @@ const resetSchema = z.object({
     .object({
       type: z.enum(["Alpha", "Beta", "Iteration"]),
       number: z.number(),
+    })
+    .optional(),
+  startDate: z
+    .object({
+      year: z.number().int().min(RESET_DATE_MIN_YEAR).max(RESET_DATE_MAX_YEAR),
+      week: z.number().int().min(1).max(48),
     })
     .optional(),
 });
@@ -79,11 +86,15 @@ export async function POST(request: Request) {
     }
 
     const parsed = await parseJsonBody(request, resetSchema);
-    const body = parsed.success ? parsed.data : {};
+    if (!parsed.success) {
+      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+    }
+    const body = parsed.data;
     const bootstrap = body.bootstrap === true || bootstrapFromQuery;
     const mode: BootstrapMode = body.mode === "vacant" ? "vacant" : "historical";
     const skipRegionalCouncil = body.skipRegionalCouncil === true;
     const iteration = body.iteration;
+    const startDate = body.startDate;
     // Founding phase only makes sense on a full historical bootstrap: it seeds
     // chambers vacant and relies on the ensure* battery (bootstrap-only) to
     // spawn the founding races. `resetAndBootstrapGameWorld` enforces that and
@@ -101,6 +112,7 @@ export async function POST(request: Request) {
       seedOnly: !bootstrap,
       adminUsername: admin.username,
       iteration,
+      startDate,
       preIteration,
     });
 
@@ -127,7 +139,13 @@ async function handleStreamingReset(
 
   const auth = await requireAdmin();
   const parsed = await parseJsonBody(request, resetSchema);
-  const body = parsed.success ? parsed.data : {};
+  if (!parsed.success) {
+    return new Response(`data: ${JSON.stringify({ type: "error", message: parsed.error })}\n\n`, {
+      status: parsed.status,
+      headers: { "Content-Type": "text/event-stream" },
+    });
+  }
+  const body = parsed.data;
 
   const deleteProfiles = searchParams.get("deleteProfiles") === "true";
   const preset = searchParams.get("preset") ?? DEFAULT_SEED_PRESET;
@@ -136,6 +154,7 @@ async function handleStreamingReset(
   const mode: BootstrapMode = body.mode === "vacant" ? "vacant" : "historical";
   const skipRegionalCouncil = body.skipRegionalCouncil === true;
   const iteration = body.iteration;
+  const startDate = body.startDate;
   const preIteration = resolvePreIterationOption(body, searchParams);
 
   if (!auth.ok) {
@@ -175,6 +194,7 @@ async function handleStreamingReset(
           seedOnly: !bootstrap,
           adminUsername: admin.username,
           iteration,
+          startDate,
           preIteration,
           log: (msg: string) => send({ type: "log", message: msg }),
         });

@@ -12,6 +12,7 @@ import {
   beginPhaseProfiling,
   endPhaseProfiling,
   phaseRoundTrips,
+  roundTripCountsAvailable,
 } from "@/lib/observability/mongoRoundTrips";
 import { roundTripBudgetFor } from "./turnPhaseBudgets";
 import { withSpan } from "@/lib/observability/spans";
@@ -311,9 +312,9 @@ export function createTurnPhaseRuntime(input: {
       }
       // Round-trip budget (see turnPhaseBudgets.ts). Warn-only: a phase over
       // budget is a perf regression to fix, not a failed turn.
-      const roundTrips = phaseRoundTrips(name);
+      const roundTrips = roundTripCountsAvailable() ? phaseRoundTrips(name) : undefined;
       const roundTripBudget = roundTripBudgetFor(name);
-      if (roundTrips > roundTripBudget) {
+      if (roundTrips != null && roundTrips > roundTripBudget) {
         console.warn(
           `[Turn] Phase "${name}" issued ${roundTrips} Mongo round trips, over its budget of ${roundTripBudget}. ` +
             `Probably a per-row query; see src/simulation/engine/turnPhaseBudgets.ts.`
@@ -325,9 +326,11 @@ export function createTurnPhaseRuntime(input: {
           data: { phase: name, roundTrips, roundTripBudget },
         });
       }
-      void setPhaseStatus(name, "completed", { roundTrips, roundTripBudget }).catch((err) =>
-        console.warn(`[Turn] Failed to mark phase "${name}" completed`, err)
-      );
+      void setPhaseStatus(
+        name,
+        "completed",
+        roundTrips == null ? {} : { roundTrips, roundTripBudget }
+      ).catch((err) => console.warn(`[Turn] Failed to mark phase "${name}" completed`, err));
       return result;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);

@@ -9,6 +9,22 @@ function entry(input: Omit<LedgerEntryInput, "turn" | "createdAt">): LedgerEntry
 }
 
 describe("reconcileLedger", () => {
+  it("echoes the turn's banking mode onto the report (per-turn activation history)", () => {
+    const forMode = (bankingMode?: string | null) =>
+      reconcileLedger({
+        turn: 10,
+        entries: [],
+        openingBalances: {},
+        closingBalances: {},
+        bankingMode,
+      });
+    expect(forMode("authoritative").bankingMode).toBe("authoritative");
+    expect(forMode("shadow").bankingMode).toBe("shadow");
+    // Absent means unknown, never authoritative: legacy docs fail closed downstream.
+    expect(forMode().bankingMode).toBeNull();
+    expect(forMode(null).bankingMode).toBeNull();
+  });
+
   it("is green on a clean, fully-balanced, fully-instrumented turn", () => {
     const donor = new ObjectId().toString();
     const recipient = new ObjectId().toString();
@@ -382,6 +398,78 @@ describe("reconcileLedger", () => {
     expect(report.status).toBe("green");
   });
 
+  it("ranks divergent account classes pre-cap so the inventory survives ~1,100-account turns", () => {
+    // Build 150 divergent accounts across three kinds: findings persist only
+    // the top 100, but byKind must account for all 150.
+    const entries: LedgerEntry[] = [];
+    const openingBalances: Record<string, number> = {};
+    const closingBalances: Record<string, number> = {};
+    for (let i = 0; i < 100; i += 1) {
+      const account = `character:small-${i}:USD`;
+      openingBalances[account] = 1000;
+      closingBalances[account] = 1010; // +10 uninstrumented each
+    }
+    for (let i = 0; i < 30; i += 1) {
+      const account = `corporation:mid-${i}:USD`;
+      openingBalances[account] = 1000;
+      closingBalances[account] = 1100; // +100 uninstrumented each
+    }
+    for (let i = 0; i < 20; i += 1) {
+      const account = `government:big-${i}:USD`;
+      openingBalances[account] = 1000;
+      closingBalances[account] = 2000; // +1000 uninstrumented each
+    }
+    const report = reconcileLedger({ turn: 10, entries, openingBalances, closingBalances });
+
+    expect(report.stockVsFlow.divergentCount).toBe(150);
+    expect(report.stockVsFlow.findings).toHaveLength(100);
+    expect(report.stockVsFlow.byKind).toEqual([
+      { kind: "government", divergentCount: 20, absDivergence: 20000, uninstrumentedCount: 20 },
+      { kind: "corporation", divergentCount: 30, absDivergence: 3000, uninstrumentedCount: 30 },
+      { kind: "character", divergentCount: 100, absDivergence: 1000, uninstrumentedCount: 100 },
+    ]);
+    // Class totals reconcile with the headline count.
+    expect(report.stockVsFlow.byKind.reduce((sum, row) => sum + row.divergentCount, 0)).toBe(
+      report.stockVsFlow.divergentCount
+    );
+  });
+
+  it("counts instrumented divergences separately from uninstrumented moves per kind", () => {
+    const report = reconcileLedger({
+      turn: 10,
+      entries: [
+        entry({
+          txType: "corp_revenue",
+          emitSite: "test/wrong-wallet",
+          legs: [
+            {
+              account: "corporation:claimed:USD",
+              amount: 500,
+              currencyCode: "USD",
+              anchorAmount: 500,
+              role: "primary",
+            },
+            {
+              account: "mint:sector_revenue:USD",
+              amount: -500,
+              currencyCode: "USD",
+              anchorAmount: -500,
+              role: "contra",
+            },
+          ],
+        }),
+      ],
+      // Ledger claims +500 but the balance never moved: instrumented divergence.
+      openingBalances: { "corporation:claimed:USD": 1000, "corporation:silent:USD": 1000 },
+      closingBalances: { "corporation:claimed:USD": 1000, "corporation:silent:USD": 1300 },
+    });
+
+    expect(report.stockVsFlow.divergentCount).toBe(2);
+    expect(report.stockVsFlow.byKind).toEqual([
+      { kind: "corporation", divergentCount: 2, absDivergence: 800, uninstrumentedCount: 1 },
+    ]);
+  });
+
   it("reports a skipped stock-vs-flow check as unverified, not as clean", () => {
     const report = reconcileLedger({
       turn: 10,
@@ -393,6 +481,7 @@ describe("reconcileLedger", () => {
     expect(report.stockVsFlow.skipped).toBe(true);
     expect(report.stockVsFlow.divergentCount).toBeNull();
     expect(report.stockVsFlow.status).toBe("amber");
+    expect(report.stockVsFlow.byKind).toEqual([]);
     expect(report.status).toBe("amber");
   });
 });

@@ -18,6 +18,8 @@ import {
   loadBondQuote,
   refundBondPoolDebit,
 } from "@/lib/bonds/marketPool";
+import { emitTx, loadTxThresholds } from "@/lib/financialTxLog/emit";
+import type { TxThresholds } from "@/lib/db/types/financialTxLog";
 import { insertFundTransaction } from "@/lib/indexFunds/fundQueries";
 
 export interface SellFundBondsResult {
@@ -35,7 +37,16 @@ export async function sellFundBondHoldingsForCash(
   db: Db,
   fund: Pick<IndexFund, "_id" | "name" | "quotedNav" | "anchorCurrencyCode">,
   neededAnchor: number,
-  now: Date = new Date()
+  now: Date = new Date(),
+  options?: {
+    /**
+     * #992 tranche 6: game turn stamped on each fund-subject ledger row.
+     * When absent the sales still settle but emit no rows.
+     */
+    turn?: number;
+    /** Preloaded thresholds shared by every sale row in the pass. */
+    thresholds?: TxThresholds;
+  }
 ): Promise<SellFundBondsResult> {
   const result: SellFundBondsResult = { proceedsAnchor: 0, unitsSold: 0, bondsTouched: 0 };
   if (!(neededAnchor > 0)) return result;
@@ -58,6 +69,10 @@ export async function sellFundBondHoldingsForCash(
     }))
     .filter((row) => row.units > 0)
     .sort((a, b) => b.units * b.bond.marketPrice - a.units * a.bond.marketPrice);
+
+  // One thresholds read for the whole sale pass; every row below shares it.
+  const thresholds =
+    options?.turn !== undefined ? (options?.thresholds ?? (await loadTxThresholds(db))) : undefined;
 
   let remainingAnchor = neededAnchor;
   for (const { bond, units: held } of positions) {
@@ -104,6 +119,39 @@ export async function sellFundBondHoldingsForCash(
       note: `Sold ${units} bond units (${bond.issuerName ?? "bond"}) to the market for liquidity`,
       createdAt: now,
     });
+
+    // #992 tranche 6: fund-subject ledger leg for the cashAnchor credit
+    // above. The bond position is an asset account the shadow ledger does
+    // not carry, so the row is single-sided under the shared
+    // bond_principal_investment reason (the purchase leg shares it, netting
+    // per currency). Fund-subject rows never mirror, so this is the only
+    // ledger row for the credit, and it fires only on the committed path
+    // — a refunded pool debit or a lost holder race emits nothing.
+    if (options?.turn !== undefined) {
+      await emitTx(
+        db,
+        {
+          type: "bond_sell",
+          turn: options.turn,
+          createdAt: now,
+          subjectType: "fund",
+          subjectId: fund._id,
+          subjectName: fund.name,
+          amount: proceedsAnchor,
+          anchorAmount: proceedsAnchor,
+          currencyCode: fund.anchorCurrencyCode,
+          counterpartyType: "system",
+          counterpartyName: bond.issuerName ?? "Bond market",
+          meta: {
+            bondId: bond._id.toString(),
+            units,
+            pricePerUnit: quote.bidPerUnit,
+            source: "redemption-liquidity",
+          },
+        },
+        thresholds
+      );
+    }
 
     remainingAnchor -= proceedsAnchor;
     result.proceedsAnchor += proceedsAnchor;

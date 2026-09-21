@@ -1096,10 +1096,17 @@ describe("computeEconomicVitalSigns", () => {
       _id: new ObjectId(),
       turn: 30,
       generatedAt: new Date("2026-08-29T00:00:00.000Z"),
+      bankingMode: null,
       status: "amber",
       entriesChecked: 0,
       trialBalance: { status: "green", unbalancedCount: 0, findings: [] },
-      stockVsFlow: { status: "amber", skipped: true, divergentCount: null, findings: [] },
+      stockVsFlow: {
+        status: "amber",
+        skipped: true,
+        divergentCount: null,
+        findings: [],
+        byKind: [],
+      },
       moneySupply: { status: "green", findings: [] },
       unattributed: [],
     };
@@ -1108,7 +1115,42 @@ describe("computeEconomicVitalSigns", () => {
 
     expect(snapshot.reconciliation.stockVsFlowDivergentCount).toBeNull();
     expect(snapshot.reconciliation.stockVsFlowSkipped).toBe(true);
+    expect(snapshot.reconciliation.stockVsFlowByKind).toBeNull();
     expect(snapshot.measurement.reasons).toContain("stock_vs_flow_skipped");
+  });
+
+  it("publishes the pre-cap per-kind stock versus flow inventory in vital signs", () => {
+    const reconciliation: LedgerReconciliation = {
+      _id: new ObjectId(),
+      turn: 30,
+      generatedAt: new Date("2026-08-29T00:00:00.000Z"),
+      bankingMode: null,
+      status: "amber",
+      entriesChecked: 12,
+      trialBalance: { status: "green", unbalancedCount: 0, findings: [] },
+      stockVsFlow: {
+        status: "amber",
+        skipped: false,
+        divergentCount: 120,
+        findings: [],
+        byKind: [
+          {
+            kind: "corporation",
+            divergentCount: 90,
+            absDivergence: 9000,
+            uninstrumentedCount: 90,
+          },
+          { kind: "character", divergentCount: 30, absDivergence: 300, uninstrumentedCount: 5 },
+        ],
+      },
+      moneySupply: { status: "green", findings: [] },
+      unattributed: [],
+    };
+
+    const snapshot = computeEconomicVitalSigns({ ...emptyInput, turn: 30, reconciliation });
+
+    expect(snapshot.reconciliation.stockVsFlowDivergentCount).toBe(120);
+    expect(snapshot.reconciliation.stockVsFlowByKind).toEqual(reconciliation.stockVsFlow.byKind);
   });
 });
 

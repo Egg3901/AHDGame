@@ -3,6 +3,10 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
+const MIN_RESET_YEAR = 1953;
+const MAX_RESET_YEAR = 2027;
+const WEEKS_PER_YEAR = 48;
+
 type ResetType = "reset" | "resetAndBootstrap" | "resetAndBootstrapVacant" | "fullReset";
 
 interface ResetPreset {
@@ -148,6 +152,8 @@ export function GameResetControls() {
   const [resetStage, setResetStage] = useState("");
   const [presets, setPresets] = useState<ResetPreset[]>([]);
   const [selectedPreset, setSelectedPreset] = useState("2019-default");
+  const [startYear, setStartYear] = useState(2019);
+  const [startWeek, setStartWeek] = useState(1);
   const [currentIteration, setCurrentIteration] = useState<{
     type: IterationType;
     number: number;
@@ -191,6 +197,7 @@ export function GameResetControls() {
       ...config.warningLines.map((line) => `- ${line}`),
       "",
       `Starting conditions: ${presetName}`,
+      `Reset date: ${startYear}, week ${startWeek}`,
       "",
       "Continue to typed confirmation?",
     ].join("\n");
@@ -223,7 +230,11 @@ export function GameResetControls() {
       const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...config.body, iteration }),
+        body: JSON.stringify({
+          ...config.body,
+          iteration,
+          startDate: { year: startYear, week: startWeek },
+        }),
       });
 
       if (!res.ok || !res.body) {
@@ -296,7 +307,6 @@ export function GameResetControls() {
   // Year + condition button grids, both derived from the preset names so new
   // presets appear automatically. A condition is only clickable when a preset
   // exists for the selected year with that variant suffix.
-  const years = [...new Set(sortedPresets.map(presetStartYear))].filter(Number.isFinite);
   const variants = [...new Set(sortedPresets.map(presetVariant))];
   const selectedYear = selectedPresetData ? presetStartYear(selectedPresetData) : null;
   const selectedVariant = selectedPresetData ? presetVariant(selectedPresetData) : null;
@@ -309,6 +319,40 @@ export function GameResetControls() {
     const same = selectedVariant ? findPreset(year, selectedVariant) : undefined;
     const fallback = sortedPresets.find((p) => presetStartYear(p) === year);
     const next = same ?? fallback;
+    if (next) {
+      setSelectedPreset(next.id);
+      setStartYear(year);
+      setStartWeek(1);
+    }
+  };
+
+  const canonicalPresets = sortedPresets.filter(
+    (preset) => preset.id === `${presetStartYear(preset)}-default`
+  );
+  const eraYears = canonicalPresets.map(presetStartYear).sort((a, b) => a - b);
+  const dateIndex = (startYear - MIN_RESET_YEAR) * WEEKS_PER_YEAR + (startWeek - 1);
+  const maxDateIndex = (MAX_RESET_YEAR - MIN_RESET_YEAR + 1) * WEEKS_PER_YEAR - 1;
+  const progress = maxDateIndex === 0 ? 0 : dateIndex / maxDateIndex;
+  const lowerEra = [...eraYears].reverse().find((year) => year <= startYear) ?? eraYears[0];
+  const upperEra = eraYears.find((year) => year >= startYear) ?? eraYears[eraYears.length - 1];
+  const exactYear = startYear + (startWeek - 1) / WEEKS_PER_YEAR;
+  const blend =
+    lowerEra === upperEra
+      ? 0
+      : Math.max(0, Math.min(1, (exactYear - lowerEra) / (upperEra - lowerEra)));
+
+  const setDateFromIndex = (index: number) => {
+    const clamped = Math.max(0, Math.min(maxDateIndex, index));
+    const year = MIN_RESET_YEAR + Math.floor(clamped / WEEKS_PER_YEAR);
+    const week = (clamped % WEEKS_PER_YEAR) + 1;
+    setStartYear(year);
+    setStartWeek(week);
+
+    const baseYear = [...eraYears].reverse().find((candidate) => candidate <= year) ?? eraYears[0];
+    const sameVariant = selectedVariant ? findPreset(baseYear, selectedVariant) : undefined;
+    const canonical = findPreset(baseYear, "Default Parties");
+    const next =
+      sameVariant ?? canonical ?? sortedPresets.find((p) => presetStartYear(p) === baseYear);
     if (next) setSelectedPreset(next.id);
   };
 
@@ -317,29 +361,80 @@ export function GameResetControls() {
       <div className="rounded-xl border border-card-border bg-card p-5 sm:p-6">
         <label className="mb-2 block text-sm font-medium">Starting Conditions</label>
 
-        <p className="mb-1.5 text-xs font-semibold tracking-wider text-muted uppercase">
-          Starting year
-        </p>
-        <div className="mb-4 flex flex-wrap gap-2">
-          {years.map((year) => {
-            const active = selectedYear === year;
-            return (
-              <button
-                key={year}
-                type="button"
-                onClick={() => pickYear(year)}
-                disabled={loading !== null}
-                aria-pressed={active}
-                className={`min-w-[4.5rem] rounded-lg border px-4 py-2 text-sm font-semibold transition-colors disabled:opacity-50 ${
-                  active
-                    ? "border-primary/60 bg-primary/15 text-primary"
-                    : "border-card-border text-muted hover:border-foreground/30 hover:text-foreground"
-                }`}
-              >
-                {year}
-              </button>
-            );
-          })}
+        <div className="mb-3 flex items-end justify-between gap-4">
+          <div>
+            <p className="text-xs font-semibold tracking-wider text-muted uppercase">Reset date</p>
+            <p className="mt-1 text-2xl font-semibold tabular-nums">
+              {startYear} <span className="text-base text-muted">Week {startWeek}</span>
+            </p>
+          </div>
+          <p className="text-right text-xs text-muted">
+            Base world: <span className="font-medium text-foreground">{selectedYear}</span>
+            <br />
+            {lowerEra === upperEra
+              ? `At the ${lowerEra} metric anchor`
+              : `Year-aware metrics: ${Math.round((1 - blend) * 100)}% ${lowerEra} / ${Math.round(blend * 100)}% ${upperEra}`}
+          </p>
+        </div>
+
+        <div className="relative mb-2 h-12" aria-hidden="true">
+          <div className="absolute inset-x-0 top-2 flex h-8 items-end gap-[2px] overflow-hidden rounded-lg px-1">
+            {Array.from({ length: MAX_RESET_YEAR - MIN_RESET_YEAR + 1 }, (_, index) => {
+              const year = MIN_RESET_YEAR + index;
+              const lit = year < startYear || (year === startYear && startWeek > 1);
+              const anchor = eraYears.includes(year);
+              return (
+                <span
+                  key={year}
+                  className={`min-w-0 flex-1 rounded-full transition-all duration-150 ${
+                    lit
+                      ? "bg-primary shadow-[0_0_9px_color-mix(in_srgb,var(--primary)_75%,transparent)]"
+                      : "bg-card-border"
+                  } ${anchor ? "h-8" : "h-4"}`}
+                />
+              );
+            })}
+          </div>
+          <input
+            type="range"
+            min={0}
+            max={maxDateIndex}
+            step={1}
+            value={dateIndex}
+            onChange={(event) => setDateFromIndex(Number(event.target.value))}
+            disabled={loading !== null}
+            aria-label="Reset year and week"
+            aria-valuetext={`${startYear}, week ${startWeek}`}
+            className="absolute inset-0 z-10 h-12 w-full cursor-ew-resize opacity-0 disabled:cursor-not-allowed"
+          />
+          <span
+            className="pointer-events-none absolute top-0 z-20 h-12 w-1 rounded-full bg-white shadow-[0_0_8px_3px_color-mix(in_srgb,var(--primary)_80%,transparent)]"
+            style={{ left: `calc(${progress * 100}% - 2px)` }}
+          />
+        </div>
+
+        <div className="mb-4 flex justify-between gap-1">
+          {canonicalPresets
+            .slice()
+            .sort((a, b) => presetStartYear(a) - presetStartYear(b))
+            .map((preset) => {
+              const year = presetStartYear(preset);
+              return (
+                <button
+                  key={preset.id}
+                  type="button"
+                  onClick={() => pickYear(year)}
+                  disabled={loading !== null}
+                  className={`rounded px-1.5 py-1 text-[11px] font-semibold tabular-nums transition-colors ${
+                    selectedYear === year
+                      ? "bg-primary/15 text-primary"
+                      : "text-muted hover:text-foreground"
+                  }`}
+                >
+                  {year}
+                </button>
+              );
+            })}
         </div>
 
         <p className="mb-1.5 text-xs font-semibold tracking-wider text-muted uppercase">

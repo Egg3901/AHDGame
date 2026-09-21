@@ -729,11 +729,17 @@ describe("fundCron — rebalanceFundToTarget", () => {
         // shareOrders: return empty list for open bids so bid logic is a no-op in existing tests
         if (name === "shareOrders")
           return { find: vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue([]) }) };
+        // Tranche 5+: the batched float-buy ledger flush reads thresholds and
+        // the turn cadence (findOne) plus FX rates (find) before the
+        // best-effort bulk insert. Nulls/empties drive the same defaults as
+        // an empty database.
         return {
-          findOne: vi.fn().mockResolvedValue(null),
           findOneAndUpdate: vi.fn(),
           updateOne: vi.fn().mockResolvedValue({ matchedCount: 1 }),
           insertOne: vi.fn(),
+          insertMany: vi.fn().mockResolvedValue({}),
+          findOne: vi.fn().mockResolvedValue(null),
+          find: vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue([]) }),
         };
       }),
       _indexFundsColl: indexFundsColl,
@@ -961,11 +967,17 @@ describe("fundCron — rebalanceFundToTarget bid logic", () => {
         if (name === "indexFunds") return indexFundsColl;
         if (name === "shareOrders") return shareOrdersColl;
         if (name === "indexFundTransactions") return { insertOne: vi.fn().mockResolvedValue({}) };
+        // Tranche 5+: the batched float-buy ledger flush reads thresholds and
+        // the turn cadence (findOne) plus FX rates (find) before the
+        // best-effort bulk insert. Nulls/empties drive the same defaults as
+        // an empty database.
         return {
-          findOne: vi.fn().mockResolvedValue(null),
           findOneAndUpdate: vi.fn(),
           updateOne: vi.fn().mockResolvedValue({ matchedCount: 1 }),
           insertOne: vi.fn(),
+          insertMany: vi.fn().mockResolvedValue({}),
+          findOne: vi.fn().mockResolvedValue(null),
+          find: vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue([]) }),
         };
       }),
       _shareOrdersColl: shareOrdersColl,
@@ -1116,8 +1128,8 @@ describe("fundCron — rebalanceFundToTarget bid logic", () => {
       5
     );
 
-    // Off-basket bid MUST be cancelled
-    expect(cancelFundShareOrder).toHaveBeenCalledWith(expect.anything(), offBasketBidId);
+    // Off-basket bid MUST be cancelled (with the turn for the refund leg)
+    expect(cancelFundShareOrder).toHaveBeenCalledWith(expect.anything(), offBasketBidId, 5);
 
     // In-basket bid MUST NOT be cancelled (regression guard for Finding 1)
     const cancelCalls = vi.mocked(cancelFundShareOrder).mock.calls.map((c) => c[1].toString());
@@ -1170,7 +1182,7 @@ describe("fundCron — rebalanceFundToTarget bid logic", () => {
       5
     );
 
-    // Stale bid must be cancelled even though corp is in basket
-    expect(cancelFundShareOrder).toHaveBeenCalledWith(expect.anything(), staleBidId);
+    // Stale bid must be cancelled even though corp is in basket (with the turn)
+    expect(cancelFundShareOrder).toHaveBeenCalledWith(expect.anything(), staleBidId, 5);
   });
 });

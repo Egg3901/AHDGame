@@ -1,4 +1,4 @@
-import type { ReconcileStatus } from "@/lib/ledger/types";
+import type { ReconcileStatus, StockVsFlowByKind } from "@/lib/ledger/types";
 import type { MarketFormationSnapshot } from "./marketFormation";
 import type { SovereignDemandGapReason } from "@/lib/bonds/sovereignIssueDiagnostics";
 
@@ -248,5 +248,12 @@ export interface EconomicVitalSigns {
     stockVsFlowDivergentCount: number | null;
     stockVsFlowSkipped: boolean | null;
     moneySupplyFindingCount: number | null;
+    /**
+     * Per-kind stock-vs-flow inventory (ranked by unexplained ₳), copied from
+     * the reconciliation report. null when the check was skipped or no
+     * reconciliation ran: unknown, not zero. Survives the report's findings
+     * cap because it is computed pre-cap (#992).
+     */
+    stockVsFlowByKind: StockVsFlowByKind[] | null;
   };
 }

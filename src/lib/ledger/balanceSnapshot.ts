@@ -1,6 +1,6 @@
 import * as Sentry from "@sentry/nextjs";
 import { ObjectId, type Db } from "mongodb";
-import type { CurrencyCode } from "@/lib/constants/currencies";
+import { COUNTRY_CURRENCY_MAP, type CurrencyCode } from "@/lib/constants/currencies";
 import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
 import { accountId } from "@/lib/ledger/accounts";
 import type { BalanceSnapshot } from "@/lib/ledger/types";
@@ -20,9 +20,15 @@ export const BALANCE_CHECKPOINTS_COLLECTION = "balanceSnapshotCheckpoints";
  * the ledger legs' `anchorAmount`. Missing rate ⇒ treated 1:1 (mirrors
  * financialTxLog/emit.ts's amountToAnchor fallback). See plan §2.
  *
- * Scope (Phase 1-2 "derivable subset"): the four financialTxLog subject kinds —
- * character personal + savings wallets, corporation liquidCapital, party
- * treasury, government treasuryBalance. Fund/org cash legs are Phase 3.
+ * Scope: every financialTxLog subject kind plus the fund cash its holders move
+ * against — character personal + savings wallets, corporation liquidCapital,
+ * party treasury, government treasuryBalance, NPP investment cash, pension
+ * scheme cash (assetsAnchor), state-party treasury, and index-fund cashAnchor.
+ * Scheme unit value (investedValueAnchor) is a marked-to-market valuation
+ * cache, not a cash balance: it reprices without flows, so it stays out the
+ * same way forex repricing stays out of cash deltas (see reconcile.ts).
+ * International-org balances have no stored treasury field yet, so the `org`
+ * account kind remains defined but uncovered.
  */
 
 async function loadAnchorRates(db: Db): Promise<Map<string, number>> {
@@ -166,7 +172,81 @@ async function collectBalanceState(
     );
   }
 
+  // --- Index funds: cashAnchor (already ₳, like NPP cash) -------------------
+  // The cash leg every holder↔fund movement settles against. Holdings, bond
+  // allocations and queued redemptions are asset/liability accounts the shadow
+  // ledger does not carry; only the cash leg is a money balance. #992
+  // tranches 5-6: every fund cash write (float buys, holding/bond sales,
+  // order-fill seller credits, bond-reserve deploys) now carries a
+  // fund-subject ledger row against this key, so those flows stop reading as
+  // divergences.
+  const funds = db.collection<{
+    _id: ObjectId;
+    anchorCurrencyCode?: CurrencyCode;
+    cashAnchor?: number;
+  }>("indexFunds");
+  const fundCursor = funds.find({}, { projection: { anchorCurrencyCode: 1, cashAnchor: 1 } });
+  for await (const fund of fundCursor) {
+    if (typeof fund.cashAnchor !== "number") continue;
+    add(
+      balances,
+      accountId("fund", fund._id.toString(), fund.anchorCurrencyCode ?? "USD"),
+      fund.cashAnchor
+    );
+  }
+
+  // --- Pension schemes: cash paid in and not yet invested (₳) --------------
+  // `assetsAnchor` is the cash balance the contribution/benefit/subscribe rows
+  // move. `investedValueAnchor` is deliberately excluded: it is a
+  // marked-to-market cache of the scheme's fund units that reprices without
+  // any flow, so snapshotting it would alarm on valuation drift.
+  const schemes = db.collection<{
+    _id: ObjectId;
+    countryId?: string;
+    assetsAnchor?: number;
+  }>("pensionSchemes");
+  const schemeCursor = schemes.find({}, { projection: { countryId: 1, assetsAnchor: 1 } });
+  for await (const scheme of schemeCursor) {
+    if (typeof scheme.assetsAnchor !== "number") continue;
+    // Same source as the emit side (schemeInvesting/pensionBenefits use
+    // COUNTRY_CURRENCY_MAP) so leg and snapshot keys match by construction.
+    add(
+      balances,
+      accountId("pension_scheme", scheme._id.toString(), mapCurrency(scheme.countryId)),
+      scheme.assetsAnchor
+    );
+  }
+
+  // --- State parties: treasury (native, converted to ₳) --------------------
+  // `_id` is the composite `${stateId}_${partySequentialId}` key the dues and
+  // transfer rows carry in `meta.statePartyKey`, so it is the account ref.
+  const stateParties = db.collection<{
+    _id: string;
+    countryId?: string;
+    treasury?: number;
+  }>("statePartyOrg");
+  const statePartyCursor = stateParties.find({}, { projection: { countryId: 1, treasury: 1 } });
+  for await (const sp of statePartyCursor) {
+    if (typeof sp.treasury !== "number") continue;
+    const cur = mapCurrency(sp.countryId);
+    add(balances, accountId("state_party", String(sp._id), cur), toAnchor(sp.treasury, cur, rates));
+  }
+
   return { balances, anchorRates: Object.fromEntries(rates) };
+}
+
+/**
+ * Emit-side currency for scheme/state-party balances. The tx rows for these
+ * accounts are denominated via COUNTRY_CURRENCY_MAP (see schemeInvesting.ts,
+ * pensionBenefits.ts, nppFundGeneration.ts), so the snapshot must use the same
+ * map or leg and snapshot keys diverge by currency segment.
+ */
+function mapCurrency(countryId?: string): CurrencyCode {
+  if (countryId) {
+    const cur = (COUNTRY_CURRENCY_MAP as Record<string, CurrencyCode>)[countryId];
+    if (cur) return cur;
+  }
+  return "USD";
 }
 
 function countryCurrency(countryId?: string): CurrencyCode {
