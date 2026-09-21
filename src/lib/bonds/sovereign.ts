@@ -29,6 +29,7 @@ import type {
   Corporation,
   FederalBudget,
   GameConfig,
+  GameState,
 } from "@/lib/db/types";
 import { BOND_UNIT_FACE_VALUE } from "@/lib/db/types/bond";
 import {
@@ -62,6 +63,8 @@ import {
   sumOutstandingSovereignPrincipal,
   sovereignDebtTerms,
 } from "@/lib/bonds/sovereignPrincipal";
+import { loadDemocraticHealth } from "@/lib/governanceStyle/loadDemocraticHealth";
+import { democraticHealthSovereignSpread } from "@/lib/governanceStyle/rules/democraticConsequences";
 
 export const SOVEREIGN_ISSUANCE_INTERVAL_TURNS = 12;
 export const SOVEREIGN_BOND_MATURITY_TURNS: BondMaturityTurns = 48;
@@ -89,6 +92,12 @@ export const SOVEREIGN_RECONCILE_DISTRIBUTION: Partial<Record<BondMaturityTurns,
   96: 0.35,
   240: 0.4,
 };
+
+async function loadDemocraticSovereignSpread(db: Db, countryId: CountryId): Promise<number> {
+  const gameState = await db.collection<GameState>("gameState").findOne({ _id: "current" });
+  const health = await loadDemocraticHealth(db, countryId, gameState);
+  return health == null ? 0 : democraticHealthSovereignSpread(health);
+}
 
 /**
  * Effective sovereign coupon rate = primeRate + term premium for the given maturity,
@@ -252,6 +261,8 @@ function buildSovereignBondDoc(params: {
   countryCorporation: Pick<Corporation, "_id" | "name"> | null;
   /** B4: percentage points of credibility spread. 0 for a clean or absent bank. */
   credibilitySpreadPp?: number;
+  /** Democratic backsliding premium in percentage points. */
+  democraticSpreadPp?: number;
 }): { bondDoc: Omit<Bond, "_id">; annualCouponCost: number } {
   const { countryId, turn, now, issueAmount, maturityTurns, primeRate, countryCorporation } =
     params;
@@ -261,7 +272,7 @@ function buildSovereignBondDoc(params: {
   const couponRate = getSovereignCouponRate(
     primeRate,
     maturityTurns,
-    params.credibilitySpreadPp ?? 0
+    (params.credibilitySpreadPp ?? 0) + (params.democraticSpreadPp ?? 0)
   );
 
   const bondDoc: Omit<Bond, "_id"> = {
@@ -312,10 +323,11 @@ async function issueSovereignBondSeries(
   if (issueAmount < BOND_UNIT_FACE_VALUE) return null;
 
   const budgetId = getNationalBudgetId(countryId);
-  const [budget, centralBank, countryCorporation] = await Promise.all([
+  const [budget, centralBank, countryCorporation, democraticSpreadPp] = await Promise.all([
     db.collection<FederalBudget>("federalBudget").findOne({ _id: budgetId }),
     db.collection<CentralBank>("centralBanks").findOne({ _id: getBankId(countryId) }),
     findPrimaryNationalCorporation(db, countryId),
+    loadDemocraticSovereignSpread(db, countryId),
   ]);
   if (!budget) return null;
 
@@ -337,6 +349,7 @@ async function issueSovereignBondSeries(
     // B4: a discredited central bank makes its government borrow dearer. No
     // bank document means no scrutiny to read, so the spread is 0, not a guess.
     credibilitySpreadPp: centralBank ? sovereignCredibilitySpread(centralBank.chairInfamy ?? 0) : 0,
+    democraticSpreadPp,
   });
 
   const budgetUpdate = applySovereignDebtAdjustment(budget, bondDoc.totalIssued, annualCouponCost);
@@ -517,10 +530,11 @@ export async function issueScheduledSovereignBondSeries(
     if (existingSeries) continue;
 
     const budgetId = getNationalBudgetId(countryId);
-    const [budgetDoc, centralBank, countryCorporation] = await Promise.all([
+    const [budgetDoc, centralBank, countryCorporation, democraticSpreadPp] = await Promise.all([
       db.collection<FederalBudget>("federalBudget").findOne({ _id: budgetId }),
       db.collection<CentralBank>("centralBanks").findOne({ _id: getBankId(countryId) }),
       findPrimaryNationalCorporation(db, countryId),
+      loadDemocraticSovereignSpread(db, countryId),
     ]);
     if (!budgetDoc) continue;
 
@@ -561,6 +575,7 @@ export async function issueScheduledSovereignBondSeries(
         maturityTurns,
         primeRate,
         countryCorporation,
+        democraticSpreadPp,
       });
       const requestedUnits = Math.floor(bondDoc.totalIssued / BOND_UNIT_FACE_VALUE);
       let placedUnits = requestedUnits;
@@ -706,10 +721,11 @@ export async function reconcileSovereignDebt(
   const distribution = params.distribution ?? SOVEREIGN_RECONCILE_DISTRIBUTION;
 
   const budgetId = getNationalBudgetId(countryId);
-  const [budget, centralBank, countryCorporation] = await Promise.all([
+  const [budget, centralBank, countryCorporation, democraticSpreadPp] = await Promise.all([
     db.collection<FederalBudget>("federalBudget").findOne({ _id: budgetId }),
     db.collection<CentralBank>("centralBanks").findOne({ _id: getBankId(countryId) }),
     findPrimaryNationalCorporation(db, countryId),
+    loadDemocraticSovereignSpread(db, countryId),
   ]);
   if (!budget) return null;
 
@@ -749,7 +765,11 @@ export async function reconcileSovereignDebt(
       if (trancheAmount < BOND_UNIT_FACE_VALUE) continue;
 
       const totalUnits = Math.floor(trancheAmount / BOND_UNIT_FACE_VALUE);
-      const couponRate = getSovereignCouponRate(primeRate, maturityTurns, credibilitySpreadPp);
+      const couponRate = getSovereignCouponRate(
+        primeRate,
+        maturityTurns,
+        credibilitySpreadPp + democraticSpreadPp
+      );
       const annualCouponCost = (couponRate / 100) * trancheAmount;
 
       const bondDoc: Omit<Bond, "_id"> = {

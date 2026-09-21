@@ -15,6 +15,7 @@ export {
   DEMOCRATIC_HEALTH_PARTY_PENALTY_MAX,
   DEMOCRATIC_HEALTH_RELIEF_CAP_PCT,
   democraticHealthEconomicDrag,
+  democraticHealthSovereignSpread,
   democraticHealthPressure,
 } from "@/lib/governanceStyle/rules/democraticConsequences";
 

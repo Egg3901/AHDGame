@@ -5,6 +5,7 @@ export const DEMOCRATIC_HEALTH_PARTY_PENALTY_MAX = 0.2;
 export const DEMOCRATIC_HEALTH_CURRENT_RULER_EXTRA_MAX = 0.1;
 export const DEMOCRATIC_HEALTH_RELIEF_CAP_PCT = 75;
 export const DEMOCRATIC_HEALTH_GDP_DRAG_MAX = 4;
+export const DEMOCRATIC_HEALTH_SOVEREIGN_SPREAD_MAX = 2;
 const DEMOCRATIC_HEALTH_SEVERITY_EXPONENT = 1.2;
 
 export interface DemocraticHealthPressure {
@@ -17,6 +18,8 @@ export interface DemocraticHealthPressure {
   currentRulerPenalty: number;
   /** Annual GDP-growth percentage points lost to institutional failure. */
   gdpGrowthDrag: number;
+  /** Percentage points added to newly issued sovereign bond coupons. */
+  sovereignSpread: number;
   /** Relief after clamping to the supported temporary-relief range. */
   reliefPct: number;
 }
@@ -48,10 +51,15 @@ export function democraticHealthPressure(value: number, reliefPct = 0): Democrat
     partyPenalty,
     currentRulerPenalty,
     gdpGrowthDrag: DEMOCRATIC_HEALTH_GDP_DRAG_MAX * severity,
+    sovereignSpread: DEMOCRATIC_HEALTH_SOVEREIGN_SPREAD_MAX * severity,
     reliefPct: safeReliefPct,
   };
 }
 
 export function democraticHealthEconomicDrag(value: number): number {
   return democraticHealthPressure(value).gdpGrowthDrag;
+}
+
+export function democraticHealthSovereignSpread(value: number): number {
+  return democraticHealthPressure(value).sovereignSpread;
 }

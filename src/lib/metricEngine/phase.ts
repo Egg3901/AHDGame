@@ -67,6 +67,7 @@ import {
   supportsGovernanceStyle,
 } from "@/lib/governanceStyle/score";
 import { democraticHealthEconomicDrag } from "@/lib/governanceStyle/rules/democraticConsequences";
+import { loadDemocraticCompetition } from "@/lib/governanceStyle/loadCompetition";
 
 /** Default unemployment when a state has no prior reading (matches gdpGrowth.ts `?? 4.5`). */
 const DEFAULT_UNEMPLOYMENT = 4.5;
@@ -379,13 +380,33 @@ export async function runMetricEngine(db: Db, turn: number): Promise<number> {
     healthTotalsByCountry.set(state.countryId, totals);
   }
   const democraticHealthDragByCountry = new Map<string, number>();
+  const healthCountries = [...healthTotalsByCountry.keys()];
+  const competitionByCountry = new Map(
+    await Promise.all(
+      healthCountries.map(
+        async (countryId) =>
+          [
+            countryId,
+            await loadDemocraticCompetition(
+              db,
+              countryId as CountryId,
+              eraGameState?.preset,
+              eraGameState
+            ),
+          ] as const
+      )
+    )
+  );
   for (const [countryId, totals] of healthTotalsByCountry) {
     const config = getCountryConfig(countryId as CountryId, eraGameState?.preset);
     if (!supportsGovernanceStyle(config.governmentType)) continue;
     const values = Object.fromEntries(
       [...totals].map(([id, total]) => [id, total.weighted / total.population])
     );
-    const health = scoreGovernanceStyle(values).democraticHealth.value;
+    // Economic fallout uses the same displayed Democratic Health score as
+    // elections, including entrenched legislative, executive, and court control.
+    const health = scoreGovernanceStyle(values, competitionByCountry.get(countryId))
+      .democraticHealth.value;
     democraticHealthDragByCountry.set(countryId, democraticHealthEconomicDrag(health));
   }
 

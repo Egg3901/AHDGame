@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   democraticHealthEconomicDrag,
+  democraticHealthSovereignSpread,
   democraticHealthMultiplierForCandidate,
   democraticHealthPressure,
   DEMOCRATIC_HEALTH_PARTY_PENALTY_MAX,
@@ -15,8 +16,15 @@ describe("democratic health pressure", () => {
       partyPenalty: 0,
       currentRulerPenalty: 0,
       gdpGrowthDrag: 0,
+      sovereignSpread: 0,
       reliefPct: 0,
     });
+  });
+
+  it("adds a sovereign borrowing premium capped at two percentage points", () => {
+    expect(democraticHealthSovereignSpread(60)).toBe(0);
+    expect(democraticHealthSovereignSpread(30)).toBeGreaterThan(0);
+    expect(democraticHealthSovereignSpread(0)).toBe(2);
   });
 
   it("imposes a bounded economic drag only below the failure threshold", () => {
