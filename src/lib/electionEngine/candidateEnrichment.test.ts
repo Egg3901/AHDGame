@@ -128,6 +128,37 @@ describe("fetchEnrichedCandidates — empty list", () => {
 // ── Player character enrichment ───────────────────────────────────────────────
 
 describe("fetchEnrichedCandidates — player character", () => {
+  it("uses sweep-preloaded actors and endorsements without per-election reads", async () => {
+    const electionId = new ObjectId();
+    const charId = new ObjectId();
+    const candidate = makePlayerCandidate({ electionId, characterId: charId });
+    const character = {
+      _id: charId,
+      policies: { economic: 2, social: -1 },
+      favorability: 50,
+      politicalInfluence: 40,
+      nationalInfluence: 25,
+    };
+    const endorsementCountByKey = new Map([[`${electionId}:${charId}`, 2]]);
+
+    const { fetchEnrichedCandidates } = await import("./candidateEnrichment");
+    const [enriched] = await fetchEnrichedCandidates([candidate], {
+      parties: [],
+      preload: {
+        charactersById: new Map([[charId.toString(), character as never]]),
+        nppsById: new Map(),
+        statePartyChairRows: [],
+        endorsementCountByKey,
+      },
+    });
+
+    expect(enriched).toMatchObject({ charEP: 2, charSP: -1, favorability: 53 });
+    expect(db.collectionMocks.characters).toBeUndefined();
+    expect(db.collectionMocks.npps).toBeUndefined();
+    expect(db.collectionMocks.statePartyOrg).toBeUndefined();
+    expect(db.collectionMocks.nppEndorsements?.find).not.toHaveBeenCalled();
+  });
+
   it("maps character fields onto enriched candidate", async () => {
     const candidateId = new ObjectId();
     const charId = new ObjectId();
