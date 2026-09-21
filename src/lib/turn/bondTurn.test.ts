@@ -3,7 +3,7 @@
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
-import type { Db } from "mongodb";
+import type { AnyBulkWriteOperation, Db } from "mongodb";
 import { ObjectId } from "mongodb";
 import { resetCorpFxRateCacheForTests } from "@/lib/currency/corporationCapital";
 // Static imports on purpose: bondTurn pulls a large transitive graph whose
@@ -307,15 +307,16 @@ describe("processBondTurn", () => {
 
     expect(result.bondsProcessed).toBe(1);
     expect(result.couponsPaid).toBe(1);
-    expect(db.collectionMocks["indexFunds"]!.updateOne).toHaveBeenCalled();
+    expect(db.collectionMocks["indexFunds"]!.bulkWrite).toHaveBeenCalled();
     const fundUpdate = vi
-      .mocked(db.collectionMocks["indexFunds"]!.updateOne)
-      .mock.calls.find((call) => {
-        const filter = call[0] as { _id: ObjectId };
-        return filter._id.toString() === fundId.toString();
-      });
+      .mocked(db.collectionMocks["indexFunds"]!.bulkWrite)
+      .mock.calls.flatMap((call) => call[0] as AnyBulkWriteOperation[])
+      .find((op) => {
+        const filter = op.updateOne?.filter as { _id?: ObjectId } | undefined;
+        return filter?._id?.toString() === fundId.toString();
+      })?.updateOne;
     expect(fundUpdate).toBeDefined();
-    const update = fundUpdate![1] as { $inc: { cashAnchor: number } };
+    const update = fundUpdate!.update as { $inc: { cashAnchor: number } };
     // perTurnCouponPayment mocked to 10; USD fx defaults to 1.0; 5 units => 50
     expect(update.$inc.cashAnchor).toBe(50);
   });
