@@ -80,6 +80,7 @@ export async function recordEnactedLaw(
           ),
         }
       : {}),
+    ...(bill.jurisdictionMode ? { jurisdictionMode: bill.jurisdictionMode } : {}),
     budgetCategory: legislationType.budgetCategory || legislationType.policyDomain,
     ...(legislationType.isGrant ? { isGrant: true } : {}),
     enactedAt: new Date(),

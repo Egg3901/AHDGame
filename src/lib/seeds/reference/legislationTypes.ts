@@ -27,6 +27,7 @@ import { csLegislationTypes } from "../cs/csLegislation";
 import { balLegislationTypes } from "../bal/balLegislation";
 import { brLegislationTypes } from "../br/brLegislationTypes";
 import { bankingSeparationLegislationTypes } from "../shared/bankingSeparationLegislation";
+import { withLawAdministration } from "@/lib/governmentFinance/lawAdministrationCatalog";
 
 // ============================================================================
 // Archetype Approval System
@@ -441,6 +442,27 @@ const rawLegislationTypes: LegislationType[] = [
     policyDomain: "healthcare",
     subCategory: "Public Health",
     budgetCategory: "healthcare",
+    administration: {
+      primaryPortfolioId: "health",
+      primaryDepartmentId: "us_health_department",
+      responsiblePositionId: "secretary_of_health",
+      lawKind: "service_program",
+      implementationMode: "direct",
+      allowedJurisdictionModes: [
+        "national_direct",
+        "national_floor",
+        "concurrent",
+        "grant_supported_regional",
+        "regional_discretion",
+      ],
+      defaultJurisdictionMode: "national_direct",
+      jurisdictionMode: "national_direct",
+      appropriationClass: "operating",
+      fundingSemantics: "appropriation_included",
+      capacityDemand: { public_health_operations: 100 },
+      rampProfileId: "standard",
+      policyFamilyId: "us_public_health",
+    },
     effectTarget: {
       metricCategoryId: "healthcare",
       metricId: "publicHealthPreparedness",
@@ -480,6 +502,21 @@ const rawLegislationTypes: LegislationType[] = [
         ][i],
         economic: ([-5, -3, -1, 0, 1, 3, 5] as const)[i],
         social: ([-3, -2, -1, 0, 1, 2, 3] as const)[i],
+        ...(i === 1
+          ? {
+              implementation: {
+                programId: "us_public_health_workforce",
+                fundingSemantics: "appropriation_included" as const,
+                appropriationClass: "operating" as const,
+                obligationPriority: 6 as const,
+                capacityType: "public_health_operations",
+                outcome: {
+                  category: "healthcare" as const,
+                  metricId: "publicHealthPreparedness",
+                },
+              },
+            }
+          : {}),
       })),
       [124, 93, 62, 37, 22, 9, 0]
     ),
@@ -8878,6 +8915,8 @@ const rawLegislationTypes: LegislationType[] = [
  * onto every spending option from the central calibration model. Hand-set fractions
  * on any option are preserved. Flag-off ignores these; flag-on uses them.
  */
-export const legislationTypes: LegislationType[] = withEraCosts(rawLegislationTypes);
+export const legislationTypes: LegislationType[] = withLawAdministration(
+  withEraCosts(rawLegislationTypes)
+);
 
 export default legislationTypes;

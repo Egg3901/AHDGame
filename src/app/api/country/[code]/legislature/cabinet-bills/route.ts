@@ -32,6 +32,7 @@ import {
 } from "@/lib/legislationTypeAliases";
 import { billRequiresExecutiveAction } from "@/lib/internationalOrganizations/withdrawalBills";
 import type { Bill, BillStatus, LegislationType, Character } from "@/lib/db/types";
+import type { EnactedLaw } from "@/lib/db/types/budget";
 import { isPolicyProvision } from "@/lib/db/types/legislation";
 import {
   BILL_PROPOSE_ACTION_COST,
@@ -45,6 +46,9 @@ import {
 } from "@/lib/legislature/billAutoFailWarning";
 import { z } from "zod";
 import { moderatedBillTitle, moderatedBillText } from "@/lib/api/schemas/congress";
+import { JURISDICTION_MODES, resolveBillJurisdiction } from "@/lib/legislature/jurisdiction";
+import { resolveAdministrationConflicts } from "@/lib/legislature/administrationConflicts";
+import { getGameState } from "@/lib/gameState";
 
 const CABINET_VOTE_DURATION_MS = 24 * 3_600_000; // 24 hours
 type BillListProvisionDisplay = NonNullable<BillDisplay["provisions"]>[number];
@@ -60,6 +64,7 @@ const proposeCabinetBillSchema = z.object({
   effectDirection: z.number().optional().default(0),
   provisions: z.array(z.unknown()).optional(),
   confirmElectionRisk: z.boolean().optional(),
+  jurisdictionMode: z.enum(JURISDICTION_MODES).optional(),
 });
 
 /**
@@ -378,6 +383,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
       stateId,
       effectDirection,
       confirmElectionRisk,
+      jurisdictionMode,
     } = parsed.data;
 
     const db = await getDb();
@@ -614,6 +620,58 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
       });
     }
 
+    const selectedLegislationType = await db
+      .collection<LegislationType>("legislationTypes")
+      .findOne({ _id: legislationTypeId });
+    if (!selectedLegislationType) {
+      return NextResponse.json(badRequest("Unknown legislation type.").toJson(), {
+        status: 400,
+      });
+    }
+    const gameState = await getGameState(db);
+    const administrationEnabled =
+      gameState?.lawAdministrationEnabled === true && ["US", "UK", "JP"].includes(countryId);
+    const jurisdiction = resolveBillJurisdiction({
+      enabled: administrationEnabled,
+      requested: jurisdictionMode,
+      legislationTypes: [selectedLegislationType],
+    });
+    if (!jurisdiction.ok || !jurisdiction.mode) {
+      return NextResponse.json(
+        badRequest(jurisdiction.error ?? "Invalid jurisdiction mode.").toJson(),
+        { status: 400 }
+      );
+    }
+    if (administrationEnabled) {
+      const activeLaws = await db
+        .collection<EnactedLaw>("enactedLaws")
+        .find(
+          { countryId, scope: "national", repealedAt: { $exists: false } },
+          { projection: { legislationTypeId: 1 } }
+        )
+        .toArray();
+      const activeTypeIds = [...new Set(activeLaws.map((law) => law.legislationTypeId))];
+      const activeTypes =
+        activeTypeIds.length === 0
+          ? []
+          : await db
+              .collection<LegislationType>("legislationTypes")
+              .find({ _id: { $in: activeTypeIds } }, { projection: { _id: 1, administration: 1 } })
+              .toArray();
+      const conflict = resolveAdministrationConflicts({
+        proposed: [selectedLegislationType],
+        existing: activeTypes,
+      }).conflicts[0];
+      if (conflict) {
+        return NextResponse.json(
+          {
+            error: `This bill conflicts with active law ${conflict.existingLegislationTypeId} through ${conflict.conflictSetId}. Repeal or replace that regime first.`,
+          },
+          { status: 409 }
+        );
+      }
+    }
+
     // Build a synthetic provision for constraint checks (cabinet bills use a single legislationType)
     const cabinetProvision = policyOptionId
       ? [{ legislationTypeId, policyOptionId }]
@@ -722,6 +780,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
       stateId: stateId ?? undefined,
       status: "cabinet_review",
       effectDirection,
+      ...(administrationEnabled ? { jurisdictionMode: jurisdiction.mode } : {}),
       sponsorId: character._id,
       sponsorName: character.name,
       sponsorParty: character.party?.toString(),

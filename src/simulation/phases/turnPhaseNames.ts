@@ -7,6 +7,7 @@ export const BASE_TURN_PHASE_NAMES = [
   "actionRefresh",
   "fundGeneration",
   "corporationTurn",
+  "departmentProgramSettlement",
   "unionsTurn",
   "nppUnionBehavior",
   "partyInfluenceTurn",

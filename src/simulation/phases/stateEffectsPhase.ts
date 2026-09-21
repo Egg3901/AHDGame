@@ -164,6 +164,17 @@ export const stateEffectsAndNationalAggregationPhase: TurnPhaseAdapter = {
               `skipped: regional budgets run every ${regionalBudgetCadence} turns`
             )
             .then(() => null);
+    const ukRegionalBudgetPromise = runRegionalBudgetPhase("regionalBudgetProcessing", () =>
+      processRegionalBudgets(
+        db,
+        newTurn,
+        regionalBudgetCadence,
+        gameState.regionalLegislationFinanceEnabled === true
+      )
+    );
+    const jpRegionalBudgetPromise = runRegionalBudgetPhase("jpRegionalBudgetProcessing", () =>
+      processJPRegionalBudgets(db, newTurn, gameState.regionalLegislationFinanceEnabled === true)
+    );
     const [
       { crisisResult, navairResult, ministerialOrdersResult, policyResult },
       demoEffectResult,
@@ -205,12 +216,8 @@ export const stateEffectsAndNationalAggregationPhase: TurnPhaseAdapter = {
       runtime.runPhase("unownedSectorGrowth", () => processUnownedSectorGrowth(db)),
       runtime.runPhase("metricDecay", () => processMetricDecay()),
       runtime.runPhase("subsidyBudget", () => processSubsidyBudget(db)),
-      runRegionalBudgetPhase("regionalBudgetProcessing", () =>
-        processRegionalBudgets(db, newTurn, regionalBudgetCadence)
-      ),
-      runRegionalBudgetPhase("jpRegionalBudgetProcessing", () =>
-        processJPRegionalBudgets(db, newTurn)
-      ),
+      ukRegionalBudgetPromise,
+      jpRegionalBudgetPromise,
       // Covers every country on the Laender revenue-sharing model, not just DE.
       // DD joined when the unified Germany was left with no processor at all:
       // this step was scoped to DE, which has held zero states since the shell
@@ -237,9 +244,13 @@ export const stateEffectsAndNationalAggregationPhase: TurnPhaseAdapter = {
       runRegionalBudgetPhase("ruRegionalBudgetProcessing", () =>
         processRURegionalBudgets(db, newTurn)
       ),
-      runtime.runPhase("politicalMetricsDynamics", () =>
-        processPoliticalMetricsDynamics(db, newTurn)
-      ),
+      runtime.runPhase("politicalMetricsDynamics", async () => {
+        // Regional delivery factors are outcomes inputs. Wait only for the two
+        // migrated budget processors; all unrelated state-effects work remains
+        // parallel with this dependency chain.
+        await Promise.all([ukRegionalBudgetPromise, jpRegionalBudgetPromise]);
+        return processPoliticalMetricsDynamics(db, newTurn);
+      }),
       // Phase key deliberately keeps its original CN-only name even though the step
       // now reconciles every chair-synced country: it is the identifier turn logs and
       // the phase-history diagnostics are keyed by, and renaming it would read as the

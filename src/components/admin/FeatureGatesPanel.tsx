@@ -144,6 +144,21 @@ export const BOOLEAN_GATES: BooleanGate[] = [
     label: "Settlement crises",
     desc: "The German Question: a standing contest over whether West Germany stays sovereign in NATO or reunifies into the Warsaw Pact, fought across four weighted institutions by the GDR, USSR, USA and UK. Off by default and incomplete — the turn phase runs but nothing creates a crisis yet, so enabling this on a live world currently does nothing.",
   },
+  {
+    key: "departmentFinanceEnabled",
+    label: "Department finance",
+    desc: "Settles ordinary spending laws through persistent department accounts, capacity, obligations, outlays, and Cabinet allocation controls.",
+  },
+  {
+    key: "lawAdministrationEnabled",
+    label: "Law administration",
+    desc: "Uses authored department, jurisdiction, program, and concrete conflict metadata for US, UK, and Japan legislation.",
+  },
+  {
+    key: "regionalLegislationFinanceEnabled",
+    label: "Regional legislation finance",
+    desc: "Funds regional laws through regional budgets and delivered national grants while preserving enacted laws during later shortfalls.",
+  },
 ];
 
 /** Default when gameConfig omits the lever (matches commandEconomyTurn). */

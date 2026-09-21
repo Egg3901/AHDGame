@@ -6,6 +6,10 @@ import type { MilitaryCommand, CommanderRef, ThreatLevel } from "@/lib/military/
 import type { ConflictAssignment } from "@/lib/military/assignments";
 import type { CorpsMember } from "@/lib/db/collections/characterGenerals";
 import type { CabinetLeverScope } from "@/lib/cabinet/actingScope";
+import type {
+  DepartmentFinanceReadModel,
+  DepartmentProgramReadModel,
+} from "@/lib/governmentFinance/readModel";
 
 export interface CabinetOfficeData {
   /** Live in-game year for era-resolved roster chrome (null/absent = unavailable).
@@ -156,6 +160,10 @@ export interface CabinetOfficeData {
   /** Finance seat only: the read-only monetary dossier + debt-op state. */
   monetary?: MonetaryView;
   currentTurn: number;
+  /** US health vertical slice only: read-only department settlement explanation. */
+  departmentProgram?: DepartmentProgramReadModel;
+  /** Generalized institution-owned accounts controlled by this office. */
+  departmentFinances?: DepartmentFinanceReadModel[];
 }
 
 export interface MonetaryView {

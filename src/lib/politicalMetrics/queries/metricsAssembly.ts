@@ -202,6 +202,8 @@ export interface ModifiersInput {
   metricId: PoliticalMetricId;
   /** National enacted levels, for the law rows. */
   nationalLevels: ReadonlyMap<string, number>;
+  /** Per-law delivered share for national contributions. Missing means 1. */
+  nationalContributionMultipliers?: ReadonlyMap<string, number>;
   /** The region's own enacted levels; an EMPTY map at national scope. */
   regionalLevels: ReadonlyMap<string, number>;
   nationalPoints: number;
@@ -217,7 +219,12 @@ export interface ModifiersInput {
 }
 
 export function buildModifiers(input: ModifiersInput): MetricModifiersInfo {
-  const laws = metricModifierRows(input.countryId, input.metricId, input.nationalLevels);
+  const laws = metricModifierRows(
+    input.countryId,
+    input.metricId,
+    input.nationalLevels,
+    input.nationalContributionMultipliers
+  );
   const regionalLaws =
     input.regionalLevels.size > 0
       ? metricModifierRows(input.countryId, input.metricId, input.regionalLevels).map((row) => ({

@@ -42,7 +42,8 @@ function lawPoints(kind: "primary" | "secondary", level: number, weight: number)
  */
 export function lawTargets(
   countryId: string,
-  levels: ReadonlyMap<string, number>
+  levels: ReadonlyMap<string, number>,
+  contributionMultipliers: ReadonlyMap<string, number> = new Map()
 ): Record<PoliticalMetricId, number> {
   const out = {} as Record<PoliticalMetricId, number>;
   for (const family of POLITICAL_METRIC_FAMILIES) out[family.id] = 0;
@@ -50,8 +51,9 @@ export function lawTargets(
     if (law.kind === "tax") continue;
     const level = levels.get(law.id) ?? 0;
     if (level <= 0) continue;
+    const multiplier = Math.max(0, Math.min(1, contributionMultipliers.get(law.id) ?? 1));
     for (const target of law.targets) {
-      out[target.metricId] += lawPoints(law.kind, level, target.weight);
+      out[target.metricId] += lawPoints(law.kind, level, target.weight) * multiplier;
     }
   }
   return out;
@@ -123,7 +125,8 @@ export interface ModifierRow {
 export function metricModifierRows(
   countryId: LawCountryId,
   metricId: PoliticalMetricId,
-  levels: ReadonlyMap<string, number>
+  levels: ReadonlyMap<string, number>,
+  contributionMultipliers: ReadonlyMap<string, number> = new Map()
 ): ModifierRow[] {
   const rows: ModifierRow[] = [];
   for (const law of getCatalog(countryId)) {
@@ -137,7 +140,9 @@ export function metricModifierRows(
       title: law.title,
       levelName: law.levels[level]?.name ?? `Level ${level}`,
       level,
-      points: lawPoints(law.kind, level, target.weight),
+      points:
+        lawPoints(law.kind, level, target.weight) *
+        Math.max(0, Math.min(1, contributionMultipliers.get(law.id) ?? 1)),
     });
   }
   return rows.sort((a, b) => b.points - a.points);

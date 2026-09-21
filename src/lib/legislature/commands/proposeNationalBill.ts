@@ -26,6 +26,7 @@ import type {
   ElectedOfficial,
   PoliticalParty,
 } from "@/lib/db/types";
+import type { JurisdictionMode } from "@/lib/db/types/legislation";
 import { isBannedParty } from "@/lib/turn/onePartyConstraints";
 import { getCountryState } from "@/lib/countryState";
 import {
@@ -56,6 +57,7 @@ export interface ProposeNationalBillInput {
   category: string;
   fullText?: string;
   provisions: unknown[];
+  jurisdictionMode?: JurisdictionMode;
   confirmElectionRisk?: boolean;
 }
 
@@ -108,6 +110,7 @@ export async function proposeNationalBill(
     category,
     fullText,
     provisions: clientProvisions,
+    jurisdictionMode: requestedJurisdictionMode,
     confirmElectionRisk,
   } = input;
 
@@ -339,7 +342,12 @@ export async function proposeNationalBill(
   }
 
   const enabledCountryIds = new Set(await getEnabledCountryIds());
-  const validation = await validateBillProvisions(db, rawProvisions, category, countryId);
+  const administrationEnabled =
+    gameState?.lawAdministrationEnabled === true && ["US", "UK", "JP"].includes(countryId);
+  const validation = await validateBillProvisions(db, rawProvisions, category, countryId, {
+    enabled: administrationEnabled,
+    requestedJurisdictionMode,
+  });
   if (!validation.ok) {
     return { status: validation.status, body: { error: validation.error } };
   }
@@ -583,6 +591,7 @@ export async function proposeNationalBill(
     votesAbstain: 0,
     votes: {},
     category,
+    ...(administrationEnabled ? { jurisdictionMode: validation.jurisdictionMode } : {}),
     provisions: combinedProvisions,
     ...(firstPolicy && {
       legislationTypeId: firstPolicy.legislationTypeId,

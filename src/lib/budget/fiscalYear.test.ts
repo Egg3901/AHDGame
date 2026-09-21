@@ -22,6 +22,15 @@ vi.mock("./revenue", () => ({
 vi.mock("./spending", () => ({
   calculateFederalSpending: vi.fn(),
   calculateStateSpending: vi.fn(),
+  calculateStateSpendingDetail: vi.fn(),
+  normalizeStateSpending: vi.fn((spending) => ({
+    ...spending,
+    total:
+      Object.values(spending.byCategory ?? {}).reduce(
+        (sum: number, amount) => sum + Number(amount),
+        0
+      ) + (spending.resourceProspecting ?? 0),
+  })),
 }));
 
 vi.mock("./debt", () => ({
@@ -48,7 +57,11 @@ import {
   calculateStateRevenue,
   applyGrowthToFederalBases,
 } from "./revenue";
-import { calculateFederalSpending, calculateStateSpending } from "./spending";
+import {
+  calculateFederalSpending,
+  calculateStateSpending,
+  calculateStateSpendingDetail,
+} from "./spending";
 import { processAnnualDebt, triggerDebtCeilingCrisis, getDebtThreshold } from "./debt";
 import { processFormulaGrants, updateStateGrantRevenue } from "./grants";
 import { calculateCountryInflation } from "./inflation";
@@ -385,6 +398,10 @@ describe("processFiscalYear", () => {
       total: 100_000_000_000,
       byCategory: {},
     } as never);
+    vi.mocked(calculateStateSpendingDetail).mockResolvedValue({
+      spending: { total: 100_000_000_000, byCategory: {} },
+      lawCosts: [],
+    });
     vi.mocked(applyGrowthToFederalBases).mockImplementation((bases) => bases as never);
   });
 
@@ -827,10 +844,10 @@ describe("processFiscalYear", () => {
       total: 110_000_000_000,
       byCategory: {},
     } as never);
-    vi.mocked(calculateStateSpending).mockResolvedValue({
-      total: 100_000_000_000,
-      byCategory: {},
-    } as never);
+    vi.mocked(calculateStateSpendingDetail).mockResolvedValue({
+      spending: { total: 100_000_000_000, byCategory: {} },
+      lawCosts: [],
+    });
 
     const db = makeDb({
       states: [{ _id: "US-CA", countryId: "US" }],

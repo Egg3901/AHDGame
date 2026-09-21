@@ -88,6 +88,7 @@ import { migration as repairDuplicateCorporationSequentialIds } from "./entries/
 import { migration as normalizeShareCorporateActions } from "./entries/2026-09-18-normalize-share-corporate-actions";
 
 import { migration as turnClockIndexes } from "./entries/2026-09-20-turn-clock-indexes";
+import { migration as legislativeAdministrationMetadata } from "./entries/2026-09-21-legislative-administration-metadata";
 
 export const MIGRATIONS: Migration[] = [
   // v0.2.6 currency cutover (declarative — shipped via standalone scripts)
@@ -284,6 +285,7 @@ export const MIGRATIONS: Migration[] = [
   // is rewritten, and rollback is dropping it.
   electionResultSnapshots,
   turnClockIndexes,
+  legislativeAdministrationMetadata,
 ];
 
 // D13 rollback drill — registered but deliberately OUTSIDE the normal chain.

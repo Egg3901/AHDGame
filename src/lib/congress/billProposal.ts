@@ -6,6 +6,7 @@ import { validateElectoralLawProvision } from "@/lib/elections/electoralLaws";
 import type {
   CentralBankIndependenceProvision,
   ElectoralLawProvision,
+  JurisdictionMode,
 } from "@/lib/db/types/legislation";
 import { canLegislateBankIndependence } from "@/lib/centralBank/governance";
 import type { Db } from "mongodb";
@@ -36,6 +37,9 @@ import {
 import { getEraContext } from "@/lib/era/context";
 import { resolveTaxSliderProvisionFields } from "@/lib/politicalLegislation/taxSlider";
 import { isLegislationTypeActive } from "@/lib/era/legislationCatalog";
+import { resolveBillJurisdiction } from "@/lib/legislature/jurisdiction";
+import { resolveAdministrationConflicts } from "@/lib/legislature/administrationConflicts";
+import type { EnactedLaw } from "@/lib/db/types/budget";
 
 // snapshotBillPolicyProvisions now lives in the shared provision-enrichment core
 // so the regional bill paths can call it too. Re-exported for existing importers.
@@ -74,6 +78,7 @@ export type ValidatedProvisions =
       unionLawProvisions: UnionLawProvision[];
       electoralLawProvisions: ElectoralLawProvision[];
       centralBankProvisions: CentralBankIndependenceProvision[];
+      jurisdictionMode: JurisdictionMode;
     }
   | { ok: false; status: number; error: string };
 
@@ -87,7 +92,11 @@ export async function validateBillProvisions(
    * here means every caller of this validator is guarded, not just the ones that
    * remember to add their own check.
    */
-  sourceCountry?: CountryId
+  sourceCountry?: CountryId,
+  administration?: {
+    enabled: boolean;
+    requestedJurisdictionMode?: JurisdictionMode;
+  }
 ): Promise<ValidatedProvisions> {
   const allowedDomains =
     CATEGORY_TO_POLICY_DOMAINS[category as keyof typeof CATEGORY_TO_POLICY_DOMAINS] ?? [];
@@ -106,6 +115,7 @@ export async function validateBillProvisions(
   const validatedUnionLawProvisions: UnionLawProvision[] = [];
   const validatedElectoralLawProvisions: ElectoralLawProvision[] = [];
   const validatedCentralBankProvisions: CentralBankIndependenceProvision[] = [];
+  const validatedLegislationTypes: LegislationType[] = [];
   const isTradeCategory = TARIFF_BILL_CATEGORIES.has(category as BillCategory);
 
   for (const rawP of rawProvisions) {
@@ -423,6 +433,7 @@ export async function validateBillProvisions(
         error: `Legislation type "${lt.name}" is not in the selected category (${category}).`,
       };
     }
+    validatedLegislationTypes.push(lt);
 
     // Tax-slider laws (ruling #16): server-side bounds/grid/min-step
     // validation against the CURRENT rate, with stamped delta-derived fields.
@@ -468,6 +479,49 @@ export async function validateBillProvisions(
     });
   }
 
+  const jurisdiction = resolveBillJurisdiction({
+    enabled: administration?.enabled === true,
+    requested: administration?.requestedJurisdictionMode,
+    legislationTypes: validatedLegislationTypes,
+  });
+  if (!jurisdiction.ok || !jurisdiction.mode) {
+    return {
+      ok: false,
+      status: 400,
+      error: jurisdiction.error ?? "Invalid jurisdiction mode.",
+    };
+  }
+
+  if (administration?.enabled === true && sourceCountry && validatedLegislationTypes.length > 0) {
+    const activeLaws = await db
+      .collection<EnactedLaw>("enactedLaws")
+      .find(
+        { countryId: sourceCountry, scope: "national", repealedAt: { $exists: false } },
+        { projection: { legislationTypeId: 1 } }
+      )
+      .toArray();
+    const activeTypeIds = [...new Set(activeLaws.map((law) => law.legislationTypeId))];
+    const activeTypes =
+      activeTypeIds.length === 0
+        ? []
+        : await db
+            .collection<LegislationType>("legislationTypes")
+            .find({ _id: { $in: activeTypeIds } }, { projection: { _id: 1, administration: 1 } })
+            .toArray();
+    const administrationConflicts = resolveAdministrationConflicts({
+      proposed: validatedLegislationTypes,
+      existing: activeTypes,
+    });
+    const conflict = administrationConflicts.conflicts[0];
+    if (conflict) {
+      return {
+        ok: false,
+        status: 409,
+        error: `This bill conflicts with active law ${conflict.existingLegislationTypeId} through ${conflict.conflictSetId}. Repeal or replace that regime first.`,
+      };
+    }
+  }
+
   return {
     ok: true,
     policyProvisions: validatedPolicyProvisions,
@@ -477,5 +531,6 @@ export async function validateBillProvisions(
     unionLawProvisions: validatedUnionLawProvisions,
     electoralLawProvisions: validatedElectoralLawProvisions,
     centralBankProvisions: validatedCentralBankProvisions,
+    jurisdictionMode: jurisdiction.mode,
   };
 }

@@ -57,12 +57,13 @@ import { resolveEnergyPosition } from "@/lib/constants/cabinetEnergy";
 import { resolveInfraPosition } from "@/lib/constants/cabinetInfra";
 import { resolveFinancePosition } from "@/lib/constants/cabinetMonetary";
 import { getCabinetIdentity } from "@/lib/constants/cabinetIdentity";
-import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
 import { TRADE_MINISTER_POSITION_BY_COUNTRY } from "@/lib/constants/internationalOrganizations";
 import { Skeleton } from "@/components/ui";
 import type { CountryId } from "@/lib/constants/countries";
 import { COUNTRY_CURRENCY_MAP, CURRENCY_SYMBOLS } from "@/lib/constants/currencies";
 import { useCountryDisplayName } from "@/contexts/RegisteredCountriesContext";
+import { DepartmentProgramPanel } from "./components/DepartmentProgramPanel";
+import { DepartmentFinancePanel } from "./components/DepartmentFinancePanel";
 
 export default function CabinetOfficePage() {
   const resolveCountryName = useCountryDisplayName();
@@ -309,6 +310,24 @@ export default function CabinetOfficePage() {
             <div className="min-w-0 flex-1 space-y-6">
               {activeTab === "overview" && (
                 <>
+                  {data.departmentFinances?.map((department) => (
+                    <DepartmentFinancePanel
+                      key={department.departmentId}
+                      department={department}
+                      currencySymbol={currencySymbol}
+                      canAct={canAct}
+                      countryCode={countryCode}
+                      positionId={positionId}
+                      currentTurn={data.currentTurn}
+                      onUpdate={refetch}
+                    />
+                  ))}
+                  {data.departmentProgram && (
+                    <DepartmentProgramPanel
+                      program={data.departmentProgram}
+                      currencySymbol={currencySymbol}
+                    />
+                  )}
                   {mechanics.tierSetting && (
                     <TierSettingPanel
                       config={mechanics.tierSetting}

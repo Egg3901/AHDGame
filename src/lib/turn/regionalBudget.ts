@@ -37,6 +37,10 @@ import { loadAnnualSubsidyCostMaps } from "@/lib/subsidies/subsidyBudgetCosts";
 import { getNationalBudgetId } from "@/lib/bonds/sovereign";
 import { getLaw } from "@/lib/politicalLegislation/catalog";
 import { computeLawCost } from "@/lib/politicalLegislation/costEngine";
+import { withLawAdministration } from "@/lib/governmentFinance/lawAdministrationCatalog";
+import { buildRegionalProgramClaims } from "@/lib/governmentFinance/regionalProgramClaims";
+import { settleRegionalBudget } from "@/lib/governmentFinance/rules/regionalSettlement";
+import { resolveAnnualRegionalGrantPool } from "@/lib/governmentFinance/grantTransfers";
 
 // ── Pure calculation types ───────────────────────────────────────────────────
 
@@ -223,7 +227,8 @@ function enactedRegionalPolicyCost(
  */
 function computeSpendingMultiplier(
   spendingPolicies: StatePolicy[],
-  legTypeMap: Map<string, LegislationType>
+  legTypeMap: Map<string, LegislationType>,
+  implementationByLegislationType?: ReadonlyMap<string, number>
 ): number {
   if (spendingPolicies.length === 0) return 1.0;
 
@@ -243,7 +248,11 @@ function computeSpendingMultiplier(
     const deviation = centristIndex - optionIndex; // positive = left/high spending
     const multiplier = 1.0 + deviation * 0.1;
 
-    weightedSum += multiplier;
+    const implementation = Math.max(
+      0,
+      Math.min(1, implementationByLegislationType?.get(policy.legislationTypeId) ?? 1)
+    );
+    weightedSum += 1 + (multiplier - 1) * implementation;
     totalWeight += 1;
   }
 
@@ -263,7 +272,8 @@ export async function processRegionalBudgets(
   db: import("mongodb").Db,
   turnNumber: number,
   /** Turns since this phase last ran; scales the value-base drift. */
-  turnsElapsed = 1
+  turnsElapsed = 1,
+  regionalFinanceEnabled = false
 ): Promise<{ regionsProcessed: number }> {
   // 1. Fetch all UK regions
   const ukRegions = await db.collection<State>("states").find({ countryId: "UK" }).toArray();
@@ -288,20 +298,32 @@ export async function processRegionalBudgets(
     .collection<LegislationType>("legislationTypes")
     .find({ _id: { $in: allLegTypeIds } })
     .toArray();
-  const legTypeMap = new Map(legTypes.map((lt) => [lt._id, lt]));
+  const materializedLegTypes = regionalFinanceEnabled ? withLawAdministration(legTypes) : legTypes;
+  const legTypeMap = new Map(materializedLegTypes.map((lt) => [lt._id, lt]));
 
   // 4. The Westminster grant pool comes from the national budget's state-grants
   //    line — the enacted figure when there is one, else the authored era
   //    baseline. Live UK carries stateGrants = 0 with baselineStateGrants =
   //    £250M, so reading only the enacted line would unfund every region.
-  const nationalBudget = await db
-    .collection<FederalBudget>("federalBudget")
-    .findOne(
-      { _id: getNationalBudgetId("UK") },
-      { projection: { spending: 1, baselineStateGrants: 1 } }
-    );
-  const grantPool =
+  const nationalBudget = await db.collection<FederalBudget>("federalBudget").findOne(
+    { _id: getNationalBudgetId("UK") },
+    {
+      projection: {
+        spending: 1,
+        baselineStateGrants: 1,
+        ...(regionalFinanceEnabled ? { departmentAccounts: 1 } : {}),
+      },
+    }
+  );
+  const legacyGrantPool =
     nationalBudget?.spending?.stateGrants || nationalBudget?.baselineStateGrants || 0;
+  const departmentGrant = regionalFinanceEnabled
+    ? resolveAnnualRegionalGrantPool({
+        accounts: nationalBudget?.departmentAccounts ?? {},
+        currentTurn: turnNumber,
+      })
+    : { hasProgram: false, annualPool: 0 };
+  const grantPool = departmentGrant.hasProgram ? departmentGrant.annualPool : legacyGrantPool;
 
   // Total UK population for the grant's population-proportional split
   const nationalPopulation = ukRegions.reduce((sum, r) => sum + r.population, 0);
@@ -371,9 +393,15 @@ export async function processRegionalBudgets(
 
     // c. Sum all enacted regional spending (excluding tax types)
     const spendingPolicies = regionPolicies.filter((p) => !TAX_TYPE_IDS.has(p.legislationTypeId));
+    const annualCostByLegislationTypeId = new Map<string, number>();
     let enactedBillCosts = 0;
     for (const policy of spendingPolicies) {
-      enactedBillCosts += enactedRegionalPolicyCost(policy, legTypeMap, region);
+      const cost = enactedRegionalPolicyCost(policy, legTypeMap, region);
+      enactedBillCosts += cost;
+      annualCostByLegislationTypeId.set(
+        policy.legislationTypeId,
+        (annualCostByLegislationTypeId.get(policy.legislationTypeId) ?? 0) + cost
+      );
     }
     // Subsidy costs must be folded into the regional phase itself because the
     // dedicated subsidy-budget phase runs in parallel and cannot safely patch
@@ -381,14 +409,29 @@ export async function processRegionalBudgets(
     const subsidyCosts = stateCostByStateId.get(region._id) ?? 0;
     enactedBillCosts += subsidyCosts;
 
+    const regionalSettlement = regionalFinanceEnabled
+      ? settleRegionalBudget({
+          availableBudget: budgetResult.totalBudget,
+          reservedNonProgramSpending: subsidyCosts,
+          claims: buildRegionalProgramClaims({
+            policies: spendingPolicies,
+            legislationTypes: materializedLegTypes,
+            annualCostByLegislationTypeId,
+            previousProgramIds: new Set(Object.keys(existingBudget?.programSettlements ?? {})),
+          }),
+        })
+      : null;
+    const fundedBillCosts = regionalSettlement?.totalFunded ?? enactedBillCosts;
+    const unfundedBillCosts = Math.max(0, enactedBillCosts - fundedBillCosts);
+
     // d. Determine surplus/deficit
-    const surplus = budgetResult.totalBudget - enactedBillCosts;
-    const isOverBudget = surplus < 0;
+    const surplus = budgetResult.totalBudget - fundedBillCosts;
+    const isOverBudget = enactedBillCosts > budgetResult.totalBudget;
     const previousTurnsOver = existingBudget?.turnsOverBudget ?? 0;
     const turnsOverBudget = isOverBudget ? previousTurnsOver + 1 : 0;
 
     // e. Forced austerity: if over budget for more than 1 turn, downgrade most expensive programme
-    if (turnsOverBudget > 1 && spendingPolicies.length > 0) {
+    if (!regionalFinanceEnabled && turnsOverBudget > 1 && spendingPolicies.length > 0) {
       // Sort by cost descending to find the most expensive enacted programme
       // (region-total cost so v2 and legacy laws compare on the same basis).
       const policiesWithCost = spendingPolicies.map((p) => ({
@@ -430,7 +473,19 @@ export async function processRegionalBudgets(
     }
 
     // f. Drift property and commercial value bases
-    const targetMultiplier = computeSpendingMultiplier(spendingPolicies, legTypeMap);
+    const implementationByLegislationType = regionalSettlement
+      ? new Map(
+          regionalSettlement.programs.map((program) => [
+            program.legislationTypeId,
+            program.implementationFactor,
+          ])
+        )
+      : undefined;
+    const targetMultiplier = computeSpendingMultiplier(
+      spendingPolicies,
+      legTypeMap,
+      implementationByLegislationType
+    );
     const newPropertyValue = driftValueBase(
       propertyValuePerCapita,
       propertyBaseline,
@@ -456,6 +511,18 @@ export async function processRegionalBudgets(
       westminsterGrant: budgetResult.westminsterGrant,
       totalBudget: budgetResult.totalBudget,
       enactedBillCosts,
+      ...(regionalFinanceEnabled
+        ? {
+            fundedBillCosts,
+            unfundedBillCosts,
+            programSettlements: Object.fromEntries(
+              (regionalSettlement?.programs ?? []).map((program) => [
+                program.programId,
+                { ...program, lastSettledTurn: turnNumber },
+              ])
+            ),
+          }
+        : {}),
       subsidyCosts,
       surplus,
       isOverBudget,

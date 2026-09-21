@@ -123,6 +123,18 @@ import {
   expireMinisterialOrders,
   isMinisterialOrderActive,
 } from "@/lib/cabinet/ministerialOrderLifecycle";
+import { loadPublicHealthDeliveryMultiplier } from "@/lib/governmentFinance/deliveryMultiplier";
+import { US_HEALTH_DEPARTMENT_ID } from "@/lib/governmentFinance/departments";
+import {
+  buildDepartmentFinanceReadModel,
+  buildPublicHealthProgramReadModel,
+} from "@/lib/governmentFinance/readModel";
+import {
+  getDepartmentDefinitions,
+  resolveDepartmentDefinitionName,
+  type DepartmentCountryId,
+} from "@/lib/governmentFinance/departmentCatalog";
+import type { LegislationType } from "@/lib/db/types/legislation";
 
 interface RouteParams {
   params: Promise<{ code: string; positionId: string }>;
@@ -722,6 +734,59 @@ export async function GET(_request: Request, { params }: RouteParams) {
       };
     }
 
+    const generalizedDepartmentFinanceEnabled = gameState?.departmentFinanceEnabled === true;
+    const legacyPublicHealthSliceEnabled =
+      gameState?.departmentProgramSliceEnabled === true && !generalizedDepartmentFinanceEnabled;
+    const departmentProgram =
+      countryId === COUNTRY_CONFIGS.US.id && positionId === "secretary_of_health"
+        ? buildPublicHealthProgramReadModel({
+            enabled: legacyPublicHealthSliceEnabled,
+            departmentName: resolveDepartment(mechanics, liveYear),
+            account: budget?.departmentAccounts?.[US_HEALTH_DEPARTMENT_ID],
+            delivery: await loadPublicHealthDeliveryMultiplier(
+              db,
+              currentTurn,
+              legacyPublicHealthSliceEnabled
+            ),
+          })
+        : undefined;
+    const departmentDefinitions =
+      generalizedDepartmentFinanceEnabled && ["US", "UK", "JP"].includes(countryId)
+        ? getDepartmentDefinitions(
+            countryId as DepartmentCountryId,
+            liveYear,
+            new Set(gameState?.manuallyEnabledSeats ?? [])
+          ).filter((definition) => definition.controllingPositionIds.includes(positionId))
+        : [];
+    const departmentProgramTypeIds = [
+      ...new Set(
+        departmentDefinitions.flatMap((definition) =>
+          Object.values(budget?.departmentAccounts?.[definition.id]?.programs ?? {}).map(
+            (program) => program.legislationTypeId
+          )
+        )
+      ),
+    ];
+    const departmentLegislationTypes =
+      departmentProgramTypeIds.length === 0
+        ? []
+        : await db
+            .collection<LegislationType>("legislationTypes")
+            .find(
+              { _id: { $in: departmentProgramTypeIds } },
+              { projection: { _id: 1, name: 1, policyOptions: 1 } }
+            )
+            .toArray();
+    const departmentFinances = departmentDefinitions.map((definition) =>
+      buildDepartmentFinanceReadModel({
+        enabled: true,
+        definition,
+        departmentName: resolveDepartmentDefinitionName(definition, liveYear),
+        account: budget?.departmentAccounts?.[definition.id],
+        legislationTypes: departmentLegislationTypes,
+      })
+    );
+
     return NextResponse.json({
       // Gates the Treasury-tab "Fund Geological Survey" action (per-surface flag
       // convention: the office page reads its own briefing GET).
@@ -792,6 +857,8 @@ export async function GET(_request: Request, { params }: RouteParams) {
       debtPrincipal: budget?.debt?.principal ?? 0,
       sovereignBondsOutstanding: sovereignBonds.reduce((sum, b) => sum + (b.totalIssued ?? 0), 0),
       canAct,
+      departmentProgram,
+      departmentFinances,
       units,
       forceSummary,
       doctrine,

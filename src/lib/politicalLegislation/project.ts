@@ -6,6 +6,7 @@
  */
 
 import type { LegislationPolicyOption, LegislationType } from "@/lib/db/types/legislation";
+import { withLawAdministration } from "@/lib/governmentFinance/lawAdministrationCatalog";
 import { getFamily } from "../politicalMetrics/families";
 import type { PoliticalMetricCategoryId } from "../politicalMetrics/types";
 import { budgetKeyForLaw } from "./budgetKeys";
@@ -57,23 +58,25 @@ export function projectLawToLegislationType(law: PoliticalLaw): LegislationType 
 
   if (law.kind === "tax") {
     const tp = law.taxPolicy!;
-    return {
-      _id: law.id,
-      name: law.title,
-      description: law.description,
-      policyDomain: "tax",
-      subCategory: "tax",
-      positions: [],
-      countryScope,
-      allowedScope: law.allowedScope === "regional" ? "state" : law.allowedScope,
-      politicalMetricTargets: [],
-      taxSlider: { ...tp, waypoints: tp.waypoints.map((w) => ({ ...w })) },
-      taxRateChange: {
-        scope: tp.scope,
-        taxType: tp.taxType as NonNullable<LegislationType["taxRateChange"]>["taxType"],
+    return withLawAdministration([
+      {
+        _id: law.id,
+        name: law.title,
+        description: law.description,
+        policyDomain: "tax",
+        subCategory: "tax",
+        positions: [],
+        countryScope,
+        allowedScope: law.allowedScope === "regional" ? "state" : law.allowedScope,
+        politicalMetricTargets: [],
+        taxSlider: { ...tp, waypoints: tp.waypoints.map((w) => ({ ...w })) },
+        taxRateChange: {
+          scope: tp.scope,
+          taxType: tp.taxType as NonNullable<LegislationType["taxRateChange"]>["taxType"],
+        },
+        source: "seed",
       },
-      source: "seed",
-    };
+    ])[0];
   }
 
   const lead = law.targets[0];
@@ -97,20 +100,22 @@ export function projectLawToLegislationType(law: PoliticalLaw): LegislationType 
     };
   });
 
-  return {
-    _id: law.id,
-    name: law.title,
-    description: law.description,
-    policyDomain: PIPELINE_POLICY_DOMAIN[law.category],
-    subCategory: law.kind,
-    positions: [],
-    countryScope,
-    allowedScope: law.allowedScope === "regional" ? "state" : law.allowedScope,
-    budgetCategory: budgetKeyForLaw(law),
-    politicalMetricTargets: law.targets.map((t) => ({ metricId: t.metricId, weight: t.weight })),
-    policyOptions,
-    source: "seed",
-  };
+  return withLawAdministration([
+    {
+      _id: law.id,
+      name: law.title,
+      description: law.description,
+      policyDomain: PIPELINE_POLICY_DOMAIN[law.category],
+      subCategory: law.kind,
+      positions: [],
+      countryScope,
+      allowedScope: law.allowedScope === "regional" ? "state" : law.allowedScope,
+      budgetCategory: budgetKeyForLaw(law),
+      politicalMetricTargets: law.targets.map((t) => ({ metricId: t.metricId, weight: t.weight })),
+      policyOptions,
+      source: "seed",
+    },
+  ])[0];
 }
 
 /**

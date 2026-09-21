@@ -6,6 +6,7 @@ import { COMMODITY_TYPES } from "@/lib/constants/commodities";
 import { schemas } from "../validate";
 import { BILL_CATEGORIES, MAX_PROVISIONS } from "@shared/constants/legislation";
 import { VETO_MESSAGE_MIN_LENGTH, VETO_MESSAGE_MAX_LENGTH } from "@/lib/constants/governorOffice";
+import { JURISDICTION_MODES } from "@/lib/legislature/jurisdiction";
 
 export const speakerActionSchema = z
   .object({
@@ -269,6 +270,7 @@ export const proposeBillSchema = z
     // its configured legislature after parsing.
     chamber: z.string().min(1, "Chamber required"),
     category: z.enum(BILL_CATEGORIES),
+    jurisdictionMode: z.enum(JURISDICTION_MODES).optional(),
     fullText: moderatedBillText(z.string()).optional(),
     provisions: z
       .array(

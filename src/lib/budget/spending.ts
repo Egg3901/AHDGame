@@ -331,6 +331,18 @@ export async function calculateStateSpending(
   countryId: CountryId,
   budget: StateBudget
 ): Promise<StateBudget["spending"]> {
+  return (await calculateStateSpendingDetail(db, stateId, countryId, budget)).spending;
+}
+
+export async function calculateStateSpendingDetail(
+  db: Db,
+  stateId: string,
+  countryId: CountryId,
+  budget: StateBudget
+): Promise<{
+  spending: StateBudget["spending"];
+  lawCosts: Array<{ law: EnactedLaw; annualCost: number; category: string }>;
+}> {
   const enactedLaws = await db
     .collection<EnactedLaw>("enactedLaws")
     .find({ scope: "state", stateId, repealedAt: { $exists: false } })
@@ -349,6 +361,7 @@ export async function calculateStateSpending(
   const v2Base = countryId in COST_INCOME_ANCHORS ? await regionFiscalBase(db, stateId) : undefined;
   const incomeBandIndex = incomeBandIndexByCountry?.[countryId] ?? null;
   const byCategory: Record<string, number> = {};
+  const lawCosts: Array<{ law: EnactedLaw; annualCost: number; category: string }> = [];
 
   for (const law of enactedLaws) {
     // Phantom-line gate (Spec B): skip era-inactive laws while the flag is on.
@@ -366,15 +379,19 @@ export async function calculateStateSpending(
     });
     const category = law.budgetCategory || "other";
     byCategory[category] = (byCategory[category] || 0) + cost;
+    lawCosts.push({ law, annualCost: cost, category });
   }
 
-  return normalizeStateSpending({
-    byCategory,
-    // Read the persisted state-prospecting spend back so it survives this
-    // rebuild-from-laws recompute (same treatment as revenue.resourceRoyalties).
-    resourceProspecting: budget.spending?.resourceProspecting ?? 0,
-    total: 0,
-  });
+  return {
+    spending: normalizeStateSpending({
+      byCategory,
+      // Read the persisted state-prospecting spend back so it survives this
+      // rebuild-from-laws recompute (same treatment as revenue.resourceRoyalties).
+      resourceProspecting: budget.spending?.resourceProspecting ?? 0,
+      total: 0,
+    }),
+    lawCosts,
+  };
 }
 
 /**

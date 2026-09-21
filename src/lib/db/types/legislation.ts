@@ -454,6 +454,8 @@ export interface Bill {
    */
   budgetFiscalYear?: number;
   legislationTypeId?: string;
+  /** Responsibility model selected independently from the policy option. */
+  jurisdictionMode?: JurisdictionMode;
   effectDirection?: number;
   provisions?: BillProvision[];
   proposedAt: Date;
@@ -641,6 +643,80 @@ export interface PolicyOptionMetricEffect {
   ratePerTurn: number;
 }
 
+export type JurisdictionMode =
+  | "national_direct"
+  | "national_floor"
+  | "concurrent"
+  | "grant_supported_regional"
+  | "regional_discretion";
+
+export type LawKind =
+  | "regime"
+  | "service_program"
+  | "capital_program"
+  | "transfer_program"
+  | "revenue"
+  | "regulation"
+  | "constitutional"
+  | "structural"
+  | "emergency";
+
+export type LawImplementationMode =
+  | "direct"
+  | "regulation"
+  | "formula_grant"
+  | "discretionary_grant"
+  | "matching_grant"
+  | "mandate"
+  | "automatic_transfer";
+
+export type AppropriationClass = "operating" | "capital" | "transfer" | "demand_led";
+export type FundingSemantics =
+  "authorization_only" | "appropriation_included" | "standing_mandatory";
+
+export interface LegislationAdministration {
+  /** Stable responsibility used by laws across cabinet reshuffles and department renames. */
+  primaryPortfolioId: string;
+  supportingPortfolioIds?: string[];
+  lawKind: LawKind;
+  implementationMode: LawImplementationMode;
+  allowedJurisdictionModes: JurisdictionMode[];
+  defaultJurisdictionMode: JurisdictionMode;
+  appropriationClass?: AppropriationClass;
+  fundingSemantics?: FundingSemantics;
+  capacityDemand?: Record<string, number>;
+  rampProfileId?: string;
+  maintenanceProfileId?: string;
+  policyFamilyId: string;
+  conflictSetIds?: string[];
+  /**
+   * Compatibility pointer for the vertical slice. New catalog entries resolve a
+   * portfolio through the country/era department catalog instead of persisting
+   * a department name on the law.
+   */
+  primaryDepartmentId?: string;
+  /** Compatibility pointer for existing office read models. */
+  responsiblePositionId?: string;
+  /** Compatibility alias for documents written by the proof slice. */
+  jurisdictionMode?: "national_direct";
+}
+
+export interface PolicyOptionImplementation {
+  programId: string;
+  fundingSemantics: FundingSemantics;
+  appropriationClass: AppropriationClass;
+  obligationPriority: 1 | 2 | 3 | 4 | 5 | 6 | 7;
+  /** Compatibility shorthand for a single capacity pool. */
+  capacityType?: string;
+  capacityDemand?: Record<string, number>;
+  rampProfileId?: string;
+  maintenanceProfileId?: string;
+  outcome?: {
+    category: MetricCategoryId;
+    metricId: string;
+  };
+}
+
 export interface LegislationPolicyOption {
   id: string;
   name: string;
@@ -661,6 +737,8 @@ export interface LegislationPolicyOption {
   archetypeApprovals?: Record<string, number>;
   /** Direct per-turn metric effects when this option is the active policy */
   metricEffects?: PolicyOptionMetricEffect[];
+  /** Department delivery metadata. Absent options remain on the legacy effect path. */
+  implementation?: PolicyOptionImplementation;
   /**
    * Annual cost as a multiplier of GDP per capita.
    * E.g. 0.07 means 7% of GDP per capita per person → total annual cost = multiplier × GDP.
@@ -811,6 +889,9 @@ export interface LegislationType {
 
   // NEW: Scope control (replaces nationalOnly)
   allowedScope?: AllowedScope;
+
+  /** Durable portfolio ownership. Display names remain country- and era-resolved. */
+  administration?: LegislationAdministration;
 
   // NEW: Multiple effect targets
   effectTargets?: LegislationEffectTargetV2[];

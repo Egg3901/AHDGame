@@ -27,6 +27,7 @@ import {
   postBillProposalWithElectionConfirmation,
 } from "@/components/bills/BillAutoFailWarning";
 import type { BillProposalAutoFailWarning } from "@/lib/legislature/billAutoFailWarning";
+import type { JurisdictionMode } from "@/lib/db/types/legislation";
 
 interface LegislationPolicyOption {
   id: string;
@@ -49,7 +50,19 @@ interface LegislationTypeOption {
   policyOptions?: LegislationPolicyOption[];
   /** Set by the era-gated legislation-types API for types unlocked this era. */
   eraNew?: boolean;
+  administration?: {
+    defaultJurisdictionMode: JurisdictionMode;
+    allowedJurisdictionModes: JurisdictionMode[];
+  };
 }
+
+const JURISDICTION_LABELS: Record<JurisdictionMode, string> = {
+  national_direct: "National administration",
+  national_floor: "National minimum standard",
+  concurrent: "Shared national and regional administration",
+  grant_supported_regional: "National grants with regional administration",
+  regional_discretion: "Leave administration to regions",
+};
 
 export function JPCabinetProposeBillModal({
   countryId,
@@ -76,6 +89,7 @@ export function JPCabinetProposeBillModal({
   const [legislationTypeId, setLegislationTypeId] = useState("");
   const [policyOptionId, setPolicyOptionId] = useState("");
   const [effectDirection, setEffectDirection] = useState(0);
+  const [jurisdictionMode, setJurisdictionMode] = useState<JurisdictionMode | "">("");
   const [currentPolicies, setCurrentPolicies] = useState<Record<string, number>>({});
   const [submitting, setSubmitting] = useState(false);
   const isNatCat = NATIONALIZATION_BILL_CATEGORIES.has(category);
@@ -147,6 +161,8 @@ export function JPCabinetProposeBillModal({
     setLegislationTypeId(nextLegislationTypeId);
     setPolicyOptionId("");
     setEffectDirection(0);
+    const nextType = legislationTypes.find((type) => type._id === nextLegislationTypeId);
+    setJurisdictionMode(nextType?.administration?.defaultJurisdictionMode ?? "");
   }
 
   async function handleSubmit(event: React.FormEvent) {
@@ -180,6 +196,7 @@ export function JPCabinetProposeBillModal({
           legislationTypeId,
           policyOptionId,
           effectDirection,
+          ...(jurisdictionMode ? { jurisdictionMode } : {}),
         };
 
     setSubmitting(true);
@@ -360,6 +377,34 @@ export function JPCabinetProposeBillModal({
                     );
                   })}
                 </select>
+
+                {selectedLegislationType?.administration ? (
+                  <div>
+                    <label className="mb-1 block text-xs text-muted">Responsibility model</label>
+                    <select
+                      className="w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                      value={
+                        jurisdictionMode ||
+                        selectedLegislationType.administration.defaultJurisdictionMode
+                      }
+                      onChange={(event) =>
+                        setJurisdictionMode(event.target.value as JurisdictionMode)
+                      }
+                    >
+                      {selectedLegislationType.administration.allowedJurisdictionModes.map(
+                        (mode) => (
+                          <option key={mode} value={mode}>
+                            {JURISDICTION_LABELS[mode]}
+                          </option>
+                        )
+                      )}
+                    </select>
+                    <p className="mt-1 text-xs text-muted">
+                      This controls which level administers the law. Regional governments use their
+                      own budgets and do not receive Cabinet accounts.
+                    </p>
+                  </div>
+                ) : null}
 
                 {selectedLegislationType ? (
                   <div className="space-y-1 rounded-lg border border-card-border bg-background/50 p-3">

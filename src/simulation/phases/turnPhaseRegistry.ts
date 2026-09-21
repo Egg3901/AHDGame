@@ -91,6 +91,7 @@ import { processNppUnionBehavior } from "@/lib/turn/unions/nppUnionBehavior";
 import { processDecolonizationTurn } from "@/lib/turn/decolonizationTurn";
 import { runNppCorporateAttacksPhase } from "@/lib/turn/nppCorporateAttacks";
 import { processTreasuryTurn } from "@/lib/turn/treasuryTurn";
+import { processDepartmentProgramSettlement } from "@/lib/turn/departmentProgramSettlement";
 import { processCommodityPriceTurn } from "@/lib/turn/commodityPriceTurn";
 import { processMacroCountryTurn } from "@/lib/world/macro";
 import { processSphereSponsorTurn } from "@/lib/world/spheres";
@@ -373,6 +374,13 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
           phaseResults.treasuryTurn = {
             countriesProcessed: treasuryResult.countriesProcessed,
           };
+        }
+
+        const departmentProgramResult = await runtime.runPhase("departmentProgramSettlement", () =>
+          processDepartmentProgramSettlement(context.db, newTurn, context.gameState)
+        );
+        if (departmentProgramResult) {
+          phaseResults.departmentProgramSettlement = departmentProgramResult;
         }
 
         const nppFundResult = await runtime.runPhase("nppFundGeneration", () =>

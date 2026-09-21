@@ -63,6 +63,25 @@ export interface RegionalBudget {
 
   // Spending
   enactedBillCosts: number;
+  /** Cash actually available to enacted programs after settlement. */
+  fundedBillCosts?: number;
+  /** Authorized program demand that the regional budget could not fund. */
+  unfundedBillCosts?: number;
+  /** Cabinet-free per-program funding results used by regional outcomes. */
+  programSettlements?: Record<
+    string,
+    {
+      programId: string;
+      legislationTypeId: string;
+      policyOptionId: string;
+      authorizedCost: number;
+      fundedAmount: number;
+      unfundedAmount: number;
+      implementationFactor: number;
+      obligationPriority: number;
+      lastSettledTurn: number;
+    }
+  >;
   subsidyCosts?: number;
   surplus: number; // totalBudget - enactedBillCosts (negative = deficit)
 

@@ -381,6 +381,16 @@ export interface TurnLog {
       countriesProcessed: number;
     } | null;
 
+    departmentProgramSettlement?: {
+      enabled: boolean;
+      programsSettled: number;
+      authorityAccrued: number;
+      outlaid: number;
+      encumbered: number;
+      implementationFactor: number | null;
+      reconciliation: "not_run" | "balanced";
+    } | null;
+
     portfolioSnapshot: {
       charactersSnapshotted: number;
     } | null;

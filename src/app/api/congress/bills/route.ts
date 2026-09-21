@@ -37,6 +37,7 @@ import type {
   BillProvision,
   Character,
   ElectedOfficial,
+  GameState,
   LegislationType,
   PoliticalParty,
 } from "@/lib/db/types";
@@ -74,6 +75,7 @@ import {
   getBillProposalAutoFailWarningError,
   type BillProposalOriginChamber,
 } from "@/lib/legislature/billAutoFailWarning";
+import { resolveBillJurisdiction } from "@/lib/legislature/jurisdiction";
 export type { BillDisplay, BillsResponse } from "@/lib/legislature/dto/billDisplay";
 
 const VOTING_DURATION_MS = 24 * 60 * 60 * 1000; // 24 hours
@@ -339,6 +341,7 @@ export async function POST(request: Request) {
       category,
       fullText,
       provisions: clientProvisions,
+      jurisdictionMode: requestedJurisdictionMode,
       confirmElectionRisk,
     } = parsed.data;
 
@@ -574,6 +577,10 @@ export async function POST(request: Request) {
           .toArray()
       ).map((lt) => [lt._id, lt])
     );
+    const administrationState = await db
+      .collection<GameState>("gameState")
+      .findOne({ _id: "current" }, { projection: { lawAdministrationEnabled: 1 } });
+    const administrationEnabled = administrationState?.lawAdministrationEnabled === true;
 
     for (const rawP of rawProvisions) {
       // Central-bank independence is carried by the country-legislature route,
@@ -943,6 +950,22 @@ export async function POST(request: Request) {
     }
 
     // Constraint 2: no duplicate provision at same policy level across active US Congress bills
+    const jurisdiction = resolveBillJurisdiction({
+      enabled: administrationEnabled,
+      requested: requestedJurisdictionMode,
+      legislationTypes: validatedPolicyProvisions
+        .map((provision) => legislationTypeById.get(provision.legislationTypeId))
+        .filter((type): type is LegislationType => type !== undefined),
+    });
+    if (!jurisdiction.ok || !jurisdiction.mode) {
+      logRequest("POST", path, 400, Date.now() - start);
+      return NextResponse.json(
+        { error: jurisdiction.error ?? "Invalid jurisdiction mode." },
+        { status: 400 }
+      );
+    }
+
+    // Constraint 2: no duplicate provision at same policy level across active US Congress bills
     const duplicateCheck = await checkDuplicateProvisions(
       db,
       "bills",
@@ -1089,6 +1112,7 @@ export async function POST(request: Request) {
       votesAbstain: 0,
       votes: {},
       category,
+      ...(administrationEnabled ? { jurisdictionMode: jurisdiction.mode } : {}),
       provisions: allProvisions,
       legislationTypeId: first?.legislationTypeId ?? null,
       effectDirection: first?.effectDirection ?? null,

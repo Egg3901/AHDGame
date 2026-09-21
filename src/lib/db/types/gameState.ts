@@ -507,6 +507,30 @@ export interface GameState {
   intOrgAlignmentEnabledBy?: string;
   intOrgAlignmentEnabledAt?: string;
   /**
+   * Stage-1 proof gate for department-funded legislation. Only the US
+   * `public_health_opt_1` vertical slice reads it. Fail-closed and deliberately
+   * absent from default flags until Gate 1 is accepted.
+   */
+  departmentProgramSliceEnabled?: boolean;
+  departmentProgramSliceEnabledBy?: string;
+  departmentProgramSliceEnabledAt?: string;
+  /** Generalized national department accounts and program settlement. */
+  departmentFinanceEnabled?: boolean;
+  departmentFinanceEnabledBy?: string;
+  departmentFinanceEnabledAt?: string;
+  /** Jurisdiction selection, conflict rules, and delivered law outcomes. */
+  lawAdministrationEnabled?: boolean;
+  lawAdministrationEnabledBy?: string;
+  lawAdministrationEnabledAt?: string;
+  /** Regional discretion, underfunding settlement, and national grants. */
+  regionalLegislationFinanceEnabled?: boolean;
+  regionalLegislationFinanceEnabledBy?: string;
+  regionalLegislationFinanceEnabledAt?: string;
+  /** Canonical metric aliases and derived political readouts. */
+  canonicalPoliticalMetricsEnabled?: boolean;
+  canonicalPoliticalMetricsEnabledBy?: string;
+  canonicalPoliticalMetricsEnabledAt?: string;
+  /**
    * Master gate for settlement crises (the German Question). Fail-closed: only
    * an explicit `true` enables. NOT in DEFAULT_GAME_STATE_FLAGS — staged
    * rollout, default off; an explicit enable survives resets.

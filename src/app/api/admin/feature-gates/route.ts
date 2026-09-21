@@ -51,6 +51,9 @@ export const FEATURE_GATE_BOOLEAN_KEYS = [
   "intOrgAlignmentEnabled",
   "nppCorpStrategyEnabled",
   "settlementCrisisEnabled",
+  "departmentFinanceEnabled",
+  "lawAdministrationEnabled",
+  "regionalLegislationFinanceEnabled",
 ] as const;
 
 type FeatureGateBooleanKey = (typeof FEATURE_GATE_BOOLEAN_KEYS)[number];

@@ -169,6 +169,7 @@ export const CABINET_ROUTE_SCOPES: Record<string, CabinetLeverScope | "operation
   // appropriation itself was decided elsewhere. Deliberately open, matching the
   // allowed list in this file's header.
   allocation: "operational",
+  "department-allocation": "operational",
 
   // The department's declared policy direction, which is what confirmation is
   // a vote on.
