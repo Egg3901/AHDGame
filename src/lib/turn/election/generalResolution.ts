@@ -31,11 +31,7 @@ import {
 } from "@/lib/constants/countries";
 import { isExecutiveOffice } from "@/lib/elections/executiveOffice";
 import { spawnHouseElection, spawnCommonsElection } from "@/lib/turn/election/electionSpawning";
-import {
-  allocateSeats,
-  getMajoritarianBonus,
-  type MajoritarianBonusConfig,
-} from "@/lib/turn/election/seatAllocation";
+import { allocateSeats } from "@/lib/turn/election/seatAllocation";
 import { loadApportionment } from "@/lib/elections/apportionment";
 import { getUkCommonsSeats } from "@/lib/constants/states";
 import { blocListQuota, blocListQuotaForGovernment } from "@/lib/constants/blocList";
@@ -418,11 +414,6 @@ export async function resolveOneGeneralElection(
         .houseSeats;
     }
 
-    // FPTP winner's bonus (#3244): UK Commons regions in historical in-game
-    // years re-split the top-two parties by the cube law. Keyed on the CURRENT
-    // in-game year — resolves to undefined (proportional behavior) from 1999
-    // on, so a world graduates back to proportional as its clock advances.
-    let majoritarianBonus: MajoritarianBonusConfig | undefined;
     if (
       election.electionType === "commons" ||
       election.electionType === "snap_commons" ||
@@ -430,7 +421,6 @@ export async function resolveOneGeneralElection(
     ) {
       const gsForCommons = await (await getGameStateCollection(db)).findOne({ _id: "current" });
       commonsSeats = getUkCommonsSeats(gsForCommons?.preset);
-      majoritarianBonus = getMajoritarianBonus(election.electionType, gsForCommons?.currentYear);
     }
 
     // Districted per-district resolution (US House, flag on). Returns null when the
@@ -494,7 +484,6 @@ export async function resolveOneGeneralElection(
         ranked,
         totalVotesCast,
         houseSeats,
-        majoritarianBonus,
         // National Front chambers: the quota decides the party split, not the
         // vote. Undefined for every non-bloc-list country, so their allocation
         // is byte-identical.

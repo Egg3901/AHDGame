@@ -1,3 +1,4 @@
+import { computeMapOfficeholders } from "@/lib/map/officeholderService";
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { handleRouteError } from "@/lib/api/errors";
@@ -89,6 +90,7 @@ export async function GET(request: Request) {
         lean,
         presidentialData,
         sectorSpecializations,
+        officeholders,
       ] = await Promise.all([
         computePartyOrgMap(db, "US"),
         computeSenateMap(db, "US"),
@@ -98,6 +100,11 @@ export async function GET(request: Request) {
         computeLeanMap(db, "US"),
         computePresidentialMap(db, "US"),
         computeSectorSpecializationMap(db, "US"),
+        computeMapOfficeholders(
+          db,
+          countryId,
+          regions.map((r) => r.id)
+        ),
       ]);
 
       const {
@@ -110,6 +117,7 @@ export async function GET(request: Request) {
       } = presidentialData;
 
       return NextResponse.json({
+        officeholders,
         partyOrg,
         senate,
         house,

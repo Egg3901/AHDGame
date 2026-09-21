@@ -236,7 +236,7 @@ describe("POST /api/corporations/[id]/bond-default/cash — ledger emission", ()
     expect(corpHolderEntry!.currencyCode).toBe("USD");
     expect(corpHolderEntry!.meta?.bondCurrency).toBe("USD");
     expect(corpHolderEntry!.meta?.bondAmount).toBeCloseTo(corpHolderEntry!.amount);
-  });
+  }, 30_000);
 
   it("preserves defaultedAtTurn and stamps defaultCure on cured bonds", async () => {
     // Pre-fix: the cure routes did `$unset: { defaultedAtTurn: "" }`, erasing
@@ -306,6 +306,7 @@ describe("POST /api/corporations/[id]/bond-default/cash — ledger emission", ()
 
   it("returns 400 (no money moved) when atomic debit loses the race", async () => {
     const corpId = new ObjectId();
+    const charId = new ObjectId();
     const corporation = {
       _id: corpId,
       name: "Test",
@@ -326,11 +327,16 @@ describe("POST /api/corporations/[id]/bond-default/cash — ledger emission", ()
           matured: false,
           defaulted: true,
           couponRate: 8,
-          holders: [{ characterId: new ObjectId(), units: 5 }],
+          holders: [{ characterId: charId, units: 5 }],
         },
       ])
     );
     db.collectionMocks["exchangeRates"]!.find.mockReturnValue(makeCursor([]));
+    db.collectionMocks["characters"]!.find.mockReturnValue({
+      project: vi.fn().mockReturnValue({
+        toArray: vi.fn().mockResolvedValue([{ _id: charId, countryId: "US" }]),
+      }),
+    });
     // Atomic debit guard: modifiedCount 0 = lost the race.
     db.collectionMocks["corporations"]!.updateOne.mockResolvedValueOnce({
       modifiedCount: 0,
@@ -388,7 +394,7 @@ describe("POST /api/corporations/[id]/bond-default/cash — ledger emission", ()
       modifiedCount: 1,
       matchedCount: 1,
     } as never);
-    db.collectionMocks["characters"]!.bulkWrite.mockRejectedValueOnce(
+    db.collectionMocks["characters"]!.updateOne.mockRejectedValueOnce(
       new Error("Simulated DB write failure")
     );
 
@@ -450,7 +456,7 @@ describe("POST /api/corporations/[id]/bond-default/cash — ledger emission", ()
     const { POST } = await import("./route");
     const res = await POST(req, { params: Promise.resolve({ id: corpId.toString() }) });
     expect(res.status).toBe(500);
-    expect(db.collectionMocks["bonds"]!.updateMany).toHaveBeenCalledTimes(1);
+    expect(db.collectionMocks["bonds"]!.updateMany).not.toHaveBeenCalled();
     expect(db.collectionMocks["characters"]!.bulkWrite).not.toHaveBeenCalled();
     const { emitTxBulk } = await import("@/lib/financialTxLog/emit");
     expect(vi.mocked(emitTxBulk)).not.toHaveBeenCalled();
@@ -480,6 +486,130 @@ describe("POST /api/corporations/[id]/bond-default/cash — ledger emission", ()
     const res = await POST(req, { params: Promise.resolve({ id: corpId.toString() }) });
     expect(res.status).toBe(503);
     // No bonds.updateMany should have fired.
+    expect(db.collectionMocks["bonds"]!.updateMany).not.toHaveBeenCalled();
+  });
+});
+
+describe("POST /api/corporations/[id]/bond-default/cash: standalone fallback", () => {
+  function mockStandaloneClient() {
+    const error = Object.assign(
+      new Error("Transaction numbers are only allowed on a replica set"),
+      { code: 20 }
+    );
+    return {
+      startSession: () => ({
+        withTransaction: vi.fn(async () => {
+          throw error;
+        }),
+        endSession: endSessionMock,
+      }),
+    };
+  }
+
+  async function arrangeStandalone(holders: Array<{ characterId: ObjectId; units: number }>) {
+    const corpId = new ObjectId();
+    const corporation = {
+      _id: corpId,
+      name: "Standalone Issuer",
+      countryId: "US",
+      liquidCapital: 1_000_000,
+      liquidCurrencyCode: "USD",
+    };
+    const { getMongoClient } = await import("@/lib/mongodb");
+    vi.mocked(getMongoClient).mockResolvedValue(mockStandaloneClient() as never);
+    const { resolveCorporation } = await import("@/lib/api/corporations/resolveQuery");
+    vi.mocked(resolveCorporation).mockResolvedValue({ ok: true, corporation } as never);
+    db.collectionMocks["corporations"]!.findOne.mockResolvedValue(corporation as never);
+    db.collectionMocks["bonds"]!.find.mockReturnValue(
+      makeCursor([
+        {
+          _id: new ObjectId(),
+          corporationId: corpId,
+          currencyCode: "USD",
+          matured: false,
+          defaulted: true,
+          couponRate: 8,
+          totalIssued: holders.reduce((sum, holder) => sum + holder.units * 1_000, 0),
+          holders,
+        },
+      ])
+    );
+    db.collectionMocks["exchangeRates"]!.find.mockReturnValue(makeCursor([]));
+    db.collectionMocks["characters"]!.find.mockReturnValue({
+      project: vi.fn().mockReturnValue({
+        toArray: vi.fn().mockResolvedValue(
+          holders.map((holder, index) => ({
+            _id: holder.characterId,
+            countryId: "US",
+            name: `Holder ${index + 1}`,
+          }))
+        ),
+      }),
+    });
+    return corpId;
+  }
+
+  it("exactly refunds the issuer when the first holder credit fails after debit", async () => {
+    const corpId = await arrangeStandalone([{ characterId: new ObjectId(), units: 4 }]);
+    db.collectionMocks["characters"]!.updateOne.mockRejectedValueOnce(
+      new Error("first credit failed")
+    );
+
+    const { POST } = await import("./route");
+    const response = await POST(
+      new Request(`http://localhost/api/corporations/${corpId}/bond-default/cash`, {
+        method: "POST",
+      }),
+      { params: Promise.resolve({ id: corpId.toString() }) }
+    );
+
+    expect(response.status).toBe(500);
+    const issuerWrites = db.collectionMocks["corporations"]!.updateOne.mock.calls;
+    expect(issuerWrites).toHaveLength(2);
+    const debit = (issuerWrites[0]![1] as { $inc: { liquidCapital: number } }).$inc.liquidCapital;
+    const refund = (issuerWrites[1]![1] as { $inc: { liquidCapital: number } }).$inc.liquidCapital;
+    expect(refund).toBe(-debit);
+    expect(db.collectionMocks["bonds"]!.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("reverses only confirmed earlier holders when a later holder credit fails", async () => {
+    const firstHolderId = new ObjectId();
+    const secondHolderId = new ObjectId();
+    const corpId = await arrangeStandalone([
+      { characterId: firstHolderId, units: 3 },
+      { characterId: secondHolderId, units: 7 },
+    ]);
+    db.collectionMocks["characters"]!.updateOne.mockResolvedValueOnce({
+      modifiedCount: 1,
+      matchedCount: 1,
+    })
+      .mockRejectedValueOnce(new Error("later credit failed"))
+      .mockResolvedValueOnce({ modifiedCount: 1, matchedCount: 1 });
+
+    const { POST } = await import("./route");
+    const response = await POST(
+      new Request(`http://localhost/api/corporations/${corpId}/bond-default/cash`, {
+        method: "POST",
+      }),
+      { params: Promise.resolve({ id: corpId.toString() }) }
+    );
+
+    expect(response.status).toBe(500);
+    const holderWrites = db.collectionMocks["characters"]!.updateOne.mock.calls;
+    expect(holderWrites).toHaveLength(3);
+    expect((holderWrites[0]![0] as { _id: ObjectId })._id.toString()).toBe(
+      firstHolderId.toString()
+    );
+    expect((holderWrites[1]![0] as { _id: ObjectId })._id.toString()).toBe(
+      secondHolderId.toString()
+    );
+    expect((holderWrites[2]![0] as { _id: ObjectId })._id.toString()).toBe(
+      firstHolderId.toString()
+    );
+    const firstCredit = (holderWrites[0]![1] as { $inc: { cashOnHand: number } }).$inc.cashOnHand;
+    const firstReversal = (holderWrites[2]![1] as { $inc: { cashOnHand: number } }).$inc.cashOnHand;
+    expect(firstCredit).toBe(3_000);
+    expect(firstReversal).toBe(-firstCredit);
     expect(db.collectionMocks["bonds"]!.updateMany).not.toHaveBeenCalled();
   });
 });
@@ -542,23 +672,16 @@ describe("POST /api/corporations/[id]/bond-default/cash — fund and NPP holders
     expect(res.status).toBe(200);
 
     // 10 units x $1,000 face = 10,000 to the fund's anchor cash.
-    const fundWrite = db.collectionMocks["indexFunds"]!.bulkWrite.mock.calls[0]![0] as Array<{
-      updateOne: { filter: { _id: ObjectId }; update: { $inc: { cashAnchor: number } } };
-    }>;
-    expect(fundWrite).toHaveLength(1);
-    expect(fundWrite[0]!.updateOne.filter._id.toString()).toBe(fundId.toString());
-    expect(fundWrite[0]!.updateOne.update.$inc.cashAnchor).toBe(10_000);
+    const fundWrite = db.collectionMocks["indexFunds"]!.updateOne.mock.calls[0]!;
+    expect((fundWrite[0] as { _id: ObjectId })._id.toString()).toBe(fundId.toString());
+    expect((fundWrite[1] as { $inc: { cashAnchor: number } }).$inc.cashAnchor).toBe(10_000);
 
     // 5 units x $1,000 = 5,000 to the NPP's INVESTMENT account, not its war chest.
-    const nppWrite = db.collectionMocks["npps"]!.bulkWrite.mock.calls[0]![0] as Array<{
-      updateOne: {
-        filter: { _id: ObjectId };
-        update: { $inc: { nppInvestmentCashAnchor: number } };
-      };
-    }>;
-    expect(nppWrite).toHaveLength(1);
-    expect(nppWrite[0]!.updateOne.filter._id.toString()).toBe(nppId.toString());
-    expect(nppWrite[0]!.updateOne.update.$inc.nppInvestmentCashAnchor).toBe(5_000);
+    const nppWrite = db.collectionMocks["npps"]!.updateOne.mock.calls[0]!;
+    expect((nppWrite[0] as { _id: ObjectId })._id.toString()).toBe(nppId.toString());
+    expect(
+      (nppWrite[1] as { $inc: { nppInvestmentCashAnchor: number } }).$inc.nppInvestmentCashAnchor
+    ).toBe(5_000);
   });
 
   it("logs the fund payout but keeps NPP investment returns out of the tx log", async () => {

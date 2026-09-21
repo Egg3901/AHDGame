@@ -6,30 +6,18 @@
  * the round trip: which fields survive a capture, and which are deliberately
  * dropped because they are per-request rather than settled.
  */
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { ObjectId } from "mongodb";
-import type { Db } from "mongodb";
 
-const getMajoritarianBonus = vi.hoisted(() => vi.fn(() => null));
-vi.mock("@/lib/turn/election/seatAllocation", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/lib/turn/election/seatAllocation")>();
-  return { ...actual, getMajoritarianBonus };
-});
 vi.mock("@/lib/elections/liveResults/electionNight", () => ({
   buildNationalElectionNight: vi.fn().mockResolvedValue(null),
 }));
 
-import {
-  buildResultsPayload,
-  snapshotFromPayload,
-  payloadFromSnapshot,
-} from "./buildResultsPayload";
+import { snapshotFromPayload, payloadFromSnapshot } from "./buildResultsPayload";
 import type { ElectionResultsResponse } from "./types";
 import type { ElectionResultSnapshot } from "@/lib/db/types/electionResultSnapshot";
 
 const ELECTION_OID = new ObjectId();
-
-beforeEach(() => getMajoritarianBonus.mockClear());
 
 const election = {
   _id: ELECTION_OID,
@@ -186,52 +174,5 @@ describe("payloadFromSnapshot", () => {
       isAdmin: false,
     });
     expect(out.election.finalHour).toBeNull();
-  });
-});
-
-describe("buildResultsPayload historical rules", () => {
-  function cursor(rows: unknown[]) {
-    return {
-      toArray: vi.fn().mockResolvedValue(rows),
-      project: vi.fn().mockReturnThis(),
-    };
-  }
-
-  function dbWithNoTally(): Db {
-    return {
-      collection: (name: string) => {
-        if (name === "electionCandidates" || name === "politicalParties") {
-          return { find: () => cursor([]) };
-        }
-        if (name === "electionVoteTallies") {
-          return { findOne: vi.fn().mockResolvedValue(null) };
-        }
-        return { find: () => cursor([]), findOne: vi.fn().mockResolvedValue(null) };
-      },
-    } as unknown as Db;
-  }
-
-  it("uses the race year for year-sensitive allocation rules during capture", async () => {
-    await buildResultsPayload(
-      dbWithNoTally(),
-      {
-        ...election,
-        state: "GBR",
-        status: "resolved",
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      },
-      {
-        currentTurn: 999,
-        currentYear: 1995,
-        nextScheduledTurn: null,
-        pausedAt: null,
-        fastMode: false,
-        preset: "1953-default",
-      },
-      { apportionmentYear: 1960, isAdmin: false }
-    );
-
-    expect(getMajoritarianBonus).toHaveBeenCalledWith("president", 1960);
   });
 });

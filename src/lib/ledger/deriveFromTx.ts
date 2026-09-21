@@ -132,6 +132,7 @@ const REASON_BY_TX_TYPE: Partial<Record<FinancialTxLogEntry["type"], string>> = 
   loc_interest: "credit_interest",
   index_fund_subscribe: "fund_subscription",
   index_fund_dividend: "fund_distribution",
+  npp_investment_income: "npp_investment_income",
   corp_escrow_funding: "escrow_transfer",
   corp_group_relief: "corporate_group_transfer",
   caucus_tax_debit: "party_internal_transfer",

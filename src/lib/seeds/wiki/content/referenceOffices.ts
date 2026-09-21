@@ -119,7 +119,7 @@ The Secretary of the Treasury is the Finance Minister equivalent and can authori
 
 ## United Kingdom
 
-The UK uses a **parliamentary system**. The Prime Minister emerges from a Commons majority, not direct election. Commons and Regional Council seats are contested as one multi-seat race per region, allocated by vote share (with a majoritarian squeeze before 1999); see [United Kingdom](/wiki/uk-overview).
+The UK uses a **parliamentary system**. The Prime Minister emerges from a Commons majority, not direct election. Commons and Regional Council seats are contested as one multi-seat race per region, allocated proportionally by vote share; see [United Kingdom](/wiki/uk-overview).
 
 ### Prime Minister
 

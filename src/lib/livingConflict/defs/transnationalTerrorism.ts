@@ -10,6 +10,11 @@ import type {
   RoleDecisionTrees,
 } from "../types";
 
+// Primary historical anchors: the independent 9/11 Commission's account of
+// warning, attack, preparedness, and response, https://911commission.gov/report/,
+// and the enacted 2001 Authorization for Use of Military Force,
+// https://www.congress.gov/bill/107th-congress/senate-joint-resolution/23
+
 function role(ctx: RoleContext): ConflictRole {
   if (ctx.belligerents.includes(ctx.countryId)) return "belligerent";
   if (ctx.countryId === ctx.backerA) return "backer_a";

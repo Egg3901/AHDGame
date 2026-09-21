@@ -51,6 +51,14 @@ describe("RACE_PRIORITY", () => {
     expect(RACE_PRIORITY[0]).toBe("stateSenate");
   });
 
+  it("prioritizes Turkish lower-chamber coverage before the overlapping senate", () => {
+    const assemblyIdx = RACE_PRIORITY.indexOf("milletMeclisi");
+    const senateIdx = RACE_PRIORITY.indexOf("senato");
+
+    expect(assemblyIdx).toBeGreaterThanOrEqual(0);
+    expect(senateIdx).toBeGreaterThan(assemblyIdx);
+  });
+
   it("should have commons between house and senate", () => {
     const houseIdx = RACE_PRIORITY.indexOf("house");
     const commonsIdx = RACE_PRIORITY.indexOf("commons");

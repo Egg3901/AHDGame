@@ -45,6 +45,22 @@ const negotiatedDef: LivingConflictDef = {
       priority: 10,
       conditions: [{ track: "violence", min: 75 }],
     },
+    {
+      key: "durable_dormancy",
+      fromPhase: "agreement",
+      toPhase: "agreement",
+      fromStatus: "settled",
+      toStatus: "dormant",
+      conditions: [{ track: "settlement", min: 90 }],
+    },
+    {
+      key: "terminal_closure",
+      fromPhase: "agreement",
+      toPhase: "agreement",
+      fromStatus: "dormant",
+      toStatus: "closed",
+      conditions: [{ track: "settlement", min: 95 }],
+    },
   ],
   scheduledPressures: [
     {
@@ -149,6 +165,28 @@ describe("negotiated living conflicts", () => {
     expect(settled.appliedTransitionKey).toBe("settle");
     expect(settled.state.phaseLevel).toBe(3);
     expect(settled.state.status).toBe("settled");
+  });
+
+  it("moves a durable settlement through dormancy to terminal closure", () => {
+    const settled = normalizeConflictState(negotiatedDef, {
+      defKey: negotiatedDef.key,
+      hasOpened: true,
+      status: "settled",
+      phaseLevel: 3,
+      tracks: { violence: 5, settlement: 92 },
+    });
+
+    const dormant = evaluateConflictTransitions(negotiatedDef, settled, 2000);
+    expect(dormant.appliedTransitionKey).toBe("durable_dormancy");
+    expect(dormant.state.status).toBe("dormant");
+
+    const closed = evaluateConflictTransitions(
+      negotiatedDef,
+      { ...dormant.state, tracks: { violence: 0, settlement: 98 } },
+      2005
+    );
+    expect(closed.appliedTransitionKey).toBe("terminal_closure");
+    expect(closed.state.status).toBe("closed");
   });
 
   it("emits scheduled pressure only inside its year, phase, and cadence gates", () => {

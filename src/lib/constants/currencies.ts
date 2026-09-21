@@ -191,10 +191,11 @@ export function getCountryIdForCurrency(code: CurrencyCode): CountryId {
  * trapped.
  */
 // SU/FR/IT/ES/SE/TR join for the 1979 Cold-War preset (player/economy-enabled
-// there). Like NG, they stay forex-active across eras even while coming-soon in
-// 2019/1991 — their currencies must be exchangeable so holders aren't trapped.
-// The NPP-run bloc (DD/HU/PL/…) is NOT forex-active (closed planned economy until
-// it decommunises).
+// there). Like NG, they stay forex-active across eras even when their sovereign
+// fiscal model is not authored, because holders must still be able to exchange
+// their currencies. Central-bank coverage is a separate preset-aware scope; see
+// presetMonetaryScope. DD remains here for Cold-War DDM support but is excluded
+// from post-reunification central-bank seeding.
 export const FOREX_ACTIVE_COUNTRIES: CountryId[] = [
   "US",
   "UK",

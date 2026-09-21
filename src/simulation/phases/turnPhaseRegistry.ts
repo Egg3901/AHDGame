@@ -1324,13 +1324,11 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
     {
       key: "fiscalYearBoundary",
       async execute(context, runtime) {
-        const { db, newTurn, phaseResults, gameState } = context;
-        const startingYear = gameState.startingYear ?? STARTING_YEAR;
-        const currentYear = startingYear + Math.floor((newTurn - 1) / TURNS_PER_YEAR);
+        const { db, newTurn, calendarTurn, currentYear, phaseResults } = context;
         let fiscalYearProcessed = false;
         let newFiscalYear: number | null = null;
-        if (isFiscalYearEnd(newTurn)) {
-          newFiscalYear = calculateFiscalYear(currentYear, newTurn);
+        if (isFiscalYearEnd(calendarTurn)) {
+          newFiscalYear = calculateFiscalYear(currentYear, calendarTurn);
           await runtime.runPhase("fiscalYear", () =>
             processFiscalYear(db, newFiscalYear!, newTurn)
           );

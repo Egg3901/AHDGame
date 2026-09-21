@@ -32,11 +32,7 @@ import {
   resolveGovExecutiveApproval,
 } from "./govCoattail";
 import { MULTI_SEAT_TYPES, officeKeyForElectionType } from "@/lib/utils/electionLabels";
-import {
-  applyMajoritarianBonus,
-  getMajoritarianBonus,
-  getMultiSeatMinShare,
-} from "@/lib/turn/election/seatAllocation";
+import { getMultiSeatMinShare } from "@/lib/turn/election/seatAllocation";
 import { turnVoteWeight, resolveTurnWindow } from "./voteCalculations";
 import { distributeVotesByGroupLevelAllocation } from "./voteDistribution";
 import { distributeVotesBySwingFlow } from "./voteDistributionSwingFlow";
@@ -161,7 +157,6 @@ export async function accumulateVoteTurn(
   let turnoutDoc: StateDemographicTurnout | null;
   let registrationPool: StateRegistrationPool | null = null;
   let preset: string | undefined;
-  let currentYear: number | undefined;
   let eraYear: { year: number | null; startingYear: number | null };
 
   if (options?.preload) {
@@ -172,7 +167,6 @@ export async function accumulateVoteTurn(
     turnoutDoc = options.preload.turnoutByState.get(stateId) ?? null;
     registrationPool = options.preload.registrationPoolByState?.get(stateId) ?? null;
     preset = options.preload.preset;
-    currentYear = options.preload.currentYear;
     eraYear = eraYearContextFromGameState({
       currentYear: options.preload.currentYear,
       startingYear: options.preload.startingYear,
@@ -227,7 +221,6 @@ export async function accumulateVoteTurn(
     turnoutDoc = t;
     registrationPool = rp;
     preset = gs?.preset;
-    currentYear = gs?.currentYear;
     eraYear = eraYearContextFromGameState(gs);
   }
 
@@ -739,9 +732,7 @@ export async function accumulateVoteTurn(
     // "re-admit everyone when eligible < min(seats, candidates)" fallback let
     // sub-1% candidates collect largest-remainder seats in any race with more
     // seats than candidates (e.g. 12 candidates vs 27-90 UK Commons seats).
-    const minShare = getMultiSeatMinShare(electionType, {
-      majoritarian: getMajoritarianBonus(electionType, currentYear) !== undefined,
-    });
+    const minShare = getMultiSeatMinShare(electionType);
     const groupKey = (ec: (typeof enriched)[number]) =>
       ec.party && ec.party !== "independent" ? `party:${ec.party}` : `cand:${ec.candidateId}`;
     const votesByGroup = new Map<string, number>();
@@ -769,31 +760,9 @@ export async function accumulateVoteTurn(
     const seats: Record<string, number> = {};
     for (const ec of enriched) seats[ec.candidateId] = 0;
 
-    // FPTP winner's bonus (#3244): mirror the resolver's cube-law re-split of
-    // the top-two party groups so live seat projections match what resolution
-    // will actually seat. Gated on the CURRENT in-game year exactly like the
-    // resolver — undefined (proportional, byte-identical estimate) once the
-    // world's clock reaches 1999, or when no year is available.
-    // Tickets #1276 / #1277: the boost is decided by votes alone now, so no
-    // per-state organization ranking is threaded in. That removed the input
-    // whose sub-point drift relocated 9 to 20 seats between consecutive turns
-    // of the same count.
-    const majoritarianBonus = getMajoritarianBonus(electionType, currentYear);
-    const effectiveVotes =
-      majoritarianBonus && pool.length > 1
-        ? applyMajoritarianBonus(
-            pool.map((ec) => ({
-              id: ec.candidateId,
-              votes: newTotals[ec.candidateId] ?? 0,
-              group: groupKey(ec),
-            })),
-            majoritarianBonus
-          ).effective
-        : undefined;
-
     // Calculate proportional seats with remainders for pool candidates
     const allocations = pool.map((ec) => {
-      const votes = effectiveVotes?.get(ec.candidateId) ?? newTotals[ec.candidateId] ?? 0;
+      const votes = newTotals[ec.candidateId] ?? 0;
       const exactSeats = (votes / poolVotes) * totalSeats;
       return {
         candidateId: ec.candidateId,

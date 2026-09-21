@@ -10,6 +10,12 @@ import type {
 import { choiceNode, responseOpt } from "../authoring";
 import { cfx } from "../effects";
 
+// Primary historical anchors constrain sanctions, ceasefire, peacekeeping, and
+// intervention pressure without fixing borders or campaigns: UNSC Resolution
+// 713 (1991), https://digitallibrary.un.org/record/126827, and the UN Security
+// Council's 1991 resolution register,
+// https://main.un.org/securitycouncil/en/content/resolutions-adopted-security-council-1991
+
 function role(ctx: RoleContext): ConflictRole {
   if (ctx.belligerents.includes(ctx.countryId)) return "belligerent";
   if (ctx.countryId === ctx.backerA) return "backer_a";

@@ -49,7 +49,10 @@ vi.mock("@/contexts/RegisteredCountriesContext", () => {
   // Match the stable production callback; a new function every render makes
   // exchangeMeta change and repeatedly triggers the page fetch effect.
   const displayName = () => "United States";
-  return { useCountryDisplayName: () => displayName };
+  return {
+    useCountryDisplayName: () => displayName,
+    useActivePreset: () => "2019-default",
+  };
 });
 
 vi.mock("@/hooks/useGameEvents", () => ({

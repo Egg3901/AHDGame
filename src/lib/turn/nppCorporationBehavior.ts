@@ -1,11 +1,3 @@
-// src/lib/turn/nppCorporationBehavior.ts
-/**
- * What NPP-run corporations do each turn. processNppCorporationDecisions has each
- * one read sector profitability, set growth by margin band, size marketing,
- * logistics and R&D budgets as a share of revenue, divest losing sectors, expand
- * only when profitable (makeNppCorpDecision), set dividends from margin and keep
- * a cash floor.
- */
 import type { Db, ObjectId } from "mongodb";
 import type {
   Corporation,
@@ -31,7 +23,6 @@ import {
   type PlacementSignals,
 } from "@/lib/turn/npp/marketSignals";
 
-// Re-exported so existing importers (and their tests) keep one entry point.
 export {
   sectorShortageScore,
   computeMacroProductionPolicy,
@@ -102,6 +93,8 @@ import {
   resolveCorpLiquidCurrencyCode,
 } from "@/lib/currency/corporationCapital";
 import type { CapacityDecisionObservation } from "@/lib/corporations/capacityDecisionTelemetry/rules";
+import type { NppOperatorObservation } from "@/lib/corporations/nppOperatorTelemetry/rules";
+import { buildNppOperatorObservation } from "@/lib/corporations/nppOperatorTelemetry/rules";
 import {
   buildCapacityCompetitorIndex,
   createFoundingCapacityOutcome,
@@ -160,8 +153,6 @@ export type { NppPlantsContext } from "@/lib/turn/npp/corpDecisionTypes";
 
 export { computeExtractionHeadroomByState } from "@/lib/turn/nppExtractionOpportunity";
 
-// Tuning constants live in nppCorporationTuning.ts to keep this file under the
-// 2000 LOC architecture cap. Behaviour is unchanged.
 import {
   GROWTH_COST_MARGIN_SHARE,
   NPP_REINVEST_AGGRESSION,
@@ -198,10 +189,6 @@ export {
   NPP_FOUNDING_HEADROOM_SHARE,
 };
 
-/**
- * Process all NPP-run corporations each turn.
- * Returns decisions that the caller applies via bulkWrite.
- */
 export async function processNppCorporationDecisions(
   db: Db,
   turn: number,
@@ -248,6 +235,7 @@ export async function processNppCorporationDecisions(
   const newSectors: Array<Omit<CorporateSector, "_id"> & { _id: ObjectId }> = [];
   const allDivestedSectorIds: ObjectId[] = [];
   const techLedger: TechUnlockLedgerInput[] = [];
+  const operatorObservations: NppOperatorObservation[] = [];
 
   if (nppCorps.length === 0)
     return {
@@ -533,6 +521,7 @@ export async function processNppCorporationDecisions(
       decision.capacityObservations,
       decision.entryDiagnostic?.reason
     );
+    if (decision.operatorObservation) operatorObservations.push(decision.operatorObservation);
     if (decision.reinvestments && corpCurrency) {
       appendNppReinvestCapexRows(capexRows, {
         corp,
@@ -596,7 +585,6 @@ export async function processNppCorporationDecisions(
     }
   }
 
-  // Founded-capacity drawdown, then the cohort flushes; see capacityWriteback.
   await drawFoundedCapacityFromPools(db, unownedDraws, {
     eraUnitScale: plants?.eraUnitScale ?? 1,
     now,
@@ -607,6 +595,7 @@ export async function processNppCorporationDecisions(
     entryDiagnostics,
     capexRows,
     capacityObservations,
+    operatorObservations,
   });
 
   return {
@@ -638,21 +627,13 @@ export function makeNppCorpDecision(
 
   const liquidCapital = corp.liquidCapital ?? 0;
   const passive = ctx.caretakerMandate === "passive";
-  // Running balance across the spending sections below (founding, then
-  // reinvestment). Both charge the SAME `liquidCapital`, so a section that read
-  // the opening balance after another had already committed would let the corp
-  // spend the same money twice and land under its own cash floor.
   let cashLocal = liquidCapital;
   const numSectors = sectors.length;
 
-  // ₳ → the corp's own currency. `liquidCapital` is local; every money constant
-  // in this module is anchor. See `NppCorpDecisionContext.fxRate`.
   const corpCurrencyCode = resolveCorpLiquidCurrencyCode(corp);
   const corpFxRate = ctx.fxRate ?? 1;
   const toCorpLocal = (amountAnchor: number): number =>
     anchorToCorpCapital(amountAnchor, corpCurrencyCode, corpFxRate);
-  // Capacity-decision telemetry: cohort, observations, rival counts off the
-  // shell's in-memory index (no turn-path reads). See capacityDecisionTelemetry.
   const cashToAnchor = makeCapacityCashToAnchor(corp, corpFxRate);
   const capacityCohort = resolveCapacityCohort(corp);
   const capacityObservations: CapacityDecisionObservation[] = [];
@@ -1158,7 +1139,6 @@ export function makeNppCorpDecision(
   if (rdBudget !== (corp.rdBudget ?? 0)) updates.rdBudget = rdBudget;
 
   // ── 4. Dividend policy ────────────────────────────────────────────────────
-  // Only pay dividends when profitable with strong margins AND above cash floor.
   // Rate scales with margin — higher margin = higher payout. isProfitable/
   // corpMargin are net of overhead (see profitability-analysis block above) —
   // a corp whose marketing/logistics/R&D/CEO-salary spend is eating its
@@ -1191,6 +1171,17 @@ export function makeNppCorpDecision(
       cashFloorLocal: effectiveCashFloor,
       sectorUpdates,
       strategy: strategyDecision?.state,
+      operatorObservation: buildNppOperatorObservation({
+        passive: true,
+        profitable: isProfitable,
+        marginPct: corpMargin,
+        cashCrisis: isCashCrisis,
+        entryReason: entryDiagnostic?.reason,
+        dividendRate: 0,
+        divestedSectors: divestedSectorIds.length,
+        reinvestments: 0,
+        cashHeadroomAnchor: cashToAnchor(cashLocal - effectiveCashFloor),
+      }),
     };
   }
 
@@ -1993,5 +1984,16 @@ export function makeNppCorpDecision(
     entryDiagnostic,
     strategy: strategyDecision?.state,
     capacityObservations,
+    operatorObservation: buildNppOperatorObservation({
+      passive: false,
+      profitable: isProfitable,
+      marginPct: corpMargin,
+      cashCrisis: isCashCrisis,
+      entryReason: entryDiagnostic?.reason,
+      dividendRate: targetDividendRate,
+      divestedSectors: divestedSectorIds.length,
+      reinvestments: reinvestments.length,
+      cashHeadroomAnchor: cashToAnchor(cashLocal - effectiveCashFloor),
+    }),
   };
 }

@@ -1,4 +1,4 @@
-import { allocateSeats, type MajoritarianBonusConfig } from "@/lib/turn/election/seatAllocation";
+import { allocateSeats } from "@/lib/turn/election/seatAllocation";
 import { MULTI_SEAT_TYPES } from "@/lib/utils/electionLabels";
 import { HOUSE_SEATS } from "@/lib/constants";
 
@@ -16,11 +16,7 @@ export function seatEstimateForVoteTotals(
   totalSeats: number | null | undefined,
   cumulativeVotes: Record<string, number>,
   houseSeats: Record<string, number> = HOUSE_SEATS,
-  candidateParties?: Record<string, string>,
-  // FPTP winner's bonus (#3244) — pass getMajoritarianBonus(electionType,
-  // gameState.currentYear) so backfilled snapshot estimates match resolution
-  // in historical in-game years (pre-1999).
-  majoritarianBonus?: MajoritarianBonusConfig
+  candidateParties?: Record<string, string>
 ): Record<string, number> | undefined {
   if (!totalSeats || totalSeats <= 1 || !MULTI_SEAT_TYPES.has(electionType)) return undefined;
 
@@ -44,8 +40,7 @@ export function seatEstimateForVoteTotals(
     totalSeats,
     ranked,
     totalVotesCast,
-    houseSeats,
-    majoritarianBonus
+    houseSeats
   );
   return Object.keys(seatsEstimate).length > 0 ? seatsEstimate : undefined;
 }

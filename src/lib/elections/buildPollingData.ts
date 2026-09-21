@@ -1,9 +1,5 @@
 import type { PoliticalParty, PrimarySnapshot, ElectionVoteTally } from "@/lib/db/types";
-import {
-  getMultiSeatMinShare,
-  largestRemainderSeats,
-  type MajoritarianBonusConfig,
-} from "@/lib/turn/election/seatAllocation";
+import { getMultiSeatMinShare, largestRemainderSeats } from "@/lib/turn/election/seatAllocation";
 import type { PartyGroup } from "./candidateEnrichment";
 import type { PollingData } from "./electionResponseTypes";
 import { MULTI_SEAT_TYPES } from "@/lib/utils/electionLabels";
@@ -24,12 +20,7 @@ export function computeSeatEstimates(
   electionType: string,
   totalSeats: number | null | undefined,
   tally: ElectionVoteTally | null,
-  activeCandidateIdSet: Set<string>,
-  // FPTP winner's bonus (#3244): pass getMajoritarianBonus(electionType,
-  // gameState.currentYear) so the projected-seats panel matches how the race
-  // will actually resolve in historical in-game years (pre-1999).
-  // Omitted/undefined → proportional (current behavior).
-  majoritarianBonus?: MajoritarianBonusConfig
+  activeCandidateIdSet: Set<string>
 ): Record<string, number> | null {
   // Same gate as the engine (allocateSeats + the per-turn estimate in
   // tallyManagement): every MULTI_SEAT_TYPES race, plus a "senate" race that
@@ -54,9 +45,7 @@ export function computeSeatEstimates(
   }
   if (totalActiveVotes === 0) return null;
 
-  const minShare = getMultiSeatMinShare(electionType, {
-    majoritarian: majoritarianBonus !== undefined,
-  });
+  const minShare = getMultiSeatMinShare(electionType);
 
   // Eligibility, the fallback and Largest Remainder come from the resolver's
   // own implementation (#585), so the panel cannot drift from the seats the
@@ -73,7 +62,7 @@ export function computeSeatEstimates(
       party: tally.candidateParties?.[cid],
     })),
     totalSeats,
-    { minShare, totalVotesForShare: totalActiveVotes, majoritarianBonus }
+    { minShare, totalVotesForShare: totalActiveVotes }
   );
   if (poolVotes === 0) return null;
 

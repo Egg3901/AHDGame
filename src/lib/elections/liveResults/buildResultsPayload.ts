@@ -9,16 +9,14 @@
  *
  * The only behavioural seam added during the lift is `opts.apportionmentYear`.
  * The route passes null and gets the current year, exactly as before; a capture
- * passes the race's own year so every year-sensitive result rule, including
- * the electoral-vote map and majoritarian bonuses, is the one that governed
- * when the race ran.
+ * passes the race's own year so the electoral-vote map is the one that
+ * governed when the race ran.
  */
 import type { Db } from "mongodb";
 import type { ObjectId } from "mongodb";
 import { loadApportionment } from "@/lib/elections/apportionment";
 import { computeSeatEstimates } from "@/lib/elections/buildPollingData";
 import { resolvedSeatsEstimate } from "@/lib/elections/resolvedSeatsEstimate";
-import { getMajoritarianBonus } from "@/lib/turn/election/seatAllocation";
 import {
   computeBaselineReportingPct,
   computeElectoralTotals,
@@ -268,20 +266,10 @@ export async function buildResultsPayload(
   // `resolvedSeatsEstimate(tally, null)` first so a finalized race
   // short-circuits before the org-ranking round-trip, exactly as the old
   // `??` did.
-  // Captures and backfills must apply every year-sensitive result rule to the
-  // race's own year, not only the presidential apportionment map. Live reads
-  // pass null and retain the previous current-year behaviour.
-  const resultYear = opts.apportionmentYear ?? gameState?.currentYear;
   const seatsEstimate =
     !isPresident && tally
       ? (resolvedSeatsEstimate(tally, null) ??
-        computeSeatEstimates(
-          election.electionType,
-          election.totalSeats,
-          tally,
-          rosterIds,
-          getMajoritarianBonus(election.electionType, resultYear)
-        ))
+        computeSeatEstimates(election.electionType, election.totalSeats, tally, rosterIds))
       : null;
 
   // ── Candidate totals ──────────────────────────────────────────────────
@@ -325,15 +313,13 @@ export async function buildResultsPayload(
     ),
   ].sort((a, b) => b.totalVotes - a.totalVotes);
 
-  // ── National Westminster-style aggregation ────────────────────────────
-  const nationalBonus = getMajoritarianBonus(election.electionType, resultYear);
+  // ── National seat aggregation ─────────────────────────────────────────
   const national = await buildNationalElectionNight(
     db,
     election,
     partyMap,
     finalHour?.progress ?? null,
-    isEnded,
-    nationalBonus
+    isEnded
   );
 
   // ── Summary ───────────────────────────────────────────────────────────
