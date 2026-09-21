@@ -185,13 +185,13 @@ describe("aggregateCountrySectorMix", () => {
     expect(automobiles.totalMarketAnchor).toBe(2_600_000);
     expect(automobiles.ownedPercent).toBeCloseTo(3.8, 1);
 
-    const entertainment = mix.find((s) => s.type === "entertainment")!;
-    // Entertainment has no plant yet, but its consumer-service demand still
-    // creates a real latent market.
-    // The standard entertainment mix is one-third entertainment services by
-    // capacity weight, so 1,000 latent service units imply $1.5M of sector
+    const entertainment = mix.find((s) => s.type === "media_entertainment")!;
+    // Media and entertainment has no plant yet, but its consumer-service demand
+    // still creates a real latent market.
+    // The unified standard mix values entertainment alongside advertising, so
+    // 1,000 latent service units imply $2M of sector
     // capacity on the same basis.
-    expect(entertainment.totalMarketAnchor).toBe(1_500_000);
+    expect(entertainment.totalMarketAnchor).toBe(2_000_000);
     expect(entertainment.ownedPercent).toBe(0);
     expect(db.collectionMocks.unownedSectors!.find).not.toHaveBeenCalled();
     // Plants has no persisted target-growth signal; exposing 0.00% here would

@@ -53,7 +53,6 @@ export const UNION_LOGOS: Record<string, string> = {
   Handels: `${COMMONS}Handels_logo.svg`,
   Unionen: `${COMMONS}Unionen_logo.svg`,
   Vårdförbundet: `${COMMONS}V%C3%A5rdf%C3%B6rbundet_logotyp.png`,
-  Journalistförbundet: `${COMMONS}Journalistf%C3%B6rbundet_logotyp.png`,
   // TR
   "Basın-İş": `${COMMONS}D%C4%B0SK_Bas%C4%B1n-%C4%B0%C5%9F_Logosu.png`,
 
@@ -87,8 +86,6 @@ export const UNION_LOGOS: Record<string, string> = {
   "National Union of Railwaymen": `${WIKIPEDIA}National_Union_of_Railwaymen_logo.jpg`,
   // The 1953 seeded name for the same union, which the article files under its
   // modern title.
-  "American Newspaper Guild": `${WIKIPEDIA}NewsGuildCWALogo20211124.png`,
-  "NewsGuild-CWA": `${WIKIPEDIA}NewsGuildCWALogo20211124.png`,
   "Nigeria Labour Congress": `${WIKIPEDIA}Nigeria_Labour_Congress_logo.svg`,
   // OCAW is the Oil Workers International Union under its later name.
   "Oil Workers International Union": `${WIKIPEDIA}OCAW_logo.png`,

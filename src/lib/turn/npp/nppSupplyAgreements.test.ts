@@ -382,7 +382,7 @@ describe("decideNppSupplyAgreements — media capacity parity", () => {
       isNatcorp: false,
       sectors: [
         {
-          sectorType: "media",
+          sectorType: "media_entertainment",
           capitalStock: 10_000,
           strategyId: "standard",
           productionPolicyLevel: 0,

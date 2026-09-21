@@ -134,6 +134,8 @@ export const gameConfig: GameConfig = {
   extractionOutputScaleEnabled: true,
   commodityScarcityDriftEnabled: true,
   qualityPremiumPricingEnabled: true,
+  // Next-iteration product lifecycles ship dark until migration + sim evidence lands.
+  corporationProductsEnabled: false,
   sectorQualityEnabled: true,
   stockCoverCapEnabled: true,
   supplyAgreementsEnabled: true,

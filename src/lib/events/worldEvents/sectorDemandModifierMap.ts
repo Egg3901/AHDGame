@@ -14,7 +14,7 @@ import { getCountryModifiersCollection } from "@/lib/db/collections/countryModif
  * World Events v1 Phase 4: total cap on summed sectorDemandModifier pct per
  * (country, sector), per plan §7 ("additive pct with a total cap, validated
  * in sim"). Worst-case overlap observed across the whole catalog is Olympics
- * host + royalEvent on "entertainment" (8% + 5% = 13%, UK-only) and
+ * host + royalEvent on "media_entertainment" (8% + 5% = 13%, UK-only) and
  * worlds-fair host + scientificBreakthrough on "technology" (5% + 6% = 11%)
  * — sim_economy_whatif projects both as bounded single-digit-to-low-teens
  * price moves with no runaway inflation (see Phase 4 handoff). This cap is

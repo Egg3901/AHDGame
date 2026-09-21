@@ -11,8 +11,8 @@ describe("2026-06-01-index-fund-seed migration", () => {
 
   it("seeds exactly the number of definitions in getAllFundDefinitions", () => {
     const definitions = getAllFundDefinitions();
-    // 16 country funds (8 countries × 2 each) + 1 global broad + 17 sector + 12 bond = 46
-    expect(definitions.length).toBe(46);
+    // 16 country funds (8 countries × 2 each) + 1 global broad + 16 sector + 12 bond = 45
+    expect(definitions.length).toBe(45);
   });
 
   it("produces valid fund documents with all required fields", () => {

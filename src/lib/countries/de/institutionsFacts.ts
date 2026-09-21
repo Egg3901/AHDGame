@@ -162,7 +162,7 @@ export const DE_CONFIG: CountryConfig = {
   },
   imperialCorporation: {
     name: "Federal Cultural Foundation",
-    sector: "media",
+    sector: "media_entertainment",
   },
   status: "active",
   tagline:

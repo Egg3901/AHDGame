@@ -642,7 +642,8 @@ export async function batchSpawnNppCorporations(
 
 const SECTOR_NAME_PREFIXES: Record<CorporationType, string[]> = {
   financial: ["First", "National", "Union", "Metro", "Central"],
-  media: ["Daily", "Metro", "National", "Global", "Prime"],
+  // issue #2234: merged newsroom and venue prefixes in one bank.
+  media_entertainment: ["Daily", "Metro", "National", "Global", "Prime", "Star", "Show"],
   manufacturing: ["Atlas", "Prime", "National", "United", "Standard"],
   chemical_industries: ["Nova", "Chem", "Atlas", "Prime", "National"],
   healthcare: ["Med", "Health", "Care", "Life", "Prime"],
@@ -655,14 +656,24 @@ const SECTOR_NAME_PREFIXES: Record<CorporationType, string[]> = {
   construction: ["Build", "Construct", "Atlas", "Prime", "United"],
   defense: ["Defense", "Shield", "Atlas", "Prime", "National"],
   telecommunications: ["Tele", "Comms", "Net", "Prime", "National"],
-  entertainment: ["Star", "Prime", "Show", "Media", "Global"],
   logistics: ["Logi", "Freight", "Transport", "Prime", "National"],
   extraction: ["Mine", "Extract", "Resource", "Atlas", "Prime"],
 };
 
 const SECTOR_NAME_SUFFIXES: Record<CorporationType, string[]> = {
   financial: ["Bank", "Financial", "Capital", "Trust", "Holdings"],
-  media: ["Media", "News", "Broadcasting", "Press", "Communications"],
+  // issue #2234: merged newsroom and venue suffixes in one bank.
+  media_entertainment: [
+    "Media",
+    "News",
+    "Broadcasting",
+    "Press",
+    "Communications",
+    "Entertainment",
+    "Studios",
+    "Productions",
+    "Group",
+  ],
   manufacturing: ["Industries", "Manufacturing", "Works", "Products", "Group"],
   chemical_industries: ["Chemicals", "Industries", "Materials", "Science", "Group"],
   healthcare: ["Healthcare", "Medical", "Health", "Clinics", "Systems"],
@@ -675,7 +686,6 @@ const SECTOR_NAME_SUFFIXES: Record<CorporationType, string[]> = {
   construction: ["Construction", "Builders", "Contracting", "Development", "Engineering"],
   defense: ["Systems", "Industries", "Defense", "Technologies", "Contractors"],
   telecommunications: ["Communications", "Telecom", "Networks", "Wireless", "Systems"],
-  entertainment: ["Entertainment", "Studios", "Productions", "Media", "Group"],
   logistics: ["Logistics", "Shipping", "Transport", "Freight", "Supply"],
   extraction: ["Mining", "Resources", "Materials", "Extraction", "Industries"],
 };

@@ -13,6 +13,7 @@
  * only name, description and effects.
  */
 import type { CorporationType } from "../../corporations";
+import { mergeLaneMaps } from "../mediaMerge";
 import type { V3LaneContent } from "./types";
 import { CORPORATE_V3 } from "./corporate";
 import { AGRICULTURE_V3 } from "./agriculture";
@@ -44,13 +45,15 @@ export const SECTOR_V3: Partial<Record<CorporationType, V3LaneContent>> = {
   construction: CONSTRUCTION_V3,
   defense: DEFENSE_V3,
   energy: ENERGY_V3,
-  entertainment: ENTERTAINMENT_V3,
   extraction: EXTRACTION_V3,
   financial: FINANCIAL_V3,
   healthcare: HEALTHCARE_V3,
   logistics: LOGISTICS_V3,
   manufacturing: MANUFACTURING_V3,
-  media: MEDIA_V3,
+  // Issue #2234: the separate media/entertainment v3 lanes merge into one
+  // media_entertainment lane (entries media[0], entertainment[0], media[1];
+  // capstones media[3], entertainment[3], media[4]).
+  media_entertainment: mergeLaneMaps(MEDIA_V3, ENTERTAINMENT_V3, "v3"),
   real_estate: REAL_ESTATE_V3,
   retail: RETAIL_V3,
   technology: TECHNOLOGY_V3,
