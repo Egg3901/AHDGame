@@ -13,9 +13,14 @@ vi.mock("@/lib/bonds/marketPool", async (importOriginal) => {
 vi.mock("@/lib/indexFunds/fundQueries", () => ({
   insertFundTransaction: vi.fn().mockResolvedValue(new ObjectId()),
 }));
+vi.mock("@/lib/financialTxLog/emit", () => ({
+  emitTx: vi.fn().mockResolvedValue(undefined),
+  loadTxThresholds: vi.fn().mockResolvedValue({}),
+}));
 
 import { loadBondQuote } from "@/lib/bonds/marketPool";
 import { insertFundTransaction } from "@/lib/indexFunds/fundQueries";
+import { emitTx, loadTxThresholds } from "@/lib/financialTxLog/emit";
 import { sellFundBondHoldingsForCash } from "./sellFundBondUnits";
 
 let db: MockDb;
@@ -81,6 +86,61 @@ describe("sellFundBondHoldingsForCash", () => {
     const result = await sellFundBondHoldingsForCash(db as unknown as Db, fund, 5_000);
     expect(result.unitsSold).toBe(0);
     expect(db.collectionMocks.bonds.updateOne).not.toHaveBeenCalled();
+  });
+
+  it("emits one fund-subject bond_sell row per committed sale when a turn is passed", async () => {
+    const bond = {
+      _id: new ObjectId(),
+      currencyCode: "USD",
+      issuerName: "US Treasury",
+      marketPrice: 1,
+      holders: [{ fundId, units: 10 }],
+    };
+    db.collectionMocks.bonds.find.mockReturnValue({ toArray: async () => [bond] });
+    vi.mocked(loadBondQuote).mockResolvedValue({ bidPerUnit: 980, depthUnitsAtBid: 100 } as never);
+    db.collectionMocks.bondMarketPools.findOneAndUpdate.mockResolvedValue({ cashLocal: 1 });
+    db.collectionMocks.bonds.updateOne.mockResolvedValue({ matchedCount: 1, modifiedCount: 1 });
+
+    const result = await sellFundBondHoldingsForCash(db as unknown as Db, fund, 1_000, new Date(), {
+      turn: 7,
+      thresholds: { fund: {} },
+    } as never);
+
+    expect(result.unitsSold).toBe(2);
+    expect(vi.mocked(loadTxThresholds)).not.toHaveBeenCalled();
+    expect(emitTx).toHaveBeenCalledTimes(1);
+    expect(emitTx).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        type: "bond_sell",
+        turn: 7,
+        subjectType: "fund",
+        subjectId: fundId,
+        amount: result.proceedsAnchor,
+        anchorAmount: result.proceedsAnchor,
+        currencyCode: "USD",
+        counterpartyType: "system",
+      }),
+      { fund: {} }
+    );
+  });
+
+  it("emits no ledger row when no turn is passed", async () => {
+    const bond = {
+      _id: new ObjectId(),
+      currencyCode: "USD",
+      marketPrice: 1,
+      holders: [{ fundId, units: 10 }],
+    };
+    db.collectionMocks.bonds.find.mockReturnValue({ toArray: async () => [bond] });
+    vi.mocked(loadBondQuote).mockResolvedValue({ bidPerUnit: 980, depthUnitsAtBid: 100 } as never);
+    db.collectionMocks.bondMarketPools.findOneAndUpdate.mockResolvedValue({ cashLocal: 1 });
+    db.collectionMocks.bonds.updateOne.mockResolvedValue({ matchedCount: 1, modifiedCount: 1 });
+
+    const result = await sellFundBondHoldingsForCash(db as unknown as Db, fund, 1_000);
+
+    expect(result.unitsSold).toBe(2);
+    expect(emitTx).not.toHaveBeenCalled();
   });
 
   it("refunds the pool when the holder release loses a race", async () => {

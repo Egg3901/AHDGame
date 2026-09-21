@@ -878,6 +878,12 @@ const RUNTIME: CollectionEntry[] = [
   { name: "indexFundRedemptionQueue", category: "runtime" },
   { name: "indexFundSnapshots", category: "runtime" },
   { name: "indexFundTransactions", category: "runtime" },
+  {
+    name: "pensionSchemes",
+    category: "runtime",
+    notes:
+      "Per-world pension balances, holdings, liabilities, and sponsor state. Rebuilt through gameplay and must not survive a world reset.",
+  },
 
   // Trade / diplomacy / international-org runtime.
   { name: "tradeEmbargoes", category: "runtime" },

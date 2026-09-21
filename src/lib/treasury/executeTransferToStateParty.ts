@@ -231,6 +231,7 @@ export async function executeTransferToStateParty(
       counterpartyName: `${state.name} state party`,
       meta: {
         partyId: String(party._id),
+        statePartyKey,
         stateId: upperStateId,
         countryId,
         side: "national_outflow",
@@ -248,6 +249,7 @@ export async function executeTransferToStateParty(
       counterpartyName: party.name,
       meta: {
         partyId: String(party._id),
+        statePartyKey,
         stateId: upperStateId,
         countryId,
         side: "state_inflow",

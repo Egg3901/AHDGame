@@ -10,6 +10,7 @@ import type {
   MoneySupplyFinding,
   ReconcileReport,
   ReconcileStatus,
+  StockVsFlowByKind,
   StockVsFlowFinding,
   TrialBalanceFinding,
 } from "@/lib/ledger/types";
@@ -25,6 +26,12 @@ function worseStatus(a: ReconcileStatus, b: ReconcileStatus): ReconcileStatus {
 
 export interface ReconcileInput {
   turn: number;
+  /**
+   * `gameConfig.savingsAccountsMode` the turn ran under (shell-supplied,
+   * plain data). Echoed onto the report so the persisted doc carries
+   * per-turn banking history. Absent means unknown, never authoritative.
+   */
+  bankingMode?: string | null;
   entries: LedgerEntry[];
   openingBalances: Record<string, number>;
   closingBalances: Record<string, number>;
@@ -107,6 +114,7 @@ export function reconcileLedger(input: ReconcileInput): ReconcileReport {
         divergence,
         uninstrumented: Math.abs(led) < eps && Math.abs(actualDelta) >= eps,
         candidateEmitSites: [...(emitSitesByAccount.get(account) ?? [])],
+        lifecycleHint: lifecycleHintFor(account, input),
       });
     }
     stockFindings.sort((a, b) => Math.abs(b.divergence) - Math.abs(a.divergence));
@@ -181,6 +189,7 @@ export function reconcileLedger(input: ReconcileInput): ReconcileReport {
   return {
     turn,
     generatedAt: new Date(),
+    bankingMode: input.bankingMode ?? null,
     status,
     entriesChecked: entries.length,
     trialBalance: {
@@ -193,6 +202,7 @@ export function reconcileLedger(input: ReconcileInput): ReconcileReport {
       skipped: Boolean(input.skipStockVsFlow),
       divergentCount: input.skipStockVsFlow ? null : stockFindings.length,
       findings: stockFindings.slice(0, MAX_FINDINGS),
+      byKind: summarizeStockVsFlowByKind(stockFindings),
     },
     moneySupply: {
       status: supplyStatus,
@@ -202,6 +212,28 @@ export function reconcileLedger(input: ReconcileInput): ReconcileReport {
       .sort((a, b) => b.anchorAmount - a.anchorAmount)
       .slice(0, MAX_FINDINGS),
   };
+}
+
+/**
+ * Roll the FULL (pre-cap) stock-vs-flow finding list into a per-kind
+ * inventory ranked by unexplained balance change (Σ|divergence|). Pure.
+ */
+export function summarizeStockVsFlowByKind(findings: StockVsFlowFinding[]): StockVsFlowByKind[] {
+  const byKind = new Map<string, StockVsFlowByKind>();
+  for (const finding of findings) {
+    const kind = accountKind(finding.account);
+    const row = byKind.get(kind) ?? {
+      kind,
+      divergentCount: 0,
+      absDivergence: 0,
+      uninstrumentedCount: 0,
+    };
+    row.divergentCount += 1;
+    row.absDivergence += Math.abs(finding.divergence);
+    if (finding.uninstrumented) row.uninstrumentedCount += 1;
+    byKind.set(kind, row);
+  }
+  return [...byKind.values()].sort((a, b) => b.absDivergence - a.absDivergence);
 }
 
 function rateForAccount(account: string, rates: Record<string, number> | undefined): number {
@@ -214,10 +246,61 @@ function rateForAccount(account: string, rates: Record<string, number> | undefin
  * leaving an account. Before the checkpoint, flows are valued at the
  * pre-forex rate. After it, flows are valued at the closing rate.
  */
+/**
+ * Account-lifecycle evidence for a divergent account, read off the snapshot
+ * key pair (#992). Pure hint: callers must still treat the finding as
+ * unexplained divergence, never as reconciled.
+ */
+function lifecycleHintFor(
+  account: string,
+  input: ReconcileInput
+): StockVsFlowFinding["lifecycleHint"] {
+  const hasOpening = account in input.openingBalances;
+  const hasClosing = account in input.closingBalances;
+  if (!hasOpening && hasClosing) {
+    // Same balance re-keyed under another currency reads as created + closed;
+    // report the conversion, which is the actionable evidence.
+    return hasRefUnderOtherCurrency(account, counterpartSide(input, "opening"))
+      ? "currency_rekey"
+      : "created";
+  }
+  if (hasOpening && !hasClosing) {
+    return hasRefUnderOtherCurrency(account, counterpartSide(input, "closing"))
+      ? "currency_rekey"
+      : "closed";
+  }
+  return undefined;
+}
+
+/**
+ * The snapshot holding the re-keyed counterpart: when an account is missing
+ * from the opening pair side, its old-currency key (if any) sits in the
+ * opening snapshot, and vice versa.
+ */
+function counterpartSide(
+  input: ReconcileInput,
+  missing: "opening" | "closing"
+): Record<string, number> {
+  return missing === "opening" ? input.openingBalances : input.closingBalances;
+}
+
+/** True when kind+ref exists under a different trailing currency segment. */
+function hasRefUnderOtherCurrency(account: string, side: Record<string, number>): boolean {
+  const first = account.indexOf(":");
+  const last = account.lastIndexOf(":");
+  if (first === -1 || last === -1 || first === last) return false;
+  const kind = account.slice(0, first);
+  const ref = account.slice(first + 1, last);
+  const prefix = `${kind}:${ref}:`;
+  return Object.keys(side).some((other) => other !== account && other.startsWith(prefix));
+}
+
 function cashMovementDelta(input: ReconcileInput, account: string): number {
-  // NPP investment cash is stored directly in anchor units. Do not apply the
-  // account suffix's native-currency rate to this wallet.
-  if (accountKind(account) === "npp") {
+  // NPP investment cash, index-fund cash, and pension-scheme cash are stored
+  // directly in anchor units. Do not apply the account suffix's
+  // native-currency rate to these wallets.
+  const kind = accountKind(account);
+  if (kind === "npp" || kind === "fund" || kind === "pension_scheme") {
     return (input.closingBalances[account] ?? 0) - (input.openingBalances[account] ?? 0);
   }
   if (
@@ -251,7 +334,7 @@ function cashMovementDelta(input: ReconcileInput, account: string): number {
 export async function reconcileTurn(
   db: Db,
   turn: number,
-  opts: { skipStockVsFlow?: boolean } = {}
+  opts: { skipStockVsFlow?: boolean; savingsAccountsMode?: string | null } = {}
 ): Promise<ReconcileReport | null> {
   try {
     const entries = await db
@@ -271,6 +354,7 @@ export async function reconcileTurn(
 
     const report = reconcileLedger({
       turn,
+      bankingMode: opts.savingsAccountsMode ?? null,
       entries,
       openingBalances: opening?.balances ?? {},
       closingBalances: closing?.balances ?? {},
