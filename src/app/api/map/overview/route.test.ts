@@ -35,7 +35,12 @@ vi.mock("@/lib/map/presidentialService", () => ({
 }));
 
 vi.mock("@/lib/elections/usPoliticalHome", () => ({
-  loadUsPoliticalStateIds: vi.fn().mockResolvedValue({ politicalIds: new Set(["CA"]) }),
+  loadUsPoliticalStateIds: vi.fn().mockResolvedValue({
+    politicalIds: new Set(["CA"]),
+    preset: "1953-default",
+    currentYear: 1953,
+    admittedIds: new Set(),
+  }),
 }));
 vi.mock("@/lib/map/officeholderService", () => ({
   computeMapOfficeholders: vi.fn().mockResolvedValue({
@@ -74,6 +79,8 @@ describe("GET /api/map/overview?countryId=US", () => {
     const response = await GET(new Request("http://t/api/map/overview?countryId=US"));
     const body = await response.json();
     expect(response.status).toBe(200);
+    expect(body.electoralVotesByState.CA).toBeGreaterThan(0);
+    expect(body.electoralVotesByState.DC).toBeUndefined();
     expect(body.officeholders.CA[0]).toMatchObject({
       office: "governor",
       avatarUrl: "/portrait.png",

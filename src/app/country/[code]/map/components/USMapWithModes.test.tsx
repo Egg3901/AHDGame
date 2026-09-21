@@ -36,6 +36,7 @@ const data: MapOverviewResponse = {
   approval: {},
   lean: {},
   presidential: {},
+  electoralVotesByState: { CA: 55, TX: 38, DC: 3 },
   officeholders: {
     CA: [
       {
@@ -73,6 +74,15 @@ describe("US national atlas", () => {
     expect(open).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: /Open state page/ }));
     expect(open).toHaveBeenCalledWith("CA");
+  });
+  it("shows electoral allocation even without presidential results", () => {
+    mount();
+    fireEvent.change(screen.getByRole("combobox", { name: "Layer" }), {
+      target: { value: "electoralAllocation" },
+    });
+    expect(screen.getByText("96 electoral votes · 49 to win")).toBeTruthy();
+    expect(screen.getByText("Washington, DC: 3 electoral votes")).toBeTruthy();
+    expect(screen.queryByText("Presidential Results")).toBeNull();
   });
   it("filters the table and exposes a no-results state", () => {
     mount();
