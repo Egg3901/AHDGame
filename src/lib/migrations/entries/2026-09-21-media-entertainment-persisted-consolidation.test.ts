@@ -42,11 +42,25 @@ function resolvePath(doc: unknown, path: string): unknown[] {
 }
 
 function matchesCondition(values: unknown[], condition: unknown): boolean {
-  if (condition !== null && typeof condition === "object" && !Array.isArray(condition) && !(condition instanceof Date) && !isObjectId(condition)) {
+  // Mongo matches an array field when ANY element matches the predicate, so
+  // unwrap one level before comparing (e.g. { sectorTypes: { $in: [...] } }
+  // must hit a doc whose sectorTypes array contains a legacy label).
+  const candidates = (value: unknown): unknown[] => (Array.isArray(value) ? value : [value]);
+  if (
+    condition !== null &&
+    typeof condition === "object" &&
+    !Array.isArray(condition) &&
+    !(condition instanceof Date) &&
+    !isObjectId(condition)
+  ) {
     const ops = condition as Record<string, unknown>;
     if ("$in" in ops) {
       const list = Array.isArray(ops.$in) ? ops.$in : [];
-      return values.some((value) => value !== undefined && list.some((entry) => valuesEqual(value, entry)));
+      return values.some((value) =>
+        candidates(value).some(
+          (entry) => entry !== undefined && list.some((item) => valuesEqual(entry, item))
+        )
+      );
     }
     if ("$exists" in ops) {
       const exists = values.some((value) => value !== undefined);
@@ -54,13 +68,20 @@ function matchesCondition(values: unknown[], condition: unknown): boolean {
     }
     return false;
   }
-  return values.some((value) => valuesEqual(value, condition));
+  return values.some(
+    (value) =>
+      valuesEqual(value, condition) ||
+      candidates(value).some((entry) => valuesEqual(entry, condition))
+  );
 }
 
 function matchesQuery(doc: Doc, query: Doc): boolean {
   for (const [key, condition] of Object.entries(query)) {
     if (key === "$or") {
-      if (!Array.isArray(condition) || !(condition as Doc[]).some((clause) => matchesQuery(doc, clause as Doc))) {
+      if (
+        !Array.isArray(condition) ||
+        !(condition as Doc[]).some((clause) => matchesQuery(doc, clause as Doc))
+      ) {
         return false;
       }
       continue;
@@ -86,7 +107,8 @@ function setPath(doc: Doc, path: string, value: unknown): void {
 
 function applyUpdate(doc: Doc, update: Doc, isInsert: boolean): void {
   if (isInsert && update.$setOnInsert !== null && typeof update.$setOnInsert === "object") {
-    for (const [path, value] of Object.entries(update.$setOnInsert as Doc)) setPath(doc, path, value);
+    for (const [path, value] of Object.entries(update.$setOnInsert as Doc))
+      setPath(doc, path, value);
   }
   if (update.$set !== null && typeof update.$set === "object") {
     for (const [path, value] of Object.entries(update.$set as Doc)) setPath(doc, path, value);
@@ -107,7 +129,8 @@ function makeDb(seed: Record<string, Doc[]>): Db {
         toArray: async () => docs().filter((doc) => matchesQuery(doc, filter)),
       }),
       findOne: async (filter: Doc = {}) => docs().find((doc) => matchesQuery(doc, filter)) ?? null,
-      countDocuments: async (filter: Doc = {}) => docs().filter((doc) => matchesQuery(doc, filter)).length,
+      countDocuments: async (filter: Doc = {}) =>
+        docs().filter((doc) => matchesQuery(doc, filter)).length,
       insertOne: async (doc: Doc) => {
         docs().push({ ...doc });
         return { acknowledged: true, insertedId: doc._id };
@@ -120,7 +143,10 @@ function makeDb(seed: Record<string, Doc[]>): Db {
         }
         if (options?.upsert) {
           const created: Doc = {};
-          if (filter._id !== undefined && (typeof filter._id !== "object" || isObjectId(filter._id))) {
+          if (
+            filter._id !== undefined &&
+            (typeof filter._id !== "object" || isObjectId(filter._id))
+          ) {
             created._id = filter._id;
           } else {
             created._id = new ObjectId();
@@ -194,11 +220,12 @@ function baseWorld(overrides: Record<string, Doc[]> = {}): Db {
 }
 
 async function all(db: Db, name: string): Promise<Doc[]> {
-  return (await (db.collection(name).find({}) as unknown as { toArray: () => Promise<Doc[]> }).toArray());
+  return await (
+    db.collection(name).find({}) as unknown as { toArray: () => Promise<Doc[]> }
+  ).toArray();
 }
 
-const run = (db: Db, dryRun = false) =>
-  consolidateMediaEntertainment(db, { dryRun });
+const run = (db: Db, dryRun = false) => consolidateMediaEntertainment(db, { dryRun });
 
 describe("no-collision rewrite", () => {
   it("rekeys corp, sector, union, campaign, agreement, designation, and history rows", async () => {
@@ -227,37 +254,88 @@ describe("no-collision rewrite", () => {
         },
       ],
       unownedSectors: [
-        { _id: oid("300000000000000000000001"), countryId: "US", stateId: "US:NY", sectorType: "entertainment", revenue: 40, createdAt: T1 },
+        {
+          _id: oid("300000000000000000000001"),
+          countryId: "US",
+          stateId: "US:NY",
+          sectorType: "entertainment",
+          revenue: 40,
+          createdAt: T1,
+        },
       ],
       unions: [
-        { _id: oid("400000000000000000000001"), countryId: "US", sectorType: "media", name: "Media Union", treasury: 100, foundedByCharacterId: null, createdAt: T1 },
+        {
+          _id: oid("400000000000000000000001"),
+          countryId: "US",
+          sectorType: "media",
+          name: "Media Union",
+          treasury: 100,
+          foundedByCharacterId: null,
+          createdAt: T1,
+        },
       ],
       bargainingCampaigns: [
-        { _id: oid("500000000000000000000001"), countryId: "US", sectorType: "entertainment", unionId: oid("400000000000000000000001"), status: "open" },
+        {
+          _id: oid("500000000000000000000001"),
+          countryId: "US",
+          sectorType: "entertainment",
+          unionId: oid("400000000000000000000001"),
+          status: "open",
+        },
       ],
       collectiveAgreements: [
-        { _id: oid("600000000000000000000001"), countryId: "US", sectorType: "media", unionId: oid("400000000000000000000001"), status: "active" },
+        {
+          _id: oid("600000000000000000000001"),
+          countryId: "US",
+          sectorType: "media",
+          unionId: oid("400000000000000000000001"),
+          status: "active",
+        },
       ],
       strategicSectorDesignations: [
-        { _id: oid("700000000000000000000001"), countryId: "US", sectorType: "entertainment", designatedAtTurn: 3, source: "seed" },
+        {
+          _id: oid("700000000000000000000001"),
+          countryId: "US",
+          sectorType: "entertainment",
+          designatedAtTurn: 3,
+          source: "seed",
+        },
       ],
       marketCapHistory: [
-        { _id: oid("800000000000000000000001"), turn: 41, bySector: { media: 5, entertainment: 7, energy: 1 } },
+        {
+          _id: oid("800000000000000000000001"),
+          turn: 41,
+          bySector: { media: 5, entertainment: 7, energy: 1 },
+        },
       ],
-      nationalizationLedger: [{ _id: oid("900000000000000000000001"), sectorTypes: ["media", "energy"] }],
+      nationalizationLedger: [
+        { _id: oid("900000000000000000000001"), sectorTypes: ["media", "energy"] },
+      ],
       states: [
         {
           _id: oid("a00000000000000000000001"),
           sectorSpecializations: { primary: "media", secondary: "energy" },
-          topSectorsCache: { sectors: [{ sectorType: "entertainment", revenue: 9 }], computedAtTurn: 41 },
+          topSectorsCache: {
+            sectors: [{ sectorType: "entertainment", revenue: 9 }],
+            computedAtTurn: 41,
+          },
         },
       ],
       sentimentPulses: [{ _id: oid("b00000000000000000000001"), sectorType: "entertainment" }],
-      countryModifiers: [{ _id: oid("c00000000000000000000001"), kind: "sectorDemandModifier", sectorType: "media", pct: 5 }],
+      countryModifiers: [
+        {
+          _id: oid("c00000000000000000000001"),
+          kind: "sectorDemandModifier",
+          sectorType: "media",
+          pct: 5,
+        },
+      ],
       bills: [
         {
           _id: oid("d00000000000000000000001"),
-          provisions: [{ type: "subsidy", targetSectorType: "media", targetStrategyId: "streaming_media" }],
+          provisions: [
+            { type: "subsidy", targetSectorType: "media", targetStrategyId: "streaming_media" },
+          ],
         },
       ],
     });
@@ -276,7 +354,9 @@ describe("no-collision rewrite", () => {
     expect(sectors[0]!.strategyId).toBe("streaming");
 
     const models = await all(db, "corporationOperatingModels");
-    expect(new Set(models.map((doc) => doc.operatingModel))).toEqual(new Set(MEDIA_OPERATING_MODELS));
+    expect(new Set(models.map((doc) => doc.operatingModel))).toEqual(
+      new Set(MEDIA_OPERATING_MODELS)
+    );
     expect(models).toHaveLength(MEDIA_OPERATING_MODELS.length);
     expect(models.every((doc) => doc.acquiredTurn === 42)).toBe(true);
 
@@ -284,12 +364,22 @@ describe("no-collision rewrite", () => {
     expect((await all(db, "unions"))[0]!.sectorType).toBe("media_entertainment");
     expect((await all(db, "bargainingCampaigns"))[0]!.sectorType).toBe("media_entertainment");
     expect((await all(db, "collectiveAgreements"))[0]!.sectorType).toBe("media_entertainment");
-    expect((await all(db, "strategicSectorDesignations"))[0]!.sectorType).toBe("media_entertainment");
-    expect((await all(db, "marketCapHistory"))[0]!.bySector).toEqual({ energy: 1, media_entertainment: 12 });
-    expect((await all(db, "nationalizationLedger"))[0]!.sectorTypes).toEqual(["media_entertainment", "energy"]);
+    expect((await all(db, "strategicSectorDesignations"))[0]!.sectorType).toBe(
+      "media_entertainment"
+    );
+    expect((await all(db, "marketCapHistory"))[0]!.bySector).toEqual({
+      energy: 1,
+      media_entertainment: 12,
+    });
+    expect((await all(db, "nationalizationLedger"))[0]!.sectorTypes).toEqual([
+      "media_entertainment",
+      "energy",
+    ]);
     const states = await all(db, "states");
     expect((states[0]!.sectorSpecializations as Doc).primary).toBe("media_entertainment");
-    expect(((states[0]!.topSectorsCache as Doc).sectors as Doc[])[0]!.sectorType).toBe("media_entertainment");
+    expect(((states[0]!.topSectorsCache as Doc).sectors as Doc[])[0]!.sectorType).toBe(
+      "media_entertainment"
+    );
     expect((await all(db, "sentimentPulses"))[0]!.sectorType).toBe("media_entertainment");
     expect((await all(db, "countryModifiers"))[0]!.sectorType).toBe("media_entertainment");
     expect(((await all(db, "bills"))[0]!.provisions as Doc[])[0]).toMatchObject({
@@ -362,7 +452,14 @@ describe("collision conservation", () => {
       corporations: [{ _id: corpId, type: "entertainment", secondaryType: null }],
       corporateSectors: [sectorA, sectorB],
       unions: [
-        { _id: unionId, countryId: "US", sectorType: "media_entertainment", name: "U", foundedByCharacterId: null, createdAt: T1 },
+        {
+          _id: unionId,
+          countryId: "US",
+          sectorType: "media_entertainment",
+          name: "U",
+          foundedByCharacterId: null,
+          createdAt: T1,
+        },
       ],
     });
 
@@ -402,7 +499,9 @@ describe("collision conservation", () => {
     expect(kept.capitalStock as number).toBeCloseTo(expectedStock, 6);
 
     const models = await all(db, "corporationOperatingModels");
-    expect(new Set(models.map((doc) => doc.operatingModel))).toEqual(new Set(MEDIA_OPERATING_MODELS));
+    expect(new Set(models.map((doc) => doc.operatingModel))).toEqual(
+      new Set(MEDIA_OPERATING_MODELS)
+    );
     expect(models).toHaveLength(MEDIA_OPERATING_MODELS.length);
   });
 
@@ -456,15 +555,53 @@ describe("union and unowned folds", () => {
         },
       ],
       unions: [
-        { _id: survivorId, countryId: "US", sectorType: "media", name: "Seeded A", treasury: 100, strength: 10, foundedByCharacterId: null, createdAt: T1 },
-        { _id: loserId, countryId: "US", sectorType: "entertainment", name: "Seeded B", treasury: 50, strength: 5, foundedByCharacterId: null, createdAt: T2 },
-        { _id: oid("400000000000000000000012"), countryId: "US", sectorType: "media", name: "Rival", treasury: 7, foundedByCharacterId: oid("900000000000000000000001"), createdAt: T1 },
+        {
+          _id: survivorId,
+          countryId: "US",
+          sectorType: "media",
+          name: "Seeded A",
+          treasury: 100,
+          strength: 10,
+          foundedByCharacterId: null,
+          createdAt: T1,
+        },
+        {
+          _id: loserId,
+          countryId: "US",
+          sectorType: "entertainment",
+          name: "Seeded B",
+          treasury: 50,
+          strength: 5,
+          foundedByCharacterId: null,
+          createdAt: T2,
+        },
+        {
+          _id: oid("400000000000000000000012"),
+          countryId: "US",
+          sectorType: "media",
+          name: "Rival",
+          treasury: 7,
+          foundedByCharacterId: oid("900000000000000000000001"),
+          createdAt: T1,
+        },
       ],
       bargainingCampaigns: [
-        { _id: oid("500000000000000000000010"), countryId: "US", sectorType: "media", unionId: loserId, status: "open" },
+        {
+          _id: oid("500000000000000000000010"),
+          countryId: "US",
+          sectorType: "media",
+          unionId: loserId,
+          status: "open",
+        },
       ],
       collectiveAgreements: [
-        { _id: oid("600000000000000000000010"), countryId: "US", sectorType: "entertainment", unionId: loserId, status: "active" },
+        {
+          _id: oid("600000000000000000000010"),
+          countryId: "US",
+          sectorType: "entertainment",
+          unionId: loserId,
+          status: "active",
+        },
       ],
     });
     const { counts } = await run(db);
@@ -479,7 +616,9 @@ describe("union and unowned folds", () => {
     const rival = unions.find((row) => String(row._id) === "400000000000000000000012")!;
     expect(rival.sectorType).toBe("media_entertainment");
     expect((await all(db, "corporateSectors"))[0]!.representingUnionId).toBeDefined();
-    expect(String((await all(db, "corporateSectors"))[0]!.representingUnionId)).toBe(String(survivorId));
+    expect(String((await all(db, "corporateSectors"))[0]!.representingUnionId)).toBe(
+      String(survivorId)
+    );
     expect(String((await all(db, "bargainingCampaigns"))[0]!.unionId)).toBe(String(survivorId));
     expect(String((await all(db, "collectiveAgreements"))[0]!.unionId)).toBe(String(survivorId));
   });
@@ -487,8 +626,24 @@ describe("union and unowned folds", () => {
   it("folds colliding unowned rows by summing revenue", async () => {
     const db = baseWorld({
       unownedSectors: [
-        { _id: oid("300000000000000000000010"), countryId: "US", stateId: "US:CA", sectorType: "media", revenue: 60, headroomUnits: 6, createdAt: T2 },
-        { _id: oid("300000000000000000000011"), countryId: "US", stateId: "US:CA", sectorType: "entertainment", revenue: 40, headroomUnits: 4, createdAt: T1 },
+        {
+          _id: oid("300000000000000000000010"),
+          countryId: "US",
+          stateId: "US:CA",
+          sectorType: "media",
+          revenue: 60,
+          headroomUnits: 6,
+          createdAt: T2,
+        },
+        {
+          _id: oid("300000000000000000000011"),
+          countryId: "US",
+          stateId: "US:CA",
+          sectorType: "entertainment",
+          revenue: 40,
+          headroomUnits: 4,
+          createdAt: T1,
+        },
       ],
     });
     const { counts } = await run(db);
@@ -527,7 +682,9 @@ describe("fund consolidation", () => {
           reserveUnits: 1000,
           cashAnchor: 100,
           targetConstituents: [],
-          holdings: [{ corporationId: corpX, shares: 10, avgCostPerShareAnchor: 5, lastValueAnchor: 50 }],
+          holdings: [
+            { corporationId: corpX, shares: 10, avgCostPerShareAnchor: 5, lastValueAnchor: 50 },
+          ],
           createdAt: T1,
           updatedAt: T1,
         },
@@ -568,17 +725,62 @@ describe("fund consolidation", () => {
           reserveUnits: 0,
           cashAnchor: 25,
           targetConstituents: [],
-          holdings: [{ corporationId: corpY, shares: 1, avgCostPerShareAnchor: 8, lastValueAnchor: 8 }],
+          holdings: [
+            { corporationId: corpY, shares: 1, avgCostPerShareAnchor: 8, lastValueAnchor: 8 },
+          ],
           createdAt: T2,
           updatedAt: T2,
         },
       ],
       indexFundPositions: [
-        { _id: oid("f00000000000000000000010"), fundId: survivorId, holderKind: "fund_reserve", units: 1000, avgNavAnchor: 10, createdAt: T1, updatedAt: T1 },
-        { _id: oid("f00000000000000000000011"), fundId: survivorId, holderKind: "character", characterId: holderA, units: 5, avgNavAnchor: 10, createdAt: T1, updatedAt: T1 },
-        { _id: oid("f00000000000000000000012"), fundId: mediaFundId, holderKind: "fund_reserve", units: 500, avgNavAnchor: 10, createdAt: T1, updatedAt: T1 },
-        { _id: oid("f00000000000000000000013"), fundId: mediaFundId, holderKind: "character", characterId: holderA, units: 3, avgNavAnchor: 10, createdAt: T1, updatedAt: T1 },
-        { _id: oid("f00000000000000000000014"), fundId: entFundId, holderKind: "npp", nppId: holderB, units: 7, avgNavAnchor: 20, createdAt: T2, updatedAt: T2 },
+        {
+          _id: oid("f00000000000000000000010"),
+          fundId: survivorId,
+          holderKind: "fund_reserve",
+          units: 1000,
+          avgNavAnchor: 10,
+          createdAt: T1,
+          updatedAt: T1,
+        },
+        {
+          _id: oid("f00000000000000000000011"),
+          fundId: survivorId,
+          holderKind: "character",
+          characterId: holderA,
+          units: 5,
+          avgNavAnchor: 10,
+          createdAt: T1,
+          updatedAt: T1,
+        },
+        {
+          _id: oid("f00000000000000000000012"),
+          fundId: mediaFundId,
+          holderKind: "fund_reserve",
+          units: 500,
+          avgNavAnchor: 10,
+          createdAt: T1,
+          updatedAt: T1,
+        },
+        {
+          _id: oid("f00000000000000000000013"),
+          fundId: mediaFundId,
+          holderKind: "character",
+          characterId: holderA,
+          units: 3,
+          avgNavAnchor: 10,
+          createdAt: T1,
+          updatedAt: T1,
+        },
+        {
+          _id: oid("f00000000000000000000014"),
+          fundId: entFundId,
+          holderKind: "npp",
+          nppId: holderB,
+          units: 7,
+          avgNavAnchor: 20,
+          createdAt: T2,
+          updatedAt: T2,
+        },
       ],
     });
 
@@ -597,7 +799,9 @@ describe("fund consolidation", () => {
 
     const positions = await all(db, "indexFundPositions");
     expect(positions.every((row) => String(row.fundId) === String(survivorId))).toBe(true);
-    const holderAPositions = positions.filter((row) => String(row.characterId ?? "") === String(holderA));
+    const holderAPositions = positions.filter(
+      (row) => String(row.characterId ?? "") === String(holderA)
+    );
     expect(holderAPositions).toHaveLength(1);
     expect(holderAPositions[0]!.units).toBe(8);
     const supply = positions.reduce((sum, row) => sum + Math.floor(row.units as number), 0);
@@ -609,15 +813,51 @@ describe("idempotent rerun", () => {
   it("changes nothing on a second pass", async () => {
     const corpId = oid("100000000000000000000020");
     const db = baseWorld({
-      corporations: [{ _id: corpId, type: "media", secondaryType: "entertainment", unlockedTechNodeIds: ["media-1940-1"] }],
+      corporations: [
+        {
+          _id: corpId,
+          type: "media",
+          secondaryType: "entertainment",
+          unlockedTechNodeIds: ["media-1940-1"],
+        },
+      ],
       corporateSectors: [
-        { _id: oid("200000000000000000000020"), corporationId: corpId, countryId: "US", stateId: "US:CA", sectorType: "media", strategyId: "standard", revenue: 100, workers: 10, profitMargin: 20, createdAt: T1 },
-        { _id: oid("200000000000000000000021"), corporationId: corpId, countryId: "US", stateId: "US:CA", sectorType: "entertainment", strategyId: "live_venue", revenue: 50, workers: 5, profitMargin: 10, createdAt: T2 },
+        {
+          _id: oid("200000000000000000000020"),
+          corporationId: corpId,
+          countryId: "US",
+          stateId: "US:CA",
+          sectorType: "media",
+          strategyId: "standard",
+          revenue: 100,
+          workers: 10,
+          profitMargin: 20,
+          createdAt: T1,
+        },
+        {
+          _id: oid("200000000000000000000021"),
+          corporationId: corpId,
+          countryId: "US",
+          stateId: "US:CA",
+          sectorType: "entertainment",
+          strategyId: "live_venue",
+          revenue: 50,
+          workers: 5,
+          profitMargin: 10,
+          createdAt: T2,
+        },
       ],
     });
     await run(db);
     const snapshot = async (): Promise<Record<string, Doc[]>> => {
-      const names = ["corporations", "corporateSectors", "corporationOperatingModels", "unions", "indexFunds", "indexFundPositions"];
+      const names = [
+        "corporations",
+        "corporateSectors",
+        "corporationOperatingModels",
+        "unions",
+        "indexFunds",
+        "indexFundPositions",
+      ];
       const out: Record<string, Doc[]> = {};
       for (const name of names) out[name] = await all(db, name);
       return out;

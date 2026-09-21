@@ -39,7 +39,12 @@ const LEGACY_SECTOR_SLUGS = ["global_sector_media", "global_sector_entertainment
 const SURVIVOR_FUND_SLUG = "global_sector_media_entertainment";
 const SURVIVOR_FUND_NAME = "Global Media & Entertainment Index";
 const SURVIVOR_FUND_TICKER = "GLBMEA";
-const LEGACY_STRATEGY_IDS = ["streaming_media", "digital_first", "legacy_broadcast", "live_service"];
+const LEGACY_STRATEGY_IDS = [
+  "streaming_media",
+  "digital_first",
+  "legacy_broadcast",
+  "live_service",
+];
 
 const finite = (value: unknown): number =>
   typeof value === "number" && Number.isFinite(value) ? value : 0;
@@ -51,7 +56,11 @@ function createdAtMs(value: unknown): number {
 }
 
 /** Deterministic oldest-first order: earliest creation wins, _id breaks ties. */
-function oldestFirst<T>(rows: readonly T[], idOf: (row: T) => string, timeOf: (row: T) => number): T[] {
+function oldestFirst<T>(
+  rows: readonly T[],
+  idOf: (row: T) => string,
+  timeOf: (row: T) => number
+): T[] {
   return [...rows].sort((a, b) => timeOf(a) - timeOf(b) || (idOf(a) < idOf(b) ? -1 : 1));
 }
 
@@ -199,7 +208,12 @@ function mergeAvgNav(
 async function foldLegacyIndexFunds(
   db: Db,
   opts: { dry: boolean; now: Date }
-): Promise<{ fundsFolded: number; fundsDeleted: number; positionsMoved: number; definitionsRekeyed: number }> {
+): Promise<{
+  fundsFolded: number;
+  fundsDeleted: number;
+  positionsMoved: number;
+  definitionsRekeyed: number;
+}> {
   const out = { fundsFolded: 0, fundsDeleted: 0, positionsMoved: 0, definitionsRekeyed: 0 };
   let survivor = await db.collection<IndexFund>("indexFunds").findOne({ slug: SURVIVOR_FUND_SLUG });
   if (!survivor && !opts.dry) {
@@ -241,7 +255,8 @@ async function foldLegacyIndexFunds(
   const canonUpdate: Record<string, unknown> = {};
   if (survivor.sectorType !== CANON) canonUpdate.sectorType = CANON;
   if (survivor.name !== SURVIVOR_FUND_NAME) canonUpdate.name = SURVIVOR_FUND_NAME;
-  if (survivor.tickerSymbol !== SURVIVOR_FUND_TICKER) canonUpdate.tickerSymbol = SURVIVOR_FUND_TICKER;
+  if (survivor.tickerSymbol !== SURVIVOR_FUND_TICKER)
+    canonUpdate.tickerSymbol = SURVIVOR_FUND_TICKER;
   if (Object.keys(canonUpdate).length > 0) {
     canonUpdate.updatedAt = opts.now;
     if (!opts.dry) {
@@ -271,13 +286,15 @@ async function foldLegacyIndexFunds(
       .find({ fundId: fund._id })
       .toArray();
     if (!opts.dry) {
-      const live = (await db.collection<IndexFund>("indexFunds").findOne({ _id: survivor._id })) ?? survivor;
+      const live =
+        (await db.collection<IndexFund>("indexFunds").findOne({ _id: survivor._id })) ?? survivor;
       const livePositions = await db
         .collection<IndexFundPosition>("indexFundPositions")
         .find({ fundId: survivor._id })
         .toArray();
       const holdingsByCorp = new Map<string, IndexFundHolding>();
-      for (const holding of live.holdings ?? []) holdingsByCorp.set(String(holding.corporationId), { ...holding });
+      for (const holding of live.holdings ?? [])
+        holdingsByCorp.set(String(holding.corporationId), { ...holding });
       for (const holding of fund.holdings ?? []) {
         const key = String(holding.corporationId);
         const existing = holdingsByCorp.get(key);
@@ -286,8 +303,12 @@ async function foldLegacyIndexFunds(
           continue;
         }
         const shares = positive(existing.shares) + positive(holding.shares);
-        const costA = typeof existing.avgCostPerShareAnchor === "number" ? existing.avgCostPerShareAnchor : null;
-        const costB = typeof holding.avgCostPerShareAnchor === "number" ? holding.avgCostPerShareAnchor : null;
+        const costA =
+          typeof existing.avgCostPerShareAnchor === "number"
+            ? existing.avgCostPerShareAnchor
+            : null;
+        const costB =
+          typeof holding.avgCostPerShareAnchor === "number" ? holding.avgCostPerShareAnchor : null;
         holdingsByCorp.set(key, {
           ...existing,
           shares,
@@ -326,9 +347,15 @@ async function foldLegacyIndexFunds(
             : { ...target }
         );
       }
-      const streaksByCorp = new Map<string, NonNullable<IndexFund["listingFailureStreaks"]>[number]>();
+      const streaksByCorp = new Map<
+        string,
+        NonNullable<IndexFund["listingFailureStreaks"]>[number]
+      >();
       for (const streak of live.listingFailureStreaks ?? []) {
-        streaksByCorp.set(String(streak.corporationId), { ...streak, failures: [...streak.failures] });
+        streaksByCorp.set(String(streak.corporationId), {
+          ...streak,
+          failures: [...streak.failures],
+        });
       }
       for (const streak of fund.listingFailureStreaks ?? []) {
         const key = String(streak.corporationId);
@@ -338,21 +365,28 @@ async function foldLegacyIndexFunds(
           existing
             ? {
                 ...existing,
-                consecutiveFailures: Math.max(existing.consecutiveFailures, streak.consecutiveFailures),
+                consecutiveFailures: Math.max(
+                  existing.consecutiveFailures,
+                  streak.consecutiveFailures
+                ),
                 failures: [...new Set([...existing.failures, ...streak.failures])],
               }
             : { ...streak, failures: [...streak.failures] }
         );
       }
       const bondsByCountry = new Map<string, NonNullable<IndexFund["bondAllocations"]>[number]>();
-      for (const bond of live.bondAllocations ?? []) bondsByCountry.set(String(bond.countryId), { ...bond });
+      for (const bond of live.bondAllocations ?? [])
+        bondsByCountry.set(String(bond.countryId), { ...bond });
       for (const bond of fund.bondAllocations ?? []) {
         const key = String(bond.countryId);
         const existing = bondsByCountry.get(key);
         bondsByCountry.set(
           key,
           existing
-            ? { ...existing, principalAnchor: finite(existing.principalAnchor) + finite(bond.principalAnchor) }
+            ? {
+                ...existing,
+                principalAnchor: finite(existing.principalAnchor) + finite(bond.principalAnchor),
+              }
             : { ...bond }
         );
       }
@@ -366,7 +400,10 @@ async function foldLegacyIndexFunds(
         if (!existing) {
           await db
             .collection("indexFundPositions")
-            .updateOne({ _id: position._id }, { $set: { fundId: survivor._id, updatedAt: opts.now } });
+            .updateOne(
+              { _id: position._id },
+              { $set: { fundId: survivor._id, updatedAt: opts.now } }
+            );
           positionsByHolder.set(key, { ...position, fundId: survivor._id });
           continue;
         }
@@ -388,7 +425,9 @@ async function foldLegacyIndexFunds(
             $set: {
               units,
               avgNavAnchor: avg,
-              legacyUnits: Math.floor(positive(existing.legacyUnits)) + Math.floor(positive(position.legacyUnits)),
+              legacyUnits:
+                Math.floor(positive(existing.legacyUnits)) +
+                Math.floor(positive(position.legacyUnits)),
               createdAt,
               updatedAt: opts.now,
             },
@@ -411,17 +450,21 @@ async function foldLegacyIndexFunds(
           $set: {
             holdings: [...holdingsByCorp.values()],
             targetConstituents: [...targetsByCorp.values()],
-            ...(streaksByCorp.size > 0 ? { listingFailureStreaks: [...streaksByCorp.values()] } : {}),
+            ...(streaksByCorp.size > 0
+              ? { listingFailureStreaks: [...streaksByCorp.values()] }
+              : {}),
             ...(bondsByCountry.size > 0 ? { bondAllocations: [...bondsByCountry.values()] } : {}),
             cashAnchor: finite(live.cashAnchor) + finite(fund.cashAnchor),
-            reserveUnits: Math.floor(positive(live.reserveUnits)) + Math.floor(positive(fund.reserveUnits)),
+            reserveUnits:
+              Math.floor(positive(live.reserveUnits)) + Math.floor(positive(fund.reserveUnits)),
             unitSupply: supply,
             updatedAt: opts.now,
           },
         }
       );
       await db.collection("indexFunds").deleteOne({ _id: fund._id });
-      survivor = (await db.collection<IndexFund>("indexFunds").findOne({ _id: survivor._id })) ?? survivor;
+      survivor =
+        (await db.collection<IndexFund>("indexFunds").findOne({ _id: survivor._id })) ?? survivor;
     } else {
       out.positionsMoved += positions.length;
     }
@@ -436,7 +479,8 @@ function rekeyBillProvisions(provisions: unknown): Record<string, unknown>[] | n
   if (!Array.isArray(provisions)) return null;
   let changed = false;
   const next = provisions.map((provision) => {
-    if (provision === null || typeof provision !== "object" || Array.isArray(provision)) return provision;
+    if (provision === null || typeof provision !== "object" || Array.isArray(provision))
+      return provision;
     const row = provision as Record<string, unknown>;
     const out = { ...row };
     if (typeof row.targetSectorType === "string" && isLegacyMediaSectorType(row.targetSectorType)) {
@@ -472,11 +516,17 @@ async function rekeyTypeKeyedHistories(db: Db, opts: { dry: boolean; now: Date }
 
   const capRows = await db
     .collection<{ _id: ObjectId; bySector?: Record<string, number> }>("marketCapHistory")
-    .find({ $or: [{ "bySector.media": { $exists: true } }, { "bySector.entertainment": { $exists: true } }] })
+    .find({
+      $or: [
+        { "bySector.media": { $exists: true } },
+        { "bySector.entertainment": { $exists: true } },
+      ],
+    })
     .toArray();
   for (const row of capRows) {
     const bySector = { ...(row.bySector ?? {}) };
-    const merged = positive(bySector[CANON]) + positive(bySector.media) + positive(bySector.entertainment);
+    const merged =
+      positive(bySector[CANON]) + positive(bySector.media) + positive(bySector.entertainment);
     delete bySector.media;
     delete bySector.entertainment;
     bySector[CANON] = merged;
@@ -492,9 +542,13 @@ async function rekeyTypeKeyedHistories(db: Db, opts: { dry: boolean; now: Date }
     .toArray();
   for (const row of ledgerRows) {
     if (!Array.isArray(row.sectorTypes)) continue;
-    const next = [...new Set(row.sectorTypes.map((entry) => (isLegacyMediaSectorType(entry) ? CANON : entry)))];
+    const next = [
+      ...new Set(row.sectorTypes.map((entry) => (isLegacyMediaSectorType(entry) ? CANON : entry))),
+    ];
     if (!opts.dry) {
-      await db.collection("nationalizationLedger").updateOne({ _id: row._id }, { $set: { sectorTypes: next } });
+      await db
+        .collection("nationalizationLedger")
+        .updateOne({ _id: row._id }, { $set: { sectorTypes: next } });
     }
     touched += 1;
   }
@@ -503,7 +557,10 @@ async function rekeyTypeKeyedHistories(db: Db, opts: { dry: boolean; now: Date }
     .collection<{
       _id: ObjectId;
       sectorSpecializations?: { primary?: unknown; secondary?: unknown; updatedAt?: unknown };
-      topSectorsCache?: { sectors?: { sectorType?: unknown; revenue?: unknown; specializationBonus?: unknown }[]; computedAtTurn?: unknown };
+      topSectorsCache?: {
+        sectors?: { sectorType?: unknown; revenue?: unknown; specializationBonus?: unknown }[];
+        computedAtTurn?: unknown;
+      };
     }>("states")
     .find({
       $or: [
@@ -515,7 +572,11 @@ async function rekeyTypeKeyedHistories(db: Db, opts: { dry: boolean; now: Date }
     .toArray();
   for (const state of states) {
     const set: Record<string, unknown> = {};
-    if (state.sectorSpecializations && (isLegacyMediaSectorType(state.sectorSpecializations.primary) || isLegacyMediaSectorType(state.sectorSpecializations.secondary))) {
+    if (
+      state.sectorSpecializations &&
+      (isLegacyMediaSectorType(state.sectorSpecializations.primary) ||
+        isLegacyMediaSectorType(state.sectorSpecializations.secondary))
+    ) {
       set.sectorSpecializations = {
         ...state.sectorSpecializations,
         primary: isLegacyMediaSectorType(state.sectorSpecializations.primary)
@@ -544,8 +605,14 @@ async function rekeyTypeKeyedHistories(db: Db, opts: { dry: boolean; now: Date }
 
   for (const collection of ["sentimentPulses", "countryModifiers"] as const) {
     const result = opts.dry
-      ? { modifiedCount: await db.collection(collection).countDocuments({ sectorType: legacyFilter }) }
-      : await db.collection(collection).updateMany({ sectorType: legacyFilter }, { $set: { sectorType: CANON } });
+      ? {
+          modifiedCount: await db
+            .collection(collection)
+            .countDocuments({ sectorType: legacyFilter }),
+        }
+      : await db
+          .collection(collection)
+          .updateMany({ sectorType: legacyFilter }, { $set: { sectorType: CANON } });
     touched += result.modifiedCount ?? 0;
   }
 
@@ -615,7 +682,12 @@ export async function consolidateMediaEntertainment(
   // ── 1. Corporations: types, tech unlocks, inferred operating models ──────
   const corporations = await db
     .collection<CorporationDoc>("corporations")
-    .find({ $or: [{ type: { $in: ["media", "entertainment"] } }, { secondaryType: { $in: ["media", "entertainment"] } }] })
+    .find({
+      $or: [
+        { type: { $in: ["media", "entertainment"] } },
+        { secondaryType: { $in: ["media", "entertainment"] } },
+      ],
+    })
     .toArray();
   const legacySectorTypesByCorp = new Map<string, unknown[]>();
   const legacySectors = await db
@@ -627,10 +699,16 @@ export async function consolidateMediaEntertainment(
     .toArray();
   for (const sector of legacySectors) {
     const key = String(sector.corporationId);
-    legacySectorTypesByCorp.set(key, [...(legacySectorTypesByCorp.get(key) ?? []), sector.sectorType]);
+    legacySectorTypesByCorp.set(key, [
+      ...(legacySectorTypesByCorp.get(key) ?? []),
+      sector.sectorType,
+    ]);
   }
   const corpPreImage = new Map(
-    corporations.map((corp) => [String(corp._id), { type: corp.type, secondaryType: corp.secondaryType }])
+    corporations.map((corp) => [
+      String(corp._id),
+      { type: corp.type, secondaryType: corp.secondaryType },
+    ])
   );
   for (const corp of corporations) {
     const pre = corpPreImage.get(String(corp._id))!;
@@ -639,8 +717,7 @@ export async function consolidateMediaEntertainment(
       Array.isArray(corp.unlockedTechNodeIds) ? (corp.unlockedTechNodeIds as unknown[]) : undefined,
       mapLegacyMediaTechId
     );
-    const techChanged =
-      JSON.stringify(nextTech) !== JSON.stringify(corp.unlockedTechNodeIds ?? []);
+    const techChanged = JSON.stringify(nextTech) !== JSON.stringify(corp.unlockedTechNodeIds ?? []);
     if (!plan.changed && !techChanged) continue;
     const set: Record<string, unknown> = {};
     if (plan.changed) {
@@ -800,7 +877,10 @@ export async function consolidateMediaEntertainment(
         )
       ),
       inventoryUnits: sumInventoryUnits(ordered),
-      inventoryValueAnchor: ordered.reduce((sum, row) => sum + positive(row.inventoryValueAnchor), 0),
+      inventoryValueAnchor: ordered.reduce(
+        (sum, row) => sum + positive(row.inventoryValueAnchor),
+        0
+      ),
       inventoryDrainedUnits: ordered.reduce(
         (sum, row) => sum + positive(row.inventoryDrainedUnits),
         0
@@ -827,7 +907,8 @@ export async function consolidateMediaEntertainment(
     }
     if (ordered.some((row) => typeof row.laborCost === "number")) {
       set.laborCost = totalLaborCost;
-      set.wagePerWorker = totalWorkers > 0 ? totalLaborCost / totalWorkers : survivor.wagePerWorker ?? null;
+      set.wagePerWorker =
+        totalWorkers > 0 ? totalLaborCost / totalWorkers : (survivor.wagePerWorker ?? null);
     }
     if (!dry) {
       await db.collection("corporateSectors").updateOne({ _id: survivor._id }, { $set: set });
@@ -881,7 +962,8 @@ export async function consolidateMediaEntertainment(
         const key = String(entry.sectorId);
         if (seenRestore.has(key)) continue;
         seenRestore.add(key);
-        if (entry.restoredAt instanceof Date) restores.push({ sectorId: key, restoredAt: entry.restoredAt });
+        if (entry.restoredAt instanceof Date)
+          restores.push({ sectorId: key, restoredAt: entry.restoredAt });
       }
     }
     const set: Record<string, unknown> = {
@@ -943,7 +1025,9 @@ export async function consolidateMediaEntertainment(
         { _id: survivor._id },
         {
           $set: {
-            treasury: finite(survivor.treasury) + losers.reduce((sum, row) => sum + finite(row.treasury), 0),
+            treasury:
+              finite(survivor.treasury) +
+              losers.reduce((sum, row) => sum + finite(row.treasury), 0),
             updatedAt: now,
             ...(ordered.some((row) => typeof row.strength === "number")
               ? { strength: ordered.reduce((sum, row) => sum + finite(row.strength), 0) }
@@ -953,7 +1037,10 @@ export async function consolidateMediaEntertainment(
       );
       await db
         .collection("corporateSectors")
-        .updateMany({ representingUnionId: { $in: loserIds } }, { $set: { representingUnionId: survivor._id } });
+        .updateMany(
+          { representingUnionId: { $in: loserIds } },
+          { $set: { representingUnionId: survivor._id } }
+        );
       await db
         .collection("bargainingCampaigns")
         .updateMany({ unionId: { $in: loserIds } }, { $set: { unionId: survivor._id } });
@@ -972,10 +1059,17 @@ export async function consolidateMediaEntertainment(
   // ── 5. Bargaining campaigns + collective agreements: rekey in place ──────
   for (const collection of ["bargainingCampaigns", "collectiveAgreements"] as const) {
     const result = dry
-      ? { modifiedCount: await db.collection(collection).countDocuments({ sectorType: { $in: ["media", "entertainment"] } }) }
+      ? {
+          modifiedCount: await db
+            .collection(collection)
+            .countDocuments({ sectorType: { $in: ["media", "entertainment"] } }),
+        }
       : await db
           .collection(collection)
-          .updateMany({ sectorType: { $in: ["media", "entertainment"] } }, { $set: { sectorType: CANON, updatedAt: now } });
+          .updateMany(
+            { sectorType: { $in: ["media", "entertainment"] } },
+            { $set: { sectorType: CANON, updatedAt: now } }
+          );
     if (collection === "bargainingCampaigns") counts.campaignsRekeyed += result.modifiedCount ?? 0;
     else counts.agreementsRekeyed += result.modifiedCount ?? 0;
   }
@@ -985,7 +1079,13 @@ export async function consolidateMediaEntertainment(
 
   // ── 6. Strategic designations: rekey + same-country collision fold ────────
   const designations = await db
-    .collection<{ _id: ObjectId; countryId?: unknown; sectorType?: unknown; designatedAtTurn?: unknown; createdAt?: unknown }>("strategicSectorDesignations")
+    .collection<{
+      _id: ObjectId;
+      countryId?: unknown;
+      sectorType?: unknown;
+      designatedAtTurn?: unknown;
+      createdAt?: unknown;
+    }>("strategicSectorDesignations")
     .find({ sectorType: { $in: ["media", "entertainment", CANON] } })
     .toArray();
   const designationsByCountry = new Map<string, typeof designations>();

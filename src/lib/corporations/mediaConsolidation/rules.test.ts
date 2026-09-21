@@ -31,7 +31,9 @@ describe("legacy boundary recognition", () => {
   it("canonicalizes both retired labels and the canonical type", () => {
     expect(canonicalizeMediaSectorType("media")).toBe(MEDIA_ENTERTAINMENT_SECTOR_TYPE);
     expect(canonicalizeMediaSectorType("entertainment")).toBe(MEDIA_ENTERTAINMENT_SECTOR_TYPE);
-    expect(canonicalizeMediaSectorType("media_entertainment")).toBe(MEDIA_ENTERTAINMENT_SECTOR_TYPE);
+    expect(canonicalizeMediaSectorType("media_entertainment")).toBe(
+      MEDIA_ENTERTAINMENT_SECTOR_TYPE
+    );
   });
 
   it("rejects unrelated types and non-strings", () => {
@@ -81,7 +83,16 @@ describe("strategy mapping", () => {
   });
 
   it("passes canonical ids through and defaults unknown ids to standard", () => {
-    for (const id of ["standard", "press", "broadcast", "screen", "studio", "streaming", "live_venue", "diversified"]) {
+    for (const id of [
+      "standard",
+      "press",
+      "broadcast",
+      "screen",
+      "studio",
+      "streaming",
+      "live_venue",
+      "diversified",
+    ]) {
       expect(canonicalMediaStrategyForLegacy(id)).toBe(id);
     }
     expect(canonicalMediaStrategyForLegacy("media_standard")).toBe("standard");
@@ -289,9 +300,7 @@ describe("collision merge", () => {
 
   it("returns null without a same-group legacy collision", () => {
     expect(planMediaSectorMerge([row({ id: "a" })])).toBeNull();
-    expect(
-      planMediaSectorMerge([row({ id: "a", sectorType: "media_entertainment" })])
-    ).toBeNull();
+    expect(planMediaSectorMerge([row({ id: "a", sectorType: "media_entertainment" })])).toBeNull();
     expect(
       planMediaSectorMerge([
         row({ id: "a", sectorType: "media" }),
@@ -302,8 +311,22 @@ describe("collision merge", () => {
 
   it("merges unowned collisions by summing revenue", () => {
     const plans = planMediaUnownedMerges([
-      { id: "a", stateId: "US:CA", countryId: "US", sectorType: "media", revenue: 60, createdAtMs: 5 },
-      { id: "b", stateId: "US:CA", countryId: "US", sectorType: "entertainment", revenue: 40, createdAtMs: 3 },
+      {
+        id: "a",
+        stateId: "US:CA",
+        countryId: "US",
+        sectorType: "media",
+        revenue: 60,
+        createdAtMs: 5,
+      },
+      {
+        id: "b",
+        stateId: "US:CA",
+        countryId: "US",
+        sectorType: "entertainment",
+        revenue: 40,
+        createdAtMs: 3,
+      },
       { id: "c", stateId: "US:NY", countryId: "US", sectorType: "media", revenue: 10 },
     ]);
     expect(plans).toEqual([
