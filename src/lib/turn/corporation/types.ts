@@ -520,4 +520,17 @@ export interface SectorCalculationsResult {
     bindingResource: ExtractableResource;
     utilization: number;
   }>;
+  /**
+   * Marketing cash the sector pass settled per buying corp, per-turn anchor
+   * basis. Under clearing this is the capped, funded share of the delivered
+   * advertising book; without clearing it is the requested budget slice.
+   * Consumed by the advertising settlement phase; read-only, no cash moves.
+   */
+  settledMarketingSpendAnchorByBuyerId: Map<string, number>;
+  /**
+   * Clearing value of actually delivered advertising per selling corp,
+   * per-turn anchor basis. Consumed by the advertising settlement phase;
+   * read-only, no cash moves.
+   */
+  advertisingDeliveredAnchorBySellerId: Map<string, number>;
 }

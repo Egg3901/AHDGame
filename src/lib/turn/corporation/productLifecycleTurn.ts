@@ -3,8 +3,10 @@
  *
  * Wires the pure `processProductLifecycle` rules core into the corporation
  * turn: once per turn, every active corporation product accumulates its share
- * of the owning corp's already-consumed R&D / marketing budgets (anchor
- * basis, per-turn slice) and advances exactly one lifecycle step.
+ * of the owning corp's already-consumed R&D budget plus the advertising
+ * settlement's effective delivered advertising (anchor basis, per-turn slice;
+ * requested `marketingBudget` slice only when no settlement value exists) and
+ * advances exactly one lifecycle step.
  *
  * Allocation view only: the corporate overhead settlement in
  * `sectorCalculations.ts` already consumes `rdBudget` and `marketingBudget`
@@ -62,6 +64,14 @@ export interface ProcessCorporationProductTurnArgs {
   corpsById: ReadonlyMap<string, Corporation>;
   /** Preloaded FX map (local per 1 anchor), same map the sector loop uses. */
   fxByCurrency: ReadonlyMap<CurrencyCode, number>;
+  /**
+   * Effective delivered advertising per corporation from the advertising
+   * settlement phase, per-turn anchor basis. When present for a corp, product
+   * brand uses the settlement result (contracted delivery with coverage
+   * efficacy, spot/uncovered spend neutral) instead of the requested
+   * `marketingBudget` slice. Absent entries fall back to the requested slice.
+   */
+  effectiveAdvertisingAnchorByCorpId?: ReadonlyMap<string, number>;
 }
 
 export interface ProcessCorporationProductTurnResult {
@@ -89,7 +99,8 @@ const ZERO_RESULT = {
  */
 export function buildProductLifecycleCorpInput(
   corp: Corporation,
-  fxByCurrency: ReadonlyMap<CurrencyCode, number>
+  fxByCurrency: ReadonlyMap<CurrencyCode, number>,
+  overrides?: { deliveredAdvertisingAnchor?: number }
 ): ProductLifecycleTurnCorpInput {
   const corpId = corp._id.toString();
   const code = resolveCorpLiquidCurrencyCode(corp);
@@ -107,11 +118,15 @@ export function buildProductLifecycleCorpInput(
   const unlocked = Array.isArray(corp.unlockedTechNodeIds)
     ? corp.unlockedTechNodeIds.filter((id): id is string => typeof id === "string")
     : [];
+  const settled = overrides?.deliveredAdvertisingAnchor;
   return {
     corpId,
     sectorQuality: quality,
     productRnDAnchor: toPerTurnAnchor(corp.rdBudget),
-    deliveredAdvertisingAnchor: toPerTurnAnchor(corp.marketingBudget),
+    deliveredAdvertisingAnchor:
+      typeof settled === "number" && Number.isFinite(settled) && settled >= 0
+        ? settled
+        : toPerTurnAnchor(corp.marketingBudget),
     unlockedTechnologyIds: unlocked,
   };
 }
@@ -141,7 +156,9 @@ export async function processCorporationProductTurn(
       skippedMissingCorp += 1;
       continue;
     }
-    const input = buildProductLifecycleCorpInput(corp, args.fxByCurrency);
+    const input = buildProductLifecycleCorpInput(corp, args.fxByCurrency, {
+      deliveredAdvertisingAnchor: args.effectiveAdvertisingAnchorByCorpId?.get(doc.corporationId),
+    });
     const result = processProductLifecycle({
       enabled: true,
       product: doc,

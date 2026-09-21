@@ -1348,5 +1348,11 @@ export function processSectors(
     ),
     strikeEvents: pendingStrikeEvents,
     capacityBindingEvents: pendingCapacityBindingEvents,
+    // Advertising settlement inputs (allocation view only): the sector pass
+    // already moved the cash via the marketing transfer legs above. These maps
+    // let the settlement phase attribute the settled spend without re-reading
+    // or re-moving anything.
+    settledMarketingSpendAnchorByBuyerId: new Map(marketingSpendAnchorByBuyerId),
+    advertisingDeliveredAnchorBySellerId: new Map(advertisingSellerDeliveredValues),
   };
 }
