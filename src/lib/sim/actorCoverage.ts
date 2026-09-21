@@ -318,6 +318,38 @@ export const ACTOR_GATED_MECHANICS: readonly ActorGatedMechanic[] = [
         "inserted survey.",
     },
   },
+  {
+    id: "uk-no-confidence-lifecycle",
+    label: "UK no-confidence motion lifecycle",
+    requires:
+      "an eligible opposition Commons MP to propose plus seated voters for a deterministic ballot",
+    seams: [
+      seam(
+        "src/lib/government/commands/parliamentaryGovernment.ts",
+        "A no-confidence vote is already in progress"
+      ),
+      seam(
+        "src/lib/turn/parliamentaryGovernment.ts",
+        "Resolve an expired no-confidence vote for the given country."
+      ),
+      seam("src/lib/government/queries/parliamentaryGovernment.ts", "No-confidence vote not found"),
+    ],
+    pureNpp: {
+      status: "unreachable",
+      reason:
+        "uncovered: no-confidence lifecycle — proposing requires an eligible " +
+        "elected Commons MP and pure NPP runs contain zero player characters, " +
+        "so no motion can ever reach the query surface or the turn resolver.",
+    },
+    synthetic: {
+      status: "covered",
+      reason:
+        "a synthetic opposition MP proposes through the real no-confidence " +
+        "command, a fixed ballot is cast through the real vote seam, and the " +
+        "same vote identity is retained through closesOnTurn into exactly-once " +
+        "turn resolution.",
+    },
+  },
 ];
 
 /** Every known actor-gated mechanic id. Reports and probes must resolve through
@@ -426,6 +458,8 @@ function evidenceFor(id: string, s: ActorPopulationSnapshot): string {
       return `${pop}; caretaker path only`;
     case "dd-finance-minister-survey":
       return `${pop}; no seated minister without actors`;
+    case "uk-no-confidence-lifecycle":
+      return `${pop}; no Commons proposer without actors`;
     default:
       return pop;
   }
