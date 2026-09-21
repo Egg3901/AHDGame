@@ -48,7 +48,11 @@ import {
   buildPresidentialModifierByParty,
 } from "./presidentialCoattail";
 import { computeMedianVoter } from "./medianVoter";
-import { fetchEnrichedCandidates, type EnrichmentParty } from "./candidateEnrichment";
+import {
+  fetchEnrichedCandidates,
+  type CandidateEnrichmentPreload,
+  type EnrichmentParty,
+} from "./candidateEnrichment";
 import type { AccumulateVoteTurnPreload } from "./types";
 import { loadPartyGroupFavorability } from "@/lib/governorOffice/address/partyGroupFavorabilityLoader";
 import { buildGranularElectorateSubstrate } from "@/lib/demographics/granularElectorate";
@@ -85,6 +89,9 @@ export interface VoteTurnMemo {
     Promise<Awaited<ReturnType<typeof resolveGovExecutiveApproval>>>
   >;
   partiesByCountry: Map<string, Promise<EnrichmentParty[]>>;
+  partyGroupFavorabilityByCountryTurn: Map<string, Promise<Map<string, number>>>;
+  candidatePreload?: CandidateEnrichmentPreload;
+  executiveEndorsedCandidateIdsByElection?: Map<string, Set<string>>;
 }
 
 export function createVoteTurnMemo(): VoteTurnMemo {
@@ -92,6 +99,7 @@ export function createVoteTurnMemo(): VoteTurnMemo {
     presidentByCountry: new Map(),
     govExecutiveByState: new Map(),
     partiesByCountry: new Map(),
+    partyGroupFavorabilityByCountryTurn: new Map(),
   };
 }
 
@@ -312,8 +320,11 @@ export async function accumulateVoteTurn(
     fetchEnrichedCandidates(candidates, {
       countryId: electionCountryId,
       partiesCache: memo?.partiesByCountry,
+      preload: memo?.candidatePreload,
     }),
-    loadPartyGroupFavorability(db, electionCountryId, turnNumber),
+    memoized(memo?.partyGroupFavorabilityByCountryTurn, `${electionCountryId}:${turnNumber}`, () =>
+      loadPartyGroupFavorability(db, electionCountryId, turnNumber)
+    ),
   ]);
   const approvalDecimal = approvalPct / 100;
   // Normalize snap_* → regular for office-strength lookup (snap_commons uses the
@@ -692,14 +703,17 @@ export async function accumulateVoteTurn(
   // because each `Election` is state-scoped (one race per AZ House district,
   // one race for AZ Senate Class 1, etc.) so the multiplier only touches
   // votes in this specific race's tally.
-  const executiveEndorsements = await db
-    .collection<ExecutiveEndorsement>("executiveEndorsements")
-    .find({ electionId, isActive: true })
-    .project<{ candidateId: ObjectId }>({ candidateId: 1 })
-    .toArray();
-  const executiveEndorsedCandidateIds = new Set(
-    executiveEndorsements.map((e) => e.candidateId.toString())
-  );
+  const executiveEndorsedCandidateIds =
+    memo?.executiveEndorsedCandidateIdsByElection?.get(electionId.toString()) ??
+    new Set(
+      (
+        await db
+          .collection<ExecutiveEndorsement>("executiveEndorsements")
+          .find({ electionId, isActive: true })
+          .project<{ candidateId: ObjectId }>({ candidateId: 1 })
+          .toArray()
+      ).map((e) => e.candidateId.toString())
+    );
   const EXECUTIVE_ENDORSEMENT_VOTE_BONUS = 1.015;
 
   // Build new totals using ONLY active candidates — withdrawn candidates'

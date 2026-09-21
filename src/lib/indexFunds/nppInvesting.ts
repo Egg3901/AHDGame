@@ -548,49 +548,35 @@ export async function processNPPFundInvestments(
     .collection<IndexFundPosition>(FUND_POSITION_COLLECTION)
     .find(
       { holderKind: "npp", nppId: { $in: distinctNppIds } },
-      { projection: { fundId: 1, nppId: 1 } }
+      { projection: { fundId: 1, nppId: 1, units: 1, avgNavAnchor: 1 } }
     )
     .toArray();
-  const existingKeys = new Set(existingPositions.map((p) => `${p.fundId}:${p.nppId}`));
+  const existingByKey = new Map(existingPositions.map((p) => [`${p.fundId}:${p.nppId}`, p]));
 
   const positionUpdateOps: AnyBulkWriteOperation<Document>[] = [];
   const positionInsertDocs: Omit<IndexFundPosition, "_id">[] = [];
   for (const p of planned) {
     const key = `${p.fund._id}:${p.nppId}`;
-    if (existingKeys.has(key)) {
+    const existing = existingByKey.get(key);
+    if (existing) {
+      const existingUnits = existing.units ?? 0;
+      const newUnits = existingUnits + p.units;
+      const existingAverage = existing.avgNavAnchor ?? p.fund.quotedNav;
+      const avgNavAnchor =
+        newUnits > 0
+          ? (existingUnits * existingAverage + p.units * p.fund.quotedNav) / newUnits
+          : p.fund.quotedNav;
       positionUpdateOps.push({
         updateOne: {
           filter: { fundId: p.fund._id, holderKind: "npp", nppId: p.nppId },
-          update: [
-            {
-              $set: {
-                avgNavAnchor: {
-                  $cond: [
-                    { $gt: [{ $add: ["$units", p.units] }, 0] },
-                    {
-                      $divide: [
-                        {
-                          $add: [
-                            {
-                              $multiply: [
-                                "$units",
-                                { $ifNull: ["$avgNavAnchor", p.fund.quotedNav] },
-                              ],
-                            },
-                            p.units * p.fund.quotedNav,
-                          ],
-                        },
-                        { $add: ["$units", p.units] },
-                      ],
-                    },
-                    p.fund.quotedNav,
-                  ],
-                },
-                units: { $add: ["$units", p.units] },
-                updatedAt: now,
-              },
-            },
-          ],
+          // NPP subscriptions are the only writer of NPP position units in
+          // this single-threaded turn pass. Preloading the prior values lets
+          // Mongo apply a simple modifier instead of evaluating an aggregation
+          // pipeline for every one of the thousands of existing positions.
+          update: {
+            $inc: { units: p.units },
+            $set: { avgNavAnchor, updatedAt: now },
+          },
         },
       });
     } else {
