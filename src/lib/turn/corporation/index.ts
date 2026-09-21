@@ -82,7 +82,11 @@ import { processEquityMarketPoolTurn } from "@/lib/equities/marketPoolTurn";
 import { placePendingShareIssuances } from "@/lib/equities/primaryMarket";
 import { creditEquityPoolsBatch } from "@/lib/equities/marketPool";
 import { resolveCorporationProductsEnabled } from "@/lib/products/featureFlag";
-import { processCorporationProductTurn } from "./productLifecycleTurn";
+import {
+  resolveProductClearingEffects,
+  type ProductClearingEffect,
+} from "@/lib/products/productMarketEffects";
+import { loadPostLaunchProductDocs, processCorporationProductTurn } from "./productLifecycleTurn";
 
 export type { CorporationTurnResult } from "./corporationTurnRuntime";
 
@@ -287,6 +291,16 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
   // on, accrual can run shadow (A1/A2) with the slice still off.
   const brandLoyaltySliceEnabled =
     brandLoyaltyEnabled && marketGovernorConfig?.brandLoyaltySliceEnabled === true;
+  // Corporation products (issue #2125 slice): post-launch demand and
+  // price-defense effects for the clearing pre-pass below. One projected bulk
+  // read, only when the flag is on; flag-off performs zero product reads and
+  // passes an empty map, which leaves every clearing input byte-identical.
+  // Last turn's persisted product state, consistent with clearing's lagged
+  // inputs (the lifecycle advances later in this same turn).
+  const corporationProductsEnabled = resolveCorporationProductsEnabled(marketGovernorConfig);
+  const productEffectsByCorp: Map<string, ProductClearingEffect> = corporationProductsEnabled
+    ? resolveProductClearingEffects(await loadPostLaunchProductDocs(db), true)
+    : new Map();
   const market = buildMarketContext(marketSystemMode, {
     cap: marketGovernorConfig?.marketGovernorCap,
     rampTurns: marketGovernorConfig?.marketGovernorRampTurns,
@@ -334,6 +348,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     brandLoyaltyEnabled,
     brandLoyaltySliceEnabled,
     qualityPremiumPricingEnabled,
+    productEffectsByCorp,
   });
   contractedByCorpCommodity = clearingContractedByCorpCommodity;
   mark("marketContext");

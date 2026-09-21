@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { getCurrentTurn } from "@/lib/currentTurn";
+import { getGameState } from "@/lib/gameState";
 import { handleRouteError } from "@/lib/api/errors";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
@@ -10,6 +11,13 @@ import { resolveCorporation, requireCeo } from "@/lib/api/corporations/resolveQu
 import { startProductSchema } from "@/lib/api/schemas/corporations";
 import { getProductKind } from "@/lib/products/catalog";
 import { isCorporationProductsEnabled } from "@/lib/products/featureFlag";
+import {
+  manufacturingKindRequirements,
+  manufacturingStrategyLabels,
+  validateManufacturingProductStart,
+} from "@/lib/products/manufacturing";
+import { PRODUCT_POST_LAUNCH_TURNS, effectsForStage } from "@/lib/products/lifecycle";
+import { isSectorTechTreesEnabled } from "@/lib/corporations/techTree/featureFlag";
 import {
   getActiveProduct,
   listOperatingModels,
@@ -26,6 +34,11 @@ interface RouteParams {
 const NO_STORE = { "Cache-Control": "private, no-store" };
 
 function serializeProduct(product: CorporationProductDocument) {
+  const effects = effectsForStage({
+    stage: product.stage,
+    launchQuality: product.launchQuality ?? null,
+    productBrand: product.productBrand,
+  });
   return {
     id: product.id,
     corporationId: product.corporationId,
@@ -36,16 +49,38 @@ function serializeProduct(product: CorporationProductDocument) {
     startedTurn: product.startedTurn,
     ...(product.launchedTurn !== undefined ? { launchedTurn: product.launchedTurn } : {}),
     ...(product.retiredTurn !== undefined ? { retiredTurn: product.retiredTurn } : {}),
+    developmentSpendAnchor: product.developmentSpendAnchor,
+    developmentAdvertisingAnchor: product.developmentAdvertisingAnchor,
+    developmentAdvertisingTurns: product.developmentAdvertisingTurns,
+    ...(product.launchQuality !== undefined ? { launchQuality: product.launchQuality } : {}),
+    ...(product.productBrand !== undefined ? { productBrand: product.productBrand } : {}),
+    demandMultiplier: effects.demandMultiplier,
+    priceDefenseMultiplier: effects.priceDefenseMultiplier,
+    amortizationPerTurnAnchor:
+      PRODUCT_POST_LAUNCH_TURNS > 0
+        ? Math.round((product.developmentSpendAnchor / PRODUCT_POST_LAUNCH_TURNS) * 100) / 100
+        : 0,
   };
 }
 
 function serializeKind(kind: ProductKindDefinition) {
+  const manufacturing = manufacturingKindRequirements(kind.id);
   return {
     id: kind.id,
     family: kind.family,
     label: kind.label,
     outputCommodity: kind.outputCommodity,
     ...(kind.operatingModels ? { operatingModels: [...kind.operatingModels] } : {}),
+    ...(manufacturing
+      ? {
+          requirements: {
+            sectorTypes: [...manufacturing.sectorTypes],
+            strategyIds: [...manufacturing.strategyIds],
+            strategyLabels: manufacturingStrategyLabels(kind.id),
+            ...(manufacturing.minDecade ? { minDecade: manufacturing.minDecade } : {}),
+          },
+        }
+      : {}),
   };
 }
 
@@ -167,6 +202,42 @@ export async function POST(request: Request, { params }: RouteParams) {
         { error: `"${kind.label}" is not legal for this corporation's operating models` },
         { status: 400 }
       );
+    }
+
+    // Industrial products additionally need a compatible plant running a
+    // compatible process in the right era with the right research. The
+    // messages name the blocker so the Studio can show it directly.
+    if (kind.family === "industrial_manufacturing") {
+      const [sectors, gameState] = await Promise.all([
+        db
+          .collection("corporateSectors")
+          .find(
+            { corporationId: corporation._id },
+            { projection: { sectorType: 1, strategyId: 1, capacity: 1, mothballed: 1 } }
+          )
+          .toArray(),
+        getGameState(db),
+      ]);
+      const compatibility = validateManufacturingProductStart({
+        kindId: kind.id,
+        corporationTypes: [corporation.type, corporation.secondaryType].filter(
+          (type): type is string => typeof type === "string"
+        ),
+        plants: sectors.map((sector) => ({
+          sectorType: (sector as { sectorType?: unknown }).sectorType,
+          strategyId: (sector as { strategyId?: unknown }).strategyId,
+          capacity: (sector as { capacity?: unknown }).capacity,
+          mothballed: (sector as { mothballed?: unknown }).mothballed,
+        })),
+        currentYear: gameState?.currentYear,
+        unlockedTechnologyIds: corporation.unlockedTechNodeIds,
+        techTreesEnabled: await isSectorTechTreesEnabled(
+          gameState ? { sectorTechTreesEnabled: gameState.sectorTechTreesEnabled } : undefined
+        ),
+      });
+      if (!compatibility.ok) {
+        return NextResponse.json({ error: compatibility.message }, { status: 400 });
+      }
     }
 
     const started = await startProductPersistent(db, {

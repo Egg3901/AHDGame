@@ -40,6 +40,7 @@ import {
   type CorporationProductDocument,
 } from "@/lib/products/persistence";
 import { processProductLifecycle } from "@/lib/products/lifecycle";
+import { POST_LAUNCH_PRODUCT_STAGES } from "@/lib/products/productMarketEffects";
 
 export interface ProductLifecycleTurnCorpInput {
   corpId: string;
@@ -187,4 +188,33 @@ export async function processCorporationProductTurn(
     retired,
     skippedMissingCorp,
   };
+}
+
+/**
+ * Loads persisted post-launch products for the clearing pre-pass. Read-only:
+ * one projected bulk read, no writes, so market effects can never create
+ * output, inventory, capacity, inputs, or cash. The caller checks the feature
+ * flag first and skips this entirely when off. Uses last turn's persisted
+ * state, consistent with every other lagged clearing input.
+ */
+export async function loadPostLaunchProductDocs(db: Db): Promise<CorporationProductDocument[]> {
+  const collection = db.collection<CorporationProductDocument>(CORPORATION_PRODUCTS_COLLECTION);
+  return collection
+    .find(
+      {
+        activeCorporationId: { $exists: true },
+        stage: { $in: [...POST_LAUNCH_PRODUCT_STAGES] },
+      } as never,
+      {
+        projection: {
+          corporationId: 1,
+          kindId: 1,
+          name: 1,
+          stage: 1,
+          launchQuality: 1,
+          productBrand: 1,
+        },
+      }
+    )
+    .toArray();
 }
