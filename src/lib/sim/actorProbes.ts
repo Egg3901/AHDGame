@@ -36,6 +36,12 @@ import {
   type SimActorMode,
 } from "./actorCoverage";
 import { buildSyntheticActorPlan } from "./syntheticActors";
+import {
+  NO_CONFIDENCE_LIFECYCLE_MECHANIC_ID,
+  buildNoConfidenceBallotPlan,
+  expectedNoConfidenceOutcome,
+  noConfidenceClosesOnTurn,
+} from "./noConfidenceLifecycle";
 
 /** Fixed timestamp every probe passes to rules that default to `new Date()`. */
 export const PROBE_1953_NOW_ISO = "1953-01-01T00:00:00.000Z";
@@ -771,5 +777,65 @@ export function probeDdFinanceSurvey(mode: SimActorMode, seed: string): SurveyPr
     seatPositionId,
     ministerCharacterIdHex: minister,
     seatMatchesIssuerGate: true,
+  };
+}
+
+// ─── UK no-confidence motion lifecycle ──────────────────────────────────────
+
+export interface NoConfidenceProbeResult {
+  mechanicId: string;
+  mode: SimActorMode;
+  result: string;
+  proposerCharacterIdHex: string | null;
+  expectedVotesFor: number | null;
+  expectedVotesAgainst: number | null;
+  expectedOutcome: "passed" | "failed" | null;
+  closesOnTurn: number | null;
+}
+
+/**
+ * Deterministic ballot expectation for the lifecycle driver. Pure NPP runs
+ * seat no Commons proposer, so no motion can ever reach the query surface.
+ * In synthetic mode the fixed ballot runs through the REAL carry rule
+ * (`noConfidenceMotionCarries`) with an explicit chamber threshold, and the
+ * deadline runs through the production duration constant — so the probe pins
+ * the ballot the live driver must reproduce, not a reworded copy of it.
+ * The live proposal/query/vote/resolution run itself is worldsim evidence,
+ * not something this probe pretends to run.
+ */
+export function probeNoConfidenceMotion(
+  mode: SimActorMode,
+  seed: string,
+  majorityThreshold: number,
+  turnProposed: number
+): NoConfidenceProbeResult {
+  const mechanicId = assertKnownActorMechanic(NO_CONFIDENCE_LIFECYCLE_MECHANIC_ID);
+  if (mode === "pure-npp") {
+    return {
+      mechanicId,
+      mode,
+      result:
+        "uncovered: no-confidence lifecycle — zero player characters, no eligible Commons proposer",
+      proposerCharacterIdHex: null,
+      expectedVotesFor: null,
+      expectedVotesAgainst: null,
+      expectedOutcome: null,
+      closesOnTurn: null,
+    };
+  }
+  const plan = buildNoConfidenceBallotPlan(seed);
+  const expectedOutcome = expectedNoConfidenceOutcome(plan, majorityThreshold);
+  return {
+    mechanicId,
+    mode,
+    result:
+      `synthetic proposer ${plan.proposer.characterIdHex} moves no confidence; ` +
+      `fixed ballot ${plan.expectedVotesFor}-${plan.expectedVotesAgainst} ` +
+      `resolves ${expectedOutcome} at threshold ${majorityThreshold}`,
+    proposerCharacterIdHex: plan.proposer.characterIdHex,
+    expectedVotesFor: plan.expectedVotesFor,
+    expectedVotesAgainst: plan.expectedVotesAgainst,
+    expectedOutcome,
+    closesOnTurn: noConfidenceClosesOnTurn(turnProposed),
   };
 }
