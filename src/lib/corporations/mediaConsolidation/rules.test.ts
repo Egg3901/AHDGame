@@ -269,9 +269,11 @@ describe("collision merge", () => {
     expect(plan?.producedUnits).toBe(70);
     expect(plan?.soldUnits).toBe(63);
     expect(plan?.contractAchievableUnits).toBe(77);
-    expect(plan?.rescaleLegs).toEqual([
-      { rowId: "b", fromStrategy: "live_venue", toStrategy: "diversified" },
+    // Legs are keyed by rowId, so their order is not contractual: compare as
+    // a set. The planner emits them in input-row order, not survivor-first.
+    expect([...(plan?.rescaleLegs ?? [])].sort((a, b) => (a.rowId < b.rowId ? -1 : 1))).toEqual([
       { rowId: "a", fromStrategy: "broadcast", toStrategy: "diversified" },
+      { rowId: "b", fromStrategy: "live_venue", toStrategy: "diversified" },
     ]);
     expect(plan?.operatingModels).toEqual([
       "newspaper",
