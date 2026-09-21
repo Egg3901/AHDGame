@@ -22,6 +22,7 @@ import type { CurrencyCode } from "@/lib/constants/currencies";
 import { runWithOptionalTransaction } from "@/lib/db/runWithOptionalTransaction";
 import { emitTx } from "@/lib/financialTxLog/emit";
 import { rejectDuringTurn } from "@/lib/api/rejectDuringTurn";
+import * as Sentry from "@sentry/nextjs";
 import {
   bondPoolDepthMessage,
   bondPoolFillableUnits,
@@ -71,6 +72,28 @@ function buildHolderCleanupUpdate(
       },
     },
   ];
+}
+
+async function cleanupEmptyHolderBestEffort(
+  db: Awaited<ReturnType<typeof getDb>>,
+  bondId: ObjectId,
+  holderKey: "corporationId" | "imperialCharacterId" | "characterId",
+  holderId: ObjectId,
+  now: Date
+) {
+  try {
+    await db
+      .collection("bonds")
+      .updateOne({ _id: bondId }, buildHolderCleanupUpdate(holderKey, holderId, now));
+  } catch (error) {
+    // The sale is already financially complete. A zero-unit holder row is
+    // harmless and can be removed later; rolling the sale back here would
+    // restore the asset and pool cash without reversing the seller payout.
+    Sentry.captureException(error, {
+      tags: { operation: "bond-sell-holder-cleanup" },
+      extra: { bondId: bondId.toString(), holderKey, holderId: holderId.toString() },
+    });
+  }
 }
 
 /**
@@ -281,18 +304,12 @@ export async function POST(request: Request, { params }: RouteParams) {
             if (payoutResult.matchedCount === 0) {
               throw notFound("Corporation not found");
             }
-
-            await db
-              .collection("bonds")
-              .updateOne(
-                { _id: bond._id },
-                buildHolderCleanupUpdate("corporationId", corp._id, now)
-              );
           } catch (error) {
             await rollbackClaim();
             await refundBondPoolDebit(db, bondCurrency, proceedsLocal, "salesOut");
             throw error;
           }
+          await cleanupEmptyHolderBestEffort(db, bond._id, "corporationId", corp._id, now);
         }
       );
 
@@ -438,18 +455,18 @@ export async function POST(request: Request, { params }: RouteParams) {
             if (payoutResult.matchedCount === 0) {
               throw notFound("Imperial character not found");
             }
-
-            await db
-              .collection("bonds")
-              .updateOne(
-                { _id: bond._id },
-                buildHolderCleanupUpdate("imperialCharacterId", imperial._id, now)
-              );
           } catch (error) {
             await rollbackClaim();
             await refundBondPoolDebit(db, bondCurrency, proceedsLocal, "salesOut");
             throw error;
           }
+          await cleanupEmptyHolderBestEffort(
+            db,
+            bond._id,
+            "imperialCharacterId",
+            imperial._id,
+            now
+          );
         }
       );
 
@@ -587,18 +604,12 @@ export async function POST(request: Request, { params }: RouteParams) {
           if (payoutResult.matchedCount === 0) {
             throw notFound("Character not found");
           }
-
-          await db
-            .collection("bonds")
-            .updateOne(
-              { _id: bond._id },
-              buildHolderCleanupUpdate("characterId", character._id, now)
-            );
         } catch (error) {
           await rollbackClaim();
           await refundBondPoolDebit(db, bondCurrency, proceedsLocal, "salesOut");
           throw error;
         }
+        await cleanupEmptyHolderBestEffort(db, bond._id, "characterId", character._id, now);
       }
     );
 

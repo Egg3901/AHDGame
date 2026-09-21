@@ -47,6 +47,10 @@ describe("pandemic living conflict", () => {
       ["endemic", 5],
     ]);
     expect(legacy.tracks).toMatchObject({ transmission: 28, healthCapacity: 68, immunity: 0 });
+    expect(PANDEMIC_DEF.participantFallbacks).toMatchObject({
+      CN: ["IN", "JP"],
+      US: ["UK", "DE", "FR"],
+    });
   });
 
   it("allows surveillance and containment to stop the first cluster", () => {

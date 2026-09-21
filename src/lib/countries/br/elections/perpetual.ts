@@ -13,7 +13,7 @@ export async function ensureBRElections(now: Date, inFlightTurn?: number): Promi
     {
       countryId: "BR",
       electionType: "chamber",
-      seatsForRegions: (regions) => Object.fromEntries(regions.map((r) => [r._id as string, 1])),
+      seatsForRegions: (regions) => seatsFromRegionField(regions, "houseDistricts"),
       openPrimaryImmediately: true,
       label: "Câmara",
     },

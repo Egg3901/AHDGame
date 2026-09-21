@@ -25,7 +25,20 @@ function report(): BalanceReport {
       medianMarginPct: 0,
     },
     officeTurnover: { officeCount: 10, nppHeldPct: 0.7, meanTenureDays: 0 },
-    crises: { totalSpawned: 4, active: 2, resolved: 2, meanResolutionHours: 0 },
+    crises: {
+      totalSpawned: 4,
+      active: 2,
+      resolved: 2,
+      meanResolutionHours: 0,
+      living: {
+        total: 0,
+        opened: 0,
+        byStatus: {},
+        pendingDecisions: 0,
+        resolvedDecisions: 0,
+        byDefinition: [],
+      },
+    },
     economy: {
       commodityCount: 3,
       inflationIndex: 1.2,

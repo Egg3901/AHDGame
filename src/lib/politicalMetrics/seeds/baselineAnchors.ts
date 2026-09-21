@@ -7,12 +7,8 @@
  * codebase has one interpolation behavior: linear between anchors, clamped at
  * both ends.
  *
- * The table currently carries a SINGLE anchor at 1953 per family, sourced from
- * NATIONAL_BASELINES_1953. Every year therefore resolves to the authored 1953
- * value, which is byte-identical to the pre-era behavior. Additional anchors are
- * authored and reviewed in the non-playable derivation step; `trendPerYear` on
- * the 1953 baselines is the authoring input for that work, never an automatic
- * extrapolation.
+ * Each family carries reviewed era anchors. Values between authored years are
+ * interpolated; values outside the authored range clamp to the nearest anchor.
  */
 import {
   POLITICAL_METRIC_COUNTRY_IDS,
@@ -20,6 +16,7 @@ import {
   type PoliticalMetricsCountryId,
 } from "../types";
 import { NATIONAL_BASELINES_1953 } from "./nationalBaselines1953";
+import { NATIONAL_BASELINES_1979 } from "./nationalBaselines1979";
 
 export interface BaselineAnchor {
   year: number;
@@ -37,7 +34,11 @@ function buildInitialTable(): AnchorTable {
   for (const countryId of POLITICAL_METRIC_COUNTRY_IDS) {
     const perFamily = {} as Record<PoliticalMetricId, BaselineAnchor[]>;
     for (const [metricId, baseline] of Object.entries(NATIONAL_BASELINES_1953[countryId])) {
-      perFamily[metricId as PoliticalMetricId] = [{ year: 1953, value: baseline.value }];
+      const id = metricId as PoliticalMetricId;
+      perFamily[id] = [
+        { year: 1953, value: baseline.value },
+        { year: 1979, value: NATIONAL_BASELINES_1979[countryId][id] },
+      ];
     }
     out[countryId] = perFamily;
   }

@@ -204,11 +204,11 @@ describe("seedExchangeRates", () => {
 });
 
 describe("updateCentralBanks", () => {
-  it("upserts all FOREX_ACTIVE_COUNTRIES including DE via bulkWrite", async () => {
+  it("upserts only countries with authored fiscal coverage while retaining currency support", async () => {
     db.collection("centralBanks").bulkWrite.mockResolvedValue({ upsertedCount: 1 });
 
     const { updateCentralBanks } = await import("./migration");
-    await updateCentralBanks(db as unknown as Db);
+    await updateCentralBanks(db as unknown as Db, "2019-default");
 
     const calls = db.collection("centralBanks").bulkWrite.mock.calls;
     expect(calls).toHaveLength(1);
@@ -218,6 +218,7 @@ describe("updateCentralBanks", () => {
     expect(filters).toEqual(
       expect.arrayContaining([{ _id: "US" }, { _id: "UK" }, { _id: "JP" }, { _id: "ECB" }])
     );
+    expect(filters).not.toEqual(expect.arrayContaining([{ _id: "RU" }, { _id: "DD" }]));
     // Every op must request upsert so missing documents get created
     expect(ops.every((op) => op.updateOne.upsert === true)).toBe(true);
     // $set must reset tradeGrowth (not forexRevenue — $setOnInsert guards existing revenue)
@@ -225,6 +226,22 @@ describe("updateCentralBanks", () => {
       const update = op.updateOne as unknown as { update: { $set: Record<string, unknown> } };
       expect(update.update.$set).toMatchObject({ tradeGrowth: 0 });
     }
+    expect(db.collection("centralBanks").deleteMany).toHaveBeenCalledWith({
+      _id: { $in: expect.arrayContaining(["RU", "DD"]) },
+    });
+  });
+
+  it("keeps RU and DD central banks in an authored Cold War preset", async () => {
+    const { updateCentralBanks } = await import("./migration");
+    await updateCentralBanks(db as unknown as Db, "1979-default");
+
+    const ops = db.collection("centralBanks").bulkWrite.mock.calls[0][0] as Array<{
+      updateOne: { filter: { _id: string } };
+    }>;
+    expect(ops.map(({ updateOne }) => updateOne.filter._id)).toEqual(
+      expect.arrayContaining(["RU", "DD"])
+    );
+    expect(db.collection("centralBanks").deleteMany).not.toHaveBeenCalled();
   });
 });
 

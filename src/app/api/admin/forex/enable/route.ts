@@ -93,9 +93,10 @@ export async function POST() {
 
     try {
       const migrationResult = await migrateCharacterBalances(db);
-      await seedExchangeRates(db, await getGameStatePresetOrDefault(db));
+      const preset = await getGameStatePresetOrDefault(db);
+      await seedExchangeRates(db, preset);
       const corpMigrationResult = await migrateCorporationLiquidCapital(db);
-      await updateCentralBanks(db);
+      await updateCentralBanks(db, preset);
       await createForexIndexes(db);
 
       // Flip the flag and release lock

@@ -5,6 +5,7 @@ import { UK_REGIONS } from "@/lib/constants/uk";
 
 export interface MapPartyOrgState {
   leadingParty: string;
+  leadingPartyName?: string;
   leadColor: string;
   organization: number;
   tooltip: string[];
@@ -91,6 +92,7 @@ function buildPartyOrg(
     const name = partyNameMap.get(top.partyId) ?? top.partyId;
     result[stateId] = {
       leadingParty: top.partyId,
+      leadingPartyName: name,
       leadColor: color,
       organization: top.organization,
       tooltip: [
@@ -129,6 +131,7 @@ function buildPartyOrgUK(
     const name = partyNameMap.get(top.partyId) ?? top.partyId;
     result[region.id] = {
       leadingParty: top.partyId,
+      leadingPartyName: name,
       leadColor: color,
       organization: top.organization,
       tooltip: [

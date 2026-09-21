@@ -52,12 +52,149 @@ import {
   resolveOrgBuildFunding,
 } from "@/lib/politicalStrength/buildOrgFunding";
 import { chargeOrgBuildFunds } from "@/lib/parties/commands/chargeOrgBuildFunds";
-import { resolveOrgBuildSizeMultiplier } from "@/lib/politicalStrength/orgBuildStateSize";
+import {
+  resolveAllOrgBuildSizeMultipliers,
+  resolveOrgBuildSizeMultiplier,
+} from "@/lib/politicalStrength/orgBuildStateSize";
 import { calcUnifiedBuildOrg } from "@/lib/turn/politicalStrength/buildOrgGain";
 import { resolveUnmannedDefaultCaptureMultiplier } from "@/lib/parties/unmannedDefenseShield";
+import { DEFENSE_UNMANNED_CAPTURE_MULTIPLIER } from "@/lib/turn/partyOrg/defenseConstants";
+import type { Character } from "@/lib/db/types";
 
 export type NppBuildOrgResult =
   { ok: true; orgGain: number; newOrg: number; psCost: number } | { ok: false; reason: string };
+
+/**
+ * Sweep-level read cache for `nppBuildPartyOrg`. Holds ONLY inputs that are
+ * immutable for the duration of the build-org sweep: national party docs
+ * (this sweep spends state-scope PS, never national PS, and never reseats
+ * chairs), chair-derived capture shields (no chair/user writes on this path),
+ * and per-state price multipliers (no population writes on this path).
+ *
+ * Deliberately NOT cached: state-party organization/PS/treasury rows, PS
+ * pressure, and ownership gates; every action re-reads those live because an
+ * earlier action in the same sweep may have moved them.
+ */
+export interface NppBuildOrgSweepCache {
+  /** Key `${countryId}:${sequentialId}`. */
+  partiesByKey: Map<
+    string,
+    Pick<
+      PoliticalParty,
+      "sequentialId" | "countryId" | "politicalStrength" | "isDefault" | "chairId"
+    >
+  >;
+  /** Capture shield per party key, replicating `resolveUnmannedDefaultCaptureMultiplier`. */
+  shieldByPartyKey: Map<string, number>;
+  /** Price multiplier per `${countryId}:${stateId}`. */
+  sizeMultiplierByKey: Map<string, number>;
+}
+
+export function partyCacheKey(countryId: CountryId, sequentialId: number | string): string {
+  return `${countryId}:${sequentialId}`;
+}
+
+function sizeCacheKey(countryId: CountryId, stateId: string): string {
+  return `${countryId}:${stateId}`;
+}
+
+/**
+ * Preload one sweep's worth of immutable build-org inputs. One
+ * `politicalParties` scan plus one `characters`/`users` pair for shields plus
+ * two `states` reads per country, replacing per-action party lookups, rival
+ * `$in` queries, per-rival shield chair/user reads, and per-action state
+ * population reads.
+ */
+export async function preloadNppBuildOrgSweepCache(
+  db: Db,
+  countryIds: CountryId[]
+): Promise<NppBuildOrgSweepCache> {
+  const cache: NppBuildOrgSweepCache = {
+    partiesByKey: new Map(),
+    shieldByPartyKey: new Map(),
+    sizeMultiplierByKey: new Map(),
+  };
+  if (countryIds.length === 0) return cache;
+
+  const partyDocs = await db
+    .collection<PoliticalParty>("politicalParties")
+    .find(
+      { countryId: { $in: countryIds } },
+      {
+        projection: {
+          countryId: 1,
+          sequentialId: 1,
+          politicalStrength: 1,
+          isDefault: 1,
+          chairId: 1,
+        },
+      }
+    )
+    .toArray();
+  for (const p of partyDocs) {
+    cache.partiesByKey.set(partyCacheKey(p.countryId as CountryId, p.sequentialId), p);
+  }
+
+  // Shields replicate `isActiveHumanChair`: vacant seat, NPP-held (no userId),
+  // or banned-user chair reads as unmanned. Bulk the same two lookups with the
+  // raw id values (never stringified; `$in` must match ObjectId `_id`s).
+  const chairIds: ObjectId[] = [];
+  {
+    const seen = new Set<string>();
+    for (const p of partyDocs) {
+      if (!p.isDefault || p.chairId == null) continue;
+      const key = String(p.chairId);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      chairIds.push(p.chairId);
+    }
+  }
+  const chairById = new Map<string, Pick<Character, "_id" | "userId">>();
+  if (chairIds.length > 0) {
+    const chairs = await db
+      .collection<Character>("characters")
+      .find({ _id: { $in: chairIds } }, { projection: { userId: 1 } })
+      .toArray();
+    for (const c of chairs) chairById.set(String(c._id), c);
+  }
+  const userIds: ObjectId[] = [];
+  {
+    const seen = new Set<string>();
+    for (const c of chairById.values()) {
+      const userId = (c as { userId?: ObjectId | null }).userId;
+      if (userId == null) continue;
+      const key = String(userId);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      userIds.push(userId);
+    }
+  }
+  const activeUserIds = new Set<string>();
+  if (userIds.length > 0) {
+    const users = await db
+      .collection("users")
+      .find({ _id: { $in: userIds }, isBanned: { $ne: true } }, { projection: { _id: 1 } })
+      .toArray();
+    for (const u of users) activeUserIds.add(String(u._id));
+  }
+  for (const p of partyDocs) {
+    const key = partyCacheKey(p.countryId as CountryId, p.sequentialId);
+    if (!p.isDefault) {
+      cache.shieldByPartyKey.set(key, 1);
+      continue;
+    }
+    const chair = p.chairId != null ? chairById.get(String(p.chairId)) : undefined;
+    const seated = chair?.userId != null && activeUserIds.has(String(chair.userId));
+    cache.shieldByPartyKey.set(key, seated ? 1 : DEFENSE_UNMANNED_CAPTURE_MULTIPLIER);
+  }
+
+  for (const cid of countryIds) {
+    const multipliers = await resolveAllOrgBuildSizeMultipliers(db, cid);
+    for (const [state, mult] of multipliers)
+      cache.sizeMultiplierByKey.set(sizeCacheKey(cid, state), mult);
+  }
+  return cache;
+}
 
 export async function nppBuildPartyOrg(
   db: Db,
@@ -65,9 +202,12 @@ export async function nppBuildPartyOrg(
   countryId: CountryId,
   stateId: string,
   partySequentialId: number,
-  currentTurn: number
+  currentTurn: number,
+  sweepCache?: NppBuildOrgSweepCache
 ): Promise<NppBuildOrgResult> {
-  const spenderParty = await findPartyBySequentialId(db, partySequentialId, countryId);
+  const spenderParty =
+    sweepCache?.partiesByKey.get(partyCacheKey(countryId, partySequentialId)) ??
+    (await findPartyBySequentialId(db, partySequentialId, countryId));
   if (!spenderParty) return { ok: false, reason: "Party not found." };
 
   const partyIdStr = String(spenderParty.sequentialId);
@@ -102,17 +242,45 @@ export async function nppBuildPartyOrg(
   );
   const rivalLeadOrgPct = rivalRows.reduce((max, r) => Math.max(max, r.organization ?? 0), 0);
 
-  const rivalParties = rivalRows.length
-    ? await db
+  type RivalParty = Pick<
+    PoliticalParty,
+    "sequentialId" | "politicalStrength" | "isDefault" | "chairId"
+  >;
+  const partyBySeq = new Map<string, RivalParty>();
+  if (sweepCache) {
+    for (const r of rivalRows) {
+      const hit = sweepCache.partiesByKey.get(partyCacheKey(countryId, r.partyId));
+      if (hit) partyBySeq.set(r.partyId, hit);
+    }
+    // A rival row whose party missed the preload (created mid-sweep) falls
+    // back to the same live `$in` read the uncached path uses.
+    const missing = rivalRows.filter((r) => !partyBySeq.has(r.partyId));
+    if (missing.length > 0) {
+      const docs = await db
         .collection<PoliticalParty>("politicalParties")
-        .find({ countryId, sequentialId: { $in: rivalRows.map((r) => Number(r.partyId)) } })
-        .toArray()
-    : [];
-  const partyBySeq = new Map(rivalParties.map((p) => [String(p.sequentialId), p]));
+        .find({ countryId, sequentialId: { $in: missing.map((r) => Number(r.partyId)) } })
+        .toArray();
+      for (const p of docs) partyBySeq.set(String(p.sequentialId), p);
+    }
+  } else if (rivalRows.length > 0) {
+    const rivalParties = await db
+      .collection<PoliticalParty>("politicalParties")
+      .find({ countryId, sequentialId: { $in: rivalRows.map((r) => Number(r.partyId)) } })
+      .toArray();
+    for (const p of rivalParties) partyBySeq.set(String(p.sequentialId), p);
+  }
   const shieldByPartyId = new Map<string, number>();
   for (const r of rivalRows) {
     const p = partyBySeq.get(r.partyId);
-    shieldByPartyId.set(r.partyId, p ? await resolveUnmannedDefaultCaptureMultiplier(db, p) : 1);
+    if (!p) {
+      shieldByPartyId.set(r.partyId, 1);
+      continue;
+    }
+    const cached = sweepCache?.shieldByPartyKey.get(partyCacheKey(countryId, r.partyId));
+    shieldByPartyId.set(
+      r.partyId,
+      cached ?? (await resolveUnmannedDefaultCaptureMultiplier(db, p))
+    );
   }
 
   const ownPS = blendedComparisonPs(
@@ -154,7 +322,9 @@ export async function nppBuildPartyOrg(
   const pressureRow = await db
     .collection<PartyStrengthPressure>("partyStrengthPressure")
     .findOne({ _id: `${countryId}_${partySequentialId}_${stateId}` });
-  const sizeMultiplier = await resolveOrgBuildSizeMultiplier(db, countryId, stateId);
+  const sizeMultiplier =
+    sweepCache?.sizeMultiplierByKey.get(sizeCacheKey(countryId, stateId)) ??
+    (await resolveOrgBuildSizeMultiplier(db, countryId, stateId));
   const quotedPrice = orgBuildCashPrice(
     countryId,
     "state",
@@ -226,48 +396,60 @@ export async function nppBuildPartyOrg(
   const actualGain = appliedPoolGain + appliedPoaches.reduce((s, p) => s + p.loss, 0);
 
   const newOwnOrg = Math.round(((spenderRow.organization ?? 0) + actualGain) * 100) / 100;
-  await db
-    .collection<StatePartyOrg>("statePartyOrg")
-    .updateOne({ _id: spenderRow._id }, { $set: { organization: newOwnOrg, updatedAt: now } });
-
-  for (const poach of appliedPoaches) {
-    const rivalRow = rivalRows.find((r) => r.partyId === poach.partyId);
-    if (!rivalRow) continue;
-    const rivalNewOrg =
-      Math.round(Math.max(0, (rivalRow.organization ?? 0) - poach.loss) * 100) / 100;
+  // Completed receipts flush as ONE `insertMany` in `finally`, in the same
+  // poaches-then-own order the per-write `insertOne`s used. Organization
+  // mutations stay sequential above; if a rival write throws, the receipts
+  // completed before it still persist as with the old per-write inserts.
+  // The original write error propagates when the receipt flush succeeds.
+  const receipts: OrgRegLedger[] = [];
+  try {
     await db
       .collection<StatePartyOrg>("statePartyOrg")
-      .updateOne({ _id: rivalRow._id }, { $set: { organization: rivalNewOrg, updatedAt: now } });
-    await db.collection<OrgRegLedger>("orgRegLedger").insertOne({
+      .updateOne({ _id: spenderRow._id }, { $set: { organization: newOwnOrg, updatedAt: now } });
+
+    for (const poach of appliedPoaches) {
+      const rivalRow = rivalRows.find((r) => r.partyId === poach.partyId);
+      if (!rivalRow) continue;
+      const rivalNewOrg =
+        Math.round(Math.max(0, (rivalRow.organization ?? 0) - poach.loss) * 100) / 100;
+      await db
+        .collection<StatePartyOrg>("statePartyOrg")
+        .updateOne({ _id: rivalRow._id }, { $set: { organization: rivalNewOrg, updatedAt: now } });
+      receipts.push({
+        _id: new ObjectId(),
+        turn: currentTurn,
+        countryId,
+        stateId,
+        partyId: poach.partyId,
+        metric: "org",
+        delta: -poach.loss,
+        value: rivalNewOrg,
+        source: "poach",
+        actorId: actorNppId,
+        note: `poach:npp-build-org:from:${partyIdStr}`,
+        createdAt: now,
+      });
+    }
+
+    receipts.push({
       _id: new ObjectId(),
       turn: currentTurn,
       countryId,
       stateId,
-      partyId: poach.partyId,
+      partyId: partyIdStr,
       metric: "org",
-      delta: -poach.loss,
-      value: rivalNewOrg,
-      source: "poach",
+      delta: actualGain,
+      value: newOwnOrg,
+      source: "action",
       actorId: actorNppId,
-      note: `poach:npp-build-org:from:${partyIdStr}`,
+      note: "action:npp-build-org",
       createdAt: now,
     });
+  } finally {
+    if (receipts.length > 0) {
+      await db.collection<OrgRegLedger>("orgRegLedger").insertMany(receipts);
+    }
   }
-
-  await db.collection<OrgRegLedger>("orgRegLedger").insertOne({
-    _id: new ObjectId(),
-    turn: currentTurn,
-    countryId,
-    stateId,
-    partyId: partyIdStr,
-    metric: "org",
-    delta: actualGain,
-    value: newOwnOrg,
-    source: "action",
-    actorId: actorNppId,
-    note: "action:npp-build-org",
-    createdAt: now,
-  });
 
   return { ok: true, orgGain: actualGain, newOrg: newOwnOrg, psCost: spendResult.effectiveCost };
 }

@@ -12,15 +12,27 @@ export function useResourceMapData(
   countryId: string,
   resourceType: ExtractableResource
 ): Record<string, ResourceEntry> {
-  const [resourceData, setResourceData] = useState<Record<string, ResourceEntry>>({});
+  const requestKey = `${countryId}:${resourceType}`;
+  const [result, setResult] = useState<{ key: string; data: Record<string, ResourceEntry> }>({
+    key: "",
+    data: {},
+  });
 
   useEffect(() => {
     if (mode !== "resources") return;
-    fetch(`/api/map/resources?countryId=${countryId}&resource=${resourceType}`)
+    const controller = new AbortController();
+    fetch(`/api/map/resources?countryId=${countryId}&resource=${resourceType}`, {
+      signal: controller.signal,
+    })
       .then((r) => (r.ok ? r.json() : { states: {} }))
-      .then(({ states }: { states: Record<string, ResourceEntry> }) => setResourceData(states))
-      .catch(() => setResourceData({}));
-  }, [mode, resourceType, countryId]);
+      .then(({ states }: { states: Record<string, ResourceEntry> }) => {
+        if (!controller.signal.aborted) setResult({ key: requestKey, data: states ?? {} });
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setResult({ key: requestKey, data: {} });
+      });
+    return () => controller.abort();
+  }, [mode, resourceType, countryId, requestKey]);
 
-  return resourceData;
+  return result.key === requestKey ? result.data : {};
 }

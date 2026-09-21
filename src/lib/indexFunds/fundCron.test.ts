@@ -47,6 +47,7 @@ vi.mock("@/lib/corporations/shareEscrowSettlement", () => ({
 }));
 
 vi.mock("@/lib/equities/marketPool", () => ({
+  equityPoolCurrency: vi.fn().mockReturnValue("USD"),
   loadEquityPoolsByCurrency: vi.fn().mockResolvedValue(new Map()),
   loadEquityQuote: vi.fn().mockImplementation((_db, corp: { sharePrice: number }) =>
     Promise.resolve({
@@ -423,7 +424,8 @@ describe("fundCron — executeFundShareBuy", () => {
     };
 
     const corporationsColl = {
-      // Used only if creditSharesToFund falls through — our mock handles it
+      findOne: vi.fn().mockResolvedValue({ _id: corpId, shareholders: [] }),
+      updateOne: vi.fn().mockResolvedValue({ matchedCount: 1 }),
     };
 
     const fundTransactionsColl = {
@@ -438,13 +440,19 @@ describe("fundCron — executeFundShareBuy", () => {
         if (name === "indexFunds") return indexFundsColl;
         if (name === "corporations") return corporationsColl;
         if (name === "indexFundTransactions") return fundTransactionsColl;
-        return { findOneAndUpdate: vi.fn(), updateOne: vi.fn(), insertOne: vi.fn() };
+        return {
+          findOne: vi.fn().mockResolvedValue(null),
+          findOneAndUpdate: vi.fn(),
+          updateOne: vi.fn().mockResolvedValue({ matchedCount: 1 }),
+          insertOne: vi.fn(),
+        };
       }),
       // Expose for assertions
       _getCashAnchor: () => cashAnchor,
       _getPublicFloat: () => publicFloat,
       _getFundTransactions: () => fundTransactions,
       _indexFundsColl: indexFundsColl,
+      _corporationsColl: corporationsColl,
       _fundTransactionsColl: fundTransactionsColl,
     };
   }
@@ -543,6 +551,89 @@ describe("fundCron — executeFundShareBuy", () => {
     expect(refundCall[0]._id.toString()).toBe(fundId.toString());
     expect(refundCall[1].$inc.cashAnchor).toBe(500);
   });
+
+  it("restores the standalone purchase when the holdings write fails and a retry applies once", async () => {
+    const { updateFundHoldings, insertFundTransaction } =
+      await import("@/lib/indexFunds/fundQueries");
+    const { creditSharesToFund } = await import("@/lib/corporations/shareholderOps");
+    const { applyFloatBuyCredit } = await import("@/lib/corporations/shareEscrowSettlement");
+    vi.mocked(updateFundHoldings).mockRejectedValueOnce(new Error("injected holdings failure"));
+
+    await expect(
+      executeFundShareBuy(
+        mockDb as unknown as import("mongodb").Db,
+        baseFund,
+        baseCorp as unknown as Parameters<typeof executeFundShareBuy>[2],
+        10,
+        50,
+        5
+      )
+    ).rejects.toThrow("injected holdings failure");
+
+    expect(mockDb._getCashAnchor()).toBe(10_000);
+    expect(mockDb._corporationsColl.updateOne).toHaveBeenCalledTimes(2);
+    expect(insertFundTransaction).not.toHaveBeenCalled();
+
+    const retry = await executeFundShareBuy(
+      mockDb as unknown as import("mongodb").Db,
+      baseFund,
+      baseCorp as unknown as Parameters<typeof executeFundShareBuy>[2],
+      10,
+      50,
+      5
+    );
+
+    expect(retry.ok).toBe(true);
+    expect(mockDb._getCashAnchor()).toBe(9_500);
+    expect(creditSharesToFund).toHaveBeenCalledTimes(2);
+    expect(applyFloatBuyCredit).toHaveBeenCalledTimes(2);
+    expect(insertFundTransaction).toHaveBeenCalledTimes(1);
+  });
+
+  it("restores holdings and every economic leg when the audit insert fails", async () => {
+    const { updateFundHoldings, insertFundTransaction } =
+      await import("@/lib/indexFunds/fundQueries");
+    vi.mocked(insertFundTransaction).mockRejectedValueOnce(new Error("injected audit failure"));
+
+    await expect(
+      executeFundShareBuy(
+        mockDb as unknown as import("mongodb").Db,
+        baseFund,
+        baseCorp as unknown as Parameters<typeof executeFundShareBuy>[2],
+        10,
+        50,
+        5
+      )
+    ).rejects.toThrow("injected audit failure");
+
+    expect(mockDb._getCashAnchor()).toBe(10_000);
+    expect(updateFundHoldings).toHaveBeenCalledTimes(1);
+    expect(mockDb._indexFundsColl.updateOne).toHaveBeenCalledWith(
+      expect.objectContaining({ _id: fundId }),
+      expect.objectContaining({ $set: expect.objectContaining({ holdings: baseFund.holdings }) })
+    );
+    expect(mockDb._corporationsColl.updateOne).toHaveBeenCalledTimes(2);
+  });
+
+  it("attempts every remaining reversal when one compensation step fails", async () => {
+    const { insertFundTransaction } = await import("@/lib/indexFunds/fundQueries");
+    vi.mocked(insertFundTransaction).mockRejectedValueOnce(new Error("injected audit failure"));
+    mockDb._indexFundsColl.updateOne.mockResolvedValueOnce({ matchedCount: 0 });
+
+    await expect(
+      executeFundShareBuy(
+        mockDb as unknown as import("mongodb").Db,
+        baseFund,
+        baseCorp as unknown as Parameters<typeof executeFundShareBuy>[2],
+        10,
+        50,
+        5
+      )
+    ).rejects.toThrow(AggregateError);
+
+    expect(mockDb._corporationsColl.updateOne).toHaveBeenCalledTimes(2);
+    expect(mockDb._getCashAnchor()).toBe(10_000);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -638,7 +729,12 @@ describe("fundCron — rebalanceFundToTarget", () => {
         // shareOrders: return empty list for open bids so bid logic is a no-op in existing tests
         if (name === "shareOrders")
           return { find: vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue([]) }) };
-        return { findOneAndUpdate: vi.fn(), updateOne: vi.fn(), insertOne: vi.fn() };
+        return {
+          findOne: vi.fn().mockResolvedValue(null),
+          findOneAndUpdate: vi.fn(),
+          updateOne: vi.fn().mockResolvedValue({ matchedCount: 1 }),
+          insertOne: vi.fn(),
+        };
       }),
       _indexFundsColl: indexFundsColl,
     };
@@ -653,6 +749,8 @@ describe("fundCron — rebalanceFundToTarget", () => {
 
     // getFundById returns the drift fund so re-fetches work
     const { getFundById } = await import("@/lib/indexFunds/fundQueries");
+    const { insertFundTransaction, insertFundTransactionsBulk } =
+      await import("@/lib/indexFunds/fundQueries");
     vi.mocked(getFundById).mockResolvedValue(fundWithDrift);
 
     const { creditSharesToFund } = await import("@/lib/corporations/shareholderOps");
@@ -684,6 +782,10 @@ describe("fundCron — rebalanceFundToTarget", () => {
       expect.any(Number),
       expect.objectContaining({ note: expect.stringContaining("Rebalance") })
     );
+    expect(insertFundTransaction).not.toHaveBeenCalled();
+    // One bulk write for completed float buys, then the existing bid-audit bulk write.
+    expect(insertFundTransactionsBulk).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(insertFundTransactionsBulk).mock.calls[0]?.[1].length).toBe(result.buys);
   });
 
   it("returns { buys, sells } counts", async () => {
@@ -859,7 +961,12 @@ describe("fundCron — rebalanceFundToTarget bid logic", () => {
         if (name === "indexFunds") return indexFundsColl;
         if (name === "shareOrders") return shareOrdersColl;
         if (name === "indexFundTransactions") return { insertOne: vi.fn().mockResolvedValue({}) };
-        return { findOneAndUpdate: vi.fn(), updateOne: vi.fn(), insertOne: vi.fn() };
+        return {
+          findOne: vi.fn().mockResolvedValue(null),
+          findOneAndUpdate: vi.fn(),
+          updateOne: vi.fn().mockResolvedValue({ matchedCount: 1 }),
+          insertOne: vi.fn(),
+        };
       }),
       _shareOrdersColl: shareOrdersColl,
       _setOpenOrders: (orders: import("mongodb").WithId<import("mongodb").Document>[]) => {

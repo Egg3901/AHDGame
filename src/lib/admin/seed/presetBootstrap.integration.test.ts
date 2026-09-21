@@ -2,6 +2,7 @@ import { beforeAll, describe, expect, it, vi } from "vitest";
 import type { Db } from "mongodb";
 import { COUNTRY_ORDER, type CountryId } from "@/lib/constants/countries";
 import { countriesByTier, tierFor, type ShippingPreset } from "@/lib/world/eraRoster";
+import { getPresetMonetaryScope } from "@/lib/monetaryPolicy/presetMonetaryScope";
 
 /**
  * ⚠️ Any seed-path code reaching for `getDb()` instead of taking the `db`
@@ -124,6 +125,25 @@ describe("a bootstrapped world matches its era roster", () => {
       }
     }
     expect(wrong, wrong.join("; ")).toEqual([]);
+  });
+
+  it.each(PRESETS)("%s gives every central bank a national fiscal document", async (preset) => {
+    const { db } = built.get(preset)!;
+    const banks = await db
+      .collection<{ countryId: CountryId }>("centralBanks")
+      .find({}, { projection: { countryId: 1 } })
+      .toArray();
+    const budgets = await db
+      .collection<{ countryId: CountryId }>("federalBudget")
+      .find({}, { projection: { countryId: 1 } })
+      .toArray();
+    const banked = banks.map(({ countryId }) => countryId);
+    const budgeted = new Set(budgets.map(({ countryId }) => countryId));
+    const scope = getPresetMonetaryScope(preset);
+
+    expect(banked).toEqual(expect.arrayContaining(scope.centralBankCountries));
+    expect(banked.every((countryId) => budgeted.has(countryId))).toBe(true);
+    for (const { countryId } of scope.exclusions) expect(banked).not.toContain(countryId);
   });
 
   it("creates no East German party in a world after reunification", async () => {

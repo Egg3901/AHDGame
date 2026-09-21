@@ -28,6 +28,8 @@ import {
 } from "@/lib/turn/npp/entryDiagnostics";
 import { recordCapacityDecisionBulkBestEffort } from "@/lib/corporations/capacityDecisionTelemetry/persistence";
 import type { CapacityDecisionObservation } from "@/lib/corporations/capacityDecisionTelemetry/rules";
+import type { NppOperatorObservation } from "@/lib/corporations/nppOperatorTelemetry/rules";
+import { recordNppOperatorObservationsBestEffort } from "@/lib/corporations/nppOperatorTelemetry/persistence";
 import type { NppCorpDecision } from "@/lib/turn/npp/corpDecisionTypes";
 
 export type NppReinvestmentList = NonNullable<NppCorpDecision["reinvestments"]>;
@@ -202,6 +204,7 @@ export async function flushNppCapacityWriteback(
     entryDiagnostics: NppMarketEntryDiagnostic[];
     capexRows: BuildCapexTxInput[];
     capacityObservations: readonly CapacityDecisionObservation[];
+    operatorObservations: readonly NppOperatorObservation[];
   }
 ): Promise<void> {
   if (args.capexRows.length > 0) {
@@ -209,4 +212,5 @@ export async function flushNppCapacityWriteback(
   }
   await persistNppMarketEntryFunnelBestEffort(db, args.turn, args.now, args.entryDiagnostics);
   await recordCapacityDecisionBulkBestEffort(db, args.turn, args.capacityObservations);
+  await recordNppOperatorObservationsBestEffort(db, args.turn, args.now, args.operatorObservations);
 }

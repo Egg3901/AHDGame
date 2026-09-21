@@ -198,7 +198,7 @@ const REFERENCE: CollectionEntry[] = [
     category: "reference",
     seededBy: "seedForex",
     notes:
-      "One row per forex-active country with day-one prime rate, empty rate history, and the bookkeeping fields the turn processor expects. WIPED on reset and re-seeded by seedForex: `resetGameWorld` deletes this collection explicitly alongside statePolicies/commodityPrices/exchangeRates, because the seeder is $setOnInsert-only and would otherwise leave the previous world's accumulated CB state (prime rate, rate history) in place. (This note previously claimed CB state survives reset — it does not.)",
+      "One row per preset-scoped country with both an active currency and an authored national fiscal model. Currency-only exclusions remain in exchangeRates and are exposed by the seed diagnostic's monetaryCoverage manifest. WIPED on reset and re-seeded by seedForex: `resetGameWorld` deletes this collection explicitly alongside statePolicies/commodityPrices/exchangeRates, because the seeder is $setOnInsert-only and would otherwise leave the previous world's accumulated CB state (prime rate, rate history) in place. (This note previously claimed CB state survives reset — it does not.)",
   },
   {
     name: "exchangeRates",
