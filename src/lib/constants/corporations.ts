@@ -30,7 +30,7 @@ import { NEUTRAL_STAT } from "@/lib/stats/statsConstants";
 
 export const CORPORATION_TYPES = [
   "financial",
-  "media",
+  "media_entertainment",
   "manufacturing",
   "chemical_industries",
   "healthcare",
@@ -43,7 +43,6 @@ export const CORPORATION_TYPES = [
   "construction",
   "defense",
   "telecommunications",
-  "entertainment",
   "logistics",
   "extraction",
 ] as const;
@@ -52,7 +51,7 @@ export type CorporationType = (typeof CORPORATION_TYPES)[number];
 
 export const CORPORATION_TYPE_LABELS: Record<CorporationType, string> = {
   financial: "Financial",
-  media: "Media",
+  media_entertainment: "Media & Entertainment",
   manufacturing: "Manufacturing",
   chemical_industries: "Chemical Industries",
   healthcare: "Healthcare",
@@ -65,7 +64,6 @@ export const CORPORATION_TYPE_LABELS: Record<CorporationType, string> = {
   construction: "Construction",
   defense: "Defense",
   telecommunications: "Telecommunications",
-  entertainment: "Entertainment",
   logistics: "Logistics",
   extraction: "Extraction & Mining",
 };

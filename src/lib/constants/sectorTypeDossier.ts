@@ -43,7 +43,7 @@ export interface SectorTypePalette {
 
 export const SECTOR_TYPE_PALETTE: Record<CorporationType, SectorTypePalette> = {
   financial: { c400: "#34d399", c500: "#10b981" }, // emerald
-  media: { c400: "#60a5fa", c500: "#3b82f6" }, // blue
+  media_entertainment: { c400: "#60a5fa", c500: "#3b82f6" }, // blue
   manufacturing: { c400: "#fb923c", c500: "#f97316" }, // orange
   chemical_industries: { c400: "#4ade80", c500: "#22c55e" }, // green
   healthcare: { c400: "#fb7185", c500: "#f43f5e" }, // rose
@@ -56,7 +56,6 @@ export const SECTOR_TYPE_PALETTE: Record<CorporationType, SectorTypePalette> = {
   construction: { c400: "#fb923c", c500: "#f97316" }, // orange
   defense: { c400: "#94a3b8", c500: "#64748b" }, // slate
   telecommunications: { c400: "#818cf8", c500: "#6366f1" }, // indigo
-  entertainment: { c400: "#f472b6", c500: "#ec4899" }, // pink
   logistics: { c400: "#a8a29e", c500: "#78716c" }, // stone
   extraction: { c400: "#a3a3a3", c500: "#737373" }, // neutral
 };
@@ -89,7 +88,7 @@ export const SECTOR_TYPE_HERO: Partial<Record<CorporationType, string>> = {
   extraction: "/static/heroes/sector-extraction.webp",
   retail: "/static/heroes/sector-retail.webp",
   financial: "/static/heroes/sector-financial.webp",
-  media: "/static/heroes/sector-media.webp",
+  media_entertainment: "/static/heroes/sector-media.webp",
   technology: "/static/heroes/sector-technology.webp",
   agriculture: "/static/heroes/sector-agriculture.webp",
   healthcare: "/static/heroes/sector-healthcare.webp",
@@ -115,8 +114,8 @@ export const SECTOR_TYPE_BRIEFING: Record<CorporationType, string> = {
     "Sells finished goods to households. The most demand sensitive type: consumer confidence, brand loyalty and advertising move revenue more than any input price.",
   financial:
     "Lends, underwrites and trades. Earns on the spread between deposits and the central bank rate, so rate decisions and credit conditions matter more than commodities.",
-  media:
-    "Sells advertising against an audience. Uniquely, a media sector also shapes opinion: editorial stance nudges approval for parties and politicians in the state.",
+  media_entertainment:
+    "Sells advertising against an audience and experiences to it: publishing, broadcast, studios, venues, and streaming. Uniquely, a media sector also shapes opinion: editorial stance nudges approval for parties and politicians in the state.",
   technology:
     "Produces electronics and software and generates the corporation's R&D points. Talent constrained rather than material constrained; the tech tree is unlocked here.",
   agriculture:
@@ -137,8 +136,6 @@ export const SECTOR_TYPE_BRIEFING: Record<CorporationType, string> = {
     "Builds for everyone else. Demand follows the state's development pipeline and public works budget; the exposure is steel and building-material prices and idle crews between contracts.",
   telecommunications:
     "Runs the network every digital sector rides on. Coverage is territorial: hubs compete for spectrum and right-of-way in each state, and outages hit approval fast.",
-  entertainment:
-    "Sells experiences: studios, venues and digital content. Revenue swings with release slates and consumer confidence, and a hit lifts the corp's brand across every other sector.",
 };
 
 /**
