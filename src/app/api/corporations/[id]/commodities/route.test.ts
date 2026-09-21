@@ -220,7 +220,7 @@ describe("GET /api/corporations/[id]/commodities world context", () => {
         {
           _id: new ObjectId(),
           corporationId: buyerId,
-          sectorType: "media",
+          sectorType: "media_entertainment",
           stateId: "CA",
           countryId: "US",
           revenue: 30_000,
