@@ -14,7 +14,8 @@ export const SECTOR_FUND_MAPPINGS: readonly {
   ticker: string;
 }[] = [
   { sectorType: "financial", sectorLabel: "Financials", ticker: "GLBFIN" },
-  { sectorType: "media", sectorLabel: "Media", ticker: "GLBMEA" },
+  // issue #2234: one fund for the merged domain. GLBMEA kept, GLBENT retired.
+  { sectorType: "media_entertainment", sectorLabel: "Media & Entertainment", ticker: "GLBMEA" },
   { sectorType: "manufacturing", sectorLabel: "Manufacturing", ticker: "GLBMFG" },
   { sectorType: "chemical_industries", sectorLabel: "Chemicals", ticker: "GLBCHM" },
   { sectorType: "healthcare", sectorLabel: "Healthcare", ticker: "GLBHLT" },
@@ -27,7 +28,6 @@ export const SECTOR_FUND_MAPPINGS: readonly {
   { sectorType: "construction", sectorLabel: "Construction", ticker: "GLBCON" },
   { sectorType: "defense", sectorLabel: "Defense", ticker: "GLBDEF" },
   { sectorType: "telecommunications", sectorLabel: "Telecom", ticker: "GLBCOM" },
-  { sectorType: "entertainment", sectorLabel: "Entertainment", ticker: "GLBENT" },
   { sectorType: "logistics", sectorLabel: "Logistics", ticker: "GLBTRN" },
   { sectorType: "extraction", sectorLabel: "Extraction & Mining", ticker: "GLBEXT" },
 ] as const;
@@ -40,7 +40,7 @@ export const SECTOR_FUND_MAPPINGS: readonly {
  */
 export const SECTOR_FUND_PRIMARY_TYPES: Record<string, CorporationType[]> = {
   Financials: ["financial"],
-  Media: ["media"],
+  "Media & Entertainment": ["media_entertainment"],
   Manufacturing: ["manufacturing"],
   Chemicals: ["chemical_industries"],
   Healthcare: ["healthcare"],
@@ -53,7 +53,6 @@ export const SECTOR_FUND_PRIMARY_TYPES: Record<string, CorporationType[]> = {
   Construction: ["construction"],
   Defense: ["defense"],
   Telecom: ["telecommunications"],
-  Entertainment: ["entertainment"],
   Logistics: ["logistics"],
   "Extraction & Mining": ["extraction"],
 };

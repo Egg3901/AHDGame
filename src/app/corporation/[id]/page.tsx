@@ -18,10 +18,12 @@ import PrivateSalePanel from "@/components/corporation/shares/PrivateSalePanel";
 import { NationalizationStatusCard } from "@/components/corporation/NationalizationStatusCard";
 import BondMaturityNotice from "@/components/corporation/BondMaturityNotice";
 import PrivateNotListedNotice from "@/components/corporation/PrivateNotListedNotice";
+import ProductStudio from "@/components/corporation/ProductStudio";
 import { NewFeatureBadge } from "@/components/ui";
 import { useFeatureSeen } from "@/hooks/useFeatureSeen";
 import { CORP_PAGE_FEATURE_KEYS } from "@/lib/ui/corpPageFeatureKeys";
 import { getLegalStructureForCorp } from "@/lib/corporations/legalStructure";
+import { productFamilyForCorporationType } from "@/lib/products/types";
 import {
   CORP_TABS,
   CEO_TAB,
@@ -1074,6 +1076,9 @@ export default function CorporationDetailPage() {
                       disclosed.
                     </p>
                   </div>
+                )}
+                {tab === "overview" && productFamilyForCorporationType(corporation.type) && (
+                  <ProductStudio corpId={id} onUpdate={fetchCorporation} />
                 )}
 
                 {tab === "financials" && financials && (

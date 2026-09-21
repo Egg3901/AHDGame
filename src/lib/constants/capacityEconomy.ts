@@ -592,8 +592,7 @@ const CAPACITY_BUILD_TURNS_TABLE: Record<CorporationType, number> = {
   healthcare: 48,
   agriculture: 48,
   logistics: 36,
-  entertainment: 24,
-  media: 24,
+  media_entertainment: 24,
   financial: 24,
   technology: 24,
   // Asset-light: a store fit-out is weeks, not years.

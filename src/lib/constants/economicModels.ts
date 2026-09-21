@@ -161,7 +161,7 @@ export const MODEL_ARCHETYPES: Record<EconomicModelId, EconomicModelArchetype> =
     id: "techInnovation",
     name: "Tech-Innovation Economy",
     primarySector: "technology",
-    secondarySectors: ["telecommunications", "media", "entertainment"],
+    secondarySectors: ["telecommunications", "media_entertainment"],
     spendingSignature: { education: 1 },
     lawSignature: ["rd_investment", "tech_subsidy"],
     metricSynergies: [
@@ -223,7 +223,7 @@ export const MODEL_ARCHETYPES: Record<EconomicModelId, EconomicModelArchetype> =
     id: "serviceConsumer",
     name: "Service / Consumer Economy",
     primarySector: "retail",
-    secondarySectors: ["entertainment", "media", "real_estate"],
+    secondarySectors: ["media_entertainment", "real_estate"],
     spendingSignature: {}, // consumer/light — no spending lean
     lawSignature: ["consumer_protection", "small_business_support"],
     metricSynergies: [

@@ -32,10 +32,9 @@ export const CARBON_INTENSITY: Record<CorporationType, number> = {
   healthcare: 0.7,
   telecommunications: 0.5,
   real_estate: 0.5,
-  entertainment: 0.5,
   technology: 0.4,
   financial: 0.3,
-  media: 0.3,
+  media_entertainment: 0.5,
 };
 
 /** A mixed reference economy's revenue-weighted intensity. */

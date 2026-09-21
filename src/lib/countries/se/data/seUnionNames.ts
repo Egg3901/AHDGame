@@ -21,12 +21,11 @@ export const SE_UNION_NAMES_MODERN: Partial<Record<CorporationType, string>> = {
   extraction: "IF Metall",
   healthcare: "Vårdförbundet",
   retail: "Handels",
-  media: "Journalistförbundet",
+  media_entertainment: "Unionen",
   logistics: "Transport",
   technology: "Unionen",
   financial: "Finansförbundet",
   telecommunications: "Unionen",
-  entertainment: "Unionen",
   defense: "IF Metall",
   agriculture: "Kommunal",
   real_estate: "Byggnads",
@@ -37,7 +36,7 @@ export const SE_UNION_NAMES_2007: Partial<Record<CorporationType, string>> = {
   energy: "Sif",
   technology: "Sif",
   telecommunications: "Sif",
-  entertainment: "Sif",
+  media_entertainment: "Sif",
 };
 
 export const SE_UNION_NAMES_1991: Partial<Record<CorporationType, string>> = {
@@ -50,7 +49,7 @@ export const SE_UNION_NAMES_1991: Partial<Record<CorporationType, string>> = {
   energy: "SIF",
   technology: "SIF",
   telecommunications: "SIF",
-  entertainment: "SIF",
+  media_entertainment: "SIF",
   healthcare: "Kommunal",
   financial: "Svenska Bankmannaförbundet",
   agriculture: "Svenska Lantarbetareförbundet",

@@ -20,7 +20,7 @@ export const IE_UNION_NAMES_MODERN: Partial<Record<CorporationType, string>> = {
   construction: "Connect Trade Union",
   energy: "SIPTU",
   logistics: "SIPTU",
-  media: "National Union of Journalists",
+  media_entertainment: "National Union of Journalists",
   financial: "Financial Services Union",
   technology: "SIPTU",
   telecommunications: "CWU Ireland",
@@ -41,7 +41,7 @@ export const IE_UNION_NAMES_1991: Partial<Record<CorporationType, string>> = {
   technology: "SIPTU",
   healthcare: "Irish Nurses Organisation",
   retail: "Irish Distributive and Administrative Trade Union",
-  media: "National Union of Journalists",
+  media_entertainment: "National Union of Journalists",
   financial: "Irish Bank Officials' Association",
   telecommunications: "Communications Workers' Union",
 };
@@ -54,7 +54,7 @@ export const IE_UNION_NAMES_1979: Partial<Record<CorporationType, string>> = {
   technology: "Irish Transport and General Workers' Union",
   healthcare: "Irish Nurses Organisation",
   retail: "Irish Distributive and Administrative Trade Union",
-  media: "National Union of Journalists",
+  media_entertainment: "National Union of Journalists",
   financial: "Irish Bank Officials' Association",
   telecommunications: "Post Office Workers' Union",
 };
