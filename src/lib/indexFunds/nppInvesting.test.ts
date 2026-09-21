@@ -177,7 +177,12 @@ describe("nppInvesting", () => {
 
     async function setup(
       nppDocs: Record<string, unknown>[],
-      nppPositions: { nppId: ObjectId; fundId: ObjectId; units: number }[]
+      nppPositions: {
+        nppId: ObjectId;
+        fundId: ObjectId;
+        units: number;
+        avgNavAnchor?: number;
+      }[]
     ) {
       const { createMockDb, createAsyncIterableCursor } = await import("@/lib/test-utils/mockDb");
       db = createMockDb();
@@ -190,9 +195,7 @@ describe("nppInvesting", () => {
       // Positions: the wealth-valuation query has no nppId clause; the pass-4
       // existing-position query filters nppId: { $in }. Dispatch on the filter.
       const positionsCol = db.collection("indexFundPositions");
-      positionsCol.find.mockImplementation((filter: Record<string, unknown>) =>
-        createAsyncIterableCursor(filter && "nppId" in filter ? [] : nppPositions)
-      );
+      positionsCol.find.mockImplementation(() => createAsyncIterableCursor(nppPositions));
       db.collection("gameConfig").findOne.mockResolvedValue({ ledgerShadow: true });
       return db;
     }
@@ -334,6 +337,39 @@ describe("nppInvesting", () => {
         .calls[0][0] as Record<string, unknown>;
       expect(firstFindFilter).toMatchObject({ holderKind: "npp" });
       expect(dbm.collectionMocks["characters"]).toBeUndefined();
+    });
+
+    it("credits an existing position with a plain update and the same weighted average", async () => {
+      const npp = makeNppDoc();
+      const dbm = await setup(
+        [npp],
+        [
+          {
+            nppId: npp._id as ObjectId,
+            fundId: FUND_ID,
+            units: 2,
+            avgNavAnchor: 50,
+          },
+        ]
+      );
+
+      await processNPPFundInvestments(dbm as never, { currentTurn: 10 });
+
+      const positionOps = dbm.collectionMocks["indexFundPositions"].bulkWrite.mock.calls[0][0];
+      expect(positionOps).toEqual([
+        {
+          updateOne: {
+            filter: { fundId: FUND_ID, holderKind: "npp", nppId: npp._id },
+            update: {
+              $inc: { units: 4 },
+              $set: {
+                avgNavAnchor: 500 / 6,
+                updatedAt: expect.any(Date),
+              },
+            },
+          },
+        },
+      ]);
     });
   });
 
