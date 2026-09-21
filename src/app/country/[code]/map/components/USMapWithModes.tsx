@@ -3,6 +3,7 @@
 import { useState, useMemo, useEffect } from "react";
 import dynamic from "next/dynamic";
 import { useTranslations } from "next-intl";
+import { MetricsMap } from "./MetricsMap";
 import { AtlasTooltip, AtlasInspector, AtlasBreakdown } from "./AtlasPanels";
 import { ATLAS_STORAGE_KEY, readAtlasPreferences, type AtlasView } from "./atlasModel";
 import styles from "./atlas.module.css";
@@ -43,6 +44,7 @@ const RegionalGeoMap = dynamic(
 );
 
 type USMapMode =
+  | "electoralAllocation"
   | "population"
   | "representation"
   | "partyOrg"
@@ -154,6 +156,7 @@ export function USMapWithModes({
   onRegionClick: (id: string) => void;
 }) {
   const t = useTranslations("elections.atlas");
+  const [section, setSection] = useState<"politics" | "metrics">("politics");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [view, setView] = useState<AtlasView>("atlas");
   const [showLabels, setShowLabels] = useState(true);
@@ -215,6 +218,18 @@ export function USMapWithModes({
       | undefined;
     let senateSplitMode = false;
 
+    if (mode === "electoralAllocation") {
+      const votes = mapData?.electoralVotesByState ?? {};
+      const max = Math.max(...Object.values(votes), 1);
+      for (const [id, value] of Object.entries(votes)) {
+        stateData[id] = {
+          color: interpolateGreen(value / max),
+          label: t("evCount", { count: value }),
+          tooltip: [t("evCount", { count: value })],
+        };
+      }
+      return { stateData, senateSplitData: undefined, senateSplitMode: false };
+    }
     if (mode === "population" || mode === "representation") {
       const regions = mapData?.regions ?? [];
       const max = Math.max(
@@ -494,362 +509,442 @@ export function USMapWithModes({
             {t("overview")}
           </Link>
         </header>
-        <div className={styles.toolbar}>
-          <label className="flex items-center gap-2 text-body-sm text-muted">
-            <span>{t("layer")}</span>
-            <select
-              className={styles.layerSelect}
-              value={mode}
-              aria-label={t("layer")}
-              onChange={(e) => {
-                const next = e.target.value as USMapMode;
-                setMode(next);
-                setLeanDetailId(next === "lean" ? selectedId : null);
-              }}
-            >
-              {(
-                [
-                  {
-                    label: "politics",
-                    modes: ["house", "senate", "governor", "presidential", "partyOrg"],
-                  },
-                  { label: "society", modes: ["approval", "lean", "population", "representation"] },
-                  { label: "economy", modes: ["resources", "sectorBonuses", "logistics"] },
-                ] as const
-              ).map((group) => (
-                <optgroup key={group.label} label={t(group.label)}>
-                  {group.modes.map((id) => (
-                    <option key={id} value={id}>
-                      {t(id)}
+        <div
+          className="mb-5 flex gap-2 border-b border-card-border pb-3"
+          aria-label={t("mapSection")}
+        >
+          <Button
+            variant={section === "politics" ? "secondary" : "ghost"}
+            aria-pressed={section === "politics"}
+            onClick={() => setSection("politics")}
+          >
+            {t("politics")}
+          </Button>
+          <Button
+            variant={section === "metrics" ? "secondary" : "ghost"}
+            aria-pressed={section === "metrics"}
+            onClick={() => setSection("metrics")}
+          >
+            {t("metrics")}
+          </Button>
+        </div>
+        {section === "metrics" ? (
+          <MetricsMap mapData={mapData} onOpen={onRegionClick} />
+        ) : (
+          <>
+            <div className={styles.toolbar}>
+              <label className="flex items-center gap-2 text-body-sm text-muted">
+                <span>{t("layer")}</span>
+                <select
+                  className={styles.layerSelect}
+                  value={mode}
+                  aria-label={t("layer")}
+                  onChange={(e) => {
+                    const next = e.target.value as USMapMode;
+                    setMode(next);
+                    setLeanDetailId(next === "lean" ? selectedId : null);
+                  }}
+                >
+                  {(
+                    [
+                      {
+                        label: "politics",
+                        modes: [
+                          "house",
+                          "senate",
+                          "governor",
+                          "electoralAllocation",
+                          "presidential",
+                          "partyOrg",
+                        ],
+                      },
+                      {
+                        label: "society",
+                        modes: ["approval", "lean", "representation"],
+                      },
+                      { label: "economy", modes: ["resources", "sectorBonuses", "logistics"] },
+                    ] as const
+                  ).map((group) => (
+                    <optgroup key={group.label} label={t(group.label)}>
+                      {group.modes.map((id) => (
+                        <option key={id} value={id}>
+                          {t(id)}
+                        </option>
+                      ))}
+                    </optgroup>
+                  ))}
+                </select>
+              </label>
+              <div className={styles.segment} aria-label={t("view")}>
+                <Button
+                  variant={view !== "table" ? "secondary" : "ghost"}
+                  size="sm"
+                  aria-pressed={view !== "table"}
+                  onClick={() => setView(view === "focus" ? "focus" : "atlas")}
+                >
+                  {t("atlas")}
+                </Button>
+                <Button
+                  variant={view === "table" ? "secondary" : "ghost"}
+                  size="sm"
+                  aria-pressed={view === "table"}
+                  onClick={() => setView("table")}
+                >
+                  {t("table")}
+                </Button>
+              </div>
+              <Input
+                className="!w-full sm:!w-52 !py-2 !text-body-sm"
+                type="search"
+                aria-label={t("search")}
+                placeholder={t("searchPlaceholder")}
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+              <details
+                className={styles.displayMenu}
+                onKeyDown={(event) => {
+                  if (event.key === "Escape") {
+                    event.currentTarget.open = false;
+                    event.currentTarget.querySelector("summary")?.focus();
+                  }
+                }}
+              >
+                <summary>{t("display")}</summary>
+                <div className={styles.display}>
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={showLabels}
+                      onChange={(e) => setShowLabels(e.target.checked)}
+                    />
+                    {t("labels")}
+                  </label>
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={showCharts}
+                      onChange={(e) => setShowCharts(e.target.checked)}
+                    />
+                    {t("charts")}
+                  </label>
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={view === "focus"}
+                      onChange={(e) => setView(e.target.checked ? "focus" : "atlas")}
+                    />
+                    {t("focus")}
+                  </label>
+                </div>
+              </details>
+            </div>
+            {mode === "resources" && (
+              <div className="mb-4 flex flex-wrap gap-3">
+                <select
+                  className={styles.search}
+                  aria-label={t("resources")}
+                  value={resourceType}
+                  onChange={(e) => setResourceType(e.target.value as ExtractableResource)}
+                >
+                  {EXTRACTABLE_RESOURCES.map((r) => (
+                    <option key={r} value={r}>
+                      {COMMODITY_LABELS[r]}
                     </option>
                   ))}
-                </optgroup>
-              ))}
-            </select>
-          </label>
-          <div className={styles.segment} aria-label={t("view")}>
-            <Button
-              variant={view !== "table" ? "secondary" : "ghost"}
-              size="sm"
-              aria-pressed={view !== "table"}
-              onClick={() => setView(view === "focus" ? "focus" : "atlas")}
-            >
-              {t("atlas")}
-            </Button>
-            <Button
-              variant={view === "table" ? "secondary" : "ghost"}
-              size="sm"
-              aria-pressed={view === "table"}
-              onClick={() => setView("table")}
-            >
-              {t("table")}
-            </Button>
-          </div>
-          <Input
-            className="!w-full sm:!w-52 !py-2 !text-body-sm"
-            type="search"
-            aria-label={t("search")}
-            placeholder={t("searchPlaceholder")}
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-          <details
-            className={styles.displayMenu}
-            onKeyDown={(event) => {
-              if (event.key === "Escape") {
-                event.currentTarget.open = false;
-                event.currentTarget.querySelector("summary")?.focus();
-              }
-            }}
-          >
-            <summary>{t("display")}</summary>
-            <div className={styles.display}>
-              <label>
-                <input
-                  type="checkbox"
-                  checked={showLabels}
-                  onChange={(e) => setShowLabels(e.target.checked)}
-                />
-                {t("labels")}
-              </label>
-              <label>
-                <input
-                  type="checkbox"
-                  checked={showCharts}
-                  onChange={(e) => setShowCharts(e.target.checked)}
-                />
-                {t("charts")}
-              </label>
-              <label>
-                <input
-                  type="checkbox"
-                  checked={view === "focus"}
-                  onChange={(e) => setView(e.target.checked ? "focus" : "atlas")}
-                />
-                {t("focus")}
-              </label>
-            </div>
-          </details>
-        </div>
-        {mode === "resources" && (
-          <div className="mb-4 flex flex-wrap gap-3">
-            <select
-              className={styles.search}
-              aria-label={t("resources")}
-              value={resourceType}
-              onChange={(e) => setResourceType(e.target.value as ExtractableResource)}
-            >
-              {EXTRACTABLE_RESOURCES.map((r) => (
-                <option key={r} value={r}>
-                  {COMMODITY_LABELS[r]}
-                </option>
-              ))}
-            </select>
-            <div className={styles.segment}>
-              {(["capacity", "contractedPct", "openAccessPct"] as const).map((tog) => (
-                <button
-                  key={tog}
-                  aria-pressed={resourceToggle === tog}
-                  onClick={() => setResourceToggle(tog)}
-                >
-                  {t(tog)}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-        {mode === "lean" && (
-          <div className="mb-4">
-            <div className={styles.segment}>
-              {(["display", "economic", "social"] as const).map((ax) => (
-                <button key={ax} aria-pressed={leanAxis === ax} onClick={() => setLeanAxis(ax)}>
-                  {t(ax === "display" ? "combined" : ax)}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-        <div className={`${styles.workspace} ${view === "focus" ? styles.focus : ""}`}>
-          <div className="min-w-0">
-            <Card padding="none" className="min-w-0">
-              <div className="border-b border-card-border px-4 py-3 text-body-sm text-muted">
-                {t(`description.${mode}`)}
-              </div>
-              {view === "table" ? (
-                <div className={styles.tableWrap}>
-                  <table className={styles.table}>
-                    <thead>
-                      <tr>
-                        {(["name", "population", "seats", "approval"] as const).map((key) => (
-                          <th
-                            key={key}
-                            aria-sort={
-                              sort === key ? (descending ? "descending" : "ascending") : "none"
-                            }
-                          >
-                            <button onClick={() => sortBy(key)}>
-                              {t(
-                                key === "name" ? "state" : key === "seats" ? "representation" : key
-                              )}{" "}
-                              {sort === key ? (descending ? "↓" : "↑") : "↕"}
-                            </button>
-                          </th>
-                        ))}
-                        <th>{t("layerValue")}</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {regions.map((r) => (
-                        <tr key={r.id} aria-selected={selectedId === r.id}>
-                          <td>
-                            <button onClick={() => selectRegion(r.id)}>
-                              <span
-                                className={styles.dot}
-                                style={{ background: stateData[r.id]?.color }}
-                              />{" "}
-                              {r.name}
-                            </button>
-                          </td>
-                          <td>{r.population.toLocaleString("en-US")}</td>
-                          <td>{r.seats}</td>
-                          <td>
-                            {mapData?.approval[r.id]
-                              ? `${mapData.approval[r.id].approval.toFixed(1)}%`
-                              : t("noData")}
-                          </td>
-                          <td>{stateData[r.id]?.label ?? t("noData")}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                  {!regions.length && <p className="p-6 text-sm text-muted">{t("noResults")}</p>}
+                </select>
+                <div className={styles.segment}>
+                  {(["capacity", "contractedPct", "openAccessPct"] as const).map((tog) => (
+                    <button
+                      key={tog}
+                      aria-pressed={resourceToggle === tog}
+                      onClick={() => setResourceToggle(tog)}
+                    >
+                      {t(tog)}
+                    </button>
+                  ))}
                 </div>
-              ) : (
-                <>
-                  <div className={styles.mapStage}>
-                    <RegionalGeoMap
-                      sourceUrl={USA_GEO_URL}
-                      regionCodes={liveUSCodes}
-                      regionData={stateData}
-                      labelOverrides={US_LABEL_OVERRIDES}
-                      projection="geoAlbersUsa"
-                      projectionConfig={{ scale: 1000 }}
-                      width={960}
-                      height={600}
-                      zoomable
-                      zoom={zoom}
-                      onZoomChange={setZoom}
-                      resetKey={resetKey}
-                      showLabels={showLabels}
-                      splitMode={senateSplitMode}
-                      splitData={splitData}
-                      highlightColor="var(--primary)"
-                      highlightedRegions={
-                        selectedId ? [selectedId] : search ? regions.map((r) => r.id) : []
-                      }
-                      renderTooltip={(id) => (
-                        <AtlasTooltip id={id} data={mapData} cell={stateData[id]} mode={mode} />
-                      )}
-                      onRegionClick={selectRegion}
-                    />
+              </div>
+            )}
+            {mode === "lean" && (
+              <div className="mb-4">
+                <div className={styles.segment}>
+                  {(["display", "economic", "social"] as const).map((ax) => (
+                    <button key={ax} aria-pressed={leanAxis === ax} onClick={() => setLeanAxis(ax)}>
+                      {t(ax === "display" ? "combined" : ax)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+            <div className={`${styles.workspace} ${view === "focus" ? styles.focus : ""}`}>
+              <div className="min-w-0">
+                <Card padding="none" className="min-w-0">
+                  <div className="border-b border-card-border px-4 py-3 text-body-sm text-muted">
+                    {t(`description.${mode}`)}
                   </div>
-                  <div className={styles.mapFooter}>
-                    <span>
-                      {selectedId ? (
-                        <a
-                          className="text-foreground underline underline-offset-4"
-                          href="#us-atlas-inspector"
-                        >
-                          {t("inspect")}: {selectedId} ↓
-                        </a>
-                      ) : (
-                        t("mapHint")
+                  {view === "table" ? (
+                    <div className={styles.tableWrap}>
+                      <table className={styles.table}>
+                        <thead>
+                          <tr>
+                            {(["name", "population", "seats", "approval"] as const).map((key) => (
+                              <th
+                                key={key}
+                                aria-sort={
+                                  sort === key ? (descending ? "descending" : "ascending") : "none"
+                                }
+                              >
+                                <button onClick={() => sortBy(key)}>
+                                  {t(
+                                    key === "name"
+                                      ? "state"
+                                      : key === "seats"
+                                        ? "representation"
+                                        : key
+                                  )}{" "}
+                                  {sort === key ? (descending ? "↓" : "↑") : "↕"}
+                                </button>
+                              </th>
+                            ))}
+                            <th>{t("layerValue")}</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {regions.map((r) => (
+                            <tr key={r.id} aria-selected={selectedId === r.id}>
+                              <td>
+                                <button onClick={() => selectRegion(r.id)}>
+                                  <span
+                                    className={styles.dot}
+                                    style={{ background: stateData[r.id]?.color }}
+                                  />{" "}
+                                  {r.name}
+                                </button>
+                              </td>
+                              <td>{r.population.toLocaleString("en-US")}</td>
+                              <td>{r.seats}</td>
+                              <td>
+                                {mapData?.approval[r.id]
+                                  ? `${mapData.approval[r.id].approval.toFixed(1)}%`
+                                  : t("noData")}
+                              </td>
+                              <td>{stateData[r.id]?.label ?? t("noData")}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                      {!regions.length && (
+                        <p className="p-6 text-sm text-muted">{t("noResults")}</p>
                       )}
-                    </span>
-                    <div className={styles.zoomControls}>
-                      <button
-                        className={styles.iconButton}
-                        aria-label={t("zoomOut")}
-                        onClick={() => setZoom((z) => Math.max(1, z - 0.5))}
-                      >
-                        −
-                      </button>
-                      <span className="w-10 text-center font-mono">{zoom.toFixed(1)}×</span>
-                      <button
-                        className={styles.iconButton}
-                        aria-label={t("zoomIn")}
-                        onClick={() => setZoom((z) => Math.min(4, z + 0.5))}
-                      >
-                        +
-                      </button>
-                      <button
-                        className="ml-2 text-xs"
-                        onClick={() => {
-                          setZoom(1);
-                          setResetKey((k) => k + 1);
-                        }}
-                      >
-                        {t("reset")}
-                      </button>
                     </div>
-                  </div>
-                  {search && (
-                    <div className={styles.regionList} aria-label={t("allStates")}>
-                      {regions.map((r) => (
-                        <button
-                          key={r.id}
-                          aria-pressed={selectedId === r.id}
-                          onClick={() => selectRegion(r.id)}
-                          title={r.name}
-                        >
-                          {search ? r.name : r.id}
-                        </button>
-                      ))}
-                      {!regions.length && <p className="text-xs text-muted">{t("noResults")}</p>}
+                  ) : (
+                    <>
+                      <div className={styles.mapStage}>
+                        <RegionalGeoMap
+                          sourceUrl={USA_GEO_URL}
+                          regionCodes={liveUSCodes}
+                          regionData={stateData}
+                          labelOverrides={
+                            mode === "electoralAllocation"
+                              ? {
+                                  ...US_LABEL_OVERRIDES,
+                                  ...Object.fromEntries(
+                                    Object.entries(mapData?.electoralVotesByState ?? {}).map(
+                                      ([id, value]) => [id, `${id} ${value}`]
+                                    )
+                                  ),
+                                }
+                              : US_LABEL_OVERRIDES
+                          }
+                          projection="geoAlbersUsa"
+                          projectionConfig={{ scale: 1000 }}
+                          width={960}
+                          height={600}
+                          zoomable
+                          zoom={zoom}
+                          onZoomChange={setZoom}
+                          resetKey={resetKey}
+                          showLabels={showLabels}
+                          splitMode={senateSplitMode}
+                          splitData={splitData}
+                          highlightColor="var(--primary)"
+                          highlightedRegions={
+                            selectedId ? [selectedId] : search ? regions.map((r) => r.id) : []
+                          }
+                          renderTooltip={(id) => (
+                            <AtlasTooltip id={id} data={mapData} cell={stateData[id]} mode={mode} />
+                          )}
+                          onRegionClick={selectRegion}
+                        />
+                      </div>
+                      <div className={styles.mapFooter}>
+                        <span>
+                          {selectedId ? (
+                            <a
+                              className="text-foreground underline underline-offset-4"
+                              href="#us-atlas-inspector"
+                            >
+                              {t("inspect")}: {selectedId} ↓
+                            </a>
+                          ) : (
+                            t("mapHint")
+                          )}
+                        </span>
+                        <div className={styles.zoomControls}>
+                          <button
+                            className={styles.iconButton}
+                            aria-label={t("zoomOut")}
+                            onClick={() => setZoom((z) => Math.max(1, z - 0.5))}
+                          >
+                            −
+                          </button>
+                          <span className="w-10 text-center font-mono">{zoom.toFixed(1)}×</span>
+                          <button
+                            className={styles.iconButton}
+                            aria-label={t("zoomIn")}
+                            onClick={() => setZoom((z) => Math.min(4, z + 0.5))}
+                          >
+                            +
+                          </button>
+                          <button
+                            className="ml-2 text-xs"
+                            onClick={() => {
+                              setZoom(1);
+                              setResetKey((k) => k + 1);
+                            }}
+                          >
+                            {t("reset")}
+                          </button>
+                        </div>
+                      </div>
+                      {search && (
+                        <div className={styles.regionList} aria-label={t("allStates")}>
+                          {regions.map((r) => (
+                            <button
+                              key={r.id}
+                              aria-pressed={selectedId === r.id}
+                              onClick={() => selectRegion(r.id)}
+                              title={r.name}
+                            >
+                              {search ? r.name : r.id}
+                            </button>
+                          ))}
+                          {!regions.length && (
+                            <p className="text-xs text-muted">{t("noResults")}</p>
+                          )}
+                        </div>
+                      )}
+                    </>
+                  )}
+                  {mode === "electoralAllocation" && (
+                    <div className="border-t border-card-border px-4 py-3 text-body-sm text-muted">
+                      {t("evTotal", {
+                        count: Object.values(mapData?.electoralVotesByState ?? {}).reduce(
+                          (a, b) => a + b,
+                          0
+                        ),
+                        needed:
+                          Math.floor(
+                            Object.values(mapData?.electoralVotesByState ?? {}).reduce(
+                              (a, b) => a + b,
+                              0
+                            ) / 2
+                          ) + 1,
+                      })}
+                      {mapData?.electoralVotesByState?.DC != null && (
+                        <span className="ml-3">
+                          {t("dcVotes", { count: mapData.electoralVotesByState.DC })}
+                        </span>
+                      )}
                     </div>
                   )}
-                </>
-              )}
-              {mode === "lean" && mapData?.lean && (
-                <div className="px-5 pb-4">
-                  <LeanMapLegend
-                    axis={leanAxis}
-                    halfRange={leanHalfRange(mapData.lean, leanAxis)}
+                  {mode === "lean" && mapData?.lean && (
+                    <div className="px-5 pb-4">
+                      <LeanMapLegend
+                        axis={leanAxis}
+                        halfRange={leanHalfRange(mapData.lean, leanAxis)}
+                      />
+                    </div>
+                  )}
+                  {mode === "logistics" && (
+                    <p className="px-5 pb-4 text-xs text-muted">
+                      {freightHaulLoadCaption(Object.keys(freightData.states).length > 0)}
+                    </p>
+                  )}
+                </Card>
+                {mode === "lean" && leanDetailId && (
+                  <StateLeanPanel
+                    key={leanDetailId}
+                    countryCode={config.id}
+                    stateId={leanDetailId}
+                    onClose={() => setLeanDetailId(null)}
                   />
-                </div>
+                )}
+                {mode === "presidential" && mapData?.presidentialElectoralVotes && (
+                  <PresidentialResultsPanel
+                    electoralVotes={mapData.presidentialElectoralVotes}
+                    candidateNames={mapData.presidentialCandidateNames ?? {}}
+                    candidateColors={mapData.presidentialCandidateColors ?? {}}
+                    totalElectoralVotes={mapData.totalElectoralVotes}
+                  />
+                )}
+              </div>
+              {mapData && (view !== "focus" || selectedId) && (
+                <aside id="us-atlas-inspector" className={styles.sidebar} aria-label={t("inspect")}>
+                  <AtlasInspector
+                    id={selectedId}
+                    data={mapData}
+                    cells={stateData}
+                    mode={mode}
+                    onOpen={onRegionClick}
+                    onClear={() => {
+                      setSelectedId(null);
+                      setLeanDetailId(null);
+                    }}
+                  />
+                  {showCharts && (
+                    <AtlasBreakdown
+                      data={mapData}
+                      mode={mode}
+                      cells={stateData}
+                      values={
+                        mode === "electoralAllocation"
+                          ? mapData.electoralVotesByState
+                          : mode === "resources"
+                            ? Object.fromEntries(
+                                Object.entries(resourceData).map(([id, entry]) => [
+                                  id,
+                                  resourceToggle === "capacity"
+                                    ? entry.capacity
+                                    : entry[resourceToggle] * 100,
+                                ])
+                              )
+                            : mode === "logistics"
+                              ? Object.fromEntries(
+                                  Object.entries(freightData.states).map(([id, entry]) => [
+                                    id,
+                                    entry.capacity ?? entry.total,
+                                  ])
+                                )
+                              : undefined
+                      }
+                      valueUnit={
+                        mode === "electoralAllocation"
+                          ? t("electoralVotes")
+                          : mode === "resources"
+                            ? resourceToggle === "capacity"
+                              ? t("unitsPerTurn")
+                              : "%"
+                            : t("freightUnits")
+                      }
+                    />
+                  )}
+                </aside>
               )}
-              {mode === "logistics" && (
-                <p className="px-5 pb-4 text-xs text-muted">
-                  {freightHaulLoadCaption(Object.keys(freightData.states).length > 0)}
-                </p>
-              )}
-            </Card>
-            {mode === "lean" && leanDetailId && (
-              <StateLeanPanel
-                key={leanDetailId}
-                countryCode={config.id}
-                stateId={leanDetailId}
-                onClose={() => setLeanDetailId(null)}
-              />
-            )}
-            {mode === "presidential" && mapData?.presidentialElectoralVotes && (
-              <PresidentialResultsPanel
-                electoralVotes={mapData.presidentialElectoralVotes}
-                candidateNames={mapData.presidentialCandidateNames ?? {}}
-                candidateColors={mapData.presidentialCandidateColors ?? {}}
-                totalElectoralVotes={mapData.totalElectoralVotes}
-              />
-            )}
-          </div>
-          {mapData && (view !== "focus" || selectedId) && (
-            <aside id="us-atlas-inspector" className={styles.sidebar} aria-label={t("inspect")}>
-              <AtlasInspector
-                id={selectedId}
-                data={mapData}
-                cells={stateData}
-                mode={mode}
-                onOpen={onRegionClick}
-                onClear={() => {
-                  setSelectedId(null);
-                  setLeanDetailId(null);
-                }}
-              />
-              {showCharts && (
-                <AtlasBreakdown
-                  data={mapData}
-                  mode={mode}
-                  cells={stateData}
-                  values={
-                    mode === "resources"
-                      ? Object.fromEntries(
-                          Object.entries(resourceData).map(([id, entry]) => [
-                            id,
-                            resourceToggle === "capacity"
-                              ? entry.capacity
-                              : entry[resourceToggle] * 100,
-                          ])
-                        )
-                      : mode === "logistics"
-                        ? Object.fromEntries(
-                            Object.entries(freightData.states).map(([id, entry]) => [
-                              id,
-                              entry.capacity ?? entry.total,
-                            ])
-                          )
-                        : undefined
-                  }
-                  valueUnit={
-                    mode === "resources"
-                      ? resourceToggle === "capacity"
-                        ? t("unitsPerTurn")
-                        : "%"
-                      : t("freightUnits")
-                  }
-                />
-              )}
-            </aside>
-          )}
-        </div>
+            </div>
+          </>
+        )}
       </main>
     </div>
   );

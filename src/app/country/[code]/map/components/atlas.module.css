@@ -359,3 +359,41 @@
     transition: none !important;
   }
 }
+
+.metricPicker {
+  margin-bottom: 12px;
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+  background: var(--card);
+}
+.metricPicker summary {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 14px 16px;
+  cursor: pointer;
+  font-size: var(--text-body-sm);
+}
+.metricCatalog {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+  gap: 8px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+.metricCatalog button {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px;
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+  text-align: left;
+  font-size: var(--text-body-sm);
+}
+.metricCatalog button:hover,
+.metricCatalog button[aria-pressed="true"] {
+  border-color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 8%, transparent);
+}
