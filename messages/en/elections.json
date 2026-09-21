@@ -300,7 +300,8 @@
         "presidential": "Electoral votes by the leading candidate",
         "resources": "Extractable resource capacity and access by state",
         "sectorBonuses": "Primary sector profit margin bonuses by state",
-        "logistics": "Freight capacity and haul load across the states"
+        "logistics": "Freight capacity and haul load across the states",
+        "electoralAllocation": "Current electoral-vote allocation. Labels show state voting weight, independent of presidential results."
       },
       "electoralVotes": "EV",
       "presidentialNote": "Electoral votes by candidate from the recorded results.",
@@ -313,7 +314,56 @@
       "selected": "State details",
       "seatCount": "{count, plural, one {# seat} other {# seats}}",
       "governorCount": "{count, plural, one {# governor} other {# governors}}",
-      "vacant": "Vacant"
+      "vacant": "Vacant",
+      "mapSection": "Map view",
+      "metrics": "Metrics",
+      "electoralAllocation": "Electoral votes",
+      "evCount": "{count, plural, one {# electoral vote} other {# electoral votes}}",
+      "evTotal": "{count} electoral votes · {needed} to win",
+      "dcVotes": "Washington, DC: {count} electoral votes",
+      "metricsView": {
+        "choose": "Metric",
+        "browse": "Browse metrics",
+        "searchMetrics": "Search metrics...",
+        "categories": "Metric categories",
+        "popular": "Frequently used metrics",
+        "loadError": "State metrics could not be loaded.",
+        "retry": "Try again",
+        "loading": "Loading state metrics...",
+        "empty": "No state metrics are available yet.",
+        "noMetrics": "No metrics match your search.",
+        "score": "Policy score",
+        "measured": "Measured value",
+        "scoreNote": "Performance score out of 100, not a percentage or a physical measurement.",
+        "measuredNote": "Current in-game state data.",
+        "valuesOnMap": "Values on map",
+        "rankLabel": "Rank by value",
+        "rank": "Rank {rank} of {count} by value",
+        "magnitude": "Low to high",
+        "coverage": "Data for {count} of {total} states",
+        "missingLegend": "Gray means no data",
+        "selectState": "Select a state",
+        "inspectHint": "Select a state on the map or table to inspect its value and compare it with another state.",
+        "compare": "Compare with",
+        "chooseState": "Choose a state",
+        "median": "State median",
+        "distribution": "State distribution",
+        "bin": "{count} states: {low} to {high}",
+        "highest": "Highest values",
+        "category": {
+          "all": "All metrics",
+          "economy": "Economy & jobs",
+          "population": "Population",
+          "education": "Education & science",
+          "health": "Health & welfare",
+          "infrastructure": "Housing & infrastructure",
+          "order": "Safety & justice",
+          "environment": "Environment & energy",
+          "society": "Society",
+          "governance": "Government & rights",
+          "defense": "Defense & diplomacy"
+        }
+      }
     }
   }
 }
