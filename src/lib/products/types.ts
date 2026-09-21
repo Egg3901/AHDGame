@@ -26,6 +26,15 @@ export type ProductLifecycleStage = (typeof PRODUCT_LIFECYCLE_STAGES)[number];
 
 export type ProductFamily = "media_entertainment" | "industrial_manufacturing";
 
+/** Existing sector types eligible for the gated product iteration. */
+export function productFamilyForCorporationType(type: string): ProductFamily | null {
+  if (type === "media" || type === "entertainment") return "media_entertainment";
+  if (type === "manufacturing" || type === "automobiles") {
+    return "industrial_manufacturing";
+  }
+  return null;
+}
+
 export interface ProductKindDefinition {
   id: string;
   family: ProductFamily;

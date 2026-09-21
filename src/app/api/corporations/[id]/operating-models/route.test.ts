@@ -25,7 +25,7 @@ async function authAsCeo() {
   const { resolveCorporation, requireCeo } = await import("@/lib/api/corporations/resolveQuery");
   vi.mocked(resolveCorporation).mockResolvedValue({
     ok: true,
-    corporation: { _id: corpId, userId: "ceo-user" },
+    corporation: { _id: corpId, userId: "ceo-user", type: "media" },
   } as never);
   vi.mocked(requireCeo).mockReturnValue(null);
 }

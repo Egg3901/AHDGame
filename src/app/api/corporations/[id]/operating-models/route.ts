@@ -7,7 +7,7 @@ import { resolveCorporation, requireCeo } from "@/lib/api/corporations/resolveQu
 import { addOperatingModelSchema } from "@/lib/api/schemas/corporations";
 import { parseJsonBody } from "@/lib/api/validate";
 import { getCurrentTurn } from "@/lib/currentTurn";
-import { MEDIA_OPERATING_MODELS } from "@/lib/products/types";
+import { MEDIA_OPERATING_MODELS, productFamilyForCorporationType } from "@/lib/products/types";
 import { isCorporationProductsEnabled } from "@/lib/products/featureFlag";
 import { addOperatingModelPersistent } from "@/lib/products/persistence";
 
@@ -46,6 +46,12 @@ export async function POST(request: Request, { params }: RouteParams) {
       return NextResponse.json(
         { error: "Corporation products are not enabled in this world" },
         { status: 403 }
+      );
+    }
+    if (productFamilyForCorporationType(corporation.type) !== "media_entertainment") {
+      return NextResponse.json(
+        { error: "Operating models are only available to Media & Entertainment corporations" },
+        { status: 400 }
       );
     }
 

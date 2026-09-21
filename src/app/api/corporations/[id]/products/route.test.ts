@@ -38,9 +38,17 @@ async function authAsCeo() {
   const { resolveCorporation, requireCeo } = await import("@/lib/api/corporations/resolveQuery");
   vi.mocked(resolveCorporation).mockResolvedValue({
     ok: true,
-    corporation: { _id: corpId, userId: "ceo-user" },
+    corporation: { _id: corpId, userId: "ceo-user", type: "media" },
   } as never);
   vi.mocked(requireCeo).mockReturnValue(null);
+}
+
+async function setCorporationType(type: "media" | "manufacturing" | "retail") {
+  const { resolveCorporation } = await import("@/lib/api/corporations/resolveQuery");
+  vi.mocked(resolveCorporation).mockResolvedValue({
+    ok: true,
+    corporation: { _id: corpId, userId: "ceo-user", type },
+  } as never);
 }
 
 async function denyCeo() {
@@ -280,6 +288,7 @@ describe("POST corporation products", () => {
   });
 
   it("returns 409 when a second product contends for the one slot", async () => {
+    await setCorporationType("manufacturing");
     flagOn();
     ownedModels([]);
     db.collection("corporationProducts");
@@ -299,5 +308,17 @@ describe("POST corporation products", () => {
     });
 
     expect(response.status).toBe(409);
+  });
+
+  it("rejects a product from another sector family", async () => {
+    flagOn();
+    await setCorporationType("retail");
+
+    const response = await POST(postRequest({ kindId: "truck", name: "Hauler" }), {
+      params: Promise.resolve({ id: "601" }),
+    });
+
+    expect(response.status).toBe(400);
+    expect(db.collection).not.toHaveBeenCalledWith("corporationProducts");
   });
 });

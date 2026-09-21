@@ -17,7 +17,7 @@ import {
   type CorporationProductDocument,
 } from "@/lib/products/persistence";
 import { queryProductCatalog } from "@/lib/products/queries";
-import type { ProductFamily, ProductKindDefinition } from "@/lib/products/types";
+import { productFamilyForCorporationType, type ProductKindDefinition } from "@/lib/products/types";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -49,11 +49,6 @@ function serializeKind(kind: ProductKindDefinition) {
   };
 }
 
-const PRODUCT_FAMILIES: readonly ProductFamily[] = [
-  "media_entertainment",
-  "industrial_manufacturing",
-];
-
 // GET /api/corporations/[id]/products — Product Studio state: launch flag,
 // owned operating models, the active product, and the legal product catalog.
 // Auth: requireBasicAuth (any signed-in viewer; mutations stay CEO-only).
@@ -71,14 +66,13 @@ export async function GET(request: Request, { params }: RouteParams) {
     const { corporation } = resolved;
     const corporationId = corporation._id.toString();
     const isCeo = requireCeo(corporation, auth.user.userId) === null;
+    const family = productFamilyForCorporationType(corporation.type);
 
     const familyParam = new URL(request.url).searchParams.get("family");
-    let families = PRODUCT_FAMILIES;
     if (familyParam !== null) {
-      if (!(PRODUCT_FAMILIES as readonly string[]).includes(familyParam)) {
+      if (familyParam !== family) {
         return NextResponse.json({ error: "Invalid product family" }, { status: 400 });
       }
-      families = [familyParam as ProductFamily];
     }
 
     if (!(await isCorporationProductsEnabled(db))) {
@@ -93,9 +87,9 @@ export async function GET(request: Request, { params }: RouteParams) {
       getActiveProduct(db, corporationId),
     ]);
     const ownedModels = owned.map((model) => model.operatingModel);
-    const catalog = families.flatMap((family) =>
-      queryProductCatalog({ family, operatingModels: ownedModels }).map(serializeKind)
-    );
+    const catalog = family
+      ? queryProductCatalog({ family, operatingModels: ownedModels }).map(serializeKind)
+      : [];
 
     return NextResponse.json(
       {
@@ -153,10 +147,18 @@ export async function POST(request: Request, { params }: RouteParams) {
       return NextResponse.json({ error: `Unknown product kind "${kindId}"` }, { status: 400 });
     }
 
+    const family = productFamilyForCorporationType(corporation.type);
+    if (family !== kind.family) {
+      return NextResponse.json(
+        { error: `"${kind.label}" is not legal for this corporation's sector` },
+        { status: 400 }
+      );
+    }
+
     const corporationId = corporation._id.toString();
     const owned = await listOperatingModels(db, corporationId);
     const legal = queryProductCatalog({
-      family: kind.family,
+      family,
       operatingModels: owned.map((model) => model.operatingModel),
     }).some((candidate) => candidate.id === kind.id);
     if (!legal) {
