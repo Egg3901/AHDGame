@@ -15,6 +15,8 @@ import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
 import { resolveCorporation, requireCeo } from "@/lib/api/corporations/resolveQuery";
 import { isCorporationProductsEnabled } from "@/lib/products/featureFlag";
+import { productFamilyForCorporationType } from "@/lib/products/types";
+import { CORPORATION_OPERATING_MODELS_COLLECTION } from "@/lib/products/persistence";
 import {
   advertisingAgreementProposalSchema,
   advertisingAgreementUpdateSchema,
@@ -80,6 +82,12 @@ export async function listAdvertisingAgreements(corpId: string) {
     const corp = resolved.corporation;
     const ceoCheck = requireCeo(corp, auth.user.userId);
     if (ceoCheck) return ceoCheck;
+    if (!(await isCorporationProductsEnabled(db))) {
+      return NextResponse.json(
+        { error: "Corporation products are not enabled in this world" },
+        { status: 403 }
+      );
+    }
 
     const corpHex = corp._id.toString();
     const agreements = await getAdvertisingAgreementsForCorp(db, corpHex);
@@ -168,6 +176,23 @@ export async function proposeAdvertisingAgreement(request: Request, initiatingCo
     }
     const initiatorHex = initiator._id.toString();
     const counterpartyHex = counterparty._id.toString();
+    const supplier = isSupplierInitiated ? initiator : counterparty;
+    const supplierHex = supplier._id.toString();
+    if (productFamilyForCorporationType(supplier.type) !== "media_entertainment") {
+      return NextResponse.json(
+        { error: "Advertising suppliers must be Media & Entertainment corporations" },
+        { status: 400 }
+      );
+    }
+    const supplierModelCount = await db
+      .collection(CORPORATION_OPERATING_MODELS_COLLECTION)
+      .countDocuments({ corporationId: supplierHex });
+    if (supplierModelCount === 0) {
+      return NextResponse.json(
+        { error: "Advertising suppliers need an operating model" },
+        { status: 400 }
+      );
+    }
     const turn = await getCurrentTurn(db);
     const now = new Date();
     const proposed = await proposeAdvertisingAgreementPersistent(db, {
@@ -216,6 +241,13 @@ export async function updateAdvertisingAgreement(
     const corp = resolved.corporation;
     const ceoCheck = requireCeo(corp, auth.user.userId);
     if (ceoCheck) return ceoCheck;
+
+    if (!(await isCorporationProductsEnabled(db))) {
+      return NextResponse.json(
+        { error: "Corporation products are not enabled in this world" },
+        { status: 403 }
+      );
+    }
 
     const agreement = await db
       .collection<AdvertisingAgreement>(ADVERTISING_AGREEMENTS_COLLECTION)

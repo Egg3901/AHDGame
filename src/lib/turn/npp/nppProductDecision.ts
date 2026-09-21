@@ -4,6 +4,10 @@ import type { NppAutonomyLevel } from "@/lib/db/types/gameState";
 import { nppAutonomyLevelAtLeast } from "@/lib/nppAutonomy/featureFlag";
 import { getProductKind } from "@/lib/products/catalog";
 import { queryProductCatalog } from "@/lib/products/queries";
+import {
+  validateManufacturingProductStart,
+  type ManufacturingPlantInput,
+} from "@/lib/products/manufacturing";
 import { mediaKindLegalForModels, mediaModelFitsCorporation } from "@/lib/products/media";
 import {
   MEDIA_OPERATING_MODELS,
@@ -84,6 +88,8 @@ export interface NppProductDecisionInput {
   unlockedTechnologyIds?: readonly string[];
   /** World year. Absent disables era filtering in the media legality check. */
   currentYear?: number | null;
+  plants?: readonly ManufacturingPlantInput[];
+  techTreesEnabled?: boolean;
   /** Current non-retired product, when the caller has loaded it. */
   activeProduct?: CorporationProduct | null;
   /**
@@ -230,7 +236,17 @@ export function decideNppProduct(input: NppProductDecisionInput): NppProductActi
     const kinds = queryProductCatalog({
       family: "industrial_manufacturing",
       unlockedTechnologyIds: techFilter,
-    });
+    }).filter(
+      (kind) =>
+        validateManufacturingProductStart({
+          kindId: kind.id,
+          corporationTypes: [input.corporationType],
+          plants: input.plants ?? [],
+          currentYear: input.currentYear,
+          unlockedTechnologyIds: input.unlockedTechnologyIds,
+          techTreesEnabled: input.techTreesEnabled,
+        }).ok
+    );
     if (kinds.length === 0) {
       return { kind: "none", reason: "no_legal_product" };
     }

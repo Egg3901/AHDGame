@@ -63,7 +63,9 @@ function corp(): Corporation {
 function sector(): CorporateSector {
   return {
     _id: new ObjectId(),
-    sectorType: "technology",
+    sectorType: "manufacturing",
+    strategyId: "electronics_manufacturing",
+    capacity: 100,
     countryId: "US",
     stateId: "NY",
     revenue: 1_000_000,
@@ -105,6 +107,7 @@ function decide(extraContext: Partial<NppCorpDecisionContext> = {}) {
       now: NOW,
       fxRate: 1,
       modifiers: ceoArchetypeModifiers("cautious"),
+      currentYear: 2027,
       strategyEligible: true,
       strategyLoopEnabled: true,
       ...extraContext,
@@ -166,7 +169,7 @@ describe("npp product autonomy seam", () => {
     const decision = decide({ productsEnabled: true, autonomyLevel: "v4" });
     expect(decision.productDecision?.kind).toBe("start_product");
     if (decision.productDecision?.kind !== "start_product") return;
-    expect(decision.productDecision.kindId).toBe("passenger_car");
+    expect(decision.productDecision.kindId).toBe("consumer_electronics");
     expect(Number.isFinite(decision.productDecision.maxSpendLocal)).toBe(true);
   });
 

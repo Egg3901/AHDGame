@@ -12,6 +12,7 @@ import {
 } from "@/components/ui";
 import { COMMODITY_LABELS } from "@/lib/constants/commodities";
 import { MEDIA_OPERATING_MODELS } from "@/lib/products/types";
+import AdvertisingAgreementsPanel from "./AdvertisingAgreementsPanel";
 
 export interface StudioCatalogKind {
   id: string;
@@ -504,6 +505,7 @@ export default function ProductStudio({ corpId, onUpdate }: ProductStudioProps) 
           <p className="mt-3 text-xs text-muted">Only the CEO can add models or start products.</p>
         )}
       </Card>
+      {canAct && <AdvertisingAgreementsPanel corpId={corpId} />}
     </div>
   );
 }

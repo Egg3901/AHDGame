@@ -202,7 +202,7 @@ describe("ProductStudio", () => {
 
     expect(await screen.findByRole("status")).toBeTruthy();
     expect(screen.getByText(/at least 2 characters/)).toBeTruthy();
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls.filter(([, init]) => init?.method === "POST")).toHaveLength(0);
   });
 
   it("starts a legal product through the corporation route", async () => {

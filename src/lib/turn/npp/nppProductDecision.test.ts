@@ -27,11 +27,18 @@ const RICH_CASH = {
 };
 
 function base(overrides: Partial<NppProductDecisionInput> = {}): NppProductDecisionInput {
+  const corporationType = overrides.corporationType ?? "manufacturing";
   return {
     enabled: true,
     autonomyLevel: "v4",
     corporationId: "corp-1",
-    corporationType: "manufacturing",
+    corporationType,
+    currentYear: 2027,
+    plants: [
+      corporationType === "automobiles"
+        ? { sectorType: "automobiles", strategyId: "standard", capacity: 100 }
+        : { sectorType: "manufacturing", strategyId: "electronics_manufacturing", capacity: 100 },
+    ],
     expansionAllowed: true,
     ...RICH_CASH,
     ...overrides,
@@ -138,8 +145,8 @@ describe("decideNppProduct legal selection", () => {
     const action = decideNppProduct(base({ corporationType: "manufacturing" }));
     expect(action).toEqual({
       kind: "start_product",
-      kindId: "passenger_car",
-      name: "Passenger Car",
+      kindId: "consumer_electronics",
+      name: "Consumer Electronics",
       maxSpendLocal: Math.floor((10_000_000 - 250_000) * 0.5),
     });
   });

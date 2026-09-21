@@ -1941,10 +1941,7 @@ export function makeNppCorpDecision(
   // it cannot spend the operating reserve or distribute a loss.
 
   // ── 6. Corporation product intent (issues #2236/#2238) ─────────────────────
-  // V4+ and flag-gated only; the pure module returns `none` for every older
-  // tier, every missing input, and every ineligible corp. The decision remains
-  // pure; the surrounding turn shell executes actionable intents through the
-  // product persistence commands. Older tiers serialize exactly as before.
+  // Pure V4+ decision; the turn shell executes actionable persistence intents.
   const productDecision = decideNppProduct({
     enabled: ctx.productsEnabled === true,
     autonomyLevel: ctx.autonomyLevel,
@@ -1953,6 +1950,8 @@ export function makeNppCorpDecision(
     operatingModels: ctx.operatingModels,
     unlockedTechnologyIds: corp.unlockedTechNodeIds,
     currentYear: ctx.currentYear,
+    plants: ctx.sectors,
+    techTreesEnabled: ctx.techTreesEnabled,
     activeProduct: ctx.activeProduct ?? null,
     failingTurns: ctx.productFailingTurns,
     cashLocal,
