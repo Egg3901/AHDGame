@@ -81,6 +81,8 @@ import { createCorporationTurnTimer, type CorporationTurnResult } from "./corpor
 import { processEquityMarketPoolTurn } from "@/lib/equities/marketPoolTurn";
 import { placePendingShareIssuances } from "@/lib/equities/primaryMarket";
 import { creditEquityPoolsBatch } from "@/lib/equities/marketPool";
+import { resolveCorporationProductsEnabled } from "@/lib/products/featureFlag";
+import { processCorporationProductTurn } from "./productLifecycleTurn";
 
 export type { CorporationTurnResult } from "./corporationTurnRuntime";
 
@@ -138,6 +140,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
           supplyAgreementsEnabled: 1,
           prospectingEnabled: 1,
           commandEconomyEnabled: 1,
+          corporationProductsEnabled: 1,
           privateBankingEnabled: 1,
           interstateMoneyWiringEnabled: 1,
           freightSettlementMode: 1,
@@ -619,6 +622,17 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
   // on pre-migration worlds.
   await creditEquityPoolsBatch(db, equityPoolDividendAccruals, "dividendsIn", now);
   mark("sector+corp bulkWrites");
+
+  // Corporation products (issue #2125 slice): advance each active product one
+  // lifecycle step from the turn's in-memory corp inputs. Allocation view
+  // only — no cash, revenue, or market writes. Flag-off performs zero product
+  // reads or writes; the flag rides the preamble projection above.
+  await processCorporationProductTurn(db, {
+    enabled: resolveCorporationProductsEnabled(marketGovernorConfig),
+    turn: turn ?? gameState?.currentTurn,
+    corpsById: lookups.corpById,
+    fxByCurrency: lookups.exchangeRatesByCurrency,
+  });
 
   // Contracts and surveys read the post-bulkWrite snapshot so this turn's
   // mothball / production-policy / cash writes are visible. Matching before
