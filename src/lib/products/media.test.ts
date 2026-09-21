@@ -96,41 +96,46 @@ describe("media operating-model profiles", () => {
     expect(mediaModelProfile("bogus_model")).toBeUndefined();
   });
 
-  it("fits newspaper and broadcast to media, studio and live to entertainment", () => {
-    expect(mediaModelFitsCorporation("newspaper", "media")).toBe(true);
-    expect(mediaModelFitsCorporation("newspaper", "entertainment")).toBe(false);
-    expect(mediaModelFitsCorporation("film_studio", "entertainment")).toBe(true);
-    expect(mediaModelFitsCorporation("film_studio", "media")).toBe(false);
-    expect(mediaModelFitsCorporation("live_entertainment", "media")).toBe(false);
-    expect(mediaModelFitsCorporation("streaming_platform", "media")).toBe(true);
-    expect(mediaModelFitsCorporation("streaming_platform", "entertainment")).toBe(true);
-    expect(mediaModelFitsCorporation("publishing_house", "entertainment")).toBe(true);
-    expect(mediaModelFitsCorporation("bogus_model", "media")).toBe(false);
+  it("fits every operating model to the merged media_entertainment type", () => {
+    for (const model of [
+      "newspaper",
+      "publishing_house",
+      "television_network",
+      "radio_network",
+      "film_studio",
+      "music_label",
+      "streaming_platform",
+      "live_entertainment",
+    ]) {
+      expect(mediaModelFitsCorporation(model, "media_entertainment")).toBe(true);
+    }
+    expect(mediaModelFitsCorporation("bogus_model", "media_entertainment")).toBe(false);
+    expect(mediaModelFitsCorporation("newspaper", "retail")).toBe(false);
   });
 });
 
 describe("media technology gates use real tech-tree nodes", () => {
   const EXPECTED_NODES = [
-    { id: "media-1940-1", name: "Radio Network Dominance" },
-    { id: "media-1950-1", name: "Television Broadcasting" },
-    { id: "media-2009-1", name: "Streaming Platforms" },
-    { id: "entertainment-1940-1", name: "Hollywood Studio System" },
-    { id: "entertainment-1950-2", name: "Record Labels" },
-    { id: "entertainment-1960-1", name: "Concert Touring" },
-    { id: "entertainment-2009-1", name: "Streaming Distribution" },
+    { id: "media_entertainment-1940-1", name: "Radio Network Dominance" },
+    { id: "media_entertainment-1950-1", name: "Television Broadcasting" },
+    { id: "media_entertainment-2009-1", name: "Streaming Platforms" },
+    { id: "media_entertainment-1940-2", name: "Hollywood Studio System" },
+    { id: "media_entertainment-1950-2", name: "Record Labels" },
+    { id: "media_entertainment-1960-2", name: "Concert Touring" },
   ] as const;
 
   for (const expected of EXPECTED_NODES) {
     it(`resolves ${expected.id} in the authored tree`, () => {
-      const sector = expected.id.startsWith("media-") ? "media" : "entertainment";
-      const node = TECH_TREE[sector].find((candidate) => candidate.id === expected.id);
+      const node = TECH_TREE.media_entertainment.find((candidate) => candidate.id === expected.id);
       expect(node?.name).toBe(expected.name);
     });
   }
 
-  it("lands the streaming strategy unlock on the media streaming node", () => {
-    const node = TECH_TREE.media.find((candidate) => candidate.id === "media-2009-1");
-    expect(node?.effects).toContainEqual({ kind: "unlockStrategy", strategyId: "streaming_media" });
+  it("lands the streaming strategy unlock on the merged streaming node", () => {
+    const node = TECH_TREE.media_entertainment.find(
+      (candidate) => candidate.id === "media_entertainment-2009-1"
+    );
+    expect(node?.effects).toContainEqual({ kind: "unlockStrategy", strategyId: "streaming" });
   });
 
   it("references only gated ids from model profiles and the catalog", () => {
@@ -139,9 +144,11 @@ describe("media technology gates use real tech-tree nodes", () => {
       for (const id of Object.values(profile.technologyIdBySector ?? {})) referenced.add(id);
     }
     for (const kind of PRODUCT_KINDS) {
-      for (const id of kind.requiredTechnologyIds ?? []) referenced.add(id);
+      if ("requiredTechnologyIds" in kind) {
+        for (const id of kind.requiredTechnologyIds ?? []) referenced.add(id);
+      }
     }
-    const known = new Set(EXPECTED_NODES.map((node) => node.id));
+    const known = new Set<string>(EXPECTED_NODES.map((node) => node.id));
     for (const id of referenced) expect(known.has(id)).toBe(true);
   });
 });
@@ -183,16 +190,40 @@ describe("media kind cadence and tail", () => {
 
 describe("validateMediaProductStart", () => {
   it.each([
-    { kindId: "news_story", corporationType: "media", operatingModels: ["newspaper"] },
-    { kindId: "book", corporationType: "media", operatingModels: ["publishing_house"] },
-    { kindId: "news_story", corporationType: "media", operatingModels: ["television_network"] },
-    { kindId: "radio_program", corporationType: "media", operatingModels: ["radio_network"] },
-    { kindId: "film", corporationType: "entertainment", operatingModels: ["film_studio"] },
-    { kindId: "film", corporationType: "media", operatingModels: ["streaming_platform"] },
-    { kindId: "music_release", corporationType: "entertainment", operatingModels: ["music_label"] },
+    {
+      kindId: "news_story",
+      corporationType: "media_entertainment",
+      operatingModels: ["newspaper"],
+    },
+    {
+      kindId: "book",
+      corporationType: "media_entertainment",
+      operatingModels: ["publishing_house"],
+    },
+    {
+      kindId: "news_story",
+      corporationType: "media_entertainment",
+      operatingModels: ["television_network"],
+    },
+    {
+      kindId: "radio_program",
+      corporationType: "media_entertainment",
+      operatingModels: ["radio_network"],
+    },
+    { kindId: "film", corporationType: "media_entertainment", operatingModels: ["film_studio"] },
+    {
+      kindId: "film",
+      corporationType: "media_entertainment",
+      operatingModels: ["streaming_platform"],
+    },
+    {
+      kindId: "music_release",
+      corporationType: "media_entertainment",
+      operatingModels: ["music_label"],
+    },
     {
       kindId: "live_production",
-      corporationType: "entertainment",
+      corporationType: "media_entertainment",
       operatingModels: ["live_entertainment"],
     },
   ])("starts $kindId for a fitting model without year or tech data", (args) => {
@@ -201,10 +232,18 @@ describe("validateMediaProductStart", () => {
 
   it("rejects unknown and industrial kinds", () => {
     expect(
-      validateMediaProductStart({ kindId: "bus", corporationType: "media", operatingModels: [] })
+      validateMediaProductStart({
+        kindId: "bus",
+        corporationType: "media_entertainment",
+        operatingModels: [],
+      })
     ).toMatchObject({ ok: false, reason: "unknown_product_kind" });
     expect(
-      validateMediaProductStart({ kindId: "truck", corporationType: "media", operatingModels: [] })
+      validateMediaProductStart({
+        kindId: "truck",
+        corporationType: "media_entertainment",
+        operatingModels: [],
+      })
     ).toMatchObject({ ok: false, reason: "unknown_product_kind" });
   });
 
@@ -218,18 +257,18 @@ describe("validateMediaProductStart", () => {
     expect(
       validateMediaProductStart({
         kindId: "news_story",
-        corporationType: "media",
+        corporationType: "media_entertainment",
         operatingModels: [],
       })
     ).toMatchObject({ ok: false, reason: "incompatible_operating_model" });
   });
 
   it("rejects a model unfitting the corporation type", () => {
-    // An entertainment corporation owning a newspaper model cannot publish news.
+    // The merged type owns every real model, so a mismatch means an unknown model.
     const result = validateMediaProductStart({
       kindId: "news_story",
-      corporationType: "entertainment",
-      operatingModels: ["newspaper"],
+      corporationType: "media_entertainment",
+      operatingModels: ["bogus_model"],
     });
     expect(result).toMatchObject({ ok: false, reason: "incompatible_operating_model" });
   });
@@ -238,10 +277,10 @@ describe("validateMediaProductStart", () => {
     expect(
       validateMediaProductStart({
         kindId: "television_show",
-        corporationType: "media",
+        corporationType: "media_entertainment",
         operatingModels: ["television_network"],
         currentYear: 1945,
-        unlockedTechnologyIds: ["media-1950-1"],
+        unlockedTechnologyIds: ["media_entertainment-1950-1"],
       })
     ).toMatchObject({ ok: false, reason: "era_locked" });
   });
@@ -250,7 +289,7 @@ describe("validateMediaProductStart", () => {
     expect(
       validateMediaProductStart({
         kindId: "radio_program",
-        corporationType: "media",
+        corporationType: "media_entertainment",
         operatingModels: ["radio_network"],
         currentYear: 1950,
         unlockedTechnologyIds: [],
@@ -262,10 +301,10 @@ describe("validateMediaProductStart", () => {
     expect(
       validateMediaProductStart({
         kindId: "radio_program",
-        corporationType: "media",
+        corporationType: "media_entertainment",
         operatingModels: ["radio_network"],
         currentYear: 1950,
-        unlockedTechnologyIds: ["media-1940-1"],
+        unlockedTechnologyIds: ["media_entertainment-1940-1"],
       })
     ).toMatchObject({ ok: true, operatingModel: "radio_network" });
   });
@@ -273,19 +312,19 @@ describe("validateMediaProductStart", () => {
   it("gates streaming behind the 2009 node of the owning lane", () => {
     const mediaLocked = validateMediaProductStart({
       kindId: "film",
-      corporationType: "media",
+      corporationType: "media_entertainment",
       operatingModels: ["streaming_platform"],
       currentYear: 2020,
-      unlockedTechnologyIds: ["entertainment-2009-1"],
+      unlockedTechnologyIds: ["media_entertainment-1940-1"],
     });
     expect(mediaLocked).toMatchObject({ ok: false, reason: "technology_locked" });
     expect(
       validateMediaProductStart({
         kindId: "film",
-        corporationType: "media",
+        corporationType: "media_entertainment",
         operatingModels: ["streaming_platform"],
         currentYear: 2020,
-        unlockedTechnologyIds: ["media-2009-1"],
+        unlockedTechnologyIds: ["media_entertainment-2009-1"],
       })
     ).toMatchObject({ ok: true, operatingModel: "streaming_platform" });
   });
@@ -369,7 +408,7 @@ describe("media lifecycles on their own cadence", () => {
         sectorQuality: 60,
         productRnDAnchor: 1000,
         deliveredAdvertisingAnchor: 500,
-        unlockedTechnologyIds: ["entertainment-1950-2"],
+        unlockedTechnologyIds: ["media_entertainment-1950-2"],
         schedule: mediaLifecycleSchedule("music_release"),
       }).product;
     }
@@ -493,16 +532,16 @@ describe("media legality helper", () => {
     expect(
       mediaKindLegalForModels({
         kindId: "film",
-        corporationType: "entertainment",
+        corporationType: "media_entertainment",
         operatingModels: ["film_studio"],
         currentYear: 1950,
-        unlockedTechnologyIds: ["entertainment-1940-1"],
+        unlockedTechnologyIds: ["media_entertainment-1940-2"],
       })
     ).toBe(true);
     expect(
       mediaKindLegalForModels({
         kindId: "film",
-        corporationType: "entertainment",
+        corporationType: "media_entertainment",
         operatingModels: ["film_studio"],
         currentYear: 1930,
       })

@@ -27,10 +27,9 @@ export type ProductLifecycleStage = (typeof PRODUCT_LIFECYCLE_STAGES)[number];
 export type ProductFamily = "media_entertainment" | "industrial_manufacturing";
 
 /**
- * Canonical Media & Entertainment sector type for issue #2234. No writer
- * persists it yet: corporations still carry the legacy `media` and
- * `entertainment` types, which read through the same alias. New writes must
- * keep using the legacy types until the collision-conserving migration lands.
+ * Canonical Media & Entertainment sector type for issue #2234. This is the
+ * sole runtime type for the domain: new writes persist it, and the legacy
+ * `media` / `entertainment` labels survive only at the input boundary.
  */
 export const CANONICAL_MEDIA_SECTOR_TYPE = "media_entertainment";
 

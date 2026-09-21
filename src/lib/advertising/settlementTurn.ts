@@ -209,7 +209,7 @@ export async function processAdvertisingTurn(
   for (const [corpId, corp] of args.corpsById) {
     const code = resolveCorpLiquidCurrencyCode(corp);
     const fx = fxRateForCorpFromMap(corp, args.fxByCurrency);
-    const requested = toPerTurnAnchor(corp.marketingBudget, code, fx);
+    const requested = code ? toPerTurnAnchor(corp.marketingBudget, code, fx) : 0;
     const settled = args.settledSpendAnchorByBuyerId.get(corpId) ?? 0;
     if (!(requested > 0) && !(settled > 0)) continue;
 

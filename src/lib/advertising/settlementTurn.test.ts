@@ -218,7 +218,10 @@ describe("processAdvertisingTurn", () => {
     const store = newStore();
     store.agreements.set("ad1", activeAgreement() as unknown as Record<string, unknown>);
     store.models.push({ corporationId: "supplier", operatingModel: "television_network" });
-    const sectorsByCorp = new Map<string, { stateId: string; revenue: number }[]>([
+    const sectorsByCorp = new Map<
+      string,
+      { stateId: string; revenue: number; countryId: string }[]
+    >([
       ["buyer", [{ stateId: "US-CA", revenue: 1000, countryId: "US" }]],
       ["supplier", [{ stateId: "US-CA", revenue: 1000, countryId: "US" }]],
     ]);
@@ -275,7 +278,10 @@ describe("processAdvertisingTurn", () => {
     store.models.push({ corporationId: "supplier", operatingModel: "television_network" });
     const buyer = corp("buyer", { liquidCapital: 1_000_000, marketingBudget: 2400 });
     const supplier = corp("supplier", { liquidCapital: 500_000, marketingBudget: 0 });
-    const sectorsByCorp = new Map<string, { stateId: string; revenue: number }[]>([
+    const sectorsByCorp = new Map<
+      string,
+      { stateId: string; revenue: number; countryId: string }[]
+    >([
       ["buyer", [{ stateId: "US-CA", revenue: 1000, countryId: "US" }]],
       ["supplier", [{ stateId: "US-CA", revenue: 1000, countryId: "US" }]],
     ]);

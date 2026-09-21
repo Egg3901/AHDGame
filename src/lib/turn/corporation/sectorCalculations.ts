@@ -86,7 +86,7 @@ const SECTOR_RD_COMMODITIES: Partial<Record<string, [string, string?]>> = {
   technology: ["electronics", "rare_earth"],
   pharmaceuticals: ["pharmaceuticals", "industrial_chemicals"],
   finance: ["consulting_services", "software"],
-  media: ["software", "consulting_services"],
+  media_entertainment: ["software", "consulting_services"],
   retail: ["consumer_goods", "produce"],
   healthcare: ["pharmaceuticals", "consulting_services"],
   education: ["consulting_services", "software"],

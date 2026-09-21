@@ -26,6 +26,10 @@ export function genericUnionName(countryId: CountryId, sectorType: CorporationTy
  * Resolve the display/seed name for a (countryId, sectorType) union in the
  * active preset's era. Uses era-appropriate historical names where authored,
  * otherwise {@link genericUnionName}.
+ *
+ * Consolidation convention (issue #2234): the merged `media_entertainment`
+ * entry carries the entertainment-side name (the deterministic winner when
+ * both legacy keys existed), so there is exactly one runtime key per country.
  */
 export function getUnionName(
   countryId: CountryId,

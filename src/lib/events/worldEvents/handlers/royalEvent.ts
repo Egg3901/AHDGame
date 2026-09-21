@@ -26,7 +26,7 @@ registerEventHandler({
           label: "Jubilee crowds fill the Mall",
           effects: [
             { type: "approvalDelta", delta: 3 },
-            { type: "sectorDemandModifier", sectorType: "entertainment", pct: 6, durationTurns: 6 },
+            { type: "sectorDemandModifier", sectorType: "media_entertainment", pct: 6, durationTurns: 6 },
             { type: "wireOnly" },
           ],
           newsWire: {
@@ -42,7 +42,7 @@ registerEventHandler({
           label: "A royal wedding lifts the mood",
           effects: [
             { type: "approvalDelta", delta: 2 },
-            { type: "sectorDemandModifier", sectorType: "entertainment", pct: 5, durationTurns: 6 },
+            { type: "sectorDemandModifier", sectorType: "media_entertainment", pct: 5, durationTurns: 6 },
             { type: "wireOnly" },
           ],
           newsWire: {
@@ -58,7 +58,7 @@ registerEventHandler({
           label: "The nation marks a solemn royal funeral",
           effects: [
             { type: "approvalDelta", delta: 1 },
-            { type: "sectorDemandModifier", sectorType: "entertainment", pct: 2, durationTurns: 3 },
+            { type: "sectorDemandModifier", sectorType: "media_entertainment", pct: 2, durationTurns: 3 },
             { type: "wireOnly" },
           ],
           newsWire: {

@@ -12,15 +12,15 @@ import type { MediaOperatingModel } from "./types";
  * appear here (advertising, entertainment_services); nothing here may
  * introduce a new commodity.
  *
- * Technology ids are real tech-tree nodes (`<sector>-<decade>-<slot>`, slots
+ * Technology ids are real tech-tree nodes on the merged
+ * `media_entertainment` lane (`media_entertainment-<decade>-<slot>`, slots
  * are 1-based within the decade lane):
- * - media-1940-1 "Radio Network Dominance"
- * - media-1950-1 "Television Broadcasting"
- * - media-2009-1 "Streaming Platforms" (unlocks the streaming_media strategy)
- * - entertainment-1940-1 "Hollywood Studio System"
- * - entertainment-1950-2 "Record Labels"
- * - entertainment-1960-1 "Concert Touring"
- * - entertainment-2009-1 "Streaming Distribution"
+ * - media_entertainment-1940-1 "Radio Network Dominance"
+ * - media_entertainment-1950-1 "Television Broadcasting"
+ * - media_entertainment-2009-1 "Streaming Platforms" (unlocks the streaming strategy)
+ * - media_entertainment-1940-2 "Hollywood Studio System"
+ * - media_entertainment-1950-2 "Record Labels"
+ * - media_entertainment-1960-2 "Concert Touring"
  *
  * Coverage is audience reach, not market share and not quality. It sizes the
  * addressable launch audience for a model and is deliberately never fed into
@@ -28,7 +28,8 @@ import type { MediaOperatingModel } from "./types";
  * multipliers only, so coverage cannot duplicate commodity demand.
  */
 
-export type MediaCorporationType = "media" | "entertainment";
+/** Sole corporation sector type that may own media operating models. */
+export type MediaCorporationType = "media_entertainment";
 
 export type MediaCoveragePattern =
   | "print_circulation"
@@ -57,10 +58,8 @@ export interface MediaModelProfile {
   /** Era floor; absent means producible in any era. */
   minDecade?: string;
   /**
-   * Anchor research per corporation lane. A model is technology-gated only
-   * for lanes listed here; unlisted lanes (and gateless models) need no
-   * research. Lanes differ because each corporation researches its own
-   * sector tree: a media corporation cannot unlock entertainment nodes.
+   * Anchor research on the merged media_entertainment lane. Every owner
+   * researches the same tree, so one gate per model covers all owners.
    */
   technologyIdBySector?: Partial<Record<MediaCorporationType, string>>;
   /** One-line Studio explanation of the model's cadence. */
@@ -72,7 +71,7 @@ export interface MediaModelProfile {
 const MODEL_PROFILES: readonly MediaModelProfile[] = [
   {
     model: "newspaper",
-    corporationTypes: ["media"],
+    corporationTypes: ["media_entertainment"],
     coverage: {
       pattern: "print_circulation",
       addressableShareBp: 1500,
@@ -83,7 +82,7 @@ const MODEL_PROFILES: readonly MediaModelProfile[] = [
   },
   {
     model: "publishing_house",
-    corporationTypes: ["media", "entertainment"],
+    corporationTypes: ["media_entertainment"],
     coverage: {
       pattern: "retail_distribution",
       addressableShareBp: 2000,
@@ -94,79 +93,79 @@ const MODEL_PROFILES: readonly MediaModelProfile[] = [
   },
   {
     model: "television_network",
-    corporationTypes: ["media"],
+    corporationTypes: ["media_entertainment"],
     coverage: {
       pattern: "broadcast",
       addressableShareBp: 8000,
       blurb: "National broadcast: a series reaches about 80% of households.",
     },
     minDecade: "1950",
-    technologyIdBySector: { media: "media-1950-1" },
+    technologyIdBySector: { media_entertainment: "media_entertainment-1950-1" },
     cadenceBlurb: "Series develop over 6 turns of production and scheduling.",
     tailBlurb: "Catalog tail: syndication reruns pay for years.",
   },
   {
     model: "radio_network",
-    corporationTypes: ["media"],
+    corporationTypes: ["media_entertainment"],
     coverage: {
       pattern: "broadcast",
       addressableShareBp: 5000,
       blurb: "National radio: a show reaches about 50% of listeners.",
     },
     minDecade: "1940",
-    technologyIdBySector: { media: "media-1940-1" },
+    technologyIdBySector: { media_entertainment: "media_entertainment-1940-1" },
     cadenceBlurb: "Shows develop in 3 turns of lineup and sponsor sales.",
     tailBlurb: "Ephemeral: a broadcast airs, then it is gone.",
   },
   {
     model: "film_studio",
-    corporationTypes: ["entertainment"],
+    corporationTypes: ["media_entertainment"],
     coverage: {
       pattern: "theatrical",
       addressableShareBp: 4000,
       blurb: "Theatrical circuit: a film reaches about 40% of moviegoers.",
     },
     minDecade: "1940",
-    technologyIdBySector: { entertainment: "entertainment-1940-1" },
+    technologyIdBySector: { media_entertainment: "media_entertainment-1940-2" },
     cadenceBlurb: "Films develop over 10 turns of shooting and post-production.",
     tailBlurb: "Catalog tail: library licensing pays for years.",
   },
   {
     model: "music_label",
-    corporationTypes: ["entertainment"],
+    corporationTypes: ["media_entertainment"],
     coverage: {
       pattern: "retail_distribution",
       addressableShareBp: 2500,
       blurb: "Record distribution: a release reaches about 25% of listeners.",
     },
     minDecade: "1950",
-    technologyIdBySector: { entertainment: "entertainment-1950-2" },
+    technologyIdBySector: { media_entertainment: "media_entertainment-1950-2" },
     cadenceBlurb: "Records develop over 4 turns of sessions and pressing.",
     tailBlurb: "Catalog tail: the back catalog keeps selling.",
   },
   {
     model: "streaming_platform",
-    corporationTypes: ["media", "entertainment"],
+    corporationTypes: ["media_entertainment"],
     coverage: {
       pattern: "subscription",
       addressableShareBp: 6000,
       blurb: "Subscriber base: originals reach about 60% of connected homes.",
     },
     minDecade: "2009",
-    technologyIdBySector: { media: "media-2009-1", entertainment: "entertainment-2009-1" },
+    technologyIdBySector: { media_entertainment: "media_entertainment-2009-1" },
     cadenceBlurb: "Originals develop over 8 turns of production and platform work.",
     tailBlurb: "Catalog tail: originals anchor the library permanently.",
   },
   {
     model: "live_entertainment",
-    corporationTypes: ["entertainment"],
+    corporationTypes: ["media_entertainment"],
     coverage: {
       pattern: "venue",
       addressableShareBp: 1000,
       blurb: "Venue circuit: a tour reaches about 10% of households in person.",
     },
     minDecade: "1960",
-    technologyIdBySector: { entertainment: "entertainment-1960-1" },
+    technologyIdBySector: { media_entertainment: "media_entertainment-1960-2" },
     cadenceBlurb: "Tours develop over 6 turns of booking and rehearsal.",
     tailBlurb: "No catalog tail: the show ends when the tour ends.",
   },
@@ -189,10 +188,11 @@ export function mediaModelProfiles(): readonly MediaModelProfile[] {
 /** Whether an operating model fits a corporation sector type. */
 export function mediaModelFitsCorporation(model: string, corporationType: unknown): boolean {
   const profile = mediaModelProfile(model);
+  const corpType = asMediaCorporationType(corporationType);
   return (
     profile !== undefined &&
-    (corporationType === "media" || corporationType === "entertainment") &&
-    (profile.corporationTypes as readonly string[]).includes(corporationType)
+    corpType !== null &&
+    (profile.corporationTypes as readonly string[]).includes(corpType)
   );
 }
 
@@ -371,8 +371,16 @@ export type ValidateMediaStartResult =
     }
   | { ok: false; reason: MediaStartRejectReason; message: string };
 
+/**
+ * Normalize a corporation sector type to the canonical lane. The canonical
+ * `media_entertainment` type and both retired labels read as the canonical
+ * type (tolerant read); anything else is null. Callers never persist the
+ * input, only the verdict, so legacy labels can never leak into writes.
+ */
 function asMediaCorporationType(value: unknown): MediaCorporationType | null {
-  return value === "media" || value === "entertainment" ? value : null;
+  return value === "media_entertainment" || value === "media" || value === "entertainment"
+    ? "media_entertainment"
+    : null;
 }
 
 function normalizeModels(values: readonly unknown[] | undefined): MediaOperatingModel[] {
@@ -410,7 +418,7 @@ export function validateMediaProductStart(
     return {
       ok: false,
       reason: "incompatible_corporation_type",
-      message: `"${kind.label}" needs a Media or Entertainment corporation`,
+      message: `"${kind.label}" needs a Media & Entertainment corporation`,
     };
   }
 
