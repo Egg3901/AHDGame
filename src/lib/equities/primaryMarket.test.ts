@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
+import { ObjectId } from "mongodb";
 import type { Db } from "mongodb";
 import { createMockDb } from "@/lib/test-utils/mockDb";
 import {
   pendingEquityPlacementBudget,
+  placePendingShareIssuances,
   planEquityUnderwriting,
   prepareEquityPrimaryPlacement,
 } from "./primaryMarket";
@@ -68,6 +70,78 @@ describe("planEquityUnderwriting", () => {
 describe("pendingEquityPlacementBudget", () => {
   it("spends ten percent of cash above half-target reserve", () => {
     expect(pendingEquityPlacementBudget(150_000, 100_000)).toBe(10_000);
-    expect(pendingEquityPlacementBudget(40_000, 100_000)).toBe(0);
+  });
+
+  it("preserves a fraction of attainable cash when the long-run target is out of reach", () => {
+    expect(pendingEquityPlacementBudget(40_000, 100_000)).toBe(2_000);
+  });
+});
+
+describe("placePendingShareIssuances", () => {
+  function thinPoolDb(poolCashLocal: number) {
+    const db = createMockDb();
+    const corp = {
+      _id: new ObjectId(),
+      name: "Stalled Corp",
+      countryId: "US",
+      liquidCurrencyCode: "USD",
+      sharePrice: 1000,
+      fundamentalSharePrice: 1000,
+      totalShares: 10_000_000,
+      publicFloat: 1_000_000,
+      pendingShareIssuance: {
+        remainingShares: 100,
+        requestedShares: 10_000,
+        source: "direct",
+        createdAtTurn: 7,
+        initialPriceLocal: 1000,
+      },
+    };
+    db.collection("corporations");
+    db.collectionMocks.corporations.find.mockReturnValue({
+      sort: () => ({ toArray: async () => [corp] }),
+    });
+    db.collectionMocks.corporations.updateOne.mockResolvedValue({ modifiedCount: 1 });
+    db.collection("equityMarketPools");
+    // Ask lands at 1020 (2% dealer spread on the 1000 execution price), so a
+    // 200-per-turn budget cannot afford a single paced share.
+    db.collectionMocks.equityMarketPools.findOne.mockResolvedValue({
+      _id: "USD",
+      cashLocal: poolCashLocal,
+      targetCashLocal: 0,
+    });
+    db.collectionMocks.equityMarketPools.findOneAndUpdate.mockImplementation(async (filter) => {
+      const needed = (filter as { cashLocal?: { $gte?: number } }).cashLocal?.$gte ?? 0;
+      return poolCashLocal >= needed ? { cashLocal: poolCashLocal - needed } : null;
+    });
+    return { db, corp };
+  }
+
+  it("places one share per turn when the pacing budget rounds below a single share (#2114)", async () => {
+    const { db } = thinPoolDb(2000);
+    const result = await placePendingShareIssuances(db as unknown as Db, 42, new Date());
+    expect(result).toMatchObject({ corporationsTouched: 1, sharesPlaced: 1 });
+    expect(db.collectionMocks.corporations.updateOne).toHaveBeenCalledWith(
+      expect.objectContaining({
+        "pendingShareIssuance.remainingShares": { $gte: 1 },
+      }),
+      expect.anything()
+    );
+  });
+
+  it("places nothing when the pool has no placement budget at all", async () => {
+    const { db } = thinPoolDb(0);
+    const result = await placePendingShareIssuances(db as unknown as Db, 42, new Date());
+    expect(result).toMatchObject({ corporationsTouched: 0, sharesPlaced: 0 });
+    expect(db.collectionMocks.corporations.updateOne).not.toHaveBeenCalled();
+  });
+
+  it("places nothing when pool cash cannot cover even one share", async () => {
+    const { db } = thinPoolDb(500);
+    // Budget is 50 (10% of 500) with cash below the 1020 ask: the one-share
+    // floor is attempted but the gated debit refuses, so no state changes.
+    const result = await placePendingShareIssuances(db as unknown as Db, 42, new Date());
+    expect(result).toMatchObject({ corporationsTouched: 0, sharesPlaced: 0 });
+    expect(db.collectionMocks.corporations.updateOne).not.toHaveBeenCalled();
   });
 });

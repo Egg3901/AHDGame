@@ -37,7 +37,10 @@ import { nppBuyBond } from "@/lib/nppAutonomy/v3/finance/nppBonds";
 import { nppBuyShares, nppSellShares } from "@/lib/nppAutonomy/v3/finance/nppShares";
 import { nppFoundCorporation } from "@/lib/nppAutonomy/v3/finance/nppFoundCorporation";
 import { loadPrivateEnterpriseBlockedCountries } from "@/lib/economy/queries/privateEnterpriseGate";
-import { nppBuildPartyOrg } from "@/lib/nppAutonomy/v3/party/nppBuildOrg";
+import {
+  nppBuildPartyOrg,
+  preloadNppBuildOrgSweepCache,
+} from "@/lib/nppAutonomy/v3/party/nppBuildOrg";
 import { BOND_UNIT_FACE_VALUE } from "@/lib/db/types/bond";
 import type { Corporation } from "@/lib/db/types/corporation";
 import type { CorporationType } from "@/lib/constants/corporations";
@@ -108,20 +111,20 @@ const NPP_BOND_MIN_YIELD_PCT = 1.0;
 const NPP_STOCK_MIN_VALUE_RATIO = 0.8;
 const NPP_STOCK_VALUE_FLOOR_MIN = 0.5;
 const NPP_STOCK_VALUE_FLOOR_MAX = 1.0;
-// How many corps (by market cap) enter the weighted sample. Wider than the bond
-// pool because equity is where the herding was worst — every NPP in a country
-// previously bought the one largest corp.
-const NPP_STOCK_CANDIDATE_POOL = 8;
+// How many corps (by market cap) enter the weighted sample. The live iteration-4
+// market put 70% of tradable capitalization in five firms while profitable
+// smaller issuers received little autonomous demand. Thirty-two keeps the query
+// bounded while giving the long tail a real chance to attract capital.
+const NPP_STOCK_CANDIDATE_POOL = 32;
 // v3 stock investment: same shape as the bond sweep above, run as a separate
 // gate immediately after it so an NPP can end up allocating to both in one
 // cycle (each draws from whatever savings remain above the floor at the time
-// it runs — sequential, same document, no double-count risk). Picks the
-// single largest eligible home-currency corp by market cap (blue-chip bias,
-// same "always highest X" simplicity as the bond sweep's highest-couponRate
-// pick) rather than diversifying across a basket — that's index funds' job.
+// it runs — sequential, same document, no double-count risk). A modestly
+// stronger buy cadence than the bond sweep gives equities a structural expansion
+// bias, but every purchase remains funded from accumulated investment cash.
 const NPP_STOCK_INVEST_RESERVE_FLOOR = 5_000;
-const NPP_STOCK_INVEST_BASE_PROBABILITY = 0.05;
-const NPP_STOCK_INVEST_FRACTION = 0.25;
+const NPP_STOCK_INVEST_BASE_PROBABILITY = 0.075;
+const NPP_STOCK_INVEST_FRACTION = 0.3;
 // v3 party-org building: counteracts processPartyOrgTurn's unconditional
 // per-turn Org decay, which nothing has ever offset autonomously (growth was
 // player-`/build-org`-only). Runs over EXISTING statePartyOrg rows with
@@ -137,8 +140,20 @@ const NPP_BUILD_ORG_BASE_PROBABILITY = 0.15;
 // hold a position at any point. Flat base probability (portfolio rebalancing
 // isn't strongly personality-driven the way investing IN is) rather than
 // archetype-scaled.
-const NPP_STOCK_SELL_BASE_PROBABILITY = 0.03;
-const NPP_STOCK_SELL_FRACTION = 0.5; // sells half the position when it fires
+const NPP_STOCK_SELL_BASE_PROBABILITY = 0.02;
+const NPP_STOCK_SELL_FRACTION = 0.4;
+
+/** Score an equity candidate without letting mega-cap size swamp value. */
+export function nppStockCandidateWeight(
+  marketCap: number,
+  valueRatio: number,
+  riskToleranceMult: number
+): number {
+  const safeMarketCap = Number.isFinite(marketCap) ? Math.max(marketCap, 1) : 1;
+  const safeValueRatio = Number.isFinite(valueRatio) ? Math.max(valueRatio, 0) : 1;
+  const safeRiskTolerance = Number.isFinite(riskToleranceMult) ? Math.max(riskToleranceMult, 0) : 1;
+  return Math.pow(safeMarketCap, 0.25) * Math.pow(safeValueRatio, safeRiskTolerance);
+}
 // v3 corporation founding: the natural next step after buy/sell — a
 // sufficiently wealthy, entrepreneurial NPP starts their own company. Gated
 // on ceoArchetype (aggressive/innovator — high ambition — found more often
@@ -841,8 +856,8 @@ async function investNppStockSurplus(
     // Everything on offer is overvalued for this NPP's taste — hold the cash.
     if (scoredCorps.length === 0) continue;
 
-    const corpWeights = scoredCorps.map(
-      (s) => Math.sqrt(Math.max(s.marketCap, 1)) * Math.pow(s.valueRatio, riskToleranceMult)
+    const corpWeights = scoredCorps.map((s) =>
+      nppStockCandidateWeight(s.marketCap, s.valueRatio, riskToleranceMult)
     );
     const corpTotal = corpWeights.reduce((sum, w) => sum + w, 0);
     let corpRoll = rng() * corpTotal;
@@ -931,6 +946,12 @@ async function buildNppPartyOrgSurplus(
 
   const rng = makeSeededRng(`npp-build-org:${currentTurn}${NPP_ACTION_RNG_SALT}`);
 
+  // Immutable per-sweep inputs (national party docs, chair shields, state
+  // price multipliers) loaded once; mutable state-party org/PS/treasury,
+  // pressure, and gates stay live per action inside `nppBuildPartyOrg`.
+  const sweepCountries = [...new Set(rows.map((r) => r.countryId as CountryId))];
+  const sweepCache = await preloadNppBuildOrgSweepCache(db, sweepCountries);
+
   for (const row of rows) {
     const countryId = row.countryId as CountryId;
     const partySeq = Number(row.partyId);
@@ -958,7 +979,15 @@ async function buildNppPartyOrgSurplus(
     const { campaignAggressionMult } = careerArchetypeModifiersContinuous(actor.personality);
     if (rng() >= NPP_BUILD_ORG_BASE_PROBABILITY * campaignAggressionMult) continue;
 
-    await nppBuildPartyOrg(db, actor._id, countryId, row.stateId, partySeq, currentTurn);
+    await nppBuildPartyOrg(
+      db,
+      actor._id,
+      countryId,
+      row.stateId,
+      partySeq,
+      currentTurn,
+      sweepCache
+    );
   }
 }
 
@@ -1079,7 +1108,7 @@ async function sellNppStockSurplus(
  * over CORPORATION_TYPES) — no diversification logic needed here, that's
  * organic across many independent founding events over a long run.
  */
-async function foundNppCorporationsSurplus(
+export async function foundNppCorporationsSurplus(
   db: Db,
   currentTurn: number,
   countryScope: CountryId[] | null = null
@@ -1094,7 +1123,8 @@ async function foundNppCorporationsSurplus(
   // command-economy gate. Resolve the live blocked set from the marketization
   // dial so a country converting in either direction is honoured with no code
   // change. One gameState read plus one federalBudget $in, once per sweep.
-  const blockedCountries = [...(await loadPrivateEnterpriseBlockedCountries(db))];
+  const blockedSet = await loadPrivateEnterpriseBlockedCountries(db);
+  const blockedCountries = [...blockedSet];
   const candidates = await db
     .collection<NPP>("npps")
     .find(
@@ -1123,6 +1153,26 @@ async function foundNppCorporationsSurplus(
     .toArray();
   if (candidates.length === 0) return;
 
+  // Already-CEO exclusion, batched: one $in query over the whole pool instead
+  // of one findOne per RNG-passing candidate (pool up to 300). Same filter
+  // semantics as the per-row check it replaces, ids-only projection. The
+  // command core keeps its own guarded check, so a founding between preload
+  // and write stays excluded. No RNG consumed here, so the per-candidate
+  // stream below is untouched.
+  const alreadyCeoIds = new Set<string>();
+  {
+    const rows = await db
+      .collection<Corporation>("corporations")
+      .find(
+        { ceoId: { $in: candidates.map((c) => c._id) }, ceoVacant: { $ne: true } },
+        { projection: { ceoId: 1 } }
+      )
+      .toArray();
+    for (const row of rows) {
+      if (row.ceoId) alreadyCeoIds.add(row.ceoId.toString());
+    }
+  }
+
   const rng = makeSeededRng(`npp-found-corp:${currentTurn}${NPP_ACTION_RNG_SALT}`);
   const fxByCcy = await loadFxRatesByCurrency(db);
 
@@ -1130,10 +1180,7 @@ async function foundNppCorporationsSurplus(
     const archetype = deriveCeoArchetype(npp.personality);
     if (rng() >= NPP_FOUNDING_BASE_PROBABILITY_BY_ARCHETYPE[archetype]) continue;
 
-    const alreadyCeo = await db
-      .collection<Corporation>("corporations")
-      .findOne({ ceoId: npp._id, ceoVacant: { $ne: true } }, { projection: { _id: 1 } });
-    if (alreadyCeo) continue;
+    if (alreadyCeoIds.has(npp._id.toString())) continue;
 
     const sectorType = CORPORATION_TYPES[
       Math.floor(rng() * CORPORATION_TYPES.length)
@@ -1141,6 +1188,14 @@ async function foundNppCorporationsSurplus(
 
     const homeRate =
       fxByCcy.get(COUNTRY_CURRENCY_MAP[(npp.countryId ?? "US") as CountryId] ?? "USD") ?? 1;
-    await nppFoundCorporation(db, npp, sectorType, NPP_FOUNDING_FEE, currentTurn, homeRate);
+    await nppFoundCorporation(
+      db,
+      npp,
+      sectorType,
+      NPP_FOUNDING_FEE,
+      currentTurn,
+      homeRate,
+      blockedSet
+    );
   }
 }

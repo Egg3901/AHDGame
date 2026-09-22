@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { ObjectId } from "mongodb";
 import type { ElectionCandidate, PoliticalParty, PrimarySnapshot } from "@/lib/db/types";
 import { buildPollingData, computeSeatEstimates } from "./buildPollingData";
-import { allocateSeats, getMajoritarianBonus } from "@/lib/turn/election/seatAllocation";
+import { allocateSeats } from "@/lib/turn/election/seatAllocation";
 
 // Minimal fixtures — buildPollingData only reads the fields set here.
 function makeCandidate(overrides: Partial<ElectionCandidate>): ElectionCandidate {
@@ -259,9 +259,6 @@ describe("buildPollingData — primary phase", () => {
 // shapes that used to diverge.
 
 describe("computeSeatEstimates — parity with allocateSeats (ticket #1032)", () => {
-  const YEAR_1953 = 1953;
-  const bonus = getMajoritarianBonus("commons", YEAR_1953);
-
   /** Runs both engines over the same votes and returns per-party seat totals. */
   function bothEngines(
     region: string,
@@ -270,26 +267,12 @@ describe("computeSeatEstimates — parity with allocateSeats (ticket #1032)", ()
     parties: Record<string, string>
   ) {
     const tally = { totalVotes: votes, candidateParties: parties } as never;
-    const projection = computeSeatEstimates(
-      "commons",
-      seats,
-      tally,
-      new Set(Object.keys(votes)),
-      bonus
-    );
+    const projection = computeSeatEstimates("commons", seats, tally, new Set(Object.keys(votes)));
     const ranked = Object.entries(votes)
       .map(([id, v]) => ({ id, votes: v, party: parties[id] }))
       .sort((a, b) => b.votes - a.votes);
     const totalVotes = ranked.reduce((s, c) => s + c.votes, 0);
-    const resolution = allocateSeats(
-      "commons",
-      region,
-      seats,
-      ranked,
-      totalVotes,
-      undefined,
-      bonus
-    ).seatsEstimate;
+    const resolution = allocateSeats("commons", region, seats, ranked, totalVotes).seatsEstimate;
     const byParty = (est: Record<string, number> | null) => {
       const out: Record<string, number> = {};
       for (const [id, s] of Object.entries(est ?? {})) {
@@ -370,7 +353,7 @@ describe("computeSeatEstimates — parity with allocateSeats (ticket #1032)", ()
     const { projection, resolution } = bothEngines(
       "NEE",
       27,
-      { lab: 52_900, con: 34_000, lib: 13_100 },
+      { lab: 45_000, con: 34_000, lib: 21_000 },
       { lab: "lab", con: "con", lib: "lib" }
     );
     expect(projection).toEqual(resolution);

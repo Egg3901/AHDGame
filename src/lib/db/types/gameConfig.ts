@@ -388,10 +388,36 @@ export interface GameConfig {
   shortageResponsiveSourcingEnabled?: boolean;
   /** Governance record required when shortage-responsive sourcing is enabled. */
   shortageResponsiveSourcingIntervention?: EconomicInterventionPlan;
+  /**
+   * Dark gate for sovereign tranche consolidation (#1001): folds below-floor
+   * quarterly issuance rungs into the largest rung so small deficit quarters
+   * stop minting sliver issues nobody holds. Default off until worldsim
+   * evidence lands; ENABLING IS A BALANCE CHANGE and merges only with a
+   * simulation report from scripts/sim/ per CONTRIBUTING.md.
+   */
+  sovereignIssuanceConsolidationEnabled?: boolean;
   /** Dark gate for the index-fund 20 percent sovereign-bond allocation target. */
   indexFundBondLiquidityEnabled?: boolean;
+  /**
+   * Dark gate for domestic sovereign-bond coverage (#1001): ensures one
+   * home-sovereign bond fund per uncovered sovereign issuer so the existing
+   * real-cash deploy pass can reach their paper. Default off until worldsim
+   * evidence lands; ENABLING IS A BALANCE CHANGE and merges only with a
+   * simulation report from scripts/sim/ per CONTRIBUTING.md.
+   */
+  domesticSovereignBondCoverageEnabled?: boolean;
   /** Governance record required when the sovereign-bond allocation target is enabled. */
   indexFundBondLiquidityIntervention?: EconomicInterventionPlan;
+  /**
+   * Dark gate for autonomous NPP index-fund redemption (#2120). When true,
+   * autonomous NPP investing may redeem fund units (enqueueing a redemption
+   * and, on the cron pass, selling holdings for cash), so the subscribe ->
+   * rebalance -> redeem round trip is exercised by a non-player actor instead
+   * of only by the player redeem route. Default off: enabling it changes
+   * simulated NPP portfolios and fund liquidity, so it merges only with a
+   * worldsim report from scripts/sim/ per CONTRIBUTING.md.
+   */
+  nppFundRedemptionEnabled?: boolean;
   /** Dark gate for bounded, index-fund-backed two-sided equity quotes. */
   equityLiquidityFacilityEnabled?: boolean;
   /** Governance record required when the equity-liquidity facility is enabled. */
@@ -735,6 +761,18 @@ export interface GameConfig {
   altScoringUpdatedBy?: string;
   /** When the alt-scoring weights/thresholds were last edited (ISO 8601). */
   altScoringUpdatedAt?: string;
+
+  /**
+   * Era price-level deflator for campaign finance (#2119). When true, campaign
+   * action fund costs and campaign income are scaled by the active era's price
+   * level relative to the modern baseline, so a 1953 world stops charging
+   * 2019-scale dollar costs while paying 2019-scale income. The per-region GDP
+   * ratio from #798 already varies WITHIN an era; this adds the BETWEEN-era
+   * price level on top. Default off (absent means off, byte-identical to
+   * today): enabling it is a balance change and merges only with a simulation
+   * report from scripts/sim/ per CONTRIBUTING.md.
+   */
+  campaignEraPriceLevelEnabled?: boolean;
 }
 
 /**

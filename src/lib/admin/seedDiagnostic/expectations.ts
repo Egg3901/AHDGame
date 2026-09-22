@@ -6,8 +6,11 @@
 import type { CountryId } from "@/lib/constants/countries";
 import { COUNTRY_CONFIGS, DEFAULT_LEGACY_COUNTRY_ID } from "@/lib/constants/countries";
 import { FOREX_ACTIVE_COUNTRIES, getInitialRates } from "@/lib/constants/currencies";
-import { NATIONAL_SCOPE_IDS } from "@/lib/constants/nationalScope";
 import { getStartingYearForPreset, TURNS_PER_YEAR } from "@/lib/constants/turnTime";
+// Re-exported so existing consumers keep their import path; the definition moved
+// to break the readiness/seed import cycle. See regionBundles.ts.
+import { expectedRegionCount } from "./regionBundles";
+export { expectedRegionCount };
 import { COUNTRY_READINESS_EXPECTATIONS } from "@/lib/constants/countryReadinessExpectations";
 import { getBranches } from "@/lib/constants/military";
 import { ESTATE_PORTFOLIO_BY_COUNTRY } from "@/lib/constants/cabinetEstates";
@@ -21,7 +24,7 @@ import {
   type ResetPresetId,
 } from "@/lib/seeds/presetSelector";
 import { getNationalBudgetSeedConfigsForPreset } from "@/lib/seeds/reference/budgets";
-import { selectStatesBundleForPreset } from "@/lib/admin/seed/seedStates";
+import { countriesByTier, SHIPPING_PRESETS } from "@/lib/world/eraRoster";
 import {
   getPresetEnablementCountries,
   getPresetEnablementTier,
@@ -29,7 +32,10 @@ import {
 import { ERA_COMPOSITIONS, getEraComposition } from "@/lib/seeds/demographicCategories";
 import { getStateSectorWeights } from "@/lib/seeds/reference/sectorSeedWeights";
 import { CORPORATION_TYPES } from "@/lib/constants/corporations";
-import type { State } from "@/lib/db/types";
+import {
+  getPresetMonetaryScope,
+  type MonetaryCoverageExclusion,
+} from "@/lib/monetaryPolicy/presetMonetaryScope";
 import { states } from "@/lib/seeds/reference/states";
 import { states1953 } from "@/lib/seeds/reference/states1953";
 import { states1979 } from "@/lib/seeds/reference/states1979";
@@ -56,138 +62,22 @@ import { stateCensusData2027 } from "@/lib/seeds/stateCensusData2027";
 import { states2027 } from "@/lib/seeds/reference/states2027";
 
 // Per-country region seed bundles (same maps the country seeders use).
-import { deRegions } from "@/lib/seeds/de/deRegions";
-import { deRegions1953 } from "@/lib/seeds/de/deRegions1953";
-import { deRegions1979 } from "@/lib/seeds/de/deRegions1979";
-import { deRegions1991 } from "@/lib/seeds/de/deRegions1991";
-import { deRegions1999 } from "@/lib/seeds/de/deRegions1999";
-import { deRegions2007 } from "@/lib/seeds/de/deRegions2007";
-import { deRegions2023 } from "@/lib/seeds/de/deRegions2023";
-import { deRegions2027 } from "@/lib/seeds/de/deRegions2027";
-import { jpRegions } from "@/lib/seeds/jp/jpRegions";
-import { jpRegions1953 } from "@/lib/seeds/jp/jpRegions1953";
-import { jpRegions1979 } from "@/lib/seeds/jp/jpRegions1979";
-import { jpRegions1991 } from "@/lib/seeds/jp/jpRegions1991";
-import { jpRegions1999 } from "@/lib/seeds/jp/jpRegions1999";
-import { jpRegions2007 } from "@/lib/seeds/jp/jpRegions2007";
-import { jpRegions2023 } from "@/lib/seeds/jp/jpRegions2023";
-import { jpRegions2027 } from "@/lib/seeds/jp/jpRegions2027";
-import { brRegions } from "@/lib/seeds/br/brRegions";
-import { brRegions1953 } from "@/lib/seeds/br/brRegions1953";
-import { brRegions1979 } from "@/lib/seeds/br/brRegions1979";
-import { brRegions1991 } from "@/lib/seeds/br/brRegions1991";
-import { brRegions1999 } from "@/lib/seeds/br/brRegions1999";
-import { brRegions2007 } from "@/lib/seeds/br/brRegions2007";
-import { brRegions2023 } from "@/lib/seeds/br/brRegions2023";
-import { ukRegions } from "@/lib/seeds/uk/ukRegions";
-import { ukRegions1953 } from "@/lib/seeds/uk/ukRegions1953";
-import { ukRegions1979 } from "@/lib/seeds/uk/ukRegions1979";
-import { ukRegions1991 } from "@/lib/seeds/uk/ukRegions1991";
-import { ukRegions1999 } from "@/lib/seeds/uk/ukRegions1999";
-import { ukRegions2007 } from "@/lib/seeds/uk/ukRegions2007";
-import { ukRegions2023 } from "@/lib/seeds/uk/ukRegions2023";
-import { ukRegions2027 } from "@/lib/seeds/uk/ukRegions2027";
-import { cnRegions } from "@/lib/seeds/cn/cnRegions";
-import { cnRegions1953 } from "@/lib/seeds/cn/cnRegions1953";
-import { cnRegions1979 } from "@/lib/seeds/cn/cnRegions1979";
-import { cnRegions1991 } from "@/lib/seeds/cn/cnRegions1991";
-import { cnRegions1999 } from "@/lib/seeds/cn/cnRegions1999";
-import { cnRegions2007 } from "@/lib/seeds/cn/cnRegions2007";
-import { cnRegions2023 } from "@/lib/seeds/cn/cnRegions2023";
-import { cnRegions2027 } from "@/lib/seeds/cn/cnRegions2027";
-import { ieRegions } from "@/lib/seeds/ie/ieRegions";
-import { ieRegions1953 } from "@/lib/seeds/ie/ieRegions1953";
-import { ieRegions1979 } from "@/lib/seeds/ie/ieRegions1979";
-import { ieRegions1991 } from "@/lib/seeds/ie/ieRegions1991";
-import { ieRegions1999 } from "@/lib/seeds/ie/ieRegions1999";
-import { ieRegions2007 } from "@/lib/seeds/ie/ieRegions2007";
-import { ieRegions2023 } from "@/lib/seeds/ie/ieRegions2023";
-import { ngRegions } from "@/lib/seeds/ng/ngRegions";
-import { ngRegions1953 } from "@/lib/seeds/ng/ngRegions1953";
-import { ngRegions1979 } from "@/lib/seeds/ng/ngRegions1979";
-import { ngRegions1991 } from "@/lib/seeds/ng/ngRegions1991";
-import { ngRegions1999 } from "@/lib/seeds/ng/ngRegions1999";
-import { ngRegions2007 } from "@/lib/seeds/ng/ngRegions2007";
-import { ngRegions2023 } from "@/lib/seeds/ng/ngRegions2023";
 
 export { TURNS_PER_YEAR };
 
 /**
- * Latent SSR republics that appear in budget seed tables but are NOT seeded as
- * countries — they live as RU regions (BEL/BLT). Never iterate them as countries.
+ * Countries the world seeds but never registers: they appear in budget seed
+ * tables and on the map, yet are absent from `COUNTRY_ORDER`, so nothing may
+ * iterate them as countries.
+ *
+ * Derived from the era roster's `latent` tier rather than hand-listed. The hand
+ * list held BLR and BAL and omitted UKR, which is the same country-set drift the
+ * roster exists to end — inert here only because none of the three is in
+ * `COUNTRY_ORDER`, so the shipping path cannot reach them either way.
  */
-const LATENT_COUNTRY_IDS = new Set<string>(["BLR", "BAL"]);
-
-const FULL_ERA_REGION_BUNDLES: Partial<Record<CountryId, Partial<Record<ResetPresetId, State[]>>>> =
-  {
-    DE: {
-      "1953-default": deRegions1953,
-      "1979-default": deRegions1979,
-      "1991-default": deRegions1991,
-      "1999-default": deRegions1999,
-      "2007-default": deRegions2007,
-      "2019-default": deRegions,
-      "2023-default": deRegions2023,
-      "2027-default": deRegions2027,
-    },
-    JP: {
-      "1953-default": jpRegions1953,
-      "1979-default": jpRegions1979,
-      "1991-default": jpRegions1991,
-      "1999-default": jpRegions1999,
-      "2007-default": jpRegions2007,
-      "2019-default": jpRegions,
-      "2023-default": jpRegions2023,
-      "2027-default": jpRegions2027,
-    },
-    BR: {
-      "1953-default": brRegions1953,
-      "1979-default": brRegions1979,
-      "1991-default": brRegions1991,
-      "1999-default": brRegions1999,
-      "2007-default": brRegions2007,
-      "2019-default": brRegions,
-      "2023-default": brRegions2023,
-    },
-    UK: {
-      "1953-default": ukRegions1953,
-      "1979-default": ukRegions1979,
-      "1991-default": ukRegions1991,
-      "1999-default": ukRegions1999,
-      "2007-default": ukRegions2007,
-      "2019-default": ukRegions,
-      "2023-default": ukRegions2023,
-      "2027-default": ukRegions2027,
-    },
-    CN: {
-      "1953-default": cnRegions1953,
-      "1979-default": cnRegions1979,
-      "1991-default": cnRegions1991,
-      "1999-default": cnRegions1999,
-      "2007-default": cnRegions2007,
-      "2019-default": cnRegions,
-      "2023-default": cnRegions2023,
-      "2027-default": cnRegions2027,
-    },
-    IE: {
-      "1953-default": ieRegions1953,
-      "1979-default": ieRegions1979,
-      "1991-default": ieRegions1991,
-      "1999-default": ieRegions1999,
-      "2007-default": ieRegions2007,
-      "2019-default": ieRegions,
-      "2023-default": ieRegions2023,
-    },
-    NG: {
-      "1953-default": ngRegions1953,
-      "1979-default": ngRegions1979,
-      "1991-default": ngRegions1991,
-      "1999-default": ngRegions1999,
-      "2007-default": ngRegions2007,
-      "2019-default": ngRegions,
-      "2023-default": ngRegions2023,
-    },
-  };
+const LATENT_COUNTRY_IDS: ReadonlySet<string> = new Set(
+  SHIPPING_PRESETS.flatMap((preset) => countriesByTier(preset, "latent"))
+);
 
 /**
  * Countries the active preset actually seeds as countries.
@@ -261,6 +151,11 @@ export interface SeedExpectations {
   seededCountryIds: CountryId[];
   forexRates: Partial<Record<CountryId, number>>;
   forexActiveCountries: readonly CountryId[];
+  /** Effective central-bank coverage and explicit currency-only exclusions. */
+  monetaryCoverage: {
+    centralBankCountries: CountryId[];
+    exclusions: MonetaryCoverageExclusion[];
+  };
   /** Domains where selectPresetBundle would silently fall back to 2019. */
   bundleFallbacks: Array<{ domain: string; note: string }>;
   /** True when ERA_COMPOSITIONS has an explicit entry for this era. */
@@ -354,26 +249,6 @@ export function expectedSectorShares(countryId: CountryId, preset: string): Reco
 }
 
 /**
- * Era-authored region count for a country, or null when no dedicated region
- * bundle is registered (caller should use a presence/sanity check).
- */
-export function expectedRegionCount(countryId: CountryId, preset: string): number | null {
-  if (countryId === DEFAULT_LEGACY_COUNTRY_ID) {
-    const bundle = selectStatesBundleForPreset(preset);
-    return bundle.filter(
-      (s) => s.countryId === DEFAULT_LEGACY_COUNTRY_ID && !NATIONAL_SCOPE_IDS.has(String(s._id))
-    ).length;
-  }
-  const maps = FULL_ERA_REGION_BUNDLES[countryId];
-  if (!maps) return null;
-  const resolvedPreset =
-    preset === "empty" || preset === "2019-no-parties" ? "2019-default" : preset;
-  const bundle = maps[resolvedPreset as ResetPresetId] ?? maps["2019-default"];
-  if (!bundle) return null;
-  return bundle.filter((s) => !NATIONAL_SCOPE_IDS.has(String(s._id))).length;
-}
-
-/**
  * Which countries each region-derived collection is SUPPOSED to cover.
  *
  * Resolved through the very config each seeder gates on — the same technique
@@ -454,6 +329,7 @@ export function buildSeedExpectations(preset: string): SeedExpectations {
   const configs = getNationalBudgetSeedConfigsForPreset(preset).filter((c) =>
     seededSet.has(c.countryId)
   );
+  const monetaryScope = getPresetMonetaryScope(preset);
 
   let eraCompositionOk = false;
   try {
@@ -482,6 +358,10 @@ export function buildSeedExpectations(preset: string): SeedExpectations {
     seededCountryIds,
     forexRates: getInitialRates(preset),
     forexActiveCountries: FOREX_ACTIVE_COUNTRIES,
+    monetaryCoverage: {
+      centralBankCountries: monetaryScope.centralBankCountries,
+      exclusions: monetaryScope.exclusions,
+    },
     bundleFallbacks: collectBundleFallbacks(preset),
     eraCompositionOk,
   };

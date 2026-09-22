@@ -133,6 +133,35 @@ describe("processElectionEntry", () => {
     });
   });
 
+  it("batches live-turn candidate inserts", async () => {
+    const election = createTestElection();
+    const npp = createTestNpp();
+    const ctx = buildContext(db, election, [npp], [], []);
+    ctx.batchCandidateInserts = true;
+    db.collection("electionCandidates");
+    db.collectionMocks.electionCandidates.bulkWrite.mockResolvedValue({
+      modifiedCount: 0,
+      matchedCount: 0,
+      upsertedCount: 1,
+      upsertedIds: { 0: new ObjectId() },
+      insertedCount: 0,
+      deletedCount: 0,
+    });
+
+    await expect(processElectionEntry(ctx)).resolves.toBe(1);
+
+    expect(db.collectionMocks.electionCandidates.insertOne).not.toHaveBeenCalled();
+    expect(db.collectionMocks.electionCandidates.bulkWrite).toHaveBeenCalledTimes(1);
+    expect(db.collectionMocks.electionCandidates.bulkWrite.mock.calls[0]?.[0]).toEqual([
+      expect.objectContaining({
+        updateOne: expect.objectContaining({
+          filter: { characterId: npp._id, status: "active" },
+          upsert: true,
+        }),
+      }),
+    ]);
+  });
+
   it("does not abort the whole pass when a candidacy insert hits the active-candidate duplicate-key index", async () => {
     // Reproduces the production crash: an incumbent who already holds an active
     // candidacy in an upcoming election (not tracked) triggers a second active
@@ -153,6 +182,55 @@ describe("processElectionEntry", () => {
     const ctx = buildContext(db, election, [incumbent], [], [incumbent._id.toString()]);
 
     await expect(processElectionEntry(ctx)).resolves.toBeTypeOf("number");
+  });
+
+  it("does not auto-defend a Commons by-election for a sitting MP, but still files a seatless challenger", async () => {
+    const election = createTestElection({
+      electionType: "special_commons",
+      state: "LON",
+      countryId: "UK",
+    });
+    const mp = createTestNpp({
+      name: "Sitting MP",
+      countryId: "UK",
+      homeState: "LON",
+      party: "lab",
+    });
+    const challenger = createTestNpp({
+      name: "Challenger",
+      countryId: "UK",
+      homeState: "LON",
+      party: "lab",
+    });
+    const ctx = buildContext(db, election, [mp, challenger], [], [mp._id.toString()]);
+    // buildContext only maps house/senate/stateSenate/regionalCouncil/sangiin
+    // office types; correct the seat to a real Commons row.
+    ctx.officialsByNPP.set(mp._id.toString(), [
+      {
+        _id: new ObjectId(),
+        officeType: "commons",
+        countryId: "UK",
+        state: "LON",
+        characterId: mp._id,
+        characterName: mp.name,
+        party: mp.party,
+        isNPP: true,
+        nppId: mp._id,
+        electedAt: new Date(),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      } as ElectedOfficial,
+    ]);
+
+    const entered = await processElectionEntry(ctx);
+
+    expect(entered).toBe(1);
+    expect(db.collectionMocks.electionCandidates.insertOne).toHaveBeenCalledTimes(1);
+    expect(db.collectionMocks.electionCandidates.insertOne.mock.calls[0]?.[0]).toMatchObject({
+      electionId: election._id,
+      characterId: challenger._id,
+      characterName: "Challenger",
+    });
   });
 
   it("lets an incumbent re-enter their defending primary despite cooldown and same-party player candidate", async () => {

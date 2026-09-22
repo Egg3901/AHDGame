@@ -28,6 +28,7 @@ interface CorpSearchResult {
   name: string;
   ticker: string | null;
   countryId: string | null;
+  nppRun?: boolean;
 }
 
 const fmt = (n: number) => "₳" + Math.round(n).toLocaleString("en-US");
@@ -147,7 +148,13 @@ export default function DealsTab({
       });
       const d = await res.json();
       if (!res.ok) setProposeErr(d.error || "Failed to send offer");
-      else {
+      else if (d.autoAccepted) {
+        setProposeMsg(`Acquired ${d.targetName ?? selectedTarget.name}.`);
+        setSelectedTarget(null);
+        setTargetQuery("");
+        setPrice("");
+        await fetchDeals();
+      } else {
         setProposeMsg(`Offer sent to ${selectedTarget.name}.`);
         setSelectedTarget(null);
         setTargetQuery("");
@@ -182,10 +189,11 @@ export default function DealsTab({
         </h3>
         <p className="mb-3 text-xs text-muted">
           Buy another player-run corporation outright. If its CEO accepts, its sectors and cash fold
-          into yours and its shareholders are paid the offer price. Only player-run private
-          companies can be targeted; state-owned and AI-run firms have no CEO who can accept an
-          offer. For now the target must also have no outstanding bonds and hold no shares in other
-          corporations.
+          into yours and its shareholders are paid the offer price. AI-run private companies can
+          also be targeted: they accept automatically at or above their asking price (fair value
+          plus a 10 percent premium) and reject below it, with no CEO approval needed. State-owned
+          firms cannot be acquired. For now the target must also have no outstanding bonds and hold
+          no shares in other corporations.
         </p>
 
         <form onSubmit={propose} className="space-y-3">
@@ -228,7 +236,12 @@ export default function DealsTab({
                           }}
                           className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm text-foreground hover:bg-card-elevated"
                         >
-                          <span className="truncate">{r.name}</span>
+                          <span className="truncate">
+                            {r.name}
+                            {r.nppRun ? (
+                              <span className="ml-1 text-xs text-muted">AI-run</span>
+                            ) : null}
+                          </span>
                           <span className="shrink-0 text-xs text-muted">
                             {[r.countryId, r.ticker].filter(Boolean).join(" · ")}
                           </span>
@@ -241,9 +254,8 @@ export default function DealsTab({
                   targetQuery.trim().length >= 2 &&
                   targetResults.length === 0 && (
                     <p className="mt-1 text-xs text-muted">
-                      No eligible corporations found. Only player-run private companies can be
-                      acquisition targets; state-owned and AI-run firms have no CEO who can accept
-                      an offer.
+                      No eligible corporations found. Only player-run and AI-run private companies
+                      can be acquisition targets; state-owned firms are excluded.
                     </p>
                   )}
               </>

@@ -52,12 +52,47 @@ export interface NppCorpCountryPlan {
 }
 
 /**
+ * Presets that spawn NPP market corporations.
+ *
+ * ⚠️ This list exists because the gate below used to be implicit. It read
+ * `getPresetEnablementCountries(preset) === null` as "this preset is
+ * admin-managed, leave it alone", which happened to exclude 2019 and 2023
+ * because those had no manifest map. The era roster gives every preset a map,
+ * so that guard silently stopped firing — and a 2019 reset would have begun
+ * spawning NPP corps for eight countries that previously got none.
+ *
+ * That is an economy change, not a config one, so it is an explicit list rather
+ * than a side effect.
+ *
+ * ⚠ "2019-default" IS UPSTREAM'S DECISION, NOT A QUIET EDIT. This list
+ * originally reproduced the old behaviour exactly, with a note that adding 2019
+ * would be a deliberate product decision wanting a simulation report. Upstream
+ * then made that decision in "make every seed complete" (#1669): its test
+ * changed from `nppCorpSpawnPlan("2019-default")` returning [] to requiring a
+ * plan covering US, UK, JP, DE, IE and CN. Following the source of truth here
+ * is not the same as choosing it unilaterally.
+ *
+ * ⚠ 2023 AND 2027 STAY OUT. Upstream decided 2019 and only 2019, and the
+ * reasoning above still applies to the other two: both now have enablement maps
+ * from the era roster, so adding them is a one-line edit with an economy-wide
+ * effect and no simulation report behind it. Leave them to an explicit call.
+ */
+const NPP_CORP_SPAWN_PRESETS = new Set<string>([
+  "1953-default",
+  "1979-default",
+  "1991-default",
+  "1999-default",
+  "2007-default",
+  "2019-default",
+]);
+
+/**
  * The per-country NPP market-corp spawn policy for a preset. Pure — no DB
  * access — so the seed step and the `spawn-npp-all` admin route share one
- * source of truth. Returns `[]` for presets with no enablement map (e.g.
- * 2019-default, which is admin-managed) to preserve their status quo.
+ * source of truth. Returns `[]` for presets that do not spawn NPP corps.
  */
 export function nppCorpSpawnPlan(preset: string, startingYear: number): NppCorpCountryPlan[] {
+  if (!NPP_CORP_SPAWN_PRESETS.has(preset)) return [];
   const mapped = getPresetEnablementCountries(preset);
   if (!mapped) return [];
 

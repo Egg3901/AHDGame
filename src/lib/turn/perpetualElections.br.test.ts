@@ -16,7 +16,14 @@ vi.mock("@/lib/discordWebhooks", () => ({
   DISCORD_COLORS: {},
 }));
 
-const BR_REGIONS = ["NORTE", "NORDESTE", "CENTRO_OESTE", "SUDESTE", "SUL"];
+const BR_CHAMBER_SEATS_PER_REGION: Record<string, number> = {
+  NORTE: 75,
+  NORDESTE: 144,
+  CENTRO_OESTE: 42,
+  SUDESTE: 179,
+  SUL: 73,
+};
+const BR_REGIONS = Object.keys(BR_CHAMBER_SEATS_PER_REGION);
 // Real seed apportionment (src/lib/seeds/br/brRegions.ts) — sums to 81.
 const BR_SENATE_SEATS_PER_REGION: Record<string, number> = {
   NORTE: 21,
@@ -28,7 +35,7 @@ const BR_SENATE_SEATS_PER_REGION: Record<string, number> = {
 
 describe("ensureBRElections", () => {
   function makeBRMockDb(
-    regions: string[],
+    regions: Array<{ _id: string; houseDistricts: number }>,
     liveOrUpcoming: Election[],
     completed: Election[],
     currentTurn: number
@@ -49,10 +56,25 @@ describe("ensureBRElections", () => {
         insertCalls.push(docs);
         return Promise.resolve({ insertedIds: {} });
       }),
+      bulkWrite: vi.fn().mockImplementation(
+        (
+          ops: Array<{
+            updateOne: { filter: { _id: ObjectId }; update: { $set: Partial<Election> } };
+          }>
+        ) => {
+          for (const op of ops) {
+            const election = liveOrUpcoming.find((candidate) =>
+              candidate._id.equals(op.updateOne.filter._id)
+            );
+            if (election) Object.assign(election, op.updateOne.update.$set);
+          }
+          return Promise.resolve({ modifiedCount: ops.length });
+        }
+      ),
     };
     const statesCollection = {
       find: vi.fn().mockReturnValue({
-        toArray: vi.fn().mockResolvedValue(regions.map((id) => ({ _id: id }))),
+        toArray: vi.fn().mockResolvedValue(regions),
       }),
     };
     const gameStateCollection = {
@@ -77,9 +99,13 @@ describe("ensureBRElections", () => {
     vi.clearAllMocks();
   });
 
-  it("spawns one chamber election per BR region from empty DB", async () => {
+  it("spawns one chamber election per BR region using the 513-seat apportionment", async () => {
     const now = new Date("2026-04-01T00:00:00Z");
-    const mock = makeBRMockDb(BR_REGIONS, [], [], 1);
+    const regions = BR_REGIONS.map((id) => ({
+      _id: id,
+      houseDistricts: BR_CHAMBER_SEATS_PER_REGION[id],
+    }));
+    const mock = makeBRMockDb(regions, [], [], 1);
     await mountBRDb(mock);
 
     const { ensureBRElections } = await import("./perpetualElections");
@@ -90,9 +116,40 @@ describe("ensureBRElections", () => {
     for (const doc of inserted) {
       expect(doc.countryId).toBe("BR");
       expect(doc.electionType).toBe("chamber");
-      expect(doc.totalSeats).toBe(1);
+      expect(doc.totalSeats).toBe(BR_CHAMBER_SEATS_PER_REGION[doc.state]);
     }
+    expect(inserted.reduce((sum, doc) => sum + (doc.totalSeats ?? 0), 0)).toBe(513);
     expect(inserted.map((d) => d.state).sort()).toEqual([...BR_REGIONS].sort());
+  });
+
+  it("repairs already-scheduled chamber elections with the authoritative apportionment", async () => {
+    const now = new Date("2026-04-01T00:00:00Z");
+    const regions = BR_REGIONS.map((id) => ({
+      _id: id,
+      houseDistricts: BR_CHAMBER_SEATS_PER_REGION[id],
+    }));
+    const live = BR_REGIONS.map(
+      (state) =>
+        ({
+          _id: new ObjectId(),
+          countryId: "BR",
+          electionType: "chamber",
+          state,
+          status: "upcoming",
+          totalSeats: 1,
+        }) as Election
+    );
+    const mock = makeBRMockDb(regions, live, [], 1);
+    await mountBRDb(mock);
+
+    const { ensureBRElections } = await import("./perpetualElections");
+    await ensureBRElections(now);
+
+    expect(mock.electionsCollection.bulkWrite).toHaveBeenCalledOnce();
+    expect(live.reduce((sum, doc) => sum + (doc.totalSeats ?? 0), 0)).toBe(513);
+    for (const doc of live) {
+      expect(doc.totalSeats).toBe(BR_CHAMBER_SEATS_PER_REGION[doc.state]);
+    }
   });
 
   it("does not duplicate active elections on second call", async () => {
@@ -105,7 +162,12 @@ describe("ensureBRElections", () => {
         if (name === "states") {
           return {
             find: vi.fn().mockReturnValue({
-              toArray: vi.fn().mockResolvedValue(BR_REGIONS.map((id) => ({ _id: id }))),
+              toArray: vi.fn().mockResolvedValue(
+                BR_REGIONS.map((id) => ({
+                  _id: id,
+                  houseDistricts: BR_CHAMBER_SEATS_PER_REGION[id],
+                }))
+              ),
             }),
           };
         }

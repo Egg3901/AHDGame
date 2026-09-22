@@ -1,0 +1,1371 @@
+{
+  "COUNTRY_ANCHOR": {
+    "shape": "country-first",
+    "value": [14.6, 47.6]
+  },
+  "COUNTRY_BUCKET_LABELS": {
+    "shape": "country-first",
+    "value": {
+      "dims": {
+        "ethnicity": "Herkunft",
+        "age": "Alter",
+        "education": "Bildung",
+        "income": "Einkommen",
+        "urbanization": "Wohnort"
+      },
+      "buckets": {
+        "ethnicity": {
+          "austrian": "Österreicher",
+          "minority": "Minderheiten",
+          "other": "Andere Herkunft"
+        },
+        "age": {
+          "young": "Unter 30",
+          "mid": "30 bis 49",
+          "mature": "50 bis 64",
+          "senior": "Über 65"
+        },
+        "education": {
+          "primary_or_below": "Pflichtschule",
+          "secondary": "Matura",
+          "vocational": "Lehre",
+          "university": "Hochschulabschluss"
+        },
+        "income": {
+          "low": "Geringes Einkommen",
+          "middle": "Mittleres Einkommen",
+          "high": "Hohes Einkommen"
+        },
+        "urbanization": {
+          "urban": "Stadt",
+          "suburban": "Umland",
+          "rural": "Ländlicher Raum"
+        }
+      }
+    }
+  },
+  "COUNTRY_COMMAND_FLAVOR": {
+    "shape": "country-first",
+    "value": {
+      "glyph": "AT",
+      "command": "BUNDESHEER",
+      "strip": "◆ VERSCHLUSSSACHE",
+      "acc": "#86d978"
+    }
+  },
+  "COUNTRY_MODIFIER_PATCHES": {
+    "shape": "absent",
+    "value": null
+  },
+  "COUNTRY_READINESS_EXPECTATIONS": {
+    "shape": "absent",
+    "value": null
+  },
+  "COUNTRY_SECTOR_WEIGHTS_1953": {
+    "shape": "country-first",
+    "value": {
+      "agriculture": 22,
+      "manufacturing": 20,
+      "construction": 12,
+      "energy": 8,
+      "logistics": 7,
+      "retail": 7,
+      "extraction": 5,
+      "financial": 5,
+      "real_estate": 4,
+      "healthcare": 3,
+      "entertainment": 3,
+      "media": 2,
+      "telecommunications": 1,
+      "defense": 1
+    }
+  },
+  "DOMAIN_BUCKET_AFFINITIES": {
+    "shape": "absent",
+    "value": null
+  },
+  "GDP_DENOMINATION_1953": {
+    "shape": "country-first",
+    "value": "local"
+  },
+  "GROUPS": {
+    "shape": "absent",
+    "value": null
+  },
+  "INITIAL_RATES": {
+    "shape": "country-first",
+    "value": 13.4
+  },
+  "MAJOR_DEFAULT_PARTIES": {
+    "shape": "absent",
+    "value": null
+  },
+  "MECHANICS_BY_COUNTRY": {
+    "shape": "country-first",
+    "value": {
+      "minister_of_finance": {
+        "positionId": "minister_of_finance",
+        "department": "Finance, Budget and National Planning",
+        "sealImage": "",
+        "nationalMetrics": [
+          {
+            "category": "governance",
+            "metricId": "budgetBalance",
+            "label": "Budget Balance",
+            "format": "percent",
+            "higherIsBetter": true
+          },
+          {
+            "category": "economic",
+            "metricId": "gdpGrowth",
+            "label": "GDP Growth",
+            "format": "percent",
+            "higherIsBetter": true
+          }
+        ],
+        "regionalMetrics": []
+      },
+      "minister_of_foreign_affairs": {
+        "positionId": "minister_of_foreign_affairs",
+        "department": "Foreign Affairs",
+        "sealImage": "",
+        "nationalMetrics": [
+          {
+            "category": "economic",
+            "metricId": "tradeBalance",
+            "label": "Trade Balance",
+            "format": "percent",
+            "higherIsBetter": true
+          }
+        ],
+        "regionalMetrics": []
+      },
+      "minister_of_defence": {
+        "positionId": "minister_of_defence",
+        "department": "Defence",
+        "sealImage": "",
+        "nationalMetrics": [
+          {
+            "category": "publicSafety",
+            "metricId": "publicSafetyConfidence",
+            "label": "Public Safety Confidence",
+            "format": "percent",
+            "higherIsBetter": true
+          },
+          {
+            "category": "publicSafety",
+            "metricId": "violentCrimeRate",
+            "label": "Violent Crime Rate",
+            "format": "number",
+            "higherIsBetter": false
+          }
+        ],
+        "regionalMetrics": []
+      },
+      "minister_of_interior": {
+        "positionId": "minister_of_interior",
+        "department": "Interior",
+        "sealImage": "",
+        "nationalMetrics": [
+          {
+            "category": "publicSafety",
+            "metricId": "crimeRate",
+            "label": "Crime Rate",
+            "format": "number",
+            "higherIsBetter": false
+          },
+          {
+            "category": "publicSafety",
+            "metricId": "publicSafetyConfidence",
+            "label": "Public Safety Confidence",
+            "format": "percent",
+            "higherIsBetter": true
+          }
+        ],
+        "regionalMetrics": []
+      },
+      "minister_of_justice": {
+        "positionId": "minister_of_justice",
+        "department": "Justice",
+        "sealImage": "",
+        "nationalMetrics": [
+          {
+            "category": "governance",
+            "metricId": "corruptionIndex",
+            "label": "Corruption Index",
+            "format": "index",
+            "higherIsBetter": false
+          },
+          {
+            "category": "publicSafety",
+            "metricId": "recidivismRate",
+            "label": "Recidivism Rate",
+            "format": "percent",
+            "higherIsBetter": false
+          }
+        ],
+        "regionalMetrics": []
+      },
+      "minister_of_health": {
+        "positionId": "minister_of_health",
+        "department": "Health",
+        "sealImage": "",
+        "nationalMetrics": [
+          {
+            "category": "healthcare",
+            "metricId": "lifeExpectancy",
+            "label": "Life Expectancy",
+            "format": "number",
+            "higherIsBetter": true
+          },
+          {
+            "category": "healthcare",
+            "metricId": "preventableMortality",
+            "label": "Preventable Mortality",
+            "format": "number",
+            "higherIsBetter": false
+          }
+        ],
+        "regionalMetrics": []
+      },
+      "minister_of_education": {
+        "positionId": "minister_of_education",
+        "department": "Education",
+        "sealImage": "",
+        "nationalMetrics": [
+          {
+            "category": "education",
+            "metricId": "literacyRate",
+            "label": "Literacy Rate",
+            "format": "percent",
+            "higherIsBetter": true
+          },
+          {
+            "category": "education",
+            "metricId": "testPerformance",
+            "label": "Test Performance",
+            "format": "index",
+            "higherIsBetter": true
+          }
+        ],
+        "regionalMetrics": []
+      },
+      "minister_of_works_housing": {
+        "positionId": "minister_of_works_housing",
+        "department": "Works and Housing",
+        "sealImage": "",
+        "nationalMetrics": [
+          {
+            "category": "infrastructure",
+            "metricId": "roadCondition",
+            "label": "Road Condition",
+            "format": "index",
+            "higherIsBetter": true
+          },
+          {
+            "category": "social",
+            "metricId": "housingAffordability",
+            "label": "Housing Affordability",
+            "format": "index",
+            "higherIsBetter": false
+          }
+        ],
+        "regionalMetrics": []
+      },
+      "minister_of_agriculture": {
+        "positionId": "minister_of_agriculture",
+        "department": "Agriculture and Rural Development",
+        "sealImage": "",
+        "nationalMetrics": [
+          {
+            "category": "social",
+            "metricId": "foodInsecurity",
+            "label": "Food Insecurity",
+            "format": "percent",
+            "higherIsBetter": false
+          },
+          {
+            "category": "economic",
+            "metricId": "povertyRate",
+            "label": "Poverty Rate",
+            "format": "percent",
+            "higherIsBetter": false
+          }
+        ],
+        "regionalMetrics": []
+      },
+      "minister_of_trade_industry": {
+        "positionId": "minister_of_trade_industry",
+        "department": "Industry, Trade and Investment",
+        "sealImage": "",
+        "nationalMetrics": [
+          {
+            "category": "economic",
+            "metricId": "smallBusinessFormation",
+            "label": "Small Business Formation",
+            "format": "percent",
+            "higherIsBetter": true
+          },
+          {
+            "category": "economic",
+            "metricId": "tradeBalance",
+            "label": "Trade Balance",
+            "format": "percent",
+            "higherIsBetter": true
+          }
+        ],
+        "regionalMetrics": []
+      },
+      "minister_of_labour": {
+        "positionId": "minister_of_labour",
+        "department": "Labour and Employment",
+        "sealImage": "",
+        "nationalMetrics": [
+          {
+            "category": "economic",
+            "metricId": "unemploymentRate",
+            "label": "Unemployment Rate",
+            "format": "percent",
+            "higherIsBetter": false
+          },
+          {
+            "category": "economic",
+            "metricId": "laborParticipation",
+            "label": "Labour Participation",
+            "format": "percent",
+            "higherIsBetter": true
+          }
+        ],
+        "regionalMetrics": []
+      },
+      "minister_of_environment": {
+        "positionId": "minister_of_environment",
+        "department": "Environment",
+        "sealImage": "",
+        "nationalMetrics": [
+          {
+            "category": "environment",
+            "metricId": "carbonEmissions",
+            "label": "Carbon Emissions",
+            "format": "number",
+            "higherIsBetter": false
+          },
+          {
+            "category": "environment",
+            "metricId": "renewableEnergy",
+            "label": "Renewable Energy",
+            "format": "percent",
+            "higherIsBetter": true
+          }
+        ],
+        "regionalMetrics": []
+      },
+      "director_of_intelligence": {
+        "positionId": "director_of_intelligence",
+        "department": "Intelligence Service",
+        "sealImage": "",
+        "nationalMetrics": [
+          {
+            "category": "governance",
+            "metricId": "publicTrust",
+            "label": "Public Trust",
+            "format": "index",
+            "higherIsBetter": true
+          },
+          {
+            "category": "publicSafety",
+            "metricId": "crimeRate",
+            "label": "Crime Rate",
+            "format": "rate",
+            "higherIsBetter": false
+          }
+        ],
+        "regionalMetrics": []
+      }
+    }
+  },
+  "MEDIAN_INCOME_THRESHOLDS": {
+    "shape": "absent",
+    "value": null
+  },
+  "POPULATION_MULTIPLIERS": {
+    "shape": "absent",
+    "value": null
+  },
+  "ORDERS_BY_COUNTRY": {
+    "shape": "absent",
+    "value": null
+  },
+  "UNION_NAMES_BY_ERA": {
+    "shape": "absent",
+    "value": null
+  },
+  "CABINET_IDENTITY": {
+    "shape": "absent",
+    "value": null
+  },
+  "CENSUS_BUNDLES": {
+    "shape": "absent",
+    "value": null
+  },
+  "CONSCRIPTION_SEED": {
+    "shape": "absent",
+    "value": null
+  },
+  "CORE5_NORMALS": {
+    "shape": "absent",
+    "value": null
+  },
+  "COST_SCALE_ANCHORS": {
+    "shape": "absent",
+    "value": null
+  },
+  "COUNTRY_BILL_PHASES": {
+    "shape": "function-valued",
+    "value": null,
+    "functionKeys": ["fn"]
+  },
+  "COUNTRY_CONFIGS": {
+    "shape": "country-first",
+    "value": {
+      "id": "AT",
+      "name": "Austria",
+      "flagEmoji": "🇦🇹",
+      "code": "AT",
+      "socialAxisBaseline": 0,
+      "regionLabel": "Region",
+      "regionLabelPlural": "Regions",
+      "executiveTitle": "Chancellor",
+      "headOfStateTitle": "President",
+      "executiveRealmPhrase": "Austria",
+      "governmentType": "parliamentaryRepublic",
+      "governmentTypeLabel": "Parliamentary Republic",
+      "coalitionThreshold": 92,
+      "legislature": {
+        "name": "Nationalrat",
+        "path": "/country/at/legislature",
+        "bicameral": false,
+        "upperChamber": {
+          "key": "bundesrat",
+          "name": "Bundesrat",
+          "shortName": "Bundesrat",
+          "seats": 61,
+          "description": "61 members delegated by the nine Landtage in proportion to Land population; a suspensive-veto chamber outside the confidence loop."
+        },
+        "lowerChamber": {
+          "key": "nationalrat",
+          "name": "Nationalrat",
+          "shortName": "Nationalrat",
+          "seats": 183,
+          "description": "183 deputies elected by proportional representation for four-year terms.",
+          "elected": true
+        }
+      },
+      "lowerElectionSystem": {
+        "termYears": 4,
+        "seatsContested": "all",
+        "singleMemberConstituencies": false,
+        "snapElectionsAllowed": true
+      },
+      "electionSystems": {
+        "lowerChamber": "pr_hareQuota",
+        "headOfGovernment": "parliamentary",
+        "headOfState": "ceremonial"
+      },
+      "officeTypes": [
+        {
+          "key": "primeMinister",
+          "label": "Chancellor",
+          "labelPlural": "Chancellors",
+          "isExecutive": true,
+          "isSubNational": false,
+          "termYears": 4,
+          "actionBonus": 4,
+          "partyStrengthWeight": 1
+        },
+        {
+          "key": "president",
+          "label": "President",
+          "labelPlural": "Presidents",
+          "isExecutive": true,
+          "isHeadOfState": true,
+          "isSubNational": false,
+          "termYears": 6,
+          "actionBonus": 0,
+          "partyStrengthWeight": 0
+        },
+        {
+          "key": "deputy",
+          "label": "Deputy",
+          "labelPlural": "Deputies",
+          "chamberKey": "nationalrat",
+          "isExecutive": false,
+          "isSubNational": false,
+          "termYears": 4,
+          "actionBonus": 1,
+          "partyStrengthWeight": 0.9
+        },
+        {
+          "key": "centralBankChair",
+          "label": "Governor of the Oesterreichische Nationalbank",
+          "labelPlural": "Governors of the Oesterreichische Nationalbank",
+          "isExecutive": false,
+          "isSubNational": false,
+          "termYears": 6,
+          "actionBonus": 3,
+          "partyStrengthWeight": 0
+        }
+      ],
+      "majorPartyIds": ["at_spo", "at_ovp"],
+      "partyCreationNPPs": {
+        "statesRequired": 2,
+        "lockHomeState": false,
+        "nppsPerState": 1
+      },
+      "demographicProfileId": "at_archetypes",
+      "centralBank": {
+        "name": "Oesterreichische Nationalbank",
+        "abbreviation": "OeNB",
+        "chairTitle": "Governor of the Oesterreichische Nationalbank",
+        "defaultPrimeRate": 5.5,
+        "heroImage": "https://flagcdn.com/w640/at.png"
+      },
+      "usdExchangeRate": 0.075,
+      "currencyCode": "ATS",
+      "fiscalYearStartTurnInYear": 40,
+      "financeMinisterCabinetId": "minister_of_finance",
+      "status": "coming-soon",
+      "tagline": "Kreisky's neutral social democracy at its zenith — an absolute SPÖ majority, Austro-Keynesian full employment, the hard schilling, and active bridge-building between the blocs from a permanently neutral Vienna.",
+      "descriptor": "A parliamentary republic where a Chancellor governs at the confidence of the unicameral 183-seat Nationalrat; constitutionally neutral since 1955 and outside both alliances.",
+      "heroImage": "https://flagcdn.com/w640/at.png",
+      "entryPath": "/country/at",
+      "overviewPath": "/country/at",
+      "mapPath": "/country/at/map",
+      "executivePath": "/country/at/executive",
+      "executiveLabel": "Ballhausplatz",
+      "centralGovernmentLabel": "Federal Budget"
+    }
+  },
+  "COUNTRY_CONTINENT": {
+    "shape": "country-first",
+    "value": "Europe"
+  },
+  "COUNTRY_CURRENCY_MAP": {
+    "shape": "country-first",
+    "value": "ATS"
+  },
+  "COUNTRY_ELECTION_PHASES": {
+    "shape": "country-first",
+    "value": [
+      {
+        "name": "atElections"
+      }
+    ]
+  },
+  "COUNTRY_ERA1991_PATCHES": {
+    "shape": "absent",
+    "value": null
+  },
+  "COUNTRY_HISTORICAL_NAMES": {
+    "shape": "country-first",
+    "value": ["Alpine Credit Bank", "Danube Commercial Bank"]
+  },
+  "COUNTRY_MAP_REGISTRY": {
+    "shape": "country-first",
+    "value": {
+      "countryId": "AT",
+      "name": "Austria",
+      "overviewPath": "/country/at",
+      "mapPath": "/country/at/map",
+      "hasRegionMap": false
+    }
+  },
+  "COUNTRY_MODERN_NAMES": {
+    "shape": "country-first",
+    "value": ["Alpine Credit Group", "Danube Banking Group"]
+  },
+  "COUNTRY_REGIONS": {
+    "shape": "country-first",
+    "value": "europe"
+  },
+  "COUNTRY_SECTOR_WEIGHTS": {
+    "shape": "country-first",
+    "value": {
+      "manufacturing": 17,
+      "real_estate": 12,
+      "retail": 9,
+      "financial": 8,
+      "construction": 8,
+      "healthcare": 7,
+      "entertainment": 7,
+      "energy": 6,
+      "logistics": 6,
+      "technology": 5,
+      "agriculture": 4,
+      "chemical_industries": 4,
+      "automobiles": 3,
+      "media": 2,
+      "extraction": 2
+    }
+  },
+  "COUNTRY_SECTOR_WEIGHTS_1979": {
+    "shape": "absent",
+    "value": null
+  },
+  "COUNTRY_SECTOR_WEIGHTS_1991": {
+    "shape": "country-first",
+    "value": {
+      "manufacturing": 20,
+      "retail": 10,
+      "real_estate": 10,
+      "construction": 9,
+      "financial": 8,
+      "entertainment": 8,
+      "energy": 7,
+      "healthcare": 6,
+      "logistics": 6,
+      "agriculture": 5,
+      "chemical_industries": 4,
+      "extraction": 3,
+      "technology": 2,
+      "media": 2
+    }
+  },
+  "COUNTRY_TO_ISO_NUMERIC": {
+    "shape": "country-first",
+    "value": "040"
+  },
+  "COUNTRY_UN_MEMBER_SINCE": {
+    "shape": "country-first",
+    "value": 1955
+  },
+  "DEFAULT_STRATEGIC_SECTORS": {
+    "shape": "absent",
+    "value": null
+  },
+  "DEFENSE_POSITION_BY_COUNTRY": {
+    "shape": "country-first",
+    "value": "minister_of_defence"
+  },
+  "ECONOMIC_BASELINES": {
+    "shape": "absent",
+    "value": null
+  },
+  "ECONOMY_TEXT": {
+    "shape": "absent",
+    "value": null
+  },
+  "ENERGY_POSITION_BY_COUNTRY": {
+    "shape": "absent",
+    "value": null
+  },
+  "ERA_COUNTRY_CONFIG_OVERRIDES": {
+    "shape": "outer-keyed",
+    "value": {
+      "1953-default": {
+        "usdExchangeRate": 0.038461538461538464,
+        "coalitionThreshold": 83,
+        "legislature": {
+          "name": "Nationalrat",
+          "path": "/country/at/legislature",
+          "bicameral": false,
+          "lowerChamber": {
+            "key": "nationalrat",
+            "name": "Nationalrat",
+            "shortName": "Nationalrat",
+            "seats": 165,
+            "description": "165 deputies of the Nationalrat (the pre-1971 chamber size), elected by proportional representation under the ÖVP–SPÖ grand coalition.",
+            "elected": true
+          }
+        },
+        "tagline": "An occupied republic between the blocs — the ÖVP–SPÖ grand coalition rebuilds under four-power occupation, bargaining toward the State Treaty and permanent neutrality.",
+        "descriptor": "A parliamentary republic where a Chancellor governs at the confidence of the unicameral 165-seat Nationalrat, while Allied occupation zones still divide the country."
+      }
+    }
+  },
+  "ESTATE_PORTFOLIO_BY_COUNTRY": {
+    "shape": "absent",
+    "value": null
+  },
+  "EXECUTIVE_SEALS": {
+    "shape": "country-first",
+    "value": {
+      "src": "https://upload.wikimedia.org/wikipedia/commons/thumb/4/4a/Coat_of_arms_of_Austria.svg/330px-Coat_of_arms_of_Austria.svg.png",
+      "alt": "Coat of arms of Austria (Bundesadler)"
+    }
+  },
+  "EXECUTIVE_SURFACE": {
+    "shape": "country-first",
+    "value": {
+      "clock": {
+        "kind": "election",
+        "label": "Term Clock",
+        "countdownNoun": "next general election"
+      },
+      "actLabels": {
+        "signed": "ENACTED",
+        "vetoed": "REJECTED",
+        "onDesk": "AWAITING",
+        "order": "ORDER",
+        "confirmed": "APPOINTED",
+        "nominated": "NOMINATED",
+        "acting": "ACTING"
+      },
+      "deskKind": "orders",
+      "deskLabel": "Orders in Force",
+      "rosterTitle": "Council of Ministers",
+      "heroImage": "/api/images/hero/ballhausplatz",
+      "heroAlt": "Federal Chancellery at Ballhausplatz, Vienna"
+    }
+  },
+  "EXECUTIVE_TEXT": {
+    "shape": "country-first",
+    "value": {
+      "glyph": "BK",
+      "serif": "mono",
+      "registry": "Republic of Austria · Federal Government",
+      "title": "Ballhausplatz",
+      "titleEn": "Federal Chancellery"
+    }
+  },
+  "FOREIGN_AFFAIRS_POSITION_BY_COUNTRY": {
+    "shape": "country-first",
+    "value": "minister_of_foreign_affairs"
+  },
+  "FULL_ERA_REGION_BUNDLES": {
+    "shape": "absent",
+    "value": null
+  },
+  "HAZARD_GROUPS": {
+    "shape": "absent",
+    "value": null
+  },
+  "INCOME_ANCHORS": {
+    "shape": "country-first",
+    "value": [
+      {
+        "year": 1953,
+        "value": 18400
+      }
+    ]
+  },
+  "INFRA_POSITION_BY_COUNTRY": {
+    "shape": "absent",
+    "value": null
+  },
+  "ISO_NUMERIC_TO_COUNTRY": {
+    "shape": "value-keyed",
+    "value": {
+      "040": "AT"
+    }
+  },
+  "LEGISLATION_COUNTRY_SCOPES": {
+    "shape": "country-first",
+    "value": "at"
+  },
+  "LEGISLATIVE_PROCESS": {
+    "shape": "absent",
+    "value": null
+  },
+  "M2_TO_GDP_1953": {
+    "shape": "absent",
+    "value": null
+  },
+  "METRIC_PRESET_BUNDLES": {
+    "shape": "country-first",
+    "value": {
+      "1953-default": {
+        "AT_VIE": {
+          "economic.gdpGrowth": 5.5,
+          "economic.medianIncome": 24300,
+          "economic.povertyRate": 12,
+          "economic.unemploymentRate": 3.5,
+          "healthcare.lifeExpectancy": 68,
+          "healthcare.nhsWaitingTime": 9,
+          "education.literacyRate": 99,
+          "education.highSchoolGradRate": 32,
+          "education.universityEnrollment": 8,
+          "population.urbanizationRate": 94,
+          "population.medianAge": 34,
+          "population.populationGrowth": 0.2,
+          "population.birthRate": 48,
+          "infrastructure.broadbandAccess": 0,
+          "infrastructure.roadCondition": 48,
+          "environment.protectedLand": 1.5,
+          "infrastructure.powerGridReliability": 95,
+          "infrastructure.waterQuality": 82,
+          "environment.renewableEnergy": 45,
+          "environment.recyclingRate": 0,
+          "environment.climateResilience": 0,
+          "environment.energyTransitionProgress": 5,
+          "mediaInformation.socialMediaSentiment": 0,
+          "governance.roboticsAdoption": 0,
+          "economic.laborParticipation": 58,
+          "economic.matchingFriction": 3.5,
+          "economic.tradeBalance": -2,
+          "economic.productivityGrowth": 4.5,
+          "economic.rdIntensity": 0.5,
+          "economic.propertyValueIndex": 30,
+          "economic.commercialValueIndex": 32,
+          "economic.ruralRevitalization": 62,
+          "economic.foodSecurity": 70,
+          "economic.exportDependency": 16,
+          "economic.manufacturingCompetitiveness": 65,
+          "economic.regulatoryBurden": 52,
+          "economic.economicFreedom": 52,
+          "education.apprenticeshipRate": 28,
+          "education.academicPressure": 42,
+          "healthcare.uninsuredRate": 6,
+          "healthcare.affordabilityIndex": 68,
+          "healthcare.mentalHealthAccess": 22,
+          "healthcare.socialCareQuality": 38,
+          "healthcare.elderCareQuality": 35,
+          "infrastructure.transportEfficiency": 68,
+          "publicSafety.antiSocialBehaviourRate": 3,
+          "publicSafety.knifeCrimeRate": 1,
+          "environment.floodRisk": 12,
+          "environment.naturalDisasterPreparedness": 48,
+          "environment.nuclearSafety": 0,
+          "social.childPoverty": 12,
+          "social.housingAffordability": 12,
+          "social.roughSleeping": 3,
+          "social.workLifeBalance": 50,
+          "social.foreignWorkerIntegration": 42,
+          "social.genderEquality": 32,
+          "social.housingSupplyGrowth": 3,
+          "governance.debtToGdp": 28,
+          "governance.devolutionSatisfaction": 48,
+          "governance.coDeterminationQuality": 62,
+          "governance.nationalPride": 55,
+          "governance.civilLiberties": 68,
+          "governance.militaryReadiness": 15,
+          "population.demographicDecline": 18,
+          "mediaInformation.stateMediaControl": 28,
+          "mediaInformation.pressFreedom": 72,
+          "mediaInformation.disinformationRisk": 14,
+          "mediaInformation.mediaPolarization": 38
+        },
+        "AT_NOE": {
+          "economic.gdpGrowth": 5.5,
+          "economic.medianIncome": 15900,
+          "economic.povertyRate": 22,
+          "economic.unemploymentRate": 4.5,
+          "healthcare.lifeExpectancy": 66,
+          "healthcare.nhsWaitingTime": 9,
+          "education.literacyRate": 97,
+          "education.highSchoolGradRate": 22,
+          "education.universityEnrollment": 4,
+          "population.urbanizationRate": 24,
+          "population.medianAge": 34,
+          "population.populationGrowth": 0.2,
+          "population.birthRate": 52,
+          "infrastructure.broadbandAccess": 0,
+          "infrastructure.roadCondition": 48,
+          "environment.protectedLand": 1.5,
+          "infrastructure.powerGridReliability": 95,
+          "infrastructure.waterQuality": 82,
+          "environment.renewableEnergy": 45,
+          "environment.recyclingRate": 0,
+          "environment.climateResilience": 0,
+          "environment.energyTransitionProgress": 5,
+          "mediaInformation.socialMediaSentiment": 0,
+          "governance.roboticsAdoption": 0,
+          "economic.laborParticipation": 58,
+          "economic.matchingFriction": 3.5,
+          "economic.tradeBalance": -2,
+          "economic.productivityGrowth": 4.5,
+          "economic.rdIntensity": 0.5,
+          "economic.propertyValueIndex": 30,
+          "economic.commercialValueIndex": 32,
+          "economic.ruralRevitalization": 72,
+          "economic.foodSecurity": 70,
+          "economic.exportDependency": 16,
+          "economic.manufacturingCompetitiveness": 65,
+          "economic.regulatoryBurden": 52,
+          "economic.economicFreedom": 52,
+          "education.apprenticeshipRate": 28,
+          "education.academicPressure": 42,
+          "healthcare.uninsuredRate": 6,
+          "healthcare.affordabilityIndex": 68,
+          "healthcare.mentalHealthAccess": 22,
+          "healthcare.socialCareQuality": 38,
+          "healthcare.elderCareQuality": 35,
+          "infrastructure.transportEfficiency": 55,
+          "publicSafety.antiSocialBehaviourRate": 3,
+          "publicSafety.knifeCrimeRate": 1,
+          "environment.floodRisk": 12,
+          "environment.naturalDisasterPreparedness": 48,
+          "environment.nuclearSafety": 0,
+          "social.childPoverty": 22,
+          "social.housingAffordability": 18,
+          "social.roughSleeping": 3,
+          "social.workLifeBalance": 50,
+          "social.foreignWorkerIntegration": 42,
+          "social.genderEquality": 32,
+          "social.housingSupplyGrowth": 3,
+          "governance.debtToGdp": 28,
+          "governance.devolutionSatisfaction": 48,
+          "governance.coDeterminationQuality": 62,
+          "governance.nationalPride": 55,
+          "governance.civilLiberties": 68,
+          "governance.militaryReadiness": 15,
+          "population.demographicDecline": 18,
+          "mediaInformation.stateMediaControl": 28,
+          "mediaInformation.pressFreedom": 72,
+          "mediaInformation.disinformationRisk": 14,
+          "mediaInformation.mediaPolarization": 38
+        },
+        "AT_OOE": {
+          "economic.gdpGrowth": 5.5,
+          "economic.medianIncome": 19900,
+          "economic.povertyRate": 18,
+          "economic.unemploymentRate": 4.5,
+          "healthcare.lifeExpectancy": 67,
+          "healthcare.nhsWaitingTime": 9,
+          "education.literacyRate": 98,
+          "education.highSchoolGradRate": 22,
+          "education.universityEnrollment": 4,
+          "population.urbanizationRate": 32,
+          "population.medianAge": 34,
+          "population.populationGrowth": 0.2,
+          "population.birthRate": 52,
+          "infrastructure.broadbandAccess": 0,
+          "infrastructure.roadCondition": 48,
+          "environment.protectedLand": 1.5,
+          "infrastructure.powerGridReliability": 95,
+          "infrastructure.waterQuality": 82,
+          "environment.renewableEnergy": 45,
+          "environment.recyclingRate": 0,
+          "environment.climateResilience": 0,
+          "environment.energyTransitionProgress": 5,
+          "mediaInformation.socialMediaSentiment": 0,
+          "governance.roboticsAdoption": 0,
+          "economic.laborParticipation": 58,
+          "economic.matchingFriction": 3.5,
+          "economic.tradeBalance": -2,
+          "economic.productivityGrowth": 4.5,
+          "economic.rdIntensity": 0.5,
+          "economic.propertyValueIndex": 30,
+          "economic.commercialValueIndex": 32,
+          "economic.ruralRevitalization": 62,
+          "economic.foodSecurity": 70,
+          "economic.exportDependency": 16,
+          "economic.manufacturingCompetitiveness": 72,
+          "economic.regulatoryBurden": 52,
+          "economic.economicFreedom": 52,
+          "education.apprenticeshipRate": 28,
+          "education.academicPressure": 42,
+          "healthcare.uninsuredRate": 6,
+          "healthcare.affordabilityIndex": 68,
+          "healthcare.mentalHealthAccess": 22,
+          "healthcare.socialCareQuality": 38,
+          "healthcare.elderCareQuality": 35,
+          "infrastructure.transportEfficiency": 55,
+          "publicSafety.antiSocialBehaviourRate": 3,
+          "publicSafety.knifeCrimeRate": 1,
+          "environment.floodRisk": 12,
+          "environment.naturalDisasterPreparedness": 48,
+          "environment.nuclearSafety": 0,
+          "social.childPoverty": 18,
+          "social.housingAffordability": 18,
+          "social.roughSleeping": 3,
+          "social.workLifeBalance": 50,
+          "social.foreignWorkerIntegration": 42,
+          "social.genderEquality": 32,
+          "social.housingSupplyGrowth": 3,
+          "governance.debtToGdp": 28,
+          "governance.devolutionSatisfaction": 48,
+          "governance.coDeterminationQuality": 62,
+          "governance.nationalPride": 55,
+          "governance.civilLiberties": 68,
+          "governance.militaryReadiness": 15,
+          "population.demographicDecline": 18,
+          "mediaInformation.stateMediaControl": 28,
+          "mediaInformation.pressFreedom": 72,
+          "mediaInformation.disinformationRisk": 14,
+          "mediaInformation.mediaPolarization": 38
+        },
+        "AT_STK": {
+          "economic.gdpGrowth": 5.5,
+          "economic.medianIncome": 16600,
+          "economic.povertyRate": 20,
+          "economic.unemploymentRate": 4.5,
+          "healthcare.lifeExpectancy": 66,
+          "healthcare.nhsWaitingTime": 9,
+          "education.literacyRate": 98,
+          "education.highSchoolGradRate": 22,
+          "education.universityEnrollment": 4,
+          "population.urbanizationRate": 32,
+          "population.medianAge": 34,
+          "population.populationGrowth": 0.2,
+          "population.birthRate": 52,
+          "infrastructure.broadbandAccess": 0,
+          "infrastructure.roadCondition": 48,
+          "environment.protectedLand": 1.5,
+          "infrastructure.powerGridReliability": 95,
+          "infrastructure.waterQuality": 82,
+          "environment.renewableEnergy": 45,
+          "environment.recyclingRate": 0,
+          "environment.climateResilience": 0,
+          "environment.energyTransitionProgress": 5,
+          "mediaInformation.socialMediaSentiment": 0,
+          "governance.roboticsAdoption": 0,
+          "economic.laborParticipation": 58,
+          "economic.matchingFriction": 3.5,
+          "economic.tradeBalance": -2,
+          "economic.productivityGrowth": 4.5,
+          "economic.rdIntensity": 0.5,
+          "economic.propertyValueIndex": 30,
+          "economic.commercialValueIndex": 32,
+          "economic.ruralRevitalization": 62,
+          "economic.foodSecurity": 70,
+          "economic.exportDependency": 16,
+          "economic.manufacturingCompetitiveness": 68,
+          "economic.regulatoryBurden": 52,
+          "economic.economicFreedom": 52,
+          "education.apprenticeshipRate": 28,
+          "education.academicPressure": 42,
+          "healthcare.uninsuredRate": 6,
+          "healthcare.affordabilityIndex": 68,
+          "healthcare.mentalHealthAccess": 22,
+          "healthcare.socialCareQuality": 38,
+          "healthcare.elderCareQuality": 35,
+          "infrastructure.transportEfficiency": 55,
+          "publicSafety.antiSocialBehaviourRate": 3,
+          "publicSafety.knifeCrimeRate": 1,
+          "environment.floodRisk": 12,
+          "environment.naturalDisasterPreparedness": 48,
+          "environment.nuclearSafety": 0,
+          "social.childPoverty": 18,
+          "social.housingAffordability": 18,
+          "social.roughSleeping": 3,
+          "social.workLifeBalance": 50,
+          "social.foreignWorkerIntegration": 42,
+          "social.genderEquality": 32,
+          "social.housingSupplyGrowth": 3,
+          "governance.debtToGdp": 28,
+          "governance.devolutionSatisfaction": 48,
+          "governance.coDeterminationQuality": 62,
+          "governance.nationalPride": 55,
+          "governance.civilLiberties": 68,
+          "governance.militaryReadiness": 15,
+          "population.demographicDecline": 18,
+          "mediaInformation.stateMediaControl": 28,
+          "mediaInformation.pressFreedom": 72,
+          "mediaInformation.disinformationRisk": 14,
+          "mediaInformation.mediaPolarization": 38
+        },
+        "AT_TYR": {
+          "economic.gdpGrowth": 5.5,
+          "economic.medianIncome": 17400,
+          "economic.povertyRate": 18,
+          "economic.unemploymentRate": 4.5,
+          "healthcare.lifeExpectancy": 67,
+          "healthcare.nhsWaitingTime": 9,
+          "education.literacyRate": 98,
+          "education.highSchoolGradRate": 22,
+          "education.universityEnrollment": 4,
+          "population.urbanizationRate": 26,
+          "population.medianAge": 32,
+          "population.populationGrowth": 0.2,
+          "population.birthRate": 52,
+          "infrastructure.broadbandAccess": 0,
+          "infrastructure.roadCondition": 48,
+          "environment.protectedLand": 1.5,
+          "infrastructure.powerGridReliability": 95,
+          "infrastructure.waterQuality": 82,
+          "environment.renewableEnergy": 45,
+          "environment.recyclingRate": 0,
+          "environment.climateResilience": 0,
+          "environment.energyTransitionProgress": 5,
+          "mediaInformation.socialMediaSentiment": 0,
+          "governance.roboticsAdoption": 0,
+          "economic.laborParticipation": 58,
+          "economic.matchingFriction": 3.5,
+          "economic.tradeBalance": -2,
+          "economic.productivityGrowth": 4.5,
+          "economic.rdIntensity": 0.5,
+          "economic.propertyValueIndex": 30,
+          "economic.commercialValueIndex": 32,
+          "economic.ruralRevitalization": 78,
+          "economic.foodSecurity": 70,
+          "economic.exportDependency": 16,
+          "economic.manufacturingCompetitiveness": 65,
+          "economic.regulatoryBurden": 52,
+          "economic.economicFreedom": 52,
+          "education.apprenticeshipRate": 28,
+          "education.academicPressure": 42,
+          "healthcare.uninsuredRate": 6,
+          "healthcare.affordabilityIndex": 68,
+          "healthcare.mentalHealthAccess": 22,
+          "healthcare.socialCareQuality": 38,
+          "healthcare.elderCareQuality": 35,
+          "infrastructure.transportEfficiency": 45,
+          "publicSafety.antiSocialBehaviourRate": 3,
+          "publicSafety.knifeCrimeRate": 1,
+          "environment.floodRisk": 12,
+          "environment.naturalDisasterPreparedness": 48,
+          "environment.nuclearSafety": 0,
+          "social.childPoverty": 18,
+          "social.housingAffordability": 18,
+          "social.roughSleeping": 3,
+          "social.workLifeBalance": 50,
+          "social.foreignWorkerIntegration": 42,
+          "social.genderEquality": 32,
+          "social.housingSupplyGrowth": 3,
+          "governance.debtToGdp": 28,
+          "governance.devolutionSatisfaction": 48,
+          "governance.coDeterminationQuality": 62,
+          "governance.nationalPride": 55,
+          "governance.civilLiberties": 68,
+          "governance.militaryReadiness": 15,
+          "population.demographicDecline": 18,
+          "mediaInformation.stateMediaControl": 28,
+          "mediaInformation.pressFreedom": 72,
+          "mediaInformation.disinformationRisk": 14,
+          "mediaInformation.mediaPolarization": 38
+        }
+      }
+    }
+  },
+  "MILITARY_BRANCHES_BY_COUNTRY": {
+    "shape": "country-first",
+    "value": [
+      {
+        "id": "heer",
+        "name": "Land Forces",
+        "abbr": "ÖBH",
+        "domain": "ground",
+        "establishedYear": 1955
+      },
+      {
+        "id": "luft",
+        "name": "Air Forces",
+        "abbr": "ÖLK",
+        "domain": "air",
+        "establishedYear": 1955
+      }
+    ]
+  },
+  "MILITARY_COUNTRY_SCALE": {
+    "shape": "country-first",
+    "value": 0.85
+  },
+  "MONETARY_BASELINES": {
+    "shape": "country-first",
+    "value": {
+      "targetInflation": 4,
+      "neutralPrimeRate": 5.5
+    }
+  },
+  "MONETARY_BASELINES_1953": {
+    "shape": "country-first",
+    "value": {
+      "targetInflation": 2,
+      "neutralPrimeRate": 4.5,
+      "trendGdpGrowth": 5.5
+    }
+  },
+  "MONETARY_BASELINES_1971": {
+    "shape": "absent",
+    "value": null
+  },
+  "MONETARY_BASELINES_1979": {
+    "shape": "absent",
+    "value": null
+  },
+  "MONETARY_BASELINES_1991": {
+    "shape": "absent",
+    "value": null
+  },
+  "NATIONAL_ADDRESS_NAME": {
+    "shape": "absent",
+    "value": null
+  },
+  "NATIONAL_IDENTITY": {
+    "shape": "country-first",
+    "value": {
+      "glyph": "ÖS",
+      "serif": "mono",
+      "motif": "laurel",
+      "name": "Austrian State Industries",
+      "native": "Österreichische Industrieholding",
+      "registry": "Republic of Austria · State Holdings Registry",
+      "ministry": "MINISTRY OF FINANCE",
+      "publicSeal": "PUBLIC REGISTER",
+      "hqCity": "Vienna",
+      "palette": ["#3a0d14", "#2a0a10", "#150608"],
+      "accent": "#d64545",
+      "accentSoft": "#eb9a9a",
+      "accentName": "Austrian red & white"
+    }
+  },
+  "NATIONAL_POLICY_STATE_IDS": {
+    "shape": "country-first",
+    "value": "at_national"
+  },
+  "NATIONAL_STATS_IDENTITY": {
+    "shape": "absent",
+    "value": null
+  },
+  "NEUTRAL_FEDERAL_SALES_TAX_BY_COUNTRY": {
+    "shape": "absent",
+    "value": null
+  },
+  "NEUTRAL_STATE_SALES_TAX_BY_COUNTRY": {
+    "shape": "absent",
+    "value": null
+  },
+  "NON_PARTY_BUCKET_INDEPENDENT_BIAS_BY_COUNTRY": {
+    "shape": "absent",
+    "value": null
+  },
+  "NPP_CAPITAL_STATES": {
+    "shape": "country-first",
+    "value": "AT_VIE"
+  },
+  "ORDERS_OF_BATTLE": {
+    "shape": "country-first",
+    "value": [
+      {
+        "branchId": "heer",
+        "type": "Infantry Division",
+        "count": 2
+      },
+      {
+        "branchId": "heer",
+        "type": "Artillery Regiment",
+        "count": 1
+      },
+      {
+        "branchId": "luft",
+        "type": "Fighter Wing",
+        "count": 1
+      }
+    ]
+  },
+  "ORDERS_OF_BATTLE_BY_ERA": {
+    "shape": "absent",
+    "value": null
+  },
+  "PLAYER_PAYOUT_CAP_PER_TURN": {
+    "shape": "absent",
+    "value": null
+  },
+  "POLICY_TEXT": {
+    "shape": "country-first",
+    "value": {
+      "glyph": "§",
+      "serif": "mono",
+      "registry": "Code of Law · Republic of Austria",
+      "title": "National Policy"
+    }
+  },
+  "POPULATION_ANCHOR_BUNDLES": {
+    "shape": "absent",
+    "value": null
+  },
+  "RAW_BUNDLES": {
+    "shape": "absent",
+    "value": null
+  },
+  "REGIONAL_BILL_ASSENT_OFFICE_KEY": {
+    "shape": "absent",
+    "value": null
+  },
+  "REGION_CENSUS_LABELS": {
+    "shape": "absent",
+    "value": null
+  },
+  "REGION_DEMOGRAPHIC_CATEGORY_IDS": {
+    "shape": "absent",
+    "value": null
+  },
+  "REGION_NAME_MAPS": {
+    "shape": "absent",
+    "value": null
+  },
+  "REGION_ROSTERS": {
+    "shape": "function-valued",
+    "value": null,
+    "functionKeys": ["1953", "2019"]
+  },
+  "REP_ECON": {
+    "shape": "absent",
+    "value": null
+  },
+  "SOVEREIGN_CORP_LEGAL_STRUCTURE": {
+    "shape": "country-first",
+    "value": "generic_corp"
+  },
+  "SPAWN_ELECTIONS_REGISTRY": {
+    "shape": "absent",
+    "value": null
+  },
+  "STATE_ADJACENCY": {
+    "shape": "country-first",
+    "value": {
+      "AT_VIE": ["AT_NOE"],
+      "AT_NOE": ["AT_VIE", "AT_OOE", "AT_STK"],
+      "AT_OOE": ["AT_NOE", "AT_STK", "AT_TYR"],
+      "AT_STK": ["AT_NOE", "AT_OOE", "AT_TYR"],
+      "AT_TYR": ["AT_OOE", "AT_STK"]
+    }
+  },
+  "STATE_DISPLAY_NAMES": {
+    "shape": "country-first",
+    "value": {
+      "AT_VIE": "Vienna",
+      "AT_NOE": "Lower Austria & Burgenland",
+      "AT_OOE": "Upper Austria & Salzburg",
+      "AT_STK": "Styria & Carinthia",
+      "AT_TYR": "Tyrol & Vorarlberg"
+    }
+  },
+  "SURFACES": {
+    "shape": "absent",
+    "value": null
+  },
+  "TARGETS": {
+    "shape": "absent",
+    "value": null
+  },
+  "TRADE_MINISTER_POSITION_BY_COUNTRY": {
+    "shape": "country-first",
+    "value": "minister_of_trade_industry"
+  },
+  "TREASURY_IDENTITY": {
+    "shape": "country-first",
+    "value": {
+      "glyph": "BM",
+      "serif": "mono",
+      "budgetTitle": "Federal Budget",
+      "ministry": "MINISTRY OF FINANCE",
+      "publicSeal": "PUBLIC RECORD",
+      "registry": "Republic of Austria · Federal Ministry of Finance",
+      "native": "Republik Österreich · Bundesministerium für Finanzen",
+      "palette": ["#3a0d14", "#2a0a10", "#150608"],
+      "accent": "#d64545",
+      "accentSoft": "#eb9a9a"
+    }
+  },
+  "TREASURY_PS_RATE_BY_COUNTRY": {
+    "shape": "country-first",
+    "value": {
+      "national": 70000,
+      "state": 35000
+    }
+  },
+  "TREASURY_TEXT": {
+    "shape": "country-first",
+    "value": {
+      "glyph": "BM",
+      "serif": "mono",
+      "budgetTitle": "Federal Budget",
+      "ministry": "MINISTRY OF FINANCE",
+      "publicSeal": "PUBLIC RECORD",
+      "registry": "Republic of Austria · Federal Ministry of Finance",
+      "native": "Republik Österreich · Bundesministerium für Finanzen"
+    }
+  }
+}

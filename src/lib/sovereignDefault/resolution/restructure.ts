@@ -12,7 +12,10 @@ import type { Bond } from "@/lib/db/types/bond";
 import type { FederalBudget, SovereignCrisisState } from "@/lib/db/types/budget";
 import type { SovereignCrisisDecision } from "@/lib/db/types/sovereignCrisisDecision";
 import { getNationalBudgetId } from "@/lib/bonds/sovereign";
-import { deriveFiscalState, nationalDebtFromBalance } from "@/lib/budget/treasuryBalance";
+import {
+  sumOutstandingSovereignPrincipal,
+  sovereignDebtTerms,
+} from "@/lib/bonds/sovereignPrincipal";
 import { applyCountryBondRestructure } from "../bondMutations/restructure";
 import { applyCrossCountryTrustHit } from "../sideEffects/trustHit";
 import { applyExchangeRateDepreciation } from "../sideEffects/fxDepreciation";
@@ -97,22 +100,35 @@ export async function applyRestructureResolution(
     countryCode,
   });
 
-  // Genuine sovereign-ledger write-down (refs #3813): apply the SAME haircut
-  // fraction dealt to bondholders to the federal budget's own debt ledger.
-  // `treasuryBalance`/`debt.principal` — not the `bonds` collection — is what
-  // `processTreasuryTurn`/`processAnnualDebt` read every turn to derive the
-  // interest-rate tier and debt/GDP ratio; leaving it untouched means the very
-  // next tick recomputes the identical pre-crisis tier and the spiral resumes.
-  const priorPrincipal =
-    budget.treasuryBalance != null
-      ? nationalDebtFromBalance(budget.treasuryBalance)
-      : (budget.debt?.principal ?? 0);
-  const writtenDownTreasuryBalance = -(priorPrincipal * (1 - RESTRUCTURE_HAIRCUT));
-  const derivedFiscal = deriveFiscalState({
-    treasuryBalance: writtenDownTreasuryBalance,
+  // Genuine sovereign-ledger write-down (refs #3813, #1975): the haircut stamped
+  // on the bonds above IS the write-down, so the stored stock is re-pointed at
+  // the post-haircut outstanding sum read back from the ledger. Treasury cash
+  // is a separate position and is deliberately untouched: a haircut writes down
+  // obligations, never cash. Reading the ledger back (rather than scaling the
+  // pre-crisis stock) keeps this a pure function of bond state, so crash/retry
+  // replay converges to the same value.
+  const postHaircutBonds = await db
+    .collection<Bond>("bonds")
+    .find(
+      { issuerType: "sovereign", countryId: countryCode, matured: false, defaulted: false },
+      // The outstanding helper re-checks the query-filtered fields, so they
+      // must be projected: a doc arriving without `issuerType` reads as
+      // non-sovereign and contributes 0, which would zero the stored stock.
+      {
+        projection: {
+          issuerType: 1,
+          matured: 1,
+          defaulted: 1,
+          totalIssued: 1,
+          restructureHaircutPercent: 1,
+        },
+      }
+    )
+    .toArray();
+  const writtenDownPrincipal = Math.round(sumOutstandingSovereignPrincipal(postHaircutBonds));
+  const terms = sovereignDebtTerms(writtenDownPrincipal, {
     gdp: budget.gdp ?? 0,
     gdpSmoothed: budget.gdpSmoothed,
-    ceiling: budget.debt?.ceiling ?? 0,
     investorConfidence: budget.investorConfidence,
     imfBailoutActive: budget.imfSovereignBailoutActive,
     sovereignRiskAnchor: budget.sovereignRiskAnchor,
@@ -131,13 +147,12 @@ export async function applyRestructureResolution(
     creditRating: "B",
     crisisAutoActionAt: null,
     crisisLegislativeDeadlineAt: null,
-    treasuryBalance: writtenDownTreasuryBalance,
     debt: {
       ...budget.debt,
-      principal: derivedFiscal.principal,
-      interestRate: derivedFiscal.interestRate,
+      principal: writtenDownPrincipal,
+      interestRate: terms.interestRate,
     },
-    debtToGdpRatio: derivedFiscal.debtToGdpRatio,
+    debtToGdpRatio: terms.debtToGdpRatio,
   };
 
   await db

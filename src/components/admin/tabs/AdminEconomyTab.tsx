@@ -87,6 +87,13 @@ const NppEconomyAdminPanel = dynamic(
     })),
   { ssr: false }
 );
+const NppEntryFunnelPanel = dynamic(
+  () =>
+    import("@/components/admin/economy/NppEntryFunnelPanel").then((m) => ({
+      default: m.NppEntryFunnelPanel,
+    })),
+  { ssr: false }
+);
 const FinancialLedgerAdminPanel = dynamic(
   () =>
     import("@/components/admin/economy/FinancialLedgerAdminPanel").then((m) => ({
@@ -165,7 +172,12 @@ export function AdminEconomyTab({ activeSub, onSubChange }: AdminEconomyTabProps
         {activeSub === "resource-capacity" && <ResourceCapacityAdminPanel />}
         {activeSub === "extraction" && <ExtractionAdminPanel />}
         {activeSub === "budgets" && <BudgetOverviewAdminPanel />}
-        {activeSub === "npp-economy" && <NppEconomyAdminPanel />}
+        {activeSub === "npp-economy" && (
+          <>
+            <NppEconomyAdminPanel />
+            <NppEntryFunnelPanel />
+          </>
+        )}
         {activeSub === "index-funds" && <IndexFundsAdminPanel />}
         {activeSub === "financial-ledger" && <FinancialLedgerAdminPanel />}
         {activeSub === "sector-seed" && <SectorSeedAdminPanel />}

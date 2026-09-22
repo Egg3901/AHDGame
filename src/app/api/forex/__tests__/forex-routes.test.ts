@@ -41,12 +41,29 @@ vi.mock("@/lib/api/rateLimit", () => ({
       })
   ),
 }));
+// Spread-fee distribution is asserted for the fill/direct-accept ordering tests
+// below: it must be invoked inside the settlement closure, once per currency leg.
+vi.mock("@/lib/currency/spreadFees", async (importOriginal) => {
+  const mod = await importOriginal<typeof import("@/lib/currency/spreadFees")>();
+  return {
+    ...mod,
+    distributeSpreadFee: vi
+      .fn()
+      .mockResolvedValue({ destroyed: 0, toCentralBank: 0, toReserveBalance: 0 }),
+    reverseSpreadFee: vi.fn().mockResolvedValue(undefined),
+  };
+});
+vi.mock("@/lib/time/gameTime", () => ({
+  getGameTime: vi.fn(async () => ({ currentTurn: 50, effectiveNow: new Date() })),
+}));
 
 import { GET as GET_FOREX_RATES } from "../rates/route";
 import { GET as GET_FOREX_MONETARY_POLICY } from "../monetary-policy/route";
 import { GET as GET_FOREX_TRADES } from "../trades/route";
 import { GET as GET_FOREX_ORDERS, POST as POST_FOREX_ORDERS } from "../orders/route";
 import { GET as GET_FOREX_TRANSACTIONS } from "../transactions/route";
+import { POST as POST_FILL_LIMIT_ORDER } from "../orders/[orderId]/fill/route";
+import { POST as POST_DIRECT_TRADE } from "../direct/[requestId]/route";
 
 let db: MockDb;
 
@@ -684,5 +701,281 @@ describe("GET /api/forex/transactions", () => {
     const items = json.turns[0].items as Array<{ kind: string; source?: string }>;
     expect(items.every((i) => i.kind === "row")).toBe(true);
     expect(items[0].source).toBe("auto_dividend");
+  });
+});
+
+// ── Spread fee is part of the fill/direct-accept unit ────────────────────────
+
+describe("POST /api/forex/orders/[orderId]/fill — spread fee", () => {
+  async function setupFill() {
+    // This file's beforeEach only rebuilds the mock db, so clear call history
+    // (implementations are preserved) before each fee-ordering assertion.
+    vi.clearAllMocks();
+    await setupDb();
+    db.collection("gameConfig");
+    const { isForexEnabled } = await import("@/lib/currency/featureFlag");
+    vi.mocked(isForexEnabled).mockResolvedValue(true);
+
+    const fillerId = new ObjectId();
+    const posterId = new ObjectId();
+    const orderId = new ObjectId();
+    const { requireAuthWithCharacter } = await import("@/lib/api/requireAuth");
+    vi.mocked(requireAuthWithCharacter).mockResolvedValue(
+      mockAuthCharacter({
+        _id: fillerId,
+        name: "Filler",
+        countryId: "US",
+        currencyBalances: { personal: { GBP: 50_000 } },
+      })
+    );
+
+    db.collectionMocks.currencyOrders.findOne.mockResolvedValue({
+      _id: orderId,
+      type: "limit",
+      status: "open",
+      characterId: posterId,
+      fromCurrency: "USD",
+      toCurrency: "GBP",
+      amount: 100,
+      filledAmount: 0,
+      limitRate: 0.8,
+    });
+    db.collectionMocks.gameState.findOne.mockResolvedValue({ currentTurn: 50 });
+    db.collectionMocks.gameConfig.findOne.mockResolvedValue({ commandEconomyEnabled: false });
+    db.collectionMocks.characters.updateOne.mockResolvedValue({
+      modifiedCount: 1,
+      matchedCount: 1,
+    });
+    // The durable fill path verifies landed character legs by their stamps
+    // before compensating. This mock represents those atomic stamped writes.
+    db.collectionMocks.characters.findOne.mockResolvedValue({ _id: fillerId });
+    db.collectionMocks.currencyOrders.findOneAndUpdate.mockResolvedValue({
+      _id: orderId,
+      status: "open",
+      filledAmount: 0,
+    });
+    db.collectionMocks.currencyOrders.updateOne.mockResolvedValue({ matchedCount: 1 });
+    db.collectionMocks.tradeHistory.insertOne.mockResolvedValue({ insertedId: new ObjectId() });
+
+    return { orderId, fillerId, posterId };
+  }
+
+  function fill(orderId: ObjectId) {
+    return POST_FILL_LIMIT_ORDER(new Request("http://localhost", { method: "POST", body: "{}" }), {
+      params: Promise.resolve({ orderId: orderId.toString() }),
+    });
+  }
+
+  it("distributes each spread leg exactly once, ordered before the order is filled", async () => {
+    const { orderId } = await setupFill();
+    const { distributeSpreadFee } = await import("@/lib/currency/spreadFees");
+
+    const res = await fill(orderId);
+    expect(res.status).toBe(200);
+
+    const fee = vi.mocked(distributeSpreadFee);
+    expect(fee).toHaveBeenCalledTimes(2); // USD leg + GBP leg, once each
+    const feeOrder = fee.mock.invocationCallOrder[0]!;
+    const fillOrder = db.collectionMocks.currencyOrders.updateOne.mock.invocationCallOrder[0]!;
+    expect(feeOrder).toBeLessThan(fillOrder);
+  });
+
+  it("does not leave the fill observable when the spread fee fails", async () => {
+    const { orderId } = await setupFill();
+    const { distributeSpreadFee } = await import("@/lib/currency/spreadFees");
+    vi.mocked(distributeSpreadFee).mockRejectedValueOnce(new Error("fee down"));
+
+    const res = await fill(orderId);
+    expect(res.status).toBeGreaterThanOrEqual(500);
+
+    const orderEdits = db.collectionMocks.currencyOrders.updateOne.mock.calls.map(
+      (c) => (c[1] as { $set?: Record<string, unknown> }).$set
+    );
+    // The order is reopened, never marked filled/partial.
+    expect(orderEdits.some((s) => s?.status === "open")).toBe(true);
+    expect(orderEdits.some((s) => s?.status === "filled" || s?.status === "partial")).toBe(false);
+    expect(db.collectionMocks.tradeHistory.insertOne).not.toHaveBeenCalled();
+    // Both stamped balance legs were settled (2) and then rolled back (2).
+    expect(db.collectionMocks.characters.updateOne).toHaveBeenCalledTimes(4);
+  });
+
+  it("reverses the first spread leg when the second leg fails", async () => {
+    const { orderId } = await setupFill();
+    const { distributeSpreadFee, reverseSpreadFee } = await import("@/lib/currency/spreadFees");
+    vi.mocked(distributeSpreadFee)
+      .mockResolvedValueOnce({ destroyed: 0, toCentralBank: 0, toReserveBalance: 0 })
+      .mockRejectedValueOnce(new Error("second fee leg failed"));
+
+    const res = await fill(orderId);
+
+    expect(res.status).toBe(500);
+    // Recovery completes each idempotent spread leg before reversing it, so
+    // both legs are removed even when the initial attempt stopped on leg two.
+    expect(reverseSpreadFee).toHaveBeenCalledTimes(2);
+  });
+
+  it("restores a completed status transition when trade-history persistence fails", async () => {
+    const { orderId } = await setupFill();
+    db.collectionMocks.tradeHistory.insertOne.mockRejectedValueOnce(new Error("history failed"));
+
+    const res = await fill(orderId);
+
+    expect(res.status).toBe(500);
+    const statusEdits = db.collectionMocks.currencyOrders.updateOne.mock.calls.map(
+      (call) => call[1] as { $set?: { status?: string }; $inc?: Record<string, number> }
+    );
+    expect(statusEdits).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ $set: expect.objectContaining({ status: "open" }) }),
+      ])
+    );
+  });
+
+  it("surfaces compensation failure as an uncertain aggregate failure", async () => {
+    const { orderId } = await setupFill();
+    const { distributeSpreadFee, reverseSpreadFee } = await import("@/lib/currency/spreadFees");
+    vi.mocked(distributeSpreadFee).mockResolvedValue({
+      destroyed: 0,
+      toCentralBank: 0,
+      toReserveBalance: 0,
+    });
+    db.collectionMocks.tradeHistory.insertOne.mockRejectedValueOnce(new Error("history failed"));
+    vi.mocked(reverseSpreadFee).mockRejectedValueOnce(new Error("fee reversal failed"));
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    const res = await fill(orderId);
+
+    expect(res.status).toBe(500);
+    expect(consoleError.mock.calls.flat()).toEqual(
+      expect.arrayContaining([expect.any(AggregateError)])
+    );
+    consoleError.mockRestore();
+  });
+});
+
+describe("POST /api/forex/direct/[requestId] — spread fee", () => {
+  async function setupDirectAccept() {
+    vi.clearAllMocks();
+    await setupDb();
+    db.collection("playerMail");
+    const { isForexEnabled } = await import("@/lib/currency/featureFlag");
+    vi.mocked(isForexEnabled).mockResolvedValue(true);
+
+    const targetId = new ObjectId();
+    const senderId = new ObjectId();
+    const reqId = new ObjectId();
+    const { requireAuthWithCharacter } = await import("@/lib/api/requireAuth");
+    vi.mocked(requireAuthWithCharacter).mockResolvedValue(
+      mockAuthCharacter({
+        _id: targetId,
+        name: "Target",
+        countryId: "US",
+        sequentialId: 3,
+        currencyBalances: { personal: { GBP: 50_000 } },
+      })
+    );
+
+    db.collectionMocks.currencyOrders.findOne.mockResolvedValue({
+      _id: reqId,
+      type: "direct",
+      status: "open",
+      characterId: senderId,
+      characterName: "Sender",
+      targetCharacterId: targetId,
+      fromCurrency: "USD",
+      toCurrency: "GBP",
+      amount: 200,
+      limitRate: 0.75,
+    });
+    db.collectionMocks.currencyOrders.findOneAndUpdate.mockResolvedValue({
+      _id: reqId,
+      status: "open",
+    });
+    db.collectionMocks.characters.updateOne.mockResolvedValue({
+      modifiedCount: 1,
+      matchedCount: 1,
+    });
+    db.collectionMocks.currencyOrders.updateOne.mockResolvedValue({ matchedCount: 1 });
+    db.collectionMocks.tradeHistory.insertOne.mockResolvedValue({ insertedId: new ObjectId() });
+    db.collectionMocks.characters.findOne.mockResolvedValue({
+      _id: senderId,
+      userId: new ObjectId(),
+      sequentialId: 9,
+    });
+    db.collectionMocks.playerMail.insertOne.mockResolvedValue({ insertedId: new ObjectId() });
+
+    return { reqId };
+  }
+
+  function accept(reqId: ObjectId) {
+    return POST_DIRECT_TRADE(
+      new Request("http://localhost", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "accept" }),
+      }),
+      { params: Promise.resolve({ requestId: reqId.toString() }) }
+    );
+  }
+
+  it("distributes each spread leg exactly once, ordered before the request is filled", async () => {
+    const { reqId } = await setupDirectAccept();
+    const { distributeSpreadFee } = await import("@/lib/currency/spreadFees");
+
+    const res = await accept(reqId);
+    expect(res.status).toBe(200);
+
+    const fee = vi.mocked(distributeSpreadFee);
+    expect(fee).toHaveBeenCalledTimes(2); // USD leg + GBP leg, once each
+    const feeOrder = fee.mock.invocationCallOrder[0]!;
+    const fillOrder = db.collectionMocks.currencyOrders.updateOne.mock.invocationCallOrder[0]!;
+    expect(feeOrder).toBeLessThan(fillOrder);
+  });
+
+  it("does not leave the trade observable when the spread fee fails", async () => {
+    const { reqId } = await setupDirectAccept();
+    const { distributeSpreadFee } = await import("@/lib/currency/spreadFees");
+    vi.mocked(distributeSpreadFee).mockRejectedValueOnce(new Error("fee down"));
+
+    const res = await accept(reqId);
+    expect(res.status).toBeGreaterThanOrEqual(500);
+
+    const orderEdits = db.collectionMocks.currencyOrders.updateOne.mock.calls.map(
+      (c) => (c[1] as { $set?: Record<string, unknown> }).$set
+    );
+    expect(orderEdits.some((s) => s?.status === "open")).toBe(true);
+    expect(orderEdits.some((s) => s?.status === "filled")).toBe(false);
+    expect(db.collectionMocks.tradeHistory.insertOne).not.toHaveBeenCalled();
+    expect(db.collectionMocks.playerMail.insertOne).not.toHaveBeenCalled();
+    // Both balance legs were settled (2) and then rolled back (2).
+    expect(db.collectionMocks.characters.updateOne).toHaveBeenCalledTimes(4);
+  });
+
+  it("reverses the first spread leg when the second leg fails", async () => {
+    const { reqId } = await setupDirectAccept();
+    const { distributeSpreadFee, reverseSpreadFee } = await import("@/lib/currency/spreadFees");
+    vi.mocked(distributeSpreadFee)
+      .mockResolvedValueOnce({ destroyed: 0, toCentralBank: 0, toReserveBalance: 0 })
+      .mockRejectedValueOnce(new Error("second fee leg failed"));
+
+    const res = await accept(reqId);
+
+    expect(res.status).toBe(500);
+    expect(reverseSpreadFee).toHaveBeenCalledTimes(1);
+  });
+
+  it("restores a filled request when trade-history persistence fails", async () => {
+    const { reqId } = await setupDirectAccept();
+    db.collectionMocks.tradeHistory.insertOne.mockRejectedValueOnce(new Error("history failed"));
+
+    const res = await accept(reqId);
+
+    expect(res.status).toBe(500);
+    const statusEdits = db.collectionMocks.currencyOrders.updateOne.mock.calls.map(
+      (call) => (call[1] as { $set?: { status?: string } }).$set
+    );
+    expect(statusEdits).toEqual(
+      expect.arrayContaining([expect.objectContaining({ status: "open" })])
+    );
   });
 });

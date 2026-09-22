@@ -89,6 +89,7 @@ function campaignFixture(over: Partial<CampaignData> = {}): CampaignData {
       rallyOneShotActionCost: 4,
       rallyTourTickActionCost: 2,
     },
+    countryId: "US",
     ...over,
   } as CampaignData;
 }
@@ -99,6 +100,7 @@ const ME = {
   actions: 20,
   nationalInfluence: 8,
   fundsCurrency: "USD" as const,
+  countryId: "US",
 };
 
 function renderClient(over: Partial<Parameters<typeof CampaignBlendClient>[0]> = {}) {
@@ -137,6 +139,55 @@ describe("manager view", () => {
     // DOM, so this asserts that the mobile shell has its own real control.
     renderClient();
     expect(screen.getAllByRole("button", { name: "CONTRIBUTE STRENGTH" })).toHaveLength(2);
+  });
+
+  it("offers campaign strength to a viewer who does not run the campaign", () => {
+    // The Blend rebuild folded the contribution control in behind the manager
+    // gate, so the only player who could still fund a nominee's strength was
+    // the nominee. The server has never restricted it: any authenticated
+    // character in the race's country may contribute.
+    renderClient({
+      campaign: campaignFixture({ accessLevel: "public", funds: undefined, actions: undefined }),
+      canManage: false,
+      canSurrogate: false,
+    });
+    expect(screen.getAllByRole("button", { name: "CONTRIBUTE STRENGTH" })).toHaveLength(2);
+  });
+
+  it("shows no contribution control on a suspended campaign", () => {
+    // The suspension guard used to ride along on `canManage`/`canSurrogate`.
+    renderClient({
+      campaign: campaignFixture({ campaignSuspended: true }),
+      canManage: false,
+      canSurrogate: false,
+    });
+    expect(screen.queryAllByRole("button", { name: "CONTRIBUTE STRENGTH" })).toHaveLength(0);
+  });
+
+  it("shows no contribution control to a viewer from another country", () => {
+    renderClient({
+      campaign: campaignFixture({ accessLevel: "public", funds: undefined }),
+      me: { ...ME, fundsCurrency: "GBP" as const, countryId: "UK" },
+      canManage: false,
+      canSurrogate: false,
+    });
+    expect(screen.queryAllByRole("button", { name: "CONTRIBUTE STRENGTH" })).toHaveLength(0);
+  });
+
+  it("offers the managers list and its controls on both layouts", () => {
+    // The managers block lived only in the desktop rail, which is
+    // `hidden lg:block`, so a phone had no way to see or change who runs
+    // the campaign. Both shells stay in the test DOM, so a count of two
+    // is what proves the mobile copy exists.
+    renderClient({
+      campaign: campaignFixture({
+        managers: [{ characterId: "m1", name: "First Manager" }],
+      }),
+    });
+    expect(screen.getAllByText("First Manager")).toHaveLength(2);
+    expect(screen.getAllByRole("button", { name: "Remove First Manager as manager" })).toHaveLength(
+      2
+    );
   });
 
   it("names the running mate on the ticket, on both layouts", () => {

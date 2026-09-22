@@ -22,6 +22,12 @@ export interface DerivedFiscalState {
  * Resync the derived fiscal fields from the signed treasury balance. Mirrors the
  * math `processAnnualDebt` used, but driven off the balance rather than an annual
  * deficit jump. `gdp` of 0 yields a 0 ratio (avoids divide-by-zero).
+ *
+ * Legacy helper (refs #1975): federal `debt.principal` and `debtToGdpRatio`
+ * now come from the sovereign bond ledger (see bonds/sovereignPrincipal.ts),
+ * never from this balance math. Production budget code must not call this to
+ * derive stored principal or ratios; it remains for the frozen migration that
+ * already ran and for unit coverage of the helper itself.
  */
 export function deriveFiscalState(input: {
   treasuryBalance: number;

@@ -219,6 +219,18 @@ export function hasEnterableHeadroom(
  * points new capacity at unmet demand — the price signal then decays as the
  * shortage fills, so the herd self-disperses.
  */
+/**
+ * Per-filter exclusion counts for one `findBestUnownedSector` scan. Passed by
+ * the caller and mutated in place, so the entry funnel can report WHICH
+ * filter bound when no candidate survives instead of a bare miss.
+ */
+export interface CandidateExclusionStats {
+  occupiedExcluded?: number;
+  emptyPoolExcluded?: number;
+  stateControlledExcluded?: number;
+  depositExcluded?: number;
+}
+
 export function findBestUnownedSector(
   countryId: CountryId,
   hqState: string,
@@ -231,7 +243,8 @@ export function findBestUnownedSector(
   plantsEnabled: boolean = false,
   eraUnitScale: number = 1,
   signals?: PlacementSignals,
-  preferredStateIds?: ReadonlySet<string>
+  preferredStateIds?: ReadonlySet<string>,
+  stats?: CandidateExclusionStats
 ): UnownedSector | null {
   const countryUnowned = unownedByCountry.get(countryId);
   if (!countryUnowned || countryUnowned.length === 0) return null;
@@ -266,12 +279,31 @@ export function findBestUnownedSector(
       ? (signals?.extractionHeadroomOf?.(us.stateId) ?? 0)
       : sizeOf(us);
 
-  const candidates = countryUnowned.filter(
-    (us) =>
-      !existingBuckets.has(bucketKey(us.stateId, us.sectorType)) &&
-      marketSizeOf(us) > 0 &&
-      !stateControlled.has(bucketKey(us.stateId, us.sectorType))
-  );
+  const candidates: UnownedSector[] = [];
+  if (stats) {
+    stats.occupiedExcluded = 0;
+    stats.emptyPoolExcluded = 0;
+    stats.stateControlledExcluded = 0;
+    stats.depositExcluded = 0;
+  }
+  for (const us of countryUnowned) {
+    if (existingBuckets.has(bucketKey(us.stateId, us.sectorType))) {
+      if (stats) stats.occupiedExcluded! += 1;
+      continue;
+    }
+    if (!(marketSizeOf(us) > 0)) {
+      if (stats) {
+        if (us.sectorType === "extraction") stats.depositExcluded! += 1;
+        else stats.emptyPoolExcluded! += 1;
+      }
+      continue;
+    }
+    if (stateControlled.has(bucketKey(us.stateId, us.sectorType))) {
+      if (stats) stats.stateControlledExcluded! += 1;
+      continue;
+    }
+    candidates.push(us);
+  }
 
   if (candidates.length === 0) return null;
 

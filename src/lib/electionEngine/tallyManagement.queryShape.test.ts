@@ -32,6 +32,7 @@ import type {
   DemographicCategory,
 } from "@/lib/db/types";
 import type { EnrichedCandidate } from "./types";
+import { accumulateVoteTurn } from "./tallyManagement";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 vi.mock("./candidateEnrichment", () => ({ fetchEnrichedCandidates: vi.fn() }));
@@ -260,10 +261,20 @@ describe("accumulateVoteTurn parallel dispatch", () => {
       })
     );
 
-    const { accumulateVoteTurn } = await import("./tallyManagement");
     const pending = accumulateVoteTurn(electionId, 1, new Date());
     await flushMicrotasks();
 
+    expect(db.collectionMocks.electionVoteTallies.findOne).toHaveBeenCalledWith(
+      { electionId },
+      {
+        projection: {
+          "turnSnapshots.recordedAt": 0,
+          "turnSnapshots.cumulativeVotes": 0,
+          "turnSnapshots.sharesPct": 0,
+          "turnSnapshots.seatsEstimate": 0,
+        },
+      }
+    );
     expect(getStateApprovalForElection).toHaveBeenCalledTimes(1);
     expect(fetchEnrichedCandidates).toHaveBeenCalledTimes(1);
     expect(loadPartyGroupFavorability).toHaveBeenCalledTimes(1);
@@ -297,7 +308,6 @@ describe("accumulateVoteTurn parallel dispatch", () => {
     );
     vi.mocked(getFundsByPartyForElection).mockResolvedValue(new Map());
 
-    const { accumulateVoteTurn } = await import("./tallyManagement");
     const pending = accumulateVoteTurn(electionId, 5, new Date());
     await flushMicrotasks();
 

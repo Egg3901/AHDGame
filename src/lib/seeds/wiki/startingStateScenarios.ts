@@ -18,7 +18,7 @@ import {
   JP_GOVERNORS_1991,
   JP_SANGIIN_1989,
   JP_SHUGIIN_1990,
-  UK_COMMONS_1992,
+  UK_COMMONS_1987,
   US_GOVERNORS_1992,
   US_HOUSE_1992,
   US_SENATE_1992,
@@ -182,10 +182,10 @@ export const STARTING_STATE_1991_COUNTRIES: readonly ScenarioCountry[] = [
   },
   {
     countryId: "UK",
-    contextLabel: "Post-April 1992 General Election",
+    contextLabel: "Parliament elected June 1987",
     posture:
-      "John Major's Conservatives held on with a slim majority. Devolved legislatures did not yet exist.",
-    chambers: [buildChamber("House of Commons", "Commons", UK_COMMONS_1992)],
+      "A third consecutive Conservative majority, with Labour rebuilding in opposition and the newly merged Liberal Democrats holding the Alliance's seats. Scotland and Wales returned large Labour majorities. The regional councils in this world are an anachronism: no devolved legislature existed until 1998.",
+    chambers: [buildChamber("House of Commons", "Commons", UK_COMMONS_1987)],
   },
   {
     countryId: "JP",

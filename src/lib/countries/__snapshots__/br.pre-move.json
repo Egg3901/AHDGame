@@ -1,0 +1,5477 @@
+{
+  "COUNTRY_ANCHOR": {
+    "shape": "country-first",
+    "value": [-51.9, -14.2]
+  },
+  "COUNTRY_BUCKET_LABELS": {
+    "shape": "country-first",
+    "value": {
+      "dims": {
+        "ethnicity": "Origem",
+        "age": "Idade",
+        "education": "Escolaridade",
+        "income": "Renda",
+        "urbanization": "Onde vivem"
+      },
+      "buckets": {
+        "ethnicity": {
+          "branco": "Brancos",
+          "pardo": "Pardos",
+          "preto": "Pretos",
+          "amarelo": "Amarelos",
+          "indigena": "Indígenas"
+        },
+        "age": {
+          "young": "Menores de 30",
+          "mid": "30 a 49 anos",
+          "mature": "50 a 64 anos",
+          "senior": "Acima de 65"
+        },
+        "education": {
+          "fundamental": "Ensino fundamental",
+          "medio": "Ensino médio",
+          "superior": "Ensino superior"
+        },
+        "income": {
+          "low": "Baixa renda",
+          "middle": "Renda média",
+          "high": "Alta renda"
+        },
+        "urbanization": {
+          "urban": "Cidades",
+          "suburban": "Periferia",
+          "rural": "Zona rural"
+        }
+      }
+    }
+  },
+  "COUNTRY_COMMAND_FLAVOR": {
+    "shape": "country-first",
+    "value": {
+      "glyph": "BR",
+      "command": "ESTADO-MAIOR CONJUNTO",
+      "strip": "◆ SECRETO",
+      "acc": "#86d978"
+    }
+  },
+  "COUNTRY_MODIFIER_PATCHES": {
+    "shape": "country-first",
+    "value": {
+      "universal_healthcare": {
+        "suppress": true
+      },
+      "crime_wave": {
+        "suppress": true
+      },
+      "high_violent_crime": {
+        "suppress": true
+      },
+      "poor_air_quality": {
+        "suppress": true
+      },
+      "corruption_concerns": {
+        "suppress": true
+      },
+      "high_corruption": {
+        "suppress": true
+      },
+      "low_public_trust": {
+        "suppress": true
+      },
+      "government_deficit": {
+        "suppress": true
+      },
+      "fiscal_crisis": {
+        "suppress": true
+      },
+      "green_transition": {
+        "suppress": true
+      },
+      "high_voter_turnout": {
+        "suppress": true
+      },
+      "civic_flourishing": {
+        "suppress": true
+      },
+      "information_disorder": {
+        "suppress": true
+      },
+      "media_polarization": {
+        "suppress": true
+      },
+      "free_press": {
+        "suppress": true
+      },
+      "high_poverty": {
+        "conditions": [
+          {
+            "category": "economic",
+            "metric": "povertyRate",
+            "op": ">=",
+            "value": 40
+          }
+        ]
+      },
+      "low_poverty": {
+        "conditions": [
+          {
+            "category": "economic",
+            "metric": "povertyRate",
+            "op": "<=",
+            "value": 18
+          }
+        ]
+      },
+      "housing_stress": {
+        "conditions": [
+          {
+            "category": "social",
+            "metric": "housingAffordability",
+            "op": ">=",
+            "value": 55
+          }
+        ]
+      },
+      "affordable_housing": {
+        "conditions": [
+          {
+            "category": "social",
+            "metric": "housingAffordability",
+            "op": "<=",
+            "value": 42
+          }
+        ]
+      },
+      "research_hub": {
+        "conditions": [
+          {
+            "category": "economic",
+            "metric": "rdIntensity",
+            "op": ">=",
+            "value": 1.6
+          }
+        ]
+      },
+      "strong_growth": {
+        "conditions": [
+          {
+            "category": "economic",
+            "metric": "gdpGrowth",
+            "op": ">=",
+            "value": 4
+          }
+        ]
+      },
+      "slow_growth": {
+        "conditions": [
+          {
+            "category": "economic",
+            "metric": "gdpGrowth",
+            "op": "<=",
+            "value": 2.5
+          }
+        ]
+      },
+      "low_social_mobility": {
+        "suppress": true
+      },
+      "income_inequality": {
+        "suppress": true
+      },
+      "food_insecurity": {
+        "suppress": true
+      },
+      "social_breakdown": {
+        "suppress": true
+      },
+      "youth_surge": {
+        "suppress": true
+      },
+      "low_life_expectancy": {
+        "suppress": true
+      }
+    }
+  },
+  "COUNTRY_READINESS_EXPECTATIONS": {
+    "shape": "country-first",
+    "value": {
+      "regionCount": 27,
+      "partyMin": 0,
+      "partyRoster": "TBD — coming soon",
+      "statePartyOrgMin": 0,
+      "seatMin": 0,
+      "seatNote": "Coming soon — no seats expected yet",
+      "nppMin": 0,
+      "nppNote": "Coming soon",
+      "officialMin": 0,
+      "demographicsCount": 27,
+      "stateMetricsFilter": {
+        "countryId": "BR"
+      },
+      "stateMetricsCount": 27,
+      "legislationTypesMin": 0
+    }
+  },
+  "COUNTRY_SECTOR_WEIGHTS_1953": {
+    "shape": "country-first",
+    "value": {
+      "agriculture": 25,
+      "manufacturing": 20,
+      "construction": 12,
+      "energy": 8,
+      "extraction": 6,
+      "logistics": 5,
+      "real_estate": 4,
+      "financial": 4,
+      "retail": 4,
+      "automobiles": 2,
+      "defense": 2,
+      "chemical_industries": 2,
+      "telecommunications": 1,
+      "healthcare": 1,
+      "media": 1,
+      "entertainment": 1,
+      "technology": 0
+    }
+  },
+  "DOMAIN_BUCKET_AFFINITIES": {
+    "shape": "absent",
+    "value": null
+  },
+  "GDP_DENOMINATION_1953": {
+    "shape": "country-first",
+    "value": "local"
+  },
+  "GROUPS": {
+    "shape": "absent",
+    "value": null
+  },
+  "INITIAL_RATES": {
+    "shape": "country-first",
+    "value": 5
+  },
+  "MAJOR_DEFAULT_PARTIES": {
+    "shape": "country-first",
+    "value": [
+      {
+        "abbr": "PMDB"
+      },
+      {
+        "abbr": "PFL"
+      },
+      {
+        "abbr": "PT",
+        "presets": ["2019-default"]
+      },
+      {
+        "abbr": "PL"
+      }
+    ]
+  },
+  "MECHANICS_BY_COUNTRY": {
+    "shape": "country-first",
+    "value": {
+      "minister_of_finance": {
+        "positionId": "minister_of_finance",
+        "department": "Finance, Budget and National Planning",
+        "sealImage": "",
+        "nationalMetrics": [
+          {
+            "category": "governance",
+            "metricId": "budgetBalance",
+            "label": "Budget Balance",
+            "format": "percent",
+            "higherIsBetter": true
+          },
+          {
+            "category": "economic",
+            "metricId": "gdpGrowth",
+            "label": "GDP Growth",
+            "format": "percent",
+            "higherIsBetter": true
+          }
+        ],
+        "regionalMetrics": []
+      },
+      "minister_of_foreign_affairs": {
+        "positionId": "minister_of_foreign_affairs",
+        "department": "Foreign Affairs",
+        "sealImage": "",
+        "nationalMetrics": [
+          {
+            "category": "economic",
+            "metricId": "tradeBalance",
+            "label": "Trade Balance",
+            "format": "percent",
+            "higherIsBetter": true
+          }
+        ],
+        "regionalMetrics": []
+      },
+      "minister_of_defence": {
+        "positionId": "minister_of_defence",
+        "department": "Defence",
+        "sealImage": "",
+        "nationalMetrics": [
+          {
+            "category": "publicSafety",
+            "metricId": "publicSafetyConfidence",
+            "label": "Public Safety Confidence",
+            "format": "percent",
+            "higherIsBetter": true
+          },
+          {
+            "category": "publicSafety",
+            "metricId": "violentCrimeRate",
+            "label": "Violent Crime Rate",
+            "format": "number",
+            "higherIsBetter": false
+          }
+        ],
+        "regionalMetrics": []
+      },
+      "minister_of_interior": {
+        "positionId": "minister_of_interior",
+        "department": "Interior",
+        "sealImage": "",
+        "nationalMetrics": [
+          {
+            "category": "publicSafety",
+            "metricId": "crimeRate",
+            "label": "Crime Rate",
+            "format": "number",
+            "higherIsBetter": false
+          },
+          {
+            "category": "publicSafety",
+            "metricId": "publicSafetyConfidence",
+            "label": "Public Safety Confidence",
+            "format": "percent",
+            "higherIsBetter": true
+          }
+        ],
+        "regionalMetrics": []
+      },
+      "minister_of_justice": {
+        "positionId": "minister_of_justice",
+        "department": "Justice",
+        "sealImage": "",
+        "nationalMetrics": [
+          {
+            "category": "governance",
+            "metricId": "corruptionIndex",
+            "label": "Corruption Index",
+            "format": "index",
+            "higherIsBetter": false
+          },
+          {
+            "category": "publicSafety",
+            "metricId": "recidivismRate",
+            "label": "Recidivism Rate",
+            "format": "percent",
+            "higherIsBetter": false
+          }
+        ],
+        "regionalMetrics": []
+      },
+      "minister_of_health": {
+        "positionId": "minister_of_health",
+        "department": "Health",
+        "sealImage": "",
+        "nationalMetrics": [
+          {
+            "category": "healthcare",
+            "metricId": "lifeExpectancy",
+            "label": "Life Expectancy",
+            "format": "number",
+            "higherIsBetter": true
+          },
+          {
+            "category": "healthcare",
+            "metricId": "preventableMortality",
+            "label": "Preventable Mortality",
+            "format": "number",
+            "higherIsBetter": false
+          }
+        ],
+        "regionalMetrics": []
+      },
+      "minister_of_education": {
+        "positionId": "minister_of_education",
+        "department": "Education",
+        "sealImage": "",
+        "nationalMetrics": [
+          {
+            "category": "education",
+            "metricId": "literacyRate",
+            "label": "Literacy Rate",
+            "format": "percent",
+            "higherIsBetter": true
+          },
+          {
+            "category": "education",
+            "metricId": "testPerformance",
+            "label": "Test Performance",
+            "format": "index",
+            "higherIsBetter": true
+          }
+        ],
+        "regionalMetrics": []
+      },
+      "minister_of_works_housing": {
+        "positionId": "minister_of_works_housing",
+        "department": "Works and Housing",
+        "sealImage": "",
+        "nationalMetrics": [
+          {
+            "category": "infrastructure",
+            "metricId": "roadCondition",
+            "label": "Road Condition",
+            "format": "index",
+            "higherIsBetter": true
+          },
+          {
+            "category": "social",
+            "metricId": "housingAffordability",
+            "label": "Housing Affordability",
+            "format": "index",
+            "higherIsBetter": false
+          }
+        ],
+        "regionalMetrics": []
+      },
+      "minister_of_agriculture": {
+        "positionId": "minister_of_agriculture",
+        "department": "Agriculture and Rural Development",
+        "sealImage": "",
+        "nationalMetrics": [
+          {
+            "category": "social",
+            "metricId": "foodInsecurity",
+            "label": "Food Insecurity",
+            "format": "percent",
+            "higherIsBetter": false
+          },
+          {
+            "category": "economic",
+            "metricId": "povertyRate",
+            "label": "Poverty Rate",
+            "format": "percent",
+            "higherIsBetter": false
+          }
+        ],
+        "regionalMetrics": []
+      },
+      "minister_of_trade_industry": {
+        "positionId": "minister_of_trade_industry",
+        "department": "Industry, Trade and Investment",
+        "sealImage": "",
+        "nationalMetrics": [
+          {
+            "category": "economic",
+            "metricId": "smallBusinessFormation",
+            "label": "Small Business Formation",
+            "format": "percent",
+            "higherIsBetter": true
+          },
+          {
+            "category": "economic",
+            "metricId": "tradeBalance",
+            "label": "Trade Balance",
+            "format": "percent",
+            "higherIsBetter": true
+          }
+        ],
+        "regionalMetrics": []
+      },
+      "minister_of_labour": {
+        "positionId": "minister_of_labour",
+        "department": "Labour and Employment",
+        "sealImage": "",
+        "nationalMetrics": [
+          {
+            "category": "economic",
+            "metricId": "unemploymentRate",
+            "label": "Unemployment Rate",
+            "format": "percent",
+            "higherIsBetter": false
+          },
+          {
+            "category": "economic",
+            "metricId": "laborParticipation",
+            "label": "Labour Participation",
+            "format": "percent",
+            "higherIsBetter": true
+          }
+        ],
+        "regionalMetrics": []
+      },
+      "minister_of_environment": {
+        "positionId": "minister_of_environment",
+        "department": "Environment",
+        "sealImage": "",
+        "nationalMetrics": [
+          {
+            "category": "environment",
+            "metricId": "carbonEmissions",
+            "label": "Carbon Emissions",
+            "format": "number",
+            "higherIsBetter": false
+          },
+          {
+            "category": "environment",
+            "metricId": "renewableEnergy",
+            "label": "Renewable Energy",
+            "format": "percent",
+            "higherIsBetter": true
+          }
+        ],
+        "regionalMetrics": []
+      },
+      "director_of_intelligence": {
+        "positionId": "director_of_intelligence",
+        "department": "Intelligence Service",
+        "sealImage": "",
+        "nationalMetrics": [
+          {
+            "category": "governance",
+            "metricId": "publicTrust",
+            "label": "Public Trust",
+            "format": "index",
+            "higherIsBetter": true
+          },
+          {
+            "category": "publicSafety",
+            "metricId": "crimeRate",
+            "label": "Crime Rate",
+            "format": "rate",
+            "higherIsBetter": false
+          }
+        ],
+        "regionalMetrics": []
+      }
+    }
+  },
+  "MEDIAN_INCOME_THRESHOLDS": {
+    "shape": "country-first",
+    "value": {
+      "best": 35000,
+      "worst": 13000
+    }
+  },
+  "POPULATION_MULTIPLIERS": {
+    "shape": "country-first",
+    "value": {
+      "evangelical_conservative": 0.5,
+      "working_class_pt": 1.15,
+      "rural_agribusiness": 1.2,
+      "urban_middle_class": 0.8,
+      "urban_poor": 1.15,
+      "afro_brazilian": 1,
+      "business_financial": 0.7,
+      "young_progressive": 0.85
+    }
+  },
+  "ORDERS_BY_COUNTRY": {
+    "shape": "absent",
+    "value": null
+  },
+  "UNION_NAMES_BY_ERA": {
+    "shape": "outer-keyed",
+    "value": {
+      "1953": {
+        "manufacturing": "National Confederation of Industrial Workers",
+        "automobiles": "National Confederation of Industrial Workers",
+        "chemical_industries": "National Confederation of Industrial Workers",
+        "extraction": "National Confederation of Industrial Workers",
+        "energy": "National Confederation of Industrial Workers",
+        "technology": "National Confederation of Industrial Workers",
+        "defense": "National Confederation of Industrial Workers",
+        "retail": "National Confederation of Commerce Workers"
+      },
+      "1979": {
+        "manufacturing": "National Confederation of Industrial Workers",
+        "automobiles": "National Confederation of Industrial Workers",
+        "chemical_industries": "National Confederation of Industrial Workers",
+        "extraction": "National Confederation of Industrial Workers",
+        "energy": "National Confederation of Industrial Workers",
+        "technology": "National Confederation of Industrial Workers",
+        "defense": "National Confederation of Industrial Workers",
+        "retail": "National Confederation of Commerce Workers",
+        "logistics": "National Confederation of Land Transport Workers",
+        "agriculture": "CONTAG"
+      },
+      "1991": {
+        "manufacturing": "CUT Metalworkers' Federation",
+        "automobiles": "CUT Metalworkers' Federation",
+        "extraction": "CUT Mining Federation",
+        "energy": "CUT Energy Federation",
+        "agriculture": "CONTAG",
+        "healthcare": "CUT Health Workers' Federation",
+        "retail": "CUT Commerce Federation",
+        "construction": "CUT Construction Federation",
+        "logistics": "CUT Transport Federation",
+        "media": "CUT Communications Federation",
+        "chemical_industries": "CUT Chemical Workers' Federation",
+        "technology": "CUT Metalworkers' Federation",
+        "financial": "CUT Bank Workers' Federation",
+        "telecommunications": "CUT Communications Federation",
+        "entertainment": "CUT Culture Federation",
+        "defense": "CUT Metalworkers' Federation",
+        "real_estate": "CUT Construction Federation"
+      },
+      "1999": {
+        "manufacturing": "CUT Metalworkers' Federation",
+        "automobiles": "CUT Metalworkers' Federation",
+        "extraction": "CUT Mining Federation",
+        "energy": "CUT Energy Federation",
+        "agriculture": "CONTAG",
+        "healthcare": "CUT Health Workers' Federation",
+        "retail": "CUT Commerce Federation",
+        "construction": "CUT Construction Federation",
+        "logistics": "CUT Transport Federation",
+        "media": "CUT Communications Federation",
+        "chemical_industries": "CUT Chemical Workers' Federation",
+        "technology": "CUT Metalworkers' Federation",
+        "financial": "CUT Bank Workers' Federation",
+        "telecommunications": "CUT Communications Federation",
+        "entertainment": "CUT Culture Federation",
+        "defense": "CUT Metalworkers' Federation",
+        "real_estate": "CUT Construction Federation"
+      },
+      "2007": {
+        "manufacturing": "CUT Metalworkers' Federation",
+        "automobiles": "CUT Metalworkers' Federation",
+        "extraction": "CUT Mining Federation",
+        "energy": "CUT Energy Federation",
+        "agriculture": "CONTAG",
+        "healthcare": "CUT Health Workers' Federation",
+        "retail": "CUT Commerce Federation",
+        "construction": "CUT Construction Federation",
+        "logistics": "CUT Transport Federation",
+        "media": "CUT Communications Federation",
+        "chemical_industries": "CUT Chemical Workers' Federation",
+        "technology": "CUT Metalworkers' Federation",
+        "financial": "CUT Bank Workers' Federation",
+        "telecommunications": "CUT Communications Federation",
+        "entertainment": "CUT Culture Federation",
+        "defense": "CUT Metalworkers' Federation",
+        "real_estate": "CUT Construction Federation"
+      },
+      "2019": {
+        "manufacturing": "CUT Metalworkers' Federation",
+        "automobiles": "CUT Metalworkers' Federation",
+        "extraction": "CUT Mining Federation",
+        "energy": "CUT Energy Federation",
+        "agriculture": "CONTAG",
+        "healthcare": "CUT Health Workers' Federation",
+        "retail": "CUT Commerce Federation",
+        "construction": "CUT Construction Federation",
+        "logistics": "CUT Transport Federation",
+        "media": "CUT Communications Federation",
+        "chemical_industries": "CUT Chemical Workers' Federation",
+        "technology": "CUT Metalworkers' Federation",
+        "financial": "CUT Bank Workers' Federation",
+        "telecommunications": "CUT Communications Federation",
+        "entertainment": "CUT Culture Federation",
+        "defense": "CUT Metalworkers' Federation",
+        "real_estate": "CUT Construction Federation"
+      },
+      "2023": {
+        "manufacturing": "CUT Metalworkers' Federation",
+        "automobiles": "CUT Metalworkers' Federation",
+        "extraction": "CUT Mining Federation",
+        "energy": "CUT Energy Federation",
+        "agriculture": "CONTAG",
+        "healthcare": "CUT Health Workers' Federation",
+        "retail": "CUT Commerce Federation",
+        "construction": "CUT Construction Federation",
+        "logistics": "CUT Transport Federation",
+        "media": "CUT Communications Federation",
+        "chemical_industries": "CUT Chemical Workers' Federation",
+        "technology": "CUT Metalworkers' Federation",
+        "financial": "CUT Bank Workers' Federation",
+        "telecommunications": "CUT Communications Federation",
+        "entertainment": "CUT Culture Federation",
+        "defense": "CUT Metalworkers' Federation",
+        "real_estate": "CUT Construction Federation"
+      },
+      "2027": {
+        "manufacturing": "CUT Metalworkers' Federation",
+        "automobiles": "CUT Metalworkers' Federation",
+        "extraction": "CUT Mining Federation",
+        "energy": "CUT Energy Federation",
+        "agriculture": "CONTAG",
+        "healthcare": "CUT Health Workers' Federation",
+        "retail": "CUT Commerce Federation",
+        "construction": "CUT Construction Federation",
+        "logistics": "CUT Transport Federation",
+        "media": "CUT Communications Federation",
+        "chemical_industries": "CUT Chemical Workers' Federation",
+        "technology": "CUT Metalworkers' Federation",
+        "financial": "CUT Bank Workers' Federation",
+        "telecommunications": "CUT Communications Federation",
+        "entertainment": "CUT Culture Federation",
+        "defense": "CUT Metalworkers' Federation",
+        "real_estate": "CUT Construction Federation"
+      }
+    }
+  },
+  "CABINET_IDENTITY": {
+    "shape": "absent",
+    "value": null
+  },
+  "CENSUS_BUNDLES": {
+    "shape": "country-first",
+    "value": {
+      "1953-default": {
+        "NORTE": {
+          "ethnicity": {
+            "branco": 22,
+            "pardo": 66,
+            "preto": 5,
+            "amarelo": 1,
+            "indigena": 6
+          },
+          "age": {
+            "young": 42,
+            "mid": 27,
+            "mature": 22,
+            "senior": 9
+          },
+          "education": {
+            "fundamental": 92,
+            "medio": 7,
+            "superior": 1
+          },
+          "income": {
+            "low": 78,
+            "middle": 19,
+            "high": 3
+          },
+          "urbanization": {
+            "urban": 26,
+            "suburban": 10,
+            "rural": 64
+          }
+        },
+        "NORDESTE": {
+          "ethnicity": {
+            "branco": 28,
+            "pardo": 61,
+            "preto": 10,
+            "amarelo": 0,
+            "indigena": 1
+          },
+          "age": {
+            "young": 43,
+            "mid": 27,
+            "mature": 22,
+            "senior": 8
+          },
+          "education": {
+            "fundamental": 92,
+            "medio": 6,
+            "superior": 2
+          },
+          "income": {
+            "low": 82,
+            "middle": 15,
+            "high": 3
+          },
+          "urbanization": {
+            "urban": 32,
+            "suburban": 12,
+            "rural": 56
+          }
+        },
+        "CENTRO_OESTE": {
+          "ethnicity": {
+            "branco": 42,
+            "pardo": 48,
+            "preto": 7,
+            "amarelo": 1,
+            "indigena": 2
+          },
+          "age": {
+            "young": 40,
+            "mid": 27,
+            "mature": 24,
+            "senior": 9
+          },
+          "education": {
+            "fundamental": 84,
+            "medio": 13,
+            "superior": 3
+          },
+          "income": {
+            "low": 62,
+            "middle": 33,
+            "high": 5
+          },
+          "urbanization": {
+            "urban": 46,
+            "suburban": 13,
+            "rural": 41
+          }
+        },
+        "SUDESTE": {
+          "ethnicity": {
+            "branco": 66,
+            "pardo": 24,
+            "preto": 7,
+            "amarelo": 2,
+            "indigena": 1
+          },
+          "age": {
+            "young": 37,
+            "mid": 28,
+            "mature": 25,
+            "senior": 10
+          },
+          "education": {
+            "fundamental": 80,
+            "medio": 16,
+            "superior": 4
+          },
+          "income": {
+            "low": 52,
+            "middle": 40,
+            "high": 8
+          },
+          "urbanization": {
+            "urban": 66,
+            "suburban": 11,
+            "rural": 23
+          }
+        },
+        "SUL": {
+          "ethnicity": {
+            "branco": 84,
+            "pardo": 9,
+            "preto": 4,
+            "amarelo": 2,
+            "indigena": 1
+          },
+          "age": {
+            "young": 37,
+            "mid": 27,
+            "mature": 26,
+            "senior": 10
+          },
+          "education": {
+            "fundamental": 82,
+            "medio": 15,
+            "superior": 3
+          },
+          "income": {
+            "low": 50,
+            "middle": 42,
+            "high": 8
+          },
+          "urbanization": {
+            "urban": 42,
+            "suburban": 13,
+            "rural": 45
+          }
+        }
+      },
+      "1979-default": {
+        "NORTE": {
+          "ethnicity": {
+            "branco": 28,
+            "pardo": 62,
+            "preto": 4,
+            "amarelo": 1,
+            "indigena": 5
+          },
+          "age": {
+            "young": 40,
+            "mid": 27,
+            "mature": 23,
+            "senior": 10
+          },
+          "education": {
+            "fundamental": 84,
+            "medio": 12,
+            "superior": 4
+          },
+          "income": {
+            "low": 66,
+            "middle": 29,
+            "high": 5
+          },
+          "urbanization": {
+            "urban": 45,
+            "suburban": 13,
+            "rural": 42
+          }
+        },
+        "NORDESTE": {
+          "ethnicity": {
+            "branco": 32,
+            "pardo": 58,
+            "preto": 8,
+            "amarelo": 1,
+            "indigena": 1
+          },
+          "age": {
+            "young": 40,
+            "mid": 27,
+            "mature": 23,
+            "senior": 10
+          },
+          "education": {
+            "fundamental": 84,
+            "medio": 12,
+            "superior": 4
+          },
+          "income": {
+            "low": 68,
+            "middle": 27,
+            "high": 5
+          },
+          "urbanization": {
+            "urban": 48,
+            "suburban": 14,
+            "rural": 38
+          }
+        },
+        "CENTRO_OESTE": {
+          "ethnicity": {
+            "branco": 45,
+            "pardo": 46,
+            "preto": 6,
+            "amarelo": 1,
+            "indigena": 2
+          },
+          "age": {
+            "young": 38,
+            "mid": 28,
+            "mature": 24,
+            "senior": 10
+          },
+          "education": {
+            "fundamental": 76,
+            "medio": 18,
+            "superior": 6
+          },
+          "income": {
+            "low": 52,
+            "middle": 40,
+            "high": 8
+          },
+          "urbanization": {
+            "urban": 66,
+            "suburban": 14,
+            "rural": 20
+          }
+        },
+        "SUDESTE": {
+          "ethnicity": {
+            "branco": 64,
+            "pardo": 27,
+            "preto": 7,
+            "amarelo": 2,
+            "indigena": 0
+          },
+          "age": {
+            "young": 35,
+            "mid": 29,
+            "mature": 25,
+            "senior": 11
+          },
+          "education": {
+            "fundamental": 70,
+            "medio": 22,
+            "superior": 8
+          },
+          "income": {
+            "low": 42,
+            "middle": 46,
+            "high": 12
+          },
+          "urbanization": {
+            "urban": 83,
+            "suburban": 9,
+            "rural": 8
+          }
+        },
+        "SUL": {
+          "ethnicity": {
+            "branco": 82,
+            "pardo": 11,
+            "preto": 4,
+            "amarelo": 2,
+            "indigena": 1
+          },
+          "age": {
+            "young": 35,
+            "mid": 28,
+            "mature": 26,
+            "senior": 11
+          },
+          "education": {
+            "fundamental": 72,
+            "medio": 21,
+            "superior": 7
+          },
+          "income": {
+            "low": 40,
+            "middle": 48,
+            "high": 12
+          },
+          "urbanization": {
+            "urban": 62,
+            "suburban": 14,
+            "rural": 24
+          }
+        }
+      },
+      "2019-default": {
+        "NORTE": {
+          "ethnicity": {
+            "branco": 20,
+            "pardo": 68,
+            "preto": 7,
+            "amarelo": 1,
+            "indigena": 4
+          },
+          "age": {
+            "young": 30,
+            "mid": 28,
+            "mature": 28,
+            "senior": 14
+          },
+          "education": {
+            "fundamental": 58,
+            "medio": 30,
+            "superior": 12
+          },
+          "income": {
+            "low": 52,
+            "middle": 38,
+            "high": 10
+          },
+          "urbanization": {
+            "urban": 72,
+            "suburban": 14,
+            "rural": 14
+          }
+        },
+        "NORDESTE": {
+          "ethnicity": {
+            "branco": 25,
+            "pardo": 64,
+            "preto": 9,
+            "amarelo": 1,
+            "indigena": 1
+          },
+          "age": {
+            "young": 30,
+            "mid": 28,
+            "mature": 28,
+            "senior": 14
+          },
+          "education": {
+            "fundamental": 56,
+            "medio": 32,
+            "superior": 12
+          },
+          "income": {
+            "low": 50,
+            "middle": 40,
+            "high": 10
+          },
+          "urbanization": {
+            "urban": 74,
+            "suburban": 14,
+            "rural": 12
+          }
+        },
+        "CENTRO_OESTE": {
+          "ethnicity": {
+            "branco": 36,
+            "pardo": 54,
+            "preto": 8,
+            "amarelo": 1,
+            "indigena": 1
+          },
+          "age": {
+            "young": 29,
+            "mid": 29,
+            "mature": 28,
+            "senior": 14
+          },
+          "education": {
+            "fundamental": 48,
+            "medio": 36,
+            "superior": 16
+          },
+          "income": {
+            "low": 38,
+            "middle": 46,
+            "high": 16
+          },
+          "urbanization": {
+            "urban": 90,
+            "suburban": 7,
+            "rural": 3
+          }
+        },
+        "SUDESTE": {
+          "ethnicity": {
+            "branco": 50,
+            "pardo": 38,
+            "preto": 10,
+            "amarelo": 2,
+            "indigena": 0
+          },
+          "age": {
+            "young": 27,
+            "mid": 30,
+            "mature": 28,
+            "senior": 15
+          },
+          "education": {
+            "fundamental": 44,
+            "medio": 36,
+            "superior": 20
+          },
+          "income": {
+            "low": 32,
+            "middle": 46,
+            "high": 22
+          },
+          "urbanization": {
+            "urban": 93,
+            "suburban": 5,
+            "rural": 2
+          }
+        },
+        "SUL": {
+          "ethnicity": {
+            "branco": 72,
+            "pardo": 18,
+            "preto": 6,
+            "amarelo": 2,
+            "indigena": 2
+          },
+          "age": {
+            "young": 26,
+            "mid": 28,
+            "mature": 29,
+            "senior": 17
+          },
+          "education": {
+            "fundamental": 46,
+            "medio": 36,
+            "superior": 18
+          },
+          "income": {
+            "low": 30,
+            "middle": 48,
+            "high": 22
+          },
+          "urbanization": {
+            "urban": 87,
+            "suburban": 8,
+            "rural": 5
+          }
+        }
+      },
+      "1991-default": {
+        "NORTE": {
+          "ethnicity": {
+            "branco": 25,
+            "pardo": 64,
+            "preto": 5,
+            "amarelo": 1,
+            "indigena": 5
+          },
+          "age": {
+            "young": 34,
+            "mid": 27,
+            "mature": 27,
+            "senior": 12
+          },
+          "education": {
+            "fundamental": 74,
+            "medio": 20,
+            "superior": 6
+          },
+          "income": {
+            "low": 60,
+            "middle": 34,
+            "high": 6
+          },
+          "urbanization": {
+            "urban": 55,
+            "suburban": 15,
+            "rural": 30
+          }
+        },
+        "NORDESTE": {
+          "ethnicity": {
+            "branco": 30,
+            "pardo": 60,
+            "preto": 8,
+            "amarelo": 1,
+            "indigena": 1
+          },
+          "age": {
+            "young": 34,
+            "mid": 27,
+            "mature": 27,
+            "senior": 12
+          },
+          "education": {
+            "fundamental": 72,
+            "medio": 22,
+            "superior": 6
+          },
+          "income": {
+            "low": 58,
+            "middle": 36,
+            "high": 6
+          },
+          "urbanization": {
+            "urban": 60,
+            "suburban": 16,
+            "rural": 24
+          }
+        },
+        "CENTRO_OESTE": {
+          "ethnicity": {
+            "branco": 42,
+            "pardo": 49,
+            "preto": 6,
+            "amarelo": 1,
+            "indigena": 2
+          },
+          "age": {
+            "young": 33,
+            "mid": 28,
+            "mature": 27,
+            "senior": 12
+          },
+          "education": {
+            "fundamental": 66,
+            "medio": 26,
+            "superior": 8
+          },
+          "income": {
+            "low": 45,
+            "middle": 44,
+            "high": 11
+          },
+          "urbanization": {
+            "urban": 78,
+            "suburban": 12,
+            "rural": 10
+          }
+        },
+        "SUDESTE": {
+          "ethnicity": {
+            "branco": 58,
+            "pardo": 33,
+            "preto": 7,
+            "amarelo": 2,
+            "indigena": 0
+          },
+          "age": {
+            "young": 31,
+            "mid": 29,
+            "mature": 27,
+            "senior": 13
+          },
+          "education": {
+            "fundamental": 60,
+            "medio": 30,
+            "superior": 10
+          },
+          "income": {
+            "low": 38,
+            "middle": 48,
+            "high": 14
+          },
+          "urbanization": {
+            "urban": 88,
+            "suburban": 8,
+            "rural": 4
+          }
+        },
+        "SUL": {
+          "ethnicity": {
+            "branco": 78,
+            "pardo": 14,
+            "preto": 5,
+            "amarelo": 2,
+            "indigena": 1
+          },
+          "age": {
+            "young": 30,
+            "mid": 28,
+            "mature": 28,
+            "senior": 14
+          },
+          "education": {
+            "fundamental": 62,
+            "medio": 29,
+            "superior": 9
+          },
+          "income": {
+            "low": 36,
+            "middle": 50,
+            "high": 14
+          },
+          "urbanization": {
+            "urban": 76,
+            "suburban": 12,
+            "rural": 12
+          }
+        }
+      }
+    }
+  },
+  "CONSCRIPTION_SEED": {
+    "shape": "country-first",
+    "value": {
+      "eligibleBand": [18, 20],
+      "sexEnabled": {
+        "male": true,
+        "female": false
+      },
+      "option": 5
+    }
+  },
+  "CORE5_NORMALS": {
+    "shape": "outer-keyed",
+    "value": {
+      "gdpGrowth": [
+        {
+          "year": 1953,
+          "value": 6.5
+        },
+        {
+          "year": 1979,
+          "value": 6.5
+        },
+        {
+          "year": 1991,
+          "value": 1.5
+        },
+        {
+          "year": 2019,
+          "value": 1.5
+        },
+        {
+          "year": 2040,
+          "value": 2
+        }
+      ],
+      "unemploymentRate": [
+        {
+          "year": 1953,
+          "value": 5.5
+        },
+        {
+          "year": 1979,
+          "value": 6.5
+        },
+        {
+          "year": 1991,
+          "value": 10
+        },
+        {
+          "year": 2019,
+          "value": 12
+        },
+        {
+          "year": 2040,
+          "value": 9
+        }
+      ],
+      "lifeExpectancy": [
+        {
+          "year": 1953,
+          "value": 50
+        },
+        {
+          "year": 1979,
+          "value": 61.5
+        },
+        {
+          "year": 1991,
+          "value": 66.5
+        },
+        {
+          "year": 2019,
+          "value": 75.5
+        },
+        {
+          "year": 2040,
+          "value": 79
+        }
+      ],
+      "violentCrimeRate": [
+        {
+          "year": 1953,
+          "value": 300
+        },
+        {
+          "year": 1979,
+          "value": 450
+        },
+        {
+          "year": 1991,
+          "value": 700
+        },
+        {
+          "year": 2019,
+          "value": 700
+        },
+        {
+          "year": 2040,
+          "value": 650
+        }
+      ],
+      "povertyRate": [
+        {
+          "year": 1953,
+          "value": 30
+        },
+        {
+          "year": 1979,
+          "value": 26
+        },
+        {
+          "year": 1991,
+          "value": 28
+        },
+        {
+          "year": 2019,
+          "value": 21
+        },
+        {
+          "year": 2040,
+          "value": 17
+        }
+      ]
+    }
+  },
+  "COST_SCALE_ANCHORS": {
+    "shape": "country-first",
+    "value": {
+      "gdpLow": 900000000000,
+      "popLow": 149000000,
+      "scaleLow": 0.12,
+      "gdpHigh": 10900000000000,
+      "popHigh": 215000000,
+      "scaleHigh": 1
+    }
+  },
+  "COUNTRY_BILL_PHASES": {
+    "shape": "function-valued",
+    "value": null,
+    "functionKeys": ["fn"]
+  },
+  "COUNTRY_CONFIGS": {
+    "shape": "country-first",
+    "value": {
+      "id": "BR",
+      "seedEconomicModel": {
+        "1991": "agrarian",
+        "2019": "resourceExtraction"
+      },
+      "name": "Brazil",
+      "flagEmoji": "🇧🇷",
+      "code": "BR",
+      "socialAxisBaseline": 0,
+      "regionLabel": "State",
+      "regionLabelPlural": "States",
+      "executiveTitle": "President",
+      "executiveRealmPhrase": "Brazil",
+      "governmentType": "presidential",
+      "governmentTypeLabel": "Presidential Republic",
+      "coalitionThreshold": 257,
+      "legislature": {
+        "name": "National Congress",
+        "path": "/country/br/legislature",
+        "bicameral": true,
+        "upperChamber": {
+          "key": "senate",
+          "name": "Federal Senate",
+          "shortName": "Senate",
+          "seats": 81,
+          "description": "81 senators - three per state - serving eight-year staggered terms. Reviews legislation from the Chamber.",
+          "elected": true
+        },
+        "lowerChamber": {
+          "key": "chamber",
+          "name": "Chamber of Deputies",
+          "shortName": "Chamber",
+          "seats": 513,
+          "description": "513 deputies elected by open-list proportional representation from 27 multi-member constituencies. Four-year terms.",
+          "elected": true
+        }
+      },
+      "lowerElectionSystem": {
+        "termYears": 4,
+        "seatsContested": "all",
+        "singleMemberConstituencies": false,
+        "snapElectionsAllowed": false
+      },
+      "upperElectionSystem": {
+        "termYears": 8,
+        "seatsContested": "partial",
+        "staggeredClasses": 2,
+        "singleMemberConstituencies": true,
+        "snapElectionsAllowed": false
+      },
+      "electionSystems": {
+        "lowerChamber": "pr_hareQuota",
+        "upperChamber": "fptp",
+        "headOfState": "electoralCollege"
+      },
+      "officeTypes": [
+        {
+          "key": "president",
+          "label": "President",
+          "labelPlural": "Presidents",
+          "isExecutive": true,
+          "isSubNational": false,
+          "termYears": 4,
+          "actionBonus": 4,
+          "partyStrengthWeight": 1
+        },
+        {
+          "key": "vicePresident",
+          "label": "Vice President",
+          "labelPlural": "Vice Presidents",
+          "isExecutive": true,
+          "isSubNational": false,
+          "termYears": 4,
+          "actionBonus": 2,
+          "partyStrengthWeight": 1
+        },
+        {
+          "key": "senate",
+          "label": "Senator",
+          "labelPlural": "Senators",
+          "chamberKey": "senate",
+          "isExecutive": false,
+          "isSubNational": false,
+          "termYears": 8,
+          "actionBonus": 2,
+          "partyStrengthWeight": 0.8
+        },
+        {
+          "key": "chamber",
+          "label": "Federal Deputy",
+          "labelPlural": "Federal Deputies",
+          "chamberKey": "chamber",
+          "isExecutive": false,
+          "isSubNational": false,
+          "termYears": 4,
+          "actionBonus": 1,
+          "partyStrengthWeight": 0.9
+        },
+        {
+          "key": "governor",
+          "label": "Governor",
+          "labelPlural": "Governors",
+          "isExecutive": false,
+          "isSubNational": true,
+          "termYears": 4,
+          "actionBonus": 2,
+          "partyStrengthWeight": 1
+        },
+        {
+          "key": "centralBankChair",
+          "label": "Governor of the BCB",
+          "labelPlural": "Governors of the BCB",
+          "isExecutive": false,
+          "isSubNational": false,
+          "termYears": 4,
+          "actionBonus": 3,
+          "partyStrengthWeight": 0
+        }
+      ],
+      "majorPartyIds": ["pt", "pl"],
+      "partyCreationNPPs": {
+        "statesRequired": 3,
+        "lockHomeState": true,
+        "nppsPerState": 2
+      },
+      "demographicProfileId": "br_archetypes",
+      "executiveTermLimit": {
+        "officeKey": "president",
+        "maxTermsPerCharacter": 2,
+        "blocksRunningMateSelection": true
+      },
+      "centralBank": {
+        "name": "Banco Central do Brasil",
+        "abbreviation": "BCB",
+        "chairTitle": "Governor of the BCB",
+        "defaultPrimeRate": 8,
+        "heroImage": "/api/images/hero/banco-central-do-brasil"
+      },
+      "exchangeName": "B3",
+      "usdExchangeRate": 0.2,
+      "currencyCode": "BRL",
+      "fiscalYearStartTurnInYear": 40,
+      "financeMinisterCabinetId": "minister_of_finance",
+      "status": "coming-soon",
+      "tagline": "South America's largest democracy - a federal presidential republic with fragmented multi-party politics and a dynamic emerging-market economy.",
+      "descriptor": "A federal presidential republic where the directly elected President governs alongside a National Congress of 513 deputies and 81 senators across five macro-regions.",
+      "heroImage": "https://flagcdn.com/w640/br.png",
+      "entryPath": "/country/br",
+      "overviewPath": "/country/br",
+      "mapPath": "/country/br/map",
+      "executivePath": "/country/br/executive",
+      "executiveLabel": "Palácio do Planalto",
+      "centralGovernmentLabel": "Federal Transfers"
+    }
+  },
+  "COUNTRY_CONTINENT": {
+    "shape": "country-first",
+    "value": "South America"
+  },
+  "COUNTRY_CURRENCY_MAP": {
+    "shape": "country-first",
+    "value": "BRL"
+  },
+  "COUNTRY_ELECTION_PHASES": {
+    "shape": "country-first",
+    "value": [
+      {
+        "name": "brElections"
+      },
+      {
+        "name": "brSenateElections"
+      }
+    ]
+  },
+  "COUNTRY_ERA1991_PATCHES": {
+    "shape": "country-first",
+    "value": {
+      "affordable_housing": {
+        "conditions": [
+          {
+            "category": "social",
+            "metric": "housingAffordability",
+            "op": "<=",
+            "value": 34
+          }
+        ]
+      },
+      "high_poverty": {
+        "conditions": [
+          {
+            "category": "economic",
+            "metric": "povertyRate",
+            "op": ">=",
+            "value": 22
+          }
+        ]
+      },
+      "slow_growth": {
+        "conditions": [
+          {
+            "category": "economic",
+            "metric": "gdpGrowth",
+            "op": "<=",
+            "value": 1
+          }
+        ]
+      },
+      "research_hub": {
+        "suppress": true
+      },
+      "low_life_expectancy": {
+        "suppress": true
+      },
+      "infrastructure_crisis": {
+        "suppress": true
+      }
+    }
+  },
+  "COUNTRY_HISTORICAL_NAMES": {
+    "shape": "country-first",
+    "value": ["Banco Paulista de Comercio", "Banco Atlantico do Sul"]
+  },
+  "COUNTRY_MAP_REGISTRY": {
+    "shape": "country-first",
+    "value": {
+      "countryId": "BR",
+      "name": "Brazil",
+      "overviewPath": "/country/br",
+      "mapPath": "/country/br/map",
+      "hasRegionMap": false
+    }
+  },
+  "COUNTRY_MODERN_NAMES": {
+    "shape": "country-first",
+    "value": ["Banco Paulista de Comercio", "Atlantico Sul Financial"]
+  },
+  "COUNTRY_REGIONS": {
+    "shape": "country-first",
+    "value": "americas"
+  },
+  "COUNTRY_SECTOR_WEIGHTS": {
+    "shape": "country-first",
+    "value": {
+      "agriculture": 14,
+      "real_estate": 11,
+      "energy": 9,
+      "extraction": 9,
+      "manufacturing": 9,
+      "financial": 8,
+      "retail": 7,
+      "construction": 7,
+      "chemical_industries": 6,
+      "logistics": 4,
+      "healthcare": 4,
+      "telecommunications": 3,
+      "technology": 2,
+      "entertainment": 2,
+      "media": 2,
+      "automobiles": 2,
+      "defense": 1
+    }
+  },
+  "COUNTRY_SECTOR_WEIGHTS_1979": {
+    "shape": "country-first",
+    "value": {
+      "manufacturing": 18,
+      "agriculture": 16,
+      "energy": 10,
+      "extraction": 8,
+      "construction": 8,
+      "retail": 7,
+      "real_estate": 6,
+      "chemical_industries": 5,
+      "automobiles": 5,
+      "healthcare": 3,
+      "financial": 4,
+      "defense": 3,
+      "logistics": 4,
+      "telecommunications": 2,
+      "technology": 1,
+      "media": 2,
+      "entertainment": 2
+    }
+  },
+  "COUNTRY_SECTOR_WEIGHTS_1991": {
+    "shape": "country-first",
+    "value": {
+      "agriculture": 14,
+      "manufacturing": 22,
+      "real_estate": 8,
+      "extraction": 9,
+      "energy": 8,
+      "financial": 6,
+      "retail": 7,
+      "construction": 8,
+      "chemical_industries": 6,
+      "automobiles": 4,
+      "logistics": 3,
+      "healthcare": 3,
+      "telecommunications": 1,
+      "technology": 1,
+      "media": 2,
+      "entertainment": 1,
+      "defense": 1
+    }
+  },
+  "COUNTRY_TO_ISO_NUMERIC": {
+    "shape": "country-first",
+    "value": "076"
+  },
+  "COUNTRY_UN_MEMBER_SINCE": {
+    "shape": "country-first",
+    "value": 1945
+  },
+  "DEFAULT_STRATEGIC_SECTORS": {
+    "shape": "country-first",
+    "value": ["agriculture", "extraction"]
+  },
+  "DEFENSE_POSITION_BY_COUNTRY": {
+    "shape": "country-first",
+    "value": "minister_of_defence"
+  },
+  "ECONOMIC_BASELINES": {
+    "shape": "country-first",
+    "value": {
+      "gdpGrowth": 2.5,
+      "tradeGrowth": 2
+    }
+  },
+  "ECONOMY_TEXT": {
+    "shape": "country-first",
+    "value": {
+      "glyph": "BR",
+      "serif": "mono",
+      "title": "Panorama Econômico",
+      "titleEn": "Economic Outlook",
+      "office": "IBGE · Contas Nacionais",
+      "officeEn": "IBGE · National Accounts",
+      "registry": "Federative Republic of Brazil · National Accounts Registry"
+    }
+  },
+  "ENERGY_POSITION_BY_COUNTRY": {
+    "shape": "absent",
+    "value": null
+  },
+  "ERA_COUNTRY_CONFIG_OVERRIDES": {
+    "shape": "outer-keyed",
+    "value": {
+      "1953-default": {
+        "usdExchangeRate": 0.05319148936170213,
+        "coalitionThreshold": 153,
+        "legislature": {
+          "name": "National Congress",
+          "path": "/country/br/legislature",
+          "bicameral": true,
+          "upperChamber": {
+            "key": "senate",
+            "name": "Federal Senate",
+            "shortName": "Senate",
+            "seats": 81,
+            "description": "81 senators - three per state - serving eight-year staggered terms. Reviews legislation from the Chamber.",
+            "elected": true
+          },
+          "lowerChamber": {
+            "key": "chamber",
+            "name": "Chamber of Deputies",
+            "shortName": "Chamber",
+            "seats": 304,
+            "description": "304 deputies of the 1950 legislature elected by open-list proportional representation.",
+            "elected": true
+          }
+        }
+      }
+    }
+  },
+  "ESTATE_PORTFOLIO_BY_COUNTRY": {
+    "shape": "absent",
+    "value": null
+  },
+  "EXECUTIVE_SEALS": {
+    "shape": "country-first",
+    "value": {
+      "src": "https://upload.wikimedia.org/wikipedia/commons/thumb/b/bf/Coat_of_arms_of_Brazil.svg/330px-Coat_of_arms_of_Brazil.svg.png",
+      "alt": "Coat of arms of Brazil"
+    }
+  },
+  "EXECUTIVE_SURFACE": {
+    "shape": "country-first",
+    "value": {
+      "clock": {
+        "kind": "election",
+        "label": "Term Clock",
+        "countdownNoun": "election"
+      },
+      "actLabels": {
+        "signed": "SIGNED",
+        "vetoed": "VETOED",
+        "onDesk": "ON DESK",
+        "order": "EX. ORDER",
+        "confirmed": "CONFIRMED",
+        "nominated": "NOMINATED",
+        "acting": "ACTING"
+      },
+      "deskKind": "bills",
+      "deskLabel": "The Desk",
+      "rosterTitle": "Cabinet",
+      "heroImage": "/api/images/hero/palacio-do-planalto",
+      "heroAlt": "Palácio do Planalto, Brasília"
+    }
+  },
+  "EXECUTIVE_TEXT": {
+    "shape": "country-first",
+    "value": {
+      "glyph": "PR",
+      "serif": "mono",
+      "registry": "Federative Republic of Brazil · Presidency",
+      "title": "Palácio do Planalto",
+      "titleEn": "Presidential Palace"
+    }
+  },
+  "FOREIGN_AFFAIRS_POSITION_BY_COUNTRY": {
+    "shape": "country-first",
+    "value": "minister_of_foreign_affairs"
+  },
+  "FULL_ERA_REGION_BUNDLES": {
+    "shape": "country-first",
+    "value": {
+      "1953-default": [
+        {
+          "_id": "NORTE",
+          "countryId": "BR",
+          "regionType": "state",
+          "name": "Norte",
+          "population": 1844000,
+          "gdp": 12000,
+          "houseDistricts": 11,
+          "stateSenateSeats": 21,
+          "region": "Norte",
+          "votingSystem": "fptp"
+        },
+        {
+          "_id": "NORDESTE",
+          "countryId": "BR",
+          "regionType": "state",
+          "name": "Nordeste",
+          "population": 17974000,
+          "gdp": 48000,
+          "houseDistricts": 105,
+          "stateSenateSeats": 27,
+          "region": "Nordeste",
+          "votingSystem": "fptp"
+        },
+        {
+          "_id": "CENTRO_OESTE",
+          "countryId": "BR",
+          "regionType": "state",
+          "name": "Centro-Oeste",
+          "population": 1735000,
+          "gdp": 9000,
+          "houseDistricts": 10,
+          "stateSenateSeats": 12,
+          "region": "Centro-Oeste",
+          "votingSystem": "fptp"
+        },
+        {
+          "_id": "SUDESTE",
+          "countryId": "BR",
+          "regionType": "state",
+          "name": "Sudeste",
+          "population": 22549000,
+          "gdp": 198000,
+          "houseDistricts": 132,
+          "stateSenateSeats": 12,
+          "region": "Sudeste",
+          "votingSystem": "fptp"
+        },
+        {
+          "_id": "SUL",
+          "countryId": "BR",
+          "regionType": "state",
+          "name": "Sul",
+          "population": 7840000,
+          "gdp": 53000,
+          "houseDistricts": 46,
+          "stateSenateSeats": 9,
+          "region": "Sul",
+          "votingSystem": "fptp"
+        }
+      ],
+      "1979-default": [
+        {
+          "_id": "NORTE",
+          "countryId": "BR",
+          "regionType": "state",
+          "name": "Norte",
+          "population": 6600000,
+          "gdp": 12000,
+          "houseDistricts": 40,
+          "stateSenateSeats": 21,
+          "region": "Norte",
+          "votingSystem": "fptp"
+        },
+        {
+          "_id": "NORDESTE",
+          "countryId": "BR",
+          "regionType": "state",
+          "name": "Nordeste",
+          "population": 35000000,
+          "gdp": 45000,
+          "houseDistricts": 130,
+          "stateSenateSeats": 27,
+          "region": "Nordeste",
+          "votingSystem": "fptp"
+        },
+        {
+          "_id": "CENTRO_OESTE",
+          "countryId": "BR",
+          "regionType": "state",
+          "name": "Centro-Oeste",
+          "population": 7000000,
+          "gdp": 15000,
+          "houseDistricts": 30,
+          "stateSenateSeats": 12,
+          "region": "Centro-Oeste",
+          "votingSystem": "fptp"
+        },
+        {
+          "_id": "SUDESTE",
+          "countryId": "BR",
+          "regionType": "state",
+          "name": "Sudeste",
+          "population": 51000000,
+          "gdp": 185000,
+          "houseDistricts": 165,
+          "stateSenateSeats": 12,
+          "region": "Sudeste",
+          "votingSystem": "fptp"
+        },
+        {
+          "_id": "SUL",
+          "countryId": "BR",
+          "regionType": "state",
+          "name": "Sul",
+          "population": 19000000,
+          "gdp": 50000,
+          "houseDistricts": 55,
+          "stateSenateSeats": 9,
+          "region": "Sul",
+          "votingSystem": "fptp"
+        }
+      ],
+      "1991-default": [
+        {
+          "_id": "NORTE",
+          "countryId": "BR",
+          "regionType": "state",
+          "name": "Norte",
+          "population": 10257000,
+          "gdp": 35000,
+          "houseDistricts": 45,
+          "stateSenateSeats": 21,
+          "region": "Norte",
+          "votingSystem": "fptp"
+        },
+        {
+          "_id": "NORDESTE",
+          "countryId": "BR",
+          "regionType": "state",
+          "name": "Nordeste",
+          "population": 42497000,
+          "gdp": 130000,
+          "houseDistricts": 141,
+          "stateSenateSeats": 27,
+          "region": "Nordeste",
+          "votingSystem": "fptp"
+        },
+        {
+          "_id": "CENTRO_OESTE",
+          "countryId": "BR",
+          "regionType": "state",
+          "name": "Centro-Oeste",
+          "population": 9412000,
+          "gdp": 70000,
+          "houseDistricts": 35,
+          "stateSenateSeats": 12,
+          "region": "Centro-Oeste",
+          "votingSystem": "fptp"
+        },
+        {
+          "_id": "SUDESTE",
+          "countryId": "BR",
+          "regionType": "state",
+          "name": "Sudeste",
+          "population": 62660000,
+          "gdp": 525000,
+          "houseDistricts": 196,
+          "stateSenateSeats": 12,
+          "region": "Sudeste",
+          "votingSystem": "fptp"
+        },
+        {
+          "_id": "SUL",
+          "countryId": "BR",
+          "regionType": "state",
+          "name": "Sul",
+          "population": 22117000,
+          "gdp": 140000,
+          "houseDistricts": 86,
+          "stateSenateSeats": 9,
+          "region": "Sul",
+          "votingSystem": "fptp"
+        }
+      ],
+      "1999-default": [
+        {
+          "_id": "NORTE",
+          "countryId": "BR",
+          "regionType": "state",
+          "name": "Norte",
+          "population": 12900000,
+          "gdp": 45000,
+          "houseDistricts": 65,
+          "stateSenateSeats": 21,
+          "region": "Norte",
+          "votingSystem": "fptp"
+        },
+        {
+          "_id": "NORDESTE",
+          "countryId": "BR",
+          "regionType": "state",
+          "name": "Nordeste",
+          "population": 47000000,
+          "gdp": 130000,
+          "houseDistricts": 151,
+          "stateSenateSeats": 27,
+          "region": "Nordeste",
+          "votingSystem": "fptp"
+        },
+        {
+          "_id": "CENTRO_OESTE",
+          "countryId": "BR",
+          "regionType": "state",
+          "name": "Centro-Oeste",
+          "population": 11600000,
+          "gdp": 80000,
+          "houseDistricts": 41,
+          "stateSenateSeats": 12,
+          "region": "Centro-Oeste",
+          "votingSystem": "fptp"
+        },
+        {
+          "_id": "SUDESTE",
+          "countryId": "BR",
+          "regionType": "state",
+          "name": "Sudeste",
+          "population": 72000000,
+          "gdp": 590000,
+          "houseDistricts": 179,
+          "stateSenateSeats": 12,
+          "region": "Sudeste",
+          "votingSystem": "fptp"
+        },
+        {
+          "_id": "SUL",
+          "countryId": "BR",
+          "regionType": "state",
+          "name": "Sul",
+          "population": 25000000,
+          "gdp": 175000,
+          "houseDistricts": 77,
+          "stateSenateSeats": 9,
+          "region": "Sul",
+          "votingSystem": "fptp"
+        }
+      ],
+      "2007-default": [
+        {
+          "_id": "NORTE",
+          "countryId": "BR",
+          "regionType": "state",
+          "name": "Norte",
+          "population": 15300000,
+          "gdp": 130000,
+          "houseDistricts": 65,
+          "stateSenateSeats": 21,
+          "region": "Norte",
+          "votingSystem": "fptp"
+        },
+        {
+          "_id": "NORDESTE",
+          "countryId": "BR",
+          "regionType": "state",
+          "name": "Nordeste",
+          "population": 52500000,
+          "gdp": 350000,
+          "houseDistricts": 151,
+          "stateSenateSeats": 27,
+          "region": "Nordeste",
+          "votingSystem": "fptp"
+        },
+        {
+          "_id": "CENTRO_OESTE",
+          "countryId": "BR",
+          "regionType": "state",
+          "name": "Centro-Oeste",
+          "population": 14000000,
+          "gdp": 240000,
+          "houseDistricts": 41,
+          "stateSenateSeats": 12,
+          "region": "Centro-Oeste",
+          "votingSystem": "fptp"
+        },
+        {
+          "_id": "SUDESTE",
+          "countryId": "BR",
+          "regionType": "state",
+          "name": "Sudeste",
+          "population": 80000000,
+          "gdp": 1560000,
+          "houseDistricts": 179,
+          "stateSenateSeats": 12,
+          "region": "Sudeste",
+          "votingSystem": "fptp"
+        },
+        {
+          "_id": "SUL",
+          "countryId": "BR",
+          "regionType": "state",
+          "name": "Sul",
+          "population": 27500000,
+          "gdp": 450000,
+          "houseDistricts": 77,
+          "stateSenateSeats": 9,
+          "region": "Sul",
+          "votingSystem": "fptp"
+        }
+      ],
+      "2019-default": [
+        {
+          "_id": "NORTE",
+          "countryId": "BR",
+          "regionType": "state",
+          "name": "Norte",
+          "population": 18430000,
+          "gdp": 480000,
+          "houseDistricts": 75,
+          "stateSenateSeats": 21,
+          "region": "Norte",
+          "votingSystem": "fptp"
+        },
+        {
+          "_id": "NORDESTE",
+          "countryId": "BR",
+          "regionType": "state",
+          "name": "Nordeste",
+          "population": 57071000,
+          "gdp": 1400000,
+          "houseDistricts": 144,
+          "stateSenateSeats": 27,
+          "region": "Nordeste",
+          "votingSystem": "fptp"
+        },
+        {
+          "_id": "CENTRO_OESTE",
+          "countryId": "BR",
+          "regionType": "state",
+          "name": "Centro-Oeste",
+          "population": 16729000,
+          "gdp": 1200000,
+          "houseDistricts": 42,
+          "stateSenateSeats": 12,
+          "region": "Centro-Oeste",
+          "votingSystem": "fptp"
+        },
+        {
+          "_id": "SUDESTE",
+          "countryId": "BR",
+          "regionType": "state",
+          "name": "Sudeste",
+          "population": 88371000,
+          "gdp": 6200000,
+          "houseDistricts": 179,
+          "stateSenateSeats": 12,
+          "region": "Sudeste",
+          "votingSystem": "fptp"
+        },
+        {
+          "_id": "SUL",
+          "countryId": "BR",
+          "regionType": "state",
+          "name": "Sul",
+          "population": 30367000,
+          "gdp": 1800000,
+          "houseDistricts": 73,
+          "stateSenateSeats": 9,
+          "region": "Sul",
+          "votingSystem": "fptp"
+        }
+      ],
+      "2023-default": [
+        {
+          "_id": "NORTE",
+          "countryId": "BR",
+          "regionType": "state",
+          "name": "Norte",
+          "population": 18430000,
+          "gdp": 480000,
+          "houseDistricts": 75,
+          "stateSenateSeats": 21,
+          "region": "Norte",
+          "votingSystem": "fptp"
+        },
+        {
+          "_id": "NORDESTE",
+          "countryId": "BR",
+          "regionType": "state",
+          "name": "Nordeste",
+          "population": 57071000,
+          "gdp": 1400000,
+          "houseDistricts": 144,
+          "stateSenateSeats": 27,
+          "region": "Nordeste",
+          "votingSystem": "fptp"
+        },
+        {
+          "_id": "CENTRO_OESTE",
+          "countryId": "BR",
+          "regionType": "state",
+          "name": "Centro-Oeste",
+          "population": 16729000,
+          "gdp": 1200000,
+          "houseDistricts": 42,
+          "stateSenateSeats": 12,
+          "region": "Centro-Oeste",
+          "votingSystem": "fptp"
+        },
+        {
+          "_id": "SUDESTE",
+          "countryId": "BR",
+          "regionType": "state",
+          "name": "Sudeste",
+          "population": 88371000,
+          "gdp": 6200000,
+          "houseDistricts": 179,
+          "stateSenateSeats": 12,
+          "region": "Sudeste",
+          "votingSystem": "fptp"
+        },
+        {
+          "_id": "SUL",
+          "countryId": "BR",
+          "regionType": "state",
+          "name": "Sul",
+          "population": 30367000,
+          "gdp": 1800000,
+          "houseDistricts": 73,
+          "stateSenateSeats": 9,
+          "region": "Sul",
+          "votingSystem": "fptp"
+        }
+      ]
+    }
+  },
+  "HAZARD_GROUPS": {
+    "shape": "country-first",
+    "value": {
+      "coastal": ["NORTE", "NORDESTE", "SUDESTE", "SUL"],
+      "flood": ["NORTE", "SUDESTE", "SUL"],
+      "arid": ["NORDESTE"],
+      "wildfire": ["CENTRO_OESTE", "NORTE"]
+    }
+  },
+  "INCOME_ANCHORS": {
+    "shape": "country-first",
+    "value": [
+      {
+        "year": 1953,
+        "value": 7500
+      },
+      {
+        "year": 1979,
+        "value": 6000
+      },
+      {
+        "year": 1991,
+        "value": 14000
+      },
+      {
+        "year": 2019,
+        "value": 27000
+      }
+    ]
+  },
+  "INFRA_POSITION_BY_COUNTRY": {
+    "shape": "absent",
+    "value": null
+  },
+  "ISO_NUMERIC_TO_COUNTRY": {
+    "shape": "value-keyed",
+    "value": {
+      "076": "BR"
+    }
+  },
+  "LEGISLATION_COUNTRY_SCOPES": {
+    "shape": "country-first",
+    "value": "br"
+  },
+  "LEGISLATIVE_PROCESS": {
+    "shape": "absent",
+    "value": null
+  },
+  "M2_TO_GDP_1953": {
+    "shape": "country-first",
+    "value": 0.28
+  },
+  "METRIC_PRESET_BUNDLES": {
+    "shape": "country-first",
+    "value": {
+      "2019-default": {
+        "NORTE": {
+          "economic.laborParticipation": 64,
+          "economic.matchingFriction": 4.5,
+          "economic.tradeBalance": 1.2,
+          "economic.productivityGrowth": 0.8,
+          "economic.rdIntensity": 0.7,
+          "economic.propertyValueIndex": 60,
+          "economic.commercialValueIndex": 80,
+          "economic.ruralRevitalization": 35,
+          "economic.foodSecurity": 70,
+          "economic.exportDependency": 30,
+          "economic.manufacturingCompetitiveness": 35,
+          "economic.regulatoryBurden": 70,
+          "economic.economicFreedom": 52,
+          "education.highSchoolGradRate": 58,
+          "education.universityEnrollment": 25,
+          "education.apprenticeshipRate": 2,
+          "education.academicPressure": 50,
+          "healthcare.uninsuredRate": 5,
+          "healthcare.affordabilityIndex": 55,
+          "healthcare.mentalHealthAccess": 38,
+          "healthcare.socialCareQuality": 48,
+          "healthcare.elderCareQuality": 45,
+          "infrastructure.transportEfficiency": 28,
+          "publicSafety.antiSocialBehaviourRate": 12,
+          "publicSafety.knifeCrimeRate": 7,
+          "environment.floodRisk": 15,
+          "environment.naturalDisasterPreparedness": 45,
+          "environment.nuclearSafety": 60,
+          "environment.energyTransitionProgress": 75,
+          "social.childPoverty": 42,
+          "social.housingAffordability": 48,
+          "social.roughSleeping": 6,
+          "social.workLifeBalance": 50,
+          "social.foreignWorkerIntegration": 50,
+          "social.genderEquality": 48,
+          "social.housingSupplyGrowth": 1.6,
+          "governance.debtToGdp": 74,
+          "governance.devolutionSatisfaction": 42,
+          "governance.roboticsAdoption": 30,
+          "governance.nationalPride": 62,
+          "governance.civilLiberties": 62,
+          "governance.militaryReadiness": 50,
+          "population.demographicDecline": 28,
+          "mediaInformation.stateMediaControl": 35
+        },
+        "NORDESTE": {
+          "economic.laborParticipation": 64,
+          "economic.matchingFriction": 4.5,
+          "economic.tradeBalance": 1.2,
+          "economic.productivityGrowth": 0.8,
+          "economic.rdIntensity": 0.8,
+          "economic.propertyValueIndex": 55,
+          "economic.commercialValueIndex": 80,
+          "economic.ruralRevitalization": 45,
+          "economic.foodSecurity": 70,
+          "economic.exportDependency": 30,
+          "economic.manufacturingCompetitiveness": 38,
+          "economic.regulatoryBurden": 70,
+          "economic.economicFreedom": 52,
+          "education.highSchoolGradRate": 58,
+          "education.universityEnrollment": 25,
+          "education.apprenticeshipRate": 2,
+          "education.academicPressure": 50,
+          "healthcare.uninsuredRate": 5,
+          "healthcare.affordabilityIndex": 55,
+          "healthcare.mentalHealthAccess": 38,
+          "healthcare.socialCareQuality": 48,
+          "healthcare.elderCareQuality": 45,
+          "infrastructure.transportEfficiency": 32,
+          "publicSafety.antiSocialBehaviourRate": 12,
+          "publicSafety.knifeCrimeRate": 7,
+          "environment.floodRisk": 15,
+          "environment.naturalDisasterPreparedness": 45,
+          "environment.nuclearSafety": 60,
+          "environment.energyTransitionProgress": 70,
+          "social.childPoverty": 45,
+          "social.housingAffordability": 40,
+          "social.roughSleeping": 6,
+          "social.workLifeBalance": 50,
+          "social.foreignWorkerIntegration": 50,
+          "social.genderEquality": 48,
+          "social.housingSupplyGrowth": 1.6,
+          "governance.debtToGdp": 74,
+          "governance.devolutionSatisfaction": 38,
+          "governance.roboticsAdoption": 30,
+          "governance.nationalPride": 62,
+          "governance.civilLiberties": 62,
+          "governance.militaryReadiness": 50,
+          "population.demographicDecline": 32,
+          "mediaInformation.stateMediaControl": 35
+        },
+        "CENTRO_OESTE": {
+          "economic.laborParticipation": 64,
+          "economic.matchingFriction": 4.5,
+          "economic.tradeBalance": 1.2,
+          "economic.productivityGrowth": 0.8,
+          "economic.rdIntensity": 1.2,
+          "economic.propertyValueIndex": 78,
+          "economic.commercialValueIndex": 80,
+          "economic.ruralRevitalization": 60,
+          "economic.foodSecurity": 85,
+          "economic.exportDependency": 30,
+          "economic.manufacturingCompetitiveness": 42,
+          "economic.regulatoryBurden": 70,
+          "economic.economicFreedom": 56,
+          "education.highSchoolGradRate": 65,
+          "education.universityEnrollment": 25,
+          "education.apprenticeshipRate": 2,
+          "education.academicPressure": 50,
+          "healthcare.uninsuredRate": 5,
+          "healthcare.affordabilityIndex": 55,
+          "healthcare.mentalHealthAccess": 38,
+          "healthcare.socialCareQuality": 48,
+          "healthcare.elderCareQuality": 45,
+          "infrastructure.transportEfficiency": 38,
+          "publicSafety.antiSocialBehaviourRate": 12,
+          "publicSafety.knifeCrimeRate": 6,
+          "environment.floodRisk": 15,
+          "environment.naturalDisasterPreparedness": 45,
+          "environment.nuclearSafety": 60,
+          "environment.energyTransitionProgress": 55,
+          "social.childPoverty": 22,
+          "social.housingAffordability": 48,
+          "social.roughSleeping": 6,
+          "social.workLifeBalance": 50,
+          "social.foreignWorkerIntegration": 50,
+          "social.genderEquality": 48,
+          "social.housingSupplyGrowth": 1.6,
+          "governance.debtToGdp": 74,
+          "governance.devolutionSatisfaction": 42,
+          "governance.roboticsAdoption": 30,
+          "governance.nationalPride": 62,
+          "governance.civilLiberties": 62,
+          "governance.militaryReadiness": 50,
+          "population.demographicDecline": 34,
+          "mediaInformation.stateMediaControl": 35
+        },
+        "SUDESTE": {
+          "economic.laborParticipation": 64,
+          "economic.matchingFriction": 4.5,
+          "economic.tradeBalance": 1.2,
+          "economic.productivityGrowth": 0.8,
+          "economic.rdIntensity": 1.8,
+          "economic.propertyValueIndex": 110,
+          "economic.commercialValueIndex": 110,
+          "economic.ruralRevitalization": 45,
+          "economic.foodSecurity": 70,
+          "economic.exportDependency": 30,
+          "economic.manufacturingCompetitiveness": 58,
+          "economic.regulatoryBurden": 70,
+          "economic.economicFreedom": 56,
+          "education.highSchoolGradRate": 70,
+          "education.universityEnrollment": 30,
+          "education.apprenticeshipRate": 2,
+          "education.academicPressure": 50,
+          "healthcare.uninsuredRate": 5,
+          "healthcare.affordabilityIndex": 55,
+          "healthcare.mentalHealthAccess": 38,
+          "healthcare.socialCareQuality": 48,
+          "healthcare.elderCareQuality": 45,
+          "infrastructure.transportEfficiency": 48,
+          "publicSafety.antiSocialBehaviourRate": 12,
+          "publicSafety.knifeCrimeRate": 6,
+          "environment.floodRisk": 15,
+          "environment.naturalDisasterPreparedness": 45,
+          "environment.nuclearSafety": 60,
+          "environment.energyTransitionProgress": 60,
+          "social.childPoverty": 26,
+          "social.housingAffordability": 60,
+          "social.roughSleeping": 6,
+          "social.workLifeBalance": 50,
+          "social.foreignWorkerIntegration": 50,
+          "social.genderEquality": 48,
+          "social.housingSupplyGrowth": 1.6,
+          "governance.debtToGdp": 74,
+          "governance.devolutionSatisfaction": 42,
+          "governance.roboticsAdoption": 40,
+          "governance.nationalPride": 62,
+          "governance.civilLiberties": 62,
+          "governance.militaryReadiness": 50,
+          "population.demographicDecline": 42,
+          "mediaInformation.stateMediaControl": 35
+        },
+        "SUL": {
+          "economic.laborParticipation": 64,
+          "economic.matchingFriction": 4.5,
+          "economic.tradeBalance": 1.2,
+          "economic.productivityGrowth": 0.8,
+          "economic.rdIntensity": 1.5,
+          "economic.propertyValueIndex": 95,
+          "economic.commercialValueIndex": 80,
+          "economic.ruralRevitalization": 58,
+          "economic.foodSecurity": 80,
+          "economic.exportDependency": 30,
+          "economic.manufacturingCompetitiveness": 60,
+          "economic.regulatoryBurden": 70,
+          "economic.economicFreedom": 52,
+          "education.highSchoolGradRate": 72,
+          "education.universityEnrollment": 25,
+          "education.apprenticeshipRate": 2,
+          "education.academicPressure": 50,
+          "healthcare.uninsuredRate": 5,
+          "healthcare.affordabilityIndex": 55,
+          "healthcare.mentalHealthAccess": 38,
+          "healthcare.socialCareQuality": 48,
+          "healthcare.elderCareQuality": 45,
+          "infrastructure.transportEfficiency": 45,
+          "publicSafety.antiSocialBehaviourRate": 12,
+          "publicSafety.knifeCrimeRate": 6,
+          "environment.floodRisk": 15,
+          "environment.naturalDisasterPreparedness": 45,
+          "environment.nuclearSafety": 60,
+          "environment.energyTransitionProgress": 62,
+          "social.childPoverty": 18,
+          "social.housingAffordability": 48,
+          "social.roughSleeping": 6,
+          "social.workLifeBalance": 50,
+          "social.foreignWorkerIntegration": 50,
+          "social.genderEquality": 48,
+          "social.housingSupplyGrowth": 1.6,
+          "governance.debtToGdp": 74,
+          "governance.devolutionSatisfaction": 42,
+          "governance.roboticsAdoption": 38,
+          "governance.nationalPride": 62,
+          "governance.civilLiberties": 62,
+          "governance.militaryReadiness": 50,
+          "population.demographicDecline": 44,
+          "mediaInformation.stateMediaControl": 35
+        }
+      },
+      "1991-default": {
+        "NORTE": {
+          "economic.laborParticipation": 60,
+          "economic.matchingFriction": 7,
+          "economic.tradeBalance": 3,
+          "economic.productivityGrowth": -1,
+          "economic.rdIntensity": 0.5,
+          "economic.propertyValueIndex": 48,
+          "economic.commercialValueIndex": 60,
+          "economic.ruralRevitalization": 35,
+          "economic.foodSecurity": 68,
+          "economic.exportDependency": 28,
+          "economic.manufacturingCompetitiveness": 38,
+          "economic.regulatoryBurden": 75,
+          "economic.economicFreedom": 40,
+          "education.highSchoolGradRate": 56,
+          "education.universityEnrollment": 11,
+          "education.apprenticeshipRate": 1.5,
+          "education.academicPressure": 45,
+          "healthcare.uninsuredRate": 12,
+          "healthcare.affordabilityIndex": 45,
+          "healthcare.mentalHealthAccess": 22,
+          "healthcare.socialCareQuality": 35,
+          "healthcare.elderCareQuality": 38,
+          "infrastructure.transportEfficiency": 26,
+          "publicSafety.antiSocialBehaviourRate": 13,
+          "publicSafety.knifeCrimeRate": 6,
+          "environment.floodRisk": 15,
+          "environment.naturalDisasterPreparedness": 35,
+          "environment.nuclearSafety": 50,
+          "environment.energyTransitionProgress": 30,
+          "social.childPoverty": 48,
+          "social.housingAffordability": 35,
+          "social.roughSleeping": 6,
+          "social.workLifeBalance": 48,
+          "social.foreignWorkerIntegration": 48,
+          "social.genderEquality": 35,
+          "social.housingSupplyGrowth": 1.5,
+          "governance.debtToGdp": 50,
+          "governance.devolutionSatisfaction": 40,
+          "governance.roboticsAdoption": 10,
+          "governance.nationalPride": 58,
+          "governance.civilLiberties": 58,
+          "governance.militaryReadiness": 55,
+          "population.demographicDecline": 20,
+          "mediaInformation.stateMediaControl": 42
+        },
+        "NORDESTE": {
+          "economic.laborParticipation": 60,
+          "economic.matchingFriction": 7,
+          "economic.tradeBalance": 3,
+          "economic.productivityGrowth": -1,
+          "economic.rdIntensity": 0.5,
+          "economic.propertyValueIndex": 45,
+          "economic.commercialValueIndex": 60,
+          "economic.ruralRevitalization": 40,
+          "economic.foodSecurity": 68,
+          "economic.exportDependency": 28,
+          "economic.manufacturingCompetitiveness": 40,
+          "economic.regulatoryBurden": 75,
+          "economic.economicFreedom": 40,
+          "education.highSchoolGradRate": 56,
+          "education.universityEnrollment": 11,
+          "education.apprenticeshipRate": 1.5,
+          "education.academicPressure": 45,
+          "healthcare.uninsuredRate": 12,
+          "healthcare.affordabilityIndex": 45,
+          "healthcare.mentalHealthAccess": 22,
+          "healthcare.socialCareQuality": 35,
+          "healthcare.elderCareQuality": 38,
+          "infrastructure.transportEfficiency": 28,
+          "publicSafety.antiSocialBehaviourRate": 13,
+          "publicSafety.knifeCrimeRate": 6,
+          "environment.floodRisk": 15,
+          "environment.naturalDisasterPreparedness": 35,
+          "environment.nuclearSafety": 50,
+          "environment.energyTransitionProgress": 30,
+          "social.childPoverty": 48,
+          "social.housingAffordability": 32,
+          "social.roughSleeping": 6,
+          "social.workLifeBalance": 48,
+          "social.foreignWorkerIntegration": 48,
+          "social.genderEquality": 35,
+          "social.housingSupplyGrowth": 1.5,
+          "governance.debtToGdp": 50,
+          "governance.devolutionSatisfaction": 40,
+          "governance.roboticsAdoption": 10,
+          "governance.nationalPride": 58,
+          "governance.civilLiberties": 58,
+          "governance.militaryReadiness": 55,
+          "population.demographicDecline": 22,
+          "mediaInformation.stateMediaControl": 42
+        },
+        "CENTRO_OESTE": {
+          "economic.laborParticipation": 60,
+          "economic.matchingFriction": 7,
+          "economic.tradeBalance": 3,
+          "economic.productivityGrowth": -1,
+          "economic.rdIntensity": 0.6,
+          "economic.propertyValueIndex": 60,
+          "economic.commercialValueIndex": 60,
+          "economic.ruralRevitalization": 50,
+          "economic.foodSecurity": 72,
+          "economic.exportDependency": 28,
+          "economic.manufacturingCompetitiveness": 50,
+          "economic.regulatoryBurden": 75,
+          "economic.economicFreedom": 40,
+          "education.highSchoolGradRate": 60,
+          "education.universityEnrollment": 11,
+          "education.apprenticeshipRate": 1.5,
+          "education.academicPressure": 45,
+          "healthcare.uninsuredRate": 12,
+          "healthcare.affordabilityIndex": 45,
+          "healthcare.mentalHealthAccess": 22,
+          "healthcare.socialCareQuality": 35,
+          "healthcare.elderCareQuality": 38,
+          "infrastructure.transportEfficiency": 35,
+          "publicSafety.antiSocialBehaviourRate": 13,
+          "publicSafety.knifeCrimeRate": 6,
+          "environment.floodRisk": 15,
+          "environment.naturalDisasterPreparedness": 35,
+          "environment.nuclearSafety": 50,
+          "environment.energyTransitionProgress": 30,
+          "social.childPoverty": 34,
+          "social.housingAffordability": 35,
+          "social.roughSleeping": 6,
+          "social.workLifeBalance": 48,
+          "social.foreignWorkerIntegration": 48,
+          "social.genderEquality": 35,
+          "social.housingSupplyGrowth": 1.5,
+          "governance.debtToGdp": 50,
+          "governance.devolutionSatisfaction": 40,
+          "governance.roboticsAdoption": 10,
+          "governance.nationalPride": 58,
+          "governance.civilLiberties": 58,
+          "governance.militaryReadiness": 55,
+          "population.demographicDecline": 24,
+          "mediaInformation.stateMediaControl": 42
+        },
+        "SUDESTE": {
+          "economic.laborParticipation": 60,
+          "economic.matchingFriction": 7,
+          "economic.tradeBalance": 3,
+          "economic.productivityGrowth": -1,
+          "economic.rdIntensity": 0.9,
+          "economic.propertyValueIndex": 80,
+          "economic.commercialValueIndex": 82,
+          "economic.ruralRevitalization": 40,
+          "economic.foodSecurity": 68,
+          "economic.exportDependency": 28,
+          "economic.manufacturingCompetitiveness": 62,
+          "economic.regulatoryBurden": 75,
+          "economic.economicFreedom": 40,
+          "education.highSchoolGradRate": 64,
+          "education.universityEnrollment": 11,
+          "education.apprenticeshipRate": 1.5,
+          "education.academicPressure": 45,
+          "healthcare.uninsuredRate": 12,
+          "healthcare.affordabilityIndex": 45,
+          "healthcare.mentalHealthAccess": 22,
+          "healthcare.socialCareQuality": 35,
+          "healthcare.elderCareQuality": 38,
+          "infrastructure.transportEfficiency": 35,
+          "publicSafety.antiSocialBehaviourRate": 13,
+          "publicSafety.knifeCrimeRate": 6,
+          "environment.floodRisk": 15,
+          "environment.naturalDisasterPreparedness": 35,
+          "environment.nuclearSafety": 50,
+          "environment.energyTransitionProgress": 30,
+          "social.childPoverty": 40,
+          "social.housingAffordability": 35,
+          "social.roughSleeping": 6,
+          "social.workLifeBalance": 48,
+          "social.foreignWorkerIntegration": 48,
+          "social.genderEquality": 35,
+          "social.housingSupplyGrowth": 1.5,
+          "governance.debtToGdp": 50,
+          "governance.devolutionSatisfaction": 40,
+          "governance.roboticsAdoption": 14,
+          "governance.nationalPride": 58,
+          "governance.civilLiberties": 58,
+          "governance.militaryReadiness": 55,
+          "population.demographicDecline": 28,
+          "mediaInformation.stateMediaControl": 42
+        },
+        "SUL": {
+          "economic.laborParticipation": 60,
+          "economic.matchingFriction": 7,
+          "economic.tradeBalance": 3,
+          "economic.productivityGrowth": -1,
+          "economic.rdIntensity": 0.8,
+          "economic.propertyValueIndex": 72,
+          "economic.commercialValueIndex": 60,
+          "economic.ruralRevitalization": 40,
+          "economic.foodSecurity": 78,
+          "economic.exportDependency": 28,
+          "economic.manufacturingCompetitiveness": 60,
+          "economic.regulatoryBurden": 75,
+          "economic.economicFreedom": 40,
+          "education.highSchoolGradRate": 66,
+          "education.universityEnrollment": 11,
+          "education.apprenticeshipRate": 1.5,
+          "education.academicPressure": 45,
+          "healthcare.uninsuredRate": 12,
+          "healthcare.affordabilityIndex": 45,
+          "healthcare.mentalHealthAccess": 22,
+          "healthcare.socialCareQuality": 35,
+          "healthcare.elderCareQuality": 38,
+          "infrastructure.transportEfficiency": 35,
+          "publicSafety.antiSocialBehaviourRate": 13,
+          "publicSafety.knifeCrimeRate": 6,
+          "environment.floodRisk": 15,
+          "environment.naturalDisasterPreparedness": 35,
+          "environment.nuclearSafety": 50,
+          "environment.energyTransitionProgress": 30,
+          "social.childPoverty": 26,
+          "social.housingAffordability": 35,
+          "social.roughSleeping": 6,
+          "social.workLifeBalance": 48,
+          "social.foreignWorkerIntegration": 48,
+          "social.genderEquality": 35,
+          "social.housingSupplyGrowth": 1.5,
+          "governance.debtToGdp": 50,
+          "governance.devolutionSatisfaction": 40,
+          "governance.roboticsAdoption": 10,
+          "governance.nationalPride": 58,
+          "governance.civilLiberties": 58,
+          "governance.militaryReadiness": 55,
+          "population.demographicDecline": 30,
+          "mediaInformation.stateMediaControl": 42
+        }
+      },
+      "1979-default": {
+        "NORTE": {
+          "economic.laborParticipation": 56,
+          "economic.matchingFriction": 5,
+          "economic.tradeBalance": -2.5,
+          "economic.productivityGrowth": 2.2,
+          "economic.rdIntensity": 0.4,
+          "economic.propertyValueIndex": 22,
+          "economic.commercialValueIndex": 25,
+          "economic.ruralRevitalization": 90,
+          "economic.foodSecurity": 62,
+          "economic.exportDependency": 20,
+          "economic.manufacturingCompetitiveness": 55,
+          "economic.regulatoryBurden": 68,
+          "economic.economicFreedom": 35,
+          "education.highSchoolGradRate": 35,
+          "education.universityEnrollment": 8,
+          "education.apprenticeshipRate": 0.8,
+          "education.academicPressure": 35,
+          "healthcare.uninsuredRate": 75,
+          "healthcare.affordabilityIndex": 42,
+          "healthcare.mentalHealthAccess": 12,
+          "healthcare.socialCareQuality": 22,
+          "healthcare.elderCareQuality": 20,
+          "infrastructure.transportEfficiency": 18,
+          "publicSafety.antiSocialBehaviourRate": 14,
+          "publicSafety.knifeCrimeRate": 6,
+          "environment.floodRisk": 22,
+          "environment.naturalDisasterPreparedness": 30,
+          "environment.nuclearSafety": 5,
+          "environment.energyTransitionProgress": 8,
+          "social.childPoverty": 68,
+          "social.housingAffordability": 15,
+          "social.roughSleeping": 8,
+          "social.workLifeBalance": 42,
+          "social.foreignWorkerIntegration": 42,
+          "social.genderEquality": 28,
+          "social.housingSupplyGrowth": 2.8,
+          "governance.debtToGdp": 45,
+          "governance.devolutionSatisfaction": 40,
+          "governance.roboticsAdoption": 0,
+          "governance.nationalPride": 65,
+          "governance.civilLiberties": 45,
+          "governance.militaryReadiness": 60,
+          "population.demographicDecline": 8,
+          "mediaInformation.stateMediaControl": 50
+        },
+        "NORDESTE": {
+          "economic.laborParticipation": 56,
+          "economic.matchingFriction": 5,
+          "economic.tradeBalance": -2.5,
+          "economic.productivityGrowth": 2.2,
+          "economic.rdIntensity": 0.4,
+          "economic.propertyValueIndex": 22,
+          "economic.commercialValueIndex": 25,
+          "economic.ruralRevitalization": 88,
+          "economic.foodSecurity": 52,
+          "economic.exportDependency": 20,
+          "economic.manufacturingCompetitiveness": 55,
+          "economic.regulatoryBurden": 68,
+          "economic.economicFreedom": 35,
+          "education.highSchoolGradRate": 18,
+          "education.universityEnrollment": 8,
+          "education.apprenticeshipRate": 0.8,
+          "education.academicPressure": 35,
+          "healthcare.uninsuredRate": 78,
+          "healthcare.affordabilityIndex": 42,
+          "healthcare.mentalHealthAccess": 12,
+          "healthcare.socialCareQuality": 22,
+          "healthcare.elderCareQuality": 20,
+          "infrastructure.transportEfficiency": 22,
+          "publicSafety.antiSocialBehaviourRate": 14,
+          "publicSafety.knifeCrimeRate": 6,
+          "environment.floodRisk": 18,
+          "environment.naturalDisasterPreparedness": 30,
+          "environment.nuclearSafety": 5,
+          "environment.energyTransitionProgress": 8,
+          "social.childPoverty": 70,
+          "social.housingAffordability": 15,
+          "social.roughSleeping": 8,
+          "social.workLifeBalance": 42,
+          "social.foreignWorkerIntegration": 42,
+          "social.genderEquality": 28,
+          "social.housingSupplyGrowth": 2.8,
+          "governance.debtToGdp": 45,
+          "governance.devolutionSatisfaction": 40,
+          "governance.roboticsAdoption": 0,
+          "governance.nationalPride": 65,
+          "governance.civilLiberties": 38,
+          "governance.militaryReadiness": 60,
+          "population.demographicDecline": 8,
+          "mediaInformation.stateMediaControl": 50
+        },
+        "CENTRO_OESTE": {
+          "economic.laborParticipation": 56,
+          "economic.matchingFriction": 5,
+          "economic.tradeBalance": -2.5,
+          "economic.productivityGrowth": 2.2,
+          "economic.rdIntensity": 0.4,
+          "economic.propertyValueIndex": 22,
+          "economic.commercialValueIndex": 25,
+          "economic.ruralRevitalization": 80,
+          "economic.foodSecurity": 68,
+          "economic.exportDependency": 20,
+          "economic.manufacturingCompetitiveness": 55,
+          "economic.regulatoryBurden": 68,
+          "economic.economicFreedom": 35,
+          "education.highSchoolGradRate": 35,
+          "education.universityEnrollment": 8,
+          "education.apprenticeshipRate": 0.8,
+          "education.academicPressure": 35,
+          "healthcare.uninsuredRate": 55,
+          "healthcare.affordabilityIndex": 42,
+          "healthcare.mentalHealthAccess": 12,
+          "healthcare.socialCareQuality": 22,
+          "healthcare.elderCareQuality": 20,
+          "infrastructure.transportEfficiency": 22,
+          "publicSafety.antiSocialBehaviourRate": 14,
+          "publicSafety.knifeCrimeRate": 6,
+          "environment.floodRisk": 18,
+          "environment.naturalDisasterPreparedness": 30,
+          "environment.nuclearSafety": 5,
+          "environment.energyTransitionProgress": 8,
+          "social.childPoverty": 52,
+          "social.housingAffordability": 15,
+          "social.roughSleeping": 8,
+          "social.workLifeBalance": 42,
+          "social.foreignWorkerIntegration": 42,
+          "social.genderEquality": 28,
+          "social.housingSupplyGrowth": 2.8,
+          "governance.debtToGdp": 45,
+          "governance.devolutionSatisfaction": 40,
+          "governance.roboticsAdoption": 0,
+          "governance.nationalPride": 65,
+          "governance.civilLiberties": 45,
+          "governance.militaryReadiness": 60,
+          "population.demographicDecline": 8,
+          "mediaInformation.stateMediaControl": 50
+        },
+        "SUDESTE": {
+          "economic.laborParticipation": 56,
+          "economic.matchingFriction": 5,
+          "economic.tradeBalance": -2.5,
+          "economic.productivityGrowth": 2.2,
+          "economic.rdIntensity": 0.4,
+          "economic.propertyValueIndex": 35,
+          "economic.commercialValueIndex": 42,
+          "economic.ruralRevitalization": 65,
+          "economic.foodSecurity": 62,
+          "economic.exportDependency": 30,
+          "economic.manufacturingCompetitiveness": 75,
+          "economic.regulatoryBurden": 68,
+          "economic.economicFreedom": 35,
+          "education.highSchoolGradRate": 50,
+          "education.universityEnrollment": 8,
+          "education.apprenticeshipRate": 0.8,
+          "education.academicPressure": 35,
+          "healthcare.uninsuredRate": 55,
+          "healthcare.affordabilityIndex": 42,
+          "healthcare.mentalHealthAccess": 12,
+          "healthcare.socialCareQuality": 22,
+          "healthcare.elderCareQuality": 20,
+          "infrastructure.transportEfficiency": 50,
+          "publicSafety.antiSocialBehaviourRate": 14,
+          "publicSafety.knifeCrimeRate": 6,
+          "environment.floodRisk": 18,
+          "environment.naturalDisasterPreparedness": 30,
+          "environment.nuclearSafety": 5,
+          "environment.energyTransitionProgress": 8,
+          "social.childPoverty": 35,
+          "social.housingAffordability": 15,
+          "social.roughSleeping": 8,
+          "social.workLifeBalance": 42,
+          "social.foreignWorkerIntegration": 42,
+          "social.genderEquality": 28,
+          "social.housingSupplyGrowth": 2.8,
+          "governance.debtToGdp": 45,
+          "governance.devolutionSatisfaction": 40,
+          "governance.roboticsAdoption": 0,
+          "governance.nationalPride": 65,
+          "governance.civilLiberties": 52,
+          "governance.militaryReadiness": 60,
+          "population.demographicDecline": 12,
+          "mediaInformation.stateMediaControl": 50
+        },
+        "SUL": {
+          "economic.laborParticipation": 56,
+          "economic.matchingFriction": 5,
+          "economic.tradeBalance": -2.5,
+          "economic.productivityGrowth": 2.2,
+          "economic.rdIntensity": 0.4,
+          "economic.propertyValueIndex": 22,
+          "economic.commercialValueIndex": 25,
+          "economic.ruralRevitalization": 72,
+          "economic.foodSecurity": 62,
+          "economic.exportDependency": 20,
+          "economic.manufacturingCompetitiveness": 58,
+          "economic.regulatoryBurden": 68,
+          "economic.economicFreedom": 35,
+          "education.highSchoolGradRate": 35,
+          "education.universityEnrollment": 8,
+          "education.apprenticeshipRate": 0.8,
+          "education.academicPressure": 35,
+          "healthcare.uninsuredRate": 55,
+          "healthcare.affordabilityIndex": 42,
+          "healthcare.mentalHealthAccess": 12,
+          "healthcare.socialCareQuality": 22,
+          "healthcare.elderCareQuality": 20,
+          "infrastructure.transportEfficiency": 35,
+          "publicSafety.antiSocialBehaviourRate": 14,
+          "publicSafety.knifeCrimeRate": 6,
+          "environment.floodRisk": 18,
+          "environment.naturalDisasterPreparedness": 30,
+          "environment.nuclearSafety": 5,
+          "environment.energyTransitionProgress": 8,
+          "social.childPoverty": 38,
+          "social.housingAffordability": 15,
+          "social.roughSleeping": 8,
+          "social.workLifeBalance": 42,
+          "social.foreignWorkerIntegration": 60,
+          "social.genderEquality": 28,
+          "social.housingSupplyGrowth": 2.8,
+          "governance.debtToGdp": 45,
+          "governance.devolutionSatisfaction": 40,
+          "governance.roboticsAdoption": 0,
+          "governance.nationalPride": 65,
+          "governance.civilLiberties": 50,
+          "governance.militaryReadiness": 60,
+          "population.demographicDecline": 10,
+          "mediaInformation.stateMediaControl": 50
+        }
+      },
+      "1953-default": {
+        "NORTE": {
+          "economic.laborParticipation": 52,
+          "economic.matchingFriction": 6,
+          "economic.tradeBalance": -1.5,
+          "economic.productivityGrowth": 4.5,
+          "economic.rdIntensity": 0.2,
+          "economic.propertyValueIndex": 15,
+          "economic.commercialValueIndex": 18,
+          "economic.ruralRevitalization": 90,
+          "economic.foodSecurity": 58,
+          "economic.exportDependency": 15,
+          "economic.manufacturingCompetitiveness": 35,
+          "economic.regulatoryBurden": 65,
+          "economic.economicFreedom": 35,
+          "education.highSchoolGradRate": 20,
+          "education.universityEnrollment": 2,
+          "education.apprenticeshipRate": 0.5,
+          "education.academicPressure": 25,
+          "healthcare.uninsuredRate": 82,
+          "healthcare.nhsWaitingTime": 20,
+          "healthcare.affordabilityIndex": 30,
+          "healthcare.mentalHealthAccess": 8,
+          "healthcare.socialCareQuality": 15,
+          "healthcare.elderCareQuality": 15,
+          "infrastructure.transportEfficiency": 15,
+          "infrastructure.roadCondition": 22,
+          "environment.protectedLand": 1.1,
+          "infrastructure.powerGridReliability": 86,
+          "infrastructure.waterQuality": 45,
+          "infrastructure.broadbandAccess": 0,
+          "publicSafety.antiSocialBehaviourRate": 12,
+          "publicSafety.knifeCrimeRate": 5,
+          "environment.floodRisk": 18,
+          "environment.naturalDisasterPreparedness": 25,
+          "environment.nuclearSafety": 0,
+          "environment.energyTransitionProgress": 2,
+          "social.childPoverty": 70,
+          "social.housingAffordability": 12,
+          "social.roughSleeping": 10,
+          "social.workLifeBalance": 38,
+          "social.foreignWorkerIntegration": 45,
+          "social.genderEquality": 18,
+          "social.housingSupplyGrowth": 2.5,
+          "governance.debtToGdp": 28,
+          "governance.devolutionSatisfaction": 42,
+          "governance.roboticsAdoption": 0,
+          "governance.nationalPride": 68,
+          "governance.civilLiberties": 40,
+          "governance.militaryReadiness": 42,
+          "population.medianAge": 17,
+          "population.birthRate": 84,
+          "population.demographicDecline": 5,
+          "mediaInformation.stateMediaControl": 55,
+          "economic.medianIncome": 4000
+        },
+        "NORDESTE": {
+          "economic.laborParticipation": 52,
+          "economic.matchingFriction": 6,
+          "economic.tradeBalance": -1.5,
+          "economic.productivityGrowth": 4.5,
+          "economic.rdIntensity": 0.2,
+          "economic.propertyValueIndex": 15,
+          "economic.commercialValueIndex": 18,
+          "economic.ruralRevitalization": 88,
+          "economic.foodSecurity": 58,
+          "economic.exportDependency": 15,
+          "economic.manufacturingCompetitiveness": 35,
+          "economic.regulatoryBurden": 65,
+          "economic.economicFreedom": 35,
+          "education.highSchoolGradRate": 12,
+          "education.universityEnrollment": 2,
+          "education.apprenticeshipRate": 0.5,
+          "education.academicPressure": 25,
+          "healthcare.uninsuredRate": 85,
+          "healthcare.nhsWaitingTime": 20,
+          "healthcare.affordabilityIndex": 30,
+          "healthcare.mentalHealthAccess": 8,
+          "healthcare.socialCareQuality": 15,
+          "healthcare.elderCareQuality": 15,
+          "infrastructure.transportEfficiency": 18,
+          "infrastructure.roadCondition": 22,
+          "environment.protectedLand": 1.1,
+          "infrastructure.powerGridReliability": 86,
+          "infrastructure.waterQuality": 45,
+          "infrastructure.broadbandAccess": 0,
+          "publicSafety.antiSocialBehaviourRate": 12,
+          "publicSafety.knifeCrimeRate": 5,
+          "environment.floodRisk": 18,
+          "environment.naturalDisasterPreparedness": 25,
+          "environment.nuclearSafety": 0,
+          "environment.energyTransitionProgress": 2,
+          "social.childPoverty": 72,
+          "social.housingAffordability": 12,
+          "social.roughSleeping": 10,
+          "social.workLifeBalance": 38,
+          "social.foreignWorkerIntegration": 45,
+          "social.genderEquality": 18,
+          "social.housingSupplyGrowth": 2.5,
+          "governance.debtToGdp": 28,
+          "governance.devolutionSatisfaction": 42,
+          "governance.roboticsAdoption": 0,
+          "governance.nationalPride": 68,
+          "governance.civilLiberties": 35,
+          "governance.militaryReadiness": 42,
+          "population.medianAge": 18,
+          "population.birthRate": 82,
+          "population.demographicDecline": 5,
+          "mediaInformation.stateMediaControl": 55,
+          "economic.medianIncome": 3500
+        },
+        "CENTRO_OESTE": {
+          "economic.laborParticipation": 52,
+          "economic.matchingFriction": 6,
+          "economic.tradeBalance": -1.5,
+          "economic.productivityGrowth": 4.5,
+          "economic.rdIntensity": 0.2,
+          "economic.propertyValueIndex": 15,
+          "economic.commercialValueIndex": 18,
+          "economic.ruralRevitalization": 85,
+          "economic.foodSecurity": 58,
+          "economic.exportDependency": 15,
+          "economic.manufacturingCompetitiveness": 35,
+          "economic.regulatoryBurden": 65,
+          "economic.economicFreedom": 35,
+          "education.highSchoolGradRate": 20,
+          "education.universityEnrollment": 2,
+          "education.apprenticeshipRate": 0.5,
+          "education.academicPressure": 25,
+          "healthcare.uninsuredRate": 72,
+          "healthcare.nhsWaitingTime": 20,
+          "healthcare.affordabilityIndex": 30,
+          "healthcare.mentalHealthAccess": 8,
+          "healthcare.socialCareQuality": 15,
+          "healthcare.elderCareQuality": 15,
+          "infrastructure.transportEfficiency": 18,
+          "infrastructure.roadCondition": 22,
+          "environment.protectedLand": 1.1,
+          "infrastructure.powerGridReliability": 86,
+          "infrastructure.waterQuality": 45,
+          "infrastructure.broadbandAccess": 0,
+          "publicSafety.antiSocialBehaviourRate": 12,
+          "publicSafety.knifeCrimeRate": 5,
+          "environment.floodRisk": 18,
+          "environment.naturalDisasterPreparedness": 25,
+          "environment.nuclearSafety": 0,
+          "environment.energyTransitionProgress": 2,
+          "social.childPoverty": 60,
+          "social.housingAffordability": 12,
+          "social.roughSleeping": 10,
+          "social.workLifeBalance": 38,
+          "social.foreignWorkerIntegration": 45,
+          "social.genderEquality": 18,
+          "social.housingSupplyGrowth": 2.5,
+          "governance.debtToGdp": 28,
+          "governance.devolutionSatisfaction": 42,
+          "governance.roboticsAdoption": 0,
+          "governance.nationalPride": 68,
+          "governance.civilLiberties": 40,
+          "governance.militaryReadiness": 42,
+          "population.medianAge": 19,
+          "population.birthRate": 78,
+          "population.demographicDecline": 5,
+          "mediaInformation.stateMediaControl": 55,
+          "economic.medianIncome": 5800
+        },
+        "SUDESTE": {
+          "economic.laborParticipation": 52,
+          "economic.matchingFriction": 6,
+          "economic.tradeBalance": -1.5,
+          "economic.productivityGrowth": 4.5,
+          "economic.rdIntensity": 0.2,
+          "economic.propertyValueIndex": 22,
+          "economic.commercialValueIndex": 28,
+          "economic.ruralRevitalization": 75,
+          "economic.foodSecurity": 58,
+          "economic.exportDependency": 20,
+          "economic.manufacturingCompetitiveness": 55,
+          "economic.regulatoryBurden": 65,
+          "economic.economicFreedom": 35,
+          "education.highSchoolGradRate": 30,
+          "education.universityEnrollment": 2,
+          "education.apprenticeshipRate": 0.5,
+          "education.academicPressure": 25,
+          "healthcare.uninsuredRate": 72,
+          "healthcare.nhsWaitingTime": 20,
+          "healthcare.affordabilityIndex": 30,
+          "healthcare.mentalHealthAccess": 8,
+          "healthcare.socialCareQuality": 15,
+          "healthcare.elderCareQuality": 15,
+          "infrastructure.transportEfficiency": 35,
+          "infrastructure.roadCondition": 22,
+          "environment.protectedLand": 1.1,
+          "infrastructure.powerGridReliability": 86,
+          "infrastructure.waterQuality": 45,
+          "infrastructure.broadbandAccess": 0,
+          "publicSafety.antiSocialBehaviourRate": 12,
+          "publicSafety.knifeCrimeRate": 5,
+          "environment.floodRisk": 18,
+          "environment.naturalDisasterPreparedness": 25,
+          "environment.nuclearSafety": 0,
+          "environment.energyTransitionProgress": 2,
+          "social.childPoverty": 42,
+          "social.housingAffordability": 12,
+          "social.roughSleeping": 10,
+          "social.workLifeBalance": 38,
+          "social.foreignWorkerIntegration": 45,
+          "social.genderEquality": 18,
+          "social.housingSupplyGrowth": 2.5,
+          "governance.debtToGdp": 28,
+          "governance.devolutionSatisfaction": 42,
+          "governance.roboticsAdoption": 0,
+          "governance.nationalPride": 68,
+          "governance.civilLiberties": 45,
+          "governance.militaryReadiness": 42,
+          "population.medianAge": 21,
+          "population.birthRate": 70,
+          "population.demographicDecline": 5,
+          "mediaInformation.stateMediaControl": 55,
+          "economic.medianIncome": 12700
+        },
+        "SUL": {
+          "economic.laborParticipation": 52,
+          "economic.matchingFriction": 6,
+          "economic.tradeBalance": -1.5,
+          "economic.productivityGrowth": 4.5,
+          "economic.rdIntensity": 0.2,
+          "economic.propertyValueIndex": 15,
+          "economic.commercialValueIndex": 18,
+          "economic.ruralRevitalization": 80,
+          "economic.foodSecurity": 58,
+          "economic.exportDependency": 15,
+          "economic.manufacturingCompetitiveness": 38,
+          "economic.regulatoryBurden": 65,
+          "economic.economicFreedom": 35,
+          "education.highSchoolGradRate": 20,
+          "education.universityEnrollment": 2,
+          "education.apprenticeshipRate": 0.5,
+          "education.academicPressure": 25,
+          "healthcare.uninsuredRate": 72,
+          "healthcare.nhsWaitingTime": 20,
+          "healthcare.affordabilityIndex": 30,
+          "healthcare.mentalHealthAccess": 8,
+          "healthcare.socialCareQuality": 15,
+          "healthcare.elderCareQuality": 15,
+          "infrastructure.transportEfficiency": 25,
+          "infrastructure.roadCondition": 22,
+          "environment.protectedLand": 1.1,
+          "infrastructure.powerGridReliability": 86,
+          "infrastructure.waterQuality": 45,
+          "infrastructure.broadbandAccess": 0,
+          "publicSafety.antiSocialBehaviourRate": 12,
+          "publicSafety.knifeCrimeRate": 5,
+          "environment.floodRisk": 18,
+          "environment.naturalDisasterPreparedness": 25,
+          "environment.nuclearSafety": 0,
+          "environment.energyTransitionProgress": 2,
+          "social.childPoverty": 45,
+          "social.housingAffordability": 12,
+          "social.roughSleeping": 10,
+          "social.workLifeBalance": 38,
+          "social.foreignWorkerIntegration": 62,
+          "social.genderEquality": 18,
+          "social.housingSupplyGrowth": 2.5,
+          "governance.debtToGdp": 28,
+          "governance.devolutionSatisfaction": 42,
+          "governance.roboticsAdoption": 0,
+          "governance.nationalPride": 68,
+          "governance.civilLiberties": 45,
+          "governance.militaryReadiness": 42,
+          "population.medianAge": 20,
+          "population.birthRate": 72,
+          "population.demographicDecline": 5,
+          "mediaInformation.stateMediaControl": 55,
+          "economic.medianIncome": 9800
+        }
+      }
+    }
+  },
+  "MILITARY_BRANCHES_BY_COUNTRY": {
+    "shape": "country-first",
+    "value": [
+      {
+        "id": "exercito",
+        "name": "Army",
+        "abbr": "EB",
+        "domain": "ground"
+      },
+      {
+        "id": "marinha",
+        "name": "Navy",
+        "abbr": "MB",
+        "domain": "naval"
+      },
+      {
+        "id": "aerea",
+        "name": "Air Force",
+        "abbr": "FAB",
+        "domain": "air"
+      }
+    ]
+  },
+  "MILITARY_COUNTRY_SCALE": {
+    "shape": "country-first",
+    "value": 1
+  },
+  "MONETARY_BASELINES": {
+    "shape": "country-first",
+    "value": {
+      "targetInflation": 4,
+      "neutralPrimeRate": 8
+    }
+  },
+  "MONETARY_BASELINES_1953": {
+    "shape": "country-first",
+    "value": {
+      "targetInflation": 4,
+      "neutralPrimeRate": 8
+    }
+  },
+  "MONETARY_BASELINES_1971": {
+    "shape": "country-first",
+    "value": {
+      "targetInflation": 12,
+      "neutralPrimeRate": 15
+    }
+  },
+  "MONETARY_BASELINES_1979": {
+    "shape": "country-first",
+    "value": {
+      "targetInflation": 12,
+      "neutralPrimeRate": 15
+    }
+  },
+  "MONETARY_BASELINES_1991": {
+    "shape": "country-first",
+    "value": {
+      "targetInflation": 12,
+      "neutralPrimeRate": 15
+    }
+  },
+  "NATIONAL_ADDRESS_NAME": {
+    "shape": "absent",
+    "value": null
+  },
+  "NATIONAL_IDENTITY": {
+    "shape": "country-first",
+    "value": {
+      "glyph": "BR",
+      "serif": "mono",
+      "motif": "starRing",
+      "name": "Brazil National Corporation",
+      "native": "Empresa Nacional do Brasil",
+      "registry": "República Federativa do Brasil · Patrimônio do Estado",
+      "ministry": "TESOURO NACIONAL",
+      "publicSeal": "REGISTRO PÚBLICO",
+      "hqCity": "Brasília",
+      "palette": ["#0f3b24", "#0b2a19", "#07180f"],
+      "accent": "#d4b13f",
+      "accentSoft": "#e8cf78",
+      "accentName": "Verde-amarelo"
+    }
+  },
+  "NATIONAL_POLICY_STATE_IDS": {
+    "shape": "country-first",
+    "value": "br_national"
+  },
+  "NATIONAL_STATS_IDENTITY": {
+    "shape": "absent",
+    "value": null
+  },
+  "NEUTRAL_FEDERAL_SALES_TAX_BY_COUNTRY": {
+    "shape": "absent",
+    "value": null
+  },
+  "NEUTRAL_STATE_SALES_TAX_BY_COUNTRY": {
+    "shape": "country-first",
+    "value": 5
+  },
+  "NON_PARTY_BUCKET_INDEPENDENT_BIAS_BY_COUNTRY": {
+    "shape": "absent",
+    "value": null
+  },
+  "NPP_CAPITAL_STATES": {
+    "shape": "country-first",
+    "value": "CENTRO_OESTE"
+  },
+  "ORDERS_OF_BATTLE": {
+    "shape": "country-first",
+    "value": [
+      {
+        "branchId": "exercito",
+        "type": "Infantry Division",
+        "count": 4
+      },
+      {
+        "branchId": "exercito",
+        "type": "Armored Division",
+        "count": 1
+      },
+      {
+        "branchId": "exercito",
+        "type": "Artillery Regiment",
+        "count": 1
+      },
+      {
+        "branchId": "marinha",
+        "type": "Frigate Squadron",
+        "count": 2
+      },
+      {
+        "branchId": "marinha",
+        "type": "Attack Submarine",
+        "count": 1
+      },
+      {
+        "branchId": "aerea",
+        "type": "Fighter Wing",
+        "count": 2
+      }
+    ]
+  },
+  "ORDERS_OF_BATTLE_BY_ERA": {
+    "shape": "absent",
+    "value": null
+  },
+  "PLAYER_PAYOUT_CAP_PER_TURN": {
+    "shape": "absent",
+    "value": null
+  },
+  "POLICY_TEXT": {
+    "shape": "country-first",
+    "value": {
+      "glyph": "§",
+      "serif": "mono",
+      "registry": "Code of National Law · Federative Republic of Brazil",
+      "title": "Direito Nacional",
+      "titleEn": "National Policy"
+    }
+  },
+  "POPULATION_ANCHOR_BUNDLES": {
+    "shape": "country-first",
+    "value": {
+      "2019-default": {
+        "NORTE": {
+          "medianAge": 28,
+          "birthRate": 51
+        },
+        "NORDESTE": {
+          "medianAge": 33.5,
+          "birthRate": 48.25
+        },
+        "CENTRO_OESTE": {
+          "medianAge": 33.5,
+          "birthRate": 48.25
+        },
+        "SUDESTE": {
+          "medianAge": 33.5,
+          "birthRate": 48.25
+        },
+        "SUL": {
+          "medianAge": 33.5,
+          "birthRate": 48.25
+        }
+      },
+      "1991-default": {
+        "NORTE": {
+          "medianAge": 19,
+          "birthRate": 82
+        },
+        "NORDESTE": {
+          "medianAge": 20,
+          "birthRate": 80
+        },
+        "CENTRO_OESTE": {
+          "medianAge": 21,
+          "birthRate": 74
+        },
+        "SUDESTE": {
+          "medianAge": 23,
+          "birthRate": 68
+        },
+        "SUL": {
+          "medianAge": 23,
+          "birthRate": 66
+        }
+      }
+    }
+  },
+  "RAW_BUNDLES": {
+    "shape": "country-first",
+    "value": [
+      {
+        "_id": "NORTE",
+        "countryId": "BR",
+        "economic": {
+          "unemploymentRate": {
+            "value": 9.5
+          },
+          "medianIncome": {
+            "value": 22000
+          },
+          "gdpGrowth": {
+            "value": 3.8
+          },
+          "povertyRate": {
+            "value": 42
+          },
+          "costOfLiving": {
+            "value": 88
+          },
+          "smallBusinessFormation": {
+            "value": 5.5
+          },
+          "laborParticipation": {
+            "value": 64
+          },
+          "matchingFriction": {
+            "value": 4.5
+          },
+          "tradeBalance": {
+            "value": 1.2
+          },
+          "productivityGrowth": {
+            "value": 0.8
+          },
+          "rdIntensity": {
+            "value": 1.2
+          },
+          "propertyValueIndex": {
+            "value": 100
+          },
+          "commercialValueIndex": {
+            "value": 100
+          },
+          "ruralRevitalization": {
+            "value": 50.8
+          },
+          "foodSecurity": {
+            "value": 55
+          },
+          "exportDependency": {
+            "value": 35
+          },
+          "manufacturingCompetitiveness": {
+            "value": 58
+          },
+          "wageGrowth": {
+            "value": 3.78
+          },
+          "tradeGrowth": {
+            "value": 2.46
+          },
+          "regulatoryBurden": {
+            "value": 50
+          },
+          "economicFreedom": {
+            "value": 46.25
+          }
+        },
+        "education": {
+          "testPerformance": {
+            "value": 68
+          },
+          "educationSpending": {
+            "value": 4200
+          },
+          "literacyRate": {
+            "value": 94
+          },
+          "workforceSkill": {
+            "value": 58
+          },
+          "highSchoolGradRate": {
+            "value": 88
+          },
+          "gcseAttainment": {
+            "value": 44.2
+          },
+          "universityEnrollment": {
+            "value": 55
+          },
+          "apprenticeshipRate": {
+            "value": 2.5
+          },
+          "academicPressure": {
+            "value": 50
+          }
+        },
+        "healthcare": {
+          "physicianRate": {
+            "value": 2.3
+          },
+          "lifeExpectancy": {
+            "value": 72
+          },
+          "preventableMortality": {
+            "value": 185
+          },
+          "publicHealthPreparedness": {
+            "value": 58
+          },
+          "mentalHealthAccess": {
+            "value": 38
+          },
+          "uninsuredRate": {
+            "value": 8
+          },
+          "affordabilityIndex": {
+            "value": 65
+          },
+          "nhsWaitingTime": {
+            "value": 18
+          },
+          "socialCareQuality": {
+            "value": 55
+          },
+          "elderCareQuality": {
+            "value": 52
+          }
+        },
+        "infrastructure": {
+          "roadCondition": {
+            "value": 48
+          },
+          "broadbandAccess": {
+            "value": 78
+          },
+          "publicTransit": {
+            "value": 42
+          },
+          "waterQuality": {
+            "value": 72
+          },
+          "powerGridReliability": {
+            "value": 98.5
+          },
+          "infrastructureInvestmentGap": {
+            "value": 45
+          },
+          "transportEfficiency": {
+            "value": 42
+          }
+        },
+        "publicSafety": {
+          "crimeRate": {
+            "value": 32000
+          },
+          "violentCrimeRate": {
+            "value": 2200
+          },
+          "policePerCapita": {
+            "value": 2.8
+          },
+          "incarcerationRate": {
+            "value": 368
+          },
+          "recidivismRate": {
+            "value": 52
+          },
+          "publicSafetyConfidence": {
+            "value": 32
+          },
+          "antiSocialBehaviourRate": {
+            "value": 25
+          },
+          "knifeCrimeRate": {
+            "value": 10
+          },
+          "firearmRights": {
+            "value": 30
+          }
+        },
+        "environment": {
+          "airQuality": {
+            "value": 62
+          },
+          "renewableEnergy": {
+            "value": 92
+          },
+          "carbonEmissions": {
+            "value": 2.4
+          },
+          "recyclingRate": {
+            "value": 18
+          },
+          "climateResilience": {
+            "value": 52
+          },
+          "protectedLand": {
+            "value": 28
+          },
+          "floodRisk": {
+            "value": 11.76
+          },
+          "naturalDisasterPreparedness": {
+            "value": 52
+          },
+          "nuclearSafety": {
+            "value": 65
+          },
+          "energyTransitionProgress": {
+            "value": 90
+          }
+        },
+        "social": {
+          "socialMobility": {
+            "value": 38
+          },
+          "incomeInequality": {
+            "value": 52
+          },
+          "homelessnessRate": {
+            "value": 14
+          },
+          "foodInsecurity": {
+            "value": 22
+          },
+          "civicParticipation": {
+            "value": 72
+          },
+          "socialCohesion": {
+            "value": 44
+          },
+          "housingAffordability": {
+            "value": 36
+          },
+          "housingSupplyGrowth": {
+            "value": 1.6
+          },
+          "childPoverty": {
+            "value": 48.3
+          },
+          "roughSleeping": {
+            "value": 2.8
+          },
+          "workLifeBalance": {
+            "value": 57
+          },
+          "foreignWorkerIntegration": {
+            "value": 50.3
+          },
+          "genderEquality": {
+            "value": 48
+          }
+        },
+        "governance": {
+          "governmentTransparency": {
+            "value": 42
+          },
+          "budgetBalance": {
+            "value": -6.5
+          },
+          "debtToGdp": {
+            "value": 74
+          },
+          "corruptionIndex": {
+            "value": 63
+          },
+          "voterTurnout": {
+            "value": 79
+          },
+          "publicTrust": {
+            "value": 28
+          },
+          "devolutionSatisfaction": {
+            "value": 28
+          },
+          "roboticsAdoption": {
+            "value": 58
+          },
+          "coDeterminationQuality": {
+            "value": 38
+          },
+          "militaryReadiness": {
+            "value": 50
+          },
+          "nationalPride": {
+            "value": 54.6
+          },
+          "civilLiberties": {
+            "value": 41.31999999999999
+          },
+          "borderSecurity": {
+            "value": 55
+          }
+        },
+        "population": {
+          "populationGrowth": {
+            "value": 0.6
+          },
+          "urbanizationRate": {
+            "value": 76
+          },
+          "medianAge": {
+            "value": 28
+          },
+          "migrationRate": {
+            "value": 0.1
+          },
+          "demographicDecline": {
+            "value": 30.800000000000004
+          },
+          "birthRate": {
+            "value": 51
+          }
+        },
+        "mediaInformation": {
+          "mediaPolarization": {
+            "value": 68
+          },
+          "disinformationRisk": {
+            "value": 72
+          },
+          "pressFreedom": {
+            "value": 52
+          },
+          "socialMediaSentiment": {
+            "value": 45
+          },
+          "newsTrust": {
+            "value": 38
+          },
+          "bbcTrust": {
+            "value": 38
+          },
+          "stateMediaControl": {
+            "value": 43.2
+          }
+        },
+        "lastUpdated": "2026-09-18T17:48:01.888Z"
+      },
+      {
+        "_id": "NORDESTE",
+        "countryId": "BR",
+        "economic": {
+          "unemploymentRate": {
+            "value": 12.4
+          },
+          "medianIncome": {
+            "value": 18000
+          },
+          "gdpGrowth": {
+            "value": 2.2
+          },
+          "povertyRate": {
+            "value": 48
+          },
+          "costOfLiving": {
+            "value": 80
+          },
+          "smallBusinessFormation": {
+            "value": 5.5
+          },
+          "laborParticipation": {
+            "value": 64
+          },
+          "matchingFriction": {
+            "value": 4.5
+          },
+          "tradeBalance": {
+            "value": 1.2
+          },
+          "productivityGrowth": {
+            "value": 0.8
+          },
+          "rdIntensity": {
+            "value": 1.2
+          },
+          "propertyValueIndex": {
+            "value": 100
+          },
+          "commercialValueIndex": {
+            "value": 100
+          },
+          "ruralRevitalization": {
+            "value": 49.9
+          },
+          "foodSecurity": {
+            "value": 55
+          },
+          "exportDependency": {
+            "value": 35
+          },
+          "manufacturingCompetitiveness": {
+            "value": 58
+          },
+          "wageGrowth": {
+            "value": 2.8200000000000003
+          },
+          "tradeGrowth": {
+            "value": 2.46
+          },
+          "regulatoryBurden": {
+            "value": 50
+          },
+          "economicFreedom": {
+            "value": 46.25
+          }
+        },
+        "education": {
+          "testPerformance": {
+            "value": 68
+          },
+          "educationSpending": {
+            "value": 4200
+          },
+          "literacyRate": {
+            "value": 94
+          },
+          "workforceSkill": {
+            "value": 58
+          },
+          "highSchoolGradRate": {
+            "value": 88
+          },
+          "gcseAttainment": {
+            "value": 44.2
+          },
+          "universityEnrollment": {
+            "value": 55
+          },
+          "apprenticeshipRate": {
+            "value": 2.5
+          },
+          "academicPressure": {
+            "value": 50
+          }
+        },
+        "healthcare": {
+          "physicianRate": {
+            "value": 2.3
+          },
+          "lifeExpectancy": {
+            "value": 72.5
+          },
+          "preventableMortality": {
+            "value": 185
+          },
+          "publicHealthPreparedness": {
+            "value": 58
+          },
+          "mentalHealthAccess": {
+            "value": 38
+          },
+          "uninsuredRate": {
+            "value": 8
+          },
+          "affordabilityIndex": {
+            "value": 65
+          },
+          "nhsWaitingTime": {
+            "value": 18
+          },
+          "socialCareQuality": {
+            "value": 55
+          },
+          "elderCareQuality": {
+            "value": 52.5
+          }
+        },
+        "infrastructure": {
+          "roadCondition": {
+            "value": 48
+          },
+          "broadbandAccess": {
+            "value": 78
+          },
+          "publicTransit": {
+            "value": 42
+          },
+          "waterQuality": {
+            "value": 72
+          },
+          "powerGridReliability": {
+            "value": 98.5
+          },
+          "infrastructureInvestmentGap": {
+            "value": 45
+          },
+          "transportEfficiency": {
+            "value": 42
+          }
+        },
+        "publicSafety": {
+          "crimeRate": {
+            "value": 35000
+          },
+          "violentCrimeRate": {
+            "value": 2200
+          },
+          "policePerCapita": {
+            "value": 2.8
+          },
+          "incarcerationRate": {
+            "value": 368
+          },
+          "recidivismRate": {
+            "value": 52
+          },
+          "publicSafetyConfidence": {
+            "value": 32
+          },
+          "antiSocialBehaviourRate": {
+            "value": 25
+          },
+          "knifeCrimeRate": {
+            "value": 10
+          },
+          "firearmRights": {
+            "value": 30
+          }
+        },
+        "environment": {
+          "airQuality": {
+            "value": 62
+          },
+          "renewableEnergy": {
+            "value": 82
+          },
+          "carbonEmissions": {
+            "value": 2.4
+          },
+          "recyclingRate": {
+            "value": 18
+          },
+          "climateResilience": {
+            "value": 52
+          },
+          "protectedLand": {
+            "value": 28
+          },
+          "floodRisk": {
+            "value": 11.76
+          },
+          "naturalDisasterPreparedness": {
+            "value": 52
+          },
+          "nuclearSafety": {
+            "value": 65
+          },
+          "energyTransitionProgress": {
+            "value": 90
+          }
+        },
+        "social": {
+          "socialMobility": {
+            "value": 38
+          },
+          "incomeInequality": {
+            "value": 52
+          },
+          "homelessnessRate": {
+            "value": 14
+          },
+          "foodInsecurity": {
+            "value": 22
+          },
+          "civicParticipation": {
+            "value": 72
+          },
+          "socialCohesion": {
+            "value": 44
+          },
+          "housingAffordability": {
+            "value": 28
+          },
+          "housingSupplyGrowth": {
+            "value": 1.6
+          },
+          "childPoverty": {
+            "value": 50
+          },
+          "roughSleeping": {
+            "value": 2.8
+          },
+          "workLifeBalance": {
+            "value": 45.4
+          },
+          "foreignWorkerIntegration": {
+            "value": 50.3
+          },
+          "genderEquality": {
+            "value": 48
+          }
+        },
+        "governance": {
+          "governmentTransparency": {
+            "value": 42
+          },
+          "budgetBalance": {
+            "value": -6.5
+          },
+          "debtToGdp": {
+            "value": 74
+          },
+          "corruptionIndex": {
+            "value": 63
+          },
+          "voterTurnout": {
+            "value": 79
+          },
+          "publicTrust": {
+            "value": 28
+          },
+          "devolutionSatisfaction": {
+            "value": 28
+          },
+          "roboticsAdoption": {
+            "value": 58
+          },
+          "coDeterminationQuality": {
+            "value": 38
+          },
+          "militaryReadiness": {
+            "value": 50
+          },
+          "nationalPride": {
+            "value": 51.4
+          },
+          "civilLiberties": {
+            "value": 41.31999999999999
+          },
+          "borderSecurity": {
+            "value": 55
+          }
+        },
+        "population": {
+          "populationGrowth": {
+            "value": 0.6
+          },
+          "urbanizationRate": {
+            "value": 78
+          },
+          "medianAge": {
+            "value": 33.5
+          },
+          "migrationRate": {
+            "value": 0.1
+          },
+          "demographicDecline": {
+            "value": 36.85
+          },
+          "birthRate": {
+            "value": 48.25
+          }
+        },
+        "mediaInformation": {
+          "mediaPolarization": {
+            "value": 68
+          },
+          "disinformationRisk": {
+            "value": 72
+          },
+          "pressFreedom": {
+            "value": 52
+          },
+          "socialMediaSentiment": {
+            "value": 45
+          },
+          "newsTrust": {
+            "value": 38
+          },
+          "bbcTrust": {
+            "value": 38
+          },
+          "stateMediaControl": {
+            "value": 43.2
+          }
+        },
+        "lastUpdated": "2026-09-18T17:48:01.888Z"
+      },
+      {
+        "_id": "CENTRO_OESTE",
+        "countryId": "BR",
+        "economic": {
+          "unemploymentRate": {
+            "value": 6.8
+          },
+          "medianIncome": {
+            "value": 34000
+          },
+          "gdpGrowth": {
+            "value": 4.2
+          },
+          "povertyRate": {
+            "value": 20
+          },
+          "costOfLiving": {
+            "value": 104
+          },
+          "smallBusinessFormation": {
+            "value": 7
+          },
+          "laborParticipation": {
+            "value": 64
+          },
+          "matchingFriction": {
+            "value": 4.5
+          },
+          "tradeBalance": {
+            "value": 1.2
+          },
+          "productivityGrowth": {
+            "value": 0.8
+          },
+          "rdIntensity": {
+            "value": 1.2
+          },
+          "propertyValueIndex": {
+            "value": 100
+          },
+          "commercialValueIndex": {
+            "value": 100
+          },
+          "ruralRevitalization": {
+            "value": 44.5
+          },
+          "foodSecurity": {
+            "value": 55
+          },
+          "exportDependency": {
+            "value": 35
+          },
+          "manufacturingCompetitiveness": {
+            "value": 58
+          },
+          "wageGrowth": {
+            "value": 4.02
+          },
+          "tradeGrowth": {
+            "value": 2.46
+          },
+          "regulatoryBurden": {
+            "value": 50
+          },
+          "economicFreedom": {
+            "value": 48.5
+          }
+        },
+        "education": {
+          "testPerformance": {
+            "value": 68
+          },
+          "educationSpending": {
+            "value": 4200
+          },
+          "literacyRate": {
+            "value": 94
+          },
+          "workforceSkill": {
+            "value": 58
+          },
+          "highSchoolGradRate": {
+            "value": 88
+          },
+          "gcseAttainment": {
+            "value": 44.2
+          },
+          "universityEnrollment": {
+            "value": 55
+          },
+          "apprenticeshipRate": {
+            "value": 2.5
+          },
+          "academicPressure": {
+            "value": 50
+          }
+        },
+        "healthcare": {
+          "physicianRate": {
+            "value": 2.3
+          },
+          "lifeExpectancy": {
+            "value": 74.5
+          },
+          "preventableMortality": {
+            "value": 185
+          },
+          "publicHealthPreparedness": {
+            "value": 58
+          },
+          "mentalHealthAccess": {
+            "value": 38
+          },
+          "uninsuredRate": {
+            "value": 8
+          },
+          "affordabilityIndex": {
+            "value": 65
+          },
+          "nhsWaitingTime": {
+            "value": 18
+          },
+          "socialCareQuality": {
+            "value": 55
+          },
+          "elderCareQuality": {
+            "value": 54.5
+          }
+        },
+        "infrastructure": {
+          "roadCondition": {
+            "value": 48
+          },
+          "broadbandAccess": {
+            "value": 78
+          },
+          "publicTransit": {
+            "value": 42
+          },
+          "waterQuality": {
+            "value": 72
+          },
+          "powerGridReliability": {
+            "value": 98.5
+          },
+          "infrastructureInvestmentGap": {
+            "value": 45
+          },
+          "transportEfficiency": {
+            "value": 42
+          }
+        },
+        "publicSafety": {
+          "crimeRate": {
+            "value": 25000
+          },
+          "violentCrimeRate": {
+            "value": 2200
+          },
+          "policePerCapita": {
+            "value": 2.8
+          },
+          "incarcerationRate": {
+            "value": 368
+          },
+          "recidivismRate": {
+            "value": 52
+          },
+          "publicSafetyConfidence": {
+            "value": 32
+          },
+          "antiSocialBehaviourRate": {
+            "value": 25
+          },
+          "knifeCrimeRate": {
+            "value": 10
+          },
+          "firearmRights": {
+            "value": 30
+          }
+        },
+        "environment": {
+          "airQuality": {
+            "value": 62
+          },
+          "renewableEnergy": {
+            "value": 82
+          },
+          "carbonEmissions": {
+            "value": 2.4
+          },
+          "recyclingRate": {
+            "value": 18
+          },
+          "climateResilience": {
+            "value": 52
+          },
+          "protectedLand": {
+            "value": 28
+          },
+          "floodRisk": {
+            "value": 11.76
+          },
+          "naturalDisasterPreparedness": {
+            "value": 52
+          },
+          "nuclearSafety": {
+            "value": 65
+          },
+          "energyTransitionProgress": {
+            "value": 90
+          }
+        },
+        "social": {
+          "socialMobility": {
+            "value": 38
+          },
+          "incomeInequality": {
+            "value": 52
+          },
+          "homelessnessRate": {
+            "value": 14
+          },
+          "foodInsecurity": {
+            "value": 22
+          },
+          "civicParticipation": {
+            "value": 72
+          },
+          "socialCohesion": {
+            "value": 44
+          },
+          "housingAffordability": {
+            "value": 36
+          },
+          "housingSupplyGrowth": {
+            "value": 1.6
+          },
+          "childPoverty": {
+            "value": 23
+          },
+          "roughSleeping": {
+            "value": 2.8
+          },
+          "workLifeBalance": {
+            "value": 67.8
+          },
+          "foreignWorkerIntegration": {
+            "value": 50.3
+          },
+          "genderEquality": {
+            "value": 48
+          }
+        },
+        "governance": {
+          "governmentTransparency": {
+            "value": 42
+          },
+          "budgetBalance": {
+            "value": -6.5
+          },
+          "debtToGdp": {
+            "value": 74
+          },
+          "corruptionIndex": {
+            "value": 63
+          },
+          "voterTurnout": {
+            "value": 79
+          },
+          "publicTrust": {
+            "value": 28
+          },
+          "devolutionSatisfaction": {
+            "value": 28
+          },
+          "roboticsAdoption": {
+            "value": 58
+          },
+          "coDeterminationQuality": {
+            "value": 38
+          },
+          "militaryReadiness": {
+            "value": 50
+          },
+          "nationalPride": {
+            "value": 55.4
+          },
+          "civilLiberties": {
+            "value": 41.31999999999999
+          },
+          "borderSecurity": {
+            "value": 55
+          }
+        },
+        "population": {
+          "populationGrowth": {
+            "value": 0.6
+          },
+          "urbanizationRate": {
+            "value": 90
+          },
+          "medianAge": {
+            "value": 33.5
+          },
+          "migrationRate": {
+            "value": 0.1
+          },
+          "demographicDecline": {
+            "value": 36.85
+          },
+          "birthRate": {
+            "value": 48.25
+          }
+        },
+        "mediaInformation": {
+          "mediaPolarization": {
+            "value": 68
+          },
+          "disinformationRisk": {
+            "value": 72
+          },
+          "pressFreedom": {
+            "value": 52
+          },
+          "socialMediaSentiment": {
+            "value": 45
+          },
+          "newsTrust": {
+            "value": 38
+          },
+          "bbcTrust": {
+            "value": 38
+          },
+          "stateMediaControl": {
+            "value": 43.2
+          }
+        },
+        "lastUpdated": "2026-09-18T17:48:01.888Z"
+      },
+      {
+        "_id": "SUDESTE",
+        "countryId": "BR",
+        "economic": {
+          "unemploymentRate": {
+            "value": 7.8
+          },
+          "medianIncome": {
+            "value": 38000
+          },
+          "gdpGrowth": {
+            "value": 3.2
+          },
+          "povertyRate": {
+            "value": 22
+          },
+          "costOfLiving": {
+            "value": 115
+          },
+          "smallBusinessFormation": {
+            "value": 5.5
+          },
+          "laborParticipation": {
+            "value": 64
+          },
+          "matchingFriction": {
+            "value": 4.5
+          },
+          "tradeBalance": {
+            "value": 1.2
+          },
+          "productivityGrowth": {
+            "value": 0.8
+          },
+          "rdIntensity": {
+            "value": 1.2
+          },
+          "propertyValueIndex": {
+            "value": 100
+          },
+          "commercialValueIndex": {
+            "value": 100
+          },
+          "ruralRevitalization": {
+            "value": 42.25
+          },
+          "foodSecurity": {
+            "value": 55
+          },
+          "exportDependency": {
+            "value": 35
+          },
+          "manufacturingCompetitiveness": {
+            "value": 58
+          },
+          "wageGrowth": {
+            "value": 3.42
+          },
+          "tradeGrowth": {
+            "value": 2.46
+          },
+          "regulatoryBurden": {
+            "value": 50
+          },
+          "economicFreedom": {
+            "value": 46.25
+          }
+        },
+        "education": {
+          "testPerformance": {
+            "value": 74
+          },
+          "educationSpending": {
+            "value": 4200
+          },
+          "literacyRate": {
+            "value": 94
+          },
+          "workforceSkill": {
+            "value": 58
+          },
+          "highSchoolGradRate": {
+            "value": 88
+          },
+          "gcseAttainment": {
+            "value": 48.1
+          },
+          "universityEnrollment": {
+            "value": 55
+          },
+          "apprenticeshipRate": {
+            "value": 2.5
+          },
+          "academicPressure": {
+            "value": 50
+          }
+        },
+        "healthcare": {
+          "physicianRate": {
+            "value": 2.3
+          },
+          "lifeExpectancy": {
+            "value": 75.8
+          },
+          "preventableMortality": {
+            "value": 185
+          },
+          "publicHealthPreparedness": {
+            "value": 58
+          },
+          "mentalHealthAccess": {
+            "value": 38
+          },
+          "uninsuredRate": {
+            "value": 8
+          },
+          "affordabilityIndex": {
+            "value": 65
+          },
+          "nhsWaitingTime": {
+            "value": 18
+          },
+          "socialCareQuality": {
+            "value": 55
+          },
+          "elderCareQuality": {
+            "value": 55.8
+          }
+        },
+        "infrastructure": {
+          "roadCondition": {
+            "value": 48
+          },
+          "broadbandAccess": {
+            "value": 78
+          },
+          "publicTransit": {
+            "value": 58
+          },
+          "waterQuality": {
+            "value": 72
+          },
+          "powerGridReliability": {
+            "value": 98.5
+          },
+          "infrastructureInvestmentGap": {
+            "value": 45
+          },
+          "transportEfficiency": {
+            "value": 58
+          }
+        },
+        "publicSafety": {
+          "crimeRate": {
+            "value": 22000
+          },
+          "violentCrimeRate": {
+            "value": 2200
+          },
+          "policePerCapita": {
+            "value": 2.8
+          },
+          "incarcerationRate": {
+            "value": 368
+          },
+          "recidivismRate": {
+            "value": 52
+          },
+          "publicSafetyConfidence": {
+            "value": 32
+          },
+          "antiSocialBehaviourRate": {
+            "value": 25
+          },
+          "knifeCrimeRate": {
+            "value": 10
+          },
+          "firearmRights": {
+            "value": 30
+          }
+        },
+        "environment": {
+          "airQuality": {
+            "value": 62
+          },
+          "renewableEnergy": {
+            "value": 82
+          },
+          "carbonEmissions": {
+            "value": 2.4
+          },
+          "recyclingRate": {
+            "value": 18
+          },
+          "climateResilience": {
+            "value": 52
+          },
+          "protectedLand": {
+            "value": 28
+          },
+          "floodRisk": {
+            "value": 11.76
+          },
+          "naturalDisasterPreparedness": {
+            "value": 52
+          },
+          "nuclearSafety": {
+            "value": 65
+          },
+          "energyTransitionProgress": {
+            "value": 90
+          }
+        },
+        "social": {
+          "socialMobility": {
+            "value": 38
+          },
+          "incomeInequality": {
+            "value": 52
+          },
+          "homelessnessRate": {
+            "value": 14
+          },
+          "foodInsecurity": {
+            "value": 22
+          },
+          "civicParticipation": {
+            "value": 72
+          },
+          "socialCohesion": {
+            "value": 44
+          },
+          "housingAffordability": {
+            "value": 36
+          },
+          "housingSupplyGrowth": {
+            "value": 1.6
+          },
+          "childPoverty": {
+            "value": 25.299999999999997
+          },
+          "roughSleeping": {
+            "value": 2.8
+          },
+          "workLifeBalance": {
+            "value": 63.8
+          },
+          "foreignWorkerIntegration": {
+            "value": 50.3
+          },
+          "genderEquality": {
+            "value": 48
+          }
+        },
+        "governance": {
+          "governmentTransparency": {
+            "value": 42
+          },
+          "budgetBalance": {
+            "value": -6.5
+          },
+          "debtToGdp": {
+            "value": 74
+          },
+          "corruptionIndex": {
+            "value": 63
+          },
+          "voterTurnout": {
+            "value": 79
+          },
+          "publicTrust": {
+            "value": 28
+          },
+          "devolutionSatisfaction": {
+            "value": 28
+          },
+          "roboticsAdoption": {
+            "value": 58
+          },
+          "coDeterminationQuality": {
+            "value": 38
+          },
+          "militaryReadiness": {
+            "value": 50
+          },
+          "nationalPride": {
+            "value": 53.4
+          },
+          "civilLiberties": {
+            "value": 41.31999999999999
+          },
+          "borderSecurity": {
+            "value": 55
+          }
+        },
+        "population": {
+          "populationGrowth": {
+            "value": 0.6
+          },
+          "urbanizationRate": {
+            "value": 95
+          },
+          "medianAge": {
+            "value": 33.5
+          },
+          "migrationRate": {
+            "value": 0.1
+          },
+          "demographicDecline": {
+            "value": 36.85
+          },
+          "birthRate": {
+            "value": 48.25
+          }
+        },
+        "mediaInformation": {
+          "mediaPolarization": {
+            "value": 68
+          },
+          "disinformationRisk": {
+            "value": 72
+          },
+          "pressFreedom": {
+            "value": 52
+          },
+          "socialMediaSentiment": {
+            "value": 45
+          },
+          "newsTrust": {
+            "value": 38
+          },
+          "bbcTrust": {
+            "value": 38
+          },
+          "stateMediaControl": {
+            "value": 43.2
+          }
+        },
+        "lastUpdated": "2026-09-18T17:48:01.888Z"
+      },
+      {
+        "_id": "SUL",
+        "countryId": "BR",
+        "economic": {
+          "unemploymentRate": {
+            "value": 5.9
+          },
+          "medianIncome": {
+            "value": 36000
+          },
+          "gdpGrowth": {
+            "value": 3.5
+          },
+          "povertyRate": {
+            "value": 14
+          },
+          "costOfLiving": {
+            "value": 108
+          },
+          "smallBusinessFormation": {
+            "value": 5.5
+          },
+          "laborParticipation": {
+            "value": 64
+          },
+          "matchingFriction": {
+            "value": 4.5
+          },
+          "tradeBalance": {
+            "value": 1.2
+          },
+          "productivityGrowth": {
+            "value": 0.8
+          },
+          "rdIntensity": {
+            "value": 1.2
+          },
+          "propertyValueIndex": {
+            "value": 100
+          },
+          "commercialValueIndex": {
+            "value": 100
+          },
+          "ruralRevitalization": {
+            "value": 46.3
+          },
+          "foodSecurity": {
+            "value": 55
+          },
+          "exportDependency": {
+            "value": 35
+          },
+          "manufacturingCompetitiveness": {
+            "value": 58
+          },
+          "wageGrowth": {
+            "value": 3.6
+          },
+          "tradeGrowth": {
+            "value": 2.46
+          },
+          "regulatoryBurden": {
+            "value": 50
+          },
+          "economicFreedom": {
+            "value": 46.25
+          }
+        },
+        "education": {
+          "testPerformance": {
+            "value": 76
+          },
+          "educationSpending": {
+            "value": 4200
+          },
+          "literacyRate": {
+            "value": 94
+          },
+          "workforceSkill": {
+            "value": 58
+          },
+          "highSchoolGradRate": {
+            "value": 88
+          },
+          "gcseAttainment": {
+            "value": 49.4
+          },
+          "universityEnrollment": {
+            "value": 55
+          },
+          "apprenticeshipRate": {
+            "value": 2.5
+          },
+          "academicPressure": {
+            "value": 50
+          }
+        },
+        "healthcare": {
+          "physicianRate": {
+            "value": 2.3
+          },
+          "lifeExpectancy": {
+            "value": 76.8
+          },
+          "preventableMortality": {
+            "value": 185
+          },
+          "publicHealthPreparedness": {
+            "value": 58
+          },
+          "mentalHealthAccess": {
+            "value": 38
+          },
+          "uninsuredRate": {
+            "value": 8
+          },
+          "affordabilityIndex": {
+            "value": 65
+          },
+          "nhsWaitingTime": {
+            "value": 18
+          },
+          "socialCareQuality": {
+            "value": 55
+          },
+          "elderCareQuality": {
+            "value": 56.8
+          }
+        },
+        "infrastructure": {
+          "roadCondition": {
+            "value": 48
+          },
+          "broadbandAccess": {
+            "value": 78
+          },
+          "publicTransit": {
+            "value": 42
+          },
+          "waterQuality": {
+            "value": 72
+          },
+          "powerGridReliability": {
+            "value": 98.5
+          },
+          "infrastructureInvestmentGap": {
+            "value": 45
+          },
+          "transportEfficiency": {
+            "value": 42
+          }
+        },
+        "publicSafety": {
+          "crimeRate": {
+            "value": 18000
+          },
+          "violentCrimeRate": {
+            "value": 2200
+          },
+          "policePerCapita": {
+            "value": 2.8
+          },
+          "incarcerationRate": {
+            "value": 368
+          },
+          "recidivismRate": {
+            "value": 52
+          },
+          "publicSafetyConfidence": {
+            "value": 32
+          },
+          "antiSocialBehaviourRate": {
+            "value": 22.5
+          },
+          "knifeCrimeRate": {
+            "value": 10
+          },
+          "firearmRights": {
+            "value": 30
+          }
+        },
+        "environment": {
+          "airQuality": {
+            "value": 62
+          },
+          "renewableEnergy": {
+            "value": 82
+          },
+          "carbonEmissions": {
+            "value": 2.4
+          },
+          "recyclingRate": {
+            "value": 18
+          },
+          "climateResilience": {
+            "value": 52
+          },
+          "protectedLand": {
+            "value": 28
+          },
+          "floodRisk": {
+            "value": 11.76
+          },
+          "naturalDisasterPreparedness": {
+            "value": 52
+          },
+          "nuclearSafety": {
+            "value": 65
+          },
+          "energyTransitionProgress": {
+            "value": 90
+          }
+        },
+        "social": {
+          "socialMobility": {
+            "value": 38
+          },
+          "incomeInequality": {
+            "value": 52
+          },
+          "homelessnessRate": {
+            "value": 14
+          },
+          "foodInsecurity": {
+            "value": 22
+          },
+          "civicParticipation": {
+            "value": 72
+          },
+          "socialCohesion": {
+            "value": 56
+          },
+          "housingAffordability": {
+            "value": 36
+          },
+          "housingSupplyGrowth": {
+            "value": 1.6
+          },
+          "childPoverty": {
+            "value": 16.099999999999998
+          },
+          "roughSleeping": {
+            "value": 2.8
+          },
+          "workLifeBalance": {
+            "value": 71.4
+          },
+          "foreignWorkerIntegration": {
+            "value": 50.3
+          },
+          "genderEquality": {
+            "value": 48
+          }
+        },
+        "governance": {
+          "governmentTransparency": {
+            "value": 42
+          },
+          "budgetBalance": {
+            "value": -6.5
+          },
+          "debtToGdp": {
+            "value": 74
+          },
+          "corruptionIndex": {
+            "value": 63
+          },
+          "voterTurnout": {
+            "value": 79
+          },
+          "publicTrust": {
+            "value": 28
+          },
+          "devolutionSatisfaction": {
+            "value": 28
+          },
+          "roboticsAdoption": {
+            "value": 58
+          },
+          "coDeterminationQuality": {
+            "value": 38
+          },
+          "militaryReadiness": {
+            "value": 50
+          },
+          "nationalPride": {
+            "value": 54
+          },
+          "civilLiberties": {
+            "value": 41.31999999999999
+          },
+          "borderSecurity": {
+            "value": 55
+          }
+        },
+        "population": {
+          "populationGrowth": {
+            "value": 0.6
+          },
+          "urbanizationRate": {
+            "value": 86
+          },
+          "medianAge": {
+            "value": 33.5
+          },
+          "migrationRate": {
+            "value": 0.1
+          },
+          "demographicDecline": {
+            "value": 36.85
+          },
+          "birthRate": {
+            "value": 48.25
+          }
+        },
+        "mediaInformation": {
+          "mediaPolarization": {
+            "value": 68
+          },
+          "disinformationRisk": {
+            "value": 72
+          },
+          "pressFreedom": {
+            "value": 52
+          },
+          "socialMediaSentiment": {
+            "value": 45
+          },
+          "newsTrust": {
+            "value": 38
+          },
+          "bbcTrust": {
+            "value": 38
+          },
+          "stateMediaControl": {
+            "value": 43.2
+          }
+        },
+        "lastUpdated": "2026-09-18T17:48:01.888Z"
+      }
+    ]
+  },
+  "REGIONAL_BILL_ASSENT_OFFICE_KEY": {
+    "shape": "absent",
+    "value": null
+  },
+  "REGION_CENSUS_LABELS": {
+    "shape": "country-first",
+    "value": {
+      "cardTitles": {
+        "ethnicity": "Race / Color (Cor/Raça)",
+        "age": "Age Distribution",
+        "education": "Education (Highest)",
+        "income": "Household Income",
+        "urbanization": "Urbanization"
+      },
+      "ethnicity": {
+        "branco": "Branco (White)",
+        "pardo": "Pardo (Mixed)",
+        "preto": "Preto (Black)",
+        "amarelo": "Amarelo (Asian)",
+        "indigena": "Indígena"
+      },
+      "age": {
+        "young": "Young (18-29)",
+        "mid": "Mid (30-44)",
+        "mature": "Mature (45-64)",
+        "senior": "Senior (65+)"
+      },
+      "education": {
+        "fundamental": "Fundamental",
+        "medio": "Ensino Médio",
+        "superior": "Ensino Superior"
+      },
+      "income": {
+        "low": "Lower income",
+        "middle": "Middle income",
+        "high": "Upper income"
+      },
+      "urbanization": {
+        "urban": "Urban",
+        "suburban": "Peri-urban",
+        "rural": "Rural"
+      }
+    }
+  },
+  "REGION_DEMOGRAPHIC_CATEGORY_IDS": {
+    "shape": "country-first",
+    "value": ["br_voterGroups"]
+  },
+  "REGION_NAME_MAPS": {
+    "shape": "country-first",
+    "value": {
+      "NORTE": "Norte",
+      "NORDESTE": "Nordeste",
+      "CENTRO_OESTE": "Centro-Oeste",
+      "SUDESTE": "Sudeste",
+      "SUL": "Sul"
+    }
+  },
+  "REGION_ROSTERS": {
+    "shape": "function-valued",
+    "value": null,
+    "functionKeys": ["1953", "1979", "1991", "1999", "2007", "2019", "2023"]
+  },
+  "REP_ECON": {
+    "shape": "absent",
+    "value": null
+  },
+  "SOVEREIGN_CORP_LEGAL_STRUCTURE": {
+    "shape": "country-first",
+    "value": "br_sa_aberta"
+  },
+  "SPAWN_ELECTIONS_REGISTRY": {
+    "shape": "function-valued",
+    "value": null,
+    "functionKeys": ["<self>"]
+  },
+  "STATE_ADJACENCY": {
+    "shape": "country-first",
+    "value": {
+      "NORTE": ["NORDESTE", "CENTRO_OESTE"],
+      "NORDESTE": ["NORTE", "CENTRO_OESTE", "SUDESTE"],
+      "CENTRO_OESTE": ["NORTE", "NORDESTE", "SUDESTE", "SUL"],
+      "SUDESTE": ["NORDESTE", "CENTRO_OESTE", "SUL"],
+      "SUL": ["CENTRO_OESTE", "SUDESTE"]
+    }
+  },
+  "STATE_DISPLAY_NAMES": {
+    "shape": "country-first",
+    "value": {
+      "NORTE": "Norte",
+      "NORDESTE": "Nordeste",
+      "CENTRO_OESTE": "Centro-Oeste",
+      "SUDESTE": "Sudeste",
+      "SUL": "Sul"
+    }
+  },
+  "SURFACES": {
+    "shape": "absent",
+    "value": null
+  },
+  "TARGETS": {
+    "shape": "country-first",
+    "value": {
+      "1991": {
+        "center": 0,
+        "centerTol": 0.8,
+        "minSpread": 1,
+        "expectLeft": [],
+        "expectRight": [],
+        "election": "Brazil 1989 presidential (pre-Lula cleavage — center/spread only)"
+      },
+      "1999": {
+        "center": 0,
+        "centerTol": 0.8,
+        "minSpread": 1,
+        "expectLeft": [],
+        "expectRight": [],
+        "election": "Brazil 1998 presidential (center/spread only)"
+      },
+      "2007": {
+        "center": 0,
+        "centerTol": 0.7,
+        "minSpread": 1.2,
+        "expectLeft": ["NORDESTE"],
+        "expectRight": ["SUL"],
+        "election": "Brazil 2006 presidential (Lula; Nordeste left emerging)"
+      },
+      "2019": {
+        "center": 0,
+        "centerTol": 0.7,
+        "minSpread": 1.3,
+        "expectLeft": ["NORDESTE"],
+        "expectRight": ["SUL", "CENTRO_OESTE"],
+        "election": "Brazil 2018 presidential"
+      },
+      "2023": {
+        "center": 0,
+        "centerTol": 0.7,
+        "minSpread": 1.3,
+        "expectLeft": ["NORDESTE", "NORTE"],
+        "expectRight": ["SUL", "CENTRO_OESTE"],
+        "election": "Brazil 2022 presidential (Lula v Bolsonaro)"
+      }
+    }
+  },
+  "TRADE_MINISTER_POSITION_BY_COUNTRY": {
+    "shape": "country-first",
+    "value": "minister_of_trade_industry"
+  },
+  "TREASURY_IDENTITY": {
+    "shape": "country-first",
+    "value": {
+      "glyph": "BR",
+      "serif": "mono",
+      "budgetTitle": "Orçamento Nacional",
+      "budgetTitleEn": "National Budget",
+      "ministry": "TESOURO NACIONAL",
+      "publicSeal": "PÚBLICO · PUBLIC",
+      "registry": "Federative Republic of Brazil · National Treasury",
+      "native": "República Federativa do Brasil · Tesouro Nacional",
+      "nativeEn": "Federative Republic of Brazil · National Treasury",
+      "palette": ["#0f3b24", "#0b2a19", "#07180f"],
+      "accent": "#d4b13f",
+      "accentSoft": "#e8cf78"
+    }
+  },
+  "TREASURY_PS_RATE_BY_COUNTRY": {
+    "shape": "country-first",
+    "value": {
+      "national": 350000,
+      "state": 175000
+    }
+  },
+  "TREASURY_TEXT": {
+    "shape": "country-first",
+    "value": {
+      "glyph": "BR",
+      "serif": "mono",
+      "budgetTitle": "Orçamento Nacional",
+      "budgetTitleEn": "National Budget",
+      "ministry": "TESOURO NACIONAL",
+      "publicSeal": "PÚBLICO · PUBLIC",
+      "registry": "Federative Republic of Brazil · National Treasury",
+      "native": "República Federativa do Brasil · Tesouro Nacional",
+      "nativeEn": "Federative Republic of Brazil · National Treasury"
+    }
+  }
+}

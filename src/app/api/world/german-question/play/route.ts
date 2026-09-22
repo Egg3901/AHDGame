@@ -30,7 +30,8 @@ const schema = z.object({
 // Errors: 400, 401, 403, 404, 409, 413, 429
 //
 // No 402: a play is never refused for want of money. `treasuryBalance` is the
-// signed national cash position, so spending past zero is national debt, which
+// signed national cash position, separate from the bond-ledger `debt.principal`
+// (refs #1975), so spending past zero digs a cash hole, which
 // `spendFromTreasury` models rather than blocks.
 //
 // `requireHumanSessionWithCharacter` rather than `requireAuthWithCharacter`:

@@ -30,6 +30,8 @@ import { computeWarApproval } from "@/lib/military/warApproval";
 import { IS_HIGHER_BETTER } from "@/lib/utils/metricScoring";
 import { axisAffinityFor, type AxisAffinity } from "@/lib/utils/metricAxisAffinity";
 import type { StateDemographicGroup, StateDemographics } from "@/lib/db/types/demographics";
+import { appendApprovalTelemetry } from "@/lib/telemetry/longHorizon/telemetry";
+import type { LongHorizonContext } from "@/lib/telemetry/longHorizon/telemetry";
 // SP4: hybrid political approval for LAW_COUNTRY_IDS. Function-time-only cycle
 // with this module (the provider imports BASE_APPROVAL) — safe by hoisting.
 import {
@@ -622,11 +624,16 @@ export function buildStateApprovalBulkOps(
 /**
  * Snapshot the current approval rating to the governmentApprovals collection.
  * Called each turn. History is capped at the last 20 entries.
+ *
+ * When a long-horizon context is supplied, the same scored values are also
+ * appended to the durable `approvalTelemetry` series (issue #2099), which
+ * keeps every turn. Without a context the operational write is unchanged.
  */
 export async function snapshotApprovalHistory(
   db: Db,
   countryId: CountryId,
-  turn: number
+  turn: number,
+  telemetryCtx?: LongHorizonContext
 ): Promise<void> {
   const statesCol = db.collection<State>("states");
 
@@ -826,5 +833,23 @@ export async function snapshotApprovalHistory(
     await db
       .collection<StateApprovalHistory>("stateApprovalHistory")
       .bulkWrite(stateApprovalOps as AnyBulkWriteOperation<StateApprovalHistory>[]);
+  }
+
+  // Durable long-horizon series (#2099): the same damped values the pages
+  // read, one point per scope, with world/run provenance. Runs after the
+  // operational writes so a telemetry failure can never block them
+  // (runPhase logs it); a missed turn surfaces as an explicit gap, never a
+  // fabricated point.
+  if (telemetryCtx) {
+    const netOf = (value: number): number => value - (100 - value);
+    await appendApprovalTelemetry(db, telemetryCtx, countryId, turn, {
+      approval,
+      net: netOf(approval),
+      states: dampedStateApprovals.map((s) => ({
+        stateId: s.stateId,
+        approval: s.approval,
+        net: netOf(s.approval),
+      })),
+    });
   }
 }

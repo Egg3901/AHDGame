@@ -38,7 +38,7 @@ import {
   isElectionTypeEntryBlocked,
   isNationwideDirectExecutiveElection,
 } from "@/lib/elections/nationwideExecutive";
-import { officeKeyForElectionType } from "@/lib/utils/electionLabels";
+import { isSpecialCommonsElection, officeKeyForElectionType } from "@/lib/utils/electionLabels";
 import { DEFAULT_CANDIDATE_SUPPORT } from "@/lib/electionEngine/electionFormulaFactors";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import {
@@ -150,11 +150,57 @@ export async function processElectionEntry(ctx: NPPContext): Promise<number> {
   // Clone candidacies to track in-memory state.
   const nppCandidacies = new Set(ctx.nppCandidacies);
   let entered = 0;
+  const pendingCandidateInserts: Array<{
+    doc: ElectionCandidate;
+    npp: NPP;
+    primary: Election;
+    key: string;
+  }> = [];
+
+  const flushCandidateInserts = async (): Promise<number> => {
+    if (pendingCandidateInserts.length === 0) return 0;
+    const pending = pendingCandidateInserts.splice(0);
+    const result = await db.collection<ElectionCandidate>("electionCandidates").bulkWrite(
+      pending.map(({ doc }) => ({
+        updateOne: {
+          filter: { characterId: doc.characterId, status: "active" },
+          update: { $setOnInsert: doc },
+          upsert: true,
+        },
+      })),
+      { ordered: false }
+    );
+    const insertedIndexes = new Set(Object.keys(result.upsertedIds).map(Number));
+    for (let index = 0; index < pending.length; index += 1) {
+      const item = pending[index]!;
+      if (insertedIndexes.has(index)) {
+        continue;
+      }
+
+      filledThisTurn.delete(item.key);
+      assignedThisTurn.delete(item.npp._id.toString());
+      nppCandidacies.delete(item.npp._id.toString());
+      ctx.nppCandidacies.delete(item.npp._id.toString());
+      const candidates = candidatesByElection.get(item.primary._id.toString());
+      const candidateIndex = candidates?.findIndex((candidate) =>
+        candidate._id.equals(item.doc._id)
+      );
+      if (candidateIndex !== undefined && candidateIndex >= 0)
+        candidates!.splice(candidateIndex, 1);
+    }
+    return insertedIndexes.size;
+  };
 
   // Snap primaries (snap_commons, snap_shugiin) defend the SAME seat as their
   // regular counterpart - normalize the election type so a sitting "commons"
   // MP is recognized as incumbent for a snap_commons primary.
   const isIncumbentFor = (npp: NPP, primary: Election): boolean => {
+    // Commons by-elections (#860) fill only vacated seats: no sitting MP is
+    // the incumbent of a race their own seat is not on the ballot for. Without
+    // this, every same-state MP auto-defends the vacant seat and a sitting
+    // winner double-seats (additive resolution never sweeps). Seatless
+    // challengers still file through the generic fill below.
+    if (isSpecialCommonsElection(primary.electionType)) return false;
     const offices = ctx.officialsByNPP.get(npp._id.toString());
     if (!offices) return false;
     const primaryCountry = (primary.countryId ?? "US") as CountryId;
@@ -238,7 +284,8 @@ export async function processElectionEntry(ctx: NPPContext): Promise<number> {
       if (cooldownExpiry && new Date(cooldownExpiry) > now) return false;
     }
 
-    const candidateDoc: Omit<ElectionCandidate, "_id"> = {
+    const candidateDoc: ElectionCandidate = {
+      _id: new ObjectId(),
       electionId: primary._id,
       countryId: (primary.countryId ?? npp.countryId ?? "US") as ElectionCandidate["countryId"],
       characterId: npp._id,
@@ -252,9 +299,11 @@ export async function processElectionEntry(ctx: NPPContext): Promise<number> {
     };
 
     try {
-      await db
-        .collection<ElectionCandidate>("electionCandidates")
-        .insertOne(candidateDoc as ElectionCandidate);
+      if (ctx.batchCandidateInserts) {
+        pendingCandidateInserts.push({ doc: candidateDoc, npp, primary, key });
+      } else {
+        await db.collection<ElectionCandidate>("electionCandidates").insertOne(candidateDoc);
+      }
     } catch (error) {
       // The partial unique index allows one active candidacy per character. If
       // this NPP already holds one elsewhere (e.g. a next-cycle upcoming race),
@@ -277,14 +326,8 @@ export async function processElectionEntry(ctx: NPPContext): Promise<number> {
     if (!candidatesByElection.has(primary._id.toString())) {
       candidatesByElection.set(primary._id.toString(), []);
     }
-    candidatesByElection.get(primary._id.toString())!.push({
-      ...candidateDoc,
-      _id: new ObjectId(),
-    } as ElectionCandidate);
+    candidatesByElection.get(primary._id.toString())!.push(candidateDoc);
 
-    console.log(
-      `[Turn] NPP entry: ${npp.name} (${npp.party}) entered ${primary.electionType}/${primary.state}`
-    );
     return true;
   };
 
@@ -328,9 +371,10 @@ export async function processElectionEntry(ctx: NPPContext): Promise<number> {
   for (const { npp, primary } of incumbentEntries) {
     if (assignedThisTurn.has(npp._id.toString())) continue;
     if (await enterPrimary(npp, primary, { incumbentDefense: true })) {
-      entered++;
+      if (!ctx.batchCandidateInserts) entered++;
     }
   }
+  if (ctx.batchCandidateInserts) entered += await flushCandidateInserts();
 
   // Phase 1a-pre: bring races that are already over the per-race cap back
   // inside it, before any filing runs, so a freed slot is available to a row
@@ -400,9 +444,12 @@ export async function processElectionEntry(ctx: NPPContext): Promise<number> {
 
       const npp = pool[0];
       if (!npp) continue;
-      if (await enterPrimary(npp, primary)) entered++;
+      if (await enterPrimary(npp, primary)) {
+        if (!ctx.batchCandidateInserts) entered++;
+      }
     }
   }
+  if (ctx.batchCandidateInserts) entered += await flushCandidateInserts();
 
   // Phase 2: fill remaining slots with non-incumbent NPPs.
   const primariesByState = new Map<string, typeof openPrimaries>();
@@ -491,13 +538,14 @@ export async function processElectionEntry(ctx: NPPContext): Promise<number> {
         if (!npp) continue;
 
         if (await enterPrimary(npp, primary)) {
-          entered++;
+          if (!ctx.batchCandidateInserts) entered++;
           const idx = availableNPPs.indexOf(npp);
           if (idx > -1) availableNPPs.splice(idx, 1);
         }
       }
     }
   }
+  if (ctx.batchCandidateInserts) entered += await flushCandidateInserts();
 
   // Phase 2.5 (v3): ambitious challengers. Design decision #4 above ("same NPP
   // always wins A SLOT") governs which NPP fills an empty slot — it does not
@@ -618,12 +666,14 @@ export async function processElectionEntry(ctx: NPPContext): Promise<number> {
         }
 
         if (await enterPrimary(challenger, primary, { allowChallenger: true })) {
-          entered++;
+          if (!ctx.batchCandidateInserts) entered++;
           challengerBudget.record(primaryCountryId, playerCandidateKey);
         }
       }
     }
   }
+
+  if (ctx.batchCandidateInserts) entered += await flushCandidateInserts();
 
   return entered;
 }

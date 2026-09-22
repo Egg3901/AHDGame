@@ -44,7 +44,9 @@ describe("processMinisterialOrders tier effect resolution", () => {
 
     // One CN province so the apply step has a state to write to.
     db.collection("states");
-    db.collectionMocks.states!.find.mockReturnValue(cursorReturning([{ _id: "HD" }]));
+    db.collectionMocks.states!.find.mockReturnValue(
+      cursorReturning([{ _id: "HD", countryId: "CN" }])
+    );
 
     // No active orders, no cabinet members (action regen no-op): defaults ([]) are fine.
 
@@ -82,7 +84,9 @@ describe("processMinisterialOrders tier effect resolution", () => {
       ])
     );
     db.collection("states");
-    db.collectionMocks.states!.find.mockReturnValue(cursorReturning([{ _id: "BJ" }]));
+    db.collectionMocks.states!.find.mockReturnValue(
+      cursorReturning([{ _id: "BJ", countryId: "CN" }])
+    );
     db.collection("centralBanks");
     db.collectionMocks.centralBanks!.find.mockReturnValue(cursorReturning([{ _id: "CN" }]));
 
@@ -140,7 +144,9 @@ describe("processMinisterialOrders tier effect resolution", () => {
     );
 
     db.collection("states");
-    db.collectionMocks.states!.find.mockReturnValue(cursorReturning([{ _id: "HD" }]));
+    db.collectionMocks.states!.find.mockReturnValue(
+      cursorReturning([{ _id: "HD", countryId: "CN" }])
+    );
     db.collection("cabinetSettings");
     db.collectionMocks.cabinetSettings!.find.mockReturnValue(cursorReturning([]));
     db.collection("cabinetMembers");

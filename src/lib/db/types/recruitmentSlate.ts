@@ -94,7 +94,14 @@ export type SlateRefusalReason =
    * Filing: the party already holds every slot on this race, so the row could
    * not go on the ballot. See `SLATE_ASSIGNMENT_CAP` for what holds a slot.
    */
-  | "slate_full";
+  | "slate_full"
+  /**
+   * Filing: the NPP already holds a Commons seat in the by-election's region,
+   * and a `special_commons` race fills only vacated seats, so seating them
+   * would double-seat them under additive resolution. They stand again once
+   * seatless.
+   */
+  | "seat_not_on_ballot";
 
 export type SlateCandidateStatus =
   "invited" | "considering" | "accepted" | "declined" | "withdrawn" | "filed";

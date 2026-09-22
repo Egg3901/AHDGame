@@ -14,7 +14,45 @@ import {
   type TierReclassificationRecord,
 } from "@/lib/world/tier1Readiness1953Data";
 import { build1953Tier3Registry } from "./registry/assemble";
+import {
+  AUTONOMY_BLOCKER,
+  decolonizationDependencyEntries,
+  emergentDecolonizationEntries,
+  HEAD_CLAIMED_1953_ENTITY_IDS,
+  PLAYER_BLOCKER,
+  sphereMacroEntry,
+} from "./registry/decolonization1953";
+import { isShippingPreset, tierFor } from "./eraRoster";
+import { JP_GEOGRAPHY } from "@/lib/countries/jp/geography";
 import { expandManifestWithBackgroundCountries } from "./backgroundCountryRoster";
+import { US_WORLD_REGION, US_UN_MEMBER_SINCE } from "@/lib/countries/us/geographyFacts";
+import { UK_WORLD_REGION, UK_UN_MEMBER_SINCE } from "@/lib/countries/uk/geographyFacts";
+import { DE_WORLD_REGION } from "@/lib/countries/de/geographyFacts";
+import { CN_WORLD_REGION, CN_UN_MEMBER_SINCE } from "@/lib/countries/cn/geographyFacts";
+import { IE_WORLD_REGION, IE_UN_MEMBER_SINCE } from "@/lib/countries/ie/geographyFacts";
+import { RU_WORLD_REGION, RU_UN_MEMBER_SINCE } from "@/lib/countries/ru/geographyFacts";
+import { DD_WORLD_REGION } from "@/lib/countries/dd/geographyFacts";
+import { NG_WORLD_REGION, NG_UN_MEMBER_SINCE } from "@/lib/countries/ng/geographyFacts";
+import { BR_WORLD_REGION, BR_UN_MEMBER_SINCE } from "@/lib/countries/br/geographyFacts";
+import { FR_WORLD_REGION, FR_UN_MEMBER_SINCE } from "@/lib/countries/fr/geographyFacts";
+import { IT_WORLD_REGION, IT_UN_MEMBER_SINCE } from "@/lib/countries/it/geographyFacts";
+import { ES_WORLD_REGION, ES_UN_MEMBER_SINCE } from "@/lib/countries/es/geographyFacts";
+import { SE_WORLD_REGION, SE_UN_MEMBER_SINCE } from "@/lib/countries/se/geographyFacts";
+import { TR_WORLD_REGION, TR_UN_MEMBER_SINCE } from "@/lib/countries/tr/geographyFacts";
+import { GR_WORLD_REGION, GR_UN_MEMBER_SINCE } from "@/lib/countries/gr/geographyFacts";
+import { AT_WORLD_REGION, AT_UN_MEMBER_SINCE } from "@/lib/countries/at/geographyFacts";
+import { FI_WORLD_REGION, FI_UN_MEMBER_SINCE } from "@/lib/countries/fi/geographyFacts";
+import { PL_WORLD_REGION, PL_UN_MEMBER_SINCE } from "@/lib/countries/pl/geographyFacts";
+import { HU_WORLD_REGION, HU_UN_MEMBER_SINCE } from "@/lib/countries/hu/geographyFacts";
+import { RO_WORLD_REGION, RO_UN_MEMBER_SINCE } from "@/lib/countries/ro/geographyFacts";
+import { YU_WORLD_REGION, YU_UN_MEMBER_SINCE } from "@/lib/countries/yu/geographyFacts";
+import { BG_WORLD_REGION, BG_UN_MEMBER_SINCE } from "@/lib/countries/bg/geographyFacts";
+import { CS_WORLD_REGION, CS_UN_MEMBER_SINCE } from "@/lib/countries/cs/geographyFacts";
+import { SCO_WORLD_REGION } from "@/lib/countries/sco/geographyFacts";
+import { WAL_WORLD_REGION } from "@/lib/countries/wal/geographyFacts";
+import { BLR_WORLD_REGION, BLR_UN_MEMBER_SINCE } from "@/lib/countries/blr/geographyFacts";
+import { UKR_WORLD_REGION, UKR_UN_MEMBER_SINCE } from "@/lib/countries/ukr/geographyFacts";
+import { BAL_WORLD_REGION } from "@/lib/countries/bal/geographyFacts";
 
 export type WorldEntityId = string;
 export type WorldEntityStatus = "sovereign" | "dependent" | "emergent" | "dissolved";
@@ -162,10 +200,6 @@ const PLANNED_ECONOMIES = new Set<CountryId>([
   "BAL",
 ]);
 
-const PLAYER_BLOCKER = "Player access is not enabled for this entity in the active preset.";
-const AUTONOMY_BLOCKER =
-  "The entity is not wired for a full autonomous country simulation in this preset.";
-
 function readinessForAccess(access: LegacyCountryAccess): WorldEntityReadiness {
   if (access === "player") {
     return { autonomous: "ready", player: "ready", hardBlockers: [], flavorGaps: [] };
@@ -200,71 +234,71 @@ function accessFromConfig(countryId: CountryId): LegacyCountryAccess {
 }
 
 /** Coverage region for CountryConfig-backed entities (1953 gate + diagnostics). */
-const COUNTRY_REGIONS: Record<CountryId, WorldEntityRegion> = {
-  US: "americas",
-  BR: "americas",
-  UK: "europe",
-  FR: "europe",
-  DE: "europe",
-  DD: "europe",
-  IT: "europe",
-  ES: "europe",
-  SE: "europe",
-  IE: "europe",
-  HU: "europe",
-  PL: "europe",
-  RO: "europe",
-  YU: "europe",
-  BG: "europe",
-  CS: "europe",
-  UKR: "europe",
-  RU: "europe",
-  TR: "europe",
-  JP: "asia",
-  CN: "asia",
-  NG: "africa",
-  AT: "europe",
-  GR: "europe",
-  FI: "europe",
-  BLR: "europe",
-  BAL: "europe",
-  SCO: "europe",
-  WAL: "europe",
+export const COUNTRY_REGIONS: Record<CountryId, WorldEntityRegion> = {
+  US: US_WORLD_REGION,
+  BR: BR_WORLD_REGION,
+  UK: UK_WORLD_REGION,
+  FR: FR_WORLD_REGION,
+  DE: DE_WORLD_REGION,
+  DD: DD_WORLD_REGION,
+  IT: IT_WORLD_REGION,
+  ES: ES_WORLD_REGION,
+  SE: SE_WORLD_REGION,
+  IE: IE_WORLD_REGION,
+  HU: HU_WORLD_REGION,
+  PL: PL_WORLD_REGION,
+  RO: RO_WORLD_REGION,
+  YU: YU_WORLD_REGION,
+  BG: BG_WORLD_REGION,
+  CS: CS_WORLD_REGION,
+  UKR: UKR_WORLD_REGION,
+  RU: RU_WORLD_REGION,
+  TR: TR_WORLD_REGION,
+  JP: JP_GEOGRAPHY.worldRegion,
+  CN: CN_WORLD_REGION,
+  NG: NG_WORLD_REGION,
+  AT: AT_WORLD_REGION,
+  GR: GR_WORLD_REGION,
+  FI: FI_WORLD_REGION,
+  BLR: BLR_WORLD_REGION,
+  BAL: BAL_WORLD_REGION,
+  SCO: SCO_WORLD_REGION,
+  WAL: WAL_WORLD_REGION,
 };
 
 /** UN admission year priors for CountryConfig sovereigns (strong defaults). */
-const COUNTRY_UN_MEMBER_SINCE: Partial<Record<CountryId, number>> = {
-  US: 1945,
-  UK: 1945,
-  FR: 1945,
-  RU: 1945,
-  CN: 1945,
-  BR: 1945,
+export const COUNTRY_UN_MEMBER_SINCE: Partial<Record<CountryId, number>> = {
+  US: US_UN_MEMBER_SINCE,
+  UK: UK_UN_MEMBER_SINCE,
+  FR: FR_UN_MEMBER_SINCE,
+  RU: RU_UN_MEMBER_SINCE,
+  CN: CN_UN_MEMBER_SINCE,
+  BR: BR_UN_MEMBER_SINCE,
   DE: undefined, // FRG admitted 1973
   DD: undefined, // GDR admitted 1973
-  IT: 1955,
-  ES: 1955,
-  SE: 1946,
-  TR: 1945,
-  JP: 1956,
-  IE: 1955,
-  NG: 1960,
-  PL: 1945,
-  HU: 1955,
-  RO: 1955,
-  BG: 1955,
+  IT: IT_UN_MEMBER_SINCE,
+  ES: ES_UN_MEMBER_SINCE,
+  SE: SE_UN_MEMBER_SINCE,
+  TR: TR_UN_MEMBER_SINCE,
+  JP: JP_GEOGRAPHY.unMemberSince,
+  IE: IE_UN_MEMBER_SINCE,
+  NG: NG_UN_MEMBER_SINCE,
+  PL: PL_UN_MEMBER_SINCE,
+  HU: HU_UN_MEMBER_SINCE,
+  RO: RO_UN_MEMBER_SINCE,
+  BG: BG_UN_MEMBER_SINCE,
   // The Ukrainian and Byelorussian SSRs were UN founding members in their own
   // right - Stalin's price for the Yalta voting arrangement. This is real, not a
   // modelling convenience, and it is the single largest thing that separates
   // them from the Baltic republics, whose annexation the UN never recognised and
   // which therefore have no admission year at all.
-  UKR: 1945,
-  BLR: 1945,
-  YU: 1945,
-  CS: 1945,
-  GR: 1945,
-  AT: 1955,
-  FI: 1955,
+  UKR: UKR_UN_MEMBER_SINCE,
+  BLR: BLR_UN_MEMBER_SINCE,
+  YU: YU_UN_MEMBER_SINCE,
+  CS: CS_UN_MEMBER_SINCE,
+  GR: GR_UN_MEMBER_SINCE,
+  AT: AT_UN_MEMBER_SINCE,
+  FI: FI_UN_MEMBER_SINCE,
 };
 
 /**
@@ -279,14 +313,23 @@ const SPHERE_SPONSOR_ELIGIBILITY: Readonly<Partial<Record<string, ReadonlySet<Co
     "1999-default": Object.freeze(new Set<CountryId>(["US", "UK", "RU", "FR", "CN"])),
     "2007-default": Object.freeze(new Set<CountryId>(["US", "UK", "RU", "FR", "CN"])),
     "2019-default": Object.freeze(new Set<CountryId>(["US", "UK", "RU", "FR", "CN", "DE", "JP"])),
+    // 2023 had NO entry, so isManifestSphereSponsor returned false for every
+    // country in that preset and nothing could sponsor a sphere there.
     "2023-default": Object.freeze(new Set<CountryId>(["US", "UK", "RU", "FR", "CN", "DE", "JP"])),
     "2027-default": Object.freeze(new Set<CountryId>(["US", "UK", "RU", "FR", "CN", "DE", "JP"])),
   });
 /** True when the preset matrix lists this entity as a sphere sponsor. */
 export function isManifestSphereSponsor(presetId: string, entityId: WorldEntityId): boolean {
   const eligible = SPHERE_SPONSOR_ELIGIBILITY[presetId];
-  if (!eligible) return false;
-  return eligible.has(entityId as CountryId);
+  if (!eligible || !eligible.has(entityId as CountryId)) return false;
+  // A country that does not exist in this era cannot sponsor a sphere. Today
+  // this is future-proofing (the sets only hold US/UK/RU/FR/CN/DE/JP, none of
+  // which is absent anywhere), but it stops the pairing breaking silently if
+  // either side changes.
+  if (isShippingPreset(presetId) && tierFor(presetId, entityId as CountryId) === "absent") {
+    return false;
+  }
+  return true;
 }
 function buildCountryEntry(
   presetId: string,
@@ -350,599 +393,18 @@ function entriesFromAccess(
     buildCountryEntry(presetId, countryId as CountryId, legacyAccess)
   );
 }
-const SPHERE_MACRO_BLOCKERS = [
-  AUTONOMY_BLOCKER,
-  PLAYER_BLOCKER,
-  "Sphere-macro countries have no domestic player offices or firm simulation.",
-] as const;
 
-function sphereMacroEntry(args: {
-  entityId: WorldEntityId;
-  presetId: string;
-  displayName: string;
-  economicArchetype: WorldEconomicArchetype;
-  region: WorldEntityRegion;
-  countryId?: CountryId;
-  primarySphereId?: string;
-  relationships?: WorldEntityRelationship[];
-  recognition?: WorldEntityRecognition;
-  un?: WorldEntityUnRecord;
-  mapFeatureIds?: string[];
-}): WorldEntityManifestEntry {
-  return {
-    entityId: args.entityId,
-    countryId: args.countryId,
-    presetId: args.presetId,
-    displayName: args.displayName,
-    status: "sovereign",
-    region: args.region,
-    simulationTier: "sphere-macro",
-    economicArchetype: args.economicArchetype,
-    sphere: {
-      canSponsor: false,
-      primarySphereId: args.primarySphereId,
-      relationships: args.relationships ?? [],
-    },
-    lifecycle: { transitionRuleIds: [] },
-    recognition: args.recognition ?? { status: "widely-recognized" },
-    un: args.un ?? { state: "eligible", expectedAdmissionYear: 1955 },
-    mapFeatureIds: args.mapFeatureIds,
-    readiness: {
-      autonomous: "blocked",
-      player: "blocked",
-      hardBlockers: [...SPHERE_MACRO_BLOCKERS],
-      flavorGaps: [],
-    },
-    legacyAccess: "hidden",
-    legacyStatus: "coming-soon",
-  };
-}
-
-function emergentSphereMacro(
-  presetId: string,
-  opts: {
-    entityId: WorldEntityId;
-    displayName: string;
-    region: WorldEntityRegion;
-    earliestYear: number;
-    expectedYear: number;
-    latestYear: number;
-    transitionRuleId: string;
-    primarySphereId: string;
-    relationships: WorldEntityRelationship[];
-    mapFeatureIds?: string[];
-  }
-): WorldEntityManifestEntry {
-  return {
-    entityId: opts.entityId,
-    presetId,
-    displayName: opts.displayName,
-    status: "emergent",
-    region: opts.region,
-    simulationTier: "sphere-macro",
-    economicArchetype: "macro",
-    sphere: {
-      canSponsor: false,
-      primarySphereId: opts.primarySphereId,
-      relationships: opts.relationships,
-    },
-    lifecycle: {
-      earliestYear: opts.earliestYear,
-      expectedYear: opts.expectedYear,
-      latestYear: opts.latestYear,
-      transitionRuleIds: [opts.transitionRuleId],
-    },
-    recognition: {
-      status: "unrecognized",
-      notes: `Emergent until ${opts.displayName} sovereignty succeeds.`,
-    },
-    un: { state: "ineligible", expectedAdmissionYear: opts.expectedYear },
-    mapFeatureIds: opts.mapFeatureIds,
-    readiness: {
-      autonomous: "blocked",
-      player: "blocked",
-      hardBlockers: [
-        AUTONOMY_BLOCKER,
-        PLAYER_BLOCKER,
-        `${opts.displayName} is emergent until its sovereignty transition succeeds.`,
-        "Sphere-macro countries have no domestic player offices or firm simulation.",
-      ],
-      flavorGaps: [],
-    },
-    legacyAccess: "hidden",
-    legacyStatus: "coming-soon",
-  };
-}
-
-function colonialDependency(
-  presetId: string,
-  opts: {
-    entityId: WorldEntityId;
-    displayName: string;
-    region: WorldEntityRegion;
-    parentEntityId: WorldEntityId;
-    coParentEntityIds?: readonly WorldEntityId[];
-    exceptionalStatus?: WorldExceptionalStatus;
-    earliestYear: number;
-    expectedYear: number;
-    latestYear: number;
-    transitionRuleId: string;
-    flavorGaps?: string[];
-    mapFeatureIds?: string[];
-    recognitionNotes?: string;
-  }
-): WorldEntityManifestEntry {
-  return {
-    entityId: opts.entityId,
-    presetId,
-    displayName: opts.displayName,
-    status: "dependent",
-    parentEntityId: opts.parentEntityId,
-    coParentEntityIds: opts.coParentEntityIds,
-    exceptionalStatus: opts.exceptionalStatus,
-    region: opts.region,
-    simulationTier: "historical-presence",
-    economicArchetype: "none",
-    sphere: {
-      canSponsor: false,
-      relationships: [],
-    },
-    lifecycle: {
-      earliestYear: opts.earliestYear,
-      expectedYear: opts.expectedYear,
-      latestYear: opts.latestYear,
-      transitionRuleIds: [opts.transitionRuleId],
-    },
-    recognition: {
-      status: "dependent",
-      notes: opts.recognitionNotes,
-    },
-    un: { state: "ineligible", expectedAdmissionYear: opts.expectedYear },
-    mapFeatureIds: opts.mapFeatureIds,
-    readiness: {
-      autonomous: "blocked",
-      player: "blocked",
-      hardBlockers: [
-        AUTONOMY_BLOCKER,
-        PLAYER_BLOCKER,
-        "Dependencies have no independent sphere or domestic player simulation.",
-      ],
-      flavorGaps: opts.flavorGaps ?? [],
-    },
-    legacyAccess: "hidden",
-    legacyStatus: "coming-soon",
-  };
+function configFallbackEntries(presetId: string): WorldEntityManifestEntry[] {
+  return COUNTRY_ORDER.map((countryId) =>
+    buildCountryEntry(presetId, countryId, "config-fallback")
+  );
 }
 
 /**
- * Emergent sphere-macro targets for decolonization transitions (#3726 / #3727).
- * Not seeded until sovereignty; authored Tier-2 rosters remain separate.
+ * Tier-3 historical-presence entities that are not already Tier-1/2 on this branch.
+ * Gold Coast / decolonization tracers stay authored above; the global 1953 registry
+ * (#3728) fills the remainder under src/lib/world/registry/.
  */
-function emergentDecolonizationEntries(presetId: string): WorldEntityManifestEntry[] {
-  if (presetId !== "1953-default") return [];
-  return [
-    emergentSphereMacro(presetId, {
-      entityId: "GH",
-      displayName: "Ghana",
-      region: "africa",
-      mapFeatureIds: ["288"],
-      earliestYear: 1954,
-      expectedYear: 1957,
-      latestYear: 1962,
-      transitionRuleId: "gold-coast-to-ghana",
-      primarySphereId: "UK",
-      relationships: [
-        {
-          sponsorId: "UK",
-          alignment: 0.55,
-          integration: 0.35,
-          treatyIds: ["commonwealth-membership"],
-          treatyState: "proposed",
-        },
-        {
-          sponsorId: "US",
-          alignment: 0.35,
-          integration: 0.15,
-          treatyIds: [],
-          treatyState: "none",
-        },
-      ],
-    }),
-    emergentSphereMacro(presetId, {
-      entityId: "SO",
-      displayName: "Somalia",
-      region: "africa",
-      earliestYear: 1958,
-      expectedYear: 1960,
-      latestYear: 1965,
-      transitionRuleId: "somalia-trust-to-somalia",
-      // The modern state outright, so its border is its own.
-      mapFeatureIds: ["706"],
-      primarySphereId: "US",
-      relationships: [
-        {
-          sponsorId: "US",
-          alignment: 0.4,
-          integration: 0.2,
-          treatyIds: [],
-          treatyState: "none",
-        },
-        {
-          sponsorId: "UK",
-          alignment: 0.35,
-          integration: 0.2,
-          treatyIds: ["commonwealth-membership"],
-          treatyState: "proposed",
-        },
-        {
-          sponsorId: "IT",
-          alignment: 0.3,
-          integration: 0.15,
-          treatyIds: [],
-          treatyState: "none",
-        },
-      ],
-    }),
-    emergentSphereMacro(presetId, {
-      entityId: "CD",
-      displayName: "Congo",
-      region: "africa",
-      earliestYear: 1958,
-      expectedYear: 1960,
-      latestYear: 1965,
-      transitionRuleId: "belgian-congo-to-congo",
-      // Same territory as `BCO` one stage on; both claim 180, first writer wins.
-      mapFeatureIds: ["180"],
-      primarySphereId: "US",
-      relationships: [
-        {
-          sponsorId: "US",
-          alignment: 0.45,
-          integration: 0.2,
-          treatyIds: [],
-          treatyState: "none",
-        },
-        {
-          sponsorId: "BE",
-          alignment: 0.35,
-          integration: 0.25,
-          treatyIds: [],
-          treatyState: "none",
-        },
-      ],
-    }),
-    emergentSphereMacro(presetId, {
-      entityId: "DZ",
-      displayName: "Algeria",
-      region: "africa",
-      mapFeatureIds: ["012"],
-      earliestYear: 1959,
-      expectedYear: 1962,
-      latestYear: 1967,
-      transitionRuleId: "french-algeria-to-algeria",
-      primarySphereId: "FR",
-      relationships: [
-        {
-          sponsorId: "FR",
-          alignment: 0.45,
-          integration: 0.3,
-          treatyIds: ["evian-accords"],
-          treatyState: "proposed",
-        },
-        {
-          sponsorId: "RU",
-          alignment: 0.3,
-          integration: 0.1,
-          treatyIds: [],
-          treatyState: "none",
-        },
-      ],
-    }),
-    emergentSphereMacro(presetId, {
-      entityId: "GY",
-      displayName: "Guyana",
-      region: "americas",
-      mapFeatureIds: ["328"],
-      earliestYear: 1961,
-      expectedYear: 1966,
-      latestYear: 1971,
-      transitionRuleId: "british-guiana-to-guyana",
-      primarySphereId: "UK",
-      relationships: [
-        {
-          sponsorId: "UK",
-          alignment: 0.55,
-          integration: 0.35,
-          treatyIds: ["commonwealth-membership"],
-          treatyState: "proposed",
-        },
-        {
-          sponsorId: "US",
-          alignment: 0.4,
-          integration: 0.2,
-          treatyIds: [],
-          treatyState: "none",
-        },
-      ],
-    }),
-    emergentSphereMacro(presetId, {
-      entityId: "YD",
-      displayName: "South Yemen",
-      region: "asia",
-      earliestYear: 1963,
-      expectedYear: 1967,
-      latestYear: 1972,
-      transitionRuleId: "aden-to-south-yemen",
-      // Southern Yemen: no ISO numeric, so `historical-regions.json` supplies it.
-      mapFeatureIds: ["YD"],
-      primarySphereId: "RU",
-      relationships: [
-        {
-          sponsorId: "RU",
-          alignment: 0.55,
-          integration: 0.3,
-          treatyIds: ["soviet-friendship"],
-          treatyState: "proposed",
-        },
-        {
-          sponsorId: "UK",
-          alignment: 0.2,
-          integration: 0.1,
-          treatyIds: [],
-          treatyState: "none",
-        },
-      ],
-    }),
-    emergentSphereMacro(presetId, {
-      entityId: "AO",
-      displayName: "Angola",
-      region: "africa",
-      mapFeatureIds: ["024"],
-      earliestYear: 1970,
-      expectedYear: 1975,
-      latestYear: 1980,
-      transitionRuleId: "portuguese-angola-to-angola",
-      primarySphereId: "RU",
-      relationships: [
-        {
-          sponsorId: "RU",
-          alignment: 0.55,
-          integration: 0.3,
-          treatyIds: ["soviet-friendship"],
-          treatyState: "proposed",
-        },
-        {
-          sponsorId: "US",
-          alignment: 0.2,
-          integration: 0.1,
-          treatyIds: [],
-          treatyState: "none",
-        },
-      ],
-    }),
-    emergentSphereMacro(presetId, {
-      entityId: "MZ",
-      displayName: "Mozambique",
-      region: "africa",
-      mapFeatureIds: ["508"],
-      earliestYear: 1970,
-      expectedYear: 1975,
-      latestYear: 1980,
-      transitionRuleId: "portuguese-mozambique-to-mozambique",
-      primarySphereId: "RU",
-      relationships: [
-        {
-          sponsorId: "RU",
-          alignment: 0.5,
-          integration: 0.28,
-          treatyIds: ["soviet-friendship"],
-          treatyState: "proposed",
-        },
-        {
-          sponsorId: "US",
-          alignment: 0.2,
-          integration: 0.1,
-          treatyIds: [],
-          treatyState: "none",
-        },
-      ],
-    }),
-  ];
-}
-
-/**
- * Entity IDs already classified by Tier-1/2 / decolonization on this branch.
- * Registry historical-presence rows for these IDs are dropped (HEAD tier wins).
- * Also drops ITS/BSL — HEAD models them as the combined ST Somalia Trust tracer.
- * Also drops BCO/BGY/BU — HEAD uses BC/BRG/MM instead.
- */
-const HEAD_CLAIMED_1953_ENTITY_IDS: ReadonlySet<string> = new Set([
-  "US",
-  "UK",
-  "RU",
-  "DD",
-  "FR",
-  "IT",
-  "ES",
-  "SE",
-  "TR",
-  "DE",
-  "JP",
-  "CN",
-  "BR",
-  "NG",
-  "AT",
-  "FI",
-  "GR",
-  "IE",
-  "PL",
-  "CS",
-  "HU",
-  "RO",
-  "BG",
-  "YU",
-  "JO",
-  "AF",
-  "YE",
-  "MM",
-  "LA",
-  "KH",
-  "TH",
-  "IN",
-  "PK",
-  "IR",
-  "IQ",
-  "EG",
-  "SA",
-  "SY",
-  "ID",
-  "KP",
-  "KR",
-  "NVN",
-  "SVN",
-  "ET",
-  "ZA",
-  "CU",
-  "GT",
-  "PA",
-  "NI",
-  "CL",
-  "AR",
-  "MX",
-  "VE",
-  "GH",
-  "SO",
-  "CD",
-  "DZ",
-  "GY",
-  "YD",
-  "AO",
-  "MZ",
-  "GC",
-  "ST",
-  "BC",
-  "FA",
-  "BRG",
-  "ADN",
-  "POA",
-  "PM",
-  "ITS",
-  "BSL",
-  "BCO",
-  "BGY",
-  "BU",
-]);
-
-/** Decolonization dependency tracers (#3726 / #3727). */
-function decolonizationDependencyEntries(presetId: string): WorldEntityManifestEntry[] {
-  if (presetId !== "1953-default") return [];
-  return [
-    colonialDependency(presetId, {
-      entityId: "GC",
-      displayName: "Gold Coast",
-      region: "africa",
-      mapFeatureIds: ["288"],
-      parentEntityId: "UK",
-      earliestYear: 1954,
-      expectedYear: 1957,
-      latestYear: 1962,
-      transitionRuleId: "gold-coast-to-ghana",
-    }),
-    colonialDependency(presetId, {
-      entityId: "ST",
-      displayName: "Somalia Trust Territories",
-      region: "africa",
-      exceptionalStatus: "un-trust-territory",
-      recognitionNotes:
-        "Italian UN Trust Territory of Somaliland plus British Somaliland as one dependency record.",
-      parentEntityId: "IT",
-      coParentEntityIds: ["UK"],
-      earliestYear: 1958,
-      expectedYear: 1960,
-      latestYear: 1965,
-      transitionRuleId: "somalia-trust-to-somalia",
-      // BOTH Somalilands as one record, per the note above — which is exactly modern
-      // Somalia. Building the Italian south alone would match the name and
-      // contradict the definition, dropping the whole north.
-      mapFeatureIds: ["706"],
-      flavorGaps: [
-        "Models the Italian UN Trust Territory of Somaliland plus British Somaliland as one dependency record.",
-      ],
-    }),
-    colonialDependency(presetId, {
-      entityId: "BC",
-      displayName: "Belgian Congo",
-      region: "africa",
-      mapFeatureIds: ["180"],
-      parentEntityId: "BE",
-      earliestYear: 1958,
-      expectedYear: 1960,
-      latestYear: 1965,
-      transitionRuleId: "belgian-congo-to-congo",
-    }),
-    colonialDependency(presetId, {
-      entityId: "FA",
-      displayName: "French Algeria",
-      region: "africa",
-      exceptionalStatus: "integral-overseas",
-      mapFeatureIds: ["012"],
-      recognitionNotes: "French départements d'Algérie.",
-      parentEntityId: "FR",
-      earliestYear: 1959,
-      expectedYear: 1962,
-      latestYear: 1967,
-      transitionRuleId: "french-algeria-to-algeria",
-    }),
-    colonialDependency(presetId, {
-      entityId: "BRG",
-      displayName: "British Guiana",
-      region: "americas",
-      mapFeatureIds: ["328"],
-      parentEntityId: "UK",
-      earliestYear: 1961,
-      expectedYear: 1966,
-      latestYear: 1971,
-      transitionRuleId: "british-guiana-to-guyana",
-    }),
-    colonialDependency(presetId, {
-      entityId: "ADN",
-      displayName: "Aden Protectorate",
-      region: "asia",
-      parentEntityId: "UK",
-      earliestYear: 1963,
-      expectedYear: 1967,
-      latestYear: 1972,
-      transitionRuleId: "aden-to-south-yemen",
-      // ⚠️ SHADOWS the asia1953 registry row of the same id, so claiming the
-      // feature only there had no effect. Geometry: `historical-regions.json`.
-      mapFeatureIds: ["ADN"],
-    }),
-    colonialDependency(presetId, {
-      entityId: "POA",
-      displayName: "Portuguese Angola",
-      region: "africa",
-      mapFeatureIds: ["024"],
-      parentEntityId: "PT",
-      earliestYear: 1970,
-      expectedYear: 1975,
-      latestYear: 1980,
-      transitionRuleId: "portuguese-angola-to-angola",
-    }),
-    colonialDependency(presetId, {
-      entityId: "PM",
-      displayName: "Portuguese Mozambique",
-      region: "africa",
-      mapFeatureIds: ["508"],
-      parentEntityId: "PT",
-      earliestYear: 1970,
-      expectedYear: 1975,
-      latestYear: 1980,
-      transitionRuleId: "portuguese-mozambique-to-mozambique",
-    }),
-  ];
-}
-
-/** Remaining 1953 historical-presence entities from the global registry. */
 function historicalPresenceEntries(presetId: string): WorldEntityManifestEntry[] {
   if (presetId !== "1953-default") return [];
   const registry = build1953Tier3Registry(presetId).filter(
@@ -1885,9 +1347,115 @@ function apply1953Tier1MatrixAdjustments(
   return [...byId.values()];
 }
 
+/**
+ * Overlay the era roster's answer onto the CountryConfig-backed entries.
+ *
+ * SCOPED TO `COUNTRY_ORDER` ON PURPOSE. The roster classifies the *registered*
+ * world; unregistered entities keep whatever classification the manifest already
+ * gives them, and there are two kinds that must not be touched:
+ *
+ * - **Latent countries.** UKR/BLR/BAL are `economy-preview` + full-autonomous in
+ *   1953 but `hidden` + historical-presence in 1979. The roster's single
+ *   `latent` tier cannot express that split, and does not need to — they are
+ *   unregistered either way, which is the only thing the roster decides.
+ * - **Sphere-macro, decolonization and historical-presence entities.** These
+ *   are not `CountryId`s at all and carry sphere relationships this must
+ *   preserve.
+ *
+ * So this mutates `legacyAccess`/`legacyStatus` in place rather than rebuilding
+ * entries: rebuilding would discard Spain's 1953 Pact-of-Madrid relationship and
+ * every tier-reclassification record.
+ */
+function applyRosterAccess(
+  presetId: string,
+  entries: readonly WorldEntityManifestEntry[]
+): WorldEntityManifestEntry[] {
+  if (!isShippingPreset(presetId)) return [...entries];
+  const out: WorldEntityManifestEntry[] = [];
+  for (const entry of entries) {
+    const countryId = entry.countryId;
+    if (!countryId || !COUNTRY_ORDER.includes(countryId)) {
+      out.push(entry);
+      continue;
+    }
+    const tier = tierFor(presetId, countryId);
+    // A country absent from this era is not a PLAYABLE world entity in it. It
+    // may still be a historical one.
+    //
+    // ⚠ A DISSOLVED STATE IS KEPT, NOT DROPPED. Upstream's background
+    // expansion marks a state that has ceased to exist `status: "dissolved"`
+    // rather than deleting it, so the world still records that East Germany,
+    // Yugoslavia and Czechoslovakia existed and then did not. Dropping them
+    // here would undo that a line later, and `backgroundCountryRoster.test.ts`
+    // asserts 1999 still carries YU and CS as dissolved.
+    //
+    // This does NOT reopen "East Germany turns up in post-reunification
+    // worlds". Everything player-facing -- the landing rosters, the admin reset
+    // picker, seeding -- filters on `tierFor`, which still answers "absent".
+    // Only the historical record keeps the row.
+    if (tier === "absent") {
+      if (entry.status === "dissolved") {
+        out.push({ ...entry, legacyAccess: "hidden", legacyStatus: "coming-soon" });
+      }
+      continue;
+    }
+    // `latent` cannot occur here: latent countries are unregistered by
+    // definition, and `eraRoster.test.ts` asserts they stay out of COUNTRY_ORDER.
+    const legacyAccess: LegacyCountryAccess =
+      tier === "player" ? "player" : tier === "econ" ? "economy-preview" : "hidden";
+    // ONLY `legacyAccess`/`legacyStatus`. Rebuilding `simulationTier` or
+    // `readiness` here destroys Spain's 1953 sphere-macro demotion, Japan's
+    // recorded 1953 player blocker, and every tierReclassification record — all
+    // of which are authored decisions the roster has no opinion about. The two
+    // stay consistent anyway: `player` and `economy-preview` both map to
+    // full-autonomous, and `hidden` to historical-presence, which is what the
+    // existing entries already carry.
+    out.push({
+      ...entry,
+      legacyAccess,
+      legacyStatus:
+        legacyAccess === "player"
+          ? "active"
+          : legacyAccess === "economy-preview"
+            ? "beta"
+            : "coming-soon",
+    });
+  }
+
+  // Fill the gaps. The hand-written maps simply omitted several registered
+  // countries — the 1991 manifest was `accessMap(POST_COLD_WAR_PLAYER,
+  // POST_COLD_WAR_ECONOMY)`, which names neither Russia nor the Warsaw Pact
+  // successors — so `getWorldEntityOrThrow` threw for exactly the countries
+  // most likely to be misconfigured, and the readiness contract could not
+  // evaluate them at all. A roster tier is a classification; every registered
+  // country now has one.
+  const present = new Set(out.map((entry) => entry.countryId).filter(Boolean));
+  for (const countryId of COUNTRY_ORDER) {
+    if (present.has(countryId)) continue;
+    const tier = tierFor(presetId, countryId);
+    if (tier === "absent" || tier === "latent") continue;
+    out.push(
+      buildCountryEntry(
+        presetId,
+        countryId,
+        tier === "player" ? "player" : tier === "econ" ? "economy-preview" : "hidden"
+      )
+    );
+  }
+  return out;
+}
+
+/** Build a preset manifest with the roster overlaid onto its registered countries. */
+function defineRosterManifest(
+  presetId: string,
+  entries: readonly WorldEntityManifestEntry[]
+): WorldEntityPresetManifest {
+  return defineWorldEntityPresetManifest(presetId, applyRosterAccess(presetId, entries));
+}
+
 export const WORLD_ENTITY_MANIFESTS: Readonly<Record<string, WorldEntityPresetManifest>> =
   Object.freeze({
-    "1953-default": defineWorldEntityPresetManifest(
+    "1953-default": defineRosterManifest(
       "1953-default",
       expandManifestWithBackgroundCountries({
         presetId: "1953-default",
@@ -1901,7 +1469,7 @@ export const WORLD_ENTITY_MANIFESTS: Readonly<Record<string, WorldEntityPresetMa
         ]),
       })
     ),
-    "1979-default": defineWorldEntityPresetManifest(
+    "1979-default": defineRosterManifest(
       "1979-default",
       expandManifestWithBackgroundCountries({
         presetId: "1979-default",
@@ -1919,7 +1487,7 @@ export const WORLD_ENTITY_MANIFESTS: Readonly<Record<string, WorldEntityPresetMa
         ),
       })
     ),
-    "1991-default": defineWorldEntityPresetManifest(
+    "1991-default": defineRosterManifest(
       "1991-default",
       expandManifestWithBackgroundCountries({
         presetId: "1991-default",
@@ -1929,7 +1497,7 @@ export const WORLD_ENTITY_MANIFESTS: Readonly<Record<string, WorldEntityPresetMa
         ),
       })
     ),
-    "1999-default": defineWorldEntityPresetManifest(
+    "1999-default": defineRosterManifest(
       "1999-default",
       expandManifestWithBackgroundCountries({
         presetId: "1999-default",
@@ -1939,7 +1507,7 @@ export const WORLD_ENTITY_MANIFESTS: Readonly<Record<string, WorldEntityPresetMa
         ),
       })
     ),
-    "2007-default": defineWorldEntityPresetManifest(
+    "2007-default": defineRosterManifest(
       "2007-default",
       expandManifestWithBackgroundCountries({
         presetId: "2007-default",
@@ -1949,28 +1517,27 @@ export const WORLD_ENTITY_MANIFESTS: Readonly<Record<string, WorldEntityPresetMa
         ),
       })
     ),
-    "2019-default": defineWorldEntityPresetManifest(
+    "2019-default": defineRosterManifest(
       "2019-default",
       expandManifestWithBackgroundCountries({
         presetId: "2019-default",
-        entries: entriesFromAccess(
-          "2019-default",
-          accessMap(POST_COLD_WAR_PLAYER, POST_COLD_WAR_ECONOMY)
-        ),
+        entries: configFallbackEntries("2019-default"),
       })
     ),
-    "2023-default": defineWorldEntityPresetManifest(
+    "2023-default": defineRosterManifest(
       "2023-default",
       expandManifestWithBackgroundCountries({
         presetId: "2023-default",
-        entries: entriesFromAccess(
-          "2023-default",
-          accessMap(POST_COLD_WAR_PLAYER, POST_COLD_WAR_ECONOMY)
-        ),
+        entries: configFallbackEntries("2023-default"),
       })
     ),
-    // prettier-ignore
-    "2027-default": defineWorldEntityPresetManifest("2027-default", entriesFromAccess("2027-default", accessMap(["US", "UK", "DE", "JP", "CN"], POST_COLD_WAR_ECONOMY.filter((countryId) => !["DE", "JP", "CN"].includes(countryId))))),
+    "2027-default": defineRosterManifest(
+      "2027-default",
+      expandManifestWithBackgroundCountries({
+        presetId: "2027-default",
+        entries: configFallbackEntries("2027-default"),
+      })
+    ),
   });
 
 export function getWorldEntityPresetManifest(presetId: string): WorldEntityPresetManifest {

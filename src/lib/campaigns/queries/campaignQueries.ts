@@ -221,6 +221,7 @@ export async function getCampaignDetail(
     candidateIsNPP: campaign.candidateIsNPP,
     party: campaign.party,
     accessLevel,
+    countryId: electionCountryId,
     isArchived: campaign.status === "archived",
     isRunningMate,
     ...(runningMateSurrogate ? { runningMateSurrogate } : {}),

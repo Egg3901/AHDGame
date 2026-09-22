@@ -43,11 +43,17 @@ export interface NavalRepairResult {
  * Naval and air only. No other domain carries `integrity`, so no other domain can be
  * charged for repairing it.
  */
-export async function applyNavalRepair(db: Db, countryId: string): Promise<NavalRepairResult> {
+export async function applyNavalRepair(
+  db: Db,
+  countryId: string,
+  knownUnits?: MilitaryUnit[]
+): Promise<NavalRepairResult> {
   const unitsCol = getMilitaryUnitsCollection(db);
-  const units = await unitsCol
-    .find({ countryId: countryId as CountryId, domain: { $in: ["naval", "air"] } })
-    .toArray();
+  const units = knownUnits
+    ? knownUnits.filter((unit) => unit.domain === "naval" || unit.domain === "air")
+    : await unitsCol
+        .find({ countryId: countryId as CountryId, domain: { $in: ["naval", "air"] } })
+        .toArray();
   if (units.length === 0) return { unitsRepaired: 0, lotsUsed: 0 };
 
   const arsenal = await getNationalArsenal(db, countryId);

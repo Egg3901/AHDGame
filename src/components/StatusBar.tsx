@@ -202,19 +202,25 @@ export function StatusBar({ showOnlineStatus = true }: { showOnlineStatus?: bool
 
   // Trade flows (bonds/shares/forex/savings/transfers) that mutate wallet state
   // but don't echo the new character dispatch CHARACTER_STATS_REFETCH.
+  // Skipped while the tab is hidden; the visible-again handler below heals it.
   useEffect(() => {
-    const handler = () => void refetchStats();
+    const handler = () => {
+      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
+      void refetchStats();
+    };
     window.addEventListener(CHARACTER_STATS_REFETCH, handler);
     return () => window.removeEventListener(CHARACTER_STATS_REFETCH, handler);
   }, [refetchStats]);
 
   // Refresh when the status-bar layout changes — different chips need fields the
-  // previous payload may have omitted.
+  // previous payload may have omitted. Skipped while the tab is hidden; the
+  // visible-again handler refetches with the current layout on return.
   useEffect(() => {
     if (isExcludedPath || !layoutSynced) return;
     const previousLayout = previousLayoutRef.current;
     previousLayoutRef.current = layout;
     if (previousLayout === null || previousLayout === layout) return;
+    if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
     void refetchStats();
   }, [isExcludedPath, layout, layoutSynced, refetchStats]);
 
@@ -236,11 +242,14 @@ export function StatusBar({ showOnlineStatus = true }: { showOnlineStatus?: bool
       prevTurnRef.current = turn;
       return;
     }
-    if (turn !== prevTurnRef.current) {
-      prevTurnRef.current = turn;
-      void refetchStats();
-      refetchNav();
-    }
+    if (turn === prevTurnRef.current) return;
+    prevTurnRef.current = turn;
+    // Nav flags (crisis/world-menu state) refresh on every turn, even hidden.
+    // The heavy status payload waits: the visible-again handler refetches it
+    // with the current layout on return.
+    refetchNav();
+    if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
+    void refetchStats();
   }, [gameState?.currentTurn, refetchStats, refetchNav]);
 
   // Refresh when the player returns to the tab, plus a light visible-only poll,

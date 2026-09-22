@@ -134,13 +134,47 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
           }
         | undefined;
 
-      const runRedemption = async (sess?: import("mongodb").ClientSession) => {
+      const runRedemptionBody = async (
+        sess: import("mongodb").ClientSession | undefined,
+        compensate: boolean,
+        undo: Array<() => Promise<void>>
+      ) => {
         const s = sess ? { session: sess } : undefined;
         // Guarded debit: a concurrent redemption may have drained the position
         // since the pre-check above — never pay out units that weren't debited.
         const debit = await debitFundPosition(db, fund._id, "character", { characterId }, units, s);
         if (!debit.ok) {
           throw badRequest("Insufficient units — your position changed, please retry.");
+        }
+        // On the standalone path there is no transaction to roll back, so the
+        // exact pre-debit position is restored if a later leg throws.
+        if (compensate) {
+          undo.push(async () => {
+            await db.collection("indexFundPositions").updateOne(
+              { _id: position!._id },
+              {
+                $set: {
+                  units: position!.units,
+                  updatedAt: position!.updatedAt,
+                  ...(position!.avgNavAnchor !== undefined
+                    ? { avgNavAnchor: position!.avgNavAnchor }
+                    : {}),
+                  ...(position!.legacyUnits !== undefined
+                    ? { legacyUnits: position!.legacyUnits }
+                    : {}),
+                },
+                $setOnInsert: {
+                  fundId: position!.fundId,
+                  holderKind: position!.holderKind,
+                  createdAt: position!.createdAt,
+                  ...(position!.characterId !== undefined
+                    ? { characterId: position!.characterId }
+                    : {}),
+                },
+              },
+              { upsert: true }
+            );
+          });
         }
 
         // Ticket #857 grandfather: units bought before the currency-scale fix
@@ -167,6 +201,16 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
         );
         if (supplyBurn.matchedCount === 0) {
           throw new Error("Fund unit supply changed during redemption; please retry.");
+        }
+        if (compensate) {
+          undo.push(async () => {
+            await db
+              .collection("indexFunds")
+              .updateOne(
+                { _id: fund._id },
+                { $inc: { unitSupply: units }, $set: { updatedAt: new Date() } }
+              );
+          });
         }
 
         let fundState = await resolveFundBySlugOrId(db, slug, s);
@@ -207,21 +251,53 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
           if (cashDebit.matchedCount === 0) {
             throw new Error("FUND_CASH_RACE");
           }
+          // Undo for this leg's cash debit, unwound by the outer stack if a
+          // later leg throws.
+          const cashUndo = compensate
+            ? async () => {
+                await db.collection("indexFunds").updateOne(
+                  { _id: fundState!._id },
+                  {
+                    $inc: { cashAnchor: quote.paidAmountAnchor },
+                    $set: { updatedAt: new Date() },
+                  }
+                );
+              }
+            : undefined;
+          if (cashUndo) undo.push(cashUndo);
 
           const creditInc = buildPersonalBalanceInc(
             forexEnabled ? quote.paidAmountAnchor * blendedRedeemFxRate : quote.paidAmountAnchor,
             fundState!.anchorCurrencyCode,
             forexEnabled
           );
-          await db
+          const creditResult = await db
             .collection("characters")
             .updateOne(
               { _id: characterId },
               { $inc: creditInc, $set: { updatedAt: new Date() } },
               s
             );
+          if (creditResult.matchedCount === 0) {
+            // Holder gone. Unwind everything already applied (position,
+            // supply and cash) via the compensation stack instead of
+            // reporting a payout that never landed.
+            throw notFound("Character not found");
+          }
 
-          await insertFundTransaction(
+          if (compensate) {
+            const negatedInc: Record<string, number> = {};
+            for (const [field, value] of Object.entries(creditInc)) {
+              negatedInc[field] = -value;
+            }
+            undo.push(async () => {
+              await db
+                .collection("characters")
+                .updateOne({ _id: characterId }, { $inc: negatedInc });
+            });
+          }
+
+          const redemptionTxId = await insertFundTransaction(
             db,
             {
               fundId: fundState!._id,
@@ -235,6 +311,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
             },
             s
           );
+          if (compensate) {
+            undo.push(async () => {
+              await db.collection("indexFundTransactions").deleteOne({ _id: redemptionTxId });
+            });
+          }
 
           totalRedeemedUnits += quote.redeemableUnits;
           totalPaidAnchor += quote.paidAmountAnchor;
@@ -254,6 +335,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
             cashQuote.queuedAmountAnchor,
             { ...s, note: "Player redemption liquidity" }
           );
+          if (compensate && sellResult.undo) undo.push(sellResult.undo);
           sharesSoldForLiquidity += sellResult.sharesSold;
 
           fundState = (await resolveFundBySlugOrId(db, slug, s)) ?? fundState;
@@ -284,7 +366,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
         }
 
         if (cashQuote.queuedUnits > 0) {
-          await enqueueRedemption(
+          const queueEntryId = await enqueueRedemption(
             db,
             {
               fundId: fundState._id,
@@ -311,8 +393,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
             },
             s
           );
+          if (compensate) {
+            undo.push(async () => {
+              await db.collection("indexFundRedemptionQueue").deleteOne({ _id: queueEntryId });
+            });
+          }
 
-          await insertFundTransaction(
+          const queuedTxId = await insertFundTransaction(
             db,
             {
               fundId: fundState._id,
@@ -327,6 +414,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
             },
             s
           );
+          if (compensate) {
+            undo.push(async () => {
+              await db.collection("indexFundTransactions").deleteOne({ _id: queuedTxId });
+            });
+          }
         }
 
         const finalStatus: "paid" | "partial" | "queued" =
@@ -343,6 +435,36 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
           redeemFxRate: blendedRedeemFxRate,
           ...(sharesSoldForLiquidity > 0 ? { sharesSoldForLiquidity } : {}),
         };
+      };
+
+      // Thin wrapper: run the body and, on the standalone (non-atomic) path,
+      // unwind every leg it applied in reverse order. A failure in the unwind
+      // itself is reported as an AggregateError so the caller never treats a
+      // partially-applied redemption as a clean abort.
+      const runRedemption = async (sess?: import("mongodb").ClientSession) => {
+        const compensate = !sess;
+        const undo: Array<() => Promise<void>> = [];
+        try {
+          await runRedemptionBody(sess, compensate, undo);
+        } catch (error) {
+          if (!compensate || undo.length === 0) throw error;
+          const compensationErrors: unknown[] = [];
+          while (undo.length > 0) {
+            const revert = undo.pop()!;
+            try {
+              await revert();
+            } catch (compensationError) {
+              compensationErrors.push(compensationError);
+            }
+          }
+          if (compensationErrors.length > 0) {
+            throw new AggregateError(
+              [error, ...compensationErrors],
+              `Redemption failed and ${compensationErrors.length} compensation step(s) were incomplete`
+            );
+          }
+          throw error;
+        }
       };
 
       try {

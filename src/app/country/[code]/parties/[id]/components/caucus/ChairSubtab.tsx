@@ -12,7 +12,12 @@ import type {
 import { apiBase, relationshipBadge, recruitStatusTone, formatHoursMinutes } from "./caucusUtils";
 import { useChairSubtabState } from "./useChairSubtabState";
 import type { CountryId } from "@/lib/constants/countries";
-import { getPlayerPayoutCap } from "@/lib/treasury/payoutCapValues";
+import {
+  countDistinctOfficers,
+  formatPayoutCap,
+  getEffectivePlayerPayoutCap,
+  PAYOUT_CAP_MULTI_OFFICER_MULTIPLIER,
+} from "@/lib/treasury/payoutCapValues";
 
 export function ChairSubtab({
   countryCode,
@@ -502,10 +507,27 @@ export function ChairSubtab({
             Move caucus funds directly to an active player member&apos;s campaign account.
           </p>
           <p className="text-[11px] text-muted">
-            Caucus funds count towards the same per-turn ceiling as party funds: $
-            {getPlayerPayoutCap(countryCode.toUpperCase() as CountryId).toLocaleString("en-US")} per
-            member per turn across the national treasury, state parties and caucuses combined.
-            Nothing moves in the last two turns before a party leadership election closes.
+            {/* Counted here rather than sent from the server, which is safe
+                ONLY because the caucus payload carries raw `chairId` /
+                `viceChairId` with no ban filtering, so it matches what the
+                send route counts. The party and state party payloads DO drop
+                a banned holder, which is why those two read a server-sent
+                `seatedOfficers` instead. If ban filtering is ever added here,
+                switch this to a server-sent count or it will quietly show a
+                lower ceiling than the server enforces. */}
+            Caucus funds count towards the same per-turn ceiling as party funds:{" "}
+            {formatPayoutCap(
+              countryCode.toUpperCase() as CountryId,
+              getEffectivePlayerPayoutCap(
+                countryCode.toUpperCase() as CountryId,
+                countDistinctOfficers([caucus.chairId, caucus.viceChairId])
+              )
+            )}{" "}
+            per member per turn across the national treasury, state parties and caucuses combined.
+            Nothing moves in the last two turns before a party leadership election closes.{" "}
+            {countDistinctOfficers([caucus.chairId, caucus.viceChairId]) >= 2
+              ? `The ceiling is ${PAYOUT_CAP_MULTI_OFFICER_MULTIPLIER} times the base one while this caucus has both a Chair and a Vice-Chair seated.`
+              : `Seating both a Chair and a Vice-Chair would raise it ${PAYOUT_CAP_MULTI_OFFICER_MULTIPLIER} times.`}
           </p>
           <label className="block text-[11px] uppercase tracking-widest text-muted">
             Member

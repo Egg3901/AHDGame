@@ -1,4 +1,10 @@
 import type { CountryId } from "@/lib/constants/countries";
+import { JP_LEGISLATIVE_PROCESS } from "@/lib/countries/jp/institutionsFacts";
+import { DE_LEGISLATIVE_PROCESS } from "@/lib/countries/de/institutionsFacts";
+import { CN_LEGISLATIVE_PROCESS } from "@/lib/countries/cn/institutionsFacts";
+import { IE_LEGISLATIVE_PROCESS } from "@/lib/countries/ie/institutionsFacts";
+import { US_LEGISLATIVE_PROCESS } from "@/lib/countries/us/institutionsFacts";
+import { UK_LEGISLATIVE_PROCESS } from "@/lib/countries/uk/institutionsFacts";
 
 /** Chamber seating geometry used by the composition + vote-seating charts. */
 export type SeatingStyle = "hemicycle" | "benches" | "horseshoe";
@@ -33,173 +39,18 @@ export interface LegislativeProcess {
   seatingStyle: SeatingStyle;
 }
 
-const US: LegislativeProcess = {
-  executive: {
-    title: "President",
-    canVeto: true,
-    signLabel: "President signs",
-    vetoLabel: "Veto",
-    signNote: "The President may sign the bill into law or return it with a veto.",
-    override: {
-      threshold: "two-thirds",
-      body: "both chambers",
-      note: "A two-thirds vote in both the House and Senate overrides a presidential veto.",
-    },
-  },
-  upperNote:
-    "Both chambers are co-equal — the bill must pass the House and the Senate in identical form.",
-  dissolution: null,
-  quirks: [
-    {
-      icon: "shield",
-      title: "Presidential veto",
-      body: "Enrolled bills go to the President's desk to be signed or vetoed.",
-    },
-    {
-      icon: "users",
-      title: "Veto override",
-      body: "Congress can override a veto with a two-thirds majority in both chambers.",
-    },
-    {
-      icon: "scale",
-      title: "Bicameral identical text",
-      body: "House and Senate must agree on the same text before enrollment.",
-    },
-  ],
-  seatingStyle: "hemicycle",
-};
+const DE: LegislativeProcess = DE_LEGISLATIVE_PROCESS;
 
-const UK: LegislativeProcess = {
-  executive: {
-    title: "The Crown",
-    canVeto: false,
-    signLabel: "Royal Assent",
-    signNote: "Royal Assent is a constitutional formality — it has not been refused since 1708.",
-    override: null,
-  },
-  upperNote:
-    "The Lords may revise or delay a bill, but under the Parliament Acts the Commons ultimately prevails — and the Lords cannot block a money bill.",
-  dissolution: {
-    actor: "Prime Minister",
-    body: "The PM may call a snap general election. Parliament is dissolved and all bills still in progress fall.",
-  },
-  quirks: [
-    {
-      icon: "building",
-      title: "Commons supremacy",
-      body: "The Lords can delay but not block; the Parliament Acts let the Commons override.",
-    },
-    {
-      icon: "bolt",
-      title: "Snap election",
-      body: "A PM-called general election dissolves Parliament and kills all active legislation.",
-    },
-    {
-      icon: "doc",
-      title: "Royal Assent",
-      body: "Assent by the Crown is automatic — a formality, never refused in practice.",
-    },
-  ],
-  seatingStyle: "benches",
-};
+/**
+ * Forwarder. Japan's legislative process moved to the country folder in D3.
+ *
+ * ⚠️ Declared as a module-level const rather than an inline key: the registry
+ * below composes from these consts by shorthand, so the usual "replace the JP
+ * entry" pass does not apply here.
+ */
+const JP: LegislativeProcess = JP_LEGISLATIVE_PROCESS;
 
-const DE: LegislativeProcess = {
-  executive: {
-    title: "Federal President",
-    canVeto: false,
-    signLabel: "Presidential signature",
-    signNote:
-      "The Federal President signs and promulgates the law, and may decline only on constitutional grounds.",
-    override: null,
-  },
-  upperNote:
-    "The Bundesrat represents the Länder. Consent bills require its approval; for objection bills it can be overruled by the Bundestag.",
-  dissolution: {
-    actor: "Chancellor",
-    body: "There is no free dissolution. A constructive vote of no confidence must name a successor Chancellor (Art. 67).",
-  },
-  quirks: [
-    {
-      icon: "building",
-      title: "Bundesrat consent",
-      body: "Bills affecting the Länder need Bundesrat approval; others it may only delay.",
-    },
-    {
-      icon: "users",
-      title: "Constructive no-confidence",
-      body: "The Chancellor can only be removed by electing a replacement in the same vote.",
-    },
-    {
-      icon: "doc",
-      title: "Promulgation",
-      body: "The Federal President's signature is largely ceremonial.",
-    },
-  ],
-  seatingStyle: "hemicycle",
-};
-
-const JP: LegislativeProcess = {
-  executive: {
-    title: "The Emperor",
-    canVeto: false,
-    signLabel: "Promulgation",
-    signNote: "The bill is promulgated by the Emperor on the Cabinet's advice — a formality.",
-    override: null,
-  },
-  upperNote:
-    "If the Sangiin (Councillors) rejects or amends a bill, the Shūgiin (Representatives) can override with a two-thirds majority.",
-  dissolution: {
-    actor: "Prime Minister",
-    body: "The PM may dissolve the Shūgiin and call an election; bills in progress lapse.",
-  },
-  quirks: [
-    {
-      icon: "users",
-      title: "Shūgiin override",
-      body: "The lower house can override the Sangiin with a two-thirds vote.",
-    },
-    {
-      icon: "doc",
-      title: "Cabinet bills",
-      body: "Most legislation is Cabinet-submitted (Kakuhō), not member-introduced.",
-    },
-    {
-      icon: "bolt",
-      title: "Dissolution",
-      body: "The PM can dissolve the Shūgiin, ending all pending business.",
-    },
-  ],
-  seatingStyle: "hemicycle",
-};
-
-const IE: LegislativeProcess = {
-  executive: {
-    title: "Enactment",
-    canVeto: false,
-    signLabel: "Signed into law",
-    signNote: "Once passed by the Dáil, the bill is enacted into law.",
-    override: null,
-  },
-  upperNote:
-    "The Seanad may revise or delay a bill, but the Dáil ultimately prevails. Seanad business is not player-managed.",
-  dissolution: {
-    actor: "Taoiseach",
-    body: "The Taoiseach may seek a dissolution of the Dáil; a general election is called and all bills in progress fall.",
-  },
-  quirks: [
-    {
-      icon: "building",
-      title: "Dáil supremacy",
-      body: "The Dáil drives all legislation; the Seanad can delay but not block.",
-    },
-    {
-      icon: "bolt",
-      title: "Dissolution",
-      body: "A Taoiseach-sought election dissolves the Dáil and ends pending bills.",
-    },
-  ],
-  seatingStyle: "horseshoe",
-};
+const IE: LegislativeProcess = IE_LEGISLATIVE_PROCESS;
 
 /** Sweden 1953 bicameral Riksdag — same revise/delay shape as IE's Seanad. */
 const SE_1953: LegislativeProcess = {
@@ -231,36 +82,7 @@ const SE_1953: LegislativeProcess = {
   seatingStyle: "hemicycle",
 };
 
-const CN: LegislativeProcess = {
-  executive: {
-    title: "President",
-    canVeto: false,
-    signLabel: "Promulgation",
-    signNote:
-      "Adopted laws are promulgated by the President by order. The NPC is the highest organ of state power.",
-    override: null,
-  },
-  upperNote: null,
-  dissolution: null,
-  quirks: [
-    {
-      icon: "building",
-      title: "NPC supremacy",
-      body: "The National People's Congress is constitutionally the highest organ of state power.",
-    },
-    {
-      icon: "users",
-      title: "Standing Committee",
-      body: "Between sessions, the NPC Standing Committee exercises legislative authority.",
-    },
-    {
-      icon: "shield",
-      title: "Party leadership",
-      body: "Legislation advances under the leadership of the Communist Party of China.",
-    },
-  ],
-  seatingStyle: "hemicycle",
-};
+const CN: LegislativeProcess = CN_LEGISLATIVE_PROCESS;
 
 const DEFAULT_PROCESS: LegislativeProcess = {
   executive: {
@@ -277,8 +99,8 @@ const DEFAULT_PROCESS: LegislativeProcess = {
 };
 
 export const LEGISLATIVE_PROCESS: Partial<Record<CountryId, LegislativeProcess>> = {
-  US,
-  UK,
+  US: US_LEGISLATIVE_PROCESS,
+  UK: UK_LEGISLATIVE_PROCESS,
   DE,
   JP,
   IE,

@@ -76,7 +76,17 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           VERSION="${{ steps.version.outputs.value }}"
-          gh release create "v$VERSION" \
-            --title "$(cat /tmp/release-title.txt)" \
-            --notes-file /tmp/release-body.md \
-            --verify-tag
+          if gh release view "v$VERSION" >/dev/null 2>&1; then
+            # A rerun may find a draft created before the tag push. Update and
+            # publish that one record instead of creating a duplicate release.
+            gh release edit "v$VERSION" \
+              --title "$(cat /tmp/release-title.txt)" \
+              --notes-file /tmp/release-body.md \
+              --draft=false \
+              --verify-tag
+          else
+            gh release create "v$VERSION" \
+              --title "$(cat /tmp/release-title.txt)" \
+              --notes-file /tmp/release-body.md \
+              --verify-tag
+          fi

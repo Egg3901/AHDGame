@@ -83,6 +83,7 @@ async function main() {
 
   const { _id: _drop, ...latestReport } = latest;
   void _drop;
+  printStockVsFlowByKind(latest);
 
   console.log("=".repeat(72));
   console.log("SHADOW LEDGER — 150-TURN SIM RECONCILER REPORT");
@@ -132,6 +133,56 @@ async function main() {
     writeFileSync(backlogOut, lines.join("\n"));
     console.log(`\nWrote backlog to ${backlogOut}`);
   }
+}
+
+/**
+ * #992 class inventory for the latest turn: divergent accounts ranked by
+ * unexplained ₳. Prefers the persisted pre-cap `byKind` breakdown; derives
+ * from the capped findings list for reconciliations written before it existed
+ * (marked approximate).
+ */
+function printStockVsFlowByKind(latest: import("@/lib/ledger/types").LedgerReconciliation) {
+  const persisted = latest.stockVsFlow.byKind ?? [];
+  console.log("### Stock-vs-flow by account kind (latest turn)");
+  console.log("");
+  if (latest.stockVsFlow.skipped) {
+    console.log("(check skipped this turn: unknown, not zero)");
+    console.log("");
+    return;
+  }
+  if (persisted.length === 0 && (latest.stockVsFlow.divergentCount ?? 0) === 0) {
+    console.log("(no divergent accounts)");
+    console.log("");
+    return;
+  }
+  console.log("| unexplained ₳ (abs) | accounts | uninstrumented | kind |");
+  console.log("| ---: | ---: | ---: | --- |");
+  if (persisted.length > 0) {
+    for (const row of persisted) {
+      console.log(
+        `| ${Math.round(row.absDivergence).toLocaleString()} | ${row.divergentCount} | ${row.uninstrumentedCount} | ${row.kind} |`
+      );
+    }
+  } else {
+    console.log(
+      `(pre-byKind reconciliation: ranking ${latest.stockVsFlow.findings.length} capped findings only — approximate)`
+    );
+    const approx = new Map<string, { count: number; abs: number; uninstrumented: number }>();
+    for (const f of latest.stockVsFlow.findings) {
+      const kind = f.account.split(":")[0] ?? "unknown";
+      const row = approx.get(kind) ?? { count: 0, abs: 0, uninstrumented: 0 };
+      row.count += 1;
+      row.abs += Math.abs(f.divergence);
+      if (f.uninstrumented) row.uninstrumented += 1;
+      approx.set(kind, row);
+    }
+    for (const [kind, row] of [...approx.entries()].sort((a, b) => b[1].abs - a[1].abs)) {
+      console.log(
+        `| ${Math.round(row.abs).toLocaleString()} | ${row.count} | ${row.uninstrumented} | ${kind} |`
+      );
+    }
+  }
+  console.log("");
 }
 
 type PhaseTelemetry = { startedAt?: string | Date | null; completedAt?: string | Date | null };

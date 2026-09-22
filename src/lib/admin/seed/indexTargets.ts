@@ -198,6 +198,12 @@ export const INDEX_TARGETS = [
     description:
       "UNIQUE indexes holding one intelligence agency per country, one network per (owner, target) pair and one coverage row per (owner, target, domain), plus the operation-log lookups by target and by owner. The read paths assume those invariants rather than re-checking them, so a world without these is quietly wrong rather than quietly slow.",
   },
+  {
+    id: "indexesTelemetry",
+    label: "Indexes — Long-horizon telemetry",
+    description:
+      "UNIQUE series coordinates on approvalTelemetry (world, country, region, turn) and macroTelemetry (world, country, region, metric, turn): the series read path and the cron-retry duplicate guard.",
+  },
 ] as const satisfies readonly IndexTargetMeta[];
 
 export type IndexTargetId = (typeof INDEX_TARGETS)[number]["id"];

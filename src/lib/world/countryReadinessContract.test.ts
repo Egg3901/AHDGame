@@ -7,6 +7,7 @@ import {
   READINESS_PROFILES,
   resolveReadinessArchetypes,
   assessCountryReadiness,
+  CAPABILITY_INVENTORY,
   type CapabilityEvidenceMap,
   type CapabilityId,
   type ReadinessArchetype,
@@ -313,5 +314,69 @@ describe("player-open gate", () => {
     const result = canOpenCountryToPlayers("FR", "1953-default");
     expect(result.ok).toBe(false);
     expect(result.report.hardBlockers.length).toBeGreaterThan(0);
+  });
+});
+
+/**
+ * The probes used to answer from a country-keyed lookup that never read the
+ * preset, so 19 countries reported another era's data as their own.
+ */
+describe("probes read the preset, not just the country", () => {
+  const rosterOf = (countryId: "RU", presetId: string) =>
+    assessCountryReadiness(countryId, presetId).capabilities.find(
+      (c) => c.capabilityId === "partiesAuthored"
+    )!;
+
+  it("does not credit Russia with the CPSU in a modern world", () => {
+    expect(rosterOf("RU", "1979-default").evidence).toContain("CPSU");
+    expect(rosterOf("RU", "2019-default").evidence).not.toContain("CPSU");
+  });
+
+  it("reports partiesAuthored as absent where the era seeds no party", () => {
+    expect(rosterOf("RU", "1979-default").present).toBe(true);
+    expect(rosterOf("RU", "2019-default").present).toBe(false);
+  });
+});
+
+describe("capability overrides justify themselves", () => {
+  it("rejects placeholder reasons", () => {
+    const placeholder = /^\s*(tbd|todo|n\/?a|none|)\s*$/i;
+    for (const [key, override] of Object.entries(CAPABILITY_INVENTORY)) {
+      if (!override) continue;
+      const text = override.present ? override.evidence : override.reason;
+      expect(placeholder.test(text), `${key}: "${text}"`).toBe(false);
+      expect(text.length, key).toBeGreaterThan(20);
+    }
+  });
+
+  it("reports every deferred waiver as debt, with or without an issue", () => {
+    // `deferred` means "not authored yet". Filing happens by hand on a public
+    // repository, so an unfiled waiver is `issue: null` and still surfaces here.
+    // What must never happen is a deferred gap disguised as `not-applicable`.
+    const deferred = Object.entries(CAPABILITY_INVENTORY).filter(
+      ([, o]) => o && !o.present && o.kind === "deferred"
+    );
+    expect(deferred.length).toBeGreaterThan(0);
+    for (const [key, override] of deferred) {
+      const issue = (override as { issue: string | null }).issue;
+      expect(issue === null || /^#\d+$/.test(issue), `${key}: ${issue}`).toBe(true);
+    }
+  });
+
+  it("surfaces the waiver reason in the report rather than undefined", () => {
+    // The conversion layer earns its keep here: the union names the field
+    // `reason`, and assigning it straight into a CapabilityEvidence would leave
+    // `evidence` undefined in every report that carries a waiver.
+    const jp = assessCountryReadiness("JP", "1953-default");
+    const events = jp.capabilities.find((c) => c.capabilityId === "bespokeEvents")!;
+    expect(events.evidence).toContain("bespoke event pack");
+    expect(events.evidence).toContain("deferred, no issue filed");
+  });
+
+  it("keeps presence overrides on their original evidence field", () => {
+    const us = assessCountryReadiness("US", "1953-default");
+    const wiki = us.capabilities.find((c) => c.capabilityId === "wikiMaterial")!;
+    expect(wiki.present).toBe(true);
+    expect(wiki.evidence).toBe("US wiki material is complete.");
   });
 });

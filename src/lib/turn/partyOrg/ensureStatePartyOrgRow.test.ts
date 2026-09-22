@@ -188,19 +188,33 @@ describe("ensureStatePartyOrgRow", () => {
     expect(row.hasPresence).toBe(false);
   });
 
-  it("refuses to create a row for a non-electoral US region (DC)", async () => {
+  it("creates a party organization row for DC despite its non-electoral status", async () => {
+    db.collection("gameState");
+    db.collection("states");
+    db.collectionMocks["statePartyOrg"]!.findOne.mockResolvedValue(null);
+
+    const row = await ensureStatePartyOrgRow(db as unknown as Db, {
+      countryId: "US",
+      stateId: "DC",
+      party,
+      hasPresence: true,
+    });
+
+    expect(row).toMatchObject({ _id: "DC_2", countryId: "US", stateId: "DC", partyId: "2" });
+    expect(db.collectionMocks["statePartyOrg"]!.updateOne).toHaveBeenCalled();
+  });
+
+  it("still refuses to create a row for an unsupported US region", async () => {
     db.collectionMocks["statePartyOrg"]!.findOne.mockResolvedValue(null);
 
     await expect(
       ensureStatePartyOrgRow(db as unknown as Db, {
         countryId: "US",
-        stateId: "DC",
+        stateId: "PR",
         party,
         hasPresence: true,
       })
-    ).rejects.toThrow(/DC|electoral/i);
-
-    expect(db.collectionMocks["statePartyOrg"]!.updateOne).not.toHaveBeenCalled();
+    ).rejects.toThrow(/PR|unsupported/i);
   });
 
   it("allows Alaska's territorial party organization under 1953-default", async () => {

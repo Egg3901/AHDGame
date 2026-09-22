@@ -11,6 +11,14 @@
  */
 import type { CountryId } from "./countries";
 import { getStatsIdentity, type StatsAccent } from "./nationalStatsIdentity";
+import { JP_IDENTITY } from "@/lib/countries/jp/identity";
+import { US_IDENTITY } from "@/lib/countries/us/identity";
+import { UK_IDENTITY } from "@/lib/countries/uk/identity";
+import { DE_IDENTITY } from "@/lib/countries/de/identity";
+import { CN_IDENTITY } from "@/lib/countries/cn/identity";
+import { IE_IDENTITY } from "@/lib/countries/ie/identity";
+import { NG_IDENTITY } from "@/lib/countries/ng/identity";
+import { BR_IDENTITY } from "@/lib/countries/br/identity";
 
 export interface EconomyIdentity {
   /** Watermark / chop glyph (经 / US / …). */
@@ -31,79 +39,15 @@ export interface EconomyIdentity {
   accent: StatsAccent;
 }
 
-const ECONOMY_TEXT: Partial<Record<CountryId, Omit<EconomyIdentity, "accent">>> = {
-  US: {
-    glyph: "US",
-    serif: "mono",
-    title: "Economic Outlook",
-    titleEn: null,
-    office: "Bureau of National Accounts",
-    officeEn: "Bureau of National Accounts",
-    registry: "United States · National Accounts Registry",
-  },
-  CN: {
-    glyph: "经",
-    serif: "cjk",
-    title: "国民经济展望",
-    titleEn: "Economic Outlook",
-    office: "国家统计局 · 国民经济核算司",
-    officeEn: "National Accounts Office",
-    registry: "People's Republic of China · National Accounts Registry",
-  },
-  UK: {
-    glyph: "UK",
-    serif: "mono",
-    title: "Economic Outlook",
-    titleEn: null,
-    office: "Office for National Statistics · Economic Accounts",
-    officeEn: "Office for National Statistics · Economic Accounts",
-    registry: "United Kingdom · National Accounts Registry",
-  },
-  DE: {
-    glyph: "DE",
-    serif: "mono",
-    title: "Wirtschaftsausblick",
-    titleEn: "Economic Outlook",
-    office: "Statistisches Bundesamt · Volkswirtschaftliche Gesamtrechnungen",
-    officeEn: "Federal Statistical Office · National Accounts",
-    registry: "Federal Republic of Germany · National Accounts Registry",
-  },
-  JP: {
-    glyph: "経",
-    serif: "cjk",
-    title: "経済展望",
-    titleEn: "Economic Outlook",
-    office: "内閣府 · 経済社会総合研究所",
-    officeEn: "Cabinet Office · Economic and Social Research Institute",
-    registry: "Japan · National Accounts Registry",
-  },
-  IE: {
-    glyph: "ÉI",
-    serif: "mono",
-    title: "Ionchas Eacnamaíochta",
-    titleEn: "Economic Outlook",
-    office: "An Phríomh-Oifig Staidrimh · Cuntais Náisiúnta",
-    officeEn: "Central Statistics Office · National Accounts",
-    registry: "Ireland · National Accounts Registry",
-  },
-  BR: {
-    glyph: "BR",
-    serif: "mono",
-    title: "Panorama Econômico",
-    titleEn: "Economic Outlook",
-    office: "IBGE · Contas Nacionais",
-    officeEn: "IBGE · National Accounts",
-    registry: "Federative Republic of Brazil · National Accounts Registry",
-  },
-  NG: {
-    glyph: "NG",
-    serif: "mono",
-    title: "Economic Outlook",
-    titleEn: null,
-    office: "National Bureau of Statistics · National Accounts",
-    officeEn: "National Bureau of Statistics · National Accounts",
-    registry: "Federal Republic of Nigeria · National Accounts Registry",
-  },
+export const ECONOMY_TEXT: Partial<Record<CountryId, Omit<EconomyIdentity, "accent">>> = {
+  US: US_IDENTITY.economyText,
+  CN: CN_IDENTITY.economyText,
+  UK: UK_IDENTITY.economyText,
+  DE: DE_IDENTITY.economyText,
+  JP: JP_IDENTITY.economyText,
+  IE: IE_IDENTITY.economyText,
+  BR: BR_IDENTITY.economyText,
+  NG: NG_IDENTITY.economyText,
 };
 
 const DEFAULT_ECONOMY_TEXT: Omit<EconomyIdentity, "accent"> = {

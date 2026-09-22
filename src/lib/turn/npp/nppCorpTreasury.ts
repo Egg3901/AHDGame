@@ -216,85 +216,101 @@ export async function processNppCorpTreasury(db: Db, turn: number, now: Date): P
     bondById.set(row.id, bond);
   }
 
-  let bought = 0;
+  // Bond float and holder caps only contend within a currency book. Preserve
+  // corporation order inside each book, while allowing independent currencies
+  // to settle concurrently instead of serializing every market behind USD.
+  const corpsByCurrency = new Map<CurrencyCode, Corporation[]>();
   for (const corp of nppCorps) {
     if (isStateOwned(corp)) continue;
     if (corp.caretakerCeo?.mandate === "passive") continue;
     if (!glutStaggerEligible(corp._id.toString(), turn)) continue;
     const currencyCode = resolveCorpLiquidCurrencyCode(corp);
     if (!currencyCode) continue;
-    const corpFx = fxByCurrency.get(currencyCode) || 1;
-    const toCorpLocal = (amountAnchor: number) =>
-      anchorToCorpCapital(amountAnchor, currencyCode, corpFx);
-    let dailyRevenueLocal = 0;
-    for (const s of sectorsByCorp.get(corp._id.toString()) ?? []) {
-      const hostCurrency = resolveSectorHostCurrencyCode(s, corp);
-      const hostRate =
-        (hostCurrency && fxByCurrency.get(hostCurrency)) ??
-        (hostCurrency === currencyCode ? corpFx : 1);
-      dailyRevenueLocal += toCorpLocal(
-        readCorpEconomicAnchor(s.realizedRevenue ?? s.revenue ?? 0, hostCurrency, hostRate)
-      );
-    }
-    const lastEarnings = corp.earningsHistory?.[corp.earningsHistory.length - 1] ?? 0;
-    const pick = pickNppCorpBond({
-      corpId: corp._id.toString(),
-      cashLocal: corp.liquidCapital ?? 0,
-      dailyRevenueLocal,
-      income: lastEarnings,
-      currencyCode,
-      bonds: bondsByCurrency.get(currencyCode) ?? [],
-    });
-    if (!pick) continue;
-
-    const bond = bondById.get(pick.bondId);
-    if (!bond) continue;
-    const capErr = sovereignBondCapError(bond, "corporationId", corp._id, pick.units);
-    if (capErr) continue;
-
-    const debit = await atomicallyDebitCorpLiquidCapital(db, corp._id, pick.costLocal);
-    if (!debit.ok) continue;
-    try {
-      const reserved = await reserveBondUnitsForHolder(
-        db,
-        bond._id,
-        { field: "corporationId", id: corp._id },
-        pick.units,
-        now
-      );
-      if (!reserved) {
-        await refundCorpLiquidCapital(db, corp._id, pick.costLocal);
-        continue;
-      }
-      await creditBondPool(db, bondPoolCurrency(bond), pick.costLocal, "purchasesIn", now);
-      await emitTx(db, {
-        type: "bond_purchase",
-        turn,
-        createdAt: now,
-        subjectType: "corporation",
-        subjectId: corp._id,
-        subjectName: corp.name,
-        amount: -pick.costLocal,
-        balanceAfter: debit.newBalance,
-        currencyCode,
-        counterpartyType: "system",
-        counterpartyName: bond.issuerName ?? "Bond market",
-        meta: {
-          bondId: bond._id.toString(),
-          units: pick.units,
-          pricePerUnit: bond.marketPrice,
-          nppTreasury: true,
-        },
-      });
-      bought += 1;
-      const book = bondsByCurrency.get(currencyCode);
-      const row = book?.find((b) => b.id === pick.bondId);
-      if (row) row.publicFloat = Math.max(0, row.publicFloat - pick.units);
-      bond.publicFloat = Math.max(0, (bond.publicFloat ?? 0) - pick.units);
-    } catch (err) {
-      await refundCorpLiquidCapital(db, corp._id, pick.costLocal);
-      throw err;
-    }
+    const list = corpsByCurrency.get(currencyCode) ?? [];
+    list.push(corp);
+    corpsByCurrency.set(currencyCode, list);
   }
-  return bought;
+
+  const purchasesByCurrency = await Promise.all(
+    [...corpsByCurrency].map(async ([currencyCode, corps]) => {
+      let currencyPurchases = 0;
+      for (const corp of corps) {
+        const corpFx = fxByCurrency.get(currencyCode) || 1;
+        const toCorpLocal = (amountAnchor: number) =>
+          anchorToCorpCapital(amountAnchor, currencyCode, corpFx);
+        let dailyRevenueLocal = 0;
+        for (const s of sectorsByCorp.get(corp._id.toString()) ?? []) {
+          const hostCurrency = resolveSectorHostCurrencyCode(s, corp);
+          const hostRate =
+            (hostCurrency && fxByCurrency.get(hostCurrency)) ??
+            (hostCurrency === currencyCode ? corpFx : 1);
+          dailyRevenueLocal += toCorpLocal(
+            readCorpEconomicAnchor(s.realizedRevenue ?? s.revenue ?? 0, hostCurrency, hostRate)
+          );
+        }
+        const lastEarnings = corp.earningsHistory?.[corp.earningsHistory.length - 1] ?? 0;
+        const pick = pickNppCorpBond({
+          corpId: corp._id.toString(),
+          cashLocal: corp.liquidCapital ?? 0,
+          dailyRevenueLocal,
+          income: lastEarnings,
+          currencyCode,
+          bonds: bondsByCurrency.get(currencyCode) ?? [],
+        });
+        if (!pick) continue;
+
+        const bond = bondById.get(pick.bondId);
+        if (!bond) continue;
+        const capErr = sovereignBondCapError(bond, "corporationId", corp._id, pick.units);
+        if (capErr) continue;
+
+        const debit = await atomicallyDebitCorpLiquidCapital(db, corp._id, pick.costLocal);
+        if (!debit.ok) continue;
+        try {
+          const reserved = await reserveBondUnitsForHolder(
+            db,
+            bond._id,
+            { field: "corporationId", id: corp._id },
+            pick.units,
+            now
+          );
+          if (!reserved) {
+            await refundCorpLiquidCapital(db, corp._id, pick.costLocal);
+            continue;
+          }
+          await creditBondPool(db, bondPoolCurrency(bond), pick.costLocal, "purchasesIn", now);
+          await emitTx(db, {
+            type: "bond_purchase",
+            turn,
+            createdAt: now,
+            subjectType: "corporation",
+            subjectId: corp._id,
+            subjectName: corp.name,
+            amount: -pick.costLocal,
+            balanceAfter: debit.newBalance,
+            currencyCode,
+            counterpartyType: "system",
+            counterpartyName: bond.issuerName ?? "Bond market",
+            meta: {
+              bondId: bond._id.toString(),
+              units: pick.units,
+              pricePerUnit: bond.marketPrice,
+              nppTreasury: true,
+            },
+          });
+          currencyPurchases += 1;
+          const book = bondsByCurrency.get(currencyCode);
+          const row = book?.find((b) => b.id === pick.bondId);
+          if (row) row.publicFloat = Math.max(0, row.publicFloat - pick.units);
+          bond.publicFloat = Math.max(0, (bond.publicFloat ?? 0) - pick.units);
+        } catch (err) {
+          await refundCorpLiquidCapital(db, corp._id, pick.costLocal);
+          throw err;
+        }
+      }
+      return currencyPurchases;
+    })
+  );
+
+  return purchasesByCurrency.reduce((total, purchases) => total + purchases, 0);
 }

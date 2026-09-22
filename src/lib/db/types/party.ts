@@ -107,6 +107,14 @@ export interface PoliticalParty {
   nppRecruitmentCooldownUntil?: Date;
   /** NPP recruitment cooldown end turn (currentTurn + 24). Turn-first source. */
   nppRecruitmentCooldownUntilTurn?: number;
+  /**
+   * Receipt for the UK party-conference cohesion payoff (ticket #862): the
+   * `ukPartyConferences._id` whose payoff credited this party's PS reserve.
+   * The credit write sets this atomically with the `$inc`, so replays and
+   * concurrent callers match zero documents and cannot double-credit.
+   * Absent = never credited (covers every legacy row, no migration).
+   */
+  lastConferencePayoffId?: string | null;
   /** Turn on which the last member purge was executed. Used to enforce the cooldown. */
   lastPurgeAtTurn?: number;
   /** Number of consecutive purges executed by the chair (resets after cooldown expires). */

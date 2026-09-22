@@ -198,6 +198,15 @@ export interface EconomicGrowthFactors {
   /** Goods scarcity at administered prices, 0 (abundant) → 100 (acute), derived
    *  from the demand-vs-supply gap and the overhang relative to the money stock. */
   shortageIndex?: number;
+  /** Observed country commodity demand-vs-supply gap, percent of supply
+   *  (0 = balanced, capped at 500 = acute), aggregated from the prior turn's
+   *  basis-explicit country ledger rows. Present only when the ledger tier is
+   *  active and at least one valid observation exists; the command economy
+   *  phase `$unset`s it otherwise, so cold start and tier changes need no
+   *  migration. Diagnostic readout: the shortage kernel consumes it same-turn
+   *  and falls back to overhang-only when absent. See
+   *  countryPhysicalDemandSupplyGapPct in @/lib/economy/rules. */
+  physicalDemandSupplyGapPct?: number;
   /** Shadow (black-market / swap-rate) premium over the official price/FX, as a
    *  fraction (0.3 = +30%). Rises with overhang + shortage, falls with tolerance. */
   blackMarketPremium?: number;
@@ -457,10 +466,13 @@ export interface FederalBudget {
   sovereignRiskAnchor?: SovereignRiskAnchor;
   /**
    * Signed national cash position (country-local currency). Positive = accumulated
-   * surplus/savings; negative = national debt. Source of truth for the fiscal
-   * position; `debt.principal` is a derived mirror = max(0, −treasuryBalance).
-   * Always present: set at every creation path (= −debt.principal) and backfilled
-   * for existing docs; the turn engine self-heals any straggler null.
+   * surplus/savings; negative = a cash hole. Cash only: `debt.principal`
+   * belongs to the sovereign bond ledger (see bonds/sovereignPrincipal.ts) and
+   * is never derived from this field — a country may hold cash assets and bond
+   * debt at the same time (refs #1975).
+   * Always present: seeded at every creation path and backfilled for existing
+   * docs; the turn engine self-heals any straggler null to zero (cash unknown;
+   * the bond stock is untouched).
    */
   treasuryBalance: number;
   /**

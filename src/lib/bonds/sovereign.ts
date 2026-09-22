@@ -28,8 +28,15 @@ import type {
   CreditRating,
   Corporation,
   FederalBudget,
+  GameConfig,
+  GameState,
 } from "@/lib/db/types";
 import { BOND_UNIT_FACE_VALUE } from "@/lib/db/types/bond";
+import {
+  consolidateSovereignTranches,
+  planSovereignTranches,
+  SOVEREIGN_MIN_TRANCHE_UNITS,
+} from "@/lib/bonds/sovereignIssueDiagnostics";
 import { COUNTRY_CONFIGS, getCountryConfig, type CountryId } from "@/lib/constants/countries";
 import { getRegisteredCountryIds } from "@/lib/country/registeredCountries";
 import { getBankId } from "@/lib/centralBank/helpers";
@@ -51,6 +58,13 @@ import {
   recordSovereignPrimaryFill,
 } from "@/lib/bonds/primaryMarket";
 import { createNotifications } from "@/lib/notifications";
+import {
+  sovereignBondOutstanding,
+  sumOutstandingSovereignPrincipal,
+  sovereignDebtTerms,
+} from "@/lib/bonds/sovereignPrincipal";
+import { loadDemocraticHealth } from "@/lib/governanceStyle/loadDemocraticHealth";
+import { democraticHealthSovereignSpread } from "@/lib/governanceStyle/rules/democraticConsequences";
 
 export const SOVEREIGN_ISSUANCE_INTERVAL_TURNS = 12;
 export const SOVEREIGN_BOND_MATURITY_TURNS: BondMaturityTurns = 48;
@@ -78,6 +92,12 @@ export const SOVEREIGN_RECONCILE_DISTRIBUTION: Partial<Record<BondMaturityTurns,
   96: 0.35,
   240: 0.4,
 };
+
+async function loadDemocraticSovereignSpread(db: Db, countryId: CountryId): Promise<number> {
+  const gameState = await db.collection<GameState>("gameState").findOne({ _id: "current" });
+  const health = await loadDemocraticHealth(db, countryId, gameState);
+  return health == null ? 0 : democraticHealthSovereignSpread(health);
+}
 
 /**
  * Effective sovereign coupon rate = primeRate + term premium for the given maturity,
@@ -241,6 +261,8 @@ function buildSovereignBondDoc(params: {
   countryCorporation: Pick<Corporation, "_id" | "name"> | null;
   /** B4: percentage points of credibility spread. 0 for a clean or absent bank. */
   credibilitySpreadPp?: number;
+  /** Democratic backsliding premium in percentage points. */
+  democraticSpreadPp?: number;
 }): { bondDoc: Omit<Bond, "_id">; annualCouponCost: number } {
   const { countryId, turn, now, issueAmount, maturityTurns, primeRate, countryCorporation } =
     params;
@@ -250,7 +272,7 @@ function buildSovereignBondDoc(params: {
   const couponRate = getSovereignCouponRate(
     primeRate,
     maturityTurns,
-    params.credibilitySpreadPp ?? 0
+    (params.credibilitySpreadPp ?? 0) + (params.democraticSpreadPp ?? 0)
   );
 
   const bondDoc: Omit<Bond, "_id"> = {
@@ -301,10 +323,11 @@ async function issueSovereignBondSeries(
   if (issueAmount < BOND_UNIT_FACE_VALUE) return null;
 
   const budgetId = getNationalBudgetId(countryId);
-  const [budget, centralBank, countryCorporation] = await Promise.all([
+  const [budget, centralBank, countryCorporation, democraticSpreadPp] = await Promise.all([
     db.collection<FederalBudget>("federalBudget").findOne({ _id: budgetId }),
     db.collection<CentralBank>("centralBanks").findOne({ _id: getBankId(countryId) }),
     findPrimaryNationalCorporation(db, countryId),
+    loadDemocraticSovereignSpread(db, countryId),
   ]);
   if (!budget) return null;
 
@@ -326,6 +349,7 @@ async function issueSovereignBondSeries(
     // B4: a discredited central bank makes its government borrow dearer. No
     // bank document means no scrutiny to read, so the spread is 0, not a guess.
     credibilitySpreadPp: centralBank ? sovereignCredibilitySpread(centralBank.chairInfamy ?? 0) : 0,
+    democraticSpreadPp,
   });
 
   const budgetUpdate = applySovereignDebtAdjustment(budget, bondDoc.totalIssued, annualCouponCost);
@@ -441,6 +465,13 @@ export async function issueScheduledSovereignBondSeries(
     return 0;
   }
 
+  // One read per scheduled quarter: the #1001 tranche-consolidation dark
+  // gate. Absent or false keeps the historical ladder exactly as issued.
+  const issuanceGate = await db
+    .collection<GameConfig>("gameConfig")
+    .findOne({ _id: "default" }, { projection: { sovereignIssuanceConsolidationEnabled: 1 } });
+  const consolidationEnabled = issuanceGate?.sovereignIssuanceConsolidationEnabled === true;
+
   // Registered, not the raw static list: a country dissolved by a merge keeps
   // its budget doc, and the scheduler would otherwise keep rolling its debt
   // over — issuing fresh paper for a state that no longer exists.
@@ -469,7 +500,11 @@ export async function issueScheduledSovereignBondSeries(
     const budget = budgetByCountry.get(countryId);
     if (!budget) continue;
 
-    const annualDeficit = Math.max(0, -(budget.surplus ?? 0));
+    // Derived, not read: `surplus` is a cache of `revenue.total - spending.total`
+    // that drifts intra-turn through every writer's read-modify-write (same
+    // reason the admin issuance path uses federalSurplus, above). Sizing a
+    // quarter's sovereign issuance off the stale cache issues the wrong face.
+    const annualDeficit = Math.max(0, -federalSurplus(budget));
     const deficitAmount = calculateQuarterlyIssuanceAmount(annualDeficit);
     // Always roll over bonds maturing in the next quarter on top of any deficit-
     // driven issuance. Mirrors real-world Treasury behavior: maturing principal
@@ -495,10 +530,11 @@ export async function issueScheduledSovereignBondSeries(
     if (existingSeries) continue;
 
     const budgetId = getNationalBudgetId(countryId);
-    const [budgetDoc, centralBank, countryCorporation] = await Promise.all([
+    const [budgetDoc, centralBank, countryCorporation, democraticSpreadPp] = await Promise.all([
       db.collection<FederalBudget>("federalBudget").findOne({ _id: budgetId }),
       db.collection<CentralBank>("centralBanks").findOne({ _id: getBankId(countryId) }),
       findPrimaryNationalCorporation(db, countryId),
+      loadDemocraticSovereignSpread(db, countryId),
     ]);
     if (!budgetDoc) continue;
 
@@ -521,12 +557,15 @@ export async function issueScheduledSovereignBondSeries(
     let requestedUnitsTotal = 0;
     let placedUnitsTotal = 0;
 
-    for (const [maturityStr, fraction] of Object.entries(distribution)) {
-      if (!fraction || fraction <= 0) continue;
-      const maturityTurns = Number(maturityStr) as BondMaturityTurns;
-      const trancheAmount =
-        Math.floor((issueAmount * fraction) / BOND_UNIT_FACE_VALUE) * BOND_UNIT_FACE_VALUE;
-      if (trancheAmount < BOND_UNIT_FACE_VALUE) continue;
+    // Plan the ladder first so the gated consolidation (#1001) reshapes rungs
+    // before pool underwriting sees them. Gate off: the same rungs, same order.
+    const tranchePlans = consolidateSovereignTranches(
+      planSovereignTranches(distribution, issueAmount),
+      consolidationEnabled ? SOVEREIGN_MIN_TRANCHE_UNITS : 0
+    );
+    for (const tranche of tranchePlans) {
+      const maturityTurns = tranche.maturityTurns;
+      const trancheAmount = tranche.amount;
 
       const { bondDoc } = buildSovereignBondDoc({
         countryId,
@@ -536,6 +575,7 @@ export async function issueScheduledSovereignBondSeries(
         maturityTurns,
         primeRate,
         countryCorporation,
+        democraticSpreadPp,
       });
       const requestedUnits = Math.floor(bondDoc.totalIssued / BOND_UNIT_FACE_VALUE);
       let placedUnits = requestedUnits;
@@ -650,17 +690,23 @@ export interface SovereignReconcileResult {
  * Converts unrepresented sovereign debt principal into tradeable bond series,
  * spread across staggered maturities with term-premium yields.
  *
- * The gap = budget.debt.principal − Σ(active sovereign bond totalIssued).
- * Each tranche in `distribution` (defaults to SOVEREIGN_RECONCILE_DISTRIBUTION)
- * receives its share of the gap at getSovereignCouponRate(primeRate, maturity).
+ * The gap = budget.debt.principal minus the haircut-adjusted outstanding
+ * sovereign stock (see sovereignPrincipal.ts). Each tranche in `distribution`
+ * (defaults to SOVEREIGN_RECONCILE_DISTRIBUTION) receives its share of the
+ * gap at getSovereignCouponRate(primeRate, maturity).
  *
- * **Budget impact:** both debt.principal and spending.debtInterest are updated, matching
- * the standard issuance path. This ensures settleSovereignBondMaturity can correctly
- * net principal back to its pre-reconcile value when each tranche matures, and that
- * debtToGdpRatio / creditRating reflect the fully-accounted bond obligations.
- * The gap analysis compares the budget principal BEFORE the update against existing bonds,
- * so running reconcile twice is safe: the second run will see gap = 0 (all principal
- * now backed by bonds) and issue nothing.
+ * **Budget impact:** the new tranches add genuine annual coupon service, so
+ * spending.debtInterest rises by the new coupons. debt.principal is
+ * RE-POINTED at the canonical post-write ledger (pre-existing outstanding
+ * plus the face just issued), never incremented by the gap: the gap was
+ * already inside the stored principal, so old principal + gap would count
+ * the same debt twice (#1975). debtToGdpRatio / creditRating are refreshed
+ * off the re-pointed stock.
+ *
+ * Retry-safe: the principal write is a pure function of the ledger read
+ * back, so a crash between the bond inserts and the budget update converges
+ * on retry (the inserted tranches are already in the ledger, the gap reads
+ * as zero, nothing issues twice, and the stock still lands on the ledger).
  */
 export async function reconcileSovereignDebt(
   db: Db,
@@ -675,10 +721,11 @@ export async function reconcileSovereignDebt(
   const distribution = params.distribution ?? SOVEREIGN_RECONCILE_DISTRIBUTION;
 
   const budgetId = getNationalBudgetId(countryId);
-  const [budget, centralBank, countryCorporation] = await Promise.all([
+  const [budget, centralBank, countryCorporation, democraticSpreadPp] = await Promise.all([
     db.collection<FederalBudget>("federalBudget").findOne({ _id: budgetId }),
     db.collection<CentralBank>("centralBanks").findOne({ _id: getBankId(countryId) }),
     findPrimaryNationalCorporation(db, countryId),
+    loadDemocraticSovereignSpread(db, countryId),
   ]);
   if (!budget) return null;
 
@@ -689,14 +736,16 @@ export async function reconcileSovereignDebt(
     ? sovereignCredibilitySpread(centralBank.chairInfamy ?? 0)
     : 0;
 
-  // Sum all active sovereign bonds already issued for this country.
+  // Canonical outstanding stock: active non-defaulted face minus any
+  // restructure haircuts (a haircut bond contributes its written-down stock).
   const activeBonds = await db
     .collection<Bond>("bonds")
     .find({ issuerType: "sovereign", countryId, matured: false, defaulted: false })
     .toArray();
-  const coveredByExistingBonds = activeBonds.reduce((sum, b) => sum + (b.totalIssued ?? 0), 0);
+  const coveredByExistingBonds = sumOutstandingSovereignPrincipal(activeBonds);
 
-  const rawGap = budget.debt.principal - coveredByExistingBonds;
+  const storedPrincipal = Math.max(0, budget.debt.principal ?? 0);
+  const rawGap = storedPrincipal - coveredByExistingBonds;
   const gap = Math.floor(Math.max(0, rawGap) / BOND_UNIT_FACE_VALUE) * BOND_UNIT_FACE_VALUE;
 
   const tranches: SovereignReconcileTranche[] = [];
@@ -716,7 +765,11 @@ export async function reconcileSovereignDebt(
       if (trancheAmount < BOND_UNIT_FACE_VALUE) continue;
 
       const totalUnits = Math.floor(trancheAmount / BOND_UNIT_FACE_VALUE);
-      const couponRate = getSovereignCouponRate(primeRate, maturityTurns, credibilitySpreadPp);
+      const couponRate = getSovereignCouponRate(
+        primeRate,
+        maturityTurns,
+        credibilitySpreadPp + democraticSpreadPp
+      );
       const annualCouponCost = (couponRate / 100) * trancheAmount;
 
       const bondDoc: Omit<Bond, "_id"> = {
@@ -763,22 +816,40 @@ export async function reconcileSovereignDebt(
     }
   }
 
-  // Update both principal and interest service so that settleSovereignBondMaturity
-  // can correctly net back to the original value when these bonds mature.
-  // The principal also rises here — this is intentional: reconcile converts
-  // "raw" historical debt into fully-accounted bond obligations; debtToGdpRatio
-  // and creditRating are recomputed accordingly.
-  const budgetUpdate = applySovereignDebtAdjustment(budget, totalIssued, totalInterestDelta);
-  if (totalIssued > 0) {
+  // Re-point principal at the post-write ledger. New tranches carry no
+  // haircut, so their face adds to the outstanding stock in full. This must
+  // NOT be old principal + gap: the gap was already inside the stored
+  // principal, and adding it again double-counts the same debt (#1975).
+  // Interest is a flow, not a stock, so it still rises incrementally by the
+  // genuine new coupon service. The write lands whenever the stock moved or
+  // drifted, so a crash/retry replay that issued nothing still converges the
+  // stored value onto the ledger.
+  const postWriteOutstanding = coveredByExistingBonds + totalIssued;
+  const newPrincipal = Math.round(postWriteOutstanding);
+  const newDebtInterest = Math.max(0, (budget.spending?.debtInterest ?? 0) + totalInterestDelta);
+  const newSpendingTotal = Math.max(0, (budget.spending?.total ?? 0) + totalInterestDelta);
+  const newSurplus = (budget.revenue?.total ?? 0) - newSpendingTotal;
+  const terms = sovereignDebtTerms(newPrincipal, {
+    gdp: budget.gdp ?? 0,
+    gdpSmoothed: budget.gdpSmoothed,
+    investorConfidence: budget.investorConfidence,
+    imfBailoutActive: budget.imfSovereignBailoutActive,
+    sovereignRiskAnchor: budget.sovereignRiskAnchor,
+  });
+  if (totalIssued > 0 || newPrincipal !== Math.round(storedPrincipal)) {
     await db.collection<FederalBudget>("federalBudget").updateOne(
       { _id: budgetId },
       {
         $set: {
-          debt: budgetUpdate.debt,
-          spending: budgetUpdate.spending,
-          surplus: budgetUpdate.surplus,
-          debtToGdpRatio: budgetUpdate.debtToGdpRatio,
-          creditRating: budgetUpdate.creditRating,
+          debt: { ...budget.debt, principal: newPrincipal, interestRate: terms.interestRate },
+          spending: {
+            ...budget.spending,
+            debtInterest: newDebtInterest,
+            total: newSpendingTotal,
+          },
+          surplus: newSurplus,
+          debtToGdpRatio: terms.debtToGdpRatio,
+          creditRating: terms.creditRating,
           updatedAt: now,
         },
       }
@@ -792,25 +863,36 @@ export async function reconcileSovereignDebt(
     tranches,
     totalIssued,
     budgetInterestDelta: totalInterestDelta,
-    newPrincipal: budgetUpdate.debt.principal,
-    newDebtInterest: budgetUpdate.spending.debtInterest,
-    newSurplus: budgetUpdate.surplus,
-    newDebtToGdpRatio: budgetUpdate.debtToGdpRatio,
-    newCreditRating: budgetUpdate.creditRating,
+    newPrincipal,
+    newDebtInterest,
+    newSurplus,
+    newDebtToGdpRatio: terms.debtToGdpRatio,
+    newCreditRating: terms.creditRating,
   };
 }
 
 export async function settleSovereignBondMaturity(
   db: Db,
-  bond: Pick<Bond, "countryId" | "couponRate" | "totalIssued">
+  bond: Pick<Bond, "countryId" | "couponRate" | "totalIssued" | "restructureHaircutPercent">
 ): Promise<void> {
   if (!bond.countryId) return;
   const budgetId = getNationalBudgetId(bond.countryId);
   const budget = await db.collection<FederalBudget>("federalBudget").findOne({ _id: budgetId });
   if (!budget) return;
 
+  // Net exactly this bond's outstanding contribution (face minus any restructure
+  // haircut, see sovereignPrincipal.ts), not raw face: a haircut bond carries
+  // only its written-down stock on the books, so redeeming full face would push
+  // principal below the remaining outstanding sum (#1975).
+  const maturedFace = sovereignBondOutstanding({
+    issuerType: "sovereign",
+    matured: false,
+    defaulted: false,
+    totalIssued: bond.totalIssued,
+    restructureHaircutPercent: bond.restructureHaircutPercent ?? null,
+  });
   const annualCouponCost = (bond.couponRate / 100) * bond.totalIssued;
-  const budgetUpdate = applySovereignDebtAdjustment(budget, -bond.totalIssued, -annualCouponCost);
+  const budgetUpdate = applySovereignDebtAdjustment(budget, -maturedFace, -annualCouponCost);
 
   await db.collection<FederalBudget>("federalBudget").updateOne(
     { _id: budgetId },
@@ -825,6 +907,74 @@ export async function settleSovereignBondMaturity(
       },
     }
   );
+}
+
+export interface SovereignPrincipalResync {
+  countryId: CountryId;
+  stored: number;
+  outstanding: number;
+  corrected: boolean;
+}
+
+/**
+ * Re-point a country's stored `debt.principal` at its authoritative outstanding
+ * bond stock (see sovereignPrincipal.ts) and refresh the debt-service terms off
+ * that stock. Treasury cash is deliberately untouched: a haircut, repudiation,
+ * or merge writes down obligations, never cash (#1975).
+ *
+ * Idempotent: a pure function of the bonds read, so crash/retry replay and the
+ * end-of-turn hygiene pass converge to the same value.
+ */
+export async function resyncSovereignPrincipalFromBonds(
+  db: Db,
+  countryId: CountryId
+): Promise<SovereignPrincipalResync | null> {
+  const budgetId = getNationalBudgetId(countryId);
+  const [budget, bonds] = await Promise.all([
+    db.collection<FederalBudget>("federalBudget").findOne({ _id: budgetId }),
+    db
+      .collection<Bond>("bonds")
+      .find(
+        { issuerType: "sovereign", countryId, matured: false, defaulted: false },
+        // The outstanding sum re-checks the query-filtered fields, so they
+        // must be projected: a doc arriving without `issuerType` reads as
+        // non-sovereign and contributes 0, which would re-point the stored
+        // principal at zero (refs #1975).
+        {
+          projection: {
+            issuerType: 1,
+            matured: 1,
+            defaulted: 1,
+            totalIssued: 1,
+            restructureHaircutPercent: 1,
+          },
+        }
+      )
+      .toArray(),
+  ]);
+  if (!budget || !budget.debt) return null;
+  const outstanding = Math.round(sumOutstandingSovereignPrincipal(bonds));
+  const stored = budget.debt.principal ?? 0;
+  const terms = sovereignDebtTerms(outstanding, {
+    gdp: budget.gdp ?? 0,
+    gdpSmoothed: budget.gdpSmoothed,
+    investorConfidence: budget.investorConfidence,
+    imfBailoutActive: budget.imfSovereignBailoutActive,
+    sovereignRiskAnchor: budget.sovereignRiskAnchor,
+  });
+  await db.collection<FederalBudget>("federalBudget").updateOne(
+    { _id: budgetId },
+    {
+      $set: {
+        "debt.principal": outstanding,
+        "debt.interestRate": terms.interestRate,
+        debtToGdpRatio: terms.debtToGdpRatio,
+        creditRating: terms.creditRating,
+        updatedAt: new Date(),
+      },
+    }
+  );
+  return { countryId, stored, outstanding, corrected: stored !== outstanding };
 }
 
 /**

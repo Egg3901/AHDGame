@@ -19,6 +19,13 @@
  */
 
 import type { CountryId } from "@/lib/constants/countries";
+import { JP_ECONOMY } from "@/lib/countries/jp/economy";
+import { US_ECONOMY } from "@/lib/countries/us/economy";
+import { UK_ECONOMY } from "@/lib/countries/uk/economy";
+import { DE_ECONOMY } from "@/lib/countries/de/economy";
+import { CN_ECONOMY } from "@/lib/countries/cn/economy";
+import { IE_ECONOMY } from "@/lib/countries/ie/economy";
+import { BR_ECONOMY } from "@/lib/countries/br/economy";
 
 /** Default daily growth rate for unowned sectors (background economy) */
 export const DEFAULT_UNOWNED_GROWTH_RATE = 0.5;
@@ -47,21 +54,21 @@ export const MAX_POLICY_DELTA = 4;
 const SALES_TAX_GROWTH_COEFFICIENT = 0.05;
 const SALES_TAX_GAP_CLAMP = 30;
 
-const NEUTRAL_FEDERAL_SALES_TAX_BY_COUNTRY: Partial<Record<CountryId, number>> = {
-  US: 0,
-  UK: 20,
-  JP: 10,
-  DE: 19,
+export const NEUTRAL_FEDERAL_SALES_TAX_BY_COUNTRY: Partial<Record<CountryId, number>> = {
+  US: US_ECONOMY.tax.neutralFederalSalesTax,
+  UK: UK_ECONOMY.tax.neutralFederalSalesTax,
+  JP: JP_ECONOMY.tax.neutralFederalSalesTax,
+  DE: DE_ECONOMY.tax.neutralFederalSalesTax,
 };
 
-const NEUTRAL_STATE_SALES_TAX_BY_COUNTRY: Partial<Record<CountryId, number>> = {
-  US: 6,
-  UK: 0,
-  JP: 0,
-  DE: 0,
-  IE: 0,
-  BR: 5,
-  CN: 4,
+export const NEUTRAL_STATE_SALES_TAX_BY_COUNTRY: Partial<Record<CountryId, number>> = {
+  US: US_ECONOMY.tax.neutralStateSalesTax,
+  UK: UK_ECONOMY.tax.neutralStateSalesTax,
+  JP: JP_ECONOMY.tax.neutralStateSalesTax,
+  DE: DE_ECONOMY.tax.neutralStateSalesTax,
+  IE: IE_ECONOMY.tax.neutralStateSalesTax,
+  BR: BR_ECONOMY.tax.neutralStateSalesTax,
+  CN: CN_ECONOMY.tax.neutralStateSalesTax,
 };
 
 // ── Unemployment (simplified Okun's law) ────────────────────────────
@@ -251,6 +258,23 @@ export interface RevenueTrendBaseline {
   spanTurns: number;
 }
 
+/**
+ * A bracketing pair for baseline interpolation: the two sanitized snapshots
+ * whose turns straddle `targetTurn` (`older.turn <= targetTurn <= newer.turn`),
+ * plus the explicit convex weight on the newer endpoint:
+ *
+ *   weightNewer = (targetTurn - older.turn) / (newer.turn - older.turn)
+ *   value(targetTurn) = older.value + weightNewer * (newer.value - older.value)
+ *
+ * When `targetTurn` lands exactly on a snapshot the bracket collapses to a
+ * single point (weight 0 or 1); callers return that snapshot directly.
+ */
+export interface RevenueBaselineBracket {
+  older: RevenueSnapshot;
+  newer: RevenueSnapshot;
+  weightNewer: number;
+}
+
 /** One turn of revenue-level smoothing. No prior EMA ⇒ seed at the level. */
 export function advanceRevenueEma(prevEma: number | undefined, now: number): number {
   if (typeof prevEma !== "number" || !Number.isFinite(prevEma) || prevEma <= 0) return now;
@@ -277,18 +301,100 @@ export function updateRevenueSnapshots(
 }
 
 /**
- * The baseline the trend measures against: the snapshot whose age is closest
- * to the target span, at least `REVENUE_TREND_MIN_SPAN` turns old. Null while
- * the log is too young — the caller falls back to the one-turn signal.
+ * Sanitize a snapshot log for baseline use: drop entries from the current or a
+ * future turn, entries with non-finite turns, and entries with non-finite or
+ * non-positive values (zero / corrupt / legacy placeholders carry no level
+ * information). Sort ascending by turn and collapse duplicate turns, keeping
+ * the last write. Returns the sanitized log, oldest-first.
+ */
+export function sanitizeRevenueSnapshots(
+  snapshots: RevenueSnapshot[] | undefined,
+  turn: number
+): RevenueSnapshot[] {
+  const byTurn = new Map<number, number>();
+  for (const s of snapshots ?? []) {
+    if (typeof s?.turn !== "number" || !Number.isFinite(s.turn) || s.turn >= turn) continue;
+    if (typeof s?.value !== "number" || !Number.isFinite(s.value) || s.value <= 0) continue;
+    byTurn.set(s.turn, s.value);
+  }
+  return [...byTurn.entries()]
+    .sort((a, b) => a[0] - b[0])
+    .map(([snapTurn, value]) => ({ turn: snapTurn, value }));
+}
+
+/**
+ * Find the bracketing pair around `targetTurn` in an already-sanitized
+ * (ascending, deduped) log: the newest snapshot at or before the target and
+ * the oldest snapshot at or after it. Null when the target falls outside the
+ * log (history shallower or staler than the target) or the log is empty.
+ * `weightNewer` is the convex interpolation weight on the newer endpoint.
+ */
+export function bracketRevenueBaselineTarget(
+  sanitized: RevenueSnapshot[],
+  targetTurn: number
+): RevenueBaselineBracket | null {
+  let older: RevenueSnapshot | null = null;
+  let newer: RevenueSnapshot | null = null;
+  for (const s of sanitized) {
+    if (s.turn <= targetTurn) older = s;
+    if (s.turn >= targetTurn && newer === null) newer = s;
+  }
+  if (older === null || newer === null) return null;
+  if (newer.turn === older.turn) return { older, newer, weightNewer: 0 };
+  return {
+    older,
+    newer,
+    weightNewer: (targetTurn - older.turn) / (newer.turn - older.turn),
+  };
+}
+
+/**
+ * Evaluate a bracket at its target turn: level-linear interpolation between
+ * the two endpoints. Exact hits return the snapshot value itself.
+ */
+export function interpolateRevenueBaselineValue(bracket: RevenueBaselineBracket): number {
+  return bracket.older.value + bracket.weightNewer * (bracket.newer.value - bracket.older.value);
+}
+
+/**
+ * The baseline the trend measures against: the interpolated EMA level exactly
+ * `REVENUE_TREND_TARGET_SPAN` turns back, linearly interpolated between the
+ * two snapshots bracketing that target turn (span 48, so the annualizer is 1).
+ * The interpolated value rolls continuously as the target turn advances one
+ * turn at a time and meets each snapshot exactly as the target crosses it, so
+ * baseline handoff carries no discontinuity.
+ *
+ * Fallbacks, in order: an exact snapshot hit returns that snapshot; when the
+ * target falls outside the log (shallow history above the minimum span, stale
+ * snapshots, or a single point) the nearest snapshot at least
+ * `REVENUE_TREND_MIN_SPAN` turns old is returned with its actual span, exactly
+ * as before. Null while the log is too young — the caller falls back to the
+ * one-turn signal.
  */
 export function selectRevenueTrendBaseline(
   snapshots: RevenueSnapshot[] | undefined,
   turn: number
 ): RevenueTrendBaseline | null {
+  const log = sanitizeRevenueSnapshots(snapshots, turn);
+  if (log.length === 0) return null;
+  const targetTurn = turn - REVENUE_TREND_TARGET_SPAN;
+  const bracket = bracketRevenueBaselineTarget(log, targetTurn);
+  if (bracket !== null) {
+    if (bracket.newer.turn === bracket.older.turn || bracket.weightNewer === 0) {
+      return { value: bracket.older.value, spanTurns: REVENUE_TREND_TARGET_SPAN };
+    }
+    if (bracket.weightNewer === 1) {
+      return { value: bracket.newer.value, spanTurns: REVENUE_TREND_TARGET_SPAN };
+    }
+    return {
+      value: interpolateRevenueBaselineValue(bracket),
+      spanTurns: REVENUE_TREND_TARGET_SPAN,
+    };
+  }
   let best: RevenueTrendBaseline | null = null;
-  for (const s of snapshots ?? []) {
+  for (const s of log) {
     const span = turn - s.turn;
-    if (span < REVENUE_TREND_MIN_SPAN || !Number.isFinite(s.value) || s.value <= 0) continue;
+    if (span < REVENUE_TREND_MIN_SPAN) continue;
     if (
       best === null ||
       Math.abs(span - REVENUE_TREND_TARGET_SPAN) <

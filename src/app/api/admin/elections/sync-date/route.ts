@@ -44,8 +44,8 @@ import { handleRouteError } from "@/lib/api/errors";
 import type { Election, State, ElectedOfficial, GameState } from "@/lib/db/types";
 import { SENATE_CLASSES, STATE_SENATE_SEATS, UK_REGIONAL_COUNCIL_SEATS } from "@/lib/constants";
 import {
-  JP_SHUGIIN_SEATS,
-  JP_SANGIIN_SEATS,
+  getJpShugiinSeats,
+  getJpSangiinClassSeats,
   JP_GOVERNOR_SEATS,
   DE_WAHLKREIS_SEATS,
   DE_LANDTAG_SEATS,
@@ -441,7 +441,7 @@ export async function POST() {
           state: regionId,
           cycle: 1,
           status: "active",
-          totalSeats: JP_SHUGIIN_SEATS[regionId] ?? 1,
+          totalSeats: getJpShugiinSeats(preset)[regionId] ?? 1,
           startTime: now,
           primaryEndTime: shugiinPrimaryEndTime,
           endTime: shugiinEndTime,
@@ -478,7 +478,7 @@ export async function POST() {
             chamberClass: sangiinClass,
             cycle: 1,
             status: "active",
-            totalSeats: Math.ceil((JP_SANGIIN_SEATS[regionId] ?? 2) / 2),
+            totalSeats: getJpSangiinClassSeats(preset, regionId, sangiinClass),
             startTime: now,
             primaryEndTime: sangiinPrimaryEndTime,
             endTime: sangiinEndTime,

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Input } from "@/components/ui";
 import { COUNTRY_CURRENCY_MAP, CURRENCY_SYMBOLS } from "@/lib/constants/currencies";
 import { parseMoneyAmountInput } from "@/lib/utils/parseMoneyAmountInput";
@@ -9,7 +9,10 @@ import { getMessageStyle } from "@/lib/utils/formatters";
 import { contrastTextColor } from "@/lib/utils/colorContrast";
 import type { PartyData } from "./types";
 import type { CountryId } from "@/lib/constants/countries";
-import { getPlayerPayoutCap } from "@/lib/treasury/payoutCapValues";
+import {
+  getEffectivePlayerPayoutCap,
+  PAYOUT_CAP_MULTI_OFFICER_MULTIPLIER,
+} from "@/lib/treasury/payoutCapValues";
 
 /**
  * Member-initiated Request Funds card. Any party member can request
@@ -35,6 +38,41 @@ export function RequestFundsCard({
   const [msg, setMsg] = useState("");
   const partyCurrencyCode = COUNTRY_CURRENCY_MAP[party.countryId];
   const partySymbol = CURRENCY_SYMBOLS[partyCurrencyCode];
+  // `seatedOfficers` comes from the server, counted off the raw seat ids.
+  // Deriving it from `chair`/`viceChair`/`treasurer` here would be wrong:
+  // those are null for a banned holder whose seat still counts.
+  const seatedOfficers = party.seatedOfficers;
+  const cap = getEffectivePlayerPayoutCap(party.countryId as CountryId, seatedOfficers);
+  /**
+   * What this member may still receive this turn. The flat cap alone
+   * was misleading: most of it may already be spent, and the player
+   * only found out when the request was refused.
+   */
+  const [remaining, setRemaining] = useState<number | null>(null);
+
+  const loadAllowance = useCallback(
+    async (isCancelled?: () => boolean) => {
+      try {
+        const res = await fetch(`${partyApiUrl(countryCode, party.id)}/treasury/payout-allowance`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (isCancelled?.()) return;
+        if (typeof data?.remaining === "number") setRemaining(data.remaining);
+      } catch {
+        // Non-critical: the card falls back to quoting the flat cap.
+        // A server mid-rollout without this endpoint lands here too.
+      }
+    },
+    [countryCode, party.id]
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    void loadAllowance(() => cancelled);
+    return () => {
+      cancelled = true;
+    };
+  }, [loadAllowance]);
 
   const handleSubmit = async () => {
     setMsg("");
@@ -63,6 +101,9 @@ export function RequestFundsCard({
       setAmount("");
       setNote("");
       onRequested?.();
+      // An approved request lands against the same per-turn allowance,
+      // so the figure above goes stale the moment one is queued.
+      void loadAllowance();
     } catch {
       setMsg("✗ Network error");
     } finally {
@@ -94,11 +135,34 @@ export function RequestFundsCard({
         </div>
         <p className="text-[11px] text-muted/60 mb-3">
           Request campaign funds from the party treasury. Your request goes to Pending Transactions
-          and waits for officer approval — Treasurer, Chair, or Vice-Chair. You can&apos;t approve
-          your own request. You can receive up to {partySymbol}
-          {getPlayerPayoutCap(party.countryId as CountryId).toLocaleString()} per turn from party
-          funds in total, counting the national treasury, state parties and caucuses together, and
-          nothing at all in the last two turns before a leadership election closes.
+          and waits for approval by an officer other than yourself: any of the Treasurer, Chair or
+          Vice-Chair. You can receive up to {partySymbol}
+          {cap.toLocaleString()} per turn from party funds in total, counting the national treasury,
+          state parties and caucuses together, and nothing at all in the last two turns before a
+          leadership election closes.{" "}
+          {seatedOfficers >= 2
+            ? `That ceiling is ${PAYOUT_CAP_MULTI_OFFICER_MULTIPLIER} times the base one, because this party has two or more officers seated to sign payments off.`
+            : `Seating a second officer would raise it to ${partySymbol}${(cap * PAYOUT_CAP_MULTI_OFFICER_MULTIPLIER).toLocaleString()}.`}
+        </p>
+        <p className="text-[11px] mb-3 text-muted">
+          {remaining == null ? (
+            <>Checking how much you can still receive this turn...</>
+          ) : remaining === 0 ? (
+            <span className="text-error">
+              You have already received your full {partySymbol}
+              {cap.toLocaleString()} for this turn. A request now will not pay out until next turn.
+            </span>
+          ) : (
+            <>
+              You can still receive{" "}
+              <span className="font-semibold text-foreground">
+                {partySymbol}
+                {remaining.toLocaleString()}
+              </span>{" "}
+              of your {partySymbol}
+              {cap.toLocaleString()} this turn.
+            </>
+          )}
         </p>
         <div className="flex flex-wrap items-center gap-2">
           <Input

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import type { TurnPhaseTelemetryMap } from "@/lib/db/types";
+import { recordRoundTrip, resetRoundTripProfiler } from "@/lib/observability/mongoRoundTrips";
 import { createTurnPhaseRuntime } from "@/simulation/engine/turnPhaseRuntime";
 
 const recordAudit = vi.fn();
@@ -44,6 +45,7 @@ describe("createTurnPhaseRuntime", () => {
   });
   beforeEach(() => {
     recordAudit.mockClear();
+    resetRoundTripProfiler();
   });
 
   it("records running and completed telemetry for successful phases", async () => {
@@ -197,5 +199,40 @@ describe("createTurnPhaseRuntime", () => {
     await flushAsyncStatusWrites();
 
     expect(recordAudit).not.toHaveBeenCalled();
+  });
+});
+
+describe("unmeasured query telemetry", () => {
+  it("omits query counts and budget status when no monitor has observed commands", async () => {
+    resetRoundTripProfiler();
+    const phaseStatuses: TurnPhaseTelemetryMap = {};
+    const runtime = createTurnPhaseRuntime({
+      db: createMockDb().db,
+      phaseStatuses,
+      warnings: [],
+      currentPhaseRef: { current: null },
+    });
+    await runtime.runPhase("unmonitored", async () => 1);
+    await flushAsyncStatusWrites();
+    expect(phaseStatuses.unmonitored).not.toHaveProperty("roundTrips");
+    expect(phaseStatuses.unmonitored).not.toHaveProperty("overBudget");
+  });
+  it("records real counts and a measured zero after the monitor observes commands", async () => {
+    resetRoundTripProfiler();
+    const phaseStatuses: TurnPhaseTelemetryMap = {};
+    const runtime = createTurnPhaseRuntime({
+      db: createMockDb().db,
+      phaseStatuses,
+      warnings: [],
+      currentPhaseRef: { current: null },
+    });
+    await runtime.runPhase("measured", async () => {
+      recordRoundTrip("npps");
+    });
+    await runtime.runPhase("empty", async () => 1);
+    await flushAsyncStatusWrites();
+    expect(phaseStatuses.measured.roundTrips).toBe(1);
+    expect(phaseStatuses.empty.roundTrips).toBe(0);
+    resetRoundTripProfiler();
   });
 });

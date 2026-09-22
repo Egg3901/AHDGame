@@ -76,6 +76,7 @@ export function CentralBankMoneySupplyTab({
     ["Rest-of-economy deposits", data.externalBroadMoney],
     [t("money.npcDeposits"), data.bankDeposits ?? 0],
     [t("money.bondCash"), data.bondPoolCash ?? 0],
+    ["Bond settlement cash (outside M2)", data.excludedBondPoolCash ?? 0],
     [t("money.equityCash"), data.equityPoolCash ?? 0],
   ] as const;
 

@@ -37,7 +37,7 @@ import { describe, expect, it } from "vitest";
 
 import { ieMetricPresets1953 } from "@/lib/seeds/ie/ieMetricPresets1953";
 import { deMetricPresets1953 } from "@/lib/seeds/de/deMetricPresets1953";
-import { jpMetricPresets1953 } from "@/lib/seeds/jp/jpMetricPresets1953";
+import { jpMetricPresets1953 } from "@/lib/countries/jp/data/jpMetricPresets1953";
 import { brMetricPresets1953 } from "@/lib/seeds/br/brMetricPresets1953";
 import { cnMetricPresets1953 } from "@/lib/seeds/cn/cnMetricPresets1953";
 import { ngMetricPresets1953 } from "@/lib/seeds/ng/ngMetricPresets1953";

@@ -5,6 +5,13 @@ export interface CorporationTurnResult {
   sectorsProcessed: number;
   totalRevenueGenerated: number;
   totalIncomeGenerated: number;
+  /**
+   * Deterministic `"<phase>: <detail>"` warning strings for this turn (issue
+   * #2054: clearing book invariant breaches). The phase registry appends each
+   * exactly once to the turn warning channel, which the completed-turn health
+   * snapshot counts. Empty on clean turns.
+   */
+  turnWarnings: string[];
   /** CEO salary + shareholder dividends this turn, internal units (for LOC cap / scoring). */
   currencyIncomeInternalByCharacterId: Map<string, number>;
   /** Same income as credited to personal, per currency (for LOC repayment allocation). */

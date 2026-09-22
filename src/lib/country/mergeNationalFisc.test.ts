@@ -52,11 +52,13 @@ describe("mergeNationalFisc", () => {
     const calls = db.collectionMocks["federalBudget"].updateOne.mock.calls;
     const deSet = calls.find((c) => c[0]._id === "DE")![1];
     expect(deSet.$set.treasuryBalance).toBe(3000); // 5000 + (−1000 × 2)
-    expect(deSet.$set["debt.principal"]).toBe(0);
+    // Cash crosses as cash; the bond ledger owns principal, so neither write
+    // carries a balance-derived mirror (refs #1975).
+    expect(deSet.$set).not.toHaveProperty("debt.principal");
     expect(deSet.$inc["defenseAppropriation.balance"]).toBe(100); // 50 × 2
     const ddSet = calls.find((c) => c[0]._id === "DD")![1].$set;
     expect(ddSet.treasuryBalance).toBe(0);
-    expect(ddSet["debt.principal"]).toBe(0);
+    expect(ddSet).not.toHaveProperty("debt.principal");
     expect(ddSet["defenseAppropriation.balance"]).toBe(0);
     expect(ddSet.mergedInto).toEqual({ countryId: "DE", turn: 510 });
   });
@@ -260,7 +262,10 @@ describe("mergeNationalFisc", () => {
     const calls = db.collectionMocks["federalBudget"].updateOne.mock.calls;
     const deSet = calls.find((c) => c[0]._id === "DE")![1].$set;
     expect(deSet.treasuryBalance).toBe(-3000); // 5000 + (−4000 × 2)
-    expect(deSet["debt.principal"]).toBe(3000); // mirror of the new negative balance
+    // A deficit that sinks the survivor still moves cash only: the stored
+    // stock is re-pointed at the rescoped bond ledger below, never mirrored
+    // off the combined balance (refs #1975).
+    expect(deSet).not.toHaveProperty("debt.principal");
   });
 
   it("rescopes sovereign bonds value-preservingly: units scale, per-unit face does not", async () => {
@@ -397,7 +402,8 @@ describe("mergeNationalFisc", () => {
       (c) => c[0]._id === "DE"
     )![1].$set;
     expect(deSet.treasuryBalance).toBe(-500);
-    expect(deSet["debt.principal"]).toBe(500);
+    // No balance-derived mirror at scale 1 either (refs #1975).
+    expect(deSet).not.toHaveProperty("debt.principal");
   });
 
   it("a re-run is a no-op: the mergedInto stamp gates the whole fiscal block", async () => {
@@ -421,6 +427,61 @@ describe("mergeNationalFisc", () => {
     expect(res.bondsRescoped).toBe(0);
     expect(res.lawsRescoped).toBe(0);
     expect(db.collection("federalBudget").updateOne).not.toHaveBeenCalled();
+  });
+
+  it("a rerun after a crash between rescope and resync still converges on the ledger", async () => {
+    // The fiscal block already ran (mergedInto stamp gates it) and the bonds
+    // already rescoped to DE, but both stored principals are stale: the crash
+    // landed before the resync. A re-run must re-point each stock at the
+    // ledger without touching cash (refs #1975).
+    const budgetsById: Record<string, Record<string, unknown>> = {
+      DD: {
+        _id: "DD",
+        treasuryBalance: 0,
+        debt: { principal: 999 },
+        mergedInto: { countryId: "DE", turn: 510 },
+      },
+      DE: { _id: "DE", treasuryBalance: 3000, debt: { principal: 0 } },
+    };
+    db.collection("federalBudget").findOne.mockImplementation(async (q: { _id: string }) => {
+      const row = budgetsById[q._id];
+      return row ? { ...row } : null;
+    });
+    db.collection("bonds").find.mockImplementation((filter: { countryId?: string }) => {
+      const docs =
+        filter.countryId === "DE"
+          ? [
+              {
+                issuerType: "sovereign",
+                countryId: "DE",
+                totalIssued: 2000,
+                matured: false,
+                defaulted: false,
+              },
+            ]
+          : [];
+      return cursorOf(docs);
+    });
+
+    const res = await mergeNationalFisc(db as unknown as Db, {
+      fromCountryId: "DD",
+      toCountryId: "DE",
+      currentTurn: 511,
+    });
+
+    expect(res.treasuryMoved).toBe(0);
+    expect(res.bondsRescoped).toBe(0);
+    const sets = db.collectionMocks["federalBudget"].updateOne.mock.calls.map(
+      (c) => [(c[0] as { _id: string })._id, c[1].$set] as const
+    );
+    const deSet = sets.find(([id]) => id === "DE")![1] as Record<string, unknown>;
+    const ddSet = sets.find(([id]) => id === "DD")![1] as Record<string, unknown>;
+    // Each stock converges on its own ledger: DE holds the rescoped series,
+    // DD holds nothing. Cash is not part of the resync write.
+    expect(deSet["debt.principal"]).toBe(2000);
+    expect(ddSet["debt.principal"]).toBe(0);
+    expect(deSet).not.toHaveProperty("treasuryBalance");
+    expect(ddSet).not.toHaveProperty("treasuryBalance");
   });
 
   it("re-bases the shell's own v2 fraction laws onto the merged base at their absolute cost", async () => {

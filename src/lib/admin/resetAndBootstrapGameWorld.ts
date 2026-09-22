@@ -48,6 +48,7 @@ import {
 } from "@/lib/admin/resetRunRecord";
 import { presetDefaultsToFoundingPhase } from "@/lib/seeds/presetSelector";
 import type { GameIteration, GameState } from "@/lib/db/types/gameState";
+import { isPresetAnchorDate, type ResetStartDate } from "@/lib/admin/resetStartDate";
 
 export interface ResetAndBootstrapOptions {
   db: Db;
@@ -77,6 +78,8 @@ export interface ResetAndBootstrapOptions {
   /** Identifier recorded in adminLogs. CLI passes "CLI"; admin passes the admin username. */
   adminUsername?: string;
   iteration?: GameIteration;
+  /** Exact game-calendar date for the fresh world. */
+  startDate?: ResetStartDate;
   /**
    * Start the world in a live pre-iteration "founding" phase: chambers seed
    * VACANT and a cycle-0 founding election seats every political nation before
@@ -136,8 +139,14 @@ export async function resetAndBootstrapGameWorld(
   // RESOLVED founding race) could never end the phase, pinning the calendar to
   // the era start forever.
   const foundingEligible = !seedOnly && mode === "historical";
+  const atPresetAnchor = isPresetAnchorDate(preset, options.startDate);
+  if (options.preIteration === true && !atPresetAnchor) {
+    throw new Error("The founding phase can only start at week 1 of an authored era anchor");
+  }
   const preIteration =
-    foundingEligible && (options.preIteration ?? presetDefaultsToFoundingPhase(preset));
+    foundingEligible &&
+    atPresetAnchor &&
+    (options.preIteration ?? presetDefaultsToFoundingPhase(preset));
   const log = options.log ?? (() => {});
   const logs: string[] = [];
   const collect = (msg: string) => {
@@ -220,6 +229,7 @@ export async function resetAndBootstrapGameWorld(
       seedHistorical: false,
       adminUsername,
       iteration,
+      startDate: options.startDate,
       preIteration,
       log: collect,
     });

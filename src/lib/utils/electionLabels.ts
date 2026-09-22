@@ -24,6 +24,7 @@ export const ELECTION_TYPE_LABEL_MAP: Record<string, string> = {
   // UK offices
   commons: "Parliamentary",
   snap_commons: "Snap Commons",
+  special_commons: "Commons By-Election",
   primeMinister: "Prime Minister",
   regionalCouncil: "Regional Council",
   // DE offices
@@ -76,6 +77,7 @@ export const ELECTION_TYPE_SHORT_LABEL: Record<string, string> = {
   president: "President",
   commons: "Parliamentary",
   snap_commons: "Snap Commons",
+  special_commons: "Commons By-Election",
   primeMinister: "Prime Minister",
   regionalCouncil: "Regional Council",
   bundestag: "Bundestag",
@@ -172,6 +174,10 @@ export const MULTI_SEAT_TYPES: ReadonlySet<string> = new Set([
   "stateSenate",
   "commons",
   "snap_commons",
+  // Commons by-elections (#860): multi-seat proportional like a regular
+  // Commons race, but resolved ADDITIVELY (see generalResolution) — the sweep
+  // that clears a region's delegation never runs for this type.
+  "special_commons",
   "regionalCouncil",
   "bundestag",
   "snap_bundestag",
@@ -266,6 +272,16 @@ const SNAP_TO_REGULAR: Readonly<Record<string, string>> = {
 };
 
 /**
+ * By-election types seat as their regular counterpart: a `special_commons`
+ * winner holds `officeType: "commons"`, exactly like `special_governor`
+ * winners seat as `governor`. The special designation lives on the ELECTION
+ * record only (plus the stored `byElectionCarve` fraction).
+ */
+const SPECIAL_TO_REGULAR: Readonly<Record<string, string>> = {
+  special_commons: "commons",
+};
+
+/**
  * Beta-parliament chamber keys → default (modern) office-type keys.
  *
  * FR/IT/ES/SE/TR elections are keyed by the legislature chamber key
@@ -298,6 +314,15 @@ const CHAMBER_KEY_TO_OFFICE_TYPE: Readonly<Record<string, string>> = {
 };
 
 /**
+ * True for Commons by-election races (#860). These resolve ADDITIVELY: they
+ * fill only the vacated seats they claim and must never run the regional
+ * delegation sweep that regular multi-seat races use.
+ */
+export function isSpecialCommonsElection(electionType: string): boolean {
+  return electionType === "special_commons";
+}
+
+/**
  * Map an electionType to the officeType key stored on electedOfficials.
  * Snap types collapse to their regular counterpart; beta chamber keys map to
  * office-type keys. When `countryId` is known, prefer the country/era office
@@ -309,6 +334,7 @@ export function officeKeyForElectionType(
   preset?: string
 ): string {
   if (SNAP_TO_REGULAR[electionType]) return SNAP_TO_REGULAR[electionType];
+  if (SPECIAL_TO_REGULAR[electionType]) return SPECIAL_TO_REGULAR[electionType];
   if (countryId) {
     const resolved = getOfficeTypeForChamber(countryId, electionType, preset);
     if (resolved !== electionType) return resolved;

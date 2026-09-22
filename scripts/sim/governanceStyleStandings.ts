@@ -30,7 +30,7 @@ const REGION_LOADERS: Partial<Record<CountryId, RegionLoader>> = {
   US: () => import("@/lib/seeds/reference/states1953").then((m) => m.states1953),
   UK: () => import("@/lib/seeds/uk/ukRegions1953").then((m) => m.ukRegions1953),
   DE: () => import("@/lib/seeds/de/deRegions1953").then((m) => m.deRegions1953),
-  JP: () => import("@/lib/seeds/jp/jpRegions1953").then((m) => m.jpRegions1953),
+  JP: () => import("@/lib/countries/jp/data/jpRegions1953").then((m) => m.jpRegions1953),
   IE: () => import("@/lib/seeds/ie/ieRegions1953").then((m) => m.ieRegions1953),
   BR: () => import("@/lib/seeds/br/brRegions1953").then((m) => m.brRegions1953),
   CN: () => import("@/lib/seeds/cn/cnRegions1953").then((m) => m.cnRegions1953),

@@ -26,7 +26,7 @@ type BudgetDoc = {
 
 type UpdateOneCall = {
   filter: { _id: ObjectId };
-  update: { $set: Record<string, number> };
+  update: { $set: Record<string, number>; $unset?: Record<string, string> };
 };
 
 function makeBudget(
@@ -52,13 +52,21 @@ function makeBudget(
  * `collection(name)` switch with findOne / find().toArray() / updateOne.
  */
 function makeDb(
-  config: { commandEconomyEnabled?: boolean; commandEconomySecondEconomyTolerance?: number } | null,
-  budgets: BudgetDoc[]
+  config: {
+    commandEconomyEnabled?: boolean;
+    commandEconomySecondEconomyTolerance?: number;
+    marketSystemMode?: string;
+  } | null,
+  budgets: BudgetDoc[],
+  commodityFlows: Array<{ turn: number; byCountry: Record<string, unknown> }> = []
 ) {
   const updateOnes: UpdateOneCall[] = [];
   const federalBudget = {
     find: () => ({ toArray: async () => budgets }),
-    updateOne: async (filter: { _id: ObjectId }, update: { $set: Record<string, number> }) => {
+    updateOne: async (
+      filter: { _id: ObjectId },
+      update: { $set: Record<string, number>; $unset?: Record<string, string> }
+    ) => {
       updateOnes.push({ filter, update });
       return { matchedCount: 1, modifiedCount: 1 };
     },
@@ -72,6 +80,19 @@ function makeDb(
       }
       if (name === "federalBudget") {
         return federalBudget;
+      }
+      if (name === "commodityFlows") {
+        return {
+          // Honor the { turn } filter like Mongo does: the phase must consume
+          // only the prior turn's settled ledger docs, never same-turn or
+          // older rows.
+          find: (filter?: { turn?: number }) => ({
+            toArray: async () =>
+              filter != null && typeof filter.turn === "number"
+                ? commodityFlows.filter((doc) => doc.turn === filter.turn)
+                : commodityFlows,
+          }),
+        };
       }
       // Per-country commandStance read — null ⇒ fall back to global tolerance.
       if (name === "governmentFormations") {
@@ -150,6 +171,9 @@ describe("processCommandEconomyTurn", () => {
     ] as const) {
       expect(Number.isFinite(set[key])).toBe(true);
     }
+    expect(cnUpdate!.update.$unset).toEqual({
+      "economicFactors.physicalDemandSupplyGapPct": "",
+    });
   });
 
   it("flag ON + US (market) budget → US is skipped", async () => {
@@ -164,6 +188,102 @@ describe("processCommandEconomyTurn", () => {
     const cnUpdate = updateOnes.find((u) => u.filter._id.equals(cn._id));
     expect(usUpdate).toBeUndefined();
     expect(cnUpdate).toBeDefined();
+  });
+
+  it("uses the prior country-scoped physical gap and does not pool countries", async () => {
+    const cn = makeBudget("CN");
+    const ru = makeBudget("RU");
+    const flows = [
+      {
+        turn: TURN,
+        byCountry: {
+          CN: {
+            basis: "country_scoped_ledger",
+            supply: 100,
+            demand: 200,
+            price: 1,
+          },
+          RU: {
+            basis: "country_scoped_ledger",
+            supply: 100,
+            demand: 100,
+            price: 1,
+          },
+        },
+      },
+    ];
+    const { db, updateOnes } = makeDb(
+      { commandEconomyEnabled: true, marketSystemMode: "ledger" },
+      [cn, ru],
+      flows
+    );
+
+    await processCommandEconomyTurn(db, TURN + 1, YEAR_1953);
+
+    const cnGap = updateOnes.find((u) => u.filter._id.equals(cn._id))!.update.$set[
+      "economicFactors.physicalDemandSupplyGapPct"
+    ];
+    const ruGap = updateOnes.find((u) => u.filter._id.equals(ru._id))!.update.$set[
+      "economicFactors.physicalDemandSupplyGapPct"
+    ];
+    expect(cnGap).toBeGreaterThan(0);
+    expect(ruGap).toBe(0);
+  });
+
+  it("ignores same-turn and older ledger docs when reading the prior gap", async () => {
+    const cn = makeBudget("CN");
+    // Prior-turn observation: (200 - 100) / (100 + 1) * 100 ≈ 99.01.
+    const prior = {
+      turn: TURN,
+      byCountry: {
+        CN: { basis: "country_scoped_ledger", supply: 100, demand: 200, price: 1 },
+      },
+    };
+    // Decoys that must never feed the kernel: a same-turn doc and an older
+    // doc, both with a capped 500-point gap. Unfiltered they would drag the
+    // weighted gap to ~499.
+    const decoy = (turn: number) => ({
+      turn,
+      byCountry: {
+        CN: { basis: "country_scoped_ledger", supply: 100, demand: 50000, price: 1 },
+      },
+    });
+    const { db, updateOnes } = makeDb(
+      { commandEconomyEnabled: true, marketSystemMode: "ledger" },
+      [cn],
+      [decoy(TURN - 1), prior, decoy(TURN + 1)]
+    );
+
+    await processCommandEconomyTurn(db, TURN + 1, YEAR_1953);
+
+    const cnGap = updateOnes.find((u) => u.filter._id.equals(cn._id))!.update.$set[
+      "economicFactors.physicalDemandSupplyGapPct"
+    ];
+    expect(cnGap).toBeCloseTo((100 / 101) * 100, 5);
+  });
+
+  it("stale-only ledger docs clear the diagnostic instead of feeding the kernel", async () => {
+    const cn = makeBudget("CN");
+    const stale = (turn: number) => ({
+      turn,
+      byCountry: {
+        CN: { basis: "country_scoped_ledger", supply: 100, demand: 50000, price: 1 },
+      },
+    });
+    // No doc for the prior turn (TURN): only an older doc and a same-turn doc.
+    const { db, updateOnes } = makeDb(
+      { commandEconomyEnabled: true, marketSystemMode: "ledger" },
+      [cn],
+      [stale(TURN - 1), stale(TURN + 1)]
+    );
+
+    await processCommandEconomyTurn(db, TURN + 1, YEAR_1953);
+
+    const cnUpdate = updateOnes.find((u) => u.filter._id.equals(cn._id))!;
+    expect(cnUpdate.update.$set["economicFactors.physicalDemandSupplyGapPct"]).toBeUndefined();
+    expect(cnUpdate.update.$unset).toEqual({
+      "economicFactors.physicalDemandSupplyGapPct": "",
+    });
   });
 
   it("a stored planned level survives the compiled schedule (post-reunification DE)", async () => {

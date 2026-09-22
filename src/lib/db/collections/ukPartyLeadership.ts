@@ -1,12 +1,7 @@
-import type { Db } from "mongodb";
-import type { UKPartyLeadership, LeadershipChallenge } from "../../uk/leadership/leadershipTypes";
-
-/** Per-party UK leadership-removal state (ticket #861). */
-export function getUKPartyLeadershipCollection(db: Db) {
-  return db.collection<UKPartyLeadership>("ukPartyLeadership");
-}
-
-/** Leadership challenges (letters/nominations + ballots) for UK parties. */
-export function getUKLeadershipChallengesCollection(db: Db) {
-  return db.collection<LeadershipChallenge>("ukLeadershipChallenges");
-}
+/**
+ * Forwarder. Moved into UK's country folder.
+ *
+ * A forwarder holds no copy, so existing importers are untouched and there is
+ * still exactly one declaration.
+ */
+export * from "@/lib/countries/uk/db/ukPartyLeadership";

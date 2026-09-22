@@ -6,8 +6,10 @@ import {
   consumerConfidenceNode,
   investorConfidenceNode,
   medianIncomeNode,
+  povertyRateNode,
   type SectorRevenueTaxPayload,
 } from "./economic";
+import { publicTrustNode } from "./governance";
 import { evalNode } from "../coexistence";
 import { advanceOutputGap } from "../outputGap";
 import type { EngineNodeContext } from "../types";
@@ -17,6 +19,14 @@ import {
   LABOUR_UNEMPLOYMENT_AUTOMATION_K,
   LABOUR_UNEMPLOYMENT_AUTOMATION_CAP_PP,
 } from "@/lib/labour/laborCost";
+import {
+  LABOUR_UNEMPLOYMENT_TIGHTNESS_CAP_PP,
+  accumulateLabourDemand,
+  computeLabourTightness,
+  labourUnemploymentTightnessPressure,
+  makeLabourDemandByState,
+  roundTightness,
+} from "@/lib/labour/labourMarket";
 
 const ctx = (over: Partial<EngineNodeContext>): EngineNodeContext => ({
   current: {},
@@ -38,6 +48,43 @@ const payload = (over: Partial<SectorRevenueTaxPayload> = {}): SectorRevenueTaxP
 });
 
 describe("sectorGrowthNode (the cyclical signal — old gdpGrowth logic)", () => {
+  it("hands off a young physical history gradually without a measurement cliff", () => {
+    const inputs = payload({
+      plantsEnabled: true,
+      revenueEmaNow: 1100,
+      revenueTrendBaseline: { value: 1000, spanTurns: 48 },
+      outputEmaNow: 1000,
+      outputTrendBaseline: { value: 1000, spanTurns: 8 },
+    });
+    expect(sectorGrowthNode.compute!(ctx({ providers: { sectorRevenueTax: inputs } }))).toBeCloseTo(
+      10
+    );
+  });
+
+  it("does not turn a price-only revenue decline into an output contraction", () => {
+    const inputs = payload({
+      plantsEnabled: true,
+      revenueEmaNow: 800,
+      revenueTrendBaseline: { value: 1000, spanTurns: 48 },
+      outputEmaNow: 1000,
+      outputTrendBaseline: { value: 1000, spanTurns: 48 },
+    });
+    expect(sectorGrowthNode.compute!(ctx({ providers: { sectorRevenueTax: inputs } }))).toBe(0);
+  });
+
+  it("retains an actual output contraction even when nominal revenue is flat", () => {
+    const inputs = payload({
+      plantsEnabled: true,
+      revenueEmaNow: 1000,
+      revenueTrendBaseline: { value: 1000, spanTurns: 48 },
+      outputEmaNow: 950,
+      outputTrendBaseline: { value: 1000, spanTurns: 48 },
+    });
+    expect(sectorGrowthNode.compute!(ctx({ providers: { sectorRevenueTax: inputs } }))).toBeCloseTo(
+      -5
+    );
+  });
+
   it("computes the revenue-weighted, tax-adjusted sector growth as the sim target", () => {
     // (1000*3 + 500*0.5)/1500 = 2.1667 ; US neutral tax (fed0/state6) → gap 0
     const out = evalNode(
@@ -497,5 +544,219 @@ describe("investorConfidenceNode", () => {
     );
     // 60 + (4−2)*4 + (12−8)*1.5 = 60 + 8 + 6 = 74
     expect(target).toBe(74);
+  });
+});
+
+describe("unemploymentNode — #791 measured-tightness channel", () => {
+  const base = {
+    current: { "economic.gdpGrowth": 2 },
+    prevSimBaseline: { "economic.unemploymentRate": 5 },
+  };
+
+  it("a tight market lowers the target and a slack market raises it", () => {
+    const baseline = unemploymentNode.compute!(ctx(base));
+    const tight = unemploymentNode.compute!(
+      ctx({
+        ...base,
+        current: { ...base.current, "economic.labourTightness": 2 },
+      })
+    );
+    const slack = unemploymentNode.compute!(
+      ctx({
+        ...base,
+        current: { ...base.current, "economic.labourTightness": 0.5 },
+      })
+    );
+    expect(tight).toBeLessThan(baseline);
+    expect(slack).toBeGreaterThan(baseline);
+  });
+
+  it("chains production headcounts through tightness into the target", () => {
+    // Build the signal the way the corp turn does: accumulate sector headcounts,
+    // divide by the metric engine labour force, persist rounded. Nothing here
+    // is derived from unemployment, so this also pins the anti-circularity.
+    const demand = makeLabourDemandByState();
+    accumulateLabourDemand(demand, "s1", 150);
+    accumulateLabourDemand(demand, "s1", 250);
+    const tight = roundTightness(computeLabourTightness(demand.get("s1")!, 200)!);
+    expect(tight).toBe(2);
+    const baseline = unemploymentNode.compute!(ctx(base));
+    const withMeasured = unemploymentNode.compute!(
+      ctx({
+        ...base,
+        current: { ...base.current, "economic.labourTightness": tight },
+      })
+    );
+    expect(withMeasured).toBeLessThan(baseline);
+    expect(baseline - withMeasured).toBeCloseTo(-labourUnemploymentTightnessPressure(2), 9);
+
+    // Mirror image from headcounts: 100 wanted over a 200-strong force reads
+    // slack and lifts the target by the symmetric amount.
+    const slackDemand = makeLabourDemandByState();
+    accumulateLabourDemand(slackDemand, "s1", 100);
+    const slackTight = roundTightness(computeLabourTightness(slackDemand.get("s1")!, 200)!);
+    expect(slackTight).toBe(0.5);
+    const withSlack = unemploymentNode.compute!(
+      ctx({
+        ...base,
+        current: { ...base.current, "economic.labourTightness": slackTight },
+      })
+    );
+    expect(withSlack).toBeGreaterThan(baseline);
+    expect(withSlack - baseline).toBeCloseTo(baseline - withMeasured, 9);
+  });
+
+  it("a sustained demand shock drifts unemployment down turn after turn", () => {
+    const run = (tightness: number | undefined) => {
+      let value = 5;
+      let simBaseline = 5;
+      const history = [];
+      for (let turn = 0; turn < 12; turn++) {
+        const out = evalNode(
+          unemploymentNode,
+          ctx({
+            current: {
+              "economic.gdpGrowth": 2,
+              ...(tightness !== undefined ? { "economic.labourTightness": tightness } : {}),
+            },
+            prevSimBaseline: { "economic.unemploymentRate": simBaseline },
+            policyValue: value,
+          }),
+          "s1"
+        );
+        value = out.value;
+        simBaseline = out.simBaseline;
+        history.push(value);
+      }
+      return history;
+    };
+    const shocked = run(2);
+    const calm = run(undefined);
+    // gdp at potential ⇒ Okun holds the calm path flat; the shock path falls.
+    expect(calm[11]).toBeCloseTo(5, 9);
+    expect(shocked[11]).toBeLessThan(4.9);
+    for (let i = 1; i < shocked.length; i++) {
+      expect(shocked[i]).toBeLessThanOrEqual(shocked[i - 1]);
+    }
+    // Mirror image: sustained slack drifts it up.
+    const slack = run(0.5);
+    expect(slack[11]).toBeGreaterThan(5.1);
+  });
+
+  it("an extreme one-turn reading cannot move the target more than the cap", () => {
+    const baseline = unemploymentNode.compute!(ctx(base));
+    const spike = unemploymentNode.compute!(
+      ctx({
+        ...base,
+        current: { ...base.current, "economic.labourTightness": 200 },
+      })
+    );
+    const collapse = unemploymentNode.compute!(
+      ctx({
+        ...base,
+        current: { ...base.current, "economic.labourTightness": 0.001 },
+      })
+    );
+    expect(baseline - spike).toBeCloseTo(LABOUR_UNEMPLOYMENT_TIGHTNESS_CAP_PP, 9);
+    expect(collapse - baseline).toBeCloseTo(LABOUR_UNEMPLOYMENT_TIGHTNESS_CAP_PP, 9);
+  });
+
+  it("cold start (no measured tightness) is byte-identical to today", () => {
+    const baseline = unemploymentNode.compute!(ctx(base));
+    for (const tightness of [undefined, Number.NaN, 0, -2]) {
+      const out = unemploymentNode.compute!(
+        ctx({
+          ...base,
+          current:
+            tightness === undefined
+              ? { ...base.current }
+              : { ...base.current, "economic.labourTightness": tightness },
+        })
+      );
+      expect(out).toBe(baseline);
+    }
+  });
+
+  it("keeps the GDP, wage and automation channels alongside the new one", () => {
+    const gdpOnly = unemploymentNode.compute!(ctx(base));
+    const all = unemploymentNode.compute!(
+      ctx({
+        current: {
+          "economic.gdpGrowth": 4,
+          "economic.labourWageIndexDelta": 0.1,
+          "economic.automationIndexDelta": -0.1,
+          "economic.labourTightness": 2,
+        },
+        prevSimBaseline: { "economic.unemploymentRate": 5 },
+      })
+    );
+    // gdp 4 vs potential 2 ⇒ Okun pulls down; wage hike + automation push up;
+    // tight market pulls down again. Net must differ from every partial read.
+    expect(all).not.toBe(gdpOnly);
+    const noTightness = unemploymentNode.compute!(
+      ctx({
+        current: {
+          "economic.gdpGrowth": 4,
+          "economic.labourWageIndexDelta": 0.1,
+          "economic.automationIndexDelta": -0.1,
+        },
+        prevSimBaseline: { "economic.unemploymentRate": 5 },
+      })
+    );
+    expect(all).toBeLessThan(noTightness);
+  });
+
+  it("downstream poverty and trust stay bounded and move in the right direction", () => {
+    const runUnemployment = (tightness: number | undefined) => {
+      let value = 5;
+      let simBaseline = 5;
+      const history = [];
+      for (let turn = 0; turn < 12; turn++) {
+        const out = evalNode(
+          unemploymentNode,
+          ctx({
+            current: {
+              "economic.gdpGrowth": 2,
+              ...(tightness !== undefined ? { "economic.labourTightness": tightness } : {}),
+            },
+            prevSimBaseline: { "economic.unemploymentRate": simBaseline },
+            policyValue: value,
+          }),
+          "s1"
+        );
+        value = out.value;
+        simBaseline = out.simBaseline;
+        history.push(value);
+      }
+      return history;
+    };
+    const calm = runUnemployment(undefined);
+    const shocked = runUnemployment(2);
+    for (let i = 0; i < calm.length; i++) {
+      const povertyCalm = povertyRateNode.compute!(
+        ctx({ current: { "economic.unemploymentRate": calm[i] } })
+      );
+      const povertyShocked = povertyRateNode.compute!(
+        ctx({ current: { "economic.unemploymentRate": shocked[i] } })
+      );
+      // Lower unemployment lowers poverty; the 0.6/pp slope keeps the gap small.
+      expect(povertyShocked).toBeLessThanOrEqual(povertyCalm);
+      expect(povertyCalm - povertyShocked).toBeLessThan(0.5);
+      const trustCalm = publicTrustNode.compute!(
+        ctx({
+          current: { "economic.unemploymentRate": calm[i] },
+          providers: { governmentApproval: 45 },
+        })
+      );
+      const trustShocked = publicTrustNode.compute!(
+        ctx({
+          current: { "economic.unemploymentRate": shocked[i] },
+          providers: { governmentApproval: 45 },
+        })
+      );
+      // Lower unemployment lifts trust; the -1/pp slope keeps the gap small.
+      expect(trustShocked).toBeGreaterThanOrEqual(trustCalm);
+      expect(trustShocked - trustCalm).toBeLessThan(1);
+    }
   });
 });

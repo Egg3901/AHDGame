@@ -21,6 +21,7 @@ import {
   debitSharesFromImperial,
 } from "@/lib/corporations/shareholderOps";
 import {
+  creditSellerFundProceeds,
   reconcileTotalSharesAfterFill,
   resolveCharName,
   resolveCorpName,
@@ -452,17 +453,31 @@ export async function fillShareOrder(request: Request, { params }: RouteParams) 
       return true;
     };
 
-    const creditSellerFund = async (): Promise<void> => {
+    // Both seller-leg sites (corporation-buyer below, character-buyer further
+    // down) settle the fund proceeds through one shared helper so the
+    // committed-path-only ledger row is identical at both: emitted after the
+    // cash credit lands, inside the guarded fill that rolls the cash back on
+    // any later failure.
+    const creditSellerFund = async (buyer: {
+      type: "corporation" | "character";
+      id: ObjectId;
+      name: string;
+    }): Promise<void> => {
       if (!order.placerFundId) return;
-      const cashCredit = await db
-        .collection<IndexFund>("indexFunds")
-        .updateOne(
-          { _id: order.placerFundId },
-          { $inc: { cashAnchor: total }, $set: { updatedAt: now } }
-        );
-      if (cashCredit.matchedCount === 0) {
-        throw new Error("Liquidity-provider fund disappeared during settlement");
-      }
+      await creditSellerFundProceeds({
+        db,
+        fundId: order.placerFundId,
+        fundName: sellerFund?.name ?? "Index fund",
+        fundAnchorCurrency: sellerFund?.anchorCurrencyCode ?? "USD",
+        total,
+        buyer,
+        corporationId: corporation._id,
+        orderId: order._id,
+        shares,
+        pricePerShare: order.pricePerShare,
+        currentTurn,
+        now,
+      });
       sellerFundCashCredited = true;
     };
 
@@ -638,7 +653,11 @@ export async function fillShareOrder(request: Request, { params }: RouteParams) 
           buyerSharesCredited = true;
 
           if (order.placerFundId) {
-            await creditSellerFund();
+            await creditSellerFund({
+              type: "corporation",
+              id: buyingCorp._id,
+              name: buyingCorp.name,
+            });
           } else if (order.placerCorporationId) {
             const sellerCorp = await db
               .collection<Corporation>("corporations")
@@ -910,7 +929,7 @@ export async function fillShareOrder(request: Request, { params }: RouteParams) 
           buyerSharesCredited = true;
 
           if (order.placerFundId) {
-            await creditSellerFund();
+            await creditSellerFund({ type: "character", id: fillerId, name: fillerName });
           } else if (order.placerCorporationId) {
             const sellerCorp = await db
               .collection<Corporation>("corporations")

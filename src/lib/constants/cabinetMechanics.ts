@@ -87,7 +87,7 @@ export interface CabinetPositionDef {
   renameOnDepartmentSplit?: { whenSeatEnabled: string; name: string };
 }
 
-const MECHANICS_BY_COUNTRY: Record<string, Record<string, CabinetPositionMechanics>> = {
+export const MECHANICS_BY_COUNTRY: Record<string, Record<string, CabinetPositionMechanics>> = {
   UK: UK_CABINET_MECHANICS,
   US: US_CABINET_MECHANICS,
   JP: JP_CABINET_MECHANICS,

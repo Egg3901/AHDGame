@@ -746,7 +746,9 @@ describe("processFiscalYear", () => {
     );
     expect(finalUpdateCall).toBeDefined();
     const setOps = (finalUpdateCall![1] as { $set: Record<string, unknown> }).$set;
-    expect(setOps["debt.principal"]).toBe(23_700_000_000_000);
+    // debt.principal is bond-ledger owned and deliberately absent from the
+    // fiscal-year write (refs #1975); only the service terms refresh.
+    expect(setOps).not.toHaveProperty("debt.principal");
     expect(setOps["debt.interestRate"]).toBe(0.04);
     expect(setOps.debtToGdpRatio).toBe(0.87);
     expect(setOps.creditRating).toBe("AA");

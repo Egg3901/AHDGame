@@ -12,7 +12,7 @@ import {
 import {
   jpDemographicCategories,
   JP_VOTER_GROUP_BASELINES,
-} from "@/lib/seeds/jp/jpDemographicCategories";
+} from "@/lib/countries/jp/data/jpDemographicCategories";
 import {
   deDemographicCategories,
   DE_VOTER_GROUP_BASELINES,

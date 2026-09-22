@@ -154,4 +154,51 @@ describe("POST /api/country/[code]/parties/[id]/join-requests", () => {
     const { applyCharacterPartyJoin } = await import("@/lib/parties/applyCharacterPartyJoin");
     expect(applyCharacterPartyJoin).not.toHaveBeenCalled();
   });
+
+  // Growth frontier, re-checked at ACCEPT time rather than only when the
+  // request was filed: the party's frontier can shrink in between if members
+  // leave or NPPs retire. Exercises the real partyFrontier module and real
+  // adjacency. The requester is homed in CA throughout.
+  describe("growth frontier", () => {
+    function seedFrontier(presence: string[], regions: string[]) {
+      db.collection("states").find.mockReturnValue({
+        toArray: vi.fn().mockResolvedValue(regions.map((r) => ({ _id: r }))),
+      } as never);
+      db.collection("characters").distinct.mockResolvedValue(presence);
+      db.collectionMocks["politicalParties"]!.findOne.mockResolvedValue(party());
+    }
+
+    it("refuses to accept a requester now outside the frontier", async () => {
+      seedFrontier(["NY"], ["NY", "PA", "CA"]);
+
+      const res = await call({ action: "accept", characterId: requesterId.toString() });
+
+      expect(res.status).toBe(400);
+      expect((await res.json()).error).toContain("not established in or next to");
+
+      const { applyCharacterPartyJoin } = await import("@/lib/parties/applyCharacterPartyJoin");
+      expect(vi.mocked(applyCharacterPartyJoin)).not.toHaveBeenCalled();
+    });
+
+    it("accepts a requester whose home region is adjacent to the party's presence", async () => {
+      // Presence in AZ; CA borders AZ, so the CA requester is reachable.
+      seedFrontier(["AZ"], ["AZ", "CA", "NY"]);
+
+      const res = await call({ action: "accept", characterId: requesterId.toString() });
+
+      expect(res.status).toBe(200);
+      const { applyCharacterPartyJoin } = await import("@/lib/parties/applyCharacterPartyJoin");
+      expect(vi.mocked(applyCharacterPartyJoin)).toHaveBeenCalledTimes(1);
+    });
+
+    it("does not run the frontier check when declining", async () => {
+      seedFrontier(["NY"], ["NY", "PA", "CA"]);
+
+      const res = await call({ action: "decline", characterId: requesterId.toString() });
+
+      expect(res.status).toBe(200);
+      const { applyCharacterPartyJoin } = await import("@/lib/parties/applyCharacterPartyJoin");
+      expect(vi.mocked(applyCharacterPartyJoin)).not.toHaveBeenCalled();
+    });
+  });
 });

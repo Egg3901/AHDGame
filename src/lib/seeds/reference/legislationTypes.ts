@@ -1,7 +1,7 @@
 import type { LegislationType, EffectTargetWeighted, MetricCategoryId } from "@/lib/db/types";
 import { policyOptions, taxRateOptions, withPerCapitaCosts } from "./policyOptionHelpers";
 import { withEraCosts } from "@/lib/era/legislationCostCatalog";
-import { jpLegislationTypes } from "../jp/jpLegislationTypes";
+import { jpLegislationTypes } from "@/lib/countries/jp/data/jpLegislationTypes";
 import { deLegislationTypes } from "../de/deLegislationTypes";
 import { ieLegislationTypes } from "../ie/ieLegislationTypes";
 import { cnLegislationTypes } from "../cn/cnLegislationTypes";
@@ -8751,8 +8751,9 @@ const rawLegislationTypes: LegislationType[] = [
   // `countryScope`, and nothing is scoped "sco"/"wls" yet — though the
   // LegislationType.countryScope union already reserves both codes).
   //
-  // TODO(secession): author `../sco/scoLegislationTypes.ts` +
-  // `../wal/walLegislationTypes.ts` (each entry `countryScope: "sco"` / "wls" —
+  // TODO(secession): author `@/lib/countries/sco/data/scoLegislationTypes.ts` +
+  // `@/lib/countries/wal/data/walLegislationTypes.ts` (each entry
+  // `countryScope: "sco"` / "wls" —
   // note Wales is "wls", not "wal") and spread them here, mirroring the
   // per-country pattern above. Until then, localize Westminster's bills.
 

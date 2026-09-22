@@ -1,5 +1,34 @@
 import type { CountryId } from "@/lib/constants/countries";
 import { metricCategories, type MetricDefinition } from "@/lib/constants/metricDefinitions";
+import { JP_CORE5_NORMALS, JP_INCOME_ANCHORS } from "@/lib/countries/jp/geographyFacts";
+import { BR_CORE5_NORMALS } from "@/lib/countries/br/geographyFacts";
+import { CN_CORE5_NORMALS } from "@/lib/countries/cn/geographyFacts";
+import { DE_CORE5_NORMALS } from "@/lib/countries/de/geographyFacts";
+import { IE_CORE5_NORMALS } from "@/lib/countries/ie/geographyFacts";
+import { NG_CORE5_NORMALS } from "@/lib/countries/ng/geographyFacts";
+import { UK_CORE5_NORMALS } from "@/lib/countries/uk/geographyFacts";
+import { US_CORE5_NORMALS } from "@/lib/countries/us/geographyFacts";
+import {
+  JP_HEALTH_COVERAGE_BAND,
+  JP_NUCLEAR_SAFETY_WINDOW,
+} from "@/lib/countries/jp/data/jpMetricOverrides";
+import { AT_INCOME_ANCHORS } from "@/lib/countries/at/geographyFacts";
+import { BR_INCOME_ANCHORS } from "@/lib/countries/br/geographyFacts";
+import { CN_INCOME_ANCHORS } from "@/lib/countries/cn/geographyFacts";
+import { DD_INCOME_ANCHORS } from "@/lib/countries/dd/geographyFacts";
+import { DE_INCOME_ANCHORS } from "@/lib/countries/de/geographyFacts";
+import { ES_INCOME_ANCHORS } from "@/lib/countries/es/geographyFacts";
+import { FI_INCOME_ANCHORS } from "@/lib/countries/fi/geographyFacts";
+import { FR_INCOME_ANCHORS } from "@/lib/countries/fr/geographyFacts";
+import { GR_INCOME_ANCHORS } from "@/lib/countries/gr/geographyFacts";
+import { IE_INCOME_ANCHORS } from "@/lib/countries/ie/geographyFacts";
+import { IT_INCOME_ANCHORS } from "@/lib/countries/it/geographyFacts";
+import { NG_INCOME_ANCHORS } from "@/lib/countries/ng/geographyFacts";
+import { RU_INCOME_ANCHORS } from "@/lib/countries/ru/geographyFacts";
+import { SE_INCOME_ANCHORS } from "@/lib/countries/se/geographyFacts";
+import { TR_INCOME_ANCHORS } from "@/lib/countries/tr/geographyFacts";
+import { UK_INCOME_ANCHORS } from "@/lib/countries/uk/geographyFacts";
+import { US_INCOME_ANCHORS } from "@/lib/countries/us/geographyFacts";
 
 /**
  * Metric Era Catalog — the single source of truth for how a metric behaves
@@ -110,13 +139,7 @@ export const METRIC_ERA_WINDOWS: Record<string, MetricEraWindow> = {
   nuclearSafety: {
     from: 1957,
     countryOverrides: {
-      JP: {
-        from: 1966,
-        news: {
-          title: "Japan Enters the Atomic Age",
-          body: "At Tōkai, Japan has stepped into the atomic age of electricity. For a nation hungry for power and technological standing, the reactor is more than a machine; it is a statement that Japan intends to master the industries of the future. Officials in Tokyo speak of energy security, engineering skill, and a modern grid fit for a rising economy.\n\nYet the achievement arrives with solemn questions. In fishing towns, factory districts, and university halls, citizens ask how safety will be proven and who will be trusted to prove it. Nuclear safety has entered Japan's national conversation as both a technical standard and a test of public confidence.",
-        },
-      },
+      JP: JP_NUCLEAR_SAFETY_WINDOW,
     },
     news: {
       title: "The Atom Goes to Work",
@@ -364,7 +387,7 @@ export interface MetricBandCurve {
  * countries (RU, …). Values are era-plausible authored estimates — the dry-run
  * review is the tuning gate before any flag flip.
  */
-type NormalAnchor = { year: number; value: number };
+export type NormalAnchor = { year: number; value: number };
 const CORE5_SPREADS: Record<
   string,
   { best: number; worst: number; bestFloor?: number; worstCeil?: number }
@@ -376,7 +399,10 @@ const CORE5_SPREADS: Record<
   povertyRate: { best: -7, worst: 14, bestFloor: 3, worstCeil: 45 },
 };
 
-const CORE5_NORMALS: Record<string, Partial<Record<CountryId | "global", NormalAnchor[]>>> = {
+export const CORE5_NORMALS: Record<
+  string,
+  Partial<Record<CountryId | "global", NormalAnchor[]>>
+> = {
   gdpGrowth: {
     global: [
       { year: 1950, value: 4.2 },
@@ -385,62 +411,14 @@ const CORE5_NORMALS: Record<string, Partial<Record<CountryId | "global", NormalA
       { year: 2019, value: 2.2 },
       { year: 2040, value: 1.8 },
     ],
-    US: [
-      { year: 1953, value: 4.2 },
-      { year: 1979, value: 3.4 },
-      { year: 1991, value: 2.9 },
-      { year: 2019, value: 2.2 },
-      { year: 2040, value: 1.8 },
-    ],
-    UK: [
-      { year: 1953, value: 3.0 },
-      { year: 1979, value: 2.4 },
-      { year: 1991, value: 2.2 },
-      { year: 2019, value: 1.5 },
-      { year: 2040, value: 1.3 },
-    ],
-    DE: [
-      { year: 1953, value: 7.5 },
-      { year: 1979, value: 3.0 },
-      { year: 1991, value: 3.5 },
-      { year: 2019, value: 1.2 },
-      { year: 2040, value: 1.0 },
-    ],
-    JP: [
-      { year: 1953, value: 8.0 },
-      { year: 1979, value: 5.0 },
-      { year: 1991, value: 3.5 },
-      { year: 2019, value: 0.8 },
-      { year: 2040, value: 0.8 },
-    ],
-    IE: [
-      { year: 1953, value: 2.0 },
-      { year: 1979, value: 3.5 },
-      { year: 1991, value: 3.5 },
-      { year: 2019, value: 5.0 },
-      { year: 2040, value: 2.5 },
-    ],
-    BR: [
-      { year: 1953, value: 6.5 },
-      { year: 1979, value: 6.5 },
-      { year: 1991, value: 1.5 },
-      { year: 2019, value: 1.5 },
-      { year: 2040, value: 2.0 },
-    ],
-    CN: [
-      { year: 1953, value: 6.0 },
-      { year: 1979, value: 6.5 },
-      { year: 1991, value: 9.0 },
-      { year: 2019, value: 6.0 },
-      { year: 2040, value: 3.5 },
-    ],
-    NG: [
-      { year: 1953, value: 4.0 },
-      { year: 1979, value: 5.0 },
-      { year: 1991, value: 2.0 },
-      { year: 2019, value: 2.2 },
-      { year: 2040, value: 3.0 },
-    ],
+    US: US_CORE5_NORMALS["gdpGrowth"] as NormalAnchor[],
+    UK: UK_CORE5_NORMALS["gdpGrowth"] as NormalAnchor[],
+    DE: DE_CORE5_NORMALS["gdpGrowth"] as NormalAnchor[],
+    JP: JP_CORE5_NORMALS["gdpGrowth"] as NormalAnchor[],
+    IE: IE_CORE5_NORMALS["gdpGrowth"] as NormalAnchor[],
+    BR: BR_CORE5_NORMALS["gdpGrowth"] as NormalAnchor[],
+    CN: CN_CORE5_NORMALS["gdpGrowth"] as NormalAnchor[],
+    NG: NG_CORE5_NORMALS["gdpGrowth"] as NormalAnchor[],
   },
   unemploymentRate: {
     global: [
@@ -450,62 +428,14 @@ const CORE5_NORMALS: Record<string, Partial<Record<CountryId | "global", NormalA
       { year: 2019, value: 4.0 },
       { year: 2040, value: 4.2 },
     ],
-    US: [
-      { year: 1953, value: 4.5 },
-      { year: 1979, value: 6.0 },
-      { year: 1991, value: 6.8 },
-      { year: 2019, value: 4.0 },
-      { year: 2040, value: 4.2 },
-    ],
-    UK: [
-      { year: 1953, value: 1.8 },
-      { year: 1979, value: 5.0 },
-      { year: 1991, value: 8.5 },
-      { year: 2019, value: 4.0 },
-      { year: 2040, value: 4.2 },
-    ],
-    DE: [
-      { year: 1953, value: 7.0 },
-      { year: 1979, value: 3.5 },
-      { year: 1991, value: 6.0 },
-      { year: 2019, value: 3.2 },
-      { year: 2040, value: 3.5 },
-    ],
-    JP: [
-      { year: 1953, value: 2.0 },
-      { year: 1979, value: 2.0 },
-      { year: 1991, value: 2.1 },
-      { year: 2019, value: 2.4 },
-      { year: 2040, value: 2.6 },
-    ],
-    IE: [
-      { year: 1953, value: 8.0 },
-      { year: 1979, value: 7.5 },
-      { year: 1991, value: 14.0 },
-      { year: 2019, value: 5.0 },
-      { year: 2040, value: 5.0 },
-    ],
-    BR: [
-      { year: 1953, value: 5.5 },
-      { year: 1979, value: 6.5 },
-      { year: 1991, value: 10.0 },
-      { year: 2019, value: 12.0 },
-      { year: 2040, value: 9.0 },
-    ],
-    CN: [
-      { year: 1953, value: 4.5 },
-      { year: 1979, value: 5.0 },
-      { year: 1991, value: 3.0 },
-      { year: 2019, value: 4.0 },
-      { year: 2040, value: 4.5 },
-    ],
-    NG: [
-      { year: 1953, value: 5.0 },
-      { year: 1979, value: 7.0 },
-      { year: 1991, value: 12.0 },
-      { year: 2019, value: 14.0 },
-      { year: 2040, value: 11.0 },
-    ],
+    US: US_CORE5_NORMALS["unemploymentRate"] as NormalAnchor[],
+    UK: UK_CORE5_NORMALS["unemploymentRate"] as NormalAnchor[],
+    DE: DE_CORE5_NORMALS["unemploymentRate"] as NormalAnchor[],
+    JP: JP_CORE5_NORMALS["unemploymentRate"] as NormalAnchor[],
+    IE: IE_CORE5_NORMALS["unemploymentRate"] as NormalAnchor[],
+    BR: BR_CORE5_NORMALS["unemploymentRate"] as NormalAnchor[],
+    CN: CN_CORE5_NORMALS["unemploymentRate"] as NormalAnchor[],
+    NG: NG_CORE5_NORMALS["unemploymentRate"] as NormalAnchor[],
   },
   lifeExpectancy: {
     global: [
@@ -515,62 +445,14 @@ const CORE5_NORMALS: Record<string, Partial<Record<CountryId | "global", NormalA
       { year: 2019, value: 79 },
       { year: 2040, value: 82 },
     ],
-    US: [
-      { year: 1953, value: 68.5 },
-      { year: 1979, value: 73.8 },
-      { year: 1991, value: 75.5 },
-      { year: 2019, value: 78.8 },
-      { year: 2040, value: 82 },
-    ],
-    UK: [
-      { year: 1953, value: 69.5 },
-      { year: 1979, value: 73.5 },
-      { year: 1991, value: 76 },
-      { year: 2019, value: 81.2 },
-      { year: 2040, value: 84 },
-    ],
-    DE: [
-      { year: 1953, value: 67.5 },
-      { year: 1979, value: 72.5 },
-      { year: 1991, value: 75.5 },
-      { year: 2019, value: 81 },
-      { year: 2040, value: 84 },
-    ],
-    JP: [
-      { year: 1953, value: 63 },
-      { year: 1979, value: 76 },
-      { year: 1991, value: 79 },
-      { year: 2019, value: 84.4 },
-      { year: 2040, value: 87 },
-    ],
-    IE: [
-      { year: 1953, value: 66.9 },
-      { year: 1979, value: 72.5 },
-      { year: 1991, value: 75.5 },
-      { year: 2019, value: 82.3 },
-      { year: 2040, value: 85 },
-    ],
-    BR: [
-      { year: 1953, value: 50 },
-      { year: 1979, value: 61.5 },
-      { year: 1991, value: 66.5 },
-      { year: 2019, value: 75.5 },
-      { year: 2040, value: 79 },
-    ],
-    CN: [
-      { year: 1953, value: 42 },
-      { year: 1979, value: 65 },
-      { year: 1991, value: 69 },
-      { year: 2019, value: 77 },
-      { year: 2040, value: 81 },
-    ],
-    NG: [
-      { year: 1953, value: 35 },
-      { year: 1979, value: 44.5 },
-      { year: 1991, value: 46 },
-      { year: 2019, value: 54.5 },
-      { year: 2040, value: 62 },
-    ],
+    US: US_CORE5_NORMALS["lifeExpectancy"] as NormalAnchor[],
+    UK: UK_CORE5_NORMALS["lifeExpectancy"] as NormalAnchor[],
+    DE: DE_CORE5_NORMALS["lifeExpectancy"] as NormalAnchor[],
+    JP: JP_CORE5_NORMALS["lifeExpectancy"] as NormalAnchor[],
+    IE: IE_CORE5_NORMALS["lifeExpectancy"] as NormalAnchor[],
+    BR: BR_CORE5_NORMALS["lifeExpectancy"] as NormalAnchor[],
+    CN: CN_CORE5_NORMALS["lifeExpectancy"] as NormalAnchor[],
+    NG: NG_CORE5_NORMALS["lifeExpectancy"] as NormalAnchor[],
   },
   violentCrimeRate: {
     global: [
@@ -581,62 +463,14 @@ const CORE5_NORMALS: Record<string, Partial<Record<CountryId | "global", NormalA
       { year: 2019, value: 380 },
       { year: 2040, value: 350 },
     ],
-    US: [
-      { year: 1953, value: 160 },
-      { year: 1979, value: 550 },
-      { year: 1991, value: 750 },
-      { year: 2019, value: 380 },
-      { year: 2040, value: 350 },
-    ],
-    UK: [
-      { year: 1953, value: 80 },
-      { year: 1979, value: 250 },
-      { year: 1991, value: 400 },
-      { year: 2019, value: 350 },
-      { year: 2040, value: 320 },
-    ],
-    DE: [
-      { year: 1953, value: 120 },
-      { year: 1979, value: 200 },
-      { year: 1991, value: 280 },
-      { year: 2019, value: 220 },
-      { year: 2040, value: 200 },
-    ],
-    JP: [
-      { year: 1953, value: 150 },
-      { year: 1979, value: 80 },
-      { year: 1991, value: 50 },
-      { year: 2019, value: 25 },
-      { year: 2040, value: 25 },
-    ],
-    IE: [
-      { year: 1953, value: 60 },
-      { year: 1979, value: 150 },
-      { year: 1991, value: 220 },
-      { year: 2019, value: 200 },
-      { year: 2040, value: 190 },
-    ],
-    BR: [
-      { year: 1953, value: 300 },
-      { year: 1979, value: 450 },
-      { year: 1991, value: 700 },
-      { year: 2019, value: 700 },
-      { year: 2040, value: 650 },
-    ],
-    CN: [
-      { year: 1953, value: 150 },
-      { year: 1979, value: 100 },
-      { year: 1991, value: 160 },
-      { year: 2019, value: 90 },
-      { year: 2040, value: 85 },
-    ],
-    NG: [
-      { year: 1953, value: 250 },
-      { year: 1979, value: 400 },
-      { year: 1991, value: 550 },
-      { year: 2019, value: 600 },
-      { year: 2040, value: 550 },
-    ],
+    US: US_CORE5_NORMALS["violentCrimeRate"] as NormalAnchor[],
+    UK: UK_CORE5_NORMALS["violentCrimeRate"] as NormalAnchor[],
+    DE: DE_CORE5_NORMALS["violentCrimeRate"] as NormalAnchor[],
+    JP: JP_CORE5_NORMALS["violentCrimeRate"] as NormalAnchor[],
+    IE: IE_CORE5_NORMALS["violentCrimeRate"] as NormalAnchor[],
+    BR: BR_CORE5_NORMALS["violentCrimeRate"] as NormalAnchor[],
+    CN: CN_CORE5_NORMALS["violentCrimeRate"] as NormalAnchor[],
+    NG: NG_CORE5_NORMALS["violentCrimeRate"] as NormalAnchor[],
   },
   povertyRate: {
     global: [
@@ -646,62 +480,14 @@ const CORE5_NORMALS: Record<string, Partial<Record<CountryId | "global", NormalA
       { year: 2019, value: 11 },
       { year: 2040, value: 10 },
     ],
-    US: [
-      { year: 1953, value: 26 },
-      { year: 1979, value: 11.7 },
-      { year: 1991, value: 14.2 },
-      { year: 2019, value: 10.5 },
-      { year: 2040, value: 9.5 },
-    ],
-    UK: [
-      { year: 1953, value: 20 },
-      { year: 1979, value: 13 },
-      { year: 1991, value: 17 },
-      { year: 2019, value: 12 },
-      { year: 2040, value: 11 },
-    ],
-    DE: [
-      { year: 1953, value: 22 },
-      { year: 1979, value: 10 },
-      { year: 1991, value: 11 },
-      { year: 2019, value: 10.5 },
-      { year: 2040, value: 10 },
-    ],
-    JP: [
-      { year: 1953, value: 30 },
-      { year: 1979, value: 12 },
-      { year: 1991, value: 12 },
-      { year: 2019, value: 15.5 },
-      { year: 2040, value: 14 },
-    ],
-    IE: [
-      { year: 1953, value: 30 },
-      { year: 1979, value: 20 },
-      { year: 1991, value: 21 },
-      { year: 2019, value: 13 },
-      { year: 2040, value: 11 },
-    ],
-    BR: [
-      { year: 1953, value: 30 },
-      { year: 1979, value: 26 },
-      { year: 1991, value: 28 },
-      { year: 2019, value: 21 },
-      { year: 2040, value: 17 },
-    ],
-    CN: [
-      { year: 1953, value: 30 },
-      { year: 1979, value: 28 },
-      { year: 1991, value: 24 },
-      { year: 2019, value: 8 },
-      { year: 2040, value: 6 },
-    ],
-    NG: [
-      { year: 1953, value: 30 },
-      { year: 1979, value: 27 },
-      { year: 1991, value: 28 },
-      { year: 2019, value: 26 },
-      { year: 2040, value: 22 },
-    ],
+    US: US_CORE5_NORMALS["povertyRate"] as NormalAnchor[],
+    UK: UK_CORE5_NORMALS["povertyRate"] as NormalAnchor[],
+    DE: DE_CORE5_NORMALS["povertyRate"] as NormalAnchor[],
+    JP: JP_CORE5_NORMALS["povertyRate"] as NormalAnchor[],
+    IE: IE_CORE5_NORMALS["povertyRate"] as NormalAnchor[],
+    BR: BR_CORE5_NORMALS["povertyRate"] as NormalAnchor[],
+    CN: CN_CORE5_NORMALS["povertyRate"] as NormalAnchor[],
+    NG: NG_CORE5_NORMALS["povertyRate"] as NormalAnchor[],
   },
 };
 
@@ -927,11 +713,7 @@ export const METRIC_BAND_CURVES: Record<string, MetricBandCurve> = {
         { year: 1979, best: 3, worst: 33 }, // normal 13
         { year: 2019, best: 0, worst: 22 }, // = THRESHOLDS
       ],
-      JP: [
-        { year: 1953, best: 15, worst: 70 }, // normal 40 (NHI universal only in 1961)
-        { year: 1979, best: 0, worst: 22 }, // universal since 1961 → modern band
-        { year: 2019, best: 0, worst: 22 },
-      ],
+      JP: JP_HEALTH_COVERAGE_BAND,
       IE: [
         { year: 1953, best: 12, worst: 62 }, // normal 35 (Mother-and-Child defeat)
         { year: 2019, best: 0, worst: 22 },
@@ -1381,140 +1163,33 @@ export const INCOME_ANCHORS: Partial<Record<CountryId, Array<{ year: number; val
   // exist. The band therefore holds flat if such a world runs forward — worth
   // revisiting if these countries ever gain a second era, but far better than
   // scoring them against 2019.
-  IT: [{ year: 1953, value: 550 }], // USD-anchored, per itMetricPresets1953's header
-  FR: [{ year: 1953, value: 420_000 }], // anciens francs
-  ES: [{ year: 1953, value: 14_000 }], // pesetas
-  SE: [{ year: 1953, value: 8_000 }], // kronor
-  TR: [{ year: 1953, value: 1_900 }], // lira
-  AT: [{ year: 1953, value: 18_400 }], // schilling
-  FI: [{ year: 1953, value: 292_500 }], // old markka (pre-1963 reform)
-  GR: [{ year: 1953, value: 9_300 }], // drachma
+  IT: IT_INCOME_ANCHORS, // USD-anchored, per itMetricPresets1953's header
+  FR: FR_INCOME_ANCHORS, // anciens francs
+  ES: ES_INCOME_ANCHORS, // pesetas
+  SE: SE_INCOME_ANCHORS, // kronor
+  TR: TR_INCOME_ANCHORS, // lira
+  AT: AT_INCOME_ANCHORS, // schilling
+  FI: FI_INCOME_ANCHORS, // old markka (pre-1963 reform)
+  GR: GR_INCOME_ANCHORS, // drachma
 
   // Median household income "normal" per era, LOCAL currency, hand-authored to
   // sit near each country's seed income scale (see MEDIAN_INCOME_THRESHOLDS
   // derivation notes). Reviewed at dry-run before any flag flip.
-  US: [
-    { year: 1953, value: 4_200 },
-    { year: 1979, value: 16_500 },
-    { year: 1991, value: 30_000 },
-    { year: 2019, value: 65_000 },
-  ],
-  UK: [
-    // 1953 re-anchored from 4,300 to 450 (#income-gdp-scale-audit) to match
-    // ukMetricPresets1953.ts's newly-authored national medianIncome — the old
-    // 4,300 measured out at ratio ~15.1x GDP/capita (£14.4B / 50.6M ≈ £284.6;
-    // medianIncomeGdpScale1953.test.ts band is [0.8, 2.6]) and traced to
-    // `1979 nominal (11,000) x Maddison REAL GDP/capita 1953:1979 ratio` — a
-    // real-volume ratio applied to a nominal value, same defect class as
-    // IE/BR/CN/DD/RU above. 450 gives ratio ~1.58x, next to the US 1953
-    // reference point (1.59x). Same 1953->1979 discontinuity caveat as IE/BR
-    // above: not reconciled, flagged only.
-    { year: 1953, value: 450 },
-    { year: 1979, value: 11_000 },
-    { year: 1991, value: 15_500 },
-    { year: 2019, value: 30_000 },
-  ],
-  DE: [
-    { year: 1953, value: 4_800 },
-    { year: 1979, value: 21_000 },
-    { year: 1991, value: 28_000 },
-    { year: 2019, value: 47_000 },
-  ],
-  JP: [
-    // 1953: USD-anchored (~¥250k / 360 JPY/USD; refs #3498). Later eras stay in JPY.
-    { year: 1953, value: 700 },
-    { year: 1979, value: 2_900_000 },
-    { year: 1991, value: 4_500_000 },
-    { year: 2019, value: 5_500_000 },
-  ],
-  IE: [
-    // 1953 re-anchored from 3,100 to 180 (#income-gdp-scale-audit) to match
-    // ieMetricPresets1953.ts's newly-authored national medianIncome (the
-    // overlay previously had none at all, so 1953 Ireland silently used
-    // ieStateMetrics.ts's MODERN income — see that file's doc comment). 180
-    // sits at ratio ~1.55x the 1953 budget's GDP/capita (£IR 340M / 2.96M =
-    // £IR 115; medianIncomeGdpScale1953.test.ts band is [0.8, 2.6]); the old
-    // 3,100 implied a ~27x ratio. NOTE: this leaves a large 1953->1979 jump
-    // (180 -> 8,500) that this audit did not attempt to reconcile — 1979 is
-    // out of scope here and its own anchor was not re-derived from a GDP
-    // ratio, so the two may not be on the same curve. Flagged, not fixed.
-    { year: 1953, value: 180 },
-    { year: 1979, value: 8_500 },
-    { year: 1991, value: 13_000 },
-    { year: 2019, value: 45_000 },
-  ],
-  BR: [
-    // 1953 re-anchored from 900 to 7,500 (#income-gdp-scale-audit) to match
-    // brMetricPresets1953.ts's newly-authored national medianIncome — the old
-    // 900 tracked applyEra1953Adjustments's US-anchor-ratio scaling of the
-    // modern BR bundle, which measured ratio ~0.39x GDP/capita (Cr$ 330B /
-    // 57M = Cr$ 5,789; band is [0.8, 2.6]), under-scaled. Same 1953->1979
-    // discontinuity caveat as IE above: not reconciled, flagged only.
-    { year: 1953, value: 7_500 },
-    { year: 1979, value: 6_000 },
-    { year: 1991, value: 14_000 },
-    { year: 2019, value: 27_000 },
-  ],
-  CN: [
-    // #income-gdp-scale-audit: re-anchored again, this time to $80 — the
-    // OPPOSITE correction from #3498's below. That pass moved this anchor to
-    // a CNY-nominal 1,000 on the theory the seed "stays in CNY", but the 1953
-    // CN BUDGET (NATIONAL_BUDGET_SEED_CONFIGS_1953) is actually USD-anchored
-    // ($33.3B, like US/DE/JP/NG/IT — currencyCode CNY is display-only there),
-    // and cnMetricPresets1953.ts's overlay is the actual income the game
-    // seeds. Re-authoring the overlay to $80 (matching the GDP's real
-    // convention; medianIncomeGdpScale1953.test.ts ratio ~1.45, band [0.8,
-    // 2.6]) means this anchor must track dollars again, not yuan.
-    //
-    // #3498's original problem (income-band index landing at the FX rate,
-    // 2.54, instead of ~1) was real, but its fix pointed the wrong direction —
-    // the seed and the budget need to agree on ONE convention, and the
-    // budget's is USD.
-    { year: 1953, value: 80 },
-    { year: 1979, value: 3_500 },
-    { year: 1991, value: 9_000 },
-    { year: 2019, value: 90_000 },
-  ],
-  NG: [
-    // 1953: USD-anchored colonial household income (~£50–60 WAP × $2.80; refs #3498).
-    // Later eras stay in NGN.
-    { year: 1953, value: 150 },
-    { year: 1979, value: 90_000 },
-    { year: 1991, value: 210_000 },
-    { year: 2019, value: 1_100_000 },
-  ],
+  US: US_INCOME_ANCHORS,
+  UK: UK_INCOME_ANCHORS,
+  DE: DE_INCOME_ANCHORS,
+  JP: JP_INCOME_ANCHORS,
+  IE: IE_INCOME_ANCHORS,
+  BR: BR_INCOME_ANCHORS,
+  CN: CN_INCOME_ANCHORS,
+  NG: NG_INCOME_ANCHORS,
   // East Germany exists only in the 1953 and 1979 presets (reunified Oct 1990).
   // Without an entry here getIncomeAnchor returns null and metricScoring falls
   // through to the GLOBAL medianIncome band (best 90,000 / worst 15,000 USD),
   // which DD's seeded 5,900-8,800 Mark der DDR sits entirely below — pinning
   // its income score at 0 for the whole run with no way for policy to move it.
-  DD: [
-    // Matches ddStateMetrics1953.ts (annual household Mark der DDR). Rescaled
-    // from 7,000 to 4,900 (#income-gdp-scale-audit) alongside that file's own
-    // rescale — the old figure measured a hair's-width (2.594x, margin 0.006)
-    // under the medianIncomeGdpScale1953.test.ts [0.8, 2.6] ceiling.
-    { year: 1953, value: 4_900 },
-    { year: 1979, value: 14_000 },
-  ],
-  RU: [
-    // Authored with the political-legislation build (spec §4.1): RU's legacy
-    // stateMetrics seed carries a COMPRESSED game-scale medianIncome (₽4,000
-    // household) and these anchors follow that seed scale per this table's rule.
-    // The law cost engine deliberately does NOT use these — it has its own
-    // history-scaled COST_INCOME_ANCHORS (src/lib/politicalLegislation).
-    //
-    // 1953 re-anchored again to ₽10,500 (#income-gdp-scale-audit) to match
-    // `ruMetricPresets1953.ts`'s corrected national figure (regions now
-    // ₽7,200-15,800) — the prior ₽1,600 measured out at ratio 0.213x GDP per
-    // capita (medianIncomeGdpScale1953.test.ts band is [0.8, 2.6]) and
-    // undershot the real average Soviet MONTHLY wage of the early 1950s
-    // (~700-720 pre-1961 rubles) by roughly a factor of 5. Keep this anchor
-    // synced to the overlay's own scale per this table's stated rule.
-    { year: 1953, value: 10_500 },
-    { year: 1979, value: 4_000 },
-    { year: 1991, value: 4_500 },
-    { year: 2019, value: 5_500 },
-  ],
+  DD: DD_INCOME_ANCHORS,
+  RU: RU_INCOME_ANCHORS,
 };
 
 export function getIncomeAnchor(countryId: string | undefined, year: number | null): number | null {

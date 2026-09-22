@@ -23,8 +23,12 @@ vi.mock("@/lib/singleplayer", () => ({
   SINGLEPLAYER_USER_ID: "504c41594552000000000001",
   isSingleplayer: vi.fn(() => true),
 }));
-vi.mock("@/lib/uk/cabinetEligibility", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/lib/uk/cabinetEligibility")>();
+// ⚠️ MOCK THE FOLDER MODULE, NOT `@/lib/uk/cabinetEligibility`. That path is a
+// forwarder now, and `cabinetApi` imports the folder directly -- mocking the
+// forwarder leaves the real implementation in place and the spy never fires.
+// Mocking the folder covers both, because the forwarder re-exports it.
+vi.mock("@/lib/countries/uk/cabinetEligibility", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/countries/uk/cabinetEligibility")>();
   return {
     ...actual,
     requireCurrentPrimeMinister: vi.fn(async () => ({
@@ -72,7 +76,7 @@ describe("candidates API position-aware eligibility", () => {
       "UK"
     );
     expect(res.status).toBe(200);
-    const { getEligibleCabinetCharacters } = await import("@/lib/uk/cabinetEligibility");
+    const { getEligibleCabinetCharacters } = await import("@/lib/countries/uk/cabinetEligibility");
     const calls = vi.mocked(getEligibleCabinetCharacters).mock.calls;
     expect(calls).toHaveLength(1);
     expect(calls[0]![1]).toBe("UK");
@@ -86,7 +90,7 @@ describe("candidates API position-aware eligibility", () => {
       ),
       "UK"
     );
-    const { getEligibleCabinetCharacters } = await import("@/lib/uk/cabinetEligibility");
+    const { getEligibleCabinetCharacters } = await import("@/lib/countries/uk/cabinetEligibility");
     expect(vi.mocked(getEligibleCabinetCharacters).mock.calls[0]![3]).toBeNull();
   });
 
@@ -95,7 +99,7 @@ describe("candidates API position-aware eligibility", () => {
       new Request("http://localhost/api/country/uk/executive/cabinet/characters"),
       "UK"
     );
-    const { getEligibleCabinetCharacters } = await import("@/lib/uk/cabinetEligibility");
+    const { getEligibleCabinetCharacters } = await import("@/lib/countries/uk/cabinetEligibility");
     expect(vi.mocked(getEligibleCabinetCharacters).mock.calls[0]![3]).toBeNull();
   });
 });

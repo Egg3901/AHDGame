@@ -181,6 +181,84 @@ describe("POST /api/country/[code]/parties/[id]/send", () => {
     );
   }
 
+  async function asAdmin() {
+    const { requireAuthWithCharacter } = await import("@/lib/api/requireAuth");
+    vi.mocked(requireAuthWithCharacter).mockResolvedValue({
+      ok: true,
+      user: {
+        userId: userId.toString(),
+        username: "admin",
+        isAdmin: true,
+        character: { _id: new ObjectId(), name: "Admin" },
+      },
+    } as never);
+  }
+
+  it("lets an admin send above the per-turn ceiling", async () => {
+    // Admins bypass the payout cap by design — the executor takes
+    // `skipPayoutCap` for exactly this. Placing the flat-ceiling refusal
+    // ahead of the admin branch made that bypass unreachable for any
+    // amount large enough to need it, which is the only kind of amount
+    // it exists for. The leadership-election freeze right above is
+    // correctly gated on `!isAdmin`; this guard was not.
+    await asAdmin();
+    await richParty();
+
+    const response = await send(9_000_000);
+
+    expect(response.status).toBe(200);
+    expect(db.collectionMocks["politicalParties"]!.updateOne).toHaveBeenCalled();
+  });
+
+  it("still refuses a player send above the per-turn ceiling", async () => {
+    // (kept alongside the admin case above so the two cannot drift)
+    await richParty();
+    const response = await send(9_000_000);
+    expect(response.status).toBe(400);
+    expect(db.collectionMocks["politicalParties"]!.updateOne).not.toHaveBeenCalled();
+  });
+
+  it("raises the ceiling five times once a second officer is seated", async () => {
+    // `richParty` seats only a Chair, so the base ceiling applies there.
+    // A seated Treasurer is a second pair of eyes on the ledger and buys
+    // the party a larger single payment.
+    await richParty();
+    const { findPartyBySequentialId } = await import("@/lib/db/partyLookup");
+    vi.mocked(findPartyBySequentialId).mockResolvedValue({
+      _id: partyOid,
+      sequentialId: Number(partyId),
+      countryId: "US",
+      name: "Test Party",
+      treasury: 50_000_000,
+      chairId,
+      treasurerId: new ObjectId(),
+      transactionApprovalMode: "single",
+    } as never);
+    db.collectionMocks["treasuryTransactions"]!.aggregate.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([]),
+    });
+
+    const response = await send(9_000_000);
+    expect(response.status).toBe(200);
+  });
+
+  it("refuses a single payment larger than the ceiling before anything is queued", async () => {
+    // Distinct from the "over their remaining allowance" case below: a
+    // payment above the flat ceiling can never clear on any turn, so it
+    // is refused at the door rather than becoming a pending row that
+    // collects signatures and then fails at execution.
+    await richParty();
+    db.collectionMocks["treasuryTransactions"]!.aggregate.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([]),
+    });
+
+    const response = await send(9_000_000);
+    expect(response.status).toBe(400);
+    const body = await response.json();
+    expect(body.error).toMatch(/2,000,000/);
+    expect(db.collectionMocks["politicalParties"]!.updateOne).not.toHaveBeenCalled();
+  });
+
   it("refuses a send that would push the recipient over their per-turn cap", async () => {
     // US cap is 2,000,000 and 1,500,000 is already spent this turn.
     await richParty();
@@ -217,7 +295,7 @@ describe("POST /api/country/[code]/parties/[id]/send", () => {
     const response = await send(1_000);
     expect(response.status).toBe(400);
     const body = await response.json();
-    expect(body.error).toMatch(/already received the maximum/);
+    expect(body.error).toMatch(/already received \$/);
   });
 
   it("refuses any send in the closing turns of a leadership election", async () => {

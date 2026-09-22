@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { deRegions } from "@/lib/seeds/de/deRegions";
 import { cnRegions } from "@/lib/seeds/cn/cnRegions";
-import { jpRegions } from "@/lib/seeds/jp/jpRegions";
+import { jpRegions } from "@/lib/countries/jp/data/jpRegions";
 import { ieRegions } from "@/lib/seeds/ie/ieRegions";
 import { brRegions } from "@/lib/seeds/br/brRegions";
 import { ukRegions } from "@/lib/seeds/uk/ukRegions";

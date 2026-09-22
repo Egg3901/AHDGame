@@ -10,6 +10,7 @@ import {
   calculateQuarterlyIssuanceAmount,
   calculateSovereignRolloverAmount,
   getSovereignCouponRate,
+  resyncSovereignPrincipalFromBonds,
   getNationalBudgetId,
   getSovereignIssuerName,
   issueScheduledSovereignBondSeries,
@@ -477,7 +478,7 @@ describe("reconcileSovereignDebt", () => {
     expect(result!.budgetInterestDelta).toBeCloseTo(expectedDelta, 2);
   });
 
-  it("updates principal, interest service, debtToGdpRatio and creditRating", async () => {
+  it("updates interest service, debtToGdpRatio and creditRating", async () => {
     const db = buildMockDb(0);
     const result = await reconcileSovereignDebt(db as unknown as Db, {
       countryId: COUNTRY_CONFIGS.US.id,
@@ -494,9 +495,105 @@ describe("reconcileSovereignDebt", () => {
     expect(setPayload.$set).toHaveProperty("surplus");
     expect(setPayload.$set).toHaveProperty("debtToGdpRatio");
     expect(setPayload.$set).toHaveProperty("creditRating");
-    // Principal = original $10B + all tranches issued
-    expect(result!.newPrincipal).toBeGreaterThan(10_000_000_000);
+    // New coupons are genuine service on the new paper.
     expect(result!.newDebtInterest).toBeGreaterThan(600_000_000_000);
+  });
+
+  it("re-points principal at the post-write ledger instead of double-adding the gap (#1975)", async () => {
+    // $4B covered by existing bonds, $6B gap to fill against a $10B stock.
+    const db = buildMockDb(4_000_000_000);
+    const result = await reconcileSovereignDebt(db as unknown as Db, {
+      countryId: COUNTRY_CONFIGS.US.id,
+      turn: 240,
+      now: new Date(),
+    });
+    expect(result!.gap).toBe(6_000_000_000);
+    // Per-tranche unit flooring can leave dust under 3 bond units unissued.
+    expect(result!.gap - result!.totalIssued).toBeLessThan(3 * BOND_UNIT_FACE_VALUE);
+    // Ledger equality: covered + issued, NOT stored + issued ($16B would
+    // double-count the gap that was already inside the $10B stock).
+    expect(result!.newPrincipal).toBe(4_000_000_000 + result!.totalIssued);
+    expect(result!.newPrincipal).toBeLessThanOrEqual(10_000_000_000);
+    const updateCall = db.collectionMocks["federalBudget"]!.updateOne.mock.calls[0];
+    const setPayload = (
+      updateCall as unknown[] as unknown as { $set: Record<string, unknown> }[]
+    )[1];
+    expect((setPayload.$set.debt as { principal: number }).principal).toBe(result!.newPrincipal);
+  });
+
+  it("measures coverage net of restructure haircuts", async () => {
+    // $10B face with a 40% haircut contributes only $6B to the stock.
+    const db = buildMockDb(0);
+    db.collectionMocks["bonds"]!.find.mockReturnValue({
+      toArray: async () => [
+        {
+          issuerType: "sovereign",
+          countryId: "US",
+          totalIssued: 10_000_000_000,
+          restructureHaircutPercent: 0.4,
+        },
+      ],
+    });
+    const result = await reconcileSovereignDebt(db as unknown as Db, {
+      countryId: COUNTRY_CONFIGS.US.id,
+      turn: 240,
+      now: new Date(),
+    });
+    expect(result!.coveredByExistingBonds).toBe(6_000_000_000);
+    expect(result!.gap).toBe(4_000_000_000);
+    expect(result!.newPrincipal).toBe(6_000_000_000 + result!.totalIssued);
+    expect(result!.newPrincipal).toBeLessThanOrEqual(10_000_000_000);
+  });
+
+  it("converges on retry after a crash between insert and budget write without issuing twice", async () => {
+    // Stateful ledger: inserts persist, so a retry sees its own tranches.
+    const db = createMockDb();
+    const budget = { ...baseBudget };
+    db.collectionMocks["federalBudget"] = db.collection("federalBudget") as ReturnType<
+      typeof db.collection
+    >;
+    db.collectionMocks["federalBudget"]!.findOne.mockResolvedValue(budget);
+    let crashOnce = true;
+    db.collectionMocks["federalBudget"]!.updateOne.mockImplementation(async () => {
+      if (crashOnce) {
+        crashOnce = false;
+        throw new Error("simulated crash before budget write");
+      }
+      return { modifiedCount: 1 };
+    });
+    db.collectionMocks["centralBanks"] = db.collection("centralBanks") as ReturnType<
+      typeof db.collection
+    >;
+    db.collectionMocks["centralBanks"]!.findOne.mockResolvedValue({ primeRate: 5.0 });
+    db.collectionMocks["corporations"] = db.collection("corporations") as ReturnType<
+      typeof db.collection
+    >;
+    db.collectionMocks["corporations"]!.findOne.mockResolvedValue(null);
+    db.collectionMocks["bonds"] = db.collection("bonds") as ReturnType<typeof db.collection>;
+    const ledger: { totalIssued: number }[] = [{ totalIssued: 4_000_000_000 }];
+    db.collectionMocks["bonds"]!.find.mockReturnValue({
+      toArray: async () => ledger.map((b) => ({ issuerType: "sovereign", countryId: "US", ...b })),
+    });
+    let issuedFace = 0;
+    db.collectionMocks["bonds"]!.insertOne.mockImplementation(
+      async (doc: { totalIssued: number }) => {
+        ledger.push({ totalIssued: doc.totalIssued });
+        issuedFace += doc.totalIssued;
+        return { insertedId: { toString: () => "mock-id" } };
+      }
+    );
+
+    const params = { countryId: COUNTRY_CONFIGS.US.id, turn: 240, now: new Date() };
+    await expect(reconcileSovereignDebt(db as unknown as Db, params)).rejects.toThrow(
+      "simulated crash"
+    );
+    const retry = await reconcileSovereignDebt(db as unknown as Db, params);
+    // The retry saw the first run's tranches in the ledger: no second issue,
+    // and the stock still lands exactly on the post-write ledger.
+    expect(retry!.totalIssued).toBe(0);
+    expect(retry!.gap).toBeLessThan(3 * BOND_UNIT_FACE_VALUE);
+    expect(retry!.newPrincipal).toBe(4_000_000_000 + issuedFace);
+    expect(retry!.newPrincipal).toBeLessThanOrEqual(10_000_000_000);
   });
 });
 
@@ -816,7 +913,17 @@ describe("issueScheduledSovereignBondSeries", () => {
   });
 
   it("skips when total issue amount is below bond unit face value", async () => {
-    const budget = makeBudget({ surplus: 0 }); // no deficit
+    // Coherent no-deficit budget: the DERIVED surplus is zero, not just the
+    // stored cache. A stale stored surplus alone must never size issuance.
+    const budget = makeBudget({
+      surplus: 0,
+      spending: {
+        byCategory: { healthcare: 1_200_000_000_000 },
+        stateGrants: 600_000_000_000,
+        debtInterest: 0,
+        total: 4_200_000_000_000,
+      },
+    });
     const { db } = setupScheduledMocks({ budget });
     const count = await issueScheduledSovereignBondSeries(db as unknown as Db, TURN, new Date());
     expect(count).toBe(0);
@@ -840,6 +947,76 @@ describe("issueScheduledSovereignBondSeries", () => {
     expect(maturities).toEqual([48, 96]);
   });
 
+  describe("tranche consolidation gate (#1001)", () => {
+    // $12M annual deficit = $3M quarterly = 750k / 1.05M / 1.2M face legs.
+    // The 750-unit 1yr leg sits below the consolidation floor.
+    function setupConsolidationMocks(enabled: boolean | null) {
+      // The scheduler derives the deficit from revenue minus spending; the
+      // cached `surplus` field alone is intentionally not authoritative.
+      const budget = makeBudget({
+        surplus: -12_000_000,
+        spending: {
+          ...makeBudget().spending,
+          total: 4_200_012_000_000,
+        },
+      });
+      const { db } = setupScheduledMocks({ budget });
+      db.collectionMocks["gameConfig"] = db.collection("gameConfig") as ReturnType<
+        typeof db.collection
+      >;
+      db.collectionMocks["gameConfig"]!.findOne.mockResolvedValue(
+        enabled === null ? null : { sovereignIssuanceConsolidationEnabled: enabled }
+      );
+      return { db };
+    }
+
+    function issuedDocs(db: ReturnType<typeof createMockDb>): Omit<Bond, "_id">[] {
+      return db.collectionMocks["bonds"]!.insertMany.mock.calls.flatMap(
+        ([docs]) => docs as Omit<Bond, "_id">[]
+      );
+    }
+
+    it("keeps the historical ladder when the gate is absent", async () => {
+      const { db } = setupConsolidationMocks(null);
+      const count = await issueScheduledSovereignBondSeries(db as unknown as Db, TURN, new Date());
+      expect(count).toBe(3);
+      expect(
+        issuedDocs(db)
+          .map((b) => b.maturityTurns)
+          .sort((a, b) => a - b)
+      ).toEqual([48, 96, 240]);
+    });
+
+    it("keeps the historical ladder when the gate is explicitly false", async () => {
+      const { db } = setupConsolidationMocks(false);
+      const count = await issueScheduledSovereignBondSeries(db as unknown as Db, TURN, new Date());
+      expect(count).toBe(3);
+      expect(issuedDocs(db)).toHaveLength(3);
+    });
+
+    it("folds dust legs into one rung with the same total when enabled", async () => {
+      const { db } = setupConsolidationMocks(true);
+      const count = await issueScheduledSovereignBondSeries(db as unknown as Db, TURN, new Date());
+      expect(count).toBe(1);
+      const docs = issuedDocs(db);
+      expect(docs).toHaveLength(1);
+      expect(docs[0]!.maturityTurns).toBe(240);
+      expect(docs[0]!.totalIssued).toBe(3_000_000);
+    });
+
+    it("preserves total issuance with and without the gate", async () => {
+      const { db: offDb } = setupConsolidationMocks(false);
+      await issueScheduledSovereignBondSeries(offDb as unknown as Db, TURN, new Date());
+      const offTotal = issuedDocs(offDb).reduce((sum, b) => sum + b.totalIssued, 0);
+
+      const { db: onDb } = setupConsolidationMocks(true);
+      await issueScheduledSovereignBondSeries(onDb as unknown as Db, TURN, new Date());
+      const onTotal = issuedDocs(onDb).reduce((sum, b) => sum + b.totalIssued, 0);
+
+      expect(onTotal).toBe(offTotal);
+    });
+  });
+
   it("never issues for a dissolved country, even with its budget doc present", async () => {
     // A merged country keeps its budget as a stamped husk; the scheduler must
     // not keep rolling a dead state's debt over into fresh paper.
@@ -860,5 +1037,76 @@ describe("issueScheduledSovereignBondSeries", () => {
     );
     expect(issuedCountries).toContain("US");
     expect(issuedCountries).not.toContain("DD");
+  });
+});
+
+describe("resyncSovereignPrincipalFromBonds", () => {
+  it("re-points stored principal at projected-shape ledger stock", async () => {
+    const db = createMockDb();
+    db.collection("federalBudget");
+    db.collectionMocks["federalBudget"]!.findOne.mockResolvedValue({
+      _id: "federal",
+      debt: { principal: 9999, interestRate: 0.05, ceiling: 100_000 },
+      gdp: 100_000,
+      gdpSmoothed: 100_000,
+    });
+    db.collection("bonds");
+    // As-projected shape: only the fields the resync projection requests, as
+    // production returns them. The outstanding sum must still count full face.
+    db.collectionMocks["bonds"]!.find.mockReturnValue({
+      toArray: async () => [
+        {
+          issuerType: "sovereign",
+          matured: false,
+          defaulted: false,
+          totalIssued: 5000,
+          restructureHaircutPercent: null,
+        },
+      ],
+    });
+
+    const result = await resyncSovereignPrincipalFromBonds(
+      db as unknown as Db,
+      COUNTRY_CONFIGS.US.id
+    );
+
+    expect(result).toMatchObject({ outstanding: 5000, stored: 9999, corrected: true });
+    const set = db.collectionMocks["federalBudget"]!.updateOne.mock.calls[0][1].$set;
+    expect(set["debt.principal"]).toBe(5000);
+  });
+
+  it("projects the bond fields the outstanding sum re-checks", async () => {
+    const db = createMockDb();
+    db.collection("federalBudget");
+    db.collectionMocks["federalBudget"]!.findOne.mockResolvedValue({
+      _id: "federal",
+      debt: { principal: 0, interestRate: 0.05, ceiling: 100_000 },
+      gdp: 100_000,
+    });
+    db.collection("bonds");
+    db.collectionMocks["bonds"]!.find.mockReturnValue({ toArray: async () => [] });
+
+    await resyncSovereignPrincipalFromBonds(db as unknown as Db, COUNTRY_CONFIGS.US.id);
+
+    // Mocks ignore projections and return full docs, but production applies
+    // them: a doc arriving without `issuerType` reads as non-sovereign and
+    // contributes 0, which would re-point the stored principal at zero.
+    expect(db.collectionMocks["bonds"]!.find).toHaveBeenCalledWith(
+      {
+        issuerType: "sovereign",
+        countryId: COUNTRY_CONFIGS.US.id,
+        matured: false,
+        defaulted: false,
+      },
+      expect.objectContaining({
+        projection: expect.objectContaining({
+          issuerType: 1,
+          matured: 1,
+          defaulted: 1,
+          totalIssued: 1,
+          restructureHaircutPercent: 1,
+        }),
+      })
+    );
   });
 });

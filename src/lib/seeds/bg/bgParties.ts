@@ -1,25 +1,10 @@
-import type { PartySeed } from "@/lib/seeds/reference/politicalParties";
-export const bgParties: PartySeed[] = [
-  {
-    seedOrder: 1,
-    countryId: "BG",
-    name: "Bulgarian Communist Party",
-    abbreviation: "BKP",
-    color: "#C00000",
-    economicPosition: -4,
-    socialPosition: 2,
-    memberCount: 0,
-    isDefault: true,
-    validForPresets: ["1953-default", "1979-default"],
-    regimeStatus: "ruling",
-    treasury: 600_000,
-    nationalTaxRate: 0,
-    politicalStrength: 0,
-    chairId: null,
-    viceChairId: null,
-    treasurerId: null,
-    committeeIds: [],
-    createdBy: null,
-  },
-];
-export default bgParties;
+/**
+ * Forwarder. Moved into BG's country folder.
+ *
+ * A forwarder holds no copy, so existing importers are untouched and there is
+ * still exactly one declaration.
+ *
+ * The default is re-exported separately: `export *` does not carry it.
+ */
+export * from "@/lib/countries/bg/data/bgParties";
+export { default } from "@/lib/countries/bg/data/bgParties";

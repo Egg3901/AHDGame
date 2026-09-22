@@ -337,8 +337,10 @@ describe("processPoliticalMetricsDynamics", () => {
         };
       };
     };
-    // Contribution seeded into cabinetResiduals…
-    expect(op.updateOne.update.$set.cabinetResiduals[family]).toBeCloseTo(5, 5);
+    // Contribution seeded into cabinetResiduals… (a large first push lands
+    // just under face value: the soft curve compresses a little from turn one)
+    expect(op.updateOne.update.$set.cabinetResiduals[family]).toBeLessThan(5);
+    expect(op.updateOne.update.$set.cabinetResiduals[family]).toBeGreaterThan(4);
     // …and the value drifts UP toward the cabinet-lifted target (was 50).
     expect(op.updateOne.update.$set.values[family]).toBeGreaterThan(50);
   });
@@ -392,11 +394,14 @@ describe("processPoliticalMetricsDynamics", () => {
       };
     };
     const set = op.updateOne.update.$set;
-    // The settings channel stays pinned at its own cap and absorbs nothing more.
-    expect(set.cabinetResidualsBySource.settings[family]).toBe(8);
-    // The estate contributes in full, on top, which the old single cap forbade.
-    expect(set.cabinetResidualsBySource.estates[family]).toBeCloseTo(2, 5);
-    expect(set.cabinetResiduals[family]).toBeCloseTo(10, 5);
+    // The settings channel holds near its own asymptote (issue #703: channels
+    // never pin exactly, they keep absorbing a little more).
+    expect(set.cabinetResidualsBySource.settings[family]).toBeLessThan(8);
+    expect(set.cabinetResidualsBySource.settings[family]).toBeGreaterThan(7.9);
+    // The estate contributes on top, which the old single cap forbade. A fresh
+    // push lands just under face value under the soft curve.
+    expect(set.cabinetResidualsBySource.estates[family]).toBeCloseTo(2, 1);
+    expect(set.cabinetResiduals[family]).toBeCloseTo(10, 1);
     expect(set.values[family]).toBeGreaterThan(50);
   });
 
@@ -436,7 +441,9 @@ describe("processPoliticalMetricsDynamics", () => {
     }>;
     const r1 = ops.find((op) => op.updateOne.filter._id === "R1");
     const r2 = ops.find((op) => op.updateOne.filter._id === "R2");
-    expect(r1?.updateOne.update.$set.cabinetResiduals?.[family!]).toBeCloseTo(5, 5);
+    // A large first push lands just under face value under the soft curve.
+    expect(r1?.updateOne.update.$set.cabinetResiduals?.[family!]).toBeLessThan(5);
+    expect(r1?.updateOne.update.$set.cabinetResiduals?.[family!]).toBeGreaterThan(4);
     expect(r1?.updateOne.update.$set.values[family!]).toBeGreaterThan(50);
     // R2 has no extra: either unwritten (nothing moved) or written without that residual.
     expect(r2?.updateOne.update.$set.cabinetResiduals?.[family!] ?? 0).toBe(0);

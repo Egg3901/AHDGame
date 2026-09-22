@@ -259,6 +259,8 @@ export const SOUTHERN_REALIGNMENT_CHECKPOINT: EraCheckpoint = {
   //   age:mature               .2(3.5)                      = 0.7
   //   wealth:low                        .35(-1.0)           = -0.35
   //   race:black                        .25(-1.0)           = -0.25
+  //   plus a #1165 consolidation countervail of -1.0 (see the race:black
+  //   social target below), for a social total of -1.25.
   // Contributions landing on the same (dim, bucket, axis) are summed into one
   // target rather than emitted as duplicates; the engine adds them either way
   // (see `applyDurableBucketShift`'s accumulator), one row per bucket just
@@ -330,12 +332,22 @@ export const SOUTHERN_REALIGNMENT_CHECKPOINT: EraCheckpoint = {
       axis: "economicLean",
       totalShift: -0.375,
     },
+    // Recalibrated (#1165): the folded archetype math above leaves race:black
+    // social at -0.25 while the white-defection pulls on the SHARED buckets
+    // (education:no_college +2.55, age:mature +0.7) land on Black cells too —
+    // every Black Deep South cell is no_college-adjacent, so Brown net-drags
+    // the Black electorate rightward (+0.5 social in Alabama, worse in
+    // Mississippi) even as the authored model consolidates it Democratic.
+    // race:black is the only bucket Black cells read that white cells do not,
+    // so it carries an explicit -1.0 consolidation countervail on top of the
+    // folded -0.25. White cells are untouched (they never read this bucket);
+    // the checkpoint's white rightward movement is unchanged.
     {
       dim: "race",
       bucket: "black",
       stateIds: DEEP_SOUTH_STATES,
       axis: "socialLean",
-      totalShift: -0.25,
+      totalShift: -1.25,
     },
   ],
 };

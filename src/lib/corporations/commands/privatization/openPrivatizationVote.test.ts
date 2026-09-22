@@ -11,6 +11,7 @@ vi.mock("@/lib/currency/characterFunds", () => ({
   getHomeCurrency: vi.fn().mockReturnValue("USD"),
 }));
 vi.mock("./fundOnlyBuyout", () => ({ executeFundOnlyBuyout: vi.fn() }));
+vi.mock("@/lib/banking/policy", () => ({ loadBankingPolicy: vi.fn() }));
 
 function makeCorp(overrides: Record<string, unknown> = {}) {
   const ceoId = new ObjectId();
@@ -287,5 +288,218 @@ describe("openPrivatizationVote — atomic open", () => {
     expect(result.totalReservedCash).toBeGreaterThanOrEqual(3_300_000);
     expect(result.totalReservedCash).toBeLessThanOrEqual(3_300_001);
     expect(insertOne).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("openPrivatizationVote — bank-NAV floor (issue #1750)", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  const BANK_CASH = 123_410_000;
+  const BANK_DEPOSITS = 71_110_000;
+  const BANK_EQUITY = BANK_CASH - BANK_DEPOSITS;
+
+  function makeCharter(overrides: Record<string, unknown> = {}) {
+    return {
+      type: "retail",
+      status: "active",
+      currency: "USD",
+      charteredTurn: 150,
+      postedCapital: 50_000_000,
+      cashReserves: BANK_CASH,
+      npcDeposits: BANK_DEPOSITS,
+      playerDeposits: 0,
+      totalDeposits: BANK_DEPOSITS,
+      totalLoans: 0,
+      propBookMarkValue: 0,
+      discountWindowDebt: 0,
+      discountWindowArrears: 0,
+      cbMarginDebt: 0,
+      cbMarginArrears: 0,
+      interbankDebt: 0,
+      ...overrides,
+    };
+  }
+
+  // CEO holds 90% of 1000 shares; market leg is 10 x 1.1 = 11 per share.
+  function makeBankCorp(charter: Record<string, unknown>) {
+    const ceoId = new ObjectId();
+    return makeCorp({
+      ceoId,
+      sharePrice: 10,
+      totalShares: 1000,
+      publicFloat: 50,
+      liquidCurrencyCode: "USD",
+      shareholders: [
+        { characterId: ceoId, shares: 900 },
+        { characterId: new ObjectId(), shares: 100 },
+      ],
+      bankCharter: charter,
+    });
+  }
+
+  function makeBankDb() {
+    const insertOne = vi.fn().mockResolvedValue({ insertedId: new ObjectId() });
+    const db = {
+      collection: vi.fn((name: string) => {
+        if (name === "corporationPrivatizationVotes") {
+          return { findOne: vi.fn().mockResolvedValue(null), insertOne };
+        }
+        if (name === "exchangeRates") {
+          return { find: vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue([]) }) };
+        }
+        return {
+          findOne: vi.fn().mockResolvedValue(null),
+          find: vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue([]) }),
+        };
+      }),
+    } as unknown as Db;
+    return { db, insertOne };
+  }
+
+  async function openWithCorp(corp: Record<string, unknown>) {
+    const { loadBankingPolicy } = await import("@/lib/banking/policy");
+    vi.mocked(loadBankingPolicy).mockResolvedValue({
+      savingsAccounts: "pointer",
+      savingsReadCurrencies: [],
+    } as never);
+    const cashMock = await import("@/lib/financialTxLog/atomicCashGuard");
+    vi.mocked(cashMock.atomicallyDebitCharacterCash).mockResolvedValue({
+      ok: true,
+      newBalance: 0,
+    });
+    const { db, insertOne } = makeBankDb();
+    const result = await openPrivatizationVote({
+      db,
+      corporation: corp as never,
+      character: { _id: corp.ceoId as ObjectId, name: "CEO" } as never,
+      currentTurn: 1000,
+      forexEnabled: false,
+    });
+    return { result, insertOne };
+  }
+
+  it("floors the locked buyout at realizable bank equity when the market underprices it", async () => {
+    const { result, insertOne } = await openWithCorp(makeBankCorp(makeCharter()));
+    expect(result.ok).toBe(true);
+    if (!result.ok || result.immediate) return;
+    // 52.3M NAV over 1000 shares = 52,300 per share, not the 11 market print.
+    expect(result.bankNavFloorApplied).toBe(true);
+    expect(result.lockedBuyoutPrice).toBe(BANK_EQUITY / 1000);
+    expect(result.totalReservedCash).toBe(Math.ceil(100 * (BANK_EQUITY / 1000)));
+    // The floor persists into the stored vote, so the later resolve (replay)
+    // pays the floored price rather than re-deriving the market one.
+    expect(insertOne).toHaveBeenCalledTimes(1);
+    expect(insertOne.mock.calls[0][0]).toMatchObject({
+      lockedBuyoutPrice: BANK_EQUITY / 1000,
+    });
+  });
+
+  it("counts the marked bond/prop book in the floor, net of borrowings", async () => {
+    const propBookMarkValue = 300_000_000;
+    const discountWindowDebt = 10_000_000;
+    const nav = BANK_CASH + propBookMarkValue - BANK_DEPOSITS - discountWindowDebt;
+    const { result } = await openWithCorp(
+      makeBankCorp(makeCharter({ propBookMarkValue, discountWindowDebt }))
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok || result.immediate) return;
+    expect(result.bankNavFloorApplied).toBe(true);
+    expect(result.lockedBuyoutPrice).toBe(nav / 1000);
+  });
+
+  it("leaves the locked price at the market premium for corps without a bank", async () => {
+    const ceoId = new ObjectId();
+    const corp = makeCorp({
+      ceoId,
+      sharePrice: 10,
+      totalShares: 1000,
+      publicFloat: 50,
+      shareholders: [
+        { characterId: ceoId, shares: 900 },
+        { characterId: new ObjectId(), shares: 100 },
+      ],
+    });
+    const { result } = await openWithCorp(corp);
+    expect(result.ok).toBe(true);
+    if (!result.ok || result.immediate) return;
+    expect(result.bankNavFloorApplied).toBe(false);
+    expect(result.lockedBuyoutPrice).toBeCloseTo(11, 4);
+  });
+
+  it("nets player deposits once the savings read is authoritative", async () => {
+    const playerDeposits = 30_000_000;
+    const { loadBankingPolicy } = await import("@/lib/banking/policy");
+    vi.mocked(loadBankingPolicy).mockResolvedValue({
+      savingsAccounts: "authoritative",
+      savingsReadCurrencies: ["USD"],
+    } as never);
+    const cashMock = await import("@/lib/financialTxLog/atomicCashGuard");
+    vi.mocked(cashMock.atomicallyDebitCharacterCash).mockResolvedValue({
+      ok: true,
+      newBalance: 0,
+    });
+    const corp = makeBankCorp(
+      makeCharter({ playerDeposits, totalDeposits: BANK_DEPOSITS + playerDeposits })
+    );
+    const { db } = makeBankDb();
+    const result = await openPrivatizationVote({
+      db,
+      corporation: corp as never,
+      character: { _id: corp.ceoId as ObjectId, name: "CEO" } as never,
+      currentTurn: 1000,
+      forexEnabled: false,
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok || result.immediate) return;
+    expect(result.bankNavFloorApplied).toBe(true);
+    expect(result.lockedBuyoutPrice).toBe((BANK_EQUITY - playerDeposits) / 1000);
+  });
+
+  it("keeps the market price when the bank is underwater", async () => {
+    const { result } = await openWithCorp(
+      makeBankCorp(makeCharter({ cashReserves: 10, npcDeposits: 100, totalDeposits: 100 }))
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok || result.immediate) return;
+    expect(result.bankNavFloorApplied).toBe(false);
+    expect(result.lockedBuyoutPrice).toBeCloseTo(11, 4);
+  });
+
+  it("#2114: immediate privatization clears a stale pendingShareIssuance", async () => {
+    const ceoId = new ObjectId();
+    const corp = makeCorp({
+      ceoId,
+      totalShares: 10_000_000,
+      shareholders: [{ characterId: ceoId, shares: 10_000_000 }],
+      pendingShareIssuance: {
+        remainingShares: 500,
+        requestedShares: 1000,
+        source: "vote",
+        createdAtTurn: 100,
+        initialPriceLocal: 1.0,
+      },
+    });
+    const character = makeCharacter(ceoId);
+    const updateOne = vi.fn().mockResolvedValue({ matchedCount: 1, modifiedCount: 1 });
+    const db = {
+      collection: vi.fn().mockReturnValue({
+        findOne: vi.fn().mockResolvedValue(null),
+        insertOne: vi.fn(),
+        updateOne,
+      }),
+    } as unknown as Db;
+
+    const result = await openPrivatizationVote({
+      db,
+      corporation: corp as never,
+      character: character as never,
+      currentTurn: 1000,
+      forexEnabled: false,
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.immediate).toBe(true);
+    expect(updateOne).toHaveBeenCalledTimes(1);
+    expect(updateOne.mock.calls[0][1].$unset.pendingShareIssuance).toBe("");
   });
 });

@@ -22,6 +22,10 @@ import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import type { Crisis } from "@/lib/db/types/crisis";
 import { GlobalResponseCrisisStrip } from "./_coldwar/GlobalResponseCrisisStrip";
 import { loadCountryNameOverrides } from "@/lib/country/countryIdentity";
+import type { LivingConflictState } from "@/lib/livingConflict/types";
+import { livingConflictDef } from "@/lib/livingConflict/registry";
+import { normalizeConflictState, phaseFor } from "@/lib/livingConflict/engine";
+import { LivingConflictStrip, livingConflictTrackView } from "./_coldwar/LivingConflictStrip";
 
 /** How many concluded wars the hub lists, newest first. Older ones keep their record page. */
 const HISTORY_LIMIT = 24;
@@ -63,7 +67,7 @@ export default async function ConflictsPage() {
     })
   );
 
-  const [vietnam, tension, dials, programs, responseCrisisDocs, activeCrisisCount] =
+  const [vietnam, tension, dials, programs, responseCrisisDocs, activeCrisisCount, livingRows] =
     await Promise.all([
       getVietnamEscalationSummary(db),
       getColdWarTension(db),
@@ -75,7 +79,45 @@ export default async function ConflictsPage() {
         .sort({ startTurn: -1 })
         .toArray(),
       db.collection<Crisis>("crises").countDocuments({ status: "active" }),
+      db
+        .collection<LivingConflictState>("livingConflicts")
+        .find({ hasOpened: true, status: { $ne: "closed" } })
+        .toArray(),
     ]);
+
+  const livingConflicts = livingRows.flatMap((row) => {
+    const def = livingConflictDef(row.defKey);
+    if (!def) return [];
+    const state = normalizeConflictState(def, row);
+    const phase = phaseFor(def, state.phaseLevel);
+    if (!phase) return [];
+    return [
+      {
+        key: def.key,
+        name: def.name,
+        phase: phase.label,
+        status: state.status!,
+        participants: [
+          ...def.participants.belligerents,
+          ...(def.participants.backerA ? [def.participants.backerA] : []),
+          ...(def.participants.backerB ? [def.participants.backerB] : []),
+          ...def.participants.neighbors,
+          ...def.participants.blocMembers,
+        ].map(countryNameOf),
+        nextPhases: [
+          ...new Set(
+            (def.transitions ?? [])
+              .filter((transition) => transition.fromPhase === phase.key)
+              .map(
+                (transition) => def.phases.find((item) => item.key === transition.toPhase)?.label
+              )
+              .filter((label): label is string => Boolean(label))
+          ),
+        ],
+        tracks: livingConflictTrackView(state.tracks ?? {}),
+      },
+    ];
+  });
 
   // Response scope answers who owns the decision, not how far the crisis reaches.
   // Living-conflict events are stored as country-scoped because every government
@@ -158,6 +200,7 @@ export default async function ConflictsPage() {
           startingYear={startingYear}
           clock={{ preIterationTurns }}
         />
+        <LivingConflictStrip conflicts={livingConflicts} />
       </div>
       <GlobalConflictsBoard year={currentYear ?? startingYear} conflicts={conflicts} />
       <HistoricalConflictsSection rows={history} />

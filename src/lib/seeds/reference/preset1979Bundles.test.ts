@@ -23,7 +23,7 @@ import { COUNTRY_POLICY_CONFIGS_1979 } from "./basePolicies1979";
 // Authored 1979 census bundles (must be the data getRegionCensusData returns).
 import { ukRegionCensusData1979 } from "@/lib/seeds/uk/ukRegionCensusData1979";
 import { deRegionCensusData1979 } from "@/lib/seeds/de/deRegionCensusData1979";
-import { jpRegionCensusData1979 } from "@/lib/seeds/jp/jpRegionCensusData1979";
+import { jpRegionCensusData1979 } from "@/lib/countries/jp/data/jpRegionCensusData1979";
 import { cnRegionCensusData1979 } from "@/lib/seeds/cn/cnRegionCensusData1979";
 import { brRegionCensusData1979 } from "@/lib/seeds/br/brRegionCensusData1979";
 import { ieRegionCensusData1979 } from "@/lib/seeds/ie/ieRegionCensusData1979";
@@ -33,7 +33,7 @@ import { ngRegionCensusData1979 } from "@/lib/seeds/ng/ngRegionCensusData1979";
 // Authored 1979 metric-preset overlays.
 import { ukMetricPresets1979 } from "@/lib/seeds/uk/ukMetricPresets1979";
 import { deMetricPresets1979 } from "@/lib/seeds/de/deMetricPresets1979";
-import { jpMetricPresets1979 } from "@/lib/seeds/jp/jpMetricPresets1979";
+import { jpMetricPresets1979 } from "@/lib/countries/jp/data/jpMetricPresets1979";
 import { cnMetricPresets1979 } from "@/lib/seeds/cn/cnMetricPresets1979";
 import { brMetricPresets1979 } from "@/lib/seeds/br/brMetricPresets1979";
 

@@ -38,13 +38,20 @@ describe("governanceStyleFlavor", () => {
       seatMarginPenalty: 12,
       legislativeContinuityPenalty: 1.5,
       executiveContinuityPenalty: 4,
-      penalty: 17.5,
+      courtDominantPartyId: "dem",
+      courtDominantShare: 77.8,
+      courtSeated: 9,
+      courtPenalty: 10.7,
+      penalty: 28.2,
     };
     expect(governanceStyleFlavor(input).competitionNarrative).toContain(
-      "total democratic-health penalty of 17.5"
+      "total democratic-health penalty of 28.2"
     );
     expect(governanceStyleFlavor(input).competitionNarrative).toContain("2 elected chambers");
     expect(governanceStyleFlavor(input).competitionNarrative).toContain("presidency");
     expect(governanceStyleFlavor(input).competitionNarrative).toContain("continuity");
+    expect(governanceStyleFlavor(input).competitionNarrative).toContain(
+      "Supreme Court is 77.8% one party"
+    );
   });
 });

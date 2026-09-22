@@ -48,6 +48,11 @@ vi.mock("@/lib/indexFunds/fundQueries", () => ({
   insertFundTransaction: vi.fn().mockResolvedValue(undefined),
 }));
 
+vi.mock("@/lib/financialTxLog/emit", () => ({
+  emitTx: vi.fn().mockResolvedValue(undefined),
+  loadTxThresholds: vi.fn().mockResolvedValue({}),
+}));
+
 // ---------------------------------------------------------------------------
 // sellFundHoldingShares tests
 // ---------------------------------------------------------------------------
@@ -243,6 +248,36 @@ describe("sellFundHoldingShares", () => {
       5,
       expect.anything(),
       expect.anything()
+    );
+  });
+
+  it("emits one fund-subject stock_trade_sell row crediting the exact proceeds", async () => {
+    const mockDb = buildMockDb();
+    const { emitTx } = await import("@/lib/financialTxLog/emit");
+
+    const result = await sellFundHoldingShares(
+      mockDb as unknown as import("mongodb").Db,
+      baseFund,
+      corpId,
+      10
+    );
+
+    expect(result.sharesSold).toBe(10);
+    expect(emitTx).toHaveBeenCalledTimes(1);
+    expect(emitTx).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        type: "stock_trade_sell",
+        turn: 5,
+        subjectType: "fund",
+        subjectId: fundId,
+        amount: result.cashRaisedAnchor,
+        anchorAmount: result.cashRaisedAnchor,
+        currencyCode: "USD",
+        counterpartyType: "system",
+        counterpartyName: "Public float",
+      }),
+      {}
     );
   });
 

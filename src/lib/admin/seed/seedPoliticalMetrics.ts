@@ -12,7 +12,15 @@ import {
   baselineFor,
 } from "@/lib/politicalMetrics/seeds/baselineAnchors";
 import { REGIONAL_MODIFIERS_1953 } from "@/lib/politicalMetrics/seeds/regionalModifiers1953";
+import { REGIONAL_TEXTURE_1953 } from "@/lib/politicalMetrics/seeds/regionalTexture1953";
 import { NON_PLAYABLE_BOARDS } from "@/lib/politicalMetrics/seeds/nonPlayableBoards";
+
+/**
+ * The only preset carrying playable-region texture and modifiers (issue #704).
+ * Applying either 1953 regional input to another era's baselines would dress
+ * it in the wrong year's regional character.
+ */
+const TEXTURE_PRESET = "1953-default";
 
 const PLAYABLE = new Set<string>(POLITICAL_METRIC_COUNTRY_IDS);
 /**
@@ -34,12 +42,16 @@ const clampScore = (v: number) => Math.max(0, Math.min(100, v));
 
 /**
  * Seeds one politicalMetrics doc per US/UK/RU/DD region present in `states`:
- * value = clamp(baseline at `year` + sparse regional modifier, 0, 100).
+ * value = clamp(baseline at `year` + regional character, 0, 100), where the
+ * character is the sparse hand-authored modifier where one exists and the
+ * generated 1953 texture deviation otherwise (issue #704).
  *
  * Baselines resolve by in-game YEAR through the anchor table, never by seed
- * preset. With the current single-1953-anchor table every year yields the
- * authored 1953 value, so this is byte-identical to the pre-era behavior;
- * authoring additional anchors is what gives other eras their own values.
+ * preset. Authored era anchors give later presets their own national values.
+ *
+ * Texture resolves by seed PRESET, never by year: it exists only for
+ * 1953-default, and a null modifier entry means "no authored statement",
+ * which is exactly when the derived texture applies.
  */
 export async function seedPoliticalMetrics(
   db: Db,
@@ -83,14 +95,21 @@ export async function seedPoliticalMetrics(
     if (!isPlayable && !BOARD_COUNTRIES.has(state.countryId)) continue;
     const values = {} as Record<PoliticalMetricId, number>;
     if (isPlayable) {
-      // Playables: year-anchored baselines + sparse regional modifiers.
+      // Playables: year-anchored baselines + regional character. The texture
+      // applies only on the preset it was derived for; elsewhere the board
+      // keeps its previous baseline+modifier shape. A present modifier wins
+      // outright over texture (deliberate history is not diluted), which the
+      // generator also guarantees by emitting zero there — belt and braces.
       const countryId = state.countryId as PoliticalMetricsCountryId;
-      const modifiers = REGIONAL_MODIFIERS_1953[countryId][state._id] ?? {};
+      const modifiers =
+        preset === TEXTURE_PRESET ? (REGIONAL_MODIFIERS_1953[countryId][state._id] ?? {}) : {};
+      const texture =
+        preset === TEXTURE_PRESET ? (REGIONAL_TEXTURE_1953[countryId]?.[state._id] ?? {}) : {};
       for (const metricId of Object.keys(
         POLITICAL_BASELINE_ANCHORS[countryId]
       ) as PoliticalMetricId[]) {
         values[metricId] = clampScore(
-          baselineFor(countryId, metricId, year) + (modifiers[metricId] ?? 0)
+          baselineFor(countryId, metricId, year) + (modifiers[metricId] ?? texture[metricId] ?? 0)
         );
       }
     } else {

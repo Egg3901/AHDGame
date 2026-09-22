@@ -1067,7 +1067,18 @@ async function loadContext(
   if (!government || government.status !== "formed") return null;
   const headNppId = government.presidentNppId ?? government.pmNppId ?? null;
   if (!headNppId) return null;
-  const head = await db.collection<NPP>("npps").findOne({ _id: headNppId });
+  const head = await db.collection<NPP>("npps").findOne(
+    { _id: headNppId },
+    {
+      projection: {
+        name: 1,
+        personality: 1,
+        "policies.economic": 1,
+        "policies.domainPositions.trade": 1,
+        "policies.domainPositions.defense": 1,
+      },
+    }
+  );
   if (!head) return null;
 
   const [

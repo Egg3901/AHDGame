@@ -1,4 +1,34 @@
 import type { CountryId } from "@/lib/constants/countries";
+import { JP_ECONOMY } from "@/lib/countries/jp/economy";
+import { JP_STRENGTH_REGION_COUNT } from "@/lib/countries/jp/geographyFacts";
+import { US_ECONOMY } from "@/lib/countries/us/economy";
+import { UK_ECONOMY } from "@/lib/countries/uk/economy";
+import { DE_ECONOMY } from "@/lib/countries/de/economy";
+import { CN_ECONOMY } from "@/lib/countries/cn/economy";
+import { IE_ECONOMY } from "@/lib/countries/ie/economy";
+import { RU_ECONOMY } from "@/lib/countries/ru/economy";
+import { DD_ECONOMY } from "@/lib/countries/dd/economy";
+import { NG_ECONOMY } from "@/lib/countries/ng/economy";
+import { BR_ECONOMY } from "@/lib/countries/br/economy";
+import { FR_ECONOMY } from "@/lib/countries/fr/economy";
+import { IT_ECONOMY } from "@/lib/countries/it/economy";
+import { ES_ECONOMY } from "@/lib/countries/es/economy";
+import { SE_ECONOMY } from "@/lib/countries/se/economy";
+import { TR_ECONOMY } from "@/lib/countries/tr/economy";
+import { GR_ECONOMY } from "@/lib/countries/gr/economy";
+import { AT_ECONOMY } from "@/lib/countries/at/economy";
+import { FI_ECONOMY } from "@/lib/countries/fi/economy";
+import { PL_ECONOMY } from "@/lib/countries/pl/economy";
+import { HU_ECONOMY } from "@/lib/countries/hu/economy";
+import { RO_ECONOMY } from "@/lib/countries/ro/economy";
+import { YU_ECONOMY } from "@/lib/countries/yu/economy";
+import { BG_ECONOMY } from "@/lib/countries/bg/economy";
+import { CS_ECONOMY } from "@/lib/countries/cs/economy";
+import { SCO_ECONOMY } from "@/lib/countries/sco/economy";
+import { WAL_ECONOMY } from "@/lib/countries/wal/economy";
+import { BLR_ECONOMY } from "@/lib/countries/blr/economy";
+import { UKR_ECONOMY } from "@/lib/countries/ukr/economy";
+import { BAL_ECONOMY } from "@/lib/countries/bal/economy";
 
 /**
  * Political Strength reserve and pressure-ladder constants for Phase 3.
@@ -46,35 +76,35 @@ export const STATE_PASSIVE_PS_PER_TURN = 5 as const;
  * countries activate.
  */
 export const TREASURY_PS_RATE_BY_COUNTRY: Record<CountryId, { national: number; state: number }> = {
-  US: { national: 75_000, state: 37_500 },
-  UK: { national: 60_000, state: 30_000 },
-  DE: { national: 70_000, state: 35_000 },
-  JP: { national: 5_000_000, state: 2_500_000 },
-  IE: { national: 60_000, state: 30_000 },
-  BR: { national: 350_000, state: 175_000 },
-  CN: { national: 500_000, state: 250_000 },
-  NG: { national: 30_000_000, state: 15_000_000 },
-  HU: { national: 50_000, state: 25_000 },
-  PL: { national: 50_000, state: 25_000 },
-  RO: { national: 50_000, state: 25_000 },
-  YU: { national: 50_000, state: 25_000 },
-  BG: { national: 50_000, state: 25_000 },
-  UKR: { national: 50_000, state: 25_000 },
-  BLR: { national: 50_000, state: 25_000 },
-  CS: { national: 50_000, state: 25_000 },
-  BAL: { national: 50_000, state: 25_000 },
-  RU: { national: 500_000, state: 250_000 },
-  FR: { national: 70_000, state: 35_000 },
-  IT: { national: 70_000, state: 35_000 },
-  ES: { national: 70_000, state: 35_000 },
-  SE: { national: 60_000, state: 30_000 },
-  TR: { national: 70_000, state: 35_000 },
-  GR: { national: 70_000, state: 35_000 },
-  AT: { national: 70_000, state: 35_000 },
-  FI: { national: 60_000, state: 30_000 },
-  DD: { national: 90_000, state: 45_000 },
-  SCO: { national: 60_000, state: 30_000 }, // mirrors UK (sterling zone)
-  WAL: { national: 60_000, state: 30_000 }, // mirrors UK (sterling zone)
+  US: US_ECONOMY.tax.treasuryPsRate,
+  UK: UK_ECONOMY.tax.treasuryPsRate,
+  DE: DE_ECONOMY.tax.treasuryPsRate,
+  JP: JP_ECONOMY.tax.treasuryPsRate,
+  IE: IE_ECONOMY.tax.treasuryPsRate,
+  BR: BR_ECONOMY.tax.treasuryPsRate,
+  CN: CN_ECONOMY.tax.treasuryPsRate,
+  NG: NG_ECONOMY.tax.treasuryPsRate,
+  HU: HU_ECONOMY.tax.treasuryPsRate,
+  PL: PL_ECONOMY.tax.treasuryPsRate,
+  RO: RO_ECONOMY.tax.treasuryPsRate,
+  YU: YU_ECONOMY.tax.treasuryPsRate,
+  BG: BG_ECONOMY.tax.treasuryPsRate,
+  UKR: UKR_ECONOMY.tax.treasuryPsRate,
+  BLR: BLR_ECONOMY.tax.treasuryPsRate,
+  CS: CS_ECONOMY.tax.treasuryPsRate,
+  BAL: BAL_ECONOMY.tax.treasuryPsRate,
+  RU: RU_ECONOMY.tax.treasuryPsRate,
+  FR: FR_ECONOMY.tax.treasuryPsRate,
+  IT: IT_ECONOMY.tax.treasuryPsRate,
+  ES: ES_ECONOMY.tax.treasuryPsRate,
+  SE: SE_ECONOMY.tax.treasuryPsRate,
+  TR: TR_ECONOMY.tax.treasuryPsRate,
+  GR: GR_ECONOMY.tax.treasuryPsRate,
+  AT: AT_ECONOMY.tax.treasuryPsRate,
+  FI: FI_ECONOMY.tax.treasuryPsRate,
+  DD: DD_ECONOMY.tax.treasuryPsRate,
+  SCO: SCO_ECONOMY.tax.treasuryPsRate, // mirrors UK (sterling zone)
+  WAL: WAL_ECONOMY.tax.treasuryPsRate, // mirrors UK (sterling zone)
 } as const;
 
 // ─── Soft-cap slowdown bands ────────────────────────────────────────────────
@@ -219,7 +249,7 @@ export const REGION_COUNT_BY_COUNTRY: Record<CountryId, number> = {
   US: 50,
   UK: 12,
   DE: 16,
-  JP: 8,
+  JP: JP_STRENGTH_REGION_COUNT,
   IE: 8, // 8 authored planning regions (not the 26 IRL counties)
   BR: 27,
   CN: 7, // 7 authored macro-regions (not the 33 IRL provinces)

@@ -164,6 +164,7 @@ describe("Phase 3 coverage — semantic mint/sink reasons", () => {
     expect(reasonForTxType("office_income")).toBe("public_salary");
     expect(reasonForTxType("savings_interest")).toBe("deposit_interest");
     expect(reasonForTxType("bond_default")).toBe("bond_default_settlement");
+    expect(reasonForTxType("npp_investment_income")).toBe("npp_investment_income");
   });
 
   it("routes a state-party dues row (no subjectId) to a state_party account via meta", () => {

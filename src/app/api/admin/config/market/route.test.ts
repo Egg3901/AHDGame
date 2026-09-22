@@ -440,6 +440,115 @@ describe("PATCH /api/admin/config/market — non-live tier gate", () => {
   });
 });
 
+describe("GET/PATCH /api/admin/config/market — #1001 sandbox-only gates", () => {
+  let db: MockDb;
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    db = createMockDb();
+    db.collection("gameConfig");
+    db.collectionMocks.gameConfig!.findOne.mockResolvedValue({
+      _id: "default",
+      marketSystemMode: "capital",
+    });
+
+    const { getDb } = await import("@/lib/mongodb");
+    vi.mocked(getDb).mockResolvedValue(db as unknown as Db);
+
+    const { requireAdmin } = await import("@/lib/api/requireAdmin");
+    vi.mocked(requireAdmin).mockResolvedValue({
+      ok: true,
+      admin: { username: "admin" },
+    } as never);
+  });
+
+  it("GET reflects both gates and defaults them to false when absent", async () => {
+    db.collectionMocks.gameConfig!.findOne.mockResolvedValue({
+      _id: "default",
+      marketSystemMode: "capital",
+      sovereignIssuanceConsolidationEnabled: true,
+      domesticSovereignBondCoverageEnabled: true,
+    });
+    const { GET } = await import("./route");
+    const enabled = (await (await GET()).json()) as {
+      sovereignIssuanceConsolidationEnabled: boolean;
+      domesticSovereignBondCoverageEnabled: boolean;
+    };
+    expect(enabled.sovereignIssuanceConsolidationEnabled).toBe(true);
+    expect(enabled.domesticSovereignBondCoverageEnabled).toBe(true);
+
+    db.collectionMocks.gameConfig!.findOne.mockResolvedValue({
+      _id: "default",
+      marketSystemMode: "capital",
+    });
+    const absent = (await (await GET()).json()) as {
+      sovereignIssuanceConsolidationEnabled: boolean;
+      domesticSovereignBondCoverageEnabled: boolean;
+    };
+    expect(absent.sovereignIssuanceConsolidationEnabled).toBe(false);
+    expect(absent.domesticSovereignBondCoverageEnabled).toBe(false);
+  });
+
+  it("PATCH persists explicit false without touching unrelated flags", async () => {
+    const { PATCH } = await import("./route");
+    const res = await PATCH(
+      makePatchRequest({
+        mode: "capital",
+        sovereignIssuanceConsolidationEnabled: false,
+        domesticSovereignBondCoverageEnabled: false,
+      })
+    );
+
+    expect(res.status).toBe(200);
+    expect(db.collectionMocks.gameConfig!.updateOne).toHaveBeenCalledWith(
+      { _id: "default" },
+      {
+        $set: expect.objectContaining({
+          sovereignIssuanceConsolidationEnabled: false,
+          domesticSovereignBondCoverageEnabled: false,
+        }),
+      },
+      { upsert: true }
+    );
+  });
+
+  it("PATCH omits both gates from $set when not provided", async () => {
+    const { PATCH } = await import("./route");
+    await PATCH(makePatchRequest({ mode: "capital" }));
+
+    const setArg = db.collectionMocks.gameConfig!.updateOne.mock.calls[0]?.[1]?.$set as Record<
+      string,
+      unknown
+    >;
+    expect(setArg).not.toHaveProperty("sovereignIssuanceConsolidationEnabled");
+    expect(setArg).not.toHaveProperty("domesticSovereignBondCoverageEnabled");
+  });
+
+  it.each([["sovereignIssuanceConsolidationEnabled"], ["domesticSovereignBondCoverageEnabled"]])(
+    "PATCH rejects enabling %s live (sandbox-only) and writes nothing",
+    async (flag) => {
+      const { PATCH } = await import("./route");
+      const res = await PATCH(makePatchRequest({ mode: "capital", [flag]: true }));
+
+      expect(res.status).toBe(400);
+      const body = (await res.json()) as { error: string };
+      expect(body.error).toContain("sandbox-only");
+      expect(db.collectionMocks.gameConfig!.updateOne).not.toHaveBeenCalled();
+    }
+  );
+
+  it.each(["sovereignIssuanceConsolidationEnabled", "domesticSovereignBondCoverageEnabled"])(
+    "PATCH rejects a non-boolean %s with 400",
+    async (flag) => {
+      const { PATCH } = await import("./route");
+      const res = await PATCH(makePatchRequest({ mode: "capital", [flag]: "yes" }));
+
+      expect(res.status).toBe(400);
+      expect(db.collectionMocks.gameConfig!.updateOne).not.toHaveBeenCalled();
+    }
+  );
+});
+
 /**
  * A mode change has to be answerable in TURNS, not just wall-clock.
  *

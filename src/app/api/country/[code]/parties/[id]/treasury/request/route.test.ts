@@ -64,10 +64,74 @@ describe("POST /api/country/[code]/parties/[id]/treasury/request", () => {
       sequentialId: Number(partyId),
       countryId: "US",
       name: "Test Party",
-      treasury: 5_000_000,
+      treasury: 50_000_000,
       chairId,
       treasurerId: new ObjectId(),
     } as never);
+  });
+
+  /** Re-seat the party with exactly one officer, so the base cap applies. */
+  async function soleOfficerParty() {
+    const { findPartyBySequentialId } = await import("@/lib/db/partyLookup");
+    vi.mocked(findPartyBySequentialId).mockResolvedValue({
+      _id: partyOid,
+      sequentialId: Number(partyId),
+      countryId: "US",
+      name: "Test Party",
+      treasury: 50_000_000,
+      chairId,
+      viceChairId: null,
+      treasurerId: null,
+    } as never);
+  }
+
+  it("refuses a request above the per-turn payout ceiling", async () => {
+    // Nothing used to stop this. The cap was only consulted at the very
+    // end of the approve flow, by which point that route had already
+    // claimed an approver's signature on a row that could never pay.
+    // One officer seated, so the base 2,000,000 ceiling is in force.
+    await soleOfficerParty();
+    const response = await import("./route").then(({ POST }) =>
+      POST(makeRequest({ amount: 3_000_000 }), {
+        params: Promise.resolve({ code: "us", id: partyId }),
+      })
+    );
+    expect(response.status).toBe(400);
+    const body = await response.json();
+    expect(body.error).toMatch(/2,000,000/);
+    expect(db.collectionMocks["pendingTreasuryTransactions"]!.insertOne).not.toHaveBeenCalled();
+  });
+
+  it("allows five times as much once a second officer is seated", async () => {
+    // The default fixture seats a Chair and a Treasurer, which is the
+    // two-officer case: a second pair of eyes on the ledger buys the
+    // party a larger ceiling.
+    const response = await import("./route").then(({ POST }) =>
+      POST(makeRequest({ amount: 9_000_000 }), {
+        params: Promise.resolve({ code: "us", id: partyId }),
+      })
+    );
+    expect(response.status).toBe(200);
+  });
+
+  it("still refuses above the raised ceiling", async () => {
+    const response = await import("./route").then(({ POST }) =>
+      POST(makeRequest({ amount: 11_000_000 }), {
+        params: Promise.resolve({ code: "us", id: partyId }),
+      })
+    );
+    expect(response.status).toBe(400);
+    const body = await response.json();
+    expect(body.error).toMatch(/10,000,000/);
+  });
+
+  it("accepts a request exactly at the ceiling", async () => {
+    const response = await import("./route").then(({ POST }) =>
+      POST(makeRequest({ amount: 2_000_000 }), {
+        params: Promise.resolve({ code: "us", id: partyId }),
+      })
+    );
+    expect(response.status).toBe(200);
   });
 
   it("queues a request when nothing blocks it", async () => {

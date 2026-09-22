@@ -43,6 +43,7 @@ import {
 import {
   selectNppBill,
   buildConditionsSignal,
+  activeProposalKey,
   type ConditionsSignal,
 } from "@/lib/nppAutonomy/selectNppBill";
 import { loadPoliticalConditionsDomains } from "@/lib/politicalLegislation/conditionsSignal";
@@ -57,6 +58,9 @@ import type { PersistedFiscalStance } from "@/lib/nppAutonomy/fiscalStance";
 import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
 import { isPlannedEconomy } from "@/lib/constants/commandEconomy";
 import { getNationalDocId } from "@/lib/constants/nationalScope";
+import { buildActiveNationalBillFilter } from "@/lib/legislature/nationalBillScope";
+import { NATIONAL_TERMINAL_STATUSES } from "@/lib/congress/billProposalLimits";
+import { isPolicyProvision, type BillStatus } from "@/lib/db/types/legislation";
 import { getLowerChamberOfficeType } from "@/lib/legislature/chamberOfficeType";
 import { getEraContext } from "@/lib/era/context";
 import { isLegislationTypeActive } from "@/lib/era/legislationCatalog";
@@ -169,6 +173,34 @@ async function recentNppSponsoredLegislationTypeIds(
       .map((bill) => bill.legislationTypeId)
       .filter((id): id is string => typeof id === "string")
   );
+}
+
+/**
+ * Normalized type/option combos already proposed by active national bills in
+ * this country (any sponsor, including players — the duplicate-provision guard
+ * rejects those too). One projected query per country per turn, passed into
+ * selection so no per-candidate query is needed.
+ */
+async function loadActiveProposalKeys(db: Db, countryId: CountryId): Promise<Set<string>> {
+  const filter = buildActiveNationalBillFilter(
+    countryId,
+    NATIONAL_TERMINAL_STATUSES as BillStatus[]
+  );
+  const bills = await db
+    .collection<Bill>("bills")
+    .find(filter as import("mongodb").Filter<Bill>, { projection: { provisions: 1 } })
+    .toArray();
+  const keys = new Set<string>();
+  for (const bill of bills) {
+    for (const provision of bill.provisions ?? []) {
+      // Mirror checkDuplicateProvisions: only policy provisions collide.
+      if (!isPolicyProvision(provision)) continue;
+      if (provision.legislationTypeId && provision.policyOptionId) {
+        keys.add(activeProposalKey(provision.legislationTypeId, provision.policyOptionId));
+      }
+    }
+  }
+  return keys;
 }
 
 // ── Sponsor selection ─────────────────────────────────────────────────────────
@@ -387,9 +419,26 @@ async function loadNationalLegislationTypes(
 
   return (
     db
-      // full-read(legislationTypes): bill selection scores every policy option
+      // Selection scores every option, but not their large downstream effect payloads.
       .collection<LegislationType>("legislationTypes")
-      .find(query as import("mongodb").Filter<LegislationType>)
+      .find(query as import("mongodb").Filter<LegislationType>, {
+        projection: {
+          _id: 1,
+          name: 1,
+          subCategory: 1,
+          policyDomain: 1,
+          taxSlider: 1,
+          "policyOptions.id": 1,
+          "policyOptions.name": 1,
+          "policyOptions.stance": 1,
+          "policyOptions.effectDirection": 1,
+          "policyOptions.economic": 1,
+          "policyOptions.social": 1,
+          "policyOptions.gdpCostFraction": 1,
+          "policyOptions.annualCostPerCapita": 1,
+          "policyOptions.gdpPerCapitaMultiplier": 1,
+        },
+      })
       .toArray()
   );
 }
@@ -410,6 +459,8 @@ interface PartySponsorshipAttempt {
   signal: ConditionsSignal;
   /** Enacted national policy rung per legislation type (fiscal-restraint ceiling). */
   currentPolicyOptionIds: ReadonlyMap<string, string>;
+  /** Type/option combos already carried by active bills (excluded in selection). */
+  activeProposalKeys: ReadonlySet<string>;
   agenda?: GoverningAgendaItem[];
   fiscalStance?: PersistedFiscalStance;
   /** V5: domains carrying a standing government goal; biases selection toward them. */
@@ -508,6 +559,7 @@ async function attemptPartySponsorship(a: PartySponsorshipAttempt): Promise<numb
       // Country + party + turn: one slate per decision, a different one next
       // decision, and identical on a replay of the same turn.
       slateSalt: `${countryId}:${party}:${currentTurn}`,
+      activeProposalKeys: a.activeProposalKeys,
     }
   );
   if (!selection) {
@@ -583,180 +635,190 @@ export async function processNppBillSponsorship(ctx: NPPContext): Promise<number
     officialsByCountry.set(official.countryId as CountryId, list);
   }
 
-  let totalBillsProposed = 0;
+  // Countries do not share sponsorship state: every throttle, proposal key,
+  // government directive and write is country-scoped. Run those independent
+  // pipelines concurrently so local BSON decoding and remote round trips do
+  // not serialize sixteen countries behind one another.
+  const proposedByCountry = await Promise.all(
+    [...officialsByCountry].map(async ([countryId, officials]) => {
+      let countryBillsProposed = 0;
+      // COUNTRY_CONFIGS check — skip unknown countries. Must run before
+      // isNppAutonomyActive: that call resolves country access from the same
+      // config map and throws "Invalid country ID" instead of returning false,
+      // so an unrecognized countryId (e.g. stale pre-rename data) has to be
+      // filtered out here first, not after.
+      if (!COUNTRY_CONFIGS[countryId]) return 0;
 
-  for (const [countryId, officials] of officialsByCountry) {
-    // COUNTRY_CONFIGS check — skip unknown countries. Must run before
-    // isNppAutonomyActive: that call resolves country access from the same
-    // config map and throws "Invalid country ID" instead of returning false,
-    // so an unrecognized countryId (e.g. stale pre-rename data) has to be
-    // filtered out here first, not after.
-    if (!COUNTRY_CONFIGS[countryId]) continue;
+      // Safety rail: only run in countries where autonomy is active.
+      //
+      // v0–v3 use the legacy strict rail (autonomy on AND the country is not
+      // player-enabled). At v4 that rail is what stood between "full agency,
+      // globally" and reality: bill sponsorship is the defining NPP legislative
+      // behaviour, and leaving it non-player-only made v4 functionally identical
+      // to v3 for the system that matters most. v4 therefore honours the ordinary
+      // per-country gate instead — but only in the same breath as the tighter
+      // player-country cap/cooldown below, because lifting the rail without the
+      // throttle would just double the volume of bills a player has to sit through.
+      const isPlayerCountry = await isCountryEnabledForPlayers(db, countryId);
+      const active = nppAutonomyLevelAtLeast(autonomyLevel, "v4")
+        ? await nppAutonomyAtLeast(db, countryId, "v4")
+        : await isNppAutonomyActive(db, countryId);
+      if (!active) return 0;
 
-    // Safety rail: only run in countries where autonomy is active.
-    //
-    // v0–v3 use the legacy strict rail (autonomy on AND the country is not
-    // player-enabled). At v4 that rail is what stood between "full agency,
-    // globally" and reality: bill sponsorship is the defining NPP legislative
-    // behaviour, and leaving it non-player-only made v4 functionally identical
-    // to v3 for the system that matters most. v4 therefore honours the ordinary
-    // per-country gate instead — but only in the same breath as the tighter
-    // player-country cap/cooldown below, because lifting the rail without the
-    // throttle would just double the volume of bills a player has to sit through.
-    const isPlayerCountry = await isCountryEnabledForPlayers(db, countryId);
-    const active = nppAutonomyLevelAtLeast(autonomyLevel, "v4")
-      ? await nppAutonomyAtLeast(db, countryId, "v4")
-      : await isNppAutonomyActive(db, countryId);
-    if (!active) continue;
-
-    // Legislation freeze (S#17): while this country's government is still
-    // forming, a player's proposal is rejected at the route by
-    // checkLegislationFreeze. NPPs read the same rule here so the two paths
-    // carry the same restriction — otherwise an NPP files bills through a
-    // window in which no human in that country can (reported in DD, whose
-    // onePartyState government counts as parliamentary for the freeze).
-    //
-    // Ordering: this phase runs well before parliamentaryGovernmentFormation
-    // and nppGovernmentPhases seat a PM, so on the turn a government is
-    // finally formed the status read here is still "pending" and sponsorship
-    // resumes the following turn. That one-turn lag is deliberate — erring
-    // toward the stricter side keeps NPPs from legislating in a window the
-    // players they share a chamber with cannot.
-    if (await isLegislationFrozen(db, countryId)) {
-      console.log(
-        `[nppBillSponsorship] ${countryId}: skipped — government in formation, legislation frozen`
-      );
-      continue;
-    }
-
-    const lowerChamberOfficeType = getLowerChamberOfficeType(countryId);
-
-    // ── Sponsor pool ─────────────────────────────────────────────────────────
-
-    const lowerOfficials = officials.filter(
-      (o) => o.countryId === countryId && o.officeType === lowerChamberOfficeType
-    );
-    if (lowerOfficials.length === 0) {
-      console.log(`[nppBillSponsorship] ${countryId}: no lower-chamber NPP officials`);
-      continue;
-    }
-
-    const majorityParty = resolveMajorityParty(lowerOfficials);
-    if (!majorityParty) {
-      console.log(`[nppBillSponsorship] ${countryId}: could not determine majority party`);
-      continue;
-    }
-
-    // Shared per-country loads (catalog, conditions, government directives,
-    // enacted national policy rungs for the fiscal-restraint ceiling).
-    const nationalPolicyStoreId =
-      getNationalDocId(countryId) ?? `${countryId.toLowerCase()}_national`;
-    const [legTypesRaw, signal, directives, nationalPolicies] = await Promise.all([
-      loadNationalLegislationTypes(db, countryId),
-      loadConditionsSignal(db, countryId),
-      loadGovernmentDirectives(db, countryId),
-      db
-        .collection<StatePolicy>("statePolicies")
-        .find(
-          { stateId: nationalPolicyStoreId },
-          { projection: { legislationTypeId: 1, policyOptionId: 1 } }
-        )
-        .toArray(),
-    ]);
-    // Keyed by every equivalent legislation-type id so selectNppBill can look
-    // up by whichever alias the catalog row carries.
-    const currentPolicyOptionIds = new Map<string, string>();
-    for (const policy of nationalPolicies) {
-      const canonicalId = canonicalizeLegislationTypeId(policy.legislationTypeId);
-      for (const id of canonicalId
-        ? getEquivalentLegislationTypeIds(canonicalId)
-        : [policy.legislationTypeId]) {
-        if (!currentPolicyOptionIds.has(id) || policy.legislationTypeId === canonicalId) {
-          currentPolicyOptionIds.set(id, policy.policyOptionId);
-        }
-      }
-    }
-    // Drop pre-window types so NPPs never sponsor legislation that cannot exist yet.
-    // Planned economies also drop clearly market-liberalizing scenario levers.
-    const planned = isPlannedEconomy(countryId, currentYear, commandEconomyEnabled);
-    const legTypes = legTypesRaw.filter((lt) => {
-      if (!isLegislationTypeActive(lt._id, eraYear)) return false;
-      if (planned && isMarketLiberalLegislationType(lt)) return false;
-      return true;
-    });
-
-    const shared = {
-      db,
-      countryId,
-      officials,
-      nppMap,
-      lowerChamberOfficeType,
-      currentTurn,
-      now,
-      legTypes,
-      signal,
-      currentPolicyOptionIds,
-      v3Active,
-      isPlayerCountry,
-      policy: behaviorPolicy,
-    };
-
-    // Governing party (V1.5 agenda + V1.6 fiscal posture). The party-scoped
-    // throttle is behavior-preserving for v0, where the majority party is the
-    // only sponsor. Planned economies persist a plan stance (same shape) on
-    // fiscalStance, so the market fiscal bias in selectNppBill naturally
-    // consumes shortage/overhang-driven direction instead of inflation/debt.
-    totalBillsProposed += await attemptPartySponsorship({
-      ...shared,
-      party: majorityParty,
-      agenda: directives.agenda,
-      fiscalStance: directives.fiscalStance,
-      goalDomains: directives.goalDomains,
-      tag: "gov",
-    });
-
-    // Opposition rival bills (V1.7): the largest non-governing party sponsors
-    // bills advancing its own counter-agenda, with an independent throttle so the
-    // government's cooldown never blocks it. Only for a formed NPP government at v1.
-    if (
-      directives.governingPartyId &&
-      directives.seatsByParty &&
-      (await nppAutonomyAtLeast(db, countryId, "v1"))
-    ) {
-      const opposition = identifyOppositionParty(
-        directives.seatsByParty,
-        directives.governingPartyId
-      );
-      if (opposition && opposition.partyId !== majorityParty) {
-        const oppSponsor = pickSponsorOfficial(
-          officials,
-          nppMap,
-          countryId,
-          lowerChamberOfficeType,
-          opposition.partyId
+      // Legislation freeze (S#17): while this country's government is still
+      // forming, a player's proposal is rejected at the route by
+      // checkLegislationFreeze. NPPs read the same rule here so the two paths
+      // carry the same restriction — otherwise an NPP files bills through a
+      // window in which no human in that country can (reported in DD, whose
+      // onePartyState government counts as parliamentary for the freeze).
+      //
+      // Ordering: this phase runs well before parliamentaryGovernmentFormation
+      // and nppGovernmentPhases seat a PM, so on the turn a government is
+      // finally formed the status read here is still "pending" and sponsorship
+      // resumes the following turn. That one-turn lag is deliberate — erring
+      // toward the stricter side keeps NPPs from legislating in a window the
+      // players they share a chamber with cannot.
+      if (await isLegislationFrozen(db, countryId)) {
+        console.log(
+          `[nppBillSponsorship] ${countryId}: skipped — government in formation, legislation frozen`
         );
-        if (oppSponsor) {
-          // Counter-agenda: the opposition pursues its own platform, computed
-          // from its sponsor's ideology — distinct from the government's agenda.
-          const counterAgenda = computeGoverningAgenda({
-            conditions: signal,
-            ideology: {
-              economic: oppSponsor.npp.policies?.economic ?? 0,
-              social: oppSponsor.npp.policies?.social ?? 0,
-            },
-            personality: oppSponsor.npp.personality,
-            currentTurn,
-          }).items;
-          totalBillsProposed += await attemptPartySponsorship({
-            ...shared,
-            party: opposition.partyId,
-            agenda: counterAgenda,
-            tag: "opp",
-          });
+        return 0;
+      }
+
+      const lowerChamberOfficeType = getLowerChamberOfficeType(countryId);
+
+      // ── Sponsor pool ─────────────────────────────────────────────────────────
+
+      const lowerOfficials = officials.filter(
+        (o) => o.countryId === countryId && o.officeType === lowerChamberOfficeType
+      );
+      if (lowerOfficials.length === 0) {
+        console.log(`[nppBillSponsorship] ${countryId}: no lower-chamber NPP officials`);
+        return 0;
+      }
+
+      const majorityParty = resolveMajorityParty(lowerOfficials);
+      if (!majorityParty) {
+        console.log(`[nppBillSponsorship] ${countryId}: could not determine majority party`);
+        return 0;
+      }
+
+      // Shared per-country loads (catalog, conditions, government directives,
+      // enacted national policy rungs for the fiscal-restraint ceiling).
+      const nationalPolicyStoreId =
+        getNationalDocId(countryId) ?? `${countryId.toLowerCase()}_national`;
+      const [legTypesRaw, signal, directives, nationalPolicies, activeProposalKeys] =
+        await Promise.all([
+          loadNationalLegislationTypes(db, countryId),
+          loadConditionsSignal(db, countryId),
+          loadGovernmentDirectives(db, countryId),
+          db
+            .collection<StatePolicy>("statePolicies")
+            .find(
+              { stateId: nationalPolicyStoreId },
+              { projection: { legislationTypeId: 1, policyOptionId: 1 } }
+            )
+            .toArray(),
+          loadActiveProposalKeys(db, countryId),
+        ]);
+      // Keyed by every equivalent legislation-type id so selectNppBill can look
+      // up by whichever alias the catalog row carries.
+      const currentPolicyOptionIds = new Map<string, string>();
+      for (const policy of nationalPolicies) {
+        const canonicalId = canonicalizeLegislationTypeId(policy.legislationTypeId);
+        for (const id of canonicalId
+          ? getEquivalentLegislationTypeIds(canonicalId)
+          : [policy.legislationTypeId]) {
+          if (!currentPolicyOptionIds.has(id) || policy.legislationTypeId === canonicalId) {
+            currentPolicyOptionIds.set(id, policy.policyOptionId);
+          }
         }
       }
-    }
-  }
+      // Drop pre-window types so NPPs never sponsor legislation that cannot exist yet.
+      // Planned economies also drop clearly market-liberalizing scenario levers.
+      const planned = isPlannedEconomy(countryId, currentYear, commandEconomyEnabled);
+      const legTypes = legTypesRaw.filter((lt) => {
+        if (!isLegislationTypeActive(lt._id, eraYear)) return false;
+        if (planned && isMarketLiberalLegislationType(lt)) return false;
+        return true;
+      });
 
-  return totalBillsProposed;
+      const shared = {
+        db,
+        countryId,
+        officials,
+        nppMap,
+        lowerChamberOfficeType,
+        currentTurn,
+        now,
+        legTypes,
+        signal,
+        currentPolicyOptionIds,
+        activeProposalKeys,
+        v3Active,
+        isPlayerCountry,
+        policy: behaviorPolicy,
+      };
+
+      // Governing party (V1.5 agenda + V1.6 fiscal posture). The party-scoped
+      // throttle is behavior-preserving for v0, where the majority party is the
+      // only sponsor. Planned economies persist a plan stance (same shape) on
+      // fiscalStance, so the market fiscal bias in selectNppBill naturally
+      // consumes shortage/overhang-driven direction instead of inflation/debt.
+      countryBillsProposed += await attemptPartySponsorship({
+        ...shared,
+        party: majorityParty,
+        agenda: directives.agenda,
+        fiscalStance: directives.fiscalStance,
+        goalDomains: directives.goalDomains,
+        tag: "gov",
+      });
+
+      // Opposition rival bills (V1.7): the largest non-governing party sponsors
+      // bills advancing its own counter-agenda, with an independent throttle so the
+      // government's cooldown never blocks it. Only for a formed NPP government at v1.
+      if (
+        directives.governingPartyId &&
+        directives.seatsByParty &&
+        (await nppAutonomyAtLeast(db, countryId, "v1"))
+      ) {
+        const opposition = identifyOppositionParty(
+          directives.seatsByParty,
+          directives.governingPartyId
+        );
+        if (opposition && opposition.partyId !== majorityParty) {
+          const oppSponsor = pickSponsorOfficial(
+            officials,
+            nppMap,
+            countryId,
+            lowerChamberOfficeType,
+            opposition.partyId
+          );
+          if (oppSponsor) {
+            // Counter-agenda: the opposition pursues its own platform, computed
+            // from its sponsor's ideology — distinct from the government's agenda.
+            const counterAgenda = computeGoverningAgenda({
+              conditions: signal,
+              ideology: {
+                economic: oppSponsor.npp.policies?.economic ?? 0,
+                social: oppSponsor.npp.policies?.social ?? 0,
+              },
+              personality: oppSponsor.npp.personality,
+              currentTurn,
+            }).items;
+            countryBillsProposed += await attemptPartySponsorship({
+              ...shared,
+              party: opposition.partyId,
+              agenda: counterAgenda,
+              tag: "opp",
+            });
+          }
+        }
+      }
+
+      return countryBillsProposed;
+    })
+  );
+
+  return proposedByCountry.reduce((total, proposed) => total + proposed, 0);
 }

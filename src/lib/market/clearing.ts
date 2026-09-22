@@ -285,11 +285,12 @@ export interface SectorClearingInput {
   /**
    * Plants tier (marketSystemMode >= "plants"): the units this sector actually
    * produced last turn (`sector.producedUnits`, daily, currency-free), already
-   * carrying the ledger-side legs the caller applies (natcorpScale ×
-   * outputMultiplier) so the offer is comparable to `balances`. When
-   * supplied AND the caller sets `plantsEnabled`, the offered book is built
-   * from these units instead of from the revenue nameplate. Null/absent falls
-   * back to the legacy revenue-derived offer.
+   * carrying the canonical ledger-side legs the caller applies
+   * (scaleMeasuredProducedUnits: natcorpScale, embargo haircut, arsenal
+   * retention) so the offer is comparable to `balances`. When supplied AND
+   * the caller sets `plantsEnabled`, the offered book is built from these
+   * units instead of from the revenue nameplate. Null/absent falls back to
+   * the legacy revenue-derived offer.
    */
   producedUnits?: number | null;
 }
@@ -297,10 +298,11 @@ export interface SectorClearingInput {
 /**
  * Per-commodity book-sanity diagnostic emitted by computeClearingFactors.
  * The raw book can legitimately exceed lagged supply because legacy nameplate
- * offers omit ledger-side scale and extraction haircuts. Callers should apply
- * mismatch tripwires to normalizedOfferedUnits, not rawOfferedUnits. A large
- * post-normalization excess means exempt measured production and the balance
- * ledger are in different units, so fill rates can still be depressed.
+ * offers omit ledger-side scale and extraction haircuts. Callers must read
+ * mismatch state from invariantBreach (the canonical-basis invariant), not
+ * from ad-hoc ratios over rawOfferedUnits. A large post-normalization excess
+ * means exempt measured production and the balance ledger are in different
+ * units, so fill rates can still be depressed.
  */
 export interface ClearingBookDiagnostic {
   commodity: CommodityType;
@@ -318,6 +320,78 @@ export interface ClearingBookDiagnostic {
   exemptRealUnits: number;
   laggedSupply: number;
   laggedDemand: number;
+  /**
+   * True when the post-normalization book breaches the canonical-basis
+   * invariant (see isClearingBookBreach). Both sides now build plants units
+   * through the canonical basis, so a breach is a genuine defect: the turn
+   * keeps clearing honestly and records a health warning.
+   */
+  invariantBreach: boolean;
+}
+
+/**
+ * Clearing book invariant (issue #2054): after normalization the offered book
+ * and the lagged supply ledger MUST be in one canonical basis. The basis fix
+ * (canonicalPlantsUnitsForCommodity on both sides) is what makes them
+ * comparable; this predicate is only the backstop that names a residual drift.
+ *
+ * Two gates, both required. First MATERIALITY: the absolute gap must reach
+ * MIN_MATERIAL_BOOK_GAP units. A sub-gap excess cannot move fills or prices:
+ * the pinned books run in the thousands, so a gap two orders below that is
+ * mix-rounding and scope noise (first landing, new production, sub-scale
+ * national books, near-zero denominators), never a defect. Second GROWTH: past
+ * the gap, legitimate one-turn growth cannot double an established book
+ * (builds land over many turns, the policy output curve caps at +15%), so an
+ * excess past 2x is a basis breach, not growth. A material book against a
+ * zero (or missing) lagged baseline has an infinite ratio and breaches: that
+ * is exactly the pinned pharmaceuticals/ordnance shape, and canonicalization
+ * leaves no legitimate way to offer thousands of units the ledger never saw.
+ */
+export const CLEARING_BOOK_INVARIANT_MIN_MATERIAL_GAP = 250;
+export const CLEARING_BOOK_INVARIANT_MAX_GROWTH_FACTOR = 2;
+
+/** Pure predicate behind ClearingBookDiagnostic.invariantBreach. */
+export function isClearingBookBreach(
+  normalizedOfferedUnits: number,
+  laggedSupply: number
+): boolean {
+  if (!(
+    typeof normalizedOfferedUnits === "number" &&
+    Number.isFinite(normalizedOfferedUnits) &&
+    typeof laggedSupply === "number" &&
+    Number.isFinite(laggedSupply)
+  )) {
+    return false;
+  }
+  if (normalizedOfferedUnits - laggedSupply < CLEARING_BOOK_INVARIANT_MIN_MATERIAL_GAP) {
+    return false;
+  }
+  if (laggedSupply <= 0) return true;
+  return normalizedOfferedUnits > laggedSupply * CLEARING_BOOK_INVARIANT_MAX_GROWTH_FACTOR;
+}
+
+/**
+ * Deterministic warning text for one breached book. Pure: the same diagnostic
+ * always yields the same string, so turn replays and retries cannot duplicate
+ * or drop it.
+ */
+export function describeClearingBookBreach(d: ClearingBookDiagnostic): string {
+  const book = d.group ? d.commodity + "@" + d.group : d.commodity;
+  const ratio =
+    d.laggedSupply > 0 ? d.normalizedOfferedUnits / d.laggedSupply : Number.POSITIVE_INFINITY;
+  return (
+    "clearing invariant breach on " +
+    book +
+    ": normalized " +
+    Math.round(d.normalizedOfferedUnits) +
+    " vs lagged supply " +
+    Math.round(d.laggedSupply) +
+    " (" +
+    (Number.isFinite(ratio) ? ratio.toFixed(1) : "inf") +
+    "x; raw " +
+    Math.round(d.rawOfferedUnits) +
+    ")"
+  );
 }
 
 export interface SectorClearingResult {
@@ -580,6 +654,7 @@ export function computeClearingFactors(args: {
         exemptRealUnits,
         laggedSupply,
         laggedDemand: bal?.demand ?? 0,
+        invariantBreach: isClearingBookBreach(normalizedOfferedUnits, laggedSupply),
       });
     }
 

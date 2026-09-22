@@ -11,9 +11,16 @@ import type {
   Corporation,
   CorporateSector,
   FederalBudget,
+  GameConfig,
+  State,
   StateMetrics,
   Union,
 } from "@/lib/db/types";
+import { isLabourMacroEnabled } from "@/lib/labour/featureFlag";
+import {
+  labourTightnessScoreFromTightness,
+  nationalTightnessWorkerWeighted,
+} from "@/lib/labour/labourMarket";
 import { isDuplicateKeyError } from "@/lib/api/errors";
 import { getNationalBudgetId } from "@/lib/bonds/sovereign";
 import { getNationalDocId } from "@/lib/constants/nationalScope";
@@ -81,9 +88,30 @@ async function costOfLivingByState(
   return byState;
 }
 
+/**
+ * National macro inputs for a bargaining mandate.
+ *
+ * Labor tightness reads the MEASURED market directly (#791): each real state's
+ * persisted `economic.labourTightness` (corporate labour demand over the
+ * civilian labour force, written by the corporation turn), aggregated to one
+ * national ratio weighted by state labour force — which equals total national
+ * demand over total national supply — then mapped onto the 0-100 score. This
+ * breaks the old round-trip where tightness was derived FROM the national
+ * unemployment rate while unemployment now derives FROM tightness.
+ *
+ * COLD-START FALLBACK: when no state has a usable measured reading yet, the
+ * score falls back to `laborTightnessFromUnemployment` off the national
+ * unemployment rate — exactly today's behaviour.
+ *
+ * MODE GATE: the measured path is gated on `labourSystemMode` >= "macro",
+ * the same tier that gates the unemployment node's tightness channel in the
+ * metric engine. Below that tier the fallback applies even when measured
+ * readings exist (the corporation turn writes telemetry ungated), so a world
+ * with the labour macro loop switched off behaves exactly as before.
+ */
 export async function bargainingMacroInputs(db: Db, countryId: Union["countryId"]) {
   const nationalDocId = getNationalDocId(countryId);
-  const [metrics, budget] = await Promise.all([
+  const [metrics, budget, states, labourConfig] = await Promise.all([
     nationalDocId
       ? db
           .collection<StateMetrics>("macroMetrics")
@@ -92,9 +120,37 @@ export async function bargainingMacroInputs(db: Db, countryId: Union["countryId"
     db
       .collection<FederalBudget>("federalBudget")
       .findOne({ _id: getNationalBudgetId(countryId) }, { projection: { unionLawBias: 1 } }),
+    db
+      .collection<State>("states")
+      .find({ countryId }, { projection: { _id: 1 } })
+      .toArray(),
+    db
+      .collection<GameConfig>("gameConfig")
+      .findOne({ _id: "default" }, { projection: { labourSystemMode: 1 } }),
   ]);
+  const unemploymentFallback = metrics?.economic?.unemploymentRate?.value ?? 5;
+  let laborTightness = laborTightnessFromUnemployment(unemploymentFallback);
+  const stateIds = states.map((state) => state._id);
+  if (stateIds.length > 0 && (await isLabourMacroEnabled(labourConfig))) {
+    const stateDocs = await db
+      .collection<StateMetrics>("macroMetrics")
+      .find(
+        { _id: { $in: stateIds } },
+        { projection: { "economic.labourTightness.value": 1, "economic.laborForce.value": 1 } }
+      )
+      .toArray();
+    const national = nationalTightnessWorkerWeighted(
+      stateDocs.map((doc) => ({
+        tightness: doc.economic?.labourTightness?.value,
+        workers: doc.economic?.laborForce?.value,
+      }))
+    );
+    if (national !== undefined) {
+      laborTightness = labourTightnessScoreFromTightness(national);
+    }
+  }
   return {
-    laborTightness: laborTightnessFromUnemployment(metrics?.economic?.unemploymentRate?.value ?? 5),
+    laborTightness,
     lawSupport: lawSupportFromBias(budget?.unionLawBias),
   };
 }

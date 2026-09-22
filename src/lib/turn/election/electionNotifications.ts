@@ -1,8 +1,8 @@
 import type { Db } from "mongodb";
 import {
   HOUSE_SEATS,
-  TOTAL_JP_SHUGIIN_SEATS,
-  TOTAL_JP_SANGIIN_SEATS,
+  getTotalJpShugiinSeats,
+  getTotalJpSangiinSeats,
   TOTAL_DE_BUNDESTAG_SEATS,
 } from "@/lib/constants";
 import { getTotalUkCommonsSeats } from "@/lib/constants/states";
@@ -85,16 +85,19 @@ export async function sendBatchedElectionResults(
   // Seat totals for chart-eligible national chambers (no regionalCouncil or
   // landtag — sub-national, charted per Land would be noisy). snap_* variants
   // use the same chamber totals as their regular counterparts since a snap
-  // election fills the same chamber. Commons is era-sized (625 in 1953).
-  const ukCommonsTotal = getTotalUkCommonsSeats(await getGameStatePreset(db));
+  // election fills the same chamber. Commons is era-sized (625 in 1953, 650 in
+  // 1991), and so is the Diet (512/252 before the 1994 reform).
+  const preset = await getGameStatePreset(db);
+  const ukCommonsTotal = getTotalUkCommonsSeats(preset);
+  const jpShugiinTotal = getTotalJpShugiinSeats(preset);
   const chartSeatTotals: Record<string, number> = {
     house: HOUSE_SEATS ? Object.values(HOUSE_SEATS).reduce((a, b) => a + b, 0) : 435,
     senate: 100,
     commons: ukCommonsTotal,
     snap_commons: ukCommonsTotal,
-    shugiin: TOTAL_JP_SHUGIIN_SEATS,
-    snap_shugiin: TOTAL_JP_SHUGIIN_SEATS,
-    sangiin: TOTAL_JP_SANGIIN_SEATS,
+    shugiin: jpShugiinTotal,
+    snap_shugiin: jpShugiinTotal,
+    sangiin: getTotalJpSangiinSeats(preset),
     bundestag: TOTAL_DE_BUNDESTAG_SEATS,
     snap_bundestag: TOTAL_DE_BUNDESTAG_SEATS,
   };

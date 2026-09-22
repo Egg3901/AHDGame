@@ -13,7 +13,6 @@ import type { CountryId } from "@/lib/constants/countries";
 import { COUNTRY_CURRENCY_MAP, type CurrencyCode } from "@/lib/constants/currencies";
 import { getBankId } from "@/lib/centralBank/helpers";
 import { getNationalBudgetId } from "@/lib/bonds/sovereign";
-import { deriveFiscalState } from "@/lib/budget/treasuryBalance";
 import { accountId } from "@/lib/ledger/accounts";
 import { emitLedgerEntries } from "@/lib/ledger/emit";
 import { isLedgerShadowEnabledFromConfig } from "@/lib/ledger/featureFlag";
@@ -116,17 +115,12 @@ export async function executeMonetaryOperation(
     const budgets = db.collection<FederalBudget>("federalBudget");
     const budget = await budgets.findOne({ _id: budgetId } as { _id: "federal" });
     if (!budget) throw new Error("Federal budget not found");
-    const before = budget.treasuryBalance ?? -(budget.debt?.principal ?? 0);
+    // Cash-only credit: newly created central-bank money lands in the treasury.
+    // `debt.principal` belongs to the sovereign bond ledger (see
+    // bonds/sovereignPrincipal.ts) and is never re-derived from the balance
+    // here: a cash advance is not a bond issuance or redemption (#1975).
+    const before = budget.treasuryBalance ?? 0;
     const after = before + amount;
-    const derived = deriveFiscalState({
-      treasuryBalance: after,
-      gdp: budget.gdp ?? 0,
-      gdpSmoothed: budget.gdpSmoothed,
-      ceiling: budget.debt?.ceiling ?? 0,
-      investorConfidence: budget.investorConfidence,
-      imfBailoutActive: budget.imfSovereignBailoutActive,
-      sovereignRiskAnchor: budget.sovereignRiskAnchor,
-    });
     const updated = await budgets.updateOne(
       { _id: budgetId, treasuryBalance: budget.treasuryBalance } as {
         _id: "federal";
@@ -135,10 +129,6 @@ export async function executeMonetaryOperation(
       {
         $set: {
           treasuryBalance: after,
-          "debt.principal": derived.principal,
-          "debt.interestRate": derived.interestRate,
-          debtToGdpRatio: derived.debtToGdpRatio,
-          creditRating: derived.creditRating,
           updatedAt: now,
         },
       }

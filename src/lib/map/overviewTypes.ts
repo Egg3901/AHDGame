@@ -20,6 +20,7 @@ export interface MapSectorSpecializationState {
 }
 
 export interface MapOverviewResponse {
+  officeholders?: Record<string, import("./officeholderService").MapOfficeholder[]>;
   partyOrg: Record<string, MapPartyOrgState>;
   senate: Record<string, MapSenateState>;
   house: Record<string, MapHouseState>;
@@ -38,6 +39,8 @@ export interface MapOverviewResponse {
    *  fewer in an earlier/fewer-state era). The map's Presidential panel derives
    *  the "to win" threshold from this instead of a hardcoded 538/270. */
   totalElectoralVotes?: number;
+  /** Current apportionment, independent of election results. Includes DC when eligible. */
+  electoralVotesByState?: Record<string, number>;
   sectorSpecializations?: Record<string, MapSectorSpecializationState>;
   /** Live region roster (id/name/seats/grouping) for the country's owned states. */
   regions?: MapRegionRosterEntry[];

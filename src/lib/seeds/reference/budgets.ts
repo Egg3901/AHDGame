@@ -37,7 +37,7 @@ import { COUNTRY_POLICY_CONFIGS_1999 } from "./basePolicies1999";
 import { COUNTRY_POLICY_CONFIGS_2007 } from "./basePolicies2007";
 import { COUNTRY_POLICY_CONFIGS_2023 } from "./basePolicies2023";
 import { legislationTypes } from "./legislationTypes";
-import { jpLegislationTypes } from "@/lib/seeds/jp/jpLegislationTypes";
+import { jpLegislationTypes } from "@/lib/countries/jp/data/jpLegislationTypes";
 import { deLegislationTypes } from "@/lib/seeds/de/deLegislationTypes";
 import { ieLegislationTypes } from "@/lib/seeds/ie/ieLegislationTypes";
 import { cnLegislationTypes } from "@/lib/seeds/cn/cnLegislationTypes";
@@ -116,47 +116,47 @@ import { getStateResourceCapacity, lookupStateResourceCapacity } from "./stateRe
  * the seed so a fresh world doesn't depend on the backfill migration ever
  * running.
  */
-const SOVEREIGN_CORP_LEGAL_STRUCTURE: Partial<Record<CountryId, LegalStructureId>> = {
-  US: "us_c_corp",
-  UK: "uk_plc",
-  JP: "jp_kk",
-  DE: "de_ag",
-  IE: "ie_plc",
-  BR: "br_sa_aberta",
-  CN: "cn_gufen",
-  NG: "ng_plc",
+export const SOVEREIGN_CORP_LEGAL_STRUCTURE: Partial<Record<CountryId, LegalStructureId>> = {
+  US: US_ECONOMY.sovereignCorpLegalStructure,
+  UK: UK_ECONOMY.sovereignCorpLegalStructure,
+  JP: JP_ECONOMY.sovereignCorpLegalStructure,
+  DE: DE_ECONOMY.sovereignCorpLegalStructure,
+  IE: IE_ECONOMY.sovereignCorpLegalStructure,
+  BR: BR_ECONOMY.sovereignCorpLegalStructure,
+  CN: CN_ECONOMY.sovereignCorpLegalStructure,
+  NG: NG_ECONOMY.sovereignCorpLegalStructure,
   // The USSR has no bespoke joint-stock legal form (Cold-War command economy);
   // the neutral fallback keeps corporationTurn able to process the RU state
   // enterprise. See GENERIC_LEGAL_STRUCTURE in constants/legalStructures.ts.
-  RU: "generic_corp",
+  RU: RU_ECONOMY.sovereignCorpLegalStructure,
   // Same reasoning as RU: a planned economy has no bespoke joint-stock form.
-  DD: "generic_corp",
+  DD: DD_ECONOMY.sovereignCorpLegalStructure,
   // Warsaw-Pact satellites (Command Economy v2 SOE stack, refs command-economy
   // seed-gap fix): none of these ran a bespoke joint-stock corporate form
   // either — same neutral fallback as RU/DD.
-  PL: "generic_corp",
-  HU: "generic_corp",
-  CS: "generic_corp",
-  BG: "generic_corp",
-  UKR: "generic_corp",
-  BLR: "generic_corp",
-  BAL: "generic_corp",
-  RO: "generic_corp",
+  PL: PL_ECONOMY.sovereignCorpLegalStructure,
+  HU: HU_ECONOMY.sovereignCorpLegalStructure,
+  CS: CS_ECONOMY.sovereignCorpLegalStructure,
+  BG: BG_ECONOMY.sovereignCorpLegalStructure,
+  UKR: UKR_ECONOMY.sovereignCorpLegalStructure,
+  BLR: BLR_ECONOMY.sovereignCorpLegalStructure,
+  BAL: BAL_ECONOMY.sovereignCorpLegalStructure,
+  RO: RO_ECONOMY.sovereignCorpLegalStructure,
   // Yugoslavia — command economy, no bespoke joint-stock form (see YU's SOE
   // note above on why it isn't grouped with the Warsaw-Pact five).
-  YU: "generic_corp",
+  YU: YU_ECONOMY.sovereignCorpLegalStructure,
   // Econ-tier market democracies (corporate-sector seed-gap fix): promoted
   // from the abstract sphere-macro tier to full-autonomous (seedEconTierRosters
   // #3253, seedManifest.ts) with no bespoke joint-stock legal form authored yet
   // — same neutral fallback used for every other country here without one.
-  FR: "generic_corp",
-  IT: "generic_corp",
-  ES: "generic_corp",
-  SE: "generic_corp",
-  TR: "generic_corp",
-  GR: "generic_corp",
-  AT: "generic_corp",
-  FI: "generic_corp",
+  FR: FR_ECONOMY.sovereignCorpLegalStructure,
+  IT: IT_ECONOMY.sovereignCorpLegalStructure,
+  ES: ES_ECONOMY.sovereignCorpLegalStructure,
+  SE: SE_ECONOMY.sovereignCorpLegalStructure,
+  TR: TR_ECONOMY.sovereignCorpLegalStructure,
+  GR: GR_ECONOMY.sovereignCorpLegalStructure,
+  AT: AT_ECONOMY.sovereignCorpLegalStructure,
+  FI: FI_ECONOMY.sovereignCorpLegalStructure,
 };
 
 const budgetLegislationTypes = [
@@ -220,6 +220,14 @@ interface NationalBudgetSeedConfig {
   budgetId: string;
   countryId: SupportedBudgetCountryId;
   fiscalYear: number;
+  /**
+   * Era the row's economic factors and fiscal calibration were authored for.
+   * Set by {@link overlayNationalBudgetConfigs} when a row is carried into a
+   * newer preset without an explicit override, so rewriting `fiscalYear` can
+   * never disguise stale factors as authored for the target era (#2076).
+   * Absent on explicitly authored rows, where it equals `fiscalYear`.
+   */
+  sourceFiscalYear?: number;
   population: number;
   gdp: number;
   currencyCode:
@@ -495,6 +503,38 @@ function derivePolicyRevenueLines(
  * pipeline is year-driven rather than 1953-gated.
  */
 import { POLITICAL_LEGISLATION_EXCLUDED_SCOPES as POLITICAL_LEGISLATION_OLD_SCOPES } from "@/lib/politicalMetrics/pipelinePreset";
+import { JP_ECONOMY } from "@/lib/countries/jp/economy";
+import {
+  JP_DEFAULT_REGIONAL_TAX_RATES,
+  JP_EXTRA_OVERRIDE_CATEGORIES,
+  JP_GRANT_MULTIPLIER,
+} from "@/lib/countries/jp/economy";
+import { US_ECONOMY } from "@/lib/countries/us/economy";
+import { UK_ECONOMY } from "@/lib/countries/uk/economy";
+import { DE_ECONOMY } from "@/lib/countries/de/economy";
+import { CN_ECONOMY } from "@/lib/countries/cn/economy";
+import { IE_ECONOMY } from "@/lib/countries/ie/economy";
+import { RU_ECONOMY } from "@/lib/countries/ru/economy";
+import { DD_ECONOMY } from "@/lib/countries/dd/economy";
+import { NG_ECONOMY } from "@/lib/countries/ng/economy";
+import { BR_ECONOMY } from "@/lib/countries/br/economy";
+import { FR_ECONOMY } from "@/lib/countries/fr/economy";
+import { IT_ECONOMY } from "@/lib/countries/it/economy";
+import { ES_ECONOMY } from "@/lib/countries/es/economy";
+import { SE_ECONOMY } from "@/lib/countries/se/economy";
+import { TR_ECONOMY } from "@/lib/countries/tr/economy";
+import { GR_ECONOMY } from "@/lib/countries/gr/economy";
+import { AT_ECONOMY } from "@/lib/countries/at/economy";
+import { FI_ECONOMY } from "@/lib/countries/fi/economy";
+import { PL_ECONOMY } from "@/lib/countries/pl/economy";
+import { HU_ECONOMY } from "@/lib/countries/hu/economy";
+import { RO_ECONOMY } from "@/lib/countries/ro/economy";
+import { YU_ECONOMY } from "@/lib/countries/yu/economy";
+import { BG_ECONOMY } from "@/lib/countries/bg/economy";
+import { CS_ECONOMY } from "@/lib/countries/cs/economy";
+import { BLR_ECONOMY } from "@/lib/countries/blr/economy";
+import { UKR_ECONOMY } from "@/lib/countries/ukr/economy";
+import { BAL_ECONOMY } from "@/lib/countries/bal/economy";
 
 /**
  * Authored historical fiscal baselines for 1953 (Korean War defense shares,
@@ -570,7 +610,7 @@ const BASELINE_OVERRIDE_CATEGORIES = ["defense", "healthcare", "health"] as cons
  */
 const EXTRA_OVERRIDE_CATEGORIES_BY_COUNTRY: Partial<Record<string, readonly string[]>> = {
   CN: ["infrastructure"],
-  JP: ["infrastructure", "social"],
+  JP: JP_EXTRA_OVERRIDE_CATEGORIES,
   DE: ["welfare", "transport", "education", "other"],
   BR: ["socialSecurity", "infrastructure", "education", "other"],
   AT: ["socialSecurity", "education", "infrastructure", "other"],
@@ -1584,6 +1624,422 @@ const NATIONAL_BUDGET_SEED_CONFIGS: NationalBudgetSeedConfig[] = [
       foreignCorporateTax: "ng_petroleum_profit_tax",
       payrollTax: "ng_paye",
       salesTax: "ng_vat_rate",
+    },
+  },
+  // ── 2019 western-market calibrations (#2076) ───────────────────────────────
+  // Before this block the 2019 preset inherited these eight countries from the
+  // 1991 bundle (ES/IT/FR/SE/TR) or the 1979 bundle (GR/AT/FI), with only
+  // fiscalYear rewritten: 1991/1979 inflation, wage, debt and spending inputs
+  // seeded turn one as if authored for 2019. Each row below is explicit for
+  // 2019. Method: game-unit GDP scales the country's latest authored row by
+  // the real USD-nominal GDP ratio 1991->2019 (GR/AT/FI: 1979->2019); spending
+  // composition and tax-base ratios carry over structurally; inflation, wage,
+  // growth, debt ratios, yields and ratings are 2019 anchors (Eurostat/IMF/
+  // World Bank 2019 actuals, rounded). Currency codes keep the game's legacy
+  // identity per country (EUR is DE-only), unchanged from the older rows.
+  // ── France FY2019 (Macron second-year budget, euros via FRF game units) ───
+  // 2019: inflation 1.1%, growth 1.8%, debt ~98% GDP, 10y ~0.1%, AA.
+  {
+    budgetId: "FR",
+    countryId: "FR",
+    fiscalYear: 2019,
+    population: 67_000_000,
+    gdp: 11_700_000_000_000,
+    currencyCode: "FRF",
+    economicFactors: {
+      gdpGrowth: 1.8,
+      wageGrowth: 1.7,
+      inflationRate: 1.1,
+      tradeGrowth: 1.5,
+      lastUpdated: new Date(),
+    },
+    taxBaseRatios: {
+      taxableIncome: 0.18,
+      corporateProfits: 0.1,
+      wagesAndSalaries: 0.5,
+      importValue: 0.2,
+      taxableSales: 0.52,
+    },
+    otherRevenue: 640_000_000_000,
+    debt: {
+      principal: 11_500_000_000_000,
+      interestRate: 0.005,
+      ceiling: 14_400_000_000_000,
+      ceilingLastRaisedYear: 2019,
+    },
+    creditRating: "AA",
+    baselineSpendingByCategory: {
+      socialSecurity: 2_200_000_000_000,
+      healthcare: 1_050_000_000_000,
+      education: 750_000_000_000,
+      defense: 370_000_000_000,
+      infrastructure: 290_000_000_000,
+      other: 440_000_000_000,
+    },
+    baselineStateGrants: 180_000_000_000,
+    policyDefaults: COUNTRY_POLICY_CONFIGS.fr.defaults,
+    policyOptionOverrides: COUNTRY_POLICY_CONFIGS.fr.optionIndexes,
+    taxPolicyIds: {
+      incomeTax: "fr_income_tax",
+      domesticCorporateTax: "fr_corporate_tax",
+      payrollTax: "fr_social_charges",
+      tariffs: "fr_customs_tariff",
+      salesTax: "fr_vat",
+    },
+  },
+  // ── Italy FY2019 (Conte I/II budget, lire game units) ─────────────────────
+  // 2019: near-stagnation (growth 0.5%), inflation 0.6%, debt ~134% GDP,
+  // 10y ~1.9%, BBB. Pension-heavy spend composition preserved from 1991.
+  {
+    budgetId: "IT",
+    countryId: "IT",
+    fiscalYear: 2019,
+    population: 60_400_000,
+    gdp: 1_670_000_000_000_000,
+    currencyCode: "ITL",
+    economicFactors: {
+      gdpGrowth: 0.5,
+      wageGrowth: 1.0,
+      inflationRate: 0.6,
+      tradeGrowth: 1.5,
+      lastUpdated: new Date(),
+    },
+    taxBaseRatios: {
+      taxableIncome: 0.16,
+      corporateProfits: 0.09,
+      wagesAndSalaries: 0.42,
+      importValue: 0.18,
+      taxableSales: 0.32,
+    },
+    otherRevenue: 105_000_000_000_000,
+    debt: {
+      principal: 2_240_000_000_000_000,
+      interestRate: 0.02,
+      ceiling: 2_800_000_000_000_000,
+      ceilingLastRaisedYear: 2019,
+    },
+    creditRating: "BBB",
+    baselineSpendingByCategory: {
+      socialSecurity: 276_000_000_000_000,
+      healthcare: 105_000_000_000_000,
+      education: 81_000_000_000_000,
+      defense: 32_000_000_000_000,
+      infrastructure: 73_000_000_000_000,
+      other: 73_000_000_000_000,
+    },
+    baselineStateGrants: 41_000_000_000_000,
+    policyDefaults: COUNTRY_POLICY_CONFIGS.it.defaults,
+    policyOptionOverrides: COUNTRY_POLICY_CONFIGS.it.optionIndexes,
+    taxPolicyIds: {
+      incomeTax: "it_income_tax",
+      domesticCorporateTax: "it_corporate_tax",
+      payrollTax: "it_social_charges",
+      tariffs: "it_customs_tariff",
+      salesTax: "it_vat",
+    },
+  },
+  // ── Spain FY2019 (Sanchez prorogued-budget year, peseta game units) ───────
+  // 2019: growth 2.0%, inflation 0.7%, debt ~95% GDP, 10y ~0.7%, A.
+  {
+    budgetId: "ES",
+    countryId: "ES",
+    fiscalYear: 2019,
+    population: 47_000_000,
+    gdp: 93_400_000_000_000,
+    currencyCode: "ESP",
+    economicFactors: {
+      gdpGrowth: 2.0,
+      wageGrowth: 2.0,
+      inflationRate: 0.7,
+      tradeGrowth: 2.0,
+      lastUpdated: new Date(),
+    },
+    taxBaseRatios: {
+      taxableIncome: 0.18,
+      corporateProfits: 0.1,
+      wagesAndSalaries: 0.4,
+      importValue: 0.18,
+      taxableSales: 0.55,
+    },
+    otherRevenue: 6_500_000_000_000,
+    debt: {
+      principal: 88_700_000_000_000,
+      interestRate: 0.01,
+      ceiling: 111_000_000_000_000,
+      ceilingLastRaisedYear: 2019,
+    },
+    creditRating: "A",
+    baselineSpendingByCategory: {
+      socialSecurity: 13_400_000_000_000,
+      healthcare: 5_800_000_000_000,
+      education: 4_300_000_000_000,
+      defense: 1_700_000_000_000,
+      infrastructure: 3_800_000_000_000,
+      other: 3_400_000_000_000,
+    },
+    baselineStateGrants: 2_600_000_000_000,
+    policyDefaults: COUNTRY_POLICY_CONFIGS.es.defaults,
+    policyOptionOverrides: COUNTRY_POLICY_CONFIGS.es.optionIndexes,
+    taxPolicyIds: {
+      incomeTax: "es_income_tax",
+      domesticCorporateTax: "es_corporate_tax",
+      payrollTax: "es_social_charges",
+      tariffs: "es_customs_tariff",
+      salesTax: "es_consumption_tax",
+    },
+  },
+  // ── Sweden FY2019 (Lofven January-Agreement budget, kronor) ───────────────
+  // 2019: growth 2.0%, CPIF inflation 1.7%, debt ~35% GDP, 10y ~0.1%, AAA.
+  {
+    budgetId: "SE",
+    countryId: "SE",
+    fiscalYear: 2019,
+    population: 10_300_000,
+    gdp: 2_300_000_000_000,
+    currencyCode: "SEK",
+    economicFactors: {
+      gdpGrowth: 2.0,
+      wageGrowth: 2.6,
+      inflationRate: 1.7,
+      tradeGrowth: 2.0,
+      lastUpdated: new Date(),
+    },
+    taxBaseRatios: {
+      taxableIncome: 0.44,
+      corporateProfits: 0.05,
+      wagesAndSalaries: 0.44,
+      importValue: 0.25,
+      taxableSales: 0.3,
+    },
+    otherRevenue: 125_000_000_000,
+    debt: {
+      principal: 800_000_000_000,
+      interestRate: 0.005,
+      ceiling: 1_000_000_000_000,
+      ceilingLastRaisedYear: 2019,
+    },
+    creditRating: "AAA",
+    baselineSpendingByCategory: {
+      socialSecurity: 420_000_000_000,
+      healthcare: 190_000_000_000,
+      education: 150_000_000_000,
+      defense: 60_000_000_000,
+      infrastructure: 90_000_000_000,
+      other: 110_000_000_000,
+    },
+    baselineStateGrants: 90_000_000_000,
+    policyDefaults: COUNTRY_POLICY_CONFIGS.se.defaults,
+    policyOptionOverrides: COUNTRY_POLICY_CONFIGS.se.optionIndexes,
+    taxPolicyIds: {
+      incomeTax: "se_income_tax",
+      domesticCorporateTax: "se_corporate_tax",
+      payrollTax: "se_social_charges",
+      tariffs: "se_customs_tariff",
+      salesTax: "se_vat",
+    },
+  },
+  // ── Turkey FY2019 (post-2018-crisis rebalancing budget, lira) ─────────────
+  // 2019: CPI inflation 15.2%, growth 0.9%, central debt ~33% GDP, high
+  // nominal rates ~15%, BB. Wage growth stays double-digit in nominal terms.
+  {
+    budgetId: "TR",
+    countryId: "TR",
+    fiscalYear: 2019,
+    population: 83_400_000,
+    gdp: 26_200_000_000_000,
+    currencyCode: "TRL",
+    economicFactors: {
+      gdpGrowth: 0.9,
+      wageGrowth: 18.0,
+      inflationRate: 15.2,
+      tradeGrowth: 4.0,
+      lastUpdated: new Date(),
+    },
+    taxBaseRatios: {
+      taxableIncome: 0.16,
+      corporateProfits: 0.05,
+      wagesAndSalaries: 0.24,
+      importValue: 0.12,
+      taxableSales: 0.35,
+    },
+    otherRevenue: 1_470_000_000_000,
+    debt: {
+      principal: 8_600_000_000_000,
+      interestRate: 0.15,
+      ceiling: 10_800_000_000_000,
+      ceilingLastRaisedYear: 2019,
+    },
+    creditRating: "BB",
+    baselineSpendingByCategory: {
+      defense: 990_000_000_000,
+      socialSecurity: 910_000_000_000,
+      education: 870_000_000_000,
+      healthcare: 420_000_000_000,
+      infrastructure: 910_000_000_000,
+      other: 460_000_000_000,
+    },
+    baselineStateGrants: 230_000_000_000,
+    policyDefaults: COUNTRY_POLICY_CONFIGS.tr.defaults,
+    policyOptionOverrides: COUNTRY_POLICY_CONFIGS.tr.optionIndexes,
+    taxPolicyIds: {
+      incomeTax: "tr_income_tax",
+      domesticCorporateTax: "tr_corporate_tax",
+      payrollTax: "tr_social_charges",
+      tariffs: "tr_customs_tariff",
+      salesTax: "tr_sales_tax",
+    },
+  },
+  // ── Greece FY2019 (post-bailout surveillance budget, drachma game units) ──
+  // 2019: growth 1.9%, inflation 0.5%, debt ~181% GDP, 10y ~1.5%, B.
+  // Sourced from the 1979 composition (no 1991 GR row was ever authored).
+  {
+    budgetId: "GR",
+    countryId: "GR",
+    fiscalYear: 2019,
+    population: 10_700_000,
+    gdp: 5_600_000_000_000,
+    currencyCode: "GRD",
+    economicFactors: {
+      gdpGrowth: 1.9,
+      wageGrowth: 1.5,
+      inflationRate: 0.5,
+      tradeGrowth: 3.0,
+      lastUpdated: new Date(),
+    },
+    taxBaseRatios: {
+      taxableIncome: 0.14,
+      corporateProfits: 0.06,
+      wagesAndSalaries: 0.26,
+      importValue: 0.16,
+      taxableSales: 0.38,
+    },
+    otherRevenue: 340_000_000_000,
+    debt: {
+      principal: 10_100_000_000_000,
+      interestRate: 0.015,
+      ceiling: 12_600_000_000_000,
+      ceilingLastRaisedYear: 2019,
+    },
+    creditRating: "B",
+    baselineSpendingByCategory: {
+      defense: 340_000_000_000,
+      socialSecurity: 390_000_000_000,
+      education: 220_000_000_000,
+      healthcare: 210_000_000_000,
+      infrastructure: 280_000_000_000,
+      other: 220_000_000_000,
+    },
+    baselineStateGrants: 170_000_000_000,
+    policyDefaults: COUNTRY_POLICY_CONFIGS.gr.defaults,
+    policyOptionOverrides: COUNTRY_POLICY_CONFIGS.gr.optionIndexes,
+    taxPolicyIds: {
+      incomeTax: "gr_income_tax",
+      domesticCorporateTax: "gr_corporate_tax",
+      payrollTax: "gr_social_charges",
+      tariffs: "gr_customs_tariff",
+      salesTax: "gr_sales_tax",
+    },
+  },
+  // ── Austria FY2019 (Kurz/Bierlein consolidation budget, schilling) ────────
+  // 2019: growth 1.6%, inflation 1.5%, debt ~71% GDP, 10y ~0.1%, AA.
+  // Sourced from the 1979 composition (no 1991 AT row was ever authored).
+  {
+    budgetId: "AT",
+    countryId: "AT",
+    fiscalYear: 2019,
+    population: 8_900_000,
+    gdp: 5_300_000_000_000,
+    currencyCode: "ATS",
+    economicFactors: {
+      gdpGrowth: 1.6,
+      wageGrowth: 2.2,
+      inflationRate: 1.5,
+      tradeGrowth: 2.0,
+      lastUpdated: new Date(),
+    },
+    taxBaseRatios: {
+      taxableIncome: 0.34,
+      corporateProfits: 0.08,
+      wagesAndSalaries: 0.44,
+      importValue: 0.28,
+      taxableSales: 0.48,
+    },
+    otherRevenue: 230_000_000_000,
+    debt: {
+      principal: 3_800_000_000_000,
+      interestRate: 0.005,
+      ceiling: 4_800_000_000_000,
+      ceilingLastRaisedYear: 2019,
+    },
+    creditRating: "AA",
+    baselineSpendingByCategory: {
+      defense: 63_000_000_000,
+      socialSecurity: 550_000_000_000,
+      education: 290_000_000_000,
+      healthcare: 260_000_000_000,
+      infrastructure: 320_000_000_000,
+      other: 260_000_000_000,
+    },
+    baselineStateGrants: 230_000_000_000,
+    policyDefaults: COUNTRY_POLICY_CONFIGS.at.defaults,
+    policyOptionOverrides: COUNTRY_POLICY_CONFIGS.at.optionIndexes,
+    taxPolicyIds: {
+      incomeTax: "at_income_tax",
+      domesticCorporateTax: "at_corporate_tax",
+      payrollTax: "at_social_charges",
+      tariffs: "at_customs_tariff",
+      salesTax: "at_sales_tax",
+    },
+  },
+  // ── Finland FY2019 (Rinne surplus-target budget, markka) ──────────────────
+  // 2019: growth 1.4%, inflation 1.1%, debt ~59% GDP, 10y ~0.1%, AA.
+  // Sourced from the 1979 composition (no 1991 FI row was ever authored).
+  {
+    budgetId: "FI",
+    countryId: "FI",
+    fiscalYear: 2019,
+    population: 5_500_000,
+    gdp: 1_000_000_000_000,
+    currencyCode: "FIM",
+    economicFactors: {
+      gdpGrowth: 1.4,
+      wageGrowth: 2.1,
+      inflationRate: 1.1,
+      tradeGrowth: 2.0,
+      lastUpdated: new Date(),
+    },
+    taxBaseRatios: {
+      taxableIncome: 0.36,
+      corporateProfits: 0.07,
+      wagesAndSalaries: 0.46,
+      importValue: 0.26,
+      taxableSales: 0.44,
+    },
+    otherRevenue: 56_000_000_000,
+    debt: {
+      principal: 590_000_000_000,
+      interestRate: 0.005,
+      ceiling: 740_000_000_000,
+      ceilingLastRaisedYear: 2019,
+    },
+    creditRating: "AA",
+    baselineSpendingByCategory: {
+      defense: 15_000_000_000,
+      socialSecurity: 106_000_000_000,
+      education: 63_000_000_000,
+      healthcare: 50_000_000_000,
+      infrastructure: 56_000_000_000,
+      other: 50_000_000_000,
+    },
+    baselineStateGrants: 50_000_000_000,
+    policyDefaults: COUNTRY_POLICY_CONFIGS.fi.defaults,
+    policyOptionOverrides: COUNTRY_POLICY_CONFIGS.fi.optionIndexes,
+    taxPolicyIds: {
+      incomeTax: "fi_income_tax",
+      domesticCorporateTax: "fi_corporate_tax",
+      payrollTax: "fi_social_charges",
+      tariffs: "fi_customs_tariff",
+      salesTax: "fi_sales_tax",
     },
   },
 ];
@@ -5027,7 +5483,13 @@ export function getNationalBudgetSeedConfigsForPreset(preset: string): NationalB
       NATIONAL_BUDGET_SEED_CONFIGS_1991,
       NATIONAL_BUDGET_SEED_CONFIGS_1979.filter((config) =>
         (["AT", "FI", "GR"] as string[]).includes(config.countryId)
-      ).map((config) => ({ ...config, fiscalYear: 1991 })),
+      ).map((config) => ({
+        ...config,
+        fiscalYear: 1991,
+        // Documented fallback (#2076): no 1991-authored row exists for these
+        // countries, so the 1979 calibration carries forward visibly tagged.
+        sourceFiscalYear: config.sourceFiscalYear ?? config.fiscalYear,
+      })),
       1991
     );
   }
@@ -5076,13 +5538,58 @@ function overlayNationalBudgetConfigs(
   inheritedFiscalYear?: number
 ): NationalBudgetSeedConfig[] {
   const overrideByCountry = new Map(overrides.map((config) => [config.countryId, config]));
-  const inherited = base.map(
-    (config) =>
-      overrideByCountry.get(config.countryId) ??
-      (inheritedFiscalYear === undefined ? config : { ...config, fiscalYear: inheritedFiscalYear })
-  );
+  const inherited = base.map((config) => {
+    const override = overrideByCountry.get(config.countryId);
+    if (override) return override;
+    if (inheritedFiscalYear === undefined) return config;
+    // Tag the source era (#2076): the rewritten fiscalYear says which world
+    // the row seeds, sourceFiscalYear says which era authored its factors.
+    return {
+      ...config,
+      fiscalYear: inheritedFiscalYear,
+      sourceFiscalYear: config.sourceFiscalYear ?? config.fiscalYear,
+    };
+  });
   const baseCountries = new Set(base.map((config) => config.countryId));
   return [...inherited, ...overrides.filter((config) => !baseCountries.has(config.countryId))];
+}
+
+export interface NationalBudgetSeedProvenance {
+  countryId: string;
+  budgetId: string;
+  /** Effective year in this preset (the world's fiscal year). */
+  fiscalYear: number;
+  /** Era the row's factors were authored for. Equals fiscalYear when explicit. */
+  sourceFiscalYear: number;
+  /** True when the row carries another era's calibration into this preset. */
+  inherited: boolean;
+}
+
+/**
+ * Per-country provenance for a preset's budget roster. Conformance surface
+ * for #2076: every cross-era inheritance is observable with source and
+ * target era instead of hidden behind a rewritten fiscalYear.
+ */
+export function getNationalBudgetSeedProvenance(preset: string): NationalBudgetSeedProvenance[] {
+  return getNationalBudgetSeedConfigsForPreset(preset).map((config) => {
+    const sourceFiscalYear = config.sourceFiscalYear ?? config.fiscalYear;
+    return {
+      countryId: config.countryId,
+      budgetId: config.budgetId,
+      fiscalYear: config.fiscalYear,
+      sourceFiscalYear,
+      inherited: sourceFiscalYear !== config.fiscalYear,
+    };
+  });
+}
+
+/**
+ * Cross-era rows only: each entry names the country, the era that authored
+ * its factors, and the preset era it seeds. Empty means every country in the
+ * preset carries an explicit era-appropriate calibration.
+ */
+export function reportCrossEraBudgetInheritance(preset: string): NationalBudgetSeedProvenance[] {
+  return getNationalBudgetSeedProvenance(preset).filter((row) => row.inherited);
 }
 
 /**
@@ -6405,13 +6912,7 @@ export function generateStateBudgets(
         foreignCorporateTax: 1,
         propertyTax: 1.6,
       },
-      JP: {
-        incomeTax: 0,
-        salesTax: 0,
-        domesticCorporateTax: 1.5,
-        foreignCorporateTax: 1.5,
-        propertyTax: 1.4,
-      },
+      JP: JP_DEFAULT_REGIONAL_TAX_RATES,
       DE: {
         incomeTax: 0,
         salesTax: 0,
@@ -6448,7 +6949,7 @@ export function generateStateBudgets(
     const GRANT_MULTIPLIERS: Record<string, number> = {
       US: 0.012,
       UK: 0.022,
-      JP: 0.018,
+      JP: JP_GRANT_MULTIPLIER,
       DE: 0.02,
       IE: 0.022, // similar to UK — centralised parliamentary transfers
       BR: 0.015, // federal transfers to states

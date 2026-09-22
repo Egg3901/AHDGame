@@ -162,14 +162,17 @@ export function buildApportionment(
 }
 
 /**
- * Load the live apportionment from the DB: reads US states' `houseDistricts` and
- * builds the seats/EV/units (seed fallback). Async wrapper over `buildApportionment`
- * for consumers without states already in hand.
+ * Load apportionment from the DB: normally reads US states' live
+ * `houseDistricts`, but an explicit historical seat map can replace those
+ * mutable values while the state docs still supply admission dates. Async
+ * wrapper over `buildApportionment` for consumers without states already in
+ * hand.
  */
 export async function loadApportionment(
   db: import("mongodb").Db,
   preset: string | undefined,
-  year?: number | null
+  year?: number | null,
+  houseSeatsOverride?: Readonly<Record<string, number>>
 ): Promise<Apportionment> {
   const usStates = (await db
     .collection("states")
@@ -179,9 +182,11 @@ export async function loadApportionment(
     houseDistricts?: number;
     admittedYear?: number;
   }>;
-  const live: Record<string, number> = {};
-  for (const s of usStates) {
-    if (typeof s.houseDistricts === "number") live[s._id] = s.houseDistricts;
+  const live: Record<string, number> = houseSeatsOverride ? { ...houseSeatsOverride } : {};
+  if (!houseSeatsOverride) {
+    for (const s of usStates) {
+      if (typeof s.houseDistricts === "number") live[s._id] = s.houseDistricts;
+    }
   }
   // A future-dated admission must not count yet — the year gate is what keeps
   // this consistent with the DC/ME-NE gates above.

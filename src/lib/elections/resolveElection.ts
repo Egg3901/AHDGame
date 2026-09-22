@@ -42,6 +42,11 @@ import type {
 } from "./electionResponseTypes";
 import { _enrichElection, fetchDepsForElection } from "./enrichElection";
 import { buildActiveVisibleNppEndorsementFilter } from "@/lib/nppEndorsements";
+import {
+  ELECTION_SUMMARY_CHARACTER_PROJECTION,
+  ELECTION_SUMMARY_GAME_STATE_PROJECTION,
+  ELECTION_SUMMARY_NPP_PROJECTION,
+} from "./electionSummaryProjections";
 
 export type {
   PollingData,
@@ -130,9 +135,15 @@ export async function resolveElection(
 
   if (!election) return null;
 
-  // Fetch game state and game time in parallel with election deps
+  // Fetch game state and game time in parallel with election deps.
+  // Summary views only consume preset/currentYear/redistrictingEnabled, so
+  // project the read (#2168); full view keeps the whole document.
   const [gameState, gameTime, deps] = await Promise.all([
-    db.collection<GameState>("gameState").findOne({ _id: "current" }),
+    isFull
+      ? db.collection<GameState>("gameState").findOne({ _id: "current" })
+      : db
+          .collection<GameState>("gameState")
+          .findOne({ _id: "current" }, { projection: ELECTION_SUMMARY_GAME_STATE_PROJECTION }),
     getGameTime(),
     fetchDepsForElection(db, election, options.view),
   ]);
@@ -247,18 +258,28 @@ export async function resolveElections(
     incumbentCharsRaw,
     incumbentNPPsRaw,
   ] = await Promise.all([
-    db.collection<GameState>("gameState").findOne({ _id: "current" }),
+    isFull
+      ? db.collection<GameState>("gameState").findOne({ _id: "current" })
+      : db
+          .collection<GameState>("gameState")
+          .findOne({ _id: "current" }, { projection: ELECTION_SUMMARY_GAME_STATE_PROJECTION }),
     getGameTime(),
     allCharIds.length > 0
       ? db
           .collection<Character>("characters")
-          .find({ _id: { $in: allCharIds } })
+          .find(
+            { _id: { $in: allCharIds } },
+            isFull ? undefined : { projection: ELECTION_SUMMARY_CHARACTER_PROJECTION }
+          )
           .toArray()
       : Promise.resolve([] as Character[]),
     allNppIds.length > 0
       ? db
           .collection<NPP>("npps")
-          .find({ _id: { $in: allNppIds } })
+          .find(
+            { _id: { $in: allNppIds } },
+            isFull ? undefined : { projection: ELECTION_SUMMARY_NPP_PROJECTION }
+          )
           .toArray()
       : Promise.resolve([] as NPP[]),
     db

@@ -220,12 +220,12 @@ describe("debt module", () => {
 
       const result = await processAnnualDebt(mockDb, federalBudget, 5000000);
 
-      expect(result.newPrincipal).toBe(1000000); // derived from balance, unchanged by the deficit
+      expect(result.newPrincipal).toBe(1000000); // bond-owned stock, unchanged by the deficit
     });
 
-    it("derives principal from a negative treasury balance", async () => {
+    it("passes the bond-owned stock through untouched by a negative treasury balance", async () => {
       const federalBudget = {
-        debt: { principal: 0, interestRate: 0.03, ceiling: 2000000 },
+        debt: { principal: 400000, interestRate: 0.03, ceiling: 2000000 },
         spending: { total: 400000 },
         revenue: { total: 500000 },
         treasuryBalance: -250000,
@@ -233,12 +233,14 @@ describe("debt module", () => {
 
       const result = await processAnnualDebt(mockDb, federalBudget, 5000000);
 
-      expect(result.newPrincipal).toBe(250000);
+      // Cash and debt are separate positions (refs #1975): the balance never
+      // re-derives the stock, so the stored bond-ledger value passes through.
+      expect(result.newPrincipal).toBe(400000);
     });
 
-    it("treats a positive treasury balance as zero debt", async () => {
+    it("leaves a positive treasury balance and an empty bond stock exactly as read", async () => {
       const federalBudget = {
-        debt: { principal: 100000, interestRate: 0.03, ceiling: 200000 },
+        debt: { principal: 0, interestRate: 0.03, ceiling: 200000 },
         spending: { total: 100000 },
         revenue: { total: 500000 },
         treasuryBalance: 750000,
@@ -287,7 +289,7 @@ describe("debt module", () => {
 
       const result = await processAnnualDebt(mockDb, federalBudget, 5000000);
 
-      // Derived principal: 900000, ratio: 0.18 -> AAA
+      // Bond-owned stock: 900000, ratio: 0.18 -> AAA
       expect(result.creditRating).toBe("AAA");
     });
 

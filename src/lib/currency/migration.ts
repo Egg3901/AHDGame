@@ -12,6 +12,7 @@ import {
 import type { CountryId } from "@/lib/constants/countries";
 import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
 import { getBankId } from "@/lib/centralBank/helpers";
+import { getPresetMonetaryScope } from "@/lib/monetaryPolicy/presetMonetaryScope";
 
 const BATCH_SIZE = 500;
 
@@ -153,20 +154,22 @@ export async function seedExchangeRates(db: Db, preset: string): Promise<void> {
 // ── Central bank updates ────────────────────────────────────────────────────────
 
 /**
- * Ensure all forex-active central bank documents exist and have the required
- * forexRevenue / tradeGrowth fields. Safe to run multiple times — upsert is
- * idempotent; $setOnInsert only fires on document creation so existing
- * accumulated forexRevenue on US/UK/JP is not wiped on re-runs.
+ * Ensure every preset-scoped central bank exists and has the required
+ * forexRevenue / tradeGrowth fields. A tradable currency alone does not imply
+ * a modelled central bank: countries without authored fiscal coverage remain
+ * in exchangeRates but are removed here. Safe to run multiple times; upsert is
+ * idempotent and $setOnInsert preserves accumulated state on existing banks.
  *
  * Previously this hardcoded ["US","UK","JP"] and omitted DE, which caused EUR
  * spread fees to be silently dropped (updateOne no-ops when the document is absent).
  */
-export async function updateCentralBanks(db: Db): Promise<void> {
+export async function updateCentralBanks(db: Db, preset: string): Promise<void> {
   const now = new Date();
+  const scope = getPresetMonetaryScope(preset);
   // centralBanks uses string _id, resolved via getBankId so shared banks (e.g.
   // ECB for DE) map to the canonical document instead of per-country dupes.
   await db.collection("centralBanks").bulkWrite(
-    FOREX_ACTIVE_COUNTRIES.map((countryId) => {
+    scope.centralBankCountries.map((countryId) => {
       const bankId = getBankId(countryId);
       return {
         updateOne: {
@@ -198,6 +201,20 @@ export async function updateCentralBanks(db: Db): Promise<void> {
       };
     })
   );
+
+  const includedBankIds = new Set(scope.centralBankCountries.map(getBankId));
+  const excludedBankIds = [
+    ...new Set(
+      scope.exclusions
+        .map(({ countryId }) => getBankId(countryId))
+        .filter((bankId) => !includedBankIds.has(bankId))
+    ),
+  ];
+  if (excludedBankIds.length > 0) {
+    await db.collection<{ _id: string }>("centralBanks").deleteMany({
+      _id: { $in: excludedBankIds },
+    });
+  }
 }
 
 // ── Corporation balance migration ───────────────────────────────────────────────

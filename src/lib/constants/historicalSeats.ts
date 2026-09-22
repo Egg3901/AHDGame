@@ -14,6 +14,8 @@
 
 import type { CountryId } from "./countries";
 import { recordPresetFallback } from "@/lib/seeds/presetSelector";
+import { tierFor, type ShippingPreset } from "@/lib/world/eraRoster";
+import { COUNTRY_ORDER } from "./countries";
 import { US_HOUSE_2027 } from "@/lib/seeds/reference/usHouse2027";
 import { US_SENATE_2027 } from "@/lib/seeds/reference/usSenate2027";
 import {
@@ -64,7 +66,13 @@ export interface HistoricalSeat {
 }
 
 // ─── US February 2020: 116th Congress ────────────────────────────────────────
-// House: 232 Democrats, 197 Republicans, 1 Independent (MI), 5 Vacant
+// House: 232 Democrats, 197 Republicans, 1 Independent (MI), 5 Vacant = 435
+//   The five vacancies are CA-25, MD-07, NY-27, TX-04 and WI-07, and they are
+//   NOT seated: the rows below sum to the 430 OCCUPIED seats, and the roster
+//   declares `vacantSeats: { "US.house": 5 }` so S4 can check 430 + 5 == 435.
+//   Seating them would invent five members who did not exist; seating only 430
+//   without declaring the gap would be indistinguishable from a truncated
+//   roster.
 // Senate: 53 Republicans, 45 Democrats, 2 Independents (VT, ME)
 // Governors: 26 Republicans, 24 Democrats
 //
@@ -81,7 +89,8 @@ export const US_HOUSE_2020: HistoricalSeat[] = [
   { state: "AZ", officeType: "house", party: "republican", seatsHeld: 4 },
   // Arkansas: 1 GOP NPP (4 seats)
   { state: "AR", officeType: "house", party: "republican", seatsHeld: 4 },
-  // California: 1 Dem NPP (45 seats), 1 GOP NPP (7 seats)
+  // California: 1 Dem NPP (45 seats), 1 GOP NPP (7 seats). CA-25 sits VACANT in
+  // February 2020, so this is 52 of the state's 53 seats.
   { state: "CA", officeType: "house", party: "democrat", seatsHeld: 45 },
   { state: "CA", officeType: "house", party: "republican", seatsHeld: 7 },
   // Colorado: 1 Dem NPP (4 seats), 1 GOP NPP (3 seats)
@@ -107,9 +116,12 @@ export const US_HOUSE_2020: HistoricalSeat[] = [
   // Indiana: 1 GOP NPP (7 seats), 1 Dem NPP (2 seats)
   { state: "IN", officeType: "house", party: "republican", seatsHeld: 7 },
   { state: "IN", officeType: "house", party: "democrat", seatsHeld: 2 },
-  // Iowa: 1 GOP NPP (3 seats), 1 Dem NPP (1 seat)
-  { state: "IA", officeType: "house", party: "republican", seatsHeld: 3 },
-  { state: "IA", officeType: "house", party: "democrat", seatsHeld: 1 },
+  // Iowa: 1 Dem NPP (3 seats), 1 GOP NPP (1 seat). The 2018 election returned
+  // Finkenauer, Loebsack and Axne for the Democrats against one Republican in
+  // IA-04; this delegation was recorded the wrong way round, which is where the
+  // national split's two-seat error came from.
+  { state: "IA", officeType: "house", party: "democrat", seatsHeld: 3 },
+  { state: "IA", officeType: "house", party: "republican", seatsHeld: 1 },
   // Kansas: 1 GOP NPP (3 seats), 1 Dem NPP (1 seat)
   { state: "KS", officeType: "house", party: "republican", seatsHeld: 3 },
   { state: "KS", officeType: "house", party: "democrat", seatsHeld: 1 },
@@ -121,8 +133,10 @@ export const US_HOUSE_2020: HistoricalSeat[] = [
   { state: "LA", officeType: "house", party: "democrat", seatsHeld: 1 },
   // Maine: 1 Dem NPP (2 seats)
   { state: "ME", officeType: "house", party: "democrat", seatsHeld: 2 },
-  // Maryland: 1 Dem NPP (7 seats), 1 GOP NPP (1 seat)
-  { state: "MD", officeType: "house", party: "democrat", seatsHeld: 7 },
+  // Maryland: 1 Dem NPP (6 seats), 1 GOP NPP (1 seat). MD-07 sits VACANT in
+  // February 2020 - the seat fell vacant in October 2019 and was not filled
+  // until the April 2020 special election.
+  { state: "MD", officeType: "house", party: "democrat", seatsHeld: 6 },
   { state: "MD", officeType: "house", party: "republican", seatsHeld: 1 },
   // Massachusetts: 1 Dem NPP (9 seats)
   { state: "MA", officeType: "house", party: "democrat", seatsHeld: 9 },
@@ -153,11 +167,14 @@ export const US_HOUSE_2020: HistoricalSeat[] = [
   { state: "NJ", officeType: "house", party: "republican", seatsHeld: 2 },
   // New Mexico: 1 Dem NPP (3 seats)
   { state: "NM", officeType: "house", party: "democrat", seatsHeld: 3 },
-  // New York: 1 Dem NPP (21 seats), 1 GOP NPP (6 seats)
+  // New York: 1 Dem NPP (21 seats), 1 GOP NPP (5 seats). NY-27 sits VACANT in
+  // February 2020, the seat having fallen vacant in October 2019.
   { state: "NY", officeType: "house", party: "democrat", seatsHeld: 21 },
-  { state: "NY", officeType: "house", party: "republican", seatsHeld: 6 },
-  // North Carolina: 1 GOP NPP (9 seats), 1 Dem NPP (3 seats) - 1 vacancy not filled
-  { state: "NC", officeType: "house", party: "republican", seatsHeld: 9 },
+  { state: "NY", officeType: "house", party: "republican", seatsHeld: 5 },
+  // North Carolina: 1 GOP NPP (10 seats), 1 Dem NPP (3 seats) = the full 13.
+  // Both 2019 vacancies (NC-03 and NC-09) were filled at the September 2019
+  // special elections, so nothing here is vacant by February 2020.
+  { state: "NC", officeType: "house", party: "republican", seatsHeld: 10 },
   { state: "NC", officeType: "house", party: "democrat", seatsHeld: 3 },
   // North Dakota: 1 GOP NPP (1 seat)
   { state: "ND", officeType: "house", party: "republican", seatsHeld: 1 },
@@ -183,8 +200,9 @@ export const US_HOUSE_2020: HistoricalSeat[] = [
   // Tennessee: 1 GOP NPP (7 seats), 1 Dem NPP (2 seats)
   { state: "TN", officeType: "house", party: "republican", seatsHeld: 7 },
   { state: "TN", officeType: "house", party: "democrat", seatsHeld: 2 },
-  // Texas: 1 GOP NPP (23 seats), 1 Dem NPP (13 seats)
-  { state: "TX", officeType: "house", party: "republican", seatsHeld: 23 },
+  // Texas: 1 GOP NPP (22 seats), 1 Dem NPP (13 seats). TX-04 sits VACANT in
+  // February 2020, the seat having fallen vacant that January.
+  { state: "TX", officeType: "house", party: "republican", seatsHeld: 22 },
   { state: "TX", officeType: "house", party: "democrat", seatsHeld: 13 },
   // Utah: 1 GOP NPP (3 seats), 1 Dem NPP (1 seat)
   { state: "UT", officeType: "house", party: "republican", seatsHeld: 3 },
@@ -199,8 +217,9 @@ export const US_HOUSE_2020: HistoricalSeat[] = [
   { state: "WA", officeType: "house", party: "republican", seatsHeld: 3 },
   // West Virginia: 1 GOP NPP (3 seats)
   { state: "WV", officeType: "house", party: "republican", seatsHeld: 3 },
-  // Wisconsin: 1 GOP NPP (5 seats), 1 Dem NPP (3 seats)
-  { state: "WI", officeType: "house", party: "republican", seatsHeld: 5 },
+  // Wisconsin: 1 GOP NPP (4 seats), 1 Dem NPP (3 seats). WI-07 sits VACANT in
+  // February 2020, the seat having fallen vacant in September 2019.
+  { state: "WI", officeType: "house", party: "republican", seatsHeld: 4 },
   { state: "WI", officeType: "house", party: "democrat", seatsHeld: 3 },
   // Wyoming: 1 GOP NPP (1 seat)
   { state: "WY", officeType: "house", party: "republican", seatsHeld: 1 },
@@ -844,61 +863,72 @@ export const US_GOVERNORS_1992: HistoricalSeat[] = [
 // Each Commons entry = ONE NPP holding all that party's seats in that region
 
 export const UK_COMMONS_2020: HistoricalSeat[] = [
-  // London (75 seats): Labour stronghold
-  // 1 Labour NPP (49 seats), 1 Conservative NPP (21 seats), 1 Lib Dem NPP (4 seats), 1 Green NPP (1 seat)
+  // The December 2019 general election, all 650 seats.
+  //
+  // Con 365, Lab 202, SNP 48, LD 11, DUP 8, SF 7, PC 4, SDLP 2, Green 1,
+  // Alliance 1, Speaker 1 = 650. Region totals are the real constituency counts
+  // and match ukRegions.houseDistricts exactly, so the seats, the chamber size
+  // and the districts that elect them all agree (S4).
+  //
+  // The Speaker sits for Chorley, in the NORTH WEST - not the South East, where
+  // the previous roster placed him alongside an independent that the 2019
+  // Parliament did not return.
+
+  // London (73)
   { state: "LON", officeType: "commons", party: "uk_labour", seatsHeld: 49 },
   { state: "LON", officeType: "commons", party: "uk_conservative", seatsHeld: 21 },
-  { state: "LON", officeType: "commons", party: "uk_libdem", seatsHeld: 4 },
-  { state: "LON", officeType: "commons", party: "uk_green", seatsHeld: 1 },
+  { state: "LON", officeType: "commons", party: "uk_libdem", seatsHeld: 3 },
 
-  // South East England (91 seats): Conservative stronghold
+  // South East England (84)
   { state: "SEE", officeType: "commons", party: "uk_conservative", seatsHeld: 74 },
   { state: "SEE", officeType: "commons", party: "uk_labour", seatsHeld: 8 },
-  { state: "SEE", officeType: "commons", party: "uk_libdem", seatsHeld: 4 },
-  { state: "SEE", officeType: "commons", party: "uk_speaker", seatsHeld: 1 },
-  { state: "SEE", officeType: "commons", party: "uk_independent", seatsHeld: 1 },
+  { state: "SEE", officeType: "commons", party: "uk_libdem", seatsHeld: 1 },
+  { state: "SEE", officeType: "commons", party: "uk_green", seatsHeld: 1 },
 
-  // South West England (58 seats): Conservative strong
+  // South West England (55)
   { state: "SWE", officeType: "commons", party: "uk_conservative", seatsHeld: 48 },
-  { state: "SWE", officeType: "commons", party: "uk_labour", seatsHeld: 4 },
-  { state: "SWE", officeType: "commons", party: "uk_libdem", seatsHeld: 3 },
+  { state: "SWE", officeType: "commons", party: "uk_labour", seatsHeld: 6 },
+  { state: "SWE", officeType: "commons", party: "uk_libdem", seatsHeld: 1 },
 
-  // East of England (61 seats): Conservative strong
+  // East of England (58)
   { state: "EAE", officeType: "commons", party: "uk_conservative", seatsHeld: 52 },
   { state: "EAE", officeType: "commons", party: "uk_labour", seatsHeld: 5 },
+  { state: "EAE", officeType: "commons", party: "uk_libdem", seatsHeld: 1 },
 
-  // East Midlands (47 seats): Conservative majority
+  // East Midlands (46)
   { state: "EMI", officeType: "commons", party: "uk_conservative", seatsHeld: 38 },
   { state: "EMI", officeType: "commons", party: "uk_labour", seatsHeld: 8 },
 
-  // West Midlands (57 seats): Conservative majority
-  { state: "WMI", officeType: "commons", party: "uk_conservative", seatsHeld: 41 },
-  { state: "WMI", officeType: "commons", party: "uk_labour", seatsHeld: 16 },
+  // West Midlands (59)
+  { state: "WMI", officeType: "commons", party: "uk_conservative", seatsHeld: 44 },
+  { state: "WMI", officeType: "commons", party: "uk_labour", seatsHeld: 15 },
 
-  // Yorkshire and the Humber (54 seats): Mixed
+  // Yorkshire and the Humber (54)
   { state: "YHU", officeType: "commons", party: "uk_conservative", seatsHeld: 26 },
   { state: "YHU", officeType: "commons", party: "uk_labour", seatsHeld: 28 },
 
-  // North West England (75 seats): Labour traditional but shifting
-  { state: "NWE", officeType: "commons", party: "uk_labour", seatsHeld: 43 },
+  // North West England (75), including the Speaker's seat at Chorley
+  { state: "NWE", officeType: "commons", party: "uk_labour", seatsHeld: 41 },
   { state: "NWE", officeType: "commons", party: "uk_conservative", seatsHeld: 32 },
+  { state: "NWE", officeType: "commons", party: "uk_libdem", seatsHeld: 1 },
+  { state: "NWE", officeType: "commons", party: "uk_speaker", seatsHeld: 1 },
 
-  // North East England (27 seats): Labour heartland
+  // North East England (29)
   { state: "NEE", officeType: "commons", party: "uk_labour", seatsHeld: 19 },
-  { state: "NEE", officeType: "commons", party: "uk_conservative", seatsHeld: 8 },
+  { state: "NEE", officeType: "commons", party: "uk_conservative", seatsHeld: 10 },
 
-  // Scotland (57 seats): SNP dominance
-  { state: "SCO", officeType: "commons", party: "uk_snp", seatsHeld: 47 },
+  // Scotland (59)
+  { state: "SCO", officeType: "commons", party: "uk_snp", seatsHeld: 48 },
   { state: "SCO", officeType: "commons", party: "uk_conservative", seatsHeld: 6 },
+  { state: "SCO", officeType: "commons", party: "uk_libdem", seatsHeld: 4 },
   { state: "SCO", officeType: "commons", party: "uk_labour", seatsHeld: 1 },
-  { state: "SCO", officeType: "commons", party: "uk_libdem", seatsHeld: 3 },
 
-  // Wales (32 seats): Labour traditional
+  // Wales (40)
   { state: "WAL", officeType: "commons", party: "uk_labour", seatsHeld: 22 },
-  { state: "WAL", officeType: "commons", party: "uk_conservative", seatsHeld: 6 },
+  { state: "WAL", officeType: "commons", party: "uk_conservative", seatsHeld: 14 },
   { state: "WAL", officeType: "commons", party: "uk_plaid", seatsHeld: 4 },
 
-  // Northern Ireland (18 seats): Regional parties
+  // Northern Ireland (18)
   { state: "NIR", officeType: "commons", party: "uk_dup", seatsHeld: 8 },
   { state: "NIR", officeType: "commons", party: "uk_sf", seatsHeld: 7 },
   { state: "NIR", officeType: "commons", party: "uk_sdlp", seatsHeld: 2 },
@@ -1162,58 +1192,91 @@ export const UK_FIRST_MINISTERS_2020: HistoricalSeat[] = [
 // Conservative 336, Labour 271, Lib Dem 20, SNP 3, Plaid 4,
 // DUP 3, UUP 9, SDLP 4, Alliance 1
 
-export const UK_COMMONS_1992: HistoricalSeat[] = [
-  { state: "LON", officeType: "commons", party: "uk_labour", seatsHeld: 35 },
-  { state: "LON", officeType: "commons", party: "uk_conservative", seatsHeld: 48 },
-  { state: "LON", officeType: "commons", party: "uk_libdem", seatsHeld: 1 },
+// ─── UK Commons — the parliament elected June 1987 ───────────────────────────
+//
+// ⚠️ THIS REPLACED A 1992 ROSTER, AND THAT WAS THE WHOLE BUG. `1991-default`
+// opens in JANUARY 1991, so the sitting Commons is the one elected in June 1987
+// on the 1983 boundaries. The preset previously seated the APRIL 1992 result —
+// a parliament fifteen months in the world's future, on boundaries that did not
+// exist yet — and then `CANONICAL_REAL_ELECTION_YEARS_BY_PRESET.ukCommons` sent
+// the world to the polls in 1992 for the election whose outcome it was already
+// holding. The US and Japan were never wrong this way: US_HOUSE_1992 is the
+// 102nd Congress (elected Nov 1990, seated Jan 1991) despite its name, and
+// Japan seats the Feb 1990 Shugiin and Jul 1989 Sangiin.
+//
+// 650 seats, not 651. The extra seat is the 1992 boundary review's.
+//
+// National totals are the real 1987 result: Con 376, Lab 229, Alliance 22,
+// UUP 9, DUP 3, SDLP 3, PC 3, SNP 3, UPUP 1, SF 1.
+//
+// ⚠️ THE ALLIANCE'S 22 SEATS ARE RECORDED AS `uk_libdem`. The SDP-Liberal
+// Alliance fought 1987 as two parties and merged into the Liberal Democrats in
+// March 1988, so by this world's January 1991 start those members sit as Lib
+// Dems — which is also the only one of the three that `ukParties.ts` makes
+// valid for this preset. Recording them as Alliance would fold all 22 to
+// "independent" through the seedHistorical resolver.
+//
+// Scotland (Lab 50, Con 10, Alliance 9, SNP 3), Wales (Lab 24, Con 8, PC 3,
+// Alliance 3) and Northern Ireland are the real regional results. England's
+// 358/155/10 is split across the nine English regions to match each region's
+// `houseDistricts` in `ukRegions1991`, whose per-region English split is itself
+// modelled rather than historical — see that file's header. The national
+// totals and the three non-English blocs are exact; the English regional
+// distribution is shaped to the real 1987 pattern (Conservative dominance
+// through the South and Midlands, Labour majorities in the North, the Alliance
+// concentrated in the South West) without claiming per-seat precision.
+export const UK_COMMONS_1987: HistoricalSeat[] = [
+  { state: "LON", officeType: "commons", party: "uk_conservative", seatsHeld: 56 },
+  { state: "LON", officeType: "commons", party: "uk_labour", seatsHeld: 23 },
+  { state: "LON", officeType: "commons", party: "uk_libdem", seatsHeld: 2 },
 
-  { state: "SEE", officeType: "commons", party: "uk_conservative", seatsHeld: 106 },
-  { state: "SEE", officeType: "commons", party: "uk_labour", seatsHeld: 3 },
+  { state: "SEE", officeType: "commons", party: "uk_conservative", seatsHeld: 84 },
+  { state: "SEE", officeType: "commons", party: "uk_labour", seatsHeld: 4 },
+  { state: "SEE", officeType: "commons", party: "uk_libdem", seatsHeld: 1 },
 
-  { state: "SWE", officeType: "commons", party: "uk_conservative", seatsHeld: 38 },
-  { state: "SWE", officeType: "commons", party: "uk_labour", seatsHeld: 4 },
-  { state: "SWE", officeType: "commons", party: "uk_libdem", seatsHeld: 6 },
+  { state: "SWE", officeType: "commons", party: "uk_conservative", seatsHeld: 44 },
+  { state: "SWE", officeType: "commons", party: "uk_labour", seatsHeld: 1 },
+  { state: "SWE", officeType: "commons", party: "uk_libdem", seatsHeld: 5 },
 
-  { state: "EAE", officeType: "commons", party: "uk_conservative", seatsHeld: 17 },
-  { state: "EAE", officeType: "commons", party: "uk_labour", seatsHeld: 3 },
+  { state: "EAE", officeType: "commons", party: "uk_conservative", seatsHeld: 48 },
+  { state: "EAE", officeType: "commons", party: "uk_labour", seatsHeld: 5 },
 
-  { state: "EMI", officeType: "commons", party: "uk_conservative", seatsHeld: 28 },
-  { state: "EMI", officeType: "commons", party: "uk_labour", seatsHeld: 14 },
+  { state: "EMI", officeType: "commons", party: "uk_conservative", seatsHeld: 31 },
+  { state: "EMI", officeType: "commons", party: "uk_labour", seatsHeld: 10 },
 
-  { state: "WMI", officeType: "commons", party: "uk_conservative", seatsHeld: 29 },
-  { state: "WMI", officeType: "commons", party: "uk_labour", seatsHeld: 29 },
+  { state: "WMI", officeType: "commons", party: "uk_conservative", seatsHeld: 36 },
+  { state: "WMI", officeType: "commons", party: "uk_labour", seatsHeld: 20 },
 
-  { state: "YHU", officeType: "commons", party: "uk_labour", seatsHeld: 34 },
+  { state: "YHU", officeType: "commons", party: "uk_labour", seatsHeld: 32 },
   { state: "YHU", officeType: "commons", party: "uk_conservative", seatsHeld: 20 },
 
-  { state: "NWE", officeType: "commons", party: "uk_labour", seatsHeld: 44 },
-  { state: "NWE", officeType: "commons", party: "uk_conservative", seatsHeld: 27 },
+  { state: "NWE", officeType: "commons", party: "uk_labour", seatsHeld: 36 },
+  { state: "NWE", officeType: "commons", party: "uk_conservative", seatsHeld: 34 },
   { state: "NWE", officeType: "commons", party: "uk_libdem", seatsHeld: 2 },
 
-  { state: "NEE", officeType: "commons", party: "uk_labour", seatsHeld: 29 },
-  { state: "NEE", officeType: "commons", party: "uk_conservative", seatsHeld: 6 },
-  { state: "NEE", officeType: "commons", party: "uk_libdem", seatsHeld: 1 },
+  { state: "NEE", officeType: "commons", party: "uk_labour", seatsHeld: 24 },
+  { state: "NEE", officeType: "commons", party: "uk_conservative", seatsHeld: 5 },
 
-  { state: "SCO", officeType: "commons", party: "uk_labour", seatsHeld: 49 },
-  { state: "SCO", officeType: "commons", party: "uk_conservative", seatsHeld: 11 },
+  { state: "SCO", officeType: "commons", party: "uk_labour", seatsHeld: 50 },
+  { state: "SCO", officeType: "commons", party: "uk_conservative", seatsHeld: 10 },
   { state: "SCO", officeType: "commons", party: "uk_libdem", seatsHeld: 9 },
   { state: "SCO", officeType: "commons", party: "uk_snp", seatsHeld: 3 },
 
-  { state: "WAL", officeType: "commons", party: "uk_labour", seatsHeld: 27 },
-  { state: "WAL", officeType: "commons", party: "uk_conservative", seatsHeld: 6 },
-  { state: "WAL", officeType: "commons", party: "uk_plaid", seatsHeld: 4 },
-  { state: "WAL", officeType: "commons", party: "uk_libdem", seatsHeld: 1 },
+  { state: "WAL", officeType: "commons", party: "uk_labour", seatsHeld: 24 },
+  { state: "WAL", officeType: "commons", party: "uk_conservative", seatsHeld: 8 },
+  { state: "WAL", officeType: "commons", party: "uk_plaid", seatsHeld: 3 },
+  { state: "WAL", officeType: "commons", party: "uk_libdem", seatsHeld: 3 },
 
-  // 1992 NIR Commons: DUP 3, UUP 9, SDLP 4, UPUP/Independent Unionist 1
-  // (James Kilfedder, North Down). SF won 0 seats in 1992; Alliance 0.
-  // SDLP and Alliance aren't seeded as default parties — `uk_sdlp` and
-  // `uk_alliance` would resolve to "independent" via the seedHistorical
-  // fallback. We keep `uk_sdlp` to preserve the historical attribution
-  // in case those parties are added later; the lone UPUP/Ind seat is
-  // recorded directly as `uk_independent`.
+  // 1987 NIR Commons: UUP 9, DUP 3, SDLP 3, SF 1 (West Belfast) and the lone
+  // UPUP member for North Down, recorded directly as `uk_independent`.
+  // Unlike 1992, Sinn Féin DID take a seat in 1987 — and unlike `uk_sdlp`,
+  // `uk_sf` is a seeded default party in this preset, so that seat keeps its
+  // real attribution. `uk_sdlp` is retained for the historical record and
+  // still folds to "independent" through the seedHistorical resolver.
   { state: "NIR", officeType: "commons", party: "uk_uup", seatsHeld: 9 },
   { state: "NIR", officeType: "commons", party: "uk_dup", seatsHeld: 3 },
-  { state: "NIR", officeType: "commons", party: "uk_sdlp", seatsHeld: 4 },
+  { state: "NIR", officeType: "commons", party: "uk_sdlp", seatsHeld: 3 },
+  { state: "NIR", officeType: "commons", party: "uk_sf", seatsHeld: 1 },
   { state: "NIR", officeType: "commons", party: "uk_independent", seatsHeld: 1 },
 ];
 
@@ -1261,7 +1324,7 @@ export const UK_FIRST_MINISTERS_1992: HistoricalSeat[] = [
 // (3 MPs after 1992 GE) but still secondary to Labour in Scottish local
 // councils.
 //
-// SDLP / Alliance are not seeded as default parties — like UK_COMMONS_1992,
+// SDLP / Alliance are not seeded as default parties — like UK_COMMONS_1987,
 // we keep `uk_sdlp` / `uk_alliance` slugs to preserve historical attribution
 // (they fall back to `independent` via `seedHistorical`'s resolver until
 // those parties are seeded).
@@ -1687,7 +1750,7 @@ export const JP_REGIONAL_COUNCIL_2020: HistoricalSeat[] = [
 //
 // Unlike `JP_REGIONAL_COUNCIL_2020` (which under-counts and rolls
 // independents into commentary), totals here match each region's
-// configured `stateSenateSeats` in `src/lib/seeds/jp/jpRegions.ts` so the
+// configured `stateSenateSeats` in `src/lib/countries/jp/data/jpRegions.ts` so the
 // chamber size and seat allocation line up — matching the US/UK pattern
 // used in this file.
 //
@@ -1771,165 +1834,228 @@ export const JP_REGIONAL_COUNCIL_1991: HistoricalSeat[] = [
 // Party slugs: jp_ldp (LDP), jp_jsp (JSP — 1991-only default), jp_komeito,
 // jp_jcp, jp_dsp (DSP — 1991-only default), jp_independent (SDF + independents).
 // CDP / DPFP / Ishin are 2019-era parties and don't appear here.
+//
+// ⚠️ THE REGIONAL SPLIT WAS RE-AGGREGATED; the national totals above are
+// unchanged and are the real result. The previous split was authored against a
+// different regional taxonomy than `jpRegions1991`: it put 85 seats in Kyushu
+// against that bundle's 62 and 78 in Kansai against its 92, inverting the real
+// ordering of the two — Kansai was the more populous by some margin. Seven of
+// the eight regions disagreed. Each region now sums to its `houseDistricts`,
+// which `JP_SHUGIIN_SEATS_1991` also mirrors, so the chamber config, the
+// districts, this roster and the election allocator finally agree.
+//
+// Within that constraint the distribution follows the real 1990 pattern: the
+// LDP's share is lowest in urban Kanto and Kansai and highest in Chugoku,
+// Shikoku and Kyushu; Komeito concentrates in Kansai and Tokyo; the JCP is
+// almost entirely urban; the DSP sits in Kansai and industrial Aichi. It is
+// not a claim of per-prefecture precision.
 
 export const JP_SHUGIIN_1990: HistoricalSeat[] = [
-  // HOK (23 seats): LDP rural + JSP labor-union strongholds. LDP 11, JSP 6,
-  // Komeito 1, JCP 1, DSP 0, Ind 4 = 23.
+  // HOK (23 seats): Hokkaido: LDP rural seats alongside JSP labour-union strongholds.
+  // LDP 11, JSP 6, Komeito 1, JCP 1, Ind 4 = 23.
   { state: "HOK", officeType: "shugiin", party: "jp_ldp", seatsHeld: 11 },
   { state: "HOK", officeType: "shugiin", party: "jp_jsp", seatsHeld: 6 },
   { state: "HOK", officeType: "shugiin", party: "jp_komeito", seatsHeld: 1 },
   { state: "HOK", officeType: "shugiin", party: "jp_jcp", seatsHeld: 1 },
   { state: "HOK", officeType: "shugiin", party: "jp_independent", seatsHeld: 4 },
 
-  // TOH (62 seats): rural LDP heartland, JSP holds industrial Niigata + Miyagi.
-  // LDP 32, JSP 18, Komeito 3, JCP 1, DSP 1, Ind 7 = 62.
-  { state: "TOH", officeType: "shugiin", party: "jp_ldp", seatsHeld: 32 },
-  { state: "TOH", officeType: "shugiin", party: "jp_jsp", seatsHeld: 18 },
+  // TOH (50 seats): Tohoku: rural LDP heartland, with the JSP holding industrial Niigata
+  // and Miyagi.
+  // LDP 30, JSP 14, Komeito 3, Ind 3 = 50.
+  { state: "TOH", officeType: "shugiin", party: "jp_ldp", seatsHeld: 30 },
+  { state: "TOH", officeType: "shugiin", party: "jp_jsp", seatsHeld: 14 },
   { state: "TOH", officeType: "shugiin", party: "jp_komeito", seatsHeld: 3 },
-  { state: "TOH", officeType: "shugiin", party: "jp_jcp", seatsHeld: 1 },
-  { state: "TOH", officeType: "shugiin", party: "jp_dsp", seatsHeld: 1 },
-  { state: "TOH", officeType: "shugiin", party: "jp_independent", seatsHeld: 7 },
+  { state: "TOH", officeType: "shugiin", party: "jp_independent", seatsHeld: 3 },
 
-  // KAN (143 seats): Tokyo metro — JSP's industrial-labor base + Komeito
-  // Soka Gakkai concentration + JCP urban strongholds. LDP 70, JSP 44,
-  // Komeito 16, JCP 7, DSP 5, Ind 1 = 143.
+  // KAN (145 seats): Kanto: proportionally the LDP's weakest region. Komeito's Tokyo
+  // organisation, the JCP's best result and the DSP's Rengo-aligned seats all
+  // sit here. This region also carries the seat that brings the chamber to 512.
+  // LDP 70, JSP 44, Komeito 15, JCP 7, DSP 6, Ind 3 = 145.
   { state: "KAN", officeType: "shugiin", party: "jp_ldp", seatsHeld: 70 },
   { state: "KAN", officeType: "shugiin", party: "jp_jsp", seatsHeld: 44 },
-  { state: "KAN", officeType: "shugiin", party: "jp_komeito", seatsHeld: 16 },
+  { state: "KAN", officeType: "shugiin", party: "jp_komeito", seatsHeld: 15 },
   { state: "KAN", officeType: "shugiin", party: "jp_jcp", seatsHeld: 7 },
-  { state: "KAN", officeType: "shugiin", party: "jp_dsp", seatsHeld: 5 },
-  { state: "KAN", officeType: "shugiin", party: "jp_independent", seatsHeld: 1 },
+  { state: "KAN", officeType: "shugiin", party: "jp_dsp", seatsHeld: 6 },
+  { state: "KAN", officeType: "shugiin", party: "jp_independent", seatsHeld: 3 },
 
-  // CHU (75 seats): industrial Aichi (Toyota/Nagoya) blunts LDP dominance.
-  // LDP 41, JSP 17, Komeito 7, JCP 2, DSP 3, Ind 5 = 75.
-  { state: "CHU", officeType: "shugiin", party: "jp_ldp", seatsHeld: 41 },
-  { state: "CHU", officeType: "shugiin", party: "jp_jsp", seatsHeld: 17 },
-  { state: "CHU", officeType: "shugiin", party: "jp_komeito", seatsHeld: 7 },
+  // CHU (86 seats): Chubu: LDP-dominant, and home to the DSP's Aichi manufacturing base.
+  // LDP 52, JSP 20, Komeito 6, JCP 2, DSP 2, Ind 4 = 86.
+  { state: "CHU", officeType: "shugiin", party: "jp_ldp", seatsHeld: 52 },
+  { state: "CHU", officeType: "shugiin", party: "jp_jsp", seatsHeld: 20 },
+  { state: "CHU", officeType: "shugiin", party: "jp_komeito", seatsHeld: 6 },
   { state: "CHU", officeType: "shugiin", party: "jp_jcp", seatsHeld: 2 },
-  { state: "CHU", officeType: "shugiin", party: "jp_dsp", seatsHeld: 3 },
-  { state: "CHU", officeType: "shugiin", party: "jp_independent", seatsHeld: 5 },
+  { state: "CHU", officeType: "shugiin", party: "jp_dsp", seatsHeld: 2 },
+  { state: "CHU", officeType: "shugiin", party: "jp_independent", seatsHeld: 4 },
 
-  // KNS (78 seats): Osaka metro — JSP industrial Sōhyō unions, strong
-  // Komeito + DSP urban presence. LDP 33, JSP 22, Komeito 11, JCP 3,
-  // DSP 4, Ind 5 = 78.
-  { state: "KNS", officeType: "shugiin", party: "jp_ldp", seatsHeld: 33 },
+  // KNS (92 seats): Kansai: Komeito's founding base in Osaka, strong JCP and DSP showings,
+  // and the LDP below its national share.
+  // LDP 41, JSP 22, Komeito 14, JCP 5, DSP 6, Ind 4 = 92.
+  { state: "KNS", officeType: "shugiin", party: "jp_ldp", seatsHeld: 41 },
   { state: "KNS", officeType: "shugiin", party: "jp_jsp", seatsHeld: 22 },
-  { state: "KNS", officeType: "shugiin", party: "jp_komeito", seatsHeld: 11 },
-  { state: "KNS", officeType: "shugiin", party: "jp_jcp", seatsHeld: 3 },
-  { state: "KNS", officeType: "shugiin", party: "jp_dsp", seatsHeld: 4 },
-  { state: "KNS", officeType: "shugiin", party: "jp_independent", seatsHeld: 5 },
+  { state: "KNS", officeType: "shugiin", party: "jp_komeito", seatsHeld: 14 },
+  { state: "KNS", officeType: "shugiin", party: "jp_jcp", seatsHeld: 5 },
+  { state: "KNS", officeType: "shugiin", party: "jp_dsp", seatsHeld: 6 },
+  { state: "KNS", officeType: "shugiin", party: "jp_independent", seatsHeld: 4 },
 
-  // CGK (30 seats): rural LDP heartland. LDP 19, JSP 6, Komeito 2, JCP 1,
-  // DSP 0, Ind 2 = 30.
-  { state: "CGK", officeType: "shugiin", party: "jp_ldp", seatsHeld: 19 },
-  { state: "CGK", officeType: "shugiin", party: "jp_jsp", seatsHeld: 6 },
+  // CGK (34 seats): Chugoku: rural and conservative, the LDP's strongest regional share.
+  // LDP 22, JSP 8, Komeito 2, Ind 2 = 34.
+  { state: "CGK", officeType: "shugiin", party: "jp_ldp", seatsHeld: 22 },
+  { state: "CGK", officeType: "shugiin", party: "jp_jsp", seatsHeld: 8 },
   { state: "CGK", officeType: "shugiin", party: "jp_komeito", seatsHeld: 2 },
-  { state: "CGK", officeType: "shugiin", party: "jp_jcp", seatsHeld: 1 },
   { state: "CGK", officeType: "shugiin", party: "jp_independent", seatsHeld: 2 },
 
-  // SHI (16 seats): smallest region, LDP dominant. LDP 11, JSP 3, Komeito 1,
-  // Ind 1 = 16.
-  { state: "SHI", officeType: "shugiin", party: "jp_ldp", seatsHeld: 11 },
-  { state: "SHI", officeType: "shugiin", party: "jp_jsp", seatsHeld: 3 },
-  { state: "SHI", officeType: "shugiin", party: "jp_komeito", seatsHeld: 1 },
-  { state: "SHI", officeType: "shugiin", party: "jp_independent", seatsHeld: 1 },
+  // SHI (20 seats): Shikoku: the smallest region, and solidly LDP.
+  // LDP 12, JSP 5, Ind 3 = 20.
+  { state: "SHI", officeType: "shugiin", party: "jp_ldp", seatsHeld: 12 },
+  { state: "SHI", officeType: "shugiin", party: "jp_jsp", seatsHeld: 5 },
+  { state: "SHI", officeType: "shugiin", party: "jp_independent", seatsHeld: 3 },
 
-  // KYU (85 seats): LDP mainland dominance plus JSP union strength in
-  // Fukuoka coal-belt + Okinawa anti-base opposition. LDP 58, JSP 20,
-  // Komeito 4, JCP 1, DSP 1, Ind 1 = 85.
-  { state: "KYU", officeType: "shugiin", party: "jp_ldp", seatsHeld: 58 },
-  { state: "KYU", officeType: "shugiin", party: "jp_jsp", seatsHeld: 20 },
+  // KYU (62 seats): Kyushu and Okinawa: LDP-dominant, with JSP strength in the old Fukuoka
+  // coalfield. Okinawa's anti-base parties fold into `jp_independent`.
+  // LDP 37, JSP 17, Komeito 4, JCP 1, Ind 3 = 62.
+  { state: "KYU", officeType: "shugiin", party: "jp_ldp", seatsHeld: 37 },
+  { state: "KYU", officeType: "shugiin", party: "jp_jsp", seatsHeld: 17 },
   { state: "KYU", officeType: "shugiin", party: "jp_komeito", seatsHeld: 4 },
   { state: "KYU", officeType: "shugiin", party: "jp_jcp", seatsHeld: 1 },
-  { state: "KYU", officeType: "shugiin", party: "jp_dsp", seatsHeld: 1 },
-  { state: "KYU", officeType: "shugiin", party: "jp_independent", seatsHeld: 1 },
+  { state: "KYU", officeType: "shugiin", party: "jp_independent", seatsHeld: 3 },
 ];
 // Totals: LDP 275, JSP 136, Komeito 45, JCP 16, DSP 14, Ind 26 = 512 ✓
 // (Independent total includes Social Democratic Federation's 4 seats + 22 true independents.)
 
+// ─── JP July 1989: the Sangiin after the 15th ordinary election ──────────────
+// Sangiin: 252 seats — the size the chamber held from 1983 until the 1998
+// reduction. LDP 109, JSP 66, Komeito 21, JCP 14, DSP 10, others 32.
+//
+// ⚠️ THIS SEATED 206 OF 252, AND NOTHING SAID SO. The 46-seat hole was not
+// declared through `vacantSeats` either, so it was indistinguishable from a
+// roster someone had truncated — the exact ambiguity that field exists to
+// resolve. The admin readiness diagnostic could not see it: `seatMin` was
+// pinned to the 2019 Diet at 713, and 512 + 206 = 718 cleared it.
+//
+// ⚠️ THE OLD 206 WAS NOT A SCALED-DOWN 1989 RESULT, so it is not what the fill
+// was built from. It ran Komeito at 13.6% against a real 8.3% and the JSP at
+// 19.4% against a real 26.2%; scaling it would have preserved that distortion
+// and buried the thing that makes 1989 worth modelling. The national totals
+// above are the real ones, distributed regionally the same way the Shugiin is.
+//
+// LDP 109 is below the 127 needed for a majority. Losing control of the upper
+// house for the first time is the defining fact of this Diet, and it is what
+// makes a 1991 Japan interesting to play: the governing party cannot pass
+// legislation on its own.
+//
+// ⚠️ THE TWO CLASSES ARE DELIBERATELY ASYMMETRIC. Half the Sangiin is elected
+// every three years, so this chamber holds one cohort from 1986 — an LDP
+// landslide — and one from 1989, its worst result to that point. Class 1 is
+// LDP 72 / JSP 18; class 2 is LDP 37 / JSP 48. Splitting each region evenly
+// between the classes would have erased the stagger that makes the next
+// election (July 1992, when the 1986 cohort comes up) consequential.
 export const JP_SANGIIN_1989: HistoricalSeat[] = [
+  // HOK (8 seats, 4 per class): Hokkaido.
+  // Class 1 (1986): LDP 2, JSP 1, Komeito 1 = 4.
   { state: "HOK", officeType: "sangiin", party: "jp_ldp", seatsHeld: 2, chamberClass: 1 },
   { state: "HOK", officeType: "sangiin", party: "jp_jsp", seatsHeld: 1, chamberClass: 1 },
   { state: "HOK", officeType: "sangiin", party: "jp_komeito", seatsHeld: 1, chamberClass: 1 },
+  // Class 2 (1989): LDP 1, JSP 2, JCP 1 = 4.
   { state: "HOK", officeType: "sangiin", party: "jp_ldp", seatsHeld: 1, chamberClass: 2 },
-  { state: "HOK", officeType: "sangiin", party: "jp_jsp", seatsHeld: 1, chamberClass: 2 },
+  { state: "HOK", officeType: "sangiin", party: "jp_jsp", seatsHeld: 2, chamberClass: 2 },
   { state: "HOK", officeType: "sangiin", party: "jp_jcp", seatsHeld: 1, chamberClass: 2 },
 
-  { state: "TOH", officeType: "sangiin", party: "jp_ldp", seatsHeld: 4, chamberClass: 1 },
+  // TOH (22 seats, 11 per class): Tohoku: rural, and the clearest 1989 swing — the LDP's farm vote broke
+  // over the beef and citrus liberalisation and the new consumption tax.
+  // Class 1 (1986): LDP 7, JSP 2, Komeito 1, JCP 1 = 11.
+  { state: "TOH", officeType: "sangiin", party: "jp_ldp", seatsHeld: 7, chamberClass: 1 },
   { state: "TOH", officeType: "sangiin", party: "jp_jsp", seatsHeld: 2, chamberClass: 1 },
   { state: "TOH", officeType: "sangiin", party: "jp_komeito", seatsHeld: 1, chamberClass: 1 },
-  { state: "TOH", officeType: "sangiin", party: "jp_dsp", seatsHeld: 1, chamberClass: 1 },
   { state: "TOH", officeType: "sangiin", party: "jp_jcp", seatsHeld: 1, chamberClass: 1 },
+  // Class 2 (1989): LDP 4, JSP 5, Komeito 1, Ind 1 = 11.
   { state: "TOH", officeType: "sangiin", party: "jp_ldp", seatsHeld: 4, chamberClass: 2 },
-  { state: "TOH", officeType: "sangiin", party: "jp_jsp", seatsHeld: 2, chamberClass: 2 },
+  { state: "TOH", officeType: "sangiin", party: "jp_jsp", seatsHeld: 5, chamberClass: 2 },
   { state: "TOH", officeType: "sangiin", party: "jp_komeito", seatsHeld: 1, chamberClass: 2 },
-  { state: "TOH", officeType: "sangiin", party: "jp_dsp", seatsHeld: 1, chamberClass: 2 },
-  // Ishin entry dropped — Nippon Ishin no Kai didn't exist until 2010.
+  { state: "TOH", officeType: "sangiin", party: "jp_independent", seatsHeld: 1, chamberClass: 2 },
 
-  { state: "KAN", officeType: "sangiin", party: "jp_ldp", seatsHeld: 16, chamberClass: 1 },
-  { state: "KAN", officeType: "sangiin", party: "jp_jsp", seatsHeld: 6, chamberClass: 1 },
-  { state: "KAN", officeType: "sangiin", party: "jp_komeito", seatsHeld: 4, chamberClass: 1 },
+  // KAN (78 seats, 39 per class): Kanto.
+  // Class 1 (1986): LDP 20, JSP 7, Komeito 3, JCP 3, DSP 2, Ind 4 = 39.
+  { state: "KAN", officeType: "sangiin", party: "jp_ldp", seatsHeld: 20, chamberClass: 1 },
+  { state: "KAN", officeType: "sangiin", party: "jp_jsp", seatsHeld: 7, chamberClass: 1 },
+  { state: "KAN", officeType: "sangiin", party: "jp_komeito", seatsHeld: 3, chamberClass: 1 },
+  { state: "KAN", officeType: "sangiin", party: "jp_jcp", seatsHeld: 3, chamberClass: 1 },
   { state: "KAN", officeType: "sangiin", party: "jp_dsp", seatsHeld: 2, chamberClass: 1 },
-  { state: "KAN", officeType: "sangiin", party: "jp_jcp", seatsHeld: 2, chamberClass: 1 },
-  { state: "KAN", officeType: "sangiin", party: "jp_independent", seatsHeld: 2, chamberClass: 1 },
-  { state: "KAN", officeType: "sangiin", party: "jp_ldp", seatsHeld: 16, chamberClass: 2 },
-  { state: "KAN", officeType: "sangiin", party: "jp_jsp", seatsHeld: 6, chamberClass: 2 },
-  { state: "KAN", officeType: "sangiin", party: "jp_komeito", seatsHeld: 4, chamberClass: 2 },
-  { state: "KAN", officeType: "sangiin", party: "jp_jcp", seatsHeld: 2, chamberClass: 2 },
-  { state: "KAN", officeType: "sangiin", party: "jp_dsp", seatsHeld: 2, chamberClass: 2 },
-  { state: "KAN", officeType: "sangiin", party: "jp_independent", seatsHeld: 2, chamberClass: 2 },
+  { state: "KAN", officeType: "sangiin", party: "jp_independent", seatsHeld: 4, chamberClass: 1 },
+  // Class 2 (1989): LDP 11, JSP 15, Komeito 3, JCP 3, DSP 1, Ind 6 = 39.
+  { state: "KAN", officeType: "sangiin", party: "jp_ldp", seatsHeld: 11, chamberClass: 2 },
+  { state: "KAN", officeType: "sangiin", party: "jp_jsp", seatsHeld: 15, chamberClass: 2 },
+  { state: "KAN", officeType: "sangiin", party: "jp_komeito", seatsHeld: 3, chamberClass: 2 },
+  { state: "KAN", officeType: "sangiin", party: "jp_jcp", seatsHeld: 3, chamberClass: 2 },
+  { state: "KAN", officeType: "sangiin", party: "jp_dsp", seatsHeld: 1, chamberClass: 2 },
+  { state: "KAN", officeType: "sangiin", party: "jp_independent", seatsHeld: 6, chamberClass: 2 },
 
-  { state: "CHU", officeType: "sangiin", party: "jp_ldp", seatsHeld: 9, chamberClass: 1 },
+  // CHU (44 seats, 22 per class): Chubu.
+  // Class 1 (1986): LDP 13, JSP 3, Komeito 2, JCP 1, DSP 1, Ind 2 = 22.
+  { state: "CHU", officeType: "sangiin", party: "jp_ldp", seatsHeld: 13, chamberClass: 1 },
   { state: "CHU", officeType: "sangiin", party: "jp_jsp", seatsHeld: 3, chamberClass: 1 },
   { state: "CHU", officeType: "sangiin", party: "jp_komeito", seatsHeld: 2, chamberClass: 1 },
   { state: "CHU", officeType: "sangiin", party: "jp_jcp", seatsHeld: 1, chamberClass: 1 },
   { state: "CHU", officeType: "sangiin", party: "jp_dsp", seatsHeld: 1, chamberClass: 1 },
-  { state: "CHU", officeType: "sangiin", party: "jp_independent", seatsHeld: 1, chamberClass: 1 },
-  { state: "CHU", officeType: "sangiin", party: "jp_ldp", seatsHeld: 9, chamberClass: 2 },
-  { state: "CHU", officeType: "sangiin", party: "jp_jsp", seatsHeld: 3, chamberClass: 2 },
+  { state: "CHU", officeType: "sangiin", party: "jp_independent", seatsHeld: 2, chamberClass: 1 },
+  // Class 2 (1989): LDP 6, JSP 8, Komeito 2, JCP 1, DSP 1, Ind 4 = 22.
+  { state: "CHU", officeType: "sangiin", party: "jp_ldp", seatsHeld: 6, chamberClass: 2 },
+  { state: "CHU", officeType: "sangiin", party: "jp_jsp", seatsHeld: 8, chamberClass: 2 },
   { state: "CHU", officeType: "sangiin", party: "jp_komeito", seatsHeld: 2, chamberClass: 2 },
   { state: "CHU", officeType: "sangiin", party: "jp_jcp", seatsHeld: 1, chamberClass: 2 },
-  { state: "CHU", officeType: "sangiin", party: "jp_independent", seatsHeld: 2, chamberClass: 2 },
+  { state: "CHU", officeType: "sangiin", party: "jp_dsp", seatsHeld: 1, chamberClass: 2 },
+  { state: "CHU", officeType: "sangiin", party: "jp_independent", seatsHeld: 4, chamberClass: 2 },
 
-  { state: "KNS", officeType: "sangiin", party: "jp_ldp", seatsHeld: 8, chamberClass: 1 },
+  // KNS (46 seats, 23 per class): Kansai.
+  // Class 1 (1986): LDP 12, JSP 3, Komeito 2, JCP 2, DSP 2, Ind 2 = 23.
+  { state: "KNS", officeType: "sangiin", party: "jp_ldp", seatsHeld: 12, chamberClass: 1 },
   { state: "KNS", officeType: "sangiin", party: "jp_jsp", seatsHeld: 3, chamberClass: 1 },
-  { state: "KNS", officeType: "sangiin", party: "jp_komeito", seatsHeld: 3, chamberClass: 1 },
-  { state: "KNS", officeType: "sangiin", party: "jp_jcp", seatsHeld: 1, chamberClass: 1 },
-  { state: "KNS", officeType: "sangiin", party: "jp_dsp", seatsHeld: 1, chamberClass: 1 },
+  { state: "KNS", officeType: "sangiin", party: "jp_komeito", seatsHeld: 2, chamberClass: 1 },
+  { state: "KNS", officeType: "sangiin", party: "jp_jcp", seatsHeld: 2, chamberClass: 1 },
+  { state: "KNS", officeType: "sangiin", party: "jp_dsp", seatsHeld: 2, chamberClass: 1 },
   { state: "KNS", officeType: "sangiin", party: "jp_independent", seatsHeld: 2, chamberClass: 1 },
-  { state: "KNS", officeType: "sangiin", party: "jp_ldp", seatsHeld: 8, chamberClass: 2 },
-  { state: "KNS", officeType: "sangiin", party: "jp_jsp", seatsHeld: 3, chamberClass: 2 },
-  { state: "KNS", officeType: "sangiin", party: "jp_komeito", seatsHeld: 3, chamberClass: 2 },
+  // Class 2 (1989): LDP 6, JSP 9, Komeito 2, JCP 1, DSP 1, Ind 4 = 23.
+  { state: "KNS", officeType: "sangiin", party: "jp_ldp", seatsHeld: 6, chamberClass: 2 },
+  { state: "KNS", officeType: "sangiin", party: "jp_jsp", seatsHeld: 9, chamberClass: 2 },
+  { state: "KNS", officeType: "sangiin", party: "jp_komeito", seatsHeld: 2, chamberClass: 2 },
   { state: "KNS", officeType: "sangiin", party: "jp_jcp", seatsHeld: 1, chamberClass: 2 },
-  { state: "KNS", officeType: "sangiin", party: "jp_independent", seatsHeld: 2, chamberClass: 2 },
+  { state: "KNS", officeType: "sangiin", party: "jp_dsp", seatsHeld: 1, chamberClass: 2 },
+  { state: "KNS", officeType: "sangiin", party: "jp_independent", seatsHeld: 4, chamberClass: 2 },
 
-  { state: "CGK", officeType: "sangiin", party: "jp_ldp", seatsHeld: 3, chamberClass: 1 },
+  // CGK (16 seats, 8 per class): Chugoku.
+  // Class 1 (1986): LDP 5, JSP 1, Komeito 1, Ind 1 = 8.
+  { state: "CGK", officeType: "sangiin", party: "jp_ldp", seatsHeld: 5, chamberClass: 1 },
   { state: "CGK", officeType: "sangiin", party: "jp_jsp", seatsHeld: 1, chamberClass: 1 },
   { state: "CGK", officeType: "sangiin", party: "jp_komeito", seatsHeld: 1, chamberClass: 1 },
-  { state: "CGK", officeType: "sangiin", party: "jp_jcp", seatsHeld: 1, chamberClass: 1 },
+  { state: "CGK", officeType: "sangiin", party: "jp_independent", seatsHeld: 1, chamberClass: 1 },
+  // Class 2 (1989): LDP 3, JSP 3, JCP 1, Ind 1 = 8.
   { state: "CGK", officeType: "sangiin", party: "jp_ldp", seatsHeld: 3, chamberClass: 2 },
-  { state: "CGK", officeType: "sangiin", party: "jp_jsp", seatsHeld: 1, chamberClass: 2 },
-  { state: "CGK", officeType: "sangiin", party: "jp_komeito", seatsHeld: 1, chamberClass: 2 },
+  { state: "CGK", officeType: "sangiin", party: "jp_jsp", seatsHeld: 3, chamberClass: 2 },
+  { state: "CGK", officeType: "sangiin", party: "jp_jcp", seatsHeld: 1, chamberClass: 2 },
   { state: "CGK", officeType: "sangiin", party: "jp_independent", seatsHeld: 1, chamberClass: 2 },
 
-  { state: "SHI", officeType: "sangiin", party: "jp_ldp", seatsHeld: 2, chamberClass: 1 },
-  { state: "SHI", officeType: "sangiin", party: "jp_jsp", seatsHeld: 1, chamberClass: 1 },
-  { state: "SHI", officeType: "sangiin", party: "jp_komeito", seatsHeld: 1, chamberClass: 1 },
-  { state: "SHI", officeType: "sangiin", party: "jp_ldp", seatsHeld: 2, chamberClass: 2 },
-  { state: "SHI", officeType: "sangiin", party: "jp_jsp", seatsHeld: 1, chamberClass: 2 },
-  { state: "SHI", officeType: "sangiin", party: "jp_jcp", seatsHeld: 1, chamberClass: 2 },
+  // SHI (10 seats, 5 per class): Shikoku.
+  // Class 1 (1986): LDP 4, Ind 1 = 5.
+  { state: "SHI", officeType: "sangiin", party: "jp_ldp", seatsHeld: 4, chamberClass: 1 },
+  { state: "SHI", officeType: "sangiin", party: "jp_independent", seatsHeld: 1, chamberClass: 1 },
+  // Class 2 (1989): LDP 1, JSP 2, Komeito 1, Ind 1 = 5.
+  { state: "SHI", officeType: "sangiin", party: "jp_ldp", seatsHeld: 1, chamberClass: 2 },
+  { state: "SHI", officeType: "sangiin", party: "jp_jsp", seatsHeld: 2, chamberClass: 2 },
+  { state: "SHI", officeType: "sangiin", party: "jp_komeito", seatsHeld: 1, chamberClass: 2 },
+  { state: "SHI", officeType: "sangiin", party: "jp_independent", seatsHeld: 1, chamberClass: 2 },
 
-  { state: "KYU", officeType: "sangiin", party: "jp_ldp", seatsHeld: 7, chamberClass: 1 },
-  { state: "KYU", officeType: "sangiin", party: "jp_jsp", seatsHeld: 3, chamberClass: 1 },
-  { state: "KYU", officeType: "sangiin", party: "jp_komeito", seatsHeld: 2, chamberClass: 1 },
-  { state: "KYU", officeType: "sangiin", party: "jp_jcp", seatsHeld: 1, chamberClass: 1 },
-  { state: "KYU", officeType: "sangiin", party: "jp_independent", seatsHeld: 1, chamberClass: 1 },
-  { state: "KYU", officeType: "sangiin", party: "jp_ldp", seatsHeld: 7, chamberClass: 2 },
-  { state: "KYU", officeType: "sangiin", party: "jp_jsp", seatsHeld: 3, chamberClass: 2 },
-  { state: "KYU", officeType: "sangiin", party: "jp_komeito", seatsHeld: 2, chamberClass: 2 },
-  { state: "KYU", officeType: "sangiin", party: "jp_jcp", seatsHeld: 1, chamberClass: 2 },
+  // KYU (28 seats, 14 per class): Kyushu and Okinawa.
+  // Class 1 (1986): LDP 9, JSP 1, Komeito 1, DSP 1, Ind 2 = 14.
+  { state: "KYU", officeType: "sangiin", party: "jp_ldp", seatsHeld: 9, chamberClass: 1 },
+  { state: "KYU", officeType: "sangiin", party: "jp_jsp", seatsHeld: 1, chamberClass: 1 },
+  { state: "KYU", officeType: "sangiin", party: "jp_komeito", seatsHeld: 1, chamberClass: 1 },
+  { state: "KYU", officeType: "sangiin", party: "jp_dsp", seatsHeld: 1, chamberClass: 1 },
+  { state: "KYU", officeType: "sangiin", party: "jp_independent", seatsHeld: 2, chamberClass: 1 },
+  // Class 2 (1989): LDP 5, JSP 4, Komeito 1, DSP 1, Ind 3 = 14.
+  { state: "KYU", officeType: "sangiin", party: "jp_ldp", seatsHeld: 5, chamberClass: 2 },
+  { state: "KYU", officeType: "sangiin", party: "jp_jsp", seatsHeld: 4, chamberClass: 2 },
+  { state: "KYU", officeType: "sangiin", party: "jp_komeito", seatsHeld: 1, chamberClass: 2 },
   { state: "KYU", officeType: "sangiin", party: "jp_dsp", seatsHeld: 1, chamberClass: 2 },
-  { state: "KYU", officeType: "sangiin", party: "jp_independent", seatsHeld: 1, chamberClass: 2 },
+  { state: "KYU", officeType: "sangiin", party: "jp_independent", seatsHeld: 3, chamberClass: 2 },
 ];
 
 // Source data is the 1990 prefectural baseline (all eight macro-regions held
@@ -3157,6 +3283,23 @@ export interface ResetPreset {
 }
 
 /**
+ * Countries a preset actually contains, straight from the era roster.
+ *
+ * This list is declarative — nothing reads it to drive seeding — but it is the
+ * admin-facing manifest of what a reset produces, served verbatim by
+ * `/api/admin/reset/presets`. Hand-maintained, it drifted: 1991-default listed
+ * seven countries while the world it produced had sixteen. Deriving it means the
+ * picker cannot disagree with the reset any more.
+ *
+ * Latent countries (UKR/BLR/BAL, SCO/WAL) are excluded by construction: they are
+ * outside `COUNTRY_ORDER`, so a preset never advertises a country it will not
+ * register.
+ */
+function presetCountries(preset: ShippingPreset): CountryId[] {
+  return COUNTRY_ORDER.filter((id) => tierFor(preset, id) !== "absent");
+}
+
+/**
  * Available reset presets.
  * Each preset defines a specific starting condition for game resets.
  */
@@ -3296,6 +3439,38 @@ export const DD_VOLKSKAMMER_1953: HistoricalSeat[] = [
 // spawns from canonical anchors regardless of the officeholder, so seeding the
 // executive does not suppress the re-election cycle.
 export const US_EXECUTIVE_1953: HistoricalSeat[] = [
+  { state: "US", officeType: "president", party: "republican" },
+  { state: "US", officeType: "vicePresident", party: "republican" },
+];
+
+// ─── US executives, 1992 and 2020 worlds ─────────────────────────────────────
+// Same unnamed-officeholder pattern as US_EXECUTIVE_1953: national offices use
+// the bare country code as `state`, and the holder is a generic NPP with a
+// generated fictional name on the historically correct governing ticket. Per
+// CLAUDE.md, named real officeholders are out of scope - the party affiliation
+// carries the history, the person does not exist.
+//
+// Without these the presidency opens VACANT and stays that way until the first
+// scheduled race: ~48 turns (~2 real days) in 1991, and ~240 turns (~10 real
+// days) in 2019, at 1 turn = 1 hour and TURNS_PER_YEAR = 48.
+//
+// Seeding an executive does not suppress the election cycle. US_EXECUTIVE_1953
+// records why: "the perpetual race spawns from canonical anchors regardless of
+// the officeholder". The appointment gate in appointNppPresident governs
+// APPOINTMENT, not seeding.
+
+// Republican ticket, from the 1988 election, sitting through the 1992 world.
+export const US_EXECUTIVE_1992: HistoricalSeat[] = [
+  { state: "US", officeType: "president", party: "republican" },
+  { state: "US", officeType: "vicePresident", party: "republican" },
+];
+
+// Republican ticket, from the 2016 election, sitting through the 2020 world.
+// Shared by the 1999/2007/2023 presets, which reuse the 2020 groups wholesale:
+// a 1999 world seating a 2020-era executive is wrong, but it is consistent with
+// those presets already reusing the entire 2020 legislature, and strictly
+// better than opening with no head of state at all.
+export const US_EXECUTIVE_2020: HistoricalSeat[] = [
   { state: "US", officeType: "president", party: "republican" },
   { state: "US", officeType: "vicePresident", party: "republican" },
 ];
@@ -3852,86 +4027,47 @@ export const RESET_PRESETS: ResetPreset[] = [
     name: "1953 Start Date - Early Cold War",
     description:
       "The Early Cold War world: US/UK and the USSR are player-enabled (Stalin died March 1953; Khrushchev consolidating). France/Italy/Spain/Sweden/Turkey + Japan/China/West Germany(FRG)/Brazil/Ireland are economy-enabled. East Germany (June 17 uprising 1953!) and the Stalinist bloc (Poland/Romania/Yugoslavia/Hungary/Czechoslovakia/Bulgaria) are NPP-run one-party states; Byelorussia and the Baltics are Soviet union republics inside the USSR, not separate states. Nigeria is a British colony (coming-soon). Real ~1953 demographics, metrics and budgets per country. One-party legislatures start seated; democracies start vacant.",
-    countries: [
-      "US",
-      "UK",
-      "RU",
-      "FR",
-      "IT",
-      "ES",
-      "SE",
-      "TR",
-      "DE",
-      "JP",
-      "CN",
-      "NG",
-      "BR",
-      "IE",
-      "DD",
-      "PL",
-      "RO",
-      "YU",
-      "HU",
-      "CS",
-      "BG",
-    ],
+    countries: presetCountries("1953-default"),
   },
   {
     id: "2027-default",
     name: "2027 Start Date - Five-Country Modern World",
     description:
       "January 2027 projection with playable United States, United Kingdom, Japan, Germany, and China. Uses projected US congressional control and the latest completed national elections elsewhere.",
-    countries: ["US", "UK", "JP", "DE", "CN"],
+    // Derived like every other preset. Upstream hard-coded the five PLAYER
+    // countries here, but this list is what the admin reset picker offers and
+    // what /api/admin/reset/presets returns, so it has to name every country the
+    // reset actually produces -- players, economy-preview and NPP-run alike.
+    // `eraContract.test.ts` S6 is what catches the two disagreeing.
+    countries: presetCountries("2027-default"),
   },
   {
     id: "2023-default",
     name: "2023 Start Date - Default Parties",
     description:
       "US 118th Congress (Jan 2023, post-2022 midterms) — Biden presidency, divided government (Republican House / Democratic Senate). Real 2023 Census/BEA/BLS state data + FY2023 budget. Non-US countries fall back to their 2019 bundles.",
-    countries: ["US", "UK", "JP", "DE", "CN", "IE"],
+    countries: presetCountries("2023-default"),
   },
   {
     id: "2019-default",
     name: "2019 Start Date - Default Parties",
     description:
       "US 116th Congress (Feb 2020) + UK post-2019 election + JP National Diet (Jan 2020) + DE 19th Bundestag scaled + 2019 Ministerpräsidenten + CN 13th NPC + IE 33rd Dáil (2020).",
-    countries: ["US", "UK", "JP", "DE", "CN", "IE"],
+    countries: presetCountries("2019-default"),
   },
   {
     id: "1991-default",
     name: "1991 Start Date - Default Parties",
     description:
       "US 102nd Congress (1991-93) + UK post-1992 election + JP post-1990 election + DE 12th Bundestag + CN 7th NPC + BR 49th Congress + IE 27th Dáil. Reg/Org seeded from 1988-92 election baselines.",
-    countries: ["US", "UK", "JP", "DE", "CN", "BR", "IE"],
+    countries: presetCountries("1991-default"),
   },
   {
     id: "1979-default",
     name: "1979 Start Date - Cold War",
     description:
       "The Cold War world: US/UK and the USSR are player-enabled; France/Italy/Spain/Sweden/Turkey + China/Japan/Germany(FRG)/Brazil/Nigeria are economy-enabled; East Germany and the Warsaw-Pact bloc (Poland/Romania/Yugoslavia/Hungary/Czechoslovakia/Bulgaria) are NPP-run one-party states; Byelorussia and the Baltics are Soviet union republics inside the USSR, not separate states. Real ~1979 demographics, metrics and budgets per country. Legislatures start vacant (historical seat maps are a follow-up).",
-    countries: [
-      "US",
-      "UK",
-      "RU",
-      "FR",
-      "IT",
-      "ES",
-      "SE",
-      "TR",
-      "DE",
-      "JP",
-      "CN",
-      "NG",
-      "BR",
-      "IE",
-      "DD",
-      "PL",
-      "RO",
-      "YU",
-      "HU",
-      "CS",
-      "BG",
-    ],
+    countries: presetCountries("1979-default"),
   },
   {
     id: "empty",
@@ -3951,153 +4087,225 @@ export const RESET_PRESETS: ResetPreset[] = [
 /**
  * Get seats for a specific preset
  */
-export function getPresetSeats(presetId: string): HistoricalSeat[] {
-  switch (presetId) {
-    case "2027-default":
-      return [
-        ...US_HOUSE_2027,
-        ...US_SENATE_2027,
-        ...US_STATE_SENATE_2020,
-        ...US_GOVERNORS_2020,
-        ...UK_COMMONS_2027,
-        ...UK_REGIONAL_COUNCIL_2020,
-        ...UK_FIRST_MINISTERS_2020,
-        ...JP_SHUGIIN_2027,
-        ...JP_SANGIIN_2027,
-        ...JP_GOVERNORS_2020,
-        ...JP_REGIONAL_COUNCIL_2020,
-        ...DE_BUNDESTAG_2027,
-        ...DE_LANDTAG_2020,
-        ...DE_MINISTERPRAESIDENTEN_2020,
-        ...splitCNNPCDelegates(CN_NPC_2020),
-        ...splitCNNPCDelegates(CN_PEOPLES_CONGRESS_2020),
-        ...CN_GOVERNORS_2020,
-      ];
-    case "2019-default":
-      return [
-        ...US_HOUSE_2020,
-        ...US_SENATE_2020,
-        ...US_STATE_SENATE_2020,
-        ...US_GOVERNORS_2020,
-        ...UK_COMMONS_2020,
-        ...UK_REGIONAL_COUNCIL_2020,
-        ...UK_FIRST_MINISTERS_2020,
-        ...JP_SHUGIIN_2020,
-        ...JP_SANGIIN_2020,
-        ...JP_GOVERNORS_2020,
-        ...JP_REGIONAL_COUNCIL_2020,
-        ...DE_BUNDESTAG_2021,
-        ...DE_LANDTAG_2020,
-        ...DE_MINISTERPRAESIDENTEN_2020,
-        ...splitCNNPCDelegates(CN_NPC_2020),
-        ...splitCNNPCDelegates(CN_PEOPLES_CONGRESS_2020),
-        ...CN_GOVERNORS_2020,
-        ...IE_DAIL_2020,
-        ...IE_SEANAD_2020,
-      ];
-    case "1991-default":
-      return [
-        ...US_HOUSE_1992,
-        ...US_SENATE_1992,
-        ...US_STATE_SENATE_1990,
-        ...US_GOVERNORS_1992,
-        ...UK_COMMONS_1992,
-        ...UK_REGIONAL_COUNCIL_1992,
-        ...UK_FIRST_MINISTERS_1992,
-        ...JP_SHUGIIN_1990,
-        ...JP_SANGIIN_1989,
-        ...JP_GOVERNORS_1991,
-        ...JP_REGIONAL_COUNCIL_1991,
-        ...DE_BUNDESTAG_1990,
-        ...DE_LANDTAG_1990,
-        ...DE_MINISTERPRAESIDENTEN_1992,
-        ...splitCNNPCDelegates(CN_NPC_1991),
-        ...splitCNNPCDelegates(CN_PEOPLES_CONGRESS_1991),
-        ...CN_GOVERNORS_1991,
-        ...BR_CHAMBER_1991,
-        ...BR_SENATE_1991,
-        ...IE_DAIL_1991,
-        ...IE_SEANAD_1991,
-      ];
-    case "1953-default":
-      // One-party states seated (USSR/GDR/PRC/bloc). The US federal legislature
-      // is ALSO fully seated — the 83rd Congress is authored per state below.
-      // The remaining democratic legislatures (UK/FR/IT/ES/SE/TR/DE/JP/BR/IE)
-      // start vacant; NG is colonial/coming-soon.
-      // Presidential EXECUTIVES are seeded as generic NPPs on the historically
-      // correct governing ticket (US Republican from the 1952 landslide; BR PTB
-      // from the 1950 election) so presidential countries don't open vacant —
-      // there is no near-term presidential race to fill them (US cycle anchors
-      // to 1956; BR only spawns chamber races). The UK PM is intentionally NOT
-      // seeded — the PM derives from the Commons majority via government
-      // formation, and the 1953 Commons seat map is a separate historical-data
-      // task.
-      return [
-        ...US_EXECUTIVE_1953,
-        ...BR_EXECUTIVE_1953,
-        // US legislature: COMPLETE 83rd Congress — every state's real 1952
-        // delegation is authored (House 213 D / 221 R / 1 I = 435 over the
-        // 1950-census apportionment; Senate 47 D / 48 R / 1 I = 96 over 48
-        // states, AK/HI still territories). Nothing here is estimated and
-        // nothing is left for backfillMissingSeats to fill.
-        ...US_HOUSE_1953,
-        ...US_SENATE_1953,
-        ...US_GOVERNOR_1953,
-        ...SU_SUPREME_SOVIET_1953,
-        ...DD_VOLKSKAMMER_1953,
-        // PRC: the national chamber only, same as GDR/bloc. Provincial People's
-        // Congresses are NOT seated — they did not exist until 1954 either, and
-        // no other 1953 one-party state seats a sub-national chamber.
-        ...splitCNNPCDelegates(CN_NPC_1953),
-        ...BLOC_CHAMBERS_1953,
-      ];
-    case "1979-default":
-      // One-party states are seated (single-list dominance is historical fact).
-      // The multiparty players (US/UK) + economy-only democracies (FR/IT/ES/SE/TR)
-      // start vacant — their per-state/per-region 1979 results are a separate
-      // historical-data task and are deliberately not estimated.
-      return [...SU_SUPREME_SOVIET_1979, ...DD_VOLKSKAMMER_1979, ...BLOC_CHAMBERS_1979];
-    case "empty":
-      return [];
-    default:
-      // ⚠️ SILENT 2020 FALLBACK — recorded, not hidden.
-      //
-      // Any preset without a case above lands here and receives the ENTIRE 2020
-      // chamber roster. That is how 1999-default, 2007-default and 2023-default
-      // came to report 1,004 seats byte-identical to 2019-default: they are not
-      // reusing these arrays by design, they are unrecognised. Downstream that
-      // shows up as 192 jp_* and 187 de_* seats naming parties whose
-      // `validForPresets` excludes those eras, so `resolvePartyId` misses and
-      // folds them to "independent" — the failure `seedHistorical.test.ts`
-      // already guards for 1991's de_spd.
-      //
-      // Authoring real 1999/2007 rosters is a historical-data task. Until then
-      // the fallback at least announces itself, via the same mechanism
-      // `selectPresetBundle` uses, so `runSeed`'s closing "⚠ N seed lane(s) had
-      // no bundle and used 2019 data" line names it.
-      recordPresetFallback("historicalSeats:getPresetSeats", presetId);
-      return [
-        ...US_HOUSE_2020,
-        ...US_SENATE_2020,
-        ...US_STATE_SENATE_2020,
-        ...US_GOVERNORS_2020,
-        ...UK_COMMONS_2020,
-        ...UK_REGIONAL_COUNCIL_2020,
-        ...UK_FIRST_MINISTERS_2020,
-        ...JP_SHUGIIN_2020,
-        ...JP_SANGIIN_2020,
-        ...JP_GOVERNORS_2020,
-        ...JP_REGIONAL_COUNCIL_2020,
-        ...DE_BUNDESTAG_2021,
-        ...DE_LANDTAG_2020,
-        ...DE_MINISTERPRAESIDENTEN_2020,
-        ...splitCNNPCDelegates(CN_NPC_2020),
-        ...splitCNNPCDelegates(CN_PEOPLES_CONGRESS_2020),
-        ...CN_GOVERNORS_2020,
-        ...IE_DAIL_2020,
-        ...IE_SEANAD_2020,
-      ];
+/**
+ * Preset seats, grouped by the country that owns them.
+ *
+ * `HistoricalSeat` carries no `countryId`, and `officeType` is NOT unique to a
+ * country: `senate` is both the US Senate and the Brazilian Senate, so counting
+ * a 1991 world by office type alone reports 181 US senators. `state` does not
+ * disambiguate either - US and Brazilian region codes share AL, PA, MT, MS, RO,
+ * SC, PR and GO - and neither does the pair, since `(PA, senate)` is both
+ * Pennsylvania and Para.
+ *
+ * The owning country is therefore recorded here, where the source arrays are
+ * still separate, rather than inferred after concatenation where the
+ * information has already been thrown away. `getPresetSeats` flattens this, so
+ * there is one source and not two.
+ *
+ * The USSR maps to `RU`, matching how the roster and the `su` policy prefix
+ * already model it.
+ */
+type SeatGroups = Partial<Record<CountryId, HistoricalSeat[]>>;
+
+/** Split a multi-country array by the country prefix on each row's party id. */
+function byPartyPrefix(rows: HistoricalSeat[], prefixes: Record<string, CountryId>): SeatGroups {
+  const out: SeatGroups = {};
+  for (const row of rows) {
+    const prefix = row.party.split("_")[0];
+    const countryId = prefixes[prefix];
+    if (!countryId) {
+      // Loud rather than silently misattributed: a row landing in the wrong
+      // country is exactly the failure this grouping exists to prevent.
+      throw new Error(`No country for bloc seat party "${row.party}" (state ${row.state}).`);
+    }
+    (out[countryId] ??= []).push(row);
   }
+  return out;
+}
+
+const BLOC_PREFIXES: Record<string, CountryId> = {
+  hu: "HU",
+  pl: "PL",
+  ro: "RO",
+  bg: "BG",
+  cs: "CS",
+  yu: "YU",
+};
+
+/** Merge groups, concatenating per country. */
+function mergeGroups(...parts: SeatGroups[]): SeatGroups {
+  const out: SeatGroups = {};
+  for (const part of parts) {
+    for (const [id, rows] of Object.entries(part) as [CountryId, HistoricalSeat[]][]) {
+      (out[id] ??= []).push(...rows);
+    }
+  }
+  return out;
+}
+
+const SEAT_GROUPS_2020: SeatGroups = {
+  US: [
+    ...US_EXECUTIVE_2020,
+    ...US_HOUSE_2020,
+    ...US_SENATE_2020,
+    ...US_STATE_SENATE_2020,
+    ...US_GOVERNORS_2020,
+  ],
+  UK: [...UK_COMMONS_2020, ...UK_REGIONAL_COUNCIL_2020, ...UK_FIRST_MINISTERS_2020],
+  JP: [...JP_SHUGIIN_2020, ...JP_SANGIIN_2020, ...JP_GOVERNORS_2020, ...JP_REGIONAL_COUNCIL_2020],
+  DE: [...DE_BUNDESTAG_2021, ...DE_LANDTAG_2020, ...DE_MINISTERPRAESIDENTEN_2020],
+  CN: [
+    ...splitCNNPCDelegates(CN_NPC_2020),
+    ...splitCNNPCDelegates(CN_PEOPLES_CONGRESS_2020),
+    ...CN_GOVERNORS_2020,
+  ],
+  IE: [...IE_DAIL_2020, ...IE_SEANAD_2020],
+};
+
+/**
+ * The 2027 preset, re-expressed in the country-owned grouping.
+ *
+ * Composed from the same arrays upstream's flat `2027-default` case used, so
+ * the seats are identical; only the shape differs. The 2027 roster is US, UK,
+ * DE, JP and CN, so IE has no entry here.
+ *
+ * ⚠ THE US EXECUTIVE IS SEATED FROM 2020, and upstream's flat case seated
+ * none at all. A presidential player country with no president is a broken
+ * world rather than an empty chair: the executive branch has no holder, and
+ * `eraContract.test.ts` S5 fails on exactly that. Reusing the 2020 holder is
+ * the same compromise 1999 and 2007 already make with the February 2020
+ * Congress, and it is the lesser of two wrongs.
+ *
+ * NOT the 1979 case. 1979 stays unseeded because its party slugs resolve to
+ * "independent", so seating it would invent a fake independent president --
+ * worse than the empty chair. Here the seat resolves correctly.
+ */
+const SEAT_GROUPS_2027: SeatGroups = {
+  US: [
+    ...US_EXECUTIVE_2020,
+    ...US_HOUSE_2027,
+    ...US_SENATE_2027,
+    ...US_STATE_SENATE_2020,
+    ...US_GOVERNORS_2020,
+  ],
+  UK: [...UK_COMMONS_2027, ...UK_REGIONAL_COUNCIL_2020, ...UK_FIRST_MINISTERS_2020],
+  JP: [...JP_SHUGIIN_2027, ...JP_SANGIIN_2027, ...JP_GOVERNORS_2020, ...JP_REGIONAL_COUNCIL_2020],
+  DE: [...DE_BUNDESTAG_2027, ...DE_LANDTAG_2020, ...DE_MINISTERPRAESIDENTEN_2020],
+  CN: [
+    ...splitCNNPCDelegates(CN_NPC_2020),
+    ...splitCNNPCDelegates(CN_PEOPLES_CONGRESS_2020),
+    ...CN_GOVERNORS_2020,
+  ],
+};
+
+const SEAT_GROUPS_1992: SeatGroups = {
+  US: [
+    ...US_EXECUTIVE_1992,
+    ...US_HOUSE_1992,
+    ...US_SENATE_1992,
+    ...US_STATE_SENATE_1990,
+    ...US_GOVERNORS_1992,
+  ],
+  UK: [...UK_COMMONS_1987, ...UK_REGIONAL_COUNCIL_1992, ...UK_FIRST_MINISTERS_1992],
+  JP: [...JP_SHUGIIN_1990, ...JP_SANGIIN_1989, ...JP_GOVERNORS_1991, ...JP_REGIONAL_COUNCIL_1991],
+  DE: [...DE_BUNDESTAG_1990, ...DE_LANDTAG_1990, ...DE_MINISTERPRAESIDENTEN_1992],
+  CN: [
+    ...splitCNNPCDelegates(CN_NPC_1991),
+    ...splitCNNPCDelegates(CN_PEOPLES_CONGRESS_1991),
+    ...CN_GOVERNORS_1991,
+  ],
+  BR: [...BR_CHAMBER_1991, ...BR_SENATE_1991],
+  IE: [...IE_DAIL_1991, ...IE_SEANAD_1991],
+};
+
+const SEAT_GROUPS_1953: SeatGroups = mergeGroups(
+  {
+    US: [...US_EXECUTIVE_1953, ...US_HOUSE_1953, ...US_SENATE_1953, ...US_GOVERNOR_1953],
+    BR: [...BR_EXECUTIVE_1953],
+    RU: [...SU_SUPREME_SOVIET_1953],
+    DD: [...DD_VOLKSKAMMER_1953],
+    CN: [...splitCNNPCDelegates(CN_NPC_1953)],
+  },
+  byPartyPrefix(BLOC_CHAMBERS_1953, BLOC_PREFIXES)
+);
+
+const SEAT_GROUPS_1979: SeatGroups = mergeGroups(
+  {
+    RU: [...SU_SUPREME_SOVIET_1979],
+    DD: [...DD_VOLKSKAMMER_1979],
+  },
+  byPartyPrefix(BLOC_CHAMBERS_1979, BLOC_PREFIXES)
+);
+
+/**
+ * The seat groups for a preset.
+ *
+ * ⚠️ 1999, 2007, 2023 and any unrecognised preset receive the 2020 groups. That
+ * mirrors `getPresetSeats`'s `default:` case exactly - see the warning there -
+ * and making the reuse explicit is not an endorsement of it: a 1999 world seats
+ * the February 2020 Congress. Authoring real 1999/2007 rosters is a separate
+ * historical-data task.
+ */
+/** Presets with their own seat groups; everything else takes the 2020 set. */
+const EXPLICIT_SEAT_PRESETS = new Set([
+  "1991-default",
+  "1953-default",
+  "1979-default",
+  "2027-default",
+  "empty",
+]);
+
+export function seatGroupsFor(presetId: string): SeatGroups {
+  switch (presetId) {
+    case "1991-default":
+      return SEAT_GROUPS_1992;
+    case "1953-default":
+      return SEAT_GROUPS_1953;
+    case "1979-default":
+      return SEAT_GROUPS_1979;
+    case "2027-default":
+      return SEAT_GROUPS_2027;
+    case "empty":
+      return {};
+    default:
+      return SEAT_GROUPS_2020;
+  }
+}
+
+/**
+ * Every seat a preset seeds, in one flat array.
+ *
+ * Derived from `seatGroupsFor` so the grouping and the flat view cannot drift:
+ * the groups are the source, this is the projection. Callers that need to know
+ * WHICH country a seat belongs to must use `seatsForCountry` / `seatCountFor`
+ * in `presetSeatGroups.ts`, because `officeType` alone cannot tell them.
+ *
+ * ⚠️ SILENT 2020 FALLBACK - recorded, not hidden.
+ *
+ * Any preset without an explicit case in `seatGroupsFor` receives the ENTIRE
+ * 2020 chamber roster. That is how 1999-default, 2007-default and 2023-default
+ * came to report seat counts byte-identical to 2019-default: they are not
+ * reusing these arrays by design, they are unrecognised. Downstream that shows
+ * up as jp_* and de_* seats naming parties whose `validForPresets` excludes
+ * those eras, so `resolvePartyId` misses and folds them to "independent" - the
+ * failure `seedHistorical.test.ts` already guards for 1991's de_spd.
+ *
+ * Authoring real 1999/2007 rosters is a historical-data task, and those presets
+ * cannot currently be reset into at all (no budgets, no parties: see S2). The
+ * fallback is left in place because returning nothing would be worse.
+ */
+export function getPresetSeats(presetId: string): HistoricalSeat[] {
+  // Recorded HERE rather than in `seatGroupsFor`, matching the pre-grouping call
+  // frequency: `seatGroupsFor` is also called per country per chamber by the
+  // contract checks, and recording there would flood the report with one entry
+  // per lookup instead of one per seed lane. `recordPresetFallback` ignores
+  // 2019-era presets itself, so this only fires for a preset genuinely taking
+  // another era's seats, and `runSeed`'s closing "N seed lane(s) had no bundle
+  // and used 2019 data" line names it.
+  if (!EXPLICIT_SEAT_PRESETS.has(presetId)) {
+    recordPresetFallback("historicalSeats:getPresetSeats", presetId);
+  }
+  return Object.values(seatGroupsFor(presetId)).flat();
 }
 
 /**

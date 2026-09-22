@@ -1,0 +1,399 @@
+.atlas {
+  min-height: 100vh;
+  background: var(--background);
+  color: var(--foreground);
+}
+.main {
+  max-width: 80rem;
+  margin: auto;
+  padding: 24px 16px 48px;
+}
+.overline {
+  font-size: var(--text-body-sm);
+  font-weight: 500;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+.segment {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.segment button[aria-pressed="true"] {
+  color: var(--primary);
+  border-color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 10%, transparent);
+}
+.segment button {
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: var(--text-body-sm);
+}
+.layerSelect,
+.search {
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+  background: var(--card);
+  color: var(--foreground);
+  padding: 8px 12px;
+  font-size: var(--text-body-sm);
+}
+.layerSelect {
+  min-width: 150px;
+}
+.search {
+  max-width: 100%;
+}
+.displayMenu {
+  margin-left: auto;
+  position: relative;
+  font-size: var(--text-body-sm);
+}
+.displayMenu summary {
+  cursor: pointer;
+  padding: 8px 12px;
+  border: 1px solid var(--card-border);
+  background: var(--card);
+  border-radius: 8px;
+  color: var(--muted);
+}
+.display {
+  position: absolute;
+  z-index: 20;
+  right: 0;
+  top: calc(100% + 8px);
+  width: 210px;
+  padding: 16px;
+  border: 1px solid var(--card-border);
+  background: var(--card);
+  border-radius: 8px;
+  box-shadow: var(--shadow-md);
+  display: grid;
+  gap: 14px;
+}
+.display label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+.display input {
+  accent-color: var(--primary);
+}
+.workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 280px;
+  gap: 16px;
+  align-items: start;
+}
+.focus {
+  grid-template-columns: minmax(0, 1fr);
+}
+.mapStage {
+  height: clamp(320px, 39vw, 520px);
+  position: relative;
+  background: var(--card-muted);
+  overflow: hidden;
+}
+/* Geographic fills come from party/data colors. White label outlines remain
+   within the map so labels are legible across the data palette in every theme. */
+.mapStage svg path {
+  outline: none;
+  cursor: pointer;
+  transition:
+    fill 0.35s ease,
+    fill-opacity 0.2s ease,
+    stroke 0.2s ease;
+}
+.mapStage svg g[role="button"]:focus {
+  outline: none;
+}
+.mapStage svg g[role="button"]:focus path {
+  stroke: var(--foreground);
+  stroke-width: 3px;
+}
+.mapStage svg text {
+  font-size: 9px;
+  paint-order: stroke;
+  stroke: #10182788;
+  stroke-width: 2px;
+}
+.mapFooter {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 16px;
+  font-size: var(--text-body-sm);
+  color: var(--muted);
+  border-top: 1px solid var(--card-border);
+}
+.zoomControls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.iconButton {
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  min-width: 32px;
+  min-height: 32px;
+  border: 1px solid var(--card-border);
+  background: var(--card);
+  border-radius: 6px;
+  font-size: var(--text-body-lg);
+}
+.iconButton:hover {
+  background: var(--card-elevated);
+}
+.sidebar {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+.panel {
+  animation: reveal 0.2s ease both;
+  min-width: 0;
+}
+.regionList {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding: 12px 16px;
+  max-height: 112px;
+  overflow: auto;
+  border-top: 1px solid var(--card-border);
+}
+.regionList button {
+  border: 1px solid var(--card-border);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: var(--text-body-sm);
+}
+.regionList button:hover {
+  background: var(--card-elevated);
+}
+.regionList button[aria-pressed="true"] {
+  background: color-mix(in srgb, var(--primary) 10%, transparent);
+  border-color: var(--primary);
+  color: var(--primary);
+}
+.stateBadge {
+  width: 40px;
+  height: 40px;
+  border: 2px solid;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  font-size: var(--text-body);
+  font-weight: 600;
+  flex-shrink: 0;
+}
+.holder {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--card-border);
+}
+.holder .overline {
+  font-size: var(--text-body-xs);
+  margin-bottom: 3px;
+}
+.holderList {
+  max-height: 340px;
+  overflow: auto;
+  margin: 6px 0 16px;
+}
+.dot {
+  height: 7px;
+  width: 7px;
+  border-radius: 50%;
+  display: inline-block;
+  flex-shrink: 0;
+}
+.bars {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+}
+.track {
+  height: 6px;
+  background: var(--track);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.bar {
+  height: 100%;
+  border-radius: inherit;
+  transition:
+    width 0.4s ease,
+    background 0.3s ease;
+  animation: grow 0.4s ease both;
+  transform-origin: left;
+}
+.composition {
+  display: flex;
+  gap: 3px;
+  height: 12px;
+  border-radius: 4px;
+  overflow: hidden;
+  margin-top: 16px;
+}
+.composition > div {
+  transition: flex 0.4s;
+}
+.tooltip {
+  color: var(--foreground);
+}
+.tableWrap {
+  overflow-x: auto;
+}
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-body-sm);
+  white-space: nowrap;
+}
+.table th {
+  text-align: left;
+  color: var(--muted);
+  font-size: var(--text-body-sm);
+  font-weight: 500;
+}
+.table th,
+.table td {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--card-border);
+}
+.table tbody tr:hover,
+.table tbody tr[aria-selected="true"] {
+  background: var(--card-elevated);
+}
+.table th button {
+  display: inline-flex;
+  gap: 5px;
+  align-items: center;
+}
+.table td button {
+  text-align: left;
+  color: var(--foreground);
+}
+.atlas button:focus-visible,
+.atlas select:focus-visible,
+.atlas summary:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 3px;
+}
+@keyframes reveal {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes grow {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+@media (min-width: 640px) {
+  .main {
+    padding: 24px;
+  }
+}
+@media (min-width: 1024px) {
+  .main {
+    padding: 32px 48px;
+  }
+}
+@media (max-width: 800px) {
+  .workspace {
+    grid-template-columns: 1fr;
+  }
+  .sidebar {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .iconButton {
+    min-width: 40px;
+    min-height: 40px;
+  }
+  .regionList button {
+    min-height: 36px;
+  }
+}
+@media (max-width: 520px) {
+  .sidebar {
+    grid-template-columns: 1fr;
+  }
+  .mapStage {
+    height: 260px;
+  }
+  .mapFooter {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .displayMenu {
+    margin-left: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .atlas *,
+  .atlas *::before,
+  .atlas *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+.metricPicker {
+  margin-bottom: 12px;
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+  background: var(--card);
+}
+.metricPicker summary {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 14px 16px;
+  cursor: pointer;
+  font-size: var(--text-body-sm);
+}
+.metricCatalog {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+  gap: 8px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+.metricCatalog button {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px;
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+  text-align: left;
+  font-size: var(--text-body-sm);
+}
+.metricCatalog button:hover,
+.metricCatalog button[aria-pressed="true"] {
+  border-color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 8%, transparent);
+}

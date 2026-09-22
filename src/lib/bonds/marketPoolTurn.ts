@@ -6,8 +6,8 @@
  * 2. Let savings flow in toward the target when the pool is short, and sweep
  *    cash back out to depositors when it has hoarded far past the target.
  *    Inflow is the institutional deposit base growing; it is new money to the
- *    pool and is counted in M2 through `bondPoolCash`. The sweep is the same
- *    money leaving.
+ *    pool and is tracked as excluded settlement inventory outside observed M2
+ *    (v3 boundary, issue #2021). The sweep is the same money leaving.
  * 3. Refresh the pool's appetite for each sovereign issuer in its currency
  *    from the sovereign-default demand model, so quotes on a CCC sovereign at
  *    four times GDP are thinner than on an AAA one.

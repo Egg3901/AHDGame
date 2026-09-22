@@ -21,7 +21,7 @@ import { CurrencyProvider } from "@/contexts/CurrencyContext";
 import { RegisteredCountriesProvider } from "@/contexts/RegisteredCountriesContext";
 import { getRegisteredCountryIds } from "@/lib/country/registeredCountries";
 import { loadCountryNameOverrides } from "@/lib/country/countryIdentity";
-import { getGameState } from "@/lib/gameState";
+import { getGameStatePreset } from "@/lib/db/collections/gameState";
 import { getEnabledCountryIds } from "@/lib/countryAccess";
 import { getDb } from "@/lib/mongodb";
 import { COUNTRY_ORDER, type CountryId } from "@/lib/constants/countries";
@@ -222,15 +222,18 @@ export default async function RootLayout({
   let countryNameOverrides: Partial<Record<CountryId, string>> = {};
   try {
     const db = await getDb();
-    const [registered, enabled, gameState, nameOverrides] = await Promise.all([
+    // Only the reset preset is needed here, so read it with a `{ preset: 1 }`
+    // projection instead of deserializing the full ~37KB gameState document
+    // (turn-phase map, census deltas, audit metadata) on every page load.
+    const [registered, enabled, preset, nameOverrides] = await Promise.all([
       getRegisteredCountryIds(db),
       getEnabledCountryIds(),
-      getGameState(),
+      getGameStatePreset(db),
       loadCountryNameOverrides(db),
     ]);
     registeredCountries = registered;
     enabledCountries = enabled;
-    activePreset = gameState?.preset ?? DEFAULT_SEED_PRESET;
+    activePreset = preset ?? DEFAULT_SEED_PRESET;
     countryNameOverrides = nameOverrides;
   } catch {
     // keep the COUNTRY_ORDER + 2019-default + no-override fallback

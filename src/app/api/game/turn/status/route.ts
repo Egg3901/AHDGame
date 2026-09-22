@@ -2,7 +2,7 @@ import { isSingleplayer } from "@/lib/singleplayer";
 import { NextResponse } from "next/server";
 import { conditionalJson } from "@/lib/api/conditionalJson";
 import { handleRouteError } from "@/lib/api/errors";
-import { getGameState } from "@/lib/gameState";
+import { getTurnStatusSnapshot } from "@/lib/turn/turnStatusSnapshot";
 import { getProcessingLockState } from "@/lib/turn/processingLock";
 import { computeTurnProcessingProgress, formatTurnPhaseLabel } from "@/lib/turn/turnProgress";
 
@@ -11,7 +11,7 @@ import { computeTurnProcessingProgress, formatTurnPhaseLabel } from "@/lib/turn/
 // Errors: 404
 export async function GET(request: Request) {
   try {
-    const gameState = await getGameState();
+    const gameState = await getTurnStatusSnapshot();
 
     if (!gameState) {
       return NextResponse.json({ error: "Game state not initialized" }, { status: 404 });

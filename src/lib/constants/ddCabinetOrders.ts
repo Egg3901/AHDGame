@@ -1,17 +1,7 @@
 /**
- * East Germany (DD) ministerial orders.
+ * Forwarder. Moved into DD's country folder.
  *
- * DD's cabinet position IDs mirror RU's one-for-one (see ddCabinet.ts), so DD
- * reuses RU_MINISTERIAL_ORDERS verbatim, remapping only the head-of-government
- * key (RU `premier` → DD `generalSecretary`). This is the same reuse the
- * mechanics take in ddCabinetMechanics.ts, and it keeps DD from drifting.
+ * A forwarder holds no copy, so existing importers are untouched and there is
+ * still exactly one declaration.
  */
-import type { MinisterialOrderConfig } from "./cabinetMechanicsTypes";
-import { RU_MINISTERIAL_ORDERS } from "./ruCabinetOrders";
-
-const { premier, ...sharedCouncilOrders } = RU_MINISTERIAL_ORDERS;
-
-export const DD_MINISTERIAL_ORDERS: Record<string, MinisterialOrderConfig[]> = {
-  generalSecretary: premier,
-  ...sharedCouncilOrders,
-};
+export * from "@/lib/countries/dd/cabinet/ddCabinetOrders";

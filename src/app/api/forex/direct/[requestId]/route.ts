@@ -10,7 +10,11 @@ import { parseJsonBody } from "@/lib/api/validate";
 import { handleRouteError, forbidden, notFound, badRequest } from "@/lib/api/errors";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
 import { buildPersonalBalanceInc, getPersonalBalance } from "@/lib/currency/characterFunds";
-import { calculateSpreadFee, distributeSpreadFee } from "@/lib/currency/spreadFees";
+import {
+  calculateSpreadFee,
+  distributeSpreadFee,
+  reverseSpreadFee,
+} from "@/lib/currency/spreadFees";
 import { getCountryForCurrency } from "@/lib/currency/marketMaker";
 import { DIRECT_TRADE_SPREAD } from "@/lib/constants/currencies";
 import { runWithOptionalTransaction } from "@/lib/db/runWithOptionalTransaction";
@@ -221,6 +225,86 @@ export async function POST(request: Request, { params }: RouteParams) {
       source: "direct",
     } as TradeHistoryEntry;
 
+    // The spread fee is part of the accepted trade, not a post-fill side
+    // effect: it runs INSIDE the transition, after both balances settle and
+    // BEFORE the request flips to filled, so a fee failure aborts/rolls back
+    // the trade instead of leaving both parties settled with the fee
+    // uncollected. Invoked exactly once per closure.
+    const spreadFeeLegs = [
+      fromCountryId
+        ? ([senderSpreadFromCurrency, fromCountryId, order.fromCurrency, toCountryId] as const)
+        : null,
+      toCountryId
+        ? ([targetSpreadToCurrency, toCountryId, order.toCurrency, fromCountryId] as const)
+        : null,
+    ].filter((leg): leg is NonNullable<typeof leg> => leg !== null);
+    const distributeSpreadFees = async (session?: import("mongodb").ClientSession) => {
+      let applied = 0;
+      try {
+        for (const [fee, source, currency, destination] of spreadFeeLegs) {
+          await distributeSpreadFee(db, fee, source, currency, destination ?? undefined, {
+            session,
+          });
+          applied++;
+        }
+      } catch (error) {
+        if (session || applied === 0) throw error;
+        const compensationErrors = await reverseAppliedSpreadFees(applied);
+        if (compensationErrors.length > 0) {
+          throw new AggregateError(
+            [error, ...compensationErrors],
+            "Spread-fee distribution failed and completed legs could not all be reversed"
+          );
+        }
+        throw error;
+      }
+      return applied;
+    };
+    const reverseAppliedSpreadFees = async (count: number) => {
+      const errors: unknown[] = [];
+      for (const [fee, source, currency, destination] of spreadFeeLegs.slice(0, count).reverse()) {
+        try {
+          await reverseSpreadFee(db, fee, source, currency, destination ?? undefined);
+        } catch (error) {
+          errors.push(error);
+        }
+      }
+      return errors;
+    };
+    const restoreClaimedOrder = async () => {
+      const restoredFields: Record<string, unknown> = {
+        status: "open",
+        updatedAt: new Date(),
+      };
+      const removedFields: Record<string, ""> = {};
+      for (const [field, value] of Object.entries({
+        filledAmount: order.filledAmount ?? 0,
+        filledRate: order.filledRate,
+        spreadCharged: order.spreadCharged ?? 0,
+      })) {
+        if (value === undefined) removedFields[field] = "";
+        else restoredFields[field] = value;
+      }
+      const filledResult = await db.collection<CurrencyOrder>("currencyOrders").updateOne(
+        { _id: order._id, status: "filled" },
+        {
+          $set: restoredFields,
+          ...(Object.keys(removedFields).length > 0 ? { $unset: removedFields } : {}),
+        }
+      );
+      if (filledResult.matchedCount > 0) return;
+
+      const processingResult = await db
+        .collection<CurrencyOrder>("currencyOrders")
+        .updateOne(
+          { _id: order._id, status: "processing" },
+          { $set: { status: "open", updatedAt: new Date() } }
+        );
+      if (processingResult.matchedCount === 0) {
+        throw new Error("Direct forex request status could not be restored after a failed trade");
+      }
+    };
+
     await runWithOptionalTransaction(
       async (session) => {
         const claimedOrder = await db
@@ -249,6 +333,9 @@ export async function POST(request: Request, { params }: RouteParams) {
         await db
           .collection("characters")
           .updateOne({ _id: order.characterId }, { $inc: senderCreditInc }, { session });
+
+        await distributeSpreadFees(session);
+
         const fillResult = await db.collection<CurrencyOrder>("currencyOrders").updateOne(
           { _id: order._id, status: "processing" },
           {
@@ -281,6 +368,7 @@ export async function POST(request: Request, { params }: RouteParams) {
 
         let targetDebited = false;
         let senderCredited = false;
+        let spreadFeesApplied = 0;
 
         try {
           const targetUpdate = await db.collection("characters").updateOne(
@@ -308,6 +396,8 @@ export async function POST(request: Request, { params }: RouteParams) {
             .updateOne({ _id: order.characterId }, { $inc: senderCreditInc });
           senderCredited = true;
 
+          spreadFeesApplied = await distributeSpreadFees();
+
           const fillResult = await db.collection<CurrencyOrder>("currencyOrders").updateOne(
             { _id: order._id, status: "processing" },
             {
@@ -325,48 +415,39 @@ export async function POST(request: Request, { params }: RouteParams) {
           }
           await db.collection<TradeHistoryEntry>("tradeHistory").insertOne(tradeHistoryEntry);
         } catch (error) {
+          const compensationErrors = await reverseAppliedSpreadFees(spreadFeesApplied);
           if (senderCredited) {
-            await db
-              .collection("characters")
-              .updateOne({ _id: order.characterId }, { $inc: senderRollbackInc });
+            try {
+              await db
+                .collection("characters")
+                .updateOne({ _id: order.characterId }, { $inc: senderRollbackInc });
+            } catch (compensationError) {
+              compensationErrors.push(compensationError);
+            }
           }
           if (targetDebited) {
-            await db
-              .collection("characters")
-              .updateOne({ _id: character._id }, { $inc: targetRollbackInc });
+            try {
+              await db
+                .collection("characters")
+                .updateOne({ _id: character._id }, { $inc: targetRollbackInc });
+            } catch (compensationError) {
+              compensationErrors.push(compensationError);
+            }
           }
-          await db
-            .collection<CurrencyOrder>("currencyOrders")
-            .updateOne(
-              { _id: order._id, status: "processing" },
-              { $set: { status: "open", updatedAt: new Date() } }
+          try {
+            await restoreClaimedOrder();
+          } catch (compensationError) {
+            compensationErrors.push(compensationError);
+          }
+          if (compensationErrors.length > 0) {
+            throw new AggregateError(
+              [error, ...compensationErrors],
+              "Direct forex trade failed and one or more compensation steps were incomplete"
             );
+          }
           throw error;
         }
       }
-    );
-
-    await Promise.all(
-      [
-        fromCountryId
-          ? distributeSpreadFee(
-              db,
-              senderSpreadFromCurrency,
-              fromCountryId,
-              order.fromCurrency,
-              toCountryId ?? undefined
-            )
-          : null,
-        toCountryId
-          ? distributeSpreadFee(
-              db,
-              targetSpreadToCurrency,
-              toCountryId,
-              order.toCurrency,
-              fromCountryId ?? undefined
-            )
-          : null,
-      ].filter(Boolean) as Promise<unknown>[]
     );
 
     const sender = await db.collection<Character>("characters").findOne({ _id: order.characterId });

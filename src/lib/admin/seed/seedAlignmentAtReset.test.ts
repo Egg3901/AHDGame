@@ -46,13 +46,16 @@ describe("core seed → country alignments", () => {
 
     await seedCountryAlignments(db as unknown as Db, preset, countries);
 
-    // 2019 has no sphere-macro tier, so the playable roster is nearly the whole
-    // set — plus Nigeria, which is not playable in 2019 but sits in the
-    // Commonwealth, and every org member is owed a row.
+    // 2019 has no sphere-macro tier, so the roster is the whole set. Nigeria
+    // used to need a `+ 1` here: it is not playable in 2019 but sits in the
+    // Commonwealth, and every org member is owed a row, yet the hand-written
+    // `RESET_PRESETS["2019-default"].countries` listed only six countries and
+    // left it out. That list is now derived from the era roster and includes
+    // NG, so the special case would double-count it.
     const keys = inserted().map((r) => r.entityId);
     expect(keys).toEqual(expect.arrayContaining([...countries]));
     expect(keys).toContain("NG");
-    expect(inserted()).toHaveLength(countries.length + 1);
+    expect(inserted()).toHaveLength(countries.length);
     for (const row of inserted()) expect(row.eraKey).toBe("post-cold-war");
   });
 

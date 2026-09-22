@@ -22,7 +22,7 @@ import { UK_REGION_POLLING_1951 } from "../uk/ukRegionPolling1951";
 import { UK_REGION_POLLING_1992 } from "../uk/ukRegionPolling1992";
 import { UK_REGION_POLLING_2020 } from "../uk/ukRegionPolling2020";
 import { DE_LAND_VOTE_SHARES_1990 } from "../de/deLandVoteShares1990";
-import { JP_REGION_VOTE_SHARES_1990 } from "../jp/jpRegionVoteShares1990";
+import { JP_REGION_VOTE_SHARES_1990 } from "@/lib/countries/jp/data/jpRegionVoteShares1990";
 import {
   IE_REGION_VOTE_SHARES_1953,
   IE_REGION_VOTE_SHARES_1989,
@@ -33,7 +33,7 @@ import {
   NG_REGION_VOTE_SHARES_1953,
   NG_REGION_VOTE_SHARES_1991,
 } from "../ng/ngStatePartyOrgCalculations";
-import { JP_REGION_VOTE_SHARES_1953 } from "../jp/jpStatePartyOrgCalculations";
+import { JP_REGION_VOTE_SHARES_1953 } from "@/lib/countries/jp/data/jpStatePartyOrgCalculations";
 import { BR_REGION_VOTE_SHARES_1953 } from "../br/brStatePartyOrgCalculations";
 import { DE_LAND_VOTE_SHARES_1953 } from "../de/deLandVoteShares1953";
 
@@ -129,23 +129,37 @@ const REG_FILES = import.meta.glob("../registration/*.ts");
 const COUNTRY_FILES: Record<string, Record<string, () => Promise<unknown>>> = {
   UK: import.meta.glob("../uk/*.ts"),
   DE: import.meta.glob("../de/*.ts"),
-  JP: import.meta.glob("../jp/*.ts"),
+  /**
+   * ⚠️ Japan's seed data moved to the country folder in D6, so this glob points
+   * outside seeds/. It is a BUILD-TIME glob, not an import path -- it contains
+   * no "seeds/jp" substring, so the sweep that repointed 73 importers could not
+   * see it, and an empty glob reports every Japan artifact as missing rather
+   * than failing to resolve.
+   */
+  JP: import.meta.glob("../../countries/jp/data/*.ts"),
   IE: import.meta.glob("../ie/*.ts"),
   BR: import.meta.glob("../br/*.ts"),
   CN: import.meta.glob("../cn/*.ts"),
   NG: import.meta.glob("../ng/*.ts"),
 };
-/** True if seeds/<cc>/<base><era>.ts exists, or (era 2019) the unsuffixed default. */
-function hasCountryFile(cc: string, base: string, era: EraId): boolean {
+/**
+ * Glob keys are relative to THIS directory, and Japan's are no longer
+ * `../jp/...` -- match on the basename instead so a country's data can live
+ * anywhere without this audit silently reporting it absent.
+ */
+function hasCountryFileNamed(cc: string, fileName: string): boolean {
   const files = COUNTRY_FILES[cc];
   if (!files) return false;
-  if (`../${cc.toLowerCase()}/${base}${era}.ts` in files) return true;
-  return era === "2019" && `../${cc.toLowerCase()}/${base}.ts` in files;
+  return Object.keys(files).some((k) => k.endsWith(`/${fileName}`));
 }
-/** True if seeds/<cc>/<base>.ts exists (era-invariant artifact). */
+/** True if <base><era>.ts exists for the country, or (era 2019) the unsuffixed default. */
+function hasCountryFile(cc: string, base: string, era: EraId): boolean {
+  if (hasCountryFileNamed(cc, `${base}${era}.ts`)) return true;
+  return era === "2019" && hasCountryFileNamed(cc, `${base}.ts`);
+}
+/** True if <base>.ts exists for the country (era-invariant artifact). */
 function hasCountryFileFixed(cc: string, base: string): boolean {
-  const files = COUNTRY_FILES[cc];
-  return !!files && `../${cc.toLowerCase()}/${base}.ts` in files;
+  return hasCountryFileNamed(cc, `${base}.ts`);
 }
 
 function eraFile(base: string, era: EraId): string {
@@ -421,7 +435,7 @@ describe("[3] Org ↔ lean coupling — favored party gets the bonus, loser keep
       for (const [stateId, margin] of Object.entries(baseline.margins)) {
         const dem = byKey.get(`${stateId}_${US_DEM}`);
         const rep = byKey.get(`${stateId}_${US_REP}`);
-        if (dem === undefined || rep === undefined) continue; // DC etc. host no org
+        if (dem === undefined || rep === undefined) continue;
         scored++;
 
         // Both parties must retain baseline organizing capacity so a region's

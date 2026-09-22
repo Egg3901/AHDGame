@@ -27,6 +27,15 @@ export interface PoliticalMetricsDoc {
    */
   residuals?: Record<PoliticalMetricId, number>;
   /**
+   * Stamp left by the 1953 playable-region texture backfill (issue #704),
+   * naming the migration id that applied it. The backfill adds a texture
+   * delta to existing residuals, which is only idempotent when a re-run can
+   * tell an already-textured doc apart from one carrying event-driven
+   * residual movement — this stamp is that signal. Written only by the
+   * migration; the seeder and the turn phase never read it.
+   */
+  playableTexture1953MigrationId?: string;
+  /**
    * Accumulating, decaying offset from standing cabinet effects (the momentum
    * driver channel). Separate from `residuals` (day-one equilibrium) so the
    * baseline is never touched; composeTarget adds this on top of `residuals`.

@@ -111,6 +111,14 @@ export {
  */
 export interface ActionEffectContext {
   formatFunds: (anchorAmount: number) => string;
+  /**
+   * World reset preset selecting the GDP-baseline era for cost math.
+   * The execute route passes `gameState.preset`; absent (client batch
+   * previews, tests) the modern-era baseline applies.
+   */
+  preset?: string;
+  /** Resolved between-era campaign price level; 1 preserves current behavior. */
+  priceLevel?: number;
 }
 
 /**
@@ -282,11 +290,14 @@ export const ACTIONS: Record<ActionType, ActionDefinition> = {
       // the credited result. canPerformAction runs the quote first; the throw
       // below is a defensive invariant for direct effect callers that skip
       // validation.
-      const quote = quoteFundraiseAction({
-        donorBaseLevel: character.donorBaseLevel,
-        politicalInfluence: character.politicalInfluence,
-        fundraising: character.stats?.fundraising,
-      });
+      const quote = quoteFundraiseAction(
+        {
+          donorBaseLevel: character.donorBaseLevel,
+          politicalInfluence: character.politicalInfluence,
+          fundraising: character.stats?.fundraising,
+        },
+        ctx?.priceLevel
+      );
       if (!quote.ok) throw new Error(quote.error);
       const amount = quote.yieldAnchor;
       const fmt = ctx?.formatFunds ?? plainFunds;
@@ -304,7 +315,7 @@ export const ACTIONS: Record<ActionType, ActionDefinition> = {
       "Increase your political influence — up to +1%, with diminishing returns above 50% (cost scales with current influence and state GDP)",
     baseCost: 1, // dynamic — actual cost computed via getCampaignActionCost()
     requiresState: false,
-    effect: (character: Character, state?: State) => {
+    effect: (character: Character, state?: State, ctx?: ActionEffectContext) => {
       // Single source of truth: the UI card quotes this same quote, so the
       // advertised cost/gain can never drift from the debited/credited result.
       // canPerformAction runs the quote first; the throw below is a defensive
@@ -320,8 +331,10 @@ export const ACTIONS: Record<ActionType, ActionDefinition> = {
               gdpMillions: state.gdp,
               population: state.population,
               countryId: character.countryId,
+              preset: ctx?.preset,
             }
-          : undefined
+          : undefined,
+        ctx?.priceLevel
       );
       if (!quote.ok) throw new Error(quote.error);
       return {
@@ -353,8 +366,10 @@ export const ACTIONS: Record<ActionType, ActionDefinition> = {
               gdpMillions: state.gdp,
               population: state.population,
               countryId: character.countryId,
+              preset: ctx?.preset,
             }
-          : undefined
+          : undefined,
+        ctx?.priceLevel
       );
       if (!quote.ok) throw new Error(quote.error);
       const fmt = ctx?.formatFunds ?? plainFunds;
@@ -388,8 +403,10 @@ export const ACTIONS: Record<ActionType, ActionDefinition> = {
               gdpMillions: state.gdp,
               population: state.population,
               countryId: character.countryId,
+              preset: ctx?.preset,
             }
-          : undefined
+          : undefined,
+        ctx?.priceLevel
       );
       if (!quote.ok) throw new Error(quote.error);
       const fmt = ctx?.formatFunds ?? plainFunds;
@@ -415,7 +432,11 @@ export const ACTIONS: Record<ActionType, ActionDefinition> = {
       // the charged result. canPerformAction runs the quote first; the throw
       // below is a defensive invariant for direct effect callers that skip
       // validation.
-      const quote = quotePollAction({ intellect: character.stats?.intellect }, "small");
+      const quote = quotePollAction(
+        { intellect: character.stats?.intellect },
+        "small",
+        ctx?.priceLevel
+      );
       if (!quote.ok) throw new Error(quote.error);
       const fmt = ctx?.formatFunds ?? plainFunds;
       return {
@@ -438,7 +459,11 @@ export const ACTIONS: Record<ActionType, ActionDefinition> = {
       // the charged result. canPerformAction runs the quote first; the throw
       // below is a defensive invariant for direct effect callers that skip
       // validation.
-      const quote = quotePollAction({ intellect: character.stats?.intellect }, "large");
+      const quote = quotePollAction(
+        { intellect: character.stats?.intellect },
+        "large",
+        ctx?.priceLevel
+      );
       if (!quote.ok) throw new Error(quote.error);
       const fmt = ctx?.formatFunds ?? plainFunds;
       return {
@@ -537,6 +562,10 @@ export type CanPerformActionOptions = {
   forexEnabled?: boolean;
   /** Live home FX rate for converting stored local campaign funds back to internal units. */
   homeFxRate?: number;
+  /** World reset preset selecting the GDP-baseline era for cost validation. */
+  preset?: string;
+  /** Resolved between-era campaign price level; 1 preserves current behavior. */
+  priceLevel?: number;
   /**
    * Resolved RPG-stats feature flag for Debate Prep validation. The execute
    * shell always passes the resolved value; callers that cannot know it omit
@@ -578,8 +607,10 @@ export function canPerformAction(
             gdpMillions: state.gdp,
             population: state.population,
             countryId: character.countryId,
+            preset: options?.preset,
           }
-        : undefined
+        : undefined,
+      options?.priceLevel
     );
     if (!quote.ok) {
       return { canPerform: false, reason: quote.error };
@@ -602,8 +633,10 @@ export function canPerformAction(
             gdpMillions: state.gdp,
             population: state.population,
             countryId: character.countryId,
+            preset: options?.preset,
           }
-        : undefined
+        : undefined,
+      options?.priceLevel
     );
     if (!quote.ok) {
       return { canPerform: false, reason: quote.error };
@@ -633,11 +666,14 @@ export function canPerformAction(
   // here with the quote reason instead of pricing a yield that cannot be
   // earned.
   if (actionType === "fundraise") {
-    const quote = quoteFundraiseAction({
-      donorBaseLevel: character.donorBaseLevel,
-      politicalInfluence: character.politicalInfluence,
-      fundraising: character.stats?.fundraising,
-    });
+    const quote = quoteFundraiseAction(
+      {
+        donorBaseLevel: character.donorBaseLevel,
+        politicalInfluence: character.politicalInfluence,
+        fundraising: character.stats?.fundraising,
+      },
+      options?.priceLevel
+    );
     if (!quote.ok) {
       return { canPerform: false, reason: quote.error };
     }
@@ -649,7 +685,11 @@ export function canPerformAction(
   // unscaled base.
   if (actionType === "poll" || actionType === "pollLarge") {
     const tier: PollTier = actionType === "pollLarge" ? "large" : "small";
-    const quote = quotePollAction({ intellect: character.stats?.intellect }, tier);
+    const quote = quotePollAction(
+      { intellect: character.stats?.intellect },
+      tier,
+      options?.priceLevel
+    );
     if (!quote.ok) {
       return { canPerform: false, reason: quote.error };
     }
@@ -688,8 +728,10 @@ export function canPerformAction(
             gdpMillions: state.gdp,
             population: state.population,
             countryId: character.countryId,
+            preset: options?.preset,
           }
-        : undefined
+        : undefined,
+      options?.priceLevel
     );
     if (!quote.ok) {
       return { canPerform: false, reason: quote.error };
@@ -717,7 +759,10 @@ export function canPerformAction(
   // Check funds for actions that cost money. effect.fundsChange is ANCHOR; the
   // stored balance is LOCAL. Compare and report in LOCAL home currency — campaign
   // funds live in local and the UI must never surface anchor (₳) to the player.
-  const effect = action.effect(character, state);
+  const effect = action.effect(character, state, {
+    formatFunds: plainFunds,
+    preset: options?.preset,
+  });
   if (effect.fundsChange && effect.fundsChange < 0) {
     const costAnchor = Math.abs(effect.fundsChange);
     const balanceLocal = character.currencyBalances?.campaign ?? character.funds ?? 0;

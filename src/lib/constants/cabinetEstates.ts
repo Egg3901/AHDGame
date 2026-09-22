@@ -1,5 +1,13 @@
 import type { CountryId } from "./countries";
 import type { CabinetEstate, EstateFundingLevel } from "@/lib/db/types/cabinetEstate";
+import { JP_ESTATE_PORTFOLIO } from "@/lib/countries/jp/institutionsFacts";
+import { US_ESTATE_PORTFOLIO } from "@/lib/countries/us/institutionsFacts";
+import { UK_ESTATE_PORTFOLIO } from "@/lib/countries/uk/institutionsFacts";
+import { DE_ESTATE_PORTFOLIO } from "@/lib/countries/de/institutionsFacts";
+import { CN_ESTATE_PORTFOLIO } from "@/lib/countries/cn/institutionsFacts";
+import { IE_ESTATE_PORTFOLIO } from "@/lib/countries/ie/institutionsFacts";
+import { RU_ESTATE_PORTFOLIO } from "@/lib/countries/ru/institutionsFacts";
+import { DD_ESTATE_PORTFOLIO } from "@/lib/countries/dd/institutionsFacts";
 
 // ── Archetype catalog ────────────────────────────────────────────────────────
 export interface EstateArchetype {
@@ -656,104 +664,20 @@ export const ESTATE_CATALOG: Record<string, EstateArchetype[]> = {
 // Reserved/excluded (no entry → no estates, placeholder stays): finance, defense,
 // energy, transportation, and head-of-government / deputy / territorial seats.
 export const ESTATE_PORTFOLIO_BY_COUNTRY: Partial<Record<CountryId, Record<string, string>>> = {
-  US: {
-    secretary_of_state: "foreign",
-    attorney_general: "justice",
-    secretary_of_interior: "interior",
-    secretary_of_agriculture: "agriculture",
-    secretary_of_commerce: "commerce",
-    secretary_of_labor: "labor",
-    secretary_of_health: "health",
-    secretary_of_hud: "housing",
-    secretary_of_education: "education",
-    secretary_of_veterans: "veterans",
-    secretary_of_homeland: "homeland",
-  },
-  UK: {
-    foreign_secretary: "foreign",
-    home_secretary: "homeland",
-    justice_secretary: "justice",
-    health_secretary: "health",
-    education_secretary: "education",
-    business_secretary: "commerce",
-    levelling_secretary: "housing",
-    environment_secretary: "interior",
-    work_secretary: "labor",
-  },
-  DE: {
-    foreign_minister: "foreign",
-    interior_minister: "homeland",
-    justice_minister: "justice",
-    labour_minister: "labor",
-    health_minister: "health",
-    education_minister: "education",
-    environment_minister: "interior",
-    economy_minister: "commerce",
-  },
-  CN: {
-    minister_of_foreign_affairs: "foreign",
-    minister_of_education: "education",
-    minister_of_health: "health",
-    minister_of_public_security: "homeland",
-    minister_of_commerce: "commerce",
-    minister_of_human_resources_social_security: "labor",
-    minister_of_ecology_environment: "interior",
-    minister_of_agriculture_rural_affairs: "agriculture",
-    minister_of_housing_urban_rural: "housing",
-  },
-  JP: {
-    foreign_affairs_minister: "foreign",
-    justice_minister: "justice",
-    health_minister: "health",
-    education_minister: "education",
-    economy_minister: "commerce",
-    environment_minister: "interior",
-    internal_affairs_minister: "homeland",
-  },
-  IE: {
-    minister_for_foreign_affairs: "foreign",
-    minister_for_enterprise: "commerce",
-    minister_for_health: "health",
-    minister_for_education: "education",
-    minister_for_further_higher_education: "education",
-    minister_for_housing: "housing",
-    minister_for_social_protection: "labor",
-    minister_for_justice: "justice",
-    minister_for_environment_climate: "interior",
-    minister_for_agriculture: "agriculture",
-  },
+  US: US_ESTATE_PORTFOLIO,
+  UK: UK_ESTATE_PORTFOLIO,
+  DE: DE_ESTATE_PORTFOLIO,
+  CN: CN_ESTATE_PORTFOLIO,
+  JP: JP_ESTATE_PORTFOLIO,
+  IE: IE_ESTATE_PORTFOLIO,
   // Command-economy Council of Ministers. Defence → Military flagship and
   // Finance → Monetary flagship are resolved elsewhere, so both are absent here;
   // `premier`/`generalSecretary` and `first_deputy_premier` are leadership seats
   // with no flagship (the UK Deputy PM precedent). DD mirrors RU's position ids
   // one-for-one (ddCabinet.ts), so the two maps are identical — written out
   // separately rather than aliased so a future divergence is a local edit.
-  RU: {
-    minister_of_foreign_affairs: "foreign",
-    minister_of_internal_affairs: "state_security",
-    chairman_of_gosplan: "planning",
-    gosbank_liaison: "state_bank",
-    minister_of_foreign_trade: "trade_mission",
-    minister_of_internal_trade: "distribution",
-    minister_of_agriculture: "collective_farming",
-    minister_of_machine_building: "heavy_industry",
-    minister_of_culture: "culture",
-    minister_of_health: "socialized_health",
-    minister_of_higher_education: "education",
-  },
-  DD: {
-    minister_of_foreign_affairs: "foreign",
-    minister_of_internal_affairs: "state_security",
-    chairman_of_gosplan: "planning",
-    gosbank_liaison: "state_bank",
-    minister_of_foreign_trade: "trade_mission",
-    minister_of_internal_trade: "distribution",
-    minister_of_agriculture: "collective_farming",
-    minister_of_machine_building: "heavy_industry",
-    minister_of_culture: "culture",
-    minister_of_health: "socialized_health",
-    minister_of_higher_education: "education",
-  },
+  RU: RU_ESTATE_PORTFOLIO,
+  DD: DD_ESTATE_PORTFOLIO,
 };
 
 /** Portfolio → federal-budget spending category; unmapped → gdp-fraction fallback. */

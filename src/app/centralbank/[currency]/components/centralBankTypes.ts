@@ -121,6 +121,10 @@ export interface MoneySupplyView {
   sovereignBondsOutstanding: number;
   centralBankBondHoldings: number;
   bondPoolCash?: number;
+  /** Bond-pool settlement cash outside observed M2 (#2021). Absent on legacy observations. */
+  excludedBondPoolCash?: number;
+  /** QE-created money still parked in the bond pool; the only pool cash inside M2. */
+  observedBondPoolCash?: number;
   netMoneyCreatedLifetime: number;
   lastOperationTurn: number | null;
   lastPolicyEvaluation: {

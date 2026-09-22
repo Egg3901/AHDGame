@@ -78,6 +78,9 @@ export async function payOrganizationAid(
   const fundCountry = await resolveOrgFundCurrencyCountry(db, organizationId);
   const preset = await loadWorldPreset(db);
   const recipientLocal = convertLocal(fundCountry, recipient, amountFund, preset);
+  // Aid credits cash, not income: revenue/spending/surplus are untouched, and
+  // `debt.principal` belongs to the bond ledger (see bonds/sovereignPrincipal.ts),
+  // so a cash-only $inc correctly leaves it alone (#1975).
   await db.collection<FederalBudget>("federalBudget").updateOne(
     { countryId: recipient },
     {

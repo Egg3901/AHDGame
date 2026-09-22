@@ -119,6 +119,14 @@ export type {
 } from "./parliamentaryGovernment";
 export type { GovernmentApproval } from "./governmentApproval";
 export type { StateApprovalHistory } from "./stateApproval";
+export type {
+  ApprovalTelemetryPoint,
+  MacroTelemetryPoint,
+  LongHorizonSourceClass,
+  TelemetryGoverningActor,
+  TelemetryEffectiveManifest,
+  TelemetryActorConfiguration,
+} from "./longHorizonTelemetry";
 export type { Task, TaskType, TaskPriority, TaskStatus } from "./task";
 export type { TaskLesson, LessonCategory } from "./taskLesson";
 export type { TaskComment, CommentAuthor } from "./taskComment";
@@ -255,6 +263,17 @@ export type {
 } from "./coalition";
 export type { PlayerMail, PlayerMailReport } from "./playerMail";
 export type { UKCabinetCooldown } from "./ukCabinetCooldown";
+export type {
+  UkCommonsVacancy,
+  CommonsVacancyReason,
+  CommonsVacancyStatus,
+  UkRecallPetition,
+  RecallPetitionStatus,
+  RecallTrigger,
+  RecallSignature,
+  RecallDeclaration,
+  RecallSupportSample,
+} from "./ukByElection";
 export type { CabinetSetting } from "./cabinetSetting";
 export type { MinisterialOrder } from "./ministerialOrder";
 export type { UnifiedCabinetMember } from "./unifiedCabinetMember";
@@ -284,6 +303,9 @@ export * from "./patreon";
 export type { ImperialCharacter } from "./imperialCharacter";
 export type {
   GameHealthSnapshot,
+  GameHealthSummary,
+  GameHealthSeverity,
+  GameHealthQualification,
   TurnWarning,
   TurnError,
   IntegrityIssue,
@@ -364,3 +386,5 @@ export type { PartyGroupFavorability } from "./partyGroupFavorability";
 export type { GovernorQueuedBill } from "./governorQueuedBill";
 export type { DemographicConfigOverride } from "./demographicConfigOverride";
 export * from "./supporterRequests";
+export type { ElectionResultSnapshot } from "./electionResultSnapshot";
+export { ELECTION_RESULT_SNAPSHOT_VERSION } from "./electionResultSnapshot";

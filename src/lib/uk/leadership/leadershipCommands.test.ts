@@ -386,6 +386,43 @@ describe("committee amendments and cooldowns", () => {
     );
     expect(again.ruleset.removalMajorityPct).toBe(0.65);
   });
+
+  it("serializes concurrent amendments: first writer wins, the loser conflicts", async () => {
+    const { db, partySeq, committeeMember } = await seedWorld();
+    const [first, second] = await Promise.allSettled([
+      amendLeadershipRules(
+        db,
+        "UK",
+        partySeq,
+        committeeMember.actor,
+        { removalMajorityPct: 0.6 },
+        100,
+        NOW()
+      ),
+      amendLeadershipRules(
+        db,
+        "UK",
+        partySeq,
+        committeeMember.actor,
+        { triggerThresholdPct: 0.2 },
+        100,
+        NOW()
+      ),
+    ]);
+    // Exactly one amendment owns the cooldown window.
+    const winners = [first, second].filter((r) => r.status === "fulfilled");
+    const losers = [first, second].filter((r) => r.status === "rejected");
+    expect(winners).toHaveLength(1);
+    expect(losers).toHaveLength(1);
+    expect(
+      (losers[0] as PromiseRejectedResult).reason instanceof ApiError &&
+        ((losers[0] as PromiseRejectedResult).reason as ApiError).status
+    ).toBe(409);
+    const state = await getLeadershipState(db, "UK", partySeq, null, 100, NOW());
+    const majorityWon = state.ruleset.removalMajorityPct === 0.6;
+    expect(state.ruleset.triggerThresholdPct).toBe(majorityWon ? 0.15 : 0.2);
+    expect(state.amendment.canAmendNow).toBe(false);
+  });
 });
 
 describe("committee faction control", () => {

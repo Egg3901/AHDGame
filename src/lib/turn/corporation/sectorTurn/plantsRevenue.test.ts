@@ -180,6 +180,41 @@ describe("resolvePlantsRevenue — governor bounds + P3b legs (#588)", () => {
     expect(nonExtraction.capacityBindingEvent).toBeNull();
   });
 
+  // Flip identity under a mid-strategy transition: on the flip turn the
+  // governor returns the anchor verbatim, so the anchor must be the
+  // capital-mode counterfactual even while transitioning. Anchoring on the
+  // transitioning nameplate booked headroom plus the blend as revenue
+  // (measured +12% on a manufacturing standard to premium flip).
+  it("anchors the flip-turn baseline on the pre-flip nameplate while transitioning", () => {
+    const r = resolvePlantsRevenue(
+      input({
+        strategyIsTransitioning: true,
+        retoolCapacityRatio: 1.0211,
+        plantsNameplateRevenue: PRE_FLIP_REVENUE * 1.1227,
+        plantsRampLambda: 0,
+        plantsStartTurn: CURRENT_TURN,
+      })
+    );
+    expect(r.baselineHourlyRevenue).toBe(BASELINE_HOURLY);
+    expect(r.marketHourlyRevenue).toBe(BASELINE_HOURLY);
+  });
+
+  // Past the flip the transitioning nameplate is the anchor again, so the
+  // governor fades realized revenue toward the re-aimed plant, not the old mix.
+  it("anchors post-flip transitioning turns on the transitioning nameplate", () => {
+    const nameplate = PRE_FLIP_REVENUE * 1.1227;
+    const r = resolvePlantsRevenue(
+      input({
+        strategyIsTransitioning: true,
+        retoolCapacityRatio: 1.0211,
+        plantsNameplateRevenue: nameplate,
+        plantsRampLambda: 0.5,
+        plantsStartTurn: CURRENT_TURN - GOVERNOR_RAMP_TURNS / 2,
+      })
+    );
+    expect(r.baselineHourlyRevenue).toBeCloseTo(nameplate / TURNS_PER_DAY, 8);
+  });
+
   it("applies the arsenal diversion after the governor, not inside it", () => {
     const diverted = resolvePlantsRevenue(
       input({

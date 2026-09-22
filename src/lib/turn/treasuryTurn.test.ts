@@ -65,29 +65,45 @@ describe("processTreasuryTurn", () => {
     expect(touched).not.toContain("DD");
   });
 
-  it("credits one turn's primary surplus and resyncs derived fields", async () => {
+  it("credits one turn's primary surplus without touching bond-owned principal", async () => {
     mockBudgets([budgetDoc({})]);
     const { processTreasuryTurn } = await import("./treasuryTurn");
     await processTreasuryTurn(10);
     // revenue 48_000, spending-ex-interest 0 ⇒ primary/turn = 48_000/48 = 1_000
     const upd = db.collectionMocks.federalBudget.updateOne.mock.calls[0][1].$set;
     expect(upd.treasuryBalance).toBe(1_000);
-    expect(upd["debt.principal"]).toBe(0); // still in surplus
+    // Cash and bond debt are separate positions (refs #1975): the phase moves
+    // cash only and never rewrites the bond-owned stock.
+    expect(upd).not.toHaveProperty("debt.principal");
   });
 
-  it("accrues debt-service while negative (the spiral)", async () => {
-    mockBudgets([budgetDoc({ treasuryBalance: -48_000, revenue: { total: 0 } })]);
+  it("accrues debt-service on the bond stock while negative (the spiral)", async () => {
+    // Cash and stock are independent (refs #1975): the spiral accrues live
+    // debt-service on the bond-owned principal, never on the cash balance.
+    mockBudgets([
+      budgetDoc({
+        treasuryBalance: -48_000,
+        revenue: { total: 0 },
+        debt: {
+          principal: 48_000,
+          interestRate: 0.05,
+          ceiling: 1_000_000,
+          ceilingLastRaisedYear: 2019,
+        },
+      }),
+    ]);
     const { processTreasuryTurn } = await import("./treasuryTurn");
     await processTreasuryTurn(10);
     const upd = db.collectionMocks.federalBudget.updateOne.mock.calls[0][1].$set;
-    // primary 0; debt-service > 0 ⇒ balance drops below -48_000.
+    // primary 0; debt-service on the 48_000 stock > 0 ⇒ balance drops below -48_000.
     expect(upd.treasuryBalance).toBeLessThan(-48_000);
-    expect(upd["debt.principal"]).toBeGreaterThan(48_000);
+    expect(upd).not.toHaveProperty("debt.principal");
   });
 
-  it("heals a null treasuryBalance from -debt.principal, then accrues this turn", async () => {
+  it("heals a null treasuryBalance to zero, then accrues this turn", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    // No treasuryBalance; principal 0; revenue 48_000 ⇒ inits to 0 then +1_000.
+    // No treasuryBalance; the heal is zero, never bond debt (refs #1975).
+    // Principal 0; revenue 48_000 ⇒ inits to 0 then +1_000.
     const doc = budgetDoc({});
     delete (doc as Record<string, unknown>).treasuryBalance;
     mockBudgets([doc]);
@@ -100,9 +116,11 @@ describe("processTreasuryTurn", () => {
     warn.mockRestore();
   });
 
-  it("heals a null balance from existing debt (negative start)", async () => {
+  it("heals a null balance to zero, then accrues bond-stock debt service", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    // principal 48_000 ⇒ inits to -48_000; revenue 0 ⇒ debt-service pushes lower.
+    // The heal is zero, never bond debt (refs #1975): revenue 0 with a 48_000
+    // stock ⇒ debt-service pushes the healed zero below zero, and the stock
+    // itself is untouched.
     const doc = budgetDoc({
       revenue: { total: 0 },
       debt: {
@@ -117,7 +135,9 @@ describe("processTreasuryTurn", () => {
     const { processTreasuryTurn } = await import("./treasuryTurn");
     await processTreasuryTurn(10);
     const upd = db.collectionMocks.federalBudget.updateOne.mock.calls[0][1].$set;
-    expect(upd.treasuryBalance).toBeLessThan(-48_000);
+    expect(upd.treasuryBalance).toBeLessThan(0);
+    expect(upd).not.toHaveProperty("debt.principal");
+    expect(warn).toHaveBeenCalledOnce();
     warn.mockRestore();
   });
 

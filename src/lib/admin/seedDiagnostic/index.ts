@@ -15,6 +15,7 @@ import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
 export type {
   RunSeedDiagnosticOptions,
   SeedDiagnosticCheck,
+  SeedDiagnosticFeatureManifest,
   SeedDiagnosticMode,
   SeedDiagnosticReport,
   SeedDiagnosticSeverity,
@@ -103,6 +104,11 @@ export async function runSeedDiagnostic(
     summary: summarize(checks),
     checks,
     ...(note ? { note } : {}),
+    ...(opts.runId !== undefined ? { runId: opts.runId } : {}),
+    ...(opts.seed !== undefined ? { seed: opts.seed } : {}),
+    ...(opts.sourceRevision !== undefined ? { sourceRevision: opts.sourceRevision } : {}),
+    ...(opts.sourceWorktree !== undefined ? { sourceWorktree: opts.sourceWorktree } : {}),
+    ...(opts.featureManifest !== undefined ? { featureManifest: opts.featureManifest } : {}),
   };
 
   if (opts.persist !== false) {
@@ -145,6 +151,11 @@ export function diagnosticErrorReport(
     preset?: string;
     trigger?: SeedDiagnosticReport["trigger"];
     now?: Date;
+    runId?: string;
+    seed?: string;
+    sourceRevision?: string | null;
+    sourceWorktree?: string | null;
+    featureManifest?: SeedDiagnosticReport["featureManifest"];
   }
 ): SeedDiagnosticReport {
   const checks: SeedDiagnosticCheck[] = [
@@ -168,5 +179,10 @@ export function diagnosticErrorReport(
     calendarTurn: 0,
     summary: summarize(checks),
     checks,
+    ...(opts?.runId !== undefined ? { runId: opts.runId } : {}),
+    ...(opts?.seed !== undefined ? { seed: opts.seed } : {}),
+    ...(opts?.sourceRevision !== undefined ? { sourceRevision: opts.sourceRevision } : {}),
+    ...(opts?.sourceWorktree !== undefined ? { sourceWorktree: opts.sourceWorktree } : {}),
+    ...(opts?.featureManifest !== undefined ? { featureManifest: opts.featureManifest } : {}),
   };
 }

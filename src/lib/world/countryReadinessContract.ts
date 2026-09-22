@@ -18,7 +18,7 @@ import {
   type CountryId,
   type GovernmentType,
 } from "@/lib/constants/countries";
-import { COUNTRY_READINESS_EXPECTATIONS } from "@/lib/constants/countryReadinessExpectations";
+import { getReadinessExpectations } from "@/lib/constants/readinessExpectations";
 import { getCabinetPositions } from "@/lib/constants/cabinetMechanics";
 import { FOREX_ACTIVE_COUNTRIES } from "@/lib/constants/currencies";
 import { MARKETIZATION_SCHEDULE } from "@/lib/constants/commandEconomy";
@@ -29,21 +29,7 @@ import {
   type ReadinessResult,
   type WorldEconomicArchetype,
 } from "@/lib/world/worldEntityManifest";
-import type { PartySeed } from "@/lib/seeds/reference/politicalParties";
-import { frParties } from "@/lib/seeds/fr/frParties";
-import { itParties } from "@/lib/seeds/it/itParties";
-import { esParties } from "@/lib/seeds/es/esParties";
-import { seParties } from "@/lib/seeds/se/seParties";
-import { trParties } from "@/lib/seeds/tr/trParties";
-import { plParties } from "@/lib/seeds/pl/plParties";
-import { csParties } from "@/lib/seeds/cs/csParties";
-import { huParties } from "@/lib/seeds/hu/huParties";
-import { roParties } from "@/lib/seeds/ro/roParties";
-import { bgParties } from "@/lib/seeds/bg/bgParties";
-import { uaParties } from "@/lib/seeds/ua/uaParties";
-import { blrParties } from "@/lib/seeds/blr/blrParties";
-import { balParties } from "@/lib/seeds/bal/balParties";
-import { yuParties } from "@/lib/seeds/yu/yuParties";
+import { partyRosterLabel, partySeedsForPreset } from "@/lib/seeds/partySeedRegistry";
 
 // ─── Capability catalogue ────────────────────────────────────────────────────
 
@@ -88,6 +74,26 @@ export interface CapabilityEvidence {
 }
 
 export type CapabilityEvidenceMap = Partial<Record<CapabilityId, CapabilityEvidence>>;
+
+/**
+ * An authored override for a capability a probe cannot prove.
+ *
+ * Absence must justify itself. A bare `present: false` with a free-text string
+ * cannot distinguish "this will never apply here" from "nobody has written it
+ * yet" — the same conflation the era roster exists to remove, one level down.
+ *
+ * `not-applicable` is permanent and needs only a reason. `deferred` is work
+ * nobody has done, and carries an issue once one is filed. `issue: null` is
+ * deliberate rather than lazy: issues are filed by hand on a public repository,
+ * and a waiver that could not be recorded until a number existed would be
+ * recorded nowhere at all. Every deferred waiver is reported as debt whether or
+ * not it has a number; what must never happen is a deferred gap dressed up as
+ * `not-applicable`.
+ */
+export type CapabilityOverride =
+  | { present: true; evidence: string }
+  | { present: false; kind: "not-applicable"; reason: string }
+  | { present: false; kind: "deferred"; reason: string; issue: string | null };
 
 export interface FailedCapability {
   capabilityId: CapabilityId;
@@ -453,62 +459,46 @@ export function evaluateCountryReadiness(input: {
  * known flavor gaps). Keyed by `${presetId}:${countryId}:${capabilityId}`.
  * `undefined` means "use the probe result".
  *
- * Authored party-seed modules for countries whose readiness expectations entry
- * is incomplete or missing are listed below; probes prefer
- * {@link COUNTRY_READINESS_EXPECTATIONS} when present.
+ * Party seeds come from `@/lib/seeds/partySeedRegistry`, which covers every
+ * registered country. The partial copy that used to live here covered 14 of
+ * them, which is why the probes needed a country-keyed fallback.
  */
-const AUTHORED_PARTY_SEED_MODULES: Partial<Record<CountryId, readonly PartySeed[]>> = {
-  FR: frParties,
-  IT: itParties,
-  ES: esParties,
-  SE: seParties,
-  TR: trParties,
-  // Eastern bloc Tier-1 — also have COUNTRY_READINESS_EXPECTATIONS entries;
-  // seed modules remain registered so probes see authored material before
-  // expectations land (and for presets that filter via validForPresets).
-  PL: plParties,
-  CS: csParties,
-  HU: huParties,
-  RO: roParties,
-  BG: bgParties,
-  YU: yuParties,
-  UKR: uaParties,
-  BLR: blrParties,
-  BAL: balParties,
-};
-
-function partySeedsForPreset(countryId: CountryId, presetId: string): PartySeed[] {
-  const seeds = AUTHORED_PARTY_SEED_MODULES[countryId];
-  if (!seeds) return [];
-  return seeds.filter((seed) => !seed.validForPresets || seed.validForPresets.includes(presetId));
-}
-
-const CAPABILITY_INVENTORY: Readonly<Record<string, CapabilityEvidence | undefined>> =
+export const CAPABILITY_INVENTORY: Readonly<Record<string, CapabilityOverride | undefined>> =
   Object.freeze({
     // Japan 1953 is the reference autonomous-ok / player-blocked case: Diet and
     // economy wiring exist for NPP autonomy, but player-parity validation and
     // flavor content are incomplete.
     "1953-default:JP:adminDiagnostics": {
       present: false,
-      evidence:
-        "Japan 1953 lacks established-player-country parity validation for its Diet/cabinet surface.",
+      kind: "deferred",
+      reason:
+        "Japan 1953 lacks established-player-country parity validation for its Diet and cabinet surface.",
+      issue: null,
     },
     "1953-default:JP:bespokeEvents": {
       present: false,
-      evidence: "No Japan-1953 bespoke event pack authored yet.",
+      kind: "deferred",
+      reason: "No Japan-1953 bespoke event pack authored yet.",
+      issue: null,
     },
     "1953-default:JP:artAssets": {
       present: false,
-      evidence: "Japan 1953 uses shared modern art placeholders.",
+      kind: "deferred",
+      reason: "Japan 1953 uses shared modern art placeholders rather than era art.",
+      issue: null,
     },
     "1953-default:JP:wikiMaterial": {
       present: false,
-      evidence: "Japan 1953 wiki material is incomplete.",
+      kind: "deferred",
+      reason: "Japan 1953 wiki material is incomplete; the Diet loop is undocumented.",
+      issue: null,
     },
     // Established player countries in Cold-War presets: flavor still tracked.
     "1953-default:UK:bespokeEvents": {
       present: false,
-      evidence: "UK 1953 bespoke event coverage is partial.",
+      kind: "deferred",
+      reason: "UK 1953 bespoke event coverage is partial; the Suez arc is unwritten.",
+      issue: null,
     },
     "1953-default:UK:wikiMaterial": {
       present: true,
@@ -556,12 +546,12 @@ function probeInstitutions(countryId: CountryId): CapabilityEvidence {
   };
 }
 
-function probeRegions(countryId: CountryId): CapabilityEvidence {
-  const expect = COUNTRY_READINESS_EXPECTATIONS[countryId];
+function probeRegions(countryId: CountryId, presetId: string): CapabilityEvidence {
+  const expect = getReadinessExpectations(countryId, presetId);
   if (expect && expect.regionCount > 0) {
     return {
       present: true,
-      evidence: `Readiness expectations require ${expect.regionCount} regions.`,
+      evidence: `Readiness expectations require ${expect.regionCount} regions in ${presetId}.`,
     };
   }
   // Config-only countries without an expectations entry still need regions
@@ -572,35 +562,34 @@ function probeRegions(countryId: CountryId): CapabilityEvidence {
   return {
     present,
     evidence: present
-      ? `Country config present; no region-count expectation registered.`
+      ? `Country config present; no region-count expectation registered for ${presetId}.`
       : `No country config.`,
   };
 }
 
+/**
+ * Parties authored for THIS preset.
+ *
+ * The previous implementation short-circuited on
+ * `COUNTRY_READINESS_EXPECTATIONS[countryId]` and never read `presetId` on that
+ * branch, so the 19 countries holding an entry passed on any preset by
+ * asserting a roster from another era: `probeParties("RU", "2019-default")`
+ * returned present with evidence "Expected parties: CPSU", while
+ * `partySeedsForPreset` returned nothing because `ruParties` is gated to 1953
+ * and 1979. It reads the seed modules directly now. The registry covers every
+ * registered country, so there is nothing left for the short-circuit to cover.
+ */
 function probeParties(countryId: CountryId, presetId: string): CapabilityEvidence {
-  const expect = COUNTRY_READINESS_EXPECTATIONS[countryId];
-  if (expect) {
-    const present = expect.partyMin > 0 || expect.partyRoster.length > 0;
-    return {
-      present,
-      evidence: present
-        ? `Expected parties: ${expect.partyRoster} (min ${expect.partyMin}).`
-        : `Party roster empty in readiness expectations.`,
-    };
-  }
-  // Economy-preview Tier-1 countries (FR/IT/ES/SE/TR) author parties in seed
-  // modules without a COUNTRY_READINESS_EXPECTATIONS entry yet.
   const seeded = partySeedsForPreset(countryId, presetId);
   if (seeded.length > 0) {
-    const labels = seeded.map((p) => p.abbreviation || p.name).join(", ");
     return {
       present: true,
-      evidence: `Authored party seed module for ${presetId}: ${labels} (${seeded.length}).`,
+      evidence: `Authored party seeds for ${presetId}: ${partyRosterLabel(seeded)} (${seeded.length}).`,
     };
   }
   return {
     present: false,
-    evidence: `No party roster in COUNTRY_READINESS_EXPECTATIONS and no authored party seed module.`,
+    evidence: `No party seed valid for ${presetId} in the party seed registry.`,
   };
 }
 
@@ -711,12 +700,22 @@ function probePlannedControls(countryId: CountryId): CapabilityEvidence {
   };
 }
 
-function probeAdminDiagnostics(countryId: CountryId): CapabilityEvidence {
-  const present = Boolean(COUNTRY_READINESS_EXPECTATIONS[countryId]);
+/**
+ * Whether an admin readiness diagnostic exists for this country.
+ *
+ * Still effectively country-keyed, and deliberately so: `getReadinessExpectations`
+ * returns null only when nothing is authored for the country at all, which is
+ * the right question for a capability that asks "is there a diagnostic", not "do
+ * its numbers pass". What the preset buys here is that the derived expectations
+ * the admin panel then reads are the era's, and that the evidence string says
+ * which era answered.
+ */
+function probeAdminDiagnostics(countryId: CountryId, presetId: string): CapabilityEvidence {
+  const present = getReadinessExpectations(countryId, presetId) !== null;
   return {
     present,
     evidence: present
-      ? `COUNTRY_READINESS_EXPECTATIONS entry present.`
+      ? `Readiness expectations resolve for ${presetId}.`
       : `No COUNTRY_READINESS_EXPECTATIONS entry.`,
   };
 }
@@ -727,6 +726,17 @@ function defaultFlavorEvidence(capabilityId: CapabilityId): CapabilityEvidence {
     present: false,
     evidence: `No authored ${CAPABILITY_LABELS[capabilityId].toLowerCase()} declared for this preset.`,
   };
+}
+
+/**
+ * Render an absence waiver for the readiness report, so the reason a capability
+ * is waived travels with it instead of being swallowed.
+ */
+function describeWaiver(override: Extract<CapabilityOverride, { present: false }>): string {
+  if (override.kind === "not-applicable") return override.reason;
+  return override.issue
+    ? `${override.reason} (deferred, ${override.issue})`
+    : `${override.reason} (deferred, no issue filed)`;
 }
 
 /**
@@ -747,7 +757,7 @@ export function collectCapabilityEvidence(
   const probes: CapabilityEvidenceMap = {
     fullAutonomousTier: probeFullAutonomousTier(countryId, presetId),
     institutionsConfigured: probeInstitutions(countryId),
-    regionsAuthored: probeRegions(countryId),
+    regionsAuthored: probeRegions(countryId, presetId),
     partiesAuthored: probeParties(countryId, presetId),
     economyModel: probeEconomyModel(countryId, planned),
     budgetsAuthored: probeBudgets(countryId, presetId),
@@ -756,15 +766,22 @@ export function collectCapabilityEvidence(
     billLifecycle: probeBillLifecycle(countryId),
     onePartyMood: probeOnePartyMood(countryId),
     plannedEconomyControls: probePlannedControls(countryId),
-    adminDiagnostics: probeAdminDiagnostics(countryId),
+    adminDiagnostics: probeAdminDiagnostics(countryId, presetId),
     bespokeEvents: defaultFlavorEvidence("bespokeEvents"),
     artAssets: defaultFlavorEvidence("artAssets"),
     wikiMaterial: defaultFlavorEvidence("wikiMaterial"),
   };
 
+  // Overrides must be MAPPED, not spread. The absence branches name the field
+  // `reason`, while `CapabilityEvidence` (and `FailedCapability.evidence`
+  // downstream) reads `evidence`; assigning straight through type-checks at the
+  // inventory and then surfaces as undefined evidence in every report.
   for (const capabilityId of CAPABILITY_IDS) {
     const override = CAPABILITY_INVENTORY[inventoryKey(presetId, countryId, capabilityId)];
-    if (override) probes[capabilityId] = override;
+    if (!override) continue;
+    probes[capabilityId] = override.present
+      ? { present: true, evidence: override.evidence }
+      : { present: false, evidence: describeWaiver(override) };
   }
 
   return probes;

@@ -5,6 +5,7 @@ import { getNationalManpower, setNationalManpower } from "@/lib/db/collections/n
 import { reinforceUnit, manpowerCeiling } from "@/lib/military/manpower";
 import { resolveConscriptionStanceFor } from "@/lib/military/conscriptionLaw";
 import { ATTRITION } from "@/lib/military/config";
+import type { MilitaryUnit } from "@/lib/db/types/militaryUnit";
 
 /**
  * Per-turn replacement flow: regenerate the nation's manpower pool from its population
@@ -16,7 +17,8 @@ import { ATTRITION } from "@/lib/military/config";
  */
 export async function applyReinforcement(
   db: Db,
-  countryId: string
+  countryId: string,
+  knownUnits?: MilitaryUnit[]
 ): Promise<{ regenerated: number; reinforced: number; drawn: number }> {
   const stance = await resolveConscriptionStanceFor(db, countryId);
   const { pool, mode } = await getNationalManpower(db, countryId);
@@ -40,7 +42,8 @@ export async function applyReinforcement(
   const effectiveMode = mode === "conscript" && !stance.conscriptAllowed ? "trained" : mode;
 
   const unitsCol = getMilitaryUnitsCollection(db);
-  const units = await unitsCol.find({ countryId: countryId as CountryId }).toArray();
+  const units =
+    knownUnits ?? (await unitsCol.find({ countryId: countryId as CountryId }).toArray());
   const ops = [];
   let drawn = 0;
   for (const u of units) {

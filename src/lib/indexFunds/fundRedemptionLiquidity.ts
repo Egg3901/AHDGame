@@ -5,7 +5,7 @@
 
 import type { ClientSession, Db, ObjectId } from "mongodb";
 import type { Corporation, IndexFund, IndexFundHolding } from "@/lib/db/types";
-import { debitSharesFromFund } from "@/lib/corporations/shareholderOps";
+import { creditSharesToFund, debitSharesFromFund } from "@/lib/corporations/shareholderOps";
 import {
   isOrderFlowPriceEligible,
   resolveShareExecutionPrice,
@@ -18,12 +18,15 @@ import {
   settleFloatSellDebit,
 } from "@/lib/corporations/shareEscrowSettlement";
 import { loadEquityQuote } from "@/lib/equities/marketPool";
+import type { CurrencyCode } from "@/lib/constants/currencies";
 import {
   fxRateForCorpFromMap,
   loadFxRatesByCurrency,
   resolveCorpLiquidCurrencyCode,
   shareTradeAnchorValue,
 } from "@/lib/currency/corporationCapital";
+import { emitTx, loadTxThresholds } from "@/lib/financialTxLog/emit";
+import type { TxThresholds } from "@/lib/db/types/financialTxLog";
 import { insertFundTransaction, updateFundHoldings } from "@/lib/indexFunds/fundQueries";
 
 export type HoldingSaleInput = {
@@ -159,6 +162,8 @@ export type SellHoldingsForRedemptionResult = {
   cashRaisedAnchor: number;
   sharesSold: number;
   salesExecuted: number;
+  /** Standalone-only economic reversal for completed sales, in reverse order. */
+  undo?: () => Promise<void>;
 };
 
 type CorpQuoteRow = Pick<
@@ -260,8 +265,12 @@ export async function sellFundHoldingsForRedemptionCash(
   let cashRaisedAnchor = 0;
   let sharesSold = 0;
   let salesExecuted = 0;
+  const saleUndos: Array<() => Promise<void>> = [];
   const turn = await getCurrentTurn(db);
   const now = new Date();
+  // #992 tranche 6: one thresholds read for the whole sale loop; the FX map
+  // above is reused per sale so neither is re-read per item.
+  const thresholds = await loadTxThresholds(db);
 
   for (const sale of plan) {
     if (cashRaisedAnchor >= cashNeededAnchor) break;
@@ -272,6 +281,8 @@ export async function sellFundHoldingsForRedemptionCash(
     const saleResult = await executeOneHoldingSale(db, fund, corp, sale, holdings, turn, now, {
       session: options?.session,
       note: options?.note,
+      thresholds,
+      fxByCurrency,
     });
     if (!saleResult) continue;
 
@@ -279,9 +290,34 @@ export async function sellFundHoldingsForRedemptionCash(
     sharesSold += sale.sharesToSell;
     salesExecuted++;
     holdings = saleResult.updatedHoldings;
+    if (saleResult.undo) saleUndos.push(saleResult.undo);
   }
 
-  return { cashRaisedAnchor, sharesSold, salesExecuted };
+  return {
+    cashRaisedAnchor,
+    sharesSold,
+    salesExecuted,
+    ...(saleUndos.length > 0 && !options?.session
+      ? {
+          undo: async () => {
+            const errors: unknown[] = [];
+            for (const revert of saleUndos.reverse()) {
+              try {
+                await revert();
+              } catch (error) {
+                errors.push(error);
+              }
+            }
+            if (errors.length > 0) {
+              throw new AggregateError(
+                errors,
+                "One or more redemption liquidity sales could not be reversed"
+              );
+            }
+          },
+        }
+      : {}),
+  };
 }
 
 // ── Shared per-sale execution helper ─────────────────────────────────────────
@@ -290,11 +326,19 @@ type OneHoldingSaleOptions = {
   session?: ClientSession;
   note?: string;
   settlementCounterparty?: "market" | "issuer";
+  /**
+   * #992 tranche 6: preloaded one-per-pass inputs so the per-sale body does
+   * no per-item reads of its own (thresholds for the ledger row, FX for the
+   * proceeds conversion). Callers that loop over sales load both once.
+   */
+  thresholds?: TxThresholds;
+  fxByCurrency?: ReadonlyMap<CurrencyCode, number>;
 };
 
 type OneHoldingSaleResult = {
   proceedsAnchor: number;
   updatedHoldings: IndexFundHolding[];
+  undo?: () => Promise<void>;
 };
 
 /**
@@ -352,7 +396,8 @@ async function executeOneHoldingSale(
     return null;
   }
 
-  const fxRate = fxRateForCorpFromMap(corp, await loadFxRatesByCurrency(db));
+  const fxByCurrency = options?.fxByCurrency ?? (await loadFxRatesByCurrency(db));
+  const fxRate = fxRateForCorpFromMap(corp, fxByCurrency);
   const proceedsAnchor =
     Math.round(
       shareTradeAnchorValue(sale.sharesToSell, { ...corp, sharePrice: executionPrice }, fxRate) *
@@ -376,7 +421,7 @@ async function executeOneHoldingSale(
 
   await updateFundHoldings(db, fund._id, updatedHoldings, { session: options?.session });
 
-  await insertFundTransaction(
+  const transactionId = await insertFundTransaction(
     db,
     {
       fundId: fund._id,
@@ -389,6 +434,38 @@ async function executeOneHoldingSale(
       createdAt: now,
     },
     { session: options?.session }
+  );
+
+  // #992 tranche 6: fund-subject ledger leg for the cashAnchor credit above.
+  // The contra is the unmodeled public float (single-sided under the shared
+  // equity_transfer reason, same as the tranche-5 float-buy row and the
+  // character/corporation stock_trade_sell rows). Fund-subject rows never
+  // mirror, so this is the only ledger row for the credit. Emitted after the
+  // holdings write and the fund transaction both landed, inside the same
+  // guarded sale that returns null on any settlement failure — a skipped sale
+  // emits nothing, an executed sale emits exactly one row.
+  await emitTx(
+    db,
+    {
+      type: "stock_trade_sell",
+      turn,
+      createdAt: now,
+      subjectType: "fund",
+      subjectId: fund._id,
+      subjectName: fund.name,
+      amount: proceedsAnchor,
+      anchorAmount: proceedsAnchor,
+      currencyCode: fund.anchorCurrencyCode,
+      counterpartyType: "system",
+      counterpartyName: "Public float",
+      meta: {
+        corporationId: corp._id.toString(),
+        shares: sale.sharesToSell,
+        pricePerShareAnchor: sale.pricePerShareAnchor,
+        source: options?.note ?? "redemption-liquidity",
+      },
+    },
+    options?.thresholds
   );
 
   void recordShareTrade(db, {
@@ -408,7 +485,60 @@ async function executeOneHoldingSale(
     counterparty: options?.settlementCounterparty,
   });
 
-  return { proceedsAnchor, updatedHoldings };
+  const undo = options?.session
+    ? undefined
+    : async () => {
+        const errors: unknown[] = [];
+        const reverse = async (work: () => Promise<unknown>) => {
+          try {
+            await work();
+          } catch (error) {
+            errors.push(error);
+          }
+        };
+        await reverse(() =>
+          db.collection("indexFundTransactions").deleteOne({ _id: transactionId })
+        );
+        await reverse(() => updateFundHoldings(db, fund._id, currentHoldings));
+        await reverse(() =>
+          db
+            .collection("indexFunds")
+            .updateOne(
+              { _id: fund._id },
+              { $inc: { cashAnchor: -proceedsAnchor }, $set: { updatedAt: new Date() } }
+            )
+        );
+        await reverse(async () => {
+          const restored = await creditSharesToFund(
+            db,
+            corp._id,
+            fund._id,
+            sale.sharesToSell,
+            sale.pricePerShareAnchor,
+            {
+              $inc: {
+                publicFloat: -sale.sharesToSell,
+                ...(orderFlowEligible
+                  ? { orderFlowWindowSellValue: -sale.sharesToSell * executionPrice }
+                  : {}),
+              },
+              $set: { updatedAt: new Date() },
+            }
+          );
+          if (!restored) throw new Error("Failed to restore fund shares after liquidity sale");
+        });
+        await reverse(() =>
+          reverseFloatSellDebit(db, corp, issuerBuyback, {
+            split: issuerDebit.split,
+            counterparty: options?.settlementCounterparty,
+          })
+        );
+        if (errors.length > 0) {
+          throw new AggregateError(errors, "Redemption liquidity sale compensation was incomplete");
+        }
+      };
+
+  return { proceedsAnchor, updatedHoldings, undo };
 }
 
 // ── sellFundHoldingShares ─────────────────────────────────────────────────────
@@ -474,7 +604,8 @@ export async function sellFundHoldingShares(
     return { cashRaisedAnchor: 0, sharesSold: 0, salesExecuted: 0 };
   }
 
-  const fxRate = fxRateForCorpFromMap(corp, await loadFxRatesByCurrency(db));
+  const fxByCurrency = await loadFxRatesByCurrency(db);
+  const fxRate = fxRateForCorpFromMap(corp, fxByCurrency);
   const pricePerShareAnchor = shareTradeAnchorValue(
     1,
     { ...corp, sharePrice: executionPrice },
@@ -495,7 +626,7 @@ export async function sellFundHoldingShares(
     [...fund.holdings],
     turn,
     now,
-    options
+    { ...options, thresholds: await loadTxThresholds(db), fxByCurrency }
   );
 
   if (!saleResult) {

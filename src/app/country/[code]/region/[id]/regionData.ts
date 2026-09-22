@@ -17,6 +17,15 @@ import { getAuthUserWithCharacter } from "@/lib/auth";
 import { buildRegionTurnoutResponse } from "@/lib/demographics/regionTurnout";
 import type { ActiveModifier } from "@/lib/utils/approvalModifiers";
 import { getRegionalApprovalData } from "@/lib/states/approval/getRegionalApprovalData";
+import { JP_GEOGRAPHY } from "@/lib/countries/jp/geography";
+import { UK_GEOGRAPHY } from "@/lib/countries/uk/geography";
+import { DE_GEOGRAPHY } from "@/lib/countries/de/geography";
+import { CN_GEOGRAPHY } from "@/lib/countries/cn/geography";
+import { IE_GEOGRAPHY } from "@/lib/countries/ie/geography";
+import { DD_GEOGRAPHY } from "@/lib/countries/dd/geography";
+import { BR_GEOGRAPHY } from "@/lib/countries/br/geography";
+import { SCO_GEOGRAPHY } from "@/lib/countries/sco/geography";
+import { WAL_GEOGRAPHY } from "@/lib/countries/wal/geography";
 
 /**
  * Coerce a Mongo timestamp field to an ISO string for client serialization.
@@ -36,16 +45,16 @@ export function toIsoStringOrNull(value: Date | string | null | undefined): stri
 
 /** Per-country voter-group category ids for region demographics (not US `find({})`). */
 export const REGION_DEMOGRAPHIC_CATEGORY_IDS: Partial<Record<CountryId, string[]>> = {
-  UK: ["uk_voterGroups"],
-  JP: ["jp_voterGroups"],
-  DE: ["de_voterGroups"],
-  IE: ["ie_voterGroups"],
-  CN: ["cn_voterGroups"],
-  BR: ["br_voterGroups"],
-  DD: ["dd_voterGroups"],
+  UK: UK_GEOGRAPHY.demographicCategoryIds,
+  JP: JP_GEOGRAPHY.demographicCategoryIds,
+  DE: DE_GEOGRAPHY.demographicCategoryIds,
+  IE: IE_GEOGRAPHY.demographicCategoryIds,
+  CN: CN_GEOGRAPHY.demographicCategoryIds,
+  BR: BR_GEOGRAPHY.demographicCategoryIds,
+  DD: DD_GEOGRAPHY.demographicCategoryIds,
   // Seceded nations share the UK archetype profile (uk_archetypes).
-  SCO: ["uk_voterGroups"],
-  WAL: ["uk_voterGroups"],
+  SCO: SCO_GEOGRAPHY.demographicCategoryIds,
+  WAL: WAL_GEOGRAPHY.demographicCategoryIds,
 };
 
 // ── Shared data-fetching helpers ──

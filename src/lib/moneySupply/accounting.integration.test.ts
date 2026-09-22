@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { ObjectId, type Db } from "mongodb";
 import { createInMemoryDb } from "@/lib/test-utils/inMemoryDb";
 import { snapshotMoneySupply } from "./snapshot";
+import { MONEY_ACCOUNTING_VERSION } from "./calculate";
 import { executeMonetaryOperation } from "./operations";
 import { processSavingsInterestTurn } from "@/lib/turn/savingsInterestTurn";
 import { monetizeUnsoldSovereignUnits } from "@/lib/bonds/primaryMarket";
@@ -146,7 +147,7 @@ describe("monetary stock boundaries", () => {
     const db = world();
     db.seed("moneySupplySnapshots", [{ _id: "0:USD", currencyCode: "USD", turn: 0, m2: 10 }]);
     const first = await observe(db, 100);
-    expect(first.accountingVersion).toBe(2);
+    expect(first.accountingVersion).toBe(MONEY_ACCOUNTING_VERSION);
     expect(first.annualizedM2GrowthPct).toBeNull();
     expect((await observe(db, 111)).annualizedM2GrowthPct).toBeNull();
     expect((await observe(db, 112)).annualizedM2GrowthPct).toBe(0);
@@ -173,8 +174,12 @@ describe("monetary stock boundaries", () => {
         marketPrice: 1,
       },
     ]);
-    db.seed("bondMarketPools", [{ _id: "USD", cashLocal: 1000 }]);
+    // The pool's cash is QE-parked created money (v3 boundary): QT against it
+    // retires observed M2. QT against pure settlement inventory would only
+    // shrink the excluded balance and leave observed M2 flat.
+    db.seed("bondMarketPools", [{ _id: "USD", cashLocal: 1000, lifetime: { qeIn: 1000 } }]);
     const before = await observe(db, 0);
+    expect(before.observedBondPoolCash).toBe(1000);
     const operation = await executeMonetaryOperation(db as unknown as Db, {
       countryId: "US",
       type: "qt",

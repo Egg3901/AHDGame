@@ -207,9 +207,20 @@ describe("deriveGranularElectorateUnits", () => {
     expect(units.length).toBeLessThan(80);
     const shareSum = units.reduce((s, u) => s + u.share, 0);
     expect(shareSum).toBeCloseTo(1, 6);
+    // The representation reprieve (#1165) intentionally keeps some below-floor
+    // cells, so the floor is no longer a per-unit minimum. What still holds:
+    // every share is finite and positive, the floor still prunes (below-floor
+    // units together hold a small fraction of the electorate), and the
+    // reprieve is actually active (at least one below-floor unit survives).
+    let belowFloorMass = 0;
+    let belowFloorCount = 0;
     for (const u of units) {
       expect(Number.isFinite(u.share)).toBe(true);
-      expect(u.share).toBeGreaterThanOrEqual(ELECTORATE_PRUNE_FLOOR);
+      expect(u.share).toBeGreaterThan(0);
+      if (u.share < ELECTORATE_PRUNE_FLOOR) {
+        belowFloorMass += u.share;
+        belowFloorCount += 1;
+      }
       expect(u.economicLean).toBeGreaterThanOrEqual(-5);
       expect(u.economicLean).toBeLessThanOrEqual(5);
       expect(u.socialLean).toBeGreaterThanOrEqual(-5);
@@ -220,6 +231,8 @@ describe("deriveGranularElectorateUnits", () => {
       // Each member cell contributes exactly one bucket per dimension.
       expect(bucketSum).toBeCloseTo(GRANULAR_DIMENSIONS.length, 6);
     }
+    expect(belowFloorCount).toBeGreaterThan(0);
+    expect(belowFloorMass).toBeLessThan(0.05);
   });
 
   it("returns null for states without a Layer-1 census", () => {

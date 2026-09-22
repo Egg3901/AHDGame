@@ -16,6 +16,12 @@
  */
 import { MongoClient } from "mongodb";
 import { readFileSync, writeFileSync } from "node:fs";
+import type { GameHealthSnapshot } from "@/lib/db/types/gameHealthSnapshot";
+import {
+  aggregateGameHealth,
+  gameHealthRunSummary,
+  type GameHealthAggregate,
+} from "@/lib/turn/rules/gameHealth";
 
 const PLAYER = ["US", "UK", "RU", "DD"] as const;
 const NAMES: Record<string, string> = {
@@ -144,9 +150,12 @@ async function main(): Promise<void> {
     .collection("unions")
     .countDocuments({ lastCalledStrikeTurn: { $ne: null } });
 
-  const snaps = await db.collection("gameHealthSnapshots").find({}).sort({ turn: 1 }).toArray();
-  const errors = snaps.reduce((n, s) => n + ((s.turnProcessing?.errorCount as number) ?? 0), 0);
-  const warnings = snaps.reduce((n, s) => n + ((s.turnProcessing?.warningCount as number) ?? 0), 0);
+  const snaps = await db
+    .collection<GameHealthSnapshot>("gameHealthSnapshots")
+    .find({})
+    .sort({ turn: 1 })
+    .toArray();
+  const runHealth = aggregateGameHealth(snaps.map(gameHealthRunSummary));
   const cfg = (await db.collection("gameConfig").findOne({ _id: "default" as never })) ?? {};
   const guardTrips = await db
     .collection("adminLogs")
@@ -173,14 +182,15 @@ async function main(): Promise<void> {
       unionsLed,
       unionsTotal,
       strikes,
-      errors,
-      warnings,
+      ...runHealth,
+      errors: runHealth.errorCount,
+      warnings: runHealth.warningCount,
       mode: String((cfg as Record<string, unknown>).marketSystemMode ?? "?"),
       guardArmed: (cfg as Record<string, unknown>).marketGuardEnabled === true,
       guardTrips,
     },
     changelog,
-    verdict: buildVerdict(cps, errors, guardTrips, unionsLed, unionsTotal, strikes),
+    verdict: buildVerdict(cps, runHealth, guardTrips, unionsLed, unionsTotal, strikes),
   };
 
   writeFileSync(outPath, render(payload));
@@ -194,7 +204,7 @@ async function main(): Promise<void> {
  */
 function buildVerdict(
   cps: Checkpoint[],
-  errors: number,
+  health: GameHealthAggregate,
   guardTrips: number,
   unionsLed: number,
   unionsTotal: number,
@@ -221,10 +231,18 @@ function buildVerdict(
   });
 
   out.push({
-    status: errors === 0 ? "good" : errors < 10 ? "warn" : "bad",
-    title: `${errors} engine errors across ${last.turn} turns`,
+    status:
+      health.qualification === "non-passing"
+        ? "bad"
+        : health.severity === "warning" || health.qualification === "unverified"
+          ? "warn"
+          : "good",
+    title: `Health ${health.severity}: ${health.errorCount} errors, ${health.warningCount} warnings`,
     detail:
-      "Phase throws are converted to warnings by the runtime, so a non-zero count here is the only signal that a phase died silently.",
+      `${health.successfulTurns}/${health.completedTurns} completed turns succeeded. ` +
+      `Processing contributes ${health.processingErrorCount} errors and ${health.processingWarningCount} warnings; ` +
+      `integrity contributes ${health.integrityErrorCount} errors and ${health.integrityWarningCount} warnings. ` +
+      `Qualification is ${health.qualification}.`,
   });
 
   out.push({
@@ -346,6 +364,7 @@ function render() {
   let h = "";
   h += '<h1>Grand Sim 1953 &mdash; Executive Summary</h1>';
   h += '<p class="sub">'+f.turn+' to '+l.turn+' turns'+(l.year?' &middot; '+f.year+' to '+l.year:'')+' &middot; <code>'+esc(D.dbName)+'</code> &middot; market tier <code>'+esc(e.mode)+'</code></p>';
+  h += '<div class="note">Completion '+e.successfulTurns+'/'+e.completedTurns+' successful turns · health severity '+esc(e.severity)+' · qualification '+esc(e.qualification)+'</div>';
 
   // Hero row: the five numbers that decide whether the run is trustworthy.
   const firmDelta = f.firms > 0 ? (100*(l.firms-f.firms))/f.firms : 0;

@@ -155,7 +155,115 @@ const SIZE_CAP_EXEMPT = [
   "src/lib/constants/techTree/earlySectorFill.ts",
   "src/lib/constants/usCabinetMechanics.ts",
   "src/lib/constants/ukCabinetMechanics.ts",
-  "src/lib/constants/jpCabinetMechanics.ts",
+  // Japan's cabinet data moved to the country folder in D3. Scoped to the
+  // cabinet/ subdirectory on purpose: SIZE_CAP_EXEMPT is matched by SUBSTRING,
+  // so a bare "src/lib/countries/" would exempt every module the folder ever
+  // gains, including the logic ones.
+  "src/lib/countries/jp/cabinet/",
+  // Japan's relocated authored seed data (D6). Added BEFORE the move: the
+  // list holds a bare "src/lib/seeds/" and is matched by SUBSTRING, so moving
+  // seeds/jp/ out strips the exemption from all 39 files at once, and
+  // jpLegislationTypes.ts is 6,168 LOC against a 2,000 blocking cap.
+  //
+  // Scoped to data/ deliberately. A bare "src/lib/countries/" would exempt
+  // contract.ts, institutions.ts, economy.ts and every logic module the
+  // folder ever gains -- uncapping the whole thing from day one.
+  "src/lib/countries/jp/data/",
+  // The United States' relocated authored data and cabinet, added BEFORE the
+  // move for the same reason Japan's was. Two separate exemptions are being
+  // stripped here at once, and both would block the gate:
+  //
+  //   - `src/lib/seeds/` is in this list as a bare prefix, so the eight
+  //     states*.ts and eight stateMetrics*.ts files are exempt only while they
+  //     sit under it;
+  //   - `usLaws.ts` (5,321 LOC) and `usCabinetMechanics.ts` (1,915 LOC) are
+  //     exempt by EXACT path further down, so moving them exempts nothing.
+  //
+  // Scoped to data/ and cabinet/ deliberately, not a bare "src/lib/countries/us/":
+  // that would exempt institutions.ts, economy.ts and every logic module the
+  // folder ever gains, uncapping it from day one.
+  "src/lib/countries/us/data/",
+  "src/lib/countries/us/cabinet/",
+  // The United Kingdom's, added AFTER the move rather than before -- which is how
+  // `ukLaws.ts` (5,337 LOC) blocked the gate for one commit. It was exempt by
+  // EXACT path at `politicalLegislation/laws/ukLaws.ts`, and relocating it to
+  // `uk/data/` stripped that. The US entries above were added first precisely to
+  // avoid this, and the lesson did not survive the next country.
+  "src/lib/countries/uk/data/",
+  "src/lib/countries/uk/cabinet/",
+  // Germany's, added BEFORE the move this time. `deLegislationTypes.ts` is 6,108
+  // lines and is exempt today only because the list holds a bare "src/lib/seeds/";
+  // relocating it to `de/data/` strips that exemption the instant it moves, which
+  // is exactly how `ukLaws.ts` blocked the gate one country ago.
+  "src/lib/countries/de/data/",
+  "src/lib/countries/de/cabinet/",
+  // China's, before the move as well. `cnLegislationTypes.ts` is 6,168 lines and
+  // rides on the bare "src/lib/seeds/" entry until it relocates.
+  "src/lib/countries/cn/data/",
+  "src/lib/countries/cn/cabinet/",
+  // Ireland's, before the move. `ieLegislationTypes.ts` is 5,531 lines and rides
+  // on the bare "src/lib/seeds/" entry until it relocates.
+  "src/lib/countries/ie/data/",
+  "src/lib/countries/ie/cabinet/",
+  // Russia's, before the move. `ruLaws.ts` is 5,545 lines and is exempt today by
+  // EXACT path at `politicalLegislation/laws/ruLaws.ts`; relocating strips that.
+  "src/lib/countries/ru/data/",
+  "src/lib/countries/ru/cabinet/",
+  // East Germany's, before the move. `ddLaws.ts` is 5,551 lines and is exempt
+  // today by EXACT path under politicalLegislation/laws/.
+  "src/lib/countries/dd/data/",
+  "src/lib/countries/dd/cabinet/",
+  // Nigeria's, before the move. `ngLegislationTypes.ts` is 3,733 lines.
+  "src/lib/countries/ng/data/",
+  "src/lib/countries/ng/cabinet/",
+  // Brazil's, before the move. Nothing of Brazil's is over the cap today, and
+  // the entry is added anyway: every country before it that waited until after
+  // the move discovered the exemption by failing the gate.
+  "src/lib/countries/br/data/",
+  "src/lib/countries/br/cabinet/",
+  // The economy tier, all eight before the move. None is over the cap today;
+  // the entries go in first on principle, because every country that waited
+  // until after the move found out by failing the gate.
+  "src/lib/countries/fr/data/",
+  "src/lib/countries/fr/cabinet/",
+  "src/lib/countries/it/data/",
+  "src/lib/countries/it/cabinet/",
+  "src/lib/countries/es/data/",
+  "src/lib/countries/es/cabinet/",
+  "src/lib/countries/se/data/",
+  "src/lib/countries/se/cabinet/",
+  "src/lib/countries/tr/data/",
+  "src/lib/countries/tr/cabinet/",
+  "src/lib/countries/gr/data/",
+  "src/lib/countries/gr/cabinet/",
+  "src/lib/countries/at/data/",
+  "src/lib/countries/at/cabinet/",
+  "src/lib/countries/fi/data/",
+  "src/lib/countries/fi/cabinet/",
+  // The Warsaw Pact tier, all six before the move.
+  "src/lib/countries/pl/data/",
+  "src/lib/countries/pl/cabinet/",
+  "src/lib/countries/hu/data/",
+  "src/lib/countries/hu/cabinet/",
+  "src/lib/countries/ro/data/",
+  "src/lib/countries/ro/cabinet/",
+  "src/lib/countries/yu/data/",
+  "src/lib/countries/yu/cabinet/",
+  "src/lib/countries/bg/data/",
+  "src/lib/countries/bg/cabinet/",
+  "src/lib/countries/cs/data/",
+  "src/lib/countries/cs/cabinet/",
+  // The devolved nations and Soviet republics, before the move.
+  "src/lib/countries/sco/data/",
+  "src/lib/countries/sco/cabinet/",
+  "src/lib/countries/wal/data/",
+  "src/lib/countries/wal/cabinet/",
+  "src/lib/countries/blr/data/",
+  "src/lib/countries/blr/cabinet/",
+  "src/lib/countries/ukr/data/",
+  "src/lib/countries/ukr/cabinet/",
+  "src/lib/countries/bal/data/",
+  "src/lib/countries/bal/cabinet/",
   "src/lib/constants/cnCabinetMechanics.ts",
   "src/lib/constants/historicalSeats.ts",
   "src/lib/constants/metricDefinitions.ts",

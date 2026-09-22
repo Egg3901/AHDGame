@@ -1,10 +1,36 @@
-import type { ReconcileStatus } from "@/lib/ledger/types";
+import type { ReconcileStatus, StockVsFlowByKind } from "@/lib/ledger/types";
 import type { MarketFormationSnapshot } from "./marketFormation";
+import type { SovereignDemandGapReason } from "@/lib/bonds/sovereignIssueDiagnostics";
 
 export interface EconomicMetric {
   value: number | null;
   observations: number;
   basis: string;
+}
+
+/**
+ * Per-country sovereign issuance rollup (#1001): the issue-level diagnostics
+ * grouped so a country-local allocator gap shows up as a cross-section.
+ * Plain data, computed from the same bond inputs as the aggregate securities
+ * section; additive and safe for older snapshots to omit.
+ */
+export interface SovereignCountryIssuanceSnapshot {
+  countryId: string;
+  issueCount: number;
+  unheldIssueCount: number;
+  noHolderShare: number;
+  subscriptionRate: number;
+  medianHolders: number;
+  medianSpreadToParPct: number;
+  maturityHhi: number;
+  thinIssueCount: number;
+  /**
+   * Demand-gap cross-section (#1001): unheld issues by primary exclusion
+   * reason (`no_domestic_fund`, `capital_controls`, `cash_buffer`, ...).
+   * Counts sum to `unheldIssueCount`. Absent when the snapshot was computed
+   * without fund demand inputs, so older snapshots keep reading identically.
+   */
+  demandGapByReason?: Partial<Record<SovereignDemandGapReason, number>>;
 }
 
 export interface RelevantMarketVitalSign {
@@ -95,6 +121,7 @@ export interface EconomicVitalSigns {
     sovereignMaturityHhi: EconomicMetric;
     corporateMaturityHhi: EconomicMetric;
     sovereignMedianPriceToParSpreadPct: EconomicMetric;
+    sovereignIssuanceByCountry?: SovereignCountryIssuanceSnapshot[];
     /** Median discount to par across unmatured corporate issues; the corporate mirror of the sovereign spread. */
     corporateMedianPriceToParSpreadPct: EconomicMetric;
     openBuyOrders: number;
@@ -129,6 +156,19 @@ export interface EconomicVitalSigns {
   };
   money: {
     currenciesObserved: number;
+    /** Rows on the current observation contract (growth-comparable in principle). */
+    currentAccountingCurrencies: number;
+    /** Rows with a finite same-version growth reading this turn. */
+    comparableGrowthCurrencies: number;
+    /** Observation contract version per currency code; null on legacy observations. */
+    observationVersions: Record<string, number | null>;
+    /**
+     * Growth comparability per currency code: high = comparable reading,
+     * medium = current method but still warming up, low = legacy/unversioned.
+     */
+    observationConfidence: Record<string, "high" | "medium" | "low">;
+    /** Bond-pool settlement inventory excluded from observed M2 (#2021). */
+    excludedBondPoolCash: EconomicMetric;
     medianAnnualizedM2GrowthPct: EconomicMetric;
     medianInflationPct: EconomicMetric;
     moneyGrowthInflationCorrelation: EconomicMetric;
@@ -208,5 +248,12 @@ export interface EconomicVitalSigns {
     stockVsFlowDivergentCount: number | null;
     stockVsFlowSkipped: boolean | null;
     moneySupplyFindingCount: number | null;
+    /**
+     * Per-kind stock-vs-flow inventory (ranked by unexplained ₳), copied from
+     * the reconciliation report. null when the check was skipped or no
+     * reconciliation ran: unknown, not zero. Survives the report's findings
+     * cap because it is computed pre-cap (#992).
+     */
+    stockVsFlowByKind: StockVsFlowByKind[] | null;
   };
 }

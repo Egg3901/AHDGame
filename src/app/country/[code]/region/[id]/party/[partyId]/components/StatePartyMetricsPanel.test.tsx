@@ -49,6 +49,7 @@ function baseParty(overrides: Partial<StatePartyData> = {}): StatePartyData {
     economicPosition: 50,
     socialPosition: 50,
     politicalStrength: 7,
+    seatedOfficers: 0,
     chair: null,
     viceChair: null,
     treasurer: null,

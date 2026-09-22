@@ -13,6 +13,8 @@ import { formatRealTimeCountdown } from "@/lib/utils/formatters";
 import { AppointModal } from "./AppointModal";
 import { CabinetAdminTab } from "./CabinetAdminTab";
 import { CabinetTabNav, type CabinetTabKey } from "./CabinetTabNav";
+import { ReshufflePanel } from "./ReshufflePanel";
+import { WhipPanel } from "./WhipPanel";
 import type { ParliamentaryCabinetConfig } from "./parliamentaryCabinetConfig";
 
 interface Position {
@@ -48,6 +50,9 @@ interface CabinetResponse {
   isOnePartyState?: boolean;
   governingPartyId: string | null;
   coalitionPartnerIds: string[];
+  // Issue #859 additions. Optional so older cached payloads still render.
+  reshuffle?: { available: boolean; reason: string };
+  myPositionId?: string | null;
 }
 
 interface EligibleCharacter {
@@ -227,6 +232,34 @@ export default function ParliamentaryCabinetClient({ config }: Props) {
     }
   };
 
+  const handleResign = async (positionId: string) => {
+    const position = state.data?.positions.find((p) => p.id === positionId);
+    if (!position) return;
+    if (!confirm(`Resign as ${position.name}? The seat will be left vacant.`)) return;
+
+    dispatch({ type: "SET_ACTION_LOADING", positionId, loading: true });
+    try {
+      const res = await fetch(`${executiveApiUrl(countryId)}/cabinet/resign`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ positionId }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        showToast(data.message, "success");
+        await fetchData();
+      } else if (res.status === 404) {
+        showToast(data.error || "You do not hold this cabinet seat", "error");
+      } else {
+        showToast(data.error || "Failed to resign", "error");
+      }
+    } catch {
+      showToast("An unexpected error occurred", "error");
+    } finally {
+      dispatch({ type: "SET_ACTION_LOADING", positionId, loading: false });
+    }
+  };
+
   const handleFire = async (positionId: string) => {
     const position = state.data?.positions.find((p) => p.id === positionId);
     if (!position?.member) return;
@@ -385,9 +418,26 @@ export default function ParliamentaryCabinetClient({ config }: Props) {
                                 variant="secondary"
                                 onClick={() => handleFire(pos.id)}
                                 disabled={isLoading}
+                                aria-label={`Remove ${member.characterName} from ${pos.name}`}
                                 className="shrink-0 text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700"
                               >
                                 {isLoading ? "..." : "Fire"}
+                              </Button>
+                            )}
+                          {/* Issue #859: only the holder may resign their own
+                              seat. UK surface only. */}
+                          {config.countryId === "UK" &&
+                            member?.characterId &&
+                            state.data!.myPositionId === pos.id &&
+                            !positionData?.isHeadOfGovernment && (
+                              <Button
+                                variant="secondary"
+                                onClick={() => handleResign(pos.id)}
+                                disabled={isLoading}
+                                aria-label={`Resign as ${pos.name}`}
+                                className="shrink-0"
+                              >
+                                {isLoading ? "..." : "Resign"}
                               </Button>
                             )}
                         </div>
@@ -466,6 +516,37 @@ export default function ParliamentaryCabinetClient({ config }: Props) {
                   })}
                 </div>
               </section>
+
+              {/* Issue #859 mechanics: reshuffle token + roster editor for the
+                  PM, holder-only resignation above, PM-only whip controls
+                  below. UK surface only; other parliamentary countries keep
+                  the appoint/fire flow unchanged. */}
+              {config.countryId === "UK" && (
+                <>
+                  <ReshufflePanel
+                    countryId={countryId}
+                    seats={state.data!.positions.map((position) => ({
+                      id: position.id,
+                      name: position.name,
+                      isHeadOfGovernment: position.isHeadOfGovernment,
+                      member: position.member
+                        ? {
+                            characterName: position.member.characterName,
+                            isNPP: position.member.isNPP,
+                          }
+                        : null,
+                    }))}
+                    available={state.data!.reshuffle?.available ?? false}
+                    reason={state.data!.reshuffle?.reason ?? "reshuffle status unavailable"}
+                    isPrimeMinister={state.data!.isPrimeMinister}
+                    candidates={state.eligibleCharacters}
+                    candidatesLoading={state.charactersLoading}
+                    onLoadCandidates={fetchEligibleCharacters}
+                    onSubmitted={fetchData}
+                  />
+                  {state.data!.isPrimeMinister && <WhipPanel countryId={countryId} />}
+                </>
+              )}
             </>
           )}
         </main>

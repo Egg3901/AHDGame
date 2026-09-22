@@ -6,6 +6,14 @@ import { getCostClass, resolveEraSpendingCost } from "@/lib/era/legislationCostC
 import { computeLawCost } from "@/lib/politicalLegislation/costEngine";
 import { COST_INCOME_ANCHORS } from "@/lib/politicalLegislation/costAnchors";
 import type { CostAnchorCountryId } from "@/lib/politicalLegislation/types";
+import { JP_ECONOMY } from "@/lib/countries/jp/economy";
+import { US_ECONOMY } from "@/lib/countries/us/economy";
+import { UK_ECONOMY } from "@/lib/countries/uk/economy";
+import { DE_ECONOMY } from "@/lib/countries/de/economy";
+import { CN_ECONOMY } from "@/lib/countries/cn/economy";
+import { IE_ECONOMY } from "@/lib/countries/ie/economy";
+import { NG_ECONOMY } from "@/lib/countries/ng/economy";
+import { BR_ECONOMY } from "@/lib/countries/br/economy";
 
 export interface BudgetCostContext {
   budgetCapacity: number;
@@ -83,7 +91,7 @@ function eraSpendingCost(
   });
 }
 
-interface CostScaleAnchor {
+export interface CostScaleAnchor {
   /** 1991-era seed GDP & population (where scaleLow is calibrated). */
   gdpLow: number;
   popLow: number;
@@ -109,82 +117,24 @@ interface CostScaleAnchor {
  * (US/UK/DE had both; JP had only MODERN; IE/CN had only PRE_2000; BR had neither).
  */
 export const COST_SCALE_ANCHORS: Partial<Record<CountryId, CostScaleAnchor>> = {
-  US: {
-    gdpLow: 6_200_000_000_000,
-    popLow: 252_177_000,
-    scaleLow: 0.3,
-    gdpHigh: 27_000_000_000_000,
-    popHigh: 333_000_000,
-    scaleHigh: 1.27,
-  },
-  UK: {
-    gdpLow: 600_000_000_000,
-    popLow: 57_500_000,
-    scaleLow: 0.31,
-    gdpHigh: 2_900_000_000_000,
-    popHigh: 68_000_000,
-    scaleHigh: 1.05,
-  },
-  JP: {
-    gdpLow: 470_000_000_000_000,
-    popLow: 124_000_000,
-    scaleLow: 1.0,
-    gdpHigh: 550_000_000_000_000,
-    popHigh: 126_000_000,
-    scaleHigh: 1.09,
-  },
-  DE: {
-    gdpLow: 1_600_000_000_000,
-    popLow: 80_000_000,
-    scaleLow: 0.65,
-    gdpHigh: 4_500_000_000_000,
-    popHigh: 84_400_000,
-    scaleHigh: 1.97,
-  },
-  IE: {
-    // 24B IEP (own currency, not EUR-converted) — matches the corrected 1991
-    // budget seed (src/lib/seeds/reference/budgets.ts), refs #3591.
-    gdpLow: 24_000_000_000,
-    popLow: 3_525_000,
-    scaleLow: 0.2,
-    gdpHigh: 500_000_000_000,
-    popHigh: 5_100_000,
-    scaleHigh: 1.0,
-  },
-  CN: {
-    gdpLow: 2_178_000_000_000,
-    popLow: 1_158_000_000,
-    scaleLow: 0.02,
-    gdpHigh: 126_000_000_000_000,
-    popHigh: 1_412_000_000,
-    scaleHigh: 1.0,
-  },
+  US: US_ECONOMY.costScaleAnchors,
+  UK: UK_ECONOMY.costScaleAnchors,
+  JP: JP_ECONOMY.costScaleAnchors,
+  DE: DE_ECONOMY.costScaleAnchors,
+  IE: IE_ECONOMY.costScaleAnchors,
+  CN: CN_ECONOMY.costScaleAnchors,
   // BR had no legacy PRE_2000/MODERN scale entries, which used to be encoded as
   // scaleLow 1.0 — full modern-authored absolute costs charged against the 1991
   // PPP-normalized R$900B economy. scaleLow = gpcLow/gpcHigh ≈ 6,040/50,698 ≈ 0.12
   // shrinks absolute costs to the same proportion of the economy they were
   // authored at; scaleHigh 1.0 matches the other modern-calibrated sides (IE/CN/NG).
-  BR: {
-    gdpLow: 900_000_000_000,
-    popLow: 149_000_000,
-    scaleLow: 0.12,
-    gdpHigh: 10_900_000_000_000,
-    popHigh: 215_000_000,
-    scaleHigh: 1.0,
-  },
+  BR: BR_ECONOMY.costScaleAnchors,
   // NG spending-law per-capita costs are calibrated in 2019 naira (scaleHigh=1).
   // 1991 nominal GDP-per-capita was ~1/27 of 2019 (₦1.8T/95M vs ₦144T/200M, pre-
   // SAP-devaluation naira), so scaleLow tames the absolute costs for the SAP-era
   // budget rather than over-stating a ₦1.8T-GDP economy. gdp/pop mirror the NG
   // 1991 + 2019 seed configs (enforced by anchorConsistency.test.ts).
-  NG: {
-    gdpLow: 1_800_000_000_000,
-    popLow: 95_000_000,
-    scaleLow: 0.04,
-    gdpHigh: 144_000_000_000_000,
-    popHigh: 200_000_000,
-    scaleHigh: 1.0,
-  },
+  NG: NG_ECONOMY.costScaleAnchors,
 };
 
 /**

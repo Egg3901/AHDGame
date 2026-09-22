@@ -19,7 +19,7 @@ import { grRegions } from "@/lib/seeds/gr/grRegions";
 import { huRegions } from "@/lib/seeds/hu/huRegions";
 import { ieRegions } from "@/lib/seeds/ie/ieRegions";
 import { itRegions } from "@/lib/seeds/it/itRegions";
-import { jpRegions } from "@/lib/seeds/jp/jpRegions";
+import { jpRegions } from "@/lib/countries/jp/data/jpRegions";
 import { ngRegions } from "@/lib/seeds/ng/ngRegions";
 import { plRegions } from "@/lib/seeds/pl/plRegions";
 import { roRegions } from "@/lib/seeds/ro/roRegions";

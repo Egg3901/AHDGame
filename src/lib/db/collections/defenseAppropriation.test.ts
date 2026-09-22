@@ -1,8 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { Db } from "mongodb";
 import {
   getDefenseAppropriation,
   applyAppropriationSettlement,
+  applyAppropriationSettlementWithOverdraft,
   debitAppropriation,
   creditAppropriation,
   encumberAppropriation,
@@ -11,6 +12,13 @@ import {
   unsettleEncumbrance,
   uncommittedFrom,
 } from "./defenseAppropriation";
+import { createInMemoryDb } from "@/lib/test-utils/inMemoryDb";
+import { sumOutstandingSovereignPrincipal } from "@/lib/bonds/sovereignPrincipal";
+import { emitTx } from "@/lib/financialTxLog/emit";
+import type { FederalBudget } from "@/lib/db/types/budget";
+import type { Bond } from "@/lib/db/types/bond";
+
+vi.mock("@/lib/financialTxLog/emit", () => ({ emitTx: vi.fn().mockResolvedValue(undefined) }));
 
 interface Capture {
   updates: { filter: Record<string, unknown>; update: Record<string, unknown> }[];
@@ -292,5 +300,82 @@ describe("encumbrance", () => {
     const capture: Capture = { updates: [] };
     await releaseEncumbrance(stubDb(pot(1_000), capture), "US", 400);
     expect(capture.updates).toHaveLength(0);
+  });
+});
+
+/**
+ * Defense-overdraft replay (refs #1975): the overdraft is a cash-only debit,
+ * never a bond issuance, so replaying the same turn must be a database-level
+ * no-op that debits cash exactly once and leaves the bond-owned principal and
+ * the ledger equal.
+ */
+describe("applyAppropriationSettlementWithOverdraft replay", () => {
+  it("books the overdraft once: replay is a no-op, principal untouched, ledger equal", async () => {
+    vi.mocked(emitTx).mockClear();
+    const memory = createInMemoryDb();
+    const db = memory as unknown as Db;
+    const BOND_FACE = 50_000_000;
+    memory.seed("federalBudget", [
+      {
+        _id: "b1",
+        countryId: "US",
+        treasuryBalance: 1_000_000,
+        debt: { principal: BOND_FACE, interestRate: 0.02, ceiling: 1_000_000_000_000 },
+        defenseAppropriation: { balance: 10, accruedThroughTurn: 4, arrearsRatio: 0 },
+      },
+    ]);
+    memory.seed("bonds", [
+      {
+        _id: "bond1",
+        issuerType: "sovereign",
+        countryId: "US",
+        totalIssued: BOND_FACE,
+        matured: false,
+        defaulted: false,
+      },
+    ]);
+
+    const settlement = {
+      balance: -5,
+      delta: -15,
+      paid: 10,
+      overdraftDrawn: 5,
+      arrearsRatio: 0.1,
+    };
+    const first = await applyAppropriationSettlementWithOverdraft(
+      db,
+      "US",
+      5,
+      settlement,
+      1_000_000,
+      10
+    );
+    expect(first).toBe(true);
+
+    // Re-entry with freshly read balances but the same turn: the
+    // accruedThroughTurn guard still refuses, so cash cannot double-debit.
+    const replay = await applyAppropriationSettlementWithOverdraft(
+      db,
+      "US",
+      5,
+      settlement,
+      999_995,
+      -5
+    );
+    expect(replay).toBe(false);
+
+    const after = await db.collection<FederalBudget>("federalBudget").findOne({ countryId: "US" });
+    expect(after?.treasuryBalance).toBe(999_995);
+    expect(after?.defenseAppropriation?.balance).toBe(-5);
+    expect(after?.defenseAppropriation?.accruedThroughTurn).toBe(5);
+    // Cash moved; the bond ledger owns principal, so the stored stock is untouched.
+    expect(after?.debt?.principal).toBe(BOND_FACE);
+    const bonds = await db
+      .collection<Bond>("bonds")
+      .find({ issuerType: "sovereign", countryId: "US", matured: false, defaulted: false })
+      .toArray();
+    expect(sumOutstandingSovereignPrincipal(bonds)).toBe(after?.debt?.principal);
+    // Exactly one treasury-debit trail entry across the replay.
+    expect(vi.mocked(emitTx)).toHaveBeenCalledTimes(1);
   });
 });

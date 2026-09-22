@@ -7,6 +7,8 @@
  */
 import type { Db } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
+import { checkGovernmentFormation } from "@/lib/constants/readinessChecks";
+import { JP_READINESS_EXPECTATIONS } from "@/lib/countries/jp/data/jpReadinessExpectations";
 
 export interface ReadinessCheck {
   name: string;
@@ -72,18 +74,6 @@ async function checkCNCountryLeaderStates(db: Db): Promise<ReadinessCheck> {
 }
 
 /** CN: government formation doc */
-async function checkGovernmentFormation(countryId: CountryId, db: Db): Promise<ReadinessCheck> {
-  const gov = await db
-    .collection<{ _id: string; status?: string; cycle?: number }>("governmentFormations")
-    .findOne({ _id: countryId });
-  return {
-    name: "GovernmentFormation",
-    status: gov ? "ok" : "missing",
-    detail: gov
-      ? `Status: ${gov.status}, cycle: ${gov.cycle}`
-      : `No ${countryId} governmentFormations doc`,
-  };
-}
 
 /** DE: Landeslisten populated. */
 async function checkDELandeslisten(db: Db): Promise<ReadinessCheck> {
@@ -126,14 +116,27 @@ export const COUNTRY_READINESS_EXPECTATIONS: Partial<
     statePartyOrgMin: 60,
     seatMin: 650,
     seatNote: "Expected ≥650 (Commons)",
-    nppMin: 600,
-    nppNote: "Expected ≥600 Commons NPPs",
+    // ⚠ A BLOC COUNT, NOT A SEAT COUNT. This read 600, as if the Commons were
+    // 650 individually-seeded politicians. It never has been: an
+    // `electedOfficials` row is one (region, party) bloc carrying `seatsHeld`,
+    // and it references ONE npp. A fully seeded 650-seat Commons is ~85 rows and
+    // ~104 NPPs, so the old floor could not be met by a correct seed -- it
+    // warned on every reset. Germany (200) and China (70) were already written
+    // against blocs; these two were the outliers.
+    //
+    // Set well under the observed count on purpose: the floor exists to catch a
+    // seed that produced nothing, and the bloc count falls in sparser eras where
+    // fewer parties stand.
+    nppMin: 30,
+    nppNote: "Expected ≥30 Commons party blocs (one NPP each, not one per seat)",
     officialMin: 600,
     demographicsCount: 12,
     stateMetricsFilter: { countryId: "UK" },
     stateMetricsCount: 12,
     legislationTypesMin: 0,
-    extras: [(db) => checkGovernmentFormation("UK", db)],
+    // The UK row is written by `updateGovernmentSeats` on the first processed
+    // turn, not at seed time, so a turn-1 world legitimately has none yet.
+    extras: [(db) => checkGovernmentFormation("UK", db, { createdOnFirstTurn: true })],
   },
   DE: {
     regionCount: 16,
@@ -154,22 +157,7 @@ export const COUNTRY_READINESS_EXPECTATIONS: Partial<
     legislationTypesMin: 1,
     extras: [(db) => checkGovernmentFormation("DE", db), checkDELandeslisten],
   },
-  JP: {
-    regionCount: 47,
-    partyMin: 5,
-    partyRoster: "LDP, CDP, Komeito, JIP, JCP",
-    statePartyOrgMin: 235,
-    seatMin: 713,
-    seatNote: "Expected ≥713 (465 Shugiin + 248 Sangiin)",
-    nppMin: 700,
-    nppNote: "Expected ≥700 Diet NPPs",
-    officialMin: 700,
-    demographicsCount: 47,
-    stateMetricsFilter: { countryId: "JP" },
-    stateMetricsCount: 47,
-    legislationTypesMin: 0,
-    extras: [(db) => checkGovernmentFormation("JP", db)],
-  },
+  JP: JP_READINESS_EXPECTATIONS,
   CN: {
     regionCount: 7,
     partyMin: 3,

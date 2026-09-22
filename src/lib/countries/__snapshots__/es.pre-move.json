@@ -1,0 +1,2324 @@
+{
+  "COUNTRY_ANCHOR": {
+    "shape": "country-first",
+    "value": [-3.7, 40.4]
+  },
+  "COUNTRY_BUCKET_LABELS": {
+    "shape": "country-first",
+    "value": {
+      "dims": {
+        "ethnicity": "Origen",
+        "age": "Edad",
+        "education": "Estudios",
+        "income": "Renta",
+        "urbanization": "Dónde viven"
+      },
+      "buckets": {
+        "ethnicity": {
+          "spanish": "Españoles",
+          "regional": "Nacionalidades históricas",
+          "other": "Otros orígenes"
+        },
+        "age": {
+          "young": "Menores de 30",
+          "mid": "30 a 49 años",
+          "mature": "50 a 64 años",
+          "senior": "Mayores de 65"
+        },
+        "education": {
+          "primary_or_below": "Sin estudios",
+          "secondary": "Bachillerato",
+          "vocational": "Formación profesional",
+          "university": "Estudios universitarios"
+        },
+        "income": {
+          "low": "Rentas bajas",
+          "middle": "Rentas medias",
+          "high": "Rentas altas"
+        },
+        "urbanization": {
+          "urban": "Ciudades",
+          "suburban": "Extrarradio",
+          "rural": "España rural"
+        }
+      }
+    }
+  },
+  "COUNTRY_COMMAND_FLAVOR": {
+    "shape": "country-first",
+    "value": {
+      "glyph": "ES",
+      "command": "ESTADO MAYOR DE LA DEFENSA",
+      "strip": "◆ SECRETO",
+      "acc": "#86d978"
+    }
+  },
+  "COUNTRY_MODIFIER_PATCHES": {
+    "shape": "absent",
+    "value": null
+  },
+  "COUNTRY_READINESS_EXPECTATIONS": {
+    "shape": "absent",
+    "value": null
+  },
+  "COUNTRY_SECTOR_WEIGHTS_1953": {
+    "shape": "country-first",
+    "value": {
+      "agriculture": 25,
+      "manufacturing": 18,
+      "construction": 10,
+      "energy": 10,
+      "extraction": 6,
+      "logistics": 4,
+      "financial": 4,
+      "retail": 4,
+      "real_estate": 3,
+      "defense": 3,
+      "telecommunications": 2,
+      "media": 2,
+      "healthcare": 2,
+      "automobiles": 1,
+      "chemical_industries": 1,
+      "entertainment": 1,
+      "technology": 0
+    }
+  },
+  "DOMAIN_BUCKET_AFFINITIES": {
+    "shape": "absent",
+    "value": null
+  },
+  "GDP_DENOMINATION_1953": {
+    "shape": "country-first",
+    "value": "local"
+  },
+  "GROUPS": {
+    "shape": "absent",
+    "value": null
+  },
+  "INITIAL_RATES": {
+    "shape": "country-first",
+    "value": 67
+  },
+  "MAJOR_DEFAULT_PARTIES": {
+    "shape": "absent",
+    "value": null
+  },
+  "MECHANICS_BY_COUNTRY": {
+    "shape": "country-first",
+    "value": {
+      "minister_of_finance": {
+        "positionId": "minister_of_finance",
+        "department": "Finance, Budget and National Planning",
+        "sealImage": "",
+        "nationalMetrics": [
+          {
+            "category": "governance",
+            "metricId": "budgetBalance",
+            "label": "Budget Balance",
+            "format": "percent",
+            "higherIsBetter": true
+          },
+          {
+            "category": "economic",
+            "metricId": "gdpGrowth",
+            "label": "GDP Growth",
+            "format": "percent",
+            "higherIsBetter": true
+          }
+        ],
+        "regionalMetrics": []
+      },
+      "minister_of_foreign_affairs": {
+        "positionId": "minister_of_foreign_affairs",
+        "department": "Foreign Affairs",
+        "sealImage": "",
+        "nationalMetrics": [
+          {
+            "category": "economic",
+            "metricId": "tradeBalance",
+            "label": "Trade Balance",
+            "format": "percent",
+            "higherIsBetter": true
+          }
+        ],
+        "regionalMetrics": []
+      },
+      "minister_of_defence": {
+        "positionId": "minister_of_defence",
+        "department": "Defence",
+        "sealImage": "",
+        "nationalMetrics": [
+          {
+            "category": "publicSafety",
+            "metricId": "publicSafetyConfidence",
+            "label": "Public Safety Confidence",
+            "format": "percent",
+            "higherIsBetter": true
+          },
+          {
+            "category": "publicSafety",
+            "metricId": "violentCrimeRate",
+            "label": "Violent Crime Rate",
+            "format": "number",
+            "higherIsBetter": false
+          }
+        ],
+        "regionalMetrics": []
+      },
+      "minister_of_interior": {
+        "positionId": "minister_of_interior",
+        "department": "Interior",
+        "sealImage": "",
+        "nationalMetrics": [
+          {
+            "category": "publicSafety",
+            "metricId": "crimeRate",
+            "label": "Crime Rate",
+            "format": "number",
+            "higherIsBetter": false
+          },
+          {
+            "category": "publicSafety",
+            "metricId": "publicSafetyConfidence",
+            "label": "Public Safety Confidence",
+            "format": "percent",
+            "higherIsBetter": true
+          }
+        ],
+        "regionalMetrics": []
+      },
+      "minister_of_justice": {
+        "positionId": "minister_of_justice",
+        "department": "Justice",
+        "sealImage": "",
+        "nationalMetrics": [
+          {
+            "category": "governance",
+            "metricId": "corruptionIndex",
+            "label": "Corruption Index",
+            "format": "index",
+            "higherIsBetter": false
+          },
+          {
+            "category": "publicSafety",
+            "metricId": "recidivismRate",
+            "label": "Recidivism Rate",
+            "format": "percent",
+            "higherIsBetter": false
+          }
+        ],
+        "regionalMetrics": []
+      },
+      "minister_of_health": {
+        "positionId": "minister_of_health",
+        "department": "Health",
+        "sealImage": "",
+        "nationalMetrics": [
+          {
+            "category": "healthcare",
+            "metricId": "lifeExpectancy",
+            "label": "Life Expectancy",
+            "format": "number",
+            "higherIsBetter": true
+          },
+          {
+            "category": "healthcare",
+            "metricId": "preventableMortality",
+            "label": "Preventable Mortality",
+            "format": "number",
+            "higherIsBetter": false
+          }
+        ],
+        "regionalMetrics": []
+      },
+      "minister_of_education": {
+        "positionId": "minister_of_education",
+        "department": "Education",
+        "sealImage": "",
+        "nationalMetrics": [
+          {
+            "category": "education",
+            "metricId": "literacyRate",
+            "label": "Literacy Rate",
+            "format": "percent",
+            "higherIsBetter": true
+          },
+          {
+            "category": "education",
+            "metricId": "testPerformance",
+            "label": "Test Performance",
+            "format": "index",
+            "higherIsBetter": true
+          }
+        ],
+        "regionalMetrics": []
+      },
+      "minister_of_works_housing": {
+        "positionId": "minister_of_works_housing",
+        "department": "Works and Housing",
+        "sealImage": "",
+        "nationalMetrics": [
+          {
+            "category": "infrastructure",
+            "metricId": "roadCondition",
+            "label": "Road Condition",
+            "format": "index",
+            "higherIsBetter": true
+          },
+          {
+            "category": "social",
+            "metricId": "housingAffordability",
+            "label": "Housing Affordability",
+            "format": "index",
+            "higherIsBetter": false
+          }
+        ],
+        "regionalMetrics": []
+      },
+      "minister_of_agriculture": {
+        "positionId": "minister_of_agriculture",
+        "department": "Agriculture and Rural Development",
+        "sealImage": "",
+        "nationalMetrics": [
+          {
+            "category": "social",
+            "metricId": "foodInsecurity",
+            "label": "Food Insecurity",
+            "format": "percent",
+            "higherIsBetter": false
+          },
+          {
+            "category": "economic",
+            "metricId": "povertyRate",
+            "label": "Poverty Rate",
+            "format": "percent",
+            "higherIsBetter": false
+          }
+        ],
+        "regionalMetrics": []
+      },
+      "minister_of_trade_industry": {
+        "positionId": "minister_of_trade_industry",
+        "department": "Industry, Trade and Investment",
+        "sealImage": "",
+        "nationalMetrics": [
+          {
+            "category": "economic",
+            "metricId": "smallBusinessFormation",
+            "label": "Small Business Formation",
+            "format": "percent",
+            "higherIsBetter": true
+          },
+          {
+            "category": "economic",
+            "metricId": "tradeBalance",
+            "label": "Trade Balance",
+            "format": "percent",
+            "higherIsBetter": true
+          }
+        ],
+        "regionalMetrics": []
+      },
+      "minister_of_labour": {
+        "positionId": "minister_of_labour",
+        "department": "Labour and Employment",
+        "sealImage": "",
+        "nationalMetrics": [
+          {
+            "category": "economic",
+            "metricId": "unemploymentRate",
+            "label": "Unemployment Rate",
+            "format": "percent",
+            "higherIsBetter": false
+          },
+          {
+            "category": "economic",
+            "metricId": "laborParticipation",
+            "label": "Labour Participation",
+            "format": "percent",
+            "higherIsBetter": true
+          }
+        ],
+        "regionalMetrics": []
+      },
+      "minister_of_environment": {
+        "positionId": "minister_of_environment",
+        "department": "Environment",
+        "sealImage": "",
+        "nationalMetrics": [
+          {
+            "category": "environment",
+            "metricId": "carbonEmissions",
+            "label": "Carbon Emissions",
+            "format": "number",
+            "higherIsBetter": false
+          },
+          {
+            "category": "environment",
+            "metricId": "renewableEnergy",
+            "label": "Renewable Energy",
+            "format": "percent",
+            "higherIsBetter": true
+          }
+        ],
+        "regionalMetrics": []
+      },
+      "director_of_intelligence": {
+        "positionId": "director_of_intelligence",
+        "department": "Intelligence Service",
+        "sealImage": "",
+        "nationalMetrics": [
+          {
+            "category": "governance",
+            "metricId": "publicTrust",
+            "label": "Public Trust",
+            "format": "index",
+            "higherIsBetter": true
+          },
+          {
+            "category": "publicSafety",
+            "metricId": "crimeRate",
+            "label": "Crime Rate",
+            "format": "rate",
+            "higherIsBetter": false
+          }
+        ],
+        "regionalMetrics": []
+      }
+    }
+  },
+  "MEDIAN_INCOME_THRESHOLDS": {
+    "shape": "absent",
+    "value": null
+  },
+  "POPULATION_MULTIPLIERS": {
+    "shape": "absent",
+    "value": null
+  },
+  "ORDERS_BY_COUNTRY": {
+    "shape": "absent",
+    "value": null
+  },
+  "UNION_NAMES_BY_ERA": {
+    "shape": "outer-keyed",
+    "value": {
+      "1953": {
+        "financial": "Organización Sindical Española",
+        "media": "Organización Sindical Española",
+        "manufacturing": "Organización Sindical Española",
+        "chemical_industries": "Organización Sindical Española",
+        "healthcare": "Organización Sindical Española",
+        "retail": "Organización Sindical Española",
+        "automobiles": "Organización Sindical Española",
+        "technology": "Organización Sindical Española",
+        "energy": "Organización Sindical Española",
+        "agriculture": "Organización Sindical Española",
+        "real_estate": "Organización Sindical Española",
+        "construction": "Organización Sindical Española",
+        "defense": "Organización Sindical Española",
+        "telecommunications": "Organización Sindical Española",
+        "entertainment": "Organización Sindical Española",
+        "logistics": "Organización Sindical Española",
+        "extraction": "Organización Sindical Española"
+      },
+      "1979": {
+        "manufacturing": "CCOO Industry Federation",
+        "automobiles": "CCOO Industry Federation",
+        "chemical_industries": "CCOO Industry Federation",
+        "construction": "CCOO Construction Federation",
+        "energy": "CCOO Energy Federation",
+        "extraction": "CCOO Mining Federation",
+        "healthcare": "CCOO Health Federation",
+        "retail": "CCOO Commerce Federation",
+        "media": "FAPE",
+        "logistics": "CCOO Transport Federation",
+        "technology": "CCOO Industry Federation",
+        "financial": "CCOO Finance Federation",
+        "telecommunications": "CCOO Communications Federation",
+        "entertainment": "CCOO Culture Federation",
+        "defense": "CCOO Industry Federation",
+        "agriculture": "CCOO Agriculture Federation",
+        "real_estate": "CCOO Construction Federation"
+      },
+      "1991": {
+        "manufacturing": "CCOO Industry Federation",
+        "automobiles": "CCOO Industry Federation",
+        "chemical_industries": "CCOO Industry Federation",
+        "construction": "CCOO Construction Federation",
+        "energy": "CCOO Energy Federation",
+        "extraction": "CCOO Mining Federation",
+        "healthcare": "CCOO Health Federation",
+        "retail": "CCOO Commerce Federation",
+        "media": "FAPE",
+        "logistics": "CCOO Transport Federation",
+        "technology": "CCOO Industry Federation",
+        "financial": "CCOO Finance Federation",
+        "telecommunications": "CCOO Communications Federation",
+        "entertainment": "CCOO Culture Federation",
+        "defense": "CCOO Industry Federation",
+        "agriculture": "CCOO Agriculture Federation",
+        "real_estate": "CCOO Construction Federation"
+      },
+      "1999": {
+        "manufacturing": "CCOO Industry Federation",
+        "automobiles": "CCOO Industry Federation",
+        "chemical_industries": "CCOO Industry Federation",
+        "construction": "CCOO Construction Federation",
+        "energy": "CCOO Energy Federation",
+        "extraction": "CCOO Mining Federation",
+        "healthcare": "CCOO Health Federation",
+        "retail": "CCOO Commerce Federation",
+        "media": "FAPE",
+        "logistics": "CCOO Transport Federation",
+        "technology": "CCOO Industry Federation",
+        "financial": "CCOO Finance Federation",
+        "telecommunications": "CCOO Communications Federation",
+        "entertainment": "CCOO Culture Federation",
+        "defense": "CCOO Industry Federation",
+        "agriculture": "CCOO Agriculture Federation",
+        "real_estate": "CCOO Construction Federation"
+      },
+      "2007": {
+        "manufacturing": "CCOO Industry Federation",
+        "automobiles": "CCOO Industry Federation",
+        "chemical_industries": "CCOO Industry Federation",
+        "construction": "CCOO Construction Federation",
+        "energy": "CCOO Energy Federation",
+        "extraction": "CCOO Mining Federation",
+        "healthcare": "CCOO Health Federation",
+        "retail": "CCOO Commerce Federation",
+        "media": "FAPE",
+        "logistics": "CCOO Transport Federation",
+        "technology": "CCOO Industry Federation",
+        "financial": "CCOO Finance Federation",
+        "telecommunications": "CCOO Communications Federation",
+        "entertainment": "CCOO Culture Federation",
+        "defense": "CCOO Industry Federation",
+        "agriculture": "CCOO Agriculture Federation",
+        "real_estate": "CCOO Construction Federation"
+      },
+      "2019": {
+        "manufacturing": "CCOO Industry Federation",
+        "automobiles": "CCOO Industry Federation",
+        "chemical_industries": "CCOO Industry Federation",
+        "construction": "CCOO Construction Federation",
+        "energy": "CCOO Energy Federation",
+        "extraction": "CCOO Mining Federation",
+        "healthcare": "CCOO Health Federation",
+        "retail": "CCOO Commerce Federation",
+        "media": "FAPE",
+        "logistics": "CCOO Transport Federation",
+        "technology": "CCOO Industry Federation",
+        "financial": "CCOO Finance Federation",
+        "telecommunications": "CCOO Communications Federation",
+        "entertainment": "CCOO Culture Federation",
+        "defense": "CCOO Industry Federation",
+        "agriculture": "CCOO Agriculture Federation",
+        "real_estate": "CCOO Construction Federation"
+      },
+      "2023": {
+        "manufacturing": "CCOO Industry Federation",
+        "automobiles": "CCOO Industry Federation",
+        "chemical_industries": "CCOO Industry Federation",
+        "construction": "CCOO Construction Federation",
+        "energy": "CCOO Energy Federation",
+        "extraction": "CCOO Mining Federation",
+        "healthcare": "CCOO Health Federation",
+        "retail": "CCOO Commerce Federation",
+        "media": "FAPE",
+        "logistics": "CCOO Transport Federation",
+        "technology": "CCOO Industry Federation",
+        "financial": "CCOO Finance Federation",
+        "telecommunications": "CCOO Communications Federation",
+        "entertainment": "CCOO Culture Federation",
+        "defense": "CCOO Industry Federation",
+        "agriculture": "CCOO Agriculture Federation",
+        "real_estate": "CCOO Construction Federation"
+      },
+      "2027": {
+        "manufacturing": "CCOO Industry Federation",
+        "automobiles": "CCOO Industry Federation",
+        "chemical_industries": "CCOO Industry Federation",
+        "construction": "CCOO Construction Federation",
+        "energy": "CCOO Energy Federation",
+        "extraction": "CCOO Mining Federation",
+        "healthcare": "CCOO Health Federation",
+        "retail": "CCOO Commerce Federation",
+        "media": "FAPE",
+        "logistics": "CCOO Transport Federation",
+        "technology": "CCOO Industry Federation",
+        "financial": "CCOO Finance Federation",
+        "telecommunications": "CCOO Communications Federation",
+        "entertainment": "CCOO Culture Federation",
+        "defense": "CCOO Industry Federation",
+        "agriculture": "CCOO Agriculture Federation",
+        "real_estate": "CCOO Construction Federation"
+      }
+    }
+  },
+  "CABINET_IDENTITY": {
+    "shape": "absent",
+    "value": null
+  },
+  "CENSUS_BUNDLES": {
+    "shape": "country-first",
+    "value": {
+      "1953-default": {
+        "ES_MAD": {
+          "ethnicity": {
+            "spanish": 97,
+            "regional": 0,
+            "other": 3
+          },
+          "age": {
+            "young": 29,
+            "mid": 28,
+            "mature": 24,
+            "senior": 19
+          },
+          "education": {
+            "primary_or_below": 30,
+            "secondary": 20,
+            "vocational": 42,
+            "university": 8
+          },
+          "income": {
+            "low": 28,
+            "middle": 52,
+            "high": 20
+          },
+          "urbanization": {
+            "urban": 72,
+            "suburban": 16,
+            "rural": 12
+          }
+        },
+        "ES_CAT": {
+          "ethnicity": {
+            "spanish": 72,
+            "regional": 26,
+            "other": 2
+          },
+          "age": {
+            "young": 28,
+            "mid": 27,
+            "mature": 25,
+            "senior": 20
+          },
+          "education": {
+            "primary_or_below": 22,
+            "secondary": 22,
+            "vocational": 48,
+            "university": 8
+          },
+          "income": {
+            "low": 20,
+            "middle": 56,
+            "high": 24
+          },
+          "urbanization": {
+            "urban": 64,
+            "suburban": 22,
+            "rural": 14
+          }
+        },
+        "ES_AND": {
+          "ethnicity": {
+            "spanish": 99,
+            "regional": 0,
+            "other": 1
+          },
+          "age": {
+            "young": 32,
+            "mid": 27,
+            "mature": 23,
+            "senior": 18
+          },
+          "education": {
+            "primary_or_below": 56,
+            "secondary": 8,
+            "vocational": 33,
+            "university": 3
+          },
+          "income": {
+            "low": 65,
+            "middle": 30,
+            "high": 5
+          },
+          "urbanization": {
+            "urban": 30,
+            "suburban": 16,
+            "rural": 54
+          }
+        },
+        "ES_VAL": {
+          "ethnicity": {
+            "spanish": 76,
+            "regional": 22,
+            "other": 2
+          },
+          "age": {
+            "young": 30,
+            "mid": 27,
+            "mature": 24,
+            "senior": 19
+          },
+          "education": {
+            "primary_or_below": 40,
+            "secondary": 15,
+            "vocational": 40,
+            "university": 5
+          },
+          "income": {
+            "low": 42,
+            "middle": 46,
+            "high": 12
+          },
+          "urbanization": {
+            "urban": 40,
+            "suburban": 20,
+            "rural": 40
+          }
+        },
+        "ES_PVB": {
+          "ethnicity": {
+            "spanish": 62,
+            "regional": 36,
+            "other": 2
+          },
+          "age": {
+            "young": 27,
+            "mid": 28,
+            "mature": 26,
+            "senior": 19
+          },
+          "education": {
+            "primary_or_below": 24,
+            "secondary": 22,
+            "vocational": 46,
+            "university": 8
+          },
+          "income": {
+            "low": 22,
+            "middle": 54,
+            "high": 24
+          },
+          "urbanization": {
+            "urban": 58,
+            "suburban": 22,
+            "rural": 20
+          }
+        },
+        "ES_GAL": {
+          "ethnicity": {
+            "spanish": 68,
+            "regional": 30,
+            "other": 2
+          },
+          "age": {
+            "young": 27,
+            "mid": 26,
+            "mature": 26,
+            "senior": 21
+          },
+          "education": {
+            "primary_or_below": 44,
+            "secondary": 13,
+            "vocational": 37,
+            "university": 6
+          },
+          "income": {
+            "low": 55,
+            "middle": 38,
+            "high": 7
+          },
+          "urbanization": {
+            "urban": 22,
+            "suburban": 14,
+            "rural": 64
+          }
+        },
+        "ES_NOR": {
+          "ethnicity": {
+            "spanish": 97,
+            "regional": 2,
+            "other": 1
+          },
+          "age": {
+            "young": 28,
+            "mid": 27,
+            "mature": 25,
+            "senior": 20
+          },
+          "education": {
+            "primary_or_below": 32,
+            "secondary": 18,
+            "vocational": 44,
+            "university": 6
+          },
+          "income": {
+            "low": 36,
+            "middle": 50,
+            "high": 14
+          },
+          "urbanization": {
+            "urban": 44,
+            "suburban": 20,
+            "rural": 36
+          }
+        },
+        "ES_CEN": {
+          "ethnicity": {
+            "spanish": 98,
+            "regional": 1,
+            "other": 1
+          },
+          "age": {
+            "young": 29,
+            "mid": 27,
+            "mature": 24,
+            "senior": 20
+          },
+          "education": {
+            "primary_or_below": 48,
+            "secondary": 11,
+            "vocational": 36,
+            "university": 5
+          },
+          "income": {
+            "low": 48,
+            "middle": 42,
+            "high": 10
+          },
+          "urbanization": {
+            "urban": 28,
+            "suburban": 16,
+            "rural": 56
+          }
+        }
+      },
+      "1979-default": {
+        "ES_MAD": {
+          "ethnicity": {
+            "spanish": 97,
+            "regional": 0,
+            "other": 3
+          },
+          "age": {
+            "young": 29,
+            "mid": 28,
+            "mature": 24,
+            "senior": 19
+          },
+          "education": {
+            "primary_or_below": 30,
+            "secondary": 20,
+            "vocational": 42,
+            "university": 8
+          },
+          "income": {
+            "low": 28,
+            "middle": 52,
+            "high": 20
+          },
+          "urbanization": {
+            "urban": 72,
+            "suburban": 16,
+            "rural": 12
+          }
+        },
+        "ES_CAT": {
+          "ethnicity": {
+            "spanish": 72,
+            "regional": 26,
+            "other": 2
+          },
+          "age": {
+            "young": 28,
+            "mid": 27,
+            "mature": 25,
+            "senior": 20
+          },
+          "education": {
+            "primary_or_below": 22,
+            "secondary": 22,
+            "vocational": 48,
+            "university": 8
+          },
+          "income": {
+            "low": 20,
+            "middle": 56,
+            "high": 24
+          },
+          "urbanization": {
+            "urban": 64,
+            "suburban": 22,
+            "rural": 14
+          }
+        },
+        "ES_AND": {
+          "ethnicity": {
+            "spanish": 99,
+            "regional": 0,
+            "other": 1
+          },
+          "age": {
+            "young": 32,
+            "mid": 27,
+            "mature": 23,
+            "senior": 18
+          },
+          "education": {
+            "primary_or_below": 56,
+            "secondary": 8,
+            "vocational": 33,
+            "university": 3
+          },
+          "income": {
+            "low": 65,
+            "middle": 30,
+            "high": 5
+          },
+          "urbanization": {
+            "urban": 30,
+            "suburban": 16,
+            "rural": 54
+          }
+        },
+        "ES_VAL": {
+          "ethnicity": {
+            "spanish": 76,
+            "regional": 22,
+            "other": 2
+          },
+          "age": {
+            "young": 30,
+            "mid": 27,
+            "mature": 24,
+            "senior": 19
+          },
+          "education": {
+            "primary_or_below": 40,
+            "secondary": 15,
+            "vocational": 40,
+            "university": 5
+          },
+          "income": {
+            "low": 42,
+            "middle": 46,
+            "high": 12
+          },
+          "urbanization": {
+            "urban": 40,
+            "suburban": 20,
+            "rural": 40
+          }
+        },
+        "ES_PVB": {
+          "ethnicity": {
+            "spanish": 62,
+            "regional": 36,
+            "other": 2
+          },
+          "age": {
+            "young": 27,
+            "mid": 28,
+            "mature": 26,
+            "senior": 19
+          },
+          "education": {
+            "primary_or_below": 24,
+            "secondary": 22,
+            "vocational": 46,
+            "university": 8
+          },
+          "income": {
+            "low": 22,
+            "middle": 54,
+            "high": 24
+          },
+          "urbanization": {
+            "urban": 58,
+            "suburban": 22,
+            "rural": 20
+          }
+        },
+        "ES_GAL": {
+          "ethnicity": {
+            "spanish": 68,
+            "regional": 30,
+            "other": 2
+          },
+          "age": {
+            "young": 27,
+            "mid": 26,
+            "mature": 26,
+            "senior": 21
+          },
+          "education": {
+            "primary_or_below": 44,
+            "secondary": 13,
+            "vocational": 37,
+            "university": 6
+          },
+          "income": {
+            "low": 55,
+            "middle": 38,
+            "high": 7
+          },
+          "urbanization": {
+            "urban": 22,
+            "suburban": 14,
+            "rural": 64
+          }
+        },
+        "ES_NOR": {
+          "ethnicity": {
+            "spanish": 97,
+            "regional": 2,
+            "other": 1
+          },
+          "age": {
+            "young": 28,
+            "mid": 27,
+            "mature": 25,
+            "senior": 20
+          },
+          "education": {
+            "primary_or_below": 32,
+            "secondary": 18,
+            "vocational": 44,
+            "university": 6
+          },
+          "income": {
+            "low": 36,
+            "middle": 50,
+            "high": 14
+          },
+          "urbanization": {
+            "urban": 44,
+            "suburban": 20,
+            "rural": 36
+          }
+        },
+        "ES_CEN": {
+          "ethnicity": {
+            "spanish": 98,
+            "regional": 1,
+            "other": 1
+          },
+          "age": {
+            "young": 29,
+            "mid": 27,
+            "mature": 24,
+            "senior": 20
+          },
+          "education": {
+            "primary_or_below": 48,
+            "secondary": 11,
+            "vocational": 36,
+            "university": 5
+          },
+          "income": {
+            "low": 48,
+            "middle": 42,
+            "high": 10
+          },
+          "urbanization": {
+            "urban": 28,
+            "suburban": 16,
+            "rural": 56
+          }
+        }
+      }
+    }
+  },
+  "CONSCRIPTION_SEED": {
+    "shape": "absent",
+    "value": null
+  },
+  "CORE5_NORMALS": {
+    "shape": "absent",
+    "value": null
+  },
+  "COST_SCALE_ANCHORS": {
+    "shape": "absent",
+    "value": null
+  },
+  "COUNTRY_BILL_PHASES": {
+    "shape": "function-valued",
+    "value": null,
+    "functionKeys": ["fn"]
+  },
+  "COUNTRY_CONFIGS": {
+    "shape": "country-first",
+    "value": {
+      "id": "ES",
+      "name": "Spain",
+      "flagEmoji": "🇪🇸",
+      "code": "ES",
+      "socialAxisBaseline": 1,
+      "regionLabel": "Autonomous Community",
+      "regionLabelPlural": "Autonomous Communities",
+      "executiveTitle": "Prime Minister",
+      "headOfStateTitle": "King",
+      "executiveRealmPhrase": "Spain",
+      "governmentType": "parliamentaryMonarchy",
+      "governmentTypeLabel": "Parliamentary Monarchy",
+      "coalitionThreshold": 176,
+      "legislature": {
+        "name": "Cortes Generales",
+        "path": "/country/es/legislature",
+        "bicameral": true,
+        "upperChamber": {
+          "key": "senado",
+          "name": "Senate",
+          "shortName": "Senado",
+          "seats": 208,
+          "description": "208 senators elected on a provincial basis (plus regional appointees) for four-year terms.",
+          "elected": true
+        },
+        "lowerChamber": {
+          "key": "congresoDiputados",
+          "name": "Congress of Deputies",
+          "shortName": "Congreso",
+          "seats": 350,
+          "description": "350 deputies elected by proportional representation (D'Hondt) in provincial constituencies for four-year terms.",
+          "elected": true
+        }
+      },
+      "lowerElectionSystem": {
+        "termYears": 4,
+        "seatsContested": "all",
+        "singleMemberConstituencies": false,
+        "snapElectionsAllowed": true
+      },
+      "upperElectionSystem": {
+        "termYears": 4,
+        "seatsContested": "all",
+        "singleMemberConstituencies": false,
+        "snapElectionsAllowed": true
+      },
+      "electionSystems": {
+        "lowerChamber": "pr_hareQuota",
+        "upperChamber": "pr_hareQuota",
+        "headOfGovernment": "parliamentary",
+        "headOfState": "ceremonial"
+      },
+      "officeTypes": [
+        {
+          "key": "primeMinister",
+          "label": "Prime Minister",
+          "labelPlural": "Prime Ministers",
+          "isExecutive": true,
+          "isSubNational": false,
+          "termYears": 4,
+          "actionBonus": 4,
+          "partyStrengthWeight": 1
+        },
+        {
+          "key": "monarch",
+          "label": "King",
+          "labelPlural": "Kings",
+          "isExecutive": true,
+          "isHeadOfState": true,
+          "isSubNational": false,
+          "termYears": 0,
+          "actionBonus": 0,
+          "partyStrengthWeight": 0
+        },
+        {
+          "key": "deputy",
+          "label": "Deputy",
+          "labelPlural": "Deputies",
+          "chamberKey": "congresoDiputados",
+          "isExecutive": false,
+          "isSubNational": false,
+          "termYears": 4,
+          "actionBonus": 1,
+          "partyStrengthWeight": 0.9
+        },
+        {
+          "key": "senator",
+          "label": "Senator",
+          "labelPlural": "Senators",
+          "chamberKey": "senado",
+          "isExecutive": false,
+          "isSubNational": false,
+          "termYears": 4,
+          "actionBonus": 1,
+          "partyStrengthWeight": 0.8
+        },
+        {
+          "key": "centralBankChair",
+          "label": "Governor of the Banco de España",
+          "labelPlural": "Governors of the Banco de España",
+          "isExecutive": false,
+          "isSubNational": false,
+          "termYears": 6,
+          "actionBonus": 3,
+          "partyStrengthWeight": 0
+        }
+      ],
+      "majorPartyIds": ["es_ucd", "es_psoe"],
+      "partyCreationNPPs": {
+        "statesRequired": 2,
+        "lockHomeState": false,
+        "nppsPerState": 1
+      },
+      "demographicProfileId": "es_archetypes",
+      "centralBank": {
+        "name": "Banco de España",
+        "abbreviation": "BdE",
+        "chairTitle": "Governor of the Banco de España",
+        "defaultPrimeRate": 14,
+        "heroImage": "https://flagcdn.com/w640/es.png"
+      },
+      "usdExchangeRate": 0.0149,
+      "currencyCode": "ESP",
+      "fiscalYearStartTurnInYear": 40,
+      "financeMinisterCabinetId": "minister_of_finance",
+      "status": "coming-soon",
+      "tagline": "The young democracy - a restored monarchy, a fragile centrist government, and a country building its autonomous communities barely four years after Franco.",
+      "descriptor": "A parliamentary monarchy under the 1978 Constitution: a Prime Minister governs at the confidence of a 350-seat Congress and a 208-seat Senate, as Spain devolves power to its new autonomous communities.",
+      "heroImage": "https://flagcdn.com/w640/es.png",
+      "entryPath": "/country/es",
+      "overviewPath": "/country/es",
+      "mapPath": "/country/es/map",
+      "executivePath": "/country/es/executive",
+      "executiveLabel": "Moncloa",
+      "centralGovernmentLabel": "State Budget"
+    }
+  },
+  "COUNTRY_CONTINENT": {
+    "shape": "country-first",
+    "value": "Europe"
+  },
+  "COUNTRY_CURRENCY_MAP": {
+    "shape": "country-first",
+    "value": "ESP"
+  },
+  "COUNTRY_ELECTION_PHASES": {
+    "shape": "country-first",
+    "value": [
+      {
+        "name": "esElections"
+      },
+      {
+        "name": "esSenateElections"
+      }
+    ]
+  },
+  "COUNTRY_ERA1991_PATCHES": {
+    "shape": "absent",
+    "value": null
+  },
+  "COUNTRY_HISTORICAL_NAMES": {
+    "shape": "country-first",
+    "value": ["Banco del Ebro", "Caja Mercantil del Norte"]
+  },
+  "COUNTRY_MAP_REGISTRY": {
+    "shape": "country-first",
+    "value": {
+      "countryId": "ES",
+      "name": "Spain",
+      "overviewPath": "/country/es",
+      "mapPath": "/country/es/map",
+      "hasRegionMap": false
+    }
+  },
+  "COUNTRY_MODERN_NAMES": {
+    "shape": "country-first",
+    "value": ["Banco del Ebro", "Grupo Mercantil del Norte"]
+  },
+  "COUNTRY_REGIONS": {
+    "shape": "country-first",
+    "value": "europe"
+  },
+  "COUNTRY_SECTOR_WEIGHTS": {
+    "shape": "country-first",
+    "value": {
+      "manufacturing": 14,
+      "real_estate": 12,
+      "retail": 9,
+      "agriculture": 9,
+      "entertainment": 8,
+      "automobiles": 7,
+      "construction": 7,
+      "financial": 6,
+      "healthcare": 6,
+      "energy": 6,
+      "chemical_industries": 4,
+      "logistics": 4,
+      "defense": 2,
+      "technology": 1,
+      "media": 1
+    }
+  },
+  "COUNTRY_SECTOR_WEIGHTS_1979": {
+    "shape": "country-first",
+    "value": {
+      "manufacturing": 18,
+      "agriculture": 10,
+      "retail": 9,
+      "construction": 8,
+      "energy": 7,
+      "real_estate": 7,
+      "automobiles": 5,
+      "chemical_industries": 5,
+      "entertainment": 7,
+      "financial": 3,
+      "healthcare": 3,
+      "defense": 3,
+      "extraction": 4,
+      "logistics": 4,
+      "telecommunications": 2,
+      "technology": 1,
+      "media": 3
+    }
+  },
+  "COUNTRY_SECTOR_WEIGHTS_1991": {
+    "shape": "country-first",
+    "value": {
+      "manufacturing": 14,
+      "real_estate": 12,
+      "retail": 9,
+      "agriculture": 9,
+      "entertainment": 8,
+      "automobiles": 7,
+      "construction": 7,
+      "financial": 6,
+      "healthcare": 6,
+      "energy": 6,
+      "chemical_industries": 4,
+      "logistics": 4,
+      "defense": 2,
+      "technology": 1,
+      "media": 1
+    }
+  },
+  "COUNTRY_TO_ISO_NUMERIC": {
+    "shape": "country-first",
+    "value": "724"
+  },
+  "COUNTRY_UN_MEMBER_SINCE": {
+    "shape": "country-first",
+    "value": 1955
+  },
+  "DEFAULT_STRATEGIC_SECTORS": {
+    "shape": "absent",
+    "value": null
+  },
+  "DEFENSE_POSITION_BY_COUNTRY": {
+    "shape": "country-first",
+    "value": "minister_of_defence"
+  },
+  "ECONOMIC_BASELINES": {
+    "shape": "absent",
+    "value": null
+  },
+  "ECONOMY_TEXT": {
+    "shape": "absent",
+    "value": null
+  },
+  "ENERGY_POSITION_BY_COUNTRY": {
+    "shape": "absent",
+    "value": null
+  },
+  "ERA_COUNTRY_CONFIG_OVERRIDES": {
+    "shape": "outer-keyed",
+    "value": {
+      "1953-default": {
+        "usdExchangeRate": 0.025252525252525252,
+        "executiveTitle": "Caudillo",
+        "headOfStateTitle": "Jefe del Estado",
+        "governmentType": "onePartyState",
+        "governmentTypeLabel": "One Party State",
+        "regionLabel": "Province",
+        "regionLabelPlural": "Provinces",
+        "rulingPartyId": 1,
+        "majorPartyIds": ["es_fet"],
+        "coalitionThreshold": 176,
+        "legislature": {
+          "name": "Cortes Españolas",
+          "path": "/country/es/legislature",
+          "bicameral": false,
+          "lowerChamber": {
+            "key": "congresoDiputados",
+            "name": "Cortes Españolas",
+            "shortName": "Cortes",
+            "seats": 350,
+            "description": "350 procuradores of the Cortes Españolas — a corporatist chamber seated by 'organic democracy' (syndicates, municipalities, families, and direct Franco appointment), not by competitive election.",
+            "elected": false
+          }
+        },
+        "lowerElectionSystem": {
+          "termYears": 4,
+          "seatsContested": "all",
+          "singleMemberConstituencies": false,
+          "snapElectionsAllowed": false
+        },
+        "electionSystems": {
+          "lowerChamber": "pr_hareQuota",
+          "headOfGovernment": "parliamentary",
+          "headOfState": "ceremonial"
+        },
+        "officeTypes": [
+          {
+            "key": "caudillo",
+            "label": "Caudillo",
+            "labelPlural": "Caudillos",
+            "isExecutive": true,
+            "isHeadOfState": true,
+            "isSubNational": false,
+            "termYears": 0,
+            "actionBonus": 4,
+            "partyStrengthWeight": 1
+          },
+          {
+            "key": "procurador",
+            "label": "Procurador",
+            "labelPlural": "Procuradores",
+            "chamberKey": "congresoDiputados",
+            "isExecutive": false,
+            "isSubNational": false,
+            "termYears": 4,
+            "actionBonus": 1,
+            "partyStrengthWeight": 0.9
+          },
+          {
+            "key": "centralBankChair",
+            "label": "Governor of the Banco de España",
+            "labelPlural": "Governors of the Banco de España",
+            "isExecutive": false,
+            "isSubNational": false,
+            "termYears": 6,
+            "actionBonus": 3,
+            "partyStrengthWeight": 0
+          }
+        ],
+        "tagline": "Franco's Spain - a one-party dictatorship under the Caudillo, with FET as the sole Movimiento party and a corporatist Cortes Españolas.",
+        "descriptor": "A one-party state where Franco governs as both Jefe del Estado and Caudillo through FET y de las JONS; the 350-seat Cortes Españolas is a corporatist appointed chamber, and Spain is organised into provinces rather than autonomous communities.",
+        "executiveLabel": "El Pardo"
+      }
+    }
+  },
+  "ESTATE_PORTFOLIO_BY_COUNTRY": {
+    "shape": "absent",
+    "value": null
+  },
+  "EXECUTIVE_SEALS": {
+    "shape": "country-first",
+    "value": {
+      "src": "https://upload.wikimedia.org/wikipedia/commons/thumb/7/78/Coat_of_Arms_of_Spain_(1977–1981).svg/330px-Coat_of_Arms_of_Spain_(1977–1981).svg.png",
+      "alt": "Coat of arms of Spain (1977–1981)"
+    }
+  },
+  "EXECUTIVE_SURFACE": {
+    "shape": "country-first",
+    "value": {
+      "clock": {
+        "kind": "election",
+        "label": "Term Clock",
+        "countdownNoun": "next general election"
+      },
+      "actLabels": {
+        "signed": "ENACTED",
+        "vetoed": "REJECTED",
+        "onDesk": "AWAITING",
+        "order": "ORDER",
+        "confirmed": "APPOINTED",
+        "nominated": "NOMINATED",
+        "acting": "ACTING"
+      },
+      "deskKind": "bills",
+      "deskLabel": "The Desk",
+      "rosterTitle": "Council of Ministers",
+      "heroImage": "/api/images/hero/moncloa",
+      "heroAlt": "Palacio de la Moncloa, Madrid"
+    }
+  },
+  "EXECUTIVE_TEXT": {
+    "shape": "country-first",
+    "value": {
+      "glyph": "RE",
+      "serif": "mono",
+      "registry": "Kingdom of Spain · Presidency of the Government",
+      "title": "La Moncloa"
+    }
+  },
+  "FOREIGN_AFFAIRS_POSITION_BY_COUNTRY": {
+    "shape": "country-first",
+    "value": "minister_of_foreign_affairs"
+  },
+  "FULL_ERA_REGION_BUNDLES": {
+    "shape": "absent",
+    "value": null
+  },
+  "HAZARD_GROUPS": {
+    "shape": "absent",
+    "value": null
+  },
+  "INCOME_ANCHORS": {
+    "shape": "country-first",
+    "value": [
+      {
+        "year": 1953,
+        "value": 14000
+      }
+    ]
+  },
+  "INFRA_POSITION_BY_COUNTRY": {
+    "shape": "absent",
+    "value": null
+  },
+  "ISO_NUMERIC_TO_COUNTRY": {
+    "shape": "value-keyed",
+    "value": {
+      "724": "ES"
+    }
+  },
+  "LEGISLATION_COUNTRY_SCOPES": {
+    "shape": "country-first",
+    "value": "es"
+  },
+  "LEGISLATIVE_PROCESS": {
+    "shape": "absent",
+    "value": null
+  },
+  "M2_TO_GDP_1953": {
+    "shape": "country-first",
+    "value": 0.4
+  },
+  "METRIC_PRESET_BUNDLES": {
+    "shape": "country-first",
+    "value": {
+      "1953-default": {
+        "ES_MAD": {
+          "economic.gdpGrowth": 4.5,
+          "economic.medianIncome": 21000,
+          "economic.povertyRate": 22,
+          "economic.unemploymentRate": 4.5,
+          "healthcare.lifeExpectancy": 64,
+          "healthcare.nhsWaitingTime": 19,
+          "education.literacyRate": 94,
+          "education.highSchoolGradRate": 20,
+          "education.universityEnrollment": 5,
+          "population.urbanizationRate": 72,
+          "population.medianAge": 28,
+          "population.birthRate": 68,
+          "population.populationGrowth": 0.9,
+          "infrastructure.broadbandAccess": 0,
+          "infrastructure.roadCondition": 35,
+          "environment.protectedLand": 0.8,
+          "infrastructure.powerGridReliability": 90,
+          "infrastructure.waterQuality": 60,
+          "environment.renewableEnergy": 12,
+          "environment.recyclingRate": 0,
+          "environment.climateResilience": 0,
+          "environment.energyTransitionProgress": 0,
+          "mediaInformation.socialMediaSentiment": 0,
+          "governance.roboticsAdoption": 0,
+          "economic.laborParticipation": 48,
+          "economic.matchingFriction": 6,
+          "economic.tradeBalance": -1.5,
+          "economic.productivityGrowth": 3,
+          "economic.rdIntensity": 0.15,
+          "economic.propertyValueIndex": 18,
+          "economic.commercialValueIndex": 20,
+          "economic.ruralRevitalization": 72,
+          "economic.foodSecurity": 55,
+          "economic.exportDependency": 8,
+          "economic.manufacturingCompetitiveness": 48,
+          "economic.regulatoryBurden": 78,
+          "economic.economicFreedom": 22,
+          "education.apprenticeshipRate": 2,
+          "education.academicPressure": 35,
+          "healthcare.uninsuredRate": 55,
+          "healthcare.affordabilityIndex": 35,
+          "healthcare.mentalHealthAccess": 10,
+          "healthcare.socialCareQuality": 18,
+          "healthcare.elderCareQuality": 20,
+          "infrastructure.transportEfficiency": 42,
+          "publicSafety.antiSocialBehaviourRate": 5,
+          "publicSafety.knifeCrimeRate": 2,
+          "environment.floodRisk": 12,
+          "environment.naturalDisasterPreparedness": 28,
+          "environment.nuclearSafety": 0,
+          "social.childPoverty": 28,
+          "social.housingAffordability": 12,
+          "social.roughSleeping": 6,
+          "social.workLifeBalance": 40,
+          "social.foreignWorkerIntegration": 15,
+          "social.genderEquality": 12,
+          "social.housingSupplyGrowth": 2,
+          "governance.debtToGdp": 18,
+          "governance.devolutionSatisfaction": 25,
+          "governance.nationalPride": 55,
+          "governance.civilLiberties": 12,
+          "governance.militaryReadiness": 48,
+          "population.demographicDecline": 5,
+          "mediaInformation.stateMediaControl": 90,
+          "mediaInformation.pressFreedom": 8,
+          "mediaInformation.disinformationRisk": 8,
+          "mediaInformation.mediaPolarization": 10
+        },
+        "ES_CAT": {
+          "economic.gdpGrowth": 4.5,
+          "economic.medianIncome": 22000,
+          "economic.povertyRate": 20,
+          "economic.unemploymentRate": 4.5,
+          "healthcare.lifeExpectancy": 64,
+          "healthcare.nhsWaitingTime": 19,
+          "education.literacyRate": 95,
+          "education.highSchoolGradRate": 22,
+          "education.universityEnrollment": 2,
+          "population.urbanizationRate": 64,
+          "population.medianAge": 28,
+          "population.birthRate": 68,
+          "population.populationGrowth": 0.9,
+          "infrastructure.broadbandAccess": 0,
+          "infrastructure.roadCondition": 35,
+          "environment.protectedLand": 0.8,
+          "infrastructure.powerGridReliability": 90,
+          "infrastructure.waterQuality": 60,
+          "environment.renewableEnergy": 12,
+          "environment.recyclingRate": 0,
+          "environment.climateResilience": 0,
+          "environment.energyTransitionProgress": 0,
+          "mediaInformation.socialMediaSentiment": 0,
+          "governance.roboticsAdoption": 0,
+          "economic.laborParticipation": 48,
+          "economic.matchingFriction": 6,
+          "economic.tradeBalance": -1.5,
+          "economic.productivityGrowth": 3,
+          "economic.rdIntensity": 0.15,
+          "economic.propertyValueIndex": 18,
+          "economic.commercialValueIndex": 20,
+          "economic.ruralRevitalization": 72,
+          "economic.foodSecurity": 55,
+          "economic.exportDependency": 14,
+          "economic.manufacturingCompetitiveness": 58,
+          "economic.regulatoryBurden": 78,
+          "economic.economicFreedom": 22,
+          "education.apprenticeshipRate": 2,
+          "education.academicPressure": 35,
+          "healthcare.uninsuredRate": 55,
+          "healthcare.affordabilityIndex": 35,
+          "healthcare.mentalHealthAccess": 10,
+          "healthcare.socialCareQuality": 18,
+          "healthcare.elderCareQuality": 20,
+          "infrastructure.transportEfficiency": 45,
+          "publicSafety.antiSocialBehaviourRate": 5,
+          "publicSafety.knifeCrimeRate": 2,
+          "environment.floodRisk": 12,
+          "environment.naturalDisasterPreparedness": 28,
+          "environment.nuclearSafety": 0,
+          "social.childPoverty": 25,
+          "social.housingAffordability": 12,
+          "social.roughSleeping": 6,
+          "social.workLifeBalance": 40,
+          "social.foreignWorkerIntegration": 15,
+          "social.genderEquality": 12,
+          "social.housingSupplyGrowth": 2,
+          "governance.debtToGdp": 18,
+          "governance.devolutionSatisfaction": 18,
+          "governance.nationalPride": 55,
+          "governance.civilLiberties": 12,
+          "governance.militaryReadiness": 48,
+          "population.demographicDecline": 5,
+          "mediaInformation.stateMediaControl": 90,
+          "mediaInformation.pressFreedom": 8,
+          "mediaInformation.disinformationRisk": 8,
+          "mediaInformation.mediaPolarization": 10
+        },
+        "ES_AND": {
+          "economic.gdpGrowth": 4.5,
+          "economic.medianIncome": 8800,
+          "economic.povertyRate": 52,
+          "economic.unemploymentRate": 4.5,
+          "healthcare.lifeExpectancy": 59,
+          "healthcare.nhsWaitingTime": 19,
+          "education.literacyRate": 78,
+          "education.highSchoolGradRate": 5,
+          "education.universityEnrollment": 2,
+          "population.urbanizationRate": 30,
+          "population.medianAge": 28,
+          "population.birthRate": 68,
+          "population.populationGrowth": 0.9,
+          "infrastructure.broadbandAccess": 0,
+          "infrastructure.roadCondition": 35,
+          "environment.protectedLand": 0.8,
+          "infrastructure.powerGridReliability": 90,
+          "infrastructure.waterQuality": 60,
+          "environment.renewableEnergy": 12,
+          "environment.recyclingRate": 0,
+          "environment.climateResilience": 0,
+          "environment.energyTransitionProgress": 0,
+          "mediaInformation.socialMediaSentiment": 0,
+          "governance.roboticsAdoption": 0,
+          "economic.laborParticipation": 48,
+          "economic.matchingFriction": 6,
+          "economic.tradeBalance": -1.5,
+          "economic.productivityGrowth": 3,
+          "economic.rdIntensity": 0.15,
+          "economic.propertyValueIndex": 18,
+          "economic.commercialValueIndex": 20,
+          "economic.ruralRevitalization": 88,
+          "economic.foodSecurity": 55,
+          "economic.exportDependency": 8,
+          "economic.manufacturingCompetitiveness": 42,
+          "economic.regulatoryBurden": 78,
+          "economic.economicFreedom": 22,
+          "education.apprenticeshipRate": 2,
+          "education.academicPressure": 35,
+          "healthcare.uninsuredRate": 70,
+          "healthcare.affordabilityIndex": 35,
+          "healthcare.mentalHealthAccess": 10,
+          "healthcare.socialCareQuality": 18,
+          "healthcare.elderCareQuality": 20,
+          "infrastructure.transportEfficiency": 22,
+          "publicSafety.antiSocialBehaviourRate": 5,
+          "publicSafety.knifeCrimeRate": 2,
+          "environment.floodRisk": 12,
+          "environment.naturalDisasterPreparedness": 28,
+          "environment.nuclearSafety": 0,
+          "social.childPoverty": 58,
+          "social.housingAffordability": 12,
+          "social.roughSleeping": 6,
+          "social.workLifeBalance": 40,
+          "social.foreignWorkerIntegration": 15,
+          "social.genderEquality": 12,
+          "social.housingSupplyGrowth": 2,
+          "governance.debtToGdp": 18,
+          "governance.devolutionSatisfaction": 25,
+          "governance.nationalPride": 55,
+          "governance.civilLiberties": 12,
+          "governance.militaryReadiness": 48,
+          "population.demographicDecline": 5,
+          "mediaInformation.stateMediaControl": 90,
+          "mediaInformation.pressFreedom": 8,
+          "mediaInformation.disinformationRisk": 8,
+          "mediaInformation.mediaPolarization": 10
+        },
+        "ES_VAL": {
+          "economic.gdpGrowth": 4.5,
+          "economic.medianIncome": 13000,
+          "economic.povertyRate": 35,
+          "economic.unemploymentRate": 4.5,
+          "healthcare.lifeExpectancy": 62,
+          "healthcare.nhsWaitingTime": 19,
+          "education.literacyRate": 88,
+          "education.highSchoolGradRate": 12,
+          "education.universityEnrollment": 2,
+          "population.urbanizationRate": 40,
+          "population.medianAge": 28,
+          "population.birthRate": 68,
+          "population.populationGrowth": 0.9,
+          "infrastructure.broadbandAccess": 0,
+          "infrastructure.roadCondition": 35,
+          "environment.protectedLand": 0.8,
+          "infrastructure.powerGridReliability": 90,
+          "infrastructure.waterQuality": 60,
+          "environment.renewableEnergy": 12,
+          "environment.recyclingRate": 0,
+          "environment.climateResilience": 0,
+          "environment.energyTransitionProgress": 0,
+          "mediaInformation.socialMediaSentiment": 0,
+          "governance.roboticsAdoption": 0,
+          "economic.laborParticipation": 48,
+          "economic.matchingFriction": 6,
+          "economic.tradeBalance": -1.5,
+          "economic.productivityGrowth": 3,
+          "economic.rdIntensity": 0.15,
+          "economic.propertyValueIndex": 18,
+          "economic.commercialValueIndex": 20,
+          "economic.ruralRevitalization": 70,
+          "economic.foodSecurity": 55,
+          "economic.exportDependency": 8,
+          "economic.manufacturingCompetitiveness": 42,
+          "economic.regulatoryBurden": 78,
+          "economic.economicFreedom": 22,
+          "education.apprenticeshipRate": 2,
+          "education.academicPressure": 35,
+          "healthcare.uninsuredRate": 55,
+          "healthcare.affordabilityIndex": 35,
+          "healthcare.mentalHealthAccess": 10,
+          "healthcare.socialCareQuality": 18,
+          "healthcare.elderCareQuality": 20,
+          "infrastructure.transportEfficiency": 32,
+          "publicSafety.antiSocialBehaviourRate": 5,
+          "publicSafety.knifeCrimeRate": 2,
+          "environment.floodRisk": 12,
+          "environment.naturalDisasterPreparedness": 28,
+          "environment.nuclearSafety": 0,
+          "social.childPoverty": 42,
+          "social.housingAffordability": 12,
+          "social.roughSleeping": 6,
+          "social.workLifeBalance": 40,
+          "social.foreignWorkerIntegration": 15,
+          "social.genderEquality": 12,
+          "social.housingSupplyGrowth": 2,
+          "governance.debtToGdp": 18,
+          "governance.devolutionSatisfaction": 25,
+          "governance.nationalPride": 55,
+          "governance.civilLiberties": 12,
+          "governance.militaryReadiness": 48,
+          "population.demographicDecline": 5,
+          "mediaInformation.stateMediaControl": 90,
+          "mediaInformation.pressFreedom": 8,
+          "mediaInformation.disinformationRisk": 8,
+          "mediaInformation.mediaPolarization": 10
+        },
+        "ES_PVB": {
+          "economic.gdpGrowth": 4.5,
+          "economic.medianIncome": 22000,
+          "economic.povertyRate": 18,
+          "economic.unemploymentRate": 4.5,
+          "healthcare.lifeExpectancy": 64,
+          "healthcare.nhsWaitingTime": 19,
+          "education.literacyRate": 94,
+          "education.highSchoolGradRate": 12,
+          "education.universityEnrollment": 2,
+          "population.urbanizationRate": 58,
+          "population.medianAge": 28,
+          "population.birthRate": 68,
+          "population.populationGrowth": 0.9,
+          "infrastructure.broadbandAccess": 0,
+          "infrastructure.roadCondition": 35,
+          "environment.protectedLand": 0.8,
+          "infrastructure.powerGridReliability": 90,
+          "infrastructure.waterQuality": 60,
+          "environment.renewableEnergy": 12,
+          "environment.recyclingRate": 0,
+          "environment.climateResilience": 0,
+          "environment.energyTransitionProgress": 0,
+          "mediaInformation.socialMediaSentiment": 0,
+          "governance.roboticsAdoption": 0,
+          "economic.laborParticipation": 48,
+          "economic.matchingFriction": 6,
+          "economic.tradeBalance": -1.5,
+          "economic.productivityGrowth": 3,
+          "economic.rdIntensity": 0.15,
+          "economic.propertyValueIndex": 18,
+          "economic.commercialValueIndex": 20,
+          "economic.ruralRevitalization": 72,
+          "economic.foodSecurity": 55,
+          "economic.exportDependency": 8,
+          "economic.manufacturingCompetitiveness": 60,
+          "economic.regulatoryBurden": 78,
+          "economic.economicFreedom": 22,
+          "education.apprenticeshipRate": 2,
+          "education.academicPressure": 35,
+          "healthcare.uninsuredRate": 55,
+          "healthcare.affordabilityIndex": 35,
+          "healthcare.mentalHealthAccess": 10,
+          "healthcare.socialCareQuality": 18,
+          "healthcare.elderCareQuality": 20,
+          "infrastructure.transportEfficiency": 44,
+          "publicSafety.antiSocialBehaviourRate": 5,
+          "publicSafety.knifeCrimeRate": 2,
+          "environment.floodRisk": 12,
+          "environment.naturalDisasterPreparedness": 28,
+          "environment.nuclearSafety": 0,
+          "social.childPoverty": 42,
+          "social.housingAffordability": 12,
+          "social.roughSleeping": 6,
+          "social.workLifeBalance": 40,
+          "social.foreignWorkerIntegration": 15,
+          "social.genderEquality": 12,
+          "social.housingSupplyGrowth": 2,
+          "governance.debtToGdp": 18,
+          "governance.devolutionSatisfaction": 18,
+          "governance.nationalPride": 55,
+          "governance.civilLiberties": 12,
+          "governance.militaryReadiness": 48,
+          "population.demographicDecline": 5,
+          "mediaInformation.stateMediaControl": 90,
+          "mediaInformation.pressFreedom": 8,
+          "mediaInformation.disinformationRisk": 8,
+          "mediaInformation.mediaPolarization": 10
+        },
+        "ES_GAL": {
+          "economic.gdpGrowth": 4.5,
+          "economic.medianIncome": 9400,
+          "economic.povertyRate": 48,
+          "economic.unemploymentRate": 4.5,
+          "healthcare.lifeExpectancy": 60,
+          "healthcare.nhsWaitingTime": 19,
+          "education.literacyRate": 82,
+          "education.highSchoolGradRate": 12,
+          "education.universityEnrollment": 2,
+          "population.urbanizationRate": 22,
+          "population.medianAge": 28,
+          "population.birthRate": 68,
+          "population.populationGrowth": 0.9,
+          "infrastructure.broadbandAccess": 0,
+          "infrastructure.roadCondition": 35,
+          "environment.protectedLand": 0.8,
+          "infrastructure.powerGridReliability": 90,
+          "infrastructure.waterQuality": 60,
+          "environment.renewableEnergy": 12,
+          "environment.recyclingRate": 0,
+          "environment.climateResilience": 0,
+          "environment.energyTransitionProgress": 0,
+          "mediaInformation.socialMediaSentiment": 0,
+          "governance.roboticsAdoption": 0,
+          "economic.laborParticipation": 48,
+          "economic.matchingFriction": 6,
+          "economic.tradeBalance": -1.5,
+          "economic.productivityGrowth": 3,
+          "economic.rdIntensity": 0.15,
+          "economic.propertyValueIndex": 18,
+          "economic.commercialValueIndex": 20,
+          "economic.ruralRevitalization": 85,
+          "economic.foodSecurity": 55,
+          "economic.exportDependency": 8,
+          "economic.manufacturingCompetitiveness": 42,
+          "economic.regulatoryBurden": 78,
+          "economic.economicFreedom": 22,
+          "education.apprenticeshipRate": 2,
+          "education.academicPressure": 35,
+          "healthcare.uninsuredRate": 55,
+          "healthcare.affordabilityIndex": 35,
+          "healthcare.mentalHealthAccess": 10,
+          "healthcare.socialCareQuality": 18,
+          "healthcare.elderCareQuality": 20,
+          "infrastructure.transportEfficiency": 24,
+          "publicSafety.antiSocialBehaviourRate": 5,
+          "publicSafety.knifeCrimeRate": 2,
+          "environment.floodRisk": 12,
+          "environment.naturalDisasterPreparedness": 28,
+          "environment.nuclearSafety": 0,
+          "social.childPoverty": 52,
+          "social.housingAffordability": 12,
+          "social.roughSleeping": 6,
+          "social.workLifeBalance": 40,
+          "social.foreignWorkerIntegration": 15,
+          "social.genderEquality": 12,
+          "social.housingSupplyGrowth": 2,
+          "governance.debtToGdp": 18,
+          "governance.devolutionSatisfaction": 25,
+          "governance.nationalPride": 55,
+          "governance.civilLiberties": 12,
+          "governance.militaryReadiness": 48,
+          "population.demographicDecline": 12,
+          "mediaInformation.stateMediaControl": 90,
+          "mediaInformation.pressFreedom": 8,
+          "mediaInformation.disinformationRisk": 8,
+          "mediaInformation.mediaPolarization": 10
+        },
+        "ES_NOR": {
+          "economic.gdpGrowth": 4.5,
+          "economic.medianIncome": 15000,
+          "economic.povertyRate": 35,
+          "economic.unemploymentRate": 4.5,
+          "healthcare.lifeExpectancy": 62,
+          "healthcare.nhsWaitingTime": 19,
+          "education.literacyRate": 90,
+          "education.highSchoolGradRate": 12,
+          "education.universityEnrollment": 2,
+          "population.urbanizationRate": 44,
+          "population.medianAge": 28,
+          "population.birthRate": 68,
+          "population.populationGrowth": 0.9,
+          "infrastructure.broadbandAccess": 0,
+          "infrastructure.roadCondition": 35,
+          "environment.protectedLand": 0.8,
+          "infrastructure.powerGridReliability": 90,
+          "infrastructure.waterQuality": 60,
+          "environment.renewableEnergy": 12,
+          "environment.recyclingRate": 0,
+          "environment.climateResilience": 0,
+          "environment.energyTransitionProgress": 0,
+          "mediaInformation.socialMediaSentiment": 0,
+          "governance.roboticsAdoption": 0,
+          "economic.laborParticipation": 48,
+          "economic.matchingFriction": 6,
+          "economic.tradeBalance": -1.5,
+          "economic.productivityGrowth": 3,
+          "economic.rdIntensity": 0.15,
+          "economic.propertyValueIndex": 18,
+          "economic.commercialValueIndex": 20,
+          "economic.ruralRevitalization": 72,
+          "economic.foodSecurity": 55,
+          "economic.exportDependency": 8,
+          "economic.manufacturingCompetitiveness": 52,
+          "economic.regulatoryBurden": 78,
+          "economic.economicFreedom": 22,
+          "education.apprenticeshipRate": 2,
+          "education.academicPressure": 35,
+          "healthcare.uninsuredRate": 55,
+          "healthcare.affordabilityIndex": 35,
+          "healthcare.mentalHealthAccess": 10,
+          "healthcare.socialCareQuality": 18,
+          "healthcare.elderCareQuality": 20,
+          "infrastructure.transportEfficiency": 32,
+          "publicSafety.antiSocialBehaviourRate": 5,
+          "publicSafety.knifeCrimeRate": 2,
+          "environment.floodRisk": 12,
+          "environment.naturalDisasterPreparedness": 28,
+          "environment.nuclearSafety": 0,
+          "social.childPoverty": 42,
+          "social.housingAffordability": 12,
+          "social.roughSleeping": 6,
+          "social.workLifeBalance": 40,
+          "social.foreignWorkerIntegration": 15,
+          "social.genderEquality": 12,
+          "social.housingSupplyGrowth": 2,
+          "governance.debtToGdp": 18,
+          "governance.devolutionSatisfaction": 25,
+          "governance.nationalPride": 55,
+          "governance.civilLiberties": 12,
+          "governance.militaryReadiness": 48,
+          "population.demographicDecline": 5,
+          "mediaInformation.stateMediaControl": 90,
+          "mediaInformation.pressFreedom": 8,
+          "mediaInformation.disinformationRisk": 8,
+          "mediaInformation.mediaPolarization": 10
+        },
+        "ES_CEN": {
+          "economic.gdpGrowth": 4.5,
+          "economic.medianIncome": 10000,
+          "economic.povertyRate": 45,
+          "economic.unemploymentRate": 4.5,
+          "healthcare.lifeExpectancy": 60,
+          "healthcare.nhsWaitingTime": 19,
+          "education.literacyRate": 84,
+          "education.highSchoolGradRate": 12,
+          "education.universityEnrollment": 2,
+          "population.urbanizationRate": 28,
+          "population.medianAge": 28,
+          "population.birthRate": 68,
+          "population.populationGrowth": 0.9,
+          "infrastructure.broadbandAccess": 0,
+          "infrastructure.roadCondition": 35,
+          "environment.protectedLand": 0.8,
+          "infrastructure.powerGridReliability": 90,
+          "infrastructure.waterQuality": 60,
+          "environment.renewableEnergy": 12,
+          "environment.recyclingRate": 0,
+          "environment.climateResilience": 0,
+          "environment.energyTransitionProgress": 0,
+          "mediaInformation.socialMediaSentiment": 0,
+          "governance.roboticsAdoption": 0,
+          "economic.laborParticipation": 48,
+          "economic.matchingFriction": 6,
+          "economic.tradeBalance": -1.5,
+          "economic.productivityGrowth": 3,
+          "economic.rdIntensity": 0.15,
+          "economic.propertyValueIndex": 18,
+          "economic.commercialValueIndex": 20,
+          "economic.ruralRevitalization": 82,
+          "economic.foodSecurity": 55,
+          "economic.exportDependency": 8,
+          "economic.manufacturingCompetitiveness": 42,
+          "economic.regulatoryBurden": 78,
+          "economic.economicFreedom": 22,
+          "education.apprenticeshipRate": 2,
+          "education.academicPressure": 35,
+          "healthcare.uninsuredRate": 55,
+          "healthcare.affordabilityIndex": 35,
+          "healthcare.mentalHealthAccess": 10,
+          "healthcare.socialCareQuality": 18,
+          "healthcare.elderCareQuality": 20,
+          "infrastructure.transportEfficiency": 32,
+          "publicSafety.antiSocialBehaviourRate": 5,
+          "publicSafety.knifeCrimeRate": 2,
+          "environment.floodRisk": 12,
+          "environment.naturalDisasterPreparedness": 28,
+          "environment.nuclearSafety": 0,
+          "social.childPoverty": 50,
+          "social.housingAffordability": 12,
+          "social.roughSleeping": 6,
+          "social.workLifeBalance": 40,
+          "social.foreignWorkerIntegration": 15,
+          "social.genderEquality": 12,
+          "social.housingSupplyGrowth": 2,
+          "governance.debtToGdp": 18,
+          "governance.devolutionSatisfaction": 25,
+          "governance.nationalPride": 55,
+          "governance.civilLiberties": 12,
+          "governance.militaryReadiness": 48,
+          "population.demographicDecline": 5,
+          "mediaInformation.stateMediaControl": 90,
+          "mediaInformation.pressFreedom": 8,
+          "mediaInformation.disinformationRisk": 8,
+          "mediaInformation.mediaPolarization": 10
+        }
+      }
+    }
+  },
+  "MILITARY_BRANCHES_BY_COUNTRY": {
+    "shape": "country-first",
+    "value": [
+      {
+        "id": "tierra",
+        "name": "Army",
+        "abbr": "ET",
+        "domain": "ground"
+      },
+      {
+        "id": "armada",
+        "name": "Navy",
+        "abbr": "AE",
+        "domain": "naval"
+      },
+      {
+        "id": "aire",
+        "name": "Air Force",
+        "abbr": "EA",
+        "domain": "air"
+      }
+    ]
+  },
+  "MILITARY_COUNTRY_SCALE": {
+    "shape": "country-first",
+    "value": 1
+  },
+  "MONETARY_BASELINES": {
+    "shape": "country-first",
+    "value": {
+      "targetInflation": 16,
+      "neutralPrimeRate": 14
+    }
+  },
+  "MONETARY_BASELINES_1953": {
+    "shape": "country-first",
+    "value": {
+      "targetInflation": 4,
+      "neutralPrimeRate": 5,
+      "trendGdpGrowth": 4.5
+    }
+  },
+  "MONETARY_BASELINES_1971": {
+    "shape": "country-first",
+    "value": {
+      "targetInflation": 9,
+      "neutralPrimeRate": 9,
+      "trendGdpGrowth": 4
+    }
+  },
+  "MONETARY_BASELINES_1979": {
+    "shape": "country-first",
+    "value": {
+      "targetInflation": 16,
+      "neutralPrimeRate": 14,
+      "trendGdpGrowth": 2
+    }
+  },
+  "MONETARY_BASELINES_1991": {
+    "shape": "country-first",
+    "value": {
+      "targetInflation": 5.5,
+      "neutralPrimeRate": 9,
+      "trendGdpGrowth": 2.5
+    }
+  },
+  "NATIONAL_ADDRESS_NAME": {
+    "shape": "absent",
+    "value": null
+  },
+  "NATIONAL_IDENTITY": {
+    "shape": "country-first",
+    "value": {
+      "glyph": "RE",
+      "serif": "mono",
+      "motif": "gear",
+      "name": "Spanish State Enterprise",
+      "native": "Empresa Pública (INI)",
+      "registry": "Kingdom of Spain · State Holdings Registry",
+      "ministry": "MINISTRY OF FINANCE",
+      "publicSeal": "PUBLIC REGISTER",
+      "hqCity": "Madrid",
+      "palette": ["#3a0d0d", "#2a0a0a", "#150606"],
+      "accent": "#cdb15a",
+      "accentSoft": "#e2cd8c",
+      "accentName": "Spanish red & gold"
+    }
+  },
+  "NATIONAL_POLICY_STATE_IDS": {
+    "shape": "country-first",
+    "value": "es_national"
+  },
+  "NATIONAL_STATS_IDENTITY": {
+    "shape": "absent",
+    "value": null
+  },
+  "NEUTRAL_FEDERAL_SALES_TAX_BY_COUNTRY": {
+    "shape": "absent",
+    "value": null
+  },
+  "NEUTRAL_STATE_SALES_TAX_BY_COUNTRY": {
+    "shape": "absent",
+    "value": null
+  },
+  "NON_PARTY_BUCKET_INDEPENDENT_BIAS_BY_COUNTRY": {
+    "shape": "absent",
+    "value": null
+  },
+  "NPP_CAPITAL_STATES": {
+    "shape": "country-first",
+    "value": "ES_MAD"
+  },
+  "ORDERS_OF_BATTLE": {
+    "shape": "country-first",
+    "value": [
+      {
+        "branchId": "tierra",
+        "type": "Infantry Division",
+        "count": 4
+      },
+      {
+        "branchId": "tierra",
+        "type": "Armored Division",
+        "count": 1
+      },
+      {
+        "branchId": "tierra",
+        "type": "Artillery Regiment",
+        "count": 2
+      },
+      {
+        "branchId": "armada",
+        "type": "Frigate Squadron",
+        "count": 2
+      },
+      {
+        "branchId": "aire",
+        "type": "Fighter Wing",
+        "count": 2
+      }
+    ]
+  },
+  "ORDERS_OF_BATTLE_BY_ERA": {
+    "shape": "absent",
+    "value": null
+  },
+  "PLAYER_PAYOUT_CAP_PER_TURN": {
+    "shape": "absent",
+    "value": null
+  },
+  "POLICY_TEXT": {
+    "shape": "country-first",
+    "value": {
+      "glyph": "§",
+      "serif": "mono",
+      "registry": "Code of Law · Kingdom of Spain",
+      "title": "National Policy"
+    }
+  },
+  "POPULATION_ANCHOR_BUNDLES": {
+    "shape": "absent",
+    "value": null
+  },
+  "RAW_BUNDLES": {
+    "shape": "country-first",
+    "value": []
+  },
+  "REGIONAL_BILL_ASSENT_OFFICE_KEY": {
+    "shape": "absent",
+    "value": null
+  },
+  "REGION_CENSUS_LABELS": {
+    "shape": "absent",
+    "value": null
+  },
+  "REGION_DEMOGRAPHIC_CATEGORY_IDS": {
+    "shape": "absent",
+    "value": null
+  },
+  "REGION_NAME_MAPS": {
+    "shape": "absent",
+    "value": null
+  },
+  "REGION_ROSTERS": {
+    "shape": "function-valued",
+    "value": null,
+    "functionKeys": ["1953", "2019"]
+  },
+  "REP_ECON": {
+    "shape": "absent",
+    "value": null
+  },
+  "SOVEREIGN_CORP_LEGAL_STRUCTURE": {
+    "shape": "country-first",
+    "value": "generic_corp"
+  },
+  "SPAWN_ELECTIONS_REGISTRY": {
+    "shape": "absent",
+    "value": null
+  },
+  "STATE_ADJACENCY": {
+    "shape": "country-first",
+    "value": {
+      "ES_MAD": ["ES_CEN"],
+      "ES_CAT": ["ES_VAL", "ES_NOR"],
+      "ES_AND": ["ES_VAL", "ES_CEN"],
+      "ES_VAL": ["ES_CAT", "ES_AND", "ES_CEN", "ES_NOR"],
+      "ES_PVB": ["ES_CEN", "ES_NOR"],
+      "ES_GAL": ["ES_CEN", "ES_NOR"],
+      "ES_NOR": ["ES_CAT", "ES_VAL", "ES_PVB", "ES_GAL", "ES_CEN"],
+      "ES_CEN": ["ES_MAD", "ES_AND", "ES_VAL", "ES_PVB", "ES_GAL", "ES_NOR"]
+    }
+  },
+  "STATE_DISPLAY_NAMES": {
+    "shape": "country-first",
+    "value": {
+      "ES_MAD": "Madrid",
+      "ES_CAT": "Catalonia",
+      "ES_AND": "Andalusia",
+      "ES_VAL": "Valencia & Murcia",
+      "ES_PVB": "Basque Country & Navarre",
+      "ES_GAL": "Galicia",
+      "ES_NOR": "Northern Spain",
+      "ES_CEN": "Central Spain & Islands"
+    }
+  },
+  "SURFACES": {
+    "shape": "absent",
+    "value": null
+  },
+  "TARGETS": {
+    "shape": "absent",
+    "value": null
+  },
+  "TRADE_MINISTER_POSITION_BY_COUNTRY": {
+    "shape": "country-first",
+    "value": "minister_of_trade_industry"
+  },
+  "TREASURY_IDENTITY": {
+    "shape": "country-first",
+    "value": {
+      "glyph": "RE",
+      "serif": "mono",
+      "budgetTitle": "State Budget",
+      "ministry": "MINISTRY OF FINANCE",
+      "publicSeal": "PUBLIC RECORD",
+      "registry": "Kingdom of Spain · Ministry of Finance",
+      "native": "Reino de España · Ministerio de Hacienda",
+      "palette": ["#3a0d0d", "#2a0a0a", "#150606"],
+      "accent": "#cdb15a",
+      "accentSoft": "#e2cd8c"
+    }
+  },
+  "TREASURY_PS_RATE_BY_COUNTRY": {
+    "shape": "country-first",
+    "value": {
+      "national": 70000,
+      "state": 35000
+    }
+  },
+  "TREASURY_TEXT": {
+    "shape": "country-first",
+    "value": {
+      "glyph": "RE",
+      "serif": "mono",
+      "budgetTitle": "State Budget",
+      "ministry": "MINISTRY OF FINANCE",
+      "publicSeal": "PUBLIC RECORD",
+      "registry": "Kingdom of Spain · Ministry of Finance",
+      "native": "Reino de España · Ministerio de Hacienda"
+    }
+  }
+}

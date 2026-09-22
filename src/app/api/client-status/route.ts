@@ -7,6 +7,7 @@ import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { handleRouteError } from "@/lib/api/errors";
 import { fundraiseYieldAnchor } from "@/lib/actions";
 import { calculateFullFundDistribution, getPopulationTier } from "@/lib/utils/fundGeneration";
+import { getGameStatePresetOrDefault } from "@/lib/db/collections/gameState";
 import { campaignAnchorToLocal } from "@/lib/campaigns/campaignCurrency";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
 import { getTotalPersonalLiquidWealth, getHomeCurrency } from "@/lib/currency/characterFunds";
@@ -69,12 +70,26 @@ export async function GET(request: Request) {
       requestedLayout === "standard" || requestedLayout === "corp" || requestedLayout === "full";
     const includeCorpMarket = requestedLayout === "corp" || requestedLayout === "full";
     const includeElection = requestedLayout === "elections" || requestedLayout === "full";
+    // Minimal hides every chip, so it needs identity + wallet scalars only.
+    // Skipping dividends, bonds, union/campaign income, office/chair/party
+    // bonuses, corp nav and election stats removes ~10 queries per poll.
+    const includeChipData = requestedLayout !== "minimal";
 
     const userId = auth.user.userId;
     const db = await getDb();
 
     const [user, forexEnabled] = await Promise.all([
-      db.collection<User>("users").findOne({ _id: new ObjectId(userId) }),
+      // Projected: only the character-selection fields below are read.
+      db.collection<User>("users").findOne(
+        { _id: new ObjectId(userId) },
+        {
+          projection: {
+            activeCharacterId: 1,
+            activeCharacterType: 1,
+            activeImperialCharacterId: 1,
+          },
+        }
+      ),
       isForexEnabled(),
     ]);
     const forexRates = forexEnabled ? await loadFxRatesRecord(db) : undefined;
@@ -116,55 +131,59 @@ export async function GET(request: Request) {
               }
             )
           : Promise.resolve(null),
-        db
-          .collection<Corporation>("corporations")
-          .find({
-            "shareholders.imperialCharacterId": imperial._id,
-          })
-          .project<{
-            _id: ObjectId;
-            sequentialId?: number;
-            name: string;
-            logoUrl?: string;
-            tickerSymbol?: string;
-            sharePrice: number;
-            dividendRate: number;
-            totalShares: number;
-            liquidCurrencyCode?: string;
-            countryId?: string;
-            shareholders: {
-              imperialCharacterId?: ObjectId;
-              characterId?: ObjectId;
-              shares: number;
-            }[];
-          }>({
-            _id: 1,
-            sequentialId: 1,
-            name: 1,
-            logoUrl: 1,
-            tickerSymbol: 1,
-            sharePrice: 1,
-            dividendRate: 1,
-            totalShares: 1,
-            liquidCurrencyCode: 1,
-            countryId: 1,
-            shareholders: 1,
-          })
-          .toArray(),
-        db
-          .collection<Bond>("bonds")
-          .find({
-            "holders.imperialCharacterId": imperial._id,
-            matured: false,
-            defaulted: false,
-          })
-          .project<{
-            couponRate: number;
-            currencyCode?: string;
-            countryId?: string;
-            holders: { imperialCharacterId?: ObjectId; units: number }[];
-          }>({ couponRate: 1, currencyCode: 1, countryId: 1, holders: 1 })
-          .toArray(),
+        includeChipData
+          ? db
+              .collection<Corporation>("corporations")
+              .find({
+                "shareholders.imperialCharacterId": imperial._id,
+              })
+              .project<{
+                _id: ObjectId;
+                sequentialId?: number;
+                name: string;
+                logoUrl?: string;
+                tickerSymbol?: string;
+                sharePrice: number;
+                dividendRate: number;
+                totalShares: number;
+                liquidCurrencyCode?: string;
+                countryId?: string;
+                shareholders: {
+                  imperialCharacterId?: ObjectId;
+                  characterId?: ObjectId;
+                  shares: number;
+                }[];
+              }>({
+                _id: 1,
+                sequentialId: 1,
+                name: 1,
+                logoUrl: 1,
+                tickerSymbol: 1,
+                sharePrice: 1,
+                dividendRate: 1,
+                totalShares: 1,
+                liquidCurrencyCode: 1,
+                countryId: 1,
+                shareholders: 1,
+              })
+              .toArray()
+          : Promise.resolve([]),
+        includeChipData
+          ? db
+              .collection<Bond>("bonds")
+              .find({
+                "holders.imperialCharacterId": imperial._id,
+                matured: false,
+                defaulted: false,
+              })
+              .project<{
+                couponRate: number;
+                currencyCode?: string;
+                countryId?: string;
+                holders: { imperialCharacterId?: ObjectId; units: number }[];
+              }>({ couponRate: 1, currencyCode: 1, countryId: 1, holders: 1 })
+              .toArray()
+          : Promise.resolve([]),
       ]);
 
       const latestHistByCorp = await fetchLatestCorpHistoryDividendRows(
@@ -352,12 +371,56 @@ export async function GET(request: Request) {
       );
     }
 
+    // Minimal layout hides every chip: identity + wallet scalars only, no
+    // enrichment queries. Same keys as the full payload so consumers keep
+    // their shape; a layout switch refetches with the wider layout.
+    if (!includeChipData) {
+      const { cap: minimalActionCap, threshold: minimalHoardThreshold } = energyActionLimits(
+        character.stats?.energy ?? STAT_MIN
+      );
+      return conditionalJson(
+        request,
+        {
+          name: character.name,
+          avatarUrl: character.avatarUrl,
+          actions: character.actions,
+          actionCap: minimalActionCap,
+          hoardThreshold: minimalHoardThreshold,
+          funds: character.currencyBalances?.campaign ?? character.funds ?? 0,
+          campaignFundsStored: character.currencyBalances?.campaign ?? character.funds ?? 0,
+          cashOnHand: getTotalPersonalLiquidWealth(character, forexEnabled, forexRates),
+          personalHomeLiquid: getTotalPersonalLiquidWealth(character, forexEnabled),
+          homeCurrency: getHomeCurrency(character),
+          projectedIncome: null,
+          campaignIncomeBreakdown: null,
+          donorBaseLevel: character.donorBaseLevel ?? 0,
+          politicalInfluence: character.politicalInfluence ?? 0,
+          favorability: character.favorability ?? 0,
+          currentOfficeType: null,
+          isCentralBankChair: false,
+          chairActionBonus: 0,
+          baseActionsPerTurn: 4,
+          officeActionBonus: 0,
+          bonusActionsFromParty: 0,
+          dividendIncome: 0,
+          bondIncome: 0,
+          corpNav: null,
+          electionStats: null,
+          turnBriefing: buildTurnBriefing(null, null),
+          marketWatch: [],
+        },
+        { cacheControl: "private, no-cache" }
+      );
+    }
+
     const hasParty = Boolean(character.party && character.party !== "independent");
     const statePartyKey = `${character.homeState}_${character.party}`;
     const partySeqId =
       hasParty && typeof character.party === "string" ? parseInt(character.party, 10) : NaN;
 
-    // Main parallel batch — status bar data (+ home state & party rates for CF income)
+    // Main parallel batch — status bar data (+ home state & party rates for CF income).
+    // Preset, campaign rates, chair bank, game config and cabinet seat ride in
+    // the same wave instead of trailing as sequential round trips.
     const [
       homeState,
       partyDoc,
@@ -368,6 +431,11 @@ export async function GET(request: Request) {
       dividendCorps,
       holderBonds,
       unionContribution,
+      preset,
+      campaignRates,
+      chairBank,
+      gameConfigDoc,
+      cabinetSeat,
     ] = await Promise.all([
       db
         .collection<State>("states")
@@ -451,6 +519,39 @@ export async function GET(request: Request) {
         }>({ couponRate: 1, currencyCode: 1, countryId: 1, holders: 1 })
         .toArray(),
       unionContributionIncomePerTurn(db, character._id),
+      // GDP-baseline era for income math: the world's reset preset, so
+      // historical worlds project in their own denomination (issue #798).
+      getGameStatePresetOrDefault(db),
+      loadCampaignCurrencyRates(db),
+      db
+        .collection("centralBanks")
+        .findOne({ chairCharacterId: character._id }, { projection: { _id: 1 } }),
+      db
+        .collection<{
+          _id: string;
+          chairActionBonus?: number;
+          baseActionsPerTurn?: number;
+          officeActionBonus?: Record<string, number>;
+          partyInfluenceMaxBonus?: number;
+          partyInfluencePoolMultiplier?: number;
+        }>("gameConfig")
+        .findOne(
+          { _id: "default" },
+          {
+            projection: {
+              chairActionBonus: 1,
+              baseActionsPerTurn: 1,
+              officeActionBonus: 1,
+              partyInfluenceMaxBonus: 1,
+              partyInfluencePoolMultiplier: 1,
+            },
+          }
+        ),
+      // Cabinet seat (unified collection) — its action bonus stacks on the
+      // legislative seat, mirroring actionRefresh.
+      db
+        .collection("cabinetMembers")
+        .findOne({ characterId: character._id }, { projection: { countryId: 1 } }),
     ]);
 
     const statePopulation = homeState?.population ?? 0;
@@ -464,13 +565,13 @@ export async function GET(request: Request) {
       nationalTaxRate,
       homeState?.gdp,
       character.countryId,
-      character.politicalInfluence ?? 0
+      character.politicalInfluence ?? 0,
+      preset
     );
     const populationTier = getPopulationTier(statePopulation);
     // fundDistribution is anchor; campaign funds display in LOCAL at the frozen
     // world-seeded currency basis (same conversion the turn processor deposits), so
     // the tooltip matches the credited amount. Face-formatted client-side (no forex).
-    const campaignRates = await loadCampaignCurrencyRates(db);
     const toCampaignLocal = (anchor: number) =>
       campaignAnchorToLocal(anchor, character.countryId ?? "US", campaignRates);
     const campaignIncomeBreakdown = {
@@ -708,40 +809,10 @@ export async function GET(request: Request) {
 
     // Central bank chair status — lives on the bank document, not currentOffice.
     // actionRefresh grants `chairActionBonus` on top of any elected-office bonus.
-    // Also pull the per-office and base-action config so the StatusBar tooltip
-    // can render the exact breakdown actionRefresh actually applies, instead of
-    // a hardcoded client table that drifts from gameConfig.
-    const [chairBank, gameConfigDoc, cabinetSeat] = await Promise.all([
-      db
-        .collection("centralBanks")
-        .findOne({ chairCharacterId: character._id }, { projection: { _id: 1 } }),
-      db
-        .collection<{
-          _id: string;
-          chairActionBonus?: number;
-          baseActionsPerTurn?: number;
-          officeActionBonus?: Record<string, number>;
-          partyInfluenceMaxBonus?: number;
-          partyInfluencePoolMultiplier?: number;
-        }>("gameConfig")
-        .findOne(
-          { _id: "default" },
-          {
-            projection: {
-              chairActionBonus: 1,
-              baseActionsPerTurn: 1,
-              officeActionBonus: 1,
-              partyInfluenceMaxBonus: 1,
-              partyInfluencePoolMultiplier: 1,
-            },
-          }
-        ),
-      // Cabinet seat (unified collection) — its action bonus stacks on the
-      // legislative seat, mirroring actionRefresh.
-      db
-        .collection("cabinetMembers")
-        .findOne({ characterId: character._id }, { projection: { countryId: 1 } }),
-    ]);
+    // chairBank, gameConfigDoc and cabinetSeat load in the main batch above; the
+    // per-office and base-action config lets the StatusBar tooltip render the
+    // exact breakdown actionRefresh actually applies, instead of a hardcoded
+    // client table that drifts from gameConfig.
     const isCentralBankChair = chairBank != null;
     const chairActionBonus = isCentralBankChair ? (gameConfigDoc?.chairActionBonus ?? 3) : 0;
     // Mirror the floors that actionRefresh applies so the displayed numbers

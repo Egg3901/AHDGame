@@ -9,6 +9,7 @@ import type {
   StatePartyOrg,
 } from "@/lib/db/types";
 import { projectCharacterGeneration, calculateTaxAmount } from "@/lib/utils/fundGeneration";
+import { resolveCampaignPriceLevel } from "@/lib/campaigns/rules/priceLevel";
 import { campaignAnchorToLocal } from "@/lib/campaigns/campaignCurrency";
 import { getHomeCurrency } from "@/lib/currency/characterFunds";
 import type { AnyBulkWriteOperation } from "mongodb";
@@ -19,6 +20,8 @@ import {
 } from "@/lib/treasury/emit";
 import type { FinancialTxLogEntry } from "@/lib/db/types/financialTxLog";
 import { COUNTRY_CURRENCY_MAP, type CurrencyCode } from "@/lib/constants/currencies";
+import { getGameStatePresetOrDefault } from "@/lib/db/collections/gameState";
+import type { GameConfig } from "@/lib/db/types/gameConfig";
 
 /**
  * Process fund generation for all characters each turn.
@@ -49,6 +52,16 @@ export async function processFundGeneration(
     async () => {
       const db = await getDb();
       const campaignRates = await loadCampaignCurrencyRates(db);
+      // GDP-baseline era for income math: the world's reset preset, so
+      // historical worlds scale against their own denomination (issue #798).
+      const preset = await getGameStatePresetOrDefault(db);
+      const gameConfig = await db
+        .collection<GameConfig>("gameConfig")
+        .findOne({ _id: "default" }, { projection: { campaignEraPriceLevelEnabled: 1 } });
+      const priceLevel = resolveCampaignPriceLevel(
+        gameConfig?.campaignEraPriceLevelEnabled,
+        preset
+      );
 
       const stateMap =
         preloadedStateMap ??
@@ -99,6 +112,8 @@ export async function processFundGeneration(
           stateGdpMillions: state.gdp,
           countryId: character.countryId,
           politicalInfluence: character.politicalInfluence ?? 0,
+          preset,
+          priceLevel,
         });
         const totalFundGeneration = campaignAnchorToLocal(
           totalFundGenerationAnchor,

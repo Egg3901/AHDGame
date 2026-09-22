@@ -13,7 +13,7 @@ import { describe, expect, it } from "vitest";
 import { applyMetricPresetToMetrics, getRegionMetricPresets } from "@/lib/seeds/metricPresets";
 import { applyEra1953Adjustments } from "@/lib/seeds/reference/stateMetricsEra1953";
 import { ieStateMetrics } from "@/lib/seeds/ie/ieStateMetrics";
-import { jpStateMetrics } from "@/lib/seeds/jp/jpStateMetrics";
+import { jpStateMetrics } from "@/lib/countries/jp/data/jpStateMetrics";
 import type { CountryId } from "@/lib/constants/countries";
 import type { StateMetrics } from "@/lib/db/types";
 

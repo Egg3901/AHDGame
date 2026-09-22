@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
+import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import { getCountryConfig, type CountryId } from "@/lib/constants/countries";
 import type { MapOverviewResponse } from "@/lib/map/overviewTypes";
@@ -43,16 +44,35 @@ const CUSTOM_MAP_RENDERERS: Partial<
 };
 
 export default function CountryMapClient({ countryId }: CountryMapClientProps) {
+  return <CountryMapContent key={countryId} countryId={countryId} />;
+}
+
+function CountryMapContent({ countryId }: CountryMapClientProps) {
   const router = useRouter();
+  const t = useTranslations("elections.atlas");
+  const [loadState, setLoadState] = useState<"loading" | "ready" | "error">("loading");
+  const [attempt, setAttempt] = useState(0);
   const config = getCountryConfig(countryId);
   const [mapData, setMapData] = useState<MapOverviewResponse | null>(null);
 
   useEffect(() => {
-    fetch(`/api/map/overview?countryId=${countryId}`)
-      .then((res) => (res.ok ? res.json() : null))
-      .then(setMapData)
-      .catch(() => setMapData(null));
-  }, [countryId]);
+    const controller = new AbortController();
+    fetch(`/api/map/overview?countryId=${countryId}`, { signal: controller.signal })
+      .then(async (res) => {
+        if (!res.ok) throw new Error("Map unavailable");
+        return res.json();
+      })
+      .then((data) => {
+        if (!controller.signal.aborted) {
+          setMapData(data);
+          setLoadState("ready");
+        }
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setLoadState("error");
+      });
+    return () => controller.abort();
+  }, [countryId, attempt]);
 
   const onRegionClick = (id: string) => router.push(regionUrl(countryId, id));
 
@@ -63,6 +83,27 @@ export default function CountryMapClient({ countryId }: CountryMapClientProps) {
   const parliamentaryConfig = useMemo<CountryMapConfig | null>(() => {
     return isParliamentaryMapCountry(countryId) ? COUNTRY_MAP_CONFIGS[countryId] : null;
   }, [countryId]);
+
+  if (loadState !== "ready") {
+    return (
+      <main className="mx-auto max-w-7xl p-8" aria-busy={loadState === "loading"}>
+        <p role={loadState === "error" ? "alert" : "status"} className="text-muted">
+          {t(loadState === "loading" ? "loading" : "loadError")}
+        </p>
+        {loadState === "error" && (
+          <button
+            className="mt-4 rounded-lg border border-card-border px-4 py-2"
+            onClick={() => {
+              setLoadState("loading");
+              setAttempt((n) => n + 1);
+            }}
+          >
+            {t("retry")}
+          </button>
+        )}
+      </main>
+    );
+  }
 
   const customRenderer = CUSTOM_MAP_RENDERERS[countryId];
   if (customRenderer) {

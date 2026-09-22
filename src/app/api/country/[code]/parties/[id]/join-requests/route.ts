@@ -12,6 +12,7 @@ import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { canActAsChair } from "@/lib/parties/actingChair";
 import { applyCharacterPartyJoin } from "@/lib/parties/applyCharacterPartyJoin";
+import { canCharacterJoinParty } from "@/lib/parties/partyFrontier";
 import { isSameCountry } from "@/lib/api/sameCountry";
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
 
@@ -114,6 +115,17 @@ export async function POST(
     if (requester.party === String(party.sequentialId)) {
       await removeRequest();
       return NextResponse.json({ success: true, message: "That character is already a member." });
+    }
+
+    // Growth frontier: re-checked at ACCEPT time, not only when the request was
+    // filed. The party's frontier can shrink in between if members leave or NPPs
+    // retire. The pending request is deliberately left in place rather than
+    // removed: a frontier can grow back, so the leader should be able to retry.
+    // This differs from the stale-character cleanup above, where the requester
+    // can never become eligible again.
+    const frontierCheck = await canCharacterJoinParty(db, requester, party, countryId);
+    if (!frontierCheck.ok) {
+      return NextResponse.json({ error: frontierCheck.error }, { status: 400 });
     }
 
     const currentTurn = await getCurrentTurn(db);

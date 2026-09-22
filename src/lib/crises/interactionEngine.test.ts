@@ -24,7 +24,9 @@ let db: MockDb;
 beforeEach(() => {
   db = createMockDb();
   // Instantiate the collections the engine touches so we can stub them.
-  ["crisisInteractions", "crises", "states", "federalBudget"].forEach((c) => db.collection(c));
+  ["crisisInteractions", "crises", "states", "federalBudget", "parties"].forEach((c) =>
+    db.collection(c)
+  );
   vi.clearAllMocks();
 });
 
@@ -152,6 +154,20 @@ describe("deriveCharacterRoles", () => {
 });
 
 describe("resolveCharacterRoles", () => {
+  it("grants a party-specific leader role to the sitting party chair", async () => {
+    const chairId = new ObjectId();
+    db.collection("politicalParties").findOne.mockResolvedValue({ abbreviation: "DUP" });
+
+    const roles = await resolveCharacterRoles(mdb(), {
+      _id: chairId,
+      currentOffice: { type: "house" },
+      countryId: "UK",
+    });
+
+    expect(roles).toContain("partyLeader");
+    expect(roles).toContain("partyLeader:DUP");
+  });
+
   it("grants headOfState to an office-seated ceremonial head of state (CN President) whose currentOffice is not a president office", async () => {
     // CN President = CCP chair, seated only via an electedOfficials row
     // (officeType "president"); currentOffice stays their primary seat.
@@ -207,6 +223,35 @@ describe("canCharacterInteract", () => {
     const node = TREE[0]; // requiredRoles ["headOfState"]
     expect(canCharacterInteract(node, ["any", "cabinet"])).toBe(false);
     expect(canCharacterInteract(node, ["any", "headOfState"])).toBe(true);
+  });
+  it("can restrict a party-leader decision to named parties", () => {
+    const node: CrisisDecisionNode = {
+      ...TREE[0],
+      requiredRoles: ["partyLeader"],
+      requiredPartyAbbreviations: ["DUP", "SF"],
+    };
+    expect(canCharacterInteract(node, ["any", "partyLeader", "partyLeader:DUP"])).toBe(true);
+    expect(canCharacterInteract(node, ["any", "partyLeader", "partyLeader:LAB"])).toBe(false);
+  });
+  it("can restrict a negotiation node to one country's office-holder", () => {
+    const node: CrisisDecisionNode = {
+      ...TREE[0],
+      requiredCountryIds: ["IE"],
+    };
+    expect(canCharacterInteract(node, ["any", "headOfState"], "IE")).toBe(true);
+    expect(canCharacterInteract(node, ["any", "headOfState"], "UK")).toBe(false);
+    expect(canCharacterInteract(node, ["any", "headOfState"])).toBe(false);
+  });
+  it("can restrict a devolved-executive node to one region", () => {
+    const node: CrisisDecisionNode = {
+      ...TREE[0],
+      requiredRoles: ["stateGovernor"],
+      requiredCountryIds: ["UK"],
+      requiredRegionIds: ["NIR"],
+    };
+    expect(canCharacterInteract(node, ["any", "stateGovernor"], "UK", "NIR")).toBe(true);
+    expect(canCharacterInteract(node, ["any", "stateGovernor"], "UK", "SCO")).toBe(false);
+    expect(canCharacterInteract(node, ["any", "stateGovernor"], "UK")).toBe(false);
   });
 });
 

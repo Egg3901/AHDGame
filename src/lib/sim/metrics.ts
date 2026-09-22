@@ -13,6 +13,13 @@ import type { CountryId } from "@/lib/constants/countries";
 import { loadExchangeRatesMap } from "@/lib/lineOfCredit/netWorth";
 import { toInternalUnits } from "@/lib/lineOfCredit/locMath";
 import type { EconomicVitalSigns } from "@/lib/db/types/economicVitalSigns";
+import {
+  summarizeResidentDemandSplit,
+  summarizeStockVsFlowDivergence,
+  type StockVsFlowKindRow,
+} from "@/lib/economy/marketAccessVisibility";
+import type { LivingConflictState } from "@/lib/livingConflict/types";
+import { collectEconomyTelemetry, type EconomyTelemetry } from "@/lib/sim/economyTelemetry";
 
 /**
  * Read-only balance-metric aggregations over a (sandbox) world DB, for the
@@ -42,6 +49,8 @@ export interface BalanceReport {
   inflationByCountry: InflationCountryMetrics[];
   corporateCashFlow: CorporateCashFlowMetrics;
   military: MilitaryMetrics;
+  /** Post-run #2159 acceptance telemetry for the economy issue cluster. */
+  telemetry?: EconomyTelemetry;
 }
 
 export interface FiscalCountryMetrics {
@@ -130,6 +139,70 @@ export interface CrisisMetrics {
   active: number;
   resolved: number;
   meanResolutionHours: number;
+  living: LivingConflictMetrics;
+}
+
+export interface LivingConflictMetricRow {
+  defKey: string;
+  status: string;
+  phaseLevel: number;
+  openedYear: number | null;
+  totalTurns: number;
+  tracks: Record<string, number>;
+  consequences: {
+    civilianStrain: number;
+    refugees: number;
+    infrastructureDamage: number;
+    regionalSpillover: number;
+    casualties: number;
+    settlementMomentum: number;
+  };
+}
+
+export interface LivingConflictMetrics {
+  total: number;
+  opened: number;
+  byStatus: Record<string, number>;
+  pendingDecisions: number;
+  resolvedDecisions: number;
+  byDefinition: LivingConflictMetricRow[];
+}
+
+export function summarizeLivingConflicts(
+  livingConflicts: LivingConflictState[],
+  pendingDecisions: number,
+  resolvedDecisions: number
+): LivingConflictMetrics {
+  const byStatus: Record<string, number> = {};
+  for (const conflict of livingConflicts) {
+    const status = conflict.status ?? (conflict.hasOpened ? "active" : "dormant");
+    byStatus[status] = (byStatus[status] ?? 0) + 1;
+  }
+  return {
+    total: livingConflicts.length,
+    opened: livingConflicts.filter((conflict) => conflict.hasOpened).length,
+    byStatus,
+    pendingDecisions,
+    resolvedDecisions,
+    byDefinition: livingConflicts
+      .map((conflict) => ({
+        defKey: conflict.defKey,
+        status: conflict.status ?? (conflict.hasOpened ? "active" : "dormant"),
+        phaseLevel: conflict.phaseLevel,
+        openedYear: conflict.openedYear ?? null,
+        totalTurns: conflict.totalTurns,
+        tracks: conflict.tracks ?? {},
+        consequences: {
+          civilianStrain: conflict.campaign?.consequences.civilianStrain ?? 0,
+          refugees: conflict.campaign?.consequences.refugees ?? 0,
+          infrastructureDamage: conflict.campaign?.consequences.infrastructureDamage ?? 0,
+          regionalSpillover: conflict.campaign?.consequences.regionalSpillover ?? 0,
+          casualties: conflict.campaign?.consequences.casualties ?? 0,
+          settlementMomentum: conflict.campaign?.consequences.settlementMomentum ?? 0,
+        },
+      }))
+      .sort((a, b) => a.defKey.localeCompare(b.defKey)),
+  };
 }
 
 /**
@@ -155,7 +228,15 @@ export interface CapacityMetrics {
 
 export interface EconomyMetrics {
   commodityCount: number;
+  /** GDP-weighted persisted household price index across reporting countries. */
   inflationIndex: number;
+  /** GDP-weighted persisted annual household CPI rate, in percentage points. */
+  inflationRate: number;
+  householdCpiCountries: number;
+  /** Commodity price-level diagnostics. These are shortage signals, not CPI. */
+  commodityPriceLevelMean: number;
+  commodityPriceLevelMedian: number;
+  commodityPriceLevelP90: number;
   /** Population stdev of (globalPrice/basePrice) across commodities — cross-sectional price dispersion, not a time series. */
   priceVolatility: number;
 }
@@ -208,12 +289,31 @@ export interface MarketAccessMetrics {
   ringFencedShareOfLiquid: number | null;
   measurementConfidence: string;
   reconciliationStatus: string;
+  /**
+   * Σ divergent accounts in the stock-vs-flow by-kind inventory (#992). Null
+   * when the check was skipped or absent: unknown, not zero.
+   */
+  stockVsFlowTotalDivergent: number | null;
+  /** Σ |divergence| over divergent accounts in ₳ (#992). Null when unrecorded. */
+  stockVsFlowTotalAbsDivergence: number | null;
+  /** Stock-vs-flow divergent account kinds ranked by |divergence| (#992). */
+  stockVsFlowTopKinds: StockVsFlowKindRow[] | null;
+  /** Σ resident demand value (base-price-weighted) across observed states (#991). */
+  residentDemandValueAnchor: number | null;
+  /** Σ demand a local producer could contest across observed states (#991). */
+  localProducerDemandValueAnchor: number | null;
+  /** localProducerDemandValue / residentDemandValue across observed states (#991). */
+  localAbsorptionShare: number | null;
 }
 
 export function marketAccessMetricsFromSnapshot(
   snapshot: EconomicVitalSigns | null
 ): MarketAccessMetrics {
   const entryFunnel = snapshot?.marketFormation?.entryFunnel;
+  const stockVsFlow = summarizeStockVsFlowDivergence(
+    snapshot?.reconciliation.stockVsFlowByKind ?? null
+  );
+  const residentSplit = summarizeResidentDemandSplit(snapshot?.marketFormation);
   return {
     pooledFillRate: snapshot?.goods.pooledFillRate.value ?? null,
     countryScopedFillRate: snapshot?.goods.countryScopedFillRate.value ?? null,
@@ -273,6 +373,12 @@ export function marketAccessMetricsFromSnapshot(
     ringFencedShareOfLiquid: snapshot?.money.ringFencedShareOfLiquid?.value ?? null,
     measurementConfidence: snapshot?.measurement.confidence ?? "unavailable",
     reconciliationStatus: snapshot?.reconciliation.status ?? "unavailable",
+    stockVsFlowTotalDivergent: stockVsFlow?.totalDivergentCount ?? null,
+    stockVsFlowTotalAbsDivergence: stockVsFlow?.totalAbsDivergence ?? null,
+    stockVsFlowTopKinds: stockVsFlow?.topKinds ?? null,
+    residentDemandValueAnchor: residentSplit?.totalResidentDemandValue ?? null,
+    localProducerDemandValueAnchor: residentSplit?.totalLocalProducerDemandValue ?? null,
+    localAbsorptionShare: residentSplit?.localAbsorptionShare ?? null,
   };
 }
 
@@ -596,40 +702,102 @@ async function collectOfficeTurnoverMetrics(db: Db): Promise<OfficeTurnoverMetri
 }
 
 async function collectCrisisMetrics(db: Db): Promise<CrisisMetrics> {
-  const crises = await db
-    .collection<Crisis>("crises")
-    .find({}, { projection: { status: 1, createdAt: 1, resolvedAt: 1 } })
-    .toArray();
+  const [crises, livingConflicts, pendingDecisions, resolvedDecisions] = await Promise.all([
+    db
+      .collection<Crisis>("crises")
+      .find({}, { projection: { status: 1, createdAt: 1, resolvedAt: 1 } })
+      .toArray(),
+    db.collection<LivingConflictState>("livingConflicts").find({}).toArray(),
+    db.collection("crisisInteractions").countDocuments({ resolvedAt: null }),
+    db.collection("crisisInteractions").countDocuments({ resolvedAt: { $ne: null } }),
+  ]);
   const totalSpawned = crises.length;
   const active = crises.filter((c) => c.status === "active").length;
   const resolvedCrises = crises.filter((c) => c.status === "resolved" && c.resolvedAt);
   const resolutionHours = resolvedCrises.map(
     (c) => (new Date(c.resolvedAt as Date).getTime() - new Date(c.createdAt).getTime()) / 3_600_000
   );
-
   return {
     totalSpawned,
     active,
     resolved: resolvedCrises.length,
     meanResolutionHours: mean(resolutionHours),
+    living: summarizeLivingConflicts(livingConflicts, pendingDecisions, resolvedDecisions),
+  };
+}
+
+type EconomyCommodityRow = { basePrice?: number; globalPrice?: number };
+type EconomyBudgetRow = {
+  gdp?: number;
+  economicFactors?: { householdPriceIndex?: number; inflationRate?: number };
+};
+
+function weightedMean(
+  rows: EconomyBudgetRow[],
+  pick: (row: EconomyBudgetRow) => number | undefined,
+  fallback: number
+): number {
+  const eligible = rows
+    .map((row) => ({ value: pick(row), gdp: row.gdp }))
+    .filter((row): row is { value: number; gdp: number | undefined } => Number.isFinite(row.value));
+  if (!eligible.length) return fallback;
+  const hasPositiveGdp = eligible.some((row) => Number.isFinite(row.gdp) && row.gdp! > 0);
+  const weighted = eligible.map((row) => ({
+    value: row.value,
+    weight: hasPositiveGdp && Number.isFinite(row.gdp) ? Math.max(0, row.gdp!) : 1,
+  }));
+  const totalWeight = weighted.reduce((sum, row) => sum + row.weight, 0);
+  return totalWeight > 0
+    ? weighted.reduce((sum, row) => sum + row.value * row.weight, 0) / totalWeight
+    : mean(weighted.map((row) => row.value));
+}
+
+export function summarizeEconomyMetrics(
+  commodities: EconomyCommodityRow[],
+  budgets: EconomyBudgetRow[]
+): EconomyMetrics {
+  const ratios = commodities
+    .filter((row) => Number.isFinite(row.basePrice) && row.basePrice! > 0)
+    .map((row) => (row.globalPrice ?? row.basePrice!) / row.basePrice!)
+    .filter(Number.isFinite);
+  const sortedRatios = [...ratios].sort((a, b) => a - b);
+  const p90Index = Math.max(0, Math.ceil(sortedRatios.length * 0.9) - 1);
+  const householdRows = budgets.filter((row) =>
+    Number.isFinite(row.economicFactors?.householdPriceIndex)
+  );
+  return {
+    commodityCount: ratios.length,
+    inflationIndex: weightedMean(budgets, (row) => row.economicFactors?.householdPriceIndex, 1),
+    inflationRate: weightedMean(budgets, (row) => row.economicFactors?.inflationRate, 0),
+    householdCpiCountries: householdRows.length,
+    commodityPriceLevelMean: mean(ratios),
+    commodityPriceLevelMedian: median(ratios),
+    commodityPriceLevelP90: sortedRatios[p90Index] ?? 0,
+    priceVolatility: stdev(ratios),
   };
 }
 
 async function collectEconomyMetrics(db: Db): Promise<EconomyMetrics> {
-  const commodities = await db
-    .collection("commodityPrices")
-    .find({ basePrice: { $gt: 0 } }, { projection: { basePrice: 1, globalPrice: 1 } })
-    .toArray();
-  if (commodities.length === 0) {
-    return { commodityCount: 0, inflationIndex: 1, priceVolatility: 0 };
-  }
-  const ratios = commodities.map((c) => (c.globalPrice ?? c.basePrice) / c.basePrice);
-
-  return {
-    commodityCount: commodities.length,
-    inflationIndex: mean(ratios),
-    priceVolatility: stdev(ratios),
-  };
+  const [commodities, budgets] = await Promise.all([
+    db
+      .collection<EconomyCommodityRow>("commodityPrices")
+      .find({ basePrice: { $gt: 0 } }, { projection: { basePrice: 1, globalPrice: 1 } })
+      .toArray(),
+    db
+      .collection<EconomyBudgetRow>("federalBudget")
+      .find(
+        {},
+        {
+          projection: {
+            gdp: 1,
+            "economicFactors.householdPriceIndex": 1,
+            "economicFactors.inflationRate": 1,
+          },
+        }
+      )
+      .toArray(),
+  ]);
+  return summarizeEconomyMetrics(commodities, budgets);
 }
 
 /**
@@ -708,6 +876,7 @@ export async function collectBalanceMetrics(db: Db): Promise<BalanceReport> {
     inflationByCountry,
     corporateCashFlow,
     military,
+    telemetry,
   ] = await Promise.all([
     collectWealthMetrics(db),
     collectElectoralMetrics(db),
@@ -723,6 +892,7 @@ export async function collectBalanceMetrics(db: Db): Promise<BalanceReport> {
     collectInflationMetrics(db),
     collectCorporateCashFlowMetrics(db, turn),
     collectMilitaryMetrics(db),
+    collectEconomyTelemetry(db),
   ]);
 
   return {
@@ -739,6 +909,7 @@ export async function collectBalanceMetrics(db: Db): Promise<BalanceReport> {
     inflationByCountry,
     corporateCashFlow,
     military,
+    telemetry,
   };
 }
 

@@ -26,6 +26,8 @@ interface RecruitmentStatus {
   activeMemberCount?: number;
   availablePartyNppSlots?: number;
   canRecruit: boolean;
+  /** False when the party has no presence in or next to this region. */
+  inFrontier?: boolean;
   isLeadership: boolean;
   blockedReason?: string | null;
   // Action Point pool (scope-appropriate)
@@ -52,6 +54,8 @@ interface StateOption {
   availableSlots: number;
   actionCost: number;
   canRecruit: boolean;
+  /** False when the party has no presence in or next to this region. */
+  inFrontier?: boolean;
   hasStateLeadership: boolean;
 }
 
@@ -369,8 +373,16 @@ export function NppRecruitmentPanel({
         </button>
       )}
 
+      {/* Growth frontier: explain the block rather than leaving a dead button. */}
+      {!isNational && status.inFrontier === false && (
+        <p className="text-sm text-muted italic">
+          Your party is not established in or next to this region. Build a presence in a nearby
+          region first.
+        </p>
+      )}
+
       {/* No slots message for state panel */}
-      {!isNational && !hasCooldown && stateAvailableSlots === 0 && (
+      {!isNational && !hasCooldown && status.inFrontier !== false && stateAvailableSlots === 0 && (
         <p className="text-sm text-muted italic">No recruitment slots available in this state.</p>
       )}
     </div>

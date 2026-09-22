@@ -100,6 +100,15 @@ export interface StockVsFlowFinding {
   uninstrumented: boolean;
   /** Candidate emit sites active this turn for the account. */
   candidateEmitSites: string[];
+  /**
+   * Account-lifecycle evidence from the snapshot pair (#992). `created` = no
+   * opening key (creation, migration re-key, or first snapshot coverage);
+   * `closed` = no closing key (closure, secession delete, migration re-key);
+   * `currency_rekey` = the same kind+ref exists under another currency segment
+   * across the pair (currency conversion, e.g. transfer rescaling). Hints only:
+   * they never suppress the finding.
+   */
+  lifecycleHint?: "created" | "closed" | "currency_rekey";
 }
 
 export interface MoneySupplyReason {
@@ -116,9 +125,37 @@ export interface MoneySupplyFinding {
   byReason: MoneySupplyReason[];
 }
 
+/**
+ * One row of the per-kind stock-vs-flow inventory.
+ *
+ * `findings` on the report is capped (MAX_FINDINGS) so a single turn's ~1,100
+ * divergent accounts never all persist; this breakdown is computed over the
+ * FULL finding list before the cap, so the class ranking survives. It is the
+ * recurring form of the #992 "inventory divergent account classes and rank
+ * them by unexplained balance change" scope item.
+ */
+export interface StockVsFlowByKind {
+  /** Ledger account kind prefix (character, corporation, ...). */
+  kind: string;
+  /** Divergent accounts of this kind this turn. */
+  divergentCount: number;
+  /** Σ |divergence| over divergent accounts of this kind (₳). */
+  absDivergence: number;
+  /** Of those, accounts that moved with no ledger legs (uninstrumented). */
+  uninstrumentedCount: number;
+}
+
 export interface ReconcileReport {
   turn: number;
   generatedAt: Date;
+  /**
+   * `gameConfig.savingsAccountsMode` the turn ran under, echoed from the
+   * reconcile input by the shell. Per-turn banking history for #992: the
+   * evidence gate requires every accepted turn to carry `authoritative`
+   * here, so post-activation proof is machine-recorded, never an operator
+   * number. Null on docs that predate the stamp (unknown, not off).
+   */
+  bankingMode: string | null;
   status: ReconcileStatus;
   entriesChecked: number;
   trialBalance: {
@@ -132,6 +169,8 @@ export interface ReconcileReport {
     /** null when the check was skipped: unknown, not zero. */
     divergentCount: number | null;
     findings: StockVsFlowFinding[];
+    /** Per-kind inventory over the FULL finding list, before the findings cap. */
+    byKind: StockVsFlowByKind[];
   };
   moneySupply: {
     status: ReconcileStatus;

@@ -15,6 +15,7 @@ import { getPartyRoleLabel } from "@/lib/parties/partyRoleLabels";
 import { INFLUENCE_ACTIONS } from "./constants";
 import { activeNppElectionCandidacyFilter } from "@/lib/elections/nppCandidacyQuery";
 import { calculateRelocationCapacity } from "@/lib/npp/recruitment";
+import { getPartyFrontier, isInFrontier } from "@/lib/parties/partyFrontier";
 
 function getNPPCountry(npp: NPP): CountryId {
   return npp.countryId as CountryId;
@@ -242,6 +243,17 @@ async function validateNppStateRelocationRequest(
     .findOne({ _id: targetStateId, countryId });
   if (!targetState) {
     return { valid: false, error: "Target state not found in this country." };
+  }
+
+  // Growth frontier: relocation cannot teleport a party into a region it does
+  // not already reach. Without this the recruitment gate is bypassable by
+  // moving one NPP and letting the new presence open the frontier.
+  const { presence, frontier } = await getPartyFrontier(db, countryId, npp.party);
+  if (!isInFrontier(presence, frontier, targetStateId)) {
+    return {
+      valid: false,
+      error: `Your party is not established in or next to ${targetState.name}. Relocation can only move an NPP into a region the party already reaches.`,
+    };
   }
 
   const targetStatePartyOrg = await db

@@ -13,6 +13,7 @@ function campaignWith(briefing: CampaignBriefing | undefined): CampaignData {
     candidateIsNPP: false,
     party: "1",
     accessLevel: "owner",
+    countryId: "US",
     isArchived: false,
     isRunningMate: false,
     currencyCode: "USD",

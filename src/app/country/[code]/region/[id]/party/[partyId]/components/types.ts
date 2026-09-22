@@ -74,6 +74,14 @@ export interface StatePartyData {
   /** Effective PS cap denominator: 30 with a homed player member, else 7.5. */
   effectivePsCap?: number;
   heroImageUrl?: string;
+  /**
+   * Distinct people holding this state party's officer seats, counted on
+   * the server from the raw seat ids. `chair`/`viceChair`/`treasurer`
+   * are null for a BANNED holder even though the seat still counts
+   * towards the payout ceiling, so deriving it here would disagree with
+   * what the server enforces.
+   */
+  seatedOfficers: number;
   chair: LeaderInfo | null;
   viceChair: LeaderInfo | null;
   treasurer: LeaderInfo | null;

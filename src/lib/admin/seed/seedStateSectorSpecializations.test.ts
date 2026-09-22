@@ -3,7 +3,7 @@ import type { State } from "@/lib/db/types";
 import { inferStateSectorSpecialization } from "@/lib/admin/seed/seedStateSectorSpecializations";
 import { ukRegions } from "@/lib/seeds/uk/ukRegions";
 import { deRegions } from "@/lib/seeds/de/deRegions";
-import { jpRegions } from "@/lib/seeds/jp/jpRegions";
+import { jpRegions } from "@/lib/countries/jp/data/jpRegions";
 import { cnRegions } from "@/lib/seeds/cn/cnRegions";
 import { ieRegions } from "@/lib/seeds/ie/ieRegions";
 import { brRegions } from "@/lib/seeds/br/brRegions";

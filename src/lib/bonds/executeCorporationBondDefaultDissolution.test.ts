@@ -110,6 +110,7 @@ function makeDb(opts: { corp: Record<string, unknown>; issuerBonds: Record<strin
       findOne: vi.fn().mockResolvedValue(null),
     },
     indexFunds: {
+      find: () => mkCursor([]),
       updateOne: vi.fn().mockResolvedValue({}),
     },
   };

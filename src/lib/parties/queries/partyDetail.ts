@@ -5,6 +5,7 @@ import type { Character, GameConfig, NPP, PoliticalParty, State, User } from "@/
 import type { PartyData, PartyLeader, PartyMember } from "@/lib/parties/dto/partyView";
 import { resolvePartyPsCap, resolvePartyTier } from "@/lib/parties/partyTier";
 import { nppActionPointCap, nppActionPointRegen } from "@/lib/npp/actionPoints";
+import { getPartyFrontier } from "@/lib/parties/partyFrontier";
 import { findPartyBudgetForScope, getEffectivePartyBudgetSpending } from "@/lib/partyBudgetGuards";
 import { getTreasuryForecast, getTreasuryReserveSummary } from "@/lib/partyTreasuryPlan";
 import {
@@ -26,9 +27,11 @@ import {
   projectNppGeneration,
 } from "@/lib/utils/fundGeneration";
 import { campaignAnchorToLocal, campaignLocalRate } from "@/lib/campaigns/campaignCurrency";
+import { getGameStatePresetOrDefault } from "@/lib/db/collections/gameState";
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
 import { isUserActive } from "@/lib/players/playerActivity";
 import { DEFAULT_LEGACY_COUNTRY_ID } from "@/lib/constants/countries";
+import { countDistinctOfficers } from "@/lib/treasury/payoutCapValues";
 
 async function resolveLeader(
   db: Db,
@@ -156,6 +159,9 @@ export async function getPartyDetail(db: Db, party: PoliticalParty): Promise<Par
   const toLocal = (anchor: number) => campaignAnchorToLocal(anchor, partyCountry, campaignRates);
 
   const nationalTaxRate = party.nationalTaxRate ?? 0;
+  // GDP-baseline era for income math: the world's reset preset, so historical
+  // worlds estimate in their own denomination (issue #798).
+  const preset = await getGameStatePresetOrDefault(db);
   let expectedHourlyIncome = 0;
   for (const member of members) {
     const statePop = statePopMap.get(member.homeState) ?? 0;
@@ -166,6 +172,7 @@ export async function getPartyDetail(db: Db, party: PoliticalParty): Promise<Par
       stateGdpMillions: stateGdpMap.get(member.homeState),
       countryId: member.countryId,
       politicalInfluence: member.politicalInfluence ?? 0,
+      preset,
     });
     expectedHourlyIncome += calculateTaxAmount(toLocal(totalFundRate), nationalTaxRate);
   }
@@ -295,14 +302,32 @@ export async function getPartyDetail(db: Db, party: PoliticalParty): Promise<Par
     effectiveBudget
   );
 
+  // Growth frontier for the Join control. `null` means unrestricted: the party
+  // has no presence anywhere, so anyone may join and the first joiner re-anchors
+  // it. That mirrors `isInFrontier`'s fail-open branch exactly, so the client
+  // does not have to re-derive the rule. Public data either way, since member
+  // lists, NPP rosters and elected officials are all already visible.
+  const { presence, frontier } = await getPartyFrontier(
+    db,
+    partyCountry,
+    String(party.sequentialId)
+  );
+  const frontierRegions = presence.size === 0 ? null : [...frontier].sort();
+
   return {
     id: String(party.sequentialId),
     name: party.name,
+    frontierRegions,
     abbreviation: party.abbreviation,
     color: getPartyHex(String(party.sequentialId), party.color),
     discordInviteUrl: party.discordInviteUrl ?? null,
     economicPosition: party.economicPosition,
     socialPosition: party.socialPosition,
+    seatedOfficers: countDistinctOfficers([
+      party.chairId?.toString(),
+      party.viceChairId?.toString(),
+      party.treasurerId?.toString(),
+    ]),
     chair,
     viceChair,
     treasurer,

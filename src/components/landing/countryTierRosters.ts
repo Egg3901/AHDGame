@@ -80,7 +80,6 @@ export const ECONOMIC_POWER_FEATURE_IDS_BY_PRESET: Readonly<Record<string, reado
     "300", // GR
     "372", // IE
     "380", // IT
-    "392", // JP
     "566", // NG
     "724", // ES
     "752", // SE
@@ -96,7 +95,6 @@ export const ECONOMIC_POWER_FEATURE_IDS_BY_PRESET: Readonly<Record<string, reado
     "300", // GR
     "372", // IE
     "380", // IT
-    "392", // JP
     "566", // NG
     "724", // ES
     "752", // SE
@@ -112,56 +110,28 @@ export const ECONOMIC_POWER_FEATURE_IDS_BY_PRESET: Readonly<Record<string, reado
     "300", // GR
     "372", // IE
     "380", // IT
-    "392", // JP
     "566", // NG
     "724", // ES
     "752", // SE
     "792", // TR
   ],
+  // US/UK/JP left this roster when the era roster made them player countries in
+  // every modern preset: this list is full-autonomous entities that are NOT
+  // player-run, and they now are.
   "2023-default": [
-    "040",
-    "076",
-    "156",
-    "246",
-    "250",
-    "276",
-    "300",
-    "372",
-    "380",
-    "392",
-    "566",
-    "724",
-    "752",
-    "792",
-  ],
-  "2027-default": [
-    "040", // AT
-    "076", // BR
-    "246", // FI
-    "250", // FR
-    "300", // GR
-    "372", // IE
-    "380", // IT
-    "566", // NG
-    "724", // ES
-    "752", // SE
-    "792", // TR
-  ],
-  "2019-default": [
-    "040", // AT
-    "076", // BR
     "156", // CN
-    "246", // FI
-    "250", // FR
     "276", // DE
-    "300", // GR
     "372", // IE
-    "380", // IT
-    "392", // JP
-    "566", // NG
-    "724", // ES
-    "752", // SE
-    "792", // TR
+  ],
+  // Only Ireland. France, Italy and the rest are npp in 2027, as they are in
+  // 2023, and Brazil and Nigeria carry the same 1953-gated full-autonomous
+  // promotion gap they do elsewhere. Re-derived from the manifest by
+  // countryTiers.test.ts.
+  "2027-default": ["372"],
+  "2019-default": [
+    "156", // CN
+    "276", // DE
+    "372", // IE
   ],
 };
 

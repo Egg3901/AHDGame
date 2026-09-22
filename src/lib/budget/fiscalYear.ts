@@ -318,6 +318,11 @@ export async function processFiscalYear(
       }
     }
 
+    // `debt.principal` is owned by the bond ledger (see bonds/sovereignPrincipal.ts)
+    // and is deliberately absent from this write: the old rollover re-derived it
+    // from the treasury balance here, clobbering same-turn issuance/maturity state
+    // every fiscal boundary (#1975). Rate/ratio/rating below are refreshed off the
+    // bond-owned stock, never the balance.
     await db.collection<FederalBudget>("federalBudget").updateOne(
       { _id: federalBudget._id },
       {
@@ -326,7 +331,6 @@ export async function processFiscalYear(
           taxRates: normalizedTaxRates,
           revenue: federalRevenue,
           spending: finalSpending,
-          "debt.principal": debtResult.newPrincipal,
           "debt.interestRate": debtResult.interestRate,
           debtToGdpRatio: debtResult.debtToGdpRatio,
           creditRating: debtResult.creditRating,

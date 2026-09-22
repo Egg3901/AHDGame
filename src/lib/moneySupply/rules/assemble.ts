@@ -55,12 +55,13 @@ export function addComponent(
 /**
  * Government "cash" for money-supply purposes.
  *
- * `federalBudget.treasuryBalance` is the signed fiscal SSOT: positive = surplus
- * cash on hand, negative = −debt.principal by design (see budgets.ts seed and
- * `nationalDebtFromBalance`). Taking `abs(treasuryBalance)` would invent
- * government deposits equal to the national debt ; a false positive the
- * postmortem warns about. Only a positive balance is spendable money; an
- * indebted treasury contributes 0 to M1.
+ * `federalBudget.treasuryBalance` is signed cash on hand: positive = surplus,
+ * negative = a cash hole. Cash and bond debt are separate positions (see
+ * bonds/sovereignPrincipal.ts and refs #1975), so a negative balance is NOT
+ * the national debt and must never stand in for `debt.principal`.
+ * Taking `abs(treasuryBalance)` would invent government deposits equal to a
+ * cash hole; a false positive the postmortem warns about. Only a positive
+ * balance is spendable money; an indebted treasury contributes 0 to M1.
  */
 export function governmentLiquidFromTreasury(treasuryBalance: unknown): number {
   if (typeof treasuryBalance !== "number" || !Number.isFinite(treasuryBalance)) return 0;

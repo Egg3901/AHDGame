@@ -238,8 +238,13 @@ export function resolvePlantsRevenue(input: PlantsRevenueInput): PlantsRevenueRe
   // anchor once per turn at a constant level. `governorEffectiveCap` drops the
   // clamp at full ramp; after that `plantsExtractionHardMin` and capacity price
   // it.
+  // A mid-transition sector governs against its transitioning nameplate once
+  // divergence is allowed, but on the flip turn (lambda 0) the governor
+  // returns the anchor verbatim: the anchor must be the capital-mode
+  // counterfactual there, or the flip books headroom plus the blend as
+  // revenue (measured +12% on a manufacturing standard to premium flip).
   const baselineHourlyRevenue =
-    ((plantsEnabled && strategyIsTransitioning && retoolCapacityRatio !== 1
+    ((plantsEnabled && strategyIsTransitioning && retoolCapacityRatio !== 1 && plantsRampLambda > 0
       ? plantsNameplateRevenue
       : preFlipNameplateRevenue) /
       TURNS_PER_DAY) *

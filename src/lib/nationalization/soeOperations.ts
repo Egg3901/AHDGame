@@ -15,6 +15,9 @@ import {
 } from "@/lib/currency/corporationCapital";
 import { getMetricDefinition } from "@/lib/constants/metricDefinitions";
 import type { MetricCategoryId } from "@/lib/db/types/stateMetrics";
+import { sumCorporateSectorConstructionInProgress } from "@/lib/bonds/corporateCredit";
+import type { CorpSnapshot, SoeBackingSnapshot } from "@/lib/turn/corporation/types";
+import type { ActionAuditInput } from "@/lib/db/types/actionAuditLog";
 import { isStateOwned } from "./nationalCorporation";
 import { findMergedRegionMetricsMany } from "@/lib/macroMetrics/merge";
 import { isMacroMetricPath } from "@/lib/macroMetrics/paths";
@@ -194,7 +197,7 @@ export function buildRdModernizationOps(
  * So the shortfall is SPLIT. The treasury covers this turn's realized OPERATING
  * loss and nothing more:
  *
- *     coverable = min(totalShortfall, max(0, −operatingResultThisTurn))
+ *     coverable = min(totalShortfall, max(0, −realizedOperatingLossThisTurn))
  *
  * The residual — cash the corp spent on build orders — stays as negative
  * `liquidCapital`. An SOE that overbuilds stays negative until it earns its way
@@ -202,24 +205,30 @@ export function buildRdModernizationOps(
  * is no automatic caretaker cancellation today, so in practice it simply stays
  * negative and cannot place further builds, which is the intended pressure).
  *
- * `operatingResultThisTurn` is an APPROXIMATION built from what this function
- * can reach: the plants-aware sector profit basis (realized-preferring revenue
- * less maintenance, no growth charge) net of corp-level overhead
- * (marketing / logistics / CEO salary), converted from the daily basis those
- * fields are stored on to one turn.
+ * `realizedOperatingLossThisTurn` is the REALIZED per-corporation operating
+ * loss for this turn, read from the corporation turn's own snapshots
+ * (`CorpSnapshot.income`, ₳/turn — the same figure that moved `liquidCapital`
+ * and that `corporationHistory.income` persists), NOT an estimate. That figure
+ * already includes every cost line the turn actually charged — idle / mothball
+ * upkeep, the regulatory burden, growth — which is what makes the upkeep-heavy
+ * construction SOE (#2043) coverable: the old margin estimator below is blind
+ * to upkeep by construction (`operatingCost` excludes it), so it reported a
+ * fraction of the true loss and the enterprise carried the rest forever.
  *
- * WHAT IT DOES NOT SEE — the full list, because a partial one reads as a
+ * The margin estimator survives ONLY as an explicit fallback
+ * (`estimateSoeOperatingLossAnchor`) for callers that have no realized snapshot
+ * map — direct unit tests, ad-hoc callers. It is never preferred when the
+ * realized figure is available.
+ *
+ * WHAT NEITHER LEG SEES — the full list, because a partial one reads as a
  * complete one:
- *   - idle / mothball upkeep (`plantsUpkeepCost` in sectorTurn)
- *   - the regulatory burden the turn processor charges
  *   - bond coupon interest and bond maturity face value (bondTurn)
  *   - corporate tax and dividend payouts (sectorCalculations)
  *
- * The first two under-state the loss, so the split is conservative in the
- * enterprise's favour on those. The debt and tax lines are DELIBERATELY out of
- * scope: this covers the OPERATING loss, and an SOE whose hole is interest- or
- * tax-driven is therefore not covered here and can stay negative. That is a
- * known gap, not an oversight — closing it is not a one-line change:
+ * The debt and tax lines are DELIBERATELY out of scope: this covers the
+ * OPERATING loss, and an SOE whose hole is interest- or tax-driven is therefore
+ * not covered here and can stay negative. That is a known gap, not an
+ * oversight — closing it is not a one-line change:
  *   - coupon interest on a corp with `countryOwnerId` is ALREADY government-
  *     covered (natcorps skip the coupon cost entirely in bondTurn), so adding
  *     an interest term here would double-cover the common case; only
@@ -231,6 +240,13 @@ export function buildRdModernizationOps(
  * Revisit as its own change, with a stated rule, rather than widening the
  * approximation by accident.
  *
+ * CIP (outstanding `constructionInProgressAnchor`) NEVER enters cover math. It
+ * is read only to NAME the residual: after covering, whatever shortfall
+ * remains is reconciled against held CIP, never funded by it. Covering at most
+ * one turn of realized loss also means legacy holes are NOT forgiven and
+ * landed build spending (already out of CIP into the paid capacity basis) is
+ * NOT covered as free growth.
+ *
  * Returns ₳. Non-plants callers get the full shortfall, exactly as before.
  */
 export function coverableSoeShortfallAnchor(args: {
@@ -240,9 +256,43 @@ export function coverableSoeShortfallAnchor(args: {
   corpOverheadAnchor: number;
   fxByCurrency: ReadonlyMap<CurrencyCode, number>;
   plantsEnabled: boolean;
+  /**
+   * This turn's realized operating loss (₳, positive = loss), from the
+   * corporation turn's snapshots. When present it IS the coverable basis;
+   * when absent the margin estimate below is used as an explicit fallback.
+   */
+  realizedLossAnchor?: number;
 }): number {
   const shortfall = Math.max(0, args.shortfallAnchor);
   if (!args.plantsEnabled || shortfall <= 0) return shortfall;
+  const realized = args.realizedLossAnchor;
+  if (typeof realized === "number" && Number.isFinite(realized)) {
+    return Math.min(shortfall, Math.max(0, realized));
+  }
+  return Math.min(shortfall, estimateSoeOperatingLossAnchor(args));
+}
+
+/**
+ * Fallback operating-loss estimate used ONLY when no realized per-corp loss is
+ * available (see `coverableSoeShortfallAnchor`). Built from the plants-aware
+ * sector profit basis (realized-preferring revenue less maintenance, no growth
+ * charge) net of corp-level overhead, converted from the daily basis those
+ * fields are stored on to one turn.
+ *
+ * Blind by construction to idle / mothball upkeep (`plantsUpkeepCost` in
+ * sectorTurn) and the regulatory burden the turn processor charges — both live
+ * outside `operatingCost`. Prefer the realized snapshot whenever it exists;
+ * this exists so a missing map degrades to a conservative partial cover, never
+ * to zero cover by accident and never to a full-hole comp.
+ *
+ * Returns ₳ (positive = loss, 0 = no estimated loss).
+ */
+export function estimateSoeOperatingLossAnchor(args: {
+  corporation: Corporation;
+  sectors: readonly CorporateSector[];
+  corpOverheadAnchor: number;
+  fxByCurrency: ReadonlyMap<CurrencyCode, number>;
+}): number {
   let dailyProfitAnchor = 0;
   for (const sector of args.sectors) {
     const code = resolveSectorHostCurrencyCode(sector, args.corporation);
@@ -280,8 +330,32 @@ export function coverableSoeShortfallAnchor(args: {
   }
   const operatingResultPerTurn =
     (dailyProfitAnchor - Math.max(0, args.corpOverheadAnchor)) / TURNS_PER_DAY;
-  const operatingLoss = Math.max(0, -operatingResultPerTurn);
-  return Math.min(shortfall, operatingLoss);
+  return Math.max(0, -operatingResultPerTurn);
+}
+
+/**
+ * Per-corporation treasury-backing reconciliation for one turn (₳ anchor).
+ * `cipHeldAnchor` only NAMES the residual — capital construction is never
+ * coverable and never enters cover math.
+ */
+export interface SoeCorpBacking {
+  corpId: Corporation["_id"];
+  /** Owning country whose treasury covered the loss. */
+  countryId: CountryId;
+  /** Total negative-liquidCapital hole at backing time. */
+  shortfallAnchor: number;
+  /** This turn's operating loss (positive = loss). */
+  realizedLossAnchor: number;
+  /** `snapshot` = this turn's corporation-turn snapshot; `estimate` = margin fallback. */
+  realizedSource: "snapshot" | "estimate";
+  /** What the treasury paid (₳). `min(shortfall, realizedLoss)` under plants. */
+  coveredAnchor: number;
+  /** What the treasury paid, in the corp's own currency (rounded). */
+  coveredLocal: number;
+  /** Outstanding construction-in-progress held off-cover (₳). Explains the residual. */
+  cipHeldAnchor: number;
+  /** `shortfallAnchor − coveredAnchor` (₳). */
+  residualAnchor: number;
 }
 
 /**
@@ -289,13 +363,31 @@ export function coverableSoeShortfallAnchor(args: {
  * sectors, and the metrics of every state they operate in; applies mandate
  * contributions (scaled by SOE share of each state-sector) and backs any
  * negative liquidCapital from the treasury. Money math is ₳-anchor internal.
+ *
+ * `realizedIncomeAnchorByCorpId` carries this turn's realized per-corp
+ * operating result (₳/turn, `CorpSnapshot.income`) keyed by corp id string.
+ * When present for a corp it IS the coverable basis; when absent the margin
+ * estimate is used as an explicit fallback (and recorded as such).
+ *
+ * WRITE ORDER (loud failure, #2043): every per-corp cover amount is computed
+ * PURE first; then each owning treasury is debited; only then are the corp
+ * credits bulk-written. A treasury failure therefore THROWS before any corp is
+ * credited — never free money. The boundary is deliberate: a failure BETWEEN
+ * the treasury debits and the corp bulk-write leaves debits without matching
+ * credits on the treasury ledger (visible, auditable), and a retry recomputes
+ * the same cover from the still-negative corp cash — so an operator rerun
+ * after such a mid-pass failure must account for already-issued debits first.
+ * Turn-level rerun atomicity beyond this window belongs to the turn framework,
+ * like every other treasury leg in this turn.
  */
 export async function processSoeOperations(
   db: Db,
   now: Date,
   /** Game year — era-prices the state capex grant. Absent ⇒ the anchor year. */
-  currentYear?: number | null
-): Promise<{ soeCorps: number }> {
+  currentYear?: number | null,
+  /** This turn's realized per-corp operating income (₳/turn) by corp id. Absent ⇒ estimate fallback. */
+  realizedIncomeAnchorByCorpId?: ReadonlyMap<string, number>
+): Promise<{ soeCorps: number; backing: SoeCorpBacking[] }> {
   // Match `isStateOwned` semantics at the DB layer: a state-owned corp has
   // `countryOwnerId` set OR `ownershipState: "stateOwned"`. The seeded NatCorps
   // (e.g. the UK NHS) and pre-Phase-1 backfilled corps carry `countryOwnerId`
@@ -308,7 +400,7 @@ export async function processSoeOperations(
     })
     .toArray();
   const soeCorps = corps.filter((c) => isStateOwned(c));
-  if (soeCorps.length === 0) return { soeCorps: 0 };
+  if (soeCorps.length === 0) return { soeCorps: 0, backing: [] };
 
   const corpIds = soeCorps.map((c) => c._id);
   const sectors = await db
@@ -433,13 +525,20 @@ export async function processSoeOperations(
   }
 
   // Treasury-backing: an SOE with negative liquidCapital is covered — but only
-  // up to its realized OPERATING loss under plants. See
+  // up to this turn's REALIZED operating loss under plants. See
   // `coverableSoeShortfallAnchor`: cash drained into build orders is the
-  // director's problem, not the treasury's.
-  const backingOps: AnyBulkWriteOperation<Corporation>[] = [];
+  // director's problem, not the treasury's. CIP only names the residual.
+  //
+  // LOUD ORDERING: the whole pass is computed pure first; treasury debits run
+  // second; corp credits bulk-write last. A treasury failure throws before any
+  // corp is credited (never free money), and the still-negative cash makes the
+  // next attempt recompute the identical cover.
+  const backing: SoeCorpBacking[] = [];
   for (const corp of soeCorps) {
     const liquid = Number.isFinite(corp.liquidCapital) ? corp.liquidCapital : 0;
     if (liquid >= 0) continue;
+    const corpId = corp._id.toString();
+    const countryId = (corp.countryOwnerId ?? corp.countryId) as CountryId;
     const code = resolveCorpLiquidCurrencyCode(corp);
     const rate = fxRateForCorpFromMap(corp, fxByCurrency);
     const shortfallAnchor = -corpCapitalToAnchor(liquid, code, rate);
@@ -449,36 +548,68 @@ export async function processSoeOperations(
       readCorpEconomicAnchor(corp.marketingBudget ?? 0, code, rate) +
       readCorpEconomicAnchor(corp.logisticsBudget ?? 0, code, rate) +
       readCorpEconomicAnchor(corp.ceoSalary ?? 0, code, rate);
-    const coveredAnchor = coverableSoeShortfallAnchor({
-      corporation: corp,
-      sectors: sectorsByCorpId.get(corp._id.toString()) ?? [],
+    const corpSectors = sectorsByCorpId.get(corpId) ?? [];
+    const realizedIncome = realizedIncomeAnchorByCorpId?.get(corpId);
+    let realizedLossAnchor: number;
+    let realizedSource: "snapshot" | "estimate";
+    if (typeof realizedIncome === "number" && Number.isFinite(realizedIncome)) {
+      realizedLossAnchor = Math.max(0, -realizedIncome);
+      realizedSource = "snapshot";
+    } else {
+      realizedLossAnchor = estimateSoeOperatingLossAnchor({
+        corporation: corp,
+        sectors: corpSectors,
+        corpOverheadAnchor,
+        fxByCurrency,
+      });
+      realizedSource = "estimate";
+    }
+    // Below plants the whole hole is covered, exactly as before.
+    const coveredAnchor = plantsEnabled
+      ? coverableSoeShortfallAnchor({
+          corporation: corp,
+          sectors: corpSectors,
+          shortfallAnchor,
+          corpOverheadAnchor,
+          fxByCurrency,
+          plantsEnabled,
+          realizedLossAnchor,
+        })
+      : shortfallAnchor;
+    const coveredLocal = Math.round(anchorToCorpCapital(coveredAnchor, code, rate));
+    backing.push({
+      corpId: corp._id,
+      countryId,
       shortfallAnchor,
-      corpOverheadAnchor,
-      fxByCurrency,
-      plantsEnabled,
+      realizedLossAnchor,
+      realizedSource,
+      coveredAnchor,
+      coveredLocal,
+      // Explanatory ONLY: held CIP names the residual, it never funds it.
+      cipHeldAnchor: sumCorporateSectorConstructionInProgress(corpSectors, corp._id),
+      residualAnchor: shortfallAnchor - coveredAnchor,
     });
-    if (coveredAnchor <= 0) continue; // nothing operating-related to comp
+  }
+
+  const backingOps: AnyBulkWriteOperation<Corporation>[] = [];
+  for (const b of backing) {
+    if (!(b.coveredAnchor > 0)) continue; // nothing operating-related to comp
     // The OWNING treasury covers the loss — the same key the remittance,
     // the state capex grant, and both budget estimators use. A firm
     // nationalised abroad keeps its domicile on `countryId`, so debiting
     // that would drain a treasury for an enterprise it does not own while
-    // the owner's books show the profit estimate (ticket #1269).
-    await coverSoeOperatingLoss(
-      db,
-      (corp.countryOwnerId ?? corp.countryId) as CountryId,
-      coveredAnchor,
-      fxByCurrency,
-      now
-    );
+    // the owner's books show the profit estimate (ticket #1269). The debit is
+    // unconditional: an unaffordable cover pushes the treasury negative
+    // (national debt) rather than being withheld — soft-budget semantics.
+    await coverSoeOperatingLoss(db, b.countryId, b.coveredAnchor, fxByCurrency, now);
     // Credit only what the treasury actually paid. Below plants that is the
     // whole hole (liquidCapital → 0, as before); under plants an over-built SOE
     // is left negative by the residual it spent on capacity.
-    const coveredLocal = anchorToCorpCapital(coveredAnchor, code, rate);
     backingOps.push({
       updateOne: {
-        filter: { _id: corp._id },
+        filter: { _id: b.corpId },
         update: plantsEnabled
-          ? { $inc: { liquidCapital: coveredLocal }, $set: { updatedAt: now } }
+          ? { $inc: { liquidCapital: b.coveredLocal }, $set: { updatedAt: now } }
           : { $set: { liquidCapital: 0, updatedAt: now } },
       },
     });
@@ -487,7 +618,100 @@ export async function processSoeOperations(
     await db.collection<Corporation>("corporations").bulkWrite(backingOps);
   }
 
-  return { soeCorps: soeCorps.length };
+  return { soeCorps: soeCorps.length, backing };
+}
+
+/**
+ * Fold SOE backing credits and profit-remittance debits into the turn's
+ * in-memory corp state BEFORE `corporationHistory` persistence, so history
+ * rows chart post-backing cash instead of the pre-backing snapshot.
+ *
+ * PURE (no DB): the DB legs already landed inside `processSoeOperations` /
+ * `processSoeRemittance`; this only syncs the two in-memory mirrors the
+ * history writer reads (`corpSnapshots[].liquidCapital` + `soeBacking`, and
+ * the `corpById` docs). Corp docs in the map are turn-start stale, so they are
+ * synced TO the folded snapshot cash, not incremented — incrementing a stale
+ * base would double-count the turn's operating income.
+ */
+export function foldSoeCashDeltas(args: {
+  corpSnapshots: CorpSnapshot[];
+  corpById: Map<string, Corporation>;
+  backing: readonly SoeCorpBacking[];
+  remittedLocalByCorpId: ReadonlyMap<string, number>;
+}): void {
+  const snapshotByCorpId = new Map(args.corpSnapshots.map((s) => [s.corpId.toString(), s]));
+  const syncCorpCash = (key: string, snap: CorpSnapshot | undefined, deltaLocal: number): void => {
+    const corp = args.corpById.get(key);
+    if (!corp) return;
+    corp.liquidCapital = snap
+      ? snap.liquidCapital
+      : (Number.isFinite(corp.liquidCapital) ? corp.liquidCapital : 0) + deltaLocal;
+  };
+  for (const b of args.backing) {
+    const key = b.corpId.toString();
+    const snap = snapshotByCorpId.get(key);
+    if (snap) {
+      snap.liquidCapital += b.coveredLocal;
+      const reconciliation: SoeBackingSnapshot = {
+        shortfallAnchor: b.shortfallAnchor,
+        realizedLossAnchor: b.realizedLossAnchor,
+        realizedSource: b.realizedSource,
+        coveredAnchor: b.coveredAnchor,
+        cipHeldAnchor: b.cipHeldAnchor,
+        residualAnchor: b.residualAnchor,
+      };
+      snap.soeBacking = reconciliation;
+    }
+    syncCorpCash(key, snap, b.coveredLocal);
+  }
+  for (const [key, amount] of args.remittedLocalByCorpId) {
+    if (!(amount > 0)) continue;
+    const snap = snapshotByCorpId.get(key);
+    if (snap) snap.liquidCapital -= amount;
+    syncCorpCash(key, snap, -amount);
+  }
+}
+
+/**
+ * Deterministic aggregate audit row for the SOE backing + remittance sweep,
+ * in the existing turn-audit shape (`corp.soe_backing_sweep`). PURE: rounded
+ * totals only, no clock, no randomness — the same input always yields the same
+ * entry. Returns null when neither leg moved anything, so callers emit no row.
+ */
+export function buildSoeBackingAuditEntry(args: {
+  backing: readonly SoeCorpBacking[];
+  remittedCorps: number;
+}): ActionAuditInput | null {
+  let corpsBacked = 0;
+  let corpsWithResidual = 0;
+  let snapshotCorps = 0;
+  let coveredAnchor = 0;
+  let residualAnchor = 0;
+  for (const b of args.backing) {
+    if (b.coveredAnchor > 0) corpsBacked += 1;
+    if (b.residualAnchor > 0) corpsWithResidual += 1;
+    if (b.realizedSource === "snapshot") snapshotCorps += 1;
+    coveredAnchor += b.coveredAnchor;
+    residualAnchor += b.residualAnchor;
+  }
+  if (corpsBacked === 0 && args.remittedCorps === 0) return null;
+  return {
+    source: "turn",
+    category: "corp",
+    action: "corp.soe_backing_sweep",
+    phase: "corporationTurn",
+    subject: { type: "corpBatch", name: "soe backing sweep" },
+    outcome: "ok",
+    meta: {
+      corpsBacked,
+      corpsWithResidual,
+      realizedFromSnapshot: snapshotCorps,
+      realizedFromEstimate: args.backing.length - snapshotCorps,
+      coveredAnchor: Math.round(coveredAnchor),
+      residualAnchor: Math.round(residualAnchor),
+      remittedCorps: args.remittedCorps,
+    },
+  };
 }
 
 function mergeContributions(contributions: MandateContribution[]): MandateContribution[] {

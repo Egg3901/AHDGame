@@ -15,7 +15,6 @@ import type { Db } from "mongodb";
 import type { Election, ElectionVoteTally } from "@/lib/db/types";
 import { computeSeatEstimates } from "@/lib/elections/buildPollingData";
 import { resolvedSeatsEstimate } from "@/lib/elections/resolvedSeatsEstimate";
-import type { MajoritarianBonusConfig } from "@/lib/turn/election/seatAllocation";
 import {
   CHAMBER_LABELS,
   NATIONAL_AGGREGATION_TYPES,
@@ -115,11 +114,7 @@ export async function buildNationalElectionNight(
   election: Election,
   partyMap: Map<string, ElectionNightPartyInfo>,
   finalHourProgress: number | null,
-  isEnded: boolean,
-  // Tickets #1276 / #1277: the boost keys on votes alone, so one shared config
-  // is now correct across every sibling region. The per-region organization
-  // rankings this used to take are gone with the org input itself.
-  majoritarianBonus?: MajoritarianBonusConfig
+  isEnded: boolean
 ): Promise<NationalResults | null> {
   const electionType = election.electionType;
   if (!NATIONAL_AGGREGATION_TYPES.has(electionType)) return null;
@@ -180,8 +175,7 @@ export async function buildNationalElectionNight(
             electionType,
             seats,
             tally as unknown as ElectionVoteTally,
-            activeIds,
-            majoritarianBonus
+            activeIds
           )
         ) ?? {};
       for (const [cid, seatCount] of Object.entries(estimate)) {

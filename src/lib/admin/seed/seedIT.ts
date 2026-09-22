@@ -56,12 +56,19 @@ export async function seedITRegions(
 
 export async function seedITParties(db: Db, log: (msg: string) => void, preset?: string) {
   const { itParties } = await import("@/lib/seeds/it/itParties");
-  const { selectPartyRosterForPreset } = await import("@/lib/seeds/ensureDefaultParties");
+  const { prunePresetMismatchedDefaultParties, selectPartyRosterForPreset } =
+    await import("@/lib/seeds/ensureDefaultParties");
 
   let activePreset = preset;
   if (!activePreset) {
     activePreset = await getGameStatePresetOrDefault(db);
   }
+
+  // Prune BEFORE selecting. Selecting alone stops the wrong parties being
+  // written but leaves the previous preset's behind, so a downgrade strands
+  // them (see partySeederPresetHygiene.test.ts). `selectPartyRosterForPreset`
+  // only chooses a roster -- it does not touch what is already in the db.
+  await prunePresetMismatchedDefaultParties(db, itParties, activePreset!);
 
   const filtered = selectPartyRosterForPreset(itParties as PartySeed[], activePreset);
   const now = new Date();

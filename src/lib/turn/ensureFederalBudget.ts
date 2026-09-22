@@ -20,66 +20,6 @@ import type { FederalBudget } from "@/lib/db/types/budget";
 import type { CountryId } from "@/lib/constants/countries";
 import { getNationalBudgetId } from "@/lib/bonds/sovereign";
 
-/**
- * Countries that legitimately have a central bank / corporations seeded under a
- * given preset but for which `NATIONAL_BUDGET_SEED_CONFIGS_*` intentionally has
- * no row yet, so `ensureFederalBudget` cannot self-heal. These are a KNOWN,
- * expected gap — national budgets are flagged off on 1991 worlds and the
- * remaining Cold-War budget seeds are deliberately deferred (see GH #3038).
- * Emitting a per-turn warn for each of them just spams the logs every turn.
- *
- * A missing seed for a country NOT in this set is genuinely unexpected and
- * still warns (once per process, to avoid a per-turn flood while staying loud
- * enough to notice).
- */
-const KNOWN_UNSEEDED_BUDGET_COUNTRIES: Partial<Record<string, ReadonlySet<CountryId>>> = {
-  "1991-default": new Set<CountryId>([
-    "CS",
-    "ES",
-    "TR",
-    "GR",
-    "AT",
-    "FI",
-    "RO",
-    "UKR",
-    "BLR",
-    "BAL",
-    "FR",
-    "SE",
-    "IT",
-    "DD",
-    "RU",
-    "PL",
-    "HU",
-    "YU",
-    "BG",
-  ]),
-  // The 2019 seed array covers only US/UK/JP/DE/IE/BR/CN/NG, so every other
-  // country with a defense seat misses here. Deliberate — the same deferral as
-  // 1991 (GH #3038) — and without this key each miss takes the "genuinely
-  // unexpected" branch and warns once per process per country.
-  "2019-default": new Set<CountryId>([
-    "RU",
-    // Union republics: era-gated to 1953/1979 like the satellites, so a 1991 or
-    // 2019 world seeds no republican budget for them by design.
-    "UKR",
-    "BLR",
-    "BAL",
-    "PL",
-    "HU",
-    "RO",
-    "BG",
-    "FR",
-    "IT",
-    "ES",
-    "SE",
-    "TR",
-    "GR",
-    "AT",
-    "FI",
-  ]),
-};
-
 /** Per-process dedup so the unexpected-miss warning fires once, not every turn. */
 const warnedUnexpectedMisses = new Set<string>();
 
@@ -97,25 +37,15 @@ export async function ensureFederalBudget(
     (b) => b.countryId === countryId
   );
   if (!defaultBudget) {
-    const isKnownDeferred = KNOWN_UNSEEDED_BUDGET_COUNTRIES[preset]?.has(countryId) ?? false;
-    if (isKnownDeferred) {
-      // Expected, deferred gap (GH #3038). Keep it informative but quiet — debug
-      // level so it never reaches warn/error log sinks and stops spamming.
-      console.debug(
-        `[ensureFederalBudget] no default budget seed for ${countryId} under preset "${preset}" — ` +
-          `known deferred (national budgets flagged off on 1991 worlds; see GH #3038); skipping self-heal`
+    // Preset-aware central-bank seeding (#2073) keeps known currency-only
+    // countries out of this path. A miss here is therefore always unexpected.
+    const dedupKey = `${preset}:${countryId}`;
+    if (!warnedUnexpectedMisses.has(dedupKey)) {
+      warnedUnexpectedMisses.add(dedupKey);
+      console.warn(
+        `[ensureFederalBudget] no default budget seed for ${countryId} under preset "${preset}"; ` +
+          `cannot self-heal (unexpected; see #2073 monetary coverage)`
       );
-    } else {
-      // Genuinely unexpected missing seed — still warn, but once per process so
-      // it doesn't flood the logs every turn.
-      const dedupKey = `${preset}:${countryId}`;
-      if (!warnedUnexpectedMisses.has(dedupKey)) {
-        warnedUnexpectedMisses.add(dedupKey);
-        console.warn(
-          `[ensureFederalBudget] no default budget seed for ${countryId} under preset "${preset}" — ` +
-            `cannot self-heal (unexpected; not in the known-deferred set)`
-        );
-      }
     }
     return null;
   }
@@ -146,16 +76,16 @@ export async function findCountriesMissingFederalBudget(db: Db): Promise<string[
     .collection("centralBanks")
     .find({}, { projection: { countryId: 1 } })
     .toArray();
-  const missing: string[] = [];
-  for (const bank of banks) {
-    const countryId = bank.countryId as CountryId;
-    const budgetId = getNationalBudgetId(countryId);
-    const exists = await db
-      .collection<FederalBudget>("federalBudget")
-      .countDocuments({ _id: budgetId }, { limit: 1 });
-    if (!exists) missing.push(countryId);
-  }
-  return missing;
+  if (banks.length === 0) return [];
+  const budgetIds = banks.map((bank) => getNationalBudgetId(bank.countryId as CountryId));
+  const budgets = await db
+    .collection<FederalBudget>("federalBudget")
+    .find({ _id: { $in: budgetIds } }, { projection: { _id: 1 } })
+    .toArray();
+  const present = new Set(budgets.map((budget) => String(budget._id)));
+  return banks
+    .filter((_, index) => !present.has(budgetIds[index]))
+    .map((bank) => bank.countryId as string);
 }
 
 /**

@@ -53,7 +53,7 @@ import { LIFE_EXPECTANCY_MID, PREVENTABLE_MORTALITY_MID } from "@/lib/demographi
 //
 // KNOWN LIMITATION: this is a single GLOBAL constant shared across all
 // countries, but per-capita costs in non-US per-country legislation seed
-// files (e.g. src/lib/seeds/jp/jpLegislationTypes.ts) are in LOCAL CURRENCY
+// files (e.g. src/lib/countries/jp/data/jpLegislationTypes.ts) are in LOCAL CURRENCY
 // UNITS with no USD normalization -- a half-sat tuned to USD-scale ranges may
 // under/over-saturate other countries' healthcare channel. Out of scope for
 // this pass; flag for a follow-up per-country/currency-normalized constant.
