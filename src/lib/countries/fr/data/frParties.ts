@@ -1,4 +1,5 @@
 import type { PartySeed } from "@/lib/seeds/reference/politicalParties";
+import { PARTY_ROSTERS_2027 } from "@/lib/seeds/partyRosters2027";
 
 /**
  * France default political parties.
@@ -13,6 +14,7 @@ import type { PartySeed } from "@/lib/seeds/reference/politicalParties";
  * Positions on -5..+5. Each entry is gated via `validForPresets`.
  */
 export const frParties: PartySeed[] = [
+  ...(PARTY_ROSTERS_2027.FR ?? []),
   // ─── 1953 Fourth Republic ──────────────────────────────────────────────
   {
     seedOrder: 10,
@@ -151,7 +153,7 @@ export const frParties: PartySeed[] = [
     socialPosition: -1,
     memberCount: 0,
     isDefault: true,
-    validForPresets: ["1979-default", "1991-default"],
+    validForPresets: ["1979-default", "1991-default", "2027-default"],
     regimeStatus: "approved",
     treasury: 700_000,
     nationalTaxRate: 0,
@@ -173,7 +175,7 @@ export const frParties: PartySeed[] = [
     memberCount: 0,
     isDefault: true,
     // PCF continuous from Fourth → Fifth Republic; also valid in 1953/1991.
-    validForPresets: ["1953-default", "1979-default", "1991-default"],
+    validForPresets: ["1953-default", "1979-default", "1991-default", "2027-default"],
     regimeStatus: "approved",
     treasury: 600_000,
     nationalTaxRate: 0,
