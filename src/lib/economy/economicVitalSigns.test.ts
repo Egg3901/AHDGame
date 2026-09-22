@@ -356,6 +356,17 @@ describe("computeEconomicVitalSigns", () => {
         turn: 100,
         year: 1955,
         timestamp: new Date(),
+        health: {
+          severity: "ok",
+          warningCount: 0,
+          errorCount: 0,
+          processingWarningCount: 0,
+          processingErrorCount: 0,
+          integrityWarningCount: 0,
+          integrityErrorCount: 0,
+          integrityChecked: false,
+          qualification: "unverified",
+        },
         turnProcessing: {
           durationMs: 1,
           success: true,

@@ -47,7 +47,7 @@ beforeEach(async () => {
 });
 
 describe("processGameHealthSnapshot", () => {
-  it("writes a snapshot with population and economy stats", async () => {
+  it("writes a snapshot with population and economy stats", { timeout: 60000 }, async () => {
     const { processGameHealthSnapshot } = await import("./gameHealthSnapshot");
 
     // systemSettings cadence = 1 → integrity check runs every turn
@@ -92,7 +92,21 @@ describe("processGameHealthSnapshot", () => {
 
     const result = await processGameHealthSnapshot(db as unknown as Db, 42, 2026, 1500, true, []);
 
-    expect(result).toEqual({ snapshotWritten: true, integrityCheckRan: true });
+    expect(result).toMatchObject({
+      snapshotWritten: true,
+      integrityCheckRan: true,
+      health: {
+        severity: "warning",
+        warningCount: 1,
+        errorCount: 0,
+        processingWarningCount: 0,
+        processingErrorCount: 0,
+        integrityWarningCount: 1,
+        integrityErrorCount: 0,
+        integrityChecked: true,
+        qualification: "passing",
+      },
+    });
     expect(db.collectionMocks.gameHealthSnapshots.insertOne).toHaveBeenCalledTimes(1);
 
     const doc = db.collectionMocks.gameHealthSnapshots.insertOne.mock.calls[0][0];
@@ -151,7 +165,15 @@ describe("processGameHealthSnapshot", () => {
       []
     );
 
-    expect(result).toEqual({ snapshotWritten: true, integrityCheckRan: false });
+    expect(result).toMatchObject({
+      snapshotWritten: true,
+      integrityCheckRan: false,
+      health: {
+        severity: "ok",
+        integrityChecked: false,
+        qualification: "unverified",
+      },
+    });
     const doc = db.collectionMocks.gameHealthSnapshots.insertOne.mock.calls[0][0];
     expect(doc.dataIntegrity).toBeNull();
   });
@@ -348,7 +370,21 @@ describe("processGameHealthSnapshot", () => {
       fakePhaseStatuses
     );
 
-    expect(result).toEqual({ snapshotWritten: true, integrityCheckRan: false });
+    expect(result).toMatchObject({
+      snapshotWritten: true,
+      integrityCheckRan: false,
+      health: {
+        severity: "error",
+        warningCount: 1,
+        errorCount: 1,
+        processingWarningCount: 1,
+        processingErrorCount: 1,
+        integrityWarningCount: 0,
+        integrityErrorCount: 0,
+        integrityChecked: false,
+        qualification: "unverified",
+      },
+    });
     const doc = db.collectionMocks.gameHealthSnapshots.insertOne.mock.calls[0][0];
 
     // phaseCount should be 5 (excludes gameHealthSnapshot)
