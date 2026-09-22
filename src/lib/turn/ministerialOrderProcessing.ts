@@ -245,29 +245,41 @@ export async function processMinisterialOrders(currentTurn: number): Promise<{
   }
 
   // 4. Fetch and apply cabinet settings effects (all countries)
-  const allSettings = await settingsCol
-    .find({})
-    .project<
-      Pick<
-        CabinetSetting,
-        | "_id"
-        | "countryId"
-        | "positionId"
-        | "tierSetting"
-        | "tierSettings"
-        | "targetRegionId"
-        | "advocacyActive"
-      >
-    >({
-      _id: 1,
-      countryId: 1,
-      positionId: 1,
-      tierSetting: 1,
-      tierSettings: 1,
-      targetRegionId: 1,
-      advocacyActive: 1,
-    })
-    .toArray();
+  const [allSettings, stateRows] = await Promise.all([
+    settingsCol
+      .find({})
+      .project<
+        Pick<
+          CabinetSetting,
+          | "_id"
+          | "countryId"
+          | "positionId"
+          | "tierSetting"
+          | "tierSettings"
+          | "targetRegionId"
+          | "advocacyActive"
+        >
+      >({
+        _id: 1,
+        countryId: 1,
+        positionId: 1,
+        tierSetting: 1,
+        tierSettings: 1,
+        targetRegionId: 1,
+        advocacyActive: 1,
+      })
+      .toArray(),
+    db
+      .collection<{ _id: string; countryId: string }>("states")
+      .find({}, { projection: { _id: 1, countryId: 1 } })
+      .toArray(),
+  ]);
+  const stateIdsByCountry = new Map<string, string[]>();
+  for (const state of stateRows) {
+    const ids = stateIdsByCountry.get(state.countryId) ?? [];
+    ids.push(state._id);
+    stateIdsByCountry.set(state.countryId, ids);
+  }
   let settingsApplied = 0;
 
   for (const setting of allSettings) {
@@ -325,19 +337,14 @@ export async function processMinisterialOrders(currentTurn: number): Promise<{
       }
       // Non-target effects (e.g., policing zero-sum)
       if (mechanics.regionalTarget.nonTargetEffects) {
-        const countryStates = await db
-          .collection("states")
-          .find({ countryId: setting.countryId })
-          .project({ _id: 1 })
-          .toArray();
-        for (const state of countryStates) {
-          if (state._id === rid) continue;
-          if (!bucket.regional[state._id]) bucket.regional[state._id] = {};
+        for (const stateId of stateIdsByCountry.get(setting.countryId) ?? []) {
+          if (stateId === rid) continue;
+          if (!bucket.regional[stateId]) bucket.regional[stateId] = {};
           for (const [metric, modifier] of Object.entries(
             mechanics.regionalTarget.nonTargetEffects
           )) {
             const path = resolveMetricPath(metric, positionMetrics);
-            bucket.regional[state._id][path] = (bucket.regional[state._id][path] ?? 0) + modifier;
+            bucket.regional[stateId][path] = (bucket.regional[stateId][path] ?? 0) + modifier;
           }
         }
       }
@@ -545,9 +552,7 @@ export async function processMinisterialOrders(currentTurn: number): Promise<{
 
   for (const [countryId, sourceBuckets] of Object.entries(effectsByCountry)) {
     const bucket = mergedBucket(sourceBuckets);
-    const stateIds = (
-      await db.collection("states").find({ countryId }).project({ _id: 1 }).toArray()
-    ).map((s) => s._id);
+    const stateIds = stateIdsByCountry.get(countryId) ?? [];
 
     for (const stateId of stateIds) {
       const combinedEffects: Record<string, number> = { ...bucket.national };

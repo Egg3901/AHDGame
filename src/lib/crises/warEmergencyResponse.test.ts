@@ -58,7 +58,7 @@ describe("war emergency crisis responses", () => {
     ).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ sectorType: "retail", pct: -8 }),
-        expect.objectContaining({ sectorType: "entertainment", pct: -10 }),
+        expect.objectContaining({ sectorType: "media_entertainment", pct: -10 }),
         expect.objectContaining({ sectorType: "manufacturing", pct: 8 }),
         expect.objectContaining({ sectorType: "defense", pct: 10 }),
       ])
@@ -102,7 +102,7 @@ describe("war emergency crisis responses", () => {
     expect(shifts).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ sectorType: "retail", pct: -20 }),
-        expect.objectContaining({ sectorType: "entertainment", pct: -12 }),
+        expect.objectContaining({ sectorType: "media_entertainment", pct: -12 }),
         expect.objectContaining({ sectorType: "construction", pct: 20 }),
         expect.objectContaining({ sectorType: "manufacturing", pct: 20 }),
         expect.objectContaining({ sectorType: "defense", pct: 20 }),

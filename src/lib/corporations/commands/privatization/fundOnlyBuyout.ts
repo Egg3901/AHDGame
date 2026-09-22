@@ -282,6 +282,10 @@ export async function executeFundOnlyBuyout(
         privatizationCooldownUntilTurn: "",
         superShareMultiplier: "",
         superSharesAdoptedAtTurn: "",
+        // Approved-but-unissued public float is void once the corp leaves the
+        // public market; the paced placement loop skips private corps, so a
+        // surviving flag would block future share proposals forever.
+        pendingShareIssuance: "",
       },
     }
   );

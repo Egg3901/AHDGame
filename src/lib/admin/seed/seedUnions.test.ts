@@ -50,11 +50,11 @@ describe("seedUnions", () => {
 
     const inserted = await seedUnions(db, (msg) => logs.push(msg), "2019-default", false);
 
-    expect(inserted).toBe(34); // 2 countries × 17 sector types
-    // All 34 in a single round trip, not 34 of them.
+    expect(inserted).toBe(32); // 2 countries × 16 sector types
+    // All 32 in a single round trip, not 32 of them.
     expect(bulkWrite).toHaveBeenCalledTimes(1);
     const ops = bulkWrite.mock.calls[0][0];
-    expect(ops).toHaveLength(34);
+    expect(ops).toHaveLength(32);
     expect(bulkWrite.mock.calls[0][1]).toEqual({ ordered: true });
     const { filter, update } = ops[0].updateOne;
     expect(filter).toMatchObject({ foundedByCharacterId: null });

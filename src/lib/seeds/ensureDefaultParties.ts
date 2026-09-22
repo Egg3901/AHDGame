@@ -77,8 +77,20 @@ export async function prunePresetMismatchedDefaultParties(
   seeds: PartySeed[],
   preset: string
 ): Promise<number> {
+  // A party name can be represented by more than one era seed. Do not delete
+  // the persisted party when another seed with the same identity is active.
+  const activeKeys = new Set(
+    seeds
+      .filter((seed) => isPartyValidForPreset(seed, preset))
+      .map((seed) => `${seed.countryId}:${seed.name}`)
+  );
   const mismatched = seeds
-    .filter((seed) => seed.validForPresets && !seed.validForPresets.includes(preset))
+    .filter(
+      (seed) =>
+        seed.validForPresets &&
+        !seed.validForPresets.includes(preset) &&
+        !activeKeys.has(`${seed.countryId}:${seed.name}`)
+    )
     .map((seed) => ({ countryId: seed.countryId, name: seed.name }));
   if (mismatched.length === 0) return 0;
   const result = await db.collection<PoliticalParty>("politicalParties").deleteMany({

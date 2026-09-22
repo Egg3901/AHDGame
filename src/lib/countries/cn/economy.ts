@@ -51,9 +51,8 @@ const sectorWeightsBase = {
   agriculture: 3,
   telecommunications: 3,
   automobiles: 2,
-  media: 1,
+  media_entertainment: 2,
   defense: 1,
-  entertainment: 1,
 };
 const repEcon = {
   gdp: 126000000000000,
@@ -123,9 +122,8 @@ export const CN_ECONOMY: CountryEconomy = {
         real_estate: 1,
         healthcare: 1,
         telecommunications: 0,
-        media: 0,
+        media_entertainment: 0,
         automobiles: 0,
-        entertainment: 0,
         technology: 0,
       },
       "1979": {
@@ -144,8 +142,7 @@ export const CN_ECONOMY: CountryEconomy = {
         financial: 0,
         real_estate: 0,
         automobiles: 0,
-        media: 0,
-        entertainment: 0,
+        media_entertainment: 0,
       },
       "1991": {
         manufacturing: 28,
@@ -163,8 +160,7 @@ export const CN_ECONOMY: CountryEconomy = {
         automobiles: 1,
         telecommunications: 1,
         technology: 1,
-        media: 1,
-        entertainment: 1,
+        media_entertainment: 2,
       },
     },
   },

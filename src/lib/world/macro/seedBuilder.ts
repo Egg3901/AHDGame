@@ -1,4 +1,5 @@
 import type { CorporationType } from "@/lib/constants/corporations";
+import { canonicalizeSectorWeightMap } from "@/lib/corporations/mediaConsolidation/rules";
 import type { ExtractableResource } from "@/lib/constants/commodities";
 import type { WorldEntityId } from "@/lib/world/worldEntityManifest";
 import { computeMacroContribution } from "./kernel";
@@ -43,7 +44,11 @@ const REQUIRED_SCALAR_FIELDS = [
  */
 function demandRatio(sectorType: CorporationType, economicSystem: MacroEconomicSystem): number {
   if (economicSystem === "planned") {
-    if (sectorType === "retail" || sectorType === "healthcare" || sectorType === "entertainment") {
+    if (
+      sectorType === "retail" ||
+      sectorType === "healthcare" ||
+      sectorType === "media_entertainment"
+    ) {
       return 1.25;
     }
     if (
@@ -70,16 +75,19 @@ export function buildSectorsFromSpec(
   spec: Pick<MacroCountrySeedSpec, "annualGdpGameUnits" | "sectorWeights" | "economicSystem">
 ): Partial<Record<CorporationType, MacroSectorState>> {
   const perTurnGdp = spec.annualGdpGameUnits / MACRO_TURNS_PER_YEAR;
-  const weightSum = Object.values(spec.sectorWeights).reduce((a, b) => a + (b ?? 0), 0);
+  // Legacy sources may still carry `media` / `entertainment` weights; fold
+  // them into `media_entertainment` before persistence so nothing downstream
+  // ever sees the retired keys.
+  const sectorWeights = canonicalizeSectorWeightMap(spec.sectorWeights) as Partial<
+    Record<CorporationType, number>
+  >;
+  const weightSum = Object.values(sectorWeights).reduce((a, b) => a + (b ?? 0), 0);
   if (weightSum <= 0) {
     throw new Error("Macro seed sector weights must sum to a positive total.");
   }
 
   const sectors: Partial<Record<CorporationType, MacroSectorState>> = {};
-  for (const [sectorType, weight] of Object.entries(spec.sectorWeights) as [
-    CorporationType,
-    number,
-  ][]) {
+  for (const [sectorType, weight] of Object.entries(sectorWeights) as [CorporationType, number][]) {
     if (weight <= 0) continue;
     const capacity = (perTurnGdp * weight) / weightSum;
     const ratio = demandRatio(sectorType, spec.economicSystem);

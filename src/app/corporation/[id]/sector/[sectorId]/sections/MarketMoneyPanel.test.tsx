@@ -97,7 +97,7 @@ describe("signed cost lines (ticket 1122)", () => {
     render(
       <MarketMoneyPanel
         plants={newsroom}
-        sectorType="media"
+        sectorType="media_entertainment"
         financials={null}
         corporation={{ _id: "corp-1", name: "Lockheed Commerce" }}
       />

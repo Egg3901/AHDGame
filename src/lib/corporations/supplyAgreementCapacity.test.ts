@@ -94,10 +94,17 @@ describe("computeSupplierCommodityCapacityUnits — parity with the production s
         isNatcorp: false,
         productionPolicyLevel: 0,
       }) ?? 0;
-    const rates = getEffectiveStrategyRates("media", "standard", null, null, 10);
+    const rates = getEffectiveStrategyRates("media_entertainment", "standard", null, null, 10);
 
     const units = computeSupplierCommodityCapacityUnits({
-      sectors: [{ sectorType: "media", capitalStock, productionPolicyLevel: 0, countryId: "US" }],
+      sectors: [
+        {
+          sectorType: "media_entertainment",
+          capitalStock,
+          productionPolicyLevel: 0,
+          countryId: "US",
+        },
+      ],
       commodity: "advertising",
       isNatcorp: false,
       turn: 10,
@@ -119,11 +126,16 @@ describe("computeSupplierCommodityCapacityUnits — parity with the production s
         isNatcorp: false,
         productionPolicyLevel: 0,
       }) ?? 0;
-    const rates = getEffectiveStrategyRates("media", "standard", null, null, 10);
-    const remapped = applyPlannedEconomyOutputMix("media", rates.supply, true);
+    const rates = getEffectiveStrategyRates("media_entertainment", "standard", null, null, 10);
+    const remapped = applyPlannedEconomyOutputMix("media_entertainment", rates.supply, true);
     const args = {
       sectors: [
-        { sectorType: "media" as const, capitalStock, productionPolicyLevel: 0, countryId: "RU" },
+        {
+          sectorType: "media_entertainment" as const,
+          capitalStock,
+          productionPolicyLevel: 0,
+          countryId: "RU",
+        },
       ],
       isNatcorp: false,
       turn: 10,

@@ -1,4 +1,5 @@
 import type { PartySeed } from "@/lib/seeds/reference/politicalParties";
+import { PARTY_ROSTERS_2027 } from "@/lib/seeds/partyRosters2027";
 
 /**
  * Turkey default political parties.
@@ -14,6 +15,7 @@ import type { PartySeed } from "@/lib/seeds/reference/politicalParties";
  * Positions -5..+5. Each entry is gated via `validForPresets`.
  */
 export const trParties: PartySeed[] = [
+  ...(PARTY_ROSTERS_2027.TR ?? []),
   // ─── 1953 DP era ───────────────────────────────────────────────────────
   {
     seedOrder: 10,
@@ -69,7 +71,7 @@ export const trParties: PartySeed[] = [
     memberCount: 0,
     isDefault: true,
     // CHP continuous from single-party era through multiparty republic.
-    validForPresets: ["1953-default", "1979-default"],
+    validForPresets: ["1953-default", "1979-default", "2027-default"],
     regimeStatus: "approved",
     treasury: 750_000,
     nationalTaxRate: 0,
@@ -111,7 +113,7 @@ export const trParties: PartySeed[] = [
     socialPosition: 4,
     memberCount: 0,
     isDefault: true,
-    validForPresets: ["1979-default"],
+    validForPresets: ["1979-default", "2027-default"],
     regimeStatus: "approved",
     treasury: 400_000,
     nationalTaxRate: 0,

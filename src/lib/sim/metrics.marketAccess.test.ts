@@ -2,6 +2,60 @@ import { describe, expect, it } from "vitest";
 import type { EconomicVitalSigns } from "@/lib/db/types/economicVitalSigns";
 import { marketAccessMetricsFromSnapshot } from "./metrics";
 
+const metric = (n: number) => ({ value: n, observations: 1, basis: "test" });
+
+/**
+ * The smallest snapshot `marketAccessMetricsFromSnapshot` reads without
+ * optional chaining. New tests override only the sections under test, so a
+ * partial literal never throws on an unrelated `goods.pooledFillRate` read.
+ */
+function minimalSnapshot(): Record<string, unknown> {
+  return {
+    goods: { pooledFillRate: metric(0.6), countryScopedFillRate: metric(0.5) },
+    trade: {
+      intentFulfillmentRate: metric(0.4),
+      localShare: metric(0.7),
+      interstateShare: metric(0.2),
+      importShare: metric(0.1),
+      toleranceBoundShareOfUnmet: metric(0.8),
+      capacityBoundShareOfUnmet: metric(0.2),
+      shortageResponsiveShareOfFulfillment: metric(0.15),
+    },
+    production: { physicalSellThrough: metric(0.9), labourStaffingRate: metric(0.55) },
+    firms: { marketCapHhi: metric(2500) },
+    competition: {
+      medianOwnershipAdjustedSellerHhi: metric(3000),
+      medianOwnershipAdjustedBuyerHhi: metric(2000),
+      highConcentrationLowFillShare: metric(0.4),
+    },
+    securities: {
+      activeTradedListingShare: metric(0.3),
+      noHolderBondShare: metric(0.6),
+      bondSubscriptionRate: metric(0.4),
+      twoSidedListingShare: metric(0.2),
+      medianQuotedSpreadPct: metric(5),
+      depthToMarketCap: metric(0.01),
+      medianFilledOrderExecutionHours: metric(8),
+      medianAmihudIlliquidity48: metric(2),
+    },
+    households: { wealthGini: metric(0.9) },
+    money: {
+      medianAnnualizedM2GrowthPct: metric(8),
+      transactionalMoneyShare: metric(0.3),
+      externalBroadMoneyShare: metric(0.4),
+      activeModeledBalanceShare48: metric(0.25),
+      modeledGrossVelocity48: metric(0.75),
+    },
+    measurement: { confidence: "high", reasons: [] },
+    reconciliation: { status: "green" },
+    marketFormation: {
+      emptyShare: 0.5,
+      facilityReadyEmptyShare: 0.8,
+      entryFunnel: { corporationsObserved: 10, entered: 2, explainedOutcomeShare: 1 },
+    },
+  };
+}
+
 describe("marketAccessMetricsFromSnapshot", () => {
   it("returns unavailable values when an older sandbox has no vital-sign snapshot", () => {
     expect(marketAccessMetricsFromSnapshot(null)).toMatchObject({
@@ -11,6 +65,12 @@ describe("marketAccessMetricsFromSnapshot", () => {
       householdSavingsVelocity48: null,
       savingsShareOfHouseholdBalances: null,
       reconciliationStatus: "unavailable",
+      stockVsFlowTotalDivergent: null,
+      stockVsFlowTotalAbsDivergence: null,
+      stockVsFlowTopKinds: null,
+      residentDemandValueAnchor: null,
+      localProducerDemandValueAnchor: null,
+      localAbsorptionShare: null,
     });
   });
 
@@ -125,6 +185,12 @@ describe("marketAccessMetricsFromSnapshot", () => {
       ringFencedShareOfLiquid: 0.4,
       measurementConfidence: "medium",
       reconciliationStatus: "amber",
+      stockVsFlowTotalDivergent: null,
+      stockVsFlowTotalAbsDivergence: null,
+      stockVsFlowTopKinds: null,
+      residentDemandValueAnchor: null,
+      localProducerDemandValueAnchor: null,
+      localAbsorptionShare: null,
     });
   });
 
@@ -186,5 +252,49 @@ describe("marketAccessMetricsFromSnapshot", () => {
     } as unknown as EconomicVitalSigns;
 
     expect(marketAccessMetricsFromSnapshot(snapshot).corporateMedianPriceToParSpreadPct).toBeNull();
+  });
+
+  it("surfaces the stock-vs-flow inventory and resident/local-producer demand split", () => {
+    const snapshot = {
+      ...minimalSnapshot(),
+      reconciliation: {
+        status: "amber",
+        stockVsFlowByKind: [
+          { kind: "character", divergentCount: 3, absDivergence: 100, uninstrumentedCount: 1 },
+          { kind: "corporation", divergentCount: 2, absDivergence: 400, uninstrumentedCount: 0 },
+        ],
+      },
+      marketFormation: {
+        coverageByState: [
+          { stateId: "A", residentDemandValue: 100, localProducerDemandValue: 50 },
+          { stateId: "B", residentDemandValue: 200, localProducerDemandValue: 100 },
+        ],
+      },
+    } as unknown as EconomicVitalSigns;
+
+    const metrics = marketAccessMetricsFromSnapshot(snapshot);
+    expect(metrics.stockVsFlowTotalDivergent).toBe(5);
+    expect(metrics.stockVsFlowTotalAbsDivergence).toBe(500);
+    expect(metrics.stockVsFlowTopKinds).toEqual([
+      { kind: "corporation", divergentCount: 2, absDivergence: 400, uninstrumentedCount: 0 },
+      { kind: "character", divergentCount: 3, absDivergence: 100, uninstrumentedCount: 1 },
+    ]);
+    expect(metrics.residentDemandValueAnchor).toBe(300);
+    expect(metrics.localProducerDemandValueAnchor).toBe(150);
+    expect(metrics.localAbsorptionShare).toBe(0.5);
+  });
+
+  it("reads a skipped stock-vs-flow check and absent coverage as unknown, not zero", () => {
+    const snapshot = {
+      ...minimalSnapshot(),
+      reconciliation: { status: "green", stockVsFlowByKind: null },
+      marketFormation: { coverageByState: [] },
+    } as unknown as EconomicVitalSigns;
+
+    const metrics = marketAccessMetricsFromSnapshot(snapshot);
+    expect(metrics.stockVsFlowTotalDivergent).toBeNull();
+    expect(metrics.stockVsFlowTopKinds).toBeNull();
+    expect(metrics.residentDemandValueAnchor).toBeNull();
+    expect(metrics.localAbsorptionShare).toBeNull();
   });
 });

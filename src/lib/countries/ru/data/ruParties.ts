@@ -1,4 +1,5 @@
 import type { PartySeed } from "@/lib/seeds/reference/politicalParties";
+import { PARTY_ROSTERS_2027 } from "@/lib/seeds/partyRosters2027";
 
 /**
  * USSR default political parties (1953 / 1979 presets).
@@ -14,6 +15,7 @@ import type { PartySeed } from "@/lib/seeds/reference/politicalParties";
  * both Cold-War eras and dissolved in 1991. Positions on the -5..+5 scale.
  */
 export const ruParties: PartySeed[] = [
+  ...(PARTY_ROSTERS_2027.RU ?? []),
   {
     seedOrder: 1,
     countryId: "RU",

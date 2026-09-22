@@ -199,40 +199,60 @@ export function detectRapidRepeat(
 }
 
 // ── Detector: circular_wire ──────────────────────────────────────────────
-// A -> B -> A within the window: A debits to B, and B credits back to A.
-// Same shape as suspectScan.ts's round_trip detector, ported onto the audit
-// spine's subject/counterparty (money rows carry these regardless of
-// whether the underlying financialTxLog row does).
+// A -> B -> A across DISTINCT transaction events: money flows from A to B in
+// one event and returns from B to A in a later one.
+//
+// Every economic transfer is double-emitted onto the audit spine — one debit
+// leg and one credit leg with mirrored subject/counterparty (settlement
+// batches via emitTxBulk share one action/ts; wires via two emitTx calls as
+// wire.send + wire.receive). Matching `an A debit to B` with `any positive B
+// row against A` therefore matches the two legs of a SINGLE transfer, so
+// every ordinary settlement and wire flagged itself (#2078).
+//
+// Fix: normalize each row to a directed money-flow edge first — a debit row
+// points subject → counterparty, a credit row points counterparty → subject
+// (the credit leg of a transfer flows the same way as its debit leg) — then
+// require the return edge to come from a different transaction event
+// (different turn or timestamp) than the outbound edge. Opposite edges
+// inside one event (bilateral netting within a batch) stay quiet.
 export function detectCircularWire(rows: AnomalyAuditRow[]): DetectorResult {
   const flaggedIds = new Set<string>();
   const moneyRows = rows.filter(
     (r) => r.category === "money" && r.subjectId && r.counterpartyId && typeof r.amount === "number"
   );
 
-  const docsBySubject = new Map<string, AnomalyAuditRow[]>();
-  const debitsBySubject = new Map<string, Set<string>>();
+  interface DirectedFlows {
+    from: string;
+    to: string;
+    stamps: Set<string>;
+    ids: Set<string>;
+  }
+  const byDirected = new Map<string, DirectedFlows>();
   for (const row of moneyRows) {
-    const sid = row.subjectId!;
-    const arr = docsBySubject.get(sid) ?? [];
-    arr.push(row);
-    docsBySubject.set(sid, arr);
-    if ((row.amount ?? 0) < 0) {
-      const set = debitsBySubject.get(sid) ?? new Set<string>();
-      set.add(row.counterpartyId!);
-      debitsBySubject.set(sid, set);
+    const amount = row.amount ?? 0;
+    if (amount === 0) continue;
+    const from = amount < 0 ? row.subjectId! : row.counterpartyId!;
+    const to = amount < 0 ? row.counterpartyId! : row.subjectId!;
+    const key = `${from}→${to}`;
+    let entry = byDirected.get(key);
+    if (!entry) {
+      entry = { from, to, stamps: new Set(), ids: new Set() };
+      byDirected.set(key, entry);
     }
+    entry.stamps.add(`${row.turn}|${row.ts.getTime()}`);
+    entry.ids.add(row.id);
   }
 
-  for (const [aId, bIds] of debitsBySubject) {
-    for (const bId of bIds) {
-      const bDocs = docsBySubject.get(bId) ?? [];
-      const returnCredits = bDocs.filter((d) => (d.amount ?? 0) > 0 && d.counterpartyId === aId);
-      if (returnCredits.length === 0) continue;
-      const aDebits = (docsBySubject.get(aId) ?? []).filter(
-        (d) => (d.amount ?? 0) < 0 && d.counterpartyId === bId
-      );
-      for (const d of [...aDebits, ...returnCredits]) flaggedIds.add(d.id);
-    }
+  const resolved = new Set<string>();
+  for (const [key, entry] of byDirected) {
+    if (resolved.has(key)) continue;
+    const reverse = byDirected.get(`${entry.to}→${entry.from}`);
+    resolved.add(key);
+    if (!reverse) continue;
+    resolved.add(`${entry.to}→${entry.from}`);
+    const stamps = new Set([...entry.stamps, ...reverse.stamps]);
+    if (stamps.size < 2) continue;
+    for (const id of [...entry.ids, ...reverse.ids]) flaggedIds.add(id);
   }
 
   return {
@@ -245,6 +265,29 @@ export function detectCircularWire(rows: AnomalyAuditRow[]): DetectorResult {
   };
 }
 
+/**
+ * Audit verbs for routine system settlement that is hub-shaped BY
+ * CONSTRUCTION — one coupon run pays N holders, one tax authority collects
+ * from N corps, one party collects dues from N members, one active
+ * corporation settles with N counterparties — and therefore must not count
+ * toward the generic collusion/burner-funding hub detector (#2078).
+ * Actor-driven transfers (wires, donations, trades) stay covered.
+ *
+ * Extension criterion: add a verb here only when its emitter pays or
+ * collects across many counterparties as its normal every-turn operation
+ * (see financialTxLog/emit.ts TX_TYPE_TO_AUDIT_ACTION for the verb mapping).
+ * Per-class baselining for these verbs is a separate detector, not a carve
+ * back into this one.
+ */
+export const SYSTEM_SETTLEMENT_ACTIONS: ReadonlySet<string> = new Set([
+  "bond.coupon",
+  "gov.coupon_payment",
+  "corp.tax_paid",
+  "gov.tax_revenue",
+  "party.dues_received",
+  "corp.supply_agreement",
+]);
+
 // ── Detector: wire_fanin_fanout ──────────────────────────────────────────
 // Many distinct senders into one recipient (fan-in) or one sender fanning
 // out to many distinct recipients (fan-out) within the window — the
@@ -254,7 +297,16 @@ export function detectWireFanInFanOut(
   config: Pick<AnomalyScanConfig, "fanInThreshold" | "fanOutThreshold"> = ANOMALY_SCAN_DEFAULTS
 ): DetectorResult {
   const flaggedIds = new Set<string>();
-  const moneyRows = rows.filter((r) => r.category === "money" && r.subjectId && r.counterpartyId);
+  const moneyRows: AnomalyAuditRow[] = [];
+  let excludedSettlementRows = 0;
+  for (const r of rows) {
+    if (!(r.category === "money" && r.subjectId && r.counterpartyId)) continue;
+    if (SYSTEM_SETTLEMENT_ACTIONS.has(r.action)) {
+      excludedSettlementRows++;
+      continue;
+    }
+    moneyRows.push(r);
+  }
 
   const inboundByCounterparty = new Map<string, Map<string, AnomalyAuditRow[]>>();
   const outboundBySubject = new Map<string, Map<string, AnomalyAuditRow[]>>();
@@ -301,6 +353,9 @@ export function detectWireFanInFanOut(
   if (fanOutHubs > 0) {
     parts.push(`${fanOutHubs} fan-out hub(s) (>= ${config.fanOutThreshold} distinct recipients)`);
   }
+  if (excludedSettlementRows > 0) {
+    parts.push(`${excludedSettlementRows} routine settlement row(s) excluded from hub baseline`);
+  }
 
   return {
     flaggedIds,
@@ -341,22 +396,25 @@ export function detectWashTrade(
       .sort((a, b) => a.ts.getTime() - b.ts.getTime());
     if (buys.length === 0 || sells.length === 0) continue;
 
-    let sellIndex = 0;
+    const sellFlagDeltas = new Int32Array(sells.length + 1);
+    let sellStart = 0;
+    let sellEnd = 0;
     for (const b of buys) {
-      while (
-        sellIndex < sells.length &&
-        sells[sellIndex].ts.getTime() < b.ts.getTime() - windowMs
-      ) {
-        sellIndex++;
+      const minTime = b.ts.getTime() - windowMs;
+      const maxTime = b.ts.getTime() + windowMs;
+      while (sellStart < sells.length && sells[sellStart].ts.getTime() < minTime) sellStart++;
+      if (sellEnd < sellStart) sellEnd = sellStart;
+      while (sellEnd < sells.length && sells[sellEnd].ts.getTime() <= maxTime) sellEnd++;
+      if (sellStart < sellEnd) {
+        flaggedIds.add(b.id);
+        sellFlagDeltas[sellStart]++;
+        sellFlagDeltas[sellEnd]--;
       }
-      for (let k = sellIndex; k < sells.length; k++) {
-        const deltaMs = sells[k].ts.getTime() - b.ts.getTime();
-        if (deltaMs > windowMs) break;
-        if (Math.abs(deltaMs) <= windowMs) {
-          flaggedIds.add(b.id);
-          flaggedIds.add(sells[k].id);
-        }
-      }
+    }
+    let activeRanges = 0;
+    for (let index = 0; index < sells.length; index++) {
+      activeRanges += sellFlagDeltas[index];
+      if (activeRanges > 0) flaggedIds.add(sells[index].id);
     }
   }
 
@@ -407,19 +465,48 @@ export function detectPreElectionFundingSurge(
   let surges = 0;
   for (const group of byRecipient.values()) {
     const sorted = [...group].sort((a, b) => a.ts.getTime() - b.ts.getTime());
+    const payerCounts = new Map<string, number>();
+    const flagDeltas = new Int32Array(sorted.length + 1);
     let start = 0;
+    let distinctPayers = 0;
+    let total = 0;
     for (let end = 0; end < sorted.length; end++) {
-      while (sorted[end].ts.getTime() - sorted[start].ts.getTime() > windowMs) start++;
-      const windowRows = sorted.slice(start, end + 1);
-      const distinctPayers = new Set(windowRows.map((r) => r.subjectId));
-      const total = windowRows.reduce((sum, r) => sum + Math.abs(r.amount ?? 0), 0);
+      const addedPayer = sorted[end].subjectId!;
+      const addedCount = payerCounts.get(addedPayer) ?? 0;
+      if (addedCount === 0) distinctPayers++;
+      payerCounts.set(addedPayer, addedCount + 1);
+      total += Math.abs(sorted[end].amount ?? 0);
+
+      while (sorted[end].ts.getTime() - sorted[start].ts.getTime() > windowMs) {
+        const removed = sorted[start];
+        const removedPayer = removed.subjectId!;
+        const remainingCount = (payerCounts.get(removedPayer) ?? 1) - 1;
+        if (remainingCount === 0) {
+          payerCounts.delete(removedPayer);
+          distinctPayers--;
+        } else {
+          payerCounts.set(removedPayer, remainingCount);
+        }
+        total -= Math.abs(removed.amount ?? 0);
+        start++;
+      }
       if (
-        distinctPayers.size >= opts.preElectionMinDistinctPayers &&
+        distinctPayers >= opts.preElectionMinDistinctPayers &&
         total >= opts.preElectionMinTotalAmount
       ) {
         surges++;
-        for (const r of windowRows) flaggedIds.add(r.id);
+        // Mark the qualifying range and materialize ids once after the scan.
+        // Repeated overlapping surge windows used to slice, allocate a Set,
+        // reduce, and revisit every row for every endpoint, making this O(n²)
+        // for large party-funding groups.
+        flagDeltas[start]++;
+        flagDeltas[end + 1]--;
       }
+    }
+    let activeRanges = 0;
+    for (let index = 0; index < sorted.length; index++) {
+      activeRanges += flagDeltas[index];
+      if (activeRanges > 0) flaggedIds.add(sorted[index].id);
     }
   }
 

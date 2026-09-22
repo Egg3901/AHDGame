@@ -3,7 +3,11 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import { ObjectId } from "mongodb";
 import type { Db } from "mongodb";
-import { getCountryForCurrency, distributeConversionSpread } from "./marketMaker";
+import {
+  getCountryForCurrency,
+  distributeConversionSpread,
+  distributeConversionSpreadsBatch,
+} from "./marketMaker";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 
@@ -32,6 +36,64 @@ describe("distributeConversionSpread", () => {
     await distributeConversionSpread(db as unknown as Db, 100, "USD", "USD");
     await distributeConversionSpread(db as unknown as Db, 100, "CAD", "USD"); // CAD has no CB
     expect(db.collectionMocks.centralBanks.updateOne).not.toHaveBeenCalled();
+  });
+});
+
+describe("distributeConversionSpreadsBatch", () => {
+  it("preserves per-fee rounding and emits one update per affected bank", async () => {
+    const bulkWrite = vi.fn().mockResolvedValue({});
+    const db = { collection: vi.fn(() => ({ bulkWrite })) };
+
+    await distributeConversionSpreadsBatch(db as unknown as Db, [
+      { fee: 3, fromCurrency: "GBP", toCurrency: "USD" },
+      { fee: 3, fromCurrency: "GBP", toCurrency: "USD" },
+      { fee: 100, fromCurrency: "USD", toCurrency: "JPY" },
+      { fee: 100, fromCurrency: "USD", toCurrency: "USD" },
+      { fee: Number.NaN, fromCurrency: "GBP", toCurrency: "USD" },
+    ]);
+
+    expect(bulkWrite).toHaveBeenCalledOnce();
+    expect(bulkWrite.mock.calls[0]![0]).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          updateOne: expect.objectContaining({
+            filter: { _id: "UK" },
+            update: { $inc: { forexRevenue: 2 } },
+            upsert: true,
+          }),
+        }),
+        expect.objectContaining({
+          updateOne: expect.objectContaining({
+            filter: { _id: "US" },
+            update: {
+              $inc: {
+                "spreadFeeReserveBalances.GBP": 4,
+                forexRevenue: 25,
+              },
+            },
+            upsert: true,
+          }),
+        }),
+        expect.objectContaining({
+          updateOne: expect.objectContaining({
+            filter: { _id: "JP" },
+            update: { $inc: { "spreadFeeReserveBalances.USD": 50 } },
+            upsert: true,
+          }),
+        }),
+      ])
+    );
+  });
+
+  it("does not write when every spread is invalid or same-currency", async () => {
+    const bulkWrite = vi.fn();
+    const db = { collection: vi.fn(() => ({ bulkWrite })) };
+    await distributeConversionSpreadsBatch(db as unknown as Db, [
+      { fee: 0, fromCurrency: "GBP", toCurrency: "USD" },
+      { fee: 10, fromCurrency: "USD", toCurrency: "USD" },
+      { fee: 10, fromCurrency: "CAD", toCurrency: "USD" },
+    ]);
+    expect(bulkWrite).not.toHaveBeenCalled();
   });
 });
 

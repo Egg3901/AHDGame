@@ -98,6 +98,9 @@ describe("executeFundOnlyBuyout", () => {
     expect(setDoc.totalShares).toBe(9_990_000);
     expect(setDoc.shareholders).toHaveLength(1);
     expect(setDoc.shareholders[0].characterId).toBe(CEO_ID);
+    // #2114: approved-but-unissued float is void once private; a surviving
+    // flag would block future share proposals as "awaiting market placement".
+    expect(updateOne.mock.calls[0][1].$unset.pendingShareIssuance).toBe("");
   });
 
   it("blocks (and moves no money) when the treasury cannot cover the buyout", async () => {

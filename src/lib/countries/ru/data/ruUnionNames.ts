@@ -23,12 +23,11 @@ export const RU_UNION_NAMES_MODERN: Partial<Record<CorporationType, string>> = {
   healthcare: "Trade Union of Health Workers of Russia",
   retail: "Trade Union of Workers of Trade and Public Catering",
   logistics: "Russian Trade Union of Railwaymen and Transport Builders",
-  media: "Interregional Trade Union of Media Workers",
+  media_entertainment: "Interregional Trade Union of Culture Workers",
   chemical_industries: "Federation of Independent Trade Unions of Russia",
   technology: "Federation of Independent Trade Unions of Russia",
   financial: "Trade Union of Workers of the Banking Sector",
   telecommunications: "Federation of Independent Trade Unions of Russia",
-  entertainment: "Interregional Trade Union of Culture Workers",
   defense: "Federation of Independent Trade Unions of Russia",
   real_estate: "Building Workers' Union of Russia",
 };

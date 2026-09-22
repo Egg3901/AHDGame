@@ -294,10 +294,14 @@ export async function resolvePrivatizationVote(input: ResolveInput): Promise<Res
       // #908: a private corp is single-class — drop dual-class supershare state
       // so hasSuperShares() stops reporting 10× voting on a now-private corp
       // (the rebuilt CEO shareholder entry above already omits `superShares`).
+      // Approved-but-unissued public float is void once the corp leaves the
+      // public market; the paced placement loop skips private corps, so a
+      // surviving flag would block future share proposals forever.
       $unset: {
         privatizationCooldownUntilTurn: "",
         superShareMultiplier: "",
         superSharesAdoptedAtTurn: "",
+        pendingShareIssuance: "",
       },
     }
   );
