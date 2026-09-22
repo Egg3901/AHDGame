@@ -612,8 +612,8 @@ describe("fillPendingShareOrders", () => {
     await fillPendingShareOrders(db as unknown as Db, new Date(), 257);
 
     const historyColl = db.collectionMocks["shareTradeHistory"]!;
-    expect(historyColl.insertOne).toHaveBeenCalledTimes(1);
-    const doc = historyColl.insertOne.mock.calls[0][0];
+    expect(historyColl.insertMany).toHaveBeenCalledTimes(1);
+    const doc = historyColl.insertMany.mock.calls[0][0][0];
     expect(doc.kind).toBe("limit_fill");
     expect(doc.turn).toBe(257);
     expect(doc.shares).toBe(10);
@@ -624,8 +624,6 @@ describe("fillPendingShareOrders", () => {
 
   it("fills a fund-owned buy order: credits the fund, refunds escrow, applies treasury delta", async () => {
     const { fillPendingShareOrders } = await import("./shareOrders");
-    const { creditSharesToFund } = await import("@/lib/corporations/shareholderOps");
-    const { upsertFundHoldingShares } = await import("@/lib/indexFunds/fundQueries");
     const corpId = new ObjectId();
     const fundId = new ObjectId();
 
@@ -675,20 +673,43 @@ describe("fillPendingShareOrders", () => {
     await fillPendingShareOrders(db as unknown as Db, new Date(), 300);
 
     // Fund cap-table credited with 10 shares at the ₳ fill price (500).
-    expect(creditSharesToFund).toHaveBeenCalledTimes(1);
-    const credArgs = vi.mocked(creditSharesToFund).mock.calls[0];
-    expect(credArgs[1]).toEqual(corpId); // targetCorpId
-    expect(credArgs[2]).toEqual(fundId); // fundId
-    expect(credArgs[3]).toBe(10); // shares
-    expect(credArgs[4]).toBe(500); // fillPriceAnchor
-    expect(upsertFundHoldingShares).toHaveBeenCalledWith(db, fundId, corpId, 10, 500);
+    const corpsColl = db.collectionMocks["corporations"]!;
+    const capTableCall = corpsColl.bulkWrite.mock.calls.find((call) =>
+      (
+        call[0] as Array<{
+          updateOne?: { update?: { $push?: { shareholders?: { fundId?: ObjectId } } } };
+        }>
+      ).some((op) => op.updateOne?.update?.$push?.shareholders?.fundId?.equals(fundId))
+    );
+    expect(capTableCall).toBeDefined();
+    expect(capTableCall![0][0].updateOne.update.$push.shareholders).toEqual({
+      fundId,
+      shares: 10,
+      avgCostPerShare: 500,
+    });
+    const fundsColl = db.collectionMocks["indexFunds"]!;
+    const holdingCall = fundsColl.bulkWrite.mock.calls.find((call) =>
+      (
+        call[0] as Array<{
+          updateOne?: { update?: { $push?: { holdings?: { corporationId?: ObjectId } } } };
+        }>
+      ).some((op) => op.updateOne?.update?.$push?.holdings?.corporationId?.equals(corpId))
+    );
+    expect(holdingCall).toBeDefined();
+    expect(holdingCall![0][0].updateOne.update.$push.holdings).toEqual({
+      corporationId: corpId,
+      shares: 10,
+      avgCostPerShareAnchor: 500,
+      lastValueAnchor: 5000,
+    });
 
     // Unused escrow refunded to fund cashAnchor (6000 - 5000 = 1000).
-    const fundsColl = db.collectionMocks["indexFunds"]!;
-    const refundCall = fundsColl.bulkWrite.mock.calls[0][0] as Array<{
-      updateOne: { update: { $inc: { cashAnchor: number } } };
-    }>;
-    expect(refundCall[0].updateOne.update.$inc.cashAnchor).toBe(1000);
+    const refundCall = fundsColl.bulkWrite.mock.calls.find((call) =>
+      (call[0] as Array<{ updateOne?: { update?: { $inc?: { cashAnchor?: number } } } }>).some(
+        (op) => op.updateOne?.update?.$inc?.cashAnchor === 1000
+      )
+    );
+    expect(refundCall).toBeDefined();
 
     // Order marked filled.
     const ordersColl = db.collectionMocks["shareOrders"]!;
@@ -698,7 +719,6 @@ describe("fillPendingShareOrders", () => {
     expect(fillOps[0].updateOne.update.$set.status).toBe("filled");
 
     // Issuer treasury credited with the buyer payment (10 * 500 = 5000).
-    const corpsColl = db.collectionMocks["corporations"]!;
     const treasuryCall = corpsColl.bulkWrite.mock.calls.find((call) =>
       (call[0] as Array<{ updateOne?: { update?: { $inc?: { liquidCapital?: number } } } }>).some(
         (op) => op.updateOne?.update?.$inc?.liquidCapital === 5000
@@ -854,10 +874,12 @@ describe("fillPendingShareOrders", () => {
 
     // Fund cash refund = 4000 (not 40000).
     const fundsColl = db.collectionMocks["indexFunds"]!;
-    const refundCall = fundsColl.bulkWrite.mock.calls[0][0] as Array<{
-      updateOne: { update: { $inc: { cashAnchor: number } } };
-    }>;
-    expect(refundCall[0].updateOne.update.$inc.cashAnchor).toBe(4000);
+    const refundCall = fundsColl.bulkWrite.mock.calls.find((call) =>
+      (call[0] as Array<{ updateOne?: { update?: { $inc?: { cashAnchor?: number } } } }>).some(
+        (op) => op.updateOne?.update?.$inc?.cashAnchor === 4000
+      )
+    );
+    expect(refundCall).toBeDefined();
 
     // Residual escrow on the open order: local 36000, anchor 36000, sharesRemaining 60.
     const ordersColl = db.collectionMocks["shareOrders"]!;
@@ -932,10 +954,12 @@ describe("fillPendingShareOrders", () => {
     await fillPendingShareOrders(db as unknown as Db, new Date(), 300);
 
     const fundsColl = db.collectionMocks["indexFunds"]!;
-    const refundCall = fundsColl.bulkWrite.mock.calls[0][0] as Array<{
-      updateOne: { update: { $inc: { cashAnchor: number } } };
-    }>;
-    expect(refundCall[0].updateOne.update.$inc.cashAnchor).toBe(1000);
+    const refundCall = fundsColl.bulkWrite.mock.calls.find((call) =>
+      (call[0] as Array<{ updateOne?: { update?: { $inc?: { cashAnchor?: number } } } }>).some(
+        (op) => op.updateOne?.update?.$inc?.cashAnchor === 1000
+      )
+    );
+    expect(refundCall).toBeDefined();
 
     const ordersColl = db.collectionMocks["shareOrders"]!;
     const fillOps = ordersColl.bulkWrite.mock.calls[0][0] as Array<{
@@ -979,7 +1003,7 @@ describe("fillPendingShareOrders", () => {
     expect(pushOps[0].updateOne.update.$push.shareholders.avgCostPerShare).toBe(10);
 
     const historyColl = db.collectionMocks["shareTradeHistory"]!;
-    const doc = historyColl.insertOne.mock.calls[0][0];
+    const doc = historyColl.insertMany.mock.calls[0][0][0];
     expect(doc.pricePerShareAnchor).toBe(10);
   });
 });

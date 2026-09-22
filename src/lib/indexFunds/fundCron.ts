@@ -29,6 +29,7 @@ import type {
 import { isIndexFundsEnabled, INDEX_FUNDS_DISABLED_MESSAGE } from "@/lib/indexFunds/featureFlag";
 import {
   getFundById,
+  listFundsByIds,
   listActiveFunds,
   listServiceableFunds,
   updateFundNav,
@@ -1735,25 +1736,25 @@ export async function runIndexFundCron(
 
   mark("pass3b-crossFund");
   // Pass 3c: pay redemptions and snapshot after cross-fund market settles.
-  funds = (
-    await Promise.all(redemptionServiceFundIds.map((fundId) => getFundById(db, fundId)))
-  ).filter((fund): fund is IndexFund => fund !== null);
+  funds = await listFundsByIds(db, redemptionServiceFundIds);
   for (const fund of funds) {
     try {
       // `funds` was just re-read above and nothing writes between; the old
       // per-fund re-read here was a duplicate round trip.
       const refreshedFund = fund;
 
-      const paidRedemptions = await processQueuedRedemptions(
-        db,
-        refreshedFund,
-        forexEnabled,
-        currentTurn
-      );
+      const hasQueuedRedemptions = queuedUnitsByFundId.has(fund._id.toString());
+      const paidRedemptions = hasQueuedRedemptions
+        ? await processQueuedRedemptions(db, refreshedFund, forexEnabled, currentTurn)
+        : 0;
       result.redemptionsPaid += paidRedemptions;
 
       if (currentTurn > 0) {
-        const finalFund = await getFundById(db, fund._id);
+        // A fund with no queued units cannot have been mutated by the
+        // redemption processor, which is skipped above. Snapshot the fresh
+        // batch-loaded document directly; only redemption-bearing funds need
+        // a post-settlement reread.
+        const finalFund = hasQueuedRedemptions ? await getFundById(db, fund._id) : refreshedFund;
         if (finalFund) {
           const holdingValue = computeHoldingsValueAnchor(finalFund);
           await insertFundSnapshot(db, {

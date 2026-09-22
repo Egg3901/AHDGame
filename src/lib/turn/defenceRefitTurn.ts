@@ -37,9 +37,14 @@ export interface RefitResult {
  * with; topping up a legacy formation's racks does not turn it into a modern one. Upgrading a
  * unit's tier remains the paid modernisation route.
  */
-export async function applyDefenceRefit(db: Db, countryId: string): Promise<RefitResult> {
+export async function applyDefenceRefit(
+  db: Db,
+  countryId: string,
+  knownUnits?: MilitaryUnit[]
+): Promise<RefitResult> {
   const unitsCol = getMilitaryUnitsCollection(db);
-  const units = await unitsCol.find({ countryId: countryId as CountryId }).toArray();
+  const units =
+    knownUnits ?? (await unitsCol.find({ countryId: countryId as CountryId }).toArray());
   if (units.length === 0) return { unitsRefitted: 0, lotsUsed: 0 };
 
   const arsenal = await getNationalArsenal(db, countryId);

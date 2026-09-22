@@ -12,7 +12,10 @@ import { getEnergyPlantsCollection } from "@/lib/db/collections/energyPlants";
 import { getCabinetMechanics } from "@/lib/constants/cabinetMechanics";
 import { resolveMetricPath } from "@/lib/cabinet/resolveMetricPath";
 import { resolveEnergyEnvelope } from "./energyEnvelope";
-import { loadPoliticalMacroInputs } from "@/lib/politicalLegislation/politicalMacroInputs";
+import {
+  loadPoliticalMacroInputs,
+  type PoliticalMacroInputs,
+} from "@/lib/politicalLegislation/politicalMacroInputs";
 import { legacyValueFromPoliticalScore } from "@/lib/politicalMetrics/derive/legacyInversion";
 import { resolveGameYear } from "@/lib/era/era";
 import type { GameState } from "@/lib/db/types";
@@ -94,7 +97,8 @@ export async function applyEnergyEffects(
   db: Db,
   countryId: string,
   positionId: string,
-  bucket: { national: Record<string, number>; regional: Record<string, Record<string, number>> }
+  bucket: { national: Record<string, number>; regional: Record<string, Record<string, number>> },
+  knownPoliticalInputs?: PoliticalMacroInputs
 ): Promise<void> {
   if (!resolveEnergyPosition(countryId, positionId)) return;
   const mechanics = getCabinetMechanics(countryId, positionId);
@@ -121,7 +125,7 @@ export async function applyEnergyEffects(
   // come back null and silently pin `current` to 0. Which BAND each of the three
   // resolves against is decided per metric at the `current` construction below;
   // the rule is that it must match the band its target is expressed in.
-  const political = await loadPoliticalMacroInputs(db);
+  const political = knownPoliticalInputs ?? (await loadPoliticalMacroInputs(db));
   // Era-aware only while the era system is on, matching the dynamics phase: a
   // realistic 1953 grid never clears the modern band, so scoring it there reads
   // every early-Cold-War region as bottom-of-scale.

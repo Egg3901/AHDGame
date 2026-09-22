@@ -465,7 +465,10 @@ export async function processStateMetrics(
  * Process policy effects for all states
  * @param db - MongoDB database instance
  */
-export async function processStatePolicyEffects(db: Db): Promise<void> {
+export async function processStatePolicyEffects(
+  db: Db,
+  knownLegislationTypes?: readonly LegislationType[]
+): Promise<void> {
   const gameStateCollection = db.collection<GameState>("gameState");
 
   // Get game state for current turn (needed for time-based effect decay)
@@ -482,7 +485,9 @@ export async function processStatePolicyEffects(db: Db): Promise<void> {
     await Promise.all([
       db.collection<State>("states").find({}).toArray(),
       db.collection<StatePolicy>("statePolicies").find({}).toArray(),
-      db.collection<LegislationType>("legislationTypes").find({}).toArray(),
+      knownLegislationTypes
+        ? Promise.resolve(knownLegislationTypes)
+        : db.collection<LegislationType>("legislationTypes").find({}).toArray(),
       // SP5: merged two-store view — economic/population inputs live on macroMetrics.
       findMergedRegionMetricsMany(db, {}),
       db.collection<StateMetricBaseline>("stateBaselines").find({}).toArray(),

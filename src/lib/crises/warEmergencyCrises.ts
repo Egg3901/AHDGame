@@ -185,11 +185,7 @@ export const WAR_EMERGENCY_CRISIS_TEMPLATES: Record<WarEmergencyTemplateKey, Cri
       "Peace marches fill public squares as fear grows that the current war will escalate further.",
     wireStart: "Large peace marches are demanding restraint from the government.",
     wireEnd: "The immediate wave of war scare protests has passed.",
-    ambientEffect: ambientMargin(
-      "media_entertainment",
-      -4,
-      "Mass demonstrations disrupt city commerce"
-    ),
+    ambientEffect: ambientMargin("entertainment", -4, "Mass demonstrations disrupt city commerce"),
     prompt: "How will the government respond to the marches?",
     options: [
       option(

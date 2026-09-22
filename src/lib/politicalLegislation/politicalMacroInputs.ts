@@ -58,7 +58,10 @@ export interface PoliticalMacroInputs {
 }
 
 export async function loadPoliticalMacroInputs(db: Db): Promise<PoliticalMacroInputs> {
-  const docs = await db.collection<PoliticalMetricsDoc>("politicalMetrics").find({}).toArray();
+  const docs = await db
+    .collection<PoliticalMetricsDoc>("politicalMetrics")
+    .find({}, { projection: { _id: 1, values: 1 } })
+    .toArray();
   const valuesById = new Map<string, Record<PoliticalMetricId, number>>(
     docs.map((d) => [String(d._id), (d.values ?? {}) as Record<PoliticalMetricId, number>])
   );

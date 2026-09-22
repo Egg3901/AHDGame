@@ -22,11 +22,12 @@ export const BR_UNION_NAMES_MODERN: Partial<Record<CorporationType, string>> = {
   retail: "CUT Commerce Federation",
   construction: "CUT Construction Federation",
   logistics: "CUT Transport Federation",
-  media_entertainment: "CUT Culture Federation",
+  media: "CUT Communications Federation",
   chemical_industries: "CUT Chemical Workers' Federation",
   technology: "CUT Metalworkers' Federation",
   financial: "CUT Bank Workers' Federation",
   telecommunications: "CUT Communications Federation",
+  entertainment: "CUT Culture Federation",
   defense: "CUT Metalworkers' Federation",
   real_estate: "CUT Construction Federation",
 };

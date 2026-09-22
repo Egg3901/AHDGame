@@ -391,7 +391,7 @@ const PLANTS_SLOTS: Partial<Record<CorporationType, readonly MetricKey[]>> = {
   extraction: ["depositCapacity", "outputMix", "jobs"],
   retail: ["capacityUsed", "fillRate", "marketShare"],
   financial: ["capacityUsed", "marketShare", "jobs"],
-  media_entertainment: ["capacityUsed", "marketShare", "jobs"],
+  media: ["capacityUsed", "marketShare", "jobs"],
   technology: ["capacityUsed", "outputMix", "jobs"],
   agriculture: ["capacityUsed", "fillRate", "jobs"],
   healthcare: ["capacityUsed", "fillRate", "marketShare"],

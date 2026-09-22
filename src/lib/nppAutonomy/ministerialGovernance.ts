@@ -480,7 +480,7 @@ export async function runMinisterialGovernance(
   const ministerNppIds = ministers.map((m) => m.nppId).filter((id): id is ObjectId => !!id);
   const nppDocs = await db
     .collection<NPP>("npps")
-    .find({ _id: { $in: ministerNppIds } })
+    .find({ _id: { $in: ministerNppIds } }, { projection: { personality: 1 } })
     .toArray();
   const personalityByNpp = new Map<string, NPPPersonality>(
     nppDocs.map((n) => [n._id.toString(), n.personality])
@@ -499,7 +499,11 @@ export async function runMinisterialGovernance(
   // threshold below is only the first gate; the tenure/cooldown/escalation
   // guard further down decides whether the head may act on it this turn.
   const headNppId = gov.presidentNppId ?? gov.pmNppId ?? null;
-  const headNpp = headNppId ? await db.collection<NPP>("npps").findOne({ _id: headNppId }) : null;
+  const headNpp = headNppId
+    ? await db
+        .collection<NPP>("npps")
+        .findOne({ _id: headNppId }, { projection: { personality: 1 } })
+    : null;
   const reshufflePropensity = headNpp
     ? governingArchetypeModifiers(headNpp.personality).reshufflePropensity
     : 0;
@@ -721,7 +725,10 @@ export async function runCaretakerMinisters(
   const ministerNppIds = ministers.map((m) => m.nppId);
   const nppDocs = await db
     .collection<NPP>("npps")
-    .find({ _id: { $in: ministerNppIds } })
+    .find(
+      { _id: { $in: ministerNppIds } },
+      { projection: { personality: 1, "policies.economic": 1, "policies.social": 1 } }
+    )
     .toArray();
   const nppById = new Map(nppDocs.map((n) => [n._id.toString(), n]));
 

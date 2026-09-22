@@ -298,7 +298,12 @@ async function computeAndPersistGoverningAgenda(
         })
       : null;
 
-  const headNpp = await db.collection<NPP>("npps").findOne({ _id: headNppId });
+  const headNpp = await db
+    .collection<NPP>("npps")
+    .findOne(
+      { _id: headNppId },
+      { projection: { personality: 1, "policies.economic": 1, "policies.social": 1 } }
+    );
   if (!headNpp) return false;
 
   const conditions = await loadConditionsSignal(db, countryId);
