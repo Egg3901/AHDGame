@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildOpenReplayMetadata,
   normalizeOpenReplayIngestUrl,
   parseOpenReplaySampleRate,
   shouldRecordOpenReplay,
@@ -28,5 +29,33 @@ describe("OpenReplay configuration", () => {
     expect(shouldRecordOpenReplay("rejected", 1, 0)).toBe(false);
     expect(shouldRecordOpenReplay("accepted", 0.25, 0.1)).toBe(true);
     expect(shouldRecordOpenReplay("accepted", 0.25, 0.3)).toBe(false);
+  });
+
+  it("builds useful game metadata without player names or contact data", () => {
+    expect(
+      buildOpenReplayMetadata({
+        authenticated: true,
+        hasCharacter: true,
+        characterCountryId: "US",
+        corporationId: 42,
+        corporationType: "player",
+        corporationCountryId: "US",
+        partyCountryId: "US",
+        hasCabinetOffice: true,
+        hasGovernorOffice: false,
+        isImperialMode: false,
+      })
+    ).toEqual({
+      authenticated: "true",
+      has_character: "true",
+      character_country: "US",
+      corporation_id: "42",
+      corporation_type: "player",
+      corporation_country: "US",
+      party_country: "US",
+      has_cabinet_office: "true",
+      has_governor_office: "false",
+      imperial_mode: "false",
+    });
   });
 });
