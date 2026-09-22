@@ -1,4 +1,5 @@
 import type { PartySeed } from "@/lib/seeds/reference/politicalParties";
+import { PARTY_ROSTERS_2027 } from "@/lib/seeds/partyRosters2027";
 
 /**
  * Italy default political parties (First Republic).
@@ -9,6 +10,7 @@ import type { PartySeed } from "@/lib/seeds/reference/politicalParties";
  * Positions -5..+5.
  */
 export const itParties: PartySeed[] = [
+  ...(PARTY_ROSTERS_2027.IT ?? []),
   {
     seedOrder: 1,
     countryId: "IT",

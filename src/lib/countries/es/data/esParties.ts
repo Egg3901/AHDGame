@@ -1,4 +1,5 @@
 import type { PartySeed } from "@/lib/seeds/reference/politicalParties";
+import { PARTY_ROSTERS_2027 } from "@/lib/seeds/partyRosters2027";
 
 /**
  * Spain default political parties.
@@ -14,6 +15,7 @@ import type { PartySeed } from "@/lib/seeds/reference/politicalParties";
  * Positions -5..+5. Each entry is gated via `validForPresets`.
  */
 export const esParties: PartySeed[] = [
+  ...(PARTY_ROSTERS_2027.ES ?? []),
   // ─── 1953 Franco dictatorship ──────────────────────────────────────────
   {
     seedOrder: 10,
@@ -69,7 +71,7 @@ export const esParties: PartySeed[] = [
     memberCount: 0,
     isDefault: true,
     // González governs continuously through the 1989 election and into 1991.
-    validForPresets: ["1979-default", "1991-default"],
+    validForPresets: ["1979-default", "1991-default", "2027-default"],
     regimeStatus: "approved",
     treasury: 750_000,
     nationalTaxRate: 0,
@@ -157,7 +159,7 @@ export const esParties: PartySeed[] = [
     socialPosition: 2,
     memberCount: 0,
     isDefault: true,
-    validForPresets: ["1991-default"],
+    validForPresets: ["1991-default", "2027-default"],
     regimeStatus: "approved",
     treasury: 550_000,
     nationalTaxRate: 0,
