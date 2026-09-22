@@ -212,7 +212,7 @@ const nextConfig: NextConfig = {
           // fundingchoicesmessages.google.com serves the GDPR/EU consent dialog
           // (Google Funding Choices) and must be allowlisted or the message
           // silently fails to render once this policy goes enforcing.
-          // worker-src blob: was added for the (now-removed) OpenReplay worker; retained pending a blob-worker audit.
+          // worker-src blob: is required by the consent-gated OpenReplay tracker worker.
           {
             key: "Content-Security-Policy-Report-Only",
             value:
