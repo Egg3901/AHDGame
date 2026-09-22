@@ -191,9 +191,9 @@ describe("buildSectorPlantsSection", () => {
     const newsroom = {
       eraUnitScale: 1,
       ...BASE_ARGS,
-      sectorType: "media" as const,
+      sectorType: "media_entertainment" as const,
       sector: sectorFixture({
-        sectorType: "media",
+        sectorType: "media_entertainment",
         revenue: 243_873.89,
         realizedRevenue: REALIZED,
         laborCost: LABOUR,

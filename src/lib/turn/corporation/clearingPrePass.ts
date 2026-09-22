@@ -42,6 +42,10 @@ import {
 } from "@/lib/currency/corporationCapital";
 import { readCorpEconomicAnchor } from "@/lib/currency/corpEconomyFields";
 import { advertisingDeliveredValueByCorp } from "./advertisingDeliveredValue";
+import {
+  applyProductClearingEffect,
+  type ProductClearingEffect,
+} from "@/lib/products/productMarketEffects";
 
 /**
  * Clearing pre-pass for the corporation turn, extracted from index.ts so the
@@ -72,6 +76,12 @@ export interface ClearingPrePassInput {
   brandLoyaltyEnabled: boolean;
   brandLoyaltySliceEnabled: boolean;
   qualityPremiumPricingEnabled: boolean;
+  /**
+   * Post-launch product effects by owning corporation id. Absent or empty
+   * (flag off, no post-launch products) leaves every clearing input
+   * byte-identical. Loaded once per turn by the caller, never per sector.
+   */
+  productEffectsByCorp?: ReadonlyMap<string, ProductClearingEffect>;
 }
 
 export interface ClearingPrePassResult {
@@ -98,6 +108,7 @@ export function runClearingPrePass(input: ClearingPrePassInput): ClearingPrePass
     brandLoyaltyEnabled,
     brandLoyaltySliceEnabled,
     qualityPremiumPricingEnabled,
+    productEffectsByCorp,
   } = input;
   let { contractedByCorpCommodity } = input;
   let buyerDemandByCorpCommodity: Map<string, Map<string, number>> | undefined;
@@ -371,6 +382,24 @@ export function runClearingPrePass(input: ClearingPrePassInput): ClearingPrePass
             }
           }
         }
+        // Corporation products (issue #2125 slice): a post-launch product
+        // replaces corp-average quality with its frozen launch quality and
+        // adds its brand bonus to corp loyalty, but only for sectors selling
+        // the product's output commodity and only while the corresponding
+        // seam flag is on. Anything else returns the lagged corp inputs
+        // unchanged, so flag-off and unrelated sectors stay byte-identical.
+        const productAdjustedQuality = applyProductClearingEffect({
+          effect: productEffectsByCorp?.get(corpId),
+          supplyRates: rates.supply,
+          brandLoyalty: brandLoyaltySliceEnabled
+            ? (lookups.corpById.get(corpId)?.brandLoyalty ?? 0)
+            : undefined,
+          outputQuality: qualityPremiumPricingEnabled
+            ? (lookups.corpById.get(corpId)?.averageQuality ?? null)
+            : undefined,
+          loyaltyEnabled: brandLoyaltySliceEnabled,
+          qualityEnabled: qualityPremiumPricingEnabled,
+        });
         const clearingInput: SectorClearingInput = {
           sectorId,
           revenue: revenueAnchor,
@@ -379,15 +408,13 @@ export function runClearingPrePass(input: ClearingPrePassInput): ClearingPrePass
           // Lagged own fill for autoPosture's feedback loop (NPP/unowned only,
           // ignored when a player posture is posted).
           lastSoldFraction: typeof sector.soldFraction === "number" ? sector.soldFraction : null,
-          // Owning corp's lagged loyalty for the slice pre-pass (A2b).
-          brandLoyalty: brandLoyaltySliceEnabled
-            ? (lookups.corpById.get(corpId)?.brandLoyalty ?? 0)
-            : undefined,
-          // Lagged owning-corp output quality for the premium coupling (Package B).
-          // Prior-turn averageQuality, consistent with clearing's lagged inputs.
-          outputQuality: qualityPremiumPricingEnabled
-            ? (lookups.corpById.get(corpId)?.averageQuality ?? null)
-            : undefined,
+          // Owning corp's lagged loyalty for the slice pre-pass (A2b),
+          // plus any post-launch product brand bonus on its output.
+          brandLoyalty: productAdjustedQuality.brandLoyalty,
+          // Lagged owning-corp output quality for the premium coupling (Package B),
+          // or the frozen launch quality of a post-launch product on its output.
+          // Prior-turn values throughout, consistent with clearing's lagged inputs.
+          outputQuality: productAdjustedQuality.outputQuality,
           // Plants tier: last turn's measured output is the offer (lagged, like
           // every other clearing input). Null for a sector that has never run a
           // plants turn, the book falls back to the revenue nameplate.

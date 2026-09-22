@@ -19,7 +19,7 @@ import {
 import { computeLabourTightness, roundTightness } from "@/lib/labour/labourMarket";
 import { emitTxBulk } from "@/lib/financialTxLog/emit";
 import type { FinancialTxLogEntry, TxThresholds } from "@/lib/db/types/financialTxLog";
-import { distributeConversionSpread } from "@/lib/currency/marketMaker";
+import { distributeConversionSpreadsBatch } from "@/lib/currency/marketMaker";
 import { buildEscrowFundingTxEntry } from "@/lib/corporations/escrowTxLog";
 import type { CorporationLookups, CorpSnapshot } from "./types";
 
@@ -297,9 +297,7 @@ export async function creditCorpDividends(args: {
     }
     // Route the skimmed cross-currency dividend spreads into the CB system after
     // the credits land (reserve slice → recipient corp's CB; revenue → payer CB).
-    for (const { fromCurrency, toCurrency, fee } of corpDividendSpreadFees) {
-      await distributeConversionSpread(db, fee, fromCurrency, toCurrency);
-    }
+    await distributeConversionSpreadsBatch(db, corpDividendSpreadFees);
     if (corpDividendRecipientTxEntries.length > 0) {
       void emitTxBulk(db, corpDividendRecipientTxEntries, thresholds);
     }

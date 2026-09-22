@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { Db } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import type { TurnPhaseTelemetryMap } from "@/lib/db/types";
+import type { CommodityType } from "@/lib/constants/commodities";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 
@@ -629,8 +630,10 @@ describe("processGameHealthSnapshot", () => {
     );
   });
 
-  it("persists clearing invariant breaches with an exact warningCount (issue #2054)", async () => {
+  it("counts a known unit-scale clearing gap in the health snapshot (issue #2054)", async () => {
     const { processGameHealthSnapshot } = await import("./gameHealthSnapshot");
+    const { computeClearingFactors, describeClearingBookBreach } =
+      await import("@/lib/market/clearing");
 
     db.collectionMocks.systemSettings.findOne.mockResolvedValue({
       _id: "healthConfig",
@@ -660,19 +663,45 @@ describe("processGameHealthSnapshot", () => {
       toArray: vi.fn().mockResolvedValue([]),
     });
 
-    await processGameHealthSnapshot(db as unknown as Db, 5, 2026, 800, true, [
-      "corporationTurn: clearing invariant breach on ordnance@FR: normalized 514 vs lagged supply 0 (inf x; raw 514)",
-      "corporationTurn: clearing invariant breach on fertilizers@FR: normalized 12139 vs lagged supply 1491 (8.1x; raw 12139)",
-    ]);
+    const warnings: string[] = [];
+    computeClearingFactors({
+      sectors: [
+        {
+          sectorId: "fr-fertilizer-sector",
+          revenue: 12_139,
+          supplyRates: { fertilizers: 1 },
+          posture: 0,
+          // The measured offer is already in era-scaled physical units. Its
+          // 8.1x gap from the country ledger reproduces the reported failure.
+          producedUnits: 12_139,
+        },
+      ],
+      balances: new Map(),
+      balancesByGroup: new Map([
+        ["FR", new Map([["fertilizers", { supply: 1_491, demand: 2_000 }]])],
+      ]),
+      groupBySector: new Map([["fr-fertilizer-sector", "FR"]]),
+      priceRatioByCommodity: new Map([["fertilizers", 1]]),
+      basePrices: { fertilizers: 1 } as Record<CommodityType, number>,
+      plantsEnabled: true,
+      onBookDiagnostic: (diagnostic) => {
+        if (diagnostic.invariantBreach) {
+          warnings.push("corporationTurn: " + describeClearingBookBreach(diagnostic));
+        }
+      },
+    });
+
+    expect(warnings).toHaveLength(1);
+    await processGameHealthSnapshot(db as unknown as Db, 5, 2026, 800, true, warnings);
 
     const doc = db.collectionMocks.gameHealthSnapshots.insertOne.mock.calls[0][0];
-    expect(doc.turnProcessing.warningCount).toBe(2);
-    expect(doc.turnProcessing.warnings).toHaveLength(2);
+    expect(doc.turnProcessing.warningCount).toBe(1);
+    expect(doc.turnProcessing.warnings).toHaveLength(1);
     expect(doc.turnProcessing.warnings[0]).toMatchObject({
       phase: "corporationTurn",
       turn: 5,
     });
-    expect(doc.turnProcessing.warnings[0].message).toContain("ordnance@FR");
+    expect(doc.turnProcessing.warnings[0].message).toContain("fertilizers@FR");
   });
 
   it("counts a retried turn's duplicate warnings exactly once (issue #2054)", async () => {

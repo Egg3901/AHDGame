@@ -53,7 +53,7 @@ function listing(corporationId: ObjectId): EquityLiquidityListing {
   };
 }
 
-function facilityDb(priorOrders: Array<{ _id: ObjectId }> = []): {
+function facilityDb(priorOrders: Array<{ _id: ObjectId; placerFundId?: ObjectId }> = []): {
   db: Db;
   replaceOne: ReturnType<typeof vi.fn>;
 } {
@@ -152,6 +152,52 @@ describe("planEquityLiquidityQuotes", () => {
 });
 
 describe("refreshEquityLiquidityFacility", () => {
+  it("cancels different funds concurrently while preserving each fund's order", async () => {
+    const firstFundId = new ObjectId();
+    const secondFundId = new ObjectId();
+    const priorOrders = [
+      { _id: new ObjectId(), placerFundId: firstFundId },
+      { _id: new ObjectId(), placerFundId: firstFundId },
+      { _id: new ObjectId(), placerFundId: secondFundId },
+      { _id: new ObjectId(), placerFundId: secondFundId },
+    ];
+    const fundByOrder = new Map(
+      priorOrders.map((order) => [order._id.toString(), order.placerFundId.toString()])
+    );
+    const activeByFund = new Map<string, number>();
+    let activeFunds = 0;
+    let peakActiveFunds = 0;
+    orderMocks.cancelFundShareOrder.mockImplementation(async (_db: unknown, orderId: ObjectId) => {
+      const fundId = fundByOrder.get(orderId.toString())!;
+      const active = activeByFund.get(fundId) ?? 0;
+      expect(active).toBe(0);
+      activeByFund.set(fundId, active + 1);
+      activeFunds++;
+      peakActiveFunds = Math.max(peakActiveFunds, activeFunds);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      activeFunds--;
+      activeByFund.set(fundId, 0);
+    });
+    const { db } = facilityDb(priorOrders);
+
+    await refreshEquityLiquidityFacility({
+      db,
+      turn: 59,
+      enabled: false,
+      funds: [],
+      listings: [],
+      totalListings: 0,
+    });
+
+    expect(peakActiveFunds).toBe(2);
+    expect(orderMocks.cancelFundShareOrder.mock.calls.map((call) => call[1])).toEqual([
+      priorOrders[0]._id,
+      priorOrders[2]._id,
+      priorOrders[1]._id,
+      priorOrders[3]._id,
+    ]);
+  });
+
   it("cancels prior quotes and places none when disabled", async () => {
     const priorOrders = [{ _id: new ObjectId() }, { _id: new ObjectId() }];
     const { db, replaceOne } = facilityDb(priorOrders);

@@ -73,8 +73,7 @@ const FI_WEIGHTS: Partial<Record<CorporationType, number>> = {
   healthcare: 3,
   defense: 3, // constrained by FCMA with USSR
   telecommunications: 2,
-  media: 1,
-  entertainment: 1,
+  media_entertainment: 2,
   automobiles: 1,
   technology: 0,
 };
@@ -94,8 +93,7 @@ const GR_WEIGHTS: Partial<Record<CorporationType, number>> = {
   healthcare: 3,
   chemical_industries: 2,
   telecommunications: 1,
-  media: 1,
-  entertainment: 1,
+  media_entertainment: 2,
   automobiles: 1,
   technology: 0,
 };
@@ -112,10 +110,9 @@ const IE_WEIGHTS: Partial<Record<CorporationType, number>> = {
   real_estate: 4,
   defense: 2,
   telecommunications: 2,
-  media: 2,
+  media_entertainment: 3,
   healthcare: 2,
   extraction: 1,
-  entertainment: 1,
   automobiles: 1,
   chemical_industries: 1,
   technology: 0,
@@ -132,12 +129,11 @@ const PL_WEIGHTS: Partial<Record<CorporationType, number>> = {
   logistics: 4,
   healthcare: 4,
   retail: 1,
-  media: 1,
+  media_entertainment: 2,
   financial: 1,
   real_estate: 1,
   telecommunications: 1,
   automobiles: 1,
-  entertainment: 1,
   technology: 0,
 };
 
@@ -153,12 +149,11 @@ const CS_WEIGHTS: Partial<Record<CorporationType, number>> = {
   healthcare: 4,
   automobiles: 3,
   retail: 1,
-  media: 1,
+  media_entertainment: 2,
   financial: 1,
   real_estate: 1,
   telecommunications: 1,
   technology: 1,
-  entertainment: 1,
 };
 
 const HU_WEIGHTS: Partial<Record<CorporationType, number>> = {
@@ -172,8 +167,7 @@ const HU_WEIGHTS: Partial<Record<CorporationType, number>> = {
   logistics: 4,
   healthcare: 4,
   retail: 2,
-  entertainment: 2,
-  media: 1,
+  media_entertainment: 3,
   financial: 1,
   real_estate: 1,
   telecommunications: 1,
@@ -192,12 +186,11 @@ const RO_WEIGHTS: Partial<Record<CorporationType, number>> = {
   logistics: 4,
   healthcare: 3,
   retail: 2,
-  media: 1,
+  media_entertainment: 2,
   financial: 1,
   real_estate: 1,
   telecommunications: 1,
   automobiles: 1,
-  entertainment: 1,
   technology: 0,
 };
 
@@ -215,12 +208,11 @@ const UKR_WEIGHTS: Partial<Record<CorporationType, number>> = {
   chemical_industries: 4,
   healthcare: 3,
   retail: 2,
-  media: 1,
+  media_entertainment: 2,
   financial: 1,
   real_estate: 1,
   telecommunications: 1,
   automobiles: 1,
-  entertainment: 1,
   technology: 0,
 };
 
@@ -236,11 +228,10 @@ const BLR_WEIGHTS: Partial<Record<CorporationType, number>> = {
   healthcare: 4,
   retail: 2,
   automobiles: 2,
-  media: 1,
+  media_entertainment: 2,
   financial: 1,
   real_estate: 1,
   telecommunications: 1,
-  entertainment: 1,
   technology: 0,
 };
 
@@ -255,8 +246,7 @@ const BAL_WEIGHTS: Partial<Record<CorporationType, number>> = {
   chemical_industries: 5,
   healthcare: 5, // the best health outcomes in the union
   retail: 3, // the best-supplied shops in the union
-  entertainment: 3,
-  media: 2, // Baltic-language press, permitted here and nowhere else
+  media_entertainment: 5, // Baltic-language press, permitted here and nowhere else
   real_estate: 2, // surviving pre-war housing stock
   telecommunications: 2,
   technology: 2,
@@ -275,12 +265,11 @@ const BG_WEIGHTS: Partial<Record<CorporationType, number>> = {
   healthcare: 3,
   chemical_industries: 3,
   retail: 2,
-  media: 1,
+  media_entertainment: 2,
   financial: 1,
   real_estate: 1,
   telecommunications: 1,
   automobiles: 1,
-  entertainment: 1,
   technology: 0,
 };
 
@@ -297,8 +286,7 @@ const YU_WEIGHTS: Partial<Record<CorporationType, number>> = {
   logistics: 4,
   healthcare: 3,
   financial: 2,
-  entertainment: 2,
-  media: 1,
+  media_entertainment: 3,
   real_estate: 1,
   telecommunications: 1,
   automobiles: 1,
@@ -319,10 +307,9 @@ const FR_WEIGHTS: Partial<Record<CorporationType, number>> = {
   real_estate: 3,
   defense: 3, // Indochina; NATO
   telecommunications: 2,
-  media: 2,
+  media_entertainment: 3,
   healthcare: 2,
   extraction: 2, // Lorraine coal/iron
-  entertainment: 1,
   technology: 0,
 };
 
@@ -341,9 +328,8 @@ const IT_WEIGHTS: Partial<Record<CorporationType, number>> = {
   defense: 2,
   healthcare: 2,
   telecommunications: 2,
-  media: 2,
+  media_entertainment: 3,
   extraction: 1,
-  entertainment: 1,
   technology: 0,
 };
 
@@ -360,11 +346,10 @@ const ES_WEIGHTS: Partial<Record<CorporationType, number>> = {
   real_estate: 3,
   defense: 3,
   telecommunications: 2,
-  media: 2,
+  media_entertainment: 3,
   healthcare: 2,
   automobiles: 1, // SEAT founded 1950
   chemical_industries: 1,
-  entertainment: 1,
   technology: 0,
 };
 
@@ -382,10 +367,9 @@ const SE_WEIGHTS: Partial<Record<CorporationType, number>> = {
   defense: 4, // neutral conscript + SAAB
   healthcare: 3,
   real_estate: 3,
-  media: 2,
+  media_entertainment: 3,
   telecommunications: 2,
   extraction: 2, // Kiruna iron
-  entertainment: 1,
   technology: 0,
 };
 
@@ -403,8 +387,7 @@ const TR_WEIGHTS: Partial<Record<CorporationType, number>> = {
   defense: 3, // NATO 1952; Korea veterans
   healthcare: 1,
   telecommunications: 1,
-  media: 1,
-  entertainment: 1,
+  media_entertainment: 2,
   automobiles: 0,
   chemical_industries: 0,
   technology: 0,

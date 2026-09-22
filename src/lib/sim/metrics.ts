@@ -13,7 +13,13 @@ import type { CountryId } from "@/lib/constants/countries";
 import { loadExchangeRatesMap } from "@/lib/lineOfCredit/netWorth";
 import { toInternalUnits } from "@/lib/lineOfCredit/locMath";
 import type { EconomicVitalSigns } from "@/lib/db/types/economicVitalSigns";
+import {
+  summarizeResidentDemandSplit,
+  summarizeStockVsFlowDivergence,
+  type StockVsFlowKindRow,
+} from "@/lib/economy/marketAccessVisibility";
 import type { LivingConflictState } from "@/lib/livingConflict/types";
+import { collectEconomyTelemetry, type EconomyTelemetry } from "@/lib/sim/economyTelemetry";
 
 /**
  * Read-only balance-metric aggregations over a (sandbox) world DB, for the
@@ -43,6 +49,8 @@ export interface BalanceReport {
   inflationByCountry: InflationCountryMetrics[];
   corporateCashFlow: CorporateCashFlowMetrics;
   military: MilitaryMetrics;
+  /** Post-run #2159 acceptance telemetry for the economy issue cluster. */
+  telemetry?: EconomyTelemetry;
 }
 
 export interface FiscalCountryMetrics {
@@ -281,12 +289,31 @@ export interface MarketAccessMetrics {
   ringFencedShareOfLiquid: number | null;
   measurementConfidence: string;
   reconciliationStatus: string;
+  /**
+   * Σ divergent accounts in the stock-vs-flow by-kind inventory (#992). Null
+   * when the check was skipped or absent: unknown, not zero.
+   */
+  stockVsFlowTotalDivergent: number | null;
+  /** Σ |divergence| over divergent accounts in ₳ (#992). Null when unrecorded. */
+  stockVsFlowTotalAbsDivergence: number | null;
+  /** Stock-vs-flow divergent account kinds ranked by |divergence| (#992). */
+  stockVsFlowTopKinds: StockVsFlowKindRow[] | null;
+  /** Σ resident demand value (base-price-weighted) across observed states (#991). */
+  residentDemandValueAnchor: number | null;
+  /** Σ demand a local producer could contest across observed states (#991). */
+  localProducerDemandValueAnchor: number | null;
+  /** localProducerDemandValue / residentDemandValue across observed states (#991). */
+  localAbsorptionShare: number | null;
 }
 
 export function marketAccessMetricsFromSnapshot(
   snapshot: EconomicVitalSigns | null
 ): MarketAccessMetrics {
   const entryFunnel = snapshot?.marketFormation?.entryFunnel;
+  const stockVsFlow = summarizeStockVsFlowDivergence(
+    snapshot?.reconciliation.stockVsFlowByKind ?? null
+  );
+  const residentSplit = summarizeResidentDemandSplit(snapshot?.marketFormation);
   return {
     pooledFillRate: snapshot?.goods.pooledFillRate.value ?? null,
     countryScopedFillRate: snapshot?.goods.countryScopedFillRate.value ?? null,
@@ -346,6 +373,12 @@ export function marketAccessMetricsFromSnapshot(
     ringFencedShareOfLiquid: snapshot?.money.ringFencedShareOfLiquid?.value ?? null,
     measurementConfidence: snapshot?.measurement.confidence ?? "unavailable",
     reconciliationStatus: snapshot?.reconciliation.status ?? "unavailable",
+    stockVsFlowTotalDivergent: stockVsFlow?.totalDivergentCount ?? null,
+    stockVsFlowTotalAbsDivergence: stockVsFlow?.totalAbsDivergence ?? null,
+    stockVsFlowTopKinds: stockVsFlow?.topKinds ?? null,
+    residentDemandValueAnchor: residentSplit?.totalResidentDemandValue ?? null,
+    localProducerDemandValueAnchor: residentSplit?.totalLocalProducerDemandValue ?? null,
+    localAbsorptionShare: residentSplit?.localAbsorptionShare ?? null,
   };
 }
 
@@ -843,6 +876,7 @@ export async function collectBalanceMetrics(db: Db): Promise<BalanceReport> {
     inflationByCountry,
     corporateCashFlow,
     military,
+    telemetry,
   ] = await Promise.all([
     collectWealthMetrics(db),
     collectElectoralMetrics(db),
@@ -858,6 +892,7 @@ export async function collectBalanceMetrics(db: Db): Promise<BalanceReport> {
     collectInflationMetrics(db),
     collectCorporateCashFlowMetrics(db, turn),
     collectMilitaryMetrics(db),
+    collectEconomyTelemetry(db),
   ]);
 
   return {
@@ -874,6 +909,7 @@ export async function collectBalanceMetrics(db: Db): Promise<BalanceReport> {
     inflationByCountry,
     corporateCashFlow,
     military,
+    telemetry,
   };
 }
 

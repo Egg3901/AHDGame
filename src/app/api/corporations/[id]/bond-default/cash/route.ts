@@ -383,11 +383,13 @@ export async function POST(_request: Request, { params }: RouteParams) {
 
           const undo: Array<() => Promise<void>> = [];
           const compensateAndThrow = async (err: unknown): Promise<never> => {
+            const compensationErrors: unknown[] = [];
             if (compensate) {
               for (const revert of undo.reverse()) {
                 try {
                   await revert();
                 } catch (compensationError) {
+                  compensationErrors.push(compensationError);
                   Sentry.captureException(compensationError, {
                     extra: {
                       context: "bond-default cash fallback compensation failed",
@@ -396,6 +398,12 @@ export async function POST(_request: Request, { params }: RouteParams) {
                   });
                 }
               }
+            }
+            if (compensationErrors.length > 0) {
+              throw new AggregateError(
+                [err, ...compensationErrors],
+                `Bond cash cure failed and ${compensationErrors.length} compensation step(s) were incomplete`
+              );
             }
             throw err;
           };
@@ -429,7 +437,7 @@ export async function POST(_request: Request, { params }: RouteParams) {
             );
           }
           undo.push(async () => {
-            await db.collection<Corporation>("corporations").updateOne(
+            const result = await db.collection<Corporation>("corporations").updateOne(
               { _id: refreshedCorporation._id },
               {
                 $inc: {
@@ -442,6 +450,9 @@ export async function POST(_request: Request, { params }: RouteParams) {
               },
               so
             );
+            if (result.matchedCount !== 1) {
+              throw new Error("Failed to restore issuer funds after bond cash cure failure");
+            }
           });
 
           // On standalone Mongo each holder is a separate confirmed write. A
@@ -459,7 +470,7 @@ export async function POST(_request: Request, { params }: RouteParams) {
               return compensateAndThrow(err);
             }
             undo.push(async () => {
-              await db.collection(credit.collection).updateOne(
+              const result = await db.collection(credit.collection).updateOne(
                 { _id: credit.id },
                 {
                   $inc: Object.fromEntries(
@@ -469,6 +480,11 @@ export async function POST(_request: Request, { params }: RouteParams) {
                 },
                 so
               );
+              if (result.matchedCount !== 1) {
+                throw new Error(
+                  `Failed to reverse ${credit.collection} holder credit after bond cash cure failure`
+                );
+              }
             });
           }
 
@@ -528,7 +544,7 @@ export async function POST(_request: Request, { params }: RouteParams) {
                   if (bond[field] === undefined) priorUnset[field] = "";
                   else priorSet[field] = bond[field];
                 }
-                await db.collection<Bond>("bonds").updateOne(
+                const result = await db.collection<Bond>("bonds").updateOne(
                   {
                     _id: bond._id,
                     matured: true,
@@ -542,6 +558,9 @@ export async function POST(_request: Request, { params }: RouteParams) {
                   },
                   so
                 );
+                if (result.matchedCount !== 1) {
+                  throw new Error("Failed to restore matured bond after bond cash cure failure");
+                }
               });
             }
           }

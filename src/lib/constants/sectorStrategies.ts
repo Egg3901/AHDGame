@@ -576,46 +576,103 @@ export const SECTOR_STRATEGIES: Record<CorporationType, SectorStrategy[]> = {
     },
   ],
 
-  // ── Media ─────────────────────────────────────────────────────────────
-  media: [
-    {
-      id: "streaming_media",
-      requiresTechUnlock: true,
-      minDecade: "2009",
-      name: "Streaming Media",
-      description:
-        "Direct-to-consumer streaming: strong content and ad output that runs on software, networks and energy.",
-      supply: { advertising: 0.3, entertainment_services: 0.3 },
-      demand: { software: 0.15, network_services: 0.12, energy: 0.08 },
-    },
+  // ── Media & Entertainment (issue #2234: one catalog for the merged domain) ──
+  media_entertainment: [
     {
       id: "standard",
       name: "Standard",
-      description: "Mixed traditional and digital media operations.",
-      supply: { advertising: 0.5 },
+      description:
+        "Integrated media and entertainment operations: advertising and content output on a shared digital base.",
+      supply: { advertising: 0.35, entertainment_services: 0.3 },
       demand: {
         software: 0.15,
         electronics: 0.1,
+        energy: 0.06,
         consulting_services: 0.06,
         real_estate_services: 0.03,
       },
     },
     {
-      id: "digital_first",
-      minDecade: "1999",
-      name: "Digital-First",
+      id: "press",
+      name: "Press & Publishing",
       description:
-        "Streaming and online-first media. Co-produces software platforms alongside advertising.",
-      supply: { advertising: 0.4, software: 0.15 },
-      demand: { software: 0.2, electronics: 0.15 },
+        "Newspapers, books, and print publishing. Strong advertising output with ink, paper-stock, and distribution costs.",
+      supply: { advertising: 0.4, entertainment_services: 0.1 },
+      demand: {
+        chemicals: 0.08,
+        energy: 0.06,
+        freight: 0.08,
+        real_estate_services: 0.03,
+      },
     },
     {
-      id: "legacy_broadcast",
-      name: "Legacy Broadcast",
+      id: "broadcast",
+      name: "Broadcast Networks",
       description:
-        "Television and radio infrastructure. Higher advertising output but aging infrastructure costs.",
-      supply: { advertising: 0.55 },
-      demand: { electronics: 0.15, energy: 0.1 },
+        "Television and radio infrastructure. Higher advertising output but transmission and tower costs.",
+      supply: { advertising: 0.45, entertainment_services: 0.15 },
+      demand: { electronics: 0.15, energy: 0.1, software: 0.05 },
+    },
+    {
+      id: "screen",
+      name: "Film & Television",
+      description:
+        "Studios and production lots: high entertainment output on sets, cameras, and post-production.",
+      supply: { advertising: 0.2, entertainment_services: 0.45 },
+      demand: {
+        electronics: 0.12,
+        energy: 0.08,
+        construction_services: 0.06,
+        real_estate_services: 0.04,
+      },
+    },
+    {
+      id: "studio",
+      name: "Recording Studios",
+      description:
+        "Recorded music and audio: high entertainment output from sessions, pressing, and catalog.",
+      supply: { advertising: 0.1, entertainment_services: 0.45 },
+      demand: { electronics: 0.12, energy: 0.06, real_estate_services: 0.03 },
+    },
+    {
+      id: "streaming",
+      requiresTechUnlock: true,
+      minDecade: "2009",
+      name: "Streaming Platforms",
+      description:
+        "Direct-to-consumer streaming: strong content and ad output that runs on software, networks and energy.",
+      supply: { advertising: 0.2, software: 0.1, entertainment_services: 0.35 },
+      demand: { software: 0.2, network_services: 0.1, energy: 0.1 },
+    },
+    {
+      id: "live_venue",
+      name: "Live & Venue",
+      description:
+        "Concert halls, theaters, and live events. Higher entertainment output, physical infrastructure needs.",
+      supply: { advertising: 0.2, entertainment_services: 0.5 },
+      demand: {
+        construction_services: 0.08,
+        building_materials: 0.06,
+        energy: 0.1,
+        freight: 0.08,
+        real_estate_services: 0.05,
+        food: 0.08,
+      },
+    },
+    {
+      id: "diversified",
+      name: "Diversified Conglomerate",
+      description:
+        "A merged house running every model at once: balanced content and advertising output on a broad operating base.",
+      supply: { advertising: 0.3, entertainment_services: 0.3 },
+      demand: {
+        software: 0.12,
+        electronics: 0.08,
+        energy: 0.08,
+        consulting_services: 0.05,
+        real_estate_services: 0.04,
+        network_services: 0.05,
+      },
     },
   ],
 
@@ -944,55 +1001,6 @@ export const SECTOR_STRATEGIES: Record<CorporationType, SectorStrategy[]> = {
     },
   ],
 
-  // ── Entertainment ─────────────────────────────────────────────────────
-  entertainment: [
-    {
-      id: "live_service",
-      requiresTechUnlock: true,
-      minDecade: "2019",
-      name: "Live-Service Platforms",
-      description:
-        "Always-on games and experiences with ongoing revenue: high entertainment output on software and networks.",
-      supply: { entertainment_services: 0.5 },
-      demand: { software: 0.18, network_services: 0.1, energy: 0.06 },
-    },
-    {
-      id: "standard",
-      name: "Standard",
-      description: "Mixed entertainment: studios, venues, and digital content.",
-      // Added entertainment_services supply 0.40 — unique output for entertainment differentiation.
-      supply: { advertising: 0.2, entertainment_services: 0.4 },
-      demand: { software: 0.15, electronics: 0.1, energy: 0.06, real_estate_services: 0.03 },
-    },
-    {
-      id: "streaming",
-      minDecade: "2009",
-      name: "Streaming/Digital",
-      description:
-        "Digital-first entertainment platforms. Co-produces software, energy-intensive streaming.",
-      // Added entertainment_services supply 0.35.
-      supply: { advertising: 0.15, software: 0.1, entertainment_services: 0.35 },
-      demand: { software: 0.2, energy: 0.1, real_estate_services: 0.02 },
-    },
-    {
-      id: "live_venue",
-      name: "Live/Venue",
-      description:
-        "Concert halls, theaters, and live events. Higher advertising output, physical infrastructure needs.",
-      // Added entertainment_services supply 0.50. Reduced construction_services 0.12→0.08
-      // to ease input stacking on a scarce commodity.
-      supply: { advertising: 0.25, entertainment_services: 0.5 },
-      demand: {
-        construction_services: 0.08,
-        building_materials: 0.06,
-        energy: 0.1,
-        freight: 0.08,
-        real_estate_services: 0.05,
-        food: 0.08,
-      },
-    },
-  ],
-
   // ── Retail ────────────────────────────────────────────────────────────
   retail: [
     {
@@ -1304,7 +1312,7 @@ export function applyPlannedEconomyOutputMix(
   supply: Partial<Record<CommodityType, number>>,
   plannedEconomy: boolean
 ): Partial<Record<CommodityType, number>> {
-  if (!plannedEconomy || sectorType !== "media") return supply;
+  if (!plannedEconomy || sectorType !== "media_entertainment") return supply;
   const advertising = supply.advertising ?? 0;
   if (!(advertising > 0)) return supply;
   const remapped: Partial<Record<CommodityType, number>> = { ...supply };
@@ -1388,6 +1396,6 @@ export function plannedEconomyMediaSupplyFactor(
   sectorType: CorporationType,
   plannedEconomy: boolean
 ): number {
-  if (sectorType !== "media") return 1;
+  if (sectorType !== "media_entertainment") return 1;
   return plannedEconomy ? PLANNED_ECONOMY_MEDIA_SUPPLY_FACTOR : MARKET_ECONOMY_MEDIA_SUPPLY_FACTOR;
 }

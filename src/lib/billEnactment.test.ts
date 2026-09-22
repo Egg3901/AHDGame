@@ -494,6 +494,36 @@ describe("onBillEnacted", () => {
     expect(call[5]).toBe("US-CA"); // stateId
   });
 
+  it("labels national bill Discord embeds as federal enactments", async () => {
+    const bill = createBill({ title: "Federal Test Act" });
+    const legType = createLegislationType("tax-cut-act", "economy");
+
+    setupCollection("legislationTypes", [legType]);
+    setupCollection("gameState", [{ _id: "current", currentYear: 2026 } as any]);
+
+    await onBillEnacted(db as unknown as Db, bill as any, 10);
+
+    expect(sendCountryGameEvent).toHaveBeenCalledWith(
+      "US",
+      expect.objectContaining({ title: "Federal bill enacted: Federal Test Act" })
+    );
+  });
+
+  it("labels state and regional bill Discord embeds as regional enactments", async () => {
+    const bill = createBill({ title: "Regional Test Act", stateId: "US-CA" });
+    const legType = createLegislationType("tax-cut-act", "economy");
+
+    setupCollection("legislationTypes", [legType]);
+    setupCollection("gameState", [{ _id: "current", currentYear: 2026 } as any]);
+
+    await onBillEnacted(db as unknown as Db, bill as any, 10);
+
+    expect(sendCountryGameEvent).toHaveBeenCalledWith(
+      "US",
+      expect.objectContaining({ title: "Regional bill enacted: Regional Test Act" })
+    );
+  });
+
   it("uses uk_national for UK bills", async () => {
     const bill = createBill({ stateId: "uk_national" });
     const legType = createLegislationType("tax-cut-act", "economy");

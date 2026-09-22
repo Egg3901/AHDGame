@@ -86,7 +86,7 @@ const SECTOR_RD_COMMODITIES: Partial<Record<string, [string, string?]>> = {
   technology: ["electronics", "rare_earth"],
   pharmaceuticals: ["pharmaceuticals", "industrial_chemicals"],
   finance: ["consulting_services", "software"],
-  media: ["software", "consulting_services"],
+  media_entertainment: ["software", "consulting_services"],
   retail: ["consumer_goods", "produce"],
   healthcare: ["pharmaceuticals", "consulting_services"],
   education: ["consulting_services", "software"],
@@ -1348,5 +1348,11 @@ export function processSectors(
     ),
     strikeEvents: pendingStrikeEvents,
     capacityBindingEvents: pendingCapacityBindingEvents,
+    // Advertising settlement inputs (allocation view only): the sector pass
+    // already moved the cash via the marketing transfer legs above. These maps
+    // let the settlement phase attribute the settled spend without re-reading
+    // or re-moving anything.
+    settledMarketingSpendAnchorByBuyerId: new Map(marketingSpendAnchorByBuyerId),
+    advertisingDeliveredAnchorBySellerId: new Map(advertisingSellerDeliveredValues),
   };
 }

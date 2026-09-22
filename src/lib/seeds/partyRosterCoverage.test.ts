@@ -20,6 +20,7 @@ const PRESETS = [
   "2007-default",
   "2019-default",
   "2023-default",
+  "2027-default",
 ];
 
 const ROSTERS: Array<[string, PartySeed[]]> = [

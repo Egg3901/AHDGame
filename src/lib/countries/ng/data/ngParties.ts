@@ -53,7 +53,7 @@ export const ngParties: PartySeed[] = [
     treasurerId: null,
     committeeIds: [],
     createdBy: null,
-    validForPresets: ["2019-default"],
+    validForPresets: ["2019-default", "2027-default"],
   },
   {
     seedOrder: 2,
@@ -73,7 +73,7 @@ export const ngParties: PartySeed[] = [
     treasurerId: null,
     committeeIds: [],
     createdBy: null,
-    validForPresets: ["2019-default"],
+    validForPresets: ["2019-default", "2027-default"],
   },
   {
     seedOrder: 3,
@@ -93,7 +93,7 @@ export const ngParties: PartySeed[] = [
     treasurerId: null,
     committeeIds: [],
     createdBy: null,
-    validForPresets: ["2019-default"],
+    validForPresets: ["2019-default", "2027-default"],
   },
   {
     seedOrder: 4,
@@ -113,7 +113,7 @@ export const ngParties: PartySeed[] = [
     treasurerId: null,
     committeeIds: [],
     createdBy: null,
-    validForPresets: ["2019-default"],
+    validForPresets: ["2019-default", "2027-default"],
   },
   {
     seedOrder: 5,
@@ -133,7 +133,7 @@ export const ngParties: PartySeed[] = [
     treasurerId: null,
     committeeIds: [],
     createdBy: null,
-    validForPresets: ["2019-default"],
+    validForPresets: ["2019-default", "2027-default"],
   },
   {
     seedOrder: 6,

@@ -35,7 +35,8 @@ import type { CommodityType } from "@/lib/constants/commodities";
 
 /** Operating-strategy rate both surfaces actually use (differs from base tables). */
 function strategyRate(
-  sectorType: "manufacturing" | "technology" | "energy" | "retail" | "media" | "extraction",
+  sectorType:
+    "manufacturing" | "technology" | "energy" | "retail" | "media_entertainment" | "extraction",
   kind: "supply" | "demand",
   commodity: CommodityType
 ): number {
@@ -286,7 +287,7 @@ describe("realized basis reconciles market and corporation surfaces", () => {
     const sectors: FixtureSector[] = [
       mkSector({
         corpId: "corpM",
-        sectorType: "media",
+        sectorType: "media_entertainment",
         stateId: "CA",
         countryId: "US",
         revenue: 200_000,

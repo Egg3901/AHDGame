@@ -30,8 +30,18 @@
 
 import { dirname, join } from "path";
 import { cpus, freemem, hostname, loadavg } from "os";
-import { MongoClient, type Db, type Collection } from "mongodb";
+import { MongoClient, type Db, type Collection, type Filter } from "mongodb";
 import { claimFilterAt, parseClaimWindow } from "./claimWindow";
+import {
+  claimNextJob,
+  createHandoffController,
+  findLiveEngineRunIdsFromCmdlines,
+  listProcessCmdlines,
+  recoverLegacyOrphans,
+  recoverStaleLeases,
+  type HandoffJob,
+  type HandoffStore,
+} from "./simJobHandoff";
 import { spawnWithPrefixedLogs, type ChildRunIdentity } from "./childLogPrefix";
 import { assertSafeToken } from "./simJobArgs";
 import { resolveSimPreset } from "./simPreset";
@@ -164,6 +174,75 @@ interface SimJob {
 
 function log(msg: string) {
   console.log(`[sim-worker] ${msg}`);
+}
+
+// Controlled-restart drain switch (#2069). The promotion path signals the
+// outgoing worker while its awaited job is still running; the worker then
+// finishes active jobs and claims nothing new, so no successor is orphaned
+// mid-handoff. Running simulations are never interrupted.
+const handoff = createHandoffController();
+process.once("SIGTERM", () => {
+  handoff.requestShutdown();
+  log("shutdown requested (SIGTERM): draining active jobs, claiming nothing new");
+});
+process.once("SIGINT", () => {
+  handoff.requestShutdown();
+  log("shutdown requested (SIGINT): draining active jobs, claiming nothing new");
+});
+
+/** Adapt the control-plane collection to the handoff store interface. Claim
+ * stays one atomic findOneAndUpdate; the legacy requeue stays conditional on
+ * the row still being unleased, so a fresh claim can never be clobbered. */
+function mongoHandoffStore(jobsCol: Collection<SimJob>): HandoffStore {
+  return {
+    async claimOne(filter, update): Promise<HandoffJob | null> {
+      const queued: Filter<SimJob> =
+        filter.startPolicy === undefined
+          ? { status: "queued" }
+          : { status: "queued", startPolicy: filter.startPolicy };
+      const job = await jobsCol.findOneAndUpdate(
+        { $and: [queued, { dbName: { $nin: filter.excludeDbNames } }] },
+        // $unset mirrors update.unset (["error"]): kept as a typed literal
+        // because the driver does not accept a computed $unset object.
+        {
+          $set: update.set,
+          $unset: { error: "" },
+        },
+        { sort: { createdAt: 1 }, returnDocument: "after" }
+      );
+      return (job ?? null) as unknown as HandoffJob | null;
+    },
+    async requeueStaleLeases(staleBefore, error, now): Promise<number> {
+      const result = await jobsCol.updateMany(
+        {
+          status: "running",
+          workerInstanceId: { $exists: true },
+          heartbeatAt: { $lt: staleBefore },
+        },
+        {
+          $set: { status: "queued", error, updatedAt: now },
+          $unset: { workerInstanceId: "", workerSlotId: "", workerPhase: "" },
+        }
+      );
+      return result.modifiedCount;
+    },
+    async listUnleasedRunning(): Promise<HandoffJob[]> {
+      const docs = await jobsCol
+        .find({ status: "running", workerInstanceId: { $exists: false } })
+        .toArray();
+      return docs as unknown as HandoffJob[];
+    },
+    async requeueLegacyOrphan(id, error, now): Promise<boolean> {
+      const result = await jobsCol.updateOne(
+        { _id: id, status: "running", workerInstanceId: { $exists: false } },
+        {
+          $set: { status: "queued", error, updatedAt: now },
+          $unset: { workerInstanceId: "", workerSlotId: "", workerPhase: "" },
+        }
+      );
+      return result.matchedCount === 1;
+    },
+  };
 }
 
 /** The ONLY function in this file allowed to touch the control-plane DB's
@@ -569,23 +648,18 @@ async function tick(jobsCol: Collection<SimJob>, slotId: number, activeDbNames: 
   // window controls admission of the next queued job only.
   if (!hasCapacity()) return null;
   const claimFilter = claimFilterAt(new Date(), CLAIM_WINDOW);
-  const job = await jobsCol.findOneAndUpdate(
-    { $and: [claimFilter, { dbName: { $nin: activeDbNames } }] },
-    {
-      $set: {
-        status: "running",
-        workerStartedAt: new Date(),
-        updatedAt: new Date(),
-        heartbeatAt: new Date(),
-        workerInstanceId: WORKER_INSTANCE_ID,
-        workerSlotId: slotId,
-        workerPhase: "starting",
-      },
+  const job = await claimNextJob(mongoHandoffStore(jobsCol), {
+    filter: {
+      ...(claimFilter.startPolicy ? { startPolicy: claimFilter.startPolicy } : {}),
+      excludeDbNames: activeDbNames,
     },
-    { sort: { createdAt: 1 }, returnDocument: "after" }
-  );
+    slotId,
+    workerInstanceId: WORKER_INSTANCE_ID,
+    now: new Date(),
+    shutdownRequested: handoff.isShutdownRequested(),
+  });
   if (!job) return null;
-  return job;
+  return job as unknown as SimJob;
 }
 
 async function main() {
@@ -600,21 +674,28 @@ async function main() {
   const jobsCol = getSimJobsCollection(client.db(OPS_DB_NAME));
 
   const active = new Map<number, { job: SimJob; promise: Promise<void> }>();
+  const store = mongoHandoffStore(jobsCol);
 
   for (;;) {
     try {
-      const staleBefore = new Date(Date.now() - LEASE_STALE_MS);
-      await jobsCol.updateMany(
-        {
-          status: "running",
-          workerInstanceId: { $exists: true },
-          heartbeatAt: { $lt: staleBefore },
-        },
-        {
-          $set: { status: "queued", error: "stale worker lease recovered", updatedAt: new Date() },
-          $unset: { workerInstanceId: "", workerSlotId: "", workerPhase: "" },
+      const now = new Date();
+      const staleBefore = new Date(now.getTime() - LEASE_STALE_MS);
+      await recoverStaleLeases(store, staleBefore, now);
+      // Legacy (pre-lease) orphan sweep (#2069). The probe must positively
+      // show no matching engine process before a row is requeued; when the
+      // process table cannot be listed it returns null and this pass recovers
+      // nothing rather than risk requeueing a live legacy run.
+      const cmdlines = listProcessCmdlines();
+      if (cmdlines !== null) {
+        const recovered = await recoverLegacyOrphans(
+          store,
+          findLiveEngineRunIdsFromCmdlines(cmdlines),
+          now
+        );
+        for (const id of recovered) {
+          log(`recovered orphaned legacy claim ${id} (no lease, no live engine process)`);
         }
-      );
+      }
       for (let slotId = 1; slotId <= CONCURRENCY; slotId += 1) {
         if (active.has(slotId)) continue;
         const job = await tick(
@@ -626,11 +707,16 @@ async function main() {
         const promise = processJob(jobsCol, job, slotId).finally(() => active.delete(slotId));
         active.set(slotId, { job, promise });
       }
+      if (handoff.isShutdownRequested() && active.size === 0) {
+        log("drain complete: no active jobs, exiting");
+        break;
+      }
     } catch (err) {
       log(`tick error (non-fatal): ${err instanceof Error ? err.message : String(err)}`);
     }
     await new Promise((resolve) => setTimeout(resolve, TICK_MS));
   }
+  await client.close();
 }
 
 main().catch((error) => {

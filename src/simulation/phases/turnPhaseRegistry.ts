@@ -812,11 +812,10 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
           return { billsProposed };
         });
 
-        // File bench challengers directly into otherwise-uncontested single-seat
-        // primaries (governor/senate) BEFORE nppBehavior, governor is last in
-        // RACE_PRIORITY so nppBehavior's own Phase-2 starves it. Running first
-        // means nppBehavior (which reloads context this same turn) sees the filed
-        // candidate and won't double-fill the race.
+        // File bench challengers directly into uncovered primaries before
+        // nppBehavior. Some direct chamber families are outside RACE_PRIORITY,
+        // while low-priority races can be starved by the shared NPP pool.
+        // nppBehavior reloads context afterward and sees the filed candidates.
         await runtime.runPhase("generateChallengers", () => processChallengerGeneration(gameNow));
 
         const nppResult = await runtime.runPhase("nppBehavior", () =>

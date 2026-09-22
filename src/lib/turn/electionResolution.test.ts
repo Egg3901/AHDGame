@@ -329,6 +329,11 @@ describe("electionResolution", () => {
       const { resolveGeneralElections } = await import("./electionResolution");
       await resolveGeneralElections(new Date("2026-09-12T12:00:00Z"));
 
+      expect(tallyFind).toHaveBeenNthCalledWith(
+        1,
+        { electionId: { $in: [election._id] } },
+        { projection: { turnSnapshots: { $slice: -1 } } }
+      );
       const { recordAuditBulk } = await import("@/lib/audit/recordAudit");
       expect(recordAuditBulk).toHaveBeenCalledWith([
         expect.objectContaining({

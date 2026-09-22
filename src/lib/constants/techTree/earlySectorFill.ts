@@ -10,6 +10,7 @@
  */
 import type { CorporationType } from "../corporations";
 import type { TechEffect } from "./effects";
+import { mergeLaneMaps } from "./mediaMerge";
 
 interface NodeSpec {
   name: string;
@@ -17,6 +18,310 @@ interface NodeSpec {
   effects: TechEffect[];
   cashRevenueFraction?: number;
 }
+
+/** Pre-merge media fill (slots 3-9), 1940-1970. Merged below, never read directly. */
+const MEDIA_EARLY_FILL: Record<string, NodeSpec[]> = {
+  "1940": [
+    {
+      name: "Newsreel Distribution",
+      description: "Theater newsreels widen audience reach.",
+      effects: [{ kind: "marketingStrength", flat: 15 }],
+    },
+    {
+      name: "Affiliate Clearance Desks",
+      description: "Clearance desks raise network fill rates.",
+      effects: [{ kind: "marginBonus", pp: 0.5 }],
+    },
+    {
+      name: "Paper Rationing Discipline",
+      description: "Tight paper use protects print margins.",
+      effects: [{ kind: "growthCostReduction", pct: 0.03 }],
+    },
+    {
+      name: "Wire Service Contracts",
+      description: "Shared wires cut reporting cost.",
+      effects: [{ kind: "growthCostReduction", pct: 0.02 }],
+    },
+    {
+      name: "Sponsor Integration Units",
+      description: "Integrated spots raise advertiser spend.",
+      effects: [{ kind: "marketingStrength", flat: 12 }],
+    },
+    {
+      name: "Shortwave Relay",
+      description: "Relay extends international reach.",
+      effects: [{ kind: "logisticsStrength", flat: 10 }],
+    },
+    {
+      name: "Archive Libraries",
+      description: "Reusable archives cut production cost.",
+      effects: [{ kind: "growthCostReduction", pct: 0.02 }],
+    },
+  ],
+  "1950": [
+    {
+      name: "Prime-Time Scheduling",
+      description: "Block scheduling lifts ad rates.",
+      effects: [{ kind: "marginBonus", pp: 1 }],
+    },
+    {
+      name: "Offset Printing Upgrades",
+      description: "Offset cuts per-copy print cost.",
+      effects: [{ kind: "growthCostReduction", pct: 0.03 }],
+    },
+    {
+      name: "Audience Measurement",
+      description: "Ratings data sharpens ad pricing.",
+      effects: [{ kind: "marketingStrength", flat: 20 }],
+    },
+    {
+      name: "Syndication Packages",
+      description: "Packages monetize library inventory.",
+      effects: [{ kind: "marginBonus", pp: 0.5 }],
+    },
+    {
+      name: "Remote Broadcast Units",
+      description: "Remotes expand live coverage cheaply.",
+      effects: [{ kind: "logisticsStrength", flat: 12 }],
+    },
+    {
+      name: "Color Process Pilots",
+      description: "Early color lifts premium ad inventory.",
+      effects: [{ kind: "marketingStrength", flat: 15 }],
+    },
+    {
+      name: "Classified Ad Systems",
+      description: "Organized classifieds raise high-margin pages.",
+      effects: [{ kind: "marginBonus", pp: 0.5 }],
+    },
+  ],
+  "1960": [
+    {
+      name: "Demographic Ad Targeting",
+      description: "Demo buys raise CPM efficiency.",
+      effects: [{ kind: "marketingStrength", flat: 25 }],
+    },
+    {
+      name: "Microwave Studio Links",
+      description: "Studio links cut tape transport cost.",
+      effects: [{ kind: "growthCostReduction", pct: 0.03 }],
+    },
+    {
+      name: "Franchise Magazine Titles",
+      description: "Franchise titles lift subscription stickiness.",
+      effects: [{ kind: "marginBonus", pp: 1 }],
+    },
+    {
+      name: "Tape Editing Suites",
+      description: "Electronic edit rooms accelerate turnaround.",
+      effects: [{ kind: "growthCostReduction", pct: 0.03 }],
+    },
+    {
+      name: "Public Affairs Bureaus",
+      description: "Bureaus deepen local affiliate value.",
+      effects: [{ kind: "marketingStrength", flat: 15 }],
+    },
+    {
+      name: "International Co-Productions",
+      description: "Co-pros share cost and widen catalogs.",
+      effects: [{ kind: "growthCostReduction", pct: 0.02 }],
+    },
+    {
+      name: "Billboard Cross-Promo",
+      description: "Outdoor promo lifts tune-in cheaply.",
+      effects: [{ kind: "marketingStrength", flat: 12 }],
+    },
+  ],
+  "1970": [
+    {
+      name: "Pay-TV Experiments",
+      description: "Subscription experiments diversify revenue.",
+      effects: [{ kind: "marginBonus", pp: 1.5 }],
+    },
+    {
+      name: "Satellite Uplink Trucks",
+      description: "Uplinks expand live footprint.",
+      effects: [{ kind: "logisticsStrength", flat: 18 }],
+    },
+    {
+      name: "Demographic Research Firms",
+      description: "Research raises advertiser confidence.",
+      effects: [{ kind: "marketingStrength", flat: 28 }],
+    },
+    {
+      name: "Newsroom Computerization",
+      description: "Electronic newsrooms cut production cost.",
+      effects: [{ kind: "growthCostReduction", pct: 0.04 }],
+    },
+    {
+      name: "Format Radio Specialization",
+      description: "Formats raise loyal listener share.",
+      effects: [{ kind: "marginBonus", pp: 1 }],
+    },
+    {
+      name: "Rights Libraries",
+      description: "Owned rights lift residual income.",
+      effects: [{ kind: "marginBonus", pp: 1 }],
+    },
+    {
+      name: "Affiliate Incentive Plans",
+      description: "Incentives raise clearance of network shows.",
+      effects: [{ kind: "marketingStrength", flat: 18 }],
+    },
+  ],
+};
+
+/** Pre-merge entertainment fill (slots 3-9), 1940-1970. Merged below, never read directly. */
+const ENTERTAINMENT_EARLY_FILL: Record<string, NodeSpec[]> = {
+  "1940": [
+    {
+      name: "Studio Lot Utilization",
+      description: "Lot sharing raises stage occupancy.",
+      effects: [{ kind: "growthCostReduction", pct: 0.03 }],
+    },
+    {
+      name: "Star Contract Systems",
+      description: "Contracts stabilize slate marketing.",
+      effects: [{ kind: "marketingStrength", flat: 15 }],
+    },
+    {
+      name: "Soundtrack Libraries",
+      description: "Libraries cut music clearance cost.",
+      effects: [{ kind: "growthCostReduction", pct: 0.02 }],
+    },
+    {
+      name: "Theater Circuit Deals",
+      description: "Circuits guarantee playdates.",
+      effects: [{ kind: "marketingStrength", flat: 14 }],
+    },
+    {
+      name: "Propaganda Unit Experience",
+      description: "Unit experience speeds sponsored content.",
+      effects: [{ kind: "marginBonus", pp: 0.5 }],
+    },
+    {
+      name: "Costume and Prop Reuse",
+      description: "Reuse lowers episode cost.",
+      effects: [{ kind: "growthCostReduction", pct: 0.02 }],
+    },
+    {
+      name: "Newsreel Adjacency",
+      description: "Adjacency lifts theater ad inventory.",
+      effects: [{ kind: "marginBonus", pp: 0.5 }],
+    },
+  ],
+  "1950": [
+    {
+      name: "Multi-Camera Stages",
+      description: "Multi-cam raises weekly output.",
+      effects: [{ kind: "growthCostReduction", pct: 0.03 }],
+    },
+    {
+      name: "Hit Singles Promotion",
+      description: "Radio promo lifts record sell-through.",
+      effects: [{ kind: "marketingStrength", flat: 20 }],
+    },
+    {
+      name: "Residuals Administration",
+      description: "Clean residuals prevent costly disputes.",
+      effects: [{ kind: "marginBonus", pp: 0.5 }],
+    },
+    {
+      name: "Location Scouting Offices",
+      description: "Offices cut shoot delay.",
+      effects: [{ kind: "logisticsStrength", flat: 12 }],
+    },
+    {
+      name: "Syndication Clearance",
+      description: "Clearance monetizes library deeper.",
+      effects: [{ kind: "marginBonus", pp: 1 }],
+    },
+    {
+      name: "Fan Club Marketing",
+      description: "Fan clubs cheaply sustain demand.",
+      effects: [{ kind: "marketingStrength", flat: 14 }],
+    },
+    {
+      name: "Film Lab Partnerships",
+      description: "Labs accelerate release prints.",
+      effects: [{ kind: "growthCostReduction", pct: 0.02 }],
+    },
+  ],
+  "1960": [
+    {
+      name: "Festival Circuit Strategy",
+      description: "Festivals raise prestige and sales.",
+      effects: [{ kind: "marketingStrength", flat: 18 }],
+    },
+    {
+      name: "Tour Production Logistics",
+      description: "Tour logistics raise show margin.",
+      effects: [{ kind: "logisticsStrength", flat: 15 }],
+    },
+    {
+      name: "Theme Park Licensing",
+      description: "Licensing extends IP into attractions.",
+      effects: [{ kind: "marginBonus", pp: 1 }],
+    },
+    {
+      name: "Color Telecine Transfer",
+      description: "Transfers unlock TV aftermarkets.",
+      effects: [{ kind: "growthCostReduction", pct: 0.03 }],
+    },
+    {
+      name: "Merchandising Tie-Ins",
+      description: "Tie-ins raise ancillary revenue.",
+      effects: [{ kind: "marketingStrength", flat: 16 }],
+    },
+    {
+      name: "Soundstage Soundproofing",
+      description: "Better stages cut reshoot cost.",
+      effects: [{ kind: "growthCostReduction", pct: 0.02 }],
+    },
+    {
+      name: "International Dubbing",
+      description: "Dubbing opens overseas windows.",
+      effects: [{ kind: "marketingStrength", flat: 14 }],
+    },
+  ],
+  "1970": [
+    {
+      name: "Home Video Rights",
+      description: "Video rights create new windows.",
+      effects: [{ kind: "marginBonus", pp: 1.5 }],
+    },
+    {
+      name: "Blockbuster Event Marketing",
+      description: "Event marketing lifts opening weekends.",
+      effects: [{ kind: "marketingStrength", flat: 28 }],
+    },
+    {
+      name: "Nationwide Print Runs",
+      description: "Saturated prints raise first-week take.",
+      effects: [{ kind: "logisticsStrength", flat: 16 }],
+    },
+    {
+      name: "Talent Packaging Agencies",
+      description: "Packages accelerate greenlights.",
+      effects: [{ kind: "growthCostReduction", pct: 0.03 }],
+    },
+    {
+      name: "Soundtrack Cross-Promo",
+      description: "Cross-promo lifts both film and album.",
+      effects: [{ kind: "marketingStrength", flat: 18 }],
+    },
+    {
+      name: "Union Rate Planning",
+      description: "Rate planning protects shoot budgets.",
+      effects: [{ kind: "growthCostReduction", pct: 0.03 }],
+    },
+    {
+      name: "Preview Screening Analytics",
+      description: "Previews tune cuts before wide release.",
+      effects: [{ kind: "marginBonus", pp: 1 }],
+    },
+  ],
+};
 
 export const SECTOR_EARLY_FILL: Partial<Record<CorporationType, Record<string, NodeSpec[]>>> = {
   manufacturing: {
@@ -619,156 +924,7 @@ export const SECTOR_EARLY_FILL: Partial<Record<CorporationType, Record<string, N
       },
     ],
   },
-  media: {
-    "1940": [
-      {
-        name: "Newsreel Distribution",
-        description: "Theater newsreels widen audience reach.",
-        effects: [{ kind: "marketingStrength", flat: 15 }],
-      },
-      {
-        name: "Affiliate Clearance Desks",
-        description: "Clearance desks raise network fill rates.",
-        effects: [{ kind: "marginBonus", pp: 0.5 }],
-      },
-      {
-        name: "Paper Rationing Discipline",
-        description: "Tight paper use protects print margins.",
-        effects: [{ kind: "growthCostReduction", pct: 0.03 }],
-      },
-      {
-        name: "Wire Service Contracts",
-        description: "Shared wires cut reporting cost.",
-        effects: [{ kind: "growthCostReduction", pct: 0.02 }],
-      },
-      {
-        name: "Sponsor Integration Units",
-        description: "Integrated spots raise advertiser spend.",
-        effects: [{ kind: "marketingStrength", flat: 12 }],
-      },
-      {
-        name: "Shortwave Relay",
-        description: "Relay extends international reach.",
-        effects: [{ kind: "logisticsStrength", flat: 10 }],
-      },
-      {
-        name: "Archive Libraries",
-        description: "Reusable archives cut production cost.",
-        effects: [{ kind: "growthCostReduction", pct: 0.02 }],
-      },
-    ],
-    "1950": [
-      {
-        name: "Prime-Time Scheduling",
-        description: "Block scheduling lifts ad rates.",
-        effects: [{ kind: "marginBonus", pp: 1 }],
-      },
-      {
-        name: "Offset Printing Upgrades",
-        description: "Offset cuts per-copy print cost.",
-        effects: [{ kind: "growthCostReduction", pct: 0.03 }],
-      },
-      {
-        name: "Audience Measurement",
-        description: "Ratings data sharpens ad pricing.",
-        effects: [{ kind: "marketingStrength", flat: 20 }],
-      },
-      {
-        name: "Syndication Packages",
-        description: "Packages monetize library inventory.",
-        effects: [{ kind: "marginBonus", pp: 0.5 }],
-      },
-      {
-        name: "Remote Broadcast Units",
-        description: "Remotes expand live coverage cheaply.",
-        effects: [{ kind: "logisticsStrength", flat: 12 }],
-      },
-      {
-        name: "Color Process Pilots",
-        description: "Early color lifts premium ad inventory.",
-        effects: [{ kind: "marketingStrength", flat: 15 }],
-      },
-      {
-        name: "Classified Ad Systems",
-        description: "Organized classifieds raise high-margin pages.",
-        effects: [{ kind: "marginBonus", pp: 0.5 }],
-      },
-    ],
-    "1960": [
-      {
-        name: "Demographic Ad Targeting",
-        description: "Demo buys raise CPM efficiency.",
-        effects: [{ kind: "marketingStrength", flat: 25 }],
-      },
-      {
-        name: "Microwave Studio Links",
-        description: "Studio links cut tape transport cost.",
-        effects: [{ kind: "growthCostReduction", pct: 0.03 }],
-      },
-      {
-        name: "Franchise Magazine Titles",
-        description: "Franchise titles lift subscription stickiness.",
-        effects: [{ kind: "marginBonus", pp: 1 }],
-      },
-      {
-        name: "Tape Editing Suites",
-        description: "Electronic edit rooms accelerate turnaround.",
-        effects: [{ kind: "growthCostReduction", pct: 0.03 }],
-      },
-      {
-        name: "Public Affairs Bureaus",
-        description: "Bureaus deepen local affiliate value.",
-        effects: [{ kind: "marketingStrength", flat: 15 }],
-      },
-      {
-        name: "International Co-Productions",
-        description: "Co-pros share cost and widen catalogs.",
-        effects: [{ kind: "growthCostReduction", pct: 0.02 }],
-      },
-      {
-        name: "Billboard Cross-Promo",
-        description: "Outdoor promo lifts tune-in cheaply.",
-        effects: [{ kind: "marketingStrength", flat: 12 }],
-      },
-    ],
-    "1970": [
-      {
-        name: "Pay-TV Experiments",
-        description: "Subscription experiments diversify revenue.",
-        effects: [{ kind: "marginBonus", pp: 1.5 }],
-      },
-      {
-        name: "Satellite Uplink Trucks",
-        description: "Uplinks expand live footprint.",
-        effects: [{ kind: "logisticsStrength", flat: 18 }],
-      },
-      {
-        name: "Demographic Research Firms",
-        description: "Research raises advertiser confidence.",
-        effects: [{ kind: "marketingStrength", flat: 28 }],
-      },
-      {
-        name: "Newsroom Computerization",
-        description: "Electronic newsrooms cut production cost.",
-        effects: [{ kind: "growthCostReduction", pct: 0.04 }],
-      },
-      {
-        name: "Format Radio Specialization",
-        description: "Formats raise loyal listener share.",
-        effects: [{ kind: "marginBonus", pp: 1 }],
-      },
-      {
-        name: "Rights Libraries",
-        description: "Owned rights lift residual income.",
-        effects: [{ kind: "marginBonus", pp: 1 }],
-      },
-      {
-        name: "Affiliate Incentive Plans",
-        description: "Incentives raise clearance of network shows.",
-        effects: [{ kind: "marketingStrength", flat: 18 }],
-      },
-    ],
-  },
+  media_entertainment: mergeLaneMaps(MEDIA_EARLY_FILL, ENTERTAINMENT_EARLY_FILL, "fill"),
   chemical_industries: {
     "1940": [
       {
@@ -2116,156 +2272,6 @@ export const SECTOR_EARLY_FILL: Partial<Record<CorporationType, Record<string, N
         name: "Energy-Efficient Switches",
         description: "Efficient switches cut CO power cost.",
         effects: [{ kind: "growthCostReduction", pct: 0.03 }],
-      },
-    ],
-  },
-  entertainment: {
-    "1940": [
-      {
-        name: "Studio Lot Utilization",
-        description: "Lot sharing raises stage occupancy.",
-        effects: [{ kind: "growthCostReduction", pct: 0.03 }],
-      },
-      {
-        name: "Star Contract Systems",
-        description: "Contracts stabilize slate marketing.",
-        effects: [{ kind: "marketingStrength", flat: 15 }],
-      },
-      {
-        name: "Soundtrack Libraries",
-        description: "Libraries cut music clearance cost.",
-        effects: [{ kind: "growthCostReduction", pct: 0.02 }],
-      },
-      {
-        name: "Theater Circuit Deals",
-        description: "Circuits guarantee playdates.",
-        effects: [{ kind: "marketingStrength", flat: 14 }],
-      },
-      {
-        name: "Propaganda Unit Experience",
-        description: "Unit experience speeds sponsored content.",
-        effects: [{ kind: "marginBonus", pp: 0.5 }],
-      },
-      {
-        name: "Costume and Prop Reuse",
-        description: "Reuse lowers episode cost.",
-        effects: [{ kind: "growthCostReduction", pct: 0.02 }],
-      },
-      {
-        name: "Newsreel Adjacency",
-        description: "Adjacency lifts theater ad inventory.",
-        effects: [{ kind: "marginBonus", pp: 0.5 }],
-      },
-    ],
-    "1950": [
-      {
-        name: "Multi-Camera Stages",
-        description: "Multi-cam raises weekly output.",
-        effects: [{ kind: "growthCostReduction", pct: 0.03 }],
-      },
-      {
-        name: "Hit Singles Promotion",
-        description: "Radio promo lifts record sell-through.",
-        effects: [{ kind: "marketingStrength", flat: 20 }],
-      },
-      {
-        name: "Residuals Administration",
-        description: "Clean residuals prevent costly disputes.",
-        effects: [{ kind: "marginBonus", pp: 0.5 }],
-      },
-      {
-        name: "Location Scouting Offices",
-        description: "Offices cut shoot delay.",
-        effects: [{ kind: "logisticsStrength", flat: 12 }],
-      },
-      {
-        name: "Syndication Clearance",
-        description: "Clearance monetizes library deeper.",
-        effects: [{ kind: "marginBonus", pp: 1 }],
-      },
-      {
-        name: "Fan Club Marketing",
-        description: "Fan clubs cheaply sustain demand.",
-        effects: [{ kind: "marketingStrength", flat: 14 }],
-      },
-      {
-        name: "Film Lab Partnerships",
-        description: "Labs accelerate release prints.",
-        effects: [{ kind: "growthCostReduction", pct: 0.02 }],
-      },
-    ],
-    "1960": [
-      {
-        name: "Festival Circuit Strategy",
-        description: "Festivals raise prestige and sales.",
-        effects: [{ kind: "marketingStrength", flat: 18 }],
-      },
-      {
-        name: "Tour Production Logistics",
-        description: "Tour logistics raise show margin.",
-        effects: [{ kind: "logisticsStrength", flat: 15 }],
-      },
-      {
-        name: "Theme Park Licensing",
-        description: "Licensing extends IP into attractions.",
-        effects: [{ kind: "marginBonus", pp: 1 }],
-      },
-      {
-        name: "Color Telecine Transfer",
-        description: "Transfers unlock TV aftermarkets.",
-        effects: [{ kind: "growthCostReduction", pct: 0.03 }],
-      },
-      {
-        name: "Merchandising Tie-Ins",
-        description: "Tie-ins raise ancillary revenue.",
-        effects: [{ kind: "marketingStrength", flat: 16 }],
-      },
-      {
-        name: "Soundstage Soundproofing",
-        description: "Better stages cut reshoot cost.",
-        effects: [{ kind: "growthCostReduction", pct: 0.02 }],
-      },
-      {
-        name: "International Dubbing",
-        description: "Dubbing opens overseas windows.",
-        effects: [{ kind: "marketingStrength", flat: 14 }],
-      },
-    ],
-    "1970": [
-      {
-        name: "Home Video Rights",
-        description: "Video rights create new windows.",
-        effects: [{ kind: "marginBonus", pp: 1.5 }],
-      },
-      {
-        name: "Blockbuster Event Marketing",
-        description: "Event marketing lifts opening weekends.",
-        effects: [{ kind: "marketingStrength", flat: 28 }],
-      },
-      {
-        name: "Nationwide Print Runs",
-        description: "Saturated prints raise first-week take.",
-        effects: [{ kind: "logisticsStrength", flat: 16 }],
-      },
-      {
-        name: "Talent Packaging Agencies",
-        description: "Packages accelerate greenlights.",
-        effects: [{ kind: "growthCostReduction", pct: 0.03 }],
-      },
-      {
-        name: "Soundtrack Cross-Promo",
-        description: "Cross-promo lifts both film and album.",
-        effects: [{ kind: "marketingStrength", flat: 18 }],
-      },
-      {
-        name: "Union Rate Planning",
-        description: "Rate planning protects shoot budgets.",
-        effects: [{ kind: "growthCostReduction", pct: 0.03 }],
-      },
-      {
-        name: "Preview Screening Analytics",
-        description: "Previews tune cuts before wide release.",
-        effects: [{ kind: "marginBonus", pp: 1 }],
       },
     ],
   },

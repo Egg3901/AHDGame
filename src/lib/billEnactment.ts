@@ -712,6 +712,7 @@ export async function onBillEnacted(
   // (see referendumWebhooks); skip the generic "Bill Enacted" notice to avoid a
   // duplicate post for the same event.
   if (bill.category !== "reunification") {
+    const enactmentScopeLabel = isNationalBill ? "Federal" : "Regional";
     const cardUrl = await generateDiscordEventCard(
       {
         eyebrow: `${countryLabel} · ${locationLabel}`,
@@ -723,7 +724,7 @@ export async function onBillEnacted(
       `bill-enacted-${bill._id.toString()}`
     );
     sendCountryGameEvent(resolvedCountry ?? "US", {
-      title: `Bill enacted: ${bill.title}`,
+      title: `${enactmentScopeLabel} bill enacted: ${bill.title}`,
       description: cardUrl
         ? `[View the enacted bill](${billUrl})`
         : `**${bill.title}** was signed into law.`,

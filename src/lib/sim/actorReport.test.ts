@@ -8,7 +8,7 @@ import { evaluateActorCoverage } from "./actorCoverage";
 import { snapshotActorPopulation } from "./syntheticActors";
 
 describe("buildActorCoverageSection", () => {
-  it("renders the full section for a pure-NPP manifest: 0/12 covered, 12 warnings", () => {
+  it("renders the full section for a pure-NPP manifest: 0/13 covered, 13 warnings", () => {
     const manifest = evaluateActorCoverage(
       snapshotActorPopulation({
         mode: "pure-npp",
@@ -23,11 +23,11 @@ describe("buildActorCoverageSection", () => {
     const section = buildActorCoverageSection(manifest);
     expect(section.heading).toBe(ACTOR_COVERAGE_SECTION_HEADING);
     expect(section.mode).toBe("pure-npp");
-    expect(section.mechanicCount).toBe(12);
+    expect(section.mechanicCount).toBe(13);
     expect(section.coveredCount).toBe(0);
-    expect(section.uncoveredCount).toBe(12);
-    expect(section.warnings).toHaveLength(12);
-    expect(section.lines[0]).toContain("0/12 mechanics covered");
+    expect(section.uncoveredCount).toBe(13);
+    expect(section.warnings).toHaveLength(13);
+    expect(section.lines[0]).toContain("0/13 mechanics covered");
     // Warnings render inline, first, so no reader meets a chart before them.
     expect(section.lines.slice(1)).toEqual(section.warnings);
   });
@@ -49,9 +49,10 @@ describe("buildActorCoverageSection", () => {
       "1953-01-01T00:00:00.000Z"
     );
     const section = buildActorCoverageSection(manifest);
-    // 11 covered + 1 partial (campaigns: accrual without an entry/spend
-    // driver), so the section warns exactly once instead of reading clean.
-    expect(section.coveredCount).toBe(11);
+    // 12 covered + 1 partial (campaigns: accrual but no retained
+    // full-sequence purchase), so the section warns exactly once instead of
+    // reading clean.
+    expect(section.coveredCount).toBe(12);
     expect(section.uncoveredCount).toBe(1);
     expect(section.warnings).toHaveLength(1);
     expect(section.warnings[0]).toContain("Campaigns and player actions");

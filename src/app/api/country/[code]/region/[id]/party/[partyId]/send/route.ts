@@ -33,6 +33,7 @@ import {
 } from "@/lib/parties/leadershipElectionFreeze";
 import { getGameTime } from "@/lib/time/gameTime";
 import { isSameCountry } from "@/lib/api/sameCountry";
+import { TreasuryExecutionUncertainError } from "@/lib/treasury/executionUncertain";
 
 interface RouteParams {
   params: Promise<{ code: string; id: string; partyId: string }>;
@@ -219,18 +220,58 @@ export async function POST(request: Request, { params }: RouteParams) {
         return NextResponse.json({ error: "Insufficient treasury funds" }, { status: 400 });
       }
 
-      const creditResult = await db
-        .collection<Character>("characters")
-        .updateOne({ _id: targetCharacterOid }, characterCredit);
+      // The debit has landed and there is no transaction to roll back, so
+      // every exit from here on must either complete the credit or put the
+      // money back. A THROWN credit was previously not compensated at all:
+      // it escaped with the treasury already short.
+      const refundDebit = async (reason: string, cause?: unknown): Promise<void> => {
+        try {
+          const refundResult = await db
+            .collection<StatePartyOrg>("statePartyOrg")
+            .updateOne(
+              { _id: statePartyKey },
+              { $inc: { treasury: sendAmount }, $set: { updatedAt: new Date() } }
+            );
+          if (refundResult.matchedCount !== 1) {
+            throw new Error("State party treasury no longer exists during refund");
+          }
+        } catch (refundError) {
+          console.error(
+            JSON.stringify({
+              error: "state_party_send_refund_failed",
+              operation: "state_party_send",
+              statePartyKey,
+              countryId,
+              amount: sendAmount,
+              recipientId: targetCharacterOid.toString(),
+              reason,
+              message: refundError instanceof Error ? refundError.message : String(refundError),
+              // The failure that triggered the refund, so an operator
+              // reconciling the row sees what went wrong first.
+              ...(cause !== undefined && {
+                causedBy: cause instanceof Error ? cause.message : String(cause),
+              }),
+            })
+          );
+          throw new TreasuryExecutionUncertainError(
+            `State party treasury debited but neither credited nor refunded (${reason}).`,
+            { cause: refundError }
+          );
+        }
+      };
+
+      let creditResult;
+      try {
+        creditResult = await db
+          .collection<Character>("characters")
+          .updateOne({ _id: targetCharacterOid }, characterCredit);
+      } catch (creditError) {
+        await refundDebit("credit threw", creditError);
+        throw creditError;
+      }
 
       if (creditResult.matchedCount === 0) {
-        await db.collection<StatePartyOrg>("statePartyOrg").updateOne(
-          { _id: statePartyKey },
-          {
-            $inc: { treasury: sendAmount },
-            $set: { updatedAt: new Date() },
-          }
-        );
+        await refundDebit("recipient not found");
         return NextResponse.json({ error: "Character not found" }, { status: 404 });
       }
 

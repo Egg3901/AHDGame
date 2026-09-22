@@ -112,15 +112,19 @@ const SECTOR_CHANNEL_PROFILES: Record<CorporationType, ChannelWeights> = {
     mediaTrust: 0.55,
     innovation: 0.55,
   },
-  media: {
+  // issue #2234: merged media/entertainment keeps the stronger of each
+  // legacy exposure (venues' foot traffic plus streaming's connectivity).
+  media_entertainment: {
     ...COMMON_PROFILE,
+    laborCost: 0.55,
     laborQuality: 0.6,
-    consumerDemand: 0.55,
+    consumerDemand: 0.85,
     digitalInfrastructure: 0.75,
-    publicSafety: 0.12,
+    publicSafety: 0.65,
     regulatoryTrust: 0.55,
     innovation: 0.45,
     mediaTrust: 0.95,
+    demographics: 0.6,
   },
   manufacturing: {
     ...COMMON_PROFILE,
@@ -238,15 +242,6 @@ const SECTOR_CHANNEL_PROFILES: Record<CorporationType, ChannelWeights> = {
     regulatoryTrust: 0.65,
     innovation: 0.75,
     publicProcurement: 0.35,
-  },
-  entertainment: {
-    ...COMMON_PROFILE,
-    laborCost: 0.55,
-    consumerDemand: 0.85,
-    digitalInfrastructure: 0.55,
-    publicSafety: 0.65,
-    mediaTrust: 0.8,
-    demographics: 0.6,
   },
   logistics: {
     ...COMMON_PROFILE,

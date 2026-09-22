@@ -248,13 +248,19 @@ describe("processForexTurn", () => {
       .mockResolvedValueOnce({ modifiedCount: 0 })
       .mockResolvedValueOnce({ modifiedCount: 1 });
 
-    // The expiry find uses a separate find() call (second one after limit order scan)
-    // Override the currencyOrders find mock to handle both calls
+    // Recovery, the open-order scan, and expiry each issue a find().
     let findCallCount = 0;
     db.collectionMocks.currencyOrders.find.mockImplementation(() => {
       findCallCount++;
       if (findCallCount === 1) {
-        // First call: limit order scan (open limit orders sorted by createdAt)
+        // First call: stale intent recovery.
+        return {
+          toArray: vi.fn().mockResolvedValue([]),
+          limit: vi.fn().mockReturnThis(),
+        };
+      }
+      if (findCallCount === 2) {
+        // Second call: limit order scan (open limit orders sorted by createdAt).
         return {
           toArray: vi.fn().mockResolvedValue([]),
           sort: vi.fn().mockReturnValue({
@@ -327,6 +333,12 @@ describe("processForexTurn", () => {
     db.collectionMocks.currencyOrders.find.mockImplementation(() => {
       findCallCount++;
       if (findCallCount === 1) {
+        return {
+          toArray: vi.fn().mockResolvedValue([]),
+          limit: vi.fn().mockReturnThis(),
+        };
+      }
+      if (findCallCount === 2) {
         return {
           sort: vi.fn().mockReturnValue({
             toArray: vi.fn().mockResolvedValue([order]),

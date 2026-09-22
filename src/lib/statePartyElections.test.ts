@@ -637,6 +637,71 @@ describe("createMissingElections — shared default-cycle alignment", () => {
     }
   });
 
+  it("loads recipients once and keeps notifications isolated by chapter", async () => {
+    const insertMany = vi.fn().mockResolvedValue({ insertedCount: 6 });
+    setMockCollection("statePartyElections", {
+      find: vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue([]) }),
+      insertMany,
+    });
+    setMockCollection("politicalParties", {
+      find: vi.fn().mockReturnValue({
+        toArray: vi.fn().mockResolvedValue([
+          { sequentialId: 1, countryId: "US" },
+          { sequentialId: 2, countryId: "US" },
+        ]),
+      }),
+    });
+    setMockCollection("statePartyOrg", {
+      find: vi.fn().mockReturnValue({
+        toArray: vi.fn().mockResolvedValue([makeOrg("CA", "1"), makeOrg("NY", "2")]),
+      }),
+    });
+    const californiaMember = {
+      _id: new ObjectId(),
+      userId: new ObjectId(),
+      homeState: "CA",
+      party: "1",
+      countryId: "US",
+    };
+    const newYorkMember = {
+      _id: new ObjectId(),
+      userId: new ObjectId(),
+      homeState: "NY",
+      party: "2",
+      countryId: "US",
+    };
+    const characterFind = vi.fn((query: Record<string, unknown>) => {
+      const rows = "$or" in query ? [californiaMember, newYorkMember] : [];
+      return {
+        toArray: vi.fn().mockResolvedValue(rows),
+        project: vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue(rows) }),
+      };
+    });
+    setMockCollection("characters", { find: characterFind });
+
+    const { createMissingElections } = await import("./statePartyElections");
+    const { createNotifications } = await import("@/lib/notifications");
+    const created = await createMissingElections(120, 72, new Date(), undefined);
+
+    expect(created).toBe(6);
+    expect(characterFind.mock.calls.filter(([query]) => "$or" in query)).toHaveLength(1);
+    expect(createNotifications).toHaveBeenCalledOnce();
+    const notifications = vi.mocked(createNotifications).mock.calls[0][0];
+    expect(notifications).toHaveLength(2);
+    expect(notifications).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          userId: californiaMember.userId,
+          metadata: expect.objectContaining({ stateId: "CA", partyId: "1" }),
+        }),
+        expect.objectContaining({
+          userId: newYorkMember.userId,
+          metadata: expect.objectContaining({ stateId: "NY", partyId: "2" }),
+        }),
+      ])
+    );
+  });
+
   it("materializes territorial party chapters with resident members and opens their elections", async () => {
     const insertMany = vi.fn().mockResolvedValue({ insertedCount: 6 });
     const orgBulkWrite = vi.fn().mockResolvedValue({ upsertedCount: 2 });

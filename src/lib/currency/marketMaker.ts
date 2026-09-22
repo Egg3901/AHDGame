@@ -1,5 +1,5 @@
 // src/lib/currency/marketMaker.ts
-import type { Db, ObjectId } from "mongodb";
+import type { AnyBulkWriteOperation, Db, ObjectId } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import type { ExchangeRate, TradeHistoryEntry, TradeSource } from "@/lib/db/types";
@@ -7,10 +7,14 @@ import {
   MARKET_MAKER_SPREAD,
   CURRENCY_ANCHOR_COUNTRY,
   COUNTRY_CURRENCY_MAP,
+  SPREAD_FEE_FOREX_REVENUE_RATIO,
+  SPREAD_FEE_RESERVE_RATIO,
   clampForexSpreadStrength,
 } from "@/lib/constants/currencies";
 import { buildPersonalBalanceInc } from "@/lib/currency/characterFunds";
 import { calculateSpreadFee, distributeSpreadFee } from "@/lib/currency/spreadFees";
+import type { CentralBank } from "@/lib/db/types/centralBank";
+import { getBankId } from "@/lib/centralBank/helpers";
 
 interface MarketMakerTradeParams {
   characterId: ObjectId;
@@ -82,6 +86,57 @@ export async function distributeConversionSpread(
   if (!fromCountryId) return;
   const toCountryId = getCountryForCurrency(toCurrency);
   await distributeSpreadFee(db, spreadFee, fromCountryId, fromCurrency, toCountryId ?? undefined);
+}
+
+/**
+ * Batch already-computed conversion spreads without changing per-fee rounding.
+ * Corporation turns can produce thousands of fee rows that ultimately touch a
+ * small, fixed set of central-bank documents. Accumulating their individually
+ * rounded legs first collapses that work to at most one update per bank.
+ */
+export async function distributeConversionSpreadsBatch(
+  db: Db,
+  spreads: readonly {
+    fee: number;
+    fromCurrency: CurrencyCode;
+    toCurrency: CurrencyCode;
+  }[]
+): Promise<void> {
+  const incrementsByBank = new Map<string, Record<string, number>>();
+  const add = (bankId: string, field: string, amount: number) => {
+    if (amount === 0) return;
+    const increments = incrementsByBank.get(bankId) ?? {};
+    increments[field] = (increments[field] ?? 0) + amount;
+    incrementsByBank.set(bankId, increments);
+  };
+
+  for (const { fee, fromCurrency, toCurrency } of spreads) {
+    if (!Number.isFinite(fee) || fee <= 0 || fromCurrency === toCurrency) continue;
+    const fromCountryId = getCountryForCurrency(fromCurrency);
+    if (!fromCountryId) continue;
+    const toCountryId = getCountryForCurrency(toCurrency);
+    const reserveAmount = Math.round(fee * SPREAD_FEE_RESERVE_RATIO);
+    const revenueAmount = Math.round(fee * SPREAD_FEE_FOREX_REVENUE_RATIO);
+    add(getBankId(fromCountryId), "forexRevenue", revenueAmount);
+    add(
+      getBankId(toCountryId ?? fromCountryId),
+      `spreadFeeReserveBalances.${fromCurrency}`,
+      reserveAmount
+    );
+  }
+
+  const operations: AnyBulkWriteOperation<CentralBank>[] = [...incrementsByBank].map(
+    ([bankId, increments]) => ({
+      updateOne: {
+        filter: { _id: bankId },
+        update: { $inc: increments },
+        upsert: true,
+      },
+    })
+  );
+  if (operations.length > 0) {
+    await db.collection<CentralBank>("centralBanks").bulkWrite(operations);
+  }
 }
 
 /**

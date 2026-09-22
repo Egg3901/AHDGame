@@ -8,7 +8,7 @@
 /**
  * 1999-era national sector weights, US only.
  *
- * Relative percentage-of-GDP allocations across the 17 game sectors, calibrated
+ * Relative percentage-of-GDP allocations across the 16 game sectors, calibrated
  * to 1999 BEA value-added shares — a *dot-com + telecom boom, pre-China-WTO*
  * economy. Relative to the 2007/2019/2023 bundles:
  *   - manufacturing notably higher (~15% of GDP; offshoring hadn't accelerated)
@@ -43,11 +43,10 @@ export const COUNTRY_SECTOR_WEIGHTS_1999: Record<string, SectorWeightMap> = {
     automobiles: 6,
     construction: 5,
     chemical_industries: 5,
-    media: 4,
+    media_entertainment: 7,
     logistics: 4,
     energy: 3,
     defense: 3,
-    entertainment: 3,
     agriculture: 2,
     extraction: 2,
   },

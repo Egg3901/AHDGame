@@ -14,10 +14,14 @@ import {
 import {
   resolveFundBySlugOrId,
   creditFundPosition,
+  getPosition,
   insertFundTransaction,
 } from "@/lib/indexFunds/fundQueries";
 import { quoteIndexFundSubscription } from "@/lib/indexFunds/unitAccounting";
-import { atomicallyDebitCharacterCash } from "@/lib/financialTxLog/atomicCashGuard";
+import {
+  atomicallyDebitCharacterCash,
+  refundCharacterCash,
+} from "@/lib/financialTxLog/atomicCashGuard";
 import { loadCharacterFxRate } from "@/lib/currency/characterFunds";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
 import { autoConvertForPurchase, convertForExplicitPay } from "@/lib/currency/autoConvert";
@@ -127,8 +131,22 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
     }
 
     // Shared logic: debit cash, mint units, credit fund cash, record transaction.
-    const applySubscription = async (session?: import("mongodb").ClientSession) => {
+    //
+    // On the standalone path (no session) there is no transaction to roll back,
+    // so every leg applied before a failure is undone in reverse order. With a
+    // real session the transaction aborts and there is nothing to compensate.
+    const applySubscription = async (
+      session?: import("mongodb").ClientSession,
+      compensateStandaloneFailure = false
+    ) => {
       const mongoOpts = session ? { session } : undefined;
+      const priorPosition = await getPosition(
+        db,
+        fund._id,
+        "character",
+        { characterId },
+        mongoOpts
+      );
 
       const debitResult = await atomicallyDebitCharacterCash(
         db,
@@ -143,42 +161,90 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
         return { error: debitResult.error };
       }
 
-      // Mint units to holder position.
-      await creditFundPosition(
-        db,
-        fund._id,
-        "character",
-        { characterId },
-        units,
-        fund.quotedNav,
-        mongoOpts
-      );
-
-      // Increment fund unit supply and cash anchor.
-      await db.collection("indexFunds").updateOne(
-        { _id: fund._id },
-        {
-          $inc: { unitSupply: units, cashAnchor: totalCostAnchor },
-          $set: { updatedAt: new Date() },
-        },
-        mongoOpts
-      );
-
-      // Record the subscription transaction.
-      await insertFundTransaction(
-        db,
-        {
-          fundId: fund._id,
-          kind: "subscription",
-          holderKind: "character",
-          characterId,
+      let positionCredited = false;
+      let fundCredited = false;
+      try {
+        // Mint units to holder position.
+        await creditFundPosition(
+          db,
+          fund._id,
+          "character",
+          { characterId },
           units,
-          navAnchor: fund.quotedNav,
-          amountAnchor: totalCostAnchor,
-          createdAt: new Date(),
-        },
-        mongoOpts
-      );
+          fund.quotedNav,
+          mongoOpts
+        );
+        positionCredited = true;
+
+        // Increment fund unit supply and cash anchor.
+        await db.collection("indexFunds").updateOne(
+          { _id: fund._id },
+          {
+            $inc: { unitSupply: units, cashAnchor: totalCostAnchor },
+            $set: { updatedAt: new Date() },
+          },
+          mongoOpts
+        );
+        fundCredited = true;
+
+        // Record the subscription transaction.
+        await insertFundTransaction(
+          db,
+          {
+            fundId: fund._id,
+            kind: "subscription",
+            holderKind: "character",
+            characterId,
+            units,
+            navAnchor: fund.quotedNav,
+            amountAnchor: totalCostAnchor,
+            createdAt: new Date(),
+          },
+          mongoOpts
+        );
+      } catch (error) {
+        if (!compensateStandaloneFailure) throw error;
+        const compensationErrors: unknown[] = [];
+        const compensate = async (revert: () => Promise<void>) => {
+          try {
+            await revert();
+          } catch (compensationError) {
+            compensationErrors.push(compensationError);
+          }
+        };
+        // Reverse in the exact reverse of the apply order.
+        if (fundCredited) {
+          await compensate(async () => {
+            await db.collection("indexFunds").updateOne(
+              { _id: fund._id },
+              {
+                $inc: { unitSupply: -units, cashAnchor: -totalCostAnchor },
+                $set: { updatedAt: new Date() },
+              }
+            );
+          });
+        }
+        if (positionCredited) {
+          await compensate(async () => {
+            const positions = db.collection("indexFundPositions");
+            if (!priorPosition) {
+              await positions.deleteOne({ fundId: fund._id, holderKind: "character", characterId });
+              return;
+            }
+            await positions.replaceOne({ _id: priorPosition._id }, priorPosition, { upsert: true });
+          });
+        }
+        await compensate(async () => {
+          await refundCharacterCash(db, characterId, fundCurrency, totalCostNative, forexEnabled);
+        });
+        if (compensationErrors.length > 0) {
+          throw new AggregateError(
+            [error, ...compensationErrors],
+            `Index fund subscription failed and ${compensationErrors.length} compensation step(s) were incomplete`
+          );
+        }
+        throw error;
+      }
 
       return {
         result: {
@@ -201,7 +267,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
         await runTransactionWithSessionRetry(
           async () => db.client,
           async (session) => {
-            const outcome = await applySubscription(session);
+            // `session` is undefined on the standalone fallback path, where a
+            // partial write must be compensated by hand.
+            const outcome = await applySubscription(session, !session);
             if (outcome.error) debitError = outcome.error;
             else subscriptionResult = outcome.result;
           }
@@ -209,8 +277,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
       } catch (err) {
         const code = (err as { code?: number } | undefined)?.code;
         if (code === 20 || code === 263) {
-          // No replica set — fall back to sequential writes.
-          const outcome = await applySubscription();
+          // No replica set — fall back to sequential writes (with compensation).
+          const outcome = await applySubscription(undefined, true);
           if (outcome.error) debitError = outcome.error;
           else subscriptionResult = outcome.result;
         } else {

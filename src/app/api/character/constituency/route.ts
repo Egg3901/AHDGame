@@ -23,7 +23,7 @@ type CommonsOffice = {
 
 type PrimeMinisterOffice = {
   type: "primeMinister";
-  state: string;
+  state?: string;
   constituency?: string;
   constituencyId?: string;
 };
@@ -41,12 +41,17 @@ function isCommonsOffice(office: Character["currentOffice"]): office is CommonsO
 }
 
 function isPrimeMinisterOffice(office: Character["currentOffice"]): office is PrimeMinisterOffice {
-  return (
-    !!office &&
-    office.type === "primeMinister" &&
-    "state" in office &&
-    typeof office.state === "string"
-  );
+  // Prime Minister `state` is optional (OfficeType) and omitted by admin
+  // appointments, so eligibility must not require it (issue #2115). The
+  // claimable region resolves from office.state, else the holder's homeState.
+  return !!office && office.type === "primeMinister";
+}
+
+function resolveClaimRegion(office: UkConstituencyOffice, homeState: unknown): string | undefined {
+  if ("state" in office && typeof office.state === "string" && office.state) {
+    return office.state;
+  }
+  return typeof homeState === "string" && homeState ? homeState : undefined;
 }
 
 function isUkConstituencyOffice(
@@ -72,11 +77,19 @@ async function handleGET() {
       });
     }
 
-    const constituencies = getConstituenciesForUkRegion(office.state);
+    const regionId = resolveClaimRegion(office, auth.user.character.homeState);
+    if (!regionId) {
+      return NextResponse.json({
+        eligible: false,
+        constituencies: [],
+        selected: null,
+      });
+    }
+    const constituencies = getConstituenciesForUkRegion(regionId);
     return NextResponse.json({
       eligible: true,
       officeType: office.type,
-      regionId: office.state,
+      regionId,
       selected: office.constituencyId
         ? { id: office.constituencyId, name: office.constituency ?? office.constituencyId }
         : null,
@@ -112,7 +125,14 @@ export async function POST(request: Request) {
       );
     }
 
-    const constituency = findUkConstituency(office.state, constituencyId);
+    const regionId = resolveClaimRegion(office, character.homeState);
+    if (!regionId) {
+      return NextResponse.json(
+        badRequest("That constituency is not in your current UK region").toJson(),
+        { status: 400 }
+      );
+    }
+    const constituency = findUkConstituency(regionId, constituencyId);
     if (!constituency) {
       return NextResponse.json(
         badRequest("That constituency is not in your current UK region").toJson(),
