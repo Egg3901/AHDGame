@@ -4,8 +4,9 @@ import { handleRouteError } from "@/lib/api/errors";
 import { requireBotToken } from "@/lib/api/requireBotToken";
 import { getTicketsCollection } from "@/lib/db/collections/tickets";
 
-// GET /api/discord-bot/tickets/pending-resolutions — Terminal tickets that carry a
-// resolution message the bot has not yet delivered back to the reporter.
+// GET /api/discord-bot/tickets/pending-resolutions — Legacy tickets without a
+// Discord channel. Ops owns channel receipt delivery and its durable retries;
+// offering those tickets to the bot would race a second, invisible DM.
 // Auth: requireBotToken (private key only). Errors: 401
 export async function GET(request: Request) {
   try {
@@ -21,6 +22,11 @@ export async function GET(request: Request) {
         status: { $in: ["resolved", "closed"] },
         "resolution.message": { $exists: true },
         "resolution.deliveredAt": null,
+        $or: [
+          { discordChannelId: { $exists: false } },
+          { discordChannelId: null },
+          { discordChannelId: "" },
+        ],
       })
       .project({
         _id: 0,

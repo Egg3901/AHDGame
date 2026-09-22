@@ -15,7 +15,7 @@ describe("GET /api/discord-bot/tickets/pending-resolutions", () => {
     vi.mocked(getDb).mockResolvedValue(db as unknown as Db);
   });
 
-  it("offers both resolved and closed receipts to the bot", async () => {
+  it("offers only channel-less resolved and closed receipts to the bot", async () => {
     const tickets = db.collection("tickets");
     db.collectionMocks.tickets = tickets;
     tickets.find.mockReturnValue({
@@ -34,6 +34,11 @@ describe("GET /api/discord-bot/tickets/pending-resolutions", () => {
       status: { $in: ["resolved", "closed"] },
       "resolution.message": { $exists: true },
       "resolution.deliveredAt": null,
+      $or: [
+        { discordChannelId: { $exists: false } },
+        { discordChannelId: null },
+        { discordChannelId: "" },
+      ],
     });
   });
 });
