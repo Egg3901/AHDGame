@@ -34,11 +34,7 @@ describe("GET /api/discord-bot/tickets/pending-resolutions", () => {
       status: { $in: ["resolved", "closed"] },
       "resolution.message": { $exists: true },
       "resolution.deliveredAt": null,
-      $or: [
-        { discordChannelId: { $exists: false } },
-        { discordChannelId: null },
-        { discordChannelId: "" },
-      ],
+      $or: [{ discordChannelId: { $exists: false } }, { discordChannelId: "" }],
     });
   });
 });

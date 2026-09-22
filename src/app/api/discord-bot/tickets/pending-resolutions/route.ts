@@ -22,11 +22,7 @@ export async function GET(request: Request) {
         status: { $in: ["resolved", "closed"] },
         "resolution.message": { $exists: true },
         "resolution.deliveredAt": null,
-        $or: [
-          { discordChannelId: { $exists: false } },
-          { discordChannelId: null },
-          { discordChannelId: "" },
-        ],
+        $or: [{ discordChannelId: { $exists: false } }, { discordChannelId: "" }],
       })
       .project({
         _id: 0,
