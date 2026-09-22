@@ -47,7 +47,11 @@ export {
 } from "@/lib/turn/npp/strategyRetooling";
 import type { NPP } from "@/lib/db/types/npp";
 import type { UnownedSector } from "@/lib/db/types/unownedSector";
-import { ceoArchetypeModifiers } from "@/lib/turn/ceoArchetype";
+import {
+  deriveCeoArchetype,
+  ceoArchetypeModifiers,
+  type CeoArchetype,
+} from "@/lib/turn/ceoArchetype";
 import type { CorporationType } from "@/lib/constants/corporations";
 import { partitionOpenMarkets } from "@/lib/economy/queries/privateEnterpriseGate";
 import type { CommodityPrice } from "@/lib/db/types/commodityPrice";
@@ -142,19 +146,13 @@ import {
 import type {
   NppCorpDecision,
   NppCorpDecisionContext,
-  NppCorporationTurnResult,
   NppPlantsContext,
   NppSectorUpdateDoc,
 } from "@/lib/turn/npp/corpDecisionTypes";
-import type { NppAutonomyLevel } from "@/lib/db/types/gameState";
-import { decideNppProduct } from "@/lib/turn/npp/nppProductDecision";
-import { executeNppProductDecision } from "@/lib/turn/npp/nppProductExecutor";
 import {
   loadNppCorporationBondLookups,
   type NppCorporationDecisionPreload,
 } from "@/lib/turn/npp/nppCorporationBondLookups";
-import { loadNppProductCohort } from "@/lib/turn/npp/nppProductCohort";
-import { indexLatestCommodityPrices, indexNppCohort } from "@/lib/turn/npp/nppCohortIndexes";
 
 export type { NppPlantsContext } from "@/lib/turn/npp/corpDecisionTypes";
 
@@ -202,7 +200,23 @@ export async function processNppCorporationDecisions(
   now: Date,
   techTreesEnabled: boolean = false,
   preloaded?: NppCorporationDecisionPreload
-): Promise<NppCorporationTurnResult> {
+): Promise<{
+  corpUpdates: Array<{
+    filter: { _id: ObjectId; unlockedTechNodeIds?: { $ne: string } };
+    update: {
+      $set?: Record<string, unknown>;
+      $inc?: Record<string, number>;
+      $addToSet?: { unlockedTechNodeIds: string };
+    };
+  }>;
+  sectorUpdates: Array<{
+    filter: { _id: ObjectId };
+    update: NppSectorUpdateDoc;
+  }>;
+  newSectors: Array<Omit<CorporateSector, "_id"> & { _id: ObjectId }>;
+  divestedSectorIds: ObjectId[];
+  techLedger: TechUnlockLedgerInput[];
+}> {
   const nppCorps = preloaded
     ? preloaded.corporations.filter((corp) => corp.ceoType === "npp" && corp.suspended !== true)
     : await db
@@ -237,46 +251,68 @@ export async function processNppCorporationDecisions(
     };
 
   const corpIds = nppCorps.map((c) => c._id);
+  // Resolve each corp's CEO NPP so its personality can shape the corp's behavior.
+  // ceoId holds the NPP _id when ceoType === "npp".
   const ceoNppIds = nppCorps.filter((c) => c.ceoType === "npp" && c.ceoId).map((c) => c.ceoId);
-  const corpIdStrings = nppCorps.map((c) => c._id.toString());
-  const [allSectors, ceoNpps, commodityPriceDocs, unownedSectors, productCohort] =
-    await Promise.all([
-      db
-        // full-read(corporateSectors): buildQueue and plantsPnl drive NPP build and divest decisions
-        .collection<CorporateSector>("corporateSectors")
-        .find({ corporationId: { $in: corpIds } })
-        .toArray(),
-      ceoNppIds.length > 0
-        ? db
-            .collection<NPP>("npps")
-            .find({ _id: { $in: ceoNppIds } }, { projection: { personality: 1 } })
-            .toArray()
-        : Promise.resolve([]),
-      db.collection<CommodityPrice>("commodityPrices").find({}).toArray(),
-      db.collection<UnownedSector>("unownedSectors").find({}).toArray(),
-      loadNppProductCohort(db, corpIdStrings),
-    ]);
-  const { archetypeByNppId, sectorsByCorp } = indexNppCohort(ceoNpps, allSectors);
+  // All four reads depend only on the NPP cohort. Start them together rather
+  // than making the decision phase wait for each collection in sequence.
+  const [allSectors, ceoNpps, commodityPriceDocs, unownedSectors] = await Promise.all([
+    db
+      // full-read(corporateSectors): buildQueue and plantsPnl drive NPP build and divest decisions
+      .collection<CorporateSector>("corporateSectors")
+      .find({ corporationId: { $in: corpIds } })
+      .toArray(),
+    ceoNppIds.length > 0
+      ? db
+          .collection<NPP>("npps")
+          .find({ _id: { $in: ceoNppIds } }, { projection: { personality: 1 } })
+          .toArray()
+      : Promise.resolve([]),
+    db.collection<CommodityPrice>("commodityPrices").find({}).toArray(),
+    db.collection<UnownedSector>("unownedSectors").find({}).toArray(),
+  ]);
+  const archetypeByNppId = new Map<string, CeoArchetype>();
+  for (const npp of ceoNpps) {
+    if (npp.personality) {
+      archetypeByNppId.set(npp._id.toString(), deriveCeoArchetype(npp.personality));
+    }
+  }
 
-  const { enabled: productsEnabled, activeProductByCorp, operatingModelsByCorp } = productCohort;
+  const sectorsByCorp = new Map<string, CorporateSector[]>();
+  for (const sector of allSectors) {
+    const cid = sector.corporationId.toString();
+    if (!sectorsByCorp.has(cid)) sectorsByCorp.set(cid, []);
+    sectorsByCorp.get(cid)!.push(sector);
+  }
 
-  const priceByCommodity = indexLatestCommodityPrices(commodityPriceDocs);
+  // Commodity price snapshot for macro-aware production policy (SP5). One doc
+  // per commodity; keep the latest turn if duplicates exist.
+  const priceByCommodity = new Map<string, CommodityPrice>();
+  for (const doc of commodityPriceDocs) {
+    const existing = priceByCommodity.get(doc.commodity);
+    if (!existing || (doc.turn ?? 0) >= (existing.turn ?? 0)) {
+      priceByCommodity.set(doc.commodity, doc);
+    }
+  }
   const { priceRatioOf, statePriceRatioOf } = buildNppPriceSignals(priceByCommodity);
 
   const placementSignals = await loadNppPlacementSignals(db, turn, allSectors, statePriceRatioOf);
 
   const { open: openUnowned, blocked } = await partitionOpenMarkets(db, unownedSectors);
 
+  // Index unowned sectors by countryId for fast lookup
   const unownedByCountry = new Map<string, UnownedSector[]>();
   for (const us of openUnowned) {
     if (!unownedByCountry.has(us.countryId)) unownedByCountry.set(us.countryId, []);
     unownedByCountry.get(us.countryId)!.push(us);
   }
+  // Shared object references let each founding deplete later candidates in this pass.
   const unownedIndex = new Map<string, UnownedSector>();
   for (const us of openUnowned) {
     unownedIndex.set(bucketKey(us.stateId, us.sectorType), us);
   }
 
+  // NPPs cannot auto-expand into state-controlled buckets; players still may.
   const [nationalCorpIds, globalSectors] = await Promise.all([
     loadNationalCorpIds(db),
     db
@@ -299,6 +335,8 @@ export async function processNppCorporationDecisions(
   const stateControlled = computeStateControlledBuckets(globalSectors, nationalCorpIds);
   placementSignals.activeMarketBuckets = buildActiveMarketBuckets(globalSectors);
 
+  // Rival index for capacity-decision telemetry, off the already-loaded
+  // `globalSectors` snapshot: no turn-path reads. See capacityDecisionTelemetry.
   const competitorsByBucket = buildCapacityCompetitorIndex(globalSectors);
 
   // Resolve the shared plants pricing context once for the cohort.
@@ -387,22 +425,13 @@ export async function processNppCorporationDecisions(
   );
 
   // Cohort-wide kill switch, read once. Absent means ON.
-  const strategyGate = await db.collection<GameState>("gameState").findOne(
-    { _id: "current" },
-    {
-      projection: {
-        nppCorpStrategyEnabled: 1,
-        frontierEntryExperimentEnabled: 1,
-        nppAutonomyLevel: 1,
-        nppAutonomyEnabled: 1,
-      },
-    }
-  );
+  const strategyGate = await db
+    .collection<GameState>("gameState")
+    .findOne(
+      { _id: "current" },
+      { projection: { nppCorpStrategyEnabled: 1, frontierEntryExperimentEnabled: 1 } }
+    );
   const strategyLoopEnabled = strategyGate?.nppCorpStrategyEnabled !== false;
-  // Product autonomy acts at V4 and above only. Same back-compat as
-  // `getNppAutonomyLevel`: a pre-level row with the legacy boolean reads v0.
-  const autonomyLevel: NppAutonomyLevel =
-    strategyGate?.nppAutonomyLevel ?? (strategyGate?.nppAutonomyEnabled === true ? "v0" : "off");
   // Frontier-entry experiment turn state (issue #991). See
   // createFrontierEntryTurnState: fail-closed, no new turn-path round trip.
   const frontierEntryTurn = createFrontierEntryTurnState(
@@ -443,10 +472,6 @@ export async function processNppCorporationDecisions(
         isNationalEnterprise: !!corp.countryOwnerId,
       }),
       modifiers: ceoArchetypeModifiers(archetype),
-      productsEnabled,
-      autonomyLevel,
-      operatingModels: operatingModelsByCorp.get(corp._id.toString()) ?? [],
-      activeProduct: activeProductByCorp.get(corp._id.toString()) ?? null,
       labourWagesEnabled,
       currentYear: techCurrentYear > 0 ? techCurrentYear : undefined,
       techTreesEnabled,
@@ -487,12 +512,6 @@ export async function processNppCorporationDecisions(
       decision.entryDiagnostic?.reason
     );
     if (decision.operatorObservation) operatorObservations.push(decision.operatorObservation);
-    await executeNppProductDecision(db, {
-      enabled: productsEnabled,
-      corporationId: corp._id.toString(),
-      turn,
-      decision: decision.productDecision,
-    });
     if (decision.reinvestments && corpCurrency) {
       appendNppReinvestCapexRows(capexRows, {
         corp,
@@ -1929,30 +1948,9 @@ export function makeNppCorpDecision(
   // section 4 applies only to positive after-tax income at settlement time, so
   // it cannot spend the operating reserve or distribute a loss.
 
-  // ── 6. Corporation product intent (issues #2236/#2238) ─────────────────────
-  // Pure V4+ decision; the turn shell executes actionable persistence intents.
-  const productDecision = decideNppProduct({
-    enabled: ctx.productsEnabled === true,
-    autonomyLevel: ctx.autonomyLevel,
-    corporationId: ownCorporationId,
-    corporationType: corp.type,
-    operatingModels: ctx.operatingModels,
-    unlockedTechnologyIds: corp.unlockedTechNodeIds,
-    currentYear: ctx.currentYear,
-    plants: ctx.sectors,
-    techTreesEnabled: ctx.techTreesEnabled,
-    activeProduct: ctx.activeProduct ?? null,
-    failingTurns: ctx.productFailingTurns,
-    cashLocal,
-    cashFloorLocal: effectiveCashFloor,
-    minStartSurplusLocal: effectiveExpansionMinCash,
-    expansionAllowed: levers.allowExpansion,
-  });
-
   return {
     corpId: corp._id,
     updates,
-    ...(productDecision.kind !== "none" ? { productDecision } : {}),
     // Ticket #1260: the cash leg travels as a DELTA, never as an absolute write.
     // These ops are appended to the corporation bulkWrite AFTER this turn's
     // income `$inc`, so a `$set` of the balance overwrote the credit and the

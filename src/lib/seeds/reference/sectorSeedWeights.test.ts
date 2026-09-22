@@ -54,7 +54,7 @@ describe("sector seed weights", () => {
   it("preserves the intended top-sector variation in representative regions", () => {
     expect(topSector("US", "CA")).toBe("technology");
     expect(topSector("US", "WY")).toBe("energy");
-    expect(topSector("UK", "NWE")).toBe("media_entertainment");
+    expect(topSector("UK", "NWE")).toBe("media");
     expect(topSector("DE", "HH")).toBe("logistics");
     expect(topSector("JP", "CHU")).toBe("automobiles");
     expect(topSector("CN", "XB")).toBe("energy");

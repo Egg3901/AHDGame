@@ -217,7 +217,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
       technology: ["electronics", "rare_earth"],
       pharmaceuticals: ["pharmaceuticals", "industrial_chemicals"],
       finance: ["consulting_services", "software"],
-      media_entertainment: ["software", "consulting_services"],
+      media: ["software", "consulting_services"],
       retail: ["consumer_goods", "produce"],
       healthcare: ["pharmaceuticals", "consulting_services"],
       education: ["consulting_services", "software"],

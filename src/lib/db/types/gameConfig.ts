@@ -475,13 +475,6 @@ export interface GameConfig {
    */
   qualityPremiumPricingEnabled?: boolean;
   /**
-   * Next-iteration corporation product system (#2125/#2238). When true,
-   * corporations may use the gated operating-model and product-lifecycle
-   * modules. Off or unset keeps every existing sector, turn, and market path
-   * unchanged.
-   */
-  corporationProductsEnabled?: boolean;
-  /**
    * Private supply agreements. When true, active bilateral supply contracts are
    * fulfilled in a contracted pre-pass before the loyal-slice and cheapest-first
    * clearing passes (supplier output guaranteed to the buyer, off the open

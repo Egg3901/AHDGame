@@ -135,10 +135,10 @@ describe("computeMarketFormationSnapshot", () => {
       sectors: [],
       unownedSectors: [
         pool("AR", "manufacturing"),
-        pool("AR", "media_entertainment"),
+        pool("AR", "media"),
         pool("AR", "retail"),
         pool("WY", "manufacturing", foundingStarterUnits("manufacturing") - 1),
-        pool("AK", "media_entertainment"),
+        pool("AK", "media"),
       ],
       prices: [
         steel,
@@ -249,7 +249,7 @@ describe("state-sector coverage", () => {
   it("treats unobserved cells as unknown rather than fundamental zeros", () => {
     const snapshot = computeMarketFormationSnapshot({
       sectors: [],
-      unownedSectors: [pool("AK", "media_entertainment", 0)],
+      unownedSectors: [pool("AK", "media", 0)],
       prices: [],
       eraUnitScale: 1,
     });
