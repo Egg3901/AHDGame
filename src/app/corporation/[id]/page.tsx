@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useParams, useRouter, useSearchParams, usePathname } from "next/navigation";
 import Link from "next/link";
 import { Skeleton } from "@/components/ui";
+import { ErrorRef } from "@/components/ui/ErrorRef";
 import BackButton from "@/components/BackButton";
 import { useToast } from "@/contexts/ToastContext";
 import { getExchangeForCountry } from "@/lib/constants/exchangeRegistry";
@@ -18,12 +19,10 @@ import PrivateSalePanel from "@/components/corporation/shares/PrivateSalePanel";
 import { NationalizationStatusCard } from "@/components/corporation/NationalizationStatusCard";
 import BondMaturityNotice from "@/components/corporation/BondMaturityNotice";
 import PrivateNotListedNotice from "@/components/corporation/PrivateNotListedNotice";
-import ProductStudio from "@/components/corporation/ProductStudio";
 import { NewFeatureBadge } from "@/components/ui";
 import { useFeatureSeen } from "@/hooks/useFeatureSeen";
 import { CORP_PAGE_FEATURE_KEYS } from "@/lib/ui/corpPageFeatureKeys";
 import { getLegalStructureForCorp } from "@/lib/corporations/legalStructure";
-import { productFamilyForCorporationType } from "@/lib/products/types";
 import {
   CORP_TABS,
   CEO_TAB,
@@ -92,6 +91,7 @@ export default function CorporationDetailPage() {
   const [ceoIsInactive, setCeoIsInactive] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [errorRef, setErrorRef] = useState<string | null>(null);
   const [isCeo, setIsCeo] = useState(false);
   const [isModerator, setIsModerator] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -198,6 +198,7 @@ export default function CorporationDetailPage() {
       const data = await res.json();
       if (res.ok) {
         setError("");
+        setErrorRef(null);
         setCorporation(data.corporation);
         setCeo(data.ceo);
         setFinancials(data.financials);
@@ -210,12 +211,14 @@ export default function CorporationDetailPage() {
         // Only set page-level error on initial load — refresh failures should not
         // destroy the entire page when we already have valid data displayed.
         setError(data.error || "Corporation not found");
+        setErrorRef(typeof data.eventId === "string" ? data.eventId : null);
       } else {
         showToast(data.error || "Failed to refresh corporation data", "error");
       }
     } catch {
       if (!hasLoaded.current) {
         setError("Network error");
+        setErrorRef(null);
       } else {
         showToast("Failed to refresh corporation data", "error");
       }
@@ -706,6 +709,11 @@ export default function CorporationDetailPage() {
         <main className="mx-auto max-w-7xl px-4 sm:px-6 py-8">
           <div className="rounded-xl border border-error/30 bg-error/10 p-6 text-center">
             <h2 className="text-lg font-semibold text-error">{error || "Corporation not found"}</h2>
+            {errorRef && (
+              <div className="mt-3 flex justify-center">
+                <ErrorRef code={errorRef} />
+              </div>
+            )}
             <BackButton />
           </div>
         </main>
@@ -1076,9 +1084,6 @@ export default function CorporationDetailPage() {
                       disclosed.
                     </p>
                   </div>
-                )}
-                {tab === "overview" && productFamilyForCorporationType(corporation.type) && (
-                  <ProductStudio corpId={id} onUpdate={fetchCorporation} />
                 )}
 
                 {tab === "financials" && financials && (

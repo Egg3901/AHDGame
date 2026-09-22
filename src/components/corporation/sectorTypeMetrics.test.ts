@@ -161,11 +161,10 @@ describe("typeFossilShare", () => {
 });
 
 describe("proposed sector actions", () => {
-  it("gives every sector type a compact, non-empty action row", () => {
+  it("gives every sector type exactly two levers, so no dossier renders an empty action row", () => {
     for (const type of CORPORATION_TYPES) {
       const actions = proposedSectorActions(type);
-      expect(actions.length, `${type} action count`).toBeGreaterThanOrEqual(2);
-      expect(actions.length, `${type} action count`).toBeLessThanOrEqual(4);
+      expect(actions, type).toHaveLength(2);
       for (const action of actions) {
         expect(action.label.length, `${type} label`).toBeGreaterThan(0);
         expect(action.help.length, `${type} help`).toBeGreaterThan(0);

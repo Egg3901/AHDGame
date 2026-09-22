@@ -41,7 +41,7 @@ describe("sovereignDefault constants", () => {
     expect(DEFAULT_MARGIN_PENALTY_MONETIZE).toBe(0);
   });
 
-  it("sector multipliers cover all 16 corporation types in 4 tiers", () => {
+  it("sector multipliers cover all 17 corporation types in 4 tiers", () => {
     const tier1 = ["financial"] as const;
     const tier2 = [
       "manufacturing",
@@ -55,7 +55,8 @@ describe("sovereignDefault constants", () => {
       "technology",
       "telecommunications",
       "healthcare",
-      "media_entertainment",
+      "media",
+      "entertainment",
       "logistics",
       "defense",
     ] as const;
@@ -65,7 +66,7 @@ describe("sovereignDefault constants", () => {
     for (const t of tier2) expect(DEFAULT_MARGIN_SECTOR_MULTIPLIERS[t]).toBe(1.3);
     for (const t of tier3) expect(DEFAULT_MARGIN_SECTOR_MULTIPLIERS[t]).toBe(1.0);
     for (const t of tier4) expect(DEFAULT_MARGIN_SECTOR_MULTIPLIERS[t]).toBe(0.7);
-    expect(Object.keys(DEFAULT_MARGIN_SECTOR_MULTIPLIERS)).toHaveLength(16);
+    expect(Object.keys(DEFAULT_MARGIN_SECTOR_MULTIPLIERS)).toHaveLength(17);
   });
 
   it("crisis windows match design (12h exec, 24h per chamber)", () => {

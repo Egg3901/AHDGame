@@ -822,7 +822,10 @@ export async function processStateDemographics(
  * @param db - MongoDB database instance
  * @returns number of states whose demographics were updated
  */
-export async function processAllStateDemographics(db: Db): Promise<number> {
+export async function processAllStateDemographics(
+  db: Db,
+  knownLegislationTypes?: readonly LegislationType[]
+): Promise<number> {
   // Bulk-fetch ALL data upfront in parallel (eliminates per-state queries)
   const [states, allStatePolicies, allLegTypes, allDemographics, gameState] = await Promise.all([
     db
@@ -833,7 +836,9 @@ export async function processAllStateDemographics(db: Db): Promise<number> {
       .collection<import("@/lib/db/types/statePolicy").StatePolicy>("statePolicies")
       .find({})
       .toArray(),
-    db.collection<LegislationType>("legislationTypes").find({}).toArray(),
+    knownLegislationTypes
+      ? Promise.resolve(knownLegislationTypes)
+      : db.collection<LegislationType>("legislationTypes").find({}).toArray(),
     db.collection<StateDemographics>("stateDemographics").find({}).toArray(),
     db.collection<GameState>("gameState").findOne(
       { _id: "current" },

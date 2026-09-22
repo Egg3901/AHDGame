@@ -243,7 +243,12 @@ export async function formNppCabinet(
   const vacant = positions.filter((p) => !filledPositionIds.has(p.id));
   if (vacant.length === 0) return { ran: true, filled: 0, filledPositionIds: [] };
 
-  const headNpp = await db.collection<NPP>("npps").findOne({ _id: headNppId });
+  const headNpp = await db
+    .collection<NPP>("npps")
+    .findOne(
+      { _id: headNppId },
+      { projection: { party: 1, personality: 1, "policies.economic": 1, "policies.social": 1 } }
+    );
   if (!headNpp) return INACTIVE;
   const governingPartyId = gov.governingPartyId ?? headNpp.party;
 
@@ -267,7 +272,20 @@ export async function formNppCabinet(
   // already-seated cabinet member.
   const poolDocs = await db
     .collection<NPP>("npps")
-    .find({ countryId, party: { $in: [...blocParties] }, retiredAt: null })
+    .find(
+      { countryId, party: { $in: [...blocParties] }, retiredAt: null },
+      {
+        projection: {
+          name: 1,
+          party: 1,
+          personality: 1,
+          politicalInfluence: 1,
+          favorability: 1,
+          "policies.economic": 1,
+          "policies.social": 1,
+        },
+      }
+    )
     .toArray();
   const candidates: CabinetCandidate[] = poolDocs
     .filter((n) => !n._id.equals(headNppId) && !seatedNppIds.has(n._id.toString()))

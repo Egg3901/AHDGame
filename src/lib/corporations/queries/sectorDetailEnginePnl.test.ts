@@ -22,7 +22,7 @@ function sectorFixture(patch: Partial<CorporateSector> = {}): CorporateSector {
     corporationId: new ObjectId(),
     countryId: "US",
     stateId: "CA",
-    sectorType: "media_entertainment",
+    sectorType: "media",
     targetGrowthRate: 0,
     currentGrowthRate: 0,
     currentGrowthCost: 0,
@@ -39,7 +39,7 @@ function sectorFixture(patch: Partial<CorporateSector> = {}): CorporateSector {
 }
 
 const BASE_ARGS = {
-  sectorType: "media_entertainment" as const,
+  sectorType: "media" as const,
   currentTurn: 100,
   currentYear: 1953,
   governorCap: 0.15,

@@ -15,11 +15,15 @@ import { invalidateSuspendEndorsementsForWithdrawnCandidate } from "@/lib/campai
 export async function removeWithdrawnCandidateFromTally(
   db: Db,
   electionId: ObjectId,
-  candidateId: string
+  candidateId: string,
+  tallyCache?: Map<string, ElectionVoteTally | null>
 ): Promise<void> {
-  const tally = await db
-    .collection<ElectionVoteTally>("electionVoteTallies")
-    .findOne({ electionId });
+  const electionKey = electionId.toString();
+  let tally = tallyCache?.get(electionKey);
+  if (tally === undefined) {
+    tally = await db.collection<ElectionVoteTally>("electionVoteTallies").findOne({ electionId });
+    tallyCache?.set(electionKey, tally);
+  }
 
   if (!tally) return;
 

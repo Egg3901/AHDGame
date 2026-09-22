@@ -47,6 +47,8 @@ export interface NPPContext {
   openPrimaries: Election[];
   nppCandidacies: Set<string>; // nppIds currently in active candidacies
   candidatesByElection: Map<string, ElectionCandidate[]>;
+  /** Queue election-entry inserts into a few bulk upserts on the live turn path. */
+  batchCandidateInserts?: boolean;
 
   // Officials (for bill/speaker voting)
   nppOfficials: ElectedOfficial[];
@@ -587,6 +589,7 @@ export async function loadNPPContext(now: Date, options?: NPPContextOptions): Pr
     openPrimaries,
     nppCandidacies,
     candidatesByElection,
+    batchCandidateInserts: true,
     nppOfficials,
     officialsByNPP,
     activeBills,

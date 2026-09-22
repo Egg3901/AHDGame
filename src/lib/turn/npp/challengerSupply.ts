@@ -8,7 +8,7 @@ import type {
   StatePartyOrg,
 } from "@/lib/db/types";
 import type { CountryId } from "@/lib/constants/countries";
-import { createNPP, calculateQualityBonus } from "@/lib/npp/generator";
+import { createNPP, calculateQualityBonus, type NPPGenerationContext } from "@/lib/npp/generator";
 import { canPartyFieldInState } from "@/lib/turn/nppEntryLogic";
 import { DEFAULT_CANDIDATE_SUPPORT } from "@/lib/electionEngine/electionFormulaFactors";
 import { isActiveElectionCandidateDuplicateKey } from "@/lib/elections/duplicateKey";
@@ -226,6 +226,9 @@ export async function processChallengerGeneration(now: Date): Promise<number> {
     )
     .toArray();
   const freeByBucket = new Map<string, NPP[]>();
+  const generationContext: NPPGenerationContext = {
+    existingNames: new Set(freeNpps.map((n) => n.name)),
+  };
   for (const n of freeNpps) {
     const id = String(n._id);
     if (incumbentNppIds.has(id) || nppsInActiveCandidacy.has(id)) continue;
@@ -266,12 +269,15 @@ export async function processChallengerGeneration(now: Date): Promise<number> {
       const bucket = `${country}:${party}:${state}`;
       let npp = freeByBucket.get(bucket)?.pop();
       if (!npp) {
-        npp = await createNPP({
-          state,
-          party,
-          countryId: country as CountryId,
-          quality: calculateQualityBonus(spo?.organization ?? 0),
-        });
+        npp = await createNPP(
+          {
+            state,
+            party,
+            countryId: country as CountryId,
+            quality: calculateQualityBonus(spo?.organization ?? 0),
+          },
+          generationContext
+        );
       }
 
       const candidateDoc: Omit<ElectionCandidate, "_id"> = {
@@ -314,7 +320,10 @@ export async function processChallengerGeneration(now: Date): Promise<number> {
         const bucket = `${country}:${party}:${state}`;
         let npp = freeByBucket.get(bucket)?.pop();
         if (!npp) {
-          npp = await createNPP({ state, party, countryId: country as CountryId, quality: 0 });
+          npp = await createNPP(
+            { state, party, countryId: country as CountryId, quality: 0 },
+            generationContext
+          );
         }
         const candidateDoc: Omit<ElectionCandidate, "_id"> = {
           electionId: primary._id,
