@@ -67,8 +67,8 @@ describe("fundDefinitions", () => {
   });
 
   describe("SECTOR_FUND_DEFINITIONS", () => {
-    it("has 16 sector funds — one per CorporationType", () => {
-      expect(SECTOR_FUND_DEFINITIONS).toHaveLength(16);
+    it("has 17 sector funds — one per CorporationType", () => {
+      expect(SECTOR_FUND_DEFINITIONS).toHaveLength(17);
     });
 
     it("all sector funds are global scope and USD-anchored", () => {
@@ -94,12 +94,6 @@ describe("fundDefinitions", () => {
       const tickers = SECTOR_FUND_DEFINITIONS.map((f) => f.ticker);
       expect(new Set(tickers).size).toBe(tickers.length);
     });
-
-    it("covers the merged media & entertainment domain with one fund", () => {
-      const merged = SECTOR_FUND_DEFINITIONS.filter((f) => f.sectorType === "media_entertainment");
-      expect(merged).toHaveLength(1);
-      expect(merged[0].ticker).toBe("GLBMEA");
-    });
   });
 
   describe("SECTOR_FUND_PRIMARY_TYPES", () => {
@@ -119,9 +113,9 @@ describe("fundDefinitions", () => {
   });
 
   describe("getAllFundDefinitions", () => {
-    it("returns the correct total: 8×2 country broad + 1 global broad + 16 sector + 12 bond = 45", () => {
+    it("returns the correct total: 8×2 country broad + 1 global broad + 17 sector + 12 bond = 46", () => {
       const all = getAllFundDefinitions();
-      expect(all).toHaveLength(45);
+      expect(all).toHaveLength(46);
     });
 
     it("returns unique slugs for all funds", () => {

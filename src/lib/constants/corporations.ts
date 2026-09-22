@@ -30,7 +30,7 @@ import { NEUTRAL_STAT } from "@/lib/stats/statsConstants";
 
 export const CORPORATION_TYPES = [
   "financial",
-  "media_entertainment",
+  "media",
   "manufacturing",
   "chemical_industries",
   "healthcare",
@@ -43,6 +43,7 @@ export const CORPORATION_TYPES = [
   "construction",
   "defense",
   "telecommunications",
+  "entertainment",
   "logistics",
   "extraction",
 ] as const;
@@ -51,7 +52,7 @@ export type CorporationType = (typeof CORPORATION_TYPES)[number];
 
 export const CORPORATION_TYPE_LABELS: Record<CorporationType, string> = {
   financial: "Financial",
-  media_entertainment: "Media & Entertainment",
+  media: "Media",
   manufacturing: "Manufacturing",
   chemical_industries: "Chemical Industries",
   healthcare: "Healthcare",
@@ -64,6 +65,7 @@ export const CORPORATION_TYPE_LABELS: Record<CorporationType, string> = {
   construction: "Construction",
   defense: "Defense",
   telecommunications: "Telecommunications",
+  entertainment: "Entertainment",
   logistics: "Logistics",
   extraction: "Extraction & Mining",
 };
@@ -973,8 +975,7 @@ export const SECTOR_RISK_PREMIUM: Record<string, number> = {
   // valuation revamp is meant to recognize. This only feeds share-price
   // cost of capital, never loan or coupon pricing.
   financial: 0.06,
-  // issue #2234: merged media/entertainment keeps the higher-volatility band.
-  media_entertainment: 0.06,
+  media: 0.05,
   manufacturing: 0.04,
   chemical_industries: 0.05,
   healthcare: 0.05,
@@ -987,6 +988,7 @@ export const SECTOR_RISK_PREMIUM: Record<string, number> = {
   construction: 0.04,
   defense: 0.04,
   telecommunications: 0.04,
+  entertainment: 0.06,
   logistics: 0.04,
   extraction: 0.06,
   default: 0.05,
@@ -1013,14 +1015,14 @@ export const WORKFORCE_SKILL_SECTORS = new Set<CorporationType>([
 export const CRIME_RATE_SECTORS = new Set<CorporationType>([
   "retail",
   "real_estate",
-  "media_entertainment",
+  "entertainment",
 ]);
 
 /** Sectors affected by broadband access (connectivity-dependent operations) */
 export const BROADBAND_SECTORS = new Set<CorporationType>([
   "technology",
   "telecommunications",
-  "media_entertainment",
+  "media",
   "financial",
 ]);
 

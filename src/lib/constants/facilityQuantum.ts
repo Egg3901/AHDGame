@@ -41,7 +41,7 @@ export const FACILITY_TARGET_DAILY_REVENUE_ANCHOR = 25_000;
 /** Units per facility, per sector type. Legibly rounded, never below 1. */
 const FACILITY_SIZE_UNITS: Record<CorporationType, number> = {
   financial: 6,
-  media_entertainment: 80,
+  media: 80,
   manufacturing: 25,
   chemical_industries: 60,
   healthcare: 5,
@@ -54,6 +54,7 @@ const FACILITY_SIZE_UNITS: Record<CorporationType, number> = {
   construction: 3,
   defense: 8,
   telecommunications: 12,
+  entertainment: 50,
   logistics: 5,
   extraction: 250,
 };

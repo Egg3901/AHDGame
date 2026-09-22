@@ -84,14 +84,6 @@ import { createCorporationTurnTimer, type CorporationTurnResult } from "./corpor
 import { processEquityMarketPoolTurn } from "@/lib/equities/marketPoolTurn";
 import { placePendingShareIssuances } from "@/lib/equities/primaryMarket";
 import { creditEquityPoolsBatch } from "@/lib/equities/marketPool";
-import { resolveCorporationProductsEnabled } from "@/lib/products/featureFlag";
-import {
-  resolveProductClearingEffects,
-  type ProductClearingEffect,
-} from "@/lib/products/productMarketEffects";
-import { loadPostLaunchProductDocs, processCorporationProductTurn } from "./productLifecycleTurn";
-import { processAdvertisingTurn } from "@/lib/advertising/settlementTurn";
-import type { CoverageSectorInput } from "@/lib/advertising/rules/coverage";
 
 export type { CorporationTurnResult } from "./corporationTurnRuntime";
 
@@ -149,7 +141,6 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
           supplyAgreementsEnabled: 1,
           prospectingEnabled: 1,
           commandEconomyEnabled: 1,
-          corporationProductsEnabled: 1,
           privateBankingEnabled: 1,
           interstateMoneyWiringEnabled: 1,
           freightSettlementMode: 1,
@@ -296,16 +287,6 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
   // on, accrual can run shadow (A1/A2) with the slice still off.
   const brandLoyaltySliceEnabled =
     brandLoyaltyEnabled && marketGovernorConfig?.brandLoyaltySliceEnabled === true;
-  // Corporation products (issue #2125 slice): post-launch demand and
-  // price-defense effects for the clearing pre-pass below. One projected bulk
-  // read, only when the flag is on; flag-off performs zero product reads and
-  // passes an empty map, which leaves every clearing input byte-identical.
-  // Last turn's persisted product state, consistent with clearing's lagged
-  // inputs (the lifecycle advances later in this same turn).
-  const corporationProductsEnabled = resolveCorporationProductsEnabled(marketGovernorConfig);
-  const productEffectsByCorp: Map<string, ProductClearingEffect> = corporationProductsEnabled
-    ? resolveProductClearingEffects(await loadPostLaunchProductDocs(db), true)
-    : new Map();
   const market = buildMarketContext(marketSystemMode, {
     cap: marketGovernorConfig?.marketGovernorCap,
     rampTurns: marketGovernorConfig?.marketGovernorRampTurns,
@@ -353,7 +334,6 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     brandLoyaltyEnabled,
     brandLoyaltySliceEnabled,
     qualityPremiumPricingEnabled,
-    productEffectsByCorp,
   });
   contractedByCorpCommodity = clearingContractedByCorpCommodity;
   mark("marketContext");
@@ -520,8 +500,6 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     labourDemandWageIndexByState,
     strikeEvents,
     capacityBindingEvents,
-    settledMarketingSpendAnchorByBuyerId,
-    advertisingDeliveredAnchorBySellerId,
   } = processSectors(
     lookups,
     turn,
@@ -648,53 +626,6 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
   // on pre-migration worlds.
   await creditEquityPoolsBatch(db, equityPoolDividendAccruals, "dividendsIn", now);
   mark("sector+corp bulkWrites");
-
-  // Coverage-backed advertising (issue #2235 slice): attribute each buyer's
-  // ALREADY-SETTLED marketing spend across its active agreements plus spot,
-  // then feed the effective delivered advertising into the product lifecycle
-  // below. Allocation view only — no cash, revenue, or market writes. Flag-off
-  // performs zero advertising reads or writes; the flag rides the preamble
-  // projection above.
-  let effectiveAdvertisingAnchorByCorpId: Map<string, number> | undefined;
-  if (corporationProductsEnabled) {
-    const advertisingSectorsByCorp = new Map<string, CoverageSectorInput[]>();
-    for (const [corpId, sectors] of lookups.sectorsByCorp) {
-      advertisingSectorsByCorp.set(
-        corpId,
-        sectors.map((sector) => ({
-          stateId: sector.stateId,
-          revenue: sector.revenue,
-          countryId: sector.countryId,
-          mothballed: sector.mothballed,
-          embargoSuspended: sector.embargoSuspended,
-          activeCapacityPercent: sector.activeCapacityPercent,
-        }))
-      );
-    }
-    const advertisingResult = await processAdvertisingTurn(db, {
-      enabled: true,
-      turn: turn ?? gameState?.currentTurn,
-      corpsById: lookups.corpById,
-      sectorsByCorp: advertisingSectorsByCorp,
-      fxByCurrency: lookups.exchangeRatesByCurrency,
-      deliveredAnchorBySellerId: advertisingDeliveredAnchorBySellerId,
-      settledSpendAnchorByBuyerId: settledMarketingSpendAnchorByBuyerId,
-    });
-    effectiveAdvertisingAnchorByCorpId = advertisingResult.effectiveAnchorByCorpId;
-  }
-  mark("advertisingSettlement");
-
-  // Corporation products (issue #2125 slice): advance each active product one
-  // lifecycle step from the turn's in-memory corp inputs. Allocation view
-  // only — no cash, revenue, or market writes. Flag-off performs zero product
-  // reads or writes; the flag rides the preamble projection above.
-  await processCorporationProductTurn(db, {
-    enabled: corporationProductsEnabled,
-    turn: turn ?? gameState?.currentTurn,
-    corpsById: lookups.corpById,
-    fxByCurrency: lookups.exchangeRatesByCurrency,
-    effectiveAdvertisingAnchorByCorpId,
-  });
 
   // Contracts and surveys read the post-bulkWrite snapshot so this turn's
   // mothball / production-policy / cash writes are visible. Matching before

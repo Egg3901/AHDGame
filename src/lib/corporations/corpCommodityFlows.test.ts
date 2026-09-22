@@ -10,7 +10,6 @@ import {
   MARKET_ECONOMY_MEDIA_SUPPLY_FACTOR,
   PLANNED_ECONOMY_MEDIA_OUTPUT,
   PLANNED_ECONOMY_MEDIA_SUPPLY_FACTOR,
-  SECTOR_STRATEGIES,
 } from "@/lib/constants/sectorStrategies";
 import type { CommodityFlow } from "@/lib/db/types/commodityFlow";
 
@@ -365,7 +364,7 @@ describe("computeCorpCommodityFlows — ledger parity legs (ticket #1177 audit)"
 
   it("derates media supply the way the world ledger and the clearing offer do", () => {
     const { commodities } = computeCorpCommodityFlows(
-      [mkSector({ sectorType: "media_entertainment", producedUnits: 1_000, capacityUnits: 1_000 })],
+      [mkSector({ sectorType: "media", producedUnits: 1_000, capacityUnits: 1_000 })],
       10,
       new Map(),
       stateInfo,
@@ -373,23 +372,17 @@ describe("computeCorpCommodityFlows — ledger parity legs (ticket #1177 audit)"
       plants
     );
 
-    // The unified standard strategy splits measured output between advertising
-    // and entertainment using the same value-weighted mix as clearing.
+    // Media is a single-output mix, so the whole 1,000 units carry the
+    // market-economy media supply factor.
     const advertising = commodities.find((c) => c.commodity === "advertising")!;
-    const standard = SECTOR_STRATEGIES.media_entertainment.find(({ id }) => id === "standard")!;
-    expect(advertising.outputUnits).toBeCloseTo(
-      1_000 *
-        MARKET_ECONOMY_MEDIA_SUPPLY_FACTOR *
-        commodityMixWeight(standard.supply, COMMODITY_BASE_PRICES, "advertising"),
-      1
-    );
+    expect(advertising.outputUnits).toBeCloseTo(1_000 * MARKET_ECONOMY_MEDIA_SUPPLY_FACTOR, 1);
   });
 
   it("remaps planned-economy media output off advertising", () => {
     const { commodities } = computeCorpCommodityFlows(
       [
         mkSector({
-          sectorType: "media_entertainment",
+          sectorType: "media",
           countryId: "RU",
           producedUnits: 1_000,
           capacityUnits: 1_000,

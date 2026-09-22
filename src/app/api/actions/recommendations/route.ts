@@ -20,7 +20,6 @@ import type {
 } from "@/lib/db/types";
 import type { ElectionCandidate } from "@/lib/db/types/election";
 import { type CountryId } from "@/lib/constants/countries";
-import { CORPORATION_TYPE_LABELS, type CorporationType } from "@/lib/constants/corporations";
 import { findPartyBudgetForScope } from "@/lib/partyBudgetGuards";
 import {
   fxRateForCorpFromMap,
@@ -141,7 +140,7 @@ async function fetchStateEconomy(
     "logistics",
     "retail",
     "foodService",
-    "media_entertainment",
+    "media",
     "telecommunications",
     "finance",
     "aerospace",
@@ -159,9 +158,7 @@ async function fetchStateEconomy(
 
     return {
       type,
-      label:
-        CORPORATION_TYPE_LABELS[type as CorporationType] ??
-        type.charAt(0).toUpperCase() + type.slice(1),
+      label: type.charAt(0).toUpperCase() + type.slice(1),
       totalMarket,
       ownedRevenue,
       unownedRevenue,

@@ -148,7 +148,7 @@ describe("governed fragile-market supply routing", () => {
 
   it("self-disarms below the shared critical-shortage threshold", () => {
     const candidates = new Map([
-      ["US", [us("manufacturing", "PA", 1_000_000), us("media_entertainment", "NY", 100_000)]],
+      ["US", [us("manufacturing", "PA", 1_000_000), us("media", "NY", 100_000)]],
     ]);
     const prices = ratios({ advertising: ESSENTIAL_SHORTAGE_SCORE - 0.01 });
     const treatment = findBestUnownedSector(
@@ -166,7 +166,7 @@ describe("governed fragile-market supply routing", () => {
     );
 
     expect(treatment?.sectorType).toBe("manufacturing");
-    expect(fragileMarketCommodityForSector("media_entertainment", "US", prices)).toBeNull();
+    expect(fragileMarketCommodityForSector("media", "US", prices)).toBeNull();
   });
 
   it("keeps rare-earth entry subject to deposit headroom", () => {
@@ -197,7 +197,7 @@ describe("governed fragile-market supply routing", () => {
 
   it("does not route market supply treatment into a planned economy", () => {
     const candidates = new Map([
-      ["US", [us("energy", "PA", 1_000_000), us("media_entertainment", "NY", 100_000)]],
+      ["US", [us("energy", "PA", 1_000_000), us("media", "NY", 100_000)]],
     ]);
     const treatment = findBestUnownedSector(
       "US",
