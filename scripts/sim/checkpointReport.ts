@@ -23,6 +23,12 @@
  */
 import { MongoClient } from "mongodb";
 import type { ActorCoverageManifest } from "@/lib/sim/actorCoverage";
+import type { GameHealthSnapshot } from "@/lib/db/types/gameHealthSnapshot";
+import {
+  aggregateGameHealth,
+  gameHealthRunSummary,
+  type GameHealthAggregate,
+} from "@/lib/turn/rules/gameHealth";
 import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
 import { getWorldEntityPresetManifest } from "@/lib/world/worldEntityManifest";
@@ -147,7 +153,7 @@ async function main(): Promise<void> {
       )[0]?.turn ?? 0);
 
   const snaps = await db
-    .collection("gameHealthSnapshots")
+    .collection<GameHealthSnapshot>("gameHealthSnapshots")
     .find({ turn: { $lte: maxTurn } })
     .sort({ turn: 1 })
     .toArray();
@@ -741,19 +747,19 @@ async function main(): Promise<void> {
 
   // ── Engine health ─────────────────────────────────────────────────────────
   const last = snaps[snaps.length - 1];
+  const runHealth = aggregateGameHealth(snaps.map(gameHealthRunSummary));
   const health = {
+    ...runHealth,
     turn: last.turn as number,
     year: (last.year as number) ?? null,
-    errors: snaps.reduce((n, s) => n + ((s.turnProcessing?.errorCount as number) ?? 0), 0),
-    warnings: snaps.reduce((n, s) => n + ((s.turnProcessing?.warningCount as number) ?? 0), 0),
     phases: (last.turnProcessing?.phaseCount as number) ?? 0,
     medianTurnMs: median(
       snaps.map((s) => (s.turnProcessing?.durationMs as number) ?? 0).filter((v) => v > 0)
     ),
-    issues: ((last.dataIntegrity?.issues ?? []) as Array<Record<string, string>>).map((i) => ({
-      category: String(i.category),
-      severity: String(i.severity),
-      message: String(i.message ?? "").slice(0, 200),
+    issues: (last.dataIntegrity?.issues ?? []).map((issue) => ({
+      category: issue.category,
+      severity: issue.severity,
+      message: issue.message.slice(0, 200),
     })),
     npps: (last.population?.totalNPPs as number) ?? 0,
   };
@@ -2164,7 +2170,7 @@ function buildNarrative(
     crisis: string;
   }>,
   market: { mode: string; trips: number; guardEnabled: boolean },
-  health: { errors: number; warnings: number; turn: number }
+  health: GameHealthAggregate & { turn: number }
 ): Array<{ countryId: string; title: string; body: string }> {
   const out: Array<{ countryId: string; title: string; body: string }> = [];
 
@@ -2243,7 +2249,11 @@ function buildNarrative(
     countryId: "WORLD",
     title: "The world",
     body:
-      `Through turn ${health.turn} the engine logged ${health.errors} errors and ${health.warnings} warnings. ` +
+      `Through turn ${health.turn}, ${health.successfulTurns}/${health.completedTurns} completed turns succeeded. ` +
+      `Health severity is ${health.severity} with ${health.errorCount} errors and ${health.warningCount} warnings ` +
+      `(${health.processingErrorCount} processing errors, ${health.processingWarningCount} processing warnings, ` +
+      `${health.integrityErrorCount} integrity errors, ${health.integrityWarningCount} integrity warnings); ` +
+      `qualification is ${health.qualification}. ` +
       `The market ran in ${market.mode} mode with the launch guard ${market.guardEnabled ? "armed" : "disarmed"}` +
       (market.trips > 0
         ? `, having tripped ${market.trips} time${market.trips === 1 ? "" : "s"} — so the capital tier was not exercised for the full window.`
@@ -2266,7 +2276,7 @@ export interface VerdictLine {
  * conclusion the charts below back up.
  */
 function buildVerdict(input: {
-  health: { errors: number; warnings: number; turn: number };
+  health: GameHealthAggregate & { turn: number };
   market: { trips: number; guardEnabled: boolean };
   corpTrend: { turn: number[]; firms: number[] };
   labour: {
@@ -2316,10 +2326,18 @@ function buildVerdict(input: {
   });
 
   out.push({
-    status: health.errors === 0 ? "good" : health.errors < 10 ? "warn" : "bad",
-    title: `${health.errors} engine error(s), ${health.warnings} warning(s) across ${health.turn} turns`,
+    status:
+      health.qualification === "non-passing"
+        ? "bad"
+        : health.severity === "warning" || health.qualification === "unverified"
+          ? "warn"
+          : "good",
+    title: `Health ${health.severity}: ${health.errorCount} error(s), ${health.warningCount} warning(s)`,
     detail:
-      "Phase throws are converted to warnings by the runtime, so a non-zero error count is the only signal a phase died silently.",
+      `${health.successfulTurns}/${health.completedTurns} completed turns succeeded. ` +
+      `Processing contributes ${health.processingErrorCount} errors and ${health.processingWarningCount} warnings; ` +
+      `integrity contributes ${health.integrityErrorCount} errors and ${health.integrityWarningCount} warnings. ` +
+      `Qualification is ${health.qualification}.`,
   });
 
   out.push({
@@ -2771,6 +2789,7 @@ function render() {
   let html = "";
   html += '<h1>Grand Sim 1953 — Checkpoint '+h.turn+'</h1>';
   html += '<p class="sub">Database <code>'+esc(D.dbName)+'</code>'+(h.year?' · in-game year '+h.year:'')+' · '+D.ordered.length+' instrumented economies</p>';
+  html += '<div class="note">Completion '+h.successfulTurns+'/'+h.completedTurns+' successful turns · health severity '+esc(h.severity)+' · qualification '+esc(h.qualification)+'</div>';
 
   if (D.missingPlayers && D.missingPlayers.length) {
     html += '<div class="warnbox"><b>Instrumentation gap:</b> player '+(D.missingPlayers.length===1?"country":"countries")+' '

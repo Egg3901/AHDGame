@@ -303,6 +303,9 @@ export * from "./patreon";
 export type { ImperialCharacter } from "./imperialCharacter";
 export type {
   GameHealthSnapshot,
+  GameHealthSummary,
+  GameHealthSeverity,
+  GameHealthQualification,
   TurnWarning,
   TurnError,
   IntegrityIssue,

@@ -37,6 +37,22 @@ export interface DataIntegrityResult {
   issues: IntegrityIssue[];
 }
 
+export type GameHealthSeverity = "ok" | "warning" | "error";
+
+export type GameHealthQualification = "passing" | "non-passing" | "unverified";
+
+export interface GameHealthSummary {
+  severity: GameHealthSeverity;
+  warningCount: number;
+  errorCount: number;
+  processingWarningCount: number;
+  processingErrorCount: number;
+  integrityWarningCount: number;
+  integrityErrorCount: number;
+  integrityChecked: boolean;
+  qualification: GameHealthQualification;
+}
+
 export interface PopulationStats {
   activePlayers: number;
   totalCharacters: number;
@@ -89,6 +105,7 @@ export interface GameHealthSnapshot {
   turn: number;
   year: number;
   timestamp: Date;
+  health: GameHealthSummary;
 
   turnProcessing: {
     durationMs: number;

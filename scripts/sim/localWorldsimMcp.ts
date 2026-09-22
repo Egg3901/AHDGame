@@ -450,6 +450,7 @@ const TOOLS: ToolDef[] = [
         currentTurn: job.currentTurn ?? 0,
         lastMessage: job.lastMessage,
         lastWarnings: job.lastWarnings,
+        health: job.health ?? null,
         error: job.error,
         metricsAvailable: !!job.metrics,
         metricsError: job.metricsError,

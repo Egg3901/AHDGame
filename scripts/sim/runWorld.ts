@@ -42,6 +42,7 @@ import type {
 } from "@/lib/db/types/gameState";
 import { worldsimQueryMonitoringRequested } from "./queryMonitoring";
 import type { GameConfig } from "@/lib/db/types/gameConfig";
+import type { GameHealthSummary } from "@/lib/db/types/gameHealthSnapshot";
 import type { TurnLog } from "@/lib/db/types/turnLog";
 import { MARKET_MODE_ORDER, type MarketSystemMode } from "@/lib/market/modes";
 import { LABOUR_MODE_ORDER, type LabourSystemMode } from "@/lib/labour/modes";
@@ -81,6 +82,7 @@ interface SimRunDoc {
   error: string | null;
   lastMessage?: string;
   lastWarnings?: string[];
+  health?: GameHealthSummary | null;
   /** Pinned-source identity (#1966): requested pin plus the exact code that
    * executed this run. Proves the SHA in the experiment report. */
   source?: {
