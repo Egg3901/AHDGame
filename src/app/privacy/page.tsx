@@ -9,7 +9,7 @@ export const metadata: Metadata = publicPageMetadata({
   pathname: "/privacy",
 });
 
-const EFFECTIVE_DATE = "April 30, 2026";
+const EFFECTIVE_DATE = "September 22, 2026";
 
 export default function PrivacyPolicyPage() {
   return (
@@ -78,6 +78,17 @@ export default function PrivacyPolicyPage() {
                   anonymous browser cookie id) for aggregate traffic dashboards visible to
                   administrators only; these records expire automatically after a limited retention
                   period.
+                </p>
+              </div>
+              <div>
+                <p className="font-semibold text-foreground mb-1">Optional session replay</p>
+                <p>
+                  If you accept non-essential cookies, we may record a sample of interactions with
+                  the game to diagnose confusing flows and technical failures. Form values are
+                  hidden, network request and response bodies are not captured, email addresses in
+                  page text are obscured, and accounts are identified only by an internal opaque
+                  identifier. Replay data is stored on infrastructure operated by Lakeside Games and
+                  is available only to administrators.
                 </p>
               </div>
               <div>
