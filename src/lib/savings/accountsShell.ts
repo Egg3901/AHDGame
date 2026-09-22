@@ -201,7 +201,11 @@ export async function runSavingsCommand(
     };
   }
 
-  const current = await loadHolderSnapshot(db, account.holder, currency, { ownerId });
+  // A bank blacklist controls new business and inbound holder changes. It must
+  // never prevent an existing depositor from moving their money out.
+  const current = await loadHolderSnapshot(db, account.holder, currency, {
+    ...(intent.type === "deposit" ? { ownerId } : {}),
+  });
   if ("error" in current) {
     // The account's own holder is no longer valid (a bank that died between
     // turns). Treat it as central-bank held for the purpose of paying out;

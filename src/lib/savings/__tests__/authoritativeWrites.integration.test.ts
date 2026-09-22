@@ -182,6 +182,24 @@ describe("authoritative savings writes", () => {
     expect(bank(db).bankCharter.playerDeposits).toBe(500);
   });
 
+  it("lets a blacklisted depositor withdraw existing savings", async () => {
+    await moveCharacterSavings(db as unknown as Db, OWNER, "USD", BANK.toString());
+    bank(db).bankCharter.blacklist = { characterIds: [OWNER.toString()] };
+
+    const result = await runSavingsCommand(
+      db as unknown as Db,
+      OWNER,
+      "USD",
+      { type: "withdraw", amount: 500 },
+      "blacklisted-withdrawal"
+    );
+
+    expect(result.ok).toBe(true);
+    expect(account(db).balance).toBe(500);
+    expect(owner(db).currencyBalances.personal.USD).toBe(5_500);
+    expect(bank(db).bankCharter.cashReserves).toBe(100_500);
+  });
+
   it("keeps the shadow comparison clean after a sequence of writes", async () => {
     await runSavingsCommand(
       db as unknown as Db,
