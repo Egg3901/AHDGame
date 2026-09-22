@@ -1,6 +1,7 @@
 import type { ObjectId } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
 import type { CurrencyCode, CurrencyCyclePressureRegime } from "@/lib/constants/currencies";
+import type { MonetaryRegime } from "@/lib/monetary/brettonWoods";
 import type { TurnSnapshot } from "./centralBank";
 
 /** One row in the recent-interventions audit log (ring buffer, last 24 turns). */
@@ -82,5 +83,23 @@ export interface ExchangeRate {
   forexSpreadStrength?: number;
   /** Turn the chair last changed `forexSpreadStrength` (cooldown gate). */
   forexSpreadStrengthLastChangedTurn?: number;
+  /**
+   * Bretton Woods monetary regime (issue #7). Absent = `"pegged"`, which is
+   * what every currency without a transition already behaved as, so legacy
+   * worlds read identically. Written by the `brettonWoodsTurn` phase while
+   * `brettonWoodsExitEnabled` is on; read by `forexTurn` (band + drift) and
+   * `inflationRecalc` (money-growth coefficient). Command-economy currencies
+   * never leave `"pegged"` — see `participatesInFloat`.
+   */
+  monetaryRegime?: MonetaryRegime;
+  /** Turn `monetaryRegime` last changed; drives the suspension-to-float clock. */
+  monetaryRegimeSetAtTurn?: number;
+  /**
+   * US gold cover, 0–1, tracked on the USD row only. Stepped every turn by
+   * `brettonWoodsTurn` from foreign dollar claims and the US inflation gap;
+   * convertibility suspends once it falls below threshold in an eligible year.
+   * Absent = full cover (1).
+   */
+  goldCover?: number;
   updatedAt: Date;
 }

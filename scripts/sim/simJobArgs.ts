@@ -4,6 +4,9 @@
 // env, safe to import eagerly.
 import { MARKET_MODE_ORDER, type MarketSystemMode } from "@/lib/market/modes";
 import { LABOUR_MODE_ORDER, type LabourSystemMode } from "@/lib/labour/modes";
+import { SIM_ACTOR_MODES } from "@/lib/sim/syntheticActors";
+import type { SimActorMode } from "@/lib/sim/actorCoverage";
+import { frontierEntryExperimentCliArgs } from "@/lib/sim/economicExperiment";
 
 /** Subset of a simJobs document that controls runWorld CLI emission. */
 export interface SimJobExperimentFields {
@@ -16,10 +19,16 @@ export interface SimJobExperimentFields {
   equityLiquidityFacilityEnabled?: boolean;
   nppMarketCoverageEnabled?: boolean;
   nppFragileMarketSupplyEnabled?: boolean;
+  /** Frontier-entry experiment gate (#991). Explicit false is a pinned control
+   * arm, not an omission: it must reach runWorld. */
+  frontierEntryExperimentEnabled?: boolean;
   allFeatureFlags?: boolean;
   autonomyLevel?: string;
   mode?: string;
   countries?: string;
+  /** Simulation actor mode (#1993): "pure-npp" keeps full NPP autonomy,
+   * "synthetic" seeds deterministic simulation-only actors. */
+  actors?: string;
 }
 
 /** Pattern every job-derived value (id/seed/preset/dbName) must match before
@@ -53,6 +62,20 @@ function booleanFlag(
   }
 }
 
+/**
+ * Validate one actors-mode value shared by every job entry point (local MCP,
+ * box MCP, worker). Omitted means pure NPP autonomy, the harness default —
+ * so jobs written before the mode existed stay byte-identical. Throws on
+ * anything else so a typo can never silently run the wrong population.
+ */
+export function parseActorsField(value: unknown): SimActorMode | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== "string" || !SIM_ACTOR_MODES.includes(value as SimActorMode)) {
+    throw new Error(`invalid actors "${String(value)}"`);
+  }
+  return value as SimActorMode;
+}
+
 /** Pure builder for the conditional runWorld CLI args of one sim job.
  * Extracted from worker.ts so argument emission is unit-testable; worker.ts
  * stays the only caller in production. */
@@ -84,6 +107,15 @@ export function buildRunWorldArgs(job: SimJobExperimentFields): string[] {
   booleanFlag(job, "equityLiquidityFacilityEnabled", "equity-liquidity-facility", args);
   booleanFlag(job, "nppMarketCoverageEnabled", "npp-market-coverage", args);
   booleanFlag(job, "nppFragileMarketSupplyEnabled", "npp-fragile-market-supply", args);
+  // Frontier-entry experiment gate (#991): spelling owned by
+  // frontierEntryExperimentCliArgs, so the worker cannot drift from runWorld's
+  // parser. Explicit false survives (control arm); absent emits nothing.
+  if (job.frontierEntryExperimentEnabled !== undefined) {
+    if (typeof job.frontierEntryExperimentEnabled !== "boolean") {
+      throw new Error("frontierEntryExperimentEnabled must be boolean");
+    }
+    args.push(...frontierEntryExperimentCliArgs(job.frontierEntryExperimentEnabled));
+  }
   if (job.allFeatureFlags !== undefined) {
     if (typeof job.allFeatureFlags !== "boolean") {
       throw new Error("allFeatureFlags must be boolean");
@@ -108,6 +140,11 @@ export function buildRunWorldArgs(job: SimJobExperimentFields): string[] {
     }
     args.push(`--mode=${job.mode}`);
   }
+  // Simulation actor mode (#1993). Omitted means pure NPP autonomy (the
+  // harness default); an explicit value must be a known mode — a typo can
+  // never silently run the wrong population.
+  const actors = parseActorsField(job.actors);
+  if (actors) args.push(`--actors=${actors}`);
   if (job.countries) {
     // Comma-separated ids become part of a child-process argv — validate each.
     const ids = job.countries

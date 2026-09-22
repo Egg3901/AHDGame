@@ -70,7 +70,12 @@ const SUCCESSOR_POLITIES = [
 ])[];
 
 const DISSOLVED_FROM: Readonly<Record<string, number>> = {
-  DD: 1992,
+  // ⚠ 1991, NOT 1992. The German Democratic Republic acceded to the Federal
+  // Republic on 3 October 1990, so it does not exist in a world set in 1991.
+  // At 1992 the 1991 preset still carried a live East Germany, which is the
+  // bug the era roster was built to end -- and `worldEntityManifest.test.ts`
+  // pins both halves: DD is PRESENT in the 1991 manifest, and dissolved in it.
+  DD: 1991,
   CS: 1993,
   YU: 1992,
   NVN: 1976,

@@ -45,10 +45,7 @@ const IGNORED_COMMANDS = new Set([
   "listIndexes",
 ]);
 
-/** Per-requestId collection lookup; commandStarted carries the namespace, the
- * succeeded/failed events do not, so we briefly stash it and consume it. */
-const pendingCollections = new Map<number, string>();
-// Hard cap so a storm of unmatched events can never grow this unbounded.
+// Hard cap on unmatched command events per client.
 const MAX_PENDING = 2000;
 
 // Span-status codes (see @sentry/core SpanStatus): 1 = OK, 2 = ERROR.
@@ -61,7 +58,6 @@ const SPAN_STATUS_ERROR = 2 as const;
  * request/turn transaction, so the trace waterfall shows individual queries
  * (name + collection + duration) alongside the existing breadcrumbs.
  */
-const pendingSpans = new Map<number, Span>();
 
 export function collectionFromCommand(
   commandName: string,
@@ -101,7 +97,7 @@ function batchBytes(batch: unknown[]): number {
   return bytes;
 }
 
-let attached = false;
+let attachedClients = new WeakSet<MongoClient>();
 
 /**
  * Whether to instrument commands at all. Off under an explicit opt-out, and
@@ -115,14 +111,26 @@ export function mongoMonitorWanted(env: Record<string, string | undefined> = pro
   return !isSingleplayer(env);
 }
 
+/** Local simulation counters do not depend on remote observability. */
+export function mongoCommandMonitoringWanted(): boolean {
+  return (
+    process.env.AHD_TURN_ROUNDTRIP_MONITOR === "1" ||
+    process.env.AHD_TURN_ROUNDTRIP_PROFILE === "1" ||
+    (process.env.NODE_ENV !== "test" && mongoMonitorWanted())
+  );
+}
+
 /**
  * Attach command-monitoring listeners to a MongoClient. Idempotent and a no-op
- * under test. The client must be created with `monitorCommands: true`.
+ * under ordinary tests. Simulations explicitly enable local counters.
+ * The client must be created with `monitorCommands: true`.
  */
 export function attachMongoCommandMonitor(client: MongoClient): void {
-  if (attached || process.env.NODE_ENV === "test") return;
-  if (!mongoMonitorWanted()) return;
-  attached = true;
+  if (attachedClients.has(client) || !mongoCommandMonitoringWanted()) return;
+  attachedClients.add(client);
+  const remoteTelemetry = process.env.NODE_ENV !== "test" && mongoMonitorWanted();
+  const pendingCollections = new Map<number, string>();
+  const pendingSpans = new Map<number, Span>();
 
   client.on("commandStarted", (event) => {
     if (IGNORED_COMMANDS.has(event.commandName)) return;
@@ -151,7 +159,7 @@ export function attachMongoCommandMonitor(client: MongoClient): void {
     // thousands of child spans. Gating on the active span means DB spans appear
     // exactly in the traces you'd want to inspect, and never otherwise. The
     // breadcrumbs + slow-query capture below run unconditionally, as before.
-    const active = Sentry.getActiveSpan();
+    const active = remoteTelemetry ? Sentry.getActiveSpan() : undefined;
     if (active?.isRecording()) {
       pendingSpans.set(
         event.requestId,
@@ -187,13 +195,14 @@ export function attachMongoCommandMonitor(client: MongoClient): void {
       span.end();
     }
 
-    Sentry.addBreadcrumb({
-      category: "db",
-      type: "query",
-      level: "info",
-      message: `${event.commandName} ${collection}`,
-      data: { durationMS: event.duration, collection },
-    });
+    if (remoteTelemetry)
+      Sentry.addBreadcrumb({
+        category: "db",
+        type: "query",
+        level: "info",
+        message: `${event.commandName} ${collection}`,
+        data: { durationMS: event.duration, collection },
+      });
 
     // Slow queries are a perf signal, not an error. They are captured above as
     // an info breadcrumb (with durationMS) so they enrich any real error that
@@ -217,23 +226,22 @@ export function attachMongoCommandMonitor(client: MongoClient): void {
       span.end();
     }
 
-    Sentry.addBreadcrumb({
-      category: "db",
-      type: "query",
-      level: "error",
-      message: `FAILED ${event.commandName} ${collection}`,
-      data: {
-        durationMS: event.duration,
-        collection,
-        error: (event.failure as Error | undefined)?.message,
-      },
-    });
+    if (remoteTelemetry)
+      Sentry.addBreadcrumb({
+        category: "db",
+        type: "query",
+        level: "error",
+        message: `FAILED ${event.commandName} ${collection}`,
+        data: {
+          durationMS: event.duration,
+          collection,
+          error: (event.failure as Error | undefined)?.message,
+        },
+      });
   });
 }
 
 /** Test-only: reset module state between cases. */
 export function __resetMongoMonitorForTest(): void {
-  attached = false;
-  pendingCollections.clear();
-  pendingSpans.clear();
+  attachedClients = new WeakSet<MongoClient>();
 }

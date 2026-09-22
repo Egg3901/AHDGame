@@ -1,5 +1,5 @@
 /**
- * Heal the stray `SU` central-bank document (GH #3038).
+ * Heal the stray `SU` central-bank document (see public issue #2073).
  *
  * `SU` is NOT a valid `CountryId` — the USSR is modelled as `RU` throughout the
  * seed stack (see `src/lib/constants/countries.ts` RU config, `seedRuBudgets`,

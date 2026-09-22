@@ -33,6 +33,7 @@ vi.mock("@/lib/currency/characterFunds", () => ({
 }));
 vi.mock("@/lib/currency/corporationCapital", () => ({
   anchorToCorpLiquidCapital: vi.fn((value: number) => value),
+  corpCapitalToAnchor: vi.fn((value: number) => value),
   corpLiquidCapitalToAnchor: vi.fn((value: number) => value),
   loadFxRatesByCurrency: vi.fn().mockResolvedValue(new Map()),
   fxRateForCorpFromMap: vi.fn().mockReturnValue(1),
@@ -155,6 +156,8 @@ async function postTakeover(targetId: ObjectId, parentId: ObjectId) {
 }
 
 describe("hostile takeover with a banked subsidiary (ticket-1267)", () => {
+  // The hostile-takeover route graph is heavy (full server module import plus
+  // the whole merge path); allow 60s per test on a shared host.
   it("moves the subsidiary bank to the parent instead of deleting it", async () => {
     const parentId = new ObjectId();
     const targetId = new ObjectId();
@@ -214,7 +217,7 @@ describe("hostile takeover with a banked subsidiary (ticket-1267)", () => {
       { [`currencyBalances.savingsHolder.USD`]: targetId.toString() },
       expect.objectContaining({})
     );
-  });
+  }, 60_000);
 
   it("refunds the parent debit when the charter transfer loses a mid-merge race", async () => {
     // Pre-lock check sees a charter-free parent, but the in-lock transfer
@@ -315,5 +318,5 @@ describe("hostile takeover with a banked subsidiary (ticket-1267)", () => {
     expect(body.error).toMatch(/already operates a bank/);
     expect(db.collectionMocks.corporations.updateOne).not.toHaveBeenCalled();
     expect(db.collectionMocks.corporations.deleteOne).not.toHaveBeenCalled();
-  });
+  }, 60_000);
 });

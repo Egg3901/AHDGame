@@ -314,7 +314,7 @@ describe("processNppGovernment", () => {
     formCabinetMock.mockResolvedValue({ ran: true, filled: 3, filledPositionIds: ["a", "b", "c"] });
     setup({ gov: formedPresidentialGov, headNpp });
     const res = await processNppGovernment(db as unknown as Db, "BR", dueTurn("BR"), now);
-    expect(formCabinetMock).toHaveBeenCalledWith(expect.anything(), "BR", now);
+    expect(formCabinetMock).toHaveBeenCalledWith(expect.anything(), "BR", now, dueTurn("BR"));
     expect(res.cabinetPostsFilled).toBe(3);
   });
 

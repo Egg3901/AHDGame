@@ -24,7 +24,6 @@ import {
   DRIFT_SPEED,
   RATE_NOISE_MAX,
   RATE_FLOOR_MULTIPLIER,
-  RATE_CEILING_MULTIPLIER,
   PRIME_RATE_SENSITIVITY,
   INFLATION_SENSITIVITY,
   ABSOLUTE_INFLATION_DEPRECIATION_THRESHOLD,
@@ -145,9 +144,16 @@ export function computeMacroTarget(
  *
  * At DRIFT_SPEED = 0.05, a rate shock takes ~48 turns (~1 game year) to converge 90%.
  * This creates multi-month currency trends that give players time to notice and act.
+ *
+ * `driftSpeed` overrides the constant (the post-Bretton-Woods float drifts
+ * faster); omitted = DRIFT_SPEED, byte-identical to prior behavior.
  */
-export function applyDrift(currentRate: number, macroTarget: number): number {
-  return currentRate + (macroTarget - currentRate) * DRIFT_SPEED;
+export function applyDrift(
+  currentRate: number,
+  macroTarget: number,
+  driftSpeed: number = DRIFT_SPEED
+): number {
+  return currentRate + (macroTarget - currentRate) * driftSpeed;
 }
 
 // ── 3. Volume pressure ──────────────────────────────────────────────────────
@@ -213,14 +219,22 @@ export function applyCyclePressure(rate: number, cyclePressure: number): number 
 // ── 5. Guardrails ───────────────────────────────────────────────────────────
 
 /**
- * Clamp a rate to the floor/ceiling guardrails (+/-50% from base rate).
+ * Clamp a rate to the floor/ceiling guardrails (+/-band around the base rate).
  *
  * Prevents runaway devaluation or appreciation. When a rate hits the guardrail,
  * trades still execute but the rate cannot move further in that direction.
+ *
+ * `band` is the half-width as a fraction of base (the post-Bretton-Woods float
+ * widens it gradually); omitted = the historical +/-50% guardrail,
+ * byte-identical to prior behavior.
  */
-export function clampRate(rate: number, baseRate: number): number {
-  const floor = baseRate * RATE_FLOOR_MULTIPLIER;
-  const ceiling = baseRate * RATE_CEILING_MULTIPLIER;
+export function clampRate(
+  rate: number,
+  baseRate: number,
+  band: number = 1 - RATE_FLOOR_MULTIPLIER
+): number {
+  const floor = baseRate * (1 - band);
+  const ceiling = baseRate * (1 + band);
   return Math.max(floor, Math.min(ceiling, rate));
 }
 
@@ -247,6 +261,10 @@ export interface RateUpdateResult {
  * `currentYear` is the CURRENT in-game year; it selects the era monetary
  * baselines for the macro target (omitted or 1999+ = modern, byte-identical
  * to prior behavior).
+ * `band` is the guardrail half-width as a fraction of base and
+ * `driftMultiplier` scales DRIFT_SPEED (the post-Bretton-Woods float widens
+ * the former and speeds the latter); both default to the historical pegged
+ * behavior, byte-identical to prior behavior.
  */
 export function computeRateUpdate(
   currentRate: number,
@@ -257,17 +275,19 @@ export function computeRateUpdate(
   noise?: number,
   volatilityMultiplier = 1,
   cyclePressure = 0,
-  currentYear?: number | null
+  currentYear?: number | null,
+  band: number = 1 - RATE_FLOOR_MULTIPLIER,
+  driftMultiplier = 1
 ): RateUpdateResult {
   const macroTarget = computeMacroTarget(baseRate, macro, countryId, currentYear);
-  const drifted = applyDrift(currentRate, macroTarget);
+  const drifted = applyDrift(currentRate, macroTarget, DRIFT_SPEED * driftMultiplier);
   const volumePressure = computeVolumePressure(volumes);
   // Blend 80% macro direction + 20% trade volume direction.
   // Positive pressure = net buying → strengthens currency (lowers rate), hence 1 - pressure.
   const withVolume = drifted * (1 - volumePressure * VOLUME_DIRECTION_WEIGHT);
   const withCycle = applyCyclePressure(withVolume, cyclePressure);
   const withNoise = applyNoise(withCycle, noise, volatilityMultiplier);
-  const clamped = clampRate(withNoise, baseRate);
+  const clamped = clampRate(withNoise, baseRate, band);
 
   return {
     rate: clamped,

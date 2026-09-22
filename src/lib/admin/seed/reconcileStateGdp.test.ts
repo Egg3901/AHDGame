@@ -12,7 +12,7 @@ import { getNationalBudgetSeedConfigsForPreset } from "@/lib/seeds/reference/bud
 // ── 1953 authored regional bundles (same modules the seeders import) ─────────
 import { states1953 } from "@/lib/seeds/reference/states1953";
 import { ukRegions1953 } from "@/lib/seeds/uk/ukRegions1953";
-import { jpRegions1953 } from "@/lib/seeds/jp/jpRegions1953";
+import { jpRegions1953 } from "@/lib/countries/jp/data/jpRegions1953";
 import { deRegions1953 } from "@/lib/seeds/de/deRegions1953";
 import { brRegions1953 } from "@/lib/seeds/br/brRegions1953";
 import { cnRegions1953 } from "@/lib/seeds/cn/cnRegions1953";
@@ -41,7 +41,7 @@ import { getBalSeedConfig } from "@/lib/seeds/bal/balSeed";
 // ── 2019 authored regional bundles ────────────────────────────────────────────
 import { states } from "@/lib/seeds/reference/states";
 import { ukRegions } from "@/lib/seeds/uk/ukRegions";
-import { jpRegions } from "@/lib/seeds/jp/jpRegions";
+import { jpRegions } from "@/lib/countries/jp/data/jpRegions";
 import { deRegions } from "@/lib/seeds/de/deRegions";
 import { brRegions } from "@/lib/seeds/br/brRegions";
 import { cnRegions } from "@/lib/seeds/cn/cnRegions";

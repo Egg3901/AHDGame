@@ -16,6 +16,7 @@ import { emitTreasuryTransaction } from "@/lib/treasury/emit";
 import { loadTxThresholds, emitTxBulk } from "@/lib/financialTxLog/emit";
 import type { FinancialTxLogEntry } from "@/lib/db/types/financialTxLog";
 import { projectCharacterGeneration, projectNppGeneration } from "@/lib/utils/fundGeneration";
+import { getGameStatePresetOrDefault } from "@/lib/db/collections/gameState";
 import { campaignAnchorToLocal, campaignLocalRate } from "@/lib/campaigns/campaignCurrency";
 import type { ObjectId } from "mongodb";
 
@@ -40,6 +41,9 @@ export async function processCaucusTax(
 ): Promise<CaucusTaxResult> {
   const db = await getDb();
   const campaignRates = await loadCampaignCurrencyRates(db);
+  // GDP-baseline era for income math: the world's reset preset, so historical
+  // worlds tax against their own denomination (issue #798).
+  const preset = await getGameStatePresetOrDefault(db);
 
   const taxedCaucuses = await db
     .collection<Caucus>("caucuses")
@@ -109,6 +113,7 @@ export async function processCaucusTax(
               stateGdpMillions: state.gdp,
               countryId: c.countryId,
               politicalInfluence: c.politicalInfluence ?? 0,
+              preset,
             })
           : 0;
         // Generation constants are anchor (₳); campaign funds are stored LOCAL

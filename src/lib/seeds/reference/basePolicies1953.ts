@@ -58,7 +58,7 @@ import type { CountryPolicyConfig } from "./basePolicies";
 import { states1953 } from "./states1953";
 import { ukRegions1953 } from "@/lib/seeds/uk/ukRegions1953";
 import { deRegions1953 } from "@/lib/seeds/de/deRegions1953";
-import { jpRegions1953 } from "@/lib/seeds/jp/jpRegions1953";
+import { jpRegions1953 } from "@/lib/countries/jp/data/jpRegions1953";
 import { cnRegions1953 } from "@/lib/seeds/cn/cnRegions1953";
 import { ieRegions1953 } from "@/lib/seeds/ie/ieRegions1953";
 import { frRegions1953 } from "@/lib/seeds/fr/frRegions1953";

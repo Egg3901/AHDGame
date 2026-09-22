@@ -37,21 +37,42 @@ export async function getDissolvedCountryIds(db: Db): Promise<Set<string>> {
 }
 
 export async function getRegisteredCountryIds(db: Db): Promise<CountryId[]> {
-  // Two queries' worth of rows in one read: the actives that widen the base,
-  // and the dissolved that narrow it.
+  // Three queries' worth of rows in one read: the actives that widen the base,
+  // and the dissolved and era-absent that narrow it.
   const docs = await db
     .collection<CountryGameState>("countryGameStates")
-    .find({ $or: [{ status: "active" }, { dissolvedTurn: { $ne: null } }] })
+    .find({
+      $or: [{ status: "active" }, { dissolvedTurn: { $ne: null } }, { absentInEra: true }],
+    })
     .toArray();
   const activeExtra = docs
-    .filter((d) => d.status === "active" && d.dissolvedTurn == null)
+    .filter((d) => d.status === "active" && d.dissolvedTurn == null && d.absentInEra !== true)
     .map((d) => d._id as CountryId)
     .filter((id) => !COUNTRY_ORDER.includes(id));
   // A country absorbed into another leaves the registry. Without this the base
   // list is add-only and a merged country stays enumerated forever.
   const dissolved = dissolvedIdsFrom(docs);
+  /*
+   * A country that does not exist in this era leaves the registry too.
+   *
+   * ⚠️ IT MUST NARROW THE SAME LIST DISSOLUTION DOES, or the two readers of this
+   * concept contradict each other. `countryAccess` already answers
+   * `registered: false` for an `absentInEra` row -- deliberately the identical
+   * answer it gives a dissolved one -- while this function, which its own doc
+   * calls "the iteration/processing source", still returned East Germany in a
+   * 2019 world. The page said the country did not exist and every per-turn phase
+   * went on simulating it: exactly the failure the dissolved filter above was
+   * added to stop.
+   *
+   * The two causes stay distinct in the DATA -- `getDissolvedCountryIds` reads
+   * `dissolvedTurn` alone, because merge idempotency depends on "absorbed" not
+   * meaning "absent" -- but they produce the same registry answer.
+   */
+  const absent = new Set(docs.filter((d) => d.absentInEra === true).map((d) => String(d._id)));
   // Stable order: COUNTRY_ORDER base, then activated extras (sorted for determinism).
-  return [...COUNTRY_ORDER, ...activeExtra.sort()].filter((id) => !dissolved.has(id));
+  return [...COUNTRY_ORDER, ...activeExtra.sort()].filter(
+    (id) => !dissolved.has(id) && !absent.has(id)
+  );
 }
 
 /**

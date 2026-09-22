@@ -49,10 +49,15 @@ export type CabinetSourceId = (typeof CABINET_SOURCE_IDS)[number];
 export const CABINET_LEGACY_SOURCE = "legacy";
 
 /**
- * Absolute clamp PER SOURCE. Unchanged in value from the single global cap it
- * replaces, deliberately: raising it would have inflated every channel that is
+ * Saturation asymptote PER SOURCE. Unchanged in value from the single global cap
+ * it replaces, deliberately: raising it would have inflated every channel that is
  * already binding, and the complaint was never that a saturated channel was too
  * weak, it was that a saturated channel silenced the OTHER channels.
+ *
+ * Since issue #703 this is an asymptote, not a clamp: the fold below approaches
+ * it monotonically but never reaches it, so more investment always buys strictly
+ * more residual. A higher clamp is not the fix for saturation; it just re-pins
+ * at the new ceiling. See `saturateResidual`.
  *
  * Theoretical total ceiling is therefore 6 × 8 = 48 points, against the ~62 a
  * fully stacked law book commands. Both maxima need every lever in the game
@@ -61,7 +66,11 @@ export const CABINET_LEGACY_SOURCE = "legacy";
  */
 export const CABINET_RESIDUAL_CAP_PER_SOURCE = 8;
 
-/** Theoretical maximum total cabinet offset on one metric, all channels pinned. */
+/**
+ * Supremum of the total cabinet offset on one metric, all channels driven hard.
+ * Unreachable by construction (every channel stays strictly below its asymptote),
+ * but still the meaningful bound: no stacked cabinet push can exceed it.
+ */
 export const CABINET_RESIDUAL_TOTAL_CEILING =
   CABINET_RESIDUAL_CAP_PER_SOURCE * CABINET_SOURCE_IDS.length;
 /** Scales the tiny StateMetrics deltas (~0.02–0.08) up to a meaningful political nudge. */
@@ -259,20 +268,61 @@ export function addContributions(
   return out;
 }
 
-/** One channel's fold: next = clamp(prev·DECAY + contribution, ±cap per source). */
+/**
+ * Soft-saturation curve order, issue #703. The steady state of the fold below
+ * for a constant contribution c is `saturateResidual(10·c)` (the 10× comes from
+ * DECAY = 0.9), and order 2.5 fits the target shape from the issue:
+ * 0.4 → ~3.7, 0.8 → ~6.1, 0.9 → ~6.4, 1.8 → ~7.6, 3.6 → ~7.9.
+ */
+const CABINET_RESIDUAL_SATURATION_ORDER = 2.5;
+
+/**
+ * Algebraic sigmoid with asymptote ±cap: the identity near zero, strictly
+ * increasing everywhere, odd (so negative pushes saturate symmetrically).
+ */
+function saturateResidual(latent: number): number {
+  const cap = CABINET_RESIDUAL_CAP_PER_SOURCE;
+  const p = CABINET_RESIDUAL_SATURATION_ORDER;
+  return (cap * latent) / Math.pow(cap ** p + Math.abs(latent) ** p, 1 / p);
+}
+
+/**
+ * Inverse of `saturateResidual`. Stored values hard-pinned at exactly ±cap by
+ * the pre-#703 clamp have no finite latent, so they are read as cap − 0.01:
+ * near enough that a standing contribution holds them near the cap (no lurch
+ * on the first turn after the change), while the 0.9 decay still drains them.
+ */
+function unsaturateResidual(residual: number): number {
+  const cap = CABINET_RESIDUAL_CAP_PER_SOURCE;
+  const p = CABINET_RESIDUAL_SATURATION_ORDER;
+  if (residual === 0) return 0;
+  const a = Math.min(Math.abs(residual), cap - 0.01);
+  return (Math.sign(residual) * cap * a) / Math.pow(cap ** p - a ** p, 1 / p);
+}
+
+/**
+ * One channel's fold: decay and contribution accumulate in latent space, then
+ * saturate softly toward ±cap. Small residuals behave exactly as before
+ * (next ≈ prev·DECAY + contribution); large ones compress smoothly, so a
+ * channel NEVER pins: every extra unit of contribution buys strictly more
+ * residual, asymptotically approaching the cap without reaching it.
+ */
 export function foldCabinetResiduals(
   prev: Record<string, number>,
   contribution: Record<string, number>
 ): Record<string, number> {
+  const cap = CABINET_RESIDUAL_CAP_PER_SOURCE;
   const ids = new Set([...Object.keys(prev), ...Object.keys(contribution)]);
   const out: Record<string, number> = {};
   for (const id of ids) {
-    const raw = (prev[id] ?? 0) * CABINET_RESIDUAL_DECAY + (contribution[id] ?? 0);
-    const capped = Math.max(
-      -CABINET_RESIDUAL_CAP_PER_SOURCE,
-      Math.min(CABINET_RESIDUAL_CAP_PER_SOURCE, raw)
-    );
-    if (Math.abs(capped) >= 0.01) out[id] = +capped.toFixed(4);
+    const latent =
+      unsaturateResidual(prev[id] ?? 0) * CABINET_RESIDUAL_DECAY + (contribution[id] ?? 0);
+    const raw = Number.isFinite(latent) ? saturateResidual(latent) : Math.sign(latent) * cap;
+    const rounded = +raw.toFixed(4);
+    // Rounding can print 7.99995+ as 8: re-clamp so the stored value stays
+    // strictly below the asymptote even for enormous contributions.
+    const capped = Math.sign(rounded) * Math.min(Math.abs(rounded), cap - 0.0001);
+    if (Math.abs(capped) >= 0.01) out[id] = capped;
   }
   return out;
 }
@@ -319,9 +369,10 @@ export function seedBySourceFromLegacy(
 }
 
 /**
- * Fold every channel independently. A channel at its cap can no longer grow,
- * but it cannot stop any OTHER channel from growing either, which is the whole point of
- * ticket #1129. Empty channels are dropped so the stored doc stays small.
+ * Fold every channel independently. A heavily driven channel still grows, only
+ * ever more slowly (issue #703), and it cannot stop any OTHER channel from
+ * growing either, which is the whole point of ticket #1129. Empty channels are
+ * dropped so the stored doc stays small.
  */
 export function foldCabinetResidualsBySource(
   prev: CabinetResidualsBySource,
@@ -351,9 +402,11 @@ export function sumCabinetResiduals(bySource: CabinetResidualsBySource): Record<
 }
 
 /**
- * How many channels are pinned at the per-source cap for a metric. The board's
- * at-ceiling warning is only honest when EVERY channel is pinned: below that,
- * building in an unsaturated channel still buys movement.
+ * How many channels sit within 0.01 of the per-source asymptote for a metric.
+ * Since issue #703 no channel ever touches the cap, so this now means "driven
+ * so hard it is effectively maxed". The board's at-ceiling warning is only
+ * honest when EVERY channel is there: below that, building in a less-driven
+ * channel still buys movement.
  */
 export function cappedSourceCount(bySource: CabinetResidualsBySource, metricId: string): number {
   let pinned = 0;

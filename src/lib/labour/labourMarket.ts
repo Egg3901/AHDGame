@@ -91,6 +91,102 @@ export function roundTightness(tightness: number): number {
 }
 
 /**
+ * Unemployment pressure per log-unit of labour market tightness (#791).
+ *
+ * pp of unemployment target per 1.0 of ln(tightness). 0.5 is deliberately
+ * small next to the Okun coefficients (0.2-0.25 per pp of output gap): the
+ * measured-demand channel ADDS to Okun's law rather than replacing it, and a
+ * tightness doubling (ln 2 = 0.69) shifts the target by 0.35pp, visible over
+ * a sustained shock but never dominant in one turn.
+ */
+export const LABOUR_UNEMPLOYMENT_TIGHTNESS_K = 0.5;
+
+/**
+ * Per-turn cap on the tightness channel's target shift (#791). The observed
+ * distribution has states reading 200 (ln 200 = 5.3, uncapped -2.65pp), so an
+ * uncapped log term would let one turn's telemetry whipsaw the target. The cap
+ * matches the wage/automation siblings' 1.5pp family at a third of their size,
+ * because this is a LEVEL term (present every turn the market stays tight)
+ * while theirs are one-time DELTA bumps.
+ */
+export const LABOUR_UNEMPLOYMENT_TIGHTNESS_CAP_PP = 0.5;
+
+/**
+ * One-turn unemployment-target pressure from the measured labour market (#791).
+ *
+ * Tight market (tightness > 1, firms want more workers than exist) pushes the
+ * target DOWN; slack (tightness < 1) pushes it UP. Log form so a doubling and
+ * a halving move the target symmetrically. Missing, non-finite, or
+ * non-positive tightness (cold start, no labour-force reading) returns 0, so
+ * worlds that never measured tightness behave exactly as before.
+ */
+export function labourUnemploymentTightnessPressure(tightness: number | undefined | null): number {
+  if (typeof tightness !== "number" || !Number.isFinite(tightness) || tightness <= 0) return 0;
+  const pp = -LABOUR_UNEMPLOYMENT_TIGHTNESS_K * Math.log(tightness);
+  return Math.max(
+    -LABOUR_UNEMPLOYMENT_TIGHTNESS_CAP_PP,
+    Math.min(LABOUR_UNEMPLOYMENT_TIGHTNESS_CAP_PP, pp)
+  );
+}
+
+/**
+ * Slope of the measured-tightness bargaining score (#791): 25 score points per
+ * log-unit centers tightness 1.0 (balanced) at 50, reads a doubling as 67 and
+ * a halving as 33, and saturates at e^2 (7.4x oversubscribed) and e^-2, so the
+ * observed 200x readings all score 100 rather than stretching the scale.
+ */
+export const LABOUR_TIGHTNESS_SCORE_K = 25;
+
+/**
+ * Map a measured tightness ratio onto the 0-100 bargaining score (#791).
+ * Tightness 1.0 (demand equals supply) scores 50; tighter scores higher.
+ * Non-finite or non-positive input returns 50 (neutral), never 0, so a corrupt
+ * reading cannot read as maximum slack.
+ */
+export function labourTightnessScoreFromTightness(tightness: number): number {
+  if (typeof tightness !== "number" || !Number.isFinite(tightness) || tightness <= 0) return 50;
+  const score = 50 + LABOUR_TIGHTNESS_SCORE_K * Math.log(tightness);
+  return Math.round(Math.max(0, Math.min(100, score)) * 10) / 10;
+}
+
+export interface StateTightnessReading {
+  /** Measured tightness ratio (demand over labour force). */
+  tightness: number | undefined | null;
+  /** Worker weight: the state's civilian labour force. */
+  workers: number | undefined | null;
+}
+
+/**
+ * Worker-weighted national tightness from per-state readings (#791).
+ *
+ * Weight is each state's labour force, so a tiny state cannot swing the
+ * national number the way a flat mean would let it. States missing tightness
+ * or a usable weight are skipped; when none qualify the result is undefined
+ * and the caller falls back (bargaining: the unemployment-derived score, so a
+ * world that never measured tightness behaves exactly as before).
+ *
+ * Note the weighted mean equals the aggregate national ratio: weighting each
+ * state's demand/supply by its supply sums to total demand over total supply.
+ * Either reading of the formula gives the same number; the mean form is used
+ * because the state's persisted tightness is what the corp turn wrote.
+ */
+export function nationalTightnessWorkerWeighted(
+  readings: readonly StateTightnessReading[]
+): number | undefined {
+  let weightedSum = 0;
+  let totalWeight = 0;
+  for (const reading of readings) {
+    const { tightness, workers } = reading;
+    if (typeof tightness !== "number" || !Number.isFinite(tightness) || tightness < 0) continue;
+    if (typeof workers !== "number" || !Number.isFinite(workers) || workers <= 0) continue;
+    weightedSum += tightness * workers;
+    totalWeight += workers;
+  }
+  if (totalWeight <= 0) return undefined;
+  return weightedSum / totalWeight;
+}
+
+/**
  * Staffing fill rate implied by a state's labour market tightness (phase 2).
  *
  * When a state's corporate sectors collectively want more workers than the

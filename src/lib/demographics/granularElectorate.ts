@@ -25,7 +25,10 @@
  * PERFORMANCE (hot loop is per-state per-turn)
  * --------------------------------------------
  * 1. PRUNE: cells below `ELECTORATE_PRUNE_FLOOR` (0.25% of the electorate) are
- *    dropped and the remainder renormalized (inside the cell derivation).
+ *    dropped, then each present bucket's largest pruned cells are reprieved
+ *    until it keeps `ELECTORATE_REPRESENTATION_FRACTION` (half) of its
+ *    marginal mass, and the remainder renormalized (inside the cell
+ *    derivation).
  * 2. COALESCE: surviving cells are merged into "units" on quantized
  *    (economicLean, socialLean, turnout) — `LEAN_QUANT` / `TURNOUT_QUANT`.
  *    Appeal only depends on a unit's leans, so coalescing IS the
@@ -150,10 +153,13 @@ import {
   deriveGranularCellsGeneric,
   COUNTRY_PRIORS,
   GRANULAR_DIMENSIONS,
+  type ConditionedLeanOffset,
   type GenericGranularCell,
   type GenericGranularDimInput,
   type GranularDim,
 } from "./granularCells";
+import { conditionedOffsetsAtAnchor } from "@/lib/seeds/demographicCategories";
+import { getConditionedOffsetsForYear } from "@/lib/seeds/eraPositionsForYear";
 import { archetypeValuesToBuckets } from "./archetypeBucketMap";
 import {
   getCountrySubstrateForYear,
@@ -176,6 +182,15 @@ export interface EraYearContext {
 
 /** Cells below this electorate share are pruned + renormalized (0.25%). */
 export const ELECTORATE_PRUNE_FLOOR = 0.0025;
+/**
+ * Representation guard for pruning: after the floor cut, every bucket with a
+ * nonzero census marginal keeps at least this fraction of its marginal mass
+ * (largest pruned cells reprieved first). A mass/representation rule, not a
+ * per-state exception — see `preserveBucketRepresentation` in
+ * `granularCells.ts`. Pure function of the census inputs, so like the floor it
+ * needs no unit-cache key entry beyond the inputs already keyed.
+ */
+export const ELECTORATE_REPRESENTATION_FRACTION = 0.5;
 /** Lean quantization step for coalescing cells into units. */
 export const LEAN_QUANT = 0.5;
 /** Turnout quantization step (percentage points) for coalescing. */
@@ -458,11 +473,23 @@ function deriveCellsForState(
       resolvedPositions,
       positionOverlay
     ) as typeof resolvedPositions;
+    // Identity-conditioned corrections (e.g. the 1953 Deep South Black-class
+    // correction): a pure function of (state, era/year), so the existing
+    // (country, state, preset, year) cache key already disambiguates them —
+    // no key change needed, unlike the DB-sourced overlays above.
+    const conditionedOffsets: ConditionedLeanOffset[] =
+      year != null
+        ? getConditionedOffsetsForYear(year, stateId)
+        : conditionedOffsetsAtAnchor(era, stateId);
     const usCells = deriveGranularCells(
       config,
       positions,
       buildUsTurnoutRates(stateId, turnoutDoc, turnoutOverlay, yearCtx),
-      { pruneFloor: ELECTORATE_PRUNE_FLOOR }
+      {
+        pruneFloor: ELECTORATE_PRUNE_FLOOR,
+        preserveBucketRepresentation: ELECTORATE_REPRESENTATION_FRACTION,
+        conditionedOffsets,
+      }
     );
     const cells: GenericGranularCell[] = usCells.map((cell) => ({
       id: cell.id,

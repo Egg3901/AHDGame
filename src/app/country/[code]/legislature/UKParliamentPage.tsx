@@ -33,6 +33,7 @@ import type {
   NoConfidenceVotePayload,
 } from "@/types/parliamentaryGovernment";
 import { ProposeLegislationModal } from "./ProposeLegislationModal";
+import { CommonsVacancyPanel } from "@/components/uk/CommonsVacancyPanel";
 import { fetchJson } from "@/lib/observability/fetchJson";
 import type { ExecutiveGovernmentResponse } from "@/lib/government/executiveViewerState";
 
@@ -42,7 +43,7 @@ const COMMONS_HERO = {
   alt: "The Palace of Westminster at night, seen from the south bank of the River Thames.",
 };
 
-type PageTab = "composition" | "bills" | "leadership" | "tariffs" | "subsidies";
+type PageTab = "composition" | "bills" | "leadership" | "vacancies" | "tariffs" | "subsidies";
 
 const LEGISLATURE_STATUS_FILTERS = [
   { value: "all", label: "All" },
@@ -558,6 +559,7 @@ export function UKParliamentPage({ countryId }: { countryId: CountryId }) {
     { id: "bills", label: "Bills" },
     { id: "composition", label: "Composition" },
     { id: "leadership", label: "Leadership" },
+    { id: "vacancies", label: "Vacancies" },
     { id: "tariffs", label: "Tariffs" },
     { id: "subsidies", label: "Subsidies" },
   ];
@@ -664,6 +666,7 @@ export function UKParliamentPage({ countryId }: { countryId: CountryId }) {
             }}
           />
         )}
+        {activeTab === "vacancies" && <CommonsVacancyPanel countryId={countryId} />}
         {activeTab === "tariffs" && <TariffsTab countryId={countryId} />}
         {activeTab === "subsidies" && <SubsidiesTab countryId={countryId} />}
       </main>

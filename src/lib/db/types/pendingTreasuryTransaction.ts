@@ -67,7 +67,23 @@ export interface PendingTreasuryTransaction {
    * for type === "request" as the treasurer slot.
    */
   leadershipApproval?: { characterId: ObjectId; approvedAt: Date };
-  status: "open" | "approved" | "cancelled" | "expired";
+  /**
+   * "executing" is the brief state between "this row has enough
+   * signatures" and "the money has moved". The approve route flips
+   * open -> executing under a `status: "open"` guard, so exactly one
+   * request wins it: two approvers filling the two DIFFERENT slots can
+   * both see a complete row, and the slot guards cannot separate them.
+   *
+   * It is also the resting place for a row whose transfer completed but
+   * whose "approved" stamp could not be written. That is deliberate — a
+   * row left "open" with a free slot would pay out a second time, so
+   * this path never falls back to "open". Such a row needs an operator
+   * to confirm the transfer landed and stamp it; it is not swept by
+   * `expirePendingTransactions`, which only touches open rows.
+   */
+  status: "open" | "executing" | "approved" | "cancelled" | "expired";
+  /** Set when the row flips to "executing"; cleared if execution is refused. */
+  executingAt?: Date;
   resolvedAt?: Date;
   resolvedAtTurn?: number;
 }

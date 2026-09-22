@@ -47,7 +47,7 @@ import type { CountryPolicyConfig } from "./basePolicies";
 import { states1979 } from "./states1979";
 import { ukRegions1979 } from "@/lib/seeds/uk/ukRegions1979";
 import { deRegions1979 } from "@/lib/seeds/de/deRegions1979";
-import { jpRegions1979 } from "@/lib/seeds/jp/jpRegions1979";
+import { jpRegions1979 } from "@/lib/countries/jp/data/jpRegions1979";
 import { cnRegions1979 } from "@/lib/seeds/cn/cnRegions1979";
 import { brRegions1979 } from "@/lib/seeds/br/brRegions1979";
 import { ieRegions1979 } from "@/lib/seeds/ie/ieRegions1979";

@@ -203,15 +203,17 @@ describe("sectorRevenueTaxProvider", () => {
     expect(out.unownedByState.size).toBe(0);
   });
 
-  it("fiscalRatiosProvider computes clamped per-country ratios from federalBudget", async () => {
+  it("fiscalRatiosProvider reads debtToGdp from the canonical bond ledger, never treasuryBalance", async () => {
     setupCollection("federalBudget", [
       {
         _id: "federal",
         countryId: "US",
-        treasuryBalance: -1000,
+        // Deep cash hole on purpose: the ledger below holds 1600, and the
+        // readout must report the ledger, not the balance.
+        treasuryBalance: -5000,
         gdp: 2000,
         gdpSmoothed: 2000,
-        debt: { ceiling: 5000 },
+        debt: { principal: 5000, ceiling: 9000 },
         revenue: { total: 400 },
         spending: { total: 460 },
       },
@@ -221,23 +223,122 @@ describe("sectorRevenueTaxProvider", () => {
         treasuryBalance: 50,
         gdp: 1000,
         gdpSmoothed: 1000,
-        debt: { ceiling: 5000 },
+        debt: { principal: 0, ceiling: 5000 },
         revenue: { total: 300 },
         spending: { total: 303 },
+      },
+    ]);
+    setupCollection("bonds", [
+      {
+        _id: "b1",
+        issuerType: "sovereign",
+        countryId: "US",
+        matured: false,
+        defaulted: false,
+        totalIssued: 1000,
+        restructureHaircutPercent: null,
+      },
+      // Haircut paper contributes face minus haircut: 1000 x (1 - 0.4).
+      {
+        _id: "b2",
+        issuerType: "sovereign",
+        countryId: "US",
+        matured: false,
+        defaulted: false,
+        totalIssued: 1000,
+        restructureHaircutPercent: 0.4,
+      },
+      // Defaulted, matured, and corporate paper never count.
+      {
+        _id: "b3",
+        issuerType: "sovereign",
+        countryId: "US",
+        matured: false,
+        defaulted: true,
+        totalIssued: 9999,
+        restructureHaircutPercent: null,
+      },
+      {
+        _id: "b4",
+        issuerType: "sovereign",
+        countryId: "US",
+        matured: true,
+        defaulted: false,
+        totalIssued: 9999,
+        restructureHaircutPercent: null,
+      },
+      {
+        _id: "b5",
+        issuerType: "corporate",
+        countryId: "US",
+        matured: false,
+        defaulted: false,
+        totalIssued: 9999,
+        restructureHaircutPercent: null,
       },
     ]);
     const { fiscalRatiosProvider } = await import("./providers");
     const out = await fiscalRatiosProvider(db as unknown as Db);
 
     const us = out.get("US")!;
-    expect(us.debtToGdp).toBe(50); // debt 1000 / gdp 2000
+    expect(us.debtToGdp).toBe(80); // (1000 + 600) / 2000, not 5000 / 2000
     expect(us.budgetBalance).toBeCloseTo(-3, 6); // (400-460)/2000
     expect(us.schuldenbremseHeadroom).toBe(-1); // 0.35 - 3% deficit = -2.65 → clamp -1
 
     const de = out.get("DE")!;
-    expect(de.debtToGdp).toBe(0); // surplus → no debt
+    expect(de.debtToGdp).toBe(0); // empty ledger → no stock
     expect(de.budgetBalance).toBeCloseTo(-0.3, 6); // (300-303)/1000
     expect(de.schuldenbremseHeadroom).toBeCloseTo(0.05, 6); // 0.35 - 0.3
+  });
+
+  it("fiscalRatiosProvider reports zero debt for an empty ledger despite a negative cash balance", async () => {
+    // A repudiated (or never indebted) country: no bond rows, but the budget
+    // still carries a stored principal and a cash hole. The readout is 0, the
+    // value the end-of-turn reconcile converges the stored stock to, not the
+    // drift. There is deliberately no fallback to stored debt.principal.
+    setupCollection("federalBudget", [
+      {
+        _id: "federal",
+        countryId: "US",
+        treasuryBalance: -1000,
+        gdp: 2000,
+        gdpSmoothed: 2000,
+        debt: { principal: 1000, ceiling: 5000 },
+        revenue: { total: 400 },
+        spending: { total: 460 },
+      },
+    ]);
+    setupCollection("bonds", []);
+    const { fiscalRatiosProvider } = await import("./providers");
+    const out = await fiscalRatiosProvider(db as unknown as Db);
+    expect(out.get("US")!.debtToGdp).toBe(0);
+  });
+
+  it("fiscalRatiosProvider projects the bond fields the outstanding helper re-checks", async () => {
+    setupCollection("federalBudget", []);
+    setupCollection("bonds", []);
+    const { fiscalRatiosProvider } = await import("./providers");
+    await fiscalRatiosProvider(db as unknown as Db);
+    // The helper re-checks these query-filtered fields, so a doc arriving
+    // without `issuerType` reads as non-sovereign and contributes 0. Pin the
+    // chained projection: mocks ignore it, production does not (refs #1975).
+    expect(db.collectionMocks.bonds!.find).toHaveBeenCalledWith({
+      issuerType: "sovereign",
+      matured: false,
+      defaulted: false,
+    });
+    const cursor = db.collectionMocks.bonds!.find.mock.results[0]!.value as {
+      project: ReturnType<typeof vi.fn>;
+    };
+    expect(cursor.project).toHaveBeenCalledWith(
+      expect.objectContaining({
+        issuerType: 1,
+        matured: 1,
+        defaulted: 1,
+        totalIssued: 1,
+        restructureHaircutPercent: 1,
+      })
+    );
   });
 
   it("fiscalRatiosProvider yields zero ratios when gdp is zero (no divide-by-zero)", async () => {
@@ -247,9 +348,20 @@ describe("sectorRevenueTaxProvider", () => {
         countryId: "US",
         treasuryBalance: -10,
         gdp: 0,
-        debt: { ceiling: 0 },
+        debt: { principal: 1000, ceiling: 0 },
         revenue: { total: 1 },
         spending: { total: 2 },
+      },
+    ]);
+    setupCollection("bonds", [
+      {
+        _id: "b1",
+        issuerType: "sovereign",
+        countryId: "US",
+        matured: false,
+        defaulted: false,
+        totalIssued: 1000,
+        restructureHaircutPercent: null,
       },
     ]);
     const { fiscalRatiosProvider } = await import("./providers");

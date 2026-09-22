@@ -24,6 +24,7 @@ import { releaseCharacterHeldIndexFundPositionsToFloat } from "@/lib/indexFunds/
 import { listCharacterPositions } from "@/lib/indexFunds/fundQueries";
 import { closeCeoTenure } from "@/lib/corporations/ceoHistory";
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
+import { createCommonsVacancy } from "@/lib/uk/elections/commonsVacancyShell";
 import { releaseCorporationHeldSharesToFloat } from "@/lib/corporations/releaseHeldSharesToFloat";
 import { stampSubjectDeleted } from "@/lib/financialTxLog/stampDeleted";
 import { deriveHighestOffice } from "@/lib/character/deriveHighestOffice";
@@ -189,6 +190,33 @@ export async function retireCharacter(
     });
   }
 
+  // UK Commons vacancies (#860): capture this character's Commons seats BEFORE
+  // the tombstone below clears them, so each vacated seat gets a durable
+  // vacancy the by-election watcher can fill. `create` dedupes per official
+  // row, so a concurrent hook or a retried retirement never doubles the seat.
+  const ukCommonsSeats =
+    character.countryId === "UK"
+      ? await db
+          .collection<{
+            _id: ObjectId;
+            state?: string;
+            countryId?: string;
+            seatsHeld?: number;
+          }>("electedOfficials")
+          .find({
+            characterId,
+            officeType: "commons",
+            $or: [{ countryId: "UK" }, { countryId: { $exists: false } }],
+          })
+          .project<{ _id: ObjectId; state?: string; countryId?: string; seatsHeld?: number }>({
+            _id: 1,
+            state: 1,
+            countryId: 1,
+            seatsHeld: 1,
+          })
+          .toArray()
+      : [];
+
   await db.collection("electedOfficials").updateMany(
     { characterId },
     {
@@ -196,6 +224,24 @@ export async function retireCharacter(
       $unset: { characterName: "", party: "", electedAt: "" },
     }
   );
+
+  if (ukCommonsSeats.length > 0) {
+    const retireTurn = await getCurrentTurn(db);
+    for (const seat of ukCommonsSeats) {
+      if (typeof seat.state !== "string" || seat.state.length === 0) continue;
+      await createCommonsVacancy(db, {
+        officialId: seat._id,
+        state: seat.state,
+        seats: seat.seatsHeld ?? 1,
+        reason: "retirement",
+        priorCharacterId: characterId,
+        priorCharacterName: character.name,
+        ...(typeof character.party === "string" ? { priorParty: character.party } : {}),
+        vacatedTurn: retireTurn,
+        now,
+      });
+    }
+  }
 
   const forexEnabled = await isForexEnabled();
   const ceoCorps = await db

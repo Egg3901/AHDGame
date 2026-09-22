@@ -8,7 +8,7 @@ import type {
 } from "@/lib/db/types";
 import { electionStatusBlocksFurtherEntry } from "@/lib/elections/activeCandidacy";
 import { DEFAULT_CANDIDATE_SUPPORT } from "@/lib/electionEngine/electionFormulaFactors";
-import { officeKeyForElectionType } from "@/lib/utils/electionLabels";
+import { isSpecialCommonsElection, officeKeyForElectionType } from "@/lib/utils/electionLabels";
 import { activeUserIds } from "@/lib/players/playerActivity";
 import type { CountryId } from "@/lib/constants/countries";
 import { getCountryState } from "@/lib/countryState";
@@ -82,11 +82,17 @@ export async function runAutoReelectionEntry(
     .collection<ElectedOfficial>("electedOfficials")
     .find({ characterId: { $in: characterIds } })
     .toArray();
+  // Characters whose target seat comes from a currently held office. A Commons
+  // by-election (#860) fills only vacated seats, so these holders must never
+  // auto-file for a special_commons race sharing their seat key — a sitting
+  // winner would double-seat (additive resolution never sweeps).
+  const holdersFromOffice = new Set<string>();
   for (const office of offices) {
     if (!office.characterId) continue;
     const characterKey = office.characterId.toHexString();
     const characterCountryId = characterById.get(characterKey)?.countryId;
     targetSeatByCharacterId.set(characterKey, getOfficialSeatKey(office, characterCountryId));
+    holdersFromOffice.add(characterKey);
   }
 
   const priorCandidates = await db
@@ -223,9 +229,13 @@ export async function runAutoReelectionEntry(
     if (primaryClosed) continue;
 
     const electionSeatKey = getElectionSeatKey(election);
-    const eligible = characters.filter(
-      (character) => targetSeatByCharacterId.get(character._id.toHexString()) === electionSeatKey
-    );
+    const byElection = isSpecialCommonsElection(election.electionType);
+    const eligible = characters.filter((character) => {
+      const characterKey = character._id.toHexString();
+      if (targetSeatByCharacterId.get(characterKey) !== electionSeatKey) return false;
+      if (byElection && holdersFromOffice.has(characterKey)) return false;
+      return true;
+    });
     if (eligible.length === 0) continue;
 
     const electionKey = election._id.toHexString();

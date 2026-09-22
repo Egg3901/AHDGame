@@ -1,3 +1,4 @@
+import { sumObservedOutput, outputHistorySpanTurns } from "./rules/outputVolume";
 import type { Db } from "mongodb";
 import type { StateMetrics, GameConfig } from "@/lib/db/types";
 import type { State } from "@/lib/db/types/state";
@@ -60,6 +61,13 @@ import type { SectorRevenueTaxPayload } from "./registry/economic";
 import type { NodeId } from "./types";
 import type { EconomicModelState } from "@/lib/constants/economicModels";
 import { loadPoliticalMacroInputs } from "@/lib/politicalLegislation/politicalMacroInputs";
+import {
+  DEMOCRATIC_HEALTH_METRIC_IDS,
+  scoreGovernanceStyle,
+  supportsGovernanceStyle,
+} from "@/lib/governanceStyle/score";
+import { democraticHealthEconomicDrag } from "@/lib/governanceStyle/rules/democraticConsequences";
+import { loadDemocraticCompetition } from "@/lib/governanceStyle/loadCompetition";
 
 /** Default unemployment when a state has no prior reading (matches gdpGrowth.ts `?? 4.5`). */
 const DEFAULT_UNEMPLOYMENT = 4.5;
@@ -266,7 +274,7 @@ export async function runMetricEngine(db: Db, turn: number): Promise<number> {
       .find({})
       .project<PrevMetricsDoc>(PREV_PROJECTION)
       .toArray(),
-    sectorRevenueTaxProvider(db),
+    sectorRevenueTaxProvider(db, turn),
     // Per-country prime rate drives capital investment (P1c-0). Batched here so
     // there is no per-region round trip.
     db.collection<{ _id: string; primeRate?: number }>("centralBanks").find({}).toArray(),
@@ -348,6 +356,59 @@ export async function runMetricEngine(db: Db, turn: number): Promise<number> {
 
   const realStates = allStates.filter((s) => !NATIONAL_SCOPE_IDS.has(s._id));
   if (realStates.length === 0) return 0;
+
+  // One in-memory pass over the political boards already loaded above. This
+  // avoids a country-by-country query loop on the multiplayer turn path.
+  const healthTotalsByCountry = new Map<
+    string,
+    Map<string, { weighted: number; population: number }>
+  >();
+  for (const state of realStates) {
+    const values = politicalInputs.values(state._id);
+    if (!values) continue;
+    const population = Math.max(0, state.population ?? 0);
+    if (population <= 0) continue;
+    const totals = healthTotalsByCountry.get(state.countryId) ?? new Map();
+    for (const id of DEMOCRATIC_HEALTH_METRIC_IDS) {
+      const value = values[id];
+      if (typeof value !== "number" || !Number.isFinite(value)) continue;
+      const current = totals.get(id) ?? { weighted: 0, population: 0 };
+      current.weighted += value * population;
+      current.population += population;
+      totals.set(id, current);
+    }
+    healthTotalsByCountry.set(state.countryId, totals);
+  }
+  const democraticHealthDragByCountry = new Map<string, number>();
+  const healthCountries = [...healthTotalsByCountry.keys()];
+  const competitionByCountry = new Map(
+    await Promise.all(
+      healthCountries.map(
+        async (countryId) =>
+          [
+            countryId,
+            await loadDemocraticCompetition(
+              db,
+              countryId as CountryId,
+              eraGameState?.preset,
+              eraGameState
+            ),
+          ] as const
+      )
+    )
+  );
+  for (const [countryId, totals] of healthTotalsByCountry) {
+    const config = getCountryConfig(countryId as CountryId, eraGameState?.preset);
+    if (!supportsGovernanceStyle(config.governmentType)) continue;
+    const values = Object.fromEntries(
+      [...totals].map(([id, total]) => [id, total.weighted / total.population])
+    );
+    // Economic fallout uses the same displayed Democratic Health score as
+    // elections, including entrenched legislative, executive, and court control.
+    const health = scoreGovernanceStyle(values, competitionByCountry.get(countryId))
+      .democraticHealth.value;
+    democraticHealthDragByCountry.set(countryId, democraticHealthEconomicDrag(health));
+  }
 
   const now = new Date();
   const macroOps: Array<{
@@ -525,6 +586,19 @@ export async function runMetricEngine(db: Db, turn: number): Promise<number> {
       trendActive && revenueEmaNow !== undefined
         ? updateRevenueSnapshots(priorSnapshots, turn, revenueEmaNow)
         : undefined;
+    // Keep physical history separate: comparing a new volume level with an old
+    // money snapshot would create an artificial recession or boom at migration.
+    const outputNow = trendActive ? sumObservedOutput(ownedForState) : null;
+    const outputEmaNow =
+      outputNow !== null ? advanceRevenueEma(finite(state.sectorOutputEma), outputNow) : undefined;
+    const outputTrendBaseline =
+      outputEmaNow !== undefined
+        ? selectRevenueTrendBaseline(state.sectorOutputSnapshots, turn)
+        : null;
+    const outputSnapshots =
+      outputEmaNow !== undefined
+        ? updateRevenueSnapshots(state.sectorOutputSnapshots, turn, outputEmaNow)
+        : undefined;
     const payload: SectorRevenueTaxPayload = {
       owned: ownedForState,
       plantsEnabled: sectorTax.plantsEnabled,
@@ -533,6 +607,9 @@ export async function runMetricEngine(db: Db, turn: number): Promise<number> {
       turnsSincePrev: prevRealizedTurn !== undefined ? turn - prevRealizedTurn : undefined,
       revenueEmaNow,
       revenueTrendBaseline,
+      outputEmaNow,
+      outputTrendBaseline,
+      outputHistorySpanTurns: outputHistorySpanTurns(state.sectorOutputSnapshots, turn),
       unowned: sectorTax.unownedByState.get(state._id) ?? [],
       federalSalesTax:
         sectorTax.federalSalesTaxByCountry.get(countryId) ??
@@ -654,6 +731,10 @@ export async function runMetricEngine(db: Db, turn: number): Promise<number> {
         }
       }
     }
+    // Institutional failure lowers the economy's annual supply-side growth
+    // ceiling. The output-gap path then carries that drag into realized GDP,
+    // unemployment, tax bases, and every downstream macro consumer.
+    potential -= democraticHealthDragByCountry.get(countryId) ?? 0;
     const prevGap = state.outputGap ?? 0;
 
     // Prev feeds the SECTOR node's EMA + policy delta (P1c-2). `potential` and the
@@ -728,6 +809,12 @@ export async function runMetricEngine(db: Db, turn: number): Promise<number> {
       if (automationDelta !== undefined) {
         seedCurrent["economic.automationIndexDelta"] = automationDelta;
       }
+      // #791: measured labour-market tightness — the corp turn's demand-over-
+      // supply reading from the PRIOR turn (same lag as the Δ signals above).
+      // Seeded, not a declared node input, so the topo order is untouched.
+      // Absent (cold start) ⇒ the node reads 0 pressure — today's behaviour.
+      const tightness = readMetricPath(prevDoc, "economic.labourTightness", "value");
+      if (tightness !== undefined) seedCurrent["economic.labourTightness"] = tightness;
     }
 
     // §6.3 (P7b): the country's LAGGED economic model nudges its synergy metrics'
@@ -899,18 +986,26 @@ export async function runMetricEngine(db: Db, turn: number): Promise<number> {
             // Trailing-trend state (host-tagged plants worlds only). The first
             // plants turn is unit-untagged, so this starts one turn later with
             // a clean host-only series.
+            ...(outputEmaNow !== undefined ? { sectorOutputEma: outputEmaNow } : {}),
+            ...(outputSnapshots !== undefined ? { sectorOutputSnapshots: outputSnapshots } : {}),
             ...(revenueEmaNow !== undefined ? { sectorRevenueEma: revenueEmaNow } : {}),
             ...(nextSnapshots !== undefined ? { sectorRevenueSnapshots: nextSnapshots } : {}),
           },
           // Dropping below plants returns the stored one-turn baseline to the
           // legacy unit. Remove the host tag and trend state so a later flip
           // starts a fresh host-only EMA and snapshot log on that exact turn.
-          ...(!sectorTax.plantsEnabled
+          ...(!sectorTax.plantsEnabled || outputEmaNow === undefined
             ? {
                 $unset: {
-                  sectorRealizedRevenueUnit: "" as const,
-                  sectorRevenueEma: "" as const,
-                  sectorRevenueSnapshots: "" as const,
+                  sectorOutputEma: "" as const,
+                  sectorOutputSnapshots: "" as const,
+                  ...(!sectorTax.plantsEnabled
+                    ? {
+                        sectorRealizedRevenueUnit: "" as const,
+                        sectorRevenueEma: "" as const,
+                        sectorRevenueSnapshots: "" as const,
+                      }
+                    : {}),
                 },
               }
             : {}),

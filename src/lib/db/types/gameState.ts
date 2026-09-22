@@ -48,6 +48,8 @@ export interface SingleplayerConfig {
   featureFlags: Record<string, boolean>;
   /** Whether the local character is locked to the head-of-state career path. */
   permanentHeadOfState: boolean;
+  /** Explicit consent for durable, per-turn long-horizon telemetry. */
+  longHorizonTelemetryEnabled?: boolean;
   configuredAt: Date;
 }
 
@@ -94,6 +96,8 @@ export interface GameState {
   coldWarEndedTurn?: number | null;
   currentTurn: number;
   currentYear: number;
+  /** Exact operator-selected date of this iteration's reset. */
+  resetStartDate?: { year: number; week: number };
   /**
    * Calendar year of turn 1 for the active reset preset (1991, 2019, etc.).
    * Set by `resetGameWorld` at bootstrap from the preset's mapping in
@@ -408,6 +412,16 @@ export interface GameState {
   nppEntryViabilityMode?: NppEntryViabilityMode;
   nppEntryViabilityModeBy?: string;
   nppEntryViabilityModeAt?: string;
+  /**
+   * Capped frontier-entry experiment for state-sector coverage (issue #991).
+   * Absent resolves to false: the experiment is disabled by default and no
+   * entry mechanics may activate without the controlled 48-turn trial plus
+   * largest-supplier-failure stress evidence. The NPP entry funnel and
+   * state-sector coverage evidence layer runs regardless of this flag.
+   */
+  frontierEntryExperimentEnabled?: boolean;
+  frontierEntryExperimentEnabledBy?: string;
+  frontierEntryExperimentEnabledAt?: string;
   /** Turn the extraction auto-strategy phase last acted. Guards its cadence. */
   lastExtractionAutoStrategyTurn?: number;
   /** Master gate for the US House districted-redistricting system. Default off. */
@@ -677,6 +691,29 @@ export interface CountryGameState {
    * any future restoration; the country simply stops being simulated.
    */
   dissolvedTurn?: number | null;
+  /**
+   * True when this country does not exist as a polity in the world's current
+   * preset era — East Germany in 1991, Czechoslovakia in 2019.
+   *
+   * DELIBERATELY NOT `dissolvedTurn`. That field means "absorbed into another
+   * and no longer exists", and it drives merge idempotency: `mergeCountry`
+   * returns `{ ok: true, retired: true }` for any row carrying it, and refuses
+   * it as a merge target. A country that simply is not part of this era was
+   * never absorbed, so stamping a dissolution would silently no-op a genuine
+   * later merge. `getDissolvedCountryIds` also has to keep "absorbed at turn N"
+   * distinct from "never existed in this era".
+   *
+   * Written true OR false by `seedCountryGameStates` on every reset, never
+   * only-when-true, so a world moving 1991 -> 1953 brings East Germany back
+   * instead of stranding it.
+   *
+   * Additive and optional by design: rows written before this field existed
+   * read `undefined` -> falsy -> registered, which is exactly the prior
+   * behaviour, so it needs no backfill migration. (CLAUDE.md asks for a tracking
+   * issue on `src/lib/db/types` changes; filing was waived by the repo owner on
+   * 2026-09-08 — recorded here so this reads as a decision, not an oversight.)
+   */
+  absentInEra?: boolean;
   /**
    * When true, non-admin players can view economy-only pages (map, metrics,
    * stockmarket, central bank, budget, forex) even while `enabledForPlayers`

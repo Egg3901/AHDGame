@@ -1,0 +1,2552 @@
+{
+  "COUNTRY_ANCHOR": {
+    "shape": "country-first",
+    "value": [35.2, 39]
+  },
+  "COUNTRY_BUCKET_LABELS": {
+    "shape": "country-first",
+    "value": {
+      "dims": {
+        "ethnicity": "Köken",
+        "age": "Yaş",
+        "education": "Eğitim",
+        "income": "Gelir",
+        "urbanization": "Yaşadıkları yer"
+      },
+      "buckets": {
+        "ethnicity": {
+          "turkish": "Türkler",
+          "kurdish": "Kürtler",
+          "other": "Diğer kökenler"
+        },
+        "age": {
+          "young": "30 yaş altı",
+          "mid": "30–49 yaş",
+          "mature": "50–64 yaş",
+          "senior": "65 yaş üstü"
+        },
+        "education": {
+          "primary_or_below": "İlkokul ve altı",
+          "secondary": "Lise",
+          "vocational": "Meslek okulu",
+          "university": "Üniversite"
+        },
+        "income": {
+          "low": "Düşük gelir",
+          "middle": "Orta gelir",
+          "high": "Yüksek gelir"
+        },
+        "urbanization": {
+          "urban": "Şehirler",
+          "suburban": "Banliyö",
+          "rural": "Kırsal"
+        }
+      }
+    }
+  },
+  "COUNTRY_COMMAND_FLAVOR": {
+    "shape": "country-first",
+    "value": {
+      "glyph": "TR",
+      "command": "GENELKURMAY",
+      "strip": "◆ ÇOK GİZLİ",
+      "acc": "#9cc0f5"
+    }
+  },
+  "COUNTRY_MODIFIER_PATCHES": {
+    "shape": "absent",
+    "value": null
+  },
+  "COUNTRY_READINESS_EXPECTATIONS": {
+    "shape": "absent",
+    "value": null
+  },
+  "COUNTRY_SECTOR_WEIGHTS_1953": {
+    "shape": "country-first",
+    "value": {
+      "agriculture": 40,
+      "manufacturing": 14,
+      "construction": 10,
+      "energy": 8,
+      "logistics": 6,
+      "extraction": 5,
+      "real_estate": 3,
+      "financial": 3,
+      "retail": 3,
+      "defense": 3,
+      "healthcare": 1,
+      "telecommunications": 1,
+      "media": 1,
+      "automobiles": 0,
+      "chemical_industries": 0,
+      "entertainment": 1,
+      "technology": 0
+    }
+  },
+  "DOMAIN_BUCKET_AFFINITIES": {
+    "shape": "absent",
+    "value": null
+  },
+  "GDP_DENOMINATION_1953": {
+    "shape": "country-first",
+    "value": "local"
+  },
+  "GROUPS": {
+    "shape": "absent",
+    "value": null
+  },
+  "INITIAL_RATES": {
+    "shape": "country-first",
+    "value": 34.5
+  },
+  "MAJOR_DEFAULT_PARTIES": {
+    "shape": "absent",
+    "value": null
+  },
+  "MECHANICS_BY_COUNTRY": {
+    "shape": "country-first",
+    "value": {
+      "minister_of_finance": {
+        "positionId": "minister_of_finance",
+        "department": "Finance, Budget and National Planning",
+        "sealImage": "",
+        "nationalMetrics": [
+          {
+            "category": "governance",
+            "metricId": "budgetBalance",
+            "label": "Budget Balance",
+            "format": "percent",
+            "higherIsBetter": true
+          },
+          {
+            "category": "economic",
+            "metricId": "gdpGrowth",
+            "label": "GDP Growth",
+            "format": "percent",
+            "higherIsBetter": true
+          }
+        ],
+        "regionalMetrics": []
+      },
+      "minister_of_foreign_affairs": {
+        "positionId": "minister_of_foreign_affairs",
+        "department": "Foreign Affairs",
+        "sealImage": "",
+        "nationalMetrics": [
+          {
+            "category": "economic",
+            "metricId": "tradeBalance",
+            "label": "Trade Balance",
+            "format": "percent",
+            "higherIsBetter": true
+          }
+        ],
+        "regionalMetrics": []
+      },
+      "minister_of_defence": {
+        "positionId": "minister_of_defence",
+        "department": "Defence",
+        "sealImage": "",
+        "nationalMetrics": [
+          {
+            "category": "publicSafety",
+            "metricId": "publicSafetyConfidence",
+            "label": "Public Safety Confidence",
+            "format": "percent",
+            "higherIsBetter": true
+          },
+          {
+            "category": "publicSafety",
+            "metricId": "violentCrimeRate",
+            "label": "Violent Crime Rate",
+            "format": "number",
+            "higherIsBetter": false
+          }
+        ],
+        "regionalMetrics": []
+      },
+      "minister_of_interior": {
+        "positionId": "minister_of_interior",
+        "department": "Interior",
+        "sealImage": "",
+        "nationalMetrics": [
+          {
+            "category": "publicSafety",
+            "metricId": "crimeRate",
+            "label": "Crime Rate",
+            "format": "number",
+            "higherIsBetter": false
+          },
+          {
+            "category": "publicSafety",
+            "metricId": "publicSafetyConfidence",
+            "label": "Public Safety Confidence",
+            "format": "percent",
+            "higherIsBetter": true
+          }
+        ],
+        "regionalMetrics": []
+      },
+      "minister_of_justice": {
+        "positionId": "minister_of_justice",
+        "department": "Justice",
+        "sealImage": "",
+        "nationalMetrics": [
+          {
+            "category": "governance",
+            "metricId": "corruptionIndex",
+            "label": "Corruption Index",
+            "format": "index",
+            "higherIsBetter": false
+          },
+          {
+            "category": "publicSafety",
+            "metricId": "recidivismRate",
+            "label": "Recidivism Rate",
+            "format": "percent",
+            "higherIsBetter": false
+          }
+        ],
+        "regionalMetrics": []
+      },
+      "minister_of_health": {
+        "positionId": "minister_of_health",
+        "department": "Health",
+        "sealImage": "",
+        "nationalMetrics": [
+          {
+            "category": "healthcare",
+            "metricId": "lifeExpectancy",
+            "label": "Life Expectancy",
+            "format": "number",
+            "higherIsBetter": true
+          },
+          {
+            "category": "healthcare",
+            "metricId": "preventableMortality",
+            "label": "Preventable Mortality",
+            "format": "number",
+            "higherIsBetter": false
+          }
+        ],
+        "regionalMetrics": []
+      },
+      "minister_of_education": {
+        "positionId": "minister_of_education",
+        "department": "Education",
+        "sealImage": "",
+        "nationalMetrics": [
+          {
+            "category": "education",
+            "metricId": "literacyRate",
+            "label": "Literacy Rate",
+            "format": "percent",
+            "higherIsBetter": true
+          },
+          {
+            "category": "education",
+            "metricId": "testPerformance",
+            "label": "Test Performance",
+            "format": "index",
+            "higherIsBetter": true
+          }
+        ],
+        "regionalMetrics": []
+      },
+      "minister_of_works_housing": {
+        "positionId": "minister_of_works_housing",
+        "department": "Works and Housing",
+        "sealImage": "",
+        "nationalMetrics": [
+          {
+            "category": "infrastructure",
+            "metricId": "roadCondition",
+            "label": "Road Condition",
+            "format": "index",
+            "higherIsBetter": true
+          },
+          {
+            "category": "social",
+            "metricId": "housingAffordability",
+            "label": "Housing Affordability",
+            "format": "index",
+            "higherIsBetter": false
+          }
+        ],
+        "regionalMetrics": []
+      },
+      "minister_of_agriculture": {
+        "positionId": "minister_of_agriculture",
+        "department": "Agriculture and Rural Development",
+        "sealImage": "",
+        "nationalMetrics": [
+          {
+            "category": "social",
+            "metricId": "foodInsecurity",
+            "label": "Food Insecurity",
+            "format": "percent",
+            "higherIsBetter": false
+          },
+          {
+            "category": "economic",
+            "metricId": "povertyRate",
+            "label": "Poverty Rate",
+            "format": "percent",
+            "higherIsBetter": false
+          }
+        ],
+        "regionalMetrics": []
+      },
+      "minister_of_trade_industry": {
+        "positionId": "minister_of_trade_industry",
+        "department": "Industry, Trade and Investment",
+        "sealImage": "",
+        "nationalMetrics": [
+          {
+            "category": "economic",
+            "metricId": "smallBusinessFormation",
+            "label": "Small Business Formation",
+            "format": "percent",
+            "higherIsBetter": true
+          },
+          {
+            "category": "economic",
+            "metricId": "tradeBalance",
+            "label": "Trade Balance",
+            "format": "percent",
+            "higherIsBetter": true
+          }
+        ],
+        "regionalMetrics": []
+      },
+      "minister_of_labour": {
+        "positionId": "minister_of_labour",
+        "department": "Labour and Employment",
+        "sealImage": "",
+        "nationalMetrics": [
+          {
+            "category": "economic",
+            "metricId": "unemploymentRate",
+            "label": "Unemployment Rate",
+            "format": "percent",
+            "higherIsBetter": false
+          },
+          {
+            "category": "economic",
+            "metricId": "laborParticipation",
+            "label": "Labour Participation",
+            "format": "percent",
+            "higherIsBetter": true
+          }
+        ],
+        "regionalMetrics": []
+      },
+      "minister_of_environment": {
+        "positionId": "minister_of_environment",
+        "department": "Environment",
+        "sealImage": "",
+        "nationalMetrics": [
+          {
+            "category": "environment",
+            "metricId": "carbonEmissions",
+            "label": "Carbon Emissions",
+            "format": "number",
+            "higherIsBetter": false
+          },
+          {
+            "category": "environment",
+            "metricId": "renewableEnergy",
+            "label": "Renewable Energy",
+            "format": "percent",
+            "higherIsBetter": true
+          }
+        ],
+        "regionalMetrics": []
+      },
+      "director_of_intelligence": {
+        "positionId": "director_of_intelligence",
+        "department": "Intelligence Service",
+        "sealImage": "",
+        "nationalMetrics": [
+          {
+            "category": "governance",
+            "metricId": "publicTrust",
+            "label": "Public Trust",
+            "format": "index",
+            "higherIsBetter": true
+          },
+          {
+            "category": "publicSafety",
+            "metricId": "crimeRate",
+            "label": "Crime Rate",
+            "format": "rate",
+            "higherIsBetter": false
+          }
+        ],
+        "regionalMetrics": []
+      }
+    }
+  },
+  "MEDIAN_INCOME_THRESHOLDS": {
+    "shape": "absent",
+    "value": null
+  },
+  "POPULATION_MULTIPLIERS": {
+    "shape": "absent",
+    "value": null
+  },
+  "ORDERS_BY_COUNTRY": {
+    "shape": "absent",
+    "value": null
+  },
+  "UNION_NAMES_BY_ERA": {
+    "shape": "outer-keyed",
+    "value": {
+      "1953": {
+        "financial": "Türk-İş",
+        "media": "Türk-İş",
+        "manufacturing": "Türk-İş",
+        "chemical_industries": "Petrol-İş",
+        "healthcare": "Türk-İş",
+        "retail": "Türk-İş",
+        "automobiles": "Türk-İş",
+        "technology": "Türk-İş",
+        "energy": "Türk-İş",
+        "agriculture": "Türk-İş",
+        "real_estate": "Türk-İş",
+        "construction": "Türk-İş",
+        "defense": "Türk-İş",
+        "telecommunications": "Türk-İş",
+        "entertainment": "Türk-İş",
+        "logistics": "TÜMTİS",
+        "extraction": "Genel Maden-İş"
+      },
+      "1979": {
+        "manufacturing": "Türk Metal",
+        "automobiles": "Türk Metal",
+        "chemical_industries": "Petrol-İş",
+        "construction": "Yol-İş",
+        "energy": "Tes-İş",
+        "extraction": "Genel Maden-İş",
+        "healthcare": "Sağlık-İş",
+        "retail": "Tez-Koop-İş",
+        "media": "Basın-İş",
+        "logistics": "TÜMTİS",
+        "financial": "Bank-Sen",
+        "telecommunications": "Haber-İş",
+        "entertainment": "Basın-İş",
+        "defense": "Türk Metal",
+        "agriculture": "Tarım-İş",
+        "real_estate": "Yol-İş"
+      },
+      "1991": {
+        "manufacturing": "Türk Metal",
+        "automobiles": "Türk Metal",
+        "chemical_industries": "Petrol-İş",
+        "construction": "Yol-İş",
+        "energy": "Tes-İş",
+        "extraction": "Genel Maden-İş",
+        "healthcare": "Sağlık-İş",
+        "retail": "Tez-Koop-İş",
+        "media": "Basın-İş",
+        "logistics": "TÜMTİS",
+        "financial": "Bank-Sen",
+        "telecommunications": "Haber-İş",
+        "entertainment": "Basın-İş",
+        "defense": "Türk Metal",
+        "agriculture": "Tarım-İş",
+        "real_estate": "Yol-İş"
+      },
+      "1999": {
+        "manufacturing": "Türk Metal",
+        "automobiles": "Türk Metal",
+        "chemical_industries": "Petrol-İş",
+        "construction": "Yol-İş",
+        "energy": "Tes-İş",
+        "extraction": "Genel Maden-İş",
+        "healthcare": "Sağlık-Sen",
+        "retail": "Tez-Koop-İş",
+        "media": "Basın-İş",
+        "logistics": "TÜMTİS",
+        "financial": "Bank-Sen",
+        "telecommunications": "Haber-İş",
+        "entertainment": "Basın-İş",
+        "defense": "Türk Metal",
+        "agriculture": "Tarım-İş",
+        "real_estate": "Yol-İş"
+      },
+      "2007": {
+        "manufacturing": "Türk Metal",
+        "automobiles": "Türk Metal",
+        "chemical_industries": "Petrol-İş",
+        "construction": "Yol-İş",
+        "energy": "Tes-İş",
+        "extraction": "Genel Maden-İş",
+        "healthcare": "Sağlık-Sen",
+        "retail": "Tez-Koop-İş",
+        "media": "Basın-İş",
+        "logistics": "TÜMTİS",
+        "financial": "Bank-Sen",
+        "telecommunications": "Haber-İş",
+        "entertainment": "Basın-İş",
+        "defense": "Türk Metal",
+        "agriculture": "Tarım-İş",
+        "real_estate": "Yol-İş"
+      },
+      "2019": {
+        "manufacturing": "Türk Metal",
+        "automobiles": "Türk Metal",
+        "chemical_industries": "Petrol-İş",
+        "construction": "Yol-İş",
+        "energy": "Tes-İş",
+        "extraction": "Genel Maden-İş",
+        "healthcare": "Sağlık-Sen",
+        "retail": "Tez-Koop-İş",
+        "media": "Basın-İş",
+        "logistics": "TÜMTİS",
+        "financial": "Bank-Sen",
+        "telecommunications": "Haber-İş",
+        "entertainment": "Basın-İş",
+        "defense": "Türk Metal",
+        "agriculture": "Tarım-İş",
+        "real_estate": "Yol-İş"
+      },
+      "2023": {
+        "manufacturing": "Türk Metal",
+        "automobiles": "Türk Metal",
+        "chemical_industries": "Petrol-İş",
+        "construction": "Yol-İş",
+        "energy": "Tes-İş",
+        "extraction": "Genel Maden-İş",
+        "healthcare": "Sağlık-Sen",
+        "retail": "Tez-Koop-İş",
+        "media": "Basın-İş",
+        "logistics": "TÜMTİS",
+        "financial": "Bank-Sen",
+        "telecommunications": "Haber-İş",
+        "entertainment": "Basın-İş",
+        "defense": "Türk Metal",
+        "agriculture": "Tarım-İş",
+        "real_estate": "Yol-İş"
+      },
+      "2027": {
+        "manufacturing": "Türk Metal",
+        "automobiles": "Türk Metal",
+        "chemical_industries": "Petrol-İş",
+        "construction": "Yol-İş",
+        "energy": "Tes-İş",
+        "extraction": "Genel Maden-İş",
+        "healthcare": "Sağlık-Sen",
+        "retail": "Tez-Koop-İş",
+        "media": "Basın-İş",
+        "logistics": "TÜMTİS",
+        "financial": "Bank-Sen",
+        "telecommunications": "Haber-İş",
+        "entertainment": "Basın-İş",
+        "defense": "Türk Metal",
+        "agriculture": "Tarım-İş",
+        "real_estate": "Yol-İş"
+      }
+    }
+  },
+  "CABINET_IDENTITY": {
+    "shape": "absent",
+    "value": null
+  },
+  "CENSUS_BUNDLES": {
+    "shape": "country-first",
+    "value": {
+      "1953-default": {
+        "TR_IST": {
+          "ethnicity": {
+            "turkish": 89,
+            "kurdish": 5,
+            "other": 6
+          },
+          "age": {
+            "young": 40,
+            "mid": 28,
+            "mature": 18,
+            "senior": 14
+          },
+          "education": {
+            "primary_or_below": 62,
+            "secondary": 24,
+            "vocational": 8,
+            "university": 6
+          },
+          "income": {
+            "low": 38,
+            "middle": 48,
+            "high": 14
+          },
+          "urbanization": {
+            "urban": 62,
+            "suburban": 16,
+            "rural": 22
+          }
+        },
+        "TR_ANK": {
+          "ethnicity": {
+            "turkish": 93,
+            "kurdish": 5,
+            "other": 2
+          },
+          "age": {
+            "young": 40,
+            "mid": 28,
+            "mature": 18,
+            "senior": 14
+          },
+          "education": {
+            "primary_or_below": 58,
+            "secondary": 26,
+            "vocational": 9,
+            "university": 7
+          },
+          "income": {
+            "low": 38,
+            "middle": 48,
+            "high": 14
+          },
+          "urbanization": {
+            "urban": 55,
+            "suburban": 18,
+            "rural": 27
+          }
+        },
+        "TR_IZM": {
+          "ethnicity": {
+            "turkish": 93,
+            "kurdish": 4,
+            "other": 3
+          },
+          "age": {
+            "young": 39,
+            "mid": 28,
+            "mature": 19,
+            "senior": 14
+          },
+          "education": {
+            "primary_or_below": 65,
+            "secondary": 24,
+            "vocational": 7,
+            "university": 4
+          },
+          "income": {
+            "low": 36,
+            "middle": 50,
+            "high": 14
+          },
+          "urbanization": {
+            "urban": 50,
+            "suburban": 14,
+            "rural": 36
+          }
+        },
+        "TR_MED": {
+          "ethnicity": {
+            "turkish": 88,
+            "kurdish": 10,
+            "other": 2
+          },
+          "age": {
+            "young": 42,
+            "mid": 28,
+            "mature": 17,
+            "senior": 13
+          },
+          "education": {
+            "primary_or_below": 70,
+            "secondary": 20,
+            "vocational": 6,
+            "university": 4
+          },
+          "income": {
+            "low": 44,
+            "middle": 48,
+            "high": 8
+          },
+          "urbanization": {
+            "urban": 40,
+            "suburban": 12,
+            "rural": 48
+          }
+        },
+        "TR_BLA": {
+          "ethnicity": {
+            "turkish": 96,
+            "kurdish": 2,
+            "other": 2
+          },
+          "age": {
+            "young": 42,
+            "mid": 28,
+            "mature": 18,
+            "senior": 12
+          },
+          "education": {
+            "primary_or_below": 72,
+            "secondary": 20,
+            "vocational": 5,
+            "university": 3
+          },
+          "income": {
+            "low": 46,
+            "middle": 46,
+            "high": 8
+          },
+          "urbanization": {
+            "urban": 28,
+            "suburban": 10,
+            "rural": 62
+          }
+        },
+        "TR_ESA": {
+          "ethnicity": {
+            "turkish": 58,
+            "kurdish": 40,
+            "other": 2
+          },
+          "age": {
+            "young": 46,
+            "mid": 28,
+            "mature": 16,
+            "senior": 10
+          },
+          "education": {
+            "primary_or_below": 78,
+            "secondary": 16,
+            "vocational": 4,
+            "university": 2
+          },
+          "income": {
+            "low": 62,
+            "middle": 34,
+            "high": 4
+          },
+          "urbanization": {
+            "urban": 24,
+            "suburban": 8,
+            "rural": 68
+          }
+        },
+        "TR_SEA": {
+          "ethnicity": {
+            "turkish": 32,
+            "kurdish": 66,
+            "other": 2
+          },
+          "age": {
+            "young": 48,
+            "mid": 28,
+            "mature": 15,
+            "senior": 9
+          },
+          "education": {
+            "primary_or_below": 80,
+            "secondary": 14,
+            "vocational": 4,
+            "university": 2
+          },
+          "income": {
+            "low": 66,
+            "middle": 30,
+            "high": 4
+          },
+          "urbanization": {
+            "urban": 26,
+            "suburban": 8,
+            "rural": 66
+          }
+        },
+        "TR_CEN": {
+          "ethnicity": {
+            "turkish": 93,
+            "kurdish": 6,
+            "other": 1
+          },
+          "age": {
+            "young": 43,
+            "mid": 28,
+            "mature": 18,
+            "senior": 11
+          },
+          "education": {
+            "primary_or_below": 72,
+            "secondary": 20,
+            "vocational": 5,
+            "university": 3
+          },
+          "income": {
+            "low": 48,
+            "middle": 44,
+            "high": 8
+          },
+          "urbanization": {
+            "urban": 35,
+            "suburban": 10,
+            "rural": 55
+          }
+        }
+      },
+      "1979-default": {
+        "TR_IST": {
+          "ethnicity": {
+            "turkish": 92,
+            "kurdish": 6,
+            "other": 2
+          },
+          "age": {
+            "young": 36,
+            "mid": 30,
+            "mature": 20,
+            "senior": 14
+          },
+          "education": {
+            "primary_or_below": 50,
+            "secondary": 30,
+            "vocational": 12,
+            "university": 8
+          },
+          "income": {
+            "low": 30,
+            "middle": 52,
+            "high": 18
+          },
+          "urbanization": {
+            "urban": 80,
+            "suburban": 12,
+            "rural": 8
+          }
+        },
+        "TR_ANK": {
+          "ethnicity": {
+            "turkish": 93,
+            "kurdish": 6,
+            "other": 1
+          },
+          "age": {
+            "young": 36,
+            "mid": 29,
+            "mature": 21,
+            "senior": 14
+          },
+          "education": {
+            "primary_or_below": 46,
+            "secondary": 31,
+            "vocational": 13,
+            "university": 10
+          },
+          "income": {
+            "low": 30,
+            "middle": 52,
+            "high": 18
+          },
+          "urbanization": {
+            "urban": 70,
+            "suburban": 12,
+            "rural": 18
+          }
+        },
+        "TR_IZM": {
+          "ethnicity": {
+            "turkish": 95,
+            "kurdish": 3,
+            "other": 2
+          },
+          "age": {
+            "young": 34,
+            "mid": 29,
+            "mature": 22,
+            "senior": 15
+          },
+          "education": {
+            "primary_or_below": 50,
+            "secondary": 31,
+            "vocational": 12,
+            "university": 7
+          },
+          "income": {
+            "low": 28,
+            "middle": 54,
+            "high": 18
+          },
+          "urbanization": {
+            "urban": 64,
+            "suburban": 12,
+            "rural": 24
+          }
+        },
+        "TR_MED": {
+          "ethnicity": {
+            "turkish": 88,
+            "kurdish": 10,
+            "other": 2
+          },
+          "age": {
+            "young": 38,
+            "mid": 28,
+            "mature": 20,
+            "senior": 14
+          },
+          "education": {
+            "primary_or_below": 56,
+            "secondary": 28,
+            "vocational": 10,
+            "university": 6
+          },
+          "income": {
+            "low": 36,
+            "middle": 50,
+            "high": 14
+          },
+          "urbanization": {
+            "urban": 52,
+            "suburban": 12,
+            "rural": 36
+          }
+        },
+        "TR_BLA": {
+          "ethnicity": {
+            "turkish": 95,
+            "kurdish": 3,
+            "other": 2
+          },
+          "age": {
+            "young": 37,
+            "mid": 28,
+            "mature": 21,
+            "senior": 14
+          },
+          "education": {
+            "primary_or_below": 58,
+            "secondary": 28,
+            "vocational": 9,
+            "university": 5
+          },
+          "income": {
+            "low": 38,
+            "middle": 50,
+            "high": 12
+          },
+          "urbanization": {
+            "urban": 40,
+            "suburban": 12,
+            "rural": 48
+          }
+        },
+        "TR_ESA": {
+          "ethnicity": {
+            "turkish": 60,
+            "kurdish": 38,
+            "other": 2
+          },
+          "age": {
+            "young": 42,
+            "mid": 28,
+            "mature": 18,
+            "senior": 12
+          },
+          "education": {
+            "primary_or_below": 68,
+            "secondary": 22,
+            "vocational": 6,
+            "university": 4
+          },
+          "income": {
+            "low": 56,
+            "middle": 38,
+            "high": 6
+          },
+          "urbanization": {
+            "urban": 36,
+            "suburban": 10,
+            "rural": 54
+          }
+        },
+        "TR_SEA": {
+          "ethnicity": {
+            "turkish": 35,
+            "kurdish": 63,
+            "other": 2
+          },
+          "age": {
+            "young": 44,
+            "mid": 28,
+            "mature": 17,
+            "senior": 11
+          },
+          "education": {
+            "primary_or_below": 72,
+            "secondary": 20,
+            "vocational": 5,
+            "university": 3
+          },
+          "income": {
+            "low": 60,
+            "middle": 35,
+            "high": 5
+          },
+          "urbanization": {
+            "urban": 38,
+            "suburban": 10,
+            "rural": 52
+          }
+        },
+        "TR_CEN": {
+          "ethnicity": {
+            "turkish": 92,
+            "kurdish": 7,
+            "other": 1
+          },
+          "age": {
+            "young": 38,
+            "mid": 28,
+            "mature": 20,
+            "senior": 14
+          },
+          "education": {
+            "primary_or_below": 58,
+            "secondary": 28,
+            "vocational": 9,
+            "university": 5
+          },
+          "income": {
+            "low": 40,
+            "middle": 50,
+            "high": 10
+          },
+          "urbanization": {
+            "urban": 48,
+            "suburban": 12,
+            "rural": 40
+          }
+        }
+      },
+      "2019-default": {
+        "TR_IST": {
+          "ethnicity": {
+            "turkish": 92,
+            "kurdish": 6,
+            "other": 2
+          },
+          "age": {
+            "young": 36,
+            "mid": 30,
+            "mature": 20,
+            "senior": 14
+          },
+          "education": {
+            "primary_or_below": 50,
+            "secondary": 30,
+            "vocational": 12,
+            "university": 8
+          },
+          "income": {
+            "low": 30,
+            "middle": 52,
+            "high": 18
+          },
+          "urbanization": {
+            "urban": 80,
+            "suburban": 12,
+            "rural": 8
+          }
+        },
+        "TR_ANK": {
+          "ethnicity": {
+            "turkish": 93,
+            "kurdish": 6,
+            "other": 1
+          },
+          "age": {
+            "young": 36,
+            "mid": 29,
+            "mature": 21,
+            "senior": 14
+          },
+          "education": {
+            "primary_or_below": 46,
+            "secondary": 31,
+            "vocational": 13,
+            "university": 10
+          },
+          "income": {
+            "low": 30,
+            "middle": 52,
+            "high": 18
+          },
+          "urbanization": {
+            "urban": 70,
+            "suburban": 12,
+            "rural": 18
+          }
+        },
+        "TR_IZM": {
+          "ethnicity": {
+            "turkish": 95,
+            "kurdish": 3,
+            "other": 2
+          },
+          "age": {
+            "young": 34,
+            "mid": 29,
+            "mature": 22,
+            "senior": 15
+          },
+          "education": {
+            "primary_or_below": 50,
+            "secondary": 31,
+            "vocational": 12,
+            "university": 7
+          },
+          "income": {
+            "low": 28,
+            "middle": 54,
+            "high": 18
+          },
+          "urbanization": {
+            "urban": 64,
+            "suburban": 12,
+            "rural": 24
+          }
+        },
+        "TR_MED": {
+          "ethnicity": {
+            "turkish": 88,
+            "kurdish": 10,
+            "other": 2
+          },
+          "age": {
+            "young": 38,
+            "mid": 28,
+            "mature": 20,
+            "senior": 14
+          },
+          "education": {
+            "primary_or_below": 56,
+            "secondary": 28,
+            "vocational": 10,
+            "university": 6
+          },
+          "income": {
+            "low": 36,
+            "middle": 50,
+            "high": 14
+          },
+          "urbanization": {
+            "urban": 52,
+            "suburban": 12,
+            "rural": 36
+          }
+        },
+        "TR_BLA": {
+          "ethnicity": {
+            "turkish": 95,
+            "kurdish": 3,
+            "other": 2
+          },
+          "age": {
+            "young": 37,
+            "mid": 28,
+            "mature": 21,
+            "senior": 14
+          },
+          "education": {
+            "primary_or_below": 58,
+            "secondary": 28,
+            "vocational": 9,
+            "university": 5
+          },
+          "income": {
+            "low": 38,
+            "middle": 50,
+            "high": 12
+          },
+          "urbanization": {
+            "urban": 40,
+            "suburban": 12,
+            "rural": 48
+          }
+        },
+        "TR_ESA": {
+          "ethnicity": {
+            "turkish": 60,
+            "kurdish": 38,
+            "other": 2
+          },
+          "age": {
+            "young": 42,
+            "mid": 28,
+            "mature": 18,
+            "senior": 12
+          },
+          "education": {
+            "primary_or_below": 68,
+            "secondary": 22,
+            "vocational": 6,
+            "university": 4
+          },
+          "income": {
+            "low": 56,
+            "middle": 38,
+            "high": 6
+          },
+          "urbanization": {
+            "urban": 36,
+            "suburban": 10,
+            "rural": 54
+          }
+        },
+        "TR_SEA": {
+          "ethnicity": {
+            "turkish": 35,
+            "kurdish": 63,
+            "other": 2
+          },
+          "age": {
+            "young": 44,
+            "mid": 28,
+            "mature": 17,
+            "senior": 11
+          },
+          "education": {
+            "primary_or_below": 72,
+            "secondary": 20,
+            "vocational": 5,
+            "university": 3
+          },
+          "income": {
+            "low": 60,
+            "middle": 35,
+            "high": 5
+          },
+          "urbanization": {
+            "urban": 38,
+            "suburban": 10,
+            "rural": 52
+          }
+        },
+        "TR_CEN": {
+          "ethnicity": {
+            "turkish": 92,
+            "kurdish": 7,
+            "other": 1
+          },
+          "age": {
+            "young": 38,
+            "mid": 28,
+            "mature": 20,
+            "senior": 14
+          },
+          "education": {
+            "primary_or_below": 58,
+            "secondary": 28,
+            "vocational": 9,
+            "university": 5
+          },
+          "income": {
+            "low": 40,
+            "middle": 50,
+            "high": 10
+          },
+          "urbanization": {
+            "urban": 48,
+            "suburban": 12,
+            "rural": 40
+          }
+        }
+      }
+    }
+  },
+  "CONSCRIPTION_SEED": {
+    "shape": "absent",
+    "value": null
+  },
+  "CORE5_NORMALS": {
+    "shape": "absent",
+    "value": null
+  },
+  "COST_SCALE_ANCHORS": {
+    "shape": "absent",
+    "value": null
+  },
+  "COUNTRY_BILL_PHASES": {
+    "shape": "function-valued",
+    "value": null,
+    "functionKeys": ["fn"]
+  },
+  "COUNTRY_CONFIGS": {
+    "shape": "country-first",
+    "value": {
+      "id": "TR",
+      "name": "Turkey",
+      "flagEmoji": "🇹🇷",
+      "code": "TR",
+      "socialAxisBaseline": 1,
+      "regionLabel": "Region",
+      "regionLabelPlural": "Regions",
+      "executiveTitle": "Prime Minister",
+      "headOfStateTitle": "President",
+      "executiveRealmPhrase": "Turkey",
+      "governmentType": "parliamentaryRepublic",
+      "governmentTypeLabel": "Parliamentary Republic",
+      "coalitionThreshold": 226,
+      "legislature": {
+        "name": "Grand National Assembly",
+        "path": "/country/tr/legislature",
+        "bicameral": true,
+        "upperChamber": {
+          "key": "senato",
+          "name": "Senate of the Republic",
+          "shortName": "Senato",
+          "seats": 184,
+          "description": "184 senators (the Cumhuriyet Senatosu, abolished after the 1980 coup), partly elected and partly appointed.",
+          "elected": true
+        },
+        "lowerChamber": {
+          "key": "milletMeclisi",
+          "name": "National Assembly",
+          "shortName": "Meclis",
+          "seats": 450,
+          "description": "450 deputies elected by proportional representation (D'Hondt) for four-year terms.",
+          "elected": true
+        }
+      },
+      "lowerElectionSystem": {
+        "termYears": 4,
+        "seatsContested": "all",
+        "singleMemberConstituencies": false,
+        "snapElectionsAllowed": true
+      },
+      "upperElectionSystem": {
+        "termYears": 6,
+        "seatsContested": "all",
+        "singleMemberConstituencies": false,
+        "snapElectionsAllowed": false
+      },
+      "electionSystems": {
+        "lowerChamber": "pr_hareQuota",
+        "upperChamber": "pr_hareQuota",
+        "headOfGovernment": "parliamentary",
+        "headOfState": "ceremonial"
+      },
+      "officeTypes": [
+        {
+          "key": "primeMinister",
+          "label": "Prime Minister",
+          "labelPlural": "Prime Ministers",
+          "isExecutive": true,
+          "isSubNational": false,
+          "termYears": 4,
+          "actionBonus": 4,
+          "partyStrengthWeight": 1
+        },
+        {
+          "key": "president",
+          "label": "President",
+          "labelPlural": "Presidents",
+          "isExecutive": true,
+          "isHeadOfState": true,
+          "isSubNational": false,
+          "termYears": 7,
+          "actionBonus": 0,
+          "partyStrengthWeight": 0
+        },
+        {
+          "key": "deputy",
+          "label": "Deputy",
+          "labelPlural": "Deputies",
+          "chamberKey": "milletMeclisi",
+          "isExecutive": false,
+          "isSubNational": false,
+          "termYears": 4,
+          "actionBonus": 1,
+          "partyStrengthWeight": 0.9
+        },
+        {
+          "key": "senator",
+          "label": "Senator",
+          "labelPlural": "Senators",
+          "chamberKey": "senato",
+          "isExecutive": false,
+          "isSubNational": false,
+          "termYears": 6,
+          "actionBonus": 1,
+          "partyStrengthWeight": 0.8
+        },
+        {
+          "key": "centralBankChair",
+          "label": "Governor of the Central Bank of Turkey",
+          "labelPlural": "Governors of the Central Bank of Turkey",
+          "isExecutive": false,
+          "isSubNational": false,
+          "termYears": 5,
+          "actionBonus": 3,
+          "partyStrengthWeight": 0
+        }
+      ],
+      "majorPartyIds": ["tr_ap", "tr_chp"],
+      "partyCreationNPPs": {
+        "statesRequired": 2,
+        "lockHomeState": false,
+        "nppsPerState": 1
+      },
+      "demographicProfileId": "tr_archetypes",
+      "centralBank": {
+        "name": "Central Bank of the Republic of Turkey",
+        "abbreviation": "TCMB",
+        "chairTitle": "Governor of the Central Bank of Turkey",
+        "defaultPrimeRate": 20,
+        "heroImage": "https://flagcdn.com/w640/tr.png"
+      },
+      "usdExchangeRate": 0.029,
+      "currencyCode": "TRL",
+      "fiscalYearStartTurnInYear": 40,
+      "financeMinisterCabinetId": "minister_of_finance",
+      "status": "coming-soon",
+      "tagline": "A republic on the brink - fragile coalitions, economic crisis and political violence in the year before the 1980 coup, balanced between secular Kemalism and rising religious and nationalist movements.",
+      "descriptor": "A parliamentary republic where a Prime Minister governs at the confidence of a 450-seat National Assembly and a 184-seat Senate, amid the unstable AP/CHP coalitions of the late 1970s.",
+      "heroImage": "https://flagcdn.com/w640/tr.png",
+      "entryPath": "/country/tr",
+      "overviewPath": "/country/tr",
+      "mapPath": "/country/tr/map",
+      "executivePath": "/country/tr/executive",
+      "executiveLabel": "Çankaya",
+      "centralGovernmentLabel": "State Budget"
+    }
+  },
+  "COUNTRY_CONTINENT": {
+    "shape": "country-first",
+    "value": "Europe"
+  },
+  "COUNTRY_CURRENCY_MAP": {
+    "shape": "country-first",
+    "value": "TRL"
+  },
+  "COUNTRY_ELECTION_PHASES": {
+    "shape": "country-first",
+    "value": [
+      {
+        "name": "trElections"
+      },
+      {
+        "name": "trSenateElections"
+      }
+    ]
+  },
+  "COUNTRY_ERA1991_PATCHES": {
+    "shape": "absent",
+    "value": null
+  },
+  "COUNTRY_HISTORICAL_NAMES": {
+    "shape": "country-first",
+    "value": ["Anatolian Commerce Bank", "Bosphorus Trading Bank"]
+  },
+  "COUNTRY_MAP_REGISTRY": {
+    "shape": "country-first",
+    "value": {
+      "countryId": "TR",
+      "name": "Turkey",
+      "overviewPath": "/country/tr",
+      "mapPath": "/country/tr/map",
+      "hasRegionMap": false
+    }
+  },
+  "COUNTRY_MODERN_NAMES": {
+    "shape": "country-first",
+    "value": ["Anatolian Commerce Group", "Bosphorus Financial"]
+  },
+  "COUNTRY_REGIONS": {
+    "shape": "country-first",
+    "value": "europe"
+  },
+  "COUNTRY_SECTOR_WEIGHTS": {
+    "shape": "country-first",
+    "value": {
+      "manufacturing": 16,
+      "agriculture": 14,
+      "real_estate": 11,
+      "retail": 9,
+      "construction": 8,
+      "automobiles": 6,
+      "financial": 5,
+      "healthcare": 5,
+      "energy": 5,
+      "logistics": 5,
+      "chemical_industries": 4,
+      "defense": 4,
+      "entertainment": 4,
+      "technology": 2,
+      "media": 2
+    }
+  },
+  "COUNTRY_SECTOR_WEIGHTS_1979": {
+    "shape": "country-first",
+    "value": {
+      "agriculture": 22,
+      "manufacturing": 15,
+      "construction": 10,
+      "retail": 10,
+      "energy": 8,
+      "extraction": 4,
+      "real_estate": 6,
+      "healthcare": 4,
+      "defense": 5,
+      "chemical_industries": 4,
+      "automobiles": 3,
+      "financial": 3,
+      "logistics": 4,
+      "telecommunications": 2,
+      "technology": 1,
+      "media": 2,
+      "entertainment": 3
+    }
+  },
+  "COUNTRY_SECTOR_WEIGHTS_1991": {
+    "shape": "country-first",
+    "value": {
+      "manufacturing": 16,
+      "agriculture": 14,
+      "real_estate": 11,
+      "retail": 9,
+      "construction": 8,
+      "automobiles": 6,
+      "financial": 5,
+      "healthcare": 5,
+      "energy": 5,
+      "logistics": 5,
+      "chemical_industries": 4,
+      "defense": 4,
+      "entertainment": 4,
+      "technology": 2,
+      "media": 2
+    }
+  },
+  "COUNTRY_TO_ISO_NUMERIC": {
+    "shape": "country-first",
+    "value": "792"
+  },
+  "COUNTRY_UN_MEMBER_SINCE": {
+    "shape": "country-first",
+    "value": 1945
+  },
+  "DEFAULT_STRATEGIC_SECTORS": {
+    "shape": "absent",
+    "value": null
+  },
+  "DEFENSE_POSITION_BY_COUNTRY": {
+    "shape": "country-first",
+    "value": "minister_of_defence"
+  },
+  "ECONOMIC_BASELINES": {
+    "shape": "absent",
+    "value": null
+  },
+  "ECONOMY_TEXT": {
+    "shape": "absent",
+    "value": null
+  },
+  "ENERGY_POSITION_BY_COUNTRY": {
+    "shape": "absent",
+    "value": null
+  },
+  "ERA_COUNTRY_CONFIG_OVERRIDES": {
+    "shape": "outer-keyed",
+    "value": {
+      "1953-default": {
+        "usdExchangeRate": 0.35714285714285715,
+        "majorPartyIds": ["tr_dp", "tr_chp"],
+        "coalitionThreshold": 244,
+        "legislature": {
+          "name": "Grand National Assembly",
+          "path": "/country/tr/legislature",
+          "bicameral": false,
+          "lowerChamber": {
+            "key": "milletMeclisi",
+            "name": "Grand National Assembly",
+            "shortName": "Meclis",
+            "seats": 487,
+            "description": "487 deputies of the unicameral Türkiye Büyük Millet Meclisi (1950 election size; Senate created only by the 1961 constitution).",
+            "elected": true
+          }
+        },
+        "electionSystems": {
+          "lowerChamber": "pr_hareQuota",
+          "headOfGovernment": "parliamentary",
+          "headOfState": "ceremonial"
+        },
+        "officeTypes": [
+          {
+            "key": "primeMinister",
+            "label": "Prime Minister",
+            "labelPlural": "Prime Ministers",
+            "isExecutive": true,
+            "isSubNational": false,
+            "termYears": 4,
+            "actionBonus": 4,
+            "partyStrengthWeight": 1
+          },
+          {
+            "key": "president",
+            "label": "President",
+            "labelPlural": "Presidents",
+            "isExecutive": true,
+            "isHeadOfState": true,
+            "isSubNational": false,
+            "termYears": 7,
+            "actionBonus": 0,
+            "partyStrengthWeight": 0
+          },
+          {
+            "key": "deputy",
+            "label": "Deputy",
+            "labelPlural": "Deputies",
+            "chamberKey": "milletMeclisi",
+            "isExecutive": false,
+            "isSubNational": false,
+            "termYears": 4,
+            "actionBonus": 1,
+            "partyStrengthWeight": 0.9
+          },
+          {
+            "key": "centralBankChair",
+            "label": "Governor of the Central Bank of Turkey",
+            "labelPlural": "Governors of the Central Bank of Turkey",
+            "isExecutive": false,
+            "isSubNational": false,
+            "termYears": 5,
+            "actionBonus": 3,
+            "partyStrengthWeight": 0
+          }
+        ],
+        "tagline": "Menderes's Democrat Party republic — a unicameral Grand National Assembly, NATO membership since 1952, and deepening secular–conservative rivalry.",
+        "descriptor": "A parliamentary republic where a Prime Minister governs at the confidence of a unicameral 487-seat Grand National Assembly (TBMM); no Senate existed until the 1961 constitution."
+      }
+    }
+  },
+  "ESTATE_PORTFOLIO_BY_COUNTRY": {
+    "shape": "absent",
+    "value": null
+  },
+  "EXECUTIVE_SEALS": {
+    "shape": "country-first",
+    "value": {
+      "src": "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a4/Emblem_of_Turkey.svg/330px-Emblem_of_Turkey.svg.png",
+      "alt": "Emblem of Turkey"
+    }
+  },
+  "EXECUTIVE_SURFACE": {
+    "shape": "country-first",
+    "value": {
+      "clock": {
+        "kind": "election",
+        "label": "Term Clock",
+        "countdownNoun": "next general election"
+      },
+      "actLabels": {
+        "signed": "ENACTED",
+        "vetoed": "REJECTED",
+        "onDesk": "AWAITING",
+        "order": "ORDER",
+        "confirmed": "APPOINTED",
+        "nominated": "NOMINATED",
+        "acting": "ACTING"
+      },
+      "deskKind": "bills",
+      "deskLabel": "The Desk",
+      "rosterTitle": "Council of Ministers",
+      "heroImage": "/api/images/hero/cankaya",
+      "heroAlt": "Çankaya Mansion, Ankara"
+    }
+  },
+  "EXECUTIVE_TEXT": {
+    "shape": "country-first",
+    "value": {
+      "glyph": "TC",
+      "serif": "mono",
+      "registry": "Republic of Turkey · Prime Ministry",
+      "title": "Çankaya"
+    }
+  },
+  "FOREIGN_AFFAIRS_POSITION_BY_COUNTRY": {
+    "shape": "country-first",
+    "value": "minister_of_foreign_affairs"
+  },
+  "FULL_ERA_REGION_BUNDLES": {
+    "shape": "absent",
+    "value": null
+  },
+  "HAZARD_GROUPS": {
+    "shape": "absent",
+    "value": null
+  },
+  "INCOME_ANCHORS": {
+    "shape": "country-first",
+    "value": [
+      {
+        "year": 1953,
+        "value": 1900
+      }
+    ]
+  },
+  "INFRA_POSITION_BY_COUNTRY": {
+    "shape": "absent",
+    "value": null
+  },
+  "ISO_NUMERIC_TO_COUNTRY": {
+    "shape": "value-keyed",
+    "value": {
+      "792": "TR"
+    }
+  },
+  "LEGISLATION_COUNTRY_SCOPES": {
+    "shape": "country-first",
+    "value": "tr"
+  },
+  "LEGISLATIVE_PROCESS": {
+    "shape": "absent",
+    "value": null
+  },
+  "M2_TO_GDP_1953": {
+    "shape": "country-first",
+    "value": 0.3
+  },
+  "METRIC_PRESET_BUNDLES": {
+    "shape": "country-first",
+    "value": {
+      "1953-default": {
+        "TR_IST": {
+          "economic.gdpGrowth": 6,
+          "economic.medianIncome": 3400,
+          "economic.povertyRate": 28,
+          "economic.unemploymentRate": 5,
+          "healthcare.lifeExpectancy": 48,
+          "healthcare.nhsWaitingTime": 24,
+          "education.literacyRate": 55,
+          "education.highSchoolGradRate": 12,
+          "education.universityEnrollment": 3,
+          "population.urbanizationRate": 62,
+          "population.medianAge": 20,
+          "population.birthRate": 100,
+          "population.populationGrowth": 2.5,
+          "infrastructure.broadbandAccess": 0,
+          "infrastructure.roadCondition": 26,
+          "environment.protectedLand": 0.3,
+          "infrastructure.powerGridReliability": 85,
+          "infrastructure.waterQuality": 42,
+          "environment.renewableEnergy": 5,
+          "environment.recyclingRate": 0,
+          "environment.climateResilience": 0,
+          "environment.energyTransitionProgress": 0,
+          "mediaInformation.socialMediaSentiment": 0,
+          "governance.roboticsAdoption": 0,
+          "economic.laborParticipation": 55,
+          "economic.matchingFriction": 7,
+          "economic.tradeBalance": -1,
+          "economic.productivityGrowth": 4,
+          "economic.rdIntensity": 0.1,
+          "economic.propertyValueIndex": 12,
+          "economic.commercialValueIndex": 14,
+          "economic.ruralRevitalization": 88,
+          "economic.foodSecurity": 58,
+          "economic.exportDependency": 20,
+          "economic.manufacturingCompetitiveness": 38,
+          "economic.regulatoryBurden": 55,
+          "economic.economicFreedom": 38,
+          "education.apprenticeshipRate": 1,
+          "education.academicPressure": 25,
+          "healthcare.uninsuredRate": 65,
+          "healthcare.affordabilityIndex": 22,
+          "healthcare.mentalHealthAccess": 5,
+          "healthcare.socialCareQuality": 12,
+          "healthcare.elderCareQuality": 15,
+          "infrastructure.transportEfficiency": 35,
+          "publicSafety.antiSocialBehaviourRate": 6,
+          "publicSafety.knifeCrimeRate": 3,
+          "environment.floodRisk": 16,
+          "environment.naturalDisasterPreparedness": 18,
+          "environment.nuclearSafety": 0,
+          "social.childPoverty": 40,
+          "social.housingAffordability": 10,
+          "social.roughSleeping": 5,
+          "social.workLifeBalance": 35,
+          "social.foreignWorkerIntegration": 35,
+          "social.genderEquality": 18,
+          "social.housingSupplyGrowth": 2.5,
+          "governance.debtToGdp": 22,
+          "governance.devolutionSatisfaction": 30,
+          "governance.nationalPride": 65,
+          "governance.civilLiberties": 40,
+          "governance.militaryReadiness": 55,
+          "population.demographicDecline": 2,
+          "mediaInformation.stateMediaControl": 45,
+          "mediaInformation.pressFreedom": 45,
+          "mediaInformation.disinformationRisk": 10,
+          "mediaInformation.mediaPolarization": 35
+        },
+        "TR_ANK": {
+          "economic.gdpGrowth": 6,
+          "economic.medianIncome": 3000,
+          "economic.povertyRate": 30,
+          "economic.unemploymentRate": 5,
+          "healthcare.lifeExpectancy": 47,
+          "healthcare.nhsWaitingTime": 24,
+          "education.literacyRate": 52,
+          "education.highSchoolGradRate": 14,
+          "education.universityEnrollment": 4,
+          "population.urbanizationRate": 55,
+          "population.medianAge": 20,
+          "population.birthRate": 100,
+          "population.populationGrowth": 2.5,
+          "infrastructure.broadbandAccess": 0,
+          "infrastructure.roadCondition": 26,
+          "environment.protectedLand": 0.3,
+          "infrastructure.powerGridReliability": 85,
+          "infrastructure.waterQuality": 42,
+          "environment.renewableEnergy": 5,
+          "environment.recyclingRate": 0,
+          "environment.climateResilience": 0,
+          "environment.energyTransitionProgress": 0,
+          "mediaInformation.socialMediaSentiment": 0,
+          "governance.roboticsAdoption": 0,
+          "economic.laborParticipation": 55,
+          "economic.matchingFriction": 7,
+          "economic.tradeBalance": -1,
+          "economic.productivityGrowth": 4,
+          "economic.rdIntensity": 0.1,
+          "economic.propertyValueIndex": 12,
+          "economic.commercialValueIndex": 14,
+          "economic.ruralRevitalization": 88,
+          "economic.foodSecurity": 58,
+          "economic.exportDependency": 12,
+          "economic.manufacturingCompetitiveness": 22,
+          "economic.regulatoryBurden": 55,
+          "economic.economicFreedom": 38,
+          "education.apprenticeshipRate": 1,
+          "education.academicPressure": 25,
+          "healthcare.uninsuredRate": 68,
+          "healthcare.affordabilityIndex": 22,
+          "healthcare.mentalHealthAccess": 5,
+          "healthcare.socialCareQuality": 12,
+          "healthcare.elderCareQuality": 15,
+          "infrastructure.transportEfficiency": 32,
+          "publicSafety.antiSocialBehaviourRate": 6,
+          "publicSafety.knifeCrimeRate": 3,
+          "environment.floodRisk": 16,
+          "environment.naturalDisasterPreparedness": 18,
+          "environment.nuclearSafety": 0,
+          "social.childPoverty": 42,
+          "social.housingAffordability": 10,
+          "social.roughSleeping": 5,
+          "social.workLifeBalance": 35,
+          "social.foreignWorkerIntegration": 20,
+          "social.genderEquality": 18,
+          "social.housingSupplyGrowth": 2.5,
+          "governance.debtToGdp": 22,
+          "governance.devolutionSatisfaction": 30,
+          "governance.nationalPride": 65,
+          "governance.civilLiberties": 40,
+          "governance.militaryReadiness": 55,
+          "population.demographicDecline": 2,
+          "mediaInformation.stateMediaControl": 45,
+          "mediaInformation.pressFreedom": 45,
+          "mediaInformation.disinformationRisk": 10,
+          "mediaInformation.mediaPolarization": 35
+        },
+        "TR_IZM": {
+          "economic.gdpGrowth": 6,
+          "economic.medianIncome": 2800,
+          "economic.povertyRate": 32,
+          "economic.unemploymentRate": 5,
+          "healthcare.lifeExpectancy": 47,
+          "healthcare.nhsWaitingTime": 24,
+          "education.literacyRate": 48,
+          "education.highSchoolGradRate": 5,
+          "education.universityEnrollment": 0.8,
+          "population.urbanizationRate": 50,
+          "population.medianAge": 20,
+          "population.birthRate": 100,
+          "population.populationGrowth": 2.5,
+          "infrastructure.broadbandAccess": 0,
+          "infrastructure.roadCondition": 26,
+          "environment.protectedLand": 0.3,
+          "infrastructure.powerGridReliability": 85,
+          "infrastructure.waterQuality": 42,
+          "environment.renewableEnergy": 5,
+          "environment.recyclingRate": 0,
+          "environment.climateResilience": 0,
+          "environment.energyTransitionProgress": 0,
+          "mediaInformation.socialMediaSentiment": 0,
+          "governance.roboticsAdoption": 0,
+          "economic.laborParticipation": 55,
+          "economic.matchingFriction": 7,
+          "economic.tradeBalance": -1,
+          "economic.productivityGrowth": 4,
+          "economic.rdIntensity": 0.1,
+          "economic.propertyValueIndex": 12,
+          "economic.commercialValueIndex": 14,
+          "economic.ruralRevitalization": 88,
+          "economic.foodSecurity": 58,
+          "economic.exportDependency": 22,
+          "economic.manufacturingCompetitiveness": 22,
+          "economic.regulatoryBurden": 55,
+          "economic.economicFreedom": 38,
+          "education.apprenticeshipRate": 1,
+          "education.academicPressure": 25,
+          "healthcare.uninsuredRate": 85,
+          "healthcare.affordabilityIndex": 22,
+          "healthcare.mentalHealthAccess": 5,
+          "healthcare.socialCareQuality": 12,
+          "healthcare.elderCareQuality": 15,
+          "infrastructure.transportEfficiency": 22,
+          "publicSafety.antiSocialBehaviourRate": 6,
+          "publicSafety.knifeCrimeRate": 3,
+          "environment.floodRisk": 16,
+          "environment.naturalDisasterPreparedness": 18,
+          "environment.nuclearSafety": 0,
+          "social.childPoverty": 45,
+          "social.housingAffordability": 10,
+          "social.roughSleeping": 5,
+          "social.workLifeBalance": 35,
+          "social.foreignWorkerIntegration": 20,
+          "social.genderEquality": 18,
+          "social.housingSupplyGrowth": 2.5,
+          "governance.debtToGdp": 22,
+          "governance.devolutionSatisfaction": 30,
+          "governance.nationalPride": 65,
+          "governance.civilLiberties": 40,
+          "governance.militaryReadiness": 55,
+          "population.demographicDecline": 2,
+          "mediaInformation.stateMediaControl": 45,
+          "mediaInformation.pressFreedom": 45,
+          "mediaInformation.disinformationRisk": 10,
+          "mediaInformation.mediaPolarization": 35
+        },
+        "TR_MED": {
+          "economic.gdpGrowth": 6,
+          "economic.medianIncome": 1800,
+          "economic.povertyRate": 48,
+          "economic.unemploymentRate": 5,
+          "healthcare.lifeExpectancy": 44,
+          "healthcare.nhsWaitingTime": 24,
+          "education.literacyRate": 32,
+          "education.highSchoolGradRate": 5,
+          "education.universityEnrollment": 0.8,
+          "population.urbanizationRate": 40,
+          "population.medianAge": 20,
+          "population.birthRate": 100,
+          "population.populationGrowth": 2.5,
+          "infrastructure.broadbandAccess": 0,
+          "infrastructure.roadCondition": 26,
+          "environment.protectedLand": 0.3,
+          "infrastructure.powerGridReliability": 85,
+          "infrastructure.waterQuality": 42,
+          "environment.renewableEnergy": 5,
+          "environment.recyclingRate": 0,
+          "environment.climateResilience": 0,
+          "environment.energyTransitionProgress": 0,
+          "mediaInformation.socialMediaSentiment": 0,
+          "governance.roboticsAdoption": 0,
+          "economic.laborParticipation": 55,
+          "economic.matchingFriction": 7,
+          "economic.tradeBalance": -1,
+          "economic.productivityGrowth": 4,
+          "economic.rdIntensity": 0.1,
+          "economic.propertyValueIndex": 12,
+          "economic.commercialValueIndex": 14,
+          "economic.ruralRevitalization": 88,
+          "economic.foodSecurity": 58,
+          "economic.exportDependency": 12,
+          "economic.manufacturingCompetitiveness": 22,
+          "economic.regulatoryBurden": 55,
+          "economic.economicFreedom": 38,
+          "education.apprenticeshipRate": 1,
+          "education.academicPressure": 25,
+          "healthcare.uninsuredRate": 85,
+          "healthcare.affordabilityIndex": 22,
+          "healthcare.mentalHealthAccess": 5,
+          "healthcare.socialCareQuality": 12,
+          "healthcare.elderCareQuality": 15,
+          "infrastructure.transportEfficiency": 22,
+          "publicSafety.antiSocialBehaviourRate": 6,
+          "publicSafety.knifeCrimeRate": 3,
+          "environment.floodRisk": 16,
+          "environment.naturalDisasterPreparedness": 18,
+          "environment.nuclearSafety": 0,
+          "social.childPoverty": 60,
+          "social.housingAffordability": 10,
+          "social.roughSleeping": 5,
+          "social.workLifeBalance": 35,
+          "social.foreignWorkerIntegration": 20,
+          "social.genderEquality": 18,
+          "social.housingSupplyGrowth": 2.5,
+          "governance.debtToGdp": 22,
+          "governance.devolutionSatisfaction": 30,
+          "governance.nationalPride": 65,
+          "governance.civilLiberties": 40,
+          "governance.militaryReadiness": 55,
+          "population.demographicDecline": 2,
+          "mediaInformation.stateMediaControl": 45,
+          "mediaInformation.pressFreedom": 45,
+          "mediaInformation.disinformationRisk": 10,
+          "mediaInformation.mediaPolarization": 35
+        },
+        "TR_BLA": {
+          "economic.gdpGrowth": 6,
+          "economic.medianIncome": 1600,
+          "economic.povertyRate": 52,
+          "economic.unemploymentRate": 5,
+          "healthcare.lifeExpectancy": 43,
+          "healthcare.nhsWaitingTime": 24,
+          "education.literacyRate": 30,
+          "education.highSchoolGradRate": 5,
+          "education.universityEnrollment": 0.8,
+          "population.urbanizationRate": 28,
+          "population.medianAge": 20,
+          "population.birthRate": 100,
+          "population.populationGrowth": 2.5,
+          "infrastructure.broadbandAccess": 0,
+          "infrastructure.roadCondition": 26,
+          "environment.protectedLand": 0.3,
+          "infrastructure.powerGridReliability": 85,
+          "infrastructure.waterQuality": 42,
+          "environment.renewableEnergy": 5,
+          "environment.recyclingRate": 0,
+          "environment.climateResilience": 0,
+          "environment.energyTransitionProgress": 0,
+          "mediaInformation.socialMediaSentiment": 0,
+          "governance.roboticsAdoption": 0,
+          "economic.laborParticipation": 55,
+          "economic.matchingFriction": 7,
+          "economic.tradeBalance": -1,
+          "economic.productivityGrowth": 4,
+          "economic.rdIntensity": 0.1,
+          "economic.propertyValueIndex": 12,
+          "economic.commercialValueIndex": 14,
+          "economic.ruralRevitalization": 90,
+          "economic.foodSecurity": 58,
+          "economic.exportDependency": 12,
+          "economic.manufacturingCompetitiveness": 22,
+          "economic.regulatoryBurden": 55,
+          "economic.economicFreedom": 38,
+          "education.apprenticeshipRate": 1,
+          "education.academicPressure": 25,
+          "healthcare.uninsuredRate": 85,
+          "healthcare.affordabilityIndex": 22,
+          "healthcare.mentalHealthAccess": 5,
+          "healthcare.socialCareQuality": 12,
+          "healthcare.elderCareQuality": 15,
+          "infrastructure.transportEfficiency": 18,
+          "publicSafety.antiSocialBehaviourRate": 6,
+          "publicSafety.knifeCrimeRate": 3,
+          "environment.floodRisk": 16,
+          "environment.naturalDisasterPreparedness": 18,
+          "environment.nuclearSafety": 0,
+          "social.childPoverty": 65,
+          "social.housingAffordability": 10,
+          "social.roughSleeping": 5,
+          "social.workLifeBalance": 35,
+          "social.foreignWorkerIntegration": 20,
+          "social.genderEquality": 18,
+          "social.housingSupplyGrowth": 2.5,
+          "governance.debtToGdp": 22,
+          "governance.devolutionSatisfaction": 30,
+          "governance.nationalPride": 65,
+          "governance.civilLiberties": 40,
+          "governance.militaryReadiness": 55,
+          "population.demographicDecline": 2,
+          "mediaInformation.stateMediaControl": 45,
+          "mediaInformation.pressFreedom": 45,
+          "mediaInformation.disinformationRisk": 10,
+          "mediaInformation.mediaPolarization": 35
+        },
+        "TR_ESA": {
+          "economic.gdpGrowth": 6,
+          "economic.medianIncome": 1100,
+          "economic.povertyRate": 65,
+          "economic.unemploymentRate": 5,
+          "healthcare.lifeExpectancy": 41,
+          "healthcare.nhsWaitingTime": 24,
+          "education.literacyRate": 18,
+          "education.highSchoolGradRate": 2,
+          "education.universityEnrollment": 0.8,
+          "population.urbanizationRate": 24,
+          "population.medianAge": 20,
+          "population.birthRate": 100,
+          "population.populationGrowth": 2.5,
+          "infrastructure.broadbandAccess": 0,
+          "infrastructure.roadCondition": 26,
+          "environment.protectedLand": 0.3,
+          "infrastructure.powerGridReliability": 85,
+          "infrastructure.waterQuality": 42,
+          "environment.renewableEnergy": 5,
+          "environment.recyclingRate": 0,
+          "environment.climateResilience": 0,
+          "environment.energyTransitionProgress": 0,
+          "mediaInformation.socialMediaSentiment": 0,
+          "governance.roboticsAdoption": 0,
+          "economic.laborParticipation": 55,
+          "economic.matchingFriction": 7,
+          "economic.tradeBalance": -1,
+          "economic.productivityGrowth": 4,
+          "economic.rdIntensity": 0.1,
+          "economic.propertyValueIndex": 12,
+          "economic.commercialValueIndex": 14,
+          "economic.ruralRevitalization": 95,
+          "economic.foodSecurity": 58,
+          "economic.exportDependency": 12,
+          "economic.manufacturingCompetitiveness": 22,
+          "economic.regulatoryBurden": 55,
+          "economic.economicFreedom": 38,
+          "education.apprenticeshipRate": 1,
+          "education.academicPressure": 25,
+          "healthcare.uninsuredRate": 95,
+          "healthcare.affordabilityIndex": 22,
+          "healthcare.mentalHealthAccess": 5,
+          "healthcare.socialCareQuality": 12,
+          "healthcare.elderCareQuality": 15,
+          "infrastructure.transportEfficiency": 12,
+          "publicSafety.antiSocialBehaviourRate": 6,
+          "publicSafety.knifeCrimeRate": 3,
+          "environment.floodRisk": 16,
+          "environment.naturalDisasterPreparedness": 18,
+          "environment.nuclearSafety": 0,
+          "social.childPoverty": 78,
+          "social.housingAffordability": 10,
+          "social.roughSleeping": 5,
+          "social.workLifeBalance": 35,
+          "social.foreignWorkerIntegration": 20,
+          "social.genderEquality": 18,
+          "social.housingSupplyGrowth": 2.5,
+          "governance.debtToGdp": 22,
+          "governance.devolutionSatisfaction": 30,
+          "governance.nationalPride": 65,
+          "governance.civilLiberties": 28,
+          "governance.militaryReadiness": 55,
+          "population.demographicDecline": 2,
+          "mediaInformation.stateMediaControl": 45,
+          "mediaInformation.pressFreedom": 45,
+          "mediaInformation.disinformationRisk": 10,
+          "mediaInformation.mediaPolarization": 35
+        },
+        "TR_SEA": {
+          "economic.gdpGrowth": 6,
+          "economic.medianIncome": 1000,
+          "economic.povertyRate": 68,
+          "economic.unemploymentRate": 5,
+          "healthcare.lifeExpectancy": 40,
+          "healthcare.nhsWaitingTime": 24,
+          "education.literacyRate": 15,
+          "education.highSchoolGradRate": 1,
+          "education.universityEnrollment": 0.8,
+          "population.urbanizationRate": 26,
+          "population.medianAge": 20,
+          "population.birthRate": 100,
+          "population.populationGrowth": 2.5,
+          "infrastructure.broadbandAccess": 0,
+          "infrastructure.roadCondition": 26,
+          "environment.protectedLand": 0.3,
+          "infrastructure.powerGridReliability": 85,
+          "infrastructure.waterQuality": 42,
+          "environment.renewableEnergy": 5,
+          "environment.recyclingRate": 0,
+          "environment.climateResilience": 0,
+          "environment.energyTransitionProgress": 0,
+          "mediaInformation.socialMediaSentiment": 0,
+          "governance.roboticsAdoption": 0,
+          "economic.laborParticipation": 55,
+          "economic.matchingFriction": 7,
+          "economic.tradeBalance": -1,
+          "economic.productivityGrowth": 4,
+          "economic.rdIntensity": 0.1,
+          "economic.propertyValueIndex": 12,
+          "economic.commercialValueIndex": 14,
+          "economic.ruralRevitalization": 96,
+          "economic.foodSecurity": 58,
+          "economic.exportDependency": 12,
+          "economic.manufacturingCompetitiveness": 22,
+          "economic.regulatoryBurden": 55,
+          "economic.economicFreedom": 38,
+          "education.apprenticeshipRate": 1,
+          "education.academicPressure": 25,
+          "healthcare.uninsuredRate": 96,
+          "healthcare.affordabilityIndex": 22,
+          "healthcare.mentalHealthAccess": 5,
+          "healthcare.socialCareQuality": 12,
+          "healthcare.elderCareQuality": 15,
+          "infrastructure.transportEfficiency": 10,
+          "publicSafety.antiSocialBehaviourRate": 6,
+          "publicSafety.knifeCrimeRate": 3,
+          "environment.floodRisk": 16,
+          "environment.naturalDisasterPreparedness": 18,
+          "environment.nuclearSafety": 0,
+          "social.childPoverty": 82,
+          "social.housingAffordability": 10,
+          "social.roughSleeping": 5,
+          "social.workLifeBalance": 35,
+          "social.foreignWorkerIntegration": 20,
+          "social.genderEquality": 18,
+          "social.housingSupplyGrowth": 2.5,
+          "governance.debtToGdp": 22,
+          "governance.devolutionSatisfaction": 30,
+          "governance.nationalPride": 65,
+          "governance.civilLiberties": 25,
+          "governance.militaryReadiness": 55,
+          "population.demographicDecline": 2,
+          "mediaInformation.stateMediaControl": 45,
+          "mediaInformation.pressFreedom": 45,
+          "mediaInformation.disinformationRisk": 10,
+          "mediaInformation.mediaPolarization": 35
+        },
+        "TR_CEN": {
+          "economic.gdpGrowth": 6,
+          "economic.medianIncome": 1500,
+          "economic.povertyRate": 52,
+          "economic.unemploymentRate": 5,
+          "healthcare.lifeExpectancy": 43,
+          "healthcare.nhsWaitingTime": 24,
+          "education.literacyRate": 28,
+          "education.highSchoolGradRate": 5,
+          "education.universityEnrollment": 0.8,
+          "population.urbanizationRate": 35,
+          "population.medianAge": 20,
+          "population.birthRate": 100,
+          "population.populationGrowth": 2.5,
+          "infrastructure.broadbandAccess": 0,
+          "infrastructure.roadCondition": 26,
+          "environment.protectedLand": 0.3,
+          "infrastructure.powerGridReliability": 85,
+          "infrastructure.waterQuality": 42,
+          "environment.renewableEnergy": 5,
+          "environment.recyclingRate": 0,
+          "environment.climateResilience": 0,
+          "environment.energyTransitionProgress": 0,
+          "mediaInformation.socialMediaSentiment": 0,
+          "governance.roboticsAdoption": 0,
+          "economic.laborParticipation": 55,
+          "economic.matchingFriction": 7,
+          "economic.tradeBalance": -1,
+          "economic.productivityGrowth": 4,
+          "economic.rdIntensity": 0.1,
+          "economic.propertyValueIndex": 12,
+          "economic.commercialValueIndex": 14,
+          "economic.ruralRevitalization": 90,
+          "economic.foodSecurity": 65,
+          "economic.exportDependency": 12,
+          "economic.manufacturingCompetitiveness": 22,
+          "economic.regulatoryBurden": 55,
+          "economic.economicFreedom": 38,
+          "education.apprenticeshipRate": 1,
+          "education.academicPressure": 25,
+          "healthcare.uninsuredRate": 85,
+          "healthcare.affordabilityIndex": 22,
+          "healthcare.mentalHealthAccess": 5,
+          "healthcare.socialCareQuality": 12,
+          "healthcare.elderCareQuality": 15,
+          "infrastructure.transportEfficiency": 22,
+          "publicSafety.antiSocialBehaviourRate": 6,
+          "publicSafety.knifeCrimeRate": 3,
+          "environment.floodRisk": 16,
+          "environment.naturalDisasterPreparedness": 18,
+          "environment.nuclearSafety": 0,
+          "social.childPoverty": 64,
+          "social.housingAffordability": 10,
+          "social.roughSleeping": 5,
+          "social.workLifeBalance": 35,
+          "social.foreignWorkerIntegration": 20,
+          "social.genderEquality": 18,
+          "social.housingSupplyGrowth": 2.5,
+          "governance.debtToGdp": 22,
+          "governance.devolutionSatisfaction": 30,
+          "governance.nationalPride": 65,
+          "governance.civilLiberties": 40,
+          "governance.militaryReadiness": 55,
+          "population.demographicDecline": 2,
+          "mediaInformation.stateMediaControl": 45,
+          "mediaInformation.pressFreedom": 45,
+          "mediaInformation.disinformationRisk": 10,
+          "mediaInformation.mediaPolarization": 35
+        }
+      }
+    }
+  },
+  "MILITARY_BRANCHES_BY_COUNTRY": {
+    "shape": "country-first",
+    "value": [
+      {
+        "id": "ground",
+        "name": "Land Forces",
+        "abbr": "KKK",
+        "domain": "ground"
+      },
+      {
+        "id": "navy",
+        "name": "Naval Forces",
+        "abbr": "DzKK",
+        "domain": "naval"
+      },
+      {
+        "id": "airforce",
+        "name": "Air Force",
+        "abbr": "HvKK",
+        "domain": "air"
+      }
+    ]
+  },
+  "MILITARY_COUNTRY_SCALE": {
+    "shape": "country-first",
+    "value": 1
+  },
+  "MONETARY_BASELINES": {
+    "shape": "country-first",
+    "value": {
+      "targetInflation": 20,
+      "neutralPrimeRate": 20
+    }
+  },
+  "MONETARY_BASELINES_1953": {
+    "shape": "country-first",
+    "value": {
+      "targetInflation": 5,
+      "neutralPrimeRate": 6,
+      "trendGdpGrowth": 6
+    }
+  },
+  "MONETARY_BASELINES_1971": {
+    "shape": "country-first",
+    "value": {
+      "targetInflation": 15,
+      "neutralPrimeRate": 15,
+      "trendGdpGrowth": 4
+    }
+  },
+  "MONETARY_BASELINES_1979": {
+    "shape": "country-first",
+    "value": {
+      "targetInflation": 20,
+      "neutralPrimeRate": 20,
+      "trendGdpGrowth": 2
+    }
+  },
+  "MONETARY_BASELINES_1991": {
+    "shape": "country-first",
+    "value": {
+      "targetInflation": 12,
+      "neutralPrimeRate": 18,
+      "trendGdpGrowth": 4
+    }
+  },
+  "NATIONAL_ADDRESS_NAME": {
+    "shape": "absent",
+    "value": null
+  },
+  "NATIONAL_IDENTITY": {
+    "shape": "country-first",
+    "value": {
+      "glyph": "TC",
+      "serif": "mono",
+      "motif": "gear",
+      "name": "Turkish State Enterprise",
+      "native": "Kamu İktisadi Teşekkülü (KİT)",
+      "registry": "Republic of Turkey · State Holdings Registry",
+      "ministry": "MINISTRY OF FINANCE",
+      "publicSeal": "PUBLIC REGISTER",
+      "hqCity": "Ankara",
+      "palette": ["#3a0d0d", "#2a0a0a", "#150606"],
+      "accent": "#e02a2a",
+      "accentSoft": "#f08a8a",
+      "accentName": "Turkish red & white"
+    }
+  },
+  "NATIONAL_POLICY_STATE_IDS": {
+    "shape": "country-first",
+    "value": "tr_national"
+  },
+  "NATIONAL_STATS_IDENTITY": {
+    "shape": "absent",
+    "value": null
+  },
+  "NEUTRAL_FEDERAL_SALES_TAX_BY_COUNTRY": {
+    "shape": "absent",
+    "value": null
+  },
+  "NEUTRAL_STATE_SALES_TAX_BY_COUNTRY": {
+    "shape": "absent",
+    "value": null
+  },
+  "NON_PARTY_BUCKET_INDEPENDENT_BIAS_BY_COUNTRY": {
+    "shape": "absent",
+    "value": null
+  },
+  "NPP_CAPITAL_STATES": {
+    "shape": "country-first",
+    "value": "TR_ANK"
+  },
+  "ORDERS_OF_BATTLE": {
+    "shape": "country-first",
+    "value": [
+      {
+        "branchId": "ground",
+        "type": "Infantry Division",
+        "count": 6
+      },
+      {
+        "branchId": "ground",
+        "type": "Armored Division",
+        "count": 1
+      },
+      {
+        "branchId": "ground",
+        "type": "Artillery Regiment",
+        "count": 2
+      },
+      {
+        "branchId": "navy",
+        "type": "Frigate Squadron",
+        "count": 2
+      },
+      {
+        "branchId": "navy",
+        "type": "Attack Submarine",
+        "count": 1
+      },
+      {
+        "branchId": "airforce",
+        "type": "Fighter Wing",
+        "count": 3
+      }
+    ]
+  },
+  "ORDERS_OF_BATTLE_BY_ERA": {
+    "shape": "absent",
+    "value": null
+  },
+  "PLAYER_PAYOUT_CAP_PER_TURN": {
+    "shape": "absent",
+    "value": null
+  },
+  "POLICY_TEXT": {
+    "shape": "country-first",
+    "value": {
+      "glyph": "§",
+      "serif": "mono",
+      "registry": "Code of Law · Republic of Turkey",
+      "title": "National Policy"
+    }
+  },
+  "POPULATION_ANCHOR_BUNDLES": {
+    "shape": "absent",
+    "value": null
+  },
+  "RAW_BUNDLES": {
+    "shape": "country-first",
+    "value": []
+  },
+  "REGIONAL_BILL_ASSENT_OFFICE_KEY": {
+    "shape": "absent",
+    "value": null
+  },
+  "REGION_CENSUS_LABELS": {
+    "shape": "absent",
+    "value": null
+  },
+  "REGION_DEMOGRAPHIC_CATEGORY_IDS": {
+    "shape": "absent",
+    "value": null
+  },
+  "REGION_NAME_MAPS": {
+    "shape": "absent",
+    "value": null
+  },
+  "REGION_ROSTERS": {
+    "shape": "function-valued",
+    "value": null,
+    "functionKeys": ["1953", "2019"]
+  },
+  "REP_ECON": {
+    "shape": "absent",
+    "value": null
+  },
+  "SOVEREIGN_CORP_LEGAL_STRUCTURE": {
+    "shape": "country-first",
+    "value": "generic_corp"
+  },
+  "SPAWN_ELECTIONS_REGISTRY": {
+    "shape": "absent",
+    "value": null
+  },
+  "STATE_ADJACENCY": {
+    "shape": "country-first",
+    "value": {
+      "TR_IST": ["TR_IZM", "TR_BLA", "TR_CEN"],
+      "TR_ANK": ["TR_BLA", "TR_CEN"],
+      "TR_IZM": ["TR_IST", "TR_MED", "TR_CEN"],
+      "TR_MED": ["TR_IZM", "TR_CEN", "TR_ESA", "TR_SEA"],
+      "TR_BLA": ["TR_IST", "TR_ANK", "TR_CEN", "TR_ESA"],
+      "TR_ESA": ["TR_BLA", "TR_CEN", "TR_MED", "TR_SEA"],
+      "TR_SEA": ["TR_MED", "TR_ESA"],
+      "TR_CEN": ["TR_IST", "TR_ANK", "TR_IZM", "TR_MED", "TR_BLA", "TR_ESA"]
+    }
+  },
+  "STATE_DISPLAY_NAMES": {
+    "shape": "country-first",
+    "value": {
+      "TR_IST": "Marmara",
+      "TR_ANK": "Ankara",
+      "TR_IZM": "Aegean",
+      "TR_MED": "Mediterranean",
+      "TR_BLA": "Black Sea",
+      "TR_ESA": "Eastern Anatolia",
+      "TR_SEA": "Southeastern Anatolia",
+      "TR_CEN": "Central Anatolia"
+    }
+  },
+  "SURFACES": {
+    "shape": "absent",
+    "value": null
+  },
+  "TARGETS": {
+    "shape": "absent",
+    "value": null
+  },
+  "TRADE_MINISTER_POSITION_BY_COUNTRY": {
+    "shape": "country-first",
+    "value": "minister_of_trade_industry"
+  },
+  "TREASURY_IDENTITY": {
+    "shape": "country-first",
+    "value": {
+      "glyph": "TC",
+      "serif": "mono",
+      "budgetTitle": "State Budget",
+      "ministry": "MINISTRY OF FINANCE",
+      "publicSeal": "PUBLIC RECORD",
+      "registry": "Republic of Turkey · Ministry of Finance",
+      "native": "Türkiye Cumhuriyeti · Maliye Bakanlığı",
+      "palette": ["#3a0d0d", "#2a0a0a", "#150606"],
+      "accent": "#e02a2a",
+      "accentSoft": "#f08a8a"
+    }
+  },
+  "TREASURY_PS_RATE_BY_COUNTRY": {
+    "shape": "country-first",
+    "value": {
+      "national": 70000,
+      "state": 35000
+    }
+  },
+  "TREASURY_TEXT": {
+    "shape": "country-first",
+    "value": {
+      "glyph": "TC",
+      "serif": "mono",
+      "budgetTitle": "State Budget",
+      "ministry": "MINISTRY OF FINANCE",
+      "publicSeal": "PUBLIC RECORD",
+      "registry": "Republic of Turkey · Ministry of Finance",
+      "native": "Türkiye Cumhuriyeti · Maliye Bakanlığı"
+    }
+  }
+}

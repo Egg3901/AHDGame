@@ -27,7 +27,7 @@ import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
  *
  * Names MUST match the names in the seed files
  * (`src/lib/seeds/reference/politicalParties.ts`, `src/lib/seeds/uk/ukParties.ts`,
- * `src/lib/seeds/jp/jpParties.ts`, `src/lib/seeds/de/deParties.ts`,
+ * `src/lib/countries/jp/data/jpParties.ts`, `src/lib/seeds/de/deParties.ts`,
  * `src/lib/seeds/br/brParties.ts`, `src/lib/seeds/ie/ieParties.ts`,
  * `src/lib/seeds/cn/cnParties.ts`).
  */
@@ -162,7 +162,7 @@ export const INDEPENDENT_SLUGS = new Set<string>([
   "uk_speaker",
   // UK SDLP and Alliance are intentional fold-to-independent (historical
   // 1991-1992 NI seat-holders that we don't seed as default parties — see
-  // comment in `historicalSeats.ts` UK_COMMONS_1992 / UK_REGIONAL_COUNCIL_1992).
+  // comment in `historicalSeats.ts` UK_COMMONS_1987 / UK_REGIONAL_COUNCIL_1992).
   "uk_sdlp",
   "uk_alliance",
   // JP minor parties that aren't seeded as defaults — they fold to

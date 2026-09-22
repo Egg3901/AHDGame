@@ -509,6 +509,7 @@ async function getCharacterById(characterId: string) {
             isCommandingGeneral: false,
           }),
       gameDateAnchor: gameState ? gameDateAnchorFromState(gameState) : undefined,
+      gamePreset: gameState?.preset,
     };
   } catch (error) {
     // redirect() throws NEXT_REDIRECT internally — it must propagate, never be caught
@@ -585,6 +586,7 @@ export default async function CharacterPage({ params }: PageProps) {
     generalPosting,
     isCommandingGeneral,
     gameDateAnchor,
+    gamePreset,
   } = data;
 
   const campaignRates = await loadCampaignCurrencyRates(await getDb());
@@ -733,6 +735,8 @@ export default async function CharacterPage({ params }: PageProps) {
   const statePopulation = homeState?.population ?? 0;
   const stateTaxRate = statePartyOrg?.stateTaxRate ?? 0;
   const nationalTaxRate = party?.nationalTaxRate ?? 0;
+  // GDP-baseline era for income math: the world's reset preset, so
+  // historical worlds project in their own denomination (issue #798).
   const fundDistribution = calculateFullFundDistribution(
     statePopulation,
     character.donorBaseLevel,
@@ -741,7 +745,8 @@ export default async function CharacterPage({ params }: PageProps) {
     nationalTaxRate,
     homeState?.gdp,
     character.countryId,
-    character.politicalInfluence ?? 0
+    character.politicalInfluence ?? 0,
+    gamePreset
   );
   const populationTier = getPopulationTier(statePopulation);
 

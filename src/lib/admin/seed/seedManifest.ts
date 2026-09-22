@@ -198,7 +198,7 @@ const REFERENCE: CollectionEntry[] = [
     category: "reference",
     seededBy: "seedForex",
     notes:
-      "One row per forex-active country with day-one prime rate, empty rate history, and the bookkeeping fields the turn processor expects. WIPED on reset and re-seeded by seedForex: `resetGameWorld` deletes this collection explicitly alongside statePolicies/commodityPrices/exchangeRates, because the seeder is $setOnInsert-only and would otherwise leave the previous world's accumulated CB state (prime rate, rate history) in place. (This note previously claimed CB state survives reset — it does not.)",
+      "One row per preset-scoped country with both an active currency and an authored national fiscal model. Currency-only exclusions remain in exchangeRates and are exposed by the seed diagnostic's monetaryCoverage manifest. WIPED on reset and re-seeded by seedForex: `resetGameWorld` deletes this collection explicitly alongside statePolicies/commodityPrices/exchangeRates, because the seeder is $setOnInsert-only and would otherwise leave the previous world's accumulated CB state (prime rate, rate history) in place. (This note previously claimed CB state survives reset — it does not.)",
   },
   {
     name: "exchangeRates",
@@ -329,6 +329,16 @@ const RUNTIME: CollectionEntry[] = [
   { name: "elections", category: "runtime" },
   { name: "electionCandidates", category: "runtime" },
   { name: "electionVoteTallies", category: "runtime" },
+  {
+    name: "electionResultSnapshots",
+    category: "runtime",
+    notes:
+      "Frozen results for ended races. Tied to the world election records, wiped on reset, and rebuilt by the migration or by election resolution.",
+  },
+  { name: "ukCommonsVacancies", category: "runtime" },
+  { name: "ukRecallPetitions", category: "runtime" },
+  { name: "ukPartyConferences", category: "runtime" },
+  { name: "ukPartyPlatforms", category: "runtime" },
   {
     name: "electedOfficials",
     category: "runtime",
@@ -494,6 +504,18 @@ const RUNTIME: CollectionEntry[] = [
       "Authoritative savings accounts, one per owner and currency; legacy character savings fields are projections of these.",
   },
   { name: "bankCharterHistory", category: "runtime" },
+  {
+    name: "bankGuarantees",
+    category: "runtime",
+    notes:
+      "Government guarantees created during financial-crisis responses. Tied to the current world's banks and treasury commitments; wiped on reset.",
+  },
+  {
+    name: "financialCrisisBankActions",
+    category: "runtime",
+    notes:
+      "Idempotency records for crisis recapitalization, guarantee, and resolution actions. Wiped with the crisis and bank state they reference.",
+  },
   { name: "depositInsuranceFunds", category: "runtime" },
   {
     name: "interbankLoans",
@@ -856,6 +878,12 @@ const RUNTIME: CollectionEntry[] = [
   { name: "indexFundRedemptionQueue", category: "runtime" },
   { name: "indexFundSnapshots", category: "runtime" },
   { name: "indexFundTransactions", category: "runtime" },
+  {
+    name: "pensionSchemes",
+    category: "runtime",
+    notes:
+      "Per-world pension balances, holdings, liabilities, and sponsor state. Rebuilt through gameplay and must not survive a world reset.",
+  },
 
   // Trade / diplomacy / international-org runtime.
   { name: "tradeEmbargoes", category: "runtime" },
@@ -934,6 +962,18 @@ const RUNTIME: CollectionEntry[] = [
     category: "runtime",
     notes:
       "SP5: the macro slice of the per-turn metric history (formerly stateMetricHistory's economic/population series). Wiped on reset, rebuilt by play.",
+  },
+  {
+    name: "approvalTelemetry",
+    category: "runtime",
+    notes:
+      "Durable long-horizon approval series (#2099): one doc per (world, country, region, turn), every turn retained under the world-raw-full policy. Wiped on reset, rebuilt by play.",
+  },
+  {
+    name: "macroTelemetry",
+    category: "runtime",
+    notes:
+      "Durable long-horizon GDP/population series (#2100): one doc per (world, country, region, metric, turn), every turn retained under the world-raw-full policy. Wiped on reset, rebuilt by play.",
   },
   {
     name: "parliamentSeatsHistory",

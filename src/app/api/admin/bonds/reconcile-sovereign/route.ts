@@ -8,8 +8,9 @@
 // carries a higher yield.
 //
 // Budget impact: spending.debtInterest and surplus are updated with the new
-// annual coupon costs. debt.principal is left unchanged — it already reflects
-// the national debt; bonds will retire it progressively as they mature.
+// annual coupon costs, and debt.principal is re-pointed at the canonical
+// post-write bond ledger (never incremented by the gap, which was already
+// inside the stored principal; see reconcileSovereignDebt).
 //
 // Body: { countryId, distribution? }
 //   distribution: optional fractional split across maturities, e.g.

@@ -138,6 +138,13 @@ const LeadershipPanel = dynamic(
     })),
   { loading: PanelFallback }
 );
+const ConferencePanel = dynamic(
+  () =>
+    import("./components/ConferencePanel").then((m) => ({
+      default: m.ConferencePanel,
+    })),
+  { loading: PanelFallback }
+);
 const ChairOfficeTab = dynamic(
   () => import("./components/ChairOfficeTab").then((m) => ({ default: m.ChairOfficeTab })),
   { loading: PanelFallback }
@@ -215,6 +222,7 @@ type NationalMainTab =
   | "discussion"
   | "chair-office"
   | "leadership"
+  | "conference"
   | "admin";
 type ElectionSubTab = "national" | "committee" | "state";
 type NppSubTab = "recruitment" | "management";
@@ -599,6 +607,8 @@ function NationalPartyHub({ scope }: { scope: Extract<PartyHubScope, { kind: "na
     if (canViewExtendedTabsEarly && canActAsChairEarly) allowed.add("chair-office");
     // UK party-leadership removal (#861): national hub only, UK parties only.
     if (canViewExtendedTabsEarly && party?.countryId === "UK") allowed.add("leadership");
+    // UK party conferences (#862): national hub only, UK parties only.
+    if (canViewExtendedTabsEarly && party?.countryId === "UK") allowed.add("conference");
     if (canViewExtendedTabsEarly && user?.isAdmin) allowed.add("admin");
     if (allowed.has(tabParam as NationalMainTab)) {
       setActiveTab(tabParam as NationalMainTab);
@@ -671,6 +681,18 @@ function NationalPartyHub({ scope }: { scope: Extract<PartyHubScope, { kind: "na
       setMsg("✗ Network error");
     }
   };
+
+  // Growth frontier: a party can only be joined from a region it already
+  // reaches or borders. `frontierRegions === null` means the party has no
+  // presence anywhere and is open to all, mirroring the server's fail-open
+  // branch. A character with no home region is also allowed through, as the
+  // server does. The server remains the real gate; this only explains it.
+  const viewerHomeState = user?.character?.homeState ?? null;
+  const joinFrontierRegions = party?.frontierRegions ?? null;
+  const canJoinFromHomeRegion =
+    joinFrontierRegions == null ||
+    !viewerHomeState ||
+    joinFrontierRegions.includes(viewerHomeState);
 
   const handleJoin = async () => {
     setJoining(true);
@@ -764,6 +786,9 @@ function NationalPartyHub({ scope }: { scope: Extract<PartyHubScope, { kind: "na
           ...(party.countryId === "UK"
             ? [{ id: "leadership" as NationalMainTab, label: "Leadership" }]
             : []),
+          ...(party.countryId === "UK"
+            ? [{ id: "conference" as NationalMainTab, label: "Conference" }]
+            : []),
           ...(user?.isAdmin
             ? [{ id: "admin" as NationalMainTab, label: "Admin", className: "text-error" }]
             : []),
@@ -843,7 +868,12 @@ function NationalPartyHub({ scope }: { scope: Extract<PartyHubScope, { kind: "na
           ) : (
             <button
               onClick={handleJoin}
-              disabled={joining}
+              disabled={joining || !canJoinFromHomeRegion}
+              title={
+                canJoinFromHomeRegion
+                  ? undefined
+                  : `${party.name} is not established in or next to your home region.`
+              }
               className="rounded-lg px-4 py-2 text-body-sm font-semibold transition-opacity hover:opacity-90 disabled:opacity-50"
               style={{
                 backgroundColor: party.color,
@@ -1295,6 +1325,10 @@ function NationalPartyHub({ scope }: { scope: Extract<PartyHubScope, { kind: "na
 
       {activeTab === "leadership" && party.countryId === "UK" && (
         <LeadershipPanel countryCode={backCountry} partyId={id} />
+      )}
+
+      {activeTab === "conference" && party.countryId === "UK" && (
+        <ConferencePanel countryCode={backCountry} partyId={id} />
       )}
 
       {activeTab === "admin" && user?.isAdmin && (

@@ -280,6 +280,32 @@ describe("formNppCabinet (I/O)", () => {
     const firstSet = updateOne.mock.calls[0][1].$set;
     expect(firstSet.party).toBe("1");
   });
+
+  it("stamps appointedTurn when the seating turn is supplied (#1994)", async () => {
+    const a = npp({ name: "Ada", politicalInfluence: 90 });
+    setup({
+      gov: { _id: "IE", status: "formed", pmNppId: headId, governingPartyId: "5" },
+      headNpp,
+      pool: [a],
+    });
+    const res = await formNppCabinet(db as unknown as Db, "IE", now, 100);
+    expect(res.filled).toBe(1);
+    const updateOne = db.collectionMocks["cabinetMembers"].updateOne as ReturnType<typeof vi.fn>;
+    expect(updateOne.mock.calls[0][1].$set.appointedTurn).toBe(100);
+  });
+
+  it("omits appointedTurn when the seating turn is not supplied (legacy callers)", async () => {
+    const a = npp({ name: "Ada", politicalInfluence: 90 });
+    setup({
+      gov: { _id: "IE", status: "formed", pmNppId: headId, governingPartyId: "5" },
+      headNpp,
+      pool: [a],
+    });
+    const res = await formNppCabinet(db as unknown as Db, "IE", now);
+    expect(res.filled).toBe(1);
+    const updateOne = db.collectionMocks["cabinetMembers"].updateOne as ReturnType<typeof vi.fn>;
+    expect(updateOne.mock.calls[0][1].$set).not.toHaveProperty("appointedTurn");
+  });
 });
 
 function metric(category: string, metricId: string): MetricConfig {

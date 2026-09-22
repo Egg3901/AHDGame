@@ -185,6 +185,15 @@ export interface BondHolder {
    * be read as evidence of a cheap secondary-market entry.
    */
   avgCostPerUnit?: number;
+  /**
+   * In-flight bond sale that claimed these units (`bondSaleIntents._id`).
+   * Stamped by the sell route's claim write in the same update that decrements
+   * `units`, so a crash between the claim and the payout leaves a witness a
+   * retry can resume from instead of destroying the units. Cleared when the
+   * claim is restored; zero-unit holder rows carrying a terminal intent's stamp
+   * are removed by the usual holder cleanup.
+   */
+  saleIntentId?: ObjectId;
 }
 
 // ── Corporate Credit Rating ──────────────────────────────────────────────────

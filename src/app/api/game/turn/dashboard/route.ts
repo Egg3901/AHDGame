@@ -163,6 +163,9 @@ async function handleGET() {
     const stateTaxRate = statePartyOrg?.stateTaxRate ?? 0;
     const nationalTaxRate = party?.nationalTaxRate ?? 0;
 
+    // GDP-baseline era for income math: the world's reset preset, so
+    // historical worlds project in their own denomination (issue #798).
+    // gameState is already loaded above; absent preset falls back to modern.
     const fundDistribution: FundDistribution = calculateFullFundDistribution(
       statePopulation,
       donor,
@@ -170,7 +173,9 @@ async function handleGET() {
       stateTaxRate,
       nationalTaxRate,
       homeState?.gdp,
-      character.countryId
+      character.countryId,
+      undefined,
+      gameState?.preset
     );
 
     // --- Decay projections (what happens next turn) ---

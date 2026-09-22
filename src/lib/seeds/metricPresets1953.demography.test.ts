@@ -9,7 +9,7 @@
 import { describe, expect, it } from "vitest";
 import { applyMetricPresetToMetrics, getRegionMetricPresets } from "@/lib/seeds/metricPresets";
 import { applyEra1953Adjustments } from "@/lib/seeds/reference/stateMetricsEra1953";
-import { jpStateMetrics } from "@/lib/seeds/jp/jpStateMetrics";
+import { jpStateMetrics } from "@/lib/countries/jp/data/jpStateMetrics";
 import { ieStateMetrics } from "@/lib/seeds/ie/ieStateMetrics";
 import { cnStateMetrics } from "@/lib/seeds/cn/cnStateMetrics";
 import { brStateMetrics } from "@/lib/seeds/br/brStateMetrics";

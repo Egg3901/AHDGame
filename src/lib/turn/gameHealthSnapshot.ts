@@ -1,6 +1,7 @@
 import type { Db } from "mongodb";
 import type {
   GameHealthSnapshot,
+  GameHealthSummary,
   TurnWarning,
   TurnError,
   DataIntegrityResult,
@@ -23,6 +24,7 @@ import {
   findCountriesMissingFederalBudget,
   findFederalBudgetCountryMismatches,
 } from "@/lib/turn/ensureFederalBudget";
+import { summarizeGameHealth } from "@/lib/turn/rules/gameHealth";
 
 type SeatScopedOfficial = ElectedOfficial & { seatId?: string };
 
@@ -50,7 +52,7 @@ export async function processGameHealthSnapshot(
   success: boolean,
   warnings: string[],
   phaseStatuses?: TurnPhaseTelemetryMap
-): Promise<{ snapshotWritten: boolean; integrityCheckRan: boolean }> {
+): Promise<{ snapshotWritten: boolean; integrityCheckRan: boolean; health: GameHealthSummary }> {
   const now = new Date();
   const failureMessages = new Map<string, string>();
   for (const warning of warnings) {
@@ -93,7 +95,23 @@ export async function processGameHealthSnapshot(
     ([, telemetry]) => telemetry.status === "skipped"
   );
 
+  // Turn warnings (issue #2054): every entry of the turn warning channel
+  // persists here exactly once. Entries follow the `"<phase>: <message>"`
+  // convention (see the failureMessages parse above); entries without a
+  // prefix land under "unknown". Identical phase+message pairs collapse to
+  // one record, so a retried or replayed turn that re-pushes the same
+  // deterministic warning cannot inflate warningCount.
+  const seenWarnings = new Set<string>();
   const turnWarnings: TurnWarning[] = [];
+  for (const warning of warnings) {
+    const colonIdx = warning.indexOf(": ");
+    const phase = colonIdx > 0 ? warning.slice(0, colonIdx) : "unknown";
+    const message = colonIdx > 0 ? warning.slice(colonIdx + 2) : warning;
+    const key = phase + "\n" + message;
+    if (seenWarnings.has(key)) continue;
+    seenWarnings.add(key);
+    turnWarnings.push({ phase, message, turn, timestamp: now });
+  }
   const turnErrors: TurnError[] = countedPhaseEntries
     .filter(([, telemetry]) => telemetry.status === "failed" || telemetry.status === "notReached")
     .map(([phase, telemetry]) => ({
@@ -133,12 +151,20 @@ export async function processGameHealthSnapshot(
     collectPopulationStats(db),
     collectEconomyStats(db),
   ]);
+  const health = summarizeGameHealth({
+    turnSuccess: success,
+    processingWarningCount: turnProcessing.warningCount,
+    processingErrorCount: turnProcessing.errorCount,
+    integrityChecked: shouldRunIntegrity,
+    integrityIssues: dataIntegrity?.issues ?? [],
+  });
 
   // Write the snapshot
   const snapshot: Omit<GameHealthSnapshot, "_id"> = {
     turn,
     year,
     timestamp: now,
+    health,
     turnProcessing,
     dataIntegrity,
     population,
@@ -147,7 +173,7 @@ export async function processGameHealthSnapshot(
 
   await db.collection("gameHealthSnapshots").insertOne(snapshot as GameHealthSnapshot);
 
-  return { snapshotWritten: true, integrityCheckRan: shouldRunIntegrity };
+  return { snapshotWritten: true, integrityCheckRan: shouldRunIntegrity, health };
 }
 
 async function runIntegrityChecks(
@@ -158,15 +184,20 @@ async function runIntegrityChecks(
   const issues: IntegrityIssue[] = [];
 
   // 1. Orphaned candidates — electionCandidates where electionId has no matching election
+  // (#2166): project to the join key before the $lookup so full candidate
+  // documents never cross the join. The count is unchanged.
   const orphanedCandidates = await db
     .collection("electionCandidates")
     .aggregate([
+      { $project: { electionId: 1 } },
       {
         $lookup: {
           from: "elections",
           localField: "electionId",
           foreignField: "_id",
           as: "election",
+          // Only existence matters; never materialize the matching documents.
+          pipeline: [{ $project: { _id: 1 } }, { $limit: 1 }],
         },
       },
       { $match: { election: { $size: 0 } } },
@@ -209,15 +240,20 @@ async function runIntegrityChecks(
   }
 
   // 4. Party members referencing deleted parties
+  // (#2166): project to the join key before the $lookup so full member
+  // documents never cross the join. The count is unchanged.
   const membersInDeletedParties = await db
     .collection("partyMembers")
     .aggregate([
+      { $project: { partyId: 1 } },
       {
         $lookup: {
           from: "politicalParties",
           localField: "partyId",
           foreignField: "_id",
           as: "party",
+          // Only existence matters; never materialize the matching documents.
+          pipeline: [{ $project: { _id: 1 } }, { $limit: 1 }],
         },
       },
       { $match: { party: { $size: 0 } } },
@@ -235,16 +271,21 @@ async function runIntegrityChecks(
   }
 
   // 5. Active elections with zero candidates
+  // (#2166): project to the join key after the status match so full
+  // election documents never cross the $lookup. The count is unchanged.
   const electionsWithoutCandidates = await db
     .collection("elections")
     .aggregate([
       { $match: { status: "active" } },
+      { $project: { _id: 1 } },
       {
         $lookup: {
           from: "electionCandidates",
           localField: "_id",
           foreignField: "electionId",
           as: "candidates",
+          // Only existence matters; never materialize the matching documents.
+          pipeline: [{ $project: { _id: 1 } }, { $limit: 1 }],
         },
       },
       { $match: { candidates: { $size: 0 } } },
@@ -520,7 +561,11 @@ async function collectPopulationStats(db: Db): Promise<PopulationStats> {
 async function collectEconomyStats(db: Db): Promise<EconomyStats> {
   // Read central banks for interest rates, and stateMetrics national docs for GDP/economic data.
   // National metrics are stored as stateMetrics docs with national scope IDs (e.g., "federal" for US).
-  const centralBanks = await db.collection<CentralBank>("centralBanks").find({}).toArray();
+  // (#2166): only the join key and the rate flow into the snapshot.
+  const centralBanks = await db
+    .collection<CentralBank>("centralBanks")
+    .find({}, { projection: { countryId: 1, primeRate: 1 } })
+    .toArray();
   const centralBankMap = new Map(centralBanks.map((b) => [String(b.countryId ?? b._id), b]));
 
   const nationalIds = Object.keys(NATIONAL_SCOPE);
@@ -572,7 +617,8 @@ async function collectEconomyStats(db: Db): Promise<EconomyStats> {
   ] = await Promise.all([
     db
       .collection<StateMetrics>("macroMetrics")
-      .find({ _id: { $in: nationalIds } })
+      // (#2166): only the gdpGrowth value is read below.
+      .find({ _id: { $in: nationalIds } }, { projection: { "economic.gdpGrowth.value": 1 } })
       .toArray(),
     db
       .collection<FederalBudget>("federalBudget")
@@ -581,7 +627,8 @@ async function collectEconomyStats(db: Db): Promise<EconomyStats> {
       // the byCountry loop below uses this list to discover them. Scoping it to
       // `budgetIds` made that discovery impossible, so the bloc produced no
       // economy row and could not be charted individually.
-      .find({})
+      // (#2166): only the discovery key and the inflation rate are read below.
+      .find({}, { projection: { countryId: 1, "economicFactors.inflationRate": 1 } })
       .toArray(),
     db
       .collection("bonds")

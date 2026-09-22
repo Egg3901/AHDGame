@@ -14,8 +14,8 @@ import {
 
 describe("getGdpBaseline (per-country GDP-per-capita baseline)", () => {
   it("returns the calibrated baseline for configured currencies", () => {
-    expect(getGdpBaseline("US")).toBe(65_000);
-    expect(getGdpBaseline("UK")).toBe(30_000);
+    expect(getGdpBaseline("US")).toBe(69_618);
+    expect(getGdpBaseline("UK")).toBe(29_734);
   });
 
   it("uses a naira-scaled baseline for NG, not the USD default", () => {

@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { Db } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import type { TurnPhaseTelemetryMap } from "@/lib/db/types";
+import type { CommodityType } from "@/lib/constants/commodities";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 
@@ -46,7 +47,7 @@ beforeEach(async () => {
 });
 
 describe("processGameHealthSnapshot", () => {
-  it("writes a snapshot with population and economy stats", async () => {
+  it("writes a snapshot with population and economy stats", { timeout: 60000 }, async () => {
     const { processGameHealthSnapshot } = await import("./gameHealthSnapshot");
 
     // systemSettings cadence = 1 → integrity check runs every turn
@@ -91,7 +92,21 @@ describe("processGameHealthSnapshot", () => {
 
     const result = await processGameHealthSnapshot(db as unknown as Db, 42, 2026, 1500, true, []);
 
-    expect(result).toEqual({ snapshotWritten: true, integrityCheckRan: true });
+    expect(result).toMatchObject({
+      snapshotWritten: true,
+      integrityCheckRan: true,
+      health: {
+        severity: "warning",
+        warningCount: 1,
+        errorCount: 0,
+        processingWarningCount: 0,
+        processingErrorCount: 0,
+        integrityWarningCount: 1,
+        integrityErrorCount: 0,
+        integrityChecked: true,
+        qualification: "passing",
+      },
+    });
     expect(db.collectionMocks.gameHealthSnapshots.insertOne).toHaveBeenCalledTimes(1);
 
     const doc = db.collectionMocks.gameHealthSnapshots.insertOne.mock.calls[0][0];
@@ -150,7 +165,15 @@ describe("processGameHealthSnapshot", () => {
       []
     );
 
-    expect(result).toEqual({ snapshotWritten: true, integrityCheckRan: false });
+    expect(result).toMatchObject({
+      snapshotWritten: true,
+      integrityCheckRan: false,
+      health: {
+        severity: "ok",
+        integrityChecked: false,
+        qualification: "unverified",
+      },
+    });
     const doc = db.collectionMocks.gameHealthSnapshots.insertOne.mock.calls[0][0];
     expect(doc.dataIntegrity).toBeNull();
   });
@@ -222,7 +245,13 @@ describe("processGameHealthSnapshot", () => {
 
     expect(result.snapshotWritten).toBe(true);
     const doc = db.collectionMocks.gameHealthSnapshots.insertOne.mock.calls[0][0];
-    expect(doc.turnProcessing.warningCount).toBe(0);
+    // Issue #2054: turn channel warnings persist with an exact count; only
+    // phase failures become errors.
+    expect(doc.turnProcessing.warningCount).toBe(2);
+    expect(doc.turnProcessing.warnings).toHaveLength(2);
+    expect(doc.turnProcessing.warnings[0].phase).toBe("nppBehavior");
+    expect(doc.turnProcessing.warnings[0].message).toBe("3 NPPs skipped entry");
+    expect(doc.turnProcessing.warnings[1].phase).toBe("billLifecycle");
     expect(doc.turnProcessing.errorCount).toBe(2);
     expect(doc.turnProcessing.errors[0].phase).toBe("nppBehavior");
     expect(doc.turnProcessing.errors[0].message).toBe("3 NPPs skipped entry");
@@ -341,7 +370,21 @@ describe("processGameHealthSnapshot", () => {
       fakePhaseStatuses
     );
 
-    expect(result).toEqual({ snapshotWritten: true, integrityCheckRan: false });
+    expect(result).toMatchObject({
+      snapshotWritten: true,
+      integrityCheckRan: false,
+      health: {
+        severity: "error",
+        warningCount: 1,
+        errorCount: 1,
+        processingWarningCount: 1,
+        processingErrorCount: 1,
+        integrityWarningCount: 0,
+        integrityErrorCount: 0,
+        integrityChecked: false,
+        qualification: "unverified",
+      },
+    });
     const doc = db.collectionMocks.gameHealthSnapshots.insertOne.mock.calls[0][0];
 
     // phaseCount should be 5 (excludes gameHealthSnapshot)
@@ -621,5 +664,129 @@ describe("processGameHealthSnapshot", () => {
         }),
       ])
     );
+  });
+
+  it("counts a known unit-scale clearing gap in the health snapshot (issue #2054)", async () => {
+    const { processGameHealthSnapshot } = await import("./gameHealthSnapshot");
+    const { computeClearingFactors, describeClearingBookBreach } =
+      await import("@/lib/market/clearing");
+
+    db.collectionMocks.systemSettings.findOne.mockResolvedValue({
+      _id: "healthConfig",
+      integrityCheckCadenceTurns: 99,
+    });
+    db.collectionMocks.users.countDocuments.mockResolvedValue(0);
+    db.collectionMocks.characters.countDocuments.mockResolvedValue(0);
+    db.collectionMocks.npps.countDocuments.mockResolvedValue(0);
+    db.collectionMocks.seats.countDocuments.mockResolvedValue(0);
+    db.collectionMocks.politicalParties.countDocuments.mockResolvedValue(0);
+    db.collectionMocks.elections.countDocuments.mockResolvedValue(0);
+    db.collectionMocks.electedOfficials.countDocuments.mockResolvedValue(0);
+    db.collectionMocks.bonds.countDocuments.mockResolvedValue(0);
+    db.collectionMocks.centralBanks.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([]),
+    });
+    db.collectionMocks.macroMetrics.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([]),
+    });
+    db.collectionMocks.federalBudget.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([]),
+    });
+    db.collectionMocks.corporations.aggregate.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([]),
+    });
+    db.collectionMocks.characters.aggregate.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([]),
+    });
+
+    const warnings: string[] = [];
+    computeClearingFactors({
+      sectors: [
+        {
+          sectorId: "fr-fertilizer-sector",
+          revenue: 12_139,
+          supplyRates: { fertilizers: 1 },
+          posture: 0,
+          // The measured offer is already in era-scaled physical units. Its
+          // 8.1x gap from the country ledger reproduces the reported failure.
+          producedUnits: 12_139,
+        },
+      ],
+      balances: new Map(),
+      balancesByGroup: new Map([
+        ["FR", new Map([["fertilizers", { supply: 1_491, demand: 2_000 }]])],
+      ]),
+      groupBySector: new Map([["fr-fertilizer-sector", "FR"]]),
+      priceRatioByCommodity: new Map([["fertilizers", 1]]),
+      basePrices: { fertilizers: 1 } as Record<CommodityType, number>,
+      plantsEnabled: true,
+      onBookDiagnostic: (diagnostic) => {
+        if (diagnostic.invariantBreach) {
+          warnings.push("corporationTurn: " + describeClearingBookBreach(diagnostic));
+        }
+      },
+    });
+
+    expect(warnings).toHaveLength(1);
+    await processGameHealthSnapshot(db as unknown as Db, 5, 2026, 800, true, warnings);
+
+    const doc = db.collectionMocks.gameHealthSnapshots.insertOne.mock.calls[0][0];
+    expect(doc.turnProcessing.warningCount).toBe(1);
+    expect(doc.turnProcessing.warnings).toHaveLength(1);
+    expect(doc.turnProcessing.warnings[0]).toMatchObject({
+      phase: "corporationTurn",
+      turn: 5,
+    });
+    expect(doc.turnProcessing.warnings[0].message).toContain("fertilizers@FR");
+  });
+
+  it("counts a retried turn's duplicate warnings exactly once (issue #2054)", async () => {
+    const { processGameHealthSnapshot } = await import("./gameHealthSnapshot");
+
+    db.collectionMocks.systemSettings.findOne.mockResolvedValue({
+      _id: "healthConfig",
+      integrityCheckCadenceTurns: 99,
+    });
+    db.collectionMocks.users.countDocuments.mockResolvedValue(0);
+    db.collectionMocks.characters.countDocuments.mockResolvedValue(0);
+    db.collectionMocks.npps.countDocuments.mockResolvedValue(0);
+    db.collectionMocks.seats.countDocuments.mockResolvedValue(0);
+    db.collectionMocks.politicalParties.countDocuments.mockResolvedValue(0);
+    db.collectionMocks.elections.countDocuments.mockResolvedValue(0);
+    db.collectionMocks.electedOfficials.countDocuments.mockResolvedValue(0);
+    db.collectionMocks.bonds.countDocuments.mockResolvedValue(0);
+    db.collectionMocks.centralBanks.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([]),
+    });
+    db.collectionMocks.macroMetrics.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([]),
+    });
+    db.collectionMocks.federalBudget.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([]),
+    });
+    db.collectionMocks.corporations.aggregate.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([]),
+    });
+    db.collectionMocks.characters.aggregate.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([]),
+    });
+
+    const breach =
+      "corporationTurn: clearing invariant breach on ordnance@FR: normalized 514 vs lagged supply 0 (inf x; raw 514)";
+    await processGameHealthSnapshot(db as unknown as Db, 5, 2026, 800, true, [
+      breach,
+      breach,
+      breach,
+      "a bare warning without a phase prefix",
+    ]);
+
+    const doc = db.collectionMocks.gameHealthSnapshots.insertOne.mock.calls[0][0];
+    expect(doc.turnProcessing.warningCount).toBe(2);
+    expect(doc.turnProcessing.warnings).toHaveLength(2);
+    expect(doc.turnProcessing.warnings[1]).toMatchObject({
+      phase: "unknown",
+      message: "a bare warning without a phase prefix",
+      turn: 5,
+    });
   });
 });

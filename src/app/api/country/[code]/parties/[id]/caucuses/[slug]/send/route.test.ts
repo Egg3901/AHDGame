@@ -125,7 +125,7 @@ describe("POST /api/country/[code]/parties/[id]/caucuses/[slug]/send", () => {
     const response = await call(100_000);
     expect(response.status).toBe(400);
     const body = await response.json();
-    expect(body.error).toMatch(/already received the maximum/);
+    expect(body.error).toMatch(/already received \$/);
     expect(db.collectionMocks["caucuses"]!.updateOne).not.toHaveBeenCalled();
   });
 
@@ -138,5 +138,37 @@ describe("POST /api/country/[code]/parties/[id]/caucuses/[slug]/send", () => {
     const body = await response.json();
     expect(body.error).toMatch(/leadership election/i);
     expect(db.collectionMocks["caucuses"]!.updateOne).not.toHaveBeenCalled();
+  });
+
+  it("refunds the caucus treasury when the recipient credit throws after the debit", async () => {
+    // Force the standalone (non-transactional) fallback so the route's own
+    // compensation runs.
+    const { getMongoClient } = await import("@/lib/mongodb");
+    vi.mocked(getMongoClient).mockResolvedValue({
+      startSession: () => ({
+        withTransaction: vi.fn(async () => {
+          const err = new Error("no tx") as Error & { code?: number };
+          err.code = 20;
+          throw err;
+        }),
+        endSession: vi.fn(async () => {}),
+      }),
+    } as never);
+
+    db.collectionMocks["characters"]!.updateOne.mockRejectedValueOnce(new Error("credit down"));
+
+    const response = await call(100_000);
+
+    expect(response.status).toBeGreaterThanOrEqual(500);
+    expect(db.collectionMocks["caucuses"]!.updateOne).toHaveBeenCalledTimes(2);
+    const debit = db.collectionMocks["caucuses"]!.updateOne.mock.calls[0]![1] as {
+      $inc: Record<string, number>;
+    };
+    const refund = db.collectionMocks["caucuses"]!.updateOne.mock.calls[1]![1] as {
+      $inc: Record<string, number>;
+    };
+    expect(debit.$inc).toMatchObject({ treasury: -100_000 });
+    expect(refund.$inc).toMatchObject({ treasury: 100_000 });
+    expect(db.collectionMocks["adminLogs"]!.insertOne).not.toHaveBeenCalled();
   });
 });

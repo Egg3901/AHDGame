@@ -1,4 +1,5 @@
 import type { ObjectId } from "mongodb";
+import type { GameHealthSummary } from "./gameHealthSnapshot";
 import type { TurnPhaseTelemetryMap } from "./turnPhaseTelemetry";
 import type { GameIteration } from "./gameState";
 
@@ -195,8 +196,24 @@ export interface TurnLog {
       removed: number;
     } | null;
 
+    ukPartyConferences: {
+      scheduled: number;
+      opened: number;
+      completed: number;
+      ratified: number;
+      expired: number;
+      payoffs: number;
+    } | null;
+
     perpetualElections: {
       electionsCreated: number;
+    } | null;
+
+    commonsByElectionWatcher: {
+      spawned: number;
+      vacanciesEnsured: number;
+      petitionsAdvanced: number;
+      reconciled: number;
     } | null;
 
     leadershipElections: {
@@ -613,6 +630,7 @@ export interface TurnLog {
     gameHealthSnapshot?: {
       snapshotWritten: boolean;
       integrityCheckRan: boolean;
+      health: GameHealthSummary;
     } | null;
 
     activityLogging?: {
@@ -634,6 +652,20 @@ export interface TurnLog {
     } | null;
 
     tradeGrowthMirror?: { countriesUpdated: number } | null;
+
+    /**
+     * Bretton Woods exit tracker (issue #7). Runs after inflationRecalc (whose
+     * settled US rate the gold-cover drain reads) and before forexTurn (which
+     * applies the persisted regime's band and drift). Zeroes when the gate is
+     * off: disabled, full cover, nothing suspended or floated.
+     */
+    brettonWoodsTurn?: {
+      enabled: boolean;
+      goldCover: number | null;
+      suspended: string[];
+      floated: string[];
+      currenciesProcessed: number;
+    } | null;
 
     forexTurn?: {
       countriesUpdated: number;

@@ -21,6 +21,7 @@ import {
 import { getDb } from "@/lib/mongodb";
 import { loadDemographicCategories } from "@/lib/demographics/categoryCatalog";
 import { accumulateNGPresidentVoteTurn } from "@/lib/turn/election/ngPresidentAccumulation";
+import { TALLY_WITH_SNAPSHOT_TURNS_ONLY } from "@/lib/electionEngine/tallyProjections";
 import { COUNTRIES_WITH_BESPOKE_PRESIDENTIAL_ELECTIONS } from "@/lib/constants/countries";
 import { ObjectId, type AnyBulkWriteOperation } from "mongodb";
 import type {
@@ -112,6 +113,8 @@ import { buildNationwideElectoratePreload } from "@/lib/electionEngine/nationwid
 import { resolveGoverningPartyIds } from "@/lib/government/governingPartyIds";
 import { isMidtermOppositionBoostEligible } from "@/lib/electionEngine/midtermOppositionBoost";
 import { finaliseManifestosAtElectionCall } from "@/lib/uk/manifesto/manifestoLifecycle";
+import { getStandingPlatformsForCountry } from "@/lib/uk/conference/conferenceCommands";
+import { hydrateVoteTurnMemo } from "@/lib/turn/voteAccumulationPreload";
 
 /**
  * Optional restriction of a turn sweep to specific elections. Absent (the
@@ -179,7 +182,7 @@ export async function resolvePrimariesIfNeeded(
         : Promise.resolve([] as StatePartyOrg[]),
       db
         .collection<ElectionVoteTally>("electionVoteTallies")
-        .find({ electionId: { $in: electionIds } })
+        .find({ electionId: { $in: electionIds } }, { projection: TALLY_WITH_SNAPSHOT_TURNS_ONLY })
         .toArray(),
       uniqueRegionKeys.size > 0
         ? db
@@ -336,11 +339,13 @@ export async function resolvePrimariesIfNeeded(
           social: party?.socialPosition ?? 0,
         };
       });
+      const standingPlatformByParty = await getStandingPlatformsForCountry(db, "UK");
       await finaliseManifestosAtElectionCall(db, {
         countryId: "UK",
         electionId,
         parties: manifestoParties,
         now,
+        standingPlatformByParty,
       });
     }
 
@@ -981,7 +986,7 @@ export async function recordPrimarySnapshots(
       : Promise.resolve([] as DemographicCategory[]),
     db
       .collection<ElectionVoteTally>("electionVoteTallies")
-      .find({ electionId: { $in: electionIds } })
+      .find({ electionId: { $in: electionIds } }, { projection: TALLY_WITH_SNAPSHOT_TURNS_ONLY })
       .project<Pick<ElectionVoteTally, "electionId" | "primaryVotes">>({
         electionId: 1,
         primaryVotes: 1,
@@ -1900,6 +1905,9 @@ export async function accumulateGeneralElectionVotes(
       .toArray(),
   ]);
   const tallyByElection = new Map(existingTallies.map((t) => [t.electionId.toString(), t]));
+  if (preload?.turnMemo) {
+    await hydrateVoteTurnMemo(db, preload.turnMemo, allActiveCandidates, electionIds);
+  }
   // Money driver inputs for every general election in one read; the per
   // election path stays for callers without a preload.
   if (preload) {

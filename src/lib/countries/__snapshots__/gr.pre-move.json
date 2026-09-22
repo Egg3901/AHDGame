@@ -1,0 +1,1466 @@
+{
+  "COUNTRY_ANCHOR": {
+    "shape": "country-first",
+    "value": [21.8, 39.1]
+  },
+  "COUNTRY_BUCKET_LABELS": {
+    "shape": "country-first",
+    "value": {
+      "dims": {
+        "ethnicity": "Καταγωγή (Background)",
+        "age": "Ηλικία (Age)",
+        "education": "Εκπαίδευση (Education)",
+        "income": "Εισόδημα (Income)",
+        "urbanization": "Τόπος διαμονής (Where they live)"
+      },
+      "buckets": {
+        "ethnicity": {
+          "greek": "Έλληνες (Greeks)",
+          "minority": "Μειονότητες (Minorities)",
+          "other": "Άλλες καταγωγές (Other backgrounds)"
+        },
+        "age": {
+          "young": "Κάτω των 30 (Under 30)",
+          "mid": "30–49 (30s and 40s)",
+          "mature": "50–64 (50s and 60s)",
+          "senior": "Άνω των 65 (Over 65)"
+        },
+        "education": {
+          "primary_or_below": "Δημοτικό ή λιγότερο (Primary or below)",
+          "secondary": "Λύκειο (Secondary)",
+          "vocational": "Επαγγελματική εκπαίδευση (Vocational)",
+          "university": "Πανεπιστήμιο (University)"
+        },
+        "income": {
+          "low": "Χαμηλό εισόδημα (Lower income)",
+          "middle": "Μεσαίο εισόδημα (Middle income)",
+          "high": "Υψηλό εισόδημα (Higher income)"
+        },
+        "urbanization": {
+          "urban": "Πόλεις (Cities)",
+          "suburban": "Προάστια (Suburbs)",
+          "rural": "Επαρχία (Rural)"
+        }
+      }
+    }
+  },
+  "COUNTRY_COMMAND_FLAVOR": {
+    "shape": "country-first",
+    "value": {
+      "glyph": "GR",
+      "command": "ΓΕΝΙΚΟ ΕΠΙΤΕΛΕΙΟ",
+      "strip": "◆ ΑΠΟΡΡΗΤΟ",
+      "acc": "#9cc0f5"
+    }
+  },
+  "COUNTRY_MODIFIER_PATCHES": {
+    "shape": "absent",
+    "value": null
+  },
+  "COUNTRY_READINESS_EXPECTATIONS": {
+    "shape": "absent",
+    "value": null
+  },
+  "COUNTRY_SECTOR_WEIGHTS_1953": {
+    "shape": "country-first",
+    "value": {
+      "agriculture": 38,
+      "logistics": 12,
+      "construction": 10,
+      "manufacturing": 10,
+      "retail": 8,
+      "energy": 6,
+      "extraction": 5,
+      "financial": 4,
+      "real_estate": 4,
+      "defense": 3
+    }
+  },
+  "DOMAIN_BUCKET_AFFINITIES": {
+    "shape": "absent",
+    "value": null
+  },
+  "GDP_DENOMINATION_1953": {
+    "shape": "country-first",
+    "value": "local"
+  },
+  "GROUPS": {
+    "shape": "absent",
+    "value": null
+  },
+  "INITIAL_RATES": {
+    "shape": "country-first",
+    "value": 37
+  },
+  "MAJOR_DEFAULT_PARTIES": {
+    "shape": "absent",
+    "value": null
+  },
+  "MECHANICS_BY_COUNTRY": {
+    "shape": "country-first",
+    "value": {
+      "minister_of_finance": {
+        "positionId": "minister_of_finance",
+        "department": "Finance, Budget and National Planning",
+        "sealImage": "",
+        "nationalMetrics": [
+          {
+            "category": "governance",
+            "metricId": "budgetBalance",
+            "label": "Budget Balance",
+            "format": "percent",
+            "higherIsBetter": true
+          },
+          {
+            "category": "economic",
+            "metricId": "gdpGrowth",
+            "label": "GDP Growth",
+            "format": "percent",
+            "higherIsBetter": true
+          }
+        ],
+        "regionalMetrics": []
+      },
+      "minister_of_foreign_affairs": {
+        "positionId": "minister_of_foreign_affairs",
+        "department": "Foreign Affairs",
+        "sealImage": "",
+        "nationalMetrics": [
+          {
+            "category": "economic",
+            "metricId": "tradeBalance",
+            "label": "Trade Balance",
+            "format": "percent",
+            "higherIsBetter": true
+          }
+        ],
+        "regionalMetrics": []
+      },
+      "minister_of_defence": {
+        "positionId": "minister_of_defence",
+        "department": "Defence",
+        "sealImage": "",
+        "nationalMetrics": [
+          {
+            "category": "publicSafety",
+            "metricId": "publicSafetyConfidence",
+            "label": "Public Safety Confidence",
+            "format": "percent",
+            "higherIsBetter": true
+          },
+          {
+            "category": "publicSafety",
+            "metricId": "violentCrimeRate",
+            "label": "Violent Crime Rate",
+            "format": "number",
+            "higherIsBetter": false
+          }
+        ],
+        "regionalMetrics": []
+      },
+      "minister_of_interior": {
+        "positionId": "minister_of_interior",
+        "department": "Interior",
+        "sealImage": "",
+        "nationalMetrics": [
+          {
+            "category": "publicSafety",
+            "metricId": "crimeRate",
+            "label": "Crime Rate",
+            "format": "number",
+            "higherIsBetter": false
+          },
+          {
+            "category": "publicSafety",
+            "metricId": "publicSafetyConfidence",
+            "label": "Public Safety Confidence",
+            "format": "percent",
+            "higherIsBetter": true
+          }
+        ],
+        "regionalMetrics": []
+      },
+      "minister_of_justice": {
+        "positionId": "minister_of_justice",
+        "department": "Justice",
+        "sealImage": "",
+        "nationalMetrics": [
+          {
+            "category": "governance",
+            "metricId": "corruptionIndex",
+            "label": "Corruption Index",
+            "format": "index",
+            "higherIsBetter": false
+          },
+          {
+            "category": "publicSafety",
+            "metricId": "recidivismRate",
+            "label": "Recidivism Rate",
+            "format": "percent",
+            "higherIsBetter": false
+          }
+        ],
+        "regionalMetrics": []
+      },
+      "minister_of_health": {
+        "positionId": "minister_of_health",
+        "department": "Health",
+        "sealImage": "",
+        "nationalMetrics": [
+          {
+            "category": "healthcare",
+            "metricId": "lifeExpectancy",
+            "label": "Life Expectancy",
+            "format": "number",
+            "higherIsBetter": true
+          },
+          {
+            "category": "healthcare",
+            "metricId": "preventableMortality",
+            "label": "Preventable Mortality",
+            "format": "number",
+            "higherIsBetter": false
+          }
+        ],
+        "regionalMetrics": []
+      },
+      "minister_of_education": {
+        "positionId": "minister_of_education",
+        "department": "Education",
+        "sealImage": "",
+        "nationalMetrics": [
+          {
+            "category": "education",
+            "metricId": "literacyRate",
+            "label": "Literacy Rate",
+            "format": "percent",
+            "higherIsBetter": true
+          },
+          {
+            "category": "education",
+            "metricId": "testPerformance",
+            "label": "Test Performance",
+            "format": "index",
+            "higherIsBetter": true
+          }
+        ],
+        "regionalMetrics": []
+      },
+      "minister_of_works_housing": {
+        "positionId": "minister_of_works_housing",
+        "department": "Works and Housing",
+        "sealImage": "",
+        "nationalMetrics": [
+          {
+            "category": "infrastructure",
+            "metricId": "roadCondition",
+            "label": "Road Condition",
+            "format": "index",
+            "higherIsBetter": true
+          },
+          {
+            "category": "social",
+            "metricId": "housingAffordability",
+            "label": "Housing Affordability",
+            "format": "index",
+            "higherIsBetter": false
+          }
+        ],
+        "regionalMetrics": []
+      },
+      "minister_of_agriculture": {
+        "positionId": "minister_of_agriculture",
+        "department": "Agriculture and Rural Development",
+        "sealImage": "",
+        "nationalMetrics": [
+          {
+            "category": "social",
+            "metricId": "foodInsecurity",
+            "label": "Food Insecurity",
+            "format": "percent",
+            "higherIsBetter": false
+          },
+          {
+            "category": "economic",
+            "metricId": "povertyRate",
+            "label": "Poverty Rate",
+            "format": "percent",
+            "higherIsBetter": false
+          }
+        ],
+        "regionalMetrics": []
+      },
+      "minister_of_trade_industry": {
+        "positionId": "minister_of_trade_industry",
+        "department": "Industry, Trade and Investment",
+        "sealImage": "",
+        "nationalMetrics": [
+          {
+            "category": "economic",
+            "metricId": "smallBusinessFormation",
+            "label": "Small Business Formation",
+            "format": "percent",
+            "higherIsBetter": true
+          },
+          {
+            "category": "economic",
+            "metricId": "tradeBalance",
+            "label": "Trade Balance",
+            "format": "percent",
+            "higherIsBetter": true
+          }
+        ],
+        "regionalMetrics": []
+      },
+      "minister_of_labour": {
+        "positionId": "minister_of_labour",
+        "department": "Labour and Employment",
+        "sealImage": "",
+        "nationalMetrics": [
+          {
+            "category": "economic",
+            "metricId": "unemploymentRate",
+            "label": "Unemployment Rate",
+            "format": "percent",
+            "higherIsBetter": false
+          },
+          {
+            "category": "economic",
+            "metricId": "laborParticipation",
+            "label": "Labour Participation",
+            "format": "percent",
+            "higherIsBetter": true
+          }
+        ],
+        "regionalMetrics": []
+      },
+      "minister_of_environment": {
+        "positionId": "minister_of_environment",
+        "department": "Environment",
+        "sealImage": "",
+        "nationalMetrics": [
+          {
+            "category": "environment",
+            "metricId": "carbonEmissions",
+            "label": "Carbon Emissions",
+            "format": "number",
+            "higherIsBetter": false
+          },
+          {
+            "category": "environment",
+            "metricId": "renewableEnergy",
+            "label": "Renewable Energy",
+            "format": "percent",
+            "higherIsBetter": true
+          }
+        ],
+        "regionalMetrics": []
+      },
+      "director_of_intelligence": {
+        "positionId": "director_of_intelligence",
+        "department": "Intelligence Service",
+        "sealImage": "",
+        "nationalMetrics": [
+          {
+            "category": "governance",
+            "metricId": "publicTrust",
+            "label": "Public Trust",
+            "format": "index",
+            "higherIsBetter": true
+          },
+          {
+            "category": "publicSafety",
+            "metricId": "crimeRate",
+            "label": "Crime Rate",
+            "format": "rate",
+            "higherIsBetter": false
+          }
+        ],
+        "regionalMetrics": []
+      }
+    }
+  },
+  "MEDIAN_INCOME_THRESHOLDS": {
+    "shape": "absent",
+    "value": null
+  },
+  "POPULATION_MULTIPLIERS": {
+    "shape": "absent",
+    "value": null
+  },
+  "ORDERS_BY_COUNTRY": {
+    "shape": "absent",
+    "value": null
+  },
+  "UNION_NAMES_BY_ERA": {
+    "shape": "absent",
+    "value": null
+  },
+  "CABINET_IDENTITY": {
+    "shape": "absent",
+    "value": null
+  },
+  "CENSUS_BUNDLES": {
+    "shape": "absent",
+    "value": null
+  },
+  "CONSCRIPTION_SEED": {
+    "shape": "absent",
+    "value": null
+  },
+  "CORE5_NORMALS": {
+    "shape": "absent",
+    "value": null
+  },
+  "COST_SCALE_ANCHORS": {
+    "shape": "absent",
+    "value": null
+  },
+  "COUNTRY_BILL_PHASES": {
+    "shape": "function-valued",
+    "value": null,
+    "functionKeys": ["fn"]
+  },
+  "COUNTRY_CONFIGS": {
+    "shape": "country-first",
+    "value": {
+      "id": "GR",
+      "name": "Greece",
+      "flagEmoji": "🇬🇷",
+      "code": "GR",
+      "socialAxisBaseline": 1,
+      "regionLabel": "Region",
+      "regionLabelPlural": "Regions",
+      "executiveTitle": "Prime Minister",
+      "headOfStateTitle": "President",
+      "executiveRealmPhrase": "Greece",
+      "governmentType": "parliamentaryRepublic",
+      "governmentTypeLabel": "Parliamentary Republic",
+      "coalitionThreshold": 151,
+      "legislature": {
+        "name": "Hellenic Parliament",
+        "path": "/country/gr/legislature",
+        "bicameral": false,
+        "lowerChamber": {
+          "key": "vouli",
+          "name": "Hellenic Parliament",
+          "shortName": "Vouli",
+          "seats": 300,
+          "description": "300 deputies of the unicameral Vouli ton Ellinon, elected by reinforced proportional representation for four-year terms.",
+          "elected": true
+        }
+      },
+      "lowerElectionSystem": {
+        "termYears": 4,
+        "seatsContested": "all",
+        "singleMemberConstituencies": false,
+        "snapElectionsAllowed": true
+      },
+      "electionSystems": {
+        "lowerChamber": "pr_hareQuota",
+        "headOfGovernment": "parliamentary",
+        "headOfState": "ceremonial"
+      },
+      "officeTypes": [
+        {
+          "key": "primeMinister",
+          "label": "Prime Minister",
+          "labelPlural": "Prime Ministers",
+          "isExecutive": true,
+          "isSubNational": false,
+          "termYears": 4,
+          "actionBonus": 4,
+          "partyStrengthWeight": 1
+        },
+        {
+          "key": "president",
+          "label": "President",
+          "labelPlural": "Presidents",
+          "isExecutive": true,
+          "isHeadOfState": true,
+          "isSubNational": false,
+          "termYears": 5,
+          "actionBonus": 0,
+          "partyStrengthWeight": 0
+        },
+        {
+          "key": "deputy",
+          "label": "Deputy",
+          "labelPlural": "Deputies",
+          "chamberKey": "vouli",
+          "isExecutive": false,
+          "isSubNational": false,
+          "termYears": 4,
+          "actionBonus": 1,
+          "partyStrengthWeight": 0.9
+        },
+        {
+          "key": "centralBankChair",
+          "label": "Governor of the Bank of Greece",
+          "labelPlural": "Governors of the Bank of Greece",
+          "isExecutive": false,
+          "isSubNational": false,
+          "termYears": 6,
+          "actionBonus": 3,
+          "partyStrengthWeight": 0
+        }
+      ],
+      "majorPartyIds": ["gr_nd", "gr_pasok"],
+      "partyCreationNPPs": {
+        "statesRequired": 2,
+        "lockHomeState": false,
+        "nppsPerState": 1
+      },
+      "demographicProfileId": "gr_archetypes",
+      "centralBank": {
+        "name": "Bank of Greece",
+        "abbreviation": "BoG",
+        "chairTitle": "Governor of the Bank of Greece",
+        "defaultPrimeRate": 16.5,
+        "heroImage": "https://flagcdn.com/w640/gr.png"
+      },
+      "usdExchangeRate": 0.027,
+      "currencyCode": "GRD",
+      "fiscalYearStartTurnInYear": 40,
+      "financeMinisterCabinetId": "minister_of_finance",
+      "status": "coming-soon",
+      "tagline": "A restored democracy finding its feet — Karamanlis's republic between NATO, an EEC accession course, and PASOK's rising challenge, with the junta years still a fresh memory.",
+      "descriptor": "A parliamentary republic where a Prime Minister governs at the confidence of the unicameral 300-seat Vouli, elected by reinforced proportional representation.",
+      "heroImage": "https://flagcdn.com/w640/gr.png",
+      "entryPath": "/country/gr",
+      "overviewPath": "/country/gr",
+      "mapPath": "/country/gr/map",
+      "executivePath": "/country/gr/executive",
+      "executiveLabel": "Maximos Mansion",
+      "centralGovernmentLabel": "State Budget"
+    }
+  },
+  "COUNTRY_CONTINENT": {
+    "shape": "country-first",
+    "value": "Europe"
+  },
+  "COUNTRY_CURRENCY_MAP": {
+    "shape": "country-first",
+    "value": "GRD"
+  },
+  "COUNTRY_ELECTION_PHASES": {
+    "shape": "country-first",
+    "value": [
+      {
+        "name": "grElections"
+      }
+    ]
+  },
+  "COUNTRY_ERA1991_PATCHES": {
+    "shape": "absent",
+    "value": null
+  },
+  "COUNTRY_HISTORICAL_NAMES": {
+    "shape": "country-first",
+    "value": ["Aegean Merchants Bank", "Peloponnese Savings Bank"]
+  },
+  "COUNTRY_MAP_REGISTRY": {
+    "shape": "country-first",
+    "value": {
+      "countryId": "GR",
+      "name": "Greece",
+      "overviewPath": "/country/gr",
+      "mapPath": "/country/gr/map",
+      "hasRegionMap": false
+    }
+  },
+  "COUNTRY_MODERN_NAMES": {
+    "shape": "country-first",
+    "value": ["Aegean Banking Group", "Peloponnese Financial"]
+  },
+  "COUNTRY_REGIONS": {
+    "shape": "country-first",
+    "value": "europe"
+  },
+  "COUNTRY_SECTOR_WEIGHTS": {
+    "shape": "country-first",
+    "value": {
+      "logistics": 14,
+      "real_estate": 12,
+      "retail": 10,
+      "entertainment": 10,
+      "agriculture": 8,
+      "construction": 7,
+      "financial": 7,
+      "manufacturing": 7,
+      "healthcare": 6,
+      "energy": 6,
+      "media": 4,
+      "technology": 3,
+      "extraction": 3,
+      "defense": 3
+    }
+  },
+  "COUNTRY_SECTOR_WEIGHTS_1979": {
+    "shape": "absent",
+    "value": null
+  },
+  "COUNTRY_SECTOR_WEIGHTS_1991": {
+    "shape": "country-first",
+    "value": {
+      "logistics": 13,
+      "agriculture": 12,
+      "retail": 10,
+      "manufacturing": 10,
+      "real_estate": 10,
+      "construction": 8,
+      "entertainment": 8,
+      "financial": 6,
+      "energy": 6,
+      "healthcare": 5,
+      "media": 4,
+      "extraction": 4,
+      "defense": 4
+    }
+  },
+  "COUNTRY_TO_ISO_NUMERIC": {
+    "shape": "country-first",
+    "value": "300"
+  },
+  "COUNTRY_UN_MEMBER_SINCE": {
+    "shape": "country-first",
+    "value": 1945
+  },
+  "DEFAULT_STRATEGIC_SECTORS": {
+    "shape": "absent",
+    "value": null
+  },
+  "DEFENSE_POSITION_BY_COUNTRY": {
+    "shape": "country-first",
+    "value": "minister_of_defence"
+  },
+  "ECONOMIC_BASELINES": {
+    "shape": "absent",
+    "value": null
+  },
+  "ECONOMY_TEXT": {
+    "shape": "absent",
+    "value": null
+  },
+  "ENERGY_POSITION_BY_COUNTRY": {
+    "shape": "absent",
+    "value": null
+  },
+  "ERA_COUNTRY_CONFIG_OVERRIDES": {
+    "shape": "outer-keyed",
+    "value": {
+      "1953-default": {
+        "usdExchangeRate": 0.03333333333333333,
+        "headOfStateTitle": "King",
+        "governmentType": "parliamentaryMonarchy",
+        "governmentTypeLabel": "Parliamentary Monarchy",
+        "majorPartyIds": ["gr_es", "gr_epek"],
+        "officeTypes": [
+          {
+            "key": "primeMinister",
+            "label": "Prime Minister",
+            "labelPlural": "Prime Ministers",
+            "isExecutive": true,
+            "isSubNational": false,
+            "termYears": 4,
+            "actionBonus": 4,
+            "partyStrengthWeight": 1
+          },
+          {
+            "key": "deputy",
+            "label": "Deputy",
+            "labelPlural": "Deputies",
+            "chamberKey": "vouli",
+            "isExecutive": false,
+            "isSubNational": false,
+            "termYears": 4,
+            "actionBonus": 1,
+            "partyStrengthWeight": 0.9
+          },
+          {
+            "key": "centralBankChair",
+            "label": "Governor of the Bank of Greece",
+            "labelPlural": "Governors of the Bank of Greece",
+            "isExecutive": false,
+            "isSubNational": false,
+            "termYears": 6,
+            "actionBonus": 3,
+            "partyStrengthWeight": 0
+          }
+        ],
+        "tagline": "The post-civil-war kingdom — Papagos's Greek Rally, American aid, NATO membership since 1952, and a banned communist left regrouping as EDA.",
+        "descriptor": "A parliamentary monarchy where a Prime Minister governs at the confidence of the unicameral 300-seat Vouli under King Paul I; the majoritarian electoral law magnifies pluralities into landslides."
+      }
+    }
+  },
+  "ESTATE_PORTFOLIO_BY_COUNTRY": {
+    "shape": "absent",
+    "value": null
+  },
+  "EXECUTIVE_SEALS": {
+    "shape": "country-first",
+    "value": {
+      "src": "https://upload.wikimedia.org/wikipedia/commons/thumb/7/7c/Coat_of_arms_of_Greece.svg/330px-Coat_of_arms_of_Greece.svg.png",
+      "alt": "Coat of arms of Greece"
+    }
+  },
+  "EXECUTIVE_SURFACE": {
+    "shape": "country-first",
+    "value": {
+      "clock": {
+        "kind": "election",
+        "label": "Term Clock",
+        "countdownNoun": "next general election"
+      },
+      "actLabels": {
+        "signed": "ENACTED",
+        "vetoed": "REJECTED",
+        "onDesk": "AWAITING",
+        "order": "ORDER",
+        "confirmed": "APPOINTED",
+        "nominated": "NOMINATED",
+        "acting": "ACTING"
+      },
+      "deskKind": "orders",
+      "deskLabel": "Orders in Force",
+      "rosterTitle": "Cabinet",
+      "heroImage": "/api/images/hero/maximos-mansion",
+      "heroAlt": "Maximos Mansion, Athens"
+    }
+  },
+  "EXECUTIVE_TEXT": {
+    "shape": "country-first",
+    "value": {
+      "glyph": "ΕΔ",
+      "serif": "mono",
+      "registry": "Hellenic Republic · Government",
+      "title": "Μέγαρο Μαξίμου",
+      "titleEn": "Maximos Mansion"
+    }
+  },
+  "FOREIGN_AFFAIRS_POSITION_BY_COUNTRY": {
+    "shape": "country-first",
+    "value": "minister_of_foreign_affairs"
+  },
+  "FULL_ERA_REGION_BUNDLES": {
+    "shape": "absent",
+    "value": null
+  },
+  "HAZARD_GROUPS": {
+    "shape": "absent",
+    "value": null
+  },
+  "INCOME_ANCHORS": {
+    "shape": "country-first",
+    "value": [
+      {
+        "year": 1953,
+        "value": 9300
+      }
+    ]
+  },
+  "INFRA_POSITION_BY_COUNTRY": {
+    "shape": "absent",
+    "value": null
+  },
+  "ISO_NUMERIC_TO_COUNTRY": {
+    "shape": "value-keyed",
+    "value": {
+      "300": "GR"
+    }
+  },
+  "LEGISLATION_COUNTRY_SCOPES": {
+    "shape": "country-first",
+    "value": "gr"
+  },
+  "LEGISLATIVE_PROCESS": {
+    "shape": "absent",
+    "value": null
+  },
+  "M2_TO_GDP_1953": {
+    "shape": "absent",
+    "value": null
+  },
+  "METRIC_PRESET_BUNDLES": {
+    "shape": "country-first",
+    "value": {
+      "1953-default": {
+        "GR_ATT": {
+          "economic.gdpGrowth": 6.5,
+          "economic.medianIncome": 14200,
+          "economic.povertyRate": 28,
+          "economic.unemploymentRate": 5,
+          "healthcare.lifeExpectancy": 66,
+          "healthcare.nhsWaitingTime": 21,
+          "education.literacyRate": 85,
+          "education.highSchoolGradRate": 18,
+          "education.universityEnrollment": 6,
+          "population.urbanizationRate": 80,
+          "population.medianAge": 27,
+          "population.populationGrowth": 1,
+          "population.birthRate": 52,
+          "infrastructure.broadbandAccess": 0,
+          "infrastructure.roadCondition": 25,
+          "environment.protectedLand": 0.9,
+          "infrastructure.powerGridReliability": 87,
+          "infrastructure.waterQuality": 52,
+          "environment.renewableEnergy": 15,
+          "environment.recyclingRate": 0,
+          "environment.climateResilience": 0,
+          "environment.energyTransitionProgress": 0,
+          "mediaInformation.socialMediaSentiment": 0,
+          "governance.roboticsAdoption": 0,
+          "economic.laborParticipation": 52,
+          "economic.matchingFriction": 5,
+          "economic.tradeBalance": -3,
+          "economic.productivityGrowth": 5.5,
+          "economic.rdIntensity": 0.2,
+          "economic.propertyValueIndex": 22,
+          "economic.commercialValueIndex": 24,
+          "economic.ruralRevitalization": 75,
+          "economic.foodSecurity": 55,
+          "economic.exportDependency": 10,
+          "economic.manufacturingCompetitiveness": 55,
+          "economic.regulatoryBurden": 58,
+          "economic.economicFreedom": 42,
+          "education.apprenticeshipRate": 4,
+          "education.academicPressure": 35,
+          "healthcare.uninsuredRate": 22,
+          "healthcare.affordabilityIndex": 42,
+          "healthcare.mentalHealthAccess": 12,
+          "healthcare.socialCareQuality": 22,
+          "healthcare.elderCareQuality": 20,
+          "infrastructure.transportEfficiency": 48,
+          "publicSafety.antiSocialBehaviourRate": 5,
+          "publicSafety.knifeCrimeRate": 3,
+          "environment.floodRisk": 16,
+          "environment.naturalDisasterPreparedness": 30,
+          "environment.nuclearSafety": 0,
+          "social.childPoverty": 28,
+          "social.housingAffordability": 14,
+          "social.roughSleeping": 6,
+          "social.workLifeBalance": 42,
+          "social.foreignWorkerIntegration": 28,
+          "social.genderEquality": 22,
+          "social.housingSupplyGrowth": 2.5,
+          "governance.debtToGdp": 25,
+          "governance.devolutionSatisfaction": 35,
+          "governance.coDeterminationQuality": 28,
+          "governance.nationalPride": 58,
+          "governance.civilLiberties": 45,
+          "governance.militaryReadiness": 55,
+          "population.demographicDecline": 10,
+          "mediaInformation.stateMediaControl": 40,
+          "mediaInformation.pressFreedom": 48,
+          "mediaInformation.disinformationRisk": 22,
+          "mediaInformation.mediaPolarization": 55
+        },
+        "GR_MAC": {
+          "economic.gdpGrowth": 6.5,
+          "economic.medianIncome": 8900,
+          "economic.povertyRate": 40,
+          "economic.unemploymentRate": 6,
+          "healthcare.lifeExpectancy": 64,
+          "healthcare.nhsWaitingTime": 21,
+          "education.literacyRate": 72,
+          "education.highSchoolGradRate": 10,
+          "education.universityEnrollment": 2.5,
+          "population.urbanizationRate": 34,
+          "population.medianAge": 27,
+          "population.populationGrowth": 1,
+          "population.birthRate": 56,
+          "infrastructure.broadbandAccess": 0,
+          "infrastructure.roadCondition": 25,
+          "environment.protectedLand": 0.9,
+          "infrastructure.powerGridReliability": 87,
+          "infrastructure.waterQuality": 52,
+          "environment.renewableEnergy": 15,
+          "environment.recyclingRate": 0,
+          "environment.climateResilience": 0,
+          "environment.energyTransitionProgress": 0,
+          "mediaInformation.socialMediaSentiment": 0,
+          "governance.roboticsAdoption": 0,
+          "economic.laborParticipation": 52,
+          "economic.matchingFriction": 5,
+          "economic.tradeBalance": -3,
+          "economic.productivityGrowth": 5.5,
+          "economic.rdIntensity": 0.2,
+          "economic.propertyValueIndex": 22,
+          "economic.commercialValueIndex": 24,
+          "economic.ruralRevitalization": 75,
+          "economic.foodSecurity": 55,
+          "economic.exportDependency": 10,
+          "economic.manufacturingCompetitiveness": 42,
+          "economic.regulatoryBurden": 58,
+          "economic.economicFreedom": 42,
+          "education.apprenticeshipRate": 4,
+          "education.academicPressure": 35,
+          "healthcare.uninsuredRate": 35,
+          "healthcare.affordabilityIndex": 42,
+          "healthcare.mentalHealthAccess": 12,
+          "healthcare.socialCareQuality": 22,
+          "healthcare.elderCareQuality": 20,
+          "infrastructure.transportEfficiency": 35,
+          "publicSafety.antiSocialBehaviourRate": 5,
+          "publicSafety.knifeCrimeRate": 3,
+          "environment.floodRisk": 16,
+          "environment.naturalDisasterPreparedness": 30,
+          "environment.nuclearSafety": 0,
+          "social.childPoverty": 42,
+          "social.housingAffordability": 22,
+          "social.roughSleeping": 6,
+          "social.workLifeBalance": 42,
+          "social.foreignWorkerIntegration": 35,
+          "social.genderEquality": 22,
+          "social.housingSupplyGrowth": 2.5,
+          "governance.debtToGdp": 25,
+          "governance.devolutionSatisfaction": 35,
+          "governance.coDeterminationQuality": 28,
+          "governance.nationalPride": 58,
+          "governance.civilLiberties": 45,
+          "governance.militaryReadiness": 55,
+          "population.demographicDecline": 10,
+          "mediaInformation.stateMediaControl": 40,
+          "mediaInformation.pressFreedom": 48,
+          "mediaInformation.disinformationRisk": 22,
+          "mediaInformation.mediaPolarization": 55
+        },
+        "GR_THE": {
+          "economic.gdpGrowth": 6.5,
+          "economic.medianIncome": 7600,
+          "economic.povertyRate": 42,
+          "economic.unemploymentRate": 6,
+          "healthcare.lifeExpectancy": 64,
+          "healthcare.nhsWaitingTime": 21,
+          "education.literacyRate": 70,
+          "education.highSchoolGradRate": 10,
+          "education.universityEnrollment": 2.5,
+          "population.urbanizationRate": 28,
+          "population.medianAge": 27,
+          "population.populationGrowth": 1,
+          "population.birthRate": 56,
+          "infrastructure.broadbandAccess": 0,
+          "infrastructure.roadCondition": 25,
+          "environment.protectedLand": 0.9,
+          "infrastructure.powerGridReliability": 87,
+          "infrastructure.waterQuality": 52,
+          "environment.renewableEnergy": 15,
+          "environment.recyclingRate": 0,
+          "environment.climateResilience": 0,
+          "environment.energyTransitionProgress": 0,
+          "mediaInformation.socialMediaSentiment": 0,
+          "governance.roboticsAdoption": 0,
+          "economic.laborParticipation": 52,
+          "economic.matchingFriction": 5,
+          "economic.tradeBalance": -3,
+          "economic.productivityGrowth": 5.5,
+          "economic.rdIntensity": 0.2,
+          "economic.propertyValueIndex": 22,
+          "economic.commercialValueIndex": 24,
+          "economic.ruralRevitalization": 82,
+          "economic.foodSecurity": 55,
+          "economic.exportDependency": 10,
+          "economic.manufacturingCompetitiveness": 42,
+          "economic.regulatoryBurden": 58,
+          "economic.economicFreedom": 42,
+          "education.apprenticeshipRate": 4,
+          "education.academicPressure": 35,
+          "healthcare.uninsuredRate": 35,
+          "healthcare.affordabilityIndex": 42,
+          "healthcare.mentalHealthAccess": 12,
+          "healthcare.socialCareQuality": 22,
+          "healthcare.elderCareQuality": 20,
+          "infrastructure.transportEfficiency": 35,
+          "publicSafety.antiSocialBehaviourRate": 5,
+          "publicSafety.knifeCrimeRate": 3,
+          "environment.floodRisk": 16,
+          "environment.naturalDisasterPreparedness": 30,
+          "environment.nuclearSafety": 0,
+          "social.childPoverty": 44,
+          "social.housingAffordability": 22,
+          "social.roughSleeping": 6,
+          "social.workLifeBalance": 42,
+          "social.foreignWorkerIntegration": 28,
+          "social.genderEquality": 22,
+          "social.housingSupplyGrowth": 2.5,
+          "governance.debtToGdp": 25,
+          "governance.devolutionSatisfaction": 35,
+          "governance.coDeterminationQuality": 28,
+          "governance.nationalPride": 58,
+          "governance.civilLiberties": 45,
+          "governance.militaryReadiness": 55,
+          "population.demographicDecline": 10,
+          "mediaInformation.stateMediaControl": 40,
+          "mediaInformation.pressFreedom": 48,
+          "mediaInformation.disinformationRisk": 22,
+          "mediaInformation.mediaPolarization": 55
+        },
+        "GR_EPC": {
+          "economic.gdpGrowth": 6.5,
+          "economic.medianIncome": 6700,
+          "economic.povertyRate": 48,
+          "economic.unemploymentRate": 6,
+          "healthcare.lifeExpectancy": 63,
+          "healthcare.nhsWaitingTime": 21,
+          "education.literacyRate": 65,
+          "education.highSchoolGradRate": 6,
+          "education.universityEnrollment": 2.5,
+          "population.urbanizationRate": 22,
+          "population.medianAge": 27,
+          "population.populationGrowth": 1,
+          "population.birthRate": 58,
+          "infrastructure.broadbandAccess": 0,
+          "infrastructure.roadCondition": 25,
+          "environment.protectedLand": 0.9,
+          "infrastructure.powerGridReliability": 87,
+          "infrastructure.waterQuality": 52,
+          "environment.renewableEnergy": 15,
+          "environment.recyclingRate": 0,
+          "environment.climateResilience": 0,
+          "environment.energyTransitionProgress": 0,
+          "mediaInformation.socialMediaSentiment": 0,
+          "governance.roboticsAdoption": 0,
+          "economic.laborParticipation": 52,
+          "economic.matchingFriction": 5,
+          "economic.tradeBalance": -3,
+          "economic.productivityGrowth": 5.5,
+          "economic.rdIntensity": 0.2,
+          "economic.propertyValueIndex": 22,
+          "economic.commercialValueIndex": 24,
+          "economic.ruralRevitalization": 88,
+          "economic.foodSecurity": 55,
+          "economic.exportDependency": 10,
+          "economic.manufacturingCompetitiveness": 42,
+          "economic.regulatoryBurden": 58,
+          "economic.economicFreedom": 42,
+          "education.apprenticeshipRate": 4,
+          "education.academicPressure": 35,
+          "healthcare.uninsuredRate": 35,
+          "healthcare.affordabilityIndex": 42,
+          "healthcare.mentalHealthAccess": 12,
+          "healthcare.socialCareQuality": 22,
+          "healthcare.elderCareQuality": 20,
+          "infrastructure.transportEfficiency": 25,
+          "publicSafety.antiSocialBehaviourRate": 5,
+          "publicSafety.knifeCrimeRate": 3,
+          "environment.floodRisk": 16,
+          "environment.naturalDisasterPreparedness": 30,
+          "environment.nuclearSafety": 0,
+          "social.childPoverty": 50,
+          "social.housingAffordability": 22,
+          "social.roughSleeping": 6,
+          "social.workLifeBalance": 42,
+          "social.foreignWorkerIntegration": 28,
+          "social.genderEquality": 22,
+          "social.housingSupplyGrowth": 2.5,
+          "governance.debtToGdp": 25,
+          "governance.devolutionSatisfaction": 35,
+          "governance.coDeterminationQuality": 28,
+          "governance.nationalPride": 58,
+          "governance.civilLiberties": 45,
+          "governance.militaryReadiness": 55,
+          "population.demographicDecline": 10,
+          "mediaInformation.stateMediaControl": 40,
+          "mediaInformation.pressFreedom": 48,
+          "mediaInformation.disinformationRisk": 22,
+          "mediaInformation.mediaPolarization": 55
+        },
+        "GR_PEL": {
+          "economic.gdpGrowth": 6.5,
+          "economic.medianIncome": 7300,
+          "economic.povertyRate": 42,
+          "economic.unemploymentRate": 6,
+          "healthcare.lifeExpectancy": 64,
+          "healthcare.nhsWaitingTime": 21,
+          "education.literacyRate": 72,
+          "education.highSchoolGradRate": 10,
+          "education.universityEnrollment": 2.5,
+          "population.urbanizationRate": 26,
+          "population.medianAge": 27,
+          "population.populationGrowth": 1,
+          "population.birthRate": 56,
+          "infrastructure.broadbandAccess": 0,
+          "infrastructure.roadCondition": 25,
+          "environment.protectedLand": 0.9,
+          "infrastructure.powerGridReliability": 87,
+          "infrastructure.waterQuality": 52,
+          "environment.renewableEnergy": 15,
+          "environment.recyclingRate": 0,
+          "environment.climateResilience": 0,
+          "environment.energyTransitionProgress": 0,
+          "mediaInformation.socialMediaSentiment": 0,
+          "governance.roboticsAdoption": 0,
+          "economic.laborParticipation": 52,
+          "economic.matchingFriction": 5,
+          "economic.tradeBalance": -3,
+          "economic.productivityGrowth": 5.5,
+          "economic.rdIntensity": 0.2,
+          "economic.propertyValueIndex": 22,
+          "economic.commercialValueIndex": 24,
+          "economic.ruralRevitalization": 80,
+          "economic.foodSecurity": 55,
+          "economic.exportDependency": 10,
+          "economic.manufacturingCompetitiveness": 42,
+          "economic.regulatoryBurden": 58,
+          "economic.economicFreedom": 42,
+          "education.apprenticeshipRate": 4,
+          "education.academicPressure": 35,
+          "healthcare.uninsuredRate": 35,
+          "healthcare.affordabilityIndex": 42,
+          "healthcare.mentalHealthAccess": 12,
+          "healthcare.socialCareQuality": 22,
+          "healthcare.elderCareQuality": 20,
+          "infrastructure.transportEfficiency": 35,
+          "publicSafety.antiSocialBehaviourRate": 5,
+          "publicSafety.knifeCrimeRate": 3,
+          "environment.floodRisk": 16,
+          "environment.naturalDisasterPreparedness": 30,
+          "environment.nuclearSafety": 0,
+          "social.childPoverty": 44,
+          "social.housingAffordability": 22,
+          "social.roughSleeping": 6,
+          "social.workLifeBalance": 42,
+          "social.foreignWorkerIntegration": 28,
+          "social.genderEquality": 22,
+          "social.housingSupplyGrowth": 2.5,
+          "governance.debtToGdp": 25,
+          "governance.devolutionSatisfaction": 35,
+          "governance.coDeterminationQuality": 28,
+          "governance.nationalPride": 58,
+          "governance.civilLiberties": 45,
+          "governance.militaryReadiness": 55,
+          "population.demographicDecline": 10,
+          "mediaInformation.stateMediaControl": 40,
+          "mediaInformation.pressFreedom": 48,
+          "mediaInformation.disinformationRisk": 22,
+          "mediaInformation.mediaPolarization": 55
+        },
+        "GR_ISL": {
+          "economic.gdpGrowth": 6.5,
+          "economic.medianIncome": 8500,
+          "economic.povertyRate": 36,
+          "economic.unemploymentRate": 6,
+          "healthcare.lifeExpectancy": 65,
+          "healthcare.nhsWaitingTime": 21,
+          "education.literacyRate": 76,
+          "education.highSchoolGradRate": 10,
+          "education.universityEnrollment": 2.5,
+          "population.urbanizationRate": 30,
+          "population.medianAge": 28,
+          "population.populationGrowth": 1,
+          "population.birthRate": 56,
+          "infrastructure.broadbandAccess": 0,
+          "infrastructure.roadCondition": 25,
+          "environment.protectedLand": 0.9,
+          "infrastructure.powerGridReliability": 87,
+          "infrastructure.waterQuality": 52,
+          "environment.renewableEnergy": 15,
+          "environment.recyclingRate": 0,
+          "environment.climateResilience": 0,
+          "environment.energyTransitionProgress": 0,
+          "mediaInformation.socialMediaSentiment": 0,
+          "governance.roboticsAdoption": 0,
+          "economic.laborParticipation": 52,
+          "economic.matchingFriction": 5,
+          "economic.tradeBalance": -3,
+          "economic.productivityGrowth": 5.5,
+          "economic.rdIntensity": 0.2,
+          "economic.propertyValueIndex": 22,
+          "economic.commercialValueIndex": 24,
+          "economic.ruralRevitalization": 75,
+          "economic.foodSecurity": 55,
+          "economic.exportDependency": 18,
+          "economic.manufacturingCompetitiveness": 42,
+          "economic.regulatoryBurden": 58,
+          "economic.economicFreedom": 42,
+          "education.apprenticeshipRate": 4,
+          "education.academicPressure": 35,
+          "healthcare.uninsuredRate": 35,
+          "healthcare.affordabilityIndex": 42,
+          "healthcare.mentalHealthAccess": 12,
+          "healthcare.socialCareQuality": 22,
+          "healthcare.elderCareQuality": 20,
+          "infrastructure.transportEfficiency": 35,
+          "publicSafety.antiSocialBehaviourRate": 5,
+          "publicSafety.knifeCrimeRate": 3,
+          "environment.floodRisk": 16,
+          "environment.naturalDisasterPreparedness": 35,
+          "environment.nuclearSafety": 0,
+          "social.childPoverty": 40,
+          "social.housingAffordability": 22,
+          "social.roughSleeping": 6,
+          "social.workLifeBalance": 42,
+          "social.foreignWorkerIntegration": 28,
+          "social.genderEquality": 22,
+          "social.housingSupplyGrowth": 2.5,
+          "governance.debtToGdp": 25,
+          "governance.devolutionSatisfaction": 35,
+          "governance.coDeterminationQuality": 28,
+          "governance.nationalPride": 58,
+          "governance.civilLiberties": 45,
+          "governance.militaryReadiness": 55,
+          "population.demographicDecline": 10,
+          "mediaInformation.stateMediaControl": 40,
+          "mediaInformation.pressFreedom": 48,
+          "mediaInformation.disinformationRisk": 22,
+          "mediaInformation.mediaPolarization": 55
+        }
+      }
+    }
+  },
+  "MILITARY_BRANCHES_BY_COUNTRY": {
+    "shape": "country-first",
+    "value": [
+      {
+        "id": "army",
+        "name": "Hellenic Army",
+        "abbr": "ES",
+        "domain": "ground"
+      },
+      {
+        "id": "navy",
+        "name": "Hellenic Navy",
+        "abbr": "PN",
+        "domain": "naval"
+      },
+      {
+        "id": "airforce",
+        "name": "Hellenic Air Force",
+        "abbr": "PA",
+        "domain": "air"
+      }
+    ]
+  },
+  "MILITARY_COUNTRY_SCALE": {
+    "shape": "country-first",
+    "value": 0.9
+  },
+  "MONETARY_BASELINES": {
+    "shape": "country-first",
+    "value": {
+      "targetInflation": 15,
+      "neutralPrimeRate": 16.5
+    }
+  },
+  "MONETARY_BASELINES_1953": {
+    "shape": "country-first",
+    "value": {
+      "targetInflation": 3,
+      "neutralPrimeRate": 6,
+      "trendGdpGrowth": 6.5
+    }
+  },
+  "MONETARY_BASELINES_1971": {
+    "shape": "country-first",
+    "value": {
+      "targetInflation": 10,
+      "neutralPrimeRate": 10,
+      "trendGdpGrowth": 4
+    }
+  },
+  "MONETARY_BASELINES_1979": {
+    "shape": "absent",
+    "value": null
+  },
+  "MONETARY_BASELINES_1991": {
+    "shape": "absent",
+    "value": null
+  },
+  "NATIONAL_ADDRESS_NAME": {
+    "shape": "absent",
+    "value": null
+  },
+  "NATIONAL_IDENTITY": {
+    "shape": "country-first",
+    "value": {
+      "glyph": "ΕΔ",
+      "serif": "mono",
+      "motif": "laurel",
+      "name": "Hellenic State Enterprise",
+      "native": "Ελληνική Δημόσια Επιχείρηση",
+      "registry": "Hellenic Republic · State Holdings Registry",
+      "ministry": "MINISTRY OF FINANCE",
+      "publicSeal": "PUBLIC REGISTER",
+      "hqCity": "Athens",
+      "palette": ["#0d2a4a", "#0a1f38", "#06101c"],
+      "accent": "#3d8fd6",
+      "accentSoft": "#8ec2ea",
+      "accentName": "Aegean blue & white"
+    }
+  },
+  "NATIONAL_POLICY_STATE_IDS": {
+    "shape": "country-first",
+    "value": "gr_national"
+  },
+  "NATIONAL_STATS_IDENTITY": {
+    "shape": "absent",
+    "value": null
+  },
+  "NEUTRAL_FEDERAL_SALES_TAX_BY_COUNTRY": {
+    "shape": "absent",
+    "value": null
+  },
+  "NEUTRAL_STATE_SALES_TAX_BY_COUNTRY": {
+    "shape": "absent",
+    "value": null
+  },
+  "NON_PARTY_BUCKET_INDEPENDENT_BIAS_BY_COUNTRY": {
+    "shape": "absent",
+    "value": null
+  },
+  "NPP_CAPITAL_STATES": {
+    "shape": "country-first",
+    "value": "GR_ATT"
+  },
+  "ORDERS_OF_BATTLE": {
+    "shape": "country-first",
+    "value": [
+      {
+        "branchId": "army",
+        "type": "Infantry Division",
+        "count": 4
+      },
+      {
+        "branchId": "army",
+        "type": "Artillery Regiment",
+        "count": 1
+      },
+      {
+        "branchId": "navy",
+        "type": "Frigate Squadron",
+        "count": 1
+      },
+      {
+        "branchId": "airforce",
+        "type": "Fighter Wing",
+        "count": 2
+      }
+    ]
+  },
+  "ORDERS_OF_BATTLE_BY_ERA": {
+    "shape": "absent",
+    "value": null
+  },
+  "PLAYER_PAYOUT_CAP_PER_TURN": {
+    "shape": "absent",
+    "value": null
+  },
+  "POLICY_TEXT": {
+    "shape": "country-first",
+    "value": {
+      "glyph": "§",
+      "serif": "mono",
+      "registry": "Code of Law · Hellenic Republic",
+      "title": "National Policy"
+    }
+  },
+  "POPULATION_ANCHOR_BUNDLES": {
+    "shape": "absent",
+    "value": null
+  },
+  "RAW_BUNDLES": {
+    "shape": "absent",
+    "value": null
+  },
+  "REGIONAL_BILL_ASSENT_OFFICE_KEY": {
+    "shape": "absent",
+    "value": null
+  },
+  "REGION_CENSUS_LABELS": {
+    "shape": "absent",
+    "value": null
+  },
+  "REGION_DEMOGRAPHIC_CATEGORY_IDS": {
+    "shape": "absent",
+    "value": null
+  },
+  "REGION_NAME_MAPS": {
+    "shape": "absent",
+    "value": null
+  },
+  "REGION_ROSTERS": {
+    "shape": "function-valued",
+    "value": null,
+    "functionKeys": ["1953", "2019"]
+  },
+  "REP_ECON": {
+    "shape": "absent",
+    "value": null
+  },
+  "SOVEREIGN_CORP_LEGAL_STRUCTURE": {
+    "shape": "country-first",
+    "value": "generic_corp"
+  },
+  "SPAWN_ELECTIONS_REGISTRY": {
+    "shape": "absent",
+    "value": null
+  },
+  "STATE_ADJACENCY": {
+    "shape": "country-first",
+    "value": {
+      "GR_ATT": ["GR_EPC", "GR_PEL", "GR_ISL"],
+      "GR_MAC": ["GR_THE", "GR_EPC"],
+      "GR_THE": ["GR_MAC", "GR_EPC"],
+      "GR_EPC": ["GR_ATT", "GR_MAC", "GR_THE", "GR_PEL"],
+      "GR_PEL": ["GR_ATT", "GR_EPC"],
+      "GR_ISL": ["GR_ATT"]
+    }
+  },
+  "STATE_DISPLAY_NAMES": {
+    "shape": "country-first",
+    "value": {
+      "GR_ATT": "Attica",
+      "GR_MAC": "Macedonia & Thrace",
+      "GR_THE": "Thessaly",
+      "GR_EPC": "Epirus & Central Greece",
+      "GR_PEL": "Peloponnese",
+      "GR_ISL": "Islands & Crete"
+    }
+  },
+  "SURFACES": {
+    "shape": "absent",
+    "value": null
+  },
+  "TARGETS": {
+    "shape": "absent",
+    "value": null
+  },
+  "TRADE_MINISTER_POSITION_BY_COUNTRY": {
+    "shape": "country-first",
+    "value": "minister_of_trade_industry"
+  },
+  "TREASURY_IDENTITY": {
+    "shape": "country-first",
+    "value": {
+      "glyph": "ΕΔ",
+      "serif": "mono",
+      "budgetTitle": "State Budget",
+      "ministry": "MINISTRY OF FINANCE",
+      "publicSeal": "PUBLIC RECORD",
+      "registry": "Hellenic Republic · Ministry of Finance",
+      "native": "Ελληνική Δημοκρατία · Υπουργείο Οικονομικών",
+      "palette": ["#0d2a4a", "#0a1f38", "#06101c"],
+      "accent": "#3d8fd6",
+      "accentSoft": "#8ec2ea"
+    }
+  },
+  "TREASURY_PS_RATE_BY_COUNTRY": {
+    "shape": "country-first",
+    "value": {
+      "national": 70000,
+      "state": 35000
+    }
+  },
+  "TREASURY_TEXT": {
+    "shape": "country-first",
+    "value": {
+      "glyph": "ΕΔ",
+      "serif": "mono",
+      "budgetTitle": "State Budget",
+      "ministry": "MINISTRY OF FINANCE",
+      "publicSeal": "PUBLIC RECORD",
+      "registry": "Hellenic Republic · Ministry of Finance",
+      "native": "Ελληνική Δημοκρατία · Υπουργείο Οικονομικών"
+    }
+  }
+}

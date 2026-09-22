@@ -7,6 +7,7 @@ import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { findPartyBySequentialId } from "@/lib/db/partyLookup";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import {
+  approvalFieldForSlot,
   getApproverSlotForRow,
   isPendingTransactionComplete,
   listOpenPendingTransactions,
@@ -81,12 +82,10 @@ export async function GET(_request: Request, { params }: RouteParams) {
       // all (not an officer, or a Request Funds row they themselves
       // requested). Helper bakes in self-exclusion for request type.
       const viewerSlot = getApproverSlotForRow(party, r, myCharOid);
-      const slotAlreadyFilled =
-        viewerSlot === "treasurer"
-          ? !!r.treasurerApproval
-          : viewerSlot === "leadership"
-            ? !!r.leadershipApproval
-            : true;
+      // `getApproverSlotForRow` only ever returns an EMPTY slot, so this
+      // is really just "did it find one"; kept explicit so the flag
+      // still reads as a guard rather than a restatement.
+      const slotAlreadyFilled = viewerSlot == null ? true : !!r[approvalFieldForSlot(viewerSlot)];
       const rowComplete = isPendingTransactionComplete(r);
       const canApprove = viewerSlot != null && !slotAlreadyFilled && !rowComplete;
       const canCancel = r.proposedBy.toString() === myChar;

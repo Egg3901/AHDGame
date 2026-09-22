@@ -28,7 +28,7 @@ describe("country coverage: state baselines", () => {
   });
 
   it("JP: stateBaselines seed is non-empty", async () => {
-    const { jpStateBaselines } = await import("@/lib/seeds/jp/jpStateBaselines");
+    const { jpStateBaselines } = await import("@/lib/countries/jp/data/jpStateBaselines");
     expect(jpStateBaselines.length).toBeGreaterThan(0);
     for (const baseline of jpStateBaselines) {
       expect(baseline._id).toBeTruthy();

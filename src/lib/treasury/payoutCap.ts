@@ -22,10 +22,14 @@
 import type { Db } from "mongodb";
 import type { ObjectId } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
-import { getPlayerPayoutCap } from "@/lib/treasury/payoutCapValues";
+import { formatPayoutCap, getEffectivePlayerPayoutCap } from "@/lib/treasury/payoutCapValues";
 
 export {
+  countDistinctOfficers,
+  getEffectivePlayerPayoutCap,
   getPlayerPayoutCap,
+  PAYOUT_CAP_MULTI_OFFICER_MIN_SEATS,
+  PAYOUT_CAP_MULTI_OFFICER_MULTIPLIER,
   PLAYER_PAYOUT_CAP_PER_TURN,
   DEFAULT_PLAYER_PAYOUT_CAP_PER_TURN,
 } from "@/lib/treasury/payoutCapValues";
@@ -83,9 +87,17 @@ export async function checkPlayerPayoutCap(
     countryId: CountryId;
     currentTurn: number;
     amount: number;
+    /**
+     * Distinct officers seated on the body making the payment. Two or
+     * more raise the ceiling; see
+     * `PAYOUT_CAP_MULTI_OFFICER_MULTIPLIER`. Omitted means "treat as a
+     * lone officer", which is the safe reading for any caller that has
+     * not been taught to count.
+     */
+    seatedOfficers?: number;
   }
 ): Promise<PayoutCapCheck> {
-  const cap = getPlayerPayoutCap(args.countryId);
+  const cap = getEffectivePlayerPayoutCap(args.countryId, args.seatedOfficers ?? 0);
   const used = await getPlayerPayoutThisTurn(
     db,
     args.characterId,
@@ -99,10 +111,15 @@ export async function checkPlayerPayoutCap(
       cap,
       used,
       remaining,
+      // The ceiling is the PAYING body's, while `used` counts every
+      // source. A member paid up to a well staffed party's higher
+      // ceiling then hits a lone officer's lower one, so saying they
+      // "already received the maximum of $2,000,000" would name a
+      // figure they never hit. State what they actually drew.
       reason:
         remaining === 0
-          ? `This member has already received the maximum of $${cap.toLocaleString()} from party funds this turn. Try again next turn.`
-          : `This member can receive $${remaining.toLocaleString()} more from party funds this turn, out of a maximum of $${cap.toLocaleString()}.`,
+          ? `This member has already received ${formatPayoutCap(args.countryId, used)} from party funds this turn, which is at or over the ${formatPayoutCap(args.countryId, cap)} this treasury may pay one member. Try again next turn.`
+          : `This member can receive ${formatPayoutCap(args.countryId, remaining)} more from party funds this turn, out of the ${formatPayoutCap(args.countryId, cap)} this treasury may pay one member.`,
     };
   }
   return { ok: true, cap, used, remaining };

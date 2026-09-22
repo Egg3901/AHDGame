@@ -9,6 +9,35 @@
  */
 import type { CountryId } from "./countries";
 import { STARTING_YEAR, getStartingYearForPreset } from "./turnTime";
+import { JP_ECONOMY } from "@/lib/countries/jp/economy";
+import { US_ECONOMY } from "@/lib/countries/us/economy";
+import { UK_ECONOMY } from "@/lib/countries/uk/economy";
+import { DE_ECONOMY } from "@/lib/countries/de/economy";
+import { CN_ECONOMY } from "@/lib/countries/cn/economy";
+import { IE_ECONOMY } from "@/lib/countries/ie/economy";
+import { RU_ECONOMY } from "@/lib/countries/ru/economy";
+import { DD_ECONOMY } from "@/lib/countries/dd/economy";
+import { NG_ECONOMY } from "@/lib/countries/ng/economy";
+import { BR_ECONOMY } from "@/lib/countries/br/economy";
+import { FR_ECONOMY } from "@/lib/countries/fr/economy";
+import { IT_ECONOMY } from "@/lib/countries/it/economy";
+import { ES_ECONOMY } from "@/lib/countries/es/economy";
+import { SE_ECONOMY } from "@/lib/countries/se/economy";
+import { TR_ECONOMY } from "@/lib/countries/tr/economy";
+import { GR_ECONOMY } from "@/lib/countries/gr/economy";
+import { AT_ECONOMY } from "@/lib/countries/at/economy";
+import { FI_ECONOMY } from "@/lib/countries/fi/economy";
+import { PL_ECONOMY } from "@/lib/countries/pl/economy";
+import { HU_ECONOMY } from "@/lib/countries/hu/economy";
+import { RO_ECONOMY } from "@/lib/countries/ro/economy";
+import { YU_ECONOMY } from "@/lib/countries/yu/economy";
+import { BG_ECONOMY } from "@/lib/countries/bg/economy";
+import { CS_ECONOMY } from "@/lib/countries/cs/economy";
+import { SCO_ECONOMY } from "@/lib/countries/sco/economy";
+import { WAL_ECONOMY } from "@/lib/countries/wal/economy";
+import { BLR_ECONOMY } from "@/lib/countries/blr/economy";
+import { UKR_ECONOMY } from "@/lib/countries/ukr/economy";
+import { BAL_ECONOMY } from "@/lib/countries/bal/economy";
 
 /**
  * Currency codes for all countries — active and future.
@@ -72,38 +101,38 @@ export const ZOD_CURRENCY_ENUM: [CurrencyCode, CurrencyCode, ...CurrencyCode[]] 
 
 /** Map country → home currency. Authoritative source for this mapping. */
 export const COUNTRY_CURRENCY_MAP: Record<CountryId, CurrencyCode> = {
-  US: "USD",
-  UK: "GBP",
-  JP: "JPY",
-  DE: "EUR",
+  US: US_ECONOMY.currencyCode,
+  UK: UK_ECONOMY.currencyCode,
+  JP: JP_ECONOMY.currencyCode,
+  DE: DE_ECONOMY.currencyCode,
   // Irish pound (Saorstát/IEP). Distinct from EUR so 1953 Bretton Woods par
   // (1:1 GBP) can have its own exchangeRates doc without colliding with DE's DM/EUR rate.
   // Display shows "€" when gameState.eurozoneEnabled (see getEraAwareCurrencySymbol).
-  IE: "IEP",
-  BR: "BRL",
-  CN: "CNY",
-  NG: "NGN",
-  HU: "HUF",
-  PL: "PLZ",
-  RO: "ROL",
-  YU: "YUD",
-  BG: "BGL",
-  BLR: "SUR",
-  UKR: "SUR",
-  CS: "CSK",
-  BAL: "SUR",
-  RU: "SUR",
-  FR: "FRF",
-  IT: "ITL",
-  ES: "ESP",
-  SE: "SEK",
-  TR: "TRL",
-  GR: "GRD",
-  AT: "ATS",
-  FI: "FIM",
-  DD: "DDM",
-  SCO: "GBP", // sterlingized — shares the UK's GBP (anchor stays UK)
-  WAL: "GBP", // sterlingized — shares the UK's GBP (anchor stays UK)
+  IE: IE_ECONOMY.currencyCode,
+  BR: BR_ECONOMY.currencyCode,
+  CN: CN_ECONOMY.currencyCode,
+  NG: NG_ECONOMY.currencyCode,
+  HU: HU_ECONOMY.currencyCode,
+  PL: PL_ECONOMY.currencyCode,
+  RO: RO_ECONOMY.currencyCode,
+  YU: YU_ECONOMY.currencyCode,
+  BG: BG_ECONOMY.currencyCode,
+  BLR: BLR_ECONOMY.currencyCode,
+  UKR: UKR_ECONOMY.currencyCode,
+  CS: CS_ECONOMY.currencyCode,
+  BAL: BAL_ECONOMY.currencyCode,
+  RU: RU_ECONOMY.currencyCode,
+  FR: FR_ECONOMY.currencyCode,
+  IT: IT_ECONOMY.currencyCode,
+  ES: ES_ECONOMY.currencyCode,
+  SE: SE_ECONOMY.currencyCode,
+  TR: TR_ECONOMY.currencyCode,
+  GR: GR_ECONOMY.currencyCode,
+  AT: AT_ECONOMY.currencyCode,
+  FI: FI_ECONOMY.currencyCode,
+  DD: DD_ECONOMY.currencyCode,
+  SCO: SCO_ECONOMY.currencyCode, // sterlingized — shares the UK's GBP (anchor stays UK)
+  WAL: WAL_ECONOMY.currencyCode, // sterlingized — shares the UK's GBP (anchor stays UK)
 };
 
 /**
@@ -162,10 +191,11 @@ export function getCountryIdForCurrency(code: CurrencyCode): CountryId {
  * trapped.
  */
 // SU/FR/IT/ES/SE/TR join for the 1979 Cold-War preset (player/economy-enabled
-// there). Like NG, they stay forex-active across eras even while coming-soon in
-// 2019/1991 — their currencies must be exchangeable so holders aren't trapped.
-// The NPP-run bloc (DD/HU/PL/…) is NOT forex-active (closed planned economy until
-// it decommunises).
+// there). Like NG, they stay forex-active across eras even when their sovereign
+// fiscal model is not authored, because holders must still be able to exchange
+// their currencies. Central-bank coverage is a separate preset-aware scope; see
+// presetMonetaryScope. DD remains here for Cold-War DDM support but is excluded
+// from post-reunification central-bank seeding.
 export const FOREX_ACTIVE_COUNTRIES: CountryId[] = [
   "US",
   "UK",
@@ -739,14 +769,14 @@ export interface EconomicBaseline {
 }
 
 export const ECONOMIC_BASELINES: Partial<Record<CountryId, EconomicBaseline>> = {
-  US: { gdpGrowth: 2.5, tradeGrowth: 0 },
-  UK: { gdpGrowth: 1.5, tradeGrowth: 0 },
-  JP: { gdpGrowth: 1.0, tradeGrowth: 0 },
-  DE: { gdpGrowth: 1.5, tradeGrowth: 0 },
-  IE: { gdpGrowth: 3.5, tradeGrowth: 2.5 },
-  BR: { gdpGrowth: 2.5, tradeGrowth: 2.0 },
-  CN: { gdpGrowth: 5.0, tradeGrowth: 4.0 },
-  NG: { gdpGrowth: 3.0, tradeGrowth: 2.5 },
+  US: US_ECONOMY.economicBaseline,
+  UK: UK_ECONOMY.economicBaseline,
+  JP: JP_ECONOMY.economicBaseline,
+  DE: DE_ECONOMY.economicBaseline,
+  IE: IE_ECONOMY.economicBaseline,
+  BR: BR_ECONOMY.economicBaseline,
+  CN: CN_ECONOMY.economicBaseline,
+  NG: NG_ECONOMY.economicBaseline,
 };
 
 /**
@@ -763,35 +793,35 @@ export interface MonetaryBaseline {
 }
 
 export const MONETARY_BASELINES: Record<CountryId, MonetaryBaseline> = {
-  US: { targetInflation: 2.0, neutralPrimeRate: 3.0 },
-  UK: { targetInflation: 2.0, neutralPrimeRate: 3.0 },
-  JP: { targetInflation: 1.0, neutralPrimeRate: 1.0 },
-  DE: { targetInflation: 2.0, neutralPrimeRate: 3.0 },
-  IE: { targetInflation: 2.0, neutralPrimeRate: 3.0 },
-  BR: { targetInflation: 4.0, neutralPrimeRate: 8.0 },
-  CN: { targetInflation: 2.0, neutralPrimeRate: 4.0 },
-  NG: { targetInflation: 6.0, neutralPrimeRate: 12.0 },
-  HU: { targetInflation: 3.0, neutralPrimeRate: 5.0 },
-  PL: { targetInflation: 4.0, neutralPrimeRate: 5.0 },
-  RO: { targetInflation: 3.0, neutralPrimeRate: 5.0 },
-  YU: { targetInflation: 15.0, neutralPrimeRate: 12.0 }, // Yugoslav high-inflation
-  BG: { targetInflation: 2.0, neutralPrimeRate: 4.0 },
-  BLR: { targetInflation: 2.0, neutralPrimeRate: 3.0 },
-  UKR: { targetInflation: 2.0, neutralPrimeRate: 3.0 },
-  CS: { targetInflation: 2.0, neutralPrimeRate: 4.0 },
-  BAL: { targetInflation: 2.0, neutralPrimeRate: 3.0 },
-  RU: { targetInflation: 2.0, neutralPrimeRate: 3.0 },
-  FR: { targetInflation: 10.0, neutralPrimeRate: 9.5 }, // late-1970s French inflation
-  IT: { targetInflation: 15.0, neutralPrimeRate: 12.0 }, // late-1970s Italian inflation
-  ES: { targetInflation: 16.0, neutralPrimeRate: 14.0 }, // late-1970s Spanish transition inflation
-  SE: { targetInflation: 8.0, neutralPrimeRate: 9.0 }, // late-1970s Swedish inflation
-  TR: { targetInflation: 20.0, neutralPrimeRate: 20.0 }, // late-1970s Turkish crisis inflation
-  GR: { targetInflation: 15.0, neutralPrimeRate: 16.5 }, // late-1970s drachma inflation regime
-  AT: { targetInflation: 4.0, neutralPrimeRate: 5.5 }, // hard-schilling DM shadow policy
-  FI: { targetInflation: 6.0, neutralPrimeRate: 8.5 }, // late-1970s markka devaluation-cycle regime
-  DD: { targetInflation: 2.0, neutralPrimeRate: 5.0 }, // administered GDR planned-economy prices
-  SCO: { targetInflation: 2.0, neutralPrimeRate: 3.0 }, // mirrors UK (sterling zone)
-  WAL: { targetInflation: 2.0, neutralPrimeRate: 3.0 }, // mirrors UK (sterling zone)
+  US: US_ECONOMY.monetary.baseline,
+  UK: UK_ECONOMY.monetary.baseline,
+  JP: JP_ECONOMY.monetary.baseline,
+  DE: DE_ECONOMY.monetary.baseline,
+  IE: IE_ECONOMY.monetary.baseline,
+  BR: BR_ECONOMY.monetary.baseline,
+  CN: CN_ECONOMY.monetary.baseline,
+  NG: NG_ECONOMY.monetary.baseline,
+  HU: HU_ECONOMY.monetary.baseline,
+  PL: PL_ECONOMY.monetary.baseline,
+  RO: RO_ECONOMY.monetary.baseline,
+  YU: YU_ECONOMY.monetary.baseline, // Yugoslav high-inflation
+  BG: BG_ECONOMY.monetary.baseline,
+  BLR: BLR_ECONOMY.monetary.baseline,
+  UKR: UKR_ECONOMY.monetary.baseline,
+  CS: CS_ECONOMY.monetary.baseline,
+  BAL: BAL_ECONOMY.monetary.baseline,
+  RU: RU_ECONOMY.monetary.baseline,
+  FR: FR_ECONOMY.monetary.baseline, // late-1970s French inflation
+  IT: IT_ECONOMY.monetary.baseline, // late-1970s Italian inflation
+  ES: ES_ECONOMY.monetary.baseline, // late-1970s Spanish transition inflation
+  SE: SE_ECONOMY.monetary.baseline, // late-1970s Swedish inflation
+  TR: TR_ECONOMY.monetary.baseline, // late-1970s Turkish crisis inflation
+  GR: GR_ECONOMY.monetary.baseline, // late-1970s drachma inflation regime
+  AT: AT_ECONOMY.monetary.baseline, // hard-schilling DM shadow policy
+  FI: FI_ECONOMY.monetary.baseline, // late-1970s markka devaluation-cycle regime
+  DD: DD_ECONOMY.monetary.baseline, // administered GDR planned-economy prices
+  SCO: SCO_ECONOMY.monetary.baseline, // mirrors UK (sterling zone)
+  WAL: WAL_ECONOMY.monetary.baseline, // mirrors UK (sterling zone)
 };
 
 // ── FX Intervention (chair standing policy) ─────────────────────────────────

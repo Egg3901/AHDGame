@@ -18,6 +18,12 @@ export interface DemocraticCompetition {
   seatMarginPenalty: number;
   legislativeContinuityPenalty: number;
   executiveContinuityPenalty: number;
+  /** Party holding the most seated SCOTUS justices, or null when the Court is too empty to score. */
+  courtDominantPartyId: string | null;
+  /** Share of seated justices held by that party, 0-100. */
+  courtDominantShare: number;
+  courtSeated: number;
+  courtPenalty: number;
   penalty: number;
 }
 
@@ -74,10 +80,57 @@ function uninterruptedControlTurns(
 }
 
 /**
+ * One-party control of the seated Supreme Court. Vacant seats do not count,
+ * but occupied seats without a recorded party still count toward the seated
+ * bench: pass the full occupied headcount as `seatedTotal` so unaffiliated
+ * justices dilute the dominant share instead of vanishing from it.
+ * A 5-4 split is 55.6% and costs nothing. Penalty starts at 60% of seated
+ * justices (about 6-3) and scales to a 24-point cap at a 9-0 bench. Courts
+ * with fewer than 5 seated justices are too empty to score as packed.
+ */
+export function assessCourtPacking(
+  justicesByParty?: Record<string, number>,
+  seatedTotal?: number
+): {
+  courtDominantPartyId: string | null;
+  courtDominantShare: number;
+  courtSeated: number;
+  courtPenalty: number;
+} {
+  const entries = Object.entries(justicesByParty ?? {}).filter(
+    ([, seats]) => Number.isFinite(seats) && seats > 0
+  );
+  const partied = entries.reduce((sum, [, seats]) => sum + seats, 0);
+  const seated = Math.max(
+    partied,
+    Number.isFinite(seatedTotal) ? Math.floor(seatedTotal as number) : partied
+  );
+  if (seated < 5) {
+    return {
+      courtDominantPartyId: null,
+      courtDominantShare: 0,
+      courtSeated: seated,
+      courtPenalty: 0,
+    };
+  }
+  const [party, count] = [...entries].sort((a, b) => b[1] - a[1])[0];
+  const share = (count / seated) * 100;
+  const penalty = clamp((share - 60) * 0.6, 0, 24);
+  return {
+    courtDominantPartyId: party,
+    courtDominantShare: Math.round(share * 10) / 10,
+    courtSeated: seated,
+    courtPenalty: Math.round(penalty * 10) / 10,
+  };
+}
+
+/**
  * Competitive-balance pressure for a liberal democracy. A normal majority has
  * no cost. Large seat monopolies cost health immediately. Uninterrupted chamber
  * leadership and repeated executive wins add slower pressure, but presidential
  * tenure compounds legislative dominance only when the same party holds both.
+ * A one-party Supreme Court is a separate sliding cost: packing the bench is
+ * not free.
  */
 export function assessDemocraticCompetition(input: {
   seatsByParty?: Record<string, number>;
@@ -85,6 +138,9 @@ export function assessDemocraticCompetition(input: {
   history?: readonly SeatControlHistoryRow[];
   executivePartyId?: string | null;
   consecutiveExecutiveTerms?: number;
+  justicesByParty?: Record<string, number>;
+  /** Full occupied headcount, including seated justices without a recorded party. */
+  seatedJustices?: number;
 }): DemocraticCompetition {
   const current = tallyChambers(input.chambersByParty ?? [input.seatsByParty ?? {}]);
   const executivePartyId = input.executivePartyId || null;
@@ -92,6 +148,7 @@ export function assessDemocraticCompetition(input: {
   const continuityPartyId = executivePartyId ?? current.party;
   const controlTurns = uninterruptedControlTurns(continuityPartyId, input.history ?? []);
   const executiveTerms = Math.max(0, Math.floor(input.consecutiveExecutiveTerms ?? 0));
+  const court = assessCourtPacking(input.justicesByParty, input.seatedJustices);
 
   const seatPenalty = clamp((current.share * 100 - 55) * 0.6, 0, 27);
   const legislativeContinuityPenalty = clamp(((controlTurns - 48) / 48) * 6, 0, 6);
@@ -111,8 +168,14 @@ export function assessDemocraticCompetition(input: {
     seatMarginPenalty: roundedSeatPenalty,
     legislativeContinuityPenalty: roundedLegislativeContinuityPenalty,
     executiveContinuityPenalty: roundedExecutiveContinuityPenalty,
+    ...court,
     penalty:
-      Math.round((seatPenalty + legislativeContinuityPenalty + executiveContinuityPenalty) * 10) /
-      10,
+      Math.round(
+        (seatPenalty +
+          legislativeContinuityPenalty +
+          executiveContinuityPenalty +
+          court.courtPenalty) *
+          10
+      ) / 10,
   };
 }

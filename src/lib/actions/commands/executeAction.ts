@@ -44,6 +44,8 @@ import { campaignLocalRate } from "@/lib/campaigns/campaignCurrency";
 import { checkActionAchievements, checkFundsAchievements } from "@/lib/achievements/triggers";
 import { recordAuditBulk } from "@/lib/audit/recordAudit";
 import type { ActionAuditInput } from "@/lib/db/types/actionAuditLog";
+import type { GameConfig } from "@/lib/db/types/gameConfig";
+import { resolveCampaignPriceLevel } from "@/lib/campaigns/rules/priceLevel";
 
 function clampAddExpression(fieldPath: string, delta: number, min: number, max: number) {
   return {
@@ -108,6 +110,13 @@ export async function executeCharacterAction(
 
   const forexEnabled = await isForexEnabled();
   const gameState = await getGameState();
+  const gameConfig = await db
+    .collection<GameConfig>("gameConfig")
+    .findOne({ _id: "default" }, { projection: { campaignEraPriceLevelEnabled: 1 } });
+  const priceLevel = resolveCampaignPriceLevel(
+    gameConfig?.campaignEraPriceLevelEnabled,
+    gameState?.preset
+  );
 
   // Block player actions while the game is paused/stopped. `isActive` is false only
   // on admin stop, auto-drift pause, or a pre-start world (turnSystem.ts) — it is not
@@ -176,6 +185,8 @@ export async function executeCharacterAction(
     const validation = canPerformAction(current, actionType, state || undefined, {
       forexEnabled,
       homeFxRate: campaignRate,
+      preset: gameState?.preset,
+      priceLevel,
       rpgStatsEnabled,
     });
     if (!validation.canPerform) {
@@ -251,7 +262,13 @@ export async function executeCharacterAction(
         message: `Donated ${formatLocalFunds(convertAmount, homeCurrency)} personal funds — ${formatLocalFunds(convertedLocal, homeCurrency)} added to campaign coffers. +${infamy} Infamy.`,
       };
     } else {
-      effect = action.effect(current, state || undefined, { formatFunds: fundsFormatter });
+      effect = action.effect(current, state || undefined, {
+        formatFunds: fundsFormatter,
+        // GDP-baseline era for cost math: the world's reset preset, so
+        // historical worlds price in their own denomination (issue #798).
+        preset: gameState?.preset,
+        priceLevel,
+      });
     }
 
     // effect.fundsChange and effect.cashOnHandChange are in ANCHOR units.

@@ -557,4 +557,63 @@ describe("getPartyDetail", () => {
       $or: [{ countryId: "US" }, { countryId: null }, { countryId: { $exists: false } }],
     });
   });
+
+  // Growth frontier surfaced for the Join control. Exercises the real
+  // partyFrontier module, so the reported regions match what the join route
+  // will actually enforce.
+  describe("frontierRegions", () => {
+    function makeParty(): PoliticalParty {
+      return {
+        _id: new ObjectId(),
+        sequentialId: 7,
+        countryId: "US",
+        name: "Northeast Labor Party",
+        abbreviation: "NLP",
+        color: "#0000ff",
+        economicPosition: 0,
+        socialPosition: 0,
+        chairId: null,
+        viceChairId: null,
+        treasurerId: null,
+        committeeIds: [],
+        treasury: 0,
+        nationalTaxRate: 0,
+        politicalStrength: 0,
+        isDefault: false,
+        createdAt: new Date(),
+        logoUrl: null,
+      } as unknown as PoliticalParty;
+    }
+
+    async function detailWithPresence(presence: string[]) {
+      const db: MockDb = createMockDb();
+      const { getDb } = await import("@/lib/mongodb");
+      vi.mocked(getDb).mockResolvedValue(db as unknown as Db);
+      // createMockDb registers a collection lazily on first access.
+      db.collection("characters");
+      db.collection("users");
+      db.collection("npps");
+      db.collection("states");
+      db.collection("electedOfficials");
+      db.collection("partyBudget");
+      db.collection("gameConfig");
+      db.collectionMocks["states"]!.find.mockReturnValue({
+        toArray: async () => [{ _id: "NY" }, { _id: "PA" }, { _id: "CA" }],
+      });
+      db.collectionMocks["characters"]!.distinct.mockResolvedValue(presence);
+      return getPartyDetail(db as unknown as Db, makeParty());
+    }
+
+    it("reports presence plus one adjacency hop, sorted", async () => {
+      const detail = await detailWithPresence(["NY"]);
+      expect(detail.frontierRegions).toContain("NY");
+      expect(detail.frontierRegions).toContain("PA");
+      expect(detail.frontierRegions).not.toContain("CA");
+    });
+
+    it("reports null for a party with no presence anywhere, meaning unrestricted", async () => {
+      const detail = await detailWithPresence([]);
+      expect(detail.frontierRegions).toBeNull();
+    });
+  });
 });

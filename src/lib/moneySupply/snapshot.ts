@@ -142,8 +142,12 @@ export async function snapshotMoneySupply(db: Db, turn: number): Promise<number>
       .find({}, { projection: { currencyCode: 1, rate: 1 } })
       .toArray(),
     db
-      .collection<{ _id: string; cashLocal?: number }>("bondMarketPools")
-      .find({}, { projection: { cashLocal: 1 } })
+      .collection<{
+        _id: string;
+        cashLocal?: number;
+        lifetime?: { qeIn?: number; qtOut?: number };
+      }>("bondMarketPools")
+      .find({}, { projection: { cashLocal: 1, lifetime: 1 } })
       .toArray(),
     db
       .collection<{ _id: string; cashLocal?: number }>("equityMarketPools")
@@ -245,8 +249,16 @@ export async function snapshotMoneySupply(db: Db, turn: number): Promise<number>
       "organizationLiquid",
       fund.balanceLocal
     );
-  for (const pool of bondPools)
+  // Bond-pool cash enters as a raw audit component plus its QE lifetime legs,
+  // so calculateMoneyAggregates can net the QE-parked portion back into
+  // observed M2 while the settlement inventory stays outside it (v3 boundary,
+  // issue #2021). Pools without flow counters contribute zero QE legs and
+  // read as pure settlement inventory.
+  for (const pool of bondPools) {
     addComponent(byCurrency, pool._id as CurrencyCode, "bondPoolCash", pool.cashLocal ?? 0);
+    addComponent(byCurrency, pool._id as CurrencyCode, "bondPoolQeIn", pool.lifetime?.qeIn ?? 0);
+    addComponent(byCurrency, pool._id as CurrencyCode, "bondPoolQeOut", pool.lifetime?.qtOut ?? 0);
+  }
   for (const pool of equityPools)
     addComponent(byCurrency, pool._id as CurrencyCode, "equityPoolCash", pool.cashLocal ?? 0);
   for (const bond of bonds) {

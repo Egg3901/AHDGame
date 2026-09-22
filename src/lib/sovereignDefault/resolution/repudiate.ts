@@ -12,7 +12,10 @@ import type { Bond } from "@/lib/db/types/bond";
 import type { FederalBudget, SovereignCrisisState } from "@/lib/db/types/budget";
 import type { SovereignCrisisDecision } from "@/lib/db/types/sovereignCrisisDecision";
 import { getNationalBudgetId } from "@/lib/bonds/sovereign";
-import { deriveFiscalState, nationalDebtFromBalance } from "@/lib/budget/treasuryBalance";
+import {
+  sumOutstandingSovereignPrincipal,
+  sovereignDebtTerms,
+} from "@/lib/bonds/sovereignPrincipal";
 import { markCountryBondsRepudiated } from "../bondMutations/repudiate";
 import { applyCrossCountryTrustHit } from "../sideEffects/trustHit";
 import { applyExchangeRateDepreciation } from "../sideEffects/fxDepreciation";
@@ -28,7 +31,6 @@ import {
   REPUDIATE_LOCKOUT_TURNS,
   REPUDIATE_GDP_PENALTY,
   REPUDIATE_GDP_PENALTY_TURNS,
-  REPUDIATE_PRINCIPAL_WRITEDOWN,
 } from "../constants";
 
 export interface RepudiateResolutionInput {
@@ -91,22 +93,33 @@ export async function applyRepudiateResolution(
     countryCode,
   });
 
-  // Genuine sovereign-ledger write-down (refs #3813) — same reasoning as the
-  // restructure path, but the near-total haircut a repudiation deals to
-  // bondholders (REPUDIATE_BOND_MARKET_PRICE = 0.05 recovery). Without this,
-  // `treasuryBalance`/`debt.principal` (the SSOT `processTreasuryTurn` reads
-  // every turn) is untouched by "repudiating," so the CCC/14% tier and the
-  // spiral resume on the very next tick regardless of the bond-market wipeout.
-  const priorPrincipal =
-    budget.treasuryBalance != null
-      ? nationalDebtFromBalance(budget.treasuryBalance)
-      : (budget.debt?.principal ?? 0);
-  const writtenDownTreasuryBalance = -(priorPrincipal * (1 - REPUDIATE_PRINCIPAL_WRITEDOWN));
-  const derivedFiscal = deriveFiscalState({
-    treasuryBalance: writtenDownTreasuryBalance,
+  // Flipping the bonds to defaulted IS the write-down (refs #1975): the
+  // stored stock is re-pointed at the outstanding sum read back from the
+  // ledger (zero once every active bond is defaulted). Treasury cash is a
+  // separate position and stays untouched. Reading the ledger back keeps
+  // this a pure function of bond state, so crash/retry replay converges.
+  const postDefaultBonds = await db
+    .collection<Bond>("bonds")
+    .find(
+      { issuerType: "sovereign", countryId: countryCode, matured: false, defaulted: false },
+      // The outstanding helper re-checks the query-filtered fields, so they
+      // must be projected: a doc arriving without `issuerType` reads as
+      // non-sovereign and contributes 0, which would zero the stored stock.
+      {
+        projection: {
+          issuerType: 1,
+          matured: 1,
+          defaulted: 1,
+          totalIssued: 1,
+          restructureHaircutPercent: 1,
+        },
+      }
+    )
+    .toArray();
+  const writtenDownPrincipal = Math.round(sumOutstandingSovereignPrincipal(postDefaultBonds));
+  const terms = sovereignDebtTerms(writtenDownPrincipal, {
     gdp: budget.gdp ?? 0,
     gdpSmoothed: budget.gdpSmoothed,
-    ceiling: budget.debt?.ceiling ?? 0,
     investorConfidence: budget.investorConfidence,
     imfBailoutActive: budget.imfSovereignBailoutActive,
     sovereignRiskAnchor: budget.sovereignRiskAnchor,
@@ -125,13 +138,12 @@ export async function applyRepudiateResolution(
     creditRating: "CCC",
     crisisAutoActionAt: null,
     crisisLegislativeDeadlineAt: null,
-    treasuryBalance: writtenDownTreasuryBalance,
     debt: {
       ...budget.debt,
-      principal: derivedFiscal.principal,
-      interestRate: derivedFiscal.interestRate,
+      principal: writtenDownPrincipal,
+      interestRate: terms.interestRate,
     },
-    debtToGdpRatio: derivedFiscal.debtToGdpRatio,
+    debtToGdpRatio: terms.debtToGdpRatio,
   };
 
   await db

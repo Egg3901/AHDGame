@@ -35,7 +35,7 @@ describe("GET /api/corporations/buyer-search", () => {
     expect(db.collectionMocks.corporations!.find).toHaveBeenCalledWith(
       expect.objectContaining({
         countryOwnerId: { $exists: false },
-        ...PLAYER_RUN_CEO_FILTER,
+        $or: [...PLAYER_RUN_CEO_FILTER.$or, { ceoType: "npp", caretakerCeo: { $exists: false } }],
         name: { $regex: "Creek", $options: "i" },
       })
     );
@@ -66,6 +66,70 @@ describe("GET /api/corporations/buyer-search", () => {
           name: "Creek Energy",
           ticker: "CREEK",
           countryId: "US",
+          nppRun: false,
+        },
+      ],
+    });
+  });
+
+  it("flags genuinely AI-run matches for the auto-resolve flow (#217)", async () => {
+    const nppId = new ObjectId();
+    db.collectionMocks.corporations!.find.mockReturnValue({
+      limit: vi.fn().mockReturnThis(),
+      toArray: vi.fn().mockResolvedValue([
+        {
+          _id: nppId,
+          name: "Creek Automatons",
+          tickerSymbol: "AUTO",
+          countryId: "US",
+          ceoType: "npp",
+        },
+      ]),
+    });
+
+    const { GET } = await import("./route");
+    const res = await GET(req("q=Creek"));
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toEqual({
+      results: [
+        {
+          id: nppId.toString(),
+          name: "Creek Automatons",
+          ticker: "AUTO",
+          countryId: "US",
+          nppRun: true,
+        },
+      ],
+    });
+  });
+
+  it("does not flag caretaker-run player corps as AI-run", async () => {
+    const caretakerId = new ObjectId();
+    db.collectionMocks.corporations!.find.mockReturnValue({
+      limit: vi.fn().mockReturnThis(),
+      toArray: vi.fn().mockResolvedValue([
+        {
+          _id: caretakerId,
+          name: "Creek Caretaker",
+          tickerSymbol: "CARE",
+          countryId: "US",
+          ceoType: "npp",
+          caretakerCeo: { displacedCeoId: new ObjectId() },
+        },
+      ]),
+    });
+
+    const { GET } = await import("./route");
+    const res = await GET(req("q=Creek"));
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toEqual({
+      results: [
+        {
+          id: caretakerId.toString(),
+          name: "Creek Caretaker",
+          ticker: "CARE",
+          countryId: "US",
+          nppRun: false,
         },
       ],
     });

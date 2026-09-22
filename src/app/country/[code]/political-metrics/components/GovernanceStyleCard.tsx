@@ -99,7 +99,7 @@ function PowerBalance({ competition }: { competition: DemocraticCompetition }) {
         </div>
       </div>
 
-      <div className="mt-4 grid gap-px overflow-hidden rounded-md border border-card-border bg-card-border sm:grid-cols-2 xl:grid-cols-4">
+      <div className="mt-4 grid gap-px overflow-hidden rounded-md border border-card-border bg-card-border sm:grid-cols-2 xl:grid-cols-5">
         <div className="bg-card px-3 py-3">
           <div className="font-mono text-[10px] uppercase tracking-[0.15em] text-muted">
             Chambers
@@ -128,6 +128,17 @@ function PowerBalance({ competition }: { competition: DemocraticCompetition }) {
           <div className="mt-1 text-body-xs text-muted">Same governing settlement</div>
         </div>
         <div className="bg-card px-3 py-3">
+          <div className="font-mono text-[10px] uppercase tracking-[0.15em] text-muted">Court</div>
+          <div className="mt-1 text-body-lg font-semibold tabular-nums text-foreground">
+            {competition.courtSeated >= 5 ? `${competition.courtDominantShare.toFixed(1)}%` : "n/a"}
+          </div>
+          <div className="mt-1 text-body-xs text-muted">
+            {competition.courtSeated >= 5
+              ? `Largest party of ${competition.courtSeated} seated justices`
+              : "Too few justices seated to score packing"}
+          </div>
+        </div>
+        <div className="bg-card px-3 py-3">
           <div className="font-mono text-[10px] uppercase tracking-[0.15em] text-muted">
             Institutional cost
           </div>
@@ -141,7 +152,8 @@ function PowerBalance({ competition }: { competition: DemocraticCompetition }) {
       <p className="mt-3 text-body-xs leading-relaxed text-muted">
         Chamber margins: −{competition.seatMarginPenalty.toFixed(1)}. Legislative continuity: −
         {competition.legislativeContinuityPenalty.toFixed(1)}. Executive continuity: −
-        {competition.executiveContinuityPenalty.toFixed(1)}.
+        {competition.executiveContinuityPenalty.toFixed(1)}. Court packing: −
+        {competition.courtPenalty.toFixed(1)}.
       </p>
     </div>
   );

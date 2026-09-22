@@ -47,6 +47,35 @@ import {
 } from "@/lib/market/unownedHeadroom";
 import { getMarketSystemModeForDb, marketAtLeast } from "@/lib/market/featureFlag";
 import { capacityRescaleRatio } from "@/lib/constants/capacityEconomy";
+import { JP_GEOGRAPHY } from "@/lib/countries/jp/geography";
+import { US_NPP_CAPITAL_STATE } from "@/lib/countries/us/geographyFacts";
+import { UK_NPP_CAPITAL_STATE } from "@/lib/countries/uk/geographyFacts";
+import { DE_NPP_CAPITAL_STATE } from "@/lib/countries/de/geographyFacts";
+import { CN_NPP_CAPITAL_STATE } from "@/lib/countries/cn/geographyFacts";
+import { IE_NPP_CAPITAL_STATE } from "@/lib/countries/ie/geographyFacts";
+import { RU_NPP_CAPITAL_STATE } from "@/lib/countries/ru/geographyFacts";
+import { DD_NPP_CAPITAL_STATE } from "@/lib/countries/dd/geographyFacts";
+import { NG_NPP_CAPITAL_STATE } from "@/lib/countries/ng/geographyFacts";
+import { BR_NPP_CAPITAL_STATE } from "@/lib/countries/br/geographyFacts";
+import { FR_NPP_CAPITAL_STATE } from "@/lib/countries/fr/geographyFacts";
+import { IT_NPP_CAPITAL_STATE } from "@/lib/countries/it/geographyFacts";
+import { ES_NPP_CAPITAL_STATE } from "@/lib/countries/es/geographyFacts";
+import { SE_NPP_CAPITAL_STATE } from "@/lib/countries/se/geographyFacts";
+import { TR_NPP_CAPITAL_STATE } from "@/lib/countries/tr/geographyFacts";
+import { GR_NPP_CAPITAL_STATE } from "@/lib/countries/gr/geographyFacts";
+import { AT_NPP_CAPITAL_STATE } from "@/lib/countries/at/geographyFacts";
+import { FI_NPP_CAPITAL_STATE } from "@/lib/countries/fi/geographyFacts";
+import { PL_NPP_CAPITAL_STATE } from "@/lib/countries/pl/geographyFacts";
+import { HU_NPP_CAPITAL_STATE } from "@/lib/countries/hu/geographyFacts";
+import { RO_NPP_CAPITAL_STATE } from "@/lib/countries/ro/geographyFacts";
+import { YU_NPP_CAPITAL_STATE } from "@/lib/countries/yu/geographyFacts";
+import { BG_NPP_CAPITAL_STATE } from "@/lib/countries/bg/geographyFacts";
+import { CS_NPP_CAPITAL_STATE } from "@/lib/countries/cs/geographyFacts";
+import { SCO_NPP_CAPITAL_STATE } from "@/lib/countries/sco/geographyFacts";
+import { WAL_NPP_CAPITAL_STATE } from "@/lib/countries/wal/geographyFacts";
+import { BLR_NPP_CAPITAL_STATE } from "@/lib/countries/blr/geographyFacts";
+import { UKR_NPP_CAPITAL_STATE } from "@/lib/countries/ukr/geographyFacts";
+import { BAL_NPP_CAPITAL_STATE } from "@/lib/countries/bal/geographyFacts";
 
 /**
  * Default founding book for an admin/NPP-spawned corporation, in ₳ at MODERN
@@ -64,41 +93,41 @@ export const NPP_DEFAULT_STARTING_CAPITAL_ANCHOR = 2_000_000;
 // dial in spawnNppCorporation above, never by blanking an entry in this map.
 // Blanks mean only "no seeded regions yet".
 export const NPP_CAPITAL_STATES: Record<CountryId, string> = {
-  US: "DC",
-  UK: "LON",
-  JP: "KAN",
-  DE: "BE",
-  CN: "HB", // Huabei (North China) — the region containing Beijing
-  IE: "DUB",
-  NG: "NORTH_CENTRAL", // federal capital (Abuja/FCT) sits in the North-Central zone
-  BR: "CENTRO_OESTE",
-  HU: "", // coming-soon: regions not yet seeded
-  PL: "",
-  RO: "",
-  YU: "",
-  BG: "",
+  US: US_NPP_CAPITAL_STATE,
+  UK: UK_NPP_CAPITAL_STATE,
+  JP: JP_GEOGRAPHY.nppCapitalState,
+  DE: DE_NPP_CAPITAL_STATE,
+  CN: CN_NPP_CAPITAL_STATE, // Huabei (North China) — the region containing Beijing
+  IE: IE_NPP_CAPITAL_STATE,
+  NG: NG_NPP_CAPITAL_STATE, // federal capital (Abuja/FCT) sits in the North-Central zone
+  BR: BR_NPP_CAPITAL_STATE,
+  HU: HU_NPP_CAPITAL_STATE, // coming-soon: regions not yet seeded
+  PL: PL_NPP_CAPITAL_STATE,
+  RO: RO_NPP_CAPITAL_STATE,
+  YU: YU_NPP_CAPITAL_STATE,
+  BG: BG_NPP_CAPITAL_STATE,
   // Union republics: seeded regions exist, so these carry real capitals.
-  UKR: "UKR_KYI",
-  BLR: "BLR_MIN",
-  CS: "",
-  BAL: "BAL_LVA", // Riga: the largest Baltic city and the regional administrative centre
-  RU: "",
+  UKR: UKR_NPP_CAPITAL_STATE,
+  BLR: BLR_NPP_CAPITAL_STATE,
+  CS: CS_NPP_CAPITAL_STATE,
+  BAL: BAL_NPP_CAPITAL_STATE, // Riga: the largest Baltic city and the regional administrative centre
+  RU: RU_NPP_CAPITAL_STATE,
   // Econ-tier market democracies — capital region (political capital where the
   // administrative and market capital differ, e.g. Ankara over Istanbul). These
   // regions are seeded by the econ-tier roster + region seeders, so an NPP corp
   // can HQ there. Left blank previously, which silently zeroed their NPP-corp
   // spawn even though the countries are full market economies.
-  FR: "FR_IDF", // Île-de-France (Paris)
-  IT: "IT_LAZ", // Lazio (Rome)
-  ES: "ES_MAD", // Comunidad de Madrid
-  SE: "SE_STH", // Stockholm
-  TR: "TR_ANK", // Ankara (political capital)
-  GR: "GR_ATT", // Attica (Athens)
-  AT: "AT_VIE", // Vienna
-  FI: "FI_UUS", // Uusimaa (Helsinki)
-  DD: "", // regions not yet seeded
-  SCO: "", // Latent — sub-regions seeded at secession (cannot spawn pre-activation)
-  WAL: "", // Latent — sub-regions seeded at secession (cannot spawn pre-activation)
+  FR: FR_NPP_CAPITAL_STATE, // Île-de-France (Paris)
+  IT: IT_NPP_CAPITAL_STATE, // Lazio (Rome)
+  ES: ES_NPP_CAPITAL_STATE, // Comunidad de Madrid
+  SE: SE_NPP_CAPITAL_STATE, // Stockholm
+  TR: TR_NPP_CAPITAL_STATE, // Ankara (political capital)
+  GR: GR_NPP_CAPITAL_STATE, // Attica (Athens)
+  AT: AT_NPP_CAPITAL_STATE, // Vienna
+  FI: FI_NPP_CAPITAL_STATE, // Uusimaa (Helsinki)
+  DD: DD_NPP_CAPITAL_STATE, // regions not yet seeded
+  SCO: SCO_NPP_CAPITAL_STATE, // Latent — sub-regions seeded at secession (cannot spawn pre-activation)
+  WAL: WAL_NPP_CAPITAL_STATE, // Latent — sub-regions seeded at secession (cannot spawn pre-activation)
 };
 
 export interface SpawnNppCorporationInput {

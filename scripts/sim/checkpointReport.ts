@@ -22,6 +22,13 @@
  * entries rendered at the top of the report.
  */
 import { MongoClient } from "mongodb";
+import type { ActorCoverageManifest } from "@/lib/sim/actorCoverage";
+import type { GameHealthSnapshot } from "@/lib/db/types/gameHealthSnapshot";
+import {
+  aggregateGameHealth,
+  gameHealthRunSummary,
+  type GameHealthAggregate,
+} from "@/lib/turn/rules/gameHealth";
 import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
 import { getWorldEntityPresetManifest } from "@/lib/world/worldEntityManifest";
@@ -146,7 +153,7 @@ async function main(): Promise<void> {
       )[0]?.turn ?? 0);
 
   const snaps = await db
-    .collection("gameHealthSnapshots")
+    .collection<GameHealthSnapshot>("gameHealthSnapshots")
     .find({ turn: { $lte: maxTurn } })
     .sort({ turn: 1 })
     .toArray();
@@ -660,16 +667,19 @@ async function main(): Promise<void> {
     .toArray();
   const moneyByCountry: Record<
     string,
-    { turn: number; m1: number; m2: number; growth: number; currency: string }
+    { turn: number; m1: number; m2: number; growth: number | null; currency: string }
   > = {};
   for (const r of msLatestRows) {
     const cid = String(r._id ?? "");
     if (!cid) continue;
+    // Unavailable growth stays null here: it is "no comparable observation",
+    // not zero growth, and the table renders it as n/a (#2021).
+    const growth = r.growth as number | null;
     moneyByCountry[cid] = {
       turn: (r.turn as number) ?? maxTurn,
       m1: (r.m1 as number) ?? 0,
       m2: (r.m2 as number) ?? 0,
-      growth: (r.growth as number) ?? 0,
+      growth: typeof growth === "number" && Number.isFinite(growth) ? growth : null,
       currency: currencyFor(cid),
     };
   }
@@ -737,19 +747,19 @@ async function main(): Promise<void> {
 
   // ── Engine health ─────────────────────────────────────────────────────────
   const last = snaps[snaps.length - 1];
+  const runHealth = aggregateGameHealth(snaps.map(gameHealthRunSummary));
   const health = {
+    ...runHealth,
     turn: last.turn as number,
     year: (last.year as number) ?? null,
-    errors: snaps.reduce((n, s) => n + ((s.turnProcessing?.errorCount as number) ?? 0), 0),
-    warnings: snaps.reduce((n, s) => n + ((s.turnProcessing?.warningCount as number) ?? 0), 0),
     phases: (last.turnProcessing?.phaseCount as number) ?? 0,
     medianTurnMs: median(
       snaps.map((s) => (s.turnProcessing?.durationMs as number) ?? 0).filter((v) => v > 0)
     ),
-    issues: ((last.dataIntegrity?.issues ?? []) as Array<Record<string, string>>).map((i) => ({
-      category: String(i.category),
-      severity: String(i.severity),
-      message: String(i.message ?? "").slice(0, 200),
+    issues: (last.dataIntegrity?.issues ?? []).map((issue) => ({
+      category: issue.category,
+      severity: issue.severity,
+      message: issue.message.slice(0, 200),
     })),
     npps: (last.population?.totalNPPs as number) ?? 0,
   };
@@ -1202,7 +1212,7 @@ async function main(): Promise<void> {
     .toArray();
   const moneyTrendByCountry: Record<
     string,
-    { turn: number[]; m1: number[]; m2: number[]; growth: number[] }
+    { turn: number[]; m1: number[]; m2: number[]; growth: Array<number | null> }
   > = {};
   const extShareByCountry: Record<string, number[]> = {};
   for (const r of msRows) {
@@ -1211,7 +1221,9 @@ async function main(): Promise<void> {
     t.turn.push(r._id.t);
     t.m1.push(r.m1 ?? 0);
     t.m2.push(r.m2 ?? 0);
-    t.growth.push(r.growth ?? 0);
+    // Preserve unavailable growth as null so the chart leaves a gap instead
+    // of drawing a false 0.00% line (#2021).
+    t.growth.push(typeof r.growth === "number" && Number.isFinite(r.growth) ? r.growth : null);
     (extShareByCountry[cid] ??= []).push(r.m2 > 0 ? (100 * (r.ext ?? 0)) / r.m2 : 0);
   }
   const MAX_MONEY_POINTS = 220;
@@ -1219,7 +1231,7 @@ async function main(): Promise<void> {
     const n = t.turn.length;
     if (n <= MAX_MONEY_POINTS) continue;
     const stride = Math.ceil(n / MAX_MONEY_POINTS);
-    const keep = (arr: number[]): number[] => {
+    const keep = <T>(arr: T[]): T[] => {
       const out = arr.filter((_, i) => i % stride === 0);
       if (arr.length && out[out.length - 1] !== arr[arr.length - 1]) out.push(arr[arr.length - 1]);
       return out;
@@ -1370,6 +1382,36 @@ async function main(): Promise<void> {
   const clampedInflation = Object.entries(series)
     .filter(([, s]) => s.inflation.length > 0 && s.inflation[s.inflation.length - 1] >= 14.9)
     .map(([cid]) => cid);
+  // Actor coverage (#1993): runWorld stamps the manifest into the sandbox
+  // simRuns doc from live counts. A missing doc predates stamping and must
+  // warn, not pass silently.
+  const simRunDoc = (
+    await db.collection("simRuns").find({}).sort({ startedAt: -1 }).limit(1).toArray()
+  )[0] as { actorCoverage?: ActorCoverageManifest } | undefined;
+  const { summarizeActorCoverageForVerdict } = await import("@/lib/sim/actorReport");
+  const actorCoverageVerdict = summarizeActorCoverageForVerdict(simRunDoc?.actorCoverage ?? null);
+  // Seed provenance (#1992): the fresh-bootstrap conformance report plus the
+  // drift baseline, so the report distinguishes seed defects (pre-turn) from
+  // later mechanical drift. Worlds bootstrapped before #1992 have neither;
+  // drift checks on those worlds compare against a reconstructed baseline.
+  const bootstrapConformanceDoc = (
+    await db
+      .collection("seedDiagnostics")
+      .find({ mode: "conformance", trigger: "worldsim-post-bootstrap" })
+      .sort({ ranAt: -1 })
+      .limit(1)
+      .toArray()
+  )[0] as Record<string, unknown> | undefined;
+  const seedBaselineDoc = (await db
+    .collection<{ _id: string; turn?: number; metrics?: Record<string, unknown> }>(
+      "seedDiagnosticBaselines"
+    )
+    .findOne({ _id: "current" })) as Record<string, unknown> | null;
+  const seedProvenance = summarizeSeedProvenance(
+    bootstrapConformanceDoc ?? null,
+    seedBaselineDoc,
+    maxTurn
+  );
   const verdict = buildVerdict({
     health,
     market,
@@ -1379,6 +1421,7 @@ async function main(): Promise<void> {
     commandEconomy,
     auditFindings,
     clampedInflation,
+    actorCoverage: actorCoverageVerdict,
   });
 
   // Downsample the inlined series so the payload stays bounded as the run grows.
@@ -1433,6 +1476,7 @@ async function main(): Promise<void> {
     verdict,
     auditFindings,
     auditSelfCheck,
+    seedProvenance,
     commandEconomy,
     scotus,
     labour,
@@ -1492,6 +1536,65 @@ export interface SeedAuditSelfCheck {
 export interface SeedAuditResult {
   findings: AuditFinding[];
   selfCheck: SeedAuditSelfCheck;
+}
+
+/**
+ * Seed provenance for the report header (#1992).
+ *
+ * Distinguishes bootstrap conformance findings (pre-turn seed defects, from
+ * the worldsim-post-bootstrap report) from later mechanical drift (the
+ * checkpoint audit findings, after N simulated turns). Worlds bootstrapped
+ * before #1992 have no bootstrap report; their drift baseline is
+ * reconstructed from seed files and cannot separate the two.
+ */
+export interface SeedProvenance {
+  hasBootstrapReport: boolean;
+  preset: string | null;
+  seed: string | null;
+  runId: string | null;
+  sourceRevision: string | null;
+  ranAt: string | null;
+  turn: number | null;
+  ok: number;
+  warn: number;
+  critical: number;
+  baselineSource: "captured" | "reconstructed";
+  baselineTurn: number | null;
+  checkpointTurn: number | null;
+}
+
+function provenanceStr(v: unknown): string | null {
+  return typeof v === "string" && v.length > 0 ? v : null;
+}
+
+function provenanceNum(v: unknown): number | null {
+  return typeof v === "number" && Number.isFinite(v) ? v : null;
+}
+
+export function summarizeSeedProvenance(
+  conformance: Record<string, unknown> | null | undefined,
+  baseline: Record<string, unknown> | null | undefined,
+  checkpointTurn?: number
+): SeedProvenance {
+  const summary = (conformance?.summary ?? {}) as Record<string, unknown>;
+  const metrics = (baseline?.metrics ?? {}) as Record<string, unknown>;
+  const ranAt = conformance?.ranAt;
+  return {
+    hasBootstrapReport: conformance != null,
+    preset: provenanceStr(conformance?.preset),
+    seed: provenanceStr(conformance?.seed),
+    runId: provenanceStr(conformance?.runId),
+    sourceRevision: provenanceStr(conformance?.sourceRevision),
+    ranAt: ranAt instanceof Date ? ranAt.toISOString() : provenanceStr(ranAt),
+    turn: provenanceNum(conformance?.turn),
+    ok: provenanceNum(summary.ok) ?? 0,
+    warn: provenanceNum(summary.warn) ?? 0,
+    critical: provenanceNum(summary.critical) ?? 0,
+    baselineSource:
+      baseline != null && Object.keys(metrics).length > 0 ? "captured" : "reconstructed",
+    baselineTurn: provenanceNum(baseline?.turn),
+    checkpointTurn: checkpointTurn ?? null,
+  };
 }
 
 /** Per-country fiscal-year series backing the staleness/trajectory checks. */
@@ -2067,7 +2170,7 @@ function buildNarrative(
     crisis: string;
   }>,
   market: { mode: string; trips: number; guardEnabled: boolean },
-  health: { errors: number; warnings: number; turn: number }
+  health: GameHealthAggregate & { turn: number }
 ): Array<{ countryId: string; title: string; body: string }> {
   const out: Array<{ countryId: string; title: string; body: string }> = [];
 
@@ -2146,7 +2249,11 @@ function buildNarrative(
     countryId: "WORLD",
     title: "The world",
     body:
-      `Through turn ${health.turn} the engine logged ${health.errors} errors and ${health.warnings} warnings. ` +
+      `Through turn ${health.turn}, ${health.successfulTurns}/${health.completedTurns} completed turns succeeded. ` +
+      `Health severity is ${health.severity} with ${health.errorCount} errors and ${health.warningCount} warnings ` +
+      `(${health.processingErrorCount} processing errors, ${health.processingWarningCount} processing warnings, ` +
+      `${health.integrityErrorCount} integrity errors, ${health.integrityWarningCount} integrity warnings); ` +
+      `qualification is ${health.qualification}. ` +
       `The market ran in ${market.mode} mode with the launch guard ${market.guardEnabled ? "armed" : "disarmed"}` +
       (market.trips > 0
         ? `, having tripped ${market.trips} time${market.trips === 1 ? "" : "s"} — so the capital tier was not exercised for the full window.`
@@ -2169,7 +2276,7 @@ export interface VerdictLine {
  * conclusion the charts below back up.
  */
 function buildVerdict(input: {
-  health: { errors: number; warnings: number; turn: number };
+  health: GameHealthAggregate & { turn: number };
   market: { trips: number; guardEnabled: boolean };
   corpTrend: { turn: number[]; firms: number[] };
   labour: {
@@ -2183,6 +2290,7 @@ function buildVerdict(input: {
   commandEconomy: { marketizationStuck: string[] };
   auditFindings: AuditFinding[];
   clampedInflation: string[];
+  actorCoverage: { status: "good" | "warn" | "bad"; title: string; detail: string };
 }): VerdictLine[] {
   const out: VerdictLine[] = [];
   const {
@@ -2198,6 +2306,13 @@ function buildVerdict(input: {
 
   const critical = auditFindings.filter((f) => f.severity === "critical").length;
   const high = auditFindings.filter((f) => f.severity === "high").length;
+  // Actor coverage renders ABOVE every chart: partial/unreachable mechanics
+  // constrain what this checkpoint can conclude, and must be read first.
+  out.push({
+    status: input.actorCoverage.status,
+    title: input.actorCoverage.title,
+    detail: input.actorCoverage.detail,
+  });
   out.push({
     status: critical > 0 ? "bad" : high > 0 ? "warn" : "good",
     title:
@@ -2211,10 +2326,18 @@ function buildVerdict(input: {
   });
 
   out.push({
-    status: health.errors === 0 ? "good" : health.errors < 10 ? "warn" : "bad",
-    title: `${health.errors} engine error(s), ${health.warnings} warning(s) across ${health.turn} turns`,
+    status:
+      health.qualification === "non-passing"
+        ? "bad"
+        : health.severity === "warning" || health.qualification === "unverified"
+          ? "warn"
+          : "good",
+    title: `Health ${health.severity}: ${health.errorCount} error(s), ${health.warningCount} warning(s)`,
     detail:
-      "Phase throws are converted to warnings by the runtime, so a non-zero error count is the only signal a phase died silently.",
+      `${health.successfulTurns}/${health.completedTurns} completed turns succeeded. ` +
+      `Processing contributes ${health.processingErrorCount} errors and ${health.processingWarningCount} warnings; ` +
+      `integrity contributes ${health.integrityErrorCount} errors and ${health.integrityWarningCount} warnings. ` +
+      `Qualification is ${health.qualification}.`,
   });
 
   out.push({
@@ -2405,7 +2528,16 @@ function drawMultiLine(lines, opts) {
   if (!lines.length) return '<svg class="chart" viewBox="0 0 '+W+' '+H+'"><text x="'+(W/2)+'" y="'+(H/2)+'" class="ax" text-anchor="middle">'+esc(opts.emptyText||"No data")+'</text></svg>';
 
   const vals = [], turns = [];
-  for (const L of lines) { L.ys.forEach((v) => vals.push(v)); L.xs.forEach((t) => turns.push(t)); }
+  // Unavailable readings are null gaps (#2021), not zeros: keep them out of
+  // the scale and break the line there instead of diving to 0.
+  for (const L of lines) {
+    L.ys.forEach((v) => {
+      if (typeof v === "number" && Number.isFinite(v)) vals.push(v);
+    });
+    L.xs.forEach((t) => turns.push(t));
+  }
+  if (!vals.length)
+    return '<svg class="chart" viewBox="0 0 '+W+' '+H+'"><text x="'+(W/2)+'" y="'+(H/2)+'" class="ax" text-anchor="middle">'+esc(opts.emptyText||"No data")+'</text></svg>';
 
   let lo = Math.min.apply(null, vals), hi = Math.max.apply(null, vals);
   if (opts.zeroFloor && lo > 0) lo = 0;
@@ -2429,12 +2561,35 @@ function drawMultiLine(lines, opts) {
   const ordered2 = [...lines].sort((a, b) => (a.heavy ? 1 : 0) - (b.heavy ? 1 : 0));
   for (const L of ordered2) {
     const col = L.color || "#8b949e";
-    const pts = L.xs.map((t, i) => X(t).toFixed(1)+","+Y(L.ys[i]).toFixed(1)).join(" ");
-    if (L.heavy) {
-      g += '<polyline points="'+pts+'" fill="none" stroke="#161b22" stroke-width="5.5" stroke-linejoin="round" stroke-linecap="round"/>';
+    // Split the line at null gaps so unavailable turns read as breaks.
+    const segs = [];
+    let cur = [];
+    L.xs.forEach((t, i) => {
+      const v = L.ys[i];
+      if (typeof v === "number" && Number.isFinite(v)) cur.push(X(t).toFixed(1)+","+Y(v).toFixed(1));
+      else {
+        if (cur.length === 1) segs.push([cur[0], cur[0]]);
+        else if (cur.length > 1) segs.push(cur);
+        cur = [];
+      }
+    });
+    if (cur.length === 1) segs.push([cur[0], cur[0]]);
+    else if (cur.length > 1) segs.push(cur);
+    for (const pts of segs) {
+      if (L.heavy) {
+        g += '<polyline points="'+pts.join(" ")+'" fill="none" stroke="#161b22" stroke-width="5.5" stroke-linejoin="round" stroke-linecap="round"/>';
+      }
+      g += '<polyline points="'+pts.join(" ")+'" fill="none" stroke="'+col+'" stroke-width="'+(L.heavy?2:1.25)+'" stroke-opacity="'+(L.heavy?1:0.55)+'" stroke-linejoin="round" stroke-linecap="round"/>';
     }
-    g += '<polyline points="'+pts+'" fill="none" stroke="'+col+'" stroke-width="'+(L.heavy?2:1.25)+'" stroke-opacity="'+(L.heavy?1:0.55)+'" stroke-linejoin="round" stroke-linecap="round"/>';
-    const lx = L.xs[L.xs.length-1], ly = L.ys[L.ys.length-1];
+    let lx = null, ly = null;
+    for (let i = L.xs.length - 1; i >= 0; i--) {
+      if (typeof L.ys[i] === "number" && Number.isFinite(L.ys[i])) {
+        lx = L.xs[i];
+        ly = L.ys[i];
+        break;
+      }
+    }
+    if (lx == null) continue;
     g += '<circle cx="'+X(lx).toFixed(1)+'" cy="'+Y(ly).toFixed(1)+'" r="'+(L.heavy?4:2.4)+'" fill="'+col+'" stroke="#161b22" stroke-width="2"/>';
     if (L.heavy || opts.alwaysLabel) {
       g += '<text x="'+(X(lx)+8).toFixed(1)+'" y="'+(Y(ly)+4).toFixed(1)+'" class="endlab" fill="'+col+'">'+esc(L.key)+'</text>';
@@ -2634,6 +2789,7 @@ function render() {
   let html = "";
   html += '<h1>Grand Sim 1953 — Checkpoint '+h.turn+'</h1>';
   html += '<p class="sub">Database <code>'+esc(D.dbName)+'</code>'+(h.year?' · in-game year '+h.year:'')+' · '+D.ordered.length+' instrumented economies</p>';
+  html += '<div class="note">Completion '+h.successfulTurns+'/'+h.completedTurns+' successful turns · health severity '+esc(h.severity)+' · qualification '+esc(h.qualification)+'</div>';
 
   if (D.missingPlayers && D.missingPlayers.length) {
     html += '<div class="warnbox"><b>Instrumentation gap:</b> player '+(D.missingPlayers.length===1?"country":"countries")+' '
@@ -2669,6 +2825,23 @@ function render() {
     }
     if (D.auditSelfCheck.skipped && D.auditSelfCheck.skipped.length) {
       html += '<div class="note"><b>Not examined:</b><ul>'+D.auditSelfCheck.skipped.map((s)=>'<li>'+esc(s.reason)+'</li>').join('')+'</ul></div>';
+    }
+  }
+
+  // Seed provenance (#1992): bootstrap conformance vs later drift.
+  if (D.seedProvenance) {
+    html += '<h3 style="margin:22px 0 8px;font-size:16px">Seed provenance</h3>';
+    if (D.seedProvenance.hasBootstrapReport) {
+      const sp = D.seedProvenance;
+      html += '<div class="note"><b>Bootstrap conformance</b> (pre-turn): '+sp.ok+' ok, '+sp.warn+' warn, '+sp.critical+' critical'
+        + ' · preset '+esc(sp.preset || "unknown")+' · seed '+esc(sp.seed || "unknown")+' · run '+esc(sp.runId || "unknown")
+        + (sp.sourceRevision ? ' · source <code>'+esc(sp.sourceRevision)+'</code>' : '')
+        + (sp.ranAt ? ' · ran '+esc(sp.ranAt) : '')
+        + ' · drift baseline '+esc(sp.baselineSource)+(sp.baselineTurn != null ? ' (turn '+sp.baselineTurn+')' : '')
+        + '. Findings in this report reflect '+(sp.checkpointTurn != null ? sp.checkpointTurn+' turns of simulation change on top of that baseline' : 'simulation change on top of that baseline')
+        + ' — consult the bootstrap report to separate seed defects from mechanical drift.</div>';
+    } else {
+      html += '<div class="warnbox"><b>No bootstrap conformance record.</b> This world bootstrapped before fresh-bootstrap diagnostics landed, so drift checks compare against a reconstructed baseline that cannot separate seed defects from mechanical drift.</div>';
     }
   }
 
@@ -2722,7 +2895,7 @@ function render() {
         + '<td>' + esc(m.currency || cid) + '</td>'
         + '<td>' + fmtMoney(m.m1) + '</td>'
         + '<td>' + fmtMoney(m.m2) + '</td>'
-        + '<td>' + (m.growth || 0).toFixed(2) + '%</td>'
+        + '<td>' + (m.growth == null ? 'n/a' : m.growth.toFixed(2) + '%') + '</td>'
         + '<td>t' + m.turn + '</td></tr>';
     }
     html += '</tbody></table></div>';

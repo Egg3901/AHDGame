@@ -43,6 +43,7 @@ import { applyStateArmsProduction } from "./stateArmsTurn";
 import { applyNuclearProduction } from "./nuclearProductionTurn";
 import { applyCovertNuclearTurn } from "./covertNuclearTurn";
 import { COVERT_CAPABLE } from "@/lib/military/covertNuclear";
+import { loadPoliticalMacroInputs } from "@/lib/politicalLegislation/politicalMacroInputs";
 import { maxTechTierForPreset } from "@/lib/admin/seed/seedMilitaryUnits";
 import { resolveGameYear } from "@/lib/era/era";
 import { getGameState } from "@/lib/gameState";
@@ -58,6 +59,7 @@ import { applyTreasuryEffects } from "./treasuryEffects";
 import { THRESHOLDS } from "@/lib/utils/metricScoring";
 import { getBankId } from "@/lib/centralBank/helpers";
 import type { CentralBank } from "@/lib/db/types/centralBank";
+import type { MilitaryUnit } from "@/lib/db/types/militaryUnit";
 import type { CountryId } from "@/lib/constants/countries";
 import { expireMinisterialOrders } from "@/lib/cabinet/ministerialOrderLifecycle";
 
@@ -245,29 +247,41 @@ export async function processMinisterialOrders(currentTurn: number): Promise<{
   }
 
   // 4. Fetch and apply cabinet settings effects (all countries)
-  const allSettings = await settingsCol
-    .find({})
-    .project<
-      Pick<
-        CabinetSetting,
-        | "_id"
-        | "countryId"
-        | "positionId"
-        | "tierSetting"
-        | "tierSettings"
-        | "targetRegionId"
-        | "advocacyActive"
-      >
-    >({
-      _id: 1,
-      countryId: 1,
-      positionId: 1,
-      tierSetting: 1,
-      tierSettings: 1,
-      targetRegionId: 1,
-      advocacyActive: 1,
-    })
-    .toArray();
+  const [allSettings, stateRows] = await Promise.all([
+    settingsCol
+      .find({})
+      .project<
+        Pick<
+          CabinetSetting,
+          | "_id"
+          | "countryId"
+          | "positionId"
+          | "tierSetting"
+          | "tierSettings"
+          | "targetRegionId"
+          | "advocacyActive"
+        >
+      >({
+        _id: 1,
+        countryId: 1,
+        positionId: 1,
+        tierSetting: 1,
+        tierSettings: 1,
+        targetRegionId: 1,
+        advocacyActive: 1,
+      })
+      .toArray(),
+    db
+      .collection<{ _id: string; countryId: string }>("states")
+      .find({}, { projection: { _id: 1, countryId: 1 } })
+      .toArray(),
+  ]);
+  const stateIdsByCountry = new Map<string, string[]>();
+  for (const state of stateRows) {
+    const ids = stateIdsByCountry.get(state.countryId) ?? [];
+    ids.push(state._id);
+    stateIdsByCountry.set(state.countryId, ids);
+  }
   let settingsApplied = 0;
 
   for (const setting of allSettings) {
@@ -325,19 +339,14 @@ export async function processMinisterialOrders(currentTurn: number): Promise<{
       }
       // Non-target effects (e.g., policing zero-sum)
       if (mechanics.regionalTarget.nonTargetEffects) {
-        const countryStates = await db
-          .collection("states")
-          .find({ countryId: setting.countryId })
-          .project({ _id: 1 })
-          .toArray();
-        for (const state of countryStates) {
-          if (state._id === rid) continue;
-          if (!bucket.regional[state._id]) bucket.regional[state._id] = {};
+        for (const stateId of stateIdsByCountry.get(setting.countryId) ?? []) {
+          if (stateId === rid) continue;
+          if (!bucket.regional[stateId]) bucket.regional[stateId] = {};
           for (const [metric, modifier] of Object.entries(
             mechanics.regionalTarget.nonTargetEffects
           )) {
             const path = resolveMetricPath(metric, positionMetrics);
-            bucket.regional[state._id][path] = (bucket.regional[state._id][path] ?? 0) + modifier;
+            bucket.regional[stateId][path] = (bucket.regional[stateId][path] ?? 0) + modifier;
           }
         }
       }
@@ -370,8 +379,39 @@ export async function processMinisterialOrders(currentTurn: number): Promise<{
   // deliberately not 4b's seat-only reach: a nation whose army is fed manpower but never
   // charged for it would be a standing asymmetry between the two sweeps.
   const appropriationPreset = await getGameStatePresetOrDefault(db);
-  for (const cid of Object.keys(DEFENSE_POSITION_BY_COUNTRY)) {
-    await applyDefenseAppropriation(db, cid, currentTurn, appropriationPreset);
+  const defenseUnitsByCountry = new Map<string, MilitaryUnit[]>();
+  for (const unit of await db.collection<MilitaryUnit>("militaryUnits").find({}).toArray()) {
+    const units = defenseUnitsByCountry.get(unit.countryId) ?? [];
+    units.push(unit);
+    defenseUnitsByCountry.set(unit.countryId, units);
+  }
+  const defenseCountryIds = Object.keys(DEFENSE_POSITION_BY_COUNTRY);
+  const defenseBudgetByCountry = new Map(
+    (
+      await db
+        .collection<FederalBudget>("federalBudget")
+        .find(
+          { countryId: { $in: defenseCountryIds } },
+          {
+            projection: {
+              countryId: 1,
+              spending: 1,
+              baselineSpendingByCategory: 1,
+              gdp: 1,
+            },
+          }
+        )
+        .toArray()
+    ).map((budget) => [budget.countryId, budget])
+  );
+  for (const cid of defenseCountryIds) {
+    await applyDefenseAppropriation(
+      db,
+      cid,
+      currentTurn,
+      appropriationPreset,
+      defenseUnitsByCountry.get(cid) ?? []
+    );
   }
 
   // 4a-iv. Defence industry — active contracts deliver what their plants produced into the
@@ -397,14 +437,15 @@ export async function processMinisterialOrders(currentTurn: number): Promise<{
     // run, so their store is fed here instead. Before the refit for the same reason
     // delivery is: materiel has to arrive before it can be issued. A no-op for every
     // country not on the state-arms roster.
-    await applyStateArmsProduction(db, cid);
+    const knownUnits = defenseUnitsByCountry.get(cid) ?? [];
+    await applyStateArmsProduction(db, cid, knownUnits);
     // Before refit, and deliberately so: a wreck restored to service is worth far more per
     // lot than topping up a working hull's racks, which `computeEffectivePower` caps at a
     // few percent. When the store is short, the lots go where they buy the most fighting
     // strength. Free repair has already run this turn in the naval and air pass, so this
     // is buying only what the ceiling there would not give away.
-    await applyNavalRepair(db, cid);
-    await applyDefenceRefit(db, cid);
+    await applyNavalRepair(db, cid, knownUnits);
+    await applyDefenceRefit(db, cid, knownUnits);
     // Nuclear stockpile accrual, right after refit so it competes for the same
     // appropriation AFTER conventional deliveries have settled: a nation short
     // of rifles equips the army before it grows the arsenal of last resort.
@@ -442,7 +483,14 @@ export async function processMinisterialOrders(currentTurn: number): Promise<{
   for (const cid of Object.keys(DEFENSE_POSITION_BY_COUNTRY)) {
     if (!DEFENSE_POSITION_BY_COUNTRY[cid as keyof typeof DEFENSE_POSITION_BY_COUNTRY]) continue;
     ensureCountry(cid);
-    await applyMilitaryForceEffects(db, cid, sourceBucket(cid, "military"), appropriationPreset);
+    await applyMilitaryForceEffects(
+      db,
+      cid,
+      sourceBucket(cid, "military"),
+      appropriationPreset,
+      defenseUnitsByCountry.get(cid) ?? [],
+      defenseBudgetByCountry.get(cid) ?? null
+    );
   }
 
   // 4b-ii. Resolve declared theater offensives (Conflicts). Declarations made on an
@@ -484,8 +532,14 @@ export async function processMinisterialOrders(currentTurn: number): Promise<{
   // losses → rebuild — a formation mauled above starts rebuilding here, in place,
   // still under its own general. Deliberately covers EVERY country, not just those
   // with a defense seat — simulated nations must sustain their forces too.
+  const reinforcementUnitsByCountry = new Map<string, MilitaryUnit[]>();
+  for (const unit of await db.collection<MilitaryUnit>("militaryUnits").find({}).toArray()) {
+    const units = reinforcementUnitsByCountry.get(unit.countryId) ?? [];
+    units.push(unit);
+    reinforcementUnitsByCountry.set(unit.countryId, units);
+  }
   for (const cid of Object.keys(DEFENSE_POSITION_BY_COUNTRY)) {
-    await applyReinforcement(db, cid);
+    await applyReinforcement(db, cid, reinforcementUnitsByCountry.get(cid) ?? []);
   }
 
   // 4c. Cabinet estates — per in-scope (country, seat): domestic estates tilt their
@@ -520,10 +574,17 @@ export async function processMinisterialOrders(currentTurn: number): Promise<{
   // 4d. Cabinet energy — per energy seat, regional plant mixes nudge that region's
   // renewable/carbon/reliability metrics toward mix targets; fleet upkeep vs the
   // energy envelope tilts national budget balance.
+  const energyPoliticalInputs = await loadPoliticalMacroInputs(db);
   for (const [cid, positionId] of Object.entries(ENERGY_POSITION_BY_COUNTRY)) {
     if (!positionId) continue;
     ensureCountry(cid);
-    await applyEnergyEffects(db, cid, positionId, sourceBucket(cid, "energy"));
+    await applyEnergyEffects(
+      db,
+      cid,
+      positionId,
+      sourceBucket(cid, "energy"),
+      energyPoliticalInputs
+    );
   }
 
   // 4e. Cabinet infrastructure — advance each transportation seat's project pipeline
@@ -545,9 +606,7 @@ export async function processMinisterialOrders(currentTurn: number): Promise<{
 
   for (const [countryId, sourceBuckets] of Object.entries(effectsByCountry)) {
     const bucket = mergedBucket(sourceBuckets);
-    const stateIds = (
-      await db.collection("states").find({ countryId }).project({ _id: 1 }).toArray()
-    ).map((s) => s._id);
+    const stateIds = stateIdsByCountry.get(countryId) ?? [];
 
     for (const stateId of stateIds) {
       const combinedEffects: Record<string, number> = { ...bucket.national };

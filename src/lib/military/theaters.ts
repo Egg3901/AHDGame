@@ -7,6 +7,35 @@ import type { Db } from "mongodb";
 import type { Posture } from "@/lib/db/types/militaryUnit";
 import type { Bloc } from "@/lib/military/bloc";
 import { conflictExists } from "@/lib/db/collections/conflicts";
+import { US_IDENTITY } from "@/lib/countries/us/identity";
+import { UK_IDENTITY } from "@/lib/countries/uk/identity";
+import { IE_IDENTITY } from "@/lib/countries/ie/identity";
+import { DE_IDENTITY } from "@/lib/countries/de/identity";
+import { DD_IDENTITY } from "@/lib/countries/dd/identity";
+import { JP_IDENTITY } from "@/lib/countries/jp/identity";
+import { NG_IDENTITY } from "@/lib/countries/ng/identity";
+import { RU_IDENTITY } from "@/lib/countries/ru/identity";
+import { CN_IDENTITY } from "@/lib/countries/cn/identity";
+import { PL_IDENTITY } from "@/lib/countries/pl/identity";
+import { CS_IDENTITY } from "@/lib/countries/cs/identity";
+import { HU_IDENTITY } from "@/lib/countries/hu/identity";
+import { RO_IDENTITY } from "@/lib/countries/ro/identity";
+import { BG_IDENTITY } from "@/lib/countries/bg/identity";
+import { BLR_IDENTITY } from "@/lib/countries/blr/identity";
+import { UKR_IDENTITY } from "@/lib/countries/ukr/identity";
+import { BAL_IDENTITY } from "@/lib/countries/bal/identity";
+import { YU_IDENTITY } from "@/lib/countries/yu/identity";
+import { FR_IDENTITY } from "@/lib/countries/fr/identity";
+import { IT_IDENTITY } from "@/lib/countries/it/identity";
+import { ES_IDENTITY } from "@/lib/countries/es/identity";
+import { SE_IDENTITY } from "@/lib/countries/se/identity";
+import { TR_IDENTITY } from "@/lib/countries/tr/identity";
+import { GR_IDENTITY } from "@/lib/countries/gr/identity";
+import { AT_IDENTITY } from "@/lib/countries/at/identity";
+import { FI_IDENTITY } from "@/lib/countries/fi/identity";
+import { BR_IDENTITY } from "@/lib/countries/br/identity";
+import { SCO_IDENTITY } from "@/lib/countries/sco/identity";
+import { WAL_IDENTITY } from "@/lib/countries/wal/identity";
 
 /**
  * Situation-board dressing for a nation's command: its classification strip, the name
@@ -29,8 +58,6 @@ export interface CountryCommandFlavor {
   acc: string;
 }
 
-const WEST_ACC = "#9cc0f5";
-const EAST_ACC = "#f0a0a0";
 const NEUTRAL_ACC = "#86d978";
 
 /** Fallback dressing for a nation with no entry of its own. */
@@ -42,60 +69,35 @@ export const DEFAULT_COMMAND_FLAVOR: CountryCommandFlavor = {
 };
 
 export const COUNTRY_COMMAND_FLAVOR: Record<string, CountryCommandFlavor> = {
-  US: {
-    glyph: "US",
-    command: "JOINT CHIEFS OF STAFF",
-    strip: "◆ EYES ONLY · ACTIVE THEATERS",
-    acc: WEST_ACC,
-  },
-  UK: {
-    glyph: "UK",
-    command: "DEFENCE STAFF",
-    strip: "◆ UK EYES ONLY · ACTIVE THEATERS",
-    acc: WEST_ACC,
-  },
-  IE: { glyph: "IE", command: "DEFENCE FORCES HQ", strip: "◆ RESTRICTED", acc: NEUTRAL_ACC },
-  DE: {
-    glyph: "DE",
-    command: "BUNDESWEHR COMMAND",
-    strip: "◆ NUR FÜR DEN DIENSTGEBRAUCH",
-    acc: "#d4af37",
-  },
-  DD: {
-    glyph: "DD",
-    command: "NATIONALE VOLKSARMEE",
-    strip: "◆ VERTRAULICHE VERSCHLUSSSACHE",
-    acc: EAST_ACC,
-  },
-  JP: { glyph: "日", command: "JOINT STAFF", strip: "◆ 機密 · ACTIVE THEATERS", acc: "#f0a0a0" },
-  NG: { glyph: "NG", command: "DEFENCE HEADQUARTERS", strip: "◆ RESTRICTED", acc: NEUTRAL_ACC },
-  RU: {
-    glyph: "RU",
-    command: "GENERAL STAFF",
-    strip: "◆ СЕКРЕТНО · ACTIVE THEATERS",
-    acc: EAST_ACC,
-  },
-  CN: { glyph: "中", command: "CENTRAL MILITARY COMMISSION", strip: "◆ 机密", acc: "#e0b352" },
-  PL: { glyph: "PL", command: "SZTAB GENERALNY", strip: "◆ TAJNE", acc: EAST_ACC },
-  CS: { glyph: "CS", command: "GENERÁLNÍ ŠTÁB", strip: "◆ PŘÍSNĚ TAJNÉ", acc: EAST_ACC },
-  HU: { glyph: "HU", command: "VEZÉRKAR", strip: "◆ SZIGORÚAN TITKOS", acc: EAST_ACC },
-  RO: { glyph: "RO", command: "MARELE STAT MAJOR", strip: "◆ STRICT SECRET", acc: EAST_ACC },
-  BG: { glyph: "BG", command: "ГЕНЕРАЛЕН ЩАБ", strip: "◆ СТРОГО СЕКРЕТНО", acc: EAST_ACC },
-  BLR: { glyph: "BY", command: "GENERAL STAFF", strip: "◆ СЕКРЕТНО", acc: EAST_ACC },
-  UKR: { glyph: "UA", command: "KYIV MILITARY DISTRICT", strip: "◆ СЕКРЕТНО", acc: EAST_ACC },
-  BAL: { glyph: "BA", command: "BALTIC COMMAND", strip: "◆ СЕКРЕТНО", acc: EAST_ACC },
-  YU: { glyph: "YU", command: "GENERALŠTAB", strip: "◆ DRŽAVNA TAJNA", acc: NEUTRAL_ACC },
-  FR: { glyph: "FR", command: "ÉTAT-MAJOR DES ARMÉES", strip: "◆ SECRET DÉFENSE", acc: WEST_ACC },
-  IT: { glyph: "IT", command: "STATO MAGGIORE DIFESA", strip: "◆ SEGRETO", acc: WEST_ACC },
-  ES: { glyph: "ES", command: "ESTADO MAYOR DE LA DEFENSA", strip: "◆ SECRETO", acc: NEUTRAL_ACC },
-  SE: { glyph: "SE", command: "FÖRSVARSMAKTEN", strip: "◆ HEMLIG", acc: NEUTRAL_ACC },
-  TR: { glyph: "TR", command: "GENELKURMAY", strip: "◆ ÇOK GİZLİ", acc: WEST_ACC },
-  GR: { glyph: "GR", command: "ΓΕΝΙΚΟ ΕΠΙΤΕΛΕΙΟ", strip: "◆ ΑΠΟΡΡΗΤΟ", acc: WEST_ACC },
-  AT: { glyph: "AT", command: "BUNDESHEER", strip: "◆ VERSCHLUSSSACHE", acc: NEUTRAL_ACC },
-  FI: { glyph: "FI", command: "PÄÄESIKUNTA", strip: "◆ SALAINEN", acc: NEUTRAL_ACC },
-  BR: { glyph: "BR", command: "ESTADO-MAIOR CONJUNTO", strip: "◆ SECRETO", acc: NEUTRAL_ACC },
-  SCO: { glyph: "SC", command: "DEFENCE STAFF", strip: "◆ RESTRICTED", acc: NEUTRAL_ACC },
-  WAL: { glyph: "WA", command: "DEFENCE STAFF", strip: "◆ RESTRICTED", acc: NEUTRAL_ACC },
+  US: US_IDENTITY.commandFlavor,
+  UK: UK_IDENTITY.commandFlavor,
+  IE: IE_IDENTITY.commandFlavor,
+  DE: DE_IDENTITY.commandFlavor,
+  DD: DD_IDENTITY.commandFlavor,
+  JP: JP_IDENTITY.commandFlavor,
+  NG: NG_IDENTITY.commandFlavor,
+  RU: RU_IDENTITY.commandFlavor,
+  CN: CN_IDENTITY.commandFlavor,
+  PL: PL_IDENTITY.commandFlavor,
+  CS: CS_IDENTITY.commandFlavor,
+  HU: HU_IDENTITY.commandFlavor,
+  RO: RO_IDENTITY.commandFlavor,
+  BG: BG_IDENTITY.commandFlavor,
+  BLR: BLR_IDENTITY.commandFlavor,
+  UKR: UKR_IDENTITY.commandFlavor,
+  BAL: BAL_IDENTITY.commandFlavor,
+  YU: YU_IDENTITY.commandFlavor,
+  FR: FR_IDENTITY.commandFlavor,
+  IT: IT_IDENTITY.commandFlavor,
+  ES: ES_IDENTITY.commandFlavor,
+  SE: SE_IDENTITY.commandFlavor,
+  TR: TR_IDENTITY.commandFlavor,
+  GR: GR_IDENTITY.commandFlavor,
+  AT: AT_IDENTITY.commandFlavor,
+  FI: FI_IDENTITY.commandFlavor,
+  BR: BR_IDENTITY.commandFlavor,
+  SCO: SCO_IDENTITY.commandFlavor,
+  WAL: WAL_IDENTITY.commandFlavor,
 };
 
 /** How the board names the viewer's alignment, from the live bloc roll. */

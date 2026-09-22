@@ -16,6 +16,7 @@ export interface TurnExecutionContext {
   config: GameConfig | null;
   activeIteration?: GameIteration;
   newTurn: number;
+  calendarTurn: number;
   currentYear: number;
   gameNow: Date;
   realNow: Date;

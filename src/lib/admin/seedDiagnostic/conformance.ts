@@ -35,6 +35,9 @@ import type { SeedDiagnosticCheck, SeedDiagnosticSeverity } from "./types";
 import { check, ok, warn, critical } from "./checkFactory";
 import { checkRegionDerivedCoverage } from "./regionDerivedCoverage";
 import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
+import { getScotusPresetSeed } from "@/lib/scotus/presetData";
+import type { ScotusPresetSeed } from "@/lib/scotus/presetData/types";
+import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 
 /** Readiness check names that are expected-empty pre-founding / pre-seat. */
 const PRE_FOUNDING_READINESS = new Set(["NPPs", "ElectedOfficials", "GovernmentFormation"]);
@@ -183,10 +186,13 @@ async function checkGameStateClock(
   );
 
   const currentTurn = typeof gs.currentTurn === "number" ? gs.currentTurn : null;
+  const resetYear = gs.resetStartDate?.year ?? expect.startingYear;
+  const resetWeek = gs.resetStartDate?.week ?? 1;
+  const expectedResetTurn = (resetYear - expect.startingYear) * TURNS_PER_YEAR + resetWeek;
   checks.push(
-    currentTurn === 1
-      ? ok("gameState.currentTurn", "global", "currentTurn", 1, currentTurn)
-      : critical("gameState.currentTurn", "global", "currentTurn", 1, currentTurn)
+    currentTurn === expectedResetTurn
+      ? ok("gameState.currentTurn", "global", "currentTurn", expectedResetTurn, currentTurn)
+      : critical("gameState.currentTurn", "global", "currentTurn", expectedResetTurn, currentTurn)
   );
 
   const currentYear = typeof gs.currentYear === "number" ? gs.currentYear : null;
@@ -213,15 +219,9 @@ async function checkGameStateClock(
     );
   } else {
     checks.push(
-      currentYear === expect.startingYear
-        ? ok("gameState.currentYear", "global", "currentYear", expect.startingYear, currentYear)
-        : critical(
-            "gameState.currentYear",
-            "global",
-            "currentYear",
-            expect.startingYear,
-            currentYear
-          )
+      currentYear === resetYear
+        ? ok("gameState.currentYear", "global", "currentYear", resetYear, currentYear)
+        : critical("gameState.currentYear", "global", "currentYear", resetYear, currentYear)
     );
   }
 
@@ -476,7 +476,7 @@ async function checkMonetary(db: Db, expect: SeedExpectations): Promise<SeedDiag
   const byId = new Map(banks.map((b) => [String(b._id), b]));
   const checks: SeedDiagnosticCheck[] = [];
 
-  for (const countryId of expect.forexActiveCountries) {
+  for (const countryId of expect.monetaryCoverage.centralBankCountries) {
     const bankId = getBankId(countryId);
     const bank = byId.get(bankId);
     if (!bank) {
@@ -534,6 +534,22 @@ async function checkMonetary(db: Db, expect: SeedExpectations): Promise<SeedDiag
             inflHistLen
           )
     );
+  }
+
+  const budgetedCountries = new Set(expect.nationalBudgets.map(({ countryId }) => countryId));
+  for (const bank of banks) {
+    if (bank.countryId && !budgetedCountries.has(bank.countryId)) {
+      checks.push(
+        critical(
+          `centralBank.${bank.countryId}.fiscalCoverage`,
+          bank.countryId,
+          "federalBudget",
+          "authored budget",
+          null,
+          "central bank exists outside the preset's authored fiscal coverage"
+        )
+      );
+    }
   }
   return checks;
 }
@@ -1070,6 +1086,159 @@ async function checkConfig(db: Db): Promise<SeedDiagnosticCheck[]> {
 }
 
 /**
+ * Verify that the active preset owns an explicit Supreme Court seed contract
+ * and that bootstrap persisted exactly that turn-one court. In particular, an
+ * empty curated docket is valid only when the preset records the reviewed
+ * procedural-only fallback; an omitted preset can never look equivalent to
+ * that deliberate choice.
+ */
+export function checkMissingScotusSeedDefinition(
+  preset: string,
+  seed: ScotusPresetSeed | undefined
+): SeedDiagnosticCheck[] | null {
+  if (!seed) {
+    // Court content is required only for presets supported by the SCOTUS
+    // subsystem. Do not turn older unsupported shipping eras into new reset
+    // blockers as a side effect of checking the 2027 reset candidate.
+    const required = new Set([
+      "1953-default",
+      "1979-default",
+      "1991-default",
+      "2019-default",
+      "2027-default",
+    ]).has(preset);
+    if (!required) return [];
+    return [
+      critical(
+        "institutions.US.scotus.definition",
+        "US",
+        "SCOTUS preset seed",
+        "explicit roster and docket policy",
+        null,
+        `no Supreme Court content registered for preset "${preset}"`
+      ),
+    ];
+  }
+  return null;
+}
+
+export async function checkScotusSeed(db: Db, preset: string): Promise<SeedDiagnosticCheck[]> {
+  const seed = getScotusPresetSeed(preset);
+  const missingDefinition = checkMissingScotusSeedDefinition(preset, seed);
+  if (missingDefinition) return missingDefinition;
+
+  // The guard above proves this for TypeScript and runtime readers alike.
+  if (!seed) return [];
+  const seatNumbers = seed.seats.map((seat) => seat.seatNumber);
+  const structurallyComplete =
+    seed.seats.length === 9 &&
+    new Set(seatNumbers).size === 9 &&
+    seatNumbers.every(
+      (seatNumber) => Number.isInteger(seatNumber) && seatNumber >= 1 && seatNumber <= 9
+    );
+  const expectedVacancies = seed.seats.filter(
+    (seat) => seat.historicalOccupants.length === 0
+  ).length;
+  const persistedSeats = await db
+    .collection("supremeCourtSeats")
+    .countDocuments({ countryId: "US" });
+  const persistedVacancies = await db.collection("supremeCourtSeats").countDocuments({
+    countryId: "US",
+    justiceMode: null,
+    justiceCharacterId: null,
+    justiceNppId: null,
+  });
+  const persistedDocket = await db
+    .collection("docketCases")
+    .countDocuments({ countryId: "US", preset });
+
+  const proceduralFallback =
+    seed.provenance?.docket.mode === "procedural-only-fallback"
+      ? seed.provenance.docket
+      : undefined;
+  const explicitProceduralFallback = proceduralFallback !== undefined;
+  const docketPolicyValid = seed.docket.length > 0 || explicitProceduralFallback;
+  const provenanceValid =
+    preset !== "2027-default" ||
+    (seed.provenance?.roster.mode === "reviewed-current-roster-fallback" &&
+      explicitProceduralFallback);
+
+  return [
+    structurallyComplete && provenanceValid
+      ? ok(
+          "institutions.US.scotus.definition",
+          "US",
+          "SCOTUS preset seed",
+          "9 unique seats numbered 1-9",
+          "complete"
+        )
+      : critical(
+          "institutions.US.scotus.definition",
+          "US",
+          "SCOTUS preset seed",
+          "9 unique seats numbered 1-9",
+          `${seed.seats.length} seat definitions`,
+          structurallyComplete
+            ? "2027 roster/docket fallback provenance is absent or invalid"
+            : "roster definition is incomplete or has duplicate/invalid seat numbers"
+        ),
+    persistedSeats === seed.seats.length
+      ? ok(
+          "institutions.US.scotus.roster",
+          "US",
+          "supremeCourtSeats.count",
+          seed.seats.length,
+          persistedSeats
+        )
+      : critical(
+          "institutions.US.scotus.roster",
+          "US",
+          "supremeCourtSeats.count",
+          seed.seats.length,
+          persistedSeats,
+          "persisted court does not match the preset roster"
+        ),
+    persistedVacancies === expectedVacancies
+      ? ok(
+          "institutions.US.scotus.vacancies",
+          "US",
+          "vacant Supreme Court seats",
+          expectedVacancies,
+          persistedVacancies
+        )
+      : critical(
+          "institutions.US.scotus.vacancies",
+          "US",
+          "vacant Supreme Court seats",
+          expectedVacancies,
+          persistedVacancies,
+          "turn-one vacancies do not match the authored roster"
+        ),
+    docketPolicyValid && persistedDocket === seed.docket.length
+      ? ok(
+          "institutions.US.scotus.docket",
+          "US",
+          "curated docket cases",
+          explicitProceduralFallback ? "explicit procedural-only fallback" : seed.docket.length,
+          persistedDocket,
+          explicitProceduralFallback
+            ? proceduralFallback.limitation
+            : "matches authored historical docket"
+        )
+      : critical(
+          "institutions.US.scotus.docket",
+          "US",
+          "curated docket cases",
+          docketPolicyValid ? seed.docket.length : "authored cases or explicit fallback",
+          persistedDocket,
+          docketPolicyValid
+            ? "persisted docket does not match the preset"
+            : "empty curated docket has no reviewed fallback provenance"
+        ),
+  ];
+}
+
+/**
  * Run all Mode A conformance checks against the live DB for the active preset.
  */
 export async function runConformanceChecks(
@@ -1105,6 +1274,7 @@ export async function runConformanceChecks(
     checkRuntimeCleanliness(db),
     checkConfig(db),
     checkRegionDerivedCoverage(db, expect),
+    checkScotusSeed(db, preset),
   ]);
   const checks: SeedDiagnosticCheck[] = groups.flat();
 

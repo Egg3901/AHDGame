@@ -98,4 +98,85 @@ describe("NppRecruitSegment", () => {
     const button = screen.getByRole("button", { name: "Party NPP capacity reached" });
     expect((button as HTMLButtonElement).disabled).toBe(true);
   });
+
+  // Growth frontier. `canRecruit` now folds in `inFrontier`, so without an
+  // explicit branch an unreachable region would wrongly read "Party NPP
+  // capacity reached".
+  describe("growth frontier", () => {
+    const UNREACHABLE = [
+      {
+        stateId: "CA",
+        stateName: "California",
+        stateOrg: 0,
+        currentNPPs: 0,
+        maxSlots: 2,
+        availableSlots: 2,
+        actionCost: 5,
+        canRecruit: false,
+        inFrontier: false,
+        hasStateLeadership: false,
+      },
+    ];
+
+    it("names the frontier as the reason rather than capacity", () => {
+      render(
+        <NppRecruitSegment
+          states={UNREACHABLE}
+          actionPoints={20}
+          recruitFund={100000}
+          treasury={5_000_000}
+          currency="USD"
+          onRecruit={vi.fn()}
+        />
+      );
+
+      expect(screen.getByText(/out of your party's reach/i)).toBeTruthy();
+      expect(screen.queryByText(/capacity reached/i)).toBeNull();
+    });
+
+    it("marks an unreachable region on its chip", () => {
+      render(
+        <NppRecruitSegment
+          states={UNREACHABLE}
+          actionPoints={20}
+          recruitFund={100000}
+          treasury={5_000_000}
+          currency="USD"
+          onRecruit={vi.fn()}
+        />
+      );
+
+      expect(screen.getByText(/out of reach/i)).toBeTruthy();
+    });
+
+    it("preselects a reachable region over an unreachable one", () => {
+      const states = [
+        { ...UNREACHABLE[0] },
+        {
+          stateId: "NY",
+          stateName: "New York",
+          stateOrg: 40,
+          currentNPPs: 0,
+          maxSlots: 4,
+          availableSlots: 4,
+          actionCost: 5,
+          canRecruit: true,
+          inFrontier: true,
+          hasStateLeadership: false,
+        },
+      ];
+      render(
+        <NppRecruitSegment
+          states={states}
+          actionPoints={20}
+          recruitFund={100000}
+          treasury={5_000_000}
+          currency="USD"
+          onRecruit={vi.fn()}
+        />
+      );
+
+      expect(screen.getByText(/Recruit NPP in New York/i)).toBeTruthy();
+    });
+  });
 });

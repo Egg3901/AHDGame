@@ -143,6 +143,37 @@ export type CrisisOptionAction =
         | "protests_address"
         | "protests_march"
         | "protests_crackdown";
+    }
+  /** Apply a financial-crisis choice to live bank charters after the option's
+   *  GDP-scaled treasury charge has been booked. */
+  | {
+      kind: "financialCrisisResponse";
+      response: "recapitalize" | "guarantee" | "resolve";
+    }
+  /** Move a negotiated living conflict through its persistent tracks and
+   * lifecycle. The definition owns track bounds and valid phase keys. */
+  | {
+      kind: "livingConflictTrajectory";
+      conflictKey: string;
+      trackDeltas?: Record<string, number>;
+      nextConflictPhase?: string;
+      nextConflictStatus?:
+        "dormant" | "active" | "ceasefire" | "negotiating" | "settled" | "closed";
+      regionalEffects?: {
+        regionId: string;
+        independenceDesireDelta?: number;
+        devolutionSatisfactionDelta?: number;
+      };
+    }
+  /** Introduce a real national ratification bill and record the resulting
+   * movement in a negotiated living conflict. Passage remains contestable. */
+  | {
+      kind: "livingConflictRatificationBill";
+      conflictKey: string;
+      title: string;
+      summary: string;
+      category: string;
+      trackDeltas?: Record<string, number>;
     };
 
 export interface CrisisDecisionOption {
@@ -224,7 +255,17 @@ export interface CrisisDecisionNode {
   nextNodeId?: string;
   outcomeEffects?: CrisisEffect[];
   outcomeMessage?: string;
-  requiredRoles: ("headOfState" | "cabinet" | "stateGovernor" | "any")[];
+  requiredRoles: ("headOfState" | "cabinet" | "stateGovernor" | "partyLeader" | "any")[];
+  /** Optional national allow-list for sequential cross-government negotiations. */
+  requiredCountryIds?: string[];
+  /** Optional regional allow-list, used with stateGovernor for devolved executives. */
+  requiredRegionIds?: string[];
+  /**
+   * Optional allow-list applied when `partyLeader` is required. Abbreviations
+   * are used because authored conflict definitions cannot depend on per-world
+   * Mongo ObjectIds.
+   */
+  requiredPartyAbbreviations?: string[];
   timeLimitMinutes: number | null;
 }
 
@@ -270,6 +311,12 @@ export interface GlobalResponseOutcome {
   /** Persistent living-conflict trajectory changes applied at resolution. */
   intensityDelta?: number;
   pressureDelta?: Partial<Record<"a" | "b", number>>;
+  /** Named negotiated-crisis progress changes applied at resolution. */
+  trackDeltas?: Record<string, number>;
+  /** Optional explicit phase jump for ceasefires, breakdowns, and settlements. */
+  nextConflictPhase?: string;
+  /** Optional durable lifecycle change independent of campaign stage. */
+  nextConflictStatus?: "dormant" | "active" | "ceasefire" | "negotiating" | "settled" | "closed";
   /** Persistent campaign damage, settlement progress, and stage transition. */
   campaignDelta?: CampaignConsequencesDelta;
   nextCampaignStage?: CampaignStage;

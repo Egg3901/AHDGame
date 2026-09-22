@@ -4,6 +4,8 @@ export interface RelocationTargetOption {
   currentNPPs: number;
   maxSlots: number;
   full: boolean;
+  /** False when the party has no presence in or next to this region. */
+  inFrontier?: boolean;
 }
 
 export interface RelocationBlockInput {
@@ -32,6 +34,19 @@ export function getRelocationBlockReason({
   regionLabelLower,
 }: RelocationBlockInput): string | null {
   if (targetOptions.length === 0) return null;
+
+  // Growth frontier first: it is a harder wall than capacity, and a region that
+  // is out of reach would otherwise be reported as merely "at capacity".
+  if (targetOptions.every((option) => option.inFrontier === false)) {
+    return `No other ${regionLabelLower} is within your party's reach. A politician can only move to a ${regionLabelLower} your party already holds or one next to it.`;
+  }
+
+  const selectedOutOfReach = targetOptions.find(
+    (option) => option.id === selectedTargetId && option.inFrontier === false
+  );
+  if (selectedOutOfReach) {
+    return `${selectedOutOfReach.name} is outside your party's reach. Pick a ${regionLabelLower} your party already holds or one next to it.`;
+  }
 
   if (targetOptions.every((option) => option.full)) {
     return `Every other ${regionLabelLower} is at capacity for your party. Build your party organization somewhere else first, or move a politician out of the target ${regionLabelLower}.`;

@@ -40,6 +40,7 @@ import { processFiscalBaseGrowth } from "@/lib/turn/fiscalBaseGrowth";
 import { processEconomicModelTurn } from "@/lib/turn/economicModelTurn";
 import { mirrorTradeGrowth } from "@/lib/turn/tradeGrowthMirror";
 import { recalculateInflationPerTurn } from "@/lib/turn/inflationRecalc";
+import { processBrettonWoodsTurn } from "@/lib/turn/brettonWoodsTurn";
 import { processCommandEconomyTurn } from "@/lib/turn/commandEconomyTurn";
 import { processForexTurn } from "@/lib/turn/forexTurn";
 import { isLedgerShadowEnabledFromConfig } from "@/lib/ledger/featureFlag";
@@ -54,6 +55,10 @@ import { processReferendumLifecycle } from "@/lib/referendum/processReferendumLi
 import { reconcilePartyMemberCounts } from "@/lib/turn/partyOrg";
 import { snapshotMetricHistory } from "@/lib/metricHistory";
 import { snapshotApprovalsForTurn } from "@/lib/utils/approvalSnapshotRun";
+import {
+  appendMacroTelemetry,
+  resolveLongHorizonContext,
+} from "@/lib/telemetry/longHorizon/telemetry";
 import { snapshotInterestRateHistory } from "@/lib/turn/interestRateSnapshot";
 import { snapshotPartyHistory } from "@/lib/turn/partyHistorySnapshot";
 import {
@@ -74,6 +79,7 @@ import { resetRunningMateSurrogateActions } from "@/lib/turn/runningMateSurrogat
 import { resetJusticeActions } from "@/lib/turn/justiceActionReset";
 import type { TurnPhaseAdapter } from "@/simulation/engine/types";
 import { regionalBudgetPhaseDue, resolveRegionalBudgetCadence } from "./regionalBudgetCadence";
+import type { LegislationType } from "@/lib/db/types/legislation";
 
 export const stateEffectsAndNationalAggregationPhase: TurnPhaseAdapter = {
   key: "stateEffectsAndNationalAggregation",
@@ -89,6 +95,18 @@ export const stateEffectsAndNationalAggregationPhase: TurnPhaseAdapter = {
       warnings,
       phaseStatuses,
     } = context;
+    // Both policy processors need the complete immutable legislation catalog
+    // and run concurrently below. Share one decode rather than pulling the same
+    // ~2.4 MB / 1,030-document collection into JS twice in the same turn.
+    let legislationTypesPromise: Promise<LegislationType[]> | undefined;
+    const getLegislationTypes = () => {
+      legislationTypesPromise ??= db
+        .collection<LegislationType>("legislationTypes")
+        // full-read(legislationTypes): both policy processors evaluate every authored effect
+        .find({})
+        .toArray();
+      return legislationTypesPromise;
+    };
     // S4 (2026-07-16 core-sim audit): crisisTurn, ministerialOrders, and
     // policyEffects all write the SAME stateMetrics "<category>.<metric>.value"
     // field paths — crisisTurn and ministerialOrders via $inc, policyEffects
@@ -136,7 +154,9 @@ export const stateEffectsAndNationalAggregationPhase: TurnPhaseAdapter = {
         processMinisterialOrders(newTurn)
       );
       const policyResult = await runtime.runPhase("policyEffects", () =>
-        processStatePolicyEffects(db)
+        getLegislationTypes().then((legislationTypes) =>
+          processStatePolicyEffects(db, legislationTypes)
+        )
       );
       return {
         intelligenceResult,
@@ -184,7 +204,7 @@ export const stateEffectsAndNationalAggregationPhase: TurnPhaseAdapter = {
       // destructured (mirrors the append-only results below); only
       // demoEffectResult is.
       runtime.runPhase("demographicEffects", async () => {
-        const result = await processAllStateDemographics(db);
+        const result = await processAllStateDemographics(db, await getLegislationTypes());
         // Isolated so a checkpoint bug can't mark the whole demographics phase
         // failed (and discard its result) after the demographics writes above
         // have already persisted — the sequencing constraint is the only
@@ -469,6 +489,26 @@ export const stateEffectsAndNationalAggregationPhase: TurnPhaseAdapter = {
       processCommandEconomyTurn(db, newTurn, currentYear)
     );
 
+    // Bretton Woods exit tracker (gameConfig `brettonWoodsExitEnabled`, issue
+    // #7). Self-gates: flag off is a single config read and zero writes.
+    // Runs after inflationRecalc (the gold-cover drain reads this turn's
+    // settled US inflation gap) and before forexTurn (which applies the
+    // persisted regime's band and drift the same turn). Forex reads the
+    // stored regime off its own exchange-rate rows, so a resume that skips
+    // this already-applied phase still prices the regime in force.
+    const brettonWoodsResult = await runtime.runPhase("brettonWoodsTurn", () =>
+      processBrettonWoodsTurn(db, newTurn, currentYear)
+    );
+    if (brettonWoodsResult) {
+      phaseResults.brettonWoodsTurn = {
+        enabled: brettonWoodsResult.enabled,
+        goldCover: brettonWoodsResult.goldCover,
+        suspended: [...brettonWoodsResult.suspended],
+        floated: [...brettonWoodsResult.floated],
+        currenciesProcessed: brettonWoodsResult.currenciesProcessed,
+      };
+    }
+
     if (isLedgerShadowEnabledFromConfig(context.config)) {
       await runtime.runPhase("ledgerPreForexSnapshot", () =>
         writePreForexBalanceCheckpoint(db, newTurn)
@@ -598,14 +638,27 @@ export const stateEffectsAndNationalAggregationPhase: TurnPhaseAdapter = {
       phaseResults.partyMemberCountReconcile = memberCountReconcileResult;
     }
 
+    // Durable long-horizon provenance (#2099/#2100), resolved once per turn and
+    // shared by both writers below: world/run identity, in-game year, and the
+    // governing actor per country. Three round trips; a null result (phase
+    // failure) skips telemetry while the operational snapshots still run.
+    const longHorizonCtx = await runtime.runPhase("longHorizonContext", () =>
+      resolveLongHorizonContext(db, newTurn)
+    );
+
     const [metricHistResult, approvalSnapshotResult] = await Promise.all([
-      runtime.runPhase("metricHistory", () => snapshotMetricHistory(db, newTurn)),
+      runtime.runPhase("metricHistory", async () => {
+        await snapshotMetricHistory(db, newTurn);
+        if (longHorizonCtx) await appendMacroTelemetry(db, longHorizonCtx, newTurn);
+      }),
       // Covers the active countries plus any belligerent that is not one of
       // them, so a war block is computed for every country actually fighting.
       // The count is read back off the run rather than recomputed here: the
       // roster is now turn-dependent, and a recomputed constant would report a
       // number the phase did not do.
-      runtime.runPhase("approvalSnapshot", () => snapshotApprovalsForTurn(db, newTurn)),
+      runtime.runPhase("approvalSnapshot", () =>
+        snapshotApprovalsForTurn(db, newTurn, longHorizonCtx ?? undefined)
+      ),
       runtime.runPhase("interestRateSnapshot", () => snapshotInterestRateHistory(db, newTurn)),
       runtime.runPhase("partyHistorySnapshot", () => snapshotPartyHistory(db, newTurn)),
     ]);

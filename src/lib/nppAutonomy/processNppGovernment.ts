@@ -178,7 +178,7 @@ export async function processNppGovernment(
 
   // 3. Cabinet formation — fill vacant posts from co-partisan NPPs (V1.3). Runs
   //    after executive formation so a freshly-seated head can staff immediately.
-  const cabinet = await formNppCabinet(db, countryId, now);
+  const cabinet = await formNppCabinet(db, countryId, now, currentTurn);
 
   // 4. Ministerial governance — NPP ministers steer tiers + issue orders toward
   //    the agenda (V1.4). Runs after cabinet formation so newly-seated ministers
@@ -298,7 +298,12 @@ async function computeAndPersistGoverningAgenda(
         })
       : null;
 
-  const headNpp = await db.collection<NPP>("npps").findOne({ _id: headNppId });
+  const headNpp = await db
+    .collection<NPP>("npps")
+    .findOne(
+      { _id: headNppId },
+      { projection: { personality: 1, "policies.economic": 1, "policies.social": 1 } }
+    );
   if (!headNpp) return false;
 
   const conditions = await loadConditionsSignal(db, countryId);

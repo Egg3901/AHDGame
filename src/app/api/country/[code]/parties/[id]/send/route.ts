@@ -26,6 +26,11 @@ import {
   LEADERSHIP_FREEZE_MESSAGE,
 } from "@/lib/parties/leadershipElectionFreeze";
 import { getGameTime } from "@/lib/time/gameTime";
+import {
+  countDistinctOfficers,
+  formatPayoutCap,
+  getEffectivePlayerPayoutCap,
+} from "@/lib/treasury/payoutCapValues";
 
 interface RouteParams {
   params: Promise<{ code: string; id: string }>;
@@ -131,6 +136,35 @@ export async function POST(request: Request, { params }: RouteParams) {
     if (treasury < sendAmount) {
       return NextResponse.json({ error: "Insufficient treasury funds" }, { status: 400 });
     }
+    // Same ceiling the request route applies, for the same reason: a
+    // send above the recipient's per-turn cap is refused by
+    // `executeSendToMember` on every turn, and in double mode it would
+    // first sit as a pending row collecting signatures that can never
+    // pay out.
+    //
+    // Gated on `!isAdmin` like the freeze check above. Admins are
+    // exempt from the cap itself (`skipPayoutCap` on the execute below),
+    // so refusing them here would make that exemption unreachable for
+    // any amount big enough to need it.
+    if (!isAdmin) {
+      const sendPayoutCap = getEffectivePlayerPayoutCap(
+        countryId,
+        countDistinctOfficers([
+          party.chairId?.toString(),
+          party.viceChairId?.toString(),
+          party.treasurerId?.toString(),
+        ])
+      );
+      if (sendAmount > sendPayoutCap) {
+        return NextResponse.json(
+          {
+            error: `A single payment cannot exceed the per-turn limit of ${formatPayoutCap(countryId, sendPayoutCap)} per member.`,
+          },
+          { status: 400 }
+        );
+      }
+    }
+
     const budgetCollection = await getPartyBudgetCollection();
     const treasuryPlan = await findPartyBudgetForScope(budgetCollection, {
       countryId,

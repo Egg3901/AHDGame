@@ -14,6 +14,8 @@ export interface RecruitStateInfo {
   availableSlots: number;
   actionCost: number;
   canRecruit: boolean;
+  /** False when the party has no presence in or next to this region. */
+  inFrontier?: boolean;
   hasStateLeadership: boolean;
 }
 
@@ -42,7 +44,11 @@ export function NppRecruitSegment({
   currency,
   onRecruit,
 }: NppRecruitSegmentProps) {
-  const initial = states.find((s) => s.availableSlots > 0)?.stateId ?? states[0]?.stateId ?? "";
+  const initial =
+    states.find((s) => s.availableSlots > 0 && s.inFrontier !== false)?.stateId ??
+    states.find((s) => s.availableSlots > 0)?.stateId ??
+    states[0]?.stateId ??
+    "";
   const [stateId, setStateId] = useState(initial);
   const [busy, setBusy] = useState(false);
   const st = states.find((s) => s.stateId === stateId) ?? states[0];
@@ -92,12 +98,19 @@ export function NppRecruitSegment({
                 key={s.stateId}
                 type="button"
                 onClick={() => setStateId(s.stateId)}
+                title={
+                  s.inFrontier === false
+                    ? "Your party is not established in or next to this region."
+                    : undefined
+                }
                 className={`flex flex-col items-center rounded-lg border px-3 py-1.5 ${
                   sel ? "border-primary bg-primary/10" : "border-card-border hover:bg-card-elevated"
-                }`}
+                } ${s.inFrontier === false ? "opacity-40" : ""}`}
               >
                 <span className="text-xs font-bold">{s.stateId}</span>
-                <span className="text-[10px] text-muted">{s.stateOrg.toFixed(0)}%</span>
+                <span className="text-[10px] text-muted">
+                  {s.inFrontier === false ? "out of reach" : `${s.stateOrg.toFixed(0)}%`}
+                </span>
               </button>
             );
           })}
@@ -134,15 +147,17 @@ export function NppRecruitSegment({
           disabled={disabled}
           className="mt-4 w-full rounded-lg bg-primary py-2 text-sm font-medium text-white hover:bg-primary/90 disabled:opacity-50"
         >
-          {avail <= 0
-            ? `No slots available in ${st.stateName}`
-            : !st.canRecruit
-              ? "Party NPP capacity reached"
-              : !affordable
-                ? "Insufficient Action Points or funds"
-                : busy
-                  ? "Recruiting…"
-                  : `Recruit NPP in ${st.stateName}`}
+          {st.inFrontier === false
+            ? `${st.stateName} is out of your party's reach`
+            : avail <= 0
+              ? `No slots available in ${st.stateName}`
+              : !st.canRecruit
+                ? "Party NPP capacity reached"
+                : !affordable
+                  ? "Insufficient Action Points or funds"
+                  : busy
+                    ? "Recruiting…"
+                    : `Recruit NPP in ${st.stateName}`}
         </button>
       </div>
 

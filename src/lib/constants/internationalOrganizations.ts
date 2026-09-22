@@ -1,6 +1,35 @@
 import type { CountryId } from "./countries";
 import type { OrgMemberId } from "@/lib/db/types/internationalOrganization";
 import type { OrganizationCategory } from "./orgCategory";
+import { JP_CABINET_SEAT_IDS } from "@/lib/countries/jp/institutionsFacts";
+import { US_CABINET_SEAT_IDS } from "@/lib/countries/us/institutionsFacts";
+import { UK_CABINET_SEAT_IDS } from "@/lib/countries/uk/institutionsFacts";
+import { DE_CABINET_SEAT_IDS } from "@/lib/countries/de/institutionsFacts";
+import { CN_CABINET_SEAT_IDS } from "@/lib/countries/cn/institutionsFacts";
+import { IE_CABINET_SEAT_IDS } from "@/lib/countries/ie/institutionsFacts";
+import { RU_CABINET_SEAT_IDS } from "@/lib/countries/ru/institutionsFacts";
+import { DD_CABINET_SEAT_IDS } from "@/lib/countries/dd/institutionsFacts";
+import { NG_CABINET_SEAT_IDS } from "@/lib/countries/ng/institutionsFacts";
+import { BR_CABINET_SEAT_IDS } from "@/lib/countries/br/institutionsFacts";
+import { FR_CABINET_SEAT_IDS } from "@/lib/countries/fr/institutionsFacts";
+import { IT_CABINET_SEAT_IDS } from "@/lib/countries/it/institutionsFacts";
+import { ES_CABINET_SEAT_IDS } from "@/lib/countries/es/institutionsFacts";
+import { SE_CABINET_SEAT_IDS } from "@/lib/countries/se/institutionsFacts";
+import { TR_CABINET_SEAT_IDS } from "@/lib/countries/tr/institutionsFacts";
+import { GR_CABINET_SEAT_IDS } from "@/lib/countries/gr/institutionsFacts";
+import { AT_CABINET_SEAT_IDS } from "@/lib/countries/at/institutionsFacts";
+import { FI_CABINET_SEAT_IDS } from "@/lib/countries/fi/institutionsFacts";
+import { PL_CABINET_SEAT_IDS } from "@/lib/countries/pl/institutionsFacts";
+import { HU_CABINET_SEAT_IDS } from "@/lib/countries/hu/institutionsFacts";
+import { RO_CABINET_SEAT_IDS } from "@/lib/countries/ro/institutionsFacts";
+import { YU_CABINET_SEAT_IDS } from "@/lib/countries/yu/institutionsFacts";
+import { BG_CABINET_SEAT_IDS } from "@/lib/countries/bg/institutionsFacts";
+import { CS_CABINET_SEAT_IDS } from "@/lib/countries/cs/institutionsFacts";
+import { SCO_CABINET_SEAT_IDS } from "@/lib/countries/sco/institutionsFacts";
+import { WAL_CABINET_SEAT_IDS } from "@/lib/countries/wal/institutionsFacts";
+import { BLR_CABINET_SEAT_IDS } from "@/lib/countries/blr/institutionsFacts";
+import { UKR_CABINET_SEAT_IDS } from "@/lib/countries/ukr/institutionsFacts";
+import { BAL_CABINET_SEAT_IDS } from "@/lib/countries/bal/institutionsFacts";
 
 /**
  * The built-in organizations seeded at game start. Player-created orgs use
@@ -618,48 +647,48 @@ export const CUSTOM_ORG_DEFAULT_LEADERSHIP_TERM_TURNS = DEFAULT_LEADERSHIP_TERM_
  * without a configured seat fall back to the head of government.
  */
 export const FOREIGN_AFFAIRS_POSITION_BY_COUNTRY: Record<CountryId, string | null> = {
-  US: "secretary_of_state",
-  UK: "foreign_secretary",
-  DE: "foreign_minister",
-  JP: "foreign_affairs_minister",
-  IE: "minister_for_foreign_affairs",
-  BR: "minister_of_foreign_affairs",
-  CN: "minister_of_foreign_affairs",
-  NG: "minister_of_foreign_affairs",
+  US: US_CABINET_SEAT_IDS.foreignAffairs,
+  UK: UK_CABINET_SEAT_IDS.foreignAffairs,
+  DE: DE_CABINET_SEAT_IDS.foreignAffairs,
+  JP: JP_CABINET_SEAT_IDS.foreignAffairs,
+  IE: IE_CABINET_SEAT_IDS.foreignAffairs,
+  BR: BR_CABINET_SEAT_IDS.foreignAffairs,
+  CN: CN_CABINET_SEAT_IDS.foreignAffairs,
+  NG: NG_CABINET_SEAT_IDS.foreignAffairs,
   // The eastern bloc and RU reuse DD_CABINET_POSITIONS, which defines a real
   // `minister_of_foreign_affairs`. These were null — the same defect #980 fixed for
   // CN/IE/NG, left standing for eight more countries: a player foreign minister here
   // was never recognized, and only the head-of-government fallback could act. Note
   // the same cabinets also hold `minister_of_foreign_trade`, which is NOT this seat.
-  HU: "minister_of_foreign_affairs",
-  PL: "minister_of_foreign_affairs",
-  RO: "minister_of_foreign_affairs",
-  YU: "minister_of_foreign_affairs",
-  BG: "minister_of_foreign_affairs",
+  HU: HU_CABINET_SEAT_IDS.foreignAffairs,
+  PL: PL_CABINET_SEAT_IDS.foreignAffairs,
+  RO: RO_CABINET_SEAT_IDS.foreignAffairs,
+  YU: YU_CABINET_SEAT_IDS.foreignAffairs,
+  BG: BG_CABINET_SEAT_IDS.foreignAffairs,
   // The Ukrainian and Byelorussian SSRs ran their own foreign ministries and
   // held UN seats in their own right from 1945, which is exactly why they are
   // the two union republics with a real seat here rather than a null.
-  BLR: "minister_of_foreign_affairs",
-  UKR: "minister_of_foreign_affairs",
-  CS: "minister_of_foreign_affairs",
-  BAL: "minister_of_foreign_affairs",
-  RU: "minister_of_foreign_affairs",
-  FR: "minister_of_foreign_affairs",
-  IT: "minister_of_foreign_affairs",
-  ES: "minister_of_foreign_affairs",
-  SE: "minister_of_foreign_affairs",
-  TR: "minister_of_foreign_affairs",
-  GR: "minister_of_foreign_affairs",
-  AT: "minister_of_foreign_affairs",
-  FI: "minister_of_foreign_affairs",
-  DD: "minister_of_foreign_affairs",
+  BLR: BLR_CABINET_SEAT_IDS.foreignAffairs,
+  UKR: UKR_CABINET_SEAT_IDS.foreignAffairs,
+  CS: CS_CABINET_SEAT_IDS.foreignAffairs,
+  BAL: BAL_CABINET_SEAT_IDS.foreignAffairs,
+  RU: RU_CABINET_SEAT_IDS.foreignAffairs,
+  FR: FR_CABINET_SEAT_IDS.foreignAffairs,
+  IT: IT_CABINET_SEAT_IDS.foreignAffairs,
+  ES: ES_CABINET_SEAT_IDS.foreignAffairs,
+  SE: SE_CABINET_SEAT_IDS.foreignAffairs,
+  TR: TR_CABINET_SEAT_IDS.foreignAffairs,
+  GR: GR_CABINET_SEAT_IDS.foreignAffairs,
+  AT: AT_CABINET_SEAT_IDS.foreignAffairs,
+  FI: FI_CABINET_SEAT_IDS.foreignAffairs,
+  DD: DD_CABINET_SEAT_IDS.foreignAffairs,
   // Sub-national entities. Both define `externalAffairsSecretary`, but they are left
   // on the head-of-government fallback deliberately: neither can be a belligerent
   // (validateDeclareWar refuses any target not enabled for players), and the
   // diplomatic surfaces for a devolved administration are unverified. The
   // completeness test below carries them as named exceptions so this stays visible.
-  SCO: null,
-  WAL: null,
+  SCO: SCO_CABINET_SEAT_IDS.foreignAffairs,
+  WAL: WAL_CABINET_SEAT_IDS.foreignAffairs,
 };
 
 /**
@@ -669,38 +698,38 @@ export const FOREIGN_AFFAIRS_POSITION_BY_COUNTRY: Record<CountryId, string | nul
  * head of government.
  */
 export const TRADE_MINISTER_POSITION_BY_COUNTRY: Record<CountryId, string | null> = {
-  US: "secretary_of_commerce",
-  UK: "business_secretary",
-  DE: "economy_minister",
-  JP: "economy_minister",
-  CN: "minister_of_commerce",
-  IE: "minister_for_enterprise", // Minister for Enterprise, Trade and Employment
-  BR: "minister_of_trade_industry",
-  NG: "minister_of_trade_industry",
-  HU: null,
-  PL: null,
-  RO: null,
-  YU: null,
-  BG: null,
-  BLR: null,
-  UKR: null,
-  CS: null,
-  BAL: null,
-  RU: "minister_of_foreign_affairs",
-  FR: "minister_of_trade_industry",
-  IT: "minister_of_trade_industry",
-  ES: "minister_of_trade_industry",
-  SE: "minister_of_trade_industry",
-  TR: "minister_of_trade_industry",
-  GR: "minister_of_trade_industry",
-  AT: "minister_of_trade_industry",
-  FI: "minister_of_trade_industry",
-  DD: "minister_of_foreign_affairs",
+  US: US_CABINET_SEAT_IDS.tradeMinister,
+  UK: UK_CABINET_SEAT_IDS.tradeMinister,
+  DE: DE_CABINET_SEAT_IDS.tradeMinister,
+  JP: JP_CABINET_SEAT_IDS.tradeMinister,
+  CN: CN_CABINET_SEAT_IDS.tradeMinister,
+  IE: IE_CABINET_SEAT_IDS.tradeMinister, // Minister for Enterprise, Trade and Employment
+  BR: BR_CABINET_SEAT_IDS.tradeMinister,
+  NG: NG_CABINET_SEAT_IDS.tradeMinister,
+  HU: HU_CABINET_SEAT_IDS.tradeMinister,
+  PL: PL_CABINET_SEAT_IDS.tradeMinister,
+  RO: RO_CABINET_SEAT_IDS.tradeMinister,
+  YU: YU_CABINET_SEAT_IDS.tradeMinister,
+  BG: BG_CABINET_SEAT_IDS.tradeMinister,
+  BLR: BLR_CABINET_SEAT_IDS.tradeMinister,
+  UKR: UKR_CABINET_SEAT_IDS.tradeMinister,
+  CS: CS_CABINET_SEAT_IDS.tradeMinister,
+  BAL: BAL_CABINET_SEAT_IDS.tradeMinister,
+  RU: RU_CABINET_SEAT_IDS.tradeMinister,
+  FR: FR_CABINET_SEAT_IDS.tradeMinister,
+  IT: IT_CABINET_SEAT_IDS.tradeMinister,
+  ES: ES_CABINET_SEAT_IDS.tradeMinister,
+  SE: SE_CABINET_SEAT_IDS.tradeMinister,
+  TR: TR_CABINET_SEAT_IDS.tradeMinister,
+  GR: GR_CABINET_SEAT_IDS.tradeMinister,
+  AT: AT_CABINET_SEAT_IDS.tradeMinister,
+  FI: FI_CABINET_SEAT_IDS.tradeMinister,
+  DD: DD_CABINET_SEAT_IDS.tradeMinister,
   // Sub-national entities. Both define `externalAffairsSecretary`, but they are left
   // on the head-of-government fallback deliberately: neither can be a belligerent
   // (validateDeclareWar refuses any target not enabled for players), and the
   // diplomatic surfaces for a devolved administration are unverified. The
   // completeness test below carries them as named exceptions so this stays visible.
-  SCO: null,
-  WAL: null,
+  SCO: SCO_CABINET_SEAT_IDS.tradeMinister,
+  WAL: WAL_CABINET_SEAT_IDS.tradeMinister,
 };

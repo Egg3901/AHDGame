@@ -71,8 +71,8 @@ describe("getDonorActionCost", () => {
 
 describe("getFundMultiplier", () => {
   it("returns 1.0 at tier 0 with average-GDP state", () => {
-    // gdpPerCapita = (65_000 * 1_000_000) / 1_000_000 = 65_000 → scalar = 1.0, tier 0 → 1.0
-    expect(getFundMultiplier(0, 65_000, 1_000_000)).toBeCloseTo(1.0);
+    // gdpPerCapita = (69_618 * 1_000_000) / 1_000_000 = 69_618 → scalar = 1.0, tier 0 → 1.0
+    expect(getFundMultiplier(0, 69_618, 1_000_000)).toBeCloseTo(1.0);
   });
   it("clamps gdp scalar to 0.85 minimum", () => {
     expect(getFundMultiplier(0, 1, 10_000_000)).toBeCloseTo(0.85);
@@ -81,7 +81,7 @@ describe("getFundMultiplier", () => {
     expect(getFundMultiplier(0, 1_000_000, 1_000_000)).toBeCloseTo(2.0);
   });
   it("applies tier modifier: tier 2 with average GDP → 1.4", () => {
-    expect(getFundMultiplier(2, 65_000, 1_000_000)).toBeCloseTo(1.4);
+    expect(getFundMultiplier(2, 69_618, 1_000_000)).toBeCloseTo(1.4);
   });
 
   it("does not saturate the cost ceiling for a representative NG region", () => {
@@ -92,6 +92,41 @@ describe("getFundMultiplier", () => {
     const mult = getFundMultiplier(0, 58_873_063, 13_392_943, "NG");
     expect(mult).toBeLessThan(2.0);
     expect(mult).toBeGreaterThan(1.0);
+  });
+});
+
+describe("getFundMultiplier era parameter (issue #798)", () => {
+  it("resolves 1.0 for a 1953-scale JP region under its own era", () => {
+    // JP 1953 seeds are USD-anchored: per-capita $277 vs the 1953 baseline.
+    const pop = 10_000_000;
+    const gdpMillions1953 = (277 * pop) / 1_000_000;
+    expect(getFundMultiplier(0, gdpMillions1953, pop, "JP", "1953-default")).toBeCloseTo(1.0);
+  });
+
+  it("pins the same 1953-scale JP region to the floor under the modern default", () => {
+    // $277 USD-anchored per-capita against the ¥4.17M modern baseline: the era
+    // parameter is load-bearing, not cosmetic.
+    const pop = 10_000_000;
+    const gdpMillions1953 = (277 * pop) / 1_000_000;
+    expect(getFundMultiplier(0, gdpMillions1953, pop, "JP")).toBeCloseTo(0.85);
+    expect(getFundMultiplier(0, gdpMillions1953, pop, "JP", "2019-default")).toBeCloseTo(0.85);
+  });
+
+  it("resolves 1.0 for an average NG region in both 1953 and 2019 eras", () => {
+    const pop = 10_000_000;
+    expect(getFundMultiplier(0, (113 * pop) / 1_000_000, pop, "NG", "1953-default")).toBeCloseTo(
+      1.0
+    );
+    expect(
+      getFundMultiplier(0, (3_669_401 * pop) / 1_000_000, pop, "NG", "2019-default")
+    ).toBeCloseTo(1.0);
+  });
+
+  it("throws for countries without an explicit baseline", () => {
+    expect(() => getFundMultiplier(0, 100_000, 1_000_000, "XX")).toThrow(/no GDP baseline/);
+    expect(() => getFundMultiplier(0, 100_000, 1_000_000, "BR", "1953-default")).toThrow(
+      /no GDP baseline/
+    );
   });
 });
 
@@ -130,12 +165,12 @@ function makeCharacter(overrides: {
 
 // Average-GDP home state (scalar 1.0) and neutral charisma (multiplier 1.0):
 // the advertise quote requires both, rejecting neutral fallbacks instead.
-const AVG_STATE = { gdp: 65_000, population: 1_000_000, name: "Test State" } as State;
+const AVG_STATE = { gdp: 69_618, population: 1_000_000, name: "Test State" } as State;
 const NEUTRAL_STATS = { charisma: 5.5 } as Character["stats"];
 
 // Average-GDP home state (scalar 1.0): the donor quote requires home-state
 // economics, rejecting neutral fallbacks instead.
-const AVG_GDP_STATE = { gdp: 65_000, population: 1_000_000, name: "Test State" } as State;
+const AVG_GDP_STATE = { gdp: 69_618, population: 1_000_000, name: "Test State" } as State;
 
 describe("canPerformAction — tiered costs", () => {
   it("advertise blocked when actions < tiered cost (high fav)", () => {

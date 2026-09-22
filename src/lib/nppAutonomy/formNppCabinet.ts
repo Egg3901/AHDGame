@@ -204,7 +204,14 @@ const INACTIVE: FormNppCabinetResult = { ran: false, filled: 0, filledPositionId
 export async function formNppCabinet(
   db: Db,
   countryId: CountryId,
-  now: Date
+  now: Date,
+  /**
+   * Game-clock turn the appointments seat on (#1994). Persisted per seat as
+   * `appointedTurn` so the reshuffle guard can enforce minimum tenure.
+   * Optional so older callers keep compiling; omitted means unstamped
+   * (legacy behavior — the guard waives tenure for unstamped seats).
+   */
+  currentTurn?: number
 ): Promise<FormNppCabinetResult> {
   // V1 gate — also enforces the player rail (false below v2 in player countries).
   if (!(await nppAutonomyAtLeast(db, countryId, "v1"))) return INACTIVE;
@@ -236,7 +243,12 @@ export async function formNppCabinet(
   const vacant = positions.filter((p) => !filledPositionIds.has(p.id));
   if (vacant.length === 0) return { ran: true, filled: 0, filledPositionIds: [] };
 
-  const headNpp = await db.collection<NPP>("npps").findOne({ _id: headNppId });
+  const headNpp = await db
+    .collection<NPP>("npps")
+    .findOne(
+      { _id: headNppId },
+      { projection: { party: 1, personality: 1, "policies.economic": 1, "policies.social": 1 } }
+    );
   if (!headNpp) return INACTIVE;
   const governingPartyId = gov.governingPartyId ?? headNpp.party;
 
@@ -260,7 +272,20 @@ export async function formNppCabinet(
   // already-seated cabinet member.
   const poolDocs = await db
     .collection<NPP>("npps")
-    .find({ countryId, party: { $in: [...blocParties] }, retiredAt: null })
+    .find(
+      { countryId, party: { $in: [...blocParties] }, retiredAt: null },
+      {
+        projection: {
+          name: 1,
+          party: 1,
+          personality: 1,
+          politicalInfluence: 1,
+          favorability: 1,
+          "policies.economic": 1,
+          "policies.social": 1,
+        },
+      }
+    )
     .toArray();
   const candidates: CabinetCandidate[] = poolDocs
     .filter((n) => !n._id.equals(headNppId) && !seatedNppIds.has(n._id.toString()))
@@ -321,6 +346,7 @@ export async function formNppCabinet(
           appointedByCharacterId: null,
           appointedByNppId: headNppId,
           appointedAt: now,
+          ...(typeof currentTurn === "number" ? { appointedTurn: currentTurn } : null),
           confirmedAt: now,
           ...initialMinisterialActionFields(now),
           updatedAt: now,

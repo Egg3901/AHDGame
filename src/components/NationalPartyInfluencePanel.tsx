@@ -76,6 +76,8 @@ interface InfluenceData {
     currentNPPs: number;
     maxSlots: number;
     full: boolean;
+    /** False when the party has no presence in or next to this region. */
+    inFrontier?: boolean;
   }>;
   nppsByState: Record<string, NPPOption[]>;
   context: {
@@ -712,11 +714,17 @@ export function NationalPartyInfluencePanel({
                               >
                                 <option value="">-- Select a target {regionLabelLower} --</option>
                                 {targetStateOptions.map((state) => (
-                                  <option key={state.id} value={state.id} disabled={state.full}>
+                                  <option
+                                    key={state.id}
+                                    value={state.id}
+                                    disabled={state.full || state.inFrontier === false}
+                                  >
                                     {state.name} ({state.actionCost} AP)
-                                    {state.full
-                                      ? `: full (${state.currentNPPs}/${state.maxSlots})`
-                                      : ""}
+                                    {state.inFrontier === false
+                                      ? ": out of reach"
+                                      : state.full
+                                        ? `: full (${state.currentNPPs}/${state.maxSlots})`
+                                        : ""}
                                   </option>
                                 ))}
                               </select>

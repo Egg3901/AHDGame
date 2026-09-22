@@ -18,6 +18,34 @@
  * those services from every later era.
  */
 import type { CountryId } from "@/lib/constants/countries";
+import { JP_INSTITUTIONS } from "@/lib/countries/jp/institutions";
+import { JP_ERAS } from "@/lib/countries/jp/eras";
+import { US_ORDERS_OF_BATTLE } from "@/lib/countries/us/institutionsFacts";
+import { UK_ORDERS_OF_BATTLE } from "@/lib/countries/uk/institutionsFacts";
+import { DE_ORDERS_OF_BATTLE } from "@/lib/countries/de/institutionsFacts";
+import { CN_ORDERS_OF_BATTLE } from "@/lib/countries/cn/institutionsFacts";
+import { IE_ORDERS_OF_BATTLE } from "@/lib/countries/ie/institutionsFacts";
+import { RU_ORDERS_OF_BATTLE } from "@/lib/countries/ru/institutionsFacts";
+import { DD_ORDERS_OF_BATTLE } from "@/lib/countries/dd/institutionsFacts";
+import { NG_ORDERS_OF_BATTLE } from "@/lib/countries/ng/institutionsFacts";
+import { BR_ORDERS_OF_BATTLE } from "@/lib/countries/br/institutionsFacts";
+import { FR_ORDERS_OF_BATTLE } from "@/lib/countries/fr/institutionsFacts";
+import { IT_ORDERS_OF_BATTLE } from "@/lib/countries/it/institutionsFacts";
+import { ES_ORDERS_OF_BATTLE } from "@/lib/countries/es/institutionsFacts";
+import { SE_ORDERS_OF_BATTLE } from "@/lib/countries/se/institutionsFacts";
+import { TR_ORDERS_OF_BATTLE } from "@/lib/countries/tr/institutionsFacts";
+import { GR_ORDERS_OF_BATTLE } from "@/lib/countries/gr/institutionsFacts";
+import { AT_ORDERS_OF_BATTLE } from "@/lib/countries/at/institutionsFacts";
+import { FI_ORDERS_OF_BATTLE } from "@/lib/countries/fi/institutionsFacts";
+import { PL_ORDERS_OF_BATTLE } from "@/lib/countries/pl/institutionsFacts";
+import { HU_ORDERS_OF_BATTLE } from "@/lib/countries/hu/institutionsFacts";
+import { RO_ORDERS_OF_BATTLE } from "@/lib/countries/ro/institutionsFacts";
+import { YU_ORDERS_OF_BATTLE } from "@/lib/countries/yu/institutionsFacts";
+import { BG_ORDERS_OF_BATTLE } from "@/lib/countries/bg/institutionsFacts";
+import { CS_ORDERS_OF_BATTLE } from "@/lib/countries/cs/institutionsFacts";
+import { BLR_ORDERS_OF_BATTLE } from "@/lib/countries/blr/institutionsFacts";
+import { UKR_ORDERS_OF_BATTLE } from "@/lib/countries/ukr/institutionsFacts";
+import { BAL_ORDERS_OF_BATTLE } from "@/lib/countries/bal/institutionsFacts";
 
 export interface OrderOfBattleEntry {
   /** Must match a Branch id for this country (`MILITARY_BRANCHES_BY_COUNTRY`). */
@@ -51,43 +79,13 @@ export const ORDERS_OF_BATTLE: Partial<Record<CountryId, OrderOfBattleEntry[]>> 
    * ran ~16 Essex-class carriers. Guided-missile ships are deliberately absent:
    * USS Boston, the first, converted in 1955.
    */
-  US: [
-    { branchId: "army", type: "Infantry Division", count: 8 },
-    { branchId: "army", type: "Armored Division", count: 4 },
-    { branchId: "army", type: "Artillery Regiment", count: 3 },
-    { branchId: "army", type: "Air Defense Battalion", count: 2 },
-    // 10th Special Forces Group activated 1952: the first, and era-correct.
-    { branchId: "army", type: "Special Forces Group", count: 1 },
-    { branchId: "navy", type: "Carrier Strike Group", count: 3 },
-    { branchId: "navy", type: "Attack Submarine", count: 3 },
-    { branchId: "navy", type: "Frigate Squadron", count: 3 },
-    { branchId: "navy", type: "Amphibious Group", count: 2 },
-    { branchId: "airforce", type: "Fighter Wing", count: 5 },
-    { branchId: "airforce", type: "Bomber Squadron", count: 5 },
-    { branchId: "airforce", type: "Airlift Wing", count: 3 },
-    { branchId: "airforce", type: "Air Defense Wing", count: 2 },
-    // Exactly the three divisions the Marine Corps fielded in 1953.
-    { branchId: "marines", type: "Marine Division", count: 3 },
-    { branchId: "marines", type: "Marine Expeditionary Unit", count: 1 },
-  ],
+  US: US_ORDERS_OF_BATTLE,
   /**
    * National Service still running: a large conscript army, six fleet carriers,
    * and Bomber Command working up to the V-force. Clearly the third power, well
    * ahead of France, well behind the US and USSR.
    */
-  UK: [
-    { branchId: "army", type: "Infantry Division", count: 6 },
-    { branchId: "army", type: "Armored Division", count: 2 },
-    { branchId: "army", type: "Artillery Regiment", count: 2 },
-    { branchId: "navy", type: "Carrier Strike Group", count: 2 },
-    { branchId: "navy", type: "Attack Submarine", count: 2 },
-    { branchId: "navy", type: "Frigate Squadron", count: 4 },
-    { branchId: "navy", type: "Amphibious Group", count: 1 },
-    { branchId: "raf", type: "Fighter Wing", count: 4 },
-    { branchId: "raf", type: "Bomber Squadron", count: 3 },
-    { branchId: "raf", type: "Air Defense Wing", count: 1 },
-    { branchId: "raf", type: "Airlift Wing", count: 1 },
-  ],
+  UK: UK_ORDERS_OF_BATTLE,
   /**
    * The Bundeswehr's establishment shape. Like NG, AT and DD, this is a
    * composition target rather than an activation year: the branches carry
@@ -98,19 +96,7 @@ export const ORDERS_OF_BATTLE: Partial<Record<CountryId, OrderOfBattleEntry[]>> 
    * and tactical air force under the Paris Accords, and never operated a
    * strategic bombing arm.
    */
-  DE: [
-    { branchId: "heer", type: "Infantry Division", count: 5 },
-    { branchId: "heer", type: "Armored Division", count: 4 },
-    { branchId: "heer", type: "Mechanized Brigade", count: 3 },
-    { branchId: "heer", type: "Artillery Regiment", count: 2 },
-    { branchId: "heer", type: "Air Defense Battalion", count: 2 },
-    // A Baltic coastal navy: frigates and small submarines, no capital ships.
-    { branchId: "marine", type: "Frigate Squadron", count: 3 },
-    { branchId: "marine", type: "Attack Submarine", count: 2 },
-    { branchId: "luftwaffe", type: "Fighter Wing", count: 4 },
-    { branchId: "luftwaffe", type: "Air Defense Wing", count: 2 },
-    { branchId: "luftwaffe", type: "Airlift Wing", count: 1 },
-  ],
+  DE: DE_ORDERS_OF_BATTLE,
   /**
    * Names BOTH the 1952-54 National Safety Force and the JSDF that replaced it,
    * and lets the branch era gates choose. A 1953 world resolves to the NSF/CSF
@@ -121,216 +107,48 @@ export const ORDERS_OF_BATTLE: Partial<Record<CountryId, OrderOfBattleEntry[]>> 
    * offensive platforms, and the JMSDF's post-war shape is ASW escorts and
    * submarines pointed at the Soviet Pacific Fleet.
    */
-  JP: [
-    { branchId: "nsf", type: "Infantry Division", count: 4 },
-    { branchId: "nsf", type: "Artillery Regiment", count: 1 },
-    { branchId: "csf", type: "Frigate Squadron", count: 2 },
-    { branchId: "jgsdf", type: "Infantry Division", count: 5 },
-    { branchId: "jgsdf", type: "Mechanized Brigade", count: 2 },
-    { branchId: "jgsdf", type: "Artillery Regiment", count: 2 },
-    { branchId: "jgsdf", type: "Air Defense Battalion", count: 1 },
-    { branchId: "jmsdf", type: "Frigate Squadron", count: 4 },
-    { branchId: "jmsdf", type: "Attack Submarine", count: 2 },
-    { branchId: "jmsdf", type: "Guided-Missile Destroyer", count: 1 },
-    { branchId: "jasdf", type: "Fighter Wing", count: 4 },
-    { branchId: "jasdf", type: "Air Defense Wing", count: 2 },
-    { branchId: "jasdf", type: "Airlift Wing", count: 1 },
-  ],
+  JP: JP_INSTITUTIONS.military.ordersOfBattle,
   /**
    * A neutral state with a Permanent Defence Force of about eight thousand, three
    * corvettes and a handful of Vampires. Four units total, below Austria and
    * Finland, which is the point. The random fallback had Ireland outgunning the
    * United States.
    */
-  IE: [
-    { branchId: "army", type: "Infantry Division", count: 1 },
-    { branchId: "army", type: "Artillery Regiment", count: 1 },
-    { branchId: "navy", type: "Frigate Squadron", count: 1 },
-    { branchId: "aircorps", type: "Fighter Wing", count: 1 },
-  ],
+  IE: IE_ORDERS_OF_BATTLE,
   /**
    * Straight out of Korea: infantry mass, almost no armour, a coastal navy that
    * barely existed, and a MiG-15 air force that had just fought the USAF. The
    * largest army on the board by headcount and one of the lowest in power per
    * man. The Second Artillery Corps is 1966, so no rocket branch here.
    */
-  CN: [
-    { branchId: "pla", type: "Infantry Division", count: 16 },
-    { branchId: "pla", type: "Artillery Regiment", count: 4 },
-    { branchId: "pla", type: "Mechanized Brigade", count: 2 },
-    { branchId: "plan", type: "Frigate Squadron", count: 2 },
-    { branchId: "plaaf", type: "Fighter Wing", count: 5 },
-    { branchId: "plaaf", type: "Bomber Squadron", count: 1 },
-  ],
-  RU: [
-    { branchId: "ground", type: "Infantry Division", count: 12 },
-    { branchId: "ground", type: "Armored Division", count: 5 },
-    { branchId: "ground", type: "Mechanized Brigade", count: 5 },
-    { branchId: "ground", type: "Artillery Regiment", count: 4 },
-    { branchId: "ground", type: "Air Defense Battalion", count: 3 },
-    { branchId: "navy", type: "Attack Submarine", count: 4 },
-    { branchId: "navy", type: "Frigate Squadron", count: 3 },
-    { branchId: "navy", type: "Amphibious Group", count: 1 },
-    { branchId: "airforce", type: "Fighter Wing", count: 4 },
-    { branchId: "airforce", type: "Bomber Squadron", count: 3 },
-    { branchId: "pvo", type: "Air Defense Wing", count: 5 },
-  ],
-  DD: [
-    { branchId: "landstreitkraefte", type: "Infantry Division", count: 3 },
-    { branchId: "landstreitkraefte", type: "Mechanized Brigade", count: 2 },
-    { branchId: "landstreitkraefte", type: "Artillery Regiment", count: 1 },
-    { branchId: "volksmarine", type: "Frigate Squadron", count: 1 },
-    { branchId: "luftstreitkraefte", type: "Fighter Wing", count: 2 },
-    { branchId: "luftstreitkraefte", type: "Air Defense Wing", count: 1 },
-  ],
-  PL: [
-    { branchId: "ground", type: "Infantry Division", count: 4 },
-    { branchId: "ground", type: "Armored Division", count: 2 },
-    { branchId: "ground", type: "Artillery Regiment", count: 2 },
-    { branchId: "navy", type: "Frigate Squadron", count: 1 },
-    { branchId: "navy", type: "Attack Submarine", count: 1 },
-    { branchId: "airforce", type: "Fighter Wing", count: 3 },
-    { branchId: "airforce", type: "Air Defense Wing", count: 1 },
-  ],
-  CS: [
-    { branchId: "ground", type: "Infantry Division", count: 4 },
-    { branchId: "ground", type: "Armored Division", count: 2 },
-    { branchId: "ground", type: "Artillery Regiment", count: 2 },
-    { branchId: "airforce", type: "Fighter Wing", count: 3 },
-    { branchId: "airforce", type: "Air Defense Wing", count: 1 },
-  ],
-  HU: [
-    { branchId: "ground", type: "Infantry Division", count: 3 },
-    { branchId: "ground", type: "Mechanized Brigade", count: 2 },
-    { branchId: "ground", type: "Artillery Regiment", count: 1 },
-    { branchId: "airforce", type: "Fighter Wing", count: 2 },
-  ],
-  RO: [
-    { branchId: "ground", type: "Infantry Division", count: 4 },
-    { branchId: "ground", type: "Mechanized Brigade", count: 2 },
-    { branchId: "ground", type: "Artillery Regiment", count: 2 },
-    { branchId: "navy", type: "Frigate Squadron", count: 1 },
-    { branchId: "airforce", type: "Fighter Wing", count: 2 },
-  ],
-  BG: [
-    { branchId: "ground", type: "Infantry Division", count: 3 },
-    { branchId: "ground", type: "Mechanized Brigade", count: 2 },
-    { branchId: "ground", type: "Artillery Regiment", count: 1 },
-    { branchId: "navy", type: "Frigate Squadron", count: 1 },
-    { branchId: "airforce", type: "Fighter Wing", count: 2 },
-  ],
+  CN: CN_ORDERS_OF_BATTLE,
+  RU: RU_ORDERS_OF_BATTLE,
+  DD: DD_ORDERS_OF_BATTLE,
+  PL: PL_ORDERS_OF_BATTLE,
+  CS: CS_ORDERS_OF_BATTLE,
+  HU: HU_ORDERS_OF_BATTLE,
+  RO: RO_ORDERS_OF_BATTLE,
+  BG: BG_ORDERS_OF_BATTLE,
   // Union republics. Deliberately thinner than the satellites: the real combat
   // power on this ground belonged to the Soviet military districts, which are
   // counted in RU's roster. What is authored here is the republican
   // establishment - garrison infantry, a fighter regiment, and coastal forces
   // where the republic has a coast. Double-counting the Kyiv or Baltic district
   // here would inflate Warsaw Pact strength by tens of divisions.
-  UKR: [
-    { branchId: "ground", type: "Infantry Division", count: 4 },
-    { branchId: "ground", type: "Mechanized Brigade", count: 2 },
-    { branchId: "ground", type: "Artillery Regiment", count: 2 },
-    { branchId: "navy", type: "Frigate Squadron", count: 1 }, // Black Sea coastal
-    { branchId: "airforce", type: "Fighter Wing", count: 2 },
-  ],
-  BLR: [
-    { branchId: "ground", type: "Infantry Division", count: 3 },
-    { branchId: "ground", type: "Mechanized Brigade", count: 1 },
-    { branchId: "ground", type: "Artillery Regiment", count: 1 },
-    { branchId: "airforce", type: "Fighter Wing", count: 1 },
-  ],
-  BAL: [
-    { branchId: "ground", type: "Infantry Division", count: 2 },
-    { branchId: "ground", type: "Artillery Regiment", count: 1 },
-    // Weighted naval rather than ground: Tallinn, Riga and Liepaja were Baltic
-    // Fleet bases, and the coast is what the republics were garrisoned for.
-    { branchId: "navy", type: "Frigate Squadron", count: 1 },
-    { branchId: "navy", type: "Attack Submarine", count: 1 },
-    { branchId: "airforce", type: "Fighter Wing", count: 1 },
-  ],
-  YU: [
-    { branchId: "ground", type: "Infantry Division", count: 5 },
-    { branchId: "ground", type: "Armored Division", count: 1 },
-    { branchId: "ground", type: "Artillery Regiment", count: 2 },
-    { branchId: "ground", type: "Special Forces Group", count: 1 },
-    { branchId: "navy", type: "Frigate Squadron", count: 1 },
-    { branchId: "navy", type: "Attack Submarine", count: 1 },
-    { branchId: "airforce", type: "Fighter Wing", count: 2 },
-  ],
-  NG: [
-    { branchId: "army", type: "Infantry Division", count: 2 },
-    { branchId: "army", type: "Artillery Regiment", count: 1 },
-    { branchId: "navy", type: "Frigate Squadron", count: 1 },
-    { branchId: "airforce", type: "Fighter Wing", count: 1 },
-  ],
-  FR: [
-    { branchId: "terre", type: "Infantry Division", count: 5 },
-    { branchId: "terre", type: "Armored Division", count: 3 },
-    { branchId: "terre", type: "Artillery Regiment", count: 2 },
-    // Arromanches (ex-HMS Colossus) was in French service from 1946, so a 1953
-    // carrier is historically right despite the modern archetype label.
-    { branchId: "marine", type: "Carrier Strike Group", count: 1 },
-    { branchId: "marine", type: "Frigate Squadron", count: 3 },
-    { branchId: "marine", type: "Attack Submarine", count: 2 },
-    { branchId: "air", type: "Fighter Wing", count: 4 },
-    { branchId: "air", type: "Bomber Squadron", count: 2 },
-  ],
-  IT: [
-    { branchId: "esercito", type: "Infantry Division", count: 4 },
-    { branchId: "esercito", type: "Armored Division", count: 2 },
-    { branchId: "esercito", type: "Artillery Regiment", count: 2 },
-    { branchId: "marina", type: "Frigate Squadron", count: 3 },
-    { branchId: "marina", type: "Attack Submarine", count: 1 },
-    { branchId: "aeronautica", type: "Fighter Wing", count: 3 },
-  ],
-  ES: [
-    { branchId: "tierra", type: "Infantry Division", count: 4 },
-    { branchId: "tierra", type: "Armored Division", count: 1 },
-    { branchId: "tierra", type: "Artillery Regiment", count: 2 },
-    { branchId: "armada", type: "Frigate Squadron", count: 2 },
-    { branchId: "aire", type: "Fighter Wing", count: 2 },
-  ],
-  SE: [
-    { branchId: "army", type: "Infantry Division", count: 3 },
-    { branchId: "army", type: "Armored Division", count: 1 },
-    { branchId: "army", type: "Artillery Regiment", count: 1 },
-    { branchId: "navy", type: "Frigate Squadron", count: 2 },
-    { branchId: "navy", type: "Attack Submarine", count: 2 },
-    { branchId: "airforce", type: "Fighter Wing", count: 4 },
-    { branchId: "airforce", type: "Air Defense Wing", count: 1 },
-  ],
-  TR: [
-    { branchId: "ground", type: "Infantry Division", count: 6 },
-    { branchId: "ground", type: "Armored Division", count: 1 },
-    { branchId: "ground", type: "Artillery Regiment", count: 2 },
-    { branchId: "navy", type: "Frigate Squadron", count: 2 },
-    { branchId: "navy", type: "Attack Submarine", count: 1 },
-    { branchId: "airforce", type: "Fighter Wing", count: 3 },
-  ],
-  GR: [
-    { branchId: "army", type: "Infantry Division", count: 4 },
-    { branchId: "army", type: "Artillery Regiment", count: 1 },
-    { branchId: "navy", type: "Frigate Squadron", count: 1 },
-    { branchId: "airforce", type: "Fighter Wing", count: 2 },
-  ],
-  AT: [
-    { branchId: "heer", type: "Infantry Division", count: 2 },
-    { branchId: "heer", type: "Artillery Regiment", count: 1 },
-    { branchId: "luft", type: "Fighter Wing", count: 1 },
-  ],
-  FI: [
-    { branchId: "army", type: "Infantry Division", count: 3 },
-    { branchId: "army", type: "Artillery Regiment", count: 1 },
-    { branchId: "navy", type: "Frigate Squadron", count: 1 },
-    { branchId: "airforce", type: "Fighter Wing", count: 1 },
-  ],
-  BR: [
-    { branchId: "exercito", type: "Infantry Division", count: 4 },
-    { branchId: "exercito", type: "Armored Division", count: 1 },
-    { branchId: "exercito", type: "Artillery Regiment", count: 1 },
-    { branchId: "marinha", type: "Frigate Squadron", count: 2 },
-    { branchId: "marinha", type: "Attack Submarine", count: 1 },
-    { branchId: "aerea", type: "Fighter Wing", count: 2 },
-  ],
+  UKR: UKR_ORDERS_OF_BATTLE,
+  BLR: BLR_ORDERS_OF_BATTLE,
+  BAL: BAL_ORDERS_OF_BATTLE,
+  YU: YU_ORDERS_OF_BATTLE,
+  NG: NG_ORDERS_OF_BATTLE,
+  FR: FR_ORDERS_OF_BATTLE,
+  IT: IT_ORDERS_OF_BATTLE,
+  ES: ES_ORDERS_OF_BATTLE,
+  SE: SE_ORDERS_OF_BATTLE,
+  TR: TR_ORDERS_OF_BATTLE,
+  GR: GR_ORDERS_OF_BATTLE,
+  AT: AT_ORDERS_OF_BATTLE,
+  FI: FI_ORDERS_OF_BATTLE,
+  BR: BR_ORDERS_OF_BATTLE,
 };
 
 /** RU's Cold War force. 1979 and 1991 are the same Soviet Army: one table, two eras. */
@@ -475,18 +293,7 @@ export const ORDERS_OF_BATTLE_BY_ERA: Partial<
       { branchId: "luftwaffe", type: "Airlift Wing", count: 1 },
     ],
     /** Thirteen JGSDF divisions and an ASW fleet aimed at the Soviet Pacific Fleet. */
-    JP: [
-      { branchId: "jgsdf", type: "Infantry Division", count: 6 },
-      { branchId: "jgsdf", type: "Mechanized Brigade", count: 2 },
-      { branchId: "jgsdf", type: "Artillery Regiment", count: 2 },
-      { branchId: "jgsdf", type: "Air Defense Battalion", count: 2 },
-      { branchId: "jmsdf", type: "Frigate Squadron", count: 5 },
-      { branchId: "jmsdf", type: "Attack Submarine", count: 3 },
-      { branchId: "jmsdf", type: "Guided-Missile Destroyer", count: 2 },
-      { branchId: "jasdf", type: "Fighter Wing", count: 4 },
-      { branchId: "jasdf", type: "Air Defense Wing", count: 2 },
-      { branchId: "jasdf", type: "Airlift Wing", count: 1 },
-    ],
+    JP: JP_ERAS["1979-default"]?.institutions?.military?.ordersOfBattle,
     IE: IE_TROUBLES,
     /** Still an infantry-mass army, now with the Second Artillery Corps (1966). */
     CN: [
@@ -554,18 +361,7 @@ export const ORDERS_OF_BATTLE_BY_ERA: Partial<
       { branchId: "luftwaffe", type: "Airlift Wing", count: 1 },
     ],
     /** Bubble-era budgets: the JMSDF grows into one of the largest escort fleets afloat. */
-    JP: [
-      { branchId: "jgsdf", type: "Infantry Division", count: 6 },
-      { branchId: "jgsdf", type: "Mechanized Brigade", count: 2 },
-      { branchId: "jgsdf", type: "Artillery Regiment", count: 2 },
-      { branchId: "jgsdf", type: "Air Defense Battalion", count: 2 },
-      { branchId: "jmsdf", type: "Frigate Squadron", count: 5 },
-      { branchId: "jmsdf", type: "Attack Submarine", count: 4 },
-      { branchId: "jmsdf", type: "Guided-Missile Destroyer", count: 3 },
-      { branchId: "jasdf", type: "Fighter Wing", count: 4 },
-      { branchId: "jasdf", type: "Air Defense Wing", count: 2 },
-      { branchId: "jasdf", type: "Airlift Wing", count: 1 },
-    ],
+    JP: JP_ERAS["1991-default"]?.institutions?.military?.ordersOfBattle,
     IE: IE_TROUBLES,
     /** Post-Deng: the four-million-man army is being cut, modernisation is slow. */
     CN: [
@@ -636,18 +432,7 @@ export const ORDERS_OF_BATTLE_BY_ERA: Partial<
       { branchId: "luftwaffe", type: "Air Defense Wing", count: 1 },
       { branchId: "luftwaffe", type: "Airlift Wing", count: 1 },
     ],
-    JP: [
-      { branchId: "jgsdf", type: "Infantry Division", count: 5 },
-      { branchId: "jgsdf", type: "Mechanized Brigade", count: 2 },
-      { branchId: "jgsdf", type: "Artillery Regiment", count: 1 },
-      { branchId: "jgsdf", type: "Air Defense Battalion", count: 2 },
-      { branchId: "jmsdf", type: "Frigate Squadron", count: 4 },
-      { branchId: "jmsdf", type: "Attack Submarine", count: 4 },
-      { branchId: "jmsdf", type: "Guided-Missile Destroyer", count: 3 },
-      { branchId: "jasdf", type: "Fighter Wing", count: 4 },
-      { branchId: "jasdf", type: "Air Defense Wing", count: 2 },
-      { branchId: "jasdf", type: "Airlift Wing", count: 1 },
-    ],
+    JP: JP_ERAS["1999-default"]?.institutions?.military?.ordersOfBattle,
     IE: IE_MODERN,
     /** After the Gulf War shock and the 1996 Strait crisis: doctrine turns, hardware lags. */
     CN: [
@@ -737,19 +522,7 @@ export const ORDERS_OF_BATTLE_BY_ERA: Partial<
       { branchId: "luftwaffe", type: "Airlift Wing", count: 1 },
     ],
     /** Ballistic-missile defence after the 1998 Taepodong overflight; helicopter destroyers. */
-    JP: [
-      { branchId: "jgsdf", type: "Infantry Division", count: 4 },
-      { branchId: "jgsdf", type: "Mechanized Brigade", count: 3 },
-      { branchId: "jgsdf", type: "Artillery Regiment", count: 1 },
-      { branchId: "jgsdf", type: "Air Defense Battalion", count: 2 },
-      { branchId: "jmsdf", type: "Frigate Squadron", count: 3 },
-      { branchId: "jmsdf", type: "Attack Submarine", count: 4 },
-      { branchId: "jmsdf", type: "Guided-Missile Destroyer", count: 4 },
-      { branchId: "jmsdf", type: "Amphibious Group", count: 1 },
-      { branchId: "jasdf", type: "Fighter Wing", count: 4 },
-      { branchId: "jasdf", type: "Air Defense Wing", count: 2 },
-      { branchId: "jasdf", type: "Airlift Wing", count: 1 },
-    ],
+    JP: JP_ERAS["2007-default"]?.institutions?.military?.ordersOfBattle,
     IE: IE_MODERN,
     /** Double-digit budget growth: the ground army mechanises, the navy goes to sea. */
     CN: [
@@ -830,21 +603,7 @@ export const ORDERS_OF_BATTLE_BY_ERA: Partial<
       { branchId: "luftwaffe", type: "Drone Command", count: 1 },
     ],
     /** Izumo conversion approved 2018, the amphibious rapid deployment brigade stood up. */
-    JP: [
-      { branchId: "jgsdf", type: "Infantry Division", count: 3 },
-      { branchId: "jgsdf", type: "Mechanized Brigade", count: 4 },
-      { branchId: "jgsdf", type: "Artillery Regiment", count: 1 },
-      { branchId: "jgsdf", type: "Air Defense Battalion", count: 2 },
-      { branchId: "jmsdf", type: "Carrier Strike Group", count: 1 },
-      { branchId: "jmsdf", type: "Frigate Squadron", count: 3 },
-      { branchId: "jmsdf", type: "Attack Submarine", count: 4 },
-      { branchId: "jmsdf", type: "Guided-Missile Destroyer", count: 4 },
-      { branchId: "jmsdf", type: "Amphibious Group", count: 1 },
-      { branchId: "jasdf", type: "Fighter Wing", count: 4 },
-      { branchId: "jasdf", type: "Air Defense Wing", count: 2 },
-      { branchId: "jasdf", type: "Airlift Wing", count: 1 },
-      { branchId: "jasdf", type: "Drone Command", count: 1 },
-    ],
+    JP: JP_ERAS["2019-default"]?.institutions?.military?.ordersOfBattle,
     IE: IE_MODERN,
     /**
      * Two carriers, the Strategic Support Force (2016), and a rocket force that
@@ -933,21 +692,7 @@ export const ORDERS_OF_BATTLE_BY_ERA: Partial<
       { branchId: "luftwaffe", type: "Drone Command", count: 1 },
     ],
     /** The 2022 National Security Strategy: defence spending to 2% and a counterstrike arm. */
-    JP: [
-      { branchId: "jgsdf", type: "Infantry Division", count: 3 },
-      { branchId: "jgsdf", type: "Mechanized Brigade", count: 4 },
-      { branchId: "jgsdf", type: "Artillery Regiment", count: 2 },
-      { branchId: "jgsdf", type: "Air Defense Battalion", count: 3 },
-      { branchId: "jmsdf", type: "Carrier Strike Group", count: 2 },
-      { branchId: "jmsdf", type: "Frigate Squadron", count: 3 },
-      { branchId: "jmsdf", type: "Attack Submarine", count: 5 },
-      { branchId: "jmsdf", type: "Guided-Missile Destroyer", count: 4 },
-      { branchId: "jmsdf", type: "Amphibious Group", count: 1 },
-      { branchId: "jasdf", type: "Fighter Wing", count: 4 },
-      { branchId: "jasdf", type: "Air Defense Wing", count: 2 },
-      { branchId: "jasdf", type: "Airlift Wing", count: 1 },
-      { branchId: "jasdf", type: "Drone Command", count: 2 },
-    ],
+    JP: JP_ERAS["2023-default"]?.institutions?.military?.ordersOfBattle,
     IE: IE_MODERN,
     /** Three carriers with Fujian launched, and the largest navy afloat by hull count. */
     CN: [

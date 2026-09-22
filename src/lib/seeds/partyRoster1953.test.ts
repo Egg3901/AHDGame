@@ -10,7 +10,7 @@ import { isPartyValidForPreset } from "@/lib/seeds/ensureDefaultParties";
 import { huParties } from "@/lib/seeds/hu/huParties";
 import { roParties } from "@/lib/seeds/ro/roParties";
 import { deParties } from "@/lib/seeds/de/deParties";
-import { jpParties } from "@/lib/seeds/jp/jpParties";
+import { jpParties } from "@/lib/countries/jp/data/jpParties";
 import { esParties } from "@/lib/seeds/es/esParties";
 import { trParties } from "@/lib/seeds/tr/trParties";
 import { seParties } from "@/lib/seeds/se/seParties";
@@ -68,14 +68,16 @@ describe("1953-default party roster era gating", () => {
 
   it("SE: period names (Högerpartiet, Bondeförbundet, SKP); no Moderaterna/Centerpartiet", () => {
     expect(abbrs(seParties)).toEqual(["BF", "FP", "H", "SAP", "SKP"]);
-    // M and C carry forward into 1991-default too (same party, continuous).
+    // M and C carry forward into later defaults too (same parties, continuous).
     expect(seParties.find((p) => p.abbreviation === "M")!.validForPresets).toEqual([
       "1979-default",
       "1991-default",
+      "2027-default",
     ]);
     expect(seParties.find((p) => p.abbreviation === "C")!.validForPresets).toEqual([
       "1979-default",
       "1991-default",
+      "2027-default",
     ]);
   });
 

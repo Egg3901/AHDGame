@@ -23,6 +23,7 @@ import { ObjectId } from "mongodb";
 import type {
   Election,
   ElectionCandidate,
+  ElectionVoteTally,
   PoliticalParty,
   RecruitmentSlate,
   SlateCandidate,
@@ -34,6 +35,7 @@ import { DEFAULT_CANDIDATE_SUPPORT } from "@/lib/electionEngine/electionFormulaF
 import { materializeSlateAssignmentsFromTemplate } from "@/lib/db/recruitmentSlateLookup";
 import { isElectionTypeEntryBlocked } from "@/lib/elections/nationwideExecutive";
 import { isPrimaryClosed } from "@/lib/elections/electionDeadlineFilters";
+import { isSpecialCommonsElection } from "@/lib/utils/electionLabels";
 import { removeWithdrawnCandidateFromTally } from "@/lib/electionEngine/tallyCleaner";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { SLATE_ASSIGNMENT_CAP, isLiveSlateStatus } from "@/lib/slateAssignmentCap";
@@ -381,6 +383,7 @@ export async function trimOverCapSlates(ctx: NPPContext): Promise<SlateTrimSumma
     return !isPrimaryClosed(election, ctx.currentTurn, now);
   });
   if (elections.length === 0) return summary;
+  const tallyCache = new Map<string, ElectionVoteTally | null>();
 
   const rows = await db
     .collection<SlateCandidate>("slateCandidates")
@@ -422,7 +425,7 @@ export async function trimOverCapSlates(ctx: NPPContext): Promise<SlateTrimSumma
         // A player on the ballot keeps their place; take the next holder.
         if (candidacy && candidacy.isNPP !== true && candidacy.nppId == null) continue;
 
-        if (candidacy && (await withdrawCandidacyFromRace(ctx, election, candidacy))) {
+        if (candidacy && (await withdrawCandidacyFromRace(ctx, election, candidacy, tallyCache))) {
           summary.withdrawn += 1;
         }
         const tombstones = liveRows.filter((row) => row.candidateId.toString() === holderId);
@@ -618,6 +621,24 @@ export async function fileAcceptedSlateRows(ctx: NPPContext): Promise<SlateFilin
       if (election.state && npp.homeState !== election.state) {
         queueSkipped(row, "ineligible_region");
         continue;
+      }
+      // Commons by-elections (#860) fill only vacated seats and resolve
+      // additively: a sitting MP holding an in-state Commons seat is never
+      // filed into a special_commons race, since a sitting winner would
+      // double-seat. Seatless challengers file normally below. Seat data comes
+      // from the shared context load, so this adds no per-row round trip.
+      if (isSpecialCommonsElection(election.electionType)) {
+        const offices = ctx.officialsByNPP.get(candidateKey) ?? [];
+        const holdsInStateCommonsSeat = offices.some(
+          (office) =>
+            office.officeType === "commons" &&
+            (office.countryId ?? electionCountry) === "UK" &&
+            office.state === election.state
+        );
+        if (holdsInStateCommonsSeat) {
+          queueSkipped(row, "seat_not_on_ballot");
+          continue;
+        }
       }
       const slateParty = ctx.partyByCompositeKey.get(`${electionCountry}:${row.partyId}`);
       const opsConfig = COUNTRY_CONFIGS[electionCountry as CountryId];
@@ -823,29 +844,39 @@ export async function fileAcceptedSlateRows(ctx: NPPContext): Promise<SlateFilin
  * withdrawn, scrub the vote tally, archive the campaign, and drop the NPP from
  * the turn's in-memory candidacy state so nothing re-files them.
  *
- * The in-memory `candidatesByElection` entry may be a clone with a synthetic
- * `_id` (rows inserted earlier this turn), so the live row is matched on
- * (electionId, characterId, status) rather than `_id`.
+ * `candidatesByElection` carries persisted candidate ids. Candidates inserted
+ * earlier in this turn receive their final `_id` before the batched upsert, so
+ * the withdrawal can update that row directly instead of re-reading it first.
  */
 async function withdrawCandidacyFromRace(
   ctx: NPPContext,
   election: Election,
-  inMemoryCandidate: ElectionCandidate
+  inMemoryCandidate: ElectionCandidate,
+  tallyCache?: Map<string, ElectionVoteTally | null>
 ): Promise<boolean> {
   const { db, now } = ctx;
-  const live = await db.collection<ElectionCandidate>("electionCandidates").findOne({
-    electionId: election._id,
-    characterId: inMemoryCandidate.characterId,
-    status: "active",
-  });
-  if (!live) return false;
+  const result = await db.collection<ElectionCandidate>("electionCandidates").updateOne(
+    {
+      _id: inMemoryCandidate._id,
+      electionId: election._id,
+      status: "active",
+    },
+    { $set: { status: "withdrawn", withdrawnAt: now } }
+  );
+  if (result.matchedCount === 0 || result.modifiedCount === 0) return false;
 
-  await db
-    .collection<ElectionCandidate>("electionCandidates")
-    .updateOne({ _id: live._id }, { $set: { status: "withdrawn", withdrawnAt: now } });
-  await removeWithdrawnCandidateFromTally(db, election._id, live._id.toString());
+  await removeWithdrawnCandidateFromTally(
+    db,
+    election._id,
+    inMemoryCandidate._id.toString(),
+    tallyCache
+  );
   await db.collection("campaigns").updateOne(
-    { electionId: election._id, candidateId: live.characterId, status: { $ne: "archived" } },
+    {
+      electionId: election._id,
+      candidateId: inMemoryCandidate.characterId,
+      status: { $ne: "archived" },
+    },
     {
       $set: {
         status: "archived",
@@ -860,9 +891,5 @@ async function withdrawCandidacyFromRace(
   inMemoryCandidate.withdrawnAt = now;
   if (inMemoryCandidate.nppId) ctx.nppCandidacies.delete(inMemoryCandidate.nppId.toString());
 
-  console.log(
-    `[Turn] Slate precedence: withdrew auto-picked ${live.characterName} from ` +
-      `${election.electionType}/${election.state} for a chair slate assignment`
-  );
   return true;
 }

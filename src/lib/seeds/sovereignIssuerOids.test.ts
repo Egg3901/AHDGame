@@ -4,7 +4,7 @@ import {
   JP_PUBLIC_CEO_OID,
   JP_PUBLIC_USER_OID,
   JP_PUBLIC_SEQUENTIAL_ID,
-} from "./jp/jpCorporations";
+} from "@/lib/countries/jp/data/jpCorporations";
 import {
   DE_PUBLIC_CORPORATION_OID,
   DE_PUBLIC_CEO_OID,

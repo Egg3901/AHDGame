@@ -11,7 +11,11 @@ import { getMilitaryUnitsCollection } from "@/lib/db/collections/militaryUnits";
 import { getCabinetMechanics } from "@/lib/constants/cabinetMechanics";
 import { getCabinetSettingsCollection } from "@/lib/db/collections/cabinetSettings";
 import { resolveMetricPath } from "@/lib/cabinet/resolveMetricPath";
-import { resolveDefenseLine } from "./defenseEnvelope";
+import {
+  resolveDefenseLine,
+  resolveDefenseLineFrom,
+  type DefenseLineSource,
+} from "./defenseEnvelope";
 import { accrualPerTurn, upkeepPerTurn, upkeepBurden } from "@/lib/military/appropriation";
 import { resolveSeedRosterUpkeep } from "@/lib/military/seedRosterUpkeepPin";
 import { isPoliticalApprovalCountry } from "@/lib/politicalLegislation/politicalApprovalProvider";
@@ -95,16 +99,20 @@ export async function applyMilitaryForceEffects(
    * defaulted: the wrong preset silently measures the force against another era's order of
    * battle, which quietly mis-states every Defense metric rather than failing.
    */
-  preset: string
+  preset: string,
+  knownUnits?: MilitaryUnit[],
+  knownBudget?: DefenseLineSource | null
 ): Promise<void> {
   const positionId = DEFENSE_POSITION_BY_COUNTRY[countryId as CountryId];
   if (!positionId) return;
   const mechanics = getCabinetMechanics(countryId, positionId);
   if (!mechanics) return;
 
-  const units = await getMilitaryUnitsCollection(db)
-    .find({ countryId: countryId as CountryId })
-    .toArray();
+  const units =
+    knownUnits ??
+    (await getMilitaryUnitsCollection(db)
+      .find({ countryId: countryId as CountryId })
+      .toArray());
   if (units.length === 0) return;
 
   const setting = await getCabinetSettingsCollection(db).findOne({
@@ -116,7 +124,10 @@ export async function applyMilitaryForceEffects(
   // Real money, both sides: what this country's force costs per turn against what its
   // enacted defence line brings in. Computed here rather than read off the pot because the
   // pot stores the settled arrears, not the burden that produced it.
-  const line = await resolveDefenseLine(db, countryId);
+  const line =
+    knownBudget === undefined
+      ? await resolveDefenseLine(db, countryId)
+      : resolveDefenseLineFrom(knownBudget);
   const seedRoster = await resolveSeedRosterUpkeep(db, preset, countryId);
   // ⚠️ The seed roster is checked HERE, not left to `upkeepPerTurn`. That function returns 0
   // for an unmeasurable seed, and a 0 upkeep against a real accrual is a burden of 0 — the
@@ -183,4 +194,7 @@ export async function applyReadinessDrift(
       updateOne: { filter: { _id: u._id }, update: { $set: { readiness: next } } },
     }));
   if (ops.length) await getMilitaryUnitsCollection(db).bulkWrite(ops);
+  for (const unit of units) {
+    unit.readiness = driftReadiness(unit.readiness, unit.posture, arrearsRatio, tier);
+  }
 }

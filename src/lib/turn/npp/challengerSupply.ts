@@ -8,7 +8,7 @@ import type {
   StatePartyOrg,
 } from "@/lib/db/types";
 import type { CountryId } from "@/lib/constants/countries";
-import { createNPP, calculateQualityBonus } from "@/lib/npp/generator";
+import { createNPP, calculateQualityBonus, type NPPGenerationContext } from "@/lib/npp/generator";
 import { canPartyFieldInState } from "@/lib/turn/nppEntryLogic";
 import { DEFAULT_CANDIDATE_SUPPORT } from "@/lib/electionEngine/electionFormulaFactors";
 import { isActiveElectionCandidateDuplicateKey } from "@/lib/elections/duplicateKey";
@@ -16,9 +16,7 @@ import { isActiveElectionCandidateDuplicateKey } from "@/lib/elections/duplicate
 /**
  * Directly-elected SINGLE-SEAT offices that need a bench challenger to be
  * contested. Multi-seat chambers normally field both parties via incumbent
- * defense; the indirectly-elected executives (president/primeMinister/
- * chancellor/ministerPresident) resolve through government formation, not a
- * primary, so they are out of scope.
+ * defense, but a vacant chamber has no incumbent supply.
  */
 const CONTESTABLE_SINGLE_SEAT = ["governor", "special_governor", "senate"] as const;
 
@@ -39,8 +37,40 @@ const CONTESTABLE_SINGLE_SEAT = ["governor", "special_governor", "senate"] as co
  */
 const CONTESTABLE_MULTI_SEAT_ONEPARTY = ["peoplesCongress", "landAssembly"] as const;
 
+/**
+ * Regional chambers whose concurrent cycles can exhaust the whole local NPP
+ * pool. These need the same per-party floor as single-seat races even in
+ * multi-party countries. Without it, a higher-priority or older overlapping
+ * race can claim every eligible NPP and leave the residual chamber empty.
+ */
+const CONTESTABLE_CONCURRENT_CHAMBERS = ["house", "milletMeclisi", "senato"] as const;
+
+/**
+ * Direct contest families observed empty in the 2027 qualification replay.
+ * These are not all represented in the generic NPP race-priority list, and a
+ * newly spawned cycle can have no incumbent to defend it. Give them the same
+ * bounded floor as the established chamber families.
+ */
+const CONTESTABLE_QUALIFICATION_FAMILIES = [
+  "ministerPresident",
+  "congresoDiputados",
+  "senado",
+  "eduskunta",
+  "vouli",
+  "dail",
+  "localCouncil",
+  "sangiin",
+  "president",
+  "regionalCouncil",
+] as const;
+
 /** All election types this phase files a floor candidate into. */
-const CONTESTABLE = [...CONTESTABLE_SINGLE_SEAT, ...CONTESTABLE_MULTI_SEAT_ONEPARTY] as const;
+const CONTESTABLE = [
+  ...CONTESTABLE_SINGLE_SEAT,
+  ...CONTESTABLE_MULTI_SEAT_ONEPARTY,
+  ...CONTESTABLE_CONCURRENT_CHAMBERS,
+  ...CONTESTABLE_QUALIFICATION_FAMILIES,
+] as const;
 
 /** Circuit breaker against malformed data — real turns file a handful. */
 const MAX_CHALLENGERS_PER_TURN = 400;
@@ -70,18 +100,12 @@ const MAX_CHALLENGERS_PER_TURN = 400;
  * are unaffected: they have exactly one default party, so they still found with
  * a single-party ballot, which is the correct 1953 behaviour.
  */
-const FOUNDING_ENTRY_BLOCKED_TYPES: ReadonlySet<string> = new Set([
-  // NPPs are barred from presidential races engine-wide because a player should
-  // always be able to contest the presidency. Autonomous economy-only countries
-  // receive presidential candidates through electionEntry's national pass.
-  "president",
-]);
-
 /**
  * File bench "challenger" candidates into open primaries that would otherwise
  * resolve UNCONTESTED / EMPTY:
  *   - directly-elected single-seat offices (governor, senate), and
- *   - one-party multi-seat sub-national congresses (CN peoplesCongress).
+ *   - one-party multi-seat sub-national congresses (CN peoplesCongress), and
+ *   - regional chambers vulnerable to concurrent-cycle pool exhaustion.
  *
  * Single-winner races seat exactly one incumbent, so to be a contest the OTHER
  * major party needs a candidate. The generic NPP entry (nppBehavior Phase 2)
@@ -119,7 +143,7 @@ export async function processChallengerGeneration(now: Date): Promise<number> {
   const currentTurn = gs?.currentTurn;
   const founding = gs?.preIteration?.active === true;
 
-  // Open single-seat primaries: active AND still in the primary window
+  // Open covered primaries: active AND still in the primary window
   // (turn-first, drift-immune — mirrors loadNPPContext's electionFilter).
   const primaryOpen =
     typeof currentTurn === "number"
@@ -135,7 +159,6 @@ export async function processChallengerGeneration(now: Date): Promise<number> {
         ? {
             status: "active",
             cycle: 0,
-            electionType: { $nin: [...FOUNDING_ENTRY_BLOCKED_TYPES] },
             $or: primaryOpen,
           }
         : {
@@ -176,9 +199,11 @@ export async function processChallengerGeneration(now: Date): Promise<number> {
     ])
     .toArray();
   const hasCandidate = new Set<string>();
+  const electionsWithCandidate = new Set<string>();
   const nppsInActiveCandidacy = new Set<string>();
   for (const c of cands) {
     hasCandidate.add(`${String(c._id.e)}_${c._id.p}`);
+    electionsWithCandidate.add(String(c._id.e));
     for (const id of c.nppIds) if (id != null) nppsInActiveCandidacy.add(String(id));
   }
 
@@ -201,6 +226,9 @@ export async function processChallengerGeneration(now: Date): Promise<number> {
     )
     .toArray();
   const freeByBucket = new Map<string, NPP[]>();
+  const generationContext: NPPGenerationContext = {
+    existingNames: new Set(freeNpps.map((n) => n.name)),
+  };
   for (const n of freeNpps) {
     const id = String(n._id);
     if (incumbentNppIds.has(id) || nppsInActiveCandidacy.has(id)) continue;
@@ -228,7 +256,9 @@ export async function processChallengerGeneration(now: Date): Promise<number> {
     if (filed >= MAX_CHALLENGERS_PER_TURN) break;
     const country = String(primary.countryId ?? "US");
     const state = primary.state;
-    for (const party of majorsByCountry.get(country) ?? []) {
+    const countryParties = majorsByCountry.get(country) ?? [];
+    let raceHasCandidate = electionsWithCandidate.has(String(primary._id));
+    for (const party of countryParties) {
       if (filed >= MAX_CHALLENGERS_PER_TURN) break;
       if (hasCandidate.has(`${String(primary._id)}_${party}`)) continue; // party already contesting
       const spo = spoByKey.get(`${state}:${party}`);
@@ -239,12 +269,15 @@ export async function processChallengerGeneration(now: Date): Promise<number> {
       const bucket = `${country}:${party}:${state}`;
       let npp = freeByBucket.get(bucket)?.pop();
       if (!npp) {
-        npp = await createNPP({
-          state,
-          party,
-          countryId: country as CountryId,
-          quality: calculateQualityBonus(spo?.organization ?? 0),
-        });
+        npp = await createNPP(
+          {
+            state,
+            party,
+            countryId: country as CountryId,
+            quality: calculateQualityBonus(spo?.organization ?? 0),
+          },
+          generationContext
+        );
       }
 
       const candidateDoc: Omit<ElectionCandidate, "_id"> = {
@@ -264,7 +297,9 @@ export async function processChallengerGeneration(now: Date): Promise<number> {
           .collection<ElectionCandidate>("electionCandidates")
           .insertOne(candidateDoc as ElectionCandidate);
         hasCandidate.add(`${String(primary._id)}_${party}`);
+        electionsWithCandidate.add(String(primary._id));
         nppsInActiveCandidacy.add(String(npp._id));
+        raceHasCandidate = true;
         filed++;
       } catch (error) {
         // Partial unique index: one active candidacy per character. A reused free
@@ -272,11 +307,54 @@ export async function processChallengerGeneration(now: Date): Promise<number> {
         if (!isActiveElectionCandidateDuplicateKey(error)) throw error;
       }
     }
+
+    // Founding cannot converge while a cycle-0 race has no candidate or vote
+    // coverage. Regional presence still controls which parties normally field,
+    // but incomplete seed org data must not strand the office forever. Give a
+    // wholly-empty founding race one fallback candidate from the country's first
+    // default party. This also covers national executive races, whose state is
+    // the country code and therefore has no statePartyOrg row by design.
+    if (founding && !raceHasCandidate && filed < MAX_CHALLENGERS_PER_TURN) {
+      const party = countryParties[0];
+      if (party) {
+        const bucket = `${country}:${party}:${state}`;
+        let npp = freeByBucket.get(bucket)?.pop();
+        if (!npp) {
+          npp = await createNPP(
+            { state, party, countryId: country as CountryId, quality: 0 },
+            generationContext
+          );
+        }
+        const candidateDoc: Omit<ElectionCandidate, "_id"> = {
+          electionId: primary._id,
+          countryId: (primary.countryId ?? npp.countryId ?? "US") as ElectionCandidate["countryId"],
+          characterId: npp._id,
+          characterName: npp.name,
+          party: npp.party,
+          status: "active",
+          support: DEFAULT_CANDIDATE_SUPPORT,
+          enteredAt: now,
+          isNPP: true,
+          nppId: npp._id,
+        };
+        try {
+          await db
+            .collection<ElectionCandidate>("electionCandidates")
+            .insertOne(candidateDoc as ElectionCandidate);
+          hasCandidate.add(`${String(primary._id)}_${party}`);
+          electionsWithCandidate.add(String(primary._id));
+          nppsInActiveCandidacy.add(String(npp._id));
+          filed++;
+        } catch (error) {
+          if (!isActiveElectionCandidateDuplicateKey(error)) throw error;
+        }
+      }
+    }
   }
 
   if (filed > 0) {
     console.log(
-      `[Turn] generateChallengers: filed ${filed} floor candidate(s) into uncontested single-seat / one-party congress primaries`
+      `[Turn] generateChallengers: filed ${filed} floor candidate(s) into uncovered primaries`
     );
   }
   return filed;

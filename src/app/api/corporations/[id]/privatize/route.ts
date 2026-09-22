@@ -92,6 +92,7 @@ export async function POST(_request: Request, { params }: RouteParams) {
       voteId: result.voteId.toString(),
       lockedBuyoutPrice: result.lockedBuyoutPrice,
       totalReservedCash: result.totalReservedCash,
+      bankNavFloorApplied: result.bankNavFloorApplied,
     });
   } catch (error) {
     return handleRouteError(error);

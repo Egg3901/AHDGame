@@ -83,12 +83,10 @@ import { getOrCreateVoteTally } from "@/lib/elections/voteTallyService";
 import { isRedistrictingEnabled } from "@/lib/redistricting/flag";
 import { districtedHouseResolution } from "@/lib/redistricting/districtedHouseResolution";
 import { buildPrimaryShareMap } from "@/lib/turn/election/generalResolutionHelpers";
-import { getMajoritarianBonus } from "@/lib/turn/election/seatAllocation";
 import { selectEndedDisplayCandidates } from "@/lib/elections/endedResultsCandidates";
 import { selectGeneralPhaseDisplayCandidates } from "@/lib/elections/generalPhaseCandidates";
 import { computeElectoralVotes } from "@/lib/elections/electoralVoteService";
 import { getFundsByPartyForElection } from "@/lib/electionEngine/fundsByParty";
-import { getPresidentialConsecutiveTerms } from "@/lib/turn/election/presidentialTenureLedger";
 import { getIncumbentSeatShareByParty } from "@/lib/electionEngine/incumbentSeatShare";
 import {
   resolveSingleSeatLegislativeIncumbent,
@@ -137,6 +135,10 @@ import {
   summarizePrimaryProjection,
 } from "./presidentialPrimaryDisplay";
 import { buildActiveVisibleNppEndorsementFilter } from "@/lib/nppEndorsements";
+import {
+  ELECTION_SUMMARY_CHARACTER_PROJECTION,
+  ELECTION_SUMMARY_NPP_PROJECTION,
+} from "./electionSummaryProjections";
 import { parseSeatId } from "@/lib/seats/seatId";
 import { buildPartyDisplayById, buildPresidentialRegByStateInput } from "./presidentialRegByState";
 import { ballotSharesWithinParty } from "@/lib/turn/primaryBallots";
@@ -722,11 +724,7 @@ export async function _enrichElection(
     inPrimary ? byParty : null
   );
 
-  // Seat estimates (always computed for multi-seat races — needed by both views)
-  // FPTP winner's bonus (#3244): UK Commons in historical in-game years
-  // projects with the same cube-law re-split the resolver applies; undefined
-  // (proportional) once the world's clock reaches 1999.
-  const majoritarianBonus = getMajoritarianBonus(election.electionType, gameState?.currentYear);
+  // Seat estimates (always computed for multi-seat races, needed by both views).
   // #1277: a RESOLVED race must show the allocation it actually seated, never a
   // fresh recompute. Recomputing on every load meant a finished election
   // rendered a different result whenever an allocator input drifted underneath
@@ -738,13 +736,7 @@ export async function _enrichElection(
 
   let seatsEstimate =
     seatedAllocation ??
-    computeSeatEstimates(
-      election.electionType,
-      election.totalSeats,
-      tally,
-      activeCandidateIdSet,
-      majoritarianBonus
-    );
+    computeSeatEstimates(election.electionType, election.totalSeats, tally, activeCandidateIdSet);
 
   // US House with redistricting on: project seats district-by-district using the
   // SAME engine that decides the final result (districtedHouseResolution on the
@@ -1087,8 +1079,7 @@ export async function _enrichElection(
               election.totalSeats,
               t.cumulativeVotes,
               houseSeats,
-              fullCandidateParties,
-              majoritarianBonus
+              fullCandidateParties
             );
           return {
             turn: t.turn,
@@ -1403,12 +1394,6 @@ export async function _enrichElection(
     byParty,
     polling,
     seatsEstimate,
-    // Conservative: true whenever the bonus GOVERNS this race. The boost can
-    // still decline to fire (a two-party pool has nothing to squeeze), in which
-    // case the quota narrative would have been accurate but is suppressed
-    // anyway. Phase C makes `applyMajoritarianBonus` report whether it actually
-    // re-weighted the vote, and this should then carry that precise value.
-    majoritarianBonusApplied: majoritarianBonus !== undefined,
     incumbent: incumbentDisplay,
 
     // Full-view fields
@@ -1497,7 +1482,10 @@ export async function fetchDepsForElection(
   ].map((s) => new ObjectId(s));
   const nppIds = candidates.filter((c) => c.isNPP && c.nppId).map((c) => c.nppId!);
 
-  // Parallel fetches (core data always; endorsements/campaigns only for full view)
+  // Parallel fetches (core data always; endorsements/campaigns only for full view).
+  // Summary views project the candidate-batch reads (#2168): NPPs drop the
+  // ~30KB stance map, characters keep the closed display/scoring set, and
+  // full view keeps whole documents. See electionSummaryProjections.ts.
   const [
     characters,
     npps,
@@ -1512,13 +1500,19 @@ export async function fetchDepsForElection(
     allCharIds.length > 0
       ? db
           .collection<Character>("characters")
-          .find({ _id: { $in: allCharIds } })
+          .find(
+            { _id: { $in: allCharIds } },
+            isFull ? undefined : { projection: ELECTION_SUMMARY_CHARACTER_PROJECTION }
+          )
           .toArray()
       : Promise.resolve([] as Character[]),
     nppIds.length > 0
       ? db
           .collection<NPP>("npps")
-          .find({ _id: { $in: nppIds } })
+          .find(
+            { _id: { $in: nppIds } },
+            isFull ? undefined : { projection: ELECTION_SUMMARY_NPP_PROJECTION }
+          )
           .toArray()
       : Promise.resolve([] as NPP[]),
     db.collection<PoliticalParty>("politicalParties").find({ countryId }).toArray(),

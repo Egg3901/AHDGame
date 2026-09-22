@@ -1,25 +1,10 @@
-import type { PartySeed } from "@/lib/seeds/reference/politicalParties";
-export const csParties: PartySeed[] = [
-  {
-    seedOrder: 1,
-    countryId: "CS",
-    name: "Komunistická strana Československa",
-    abbreviation: "KSČ",
-    color: "#C00000",
-    economicPosition: -4,
-    socialPosition: 2,
-    memberCount: 0,
-    isDefault: true,
-    validForPresets: ["1953-default", "1979-default"],
-    regimeStatus: "ruling",
-    treasury: 650_000,
-    nationalTaxRate: 0,
-    politicalStrength: 0,
-    chairId: null,
-    viceChairId: null,
-    treasurerId: null,
-    committeeIds: [],
-    createdBy: null,
-  },
-];
-export default csParties;
+/**
+ * Forwarder. Moved into CS's country folder.
+ *
+ * A forwarder holds no copy, so existing importers are untouched and there is
+ * still exactly one declaration.
+ *
+ * The default is re-exported separately: `export *` does not carry it.
+ */
+export * from "@/lib/countries/cs/data/csParties";
+export { default } from "@/lib/countries/cs/data/csParties";

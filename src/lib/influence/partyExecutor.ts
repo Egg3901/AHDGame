@@ -26,6 +26,7 @@ import {
 import { applyPartyInfluenceEffects } from "./partyExecutorEffects";
 import type { ExecutePartyInfluenceInput } from "./partyExecutorTypes";
 import { calculateRelocationCapacity, calculateRelocationRequestCost } from "@/lib/npp/recruitment";
+import { getPartyFrontier, isInFrontier } from "@/lib/parties/partyFrontier";
 import {
   NPP_MANAGEMENT_AP_COST,
   nppActionPointCap,
@@ -767,6 +768,8 @@ export async function getNationalPartyInfluenceOptions(party: PoliticalParty): P
     currentNPPs: number;
     maxSlots: number;
     full: boolean;
+    /** False when the party has no presence in or next to this region. */
+    inFrontier: boolean;
   }>;
   nppsByState: Record<
     string,
@@ -894,6 +897,15 @@ export async function getNationalPartyInfluenceOptions(party: PoliticalParty): P
   // picker must use the same rule the executor enforces, or a target renders as
   // selectable and is then refused (or vice versa).
   const partyNppCount = npps.length;
+  // Growth frontier: relocation is gated on it in `partyExecutorValidation`, so
+  // the picker must report it too or a target renders selectable and is then
+  // refused. Reuses the already-loaded region list to avoid re-reading states.
+  const { presence, frontier } = await getPartyFrontier(
+    db,
+    countryId,
+    partyId,
+    states.map((state) => state._id)
+  );
   const targetStates = states.map((state) => {
     const currentNPPs = nppsByState[state._id]?.length ?? 0;
     const orgLevel = orgByStateKey.get(`${state._id}_${partyId}`)?.organization ?? 0;
@@ -907,6 +919,7 @@ export async function getNationalPartyInfluenceOptions(party: PoliticalParty): P
       currentNPPs,
       maxSlots,
       full: currentNPPs >= maxSlots,
+      inFrontier: isInFrontier(presence, frontier, state._id),
     };
   });
 

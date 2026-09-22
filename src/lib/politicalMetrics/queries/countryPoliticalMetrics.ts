@@ -173,13 +173,15 @@ export async function loadCountryPoliticalMetrics(
   };
   /**
    * Population-weighted mean cabinet residual, plus the share of population for
-   * which the channel can absorb nothing more. Ticket #1129: players reported
+   * which every channel is effectively maxed. Ticket #1129: players reported
    * built estates doing nothing, because a single global cap meant a saturated
    * order book zeroed every other channel too.
    *
    * The cap is now per channel, so "at cap" is only true when EVERY channel is
-   * pinned. Anything less and there is still a channel a player can build in,
-   * which is exactly the case the old warning would have called hopeless.
+   * within 0.01 of its asymptote (issue #703: channels never touch it, so this
+   * means effectively maxed, not exactly pinned). Anything less and there is
+   * still a channel a player can build in, which is exactly the case the old
+   * warning would have called hopeless.
    * A doc with no per-source split yet (written before the change, or a region
    * the ministerial step has not touched since) falls back to comparing its
    * flat total against the full ceiling, which is the same question.

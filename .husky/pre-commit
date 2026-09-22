@@ -1,2 +1,8 @@
 #!/bin/sh
-npx lint-staged
+# --relative passes paths relative to the repo root instead of absolute ones.
+# Windows caps a command line at 8191 characters, and this worktree lives at a
+# 76-character path: a 119-file commit builds a 14,717-character eslint
+# invocation and fails with "The command line is too long." The same file list
+# is 5,435 characters relative. Nothing is skipped -- every staged file still
+# goes through eslint --fix and prettier --write.
+npx lint-staged --relative

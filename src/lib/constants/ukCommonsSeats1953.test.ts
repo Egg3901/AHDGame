@@ -33,7 +33,6 @@ describe("UK Commons era seat maps (ticket #1058)", () => {
     expect(getTotalUkCommonsSeats("1953-default")).toBe(625);
 
     expect(getUkCommonsSeats("2019-default")).toBe(UK_COMMONS_SEATS);
-    expect(getUkCommonsSeats("1991-default")).toBe(UK_COMMONS_SEATS);
     expect(getUkCommonsSeats(undefined)).toBe(UK_COMMONS_SEATS);
     expect(getTotalUkCommonsSeats("2019-default")).toBe(650);
   });

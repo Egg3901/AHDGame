@@ -154,18 +154,40 @@ export async function emitBondTurnLedger(args: {
         : [];
     const corpNameById = new Map(corpNameDocs.map((c) => [c._id.toString(), c.name as string]));
 
+    // #992 tranche 4: fund-subject coupon/maturity rows need a subjectName too.
+    const fundSubjectIds = [
+      ...new Set(
+        txBondEntries
+          .filter((e) => e.subjectType === "fund" && e.subjectId)
+          .map((e) => e.subjectId!.toString())
+      ),
+    ];
+    const fundNameDocs =
+      fundSubjectIds.length > 0
+        ? await db
+            .collection("indexFunds")
+            .find({ _id: { $in: fundSubjectIds.map((id) => new ObjectId(id)) } })
+            .project({ _id: 1, name: 1 })
+            .toArray()
+        : [];
+    const fundNameById = new Map(
+      fundNameDocs.map((f) => [f._id.toString(), (f.name ?? "") as string])
+    );
+
     const resolvedCharEntries = txBondEntries.map(({ charId, isImperial, ...rest }) => ({
       ...rest,
       subjectName:
-        rest.subjectType === "corporation"
-          ? (corpNameById.get(rest.subjectId?.toString() ?? "") ?? "")
-          : rest.subjectType === "government"
-            ? // Government rows derive their name from countryId — same shape as
-              // the gov_coupon_payment rows built below.
-              `${rest.countryId ?? ""} Government`
-            : isImperial
-              ? (imperialNameById.get(charId ?? "") ?? "")
-              : (regularNameById.get(charId ?? "") ?? ""),
+        rest.subjectType === "fund"
+          ? (fundNameById.get(rest.subjectId?.toString() ?? "") ?? "")
+          : rest.subjectType === "corporation"
+            ? (corpNameById.get(rest.subjectId?.toString() ?? "") ?? "")
+            : rest.subjectType === "government"
+              ? // Government rows derive their name from countryId — same shape as
+                // the gov_coupon_payment rows built below.
+                `${rest.countryId ?? ""} Government`
+              : isImperial
+                ? (imperialNameById.get(charId ?? "") ?? "")
+                : (regularNameById.get(charId ?? "") ?? ""),
     }));
 
     const govEntries = [...govCouponByCountry.entries()].map(([cid, { total, currency }]) => ({

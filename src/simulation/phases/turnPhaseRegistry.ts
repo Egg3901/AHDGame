@@ -12,6 +12,7 @@ import { processFomcNominationLifecycle } from "@/lib/fomcNominationLifecycle";
 import { processScotusTurn } from "@/lib/turn/scotusTurn";
 import { processUkJrSurpriseTurn } from "@/lib/turn/ukJrSurpriseTurn";
 import { processUkLeadershipChallengeTurn } from "@/lib/turn/ukLeadershipChallengeTurn";
+import { processUkPartyConferenceTurn } from "@/lib/turn/ukPartyConferenceTurn";
 import { processSocialAxisDrift } from "@/lib/turn/socialAxisDrift";
 import { processGovernorAPRegen } from "@/lib/turn/governorAPRegen";
 import { seedOfficeStates } from "@/lib/governorOffice/seedOfficeStates";
@@ -118,6 +119,7 @@ import { processPartyInfluenceTurn } from "@/lib/turn/partyInfluenceTurn";
 import { processPresidentialSuccession } from "@/lib/turn/presidentialSuccession";
 import { processImpeachmentLifecycle } from "@/lib/turn/impeachmentLifecycle";
 import { processByElectionWatcher } from "@/lib/turn/byElections";
+import { processCommonsByElectionWatcher } from "@/lib/turn/commonsByElections";
 import { detectPreIterationComplete } from "@/lib/turn/preIterationLifecycle";
 import { processActivityLogging } from "@/lib/turn/activityLogging";
 import { runFinancialSuspectScan } from "@/lib/financialTxLog/suspectScan";
@@ -203,6 +205,7 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
           newTurn,
           currentYear,
           phaseResults,
+          warnings,
         } = context;
         // When an admin pauses corporation actions, the corporate turn phase
         // (sector revenue, operating income, dividends, market-cap/history
@@ -351,6 +354,13 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
             totalRevenueGenerated: corpTurnResults.totalRevenueGenerated,
             totalIncomeGenerated: corpTurnResults.totalIncomeGenerated,
           };
+          // Clearing book invariant breaches (issue #2054) join the turn
+          // warning channel here, so the completed-turn health snapshot
+          // counts them. The includes-guard keeps a retried or replayed
+          // corporation phase from recording the same breach twice.
+          for (const warning of corpTurnResults.turnWarnings ?? []) {
+            if (!warnings.includes(warning)) warnings.push(warning);
+          }
         }
 
         // Live fiscal accrual into the signed treasury balance. Runs after the
@@ -802,11 +812,10 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
           return { billsProposed };
         });
 
-        // File bench challengers directly into otherwise-uncontested single-seat
-        // primaries (governor/senate) BEFORE nppBehavior, governor is last in
-        // RACE_PRIORITY so nppBehavior's own Phase-2 starves it. Running first
-        // means nppBehavior (which reloads context this same turn) sees the filed
-        // candidate and won't double-fill the race.
+        // File bench challengers directly into uncovered primaries before
+        // nppBehavior. Some direct chamber families are outside RACE_PRIORITY,
+        // while low-priority races can be starved by the shared NPP pool.
+        // nppBehavior reloads context afterward and sees the filed candidates.
         await runtime.runPhase("generateChallengers", () => processChallengerGeneration(gameNow));
 
         const nppResult = await runtime.runPhase("nppBehavior", () =>
@@ -866,6 +875,12 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
           runtime.runPhase("ukLeadershipChallenges", () =>
             processUkLeadershipChallengeTurn(db, gameState.currentTurn, realNow)
           ),
+          // UK party conferences (#862): annual schedule/open/ratify/complete
+          // lifecycle per party. UK-gated no-op elsewhere; appended after the
+          // leadership phase so the index math above is unchanged.
+          runtime.runPhase("ukPartyConferences", () =>
+            processUkPartyConferenceTurn(db, gameState.currentTurn, realNow)
+          ),
         ]);
         const countryBillResultsStart = 1;
         const stateBillResultIndex = countryBillResultsStart + countryBillPhaseEntries.length;
@@ -902,6 +917,17 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
           expired: 0,
           resolved: 0,
           removed: 0,
+        };
+        const ukConferenceResult = billPhaseResults[ukJrSurpriseResultIndex + 3] as Awaited<
+          ReturnType<typeof processUkPartyConferenceTurn>
+        > | null;
+        phaseResults.ukPartyConferences = ukConferenceResult ?? {
+          scheduled: 0,
+          opened: 0,
+          completed: 0,
+          ratified: 0,
+          expired: 0,
+          payoffs: 0,
         };
 
         phaseResults.billLifecycle = billLifecycleResult ?? {
@@ -1256,6 +1282,12 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
           await runtime.runPhase("byElectionWatcher", () =>
             processByElectionWatcher(db, newTurn, gameNow)
           );
+          // Immediately after the governor watcher: same settled seat state,
+          // separate country scope (UK Commons), separate election type.
+          phaseResults.commonsByElectionWatcher = await runtime.runPhase(
+            "commonsByElectionWatcher",
+            () => processCommonsByElectionWatcher(db, newTurn, gameNow)
+          );
         }
         phaseResults.perpetualElections = { electionsCreated: 0 };
         phaseResults.leadershipElections = { electionsResolved: 0 };
@@ -1291,13 +1323,11 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
     {
       key: "fiscalYearBoundary",
       async execute(context, runtime) {
-        const { db, newTurn, phaseResults, gameState } = context;
-        const startingYear = gameState.startingYear ?? STARTING_YEAR;
-        const currentYear = startingYear + Math.floor((newTurn - 1) / TURNS_PER_YEAR);
+        const { db, newTurn, calendarTurn, currentYear, phaseResults } = context;
         let fiscalYearProcessed = false;
         let newFiscalYear: number | null = null;
-        if (isFiscalYearEnd(newTurn)) {
-          newFiscalYear = calculateFiscalYear(currentYear, newTurn);
+        if (isFiscalYearEnd(calendarTurn)) {
+          newFiscalYear = calculateFiscalYear(currentYear, calendarTurn);
           await runtime.runPhase("fiscalYear", () =>
             processFiscalYear(db, newFiscalYear!, newTurn)
           );
@@ -1411,7 +1441,12 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
           );
           return;
         }
-        const report = await runtime.runPhase("ledgerReconcile", () => reconcileTurn(db, newTurn));
+        // Stamp the turn's banking mode from the already-loaded turn config:
+        // zero extra round trips, and the persisted doc carries per-turn
+        // banking history for the #992 evidence gate.
+        const report = await runtime.runPhase("ledgerReconcile", () =>
+          reconcileTurn(db, newTurn, { savingsAccountsMode: config?.savingsAccountsMode ?? null })
+        );
         if (report) {
           phaseResults.ledgerReconcile = {
             status: report.status,

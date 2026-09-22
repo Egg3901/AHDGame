@@ -25,7 +25,7 @@ function flatten(doc: Record<string, unknown>): Record<string, number> {
 }
 
 async function jpBoard() {
-  const { jpStateMetrics } = await import("@/lib/seeds/jp/jpStateMetrics");
+  const { jpStateMetrics } = await import("@/lib/countries/jp/data/jpStateMetrics");
   const legacy = flatten(jpStateMetrics[0] as unknown as Record<string, unknown>);
   // A real seed carries economic/population in the SAME doc (pre-split source),
   // so the same flat map serves as both halves here.

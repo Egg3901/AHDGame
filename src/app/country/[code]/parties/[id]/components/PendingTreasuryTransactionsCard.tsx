@@ -179,8 +179,8 @@ export function PendingTreasuryTransactionsCard({ countryCode, partyId, onActed 
                 <th className="text-left py-2 pr-3">Type</th>
                 <th className="text-right py-2 pr-3">Amount</th>
                 <th className="text-left py-2 pr-3">Recipient</th>
-                <th className="text-left py-2 pr-3">Approver 1 (Treasurer)</th>
-                <th className="text-left py-2 pr-3">Approver 2 (Chair/VC)</th>
+                <th className="text-left py-2 pr-3">Approver 1</th>
+                <th className="text-left py-2 pr-3">Approver 2</th>
                 <th className="text-right py-2">Actions</th>
               </tr>
             </thead>
@@ -226,7 +226,7 @@ export function PendingTreasuryTransactionsCard({ countryCode, partyId, onActed 
                           )}
                         </span>
                       ) : (
-                        <span className="text-muted">⏳ Awaiting Treasurer</span>
+                        <span className="text-muted">⏳ Awaiting approval</span>
                       )}
                     </td>
                     <td className="py-2 pr-3">
@@ -237,8 +237,13 @@ export function PendingTreasuryTransactionsCard({ countryCode, partyId, onActed 
                             <span className="text-muted"> (auto)</span>
                           )}
                         </span>
+                      ) : row.approvalMode === "single" ? (
+                        // A single-mode row completes on one signature, so a
+                        // second "Awaiting approval" here read as an approval
+                        // that was still owed and never came.
+                        <span className="text-muted/60">Not required</span>
                       ) : (
-                        <span className="text-muted">⏳ Awaiting Chair/VC</span>
+                        <span className="text-muted">⏳ Awaiting approval</span>
                       )}
                     </td>
                     <td className="py-2 text-right space-x-2">

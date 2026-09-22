@@ -87,6 +87,14 @@ const FISCAL_COEFF_DEFICIT = 0.15;
 const FISCAL_COEFF_SURPLUS = 0.08;
 
 /**
+ * Pegged-era money-growth → CPI coefficient: each 1 pp of excess M2 growth →
+ * this much inflation. Money growth was disciplined by convertibility; the
+ * post-Bretton-Woods-exit value lives in `monetary/brettonWoods.ts`
+ * (BW_POST_EXIT_MONEY_COEFF) and arrives via `moneyGrowthCoeff`.
+ */
+export const PEGGED_MONEY_GROWTH_COEFF = 0.08;
+
+/**
  * Deficit/GDP clamp (percentage points), applied BEFORE the FISCAL_COEFF
  * multipliers — the same defensive pattern already used for commodity
  * (`COMMODITY_PRESSURE_ROW_*`) and forex (`FOREX_PRESSURE_CLAMP`) pressure,
@@ -318,6 +326,13 @@ export interface InflationInputs {
   /** Annualized M2 growth. Converted to bounded excess-money-growth pressure. */
   moneySupplyGrowthPct?: number;
   /**
+   * Money-growth → CPI coefficient. Defaults to the pegged-era 0.08; the
+   * Bretton Woods float passes the regime coefficient from
+   * `moneyGrowthCoefficient` (post-exit money growth is no longer disciplined
+   * by convertibility).
+   */
+  moneyGrowthCoeff?: number;
+  /**
    * Central-bank scrutiny (0-100). Dampens the MONETARY term only: a bank the
    * market does not believe has to move further for the same effect on
    * expectations. Loan rates, cost of capital and bond pricing are deliberately
@@ -499,9 +514,10 @@ export function calculateInflationWithBreakdown(inputs: InflationInputs): {
   const housing = housingCostPressureInput * HOUSING_PRESSURE_COEFF;
 
   const policy = policyStancePressureInput;
+  const moneyGrowthCoeffInput = finiteOr(inputs.moneyGrowthCoeff, PEGGED_MONEY_GROWTH_COEFF);
   const moneySupply = Math.max(
     -1.5,
-    Math.min(2.5, (moneySupplyGrowthInput - gdpGrowthInput) * 0.08)
+    Math.min(2.5, (moneySupplyGrowthInput - gdpGrowthInput) * moneyGrowthCoeffInput)
   );
 
   const base = targetInflationInput;
@@ -655,7 +671,13 @@ export async function calculateCountryInflation(
   forexPressure = 0.0,
   savingsPressure = 0.0,
   policyStancePressure = 0.0,
-  moneySupplyGrowthPct?: number
+  moneySupplyGrowthPct?: number,
+  /**
+   * Money-growth → CPI coefficient for the regime in force (see
+   * `moneyGrowthCoefficient`). Omitted = the pegged-era default, so callers
+   * that do not track a regime compute byte-identically to before.
+   */
+  moneyGrowthCoeff?: number
 ): Promise<number> {
   // `typeof NaN === "number"`, so `?? fallback` does not catch NaN that slipped
   // into a persisted field. Any NaN reaching the inflation math recurses every
@@ -790,6 +812,10 @@ export async function calculateCountryInflation(
     moneySupplyGrowthPct: isMoneySupplyEnabledFromConfig(gc)
       ? finiteOr(moneySupplyGrowthPct, gdpGrowth)
       : gdpGrowth,
+    // Bretton Woods exit (issue #7): the caller passes the regime coefficient
+    // for this country's stored regime; omitted keeps the pegged default, so
+    // flag-off worlds compute byte-identically.
+    moneyGrowthCoeff: finiteOr(moneyGrowthCoeff, PEGGED_MONEY_GROWTH_COEFF),
     centralBankScrutiny,
     housingCostPressure,
     previousInflation,

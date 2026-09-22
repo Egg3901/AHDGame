@@ -180,10 +180,21 @@ describe("1953 era usdExchangeRate overrides", () => {
     }
   });
 
-  it("changes nothing outside the 1953 preset", () => {
+  /**
+   * ⚠️ 1991 IS NO LONGER IN THIS LIST, and that is a change in fact rather than
+   * in scope. When this test was written the 1953 table was the only one
+   * carrying `usdExchangeRate`, so "changes nothing outside 1953" and "1953 is
+   * the only era with anchors" were the same statement. They are not any more:
+   * UK/JP/DE/IE/CN now carry authored 1991 anchors, because without them a 1991
+   * world read the UK as a $433B economy against a real ~$1.03T. Those five are
+   * asserted in `gdpAnchorRate1991.test.ts`.
+   *
+   * The 1953 work still must not leak, which is what the remaining presets and
+   * the per-era sweep below check.
+   */
+  it("changes nothing outside the eras that author anchors", () => {
     const presets = [
       "1979-default",
-      "1991-default",
       "1999-default",
       "2007-default",
       "2019-default",
@@ -197,12 +208,19 @@ describe("1953 era usdExchangeRate overrides", () => {
         ).toBe(COUNTRY_CONFIGS[countryId].usdExchangeRate);
       }
     }
-    // Only the 1953 table carries usdExchangeRate overrides at all.
+    // Only 1953 and 1991 carry usdExchangeRate overrides at all.
+    const ANCHORED_ERAS = new Set(["1953-default", "1991-default"]);
     for (const [preset, table] of Object.entries(ERA_COUNTRY_CONFIG_OVERRIDES)) {
-      if (preset === "1953-default") continue;
+      if (ANCHORED_ERAS.has(preset)) continue;
       for (const override of Object.values(table)) {
         expect(override?.usdExchangeRate).toBeUndefined();
       }
     }
+    // And 1991 authors exactly the five, so a sweep cannot quietly add more.
+    const anchored1991 = Object.entries(ERA_COUNTRY_CONFIG_OVERRIDES["1991-default"] ?? {})
+      .filter(([, override]) => override?.usdExchangeRate !== undefined)
+      .map(([countryId]) => countryId)
+      .sort();
+    expect(anchored1991).toEqual(["CN", "DE", "IE", "JP", "UK"]);
   });
 });

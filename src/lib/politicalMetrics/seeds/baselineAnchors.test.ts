@@ -6,6 +6,7 @@ import {
   validateAnchorTable,
 } from "./baselineAnchors";
 import { NATIONAL_BASELINES_1953 } from "./nationalBaselines1953";
+import { NATIONAL_BASELINES_1979 } from "./nationalBaselines1979";
 import { POLITICAL_METRIC_COUNTRY_IDS, type PoliticalMetricId } from "../types";
 
 describe("interpolateAnchors", () => {
@@ -41,6 +42,25 @@ describe("baselineFor", () => {
       for (const [metricId, baseline] of Object.entries(authored)) {
         expect(baselineFor(countryId, metricId as PoliticalMetricId, 1953)).toBe(baseline.value);
       }
+    }
+  });
+
+  it("reproduces the 1979 authored value exactly for every country and family", () => {
+    for (const countryId of POLITICAL_METRIC_COUNTRY_IDS) {
+      for (const [metricId, value] of Object.entries(NATIONAL_BASELINES_1979[countryId])) {
+        expect(baselineFor(countryId, metricId as PoliticalMetricId, 1979)).toBe(value);
+      }
+    }
+  });
+
+  it("gives every playable country era divergence by 1979", () => {
+    for (const countryId of POLITICAL_METRIC_COUNTRY_IDS) {
+      const changed = Object.keys(NATIONAL_BASELINES_1953[countryId]).filter(
+        (metricId) =>
+          baselineFor(countryId, metricId as PoliticalMetricId, 1953) !==
+          baselineFor(countryId, metricId as PoliticalMetricId, 1979)
+      );
+      expect(changed.length).toBeGreaterThan(0);
     }
   });
 

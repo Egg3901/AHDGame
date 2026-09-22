@@ -323,6 +323,89 @@ describe("validateNationalPartyInfluence", () => {
     );
     expect(result.valid).toBe(true);
   });
+
+  // Growth frontier: relocation must not teleport a party into a region it does
+  // not already reach, otherwise it is a trivial bypass of the recruitment gate
+  // (move one NPP, and the new presence opens the frontier).
+  describe("growth frontier", () => {
+    function seedFrontier(presenceStates: string[], regionIds: string[]) {
+      db.collectionMocks.states.find.mockReturnValue({
+        toArray: vi.fn().mockResolvedValue(regionIds.map((r) => ({ _id: r }))),
+      });
+      db.collectionMocks.characters.distinct.mockResolvedValue(presenceStates);
+      db.collectionMocks.statePartyOrg.findOne.mockResolvedValue({
+        _id: "CA_1",
+        stateId: "CA",
+        partyId: "1",
+        organization: 0,
+      });
+      db.collectionMocks.npps.countDocuments.mockResolvedValue(0);
+      db.collectionMocks.states.countDocuments.mockResolvedValue(50);
+    }
+
+    it("rejects a relocation target outside the party frontier", async () => {
+      seedFrontier(["NY"], ["NY", "PA", "CA"]);
+      db.collectionMocks.states.findOne.mockResolvedValue({
+        _id: "CA",
+        countryId: "US",
+        name: "California",
+      });
+
+      const result = await validateNationalPartyInfluence(
+        party,
+        npp,
+        "relocate_state",
+        0,
+        actorCharacterId,
+        { targetStateId: "CA" }
+      );
+
+      expect(result.valid).toBe(false);
+      expect(result.error).toContain("not established in or next to");
+      expect(result.error).toContain("California");
+      expect(result.error).not.toMatch(/[–—]/);
+    });
+
+    it("allows a relocation target adjacent to existing presence", async () => {
+      seedFrontier(["NY"], ["NY", "PA", "CA"]);
+      db.collectionMocks.states.findOne.mockResolvedValue({
+        _id: "PA",
+        countryId: "US",
+        name: "Pennsylvania",
+      });
+
+      const result = await validateNationalPartyInfluence(
+        party,
+        npp,
+        "relocate_state",
+        0,
+        actorCharacterId,
+        { targetStateId: "PA" }
+      );
+
+      expect(result).toEqual({ valid: true });
+    });
+
+    it("allows any target for a party with no presence anywhere", async () => {
+      seedFrontier([], ["NY", "PA", "CA"]);
+      db.collectionMocks.states.findOne.mockResolvedValue({
+        _id: "CA",
+        countryId: "US",
+        name: "California",
+      });
+
+      const result = await validateNationalPartyInfluence(
+        party,
+        npp,
+        "relocate_state",
+        0,
+        actorCharacterId,
+        { targetStateId: "CA" }
+      );
+
+      expect(result).toEqual({ valid: true });
+    });
+  });
 });
 
 describe("validateStatePartyInfluence", () => {

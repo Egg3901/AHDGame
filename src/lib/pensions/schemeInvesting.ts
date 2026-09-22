@@ -163,6 +163,7 @@ export async function runPensionSchemeInvestments(
           schemeId: scheme._id.toString(),
           fundId: fund._id.toString(),
           fundSlug: fund.slug,
+          fundCurrency: fund.anchorCurrencyCode,
           units,
           navAnchor: fund.quotedNav,
           source: "cron",

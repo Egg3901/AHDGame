@@ -128,6 +128,12 @@ export async function resolveCharacterRoles(
       }
     }
   }
+  const ledParty = await db
+    .collection<{ abbreviation: string }>("politicalParties")
+    .findOne({ chairId: character._id }, { projection: { abbreviation: 1 } });
+  if (ledParty?.abbreviation) {
+    roles.push("partyLeader", `partyLeader:${ledParty.abbreviation}`);
+  }
   return roles;
 }
 
@@ -396,9 +402,30 @@ export async function getCrisisInteraction(
 /**
  * Check if a character has the required role to interact with a node.
  */
-export function canCharacterInteract(node: CrisisDecisionNode, characterRoles: string[]): boolean {
+export function canCharacterInteract(
+  node: CrisisDecisionNode,
+  characterRoles: string[],
+  countryId?: string,
+  regionId?: string
+): boolean {
+  if (
+    node.requiredCountryIds?.length &&
+    (!countryId || !node.requiredCountryIds.includes(countryId))
+  ) {
+    return false;
+  }
+  if (node.requiredRegionIds?.length && (!regionId || !node.requiredRegionIds.includes(regionId))) {
+    return false;
+  }
   if (node.requiredRoles.includes("any")) return true;
-  return node.requiredRoles.some((role) => characterRoles.includes(role));
+  const roleMatches = node.requiredRoles.some((role) => characterRoles.includes(role));
+  if (!roleMatches) return false;
+  if (node.requiredRoles.includes("partyLeader") && node.requiredPartyAbbreviations?.length) {
+    return node.requiredPartyAbbreviations.some((abbreviation) =>
+      characterRoles.includes(`partyLeader:${abbreviation}`)
+    );
+  }
+  return true;
 }
 
 function deadlineForNode(node: CrisisDecisionNode | null): Date | null {
@@ -418,7 +445,8 @@ export async function submitCrisisDecision(
   optionId: string,
   characterId: ObjectId,
   countryId: string,
-  characterRoles: string[] = ["any"]
+  characterRoles: string[] = ["any"],
+  regionId?: string
 ): Promise<{
   interaction: CrisisInteraction;
   nextNode: CrisisDecisionNode | null;
@@ -434,7 +462,7 @@ export async function submitCrisisDecision(
   const currentNode = interaction.decisionTree.find((n) => n.nodeId === interaction.currentNodeId);
   if (!currentNode) throw conflict("No active decision node");
 
-  if (!canCharacterInteract(currentNode, characterRoles)) {
+  if (!canCharacterInteract(currentNode, characterRoles, countryId, regionId)) {
     throw forbidden("You are not authorized to make this decision");
   }
 

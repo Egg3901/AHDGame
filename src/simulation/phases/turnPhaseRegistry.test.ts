@@ -36,6 +36,82 @@ describe("turn phase registry", () => {
     expect(phaseIndex.get("bankingTurn")).toBe((phaseIndex.get("npcBankPolicyTurn") ?? -1) + 1);
   });
 
+  describe("fiscal year boundary calendar", () => {
+    const fiscalYearAdapter = () => {
+      const adapter = getTurnPhaseRegistry().find((entry) => entry.key === "fiscalYearBoundary");
+      expect(adapter).toBeDefined();
+      return adapter!;
+    };
+
+    it("does not roll over while a founding election pins the calendar", async () => {
+      const phaseResults = {} as Record<string, unknown>;
+      const runtime = { runPhase: vi.fn(), markPhaseSkipped: vi.fn() };
+
+      await fiscalYearAdapter().execute(
+        {
+          db: {} as never,
+          newTurn: 40,
+          calendarTurn: 1,
+          currentYear: 1953,
+          phaseResults,
+        } as never,
+        runtime as never
+      );
+
+      expect(runtime.runPhase).not.toHaveBeenCalled();
+      expect(runtime.markPhaseSkipped).toHaveBeenCalledWith(
+        "fiscalYear",
+        "conditional",
+        "Skipped because this turn is not a fiscal year boundary."
+      );
+      expect(phaseResults.fiscalYear).toEqual({ processed: false, newFiscalYear: null });
+    });
+
+    it("rolls FY1954 at the first post-founding October boundary", async () => {
+      const phaseResults = {} as Record<string, unknown>;
+      const runtime = {
+        runPhase: vi.fn().mockResolvedValue(undefined),
+        markPhaseSkipped: vi.fn(),
+      };
+
+      await fiscalYearAdapter().execute(
+        {
+          db: {} as never,
+          newTurn: 88,
+          calendarTurn: 40,
+          currentYear: 1953,
+          phaseResults,
+        } as never,
+        runtime as never
+      );
+
+      expect(runtime.runPhase).toHaveBeenCalledWith("fiscalYear", expect.any(Function));
+      expect(runtime.markPhaseSkipped).not.toHaveBeenCalled();
+      expect(phaseResults.fiscalYear).toEqual({ processed: true, newFiscalYear: 1954 });
+    });
+
+    it("preserves rollover timing in a world without a founding offset", async () => {
+      const phaseResults = {} as Record<string, unknown>;
+      const runtime = {
+        runPhase: vi.fn().mockResolvedValue(undefined),
+        markPhaseSkipped: vi.fn(),
+      };
+
+      await fiscalYearAdapter().execute(
+        {
+          db: {} as never,
+          newTurn: 40,
+          calendarTurn: 40,
+          currentYear: 2019,
+          phaseResults,
+        } as never,
+        runtime as never
+      );
+
+      expect(phaseResults.fiscalYear).toEqual({ processed: true, newFiscalYear: 2020 });
+    });
+  });
+
   it("runs bankSolvencyTurn immediately after recomputeSharePrices", () => {
     const phaseIndex = new Map(TURN_PHASE_NAMES.map((name, index) => [name, index]));
     expect(phaseIndex.get("bankSolvencyTurn"), "bankSolvencyTurn must be registered").not.toBe(
@@ -381,13 +457,23 @@ describe("uk leadership challenges (#861) registration", () => {
     expect(indexOf("ukLeadershipChallenges")).toBeGreaterThan(indexOf("fomcNominations"));
     expect(indexOf("ukLeadershipChallenges")).toBeGreaterThan(indexOf("ukJrSurpriseTurn"));
     expect(indexOf("ukLeadershipChallenges")).toBe(indexOf("fomcNominations") + 1);
-    expect(calledPhases[indexOf("ukLeadershipChallenges") + 1]).toBe("socialAxisDrift");
+    // UK party conferences (#862) run immediately after the leadership phase.
+    expect(indexOf("ukPartyConferences")).toBe(indexOf("ukLeadershipChallenges") + 1);
+    expect(calledPhases[indexOf("ukPartyConferences") + 1]).toBe("socialAxisDrift");
     // The recording stub returns undefined, so the adapter records the
     // documented zero default rather than leaving the key absent.
     expect(phaseResults.ukLeadershipChallenges).toEqual({
       expired: 0,
       resolved: 0,
       removed: 0,
+    });
+    expect(phaseResults.ukPartyConferences).toEqual({
+      scheduled: 0,
+      opened: 0,
+      completed: 0,
+      ratified: 0,
+      expired: 0,
+      payoffs: 0,
     });
   });
 });

@@ -41,7 +41,49 @@ export interface ScotusPresetDocketCaseSeed {
   demographicSignal?: { affirmedSignal: string; divergedSignal: string };
 }
 
+export interface ScotusRosterProvenance {
+  /** A reviewed current roster carried forward to a future preset date. */
+  mode: "reviewed-current-roster-fallback";
+  /** ISO date on which the source roster was reviewed. */
+  asOf: string;
+  /** Future preset date for which the reviewed roster is the explicit fallback. */
+  projectedFor: string;
+  /** Public source used to review the membership and vacancies. */
+  source: string;
+  /** Limits on treating the projection as a historical observation. */
+  limitation: string;
+}
+
+export type ScotusDocketProvenance =
+  | {
+      mode: "authored-history";
+      /** Last calendar year covered by the curated historical docket. */
+      throughYear: number;
+      source: string;
+    }
+  | {
+      /**
+       * Explicit fallback for a preset whose opening date is beyond the last
+       * completed historical term. The curated docket deliberately starts
+       * empty; ordinary play still receives the procedural surprise docket.
+       */
+      mode: "procedural-only-fallback";
+      reviewedAt: string;
+      source: string;
+      limitation: string;
+    };
+
+export interface ScotusPresetProvenance {
+  roster: ScotusRosterProvenance;
+  docket: ScotusDocketProvenance;
+}
+
 export interface ScotusPresetSeed {
   seats: ScotusPresetSeatSeed[];
   docket: ScotusPresetDocketCaseSeed[];
+  /**
+   * Required when a preset intentionally relies on a reviewed fallback. Older
+   * authored historical presets predate this metadata and remain compatible.
+   */
+  provenance?: ScotusPresetProvenance;
 }

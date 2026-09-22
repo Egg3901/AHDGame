@@ -1,16 +1,18 @@
 import { describe, expect, it } from "vitest";
 import { buildAllRegistrationSeeds, validateSeed } from "./registrationLanes";
 import { build1991RegistrationSeeds } from "./registrationLanes1991";
+import { build2027RegistrationSeeds } from "./registrationLanes2027";
+import { generateStatePartyOrg } from "@/lib/seeds/reference/statePartyOrg";
 import { states as usStates } from "@/lib/seeds/reference/states";
 import { ukRegions } from "@/lib/seeds/uk/ukRegions";
-import { jpRegions } from "@/lib/seeds/jp/jpRegions";
+import { jpRegions } from "@/lib/countries/jp/data/jpRegions";
 import { deRegions } from "@/lib/seeds/de/deRegions";
 import { brRegions } from "@/lib/seeds/br/brRegions";
 import { ieRegions } from "@/lib/seeds/ie/ieRegions";
 import { cnRegions } from "@/lib/seeds/cn/cnRegions";
 import { politicalParties as usParties } from "@/lib/seeds/reference/politicalParties";
 import { ukParties } from "@/lib/seeds/uk/ukParties";
-import { jpParties } from "@/lib/seeds/jp/jpParties";
+import { jpParties } from "@/lib/countries/jp/data/jpParties";
 import { deParties } from "@/lib/seeds/de/deParties";
 import { brParties } from "@/lib/seeds/br/brParties";
 import { ieParties } from "@/lib/seeds/ie/ieParties";
@@ -181,5 +183,27 @@ describe("1991 registration bootstrap seeds", () => {
         expect(p.abbr).not.toBe("RUK");
       }
     }
+  });
+});
+
+describe("2027 registration bootstrap seeds", () => {
+  it("covers all 50 states plus DC and every referenced party organization", () => {
+    const seeds = build2027RegistrationSeeds();
+    const orgIds = new Set(generateStatePartyOrg("2027-default").map((org) => org._id));
+    const missing: string[] = [];
+
+    expect(seeds).toHaveLength(51);
+    for (const row of seeds) {
+      for (const share of row.parties) {
+        const partyId = share.abbr === "DEM" ? "1" : share.abbr === "REP" ? "2" : undefined;
+        if (!partyId || !orgIds.has(`${row.stateId}_${partyId}`)) {
+          missing.push(`${row.stateId}/${share.abbr}`);
+        }
+      }
+    }
+
+    expect(orgIds.has("DC_1")).toBe(true);
+    expect(orgIds.has("DC_2")).toBe(true);
+    expect(missing).toEqual([]);
   });
 });

@@ -5,13 +5,16 @@
  */
 
 import { ObjectId, type Db } from "mongodb";
-import type { Bond, IndexFund } from "@/lib/db/types";
+import type { Bond, IndexFund, IndexFundTransaction } from "@/lib/db/types";
 import type { CountryId } from "@/lib/constants/countries";
 import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
 import { BOND_UNIT_FACE_VALUE } from "@/lib/db/types/bond";
 import { corpCapitalToAnchor, loadFxRatesRecord } from "@/lib/currency/corporationCapital";
 import { loadBondPoolsByCurrency } from "@/lib/bonds/marketPool";
+import { insertFundTransactionsBulk } from "@/lib/indexFunds/fundQueries";
 import { purchaseBondUnitsForFund } from "@/lib/bonds/purchaseBondUnitsForFund";
+import { loadTxThresholds } from "@/lib/financialTxLog/emit";
+import type { TxThresholds } from "@/lib/db/types/financialTxLog";
 import { computeFundAllocationBreakdown } from "@/lib/indexFunds/fundAllocation";
 import { sovereignBondRemainingCapacityUnits } from "@/lib/bonds/holderCap";
 import { getAllFundDefinitions, type BondFundUniverse } from "@/lib/indexFunds/fundDefinitions";
@@ -193,7 +196,20 @@ export async function deployBondReserveFromCash(
   db: Db,
   fund: IndexFund,
   bondPrincipalAnchor: number,
-  options?: { liquidityTargetEnabled?: boolean }
+  options?: {
+    liquidityTargetEnabled?: boolean;
+    /**
+     * #992 tranche 6: game turn threaded to each bond purchase's fund-subject
+     * ledger row. When absent the purchases still settle but emit no rows.
+     */
+    turn?: number;
+    /**
+     * Preloaded thresholds for the purchase rows; loaded once per deploy
+     * pass when a turn is present and this is absent, so N purchases share
+     * one read instead of one per bond.
+     */
+    thresholds?: TxThresholds;
+  }
 ): Promise<DeployBondReserveResult> {
   const breakdown = computeFundAllocationBreakdown(fund, {
     bondPrincipalAnchor,
@@ -209,9 +225,16 @@ export async function deployBondReserveFromCash(
   }
 
   const countryId = resolveFundBondCountryId(fund);
+  // Coverage funds ensured under the #1001 domestic gate carry no standing
+  // definition entry (definitions only list the broad-fund countries); a
+  // country bond fund with a home country always means its home-sovereign
+  // mandate, so it deploys exactly like a seeded home-only fund. Funds that
+  // exist today all resolve through definitions, so this fallback never fires
+  // for them and gate-off behavior is unchanged.
   const bondUniverse =
     fund.kind === "bond"
-      ? getAllFundDefinitions().find((d) => d.slug === fund.slug)?.bondUniverse
+      ? (getAllFundDefinitions().find((d) => d.slug === fund.slug)?.bondUniverse ??
+        (fund.countryId ? ({ issuerType: "sovereign", homeOnly: true } as const) : undefined))
       : undefined;
   if (fund.kind === "bond" && !bondUniverse) {
     return { deployedAnchor: 0, unitsPurchased: 0, countryId };
@@ -264,34 +287,50 @@ export async function deployBondReserveFromCash(
   const fxRates = await loadFxRatesRecord(db);
   // One pool read for the whole pass; each purchase advances the snapshot.
   const bondPools = await loadBondPoolsByCurrency(db);
+  // One thresholds read for the whole pass, shared by every purchase row.
+  const thresholds =
+    options?.turn !== undefined ? (options?.thresholds ?? (await loadTxThresholds(db))) : undefined;
   let deployedAnchor = 0;
   let unitsPurchased = 0;
 
-  for (let index = 0; index < bonds.length; index++) {
-    const bond = bonds[index]!;
-    if (budgetAnchor <= 0) break;
+  const transactions: Omit<IndexFundTransaction, "_id">[] = [];
+  try {
+    for (let index = 0; index < bonds.length; index++) {
+      const bond = bonds[index]!;
+      if (budgetAnchor <= 0) break;
 
-    const unitCostAnchor = costPerUnitAnchor(bond, fxRates);
-    if (unitCostAnchor <= 0) continue;
+      const unitCostAnchor = costPerUnitAnchor(bond, fxRates);
+      if (unitCostAnchor <= 0) continue;
 
-    const issueBudgetAnchor =
-      options?.liquidityTargetEnabled || bondUniverse
-        ? bondAllocationBudgetForIssue(budgetAnchor, bonds.length - index)
-        : budgetAnchor;
-    const maxUnitsByBudget = Math.floor(issueBudgetAnchor / unitCostAnchor);
-    const maxUnitsByFloat = Math.floor(bond.publicFloat ?? 0);
-    const maxUnitsByPosition = sovereignBondRemainingCapacityUnits(bond, "fundId", fund._id);
-    const units = Math.min(maxUnitsByBudget, maxUnitsByFloat, maxUnitsByPosition);
-    if (units <= 0) continue;
+      const issueBudgetAnchor =
+        options?.liquidityTargetEnabled || bondUniverse
+          ? bondAllocationBudgetForIssue(budgetAnchor, bonds.length - index)
+          : budgetAnchor;
+      const maxUnitsByBudget = Math.floor(issueBudgetAnchor / unitCostAnchor);
+      const maxUnitsByFloat = Math.floor(bond.publicFloat ?? 0);
+      const maxUnitsByPosition = sovereignBondRemainingCapacityUnits(bond, "fundId", fund._id);
+      const units = Math.min(maxUnitsByBudget, maxUnitsByFloat, maxUnitsByPosition);
+      if (units <= 0) continue;
 
-    const purchase = await purchaseBondUnitsForFund(db, fund, bond, units, { bondPools });
-    if (!purchase.ok) continue;
+      const purchase = await purchaseBondUnitsForFund(db, fund, bond, units, {
+        bondPools,
+        fxRates,
+        txSink: transactions,
+        turn: options?.turn,
+        thresholds,
+      });
+      if (!purchase.ok) continue;
 
-    deployedAnchor += purchase.costAnchor;
-    unitsPurchased += purchase.units;
-    budgetAnchor -= purchase.costAnchor;
-    // The purchase debits fund cash atomically; nothing below reads the
-    // fund's cash, so no re-read per bond. `budgetAnchor` is the running cap.
+      deployedAnchor += purchase.costAnchor;
+      unitsPurchased += purchase.units;
+      budgetAnchor -= purchase.costAnchor;
+      // The purchase debits fund cash atomically; nothing below reads the
+      // fund's cash, so no re-read per bond. `budgetAnchor` is the running cap.
+    }
+  } finally {
+    // Preserve receipts for purchases already committed if a later issue fails.
+    // Balance gates, reservations and pool credits remain sequential per purchase.
+    await insertFundTransactionsBulk(db, transactions);
   }
 
   return { deployedAnchor, unitsPurchased, countryId };

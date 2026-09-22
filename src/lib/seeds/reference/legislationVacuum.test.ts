@@ -50,4 +50,29 @@ describe("policy-vacuum seeding — default policies (basePolicies.ts)", () => {
     // A pre-2019 CN windowed type is still present (gaokao 1977).
     expect(ids2019.has("cn_gaokao_reform")).toBe(true);
   });
+
+  it("seeds no other era's policy block in a 2019 world", async () => {
+    // The Leading Role Statute is a one-party constitutional lever. Poland,
+    // Hungary, Romania, Bulgaria, Belarus and Ukraine all existed in 2019; their
+    // blocks come from easternBlocPolicyConfig and belong to another era. The
+    // Soviet Union, East Germany, Czechoslovakia, Yugoslavia and the Baltic
+    // republics did not exist in 2019 at all.
+    const ids = (await getBasePolicies("2019-default")).map((r) => r.legislationTypeId);
+    for (const prefix of ["su", "dd", "cs", "yu", "bal", "pl", "hu", "ro", "bg", "blr", "ukr"]) {
+      expect(
+        ids.filter((id) => id.startsWith(`${prefix}_`)),
+        prefix
+      ).toEqual([]);
+    }
+  });
+
+  it("still seeds every country the 2019 world does contain", async () => {
+    const ids = (await getBasePolicies("2019-default")).map((r) => r.legislationTypeId);
+    for (const prefix of ["us", "uk", "jp", "de", "ie", "cn", "fr", "it", "es", "se", "tr"]) {
+      expect(
+        ids.some((id) => id.startsWith(`${prefix}_`)),
+        prefix
+      ).toBe(true);
+    }
+  });
 });

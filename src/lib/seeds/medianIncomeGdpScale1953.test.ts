@@ -44,7 +44,7 @@ import { brRegions1953 } from "@/lib/seeds/br/brRegions1953";
 import { ruRegions1953 } from "@/lib/seeds/ru/ruRegions1953";
 import { cnRegions1953 } from "@/lib/seeds/cn/cnRegions1953";
 import { ngRegions1953 } from "@/lib/seeds/ng/ngRegions1953";
-import { jpRegions1953 } from "@/lib/seeds/jp/jpRegions1953";
+import { jpRegions1953 } from "@/lib/countries/jp/data/jpRegions1953";
 import { itRegions1953 } from "@/lib/seeds/it/itRegions1953";
 import { seRegions1953 } from "@/lib/seeds/se/seRegions1953";
 import { atRegions1953 } from "@/lib/seeds/at/atRegions1953";

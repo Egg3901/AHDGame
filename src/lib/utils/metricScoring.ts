@@ -1,6 +1,14 @@
 import { metricCategories } from "@/lib/constants/metricDefinitions";
 import { getEraBand, getIncomeAnchor, isMetricActive } from "@/lib/era/metricCatalog";
 import { toUsd } from "./fxNormalize";
+import { JP_MEDIAN_INCOME_BAND } from "@/lib/countries/jp/economy";
+import { US_MEDIAN_INCOME_THRESHOLDS } from "@/lib/countries/us/geographyFacts";
+import { UK_MEDIAN_INCOME_THRESHOLDS } from "@/lib/countries/uk/geographyFacts";
+import { DE_MEDIAN_INCOME_THRESHOLDS } from "@/lib/countries/de/geographyFacts";
+import { CN_MEDIAN_INCOME_THRESHOLDS } from "@/lib/countries/cn/geographyFacts";
+import { IE_MEDIAN_INCOME_THRESHOLDS } from "@/lib/countries/ie/geographyFacts";
+import { NG_MEDIAN_INCOME_THRESHOLDS } from "@/lib/countries/ng/geographyFacts";
+import { BR_MEDIAN_INCOME_THRESHOLDS } from "@/lib/countries/br/geographyFacts";
 
 /**
  * Absolute metric scoring — converts a raw metric value to a 0–100 score
@@ -18,7 +26,7 @@ import { toUsd } from "./fxNormalize";
  * unfairly inflated and strong-currency countries aren't penalized.
  */
 
-interface ScoreThreshold {
+export interface ScoreThreshold {
   best: number;
   worst: number;
 }
@@ -162,14 +170,14 @@ const CURRENCY_METRICS = new Set<string>();
  * ×0.45). Unknown countries fall back to the global `THRESHOLDS.medianIncome`.
  */
 export const MEDIAN_INCOME_THRESHOLDS: Record<string, ScoreThreshold> = {
-  US: { best: 90_000, worst: 32_000 },
-  UK: { best: 44_000, worst: 16_000 },
-  DE: { best: 62_000, worst: 22_000 },
-  IE: { best: 52_000, worst: 19_000 },
-  JP: { best: 5_500_000, worst: 2_000_000 },
-  BR: { best: 35_000, worst: 13_000 },
-  CN: { best: 125_000, worst: 45_000 },
-  NG: { best: 1_500_000, worst: 540_000 },
+  US: US_MEDIAN_INCOME_THRESHOLDS,
+  UK: UK_MEDIAN_INCOME_THRESHOLDS,
+  DE: DE_MEDIAN_INCOME_THRESHOLDS,
+  IE: IE_MEDIAN_INCOME_THRESHOLDS,
+  JP: JP_MEDIAN_INCOME_BAND,
+  BR: BR_MEDIAN_INCOME_THRESHOLDS,
+  CN: CN_MEDIAN_INCOME_THRESHOLDS,
+  NG: NG_MEDIAN_INCOME_THRESHOLDS,
 };
 
 /**

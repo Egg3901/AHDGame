@@ -26,6 +26,16 @@ import type { CountryId } from "@/lib/constants/countries";
 export type MonetaryRegime = "pegged" | "suspended" | "floating";
 
 /**
+ * Resolve the stored regime, defaulting anything absent or unrecognized to
+ * `"pegged"` — the pre-exit behavior every currency already had, so legacy
+ * worlds and flag-off reads are byte-identical. Single gate for the default;
+ * callers must not re-derive it.
+ */
+export function resolveMonetaryRegime(regime: unknown): MonetaryRegime {
+  return regime === "suspended" || regime === "floating" ? regime : "pegged";
+}
+
+/**
  * Earliest in-game year the peg may be suspended. Guards against a 1955 exit if
  * the pressure model spikes early — the decision should become available around
  * its historical window, not whenever the arithmetic first permits it.

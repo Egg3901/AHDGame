@@ -10,6 +10,7 @@ import type {
   TurnLog,
   GameIteration,
   TurnPhaseTelemetryMap,
+  GameHealthSummary,
 } from "@/lib/db/types";
 import { invalidateGameTimeCache, reconcileGameStateClock } from "@/lib/time/gameTime";
 import { emit } from "@/lib/events";
@@ -55,7 +56,9 @@ import {
 import { getAnomalyScanCadencePredicate } from "@/simulation/phases/anomalyScanCadence";
 import { isSingleplayer } from "@/lib/singleplayer";
 import { reconcileFederalBudgetInvariants } from "@/lib/budget/budgetInvariants";
+import { publishPlatformEvent } from "@/lib/platformEvents";
 import type { CompletedTurnPhaseObservation } from "@/simulation/engine/types";
+import { completedTurnStatus } from "@/simulation/engine/turnCompletion";
 
 // Re-export public helpers consumed by other modules
 export {
@@ -223,6 +226,7 @@ export async function processTurn(
   turn: number;
   message: string;
   warnings: string[];
+  health: GameHealthSummary | null;
 }> {
   const warnings: string[] = [];
   const startTime = Date.now();
@@ -235,6 +239,7 @@ export async function processTurn(
   let phaseResultsForFailure: TurnLog["phases"] | null = null;
   let turnLogWritten = false;
   let healthSnapshotWritten = false;
+  let lastHealth: GameHealthSummary | null = null;
   // #2815: if the previous lock holder died mid-turn (after phases began
   // committing writes), we must NOT re-run that turn — that would double-apply
   // committed income phases. Captured from the pre-lock snapshot, acted on once
@@ -365,6 +370,7 @@ export async function processTurn(
             turn: 0,
             message: `Auto-paused: no completed turn in ${formatDriftHours(cronDriftMs)}`,
             warnings: [],
+            health: null,
           };
         }
       }
@@ -421,6 +427,7 @@ export async function processTurn(
         turn: 0,
         message: "Skipped: concurrent turn in progress",
         warnings: [],
+        health: null,
       };
     }
 
@@ -564,7 +571,9 @@ export async function processTurn(
     }
 
     healthSnapshotWritten = context.phaseResults.gameHealthSnapshot !== null;
+    lastHealth = context.phaseResults.gameHealthSnapshot?.health ?? null;
 
+    const completion = completedTurnStatus(warnings);
     const compactPhaseTimings = Object.entries(phaseStatuses)
       .flatMap(([phase, status]) => {
         if (!status.startedAt || !status.completedAt) return [];
@@ -599,8 +608,8 @@ export async function processTurn(
                 singleplayerTurnMetrics: {
                   turn: context.newTurn,
                   durationMs: Date.now() - startTime,
-                  success: warnings.length === 0,
-                  warningCount: warnings.length,
+                  success: completion.success,
+                  warningCount: completion.warningCount,
                   slowestPhases: compactPhaseTimings,
                 },
               }
@@ -620,7 +629,7 @@ export async function processTurn(
       gameTime: context.gameNow,
       realTime: context.realNow,
       durationMs: Date.now() - startTime,
-      success: warnings.length === 0,
+      success: completion.success,
       warnings,
       phaseStatuses,
       phases: context.phaseResults,
@@ -687,14 +696,25 @@ export async function processTurn(
       electionsCompleted: context.phaseResults.partyElections?.stateElectionsCompleted ?? 0,
     });
 
+    if (!localSingleplayer) {
+      void publishPlatformEvent({
+        type: "turn:completed",
+        source: "ahd",
+        id: `ahd:turn:${context.newTurn}:completed`,
+        occurredAt: context.realNow.toISOString(),
+        payload: { turn: context.newTurn, durationMs, warnings: warnings.length },
+      });
+    }
+
     return {
-      success: warnings.length === 0,
+      success: completion.success,
       turn: context.newTurn,
       message:
         warnings.length === 0
           ? `Turn ${context.newTurn} processed successfully. ${context.characters.length} characters received action points.`
           : `Turn ${context.newTurn} processed with ${warnings.length} warning(s). ${context.characters.length} characters received action points.`,
       warnings,
+      health: lastHealth,
     };
   } catch (error) {
     console.error("[Turn System] Critical error processing turn:", error);
@@ -742,7 +762,7 @@ export async function processTurn(
         !healthSnapshotWritten
       ) {
         try {
-          await processGameHealthSnapshot(
+          const crashHealth = await processGameHealthSnapshot(
             db,
             activeTurn,
             activeCurrentYear,
@@ -751,6 +771,8 @@ export async function processTurn(
             [...warnings],
             finalizedPhaseStatuses
           );
+          lastHealth = crashHealth.health;
+          healthSnapshotWritten = crashHealth.snapshotWritten;
         } catch (snapshotError) {
           console.warn("[Turn] Failed to persist crash health snapshot", snapshotError);
           Sentry.captureException(snapshotError, {
@@ -793,11 +815,26 @@ export async function processTurn(
       });
     }
 
+    if (!isSingleplayer()) {
+      void publishPlatformEvent({
+        type: "turn:failed",
+        source: "ahd",
+        id: `ahd:turn:${activeTurn || "unknown"}:failed:${failureTime.getTime()}`,
+        occurredAt: failureTime.toISOString(),
+        payload: {
+          turn: activeTurn || null,
+          phase: currentPhaseRef.current,
+          message: failureMessage,
+        },
+      });
+    }
+
     return {
       success: false,
       turn: 0,
       message: `Failed to process turn: ${error instanceof Error ? error.message : "Unknown error"}`,
       warnings,
+      health: lastHealth,
     };
   }
 }

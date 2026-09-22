@@ -62,12 +62,18 @@ import {
   describeDebatePrepEffect,
 } from "./rules";
 import {
+  ERA_PRICE_LEVEL,
+  eraPriceLevelFor,
+  resolveCampaignPriceLevel,
+} from "../campaigns/rules/priceLevel";
+import {
   ACTIONS,
   buildBatchResultMessage,
   canPerformAction,
   getDonorActionCost,
   getActionPointCost,
   simulateActionBatch,
+  type ActionEffectContext,
 } from "../actions";
 
 function makeCharacter(overrides: Partial<Character>): Character {
@@ -206,7 +212,7 @@ function campaignCharacter(
 function campaignState(): State {
   return {
     name: "Test State",
-    gdp: 65_000,
+    gdp: 69_618,
     population: 1_000_000,
     countryId: "US",
   } as unknown as State;
@@ -250,7 +256,7 @@ describe("campaign quote matches debit and result through one source", () => {
   it("pins the baseline quote (influence 0, average GDP, neutral stats)", () => {
     const quote = quoteCampaignAction(
       { politicalInfluence: 0, charisma: 5.5, intellect: 5.5 },
-      { gdpMillions: 65_000, population: 1_000_000, countryId: "US" }
+      { gdpMillions: 69_618, population: 1_000_000, countryId: "US" }
     );
     expect(quote).toEqual({ ok: true, apCost: 1, fundCostAnchor: 20_000, influenceGain: 1 });
   });
@@ -297,7 +303,7 @@ describe("campaign quote matches debit and result through one source", () => {
     // One base input changes (influence 10 -> 85, crossing AP tiers 1 -> 5);
     // both the displayed quote and the debited/applied result must follow it
     // through the same function, with no second formula edit.
-    const target = { gdpMillions: 65_000, population: 1_000_000, countryId: "US" };
+    const target = { gdpMillions: 69_618, population: 1_000_000, countryId: "US" };
     const before = quoteCampaignAction(
       { politicalInfluence: 10, charisma: 5.5, intellect: 5.5 },
       target
@@ -321,7 +327,7 @@ describe("campaign quote matches debit and result through one source", () => {
     expect(getActionPointCost(campaignCharacter(10), "campaign")).toBe(before.apCost);
   });
   it("a test-only charisma bump moves quoted and applied gain together", () => {
-    const target = { gdpMillions: 65_000, population: 1_000_000, countryId: "US" };
+    const target = { gdpMillions: 69_618, population: 1_000_000, countryId: "US" };
     const weak = quoteCampaignAction(
       { politicalInfluence: 20, charisma: 1, intellect: 5.5 },
       target
@@ -350,7 +356,7 @@ describe("campaign failure agreement", () => {
     expect(isCampaignEligible(100)).toBe(false);
     const quote = quoteCampaignAction(
       { politicalInfluence: 100, charisma: 5.5, intellect: 5.5 },
-      { gdpMillions: 65_000, population: 1_000_000, countryId: "US" }
+      { gdpMillions: 69_618, population: 1_000_000, countryId: "US" }
     );
     expect(quote).toEqual({ ok: false, error: reason });
     expect(canPerformAction(campaignCharacter(100), "campaign", campaignState())).toEqual({
@@ -372,7 +378,7 @@ describe("campaign failure agreement", () => {
     });
     const quote = quoteCampaignAction(
       { politicalInfluence: 20, charisma: undefined, intellect: undefined },
-      { gdpMillions: 65_000, population: 1_000_000, countryId: "US" }
+      { gdpMillions: 69_618, population: 1_000_000, countryId: "US" }
     );
     expect(quote.ok).toBe(false);
     if (quote.ok) return;
@@ -397,19 +403,19 @@ describe("campaign failure agreement", () => {
   it("degenerate targets reject instead of pricing", () => {
     const actor = { politicalInfluence: 20, charisma: 5.5, intellect: 5.5 };
     expect(
-      quoteCampaignAction(actor, { gdpMillions: 65_000, population: 0, countryId: "US" }).ok
+      quoteCampaignAction(actor, { gdpMillions: 69_618, population: 0, countryId: "US" }).ok
     ).toBe(false);
-    expect(quoteCampaignAction(actor, { gdpMillions: 65_000, population: 1_000_000 }).ok).toBe(
+    expect(quoteCampaignAction(actor, { gdpMillions: 69_618, population: 1_000_000 }).ok).toBe(
       false
     );
   });
 });
 // ── Advertise (Game1724 slice) ──────────────────────────────────────────────
-// Average-GDP US home state: gdpPerCapita = 65_000 × 1M / 1M hits the 65_000
+// Average-GDP US home state: gdpPerCapita = 69_618 × 1M / 1M hits the 69_618
 // baseline exactly, so the GDP scalar is 1.0 and fund pins read straight off
 // the tier multiplier ($100K × (1 + tier × 0.2)).
-const AVG_STATE = { gdp: 65_000, population: 1_000_000, name: "Test State" } as State;
-const AVG_TARGET = { gdpMillions: 65_000, population: 1_000_000, countryId: "US" };
+const AVG_STATE = { gdp: 69_618, population: 1_000_000, name: "Test State" } as State;
+const AVG_TARGET = { gdpMillions: 69_618, population: 1_000_000, countryId: "US" };
 // Charisma 5.5 is the neutral pivot: statMultiplier is exactly 1.0, so gain
 // pins read straight off the diminishing-returns curve (base +3).
 const NEUTRAL_CHARISMA = { charisma: 5.5 };
@@ -434,13 +440,13 @@ describe("Advertise action point quotes", () => {
 
 describe("getAdvertiseFundCost independent literals", () => {
   it("tier 0 at average GDP costs the $100K base", () => {
-    expect(getAdvertiseFundCost(0, 65_000, 1_000_000)).toBe(100_000);
+    expect(getAdvertiseFundCost(0, 69_618, 1_000_000)).toBe(100_000);
   });
   it("tier 2 (fav 50) at average GDP costs $140K", () => {
-    expect(getAdvertiseFundCost(50, 65_000, 1_000_000)).toBe(140_000);
+    expect(getAdvertiseFundCost(50, 69_618, 1_000_000)).toBe(140_000);
   });
   it("tier 4 (fav 90) at average GDP costs $180K", () => {
-    expect(getAdvertiseFundCost(90, 65_000, 1_000_000)).toBe(180_000);
+    expect(getAdvertiseFundCost(90, 69_618, 1_000_000)).toBe(180_000);
   });
 });
 
@@ -474,7 +480,7 @@ describe("quoteAdvertiseAction strictness", () => {
   it("rejects a missing country basis", () => {
     const quote = quoteAdvertiseAction(
       { favorability: 10, ...NEUTRAL_CHARISMA },
-      { gdpMillions: 65_000, population: 1_000_000 }
+      { gdpMillions: 69_618, population: 1_000_000 }
     );
     expect(quote.ok).toBe(false);
     expect(quote.ok ? "" : quote.error).toContain("country");
@@ -574,13 +580,13 @@ function donorCharacter(
 function donorState(): State {
   return {
     name: "Test State",
-    gdp: 65_000,
+    gdp: 69_618,
     population: 1_000_000,
     countryId: "US",
   } as unknown as State;
 }
 
-const DONOR_TARGET = { gdpMillions: 65_000, population: 1_000_000, countryId: "US" };
+const DONOR_TARGET = { gdpMillions: 69_618, population: 1_000_000, countryId: "US" };
 
 describe("donor base cost is single-sourced", () => {
   it("pins the $3K base and $1.5K per-level scale the fund formula uses", () => {
@@ -607,16 +613,16 @@ describe("donor base cost is single-sourced", () => {
 
 describe("getBuildDonorBaseFundCost independent literals", () => {
   it("L0 at average GDP costs the $3K base", () => {
-    expect(getBuildDonorBaseFundCost(0, 65_000, 1_000_000)).toBe(3_000);
+    expect(getBuildDonorBaseFundCost(0, 69_618, 1_000_000)).toBe(3_000);
   });
   it("L10 at average GDP costs $18K", () => {
-    expect(getBuildDonorBaseFundCost(10, 65_000, 1_000_000)).toBe(18_000);
+    expect(getBuildDonorBaseFundCost(10, 69_618, 1_000_000)).toBe(18_000);
   });
   it("L50 at average GDP costs $78K", () => {
-    expect(getBuildDonorBaseFundCost(50, 65_000, 1_000_000)).toBe(78_000);
+    expect(getBuildDonorBaseFundCost(50, 69_618, 1_000_000)).toBe(78_000);
   });
   it("L75 at average GDP costs $116K", () => {
-    expect(getBuildDonorBaseFundCost(75, 65_000, 1_000_000)).toBe(116_000);
+    expect(getBuildDonorBaseFundCost(75, 69_618, 1_000_000)).toBe(116_000);
   });
 });
 
@@ -697,6 +703,186 @@ describe("donor quote matches debit and result through one source", () => {
     expect(ACTIONS.buildDonorBase.effect(donorCharacter(25, 10), state).fundsChange).toBe(
       -strong.fundCostAnchor
     );
+  });
+});
+
+// ── GDP-baseline preset parity (issue #798) ───────────────────────────────────
+// The actions page passes `worldFlags.preset` into the three GDP-scaled quotes
+// and the execute shell passes `gameState.preset` into validation and effect,
+// so a historical-world quote and its execution share one (country, era)
+// baseline. The tests below prove the preset is load-bearing in every quote
+// and that quote, effect and validation agree when it is threaded. A CN
+// 1953-scale region is the fixture: per-capita 57 USD-anchored resolves a
+// neutral scalar under its own era but pins to the 0.85 floor under the modern
+// default, so omitting the preset visibly misprices the quote.
+const CN_1953_POP = 10_000_000;
+const CN_1953_GDP_MILLIONS = (57 * CN_1953_POP) / 1_000_000;
+
+function cn1953State(): State {
+  return {
+    name: "CN Test Region",
+    gdp: CN_1953_GDP_MILLIONS,
+    population: CN_1953_POP,
+    countryId: "CN",
+  } as unknown as State;
+}
+
+function cn1953Target(preset?: string) {
+  return {
+    gdpMillions: CN_1953_GDP_MILLIONS,
+    population: CN_1953_POP,
+    countryId: "CN",
+    preset,
+  };
+}
+
+// Effect context for preset-parity checks: the assertions compare debited
+// ANCHOR units, never the rendered message, so the formatter is the same
+// bare-number fallback canPerformAction uses for non-rendering callers.
+function presetEffectCtx(preset: "1953-default" | undefined): ActionEffectContext {
+  return {
+    preset,
+    formatFunds: (anchor) => Math.round(anchor).toLocaleString(),
+  };
+}
+
+describe("GDP-baseline preset is load-bearing in every GDP-scaled quote", () => {
+  it("campaign quotes the era baseline when preset is threaded, the modern floor when omitted", () => {
+    const actor = { politicalInfluence: 0, charisma: 5.5, intellect: 5.5 };
+    const eraQuote = quoteCampaignAction(actor, cn1953Target("1953-default"));
+    const defaultQuote = quoteCampaignAction(actor, cn1953Target());
+    expect(eraQuote.ok && defaultQuote.ok).toBe(true);
+    if (!eraQuote.ok || !defaultQuote.ok) return;
+    // Neutral scalar under the 1953 baseline vs the 0.85 clamp under modern.
+    expect(eraQuote.fundCostAnchor).toBe(20_000);
+    expect(defaultQuote.fundCostAnchor).toBe(17_000);
+    expect(eraQuote.fundCostAnchor).toBeGreaterThan(defaultQuote.fundCostAnchor);
+    // The quote applies the cost function with the same preset, not a copy.
+    expect(eraQuote.fundCostAnchor).toBe(
+      Math.round(
+        getCampaignFundCost(0, CN_1953_GDP_MILLIONS, CN_1953_POP, "CN", "1953-default") /
+          statMultiplier(5.5)
+      )
+    );
+  });
+  it("advertise quotes the era baseline when preset is threaded, the modern floor when omitted", () => {
+    const actor = { favorability: 0, charisma: 5.5 };
+    const eraQuote = quoteAdvertiseAction(actor, cn1953Target("1953-default"));
+    const defaultQuote = quoteAdvertiseAction(actor, cn1953Target());
+    expect(eraQuote.ok && defaultQuote.ok).toBe(true);
+    if (!eraQuote.ok || !defaultQuote.ok) return;
+    expect(eraQuote.fundCostAnchor).toBe(100_000);
+    expect(defaultQuote.fundCostAnchor).toBe(85_000);
+    expect(eraQuote.fundCostAnchor).toBe(
+      getAdvertiseFundCost(0, CN_1953_GDP_MILLIONS, CN_1953_POP, "CN", "1953-default")
+    );
+  });
+  it("buildDonorBase quotes the era baseline when preset is threaded, the modern floor when omitted", () => {
+    const actor = { donorBaseLevel: 10, fundraising: 5.5 };
+    const eraQuote = quoteBuildDonorBaseAction(actor, cn1953Target("1953-default"));
+    const defaultQuote = quoteBuildDonorBaseAction(actor, cn1953Target());
+    expect(eraQuote.ok && defaultQuote.ok).toBe(true);
+    if (!eraQuote.ok || !defaultQuote.ok) return;
+    expect(eraQuote.fundCostAnchor).toBe(18_000);
+    expect(defaultQuote.fundCostAnchor).toBe(15_000);
+    expect(eraQuote.fundCostAnchor).toBe(
+      Math.round(
+        getBuildDonorBaseFundCost(10, CN_1953_GDP_MILLIONS, CN_1953_POP, "CN", "1953-default") /
+          statMultiplier(5.5)
+      )
+    );
+  });
+});
+
+describe("GDP-baseline preset parity between UI quote and execution", () => {
+  it("campaign effect debits exactly what the same-preset quote advertises", () => {
+    const state = cn1953State();
+    for (const preset of ["1953-default", undefined] as const) {
+      const quote = quoteCampaignAction(
+        { politicalInfluence: 0, charisma: 5.5, intellect: 5.5 },
+        cn1953Target(preset)
+      );
+      expect(quote.ok).toBe(true);
+      if (!quote.ok) continue;
+      const char = campaignCharacter(0, 5.5, 5.5, { countryId: "CN" });
+      const effect = ACTIONS.campaign.effect(char, state, presetEffectCtx(preset));
+      expect(effect.fundsChange).toBe(-quote.fundCostAnchor);
+      expect(effect.politicalInfluenceChange).toBe(quote.influenceGain);
+    }
+  });
+  it("advertise effect debits exactly what the same-preset quote advertises", () => {
+    const state = cn1953State();
+    for (const preset of ["1953-default", undefined] as const) {
+      const quote = quoteAdvertiseAction({ favorability: 0, charisma: 5.5 }, cn1953Target(preset));
+      expect(quote.ok).toBe(true);
+      if (!quote.ok) continue;
+      const char = makeCharacter({
+        actions: 100,
+        funds: 100_000_000,
+        favorability: 0,
+        countryId: "CN",
+        stats: { ...NEUTRAL_STATS, charisma: 5.5 },
+      });
+      const effect = ACTIONS.advertise.effect(char, state, presetEffectCtx(preset));
+      expect(effect.fundsChange).toBe(-quote.fundCostAnchor);
+      expect(effect.favorabilityChange).toBe(quote.favorabilityGain);
+    }
+  });
+  it("buildDonorBase effect debits exactly what the same-preset quote advertises", () => {
+    const state = cn1953State();
+    for (const preset of ["1953-default", undefined] as const) {
+      const quote = quoteBuildDonorBaseAction(
+        { donorBaseLevel: 10, fundraising: 5.5 },
+        cn1953Target(preset)
+      );
+      expect(quote.ok).toBe(true);
+      if (!quote.ok) continue;
+      const char = donorCharacter(10, 5.5, { countryId: "CN" });
+      const effect = ACTIONS.buildDonorBase.effect(char, state, presetEffectCtx(preset));
+      expect(effect.fundsChange).toBe(-quote.fundCostAnchor);
+      expect(effect.donorBaseLevelChange).toBe(quote.donorGain);
+    }
+  });
+  it("validation enforces the preset-threaded cost, not the omitted-preset quote", () => {
+    // Regression for the actions-page omission: the page quoted the modern
+    // floor (17,000) while the server charged the era cost (20,000), so a
+    // player quoted "affordable" failed at execution. With the preset threaded
+    // on both sides, a balance covering only the modern quote fails validation
+    // under the era preset and passes without it.
+    const state = cn1953State();
+    const poor = campaignCharacter(0, 5.5, 5.5, { countryId: "CN", funds: 17_000 });
+    expect(canPerformAction(poor, "campaign", state)).toEqual({ canPerform: true });
+    expect(canPerformAction(poor, "campaign", state, { preset: "1953-default" })).toEqual({
+      canPerform: false,
+      reason: expect.stringContaining("Not enough funds"),
+    });
+    const rich = campaignCharacter(0, 5.5, 5.5, { countryId: "CN", funds: 20_000 });
+    expect(canPerformAction(rich, "campaign", state, { preset: "1953-default" })).toEqual({
+      canPerform: true,
+    });
+  });
+});
+
+describe("GDP-baseline preset failure agreement", () => {
+  it("all three GDP-scaled quotes fail loudly for countries without a baseline", () => {
+    expect(() =>
+      quoteCampaignAction(
+        { politicalInfluence: 0, charisma: 5.5, intellect: 5.5 },
+        { gdpMillions: 100_000, population: 1_000_000, countryId: "XX", preset: "1953-default" }
+      )
+    ).toThrow(/no GDP baseline/);
+    expect(() =>
+      quoteAdvertiseAction(
+        { favorability: 0, charisma: 5.5 },
+        { gdpMillions: 100_000, population: 1_000_000, countryId: "BR", preset: "1953-default" }
+      )
+    ).toThrow(/no GDP baseline/);
+    expect(() =>
+      quoteBuildDonorBaseAction(
+        { donorBaseLevel: 0, fundraising: 5.5 },
+        { gdpMillions: 100_000, population: 1_000_000, countryId: "XX" }
+      )
+    ).toThrow(/no GDP baseline/);
   });
 });
 
@@ -835,10 +1021,10 @@ describe("donor failure agreement", () => {
   it("degenerate targets and levels reject instead of pricing", () => {
     const actor = { donorBaseLevel: 10, fundraising: 5.5 };
     expect(
-      quoteBuildDonorBaseAction(actor, { gdpMillions: 65_000, population: 0, countryId: "US" }).ok
+      quoteBuildDonorBaseAction(actor, { gdpMillions: 69_618, population: 0, countryId: "US" }).ok
     ).toBe(false);
     expect(
-      quoteBuildDonorBaseAction(actor, { gdpMillions: 65_000, population: 1_000_000 }).ok
+      quoteBuildDonorBaseAction(actor, { gdpMillions: 69_618, population: 1_000_000 }).ok
     ).toBe(false);
     expect(
       quoteBuildDonorBaseAction({ donorBaseLevel: -1, fundraising: 5.5 }, DONOR_TARGET).ok
@@ -1355,5 +1541,140 @@ describe("debate prep failure agreement", () => {
     expect(canPerformAction(debateCharacter(STAT_MAX), "debatePrep")).toEqual({
       canPerform: true,
     });
+  });
+});
+
+// ── Era price level (issue #2119) ────────────────────────────────────────────
+// Every money quote/helper takes a trailing `priceLevel` scalar, resolved at the
+// shell from `gameConfig.campaignEraPriceLevelEnabled` + `gameState.preset`.
+// These tests prove: (1) flag OFF resolves exactly 1 and reproduces every
+// existing pin byte-for-byte, (2) flag ON scales a 1953 cost and a 1953 income
+// by the SAME era value (symmetry), and (3) 2019 is unchanged.
+describe("era price level threading (issue #2119)", () => {
+  // Era-neutral US 1953 region: per-capita == the 1953 US baseline (2,557), so
+  // the within-era GDP scalar is exactly 1 and any movement is the price level.
+  const US_1953 = { gdpMillions: 2_557, population: 1_000_000, countryId: "US" } as const;
+  const P1953 = eraPriceLevelFor("1953-default");
+
+  it("flag off resolves exactly 1 for every preset (zero behavior change)", () => {
+    for (const enabled of [false, undefined, null]) {
+      for (const preset of ["1953-default", "1991-default", "2019-default", undefined]) {
+        expect(resolveCampaignPriceLevel(enabled, preset)).toBe(1);
+      }
+    }
+  });
+
+  it("flag off leaves every helper and quote identical to its omitted-scalar call", () => {
+    const target = { gdpMillions: 69_618, population: 1_000_000, countryId: "US" };
+    // Low-level helpers: passing the flag-off scalar (1) is the same expression.
+    expect(getCampaignFundCost(0, 69_618, 1_000_000, "US", undefined, 1)).toBe(
+      getCampaignFundCost(0, 69_618, 1_000_000)
+    );
+    expect(getCampaignFundCost(0, 2_557, 1_000_000, "US", "1953-default", 1)).toBe(
+      getCampaignFundCost(0, 2_557, 1_000_000, "US", "1953-default")
+    );
+    expect(getAdvertiseFundCost(50, 69_618, 1_000_000, "US", undefined, 1)).toBe(
+      getAdvertiseFundCost(50, 69_618, 1_000_000)
+    );
+    expect(getBuildDonorBaseFundCost(50, 69_618, 1_000_000, "US", undefined, 1)).toBe(
+      getBuildDonorBaseFundCost(50, 69_618, 1_000_000)
+    );
+    expect(getPollFundCost("small", 1, 1)).toBe(getPollFundCost("small", 1));
+    expect(calculateFundraisingAmount(50, 50, 1)).toBe(calculateFundraisingAmount(50, 50));
+    expect(fundraiseYieldAnchor({ donorBaseLevel: 50, politicalInfluence: 40 }, 1)).toBe(
+      fundraiseYieldAnchor({ donorBaseLevel: 50, politicalInfluence: 40 })
+    );
+    // Strict quotes: the flag-off scalar is a no-op against the pinned literals.
+    expect(
+      quoteCampaignAction({ politicalInfluence: 0, charisma: 5.5, intellect: 5.5 }, target, 1)
+    ).toEqual(
+      quoteCampaignAction({ politicalInfluence: 0, charisma: 5.5, intellect: 5.5 }, target)
+    );
+    expect(quoteAdvertiseAction({ favorability: 0, charisma: 5.5 }, target, 1)).toEqual(
+      quoteAdvertiseAction({ favorability: 0, charisma: 5.5 }, target)
+    );
+    expect(quoteBuildDonorBaseAction({ donorBaseLevel: 0, fundraising: 5.5 }, target, 1)).toEqual(
+      quoteBuildDonorBaseAction({ donorBaseLevel: 0, fundraising: 5.5 }, target)
+    );
+    expect(quoteFundraiseAction({ donorBaseLevel: 50, politicalInfluence: 40 }, 1)).toEqual(
+      quoteFundraiseAction({ donorBaseLevel: 50, politicalInfluence: 40 })
+    );
+    expect(quotePollAction({ intellect: 5.5 }, "small", 1)).toEqual(
+      quotePollAction({ intellect: 5.5 }, "small")
+    );
+    // The pinned literal itself is untouched.
+    expect(
+      quoteCampaignAction({ politicalInfluence: 0, charisma: 5.5, intellect: 5.5 }, target)
+    ).toEqual({ ok: true, apCost: 1, fundCostAnchor: 20_000, influenceGain: 1 });
+  });
+
+  it("flag on scales a 1953 cost and a 1953 income by the SAME era price level", () => {
+    expect(resolveCampaignPriceLevel(true, "1953-default")).toBe(P1953);
+    expect(P1953).toBe(ERA_PRICE_LEVEL["1953"]);
+    expect(P1953).toBeGreaterThan(0);
+    expect(P1953).toBeLessThan(1);
+
+    // Cost side: modern base deflated once by the era price level.
+    const modernCampaign = getCampaignFundCost(0, 2_557, 1_000_000, "US", "1953-default");
+    const eraCampaign = getCampaignFundCost(0, 2_557, 1_000_000, "US", "1953-default", P1953);
+    expect(modernCampaign).toBe(20_000);
+    expect(eraCampaign).toBe(Math.round((20_000 * P1953) / 1_000) * 1_000);
+    expect(eraCampaign).toBeLessThan(modernCampaign);
+
+    const modernAdvertise = getAdvertiseFundCost(0, 2_557, 1_000_000, "US", "1953-default");
+    const eraAdvertise = getAdvertiseFundCost(0, 2_557, 1_000_000, "US", "1953-default", P1953);
+    expect(modernAdvertise).toBe(100_000);
+    expect(eraAdvertise).toBe(Math.round((100_000 * P1953) / 1_000) * 1_000);
+
+    // Income side: the fundraise L0 yield ($50K base) deflates by the SAME value.
+    const modernYield = fundraiseYieldAnchor({ donorBaseLevel: 0, politicalInfluence: 0 });
+    const eraYield = fundraiseYieldAnchor({ donorBaseLevel: 0, politicalInfluence: 0 }, P1953);
+    expect(modernYield).toBe(50_000);
+    expect(eraYield).toBe(Math.round(50_000 * P1953));
+    expect(eraYield).toBeLessThan(modernYield);
+  });
+
+  it("flag on scales the strict quotes by the same era value as the helpers", () => {
+    const actor = { politicalInfluence: 0, charisma: 5.5, intellect: 5.5 };
+    const qModern = quoteCampaignAction(actor, { ...US_1953, preset: "1953-default" });
+    const qEra = quoteCampaignAction(actor, { ...US_1953, preset: "1953-default" }, P1953);
+    expect(qModern.ok && qEra.ok).toBe(true);
+    if (!qModern.ok || !qEra.ok) return;
+    expect(qModern.fundCostAnchor).toBe(20_000);
+    expect(qEra.fundCostAnchor).toBe(Math.round((20_000 * P1953) / 1_000) * 1_000);
+
+    const yieldQuote = quoteFundraiseAction({ donorBaseLevel: 50, politicalInfluence: 0 }, P1953);
+    expect(yieldQuote.ok).toBe(true);
+    if (!yieldQuote.ok) return;
+    // L50 / 0% influence: the $150K base deflated by the same era value.
+    expect(yieldQuote.yieldAnchor).toBe(Math.round(150_000 * P1953));
+  });
+
+  it("2019 stays unchanged even with the flag on", () => {
+    const p = resolveCampaignPriceLevel(true, "2019-default");
+    expect(p).toBe(1);
+    expect(getCampaignFundCost(0, 69_618, 1_000_000, "US", "2019-default", p)).toBe(
+      getCampaignFundCost(0, 69_618, 1_000_000, "US", "2019-default")
+    );
+    expect(fundraiseYieldAnchor({ donorBaseLevel: 50, politicalInfluence: 40 }, p)).toBe(
+      fundraiseYieldAnchor({ donorBaseLevel: 50, politicalInfluence: 40 })
+    );
+    expect(
+      quoteCampaignAction(
+        { politicalInfluence: 0, charisma: 5.5, intellect: 5.5 },
+        {
+          gdpMillions: 69_618,
+          population: 1_000_000,
+          countryId: "US",
+          preset: "2019-default",
+        },
+        p
+      )
+    ).toEqual(
+      quoteCampaignAction(
+        { politicalInfluence: 0, charisma: 5.5, intellect: 5.5 },
+        { gdpMillions: 69_618, population: 1_000_000, countryId: "US", preset: "2019-default" }
+      )
+    );
   });
 });

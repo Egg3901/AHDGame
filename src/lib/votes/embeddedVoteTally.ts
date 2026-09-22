@@ -56,3 +56,84 @@ export function buildEmbeddedVoteTallyUpdate<TVote extends string>({
     },
   ];
 }
+
+interface MotionVoteTallyUpdateOptions<TVote extends string> {
+  motionId: string;
+  voteKey: string;
+  vote: TVote;
+  tallyFieldByVote: VoteTallyFieldMap<TVote>;
+  updatedAt: Date;
+  weight?: number;
+}
+
+/**
+ * Build an atomic update pipeline for one element of a motions array. The
+ * $map rewrites only the matching voting motion's vote map + cached tallies
+ * at write time, so concurrent votes on the same motion converge instead of
+ * clobbering each other like a whole-array read/modify/write would. Sibling
+ * motions pass through untouched; a non-voting match is left alone so the
+ * caller can reject it after re-reading.
+ */
+export function buildMotionVoteTallyUpdate<TVote extends string>({
+  motionId,
+  voteKey,
+  vote,
+  tallyFieldByVote,
+  updatedAt,
+  weight = 1,
+}: MotionVoteTallyUpdateOptions<TVote>) {
+  const existingVoteExpr = {
+    $getField: {
+      field: voteKey,
+      input: { $ifNull: ["$$m.votes", {}] },
+    },
+  };
+
+  const tallyUpdates = Object.fromEntries(
+    Object.entries(tallyFieldByVote).map(([voteValue, tallyField]) => [
+      tallyField,
+      {
+        $add: [
+          { $ifNull: [`$$m.${tallyField}`, 0] },
+          vote === voteValue ? weight : 0,
+          {
+            $cond: [{ $eq: [existingVoteExpr, voteValue] }, -weight, 0],
+          },
+        ],
+      },
+    ])
+  );
+
+  return [
+    {
+      $set: {
+        motions: {
+          $map: {
+            input: "$motions",
+            as: "m",
+            in: {
+              $cond: [
+                {
+                  $and: [{ $eq: ["$$m.motionId", motionId] }, { $eq: ["$$m.status", "voting"] }],
+                },
+                {
+                  $mergeObjects: [
+                    "$$m",
+                    {
+                      votes: {
+                        $mergeObjects: [{ $ifNull: ["$$m.votes", {}] }, { [voteKey]: vote }],
+                      },
+                      ...tallyUpdates,
+                    },
+                  ],
+                },
+                "$$m",
+              ],
+            },
+          },
+        },
+        updatedAt,
+      },
+    },
+  ];
+}

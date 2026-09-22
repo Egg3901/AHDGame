@@ -137,6 +137,18 @@ export function makeInMemoryStore(
       cols[name] = col(name).filter((d) => !matches(d, filter, options));
       return { deletedCount: before - cols[name].length };
     },
+    bulkWrite: async (ops: Array<{ updateOne?: { filter: Doc; update: Doc } }>) => {
+      let n = 0;
+      for (const op of ops) {
+        if (!op.updateOne) continue;
+        const hit = col(name).find((d) => matches(d, op.updateOne!.filter, options));
+        if (hit) {
+          if (op.updateOne.update.$set) applySet(hit, op.updateOne.update.$set as Doc);
+          n++;
+        }
+      }
+      return { matchedCount: n, modifiedCount: n };
+    },
     countDocuments: async (filter: Doc = {}) =>
       col(name).filter((d) => matches(d, filter, options)).length,
     replaceOne: async (filter: Doc, doc: Doc, opts?: { upsert?: boolean }) => {

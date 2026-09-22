@@ -12,6 +12,7 @@ import {
   detectOffHoursPrivilegedAction,
   runAuditAnomalyScan,
   ANOMALY_SCAN_DEFAULTS,
+  SYSTEM_SETTLEMENT_ACTIONS,
   type AnomalyAuditRow,
 } from "./anomalyScan";
 
@@ -31,6 +32,7 @@ function row(over: Partial<AnomalyAuditRow> & { ts: Date }): AnomalyAuditRow {
   rowSeq++;
   return {
     id: `row-${rowSeq}`,
+    traceId: `trace-${rowSeq}`,
     turn: 100,
     action: "money.fund_debit",
     category: "money",
@@ -54,6 +56,7 @@ describe("toAnomalyRow", () => {
       ts: new Date("2026-01-01T00:00:00Z"),
       turn: 42,
       traceId: "t1",
+      seq: 7,
       source: "api",
       action: "wire.send",
       category: "money",
@@ -61,14 +64,19 @@ describe("toAnomalyRow", () => {
       subject: { type: "character", id: subjectId },
       counterparty: { type: "character", id: counterpartyId },
       amount: -500,
+      meta: { agreementId: "agreement-42" },
       outcome: "ok",
       expiresAt: new Date(),
     };
     const mapped = toAnomalyRow(doc);
+    expect(mapped.traceId).toBe("t1");
+    expect(mapped.seq).toBe(7);
+    expect(mapped.actorKind).toBe("player");
     expect(mapped.actorKey).toBe(`u:${userId.toString()}`);
     expect(mapped.subjectId).toBe(subjectId.toString());
     expect(mapped.counterpartyId).toBe(counterpartyId.toString());
     expect(mapped.amount).toBe(-500);
+    expect(mapped.agreementId).toBe("agreement-42");
   });
 
   it("reads pricePerShare/orderSide off a share.order buy envelope", () => {
@@ -160,7 +168,11 @@ describe("detectRapidRepeat", () => {
 describe("detectCircularWire", () => {
   const base = new Date("2026-01-01T00:00:00Z").getTime();
 
-  it("flags a seeded A -> B -> A round trip", () => {
+  it("does not flag one transfer's legs split across batches as a round trip", () => {
+    // This fixture previously asserted a flag, but the two rows are the
+    // debit and credit legs of a SINGLE transfer (same flow A→B), not an
+    // A→B→A round trip — the exact #2078 false positive. A genuine round
+    // trip needs a second transfer's legs (see the transfer-grouping suite).
     const rows: AnomalyAuditRow[] = [
       row({
         ts: new Date(base),
@@ -178,8 +190,95 @@ describe("detectCircularWire", () => {
       }),
     ];
     const { flaggedIds, finding } = detectCircularWire(rows);
-    expect(flaggedIds.size).toBe(2);
-    expect(finding?.type).toBe("circular_wire");
+    expect(flaggedIds.size).toBe(0);
+    expect(finding).toBeNull();
+  });
+
+  it("pairs one transfer by agreement identity even across traces and the fallback window", () => {
+    const outbound: AnomalyAuditRow[] = [
+      row({
+        ts: new Date(base),
+        traceId: "debit-trace",
+        seq: 20,
+        agreementId: "agreement-1",
+        category: "money",
+        subjectId: "A",
+        counterpartyId: "B",
+        amount: -1000,
+      }),
+      row({
+        ts: new Date(base + 60_000),
+        traceId: "credit-trace",
+        seq: 2,
+        agreementId: "agreement-1",
+        category: "money",
+        subjectId: "B",
+        counterpartyId: "A",
+        amount: 1000,
+      }),
+    ];
+    const inbound: AnomalyAuditRow[] = [
+      row({
+        ts: new Date(base + 120_000),
+        traceId: "return-debit-trace",
+        seq: 8,
+        agreementId: "agreement-2",
+        category: "money",
+        subjectId: "B",
+        counterpartyId: "A",
+        amount: -1000,
+      }),
+      row({
+        ts: new Date(base + 180_000),
+        traceId: "return-credit-trace",
+        seq: 3,
+        agreementId: "agreement-2",
+        category: "money",
+        subjectId: "A",
+        counterpartyId: "B",
+        amount: 1000,
+      }),
+    ];
+
+    expect(detectCircularWire(outbound)).toEqual({
+      flaggedIds: new Set(),
+      finding: null,
+    });
+    expect(detectCircularWire([...outbound, ...inbound])).toEqual({
+      flaggedIds: new Set(outbound.concat(inbound).map((transferRow) => transferRow.id)),
+      finding: {
+        type: "circular_wire",
+        detail: "1 distinct A-to-B-to-A round trip(s) with a strictly later return event",
+        flaggedRows: 4,
+      },
+    });
+  });
+
+  it("does not flag system settlement rows as a circular wire", () => {
+    const rows: AnomalyAuditRow[] = [
+      row({
+        ts: new Date(base),
+        actorKind: "system",
+        actorKey: null,
+        action: "corp.supply_agreement",
+        category: "money",
+        subjectId: "A",
+        counterpartyId: "B",
+        amount: -1000,
+      }),
+      row({
+        ts: new Date(base + 60_000),
+        actorKind: "system",
+        actorKey: null,
+        action: "corp.supply_agreement",
+        category: "money",
+        subjectId: "B",
+        counterpartyId: "A",
+        amount: 1000,
+      }),
+    ];
+
+    expect(detectCircularWire(rows).flaggedIds.size).toBe(0);
   });
 
   it("does not flag a one-way transfer", () => {
@@ -195,6 +294,136 @@ describe("detectCircularWire", () => {
     const { flaggedIds, finding } = detectCircularWire(rows);
     expect(flaggedIds.size).toBe(0);
     expect(finding).toBeNull();
+  });
+});
+
+describe("detectCircularWire transfer grouping (#2078)", () => {
+  const base = new Date("2026-01-01T00:00:00Z").getTime();
+
+  it("does not flag the mirrored debit/credit legs of one supply-agreement settlement", () => {
+    // One settlement emits two audit rows (settleSupplyAgreements.ts via
+    // financialTxLog/emit.ts buildAuditEnvelope): a buyer debit and a
+    // supplier credit with the same action/turn/ts. That is one transfer,
+    // not an A→B→A round trip.
+    const rows: AnomalyAuditRow[] = [
+      row({
+        ts: new Date(base),
+        turn: 100,
+        action: "corp.supply_agreement",
+        subjectId: "buyer",
+        counterpartyId: "supplier",
+        amount: -513,
+      }),
+      row({
+        ts: new Date(base),
+        turn: 100,
+        action: "corp.supply_agreement",
+        subjectId: "supplier",
+        counterpartyId: "buyer",
+        amount: 513,
+      }),
+    ];
+    const { flaggedIds, finding } = detectCircularWire(rows);
+    expect(flaggedIds.size).toBe(0);
+    expect(finding).toBeNull();
+  });
+
+  it("does not flag cross-currency legs with different local amounts", () => {
+    // FX legs of one settlement carry different local amounts
+    // (anchorToCorpCapital per ccy). Direction still matches: the buyer
+    // debit and the supplier credit are the same flow, not a return.
+    const rows: AnomalyAuditRow[] = [
+      row({
+        ts: new Date(base),
+        turn: 100,
+        action: "corp.supply_agreement",
+        subjectId: "buyer",
+        counterpartyId: "supplier",
+        amount: -513,
+      }),
+      row({
+        ts: new Date(base),
+        turn: 100,
+        action: "corp.supply_agreement",
+        subjectId: "supplier",
+        counterpartyId: "buyer",
+        amount: 61400,
+      }),
+    ];
+    const { flaggedIds, finding } = detectCircularWire(rows);
+    expect(flaggedIds.size).toBe(0);
+    expect(finding).toBeNull();
+  });
+
+  it("does not flag one wire transfer's dual emission across flush batches", () => {
+    // A wire emits wire_transfer_out + wire_transfer_in via two separate
+    // emitTx calls (characters/[id]/wire/route.ts). The legs normally share
+    // a flush batch (identical ts) but can split when the audit buffer hits
+    // its size threshold mid-pair — still one transfer, not a round trip.
+    const rows: AnomalyAuditRow[] = [
+      row({
+        ts: new Date(base),
+        turn: 100,
+        action: "wire.send",
+        subjectId: "A",
+        counterpartyId: "B",
+        amount: -1000,
+      }),
+      row({
+        ts: new Date(base + 1000),
+        turn: 100,
+        action: "wire.receive",
+        subjectId: "B",
+        counterpartyId: "A",
+        amount: 1000,
+      }),
+    ];
+    const { flaggedIds, finding } = detectCircularWire(rows);
+    expect(flaggedIds.size).toBe(0);
+    expect(finding).toBeNull();
+  });
+
+  it("still flags a genuine A→B→A round trip across two transfers", () => {
+    // Two distinct transfers: A wires to B, then B wires back to A. Each
+    // transfer contributes its dual-emission pair; the temporal return leg
+    // is what makes this a round trip.
+    const rows: AnomalyAuditRow[] = [
+      row({
+        ts: new Date(base),
+        turn: 100,
+        action: "wire.send",
+        subjectId: "A",
+        counterpartyId: "B",
+        amount: -1000,
+      }),
+      row({
+        ts: new Date(base),
+        turn: 100,
+        action: "wire.receive",
+        subjectId: "B",
+        counterpartyId: "A",
+        amount: 1000,
+      }),
+      row({
+        ts: new Date(base + 60_000),
+        turn: 100,
+        action: "wire.send",
+        subjectId: "B",
+        counterpartyId: "A",
+        amount: -1000,
+      }),
+      row({
+        ts: new Date(base + 60_000),
+        turn: 100,
+        action: "wire.receive",
+        subjectId: "A",
+        counterpartyId: "B",
+        amount: 1000,
+      }),
+    ];
+    const { flaggedIds, finding } = detectCircularWire(rows);
+    expect(flaggedIds.size).toBe(4);
+    expect(finding?.type).toBe("circular_wire");
   });
 });
 
@@ -244,6 +473,136 @@ describe("detectWireFanInFanOut", () => {
     );
     const { flaggedIds } = detectWireFanInFanOut(rows, config);
     expect(flaggedIds.size).toBe(0);
+  });
+});
+
+describe("detectWireFanInFanOut system settlement (#2078)", () => {
+  const base = new Date("2026-01-01T00:00:00Z").getTime();
+  const config = { fanInThreshold: 4, fanOutThreshold: 4 };
+
+  it("does not flag a routine bond.coupon payout batch as a fan-out hub", () => {
+    // One sovereign/corporate coupon run pays N holders from one issuer —
+    // hub-shaped by construction, not collusion.
+    const rows = Array.from({ length: 6 }, (_, i) =>
+      row({
+        ts: new Date(base + i * 1000),
+        category: "money",
+        action: "bond.coupon",
+        subjectId: "issuer",
+        counterpartyId: `holder-${i}`,
+        amount: -100,
+      })
+    );
+    const { flaggedIds, finding } = detectWireFanInFanOut(rows, config);
+    expect(flaggedIds.size).toBe(0);
+    expect(finding).toBeNull();
+  });
+
+  it("does not flag routine tax and dues batches as fan-in hubs", () => {
+    const rows = [
+      ...Array.from({ length: 5 }, (_, i) =>
+        row({
+          ts: new Date(base + i * 1000),
+          category: "money",
+          action: "corp.tax_paid",
+          subjectId: `corp-${i}`,
+          counterpartyId: "treasury",
+          amount: -100,
+        })
+      ),
+      ...Array.from({ length: 5 }, (_, i) =>
+        row({
+          ts: new Date(base + i * 1000),
+          category: "money",
+          action: "party.dues_received",
+          subjectId: `member-${i}`,
+          counterpartyId: "partyA",
+          amount: -10,
+        })
+      ),
+    ];
+    const { flaggedIds, finding } = detectWireFanInFanOut(rows, config);
+    expect(flaggedIds.size).toBe(0);
+    expect(finding).toBeNull();
+  });
+
+  it("excludes every routine settlement verb from the generic hub baseline", () => {
+    const rows = [...SYSTEM_SETTLEMENT_ACTIONS].flatMap((action) =>
+      Array.from({ length: config.fanOutThreshold }, (_, i) =>
+        row({
+          ts: new Date(base + i * 1000),
+          category: "money",
+          action,
+          subjectId: `system-${action}`,
+          counterpartyId: `recipient-${action}-${i}`,
+          amount: -100,
+        })
+      )
+    );
+
+    expect(detectWireFanInFanOut(rows, config)).toEqual({
+      flaggedIds: new Set(),
+      finding: null,
+    });
+  });
+
+  it("does not flag unattributed system rows in an otherwise actor-shaped hub", () => {
+    const rows = Array.from({ length: 5 }, (_, i) =>
+      row({
+        ts: new Date(base + i * 1000),
+        category: "money",
+        action: "money.system_settlement",
+        actorKind: "system",
+        actorKey: null,
+        subjectId: `payer-${i}`,
+        counterpartyId: "hub",
+        amount: -100,
+      })
+    );
+
+    expect(detectWireFanInFanOut(rows, config).flaggedIds.size).toBe(0);
+  });
+
+  it("still flags an actor-driven wire hub above threshold", () => {
+    const rows = Array.from({ length: 5 }, (_, i) =>
+      row({
+        ts: new Date(base + i * 1000),
+        category: "money",
+        action: "wire.send",
+        subjectId: `payer-${i}`,
+        counterpartyId: "hub",
+        amount: -100,
+      })
+    );
+    const { flaggedIds, finding } = detectWireFanInFanOut(rows, config);
+    expect(flaggedIds.size).toBe(5);
+    expect(finding?.type).toBe("wire_fanin_fanout");
+  });
+
+  it("flags only the actor rows in a mixed settlement + wire batch", () => {
+    const settlementRows = Array.from({ length: 6 }, (_, i) =>
+      row({
+        ts: new Date(base + i * 1000),
+        category: "money",
+        action: "corp.supply_agreement",
+        subjectId: "supplier",
+        counterpartyId: `buyer-${i}`,
+        amount: 500,
+      })
+    );
+    const actorRows = Array.from({ length: 5 }, (_, i) =>
+      row({
+        ts: new Date(base + i * 1000),
+        category: "money",
+        action: "wire.send",
+        subjectId: "spreader",
+        counterpartyId: `recipient-${i}`,
+        amount: -100,
+      })
+    );
+    const { flaggedIds } = detectWireFanInFanOut([...settlementRows, ...actorRows], config);
+    expect(flaggedIds.size).toBe(5);
+    expect([...flaggedIds].sort()).toEqual(actorRows.map((r) => r.id).sort());
   });
 });
 
@@ -314,6 +673,30 @@ describe("detectWashTrade", () => {
     ];
     expect(detectWashTrade(rows, config).flaggedIds.size).toBe(0);
   });
+
+  it("matches dense buy and sell windows without comparing every pair", () => {
+    const rows: AnomalyAuditRow[] = [];
+    for (let index = 0; index < 5_000; index++) {
+      rows.push(
+        row({
+          ts: new Date(base + index),
+          actorKey: "c:char1",
+          subjectId: "corpA",
+          orderSide: "buy",
+          pricePerShare: 10,
+        }),
+        row({
+          ts: new Date(base + index),
+          actorKey: "c:char1",
+          subjectId: "corpA",
+          orderSide: "sell",
+          pricePerShare: 10,
+        })
+      );
+    }
+
+    expect(detectWashTrade(rows, config).flaggedIds.size).toBe(10_000);
+  });
 });
 
 describe("detectPreElectionFundingSurge", () => {
@@ -372,6 +755,28 @@ describe("detectPreElectionFundingSurge", () => {
     });
     expect(flaggedIds.size).toBe(0);
   });
+
+  it("handles a large overlapping surge window in one linear scan", () => {
+    const rows = Array.from({ length: 10_000 }, (_, index) =>
+      row({
+        ts: new Date(base + index),
+        category: "money",
+        action: "party.donate",
+        subjectId: `payer-${index % 10}`,
+        counterpartyId: "partyA",
+        amount: -100,
+      })
+    );
+
+    const { flaggedIds } = detectPreElectionFundingSurge(rows, {
+      isPreElectionWindow: true,
+      preElectionFundingWindowSeconds: 3600,
+      preElectionMinDistinctPayers: 10,
+      preElectionMinTotalAmount: 1_000,
+    });
+
+    expect(flaggedIds.size).toBe(10_000);
+  });
 });
 
 describe("detectOffHoursPrivilegedAction", () => {
@@ -415,12 +820,16 @@ describe("runAuditAnomalyScan", () => {
   });
 
   it("flags a seeded circular wire back onto actionAuditLog and writes an auditAnomalies summary", async () => {
-    const idA = new ObjectId();
-    const idB = new ObjectId();
+    // A genuine round trip: A wires to B, then B wires back. Each transfer
+    // contributes its dual-emission pair (wire.send + wire.receive); the old
+    // two-row fixture modeled a single transfer's legs, which is one flow,
+    // not a round trip (#2078).
+    const ids = [new ObjectId(), new ObjectId(), new ObjectId(), new ObjectId()];
     const now = new Date("2026-01-01T00:00:00Z");
+    const later = new Date(now.getTime() + 60_000);
     const docs: ActionAuditRecord[] = [
       {
-        _id: idA,
+        _id: ids[0],
         ts: now,
         turn: 100,
         traceId: "t1",
@@ -435,10 +844,10 @@ describe("runAuditAnomalyScan", () => {
         expiresAt: new Date(),
       },
       {
-        _id: idB,
-        ts: new Date(now.getTime() + 1000),
+        _id: ids[1],
+        ts: now,
         turn: 100,
-        traceId: "t2",
+        traceId: "t1",
         source: "api",
         action: "wire.receive",
         category: "money",
@@ -449,12 +858,42 @@ describe("runAuditAnomalyScan", () => {
         outcome: "ok",
         expiresAt: new Date(),
       },
+      {
+        _id: ids[2],
+        ts: later,
+        turn: 100,
+        traceId: "t2",
+        source: "api",
+        action: "wire.send",
+        category: "money",
+        actor: { kind: "player" },
+        subject: { type: "character", id: "B" },
+        counterparty: { type: "character", id: "A" },
+        amount: -1000,
+        outcome: "ok",
+        expiresAt: new Date(),
+      },
+      {
+        _id: ids[3],
+        ts: later,
+        turn: 100,
+        traceId: "t2",
+        source: "api",
+        action: "wire.receive",
+        category: "money",
+        actor: { kind: "player" },
+        subject: { type: "character", id: "A" },
+        counterparty: { type: "character", id: "B" },
+        amount: 1000,
+        outcome: "ok",
+        expiresAt: new Date(),
+      },
     ];
 
     db.collectionMocks.actionAuditLog = {
       ...db.collection("actionAuditLog"),
       find: vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue(docs) }),
-      bulkWrite: vi.fn().mockResolvedValue({ modifiedCount: 2 }),
+      bulkWrite: vi.fn().mockResolvedValue({ modifiedCount: 4 }),
     } as never;
     // Narrow elections lookup — no upcoming election, so pre-election-only
     // detector stays inert; circular_wire doesn't depend on it.
@@ -466,8 +905,8 @@ describe("runAuditAnomalyScan", () => {
     const result = await runAuditAnomalyScan(db as unknown as Db, 100);
 
     expect(result).not.toBeNull();
-    expect(result?.scannedRows).toBe(2);
-    expect(result?.flaggedRows).toBe(2);
+    expect(result?.scannedRows).toBe(4);
+    expect(result?.flaggedRows).toBe(4);
     expect(result?.findings.some((f) => f.type === "circular_wire")).toBe(true);
 
     const bulkWriteCalls = db.collectionMocks.actionAuditLog.bulkWrite.mock.calls;
@@ -479,15 +918,15 @@ describe("runAuditAnomalyScan", () => {
       };
     }>;
     const flaggedIds = ops.map((op) => op.updateOne.filter._id.toString());
-    expect(flaggedIds).toEqual(expect.arrayContaining([idA.toString(), idB.toString()]));
+    expect(flaggedIds).toEqual(expect.arrayContaining(ids.map((id) => id.toString())));
     const flagTypes = ops.flatMap((op) => op.updateOne.update.$addToSet.flags.$each);
     expect(flagTypes).toContain("circular_wire");
 
     expect(db.collectionMocks.auditAnomalies.insertOne).toHaveBeenCalledTimes(1);
     const summary = db.collectionMocks.auditAnomalies.insertOne.mock.calls[0][0];
     expect(summary.turn).toBe(100);
-    expect(summary.scannedRows).toBe(2);
-    expect(summary.flaggedRows).toBe(2);
+    expect(summary.scannedRows).toBe(4);
+    expect(summary.flaggedRows).toBe(4);
   });
 
   it("is a no-op when the audit log flag is off", async () => {
@@ -510,6 +949,26 @@ describe("runAuditAnomalyScan", () => {
     const result = await runAuditAnomalyScan(db as unknown as Db, 100);
 
     expect(result).toBeNull();
+  });
+
+  it("projects the transfer identity fields used to pair ledger legs", async () => {
+    db.collectionMocks.actionAuditLog = {
+      ...db.collection("actionAuditLog"),
+      find: vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue([]) }),
+    } as never;
+
+    await runAuditAnomalyScan(db as unknown as Db, 100);
+
+    expect(vi.mocked(db.collectionMocks.actionAuditLog!.find)).toHaveBeenCalledWith(
+      { turn: { $gte: 95 } },
+      {
+        projection: expect.objectContaining({
+          traceId: 1,
+          seq: 1,
+          "meta.agreementId": 1,
+        }),
+      }
+    );
   });
 
   it("captures to Sentry and rethrows when the underlying query fails", async () => {

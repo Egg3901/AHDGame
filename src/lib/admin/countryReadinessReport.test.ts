@@ -1,10 +1,24 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Db } from "mongodb";
 
+/**
+ * `counts` is read as SEATS for `seats` and `electedOfficials`, and as rows for
+ * everything else.
+ *
+ * ⚠️ THOSE TWO COLLECTIONS ARE SUMMED, NOT COUNTED. Each stores one row per
+ * constituency or per (region, party) carrying a seat count, so the report
+ * aggregates `totalSeats` / `seatsHeld` rather than calling `countDocuments`.
+ * The numbers these tests pass were always seat counts -- DE's 16 is 16 seats --
+ * so the stub answers the aggregate with the same figure and the cases keep
+ * meaning what they did.
+ */
 function makeDb(counts: Record<string, number>, finds: Record<string, unknown> = {}): Db {
   const collection = (name: string) => ({
     countDocuments: vi.fn().mockResolvedValue(counts[name] ?? 0),
     findOne: vi.fn().mockResolvedValue(finds[name] ?? null),
+    aggregate: vi.fn().mockImplementation(() => ({
+      toArray: async () => [{ seats: counts[name] ?? 0 }],
+    })),
   });
   return { collection: vi.fn().mockImplementation(collection) } as unknown as Db;
 }
@@ -83,6 +97,15 @@ describe("buildCountryReadinessReport", () => {
         return Promise.resolve(0);
       }),
       findOne: vi.fn().mockResolvedValue(null),
+      // `seats` and `electedOfficials` are summed, not counted, so they arrive
+      // as a pipeline. Record the $match under the same key: these cases assert
+      // WHICH FILTER each collection is queried with, and that has to keep
+      // working whichever call shape the report uses.
+      aggregate: vi.fn().mockImplementation((pipeline: Array<Record<string, unknown>>) => {
+        const match = pipeline.find((stage) => "$match" in stage)?.$match;
+        (seenFilters[name] ??= []).push(match);
+        return { toArray: async () => [{ seats: 0 }] };
+      }),
     });
     const db = { collection: vi.fn().mockImplementation(collection) } as unknown as Db;
     const { buildCountryReadinessReport } = await import("./countryReadinessReport");
@@ -102,6 +125,15 @@ describe("buildCountryReadinessReport", () => {
         return Promise.resolve(0);
       }),
       findOne: vi.fn().mockResolvedValue(null),
+      // `seats` and `electedOfficials` are summed, not counted, so they arrive
+      // as a pipeline. Record the $match under the same key: these cases assert
+      // WHICH FILTER each collection is queried with, and that has to keep
+      // working whichever call shape the report uses.
+      aggregate: vi.fn().mockImplementation((pipeline: Array<Record<string, unknown>>) => {
+        const match = pipeline.find((stage) => "$match" in stage)?.$match;
+        (seenFilters[name] ??= []).push(match);
+        return { toArray: async () => [{ seats: 0 }] };
+      }),
     });
     const db = { collection: vi.fn().mockImplementation(collection) } as unknown as Db;
     const { buildCountryReadinessReport } = await import("./countryReadinessReport");
@@ -202,5 +234,83 @@ describe("buildCountryReadinessReport", () => {
     const result = await buildCountryReadinessReport(db, "IE");
     expect(result).not.toBeNull();
     expect(result!.ready).toBe(true);
+  });
+
+  /**
+   * The regression this file exists to prevent from coming back.
+   *
+   * ⚠ ROWS AND SEATS ARE DIFFERENT NUMBERS, and `makeDb` above cannot tell
+   * them apart -- it answers `countDocuments` and the aggregate with the same
+   * figure, so reverting the report to `countDocuments` would keep every case
+   * above green. This one models real documents: Japan's Diet is 713 seats held
+   * in 24 rows. Counting rows scores a correctly seeded Diet as 24 against an
+   * expectation of 713 and reports a healthy world as broken, which is exactly
+   * what it did on a live 2019 reset.
+   */
+  it("sums seats across grouped rows rather than counting the rows", async () => {
+    // Whole seats only: a chamber never splits one between two rows.
+    const spread = (total: number, rows: number, field: string) =>
+      Array.from({ length: rows }, (_, i) => ({
+        [field]: Math.floor(total / rows) + (i < total % rows ? 1 : 0),
+      }));
+    const docs: Record<string, Array<Record<string, number>>> = {
+      // 8 Shugiin blocs totalling 465, 16 Sangiin blocs totalling 248.
+      seats: [...spread(465, 8, "totalSeats"), ...spread(248, 16, "totalSeats")],
+      // 51 + 87 party blocs holding the same 713 seats between them.
+      electedOfficials: [...spread(465, 51, "seatsHeld"), ...spread(248, 87, "seatsHeld")],
+    };
+    const collection = (name: string) => ({
+      countDocuments: vi.fn().mockResolvedValue((docs[name] ?? []).length),
+      findOne: vi
+        .fn()
+        .mockResolvedValue(
+          name === "governmentFormations" ? { _id: "JP", status: "active", cycle: 1 } : null
+        ),
+      aggregate: vi.fn().mockImplementation((pipeline: Array<Record<string, unknown>>) => {
+        const group = pipeline.find((stage) => "$group" in stage)?.$group as
+          { seats?: { $sum?: { $ifNull?: [string, number] } } } | undefined;
+        const field = group?.seats?.$sum?.$ifNull?.[0]?.replace("$", "") ?? "";
+        const fallback = group?.seats?.$sum?.$ifNull?.[1] ?? 1;
+        const seats = (docs[name] ?? []).reduce(
+          (total, doc) => total + (doc[field] ?? fallback),
+          0
+        );
+        return { toArray: async () => [{ seats }] };
+      }),
+    });
+    const db = { collection: vi.fn().mockImplementation(collection) } as unknown as Db;
+    const { buildCountryReadinessReport } = await import("./countryReadinessReport");
+    const result = await buildCountryReadinessReport(db, "JP");
+
+    const byName = (n: string) => result!.checks.find((c) => c.name === n);
+    // 713 seats, not the 24 rows holding them.
+    expect(byName("Seats")?.count).toBe(713);
+    expect(byName("Seats")?.status).toBe("ok");
+    // 713 seats again, not the 138 party blocs.
+    expect(byName("ElectedOfficials")?.count).toBe(713);
+    expect(byName("ElectedOfficials")?.status).toBe("ok");
+  });
+
+  /**
+   * ⚠ A MISSING COUNT MEANS ONE SEAT. Single-seat offices omit the field
+   * rather than storing 1: the US Senate is 100 rows with no `totalSeats` at
+   * all. A sum without the fallback scores the whole chamber as zero.
+   */
+  it("treats a row with no seat count as holding one seat", async () => {
+    const collection = (name: string) => ({
+      countDocuments: vi.fn().mockResolvedValue(0),
+      findOne: vi.fn().mockResolvedValue(null),
+      aggregate: vi.fn().mockImplementation((pipeline: Array<Record<string, unknown>>) => {
+        const group = pipeline.find((stage) => "$group" in stage)?.$group as
+          { seats?: { $sum?: { $ifNull?: [string, number] } } } | undefined;
+        const fallback = group?.seats?.$sum?.$ifNull?.[1];
+        // 100 Senate rows, none carrying a seat count.
+        return { toArray: async () => [{ seats: name === "seats" ? 100 * (fallback ?? 0) : 0 }] };
+      }),
+    });
+    const db = { collection: vi.fn().mockImplementation(collection) } as unknown as Db;
+    const { buildCountryReadinessReport } = await import("./countryReadinessReport");
+    const result = await buildCountryReadinessReport(db, "US");
+    expect(result!.checks.find((c) => c.name === "Seats")?.count).toBe(100);
   });
 });

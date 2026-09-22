@@ -168,6 +168,51 @@ function matchesCondition(value: unknown, condition: unknown): boolean {
             return !(operand as unknown[]).some((o) => equalsAny(value, o));
           case "$exists":
             return (value !== undefined) === Boolean(operand);
+          case "$regex": {
+            if (typeof value !== "string") return false;
+            const flags = typeof condition["$options"] === "string" ? condition["$options"] : "";
+            const source = operand instanceof RegExp ? operand.source : String(operand);
+            return new RegExp(source, flags).test(value);
+          }
+          // A modifier consumed by $regex above, never a test in its own right.
+          // Returning true here is correct rather than permissive: `every` still
+          // requires the sibling $regex to match.
+          case "$options":
+            return true;
+          case "$not":
+            return !matchesCondition(value, operand);
+          case "$type": {
+            const aliases = Array.isArray(operand) ? operand : [operand];
+            return aliases.some((alias) => {
+              switch (alias) {
+                case "number":
+                case 1:
+                case 16:
+                case 18:
+                  return typeof value === "number";
+                case "string":
+                case 2:
+                  return typeof value === "string";
+                case "bool":
+                case 8:
+                  return typeof value === "boolean";
+                case "array":
+                case 4:
+                  return Array.isArray(value);
+                case "date":
+                case 9:
+                  return value instanceof Date;
+                case "null":
+                case 10:
+                  return value === null;
+                case "object":
+                case 3:
+                  return isPlainObject(value);
+                default:
+                  throw new Error(`inMemoryDb: unsupported $type alias ${String(alias)}`);
+              }
+            });
+          }
           default:
             throw new Error(`inMemoryDb: unsupported operator ${op}`);
         }
@@ -217,13 +262,50 @@ function evalExpr(expr: unknown, doc: Doc): unknown {
   }
 }
 
+/**
+ * Every value a dotted path can resolve to, expanding arrays Mongo-style: a
+ * segment against an array fans out to each element's traversal. Without this
+ * a filter like `{ "shareholders.corporationId": id }` silently matched
+ * nothing (the path dead-ended at the array), which is exactly the
+ * match-nothing-while-lying failure mode this harness exists to prevent.
+ */
+function getPathValues(doc: Doc, path: string): unknown[] {
+  let values: unknown[] = [doc];
+  for (const part of safePathParts(path)) {
+    const next: unknown[] = [];
+    for (const value of values) {
+      if (Array.isArray(value)) {
+        if (/^\d+$/.test(part)) {
+          const element = value[Number(part)];
+          if (element !== undefined) next.push(element);
+        } else {
+          for (const element of value) {
+            if (!isContainer(element)) continue;
+            const resolved = readPart(element, part);
+            if (resolved !== undefined) next.push(resolved);
+          }
+        }
+      } else if (isContainer(value)) {
+        const resolved = readPart(value, part);
+        if (resolved !== undefined) next.push(resolved);
+      }
+    }
+    values = next;
+  }
+  return values;
+}
+
 function matchesFilter(doc: Doc, filter: Doc): boolean {
   return Object.entries(filter).every(([key, condition]) => {
     if (key === "$or") return (condition as Doc[]).some((sub) => matchesFilter(doc, sub));
     if (key === "$and") return (condition as Doc[]).every((sub) => matchesFilter(doc, sub));
     if (key === "$nor") return !(condition as Doc[]).some((sub) => matchesFilter(doc, sub));
     if (key === "$expr") return Boolean(evalExpr(condition, doc));
-    return matchesCondition(getPath(doc, key), condition);
+    // The unexpanded read first, so whole-array equality keeps its current
+    // meaning; then every array-expanded traversal, so dotted paths into
+    // arrays match when ANY element does.
+    if (matchesCondition(getPath(doc, key), condition)) return true;
+    return getPathValues(doc, key).some((value) => matchesCondition(value, condition));
   });
 }
 
@@ -248,6 +330,12 @@ function applyUpdate(doc: Doc, update: Update): void {
         const current = getPath(doc, path);
         setPath(doc, path, (typeof current === "number" ? current : 0) + (value as number));
       }
+    } else if (op === "$mul") {
+      for (const [path, value] of Object.entries(fields as Doc)) {
+        const current = getPath(doc, path);
+        // Mongo treats a missing field as 0 for $mul, not as 1.
+        setPath(doc, path, (typeof current === "number" ? current : 0) * (value as number));
+      }
     } else if (op === "$unset") {
       for (const path of Object.keys(fields as Doc)) unsetPath(doc, path);
     } else if (op === "$setOnInsert") {
@@ -267,6 +355,30 @@ function applyUpdate(doc: Doc, update: Update): void {
           setPath(doc, path, [...base, value]);
         }
       }
+    } else if (op === "$pull") {
+      // Selector form only (`$pull: { path: { field: value } }`): drop every
+      // array element matching ALL selector fields. Pulling an absent element
+      // is a no-op, which is what makes pull-then-credit legs replay-safe.
+      for (const [path, selector] of Object.entries(fields as Doc)) {
+        const current = getPath(doc, path);
+        if (current === undefined) continue;
+        if (!Array.isArray(current)) {
+          throw new Error(`inMemoryDb: $pull target "${path}" is not an array`);
+        }
+        if (!isPlainObject(selector)) {
+          throw new Error(`inMemoryDb: $pull selector for "${path}" is not supported`);
+        }
+        setPath(
+          doc,
+          path,
+          current.filter(
+            (item) =>
+              !Object.entries(selector).every(([key, want]) =>
+                sameValue(isPlainObject(item) ? (item as Doc)[key] : undefined, want)
+              )
+          )
+        );
+      }
     } else {
       throw new Error(`inMemoryDb: unsupported update operator ${op}`);
     }
@@ -280,6 +392,24 @@ function applyUpdate(doc: Doc, update: Update): void {
  * every id filter miss. A test harness that quietly matches nothing is worse
  * than no harness, so this is hand-rolled.
  */
+/**
+ * Build the starting document for an upsert from its filter, the way the server
+ * does: every top-level equality condition becomes a field, and a document that
+ * named no `_id` gets one assigned, because readers that key on `_id` must see
+ * the same thing they would against a real driver.
+ *
+ * Shared by `updateOne`, `findOneAndUpdate` and `replaceOne` so the three cannot
+ * drift apart on what an upserted document starts out as.
+ */
+function seedFromFilter(filter: Doc): Doc {
+  const seed: Doc = {};
+  for (const [key, condition] of Object.entries(filter)) {
+    if (!key.startsWith("$") && !isPlainObject(condition)) setPath(seed, key, condition);
+  }
+  if (seed._id === undefined) seed._id = new ObjectId();
+  return seed;
+}
+
 function clone<T>(value: T): T {
   if (value instanceof ObjectId) return new ObjectId(value.toHexString()) as unknown as T;
   if (value instanceof Date) return new Date(value.getTime()) as unknown as T;
@@ -293,6 +423,8 @@ function clone<T>(value: T): T {
 }
 
 class InMemoryCollection {
+  private indexDescriptions: Doc[] = [];
+
   docs: Doc[] = [];
 
   constructor(public name: string) {}
@@ -314,6 +446,13 @@ class InMemoryCollection {
       skip: () => cursor,
       batchSize: () => cursor,
       toArray: async () => rows,
+      // Driver cursors are async-iterable, and seed code streams large
+      // collections with `for await (const doc of col.find(...))` rather than
+      // materialising them. Read `rows` lazily so a `.limit()` chained after
+      // this still applies.
+      async *[Symbol.asyncIterator]() {
+        for (const row of rows) yield row;
+      },
     };
     return cursor;
   }
@@ -345,13 +484,7 @@ class InMemoryCollection {
         if (Array.isArray(update)) {
           throw new Error("inMemoryDb: pipeline upserts are not supported");
         }
-        const seed: Doc = {};
-        for (const [key, condition] of Object.entries(filter)) {
-          if (!key.startsWith("$") && !isPlainObject(condition)) setPath(seed, key, condition);
-        }
-        // The server assigns an ObjectId to an upserted document that named
-        // none; readers that key on `_id` must see the same here.
-        if (seed._id === undefined) seed._id = new ObjectId();
+        const seed = seedFromFilter(filter);
         applyUpdate(seed, {
           ...update,
           ...((update.$setOnInsert as Doc)
@@ -379,13 +512,65 @@ class InMemoryCollection {
   async findOneAndUpdate(
     filter: Doc,
     update: Update,
-    options: { returnDocument?: "before" | "after" } = {}
+    options: { returnDocument?: "before" | "after"; upsert?: boolean } = {}
   ): Promise<Doc | null> {
     const target = this.docs.find((d) => matchesFilter(d, filter));
-    if (!target) return null;
+    if (!target) {
+      // Without upsert this is the ONLY path `getNextSequentialId` can take on a
+      // fresh world — it calls with `{ upsert: true }` against an empty
+      // `counters` collection, gets null back, and throws. That made a real
+      // `bootstrapGameWorld` impossible to run here.
+      if (!options.upsert) return null;
+      const seed = seedFromFilter(filter);
+      const u = update as Doc;
+      applyUpdate(seed, {
+        ...u,
+        ...((u.$setOnInsert as Doc)
+          ? { $set: { ...(u.$set as Doc), ...(u.$setOnInsert as Doc) } }
+          : {}),
+      });
+      this.docs.push(seed);
+      // Mongo returns null for `before` on an upsert: there was no prior doc.
+      return options.returnDocument === "before" ? null : clone(seed);
+    }
     const before = clone(target);
     applyUpdate(target, update);
     return options.returnDocument === "before" ? before : clone(target);
+  }
+
+  async replaceOne(
+    filter: Doc,
+    replacement: Doc,
+    options: { upsert?: boolean } = {}
+  ): Promise<{ matchedCount: number; modifiedCount: number; upsertedCount: number }> {
+    const index = this.docs.findIndex((d) => matchesFilter(d, filter));
+    if (index < 0) {
+      if (!options.upsert) return { matchedCount: 0, modifiedCount: 0, upsertedCount: 0 };
+      this.docs.push({ ...seedFromFilter(filter), ...clone(replacement) });
+      return { matchedCount: 0, modifiedCount: 0, upsertedCount: 1 };
+    }
+    // A replace keeps `_id` and discards every other previous field — unlike
+    // `$set`, which merges.
+    const id = this.docs[index]!._id;
+    this.docs[index] = { ...clone(replacement), _id: id };
+    return { matchedCount: 1, modifiedCount: 1, upsertedCount: 0 };
+  }
+
+  async distinct(field: string, filter: Doc = {}): Promise<unknown[]> {
+    const seen = new Set<unknown>();
+    for (const doc of this.docs) {
+      if (!matchesFilter(doc, filter)) continue;
+      const value = getPath(doc, field);
+      // Mongo flattens array values into the distinct set.
+      if (Array.isArray(value)) value.forEach((v) => seen.add(v));
+      else if (value !== undefined) seen.add(value);
+    }
+    return [...seen];
+  }
+
+  /** Whatever `createIndex` has recorded; empty until something creates one. */
+  async indexes(): Promise<Doc[]> {
+    return [...this.indexDescriptions];
   }
 
   async deleteOne(filter: Doc): Promise<{ deletedCount: number }> {
@@ -418,8 +603,29 @@ class InMemoryCollection {
         modified += res.modifiedCount;
       } else if (op.insertOne) {
         await this.insertOne((op.insertOne as { document: Doc }).document);
+      } else if (op.replaceOne) {
+        const { filter, replacement, upsert } = op.replaceOne as {
+          filter: Doc;
+          replacement: Doc;
+          upsert?: boolean;
+        };
+        const res = await this.replaceOne(filter, replacement, { upsert });
+        modified += res.modifiedCount;
+      } else if (op.updateMany) {
+        const { filter, update } = op.updateMany as { filter: Doc; update: Update };
+        const res = await this.updateMany(filter, update);
+        modified += res.modifiedCount;
+      } else if (op.deleteMany) {
+        const { filter } = op.deleteMany as { filter: Doc };
+        await this.deleteMany(filter);
+      } else if (op.deleteOne) {
+        const { filter } = op.deleteOne as { filter: Doc };
+        const [target] = this.docs.filter((d) => matchesFilter(d, filter));
+        if (target) this.docs = this.docs.filter((d) => d !== target);
       } else {
-        throw new Error("inMemoryDb: unsupported bulk op");
+        // Still throws on anything it does not understand. Returning silently
+        // would make a seeder that writes nothing look like one that worked.
+        throw new Error(`inMemoryDb: unsupported bulk op ${Object.keys(op).join(",")}`);
       }
     }
     return { modifiedCount: modified };
@@ -569,8 +775,48 @@ class InMemoryCollection {
     };
   }
 
-  async createIndex(): Promise<string> {
-    return "index";
+  /**
+   * Record the index so `indexes()` and `listIndexes()` can report it back.
+   *
+   * ⚠ IT USED TO RETURN A STRING AND KEEP NOTHING. That was fine while every
+   * caller only created indexes. `ensureProviderIdentityIndexes` both creates
+   * one AND reads it back to confirm it exists, so a stub that forgets makes
+   * the verification throw "Required provider identity index ... is
+   * unavailable" -- a failure that looks like a broken index and is really a
+   * gap in the double.
+   */
+  async createIndex(key: Doc = {}, options: Doc = {}): Promise<string> {
+    const name =
+      typeof options.name === "string"
+        ? options.name
+        : Object.keys(key)
+            .map((field) => `${field}_${key[field] as string}`)
+            .join("_") || "index";
+    this.indexDescriptions = this.indexDescriptions.filter((index) => index.name !== name);
+    this.indexDescriptions.push({ ...options, name, key });
+    return name;
+  }
+
+  /** Mongo returns a cursor here, not an array. */
+  listIndexes(): { toArray: () => Promise<Doc[]> } {
+    return { toArray: async () => [...this.indexDescriptions] };
+  }
+
+  /**
+   * Drop a recorded index by name.
+   *
+   * Real Mongo throws when the index is absent, and the seeders rely on that:
+   * `indexes/helpers.ts` drops an existing index only after finding it in
+   * `listIndexes()`, and the migrations guard on a name they just read. A stub
+   * that silently succeeded would hide a seeder dropping something it never
+   * checked for.
+   */
+  async dropIndex(name: string): Promise<void> {
+    const before = this.indexDescriptions.length;
+    this.indexDescriptions = this.indexDescriptions.filter((index) => index.name !== name);
+    if (this.indexDescriptions.length === before) {
+      throw new Error(`index not found with name [${name}]`);
+    }
   }
 }
 

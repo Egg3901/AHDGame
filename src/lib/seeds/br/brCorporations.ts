@@ -1,17 +1,7 @@
 /**
- * Brazil corporation seed constants.
+ * Forwarder. Moved into BR's country folder.
  *
- * The BR sovereign issuer corporation is created by
- * generateCountryOwnedSeedData() in budgets.ts alongside other sovereign
- * issuers. Player corporations are created in-game through the corporation
- * system — not seeded.
+ * A forwarder holds no copy, so existing importers are untouched and there is
+ * still exactly one declaration.
  */
-
-/** Placeholder ObjectId string for the BR sovereign corporation. */
-export const BR_PUBLIC_CORPORATION_OID = "700000000000000000000051";
-/** Placeholder ObjectId string for the BR sovereign CEO. */
-export const BR_PUBLIC_CEO_OID = "700000000000000000000052";
-/** Placeholder ObjectId string for the BR sovereign user. */
-export const BR_PUBLIC_USER_OID = "700000000000000000000053";
-/** Reserved sequential ID for the BR sovereign corporation. */
-export const BR_PUBLIC_SEQUENTIAL_ID = 900_006;
+export * from "@/lib/countries/br/data/brCorporations";

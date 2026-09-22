@@ -1,5 +1,7 @@
 import { ObjectId } from "mongodb";
 import { describe, expect, it } from "vitest";
+import { MONEY_ACCOUNTING_VERSION } from "@/lib/moneySupply/calculate";
+import type { Bond } from "@/lib/db/types";
 import { computeEconomicVitalSigns, summarizeLedgerTurnover } from "./economicVitalSigns";
 import type { VitalSignsHistoryRow } from "./economicVitalSigns";
 import type { LedgerReconciliation } from "@/lib/ledger/types";
@@ -215,6 +217,12 @@ describe("computeEconomicVitalSigns", () => {
         listings,
         createdAt: new Date(),
       },
+      firmIncome: listings.map((listing, index) => ({
+        corporationId: listing._id.toString(),
+        // Deliberately disagree with the reconstructed listing sign: the
+        // persisted same-turn result is authoritative for this metric.
+        income: index === 0 ? -50 : index === 2 ? 0 : 50,
+      })),
       trades: [
         {
           _id: new ObjectId(),
@@ -338,7 +346,7 @@ describe("computeEconomicVitalSigns", () => {
           centralBankBondHoldings: 0,
           bondPoolCash: 0,
           annualizedM2GrowthPct: 5,
-          accountingVersion: 2,
+          accountingVersion: MONEY_ACCOUNTING_VERSION,
           netMoneyCreatedLifetime: 0,
           createdAt: new Date(),
         },
@@ -348,6 +356,17 @@ describe("computeEconomicVitalSigns", () => {
         turn: 100,
         year: 1955,
         timestamp: new Date(),
+        health: {
+          severity: "ok",
+          warningCount: 0,
+          errorCount: 0,
+          processingWarningCount: 0,
+          processingErrorCount: 0,
+          integrityWarningCount: 0,
+          integrityErrorCount: 0,
+          integrityChecked: false,
+          qualification: "unverified",
+        },
         turnProcessing: {
           durationMs: 1,
           success: true,
@@ -445,6 +464,10 @@ describe("computeEconomicVitalSigns", () => {
 
     expect(snapshot.firms.marketCapHhi.value).toBe(4200);
     expect(snapshot.firms.lossMakingShare.value).toBe(0.25);
+    expect(snapshot.firms.lossMakingShare.observations).toBe(4);
+    expect(snapshot.firms.lossMakingShare.basis).toBe(
+      "same_turn_listed_corporation_history_income"
+    );
     expect(snapshot.securities.activeTradedListingShare.value).toBe(0.25);
     expect(snapshot.securities.noHolderBondShare.value).toBe(1);
     expect(snapshot.securities.bondSubscriptionRate.value).toBe(0);
@@ -454,6 +477,19 @@ describe("computeEconomicVitalSigns", () => {
     expect(snapshot.securities.corporateMaturityHhi.value).toBeNull();
     expect(snapshot.securities.corporateMaturityHhi.observations).toBe(0);
     expect(snapshot.securities.sovereignMedianPriceToParSpreadPct.value).toBe(0);
+    expect(snapshot.securities.sovereignIssuanceByCountry).toEqual([
+      {
+        countryId: "US",
+        issueCount: 1,
+        unheldIssueCount: 1,
+        noHolderShare: 1,
+        subscriptionRate: 0,
+        medianHolders: 0,
+        medianSpreadToParPct: 0,
+        maturityHhi: 10_000,
+        thinIssueCount: 1,
+      },
+    ]);
     expect(snapshot.securities.twoSidedListingShare.value).toBe(0.25);
     expect(snapshot.securities.medianQuotedSpreadPct.value).toBe(40);
     expect(snapshot.securities.openOrderDepthAnchor).toBe(50);
@@ -1071,10 +1107,17 @@ describe("computeEconomicVitalSigns", () => {
       _id: new ObjectId(),
       turn: 30,
       generatedAt: new Date("2026-08-29T00:00:00.000Z"),
+      bankingMode: null,
       status: "amber",
       entriesChecked: 0,
       trialBalance: { status: "green", unbalancedCount: 0, findings: [] },
-      stockVsFlow: { status: "amber", skipped: true, divergentCount: null, findings: [] },
+      stockVsFlow: {
+        status: "amber",
+        skipped: true,
+        divergentCount: null,
+        findings: [],
+        byKind: [],
+      },
       moneySupply: { status: "green", findings: [] },
       unattributed: [],
     };
@@ -1083,7 +1126,98 @@ describe("computeEconomicVitalSigns", () => {
 
     expect(snapshot.reconciliation.stockVsFlowDivergentCount).toBeNull();
     expect(snapshot.reconciliation.stockVsFlowSkipped).toBe(true);
+    expect(snapshot.reconciliation.stockVsFlowByKind).toBeNull();
     expect(snapshot.measurement.reasons).toContain("stock_vs_flow_skipped");
+  });
+
+  it("publishes the pre-cap per-kind stock versus flow inventory in vital signs", () => {
+    const reconciliation: LedgerReconciliation = {
+      _id: new ObjectId(),
+      turn: 30,
+      generatedAt: new Date("2026-08-29T00:00:00.000Z"),
+      bankingMode: null,
+      status: "amber",
+      entriesChecked: 12,
+      trialBalance: { status: "green", unbalancedCount: 0, findings: [] },
+      stockVsFlow: {
+        status: "amber",
+        skipped: false,
+        divergentCount: 120,
+        findings: [],
+        byKind: [
+          {
+            kind: "corporation",
+            divergentCount: 90,
+            absDivergence: 9000,
+            uninstrumentedCount: 90,
+          },
+          { kind: "character", divergentCount: 30, absDivergence: 300, uninstrumentedCount: 5 },
+        ],
+      },
+      moneySupply: { status: "green", findings: [] },
+      unattributed: [],
+    };
+
+    const snapshot = computeEconomicVitalSigns({ ...emptyInput, turn: 30, reconciliation });
+
+    expect(snapshot.reconciliation.stockVsFlowDivergentCount).toBe(120);
+    expect(snapshot.reconciliation.stockVsFlowByKind).toEqual(reconciliation.stockVsFlow.byKind);
+  });
+});
+
+describe("sovereign demand gaps", () => {
+  const gapBonds = (): Bond[] => [
+    {
+      _id: new ObjectId(),
+      issuerType: "sovereign",
+      countryId: "US",
+      corporationId: new ObjectId(),
+      faceValue: 1_000,
+      couponRate: 4,
+      maturityTurns: 96,
+      issuedAtTurn: 1,
+      maturityTurn: 97,
+      marketPrice: 1,
+      totalIssued: 10_000,
+      publicFloat: 10,
+      holders: [],
+      defaulted: false,
+      defaultedAtTurn: null,
+      matured: false,
+      currencyCode: "USD",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    },
+  ];
+
+  it("attaches demandGapByReason when sovereign demand inputs are present", () => {
+    const snapshot = computeEconomicVitalSigns({
+      ...emptyInput,
+      bonds: gapBonds(),
+      sovereignDemand: {
+        funds: [],
+        fundIdToKey: new Map(),
+        tradableCurrencies: ["USD"],
+        controlledCurrencies: [],
+        ratingByCountry: new Map(),
+        crossBorderEnabled: false,
+      },
+    });
+    expect(snapshot.securities.sovereignIssuanceByCountry).toEqual([
+      expect.objectContaining({
+        countryId: "US",
+        unheldIssueCount: 1,
+        demandGapByReason: { no_domestic_fund: 1 },
+      }),
+    ]);
+  });
+
+  it("omits demandGapByReason without sovereign demand inputs", () => {
+    const snapshot = computeEconomicVitalSigns({ ...emptyInput, bonds: gapBonds() });
+    expect(snapshot.securities.sovereignIssuanceByCountry).toEqual([
+      expect.objectContaining({ countryId: "US", unheldIssueCount: 1 }),
+    ]);
+    expect(snapshot.securities.sovereignIssuanceByCountry?.[0]?.demandGapByReason).toBeUndefined();
   });
 });
 
@@ -1196,9 +1330,88 @@ it("does not mix legacy money growth into the current median", () => {
   };
   const snapshot = computeEconomicVitalSigns({
     ...emptyInput,
-    money: [money, { ...money, _id: "new", accountingVersion: 2, annualizedM2GrowthPct: 4 }],
+    money: [
+      money,
+      {
+        ...money,
+        _id: "new",
+        accountingVersion: MONEY_ACCOUNTING_VERSION,
+        annualizedM2GrowthPct: 4,
+      },
+    ],
   });
   expect(snapshot.money.medianAnnualizedM2GrowthPct.value).toBe(4);
+});
+
+it("reports the bond-pool exclusion with per-currency observation versions", () => {
+  const row = (overrides: Record<string, unknown>) => ({
+    _id: "money",
+    turn: 100,
+    countryId: "US" as const,
+    bankId: "US",
+    currencyCode: "USD" as const,
+    m1: 50,
+    m2: 100,
+    householdLiquid: 50,
+    campaignLiquid: 0,
+    nppLiquid: 0,
+    corporateLiquid: 0,
+    partyLiquid: 0,
+    governmentLiquid: 0,
+    fundLiquid: 0,
+    organizationLiquid: 0,
+    householdSavings: 0,
+    externalBroadMoney: 50,
+    bankDeposits: 0,
+    bankReserves: 0,
+    creditOutstanding: 0,
+    sovereignBondsOutstanding: 0,
+    centralBankBondHoldings: 0,
+    bondPoolCash: 0,
+    annualizedM2GrowthPct: null,
+    netMoneyCreatedLifetime: 0,
+    createdAt: new Date(),
+    ...overrides,
+  });
+  const snapshot = computeEconomicVitalSigns({
+    ...emptyInput,
+    money: [
+      row({
+        _id: "usd",
+        accountingVersion: MONEY_ACCOUNTING_VERSION,
+        annualizedM2GrowthPct: 4,
+        excludedBondPoolCash: 100,
+      }),
+      // Current method but still warming up: no comparable growth yet.
+      row({
+        _id: "huf",
+        countryId: "HU" as const,
+        currencyCode: "HUF" as const,
+        accountingVersion: MONEY_ACCOUNTING_VERSION,
+        excludedBondPoolCash: 4_700_000_000,
+      }),
+      // Legacy v2 row: keeps its level, never feeds growth, contributes no exclusion.
+      row({
+        _id: "plz",
+        countryId: "PL" as const,
+        currencyCode: "PLZ" as const,
+        accountingVersion: 2,
+        annualizedM2GrowthPct: 500,
+      }),
+    ],
+  });
+  expect(snapshot.money.excludedBondPoolCash.value).toBe(4_700_000_100);
+  expect(snapshot.money.currentAccountingCurrencies).toBe(2);
+  expect(snapshot.money.comparableGrowthCurrencies).toBe(1);
+  expect(snapshot.money.medianAnnualizedM2GrowthPct.value).toBe(4);
+  expect(snapshot.money.observationVersions).toEqual({
+    USD: MONEY_ACCOUNTING_VERSION,
+    HUF: MONEY_ACCOUNTING_VERSION,
+    PLZ: 2,
+  });
+  expect(snapshot.money.observationConfidence).toEqual({ USD: "high", HUF: "medium", PLZ: "low" });
+  expect(snapshot.measurement.reasons).toContain("money_observation_version_transition");
+  expect(snapshot.measurement.reasons).toContain("money_growth_awaiting_comparable_window");
 });
 
 describe("ring-fenced bank and escrow money", () => {

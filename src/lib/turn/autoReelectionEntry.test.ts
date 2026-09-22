@@ -157,6 +157,66 @@ describe("runAutoReelectionEntry", () => {
     );
   });
 
+  it("skips a Commons by-election for a sitting MP but still defends the regular race", async () => {
+    const characterId = new ObjectId();
+    const regularElectionId = new ObjectId();
+    const byElectionId = new ObjectId();
+
+    const character = {
+      _id: characterId,
+      userId: new ObjectId(),
+      countryId: "UK",
+      name: "Sitting MP",
+      homeState: "LON",
+      party: "7",
+      currentOffice: { type: "commons", state: "LON" },
+      autoRunForReelection: true,
+    } as Character;
+
+    const heldSeat = {
+      _id: new ObjectId(),
+      characterId,
+      officeType: "commons",
+      state: "LON",
+    } as ElectedOfficial;
+
+    // The by-election shares the regular race's seat key (special_commons seats
+    // as commons), so without the #860 guard the holder would file for both
+    // and double-seat on a win.
+    const byElection = {
+      _id: byElectionId,
+      countryId: "UK",
+      electionType: "special_commons",
+      state: "LON",
+      status: "active",
+    } as Election;
+    const regularElection = {
+      _id: regularElectionId,
+      countryId: "UK",
+      electionType: "commons",
+      state: "LON",
+      status: "active",
+    } as Election;
+
+    db.collectionMocks.characters.find.mockReturnValue(makeCursor([character]));
+    db.collectionMocks.electedOfficials.find.mockReturnValue(makeCursor([heldSeat]));
+    db.collectionMocks.elections.find.mockReturnValue(makeCursor([byElection, regularElection]));
+
+    await runAutoReelectionEntry(db as unknown as Db, now, 1);
+
+    expect(db.collectionMocks.electionCandidates.insertMany).toHaveBeenCalledTimes(1);
+    expect(db.collectionMocks.electionCandidates.insertMany).toHaveBeenCalledWith(
+      [
+        expect.objectContaining({
+          electionId: regularElectionId,
+          characterId,
+          characterName: "Sitting MP",
+        }),
+      ],
+      { ordered: false }
+    );
+  });
+
   it("re-enters a loser into the most recently resolved seat they contested", async () => {
     const characterId = new ObjectId();
     const priorGovernorElectionId = new ObjectId();

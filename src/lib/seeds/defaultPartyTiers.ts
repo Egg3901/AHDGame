@@ -1,3 +1,17 @@
+import { US_ELECTIONS } from "@/lib/countries/us/elections";
+import { UK_ELECTIONS } from "@/lib/countries/uk/elections";
+import { DE_ELECTIONS } from "@/lib/countries/de/elections";
+import { JP_ELECTIONS } from "@/lib/countries/jp/elections";
+import { BR_ELECTIONS } from "@/lib/countries/br/elections";
+import { IE_ELECTIONS } from "@/lib/countries/ie/elections";
+import { CN_ELECTIONS } from "@/lib/countries/cn/elections";
+import { NG_ELECTIONS } from "@/lib/countries/ng/elections";
+
+export interface MajorDefaultParty {
+  abbr: string;
+  presets?: string[];
+}
+
 /**
  * Major default parties by country, for seed-time tier assignment (D5, the
  * 2026-06-18 tier proposal). Any default party NOT listed here seeds **Minor**;
@@ -11,62 +25,15 @@
  * Seed tier is only the STARTING value — the `partyTierTurn` phase recomputes
  * tier from live Org every turn, so this just sets the badge/cap at game start.
  */
-export const MAJOR_DEFAULT_PARTIES: Record<string, Array<{ abbr: string; presets?: string[] }>> = {
-  US: [{ abbr: "DEM" }, { abbr: "REP" }],
-  UK: [
-    { abbr: "LAB" },
-    { abbr: "CON" },
-    // Lib Dems founded 1988; in 1953 the majors are Conservative + Labour and
-    // the historic Liberal Party (LIB, 1953-only seed) is a Minor third party.
-    {
-      abbr: "LD",
-      presets: [
-        "1979-default",
-        "1991-default",
-        "1999-default",
-        "2007-default",
-        "2019-default",
-        "2023-default",
-      ],
-    },
-  ],
-  DE: [{ abbr: "SPD" }, { abbr: "CDU" }, { abbr: "GRN", presets: ["2019-default"] }],
-  JP: [
-    // LDP formed Nov 1955; in 1953 the Liberal Party (RYO) was the major conservative force.
-    // LDP is Major for all eras except 1953-default.
-    {
-      abbr: "LDP",
-      presets: [
-        "1979-default",
-        "1991-default",
-        "1999-default",
-        "2007-default",
-        "2019-default",
-        "2023-default",
-      ],
-    },
-    { abbr: "RYO", presets: ["1953-default"] },
-    { abbr: "JSP" },
-    { abbr: "CDP" },
-  ],
-  BR: [
-    { abbr: "PMDB" },
-    { abbr: "PFL" },
-    { abbr: "PT", presets: ["2019-default"] },
-    { abbr: "PL" },
-  ],
-  IE: [{ abbr: "FF" }, { abbr: "FG" }, { abbr: "SF" }],
-  CN: [{ abbr: "CCP" }],
-  NG: [
-    // 2019 majors — era-exclusive so no presets filter needed.
-    { abbr: "APC" },
-    { abbr: "PDP" },
-    // 1953 late-colonial triad (NCNC/AG/NPC) — all three were major regional
-    // parties contesting under Macpherson/Lyttelton; NPC demographically largest.
-    { abbr: "NCNC" },
-    { abbr: "AG" },
-    { abbr: "NPC" },
-  ],
+export const MAJOR_DEFAULT_PARTIES: Record<string, MajorDefaultParty[] | undefined> = {
+  US: US_ELECTIONS.majorDefaultParties,
+  UK: UK_ELECTIONS.majorDefaultParties,
+  DE: DE_ELECTIONS.majorDefaultParties,
+  JP: JP_ELECTIONS.majorDefaultParties,
+  BR: BR_ELECTIONS.majorDefaultParties,
+  IE: IE_ELECTIONS.majorDefaultParties,
+  CN: CN_ELECTIONS.majorDefaultParties,
+  NG: NG_ELECTIONS.majorDefaultParties,
 };
 
 /**

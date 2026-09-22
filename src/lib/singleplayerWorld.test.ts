@@ -25,8 +25,30 @@ function report(): BalanceReport {
       medianMarginPct: 0,
     },
     officeTurnover: { officeCount: 10, nppHeldPct: 0.7, meanTenureDays: 0 },
-    crises: { totalSpawned: 4, active: 2, resolved: 2, meanResolutionHours: 0 },
-    economy: { commodityCount: 3, inflationIndex: 1.2, priceVolatility: 0 },
+    crises: {
+      totalSpawned: 4,
+      active: 2,
+      resolved: 2,
+      meanResolutionHours: 0,
+      living: {
+        total: 0,
+        opened: 0,
+        byStatus: {},
+        pendingDecisions: 0,
+        resolvedDecisions: 0,
+        byDefinition: [],
+      },
+    },
+    economy: {
+      commodityCount: 3,
+      inflationIndex: 1.2,
+      inflationRate: 4,
+      householdCpiCountries: 1,
+      commodityPriceLevelMean: 2,
+      commodityPriceLevelMedian: 2,
+      commodityPriceLevelP90: 3,
+      priceVolatility: 0,
+    },
     capacity: {
       sectorCount: 0,
       totalCapitalStock: 0,
@@ -78,6 +100,7 @@ describe("singleplayer worldsim contract", () => {
       turn: ++turn,
       message: "ok",
       warnings: [],
+      health: null,
     }));
     await expect(advanceWorldsim(3, advance)).resolves.toMatchObject({
       completed: 3,
@@ -89,8 +112,14 @@ describe("singleplayer worldsim contract", () => {
   it("stops when the authoritative engine fails", async () => {
     const advance = vi
       .fn()
-      .mockResolvedValueOnce({ success: true, turn: 2, message: "ok", warnings: [] })
-      .mockResolvedValueOnce({ success: false, turn: 0, message: "locked", warnings: ["busy"] });
+      .mockResolvedValueOnce({ success: true, turn: 2, message: "ok", warnings: [], health: null })
+      .mockResolvedValueOnce({
+        success: false,
+        turn: 0,
+        message: "locked",
+        warnings: ["busy"],
+        health: null,
+      });
     await expect(advanceWorldsim(3, advance)).rejects.toThrow("locked");
     expect(advance).toHaveBeenCalledTimes(2);
   });
@@ -101,6 +130,7 @@ describe("singleplayer worldsim contract", () => {
       turn: 2,
       message: "Turn 2 processed with 1 warning(s)",
       warnings: ["Optional summary unavailable"],
+      health: null,
     }));
     await expect(advanceWorldsim(1, advance)).resolves.toMatchObject({
       completed: 1,

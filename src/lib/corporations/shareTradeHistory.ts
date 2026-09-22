@@ -27,19 +27,13 @@ export interface RecordShareTradeInput {
   structureChange?: ShareTradeStructureChangeMeta;
 }
 
-/**
- * Insert a trade-history row. Best-effort: logs to Sentry on failure rather
- * than throwing so it can never roll back the share-movement it audits.
- */
-export async function recordShareTrade(db: Db, input: RecordShareTradeInput): Promise<void> {
+function buildShareTradeDocument(input: RecordShareTradeInput): Omit<ShareTradeHistory, "_id"> {
   const isStructureChange = STRUCTURE_CHANGE_KINDS.has(input.kind);
-  const doc: Omit<ShareTradeHistory, "_id"> = {
+  return {
     corporationId: input.corporationId,
     kind: input.kind,
     turn: input.turn,
     createdAt: input.createdAt ?? new Date(),
-    // Corporate actions stay on this audit surface for cost-basis replay, but
-    // they are not executable trades and must contribute no volume/notional.
     shares: isStructureChange ? 0 : input.shares,
     pricePerShareAnchor: isStructureChange ? 0 : input.pricePerShareAnchor,
     totalAnchor: isStructureChange
@@ -51,8 +45,29 @@ export async function recordShareTrade(db: Db, input: RecordShareTradeInput): Pr
     ...(input.note ? { note: input.note } : {}),
     ...(input.structureChange ? { structureChange: input.structureChange } : {}),
   };
+}
+
+/**
+ * Insert a trade-history row. Best-effort: logs to Sentry on failure rather
+ * than throwing so it can never roll back the share-movement it audits.
+ */
+export async function recordShareTrade(db: Db, input: RecordShareTradeInput): Promise<void> {
   try {
-    await db.collection<Omit<ShareTradeHistory, "_id">>(COLL).insertOne(doc);
+    await db
+      .collection<Omit<ShareTradeHistory, "_id">>(COLL)
+      .insertOne(buildShareTradeDocument(input));
+  } catch (err) {
+    Sentry.captureException(err, { tags: { module: "shareTradeHistory" } });
+  }
+}
+
+/** Best-effort batch form for turn paths that already collect several fills. */
+export async function recordShareTrades(db: Db, inputs: RecordShareTradeInput[]): Promise<void> {
+  if (inputs.length === 0) return;
+  try {
+    await db
+      .collection<Omit<ShareTradeHistory, "_id">>(COLL)
+      .insertMany(inputs.map(buildShareTradeDocument), { ordered: false });
   } catch (err) {
     Sentry.captureException(err, { tags: { module: "shareTradeHistory" } });
   }

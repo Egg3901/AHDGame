@@ -6,6 +6,33 @@ import { ensureIndex } from "./helpers";
 export async function seedPerfIndexes(db: Db, log: (msg: string) => void) {
   log("Performance indexes:");
 
+  // Clock repair filters successful logs within the current reset iteration.
+  await ensureIndex(
+    db,
+    "turnLogs",
+    {
+      success: 1,
+      "iteration.type": 1,
+      "iteration.number": 1,
+      turn: -1,
+      gameTime: -1,
+    },
+    { name: "turnLogs_success_iteration_clock" },
+    log
+  );
+  // Legacy worlds without an iteration still need an ordered successful scan.
+  await ensureIndex(
+    db,
+    "turnLogs",
+    {
+      success: 1,
+      turn: -1,
+      gameTime: -1,
+    },
+    { name: "turnLogs_success_clock" },
+    log
+  );
+
   // Aggregate/background countries refresh one deterministic sixth of the
   // roster per turn. This keeps the hot read proportional to the due bucket.
   await ensureIndex(
@@ -81,6 +108,23 @@ export async function seedPerfIndexes(db: Db, log: (msg: string) => void) {
     { name: "electionVoteTallies_electionId" },
     log
   );
+  // Runtime reset drops electionResultSnapshots, including its indexes, while
+  // migration markers intentionally survive. Bootstrap must therefore restore
+  // both indexes; the one-off migration alone cannot protect the new world.
+  await ensureIndex(
+    db,
+    "electionResultSnapshots",
+    { electionId: 1 },
+    { unique: true, name: "election_result_snapshot_election" },
+    log
+  );
+  await ensureIndex(
+    db,
+    "electionResultSnapshots",
+    { countryId: 1, electionType: 1, cycle: -1 },
+    { name: "election_result_snapshot_history" },
+    log
+  );
 
   // electedOfficials — lookup a character's offices
   await ensureIndex(
@@ -101,6 +145,19 @@ export async function seedPerfIndexes(db: Db, log: (msg: string) => void) {
     "electedOfficials",
     { nppId: 1, officeType: 1 },
     { name: "electedOfficials_nppId_officeType" },
+    log
+  );
+
+  // electedOfficials — party presence by region, for the party growth frontier.
+  // `getPartyPresenceStates` asks "which regions hold an office for this party"
+  // on every party hub load, every recruitment/relocation picker, and every
+  // join or recruit attempt. Without this the collection has no `party` index at
+  // all and each of those is a full scan.
+  await ensureIndex(
+    db,
+    "electedOfficials",
+    { party: 1, state: 1 },
+    { name: "electedOfficials_party_state" },
     log
   );
 

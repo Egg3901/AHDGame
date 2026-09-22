@@ -277,6 +277,33 @@ export const UK_COMMONS_SEATS_1953: Record<string, number> = {
 
 export const TOTAL_UK_COMMONS_SEATS_1953 = 625;
 
+/**
+ * UK Commons seat counts by region — 1983 redistribution (in force for the
+ * `1991-default` preset). Mirrors `ukRegions1991.houseDistricts` exactly
+ * (England 523 / Scotland 72 / Wales 38 / Northern Ireland 17 = 650).
+ *
+ * Same defect `UK_COMMONS_SEATS_1953` was written for, one era over: without
+ * this map `getUkCommonsSeats` fell through to the modern table, so a 1991
+ * world spawned and allocated Commons elections on a regional split that
+ * matched neither its chamber config nor its seated roster.
+ */
+export const UK_COMMONS_SEATS_1991: Record<string, number> = {
+  LON: 81,
+  SEE: 89,
+  SWE: 50,
+  EAE: 53,
+  EMI: 41,
+  WMI: 56,
+  YHU: 52,
+  NWE: 72,
+  NEE: 29,
+  SCO: 72,
+  WAL: 38,
+  NIR: 17,
+};
+
+export const TOTAL_UK_COMMONS_SEATS_1991 = 650;
+
 /** RU (Soviet Union) region id → display name. Matches ruRegions seed names. */
 export const RU_REGION_NAMES: Record<string, string> = {
   CEN: "Central Russia",
@@ -348,20 +375,6 @@ export const NG_REGIONAL_COUNCIL_SEATS: Record<string, number> = {
 };
 
 // ── Japan seat counts ────────────────────────────────────────────────────────
-
-/** Shugiin (House of Representatives) seat counts per region. Total = 465. */
-export const JP_SHUGIIN_SEATS: Record<string, number> = {
-  HOK: 12,
-  TOH: 37,
-  KAN: 150,
-  CHU: 81,
-  KNS: 82,
-  CGK: 28,
-  SHI: 14,
-  KYU: 61,
-};
-
-export const TOTAL_JP_SHUGIIN_SEATS = 465;
 
 // ── China seat counts ────────────────────────────────────────────────────────
 
@@ -497,20 +510,6 @@ export function subNationalChamberSeats(
   return state.stateSenateSeats ?? 0;
 }
 
-/** Sangiin (House of Councillors) seat counts per region. Total = 248. */
-export const JP_SANGIIN_SEATS: Record<string, number> = {
-  HOK: 7,
-  TOH: 20,
-  KAN: 80,
-  CHU: 44,
-  KNS: 44,
-  CGK: 14,
-  SHI: 8,
-  KYU: 31,
-};
-
-export const TOTAL_JP_SANGIIN_SEATS = 248;
-
 // ── Germany seat counts ──────────────────────────────────────────────────────
 
 /**
@@ -564,18 +563,6 @@ export const DE_LANDTAG_SEATS: Record<string, number> = {
   ST: 97,
   SH: 73,
   TH: 88,
-};
-
-/** JP Governor seats per region. 1 governor per region. */
-export const JP_GOVERNOR_SEATS: Record<string, number> = {
-  HOK: 1,
-  TOH: 1,
-  KAN: 1,
-  CHU: 1,
-  KNS: 1,
-  CGK: 1,
-  SHI: 1,
-  KYU: 1,
 };
 
 /** Electoral votes per state (House seats + 2). DC = 3. Total = 538. */
@@ -856,15 +843,24 @@ export function getHouseSeats(preset: string | undefined): Record<string, number
 
 /**
  * Preset-aware UK Commons seat map. `1953-default` → 625-seat 1950–55
- * redistribution; every other preset → the modern 650-seat map.
+ * redistribution; `1991-default` → the 650-seat 1983-boundary map; every
+ * other preset → the modern 650-seat map.
  */
 export function getUkCommonsSeats(preset: string | undefined): Record<string, number> {
-  return preset === "1953-default" ? UK_COMMONS_SEATS_1953 : UK_COMMONS_SEATS;
+  if (preset === "1953-default") return UK_COMMONS_SEATS_1953;
+  return preset === "1991-default" ? UK_COMMONS_SEATS_1991 : UK_COMMONS_SEATS;
 }
 
-/** National Commons size for the active preset (625 in 1953, else 650). */
+/**
+ * National Commons size for the active preset (625 in 1953, 650 in 1991, else
+ * 650).
+ *
+ * 1991 and the modern era agree on the total and disagree on the split, which
+ * is exactly why the map above is per-region rather than a single number.
+ */
 export function getTotalUkCommonsSeats(preset: string | undefined): number {
-  return preset === "1953-default" ? TOTAL_UK_COMMONS_SEATS_1953 : TOTAL_UK_COMMONS_SEATS;
+  if (preset === "1953-default") return TOTAL_UK_COMMONS_SEATS_1953;
+  return preset === "1991-default" ? TOTAL_UK_COMMONS_SEATS_1991 : TOTAL_UK_COMMONS_SEATS;
 }
 
 export function getElectoralVotes(preset: string | undefined): Record<string, number> {
@@ -929,14 +925,21 @@ export function isUsElectoralState(id: string): boolean {
 }
 
 /**
- * True when `region` is a US federal district (e.g. DC) that elects no offices
- * and hosts no state party organization. Only the US has such regions, so this
- * is a no-op for every other country. Callers use it to short-circuit
- * state-party-org paths with a clean response instead of reaching the
- * `ensureStatePartyOrgRow` chokepoint, which throws for these regions.
+ * True when `id` is a US jurisdiction that hosts a party organization.
+ *
+ * This is deliberately broader than {@link isUsElectoralState}. DC elects no
+ * House, Senate, governor, or state-legislature seats, but it does have party
+ * committees, presidential registration, and party recruitment. Public-office
+ * election code must continue to use `isUsElectoralState`; party-organization
+ * code uses this predicate instead.
  */
-export function isNonElectoralUsRegion(country: string, region: string): boolean {
-  return country === "US" && !isUsElectoralState(region);
+export function isUsPartyOrganizationJurisdiction(id: string): boolean {
+  return isUsElectoralState(id) || id === "DC";
+}
+
+/** True when a US region cannot host a party organization. */
+export function isNonPartyOrganizationUsRegion(country: string, region: string): boolean {
+  return country === "US" && !isUsPartyOrganizationJurisdiction(region);
 }
 
 /**
@@ -952,3 +955,26 @@ export function getTravelActionCost(stateId: string, preset?: string): number {
   if (ev <= 20) return 7;
   return 10;
 }
+
+/**
+ * Japan's chamber seat tables, which now live in its country folder.
+ *
+ * ⚠️ A FORWARDER HOLDS NO COPY. They were duplicated between this file and
+ * `jp/elections.ts`; both now resolve to `jp/data/jpSeats.ts`.
+ */
+export {
+  JP_SHUGIIN_SEATS,
+  TOTAL_JP_SHUGIIN_SEATS,
+  JP_SHUGIIN_SEATS_1991,
+  TOTAL_JP_SHUGIIN_SEATS_1991,
+  JP_SANGIIN_SEATS_1991,
+  TOTAL_JP_SANGIIN_SEATS_1991,
+  getJpShugiinSeats,
+  getJpSangiinSeats,
+  getJpSangiinClassSeats,
+  getTotalJpShugiinSeats,
+  getTotalJpSangiinSeats,
+  JP_SANGIIN_SEATS,
+  TOTAL_JP_SANGIIN_SEATS,
+  JP_GOVERNOR_SEATS,
+} from "@/lib/countries/jp/data/jpSeats";

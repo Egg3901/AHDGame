@@ -4,7 +4,7 @@ import { legislationTypes } from "./legislationTypes";
 import { deLegislationTypes } from "../de/deLegislationTypes";
 import { cnLegislationTypes } from "../cn/cnLegislationTypes";
 import { ieLegislationTypes } from "../ie/ieLegislationTypes";
-import { jpLegislationTypes } from "../jp/jpLegislationTypes";
+import { jpLegislationTypes } from "@/lib/countries/jp/data/jpLegislationTypes";
 
 /**
  * §4.7 healthcare spending sweep guard (P2b). These healthcare outcomes are

@@ -216,6 +216,18 @@ describe("NPP capacity reinvestment — a selling-out, fully-utilized plant grow
     expect(JSON.stringify(write.update)).not.toContain('"unitsOrdered":5,');
   });
 
+  it("does not clog growth slots with replacement-only orders", () => {
+    const existing = Array.from({ length: 2 }, (_, index) => ({
+      unitsOrdered: 5,
+      costPaidAnchor: 1_000,
+      startTurn: TURN - index,
+      onlineTurn: TURN + 10 + index,
+    }));
+    const decision = decide(corp(), [sector({ buildQueue: existing })], [pool()]);
+
+    expect(queueWrites(decision)).toHaveLength(0);
+  });
+
   it("expands several owned plants in one turn, as a player would", () => {
     const a = sector({ stateId: "CA", producedUnits: 1_000, soldUnits: 1_000 });
     const b = sector({ stateId: "NY", producedUnits: 1_000, soldUnits: 1_000 });
@@ -266,6 +278,40 @@ describe("NPP capacity reinvestment — a selling-out, fully-utilized plant grow
     const replacement = 1_000 * CAPITAL_DEPRECIATION_PER_TURN;
     expect(order.unitsOrdered).toBeCloseTo(replacement, 6);
     expect(decision.unownedDraws).toBeUndefined();
+  });
+
+  it("does not grow extraction when the state's deposits have no headroom", () => {
+    const s = sector({ sectorType: "extraction", strategyId: "rare_earth_mining" });
+    const decision = decide(
+      corp({ type: "extraction" }),
+      [s],
+      [pool({ sectorType: "extraction", headroomUnits: 0, revenue: 0 })],
+      plantsCtx,
+      { placementSignals: { extractionHeadroomOf: () => 0 } }
+    );
+
+    const order = pushedOrder(queueWrites(decision)[0]);
+    // Existing capacity still receives maintenance; only new capacity is
+    // blocked when the physical deposit is exhausted.
+    expect(order.unitsOrdered).toBeCloseTo(
+      (s.producedUnits ?? 0) * CAPITAL_DEPRECIATION_PER_TURN,
+      6
+    );
+    expect(decision.reinvestments).toHaveLength(1);
+  });
+
+  it("treats an unknown extraction capacity document as uncapped", () => {
+    const s = sector({ sectorType: "extraction", strategyId: "rare_earth_mining" });
+    const decision = decide(
+      corp({ type: "extraction" }),
+      [s],
+      [pool({ sectorType: "extraction", headroomUnits: 0, revenue: 0 })]
+    );
+
+    const order = pushedOrder(queueWrites(decision)[0]);
+    expect(order.unitsOrdered).toBeGreaterThan(
+      (s.producedUnits ?? 0) * CAPITAL_DEPRECIATION_PER_TURN
+    );
   });
 });
 

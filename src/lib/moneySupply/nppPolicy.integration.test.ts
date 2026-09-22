@@ -7,12 +7,14 @@ vi.mock("./operations", () => ({
 }));
 import { executeMonetaryOperation } from "./operations";
 import { processNppMonetaryOperations } from "./nppPolicy";
+import { MONEY_ACCOUNTING_VERSION } from "./rules/calculate";
 
 describe("monetary policy after accounting transition", () => {
   it.each([
     [undefined, 500, false],
-    [2, null, false],
-    [2, 500, true],
+    [MONEY_ACCOUNTING_VERSION - 1, 500, false],
+    [MONEY_ACCOUNTING_VERSION, null, false],
+    [MONEY_ACCOUNTING_VERSION, 500, true],
   ] as const)(
     "only tightens on comparable version %s growth %s",
     async (accountingVersion, annualizedM2GrowthPct, shouldTighten) => {

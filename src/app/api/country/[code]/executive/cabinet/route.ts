@@ -26,6 +26,7 @@ import { getCabinetMembersCollection } from "@/lib/db/collections/cabinetMembers
 import { getGovernmentFormationsCollection } from "@/lib/db/collections/governmentFormation";
 import { getGameTime } from "@/lib/time/gameTime";
 import { getCountryState } from "@/lib/countryState";
+import { canReshuffle, getReshuffleIdentity } from "@/lib/uk/cabinet/reshuffleLimit";
 
 export async function GET(_request: Request, { params }: { params: Promise<{ code: string }> }) {
   try {
@@ -215,6 +216,28 @@ async function handleParliamentaryCabinet(countryId: CountryId) {
     };
   });
 
+  // Reshuffle availability (issue #859): the PM's once-per-parliament token
+  // state, so the client can offer or explain the reshuffle action.
+  const { governmentId, parliamentId } = getReshuffleIdentity({
+    countryId,
+    pmCharacterId: govFormation?.pmCharacterId ?? null,
+    formedTurn: govFormation?.formedTurn ?? null,
+    formedAt: govFormation?.formedAt ?? null,
+    cycle: govFormation?.cycle ?? null,
+  });
+  const reshuffleDecision = canReshuffle(
+    govFormation?.reshuffleLog ?? [],
+    governmentId,
+    parliamentId
+  );
+
+  // The viewer's own minister seat, if any — drives the Resign button.
+  const myPositionId =
+    myCharacter != null
+      ? (members.find((m) => m.characterId != null && m.characterId.equals(myCharacter._id))
+          ?.positionId ?? null)
+      : null;
+
   return NextResponse.json({
     countryId,
     positions,
@@ -225,5 +248,10 @@ async function handleParliamentaryCabinet(countryId: CountryId) {
     coalitionPartnerIds: (govFormation?.coalitionPartyIds ?? []).filter(
       (pid) => pid !== govFormation?.governingPartyId
     ),
+    reshuffle: {
+      available: reshuffleDecision.allowed,
+      reason: reshuffleDecision.reason,
+    },
+    myPositionId,
   });
 }

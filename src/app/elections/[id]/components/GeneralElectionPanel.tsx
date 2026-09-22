@@ -47,7 +47,6 @@ export function GeneralElectionPanel({
   candidates,
   isEnded,
   totalSeats,
-  majoritarianBonusApplied,
   electionType = "governor",
   electionId,
   myCharId,
@@ -67,8 +66,6 @@ export function GeneralElectionPanel({
   candidates: CandidateDetail[];
   isEnded: boolean;
   totalSeats: number | null;
-  /** FPTP winner's bonus governs this race, so quota copy is suppressed (#1276). */
-  majoritarianBonusApplied?: boolean;
   electionType?:
     "senate" | "house" | "stateSenate" | "governor" | "president" | "commons" | (string & {});
   electionId?: string;
@@ -662,7 +659,6 @@ export function GeneralElectionPanel({
       totalVotesCast={totalVotesCast}
       isEnded={isEnded}
       totalSeats={totalSeats}
-      majoritarianBonusApplied={majoritarianBonusApplied}
       lineSeries={lineSeries}
       countryId={countryId}
       electionType={electionType}

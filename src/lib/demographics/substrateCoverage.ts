@@ -49,7 +49,7 @@ export const COVERAGE_ERAS: readonly EraId[] = [
  */
 type RosterThunk = () => Promise<State[]>;
 
-const REGION_ROSTERS: Partial<Record<CountryId, Partial<Record<EraId, RosterThunk>>>> = {
+export const REGION_ROSTERS: Partial<Record<CountryId, Partial<Record<EraId, RosterThunk>>>> = {
   US: {
     "1953": () => import("@/lib/seeds/reference/states1953").then((m) => m.states1953),
     "1979": () => import("@/lib/seeds/reference/states1979").then((m) => m.states1979),
@@ -81,14 +81,14 @@ const REGION_ROSTERS: Partial<Record<CountryId, Partial<Record<EraId, RosterThun
     "2027": () => import("@/lib/seeds/de/deRegions2027").then((m) => m.deRegions2027),
   },
   JP: {
-    "1953": () => import("@/lib/seeds/jp/jpRegions1953").then((m) => m.jpRegions1953),
-    "1979": () => import("@/lib/seeds/jp/jpRegions1979").then((m) => m.jpRegions1979),
-    "1991": () => import("@/lib/seeds/jp/jpRegions1991").then((m) => m.jpRegions1991),
-    "1999": () => import("@/lib/seeds/jp/jpRegions1999").then((m) => m.jpRegions1999),
-    "2007": () => import("@/lib/seeds/jp/jpRegions2007").then((m) => m.jpRegions2007),
-    "2019": () => import("@/lib/seeds/jp/jpRegions").then((m) => m.jpRegions),
-    "2023": () => import("@/lib/seeds/jp/jpRegions2023").then((m) => m.jpRegions2023),
-    "2027": () => import("@/lib/seeds/jp/jpRegions2027").then((m) => m.jpRegions2027),
+    "1953": () => import("@/lib/countries/jp/data/jpRegions1953").then((m) => m.jpRegions1953),
+    "1979": () => import("@/lib/countries/jp/data/jpRegions1979").then((m) => m.jpRegions1979),
+    "1991": () => import("@/lib/countries/jp/data/jpRegions1991").then((m) => m.jpRegions1991),
+    "1999": () => import("@/lib/countries/jp/data/jpRegions1999").then((m) => m.jpRegions1999),
+    "2007": () => import("@/lib/countries/jp/data/jpRegions2007").then((m) => m.jpRegions2007),
+    "2019": () => import("@/lib/countries/jp/data/jpRegions").then((m) => m.jpRegions),
+    "2023": () => import("@/lib/countries/jp/data/jpRegions2023").then((m) => m.jpRegions2023),
+    "2027": () => import("@/lib/countries/jp/data/jpRegions2027").then((m) => m.jpRegions2027),
   },
   IE: {
     "1953": () => import("@/lib/seeds/ie/ieRegions1953").then((m) => m.ieRegions1953),

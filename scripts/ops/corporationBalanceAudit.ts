@@ -23,6 +23,7 @@ import {
   type CapacityDecisionAggregate,
 } from "../../src/lib/corporations/capacityDecisionTelemetry/rules";
 import { CAPACITY_DECISION_COLLECTION } from "../../src/lib/corporations/capacityDecisionTelemetry/persistence";
+import { NPP_OPERATOR_TELEMETRY_COLLECTION } from "../../src/lib/corporations/nppOperatorTelemetry/persistence";
 import { resolveMongoDbName } from "../../src/lib/mongodb";
 
 function finite(value: unknown): number {
@@ -43,7 +44,7 @@ async function main(): Promise<void> {
         MONGO_DB_NAME: process.env.MONGO_DB_NAME,
       })
     );
-    const [fxByCurrency, corporations, gameState, entryFunnel, capacityDecisions] =
+    const [fxByCurrency, corporations, gameState, entryFunnel, capacityDecisions, nppOperator] =
       await Promise.all([
         loadFxRatesByCurrency(db),
         db
@@ -82,6 +83,9 @@ async function main(): Promise<void> {
             {},
             { projection: { buckets: 1, schemaVersion: 1, turn: 1 }, sort: { turn: -1 } }
           ),
+        db
+          .collection(NPP_OPERATOR_TELEMETRY_COLLECTION)
+          .findOne({}, { projection: { _id: 0 }, sort: { turn: -1 } }),
       ]);
     const currentTurn = finite(gameState?.currentTurn);
     const corporationById = new Map(corporations.map((corp) => [corp._id.toString(), corp]));
@@ -162,8 +166,9 @@ async function main(): Promise<void> {
       generatedAt: new Date().toISOString(),
       turn: currentTurn,
       source:
-        "corporations + corporateSectors.plantsPnl + nppMarketEntryFunnels/current + capacityDecisionFunnels/latest",
+        "corporations + corporateSectors.plantsPnl + nppMarketEntryFunnels/current + capacityDecisionFunnels/latest + nppOperatorDiagnostics/latest",
       coverage,
+      latestNppOperatorDiagnosis: nppOperator,
       latestCapacityDecisionFunnel: capacityDecisions,
       // Aggregate, non-identifying funnel: world denominators plus each
       // bucket's share of observed capacity decisions. Buckets carry sums and

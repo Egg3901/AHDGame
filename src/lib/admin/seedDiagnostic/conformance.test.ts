@@ -8,7 +8,11 @@ import {
   seededCountryIdsForPreset,
   readinessCountryIds,
 } from "./expectations";
-import { runConformanceChecks } from "./conformance";
+import {
+  checkMissingScotusSeedDefinition,
+  checkScotusSeed,
+  runConformanceChecks,
+} from "./conformance";
 import { runSeedDiagnostic, diagnosticErrorReport, formatDiagnosticSummary } from "./index";
 import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
 
@@ -26,6 +30,15 @@ type CollMock = {
    * one threw for 14 unrelated tests before it was implemented.
    */
   distinct: ReturnType<typeof vi.fn>;
+  /**
+   * Needed by the readiness report, which SUMS seats rather than counting rows:
+   * `seats` and `electedOfficials` each store one row per constituency or party
+   * bloc carrying a seat count, so it aggregates `totalSeats` / `seatsHeld`.
+   * Added to the FAKE for the same reason `distinct` was -- without it the
+   * report throws and the same 14 unrelated tests fail on a missing mock rather
+   * than on anything they assert.
+   */
+  aggregate: ReturnType<typeof vi.fn>;
 };
 
 function cursorOf(rows: unknown[]) {
@@ -74,6 +87,12 @@ function makeDb(opts: {
       insertOne: vi.fn().mockResolvedValue({ insertedId: "x" }),
       deleteMany: vi.fn().mockResolvedValue({ deletedCount: 0 }),
       distinct: vi.fn().mockResolvedValue(opts.distinct?.[name] ?? []),
+      // Answers the seat-sum with the same figure `countDocuments` would give,
+      // so a collection configured through `counts` behaves consistently
+      // whichever way the code under test asks for it.
+      aggregate: vi.fn().mockImplementation(() => ({
+        toArray: async () => [{ seats: counts[name] ?? 0 }],
+      })),
     };
     collections[name] = coll;
     return coll;
@@ -160,6 +179,74 @@ describe("era-derived expectations", () => {
   });
 });
 
+describe("Supreme Court seed conformance", () => {
+  it("rejects missing content for the required 2027 court preset", () => {
+    expect(checkMissingScotusSeedDefinition("2027-default", undefined)).toEqual([
+      expect.objectContaining({
+        id: "institutions.US.scotus.definition",
+        severity: "critical",
+        actual: null,
+      }),
+    ]);
+  });
+
+  it("does not impose the court contract on an older unsupported preset", async () => {
+    const { db } = makeDb({});
+
+    const checks = await checkScotusSeed(db, "2023-default");
+
+    expect(checks).toEqual([]);
+  });
+
+  it("accepts the explicit 2027 procedural-only docket fallback", async () => {
+    const { db } = makeDb({
+      countByFilter: [
+        {
+          name: "supremeCourtSeats",
+          match: (filter) => JSON.stringify(filter) === JSON.stringify({ countryId: "US" }),
+          count: 9,
+        },
+        {
+          name: "supremeCourtSeats",
+          match: (filter) =>
+            JSON.stringify(filter) ===
+            JSON.stringify({
+              countryId: "US",
+              justiceMode: null,
+              justiceCharacterId: null,
+              justiceNppId: null,
+            }),
+          count: 0,
+        },
+        {
+          name: "docketCases",
+          match: (filter) =>
+            JSON.stringify(filter) === JSON.stringify({ countryId: "US", preset: "2027-default" }),
+          count: 0,
+        },
+      ],
+    });
+
+    const checks = await checkScotusSeed(db, "2027-default");
+
+    expect(checks).toHaveLength(4);
+    expect(checks.every((check) => check.severity === "ok")).toBe(true);
+    expect(checks.find((check) => check.id.endsWith(".docket"))).toMatchObject({
+      expected: "explicit procedural-only fallback",
+      actual: 0,
+      severity: "ok",
+    });
+  });
+
+  it("rejects a missing persisted 2027 roster", async () => {
+    const { db } = makeDb({});
+
+    const checks = await checkScotusSeed(db, "2027-default");
+
+    expect(checks.find((check) => check.id.endsWith(".roster"))?.severity).toBe("critical");
+  });
+});
+
 describe("classifyPopulationSumCheck", () => {
   it("returns ok within 3%, warn for 5–16% dual-source drift, critical above 25% or empty", async () => {
     const { classifyPopulationSumCheck } = await import("./conformance");
@@ -204,6 +291,24 @@ describe("runConformanceChecks", () => {
     expect(checks.find((c) => c.id === "gameState.startingYear")?.severity).toBe("ok");
   });
 
+  it("passes the exact preset-relative clock for an arbitrary reset date", async () => {
+    const { db } = makeDb({
+      gameState: {
+        _id: "current",
+        preset: "1991-default",
+        startingYear: 1991,
+        currentTurn: 161,
+        currentYear: 1994,
+        resetStartDate: { year: 1994, week: 17 },
+        iteration: { type: "Alpha", number: 1 },
+      },
+      gameConfig: { _id: "default", maintenanceMode: true },
+    });
+    const { checks } = await runConformanceChecks(db, { preset: "1991-default" });
+    expect(checks.find((c) => c.id === "gameState.currentTurn")?.severity).toBe("ok");
+    expect(checks.find((c) => c.id === "gameState.currentYear")?.severity).toBe("ok");
+  });
+
   it("flags wrong GDP on a national budget as critical", async () => {
     const seedExpect = buildSeedExpectations("2019-default");
     const us = seedExpect.nationalBudgets.find((b) => b.countryId === "US");
@@ -237,6 +342,27 @@ describe("runConformanceChecks", () => {
     const { checks } = await runConformanceChecks(db, { preset: "2019-default" });
     const gdp = checks.find((c) => c.id === "budget.US.gdp");
     expect(gdp?.severity).toBe("critical");
+  });
+
+  it("flags a central bank outside the preset's authored fiscal coverage", async () => {
+    const { db } = makeDb({
+      gameState: {
+        _id: "current",
+        preset: "2019-default",
+        startingYear: 2019,
+        currentTurn: 1,
+        currentYear: 2019,
+        iteration: { type: "Alpha", number: 1 },
+      },
+      gameConfig: { _id: "default", maintenanceMode: true },
+      centralBanks: [{ _id: "RU", countryId: "RU", primeRate: 5 }],
+    });
+
+    const { checks } = await runConformanceChecks(db, { preset: "2019-default" });
+    expect(checks.find((check) => check.id === "centralBank.RU.fiscalCoverage")).toMatchObject({
+      severity: "critical",
+      actual: null,
+    });
   });
 
   it("does not emit budget.exists for latent BLR/BAL on 1953", async () => {
@@ -358,6 +484,10 @@ describe("runConformanceChecks", () => {
         insertOne: vi.fn(),
         deleteMany: vi.fn(),
         distinct: vi.fn().mockResolvedValue([]),
+        // The readiness report sums seats instead of counting rows; this
+        // catch-all has to answer that too or it throws before the sector
+        // checks this case is actually about.
+        aggregate: vi.fn().mockReturnValue({ toArray: async () => [{ seats: 0 }] }),
       };
     });
 

@@ -1,34 +1,7 @@
-import type { GovernmentFormation } from "@/lib/db/types/governmentFormation";
-
 /**
- * Initial CN governmentFormations seed document.
+ * Forwarder. Moved into CN's country folder.
  *
- * Created in "pending" status — no President appointed yet. The turn
- * processor (via runParliamentaryGovernmentPhases) will process President
- * appointment votes once this document exists.
- *
- * majorityThreshold and totalSeats match COUNTRY_CONFIGS.CN:
- *   - coalitionThreshold: 1491 (2980 / 2 + 1)
- *   - legislature.lowerChamber.seats: 2980 (National People's Congress)
+ * A forwarder holds no copy, so existing importers are untouched and there is
+ * still exactly one declaration.
  */
-export const cnGovernmentFormation: Omit<GovernmentFormation, "createdAt" | "updatedAt"> = {
-  _id: "CN",
-  countryId: "CN",
-  cycle: 1,
-  status: "pending",
-  formationType: null,
-  lostMajority: false,
-  pmCharacterId: null,
-  pmName: null,
-  governingPartyId: null,
-  coalitionId: null,
-  coalitionPartyIds: null,
-  totalSeatsSupporting: 0,
-  majorityThreshold: 1491,
-  seatsByParty: {},
-  totalSeats: 2980,
-  activeVoteId: null,
-  formedAt: null,
-  formedTurn: null,
-  collapsedAt: null,
-};
+export * from "@/lib/countries/cn/data/cnGovernmentFormation";

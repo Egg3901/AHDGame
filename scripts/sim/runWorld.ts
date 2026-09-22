@@ -23,6 +23,9 @@
  *   SIM_MONGODB_URI=mongodb://127.0.0.1:27018 \
  *     npx tsx scripts/sim/runWorld.ts --seed=run1 --preset=2019-default --turns=500
  *
+ * Add --profile-queries for per-phase Mongo command counts. Diagnostic runs
+ * incur driver reply-decoding overhead and should not be used as clean timings.
+ *
  * Re-running the same --seed/--db against a DB that already has a
  * bootstrapped world SKIPS bootstrap and CONTINUES from the current turn —
  * safe to re-run after a crash, and how you extend a run past its original
@@ -37,17 +40,31 @@ import type {
   NppForeignPolicyMode,
   NppForeignPolicyStage,
 } from "@/lib/db/types/gameState";
+import { worldsimQueryMonitoringRequested } from "./queryMonitoring";
 import type { GameConfig } from "@/lib/db/types/gameConfig";
+import type { GameHealthSummary } from "@/lib/db/types/gameHealthSnapshot";
 import type { TurnLog } from "@/lib/db/types/turnLog";
 import { MARKET_MODE_ORDER, type MarketSystemMode } from "@/lib/market/modes";
 import { LABOUR_MODE_ORDER, type LabourSystemMode } from "@/lib/labour/modes";
 import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
 import { applyCloneControllerPolicy } from "@/lib/sim/cloneControllers";
 import {
+  evaluateActorCoverage,
+  actorCoverageWarnings,
+  uncoveredEntries,
+  type ActorCoverageManifest,
+  type SimActorMode,
+} from "@/lib/sim/actorCoverage";
+import { parseSimActorMode } from "@/lib/sim/syntheticActors";
+import { completedTurnProgress } from "./simStatusMirror";
+import {
+  allFeatureFlagsGameStateSet,
   economicExperimentConfigSet,
   isGameplayOverrideArg,
   parseEquityLiquidityFacilityEnabled,
+  parseFrontierEntryExperimentArg,
   parseOptionalBoolean,
+  SIM_ALL_FEATURE_FLAGS_EXCLUDE,
   type FreightSettlementExperimentMode,
 } from "@/lib/sim/economicExperiment";
 
@@ -65,6 +82,7 @@ interface SimRunDoc {
   error: string | null;
   lastMessage?: string;
   lastWarnings?: string[];
+  health?: GameHealthSummary | null;
   /** Pinned-source identity (#1966): requested pin plus the exact code that
    * executed this run. Proves the SHA in the experiment report. */
   source?: {
@@ -82,17 +100,35 @@ interface SimRunDoc {
     canonicalFreightBillingEnabled?: boolean;
     shortageResponsiveSourcingEnabled?: boolean;
     indexFundBondLiquidityEnabled?: boolean;
+    sovereignIssuanceConsolidationEnabled?: boolean;
+    domesticSovereignBondCoverageEnabled?: boolean;
     equityLiquidityFacilityEnabled?: boolean;
     nppMarketCoverageEnabled?: boolean;
     nppFragileMarketSupplyEnabled?: boolean;
   };
+  frontierEntryExperimentEnabled?: boolean;
   nppForeignPolicyMode?: NppForeignPolicyMode;
   nppForeignPolicyStage?: NppForeignPolicyStage;
+  /** Simulation actor mode (#1993): pure NPP autonomy vs synthetic actors. */
+  actorMode?: SimActorMode;
+  /** Effective-run actor-coverage manifest evaluated from live sandbox counts. */
+  actorCoverage?: ActorCoverageManifest;
   preservePlayerRail?: boolean;
   preserveLiveConfig?: boolean;
   /** Autonomy tier and local-world difficulty the run was configured with. */
   autonomyLevel?: string;
   difficulty?: string;
+  /** Fresh-bootstrap seed conformance summary (#1992). */
+  bootstrapConformance?: {
+    status: "reported" | "skipped-existing" | "diagnostic-error";
+    summary: string;
+    baselineCaptured: boolean;
+    reportId?: unknown;
+    ranAt?: Date | null;
+    ok?: number | null;
+    warn?: number | null;
+    critical?: number | null;
+  };
 }
 
 function arg(flag: string): string | undefined {
@@ -219,6 +255,18 @@ const indexFundBondLiquidityEnabled = parseOptionalBoolean(
   arg("index-fund-bond-liquidity"),
   "index-fund-bond-liquidity"
 );
+// #1001 controlled comparison: seeds the gated tranche-consolidation flag on
+// the sandbox gameConfig. Absent keeps the scheduler default (off).
+const sovereignIssuanceConsolidationEnabled = parseOptionalBoolean(
+  arg("sovereign-issuance-consolidation"),
+  "sovereign-issuance-consolidation"
+);
+// #1001 controlled comparison: seeds the gated domestic-coverage flag on the
+// sandbox gameConfig. Absent keeps the scheduler default (off).
+const domesticSovereignBondCoverageEnabled = parseOptionalBoolean(
+  arg("domestic-sovereign-bond-coverage"),
+  "domestic-sovereign-bond-coverage"
+);
 // Canonical flag is --equity-liquidity-facility; the deprecated
 // --equity-liquidity alias still parses so older scripts keep working.
 const equityLiquidityFacilityEnabled = parseEquityLiquidityFacilityEnabled(arg);
@@ -229,6 +277,12 @@ const nppMarketCoverageEnabled = parseOptionalBoolean(
 const nppFragileMarketSupplyEnabled = parseOptionalBoolean(
   arg("npp-fragile-market-supply"),
   "npp-fragile-market-supply"
+);
+// Frontier-entry experiment gate (issue #991): gameState flag, not gameConfig.
+// Explicit true arms the capped trial, explicit false pins the control arm;
+// absent leaves the sandbox default untouched.
+const frontierEntryExperimentEnabled = parseFrontierEntryExperimentArg(
+  arg("frontier-entry-experiment")
 );
 // Clone mode: the sandbox DB was pre-loaded with a restore of the LIVE world
 // (mongorestore), so skip bootstrap AND the "real world" users guardrail, and
@@ -285,6 +339,10 @@ if (modeRaw && !SIM_TURN_PHASE_MODES.includes(modeRaw)) {
 }
 const simTurnPhaseMode = modeRaw as
   "full" | "elections-only" | "economy-only" | "macro-only" | undefined;
+// Simulation actor mode (#1993). Omitted means pure NPP autonomy —
+// byte-identical to every harness run before this flag existed. Explicit
+// selection is validated here so a typo fails fast before any sandbox work.
+const actorMode = parseSimActorMode(arg("actors"));
 const electionsOnly = simTurnPhaseMode === "elections-only";
 const economyOnly = simTurnPhaseMode === "economy-only";
 const macroOnly = simTurnPhaseMode === "macro-only";
@@ -368,6 +426,11 @@ if (!Number.isFinite(turns) || turns <= 0) {
 // Must happen before any @/lib import that might transitively touch mongodb.ts.
 // NODE_ENV is typed read-only by @types/node; this is the standard escape hatch.
 (process.env as { NODE_ENV: string }).NODE_ENV = "test";
+// Query diagnostics force extra BSON decoding in the driver. Keep them opt-in;
+// phase wall timings remain available during ordinary runs.
+process.env.AHD_TURN_ROUNDTRIP_MONITOR = worldsimQueryMonitoringRequested(process.argv, process.env)
+  ? "1"
+  : "0";
 process.env.MONGODB_URI = SIM_MONGODB_URI;
 process.env.MONGODB_DB = dbName;
 process.env.SIM_RNG_SALT = seed;
@@ -536,6 +599,49 @@ async function main() {
       `Bootstrapping world (preset=${preset}, db=${dbName}${preIteration ? ", pre-iteration" : ""})`
     );
     await bootstrapGameWorld({ db, mode: "historical", preset, log, preIteration });
+
+    // #1992: persist fresh-bootstrap seed conformance BEFORE sim-only state
+    // mutation (the tier patches, autonomy, backfill, and corp spawn below)
+    // or the first turn can obscure seed provenance. Findings never abort the
+    // run; a diagnostic throw is recorded on the sim manifest, not rethrown.
+    const { runWorldsimBootstrapConformance, buildWorldsimFeatureManifest } =
+      await import("@/lib/sim/worldsimBootstrapConformance");
+    const bootstrapConformance = await runWorldsimBootstrapConformance(db, {
+      runId,
+      seed,
+      preset,
+      sourceRevision: executedCommit,
+      sourceWorktree: sourceWorktree ?? null,
+      featureManifest: buildWorldsimFeatureManifest({
+        autonomyLevel: AUTONOMY_LEVEL,
+        actorMode,
+        simTurnPhaseMode: simTurnPhaseMode ?? "full",
+        preIteration,
+        preservePlayerRail,
+        commandEconomy,
+        scarcityDrift,
+        brandLoyalty,
+        brandLoyaltySlice,
+        sectorQuality,
+        demographicsDemand,
+        macroGrowth,
+        allFeatureFlags,
+        marketMode,
+        labourMode,
+        freightSettlementMode,
+        canonicalFreightBillingEnabled,
+        shortageResponsiveSourcingEnabled,
+        indexFundBondLiquidityEnabled,
+        sovereignIssuanceConsolidationEnabled,
+        domesticSovereignBondCoverageEnabled,
+        equityLiquidityFacilityEnabled,
+        nppMarketCoverageEnabled,
+        nppFragileMarketSupplyEnabled,
+        frontierEntryExperimentEnabled,
+        difficulty,
+      }),
+    });
+    log(`Bootstrap seed conformance: ${bootstrapConformance.summary}`);
 
     // Apply the structural-market rollout tier for this run (if requested).
     // Sim-only: patches the sandbox gameConfig so every turn resolves
@@ -709,6 +815,16 @@ async function main() {
           source,
           autonomyLevel: AUTONOMY_LEVEL,
           ...(difficulty ? { difficulty } : {}),
+          bootstrapConformance: {
+            status: bootstrapConformance.status,
+            summary: bootstrapConformance.summary,
+            baselineCaptured: bootstrapConformance.baselineCaptured,
+            reportId: bootstrapConformance.report?._id ?? null,
+            ranAt: bootstrapConformance.report?.ranAt ?? null,
+            ok: bootstrapConformance.report?.summary.ok ?? null,
+            warn: bootstrapConformance.report?.summary.warn ?? null,
+            critical: bootstrapConformance.report?.summary.critical ?? null,
+          },
           updatedAt: new Date(),
         },
       },
@@ -745,6 +861,8 @@ async function main() {
     canonicalFreightBillingEnabled,
     shortageResponsiveSourcingEnabled,
     indexFundBondLiquidityEnabled,
+    sovereignIssuanceConsolidationEnabled,
+    domesticSovereignBondCoverageEnabled,
     equityLiquidityFacilityEnabled,
     nppMarketCoverageEnabled,
     nppFragileMarketSupplyEnabled,
@@ -759,6 +877,24 @@ async function main() {
       { $set: { economicExperiment: economicExperimentSet, updatedAt: new Date() } }
     );
     log(`Economic experiment overrides: ${JSON.stringify(economicExperimentSet)}`);
+  }
+
+  // Frontier-entry experiment gate (issue #991). gameState, not gameConfig:
+  // the turn path reads it from gameState. Explicit true AND explicit false
+  // are both written, so the on arm and the off control are distinguishable
+  // in the report; absent leaves the sandbox default (disabled) untouched.
+  // Runs for fresh, resumed, and clone worlds alike, mirroring the block above.
+  if (frontierEntryExperimentEnabled !== undefined) {
+    await db
+      .collection<GameState>("gameState")
+      .updateOne({ _id: "current" }, { $set: { frontierEntryExperimentEnabled } });
+    await simRuns.updateOne(
+      { _id: runId },
+      { $set: { frontierEntryExperimentEnabled, updatedAt: new Date() } }
+    );
+    log(
+      `Frontier-entry experiment gate: frontierEntryExperimentEnabled=${String(frontierEntryExperimentEnabled)} on sandbox gameState`
+    );
   }
 
   await db
@@ -866,15 +1002,17 @@ async function main() {
 
   if (allFeatureFlags) {
     const { DEFAULT_GAME_STATE_FLAGS } = await import("@/lib/seeds/reference/featureFlagDefaults");
-    const enabledFlags = Object.fromEntries(
-      Object.entries(DEFAULT_GAME_STATE_FLAGS)
-        .filter(([, value]) => typeof value === "boolean")
-        .map(([key]) => [key, true])
+    // Experimental gates stay out: arming the frontier-entry trial as a side
+    // effect of a full-feature sweep would bypass its evidence gate.
+    const enabledFlags = allFeatureFlagsGameStateSet(
+      DEFAULT_GAME_STATE_FLAGS as unknown as Record<string, unknown>
     );
     await db
       .collection<GameState>("gameState")
       .updateOne({ _id: "current" }, { $set: enabledFlags });
-    log(`Enabled all ${Object.keys(enabledFlags).length} compatible gameplay boolean flags`);
+    log(
+      `Enabled all ${Object.keys(enabledFlags).length} compatible gameplay boolean flags (excluded experimental gates: ${[...SIM_ALL_FEATURE_FLAGS_EXCLUDE].join(", ")})`
+    );
   }
 
   // ── SIM-ONLY: elections-only turn profile + country scope ──────────────────
@@ -934,6 +1072,7 @@ async function main() {
         electionScope: electionScope ? [...electionScope] : null,
         nppForeignPolicyMode: foreignPolicyMode,
         nppForeignPolicyStage: foreignPolicyStage,
+        actorMode,
         preservePlayerRail,
         preserveLiveConfig,
         effectiveConfigInitial: {
@@ -957,6 +1096,47 @@ async function main() {
       },
     }
   );
+
+  // Actor-coverage manifest (#1993): in synthetic mode, materialize the
+  // deterministic population FIRST (idempotent sandbox upserts, before any
+  // turn advances), then evaluate every known actor-gated mechanic from the
+  // PERSISTED sandbox counts — never from the intended plan. Pure NPP runs
+  // skip seeding entirely and honestly report vacancies; synthetic mode
+  // without materialized synthetic characters degrades to unreachable
+  // (see SYNTHETIC_UNSEEDED_REASON) instead of claiming coverage from a flag.
+  // This pre-turn stamp proves the population exists; the manifest is
+  // re-stamped after the turn loop so reports carry executed evidence.
+  {
+    if (actorMode === "synthetic") {
+      const { materializeSyntheticActors } = await import("@/lib/sim/materializeSyntheticActors");
+      const gameStateTurn = await db.collection<GameState>("gameState").findOne({ _id: "current" });
+      const seeded = await materializeSyntheticActors(db, {
+        seed,
+        runId,
+        turn: (gameStateTurn?.currentTurn as number | undefined) ?? 0,
+      });
+      log(
+        `Seeded synthetic actors (seed=${seed}): ${seeded.characters} characters, ` +
+          `${seeded.users} users, ${seeded.officials} official(s), ` +
+          `${seeded.cabinetSeats} cabinet seat(s), ${seeded.statePartyCandidates} candidacies, ` +
+          `${seeded.statePartyVotes} state-party votes, ${seeded.fedNominations} Fed nomination(s), ` +
+          `${seeded.corporations} corporations`
+      );
+    }
+    const { readActorPopulation } = await import("@/lib/sim/materializeSyntheticActors");
+    const snapshot = await readActorPopulation(db, { mode: actorMode, preset });
+    const manifest = evaluateActorCoverage(snapshot, new Date().toISOString());
+    await simRuns.updateOne({ _id: runId }, { $set: { actorCoverage: manifest } });
+    log(
+      `Actor mode: ${actorMode} — ${manifest.mechanicCount - uncoveredEntries(manifest).length}` +
+        `/${manifest.mechanicCount} mechanics covered ` +
+        `(characters=${snapshot.characters} users=${snapshot.users} ` +
+        `synthetic=${snapshot.syntheticCharacters}/${snapshot.syntheticUsers} ` +
+        `candidates=${snapshot.statePartyCandidates} crisisDecided=${snapshot.crisisDecidedInteractions} ` +
+        `wealthRows=${snapshot.wealthListRows} playerCorps=${snapshot.playerFoundedCorps})`
+    );
+    for (const warning of actorCoverageWarnings(manifest)) log(warning);
+  }
 
   // Candidate-supply guard (#3253): some seeds (FR/IT/ES/SE/TR) ship no NPPs, so
   // their elections resolve empty. Flag scoped countries with no NPP supply so
@@ -1065,23 +1245,48 @@ async function main() {
       await snapshotParliamentSeats(db, lastTurn);
       await snapshotCorporationsByCountry(db, lastTurn);
 
+      // Synthetic-actor per-turn driver (#1993): crisis decisions, DD survey,
+      // and Fed-chair acceptance through the production seams. Synthetic mode
+      // only, bounded, and never throwing — a driver skip never fails a turn.
+      if (actorMode === "synthetic") {
+        const { driveSyntheticActors } = await import("@/lib/sim/driveSyntheticActors");
+        await driveSyntheticActors(db, { seed, turn: lastTurn, now: new Date() });
+      }
+
       if (iterations % checkpointEvery === 0 || lastTurn >= targetTurn) {
         log(
           `turn ${lastTurn} (${lastTurn - startTurn}/${turns})` +
             (result.warnings.length ? ` — ${result.warnings.length} warning(s)` : "")
         );
-        await simRuns.updateOne(
-          { _id: runId },
-          {
-            $set: {
-              currentTurn: lastTurn,
-              lastMessage: result.message,
-              lastWarnings: result.warnings,
-              updatedAt: new Date(),
-            },
-          }
-        );
       }
+      // Persist every completed turn. Console checkpoints may stay sparse,
+      // but the worker status mirror must never attach a fresh heartbeat to
+      // progress that is up to `checkpointEvery` turns old (#2074).
+      const progressUpdatedAt = new Date();
+      await simRuns.updateOne(
+        { _id: runId },
+        {
+          $set: completedTurnProgress(lastTurn, result, progressUpdatedAt),
+        }
+      );
+    }
+
+    // Final actor-coverage re-stamp (#1993): the pre-turn manifest proves the
+    // population was materialized, but only this post-turn read proves which
+    // paths actually executed (crisis decisions, wealth rows, founded corps).
+    // Reports must never claim a covered path whose evidence counter is zero.
+    {
+      const { readActorPopulation } = await import("@/lib/sim/materializeSyntheticActors");
+      const snapshot = await readActorPopulation(db, { mode: actorMode, preset });
+      const manifest = evaluateActorCoverage(snapshot, new Date().toISOString());
+      await simRuns.updateOne({ _id: runId }, { $set: { actorCoverage: manifest } });
+      log(
+        `Actor coverage re-stamped: ${manifest.mechanicCount - uncoveredEntries(manifest).length}` +
+          `/${manifest.mechanicCount} covered ` +
+          `(crisisDecided=${snapshot.crisisDecidedInteractions} ` +
+          `wealthRows=${snapshot.wealthListRows} playerCorps=${snapshot.playerFoundedCorps})`
+      );
+      for (const warning of actorCoverageWarnings(manifest)) log(warning);
     }
 
     await simRuns.updateOne(
@@ -1107,9 +1312,10 @@ if (hasFlag("help") || hasFlag("h")) {
       "--seed=<id> [--preset=2019-default] [--turns=500] [--db=<name>] [--autonomy=v3|v4] " +
       "[--run-id=<id>] [--checkpoint-every=10] " +
       "[--foreign-policy=off|shadow|active] [--foreign-policy-stage=votes|proposals|trade|support|war] " +
-      "[--mode=full|elections-only|economy-only|macro-only] " +
+      "[--mode=full|elections-only|economy-only|macro-only] [--actors=pure-npp|synthetic] " +
       "[--npp-market-coverage=true|false] " +
       "[--npp-fragile-market-supply=true|false] " +
+      "[--frontier-entry-experiment=true|false] " +
       "[--macro-growth] [--pre-iteration|--no-pre-iteration] [--preserve-player-rail] [--preserve-live-config] [--sector-investment-snapshots=<directory>] [--quiet]"
   );
   process.exit(0);

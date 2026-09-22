@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { Tooltip } from "@/components/Tooltip";
 import type { GenericGranularCell } from "@/lib/demographics/granularCells";
 import type { GranularCandidateShare } from "@/lib/actions/granularPollPayload";
-import { DEMOGRAPHIC_LABELS } from "@/lib/seeds/demographicCategories";
+import { DEMOGRAPHIC_LABELS } from "@/lib/seeds/demographicLabels";
 import type { PollData, StoredPoll } from "../../types";
 
 const BASE_MOE = 3.0; // Typical large-poll margin of error (percentage points).

@@ -1,4 +1,5 @@
 import { getCampaignCopyForElection } from "@/lib/campaigns/raceFamilyCopy";
+import type { CountryId } from "@/lib/constants/countries";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import type { Campaign } from "@/lib/db/types";
 import type { CampaignStatePresence } from "@/lib/elections/dto/campaignStatePresence";
@@ -27,6 +28,15 @@ export interface CampaignData {
   candidateIsNPP: boolean;
   party: string;
   accessLevel: "owner" | "party" | "public";
+
+  /**
+   * The country the RACE belongs to, not the viewer's.
+   *
+   * Carried so the desk can close controls the server refuses across a
+   * border (`assertSameCountry`) without a second fetch. `currencyCode` is
+   * not a substitute: several countries share a currency.
+   */
+  countryId: CountryId;
 
   /**
    * True when the campaign is archived (primary loser / withdrawn). It remains

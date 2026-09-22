@@ -64,8 +64,13 @@ export function planEquityUnderwriting(input: {
 export function pendingEquityPlacementBudget(cashLocal: number, targetCashLocal: number): number {
   const cash = Math.max(0, Number.isFinite(cashLocal) ? cashLocal : 0);
   const target = Math.max(0, Number.isFinite(targetCashLocal) ? targetCashLocal : 0);
+  // The calibrated target is a long-run liquidity goal. When the pool is below
+  // it, reserving a fraction of that unattainable target makes every pending
+  // placement wait forever. Reserve against the cash we actually have instead.
+  const attainableTarget = Math.min(cash, target);
   return (
-    Math.max(0, cash - target * EQUITY_PENDING_RESERVE_SHARE) * EQUITY_PENDING_CASH_SHARE_PER_TURN
+    Math.max(0, cash - attainableTarget * EQUITY_PENDING_RESERVE_SHARE) *
+    EQUITY_PENDING_CASH_SHARE_PER_TURN
   );
 }
 
@@ -176,11 +181,21 @@ export async function placePendingShareIssuances(
       1,
       Math.floor(pending.requestedShares * EQUITY_PENDING_PLACEMENT_SHARE_PER_TURN)
     );
-    const shares = Math.min(
+    const pacedShares = Math.min(
       wholeShares(pending.remainingShares),
       perTurnCap,
       Math.floor(budget / price)
     );
+    // A thin pool budget below the price of one share would pace this
+    // remainder at zero shares per turn forever, while the issuance guards
+    // keep rejecting every new share proposal as "awaiting market placement".
+    // Guarantee one share of progress whenever the pool has any placement
+    // budget; the gated debit below still refuses when pool cash cannot cover
+    // that share, so pool solvency is unchanged.
+    const shares =
+      pacedShares > 0 || budget <= 0
+        ? pacedShares
+        : Math.min(1, wholeShares(pending.remainingShares));
     if (shares <= 0) continue;
     const paidLocal = Math.round(shares * price * 100) / 100;
     const debit = await debitEquityPoolGated(db, currency, paidLocal, "issuanceOut", now);

@@ -56,6 +56,33 @@
 
 import type { CountryId } from "./countries";
 import type { MonetaryBaseline } from "./currencies";
+import { JP_ECONOMY } from "@/lib/countries/jp/economy";
+import { US_ECONOMY } from "@/lib/countries/us/economy";
+import { UK_ECONOMY } from "@/lib/countries/uk/economy";
+import { DE_ECONOMY } from "@/lib/countries/de/economy";
+import { CN_ECONOMY } from "@/lib/countries/cn/economy";
+import { IE_ECONOMY } from "@/lib/countries/ie/economy";
+import { RU_ECONOMY } from "@/lib/countries/ru/economy";
+import { DD_ECONOMY } from "@/lib/countries/dd/economy";
+import { NG_ECONOMY } from "@/lib/countries/ng/economy";
+import { BR_ECONOMY } from "@/lib/countries/br/economy";
+import { FR_ECONOMY } from "@/lib/countries/fr/economy";
+import { IT_ECONOMY } from "@/lib/countries/it/economy";
+import { ES_ECONOMY } from "@/lib/countries/es/economy";
+import { SE_ECONOMY } from "@/lib/countries/se/economy";
+import { TR_ECONOMY } from "@/lib/countries/tr/economy";
+import { GR_ECONOMY } from "@/lib/countries/gr/economy";
+import { AT_ECONOMY } from "@/lib/countries/at/economy";
+import { FI_ECONOMY } from "@/lib/countries/fi/economy";
+import { PL_ECONOMY } from "@/lib/countries/pl/economy";
+import { HU_ECONOMY } from "@/lib/countries/hu/economy";
+import { RO_ECONOMY } from "@/lib/countries/ro/economy";
+import { YU_ECONOMY } from "@/lib/countries/yu/economy";
+import { BG_ECONOMY } from "@/lib/countries/bg/economy";
+import { CS_ECONOMY } from "@/lib/countries/cs/economy";
+import { BLR_ECONOMY } from "@/lib/countries/blr/economy";
+import { UKR_ECONOMY } from "@/lib/countries/ukr/economy";
+import { BAL_ECONOMY } from "@/lib/countries/bal/economy";
 
 export interface EraMonetaryBaseline extends MonetaryBaseline {
   /**
@@ -71,37 +98,37 @@ export interface EraMonetaryBaseline extends MonetaryBaseline {
  * discount/bank rates from the respective central banks; CPI from national
  * statistical series. Values are gameplay-rounded.
  */
-const MONETARY_BASELINES_1953: Partial<Record<CountryId, EraMonetaryBaseline>> = {
+export const MONETARY_BASELINES_1953: Partial<Record<CountryId, EraMonetaryBaseline>> = {
   // Bank of Japan discount ~5.8%; post-Korean-War CPI spike cooling toward
   // low single digits by 1955; reconstruction boom (growth authored in the
   // JP 1953 metric presets).
-  JP: { targetInflation: 2.0, neutralPrimeRate: 5.5 },
+  JP: JP_ECONOMY.monetary.byEra["1953"],
   // Bank deutscher Länder discount 3.5%; Wirtschaftswunder price stability
   // (CPI ~ -1.7 to +2%).
-  DE: { targetInflation: 2.0, neutralPrimeRate: 3.5 },
+  DE: DE_ECONOMY.monetary.byEra["1953"],
   // Colonial Nigeria on the sterling peg — imported UK price stability
   // (modern table's 6%/12% is the post-independence naira regime).
-  NG: { targetInflation: 2.0, neutralPrimeRate: 3.5 },
+  NG: NG_ECONOMY.monetary.byEra["1953"],
   // BR targetInflation is a POLICY target (Taylor rule + CPI attractor + FX
   // deviation baseline), not realized Vargas CPI. Authoring 10% here because
   // 1953 Brazil *experienced* ~10-20% made the NPP/FOMC chair treat 10% as
   // fine and, with the era-blind 6% FX absolute-penalty ceiling, structurally
   // depreciated BRL even on-target (ticket 1124). Do not put this back.
-  BR: { targetInflation: 4.0, neutralPrimeRate: 8.0 },
+  BR: BR_ECONOMY.monetary.byEra["1953"],
   // Administered prices with annual state retail price cuts; Gosbank
   // administrative rates. trendGdpGrowth matches the authored RU 1953
   // overlay ("economic.gdpGrowth": 6.0 in ruMetricPresets1953).
-  RU: { targetInflation: 1.0, neutralPrimeRate: 2.5, trendGdpGrowth: 6.0 },
+  RU: RU_ECONOMY.monetary.byEra["1953"],
   // Pinay stabilization: CPI ~ -2 to +1% in 1953; Banque de France discount
   // 4%; Trente Glorieuses trend growth.
-  FR: { targetInflation: 2.0, neutralPrimeRate: 4.0, trendGdpGrowth: 4.5 },
+  FR: FR_ECONOMY.monetary.byEra["1953"],
   // CPI ~2%; miracolo economico takeoff.
-  IT: { targetInflation: 2.5, neutralPrimeRate: 4.0, trendGdpGrowth: 6.0 },
+  IT: IT_ECONOMY.monetary.byEra["1953"],
   // Autarky-era Spain: moderate but bumpy inflation, pre-1959 Stabilization
   // Plan.
-  ES: { targetInflation: 4.0, neutralPrimeRate: 5.0, trendGdpGrowth: 4.5 },
+  ES: ES_ECONOMY.monetary.byEra["1953"],
   // CPI ~1%; Riksbank discount 2.75-3%.
-  SE: { targetInflation: 2.0, neutralPrimeRate: 3.0, trendGdpGrowth: 3.5 },
+  SE: SE_ECONOMY.monetary.byEra["1953"],
   // Post-reparation Finland: FY1953 budget seeds CPI at 2% ("stabilisation
   // after the 1950-51 inflation wave"). Without this row FI falls through to
   // MONETARY_BASELINES.FI (6.0/8.5, late-1970s markka devaluation cycle) for
@@ -109,10 +136,10 @@ const MONETARY_BASELINES_1953: Partial<Record<CountryId, EraMonetaryBaseline>> =
   // exists to cure. trendGdpGrowth is the layer-1 fallback (FI is not in
   // NATIONAL_SCOPE); the 1% seed gdpGrowth is the 1953 recession starting
   // point, not the structural rate.
-  FI: { targetInflation: 2.0, neutralPrimeRate: 4.5, trendGdpGrowth: 4.0 },
+  FI: FI_ECONOMY.monetary.byEra["1953"],
   // Menderes boom: strong growth with inflation building through the
   // mid-1950s (far from the 1979 crisis' 20%).
-  TR: { targetInflation: 5.0, neutralPrimeRate: 6.0, trendGdpGrowth: 6.0 },
+  TR: TR_ECONOMY.monetary.byEra["1953"],
 
   // ── Eastern-bloc budget-only countries (no central bank, layer-1) ─────────
   // Their inflation is recalculated only at the annual fiscal-year rollover
@@ -126,24 +153,24 @@ const MONETARY_BASELINES_1953: Partial<Record<CountryId, EraMonetaryBaseline>> =
   // instead of jumping at the first rollover; neutral rates are administered
   // Gosbank-style credit rates; trendGdpGrowth mirrors the authored plan-era
   // gdpGrowth for these metric-less countries.
-  HU: { targetInflation: 3.0, neutralPrimeRate: 3.5, trendGdpGrowth: 3.5 },
-  PL: { targetInflation: 2.0, neutralPrimeRate: 3.5, trendGdpGrowth: 4.0 },
-  RO: { targetInflation: 2.0, neutralPrimeRate: 3.5, trendGdpGrowth: 3.5 },
+  HU: HU_ECONOMY.monetary.byEra["1953"],
+  PL: PL_ECONOMY.monetary.byEra["1953"],
+  RO: RO_ECONOMY.monetary.byEra["1953"],
   // Tito's self-managed economy ran visibly hotter than the Cominform bloc.
-  YU: { targetInflation: 5.0, neutralPrimeRate: 5.0, trendGdpGrowth: 5.0 },
-  BG: { targetInflation: 1.5, neutralPrimeRate: 3.5, trendGdpGrowth: 4.0 },
+  YU: YU_ECONOMY.monetary.byEra["1953"],
+  BG: BG_ECONOMY.monetary.byEra["1953"],
   // Soviet-republic fictions mirror RU's administered anchors. There was no
   // republican monetary authority at all - Gosbank set one rate for the union -
   // so these three share RU's numbers and differ only on trend growth, which is
   // a real plan-output difference rather than a policy one.
-  BLR: { targetInflation: 0.5, neutralPrimeRate: 2.5, trendGdpGrowth: 5.0 },
+  BLR: BLR_ECONOMY.monetary.byEra["1953"],
   // Ukraine grows slower than Byelorussia: a bigger, more mature industrial base
   // rebounding from a higher pre-war level, not a republic rebuilt from zero.
-  UKR: { targetInflation: 0.5, neutralPrimeRate: 2.5, trendGdpGrowth: 4.5 },
-  CS: { targetInflation: 1.5, neutralPrimeRate: 3.5, trendGdpGrowth: 4.5 },
-  BAL: { targetInflation: 0.5, neutralPrimeRate: 2.5, trendGdpGrowth: 4.5 },
+  UKR: UKR_ECONOMY.monetary.byEra["1953"],
+  CS: CS_ECONOMY.monetary.byEra["1953"],
+  BAL: BAL_ECONOMY.monetary.byEra["1953"],
   // GDR administered prices (June 1953 uprising notwithstanding).
-  DD: { targetInflation: 0.5, neutralPrimeRate: 3.5, trendGdpGrowth: 3.0 },
+  DD: DD_ECONOMY.monetary.byEra["1953"],
   // Post-April-1953 Markezinis stabilization: drachma pegged (30 GRD/USD, see
   // INITIAL_RATES_1953.GR in crisisTurn.ts), Bank of Greece discount ~6%, and
   // the opening years of the "Greek economic miracle" (strong reconstruction
@@ -156,7 +183,7 @@ const MONETARY_BASELINES_1953: Partial<Record<CountryId, EraMonetaryBaseline>> =
   // Taylor rule found equilibrium at the wrong neutral rate (16.5%) with zero
   // inflation gap to correct — exactly the disease this module was built to
   // cure for IT/ES/TR (see the file header), just missed for GR.
-  GR: { targetInflation: 3.0, neutralPrimeRate: 6.0, trendGdpGrowth: 6.5 },
+  GR: GR_ECONOMY.monetary.byEra["1953"],
   // AT had no 1953 entry, so it fell through to the modern global table — whose
   // AT values are an explicitly late-1970s calibration ("hard-schilling DM
   // shadow policy", 4.0/5.5). Same fall-through that pinned GR's inflation at
@@ -164,7 +191,7 @@ const MONETARY_BASELINES_1953: Partial<Record<CountryId, EraMonetaryBaseline>> =
   // Austria 1953: CPI ~0-2% under the 1951-52 Raab-Kamitz stabilization;
   // Oesterreichische Nationalbank discount 4.5%; post-Marshall-Plan
   // reconstruction growth.
-  AT: { targetInflation: 2.0, neutralPrimeRate: 4.5, trendGdpGrowth: 5.5 },
+  AT: AT_ECONOMY.monetary.byEra["1953"],
 };
 
 /**
@@ -180,24 +207,24 @@ const MONETARY_BASELINES_1953: Partial<Record<CountryId, EraMonetaryBaseline>> =
  * them 1979 resolution is value-identical to the pre-era-table behavior — and
  * add authored trend growth for the layer-1 growth fallback (was flat 2.5).
  */
-const MONETARY_BASELINES_1979: Partial<Record<CountryId, EraMonetaryBaseline>> = {
-  US: { targetInflation: 10.0, neutralPrimeRate: 12.0 },
-  UK: { targetInflation: 12.0, neutralPrimeRate: 14.0 },
-  JP: { targetInflation: 4.0, neutralPrimeRate: 6.0 },
-  DE: { targetInflation: 4.0, neutralPrimeRate: 6.0 },
-  IE: { targetInflation: 12.0, neutralPrimeRate: 14.0 },
+export const MONETARY_BASELINES_1979: Partial<Record<CountryId, EraMonetaryBaseline>> = {
+  US: US_ECONOMY.monetary.byEra["1979"],
+  UK: UK_ECONOMY.monetary.byEra["1979"],
+  JP: JP_ECONOMY.monetary.byEra["1979"],
+  DE: DE_ECONOMY.monetary.byEra["1979"],
+  IE: IE_ECONOMY.monetary.byEra["1979"],
   // Military-regime "miracle" hangover: chronic high inflation, pre-hyper era.
-  BR: { targetInflation: 12.0, neutralPrimeRate: 15.0 },
+  BR: BR_ECONOMY.monetary.byEra["1979"],
   // Oil-boom Nigeria: double-digit CPI on fiscal expansion.
-  NG: { targetInflation: 10.0, neutralPrimeRate: 10.0 },
+  NG: NG_ECONOMY.monetary.byEra["1979"],
   // Brezhnev stagnation: administered prices (low open inflation), slowing
   // structural growth ~2-3%/yr for the metric-less RU bloc.
-  RU: { targetInflation: 1.5, neutralPrimeRate: 2.5, trendGdpGrowth: 2.5 },
-  FR: { targetInflation: 10.0, neutralPrimeRate: 9.5, trendGdpGrowth: 3.0 },
-  IT: { targetInflation: 15.0, neutralPrimeRate: 12.0, trendGdpGrowth: 3.5 },
-  ES: { targetInflation: 16.0, neutralPrimeRate: 14.0, trendGdpGrowth: 2.0 },
-  SE: { targetInflation: 8.0, neutralPrimeRate: 9.0, trendGdpGrowth: 2.0 },
-  TR: { targetInflation: 20.0, neutralPrimeRate: 20.0, trendGdpGrowth: 2.0 },
+  RU: RU_ECONOMY.monetary.byEra["1979"],
+  FR: FR_ECONOMY.monetary.byEra["1979"],
+  IT: IT_ECONOMY.monetary.byEra["1979"],
+  ES: ES_ECONOMY.monetary.byEra["1979"],
+  SE: SE_ECONOMY.monetary.byEra["1979"],
+  TR: TR_ECONOMY.monetary.byEra["1979"],
 };
 
 /**
@@ -211,24 +238,24 @@ const MONETARY_BASELINES_1979: Partial<Record<CountryId, EraMonetaryBaseline>> =
  * ~66%/yr — all three far beyond the model's 15 cap, so they are authored
  * below it (12) to keep inflation dynamic instead of pinned at min=max=15.
  */
-const MONETARY_BASELINES_1991: Partial<Record<CountryId, EraMonetaryBaseline>> = {
-  US: { targetInflation: 4.0, neutralPrimeRate: 6.0 },
-  UK: { targetInflation: 4.5, neutralPrimeRate: 8.0 },
-  JP: { targetInflation: 2.5, neutralPrimeRate: 4.5 },
-  DE: { targetInflation: 3.5, neutralPrimeRate: 7.0 },
-  IE: { targetInflation: 3.0, neutralPrimeRate: 6.0 },
-  CN: { targetInflation: 5.0, neutralPrimeRate: 7.0 },
-  BR: { targetInflation: 12.0, neutralPrimeRate: 15.0 },
-  NG: { targetInflation: 12.0, neutralPrimeRate: 15.0 },
+export const MONETARY_BASELINES_1991: Partial<Record<CountryId, EraMonetaryBaseline>> = {
+  US: US_ECONOMY.monetary.byEra["1991"],
+  UK: UK_ECONOMY.monetary.byEra["1991"],
+  JP: JP_ECONOMY.monetary.byEra["1991"],
+  DE: DE_ECONOMY.monetary.byEra["1991"],
+  IE: IE_ECONOMY.monetary.byEra["1991"],
+  CN: CN_ECONOMY.monetary.byEra["1991"],
+  BR: BR_ECONOMY.monetary.byEra["1991"],
+  NG: NG_ECONOMY.monetary.byEra["1991"],
   // Post-Soviet collapse: price liberalization (Jan '92: >2500%/yr, capped-model
   // authoring) and output contraction ~-5%/yr through the early 90s.
-  RU: { targetInflation: 12.0, neutralPrimeRate: 20.0, trendGdpGrowth: -5.0 },
-  FR: { targetInflation: 3.0, neutralPrimeRate: 6.0, trendGdpGrowth: 2.0 },
-  IT: { targetInflation: 5.5, neutralPrimeRate: 9.0, trendGdpGrowth: 1.5 },
-  ES: { targetInflation: 5.5, neutralPrimeRate: 9.0, trendGdpGrowth: 2.5 },
+  RU: RU_ECONOMY.monetary.byEra["1991"],
+  FR: FR_ECONOMY.monetary.byEra["1991"],
+  IT: IT_ECONOMY.monetary.byEra["1991"],
+  ES: ES_ECONOMY.monetary.byEra["1991"],
   // Early-90s Swedish crisis: near-zero growth, disinflation from the '91 spike.
-  SE: { targetInflation: 4.0, neutralPrimeRate: 8.0, trendGdpGrowth: 1.0 },
-  TR: { targetInflation: 12.0, neutralPrimeRate: 18.0, trendGdpGrowth: 4.0 },
+  SE: SE_ECONOMY.monetary.byEra["1991"],
+  TR: TR_ECONOMY.monetary.byEra["1991"],
 };
 
 /**
@@ -241,31 +268,31 @@ const MONETARY_BASELINES_1991: Partial<Record<CountryId, EraMonetaryBaseline>> =
  * administered prices — RU/bloc values track their 1953 posture, not the West's
  * inflation, which is the whole point of the divergence.
  */
-const MONETARY_BASELINES_1971: Partial<Record<CountryId, EraMonetaryBaseline>> = {
-  US: { targetInflation: 6.0, neutralPrimeRate: 7.5 },
-  UK: { targetInflation: 9.0, neutralPrimeRate: 10.0 },
-  DE: { targetInflation: 4.5, neutralPrimeRate: 6.0 },
-  JP: { targetInflation: 6.5, neutralPrimeRate: 7.0, trendGdpGrowth: 4.5 },
-  IE: { targetInflation: 9.0, neutralPrimeRate: 10.0 },
-  CN: { targetInflation: 2.0, neutralPrimeRate: 4.0, trendGdpGrowth: 5.0 },
-  BR: { targetInflation: 12.0, neutralPrimeRate: 15.0 },
-  NG: { targetInflation: 10.0, neutralPrimeRate: 10.0 },
-  RU: { targetInflation: 1.5, neutralPrimeRate: 2.5, trendGdpGrowth: 3.0 },
-  DD: { targetInflation: 1.5, neutralPrimeRate: 2.5, trendGdpGrowth: 3.0 },
-  FR: { targetInflation: 7.0, neutralPrimeRate: 8.5, trendGdpGrowth: 3.5 },
-  IT: { targetInflation: 9.0, neutralPrimeRate: 10.0, trendGdpGrowth: 3.0 },
-  ES: { targetInflation: 9.0, neutralPrimeRate: 9.0, trendGdpGrowth: 4.0 },
-  SE: { targetInflation: 7.0, neutralPrimeRate: 8.0, trendGdpGrowth: 2.0 },
-  TR: { targetInflation: 15.0, neutralPrimeRate: 15.0, trendGdpGrowth: 4.0 },
-  HU: { targetInflation: 2.5, neutralPrimeRate: 3.5, trendGdpGrowth: 3.0 },
-  PL: { targetInflation: 2.5, neutralPrimeRate: 3.5, trendGdpGrowth: 3.5 },
+export const MONETARY_BASELINES_1971: Partial<Record<CountryId, EraMonetaryBaseline>> = {
+  US: US_ECONOMY.monetary.byEra["1971"],
+  UK: UK_ECONOMY.monetary.byEra["1971"],
+  DE: DE_ECONOMY.monetary.byEra["1971"],
+  JP: JP_ECONOMY.monetary.byEra["1971"],
+  IE: IE_ECONOMY.monetary.byEra["1971"],
+  CN: CN_ECONOMY.monetary.byEra["1971"],
+  BR: BR_ECONOMY.monetary.byEra["1971"],
+  NG: NG_ECONOMY.monetary.byEra["1971"],
+  RU: RU_ECONOMY.monetary.byEra["1971"],
+  DD: DD_ECONOMY.monetary.byEra["1971"],
+  FR: FR_ECONOMY.monetary.byEra["1971"],
+  IT: IT_ECONOMY.monetary.byEra["1971"],
+  ES: ES_ECONOMY.monetary.byEra["1971"],
+  SE: SE_ECONOMY.monetary.byEra["1971"],
+  TR: TR_ECONOMY.monetary.byEra["1971"],
+  HU: HU_ECONOMY.monetary.byEra["1971"],
+  PL: PL_ECONOMY.monetary.byEra["1971"],
   // Pre-junta/early-junta Greece: inflation accelerated through the decade
   // (post-1973 oil shock CPI briefly spiked into the 20s before moderating),
   // averaging out gameplay-rounded to a high-but-not-yet-1979-extreme regime.
   // Without this entry GR falls through to the 1979 table's 15.0/16.5 a
   // decade early — the same "wrong-era anchor" bug this table exists to fix
   // for its other members.
-  GR: { targetInflation: 10.0, neutralPrimeRate: 10.0, trendGdpGrowth: 4.0 },
+  GR: GR_ECONOMY.monetary.byEra["1971"],
 };
 
 /**

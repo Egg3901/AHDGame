@@ -2,9 +2,13 @@ import type { Db } from "mongodb";
 import type { ConflictRole, FiredEvent, LivingConflictDef, LivingConflictState } from "./types";
 import {
   applyCommitment,
+  applyTrackDeltas,
   emptyConflictState,
+  evaluateConflictTransitions,
+  normalizeConflictState,
   openConflict,
   phaseFor,
+  scheduledPressureDeltas,
   selectEvents,
   tickConflict,
 } from "./engine";
@@ -107,17 +111,25 @@ export async function driveConflictTurn(
   participants: ConflictParticipants,
   turn: number,
   year: number | null | undefined,
-  externalPressure = 0
+  externalPressure = 0,
+  openingTrackDeltas: Record<string, number> = {}
 ): Promise<DriveResult> {
-  let state = await loadConflictState(db, def.key);
+  let state = normalizeConflictState(def, await loadConflictState(db, def.key));
   if (state.lastProcessedTurn === turn) return { state, events: [] };
+  if (state.status === "closed") return { state, events: [] };
   const wasOpen = state.hasOpened;
 
   if (!state.hasOpened) {
     if (!inWindow(def, year)) {
       return { state, events: [] };
     }
+    if (def.minimumOpeningPressure !== undefined && externalPressure < def.minimumOpeningPressure) {
+      return { state, events: [] };
+    }
     state = openConflict(state, typeof year === "number" ? year : null);
+    if (Object.keys(openingTrackDeltas).length > 0) {
+      state = applyTrackDeltas(def, state, openingTrackDeltas);
+    }
   } else if (state.emitPhaseEntryNextTurn) {
     state = {
       ...state,
@@ -144,6 +156,20 @@ export async function driveConflictTurn(
   if (wasOpen && state.hasOpened) {
     state = { ...state, campaign: advanceCampaignTurn(state.campaign) };
   }
+
+  const trackDeltas = scheduledPressureDeltas(
+    def,
+    state,
+    typeof year === "number" ? year : undefined
+  );
+  if (Object.keys(trackDeltas).length > 0) {
+    state = applyTrackDeltas(def, state, trackDeltas);
+  }
+  state = evaluateConflictTransitions(
+    def,
+    state,
+    typeof year === "number" ? year : undefined
+  ).state;
 
   const fired = selectEvents(def, state, turn);
   const events: DrivenEvent[] = fired.map((f) => ({

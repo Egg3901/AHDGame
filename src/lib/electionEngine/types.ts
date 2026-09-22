@@ -429,9 +429,8 @@ export interface AccumulateVoteTurnPreload {
   /** gameState.preset — selects the era-correct census bundle for Layer-1 turnout derivation. */
   preset?: string;
   /**
-   * gameState.currentYear — CURRENT in-game year. Gates the FPTP cube-law
-   * winner's bonus (#3244): active only while the year is pre-1999, so a
-   * world graduates back to proportional UK Commons as its clock advances.
+   * gameState.currentYear — CURRENT in-game year used by era-aware turnout and
+   * election calculations.
    */
   currentYear?: number;
   /**

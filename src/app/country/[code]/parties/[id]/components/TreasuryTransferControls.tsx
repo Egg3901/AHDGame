@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Input } from "@/components/ui";
 import type { PartyData, PartyMember } from "./types";
 import { getCountryConfig, type CountryId } from "@/lib/constants/countries";
@@ -6,7 +6,11 @@ import { getNationalPartyTransferTargets } from "@/lib/constants/transferTargets
 import type { TreasuryAction } from "./treasuryReducer";
 import { contrastTextColor } from "@/lib/utils/colorContrast";
 import { fmt } from "./helpers";
-import { getPlayerPayoutCap } from "@/lib/treasury/payoutCapValues";
+import { partyApiUrl } from "@/lib/urls";
+import {
+  getEffectivePlayerPayoutCap,
+  PAYOUT_CAP_MULTI_OFFICER_MULTIPLIER,
+} from "@/lib/treasury/payoutCapValues";
 
 interface TreasuryTransferControlsProps {
   party: PartyData;
@@ -38,7 +42,49 @@ export function TreasuryTransferControls({
 
   const regionLabel = countryConfig.regionLabel.toLowerCase();
 
-  const payoutCap = getPlayerPayoutCap(countryId as CountryId);
+  // Server-counted off the raw seat ids; see the note on PartyData.
+  const seatedOfficers = party.seatedOfficers;
+  const payoutCap = getEffectivePlayerPayoutCap(countryId as CountryId, seatedOfficers);
+
+  /**
+   * What the SELECTED member may still receive this turn.
+   *
+   * The ceiling alone told an officer nothing about whether a payment
+   * would actually land: most of a member's allowance may already be
+   * gone, spent through a state party or a caucus rather than here.
+   * Refetched per selection, and null while unknown or unselected.
+   */
+  const [recipientRemaining, setRecipientRemaining] = useState<number | null>(null);
+  const selectedMemberId = sendForm.memberId;
+
+  useEffect(() => {
+    if (!selectedMemberId) {
+      setRecipientRemaining(null);
+      return;
+    }
+    // Cleared before the refetch, or the previous member's allowance
+    // stays on screen under the new member's name until the request
+    // comes back. A figure attached to the wrong person is worse than
+    // no figure, and this control exists to stop exactly that error.
+    setRecipientRemaining(null);
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch(
+          `${partyApiUrl(countryId, party.id)}/treasury/payout-allowance?characterId=${encodeURIComponent(selectedMemberId)}`
+        );
+        if (!res.ok) return;
+        const data = await res.json();
+        if (cancelled) return;
+        if (typeof data?.remaining === "number") setRecipientRemaining(data.remaining);
+      } catch {
+        // Non-critical: the card falls back to quoting the flat cap.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedMemberId, countryId, party.id]);
 
   return (
     <>
@@ -95,6 +141,24 @@ export function TreasuryTransferControls({
         <div className="mt-1 text-xs text-muted">
           Available: {fmt(party.treasury, party.countryId)} · Min. {fmt(1000, party.countryId)}
         </div>
+        {selectedMemberId && recipientRemaining != null && (
+          <div className="mt-1 text-xs">
+            {recipientRemaining === 0 ? (
+              <span className="text-error">
+                This member has already received their full {fmt(payoutCap, party.countryId)} this
+                turn. A payment now will be refused.
+              </span>
+            ) : (
+              <span className="text-muted">
+                They can still receive{" "}
+                <span className="font-semibold text-foreground">
+                  {fmt(recipientRemaining, party.countryId)}
+                </span>{" "}
+                this turn.
+              </span>
+            )}
+          </div>
+        )}
         <p className="mt-2 text-[11px] text-muted">
           No party funds move in the last two turns before a leadership election closes.
         </p>
@@ -123,7 +187,10 @@ export function TreasuryTransferControls({
         <p className="text-[11px] text-muted mb-3">
           A member can receive up to {fmt(payoutCap, party.countryId)} per turn from party funds.
           That ceiling counts the national treasury, every state party and every caucus together. No
-          party funds move at all in the last two turns before a leadership election closes.
+          party funds move at all in the last two turns before a leadership election closes.{" "}
+          {seatedOfficers >= 2
+            ? `It is ${PAYOUT_CAP_MULTI_OFFICER_MULTIPLIER} times the base ceiling, because two or more officers are seated here.`
+            : `A second seated officer would raise it to ${fmt(payoutCap * PAYOUT_CAP_MULTI_OFFICER_MULTIPLIER, party.countryId)}.`}
         </p>
         <div className="flex flex-wrap items-center gap-2">
           <select

@@ -350,10 +350,12 @@ export async function updateParliamentaryGovernmentSeats(
           },
         }
       );
-      // Clear cabinet (clearCabinetOnTransition handles all parliamentary/OPS
-      // countries; the extra cabinetMembers sweep catches any stray positions).
+      // Restore former cabinet holders before the broad cleanup. The restore
+      // pass reads cabinetMembers to find their character ids; running the
+      // safety-net delete concurrently can erase those rows first and strand a
+      // player with a null currentOffice despite a live electedOfficials seat.
+      await clearCabinetOnTransition(db, countryId);
       await Promise.all([
-        clearCabinetOnTransition(db, countryId),
         db.collection("ukCabinetCooldowns").deleteMany({ countryId }),
         db.collection("cabinetMembers").deleteMany({ countryId }),
       ]);
@@ -1643,11 +1645,14 @@ export async function unformGovernmentAndVacatePM(
     }
   );
 
+  // Restore former cabinet holders before the broad cleanup. The restore pass
+  // reads cabinetMembers to find their character ids; running the safety-net
+  // delete concurrently can erase those rows first and strand a player with a
+  // null currentOffice despite a live electedOfficials seat.
+  await clearCabinetOnTransition(db, countryId);
   await Promise.all([
-    clearCabinetOnTransition(db, countryId),
     db.collection("ukCabinetCooldowns").deleteMany({ countryId }),
-    // Extra cabinetMembers sweep catches any position not in the country's
-    // position map (clearCabinetOnTransition is scoped to known positions).
+    // Extra sweep catches any position not in the country's position map.
     db.collection("cabinetMembers").deleteMany({ countryId }),
   ]);
 

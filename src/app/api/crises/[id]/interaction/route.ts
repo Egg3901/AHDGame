@@ -84,7 +84,12 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 
     const canInteract =
       crisis.interactionDefinition && interaction && activeNode && !interaction.resolvedAt
-        ? canCharacterInteract(activeNode, characterRoles) &&
+        ? canCharacterInteract(
+            activeNode,
+            characterRoles,
+            character.countryId,
+            character.homeState
+          ) &&
           !alreadyResponded &&
           (activeNode.type !== "aid" || aidBillsEnabled) &&
           (!crisis.globalResponse || !!globalResponseRoleFor(crisis, character.countryId))

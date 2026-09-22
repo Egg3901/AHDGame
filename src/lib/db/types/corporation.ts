@@ -657,6 +657,14 @@ export interface Corporation {
    * every turn and bars it from opening new acquisitions.
    */
   pendingDivestiture?: import("./mergerReview").PendingDivestiture;
+  /**
+   * Offer id currently executing an agreed acquisition against this
+   * corporation as the target. Atomic claim: only the owning offer's executor
+   * may move money or sectors, which is what stops two concurrently accepted
+   * offers for one corporation from both paying out. Dies with the shell on
+   * success; released on terminal compensation.
+   */
+  acquisitionSettlementId?: ObjectId;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -1277,8 +1285,11 @@ export interface CorporateSector {
    * scaled: a permanent mint or burn of the whole RPU ratio, which reaches
    * 327x for a coal to rare-earth pair. Persisting the decision makes the
    * inverse conditional on the forward step having happened, so the pair can
-   * never come apart across a mode change. Absent on legacy rows, which
-   * predate plants and were therefore never rescaled: treat as false.
+   * never come apart across a mode change. Absent on legacy rows: the sector
+   * turn converts a provably unconverted stock (committed before the sector's
+   * first plants turn, issue #2009) and stamps true; a legacy row committed
+   * under plants converted its stock at the boundary and only ever needs the
+   * opex-anchor heal.
    */
   retoolRescaleApplied?: boolean;
   /** Turn after which a new strategy change is allowed (transition end + cooldown) */

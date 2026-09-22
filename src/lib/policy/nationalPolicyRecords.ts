@@ -23,6 +23,35 @@ import type {
 import { getMetricDefinition } from "@/lib/constants/metricDefinitions";
 import type { MetricCategoryId } from "@/lib/db/types";
 import { taxSliderRateLabel } from "@/lib/politicalLegislation/taxSlider";
+import { JP_ECONOMY } from "@/lib/countries/jp/economy";
+import { US_ECONOMY } from "@/lib/countries/us/economy";
+import { UK_ECONOMY } from "@/lib/countries/uk/economy";
+import { DE_ECONOMY } from "@/lib/countries/de/economy";
+import { CN_ECONOMY } from "@/lib/countries/cn/economy";
+import { IE_ECONOMY } from "@/lib/countries/ie/economy";
+import { RU_ECONOMY } from "@/lib/countries/ru/economy";
+import { DD_ECONOMY } from "@/lib/countries/dd/economy";
+import { NG_ECONOMY } from "@/lib/countries/ng/economy";
+import { BR_ECONOMY } from "@/lib/countries/br/economy";
+import { FR_ECONOMY } from "@/lib/countries/fr/economy";
+import { IT_ECONOMY } from "@/lib/countries/it/economy";
+import { ES_ECONOMY } from "@/lib/countries/es/economy";
+import { SE_ECONOMY } from "@/lib/countries/se/economy";
+import { TR_ECONOMY } from "@/lib/countries/tr/economy";
+import { GR_ECONOMY } from "@/lib/countries/gr/economy";
+import { AT_ECONOMY } from "@/lib/countries/at/economy";
+import { FI_ECONOMY } from "@/lib/countries/fi/economy";
+import { PL_ECONOMY } from "@/lib/countries/pl/economy";
+import { HU_ECONOMY } from "@/lib/countries/hu/economy";
+import { RO_ECONOMY } from "@/lib/countries/ro/economy";
+import { YU_ECONOMY } from "@/lib/countries/yu/economy";
+import { BG_ECONOMY } from "@/lib/countries/bg/economy";
+import { CS_ECONOMY } from "@/lib/countries/cs/economy";
+import { SCO_ECONOMY } from "@/lib/countries/sco/economy";
+import { WAL_ECONOMY } from "@/lib/countries/wal/economy";
+import { BLR_ECONOMY } from "@/lib/countries/blr/economy";
+import { UKR_ECONOMY } from "@/lib/countries/ukr/economy";
+import { BAL_ECONOMY } from "@/lib/countries/bal/economy";
 
 /**
  * Shared national policy-record assembly — extracted verbatim from
@@ -44,39 +73,39 @@ export type PolicyRecordLike = Pick<
 
 export type ActiveOrderInfo = NonNullable<PolicyRecordResponse["activeOrder"]>;
 
-const LEGISLATION_COUNTRY_SCOPES: Record<
+export const LEGISLATION_COUNTRY_SCOPES: Record<
   CountryId,
   NonNullable<LegislationType["countryScope"]>
 > = {
-  US: "us",
-  UK: "uk",
-  JP: "jp",
-  DE: "de",
-  IE: "ie",
-  BR: "br",
-  CN: "cn",
-  NG: "ng",
-  HU: "hu",
-  PL: "pl",
-  RO: "ro",
-  YU: "yu",
-  BG: "bg",
-  BLR: "blr",
-  UKR: "ukr",
-  CS: "cs",
-  BAL: "bal",
-  RU: "ru",
-  FR: "fr",
-  IT: "it",
-  ES: "es",
-  SE: "se",
-  TR: "tr",
-  GR: "gr",
-  AT: "at",
-  FI: "fi",
-  DD: "dd",
-  SCO: "sco",
-  WAL: "wls",
+  US: US_ECONOMY.legislationScope,
+  UK: UK_ECONOMY.legislationScope,
+  JP: JP_ECONOMY.legislationScope,
+  DE: DE_ECONOMY.legislationScope,
+  IE: IE_ECONOMY.legislationScope,
+  BR: BR_ECONOMY.legislationScope,
+  CN: CN_ECONOMY.legislationScope,
+  NG: NG_ECONOMY.legislationScope,
+  HU: HU_ECONOMY.legislationScope,
+  PL: PL_ECONOMY.legislationScope,
+  RO: RO_ECONOMY.legislationScope,
+  YU: YU_ECONOMY.legislationScope,
+  BG: BG_ECONOMY.legislationScope,
+  BLR: BLR_ECONOMY.legislationScope,
+  UKR: UKR_ECONOMY.legislationScope,
+  CS: CS_ECONOMY.legislationScope,
+  BAL: BAL_ECONOMY.legislationScope,
+  RU: RU_ECONOMY.legislationScope,
+  FR: FR_ECONOMY.legislationScope,
+  IT: IT_ECONOMY.legislationScope,
+  ES: ES_ECONOMY.legislationScope,
+  SE: SE_ECONOMY.legislationScope,
+  TR: TR_ECONOMY.legislationScope,
+  GR: GR_ECONOMY.legislationScope,
+  AT: AT_ECONOMY.legislationScope,
+  FI: FI_ECONOMY.legislationScope,
+  DD: DD_ECONOMY.legislationScope,
+  SCO: SCO_ECONOMY.legislationScope,
+  WAL: WAL_ECONOMY.legislationScope,
 };
 
 /**
