@@ -45,7 +45,8 @@ export interface StateArmsResult {
  */
 export async function applyStateArmsProduction(
   db: Db,
-  countryId: string
+  countryId: string,
+  knownUnits?: MilitaryUnit[]
 ): Promise<StateArmsResult> {
   const planned = stateArmsLotsPerTurn(countryId);
   const arsenal = await getNationalArsenal(db, countryId);
@@ -56,9 +57,11 @@ export async function applyStateArmsProduction(
     return { lots: 0, domain: null };
   }
 
-  const units = (await getMilitaryUnitsCollection(db)
-    .find({ countryId: countryId as CountryId })
-    .toArray()) as MilitaryUnit[];
+  const units =
+    knownUnits ??
+    ((await getMilitaryUnitsCollection(db)
+      .find({ countryId: countryId as CountryId })
+      .toArray()) as MilitaryUnit[]);
   if (units.length === 0) return { lots: 0, domain: null };
 
   // What each domain still needs to top its formations up, and the size of one full

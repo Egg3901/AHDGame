@@ -81,7 +81,10 @@ export async function appointNppPresident(
   // Deterministic tie-breaks (influence, then id) keep the choice stable.
   const candidates = await db
     .collection<NPP>("npps")
-    .find({ countryId, retiredAt: null })
+    .find(
+      { countryId, retiredAt: null },
+      { projection: { name: 1, party: 1, favorability: 1, politicalInfluence: 1 } }
+    )
     .toArray();
   if (candidates.length === 0) return false;
 
