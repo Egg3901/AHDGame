@@ -55,6 +55,7 @@ import {
 import { getAnomalyScanCadencePredicate } from "@/simulation/phases/anomalyScanCadence";
 import { isSingleplayer } from "@/lib/singleplayer";
 import { reconcileFederalBudgetInvariants } from "@/lib/budget/budgetInvariants";
+import { publishPlatformEvent } from "@/lib/platformEvents";
 import type { CompletedTurnPhaseObservation } from "@/simulation/engine/types";
 import { completedTurnStatus } from "@/simulation/engine/turnCompletion";
 
@@ -689,6 +690,16 @@ export async function processTurn(
       electionsCompleted: context.phaseResults.partyElections?.stateElectionsCompleted ?? 0,
     });
 
+    if (!localSingleplayer) {
+      void publishPlatformEvent({
+        type: "turn:completed",
+        source: "ahd",
+        id: `ahd:turn:${context.newTurn}:completed`,
+        occurredAt: context.realNow.toISOString(),
+        payload: { turn: context.newTurn, durationMs, warnings: warnings.length },
+      });
+    }
+
     return {
       success: completion.success,
       turn: context.newTurn,
@@ -792,6 +803,20 @@ export async function processTurn(
       console.error("[Turn System] Failed to release lock after turn error:", releaseError);
       Sentry.captureException(releaseError, {
         tags: { component: "turnSystem", op: "lockReleaseAfterError" },
+      });
+    }
+
+    if (!isSingleplayer()) {
+      void publishPlatformEvent({
+        type: "turn:failed",
+        source: "ahd",
+        id: `ahd:turn:${activeTurn || "unknown"}:failed:${failureTime.getTime()}`,
+        occurredAt: failureTime.toISOString(),
+        payload: {
+          turn: activeTurn || null,
+          phase: currentPhaseRef.current,
+          message: failureMessage,
+        },
       });
     }
 
