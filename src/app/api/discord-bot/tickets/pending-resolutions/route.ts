@@ -4,7 +4,7 @@ import { handleRouteError } from "@/lib/api/errors";
 import { requireBotToken } from "@/lib/api/requireBotToken";
 import { getTicketsCollection } from "@/lib/db/collections/tickets";
 
-// GET /api/discord-bot/tickets/pending-resolutions — Closed tickets that carry a
+// GET /api/discord-bot/tickets/pending-resolutions — Terminal tickets that carry a
 // resolution message the bot has not yet delivered back to the reporter.
 // Auth: requireBotToken (private key only). Errors: 401
 export async function GET(request: Request) {
@@ -18,7 +18,7 @@ export async function GET(request: Request) {
 
     const tickets = await coll
       .find({
-        status: "closed",
+        status: { $in: ["resolved", "closed"] },
         "resolution.message": { $exists: true },
         "resolution.deliveredAt": null,
       })
