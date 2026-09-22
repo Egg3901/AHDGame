@@ -22,6 +22,7 @@
 export {};
 
 import { SOVEREIGN_DEMAND_EXPERIMENT_FIELDS } from "./sovereignDemandExperimentFlags";
+import { writeExperimentReport } from "./experimentReportStorage";
 import {
   assertCollectorSourceMatch,
   attachActorCoverageSection,
@@ -196,13 +197,11 @@ async function main() {
     )?.actorCoverage;
     attachActorCoverageSection(report as unknown as Record<string, unknown>, actorManifest);
 
-    await opsDb
-      .collection("simExperimentReports")
-      .updateOne(
-        { _id: runId as never },
-        { $set: { runId, ...report, collectedAt: new Date() } },
-        { upsert: true }
-      );
+    await writeExperimentReport(
+      opsDb,
+      runId as string,
+      report as unknown as Record<string, unknown>
+    );
     console.log(
       `[experiments:${runId}] Report written (v${report.runConfig.appVersion}, seed=${report.runConfig.seed ?? "?"}, git=${report.runConfig.gitCommit ?? "?"}${report.runConfig.gitDirty ? "-dirty" : ""}).`
     );
