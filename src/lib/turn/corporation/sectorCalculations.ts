@@ -759,7 +759,12 @@ export function processSectors(
     ) {
       const rawDividendPool = netIncomeBeforeDividends * (payoutDividendRate / 100);
       hourlyDividendPayout = Math.min(rawDividendPool, Math.max(0, netIncomeBeforeDividends));
-      const totalShares = corp.totalShares ?? 10_000_000;
+      // Shares issued for an IPO but not yet placed have no holder and earn no dividend.
+      const unplacedIpoShares =
+        corp.pendingShareIssuance?.issuedUpfront && corp.pendingShareIssuance.source === "ipo"
+          ? corp.pendingShareIssuance.remainingShares
+          : 0;
+      const totalShares = Math.max(1, (corp.totalShares ?? 10_000_000) - unplacedIpoShares);
       for (const sh of corp.shareholders) {
         const share = totalShares > 0 ? sh.shares / totalShares : 0;
         const payment = hourlyDividendPayout * share;

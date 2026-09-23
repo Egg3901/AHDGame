@@ -941,6 +941,37 @@ describe("corporate tax deduction", () => {
 // ── Dividend payouts ──────────────────────────────────────────────────────────
 
 describe("dividend payments to shareholders", () => {
+  it("does not reserve dividends for issued IPO shares awaiting placement", () => {
+    const charId = new ObjectId();
+    const corp = makeCorp({
+      dividendRate: 25,
+      totalShares: 18_000_000,
+      publicFloat: 0,
+      shareholders: [{ characterId: charId, shares: 10_000_000 }],
+      pendingShareIssuance: {
+        remainingShares: 8_000_000,
+        requestedShares: 8_000_000,
+        source: "ipo",
+        issuedUpfront: true,
+        createdAtTurn: 1,
+        initialPriceLocal: 1,
+      },
+    });
+    const sector = makeSector(corp._id, {
+      revenue: 24_000,
+      profitMargin: 100,
+      targetGrowthRate: 0,
+      currentGrowthRate: 0,
+    });
+
+    const result = processSectors(baseLookups([corp], [sector]), 1, new Date());
+    expect(getTotalPayment(result.dividendPayments, charId.toString())).toBeCloseTo(
+      1000 * EFF_MARGIN_100 * 0.25,
+      1
+    );
+    expect(result.equityPoolDividendAccruals).toHaveLength(0);
+  });
+
   it("pays the public-float slice into the equity market pool accrual", () => {
     const charId = new ObjectId();
     const corp = makeCorp({
