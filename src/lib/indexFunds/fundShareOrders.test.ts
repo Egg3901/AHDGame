@@ -129,6 +129,24 @@ describe("placeFundShareBuyOrder", () => {
 });
 
 describe("placeFundShareSellOrder", () => {
+  it("uses preloaded reservations without a per-quote order read", async () => {
+    const { placeFundShareSellOrder } = await import("./fundShareOrders");
+    const c = corp();
+    const f = { ...fund(), holdings: [{ corporationId: c._id, shares: 100 }] };
+
+    const result = await placeFundShareSellOrder(db as unknown as Db, {
+      fund: f,
+      corp: c,
+      shares: 25,
+      limitPriceLocal: 51,
+      reservedOpenShares: 80,
+    });
+
+    expect(result.ok).toBe(false);
+    expect(db.collection("shareOrders").find).not.toHaveBeenCalled();
+    expect(db.collection("shareOrders").insertOne).not.toHaveBeenCalled();
+  });
+
   it("places a bounded fund ask only against unreserved holdings", async () => {
     const { placeFundShareSellOrder } = await import("./fundShareOrders");
     const c = corp();

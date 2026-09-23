@@ -13,10 +13,14 @@ const ledgerMocks = vi.hoisted(() => ({
   loadTxThresholds: vi.fn().mockResolvedValue({}),
 }));
 const cadenceMocks = vi.hoisted(() => ({ loadTurnLengthMinutes: vi.fn() }));
+const fundQueryMocks = vi.hoisted(() => ({
+  insertFundTransactionsBulk: vi.fn().mockResolvedValue(undefined),
+}));
 
 vi.mock("@/lib/indexFunds/fundShareOrders", () => orderMocks);
 vi.mock("@/lib/financialTxLog/emit", () => ledgerMocks);
 vi.mock("@/lib/financialTxLog/expiresAt", () => cadenceMocks);
+vi.mock("@/lib/indexFunds/fundQueries", () => fundQueryMocks);
 
 import {
   EQUITY_LIQUIDITY_MAX_QUOTES_PER_FUND,
@@ -61,23 +65,30 @@ function listing(corporationId: ObjectId): EquityLiquidityListing {
   };
 }
 
-function facilityDb(priorOrders: Array<{ _id: ObjectId; placerFundId?: ObjectId }> = []): {
+function facilityDb(
+  priorOrders: Array<{ _id: ObjectId; placerFundId?: ObjectId }> = [],
+  openAsks: Array<{ placerFundId: ObjectId; corporationId: ObjectId; sharesRemaining: number }> = []
+): {
   db: Db;
   replaceOne: ReturnType<typeof vi.fn>;
+  findShareOrders: ReturnType<typeof vi.fn>;
 } {
   const replaceOne = vi.fn().mockResolvedValue({ acknowledged: true });
+  const findShareOrders = vi.fn((filter: { liquidityProvider?: boolean }) => ({
+    toArray: vi.fn().mockResolvedValue(filter.liquidityProvider ? priorOrders : openAsks),
+  }));
   const db = {
     collection: vi.fn((name: string) => {
       if (name === "shareOrders") {
         return {
-          find: vi.fn(() => ({ toArray: vi.fn().mockResolvedValue(priorOrders) })),
+          find: findShareOrders,
         };
       }
       if (name === "equityLiquidityFacilitySnapshots") return { replaceOne };
       throw new Error(`Unexpected collection ${name}`);
     }),
   } as unknown as Db;
-  return { db, replaceOne };
+  return { db, replaceOne, findShareOrders };
 }
 
 beforeEach(() => {
@@ -287,8 +298,9 @@ describe("refreshEquityLiquidityFacility", () => {
     const bidProvider = fund([bidCorporationId]);
     const { db: bidDb } = facilityDb();
     orderMocks.placeFundShareBuyOrder.mockImplementation(
-      async (_db: Db, input: { ledgerSink: unknown[] }) => {
+      async (_db: Db, input: { ledgerSink: unknown[]; txSink: unknown[] }) => {
         input.ledgerSink.push({ type: "stock_order_escrow", amount: -50 });
+        input.txSink.push({ kind: "public_float_buy", amountAnchor: 50 });
         return { ok: true, orderId: new ObjectId() };
       }
     );
@@ -307,6 +319,33 @@ describe("refreshEquityLiquidityFacility", () => {
     expect(ledgerMocks.emitTxBulk.mock.calls[0][1]).toMatchObject([
       { type: "stock_order_escrow", amount: -50 },
     ]);
+    expect(fundQueryMocks.insertFundTransactionsBulk).toHaveBeenCalledTimes(1);
+    expect(fundQueryMocks.insertFundTransactionsBulk.mock.calls[0][1]).toMatchObject([
+      { kind: "public_float_buy", amountAnchor: 50 },
+    ]);
+  });
+
+  it("preloads existing ask reservations for quote placement", async () => {
+    const corporationId = new ObjectId();
+    const provider = fund([corporationId]);
+    const { db, findShareOrders } = facilityDb(
+      [],
+      [{ placerFundId: provider._id, corporationId, sharesRemaining: 25 }]
+    );
+    orderMocks.placeFundShareBuyOrder.mockResolvedValue({ ok: true, orderId: new ObjectId() });
+    orderMocks.placeFundShareSellOrder.mockResolvedValue({ ok: true, orderId: new ObjectId() });
+
+    await refreshEquityLiquidityFacility({
+      db,
+      turn: 59,
+      enabled: true,
+      funds: [provider],
+      listings: [listing(corporationId)],
+      totalListings: 10,
+    });
+
+    expect(findShareOrders).toHaveBeenCalledTimes(2);
+    expect(orderMocks.placeFundShareSellOrder.mock.calls[0][1].reservedOpenShares).toBe(25);
   });
 
   it("flushes a committed bid when a later quote fails", async () => {
@@ -314,10 +353,13 @@ describe("refreshEquityLiquidityFacility", () => {
     const provider = fund(ids);
     const { db } = facilityDb();
     orderMocks.placeFundShareBuyOrder
-      .mockImplementationOnce(async (_db: Db, input: { ledgerSink: unknown[] }) => {
-        input.ledgerSink.push({ type: "stock_order_escrow", amount: -50 });
-        return { ok: true, orderId: new ObjectId() };
-      })
+      .mockImplementationOnce(
+        async (_db: Db, input: { ledgerSink: unknown[]; txSink: unknown[] }) => {
+          input.ledgerSink.push({ type: "stock_order_escrow", amount: -50 });
+          input.txSink.push({ kind: "public_float_buy", amountAnchor: 50 });
+          return { ok: true, orderId: new ObjectId() };
+        }
+      )
       .mockRejectedValueOnce(new Error("bid failed"));
     orderMocks.placeFundShareSellOrder.mockResolvedValue({ ok: true, orderId: new ObjectId() });
 
@@ -331,6 +373,36 @@ describe("refreshEquityLiquidityFacility", () => {
         totalListings: 10,
       })
     ).rejects.toThrow("bid failed");
+
+    expect(ledgerMocks.emitTxBulk).toHaveBeenCalledTimes(1);
+    expect(ledgerMocks.emitTxBulk.mock.calls[0][1]).toHaveLength(1);
+    expect(fundQueryMocks.insertFundTransactionsBulk.mock.calls[0][1]).toHaveLength(1);
+  });
+
+  it("flushes escrow ledger rows if the bulk transaction insert fails", async () => {
+    const corporationId = new ObjectId();
+    const provider = fund([corporationId]);
+    const { db } = facilityDb();
+    orderMocks.placeFundShareBuyOrder.mockImplementation(
+      async (_db: Db, input: { ledgerSink: unknown[]; txSink: unknown[] }) => {
+        input.txSink.push({ kind: "public_float_buy", amountAnchor: 50 });
+        input.ledgerSink.push({ type: "stock_order_escrow", amount: -50 });
+        return { ok: true, orderId: new ObjectId() };
+      }
+    );
+    orderMocks.placeFundShareSellOrder.mockResolvedValue({ ok: true, orderId: new ObjectId() });
+    fundQueryMocks.insertFundTransactionsBulk.mockRejectedValueOnce(new Error("insert failed"));
+
+    await expect(
+      refreshEquityLiquidityFacility({
+        db,
+        turn: 59,
+        enabled: true,
+        funds: [provider],
+        listings: [listing(corporationId)],
+        totalListings: 10,
+      })
+    ).rejects.toThrow("insert failed");
 
     expect(ledgerMocks.emitTxBulk).toHaveBeenCalledTimes(1);
     expect(ledgerMocks.emitTxBulk.mock.calls[0][1]).toHaveLength(1);
