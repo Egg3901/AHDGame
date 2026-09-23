@@ -808,7 +808,10 @@ export function processSectors(
           }
         }
       }
-      const floatShares = Math.max(0, Math.min(totalShares, corp.publicFloat ?? 0));
+      const floatShares = Math.max(
+        0,
+        Math.min(totalShares, (corp.publicFloat ?? 0) - unplacedIpoShares)
+      );
       const floatDividendAnchor = hourlyDividendPayout * (floatShares / totalShares);
       if (floatDividendAnchor > 0) {
         equityPoolDividendAccruals.push({

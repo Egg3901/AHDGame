@@ -89,13 +89,14 @@ export function totalVotingPower(
   corp: Pick<Corporation, "superShareMultiplier" | "totalShares"> & {
     shareholders?: Array<Pick<Shareholder, "shares" | "superShares">>;
     pendingShareIssuance?: Corporation["pendingShareIssuance"];
+    pendingIpoShares?: number;
   }
 ): number {
   // Issued IPO inventory has no owner and cannot vote until placed.
   const unplacedIpoShares =
     corp.pendingShareIssuance?.issuedUpfront && corp.pendingShareIssuance.source === "ipo"
       ? corp.pendingShareIssuance.remainingShares
-      : 0;
+      : (corp.pendingIpoShares ?? 0);
   const total = Math.max(0, (corp.totalShares ?? 0) - unplacedIpoShares);
   if (!hasSuperShares(corp)) return total;
   const multiplier = corp.superShareMultiplier as number;

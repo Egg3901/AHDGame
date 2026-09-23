@@ -269,4 +269,61 @@ describe("resolvePrivatizationVote — atomic claim", () => {
     expect(corpUpdateOne).toHaveBeenCalledTimes(1);
     expect(corpUpdateOne.mock.calls[0][1].$unset.pendingShareIssuance).toBe("");
   });
+
+  it("does not pay a buyout for issuer-owned IPO shares in the listed float", async () => {
+    const ceoId = new ObjectId();
+    const voterId = new ObjectId();
+    const corpId = new ObjectId();
+    const vote = makeVote({
+      corporationId: corpId,
+      totalReservedCash: 2_200_000,
+      votes: [{ characterId: voterId, voteShares: 1_000_000, vote: "yes", castAt: new Date() }],
+    });
+    const corp = {
+      _id: corpId,
+      ceoId,
+      name: "TestCo",
+      sequentialId: 1,
+      publicFloat: 8_000_000,
+      totalShares: 18_000_000,
+      shareholders: [
+        { characterId: ceoId, shares: 9_000_000 },
+        { characterId: voterId, shares: 1_000_000 },
+      ],
+      pendingShareIssuance: {
+        remainingShares: 7_000_000,
+        requestedShares: 8_000_000,
+        source: "ipo",
+        issuedUpfront: true,
+        createdAtTurn: 100,
+        initialPriceLocal: 1.1,
+      },
+    };
+    const voteUpdateOne = vi.fn().mockResolvedValue({ matchedCount: 1 });
+    const corpUpdateOne = vi.fn().mockResolvedValue({ matchedCount: 1 });
+    const db = {
+      collection: vi.fn().mockImplementation((name: string) => {
+        if (name === "corporationPrivatizationVotes") return { updateOne: voteUpdateOne };
+        if (name === "corporations")
+          return { findOne: vi.fn().mockResolvedValue(corp), updateOne: corpUpdateOne };
+        return { findOne: vi.fn(), updateOne: vi.fn() };
+      }),
+    } as unknown as Db;
+
+    const result = await resolvePrivatizationVote({
+      db,
+      vote: vote as never,
+      currentTurn: 200,
+      forexEnabled: true,
+    });
+
+    expect(result).toMatchObject({ resolved: true, status: "passed" });
+    expect(corpUpdateOne.mock.calls[0][1]).toMatchObject({
+      $inc: { liquidCapital: 1_100_000 },
+    });
+    expect(corpUpdateOne.mock.calls[1][1].$set).toMatchObject({
+      totalShares: 10_000_000,
+      publicFloat: 0,
+    });
+  });
 });
