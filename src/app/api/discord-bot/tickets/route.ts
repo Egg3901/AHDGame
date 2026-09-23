@@ -127,6 +127,7 @@ const updateSchema = z
       resolution: z.string().max(5000).optional(),
     }),
     z.object({ action: z.literal("retriage"), ...ticketIdFields }),
+    z.object({ action: z.literal("resolution-channel-delivered"), ...ticketIdFields }),
     z.object({ action: z.literal("resolution-delivered"), ...ticketIdFields }),
   ])
   .refine((d) => d.ticketNumber != null || d.discordChannelId, {
@@ -348,6 +349,38 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ ok: true });
     }
 
+    if (body.action === "resolution-channel-delivered") {
+      const note = "resolution-channel-delivered";
+      const current = await coll.findOne(filter, {
+        projection: { status: 1 },
+      });
+      if (!current) {
+        return NextResponse.json({ error: "Ticket not found" }, { status: 404 });
+      }
+      const res = await coll.updateOne(
+        { ...filter, "statusHistory.note": { $ne: note } },
+        {
+          $set: { updatedAt: now },
+          $push: {
+            statusHistory: {
+              status: current.status,
+              at: now,
+              source: "bot",
+              note,
+            },
+          },
+        }
+      );
+      if (!res.matchedCount) {
+        const ticket = await coll.findOne(filter, { projection: { _id: 1 } });
+        if (!ticket) {
+          return NextResponse.json({ error: "Ticket not found" }, { status: 404 });
+        }
+        return NextResponse.json({ ok: true, alreadyRecorded: true });
+      }
+      return NextResponse.json({ ok: true });
+    }
+
     if (body.action === "resolution-delivered") {
       const res = await coll.updateOne(filter, {
         $set: { "resolution.deliveredAt": new Date(), updatedAt: now },
@@ -360,19 +393,42 @@ export async function PATCH(request: Request) {
 
     // action === "close"
     const closedBy = body.closedBy?.slice(0, 128);
+    const existing = await coll.findOne(filter, {
+      projection: {
+        status: 1,
+        "resolution.message": 1,
+        "resolution.deliveredAt": 1,
+        "resolution.channelDelivery.status": 1,
+        "statusHistory.note": 1,
+      },
+    });
+    if (!existing) {
+      return NextResponse.json({ error: "Ticket not found" }, { status: 404 });
+    }
+    const deliveryState = existing as typeof existing & {
+      resolution?: {
+        message?: string;
+        deliveredAt?: Date | null;
+        channelDelivery?: { status?: string };
+      };
+      statusHistory?: Array<{ note?: string }>;
+    };
+    const resolutionDelivered = Boolean(deliveryState.resolution?.deliveredAt);
+    const channelUpdatePosted =
+      deliveryState.resolution?.channelDelivery?.status === "posted" ||
+      deliveryState.statusHistory?.some(
+        (entry) => entry.note === "resolution-channel-delivered"
+      ) === true;
     const res = await coll.updateOne(filter, {
       $set: {
         status: "closed",
         closedAt: now,
         ...(closedBy ? { closedBy } : {}),
-        ...(body.resolution
+        ...(body.resolution && !resolutionDelivered && !channelUpdatePosted
           ? {
-              resolution: {
-                message: body.resolution,
-                createdAt: now,
-                ...(closedBy ? { closedBy } : {}),
-                deliveredAt: null,
-              },
+              "resolution.message": body.resolution,
+              "resolution.createdAt": now,
+              ...(closedBy ? { "resolution.closedBy": closedBy } : {}),
             }
           : {}),
         updatedAt: now,
@@ -383,13 +439,23 @@ export async function PATCH(request: Request) {
           at: now,
           source: "bot",
           ...(closedBy ? { by: closedBy } : {}),
+          ...(body.resolution ? { note: "discord-ticket-close" } : {}),
         },
       },
     });
     if (!res.matchedCount) {
       return NextResponse.json({ error: "Ticket not found" }, { status: 404 });
     }
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({
+      ok: true,
+      alreadyClosed: existing.status === "closed",
+      channelUpdatePosted,
+      resolutionDelivered,
+      finalOutcome:
+        channelUpdatePosted || resolutionDelivered
+          ? deliveryState.resolution?.message
+          : body.resolution || deliveryState.resolution?.message,
+    });
   } catch (error) {
     return handleRouteError(error);
   }
