@@ -191,6 +191,40 @@ describe("BankingHubClient", () => {
     expect(primaryLink.getAttribute("href")).toBe("/centralbank/usd");
   });
 
+  it("lets a player withdraw from savings held at a private bank", async () => {
+    const fetchMock = vi.fn().mockImplementation(async (url: string) => {
+      if (url === "/api/character/savings/withdraw") {
+        return {
+          ok: true,
+          json: async () => ({ success: true, currency: "USD", amount: 250 }),
+        };
+      }
+      return { ok: true, json: async () => payload };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<BankingHubClient />);
+    await waitFor(() =>
+      expect(screen.getByRole("heading", { name: "Banking & Credit" })).toBeTruthy()
+    );
+    fireEvent.click(screen.getByRole("tab", { name: "Your accounts" }));
+
+    fireEvent.change(screen.getByLabelText("Withdrawal amount in USD"), {
+      target: { value: "250" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Withdraw USD savings" }));
+
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/character/savings/withdraw",
+        expect.objectContaining({
+          method: "POST",
+          body: JSON.stringify({ currency: "USD", amount: 250 }),
+        })
+      )
+    );
+  });
+
   it("keeps private banking surfaces hidden behind the feature flag", async () => {
     vi.stubGlobal(
       "fetch",

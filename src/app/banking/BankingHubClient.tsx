@@ -684,6 +684,7 @@ function YourSavingsSection({
   showToast: (msg: string, type?: "success" | "error" | "info" | "warning") => void;
 }) {
   const [busy, setBusy] = useState<string | null>(null);
+  const [withdrawAmounts, setWithdrawAmounts] = useState<Partial<Record<CurrencyCode, string>>>({});
 
   const setHolder = async (currency: CurrencyCode, holder: string) => {
     setBusy(currency);
@@ -700,6 +701,35 @@ function YourSavingsSection({
       }
       showToast("Savings holder updated", "success");
       await onChanged();
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const withdraw = async (currency: CurrencyCode, balance: number) => {
+    const amount = Number(withdrawAmounts[currency]);
+    if (!Number.isFinite(amount) || amount <= 0 || amount > balance) {
+      showToast("Enter a withdrawal amount up to your savings balance", "error");
+      return;
+    }
+
+    setBusy(`withdraw:${currency}`);
+    try {
+      const res = await fetch("/api/character/savings/withdraw", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ currency, amount }),
+      });
+      const json = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) {
+        showToast(json.error ?? "Withdrawal failed", "error");
+        return;
+      }
+      showToast(`Withdrew ${formatBankMoney(amount, currency)} from savings`, "success");
+      setWithdrawAmounts((current) => ({ ...current, [currency]: "" }));
+      await onChanged();
+    } catch {
+      showToast("Withdrawal failed", "error");
     } finally {
       setBusy(null);
     }
@@ -726,13 +756,13 @@ function YourSavingsSection({
       <AccountCardHeader
         icon={PiggyBank}
         title="Savings"
-        description="Moving the holder changes the return, not the balance."
+        description="Choose where savings earn interest, or withdraw them to your wallet."
       />
       <div className="divide-y divide-card-border">
         {rows.map((row) => (
           <div
             key={row.currency}
-            className="grid gap-3 px-5 py-4 sm:grid-cols-[1fr_minmax(220px,0.95fr)] sm:items-center"
+            className="grid gap-3 px-5 py-4 sm:grid-cols-[1fr_minmax(280px,1.1fr)] sm:items-center"
           >
             <div className="flex items-center gap-3">
               <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-success/10 font-mono text-xs font-bold text-success">
@@ -747,22 +777,58 @@ function YourSavingsSection({
                 </p>
               </div>
             </div>
-            <label className="flex min-w-0 flex-col gap-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted">
-              Held at
-              <select
-                className="h-10 w-full rounded-lg border border-card-border bg-background px-3 text-sm font-normal normal-case tracking-normal text-foreground outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:opacity-60"
-                value={row.currentHolder}
-                disabled={busy === row.currency}
-                onChange={(e) => void setHolder(row.currency, e.target.value)}
-                aria-label={`Savings holder for ${row.currency}`}
-              >
-                {row.options.map((opt) => (
-                  <option key={opt.holder} value={opt.holder}>
-                    {opt.label} · {formatRatePercent(opt.depositRatePercent)}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <div className="min-w-0">
+              <label className="flex min-w-0 flex-col gap-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted">
+                Held at
+                <select
+                  className="h-10 w-full rounded-lg border border-card-border bg-background px-3 text-sm font-normal normal-case tracking-normal text-foreground outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:opacity-60"
+                  value={row.currentHolder}
+                  disabled={busy !== null}
+                  onChange={(e) => void setHolder(row.currency, e.target.value)}
+                  aria-label={`Savings holder for ${row.currency}`}
+                >
+                  {row.options.map((opt) => (
+                    <option key={opt.holder} value={opt.holder}>
+                      {opt.label} · {formatRatePercent(opt.depositRatePercent)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <div className="mt-2 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  min="0"
+                  max={row.balance}
+                  step="any"
+                  value={withdrawAmounts[row.currency] ?? ""}
+                  onChange={(event) =>
+                    setWithdrawAmounts((current) => ({
+                      ...current,
+                      [row.currency]: event.target.value,
+                    }))
+                  }
+                  disabled={busy !== null}
+                  placeholder={`Amount in ${row.currency}`}
+                  aria-label={`Withdrawal amount in ${row.currency}`}
+                  className="h-10 min-w-0 rounded-lg border border-card-border bg-background px-3 font-mono text-sm tabular-nums text-foreground outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:opacity-60"
+                />
+                <button
+                  type="button"
+                  aria-label={`Withdraw ${row.currency} savings`}
+                  disabled={
+                    busy !== null ||
+                    !Number.isFinite(Number(withdrawAmounts[row.currency])) ||
+                    Number(withdrawAmounts[row.currency]) <= 0 ||
+                    Number(withdrawAmounts[row.currency]) > row.balance
+                  }
+                  onClick={() => void withdraw(row.currency, row.balance)}
+                  className="h-10 rounded-lg border border-card-border bg-card px-4 text-sm font-semibold text-foreground transition-colors hover:border-primary/40 hover:text-primary disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {busy === `withdraw:${row.currency}` ? "…" : "Withdraw"}
+                </button>
+              </div>
+            </div>
           </div>
         ))}
       </div>

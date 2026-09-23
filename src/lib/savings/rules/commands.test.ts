@@ -385,3 +385,68 @@ describe("resolve_failed_holder", () => {
     });
   });
 });
+
+describe("recover_orphaned_holder", () => {
+  it("rehomes a deleted bank's account through insurance and the treasury backstop", () => {
+    const decision = allowed(
+      decideSavingsCommand(
+        account({ holder: BANK, version: 8 }),
+        {
+          type: "recover_orphaned_holder",
+          holder: bank({ active: false }),
+          fromInsuranceFund: 700,
+          fromTreasury: 300,
+        },
+        CTX,
+        "attempt-1"
+      )
+    );
+
+    expect(decision.next).toMatchObject({ balance: 1_000, holder: "centralBank", status: "open" });
+    expect(decision.transition.key).toBe(
+      `savings_orphaned_holder_recovery:${account({ holder: BANK }).id}:8`
+    );
+    expect(decision.transition.projections[1]?.update).toMatchObject({
+      $set: { lastSettlementKey: decision.transition.key },
+    });
+    expect(decision.transition.legs.map((leg) => [leg.kind, leg.amount])).toEqual([
+      ["debit", 700],
+      ["mint", 300],
+      ["credit", 1_000],
+    ]);
+    expect(decision.transition.projections.map((projection) => projection.collection)).toEqual([
+      "centralBanks",
+      "savingsAccounts",
+      "characters",
+    ]);
+    expect(decision.transition.projections[0]?.update).toEqual({
+      $inc: { householdSavingsLiability: 1_000 },
+    });
+
+    const retry = decideSavingsCommand(
+      account({ holder: BANK, version: 8 }),
+      {
+        type: "recover_orphaned_holder",
+        holder: bank({ active: false }),
+        fromInsuranceFund: 700,
+        fromTreasury: 300,
+      },
+      { ...CTX, turn: CTX.turn + 1 },
+      "attempt-2"
+    );
+    expect(retry.allowed && retry.transition.key).toBe(decision.transition.key);
+
+    const invalidFunding = decideSavingsCommand(
+      account({ holder: BANK }),
+      {
+        type: "recover_orphaned_holder",
+        holder: bank({ active: false }),
+        fromInsuranceFund: -1,
+        fromTreasury: 1_001,
+      },
+      CTX,
+      "invalid-funding"
+    );
+    expect(invalidFunding.allowed).toBe(false);
+  });
+});
