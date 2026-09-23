@@ -7,8 +7,14 @@ const orderMocks = vi.hoisted(() => ({
   placeFundShareBuyOrder: vi.fn(),
   placeFundShareSellOrder: vi.fn(),
 }));
+const ledgerMocks = vi.hoisted(() => ({
+  emitTx: vi.fn().mockResolvedValue(undefined),
+  emitTxBulk: vi.fn().mockResolvedValue(undefined),
+  loadTxThresholds: vi.fn().mockResolvedValue({}),
+}));
 
 vi.mock("@/lib/indexFunds/fundShareOrders", () => orderMocks);
+vi.mock("@/lib/financialTxLog/emit", () => ledgerMocks);
 
 import {
   EQUITY_LIQUIDITY_MAX_QUOTES_PER_FUND,
@@ -152,6 +158,142 @@ describe("planEquityLiquidityQuotes", () => {
 });
 
 describe("refreshEquityLiquidityFacility", () => {
+  it("batches completed cancellation refund rows for each fund", async () => {
+    const provider = fund([]);
+    const priorOrders = [
+      { _id: new ObjectId(), placerFundId: provider._id },
+      { _id: new ObjectId(), placerFundId: provider._id },
+    ];
+    const { db } = facilityDb(priorOrders);
+    orderMocks.cancelFundShareOrder.mockImplementation(
+      async (_db: Db, _id: ObjectId, _turn: number, options: { ledgerSink: unknown[] }) => {
+        options.ledgerSink.push({ type: "stock_order_refund", amount: 10 });
+      }
+    );
+
+    await refreshEquityLiquidityFacility({
+      db,
+      turn: 59,
+      enabled: false,
+      funds: [provider],
+      listings: [],
+      totalListings: 0,
+    });
+
+    expect(orderMocks.cancelFundShareOrder).toHaveBeenCalledTimes(2);
+    expect(orderMocks.cancelFundShareOrder.mock.calls[0][3].fund).toBe(provider);
+    expect(ledgerMocks.emitTxBulk).toHaveBeenCalledTimes(1);
+    expect(ledgerMocks.emitTxBulk.mock.calls[0][1]).toHaveLength(2);
+  });
+
+  it("still cancels quotes when the ledger threshold read fails", async () => {
+    const provider = fund([]);
+    const order = { _id: new ObjectId(), placerFundId: provider._id };
+    const { db } = facilityDb([order]);
+    ledgerMocks.loadTxThresholds.mockRejectedValueOnce(new Error("threshold unavailable"));
+    orderMocks.cancelFundShareOrder.mockImplementation(
+      async (_db: Db, _id: ObjectId, _turn: number, options: { ledgerSink: unknown[] }) => {
+        options.ledgerSink.push({ type: "stock_order_refund", amount: 10 });
+      }
+    );
+
+    await refreshEquityLiquidityFacility({
+      db,
+      turn: 59,
+      enabled: false,
+      funds: [provider],
+      listings: [],
+      totalListings: 0,
+    });
+
+    expect(orderMocks.cancelFundShareOrder).toHaveBeenCalledTimes(1);
+    expect(ledgerMocks.emitTx).toHaveBeenCalledTimes(1);
+  });
+
+  it("flushes completed refunds when a later cancellation fails", async () => {
+    const provider = fund([]);
+    const priorOrders = [
+      { _id: new ObjectId(), placerFundId: provider._id },
+      { _id: new ObjectId(), placerFundId: provider._id },
+    ];
+    const { db } = facilityDb(priorOrders);
+    orderMocks.cancelFundShareOrder
+      .mockImplementationOnce(
+        async (_db: Db, _id: ObjectId, _turn: number, options: { ledgerSink: unknown[] }) => {
+          options.ledgerSink.push({ type: "stock_order_refund", amount: 10 });
+        }
+      )
+      .mockRejectedValueOnce(new Error("cancel failed"));
+
+    await expect(
+      refreshEquityLiquidityFacility({
+        db,
+        turn: 59,
+        enabled: false,
+        funds: [provider],
+        listings: [],
+        totalListings: 0,
+      })
+    ).rejects.toThrow("cancel failed");
+
+    expect(ledgerMocks.emitTxBulk).toHaveBeenCalledTimes(1);
+    expect(ledgerMocks.emitTxBulk.mock.calls[0][1]).toHaveLength(1);
+  });
+
+  it("batches completed bid escrow rows for each fund", async () => {
+    const corporationId = new ObjectId();
+    const provider = fund([corporationId]);
+    const { db } = facilityDb();
+    orderMocks.placeFundShareBuyOrder.mockImplementation(
+      async (_db: Db, input: { ledgerSink: unknown[] }) => {
+        input.ledgerSink.push({ type: "stock_order_escrow", amount: -50 });
+        return { ok: true, orderId: new ObjectId() };
+      }
+    );
+    orderMocks.placeFundShareSellOrder.mockResolvedValue({ ok: true, orderId: new ObjectId() });
+
+    await refreshEquityLiquidityFacility({
+      db,
+      turn: 59,
+      enabled: true,
+      funds: [provider],
+      listings: [listing(corporationId)],
+      totalListings: 10,
+    });
+
+    expect(ledgerMocks.emitTxBulk).toHaveBeenCalledTimes(1);
+    expect(ledgerMocks.emitTxBulk.mock.calls[0][1]).toMatchObject([
+      { type: "stock_order_escrow", amount: -50 },
+    ]);
+  });
+
+  it("flushes a committed bid when a later quote fails", async () => {
+    const ids = [new ObjectId(), new ObjectId()];
+    const provider = fund(ids);
+    const { db } = facilityDb();
+    orderMocks.placeFundShareBuyOrder
+      .mockImplementationOnce(async (_db: Db, input: { ledgerSink: unknown[] }) => {
+        input.ledgerSink.push({ type: "stock_order_escrow", amount: -50 });
+        return { ok: true, orderId: new ObjectId() };
+      })
+      .mockRejectedValueOnce(new Error("bid failed"));
+    orderMocks.placeFundShareSellOrder.mockResolvedValue({ ok: true, orderId: new ObjectId() });
+
+    await expect(
+      refreshEquityLiquidityFacility({
+        db,
+        turn: 59,
+        enabled: true,
+        funds: [provider],
+        listings: ids.map(listing),
+        totalListings: 10,
+      })
+    ).rejects.toThrow("bid failed");
+
+    expect(ledgerMocks.emitTxBulk).toHaveBeenCalledTimes(1);
+    expect(ledgerMocks.emitTxBulk.mock.calls[0][1]).toHaveLength(1);
+  });
+
   it("cancels different funds concurrently while preserving each fund's order", async () => {
     const firstFundId = new ObjectId();
     const secondFundId = new ObjectId();
