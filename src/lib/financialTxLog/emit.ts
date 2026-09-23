@@ -260,6 +260,7 @@ function buildAuditEnvelope(doc: FinancialTxLogEntry): ActionAuditInput {
     amount: doc.amount,
     currencyCode: doc.currencyCode,
     anchorAmount: doc.anchorAmount,
+    meta: doc.meta,
     refs: { financialTxLogId: doc._id },
     outcome: "ok",
   };

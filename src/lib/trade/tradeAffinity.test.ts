@@ -85,6 +85,73 @@ describe("buildTradeAffinity", () => {
   });
 });
 
+describe("embargo index (directed lookups)", () => {
+  it("an import-direction embargo blocks the reverse flow, not the forward one", () => {
+    // US will not import from CN.
+    const embargoes = [embargo({ sourceCountry: "US", targetCountry: "CN", direction: "import" })];
+    const { affinityFor } = buildTradeAffinity(ctx({ embargoes }));
+    expect(affinityFor("steel", "CN", "US")).toBe(0);
+    expect(affinityFor("steel", "US", "CN")).toBeGreaterThan(0);
+  });
+
+  it('"both" blocks the pair in either direction', () => {
+    const embargoes = [embargo({ sourceCountry: "US", targetCountry: "CN", direction: "both" })];
+    const { affinityFor } = buildTradeAffinity(ctx({ embargoes }));
+    expect(affinityFor("steel", "US", "CN")).toBe(0);
+    expect(affinityFor("steel", "CN", "US")).toBe(0);
+  });
+
+  it('an "all" embargo blocks every commodity but leaves other pairs alone', () => {
+    const embargoes = [embargo({ sourceCountry: "US", targetCountry: "CN", commodity: "all" })];
+    const { affinityFor } = buildTradeAffinity(ctx({ embargoes }));
+    expect(affinityFor("steel", "US", "CN")).toBe(0);
+    expect(affinityFor("oil", "US", "CN")).toBe(0);
+    expect(affinityFor("steel", "US", "UK")).toBeGreaterThan(0);
+  });
+
+  it("a cap embargo with no numeric cap restricts nothing", () => {
+    const embargoes = [
+      embargo({ mode: "cap", cap: undefined, sourceCountry: "US", targetCountry: "CN" }),
+    ];
+    const { capUnitsFor } = buildTradeAffinity(ctx({ embargoes }));
+    expect(capUnitsFor("steel", "US", "CN")).toBeUndefined();
+  });
+
+  it("takes the smallest cap across directions and commodity entries", () => {
+    const embargoes = [
+      embargo({
+        mode: "cap",
+        cap: 500,
+        commodity: "all",
+        sourceCountry: "US",
+        targetCountry: "CN",
+        direction: "both",
+      }),
+      embargo({
+        mode: "cap",
+        cap: 200,
+        commodity: "steel",
+        sourceCountry: "US",
+        targetCountry: "CN",
+      }),
+      embargo({
+        mode: "cap",
+        cap: 300,
+        commodity: "steel",
+        sourceCountry: "CN",
+        targetCountry: "US",
+      }),
+    ];
+    const { capUnitsFor } = buildTradeAffinity(ctx({ embargoes }));
+    // steel US→CN: the "all" cap of 500 and the 200 export cap → 200.
+    expect(capUnitsFor("steel", "US", "CN")).toBe(200);
+    // steel CN→US: the "all" cap of 500 and CN's own 300 export cap → 300.
+    expect(capUnitsFor("steel", "CN", "US")).toBe(300);
+    // oil US→CN: only the "all" cap applies → 500.
+    expect(capUnitsFor("oil", "US", "CN")).toBe(500);
+  });
+});
+
 describe("iron curtain (curtainedCountries)", () => {
   const curtain = new Set(["RU", "PL", "UKR"]);
 

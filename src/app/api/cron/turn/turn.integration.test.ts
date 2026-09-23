@@ -51,6 +51,7 @@ describe("GET /api/cron/turn", () => {
       turn: 42,
       message: "Turn 42 processed successfully.",
       warnings: [],
+      health: null,
     });
     vi.mocked(getGameState).mockResolvedValue({
       isActive: true,
@@ -114,6 +115,7 @@ describe("GET /api/cron/turn", () => {
       turn: 0,
       message: "Failed to process turn: Game state not initialized",
       warnings: [],
+      health: null,
     });
 
     const { GET } = await import("./route");
