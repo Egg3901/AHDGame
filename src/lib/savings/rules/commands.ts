@@ -73,6 +73,13 @@ export type SavingsCommand =
       fromEstate: number;
       fromInsuranceFund: number;
       fromTreasury: number;
+    }
+  | {
+      /** Recover a savings account whose bank document was deleted before its book was returned. */
+      type: "recover_orphaned_holder";
+      holder: HolderSnapshot;
+      fromInsuranceFund: number;
+      fromTreasury: number;
     };
 
 export type SavingsRefusal =
@@ -595,6 +602,100 @@ export function decideSavingsCommand(
           }
         ),
       };
+    }
+
+    case "recover_orphaned_holder": {
+      if (!isBankHolder(account.holder)) return refuse({ code: "not_failed" }, "not bank-held");
+      if (account.status !== "open") {
+        return refuse(
+          { code: "account_status", status: account.status },
+          "This savings account cannot be recovered right now."
+        );
+      }
+      if (command.holder.holder !== account.holder) {
+        return refuse({ code: "holder_refuses", detail: "holder mismatch" }, "holder changed");
+      }
+      const amount = account.balance;
+      if (
+        !Number.isFinite(command.fromInsuranceFund) ||
+        !Number.isFinite(command.fromTreasury) ||
+        command.fromInsuranceFund < 0 ||
+        command.fromTreasury < 0
+      ) {
+        return refuse({ code: "invalid_amount" }, "recovery funding cannot be negative");
+      }
+      const covered = command.fromInsuranceFund + command.fromTreasury;
+      if (Math.abs(covered - amount) > 1e-6) {
+        return refuse({ code: "invalid_amount" }, "recovery funding must cover the whole balance");
+      }
+
+      const next = {
+        ...account,
+        holder: CENTRAL_BANK_HOLDER,
+        status: "open" as const,
+        version: account.version + 1,
+      };
+      const legs: TransitionLeg[] = [];
+      if (command.fromInsuranceFund > 0) {
+        legs.push({
+          kind: "debit",
+          amount: command.fromInsuranceFund,
+          collection: "depositInsuranceFunds",
+          filter: { _id: account.currency },
+          path: "balance",
+          note: "deposit insurance covers the missing bank's savings liability",
+        });
+      }
+      if (command.fromTreasury > 0) {
+        legs.push({
+          kind: "mint",
+          amount: command.fromTreasury,
+          note: "treasury backstop, deficit financed",
+        });
+      }
+      if (amount > 0) {
+        legs.push({
+          kind: "credit",
+          amount,
+          ...holderCashTarget(CENTRAL_BANK_HOLDER, ctx.centralBankId),
+          note: "backing returns to the central bank's household pool",
+        });
+      }
+      const transition = transitionFor(
+        account,
+        ctx,
+        "savings_orphaned_holder_recovery",
+        String(account.version),
+        legs,
+        [
+          holderLiabilityProjection(CENTRAL_BANK_HOLDER, amount, ctx.centralBankId),
+          accountProjection(
+            account,
+            next,
+            `savings_orphaned_holder_recovery:${account.id}:${account.version}`,
+            ctx.turn
+          ),
+          legacyProjectionFor(account, next),
+        ],
+        {
+          kind: "account.holder_changed",
+          command: "savings.holder.orphan_recover",
+          subjectType: "savingsAccount",
+          subjectId: account.id,
+          statusBefore: account.holder,
+          statusAfter: CENTRAL_BANK_HOLDER,
+          amount,
+          meta: {
+            fromEstate: 0,
+            fromInsuranceFund: command.fromInsuranceFund,
+            fromTreasury: command.fromTreasury,
+          },
+        }
+      );
+
+      // A concurrent recovery for the same account version must replay the
+      // original funding waterfall, even when it arrives on a later turn.
+      return { allowed: true, next, transition };
     }
 
     case "resolve_failed_holder": {
