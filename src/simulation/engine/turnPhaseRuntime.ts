@@ -12,6 +12,7 @@ import {
   beginPhaseProfiling,
   endPhaseProfiling,
   phaseRoundTrips,
+  phaseTopCollectionsByRoundTrips,
   roundTripCountsAvailable,
 } from "@/lib/observability/mongoRoundTrips";
 import { roundTripBudgetFor } from "./turnPhaseBudgets";
@@ -315,9 +316,12 @@ export function createTurnPhaseRuntime(input: {
       const roundTrips = roundTripCountsAvailable() ? phaseRoundTrips(name) : undefined;
       const roundTripBudget = roundTripBudgetFor(name);
       if (roundTrips != null && roundTrips > roundTripBudget) {
+        const topCollections = phaseTopCollectionsByRoundTrips(name)
+          .map(({ collection, roundTrips: count }) => `${collection}:${count}`)
+          .join(", ");
         console.warn(
           `[Turn] Phase "${name}" issued ${roundTrips} Mongo round trips, over its budget of ${roundTripBudget}. ` +
-            `Probably a per-row query; see src/simulation/engine/turnPhaseBudgets.ts.`
+            `Top collections: ${topCollections}. See src/simulation/engine/turnPhaseBudgets.ts.`
         );
         Sentry.addBreadcrumb({
           category: "turn.phase",
