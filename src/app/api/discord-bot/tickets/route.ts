@@ -500,6 +500,7 @@ export async function PATCH(request: Request) {
         "resolution.channelDelivery.status": 1,
         "resolution.channelDelivery.postedAt": 1,
         "statusHistory.note": 1,
+        "statusHistory.at": 1,
       },
     });
     if (!existing) {

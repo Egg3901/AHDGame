@@ -186,6 +186,12 @@ describe("PATCH /api/discord-bot/tickets", () => {
         $set: expect.objectContaining({ "resolution.deliveredAt": null }),
       })
     );
+    expect(db.collectionMocks.tickets.findOne).toHaveBeenCalledWith(
+      { discordChannelId: "discord-channel-1" },
+      expect.objectContaining({
+        projection: expect.objectContaining({ "statusHistory.at": 1 }),
+      })
+    );
     await expect(response.json()).resolves.toMatchObject({
       ok: true,
       alreadyClosed: true,
@@ -286,6 +292,50 @@ describe("PATCH /api/discord-bot/tickets", () => {
         $set: expect.objectContaining({
           "resolution.message": "The corrected fix is live.",
         }),
+      })
+    );
+  });
+
+  it("preserves a matching legacy channel receipt marker", async () => {
+    const createdAt = new Date("2026-09-22T10:00:00.000Z");
+    db.collectionMocks.tickets.findOne.mockResolvedValueOnce({
+      status: "closed",
+      discordChannelId: "discord-channel-1",
+      resolution: {
+        message: "The fix is live.",
+        createdAt,
+        deliveredAt: null,
+      },
+      statusHistory: [
+        {
+          note: "resolution-channel-delivered",
+          at: new Date("2026-09-22T10:05:00.000Z"),
+        },
+      ],
+    });
+    const { PATCH } = await import("./route");
+    const response = await PATCH(
+      new Request("https://example.com/api/discord-bot/tickets", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          action: "close",
+          discordChannelId: "discord-channel-1",
+          closedBy: "staff-user",
+          resolution: "Do not replace the channel-visible outcome.",
+        }),
+      })
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      channelUpdatePosted: true,
+      finalOutcome: "The fix is live.",
+    });
+    expect(db.collectionMocks.tickets.updateOne).toHaveBeenCalledWith(
+      { discordChannelId: "discord-channel-1" },
+      expect.objectContaining({
+        $set: expect.not.objectContaining({ "resolution.message": expect.anything() }),
       })
     );
   });
