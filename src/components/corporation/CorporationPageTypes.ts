@@ -198,6 +198,8 @@ export interface CorporationDetail {
   marketDepthShares?: number;
   totalShares: number;
   publicFloat: number;
+  /** IPO shares issued but awaiting cash-backed market placement. */
+  pendingIpoShares?: number;
   shareholders: ShareholderInfo[];
   /** Dual-class supershare vote multiplier; absent = one share one vote. */
   superShareMultiplier?: number;

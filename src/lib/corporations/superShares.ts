@@ -80,17 +80,23 @@ export function shareholderVotingPower(
 
 /**
  * Total eligible vote weight across the cap table (the denominator for pass
- * thresholds). The public float and all common shares count 1 each, so this is
- * totalShares plus the supershare bonus votes.
+ * thresholds). The public float and all held common shares count 1 each.
+ * Unplaced IPO shares have no voter.
  */
 export function totalVotingPower(
   // Only vote-weight fields are read from each holder, so client-side payload
   // shapes (e.g. ShareholderInfo with string characterIds) qualify too.
   corp: Pick<Corporation, "superShareMultiplier" | "totalShares"> & {
     shareholders?: Array<Pick<Shareholder, "shares" | "superShares">>;
+    pendingShareIssuance?: Corporation["pendingShareIssuance"];
   }
 ): number {
-  const total = corp.totalShares ?? 0;
+  // Issued IPO inventory has no owner and cannot vote until placed.
+  const unplacedIpoShares =
+    corp.pendingShareIssuance?.issuedUpfront && corp.pendingShareIssuance.source === "ipo"
+      ? corp.pendingShareIssuance.remainingShares
+      : 0;
+  const total = Math.max(0, (corp.totalShares ?? 0) - unplacedIpoShares);
   if (!hasSuperShares(corp)) return total;
   const multiplier = corp.superShareMultiplier as number;
   const bonus = (corp.shareholders ?? []).reduce(

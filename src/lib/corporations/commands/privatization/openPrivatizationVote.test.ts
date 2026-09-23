@@ -502,4 +502,41 @@ describe("openPrivatizationVote — bank-NAV floor (issue #1750)", () => {
     expect(updateOne).toHaveBeenCalledTimes(1);
     expect(updateOne.mock.calls[0][1].$unset.pendingShareIssuance).toBe("");
   });
+
+  it("retires issued IPO shares that have no buyer when privatizing immediately", async () => {
+    const ceoId = new ObjectId();
+    const corp = makeCorp({
+      ceoId,
+      totalShares: 18_000_000,
+      publicFloat: 0,
+      shareholders: [{ characterId: ceoId, shares: 10_000_000 }],
+      pendingShareIssuance: {
+        remainingShares: 8_000_000,
+        requestedShares: 8_000_000,
+        source: "ipo",
+        issuedUpfront: true,
+        createdAtTurn: 100,
+        initialPriceLocal: 1,
+      },
+    });
+    const updateOne = vi.fn().mockResolvedValue({ matchedCount: 1, modifiedCount: 1 });
+    const db = {
+      collection: vi.fn().mockReturnValue({
+        findOne: vi.fn().mockResolvedValue(null),
+        updateOne,
+      }),
+    } as unknown as Db;
+
+    const result = await openPrivatizationVote({
+      db,
+      corporation: corp as never,
+      character: makeCharacter(ceoId) as never,
+      currentTurn: 1000,
+      forexEnabled: false,
+    });
+
+    expect(result).toEqual({ ok: true, immediate: true });
+    expect(updateOne.mock.calls[0][1].$set.totalShares).toBe(10_000_000);
+    expect(updateOne.mock.calls[0][1].$unset.pendingShareIssuance).toBe("");
+  });
 });

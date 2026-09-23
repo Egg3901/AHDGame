@@ -209,31 +209,44 @@ export async function placePendingShareIssuances(
       [
         {
           $set: {
-            totalShares: { $add: [{ $ifNull: ["$totalShares", 0] }, shares] },
+            ...(pending.issuedUpfront
+              ? {}
+              : { totalShares: { $add: [{ $ifNull: ["$totalShares", 0] }, shares] } }),
             publicFloat: { $add: [{ $ifNull: ["$publicFloat", 0] }, shares] },
             liquidCapital: { $add: [{ $ifNull: ["$liquidCapital", 0] }, paidLocal] },
             shareIssuanceProceeds: {
               $add: [{ $ifNull: ["$shareIssuanceProceeds", 0] }, paidLocal],
             },
-            sharePrice: {
-              $round: [
-                {
-                  $multiply: [{ $ifNull: ["$sharePrice", 0] }, issuanceDilutionFactorExpr(shares)],
-                },
-                4,
-              ],
-            },
-            fundamentalSharePrice: {
-              $round: [
-                {
-                  $multiply: [
-                    { $ifNull: ["$fundamentalSharePrice", { $ifNull: ["$sharePrice", 0] }] },
-                    issuanceDilutionFactorExpr(shares),
-                  ],
-                },
-                4,
-              ],
-            },
+            ...(pending.issuedUpfront
+              ? {}
+              : {
+                  sharePrice: {
+                    $round: [
+                      {
+                        $multiply: [
+                          { $ifNull: ["$sharePrice", 0] },
+                          issuanceDilutionFactorExpr(shares),
+                        ],
+                      },
+                      4,
+                    ],
+                  },
+                }),
+            ...(pending.issuedUpfront
+              ? {}
+              : {
+                  fundamentalSharePrice: {
+                    $round: [
+                      {
+                        $multiply: [
+                          { $ifNull: ["$fundamentalSharePrice", { $ifNull: ["$sharePrice", 0] }] },
+                          issuanceDilutionFactorExpr(shares),
+                        ],
+                      },
+                      4,
+                    ],
+                  },
+                }),
             pendingShareIssuance: {
               $cond: [
                 { $lte: ["$pendingShareIssuance.remainingShares", shares] },
