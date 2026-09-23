@@ -129,6 +129,21 @@ describe("placePendingShareIssuances", () => {
     );
   });
 
+  it("lists an already issued IPO share without issuing or diluting it again", async () => {
+    const { db, corp } = thinPoolDb(2000);
+    Object.assign(corp.pendingShareIssuance, { source: "ipo", issuedUpfront: true });
+    await placePendingShareIssuances(db as unknown as Db, 42, new Date());
+    const pipeline = db.collectionMocks.corporations.updateOne.mock.calls[0][1] as Array<{
+      $set: Record<string, unknown>;
+    }>;
+    expect(pipeline[0].$set.totalShares).toBeUndefined();
+    expect(pipeline[0].$set.sharePrice).toBeUndefined();
+    expect(pipeline[0].$set.fundamentalSharePrice).toBeUndefined();
+    expect(pipeline[0].$set.publicFloat).toEqual({
+      $add: [{ $ifNull: ["$publicFloat", 0] }, 1],
+    });
+  });
+
   it("places nothing when the pool has no placement budget at all", async () => {
     const { db } = thinPoolDb(0);
     const result = await placePendingShareIssuances(db as unknown as Db, 42, new Date());

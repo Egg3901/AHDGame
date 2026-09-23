@@ -133,6 +133,32 @@ export function recordRoundTrip(collection: string): void {
 }
 
 /**
+ * Last trace id seen, and the phase it resolves to.
+ *
+ * `currentPhaseName` runs on every Mongo command — tens of thousands per turn —
+ * and the trace id is stable for the whole of a phase, so re-deriving the phase
+ * from it on every command was pure allocation on the hot path. Cache the last
+ * answer instead: the id changes once per phase, not once per command.
+ */
+let cachedTraceId: string | null = null;
+let cachedTracePhase: string | undefined;
+
+/** Phase encoded in a `turn:<n>:<phase>` trace id, if it is one. */
+function phaseFromTraceId(traceId: string): string | undefined {
+  if (traceId === cachedTraceId) return cachedTracePhase;
+  cachedTraceId = traceId;
+  // The phase may itself contain colons, so take everything after the second
+  // one rather than splitting the whole string apart and rejoining it.
+  const first = traceId.indexOf(":");
+  const second = first === -1 ? -1 : traceId.indexOf(":", first + 1);
+  cachedTracePhase =
+    traceId.startsWith("turn:") && second !== -1
+      ? traceId.slice(second + 1) || undefined
+      : undefined;
+  return cachedTracePhase;
+}
+
+/**
  * The phase a command belongs to.
  *
  * Prefers the audit context, which `runPhase` already establishes per phase via
@@ -146,10 +172,8 @@ export function recordRoundTrip(collection: string): void {
  */
 function currentPhaseName(s: ProfilerState): string {
   const traceId = getAuditRequestContext()?.traceId;
-  if (traceId?.startsWith("turn:")) {
-    // "turn:<n>:<phase>" — the phase may itself contain colons, so take the
-    // remainder rather than a fixed field.
-    const phase = traceId.split(":").slice(2).join(":");
+  if (traceId) {
+    const phase = phaseFromTraceId(traceId);
     if (phase) return phase;
   }
   return s.currentPhase ?? "(outside any phase)";

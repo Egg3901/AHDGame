@@ -313,14 +313,15 @@ export interface Corporation {
   /** Shares available in the public float (universal market maker pool) */
   publicFloat?: number;
   /**
-   * Approved primary shares not yet bought by the currency market pool. These
-   * are authorized, not outstanding: they earn no dividends and dilute only
-   * as the pool places them into publicFloat with real cash.
+   * Approved primary shares not yet bought by the currency market pool. For
+   * IPOs with issuedUpfront, they are in totalShares but not yet listed in
+   * publicFloat. Other pending issues are authorized and not yet outstanding.
    */
   pendingShareIssuance?: {
     remainingShares: number;
     requestedShares: number;
     source: "direct" | "vote" | "ipo" | "founding_ipo";
+    issuedUpfront?: boolean;
     createdAtTurn: number;
     initialPriceLocal: number;
   };

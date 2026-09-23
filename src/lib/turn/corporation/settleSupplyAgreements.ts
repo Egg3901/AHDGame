@@ -418,18 +418,26 @@ function allocateDeliveriesToBuyers(args: {
 }): Map<number, number> {
   const deliveredByAgreement = new Map<number, number>();
   // One flow graph per scope: a state freight book is its own physical market.
-  const scopes = [...new Set(args.agreements.map((agreement) => scopeOf(agreement)))];
+  // Bucket the book once. The old shape re-scanned every agreement for every
+  // scope — re-deriving `scopeOf` each time — which is O(scopes × agreements)
+  // on a book that runs to thousands of rows. Each scope's graph is
+  // independent, so bucket order cannot change the result.
+  const byScope = new Map<string, { agreement: SettleableSupplyAgreement; index: number }[]>();
+  for (let index = 0; index < args.agreements.length; index++) {
+    const agreement = args.agreements[index]!;
+    if (!(agreement.volumeCap > 0)) continue;
+    const scope = scopeOf(agreement);
+    const bucket = byScope.get(scope);
+    if (bucket) bucket.push({ agreement, index });
+    else byScope.set(scope, [{ agreement, index }]);
+  }
 
-  for (const scope of scopes) {
-    const indexed = args.agreements
-      .map((agreement, index) => ({ agreement, index }))
-      .filter(({ agreement }) => scopeOf(agreement) === scope && agreement.volumeCap > 0)
-      .sort((left, right) =>
-        (left.agreement.agreementId ?? String(left.index)).localeCompare(
-          right.agreement.agreementId ?? String(right.index)
-        )
-      );
-    if (indexed.length === 0) continue;
+  for (const [scope, indexed] of byScope) {
+    indexed.sort((left, right) =>
+      (left.agreement.agreementId ?? String(left.index)).localeCompare(
+        right.agreement.agreementId ?? String(right.index)
+      )
+    );
 
     const suppliers = [...new Set(indexed.map(({ agreement }) => agreement.supplierCorpId))];
     const buyers = [...new Set(indexed.map(({ agreement }) => agreement.buyerCorpId))];

@@ -3,6 +3,16 @@ import { ObjectId } from "mongodb";
 import type { Db } from "mongodb";
 import { goPublic } from "./goPublic";
 
+const placementMocks = vi.hoisted(() => ({
+  prepare: vi.fn(),
+  refund: vi.fn(),
+}));
+
+vi.mock("@/lib/equities/primaryMarket", () => ({
+  prepareEquityPrimaryPlacement: placementMocks.prepare,
+  refundPreparedEquityPlacement: placementMocks.refund,
+}));
+
 function makeCorp(overrides: Record<string, unknown> = {}) {
   const ceoId = new ObjectId();
   return {
@@ -33,7 +43,18 @@ function makeDb() {
 }
 
 describe("goPublic command", () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    placementMocks.prepare.mockImplementation(
+      (_db, _corporation, requestedShares: number, pricePerShare: number) => ({
+        poolActive: false,
+        requestedShares,
+        placedShares: requestedShares,
+        unsoldShares: 0,
+        paidLocal: requestedShares * pricePerShare,
+      })
+    );
+  });
 
   it("rejects when corp is already public", async () => {
     const corp = makeCorp({ isPrivate: false });
@@ -124,6 +145,46 @@ describe("goPublic command", () => {
     // realizes both as the float is actually bought (treasury-backed market maker).
     expect(incOps.liquidCapital).toBeUndefined();
     expect(incOps.shareIssuanceProceeds).toBeUndefined();
+  });
+
+  it("issues the selected float while listing only the cash-backed tranche", async () => {
+    const corp = makeCorp({ totalShares: 10_934_794, sharePrice: 648 });
+    const { db, updateOne } = makeDb();
+    placementMocks.prepare.mockResolvedValueOnce({
+      poolActive: true,
+      requestedShares: 8_946_649,
+      placedShares: 81_446,
+      unsoldShares: 8_865_203,
+      paidLocal: 52_787_596,
+      currency: "USD",
+    });
+
+    const result = await goPublic({
+      db,
+      corporation: corp as never,
+      floatPct: 45,
+      currentTurn: 1_079,
+      superShareMultiplier: 10,
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.totalSharesAfter).toBe(19_881_443);
+    expect(result.newShares).toBe(8_946_649);
+    expect(result.listedShares).toBe(81_446);
+    expect(result.pendingShares).toBe(8_865_203);
+    const pipeline = updateOne.mock.calls[0][1];
+    expect(pipeline[0].$set.totalShares).toEqual({
+      $add: [{ $ifNull: ["$totalShares", 0] }, 8_946_649],
+    });
+    expect(pipeline[0].$set.publicFloat).toEqual({
+      $add: [{ $ifNull: ["$publicFloat", 0] }, 81_446],
+    });
+    expect(pipeline[0].$set.pendingShareIssuance).toMatchObject({
+      remainingShares: 8_865_203,
+      issuedUpfront: true,
+    });
+    expect(placementMocks.refund).not.toHaveBeenCalled();
   });
 
   it("rejects a float above 49% without supershares", async () => {

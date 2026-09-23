@@ -45,6 +45,7 @@ export type GoPublicResult =
   | {
       ok: true;
       newShares: number;
+      listedShares: number;
       requestedShares: number;
       pendingShares: number;
       proceeds: number;
@@ -53,7 +54,7 @@ export type GoPublicResult =
 
 /**
  * Convert a private corp to public by issuing new shares to the public float at
- * the current sharePrice. Cash flows into the corporation's treasury.
+ * the current sharePrice. The market pays the treasury only for shares it places.
  *
  * Cooldown anchor: `lastPrivatizationTurn` only. The cooldown exists to prevent
  * rapid public↔private oscillation; a corp that has never been public (founded
@@ -164,7 +165,7 @@ export async function goPublic(input: GoPublicInput): Promise<GoPublicResult> {
               hiddenFromExchange: false,
               lastIpoTurn: currentTurn,
               totalShares: {
-                $add: [{ $ifNull: ["$totalShares", 0] }, placement.placedShares],
+                $add: [{ $ifNull: ["$totalShares", 0] }, ipo.newShares],
               },
               publicFloat: {
                 $add: [{ $ifNull: ["$publicFloat", 0] }, placement.placedShares],
@@ -184,7 +185,7 @@ export async function goPublic(input: GoPublicInput): Promise<GoPublicResult> {
                   {
                     $multiply: [
                       { $ifNull: ["$sharePrice", 0] },
-                      issuanceDilutionFactorExpr(placement.placedShares),
+                      issuanceDilutionFactorExpr(ipo.newShares),
                     ],
                   },
                   4,
@@ -195,7 +196,7 @@ export async function goPublic(input: GoPublicInput): Promise<GoPublicResult> {
                   {
                     $multiply: [
                       { $ifNull: ["$fundamentalSharePrice", { $ifNull: ["$sharePrice", 0] }] },
-                      issuanceDilutionFactorExpr(placement.placedShares),
+                      issuanceDilutionFactorExpr(ipo.newShares),
                     ],
                   },
                   4,
@@ -207,6 +208,7 @@ export async function goPublic(input: GoPublicInput): Promise<GoPublicResult> {
                       remainingShares: placement.unsoldShares,
                       requestedShares: ipo.newShares,
                       source: "ipo",
+                      issuedUpfront: true,
                       createdAtTurn: currentTurn,
                       initialPriceLocal: corporation.sharePrice,
                     },
@@ -287,7 +289,8 @@ export async function goPublic(input: GoPublicInput): Promise<GoPublicResult> {
     meta: {
       floatPct,
       requestedShares: ipo.newShares,
-      newShares: placement.placedShares,
+      newShares: ipo.newShares,
+      listedShares: placement.placedShares,
       pendingShares: placement.unsoldShares,
       superShareMultiplier,
     },
@@ -295,10 +298,11 @@ export async function goPublic(input: GoPublicInput): Promise<GoPublicResult> {
 
   return {
     ok: true,
-    newShares: placement.placedShares,
+    newShares: ipo.newShares,
+    listedShares: placement.placedShares,
     requestedShares: ipo.newShares,
     pendingShares: placement.unsoldShares,
     proceeds,
-    totalSharesAfter: corporation.totalShares + placement.placedShares,
+    totalSharesAfter: corporation.totalShares + ipo.newShares,
   };
 }

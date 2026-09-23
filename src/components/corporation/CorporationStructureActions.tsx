@@ -148,10 +148,7 @@ function GoPublicCard({
         return;
       }
       setSuccess(
-        `IPO complete: ${data.newShares.toLocaleString("en-US")} shares listed to the public float. Up to ${formatAmount(
-          toInternal(data.proceeds),
-          liquidCode
-        )} flows into the treasury as those shares are bought.`
+        `IPO complete: ${data.newShares.toLocaleString("en-US")} shares issued. ${data.listedShares.toLocaleString("en-US")} are available to buy now; ${data.pendingShares.toLocaleString("en-US")} will enter the public float as market cash funds them. The treasury receives proceeds only as shares are placed.`
       );
       onRefresh();
     } catch {
