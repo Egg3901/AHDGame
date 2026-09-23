@@ -508,7 +508,7 @@ describe("openPrivatizationVote — bank-NAV floor (issue #1750)", () => {
     const corp = makeCorp({
       ceoId,
       totalShares: 18_000_000,
-      publicFloat: 0,
+      publicFloat: 8_000_000,
       shareholders: [{ characterId: ceoId, shares: 10_000_000 }],
       pendingShareIssuance: {
         remainingShares: 8_000_000,

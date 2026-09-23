@@ -331,7 +331,9 @@ export async function placeShareOrder(request: Request, { params }: RouteParams)
 
             // Treasury-backed market maker: inject the buyer's payment into the
             // issuer treasury. Last in the try — a throw rolls back via the catch.
-            await applyFloatBuyCredit(db, corporation, shares * executionPrice);
+            await applyFloatBuyCredit(db, corporation, shares * executionPrice, {
+              sharesBought: shares,
+            });
 
             // Cross-currency immediate fill realizes the spread now — route it to
             // the CB system. (Resting-order escrow defers its spread to fill time.)
@@ -832,7 +834,9 @@ export async function placeShareOrder(request: Request, { params }: RouteParams)
 
           // Treasury-backed market maker: inject the buyer's payment into the
           // issuer treasury. Last in the try — a throw rolls back via the catch.
-          await applyFloatBuyCredit(db, corporation, shares * executionPrice);
+          await applyFloatBuyCredit(db, corporation, shares * executionPrice, {
+            sharesBought: shares,
+          });
         } catch (err) {
           if (sharesCredited) {
             await debitShares(

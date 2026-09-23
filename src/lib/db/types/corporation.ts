@@ -313,9 +313,10 @@ export interface Corporation {
   /** Shares available in the public float (universal market maker pool) */
   publicFloat?: number;
   /**
-   * Approved primary shares not yet bought by the currency market pool. For
-   * IPOs with issuedUpfront, they are in totalShares but not yet listed in
-   * publicFloat. Other pending issues are authorized and not yet outstanding.
+   * Approved primary shares not yet bought by the currency market pool or a
+   * direct exchange buyer. For
+   * IPOs with issuedUpfront, they are in totalShares and publicFloat, available
+   * to buy. Other pending issues are authorized and not yet outstanding.
    */
   pendingShareIssuance?: {
     remainingShares: number;
