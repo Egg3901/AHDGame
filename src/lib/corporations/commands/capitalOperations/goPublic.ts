@@ -131,6 +131,14 @@ export async function goPublic(input: GoPublicInput): Promise<GoPublicResult> {
     corporation.sharePrice,
     now
   );
+  if (placement.unsoldShares > 0) {
+    await refundPreparedEquityPlacement(db, placement, now);
+    return {
+      ok: false,
+      error: `The market can place only ${placement.placedShares.toLocaleString("en-US")} of ${ipo.newShares.toLocaleString("en-US")} shares right now. No shares were issued. Try again when market liquidity improves or select a smaller public float.`,
+      status: 409,
+    };
+  }
   const proceeds = Math.round(placement.poolActive ? placement.paidLocal : ipo.proceeds);
 
   let updateRes;
