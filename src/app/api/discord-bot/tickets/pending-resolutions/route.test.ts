@@ -31,34 +31,31 @@ describe("GET /api/discord-bot/tickets/pending-resolutions", () => {
     );
 
     expect(response.status).toBe(200);
-    expect(tickets.find).toHaveBeenCalledWith({
-      status: { $in: ["resolved", "closed"] },
-      "resolution.message": { $exists: true },
-      "resolution.deliveredAt": null,
-      $or: [
-        { discordChannelId: { $in: [null, ""] } },
-        { "resolution.channelDelivery.status": "posted" },
-        { "statusHistory.note": "resolution-channel-delivered" },
-        {
-          $and: [
-            { "statusHistory.note": "discord-ticket-close" },
-            { $nor: [{ "statusHistory.note": "resolution-channel-delivered" }] },
-          ],
-        },
-        {
-          publicUpdates: {
-            $elemMatch: {
-              kind: "resolution",
-              "delivery.status": { $in: ["failed", "skipped"] },
-              "delivery.attempts": { $gte: 5 },
+    expect(tickets.find).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: { $in: ["resolved", "closed"] },
+        "resolution.message": { $exists: true },
+        "resolution.deliveredAt": null,
+        $or: expect.arrayContaining([
+          { discordChannelId: { $in: [null, ""] } },
+          { $expr: expect.objectContaining({ $or: expect.any(Array) }) },
+          { "statusHistory.note": "discord-ticket-close" },
+          {
+            publicUpdates: {
+              $elemMatch: {
+                kind: "resolution",
+                "delivery.status": { $in: ["failed", "skipped"] },
+                "delivery.attempts": { $gte: 5 },
+              },
             },
           },
-        },
-      ],
-    });
+        ]),
+      })
+    );
     expect(projection).toHaveBeenCalledWith(
       expect.objectContaining({
         discordChannelId: 1,
+        resolutionVersion: "$resolution.createdAt",
         channelUpdatePosted: expect.objectContaining({ $or: expect.any(Array) }),
       })
     );

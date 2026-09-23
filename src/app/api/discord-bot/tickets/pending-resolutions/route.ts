@@ -6,6 +6,70 @@ import { requireBotToken } from "@/lib/api/requireBotToken";
 import { getTicketsCollection } from "@/lib/db/collections/tickets";
 import type { Ticket } from "@/lib/db/types/ticket";
 
+function currentChannelDeliveryExpression() {
+  return {
+    $and: [
+      { $eq: ["$resolution.channelDelivery.status", "posted"] },
+      {
+        $or: [
+          { $eq: [{ $ifNull: ["$resolution.createdAt", null] }, null] },
+          { $eq: [{ $ifNull: ["$resolution.channelDelivery.postedAt", null] }, null] },
+          { $gte: ["$resolution.channelDelivery.postedAt", "$resolution.createdAt"] },
+        ],
+      },
+    ],
+  };
+}
+
+function currentChannelHistoryDeliveryExpression() {
+  const currentNote = {
+    $cond: [
+      { $eq: [{ $ifNull: ["$resolution.createdAt", null] }, null] },
+      "discord-ticket-channel-delivered:legacy",
+      {
+        $concat: [
+          "discord-ticket-channel-delivered:",
+          { $toString: { $toLong: "$resolution.createdAt" } },
+        ],
+      },
+    ],
+  };
+  const hasCurrentVersionedNote = {
+    $in: [currentNote, { $ifNull: ["$statusHistory.note", []] }],
+  };
+  const hasCurrentLegacyNote = {
+    $gt: [
+      {
+        $size: {
+          $filter: {
+            input: { $ifNull: ["$statusHistory", []] },
+            as: "entry",
+            cond: {
+              $and: [
+                { $eq: ["$$entry.note", "resolution-channel-delivered"] },
+                {
+                  $or: [
+                    { $eq: [{ $ifNull: ["$resolution.createdAt", null] }, null] },
+                    { $gte: ["$$entry.at", "$resolution.createdAt"] },
+                  ],
+                },
+              ],
+            },
+          },
+        },
+      },
+      0,
+    ],
+  };
+  return { $or: [hasCurrentVersionedNote, hasCurrentLegacyNote] };
+}
+
+function currentChannelUpdatePostedExpression() {
+  return {
+    $or: [currentChannelDeliveryExpression(), currentChannelHistoryDeliveryExpression()],
+  };
+}
+
 // GET /api/discord-bot/tickets/pending-resolutions — Closed tickets whose
 // reporter still needs the final DM. Ops and the bot record channel delivery
 // separately so the bot can also close the channel without duplicating receipts.
@@ -27,13 +91,9 @@ export async function GET(request: Request) {
       "resolution.deliveredAt": null,
       $or: [
         { discordChannelId: { $in: [null, ""] } },
-        { "resolution.channelDelivery.status": "posted" },
-        { "statusHistory.note": "resolution-channel-delivered" },
+        { $expr: currentChannelUpdatePostedExpression() },
         {
-          $and: [
-            { "statusHistory.note": "discord-ticket-close" },
-            { $nor: [{ "statusHistory.note": "resolution-channel-delivered" }] },
-          ],
+          "statusHistory.note": "discord-ticket-close",
         },
         {
           publicUpdates: {
@@ -53,13 +113,9 @@ export async function GET(request: Request) {
       discordChannelId: 1,
       mergedFromUserIds: 1,
       message: "$resolution.message",
+      resolutionVersion: "$resolution.createdAt",
       channelUpdatePosted: {
-        $or: [
-          { $eq: ["$resolution.channelDelivery.status", "posted"] },
-          {
-            $in: ["resolution-channel-delivered", { $ifNull: ["$statusHistory.note", []] }],
-          },
-        ],
+        ...currentChannelUpdatePostedExpression(),
       },
     };
 
