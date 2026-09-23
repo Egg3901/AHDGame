@@ -10,7 +10,8 @@
  *    below LOSE% (hysteresis — sticky in the LOSE–EARN band).
  *  - **Major** cap = the standard national cap (`nationalCapForCountry`).
  *
- *  - **Graduation** Minor → Major: ≥ EARN% Org in ≥ ⌈regions/3⌉ regions.
+ *  - **Graduation** Minor → Major: ≥ EARN% Org in the configured fraction of
+ *    regions (⌈regions/3⌉ by default).
  *  - **Demotion** Major → Minor: < LOSE% Org in ≥ ⌈2·regions/3⌉ regions opens a
  *    `MAJOR_DEMOTION_GRACE_TURNS` warning countdown, cancelled only by regaining
  *    the graduation condition; on expiry the party is demoted and its Minor cap
@@ -45,6 +46,8 @@ export const TIER_EARN_REGION_ORG_PCT = 20 as const;
 export const TIER_LOSE_REGION_ORG_PCT = 10 as const;
 /** Fraction of a country's regions that must be earned to graduate to Major. */
 export const TIER_GRADUATION_REGION_FRACTION = 1 / 3;
+/** The UK uses three of its twelve regions so a strong nation-wide party can graduate. */
+export const UK_TIER_GRADUATION_REGION_FRACTION = 1 / 4;
 /** Fraction of regions that must be below LOSE% to trigger the demotion warning. */
 export const TIER_DEMOTION_REGION_FRACTION = 2 / 3;
 /** Turns a Major party may sit at-risk before demotion (240 = locked default). */
@@ -52,9 +55,12 @@ export const MAJOR_DEMOTION_GRACE_TURNS = 240 as const;
 
 // ─── Thresholds ──────────────────────────────────────────────────────────────
 
-/** Regions at ≥ EARN% needed to graduate (⌈regions/3⌉). */
-export function graduationThreshold(regionCount: number): number {
-  return Math.ceil(regionCount * TIER_GRADUATION_REGION_FRACTION);
+/** Regions at ≥ EARN% needed to graduate (⌈regions × configured fraction⌉). */
+export function graduationThreshold(
+  regionCount: number,
+  fraction = TIER_GRADUATION_REGION_FRACTION
+): number {
+  return Math.ceil(regionCount * fraction);
 }
 
 /** Regions below LOSE% needed to open the demotion warning (⌈2·regions/3⌉). */
@@ -112,6 +118,8 @@ export interface TierTransitionInput {
   orgByRegion: Map<string, number>;
   /** Total regions in the country (denominator for the fraction thresholds). */
   regionCount: number;
+  /** Optional country-specific graduation fraction; defaults to one third. */
+  graduationRegionFraction?: number;
   /** Existing demotion-warning start turn, or null when not at-risk. */
   warningStartedTurn: number | null;
   currentTurn: number;
@@ -158,7 +166,8 @@ export function resolveTierTransition(input: TierTransitionInput): TierTransitio
     if (org >= TIER_EARN_REGION_ORG_PCT) atEarn++;
     if (org >= TIER_LOSE_REGION_ORG_PCT) atLose++;
   }
-  const meetsGraduation = atEarn >= graduationThreshold(input.regionCount);
+  const meetsGraduation =
+    atEarn >= graduationThreshold(input.regionCount, input.graduationRegionFraction);
   // Regions below LOSE% includes those with no Org entry at all (→ 0%).
   const belowLose = input.regionCount - atLose;
   const atRisk = belowLose >= demotionThreshold(input.regionCount);
