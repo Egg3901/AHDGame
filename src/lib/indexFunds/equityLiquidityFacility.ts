@@ -1,5 +1,6 @@
 import { ObjectId, type Db } from "mongodb";
-import type { Corporation, IndexFund, ShareOrder } from "@/lib/db/types";
+import type { Corporation, IndexFund, IndexFundTransaction, ShareOrder } from "@/lib/db/types";
+import { insertFundTransactionsBulk } from "@/lib/indexFunds/fundQueries";
 import { computeHoldingsValueAnchor } from "@/lib/indexFunds/fundAllocation";
 import {
   cancelFundShareOrder,
@@ -226,11 +227,40 @@ export async function refreshEquityLiquidityFacility(input: {
       group.push(plan);
       plansByFund.set(key, group);
     }
+    // Existing non-facility asks still reserve inventory. Read them once for
+    // all quoted funds; each fund worker advances its own running reservation
+    // after a successful ask instead of querying the order book per quote.
+    const openAsks =
+      plansByFund.size > 0
+        ? await db
+            .collection<ShareOrder>("shareOrders")
+            .find(
+              {
+                placerFundId: { $in: [...plansByFund.keys()].map((id) => new ObjectId(id)) },
+                type: "sell",
+                status: "open",
+              },
+              { projection: { placerFundId: 1, corporationId: 1, sharesRemaining: 1 } }
+            )
+            .toArray()
+        : [];
+    const reservedSharesByFundCorp = new Map<string, number>();
+    const askKey = (fundId: ObjectId, corporationId: ObjectId) =>
+      `${fundId.toString()}:${corporationId.toString()}`;
+    for (const ask of openAsks) {
+      if (!ask.placerFundId) continue;
+      const key = askKey(ask.placerFundId, ask.corporationId);
+      reservedSharesByFundCorp.set(
+        key,
+        (reservedSharesByFundCorp.get(key) ?? 0) + ask.sharesRemaining
+      );
+    }
     const outcomes = await boundedParallelMap(
       [...plansByFund.values()],
       EQUITY_LIQUIDITY_FUND_CONCURRENCY,
       async (fundPlans) => {
         const ledgerEntries: TxInput[] = [];
+        const transactions: Omit<IndexFundTransaction, "_id">[] = [];
         const outcome = {
           quotePairsPlaced: 0,
           quotePairsFailed: 0,
@@ -258,6 +288,7 @@ export async function refreshEquityLiquidityFacility(input: {
               fxRate: listing.fxRate,
               turn,
               liquidityQuote,
+              txSink: transactions,
               ledgerSink: ledgerEntries,
             });
             if (!bid.ok || !bid.orderId) {
@@ -268,16 +299,22 @@ export async function refreshEquityLiquidityFacility(input: {
             outcome.bidDepthAnchor += (plan.bidShares * plan.bidPriceLocal) / listing.fxRate;
 
             if (plan.askShares > 0) {
+              const reservationKey = askKey(plan.fundId, plan.corporationId);
               const ask = await placeFundShareSellOrder(db, {
                 fund,
                 corp: listing.corporation,
                 shares: plan.askShares,
                 limitPriceLocal: plan.askPriceLocal,
                 liquidityQuote,
+                reservedOpenShares: reservedSharesByFundCorp.get(reservationKey) ?? 0,
               });
               if (!ask.ok) {
                 outcome.quotePairsFailed++;
               } else {
+                reservedSharesByFundCorp.set(
+                  reservationKey,
+                  (reservedSharesByFundCorp.get(reservationKey) ?? 0) + plan.askShares
+                );
                 outcome.quotePairsPlaced++;
                 outcome.askQuotesPlaced++;
                 outcome.askDepthAnchor += (plan.askShares * plan.askPriceLocal) / listing.fxRate;
@@ -289,7 +326,11 @@ export async function refreshEquityLiquidityFacility(input: {
           }
         } finally {
           // Earlier bids may have committed before a later placement failed.
-          await flushLedgerEntries(ledgerEntries);
+          try {
+            await insertFundTransactionsBulk(db, transactions);
+          } finally {
+            await flushLedgerEntries(ledgerEntries);
+          }
         }
         return outcome;
       }

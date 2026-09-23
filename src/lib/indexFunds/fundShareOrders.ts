@@ -184,6 +184,8 @@ export interface PlaceFundShareSellOrderInput {
   /** Ask price in the target corporation's local currency. */
   limitPriceLocal: number;
   liquidityQuote?: { turn: number; referencePrice: number };
+  /** Open asks already loaded by a caller placing several quotes for this fund. */
+  reservedOpenShares?: number;
 }
 
 /**
@@ -205,16 +207,19 @@ export async function placeFundShareSellOrder(
   }
 
   const holding = fund.holdings.find((row) => row.corporationId.toString() === corp._id.toString());
-  const openAsks = await db
-    .collection<ShareOrder>("shareOrders")
-    .find({
-      placerFundId: fund._id,
-      corporationId: corp._id,
-      type: "sell",
-      status: "open",
-    })
-    .toArray();
-  const reserved = openAsks.reduce((sum, order) => sum + order.sharesRemaining, 0);
+  const reserved =
+    input.reservedOpenShares ??
+    (
+      await db
+        .collection<ShareOrder>("shareOrders")
+        .find({
+          placerFundId: fund._id,
+          corporationId: corp._id,
+          type: "sell",
+          status: "open",
+        })
+        .toArray()
+    ).reduce((sum, order) => sum + order.sharesRemaining, 0);
   if ((holding?.shares ?? 0) - reserved < shares) {
     return { ok: false, reason: "Insufficient unreserved fund shares" };
   }
