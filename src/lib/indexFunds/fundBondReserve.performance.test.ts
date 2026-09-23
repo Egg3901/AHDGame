@@ -65,10 +65,14 @@ describe("fund bond reserve audit batching", () => {
     await expect(
       deployBondReserveFromCash(db as unknown as Db, fund, 0, {
         liquidityTargetEnabled: true,
+        turn: 100,
       })
     ).rejects.toThrow("debit unavailable");
     expect(db.collectionMocks.indexFundTransactions.insertMany).toHaveBeenCalledTimes(1);
     expect(db.collectionMocks.indexFundTransactions.insertMany.mock.calls[0][0]).toHaveLength(2);
+    expect(db.collectionMocks.financialTxLog.insertOne).not.toHaveBeenCalled();
+    expect(db.collectionMocks.financialTxLog.insertMany).toHaveBeenCalledTimes(1);
+    expect(db.collectionMocks.financialTxLog.insertMany.mock.calls[0][0]).toHaveLength(2);
   });
 
   it("surfaces receipt persistence failures", async () => {
@@ -79,14 +83,18 @@ describe("fund bond reserve audit batching", () => {
     await expect(
       deployBondReserveFromCash(db as unknown as Db, fund, 0, {
         liquidityTargetEnabled: true,
+        turn: 100,
       })
     ).rejects.toThrow("receipt unavailable");
+    expect(db.collectionMocks.financialTxLog.insertMany).toHaveBeenCalledTimes(1);
+    expect(db.collectionMocks.financialTxLog.insertMany.mock.calls[0][0]).toHaveLength(10);
   });
 
-  it("preserves ten ordered purchases with one audit write", async () => {
+  it("preserves ten ordered purchases with one write per log", async () => {
     const { db, fund } = fixture();
     const result = await deployBondReserveFromCash(db as unknown as Db, fund, 0, {
       liquidityTargetEnabled: true,
+      turn: 100,
     });
     expect(result.unitsPurchased).toBeGreaterThan(0);
     expect(db.collectionMocks.indexFunds.findOneAndUpdate).toHaveBeenCalledTimes(10);
@@ -95,8 +103,20 @@ describe("fund bond reserve audit batching", () => {
     expect(db.collectionMocks.indexFundTransactions.insertMany).toHaveBeenCalledTimes(1);
     const transactions = db.collectionMocks.indexFundTransactions.insertMany.mock.calls[0][0];
     expect(transactions).toHaveLength(10);
+    expect(db.collectionMocks.financialTxLog.insertOne).not.toHaveBeenCalled();
+    expect(db.collectionMocks.financialTxLog.insertMany).toHaveBeenCalledTimes(1);
+    const ledgerRows = db.collectionMocks.financialTxLog.insertMany.mock.calls[0][0];
+    expect(ledgerRows).toHaveLength(10);
+    expect(
+      ledgerRows.every(
+        (row: { turn: number; type: string }) => row.turn === 100 && row.type === "bond_purchase"
+      )
+    ).toBe(true);
     expect(
       transactions.reduce((sum: number, tx: { amountAnchor: number }) => sum + tx.amountAnchor, 0)
     ).toBe(result.deployedAnchor);
+    expect(ledgerRows.reduce((sum: number, row: { amount: number }) => sum - row.amount, 0)).toBe(
+      result.deployedAnchor
+    );
   });
 });

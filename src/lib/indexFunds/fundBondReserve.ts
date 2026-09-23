@@ -13,7 +13,7 @@ import { corpCapitalToAnchor, loadFxRatesRecord } from "@/lib/currency/corporati
 import { loadBondPoolsByCurrency } from "@/lib/bonds/marketPool";
 import { insertFundTransactionsBulk } from "@/lib/indexFunds/fundQueries";
 import { purchaseBondUnitsForFund } from "@/lib/bonds/purchaseBondUnitsForFund";
-import { loadTxThresholds } from "@/lib/financialTxLog/emit";
+import { emitTxBulk, loadTxThresholds, type TxInput } from "@/lib/financialTxLog/emit";
 import type { TxThresholds } from "@/lib/db/types/financialTxLog";
 import { computeFundAllocationBreakdown } from "@/lib/indexFunds/fundAllocation";
 import { sovereignBondRemainingCapacityUnits } from "@/lib/bonds/holderCap";
@@ -294,6 +294,7 @@ export async function deployBondReserveFromCash(
   let unitsPurchased = 0;
 
   const transactions: Omit<IndexFundTransaction, "_id">[] = [];
+  const ledgerEntries: TxInput[] = [];
   try {
     for (let index = 0; index < bonds.length; index++) {
       const bond = bonds[index]!;
@@ -316,6 +317,7 @@ export async function deployBondReserveFromCash(
         bondPools,
         fxRates,
         txSink: transactions,
+        ledgerSink: ledgerEntries,
         turn: options?.turn,
         thresholds,
       });
@@ -330,7 +332,11 @@ export async function deployBondReserveFromCash(
   } finally {
     // Preserve receipts for purchases already committed if a later issue fails.
     // Balance gates, reservations and pool credits remain sequential per purchase.
-    await insertFundTransactionsBulk(db, transactions);
+    try {
+      await insertFundTransactionsBulk(db, transactions);
+    } finally {
+      if (thresholds) await emitTxBulk(db, ledgerEntries, thresholds);
+    }
   }
 
   return { deployedAnchor, unitsPurchased, countryId };
