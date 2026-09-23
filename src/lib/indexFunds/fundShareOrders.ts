@@ -2,7 +2,7 @@ import { ObjectId, type Db } from "mongodb";
 import type { Corporation, IndexFund, IndexFundTransaction, ShareOrder } from "@/lib/db/types";
 import { corpLiquidCapitalToAnchor } from "@/lib/currency/corporationCapital";
 import { insertFundTransaction } from "@/lib/indexFunds/fundQueries";
-import { emitTx } from "@/lib/financialTxLog/emit";
+import { emitTx, type TxInput } from "@/lib/financialTxLog/emit";
 import type { TxThresholds } from "@/lib/db/types/financialTxLog";
 
 /**
@@ -71,6 +71,8 @@ export interface PlaceFundShareBuyOrderInput {
    * for a caller placing many bids that writes them in one insertMany.
    */
   txSink?: Omit<IndexFundTransaction, "_id">[];
+  /** Caller flushes escrow ledger rows after completed bid placements. */
+  ledgerSink?: TxInput[];
 }
 
 export interface PlaceFundShareBuyOrderResult {
@@ -150,30 +152,30 @@ export async function placeFundShareBuyOrder(
     // character/corporation placement rows; the refund shares it so a
     // placement nets against its own cancel per currency). Fund-subject rows
     // never mirror, so this is the only ledger row for the debit.
-    await emitTx(
-      db,
-      {
-        type: "stock_order_escrow",
-        turn: input.turn,
-        createdAt: now,
-        subjectType: "fund",
-        subjectId: fund._id,
-        subjectName: fund.name,
-        amount: -escrowAnchor,
-        anchorAmount: -escrowAnchor,
-        currencyCode: fund.anchorCurrencyCode,
-        counterpartyType: "system",
-        counterpartyName: "Order book escrow",
-        meta: {
-          orderId: orderId.toString(),
-          orderType: "buy",
-          targetCorporationId: corp._id.toString(),
-          escrowAmountAnchor: escrowAnchor,
-        },
+    const ledgerEntry: TxInput = {
+      type: "stock_order_escrow",
+      turn: input.turn,
+      createdAt: now,
+      subjectType: "fund",
+      subjectId: fund._id,
+      subjectName: fund.name,
+      amount: -escrowAnchor,
+      anchorAmount: -escrowAnchor,
+      currencyCode: fund.anchorCurrencyCode,
+      counterpartyType: "system",
+      counterpartyName: "Order book escrow",
+      meta: {
+        orderId: orderId.toString(),
+        orderType: "buy",
+        targetCorporationId: corp._id.toString(),
+        escrowAmountAnchor: escrowAnchor,
       },
-      input.thresholds,
-      { turnLengthMinutes: input.turnLengthMinutes }
-    );
+    };
+    if (input.ledgerSink) input.ledgerSink.push(ledgerEntry);
+    else
+      await emitTx(db, ledgerEntry, input.thresholds, {
+        turnLengthMinutes: input.turnLengthMinutes,
+      });
   } catch (err) {
     // Roll the escrow back if we couldn't persist the order.
     await refundFundCashAnchor(db, fund._id, escrowAnchor);
@@ -263,8 +265,16 @@ export async function cancelFundShareOrder(
   db: Db,
   orderId: ObjectId,
   turn?: number,
-  thresholds?: TxThresholds,
-  turnLengthMinutes?: number
+  options?: {
+    /** Preloaded thresholds for the refund row; avoids a per-cancel read. */
+    thresholds?: TxThresholds;
+    /** Preloaded turn cadence for the transaction expiry date. */
+    turnLengthMinutes?: number;
+    /** Preloaded fund metadata; used only when it matches the claimed order. */
+    fund?: Pick<IndexFund, "_id" | "name" | "anchorCurrencyCode">;
+    /** Caller flushes refund rows after all completed cancellations. */
+    ledgerSink?: TxInput[];
+  }
 ): Promise<void> {
   // Atomically claim the order so a concurrent fill/cancel can't double-refund.
   const claimed = await db
@@ -293,35 +303,41 @@ export async function cancelFundShareOrder(
     // exactly one row. No-op refunds (fully-filled escrow already zeroed)
     // move no cash and emit nothing.
     if (turn !== undefined) {
-      const fund = await db
-        .collection<IndexFund>("indexFunds")
-        .findOne({ _id: claimed.placerFundId }, { projection: { name: 1, anchorCurrencyCode: 1 } });
+      const fund =
+        options?.fund?._id.toString() === claimed.placerFundId.toString()
+          ? options.fund
+          : await db
+              .collection<IndexFund>("indexFunds")
+              .findOne(
+                { _id: claimed.placerFundId },
+                { projection: { name: 1, anchorCurrencyCode: 1 } }
+              );
       if (fund) {
         const now = new Date();
-        await emitTx(
-          db,
-          {
-            type: "stock_order_refund",
-            turn,
-            createdAt: now,
-            subjectType: "fund",
-            subjectId: claimed.placerFundId,
-            subjectName: fund.name,
-            amount: refundAnchor,
-            anchorAmount: refundAnchor,
-            currencyCode: fund.anchorCurrencyCode,
-            counterpartyType: "system",
-            counterpartyName: "Order book escrow",
-            meta: {
-              orderId: orderId.toString(),
-              orderType: claimed.type,
-              targetCorporationId: claimed.corporationId.toString(),
-              escrowAmountAnchor: refundAnchor,
-            },
+        const ledgerEntry: TxInput = {
+          type: "stock_order_refund",
+          turn,
+          createdAt: now,
+          subjectType: "fund",
+          subjectId: claimed.placerFundId,
+          subjectName: fund.name,
+          amount: refundAnchor,
+          anchorAmount: refundAnchor,
+          currencyCode: fund.anchorCurrencyCode,
+          counterpartyType: "system",
+          counterpartyName: "Order book escrow",
+          meta: {
+            orderId: orderId.toString(),
+            orderType: claimed.type,
+            targetCorporationId: claimed.corporationId.toString(),
+            escrowAmountAnchor: refundAnchor,
           },
-          thresholds,
-          { turnLengthMinutes }
-        );
+        };
+        if (options?.ledgerSink) options.ledgerSink.push(ledgerEntry);
+        else
+          await emitTx(db, ledgerEntry, options?.thresholds, {
+            turnLengthMinutes: options?.turnLengthMinutes,
+          });
       }
     }
   }
