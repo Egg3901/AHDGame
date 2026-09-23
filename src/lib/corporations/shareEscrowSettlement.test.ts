@@ -44,6 +44,88 @@ describe("shareEscrowSettlement", () => {
       expect(db.collectionMocks.corporations?.findOneAndUpdate).toBeUndefined();
     });
 
+    it("pays the issuer for IPO shares bought directly from the full listed float", async () => {
+      const corporations = db.collection("corporations");
+      db.collectionMocks.corporations.findOneAndUpdate.mockResolvedValueOnce({
+        pendingShareIssuance: {
+          source: "ipo",
+          issuedUpfront: true,
+          remainingShares: 6,
+        },
+      });
+      db.collectionMocks.corporations.findOneAndUpdate.mockResolvedValueOnce({
+        liquidCapital: 600,
+      });
+
+      const receipt = await applyFloatBuyCredit(db as unknown as Db, INSTANT, 1_000, {
+        sharesBought: 10,
+      });
+
+      expect(receipt).toEqual({ issuerShares: 6, issuerCreditLocal: 600, poolCreditLocal: 400 });
+      expect(corporations.findOneAndUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({ "pendingShareIssuance.remainingShares": { $gt: 0 } }),
+        expect.any(Array),
+        expect.objectContaining({ returnDocument: "before" })
+      );
+      expect(incOf(corporations.findOneAndUpdate.mock.calls[1])).toMatchObject({
+        liquidCapital: 600,
+        shareIssuanceProceeds: 600,
+      });
+      expect(db.collectionMocks.equityMarketPools.updateOne).toHaveBeenCalledWith(
+        { _id: "USD" },
+        expect.objectContaining({ $inc: { cashLocal: 400, "lifetime.purchasesIn": 400 } }),
+        expect.anything()
+      );
+    });
+
+    it("lets one funded buyer take the entire unsold IPO float", async () => {
+      db.collection("corporations");
+      db.collectionMocks.corporations.findOneAndUpdate.mockResolvedValueOnce({
+        pendingShareIssuance: {
+          source: "ipo",
+          issuedUpfront: true,
+          remainingShares: 8_946_649,
+        },
+      });
+      db.collectionMocks.corporations.findOneAndUpdate.mockResolvedValueOnce({ liquidCapital: 1 });
+
+      const receipt = await applyFloatBuyCredit(db as unknown as Db, INSTANT, 89_466_490, {
+        sharesBought: 8_946_649,
+      });
+
+      expect(receipt).toEqual({
+        issuerShares: 8_946_649,
+        issuerCreditLocal: 89_466_490,
+        poolCreditLocal: 0,
+      });
+      expect(db.collectionMocks.equityMarketPools.updateOne).not.toHaveBeenCalled();
+    });
+
+    it("restores issuer inventory and cash if the pool portion cannot settle", async () => {
+      db.collection("corporations");
+      db.collectionMocks.corporations.findOneAndUpdate.mockResolvedValueOnce({
+        pendingShareIssuance: { source: "ipo", issuedUpfront: true, remainingShares: 6 },
+      });
+      db.collectionMocks.corporations.findOneAndUpdate.mockResolvedValueOnce({
+        liquidCapital: 600,
+      });
+      db.collectionMocks.corporations.updateOne.mockResolvedValue({ matchedCount: 1 });
+      db.collectionMocks.equityMarketPools.updateOne.mockRejectedValue(
+        new Error("pool write failed")
+      );
+
+      await expect(
+        applyFloatBuyCredit(db as unknown as Db, INSTANT, 1_000, { sharesBought: 10 })
+      ).rejects.toThrow("pool write failed");
+      expect(db.collectionMocks.corporations.updateOne.mock.calls[0][1]).toEqual({
+        $inc: {
+          "pendingShareIssuance.remainingShares": 6,
+          liquidCapital: -600,
+          shareIssuanceProceeds: -600,
+        },
+      });
+    });
+
     it("routes float sales through the pool's atomic cash gate", async () => {
       db.collectionMocks.equityMarketPools.findOneAndUpdate.mockResolvedValue({ cashLocal: 4_000 });
       const result = await settleFloatSellDebit(db as unknown as Db, INSTANT, 1_000);

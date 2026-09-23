@@ -212,7 +212,9 @@ export async function placePendingShareIssuances(
             ...(pending.issuedUpfront
               ? {}
               : { totalShares: { $add: [{ $ifNull: ["$totalShares", 0] }, shares] } }),
-            publicFloat: { $add: [{ $ifNull: ["$publicFloat", 0] }, shares] },
+            ...(pending.issuedUpfront
+              ? {}
+              : { publicFloat: { $add: [{ $ifNull: ["$publicFloat", 0] }, shares] } }),
             liquidCapital: { $add: [{ $ifNull: ["$liquidCapital", 0] }, paidLocal] },
             shareIssuanceProceeds: {
               $add: [{ $ifNull: ["$shareIssuanceProceeds", 0] }, paidLocal],

@@ -168,7 +168,7 @@ export async function goPublic(input: GoPublicInput): Promise<GoPublicResult> {
                 $add: [{ $ifNull: ["$totalShares", 0] }, ipo.newShares],
               },
               publicFloat: {
-                $add: [{ $ifNull: ["$publicFloat", 0] }, placement.placedShares],
+                $add: [{ $ifNull: ["$publicFloat", 0] }, ipo.newShares],
               },
               ...(placement.poolActive
                 ? {
@@ -299,7 +299,7 @@ export async function goPublic(input: GoPublicInput): Promise<GoPublicResult> {
   return {
     ok: true,
     newShares: ipo.newShares,
-    listedShares: placement.placedShares,
+    listedShares: ipo.newShares,
     requestedShares: ipo.newShares,
     pendingShares: placement.unsoldShares,
     proceeds,

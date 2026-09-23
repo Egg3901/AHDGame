@@ -89,6 +89,16 @@ describe("totalVotingPower", () => {
     ).toBe(10_000_000);
   });
 
+  it("excludes issuer inventory in the company detail voting display", () => {
+    expect(
+      totalVotingPower({
+        totalShares: 18_000_000,
+        pendingIpoShares: 8_000_000,
+        shareholders: [{ shares: 10_000_000 }],
+      })
+    ).toBe(10_000_000);
+  });
+
   it("equals totalShares for single-class corps", () => {
     expect(
       totalVotingPower({
