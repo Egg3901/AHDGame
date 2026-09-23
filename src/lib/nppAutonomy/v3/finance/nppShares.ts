@@ -128,7 +128,7 @@ export async function nppBuyShares(
   // Treasury-backed market maker: the buyer's payment is injected into the
   // issuer's liquidCapital so a float buy conserves money instead of
   // vanishing, matching the player buy route.
-  await applyFloatBuyCredit(db, corp, shares * executionPrice);
+  await applyFloatBuyCredit(db, corp, shares * executionPrice, { sharesBought: shares });
 
   return {
     ok: true,

@@ -946,7 +946,7 @@ describe("dividend payments to shareholders", () => {
     const corp = makeCorp({
       dividendRate: 25,
       totalShares: 18_000_000,
-      publicFloat: 0,
+      publicFloat: 8_000_000,
       shareholders: [{ characterId: charId, shares: 10_000_000 }],
       pendingShareIssuance: {
         remainingShares: 8_000_000,

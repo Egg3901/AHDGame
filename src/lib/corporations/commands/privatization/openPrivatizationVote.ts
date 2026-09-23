@@ -162,7 +162,11 @@ export async function openPrivatizationVote(
   const hasFundHolders = corporation.shareholders.some(
     (s) => s.fundId && !s.characterId && !s.corporationId
   );
-  if (!hasNonCeoCharOrCorp && (corporation.publicFloat ?? 0) === 0 && hasFundHolders) {
+  if (
+    !hasNonCeoCharOrCorp &&
+    (corporation.publicFloat ?? 0) - unplacedIpoShares === 0 &&
+    hasFundHolders
+  ) {
     const buyout = await executeFundOnlyBuyout(db, corporation, currentTurn);
     if (!buyout.ok) return buyout;
     return { ok: true, immediate: true };

@@ -99,7 +99,8 @@ describe("nppBuyShares", () => {
     expect(applyFloatBuyCredit).toHaveBeenCalledWith(
       db,
       expect.objectContaining({ _id: corpId }),
-      SHARES * SHARE_PRICE
+      SHARES * SHARE_PRICE,
+      { sharesBought: SHARES }
     );
     expect(nppUpdateOne).not.toHaveBeenCalled(); // no refund on success
   });

@@ -59,7 +59,10 @@ import {
   isOrderFlowPriceEligible,
   resolveShareExecutionPrice,
 } from "@/lib/corporations/marketExecution";
-import { applyFloatBuyCredit } from "@/lib/corporations/shareEscrowSettlement";
+import {
+  applyFloatBuyCredit,
+  type FloatBuyCreditReceipt,
+} from "@/lib/corporations/shareEscrowSettlement";
 import { recordShareTrade } from "@/lib/corporations/shareTradeHistory";
 import {
   sellFundHoldingsForRedemptionCash,
@@ -388,10 +391,44 @@ async function reverseFloatBuyCredit(
   db: Db,
   corp: EligibleCorpRow,
   amountLocal: number,
-  pools?: Map<CurrencyCode, EquityMarketPool>
+  pools?: Map<CurrencyCode, EquityMarketPool>,
+  receipt?: FloatBuyCreditReceipt
 ): Promise<void> {
   const currency = equityPoolCurrency(corp);
   const snapshot = pools?.get(currency);
+  if (receipt && receipt.issuerShares > 0) {
+    if (receipt.poolCreditLocal > 0) {
+      const poolRollback = await db
+        .collection<EquityMarketPool>(EQUITY_MARKET_POOLS_COLLECTION)
+        .updateOne(
+          { _id: currency, cashLocal: { $gte: receipt.poolCreditLocal } },
+          {
+            $inc: {
+              cashLocal: -receipt.poolCreditLocal,
+              "lifetime.purchasesIn": -receipt.poolCreditLocal,
+            },
+            $set: { updatedAt: new Date() },
+          }
+        );
+      if (poolRollback.matchedCount !== 1)
+        throw new Error("Failed to reverse equity-pool buy credit");
+      if (snapshot)
+        snapshot.cashLocal = Math.max(0, (snapshot.cashLocal ?? 0) - receipt.poolCreditLocal);
+    }
+    const issuerRollback = await db.collection<Corporation>("corporations").updateOne(
+      { _id: corp._id },
+      {
+        $inc: {
+          "pendingShareIssuance.remainingShares": receipt.issuerShares,
+          liquidCapital: -receipt.issuerCreditLocal,
+          shareIssuanceProceeds: -receipt.issuerCreditLocal,
+        },
+        $set: { updatedAt: new Date() },
+      }
+    );
+    if (issuerRollback.matchedCount !== 1) throw new Error("Failed to reverse IPO buy credit");
+    return;
+  }
   const poolExists = pools
     ? snapshot !== undefined
     : Boolean(
@@ -497,6 +534,7 @@ export async function executeFundShareBuy(
     let debitedFund: Pick<IndexFund, "_id" | "cashAnchor" | "holdings"> | null = null;
     let shareCreditApplied = false;
     let issuerCreditApplied = false;
+    let floatBuyCreditReceipt: FloatBuyCreditReceipt | undefined;
     let holdingsUpdated = false;
     let purchasedHoldings: IndexFundHolding[] | undefined;
     const shareholderSnapshot = await db
@@ -536,9 +574,10 @@ export async function executeFundShareBuy(
       }
       shareCreditApplied = true;
 
-      await applyFloatBuyCredit(db, corp, actualIssuerCreditLocal, {
+      floatBuyCreditReceipt = await applyFloatBuyCredit(db, corp, actualIssuerCreditLocal, {
         ...sessionOpts,
         pools: batch?.pools,
+        sharesBought: shares,
       });
       issuerCreditApplied = true;
 
@@ -613,7 +652,13 @@ export async function executeFundShareBuy(
       }
       if (issuerCreditApplied) {
         await compensate(async () => {
-          await reverseFloatBuyCredit(db, corp, actualIssuerCreditLocal, batch?.pools);
+          await reverseFloatBuyCredit(
+            db,
+            corp,
+            actualIssuerCreditLocal,
+            batch?.pools,
+            floatBuyCreditReceipt
+          );
         });
       }
       if (shareCreditApplied) {

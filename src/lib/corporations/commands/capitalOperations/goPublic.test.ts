@@ -147,7 +147,7 @@ describe("goPublic command", () => {
     expect(incOps.shareIssuanceProceeds).toBeUndefined();
   });
 
-  it("issues the selected float while listing only the cash-backed tranche", async () => {
+  it("issues and lists the selected float even when the pool buys only a small tranche", async () => {
     const corp = makeCorp({ totalShares: 10_934_794, sharePrice: 648 });
     const { db, updateOne } = makeDb();
     placementMocks.prepare.mockResolvedValueOnce({
@@ -171,14 +171,17 @@ describe("goPublic command", () => {
     if (!result.ok) return;
     expect(result.totalSharesAfter).toBe(19_881_443);
     expect(result.newShares).toBe(8_946_649);
-    expect(result.listedShares).toBe(81_446);
+    expect(result.listedShares).toBe(8_946_649);
     expect(result.pendingShares).toBe(8_865_203);
     const pipeline = updateOne.mock.calls[0][1];
     expect(pipeline[0].$set.totalShares).toEqual({
       $add: [{ $ifNull: ["$totalShares", 0] }, 8_946_649],
     });
     expect(pipeline[0].$set.publicFloat).toEqual({
-      $add: [{ $ifNull: ["$publicFloat", 0] }, 81_446],
+      $add: [{ $ifNull: ["$publicFloat", 0] }, 8_946_649],
+    });
+    expect(pipeline[0].$set.liquidCapital).toEqual({
+      $add: [{ $ifNull: ["$liquidCapital", 0] }, 52_787_596],
     });
     expect(pipeline[0].$set.pendingShareIssuance).toMatchObject({
       remainingShares: 8_865_203,
