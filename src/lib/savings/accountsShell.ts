@@ -16,7 +16,10 @@ import type { SavingsHolder } from "@/lib/db/types/bank";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import { getCountryIdForCurrency } from "@/lib/constants/currencies";
 import { getBankId } from "@/lib/centralBank/helpers";
+import { getNationalBudgetId } from "@/lib/bonds/sovereign";
 import { loadBankingPolicy } from "@/lib/banking/policy";
+import { DEPOSIT_INSURANCE_SPENDING_KEY } from "@/lib/banking/depositBookReturn";
+import { ensureFund } from "@/lib/banking/insurance";
 import { charterMay } from "@/lib/banking/rules/capabilities";
 import { lifecycleRefusal } from "@/lib/banking/rules/lifecycle";
 import { getBankDepositCeiling } from "@/lib/banking/capacityAllocation";
@@ -24,6 +27,8 @@ import { getCashReserves } from "@/lib/banking/rules/balanceSheet";
 import { isBlockedDepositor } from "@/lib/banking/blacklist";
 import { settleTransition } from "@/lib/banking/settlementJournal";
 import { emitBankingAuditEvent } from "@/lib/banking/auditEvents";
+import { emitTx } from "@/lib/financialTxLog/emit";
+import type { TransitionProjection } from "@/lib/banking/rules/boundary";
 import { getCurrentTurn } from "@/lib/currentTurn";
 import {
   CENTRAL_BANK_HOLDER,
@@ -133,7 +138,7 @@ export async function loadHolderSnapshot(
   holder: SavingsHolder,
   currency: CurrencyCode,
   options: { ownerId?: ObjectId; withCeiling?: boolean } = {}
-): Promise<HolderSnapshot | { error: string }> {
+): Promise<HolderSnapshot | { error: string; code?: "missing_bank" }> {
   if (!isBankHolder(holder)) {
     return {
       holder: CENTRAL_BANK_HOLDER,
@@ -148,7 +153,7 @@ export async function loadHolderSnapshot(
   const bank = await db
     .collection<Corporation>("corporations")
     .findOne({ _id: new ObjectId(holder) });
-  if (!bank) return { error: "Bank corporation not found" };
+  if (!bank) return { error: "Bank corporation not found", code: "missing_bank" };
   const charter = bank.bankCharter;
   if (!charter || !charterMay(charter, "acceptPlayerDeposits")) {
     return { error: "Target bank must have an active retail or universal charter" };
@@ -201,11 +206,23 @@ export async function runSavingsCommand(
     };
   }
 
-  const current = await loadHolderSnapshot(db, account.holder, currency, { ownerId });
+  // A bank blacklist controls new business and inbound holder changes. It must
+  // never prevent an existing depositor from moving their money out.
+  const current = await loadHolderSnapshot(db, account.holder, currency, {
+    ...(intent.type === "deposit" ? { ownerId } : {}),
+  });
   if ("error" in current) {
-    // The account's own holder is no longer valid (a bank that died between
-    // turns). Treat it as central-bank held for the purpose of paying out;
-    // the resolution pass is what moves it for real.
+    const mayRecoverMissingHolder =
+      current.code === "missing_bank" &&
+      (intent.type === "withdraw" ||
+        (intent.type === "transfer_holder" && intent.to === CENTRAL_BANK_HOLDER));
+    if (mayRecoverMissingHolder) {
+      const recovered = await recoverOrphanedSavingsAccount(db, account, turn);
+      if (!recovered.ok) return recovered;
+      // Recovery re-homes the full account at the central bank through the
+      // insurer and Treasury. Re-read before applying the requested command.
+      return runSavingsCommand(db, ownerId, currency, intent, commandId);
+    }
     return { ok: false, error: current.error };
   }
 
@@ -296,5 +313,126 @@ export async function runSavingsCommand(
     },
     db
   );
+  return { ok: true, account: decision.next, settlementId: decision.transition.key };
+}
+
+/**
+ * Return a savings account to the central bank when its former bank document
+ * has been deleted before the bank's deposit book was resolved. The same
+ * insurance fund then Treasury waterfall backs that account as a failed-bank
+ * resolution would. The settlement key is tied to the account version so two
+ * withdrawals racing to repair the same orphan cannot pay it twice.
+ */
+async function recoverOrphanedSavingsAccount(
+  db: Db,
+  account: SavingsAccountSnapshot,
+  turn: number
+): Promise<SavingsCommandResult> {
+  const fund = await ensureFund(db, account.currency as CurrencyCode);
+  const fundBalance = Number.isFinite(fund.balance) ? Math.max(0, fund.balance) : 0;
+  const fromInsuranceFund = Math.min(account.balance, fundBalance);
+  const fromTreasury = Math.max(0, account.balance - fromInsuranceFund);
+  const context = {
+    turn,
+    centralBankId: getBankId(getCountryIdForCurrency(account.currency as CurrencyCode)),
+    privateBanking: false,
+    expectedVersion: account.version,
+  };
+  const decision = decideSavingsCommand(
+    account,
+    {
+      type: "recover_orphaned_holder",
+      holder: {
+        holder: account.holder,
+        cash: 0,
+        acceptsDeposits: false,
+        playerDeposits: 0,
+        active: false,
+      },
+      fromInsuranceFund,
+      fromTreasury,
+    },
+    context,
+    "orphaned-holder-recovery"
+  );
+  if (!decision.allowed) return { ok: false, error: decision.message, refusal: decision.refusal };
+
+  const now = new Date();
+  const countryId = getCountryIdForCurrency(account.currency as CurrencyCode);
+  const fiscalProjections: TransitionProjection[] = [];
+  if (fromTreasury > 0) {
+    fiscalProjections.push({
+      collection: "federalBudget",
+      filter: { _id: getNationalBudgetId(countryId) },
+      update: {
+        $inc: {
+          treasuryBalance: -fromTreasury,
+          [`spending.byCategory.${DEPOSIT_INSURANCE_SPENDING_KEY}`]: fromTreasury,
+          "spending.total": fromTreasury,
+          surplus: -fromTreasury,
+        },
+        $set: { updatedAt: now },
+      },
+      note: "Treasury books the orphaned savings backstop",
+    });
+  }
+  if (account.balance > 0) {
+    fiscalProjections.push({
+      collection: "depositInsuranceFunds",
+      filter: { _id: account.currency },
+      update: {
+        $inc: {
+          payoutsLifetime: account.balance,
+          treasuryBackstopLifetime: fromTreasury,
+        },
+      },
+      note: "deposit insurance records the orphaned savings payout",
+    });
+  }
+  if (fiscalProjections.length > 0) {
+    // Keep the account at the orphaned holder until the funding records land.
+    // The journal persists these projections under the stable recovery key.
+    decision.transition.projections.splice(1, 0, ...fiscalProjections);
+  }
+
+  const settled = await settleTransition(db, decision.transition);
+  if (settled.status === "rejected" || settled.status === "partial" || settled.error) {
+    return {
+      ok: false,
+      error:
+        settled.error ?? "The missing bank's savings recovery could not be completed. Try again.",
+    };
+  }
+  if (settled.status === "applied") {
+    emitBankingAuditEvent(
+      {
+        ...decision.transition.event,
+        turn,
+        outcome: "ok",
+        currency: account.currency as CurrencyCode,
+        settlementId: decision.transition.key,
+      },
+      db
+    );
+    if (fromInsuranceFund > 0 || fromTreasury > 0) {
+      void emitTx(db, {
+        type: "bank_insurance_payout",
+        turn,
+        createdAt: now,
+        subjectType: "government",
+        countryId,
+        subjectName: `${account.currency} deposit insurance`,
+        amount: -(fromInsuranceFund + fromTreasury),
+        currencyCode: account.currency as CurrencyCode,
+        counterpartyType: "system",
+        counterpartyName: "Household depositors",
+        meta: {
+          kind: "fund_payout",
+          bankCorporationId: account.holder,
+          treasuryBackstop: fromTreasury,
+        },
+      });
+    }
+  }
   return { ok: true, account: decision.next, settlementId: decision.transition.key };
 }
