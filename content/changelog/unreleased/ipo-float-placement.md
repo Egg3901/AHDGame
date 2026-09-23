@@ -1,9 +1,10 @@
 ---
 date: 2026-09-23
-title: Keep IPO float selections accurate
+title: Issue the full selected IPO float
 summary: >-
-  Going public now waits until the market can place the selected share float.
-  If there is not enough demand, the company stays private and no shares are issued.
+  Going public now issues the full selected share amount immediately. Shares enter
+  the buyable public float as market cash funds them, and the company receives
+  proceeds only for shares placed.
 tags: [corporations, equities]
 badges: [patch]
 areas: [backend]
@@ -11,5 +12,6 @@ areas: [backend]
 
 ## What changed
 
-- An IPO no longer completes with only a small fraction of the selected public float.
-- The CEO sees how many shares the market can place and can try again later or choose a smaller float.
+- The selected shares are issued immediately, so ownership reflects the full IPO.
+- The company view shows how many shares are buyable now and how many await placement.
+- Pending placement does not issue the same shares twice or credit the treasury early.
