@@ -46,6 +46,7 @@ import { spawnWithPrefixedLogs, type ChildRunIdentity } from "./childLogPrefix";
 import { assertSafeToken } from "./simJobArgs";
 import { resolveSimPreset } from "./simPreset";
 import { buildStatusMirrorUpdate, type SandboxProgress } from "./simStatusMirror";
+import type { GameHealthSummary } from "@/lib/db/types/gameHealthSnapshot";
 import { defaultSimSourceDeps, planRunWorldSpawn, verifySimSource } from "./simSource";
 import { planCollectorSpawns } from "./collectorSource";
 import {
@@ -163,6 +164,7 @@ interface SimJob {
   currentTurn?: number;
   lastMessage?: string;
   lastWarnings?: string[];
+  health?: GameHealthSummary | null;
   error?: string | null;
   workerInstanceId?: string;
   workerSlotId?: number;

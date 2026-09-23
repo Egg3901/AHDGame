@@ -12,6 +12,7 @@ import {
   detectOffHoursPrivilegedAction,
   runAuditAnomalyScan,
   ANOMALY_SCAN_DEFAULTS,
+  SYSTEM_SETTLEMENT_ACTIONS,
   type AnomalyAuditRow,
 } from "./anomalyScan";
 
@@ -31,6 +32,7 @@ function row(over: Partial<AnomalyAuditRow> & { ts: Date }): AnomalyAuditRow {
   rowSeq++;
   return {
     id: `row-${rowSeq}`,
+    traceId: `trace-${rowSeq}`,
     turn: 100,
     action: "money.fund_debit",
     category: "money",
@@ -54,6 +56,7 @@ describe("toAnomalyRow", () => {
       ts: new Date("2026-01-01T00:00:00Z"),
       turn: 42,
       traceId: "t1",
+      seq: 7,
       source: "api",
       action: "wire.send",
       category: "money",
@@ -61,14 +64,19 @@ describe("toAnomalyRow", () => {
       subject: { type: "character", id: subjectId },
       counterparty: { type: "character", id: counterpartyId },
       amount: -500,
+      meta: { agreementId: "agreement-42" },
       outcome: "ok",
       expiresAt: new Date(),
     };
     const mapped = toAnomalyRow(doc);
+    expect(mapped.traceId).toBe("t1");
+    expect(mapped.seq).toBe(7);
+    expect(mapped.actorKind).toBe("player");
     expect(mapped.actorKey).toBe(`u:${userId.toString()}`);
     expect(mapped.subjectId).toBe(subjectId.toString());
     expect(mapped.counterpartyId).toBe(counterpartyId.toString());
     expect(mapped.amount).toBe(-500);
+    expect(mapped.agreementId).toBe("agreement-42");
   });
 
   it("reads pricePerShare/orderSide off a share.order buy envelope", () => {
@@ -184,6 +192,93 @@ describe("detectCircularWire", () => {
     const { flaggedIds, finding } = detectCircularWire(rows);
     expect(flaggedIds.size).toBe(0);
     expect(finding).toBeNull();
+  });
+
+  it("pairs one transfer by agreement identity even across traces and the fallback window", () => {
+    const outbound: AnomalyAuditRow[] = [
+      row({
+        ts: new Date(base),
+        traceId: "debit-trace",
+        seq: 20,
+        agreementId: "agreement-1",
+        category: "money",
+        subjectId: "A",
+        counterpartyId: "B",
+        amount: -1000,
+      }),
+      row({
+        ts: new Date(base + 60_000),
+        traceId: "credit-trace",
+        seq: 2,
+        agreementId: "agreement-1",
+        category: "money",
+        subjectId: "B",
+        counterpartyId: "A",
+        amount: 1000,
+      }),
+    ];
+    const inbound: AnomalyAuditRow[] = [
+      row({
+        ts: new Date(base + 120_000),
+        traceId: "return-debit-trace",
+        seq: 8,
+        agreementId: "agreement-2",
+        category: "money",
+        subjectId: "B",
+        counterpartyId: "A",
+        amount: -1000,
+      }),
+      row({
+        ts: new Date(base + 180_000),
+        traceId: "return-credit-trace",
+        seq: 3,
+        agreementId: "agreement-2",
+        category: "money",
+        subjectId: "A",
+        counterpartyId: "B",
+        amount: 1000,
+      }),
+    ];
+
+    expect(detectCircularWire(outbound)).toEqual({
+      flaggedIds: new Set(),
+      finding: null,
+    });
+    expect(detectCircularWire([...outbound, ...inbound])).toEqual({
+      flaggedIds: new Set(outbound.concat(inbound).map((transferRow) => transferRow.id)),
+      finding: {
+        type: "circular_wire",
+        detail: "1 distinct A-to-B-to-A round trip(s) with a strictly later return event",
+        flaggedRows: 4,
+      },
+    });
+  });
+
+  it("does not flag system settlement rows as a circular wire", () => {
+    const rows: AnomalyAuditRow[] = [
+      row({
+        ts: new Date(base),
+        actorKind: "system",
+        actorKey: null,
+        action: "corp.supply_agreement",
+        category: "money",
+        subjectId: "A",
+        counterpartyId: "B",
+        amount: -1000,
+      }),
+      row({
+        ts: new Date(base + 60_000),
+        actorKind: "system",
+        actorKey: null,
+        action: "corp.supply_agreement",
+        category: "money",
+        subjectId: "B",
+        counterpartyId: "A",
+        amount: 1000,
+      }),
+    ];
+
+    expect(detectCircularWire(rows).flaggedIds.size).toBe(0);
   });
 
   it("does not flag a one-way transfer", () => {
@@ -429,6 +524,43 @@ describe("detectWireFanInFanOut system settlement (#2078)", () => {
     const { flaggedIds, finding } = detectWireFanInFanOut(rows, config);
     expect(flaggedIds.size).toBe(0);
     expect(finding).toBeNull();
+  });
+
+  it("excludes every routine settlement verb from the generic hub baseline", () => {
+    const rows = [...SYSTEM_SETTLEMENT_ACTIONS].flatMap((action) =>
+      Array.from({ length: config.fanOutThreshold }, (_, i) =>
+        row({
+          ts: new Date(base + i * 1000),
+          category: "money",
+          action,
+          subjectId: `system-${action}`,
+          counterpartyId: `recipient-${action}-${i}`,
+          amount: -100,
+        })
+      )
+    );
+
+    expect(detectWireFanInFanOut(rows, config)).toEqual({
+      flaggedIds: new Set(),
+      finding: null,
+    });
+  });
+
+  it("does not flag unattributed system rows in an otherwise actor-shaped hub", () => {
+    const rows = Array.from({ length: 5 }, (_, i) =>
+      row({
+        ts: new Date(base + i * 1000),
+        category: "money",
+        action: "money.system_settlement",
+        actorKind: "system",
+        actorKey: null,
+        subjectId: `payer-${i}`,
+        counterpartyId: "hub",
+        amount: -100,
+      })
+    );
+
+    expect(detectWireFanInFanOut(rows, config).flaggedIds.size).toBe(0);
   });
 
   it("still flags an actor-driven wire hub above threshold", () => {
@@ -817,6 +949,26 @@ describe("runAuditAnomalyScan", () => {
     const result = await runAuditAnomalyScan(db as unknown as Db, 100);
 
     expect(result).toBeNull();
+  });
+
+  it("projects the transfer identity fields used to pair ledger legs", async () => {
+    db.collectionMocks.actionAuditLog = {
+      ...db.collection("actionAuditLog"),
+      find: vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue([]) }),
+    } as never;
+
+    await runAuditAnomalyScan(db as unknown as Db, 100);
+
+    expect(vi.mocked(db.collectionMocks.actionAuditLog!.find)).toHaveBeenCalledWith(
+      { turn: { $gte: 95 } },
+      {
+        projection: expect.objectContaining({
+          traceId: 1,
+          seq: 1,
+          "meta.agreementId": 1,
+        }),
+      }
+    );
   });
 
   it("captures to Sentry and rethrows when the underlying query fails", async () => {

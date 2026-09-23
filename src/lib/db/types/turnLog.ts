@@ -1,4 +1,5 @@
 import type { ObjectId } from "mongodb";
+import type { GameHealthSummary } from "./gameHealthSnapshot";
 import type { TurnPhaseTelemetryMap } from "./turnPhaseTelemetry";
 import type { GameIteration } from "./gameState";
 
@@ -629,6 +630,7 @@ export interface TurnLog {
     gameHealthSnapshot?: {
       snapshotWritten: boolean;
       integrityCheckRan: boolean;
+      health: GameHealthSummary;
     } | null;
 
     activityLogging?: {

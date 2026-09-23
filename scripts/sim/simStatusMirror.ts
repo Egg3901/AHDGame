@@ -1,7 +1,10 @@
+import type { GameHealthSummary } from "@/lib/db/types/gameHealthSnapshot";
+
 export interface MirroredProgress {
   currentTurn?: number;
   lastMessage?: string;
   lastWarnings?: string[];
+  health?: GameHealthSummary | null;
   progressUpdatedAt?: Date;
 }
 
@@ -9,6 +12,7 @@ export interface SandboxProgress {
   currentTurn?: number;
   lastMessage?: string;
   lastWarnings?: string[];
+  health?: GameHealthSummary | null;
   progressUpdatedAt?: Date;
   updatedAt?: Date;
   bootstrapConformance?: {
@@ -25,18 +29,19 @@ export interface SandboxProgress {
 
 export function completedTurnProgress(
   currentTurn: number,
-  result: { message: string; warnings: string[] },
+  result: { message: string; warnings: string[]; health?: GameHealthSummary | null },
   progressUpdatedAt: Date
 ): Required<
   Pick<
     SandboxProgress,
-    "currentTurn" | "lastMessage" | "lastWarnings" | "progressUpdatedAt" | "updatedAt"
+    "currentTurn" | "lastMessage" | "lastWarnings" | "health" | "progressUpdatedAt" | "updatedAt"
   >
 > {
   return {
     currentTurn,
     lastMessage: result.message,
     lastWarnings: result.warnings,
+    health: result.health ?? null,
     progressUpdatedAt,
     updatedAt: progressUpdatedAt,
   };
@@ -46,6 +51,13 @@ function warningsEqual(left: string[] | undefined, right: string[] | undefined):
   const a = left ?? [];
   const b = right ?? [];
   return a.length === b.length && a.every((warning, index) => warning === b[index]);
+}
+
+function healthEqual(
+  left: GameHealthSummary | null | undefined,
+  right: GameHealthSummary | null | undefined
+): boolean {
+  return JSON.stringify(left ?? null) === JSON.stringify(right ?? null);
 }
 
 /**
@@ -66,7 +78,8 @@ export function buildStatusMirrorUpdate(
   const changed =
     sandbox.currentTurn !== job.currentTurn ||
     sandbox.lastMessage !== job.lastMessage ||
-    !warningsEqual(sandbox.lastWarnings, job.lastWarnings);
+    !warningsEqual(sandbox.lastWarnings, job.lastWarnings) ||
+    !healthEqual(sandbox.health, job.health);
   if (!changed) return heartbeat;
 
   const progressUpdatedAt = sandbox.progressUpdatedAt ?? sandbox.updatedAt ?? workerHeartbeatAt;
@@ -74,6 +87,7 @@ export function buildStatusMirrorUpdate(
     currentTurn: sandbox.currentTurn,
     lastMessage: sandbox.lastMessage,
     lastWarnings: sandbox.lastWarnings,
+    health: sandbox.health ?? null,
     progressUpdatedAt,
     updatedAt: progressUpdatedAt,
     ...heartbeat,

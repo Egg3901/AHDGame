@@ -26,6 +26,14 @@ import { getAuditAnomaliesCollection } from "@/lib/db/collections/auditAnomalies
 import { isAuditLogEnabled } from "@/lib/audit/featureFlag";
 import type { ActionAuditRecord } from "@/lib/db/types/actionAuditLog";
 import type { AuditAnomalyFinding, AuditAnomalyType } from "@/lib/db/types/auditAnomalies";
+import {
+  detectCircularWire as detectTransferCircularWire,
+  detectWireFanInFanOut as detectTransferWireFanInFanOut,
+  type AnomalyAuditRow,
+} from "@/lib/audit/rules/transferFlows";
+
+export type { AnomalyAuditRow } from "@/lib/audit/rules/transferFlows";
+export { SYSTEM_SETTLEMENT_ACTIONS } from "@/lib/audit/rules/transferFlows";
 
 // ── Config ───────────────────────────────────────────────────────────────
 
@@ -73,31 +81,6 @@ export const ANOMALY_SCAN_DEFAULTS: AnomalyScanConfig = {
 
 // ── Row shape shared by every pure detector ─────────────────────────────
 
-/** Minimal, PII-free projection of an `actionAuditLog` row — enough for
- * every detector below without threading the full `ActionAuditRecord`
- * (and its `net`/`meta`) through pure, easily-fixtured functions. */
-export interface AnomalyAuditRow {
-  id: string;
-  ts: Date;
-  turn: number;
-  action: string;
-  category: string;
-  /** `"u:<userId>"` / `"c:<characterId>"` — whichever the actor carries;
-   * `null` for unattributed system rows (never grouped). */
-  actorKey: string | null;
-  subjectType?: string;
-  subjectId?: string;
-  counterpartyType?: string;
-  counterpartyId?: string;
-  amount?: number;
-  /** Share-trade price, read off `delta[].field === "pricePerShare"`. */
-  pricePerShare?: number;
-  /** Buy/sell side, inferred from `action`/`delta[].field === "orderType"`
-   * (see `share.order`/`share.sell` envelopes in `placeShareOrder.ts` /
-   * `sellPublicShares.ts`). */
-  orderSide?: "buy" | "sell";
-}
-
 export function toAnomalyRow(doc: ActionAuditRecord): AnomalyAuditRow {
   const actorKey = doc.actor?.userId
     ? `u:${doc.actor.userId.toString()}`
@@ -123,16 +106,23 @@ export function toAnomalyRow(doc: ActionAuditRecord): AnomalyAuditRow {
 
   return {
     id: doc._id.toString(),
+    traceId: doc.traceId,
+    seq: doc.seq,
     ts: doc.ts,
     turn: doc.turn,
     action: doc.action,
     category: doc.category,
     actorKey,
+    actorKind: doc.actor.kind,
     subjectType: doc.subject?.type,
     subjectId: doc.subject?.id !== undefined ? String(doc.subject.id) : undefined,
     counterpartyType: doc.counterparty?.type,
     counterpartyId: doc.counterparty?.id !== undefined ? String(doc.counterparty.id) : undefined,
     amount: doc.amount,
+    agreementId:
+      doc.meta?.agreementId === undefined || doc.meta?.agreementId === null
+        ? undefined
+        : String(doc.meta.agreementId),
     pricePerShare:
       priceDelta && typeof priceDelta.after === "number" ? priceDelta.after : undefined,
     orderSide,
@@ -198,169 +188,15 @@ export function detectRapidRepeat(
   };
 }
 
-// ── Detector: circular_wire ──────────────────────────────────────────────
-// A -> B -> A across DISTINCT transaction events: money flows from A to B in
-// one event and returns from B to A in a later one.
-//
-// Every economic transfer is double-emitted onto the audit spine — one debit
-// leg and one credit leg with mirrored subject/counterparty (settlement
-// batches via emitTxBulk share one action/ts; wires via two emitTx calls as
-// wire.send + wire.receive). Matching `an A debit to B` with `any positive B
-// row against A` therefore matches the two legs of a SINGLE transfer, so
-// every ordinary settlement and wire flagged itself (#2078).
-//
-// Fix: normalize each row to a directed money-flow edge first — a debit row
-// points subject → counterparty, a credit row points counterparty → subject
-// (the credit leg of a transfer flows the same way as its debit leg) — then
-// require the return edge to come from a different transaction event
-// (different turn or timestamp) than the outbound edge. Opposite edges
-// inside one event (bilateral netting within a batch) stay quiet.
 export function detectCircularWire(rows: AnomalyAuditRow[]): DetectorResult {
-  const flaggedIds = new Set<string>();
-  const moneyRows = rows.filter(
-    (r) => r.category === "money" && r.subjectId && r.counterpartyId && typeof r.amount === "number"
-  );
-
-  interface DirectedFlows {
-    from: string;
-    to: string;
-    stamps: Set<string>;
-    ids: Set<string>;
-  }
-  const byDirected = new Map<string, DirectedFlows>();
-  for (const row of moneyRows) {
-    const amount = row.amount ?? 0;
-    if (amount === 0) continue;
-    const from = amount < 0 ? row.subjectId! : row.counterpartyId!;
-    const to = amount < 0 ? row.counterpartyId! : row.subjectId!;
-    const key = `${from}→${to}`;
-    let entry = byDirected.get(key);
-    if (!entry) {
-      entry = { from, to, stamps: new Set(), ids: new Set() };
-      byDirected.set(key, entry);
-    }
-    entry.stamps.add(`${row.turn}|${row.ts.getTime()}`);
-    entry.ids.add(row.id);
-  }
-
-  const resolved = new Set<string>();
-  for (const [key, entry] of byDirected) {
-    if (resolved.has(key)) continue;
-    const reverse = byDirected.get(`${entry.to}→${entry.from}`);
-    resolved.add(key);
-    if (!reverse) continue;
-    resolved.add(`${entry.to}→${entry.from}`);
-    const stamps = new Set([...entry.stamps, ...reverse.stamps]);
-    if (stamps.size < 2) continue;
-    for (const id of [...entry.ids, ...reverse.ids]) flaggedIds.add(id);
-  }
-
-  return {
-    flaggedIds,
-    finding: findingOrNull(
-      "circular_wire",
-      flaggedIds,
-      `${flaggedIds.size} rows in A→B→A money round-trips`
-    ),
-  };
+  return detectTransferCircularWire(rows);
 }
 
-/**
- * Audit verbs for routine system settlement that is hub-shaped BY
- * CONSTRUCTION — one coupon run pays N holders, one tax authority collects
- * from N corps, one party collects dues from N members, one active
- * corporation settles with N counterparties — and therefore must not count
- * toward the generic collusion/burner-funding hub detector (#2078).
- * Actor-driven transfers (wires, donations, trades) stay covered.
- *
- * Extension criterion: add a verb here only when its emitter pays or
- * collects across many counterparties as its normal every-turn operation
- * (see financialTxLog/emit.ts TX_TYPE_TO_AUDIT_ACTION for the verb mapping).
- * Per-class baselining for these verbs is a separate detector, not a carve
- * back into this one.
- */
-export const SYSTEM_SETTLEMENT_ACTIONS: ReadonlySet<string> = new Set([
-  "bond.coupon",
-  "gov.coupon_payment",
-  "corp.tax_paid",
-  "gov.tax_revenue",
-  "party.dues_received",
-  "corp.supply_agreement",
-]);
-
-// ── Detector: wire_fanin_fanout ──────────────────────────────────────────
-// Many distinct senders into one recipient (fan-in) or one sender fanning
-// out to many distinct recipients (fan-out) within the window — the
-// coordinated-collusion / burner-funding shape from the plan's exploit list.
 export function detectWireFanInFanOut(
   rows: AnomalyAuditRow[],
   config: Pick<AnomalyScanConfig, "fanInThreshold" | "fanOutThreshold"> = ANOMALY_SCAN_DEFAULTS
 ): DetectorResult {
-  const flaggedIds = new Set<string>();
-  const moneyRows: AnomalyAuditRow[] = [];
-  let excludedSettlementRows = 0;
-  for (const r of rows) {
-    if (!(r.category === "money" && r.subjectId && r.counterpartyId)) continue;
-    if (SYSTEM_SETTLEMENT_ACTIONS.has(r.action)) {
-      excludedSettlementRows++;
-      continue;
-    }
-    moneyRows.push(r);
-  }
-
-  const inboundByCounterparty = new Map<string, Map<string, AnomalyAuditRow[]>>();
-  const outboundBySubject = new Map<string, Map<string, AnomalyAuditRow[]>>();
-  for (const row of moneyRows) {
-    const inKey = row.counterpartyId!;
-    let inMap = inboundByCounterparty.get(inKey);
-    if (!inMap) {
-      inMap = new Map();
-      inboundByCounterparty.set(inKey, inMap);
-    }
-    const inArr = inMap.get(row.subjectId!) ?? [];
-    inArr.push(row);
-    inMap.set(row.subjectId!, inArr);
-
-    const outKey = row.subjectId!;
-    let outMap = outboundBySubject.get(outKey);
-    if (!outMap) {
-      outMap = new Map();
-      outboundBySubject.set(outKey, outMap);
-    }
-    const outArr = outMap.get(row.counterpartyId!) ?? [];
-    outArr.push(row);
-    outMap.set(row.counterpartyId!, outArr);
-  }
-
-  let fanInHubs = 0;
-  for (const bySubject of inboundByCounterparty.values()) {
-    if (bySubject.size < config.fanInThreshold) continue;
-    fanInHubs++;
-    for (const arr of bySubject.values()) for (const r of arr) flaggedIds.add(r.id);
-  }
-
-  let fanOutHubs = 0;
-  for (const byCounterparty of outboundBySubject.values()) {
-    if (byCounterparty.size < config.fanOutThreshold) continue;
-    fanOutHubs++;
-    for (const arr of byCounterparty.values()) for (const r of arr) flaggedIds.add(r.id);
-  }
-
-  const parts: string[] = [];
-  if (fanInHubs > 0) {
-    parts.push(`${fanInHubs} fan-in hub(s) (>= ${config.fanInThreshold} distinct senders)`);
-  }
-  if (fanOutHubs > 0) {
-    parts.push(`${fanOutHubs} fan-out hub(s) (>= ${config.fanOutThreshold} distinct recipients)`);
-  }
-  if (excludedSettlementRows > 0) {
-    parts.push(`${excludedSettlementRows} routine settlement row(s) excluded from hub baseline`);
-  }
-
-  return {
-    flaggedIds,
-    finding: findingOrNull("wire_fanin_fanout", flaggedIds, parts.join("; ")),
-  };
+  return detectTransferWireFanInFanOut(rows, config);
 }
 
 // ── Detector: wash_trade ─────────────────────────────────────────────────
@@ -613,6 +449,8 @@ export async function runAuditAnomalyScan(
           projection: {
             _id: 1,
             ts: 1,
+            traceId: 1,
+            seq: 1,
             turn: 1,
             action: 1,
             category: 1,
@@ -621,6 +459,7 @@ export async function runAuditAnomalyScan(
             counterparty: 1,
             amount: 1,
             delta: 1,
+            "meta.agreementId": 1,
           },
         }
       )

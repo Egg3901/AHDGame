@@ -143,9 +143,9 @@ When Forex is enabled, you can trade every active country's currency. A full mod
 
 ## Characters
 
-**Can I change my home state?**
+**Can I change my home state or UK constituency?**
 
-Yes, via the relocation action. Relocating costs actions and funds, and there is a cooldown period. After relocating, your home state updates for canvassing and future elections. Relocation can also move you to a different country - that resets your national influence and drops you to independent in the new country, so treat it as a fresh start there, not a free jump.
+Yes. Open the state or UK constituency you want to move to, then choose **Relocate here** in its header. Relocating costs actions and funds, and there is a cooldown period. Your home state or constituency updates for canvassing and future elections. Relocation can also move you to a different country. That resets your national influence and makes you independent in the new country, so treat it as a fresh start there, not a free jump.
 
 ---
 
