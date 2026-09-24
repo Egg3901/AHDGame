@@ -13,6 +13,7 @@ import {
 } from "./inflation";
 import { moneyGrowthCoefficient } from "../monetary/brettonWoods";
 import { computeMacroTarget, applyDrift } from "../currency/rateCalculation";
+import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 
 /** Baseline "healthy economy" inputs — should produce ~2% (target) inflation */
 const baseline: InflationInputs = {
@@ -27,6 +28,49 @@ const baseline: InflationInputs = {
   savingsPressure: 0.0, // no net savings flow
   previousInflation: 2.0,
 };
+
+describe("inflation frequency audit (#2337)", () => {
+  const horizons = [1, 12, TURNS_PER_YEAR, TURNS_PER_YEAR * 5];
+
+  it.each([
+    ["inflation carryover", 8, {}, [6.5, 2, 2, 2]],
+    ["rate cut", 2, { primeRate: 1 }, [2.48, 2.7, 2.7, 2.7]],
+    ["output growth", 2, { gdpGrowth: 5 }, [2.36, 2.53, 2.53, 2.53]],
+    ["currency depreciation", 2, { forexPressure: 0.1 }, [2.48, 2.7, 2.7, 2.7]],
+    [
+      "combined rate, output, and FX shock",
+      2,
+      { primeRate: 1, gdpGrowth: 5, forexPressure: 0.1 },
+      [3.32, 3.94, 3.94, 3.94],
+    ],
+  ] as const)("tracks %s at 1, 12, 48, and 240 turns", (_name, startingRate, shock, expected) => {
+    let annualizedRate = startingRate;
+    const observed: number[] = [];
+    for (let turn = 1; turn <= horizons[horizons.length - 1]; turn++) {
+      annualizedRate = calculateInflation({
+        ...baseline,
+        ...shock,
+        previousInflation: annualizedRate,
+      });
+      if (horizons.includes(turn)) observed.push(annualizedRate);
+    }
+    expect(observed).toEqual(expected);
+  });
+
+  it("distinguishes the 72pp annual cap envelope from realized inflation", () => {
+    expect(TURNS_PER_YEAR).toBe(48);
+    let annualizedRate = 2;
+    for (let turn = 0; turn < TURNS_PER_YEAR; turn++) {
+      annualizedRate = calculateInflation({
+        ...baseline,
+        previousInflation: annualizedRate,
+        policyStancePressure: 200,
+      });
+    }
+    expect(annualizedRate - 2).toBeCloseTo(1.5 * TURNS_PER_YEAR);
+    expect(annualizedRate - 2).toBe(72);
+  });
+});
 
 describe("calculateInflation", () => {
   it.each([
