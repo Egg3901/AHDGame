@@ -89,6 +89,7 @@ import { migration as normalizeShareCorporateActions } from "./entries/2026-09-1
 
 import { migration as turnClockIndexes } from "./entries/2026-09-20-turn-clock-indexes";
 import { migration as activatePendingNppDefenceContracts } from "./entries/2026-09-24-activate-pending-npp-defence-contracts";
+import { migration as backfillNppTechBaselines } from "./entries/2026-09-24-backfill-npp-tech-baselines";
 
 export const MIGRATIONS: Migration[] = [
   // v0.2.6 currency cutover (declarative — shipped via standalone scripts)
@@ -290,6 +291,11 @@ export const MIGRATIONS: Migration[] = [
   // Activate those legacy rows while preserving offers to player-owned corps
   // that happen to be operated by an NPP caretaker.
   activatePendingNppDefenceContracts,
+  // NPP founding omitted the passed-decade prerequisite nodes granted to
+  // player-founded corporations, leaving every current-era unlock blocked.
+  // Heal existing true NPP-owned corporations; the founding path now stamps
+  // these nodes for future spawns.
+  backfillNppTechBaselines,
 ];
 
 // D13 rollback drill — registered but deliberately OUTSIDE the normal chain.

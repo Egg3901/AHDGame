@@ -1,5 +1,6 @@
 import type { Db } from "mongodb";
 import type { Corporation, CorporateSector } from "@/lib/db/types";
+import type { CurrencyCode } from "@/lib/constants/currencies";
 import { sectorEconomicScale } from "@/lib/corporations/sectorProfitBasis";
 import { getMarketSystemModeForDb, marketAtLeast } from "@/lib/market/featureFlag";
 import { loadWorldEraUnitScale } from "@/lib/currency/gdpAnchorRate";
@@ -37,6 +38,39 @@ export interface CorpDailyGrossRevenuePricing {
   capacityFloorApplied: boolean;
 }
 
+/**
+ * Pure counterpart to {@link corpDailyGrossRevenuePricingLocal} for turn paths
+ * that already hold the sector, feature, era, and FX snapshots. Keeping this
+ * arithmetic shared prevents autonomous NPP unlocks from pricing raw host
+ * currencies together or treating the already-daily sector revenue as hourly.
+ */
+export function corpDailyGrossRevenueLocalFromSectors(
+  sectors: readonly CorporateSector[],
+  corp: Pick<Corporation, "countryId" | "liquidCurrencyCode">,
+  options: {
+    plantsEnabled: boolean;
+    eraUnitScale: number;
+    fxByCurrency: ReadonlyMap<CurrencyCode, number>;
+  }
+): number {
+  let totalAnchor = 0;
+  for (const sector of sectors) {
+    const local = sectorEconomicScale(sector, options.plantsEnabled, options.eraUnitScale);
+    if (!local) continue;
+    totalAnchor += corpCapitalToAnchor(
+      local,
+      resolveSectorHostCurrencyCode(sector, corp),
+      fxRateForSectorHostFromMap(sector, corp, options.fxByCurrency)
+    );
+  }
+
+  return anchorToCorpLiquidCapital(
+    totalAnchor,
+    corp,
+    fxRateForCorpFromMap(corp, options.fxByCurrency)
+  );
+}
+
 /** The pricing basis plus whether owned plant capacity supplied its floor. */
 export async function corpDailyGrossRevenuePricingLocal(
   db: Db,
@@ -63,24 +97,12 @@ export async function corpDailyGrossRevenuePricingLocal(
     loadFxRatesByCurrency(db),
   ]);
 
-  let totalAnchor = 0;
-  for (const sector of sectors) {
-    // Stored per day already, so no per-turn rescaling here.
-    const local = sectorEconomicScale(sector, plantsEnabled, eraUnitScale);
-    if (!local) continue;
-    totalAnchor += corpCapitalToAnchor(
-      local,
-      resolveSectorHostCurrencyCode(sector, corp),
-      fxRateForSectorHostFromMap(sector, corp, fxByCurrency)
-    );
-  }
-
   return {
-    dailyGrossRevenueLocal: anchorToCorpLiquidCapital(
-      totalAnchor,
-      corp,
-      fxRateForCorpFromMap(corp, fxByCurrency)
-    ),
+    dailyGrossRevenueLocal: corpDailyGrossRevenueLocalFromSectors(sectors, corp, {
+      plantsEnabled,
+      eraUnitScale,
+      fxByCurrency,
+    }),
     capacityFloorApplied: plantsEnabled,
   };
 }
