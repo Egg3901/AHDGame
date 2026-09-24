@@ -82,6 +82,14 @@ export async function repairRejectedRegionalBill(
       enactedByBillId: billId,
     });
     if (!enactedPolicy) throw new Error(`Replayed policy ${legislationTypeId} was not recorded`);
+    const enactedLaw = await db.collection("enactedLaws").findOne({
+      billId,
+      countryId: bill.countryId,
+      stateId: bill.stateId,
+      legislationTypeId,
+      repealedAt: { $exists: false },
+    });
+    if (!enactedLaw) throw new Error(`Replayed law ${legislationTypeId} was not recorded`);
   }
 
   const committed = await bills.updateOne(

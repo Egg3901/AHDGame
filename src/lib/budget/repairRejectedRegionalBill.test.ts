@@ -32,10 +32,12 @@ describe("repairRejectedRegionalBill", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     db = createMockDb();
-    for (const name of ["stateBills", "regionalBudgets", "statePolicies"]) db.collection(name);
+    for (const name of ["stateBills", "regionalBudgets", "statePolicies", "enactedLaws"])
+      db.collection(name);
     db.collectionMocks.stateBills.findOne.mockResolvedValue(bill);
     db.collectionMocks.regionalBudgets.findOne.mockResolvedValue({ _id: "BY", countryId: "DD" });
     db.collectionMocks.statePolicies.findOne.mockResolvedValue(null);
+    db.collectionMocks.enactedLaws.findOne.mockResolvedValue({ billId });
     vi.mocked(validateStateBudgetImpact).mockResolvedValue({
       allowed: true,
       costAmount: 1_200_000_000,
@@ -82,6 +84,9 @@ describe("repairRejectedRegionalBill", () => {
       "override_closing"
     );
     expect(finalizeStateBillEnactment).toHaveBeenCalledWith(db, bill, 1097);
+    expect(db.collectionMocks.enactedLaws.findOne).toHaveBeenCalledWith(
+      expect.objectContaining({ billId, countryId: "DD", stateId: "BY" })
+    );
     expect(db.collectionMocks.stateBills.updateOne.mock.calls[1][1].$set.status).toBe("enacted");
   });
 
