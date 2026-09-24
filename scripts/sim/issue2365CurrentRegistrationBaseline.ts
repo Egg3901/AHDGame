@@ -1,5 +1,11 @@
 import { regBaselineMultiplier } from "../../src/lib/electionEngine/electionFormulaFactors";
-import { largestRemainderSeats } from "../../src/lib/turn/election/seatAllocation";
+import {
+  getMultiSeatMinShare,
+  largestRemainderSeats,
+} from "../../src/lib/turn/election/seatAllocation";
+
+const OLD_COMMONS_MIN_SHARE = 0.2;
+const COMMONS_MIN_SHARE = getMultiSeatMinShare("commons");
 
 interface PartySnapshot {
   party: string;
@@ -331,7 +337,7 @@ function projectRegion(region: RegionSnapshot): ProjectedParty[] {
       votes: party.projectedShare,
     })),
     region.seats,
-    { minShare: 0.2, totalVotesForShare: 100 }
+    { minShare: COMMONS_MIN_SHARE, totalVotesForShare: 100 }
   );
   return projected.map((party) => ({
     ...party,
@@ -387,13 +393,15 @@ for (const partyName of partyNames) {
   );
 }
 
-console.log("\nTHRESHOLD_FLIPS\tREGION\tPARTY\tCURRENT_SHARE\tPROJECTED_SHARE");
+console.log("\nELIGIBILITY_FLIPS\tREGION\tPARTY\tCURRENT_SHARE\tPROJECTED_SHARE");
 for (const { region, parties } of projections) {
   for (const party of parties) {
-    if (party.voteShare >= 20 !== party.projectedShare >= 20) {
+    const oldEligible = party.voteShare >= OLD_COMMONS_MIN_SHARE * 100;
+    const newEligible = party.projectedShare >= COMMONS_MIN_SHARE * 100;
+    if (oldEligible !== newEligible) {
       console.log(
         [
-          "THRESHOLD_FLIP",
+          "ELIGIBILITY_FLIP",
           region.region,
           party.party,
           party.voteShare.toFixed(2),

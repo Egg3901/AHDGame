@@ -63,11 +63,11 @@ If a state has passed legislation switching to **Ranked Choice Voting**, the FPT
 US House, US State Senate, UK Commons regions, DE Bundestag constituencies, and JP Shūgiin use proportional allocation:
 
 - **Largest-remainder method** converts vote shares to seat shares.
-- **Minimum threshold:** 20% of votes for US House and UK Commons; **10%** for US State Senate and Regional Council races, which run in larger districts where more parties split the vote.
+- **Minimum threshold:** **10%** of pooled party votes for UK Commons, US State Senate, and Regional Council races, which run in larger districts where more parties split the vote; 20% for the US House.
 - **2-seat special case (House):** winner takes both unless the runner-up reaches the threshold.
 - **Seats estimate** updates each turn as votes accumulate.
 
-If you're running for a 4-seat region and your party projects to 42% of the vote, you expect ~2 seats. If you're projected at 17% and another party is at 25%, you likely get 0 and they get all.
+If you're running for a 4-seat region and your party projects to 42% of the vote, you expect about 2 seats. In a UK Commons region, a party below 10% receives no seats unless no party clears the gate.
 
 ## Candidate strategy by phase
 
@@ -114,7 +114,7 @@ When the general window closes:
 1. The final-turn vote snapshot is captured.
 2. Winners are declared.
 3. Single-seat races: highest vote total wins.
-4. Multi-seat races: largest-remainder allocation; 20% threshold applied.
+4. Multi-seat races: largest-remainder allocation with the race-specific threshold applied, including 10% for UK Commons and 20% for US House.
 5. Winners take office. Office action and fund bonuses kick in next turn.
 6. Losers' campaign documents persist for historical records but the candidacy is marked resolved.
 7. News post fires with results.
