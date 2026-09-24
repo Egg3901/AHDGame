@@ -96,6 +96,7 @@ const joinConflictSchema = z.object({
   /** ConflictDoc._id — the theater key, not the public conflictId. */
   theaterId: z.string().min(1).max(120),
   side: z.enum(["A", "B"]),
+  defendingCountryId: z.string().min(2).max(8).optional(),
   title: z.string().min(3).max(120).optional(),
   description: z.string().max(2000).optional(),
 });
@@ -223,12 +224,19 @@ export async function POST(
         description: body.data.description,
       };
     } else if (body.data.type === "join_conflict") {
-      // No country to validate here — the theater is checked against the live
-      // conflict, and the category gate refuses any org that is not a bloc.
+      const defendingCountryId = body.data.defendingCountryId?.toUpperCase() as
+        CountryId | undefined;
+      if (defendingCountryId && !COUNTRY_CONFIGS[defendingCountryId]) {
+        return NextResponse.json(
+          badRequest(`Unknown defending country: ${defendingCountryId}`).toJson(),
+          { status: 400 }
+        );
+      }
       validatedInput = {
         type: "join_conflict",
         theaterId: body.data.theaterId,
         side: body.data.side,
+        defendingCountryId,
         title: body.data.title,
         description: body.data.description,
       };

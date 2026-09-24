@@ -30,6 +30,7 @@ import { resolveMetricPath } from "@/lib/cabinet/resolveMetricPath";
 import { applyMilitaryForceEffects } from "./militaryForceEffects";
 import { resolveBattleDeclarations } from "./battleResolution";
 import { resolveColdWarHolds } from "./coldWarHolds";
+import { resolveMatureWarPoles } from "./matureWarPoles";
 import { resolvePeaceWindows } from "./peaceWindows";
 import { emitWarWire } from "@/lib/military/emitWarWire";
 import { processGeneralTenure } from "./generalTenure";
@@ -508,6 +509,11 @@ export async function processMinisterialOrders(currentTurn: number): Promise<{
   // to be measured on turns where nobody fought at all. It reads `conflictsEnabled`
   // itself — it is the only conflict step with no declaration upstream to gate it.
   await resolveColdWarHolds(db, currentTurn);
+
+  // 4b-ii-a-i. Finish non-proxy wars that reached a pole before their 24-turn
+  // minimum and still hold it now. This runs after battles for the same reason as
+  // the proxy hold sweep: a counterattack this turn must clear the pole first.
+  await resolveMatureWarPoles(db, currentTurn, defenceGameState?.conflictsEnabled === true);
 
   // 4b-ii-a-ii. White-peace any won war whose dictate window has lapsed. A real
   // sweep rather than lazy expiry: nothing forces a victor to open the conflict

@@ -75,6 +75,7 @@ import {
   classifyWarEntry,
   assessWarEntryPoliticalPressure,
   enactImmediateWarEntry,
+  loadCollectiveDefenseEntryBlocks,
   warEntryIsImmediate,
 } from "@/lib/military/warEntryPolicy";
 import type {
@@ -918,17 +919,78 @@ async function applyResolutionEffect(
         return;
       }
 
-      const preset = await loadWorldPreset(db);
+      const entryMembers = (await getMembers(db, resolution.organizationId)).filter(
+        (member): member is CountryId => member in COUNTRY_CONFIGS
+      );
       const chosen = (
         side === "A" ? conflict.sideA.countries : conflict.sideB.countries
       ) as string[];
       const other = (
         side === "A" ? conflict.sideB.countries : conflict.sideA.countries
       ) as string[];
+      const defendedCountry = resolution.joinConflictDefendingCountryId;
+      const hosts = conflict.hostEntities ?? [conflict.hostCountry];
+      if (
+        defendedCountry &&
+        (!chosen.includes(defendedCountry) || !hosts.includes(defendedCountry))
+      ) {
+        await recordOrgHistoryEvent(
+          db,
+          resolution.proposingCountryId,
+          currentTurn,
+          `${resolution.organizationId}'s defensive entry resolution lapsed: ${countryName(defendedCountry)} is no longer defending this conflict.`,
+          {
+            organizationId: resolution.organizationId,
+            legislationId: resolution._id.toString(),
+          }
+        );
+        return;
+      }
+      if (defendedCountry && !entryMembers.includes(defendedCountry)) {
+        const pendingApplication = await (
+          await getOrganizationProposalsCollection(db)
+        ).findOne({
+          organizationId: resolution.organizationId,
+          proposingCountryId: defendedCountry,
+          status: "pending",
+        });
+        if (!pendingApplication) {
+          await recordOrgHistoryEvent(
+            db,
+            resolution.proposingCountryId,
+            currentTurn,
+            `${resolution.organizationId}'s defensive entry resolution lapsed: ${countryName(defendedCountry)} is no longer a member or pending applicant.`,
+            {
+              organizationId: resolution.organizationId,
+              legislationId: resolution._id.toString(),
+            }
+          );
+          return;
+        }
+      }
+      const preset = await loadWorldPreset(db);
 
-      const entryMembers = (await getMembers(db, resolution.organizationId)).filter(
-        (member): member is CountryId => member in COUNTRY_CONFIGS
+      const collectiveDefenseCandidates = entryMembers.filter(
+        (countryId) =>
+          !chosen.includes(countryId) &&
+          !other.includes(countryId) &&
+          classifyWarEntry({
+            conflict,
+            countryId,
+            side,
+            organizationId: resolution.organizationId,
+            defendingCountryId: resolution.joinConflictDefendingCountryId,
+          }) === "collective_defense"
       );
+      const collectiveDefenseBlocks = await loadCollectiveDefenseEntryBlocks({
+        db,
+        conflict,
+        candidates: collectiveDefenseCandidates,
+        opponents: other.filter(
+          (countryId): countryId is CountryId => countryId in COUNTRY_CONFIGS
+        ),
+        currentTurn,
+      });
       for (const countryId of entryMembers) {
         if (other.includes(countryId)) {
           // A bloc resolution never switches a country's side mid-war.
@@ -948,8 +1010,24 @@ async function applyResolutionEffect(
           countryId,
           side,
           organizationId: resolution.organizationId,
+          defendingCountryId: resolution.joinConflictDefendingCountryId,
         });
         if (warEntryIsImmediate(stake)) {
+          const blockedBy =
+            stake === "collective_defense" ? collectiveDefenseBlocks.get(countryId) : undefined;
+          if (blockedBy) {
+            await recordOrgHistoryEvent(
+              db,
+              countryId,
+              currentTurn,
+              `${countryName(countryId)} could not enter ${conflict.name} under collective defence because of ${blockedBy}.`,
+              {
+                organizationId: resolution.organizationId,
+                legislationId: resolution._id.toString(),
+              }
+            );
+            continue;
+          }
           await enactImmediateWarEntry({
             db,
             conflict,
@@ -958,6 +1036,7 @@ async function applyResolutionEffect(
             organizationId: resolution.organizationId,
             currentTurn,
             stake,
+            defendingCountryId: resolution.joinConflictDefendingCountryId,
           });
           await recordOrgHistoryEvent(
             db,
