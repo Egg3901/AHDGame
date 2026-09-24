@@ -202,14 +202,11 @@ export interface DistributeVotesOptions {
    */
   regByParty?: Map<string, number>;
   /**
-   * Per-party seeded registration SHARE (0-100) for the state — feeds
-   * `regBaselineMultiplier`, the concave party-baseline vote-weight scalar.
-   * Populated only from `statePartyOrg.registrationShare` (seed-authored,
-   * today UK-era-polling only). Undefined map / missing party degrades to
-   * exactly 1.0× — worlds without the seeded field are byte-identical, and
-   * the US `registration` resistance/peel lane is never double-counted.
+   * Per-party current Reg (0-100) for regions that use the concave party
+   * baseline. Undefined disables the lane. When present, a missing party is
+   * treated as 0 so late-created parties cannot inherit a neutral advantage.
    */
-  regShareByParty?: Map<string, number>;
+  regBaselineByParty?: Map<string, number>;
   /**
    * Per-party governor coattail multiplier for the state — the §7.3.2
    * `govModifier` term. Only the executive's party has an entry, scaled by

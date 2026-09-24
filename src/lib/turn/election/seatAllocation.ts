@@ -3,20 +3,28 @@ import { allocateBlocListSeats } from "./blocListAllocation";
 import { MULTI_SEAT_TYPES } from "@/lib/utils/electionLabels";
 
 /**
- * Minimum vote share a candidate needs to be eligible for a seat.
+ * Minimum vote share an eligibility group needs to enter the seat pool. Party
+ * candidates are grouped together; independents and party-less candidates are
+ * evaluated individually.
  *
- * State Senate uses a lower threshold (10%) because these districts are larger
- * and typically have more parties splitting the vote — small third parties can
- * win a seat with 10-15% in a crowded field. The US House threshold is higher
- * (20%) to reflect the practical reality of two-party dominance in most
- * congressional districts, preventing near-marginal candidates from claiming
- * seats with negligible vote shares via Largest Remainder rounding.
+ * State Senate and UK Commons use a lower threshold (10%) because these
+ * districts elect many seats and typically have more parties splitting the
+ * vote. The US House threshold is higher (20%) to reflect the practical reality
+ * of two-party dominance in most congressional districts, preventing
+ * near-marginal candidates from claiming seats with negligible vote shares via
+ * Largest Remainder rounding.
  */
 export function getMultiSeatMinShare(electionType: string): number {
   if (
     electionType === "stateSenate" ||
     electionType === "regionalCouncil" ||
     electionType === "landtag" ||
+    // UK Commons regions elect large delegations and commonly field several
+    // candidates per party. A 20% party gate creates an excessive cliff in a
+    // competitive five-party race, where a party near one fifth of the vote
+    // can otherwise receive no representation at all.
+    electionType === "commons" ||
+    electionType === "snap_commons" ||
     // CN Provincial People's Congress: lower threshold so CDL / CNDCA
     // token candidates with ~2-5% can hold a few seats even when CCP
     // dominates the field.

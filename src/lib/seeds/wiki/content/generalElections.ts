@@ -31,11 +31,12 @@ Each turn, for each candidate, for each demographic group:
 3. **Approval scalar**: \`(favorability / 100) ^ 0.8\`. 0% approval = 0 votes. The exponent softens the curve compared to a straight percentage, so mid-favorability candidates lose less than a linear scalar would suggest.
 4. **Party Org as normalized state share**: each party's organization score divided by the state's total organization. Range \`[0, 1]\`. A party with 60 Org in a state where the total is 100 gets a 0.6 multiplier on its weight; a party not present in the state gets 0 (no votes from that party's candidates). When the state has no Org data at all (test fixtures, unbootstrapped seeds) every candidate falls back to a neutral \`1×\` so the game doesn't zero the whole field.
 5. **Reg resistance**: \`1 + 0.3 × (Reg / 100)\`. Range \`1.0×-1.3×\`. Higher own-Reg makes the party harder to peel away through persuasion. Independents and parties without a registration entry get neutral 1.0×. Reg data is bootstrap-deferred to a later phase, so most rows currently degrade to neutral.
-6. **Support mood**: \`0.6 + 0.8 × (support / 100)\`. Range \`0.6×-1.4×\` with neutral 1.0× at support=50. Captures short-term candidate mood / momentum (debate performance, scandals, endorsements). New candidates without a stored support value default to 1.0×.
-7. **Infamy scalar**: \`1 − 0.05 × (infamy/100)\`. Player characters lose up to 5% of their per-group weight at infamy=100. NPPs don't have infamy and aren't affected.
-8. **Party strength modifier**: applied to the full turn pool, scaled by state government approval and office strength (Gov 1.0, House 0.9, Senate 0.8, State Senate 0.85).
-9. **Group-level allocation**: each group contributes to the turn pool proportional to its size and turnout. Within each group, candidates split by their relative combined score across appeal, reach, approval, org share, reg resistance, support mood, and the infamy scalar.
-10. **Votes summed** across groups. That's the candidate's turn vote total.
+6. **UK current-Reg baseline**: UK regional elections also multiply party weight by the square root of current Reg share. A party at 25 Reg receives \`0.5×\`; a party at 100 Reg receives \`1×\`. The minimum is the square root of 0.5%, so a party can grow from zero without being erased. The calculation uses live Reg for every party, including parties created after the world began. If an old UK region has no Reg data at all, this factor is neutral for the whole field. Other countries do not use this extra baseline.
+7. **Support mood**: \`0.6 + 0.8 × (support / 100)\`. Range \`0.6×-1.4×\` with neutral 1.0× at support=50. Captures short-term candidate mood / momentum (debate performance, scandals, endorsements). New candidates without a stored support value default to 1.0×.
+8. **Infamy scalar**: \`1 − 0.05 × (infamy/100)\`. Player characters lose up to 5% of their per-group weight at infamy=100. NPPs don't have infamy and aren't affected.
+9. **Party strength modifier**: applied to the full turn pool, scaled by state government approval and office strength (Gov 1.0, House 0.9, Senate 0.8, State Senate 0.85).
+10. **Group-level allocation**: each group contributes to the turn pool proportional to its size and turnout. Within each group, candidates split by their relative combined score across appeal, reach, approval, org share, both Reg factors where applicable, support mood, and the infamy scalar.
+11. **Votes summed** across groups. That's the candidate's turn vote total.
 
 The org-share, reg-resistance, and support-mood factors are general-election-only. Primary elections are intra-party, so Org is applied as a uniform neutral \`1×\` (every candidate of a single party shares the same Org, which would cancel out of the within-party split anyway).
 
@@ -62,11 +63,11 @@ If a state has passed legislation switching to **Ranked Choice Voting**, the FPT
 US House, US State Senate, UK Commons regions, DE Bundestag constituencies, and JP Shūgiin use proportional allocation:
 
 - **Largest-remainder method** converts vote shares to seat shares.
-- **Minimum threshold:** 20% of votes for US House and UK Commons; **10%** for US State Senate and Regional Council races, which run in larger districts where more parties split the vote.
+- **Minimum threshold:** **10%** of pooled party votes for UK Commons, US State Senate, and Regional Council races, which run in larger districts where more parties split the vote; 20% for the US House.
 - **2-seat special case (House):** winner takes both unless the runner-up reaches the threshold.
 - **Seats estimate** updates each turn as votes accumulate.
 
-If you're running for a 4-seat region and your party projects to 42% of the vote, you expect ~2 seats. If you're projected at 17% and another party is at 25%, you likely get 0 and they get all.
+If you're running for a 4-seat region and your party projects to 42% of the vote, you expect about 2 seats. In a UK Commons region, a party below 10% receives no seats unless no party clears the gate.
 
 ## Candidate strategy by phase
 
@@ -113,7 +114,7 @@ When the general window closes:
 1. The final-turn vote snapshot is captured.
 2. Winners are declared.
 3. Single-seat races: highest vote total wins.
-4. Multi-seat races: largest-remainder allocation; 20% threshold applied.
+4. Multi-seat races: largest-remainder allocation with the race-specific threshold applied, including 10% for UK Commons and 20% for US House.
 5. Winners take office. Office action and fund bonuses kick in next turn.
 6. Losers' campaign documents persist for historical records but the candidacy is marked resolved.
 7. News post fires with results.
