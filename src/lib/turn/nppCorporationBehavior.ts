@@ -126,6 +126,7 @@ import { readCorpEconomicAnchor } from "@/lib/currency/corpEconomyFields";
 import { getNppCashFloorAnchor } from "@/lib/turn/npp/nppCashReserve";
 import { loadNppBehaviorConfig } from "@/lib/turn/npp/behaviorConfig";
 import { maybePushNppTechUnlock } from "@/lib/turn/npp/corpBehaviorConfig";
+import { corpDailyGrossRevenueLocalFromSectors } from "@/lib/corporations/dailyGrossRevenue";
 import type { TechUnlockLedgerInput } from "@/lib/corporations/techTree/techUnlockLedger";
 import {
   fragileReinvestmentPriority,
@@ -538,7 +539,11 @@ export async function processNppCorporationDecisions(
     if (techTreesEnabled && decisionContext.caretakerMandate !== "passive") {
       maybePushNppTechUnlock({
         corp,
-        sectors,
+        dailyGrossRevenueLocal: corpDailyGrossRevenueLocalFromSectors(sectors, corp, {
+          plantsEnabled,
+          eraUnitScale: plants?.eraUnitScale ?? 1,
+          fxByCurrency: fxByCurrency as ReadonlyMap<CurrencyCode, number>,
+        }),
         techCurrentYear,
         turn,
         now,
