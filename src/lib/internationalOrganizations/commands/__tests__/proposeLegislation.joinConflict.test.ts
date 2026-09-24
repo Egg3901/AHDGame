@@ -42,11 +42,11 @@ const stubDb = () =>
     collection: () => ({ findOne: async () => ({ _id: "current", conflictsEnabled }) }),
   }) as unknown as Db;
 
-const propose = (input: Record<string, unknown>) =>
+const propose = (input: Record<string, unknown>, orgId = "NATO") =>
   proposeOrganizationLegislation({
     db: stubDb(),
     countryId: "US",
-    orgId: "NATO",
+    orgId,
     actor: { characterId: new ObjectId(), characterName: "Secretary of State" },
     input: input as never,
   });
@@ -94,6 +94,22 @@ describe("tabling a join_conflict resolution", () => {
       status: "active",
       enactedOnTurn: 500,
       closesOnTurn: 500,
+    });
+  });
+
+  it("activates a player-founded Bloc's collective defense immediately", async () => {
+    conflict = { ...CONFLICT, hostCountry: "KP" } as ConflictDoc;
+
+    const res = await propose(
+      { type: "join_conflict", theaterId: "korea-1953", side: "B" },
+      "andes-pact"
+    );
+
+    expect(res.ok).toBe(true);
+    expect(insertOne.mock.calls[0]![0]).toMatchObject({
+      organizationId: "andes-pact",
+      status: "active",
+      enactedOnTurn: 500,
     });
   });
 

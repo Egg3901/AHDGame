@@ -17,8 +17,8 @@ import MapControls from "./MapControls";
 import MapTooltip from "./MapTooltip";
 import MapSVGContent, { BACKGROUND_LAYER_KEY } from "./MapSVGContent";
 import { buildTierLookup, isTierInteractive } from "@/components/landing/countryTiers";
-import { buildBlocLookup, hasBlocData, BLOC_LABELS } from "../worldBlocs";
-import type { BlocMembership } from "@/lib/world/blocMembership";
+import { buildBlocLookup, buildBlocPalette, hasBlocData } from "../worldBlocs";
+import type { BlocMapData } from "@/lib/world/blocMembership";
 import { REGION_SHARDS } from "@/lib/maps/regionManifest";
 import { computeRegionBlobs, selectStructuralOverlayShards } from "@/lib/maps/regionOverlay";
 import { WORLD_OVERLAY_OWNER_FOLD } from "@/lib/maps/germanyGeometry";
@@ -41,17 +41,22 @@ import type { WorldEntityMapSnapshot } from "@/lib/world/worldEntityMap";
 export default function WorldMapSVG({
   countryAccess,
   worldEntities,
-  blocMembership,
+  blocMapData,
 }: {
   countryAccess: CountryAccessMap;
   worldEntities: WorldEntityMapSnapshot;
-  blocMembership: BlocMembership;
+  blocMapData: BlocMapData;
 }) {
   const router = useRouter();
   const preset = useActivePreset();
   const countryName = useCountryDisplayName();
   const { metricFilter, setMetricFilter, worldMetrics, partyData, corpsData, countryIdToIso } =
     useWorldMetricFilter();
+  const blocsAvailable = hasBlocData(preset, blocMapData.customBlocs.length);
+
+  useEffect(() => {
+    if (metricFilter.type === "blocs" && !blocsAvailable) setMetricFilter({ type: "none" });
+  }, [blocsAvailable, metricFilter.type, setMetricFilter]);
 
   // --- React state ---
   const [viewMode, setViewMode] = useState<"map" | "globe">("globe");
@@ -102,12 +107,17 @@ export default function WorldMapSVG({
     () =>
       buildBlocLookup({
         presetId: preset,
-        membership: blocMembership,
+        membership: blocMapData.membership,
+        customBlocCount: blocMapData.customBlocs.length,
         interactiveFeatureIds: [...tierLookup]
           .filter(([, tier]) => isTierInteractive(tier))
           .map(([featureId]) => featureId),
       }),
-    [preset, blocMembership, tierLookup]
+    [preset, blocMapData, tierLookup]
+  );
+  const blocPalette = useMemo(
+    () => buildBlocPalette(blocMapData.customBlocs, blocMapData.membership),
+    [blocMapData]
   );
 
   /**
@@ -1062,7 +1072,7 @@ export default function WorldMapSVG({
   const tooltipFilterHighlight =
     metricFilter.type === "blocs"
       ? hoveredBloc
-        ? { label: "Bloc", value: BLOC_LABELS[hoveredBloc] }
+        ? { label: "Bloc", value: blocPalette[hoveredBloc]?.label ?? hoveredBloc }
         : null
       : hoveredIsoCountryId && metricFilter.type !== "none"
         ? getMetricFilterHighlight(
@@ -1166,6 +1176,7 @@ export default function WorldMapSVG({
           syncPathsState={commitLivePaths}
           tierLookup={activeTierLookup}
           blocLookup={activeBlocLookup}
+          blocPalette={blocPalette}
           onHover={setHovered}
           onTooltipClear={() => setTooltipPos(null)}
           onCountryClick={handleCountryClick}
@@ -1196,7 +1207,8 @@ export default function WorldMapSVG({
         onFilterChange={setMetricFilter}
         availableCategories={worldMetrics?.availableCategories ?? []}
         availableMetrics={worldMetrics?.availableMetrics ?? {}}
-        blocsAvailable={hasBlocData(preset)}
+        blocsAvailable={blocsAvailable}
+        blocPalette={blocPalette}
       />
     </div>
   );

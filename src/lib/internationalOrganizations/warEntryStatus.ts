@@ -33,6 +33,10 @@ const DISPLAY_TO_MILITARY_ORG: Readonly<Record<string, string>> = {
   COMECON: "WARSAW_PACT",
 };
 
+function militaryOrgIdForDisplay(org: OrganizationSummary): string | null {
+  return DISPLAY_TO_MILITARY_ORG[org.id] ?? (org.def.category === "bloc" ? org.id : null);
+}
+
 function billOutcome(status: BillStatus): MemberWarEntryStatus["status"] {
   if (status === "signed") return "approved";
   if (status === "failed" || status === "override_failed" || status === "withdrawn") {
@@ -51,9 +55,9 @@ export async function loadBlocWarEntryStatusByDisplayOrg(
   organizations: OrganizationSummary[],
   preset?: string
 ): Promise<Map<string, BlocWarEntryOperation[]>> {
-  const displayOrgs = organizations.filter((org) => DISPLAY_TO_MILITARY_ORG[org.id]);
+  const displayOrgs = organizations.filter((org) => militaryOrgIdForDisplay(org) !== null);
   if (displayOrgs.length === 0) return new Map();
-  const militaryOrgIds = [...new Set(displayOrgs.map((org) => DISPLAY_TO_MILITARY_ORG[org.id]))];
+  const militaryOrgIds = [...new Set(displayOrgs.map((org) => militaryOrgIdForDisplay(org)!))];
   const resolutions = await db
     .collection<OrganizationLegislation>("organizationLegislation")
     .find({
@@ -82,7 +86,7 @@ export async function loadBlocWarEntryStatusByDisplayOrg(
   const result = new Map<string, BlocWarEntryOperation[]>();
 
   for (const displayOrg of displayOrgs) {
-    const militaryOrganizationId = DISPLAY_TO_MILITARY_ORG[displayOrg.id];
+    const militaryOrganizationId = militaryOrgIdForDisplay(displayOrg)!;
     const operations: BlocWarEntryOperation[] = [];
     for (const resolution of resolutions.filter(
       (row) => row.organizationId === militaryOrganizationId
@@ -107,6 +111,7 @@ export async function loadBlocWarEntryStatusByDisplayOrg(
           countryId: countryId as CountryId,
           side,
           organizationId: militaryOrganizationId,
+          organization: displayOrg.def,
         });
         const bill = bills.find(
           (candidate) =>

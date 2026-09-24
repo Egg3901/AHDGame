@@ -11,6 +11,7 @@ import {
   defconFor,
 } from "@/lib/military/theaters";
 import type { Bloc } from "@/lib/military/bloc";
+import { isCustomAlignmentPoleId } from "@/lib/constants/alignmentEras";
 import { DEFENSE_POSITION_BY_COUNTRY } from "@/lib/constants/military";
 import type { CountryId } from "@/lib/constants/countries";
 import { useTheaterState } from "./useTheaterState";
@@ -71,7 +72,7 @@ export function SituationBoardClient({
   const C = COUNTRY_COMMAND_FLAVOR[state.country] ?? DEFAULT_COMMAND_FLAVOR;
   // Alignment comes from the live bloc roll the server resolved, never from the
   // flavour table — that table claimed West Germany was NATO in 1953.
-  const blocName = BLOC_BOARD_NAME[bloc];
+  const blocName = isCustomAlignmentPoleId(bloc) ? "INDEPENDENT BLOC" : BLOC_BOARD_NAME[bloc];
   const total = state.pool;
   const deployed = conflicts.reduce(
     (sum, conflict) => sum + (state.committed[conflict.id] ?? 0),

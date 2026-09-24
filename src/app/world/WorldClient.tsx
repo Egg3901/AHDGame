@@ -11,7 +11,7 @@ import type { NationWorldSnapshot } from "@/lib/world/nationWorldSnapshots";
 import type { CountryAccessMap } from "./page";
 import { WorldMetricFilterProvider } from "./WorldMetricFilterContext";
 import type { WorldEntityMapSnapshot } from "@/lib/world/worldEntityMap";
-import type { BlocMembership } from "@/lib/world/blocMembership";
+import type { BlocMapData } from "@/lib/world/blocMembership";
 
 interface WorldClientProps {
   countryAccess: CountryAccessMap;
@@ -20,7 +20,7 @@ interface WorldClientProps {
   conflictsEnabled: boolean;
   worldEntities: WorldEntityMapSnapshot;
   /** entityId → bloc, for the globe's Blocs mode. */
-  blocMembership: BlocMembership;
+  blocMapData: BlocMapData;
 }
 
 export default function WorldClient({
@@ -28,7 +28,7 @@ export default function WorldClient({
   nationSnapshots,
   conflictsEnabled,
   worldEntities,
-  blocMembership,
+  blocMapData,
 }: WorldClientProps) {
   // `countryAccess` is keyed by the runtime registered set (getAllCountryAccess →
   // COUNTRY_ORDER ∪ active countryGameStates), so its keys are the SSOT for which
@@ -58,7 +58,7 @@ export default function WorldClient({
             <WorldMapSVG
               countryAccess={countryAccess}
               worldEntities={worldEntities}
-              blocMembership={blocMembership}
+              blocMapData={blocMapData}
             />
             <div className="flex justify-center gap-6 text-xs text-muted">
               <div className="flex items-center gap-2">

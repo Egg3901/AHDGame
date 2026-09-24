@@ -4,6 +4,10 @@ import type { CountryId } from "@/lib/constants/countries";
 import type { OrgIdentity } from "@/lib/constants/orgIdentity";
 import type { OrganizationCategory } from "@/lib/constants/orgCategory";
 import type { AlertPosture } from "@/lib/constants/orgPosture";
+import type {
+  CustomAlignmentPoleId,
+  CustomAlignmentPoleToken,
+} from "@/lib/constants/alignmentEras";
 import type { OrgDerived } from "@/lib/internationalOrganizations/orgDerivedMetrics";
 import type { BlocWarEntryOperation } from "@/lib/internationalOrganizations/warEntryStatus";
 import type {
@@ -33,6 +37,10 @@ export interface OrgSummary {
     leadership: { title: string; termTurns: number };
     charter: string;
     category: OrganizationCategory;
+    alignment?: {
+      poleId: CustomAlignmentPoleId;
+      accentToken: CustomAlignmentPoleToken;
+    };
     isCustom?: boolean;
   };
   members: Array<{

@@ -6,7 +6,11 @@ import type { OrganizationLegislation } from "@/lib/db/types/internationalOrgani
 import { getOrganizationLegislationCollection } from "@/lib/db/collections";
 import { getConflict } from "@/lib/db/collections/conflicts";
 import { loadWorldPreset } from "@/lib/currency/gdpAnchorRate";
-import { getMembers, recordOrgHistoryEvent } from "@/lib/internationalOrganizations/service";
+import {
+  getMembers,
+  loadOrganizationDef,
+  recordOrgHistoryEvent,
+} from "@/lib/internationalOrganizations/service";
 import { buildJoinConflictBill } from "@/lib/internationalOrganizations/commands/buildJoinConflictBill";
 import { hasBillLifecycle } from "@/lib/legislature/hasBillLifecycle";
 import { isConflictConcluded } from "@/lib/military/conflictLifecycle";
@@ -89,6 +93,7 @@ export async function reconcileAutonomousWarEntryBills(db: Db): Promise<number> 
     const theaterId = resolution.joinConflictTheaterId;
     const side = resolution.joinConflictSide;
     if (!theaterId || !side) continue;
+    const warEntryOrganization = await loadOrganizationDef(db, resolution.organizationId);
 
     const conflict = await getConflict(db, theaterId);
     if (!conflict || isConflictConcluded(conflict.status)) continue;
@@ -108,6 +113,7 @@ export async function reconcileAutonomousWarEntryBills(db: Db): Promise<number> 
         countryId,
         side,
         organizationId: resolution.organizationId,
+        organization: warEntryOrganization ?? undefined,
       });
       if (chosen.includes(countryId)) {
         if (bill && bill.status !== "signed") {
@@ -159,6 +165,7 @@ export async function reconcileAutonomousWarEntryBills(db: Db): Promise<number> 
           db,
           countryId,
           organizationId: resolution.organizationId,
+          organization: warEntryOrganization ?? undefined,
           stake,
           currentTurn,
         });
@@ -221,6 +228,7 @@ export async function reconcileAutonomousWarEntryBills(db: Db): Promise<number> 
             db,
             countryId,
             organizationId: resolution.organizationId,
+            organization: warEntryOrganization ?? undefined,
             stake,
             currentTurn,
           }),

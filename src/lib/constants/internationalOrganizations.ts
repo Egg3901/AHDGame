@@ -1,6 +1,7 @@
 import type { CountryId } from "./countries";
 import type { OrgMemberId } from "@/lib/db/types/internationalOrganization";
 import type { OrganizationCategory } from "./orgCategory";
+import type { CustomAlignmentPoleId, CustomAlignmentPoleToken } from "./alignmentEras";
 import { JP_CABINET_SEAT_IDS } from "@/lib/countries/jp/institutionsFacts";
 import { US_CABINET_SEAT_IDS } from "@/lib/countries/us/institutionsFacts";
 import { UK_CABINET_SEAT_IDS } from "@/lib/countries/uk/institutionsFacts";
@@ -107,6 +108,11 @@ export interface InternationalOrganizationDef {
   charter: string;
   /** Shared classification driving powers, flagship, and group label. */
   category: OrganizationCategory;
+  /** Independent alignment identity for a player-founded Bloc. */
+  alignment?: {
+    poleId: CustomAlignmentPoleId;
+    accentToken: CustomAlignmentPoleToken;
+  };
   /** True for player-created orgs so the UI can badge / filter them. */
   isCustom?: boolean;
 }

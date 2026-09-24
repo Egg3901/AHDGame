@@ -22,7 +22,10 @@ import {
   TIER_STROKE_WIDTHS,
   type CountryTier,
 } from "@/components/landing/countryTiers";
-import { BLOC_COLORS, BLOC_STROKES, type WorldBloc } from "../worldBlocs";
+import { buildBlocPalette, type MapBlocStyle } from "../worldBlocs";
+import type { MapBlocId } from "@/lib/world/blocMembership";
+
+const DEFAULT_BLOC_PALETTE = buildBlocPalette([]);
 
 /**
  * pathRefsMap key for the single merged Background Nations layer. The landing
@@ -137,7 +140,8 @@ interface MapSVGContentProps {
    * alongside `tierLookup`: it recolors the interactive tiers and leaves the
    * merged Background layer alone. Absent means plain tier coloring.
    */
-  blocLookup?: ReadonlyMap<string, WorldBloc>;
+  blocLookup?: ReadonlyMap<string, MapBlocId>;
+  blocPalette?: Readonly<Record<string, MapBlocStyle>>;
 }
 
 export default function MapSVGContent({
@@ -178,6 +182,7 @@ export default function MapSVGContent({
   crisisCountryId,
   tierLookup,
   blocLookup,
+  blocPalette = DEFAULT_BLOC_PALETTE,
 }: MapSVGContentProps) {
   const svgW = layout?.svgW ?? DEFAULT_SVG_W;
   const svgH = layout?.svgH ?? DEFAULT_SVG_H;
@@ -372,8 +377,12 @@ export default function MapSVGContent({
                   else pathRefsMap.current.delete(id);
                 }}
                 d={paths.get(id) ?? ""}
-                fill={wireframeColor ? tierWireframeFill(tier, wireframeColor) : BLOC_COLORS[bloc]}
-                stroke={wireframeColor ?? BLOC_STROKES[bloc]}
+                fill={
+                  wireframeColor
+                    ? tierWireframeFill(tier, wireframeColor)
+                    : (blocPalette[bloc]?.fill ?? TIER_COLORS[tier])
+                }
+                stroke={wireframeColor ?? blocPalette[bloc]?.stroke ?? TIER_STROKES[tier]}
                 strokeWidth={TIER_STROKE_WIDTHS[tier]}
                 style={{ outline: "none", pointerEvents: "none" }}
               />
@@ -384,11 +393,11 @@ export default function MapSVGContent({
           const tierFill = wireframeColor
             ? tierWireframeFill(tier, wireframeColor)
             : bloc
-              ? BLOC_COLORS[bloc]
+              ? (blocPalette[bloc]?.fill ?? TIER_COLORS[tier])
               : TIER_COLORS[tier];
           const tierStroke = isHov
             ? (wireframeColor ?? MAP_COLORS.strokeActive)
-            : (wireframeColor ?? (bloc ? BLOC_STROKES[bloc] : TIER_STROKES[tier]));
+            : (wireframeColor ?? (bloc ? blocPalette[bloc]?.stroke : null) ?? TIER_STROKES[tier]);
           return (
             <path
               key={id}

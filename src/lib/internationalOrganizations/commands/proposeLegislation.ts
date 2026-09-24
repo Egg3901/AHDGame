@@ -15,7 +15,6 @@ import {
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
 import { getConflict } from "@/lib/db/collections/conflicts";
 import { hostSideOf } from "@/lib/military/warEntryPolicy";
-import { BLOC_DESIGNATED_ORG_IDS } from "@/lib/constants/orgCategory";
 
 export type ProposeResolutionInput =
   | { type: "free_trade_agreement"; parties: CountryId[]; title?: string; description?: string }
@@ -394,9 +393,7 @@ export async function proposeOrganizationLegislation(params: {
 
     const sideLabel = input.side === "A" ? conflict.sideA.label : conflict.sideB.label;
     const title = input.title?.trim() || `${orgId} Entry into ${conflict.name} (${sideLabel})`;
-    const collectiveDefense =
-      (BLOC_DESIGNATED_ORG_IDS as readonly string[]).includes(orgId) &&
-      hostSideOf(conflict) === input.side;
+    const collectiveDefense = def.category === "bloc" && hostSideOf(conflict) === input.side;
 
     await legislation.insertOne({
       _id: legislationId,

@@ -10,6 +10,12 @@ import type { GovernmentApproval } from "@/lib/db/types/governmentApproval";
 import type { MilitaryUnit } from "@/lib/db/types/militaryUnit";
 import type { PersistedSphereMembership } from "@/lib/world/spheres/membershipStore";
 import type { AlignmentPoleId } from "@/lib/constants/alignmentEras";
+import type { InternationalOrganizationDef } from "@/lib/constants/internationalOrganizations";
+
+type WarEntryOrganization = Pick<
+  InternationalOrganizationDef,
+  "category" | "alignment" | "foundingMembers"
+>;
 
 export type WarEntryStake =
   "principal_belligerent" | "collective_defense" | "offensive_coalition" | "discretionary";
@@ -49,13 +55,17 @@ export function classifyWarEntry(params: {
   countryId: CountryId;
   side: "A" | "B";
   organizationId: string;
+  organization?: WarEntryOrganization;
 }): WarEntryStake {
-  const { conflict, countryId, side, organizationId } = params;
+  const { conflict, countryId, side, organizationId, organization } = params;
   if ((conflict.hostEntities ?? [conflict.hostCountry]).includes(countryId)) {
     return "principal_belligerent";
   }
   const hostSide = hostSideOf(conflict);
-  if (!hostSide || !(BLOC_DESIGNATED_ORG_IDS as readonly string[]).includes(organizationId)) {
+  const isBloc =
+    organization?.category === "bloc" ||
+    (BLOC_DESIGNATED_ORG_IDS as readonly string[]).includes(organizationId);
+  if (!hostSide || !isBloc) {
     return "discretionary";
   }
   return side === hostSide ? "collective_defense" : "offensive_coalition";
@@ -80,10 +90,11 @@ export async function assessWarEntryPoliticalPressure(params: {
   db: Db;
   countryId: CountryId;
   organizationId: string;
+  organization?: WarEntryOrganization;
   stake: WarEntryStake;
   currentTurn: number;
 }): Promise<WarEntryPoliticalPressure> {
-  const { db, countryId, organizationId, stake, currentTurn } = params;
+  const { db, countryId, organizationId, organization, stake, currentTurn } = params;
   const [alignment, sphere, approval, budget, units] = await Promise.all([
     db.collection<CountryAlignment>("countryAlignments").findOne({ entityId: countryId }),
     db.collection<PersistedSphereMembership>("sphereMemberships").findOne({ entityId: countryId }),
@@ -94,10 +105,17 @@ export async function assessWarEntryPoliticalPressure(params: {
     db.collection<MilitaryUnit>("militaryUnits").find({ countryId }).toArray(),
   ]);
 
-  const alignedPole =
-    organizationId === "WARSAW_PACT" ? ["EAST", "MOSCOW"] : ["WEST", "WASHINGTON"];
-  const opposingPole =
-    organizationId === "WARSAW_PACT" ? ["WEST", "WASHINGTON"] : ["EAST", "MOSCOW"];
+  const customPole = organization?.alignment?.poleId;
+  const alignedPole = customPole
+    ? [customPole]
+    : organizationId === "WARSAW_PACT"
+      ? ["EAST", "MOSCOW"]
+      : ["WEST", "WASHINGTON"];
+  const opposingPole = customPole
+    ? Object.keys(alignment?.shares ?? {}).filter((pole) => pole !== customPole)
+    : organizationId === "WARSAW_PACT"
+      ? ["WEST", "WASHINGTON"]
+      : ["EAST", "MOSCOW"];
   const alignedShare = Math.max(
     0,
     ...alignedPole.map((pole) => alignment?.shares[pole as AlignmentPoleId] ?? 0)
@@ -107,7 +125,11 @@ export async function assessWarEntryPoliticalPressure(params: {
     ...opposingPole.map((pole) => alignment?.shares[pole as AlignmentPoleId] ?? 0)
   );
   const blocAlignment = (alignedShare - opposingShare) * 0.35;
-  const blocLeader = organizationId === "WARSAW_PACT" ? "RU" : "US";
+  const blocLeader = customPole
+    ? organization?.foundingMembers[0]
+    : organizationId === "WARSAW_PACT"
+      ? "RU"
+      : "US";
   const sponsorTie = sphere?.relationships.find((row) => row.sponsorId === blocLeader);
   const sphereTie =
     sphere?.primarySphereId === blocLeader

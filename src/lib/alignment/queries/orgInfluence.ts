@@ -14,10 +14,7 @@ import type { Db } from "mongodb";
 import {
   ALIGNMENT_GATES,
   CRISIS_TURN_CAP,
-  ALIGNMENT_POLES,
   PER_NATION_TURN_CAP,
-  polesForYear,
-  resolveAlignmentEra,
   type AlignmentPoleId,
   type AlignmentPoleToken,
 } from "@/lib/constants/alignmentEras";
@@ -54,6 +51,7 @@ import {
   type NationStanding,
 } from "./nationStanding";
 import { computeWorldBalance, type WorldBalance } from "./worldBalance";
+import { loadAlignmentTopology } from "../topology";
 
 export interface InfluenceChannelView {
   poleId: AlignmentPoleId;
@@ -271,8 +269,9 @@ export async function loadOrgInfluence(
     };
   }
 
-  const era = resolveAlignmentEra(year);
-  const channelDef = era.channels.find((c) => c.organizationId === organizationId);
+  const topology = await loadAlignmentTopology(db, year);
+  const { era } = topology;
+  const channelDef = topology.channels.find((c) => c.organizationId === organizationId);
   if (!channelDef) {
     // The common case for most orgs in most eras. Not an error — the tab says so.
     return {
@@ -294,7 +293,8 @@ export async function loadOrgInfluence(
     };
   }
 
-  const pole = ALIGNMENT_POLES[channelDef.poleId];
+  const pole = topology.poleDefinitions.get(channelDef.poleId);
+  if (!pole) throw new Error(`Missing alignment pole definition for ${channelDef.poleId}`);
   const channel: InfluenceChannelView = {
     poleId: channelDef.poleId,
     poleLabel: pole.label,
@@ -302,8 +302,11 @@ export async function loadOrgInfluence(
     weight: channelDef.weight,
   };
 
-  const poleIds = polesForYear(year);
-  const { poles, remainderLabel } = eraPoleVocabulary(year);
+  const poleIds = topology.poles;
+  const { poles, remainderLabel } = eraPoleVocabulary(year, {
+    poleIds,
+    poleDefinitions: topology.poleDefinitions,
+  });
   const alignments = await getCountryAlignmentsCollection(db);
   const rows = await alignments.find({}).toArray();
 
@@ -460,11 +463,12 @@ export async function loadOrgInfluence(
   const rivalIntel: Record<string, RivalIntelEntry[]> = {};
   for (const doc of intelDocs) {
     if (doc.organizationId === organizationId) continue;
-    const intelChannel = era.channels.find((c) => c.organizationId === doc.organizationId);
+    const intelChannel = topology.channels.find((c) => c.organizationId === doc.organizationId);
     if (!intelChannel) continue; // stranded by an era crossing; unmappable to a pole
     const points = doc.appliedPoints ?? 0;
     if (points <= 0) continue; // resolved at zero is noise, not intelligence
-    const intelPole = ALIGNMENT_POLES[intelChannel.poleId];
+    const intelPole = topology.poleDefinitions.get(intelChannel.poleId);
+    if (!intelPole) continue;
     // `amountUsd` is deliberately not read here. Withholding a rival's spend is
     // enforced at this boundary so no later UI change can leak fund depth.
     const entry: RivalIntelEntry = {
@@ -504,6 +508,7 @@ export async function loadOrgInfluence(
       shares: { shares: row.shares, nonAligned: row.nonAligned },
       year,
       organizationId,
+      channels: topology.channels,
     });
     if (!standing) continue;
     members.push({
@@ -534,7 +539,7 @@ export async function loadOrgInfluence(
             const row = alignmentByEntity.get(m.countryId);
             if (!row) return null;
             // The era's pole IDS, not the display vocabulary `poles` above.
-            const rivalShare = era.poles
+            const rivalShare = topology.poles
               .filter((p) => p !== channel.poleId)
               .reduce((max, p) => Math.max(max, row.shares[p] ?? 0), 0);
             return {

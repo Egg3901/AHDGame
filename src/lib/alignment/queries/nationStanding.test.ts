@@ -36,6 +36,14 @@ describe("projectNationStanding", () => {
     expect(s.isPlayable).toBe(true); // Yugoslavia is a modelled country
   });
 
+  it("hides the bipolar axis as soon as a custom pole exists", () => {
+    const s = projectNationStanding(doc(), {
+      ...ctx(),
+      poleIds: ["WEST", "EAST", "ORG:andes-pact"],
+    });
+    expect(s?.axis).toBeNull();
+  });
+
   it("marks a roster-only entity as not playable", () => {
     // Jordan is sphere-macro: it has a roster name but no CountryConfig, and
     // the distinction is what stops callers indexing COUNTRY_CONFIGS blindly.

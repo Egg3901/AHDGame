@@ -150,7 +150,8 @@ export async function loadWorldOrganizationsView(db: Db) {
         s.def.isCustom ?? false,
         s.def.shortName,
         s.def.category,
-        s.def.logoPath
+        s.def.logoPath,
+        s.def.alignment?.accentToken
       ),
       // Viewer-agnostic at the list level; the client recomputes `yourInfluence`
       // from `derived.members` against the viewer's own country.

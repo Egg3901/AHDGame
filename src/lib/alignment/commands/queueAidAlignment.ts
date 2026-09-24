@@ -24,9 +24,9 @@ import type { CountryId } from "@/lib/constants/countries";
 import type { InternationalOrganizationId } from "@/lib/constants/internationalOrganizations";
 import { getAlignmentPlaysCollection } from "@/lib/db/collections";
 import type { GameState } from "@/lib/db/types";
-import { resolveAlignmentEra } from "@/lib/constants/alignmentEras";
 import { resolveGameYear } from "@/lib/era/era";
 import { isIntOrgAlignmentEnabled } from "../featureFlag";
+import { loadAlignmentTopology } from "../topology";
 
 /**
  * Queue the alignment pull an aid package earns. Returns whether one was
@@ -58,7 +58,7 @@ export async function queueAidAlignmentPull(params: {
   const year = (gs ? resolveGameYear(gs) : null) ?? new Date().getFullYear();
   // No channel means this organisation carries no influence this era — the aid
   // still pays, it simply buys no alignment.
-  const channel = resolveAlignmentEra(year).channels.find(
+  const channel = (await loadAlignmentTopology(db, year)).channels.find(
     (c) => c.organizationId === organizationId
   );
   if (!channel) return false;

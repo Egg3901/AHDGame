@@ -32,6 +32,7 @@ const proposalsStore = new Map<string, Record<string, unknown>>();
 const billsStore = new Map<string, Record<string, unknown>>();
 const membershipsStore: Array<Record<string, unknown>> = [];
 const legislationStore: Array<Record<string, unknown>> = [];
+const customBlocsStore: Array<Record<string, unknown>> = [];
 
 function applySet(doc: Record<string, unknown>, update: Record<string, unknown>) {
   const set = update.$set as Record<string, unknown> | undefined;
@@ -39,6 +40,9 @@ function applySet(doc: Record<string, unknown>, update: Record<string, unknown>)
 }
 
 vi.mock("@/lib/db/collections", () => ({
+  getCustomInternationalOrganizationsCollection: vi.fn().mockResolvedValue({
+    find: () => ({ project: () => ({ toArray: () => Promise.resolve(customBlocsStore) }) }),
+  }),
   getOrganizationProposalsCollection: vi.fn().mockResolvedValue({
     findOne: (q: { _id: ObjectId }) =>
       Promise.resolve(proposalsStore.get(q._id.toString()) ?? null),
@@ -128,6 +132,7 @@ beforeEach(() => {
   billsStore.clear();
   membershipsStore.length = 0;
   legislationStore.length = 0;
+  customBlocsStore.length = 0;
   vi.clearAllMocks();
 });
 
@@ -197,6 +202,38 @@ describe("admitMember bloc exclusivity", () => {
     await admitMember(fakeDb(), "NATO", "YU", 700);
 
     expect(membershipsStore.map((m) => m.organizationId)).toEqual(["NATO"]);
+  });
+
+  it("withdraws from a player-founded Bloc before admitting a country to NATO", async () => {
+    customBlocsStore.push({
+      id: "andes-pact",
+      name: "Andes Pact",
+      shortName: "AP",
+      creatorCountryId: "BR",
+      category: "bloc",
+      createdOnTurn: 1,
+      alignment: { poleId: "ORG:andes-pact", accentToken: "warning" },
+    });
+    member("andes-pact", "GR");
+    await admitMember(fakeDb(), "NATO", "GR", 700);
+
+    expect(membershipsStore.map((m) => m.organizationId)).toEqual(["NATO"]);
+  });
+
+  it("withdraws from NATO before admitting a country to a player-founded Bloc", async () => {
+    customBlocsStore.push({
+      id: "andes-pact",
+      name: "Andes Pact",
+      shortName: "AP",
+      creatorCountryId: "BR",
+      category: "bloc",
+      createdOnTurn: 1,
+      alignment: { poleId: "ORG:andes-pact", accentToken: "warning" },
+    });
+    member("NATO", "GR");
+    await admitMember(fakeDb(), "andes-pact", "GR", 700);
+
+    expect(membershipsStore.map((m) => m.organizationId)).toEqual(["andes-pact"]);
   });
 
   it("gives up the rival row before taking the new one", async () => {
