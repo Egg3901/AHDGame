@@ -87,6 +87,34 @@ describe("takeStateBillGovernorAction — sign with the budget gate", () => {
     expect(finalizeStateBillEnactment).not.toHaveBeenCalled();
   });
 
+  it("explains the bill cost and remaining headroom in the local currency", async () => {
+    const bill = makeBill({ stateId: "BY", countryId: "DE" });
+    db.collectionMocks["stateBills"]!.findOne.mockResolvedValue(bill);
+    vi.mocked(validateStateBudgetImpact).mockResolvedValue({
+      allowed: false,
+      error: "INSUFFICIENT_FUNDS",
+      costAmount: 1_500_000_000,
+      newTotalSpending: 23_900_000_000,
+      shortfall: 699_000_000,
+    });
+
+    const result = await takeStateBillGovernorAction(
+      db as unknown as Db,
+      "DE",
+      "BY",
+      bill._id.toString(),
+      user,
+      "signed"
+    );
+
+    expect(result.status).toBe(400);
+    expect(String(result.body.error)).toContain("annual cost");
+    expect(String(result.body.error)).toContain("1.5B");
+    expect(String(result.body.error)).toContain("801M funding headroom");
+    expect(String(result.body.error)).toContain("699M");
+    expect(String(result.body.error)).not.toContain("$699M");
+  });
+
   it("signs and enacts when the budget allows", async () => {
     const bill = makeBill();
     db.collectionMocks["stateBills"]!.findOne.mockResolvedValue(bill);
