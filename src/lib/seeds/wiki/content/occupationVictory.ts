@@ -88,9 +88,16 @@ Countries with no mapped region data fall back to the meter alone.
 
 ## Victory
 
-**Control reaching 0 or 100 wins the war.** It does not end it on the spot.
+**Control reaching 0 or 100 can win the war once it has lasted 24 turns.** A side
+that reaches a pole earlier must keep it until that minimum passes. If the enemy
+pushes the line off the pole first, the war continues.
 
-At that point:
+The defender's opening ownership is not a victory waiting to happen. An interstate
+war begins at the defender's pole, but that position carries no victory stamp until
+the front first moves away and a battle later returns it there. A war in which nobody
+ever crosses the border therefore does not resolve automatically on turn 24.
+
+Once the minimum has elapsed and a side holds a pole:
 
 1. The fighting stops. The conflict moves to **terms pending**: it takes no more offensives, accepts no more peace offers and admits no new belligerents, but it still counts as a live war everywhere else, so the wartime strip stays up and no second war can be declared between the same countries.
 2. **Every belligerent stands down.** For each country, its general postings at that conflict are dropped, which returns all of their units to reserve.
@@ -98,7 +105,7 @@ At that point:
 4. When the term is applied or the window lapses, the conflict is marked **resolved**, the winner and end turn are recorded, and **truces are recorded between every cross-side pair**: 240 turns, about ten real days.
 5. **The fog stays down for 480 turns, then lifts entirely.** Until then the conflict page reads as it did during the war: territory, casualties and verdicts for everyone, your own side's rosters for a belligerent's seats. Once the window lapses the page becomes an open archive: both sides' rosters, every engagement, what each formation lost. The war is listed under Historical Conflicts on the conflicts hub from the turn it ends.
 
-Two exceptions skip the terms window and end the war the moment the front runs out: a war against an **insurgency** (no government to impose on), and a war whose losing **founder already left** on a separate peace (nobody is left holding the claim).
+Two exceptions skip the terms window once the pole becomes eligible and resolve outright: a war against an **insurgency** (no government to impose on), and a war whose losing **founder already left** on a separate peace (nobody is left holding the claim).
 
 Standing down works by removing the **posting**, not by clearing unit locations. Since a unit's position is a cache of its general's posting, clearing the location alone would simply be re-derived back to a dead front on the next reconcile. Removing the posting is what actually brings the army home.
 

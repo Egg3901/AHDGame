@@ -2,11 +2,14 @@ import { ObjectId, type Db } from "mongodb";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import type { CommodityType } from "@/lib/constants/commodities";
 import { ORG_PROPOSAL_VOTING_TURNS } from "@/lib/constants/internationalOrganizations";
-import { canTableResolutionType } from "@/lib/constants/orgCategory";
+import { BLOC_DESIGNATED_ORG_IDS, canTableResolutionType } from "@/lib/constants/orgCategory";
 import { getDirectiveDef } from "@/lib/constants/orgDirectives";
 import { POSTURE_META, isAlertPosture, type AlertPosture } from "@/lib/constants/orgPosture";
 import { getAgencyDef } from "@/lib/constants/orgAgencies";
-import { getOrganizationLegislationCollection } from "@/lib/db/collections";
+import {
+  getOrganizationLegislationCollection,
+  getOrganizationProposalsCollection,
+} from "@/lib/db/collections";
 import {
   getMembers,
   loadOrganizationDefWithPowers,
@@ -14,8 +17,7 @@ import {
 } from "@/lib/internationalOrganizations/service";
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
 import { getConflict } from "@/lib/db/collections/conflicts";
-import { hostSideOf } from "@/lib/military/warEntryPolicy";
-import { BLOC_DESIGNATED_ORG_IDS } from "@/lib/constants/orgCategory";
+import { isConflictConcluded } from "@/lib/military/conflictLifecycle";
 
 export type ProposeResolutionInput =
   | { type: "free_trade_agreement"; parties: CountryId[]; title?: string; description?: string }
@@ -49,6 +51,7 @@ export type ProposeResolutionInput =
       /** ConflictDoc._id — the theater key, not the public conflictId. */
       theaterId: string;
       side: "A" | "B";
+      defendingCountryId?: CountryId;
       title?: string;
       description?: string;
     };
@@ -388,15 +391,63 @@ export async function proposeOrganizationLegislation(params: {
     // Checked again at enactment: a resolution sits for 24 turns and the war can end
     // inside that window, so passing here is not a promise that it is still live.
     const conflict = await getConflict(db, input.theaterId);
-    if (!conflict || conflict.status === "resolved") {
+    if (!conflict || isConflictConcluded(conflict.status)) {
       return { ok: false as const, status: 400, error: "That conflict is not live." };
+    }
+
+    if (input.defendingCountryId) {
+      const defendingCountryId = input.defendingCountryId;
+      const chosen = input.side === "A" ? conflict.sideA.countries : conflict.sideB.countries;
+      const hosts = conflict.hostEntities ?? [conflict.hostCountry];
+      if (
+        !BLOC_DESIGNATED_ORG_IDS.includes(orgId) ||
+        !chosen.includes(defendingCountryId) ||
+        !hosts.includes(defendingCountryId)
+      ) {
+        return {
+          ok: false as const,
+          status: 400,
+          error: "That country cannot be named as the defended member for this side.",
+        };
+      }
+      if (!members.has(defendingCountryId)) {
+        const pendingApplication = await (
+          await getOrganizationProposalsCollection(db)
+        ).findOne({
+          organizationId: orgId,
+          proposingCountryId: defendingCountryId,
+          status: "pending",
+        });
+        if (!pendingApplication) {
+          return {
+            ok: false as const,
+            status: 400,
+            error: "The defended country is neither a member nor a pending applicant.",
+          };
+        }
+      }
+    }
+
+    const existing = await legislation.findOne({
+      organizationId: orgId,
+      type: "join_conflict",
+      joinConflictTheaterId: conflict._id,
+      joinConflictSide: input.side,
+      ...(input.defendingCountryId
+        ? { joinConflictDefendingCountryId: input.defendingCountryId }
+        : { joinConflictDefendingCountryId: { $exists: false } }),
+      status: { $in: ["pending", "active"] },
+    });
+    if (existing) {
+      return {
+        ok: false as const,
+        status: 409,
+        error: `${orgId} is already considering or enforcing entry on that side.`,
+      };
     }
 
     const sideLabel = input.side === "A" ? conflict.sideA.label : conflict.sideB.label;
     const title = input.title?.trim() || `${orgId} Entry into ${conflict.name} (${sideLabel})`;
-    const collectiveDefense =
-      (BLOC_DESIGNATED_ORG_IDS as readonly string[]).includes(orgId) &&
-      hostSideOf(conflict) === input.side;
 
     await legislation.insertOne({
       _id: legislationId,
@@ -407,24 +458,24 @@ export async function proposeOrganizationLegislation(params: {
       parties: [],
       joinConflictTheaterId: conflict._id,
       joinConflictSide: input.side,
+      ...(input.defendingCountryId
+        ? { joinConflictDefendingCountryId: input.defendingCountryId }
+        : {}),
       proposingCountryId: countryId,
       proposedByCharacterId: actor.characterId,
       proposedByCharacterName: actor.characterName,
-      status: collectiveDefense ? "active" : "pending",
+      status: "pending",
       votes: [],
       proposedAt: now,
       proposedOnTurn: currentTurn,
-      closesOnTurn: collectiveDefense ? currentTurn : currentTurn + ORG_PROPOSAL_VOTING_TURNS,
-      ...(collectiveDefense ? { enactedAt: now, enactedOnTurn: currentTurn } : {}),
+      closesOnTurn: currentTurn + ORG_PROPOSAL_VOTING_TURNS,
     });
 
     await recordOrgHistoryEvent(
       db,
       countryId,
       currentTurn,
-      collectiveDefense
-        ? `${orgId} collective defense activated immediately for ${conflict.name}.`
-        : `${COUNTRY_CONFIGS[countryId].name} moved that ${orgId} enter ${conflict.name} alongside ${sideLabel}.`,
+      `${COUNTRY_CONFIGS[countryId].name} moved that ${orgId} enter ${conflict.name} alongside ${sideLabel}.`,
       { organizationId: orgId, legislationId: legislationId.toString() }
     );
 

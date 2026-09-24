@@ -38,8 +38,12 @@ const stubDb = () =>
   }) as unknown as Db;
 
 const buildJoinConflictBill = vi.fn().mockResolvedValue(new ObjectId());
+const enactImmediateWarEntry = vi.fn().mockResolvedValue({ joined: true, deployedUnits: 1 });
+const loadCollectiveDefenseEntryBlocks = vi.fn().mockResolvedValue(new Map());
 let conflict: ConflictDoc | null = null;
 let roster: string[] = [];
+let defendingCountryId: string | undefined;
+let applicantStillPending = true;
 const { headlessCountries } = vi.hoisted(() => ({ headlessCountries: new Set<string>() }));
 
 vi.mock("@/lib/db/collections", () => ({
@@ -88,6 +92,9 @@ vi.mock("@/lib/internationalOrganizations/reconcileAutonomousWarEntry", () => ({
 }));
 vi.mock("@/lib/military/warEntryPolicy", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/military/warEntryPolicy")>()),
+  enactImmediateWarEntry: (...args: unknown[]) => enactImmediateWarEntry(...args),
+  loadCollectiveDefenseEntryBlocks: (...args: unknown[]) =>
+    loadCollectiveDefenseEntryBlocks(...args),
   assessWarEntryPoliticalPressure: vi.fn().mockResolvedValue({
     blocRelations: 0,
     securityStakes: -10,
@@ -139,6 +146,7 @@ async function runPhase(voters?: string[]) {
 
   vi.mocked(collections.getOrganizationProposalsCollection).mockResolvedValue({
     ...empty(),
+    findOne: vi.fn().mockResolvedValue(applicantStillPending ? { status: "pending" } : null),
     updateOne: vi.fn(),
   } as never);
   vi.mocked(collections.getOrganizationMembershipsCollection).mockResolvedValue({
@@ -163,6 +171,7 @@ async function runPhase(voters?: string[]) {
             type: "join_conflict",
             joinConflictTheaterId: "korea-1953",
             joinConflictSide: "A",
+            ...(defendingCountryId ? { joinConflictDefendingCountryId: defendingCountryId } : {}),
             parties: [],
             proposingCountryId: "US",
             proposedByCharacterId: new ObjectId("507f1f77bcf86cd799439092"),
@@ -187,8 +196,13 @@ const billedCountries = () =>
 describe("join_conflict enactment", () => {
   beforeEach(async () => {
     buildJoinConflictBill.mockClear();
+    enactImmediateWarEntry.mockClear();
+    loadCollectiveDefenseEntryBlocks.mockReset();
+    loadCollectiveDefenseEntryBlocks.mockResolvedValue(new Map());
     conflict = KOREA;
     roster = ["US", "UK"];
+    defendingCountryId = undefined;
+    applicantStillPending = true;
     policyMode = "shadow";
     headlessCountries.clear();
     const access = await import("@/lib/countryAccess");
@@ -203,6 +217,114 @@ describe("join_conflict enactment", () => {
     // France assertion below passes anyway.
     await runPhase();
     expect(billedCountries()).toContain("US");
+  });
+
+  it("enacts a passed defensive-side bloc vote without national legislation", async () => {
+    conflict = {
+      ...KOREA,
+      hostCountry: "DD",
+      hostEntities: ["DD", "DE"],
+      sideA: { label: "West Germany", countries: ["DE"] },
+      sideB: { label: "East Germany", countries: ["DD", "RU"] },
+    } as ConflictDoc;
+    defendingCountryId = "DE";
+
+    await runPhase();
+
+    expect(buildJoinConflictBill).not.toHaveBeenCalled();
+    expect(enactImmediateWarEntry).toHaveBeenCalledTimes(2);
+    expect(enactImmediateWarEntry).toHaveBeenCalledWith(
+      expect.objectContaining({
+        countryId: "US",
+        side: "A",
+        organizationId: "NATO",
+        stake: "collective_defense",
+        defendingCountryId: "DE",
+      })
+    );
+    expect(enactImmediateWarEntry).toHaveBeenCalledWith(
+      expect.objectContaining({
+        countryId: "UK",
+        side: "A",
+        organizationId: "NATO",
+        stake: "collective_defense",
+        defendingCountryId: "DE",
+      })
+    );
+  });
+
+  it("keeps a member with an active truce out of collective defence", async () => {
+    conflict = {
+      ...KOREA,
+      hostCountry: "DD",
+      hostEntities: ["DD", "DE"],
+      sideA: { label: "West Germany", countries: ["DE"] },
+      sideB: { label: "East Germany", countries: ["DD", "RU"] },
+    } as ConflictDoc;
+    defendingCountryId = "DE";
+    loadCollectiveDefenseEntryBlocks.mockResolvedValue(
+      new Map([["UK", "an active truce with RU"]])
+    );
+
+    await runPhase();
+
+    expect(enactImmediateWarEntry).toHaveBeenCalledTimes(1);
+    expect(enactImmediateWarEntry).toHaveBeenCalledWith(
+      expect.objectContaining({ countryId: "US" })
+    );
+    const service = await import("@/lib/internationalOrganizations/service");
+    expect(
+      vi
+        .mocked(service.recordOrgHistoryEvent)
+        .mock.calls.some((call) => String(call[3]).includes("active truce with RU"))
+    ).toBe(true);
+  });
+
+  it("lets a defensive-entry resolution lapse when the applicant is no longer pending", async () => {
+    conflict = {
+      ...KOREA,
+      hostCountry: "DD",
+      hostEntities: ["DD", "DE"],
+      sideA: { label: "West Germany", countries: ["DE"] },
+      sideB: { label: "East Germany", countries: ["DD", "RU"] },
+    } as ConflictDoc;
+    defendingCountryId = "DE";
+    applicantStillPending = false;
+
+    await runPhase();
+
+    expect(enactImmediateWarEntry).not.toHaveBeenCalled();
+    expect(buildJoinConflictBill).not.toHaveBeenCalled();
+    const service = await import("@/lib/internationalOrganizations/service");
+    expect(
+      vi
+        .mocked(service.recordOrgHistoryEvent)
+        .mock.calls.some((call) =>
+          String(call[3]).includes("no longer a member or pending applicant")
+        )
+    ).toBe(true);
+  });
+
+  it("lets the resolution lapse if the applicant has left the defended side", async () => {
+    conflict = {
+      ...KOREA,
+      hostCountry: "DD",
+      hostEntities: ["DD", "DE"],
+      sideA: { label: "West Germany", countries: ["US"] },
+      sideB: { label: "East Germany", countries: ["DD", "RU"] },
+    } as ConflictDoc;
+    defendingCountryId = "DE";
+
+    await runPhase();
+
+    expect(enactImmediateWarEntry).not.toHaveBeenCalled();
+    expect(buildJoinConflictBill).not.toHaveBeenCalled();
+    const service = await import("@/lib/internationalOrganizations/service");
+    expect(
+      vi
+        .mocked(service.recordOrgHistoryEvent)
+        .mock.calls.some((call) => String(call[3]).includes("no longer defending this conflict"))
+    ).toBe(true);
   });
 
   it("spawns one bill per player-enabled member with a lifecycle", async () => {

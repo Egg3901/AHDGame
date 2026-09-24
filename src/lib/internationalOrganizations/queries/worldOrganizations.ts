@@ -37,6 +37,7 @@ import {
   defenseSharePctFromMacroSectors,
 } from "@/lib/internationalOrganizations/defensePledge";
 import { loadBlocWarEntryStatusByDisplayOrg } from "@/lib/internationalOrganizations/warEntryStatus";
+import { loadMembershipDefenseWarnings } from "@/lib/internationalOrganizations/membershipDefenseWarnings";
 
 // Re-exported from its own module: `entityGdp` builds on it, and this view
 // builds on `entityGdp`. Kept exported here so existing callers are unaffected.
@@ -66,7 +67,10 @@ export async function loadWorldOrganizationsView(db: Db) {
     }
   }
   const preset = await loadWorldPreset(db);
-  const warEntryByOrg = await loadBlocWarEntryStatusByDisplayOrg(db, summaries, preset);
+  const [warEntryByOrg, membershipDefenseWarningsByOrg] = await Promise.all([
+    loadBlocWarEntryStatusByDisplayOrg(db, summaries, preset),
+    loadMembershipDefenseWarnings(db, summaries, preset),
+  ]);
   // Entity-wide throughout. `loadUsdGdpByCountry` used to be called here as
   // well, for a country-only member table; `loadGdpUsdMillionsByEntity` is a
   // superset of it (it starts from the same query and adds macro entities), so
@@ -214,6 +218,7 @@ export async function loadWorldOrganizationsView(db: Db) {
           .filter((e): e is [OrgMemberId, number] => e[1] !== undefined)
       ),
       warEntryOperations: warEntryByOrg.get(s.id) ?? [],
+      membershipDefenseWarnings: membershipDefenseWarningsByOrg.get(s.id) ?? [],
     };
   });
 
