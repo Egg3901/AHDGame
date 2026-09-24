@@ -321,7 +321,8 @@ export const NAVAL_REACH = {
 /**
  * Territorial control. `ConflictDoc.control` is the share of the HOST country's
  * territory held by side B (0 = side A holds all of it, 100 = side B holds all).
- * Battles move it; reaching a pole ends the war.
+ * Battles move it; reaching and holding a pole until the applicable duration
+ * elapses ends the war.
  */
 export const OCCUPATION = {
   /** Battle `margin` at which a win counts as decisive (mirrors the verdict ladder). */

@@ -155,8 +155,9 @@ export interface ConflictDoc {
   limitedWarSinceTurn?: number;
   /**
    * Share of the HOST country's territory held by side B: 0 = side A holds all of
-   * it, 100 = side B holds all of it. Moved by battles; reaching a pole ends the war.
-   * See src/lib/military/occupation.ts.
+   * it, 100 = side B holds all of it. Moved by battles; a stamped pole may end a
+   * non-proxy war once its minimum lifetime elapses. See occupation.ts and
+   * rules/warResolution.ts.
    */
   control: number;
   /** `control` at creation — the front's starting line. Supply is derived from the
@@ -194,14 +195,14 @@ export interface ConflictDoc {
    */
   hostEntities?: WorldEntityId[];
   /**
-   * `cold_war`: which side currently holds 100% of the host territory.
+   * Which side most recently MOVED into control of 100% of the host territory.
    *
-   * Nullable, not merely optional: a front pushed back off the pole is explicitly
-   * CLEARED to null, and "the hold was broken" is a state worth storing rather than
-   * an absence worth inferring.
+   * Creation never stamps a side merely because it starts at its own pole. Nullable,
+   * not merely optional: a front pushed back off the pole is explicitly CLEARED to
+   * null, and "the hold was broken" is state worth storing rather than inferring.
    */
   poleSide?: "A" | "B" | null;
-  /** `cold_war`: the turn that side reached the pole. Cleared if it comes off. */
+  /** Turn battle movement reached the pole. Cleared if the front comes off it. */
   poleSinceTurn?: number | null;
   /** What this war was declared for. Absent on conflicts predating declarations. */
   warGoal?: WarGoal;

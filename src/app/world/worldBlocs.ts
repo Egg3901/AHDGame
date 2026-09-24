@@ -1,6 +1,7 @@
 import { BLOC_DESIGNATION_PRESETS } from "@/lib/constants/orgCategory";
 import { ROSTER_BY_KEY, statusAt, type AlignmentCountryKey } from "@/lib/constants/alignmentRoster";
 import { PRESET_YEAR } from "@/lib/constants/alignmentSeeds";
+import type { CustomMapBloc, MapBlocId } from "@/lib/world/blocMembership";
 
 /**
  * Cold War bloc alignment for the /world globe's BLOCS map mode.
@@ -23,16 +24,15 @@ import { PRESET_YEAR } from "@/lib/constants/alignmentSeeds";
  * point: an orbit is not a treaty, and the influence system already has the
  * Cold War Ledger for showing where sympathy lies.
  *
- * SCOPE: the presets that have blocs at all (`BLOC_DESIGNATION_PRESETS`).
- * Elsewhere the mode is not offered and the globe stays in tier coloring, which
- * is correct-but-plain rather than confidently wrong.
+ * SCOPE: presets with built-in Blocs (`BLOC_DESIGNATION_PRESETS`) and any world
+ * where a player-founded Bloc exists. The latter receives its own treaty color.
  */
 /**
  * Non-aligned covers both principled neutrality (SE, IE) and genuinely contested ground.
  *
  * Defined in `@/lib/world/bloc` and re-exported here under the name the map components
  * already import. The domain layer owns it because the military system reads the same
- * three values — `src/lib/military/bloc.ts` — and `src/lib` may not import `src/app`.
+ * preset values plus custom pole ids, and `src/lib` may not import `src/app`.
  */
 export type { WorldBloc } from "@/lib/world/bloc";
 import type { WorldBloc } from "@/lib/world/bloc";
@@ -62,9 +62,40 @@ export const BLOC_STROKES: Record<WorldBloc, string> = {
   nonAligned: "rgba(240, 224, 176, 0.50)",
 };
 
+export interface MapBlocStyle {
+  label: string;
+  fill: string;
+  stroke: string;
+}
+
+const CUSTOM_COLORS: Record<CustomMapBloc["accentToken"], Pick<MapBlocStyle, "fill" | "stroke">> = {
+  info: { fill: "rgba(79, 134, 217, 0.78)", stroke: "rgba(169, 199, 242, 0.55)" },
+  error: { fill: "rgba(195, 77, 88, 0.78)", stroke: "rgba(231, 165, 171, 0.55)" },
+  warning: { fill: "rgba(197, 139, 32, 0.78)", stroke: "rgba(239, 208, 138, 0.55)" },
+};
+
+export function buildBlocPalette(
+  customBlocs: readonly CustomMapBloc[],
+  membership?: Readonly<Record<string, MapBlocId>>
+): Record<string, MapBlocStyle> {
+  const active = membership ? new Set(Object.values(membership)) : null;
+  const palette: Record<string, MapBlocStyle> = Object.fromEntries(
+    BLOC_ORDER.filter((bloc) => bloc === "nonAligned" || !active || active.has(bloc)).map(
+      (bloc) => [
+        bloc,
+        { label: BLOC_LABELS[bloc], fill: BLOC_COLORS[bloc], stroke: BLOC_STROKES[bloc] },
+      ]
+    )
+  );
+  for (const bloc of customBlocs) {
+    palette[bloc.poleId] = { label: bloc.label, ...CUSTOM_COLORS[bloc.accentToken] };
+  }
+  return palette;
+}
+
 /** Whether this preset has blocs at all (drives whether the mode is offered). */
-export function hasBlocData(presetId: string | undefined): boolean {
-  return Boolean(presetId && BLOC_DESIGNATION_PRESETS.includes(presetId));
+export function hasBlocData(presetId: string | undefined, customBlocCount = 0): boolean {
+  return customBlocCount > 0 || Boolean(presetId && BLOC_DESIGNATION_PRESETS.includes(presetId));
 }
 
 /**
@@ -94,12 +125,13 @@ export function hasBlocData(presetId: string | undefined): boolean {
 export function buildBlocLookup(params: {
   presetId: string | undefined;
   /** entityId → bloc, from `loadBlocMembership`. */
-  membership: Readonly<Record<string, WorldBloc>>;
+  membership: Readonly<Record<string, MapBlocId>>;
+  customBlocCount?: number;
   /** Feature ids the globe draws as interactive. */
   interactiveFeatureIds: Iterable<string>;
-}): Map<string, WorldBloc> {
-  const lookup = new Map<string, WorldBloc>();
-  if (!hasBlocData(params.presetId)) return lookup;
+}): Map<string, MapBlocId> {
+  const lookup = new Map<string, MapBlocId>();
+  if (!hasBlocData(params.presetId, params.customBlocCount)) return lookup;
 
   for (const featureId of params.interactiveFeatureIds) lookup.set(featureId, "nonAligned");
 

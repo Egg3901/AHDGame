@@ -69,16 +69,14 @@ describe("the bloc designation", () => {
     expect(nato({ coldWarEnded: true })).toBe("security");
   });
 
-  it("leads the directory, and creatable categories keep their order", () => {
+  it("leads both the directory and player creation choices", () => {
     // The directory groups by this array, so its order is display order.
     expect(ORGANIZATION_CATEGORIES[0]).toBe("bloc");
-    expect(CREATABLE_ORGANIZATION_CATEGORIES[0]).toBe("political");
+    expect(CREATABLE_ORGANIZATION_CATEGORIES[0]).toBe("bloc");
   });
 
-  it("cannot be founded by a player", () => {
-    // A player picking "bloc" would hand themselves powers a security alliance
-    // is explicitly denied.
-    expect(CREATABLE_ORGANIZATION_CATEGORIES).not.toContain("bloc");
+  it("can be founded by a player", () => {
+    expect(CREATABLE_ORGANIZATION_CATEGORIES).toContain("bloc");
     expect(CREATABLE_ORGANIZATION_CATEGORIES).toContain("security");
   });
 });

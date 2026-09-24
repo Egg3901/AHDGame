@@ -9,8 +9,6 @@ import type { Db } from "mongodb";
 import {
   CRISIS_TURN_CAP,
   joinGateForPoleCount,
-  polesForYear,
-  resolveAlignmentEra,
   type AlignmentPoleId,
 } from "@/lib/constants/alignmentEras";
 import { ROSTER_BY_KEY } from "@/lib/constants/alignmentRoster";
@@ -28,6 +26,7 @@ import {
   type LedgerPole,
   type NationStanding,
 } from "./nationStanding";
+import { loadAlignmentTopology } from "../topology";
 
 export type { LedgerPole };
 
@@ -89,9 +88,12 @@ export async function loadWorldAlignment(db: Db): Promise<WorldAlignmentView> {
   );
 
   const year = (gs ? resolveGameYear(gs) : null) ?? new Date().getFullYear();
-  const era = resolveAlignmentEra(year);
-  const poleIds = polesForYear(year);
-  const { poles, remainderLabel } = eraPoleVocabulary(year);
+  const topology = await loadAlignmentTopology(db, year);
+  const { era, poles: poleIds } = topology;
+  const { poles, remainderLabel } = eraPoleVocabulary(year, {
+    poleIds,
+    poleDefinitions: topology.poleDefinitions,
+  });
   // Names are era-aware: a 1953 world says West Germany and Soviet Union.
   const preset = resolvePresetIdFromGameState(gs);
   const base = {
@@ -133,7 +135,7 @@ export async function loadWorldAlignment(db: Db): Promise<WorldAlignmentView> {
   /** Poles reachable by the orgs this country belongs to, via era channels. */
   const polesOf = (orgIds: string[]): Set<AlignmentPoleId> => {
     const set = new Set<AlignmentPoleId>();
-    for (const c of era.channels) {
+    for (const c of topology.channels) {
       if (orgIds.includes(c.organizationId)) set.add(c.poleId);
     }
     return set;

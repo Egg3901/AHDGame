@@ -1,14 +1,11 @@
 import type { Db, Filter } from "mongodb";
 import type { CountryAlignment } from "@/lib/db/types/countryAlignment";
-import {
-  PER_NATION_TURN_CAP,
-  polesForYear,
-  type AlignmentPoleId,
-} from "@/lib/constants/alignmentEras";
+import { PER_NATION_TURN_CAP, type AlignmentPoleId } from "@/lib/constants/alignmentEras";
 import { getCountryAlignmentsCollection } from "@/lib/db/collections/countryAlignments";
 import { normalizeShares } from "@/lib/alignment/normalize";
 import type { WorldBloc } from "@/lib/world/bloc";
 import type { WorldEntityId } from "@/lib/world/worldEntityManifest";
+import { loadAlignmentTopology } from "@/lib/alignment/topology";
 
 /**
  * How far a conquered nation swings toward the bloc that took it.
@@ -60,7 +57,7 @@ export async function applyConflictOutcomeAlignment(
   }
 ): Promise<{ moved: number }> {
   const { entityIds, bloc, turn, year } = params;
-  const poles = polesForYear(year);
+  const poles = (await loadAlignmentTopology(db, year)).poles;
   const target = POLES_BY_BLOC[bloc].find((p) => poles.includes(p));
   // No pole for this bloc in this era's vocabulary: move nothing rather than write a
   // key the row does not speak.

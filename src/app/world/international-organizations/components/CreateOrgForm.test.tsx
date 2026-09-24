@@ -46,4 +46,15 @@ describe("CreateOrgForm", () => {
       )
     ).toBeTruthy();
   });
+
+  it("offers Bloc creation with a selectable alignment color", () => {
+    render(<CreateOrgForm viewer={viewer} onCreated={() => {}} />);
+    fireEvent.click(screen.getByText("Found new organization"));
+    fireEvent.change(screen.getByLabelText("Category"), { target: { value: "bloc" } });
+
+    expect(screen.getByText("Alignment color")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Blue" }).getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(screen.getByRole("button", { name: "Red" }));
+    expect(screen.getByRole("button", { name: "Red" }).getAttribute("aria-pressed")).toBe("true");
+  });
 });

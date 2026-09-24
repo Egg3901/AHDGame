@@ -79,6 +79,39 @@ describe("commitInfluencePlay", () => {
     expect(doc.amountUsd).toBeGreaterThan(0);
   });
 
+  it("queues influence for a player-founded Bloc through its independent pole", async () => {
+    const cursor = {
+      project: vi.fn().mockReturnThis(),
+      toArray: vi.fn().mockResolvedValue([
+        {
+          id: "andes-pact",
+          name: "Andes Pact",
+          shortName: "AP",
+          creatorCountryId: "BR",
+          category: "bloc",
+          alignment: { poleId: "ORG:andes-pact", accentToken: "warning" },
+        },
+      ]),
+    };
+    db.collection("customInternationalOrganizations").find.mockReturnValue(cursor);
+
+    const { commitInfluencePlay } = await import("./commitInfluencePlay");
+    const r = await commitInfluencePlay({
+      db: db as unknown as Db,
+      ...base,
+      organizationId: "andes-pact" as never,
+      sponsorCountryId: "BR",
+    });
+
+    expect(r.ok).toBe(true);
+    expect(db.collection("alignmentPlays").insertOne).toHaveBeenCalledWith(
+      expect.objectContaining({
+        organizationId: "andes-pact",
+        sponsorCountryId: "BR",
+      })
+    );
+  });
+
   it("refuses a locked target instead of taking the money for nothing", async () => {
     db.collection("countryAlignments").findOne.mockResolvedValue({
       entityId: "PL",
