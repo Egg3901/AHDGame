@@ -130,6 +130,54 @@ describe("distributeVotesByGroupLevelAllocation", () => {
     expect(sharesPct.bob).toBeCloseTo(50, 0);
   });
 
+  it("uses the current-Reg baseline and floors a missing party in the legacy path", () => {
+    const candidates = [
+      makeCandidate({ candidateId: "lab", party: "lab", charEP: 0, charSP: 0 }),
+      makeCandidate({ candidateId: "revival", party: "revival", charEP: 0, charSP: 0 }),
+    ];
+
+    const withCurrentRegistration = distributeVotesByGroupLevelAllocation(
+      candidates,
+      turnPool,
+      totalPool,
+      population,
+      demographics,
+      categories,
+      emptyOrgMap,
+      {
+        isGeneralElection: true,
+        countryId: "UK",
+        votingSystem: "rcv",
+        regBaselineByParty: new Map([
+          ["lab", 25],
+          ["revival", 100],
+        ]),
+      }
+    );
+    expect(withCurrentRegistration.sharesPct.lab).toBeLessThan(
+      withCurrentRegistration.sharesPct.revival!
+    );
+
+    const withMissingLateParty = distributeVotesByGroupLevelAllocation(
+      candidates,
+      turnPool,
+      totalPool,
+      population,
+      demographics,
+      categories,
+      emptyOrgMap,
+      {
+        isGeneralElection: true,
+        countryId: "UK",
+        votingSystem: "rcv",
+        regBaselineByParty: new Map([["lab", 50]]),
+      }
+    );
+    expect(withMissingLateParty.sharesPct.revival).toBeLessThan(
+      withMissingLateParty.sharesPct.lab!
+    );
+  });
+
   it("returns equal shares when totalPool is 0", () => {
     const candidates = [
       makeCandidate({ candidateId: "alice" }),

@@ -299,10 +299,16 @@ export async function takeStateBillGovernorAction(
       const { validateStateBudgetImpact } = await import("@/lib/budget/validation");
       const budgetResult = await validateStateBudgetImpact(db, stateId, countryId, bill);
       if (!budgetResult.allowed) {
+        const formatBudgetAmount = (amount: number) =>
+          amount >= 1_000_000_000
+            ? `${(amount / 1_000_000_000).toFixed(1)}B`
+            : `${Math.round(amount / 1_000_000)}M`;
+        const shortfall = Math.max(0, budgetResult.shortfall ?? 0);
+        const headroom = Math.max(0, budgetResult.costAmount - shortfall);
         return {
           status: 400,
           body: {
-            error: `Cannot sign: the state cannot fund this bill (shortfall $${Math.round((budgetResult.shortfall ?? 0) / 1_000_000)}M).`,
+            error: `Cannot sign: this bill has an annual cost of ${formatBudgetAmount(budgetResult.costAmount)}, but the state has ${formatBudgetAmount(headroom)} funding headroom. Shortfall: ${formatBudgetAmount(shortfall)}. Amounts are in the state budget currency.`,
           },
         };
       }
