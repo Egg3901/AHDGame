@@ -6,6 +6,7 @@ import {
   BLOC_COLORS,
   BLOC_LABELS,
   BLOC_ORDER,
+  buildBlocPalette,
   buildBlocLookup,
   hasBlocData,
   type WorldBloc,
@@ -123,12 +124,35 @@ describe("worldBlocs", () => {
   });
 
   it("splits 1953 across all three blocs rather than collapsing to two", () => {
-    const counts = new Map<WorldBloc, number>();
+    const counts = new Map<string, number>();
     for (const bloc of lookup1953().values()) counts.set(bloc, (counts.get(bloc) ?? 0) + 1);
     for (const bloc of BLOC_ORDER) {
       expect(counts.get(bloc) ?? 0, bloc).toBeGreaterThan(0);
       expect(BLOC_LABELS[bloc]).toBeTruthy();
       expect(BLOC_COLORS[bloc]).toBeTruthy();
     }
+  });
+
+  it("offers a modern Bloc mode and paints a player-founded pole in its chosen color", () => {
+    const customBlocs = [
+      { poleId: "ORG:andes-pact" as const, label: "Andes Pact", accentToken: "warning" as const },
+    ];
+    const lookup = buildBlocLookup({
+      presetId: "2019-default",
+      membership: { BR: "ORG:andes-pact" },
+      customBlocCount: customBlocs.length,
+      interactiveFeatureIds: ["076", "752"],
+    });
+    const palette = buildBlocPalette(customBlocs, { BR: "ORG:andes-pact", US: "west" });
+
+    expect(hasBlocData("2019-default", customBlocs.length)).toBe(true);
+    expect(lookup.get("076")).toBe("ORG:andes-pact");
+    expect(lookup.get("752")).toBe("nonAligned");
+    expect(palette["ORG:andes-pact"]).toEqual({
+      label: "Andes Pact",
+      fill: expect.stringContaining("197, 139, 32"),
+      stroke: expect.any(String),
+    });
+    expect(palette.east).toBeUndefined();
   });
 });

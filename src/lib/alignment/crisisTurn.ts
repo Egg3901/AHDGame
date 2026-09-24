@@ -9,7 +9,7 @@
  * changes nothing at all.
  */
 import { ObjectId, type Db } from "mongodb";
-import { ALIGNMENT_GATES, polesForYear } from "@/lib/constants/alignmentEras";
+import { ALIGNMENT_GATES, polesForYear, type AlignmentPoleId } from "@/lib/constants/alignmentEras";
 import type { AlignmentCountryKey } from "@/lib/constants/alignmentRoster";
 import { getAlignmentCrisesCollection } from "@/lib/db/collections";
 import type { AlignmentCrisis } from "@/lib/db/types/alignmentCrisis";
@@ -75,10 +75,11 @@ export async function openDueCrises(
     year: number;
     rows: readonly CrisisTurnRow[];
     memberships: readonly OrganizationMembership[];
+    poles?: readonly AlignmentPoleId[];
   }
 ): Promise<{ crisesOpened: number }> {
   const crises = await getAlignmentCrisesCollection(db);
-  const poles = polesForYear(params.year);
+  const poles = params.poles ?? polesForYear(params.year);
 
   const open = await crises.find({ status: "open" }).toArray();
   let slots = MAX_OPEN_CRISES - open.length;

@@ -22,16 +22,10 @@ export const ORGANIZATION_CATEGORIES: OrganizationCategory[] = [
   "development",
 ];
 
-/**
- * Categories a player may found an organisation as.
- *
- * `bloc` is deliberately absent: it is a designation the world confers on the
- * two alliances that WERE the Cold War, not an archetype anyone can pick. A
- * player founding a "bloc" would be handing themselves patronage and coercion
- * powers a security alliance is explicitly denied.
- */
-export const CREATABLE_ORGANIZATION_CATEGORIES: OrganizationCategory[] =
-  ORGANIZATION_CATEGORIES.filter((c) => c !== "bloc");
+/** Categories a player may choose when founding an organization. */
+export const CREATABLE_ORGANIZATION_CATEGORIES: OrganizationCategory[] = [
+  ...ORGANIZATION_CATEGORIES,
+];
 
 /** Flagship template key the UI renders per category. */
 export type FlagshipTemplate = "assembly" | "market" | "alliance" | "development";
@@ -87,8 +81,7 @@ export const ORGANIZATION_CATEGORY_META: Record<OrganizationCategory, OrgCategor
     // instruments a superpower bloc actually used on the countries behind its
     // line.
     flagship: "alliance",
-    blurb:
-      "A Cold War bloc — a defense alliance that also pays and coerces the countries in its sphere.",
+    blurb: "A defense alliance that can fund, influence, and sanction countries in its sphere.",
     // A security alliance's powers, plus patronage and coercion. The security
     // category is explicit that a defense pact has neither, and for an ordinary
     // alliance that holds. NATO and the Warsaw Pact were not ordinary alliances:

@@ -2,7 +2,7 @@ import { ObjectId, type Db } from "mongodb";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import type { CommodityType } from "@/lib/constants/commodities";
 import { ORG_PROPOSAL_VOTING_TURNS } from "@/lib/constants/internationalOrganizations";
-import { BLOC_DESIGNATED_ORG_IDS, canTableResolutionType } from "@/lib/constants/orgCategory";
+import { canTableResolutionType } from "@/lib/constants/orgCategory";
 import { getDirectiveDef } from "@/lib/constants/orgDirectives";
 import { POSTURE_META, isAlertPosture, type AlertPosture } from "@/lib/constants/orgPosture";
 import { getAgencyDef } from "@/lib/constants/orgAgencies";
@@ -400,7 +400,7 @@ export async function proposeOrganizationLegislation(params: {
       const chosen = input.side === "A" ? conflict.sideA.countries : conflict.sideB.countries;
       const hosts = conflict.hostEntities ?? [conflict.hostCountry];
       if (
-        !BLOC_DESIGNATED_ORG_IDS.includes(orgId) ||
+        def.category !== "bloc" ||
         !chosen.includes(defendingCountryId) ||
         !hosts.includes(defendingCountryId)
       ) {
@@ -448,7 +448,6 @@ export async function proposeOrganizationLegislation(params: {
 
     const sideLabel = input.side === "A" ? conflict.sideA.label : conflict.sideB.label;
     const title = input.title?.trim() || `${orgId} Entry into ${conflict.name} (${sideLabel})`;
-
     await legislation.insertOne({
       _id: legislationId,
       organizationId: orgId,

@@ -13,7 +13,11 @@
  * the rule that admits a country and the rule that eventually shows it the door
  * can never drift apart.
  */
-import { resolveAlignmentEra, type AlignmentPoleId } from "@/lib/constants/alignmentEras";
+import {
+  resolveAlignmentEra,
+  type AlignmentChannel,
+  type AlignmentPoleId,
+} from "@/lib/constants/alignmentEras";
 import type { AlignmentShares } from "./normalize";
 
 /** The one org whose standing is read from the remainder rather than a pole. */
@@ -66,6 +70,8 @@ export function standingFor(params: {
   shares: AlignmentShares;
   year: number;
   organizationId: string;
+  /** Live channels, including player-founded Blocs. */
+  channels?: readonly AlignmentChannel[];
 }): AlignmentStanding | null {
   // The Non-Aligned Movement has no channel and no pole, because non-alignment
   // is not something a bloc pushes for — it is the remainder neither bloc has
@@ -82,8 +88,8 @@ export function standingFor(params: {
     };
   }
 
-  const era = resolveAlignmentEra(params.year);
-  const channel = era.channels.find((c) => c.organizationId === params.organizationId);
+  const channels = params.channels ?? resolveAlignmentEra(params.year).channels;
+  const channel = channels.find((c) => c.organizationId === params.organizationId);
   if (!channel) return null;
 
   const share = params.shares.shares[channel.poleId] ?? 0;

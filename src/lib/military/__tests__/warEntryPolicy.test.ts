@@ -59,6 +59,22 @@ describe("war entry stakes", () => {
     expect(warEntryIsImmediate(stake)).toBe(false);
   });
 
+  it("treats a player-founded Bloc's defensive call as collective defense", () => {
+    const stake = classifyWarEntry({
+      conflict: germany,
+      countryId: "PL",
+      side: "B",
+      organizationId: "andes-pact",
+      organization: {
+        category: "bloc",
+        foundingMembers: ["BR"],
+        alignment: { poleId: "ORG:andes-pact", accentToken: "warning" },
+      },
+    });
+    expect(stake).toBe("collective_defense");
+    expect(warEntryIsImmediate(stake)).toBe(true);
+  });
+
   it("treats a widened theatre's attacked applicant as collective defence", () => {
     const stake = classifyWarEntry({
       conflict: {
@@ -178,5 +194,33 @@ describe("offensive coalition pressure", () => {
     expect(pressure.securityStakes).toBe(-15);
     expect(pressure.blocRelations).toBe(33);
     expect(pressure.total).toBe(23);
+  });
+
+  it("prices a custom Bloc's own pole and founder sphere tie", async () => {
+    db.collection("countryAlignments").findOne.mockResolvedValue({
+      entityId: "FR",
+      shares: { WEST: 10, EAST: 20, "ORG:andes-pact": 60 },
+      nonAligned: 10,
+    });
+    db.collection("sphereMemberships").findOne.mockResolvedValue({
+      entityId: "FR",
+      primarySphereId: "BR",
+      relationships: [],
+    });
+
+    const pressure = await assessWarEntryPoliticalPressure({
+      db: db as unknown as Db,
+      countryId: "FR",
+      organizationId: "andes-pact",
+      organization: {
+        category: "bloc",
+        foundingMembers: ["BR"],
+        alignment: { poleId: "ORG:andes-pact", accentToken: "warning" },
+      },
+      stake: "offensive_coalition",
+      currentTurn: 458,
+    });
+
+    expect(pressure.blocRelations).toBe(26);
   });
 });

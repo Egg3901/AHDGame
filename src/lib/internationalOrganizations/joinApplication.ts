@@ -18,6 +18,10 @@ import { clearOrganizationWithdrawal } from "@/lib/internationalOrganizations/wi
 import { getGameStatePresetOrDefault } from "@/lib/db/collections/gameState";
 import { rivalBlocOrgsFor } from "@/lib/world/blocMembership";
 import { liftOrganizationSanctions } from "@/lib/internationalOrganizations/sanctions";
+import { PRESET_YEAR, DEFAULT_PRESET } from "@/lib/constants/alignmentSeeds";
+import { loadAlignmentTopology } from "@/lib/alignment/topology";
+import { resolveAlignmentEra } from "@/lib/constants/alignmentEras";
+import { INTERNATIONAL_ORGANIZATIONS } from "@/lib/constants/internationalOrganizations";
 
 /**
  * Parallel-join coordination. A country is admitted only when BOTH gates pass:
@@ -110,7 +114,18 @@ async function leaveRivalBlocs(
   if (!(countryId in COUNTRY_CONFIGS)) return;
 
   const preset = await getGameStatePresetOrDefault(db);
-  for (const rivalId of rivalBlocOrgsFor(preset, organizationId)) {
+  const year = PRESET_YEAR[preset] ?? PRESET_YEAR[DEFAULT_PRESET];
+  // Ordinary built-ins have no accession pole and need no topology read.
+  if (
+    organizationId in INTERNATIONAL_ORGANIZATIONS &&
+    !resolveAlignmentEra(year).channels.some(
+      (channel) => channel.organizationId === organizationId && channel.alignmentAccession
+    )
+  ) {
+    return;
+  }
+  const topology = await loadAlignmentTopology(db, year);
+  for (const rivalId of rivalBlocOrgsFor(preset, organizationId, topology.channels)) {
     // Checked, because `removeOrganizationMembership` writes a withdrawal
     // tombstone and a history line for every remaining member. Calling it for a
     // country that was never in the rival would announce a departure that never

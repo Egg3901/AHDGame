@@ -86,9 +86,11 @@ Players can **create their own international organizations** with arbitrary para
 
 - **A player-chosen name**: the org is identified by a unique short name
 - **A player-created flag**: marks the org as player-created (as opposed to built-in)
-- Player-defined founding members, leadership office, and charter
+- A category, leadership office, charter, and optional emblem
 
-Custom orgs function identically to built-in ones for membership, leadership, and legislation purposes. The primary difference is provenance: they did not exist at game start.
+A custom organization may use the **Bloc** category. Founding a Bloc creates a new independent alignment pole named for the organization, with a color chosen by its founder. The founder begins committed to that pole. Bloc members can spend the pooled organization fund on Influence, use aid to reinforce member alignment, draw autonomous countries toward membership, and risk defections when a member remains below the alignment threshold. Custom Blocs also receive the same posture, statement, aid, sanctions, and conflict-entry resolution powers as other Bloc organizations.
+
+Custom orgs function identically to built-in ones for membership, leadership, and legislation purposes. The primary difference is provenance: they did not exist at game start. Categories other than Bloc do not create alignment poles.
 
 ## Organization pages
 

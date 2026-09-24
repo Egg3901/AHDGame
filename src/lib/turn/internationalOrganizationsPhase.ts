@@ -901,6 +901,7 @@ async function applyResolutionEffect(
       const theaterId = resolution.joinConflictTheaterId;
       const side = resolution.joinConflictSide;
       if (!theaterId || !side) return;
+      const warEntryOrganization = await loadOrganizationDef(db, resolution.organizationId);
 
       // A resolution sits for 24 turns; the war it was about can end inside that
       // window. Mirrors declareWar, which re-runs findWarBetween at enactment.
@@ -979,6 +980,7 @@ async function applyResolutionEffect(
             countryId,
             side,
             organizationId: resolution.organizationId,
+            organization: warEntryOrganization ?? undefined,
             defendingCountryId: resolution.joinConflictDefendingCountryId,
           }) === "collective_defense"
       );
@@ -1010,6 +1012,7 @@ async function applyResolutionEffect(
           countryId,
           side,
           organizationId: resolution.organizationId,
+          organization: warEntryOrganization ?? undefined,
           defendingCountryId: resolution.joinConflictDefendingCountryId,
         });
         if (warEntryIsImmediate(stake)) {
@@ -1107,6 +1110,7 @@ async function applyResolutionEffect(
               db,
               countryId,
               organizationId: resolution.organizationId,
+              organization: warEntryOrganization ?? undefined,
               stake,
               currentTurn,
             }),

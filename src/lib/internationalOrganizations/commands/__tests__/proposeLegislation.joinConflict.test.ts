@@ -45,11 +45,11 @@ const stubDb = () =>
     collection: () => ({ findOne: async () => ({ _id: "current", conflictsEnabled }) }),
   }) as unknown as Db;
 
-const propose = (input: Record<string, unknown>) =>
+const propose = (input: Record<string, unknown>, orgId = "NATO") =>
   proposeOrganizationLegislation({
     db: stubDb(),
     countryId: "US",
-    orgId: "NATO",
+    orgId,
     actor: { characterId: new ObjectId(), characterName: "Secretary of State" },
     input: input as never,
   });
@@ -184,6 +184,50 @@ describe("tabling a join_conflict resolution", () => {
     expect(res.ok).toBe(false);
     if (!res.ok) expect(res.status).toBe(409);
     expect(insertOne).not.toHaveBeenCalled();
+  });
+
+  it("puts a player-founded Bloc's collective defense to a vote", async () => {
+    conflict = { ...CONFLICT, hostCountry: "KP" } as ConflictDoc;
+
+    const res = await propose(
+      { type: "join_conflict", theaterId: "korea-1953", side: "B" },
+      "andes-pact"
+    );
+
+    expect(res.ok).toBe(true);
+    expect(insertOne.mock.calls[0]![0]).toMatchObject({
+      organizationId: "andes-pact",
+      status: "pending",
+      closesOnTurn: 524,
+    });
+  });
+
+  it("allows a player-founded Bloc to defend a pending applicant", async () => {
+    conflict = {
+      ...CONFLICT,
+      hostCountry: "DD",
+      hostEntities: ["DD", "DE"],
+      sideA: { label: "West Germany", countries: ["DE"] },
+      sideB: { label: "East Germany", countries: ["DD"] },
+    } as ConflictDoc;
+    findMembershipProposal.mockResolvedValue({ _id: new ObjectId(), status: "pending" });
+
+    const res = await propose(
+      {
+        type: "join_conflict",
+        theaterId: "korea-1953",
+        side: "A",
+        defendingCountryId: "DE",
+      },
+      "andes-pact"
+    );
+
+    expect(res.ok).toBe(true);
+    expect(insertOne.mock.calls[0]![0]).toMatchObject({
+      organizationId: "andes-pact",
+      joinConflictDefendingCountryId: "DE",
+      status: "pending",
+    });
   });
 
   it("is refused at a security-category org", async () => {
