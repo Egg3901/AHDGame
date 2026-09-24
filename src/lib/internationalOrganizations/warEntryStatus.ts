@@ -98,8 +98,13 @@ export async function loadBlocWarEntryStatusByDisplayOrg(
       if (!conflict) continue;
       const chosen = side === "A" ? conflict.sideA.countries : conflict.sideB.countries;
       const opposing = side === "A" ? conflict.sideB.countries : conflict.sideA.countries;
+      const defendedCountryId = resolution.joinConflictDefendingCountryId;
+      const defendingApplicant =
+        defendedCountryId &&
+        chosen.includes(defendedCountryId) &&
+        (conflict.hostEntities ?? [conflict.hostCountry]).includes(defendedCountryId);
       const operationStake =
-        hostSideOf(conflict) === side
+        defendingApplicant || hostSideOf(conflict) === side
           ? "collective_defense"
           : hostSideOf(conflict) == null
             ? "discretionary"
@@ -112,6 +117,7 @@ export async function loadBlocWarEntryStatusByDisplayOrg(
           side,
           organizationId: militaryOrganizationId,
           organization: displayOrg.def,
+          defendingCountryId: resolution.joinConflictDefendingCountryId,
         });
         const bill = bills.find(
           (candidate) =>

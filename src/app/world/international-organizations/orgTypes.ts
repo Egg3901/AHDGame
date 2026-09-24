@@ -10,6 +10,7 @@ import type {
 } from "@/lib/constants/alignmentEras";
 import type { OrgDerived } from "@/lib/internationalOrganizations/orgDerivedMetrics";
 import type { BlocWarEntryOperation } from "@/lib/internationalOrganizations/warEntryStatus";
+import type { MembershipDefenseWarning } from "@/lib/internationalOrganizations/membershipDefenseWarnings";
 import type {
   OrganizationLegislation,
   OrganizationLeadership,
@@ -113,6 +114,8 @@ export interface OrgSummary {
   defensePctByCountry: Record<string, number>;
   /** Active military-entry calls, including Warsaw Pact status shown on COMECON. */
   warEntryOperations?: BlocWarEntryOperation[];
+  /** War and declaration risks attached to pending applicants in armed blocs. */
+  membershipDefenseWarnings?: MembershipDefenseWarning[];
 }
 
 export interface OrgWorldResponse {

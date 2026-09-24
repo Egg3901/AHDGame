@@ -88,6 +88,7 @@ import { migration as repairDuplicateCorporationSequentialIds } from "./entries/
 import { migration as normalizeShareCorporateActions } from "./entries/2026-09-18-normalize-share-corporate-actions";
 
 import { migration as turnClockIndexes } from "./entries/2026-09-20-turn-clock-indexes";
+import { migration as activatePendingNppDefenceContracts } from "./entries/2026-09-24-activate-pending-npp-defence-contracts";
 
 export const MIGRATIONS: Migration[] = [
   // v0.2.6 currency cutover (declarative — shipped via standalone scripts)
@@ -284,6 +285,11 @@ export const MIGRATIONS: Migration[] = [
   // is rewritten, and rollback is dropping it.
   electionResultSnapshots,
   turnClockIndexes,
+  // True NPP-owned suppliers never had a player who could answer an offer, so
+  // awards made before automatic activation shipped remain pending forever.
+  // Activate those legacy rows while preserving offers to player-owned corps
+  // that happen to be operated by an NPP caretaker.
+  activatePendingNppDefenceContracts,
 ];
 
 // D13 rollback drill — registered but deliberately OUTSIDE the normal chain.

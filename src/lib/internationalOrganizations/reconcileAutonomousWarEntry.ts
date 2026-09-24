@@ -114,6 +114,7 @@ export async function reconcileAutonomousWarEntryBills(db: Db): Promise<number> 
         side,
         organizationId: resolution.organizationId,
         organization: warEntryOrganization ?? undefined,
+        defendingCountryId: resolution.joinConflictDefendingCountryId,
       });
       if (chosen.includes(countryId)) {
         if (bill && bill.status !== "signed") {

@@ -14,6 +14,7 @@ import {
   votesNeeded,
 } from "@/lib/internationalOrganizations/resolutionRules";
 import { useEntityName } from "./useEntityName";
+import type { MembershipDefenseWarning } from "@/lib/internationalOrganizations/membershipDefenseWarnings";
 
 interface Props {
   org: OrgSummary;
@@ -53,6 +54,8 @@ export function MembershipPanel({ org, viewer, currentTurn, votingWindowTurns, o
   const [leaveError, setLeaveError] = useState<string | null>(null);
   const [leaveSuccess, setLeaveSuccess] = useState<string | null>(null);
   const [leavePendingLocal, setLeavePendingLocal] = useState(false);
+  const [defenseEntrySubmitting, setDefenseEntrySubmitting] = useState<string | null>(null);
+  const [defenseEntryError, setDefenseEntryError] = useState<string | null>(null);
   const hasPendingWithdrawal = viewerHasPendingWithdrawal || leavePendingLocal;
 
   async function proposeJoin() {
@@ -125,6 +128,38 @@ export function MembershipPanel({ org, viewer, currentTurn, votingWindowTurns, o
     }
   }
 
+  async function proposeDefensiveEntry(warning: MembershipDefenseWarning) {
+    if (!viewerFmCountry || !warning.conflictId || !warning.side) return;
+    setDefenseEntrySubmitting(warning.conflictId);
+    setDefenseEntryError(null);
+    try {
+      const res = await fetch(
+        `/api/country/${viewerFmCountry}/international-organizations/${org.id}/legislation`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            type: "join_conflict",
+            theaterId: warning.conflictId,
+            side: warning.side,
+            defendingCountryId: warning.applicantCountryId,
+          }),
+        }
+      );
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body?.error ?? "Failed to propose defensive entry");
+      }
+      onChange();
+    } catch (err) {
+      setDefenseEntryError(
+        err instanceof Error ? err.message : "Failed to propose defensive entry"
+      );
+    } finally {
+      setDefenseEntrySubmitting(null);
+    }
+  }
+
   const canPropose = viewerFmCountry != null && !viewerIsMember && !viewerHasOpenProposal;
 
   return (
@@ -185,6 +220,9 @@ export function MembershipPanel({ org, viewer, currentTurn, votingWindowTurns, o
         <div className="space-y-3">
           {org.pendingMembershipProposals.map((p) => {
             const proposingName = entityName(p.proposingCountryId);
+            const defenseWarnings = (org.membershipDefenseWarnings ?? []).filter(
+              (warning) => warning.applicantCountryId === p.proposingCountryId
+            );
             // Empty-org accession: the org vote was waived at application time,
             // so there is no member tally to show — only the domestic bill.
             const isFoundingApplication = p.orgVoteExempt === true;
@@ -263,6 +301,66 @@ export function MembershipPanel({ org, viewer, currentTurn, votingWindowTurns, o
                     {isFoundingApplication ? "Awaiting ratification" : "Voting"}
                   </span>
                 </div>
+
+                {defenseWarnings.map((warning) => {
+                  const existingEntry = [...org.pendingLegislation, ...org.activeLegislation].find(
+                    (row) =>
+                      row.type === "join_conflict" &&
+                      row.joinConflictTheaterId === warning.conflictId &&
+                      row.joinConflictSide === warning.side &&
+                      row.joinConflictDefendingCountryId === warning.applicantCountryId
+                  );
+                  const opponents = warning.opposingNames.join(", ");
+                  return (
+                    <div
+                      key={`${warning.kind}:${warning.conflictId ?? warning.declarationBillId}`}
+                      className="mb-3 rounded-lg border border-warning/30 bg-warning/10 p-3"
+                    >
+                      <p className="text-sm font-semibold text-warning">Mutual defence warning</p>
+                      {warning.kind === "active_conflict" ? (
+                        <>
+                          <p className="mt-1 text-xs text-foreground">
+                            {proposingName} is already fighting in {warning.conflictName ?? "a war"}
+                            {opponents ? ` against ${opponents}` : ""}. Admission does not invoke
+                            the pact retroactively.
+                          </p>
+                          <p className="mt-1 text-xs text-muted">
+                            A member may table a defensive entry vote. If it passes unanimously,
+                            eligible alliance members join immediately without national legislation.
+                          </p>
+                          {existingEntry ? (
+                            <p className="mt-2 text-xs font-medium text-foreground">
+                              {existingEntry.status === "active"
+                                ? "Collective defence entry is active."
+                                : "A defensive entry vote is already pending."}
+                            </p>
+                          ) : viewerIsMember && viewerFmCountry ? (
+                            <Button
+                              className="mt-2"
+                              variant="secondary"
+                              size="sm"
+                              isLoading={defenseEntrySubmitting === warning.conflictId}
+                              onClick={() => proposeDefensiveEntry(warning)}
+                            >
+                              Propose defensive entry
+                            </Button>
+                          ) : null}
+                        </>
+                      ) : (
+                        <p className="mt-1 text-xs text-foreground">
+                          {opponents || "Another country"} has a declaration of war against{" "}
+                          {proposingName}
+                          before its legislature. If it becomes law after admission, the pact
+                          invokes automatically. If war begins first, members can vote on
+                          retroactive defensive entry.
+                        </p>
+                      )}
+                    </div>
+                  );
+                })}
+                {defenseEntryError && (
+                  <p className="mb-3 text-xs text-error">{defenseEntryError}</p>
+                )}
 
                 {isFoundingApplication ? (
                   <p className="text-xs text-muted">

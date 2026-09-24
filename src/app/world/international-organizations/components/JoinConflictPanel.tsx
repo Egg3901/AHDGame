@@ -24,8 +24,8 @@ interface Props {
 
 /**
  * Entry into a conflict at the bloc's call: members vote a `join_conflict`
- * resolution, and passing it puts a bill before BOTH chambers of every
- * player-enabled member's legislature at once.
+ * resolution. Defensive-side entry is immediate after passage; offensive-side
+ * entry puts a bill before both chambers of every eligible member's legislature.
  *
  * Rendered only for a category that may table it — which in a Cold War world is
  * the two blocs and nothing else. The gate reads the org's EFFECTIVE category,
@@ -137,14 +137,19 @@ export function JoinConflictPanel({
           <h3 className="text-lg font-semibold text-foreground">Entry into a conflict</h3>
           <p className="text-xs text-muted">
             Call the bloc into a war already being fought. Entry needs unanimous consent from every
-            member that holds a vote. If they carry it, every player-enabled member puts the
-            question to both chambers of its own legislature at once, and each one decides for
-            itself.
+            member that holds a vote. A defensive call takes effect immediately. An offensive call
+            then puts the question to both chambers of each eligible member&apos;s legislature, and
+            each country decides for itself.
           </p>
           <p className="mt-1 text-xs text-muted">
             Defence of a member is not voted on. If a member is attacked, every player-led member of
             this alliance enters that war at once. Leaving the alliance beforehand is the only way
             to stay out of it, and leaving after a war has begun does not take you out of that war.
+          </p>
+          <p className="mt-1 text-xs text-muted">
+            An attack that began before a country joined is not retroactive. Members may unanimously
+            extend collective defence to that live war. If the vote passes, alliance members enter
+            immediately without national legislation.
           </p>
         </div>
         {viewerIsMember && viewerFmCountry && (

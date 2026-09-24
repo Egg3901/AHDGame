@@ -55,6 +55,57 @@ describe("bloc war entry status projection", () => {
     });
   });
 
+  it("shows a custom Bloc's defense of an applicant on the non-host side", async () => {
+    const db = createMockDb();
+    db.collection("organizationLegislation").find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([
+        {
+          _id: new ObjectId(),
+          organizationId: "andes-pact",
+          type: "join_conflict",
+          status: "active",
+          joinConflictTheaterId: "germany",
+          joinConflictSide: "A",
+          joinConflictDefendingCountryId: "DE",
+        },
+      ]),
+    });
+    db.collection("conflicts").find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([
+        {
+          _id: "germany",
+          name: "The War for Germany",
+          hostCountry: "DD",
+          hostEntities: ["DD", "DE"],
+          status: "active",
+          sideA: { countries: ["DE"] },
+          sideB: { countries: ["DD"] },
+        },
+      ]),
+    });
+    db.collection("bills").find.mockReturnValue({ toArray: vi.fn().mockResolvedValue([]) });
+
+    const result = await loadBlocWarEntryStatusByDisplayOrg(
+      db as unknown as Db,
+      [
+        {
+          id: "andes-pact",
+          def: {
+            category: "bloc",
+            foundingMembers: ["BR"],
+            alignment: { poleId: "ORG:andes-pact", accentToken: "warning" },
+          },
+          members: [{ countryId: "BR" }],
+        },
+      ] as never
+    );
+
+    expect(result.get("andes-pact")?.[0]).toMatchObject({
+      stake: "collective_defense",
+      members: [{ countryId: "BR", stake: "collective_defense", status: "awaiting" }],
+    });
+  });
+
   it("shows NATO votes and linked Warsaw Pact status on COMECON", async () => {
     const db = createMockDb();
     const natoResolution = new ObjectId();

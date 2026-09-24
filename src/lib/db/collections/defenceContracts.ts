@@ -59,8 +59,8 @@ export async function awardContract(
     assignedFactories?: number;
     selfDealing?: DefenceContract["selfDealing"];
     /**
-     * State-owned suppliers have no player CEO to accept. Activate immediately so the
-     * order delivers rather than sitting pending forever (ticket #1087).
+     * Suppliers without a player CEO have nobody who can accept. Activate immediately so
+     * the order delivers rather than sitting pending forever (ticket #1087).
      */
     activateImmediately?: boolean;
   }
@@ -85,9 +85,9 @@ export async function awardContract(
     // Stamped on every new award. Contracts without it settle under the pre-#1134 economics
     // they were signed under; see `DefenceContract.costBasis`.
     costBasis: "margin",
-    // An offer, not an order, unless the buyer is contracting its own state industry.
-    // A National Corporation has no player CEO to click Accept; leaving those pending
-    // meant the arsenal never filled.
+    // An offer, not an order, unless the supplier has no player CEO. National Corporations
+    // and true NPP-owned corporations have nobody who can click Accept; leaving those pending
+    // means the arsenal never fills.
     status: input.activateImmediately ? "active" : "pending",
     awardedTurn: input.awardedTurn,
     updatedAt: new Date(),
