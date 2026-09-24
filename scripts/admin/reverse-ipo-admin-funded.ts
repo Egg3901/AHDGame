@@ -76,14 +76,12 @@ async function plan(db: Db, session?: ClientSession): Promise<Plan> {
     .collection<ShareOrder>("shareOrders")
     .find({ corporationId: CORPORATION_ID, status: "open" }, { session })
     .toArray();
-  const [openListings, pendingOffers] = await Promise.all([
-    db
-      .collection("shareListings")
-      .countDocuments({ corporationId: CORPORATION_ID, status: "open" }, { session }),
-    db
-      .collection("shareOffers")
-      .countDocuments({ corporationId: CORPORATION_ID, status: "pending" }, { session }),
-  ]);
+  const openListings = await db
+    .collection("shareListings")
+    .countDocuments({ corporationId: CORPORATION_ID, status: "open" }, { session });
+  const pendingOffers = await db
+    .collection("shareOffers")
+    .countDocuments({ corporationId: CORPORATION_ID, status: "pending" }, { session });
   assert(openListings === 0 && pendingOffers === 0, "Open private trades require manual review");
   assert(
     orders.every(
@@ -99,10 +97,10 @@ async function plan(db: Db, session?: ClientSession): Promise<Plan> {
     "Unexpected open order requires manual review"
   );
 
-  const [rates, gameState] = await Promise.all([
-    db.collection<ExchangeRate>("exchangeRates").find({}, { session }).toArray(),
-    db.collection<GameState>("gameState").findOne({ _id: "current" }, { session }),
-  ]);
+  const rates = await db.collection<ExchangeRate>("exchangeRates").find({}, { session }).toArray();
+  const gameState = await db
+    .collection<GameState>("gameState")
+    .findOne({ _id: "current" }, { session });
   assert(typeof gameState?.currentTurn === "number", "Current turn unavailable");
   const rateByCurrency = new Map(rates.map((rate) => [rate.currencyCode, rate.rate]));
   const usdRate = rateByCurrency.get("USD");
