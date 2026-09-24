@@ -72,7 +72,11 @@ A resolution that fails, and a leadership candidate who is not elected, are writ
 
 ## Mutual defence
 
-The military alliances (NATO and the Warsaw Pact) carry collective-defence charters that the engine enforces without any vote at all. A declaration of war **against** a member pulls every other voting member of that alliance onto the defender's side automatically, the alliance is named on the war's belligerent roll, and the members are told. It is defensive only: an ally pulled in has declared on nobody, so no other alliance fires and no chain can form, and a member truced with the declarer stays out. A member dragged in this way can negotiate its own exit; it is not held in the war until the member it came to defend settles. Calling the bloc into a war it was not attacked in is the unanimous resolution above. In worlds that begin at the 1953 preset the two armed blocs also levy a fixed **tribute** on their non-voting client members instead of voted dues. See [Declaring War](/wiki/declaring-war).
+The military alliances (NATO and the Warsaw Pact) carry collective-defence charters that the engine enforces without any vote at all. A declaration of war **against** a member pulls every other voting member of that alliance onto the defender's side automatically, the alliance is named on the war's belligerent roll, and the members are told. It is defensive only: an ally pulled in has declared on nobody, so no other alliance fires and no chain can form, and a member truced with the declarer stays out. A member dragged in this way can negotiate its own exit; it is not held in the war until the member it came to defend settles.
+
+Admission does not apply the charter retroactively. When an applicant is already defending a live war, the membership ballot shows a warning and a member can table a unanimous defensive-entry resolution. If it passes, eligible alliance members enter the defender's side immediately without votes in their national legislatures. A declaration still before an aggressor's legislature also appears as a warning. If the applicant becomes a member before that declaration is enacted, the normal automatic charter applies when the war begins. Calling the bloc onto the attacking side remains an offensive coalition choice and requires national ratification after the organization vote.
+
+In worlds that begin at the 1953 preset the two armed blocs also levy a fixed **tribute** on their non-voting client members instead of voted dues. See [Declaring War](/wiki/declaring-war).
 
 Autonomous governments cast opinion-based votes here too, table trade agreements, aid, sanctions and statements, and can call their alliance to war, so a bloc's ballots fill in whether or not players hold the seats.
 
@@ -82,9 +86,11 @@ Players can **create their own international organizations** with arbitrary para
 
 - **A player-chosen name**: the org is identified by a unique short name
 - **A player-created flag**: marks the org as player-created (as opposed to built-in)
-- Player-defined founding members, leadership office, and charter
+- A category, leadership office, charter, and optional emblem
 
-Custom orgs function identically to built-in ones for membership, leadership, and legislation purposes. The primary difference is provenance: they did not exist at game start.
+A custom organization may use the **Bloc** category. Founding a Bloc creates a new independent alignment pole named for the organization, with a color chosen by its founder. The founder begins committed to that pole. Bloc members can spend the pooled organization fund on Influence, use aid to reinforce member alignment, draw autonomous countries toward membership, and risk defections when a member remains below the alignment threshold. Custom Blocs also receive the same posture, statement, aid, sanctions, and conflict-entry resolution powers as other Bloc organizations.
+
+Custom orgs function identically to built-in ones for membership, leadership, and legislation purposes. The primary difference is provenance: they did not exist at game start. Categories other than Bloc do not create alignment poles.
 
 ## Organization pages
 

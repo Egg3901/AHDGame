@@ -1,6 +1,6 @@
 import type { Db } from "mongodb";
 import { ObjectId } from "mongodb";
-import type { Corporation, CorporateSector, NPP, PoliticalParty } from "@/lib/db/types";
+import type { Corporation, CorporateSector, GameState, NPP, PoliticalParty } from "@/lib/db/types";
 import {
   buildCeoAffiliations,
   chooseNppCorpCeo,
@@ -18,6 +18,9 @@ import {
   loadWorldPreset,
 } from "@/lib/currency/gdpAnchorRate";
 import { getEraFounderShares, getEraNominalScale } from "@/lib/constants/sectorSeedEra";
+import { autoGrantedNodeIds } from "@/lib/constants/techTree";
+import { resolveGameYear } from "@/lib/era/era";
+import { getStartingYearForPreset } from "@/lib/constants/turnTime";
 import {
   CORPORATION_TYPES,
   type CorporationType,
@@ -335,6 +338,21 @@ export async function spawnNppCorporation(
   //     by the era's nominal scale keeps the founding book the same share of
   //     the economy it is in a 2019 world. No-op for every modern preset.
   const preset = await loadWorldPreset(db);
+  const techGameState = await db.collection<GameState>("gameState").findOne(
+    { _id: "current" },
+    {
+      projection: {
+        sectorTechTreesEnabled: 1,
+        currentYear: 1,
+        currentTurn: 1,
+        startingYear: 1,
+      },
+    }
+  );
+  const techGrantIds =
+    techGameState?.sectorTechTreesEnabled === true
+      ? autoGrantedNodeIds(type, resolveGameYear(techGameState) ?? getStartingYearForPreset(preset))
+      : [];
   const startingCapital =
     customCapital ??
     Math.round(
@@ -415,6 +433,7 @@ export async function spawnNppCorporation(
     logisticsStrength: 0,
     rdBudget: Math.round(startingCapital * 0.01), // 1% R&D
     rdScore: 0,
+    ...(techGrantIds.length > 0 ? { unlockedTechNodeIds: techGrantIds } : {}),
     ceoSalary: 0,
     brandColor: pickBrandColor(brandColor),
     sequentialId,

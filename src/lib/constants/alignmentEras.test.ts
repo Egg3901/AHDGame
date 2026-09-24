@@ -121,7 +121,9 @@ describe("ALIGNMENT_ERAS", () => {
     // Two poles must never share a token within a start, or the Ledger's bars
     // and the map become unreadable.
     for (const year of [1953, 1979, 2019]) {
-      const tokens = polesForYear(year).map((id) => ALIGNMENT_POLES[id].accentToken);
+      const tokens = polesForYear(year).map(
+        (id) => ALIGNMENT_POLES[id as keyof typeof ALIGNMENT_POLES].accentToken
+      );
       expect(new Set(tokens).size, `year ${year}`).toBe(tokens.length);
     }
   });

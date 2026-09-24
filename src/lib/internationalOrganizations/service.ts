@@ -121,6 +121,7 @@ export function customOrgToDef(org: CustomInternationalOrganization): Internatio
     leadership: { title: org.leadership.title, termTurns: org.leadership.termTurns },
     charter: org.charter,
     category: org.category ?? DEFAULT_CUSTOM_ORG_CATEGORY,
+    ...(org.alignment ? { alignment: org.alignment } : {}),
     isCustom: true,
   };
 }

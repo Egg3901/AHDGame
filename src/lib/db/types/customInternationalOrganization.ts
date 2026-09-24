@@ -1,6 +1,10 @@
 import type { ObjectId } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
 import type { OrganizationCategory } from "@/lib/constants/orgCategory";
+import type {
+  CustomAlignmentPoleId,
+  CustomAlignmentPoleToken,
+} from "@/lib/constants/alignmentEras";
 
 /**
  * A player-created international organization. Stored alongside the built-in
@@ -20,6 +24,11 @@ export interface CustomInternationalOrganization {
   logoPath?: string | null;
   /** Shared classification (fixed at creation). Legacy docs may lack it. */
   category?: OrganizationCategory;
+  /** Present only for a custom Bloc: its independent alignment identity. */
+  alignment?: {
+    poleId: CustomAlignmentPoleId;
+    accentToken: CustomAlignmentPoleToken;
+  };
   /** Single-element list at creation: the creator's country. */
   foundingMembers: CountryId[];
   leadership: {

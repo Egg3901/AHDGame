@@ -19,6 +19,7 @@ import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import { DEFAULT_SECTOR_STARTING_REVENUE } from "@/lib/constants/corporations";
 import { computeUnownedHeadroomUnits } from "@/lib/market/unownedHeadroom";
 import { capacityRescaleRatio } from "@/lib/constants/capacityEconomy";
+import { autoGrantedNodeIds } from "@/lib/constants/techTree";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 vi.mock("@/lib/npp/generator", () => ({
@@ -79,6 +80,7 @@ describe("spawnNppCorporation — plants", () => {
       "corporateSectors",
       "unownedSectors",
       "politicalParties",
+      "gameState",
     ]) {
       db.collection(name);
       const cursor = {
@@ -102,6 +104,13 @@ describe("spawnNppCorporation — plants", () => {
       sectorType: "manufacturing",
       revenue: POOL_REVENUE,
       headroomUnits: POOL_UNITS,
+    });
+    db.collectionMocks.gameState!.findOne.mockResolvedValue({
+      _id: "current",
+      sectorTechTreesEnabled: true,
+      currentYear: 1953,
+      currentTurn: 1,
+      startingYear: 1953,
     });
   });
 
@@ -143,6 +152,32 @@ describe("spawnNppCorporation — plants", () => {
     // Seed context: instant, so nothing is queued.
     expect(sector.buildQueue).toBeUndefined();
     expect(sector.plantsStartTurn).toBe(0);
+  });
+
+  it("grants passed-decade tech prerequisites to a new NPP corporation", async () => {
+    await spawn(true);
+    const corporation = db.collectionMocks.corporations!.insertOne.mock.calls[0][0] as Record<
+      string,
+      unknown
+    >;
+
+    expect(corporation.unlockedTechNodeIds).toEqual(autoGrantedNodeIds("manufacturing", 1953));
+  });
+
+  it("leaves tech state absent while the tech-tree feature is disabled", async () => {
+    db.collectionMocks.gameState!.findOne.mockResolvedValue({
+      _id: "current",
+      sectorTechTreesEnabled: false,
+      currentYear: 1953,
+    });
+
+    await spawn(true);
+    const corporation = db.collectionMocks.corporations!.insertOne.mock.calls[0][0] as Record<
+      string,
+      unknown
+    >;
+
+    expect(corporation.unlockedTechNodeIds).toBeUndefined();
   });
 
   it("founds a focused extraction sector with strategy-normalized capacity", async () => {

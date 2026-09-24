@@ -11,6 +11,7 @@ import {
   joinGateForPoleCount,
   polesForYear,
   type AlignmentPoleId,
+  type AlignmentPole,
 } from "@/lib/constants/alignmentEras";
 import type { CountryId } from "@/lib/constants/countries";
 import type { SphereMembership } from "@/lib/world/spheres/types";
@@ -22,8 +23,17 @@ import { statusFor } from "./project";
  * it has no sponsor by definition, which is precisely why a nation it leads
  * has no primary sphere.
  */
-export function sponsorForPole(pole: AlignmentPoleId): CountryId | null {
-  return ALIGNMENT_POLES[pole].leaderCountryId ?? null;
+export function sponsorForPole(
+  pole: AlignmentPoleId,
+  definitions?: ReadonlyMap<AlignmentPoleId, AlignmentPole>
+): CountryId | null {
+  return (
+    definitions?.get(pole)?.leaderCountryId ??
+    (pole in ALIGNMENT_POLES
+      ? ALIGNMENT_POLES[pole as keyof typeof ALIGNMENT_POLES].leaderCountryId
+      : null) ??
+    null
+  );
 }
 
 /**
@@ -38,12 +48,17 @@ export function sponsorForPole(pole: AlignmentPoleId): CountryId | null {
 export function projectSphereAlignment(params: {
   shares: AlignmentShares;
   year: number;
+  poles?: readonly AlignmentPoleId[];
+  poleDefinitions?: ReadonlyMap<AlignmentPoleId, AlignmentPole>;
 }): Map<CountryId, number> {
   const out = new Map<CountryId, number>();
-  for (const pole of polesForYear(params.year)) {
-    const sponsor = sponsorForPole(pole);
+  for (const pole of params.poles ?? polesForYear(params.year)) {
+    const sponsor = sponsorForPole(pole, params.poleDefinitions);
     if (!sponsor) continue;
-    out.set(sponsor, (params.shares.shares[pole] ?? 0) / 100);
+    // One country may lead both a built-in pole and a player-founded Bloc.
+    // Sphere relationships are keyed by sponsor, so keep its strongest channel
+    // instead of letting whichever pole was iterated last overwrite the other.
+    out.set(sponsor, Math.max(out.get(sponsor) ?? 0, (params.shares.shares[pole] ?? 0) / 100));
   }
   return out;
 }
@@ -57,8 +72,10 @@ export function projectSphereAlignment(params: {
 export function primarySphereFor(params: {
   shares: AlignmentShares;
   year: number;
+  poles?: readonly AlignmentPoleId[];
+  poleDefinitions?: ReadonlyMap<AlignmentPoleId, AlignmentPole>;
 }): CountryId | null {
-  const poles = polesForYear(params.year);
+  const poles = params.poles ?? polesForYear(params.year);
   const { topPoleId, lead } = statusFor({
     shares: params.shares,
     poleCount: poles.length,
@@ -67,7 +84,7 @@ export function primarySphereFor(params: {
   });
   if (!topPoleId) return null;
   if (lead < joinGateForPoleCount(poles.length)) return null;
-  return sponsorForPole(topPoleId);
+  return sponsorForPole(topPoleId, params.poleDefinitions);
 }
 
 /**
@@ -90,9 +107,16 @@ export function applyAlignmentToMembership(params: {
   membership: SphereMembership;
   shares: AlignmentShares;
   year: number;
+  poles?: readonly AlignmentPoleId[];
+  poleDefinitions?: ReadonlyMap<AlignmentPoleId, AlignmentPole>;
 }): SphereMembership {
   const { membership } = params;
-  const projected = projectSphereAlignment({ shares: params.shares, year: params.year });
+  const projected = projectSphereAlignment({
+    shares: params.shares,
+    year: params.year,
+    poles: params.poles,
+    poleDefinitions: params.poleDefinitions,
+  });
 
   const relationships = membership.relationships.map((rel) => {
     const next = projected.get(rel.sponsorId as CountryId);
@@ -100,7 +124,12 @@ export function applyAlignmentToMembership(params: {
   });
 
   const sponsors = new Set(relationships.map((r) => r.sponsorId));
-  const committed = primarySphereFor({ shares: params.shares, year: params.year });
+  const committed = primarySphereFor({
+    shares: params.shares,
+    year: params.year,
+    poles: params.poles,
+    poleDefinitions: params.poleDefinitions,
+  });
 
   let primarySphereId = membership.primarySphereId;
   if (committed && sponsors.has(committed)) {

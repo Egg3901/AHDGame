@@ -110,6 +110,7 @@ interface ForeignPolicyContext {
   spheres: PersistedSphereMembership[];
   memberships: OrganizationMembership[];
   organizationCategories: Map<string, OrganizationCategory>;
+  poleLeaders: Map<AlignmentPoleId, CountryId>;
   conflicts: ConflictDoc[];
   embargoes: TradeEmbargo[];
   tariffs: Tariff[];
@@ -934,7 +935,7 @@ function warCandidates(
     );
     const poleSupport = sourceAlignment
       ? Object.entries(sourceAlignment.shares).reduce((best, [pole, share]) => {
-          const leader = ALIGNMENT_POLES[pole as AlignmentPoleId]?.leaderCountryId;
+          const leader = context.poleLeaders.get(pole as AlignmentPoleId);
           return preferred.countries.includes(leader as CountryId)
             ? Math.max(best, share ?? 0)
             : best;
@@ -1169,6 +1170,10 @@ async function loadContext(
   ]);
 
   const organizationCategories = new Map<string, OrganizationCategory>();
+  const poleLeaders = new Map<AlignmentPoleId, CountryId>();
+  for (const pole of Object.values(ALIGNMENT_POLES)) {
+    if (pole.leaderCountryId) poleLeaders.set(pole.id, pole.leaderCountryId);
+  }
   const organizationIds = Array.from(
     new Set(memberships.map((membership) => membership.organizationId))
   );
@@ -1176,7 +1181,12 @@ async function loadContext(
     organizationIds.map((organizationId) => loadOrganizationDefWithPowers(db, organizationId))
   );
   organizationDefs.forEach((definition, index) => {
-    if (definition) organizationCategories.set(organizationIds[index], definition.category);
+    if (!definition) return;
+    organizationCategories.set(organizationIds[index], definition.category);
+    const founder = definition.foundingMembers[0];
+    if (definition.alignment && founder && founder in COUNTRY_CONFIGS) {
+      poleLeaders.set(definition.alignment.poleId, founder as CountryId);
+    }
   });
   const pendingTariffTargets = new Set<CountryId>();
   for (const bill of pendingTariffBills) {
@@ -1213,6 +1223,7 @@ async function loadContext(
     spheres,
     memberships,
     organizationCategories,
+    poleLeaders,
     conflicts,
     embargoes,
     tariffs,

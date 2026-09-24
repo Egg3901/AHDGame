@@ -15,6 +15,7 @@ import {
   type AlignmentEra,
   type AlignmentPoleId,
   type AlignmentPoleToken,
+  type AlignmentPole,
 } from "@/lib/constants/alignmentEras";
 import { ROSTER_BY_KEY, type AlignmentCountryKey } from "@/lib/constants/alignmentRoster";
 import { COUNTRY_CONFIGS, getCountryDisplayName, type CountryId } from "@/lib/constants/countries";
@@ -105,7 +106,7 @@ export function projectNationStanding(
     shares: doc.shares,
     nonAligned: doc.nonAligned,
     previousShares: doc.previous?.shares ?? null,
-    axis: axisFor(current, ctx.era),
+    axis: ctx.poleIds.length === 2 ? axisFor(current, ctx.era) : null,
     lead,
     status,
     topPoleId,
@@ -126,12 +127,22 @@ export function projectNationStanding(
  * the remainder is "Non-aligned" or "Uncommitted" — or about a pole's colour —
  * the same country would read differently depending on which page you opened.
  */
-export function eraPoleVocabulary(year: number): {
+export function eraPoleVocabulary(
+  year: number,
+  live?: {
+    poleIds: readonly AlignmentPoleId[];
+    poleDefinitions: ReadonlyMap<AlignmentPoleId, AlignmentPole>;
+  }
+): {
   poles: LedgerPole[];
   remainderLabel: string;
 } {
-  const poles = polesForYear(year).map((id) => {
-    const pole = ALIGNMENT_POLES[id];
+  const poleIds = live?.poleIds ?? polesForYear(year);
+  const poles = poleIds.map((id) => {
+    const pole =
+      live?.poleDefinitions.get(id) ??
+      (id in ALIGNMENT_POLES ? ALIGNMENT_POLES[id as keyof typeof ALIGNMENT_POLES] : null);
+    if (!pole) throw new Error(`Missing alignment pole definition for ${id}`);
     return {
       id: pole.id,
       label: pole.label,

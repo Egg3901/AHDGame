@@ -1,7 +1,8 @@
 import type { ThreatLevel, RegionCode } from "./types";
 import { STRATEGIC_REGIONS } from "./regions";
-import { blocOf, type BlocLookup } from "./bloc";
+import { blocOf, type Bloc, type BlocLookup } from "./bloc";
 import { regionNeighbors } from "./regionTopology";
+import { blocMassingHeat } from "./rules/blocThreat";
 
 export type { ThreatLevel };
 
@@ -9,8 +10,6 @@ const WINDOW = 24; // turns a battle stays relevant (linear decay to zero)
 const DECL_HEAT = 25;
 const BATTLE_HEAT = 35;
 const NO_CONTACT_MULT = 0.4;
-const MASS_HEAT = 12;
-const MASS_BOTH_BLOCS = 6;
 const SPILL = 0.35; // fraction of a region's heat that bleeds into each neighbour
 const PROX_HOME = 1.4; // conflict in the viewer's home region
 const PROX_ADJ = 1.2; // conflict in a region bordering the viewer's home
@@ -131,29 +130,19 @@ export function computeRegionThreats(input: ThreatInput): Record<string, ThreatL
 
   // Massed forces = tension before shots. Weight up when the enemy bloc is present.
   const vb = blocOf(input.blocs, input.viewerCountry);
-  const mass: Record<string, { west: boolean; east: boolean }> = {};
+  const mass: Record<string, Set<Bloc>> = {};
   for (const cs of input.committedByCountry) {
     for (const [tid, amt] of Object.entries(cs.committed)) {
       if (amt <= 0) continue;
-      const m = (mass[tid] ??= { west: false, east: false });
-      // Non-aligned forces set NEITHER flag. This was an `else`, so every country the
-      // old table omitted — and every genuine neutral — was counted as an eastern
-      // build-up, which is how a Swedish or Yugoslav deployment raised NATO's threat
-      // board. A neutral massing is not an enemy massing.
+      const m = (mass[tid] ??= new Set<Bloc>());
+      // Non-aligned forces carry no treaty pole. Custom Blocs do, and their
+      // deployments must count as foreign buildup just like preset alliances.
       const bloc = blocOf(input.blocs, cs.country);
-      if (bloc === "west") m.west = true;
-      else if (bloc === "east") m.east = true;
+      if (bloc !== "nonAligned") m.add(bloc);
     }
   }
   for (const [tid, m] of Object.entries(mass)) {
-    // "Enemy" is any bloc that is not the viewer's. This was `vb === "west" ? m.east :
-    // m.west`, a binary that put a non-aligned viewer in the else branch — so a neutral
-    // read a WESTERN build-up as hostile and an eastern one as harmless, arbitrarily.
-    // For a non-aligned viewer both are foreign, which is the whole point of neutrality.
-    const enemyMassed = vb === "west" ? m.east : vb === "east" ? m.west : m.west || m.east;
-    let v = MASS_HEAT * (enemyMassed ? 1.6 : 1.0);
-    if (m.west && m.east) v += MASS_BOTH_BLOCS;
-    add(input.theaterRegion[tid], v);
+    add(input.theaterRegion[tid], blocMassingHeat(vb, m));
   }
 
   // Home proximity: scale a region's own conflict heat up when it's near the viewer.
