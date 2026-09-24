@@ -12,18 +12,22 @@ if (!ObjectId.isValid(billIdText ?? "") || !rejectedAtText || (action && action 
 const rejectedAt = new Date(rejectedAtText);
 if (Number.isNaN(rejectedAt.getTime())) throw new Error("Invalid rejection timestamp");
 
-try {
-  const db = await getDb();
-  const gameState = await db.collection<GameState>("gameState").findOne({ _id: "current" });
-  if (typeof gameState?.currentTurn !== "number") throw new Error("Current turn is missing");
-  const result = await repairRejectedRegionalBill(
-    db,
-    new ObjectId(billIdText),
-    rejectedAt,
-    gameState.currentTurn,
-    action === "--apply"
-  );
-  console.log(JSON.stringify(result));
-} finally {
-  await (await getMongoClient()).close();
+async function main(): Promise<void> {
+  try {
+    const db = await getDb();
+    const gameState = await db.collection<GameState>("gameState").findOne({ _id: "current" });
+    if (typeof gameState?.currentTurn !== "number") throw new Error("Current turn is missing");
+    const result = await repairRejectedRegionalBill(
+      db,
+      new ObjectId(billIdText),
+      rejectedAt,
+      gameState.currentTurn,
+      action === "--apply"
+    );
+    console.log(JSON.stringify(result));
+  } finally {
+    await (await getMongoClient()).close();
+  }
 }
+
+void main();
