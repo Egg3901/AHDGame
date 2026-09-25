@@ -13,9 +13,9 @@
 import { CDN_BASE, CDN_GEO, CDN_HERO_SLUGS } from "@/lib/images/cdnUrls";
 import {
   ACTION_IMAGE_SLUGS,
-  countriesWithArt,
-  erasWithCountryArt,
+  countryArtSlugs,
   erasWithGenericSet,
+  type ActionImageSlug,
 } from "@/lib/images/actionImages";
 import {
   CDN_ACTION_IMAGE_URLS,
@@ -31,7 +31,7 @@ export interface PublicCdnCategory {
   /** Directory under `${cdnBase}/static/`. */
   name: string;
   description: string;
-  /** Absolute URL templates; `{slug}`, `{era}`, `{country}`, `{file}` are placeholders. */
+  /** Absolute URL templates; `{slug}`, `{era}`, `{country}`, `{sectorType}`, `{file}` are placeholders. */
   urlTemplates: string[];
   /** File slugs known to be published, when the set is enumerable. */
   slugs?: readonly string[];
@@ -54,8 +54,8 @@ export interface PublicCdnCatalog {
       slugs: readonly string[];
       /** Eras whose every slug resolves under `actions/{era}/`. */
       eraGenericSets: string[];
-      /** Era → countries that have at least one bespoke national image. */
-      countryArt: Record<string, string[]>;
+      /** Era → country → slugs published under `actions/{era}/{country}/`. */
+      countryArt: Record<string, Record<string, readonly ActionImageSlug[]>>;
     };
     geoJson: Record<string, string>;
     scotusBuilding: string;
@@ -170,14 +170,15 @@ export function buildCdnCatalog(): PublicCdnCatalog {
           `${staticBase}/actions/{era}/{country}/{slug}.webp`,
         ],
         slugs: ACTION_IMAGE_SLUGS,
-        notes: "See assets.actionCards for which eras and countries have art published.",
+        notes: "See assets.actionCards for which eras, countries, and slugs have art published.",
       },
       {
         name: "create-character",
         description: "Era hero images for character creation.",
-        urlTemplates: [`${staticBase}/create-character/create-{era}.webp`],
+        urlTemplates: [`${staticBase}/create-character/{slug}.webp`],
         slugs: Object.keys(CDN_CREATE_CHARACTER_IMAGES).map((era) => `create-${era}`),
-        notes: "Empty slug list means none are published; clients should use assets.heroFallback.",
+        notes:
+          "{slug} is create-{era} (same convention as login/). Empty slug list means none are published; clients should use assets.heroFallback.",
       },
       {
         name: "scotus",
@@ -211,11 +212,9 @@ export function buildCdnCatalog(): PublicCdnCatalog {
         urls: configuredAssetMap(CDN_ACTION_IMAGE_URLS),
         slugs: ACTION_IMAGE_SLUGS,
         eraGenericSets: erasWithGenericSet(),
-        countryArt: Object.fromEntries(
-          erasWithCountryArt().map((era) => [era, countriesWithArt(era)])
-        ),
+        countryArt: countryArtSlugs(),
       },
-      geoJson: { ...CDN_GEO },
+      geoJson: configuredAssetMap(CDN_GEO),
       scotusBuilding: configuredAssetUrl(SCOTUS_HERO_IMAGE_URL),
       techTierPlaceholder: configuredAssetUrl(TECH_PLACEHOLDER_IMAGE),
     },
