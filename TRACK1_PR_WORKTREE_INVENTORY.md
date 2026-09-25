@@ -932,3 +932,22 @@ ref stays as provenance.
 commit `6360845ec3`; fresh origin/development already contains that commit
 and four later merged PRs. Fresh status showed no changes. Decision: remove
 the redundant checkout normally, keeping Track 1 as the only task checkout.
+
+**AHDGame `track3-cdn`: DELETE redundant clean checkout, 2026-09-25.** Its
+catalog tip `33e9a85318` is patch-equivalent to merged development
+`e6888643e6` (`git cherry` reports `-`), and later #2387 hardened that
+catalog. Its three patch-unique ancestor commits are IPO reversal/org
+migration work already carried by the protected active main checkout branch
+`fix/admin-funded-ipo-reversal`; they are not CDN work and are not deleted
+or discarded. Fresh worktree status is clean, it is unlocked and process-free.
+Decision: remove only this redundant checkout normally, retaining both the
+CDN and protected IPO branch refs.
+
+**AHDGame `track3-mcp-hardening`: DELETE superseded clean checkout,
+2026-09-25.** Its one patch-unique commit `f5a8500c5c` is an earlier MCP
+JSON-RPC hardening draft. Merged PR #2385 (`2f52a77d63`) contains that
+handler and tests plus stricter finite-ID and `jsonrpc: "2.0"` validation and
+12 additional regression-test lines absent from this source. A direct
+two-file diff confirms the source has no extra handler behavior beyond the
+merged version. The checkout is clean, unlocked, and process-free. Decision:
+remove it normally as superseded, retaining the branch ref for provenance.
