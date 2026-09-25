@@ -553,15 +553,32 @@
       "requirement": "Fresh-bootstrap conformance contains no unexplained missing country systems, orphaned offices, candidate-less founding contests, empty required parties, seat/office mismatches, or wrong-era fallbacks.",
       "parent_checked": false,
       "status": "open",
-      "issue_refs": [],
+      "issue_refs": [
+        {
+          "repo": "Egg3901/AHDGame",
+          "number": 2316,
+          "state": "OPEN",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2316"
+        }
+      ],
       "evidence": [
         {
           "type": "tracker_checklist",
           "url": "https://github.com/Egg3901/AHDGame/issues/2159",
           "detail": "Unchecked in #2159"
+        },
+        {
+          "type": "candidate_checkpoint",
+          "ref": "afcb2681a6cd6366fb107d720cba9e31d64d214f",
+          "detail": "Clean preserved worktree checkpoint contains authored RU/PL/CS/HU/RO/BG/YU 1991 source and tests; not yet integrated into Track 1 or validated on the final release SHA."
         }
       ],
-      "blocked_by": [],
+      "blocked_by": [
+        {
+          "type": "issue",
+          "detail": "#2316 1991 successor country substrate must pass fresh-bootstrap conformance and required simulation report before qualifying the selected 1991 profile"
+        }
+      ],
       "final_validation": {
         "state": "pending",
         "evidence": []
@@ -2419,6 +2436,11 @@
           "type": "partial_source_and_tests",
           "ref": "a635fea5f2f9c3e93781236886f81179d2952235",
           "detail": "2027 euro member rules, seed budgets/FX/era and live forex follower peg implemented. Focused euro conformance, adoption, and forex tests passed. #2291 remains partial: central-bank/corporation/bond/balance/transaction topology and bootstrap conformance are not yet proven."
+        },
+        {
+          "type": "candidate_checkpoint",
+          "ref": "afcb2681a6cd6366fb107d720cba9e31d64d214f",
+          "detail": "Clean preserved worktree checkpoint contains partial 2027 Turkey/regional/currency fixes and a #2325 report; review, integration, and final-SHA bootstrap proof remain pending."
         }
       ],
       "blocked_by": [
