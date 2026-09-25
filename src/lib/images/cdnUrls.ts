@@ -18,35 +18,43 @@ export function cdnStatic(category: string, slug: string, ext: "webp" | "png" = 
   return `${CDN_BASE}/static/${category}/${slug}.${ext}`;
 }
 
+/**
+ * Fixed hero banner slugs published at `static/heroes/`. Kept as a runtime
+ * tuple (not just a type union) so the public v1 CDN catalog can advertise the
+ * same list without a second source of truth. Commodity heroes
+ * (`commodity-<key>`) are generated per commodity and stay type-only.
+ */
+export const CDN_HERO_SLUGS = [
+  "white-house",
+  "cabinet",
+  "actions",
+  "politicians",
+  "parties",
+  "house-of-commons",
+  "downing-street",
+  "reichstag",
+  "government-buildings-dublin",
+  "federal-reserve",
+  "us-overview-mount-rushmore",
+  "changelog",
+  "national-diet",
+  "kantei",
+  "bank-of-japan",
+  "bank-of-england",
+  "ecb",
+  "peoples-bank-of-china",
+  "great-hall-of-the-people",
+  "zhongnanhai",
+  "banco-central-do-brasil",
+  "palacio-do-planalto",
+  "aso-rock",
+  "central-bank-of-nigeria",
+  "imf",
+  "imf-logo",
+] as const;
+
 /** Hero banner slugs served by `/api/images/hero/[slug]` (and direct CDN use). */
-export type HeroSlug =
-  | "white-house"
-  | "cabinet"
-  | "actions"
-  | "politicians"
-  | "parties"
-  | "house-of-commons"
-  | "downing-street"
-  | "reichstag"
-  | "government-buildings-dublin"
-  | "federal-reserve"
-  | "us-overview-mount-rushmore"
-  | "changelog"
-  | "national-diet"
-  | "kantei"
-  | "bank-of-japan"
-  | "bank-of-england"
-  | "ecb"
-  | "peoples-bank-of-china"
-  | "great-hall-of-the-people"
-  | "zhongnanhai"
-  | "banco-central-do-brasil"
-  | "palacio-do-planalto"
-  | "aso-rock"
-  | "central-bank-of-nigeria"
-  | "imf"
-  | "imf-logo"
-  | `commodity-${string}`;
+export type HeroSlug = (typeof CDN_HERO_SLUGS)[number] | `commodity-${string}`;
 
 export function cdnHero(slug: string): string {
   const ext = slug === "imf-logo" ? "png" : "webp";
