@@ -794,6 +794,11 @@
           "type": "implementation_checkpoint",
           "ref": "8949c9da39",
           "detail": "Ported the keyed non-transaction money-flow primitive, receipt getter and indexes; 13 focused primitive/index tests passed. No consumer coverage or full validation is claimed. The old 55-commit branch is being extracted in verified slices."
+        },
+        {
+          "type": "implementation_checkpoint",
+          "ref": "1fdffbcec1,c9b411a09e",
+          "detail": "Migrated standalone character transfer routes to keyed debit/credit legs, then removed preflight balance checks that would block replay after a landed debit. Helper crash/recovery tests passed 12/12; web route tests passed 5/5 including a depleted-sender retry; scoped lint and format passed. Other #1672 consumers and full validation remain open."
         }
       ],
       "blocked_by": [
