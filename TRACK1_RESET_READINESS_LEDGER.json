@@ -2462,6 +2462,11 @@
           "type": "issue_state",
           "url": "https://github.com/Egg3901/AHDGame/issues/1670",
           "detail": "OPEN"
+        },
+        {
+          "type": "official_source_check",
+          "url": "https://www.census.gov/programs-surveys/acs/news/updates/2026.html",
+          "detail": "2026-09-25: Census says 2025 ACS 1-year release date remains undetermined; its API catalog lists data only through 2024. Keep the documented January 2027 education/income projection."
         }
       ],
       "blocked_by": [
@@ -2473,6 +2478,10 @@
         {
           "type": "scope",
           "detail": "2027 implementation/evidence required; final launch worldsim targets selected 1991 profile"
+        },
+        {
+          "type": "gate",
+          "detail": "Owner approval of documented projection waiver (impact, mitigation, monitoring, rollback) before 2027 readiness can be claimed"
         }
       ],
       "final_validation": {
