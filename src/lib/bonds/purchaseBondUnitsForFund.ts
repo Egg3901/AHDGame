@@ -4,7 +4,7 @@ import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import { corpCapitalToAnchor, loadFxRatesRecord } from "@/lib/currency/corporationCapital";
 import { reserveBondUnitsForHolder } from "@/lib/bonds/bondHolderOps";
-import { emitTx } from "@/lib/financialTxLog/emit";
+import { emitTx, type TxInput } from "@/lib/financialTxLog/emit";
 import type { TxThresholds } from "@/lib/db/types/financialTxLog";
 import { insertFundTransaction } from "@/lib/indexFunds/fundQueries";
 import { sovereignBondCapError } from "@/lib/bonds/holderCap";
@@ -62,6 +62,8 @@ export async function purchaseBondUnitsForFund(
     fxRates?: Partial<Record<CurrencyCode, number>>;
     /** Caller must flush completed purchase receipts even if a later purchase fails. */
     txSink?: Omit<IndexFundTransaction, "_id">[];
+    /** Caller flushes ledger rows for completed purchases after the reserve pass. */
+    ledgerSink?: TxInput[];
     /**
      * #992 tranche 6: game turn stamped on the fund-subject ledger row. When
      * absent no ledger row is emitted (the cash debit still settles) so
@@ -132,30 +134,27 @@ export async function purchaseBondUnitsForFund(
     // rows never mirror, so this is the only ledger row for the debit, and it
     // fires only on the committed path — a refunded reservation emits nothing.
     if (options?.turn !== undefined) {
-      await emitTx(
-        db,
-        {
-          type: "bond_purchase",
-          turn: options.turn,
-          createdAt: now,
-          subjectType: "fund",
-          subjectId: fund._id,
-          subjectName: fund.name,
-          amount: -costAnchor,
-          anchorAmount: -costAnchor,
-          currencyCode: fund.anchorCurrencyCode,
-          counterpartyType: "system",
-          counterpartyName: bond.issuerName ?? "Bond market",
-          meta: {
-            bondId: bond._id.toString(),
-            units: wholeUnits,
-            pricePerUnit,
-            source: "bond-reserve",
-          },
+      const ledgerEntry: TxInput = {
+        type: "bond_purchase",
+        turn: options.turn,
+        createdAt: now,
+        subjectType: "fund",
+        subjectId: fund._id,
+        subjectName: fund.name,
+        amount: -costAnchor,
+        anchorAmount: -costAnchor,
+        currencyCode: fund.anchorCurrencyCode,
+        counterpartyType: "system",
+        counterpartyName: bond.issuerName ?? "Bond market",
+        meta: {
+          bondId: bond._id.toString(),
+          units: wholeUnits,
+          pricePerUnit,
+          source: "bond-reserve",
         },
-        options.thresholds,
-        options.turnLengthMinutes
-      );
+      };
+      if (options.ledgerSink) options.ledgerSink.push(ledgerEntry);
+      else await emitTx(db, ledgerEntry, options.thresholds, options.turnLengthMinutes);
     }
 
     return { ok: true, units: wholeUnits, costAnchor, bondId: bond._id };
