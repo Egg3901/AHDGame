@@ -177,13 +177,14 @@ Track 1 branch and before its final source freeze. I checked the local
 sandbox `simJobs` status on 2026-09-25; these runs are diagnostic history,
 not release qualification or extra planned campaign starts.
 
-| Job                                    | Profile / result                    | Purpose and disposition                                                                                                               |
-| -------------------------------------- | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| `c3c60a2e-088f-4389-92c4-631e7c13a918` | 1991, failed at turn 0              | Fail-fast bootstrap probe identified the seven missing successor-country bundles. Do not continue its invalid world.                  |
-| `0ceb61be-3ee7-4147-9877-7e63a7617332` | 2027, failed at turn 0              | Fail-fast bootstrap probe isolated Turkey regional population; euro comparison false positives had been corrected in newer source.    |
-| `24416f47-51b3-45d1-b192-9dbe790ff51e` | 2027, completed at turn 6           | Short repaired-bootstrap probe, not a 240-turn or release-SHA result.                                                                 |
-| `6ee60360-699f-4001-9713-1252dbc4b95a` | 1991, stopped at turn 30 (exit 143) | Full-flags diagnostic with 49 successor-country criticals; intentionally interrupted rather than spending 240 turns on invalid input. |
-| `2df29be2-b4c0-4d62-a3fb-6e21e162e003` | 2027, stopped at turn 41 (exit 143) | Full-flags diagnostic with stale euro and Turkey findings; intentionally interrupted.                                                 |
+| Job                                    | Profile / result                    | Purpose and disposition                                                                                                                                                 |
+| -------------------------------------- | ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `c3c60a2e-088f-4389-92c4-631e7c13a918` | 1991, failed at turn 0              | Fail-fast bootstrap probe identified the seven missing successor-country bundles. Do not continue its invalid world.                                                    |
+| `0ceb61be-3ee7-4147-9877-7e63a7617332` | 2027, failed at turn 0              | Fail-fast bootstrap probe isolated Turkey regional population; euro comparison false positives had been corrected in newer source.                                      |
+| `24416f47-51b3-45d1-b192-9dbe790ff51e` | 2027, completed at turn 6           | Short repaired-bootstrap probe, not a 240-turn or release-SHA result.                                                                                                   |
+| `038bc511-167a-4c60-a9c3-ae4eb2fa0637` | 2027, completed at turn 5           | #2325 four-turn regional-population overlay probe with before/after totals in `scripts/sim/reports/issue-2325-modern-regional-population.md`; short-seed evidence only. |
+| `6ee60360-699f-4001-9713-1252dbc4b95a` | 1991, stopped at turn 30 (exit 143) | Full-flags diagnostic with 49 successor-country criticals; intentionally interrupted rather than spending 240 turns on invalid input.                                   |
+| `2df29be2-b4c0-4d62-a3fb-6e21e162e003` | 2027, stopped at turn 41 (exit 143) | Full-flags diagnostic with stale euro and Turkey findings; intentionally interrupted.                                                                                   |
 
 No new Track 1 worldsim has been started. The forward seven-start budget
 begins only after the integrated candidate passes non-worldsim gates and
