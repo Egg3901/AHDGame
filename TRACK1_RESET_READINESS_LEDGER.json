@@ -2780,6 +2780,11 @@
           "type": "hu_2027_data_checkpoint",
           "ref": "b0c0908742",
           "detail": "Muse Spark 1.3 authored HU democratic party, region, demographic, metric, baseline, and seeder data; scoped lint/format passed. This is not wired into 2027 bootstrap or era roster yet, so HU remains absent at runtime. Budget, currency, geography, government and deterministic seed tests are pending."
+        },
+        {
+          "type": "hu_2027_source_correction",
+          "ref": "949c63c4e2",
+          "detail": "Corrected the authored HU 2027 roster to the official 2026 election (TISZA 141, FIDESZ-KDNP 52, Mi Hazank 6), and reconciled regional estimates to KSH national 2026 population 9.488 million and first 2025 GDP estimate HUF 86,893 billion. The six regional amounts are documented proportional estimates, not KSH regional observations. Fourteen focused tests passed; bootstrap, budget/FX alignment and final replay remain pending. Official sources are linked in the code."
         }
       ],
       "blocked_by": [
