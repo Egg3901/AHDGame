@@ -217,16 +217,19 @@ within a package is dependency order; packages are sequenced in §5.
 
 ### WP2 - `corporationTurn` read batching
 
-- **Problem (high):** 23.2 s median / 2,420 trips [measured, stale]; per-row
-  helpers persist in `src/lib/turn/corporation/` support modules
-  (`buildLookups.ts`, `shareListings.ts`, `shareOrders.ts`,
-  `voteReminders.ts`) [code]. Writes already end in `bulkWrite`; the trips are
-  reads.
+- **Problem (high):** 23.2 s median / 2,420 trips [measured, stale]. A local
+  phase trace found 558 `tariffs` commands inside signed-bill reconciliation
+  on a turn with 276 tariff provisions. Per-row helpers also remain in
+  `src/lib/turn/corporation/` support modules (`buildLookups.ts`,
+  `shareListings.ts`, `shareOrders.ts`, `voteReminders.ts`) [code], but the
+  watched support reads did not show a comparable per-sector query loop.
 - **Surface:** `src/lib/turn/corporation/*`, `corporateSectors`,
   `corporations`, `shareListings`, `shareOrders`, state-metric margin modifier.
-- **Smallest useful steps:** collect ids once per turn → projected `$in` reads
-  → per-turn lookup maps passed into `sectorTurn`; memoize the state-metric
-  margin modifier; keep write order identical.
+- **Smallest useful steps:** replay signed non-economy tariff provisions with
+  one ordered bulk write while retaining economy-wide budget sync; collect
+  remaining ids once per turn → projected `$in` reads → per-turn lookup maps
+  passed into `sectorTurn`; memoize the state-metric margin modifier; keep
+  write order identical.
 - **Correctness risks:** same-turn write-then-read inside the loop (a sector's
   own update must be visible to later legs in the same turn - check whether
   any helper re-reads what an earlier leg wrote); guarded float/ownership
@@ -607,6 +610,18 @@ count matched. The aggregate fund cash, units, NAV, liquidity quote statuses
 and escrow totals, 680 fund transaction-log rows at turn 1120, and the
 liquidity snapshot also matched. This verifies the local phase behavior on
 the partial world; production monitoring must confirm the deployed effect.
+
+WP2's direct local `corporationTurn` trace at turn 1121 recorded 1,741 Mongo
+commands, including 558 on `tariffs`. The signed-bill replay contained 275
+origin-country tariff provisions and one economy-wide provision. The replay
+now batches non-economy scope updates in enactment order and keeps the
+economy-wide provision on its existing budget-sync path. On two identical
+local copies, `reconcileSignedTariffBills` fell from 559 to 11 Mongo commands
+(548 fewer, 98.0%), from 557 to 282 returned documents, and from 1,092,025
+to 1,033,415 BSON bytes. Both copies ended with 222 tariff documents and the
+same normalized scope/rate/source-bill digest; federal budget tariff-rate and
+revenue totals matched. This is a helper-level replay on a partial local world,
+not a production phase p95 claim. The rest of WP2 remains open.
 
 The one-turn profiler has a local-only guard and cannot be run against
 production. A partial production copy is restored to a private localhost Mongo instance

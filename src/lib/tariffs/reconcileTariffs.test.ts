@@ -5,6 +5,7 @@ import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import { reconcileSignedTariffBills } from "./reconcileTariffs";
 
 vi.mock("@/lib/budget/revenue", () => ({
+  normalizeFederalTaxRates: vi.fn().mockReturnValue(null),
   calculateFederalRevenue: vi.fn().mockResolvedValue({
     incomeTax: 0,
     domesticCorporateTax: 0,
@@ -116,18 +117,60 @@ describe("reconcileSignedTariffBills", () => {
 
     await reconcileSignedTariffBills(db as unknown as Db, "US");
 
-    expect(db.collectionMocks.tariffs.updateOne).toHaveBeenCalledTimes(2);
+    expect(db.collectionMocks.tariffs.findOne).toHaveBeenCalledTimes(1);
+    expect(db.collectionMocks.tariffs.updateOne).not.toHaveBeenCalled();
+    expect(db.collectionMocks.tariffs.bulkWrite).toHaveBeenCalledTimes(1);
 
-    const firstCall = db.collectionMocks.tariffs.updateOne.mock.calls[0];
-    const secondCall = db.collectionMocks.tariffs.updateOne.mock.calls[1];
-
-    expect(firstCall[0]).toMatchObject({
+    const [ops, options] = db.collectionMocks.tariffs.bulkWrite.mock.calls[0];
+    expect(options).toEqual({ ordered: true });
+    expect(ops).toHaveLength(2);
+    expect(ops[0].updateOne.filter).toMatchObject({
       countryId: "US",
       scopeType: "origin_country",
       targetOriginCountryId: "JP",
     });
-    expect(firstCall[1].$set.rate).toBe(20);
-    expect(secondCall[1].$set.rate).toBe(40);
-    expect(secondCall[1].$set.sourceBillId).toStrictEqual(laterBillId);
+    expect(ops[0].updateOne.update.$set.rate).toBe(20);
+    expect(ops[1].updateOne.update.$set.rate).toBe(40);
+    expect(ops[1].updateOne.update.$set.sourceBillId).toStrictEqual(laterBillId);
+  });
+
+  it("flushes ordered scope updates around an economy-wide budget sync", async () => {
+    db.collectionMocks.tariffs.findOne.mockResolvedValue({ rate: 2 });
+    db.collectionMocks.federalBudget.findOne.mockResolvedValue(null);
+    db.collectionMocks.bills.find.mockReturnValue({
+      sort: vi.fn().mockReturnValue({
+        toArray: vi.fn().mockResolvedValue([
+          {
+            _id: new ObjectId(),
+            countryId: "US",
+            status: "signed",
+            provisions: [
+              {
+                type: "tariff",
+                scopeType: "origin_country",
+                targetOriginCountryId: "JP",
+                rate: 20,
+              },
+              { type: "tariff", scopeType: "economy_wide", rate: 5 },
+              {
+                type: "tariff",
+                scopeType: "origin_country",
+                targetOriginCountryId: "UK",
+                rate: 40,
+              },
+            ],
+          },
+        ]),
+      }),
+    });
+
+    await reconcileSignedTariffBills(db as unknown as Db, "US");
+
+    expect(db.collectionMocks.tariffs.bulkWrite).toHaveBeenCalledTimes(2);
+    expect(db.collectionMocks.tariffs.updateOne).toHaveBeenCalledTimes(1);
+    const [firstBulk, secondBulk] = db.collectionMocks.tariffs.bulkWrite.mock.invocationCallOrder;
+    const [budgetScopeWrite] = db.collectionMocks.tariffs.updateOne.mock.invocationCallOrder;
+    expect(firstBulk).toBeLessThan(budgetScopeWrite);
+    expect(budgetScopeWrite).toBeLessThan(secondBulk);
   });
 });
