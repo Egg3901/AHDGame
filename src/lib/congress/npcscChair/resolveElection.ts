@@ -9,6 +9,7 @@ import { sendCountryGameEvent, DISCORD_COLORS } from "@/lib/discordWebhooks";
 import { leadershipRoleLabel } from "@/lib/congress/leadership/electionRoleMap";
 import { claimStatusTransition } from "@/lib/turn/atomicClaim";
 import type {
+  Character,
   NpcscChairElection,
   NpcscChairNomination,
   CongressLeader,
@@ -94,12 +95,18 @@ export async function resolveNpcscChairElection(
 
   if (claimed) {
     const roleLabel = leadershipRoleLabel("chair_npcsc");
+    const nomineeAvatarUrl = (
+      await db
+        .collection<Character>("characters")
+        .findOne({ _id: winner.nomineeId }, { projection: { avatarUrl: 1 } })
+    )?.avatarUrl;
     sendCountryGameEvent("CN", {
       title: `Leadership Election Result — ${roleLabel}`,
       description: `**${winner.nomineeName}** has been elected as **${roleLabel}**.`,
       color: DISCORD_COLORS.leadership,
       footer: { text: "A House Divided" },
       timestamp: now.toISOString(),
+      ...(nomineeAvatarUrl ? { thumbnail: { url: nomineeAvatarUrl } } : {}),
     }).catch(() => {});
   }
 

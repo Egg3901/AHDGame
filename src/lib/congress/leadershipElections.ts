@@ -218,12 +218,18 @@ export async function resolveLeadershipElection(
   if (claimed) {
     const roleLabel = leadershipRoleLabel(leaderRole);
     const chamberLabel = chamber === "senate" ? "Senate" : "House";
+    const nomineeAvatarUrl = (
+      await db
+        .collection<Character>("characters")
+        .findOne({ _id: winner.nomineeId }, { projection: { avatarUrl: 1 } })
+    )?.avatarUrl;
     sendCountryGameEvent("US", {
       title: `Leadership Election Result — ${roleLabel}`,
       description: `**${winner.nomineeName}** has been elected as **${roleLabel}** in the ${chamberLabel}.`,
       color: DISCORD_COLORS.leadership,
       footer: { text: "A House Divided" },
       timestamp: now.toISOString(),
+      ...(nomineeAvatarUrl ? { thumbnail: { url: nomineeAvatarUrl } } : {}),
     }).catch(() => {});
   }
 

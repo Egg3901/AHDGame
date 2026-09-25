@@ -1088,6 +1088,15 @@ export async function resolveParliamentaryAppointmentVote(
       color: DISCORD_COLORS.govFormed,
       footer: { text: "A House Divided" },
       timestamp: now.toISOString(),
+      cardVoteSplit: [
+        {
+          label: config.legislature.lowerChamber.name,
+          votesFor: vote.votesFor,
+          votesAgainst: vote.votesAgainst,
+          votesAbstain: 0,
+          seats: existing?.totalSeats,
+        },
+      ],
       ...(nomineeChar?.avatarUrl ? { thumbnail: { url: nomineeChar.avatarUrl } } : {}),
     }).catch(() => {});
   } else {
@@ -1117,6 +1126,14 @@ export async function resolveParliamentaryAppointmentVote(
           color: DISCORD_COLORS.govCollapsed,
           footer: { text: "A House Divided" },
           timestamp: now.toISOString(),
+          cardVoteSplit: [
+            {
+              label: config.legislature.lowerChamber.name,
+              votesFor: vote.votesFor,
+              votesAgainst: vote.votesAgainst,
+              votesAbstain: 0,
+            },
+          ],
           ...(nomineeChar?.avatarUrl ? { thumbnail: { url: nomineeChar.avatarUrl } } : {}),
         }).catch(() => {});
       }
@@ -1268,6 +1285,15 @@ export async function resolveParliamentaryNoConfidenceVote(
       color: DISCORD_COLORS.govCollapsed,
       footer: { text: "A House Divided" },
       timestamp: now.toISOString(),
+      cardVoteSplit: [
+        {
+          label: getCountryConfig(countryId).legislature.lowerChamber.name,
+          votesFor: vote.votesFor,
+          votesAgainst: vote.votesAgainst,
+          votesAbstain: 0,
+          seats: govFormationForTally?.totalSeats ?? undefined,
+        },
+      ],
       ...(pmChar?.avatarUrl ? { thumbnail: { url: pmChar.avatarUrl } } : {}),
     }).catch(() => {});
   } else {

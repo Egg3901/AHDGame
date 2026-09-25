@@ -12,6 +12,7 @@
     "prebuild": "node scripts/clear-railway-build-cache.mjs",
     "build": "next build && tsx scripts/postbuild-quality.ts",
     "start": "next start",
+    "start:turn-worker": "NODE_ENV=production NODE_OPTIONS=\"--max-old-space-size=3072 --max-semi-space-size=64\" tsx scripts/turn-worker.ts",
     "lint": "eslint --cache --cache-location node_modules/.cache/eslint",
     "format": "prettier --write .",
     "format:check": "prettier --check . --cache --cache-location node_modules/.cache/prettier/.prettier-cache",
@@ -103,6 +104,7 @@
     ]
   },
   "dependencies": {
+    "@amplitude/analytics-browser": "^2.47.0",
     "@aws-sdk/client-s3": "^3.1054.0",
     "@lakeside/account-registry": "file:vendor/lakeside-account-registry-0.1.0.tgz",
     "@lakeside/auth-enrollment": "file:vendor/lakeside-auth-enrollment-0.1.0.tgz",
@@ -124,6 +126,7 @@
     "node-cron": "^4.6.0",
     "pg": "^8.23.0",
     "polygon-clipping": "^0.15.7",
+    "posthog-js": "1.434.13",
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "react-markdown": "^10.1.0",
@@ -132,6 +135,7 @@
     "remark-gfm": "^4.0.1",
     "sharp": "^0.35.4",
     "topojson-client": "^3.1.0",
+    "tsx": "^4.23.15",
     "westminster-svg": "^2.0.0",
     "zod": "^4.4.3"
   },
@@ -151,7 +155,6 @@
     "vite": ">=8.0.16"
   },
   "devDependencies": {
-    "@types/pg": "^8.18.0",
     "@commitlint/cli": "^21.2.2",
     "@commitlint/config-conventional": "^21.2.2",
     "@playwright/test": "^1.62.1",
@@ -159,6 +162,7 @@
     "@testing-library/dom": "^10.4.1",
     "@testing-library/react": "^16.3.2",
     "@types/node": "^26",
+    "@types/pg": "^8.18.0",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@types/topojson-server": "^3.0.4",
@@ -175,7 +179,6 @@
     "prettier": "^3.9.6",
     "tailwindcss": "^4",
     "topojson-server": "^3.0.1",
-    "tsx": "^4.23.13",
     "typescript": "6.0.2",
     "vitest": "^4.1.11"
   },

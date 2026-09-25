@@ -199,6 +199,41 @@ describe("fillPendingShareOrders", () => {
 
     await fillPendingShareOrders(db as unknown as Db, new Date(), 258);
 
+    expect(db.collection("shareOrders").find).toHaveBeenCalledWith(
+      { status: "open" },
+      expect.objectContaining({
+        projection: expect.objectContaining({
+          _id: 1,
+          characterId: 1,
+          corporationId: 1,
+          escrowAmount: 1,
+          escrowAnchor: 1,
+          placerCorporationId: 1,
+          placerFundId: 1,
+          pricePerShare: 1,
+          sharesDebitedAtCreation: 1,
+          sharesRemaining: 1,
+          type: 1,
+        }),
+      })
+    );
+    expect(db.collection("corporations").find).toHaveBeenCalledWith(
+      { _id: { $in: [corpId] } },
+      expect.objectContaining({
+        projection: expect.objectContaining({
+          _id: 1,
+          countryId: 1,
+          liquidCurrencyCode: 1,
+          fundamentalSharePrice: 1,
+          publicFloat: 1,
+          sharePrice: 1,
+          totalShares: 1,
+          liquidCapital: 1,
+          shareholders: 1,
+        }),
+      })
+    );
+
     expect(pool.updateOne).toHaveBeenCalledWith(
       { _id: "USD" },
       expect.objectContaining({

@@ -33,8 +33,6 @@
  * boring: set the variable on the worker first, confirm it is taking turns, then set
  * it on web.
  */
-import { initializeCronJobs, stopCronJobs } from "@/lib/cron";
-import { releaseLocalProcessingLock } from "@/lib/turnSystem";
 import { isCronWorkerProcess } from "@/lib/startupMode";
 
 const SHUTDOWN_TIMEOUT_MS = 2500;
@@ -49,6 +47,22 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
+  // Unlike next start, this entry point does not run instrumentation.ts.
+  // Initialize the same error and memory reporting before loading the cron
+  // graph so failed worker boots and missed turns are observable.
+  process.env.SENTRY_RELEASE ||= process.env.RAILWAY_GIT_COMMIT_SHA || "unknown";
+  await import("../sentry.server.config");
+  const { installCrashCapture } = await import("@/lib/observability/crashCapture");
+  installCrashCapture();
+  if (process.env.NODE_ENV === "production") {
+    const { startHeapWatchdog } = await import("@/lib/observability/heapWatchdog");
+    startHeapWatchdog({
+      rssCapBytes: Number(process.env.HEAP_WATCHDOG_RSS_CAP_BYTES) || 5_000_000_000,
+    });
+  }
+
+  const { initializeCronJobs, stopCronJobs } = await import("@/lib/cron");
+  const { releaseLocalProcessingLock } = await import("@/lib/turnSystem");
   console.log("[turn-worker] starting; this process owns the cron schedule");
   await initializeCronJobs();
   console.log("[turn-worker] cron initialized, waiting for the clock");

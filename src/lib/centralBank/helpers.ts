@@ -47,7 +47,7 @@ export async function vacateFomcChairSeat(db: Db, bankId: string): Promise<void>
  * member.
  */
 export function buildPrimeRateByCountry(
-  banks: Array<Pick<CentralBank, "countryId" | "primeRate"> & { _id: string }>
+  banks: ReadonlyArray<Pick<CentralBank, "countryId" | "primeRate"> & { _id: string }>
 ): Map<CountryId, number> {
   const rateByBankId = new Map(banks.map((bank) => [String(bank._id), bank.primeRate]));
   const map = new Map<CountryId, number>();

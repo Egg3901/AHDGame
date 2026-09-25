@@ -1,5 +1,5 @@
 import type { NextConfig } from "next";
-import { withSentryConfig } from "@sentry/nextjs";
+import { withSentryConfig } from "@sentry/nextjs/config";
 import createNextIntlPlugin from "next-intl/plugin";
 import { execSync } from "child_process";
 import { readFileSync } from "fs";
@@ -20,7 +20,7 @@ const gitRevParseHead = (): string | null => {
   }
 };
 
-// Full commit SHA used as the Sentry/GlitchTip release identifier. Tagging
+// Full commit SHA used as the Sentry release identifier. Tagging
 // every event with a release ties errors to a specific deploy AND matches the
 // source-map artifacts the Sentry webpack plugin uploads under this release, so
 // stacks symbolicate. Exported via env so the three Sentry configs (which run
@@ -28,9 +28,11 @@ const gitRevParseHead = (): string | null => {
 const SENTRY_RELEASE = process.env.RAILWAY_GIT_COMMIT_SHA || gitRevParseHead() || "unknown";
 process.env.SENTRY_RELEASE = SENTRY_RELEASE;
 process.env.NEXT_PUBLIC_SENTRY_RELEASE = SENTRY_RELEASE;
+process.env.NEXT_PUBLIC_SENTRY_ENVIRONMENT =
+  process.env.RAILWAY_ENVIRONMENT_NAME || process.env.NODE_ENV || "development";
 
 // Short commit shown in the version badge — derived from the same SHA as the
-// release identifier so the badge and GlitchTip release can never disagree.
+// release identifier so the badge and Sentry release can never disagree.
 const gitCommit = SENTRY_RELEASE === "unknown" ? "unknown" : SENTRY_RELEASE.slice(0, 7);
 
 // An unresolvable release on a production Railway build means events tag
@@ -39,7 +41,7 @@ const gitCommit = SENTRY_RELEASE === "unknown" ? "unknown" : SENTRY_RELEASE.slic
 if (SENTRY_RELEASE === "unknown" && process.env.RAILWAY_ENVIRONMENT_NAME === "production") {
   console.warn(
     '[next.config] SENTRY_RELEASE resolved to "unknown" on a production Railway build: ' +
-      "RAILWAY_GIT_COMMIT_SHA is missing and `git rev-parse HEAD` failed. GlitchTip events " +
+      "RAILWAY_GIT_COMMIT_SHA is missing and `git rev-parse HEAD` failed. Sentry events " +
       "from this deploy will not symbolicate or attribute to a commit (#2772)."
   );
 }
@@ -54,12 +56,12 @@ const isProductionBuild = railwayEnv === "production";
 const widenSentryClientFileUpload = process.env.SENTRY_WIDEN_CLIENT_FILE_UPLOAD === "true";
 // Source-map upload is enabled only when an auth token is present, so local and
 // token-less CI builds behave exactly as before (no upload, no failure). Set
-// SENTRY_AUTH_TOKEN (a GlitchTip org token with project:releases scope) in the
-// Railway build env to turn on symbolication — see docs/observability/sourcemaps.md.
+// SENTRY_AUTH_TOKEN in the Railway build env turns on symbolication.
 const sentryAuthToken = process.env.SENTRY_AUTH_TOKEN;
-// Self-hosted GlitchTip base URL (the sentry-cli upload target). Defaults to the
-// Sentry-compatible ingest for sourcemap upload; unset disables upload.
-const sentryUrl = process.env.SENTRY_URL;
+// Sentry SaaS is the default. SENTRY_URL remains an explicit GlitchTip fallback.
+const sentryUrl = process.env.SENTRY_URL || undefined;
+const sentryOrg = sentryUrl ? "ahousedivided" : process.env.SENTRY_ORG || "lakeside-games";
+const sentryProject = sentryUrl ? "ahd" : process.env.SENTRY_PROJECT || "a-house-divided";
 
 const nextConfig: NextConfig = {
   // Don't advertise the framework version via the x-powered-by header.
@@ -110,6 +112,7 @@ const nextConfig: NextConfig = {
     NEXT_PUBLIC_IS_PREVIEW: isPreview ? "true" : "",
     SENTRY_RELEASE,
     NEXT_PUBLIC_SENTRY_RELEASE: SENTRY_RELEASE,
+    NEXT_PUBLIC_SENTRY_ENVIRONMENT: process.env.NEXT_PUBLIC_SENTRY_ENVIRONMENT,
   },
   async headers() {
     return [
@@ -376,10 +379,8 @@ const withNextIntl = createNextIntlPlugin();
 
 export default withNextIntl(
   withSentryConfig(nextConfig, {
-    org: "ahousedivided",
-    // GlitchTip project slug is "ahd" (not "a-house-divided"); artifacts must be
-    // uploaded to the real slug or symbolication silently no-ops.
-    project: "ahd",
+    org: sentryOrg,
+    project: sentryProject,
     sentryUrl,
     authToken: sentryAuthToken,
     // Tie uploaded source-map artifacts to the same release the runtime tags
@@ -387,11 +388,8 @@ export default withNextIntl(
     release: { name: SENTRY_RELEASE },
     silent: !process.env.CI,
     widenClientFileUpload: widenSentryClientFileUpload,
-    // GlitchTip 6.1 implements the artifact-bundle / chunk-upload API, so source
-    // maps DO symbolicate client stacks (turning minified `rX`/`ux` frames into
-    // real file:line). Upload is gated on the auth token so token-less builds are
-    // unaffected. Maps are uploaded then deleted from the build output by the
-    // plugin, so they are never served publicly.
+    // Upload is gated on the auth token so token-less builds are unaffected.
+    // Maps are removed from build output after upload.
     sourcemaps: {
       disable: !sentryAuthToken,
     },

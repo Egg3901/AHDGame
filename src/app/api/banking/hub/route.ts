@@ -33,7 +33,7 @@ import { getGameState } from "@/lib/gameState";
 import { loadCountryNameOverrides } from "@/lib/country/countryIdentity";
 import { corporationPathIdFromDoc } from "@/lib/api/corporations/resolveQuery";
 import type { CentralBank } from "@/lib/db/types/centralBank";
-import type { Corporation } from "@/lib/db/types";
+import type { Corporation, ImperialCharacter, NPP } from "@/lib/db/types";
 import type { Character } from "@/lib/db/types";
 import type { BankCharterType } from "@/lib/db/types/bank";
 import { savingsApyPercent } from "@/lib/currency/savingsInterest";
@@ -72,6 +72,9 @@ type HubPrivateBank = {
   cashReserves: number;
   lendableHeadroom: number;
   requireApproval?: boolean;
+  logoUrl?: string;
+  ceoName: string | null;
+  ceoAvatarUrl: string | null;
   href: string;
 };
 
@@ -185,6 +188,9 @@ async function handleGET() {
     const personalCash: Partial<Record<CurrencyCode, number>> = {
       ...(character?.currencyBalances?.personal ?? {}),
     };
+    if (character && personalCash[primaryCurrency] == null) {
+      personalCash[primaryCurrency] = character.cashOnHand ?? 0;
+    }
     const savingsBalances: Partial<Record<CurrencyCode, number>> = {
       ...(character?.currencyBalances?.savings ?? {}),
     };
@@ -202,7 +208,15 @@ async function handleGET() {
     if (privateEnabled || isAdmin) {
       type CharteredCorp = Pick<
         Corporation,
-        "_id" | "sequentialId" | "name" | "countryId" | "ceoType" | "bankCharter"
+        | "_id"
+        | "sequentialId"
+        | "name"
+        | "countryId"
+        | "ceoId"
+        | "ceoType"
+        | "ceoVacant"
+        | "logoUrl"
+        | "bankCharter"
       >;
       const chartered = (await db
         .collection<Corporation>("corporations")
@@ -212,10 +226,52 @@ async function handleGET() {
           sequentialId: 1,
           name: 1,
           countryId: 1,
+          ceoId: 1,
           ceoType: 1,
+          ceoVacant: 1,
+          logoUrl: 1,
           bankCharter: 1,
         })
         .toArray()) as CharteredCorp[];
+
+      const characterCeoIds = chartered
+        .filter((corp) => corp.ceoType !== "npp" && corp.ceoType !== "imperial")
+        .map((corp) => corp.ceoId);
+      const nppCeoIds = chartered
+        .filter((corp) => corp.ceoType === "npp")
+        .map((corp) => corp.ceoId);
+      const imperialCeoIds = chartered
+        .filter((corp) => corp.ceoType === "imperial")
+        .map((corp) => corp.ceoId);
+      const [characterCeoDocs, nppCeoDocs, imperialCeoDocs] = await Promise.all([
+        characterCeoIds.length
+          ? db
+              .collection<Character>("characters")
+              .find({ _id: { $in: characterCeoIds } })
+              .project({ _id: 1, name: 1, avatarUrl: 1 })
+              .toArray()
+          : [],
+        nppCeoIds.length
+          ? db
+              .collection<NPP>("npps")
+              .find({ _id: { $in: nppCeoIds } })
+              .project({ _id: 1, name: 1, avatarUrl: 1 })
+              .toArray()
+          : [],
+        imperialCeoIds.length
+          ? db
+              .collection<ImperialCharacter>("imperialCharacters")
+              .find({ _id: { $in: imperialCeoIds } })
+              .project({ _id: 1, name: 1, avatarUrl: 1 })
+              .toArray()
+          : [],
+      ]);
+      const ceoById = new Map(
+        [...characterCeoDocs, ...nppCeoDocs, ...imperialCeoDocs].map((ceo) => [
+          ceo._id.toString(),
+          { name: ceo.name, avatarUrl: ceo.avatarUrl ?? null },
+        ])
+      );
 
       const reserveByCurrency = new Map<CurrencyCode, number>();
       privateBanks = await Promise.all(
@@ -251,6 +307,11 @@ async function handleGET() {
               playerDepositsAreLiabilities: savingsReadsAuthoritative(policy, charter.currency),
             }),
             requireApproval: charter.requireApproval === true,
+            logoUrl: corp.logoUrl,
+            ceoName: corp.ceoVacant ? null : (ceoById.get(corp.ceoId.toString())?.name ?? null),
+            ceoAvatarUrl: corp.ceoVacant
+              ? null
+              : (ceoById.get(corp.ceoId.toString())?.avatarUrl ?? null),
             href: `/corporation/${corporationPathIdFromDoc({
               _id: corp._id as ObjectId,
               sequentialId: corp.sequentialId,

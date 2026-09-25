@@ -213,6 +213,9 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
       const data = await res.json();
       if (res.ok) {
         showToast(data.message ?? "Entered race", "success");
+        void import("@/lib/analytics/capture")
+          .then(({ captureProductEvent }) => captureProductEvent("election_entered"))
+          .catch(() => {});
         await fetchElection();
       } else {
         showToast(data.error ?? "Failed to enter race", "error");

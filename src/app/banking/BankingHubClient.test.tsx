@@ -60,6 +60,9 @@ const payload = {
       totalDeposits: 2_400_000,
       cashReserves: 1_200_000,
       lendableHeadroom: 900_000,
+      logoUrl: "/api/logos/corporations/17",
+      ceoName: "Ada CEO",
+      ceoAvatarUrl: null,
       href: "/corporation/17?tab=bank",
     },
     {
@@ -78,6 +81,9 @@ const payload = {
       totalDeposits: 800_000,
       cashReserves: 200_000,
       lendableHeadroom: 300_000,
+      logoUrl: undefined,
+      ceoName: "NPP Director",
+      ceoAvatarUrl: null,
       href: "/corporation/23?tab=bank",
     },
   ],
@@ -181,15 +187,20 @@ describe("BankingHubClient", () => {
     expect(screen.getByText("Player-run")).toBeTruthy();
     expect(screen.queryByRole("heading", { name: "Central banks" })).toBeNull();
     expect(
-      screen
-        .getByRole("link", { name: "Deposit savings at Continental Trust" })
-        .getAttribute("href")
-    ).toBe("/corporation/17?tab=bank#customer-deposit");
+      screen.getByRole("button", { name: "Deposit savings at Continental Trust" })
+    ).toBeTruthy();
     expect(
-      screen
-        .getByRole("link", { name: "Apply for a loan at Continental Trust" })
-        .getAttribute("href")
-    ).toBe("/corporation/17?tab=bank#customer-loan");
+      screen.getByRole("button", { name: "Apply for a loan at Continental Trust" })
+    ).toBeTruthy();
+    expect(screen.getByText("Ada CEO")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Deposit savings at Continental Trust" }));
+    expect(screen.getByRole("heading", { name: "Deposit with Continental Trust" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    fireEvent.click(screen.getByRole("button", { name: "Apply for a loan at Continental Trust" }));
+    expect(screen.getByRole("heading", { name: "Arrange private-bank credit" })).toBeTruthy();
+    expect((screen.getByLabelText("Lending bank") as HTMLSelectElement).value).toBe("bank-1");
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
 
     // Hero: account balances plus the link to the player's central bank.
     expect(screen.getByText("Liquid funds")).toBeTruthy();
@@ -215,6 +226,34 @@ describe("BankingHubClient", () => {
     expect(screen.getByRole("heading", { name: "Arrange private-bank credit" })).toBeTruthy();
     expect(screen.getByText(/Private-bank maximum/)).toBeTruthy();
     expect(screen.getByText(/separate from bond issuance capacity/i)).toBeTruthy();
+  });
+
+  it("deposits from the bank table using a review modal and routes savings to that bank", async () => {
+    const fetchMock = vi.fn().mockImplementation(async (url: string) => {
+      if (url === "/api/character/savings/deposit") {
+        return { ok: true, json: async () => ({ success: true, holderRouted: true }) };
+      }
+      return { ok: true, json: async () => payload };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<BankingHubClient />);
+    await waitFor(() => expect(screen.getByText("Continental Trust")).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: "Deposit savings at Continental Trust" }));
+    fireEvent.change(screen.getByLabelText("Deposit amount in USD"), {
+      target: { value: "500" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Deposit savings" }));
+
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/character/savings/deposit",
+        expect.objectContaining({
+          method: "POST",
+          body: JSON.stringify({ currency: "USD", amount: 500, holder: "bank-1" }),
+        })
+      )
+    );
   });
 
   it("sorts the private-bank table by savings APY, loan rate, and health", async () => {
