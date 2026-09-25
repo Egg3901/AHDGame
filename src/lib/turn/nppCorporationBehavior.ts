@@ -83,7 +83,8 @@ import { unownedHeadroomUnitsOf } from "@/lib/corporations/marketShare";
 import { resolvePresetIdFromGameState } from "@/lib/world/countryReadinessContract";
 import { getMarketSystemModeForDb, marketAtLeast } from "@/lib/market/featureFlag";
 import { buildNppPriceSignals } from "@/lib/turn/npp/priceSignals";
-import { resolveCountryPrimeRate } from "@/lib/corporations/sectorGrowthCost";
+import type { RelocationPrimeBank } from "@/lib/corporations/issueRelocationBond";
+import { loadNppBankRateSnapshot } from "@/lib/turn/npp/bankRateSnapshot";
 import { NEUTRAL_STAT } from "@/lib/stats/statsConstants";
 import {
   anchorToCorpCapital,
@@ -343,6 +344,7 @@ export async function processNppCorporationDecisions(
   // Resolve the shared plants pricing context once for the cohort.
   const plantsEnabled = marketAtLeast(await getMarketSystemModeForDb(db), "plants");
   let plants: NppPlantsContext | undefined;
+  let bankRates: RelocationPrimeBank[] | undefined;
   if (plantsEnabled) {
     const gsPlants = await db
       .collection<GameState>("gameState")
@@ -356,13 +358,10 @@ export async function processNppCorporationDecisions(
         Math.floor(((gsPlants?.currentTurn ?? turn) - 1) / TURNS_PER_YEAR);
 
     const countryIds = [...new Set(nppCorps.map((c) => c.countryId))];
-    const primeByCountry = new Map<string, number>(
-      await Promise.all(
-        countryIds.map(
-          async (cid) => [cid, await resolveCountryPrimeRate(db, cid)] as [string, number]
-        )
-      )
-    );
+    // Bank rates are fixed during this phase; reuse this snapshot for quotes.
+    const bankSnapshot = await loadNppBankRateSnapshot(db, countryIds);
+    bankRates = bankSnapshot.bankRates;
+    const primeByCountry = bankSnapshot.primeByCountry;
     const colDocs = await db
       .collection<StateMetrics>("macroMetrics")
       .find({}, { projection: { "economic.costOfLiving": 1 } })
@@ -493,6 +492,7 @@ export async function processNppCorporationDecisions(
       decision,
       turn,
       fxByCurrency: fxByCurrency as ReadonlyMap<CurrencyCode, number>,
+      bankRates,
       corpFxRate,
       retry: (creditLocal) =>
         makeNppCorpDecision(
