@@ -19,11 +19,8 @@ describe("PL 2027 government and geography", () => {
     expect(PL_2027.config?.executiveTitle).toBe("Prime Minister");
     expect(PL_2027.config?.electionSystems?.lowerChamber).toBe("pr_hareQuota");
     expect(PL_2027.config?.electionSystems?.upperChamber).toBe("fptp");
-    // NOTE: this folder override reaches `getCountryConfig` only through the
-    // shared ERA_COUNTRY_CONFIG_OVERRIDES table (constants/countries.ts),
-    // which is outside this change: that table needs
-    // `PL: PL_ERAS["2027-default"]?.config` in its "2027-default" block
-    // before the modern preset resolves democratically at runtime.
+    expect(getCountryConfig("PL", "2027-default").governmentType).toBe("parliamentaryRepublic");
+    expect(getCountryConfig("PL", "2027-default").legislature.upperChamber?.seats).toBe(100);
     expect(PL_GEOGRAPHY.regionBundles["2027-default"]).toBe(plRegions2027);
   });
 

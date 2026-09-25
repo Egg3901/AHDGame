@@ -1223,6 +1223,7 @@ export const ERA_COUNTRY_CONFIG_OVERRIDES: Record<
     FI: FI_ERAS["2027-default"]?.config,
     HU: HU_ERAS["2027-default"]?.config,
     RO: RO_ERAS["2027-default"]?.config,
+    PL: PL_ERAS["2027-default"]?.config,
   },
   "1991-default": {
     UK: UK_ERAS["1991-default"]?.config,
