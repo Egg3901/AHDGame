@@ -46,7 +46,10 @@ configured destination.
 
 PostHog loads only on the hosted multiplayer site after the existing optional analytics consent is accepted. Rejecting or resetting consent opts out and clears the PostHog identity. The Google consent message on ad content does not itself grant PostHog consent; those pages remain untracked unless the AHD analytics choice was accepted elsewhere.
 
-PostHog autocapture, automatic pageviews, session replay, and surveys are disabled. The sampled OpenReplay integration on the production branch remains governed by the same optional consent. When promoting this change from `development`, retain that existing provider and its privacy disclosure. Named area events avoid raw URLs and player text; the SDK denies URL and referrer properties. Identification uses an opaque account ID without name or email.
+PostHog autocapture, automatic pageviews, session replay, and surveys are disabled. Named area events avoid raw URLs and player text; the SDK denies URL and referrer properties. Identification uses an opaque account ID without name or email. Amplitude receives the same event set via the shared fan-out so retention and funnel questions can be answered without a second instrumentation pass.
+
+OpenReplay session replay has been **removed** and is not part of the production stack. PostHog plus Amplitude are the whole of it. If replay is ever revisited, make that a deliberate decision on its own merits — do not restore the old provider.
+
 
 | Event                  | Trigger                                                   | Properties                                                                                          |
 | ---------------------- | --------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
@@ -68,7 +71,7 @@ Sentry keeps browser, server, edge, API, and turn capture paths. The release is 
 1. Build and validate the onboarding funnel and next-day retention dashboard in PostHog.
 2. Validate coverage of the initial first-week action events, then add other action paths needed for D7 and D30 retention analysis. Treat correlations as leads to investigate, not proof of causation.
 3. Add discovery metrics for corporations, banking, and media. Use existing performance telemetry to measure slow corporation pages.
-4. Decide whether PostHog replay should replace the existing OpenReplay integration. If piloted, apply masking and privacy review on account, messaging, and financial screens, use sampling and a monthly spend cap, and avoid recording the same session in both tools.
+4. Replay is settled: OpenReplay is removed and PostHog session replay stays off. If a replay capability is ever wanted again, scope it as a fresh decision with its own masking and privacy review rather than reviving OpenReplay.
 5. Pilot one UI or tutorial feature flag and experiment with a defined outcome. Flags must have local defaults and stay off the turn's critical path. Scope surveys to specific open product questions.
 
 Before launch, verify accepted, rejected, and withdrawn consent; singleplayer exclusion; event volumes; Sentry error arrival; readable browser stacks; release identity; and alert delivery in staging.
