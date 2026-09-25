@@ -1072,7 +1072,8 @@ partial-world and production-latency limitations made explicit. Squash merge
 `1919657c625cf5582034f3506357dedfda8e7fe9` is on `development`.
 The Track 1 branch incorporated that squash in merge `f2ba89a6cc`. The
 `dead-weight-plan` source checkout was rechecked clean, unlocked, and
-process-free; decision: remove it normally, retaining the branch ref.
+process-free; it was removed with ordinary `git worktree remove` (exit 0),
+retaining the branch ref.
 
 **AHDGame `AHDGame-turn-perf`: MERGED selectively, then DELETE clean
 checkout, 2026-09-25.** The five commits ending `216d506905` from production
@@ -1083,5 +1084,6 @@ collection attribution. Track 1 integrated them as `a8298fe1a6`,
 focused repair commits preserve the newer fund thresholds/cadence and test
 shape. Forty-nine focused tests, scoped lint, formatting, and diff checks
 passed. The source checkout was rechecked clean, unlocked, and process-free;
-decision: remove it normally while retaining its branch ref. The full
+it was removed with ordinary `git worktree remove` (exit 0), retaining its
+branch ref. The full
 integrated build and matched turn-profile gate remain open.
