@@ -24,7 +24,6 @@ import {
   creditSellerFundProceeds,
   reconcileTotalSharesAfterFill,
   resolveCharName,
-  resolveCorpName,
   settleBuyOrderFill,
 } from "@/lib/corporations/commands/shareTrading/fillShareOrderSettlement";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
@@ -42,7 +41,19 @@ import {
   atomicallyDebitCorpLiquidCapital,
   refundCorpLiquidCapital,
 } from "@/lib/financialTxLog/atomicCashGuard";
-import { emitTx } from "@/lib/financialTxLog/emit";
+import {
+  beginShareFillAttempt,
+  buildShareFillClaimFilter,
+  buildShareFillFingerprint,
+  buildShareFillRouteClaimPipeline,
+  collectShareFillAuditRows,
+  insertShareFillAuditRows,
+  markShareFillMoneyCommitted,
+  prepareShareFillClaim,
+  settleShareFillAttempt,
+  type ShareFillAuditPlan,
+  type ShareFillPlacerKind,
+} from "@/lib/corporations/commands/shareTrading/shareFillAudit";
 import {
   anchorToCorpLiquidCapital,
   corpLiquidCapitalToAnchor,
@@ -53,18 +64,12 @@ import {
 } from "@/lib/currency/corporationCapital";
 import { distributeConversionSpread } from "@/lib/currency/marketMaker";
 import { notifyHostileTakeoverThresholdIfEligible } from "@/lib/corporations/hostileTakeoverNotifications";
-import { recordShareTrade } from "@/lib/corporations/shareTradeHistory";
-import type { ShareTradeParty } from "@/lib/db/types/shareTradeHistory";
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
 import { assertCeoAcquisitionWithinCap } from "@/lib/corporations/ceoShareAcquisitionCap";
 import { CURRENCY_SYMBOLS } from "@/lib/constants/currencies";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import { rejectDuringTurn } from "@/lib/api/rejectDuringTurn";
-import {
-  debitFundHoldingShares,
-  insertFundTransaction,
-  upsertFundHoldingShares,
-} from "@/lib/indexFunds/fundQueries";
+import { debitFundHoldingShares, upsertFundHoldingShares } from "@/lib/indexFunds/fundQueries";
 
 interface RouteParams {
   params: Promise<{ id: string; orderId: string }>;
@@ -104,11 +109,16 @@ export async function fillShareOrder(request: Request, { params }: RouteParams) 
       return NextResponse.json({ error: "Invalid order ID" }, { status: 400 });
     }
 
-    const order = await db
+    const loadedOrder = await db
       .collection<ShareOrder>("shareOrders")
       .findOne({ _id: new ObjectId(orderId) });
 
-    if (!order) return NextResponse.json({ error: "Order not found" }, { status: 404 });
+    if (!loadedOrder)
+      return NextResponse.json({ error: "Order not found" }, { status: 404 });
+    // Repair a stranded legacy claim and recover the stamped prior attempt's
+    // audit before validating: a stuck `filled` order is fillable again here.
+    const prepared = await prepareShareFillClaim(db, loadedOrder);
+    const order = prepared.order;
     const orderCharacterId = order.characterId;
     // Fund buy orders (bids) can be peer-filled: the filler sells their shares and
     // receives the fund's escrowed cash. Orders with no placer at all cannot be filled.
@@ -234,8 +244,6 @@ export async function fillShareOrder(request: Request, { params }: RouteParams) 
     const targetFxRate = await getCorpFxRate(db, corporation);
     const totalLocal = shares * order.pricePerShare;
     const total = corpLiquidCapitalToAnchor(totalLocal, corporation, targetFxRate);
-    const newSharesRemaining = order.sharesRemaining - shares;
-    const orderFilled = newSharesRemaining === 0;
     const forexEnabled = await isForexEnabled();
     const fillerHomeCurrency = getHomeCurrency({ countryId: fillerCountryId });
     const currentTurn = await getCurrentTurn(db);
@@ -347,52 +355,146 @@ export async function fillShareOrder(request: Request, { params }: RouteParams) 
       }
     }
 
-    const claimedOrder = await db.collection<ShareOrder>("shareOrders").findOneAndUpdate(
-      {
-        _id: order._id,
-        status: "open",
-        sharesRemaining: { $gte: shares },
+    // Pin every audit-plan figure before the claim (issue #1672). Seller
+    // proceeds, display names, and the corp-filler FX estimate are pure reads,
+    // so hoisting them ahead of the claim changes no money behavior; the
+    // resume plan then carries the exact first-attempt figures and recovery
+    // never reprices from post-fill state.
+    const buyingCurrency = (
+      buyingCorpForSellFill ? (resolveCorpLiquidCurrencyCode(buyingCorpForSellFill) ?? "USD") : "USD"
+    ) as CurrencyCode;
+    const targetCurrency = (resolveCorpLiquidCurrencyCode(corporation) ?? "USD") as CurrencyCode;
+    let pinnedSellerName: string | null = null;
+    let pinnedSellerAmount = 0;
+    let pinnedSellerCurrency: CurrencyCode | null = null;
+    let pinnedBuyerName: string | null = null;
+    let corpFillCostInBuyerCapital = 0;
+    if (order.type === "sell") {
+      if (order.placerFundId) {
+        pinnedSellerName = sellerFund?.name ?? "Index fund";
+      } else if (order.placerCorporationId) {
+        const sellerCorp = await db
+          .collection<Corporation>("corporations")
+          .findOne({ _id: order.placerCorporationId });
+        const sellerFxRate = await getCorpFxRate(db, sellerCorp ?? {});
+        pinnedSellerName = sellerCorp?.name ?? "Unknown corporation";
+        pinnedSellerAmount = anchorToCorpLiquidCapital(total, sellerCorp ?? {}, sellerFxRate);
+        pinnedSellerCurrency = (resolveCorpLiquidCurrencyCode(sellerCorp ?? {}) ??
+          "USD") as CurrencyCode;
+      } else {
+        const seller = await db
+          .collection<Character>("characters")
+          .findOne({ _id: orderCharacterId }, { projection: { countryId: 1, name: 1 } });
+        pinnedSellerName = seller?.name ?? "Unknown character";
+        pinnedSellerCurrency = seller ? getHomeCurrency(seller as Character) : fillerHomeCurrency;
+        let sellerFxRate = 1.0;
+        if (forexEnabled) {
+          const sellerFxResult = await loadCharacterFxRate(db, pinnedSellerCurrency);
+          if (!sellerFxResult.ok) {
+            throw new Error("Exchange rate unavailable for seller");
+          }
+          sellerFxRate = sellerFxResult.rate;
+        }
+        pinnedSellerAmount = total * sellerFxRate;
+      }
+      if (fillAsCorporation && buyingCorpForSellFill) {
+        const buyerFxRate = await getCorpFxRate(db, buyingCorpForSellFill);
+        const fxRates = await loadFxRatesRecord(db);
+        const corpPurchaseEstimate = estimateCorpWalletSpend({
+          requiredAmount: totalLocal,
+          availableBalance: buyingCorpForSellFill.liquidCapital ?? 0,
+          fromCurrency: buyingCurrency,
+          toCurrency: targetCurrency,
+          rates: fxRates,
+        });
+        if (!corpPurchaseEstimate) {
+          return NextResponse.json(
+            { error: "Exchange rate unavailable, try again shortly" },
+            { status: 503 }
+          );
+        }
+        corpFillCostInBuyerCapital =
+          buyingCurrency !== targetCurrency
+            ? corpPurchaseEstimate.spendAmount
+            : anchorToCorpLiquidCapital(total, buyingCorpForSellFill, buyerFxRate);
+        if (buyingCurrency !== targetCurrency) {
+          fillerBuyConversionSpread = {
+            fee: corpPurchaseEstimate.spreadFee,
+            from: buyingCurrency,
+            to: targetCurrency,
+          };
+        }
+      }
+    } else if (!order.placerFundId && !order.placerCorporationId) {
+      pinnedBuyerName = await resolveCharName(db, orderCharacterId!, false);
+    }
+
+    const placerKind: ShareFillPlacerKind = order.placerFundId
+      ? "fund"
+      : order.placerCorporationId
+        ? "corporation"
+        : "character";
+    const placerName =
+      order.type === "sell"
+        ? (pinnedSellerName ?? "Unknown character")
+        : order.placerFundId
+          ? "Index fund"
+          : (buyOrderBuyerCorp?.name ?? pinnedBuyerName ?? "Unknown corporation");
+    const fillerIsCorpFill = fillAsCorporation && !!buyingCorpForSellFill;
+    const placerIdHex =
+      placerKind === "fund"
+        ? order.placerFundId!.toHexString()
+        : placerKind === "corporation"
+          ? order.placerCorporationId!.toHexString()
+          : orderCharacterId!.toHexString();
+    const fillPlan: ShareFillAuditPlan = {
+      version: 1,
+      orderIdHex: order._id.toHexString(),
+      corpIdHex: corporation._id.toHexString(),
+      corpCcy: corporation.liquidCurrencyCode,
+      orderType: order.type,
+      shares,
+      pricePerShare: order.pricePerShare,
+      totalAnchor: total,
+      turn: currentTurn,
+      nowIso: now.toISOString(),
+      preClaimRemaining: order.sharesRemaining,
+      filler: {
+        idHex: fillerId.toHexString(),
+        collection: fillerIsCorpFill ? "corporations" : fillerCollectionName,
+        name: fillerIsCorpFill ? buyingCorpForSellFill!.name : fillerName,
+        homeCurrency: fillerIsCorpFill ? buyingCurrency : fillerHomeCurrency,
+        imperial: isImperialFiller,
       },
-      [
-        {
-          $set: {
-            sharesRemaining: { $subtract: ["$sharesRemaining", shares] },
-            escrowAmount: {
-              $cond: [
-                { $eq: ["$type", "buy"] },
-                { $multiply: [{ $subtract: ["$sharesRemaining", shares] }, "$pricePerShare"] },
-                "$escrowAmount",
-              ],
-            },
-            // For fund buy orders: decrement escrowAnchor proportionally so NAV
-            // doesn't over-count anchor-denominated escrow after a partial peer-fill.
-            escrowAnchor: {
-              $cond: [
-                {
-                  $and: [
-                    { $eq: ["$type", "buy"] },
-                    { $gt: ["$sharesRemaining", 0] },
-                    { $gt: [{ $ifNull: ["$escrowAnchor", 0] }, 0] },
-                  ],
-                },
-                {
-                  $multiply: [
-                    "$escrowAnchor",
-                    { $divide: [{ $subtract: ["$sharesRemaining", shares] }, "$sharesRemaining"] },
-                  ],
-                },
-                "$escrowAnchor",
-              ],
-            },
-            status: "filled",
-            updatedAt: now,
-          },
-        },
-      ],
+      fillerAmount: fillerIsCorpFill ? corpFillCostInBuyerCapital : totalInFillerHome,
+      placerKind,
+      placerIdHex,
+      placerName,
+      ...(order.type === "sell" && placerKind !== "fund" && pinnedSellerCurrency
+        ? { sellerAmount: pinnedSellerAmount, sellerCurrency: pinnedSellerCurrency }
+        : {}),
+      fundTx: order.type === "sell" && placerKind === "fund",
+      moneyCommitted: false,
+    };
+    const fillKey = await beginShareFillAttempt(
+      db,
+      fillPlan,
+      buildShareFillFingerprint({
+        orderId: order._id,
+        fillerId,
+        shares,
+        pricePerShare: order.pricePerShare,
+      })
+    );
+
+    const claimedOrder = await db.collection<ShareOrder>("shareOrders").findOneAndUpdate(
+      buildShareFillClaimFilter(order._id, shares),
+      buildShareFillRouteClaimPipeline({ shares, fillKey, now }),
       { returnDocument: "after" }
     );
 
     if (!claimedOrder) {
+      await settleShareFillAttempt(db, fillKey, "failed", "share-fill:claim-never-landed");
       return NextResponse.json(
         { error: "Order changed before this fill could be applied" },
         { status: 409 }
@@ -407,9 +509,19 @@ export async function fillShareOrder(request: Request, { params }: RouteParams) 
         updatedAt: new Date(),
       };
       if (order.escrowAnchor !== undefined) restoreFields.escrowAnchor = order.escrowAnchor;
+      if (order.lastShareFillKey !== undefined) {
+        restoreFields.lastShareFillKey = order.lastShareFillKey;
+      }
+      const restoreUpdate: {
+        $set: Record<string, unknown>;
+        $unset?: Record<string, unknown>;
+      } = { $set: restoreFields };
+      if (order.lastShareFillKey === undefined) {
+        restoreUpdate.$unset = { lastShareFillKey: "" };
+      }
       await db
         .collection<ShareOrder>("shareOrders")
-        .updateOne({ _id: order._id }, { $set: restoreFields });
+        .updateOne({ _id: order._id }, restoreUpdate);
     };
 
     const sellerCharacterAvgCost = orderCharacterId
@@ -481,19 +593,10 @@ export async function fillShareOrder(request: Request, { params }: RouteParams) 
       sellerFundCashCredited = true;
     };
 
-    const recordSellerFundSale = async (): Promise<void> => {
-      if (!order.placerFundId) return;
-      await insertFundTransaction(db, {
-        fundId: order.placerFundId,
-        kind: "liquidity_quote_sell",
-        corporationId: corporation._id,
-        shares,
-        amountAnchor: total,
-        note: "Executable equity liquidity ask filled",
-        createdAt: now,
-      });
-    };
-
+    // The fund-transaction row the removed `recordSellerFundSale` wrote is now
+    // part of the convergent post-commit audit (identical values, keyed _id):
+    // a post-commit duplicate converges instead of double-inserting. The
+    // cash credit above stays on the legacy money path.
     const rollbackSellerFund = async (): Promise<void> => {
       if (!order.placerFundId) return;
       if (sellerFundCashCredited) {
@@ -526,48 +629,20 @@ export async function fillShareOrder(request: Request, { params }: RouteParams) 
     };
 
     if (order.type === "sell") {
+      // Post-debit filler balance pinned for the audit plan (balanceAfter).
+      let fillerBalanceAfter: number | undefined;
       if (fillAsCorporation) {
         // Filler is a corporation (CEO's company) — pay from liquidCapital, credit shares to that corp.
         const buyingCorp = buyingCorpForSellFill;
         if (!buyingCorp) throw new Error("Validated buying corporation missing");
 
-        const buyingCurrency = (resolveCorpLiquidCurrencyCode(buyingCorp) ?? "USD") as CurrencyCode;
-        const targetCurrency = (resolveCorpLiquidCurrencyCode(corporation) ??
-          "USD") as CurrencyCode;
-        const buyerFxRate = await getCorpFxRate(db, buyingCorp);
-        const fxRates = await loadFxRatesRecord(db);
-        const corpPurchaseEstimate = estimateCorpWalletSpend({
-          requiredAmount: totalLocal,
-          availableBalance: buyingCorp.liquidCapital ?? 0,
-          fromCurrency: buyingCurrency,
-          toCurrency: targetCurrency,
-          rates: fxRates,
-        });
-        if (!corpPurchaseEstimate) {
-          await restoreClaimedOrder();
-          return NextResponse.json(
-            { error: "Exchange rate unavailable, try again shortly" },
-            { status: 503 }
-          );
-        }
-        const costInBuyerCapital =
-          buyingCurrency !== targetCurrency
-            ? corpPurchaseEstimate.spendAmount
-            : anchorToCorpLiquidCapital(total, buyingCorp, buyerFxRate);
-        if (buyingCurrency !== targetCurrency) {
-          fillerBuyConversionSpread = {
-            fee: corpPurchaseEstimate.spreadFee,
-            from: buyingCurrency,
-            to: targetCurrency,
-          };
-        }
+        // Pinned pre-claim by the audit-plan hoist above (same FX estimate the
+        // legacy path computed here).
+        const costInBuyerCapital = corpFillCostInBuyerCapital;
         let sellerSharesDebited = false;
         let buyerSharesCredited = false;
         let sellerCapitalCredited = false;
         let sellerHomeCredited = false;
-        let totalInSellerCapital = 0;
-        let totalInSellerHome = 0;
-        let sellerCurrency: CurrencyCode | null = null;
 
         // Atomic balance-gated debit on the buying corp's liquidCapital.
         // Replaces the read-then-write check + naïve $inc that allowed
@@ -581,6 +656,7 @@ export async function fillShareOrder(request: Request, { params }: RouteParams) 
         );
         if (!corpDebit.ok) {
           await restoreClaimedOrder();
+          await settleShareFillAttempt(db, fillKey, "failed", "share-fill:claim-restored");
           // Honor liquidCurrencyCode first (A28/A32) so a corp that relocated
           // without a liquidCurrencyCode backfill still shows the correct symbol.
           const buySym = CURRENCY_SYMBOLS[buyingCurrency] ?? "$";
@@ -612,6 +688,7 @@ export async function fillShareOrder(request: Request, { params }: RouteParams) 
             const debited = await debitSellerFundInventory();
             if (!debited) {
               await restoreClaimedOrder();
+              await settleShareFillAttempt(db, fillKey, "failed", "share-fill:claim-restored");
               await refundCorpLiquidCapital(db, buyingCorp._id, costInBuyerCapital);
               return NextResponse.json(
                 { error: "Liquidity provider no longer has enough shares" },
@@ -633,6 +710,7 @@ export async function fillShareOrder(request: Request, { params }: RouteParams) 
             );
             if (remainingSellerShares < 0) {
               await restoreClaimedOrder();
+              await settleShareFillAttempt(db, fillKey, "failed", "share-fill:claim-restored");
               await refundCorpLiquidCapital(db, buyingCorp._id, costInBuyerCapital);
               return NextResponse.json(
                 { error: "Seller no longer has enough shares to settle this order" },
@@ -652,6 +730,9 @@ export async function fillShareOrder(request: Request, { params }: RouteParams) 
           );
           buyerSharesCredited = true;
 
+          // Money only from here: seller proceeds and names are pinned
+          // pre-claim on the audit plan, and the audit rows are written
+          // convergently after the commit below, never inside this try.
           if (order.placerFundId) {
             await creditSellerFund({
               type: "corporation",
@@ -659,120 +740,39 @@ export async function fillShareOrder(request: Request, { params }: RouteParams) 
               name: buyingCorp.name,
             });
           } else if (order.placerCorporationId) {
-            const sellerCorp = await db
-              .collection<Corporation>("corporations")
-              .findOne({ _id: order.placerCorporationId });
-            const sellerFxRate = await getCorpFxRate(db, sellerCorp ?? {});
-            totalInSellerCapital = anchorToCorpLiquidCapital(total, sellerCorp ?? {}, sellerFxRate);
             await db
               .collection<Corporation>("corporations")
               .updateOne(
                 { _id: order.placerCorporationId },
-                { $inc: { liquidCapital: totalInSellerCapital }, $set: { updatedAt: now } }
+                { $inc: { liquidCapital: pinnedSellerAmount }, $set: { updatedAt: now } }
               );
             sellerCapitalCredited = true;
-            await emitTx(db, {
-              type: "stock_trade_sell",
-              turn: currentTurn,
-              createdAt: now,
-              subjectType: "corporation",
-              subjectId: order.placerCorporationId,
-              subjectName: sellerCorp?.name ?? "Unknown corporation",
-              amount: totalInSellerCapital,
-              currencyCode: resolveCorpLiquidCurrencyCode(sellerCorp ?? {}) ?? "USD",
-              counterpartyType: "corporation",
-              counterpartyId: buyingCorp._id,
-              counterpartyName: buyingCorp.name,
-              meta: {
-                corporationId: corporation._id.toString(),
-                orderId: order._id.toString(),
-                shares,
-                pricePerShare: order.pricePerShare,
-                source: "order_fill_sell_order",
-              },
-            });
           } else {
-            const seller = await db
-              .collection<Character>("characters")
-              .findOne({ _id: orderCharacterId }, { projection: { countryId: 1, name: 1 } });
-            sellerCurrency = seller ? getHomeCurrency(seller as Character) : fillerHomeCurrency;
-            let sellerFxRate = 1.0;
-            if (forexEnabled) {
-              const sellerFxResult = await loadCharacterFxRate(db, sellerCurrency);
-              if (!sellerFxResult.ok) {
-                throw new Error("Exchange rate unavailable for seller");
-              }
-              sellerFxRate = sellerFxResult.rate;
-            }
-            totalInSellerHome = total * sellerFxRate;
             await db.collection<Character>("characters").updateOne(
               { _id: orderCharacterId },
               {
-                $inc: buildPersonalBalanceInc(totalInSellerHome, sellerCurrency, forexEnabled),
+                $inc: buildPersonalBalanceInc(
+                  pinnedSellerAmount,
+                  pinnedSellerCurrency ?? fillerHomeCurrency,
+                  forexEnabled
+                ),
                 $set: { updatedAt: now },
               }
             );
             sellerHomeCredited = true;
-            await emitTx(db, {
-              type: "stock_trade_sell",
-              turn: currentTurn,
-              createdAt: now,
-              subjectType: "character",
-              subjectId: orderCharacterId,
-              subjectName: seller?.name ?? "Unknown character",
-              amount: totalInSellerHome,
-              currencyCode: sellerCurrency,
-              counterpartyType: "corporation",
-              counterpartyId: buyingCorp._id,
-              counterpartyName: buyingCorp.name,
-              meta: {
-                corporationId: corporation._id.toString(),
-                orderId: order._id.toString(),
-                shares,
-                pricePerShare: order.pricePerShare,
-                source: "order_fill_sell_order",
-              },
-            });
           }
-          await emitTx(db, {
-            type: "stock_trade_buy",
-            turn: currentTurn,
-            createdAt: now,
-            subjectType: "corporation",
-            subjectId: buyingCorp._id,
-            subjectName: buyingCorp.name,
-            amount: -costInBuyerCapital,
-            balanceAfter: corpDebit.newBalance,
-            currencyCode: resolveCorpLiquidCurrencyCode(buyingCorp) ?? "USD",
-            counterpartyType: order.placerFundId
-              ? "system"
-              : order.placerCorporationId
-                ? "corporation"
-                : "character",
-            counterpartyId: order.placerFundId
-              ? undefined
-              : (order.placerCorporationId ?? orderCharacterId!),
-            counterpartyName: order.placerFundId
-              ? (sellerFund?.name ?? "Index fund")
-              : order.placerCorporationId
-                ? await resolveCorpName(db, order.placerCorporationId)
-                : await resolveCharName(db, orderCharacterId!, false),
-            meta: {
-              corporationId: corporation._id.toString(),
-              orderId: order._id.toString(),
-              shares,
-              pricePerShare: order.pricePerShare,
-              source: "order_fill_sell_order",
-            },
-          });
-          await recordSellerFundSale();
+          fillerBalanceAfter = corpDebit.newBalance;
         } catch (err) {
           await rollbackSellerFund();
-          if (sellerHomeCredited && sellerCurrency) {
+          if (sellerHomeCredited && pinnedSellerCurrency) {
             await db.collection<Character>("characters").updateOne(
               { _id: orderCharacterId! },
               {
-                $inc: buildPersonalBalanceInc(-totalInSellerHome, sellerCurrency, forexEnabled),
+                $inc: buildPersonalBalanceInc(
+                  -pinnedSellerAmount,
+                  pinnedSellerCurrency,
+                  forexEnabled
+                ),
                 $set: { updatedAt: new Date() },
               }
             );
@@ -782,7 +782,7 @@ export async function fillShareOrder(request: Request, { params }: RouteParams) 
               .collection<Corporation>("corporations")
               .updateOne(
                 { _id: order.placerCorporationId },
-                { $inc: { liquidCapital: -totalInSellerCapital }, $set: { updatedAt: new Date() } }
+                { $inc: { liquidCapital: -pinnedSellerAmount }, $set: { updatedAt: new Date() } }
               );
           }
           if (buyerSharesCredited) {

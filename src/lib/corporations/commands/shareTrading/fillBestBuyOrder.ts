@@ -2,7 +2,14 @@ import type { Db, ObjectId } from "mongodb";
 import type { Corporation, IndexFund, ShareOrder } from "@/lib/db/types";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import { settleBuyOrderFill, reconcileTotalSharesAfterFill } from "./fillShareOrderSettlement";
-import { recordShareTrade } from "@/lib/corporations/shareTradeHistory";
+import {
+  beginShareFillAttempt,
+  buildShareFillFingerprint,
+  buildShareFillTurnClaimUpdate,
+  prepareShareFillClaim,
+  settleShareFillAttempt,
+  type ShareFillAuditPlan,
+} from "./shareFillAudit";
 
 export interface MarketSellParty {
   id: ObjectId;
@@ -51,19 +58,58 @@ export async function fillBestBuyOrderForMarketSell(input: {
     .limit(12)
     .toArray();
 
-  for (const order of candidates) {
+  for (let order of candidates) {
     if (!order.placerFundId || !(order.escrowAnchor && order.escrowAnchor > 0)) continue;
     const provider = await db
       .collection<Pick<IndexFund, "_id" | "name" | "status">>("indexFunds")
       .findOne({ _id: order.placerFundId, status: "active" });
     if (!provider) continue;
 
+    const prepared = await prepareShareFillClaim(db, order);
+    order = prepared.order;
     const remainingShares = order.sharesRemaining - shares;
     const fillFraction = shares / order.sharesRemaining;
     const proceedsAnchor = order.escrowAnchor * fillFraction;
     if (!Number.isFinite(proceedsAnchor) || proceedsAnchor <= 0) continue;
     const remainingEscrowAnchor = order.escrowAnchor - proceedsAnchor;
     const remainingEscrowLocal = Math.max(0, order.escrowAmount - shares * order.pricePerShare);
+    const proceedsInHomeCurrency = forexEnabled ? proceedsAnchor * sellerFxRate : proceedsAnchor;
+    const fillPlan: ShareFillAuditPlan = {
+      version: 1,
+      orderIdHex: order._id.toHexString(),
+      corpIdHex: corporation._id.toHexString(),
+      corpCcy: corporation.liquidCurrencyCode,
+      orderType: "buy",
+      shares,
+      pricePerShare: order.pricePerShare,
+      totalAnchor: proceedsAnchor,
+      turn,
+      nowIso: now.toISOString(),
+      preClaimRemaining: order.sharesRemaining,
+      filler: {
+        idHex: seller.id.toHexString(),
+        collection: seller.collectionName,
+        name: seller.name,
+        homeCurrency: seller.homeCurrency,
+        imperial: seller.isImperial,
+      },
+      fillerAmount: proceedsInHomeCurrency,
+      placerKind: "fund",
+      placerIdHex: order.placerFundId!.toHexString(),
+      placerName: provider.name,
+      fundTx: false,
+      moneyCommitted: false,
+    };
+    const fillKey = await beginShareFillAttempt(
+      db,
+      fillPlan,
+      buildShareFillFingerprint({
+        orderId: order._id,
+        fillerId: seller.id,
+        shares,
+        pricePerShare: order.pricePerShare,
+      })
+    );
     const claimed = await db.collection<ShareOrder>("shareOrders").findOneAndUpdate(
       {
         _id: order._id,
@@ -71,34 +117,42 @@ export async function fillBestBuyOrderForMarketSell(input: {
         sharesRemaining: order.sharesRemaining,
         escrowAnchor: order.escrowAnchor,
       },
-      {
-        $set: {
-          sharesRemaining: remainingShares,
-          escrowAmount: remainingEscrowLocal,
-          escrowAnchor: remainingEscrowAnchor,
-          status: remainingShares === 0 ? "filled" : "open",
-          updatedAt: now,
-        },
-      },
+      buildShareFillTurnClaimUpdate({
+        remainingShares,
+        remainingEscrowLocal,
+        remainingEscrowAnchor,
+        status: remainingShares === 0 ? "filled" : "open",
+        fillKey,
+        now,
+      }),
       { returnDocument: "after" }
     );
-    if (!claimed) continue;
+    if (!claimed) {
+      await settleShareFillAttempt(db, fillKey, "failed", "share-fill:claim-never-landed");
+      continue;
+    }
 
     const restoreClaimedOrder = async (): Promise<void> => {
-      await db.collection<ShareOrder>("shareOrders").updateOne(
-        { _id: order._id },
-        {
-          $set: {
-            sharesRemaining: order.sharesRemaining,
-            escrowAmount: order.escrowAmount,
-            escrowAnchor: order.escrowAnchor,
-            status: order.status,
-            updatedAt: new Date(),
-          },
-        }
-      );
+      const restoreUpdate: {
+        $set: Record<string, unknown>;
+        $unset?: Record<string, unknown>;
+      } = {
+        $set: {
+          sharesRemaining: order.sharesRemaining,
+          escrowAmount: order.escrowAmount,
+          escrowAnchor: order.escrowAnchor,
+          status: order.status,
+          updatedAt: new Date(),
+          ...(order.lastShareFillKey !== undefined
+            ? { lastShareFillKey: order.lastShareFillKey }
+            : {}),
+        },
+      };
+      if (order.lastShareFillKey === undefined) {
+        restoreUpdate.$unset = { lastShareFillKey: "" };
+      }
+      await db.collection<ShareOrder>("shareOrders").updateOne({ _id: order._id }, restoreUpdate);
     };
-    const proceedsInHomeCurrency = forexEnabled ? proceedsAnchor * sellerFxRate : proceedsAnchor;
     const settlementError = await settleBuyOrderFill({
       db,
       corporation,
@@ -117,22 +171,11 @@ export async function fillBestBuyOrderForMarketSell(input: {
       currentTurn: turn,
       now,
       restoreClaimedOrder,
+      fillKey,
+      plan: fillPlan,
     });
     if (settlementError) continue;
 
-    void recordShareTrade(db, {
-      corporationId: corporation._id,
-      kind: "peer_fill",
-      turn,
-      shares,
-      pricePerShareAnchor: proceedsAnchor / shares,
-      from: {
-        ...(seller.isImperial ? { imperialCharacterId: seller.id } : { characterId: seller.id }),
-        name: seller.name,
-      },
-      to: { name: provider.name },
-      corpCurrencyCode: corporation.liquidCurrencyCode,
-    });
     await reconcileTotalSharesAfterFill(db, corporation._id);
 
     return {
