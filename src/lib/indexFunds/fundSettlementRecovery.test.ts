@@ -327,7 +327,7 @@ beforeEach(() => {
   vi.mocked(sellFundBondHoldingsForCash).mockResolvedValue({
     proceedsAnchor: 0,
     unitsSold: 0,
-    salesExecuted: 0,
+    bondsTouched: 0,
   });
   vi.mocked(emitTx).mockResolvedValue(undefined as never);
   vi.mocked(resolveIndexFundHolder).mockResolvedValue(null);
@@ -1424,7 +1424,12 @@ describe("reapStaleRedemptionProcessing", () => {
       makeFund({
         _id: id,
         redemptionDebitMarkers: {
-          [ATTEMPT]: { amountAnchor: 500, units: 0, markedAt: new Date() },
+          [ATTEMPT]: {
+            amountAnchor: 500,
+            units: 0,
+            queueEntryId: row._id,
+            markedAt: new Date(),
+          },
         },
       } as Partial<IndexFund>)
     );

@@ -30,7 +30,7 @@ describe("corporation wiki claim", () => {
       collection: (name: string) => ({
         findOne: name === "corporations" ? corpFindOne : pageFindOne,
       }),
-    } as Awaited<ReturnType<typeof getDb>>);
+    } as unknown as Awaited<ReturnType<typeof getDb>>);
     corpFindOne.mockResolvedValue({ sequentialId: 931, name: "Requested Corporation" });
     pageFindOne.mockResolvedValue({ slug: "corp-931" });
   });

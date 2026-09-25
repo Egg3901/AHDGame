@@ -72,7 +72,7 @@ export interface ShareFillAuditPlan {
     idHex: string;
     collection: ShareFillFillerCollection;
     name: string;
-    homeCurrency: string;
+    homeCurrency: CurrencyCode;
     imperial: boolean;
   };
   /** Filler-side proceeds/cost in the filler's own currency units. */
@@ -83,7 +83,7 @@ export interface ShareFillAuditPlan {
   placerName: string;
   /** Seller proceeds (sell fills against a character/corporation placer). */
   sellerAmount?: number;
-  sellerCurrency?: string;
+  sellerCurrency?: CurrencyCode;
   /** Sell fills against a fund placer own a fund-transaction row, no seller tx. */
   fundTx: boolean;
   moneyCommitted: boolean;

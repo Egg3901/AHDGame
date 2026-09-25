@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { ObjectId, type ClientSession, type Collection, type Filter } from "mongodb";
+import { ObjectId, type ClientSession, type Collection, type Document, type Filter } from "mongodb";
 
 /**
  * Partial-write safety for money flows on deployments without transaction
@@ -453,7 +453,7 @@ export function keyedInsertId(key: string, domain: string): ObjectId {
  * `keyedInsertId`). A duplicate key means this step already applied; anything
  * else throws.
  */
-export async function insertKeyedDoc<TSchema>(
+export async function insertKeyedDoc<TSchema extends Document>(
   collection: Collection<TSchema>,
   doc: TSchema,
   options: MoneyFlowOptions = {}
@@ -499,7 +499,7 @@ export interface MoneyFlowStep {
  * step to its own error. Duplicate `_id` still converges to
  * `already-applied` inside `insertKeyedDoc`.
  */
-export function makeInsertStep<TSchema>(
+export function makeInsertStep<TSchema extends Document>(
   name: string,
   collection: Collection<TSchema>,
   doc: TSchema

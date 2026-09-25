@@ -172,7 +172,7 @@ export async function placeFundShareBuyOrder(
         },
       },
       input.thresholds,
-      input.turnLengthMinutes
+      { turnLengthMinutes: input.turnLengthMinutes }
     );
   } catch (err) {
     // Roll the escrow back if we couldn't persist the order.
@@ -320,7 +320,7 @@ export async function cancelFundShareOrder(
             },
           },
           thresholds,
-          turnLengthMinutes
+          { turnLengthMinutes }
         );
       }
     }

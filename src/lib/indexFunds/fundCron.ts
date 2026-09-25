@@ -1571,14 +1571,16 @@ async function reverseHolderCredit(
   }
   if (!inc) return false;
   try {
-    const result = await db.collection(target.collection).updateOne(
-      { _id: target.id, "redemptionReceipts.key": receiptKey },
-      {
-        $inc: inc,
-        $pull: { redemptionReceipts: { key: receiptKey } },
-        $set: { updatedAt: new Date() },
-      }
-    );
+    const result = await db
+      .collection<{ redemptionReceipts?: IndexFundRedemptionReceipt[] }>(target.collection)
+      .updateOne(
+        { _id: target.id, "redemptionReceipts.key": receiptKey },
+        {
+          $inc: inc,
+          $pull: { redemptionReceipts: { key: receiptKey } },
+          $set: { updatedAt: new Date() },
+        }
+      );
     return result.matchedCount === 1;
   } catch {
     return false;

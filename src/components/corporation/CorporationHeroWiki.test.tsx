@@ -2,7 +2,8 @@
  * @vitest-environment happy-dom
  */
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi, type ComponentProps } from "vitest";
+import type { ComponentProps } from "react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { CorporationHero } from "./CorporationHero";
 import type { CorporationDetail } from "./CorporationPageTypes";
 
