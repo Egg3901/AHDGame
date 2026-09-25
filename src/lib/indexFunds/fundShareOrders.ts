@@ -3,6 +3,7 @@ import type { Corporation, IndexFund, IndexFundTransaction, ShareOrder } from "@
 import { corpLiquidCapitalToAnchor } from "@/lib/currency/corporationCapital";
 import { insertFundTransaction } from "@/lib/indexFunds/fundQueries";
 import { emitTx } from "@/lib/financialTxLog/emit";
+import type { TxThresholds } from "@/lib/db/types/financialTxLog";
 
 /**
  * Index-fund-owned order-book buy orders.
@@ -60,6 +61,8 @@ export interface PlaceFundShareBuyOrderInput {
   fxRate: number;
   /** Game turn stamped on the ledger escrow row (#992 tranche 4). */
   turn: number;
+  /** Reused for a turn pass placing many fund bids. */
+  thresholds?: TxThresholds;
   liquidityQuote?: { turn: number; referencePrice: number };
   /**
    * When set, the escrow transaction row is pushed here instead of inserted,
@@ -145,25 +148,29 @@ export async function placeFundShareBuyOrder(
     // character/corporation placement rows; the refund shares it so a
     // placement nets against its own cancel per currency). Fund-subject rows
     // never mirror, so this is the only ledger row for the debit.
-    await emitTx(db, {
-      type: "stock_order_escrow",
-      turn: input.turn,
-      createdAt: now,
-      subjectType: "fund",
-      subjectId: fund._id,
-      subjectName: fund.name,
-      amount: -escrowAnchor,
-      anchorAmount: -escrowAnchor,
-      currencyCode: fund.anchorCurrencyCode,
-      counterpartyType: "system",
-      counterpartyName: "Order book escrow",
-      meta: {
-        orderId: orderId.toString(),
-        orderType: "buy",
-        targetCorporationId: corp._id.toString(),
-        escrowAmountAnchor: escrowAnchor,
+    await emitTx(
+      db,
+      {
+        type: "stock_order_escrow",
+        turn: input.turn,
+        createdAt: now,
+        subjectType: "fund",
+        subjectId: fund._id,
+        subjectName: fund.name,
+        amount: -escrowAnchor,
+        anchorAmount: -escrowAnchor,
+        currencyCode: fund.anchorCurrencyCode,
+        counterpartyType: "system",
+        counterpartyName: "Order book escrow",
+        meta: {
+          orderId: orderId.toString(),
+          orderType: "buy",
+          targetCorporationId: corp._id.toString(),
+          escrowAmountAnchor: escrowAnchor,
+        },
       },
-    });
+      input.thresholds
+    );
   } catch (err) {
     // Roll the escrow back if we couldn't persist the order.
     await refundFundCashAnchor(db, fund._id, escrowAnchor);
@@ -252,7 +259,8 @@ export async function placeFundShareSellOrder(
 export async function cancelFundShareOrder(
   db: Db,
   orderId: ObjectId,
-  turn?: number
+  turn?: number,
+  thresholds?: TxThresholds
 ): Promise<void> {
   // Atomically claim the order so a concurrent fill/cancel can't double-refund.
   const claimed = await db
@@ -286,25 +294,29 @@ export async function cancelFundShareOrder(
         .findOne({ _id: claimed.placerFundId }, { projection: { name: 1, anchorCurrencyCode: 1 } });
       if (fund) {
         const now = new Date();
-        await emitTx(db, {
-          type: "stock_order_refund",
-          turn,
-          createdAt: now,
-          subjectType: "fund",
-          subjectId: claimed.placerFundId,
-          subjectName: fund.name,
-          amount: refundAnchor,
-          anchorAmount: refundAnchor,
-          currencyCode: fund.anchorCurrencyCode,
-          counterpartyType: "system",
-          counterpartyName: "Order book escrow",
-          meta: {
-            orderId: orderId.toString(),
-            orderType: claimed.type,
-            targetCorporationId: claimed.corporationId.toString(),
-            escrowAmountAnchor: refundAnchor,
+        await emitTx(
+          db,
+          {
+            type: "stock_order_refund",
+            turn,
+            createdAt: now,
+            subjectType: "fund",
+            subjectId: claimed.placerFundId,
+            subjectName: fund.name,
+            amount: refundAnchor,
+            anchorAmount: refundAnchor,
+            currencyCode: fund.anchorCurrencyCode,
+            counterpartyType: "system",
+            counterpartyName: "Order book escrow",
+            meta: {
+              orderId: orderId.toString(),
+              orderType: claimed.type,
+              targetCorporationId: claimed.corporationId.toString(),
+              escrowAmountAnchor: refundAnchor,
+            },
           },
-        });
+          thresholds
+        );
       }
     }
   }

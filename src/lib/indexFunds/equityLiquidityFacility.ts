@@ -11,6 +11,7 @@ import {
   type EquityLiquidityRuleQuotePlan,
 } from "@/lib/indexFunds/equityLiquidity/rules";
 import { boundedParallelMap } from "@/lib/indexFunds/boundedParallelMap";
+import { loadTxThresholds } from "@/lib/financialTxLog/emit";
 
 // Each worker owns one fund's cash, escrow and inventory. Eight overlaps the
 // remote Mongo waits while remaining far below the driver's connection pool;
@@ -144,6 +145,8 @@ export async function refreshEquityLiquidityFacility(input: {
     .collection<ShareOrder>("shareOrders")
     .find({ liquidityProvider: true, status: "open" })
     .toArray();
+  const thresholds =
+    priorQuotes.length > 0 || input.enabled ? await loadTxThresholds(db) : undefined;
   const cancellationsByFund = new Map<string, ShareOrder[]>();
   for (const order of priorQuotes) {
     // Preserve order within a fund because every cancellation refunds that
@@ -157,7 +160,7 @@ export async function refreshEquityLiquidityFacility(input: {
     [...cancellationsByFund.values()],
     EQUITY_LIQUIDITY_FUND_CONCURRENCY,
     async (orders) => {
-      for (const order of orders) await cancelFundShareOrder(db, order._id, turn);
+      for (const order of orders) await cancelFundShareOrder(db, order._id, turn, thresholds);
     }
   );
 
@@ -228,6 +231,7 @@ export async function refreshEquityLiquidityFacility(input: {
             limitPriceLocal: plan.bidPriceLocal,
             fxRate: listing.fxRate,
             turn,
+            thresholds,
             liquidityQuote,
           });
           if (!bid.ok || !bid.orderId) {

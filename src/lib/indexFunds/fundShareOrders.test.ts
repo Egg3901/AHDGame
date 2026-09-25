@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import { ObjectId } from "mongodb";
 import type { Db } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
+import { DEFAULT_TX_THRESHOLDS } from "@/lib/db/types/financialTxLog";
 
 vi.mock("@/lib/currency/corporationCapital", () => ({
   // anchor == local in tests (fxRate 1)
@@ -47,6 +48,7 @@ describe("placeFundShareBuyOrder", () => {
       limitPriceLocal: 50,
       fxRate: 1,
       turn: 44,
+      thresholds: DEFAULT_TX_THRESHOLDS,
     });
 
     expect(result.ok).toBe(true);
@@ -68,6 +70,12 @@ describe("placeFundShareBuyOrder", () => {
     expect(insertCall.escrowAmount).toBe(500);
     expect(insertCall.escrowAnchor).toBe(500);
     expect(insertCall.pricePerShare).toBe(50);
+    const { emitTx } = await import("@/lib/financialTxLog/emit");
+    expect(emitTx).toHaveBeenCalledWith(
+      db,
+      expect.objectContaining({ type: "stock_order_escrow" }),
+      DEFAULT_TX_THRESHOLDS
+    );
   });
 
   it("returns not-ok and does not insert when cashAnchor is insufficient", async () => {
@@ -158,11 +166,14 @@ describe("cancelFundShareOrder", () => {
     (db.collection("shareOrders").findOneAndUpdate as ReturnType<typeof vi.fn>).mockResolvedValue({
       _id: orderId,
       placerFundId: f._id,
+      corporationId: new ObjectId(),
+      type: "buy",
       escrowAnchor: 300,
       status: "open",
     });
+    (db.collection("indexFunds").findOne as ReturnType<typeof vi.fn>).mockResolvedValue(f);
 
-    await cancelFundShareOrder(db as unknown as Db, orderId);
+    await cancelFundShareOrder(db as unknown as Db, orderId, 44, DEFAULT_TX_THRESHOLDS);
 
     // Marked cancelled atomically.
     const claimCall = (db.collection("shareOrders").findOneAndUpdate as ReturnType<typeof vi.fn>)
@@ -174,6 +185,12 @@ describe("cancelFundShareOrder", () => {
       .calls[0];
     expect(refundCall[0]).toMatchObject({ _id: f._id });
     expect(refundCall[1].$inc.cashAnchor).toBe(300);
+    const { emitTx } = await import("@/lib/financialTxLog/emit");
+    expect(emitTx).toHaveBeenCalledWith(
+      db,
+      expect.objectContaining({ type: "stock_order_refund" }),
+      DEFAULT_TX_THRESHOLDS
+    );
   });
 
   it("refunds exactly the post-partial-fill residual escrowAnchor (no over-refund)", async () => {

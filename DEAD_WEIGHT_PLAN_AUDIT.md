@@ -587,8 +587,14 @@ so these readings cannot by themselves prove a code-diff speedup.
 WP6 now projects only `turnLengthMinutes` for transaction expiry reads. On the
 local copy, the full `gameConfig` document is 10,572 BSON bytes and the
 projected result is 45 bytes. This changes bytes returned per read, not the
-number of reads; call-site attribution and a matched before/after turn remain
-necessary before claiming a phase-level improvement.
+number of reads. A call-site trace on local turn 1119 counted 417 expiry reads
+from fund bond purchases, 342 from bid placement, and 282 from bid refunds.
+It also counted 342 `systemSettings` threshold reads from bid placement and
+282 from bid refunds. The equity liquidity refresh now loads thresholds once
+and passes them to both order paths. This predicts 623 fewer threshold reads
+for an equivalent turn, subject to a matched before/after replay. The trace
+instrumentation counts both `findOne` and the underlying `find` hook for each
+call, so the stated counts use only its `findOne` rows.
 
 The one-turn profiler has a local-only guard and cannot be run against
 production. A partial production copy is restored to a private localhost Mongo instance
