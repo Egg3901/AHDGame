@@ -12,7 +12,6 @@ import {
   resolveCorpLiquidCurrencyCode,
 } from "@/lib/currency/corporationCapital";
 import { COUNTRY_CURRENCY_MAP, type CurrencyCode } from "@/lib/constants/currencies";
-import { recoverShareFillOrphans } from "@/lib/corporations/commands/shareTrading/shareFillAudit";
 import { recordShareTrades } from "@/lib/corporations/shareTradeHistory";
 import type { ShareTradeParty } from "@/lib/db/types/shareTradeHistory";
 import { loadEquityPoolsByCurrency, loadEquityQuote } from "@/lib/equities/marketPool";
@@ -57,17 +56,12 @@ interface PendingHistoryEmit {
  * `turn` is stamped on every emitted `shareTradeHistory` row.
  */
 export async function fillPendingShareOrders(db: Db, now: Date, turn: number): Promise<void> {
-  // Peer-fill orphan recovery (issue #1672, slice 1): route and market-sell
-  // fills stamp one attempt key per fill and persist convergent audit rows
-  // under it. The per-order stamp hook covers orders that see another fill;
-  // this bounded scan re-drives lonely receipts (order already filled) once
-  // per turn before the fresh scan. Best-effort: recovery never fails the
-  // matcher; unrecovered receipts stay `in_progress` for the next turn.
-  try {
-    await recoverShareFillOrphans(db, 50);
-  } catch {
-    // Receipts stay `in_progress` for the next turn.
-  }
+  // Peer-fill orphan recovery (issue #1672) deliberately does NOT run here:
+  // the receipt scan is a query-per-row N+1 that does not belong on the turn
+  // path. Lonely receipts are re-driven by the periodic
+  // `runShareFillRecoveryPass` driver (cron sweep in multiplayer, post-turn
+  // pass on the singleplayer advance route), and the per-order stamp hook
+  // (`prepareShareFillClaim`) still covers any order that sees another fill.
 
   // Fill decisions and their escrow/history writes only use these order
   // fields; the query filter still applies `status` server-side.

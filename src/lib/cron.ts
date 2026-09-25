@@ -15,6 +15,7 @@ import { persistApiAbuseScan } from "@/lib/api/abuseDetection";
 import { runRetention } from "@/lib/retention/retention";
 import { runAltScoring } from "@/lib/altDetection/run";
 import { runAltDigest } from "@/lib/altDetection/digest";
+import { runShareFillRecoveryPass } from "@/lib/corporations/commands/shareTrading/shareFillAudit";
 
 /*
  * Sentry cron-monitor slug for the primary turn cron. Service-suffixed so
@@ -86,6 +87,15 @@ let apiAbuseScanCron: ReturnType<typeof cron.schedule> | null = null;
 let retentionCron: ReturnType<typeof cron.schedule> | null = null;
 let altScoringCron: ReturnType<typeof cron.schedule> | null = null;
 let altDigestCron: ReturnType<typeof cron.schedule> | null = null;
+let shareFillRecoveryCron: ReturnType<typeof cron.schedule> | null = null;
+
+/**
+ * Share-fill orphan recovery sweep (issue #1672). Staggered to :07/:22/:37/:52
+ * so it never fires on a turn tick (:00/:30) or the stock refresh (:15), and
+ * runs 4x/hour so a crash-orphaned receipt waits at most ~15 minutes. Offset
+ * slots double as the test selector (see `findScheduledCallback` in cron.test.ts).
+ */
+export const SHARE_FILL_RECOVERY_SCHEDULE = "7,22,37,52 * * * *";
 
 /**
  * Get the cron schedule expression based on game state fastMode setting.
@@ -137,6 +147,9 @@ export async function initializeCronJobs() {
   }
   if (playerEventsSweepCron) {
     playerEventsSweepCron.stop();
+  }
+  if (shareFillRecoveryCron) {
+    shareFillRecoveryCron.stop();
   }
 
   // Get current game state to determine schedule
@@ -581,8 +594,45 @@ export async function initializeCronJobs() {
     }).`
   );
   console.log("[Cron] Stuck turn-lock recovery sweep will run every 5 minutes.");
+  // Share-fill orphan recovery (issue #1672). Deliberately NOT a turn phase:
+  // the receipt scan is a query-per-row N+1 that must not run inside
+  // processTurn. This sweep re-drives lonely receipts outside the turn with
+  // a bounded fair pass. Deferrable by design: while a turn holds the
+  // processing lock (fresh OR stale — a stale lock may still be a live but
+  // blocked turn, per #1208) the pass is skipped and retried next tick.
+  // `runShareFillRecoveryPass` never throws and carries its own concurrency
+  // guard, so overlapping ticks collapse instead of piling up.
+  shareFillRecoveryCron = cron.schedule(
+    SHARE_FILL_RECOVERY_SCHEDULE,
+    async () => {
+      try {
+        const currentState = await getGameState();
+        if (currentState?.isProcessing) {
+          console.log("[Cron] Share-fill recovery skipped — turn in progress");
+          return;
+        }
+        const summary = await runShareFillRecoveryPass(await getDb());
+        if (summary.status === "skipped-concurrent") {
+          console.log("[Cron] Share-fill recovery skipped — previous pass still running");
+        } else if (summary.status === "failed") {
+          console.log("[Cron] Share-fill recovery pass failed — retrying next sweep");
+        } else if (summary.recovered > 0 || summary.incomplete > 0) {
+          console.log(
+            `[Cron] Share-fill recovery: examined ${summary.examined}, ` +
+              `recovered ${summary.recovered}, incomplete ${summary.incomplete}`
+          );
+        }
+      } catch (error) {
+        console.error("[Cron] Share-fill recovery sweep failed:", error);
+        Sentry.captureException(error, { tags: { component: "cron", job: "shareFillRecovery" } });
+      }
+    },
+    { timezone: "UTC" }
+  );
+
   console.log("[Cron] Alt-detection scoring will run every hour at :45 (flag-gated).");
   console.log("[Cron] Alt digest (new suspicious rings) will run daily at 13:00 UTC (flag-gated).");
+  console.log("[Cron] Share-fill recovery sweep will run at :07/:22/:37/:52 UTC.");
 }
 
 /**
@@ -624,6 +674,10 @@ export async function restartCronWithSchedule() {
   if (altDigestCron) {
     altDigestCron.stop();
     altDigestCron = null;
+  }
+  if (shareFillRecoveryCron) {
+    shareFillRecoveryCron.stop();
+    shareFillRecoveryCron = null;
   }
   await initializeCronJobs();
 }
@@ -673,6 +727,10 @@ export function stopCronJobs() {
   if (altDigestCron) {
     altDigestCron.stop();
     altDigestCron = null;
+  }
+  if (shareFillRecoveryCron) {
+    shareFillRecoveryCron.stop();
+    shareFillRecoveryCron = null;
   }
   console.log("[Cron] Cron jobs stopped");
 }

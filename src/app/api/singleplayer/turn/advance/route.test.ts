@@ -7,6 +7,7 @@ const {
   processTurn,
   findOne,
   getSingleplayerWorldAvailability,
+  runShareFillRecoveryPass,
 } = vi.hoisted(() => ({
   requireSingleplayer: vi.fn(),
   getDb: vi.fn(),
@@ -14,6 +15,7 @@ const {
   processTurn: vi.fn(),
   findOne: vi.fn(),
   getSingleplayerWorldAvailability: vi.fn(),
+  runShareFillRecoveryPass: vi.fn(),
 }));
 
 vi.mock("@/lib/api/requireSingleplayer", () => ({ requireSingleplayer }));
@@ -21,6 +23,9 @@ vi.mock("@/lib/mongodb", () => ({ getDb }));
 vi.mock("@/lib/singleplayerServer", () => ({ getSingleplayerConfig }));
 vi.mock("@/lib/singleplayerOperator", () => ({ getSingleplayerWorldAvailability }));
 vi.mock("@/lib/turnSystem", () => ({ processTurn }));
+vi.mock("@/lib/corporations/commands/shareTrading/shareFillAudit", () => ({
+  runShareFillRecoveryPass,
+}));
 
 import { POST } from "./route";
 
@@ -38,6 +43,7 @@ describe("POST /api/singleplayer/turn/advance", () => {
       message: "Turn complete",
       warnings: [],
     });
+    runShareFillRecoveryPass.mockResolvedValue({ status: "completed", examined: 0 });
   });
 
   it("does not expose a player turn control for a worldsim", async () => {
@@ -113,5 +119,40 @@ describe("POST /api/singleplayer/turn/advance", () => {
     expect(response.status).toBe(200);
     expect(processTurn).toHaveBeenCalledTimes(1);
     await expect(response.json()).resolves.toMatchObject({ success: true, turn: 2 });
+  });
+
+  it("drives one bounded orphan recovery pass after the turn", async () => {
+    const response = await POST(
+      new Request("http://localhost/api/singleplayer/turn/advance", { method: "POST" })
+    );
+
+    expect(response.status).toBe(200);
+    expect(processTurn).toHaveBeenCalledTimes(1);
+    expect(runShareFillRecoveryPass).toHaveBeenCalledTimes(1);
+  });
+
+  it("still completes the advance when the recovery pass fails", async () => {
+    runShareFillRecoveryPass.mockRejectedValue(new Error("recovery unavailable"));
+    const response = await POST(
+      new Request("http://localhost/api/singleplayer/turn/advance", { method: "POST" })
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({ success: true, turn: 2 });
+  });
+
+  it("skips recovery when the turn itself is not committed", async () => {
+    processTurn.mockResolvedValue({
+      success: false,
+      turn: 0,
+      message: "Turn failed",
+      warnings: [],
+    });
+    const response = await POST(
+      new Request("http://localhost/api/singleplayer/turn/advance", { method: "POST" })
+    );
+
+    expect(response.status).toBe(500);
+    expect(runShareFillRecoveryPass).not.toHaveBeenCalled();
   });
 });

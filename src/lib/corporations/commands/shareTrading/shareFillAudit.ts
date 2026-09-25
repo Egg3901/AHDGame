@@ -496,6 +496,33 @@ export type ShareFillRecoveryAction =
   | "skipped-settled"
   | "skipped-missing";
 
+/** Module-level concurrency guard for the periodic recovery pass. */
+let shareFillRecoveryRunning = false;
+
+export interface ShareFillRecoveryPassSummary {
+  status: "completed" | "skipped-concurrent" | "failed";
+  examined: number;
+  recovered: number;
+  alreadyComplete: number;
+  settledFailed: number;
+  leftInProgress: number;
+  incomplete: number;
+}
+
+function emptyPassSummary(
+  status: ShareFillRecoveryPassSummary["status"]
+): ShareFillRecoveryPassSummary {
+  return {
+    status,
+    examined: 0,
+    recovered: 0,
+    alreadyComplete: 0,
+    settledFailed: 0,
+    leftInProgress: 0,
+    incomplete: 0,
+  };
+}
+
 export interface ShareFillRecoveryResult {
   key: string;
   action: ShareFillRecoveryAction;
@@ -509,6 +536,32 @@ export interface ShareFillRecoveryResult {
  * nothing and stay `in_progress` (mid-money prefixes are the keyed-money
  * seam, never guessed at here).
  */
+/**
+ * Decision core shared by the single-key attempt path and the batched orphan
+ * scan. The receipt is already loaded and known `in_progress` with a valid
+ * plan; the order is the live row (or null when it cannot be resolved).
+ */
+async function applyShareFillRecovery(
+  db: Db,
+  key: string,
+  plan: ShareFillAuditPlan,
+  order: ShareOrder | null
+): Promise<ShareFillRecoveryAction> {
+  if (!order) {
+    await settleShareFillAttempt(db, key, "failed", "share-fill:order-missing");
+    return "settled-failed-order-missing";
+  }
+  if (order.sharesRemaining === plan.preClaimRemaining) {
+    await settleShareFillAttempt(db, key, "failed", "share-fill:claim-never-landed");
+    return "settled-failed-claim-never-landed";
+  }
+  if (!plan.moneyCommitted) return "left-in-progress-uncommitted";
+  const outcome = await insertShareFillAuditRows(db, key, collectShareFillAuditRows(plan));
+  if (outcome === "failed") return "audit-incomplete";
+  await settleShareFillAttempt(db, key, "completed");
+  return outcome === "applied" ? "audit-recovered" : "audit-already-complete";
+}
+
 export async function recoverShareFillAttempt(
   db: Db,
   key: string
@@ -524,19 +577,7 @@ export async function recoverShareFillAttempt(
   const order = await db
     .collection<ShareOrder>("shareOrders")
     .findOne({ _id: new ObjectId(plan.orderIdHex) });
-  if (!order) {
-    await settleShareFillAttempt(db, key, "failed", "share-fill:order-missing");
-    return { key, action: "settled-failed-order-missing" };
-  }
-  if (order.sharesRemaining === plan.preClaimRemaining) {
-    await settleShareFillAttempt(db, key, "failed", "share-fill:claim-never-landed");
-    return { key, action: "settled-failed-claim-never-landed" };
-  }
-  if (!plan.moneyCommitted) return { key, action: "left-in-progress-uncommitted" };
-  const outcome = await insertShareFillAuditRows(db, key, collectShareFillAuditRows(plan));
-  if (outcome === "failed") return { key, action: "audit-incomplete" };
-  await settleShareFillAttempt(db, key, "completed");
-  return { key, action: outcome === "applied" ? "audit-recovered" : "audit-already-complete" };
+  return { key, action: await applyShareFillRecovery(db, key, plan, order) };
 }
 
 /**
@@ -583,38 +624,70 @@ export async function prepareShareFillClaim(
 
 /**
  * Bounded orphan scan for wiring by a periodic driver (no fill path owns a
- * pass over all orders). The per-order stamp hook covers any order that sees
- * another fill; this covers lonely orders whose receipt outlives them.
+ * pass over all orders, and the turn matcher must not scan receipts either).
+ * The per-order stamp hook covers any order that sees another fill; this
+ * covers lonely orders whose receipt outlives them.
+ *
+ * Fairness: uncommitted receipts never settle, so a naive head-of-queue scan
+ * starves every receipt behind them. Committed plans (actionable work) are
+ * therefore visited first; uncommitted plans follow only to settle the
+ * provably dead ones (claim never landed). Every pass settles what it can,
+ * so repeated passes drain the queue monotonically.
+ *
+ * Reads are batched: one receipts query per phase plus a single `$in` load
+ * of the referenced orders, instead of one receipt read plus one order read
+ * per row. Audit inserts and settle writes stay per row (distinct
+ * deterministic `_id`s per attempt); the pass runs outside `processTurn`,
+ * so it is outside the turn round-trip budgets.
  *
  * Plan-less receipts (claim insert landed, plan store never did, so the
- * order claim never ran) settle `failed` in the second pass via
+ * order claim never ran) settle `failed` in the last phase via
  * `recoverShareFillAttempt`: otherwise they stay `in_progress` forever,
  * since no order ever stamps a key whose plan never landed. Failing is
  * truthful because `beginShareFillAttempt` persists the plan before the
  * order claim runs. The fingerprint prefix keeps foreign-domain receipts
  * (including the `share-fill-money` money receipts) out.
+ *
+ * Per-receipt failures are captured with the receipt key only, never plan
+ * or order contents, and the receipt stays `in_progress` for the next pass.
  */
 export async function recoverShareFillOrphans(
   db: Db,
   limit = 50
 ): Promise<ShareFillRecoveryResult[]> {
-  const stuck = await receiptsEx(db)
-    .find({ status: "in_progress", shareFillPlan: { $exists: true } })
-    .limit(limit)
-    .toArray();
+  const budget = Math.max(0, Math.floor(limit));
   const results: ShareFillRecoveryResult[] = [];
-  for (const receipt of stuck) {
-    try {
-      results.push(await recoverShareFillAttempt(db, receipt._id));
-    } catch (err) {
-      Sentry.captureException(err, { tags: { module: "shareFillAudit" } });
-      results.push({ key: receipt._id, action: "left-in-progress-uncommitted" });
-    }
-  }
-  if (results.length >= limit) return results;
+  if (budget === 0) return results;
+
+  // Phase 1: committed plans first (actionable), then uncommitted plans
+  // (settle provably-dead claims, leave the rest). One `$in` order load
+  // covers both phases.
+  const committed = await receiptsEx(db)
+    .find({ status: "in_progress", "shareFillPlan.moneyCommitted": true })
+    .limit(budget)
+    .toArray();
+  const remainderAfterCommitted = budget - committed.length;
+  const uncommitted =
+    remainderAfterCommitted > 0
+      ? await receiptsEx(db)
+          .find({
+            status: "in_progress",
+            shareFillPlan: { $exists: true },
+            "shareFillPlan.moneyCommitted": { $ne: true },
+          })
+          .limit(remainderAfterCommitted)
+          .toArray()
+      : [];
+  results.push(...(await recoverLoadedReceipts(db, [...committed, ...uncommitted])));
+
+  const remainder = budget - results.length;
+  if (remainder <= 0) return results;
+
+  // Phase 2: claim-before-plan receipts. These carry no plan, so they need
+  // no order read; `recoverShareFillAttempt` settles them without one.
   const planless = await receiptsEx(db)
     .find({ status: "in_progress", shareFillPlan: { $exists: false } })
-    .limit(limit - results.length)
+    .limit(remainder)
     .toArray();
   for (const receipt of planless) {
     if (typeof receipt._id !== "string") continue;
@@ -624,9 +697,135 @@ export async function recoverShareFillOrphans(
     try {
       results.push(await recoverShareFillAttempt(db, receipt._id));
     } catch (err) {
-      Sentry.captureException(err, { tags: { module: "shareFillAudit" } });
+      captureRecoveryError(err, receipt._id);
       results.push({ key: receipt._id, action: "left-in-progress-uncommitted" });
     }
   }
   return results;
+}
+
+/** Sanitized per-receipt failure capture: receipt key only, never plan contents. */
+function captureRecoveryError(err: unknown, key: string): void {
+  try {
+    Sentry.captureException(err, {
+      tags: { module: "shareFillAudit" },
+      extra: { receiptKey: key },
+    });
+  } catch {
+    // Telemetry must never break recovery.
+  }
+  console.warn(`[ShareFill] orphan recovery deferred receipt ${key} for a later pass`);
+}
+
+/**
+ * Run the shared decision core over already-loaded receipts with one batched
+ * order read. Receipts whose plan is absent or malformed settle `failed`
+ * without an order read; an unresolvable order reference settles
+ * `order-missing` (fail-closed: the rows it would rebuild cannot be found).
+ */
+async function recoverLoadedReceipts(
+  db: Db,
+  loaded: ShareFillReceipt[]
+): Promise<ShareFillRecoveryResult[]> {
+  const plans = new Map<string, ShareFillAuditPlan>();
+  for (const receipt of loaded) {
+    if (typeof receipt._id !== "string") continue;
+    if (receipt.status !== "in_progress") continue;
+    const plan = isShareFillAuditPlan(receipt.shareFillPlan) ? receipt.shareFillPlan : undefined;
+    if (plan) plans.set(receipt._id, plan);
+  }
+  const orderIds: ObjectId[] = [];
+  const hexes = new Set<string>();
+  for (const plan of plans.values()) {
+    if (hexes.has(plan.orderIdHex)) continue;
+    hexes.add(plan.orderIdHex);
+    try {
+      orderIds.push(new ObjectId(plan.orderIdHex));
+    } catch {
+      // Left out of the `$in` load: the per-row step settles `order-missing`.
+    }
+  }
+  const orderByIdHex = new Map<string, ShareOrder>();
+  if (orderIds.length > 0) {
+    const orders = await db
+      .collection<ShareOrder>("shareOrders")
+      .find({ _id: { $in: orderIds } }, { projection: { _id: 1, sharesRemaining: 1 } })
+      .toArray();
+    for (const order of orders) {
+      orderByIdHex.set(order._id.toHexString(), order as ShareOrder);
+    }
+  }
+  const results: ShareFillRecoveryResult[] = [];
+  for (const receipt of loaded) {
+    const key = receipt._id;
+    if (typeof key !== "string") continue;
+    if (receipt.status !== "in_progress") continue;
+    try {
+      const plan = plans.get(key);
+      if (!plan) {
+        await settleShareFillAttempt(db, key, "failed", "share-fill:plan-never-stored");
+        results.push({ key, action: "settled-failed-no-plan" });
+        continue;
+      }
+      const order = orderByIdHex.get(plan.orderIdHex) ?? null;
+      results.push({ key, action: await applyShareFillRecovery(db, key, plan, order) });
+    } catch (err) {
+      captureRecoveryError(err, key);
+      results.push({ key, action: "left-in-progress-uncommitted" });
+    }
+  }
+  return results;
+}
+
+/**
+ * One bounded eventual-recovery pass for periodic drivers (the cron sweep,
+ * the singleplayer advance route, or an operator script). Never throws: an
+ * unexpected top-level failure is captured with sanitized context and
+ * reported as `failed` so drivers never break their own flow. Concurrent
+ * invocations collapse to `skipped-concurrent` via the module guard.
+ */
+export async function runShareFillRecoveryPass(
+  db: Db,
+  limit = 50
+): Promise<ShareFillRecoveryPassSummary> {
+  if (shareFillRecoveryRunning) return emptyPassSummary("skipped-concurrent");
+  shareFillRecoveryRunning = true;
+  try {
+    const results = await recoverShareFillOrphans(db, limit);
+    const summary = emptyPassSummary("completed");
+    summary.examined = results.length;
+    for (const result of results) {
+      switch (result.action) {
+        case "audit-recovered":
+          summary.recovered += 1;
+          break;
+        case "audit-already-complete":
+          summary.alreadyComplete += 1;
+          break;
+        case "audit-incomplete":
+          summary.incomplete += 1;
+          break;
+        case "left-in-progress-uncommitted":
+          summary.leftInProgress += 1;
+          break;
+        default:
+          summary.settledFailed += 1;
+          break;
+      }
+    }
+    if (summary.recovered > 0 || summary.incomplete > 0) {
+      console.log(
+        `[ShareFill] recovery pass: examined ${summary.examined}, ` +
+          `recovered ${summary.recovered}, already-complete ${summary.alreadyComplete}, ` +
+          `settled-failed ${summary.settledFailed}, left-in-progress ${summary.leftInProgress}, ` +
+          `incomplete ${summary.incomplete}`
+      );
+    }
+    return summary;
+  } catch (err) {
+    captureRecoveryError(err, "recovery-pass");
+    return emptyPassSummary("failed");
+  } finally {
+    shareFillRecoveryRunning = false;
+  }
 }

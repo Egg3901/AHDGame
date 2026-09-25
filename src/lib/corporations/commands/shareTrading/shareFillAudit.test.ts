@@ -24,6 +24,7 @@ import {
   prepareShareFillClaim,
   recoverShareFillAttempt,
   recoverShareFillOrphans,
+  runShareFillRecoveryPass,
   repairStrandedShareFillClaim,
   settleShareFillAttempt,
   type ShareFillAuditPlan,
@@ -109,6 +110,17 @@ function matchesFilter(doc: Doc, filter: Record<string, unknown>): boolean {
       if ("$gte" in ops) {
         const actual = getPath(doc, key);
         if (typeof actual !== "number" || actual < (ops.$gte as number)) return false;
+        continue;
+      }
+      if ("$ne" in ops) {
+        const actual = doc[key] ?? getPath(doc, key);
+        if (valueEquals(actual, ops.$ne)) return false;
+        continue;
+      }
+      if ("$in" in ops) {
+        const actual = doc[key] ?? getPath(doc, key);
+        const list = ops.$in as unknown[];
+        if (!list.some((candidate) => valueEquals(actual, candidate))) return false;
         continue;
       }
       return false;
@@ -926,8 +938,131 @@ describe("orphan scan", () => {
   });
 });
 
-describe("turn driver orphan wiring", () => {
-  it("re-drives a lonely committed orphan before the fresh order scan", async () => {
+describe("orphan scan fairness", () => {
+  it("reaches committed receipts stranded behind persistent uncommitted ones", async () => {
+    // Starvation regression (issue #1672): uncommitted receipts never settle,
+    // so a head-of-queue scan burns its whole budget on them and never reaches
+    // later receipts. Committed plans are visited first, so one bounded pass
+    // still recovers the actionable tail.
+    for (let i = 0; i < 55; i += 1) {
+      const orderId = new ObjectId();
+      fake.seed("shareOrders", { _id: orderId, status: "filled", sharesRemaining: 0 });
+      seedReceipt(
+        `stuck-uncommitted-${i}`,
+        basePlan({ orderIdHex: orderId.toHexString(), preClaimRemaining: 10 })
+      );
+    }
+    const committedKeys: string[] = [];
+    for (let i = 0; i < 5; i += 1) {
+      const orderId = new ObjectId();
+      const key = `late-committed-${i}`;
+      committedKeys.push(key);
+      fake.seed("shareOrders", { _id: orderId, status: "filled", sharesRemaining: 0 });
+      seedReceipt(
+        key,
+        basePlan({
+          orderIdHex: orderId.toHexString(),
+          preClaimRemaining: 10,
+          moneyCommitted: true,
+          fillerBalanceAfter: 100,
+        })
+      );
+    }
+
+    const results = await recoverShareFillOrphans(fake.db, 50);
+    expect(results).toHaveLength(50);
+    const recovered = results.filter((r) => r.action === "audit-recovered").map((r) => r.key);
+    expect(recovered.sort()).toEqual(committedKeys.sort());
+    for (const key of committedKeys) {
+      expect((await readReceipt(key))?.status).toBe("completed");
+    }
+    expect((await readReceipt("stuck-uncommitted-0"))?.status).toBe("in_progress");
+  });
+
+  it("drains more committed receipts than one pass budget across passes", async () => {
+    const keys: string[] = [];
+    for (let i = 0; i < 60; i += 1) {
+      const orderId = new ObjectId();
+      const key = `drain-${i}`;
+      keys.push(key);
+      fake.seed("shareOrders", { _id: orderId, status: "filled", sharesRemaining: 0 });
+      seedReceipt(
+        key,
+        basePlan({
+          orderIdHex: orderId.toHexString(),
+          preClaimRemaining: 10,
+          moneyCommitted: true,
+          fillerBalanceAfter: 100,
+        })
+      );
+    }
+
+    const first = await recoverShareFillOrphans(fake.db, 50);
+    expect(first).toHaveLength(50);
+    expect(first.every((r) => r.action === "audit-recovered")).toBe(true);
+    const second = await recoverShareFillOrphans(fake.db, 50);
+    expect(second.map((r) => r.key).sort()).toEqual(keys.slice(50).sort());
+    expect(second.every((r) => r.action === "audit-recovered")).toBe(true);
+    const third = await recoverShareFillOrphans(fake.db, 50);
+    expect(third).toHaveLength(0);
+  });
+});
+
+describe("recovery pass driver", () => {
+  it("summarizes a mixed pass and settles provably-dead uncommitted claims", async () => {
+    const goodOrderId = new ObjectId();
+    fake.seed("shareOrders", { _id: goodOrderId, status: "filled", sharesRemaining: 0 });
+    seedReceipt(
+      "pass-committed",
+      basePlan({
+        orderIdHex: goodOrderId.toHexString(),
+        preClaimRemaining: 10,
+        moneyCommitted: true,
+        fillerBalanceAfter: 100,
+      })
+    );
+    // Claim never landed and money never moved: truthful `failed` settlement.
+    seedOrder({ sharesRemaining: 10 });
+    seedReceipt("pass-dead", basePlan({ preClaimRemaining: 10 }));
+
+    const summary = await runShareFillRecoveryPass(fake.db);
+    expect(summary.status).toBe("completed");
+    expect(summary.examined).toBe(2);
+    expect(summary.recovered).toBe(1);
+    expect(summary.settledFailed).toBe(1);
+    expect((await readReceipt("pass-committed"))?.status).toBe("completed");
+    expect((await readReceipt("pass-dead"))?.status).toBe("failed");
+  });
+
+  it("collapses a concurrent invocation instead of running twice", async () => {
+    const first = runShareFillRecoveryPass(fake.db);
+    const second = runShareFillRecoveryPass(fake.db);
+    const [firstResult, secondResult] = await Promise.all([first, second]);
+    expect(firstResult.status).toBe("completed");
+    expect(secondResult.status).toBe("skipped-concurrent");
+    expect(secondResult.examined).toBe(0);
+  });
+
+  it("reports failed without throwing and without leaking plan contents", async () => {
+    const broken = {
+      collection: () => {
+        throw new Error("no-database-here");
+      },
+    } as unknown as Db;
+    const summary = await runShareFillRecoveryPass(broken);
+    expect(summary.status).toBe("failed");
+    expect(captureExceptionMock).toHaveBeenCalledTimes(1);
+    const payload = JSON.stringify(captureExceptionMock.mock.calls[0]);
+    expect(payload).not.toContain("Filler");
+    expect(payload).not.toContain("Seller");
+  });
+});
+
+describe("turn matcher orphan scan removed", () => {
+  it("leaves a lonely committed orphan for the periodic driver", async () => {
+    // The turn matcher must not scan receipts (query-per-row N+1 on the turn
+    // path, issue #1672). Lonely orphans stay `in_progress` through the
+    // matcher; the periodic `runShareFillRecoveryPass` driver recovers them.
     const { fillPendingShareOrders } = await import("@/lib/turn/corporation/shareOrders");
     const orderId = new ObjectId();
     const key = "lonely-orphan";
@@ -936,6 +1071,13 @@ describe("turn driver orphan wiring", () => {
     seedReceipt(key, { ...plan, moneyCommitted: true, fillerBalanceAfter: 100 });
 
     await fillPendingShareOrders(fake.db, new Date("2026-01-02T00:00:00Z"), 8);
+    expect((await readReceipt(key))?.status).toBe("in_progress");
+    expect(fake.counts("financialTxLog").docs).toBe(0);
+    expect(fake.counts("shareTradeHistory").docs).toBe(0);
+
+    const summary = await runShareFillRecoveryPass(fake.db);
+    expect(summary.status).toBe("completed");
+    expect(summary.recovered).toBe(1);
     expect((await readReceipt(key))?.status).toBe("completed");
     expect(fake.counts("financialTxLog").docs).toBe(2);
     expect(fake.counts("shareTradeHistory").docs).toBe(1);
