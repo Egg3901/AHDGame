@@ -263,6 +263,17 @@ describe("POST /api/elections/[id]/running-mate/travel keyed flow", () => {
     expect(first.status).toBe(200);
     expect(firstBody.duplicate ?? false).toBe(false);
 
+    // The real second request observes the first request's persisted state.
+    db.collection("electionCandidates").findOne.mockResolvedValue({
+      ...candidateDoc(),
+      runningMateTravelState: "PA",
+    });
+    db.collection("characters").findOne.mockResolvedValue({ _id: characterId, actions: 0 });
+    db.collection("campaigns").findOne.mockImplementation(
+      async (filter: Record<string, unknown>) =>
+        "runningMateSurrogateActionsRemaining" in filter ? null : { _id: campaignId }
+    );
+
     const second = await POST(makeRequest({ stateId: "PA" }, "replay-key-1"), params);
     const secondBody = await second.json();
     expect(second.status).toBe(200);
@@ -305,17 +316,21 @@ describe("POST /api/elections/[id]/running-mate/travel keyed flow", () => {
       async (_filter: unknown, opts?: { projection?: Record<string, unknown> }) =>
         opts?.projection && "appliedMoneyFlowKeys" in opts.projection
           ? { _id: characterId, appliedMoneyFlowKeys: [key] }
-          : { _id: characterId, actions: 10 }
+          : { _id: characterId, actions: 0 }
     );
     db.collection("campaigns").findOne.mockImplementation(
-      async (_filter: unknown, opts?: { projection?: Record<string, unknown> }) =>
+      async (filter: Record<string, unknown>, opts?: { projection?: Record<string, unknown> }) =>
         opts?.projection && "appliedMoneyFlowKeys" in opts.projection
           ? { _id: campaignId, appliedMoneyFlowKeys: [key] }
-          : { _id: campaignId }
+          : "runningMateSurrogateActionsRemaining" in filter
+            ? null
+            : { _id: campaignId }
     );
     db.collection("electionCandidates").findOne.mockImplementation(
       async (_filter: unknown, opts?: unknown) =>
-        opts ? { ...candidateDoc(), appliedMoneyFlowKeys: [key] } : candidateDoc()
+        opts
+          ? { ...candidateDoc(), runningMateTravelState: "PA", appliedMoneyFlowKeys: [key] }
+          : { ...candidateDoc(), runningMateTravelState: "PA" }
     );
 
     const { POST } = await import("./route");

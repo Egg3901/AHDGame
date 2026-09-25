@@ -14,6 +14,7 @@ import {
   applyKeyedUpdate,
   claimMoneyFlowReceipt,
   makeLegStep,
+  MoneyFlowKeyConflictError,
   runMoneyFlowSteps,
   type MoneyFlowLegOutcome,
   type MoneyFlowStepRef,
@@ -126,13 +127,6 @@ export async function POST(request: Request, { params }: RouteParams) {
       );
     }
 
-    if (candidate.runningMateTravelState === stateId) {
-      return NextResponse.json(
-        { error: "The running mate is already campaigning in this state" },
-        { status: 400 }
-      );
-    }
-
     // The ticket's Campaign holds the shared per-day surrogate pool.
     const campaign = await db.collection<Campaign>("campaigns").findOne(
       {
@@ -150,11 +144,45 @@ export async function POST(request: Request, { params }: RouteParams) {
     // nominee's own travel action cost. Spent from the VP's OWN action pool.
     const actionCost = getTravelActionCost(stateId, gameState?.preset);
 
-    const freshChar = await db
-      .collection<Character>("characters")
-      .findOne({ _id: character._id }, { projection: { actions: 1 } });
+    const headerKey = request.headers.get("Idempotency-Key");
+    if (headerKey !== null && (headerKey.length === 0 || headerKey.length > 128)) {
+      return NextResponse.json({ error: "Invalid Idempotency-Key header" }, { status: 400 });
+    }
+    const flowKey = headerKey ?? randomUUID();
+    const fingerprint = `${character._id.toHexString()}:${candidate._id.toHexString()}:rm-travel:${stateId}:${actionCost}`;
+    const receipts = await getMoneyFlowReceiptsCollection(db);
+    // A completed retry sees the destination and balances *after* the first
+    // request. Read its receipt before checking those mutable preconditions.
+    // An interrupted flow must likewise reach the keyed legs for recovery.
+    const previousReceipt = headerKey ? await receipts.findOne({ _id: flowKey }) : null;
+    if (previousReceipt && previousReceipt.fingerprint !== fingerprint) {
+      throw new MoneyFlowKeyConflictError(flowKey);
+    }
+    if (previousReceipt?.status === "completed") {
+      return NextResponse.json({
+        success: true,
+        message: `Running mate now campaigning in ${stateId}`,
+        runningMateTravelState: stateId,
+        actionsCost: actionCost,
+        duplicate: true,
+      });
+    }
+    const recovering = previousReceipt?.status === "in_progress";
 
-    if (!freshChar || freshChar.actions < actionCost) {
+    if (!recovering && candidate.runningMateTravelState === stateId) {
+      return NextResponse.json(
+        { error: "The running mate is already campaigning in this state" },
+        { status: 400 }
+      );
+    }
+
+    const freshChar = recovering
+      ? null
+      : await db
+          .collection<Character>("characters")
+          .findOne({ _id: character._id }, { projection: { actions: 1 } });
+
+    if (!recovering && (!freshChar || freshChar.actions < actionCost)) {
       return NextResponse.json(
         { error: `Not enough actions. Travel to ${stateId} costs ${actionCost} actions.` },
         { status: 400 }
@@ -173,29 +201,24 @@ export async function POST(request: Request, { params }: RouteParams) {
     // (Issue #1672: the old code drew the pool down outside the transaction
     // and hand-restored it on failure — a crash in between lost or
     // double-counted a pool action.)
-    const poolAvailable = await db
-      .collection<Campaign>("campaigns")
-      .findOne(
-        { _id: campaign._id, runningMateSurrogateActionsRemaining: { $gte: 1 } },
-        { projection: { _id: 1 } }
-      );
-    if (!poolAvailable) {
+    const poolAvailable = recovering
+      ? null
+      : await db
+          .collection<Campaign>("campaigns")
+          .findOne(
+            { _id: campaign._id, runningMateSurrogateActionsRemaining: { $gte: 1 } },
+            { projection: { _id: 1 } }
+          );
+    if (!recovering && !poolAvailable) {
       return NextResponse.json(
         { error: "No running-mate surrogate actions remaining today." },
         { status: 409 }
       );
     }
 
-    const headerKey = request.headers.get("Idempotency-Key");
-    if (headerKey !== null && (headerKey.length === 0 || headerKey.length > 128)) {
-      return NextResponse.json({ error: "Invalid Idempotency-Key header" }, { status: 400 });
-    }
-    const flowKey = headerKey ?? randomUUID();
-    const fingerprint = `${character._id.toHexString()}:${candidate._id.toHexString()}:rm-travel:${stateId}:${actionCost}`;
     const characters = db.collection<Character>("characters");
     const campaigns = db.collection<Campaign>("campaigns");
     const candidates = db.collection<ElectionCandidate>("electionCandidates");
-    const receipts = await getMoneyFlowReceiptsCollection(db);
     const mapRmTravelError = (step: MoneyFlowStepRef, outcome: MoneyFlowLegOutcome): Error => {
       if (step.index === 0) return new Error("SURROGATE_POOL_EMPTY");
       if (step.index === 1) return new Error("INSUFFICIENT_ACTIONS");
