@@ -1164,3 +1164,17 @@ locked by its active owner; neither checkout was touched. The disposition
 stays merge after its owner resolves conflicts and gates, or delete only
 with a documented supersession decision. #186 remains active draft work and
 requires its own complete gate before merge or an explicit abandon reason.
+
+**Bot ticket-filing source, 2026-09-25:** The dirty
+`adhd-bot/worktrees/ticket-filing` patch was committed for provenance as
+`3805e3991`, rebased onto fresh Bot `main` as `da2724205`, then reduced to
+one focused companion commit `8e9b2c163` on
+`fix/track1-ticket-filing-context`. The focused branch contains only the
+four context-question files, with no older `client-tester.ts` or receipt
+experiments. Thirty-one focused ticket tests and scoped lint passed. It is
+open as [adhd-bot PR #153](https://github.com/arle-bina/adhd-bot/pull/153),
+mergeable but awaiting the queued build and remote checks. The old branch
+ref remains for provenance; its unrelated commits are abandoned for this
+Track. The source checkout is clean but remains in place until the PR merges
+and a fresh locked/process/dirty check permits ordinary removal. This PR
+supersedes the snapshot statement that Bot has zero open PRs.
