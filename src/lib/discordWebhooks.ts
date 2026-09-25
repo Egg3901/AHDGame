@@ -10,7 +10,7 @@ import { ownsConfiguredWebhooks } from "@/lib/deploymentIdentity";
 import { isCountryEnabledForPlayers } from "@/lib/countryAccess";
 import type { CountryId } from "@/lib/constants/countries";
 import type { GameConfig } from "@/lib/db/types";
-import { generateLegacyDiscordEventCard } from "@/lib/discord/eventCard";
+import { generateLegacyDiscordEventCard, US_CAPITOL_IMAGE_URL } from "@/lib/discord/eventCard";
 
 export interface DiscordEmbed {
   title?: string;
@@ -108,6 +108,7 @@ export interface BillVetoedDiscordInput {
   vetoMessage?: string;
   /** Deep link to the bill page. */
   billUrl: string;
+  voteTally?: { for: number; against: number; abstain: number };
 }
 
 /**
@@ -127,6 +128,13 @@ export function buildBillVetoedDiscordEmbed(input: BillVetoedDiscordInput): Disc
       inline: false,
     });
   }
+  if (input.voteTally) {
+    fields.push({
+      name: "Floor Vote",
+      value: `For ${input.voteTally.for}, Against ${input.voteTally.against}, Abstain ${input.voteTally.abstain}`,
+      inline: false,
+    });
+  }
   fields.push({
     name: "View Bill",
     value: `[Open in A House Divided](${input.billUrl})`,
@@ -138,6 +146,7 @@ export function buildBillVetoedDiscordEmbed(input: BillVetoedDiscordInput): Disc
     description: `**${truncateDiscordText(input.billTitle, 500)}** was vetoed by ${vetoer}. Congress may attempt an override.`,
     color: DISCORD_COLORS.billVetoed,
     fields,
+    thumbnail: { url: US_CAPITOL_IMAGE_URL },
     url: input.billUrl,
     footer: { text: "A House Divided" },
   };

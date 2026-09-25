@@ -172,4 +172,19 @@ describe("buildBillVetoedDiscordEmbed", () => {
     expect(msgField?.value).toBe("This bill is fiscally irresponsible.");
     expect(withoutMsg.fields?.some((f) => f.name === "Veto Message")).toBe(false);
   });
+
+  it("includes a Capitol image and floor tally for the US legislature feed", () => {
+    const embed = buildBillVetoedDiscordEmbed({
+      billTitle: "Clean Air Act",
+      billUrl,
+      voteTally: { for: 280, against: 140, abstain: 15 },
+    });
+
+    expect(embed.thumbnail?.url).toContain("upload.wikimedia.org");
+    expect(embed.fields).toContainEqual({
+      name: "Floor Vote",
+      value: "For 280, Against 140, Abstain 15",
+      inline: false,
+    });
+  });
 });

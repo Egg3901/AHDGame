@@ -1,9 +1,9 @@
 "use client";
 
 import Image from "next/image";
+import { useState } from "react";
 import type { ProfileBorderKey } from "@/lib/db/types";
 import { ProfileBorder } from "@/components/patreon/ProfileBorder";
-import { bypassNextImageOptimization } from "@/lib/images/bypassImageOptimization";
 
 interface AvatarProps {
   url?: string | null;
@@ -34,19 +34,24 @@ export function Avatar({
   const initial = (name || "?").charAt(0).toUpperCase();
   const hasBorder = !!borderKey;
   const shape = "rounded-lg";
+  const [failedUrl, setFailedUrl] = useState<string | null>(null);
+  const imageUrl = url && failedUrl !== url ? url : null;
 
   const core = (
     <div
       className={`relative flex items-center justify-center overflow-hidden ${shape} bg-gradient-to-br from-primary/20 to-secondary/20 text-xs font-bold shrink-0 ${size} ${hasBorder ? "" : className}`}
     >
-      {url ? (
+      {imageUrl ? (
         <Image
-          src={url}
+          src={imageUrl}
           alt={name}
           fill
           className="object-cover"
           sizes="64px"
-          unoptimized={bypassNextImageOptimization(url)}
+          // Player supplied URLs vary by storage provider. Loading them directly
+          // avoids a broken optimizer fetch for hosts outside remotePatterns.
+          unoptimized
+          onError={() => setFailedUrl(imageUrl)}
         />
       ) : (
         initial

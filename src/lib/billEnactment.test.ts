@@ -20,7 +20,9 @@ vi.mock("@/lib/discordWebhooks", () => ({
 }));
 
 vi.mock("@/lib/discord/eventCard", () => ({
+  buildLegislatureVoteChartSvg: vi.fn().mockReturnValue("<svg />"),
   generateDiscordEventCard: vi.fn().mockResolvedValue("https://cdn.test/event.png"),
+  loadUSCapitolImageDataUrl: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("@/lib/archetypeAffinities", () => ({

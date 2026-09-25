@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { buildDiscordEventCardSvg, eventCardInputFromEmbed } from "./eventCard";
+import {
+  buildDiscordEventCardSvg,
+  buildLegislatureVoteChartSvg,
+  eventCardInputFromEmbed,
+} from "./eventCard";
 
 describe("buildDiscordEventCardSvg", () => {
   it("renders AHD branding and escapes player-controlled text", () => {
@@ -49,6 +53,24 @@ describe("buildDiscordEventCardSvg", () => {
     expect(svg).toContain('<clipPath id="copyClip"><rect x="60" y="100" width="730"');
   });
 
+  it("pairs a legislature vote chart with a representative event image", () => {
+    const chartSvg = buildLegislatureVoteChartSvg({ for: 280, against: 140, abstain: 15 });
+    const svg = buildDiscordEventCardSvg({
+      eyebrow: "USA · Legislature",
+      title: "Clean Air Act",
+      summary: "Signed into law",
+      chartSvg,
+      portraitDataUrl: "data:image/jpeg;base64,Y2FwaXRvbA==",
+      portraitLabel: "UNITED STATES CAPITOL",
+    });
+
+    expect(svg).toContain("UNITED STATES CAPITOL");
+    expect(chartSvg).toContain(">AYE · 280</text>");
+    expect(chartSvg).toContain(">NO · 140</text>");
+    expect(chartSvg).toContain(">ABSTAIN · 15</text>");
+    expect(svg).toContain("data:image/jpeg;base64,Y2FwaXRvbA==");
+  });
+
   it("wraps long portrait titles before the photo column", () => {
     const svg = buildDiscordEventCardSvg({
       eyebrow: "US · National event",
@@ -87,5 +109,18 @@ describe("eventCardInputFromEmbed", () => {
       ],
       tone: "positive",
     });
+  });
+
+  it("turns US legislative webhook tallies into charts and marks the Capitol art", () => {
+    const input = eventCardInputFromEmbed("US", {
+      title: "Federal bill enacted: Clean Air Act",
+      description: "Signed into law.",
+      color: 0x57f287,
+      fields: [{ name: "Floor Vote", value: "For 280, Against 140, Abstain 15" }],
+    });
+
+    expect(input.eyebrow).toBe("US · Legislature");
+    expect(input.portraitLabel).toBe("UNITED STATES CAPITOL");
+    expect(input.chartSvg).toContain("AYE · 280");
   });
 });

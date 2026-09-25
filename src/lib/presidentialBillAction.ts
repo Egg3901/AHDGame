@@ -248,6 +248,11 @@ export async function executePresidentialBillAction(
         presidentName: president?.name,
         vetoMessage: trimmedVetoMessage,
         billUrl,
+        voteTally: {
+          for: bill.votesFor,
+          against: bill.votesAgainst,
+          abstain: bill.votesAbstain,
+        },
       })
     ).catch(() => {});
 

@@ -14,6 +14,7 @@ export interface DiscordEventCardInput {
   chartSvg?: string;
   /** Base64 image data resolved by the server. Never place an untrusted URL in the SVG. */
   portraitDataUrl?: string;
+  portraitLabel?: string;
 }
 
 export interface LegacyDiscordEventEmbed {
@@ -26,7 +27,10 @@ export interface LegacyDiscordEventEmbed {
 }
 
 const WIDTH = 1200;
+export const US_CAPITOL_IMAGE_URL =
+  "https://upload.wikimedia.org/wikipedia/commons/thumb/2/2c/Old_Senate_chambers_US_Capitol.jpg/1280px-Old_Senate_chambers_US_Capitol.jpg";
 let fontCssCache: string | undefined;
+let capitolDataUrlPromise: Promise<string | undefined> | undefined;
 const XML_ENTITIES: Record<string, string> = {
   "&": "&amp;",
   "<": "&lt;",
@@ -117,16 +121,31 @@ export function eventCardInputFromEmbed(
   countryId: string,
   embed: LegacyDiscordEventEmbed
 ): DiscordEventCardInput {
+  const legislative = /bill|legislat|veto|vote/i.test(embed.title ?? "");
   const details = (embed.fields ?? [])
     .filter((field) => plainDiscordText(field.name) && plainDiscordText(field.value))
     .slice(0, 4)
     .map((field) => `${plainDiscordText(field.name)} · ${plainDiscordText(field.value)}`);
+  const voteField = embed.fields?.find((field) => /floor vote/i.test(field.name));
+  const voteCounts = voteField?.value.match(/for\s+(\d+).*against\s+(\d+).*abstain\s+(\d+)/i);
   return {
-    eyebrow: `${countryId.toUpperCase()} · National event`,
+    eyebrow: `${countryId.toUpperCase()} · ${legislative ? "Legislature" : "National event"}`,
     title: plainDiscordText(embed.title || "National update"),
     summary: plainDiscordText(embed.description || details.shift() || "A new event has occurred."),
     detailLines: details,
     tone: toneFromEmbedColor(embed.color),
+    ...(countryId.toUpperCase() === "US" && legislative && voteCounts
+      ? {
+          chartSvg: buildLegislatureVoteChartSvg({
+            for: Number(voteCounts[1]),
+            against: Number(voteCounts[2]),
+            abstain: Number(voteCounts[3]),
+          }),
+        }
+      : {}),
+    ...(countryId.toUpperCase() === "US" && legislative
+      ? { portraitLabel: "UNITED STATES CAPITOL" }
+      : {}),
   };
 }
 
@@ -163,7 +182,7 @@ async function loadPortraitDataUrl(urlValue: string | undefined): Promise<string
 export function buildDiscordEventCardSvg(input: DiscordEventCardInput): string {
   const accent = toneColor(input.tone ?? "neutral");
   const hasChart = Boolean(input.chartSvg);
-  const hasPortrait = Boolean(input.portraitDataUrl) && !hasChart;
+  const hasPortrait = Boolean(input.portraitDataUrl);
   const titleLines = wrap(input.title, hasPortrait ? 20 : 36, hasPortrait ? 3 : 2);
   const summaryLines = wrap(input.summary, hasPortrait ? 40 : 72, 2);
   const details = (input.detailLines ?? [])
@@ -202,7 +221,7 @@ export function buildDiscordEventCardSvg(input: DiscordEventCardInput): string {
   const chartSvg = chartData
     ? `<rect x="60" y="286" width="730" height="410" rx="22" fill="#111827"/><image x="78" y="304" width="694" height="374" preserveAspectRatio="xMidYMid meet" href="${chartData}"/>`
     : "";
-  const detailY = hasChart ? 374 : contentY;
+  const detailY = hasChart ? (hasPortrait ? 520 : 374) : contentY;
   const detailSvg = details
     .map(
       (line, index) =>
@@ -210,7 +229,7 @@ export function buildDiscordEventCardSvg(input: DiscordEventCardInput): string {
     )
     .join("");
   const portraitSvg = hasPortrait
-    ? `<rect x="850" y="142" width="266" height="300" rx="28" fill="#1e293b" stroke="#334155" stroke-width="3"/><image x="850" y="142" width="266" height="300" preserveAspectRatio="xMidYMid slice" href="${input.portraitDataUrl}" clip-path="url(#portraitClip)"/><rect x="850" y="402" width="266" height="40" rx="0" fill="${accent}" opacity=".92"/><text x="983" y="429" text-anchor="middle" class="portraitLabel">OFFICIAL PORTRAIT</text>`
+    ? `<rect x="850" y="142" width="266" height="300" rx="28" fill="#1e293b" stroke="#334155" stroke-width="3"/><image x="850" y="142" width="266" height="300" preserveAspectRatio="xMidYMid slice" href="${input.portraitDataUrl}" clip-path="url(#portraitClip)"/><rect x="850" y="402" width="266" height="40" rx="0" fill="${accent}" opacity=".92"/><text x="983" y="429" text-anchor="middle" class="portraitLabel">${escapeXml(input.portraitLabel ?? "OFFICIAL PORTRAIT")}</text>`
     : "";
 
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${height}" viewBox="0 0 ${WIDTH} ${height}">
@@ -259,6 +278,51 @@ export async function generateLegacyDiscordEventCard(
     .replace(/^-|-$/g, "")
     .slice(0, 48);
   const input = eventCardInputFromEmbed(countryId, embed);
-  input.portraitDataUrl = await loadPortraitDataUrl(embed.thumbnail?.url);
+  if (embed.thumbnail?.url) {
+    if (embed.thumbnail.url === US_CAPITOL_IMAGE_URL) {
+      input.portraitDataUrl = await loadUSCapitolImageDataUrl();
+    } else {
+      input.portraitDataUrl = await loadPortraitDataUrl(embed.thumbnail.url);
+    }
+  } else if (countryId.toUpperCase() === "US" && input.portraitLabel) {
+    input.portraitDataUrl = await loadUSCapitolImageDataUrl();
+  }
   return generateDiscordEventCard(input, slug || "event");
+}
+
+/** Load the fixed United States Capitol image once per server process. */
+export function loadUSCapitolImageDataUrl(): Promise<string | undefined> {
+  capitolDataUrlPromise ??= loadPortraitDataUrl(US_CAPITOL_IMAGE_URL);
+  return capitolDataUrlPromise;
+}
+
+/** Build a vote chart with only numeric inputs so player text never enters its SVG. */
+export function buildLegislatureVoteChartSvg(votes: {
+  for: number;
+  against: number;
+  abstain: number;
+}): string {
+  const values = [votes.for, votes.against, votes.abstain].map((value) =>
+    Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0
+  );
+  const total = values.reduce((sum, value) => sum + value, 0);
+  const colors = ["#4ade80", "#f87171", "#94a3b8"];
+  const labels = ["AYE", "NO", "ABSTAIN"];
+  let x = 0;
+  const segments = values
+    .map((value, index) => {
+      if (!value || !total) return "";
+      const width = (value / total) * 720;
+      const segment = `<rect x="${x}" y="38" width="${width}" height="42" fill="${colors[index]}"/>`;
+      x += width;
+      return segment;
+    })
+    .join("");
+  const legends = values
+    .map(
+      (value, index) =>
+        `<circle cx="${18 + index * 240}" cy="122" r="7" fill="${colors[index]}"/><text x="${34 + index * 240}" y="127" class="label">${labels[index]} · ${value.toLocaleString("en-US")}</text>`
+    )
+    .join("");
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 180"><defs><clipPath id="bar"><rect y="38" width="720" height="42" rx="21"/></clipPath><style>.label{font-family:Arial,sans-serif;font-size:18px;font-weight:700;fill:#e2e8f0;letter-spacing:1px}</style></defs><text x="0" y="24" class="label">FLOOR VOTE</text><g clip-path="url(#bar)">${segments}</g>${legends}<text x="0" y="166" class="label">${total.toLocaleString("en-US")} VOTES CAST</text></svg>`;
 }

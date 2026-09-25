@@ -61,7 +61,11 @@ import { validateFederalBudgetImpact } from "@/lib/budget/validation";
 import { triggerDebtCeilingCrisis } from "@/lib/budget/debt";
 import { recordEnactedLaw } from "@/lib/budget/enactedLaws";
 import { sendCountryGameEvent, DISCORD_COLORS } from "@/lib/discordWebhooks";
-import { generateDiscordEventCard } from "@/lib/discord/eventCard";
+import {
+  buildLegislatureVoteChartSvg,
+  generateDiscordEventCard,
+  loadUSCapitolImageDataUrl,
+} from "@/lib/discord/eventCard";
 import { calculateShiftImpacts } from "@/lib/archetypeAffinities";
 import { regionalDefaultLevel } from "@/lib/politicalLegislation/regionalDefaults";
 import {
@@ -94,7 +98,14 @@ import {
 
 type EnactableBill = Pick<
   Bill | StateBill,
-  "_id" | "title" | "legislationTypeId" | "effectDirection" | "provisions"
+  | "_id"
+  | "title"
+  | "legislationTypeId"
+  | "effectDirection"
+  | "provisions"
+  | "votesFor"
+  | "votesAgainst"
+  | "votesAbstain"
 > & {
   stateId?: string;
   countryId?: CountryId;
@@ -713,12 +724,25 @@ export async function onBillEnacted(
   // duplicate post for the same event.
   if (bill.category !== "reunification") {
     const enactmentScopeLabel = isNationalBill ? "Federal" : "Regional";
+    const capitolImage = resolvedCountry === "US" ? await loadUSCapitolImageDataUrl() : undefined;
     const cardUrl = await generateDiscordEventCard(
       {
         eyebrow: `${countryLabel} · ${locationLabel}`,
         title: bill.title,
         summary: "Signed into law",
         metadata: policyLabel ? ["Bill enacted", policyLabel] : ["Bill enacted"],
+        ...(resolvedCountry === "US"
+          ? {
+              chartSvg: buildLegislatureVoteChartSvg({
+                for: bill.votesFor,
+                against: bill.votesAgainst,
+                abstain: bill.votesAbstain,
+              }),
+            }
+          : {}),
+        ...(capitolImage
+          ? { portraitDataUrl: capitolImage, portraitLabel: "UNITED STATES CAPITOL" }
+          : {}),
         tone: "positive",
       },
       `bill-enacted-${bill._id.toString()}`
