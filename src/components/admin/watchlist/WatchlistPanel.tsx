@@ -101,6 +101,7 @@ export interface WatchlistPanelProps {
 }
 
 const CARD_CLS = "rounded-xl border border-card-border bg-card p-4 shadow-card";
+const OBJECT_ID_RE = /^[0-9a-f]{24}$/i;
 const OVERLINE_CLS = "text-[11px] font-semibold uppercase tracking-[0.14em] text-muted";
 const BTN_CLS =
   "inline-flex h-9 items-center justify-center rounded-lg border px-3 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:opacity-50 motion-reduce:transition-none";
@@ -113,6 +114,7 @@ export default function WatchlistPanel({ onOpenDossier, onOpenAltLink }: Watchli
 
   const [query, setQuery] = useState("");
   const [picked, setPicked] = useState<PlayerHit | null>(null);
+  const [userIdInput, setUserIdInput] = useState("");
   const [answered, setAnswered] = useState<{ term: string; hits: PlayerHit[] }>({
     term: "",
     hits: [],
@@ -130,7 +132,6 @@ export default function WatchlistPanel({ onOpenDossier, onOpenAltLink }: Watchli
   // pasting a 24-char Mongo id no human can obtain from the game.
   useEffect(() => {
     if (term.length < 2) {
-      setAnswered({ term: "", hits: [] });
       return;
     }
     let cancelled = false;
@@ -191,8 +192,9 @@ export default function WatchlistPanel({ onOpenDossier, onOpenAltLink }: Watchli
   async function handleAdd(e: React.FormEvent) {
     e.preventDefault();
     setAddError(null);
-    if (!picked?.userId) {
-      setAddError("Search for a player and pick a result first.");
+    const userId = picked?.userId ?? userIdInput.trim();
+    if (!OBJECT_ID_RE.test(userId)) {
+      setAddError("Pick a player or enter a valid 24-character user ID.");
       return;
     }
     setAdding(true);
@@ -200,7 +202,7 @@ export default function WatchlistPanel({ onOpenDossier, onOpenAltLink }: Watchli
       const res = await fetch("/api/admin/watchlist", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId: picked.userId, reason: reasonInput.trim() || undefined }),
+        body: JSON.stringify({ userId, reason: reasonInput.trim() || undefined }),
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -209,9 +211,10 @@ export default function WatchlistPanel({ onOpenDossier, onOpenAltLink }: Watchli
       setEntries((prev) => [body.entry as WatchlistEntryView, ...prev]);
       setQuery("");
       setPicked(null);
+      setUserIdInput("");
       setAnswered({ term: "", hits: [] });
       setReasonInput("");
-      setFlash(`Pinned ${body.entry?.username ?? picked.name} to the watchlist.`);
+      setFlash(`Pinned ${body.entry?.username ?? picked?.name ?? "account"} to the watchlist.`);
       setTimeout(() => setFlash(null), 3500);
     } catch (err) {
       setAddError(err instanceof Error ? err.message : "Failed to add");
@@ -321,6 +324,7 @@ export default function WatchlistPanel({ onOpenDossier, onOpenAltLink }: Watchli
                         disabled={!hit.userId}
                         onClick={() => {
                           setPicked(hit);
+                          setUserIdInput("");
                           setAnswered({ term: "", hits: [] });
                           setAddError(null);
                         }}
@@ -348,6 +352,17 @@ export default function WatchlistPanel({ onOpenDossier, onOpenAltLink }: Watchli
             </>
           )}
         </div>
+        {!picked && (
+          <label className="flex min-w-[220px] flex-1 flex-col gap-1 text-xs font-medium text-muted">
+            User ID for banned or unlisted accounts
+            <input
+              value={userIdInput}
+              onChange={(e) => setUserIdInput(e.target.value)}
+              placeholder="24-character user ID"
+              className="h-9 rounded-lg border border-card-border bg-card px-2.5 text-sm text-foreground transition-colors placeholder:text-muted/60 hover:border-muted/50 focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/25 motion-reduce:transition-none"
+            />
+          </label>
+        )}
         <label className="flex min-w-[220px] flex-[2] flex-col gap-1 text-xs font-medium text-muted">
           Reason (optional)
           <input
@@ -359,7 +374,7 @@ export default function WatchlistPanel({ onOpenDossier, onOpenAltLink }: Watchli
         </label>
         <button
           type="submit"
-          disabled={adding || !picked?.userId}
+          disabled={adding || !(picked?.userId || OBJECT_ID_RE.test(userIdInput.trim()))}
           className={`${BTN_CLS} border-primary/40 bg-primary/10 text-primary hover:bg-primary/20`}
         >
           {adding ? "Adding…" : "Add to watchlist"}

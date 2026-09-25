@@ -48,6 +48,36 @@ afterEach(() => {
 });
 
 describe("WatchlistPanel player search", () => {
+  it("keeps direct user ID entry for banned accounts excluded from public search", async () => {
+    const post = vi.fn(async (_url: string, init?: RequestInit) => {
+      const body = JSON.parse(init?.body as string) as { userId: string };
+      return { ok: true, json: async () => ({ entry: entryFor(body.userId, "banned-user") }) };
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: RequestInit) => {
+        if (url === "/api/admin/watchlist" && init?.method === "POST") {
+          return post(url, init);
+        }
+        return emptyWatchlist();
+      })
+    );
+
+    render(<WatchlistPanel />);
+    await waitFor(() => expect(screen.getByText("Nothing pinned yet")).toBeTruthy());
+
+    const add = screen.getByRole("button", { name: "Add to watchlist" });
+    expect((add as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.change(screen.getByPlaceholderText("24-character user ID"), {
+      target: { value: USER_ID },
+    });
+    expect((add as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(add);
+
+    await waitFor(() => expect(post).toHaveBeenCalledOnce());
+    expect(JSON.parse(post.mock.calls[0]![1]!.body as string)).toEqual({ userId: USER_ID });
+  });
+
   it("searches, selects, and submits the picked player", async () => {
     const calls: { url: string; init?: RequestInit }[] = [];
     vi.stubGlobal(
