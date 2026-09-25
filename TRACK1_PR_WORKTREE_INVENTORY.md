@@ -732,3 +732,16 @@ Disposition decision: **extract and merge verified slices into Track 1, then
 delete the superseded source checkout only after every retained slice is
 accounted for**. A wholesale merge or immediate deletion would each discard
 required review. The source worktree stays active until extraction is complete.
+
+**New AHDGame PRs since the first inventory, 2026-09-25.** #2385
+`fix(mcp): harden public API bridge protocol handling` was fully green and
+merged into `development` as `2f52a77d63abdfadc34dd2c5b5cb4f02fd976a84`.
+It adds parse/protocol/disconnect/argument guards and focused stdio tests to
+the read-only bridge from #2382; the merge reason was posted on the PR. Its
+source `track3-integrations` worktree passed a fresh clean/lock/process check
+and was removed with ordinary `git worktree remove` after the merge. #2384 is
+the `staging` to `main` production promotion and is
+currently conflicting; #2386 is the `main` into `staging` ancestry repair
+intended to unblock it, with CI still running. These are active promotion
+steps, not feature-branch cleanup targets; resolve their gate and sequence
+before their final PR/worktree disposition.
