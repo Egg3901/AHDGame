@@ -42,7 +42,11 @@ it("exports a versioned local SP world after a real 1953 US turn without account
     const request = new Request("http://127.0.0.1/api/singleplayer/setup", {
       method: "POST",
       headers: { host: "127.0.0.1", "content-type": "application/json" },
-      body: JSON.stringify({ preset: "1953-default", mode: "head-of-state", displayName: "Snapshot Test" }),
+      body: JSON.stringify({
+        preset: "1953-default",
+        mode: "head-of-state",
+        displayName: "Snapshot Test",
+      }),
     });
     const setupResponse = await setup(request);
     expect(setupResponse.status, await setupResponse.text()).toBe(200);
@@ -59,17 +63,34 @@ it("exports a versioned local SP world after a real 1953 US turn without account
     expect(after.turn).toBe(turn.turn);
     expect(after.turnInProgress).toBe(false);
 
-    const run = spawnSync(process.execPath, [
-      "--import", "tsx", "scripts/sim/exportPortableSpSnapshot.ts",
-      "--db", dbName, "--output", output,
-    ], { cwd: process.cwd(), env: { ...process.env, MONGODB_URI: uri, MONGODB_DB: dbName }, encoding: "utf8", timeout: 180_000 });
+    const run = spawnSync(
+      process.execPath,
+      [
+        "--import",
+        "tsx",
+        "scripts/sim/exportPortableSpSnapshot.ts",
+        "--db",
+        dbName,
+        "--output",
+        output,
+      ],
+      {
+        cwd: process.cwd(),
+        env: { ...process.env, MONGODB_URI: uri, MONGODB_DB: dbName },
+        encoding: "utf8",
+        timeout: 180_000,
+      }
+    );
     expect(run.status, `${run.stderr}\n${run.error?.message ?? ""}`).toBe(0);
     const snapshot = JSON.parse(readFileSync(output, "utf8"));
-    expect(snapshot).toMatchObject({ format: "ahd-current-sp-snapshot", version: 2,
-      source: { product: "AHDGame" } });
-    expect(snapshot.manifest).toEqual(expect.arrayContaining([
-      expect.objectContaining({ name: "gameState", documentCount: 1 }),
-    ]));
+    expect(snapshot).toMatchObject({
+      format: "ahd-current-sp-snapshot",
+      version: 2,
+      source: { product: "AHDGame" },
+    });
+    expect(snapshot.manifest).toEqual(
+      expect.arrayContaining([expect.objectContaining({ name: "gameState", documentCount: 1 })])
+    );
     expect(snapshot.collections).not.toHaveProperty("users");
     expect(JSON.stringify(snapshot)).not.toMatch(/password|authSecret|sessionToken|cookie/i);
   } finally {
