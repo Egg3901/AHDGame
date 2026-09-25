@@ -668,6 +668,22 @@ same five selected state digests matched. The remaining WP3 acceptance gate
 is a production phase p95 comparison; these partial-world replays establish
 local behavior and command reduction only.
 
+WP4 spot checks on the same partial local world at turn 1128 found 483
+`bankingTurn` commands, 207 returned documents, and 919,841 BSON bytes while
+processing six banks with no unfinished settlements. This is below the
+current 1,000-command warning budget; the production sample above likewise
+has 818 commands at p95 across 55 successful turns. A direct
+`voteAccumulation` run used 398 commands, 2,767 returned documents, and
+4,500,638 BSON bytes, but its active election mix differs from the
+production spike turns. The active-candidate query over 613 election ids
+used `electionCandidates_electionId`, examining 3,068 documents to return
+2,338; that sample does not justify a new compound index. A phase-only
+`recomputeSharePrices` run read 18,866,804 BSON bytes in 61 commands but
+repriced zero of 734 corporations because same-turn `corporationHistory` was
+absent. It cannot validate that phase's normal path. WP4 therefore retains
+the production spike-turn, full-turn share-price, and NPP support-phase
+measurements before any batching change.
+
 The one-turn profiler has a local-only guard and cannot be run against
 production. A partial production copy is restored to a private localhost Mongo instance
 outside the repository for a profiling turn. It has 380 collections, 3.31 million
