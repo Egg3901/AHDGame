@@ -587,6 +587,58 @@ so these readings cannot by themselves prove a code-diff speedup.
 | WP8 measurement        | Read-only production aggregation found 36,140 withdrawn and 2,337 active `electionCandidates` rows. The `tallyManagement` query `{ electionId, status: "active" }` uses `electionCandidates_electionId` in production `explain(queryPlanner)`. This does not support a global candidate-scan explanation for `voteAccumulation` latency.                                                                                    | Profile election-turn query work and define the historical reader contract before any archive or deletion.                                                                                                                                  |
 | WP13 measurement       | `/usr/bin/time -f %M npm run typecheck` completed successfully with peak RSS 7,849,504 KiB (7.49 GiB) in this worktree. The configured 8,192 MiB V8 heap is a limit, not the measured RSS; the proposed under-3-GB target is currently unsupported.                                                                                                                                                                         | Profile TypeScript diagnostics and type instantiation hotspots before changing compiler settings. Elapsed wall time was 1,790.93 s on a heavily contended host and is not a stable compiler benchmark.                                      |
 
+WP11 route baseline contains 34 routes and 6,557 LOC. Each was first
+introduced in the repository's `Initial public release` commit, so repository
+history does not connect these handlers to their originating incidents. The
+static inventory below records route names, methods, and current size for
+route-by-route follow-up.
+
+| Route                                      | Methods   | LOC |
+| ------------------------------------------ | --------- | --: |
+| `admin/candidates/heal-cross-country`      | GET, POST | 163 |
+| `admin/corporations/heal-captured-unowned` | GET, POST |  35 |
+| `admin/elections/heal-orphan-tallies`      | GET, POST |  92 |
+| `admin/elections/heal-withdrawn-tallies`   | GET, POST | 226 |
+| `admin/heal/banned-party-membership`       | GET, POST |  85 |
+| `admin/heal/ceo-votes`                     | GET, POST | 118 |
+| `admin/heal/confidence-votes`              | GET, POST | 165 |
+| `admin/heal/corporation-cash`              | GET, POST |  77 |
+| `admin/heal/corporation-ceo-vacant`        | GET, POST | 146 |
+| `admin/heal/corporation-shares`            | POST      |  80 |
+| `admin/heal/corporation-timers`            | GET, POST | 123 |
+| `admin/heal/cross-country-party-org`       | GET, POST | 163 |
+| `admin/heal/de-bundestag-seats`            | GET, POST | 146 |
+| `admin/heal/discord-users`                 | GET, POST | 216 |
+| `admin/heal/dropped-npp-parties`           | GET, POST | 268 |
+| `admin/heal/duplicate-sectors`             | POST      |  27 |
+| `admin/heal/executive-duplicates`          | POST, GET | 189 |
+| `admin/heal/federal-budgets`               | GET, POST | 487 |
+| `admin/heal/multi-seat-elections`          | GET, POST | 332 |
+| `admin/heal/nationalization-shares`        | POST      | 246 |
+| `admin/heal/npp-data-corruption`           | GET, POST | 158 |
+| `admin/heal/npp-district-holders`          | GET, POST | 108 |
+| `admin/heal/npp-names`                     | GET, POST | 100 |
+| `admin/heal/npp-portraits`                 | GET, POST | 154 |
+| `admin/heal/party-elections`               | GET, POST | 440 |
+| `admin/heal/party-leadership-elections`    | GET, POST | 402 |
+| `admin/heal/party-membership`              | GET, POST | 402 |
+| `admin/heal/presidential-election`         | GET, POST | 178 |
+| `admin/heal/stale-admin-appointments`      | GET, POST | 218 |
+| `admin/heal/stale-campaigns`               | GET, POST | 266 |
+| `admin/heal/strategy-cooldown`             | GET, POST | 160 |
+| `admin/heal/uk-commons-seats`              | GET, POST | 273 |
+| `admin/officials/heal-senate`              | GET, POST | 126 |
+| `admin/uk/government/heal`                 | GET, POST | 188 |
+
+Only `corporation-cash` and `stale-campaigns` write `adminLogs`. The partial
+local copy contains one `heal_corporation_cash` event at 2026-08-16 15:20 UTC
+and no `heal_stale_campaigns` event. The other 32 routes do not persist their
+own invocation through that collection; production access-log evidence and
+the original incident records were unavailable in this inventory. This does
+not establish that those routes are unused. No route was removed. Retirement
+stays gated on fixing and tracing its root cause, confirming live use, and
+preserving the repair history.
+
 WP6 now projects only `turnLengthMinutes` for transaction expiry reads. On the
 local copy, the full `gameConfig` document is 10,572 BSON bytes and the
 projected result is 45 bytes. This changes bytes returned per read, not the
@@ -622,6 +674,17 @@ to 1,033,415 BSON bytes. Both copies ended with 222 tariff documents and the
 same normalized scope/rate/source-bill digest; federal budget tariff-rate and
 revenue totals matched. This is a helper-level replay on a partial local world,
 not a production phase p95 claim. The rest of WP2 remains open.
+
+The `voteReminders` support phase also fetched corporation name and
+shareholders separately for each due vote, then fetched that vote's
+unvoted-character accounts. It now reads all due corporations with one
+projected `$in` query and all unique unvoted characters with one projected
+`$in` query. The focused test preserves recipient lists across two generic
+votes and one privatization vote while asserting those two batch reads. For
+that fixture, the source pattern drops from 11 reads (two vote lists plus three
+reads per vote) to four. The partial copy at turn 1119 had no votes due at
+turn 1123, so it provides no phase-level timing or command reduction sample;
+production canary telemetry remains the performance acceptance gate.
 
 WP3's direct local `processNppActions` trace at turn 1124 recorded 7,267 Mongo
 commands, 24,394 returned documents, and 14,934,762 BSON bytes on the partial
