@@ -22,8 +22,21 @@
 // renders that computed state; it does not itself decide what counts as new.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useDebounce } from "@/hooks/useDebounce";
 import { ConfidenceBar } from "../alts/ConfidenceMeter";
 import { confidenceHex, formatRelativeTime, memberDisplayName } from "../alts/altTypes";
+
+// A player the moderator picked from the name/username/Discord search. The
+// watchlist keys on `userId`, so an account with no linked user is unpickable.
+interface PlayerHit {
+  id: string;
+  userId: string | null;
+  name: string;
+  username: string | null;
+  discordUsername: string | null;
+  homeState: string | null;
+  currentOffice: string | null;
+}
 
 // ─── API response shapes (mirrors the frozen contract; see module header) ──
 
@@ -87,8 +100,6 @@ export interface WatchlistPanelProps {
   onOpenAltLink?: (userId: string) => void;
 }
 
-const OBJECT_ID_RE = /^[0-9a-f]{24}$/i;
-
 const CARD_CLS = "rounded-xl border border-card-border bg-card p-4 shadow-card";
 const OVERLINE_CLS = "text-[11px] font-semibold uppercase tracking-[0.14em] text-muted";
 const BTN_CLS =
@@ -100,10 +111,41 @@ export default function WatchlistPanel({ onOpenDossier, onOpenAltLink }: Watchli
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [userIdInput, setUserIdInput] = useState("");
+  const [query, setQuery] = useState("");
+  const [picked, setPicked] = useState<PlayerHit | null>(null);
+  const [answered, setAnswered] = useState<{ term: string; hits: PlayerHit[] }>({
+    term: "",
+    hits: [],
+  });
   const [reasonInput, setReasonInput] = useState("");
   const [adding, setAdding] = useState(false);
   const [addError, setAddError] = useState<string | null>(null);
+
+  const debouncedQuery = useDebounce(query, 300);
+  const term = debouncedQuery.trim();
+
+  // Resolve names/usernames/Discord handles to accounts. `/api/characters/search`
+  // matches character name OR username OR discordUsername and returns the
+  // `userId` the watchlist keys on — so a moderator types "mango" instead of
+  // pasting a 24-char Mongo id no human can obtain from the game.
+  useEffect(() => {
+    if (term.length < 2) {
+      setAnswered({ term: "", hits: [] });
+      return;
+    }
+    let cancelled = false;
+    fetch(`/api/characters/search?limit=8&q=${encodeURIComponent(term)}`)
+      .then((res) => (res.ok ? res.json() : { results: [] }))
+      .then((json: { results?: PlayerHit[] }) => {
+        if (!cancelled) setAnswered({ term, hits: json.results ?? [] });
+      })
+      .catch(() => {
+        if (!cancelled) setAnswered({ term, hits: [] });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [term]);
 
   const [removingId, setRemovingId] = useState<string | null>(null);
   const [flash, setFlash] = useState<string | null>(null);
@@ -149,9 +191,8 @@ export default function WatchlistPanel({ onOpenDossier, onOpenAltLink }: Watchli
   async function handleAdd(e: React.FormEvent) {
     e.preventDefault();
     setAddError(null);
-    const userId = userIdInput.trim();
-    if (!OBJECT_ID_RE.test(userId)) {
-      setAddError("Enter a valid 24-character user id.");
+    if (!picked?.userId) {
+      setAddError("Search for a player and pick a result first.");
       return;
     }
     setAdding(true);
@@ -159,16 +200,18 @@ export default function WatchlistPanel({ onOpenDossier, onOpenAltLink }: Watchli
       const res = await fetch("/api/admin/watchlist", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId, reason: reasonInput.trim() || undefined }),
+        body: JSON.stringify({ userId: picked.userId, reason: reasonInput.trim() || undefined }),
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) {
         throw new Error(body.error ?? `Failed to add (${res.status})`);
       }
       setEntries((prev) => [body.entry as WatchlistEntryView, ...prev]);
-      setUserIdInput("");
+      setQuery("");
+      setPicked(null);
+      setAnswered({ term: "", hits: [] });
       setReasonInput("");
-      setFlash(`Pinned ${body.entry?.username ?? "account"} to the watchlist.`);
+      setFlash(`Pinned ${body.entry?.username ?? picked.name} to the watchlist.`);
       setTimeout(() => setFlash(null), 3500);
     } catch (err) {
       setAddError(err instanceof Error ? err.message : "Failed to add");
@@ -221,17 +264,90 @@ export default function WatchlistPanel({ onOpenDossier, onOpenAltLink }: Watchli
         </button>
       </div>
 
-      {/* Add form */}
+      {/* Add form — name/username/Discord search instead of raw id paste */}
       <form onSubmit={handleAdd} className={`${CARD_CLS} flex flex-wrap items-end gap-2`}>
-        <label className="flex min-w-[220px] flex-1 flex-col gap-1 text-xs font-medium text-muted">
-          User id
-          <input
-            value={userIdInput}
-            onChange={(e) => setUserIdInput(e.target.value)}
-            placeholder="24-character user id"
-            className="h-9 rounded-lg border border-card-border bg-card px-2.5 text-sm text-foreground transition-colors placeholder:text-muted/60 hover:border-muted/50 focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/25 motion-reduce:transition-none"
-          />
-        </label>
+        <div className="relative flex min-w-[220px] flex-1 flex-col gap-1 text-xs font-medium text-muted">
+          Player
+          {picked ? (
+            <div className="flex h-9 items-center gap-2 rounded-lg border border-primary/40 bg-primary/10 px-2.5">
+              <span className="truncate text-sm font-medium text-foreground">{picked.name}</span>
+              {picked.username && (
+                <span className="truncate text-xs text-muted">@{picked.username}</span>
+              )}
+              {picked.discordUsername && (
+                <span className="truncate text-xs text-indigo-300">{picked.discordUsername}</span>
+              )}
+              <button
+                type="button"
+                onClick={() => {
+                  setPicked(null);
+                  setQuery("");
+                }}
+                aria-label="Clear selected player"
+                className="ml-auto text-muted transition-colors hover:text-foreground"
+              >
+                <svg
+                  className="h-4 w-4"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                  aria-hidden
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          ) : (
+            <>
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search by name, username, or Discord"
+                aria-label="Search players"
+                className="h-9 rounded-lg border border-card-border bg-card px-2.5 text-sm text-foreground transition-colors placeholder:text-muted/60 hover:border-muted/50 focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/25 motion-reduce:transition-none"
+              />
+              {query.trim().length >= 2 && (
+                <div className="absolute left-0 right-0 top-full z-20 mt-1 max-h-72 overflow-y-auto rounded-lg border border-card-border bg-card-elevated shadow-modal">
+                  {answered.term !== term ? (
+                    <p className="px-3 py-2 text-xs text-muted">Searching…</p>
+                  ) : answered.hits.length === 0 ? (
+                    <p className="px-3 py-2 text-xs text-muted">No match.</p>
+                  ) : (
+                    answered.hits.map((hit) => (
+                      <button
+                        key={hit.id}
+                        type="button"
+                        disabled={!hit.userId}
+                        onClick={() => {
+                          setPicked(hit);
+                          setAnswered({ term: "", hits: [] });
+                          setAddError(null);
+                        }}
+                        title={hit.userId ? undefined : "No linked account — cannot watch"}
+                        className="flex w-full items-center justify-between gap-3 border-b border-card-border px-3 py-2 text-left last:border-b-0 hover:bg-card disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        <span className="min-w-0">
+                          <span className="block truncate text-sm text-foreground">{hit.name}</span>
+                          <span className="block truncate text-xs text-muted">
+                            {[
+                              hit.username && `@${hit.username}`,
+                              hit.discordUsername,
+                              hit.currentOffice,
+                            ]
+                              .filter(Boolean)
+                              .join(" · ") ||
+                              (hit.homeState ?? "")}
+                          </span>
+                        </span>
+                      </button>
+                    ))
+                  )}
+                </div>
+              )}
+            </>
+          )}
+        </div>
         <label className="flex min-w-[220px] flex-[2] flex-col gap-1 text-xs font-medium text-muted">
           Reason (optional)
           <input
@@ -243,7 +359,7 @@ export default function WatchlistPanel({ onOpenDossier, onOpenAltLink }: Watchli
         </label>
         <button
           type="submit"
-          disabled={adding || !userIdInput.trim()}
+          disabled={adding || !picked?.userId}
           className={`${BTN_CLS} border-primary/40 bg-primary/10 text-primary hover:bg-primary/20`}
         >
           {adding ? "Adding…" : "Add to watchlist"}
