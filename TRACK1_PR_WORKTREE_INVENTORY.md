@@ -439,5 +439,19 @@ and `fast-uri` had green checks and clean merge states. They landed as
 `b9a006840559d2bec35377062c2a7ad5905f8eff` respectively. They had
 no local worktrees and do not change AHDGame's `development` base.
 
+**Dynamic inventory update, 2026-09-25 00:45 UTC.** Fresh `git worktree list`
+shows 30 AHDGame checkouts after the removals above, including new clean-base
+`banking-hub-tables` and `discord-event-cards` feature worktrees created by
+other sessions. They are active-feature, not duplicate Track 1 checkouts, and
+are reserved for the agents working in them. Fresh PR enumeration finds only
+AHDGame #2377 still open; its committed head has green checks, but its
+associated worktree has unpublished edits and is still active. A new Ops PR
+#186 (`feat/posthog-key-portal` -> `main`) is active; its checks did not start
+because GitHub reports an Actions billing/spending gate. Its author's local
+verification is recorded in the PR, but this does not substitute for the
+repository checks or justify touching the active agent's branch. The current
+Ops open set is #186, #168, #167, #162, #137, and #122. This new surface must
+receive final merge-or-delete decisions after its owners finish.
+
 The remaining rows above require final decisions and execution; this document
 does not mark them complete.
