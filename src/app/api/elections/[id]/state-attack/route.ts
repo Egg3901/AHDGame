@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { ObjectId, type ClientSession } from "mongodb";
+import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
@@ -11,7 +11,8 @@ import { resolveElectionRouteParam } from "@/lib/elections/electionParamResoluti
 import { isPrimaryEnded } from "@/lib/elections/phases";
 import { getGameTime } from "@/lib/time/gameTime";
 import { getElectoralVoteUnits } from "@/lib/constants/states";
-import { runWithOptionalTransaction } from "@/lib/db/runWithOptionalTransaction";
+import { randomUUID } from "node:crypto";
+import { applyStateAttackSpend } from "@/lib/elections/stateAttackSpend";
 import { getOpsBranchMagnitude } from "@/lib/campaigns/upgradeCosts";
 import { getHomeCurrency, loadCharacterFxRate } from "@/lib/currency/characterFunds";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
@@ -247,74 +248,25 @@ export async function POST(request: Request, { params }: RouteParams) {
       createdAt: now,
     };
 
-    /**
-     * Give back what was taken when a later step fails.
-     *
-     * Production Mongo is a standalone instance, so `runWithOptionalTransaction`
-     * runs the sequential path and a throw rolls nothing back on its own: the
-     * player would be charged for an attack that never landed. Inside a real
-     * transaction the abort already undoes these, and re-crediting there would
-     * be undone with everything else, so this is safe on both paths.
-     */
-    const refund = async (what: { actions: boolean; funds: boolean }) => {
-      const stamp = new Date();
-      if (what.actions) {
-        await db
-          .collection<Character>("characters")
-          .updateOne(
-            { _id: character._id },
-            { $inc: { actions: terms.costActions }, $set: { updatedAt: stamp } }
-          );
-      }
-      if (what.funds) {
-        await db
-          .collection<Campaign>("campaigns")
-          .updateOne(
-            { _id: campaign._id },
-            { $inc: { funds: costFundsLocal }, $set: { updatedAt: stamp } }
-          );
-      }
-    };
-
-    const debit = async (session?: ClientSession) => {
-      const opts = session ? { session } : {};
-      const charDebit = await db
-        .collection<Character>("characters")
-        .updateOne(
-          { _id: character._id, actions: { $gte: terms.costActions } },
-          { $inc: { actions: -terms.costActions }, $set: { updatedAt: now } },
-          opts
-        );
-      if (charDebit.modifiedCount === 0) throw new Error("INSUFFICIENT_RESOURCES");
-
-      const campDebit = await db
-        .collection<Campaign>("campaigns")
-        .updateOne(
-          { _id: campaign._id, funds: { $gte: costFundsLocal } },
-          { $inc: { funds: -costFundsLocal }, $set: { updatedAt: now } },
-          opts
-        );
-      if (campDebit.modifiedCount === 0) {
-        // Only the character's actions were taken. Hand them back.
-        await refund({ actions: true, funds: false });
-        throw new Error("INSUFFICIENT_RESOURCES");
-      }
-
-      try {
-        await db
-          .collection<PrimaryStateAction>("primaryStateActions")
-          .insertOne(row as PrimaryStateAction, opts);
-      } catch (error) {
-        await refund({ actions: true, funds: true });
-        throw error;
-      }
-    };
-
+    // Crash-safe spend (issue #1672): the actions and funds debits are keyed
+    // idempotent legs and the attack row a deterministic insert, so a crash
+    // between the sequential writes reconciles instead of charging for an
+    // attack that never landed. `Idempotency-Key` replays the stored outcome
+    // without charging again.
+    const headerKey = request.headers.get("Idempotency-Key");
+    if (headerKey !== null && (headerKey.length === 0 || headerKey.length > 128)) {
+      return NextResponse.json({ error: "Invalid Idempotency-Key header" }, { status: 400 });
+    }
     try {
-      await runWithOptionalTransaction(
-        (session) => debit(session),
-        () => debit()
-      );
+      await applyStateAttackSpend(db, {
+        characterId: character._id,
+        campaignId: campaign._id,
+        costActions: terms.costActions,
+        costFundsLocal,
+        action: row,
+        fingerprint: `${actor._id.toHexString()}:${target._id.toHexString()}:${stateId}:${kind}:${currentTurn}`,
+        ...(headerKey !== null ? { idempotencyKey: headerKey } : { idempotencyKey: randomUUID() }),
+      });
     } catch (error) {
       const message = (error as Error).message;
       if (message === "INSUFFICIENT_RESOURCES") {
