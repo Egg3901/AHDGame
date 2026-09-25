@@ -2720,6 +2720,11 @@
           "type": "partial_source_and_tests",
           "ref": "467a9d0e7b",
           "detail": "Onboarding reward and welcome mail now use the world preset and credited home currency; event substrate personal/campaign/treasury effects use the same preset-aware seams. Focused suites passed 21/21 and neighboring suites 46/46; scoped lint/format passed. Profile reward preview and other banking/trading/credit sites plus full 2027 bootstrap/replay remain open."
+        },
+        {
+          "type": "turn_path_regression_fix",
+          "ref": "1061e47e43",
+          "detail": "The event timeout sweep and broadcast supersession pass a batch-loaded world preset into each resolution, avoiding the per-event gameState query introduced by 2027 currency routing. Three focused files passed 14/14 tests, including a two-event one-query regression; scoped ESLint, Prettier, and diff check passed. Final turn profile and full gates remain pending."
         }
       ],
       "blocked_by": [

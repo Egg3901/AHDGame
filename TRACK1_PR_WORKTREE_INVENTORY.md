@@ -773,3 +773,19 @@ game and Railway deploy source. Merging dependency bumps into stale private
 must be evaluated against the public repo's current package and lockfile;
 this disposition does not assert those versions have all been adopted. No
 private checkout, dirty file, or locked worktree was touched.
+
+**Fresh PR inventory, 2026-09-25 04:19 UTC.** The original snapshot above is
+historical. A fresh `gh pr list` found #2380, #2381, #2384, #2388, #2389,
+#2390, and #2391 still open. #2387 has merged into `development` as
+`6360845ec34141570a0be3ba55e5d3bd55efc6aa`; #2390 promotes it together
+with #2385 to staging. The new rows require these dispositions:
+
+| PR | Current classification | Required disposition and reason |
+| --- | --- | --- |
+| #2388 | Draft, active owner feature; base `main` | Merge to its base after the owner completes the staging worker rehearsal and deployment prerequisites, or close only if the dedicated worker is abandoned. It adds a production start command and runbook, not a Track 1 source branch. CI was green at the snapshot; no Track 1 checkout is removed. |
+| #2389 | Active staging repair; base `staging` | Merge to staging after its green CI and verify Railway can build with the cache mount. It fixes the `EBUSY` failure caused by removing the mount directory and must precede the staging promotion. |
+| #2390 | Active promotion; base `staging` | Merge with a merge commit after #2389 and staging deployment health. It promotes already merged #2385/#2387; its source is `development`, so no independent feature checkout exists. |
+| #2391 | Active security fix, currently conflicting with development | Rebase/review the concurrent vote, API-key, barrier, forex, blackjack, and privacy repairs, then merge only after full gates and the real-Mongo race proof. It touches Track 1 transfer/forex surfaces and needs integration rather than a blind merge; no source checkout will be pruned while the owner is active. |
+
+#2380/#2381/#2384 remain active dispositions from the earlier updates. No
+locked or dirty checkout was touched to make this inventory update.
