@@ -671,10 +671,11 @@ removal; no unique work or ignored cache was retained.
 contributor reconciled its supporter feed with the game API's three tiers,
 added a role-mapping test, and rebased the branch onto upstream `main` after
 #45 merged. The shared baseline test typing and lint repairs are already in
-that base and were dropped as patch-equivalent. The isolated #122 checkout is
-clean and active-feature while final post-rebase gates run; it has not yet
-been pushed or merged. Bot deployment additionally needs command
-registration and the existing configured supporter role IDs.
+that base and were dropped as patch-equivalent. The clean isolated #122
+checkout was pushed to the fork at `b49a96c81` with an exact force-with-lease;
+the PR has a progress/evidence comment. It remains active-feature while final
+post-rebase gates run and has not yet merged. Bot deployment additionally
+needs command registration and the existing configured supporter role IDs.
 
 **Ops PR #137: MERGED, 2026-09-25.** The pinned AHDGame source identity for
 worldsim jobs landed on Ops `main` as
