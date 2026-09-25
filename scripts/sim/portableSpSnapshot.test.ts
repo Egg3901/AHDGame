@@ -28,7 +28,9 @@ it("exports a versioned local SP world after a real 1953 US turn without account
   process.env.MONGODB_URI = uri;
   process.env.MONGODB_DB = dbName;
   process.env.SINGLEPLAYER = "1";
-  process.env.NODE_ENV = "test";
+  // Next declares NODE_ENV readonly in its global types, so it is set through
+  // the index signature rather than as a direct property assignment.
+  (process.env as Record<string, string | undefined>).NODE_ENV = "test";
 
   try {
     // Dynamic imports are required: getDb binds its Mongo URI on first use.
