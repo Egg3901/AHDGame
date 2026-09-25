@@ -81,6 +81,9 @@ export const createCharacterSchema = z.object({
 export const characterTransferSchema = z.object({
   // `amount` is in the sender's local home currency (same unit as their balance).
   amount: z.coerce.number().int().min(1000, "Minimum transfer is 1,000"),
+  // Optional client idempotency key: same key + same transfer replays the
+  // stored outcome instead of moving money again (issue #1672).
+  idempotencyKey: z.string().min(1).max(128).optional(),
 });
 
 export const partyTransferSchema = z.object({

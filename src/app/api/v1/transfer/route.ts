@@ -12,7 +12,8 @@ import { localCampaignBalance } from "@/lib/currency/campaignBalance";
 import { getHomeCurrency, loadCharacterFxRate } from "@/lib/currency/characterFunds";
 import { getGameTime } from "@/lib/time/gameTime";
 import { emitTx } from "@/lib/financialTxLog/emit";
-import { runWithOptionalTransaction } from "@/lib/db/runWithOptionalTransaction";
+import { transferCharacterCampaignFunds } from "@/lib/character/campaignTransfer";
+import { MoneyFlowKeyConflictError, MoneyFlowTerminalError } from "@/lib/db/nonAtomicMoneyFlow";
 import { isSameCountry } from "@/lib/api/sameCountry";
 import {
   getNewCharacterTransferBarrier,
@@ -24,6 +25,9 @@ const apiTransferSchema = z.object({
   targetCharacterId: schemas.objectId,
   // `amount` is in the sender's local home currency (same unit as their balance).
   amount: z.coerce.number().int().min(1000, "Minimum transfer is 1,000"),
+  // Optional client idempotency key: same key + same transfer replays the
+  // stored outcome instead of moving money again (issue #1672).
+  idempotencyKey: z.string().min(1).max(128).optional(),
 });
 
 // POST /api/v1/transfer — Transfer campaign funds from the API key owner's active character
@@ -133,120 +137,85 @@ export async function POST(request: Request) {
     }
 
     const campaignFundsField = forexEnabled ? "currencyBalances.campaign" : "funds";
-    const atomicFilter: Record<string, unknown> = {
-      _id: sender._id,
-      [campaignFundsField]: { $gte: transferAmountLocal },
-    };
 
-    const senderDebit = { $inc: { [campaignFundsField]: -transferAmountLocal } };
-    const targetCredit = { $inc: { [campaignFundsField]: transferAmountLocal } };
-
-    await runWithOptionalTransaction(
-      async (session) => {
-        const senderUpdate = await db
-          .collection<Character>("characters")
-          .updateOne(atomicFilter, senderDebit, { session });
-        if (senderUpdate.modifiedCount === 0) {
-          throw new Error("INSUFFICIENT_FUNDS");
-        }
-
-        const targetUpdate = await db
-          .collection<Character>("characters")
-          .updateOne({ _id: targetObjectId }, targetCredit, { session });
-        if (targetUpdate.matchedCount === 0) {
-          throw new Error("TARGET_NOT_FOUND");
-        }
-      },
-      async () => {
-        const senderUpdate = await db
-          .collection<Character>("characters")
-          .updateOne(atomicFilter, senderDebit);
-        if (senderUpdate.modifiedCount === 0) {
-          throw new Error("INSUFFICIENT_FUNDS");
-        }
-
-        try {
-          const targetUpdate = await db
-            .collection<Character>("characters")
-            .updateOne({ _id: targetObjectId }, targetCredit);
-          if (targetUpdate.matchedCount === 0) {
-            await db
-              .collection<Character>("characters")
-              .updateOne(
-                { _id: sender._id },
-                { $inc: { [campaignFundsField]: transferAmountLocal } }
-              );
-            throw new Error("TARGET_NOT_FOUND");
-          }
-        } catch (error) {
-          if ((error as Error).message !== "TARGET_NOT_FOUND") {
-            await db
-              .collection<Character>("characters")
-              .updateOne(
-                { _id: sender._id },
-                { $inc: { [campaignFundsField]: transferAmountLocal } }
-              );
-          }
-          throw error;
-        }
+    // Exactly-once on every topology (issue #1672): keyed idempotent legs
+    // reconcile a crash between the debit and the credit instead of
+    // destroying or duplicating money. A replayed key returns duplicate.
+    const { duplicate: transferDuplicate } = await transferCharacterCampaignFunds(db, {
+      senderId: sender._id,
+      targetId: targetObjectId,
+      amountLocal: transferAmountLocal,
+      fundsField: campaignFundsField,
+      idempotencyKey: parsed.data.idempotencyKey,
+    });
+    if (transferDuplicate) {
+      const freshSender = await db.collection<Character>("characters").findOne({ _id: sender._id });
+      if (freshSender) {
+        Object.assign(sender, freshSender);
       }
-    );
-
-    // Achievement checks
-    try {
-      const { awardAchievement, resolveUserIdFromCharacter } = await import("@/lib/achievements");
-      const { checkFundsAchievements } = await import("@/lib/achievements/triggers");
-      const senderUserId = new ObjectId(apiAuth.ownerUserId);
-      await awardAchievement(senderUserId, "donor", sender._id);
-      const targetUserId = await resolveUserIdFromCharacter(targetObjectId);
-      if (targetUserId) {
-        await awardAchievement(targetUserId, "big_spender", targetObjectId);
-      }
-      const newSenderBalanceLocal =
-        localCampaignBalance(sender, forexEnabled) - transferAmountLocal;
-      const newSenderBalanceAnchor = forexEnabled
-        ? newSenderBalanceLocal / homeFxRate
-        : newSenderBalanceLocal;
-      await checkFundsAchievements(senderUserId, sender._id, newSenderBalanceAnchor);
-    } catch (e) {
-      console.error("Achievement check failed:", e);
     }
 
-    const turn = gameTime.currentTurn;
-    const now = new Date();
-    const currency = senderCurrency;
+    // A replayed idempotency key moved no money, so it must not re-emit
+    // ledger entries or re-award achievements.
+    if (!transferDuplicate) {
+      // Achievement checks
+      try {
+        const { awardAchievement, resolveUserIdFromCharacter } = await import("@/lib/achievements");
+        const { checkFundsAchievements } = await import("@/lib/achievements/triggers");
+        const senderUserId = new ObjectId(apiAuth.ownerUserId);
+        await awardAchievement(senderUserId, "donor", sender._id);
+        const targetUserId = await resolveUserIdFromCharacter(targetObjectId);
+        if (targetUserId) {
+          await awardAchievement(targetUserId, "big_spender", targetObjectId);
+        }
+        const newSenderBalanceLocal =
+          localCampaignBalance(sender, forexEnabled) - transferAmountLocal;
+        const newSenderBalanceAnchor = forexEnabled
+          ? newSenderBalanceLocal / homeFxRate
+          : newSenderBalanceLocal;
+        await checkFundsAchievements(senderUserId, sender._id, newSenderBalanceAnchor);
+      } catch (e) {
+        console.error("Achievement check failed:", e);
+      }
 
-    void emitTx(db, {
-      type: "campaign_donation",
-      turn,
-      createdAt: now,
-      subjectType: "character",
-      subjectId: sender._id,
-      subjectName: sender.name,
-      amount: -transferAmount,
-      currencyCode: currency,
-      counterpartyType: "character",
-      counterpartyId: target._id,
-      counterpartyName: target.name,
-      meta: { side: "donor", source: "api" },
-    });
-    void emitTx(db, {
-      type: "campaign_donation",
-      turn,
-      createdAt: now,
-      subjectType: "character",
-      subjectId: target._id,
-      subjectName: target.name,
-      amount: transferAmount,
-      currencyCode: currency,
-      counterpartyType: "character",
-      counterpartyId: sender._id,
-      counterpartyName: sender.name,
-      meta: { side: "recipient", source: "api" },
-    });
+      const turn = gameTime.currentTurn;
+      const now = new Date();
+      const currency = senderCurrency;
+
+      void emitTx(db, {
+        type: "campaign_donation",
+        turn,
+        createdAt: now,
+        subjectType: "character",
+        subjectId: sender._id,
+        subjectName: sender.name,
+        amount: -transferAmount,
+        currencyCode: currency,
+        counterpartyType: "character",
+        counterpartyId: target._id,
+        counterpartyName: target.name,
+        meta: { side: "donor", source: "api" },
+      });
+      void emitTx(db, {
+        type: "campaign_donation",
+        turn,
+        createdAt: now,
+        subjectType: "character",
+        subjectId: target._id,
+        subjectName: target.name,
+        amount: transferAmount,
+        currencyCode: currency,
+        counterpartyType: "character",
+        counterpartyId: sender._id,
+        counterpartyName: sender.name,
+        meta: { side: "recipient", source: "api" },
+      });
+    }
 
     // Response is in the sender's local home currency, matching the `amount` input.
-    const senderRemainingFunds = localCampaignBalance(sender, forexEnabled) - transferAmountLocal;
+    const senderRemainingFunds = transferDuplicate
+      ? localCampaignBalance(sender, forexEnabled)
+      : localCampaignBalance(sender, forexEnabled) - transferAmountLocal;
 
     return NextResponse.json({
       success: true,
@@ -254,6 +223,7 @@ export async function POST(request: Request) {
       currency: senderCurrency,
       senderRemainingFunds,
       targetName: target.name,
+      duplicate: transferDuplicate,
     });
   } catch (error) {
     if (error instanceof Error && error.message === "INSUFFICIENT_FUNDS") {
@@ -261,6 +231,9 @@ export async function POST(request: Request) {
     }
     if (error instanceof Error && error.message === "TARGET_NOT_FOUND") {
       return NextResponse.json({ error: "Target character not found" }, { status: 404 });
+    }
+    if (error instanceof MoneyFlowTerminalError || error instanceof MoneyFlowKeyConflictError) {
+      return NextResponse.json({ error: error.message }, { status: 409 });
     }
     return handleRouteError(error);
   }
