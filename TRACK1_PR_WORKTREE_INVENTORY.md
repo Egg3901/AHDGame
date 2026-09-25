@@ -789,3 +789,12 @@ with #2385 to staging. The new rows require these dispositions:
 
 #2380/#2381/#2384 remain active dispositions from the earlier updates. No
 locked or dirty checkout was touched to make this inventory update.
+
+**Promotion follow-up, 2026-09-25:** #2389 merged to `staging` as
+`a9f1261b8d54ac0aac71b3c3e051ce517aee4af2` after its full CI went
+green; it preserves the Railway cache mount while clearing its contents.
+#2390 then merged to `staging` as merge commit
+`6bf2fbaf5dd5ebe835990831acad5ca365867d68`, promoting the already
+reviewed #2385/#2387 source. Staging deployment health and the subsequent
+#2384 production promotion remain separate release gates; this record does
+not claim they passed.
