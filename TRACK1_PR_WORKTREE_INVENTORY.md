@@ -1070,8 +1070,18 @@ recurring snapshot indexes. The PR records matched local before/after
 command/document/byte measurements and unchanged result digests, with the
 partial-world and production-latency limitations made explicit. Squash merge
 `1919657c625cf5582034f3506357dedfda8e7fe9` is on `development`.
-The `dead-weight-plan` source checkout is clean and unlocked in the latest
-read-only check; the Track 1 branch must incorporate the squash before this
-checkout can be normally removed. Its remaining source branch ref may be
-retained for provenance. This is a merge disposition for the PR, while the
-checkout removal is still pending its final process/clean-state recheck.
+The Track 1 branch incorporated that squash in merge `f2ba89a6cc`. The
+`dead-weight-plan` source checkout was rechecked clean, unlocked, and
+process-free; decision: remove it normally, retaining the branch ref.
+
+**AHDGame `AHDGame-turn-perf`: MERGED selectively, then DELETE clean
+checkout, 2026-09-25.** The five commits ending `216d506905` from production
+PR #2356 contribute bond-purchase and liquidity-quote ledger batching,
+hot-path indexes, quote receipts/ask-reservation preload, and over-budget
+collection attribution. Track 1 integrated them as `a8298fe1a6`,
+`cb7e61920d`, `a1e4a8d7d3`, `4539de1277`, and `66b0b0debe`; two small
+focused repair commits preserve the newer fund thresholds/cadence and test
+shape. Forty-nine focused tests, scoped lint, formatting, and diff checks
+passed. The source checkout was rechecked clean, unlocked, and process-free;
+decision: remove it normally while retaining its branch ref. The full
+integrated build and matched turn-profile gate remain open.

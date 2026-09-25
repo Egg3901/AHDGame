@@ -9,13 +9,17 @@ note, not a declaration that reset readiness has passed.
 - Source branch: `origin/development` fetched on 2026-09-25.
 - Exact base: `028cb9265e76555efa5d73b611cea0f409c3446b`.
 - Latest incorporated `origin/development` on 2026-09-25 is
-  `346f0cdde97ee3e237d78fa1f153da7038a14b6a` (through #2392 turn
-  performance, #2388 worker, #2380 analytics, and #2391 security). Track 1 first rebased
+  `1919657c625cf5582034f3506357dedfda8e7fe9` (through #2381 turn
+  performance, #2392 turn performance, #2388 worker, #2380 analytics, and
+  #2391 security). Track 1 first rebased
   onto `cc06acd25cf259f9f9ede8076ac57552867ebae8`, retaining both the
   newer fund-liquidity threshold reuse and crash journal at that conflict.
   It then merged the newer development head cleanly as
   `3456be9ac6412df733e76d35b2dc9d46cce30293`, then incorporated the
-  newer development head as merge `90b3bf85c7e871dfe5093625b6febc4daae42601`.
+  newer development head as merge `90b3bf85c7e871dfe5093625b6febc4daae42601`,
+  then incorporated #2381 as merge `f2ba89a6ccfbaacb0bb60fd0e0de783487a96eb2`.
+  Its sole conflict combined #1672's orphan recovery hook and #2381's
+  projected share-order read; 52 focused tests, scoped lint, and format passed.
   The exact base above records where Track 1 began; the incorporated commit
   records current development ancestry. Refresh again before the final PR if
   development advances.
@@ -368,12 +372,12 @@ upstream #45 and #122 both merged after their exact-head gates. Ops #137 and
 #168 merged; #167 closed as superseded. See the inventory
 for each decision and the current open PRs.
 
-**Upstream refresh pending, 2026-09-25 07:22 UTC:** Track 1 already
-incorporated `346f0cdde97ee3e237d78fa1f153da7038a14b6a` through merge
-`90b3bf85c7e871dfe5093625b6febc4daae42601`. PR #2381 has since merged
-to `development` as `1919657c625cf5582034f3506357dedfda8e7fe9`.
-The five-commit production fund-performance backport is under way in the
-Track 1 worktree; merge this new development head after those source commits
-are durable, then update the exact incorporated SHA near the top. The
-original fresh base remains `028cb9265e`. Rerun affected gates after that
-merge from the new exact SHA.
+**Upstream refresh completed, 2026-09-25:** The five production
+fund-performance source commits have been selectively integrated into Track 1
+as `a8298fe1a6`, `cb7e61920d`, `a1e4a8d7d3`, `4539de1277`, and
+`66b0b0debe`, with focused repair commits `e813f4eab6` and `4d1b25ceac`.
+Forty-nine focused tests, scoped lint, formatting, and diff checks passed.
+The new development head `1919657c625cf5582034f3506357dedfda8e7fe9`
+was then merged as `f2ba89a6ccfbaacb0bb60fd0e0de783487a96eb2`. The
+original fresh base remains `028cb9265e`. Full integrated typecheck,
+`verify`, build, turn profiling, and the final campaign are still owed.
