@@ -351,7 +351,10 @@ The original fresh base is recorded above. Track 1 was rebased onto
 1991/2027 source checkpoint was integrated as `609cf2bd7d`; the four observed
 TypeScript defects were repaired in `9c23912f6f` and `c065c18730`. A Muse
 Spark 1.3 contributor fixed RU owned producing SOEs in 1991 as `7e30f53bb6`
-with four focused tests passing. The full typecheck is still queued; no fresh
+with four focused tests passing. The later integrated `npm run typecheck` on
+checkpoint `aef40e9ce4` passed after the two Watchlist test fixture response
+types were corrected. This pass includes the production ticket route backport
+and receipt scan index; repeat after subsequent 2027 and #1672 edits. No fresh
 zero-critical 1991 bootstrap or #2316 scripts/sim balance report exists yet.
 
 The #1672 keyed standalone-Mongo money-flow primitive and indexes were ported
@@ -400,5 +403,6 @@ as `a8298fe1a6`, `cb7e61920d`, `a1e4a8d7d3`, `4539de1277`, and
 Forty-nine focused tests, scoped lint, formatting, and diff checks passed.
 The new development head `1919657c625cf5582034f3506357dedfda8e7fe9`
 was then merged as `f2ba89a6ccfbaacb0bb60fd0e0de783487a96eb2`. The
-original fresh base remains `028cb9265e`. Full integrated typecheck,
-`verify`, build, turn profiling, and the final campaign are still owed.
+original fresh base remains `028cb9265e`. The integrated typecheck passed
+at `aef40e9ce4`; a final post-change typecheck, `verify`, build, turn
+profiling, and the final campaign are still owed.
