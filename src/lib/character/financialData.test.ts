@@ -4,7 +4,7 @@ import { ObjectId } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
-vi.mock("@/lib/corporation/dividendIncomeFromHistory", () => ({
+vi.mock("@/lib/corporations/dividendIncomeFromHistory", () => ({
   estimateCorpDividendPaidLastTurn: vi.fn().mockReturnValue(0),
   fetchLatestCorpHistoryDividendRows: vi.fn().mockResolvedValue(new Map()),
 }));

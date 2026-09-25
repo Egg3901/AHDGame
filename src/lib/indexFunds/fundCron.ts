@@ -105,6 +105,9 @@ import {
 } from "@/lib/indexFunds/fundRedemptionQueue";
 import { logIndexFundRedeem, resolveIndexFundHolder } from "@/lib/indexFunds/fundTxLog";
 import { emitTx, emitTxBulk, loadTxThresholds } from "@/lib/financialTxLog/emit";
+import { getCurrentTurn } from "@/lib/turn/currentTurn";
+import { loadFxRatesByCurrency } from "@/lib/currency/corporationCapital";
+import { loadTurnLengthMinutes } from "@/lib/financialTxLog/expiresAt";
 import { runWithOptionalTransaction } from "@/lib/db/runWithOptionalTransaction";
 import { TURNS_PER_DAY, MS_PER_TURN } from "@/lib/constants/turnTime";
 import { placeFundShareBuyOrder, cancelFundShareOrder } from "@/lib/indexFunds/fundShareOrders";
@@ -730,11 +733,18 @@ export async function rebalanceFundToTarget(
   });
 
   let sells = 0;
+  const sellInputs =
+    plan.sells.length > 0
+      ? await Promise.all([loadFxRatesByCurrency(db), getCurrentTurn(db), loadTxThresholds(db)])
+      : undefined;
   // Sells first so freed cash funds the buys.
   for (const leg of plan.sells) {
     const refreshed = (await getFundById(db, fund._id)) ?? fund;
     const res = await sellFundHoldingShares(db, refreshed, leg.corporationId, leg.shares, {
       note: "Rebalance: trim overweight",
+      fxByCurrency: sellInputs?.[0],
+      turn: sellInputs?.[1],
+      thresholds: sellInputs?.[2],
     });
     if (res.sharesSold > 0) sells++;
   }
@@ -1499,7 +1509,10 @@ export async function runIndexFundCron(
   const initialBondPrincipalByFundId = await sumFundBondHoldingsByFundId(db, funds, exchangeRates);
   // #992 tranche 6: one thresholds read for every bond-reserve purchase row
   // this turn; threaded through each deploy so N funds share it.
-  const bondDeployThresholds = await loadTxThresholds(db);
+  const [bondDeployThresholds, bondDeployTurnLengthMinutes] = await Promise.all([
+    loadTxThresholds(db),
+    loadTurnLengthMinutes(db),
+  ]);
 
   // Pass 1a: mark holdings and recompute NAV. Each task only writes its own
   // fund document, so bounded concurrency is safe and removes the serial
@@ -1636,6 +1649,7 @@ export async function runIndexFundCron(
             liquidityTargetEnabled: bondLiquidityEnabled,
             turn: currentTurn,
             thresholds: bondDeployThresholds,
+            turnLengthMinutes: bondDeployTurnLengthMinutes,
           }
         );
         if (bondDeploy.deployedAnchor > 0) {

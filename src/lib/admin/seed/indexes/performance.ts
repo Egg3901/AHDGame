@@ -481,6 +481,17 @@ export async function seedPerfIndexes(db: Db, log: (msg: string) => void) {
     { name: "shareOrders_char_status" },
     log
   );
+  // The index-fund rebalance reads open buy bids by fund before and after
+  // cancellation. The one-off 2026-08-10 migration creates this index in
+  // existing worlds, but a reset drops it while migration markers survive.
+  // Seed the same name and options so new/reset worlds retain that coverage.
+  await ensureIndex(
+    db,
+    "shareOrders",
+    { placerFundId: 1, type: 1, status: 1 },
+    { name: "share_orders_fund_open_bids", sparse: true, background: true },
+    log
+  );
   await ensureIndex(
     db,
     "shareListings",

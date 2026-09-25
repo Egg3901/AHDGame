@@ -267,7 +267,12 @@ function buildAuditEnvelope(doc: FinancialTxLogEntry): ActionAuditInput {
 }
 
 // Fire-and-forget single emission. Failures are sent to Sentry, never thrown.
-export async function emitTx(db: Db, entry: TxInput, thresholds?: TxThresholds): Promise<void> {
+export async function emitTx(
+  db: Db,
+  entry: TxInput,
+  thresholds?: TxThresholds,
+  turnLengthMinutes?: number
+): Promise<void> {
   try {
     const resolvedThresholds = thresholds ?? (await loadTxThresholds(db));
     const ratesByCurrency = await loadAnchorRateMap(db, [entry]);
@@ -276,7 +281,10 @@ export async function emitTx(db: Db, entry: TxInput, thresholds?: TxThresholds):
     const doc: FinancialTxLogEntry = {
       ...entryWithAnchor,
       _id: new ObjectId(),
-      expiresAt: await computeExpiresAt(db, entryWithAnchor.createdAt),
+      expiresAt:
+        turnLengthMinutes === undefined
+          ? await computeExpiresAt(db, entryWithAnchor.createdAt)
+          : computeExpiresAtSync(entryWithAnchor.createdAt, turnLengthMinutes),
       suspectFlags: flags.length > 0 ? flags : undefined,
       flagged: flags.length > 0,
     };

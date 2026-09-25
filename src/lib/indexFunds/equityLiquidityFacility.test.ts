@@ -7,8 +7,12 @@ const orderMocks = vi.hoisted(() => ({
   placeFundShareBuyOrder: vi.fn(),
   placeFundShareSellOrder: vi.fn(),
 }));
+const thresholdMocks = vi.hoisted(() => ({ loadTxThresholds: vi.fn() }));
+const cadenceMocks = vi.hoisted(() => ({ loadTurnLengthMinutes: vi.fn() }));
 
 vi.mock("@/lib/indexFunds/fundShareOrders", () => orderMocks);
+vi.mock("@/lib/financialTxLog/emit", () => thresholdMocks);
+vi.mock("@/lib/financialTxLog/expiresAt", () => cadenceMocks);
 
 import {
   EQUITY_LIQUIDITY_MAX_QUOTES_PER_FUND,
@@ -75,6 +79,8 @@ function facilityDb(priorOrders: Array<{ _id: ObjectId; placerFundId?: ObjectId 
 beforeEach(() => {
   vi.clearAllMocks();
   orderMocks.cancelFundShareOrder.mockResolvedValue(undefined);
+  thresholdMocks.loadTxThresholds.mockResolvedValue({});
+  cadenceMocks.loadTurnLengthMinutes.mockResolvedValue(60);
 });
 
 describe("planEquityLiquidityQuotes", () => {
@@ -152,6 +158,39 @@ describe("planEquityLiquidityQuotes", () => {
 });
 
 describe("refreshEquityLiquidityFacility", () => {
+  it("shares one threshold snapshot across cancellations and replacements", async () => {
+    const corporationId = new ObjectId();
+    const priorOrderId = new ObjectId();
+    const { db } = facilityDb([{ _id: priorOrderId }]);
+    const thresholds = { testThreshold: 1 };
+    thresholdMocks.loadTxThresholds.mockResolvedValue(thresholds);
+    orderMocks.placeFundShareBuyOrder.mockResolvedValue({ ok: true, orderId: new ObjectId() });
+    orderMocks.placeFundShareSellOrder.mockResolvedValue({ ok: true, orderId: new ObjectId() });
+
+    await refreshEquityLiquidityFacility({
+      db,
+      turn: 58,
+      enabled: true,
+      funds: [fund([corporationId])],
+      listings: [listing(corporationId)],
+      totalListings: 10,
+    });
+
+    expect(thresholdMocks.loadTxThresholds).toHaveBeenCalledTimes(1);
+    expect(cadenceMocks.loadTurnLengthMinutes).toHaveBeenCalledTimes(1);
+    expect(orderMocks.cancelFundShareOrder).toHaveBeenCalledWith(
+      db,
+      priorOrderId,
+      58,
+      thresholds,
+      60
+    );
+    expect(orderMocks.placeFundShareBuyOrder).toHaveBeenCalledWith(
+      db,
+      expect.objectContaining({ thresholds, turnLengthMinutes: 60 })
+    );
+  });
+
   it("cancels different funds concurrently while preserving each fund's order", async () => {
     const firstFundId = new ObjectId();
     const secondFundId = new ObjectId();
@@ -190,6 +229,15 @@ describe("refreshEquityLiquidityFacility", () => {
     });
 
     expect(peakActiveFunds).toBe(2);
+    expect(thresholdMocks.loadTxThresholds).toHaveBeenCalledTimes(1);
+    expect(cadenceMocks.loadTurnLengthMinutes).toHaveBeenCalledTimes(1);
+    expect(orderMocks.cancelFundShareOrder).toHaveBeenCalledWith(
+      db,
+      priorOrders[0]._id,
+      59,
+      expect.anything(),
+      60
+    );
     expect(orderMocks.cancelFundShareOrder.mock.calls.map((call) => call[1])).toEqual([
       priorOrders[0]._id,
       priorOrders[2]._id,
@@ -239,6 +287,12 @@ describe("refreshEquityLiquidityFacility", () => {
     });
 
     expect(orderMocks.cancelFundShareOrder).not.toHaveBeenCalledWith(db, bidOrderId);
+    expect(thresholdMocks.loadTxThresholds).toHaveBeenCalledTimes(1);
+    expect(cadenceMocks.loadTurnLengthMinutes).toHaveBeenCalledTimes(1);
+    expect(orderMocks.placeFundShareBuyOrder).toHaveBeenCalledWith(
+      db,
+      expect.objectContaining({ thresholds: expect.anything(), turnLengthMinutes: 60 })
+    );
     expect(snapshot).toMatchObject({
       quotePairsPlanned: 1,
       quotePairsPlaced: 0,

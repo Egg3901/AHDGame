@@ -64,6 +64,9 @@ export default function ApiAutomationGuidePage() {
         <p className="text-sm text-muted">
           View endpoints accept any personal API key (public or private scope) sent in the{" "}
           <code>X-API-Key</code> header. Write endpoints require a <code>private</code> scope key.
+          To check which scope a key has and what it is allowed to do, call{" "}
+          <code>GET /api/v1/key</code> with the key: it reports the key&apos;s scope, allowed
+          operations, and usage metadata, and never returns the secret itself.
         </p>
         <div className="mt-2 space-y-2">
           <p className="text-sm font-medium">Allowed via automation:</p>

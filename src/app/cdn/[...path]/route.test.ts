@@ -30,4 +30,17 @@ describe("singleplayer CDN mirror", () => {
     expect((await call(["static", "maps", "space name.json"])).status).toBe(400);
     expect((await call([])).status).toBe(400);
   });
+
+  it("rejects oversized upstream assets without caching them", async () => {
+    vi.stubEnv("SINGLEPLAYER", "1");
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        new Response("x", { headers: { "content-length": String(21 * 1024 * 1024) } })
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    expect((await call(["static", "oversized.webp"])).status).toBe(502);
+    expect(fetchMock).toHaveBeenCalledOnce();
+    vi.unstubAllGlobals();
+  });
 });

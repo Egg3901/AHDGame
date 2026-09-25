@@ -1,14 +1,17 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
+  ArrowDown,
   ArrowRight,
+  ArrowUp,
+  ArrowUpDown,
   Building2,
   HandCoins,
   Landmark,
   PiggyBank,
-  ShieldCheck,
+  Wallet,
   WalletCards,
 } from "lucide-react";
 import { CountryFlag } from "@/components/CountryFlag";
@@ -17,6 +20,7 @@ import { useToast } from "@/contexts/ToastContext";
 import { WarningBandBadge } from "@/components/banking/WarningBandBadge";
 import { formatBankMoney, formatRatePercent } from "@/components/banking/formatBankMoney";
 import { PrivateLoanModal } from "@/app/banking/PrivateLoanModal";
+import { CHARACTER_LOAN_SPREAD_PP, convertFaceBetweenCurrencies } from "@/lib/banking/lendingMath";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import type { CountryId } from "@/lib/constants/countries";
 import type { BankCharterType } from "@/lib/db/types/bank";
@@ -98,8 +102,10 @@ type HubPayload = {
   centralBanks: HubCentralBank[];
   privateBanks: HubPrivateBank[];
   savings: HubSavingsRow[];
+  savingsBalances?: Partial<Record<CurrencyCode, number>>;
   personalCash: Partial<Record<CurrencyCode, number>>;
   exchangeRates?: Partial<Record<CurrencyCode, number>>;
+  displayFxRates?: Partial<Record<CurrencyCode, number>>;
   personalIncomeByCurrency: Partial<Record<CurrencyCode, number>>;
   currentTurn: number;
   ceoCorporations: HubCeoCorporation[];
@@ -120,7 +126,7 @@ export function BankingHubClient() {
   const [data, setData] = useState<HubPayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<HubTab>("central");
+  const [activeTab, setActiveTab] = useState<HubTab>("private");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -165,8 +171,8 @@ export function BankingHubClient() {
   }
 
   const primary = data.centralBanks.find((b) => b.isPrimary);
+  const resolvedTab: HubTab = data.privateBankingEnabled ? activeTab : "central";
   const visibleTabs: Array<{ id: HubTab; label: string; icon: typeof Landmark; count?: number }> = [
-    { id: "central", label: "Central banks", icon: Landmark, count: data.centralBanks.length },
     ...(data.privateBankingEnabled
       ? [
           {
@@ -175,8 +181,11 @@ export function BankingHubClient() {
             icon: Building2,
             count: data.privateBanks.length,
           },
-          { id: "accounts" as const, label: "Your accounts", icon: WalletCards },
         ]
+      : []),
+    { id: "central", label: "Central banks", icon: Landmark, count: data.centralBanks.length },
+    ...(data.privateBankingEnabled
+      ? [{ id: "accounts" as const, label: "Your accounts", icon: WalletCards }]
       : []),
   ];
 
@@ -185,12 +194,17 @@ export function BankingHubClient() {
       <BankingHero
         primary={primary}
         privateBankingEnabled={data.privateBankingEnabled}
+        hasCharacter={!!data.characterId}
+        primaryCurrency={data.primaryCurrency}
+        personalCash={data.personalCash ?? {}}
+        savingsBalances={data.savingsBalances ?? {}}
+        displayFxRates={data.displayFxRates ?? {}}
         onNavigate={setActiveTab}
       />
 
-      <HubTabs tabs={visibleTabs} activeTab={activeTab} onChange={setActiveTab} />
+      <HubTabs tabs={visibleTabs} activeTab={resolvedTab} onChange={setActiveTab} />
 
-      {activeTab === "central" && (
+      {resolvedTab === "central" && (
         <section
           id="banking-panel-central"
           role="tabpanel"
@@ -204,15 +218,11 @@ export function BankingHubClient() {
             description="Compare the policy rates that set the baseline for saving and borrowing in each currency."
             icon={Landmark}
           />
-          <div className="grid gap-4 md:grid-cols-2">
-            {data.centralBanks.map((bank) => (
-              <CentralBankCard key={bank.currency} bank={bank} />
-            ))}
-          </div>
+          <CentralBanksTable banks={data.centralBanks} />
         </section>
       )}
 
-      {data.privateBankingEnabled && activeTab === "private" && (
+      {data.privateBankingEnabled && resolvedTab === "private" && (
         <section
           id="banking-panel-private"
           role="tabpanel"
@@ -237,16 +247,12 @@ export function BankingHubClient() {
               description="A corporation that owns a financial sector can issue a bank charter from its Bank console."
             />
           ) : (
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-              {data.privateBanks.map((bank) => (
-                <PrivateBankCard key={bank.corporationId} bank={bank} />
-              ))}
-            </div>
+            <PrivateBanksTable banks={data.privateBanks} hasCharacter={!!data.characterId} />
           )}
         </section>
       )}
 
-      {data.privateBankingEnabled && activeTab === "accounts" && (
+      {data.privateBankingEnabled && resolvedTab === "accounts" && (
         <section
           id="banking-panel-accounts"
           role="tabpanel"
@@ -377,10 +383,20 @@ function SectionHeading({
 function BankingHero({
   primary,
   privateBankingEnabled,
+  hasCharacter,
+  primaryCurrency,
+  personalCash,
+  savingsBalances,
+  displayFxRates,
   onNavigate,
 }: {
   primary: HubCentralBank | undefined;
   privateBankingEnabled: boolean;
+  hasCharacter: boolean;
+  primaryCurrency: CurrencyCode;
+  personalCash: Partial<Record<CurrencyCode, number>>;
+  savingsBalances: Partial<Record<CurrencyCode, number>>;
+  displayFxRates: Partial<Record<CurrencyCode, number>>;
   onNavigate: (tab: HubTab) => void;
 }) {
   return (
@@ -396,37 +412,50 @@ function BankingHero({
       />
 
       <div className="relative px-5 pb-6 pt-7 sm:px-8 sm:pb-8 sm:pt-9">
-        <div className="max-w-2xl">
-          <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] text-primary">
-            <span className="h-px w-7 bg-primary/70" aria-hidden />
-            World financial system
-          </div>
-          <h1 className="mt-3 font-display text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
-            Banking &amp; Credit
-          </h1>
-          <p className="mt-3 max-w-xl text-sm leading-relaxed text-muted sm:text-base">
-            Follow monetary policy, compare chartered banks, and manage your savings and borrowing
-            from one desk.
-          </p>
-          {privateBankingEnabled && (
-            <div className="mt-5 flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => onNavigate("private")}
-                className="inline-flex items-center gap-2 rounded-lg bg-primary px-3.5 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-card"
-              >
-                Browse private banks
-                <ArrowRight className="h-4 w-4" aria-hidden />
-              </button>
-              <button
-                type="button"
-                onClick={() => onNavigate("accounts")}
-                className="inline-flex items-center gap-2 rounded-lg border border-card-border bg-card/70 px-3.5 py-2 text-sm font-semibold text-foreground transition-colors hover:border-primary/40 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-card"
-              >
-                Deposit or borrow
-                <WalletCards className="h-4 w-4" aria-hidden />
-              </button>
+        <div
+          className={`grid gap-6 ${hasCharacter ? "xl:grid-cols-[minmax(0,1fr)_minmax(300px,360px)]" : ""}`}
+        >
+          <div className="max-w-2xl">
+            <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] text-primary">
+              <span className="h-px w-7 bg-primary/70" aria-hidden />
+              World financial system
             </div>
+            <h1 className="mt-3 font-display text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
+              Banking &amp; Credit
+            </h1>
+            <p className="mt-3 max-w-xl text-sm leading-relaxed text-muted sm:text-base">
+              Follow monetary policy, compare chartered banks, and manage your savings and borrowing
+              from one desk.
+            </p>
+            {privateBankingEnabled && (
+              <div className="mt-5 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => onNavigate("private")}
+                  className="inline-flex items-center gap-2 rounded-lg bg-primary px-3.5 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-card"
+                >
+                  Browse private banks
+                  <ArrowRight className="h-4 w-4" aria-hidden />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onNavigate("accounts")}
+                  className="inline-flex items-center gap-2 rounded-lg border border-card-border bg-card/70 px-3.5 py-2 text-sm font-semibold text-foreground transition-colors hover:border-primary/40 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-card"
+                >
+                  Deposit or borrow
+                  <WalletCards className="h-4 w-4" aria-hidden />
+                </button>
+              </div>
+            )}
+          </div>
+
+          {hasCharacter && (
+            <YourFundsPanel
+              personalCash={personalCash}
+              savingsBalances={savingsBalances}
+              primaryCurrency={primaryCurrency}
+              fxRates={displayFxRates}
+            />
           )}
         </div>
 
@@ -506,170 +535,554 @@ function HeroRate({
   );
 }
 
-function CentralBankCard({ bank }: { bank: HubCentralBank }) {
+// ── Hero "Your balances" panel ─────────────────────────────────────────
+
+function nonzeroBalances(
+  balances: Partial<Record<CurrencyCode, number>>
+): Array<[CurrencyCode, number]> {
+  return (Object.entries(balances) as Array<[CurrencyCode, number]>)
+    .filter(([, amount]) => Number.isFinite(amount) && amount > 0)
+    .sort(([a], [b]) => a.localeCompare(b));
+}
+
+/** Display total of a multi-currency balance set, converted into `target`. */
+function totalInCurrency(
+  balances: Partial<Record<CurrencyCode, number>>,
+  target: CurrencyCode,
+  rates: Partial<Record<CurrencyCode, number>>
+): number {
+  let total = 0;
+  for (const [code, amount] of Object.entries(balances) as Array<[CurrencyCode, number]>) {
+    if (!Number.isFinite(amount) || amount <= 0) continue;
+    total +=
+      code === target
+        ? amount
+        : convertFaceBetweenCurrencies(amount, code, target, rates[code] ?? 0, rates[target] ?? 0);
+  }
+  return total;
+}
+
+function YourFundsPanel({
+  personalCash,
+  savingsBalances,
+  primaryCurrency,
+  fxRates,
+}: {
+  personalCash: Partial<Record<CurrencyCode, number>>;
+  savingsBalances: Partial<Record<CurrencyCode, number>>;
+  primaryCurrency: CurrencyCode;
+  fxRates: Partial<Record<CurrencyCode, number>>;
+}) {
   return (
-    <Link
-      href={bank.href}
-      className="group relative overflow-hidden rounded-2xl border border-card-border bg-card p-5 shadow-card transition-all hover:-translate-y-0.5 hover:border-primary/35 hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+    <aside
+      aria-label="Your balances"
+      className="self-start overflow-hidden rounded-2xl border border-primary/25 bg-background/55 backdrop-blur-sm"
     >
-      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-primary/60 via-primary/20 to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
-      <div className="flex items-start justify-between gap-4">
-        <div className="flex min-w-0 items-start gap-3">
-          <div className="flex h-10 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-card-border bg-card-elevated transition-colors group-hover:border-primary/25">
-            <CountryFlag country={bank.countryId} width={40} height={27} title={bank.countryName} />
-          </div>
-          <div className="min-w-0">
-            <h3 className="truncate font-bold text-foreground transition-colors group-hover:text-primary">
-              {bank.bankName}
-            </h3>
-            <p className="mt-0.5 text-xs text-muted">
-              {bank.countryName} · <span className="font-mono">{bank.currency}</span>
-            </p>
-          </div>
-        </div>
-        {bank.isPrimary ? (
-          <Badge color="primary" variant="subtle">
-            Primary
-          </Badge>
-        ) : (
-          <ArrowRight
-            className="mt-1 h-4 w-4 shrink-0 text-muted/50 transition-all group-hover:translate-x-0.5 group-hover:text-primary"
-            aria-hidden
-          />
-        )}
-      </div>
-      <dl className="mt-5 grid grid-cols-2 divide-x divide-card-border rounded-xl border border-card-border bg-background/45">
-        <RateMetric label="Prime rate" value={formatRatePercent(bank.primeRate)} />
-        <RateMetric
-          label="Savings APY"
-          value={formatRatePercent(bank.savingsApyPercent)}
-          hint="Half the real rate: prime minus inflation"
+      <p className="border-b border-card-border px-4 py-3 text-[10px] font-bold uppercase tracking-[0.16em] text-primary">
+        Your balances
+      </p>
+      <div className="grid divide-y divide-card-border sm:grid-cols-2 sm:divide-x sm:divide-y-0 xl:grid-cols-1 xl:divide-x-0 xl:divide-y">
+        <FundsStat
+          icon={Wallet}
+          label="Liquid funds"
+          total={totalInCurrency(personalCash, primaryCurrency, fxRates)}
+          currency={primaryCurrency}
+          entries={nonzeroBalances(personalCash)}
         />
-      </dl>
-    </Link>
+        <FundsStat
+          icon={PiggyBank}
+          label="Savings"
+          total={totalInCurrency(savingsBalances, primaryCurrency, fxRates)}
+          currency={primaryCurrency}
+          entries={nonzeroBalances(savingsBalances)}
+        />
+      </div>
+      <p className="border-t border-card-border px-4 py-2.5 text-[10px] leading-relaxed text-muted">
+        Totals converted to {primaryCurrency} at current exchange rates.
+      </p>
+    </aside>
   );
 }
 
-function PrivateBankCard({ bank }: { bank: HubPrivateBank }) {
-  const customerBank = bank.charterType === "retail" || bank.charterType === "universal";
-  const depositRate =
-    bank.charterType === "investment" ? "Not offered" : formatRatePercent(bank.depositRatePercent);
-  const lendingRate =
-    bank.charterType === "investment" ? "Not offered" : formatRatePercent(bank.lendingRatePercent);
-
+function FundsStat({
+  icon: Icon,
+  label,
+  total,
+  currency,
+  entries,
+}: {
+  icon: typeof Landmark;
+  label: string;
+  total: number;
+  currency: CurrencyCode;
+  entries: Array<[CurrencyCode, number]>;
+}) {
   return (
-    <article className="group flex min-h-full flex-col overflow-hidden rounded-2xl border border-card-border bg-card shadow-card transition-all hover:-translate-y-0.5 hover:border-primary/35 hover:shadow-lg">
-      <Link
-        href={bank.href}
-        className="block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary"
+    <div className="px-4 py-4">
+      <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">
+        <Icon className="h-3.5 w-3.5" aria-hidden />
+        {label}
+      </div>
+      <p className="mt-1.5 font-mono text-2xl font-bold tabular-nums text-foreground">
+        {formatBankMoney(total, currency)}
+      </p>
+      {entries.length > 0 ? (
+        <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1">
+          {entries.map(([code, amount]) => (
+            <span key={code} className="font-mono text-[11px] tabular-nums text-muted">
+              {formatBankMoney(amount, code)} {code}
+            </span>
+          ))}
+        </div>
+      ) : (
+        <p className="mt-2 text-[11px] text-muted">No balance yet</p>
+      )}
+    </div>
+  );
+}
+
+// ── Sortable tables ────────────────────────────────────────────────────
+
+type SortDirection = "asc" | "desc";
+type SortState<K extends string> = { key: K; dir: SortDirection } | null;
+
+function toggleSort<K extends string>(
+  current: SortState<K>,
+  column: K,
+  defaultDir: SortDirection
+): SortState<K> {
+  if (current?.key === column) {
+    return { key: column, dir: current.dir === "asc" ? "desc" : "asc" };
+  }
+  return { key: column, dir: defaultDir };
+}
+
+function SortableTh<K extends string>({
+  label,
+  column,
+  sort,
+  onToggle,
+  defaultDir = "desc",
+  align = "left",
+  className = "",
+}: {
+  label: string;
+  column: K;
+  sort: SortState<K>;
+  onToggle: (column: K, defaultDir: SortDirection) => void;
+  defaultDir?: SortDirection;
+  align?: "left" | "right";
+  className?: string;
+}) {
+  const dir = sort && sort.key === column ? sort.dir : null;
+  return (
+    <th
+      scope="col"
+      aria-sort={dir === "asc" ? "ascending" : dir === "desc" ? "descending" : undefined}
+      className={`px-4 py-3 font-semibold ${align === "right" ? "text-right" : "text-left"} ${className}`}
+    >
+      <button
+        type="button"
+        onClick={() => onToggle(column, defaultDir)}
+        className={`group inline-flex items-center gap-1 uppercase tracking-widest transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
+          align === "right" ? "flex-row-reverse" : ""
+        } ${dir ? "text-foreground" : ""}`}
       >
-        <div className="flex items-start justify-between gap-3 p-5 pb-4">
-          <div className="flex min-w-0 items-start gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-card-elevated text-muted transition-colors group-hover:text-primary">
-              <Building2 className="h-4.5 w-4.5" aria-hidden />
-            </div>
-            <div className="min-w-0">
-              <h3 className="truncate font-bold text-foreground transition-colors group-hover:text-primary">
-                {bank.name}
-              </h3>
-              <p className="mt-0.5 text-xs text-muted">
-                {bank.countryName} · <span className="font-mono">{bank.currency}</span>
-              </p>
-            </div>
-          </div>
-          <ArrowRight
-            className="mt-1 h-4 w-4 shrink-0 text-muted/50 transition-all group-hover:translate-x-0.5 group-hover:text-primary"
+        {label}
+        {dir ? (
+          dir === "asc" ? (
+            <ArrowUp className="h-3 w-3 text-primary" aria-hidden />
+          ) : (
+            <ArrowDown className="h-3 w-3 text-primary" aria-hidden />
+          )
+        ) : (
+          <ArrowUpDown
+            className="h-3 w-3 text-muted/40 transition-colors group-hover:text-muted"
             aria-hidden
           />
-        </div>
+        )}
+      </button>
+    </th>
+  );
+}
 
-        <div className="flex flex-wrap items-center gap-2 px-5">
+function sortRows<T, K extends string>(
+  rows: T[],
+  sort: SortState<K>,
+  metric: (row: T, key: K) => number | string | null,
+  tiebreak: (row: T) => string
+): T[] {
+  if (!sort) return rows;
+  const { key, dir } = sort;
+  return [...rows].sort((a, b) => {
+    const av = metric(a, key);
+    const bv = metric(b, key);
+    let cmp: number;
+    if (av == null && bv == null) cmp = 0;
+    else if (av == null) return 1;
+    else if (bv == null) return -1;
+    else if (typeof av === "string") cmp = av.localeCompare(String(bv));
+    else cmp = av - Number(bv);
+    const ordered = dir === "asc" ? cmp : -cmp;
+    return ordered === 0 ? tiebreak(a).localeCompare(tiebreak(b)) : ordered;
+  });
+}
+
+// ── Central banks table ────────────────────────────────────────────────
+
+type CentralBankSortKey = "name" | "prime" | "apy";
+
+function CentralBanksTable({ banks }: { banks: HubCentralBank[] }) {
+  const [sort, setSort] = useState<SortState<CentralBankSortKey>>(null);
+
+  const sorted = useMemo(
+    () =>
+      sortRows(
+        banks,
+        sort,
+        (bank, key) => {
+          if (key === "name") return bank.bankName.toLowerCase();
+          if (key === "prime") return bank.primeRate;
+          return bank.savingsApyPercent;
+        },
+        (bank) => bank.bankName
+      ),
+    [banks, sort]
+  );
+
+  return (
+    <div className="overflow-x-auto rounded-2xl border border-card-border bg-card shadow-card">
+      <table className="w-full min-w-[640px] text-sm">
+        <thead>
+          <tr className="border-b border-card-border bg-card-elevated/45 text-[10px] uppercase tracking-widest text-muted">
+            <SortableTh
+              label="Bank"
+              column="name"
+              sort={sort}
+              onToggle={(key, dir) => setSort((cur) => toggleSort(cur, key, dir))}
+              defaultDir="asc"
+              className="pl-5"
+            />
+            <th scope="col" className="px-4 py-3 text-left font-semibold">
+              Currency
+            </th>
+            <SortableTh
+              label="Prime rate"
+              column="prime"
+              sort={sort}
+              onToggle={(key, dir) => setSort((cur) => toggleSort(cur, key, dir))}
+              align="right"
+            />
+            <SortableTh
+              label="Savings APY"
+              column="apy"
+              sort={sort}
+              onToggle={(key, dir) => setSort((cur) => toggleSort(cur, key, dir))}
+              align="right"
+            />
+            <th scope="col" className="px-5 py-3 text-right font-semibold">
+              <span className="sr-only">Open</span>
+            </th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-card-border">
+          {sorted.map((bank) => (
+            <tr key={bank.currency} className="transition-colors hover:bg-background/40">
+              <td className="px-5 py-3.5">
+                <Link
+                  href={bank.href}
+                  className="group flex min-w-0 items-center gap-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                >
+                  <span className="flex h-8 w-10 shrink-0 items-center justify-center overflow-hidden rounded-md border border-card-border bg-card-elevated">
+                    <CountryFlag
+                      country={bank.countryId}
+                      width={32}
+                      height={22}
+                      title={bank.countryName}
+                    />
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block truncate font-semibold text-foreground transition-colors group-hover:text-primary">
+                      {bank.bankName}
+                    </span>
+                    <span className="block text-xs text-muted">{bank.countryName}</span>
+                  </span>
+                </Link>
+              </td>
+              <td className="px-4 py-3.5 font-mono text-xs font-semibold text-muted">
+                {bank.currency}
+              </td>
+              <td className="px-4 py-3.5 text-right font-mono text-sm font-bold tabular-nums text-foreground">
+                {formatRatePercent(bank.primeRate)}
+              </td>
+              <td className="px-4 py-3.5 text-right font-mono text-sm font-bold tabular-nums text-success">
+                {formatRatePercent(bank.savingsApyPercent)}
+              </td>
+              <td className="px-5 py-3.5 text-right">
+                {bank.isPrimary ? (
+                  <Badge color="primary" variant="subtle">
+                    Your bank
+                  </Badge>
+                ) : (
+                  <Link
+                    href={bank.href}
+                    aria-label={`Open ${bank.bankName}`}
+                    className="inline-flex items-center gap-1 text-xs font-semibold text-muted transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                  >
+                    Open desk
+                    <ArrowRight className="h-3.5 w-3.5" aria-hidden />
+                  </Link>
+                )}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// ── Private banks table ────────────────────────────────────────────────
+
+type PrivateBankSortKey = "name" | "depositApy" | "loanRate" | "health" | "deposits";
+
+function PrivateBanksTable({
+  banks,
+  hasCharacter,
+}: {
+  banks: HubPrivateBank[];
+  hasCharacter: boolean;
+}) {
+  const [sort, setSort] = useState<SortState<PrivateBankSortKey>>({
+    key: "depositApy",
+    dir: "desc",
+  });
+  const estRateLabel = hasCharacter ? "Est. yours" : "Est. personal";
+
+  const sorted = useMemo(
+    () =>
+      sortRows(
+        banks,
+        sort,
+        (bank, key) => {
+          switch (key) {
+            case "name":
+              return bank.name.toLowerCase();
+            case "depositApy":
+              return bank.charterType === "investment" ? null : bank.depositRatePercent;
+            case "loanRate":
+              return bank.charterType === "investment" ? null : bank.lendingRatePercent;
+            case "health":
+              return bank.confidence;
+            case "deposits":
+              return bank.totalDeposits;
+            default:
+              return bank.name.toLowerCase();
+          }
+        },
+        (bank) => bank.name
+      ),
+    [banks, sort]
+  );
+
+  const onToggle = (key: PrivateBankSortKey, dir: SortDirection) =>
+    setSort((cur) => toggleSort(cur, key, dir));
+
+  return (
+    <div className="overflow-x-auto rounded-2xl border border-card-border bg-card shadow-card">
+      <table className="w-full min-w-[960px] text-sm">
+        <thead>
+          <tr className="border-b border-card-border bg-card-elevated/45 text-[10px] uppercase tracking-widest text-muted">
+            <SortableTh
+              label="Bank"
+              column="name"
+              sort={sort}
+              onToggle={onToggle}
+              defaultDir="asc"
+              className="pl-5"
+            />
+            <th scope="col" className="px-4 py-3 text-left font-semibold">
+              Charter
+            </th>
+            <SortableTh
+              label="Savings APY"
+              column="depositApy"
+              sort={sort}
+              onToggle={onToggle}
+              align="right"
+            />
+            <SortableTh
+              label="Loan rate"
+              column="loanRate"
+              sort={sort}
+              onToggle={onToggle}
+              defaultDir="asc"
+              align="right"
+            />
+            <SortableTh
+              label="Health"
+              column="health"
+              sort={sort}
+              onToggle={onToggle}
+              align="right"
+            />
+            <SortableTh
+              label="Deposits"
+              column="deposits"
+              sort={sort}
+              onToggle={onToggle}
+              align="right"
+            />
+            <th scope="col" className="px-5 py-3 text-right font-semibold">
+              <span className="sr-only">Actions</span>
+            </th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-card-border">
+          {sorted.map((bank) => (
+            <PrivateBankRow key={bank.corporationId} bank={bank} estRateLabel={estRateLabel} />
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function PrivateBankRow({ bank, estRateLabel }: { bank: HubPrivateBank; estRateLabel: string }) {
+  const customerBank = bank.charterType === "retail" || bank.charterType === "universal";
+  const estimatedRate = bank.lendingRatePercent + CHARACTER_LOAN_SPREAD_PP;
+
+  return (
+    <tr className="transition-colors hover:bg-background/40">
+      <td className="px-5 py-3.5">
+        <Link
+          href={bank.href}
+          className="group flex min-w-0 items-center gap-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+        >
+          <span className="flex h-8 w-10 shrink-0 items-center justify-center overflow-hidden rounded-md border border-card-border bg-card-elevated">
+            <CountryFlag country={bank.countryId} width={32} height={22} title={bank.countryName} />
+          </span>
+          <span className="min-w-0">
+            <span className="block truncate font-semibold text-foreground transition-colors group-hover:text-primary">
+              {bank.name}
+            </span>
+            <span className="block text-xs text-muted">
+              {bank.countryName} · <span className="font-mono">{bank.currency}</span>
+            </span>
+          </span>
+        </Link>
+      </td>
+      <td className="px-4 py-3.5">
+        <div className="flex flex-wrap items-center gap-1.5">
           <Badge color={bank.operatorType === "player" ? "info" : "default"} variant="subtle">
             {bank.operatorType === "player" ? "Player-run" : "NPP-run"}
           </Badge>
           <Badge color="default" variant="subtle">
             {charterLabel(bank.charterType)}
           </Badge>
-          <WarningBandBadge band={bank.warningBand} confidence={bank.confidence} />
+          {bank.requireApproval && (
+            <Badge color="warning" variant="subtle">
+              Manual approval
+            </Badge>
+          )}
         </div>
-
-        <dl className="mt-5 grid grid-cols-2 divide-x divide-card-border border-y border-card-border bg-background/35">
-          <RateMetric
-            label="Deposit rate"
-            value={depositRate}
-            compact={depositRate === "Not offered"}
-          />
-          <RateMetric
-            label="Lending rate"
-            value={lendingRate}
-            compact={lendingRate === "Not offered"}
-          />
-        </dl>
-      </Link>
-
-      <div className="mt-auto flex items-center justify-between gap-3 px-5 py-4">
-        <div>
-          <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">
-            Total deposits
-          </p>
-          <p className="mt-0.5 font-mono text-sm font-semibold tabular-nums text-foreground">
-            {formatBankMoney(bank.totalDeposits, bank.currency)}
-          </p>
-        </div>
-        <ShieldCheck className="h-4 w-4 text-muted/60" aria-label="Deposit supervision" />
-      </div>
-
-      <div className="grid gap-2 border-t border-card-border p-4 sm:grid-cols-2">
+      </td>
+      <td className="px-4 py-3.5 text-right">
         {customerBank ? (
-          <>
-            <Link
-              href={`${bank.href}#customer-deposit`}
-              aria-label={`Deposit savings at ${bank.name}`}
-              className="inline-flex items-center justify-center rounded-lg border border-success/35 bg-success/10 px-3 py-2 text-xs font-semibold text-success transition-colors hover:bg-success/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-success"
-            >
-              Deposit savings
-            </Link>
-            <Link
-              href={`${bank.href}#customer-loan`}
-              aria-label={`Apply for a loan at ${bank.name}`}
-              className="inline-flex items-center justify-center rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-            >
-              Apply for a loan
-            </Link>
-          </>
+          <span className="font-mono text-sm font-bold tabular-nums text-success">
+            {formatRatePercent(bank.depositRatePercent)}
+          </span>
         ) : (
-          <Link
-            href={bank.href}
-            className="col-span-full inline-flex items-center justify-center rounded-lg border border-card-border px-3 py-2 text-xs font-semibold text-muted transition-colors hover:border-primary/40 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-          >
-            View bank
-          </Link>
+          <span className="text-xs text-muted">Not offered</span>
         )}
-      </div>
-    </article>
+      </td>
+      <td className="px-4 py-3.5 text-right">
+        {customerBank ? (
+          <span title={`Personal loans price at the base rate +${CHARACTER_LOAN_SPREAD_PP}pp`}>
+            <span className="block font-mono text-sm font-bold tabular-nums text-foreground">
+              {formatRatePercent(bank.lendingRatePercent)}
+            </span>
+            <span className="block font-mono text-[11px] tabular-nums text-muted">
+              {estRateLabel} {formatRatePercent(estimatedRate)}
+            </span>
+          </span>
+        ) : (
+          <span className="text-xs text-muted">Not offered</span>
+        )}
+      </td>
+      <td className="px-4 py-3.5">
+        <BankHealthCell band={bank.warningBand} confidence={bank.confidence} />
+      </td>
+      <td className="px-4 py-3.5 text-right font-mono text-sm tabular-nums text-foreground">
+        {formatBankMoney(bank.totalDeposits, bank.currency)}
+      </td>
+      <td className="px-5 py-3.5">
+        <div className="flex items-center justify-end gap-2">
+          {customerBank ? (
+            <>
+              <Link
+                href={`${bank.href}#customer-deposit`}
+                aria-label={`Deposit savings at ${bank.name}`}
+                className="rounded-lg border border-success/35 bg-success/10 px-3 py-1.5 text-xs font-semibold text-success transition-colors hover:bg-success/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-success"
+              >
+                Deposit
+              </Link>
+              <Link
+                href={`${bank.href}#customer-loan`}
+                aria-label={`Apply for a loan at ${bank.name}`}
+                className="rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              >
+                Borrow
+              </Link>
+            </>
+          ) : (
+            <Link
+              href={bank.href}
+              className="rounded-lg border border-card-border px-3 py-1.5 text-xs font-semibold text-muted transition-colors hover:border-primary/40 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            >
+              View bank
+            </Link>
+          )}
+        </div>
+      </td>
+    </tr>
   );
 }
 
-function RateMetric({
-  label,
-  value,
-  hint,
-  compact = false,
+const BAND_BAR_COLOR = {
+  green: "bg-success",
+  amber: "bg-warning",
+  red: "bg-error",
+} as const;
+
+function BankHealthCell({
+  band,
+  confidence,
 }: {
-  label: string;
-  value: string;
-  hint?: string;
-  compact?: boolean;
+  band: HubPrivateBank["warningBand"];
+  confidence: number | null;
 }) {
+  const score =
+    typeof confidence === "number" && Number.isFinite(confidence)
+      ? Math.round(confidence * 100)
+      : null;
   return (
-    <div className="min-w-0 px-4 py-3.5">
-      <dt className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted">{label}</dt>
-      <dd
-        className={`mt-1 font-mono font-bold tabular-nums text-foreground ${compact ? "text-xs" : "text-base"}`}
-      >
-        {value}
-      </dd>
-      {hint && <dd className="mt-1 text-[10px] leading-tight text-muted">{hint}</dd>}
+    <div className="flex items-center justify-end gap-2.5">
+      {score != null && (
+        <span
+          className="hidden h-1.5 w-12 overflow-hidden rounded-full bg-card-border/50 sm:block"
+          aria-hidden
+        >
+          <span
+            className={`block h-full rounded-full ${band ? BAND_BAR_COLOR[band] : "bg-muted"}`}
+            style={{ width: `${score}%` }}
+          />
+        </span>
+      )}
+      <span className="w-7 text-right font-mono text-sm font-bold tabular-nums text-foreground">
+        {score ?? "—"}
+      </span>
+      <WarningBandBadge band={band} />
     </div>
   );
 }

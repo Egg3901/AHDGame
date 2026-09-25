@@ -90,6 +90,12 @@ Useful entry points:
 - `scripts/seed/` for seeders, `scripts/world/` for bootstrap, `scripts/migrations/` for migrations
 - `scripts/sim/` for the headless world simulator, including `localWorldsimMcp.ts`, an MCP server over stdio that lets a coding agent run full world simulations against a local sandbox Mongo. This is how balance changes get validated: simulate hundreds of turns, compare against baseline, then merge.
 
+### Public API MCP bridge
+
+For external read-only integrations, create a **public-scope** API key in Settings and run `npm run --silent api:mcp`. Configure your MCP client to launch that command with `AHD_API_KEY` in its environment. Set `AHD_API_BASE_URL` only for a local or alternate deployment; remote URLs must use HTTPS. The bridge exposes each public v1 read endpoint and own-key capabilities as tools, forwards the key in `X-API-Key`, and respects the API's existing rate limits. It has no write tools and does not use a session cookie. Keep the key in your client secrets store, outside repository config.
+
+The machine-readable catalog at `/api/public/v1/meta` includes MCP setup metadata and the static CDN base URL. CDN assets are public; API data still requires a scoped key. Singleplayer keeps its local `/cdn` mirror and limits downloaded assets to 20 MB each.
+
 ## Documentation
 
 [docs.lakesidegames.net](https://docs.lakesidegames.net) has the player wiki, design docs, and engineering guides in one place. Doc sources live in [Egg3901/ahd-docs](https://github.com/Egg3901/ahd-docs); the player wiki is seeded from `src/lib/seeds/wiki/` in this repo. Docs suffixed `-as-shipped` are grounded in current code and win over older design docs where they disagree.
