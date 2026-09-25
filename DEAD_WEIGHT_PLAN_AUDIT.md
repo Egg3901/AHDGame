@@ -217,16 +217,19 @@ within a package is dependency order; packages are sequenced in §5.
 
 ### WP2 - `corporationTurn` read batching
 
-- **Problem (high):** 23.2 s median / 2,420 trips [measured, stale]; per-row
-  helpers persist in `src/lib/turn/corporation/` support modules
-  (`buildLookups.ts`, `shareListings.ts`, `shareOrders.ts`,
-  `voteReminders.ts`) [code]. Writes already end in `bulkWrite`; the trips are
-  reads.
+- **Problem (high):** 23.2 s median / 2,420 trips [measured, stale]. A local
+  phase trace found 558 `tariffs` commands inside signed-bill reconciliation
+  on a turn with 276 tariff provisions. Per-row helpers also remain in
+  `src/lib/turn/corporation/` support modules (`buildLookups.ts`,
+  `shareListings.ts`, `shareOrders.ts`, `voteReminders.ts`) [code], but the
+  watched support reads did not show a comparable per-sector query loop.
 - **Surface:** `src/lib/turn/corporation/*`, `corporateSectors`,
   `corporations`, `shareListings`, `shareOrders`, state-metric margin modifier.
-- **Smallest useful steps:** collect ids once per turn → projected `$in` reads
-  → per-turn lookup maps passed into `sectorTurn`; memoize the state-metric
-  margin modifier; keep write order identical.
+- **Smallest useful steps:** replay signed non-economy tariff provisions with
+  one ordered bulk write while retaining economy-wide budget sync; collect
+  remaining ids once per turn → projected `$in` reads → per-turn lookup maps
+  passed into `sectorTurn`; memoize the state-metric margin modifier; keep
+  write order identical.
 - **Correctness risks:** same-turn write-then-read inside the loop (a sector's
   own update must be visible to later legs in the same turn - check whether
   any helper re-reads what an earlier leg wrote); guarded float/ownership
@@ -575,14 +578,96 @@ so these readings cannot by themselves prove a code-diff speedup.
 | `recomputeSharePrices` |                55 |          631 |       853 |                     55 |              1,000 |
 | `fiscalYear`           |                 1 |        3,214 |     3,214 |                      0 |   7,000, unchanged |
 
-| Package                | Result                                                                                                                                                                                                                                                                                                                                                                                                                      | Remaining gate                                                                                                                                                                                                              |
-| ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| WP0                    | Production turndiag read at turn 1117 (2026-09-24 23:00 UTC): successful 116.358 s turn, 243 recorded phases; `corporationTurn` 29.726 s and `indexFunds` 14.345 s. The last 60 logged turns have 111.846 s median and 236.547 s p95. Turn 960 was completed with warnings under the old success predicate, fixed by #2281. Queried `turnLogs` directly for the round-trip sample above and reconciled six warning budgets. | BSON bytes and per-turn-type p95 need a matched local world or additional telemetry. The partial local copy is ready for a profiling turn. Warning-budget changes are not performance gains.                                |
-| WP1                    | Added the migration-compatible `share_orders_fund_open_bids` index to the recurring seed path. Production `explain(queryPlanner)` already uses the migration-created index, so this protects reset worlds and has no expected production speedup.                                                                                                                                                                           | Test a reset world to confirm the index is recreated; measure the actual batching changes before claiming a trip or byte reduction. The second bid read remains because it observes the live order book after cancellation. |
-| WP10, stream 6 cleanup | Moved the two residual modules from `src/lib/corporation/` into `src/lib/corporations/` and updated their four callers. The singular directory is gone.                                                                                                                                                                                                                                                                     | Typecheck, focused tests, and build must pass. The banking/fund seam and phase merge are still open.                                                                                                                        |
-| WP7 inventory          | Read-only production `db.stats()` reports 392 collections, 31,156,553 documents, and 16.49 GB logical data. The three largest collections by logical size are `ledgerEntries` (4,390 MB), `actionAuditLog` (2,935 MB), and `financialTxLog` (2,572 MB).                                                                                                                                                                     | Writer/reader inventory, 30-day growth, and restore requirements remain open; no TTL or deletion has been applied.                                                                                                          |
-| WP8 measurement        | Read-only production aggregation found 36,140 withdrawn and 2,337 active `electionCandidates` rows. The `tallyManagement` query `{ electionId, status: "active" }` uses `electionCandidates_electionId` in production `explain(queryPlanner)`. This does not support a global candidate-scan explanation for `voteAccumulation` latency.                                                                                    | Profile election-turn query work and define the historical reader contract before any archive or deletion.                                                                                                                  |
-| WP13 measurement       | `/usr/bin/time -f %M npm run typecheck` completed successfully with peak RSS 7,849,504 KiB (7.49 GiB) in this worktree. The configured 8,192 MiB V8 heap is a limit, not the measured RSS; the proposed under-3-GB target is currently unsupported.                                                                                                                                                                         | Profile TypeScript diagnostics and type instantiation hotspots before changing compiler settings. Elapsed wall time was 1,790.93 s on a heavily contended host and is not a stable compiler benchmark.                      |
+| Package                | Result                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | Remaining gate                                                                                                                                                                                                                                                       |
+| ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| WP0                    | Production turndiag read at turn 1124 (2026-09-25 06:00 UTC): successful 127.205 s turn, 243 recorded phases, six warnings; `corporationTurn` 28.959 s, `nppActionProcessing` 28.272 s, and `indexFunds` 12.241 s. The latest 50 turns (1075-1124) have 111.773 s median, 238.052 s p95, and 339.773 s max. The 60-turn phase timing refresh below is from the currently deployed service, not this PR. The existing production round-trip sample above covers turns 1058-1117. Turn 960 was completed with warnings under the old success predicate, fixed by #2281. | Production BSON bytes are not exposed by current turndiag tools. Separate fiscal-year and election-turn p95s and a fresh round-trip window remain open; the partial local copy is not a production bytes baseline. Warning-budget changes are not performance gains. |
+| WP1                    | Added the migration-compatible `share_orders_fund_open_bids` index to the recurring seed path. Production `explain(queryPlanner)` already uses the migration-created index, so this protects reset worlds and has no expected production speedup. A fresh local reset-world seed recreated the index with its expected key, name, and sparse option.                                                                                                                                                                                                                  | Validate the local phase-only reduction after rollout against production telemetry. The second bid read remains because it observes the live order book after cancellation.                                                                                          |
+| WP10, stream 6 cleanup | Moved the two residual modules from `src/lib/corporation/` into `src/lib/corporations/` and updated their four callers. The singular directory is gone.                                                                                                                                                                                                                                                                                                                                                                                                               | Focused tests, full typecheck, and build passed in CI on the prior head. The banking/fund seam and phase merge are still open.                                                                                                                                       |
+| WP7 inventory          | Read-only production `db.stats()` reports 392 collections, 31,156,553 documents, and 16.49 GB logical data. The three largest collections by logical size are `ledgerEntries` (4,390 MB), `actionAuditLog` (2,935 MB), and `financialTxLog` (2,572 MB).                                                                                                                                                                                                                                                                                                               | Writer/reader inventory, 30-day growth, and restore requirements remain open; no TTL or deletion has been applied.                                                                                                                                                   |
+| WP8 measurement        | Read-only production aggregation found 36,140 withdrawn and 2,337 active `electionCandidates` rows. The `tallyManagement` query `{ electionId, status: "active" }` uses `electionCandidates_electionId` in production `explain(queryPlanner)`. This does not support a global candidate-scan explanation for `voteAccumulation` latency.                                                                                                                                                                                                                              | Profile election-turn query work and define the historical reader contract before any archive or deletion.                                                                                                                                                           |
+| WP13 measurement       | `/usr/bin/time -f %M npm run typecheck` completed with peak RSS 7,849,504 KiB (7.49 GiB). A second run with `--extendedDiagnostics` completed with peak RSS 7,683,024 KiB (7.33 GiB); it reported 2,680,197 types, 6,226,361 instantiations, and 1,168.77 s of check time.                                                                                                                                                                                                                                                                                            | The diagnostics are project-wide and do not attribute cost to an individual type family. No compiler setting or under-3-GB target is justified by these measurements. Wall time is host-sensitive.                                                                   |
+
+The latest read-only turndiag timing window covers turns 1065-1124 and is
+pre-merge production data. The values below use completed readings above 1 ms
+to omit cadence skips; p95 is nearest-rank. `corporationTurn` had four failed
+phase readings, excluded from its timing quantiles. These measurements are
+not a before/after comparison for this PR.
+
+| Phase                  | Executed readings | Median ms | p95 ms | Max ms | Failed readings |
+| ---------------------- | ----------------: | --------: | -----: | -----: | --------------: |
+| `indexFunds`           |                60 |    13,249 | 48,766 | 75,484 |               0 |
+| `corporationTurn`      |                56 |    27,139 | 61,767 | 81,039 |               4 |
+| `nppActionProcessing`  |                16 |    27,000 | 42,754 | 42,754 |               0 |
+| `bankingTurn`          |                60 |     1,990 |  5,673 |  8,176 |               0 |
+| `voteAccumulation`     |                60 |     8,123 | 23,668 | 25,380 |               0 |
+| `bondTurn`             |                60 |     6,126 | 19,977 | 27,329 |               0 |
+| `financialSuspectScan` |                20 |     8,282 | 10,547 | 12,880 |               0 |
+| `recomputeSharePrices` |                60 |     3,214 |  7,245 |  9,319 |               0 |
+
+The extended TypeScript diagnostics run exited successfully on 2026-09-25:
+`node --max-old-space-size=8192 ./node_modules/typescript/bin/tsc --noEmit
+--extendedDiagnostics`. It took 1,639.56 s, with 17,213 files,
+2,561,430 TypeScript lines, 4,107,219 identifiers, 8,871,970 symbols,
+2,680,197 types, 6,226,361 instantiations, 427.47 s program time, and
+1,168.77 s check time. It provides aggregate diagnostics, not a per-type
+hotspot ranking. The two RSS readings (7,849,504 and 7,683,024 KiB) do not
+support the proposed under-3-GB target; compiler settings remain unchanged.
+
+WP11 route baseline contains 34 routes and 6,557 LOC. Each was first
+introduced in the repository's `Initial public release` commit, so repository
+history does not connect these handlers to their originating incidents. The
+static inventory below records route names, methods, and current size for
+route-by-route follow-up.
+
+| Route                                      | Methods   | LOC |
+| ------------------------------------------ | --------- | --: |
+| `admin/candidates/heal-cross-country`      | GET, POST | 163 |
+| `admin/corporations/heal-captured-unowned` | GET, POST |  35 |
+| `admin/elections/heal-orphan-tallies`      | GET, POST |  92 |
+| `admin/elections/heal-withdrawn-tallies`   | GET, POST | 226 |
+| `admin/heal/banned-party-membership`       | GET, POST |  85 |
+| `admin/heal/ceo-votes`                     | GET, POST | 118 |
+| `admin/heal/confidence-votes`              | GET, POST | 165 |
+| `admin/heal/corporation-cash`              | GET, POST |  77 |
+| `admin/heal/corporation-ceo-vacant`        | GET, POST | 146 |
+| `admin/heal/corporation-shares`            | POST      |  80 |
+| `admin/heal/corporation-timers`            | GET, POST | 123 |
+| `admin/heal/cross-country-party-org`       | GET, POST | 163 |
+| `admin/heal/de-bundestag-seats`            | GET, POST | 146 |
+| `admin/heal/discord-users`                 | GET, POST | 216 |
+| `admin/heal/dropped-npp-parties`           | GET, POST | 268 |
+| `admin/heal/duplicate-sectors`             | POST      |  27 |
+| `admin/heal/executive-duplicates`          | POST, GET | 189 |
+| `admin/heal/federal-budgets`               | GET, POST | 487 |
+| `admin/heal/multi-seat-elections`          | GET, POST | 332 |
+| `admin/heal/nationalization-shares`        | POST      | 246 |
+| `admin/heal/npp-data-corruption`           | GET, POST | 158 |
+| `admin/heal/npp-district-holders`          | GET, POST | 108 |
+| `admin/heal/npp-names`                     | GET, POST | 100 |
+| `admin/heal/npp-portraits`                 | GET, POST | 154 |
+| `admin/heal/party-elections`               | GET, POST | 440 |
+| `admin/heal/party-leadership-elections`    | GET, POST | 402 |
+| `admin/heal/party-membership`              | GET, POST | 402 |
+| `admin/heal/presidential-election`         | GET, POST | 178 |
+| `admin/heal/stale-admin-appointments`      | GET, POST | 218 |
+| `admin/heal/stale-campaigns`               | GET, POST | 266 |
+| `admin/heal/strategy-cooldown`             | GET, POST | 160 |
+| `admin/heal/uk-commons-seats`              | GET, POST | 273 |
+| `admin/officials/heal-senate`              | GET, POST | 126 |
+| `admin/uk/government/heal`                 | GET, POST | 188 |
+
+Only `corporation-cash` and `stale-campaigns` write `adminLogs`. The partial
+local copy contains one `heal_corporation_cash` event at 2026-08-16 15:20 UTC
+and no `heal_stale_campaigns` event. The other 32 routes do not persist their
+own invocation through that collection; production access-log evidence and
+the original incident records were unavailable in this inventory. This does
+not establish that those routes are unused. No route was removed. Retirement
+stays gated on fixing and tracing its root cause, confirming live use, and
+preserving the repair history.
+
+The partial copy's `apiAccessLog` contains 146,580 rows and no heal-route
+paths. That log is wired through authenticated public/API middleware, not the
+admin heal handlers, so its absence is also not evidence of non-use.
 
 WP6 now projects only `turnLengthMinutes` for transaction expiry reads. On the
 local copy, the full `gameConfig` document is 10,572 BSON bytes and the
@@ -594,10 +679,218 @@ It also counted 342 `systemSettings` threshold reads from bid placement and
 and passes them to both order paths. This predicts 623 fewer threshold reads
 for an equivalent turn. It and the bond reserve pass also load turn cadence
 once each and pass it to transaction emission, predicting 1,039 fewer
-`gameConfig` expiry reads across these paths. Both estimates require a matched
-before/after replay before they count as measured gains. The trace
+`gameConfig` expiry reads across these paths on turn 1119. The trace
 instrumentation counts both `findOne` and the underlying `find` hook for each
 call, so the stated counts use only its `findOne` rows.
+
+A matched phase-only replay at turn 1120 used two copies of the same local
+snapshot: baseline commit `4fdc572264` and batched commit `4ae339b03a`.
+`indexFunds` fell from 5,980 to 4,625 Mongo round trips (1,355 fewer,
+22.7%), from 32,324 to 31,647 returned documents, and from 6,460,783 to
+6,430,318 BSON bytes. All numeric phase result counters and the zero error
+count matched. The aggregate fund cash, units, NAV, liquidity quote statuses
+and escrow totals, 680 fund transaction-log rows at turn 1120, and the
+liquidity snapshot also matched. This verifies the local phase behavior on
+the partial world; production monitoring must confirm the deployed effect.
+
+WP2's direct local `corporationTurn` trace at turn 1121 recorded 1,741 Mongo
+commands, including 558 on `tariffs`. The signed-bill replay contained 275
+origin-country tariff provisions and one economy-wide provision. The replay
+now batches non-economy scope updates in enactment order and keeps the
+economy-wide provision on its existing budget-sync path. On two identical
+local copies, `reconcileSignedTariffBills` fell from 559 to 11 Mongo commands
+(548 fewer, 98.0%), from 557 to 282 returned documents, and from 1,092,025
+to 1,033,415 BSON bytes. Both copies ended with 222 tariff documents and the
+same normalized scope/rate/source-bill digest; federal budget tariff-rate and
+revenue totals matched. This is a helper-level replay on a partial local world,
+not a production phase p95 claim. The rest of WP2 remains open.
+
+The `voteReminders` support phase also fetched corporation name and
+shareholders separately for each due vote, then fetched that vote's
+unvoted-character accounts. It now reads all due corporations with one
+projected `$in` query and all unique unvoted characters with one projected
+`$in` query. The focused test preserves recipient lists across two generic
+votes and one privatization vote while asserting those two batch reads. For
+that fixture, the source pattern drops from 11 reads (two vote lists plus three
+reads per vote) to four. The partial copy at turn 1119 had no votes due at
+turn 1123, so it provides no phase-level timing or command reduction sample;
+production canary telemetry remains the performance acceptance gate.
+
+The share-order matcher now projects open orders and affected corporation
+documents to the fields it consumes. It retains the full `shareholders` array
+because sales are capped against current holdings. On the partial local copy at
+turn 1119, 495 open orders fell from 151,753 to 80,134 BSON bytes, and the 336
+affected corporations fell from 1,675,637 to 1,130,703 bytes. The combined
+reads fell by 616,553 bytes (33.7%) with the document counts unchanged. The
+measurement sums `BSON.calculateObjectSize` for returned documents; it is a
+read-shape comparison, not a phase timing or command-count result. The focused
+`shareOrders.test.ts` suite verifies the projections alongside its settlement
+cases.
+
+WP3's direct local `processNppActions` trace at turn 1124 recorded 7,267 Mongo
+commands, 24,394 returned documents, and 14,934,762 BSON bytes on the partial
+local world. The bond-buy core made 132 `bonds.findOne` calls after the sweep
+had already loaded candidate bonds by country. The share-buy and share-sell
+cores made another 242 and 270 `corporations.findOne` calls respectively.
+The bond sweep now passes its projected candidate to `nppBuyBond`; the core
+still obtains a live market-pool quote and retains the guarded NPP debit and
+bond reservation with refund on a failed reservation. The reservation also
+checks the candidate's price, maturity, currency, country, issuer type, and
+default state, so a changed bond fails and refunds instead of trading on a
+stale snapshot. Focused tests verify the omitted bond read, refund, and guard
+on all reservation attempts. A matched `processNppActions` replay at turn
+1128 on two copies of the same local snapshot reduced commands from 7,279 to
+7,150 (129 fewer), returned documents from 22,970 to 22,841, and BSON bytes
+from 13,909,605 to 13,009,284. All reported action counters matched. Hashes
+of projected NPP investment cash (3,450 rows), bond float and holders (5,693),
+bond pool cash and lifetime totals (24), and corporation float, shareholders,
+and liquid capital (734) matched. This verifies the local phase behavior; the
+other share command-core reads and production p95 remain open.
+
+The share-buy sweep now passes its projected corporation candidate to
+`nppBuyShares`; the live equity-pool quote and guarded NPP debit remain, and
+the guarded share credit requires the selected price, float, currency,
+ownership status, and settlement mode to remain unchanged. A second matched
+`processNppActions` replay at turn 1128 compared the previous commit with this
+change on two fresh copies of the same local snapshot: commands fell from
+7,149 to 6,921 (228 fewer), returned documents from 22,823 to 22,595, and
+BSON bytes from 12,857,039 to 10,761,853. All action counters matched, as did
+digests of NPP investment cash (3,450 rows), bond float and holders (5,693),
+bond-pool balances (24), corporation float/shareholders/liquid capital (734),
+and equity-pool balances (24).
+
+The share-sell sweep now passes each projected corporation to `nppSellShares`
+and advances its in-memory float and holding after a successful sale. The
+live quote and settlement reads remain; the atomic share debit checks the
+snapshot's price, float, currency, ownership status, and settlement mode,
+and a failed guard reverses the settlement. A third matched
+`processNppActions` replay at turn 1128 compared the previous commit with
+this change on two fresh copies of the same local snapshot: commands fell
+from 6,922 to 6,642 (280 fewer), returned documents from 22,613 to 22,333,
+and BSON bytes from 10,914,098 to 7,750,309. All action counters and the
+same five selected state digests matched. The remaining WP3 acceptance gate
+is a production phase p95 comparison; these partial-world replays establish
+local behavior and command reduction only.
+
+WP4 spot checks on the same partial local world at turn 1128 found 483
+`bankingTurn` commands, 207 returned documents, and 919,841 BSON bytes while
+processing six banks with no unfinished settlements. This is below the
+current 1,000-command warning budget; the production sample above likewise
+has 818 commands at p95 across 55 successful turns. A direct
+`voteAccumulation` run used 398 commands, 2,767 returned documents, and
+4,500,638 BSON bytes, but its active election mix differs from the
+production spike turns. The active-candidate query over 613 election ids
+used `electionCandidates_electionId`, examining 3,068 documents to return
+2,338; that sample does not justify a new compound index. A phase-only
+`recomputeSharePrices` run read 18,866,804 BSON bytes in 61 commands but
+repriced zero of 734 corporations because same-turn `corporationHistory` was
+absent. It cannot validate that phase's normal path. WP4 therefore retains
+the production spike-turn, full-turn share-price, and NPP support-phase
+measurements before any batching change.
+
+WP5/6 direct `bondTurn` profiling at turn 1128 on the partial local world
+processed 1,107 bonds and wrote 1,058 bond-history snapshots. It used 922
+commands, returned 6,936 documents, and decoded 14,101,164 BSON bytes.
+`centralBanks` accounted for 69 commands and 5,504,778 bytes. The CPU sample
+showed BSON parsing, garbage collection, and `bondTurnLedger.ts` work. The
+ledger's history writer scanned all active bonds for every updated bond;
+it now builds one ID map. A matched helper replay with 1,058 active bonds
+and prior-interest rows wrote 1,058 identical history snapshots in each
+version, with five commands, 2,116 returned documents, and 89,800 BSON
+bytes in both; the normalized history digest matched. Three sovereign
+issuance reads now project only `primeRate` and `chairInfamy`: across the 24
+local central-bank documents, those fields are 1,297 BSON bytes versus
+1,557,568 bytes for full documents. That is a read-shape comparison, not a
+measured phase speedup. A full-turn CPU profile on the repeatedly modified
+local world did not complete in `corporationTurn` and yielded no CPU file;
+fresh-world full-turn and production p95 checks remain open.
+
+WP8 candidate check on the partial local copy counted 36,267 `withdrawn`
+and 2,342 `active` `electionCandidates` rows; the earlier read-only production
+aggregation in the table above counted 36,140 and 2,337 respectively. For the active-election vote
+query, the existing `electionCandidates_electionId` index examined 3,068
+documents to return 2,338 across 613 election ids. This does not support
+the claim that dead candidate rows are driving vote accumulation, or a new
+compound index for that query. A later attempt to refresh the production
+counts could not connect to Mongo, so the local query plan is not a current
+production plan. Archival remains gated on the historical-results reader contract and
+a production query-plan sample; no candidate rows were deleted.
+
+WP7 first-pass code inventory for the twelve snapshot collections is below.
+"No seed index" means no recurring index entry was found under
+`src/lib/admin/seed/indexes`; a one-time migration may still have created an
+index on an existing world. Readers listed are representative, not a complete
+external-consumer contract.
+
+| Collection                         | Writer                                           | Representative reader                             | Recurring index / retention                                 |
+| ---------------------------------- | ------------------------------------------------ | ------------------------------------------------- | ----------------------------------------------------------- |
+| `moneySupplySnapshots`             | `moneySupply/snapshot.ts`                        | central-bank detail, inflation, market-pool turns | Currency/turn index in `moneySupply/seed.ts` / no policy    |
+| `primarySnapshots`                 | `turn/primaryResolution.ts`                      | wiki election, public election API, Discord race  | Election and recorded-time indexes / no policy              |
+| `tradeFlowSnapshots`               | `turn/commodity/persistence.ts`                  | trade ledger, public history, foreign policy      | Unique turn index / no policy                               |
+| `federalBudgetSnapshots`           | `budget/fiscalYear.ts`                           | budget detail, public history, admin budgets      | Country/turn descending index now seeded / no policy        |
+| `stockExchangeSnapshots`           | `turn/stockExchangeSnapshot.ts`                  | stock-exchange API, public economy                | No seed index / no policy                                   |
+| `investorRankingSnapshots`         | `turn/investorWealthSnapshots.ts`                | public character, Discord lookup, season recap    | No seed index / no policy                                   |
+| `gameHealthSnapshots`              | `turn/gameHealthSnapshot.ts`                     | admin health pages, simulation metrics            | Turn and warning indexes / 30-day TTL                       |
+| `wealthListSnapshots`              | `turn/investorWealthSnapshots.ts`                | stock-exchange wealth list                        | No seed index / no policy                                   |
+| `indexFundSnapshots`               | `indexFunds/fundQueries.ts`                      | fund detail and NAV history                       | Fund and turn index / archive and downsample after 72 turns |
+| `electionResultSnapshots`          | `elections/liveResults/captureResultSnapshot.ts` | election results API                              | Unique election and history indexes / no policy             |
+| `equityLiquidityFacilitySnapshots` | `indexFunds/equityLiquidityFacility.ts`          | No in-repo read found                             | Unique turn index now seeded / no policy                    |
+| `balanceSnapshots`                 | `ledger/balanceSnapshot.ts`                      | ledger reconciliation                             | Unique turn index / no policy                               |
+
+The first retention decision is to keep player-visible history and ledger
+inputs until each reader's restore contract and 30-day growth are measured.
+No new TTL or deletion is justified by this inventory. The liquidity-facility
+snapshot's migration-created unique turn index is now also in the recurring
+fund index seed; an empty local reset-world seed recreated it with the same
+name, key, and uniqueness.
+
+The local partial copy shows three bounded latest-state snapshots: 20 stock
+exchange documents (one per exchange key), one investor-ranking document
+(`_id: "global"`), and nine wealth-list documents (one per active exchange
+key). Their writers upsert stable `_id` values, so they do not need TTLs.
+`wealthListHistory` carries the separate 72-turn downsampling policy. Keep
+money-supply, primary-election, trade-flow, federal-budget, election-result,
+and balance snapshots because current readers use them as history or ledger
+inputs. Keep game-health snapshots on the existing 30-day TTL and index-fund
+snapshots on their 72-turn archive/downsample policy. `equityLiquidityFacilitySnapshots`
+has a per-turn writer but no in-repo reader; retain it until its external or
+operational consumer and restore contract are known.
+
+The public budget-history query filtered by `countryId` and sorted descending
+by `turn`. The partial local copy had 577 `federalBudgetSnapshots` rows and
+only `_id`; explain examined all 577 and performed a blocking sort for ten
+results. With `{ countryId: 1, turn: -1 }`, explain used the compound index and
+examined ten keys and ten documents for the same ten results. Added that index
+to recurring performance seeding and a one-time idempotent migration. This is
+a query-plan comparison on the partial local copy, not a production latency
+claim.
+
+WP12 route inventory found 23 `character` routes and 6 `characters` routes,
+5 `corporation` routes and 110 `corporations` routes, and 363 `country` routes
+and 1 `countries` route. Comparing relative route paths within each pair found
+zero overlaps. The singular and plural namespaces currently expose different
+operations; none is a direct alias eligible for a blanket redirect. Existing
+web callers use both forms, including authenticated character actions under
+`/api/character` and character search or transfers under `/api/characters`.
+Any route consolidation needs endpoint-level caller and response contracts;
+the report's 308-redirect target is not a counted set of redundant routes.
+
+WP9 recovery inspection found that `turnPhaseRuntime.runPhase` places both
+completed and interrupted phases in the resume skip set. An interrupted
+`corporationTurn` therefore does not rerun tariff reconciliation during that
+turn's recovery. The ordered tariff bulk can leave a prefix of signed bills
+applied; the next scheduled turn replays all bills and repairs final rates and
+source ids because the writes set values. Downstream phases in the recovered
+turn can still observe partial tariffs. This is an explicit recovery limit for
+the WP2 batching change. The fault-injection rehearsal below confirms next-run
+repair after an interrupted ordered bulk, but does not prove same-turn recovery
+or cover every `corporationTurn` effect.
+An in-memory fault-injection test now crashes after the first ordered tariff
+bulk lands, verifies the partial state, then runs the next scheduled
+reconciliation and checks that the three final tariff scopes have the expected
+rates and source bills without duplicate rows. All four focused tariff
+reconciliation tests pass. This proves next-run repair for that write boundary;
+it does not prove same-turn recovery or cover every corporationTurn side effect.
 
 The one-turn profiler has a local-only guard and cannot be run against
 production. A partial production copy is restored to a private localhost Mongo instance
@@ -614,8 +907,8 @@ profile completed turn 1118 in 544.4 s with 20,362 Mongo round trips,
 `corporationTurn` accounted for 1,717 trips and 91.6 MB, with 33.4 MB from
 `corporateSectors` and 22.1 MB from `supplyAgreements`. These values are a
 single partial-world observation and cannot be compared with the production
-duration or used as acceptance thresholds. WP1 now loads exchange rates,
-the persisted turn, and transaction thresholds once for each fund rebalance
-sell pass; replay the same world before and after this change to quantify its
-effect. The operations page is unchanged. The remaining work packages are open and must pass their
-own measurement and correctness gates before implementation.
+duration or used as acceptance thresholds. WP1's matched phase-only replay at
+turn 1120 and its limitations are recorded above. The operations page is
+unchanged. Remaining implementation items and rollout gates are
+package-specific and listed above; production canary, full-world replay,
+retention, and recovery contracts are not inferred from this partial copy.
