@@ -2784,7 +2784,7 @@
         {
           "type": "hu_2027_source_correction",
           "ref": "949c63c4e2",
-          "detail": "Corrected the authored HU 2027 roster to the official 2026 election (TISZA 141, FIDESZ-KDNP 52, Mi Hazank 6), and reconciled regional estimates to KSH national 2026 population 9.488 million and first 2025 GDP estimate HUF 86,893 billion. The six regional amounts are documented proportional estimates, not KSH regional observations. Fourteen focused tests passed; bootstrap, budget/FX alignment and final replay remain pending. Official sources are linked in the code."
+          "detail": "Corrected the authored HU 2027 roster to the official 2026 election (TISZA 141, FIDESZ-KDNP 52, Mi Hazank 6), and reconciled regional estimates to KSH national 2026 population 9.488 million and revised 2025 GDP HUF 87,045.554 billion (follow-up correction to 949c63c4e2). The six regional amounts are documented proportional estimates, not KSH regional observations. Fourteen focused tests passed before the GDP revision; bootstrap, budget/FX alignment and final replay remain pending. Official sources are linked in the code."
         }
       ],
       "blocked_by": [

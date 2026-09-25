@@ -2,9 +2,9 @@ import type { State } from "@/lib/db/types";
 
 /** Hungary regions (2027) — Third-Republic democracy. The latest national
  *  anchors available for this future preset are the KSH 1 Jan 2026 population
- *  (9.488M) and first 2025 annual GDP estimate (HUF 86,893 billion).
+ *  (9.488M) and revised 2025 annual GDP (HUF 87,045.554 billion).
  *  https://www.ksh.hu/stadat_files/nep/hu/nep0002.html
- *  https://www.ksh.hu/en/first-releases/gdp/egdp2512.html
+ *  https://www.ksh.hu/stadat_files/gdp/en/gdp0094.html
  *  These six regional figures are proportional estimates from the earlier
  *  authored distribution, reconciled exactly to those national anchors; they
  *  are not published KSH regional observations. GDP is millions of forint.
@@ -24,7 +24,7 @@ export const huRegions2027: State[] = [
     regionType: "state",
     name: "Budapest",
     population: 1_653_935,
-    gdp: 32_134_015,
+    gdp: 32_190_431,
     houseDistricts: 35,
     stateSenateSeats: 0,
     region: "Budapest",
@@ -36,7 +36,7 @@ export const huRegions2027: State[] = [
     regionType: "state",
     name: "Pest",
     population: 1_310_758,
-    gdp: 9_509_045,
+    gdp: 9_525_739,
     houseDistricts: 27,
     stateSenateSeats: 0,
     region: "Pest",
@@ -48,7 +48,7 @@ export const huRegions2027: State[] = [
     regionType: "state",
     name: "Western Transdanubia",
     population: 2_024_644,
-    gdp: 17_378_600,
+    gdp: 17_409_111,
     houseDistricts: 42,
     stateSenateSeats: 0,
     region: "Transdanubia",
@@ -60,7 +60,7 @@ export const huRegions2027: State[] = [
     regionType: "state",
     name: "Southern Transdanubia",
     population: 847_617,
-    gdp: 5_246_370,
+    gdp: 5_255_581,
     houseDistricts: 18,
     stateSenateSeats: 0,
     region: "Transdanubia",
@@ -72,7 +72,7 @@ export const huRegions2027: State[] = [
     regionType: "state",
     name: "Northern Hungary",
     population: 1_076_729,
-    gdp: 7_432_357,
+    gdp: 7_445_406,
     houseDistricts: 23,
     stateSenateSeats: 0,
     region: "Northern Hungary",
@@ -84,7 +84,7 @@ export const huRegions2027: State[] = [
     regionType: "state",
     name: "Great Plain",
     population: 2_574_317,
-    gdp: 15_192_613,
+    gdp: 15_219_286,
     houseDistricts: 54,
     stateSenateSeats: 0,
     region: "Great Plain",

@@ -62,12 +62,12 @@ note, not a declaration that reset readiness has passed.
 - Hungary's initial 2027 source patch used 2022 parties and older economic
   anchors. Commit `949c63c4e2` corrects the party roster to the official
   2026 election result and reconciles authored regional estimates to KSH's
-  1 January 2026 population of 9.488 million and first 2025 GDP estimate of
-  HUF 86,893 billion. The regional figures remain estimates; budget and FX
+  1 January 2026 population of 9.488 million and revised 2025 GDP of
+  HUF 87,045.554 billion. The regional figures remain estimates; budget and FX
   data must align before the bootstrap gate. Sources:
   https://valtor.valasztas.hu/valtort/jsp/ma1.jsp?EA=47,
   https://www.ksh.hu/stadat_files/nep/hu/nep0002.html, and
-  https://www.ksh.hu/en/first-releases/gdp/egdp2512.html.
+  https://www.ksh.hu/stadat_files/gdp/en/gdp0094.html.
 
 ## Completion contract
 

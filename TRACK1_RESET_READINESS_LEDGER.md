@@ -20,7 +20,7 @@ open, and the selected reset stays 1991.
 RR-065 (#2289 and related 2027 country issues) records the deterministic IE
 40-organization check in `8a1709776a` and HU data authored in `b0c0908742`.
 HU's roster and regional estimates were corrected in `949c63c4e2` against
-the official 2026 election and KSH 2026 population/2025 GDP anchors; 14
+the official 2026 election and KSH 2026 population/revised 2025 GDP anchors; 14
 focused tests passed. HU is not yet wired into bootstrap, and its budget/FX
 still needs alignment. Both remain open
 until exact-release persisted bootstrap and conformance evidence passes.
