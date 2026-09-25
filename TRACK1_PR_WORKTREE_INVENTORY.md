@@ -964,3 +964,14 @@ source work; their release commits remain available from remote history and
 the named branch refs. Decision: remove all three normally. This also keeps
 one checkout per commit where the old release checkouts would duplicate
 merged history.
+
+**AHDGame `AHDGame-buildfix`: DELETE superseded clean production cache
+checkout, 2026-09-25.** Its earlier observability and ticket ancestors are
+already on production `main`; `git cherry origin/main` identifies only the
+old cache-clearing commit `66340238ba` and its note `e18e94f169` as distinct
+patches. The old script removes `.next/cache` itself, which fails when that
+path is the Railway cache mount. Staging #2389 and the production promotion
+#2384 replaced it with a mount-preserving script; Track 1 carries that exact
+repair into development as `48beb50c96`. No older cache behavior should be
+merged. Fresh status is clean, the checkout is unlocked and has no owner
+process. Decision: remove it normally while retaining its branch ref.
