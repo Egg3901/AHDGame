@@ -783,7 +783,7 @@ external-consumer contract.
 
 | Collection                         | Writer                                           | Representative reader                             | Recurring index / retention                                 |
 | ---------------------------------- | ------------------------------------------------ | ------------------------------------------------- | ----------------------------------------------------------- |
-| `moneySupplySnapshots`             | `moneySupply/snapshot.ts`                        | central-bank detail, inflation, market-pool turns | No seed index / no policy                                   |
+| `moneySupplySnapshots`             | `moneySupply/snapshot.ts`                        | central-bank detail, inflation, market-pool turns | Currency/turn index in `moneySupply/seed.ts` / no policy    |
 | `primarySnapshots`                 | `turn/primaryResolution.ts`                      | wiki election, public election API, Discord race  | Election and recorded-time indexes / no policy              |
 | `tradeFlowSnapshots`               | `turn/commodity/persistence.ts`                  | trade ledger, public history, foreign policy      | Unique turn index / no policy                               |
 | `federalBudgetSnapshots`           | `budget/fiscalYear.ts`                           | budget detail, public history, admin budgets      | Country/turn descending index now seeded / no policy        |
