@@ -13,6 +13,7 @@ import { triggerDebtCeilingCrisis } from "./budget/debt";
 import { onBillEnacted } from "@/lib/billEnactment";
 import { generateBillSignedNews, generateBillVetoedNews } from "@/lib/news";
 import { sendCountryGameEvent, buildBillVetoedDiscordEmbed } from "@/lib/discordWebhooks";
+import { billChamberVoteSplits } from "@/lib/charts/voteSplitChart";
 import { claimStatusTransition } from "@/lib/turn/atomicClaim";
 
 const OVERRIDE_WINDOW_HOURS = 24;
@@ -248,6 +249,7 @@ export async function executePresidentialBillAction(
         presidentName: president?.name,
         vetoMessage: trimmedVetoMessage,
         billUrl,
+        voteSplit: billChamberVoteSplits(bill, bill.countryId ?? "US", "national"),
       })
     ).catch(() => {});
 

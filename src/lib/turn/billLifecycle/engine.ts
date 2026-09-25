@@ -306,9 +306,13 @@ async function closeOverrideStage(
         await applyLegislationEffect(db, bill).catch((err) =>
           console.error("Veto override legislation effect failed (engine):", err)
         );
-        await onBillEnacted(db, bill, currentTurn).catch((err) =>
-          console.error("Bill enactment hook failed (engine veto override):", err)
-        );
+        // The snapshot was just written by the claim above — the in-memory bill
+        // predates it, and onBillEnacted reads it for the Discord vote chart.
+        await onBillEnacted(
+          db,
+          { ...bill, presidentAction: "override", overrideDisplaySnapshot },
+          currentTurn
+        ).catch((err) => console.error("Bill enactment hook failed (engine veto override):", err));
         await awardLawmakerAchievementForSponsor(bill);
         await resolveNotifier(config)(db, bill, "signed");
         if (bill.category) result.enactedCategories.push(bill.category);
@@ -918,7 +922,9 @@ async function enterSigned(
   await applyLegislationEffect(db, bill).catch((err) =>
     console.error("Legislation effect apply failed (engine signed):", err)
   );
-  await onBillEnacted(db, bill, currentTurn).catch((err) =>
+  // `fields` carries this chamber's fresh tally + vote snapshot, which the
+  // in-memory bill predates — onBillEnacted reads them for the vote chart.
+  await onBillEnacted(db, { ...bill, ...(fields as Partial<Bill>) }, currentTurn).catch((err) =>
     console.error("Bill enactment hook failed (engine signed):", err)
   );
   await resolveNotifier(config)(db, bill, "signed");

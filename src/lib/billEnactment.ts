@@ -62,6 +62,7 @@ import { triggerDebtCeilingCrisis } from "@/lib/budget/debt";
 import { recordEnactedLaw } from "@/lib/budget/enactedLaws";
 import { sendCountryGameEvent, DISCORD_COLORS } from "@/lib/discordWebhooks";
 import { generateDiscordEventCard } from "@/lib/discord/eventCard";
+import { billChamberVoteSplits } from "@/lib/charts/voteSplitChart";
 import { calculateShiftImpacts } from "@/lib/archetypeAffinities";
 import { regionalDefaultLevel } from "@/lib/politicalLegislation/regionalDefaults";
 import {
@@ -108,6 +109,21 @@ type EnactableBill = Pick<
   // Votes from both chambers for federal bills
   votes?: Record<string, "for" | "against" | "abstain">;
   otherChamberVotes?: Record<string, "for" | "against" | "abstain">;
+  // Chamber + tally fields read by the Discord card's vote-split chart. The
+  // lifecycle engine hands us the full bill document, so these are present on
+  // real enactments even though the Pick above doesn't declare them.
+  originChamber?: Bill["originChamber"];
+  currentChamber?: Bill["currentChamber"];
+  presidentAction?: Bill["presidentAction"];
+  votesFor?: number;
+  votesAgainst?: number;
+  votesAbstain?: number;
+  otherChamberVotesFor?: number;
+  otherChamberVotesAgainst?: number;
+  otherChamberVotesAbstain?: number;
+  voteSnapshot?: Bill["voteSnapshot"];
+  otherChamberVoteSnapshot?: Bill["otherChamberVoteSnapshot"];
+  overrideDisplaySnapshot?: Bill["overrideDisplaySnapshot"];
   /**
    * #3598: attribution tag threaded onto the resulting `EnactedLaw` row.
    * Omitted for ordinary bills; set to "scotus_ruling" by the SCOTUS docket
@@ -713,12 +729,23 @@ export async function onBillEnacted(
   // duplicate post for the same event.
   if (bill.category !== "reunification") {
     const enactmentScopeLabel = isNationalBill ? "Federal" : "Regional";
+    const voteSplit = billChamberVoteSplits(
+      bill,
+      resolvedCountry ?? "US",
+      isNationalBill ? "national" : "regional"
+    );
+    const cardMetadata = [
+      "Bill enacted",
+      ...(policyLabel ? [policyLabel] : []),
+      ...(bill.sponsorName ? [`Sponsor: ${bill.sponsorName}`] : []),
+    ];
     const cardUrl = await generateDiscordEventCard(
       {
         eyebrow: `${countryLabel} · ${locationLabel}`,
         title: bill.title,
         summary: "Signed into law",
-        metadata: policyLabel ? ["Bill enacted", policyLabel] : ["Bill enacted"],
+        metadata: cardMetadata,
+        voteSplit,
         tone: "positive",
       },
       `bill-enacted-${bill._id.toString()}`

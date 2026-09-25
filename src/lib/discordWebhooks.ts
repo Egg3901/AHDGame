@@ -11,6 +11,7 @@ import { isCountryEnabledForPlayers } from "@/lib/countryAccess";
 import type { CountryId } from "@/lib/constants/countries";
 import type { GameConfig } from "@/lib/db/types";
 import { generateLegacyDiscordEventCard } from "@/lib/discord/eventCard";
+import type { ChamberVoteSplit } from "@/lib/charts/voteSplitChart";
 
 export interface DiscordEmbed {
   title?: string;
@@ -23,6 +24,12 @@ export interface DiscordEmbed {
   thumbnail?: { url: string };
   image?: { url: string };
   author?: { name: string; icon_url?: string };
+  /**
+   * Internal-only: per-chamber aye/nay/abstain split rendered into the branded
+   * card's chart slot. Consumed by `withBrandedGameEventCard`; stripped before
+   * the payload is posted to Discord.
+   */
+  cardVoteSplit?: readonly ChamberVoteSplit[];
 }
 
 /** Discord embed colors */
@@ -108,6 +115,8 @@ export interface BillVetoedDiscordInput {
   vetoMessage?: string;
   /** Deep link to the bill page. */
   billUrl: string;
+  /** Per-chamber aye/nay/abstain splits, rendered as the card's vote chart. */
+  voteSplit?: readonly ChamberVoteSplit[];
 }
 
 /**
@@ -140,6 +149,7 @@ export function buildBillVetoedDiscordEmbed(input: BillVetoedDiscordInput): Disc
     fields,
     url: input.billUrl,
     footer: { text: "A House Divided" },
+    cardVoteSplit: input.voteSplit,
   };
 }
 
@@ -181,10 +191,13 @@ export async function sendDiscordWebhookMultiple(
   embeds: DiscordEmbed[]
 ): Promise<void> {
   const payload = {
-    embeds: embeds.map((embed) => ({
-      ...embed,
-      timestamp: embed.timestamp ?? new Date().toISOString(),
-    })),
+    embeds: embeds.map((embed) => {
+      const { cardVoteSplit: _cardVoteSplit, ...postable } = embed;
+      return {
+        ...postable,
+        timestamp: embed.timestamp ?? new Date().toISOString(),
+      };
+    }),
   };
   const res = await fetch(url, {
     method: "POST",
@@ -208,10 +221,13 @@ async function sendDiscordWebhookForId(
   const waitUrl = new URL(url);
   waitUrl.searchParams.set("wait", "true");
   const payload = {
-    embeds: embeds.map((embed) => ({
-      ...embed,
-      timestamp: embed.timestamp ?? new Date().toISOString(),
-    })),
+    embeds: embeds.map((embed) => {
+      const { cardVoteSplit: _cardVoteSplit, ...postable } = embed;
+      return {
+        ...postable,
+        timestamp: embed.timestamp ?? new Date().toISOString(),
+      };
+    }),
   };
   const res = await fetch(waitUrl.toString(), {
     method: "POST",
