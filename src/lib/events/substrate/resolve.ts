@@ -22,7 +22,8 @@ export async function resolveEvent(
   optionId: string,
   reason: "player" | "timeout",
   currentTurn: number,
-  hooks?: ResolveEventHooks
+  hooks?: ResolveEventHooks,
+  preset?: string
 ): Promise<EventInstance> {
   const coll = getEventInstancesCollection(db);
   const instance = await coll.findOne({ _id: instanceId });
@@ -79,7 +80,7 @@ export async function resolveEvent(
     tier,
     reason,
     statAdjustment,
-    preset: await getGameStatePresetOrDefault(db),
+    preset: preset ?? (await getGameStatePresetOrDefault(db)),
   };
 
   if (handler.applyEffects) {

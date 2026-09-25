@@ -149,4 +149,45 @@ describe("event substrate resolve + sweep", () => {
     expect(result.swept).toHaveLength(1);
     expect(applySpy).toHaveBeenCalledTimes(1);
   });
+
+  it("reads the world preset once for a batch of expired events", async () => {
+    const applySpy = vi.fn().mockResolvedValue(undefined);
+    makeHandler(applySpy);
+    const expired = [new ObjectId(), new ObjectId()].map((id) => ({
+      _id: id,
+      kind: "pree.test",
+      scope: "character" as const,
+      scopeId,
+      definitionVersion: 1,
+      status: "pending" as const,
+      roll: 50,
+      payload: {},
+      offeredAtTurn: 5,
+      offeredAt: new Date(),
+      expiresAtRealtimeMs: Date.now() - 1,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    }));
+    const { instances } = touchEventCollections(db);
+    const gameState = db.collection("gameState");
+    gameState.findOne.mockResolvedValue({ preset: "2027-default" });
+    instances.find.mockReturnValue({ toArray: vi.fn().mockResolvedValue(expired) });
+    instances.findOne.mockImplementation(async ({ _id }: { _id: ObjectId }) =>
+      expired.find((item) => item._id.equals(_id))
+    );
+    instances.findOneAndUpdate.mockImplementation(async ({ _id }: { _id: ObjectId }) => ({
+      ...expired.find((item) => item._id.equals(_id)),
+      status: "expired",
+    }));
+
+    const result = await sweepExpired(db as never, 10);
+
+    expect(result.swept).toHaveLength(2);
+    expect(gameState.findOne).toHaveBeenCalledTimes(1);
+    expect(applySpy).toHaveBeenCalledTimes(2);
+    expect(applySpy.mock.calls.map(([ctx]) => ctx.preset)).toEqual([
+      "2027-default",
+      "2027-default",
+    ]);
+  });
 });
