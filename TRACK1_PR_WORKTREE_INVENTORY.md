@@ -599,3 +599,15 @@ and evidence explanation was posted before merge. The `track3-integrations`
 checkout was clean, unlocked, and process-free at the removal check and was
 **DELETED** with ordinary `git worktree remove`. Its branch ref remains as
 provenance; no force removal or branch deletion was used.
+
+**Bot upstream PR surface, 2026-09-25 02:20 UTC.** The initial bot query
+covered `Egg3901/adhd-bot` (the owner's fork), which still has no open PRs.
+The local bot checkout's `origin` is the writable upstream
+`arle-bina/adhd-bot`; it has five older open PRs: #122 supporter sync, #45
+URL/stockpick links, #41 market registration/chart repair, #40 market command,
+and #36 country/watchlist/autocomplete. All five were enumerated before any
+disposition. Most conflict with current upstream `main`, and none has hosted
+checks. The game-side supporter, government, and autocomplete routes exist in
+AHDGame; the matching `/api/discord-bot/market` route does not. A read-only
+Muse patch/content audit is in progress to distinguish useful work from
+abandoned or superseded PRs. No bot PR, branch, or worktree has been mutated.
