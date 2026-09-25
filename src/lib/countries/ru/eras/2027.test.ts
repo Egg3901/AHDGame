@@ -4,13 +4,6 @@ import { RU_GEOGRAPHY } from "../geography";
 import { RU_2027 } from "./2027";
 import { ruRegions2027 } from "../data/ruRegions2027";
 
-/**
- * NOTE: `getCountryConfig("RU", "2027-default")` only reflects RU_2027 once
- * the supervisor wires `RU: RU_ERAS["2027-default"]?.config` into
- * ERA_COUNTRY_CONFIG_OVERRIDES (shared file, out of scope here — HU and RO
- * follow this same two-place pattern). Until then this suite asserts the
- * folder-owned override object directly, plus everything readable today.
- */
 describe("RU 2027 government and geography", () => {
   it("authors a presidential-federation override for the modern preset", () => {
     expect(RU_2027.preset).toBe("2027-default");
@@ -32,6 +25,8 @@ describe("RU 2027 government and geography", () => {
     expect(config?.exchangeKind).toBe("market");
     expect(config?.centralGovernmentLabel).toBe("Federal Government");
     expect(config?.usdExchangeRate).toBeCloseTo(0.01081, 5);
+    expect(getCountryConfig("RU", "2027-default").governmentType).toBe("presidential");
+    expect(getCountryConfig("RU", "2027-default").legislature.lowerChamber.seats).toBe(450);
     expect(RU_GEOGRAPHY.regionBundles["2027-default"]).toBe(ruRegions2027);
   });
 
