@@ -188,6 +188,10 @@ export default function RegisterPageClient({ heroImageUrl }: { heroImageUrl?: st
         throw new Error(registerData.error || t("errors.registrationFailed"));
       }
 
+      await import("@/lib/analytics/posthogClient")
+        .then(({ rememberAccountCreated }) => rememberAccountCreated())
+        .catch(() => {});
+
       // Step 2: Auto-login
       const loginRes = await fetch("/api/auth/login", {
         method: "POST",

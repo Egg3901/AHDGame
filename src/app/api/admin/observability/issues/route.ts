@@ -1,14 +1,13 @@
 /**
- * Admin observability API — proxies GlitchTip issue list.
+ * Admin observability API — proxies the Sentry-compatible issue list.
  *
  * GET /api/admin/observability/issues
- * Returns recent GlitchTip issues for the admin observability tab.
+ * Returns recent Sentry issues for the admin observability tab.
  * Requires admin auth.
  */
 import { NextResponse } from "next/server";
 import { getAuthAdmin } from "@/lib/auth";
 import { handleRouteError } from "@/lib/api/errors";
-import { getGlitchTipBaseUrl } from "@/lib/observability/glitchtip";
 
 export const dynamic = "force-dynamic";
 
@@ -19,27 +18,23 @@ export async function GET() {
       return NextResponse.json({ error: "Admin access required" }, { status: 403 });
     }
 
-    const baseUrl = getGlitchTipBaseUrl();
-    if (!baseUrl) {
-      return NextResponse.json({
-        configured: false,
-        issues: [],
-        message: "GLITCHTIP_URL not configured",
-      });
-    }
-
-    const orgSlug = process.env.GLITCHTIP_ORG_SLUG ?? "ahd";
-    const token = process.env.GLITCHTIP_API_TOKEN;
+    const baseUrl = (process.env.SENTRY_URL || "https://sentry.io").replace(/\/+$/, "");
+    const orgSlug = process.env.SENTRY_URL
+      ? (process.env.GLITCHTIP_ORG_SLUG ?? "ahd")
+      : (process.env.SENTRY_ORG ?? "lakeside-games");
+    const token =
+      process.env.SENTRY_API_TOKEN ||
+      (process.env.SENTRY_URL ? process.env.GLITCHTIP_API_TOKEN : undefined);
 
     if (!token) {
       return NextResponse.json({
         configured: false,
         issues: [],
-        message: "GLITCHTIP_API_TOKEN not configured",
+        message: "SENTRY_API_TOKEN not configured",
       });
     }
 
-    // Fetch recent issues from GlitchTip API
+    // Fetch recent issues from the selected Sentry-compatible API.
     const url = `${baseUrl}/api/0/organizations/${orgSlug}/issues/?limit=25&sort=date&statsPeriod=24h`;
     const res = await fetch(url, {
       headers: {
@@ -54,7 +49,7 @@ export async function GET() {
         {
           configured: true,
           issues: [],
-          error: `GlitchTip API returned ${res.status}`,
+          error: `Sentry API returned ${res.status}`,
         },
         { status: 200 }
       );
