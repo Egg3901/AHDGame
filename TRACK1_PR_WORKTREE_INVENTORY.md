@@ -1113,6 +1113,18 @@ their old main ancestry should not be merged into development. The branch
 refs remain for provenance. Before removal, each checkout was checked clean,
 unlocked, and process-free at the exact heads above. Ordinary `git worktree
 remove` without `--force` is the only authorized removal method.
+All three ordinary removals completed with exit 0 on 2026-09-25; a fresh
+`git worktree list --porcelain` no longer contains their paths.
+
+The two Paseo recovery checkouts still share base `6360845ec3` but contain
+different real uncommitted patches (banking/private-central tables versus
+legislature channels/vote charts). The duplicate-checkout rule requires
+integrating or explicitly discarding each patch set first, then removing at
+least one checkout normally. It does not authorize deleting either dirty
+checkout or hiding its changes. The later `sp-snapshot-export-complete-slice`
+checkout disappeared from `git worktree list` during this audit; no Track 1
+cleanup command touched it. Its original source disposition is retained
+above.
 
 **Fresh cross-repo PR check, 2026-09-25:** AHDGame, adhd-bot, and the
 legacy `a-house-divided` repo currently have no open PRs. Ops has #162
