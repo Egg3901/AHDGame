@@ -540,6 +540,16 @@ from `/root/worktrees/ops-restore-ticket-receipts` to
 shared check scheduler can run there. This is a needed merge candidate, not
 a completed merge. A progress comment records the remaining gates on the PR.
 
+**Ops full-suite results, 2026-09-25 02:08 UTC.** PR #137 passed its complete
+tracked suite **560/560** in the rebased source-pin worktree; PR #168 passed
+**559/559** in the rebased receipt worktree. The first runs failed only because
+the isolated installs lacked the locked MCP SDK and/or built `better-sqlite3`
+native binding. After `npm ci --ignore-scripts` for #137 and
+`npm rebuild better-sqlite3` in both existing worktrees, the reruns passed
+without tracked source changes. These are local test results, not substitutes
+for the still-zero-step hosted Semgrep/test/analysis gates. Both PRs remain
+open, and the exact local result/job IDs were posted to each PR.
+
 The remaining rows above require final decisions and execution; this document
 does not mark them complete.
 
