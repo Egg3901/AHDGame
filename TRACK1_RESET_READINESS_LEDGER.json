@@ -2715,6 +2715,11 @@
           "type": "partial_source_and_tests",
           "ref": "16baefdba9",
           "detail": "2027 EUR migration, registration, corporation/sector home currency, campaigns, central-bank/savings queries, and treasury audit routing. Six euro suites passed 69/69 in shared check job 20260925T013650Z-eb9e0858; path-specific matrix passed 125. Era-blind callers and pinned bootstrap/replay still block #2291 and this item."
+        },
+        {
+          "type": "partial_source_and_tests",
+          "ref": "467a9d0e7b",
+          "detail": "Onboarding reward and welcome mail now use the world preset and credited home currency; event substrate personal/campaign/treasury effects use the same preset-aware seams. Focused suites passed 21/21 and neighboring suites 46/46; scoped lint/format passed. Profile reward preview and other banking/trading/credit sites plus full 2027 bootstrap/replay remain open."
         }
       ],
       "blocked_by": [
