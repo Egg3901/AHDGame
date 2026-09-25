@@ -82,4 +82,14 @@ describe("seedPerfIndexes", () => {
       ])
     );
   });
+
+  it("indexes federal budget snapshots for country history in turn order", async () => {
+    const db = { collection: vi.fn() } as unknown as Db;
+    await seedPerfIndexes(db, () => {});
+
+    const call = ensureIndexMock.mock.calls.find((c) => c[1] === "federalBudgetSnapshots");
+    expect(call, "no federal budget history index is seeded").toBeTruthy();
+    expect(call![2]).toEqual({ countryId: 1, turn: -1 });
+    expect(call![3]).toMatchObject({ name: "federalBudgetSnapshots_country_turn" });
+  });
 });

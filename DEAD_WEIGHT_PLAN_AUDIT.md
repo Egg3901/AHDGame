@@ -723,7 +723,7 @@ external-consumer contract.
 | `moneySupplySnapshots`             | `moneySupply/snapshot.ts`                        | central-bank detail, inflation, market-pool turns | No seed index / no policy                                   |
 | `primarySnapshots`                 | `turn/primaryResolution.ts`                      | wiki election, public election API, Discord race  | Election and recorded-time indexes / no policy              |
 | `tradeFlowSnapshots`               | `turn/commodity/persistence.ts`                  | trade ledger, public history, foreign policy      | Unique turn index / no policy                               |
-| `federalBudgetSnapshots`           | `budget/fiscalYear.ts`                           | budget detail, public history, admin budgets      | No seed index / no policy                                   |
+| `federalBudgetSnapshots`           | `budget/fiscalYear.ts`                           | budget detail, public history, admin budgets      | Country/turn descending index now seeded / no policy        |
 | `stockExchangeSnapshots`           | `turn/stockExchangeSnapshot.ts`                  | stock-exchange API, public economy                | No seed index / no policy                                   |
 | `investorRankingSnapshots`         | `turn/investorWealthSnapshots.ts`                | public character, Discord lookup, season recap    | No seed index / no policy                                   |
 | `gameHealthSnapshots`              | `turn/gameHealthSnapshot.ts`                     | admin health pages, simulation metrics            | Turn and warning indexes / 30-day TTL                       |
@@ -740,6 +740,15 @@ snapshot's migration-created unique turn index is now also in the recurring
 fund index seed; an empty local reset-world seed recreated it with the same
 name, key, and uniqueness.
 
+The public budget-history query filtered by `countryId` and sorted descending
+by `turn`. The partial local copy had 577 `federalBudgetSnapshots` rows and
+only `_id`; explain examined all 577 and performed a blocking sort for ten
+results. With `{ countryId: 1, turn: -1 }`, explain used the compound index and
+examined ten keys and ten documents for the same ten results. Added that index
+to recurring performance seeding and a one-time idempotent migration. This is
+a query-plan comparison on the partial local copy, not a production latency
+claim.
+
 WP12 route inventory found 23 `character` routes and 6 `characters` routes,
 5 `corporation` routes and 110 `corporations` routes, and 363 `country` routes
 and 1 `countries` route. Comparing relative route paths within each pair found
@@ -749,15 +758,6 @@ web callers use both forms, including authenticated character actions under
 `/api/character` and character search or transfers under `/api/characters`.
 Any route consolidation needs endpoint-level caller and response contracts;
 the report's 308-redirect target is not a counted set of redundant routes.
-
-WP13 local compiler probe used `/usr/bin/time -v npm run typecheck` on this
-worktree. After 12 minutes 51 seconds it was still running, so it was
-interrupted; maximum resident set size before interruption was 6,108,172 KB
-(about 5.8 GiB). This is a measured lower bound for this incomplete local
-run, not a completed typecheck peak or a CI memory measurement. CI typecheck
-for the preceding pushed commit passed. The proposed sub-3 GB target is not
-met by this local probe; changing the 8 GB heap ceiling requires a completed
-diagnostic run and a narrower type-level cause.
 
 WP9 recovery inspection found that `turnPhaseRuntime.runPhase` places both
 completed and interrupted phases in the resume skip set. An interrupted
