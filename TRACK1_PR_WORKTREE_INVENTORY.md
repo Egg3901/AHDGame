@@ -19,7 +19,7 @@ this file. No GitHub mutation, no worktree mutation, no builds/tests.
 
 Scope constraint honored: only this file written
 (`TRACK1_PR_WORKTREE_INVENTORY.md` at the AHDGame repo top level, inside
-worktree `track1-fixer`). Another agent is coding #2291 in this worktree;
+worktree `track1-fixer`). The #2291 patch is committed but partial;
 `src/` and tests were not touched. File is left UNCOMMITTED per task
 ("Do not commit"); supervisor checkpoints it.
 
@@ -402,6 +402,42 @@ quote batching, indexes, phase telemetry). These need selective integration
 and before/after bytes/round trips into Track 1 rather than merging production
 ancestry wholesale. Both checkouts are clean and remain active-feature until
 their patches have a tested `development` disposition.
+
+**Ops PR #4: CLOSED and remote branch DELETED, 2026-09-25.** Its June
+`LANDING_PAGE` CSS redesign is superseded by the v4 workbench/nav rebuild on
+ops `main` (`17804fc`, `21b09a1`, `c72c36d`). A written reason was posted
+on the PR before closure. It had no local worktree.
+
+**Ops PR #34: CLOSED and remote branch DELETED, 2026-09-25.** The prior mixed
+commit `4b009d4` is an ancestor of current ops `origin/main`, and current
+main contains all named knowledge MCP tools, versioned saves, catalog,
+backfill/review scripts, and tests from the PR. Merging the old branch would
+reapply stale copies over newer ops changes. A written reason was posted on
+the PR. It had no local worktree.
+
+**Ops PR #43: CLOSED and remote branch DELETED, 2026-09-25.** Its July
+static consumer-demand report predates the September #2087-#2089 diagnosis
+and cannot serve as final-source evidence for current clearing and scarcity
+behavior. The CodeQL job failed without retained steps. Track 1 preserved
+the later research report and will generate current pinned comparisons.
+A written abandonment/supersession reason was posted on the PR. It had no
+local worktree.
+
+**`muse-588`: DELETED after discarding a stale worker-status file.**
+Its only untracked file, `muse-1.3`, is a 45-byte `finished_at`/`exit_code`
+record, not source or simulation evidence. The branch's two source commits
+are the sector-turn decomposition and typecheck fix delivered by merged PR
+#1942 (`669ad490219b25db82c55c13760ad2b80f5b5ae0`), which covers the
+same changed paths; issue #588 is closed. Only that log was discarded, then
+clean status was checked and the checkout removed normally. The branch ref is
+preserved; no force deletion.
+
+**a-house-divided PRs #4441 and #4440: MERGED to their own `master`,
+2026-09-25.** The existing dev dependency patch updates for `@humanfs/node`
+and `fast-uri` had green checks and clean merge states. They landed as
+`39c471013732eab309cd7071eb60c249212c3b0e` and
+`b9a006840559d2bec35377062c2a7ad5905f8eff` respectively. They had
+no local worktrees and do not change AHDGame's `development` base.
 
 The remaining rows above require final decisions and execution; this document
 does not mark them complete.

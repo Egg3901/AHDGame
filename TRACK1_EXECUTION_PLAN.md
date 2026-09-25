@@ -156,6 +156,15 @@ five-year, ten-year, and horizon starts. The budget remains provisional until
 the production worker's pinned-source resume and complete report retention
 are verified in sandbox.
 
+Worker source inspection confirms a continuation job can point at the same
+sandbox database: `worker.ts` verifies the pinned worktree before spawn and
+again before report collection, while `runWorld.ts` detects an already
+bootstrapped database and advances from persisted `gameState.currentTurn`.
+Give each queued continuation its own run ID, retain the prior run IDs and
+reports, and assert identical seed, preset, source SHA, and manifest across
+the chain. The first actual sandbox continuation remains a required rehearsal
+of report stitching before relying on it for the horizon evidence.
+
 The initial 1991 qualification worlds also supply #2078's corrected six-turn
 anomaly precision and scan-duration window. Its transfer-detector code and
 targeted fixtures are already in development; a separate world start would
@@ -203,8 +212,10 @@ run is insufficient.
 - 2026-09-25: Actual Muse Spark 1.3 contributors implemented preliminary
   2027 euro seed repair and corporation UI fixes. Focused euro-rule and Build
   Org suites passed 20 tests together. Follow-up Muse work is completing
-  runtime forex mirroring, conformance tests, and corporation regressions;
-  neither area is yet marked done.
+  runtime forex mirroring, conformance tests, and corporation regressions.
+  The focused eight-suite checkpoint passed 72 tests, with scoped ESLint
+  reporting no errors. #2291 and #2349 remain partial for the explicit
+  completion boundaries below.
 
 ### #2291 completion boundary
 
@@ -216,3 +227,22 @@ failure on any legacy row. The branch still has era-blind
 (`src/lib/seeds/reference/budgets.ts`) and money operations. Test and resolve
 those paths before marking #2291 ready. A passing rule helper suite alone is
 insufficient evidence.
+
+- 2026-09-25: Merged green a-house-divided dependency PRs #4441 and #4440
+  into that repository's `master`. Closed superseded ops PRs #4, #34, and
+  #43 with written reasons and deleted their remote branches. No locked or
+  uncommitted checkout was removed for these decisions.
+- 2026-09-25: Committed corporation wiki claim scoping and published-page
+  checks, Build Org preview eligibility, and a defensive corporation-page
+  bond-holder guard in `a9b278a3ce`. The live #2349 exception has sanitized
+  GlitchTip evidence but no source-map-confirmed root cause, so it stays
+  partial. Committed the partial 2027 euro repair in `a635fea5f2`; #2291
+  remains partial pending all currency-bearing seed and runtime paths.
+
+### Current source checkpoint
+
+The original fresh base is recorded above. After the three AHDGame dependency
+merges, the latest fetched `origin/development` is
+`088cc9ba629b1d41713154afb0148c827147842a`. This branch still needs a
+controlled rebase onto that commit after the current queued typecheck and
+source checkpoint; a later upstream change requires another refresh.

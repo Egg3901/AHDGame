@@ -2414,6 +2414,11 @@
           "type": "tracker_checklist",
           "url": "https://github.com/Egg3901/AHDGame/issues/2159",
           "detail": "Unchecked in #2159"
+        },
+        {
+          "type": "partial_source_and_tests",
+          "ref": "a635fea5f2f9c3e93781236886f81179d2952235",
+          "detail": "2027 euro member rules, seed budgets/FX/era and live forex follower peg implemented. Focused euro conformance, adoption, and forex tests passed. #2291 remains partial: central-bank/corporation/bond/balance/transaction topology and bootstrap conformance are not yet proven."
         }
       ],
       "blocked_by": [
