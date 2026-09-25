@@ -38,7 +38,7 @@ export const CS_1991_CZECH_REGION_OUTPUT_INDEX = {
     3,
 } as const;
 
-export const CS_1991_ESTIMATED_REGION_GDP_CSK = {
+export const CS_1991_ESTIMATED_REGION_GDP_CSK: Record<string, number> = {
   ...allocateRegionalGdp(
     CS_1991_CZECH_GDP_CSK,
     {

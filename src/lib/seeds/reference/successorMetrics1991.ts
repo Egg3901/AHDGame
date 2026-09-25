@@ -16,7 +16,9 @@ import { yuRegions1991 } from "@/lib/countries/yu/data/yuRegions1991";
  * because the SFRY series ends before this scenario's January start. The
  * baseline builder supplies the metric schema and plausible infrastructure/
  * health priors; the transition economy, election and media indicators below
- * replace its 1979 command-system values. Regional income and urbanization
+ * replace its 1979 command-system values. `governance.voterTurnout` is the
+ * last-election/scenario metric; it is distinct from the demographic model's
+ * capped turnout propensity for future simulated elections. Regional income and urbanization
  * differences are transparent GDP-per-resident estimates, not claimed census
  * observations. Sources (replace country and indicator in the URL):
  * https://api.worldbank.org/v2/country/POL/indicator/SP.DYN.LE00.IN?date=1991&format=json
