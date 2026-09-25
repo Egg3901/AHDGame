@@ -803,7 +803,12 @@
         {
           "type": "partial_source_and_tests",
           "ref": "108c84d656",
-          "detail": "Muse extracted keyed bond-sale holder claim, pool debit, payout, compensation, and route integration. Primitive tests passed 10/10 and route tests 9/9 under an extended host timeout; scoped lint/format passed. Supervisor review found that same-key retry can still fail before reconciliation on depleted holder units or a changed quote/FX fingerprint. A Muse follow-up is correcting this boundary before bond-sale coverage is claimed."
+          "detail": "Historical extraction checkpoint: Muse ported keyed bond-sale holder/pool/payout steps with 10/10 primitive and 9/9 route tests. Supervisor review found retries could fail on depleted holder units or changed quote/FX. More importantly, merged PR #2288 already implements durable bond-sale intents with original stored settlement terms and a repair queue. This duplicate extraction was reverted in 0108ff94f2; it is not candidate coverage."
+        },
+        {
+          "type": "superseded_source_disposition",
+          "ref": "4b5f615115cf1181fadd1afb2cbfd5586aba3f50,0108ff94f2",
+          "detail": "The bond-sale slice of the old #1672 branch is superseded by merged development PR #2288, which records an intent before moving units, stamps claim/pool/payout, resumes frozen terms, and exposes unfinished intents for repair. Track 1 kept development's implementation and removed the duplicate port. #1672 remains open for other standalone flows and exact-branch validation."
         }
       ],
       "blocked_by": [

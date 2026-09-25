@@ -798,3 +798,14 @@ green; it preserves the Railway cache mount while clearing its contents.
 reviewed #2385/#2387 source. Staging deployment health and the subsequent
 #2384 production promotion remain separate release gates; this record does
 not claim they passed.
+
+**Old #1672 bond-sale patch: DISCARD as superseded, 2026-09-25.** The
+source `muse-1672` commit `4670f10cbe` was initially extracted into Track 1
+as `108c84d656`, then supervisor review found it failed same-key recovery
+after a holder claim or a market quote change. Development already contained
+merged PR #2288 (`4b5f615115cf1181fadd1afb2cbfd5586aba3f50`), which
+persists sale intents with frozen terms and a recovery queue. The duplicate
+extraction was reverted as `0108ff94f2`; its Muse follow-up was stopped
+before any new source edits. This is a disposition for the bond-sale slice,
+not for the still-active 55-commit source checkout: other unique flow
+families there still need individual accounting.
