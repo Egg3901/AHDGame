@@ -8,28 +8,21 @@ import { NextResponse } from "next/server";
 import type { Db } from "mongodb";
 import { ObjectId } from "mongodb";
 import type { Corporation, ShareListing, ShareOrder } from "@/lib/db/types";
-import {
-  creditShares,
-  creditSharesToFund,
-  creditSharesToImperial,
-  creditSharesToCorp,
-  debitShares,
-  debitSharesFromCorp,
-  debitSharesFromFund,
-  debitSharesFromImperial,
-} from "@/lib/corporations/shareholderOps";
-import { buildPersonalBalanceInc } from "@/lib/currency/characterFunds";
 import { emitTx } from "@/lib/financialTxLog/emit";
 import {
   collectShareFillAuditRows,
   insertShareFillAuditRows,
-  markShareFillMoneyCommitted,
   settleShareFillAttempt,
   type ShareFillAuditPlan,
 } from "@/lib/corporations/commands/shareTrading/shareFillAudit";
+import {
+  executeShareFillMoneyFlow,
+  personalBalanceField,
+  SHARE_FILL_MONEY_SELLER_SHARES,
+  type ShareFillMoneyPlan,
+} from "@/lib/corporations/commands/shareTrading/shareFillMoney";
 import { computeAccountedShares } from "@/lib/corporations/shareInvariant";
 import type { CurrencyCode } from "@/lib/constants/currencies";
-import { debitFundHoldingShares, upsertFundHoldingShares } from "@/lib/indexFunds/fundQueries";
 
 export const resolveCharName = async (
   db: Db,
@@ -51,17 +44,17 @@ export const resolveCorpName = async (db: Db, id: ObjectId): Promise<string> => 
 };
 
 /**
- * Credit a liquidity-provider fund's `cashAnchor` for a filled fund sell
- * order and evidence it with the single fund-subject `stock_trade_sell`
- * ledger row. Extracted from fillShareOrder so both seller-leg sites (the
- * corporation-buyer and character-buyer fills) share one committed-path-only
- * implementation: the row is emitted after the cash credit lands, so a fill
- * that fails before the credit emits nothing, and a committed fill emits
- * exactly one row. Fund-subject rows never mirror, so this is the only
- * ledger row for the credit (the contra is the buyer's shares, an asset
- * account the shadow ledger does not carry).
+ * Evidence a filled fund sell order with the single fund-subject
+ * `stock_trade_sell` ledger row. The fund's `cashAnchor` credit itself is a
+ * keyed money leg now (issue #1672); this row is post-commit best effort,
+ * emitted once per attempt under the caller's deterministic id so a retry
+ * converges instead of double-booking. Shared by both seller-leg sites (the
+ * corporation-buyer and character-buyer fills) so the committed-path-only
+ * row is identical at both. Fund-subject rows never mirror, so this is the
+ * only ledger row for the credit (the contra is the buyer's shares, an
+ * asset account the shadow ledger does not carry).
  */
-export async function creditSellerFundProceeds(args: {
+export async function emitSellerFundProceedsRow(args: {
   db: Db;
   fundId: ObjectId;
   fundName: string;
@@ -79,6 +72,8 @@ export async function creditSellerFundProceeds(args: {
   pricePerShare: number;
   currentTurn: number;
   now: Date;
+  /** Deterministic insert id for the attempt (convergent on retry). */
+  dedupeId: ObjectId;
 }): Promise<void> {
   const {
     db,
@@ -93,34 +88,37 @@ export async function creditSellerFundProceeds(args: {
     pricePerShare,
     currentTurn,
     now,
+    dedupeId,
   } = args;
-  const cashCredit = await db
-    .collection("indexFunds")
-    .updateOne({ _id: fundId }, { $inc: { cashAnchor: total }, $set: { updatedAt: now } });
-  if (cashCredit.matchedCount === 0) {
-    throw new Error("Liquidity-provider fund disappeared during settlement");
-  }
-  await emitTx(db, {
-    type: "stock_trade_sell",
-    turn: currentTurn,
-    createdAt: now,
-    subjectType: "fund",
-    subjectId: fundId,
-    subjectName: fundName,
-    amount: total,
-    anchorAmount: total,
-    currencyCode: fundAnchorCurrency,
-    counterpartyType: buyer.type,
-    counterpartyId: buyer.id,
-    counterpartyName: buyer.name,
-    meta: {
-      corporationId: corporationId.toString(),
-      orderId: orderId.toString(),
-      shares,
-      pricePerShare,
-      source: "order_fill_sell_order",
+  const outcome = await emitTx(
+    db,
+    {
+      type: "stock_trade_sell",
+      turn: currentTurn,
+      createdAt: now,
+      subjectType: "fund",
+      subjectId: fundId,
+      subjectName: fundName,
+      amount: total,
+      anchorAmount: total,
+      currencyCode: fundAnchorCurrency,
+      counterpartyType: buyer.type,
+      counterpartyId: buyer.id,
+      counterpartyName: buyer.name,
+      meta: {
+        corporationId: corporationId.toString(),
+        orderId: orderId.toString(),
+        shares,
+        pricePerShare,
+        source: "order_fill_sell_order",
+      },
     },
-  });
+    undefined,
+    { _id: dedupeId }
+  );
+  if (outcome === "failed") {
+    throw new Error("share-fill:fund-proceeds-row-failed");
+  }
 }
 
 /**
@@ -161,12 +159,10 @@ export async function settleBuyOrderFill(args: {
     corporation,
     order,
     orderCharacterId,
-    buyOrderBuyerCorp,
     shares,
     total,
     totalInFillerHome,
     fillerId,
-    fillerName,
     fillerCollectionName,
     fillerHomeCurrency,
     isImperialFiller,
@@ -182,126 +178,93 @@ export async function settleBuyOrderFill(args: {
     corporation.shareholders?.find((sh) =>
       isImperialFiller ? sh.imperialCharacterId?.equals(fillerId) : sh.characterId?.equals(fillerId)
     )?.avgCostPerShare ?? order.pricePerShare;
-  let sellerSharesDebited = false;
-  let buyerSharesCredited = false;
-  let buyerFundHoldingCredited = false;
-  let fillerEscrowReleased = false;
+  // All money moves through the keyed share-fill money flow (issue #1672):
+  // filler share debit, buyer cap-table credit, fund holdings credit, and
+  // escrow release run as compare-and-set steps under the attempt key with
+  // keyed inverses, so a crash between any two converges on retry instead
+  // of stranding shares or double-releasing escrow. The flow settles its
+  // own receipt (compensating the prefix on a later-step failure); the
+  // caller only restores the order claim and maps the legacy response.
+  //
+  // #992 audit, preserved: a buy-order fill moves NO fund cash. The fund's
+  // cashAnchor was debited up front at placement, so the plan below carries
+  // no proceeds leg — the filler is paid out of that already-moved escrow,
+  // and the fund side of this fill is shares in. Proven by the
+  // no-fund-cash-movement characterization test in
+  // fillShareOrderSettlement.test.ts.
+  const fillPriceAnchor = shares > 0 ? total / shares : 0;
+  const moneyPlan: ShareFillMoneyPlan = {
+    version: 1,
+    fillKey,
+    orderIdHex: order._id.toHexString(),
+    corpIdHex: corporation._id.toHexString(),
+    direction: "buy-fill",
+    shares,
+    turn: currentTurn,
+    nowIso: now.toISOString(),
+    fillerDebit: null,
+    fillerCredit: {
+      collection: fillerCollectionName,
+      idHex: fillerId.toHexString(),
+      field: personalBalanceField(fillerHomeCurrency, forexEnabled),
+      amount: totalInFillerHome,
+    },
+    sellerDebit: {
+      field: isImperialFiller ? "imperialCharacterId" : "characterId",
+      idHex: fillerId.toHexString(),
+      pricePerShare: fillerAvgCost,
+    },
+    buyerCredit: order.placerFundId
+      ? {
+          field: "fundId",
+          idHex: order.placerFundId.toHexString(),
+          pricePerShare: fillPriceAnchor,
+        }
+      : order.placerCorporationId
+        ? {
+            field: "corporationId",
+            idHex: order.placerCorporationId.toHexString(),
+            pricePerShare: order.pricePerShare,
+          }
+        : {
+            field: "characterId",
+            idHex: orderCharacterId!.toHexString(),
+            pricePerShare: order.pricePerShare,
+          },
+    fundInventoryDebit: null,
+    buyerHoldingsCredit: order.placerFundId
+      ? {
+          fundIdHex: order.placerFundId.toHexString(),
+          pricePerShareAnchor: fillPriceAnchor,
+        }
+      : null,
+    sellerProceeds: null,
+  };
   try {
-    // Transfer shares from filler to buyer (fund, corp, or character)
-    const debitFillerShares = async () => {
-      const remaining = isImperialFiller
-        ? await debitSharesFromImperial(
-            db,
-            corporation._id,
-            fillerId,
-            shares,
-            { $set: { updatedAt: now } },
-            { requireSufficient: true }
-          )
-        : await debitShares(
-            db,
-            corporation._id,
-            fillerId,
-            shares,
-            { $set: { updatedAt: now } },
-            { requireSufficient: true }
-          );
-      return remaining;
-    };
-
-    if (order.placerFundId) {
-      // #992 audit: a buy-order fill moves NO fund cash. The fund's cashAnchor
-      // was debited up front at placement — placeFundShareBuyOrder holds the
-      // full anchor escrow on the order as escrowAnchor, and the peer-fill
-      // claim (in fillShareOrder / fillBestBuyOrderForMarketSell) only
-      // decrements the order's escrowAmount/escrowAnchor. The filler here is
-      // paid out of that already-moved escrow, and the fund side of this fill
-      // is shares in. So the only ledger row below is the filler's
-      // stock_trade_sell (counterparty system / the fund name) — there is
-      // deliberately no fund-subject row at fill. Proven by the
-      // no-fund-cash-movement characterization test in
-      // fillShareOrderSettlement.test.ts.
-      const remaining = await debitFillerShares();
-      if (remaining < 0) {
-        await restoreClaimedOrder();
-        await settleShareFillAttempt(db, fillKey, "failed", "share-fill:claim-restored");
-        return NextResponse.json(
-          { error: "You no longer have enough shares to fill this order" },
-          { status: 409 }
-        );
-      }
-      sellerSharesDebited = true;
-      // pricePerShare for cost-basis is stored in anchor (₳) to match turn-engine behaviour.
-      const fillPriceAnchor = shares > 0 ? total / shares : 0;
-      await creditSharesToFund(db, corporation._id, order.placerFundId, shares, fillPriceAnchor, {
-        $set: { updatedAt: now },
-      });
-      buyerSharesCredited = true;
-      await upsertFundHoldingShares(
-        db,
-        order.placerFundId,
-        corporation._id,
-        shares,
-        fillPriceAnchor
+    await executeShareFillMoneyFlow(db, moneyPlan);
+  } catch (err) {
+    await restoreClaimedOrder();
+    const code = err instanceof Error ? err.message.split(":")[0] : "";
+    if (code === SHARE_FILL_MONEY_SELLER_SHARES) {
+      await settleShareFillAttempt(db, fillKey, "failed", "share-fill:claim-restored");
+      return NextResponse.json(
+        { error: "You no longer have enough shares to fill this order" },
+        { status: 409 }
       );
-      buyerFundHoldingCredited = true;
-    } else if (order.placerCorporationId) {
-      const remaining = await debitFillerShares();
-      if (remaining < 0) {
-        await restoreClaimedOrder();
-        await settleShareFillAttempt(db, fillKey, "failed", "share-fill:claim-restored");
-        return NextResponse.json(
-          { error: "You no longer have enough shares to fill this order" },
-          { status: 409 }
-        );
-      }
-      sellerSharesDebited = true;
-      await creditSharesToCorp(
-        db,
-        corporation._id,
-        order.placerCorporationId,
-        shares,
-        order.pricePerShare,
-        { $set: { updatedAt: now } }
-      );
-      buyerSharesCredited = true;
-    } else {
-      // Transfer to another character — debit from filler, credit to buyer
-      const remaining = await debitFillerShares();
-      if (remaining < 0) {
-        await restoreClaimedOrder();
-        await settleShareFillAttempt(db, fillKey, "failed", "share-fill:claim-restored");
-        return NextResponse.json(
-          { error: "You no longer have enough shares to fill this order" },
-          { status: 409 }
-        );
-      }
-      sellerSharesDebited = true;
-      await creditShares(
-        db,
-        corporation._id,
-        orderCharacterId!,
-        shares,
-        { $set: { updatedAt: now } },
-        { pricePerShare: order.pricePerShare }
-      );
-      buyerSharesCredited = true;
     }
-
-    // Release escrow to filler (escrow stored in ₳; convert to filler home currency)
-    await db.collection(fillerCollectionName).updateOne(
-      { _id: fillerId },
-      {
-        $inc: buildPersonalBalanceInc(totalInFillerHome, fillerHomeCurrency, forexEnabled),
-        $set: { updatedAt: now },
-      }
+    await settleShareFillAttempt(
+      db,
+      fillKey,
+      "failed",
+      err instanceof Error ? err.message : "share-fill:settlement-failed"
     );
-    fillerEscrowReleased = true;
-    // Money committed. The sell-tx and history rows are rebuilt from the
-    // pinned plan (buyer name included) and inserted convergently: a crash
-    // from here on is repaired by recovery, and an audit failure leaves the
-    // receipt in_progress instead of rolling back moved money.
-    await markShareFillMoneyCommitted(db, fillKey);
+    throw err;
+  }
+  // Money committed: the money flow flipped the audit receipt. The audit
+  // rows below stay convergent deterministic-_id inserts, exactly as
+  // before; an audit failure leaves the receipt in_progress for recovery
+  // instead of rolling back moved money.
+  {
     const auditOutcome = await insertShareFillAuditRows(
       db,
       fillKey,
@@ -310,84 +273,6 @@ export async function settleBuyOrderFill(args: {
     if (auditOutcome !== "failed") {
       await settleShareFillAttempt(db, fillKey, "completed");
     }
-  } catch (err) {
-    if (fillerEscrowReleased) {
-      await db.collection(fillerCollectionName).updateOne(
-        { _id: fillerId },
-        {
-          $inc: buildPersonalBalanceInc(-totalInFillerHome, fillerHomeCurrency, forexEnabled),
-          $set: { updatedAt: new Date() },
-        }
-      );
-    }
-    if (buyerSharesCredited) {
-      if (order.placerFundId) {
-        await debitSharesFromFund(
-          db,
-          corporation._id,
-          order.placerFundId,
-          shares,
-          { $set: { updatedAt: new Date() } },
-          { requireSufficient: true }
-        );
-        if (buyerFundHoldingCredited) {
-          await debitFundHoldingShares(
-            db,
-            order.placerFundId,
-            corporation._id,
-            shares,
-            shares > 0 ? total / shares : 0
-          );
-        }
-      } else if (order.placerCorporationId) {
-        await debitSharesFromCorp(
-          db,
-          corporation._id,
-          order.placerCorporationId,
-          shares,
-          { $set: { updatedAt: new Date() } },
-          { requireSufficient: true }
-        );
-      } else {
-        await debitShares(
-          db,
-          corporation._id,
-          orderCharacterId!,
-          shares,
-          { $set: { updatedAt: new Date() } },
-          { requireSufficient: true }
-        );
-      }
-    }
-    if (sellerSharesDebited) {
-      if (isImperialFiller) {
-        await creditSharesToImperial(
-          db,
-          corporation._id,
-          fillerId,
-          shares,
-          { $set: { updatedAt: new Date() } },
-          { pricePerShare: fillerAvgCost }
-        );
-      } else {
-        await creditShares(
-          db,
-          corporation._id,
-          fillerId,
-          shares,
-          { $set: { updatedAt: new Date() } },
-          { pricePerShare: fillerAvgCost }
-        );
-      }
-    }
-    await restoreClaimedOrder();
-    await settleShareFillAttempt(
-      db,
-      fillKey,
-      "failed",
-      err instanceof Error ? err.message : "share-fill:settlement-failed"
-    );
-    throw err;
   }
   return null;
 }

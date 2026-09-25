@@ -10,6 +10,7 @@ import {
   settleShareFillAttempt,
   type ShareFillAuditPlan,
 } from "./shareFillAudit";
+import { recoverShareFillMoneyByFillKey } from "./shareFillMoney";
 
 export interface MarketSellParty {
   id: ObjectId;
@@ -66,6 +67,10 @@ export async function fillBestBuyOrderForMarketSell(input: {
     if (!provider) continue;
 
     const prepared = await prepareShareFillClaim(db, order);
+    // Converge a prior attempt crashed mid-money before reading balances.
+    if (prepared.order.lastShareFillKey) {
+      await recoverShareFillMoneyByFillKey(db, prepared.order.lastShareFillKey);
+    }
     order = prepared.order;
     const escrowAnchor = order.escrowAnchor;
     if (!(escrowAnchor && escrowAnchor > 0)) continue;

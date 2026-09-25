@@ -15,6 +15,7 @@ import {
   type RecordShareTradeOutcome,
 } from "@/lib/corporations/shareTradeHistory";
 import { FUND_TRANSACTION_COLLECTION } from "@/lib/indexFunds/fundQueries";
+import { recoverShareFillMoneyOrphans } from "./shareFillMoney";
 import type { IndexFundTransaction } from "@/lib/db/types";
 import type { ShareOrder } from "@/lib/db/types/corporation";
 import type { ShareTradeParty } from "@/lib/db/types/shareTradeHistory";
@@ -23,19 +24,21 @@ import type { CurrencyCode } from "@/lib/constants/currencies";
 /**
  * Durable audit for peer order-book fills (issue #1672).
  *
- * The fill money path keeps its legacy compensation. This module owns the
- * audit side that the compensation cannot cover: every fill attempt mints one
- * key, stamps it on the order inside the atomic claim write, and persists a
- * resume plan on a money-flow receipt before money moves. All audit rows
- * (financial-tx log, fund-transaction row, trade-history row) then insert
- * under deterministic `_id`s derived from the attempt key, so a crash
- * between money and audit is repaired by convergent re-insertion instead of
- * leaving missing audit, and a retry never duplicates rows.
+ * Fill money moves as keyed legs (shareFillMoney.ts): every fill attempt
+ * mints one key, stamps it on the order inside the atomic claim write, and
+ * persists a resume plan on a money-flow receipt before money moves. This
+ * module owns the audit side: all audit rows (financial-tx log,
+ * fund-transaction row, trade-history row) insert under deterministic `_id`s
+ * derived from the attempt key, so a crash between money and audit is
+ * repaired by convergent re-insertion instead of leaving missing audit, and
+ * a retry never duplicates rows.
  *
- * Recovery is audit-only and never re-runs money: it inserts planned rows
- * only after the receipt records `moneyCommitted`. Anything earlier (claim
- * never landed, or landed but money unproven) settles `failed` or stays
- * `in_progress` (TTL-visible) for ops instead of guessing.
+ * Recovery runs money first, audit second: the periodic pass re-drives
+ * stranded money receipts from their stored plans (converging balances),
+ * then inserts planned audit rows only after the receipt records
+ * `moneyCommitted`. Anything earlier (claim never landed, or landed but
+ * money unproven) settles `failed` or stays `in_progress` (TTL-visible) for
+ * ops instead of guessing.
  */
 
 /** Deterministic-insert domains for one fill attempt's audit rows. */
@@ -978,9 +981,22 @@ export async function runShareFillRecoveryPass(
   if (shareFillRecoveryRunning) return emptyPassSummary("skipped-concurrent");
   shareFillRecoveryRunning = true;
   try {
-    const results = await recoverShareFillOrphans(db, limit, now);
+    // Money first, audit second (issue #1672): a crash between two money
+    // legs converges the balances here so the audit pass below observes
+    // settled money; a crash between money and audit lands the missing rows
+    // there. Settled/missing skips report nothing: they examined no live
+    // prefix.
     const summary = emptyPassSummary("completed");
-    summary.examined = results.length;
+    const moneyResults = await recoverShareFillMoneyOrphans(db, limit);
+    for (const money of moneyResults) {
+      if (money.action === "skipped-settled" || money.action === "skipped-missing") continue;
+      summary.examined += 1;
+      if (money.action === "money-recovered") summary.recovered += 1;
+      else if (money.action === "settled-failed-no-plan") summary.settledFailed += 1;
+      else summary.incomplete += 1;
+    }
+    const results = await recoverShareFillOrphans(db, limit, now);
+    summary.examined += results.length;
     for (const result of results) {
       switch (result.action) {
         case "audit-recovered":
