@@ -327,6 +327,7 @@
       "requirement": "`1991-default`: historical modern-world start, including the full living-crisis program from 1991 onward.",
       "parent_checked": true,
       "status": "selected_pending_release_validation",
+      "owner": "Game owner / Track #1",
       "issue_refs": [],
       "evidence": [
         {
@@ -347,6 +348,7 @@
       "requirement": "`2027-default`: contemporary start, with current seed data and correct inherited crisis state.",
       "parent_checked": false,
       "status": "open",
+      "owner": "Game owner / Track #1",
       "issue_refs": [],
       "evidence": [
         {
@@ -372,6 +374,7 @@
       "requirement": "Record the selected profile, exact release commit, effective world-entity manifest, and immutable turn-one feature/configuration manifest here.",
       "parent_checked": false,
       "status": "open",
+      "owner": "Game owner / Track #1",
       "issue_refs": [],
       "evidence": [
         {
@@ -397,6 +400,7 @@
       "requirement": "#2072",
       "parent_checked": false,
       "status": "open",
+      "owner": "Track #1 implementation",
       "issue_refs": [
         {
           "repo": "Egg3901/AHDGame",
@@ -435,6 +439,7 @@
       "requirement": "#2073",
       "parent_checked": true,
       "status": "claimed_complete_pending_final_validation",
+      "owner": "Track #1 implementation",
       "issue_refs": [
         {
           "repo": "Egg3901/AHDGame",
@@ -467,6 +472,7 @@
       "requirement": "#2090",
       "parent_checked": true,
       "status": "claimed_complete_pending_final_validation",
+      "owner": "Track #1 implementation",
       "issue_refs": [
         {
           "repo": "Egg3901/AHDGame",
@@ -499,6 +505,7 @@
       "requirement": "#2101",
       "parent_checked": true,
       "status": "claimed_complete_pending_final_validation",
+      "owner": "Track #1 implementation",
       "issue_refs": [
         {
           "repo": "Egg3901/AHDGame",
@@ -531,6 +538,7 @@
       "requirement": "#2121",
       "parent_checked": true,
       "status": "claimed_complete_pending_final_validation",
+      "owner": "Track #1 implementation",
       "issue_refs": [
         {
           "repo": "Egg3901/AHDGame",
@@ -563,6 +571,7 @@
       "requirement": "Fresh-bootstrap conformance contains no unexplained missing country systems, orphaned offices, candidate-less founding contests, empty required parties, seat/office mismatches, or wrong-era fallbacks.",
       "parent_checked": false,
       "status": "open",
+      "owner": "Track #1 implementation",
       "issue_refs": [
         {
           "repo": "Egg3901/AHDGame",
@@ -600,6 +609,7 @@
       "requirement": "#968",
       "parent_checked": false,
       "status": "open",
+      "owner": "Track #1 implementation",
       "issue_refs": [
         {
           "repo": "Egg3901/AHDGame",
@@ -638,6 +648,7 @@
       "requirement": "#991",
       "parent_checked": false,
       "status": "open",
+      "owner": "Track #1 implementation",
       "issue_refs": [
         {
           "repo": "Egg3901/AHDGame",
@@ -676,6 +687,7 @@
       "requirement": "#992",
       "parent_checked": false,
       "status": "open",
+      "owner": "Track #1 implementation",
       "issue_refs": [
         {
           "repo": "Egg3901/AHDGame",
@@ -714,6 +726,7 @@
       "requirement": "#1328",
       "parent_checked": false,
       "status": "open",
+      "owner": "Track #1 implementation",
       "issue_refs": [
         {
           "repo": "Egg3901/AHDGame",
@@ -752,6 +765,7 @@
       "requirement": "#1672",
       "parent_checked": false,
       "status": "open",
+      "owner": "Track #1 implementation",
       "issue_refs": [
         {
           "repo": "Egg3901/AHDGame",
@@ -790,6 +804,7 @@
       "requirement": "#2118",
       "parent_checked": false,
       "status": "open",
+      "owner": "Track #1 implementation",
       "issue_refs": [
         {
           "repo": "Egg3901/AHDGame",
@@ -828,6 +843,7 @@
       "requirement": "#2119",
       "parent_checked": false,
       "status": "open",
+      "owner": "Track #1 implementation",
       "issue_refs": [
         {
           "repo": "Egg3901/AHDGame",
@@ -866,6 +882,7 @@
       "requirement": "#2120",
       "parent_checked": false,
       "status": "open",
+      "owner": "Track #1 implementation",
       "issue_refs": [
         {
           "repo": "Egg3901/AHDGame",
@@ -904,6 +921,7 @@
       "requirement": "#2122",
       "parent_checked": false,
       "status": "open",
+      "owner": "Track #1 implementation",
       "issue_refs": [
         {
           "repo": "Egg3901/AHDGame",
@@ -942,6 +960,7 @@
       "requirement": "#2125",
       "parent_checked": true,
       "status": "claimed_complete_pending_final_validation",
+      "owner": "Track #1 implementation",
       "issue_refs": [
         {
           "repo": "Egg3901/AHDGame",
@@ -974,6 +993,7 @@
       "requirement": "Every enabled financial product works end to end through player UI, API, settlement, turn processing, accounting, and resulting read models. No enabled facade or knowingly broken product ships.",
       "parent_checked": false,
       "status": "open",
+      "owner": "Track #1 implementation",
       "issue_refs": [
         {
           "repo": "Egg3901/AHDGame",
@@ -1006,6 +1026,7 @@
       "requirement": "There is zero unexplained money creation or destruction, stock-flow divergence, negative guarded balance, or unresolved settlement.",
       "parent_checked": false,
       "status": "open",
+      "owner": "Track #1 implementation",
       "issue_refs": [
         {
           "repo": "Egg3901/AHDGame",
@@ -1038,6 +1059,7 @@
       "requirement": "Treasury, debt, CPI/inflation, credit, employment, firm entry, market fill, securities liquidity, and bank solvency remain stable under the selected profile.",
       "parent_checked": false,
       "status": "open",
+      "owner": "Track #1 implementation",
       "issue_refs": [
         {
           "repo": "Egg3901/AHDGame",
@@ -1075,6 +1097,7 @@
       "requirement": "Bank-run, largest-supplier-failure, rate-shock, exchange-closure, synchronized-liquidation, and dormant-money-reactivation stress tests pass their issue-owned guardrails.",
       "parent_checked": false,
       "status": "open",
+      "owner": "Track #1 implementation",
       "issue_refs": [],
       "evidence": [
         {
@@ -1100,6 +1123,7 @@
       "requirement": "Every remaining quantitative miss has an owner-approved waiver recording impact, mitigation, monitoring, and rollback conditions.",
       "parent_checked": false,
       "status": "open",
+      "owner": "Track #1 implementation",
       "issue_refs": [],
       "evidence": [
         {
@@ -1125,6 +1149,7 @@
       "requirement": "#2015",
       "parent_checked": true,
       "status": "claimed_complete_pending_final_validation",
+      "owner": "Track #1 implementation",
       "issue_refs": [
         {
           "repo": "Egg3901/AHDGame",
@@ -1157,6 +1182,7 @@
       "requirement": "#2098",
       "parent_checked": true,
       "status": "claimed_complete_pending_final_validation",
+      "owner": "Track #1 implementation",
       "issue_refs": [
         {
           "repo": "Egg3901/AHDGame",
@@ -1189,6 +1215,7 @@
       "requirement": "#2113",
       "parent_checked": true,
       "status": "claimed_complete_pending_final_validation",
+      "owner": "Track #1 implementation",
       "issue_refs": [
         {
           "repo": "Egg3901/AHDGame",
@@ -1221,6 +1248,7 @@
       "requirement": "#2124, with current disposition supplied by its active investigation",
       "parent_checked": false,
       "status": "open",
+      "owner": "Track #1 implementation",
       "issue_refs": [
         {
           "repo": "Egg3901/AHDGame",
@@ -1259,6 +1287,7 @@
       "requirement": "#2161",
       "parent_checked": false,
       "status": "open",
+      "owner": "Track #1 implementation",
       "issue_refs": [
         {
           "repo": "Egg3901/AHDGame",
@@ -1297,6 +1326,7 @@
       "requirement": "#2117",
       "parent_checked": false,
       "status": "open",
+      "owner": "Track #1 implementation",
       "issue_refs": [
         {
           "repo": "Egg3901/AHDGame",
@@ -1335,6 +1365,7 @@
       "requirement": "Competitive swing fixtures change recorded control correctly across single-winner, multi-seat, district, proportional, AMS, PR-STV, bloc-list, and regime-constrained systems; incumbent victories preserve control; every active election has valid candidates; and every completed election resolves exactly once.",
       "parent_checked": false,
       "status": "open",
+      "owner": "Track #1 implementation",
       "issue_refs": [],
       "evidence": [
         {
@@ -1370,6 +1401,7 @@
       "requirement": "Overlapping upper- and lower-chamber cycles retain valid candidate fields without violating the one-active-candidacy invariant. Multiplayer qualification covers NPP-only, player-vs-NPP, opposing-player, and mixed same-party player/NPP fields. Presidential qualification separately proves popular/EV flips, incumbent holds, contingent resolution, result/apportionment reconciliation, executive seating, and exactly-once finalization.",
       "parent_checked": false,
       "status": "open",
+      "owner": "Track #1 implementation",
       "issue_refs": [],
       "evidence": [
         {
@@ -1405,6 +1437,7 @@
       "requirement": "Report officeholder replacement, party seat-vector change, unique chamber-control change, tied-control cycles, and incumbent retention separately for every major chamber. Aggregate election counts or candidate churn alone do not prove political turnover.",
       "parent_checked": false,
       "status": "open",
+      "owner": "Track #1 implementation",
       "issue_refs": [],
       "evidence": [
         {
@@ -1430,6 +1463,7 @@
       "requirement": "Compare target-seed turnover with live multiplayer as a reference, without treating the old world as a mandatory balance target. Current live US House history has 307 seat-vector changes and 78 unique top-party flips across 485 cycle transitions, with 182 tied-top cycles.",
       "parent_checked": false,
       "status": "open",
+      "owner": "Track #1 implementation",
       "issue_refs": [],
       "evidence": [
         {
@@ -1455,6 +1489,7 @@
       "requirement": "#1992",
       "parent_checked": true,
       "status": "claimed_complete_pending_final_validation",
+      "owner": "Track #1 evidence",
       "issue_refs": [
         {
           "repo": "Egg3901/AHDGame",
@@ -1487,6 +1522,7 @@
       "requirement": "#2071",
       "parent_checked": true,
       "status": "claimed_complete_pending_final_validation",
+      "owner": "Track #1 evidence",
       "issue_refs": [
         {
           "repo": "Egg3901/AHDGame",
@@ -1519,6 +1555,7 @@
       "requirement": "#2074, unless final-run progress and completion are read from an explicitly authoritative source",
       "parent_checked": true,
       "status": "claimed_complete_pending_final_validation",
+      "owner": "Track #1 evidence",
       "issue_refs": [
         {
           "repo": "Egg3901/AHDGame",
@@ -1551,6 +1588,7 @@
       "requirement": "#2080",
       "parent_checked": true,
       "status": "claimed_complete_pending_final_validation",
+      "owner": "Track #1 evidence",
       "issue_refs": [
         {
           "repo": "Egg3901/AHDGame",
@@ -1583,6 +1621,7 @@
       "requirement": "#2083",
       "parent_checked": true,
       "status": "claimed_complete_pending_final_validation",
+      "owner": "Track #1 evidence",
       "issue_refs": [
         {
           "repo": "Egg3901/AHDGame",
@@ -1615,6 +1654,7 @@
       "requirement": "#2087",
       "parent_checked": true,
       "status": "claimed_complete_pending_final_validation",
+      "owner": "Track #1 evidence",
       "issue_refs": [
         {
           "repo": "Egg3901/AHDGame",
@@ -1647,6 +1687,7 @@
       "requirement": "#2088",
       "parent_checked": false,
       "status": "open",
+      "owner": "Track #1 evidence",
       "issue_refs": [
         {
           "repo": "Egg3901/AHDGame",
@@ -1685,6 +1726,7 @@
       "requirement": "#2099",
       "parent_checked": false,
       "status": "open",
+      "owner": "Track #1 evidence",
       "issue_refs": [
         {
           "repo": "Egg3901/AHDGame",
@@ -1723,6 +1765,7 @@
       "requirement": "#2100",
       "parent_checked": false,
       "status": "open",
+      "owner": "Track #1 evidence",
       "issue_refs": [
         {
           "repo": "Egg3901/AHDGame",
@@ -1761,6 +1804,7 @@
       "requirement": "#2104",
       "parent_checked": true,
       "status": "claimed_complete_pending_final_validation",
+      "owner": "Track #1 evidence",
       "issue_refs": [
         {
           "repo": "Egg3901/AHDGame",
@@ -1793,6 +1837,7 @@
       "requirement": "#2112",
       "parent_checked": true,
       "status": "claimed_complete_pending_final_validation",
+      "owner": "Track #1 evidence",
       "issue_refs": [
         {
           "repo": "Egg3901/AHDGame",
@@ -1825,6 +1870,7 @@
       "requirement": "Egg3901/LSGD-ops-dash#142 restores the canonical election calibration evidence tool",
       "parent_checked": true,
       "status": "claimed_complete_pending_final_validation",
+      "owner": "Ops maintainer / Track #1 validation",
       "issue_refs": [
         {
           "repo": "Egg3901/LSGD-ops-dash",
@@ -1862,6 +1908,7 @@
       "requirement": "Every qualifying report records the source commit, effective manifest, seed, actor configuration, schema/calculation versions, and complete retained time series.",
       "parent_checked": false,
       "status": "open",
+      "owner": "Track #1 evidence",
       "issue_refs": [],
       "evidence": [
         {
@@ -1897,6 +1944,7 @@
       "requirement": "A completed turn count is not accepted as a pass when telemetry is incomplete, stale, unattributed, collected from a different checkout, or known to mismeasure the subsystem.",
       "parent_checked": false,
       "status": "open",
+      "owner": "Track #1 evidence",
       "issue_refs": [
         {
           "repo": "Egg3901/AHDGame",
@@ -1934,6 +1982,7 @@
       "requirement": "#2166",
       "parent_checked": true,
       "status": "claimed_complete_pending_final_validation",
+      "owner": "Track #1 implementation",
       "issue_refs": [
         {
           "repo": "Egg3901/AHDGame",
@@ -1966,6 +2015,7 @@
       "requirement": "#2167",
       "parent_checked": true,
       "status": "claimed_complete_pending_final_validation",
+      "owner": "Track #1 implementation",
       "issue_refs": [
         {
           "repo": "Egg3901/AHDGame",
@@ -1998,6 +2048,7 @@
       "requirement": "#2168",
       "parent_checked": true,
       "status": "claimed_complete_pending_final_validation",
+      "owner": "Track #1 implementation",
       "issue_refs": [
         {
           "repo": "Egg3901/AHDGame",
@@ -2030,6 +2081,7 @@
       "requirement": "#2169",
       "parent_checked": true,
       "status": "claimed_complete_pending_final_validation",
+      "owner": "Track #1 implementation",
       "issue_refs": [
         {
           "repo": "Egg3901/AHDGame",
@@ -2062,6 +2114,7 @@
       "requirement": "Turn processing time, BSON decoding volume, and per-phase round trips remain within budget (`src/simulation/engine/turnPhaseBudgets.ts`) on the release candidate under full qualification load.",
       "parent_checked": false,
       "status": "open",
+      "owner": "Track #1 implementation",
       "issue_refs": [
         {
           "repo": "Egg3901/AHDGame",
@@ -2100,6 +2153,7 @@
       "requirement": "Root layout and client status requests avoid unprojected `GameState` deserialization and multi-query fanouts on regular page navigation.",
       "parent_checked": true,
       "status": "claimed_complete_pending_final_validation",
+      "owner": "Track #1 implementation",
       "issue_refs": [],
       "evidence": [
         {
@@ -2120,6 +2174,7 @@
       "requirement": "Active turn execution is protected from client polling storms and unindexed clock reconciliation scans.",
       "parent_checked": false,
       "status": "open",
+      "owner": "Track #1 implementation",
       "issue_refs": [],
       "evidence": [
         {
@@ -2145,6 +2200,7 @@
       "requirement": "#2158",
       "parent_checked": false,
       "status": "open",
+      "owner": "Track #1 implementation",
       "issue_refs": [
         {
           "repo": "Egg3901/AHDGame",
@@ -2183,6 +2239,7 @@
       "requirement": "Reset-day dependency #2150 is production-ready.",
       "parent_checked": false,
       "status": "open",
+      "owner": "Track #1 implementation",
       "issue_refs": [
         {
           "repo": "Egg3901/AHDGame",
@@ -2221,6 +2278,7 @@
       "requirement": "Reset-day flagship #2151 opens correctly in 1991.",
       "parent_checked": false,
       "status": "open",
+      "owner": "Track #1 implementation",
       "issue_refs": [
         {
           "repo": "Egg3901/AHDGame",
@@ -2259,6 +2317,7 @@
       "requirement": "#2152, #2153, #2154, #2155, #2156, and #2157 are production-ready before the qualification run reaches their pressure windows.",
       "parent_checked": false,
       "status": "open",
+      "owner": "Track #1 implementation",
       "issue_refs": [
         {
           "repo": "Egg3901/AHDGame",
@@ -2377,6 +2436,7 @@
       "requirement": "The running world can reach 2027 without missing a scheduled crisis family, invalid historical actor assumptions, or a required content deployment after launch.",
       "parent_checked": false,
       "status": "open",
+      "owner": "Track #1 implementation",
       "issue_refs": [],
       "evidence": [
         {
@@ -2407,6 +2467,7 @@
       "requirement": "Closed seed delivery #1679 is revalidated on the release commit and effective manifest.",
       "parent_checked": true,
       "status": "claimed_complete_pending_final_validation",
+      "owner": "Track #1 implementation",
       "issue_refs": [
         {
           "repo": "Egg3901/AHDGame",
@@ -2444,6 +2505,7 @@
       "requirement": "#1670 is resolved if ACS 2025 data is available; otherwise its projection status, provenance, and owner-approved waiver are recorded here.",
       "parent_checked": false,
       "status": "open_nonlaunch_profile",
+      "owner": "Game owner (projection waiver) / Track #1",
       "issue_refs": [
         {
           "repo": "Egg3901/AHDGame",
@@ -2495,6 +2557,7 @@
       "requirement": "#2170",
       "parent_checked": true,
       "status": "claimed_complete_pending_final_validation",
+      "owner": "Track #1 implementation",
       "issue_refs": [
         {
           "repo": "Egg3901/AHDGame",
@@ -2532,6 +2595,7 @@
       "requirement": "#2171",
       "parent_checked": true,
       "status": "claimed_complete_pending_final_validation",
+      "owner": "Track #1 implementation",
       "issue_refs": [
         {
           "repo": "Egg3901/AHDGame",
@@ -2569,6 +2633,7 @@
       "requirement": "Every country, party, office, chamber, regional government, corporation, bank, budget, currency, and election uses the 2027 source or an explicit documented fallback, never an accidental 2019/1991 carry-forward.",
       "parent_checked": false,
       "status": "open_nonlaunch_profile",
+      "owner": "Track #1 implementation",
       "issue_refs": [
         {
           "repo": "Egg3901/AHDGame",
@@ -2649,6 +2714,7 @@
       "requirement": "Each living crisis has an authored 2027 initial state: active, settled, dormant, relapsed, or not applicable. A 2027 world does not replay expired opening beats solely because it starts fresh.",
       "parent_checked": false,
       "status": "open_nonlaunch_profile",
+      "owner": "Track #1 implementation",
       "issue_refs": [],
       "evidence": [
         {
@@ -2674,6 +2740,7 @@
       "requirement": "#2150 and every crisis family reachable from the 2027 initial state are production-ready, including participant fallbacks and counterfactual state initialization.",
       "parent_checked": false,
       "status": "open_nonlaunch_profile",
+      "owner": "Track #1 implementation",
       "issue_refs": [
         {
           "repo": "Egg3901/AHDGame",
@@ -2716,6 +2783,7 @@
       "requirement": "Freeze and review feature flags, economy tier, labour mode, NPP/autonomy version, calendar settings, financial-product enablement, and crisis enablement for the selected profile.",
       "parent_checked": false,
       "status": "open",
+      "owner": "Track #1 release lead",
       "issue_refs": [],
       "evidence": [
         {
@@ -2741,6 +2809,7 @@
       "requirement": "Validate countries, parties, offices, chambers, regional governments, corporations, banks, budgets, currencies, elections, and founding-election behavior against the selected manifest.",
       "parent_checked": false,
       "status": "open",
+      "owner": "Track #1 release lead",
       "issue_refs": [],
       "evidence": [
         {
@@ -2766,6 +2835,7 @@
       "requirement": "Confirm existing-world migration/normalization behavior and that reset tooling targets only the intended world.",
       "parent_checked": false,
       "status": "open",
+      "owner": "Track #1 release lead",
       "issue_refs": [],
       "evidence": [
         {
@@ -2791,6 +2861,7 @@
       "requirement": "Prepare player-facing reset notes covering the selected start date, playable roles, major system changes, known limitations, and opening crisis situation.",
       "parent_checked": false,
       "status": "open",
+      "owner": "Track #1 release lead",
       "issue_refs": [],
       "evidence": [
         {
@@ -2816,6 +2887,7 @@
       "requirement": "Rehearse the complete reset against sandbox Mongo using the production procedure and selected profile.",
       "parent_checked": false,
       "status": "open",
+      "owner": "Track #1 operations",
       "issue_refs": [],
       "evidence": [
         {
@@ -2845,6 +2917,7 @@
       "requirement": "Capture row-count and invariant checks before and after bootstrap.",
       "parent_checked": false,
       "status": "open",
+      "owner": "Track #1 operations",
       "issue_refs": [],
       "evidence": [
         {
@@ -2874,6 +2947,7 @@
       "requirement": "Capture conformance before turn one, complete the founding-election period, and process at least ten normal turns without unexplained health errors.",
       "parent_checked": false,
       "status": "open",
+      "owner": "Track #1 operations",
       "issue_refs": [],
       "evidence": [
         {
@@ -2903,6 +2977,7 @@
       "requirement": "Verify login, character creation, office claiming, elections, actions, economy, banking, funds, crises, wire, and admin surfaces.",
       "parent_checked": false,
       "status": "open",
+      "owner": "Track #1 operations",
       "issue_refs": [],
       "evidence": [
         {
@@ -2932,6 +3007,7 @@
       "requirement": "Record timing, named operators, commands/runbook references, backups, abort conditions, and rollback procedure.",
       "parent_checked": false,
       "status": "open",
+      "owner": "Track #1 operations",
       "issue_refs": [],
       "evidence": [
         {
@@ -2961,6 +3037,7 @@
       "requirement": "Test restore or rollback rather than documenting an unexercised procedure.",
       "parent_checked": false,
       "status": "open",
+      "owner": "Track #1 operations",
       "issue_refs": [],
       "evidence": [
         {
@@ -2990,6 +3067,7 @@
       "requirement": "Confirm production monitoring and support coverage for launch.",
       "parent_checked": false,
       "status": "open",
+      "owner": "Track #1 operations",
       "issue_refs": [],
       "evidence": [
         {
@@ -3019,6 +3097,7 @@
       "requirement": "Run the exact release candidate and production manifest for the selected profile against sandbox Mongo.",
       "parent_checked": false,
       "status": "open",
+      "owner": "Track #1 validation",
       "issue_refs": [],
       "evidence": [
         {
@@ -3044,6 +3123,7 @@
       "requirement": "Persist diagnostics and the seed baseline before turn one, complete founding, and process at least ten normal turns.",
       "parent_checked": false,
       "status": "open",
+      "owner": "Track #1 validation",
       "issue_refs": [],
       "evidence": [
         {
@@ -3069,6 +3149,7 @@
       "requirement": "Pass with zero unexplained error-level integrity findings, orphaned offices, candidate-less contests, missing country systems, wrong-era fallbacks, or configuration mismatches.",
       "parent_checked": false,
       "status": "open",
+      "owner": "Track #1 validation",
       "issue_refs": [],
       "evidence": [
         {
@@ -3094,6 +3175,7 @@
       "requirement": "Run at least three deterministic seeds through five in-game years from the selected start year.",
       "parent_checked": false,
       "status": "open",
+      "owner": "Track #1 validation",
       "issue_refs": [],
       "evidence": [
         {
@@ -3123,6 +3205,7 @@
       "requirement": "Include an autonomous control, a synthetic-political-actor treatment, and an economy/banking stress treatment.",
       "parent_checked": false,
       "status": "open",
+      "owner": "Track #1 validation",
       "issue_refs": [],
       "evidence": [
         {
@@ -3152,6 +3235,7 @@
       "requirement": "Evaluate elections, government formation, treasury, CPI/inflation, employment, firms, market coverage, banking, credit, funds, securities, accounting conservation, and the selected profile's opening crisis state.",
       "parent_checked": false,
       "status": "open",
+      "owner": "Track #1 validation",
       "issue_refs": [],
       "evidence": [
         {
@@ -3181,6 +3265,7 @@
       "requirement": "Run at least three deterministic seeds for 480 year-advancing turns using the selected release configuration.",
       "parent_checked": false,
       "status": "open",
+      "owner": "Track #1 validation",
       "issue_refs": [],
       "evidence": [
         {
@@ -3210,6 +3295,7 @@
       "requirement": "Exercise overlapping elections plus targeted economy and banking stress scenarios.",
       "parent_checked": false,
       "status": "open",
+      "owner": "Track #1 validation",
       "issue_refs": [],
       "evidence": [
         {
@@ -3239,6 +3325,7 @@
       "requirement": "For `1991-default`, prove the old `audit-allflags-1991-r3` findings no longer represent the release candidate: 36.7% pooled fill, 23.0% country fill, 58.3% empty market cells, 0.2% bond subscription, candidate-less elections, and fiscal integrity errors.",
       "parent_checked": false,
       "status": "open",
+      "owner": "Track #1 validation",
       "issue_refs": [],
       "evidence": [
         {
@@ -3268,6 +3355,7 @@
       "requirement": "For `2027-default`, compare against a frozen turn-one baseline and report every inherited older-era fallback rather than silently accepting it.",
       "parent_checked": false,
       "status": "open",
+      "owner": "Track #1 validation",
       "issue_refs": [],
       "evidence": [
         {
@@ -3297,6 +3385,7 @@
       "requirement": "For `1991-default`, complete at least one deterministic synthetic-actor run from 1991 through 2027 after all crisis families are integrated.",
       "parent_checked": false,
       "status": "open",
+      "owner": "Track #1 validation",
       "issue_refs": [],
       "evidence": [
         {
@@ -3326,6 +3415,7 @@
       "requirement": "For `2027-default`, complete at least one deterministic synthetic-actor run from 2027 through 2037 with the 2027 initial crisis states.",
       "parent_checked": false,
       "status": "open",
+      "owner": "Track #1 validation",
       "issue_refs": [],
       "evidence": [
         {
@@ -3355,6 +3445,7 @@
       "requirement": "Add a second horizon seed if the first exposes seed-sensitive crisis timing, systemic failures, or materially different economic outcomes.",
       "parent_checked": false,
       "status": "open",
+      "owner": "Track #1 validation",
       "issue_refs": [],
       "evidence": [
         {
@@ -3384,6 +3475,7 @@
       "requirement": "Report crisis reachability, overlap, escalation, settlement, relapse, reconstruction, player-decision volume, election turnover, fiscal and credit paths, banking failures, displacement, damage, and recovery.",
       "parent_checked": false,
       "status": "open",
+      "owner": "Track #1 validation",
       "issue_refs": [],
       "evidence": [
         {
@@ -3413,6 +3505,7 @@
       "requirement": "The applicable horizon run completes before launch; a merely queued run does not satisfy this gate.",
       "parent_checked": false,
       "status": "open",
+      "owner": "Track #1 validation",
       "issue_refs": [],
       "evidence": [
         {
@@ -3442,6 +3535,7 @@
       "requirement": "After the final code or configuration change, repeat bootstrap conformance and the five-year matrix on the exact release SHA. Earlier runs do not qualify a changed release.",
       "parent_checked": false,
       "status": "open",
+      "owner": "Track #1 validation",
       "issue_refs": [],
       "evidence": [
         {
@@ -3471,6 +3565,7 @@
       "requirement": "Attach sanitized reports and exact source revisions beside every completed simulation checklist item.",
       "parent_checked": false,
       "status": "open",
+      "owner": "Track #1 validation",
       "issue_refs": [],
       "evidence": [
         {
@@ -3500,6 +3595,7 @@
       "requirement": "Audit current multiplayer over a fixed recent window for political turnover, treasury cash versus itemized flows, ledger reconciliation, market shortages, price levels, bank outcomes, firm survival, and failed or warning-bearing turn phases.",
       "parent_checked": false,
       "status": "open",
+      "owner": "Track #1 analysis",
       "issue_refs": [],
       "evidence": [
         {
@@ -3525,6 +3621,7 @@
       "requirement": "Explain every material difference between multiplayer and the selected seed as an era effect, a configuration difference, a fixed defect, or a release blocker.",
       "parent_checked": false,
       "status": "open",
+      "owner": "Track #1 analysis",
       "issue_refs": [],
       "evidence": [
         {
@@ -3550,6 +3647,7 @@
       "requirement": "Use current live data as an additional control, not as a substitute for source-pinned sandbox runs. Record the live turn range and observation time with the evidence.",
       "parent_checked": false,
       "status": "open",
+      "owner": "Track #1 analysis",
       "issue_refs": [],
       "evidence": [
         {
@@ -3575,6 +3673,7 @@
       "requirement": "Recheck closed issues whose exact symptom appears in current data. Do not reopen #2054 merely because its now-persisted invariant warning fires; route genuine continuing shortage and fill failures through #2088/#991 unless the canonical-unit fix itself is disproved.",
       "parent_checked": false,
       "status": "open",
+      "owner": "Track #1 analysis",
       "issue_refs": [
         {
           "repo": "Egg3901/AHDGame",
