@@ -789,6 +789,11 @@
           "type": "issue_state",
           "url": "https://github.com/Egg3901/AHDGame/issues/1672",
           "detail": "OPEN"
+        },
+        {
+          "type": "implementation_checkpoint",
+          "ref": "8949c9da39",
+          "detail": "Ported the keyed non-transaction money-flow primitive, receipt getter and indexes; 13 focused primitive/index tests passed. No consumer coverage or full validation is claimed. The old 55-commit branch is being extracted in verified slices."
         }
       ],
       "blocked_by": [
