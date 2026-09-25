@@ -24,7 +24,7 @@ vi.mock("@/lib/mongodb", () => ({
 
 // ---------------------------------------------------------------------------
 // Stateful in-memory fakes. They honor exactly the operators the money-flow
-// primitive emits ($inc / $push+$each+$slice / $set writes; _id equality,
+// primitive emits ($inc / $push+$each / $set writes; _id equality,
 // $ne-on-keys and $gte-on-balance filters; duplicate-key errors on insert),
 // so an injected crash between any two writes models a real process death
 // between the corresponding sequential Mongo writes.
@@ -106,13 +106,11 @@ class FakeCollection {
     for (const [field, delta] of Object.entries(inc)) {
       setPath(doc, field, ((getPath(doc, field) as number | undefined) ?? 0) + delta);
     }
-    const push = update.$push as
-      { appliedMoneyFlowKeys?: { $each: string[]; $slice: number } } | undefined;
+    const push = update.$push as { appliedMoneyFlowKeys?: { $each: string[] } } | undefined;
     if (push?.appliedMoneyFlowKeys) {
       const current = (doc.appliedMoneyFlowKeys as string[] | undefined) ?? [];
       const next = [...current, ...push.appliedMoneyFlowKeys.$each];
-      const slice = push.appliedMoneyFlowKeys.$slice;
-      doc.appliedMoneyFlowKeys = slice < 0 ? next.slice(slice) : next;
+      doc.appliedMoneyFlowKeys = next;
     }
     const set = (update.$set ?? {}) as Record<string, unknown>;
     for (const [field, value] of Object.entries(set)) {
@@ -370,7 +368,7 @@ describe("transferCharacterCampaignFunds (standalone fallback)", () => {
     expect(receipt(db, "tx-path").status).toBe("completed");
   });
 
-  it("applies dotted balance fields and caps stored keys", async () => {
+  it("applies dotted balance fields and retains old keys after heavy use", async () => {
     const db = new FakeDb();
     db.collection("characters").docs.set(senderId.toHexString(), {
       _id: senderId,
@@ -380,6 +378,7 @@ describe("transferCharacterCampaignFunds (standalone fallback)", () => {
     db.collection("characters").docs.set(targetId.toHexString(), {
       _id: targetId,
       currencyBalances: { campaign: 500 },
+      appliedMoneyFlowKeys: Array.from({ length: 150 }, (_, i) => `old-${i}`),
     });
     const input = transferInput({
       idempotencyKey: "dotted",
@@ -399,6 +398,22 @@ describe("transferCharacterCampaignFunds (standalone fallback)", () => {
     ).toBe(1500);
     const keys = senderDoc.appliedMoneyFlowKeys as string[];
     expect(keys).toContain("dotted");
-    expect(keys.length).toBeLessThanOrEqual(100);
+    expect(keys).toContain("old-0");
+    expect(keys).toHaveLength(151);
+
+    // The old receipt may have expired. Its atomic leg markers still prevent
+    // a delayed retry from crediting or debiting either account again.
+    await transferCharacterCampaignFunds(
+      db as unknown as Db,
+      transferInput({ idempotencyKey: "old-0", fundsField: "currencyBalances.campaign" })
+    );
+    expect((senderDoc.currencyBalances as { campaign: number }).campaign).toBe(9000);
+    expect(
+      (
+        db.collection("characters").docs.get(targetId.toHexString()) as {
+          currencyBalances: { campaign: number };
+        }
+      ).currencyBalances.campaign
+    ).toBe(1500);
   });
 });

@@ -335,6 +335,19 @@ and ledger RR-014 remain open. A 2027 ACS education/income projection waiver
 was approved by the owner and recorded in RR-062, while 2027 implementation
 and final evidence stay open.
 
+A read-only Muse Spark 1.3 audit classified all 55 commits of the preserved
+`muse-1672` source by diff. Its commit-by-commit disposition and seven ordered
+extraction slices are in `TRACK1_1672_SOURCE_AUDIT.txt`. The bond-sale slice is
+superseded by merged #2288; forex turn fills remain with merged #2286; queued
+fund redemptions remain with the verified Track 1 journal. The remaining
+unique share, bond, fund/pension, forex-route, and small-spend slices still
+require extraction, conflict reconciliation, and tests. Keep the clean source
+checkout as a read-only reference until every slice is accounted for. The
+audit identified a correctness risk in the primitive's 100-key eviction:
+after heavy use, a delayed retry could apply an evicted key again. Track 1
+removed that eviction and added a heavy-history retry regression; account
+document-size monitoring remains a #1672 retention gate.
+
 Additional PR dispositions since the initial inventory: #2379 and #2382
 merged to `development`; #2385 merged at
 `2f52a77d63abdfadc34dd2c5b5cb4f02fd976a84`. The clean Track 3 source,

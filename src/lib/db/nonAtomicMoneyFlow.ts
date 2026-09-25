@@ -38,15 +38,14 @@ import { ObjectId, type ClientSession, type Collection, type Filter } from "mong
  * replay, compensation, and orphan recovery before claiming coverage.
  *
  * Operations note: receipts accumulate one small document per keyed flow. The
- * TTL index on `createdAt` is seeded by `seedMoneyFlowIndexes` (registered in
- * `src/lib/admin/seed/seedIndexes.ts`); this module never creates indexes at
- * runtime.
+ * TTL index expires only terminal receipts 30 days after `updatedAt`; an
+ * in-progress receipt must survive until recovery. The account's applied-key
+ * history is retained for its lifetime: evicting a key while its receipt is
+ * in progress lets a delayed retry apply that leg twice. Monitor account
+ * document size as part of #1672's recovery and retention gate.
  */
 
 export const NON_ATOMIC_MONEY_FLOW_RECEIPTS_COLLECTION = "nonAtomicMoneyFlowReceipts";
-
-/** Cap on stored keys per account document; bounds growth, not correctness. */
-export const MAX_APPLIED_MONEY_FLOW_KEYS = 100;
 
 /**
  * Maximum length of any money-flow idempotency key, including derived
@@ -261,10 +260,7 @@ export async function applyIdempotentLeg<TDoc extends MoneyFlowAccount>(
     $inc: { [leg.field]: leg.delta, ...(leg.extraIncs ?? {}) },
     ...(leg.set !== undefined ? { $set: leg.set } : {}),
     $push: {
-      appliedMoneyFlowKeys: {
-        $each: [key],
-        $slice: -MAX_APPLIED_MONEY_FLOW_KEYS,
-      },
+      appliedMoneyFlowKeys: { $each: [key] },
     },
   } as unknown as Parameters<Collection<TDoc>["updateOne"]>[1];
   const result = await leg.collection.updateOne(filter, update, sessionOpt(options));
@@ -403,10 +399,7 @@ export async function applyKeyedUpdate<TDoc extends MoneyFlowAccount>(
     throw new TypeError("Keyed update must not touch appliedMoneyFlowKeys");
   }
   const keyPush = {
-    appliedMoneyFlowKeys: {
-      $each: [key],
-      $slice: -MAX_APPLIED_MONEY_FLOW_KEYS,
-    },
+    appliedMoneyFlowKeys: { $each: [key] },
   };
   const existingPush =
     update.update.$push !== null && typeof update.update.$push === "object"

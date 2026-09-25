@@ -814,6 +814,16 @@
           "type": "superseded_source_disposition",
           "ref": "4b5f615115cf1181fadd1afb2cbfd5586aba3f50,0108ff94f2",
           "detail": "The bond-sale slice of the old #1672 branch is superseded by merged development PR #2288, which records an intent before moving units, stamps claim/pool/payout, resumes frozen terms, and exposes unfinished intents for repair. Track 1 kept development's implementation and removed the duplicate port. #1672 remains open for other standalone flows and exact-branch validation."
+        },
+        {
+          "type": "source_disposition_audit",
+          "ref": "TRACK1_1672_SOURCE_AUDIT.txt",
+          "detail": "Read-only Muse Spark 1.3 diff audit classified all 55 source commits into seven ordered extraction slices. Bond-sale #2288, forex turn-fill #2286, and queued fund-redemption journal supersede three conflicting slices; other unique consumers remain open. The clean source worktree is retained until those slices are implemented and verified."
+        },
+        {
+          "type": "heavy_history_retry_regression",
+          "ref": "src/lib/db/nonAtomicMoneyFlow.ts;src/lib/character/campaignTransfer.test.ts",
+          "detail": "Removed the 100-key eviction that could permit delayed double application on hot accounts. A 150-prior-key regression verifies an old key survives and prevents a second debit/credit after receipt expiry. Focused money-flow tests passed 21/21; document-size monitoring remains required before final validation."
         }
       ],
       "blocked_by": [

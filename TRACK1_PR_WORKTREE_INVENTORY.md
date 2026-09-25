@@ -780,11 +780,11 @@ historical. A fresh `gh pr list` found #2380, #2381, #2384, #2388, #2389,
 `6360845ec34141570a0be3ba55e5d3bd55efc6aa`; #2390 promotes it together
 with #2385 to staging. The new rows require these dispositions:
 
-| PR | Current classification | Required disposition and reason |
-| --- | --- | --- |
-| #2388 | Draft, active owner feature; base `main` | Merge to its base after the owner completes the staging worker rehearsal and deployment prerequisites, or close only if the dedicated worker is abandoned. It adds a production start command and runbook, not a Track 1 source branch. CI was green at the snapshot; no Track 1 checkout is removed. |
-| #2389 | Active staging repair; base `staging` | Merge to staging after its green CI and verify Railway can build with the cache mount. It fixes the `EBUSY` failure caused by removing the mount directory and must precede the staging promotion. |
-| #2390 | Active promotion; base `staging` | Merge with a merge commit after #2389 and staging deployment health. It promotes already merged #2385/#2387; its source is `development`, so no independent feature checkout exists. |
+| PR    | Current classification                                      | Required disposition and reason                                                                                                                                                                                                                                                                                      |
+| ----- | ----------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| #2388 | Draft, active owner feature; base `main`                    | Merge to its base after the owner completes the staging worker rehearsal and deployment prerequisites, or close only if the dedicated worker is abandoned. It adds a production start command and runbook, not a Track 1 source branch. CI was green at the snapshot; no Track 1 checkout is removed.                |
+| #2389 | Active staging repair; base `staging`                       | Merge to staging after its green CI and verify Railway can build with the cache mount. It fixes the `EBUSY` failure caused by removing the mount directory and must precede the staging promotion.                                                                                                                   |
+| #2390 | Active promotion; base `staging`                            | Merge with a merge commit after #2389 and staging deployment health. It promotes already merged #2385/#2387; its source is `development`, so no independent feature checkout exists.                                                                                                                                 |
 | #2391 | Active security fix, currently conflicting with development | Rebase/review the concurrent vote, API-key, barrier, forex, blackjack, and privacy repairs, then merge only after full gates and the real-Mongo race proof. It touches Track 1 transfer/forex surfaces and needs integration rather than a blind merge; no source checkout will be pruned while the owner is active. |
 
 #2380/#2381/#2384 remain active dispositions from the earlier updates. No
@@ -824,3 +824,24 @@ checkout was clean, unlocked and process-free at removal, and ordinary
 promotion merged as `d24b542a7c35ea3e9cdd337f82fda885be91c216` after
 #2389 and #2390. #2388's owner retargeted its still-draft dedicated-worker
 PR from `main` to `development`; its final disposition remains outstanding.
+
+**Bot PR #122: MERGED, 2026-09-25.** Existing `feat/sync-supporters` merged
+into `arle-bina/adhd-bot` `main` as `39570e0f291b44893cc6b50866baba979f3ac3f5`.
+It adds admin-only dry-run-first supporter role reconciliation. Track 1
+follow-up `8040673bb` corrected unchanged-role previews, missing-role errors,
+and swallowed Discord role failures. Exact head passed lint, typecheck, build,
+and 343/343 tests. Ordinary `git worktree remove` deleted tracked source after
+its patch became ancestor of upstream `main`; the detached background removal
+left only `README.md`, `CHANGELOG.md`, and an ignored `.npm` cache (2 MB) with
+no `.git` file. Those verified residuals were removed and stale worktree
+metadata pruned without a force option. No bot deployment or command
+registration was performed.
+
+**AHDGame `muse-1672`: ACTIVE unique source, 2026-09-25.** A read-only Muse
+Spark 1.3 audit classified all 55 commits against current development and
+Track 1; see `TRACK1_1672_SOURCE_AUDIT.txt`. The clean source checkout remains
+the only converged reference for seven extraction slices. Its final
+merge-or-delete disposition is contingent on extracting and verifying every
+unique slice in Track 1; it is not safe to prune yet. Bond sale, forex turn
+fills, and queued fund redemptions have explicit superseding implementations
+recorded in that audit.
