@@ -2,7 +2,6 @@ import type { Db } from "mongodb";
 import type { PoliticalParty, StatePartyOrg } from "@/lib/db/types";
 import { SUCCESSOR_REGIONS_1991 } from "@/lib/seeds/reference/successorRegions1991";
 import { SUCCESSOR_PARTIES_1991 } from "@/lib/seeds/reference/successorParties1991";
-import type { CountryId } from "@/lib/constants/countries";
 
 /**
  * January 1991 founding footprints. The nationally organized transition parties
@@ -17,7 +16,7 @@ export async function seedSuccessorStatePartyOrg1991(
   log: (message: string) => void
 ): Promise<void> {
   if (preset !== "1991-default") return;
-  const countries = Object.keys(SUCCESSOR_REGIONS_1991) as CountryId[];
+  const countries = Object.keys(SUCCESSOR_REGIONS_1991) as (keyof typeof SUCCESSOR_REGIONS_1991)[];
   if (reset)
     await db
       .collection<StatePartyOrg>("statePartyOrg")

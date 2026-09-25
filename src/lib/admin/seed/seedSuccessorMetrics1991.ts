@@ -1,5 +1,6 @@
 import type { Db } from "mongodb";
 import type { StateMetrics } from "@/lib/db/types";
+import type { MacroMetricsDoc } from "@/lib/db/types/macroMetrics";
 import type { StateMetricBaseline } from "@/lib/db/types/statePolicy";
 import { writeSplitMetricsBulk } from "@/lib/macroMetrics/split";
 import { makeEasternBlocBaselines } from "@/lib/seeds/shared/easternBlocMetrics";
@@ -15,7 +16,7 @@ export async function seedSuccessorMetrics1991(
   if (preset !== "1991-default") return;
   const ids = SUCCESSOR_STATE_METRICS_1991.map((metric) => metric._id);
   if (reset) {
-    await db.collection("macroMetrics").deleteMany({ _id: { $in: ids } });
+    await db.collection<MacroMetricsDoc>("macroMetrics").deleteMany({ _id: { $in: ids } });
     await db.collection<StateMetrics>("stateMetrics").deleteMany({ _id: { $in: ids } });
     await db.collection<StateMetricBaseline>("stateBaselines").deleteMany({ _id: { $in: ids } });
   }

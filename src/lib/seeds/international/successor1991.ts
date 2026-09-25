@@ -122,7 +122,7 @@ export function getSuccessor1991Model(countryId: Successor1991CountryId): Countr
     groupIds: [...EASTERN_BLOC_GROUP_IDS],
     dims: ["age", "education", "income", "urbanization"],
     census,
-    composition: EASTERN_BLOC_COMPOSITION,
+    composition: EASTERN_BLOC_COMPOSITION as unknown as CountryLayer1Model["composition"],
     turnoutRates,
     positions: {
       age: {
