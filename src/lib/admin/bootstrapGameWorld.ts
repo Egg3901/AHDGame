@@ -555,6 +555,16 @@ export async function seedAllCountryData(
       await seedHUStateMetrics(db, resetReference, log, preset);
       await seedHUBaselines(db, resetReference, log, preset);
     })(),
+    // Modern PL + RO democratic substrate (2027-default only). The Cold-War
+    // one-party block above self-guards on isEasternBlocEra, and the 1991
+    // successor seeders below self-guard on preset, so this pack only runs
+    // where neither does. Scoped to PL/RO countryIds throughout.
+    pack(async (log) => {
+      if (preset !== "2027-default") return;
+      const { seedModernTransitionCountry } = await import("./seed/seedModernTransitionCountries");
+      await seedModernTransitionCountry(db, resetReference, log, preset, "PL");
+      await seedModernTransitionCountry(db, resetReference, log, preset, "RO");
+    })(),
   ]);
 
   for (const buffer of packBuffers) for (const line of buffer) log(line);

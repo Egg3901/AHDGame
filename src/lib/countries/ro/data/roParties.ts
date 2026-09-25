@@ -1,4 +1,5 @@
 import type { PartySeed } from "@/lib/seeds/reference/politicalParties";
+import { roParties2027 } from "./roParties2027";
 
 /**
  * Romania ruling party (Cold-War presets) — era-specific identity.
@@ -14,8 +15,12 @@ import type { PartySeed } from "@/lib/seeds/reference/politicalParties";
  * `seedEasternBloc` filters with `isPartyValidForPreset` so only the entry
  * matching the active preset is upserted, and the shared `seedOrder` never
  * collides. Positions on the -5..+5 scale.
+ *
+ * The 2027 democratic roster (December 2024 ROAEP/BEC result) seeds first and
+ * is gated to `2027-default`, so Cold-War worlds never see a modern party.
  */
 export const roParties: PartySeed[] = [
+  ...roParties2027,
   {
     seedOrder: 1,
     countryId: "RO",
