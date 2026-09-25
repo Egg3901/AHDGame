@@ -591,6 +591,15 @@ excluded `ledgerEntries`, `actionAuditLog`, `financialTxLog`,
 `corporationHistory`, `indexFundTransactions`, `orgRegLedger`,
 `corporationPortfolioHistory`, `treasuryTransactions`, `primarySnapshots`,
 `tradeFlowSnapshots`, `wealthListHistory`, and `portfolioHistory`. Any local
-bytes or CPU profile from this copy is a partial-world sample. The operations
-page is unchanged. The remaining work packages are open and must pass their
+bytes or CPU profile from this copy is a partial-world sample. The local
+profile completed turn 1118 in 544.4 s with 20,362 Mongo round trips,
+507,833 documents, and 291.7 MB BSON returned. `indexFunds` accounted for
+7,064 trips and 15.8 MB; its 970 `gameConfig` reads returned 9.7 MB.
+`corporationTurn` accounted for 1,717 trips and 91.6 MB, with 33.4 MB from
+`corporateSectors` and 22.1 MB from `supplyAgreements`. These values are a
+single partial-world observation and cannot be compared with the production
+duration or used as acceptance thresholds. WP1 now loads exchange rates,
+the persisted turn, and transaction thresholds once for each fund rebalance
+sell pass; replay the same world before and after this change to quantify its
+effect. The operations page is unchanged. The remaining work packages are open and must pass their
 own measurement and correctness gates before implementation.
