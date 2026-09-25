@@ -40,45 +40,8 @@ beforeEach(() => {
   db.collection("users");
   // A flush market pool: every sale in these tests is small.
   db.collection("bondMarketPools");
-  db.collectionMocks.bondMarketPools.findOne.mockImplementation(
-    async (filter: Record<string, unknown>) =>
-      "settledKeys" in filter ? null : { _id: "USD", cashLocal: 1e9 }
-  );
+  db.collectionMocks.bondMarketPools.findOne.mockResolvedValue({ _id: "USD", cashLocal: 1e9 });
   db.collectionMocks.bondMarketPools.findOneAndUpdate.mockResolvedValue({ cashLocal: 1e9 });
-
-  db.collection("bondSaleIntents");
-  const intents: Array<Record<string, unknown>> = [];
-  const matches = (row: Record<string, unknown>, filter: Record<string, unknown>) =>
-    Object.entries(filter).every(([key, value]) => {
-      const actual = row[key];
-      if (actual instanceof ObjectId && value instanceof ObjectId) return actual.equals(value);
-      return actual === value;
-    });
-  db.collectionMocks.bondSaleIntents.insertOne.mockImplementation(
-    async (intent: Record<string, unknown>) => {
-      intents.push({ ...intent });
-      return { insertedId: intent._id };
-    }
-  );
-  db.collectionMocks.bondSaleIntents.findOne.mockImplementation(
-    async (filter: Record<string, unknown>) => intents.find((row) => matches(row, filter)) ?? null
-  );
-  db.collectionMocks.bondSaleIntents.find.mockImplementation((filter: Record<string, unknown>) => {
-    const cursor = {
-      sort: () => cursor,
-      limit: () => cursor,
-      toArray: async () => intents.filter((row) => matches(row, filter)),
-    };
-    return cursor;
-  });
-  db.collectionMocks.bondSaleIntents.updateOne.mockImplementation(
-    async (filter: Record<string, unknown>, update: { $set?: Record<string, unknown> }) => {
-      const row = intents.find((candidate) => matches(candidate, filter));
-      if (!row) return { matchedCount: 0, modifiedCount: 0 };
-      Object.assign(row, update.$set);
-      return { matchedCount: 1, modifiedCount: 1 };
-    }
-  );
 });
 
 describe("POST /api/bonds/[bondId]/sell", () => {
@@ -125,7 +88,7 @@ describe("POST /api/bonds/[bondId]/sell", () => {
     expect(db.collectionMocks.bondMarketPools.findOneAndUpdate).not.toHaveBeenCalled();
   });
 
-  it("refunds the pool when the payout fails after the pool was debited", async () => {
+  it("compensates the pool debit when the payout fails after the pool was debited", async () => {
     const bondId = new ObjectId();
     const characterId = new ObjectId();
     const userId = new ObjectId();
@@ -149,15 +112,12 @@ describe("POST /api/bonds/[bondId]/sell", () => {
       _id: userId,
       activeCharacterId: characterId,
     });
-    const seller = {
+    db.collectionMocks.characters.findOne.mockResolvedValue({
       _id: characterId,
       userId,
       name: "Seller",
       countryId: "US",
-    };
-    db.collectionMocks.characters.findOne.mockImplementation(
-      async (filter: Record<string, unknown>) => ("userId" in filter ? seller : null)
-    );
+    });
     db.collectionMocks.bonds.updateOne.mockResolvedValue({ matchedCount: 1, modifiedCount: 1 });
     db.collectionMocks.characters.updateOne.mockResolvedValue({
       matchedCount: 0,
@@ -175,26 +135,24 @@ describe("POST /api/bonds/[bondId]/sell", () => {
     );
 
     expect(response.status).toBe(404);
-    // Three units at the 980 bid: debited 2,940 from the pool, then put it back.
-    expect(db.collectionMocks.bondMarketPools.findOneAndUpdate).toHaveBeenCalledWith(
-      expect.objectContaining({
-        _id: "USD",
-        cashLocal: { $gte: 2940 },
-        settledKeys: { $ne: expect.any(String) },
-      }),
+    // Three units at the 980 bid: keyed debit of 2,940 from the pool, then
+    // the keyed compensation puts it back (no findOneAndUpdate anywhere).
+    expect(db.collectionMocks.bondMarketPools.findOneAndUpdate).not.toHaveBeenCalled();
+    expect(db.collectionMocks.bondMarketPools.updateOne).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ _id: "USD", cashLocal: { $gte: 2940 } }),
       expect.objectContaining({ $inc: { cashLocal: -2940, "lifetime.salesOut": 2940 } }),
-      expect.anything()
+      undefined
     );
-    expect(db.collectionMocks.bondMarketPools.updateOne).toHaveBeenCalledWith(
-      expect.objectContaining({ _id: "USD", settledKeys: expect.any(String) }),
-      expect.objectContaining({
-        $inc: { cashLocal: 2940, "lifetime.salesOut": -2940 },
-        $pull: { settledKeys: expect.any(String) },
-      })
+    expect(db.collectionMocks.bondMarketPools.updateOne).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ _id: "USD" }),
+      expect.objectContaining({ $inc: { cashLocal: 2940, "lifetime.salesOut": -2940 } }),
+      undefined
     );
   });
 
-  it("rolls back the holder claim when the character payout disappears in fallback mode", async () => {
+  it("restores the holder claim with a compensation key when the payout disappears", async () => {
     const bondId = new ObjectId();
     const characterId = new ObjectId();
     const userId = new ObjectId();
@@ -208,7 +166,7 @@ describe("POST /api/bonds/[bondId]/sell", () => {
       user: { userId: userId.toString() },
     } as never);
 
-    db.collectionMocks.bonds.findOne.mockResolvedValueOnce({
+    db.collectionMocks.bonds.findOne.mockResolvedValue({
       _id: bondId,
       defaulted: false,
       marketPrice: 1,
@@ -219,18 +177,13 @@ describe("POST /api/bonds/[bondId]/sell", () => {
       _id: userId,
       activeCharacterId: characterId,
     });
-    const seller = {
+    db.collectionMocks.characters.findOne.mockResolvedValue({
       _id: characterId,
       userId,
       name: "Seller",
       countryId: "US",
-    };
-    db.collectionMocks.characters.findOne.mockImplementation(
-      async (filter: Record<string, unknown>) => ("userId" in filter ? seller : null)
-    );
-    db.collectionMocks.bonds.updateOne
-      .mockResolvedValueOnce({ matchedCount: 1, modifiedCount: 1 })
-      .mockResolvedValueOnce({ matchedCount: 1, modifiedCount: 1 });
+    });
+    db.collectionMocks.bonds.updateOne.mockResolvedValue({ matchedCount: 1, modifiedCount: 1 });
     db.collectionMocks.characters.updateOne.mockResolvedValue({
       matchedCount: 0,
       modifiedCount: 0,
@@ -247,21 +200,62 @@ describe("POST /api/bonds/[bondId]/sell", () => {
     );
 
     expect(response.status).toBe(404);
-    const restoreCall = db.collectionMocks.bonds.updateOne.mock.calls.find(
-      (call) => call[1]?.$inc?.publicFloat === -3
-    );
-    expect(restoreCall).toBeDefined();
-    expect(restoreCall?.[0]).toEqual(
+    // Claim lands keyed first; the compensation (not the legacy rollback)
+    // restores the units under a `:compensate:` key.
+    expect(db.collectionMocks.bonds.updateOne).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ _id: bondId }),
       expect.objectContaining({
-        _id: bondId,
-        holders: {
-          $elemMatch: expect.objectContaining({ characterId, saleIntentId: expect.any(ObjectId) }),
-        },
-      })
+        $inc: expect.objectContaining({ "holders.$.units": -3, publicFloat: 3 }),
+      }),
+      undefined
+    );
+    expect(db.collectionMocks.bonds.updateOne).toHaveBeenCalledWith(
+      expect.objectContaining({ _id: bondId, "holders.characterId": characterId }),
+      expect.objectContaining({
+        $inc: expect.objectContaining({
+          "holders.$.units": 3,
+          publicFloat: -3,
+        }),
+        $push: expect.objectContaining({
+          appliedMoneyFlowKeys: expect.objectContaining({
+            $each: [expect.stringContaining(":compensate:holder-claim")],
+          }),
+        }),
+      }),
+      undefined
     );
   });
 
-  it("keeps a completed fallback sale when zero-unit holder cleanup fails", async () => {
+  it("rejects an invalid Idempotency-Key header without touching money", async () => {
+    const bondId = new ObjectId();
+    const userId = new ObjectId();
+
+    const { getDb } = await import("@/lib/mongodb");
+    vi.mocked(getDb).mockResolvedValue(db as unknown as Db);
+    const { requireBasicAuth } = await import("@/lib/api/requireAuth");
+    vi.mocked(requireBasicAuth).mockResolvedValue({
+      ok: true,
+      user: { userId: userId.toString() },
+    } as never);
+
+    const { POST } = await import("./route");
+    const response = await POST(
+      new Request("http://localhost/api/bonds/x/sell", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Idempotency-Key": "" },
+        body: JSON.stringify({ units: 3 }),
+      }),
+      { params: Promise.resolve({ bondId: bondId.toString() }) }
+    );
+
+    expect(response.status).toBe(400);
+    const body = (await response.json()) as { error: string };
+    expect(body.error).toBe("Invalid Idempotency-Key header");
+    expect(db.collectionMocks.bonds.updateOne).not.toHaveBeenCalled();
+  });
+
+  it("replays the same Idempotency-Key without moving money again", async () => {
     const bondId = new ObjectId();
     const characterId = new ObjectId();
     const userId = new ObjectId();
@@ -274,12 +268,104 @@ describe("POST /api/bonds/[bondId]/sell", () => {
       user: { userId: userId.toString() },
     } as never);
 
-    db.collectionMocks.bonds.findOne.mockResolvedValueOnce({
+    db.collection("gameState");
+    db.collectionMocks.gameState.findOne.mockResolvedValue({ _id: "current", currentTurn: 506 });
+
+    const bondDoc = {
+      _id: bondId,
+      defaulted: false,
+      marketPrice: 1,
+      currencyCode: "USD",
+      holders: [{ characterId, units: 5 }],
+      publicFloat: 10,
+    };
+    db.collectionMocks.bonds.findOne.mockResolvedValue(bondDoc);
+    db.collectionMocks.users.findOne.mockResolvedValue({
+      _id: userId,
+      activeCharacterId: characterId,
+    });
+    db.collectionMocks.characters.findOne.mockResolvedValue({
+      _id: characterId,
+      userId,
+      name: "Seller",
+      countryId: "US",
+    });
+    db.collectionMocks.bonds.updateOne.mockResolvedValue({ matchedCount: 1, modifiedCount: 1 });
+    db.collectionMocks.characters.updateOne.mockResolvedValue({
+      matchedCount: 1,
+      modifiedCount: 1,
+    });
+
+    const receipts = db.collection("nonAtomicMoneyFlowReceipts");
+    const fingerprint = `bond-sell:${bondId.toHexString()}:character:${characterId.toHexString()}:3:2940`;
+
+    const { POST } = await import("./route");
+    const first = await POST(
+      new Request("http://localhost/api/bonds/x/sell", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Idempotency-Key": "sell-replay-key" },
+        body: JSON.stringify({ units: 3 }),
+      }),
+      { params: Promise.resolve({ bondId: bondId.toString() }) }
+    );
+    expect(first.status).toBe(200);
+    const claimWrites = (): number =>
+      db.collectionMocks.bonds.updateOne.mock.calls.filter(
+        (call) => (call[1] as { $inc?: Record<string, number> }).$inc?.["holders.$.units"] === -3
+      ).length;
+    expect(claimWrites()).toBe(1);
+
+    // The stored receipt now settles the retry as a duplicate: the second
+    // request replays the outcome without another holder claim.
+    const duplicateKeyError = new Error("E11000 duplicate key") as Error & { code: number };
+    duplicateKeyError.code = 11000;
+    receipts.insertOne.mockRejectedValueOnce(duplicateKeyError);
+    receipts.findOne.mockResolvedValue({
+      _id: "sell-replay-key",
+      status: "completed",
+      fingerprint,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    const second = await POST(
+      new Request("http://localhost/api/bonds/x/sell", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Idempotency-Key": "sell-replay-key" },
+        body: JSON.stringify({ units: 3 }),
+      }),
+      { params: Promise.resolve({ bondId: bondId.toString() }) }
+    );
+    expect(second.status).toBe(200);
+    expect(await second.json()).toEqual(await first.json());
+    // The replay runs no second holder claim (the post-commit zero-unit
+    // cleanup may still rewrite the holders array, which moves no units).
+    expect(claimWrites()).toBe(1);
+  });
+
+  it("keeps a completed sale when zero-unit holder cleanup fails", async () => {
+    const bondId = new ObjectId();
+    const characterId = new ObjectId();
+    const userId = new ObjectId();
+
+    const { getDb } = await import("@/lib/mongodb");
+    vi.mocked(getDb).mockResolvedValue(db as unknown as Db);
+    const { requireBasicAuth } = await import("@/lib/api/requireAuth");
+    vi.mocked(requireBasicAuth).mockResolvedValue({
+      ok: true,
+      user: { userId: userId.toString() },
+    } as never);
+
+    db.collection("gameState");
+    db.collectionMocks.gameState.findOne.mockResolvedValue({ _id: "current", currentTurn: 506 });
+
+    db.collectionMocks.bonds.findOne.mockResolvedValue({
       _id: bondId,
       defaulted: false,
       marketPrice: 1,
       currencyCode: "USD",
       holders: [{ characterId, units: 3 }],
+      publicFloat: 10,
     });
     db.collectionMocks.users.findOne.mockResolvedValue({
       _id: userId,
@@ -291,9 +377,14 @@ describe("POST /api/bonds/[bondId]/sell", () => {
       name: "Seller",
       countryId: "US",
     });
-    db.collectionMocks.bonds.updateOne
-      .mockResolvedValueOnce({ matchedCount: 1, modifiedCount: 1 })
-      .mockRejectedValueOnce(new Error("cleanup unavailable"));
+    // Only the post-commit zero-unit holder cleanup uses a pipeline update;
+    // fail exactly that write. The money already moved, so the sale stands.
+    db.collectionMocks.bonds.updateOne.mockImplementation(
+      async (filter: unknown, update: unknown) => {
+        if (Array.isArray(update)) throw new Error("cleanup unavailable");
+        return { matchedCount: 1, modifiedCount: 1 };
+      }
+    );
     db.collectionMocks.characters.updateOne.mockResolvedValue({
       matchedCount: 1,
       modifiedCount: 1,
@@ -311,8 +402,131 @@ describe("POST /api/bonds/[bondId]/sell", () => {
 
     expect(response.status).toBe(200);
     expect(db.collectionMocks.characters.updateOne).toHaveBeenCalledOnce();
-    expect(db.collectionMocks.bondMarketPools.updateOne).not.toHaveBeenCalled();
-    expect(db.collectionMocks.bonds.updateOne).toHaveBeenCalledTimes(2);
+    // Debit landed once and was never compensated.
+    expect(db.collectionMocks.bondMarketPools.updateOne).toHaveBeenCalledOnce();
+  });
+
+  it("returns 409 when an Idempotency-Key is reused for a different sale", async () => {
+    const bondId = new ObjectId();
+    const characterId = new ObjectId();
+    const userId = new ObjectId();
+
+    const { getDb } = await import("@/lib/mongodb");
+    vi.mocked(getDb).mockResolvedValue(db as unknown as Db);
+    const { requireBasicAuth } = await import("@/lib/api/requireAuth");
+    vi.mocked(requireBasicAuth).mockResolvedValue({
+      ok: true,
+      user: { userId: userId.toString() },
+    } as never);
+
+    db.collectionMocks.bonds.findOne.mockResolvedValue({
+      _id: bondId,
+      defaulted: false,
+      marketPrice: 1,
+      currencyCode: "USD",
+      holders: [{ characterId, units: 5 }],
+      publicFloat: 10,
+    });
+    db.collectionMocks.users.findOne.mockResolvedValue({
+      _id: userId,
+      activeCharacterId: characterId,
+    });
+    db.collectionMocks.characters.findOne.mockResolvedValue({
+      _id: characterId,
+      userId,
+      name: "Seller",
+      countryId: "US",
+    });
+
+    const receipts = db.collection("nonAtomicMoneyFlowReceipts");
+    const duplicateKeyError = new Error("E11000 duplicate key") as Error & { code: number };
+    duplicateKeyError.code = 11000;
+    receipts.insertOne.mockRejectedValue(duplicateKeyError);
+    receipts.findOne.mockResolvedValue({
+      _id: "conflict-key",
+      status: "completed",
+      fingerprint: "bond-sell:some-other-sale",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    const { POST } = await import("./route");
+    const response = await POST(
+      new Request("http://localhost/api/bonds/x/sell", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Idempotency-Key": "conflict-key" },
+        body: JSON.stringify({ units: 3 }),
+      }),
+      { params: Promise.resolve({ bondId: bondId.toString() }) }
+    );
+
+    expect(response.status).toBe(409);
+  });
+
+  it("lets a keyed retry of a started sale past the upfront depth check", async () => {
+    const bondId = new ObjectId();
+    const characterId = new ObjectId();
+    const userId = new ObjectId();
+
+    const { getDb } = await import("@/lib/mongodb");
+    vi.mocked(getDb).mockResolvedValue(db as unknown as Db);
+    const { requireBasicAuth } = await import("@/lib/api/requireAuth");
+    vi.mocked(requireBasicAuth).mockResolvedValue({
+      ok: true,
+      user: { userId: userId.toString() },
+    } as never);
+
+    db.collection("gameState");
+    db.collectionMocks.gameState.findOne.mockResolvedValue({ _id: "current", currentTurn: 506 });
+
+    db.collectionMocks.bonds.findOne.mockResolvedValue({
+      _id: bondId,
+      defaulted: false,
+      marketPrice: 1,
+      currencyCode: "USD",
+      holders: [{ characterId, units: 10 }],
+      publicFloat: 10,
+    });
+    db.collectionMocks.users.findOne.mockResolvedValue({
+      _id: userId,
+      activeCharacterId: characterId,
+    });
+    db.collectionMocks.characters.findOne.mockResolvedValue({
+      _id: characterId,
+      userId,
+      name: "Seller",
+      countryId: "US",
+    });
+    // 2,500 of cash cannot cover ten units at the 980 bid, but the retry
+    // carries the key of the sale whose own debit accounts for the
+    // shortfall, so the route reconciles instead of refusing.
+    db.collectionMocks.bondMarketPools.findOne.mockResolvedValue({ _id: "USD", cashLocal: 2_500 });
+    const receipts = db.collection("nonAtomicMoneyFlowReceipts");
+    receipts.findOne.mockResolvedValue({
+      _id: "retry-key",
+      status: "in_progress",
+      fingerprint: `bond-sell:${bondId.toHexString()}:character:${characterId.toHexString()}:10:9800`,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    db.collectionMocks.bonds.updateOne.mockResolvedValue({ matchedCount: 1, modifiedCount: 1 });
+    db.collectionMocks.characters.updateOne.mockResolvedValue({
+      matchedCount: 1,
+      modifiedCount: 1,
+    });
+
+    const { POST } = await import("./route");
+    const response = await POST(
+      new Request("http://localhost/api/bonds/x/sell", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Idempotency-Key": "retry-key" },
+        body: JSON.stringify({ units: 10 }),
+      }),
+      { params: Promise.resolve({ bondId: bondId.toString() }) }
+    );
+
+    expect(response.status).toBe(200);
+    expect(db.collectionMocks.bonds.updateOne).toHaveBeenCalled();
   });
 
   it("emits a bond_sell ledger row after a successful character sale", async () => {
