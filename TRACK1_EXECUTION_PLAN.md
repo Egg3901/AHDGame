@@ -68,6 +68,22 @@ note, not a declaration that reset readiness has passed.
   https://valtor.valasztas.hu/valtort/jsp/ma1.jsp?EA=47,
   https://www.ksh.hu/stadat_files/nep/hu/nep0002.html, and
   https://www.ksh.hu/stadat_files/gdp/en/gdp0094.html.
+- The HU 2027 fiscal opening uses KSH 2025 general-government revenue HUF
+  37,082 billion, spending HUF 41,141 billion and debt HUF 64,912 billion,
+  with an explicitly authored functional spending and tax allocation. The
+  2025 NBH annual average of HUF 353.20/USD is the exchange fallback. The
+  seed builder's old HU law catalog underbooked 2027 spending, so
+  `0586eb438f` chooses the portable authored 2027 envelope. Its tests compare
+  actual seeded revenue/spending with KSH totals; a `scripts/sim/` report
+  and exact-release world evidence remain required before merge. Sources:
+  https://www.ksh.hu/s/en/publications/notification-of-balance-and-debt-of-the-general-government-sector-first-edp-notification-in-2026/index.html
+  and https://www.ksh.hu/evkonyvek/2025/magyar-statisztikai-zsebkonyv-2025/pdf/statistical_pocketbook_of_hungary_2025.pdf.
+- The 2027 HU country config has a 199-seat unicameral parliament and a
+  distinct democratic seed path. The existing `ams` election method is an
+  explicit approximation of Hungary's parallel 106 constituency/93 list
+  system; replay evidence must inspect its seat distribution. The 2027
+  country remains a nonplayable world actor under the base `coming-soon`
+  product status, so that status is not interpreted as missing seed data.
 
 ## Completion contract
 

@@ -2785,6 +2785,11 @@
           "type": "hu_2027_source_correction",
           "ref": "949c63c4e2",
           "detail": "Corrected the authored HU 2027 roster to the official 2026 election (TISZA 141, FIDESZ-KDNP 52, Mi Hazank 6), and reconciled regional estimates to KSH national 2026 population 9.488 million and revised 2025 GDP HUF 87,045.554 billion (follow-up correction to 949c63c4e2). The six regional amounts are documented proportional estimates, not KSH regional observations. Fourteen focused tests passed before the GDP revision; bootstrap, budget/FX alignment and final replay remain pending. Official sources are linked in the code."
+        },
+        {
+          "type": "hu_2027_bootstrap_and_fiscal_checkpoint",
+          "ref": "0586eb438f",
+          "detail": "HU 2027 now has an explicitly wired bootstrap pack, democratic 199-seat country/geography override, 2026-election roster, revised KSH GDP/population fallback, 2025 KSH fiscal revenue/expenditure/debt envelope, and 2025 NBH annual HUF/USD average. Commits 4a616f2a17, 2c1f00a926, df97ecc423, and 0586eb438f. Focused region/config tests passed 14/14; budget/1991 isolation tests passed 5/5; scoped lint/format passed. The seed builder initially underbooked HU 2027 spending by reusing the 1979 law catalog; the portable baseline-selection rule now uses the authored modern envelope and tests its actual revenue/spending totals. Full typecheck, pinned bootstrap, other 2027 countries and final replay remain pending."
         }
       ],
       "blocked_by": [
