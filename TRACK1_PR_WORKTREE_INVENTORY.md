@@ -988,3 +988,16 @@ caller to mark a receipt delivered without the bot's acknowledgement. Decision:
 abandon this unconsumed prototype and keep the reviewed existing delivery
 contract. Fresh status is clean, checkout unlocked and process-free; remove
 normally and retain its branch ref as provenance.
+
+**AHDGame `npp-bounded-directives`: DELETE abandoned clean singleplayer
+mechanic, 2026-09-25.** Six unique commits add a 2,403-line NPP strategy
+room, new player directive rules, fiscal and diplomatic weights, API/UI, and a
+persisted `GovernmentFormation.playerDirective` field. There is no issue for
+this new mechanic/schema or `scripts/sim/` balance report, both required by
+AGENTS.md before a production merge. The open NPP mandate issue #2321 asks
+for the winning party's electoral platform; this branch instead adds an
+independent player-authored brief and does not solve that issue. Its changes
+are therefore outside the approved reset repair and would alter autonomy
+outcomes without qualification. Fresh status is clean, checkout unlocked and
+process-free. Decision: abandon and remove the checkout normally; retain the
+branch ref so the experiment is recoverable if separately scoped later.
