@@ -22,6 +22,7 @@ import type {
   ImperialCharacter,
   GameState,
   Corporation,
+  ExchangeRate,
 } from "@/lib/db/types";
 import { getAuthUser } from "@/lib/auth";
 import { getOfficeLabel, getPartyHex } from "@/lib/utils/politics";
@@ -79,6 +80,8 @@ import { OnboardingChecklist } from "./components/OnboardingChecklist";
 import { isOnboardingChecklistEnabled } from "@/lib/onboarding/featureFlag";
 import { isOnboardingDismissed, loadOnboardingChecklist } from "@/lib/onboarding/checklist";
 import { onboardingRewardAmount } from "@/lib/onboarding/reward";
+import { onboardingRewardLocalAmount } from "@/lib/onboarding/rules";
+import { CURRENCY_SYMBOLS, getCountryIdForCurrency } from "@/lib/constants/currencies";
 import { StatAllocationBanner } from "./components/StatAllocationBanner";
 import { SectionHeader } from "./components/ProfileMeters";
 import { buildCharacterHref } from "@/lib/utils/profileUrls";
@@ -192,6 +195,7 @@ async function getCharacterData() {
     completedCount: number;
     total: number;
     rewardAmount: number;
+    rewardSymbol: string;
   } | null = null;
   if (
     onboardingChecklistEnabled &&
@@ -199,11 +203,23 @@ async function getCharacterData() {
     character.onboarding?.rewardGrantedAt === undefined
   ) {
     const checklist = await loadOnboardingChecklist(db, character);
+    const homeCurrency = getHomeCurrency(character, gameState?.preset);
+    const anchorCountry = getCountryIdForCurrency(homeCurrency);
+    const rateDoc = forexEnabled
+      ? await db.collection<ExchangeRate>("exchangeRates").findOne({ _id: anchorCountry })
+      : null;
     onboardingChecklist = {
       steps: checklist.steps,
       completedCount: checklist.completedCount,
       total: checklist.total,
-      rewardAmount: onboardingRewardAmount(gameConfig?.startingFunds),
+      rewardAmount: onboardingRewardLocalAmount(
+        onboardingRewardAmount(gameConfig?.startingFunds),
+        forexEnabled,
+        homeCurrency,
+        rateDoc?.rate,
+        gameState?.preset
+      ),
+      rewardSymbol: forexEnabled ? CURRENCY_SYMBOLS[homeCurrency] : "₳",
     };
   }
 
@@ -376,6 +392,7 @@ async function getCharacterData() {
     conflictsEnabled: !!gameState?.conflictsEnabled,
     ...conflictExtras,
     gameDateAnchor: gameState ? gameDateAnchorFromState(gameState) : undefined,
+    preset: gameState?.preset,
     iteration: gameState?.iteration ?? null,
   };
 }
@@ -435,6 +452,7 @@ export default async function ProfilePage() {
     onboardingChecklist,
     nationalNpiOrdinalRank,
     gameDateAnchor,
+    preset,
     conflictsEnabled,
     doctrineAdopted,
     general,
@@ -656,6 +674,7 @@ export default async function ProfilePage() {
                 completedCount={onboardingChecklist.completedCount}
                 total={onboardingChecklist.total}
                 rewardAmount={onboardingChecklist.rewardAmount}
+                rewardSymbol={onboardingChecklist.rewardSymbol}
               />
             )
           : !character.onboardingDismissed && <NewPlayerBanner />}
@@ -762,11 +781,16 @@ export default async function ProfilePage() {
                   maxDonorLevel={maxDonorLevel}
                   campaignFunds={character.currencyBalances?.campaign ?? character.funds ?? 0}
                   cashOnHand={getTotalPersonalLiquidWealth(character, forexEnabled, fxRatesRecord)}
-                  currency={getHomeCurrency(character)}
+                  currency={getHomeCurrency(character, preset)}
                   donorIncome={{
                     passivePerHour: fundDistribution.donorBaseBonus,
                     perLevelRate: DONOR_BASE_BONUS_PER_LEVEL[populationTier],
-                    fundraiseYield: fundraiseYieldLocal(character, forexEnabled, campaignRates),
+                    fundraiseYield: fundraiseYieldLocal(
+                      character,
+                      forexEnabled,
+                      campaignRates,
+                      preset
+                    ),
                     populationTier,
                     influenceMultiplier: 1 + (character.politicalInfluence ?? 0) / 100,
                   }}

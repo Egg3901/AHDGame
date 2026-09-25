@@ -178,11 +178,12 @@ export interface ActionResult {
 export function fundraiseYieldLocal(
   character: Character,
   forexEnabled: boolean,
-  campaignRates?: import("@/lib/campaigns/rules/currency").CampaignCurrencyRates | null
+  campaignRates?: import("@/lib/campaigns/rules/currency").CampaignCurrencyRates | null,
+  preset?: string
 ): number {
   const anchor = fundraiseYieldAnchor(character);
   return forexEnabled
-    ? campaignAnchorToLocal(anchor, character.countryId ?? "US", campaignRates)
+    ? campaignAnchorToLocal(anchor, character.countryId ?? "US", campaignRates, preset)
     : anchor;
 }
 

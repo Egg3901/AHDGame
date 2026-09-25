@@ -1,15 +1,10 @@
 import type { Db } from "mongodb";
 import type { Character, ExchangeRate, GameConfig } from "@/lib/db/types";
-import {
-  INITIAL_RATES,
-  getCountryIdForCurrency,
-  getInitialRates,
-  type CurrencyCode,
-} from "@/lib/constants/currencies";
-import type { CountryId } from "@/lib/constants/countries";
+import { getCountryIdForCurrency, type CurrencyCode } from "@/lib/constants/currencies";
 import { getHomeCurrency } from "@/lib/currency/characterFunds";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
 import { emitTx } from "@/lib/financialTxLog/emit";
+import { onboardingRewardLocalAmount } from "./rules";
 
 /**
  * One-time payout for completing all seven onboarding checklist steps,
@@ -81,17 +76,13 @@ export async function grantOnboardingReward(
   // A zero/negative stored rate would credit ₳0 usable currency while the
   // funds mirror and anchorAmount still say full value; treat it like an
   // absent rate instead.
-  const storedRate = rateDoc?.rate;
-  const fallbackRate =
-    getInitialRates(preset ?? "")[anchorCountry as CountryId] ??
-    INITIAL_RATES[anchorCountry as CountryId] ??
-    1;
-  const homeRate = forexEnabled
-    ? storedRate !== undefined && storedRate > 0
-      ? storedRate
-      : fallbackRate
-    : 1;
-  const localAmount = Math.round(amount * homeRate);
+  const localAmount = onboardingRewardLocalAmount(
+    amount,
+    forexEnabled,
+    homeCurrency,
+    rateDoc?.rate,
+    preset
+  );
 
   const inc: Record<string, number> = { funds: amount };
   if (forexEnabled) {

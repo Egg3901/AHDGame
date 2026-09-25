@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useTranslations, useLocale } from "next-intl";
 import { Button } from "@/components/ui/Button";
+import { currencySymbolSep } from "@/lib/currency/symbolSep";
 
 export interface OnboardingChecklistCardStep {
   id: string;
@@ -17,8 +18,9 @@ interface OnboardingChecklistProps {
   steps: OnboardingChecklistCardStep[];
   completedCount: number;
   total: number;
-  /** Anchor-denominated (₳) completion reward. */
+  /** Completion reward in the currency actually credited on claim. */
   rewardAmount: number;
+  rewardSymbol: string;
 }
 
 /**
@@ -33,6 +35,7 @@ export function OnboardingChecklist({
   completedCount,
   total,
   rewardAmount,
+  rewardSymbol,
 }: OnboardingChecklistProps) {
   const t = useTranslations("profile.onboarding");
   const locale = useLocale();
@@ -46,7 +49,7 @@ export function OnboardingChecklist({
 
   const allComplete = completedCount === total;
   const progressPct = total > 0 ? Math.round((completedCount / total) * 100) : 0;
-  const rewardLabel = `₳${rewardAmount.toLocaleString(locale)}`;
+  const rewardLabel = `${rewardSymbol}${currencySymbolSep(rewardSymbol)}${rewardAmount.toLocaleString(locale)}`;
 
   async function handleDismiss() {
     setDismissing(true);
