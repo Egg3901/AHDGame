@@ -29,6 +29,16 @@ export type PublicApiGuardResult =
   { ok: false; response: NextResponse } | { ok: true; headers: Record<string, string> };
 
 /**
+ * Rejection responses carry no cache headers from their builders; stamp
+ * `no-store` so a "cache everything" edge rule can never replay an auth or
+ * rate-limit failure to a caller whose credentials were never evaluated.
+ */
+function uncacheable(response: NextResponse): NextResponse {
+  response.headers.set("Cache-Control", "no-store");
+  return response;
+}
+
+/**
  * Call at the top of every public API route handler.
  *
  * Accepts either:
@@ -61,7 +71,9 @@ export async function publicApiGuard(
       keyId: userKeyResult.keyId,
       status: rl.ok ? 200 : 429,
     });
-    if (!rl.ok) return { ok: false, response: rateLimitResponse(rl.retryAfter, undefined, rl) };
+    if (!rl.ok) {
+      return { ok: false, response: uncacheable(rateLimitResponse(rl.retryAfter, undefined, rl)) };
+    }
     return { ok: true, headers: { ...rateLimitHeaders(rl), ...PUBLIC_API_CACHE_HEADERS } };
   }
 
@@ -69,10 +81,12 @@ export async function publicApiGuard(
   if (!requirePublicBotToken(request)) {
     return {
       ok: false,
-      response: publicError(
-        "UNAUTHORIZED",
-        "Invalid or missing API key. Use X-API-Key or X-Bot-Token header.",
-        401
+      response: uncacheable(
+        publicError(
+          "UNAUTHORIZED",
+          "Invalid or missing API key. Use X-API-Key or X-Bot-Token header.",
+          401
+        )
       ),
     };
   }
@@ -82,6 +96,8 @@ export async function publicApiGuard(
     BOT_READ_LIMITS.windowMs
   );
   logApiAccess(request, { bucket, authType: "bot-token", status: rl.ok ? 200 : 429 });
-  if (!rl.ok) return { ok: false, response: rateLimitResponse(rl.retryAfter, undefined, rl) };
+  if (!rl.ok) {
+    return { ok: false, response: uncacheable(rateLimitResponse(rl.retryAfter, undefined, rl)) };
+  }
   return { ok: true, headers: { ...rateLimitHeaders(rl), ...PUBLIC_API_CACHE_HEADERS } };
 }

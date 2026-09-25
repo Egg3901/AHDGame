@@ -28,6 +28,16 @@ describe("buildCdnCatalog", () => {
     }
   });
 
+  it("enumerates slugs only where a template can substitute them", () => {
+    for (const category of buildCdnCatalog().categories) {
+      if (!category.slugs?.length) continue;
+      const substitutable = category.urlTemplates.some(
+        (template) => template.includes("{slug}") || template.includes("{file}")
+      );
+      expect(substitutable, `category ${category.name}`).toBe(true);
+    }
+  });
+
   it("enumerates hero slugs from the shared runtime list", () => {
     const heroes = buildCdnCatalog().categories.find((category) => category.name === "heroes");
 
@@ -49,7 +59,14 @@ describe("buildCdnCatalog", () => {
       expect(url.startsWith(`${CDN_BASE}/`)).toBe(true);
     }
     expect(actionCards.eraGenericSets).toContain("1953");
-    expect(actionCards.countryArt["1953"]).toContain("US");
+    // Era → country → published slugs, so clients can build URLs that exist.
+    expect(Object.keys(actionCards.countryArt["1953"])).toEqual(
+      expect.arrayContaining(["US", "UK", "FR", "DD"])
+    );
+    expect(actionCards.countryArt["1953"].FR).toEqual(["advertise"]);
+    expect(actionCards.countryArt["1979"].RU).toEqual(
+      expect.arrayContaining(["campaign", "convertCash", "hero"])
+    );
   });
 
   it("resolves curated assets against the configured CDN base", () => {
