@@ -22,4 +22,16 @@ describe("seedMoneyFlowIndexes", () => {
       expect.any(Function)
     );
   });
+
+  it("indexes the share-fill orphan sweep's status and keyset sort", async () => {
+    await seedMoneyFlowIndexes({} as Db, () => {});
+
+    expect(vi.mocked(ensureIndex)).toHaveBeenCalledWith(
+      expect.anything(),
+      "nonAtomicMoneyFlowReceipts",
+      { status: 1, _id: 1 },
+      expect.objectContaining({ name: "nonAtomicMoneyFlowReceipts_status_id" }),
+      expect.any(Function)
+    );
+  });
 });

@@ -36,4 +36,15 @@ export async function seedMoneyFlowIndexes(db: Db, log: (msg: string) => void) {
     { name: "nonAtomicMoneyFlowReceipts_status_updatedAt", background: true },
     log
   );
+
+  // The periodic share-fill orphan sweep walks in-progress receipts in _id
+  // order with a keyset cursor. The updatedAt index above cannot satisfy
+  // that sort and would force a sort over the receipt collection each pass.
+  await ensureIndex(
+    db,
+    "nonAtomicMoneyFlowReceipts",
+    { status: 1, _id: 1 },
+    { name: "nonAtomicMoneyFlowReceipts_status_id", background: true },
+    log
+  );
 }
