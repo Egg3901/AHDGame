@@ -107,6 +107,7 @@ import { logIndexFundRedeem, resolveIndexFundHolder } from "@/lib/indexFunds/fun
 import { emitTx, emitTxBulk, loadTxThresholds } from "@/lib/financialTxLog/emit";
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
 import { loadFxRatesByCurrency } from "@/lib/currency/corporationCapital";
+import { loadTurnLengthMinutes } from "@/lib/financialTxLog/expiresAt";
 import { runWithOptionalTransaction } from "@/lib/db/runWithOptionalTransaction";
 import { TURNS_PER_DAY, MS_PER_TURN } from "@/lib/constants/turnTime";
 import { placeFundShareBuyOrder, cancelFundShareOrder } from "@/lib/indexFunds/fundShareOrders";
@@ -1508,7 +1509,10 @@ export async function runIndexFundCron(
   const initialBondPrincipalByFundId = await sumFundBondHoldingsByFundId(db, funds, exchangeRates);
   // #992 tranche 6: one thresholds read for every bond-reserve purchase row
   // this turn; threaded through each deploy so N funds share it.
-  const bondDeployThresholds = await loadTxThresholds(db);
+  const [bondDeployThresholds, bondDeployTurnLengthMinutes] = await Promise.all([
+    loadTxThresholds(db),
+    loadTurnLengthMinutes(db),
+  ]);
 
   // Pass 1a: mark holdings and recompute NAV. Each task only writes its own
   // fund document, so bounded concurrency is safe and removes the serial
@@ -1645,6 +1649,7 @@ export async function runIndexFundCron(
             liquidityTargetEnabled: bondLiquidityEnabled,
             turn: currentTurn,
             thresholds: bondDeployThresholds,
+            turnLengthMinutes: bondDeployTurnLengthMinutes,
           }
         );
         if (bondDeploy.deployedAnchor > 0) {

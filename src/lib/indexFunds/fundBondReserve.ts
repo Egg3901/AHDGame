@@ -209,6 +209,8 @@ export async function deployBondReserveFromCash(
      * one read instead of one per bond.
      */
     thresholds?: TxThresholds;
+    /** Preloaded turn cadence shared by every purchase receipt. */
+    turnLengthMinutes?: number;
   }
 ): Promise<DeployBondReserveResult> {
   const breakdown = computeFundAllocationBreakdown(fund, {
@@ -318,6 +320,7 @@ export async function deployBondReserveFromCash(
         txSink: transactions,
         turn: options?.turn,
         thresholds,
+        turnLengthMinutes: options?.turnLengthMinutes,
       });
       if (!purchase.ok) continue;
 
