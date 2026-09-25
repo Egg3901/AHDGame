@@ -11,7 +11,7 @@
     "design:check": "node scripts/build-design-md.mjs --check",
     "build": "next build && tsx scripts/postbuild-quality.ts",
     "start": "next start",
-    "start:turn-worker": "NODE_OPTIONS=\"--max-old-space-size=3072 --max-semi-space-size=64\" tsx scripts/turn-worker.ts",
+    "start:turn-worker": "NODE_ENV=production NODE_OPTIONS=\"--max-old-space-size=3072 --max-semi-space-size=64\" tsx scripts/turn-worker.ts",
     "lint": "eslint --cache --cache-location node_modules/.cache/eslint",
     "format": "prettier --write .",
     "format:check": "prettier --check . --cache --cache-location node_modules/.cache/prettier/.prettier-cache",

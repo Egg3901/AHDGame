@@ -26,8 +26,8 @@ in-process scheduler. `CRON_OWNER=worker` already disables the web scheduler;
 `scripts/turn-worker.ts` owns it in a separate process. The worker now starts
 Sentry and the heap watchdog before loading the cron graph. Its command is
 `npm run start:turn-worker`.
-The command uses the web service's V8 heap settings so the worker watchdog
-retains the same memory backstop.
+The command sets production mode and uses the web service's V8 heap settings
+so the worker watchdog retains the same memory backstop.
 
 Set up one worker service from the **same AHD source revision** as the web
 service, with one replica and no public domain. Use the same game database and
