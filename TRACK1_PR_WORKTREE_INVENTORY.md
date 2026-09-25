@@ -439,6 +439,15 @@ and `fast-uri` had green checks and clean merge states. They landed as
 `b9a006840559d2bec35377062c2a7ad5905f8eff` respectively. They had
 no local worktrees and do not change AHDGame's `development` base.
 
+**Concurrent worktree update, 2026-09-25 00:47 UTC.** Read-only status
+shows `worldsim-readiness-20260922` has expanded far beyond the original five
+modified sim files: it now has uncommitted changes across `scripts/sim/`,
+bootstrap/seed, country, currency, budget, and turn modules, plus new 1991
+successor and 2027 regional population source/report files. It is active
+feature work for several #2159 blockers, not a prunable checkout. Track 1
+must review and integrate its final committed result before qualifying the
+release. Its uncommitted contents, branch, and worktree remain untouched.
+
 **Dynamic inventory update, 2026-09-25 00:45 UTC.** Fresh `git worktree list`
 shows 30 AHDGame checkouts after the removals above, including new clean-base
 `banking-hub-tables` and `discord-event-cards` feature worktrees created by
