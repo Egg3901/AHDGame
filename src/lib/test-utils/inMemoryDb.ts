@@ -164,6 +164,11 @@ function matchesCondition(value: unknown, condition: unknown): boolean {
             return typeof value === "number" && value < (operand as number);
           case "$in":
             return (operand as unknown[]).some((o) => equalsAny(value, o));
+          case "$elemMatch":
+            return (
+              Array.isArray(value) &&
+              value.some((item) => isPlainObject(item) && matchesFilter(item, operand as Doc))
+            );
           case "$nin":
             return !(operand as unknown[]).some((o) => equalsAny(value, o));
           case "$exists":

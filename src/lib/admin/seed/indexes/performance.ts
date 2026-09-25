@@ -186,6 +186,17 @@ export async function seedPerfIndexes(db: Db, log: (msg: string) => void) {
     log
   );
 
+  // Federal budget history is filtered by country and returned by newest turn.
+  // The former collection scan examined all 577 local rows and performed a
+  // blocking sort; this compound supports both the country filter and ordering.
+  await ensureIndex(
+    db,
+    "federalBudgetSnapshots",
+    { countryId: 1, turn: -1 },
+    { name: "federalBudgetSnapshots_country_turn" },
+    log
+  );
+
   // npps — active NPP filter
   await ensureIndex(
     db,

@@ -16,7 +16,7 @@
  * partial state. The bondTurn coupon phase pays the nppId holder.
  */
 
-import type { Db, ObjectId } from "mongodb";
+import type { Db, Filter, ObjectId } from "mongodb";
 import type { Bond, NPP } from "@/lib/db/types";
 import { reserveBondUnitsForHolder } from "@/lib/bonds/bondHolderOps";
 import { bondPoolCurrency, creditBondPool, loadBondQuote } from "@/lib/bonds/marketPool";
@@ -35,6 +35,19 @@ export type NppBondBuyResult =
     }
   | { ok: false; reason: string };
 
+export type NppBondBuySnapshot = Pick<
+  Bond,
+  | "_id"
+  | "maturityTurn"
+  | "publicFloat"
+  | "currencyCode"
+  | "countryId"
+  | "marketPrice"
+  | "issuerType"
+  | "defaulted"
+  | "issuerName"
+>;
+
 export async function nppBuyBond(
   db: Db,
   npp: Pick<NPP, "_id" | "countryId">,
@@ -42,13 +55,18 @@ export async function nppBuyBond(
   units: number,
   currentTurn: number,
   /** Pre-loaded home FX rate (local per ₳); loaded on demand when omitted. */
-  homeRate?: number
+  homeRate?: number,
+  /** Candidate from the turn sweep. The reservation still checks live float atomically. */
+  bondSnapshot?: NppBondBuySnapshot
 ): Promise<NppBondBuyResult> {
   if (!Number.isInteger(units) || units <= 0) {
     return { ok: false, reason: "Units must be a positive integer." };
   }
 
-  const bond = await db.collection<Bond>("bonds").findOne({ _id: bondId });
+  const bond =
+    bondSnapshot?._id.equals(bondId) === true
+      ? bondSnapshot
+      : await db.collection<Bond>("bonds").findOne({ _id: bondId });
   if (!bond) return { ok: false, reason: "Bond not found." };
   if (bond.maturityTurn <= currentTurn) return { ok: false, reason: "Bond has matured." };
   if ((bond.publicFloat ?? 0) < units) {
@@ -71,6 +89,20 @@ export async function nppBuyBond(
   const costAnchor = localToAnchor(cost, rate);
   const now = new Date();
 
+  // The sweep snapshot removes a read, so the reservation must reject a bond
+  // whose price or quote inputs changed since selection. Its failed guard
+  // follows the existing refund path below.
+  const guardFilter: Filter<Bond> | undefined = bondSnapshot
+    ? {
+        marketPrice: bond.marketPrice,
+        maturityTurn: bond.maturityTurn,
+        defaulted: bond.defaulted,
+        currencyCode: bond.currencyCode === undefined ? { $exists: false } : bond.currencyCode,
+        countryId: bond.countryId === undefined ? { $exists: false } : bond.countryId,
+        issuerType: bond.issuerType === undefined ? { $exists: false } : bond.issuerType,
+      }
+    : undefined;
+
   // Deduct from the personal forex account first (atomic guard), then reserve
   // units. NOT campaign `funds` — investing is real-economy, not political.
   const deducted = await db
@@ -90,7 +122,7 @@ export async function nppBuyBond(
     { field: "nppId", id: npp._id },
     units,
     now,
-    { avgCostPerUnit: Math.round(pricePerUnit * 100) / 100 }
+    { avgCostPerUnit: Math.round(pricePerUnit * 100) / 100, guardFilter }
   );
   if (!reserved) {
     // Float was taken between read and reserve — refund and bail, no partial state.

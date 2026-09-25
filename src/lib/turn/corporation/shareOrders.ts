@@ -1,6 +1,6 @@
 import { ObjectId } from "mongodb";
 import type { Db } from "mongodb";
-import type { Character, Corporation, IndexFund } from "@/lib/db/types";
+import type { Character, Corporation, IndexFund, ShareOrder } from "@/lib/db/types";
 import { emitTxBulk, loadTxThresholds } from "@/lib/financialTxLog/emit";
 import { buildPersonalBalanceBulkOp } from "@/lib/currency/characterFunds";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
@@ -69,7 +69,29 @@ export async function fillPendingShareOrders(db: Db, now: Date, turn: number): P
     // Receipts stay `in_progress` for the next turn.
   }
 
-  const openOrders = await db.collection("shareOrders").find({ status: "open" }).toArray();
+  // Fill decisions and their escrow/history writes only use these order
+  // fields; the query filter still applies `status` server-side.
+  const openOrders = await db
+    .collection<ShareOrder>("shareOrders")
+    .find(
+      { status: "open" },
+      {
+        projection: {
+          _id: 1,
+          characterId: 1,
+          corporationId: 1,
+          escrowAmount: 1,
+          escrowAnchor: 1,
+          placerCorporationId: 1,
+          placerFundId: 1,
+          pricePerShare: 1,
+          sharesDebitedAtCreation: 1,
+          sharesRemaining: 1,
+          type: 1,
+        },
+      }
+    )
+    .toArray();
 
   if (openOrders.length === 0) return;
 
@@ -83,9 +105,26 @@ export async function fillPendingShareOrders(db: Db, now: Date, turn: number): P
   }
 
   const corpIds = [...ordersByCorp.keys()].map((k) => new ObjectId(k));
+  // Keep the full shareholder array for live holding caps. Other corporation
+  // payload fields are not read by this matcher.
   const corpDocs = await db
     .collection<Corporation>("corporations")
-    .find({ _id: { $in: corpIds } })
+    .find(
+      { _id: { $in: corpIds } },
+      {
+        projection: {
+          _id: 1,
+          countryId: 1,
+          liquidCurrencyCode: 1,
+          fundamentalSharePrice: 1,
+          publicFloat: 1,
+          sharePrice: 1,
+          totalShares: 1,
+          liquidCapital: 1,
+          shareholders: 1,
+        },
+      }
+    )
     .toArray();
   const corpMap = new Map(corpDocs.map((c) => [c._id.toString(), c]));
 

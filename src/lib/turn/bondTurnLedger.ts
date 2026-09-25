@@ -46,6 +46,7 @@ export async function snapshotBondHistory(args: {
     ])
     .toArray();
   const prevInterestMap = new Map(existingHistory.map((h) => [h._id.toString(), h.maxInterest]));
+  const activeBondById = new Map(activeBonds.map((bond) => [bond._id.toString(), bond]));
 
   if (updatedBonds.length > 0) {
     const historyDocs = updatedBonds.map((bond) => {
@@ -53,7 +54,7 @@ export async function snapshotBondHistory(args: {
       // `couponPerUnit × totalUnits` is LOCAL (bond.currencyCode per Task-18B).
       // Anchor-normalize before accumulating `totalInterestPaid` so cross-bond
       // aggregations at read time can sum in ₳ without mixing currencies. (A16)
-      const originalBond = activeBonds.find((b) => b._id.toString() === bond._id.toString());
+      const originalBond = activeBondById.get(bond._id.toString());
       const couponPerUnitLocal = originalBond
         ? perTurnCouponPayment(originalBond.couponRate, BOND_UNIT_FACE_VALUE)
         : 0;
