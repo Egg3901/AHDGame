@@ -50,7 +50,6 @@ PostHog autocapture, automatic pageviews, session replay, and surveys are disabl
 
 OpenReplay session replay has been **removed** and is not part of the production stack. PostHog plus Amplitude are the whole of it. If replay is ever revisited, make that a deliberate decision on its own merits — do not restore the old provider.
 
-
 | Event                  | Trigger                                                   | Properties                                                                                          |
 | ---------------------- | --------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
 | `area_viewed`          | Opted-in visit to a named area                            | `area`: landing, registration, character_creation, profile, corporations, banking, media, elections |
