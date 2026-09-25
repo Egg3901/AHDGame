@@ -25,6 +25,11 @@ let warnedNonAtomicFallback = false;
  *   5. Verify `withTransaction` succeeds, then this fallback path goes cold.
  * Until then the fallback keeps writes working (just not atomic). Do NOT
  * attempt this live without a backup + window — it can cause downtime.
+ *
+ * NOTE: callers moving money MUST NOT rely on this fallback being atomic
+ * (issue #1672). New money flows should express their balance writes as
+ * keyed idempotent legs via `src/lib/db/nonAtomicMoneyFlow.ts`, which
+ * reconciles a crash between sequential writes to exactly one final state.
  */
 export async function runWithOptionalTransaction<T>(
   runInTransaction: (session: ClientSession) => Promise<T>,

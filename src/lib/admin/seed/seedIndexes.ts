@@ -28,6 +28,7 @@ import { seedSettlementIndexes } from "./indexes/settlement";
 import { seedIntelligenceIndexes } from "./indexes/intelligence";
 import { seedIdentityHistoryIndexes } from "./indexes/identityHistory";
 import { seedTelemetryIndexes } from "./indexes/telemetry";
+import { seedMoneyFlowIndexes } from "./indexes/moneyFlow";
 import { INDEX_TARGETS, type IndexTargetId, type IndexTargetMeta } from "./indexTargets";
 
 export { INDEX_TARGETS, INDEX_TARGET_IDS } from "./indexTargets";
@@ -80,6 +81,7 @@ const INDEX_RUNNERS: Record<IndexTargetId, IndexModule> = {
   indexesIntelligence: seedIntelligenceIndexes,
   indexesIdentityHistory: seedIdentityHistoryIndexes,
   indexesTelemetry: seedTelemetryIndexes,
+  indexesMoneyFlow: seedMoneyFlowIndexes,
 };
 
 export interface IndexModuleEntry extends Omit<IndexTargetMeta, "id"> {
