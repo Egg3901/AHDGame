@@ -21,6 +21,8 @@ RR-014 (#1672) records the extracted money-flow primitive, transfer and
 share-fill audit checkpoints, and the later recovery-turn-budget repair.
 The receipt orphan sweep now runs outside `processTurn` with a bounded
 keyset scan, an in-flight age grace, and separate cron/singleplayer drivers.
+The status/ID sweep index is registered in `317153a065`; its focused test
+passed, while a production-shaped explain plan is still owed.
 Other money-flow consumers, integrated gates, and final campaign evidence
 remain open; the GitHub issue stays `status: partial`.
 

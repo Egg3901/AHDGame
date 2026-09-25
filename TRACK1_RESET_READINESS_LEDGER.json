@@ -834,6 +834,11 @@
           "type": "share_fill_recovery_turn_budget_repair",
           "ref": "5a1cd3daf5,ac21ae83e3,e0cd159fe4,b68461e8bb",
           "detail": "Moved the receipt orphan scan out of processTurn to a separate bounded cron pass and a post-turn singleplayer pass. Added batched order reads, per-client/database keyset rotation, reserved phase capacity, a five-minute in-flight age grace, and a duplicate-visit guard at wrap-around. Focused audit suite passed 52/52, plus scoped lint/format; earlier cron and route suites passed with an increased timeout on the shared box. This supersedes the once-per-turn scan in the prior checkpoint. Owed: integrated verify/build, matched query and turn round-trip evidence, remaining #1672 money-flow consumers, and the final validation gate."
+        },
+        {
+          "type": "share_fill_recovery_index",
+          "ref": "317153a065",
+          "detail": "Added recurring {status:1,_id:1} receipt index to serve the bounded orphan-sweep keyset sort without a collection-wide sort. The focused index-registration suite passed 2/2, scoped lint/format and diff checks passed. An actual production-shaped explain plan and integrated build remain required."
         }
       ],
       "blocked_by": [
