@@ -7,6 +7,7 @@ import type {
   ReconcileReport,
 } from "@/lib/ledger/types";
 import { snapshotEconomicVitalSigns } from "@/lib/economy/economicVitalSigns";
+import { evaluateCorporateNoHolderAlert } from "@/lib/economy/corporateNoHolderAlert/rules";
 import { reconcileLedger } from "@/lib/ledger/reconcile";
 
 function argument(name: string): string | undefined {
@@ -255,6 +256,7 @@ async function summarizeDatabase(client: MongoClient, dbName: string, refresh: b
     terminalWindow: { startTurn, endTurn: terminalTurn, snapshots: snapshots.length },
     medianTerminal12: metricRows(snapshots),
     endpoint: snapshots.at(-1) ?? null,
+    corporateNoHolderAlert: evaluateCorporateNoHolderAlert(snapshots.at(-1)),
     countryFillMedianTerminal12: await countryFillMedians(flows),
     bonds: bondGroups,
     indexFunds: {

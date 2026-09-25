@@ -3,8 +3,11 @@ import { z } from "zod";
 import { requireAdmin } from "@/lib/api/requireAdmin";
 import { handleRouteError } from "@/lib/api/errors";
 import type { EconomicVitalSigns } from "@/lib/db/types";
-import { ECONOMIC_VITAL_SIGNS_COLLECTION } from "@/lib/economy/economicVitalSigns";
+import { evaluateCorporateNoHolderAlert } from "@/lib/economy/corporateNoHolderAlert/rules";
 import { getDb } from "@/lib/mongodb";
+
+// Keep this read-only route off the full turn-snapshot import graph.
+const ECONOMIC_VITAL_SIGNS_COLLECTION = "economicVitalSigns";
 
 const querySchema = z.object({
   turn: z.coerce.number().int().nonnegative().optional(),
@@ -44,7 +47,10 @@ export async function GET(request: Request) {
         { status: 404 }
       );
     }
-    return NextResponse.json({ snapshot });
+    return NextResponse.json({
+      snapshot,
+      alerts: { corporateNoHolder: evaluateCorporateNoHolderAlert(snapshot) },
+    });
   } catch (error) {
     return handleRouteError(error);
   }
