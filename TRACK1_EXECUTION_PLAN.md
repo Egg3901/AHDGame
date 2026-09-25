@@ -300,8 +300,8 @@ insufficient evidence.
   dirty, now clean `worldsim-readiness-20260922` checkout as
   `afcb2681a6cd6366fb107d720cba9e31d64d214f`. This checkpoint contains
   1991 successor substrate, 2027 region/currency work, sim report changes,
-  and game-health evidence. It is **not integrated or validated** yet; a
-  queued typecheck and subsequent review determine what can enter Track 1.
+  and game-health evidence. At that checkpoint it was not yet integrated or
+  validated; integration and focused repair are recorded below.
   A literal local connection string was removed from the handoff note before
   the final checkpoint commit was retained.
 - 2026-09-25: The first scheduled Track 1 typecheck ended by SIGTERM (`-15`)
@@ -318,8 +318,32 @@ insufficient evidence.
 
 ### Current source checkpoint
 
-The original fresh base is recorded above. After the three AHDGame dependency
-merges, the latest fetched `origin/development` is
-`311334422141a8f2374dce525f32a44e5b305ba5` after PR #2377 merged. This branch still needs a
-controlled rebase onto that commit after the current queued typecheck and
-source checkpoint; a later upstream change requires another refresh.
+The original fresh base is recorded above. Track 1 was rebased onto
+`cc06acd25cf259f9f9ede8076ac57552867ebae8` after PR #2382. The preserved
+1991/2027 source checkpoint was integrated as `609cf2bd7d`; the four observed
+TypeScript defects were repaired in `9c23912f6f` and `c065c18730`. A Muse
+Spark 1.3 contributor fixed RU owned producing SOEs in 1991 as `7e30f53bb6`
+with four focused tests passing. The full typecheck is still queued; no fresh
+zero-critical 1991 bootstrap or #2316 scripts/sim balance report exists yet.
+
+The #1672 keyed standalone-Mongo money-flow primitive and indexes were ported
+as `8949c9da39` with 13 focused tests passing. Its source branch remains
+partial; consumers are being extracted and verified in bounded slices. #1672
+and ledger RR-014 remain open. A 2027 ACS education/income projection waiver
+was approved by the owner and recorded in RR-062, while 2027 implementation
+and final evidence stay open.
+
+Additional PR dispositions since the initial inventory: #2379 and #2382
+merged to `development`; #2385 merged at
+`2f52a77d63abdfadc34dd2c5b5cb4f02fd976a84`. The clean Track 3 source,
+short-turn candidate, and two Campaign 3 snapshot worktrees were removed with
+ordinary `git worktree remove`. The 11 remaining legacy private game repo
+Dependabot PRs were closed as abandoned with individual explanations. Bot
+upstream #45 merged; #122 was rebased and pushed and awaits exact-head local
+gates. Ops #137 and #168 merged; #167 closed as superseded. See the inventory
+for each decision and the current open PRs.
+
+The latest incorporated development tip is still `cc06acd25` while concurrent
+Muse source edits finish. PR #2385 advanced remote `development`; fetch and
+rebase this branch onto the newer exact tip once those edits are committed,
+then rerun all affected gates from that exact SHA.
