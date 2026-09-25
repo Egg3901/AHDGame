@@ -51,6 +51,9 @@ export async function GET(request: Request) {
         stability:
           "v1 is additive-only: fields may be added, existing fields are never removed or renamed.",
         writeEndpoints: ["POST /api/v1/transfer", "POST /api/v1/forex/exchange"],
+        // Self-introspection: a key reads its own scope and allowed operation
+        // classes. Not edge-cached; the response is per-key and no-store.
+        keyIntrospection: "GET /api/v1/key",
         endpoints: ENDPOINTS,
       },
       { headers: guard.headers }
