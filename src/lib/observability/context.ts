@@ -90,11 +90,10 @@ export function turnPhaseTraceId(turn: number, phase: string): string {
 /**
  * Attribute the current Sentry scope to an authenticated user. Called from the
  * auth guards so every subsequent error, log, and breadcrumb in the request
- * carries who triggered it. Username (a game handle, not PII like email) is
- * included deliberately for triage; email is never set.
+ * carries an opaque account id for triage. Names and email are not set.
  */
 export function setUserContext(user: AttributableUser): void {
-  Sentry.setUser({ id: user.userId, username: user.username });
+  Sentry.setUser({ id: user.userId });
   Sentry.setTags({
     "user.role": user.role,
     "user.isAdmin": user.isAdmin === true,
