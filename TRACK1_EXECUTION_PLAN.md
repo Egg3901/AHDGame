@@ -44,6 +44,13 @@ note, not a declaration that reset readiness has passed.
   deliberately run only for `isEasternBlocEra(preset)`; preserve that Cold War
   guard and add a separate modern-country seed path for the selected five.
   This decision does not weaken #2289's zero-critical fresh-bootstrap gate.
+  The DE 2027 organization floor is already calibrated to its authored
+  geography (96 rows: 15 CDU, one Bavaria CSU, and five all-Land parties;
+  `readinessExpectations.ts`). The historical IE 24-row warning predates the
+  current five-party 2027 vote-share seed. Commit `8a1709776a` tests the
+  current filtered 2027 party roster against that seed and proves 40 rows
+  across all eight IE regions. A fresh exact-release bootstrap must still
+  confirm both counts in persisted collections.
 - For the 2027 electorate repair, the owner approved a temporary projection
   waiver on 2026-09-25 while the Census Bureau has not announced publication
   of the 2025 ACS 1-year detailed tables. Keep the January 2027 education and
