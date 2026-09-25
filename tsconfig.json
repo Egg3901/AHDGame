@@ -43,6 +43,7 @@
     "scripts/test-imports.ts",
     "scripts/restore-election-data.ts",
     "discord-bot",
-    ".worktrees"
+    ".worktrees",
+    "worktrees"
   ]
 }

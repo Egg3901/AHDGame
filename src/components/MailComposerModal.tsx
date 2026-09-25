@@ -152,6 +152,11 @@ export function MailComposerModal({ mode, onClose }: MailComposerModalProps) {
       }
 
       dispatch({ type: "SUBMIT_SUCCESS" });
+      if (mode.type === "mail") {
+        void import("@/lib/analytics/posthogClient")
+          .then(({ captureProductEvent }) => captureProductEvent("message_sent"))
+          .catch(() => {});
+      }
     } catch {
       dispatch({ type: "SUBMIT_ERROR", error: "Failed to send." });
     }

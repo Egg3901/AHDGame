@@ -6,6 +6,7 @@ public
 *.min.js
 package-lock.json
 .worktrees
+worktrees
 src/data/
 
 # Design handoff prototypes (Claude Design exports) — verbatim reference mocks,

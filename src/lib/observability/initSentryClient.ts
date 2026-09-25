@@ -24,6 +24,7 @@ export function initSentryClient(): typeof Sentry.captureRouterTransitionStart {
     // NEXT_PUBLIC_ var so the browser bundle can read it. Matches the uploaded
     // source-map artifacts so minified client stacks symbolicate.
     release: process.env.NEXT_PUBLIC_SENTRY_RELEASE,
+    environment: process.env.NEXT_PUBLIC_SENTRY_ENVIRONMENT,
 
     sendDefaultPii: false,
 
@@ -38,14 +39,8 @@ export function initSentryClient(): typeof Sentry.captureRouterTransitionStart {
       "POST /api/analytics/pageview",
     ],
 
-    // Structured logs shipped to GlitchTip's Logs view in every environment.
-    enableLogs: true,
-
-    integrations: [
-      // Route browser console.warn/console.error into GlitchTip Logs so client
-      // side console-only failures become queryable instead of vanishing.
-      Sentry.consoleLoggingIntegration({ levels: ["warn", "error"] }),
-    ],
+    // Enable logs only after SaaS volume and cost have been measured.
+    enableLogs: false,
 
     // Errors that originate entirely in browser extensions / injected third-party
     // scripts. These are never actionable from our code and were the bulk of the

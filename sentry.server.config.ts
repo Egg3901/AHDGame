@@ -19,6 +19,7 @@ Sentry.init({
   // Deploy identifier (full git SHA) injected via next.config.ts. Ties every
   // event to a specific build and matches uploaded source-map artifacts.
   release: process.env.SENTRY_RELEASE,
+  environment: process.env.RAILWAY_ENVIRONMENT_NAME || process.env.NODE_ENV,
 
   // Define how likely traces are sampled. Adjust this value in production, or use tracesSampler for greater control.
   tracesSampleRate: isProduction ? 0.02 : 1,
@@ -33,18 +34,9 @@ Sentry.init({
     "POST /api/analytics/pageview",
   ],
 
-  // Structured logs shipped to GlitchTip's Logs view in every environment.
-  // Self-hosted GlitchTip has no per-event billing, so production logs are
-  // safe to keep on and are essential for reconstructing "it just didn't work".
-  enableLogs: true,
-
-  integrations: [
-    // Mirror server-side console.warn/console.error into GlitchTip Logs. This
-    // captures the large body of existing console-only error handling without
-    // rewriting every call site, turning silent console output into a queryable
-    // forensic trail correlated with traces.
-    Sentry.consoleLoggingIntegration({ levels: ["warn", "error"] }),
-  ],
+  // SaaS logs are usage-billed. Keep errors and sampled traces as the initial
+  // signal, then enable logs only after a volume and cost review.
+  enableLogs: false,
 
   // Disable sending user PII (Personally Identifiable Information) to error tracking
   // https://docs.sentry.io/platforms/javascript/guides/nextjs/configuration/options/#sendDefaultPii

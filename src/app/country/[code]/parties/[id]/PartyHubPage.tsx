@@ -663,7 +663,11 @@ function NationalPartyHub({ scope }: { scope: Extract<PartyHubScope, { kind: "na
     }
   }, [id, party]);
 
-  const apiPost = async (url: string, body: object, onOk?: () => void) => {
+  const apiPost = async (
+    url: string,
+    body: object,
+    onOk?: (data: { pending?: boolean }) => void
+  ) => {
     setMsg("");
     try {
       const r = await fetch(url, {
@@ -675,7 +679,7 @@ function NationalPartyHub({ scope }: { scope: Extract<PartyHubScope, { kind: "na
       setMsg(r.ok ? `✓ ${d.message}` : `✗ ${d.error}`);
       if (r.ok) {
         fetchParty();
-        onOk?.();
+        onOk?.(d);
       }
     } catch {
       setMsg("✗ Network error");
@@ -696,7 +700,16 @@ function NationalPartyHub({ scope }: { scope: Extract<PartyHubScope, { kind: "na
 
   const handleJoin = async () => {
     setJoining(true);
-    await apiPost(`${partyApiUrl(requestedCountry?.toLowerCase() ?? "us", id)}/join`, {});
+    await apiPost(
+      `${partyApiUrl(requestedCountry?.toLowerCase() ?? "us", id)}/join`,
+      {},
+      (data) => {
+        if (data.pending) return;
+        void import("@/lib/analytics/posthogClient")
+          .then(({ captureProductEvent }) => captureProductEvent("party_joined"))
+          .catch(() => {});
+      }
+    );
     fetchUser();
     setJoining(false);
   };
