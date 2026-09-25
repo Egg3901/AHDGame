@@ -759,6 +759,16 @@ for the preceding pushed commit passed. The proposed sub-3 GB target is not
 met by this local probe; changing the 8 GB heap ceiling requires a completed
 diagnostic run and a narrower type-level cause.
 
+WP9 recovery inspection found that `turnPhaseRuntime.runPhase` places both
+completed and interrupted phases in the resume skip set. An interrupted
+`corporationTurn` therefore does not rerun tariff reconciliation during that
+turn's recovery. The ordered tariff bulk can leave a prefix of signed bills
+applied; the next scheduled turn replays all bills and repairs final rates and
+source ids because the writes set values. Downstream phases in the recovered
+turn can still observe partial tariffs. This is an explicit acceptance risk for
+the WP2 batching change and a reason to retain the phase's recovery gate until
+a fault-injection rehearsal proves the financial effects acceptable.
+
 The one-turn profiler has a local-only guard and cannot be run against
 production. A partial production copy is restored to a private localhost Mongo instance
 outside the repository for a profiling turn. It has 380 collections, 3.31 million

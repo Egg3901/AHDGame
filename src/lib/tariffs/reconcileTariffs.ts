@@ -68,6 +68,13 @@ async function ensureBaselineEconomyWideTariffs(db: Db, countryId?: CountryId): 
  * Non-economy scopes only update tariff documents, so they can share one
  * ordered bulk command. Economy-wide scopes still use applyTariffProvision to
  * heal the federal budget's headline rate when it is out of sync.
+ *
+ * A crash between ordered bulk operations can leave only an enactment-order
+ * prefix applied. Crash recovery skips the interrupted corporationTurn phase,
+ * so the next scheduled reconciliation repairs that partial state rather
+ * than the current turn's resume. Replaying signed bills sets final rates and
+ * source bills without double-applying them; the budget sync is also a value
+ * repair. Keep this recovery window in mind if this work moves between phases.
  */
 export async function reconcileSignedTariffBills(db: Db, countryId?: CountryId): Promise<void> {
   // Reset/bootstrap seeds the baseline tariff rate into federal budgets, but not all
