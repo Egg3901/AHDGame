@@ -162,9 +162,9 @@ describe("WatchlistPanel player search", () => {
     await waitFor(() => expect(fetchedTerms).toContain("alphab"));
 
     // Newer term resolves first, then the stale one lands late.
-    resolveBeta!({ ok: true, json: async () => ({ results: [betaHit] }) });
+    resolveBeta!({ ok: true, json: async () => ({ results: [betaHit] }) } as Response);
     await waitFor(() => expect(screen.getByText("Beta Hit")).toBeTruthy());
-    resolveAlpha!({ ok: true, json: async () => ({ results: [alphaHit] }) });
+    resolveAlpha!({ ok: true, json: async () => ({ results: [alphaHit] }) } as Response);
 
     // Flush the late resolution, then confirm it did not clobber the dropdown.
     await waitFor(() => expect(screen.getByText("Beta Hit")).toBeTruthy());
