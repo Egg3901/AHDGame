@@ -909,3 +909,12 @@ an active draft on `perf/dead-weight-next` with WP3/WP7 measurements and CI
 still in progress; its `dead-weight-plan` checkout is dirty. Its final
 merge-or-delete decision requires the owner session to finish its source and
 checks, and Track 1 must then incorporate or discard it before final PR.
+
+**AHDGame `track3-edge-auth-review`: DISCARD uncommitted superseded patch,
+2026-09-25.** The branch commit is already an ancestor of development. Its
+nine dirty source files are the pre-merge #2387 hardening draft: seven are
+byte-identical to merged commit `6360845ec3`; the remaining CDN route and
+test lack the merged version's catch for a stream failure after headers and
+its regression. The merged version is strictly stronger. Decision: discard
+the nine old working copies, verify clean status, and remove the unlocked
+worktree normally. No unpublished fix or patch-unique branch commit is lost.
