@@ -1059,3 +1059,19 @@ The three untracked `muse*.log` files are local provider transcripts, not
 source or game evidence; discard them by exact path. Never force-remove the
 checkout. After a fresh clean, unlocked, process-free check, remove it
 normally while retaining its branch ref for provenance.
+
+**AHDGame PR #2381: MERGED, 2026-09-25 07:22 UTC.** The final clean
+`perf/dead-weight-next` head `768d5dd478` targeted `development`, was
+mergeable, and passed lint, format, typecheck, all four test shards, build,
+custom Semgrep, dependency review, CodeQL, and the title gate. Its scoped
+turn work batches tariff reconciliation, corporation vote reminders, and NPP
+finance candidate reads; projects share-order and sovereign reads; and adds
+recurring snapshot indexes. The PR records matched local before/after
+command/document/byte measurements and unchanged result digests, with the
+partial-world and production-latency limitations made explicit. Squash merge
+`1919657c625cf5582034f3506357dedfda8e7fe9` is on `development`.
+The `dead-weight-plan` source checkout is clean and unlocked in the latest
+read-only check; the Track 1 branch must incorporate the squash before this
+checkout can be normally removed. Its remaining source branch ref may be
+retained for provenance. This is a merge disposition for the PR, while the
+checkout removal is still pending its final process/clean-state recheck.

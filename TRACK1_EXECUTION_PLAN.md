@@ -368,11 +368,12 @@ upstream #45 and #122 both merged after their exact-head gates. Ops #137 and
 #168 merged; #167 closed as superseded. See the inventory
 for each decision and the current open PRs.
 
-**Upstream refresh pending, 2026-09-25:** Remote `origin/development` is now
-`346f0cdde97ee3e237d78fa1f153da7038a14b6a` after merged PRs #2391,
-#2380, #2388, and #2392. Track 1 still contains `6360845e` as its latest
-incorporated ancestor because the Muse Spark 1.3 #1672 share-recovery slice is
-editing this worktree. Merge the new development head after that slice is
-committed and reviewed; then update the exact incorporated SHA above. The
-original fresh base remains `028cb9265e`. Rerun all affected gates after the
-merge from that exact SHA.
+**Upstream refresh pending, 2026-09-25 07:22 UTC:** Track 1 already
+incorporated `346f0cdde97ee3e237d78fa1f153da7038a14b6a` through merge
+`90b3bf85c7e871dfe5093625b6febc4daae42601`. PR #2381 has since merged
+to `development` as `1919657c625cf5582034f3506357dedfda8e7fe9`.
+The five-commit production fund-performance backport is under way in the
+Track 1 worktree; merge this new development head after those source commits
+are durable, then update the exact incorporated SHA near the top. The
+original fresh base remains `028cb9265e`. Rerun affected gates after that
+merge from the new exact SHA.
