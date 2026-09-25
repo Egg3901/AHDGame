@@ -62,6 +62,24 @@ const payload = {
       lendableHeadroom: 900_000,
       href: "/corporation/17?tab=bank",
     },
+    {
+      corporationId: "bank-2",
+      sequentialId: 23,
+      name: "Meridian Mutual",
+      countryId: "UK",
+      countryName: "United Kingdom",
+      currency: "GBP",
+      operatorType: "npp",
+      charterType: "retail",
+      depositRatePercent: 4.0,
+      lendingRatePercent: 6.0,
+      warningBand: "amber",
+      confidence: 0.55,
+      totalDeposits: 800_000,
+      cashReserves: 200_000,
+      lendableHeadroom: 300_000,
+      href: "/corporation/23?tab=bank",
+    },
   ],
   savings: [
     {
@@ -74,7 +92,9 @@ const payload = {
       ],
     },
   ],
+  savingsBalances: { USD: 125_000 },
   personalCash: { USD: 40_000 },
+  displayFxRates: { USD: 1 },
   personalIncomeByCurrency: { USD: 50_000 },
   currentTurn: 115,
   ceoCorporations: [
@@ -146,24 +166,20 @@ describe("BankingHubClient", () => {
     expect(screen.getByRole("heading", { name: "Your accounts" })).toBeTruthy();
   });
 
-  it("uses tabs for the policy, commercial banking, and account hierarchy", async () => {
+  it("uses tabs for the commercial banking, policy, and account hierarchy", async () => {
     render(<BankingHubClient />);
 
     await waitFor(() =>
       expect(screen.getByRole("heading", { name: "Banking & Credit" })).toBeTruthy()
     );
 
-    expect(screen.getByRole("tab", { name: /Central banks/ }).getAttribute("aria-selected")).toBe(
+    expect(screen.getByRole("tab", { name: /Private banks/ }).getAttribute("aria-selected")).toBe(
       "true"
     );
-    expect(screen.getByRole("heading", { name: "Central banks" })).toBeTruthy();
-    expect(screen.getAllByTestId("country-flag-US").length).toBeGreaterThan(0);
-    expect(screen.queryByRole("heading", { name: "Private banks" })).toBeNull();
-
-    fireEvent.click(screen.getByRole("tab", { name: /Private banks/ }));
     expect(screen.getByRole("heading", { name: "Private banks" })).toBeTruthy();
     expect(screen.getByText("Continental Trust")).toBeTruthy();
     expect(screen.getByText("Player-run")).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: "Central banks" })).toBeNull();
     expect(
       screen
         .getByRole("link", { name: "Deposit savings at Continental Trust" })
@@ -174,6 +190,19 @@ describe("BankingHubClient", () => {
         .getByRole("link", { name: "Apply for a loan at Continental Trust" })
         .getAttribute("href")
     ).toBe("/corporation/17?tab=bank#customer-loan");
+
+    // Hero: account balances plus the link to the player's central bank.
+    expect(screen.getByText("Liquid funds")).toBeTruthy();
+    expect(screen.getAllByText(/40,000/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/125,000/).length).toBeGreaterThan(0);
+    const primaryLink = screen.getByRole("link", { name: /Open policy desk/ });
+    expect(primaryLink.getAttribute("href")).toBe("/centralbank/usd");
+
+    fireEvent.click(screen.getByRole("tab", { name: /Central banks/ }));
+    expect(screen.getByRole("heading", { name: "Central banks" })).toBeTruthy();
+    expect(screen.getByText("Bank of England")).toBeTruthy();
+    expect(screen.getAllByTestId("country-flag-US").length).toBeGreaterThan(0);
+    expect(screen.queryByRole("heading", { name: "Private banks" })).toBeNull();
 
     fireEvent.click(screen.getByRole("tab", { name: "Your accounts" }));
     expect(screen.getByRole("heading", { name: "Your accounts" })).toBeTruthy();
@@ -186,9 +215,35 @@ describe("BankingHubClient", () => {
     expect(screen.getByRole("heading", { name: "Arrange private-bank credit" })).toBeTruthy();
     expect(screen.getByText(/Private-bank maximum/)).toBeTruthy();
     expect(screen.getByText(/separate from bond issuance capacity/i)).toBeTruthy();
+  });
 
-    const primaryLink = screen.getByRole("link", { name: /Open policy desk/ });
-    expect(primaryLink.getAttribute("href")).toBe("/centralbank/usd");
+  it("sorts the private-bank table by savings APY, loan rate, and health", async () => {
+    render(<BankingHubClient />);
+    await waitFor(() => expect(screen.getByText("Meridian Mutual")).toBeTruthy());
+
+    const bankRows = () =>
+      screen
+        .getAllByRole("row")
+        .filter((row) => row.textContent?.includes("Mutual") || row.textContent?.includes("Trust"));
+
+    // Default sort: savings APY descending puts Meridian (4.00%) on top.
+    expect(bankRows()[0].textContent).toContain("Meridian Mutual");
+
+    // Estimated personal rate renders next to the posted base rate.
+    expect(screen.getAllByText(/Est\. yours/).length).toBe(2);
+    expect(screen.getByText(/Est\. yours 9\.00%/)).toBeTruthy();
+
+    // Health column shows the published score.
+    expect(screen.getByText("91")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: /Savings APY/ }));
+    expect(bankRows()[0].textContent).toContain("Continental Trust");
+
+    fireEvent.click(screen.getByRole("button", { name: /Loan rate/ }));
+    expect(bankRows()[0].textContent).toContain("Meridian Mutual");
+
+    fireEvent.click(screen.getByRole("button", { name: /Health/ }));
+    expect(bankRows()[0].textContent).toContain("Continental Trust");
   });
 
   it("lets a player withdraw from savings held at a private bank", async () => {
