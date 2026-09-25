@@ -267,12 +267,19 @@ function buildAuditEnvelope(doc: FinancialTxLogEntry): ActionAuditInput {
 }
 
 // Fire-and-forget single emission. Failures are sent to Sentry, never thrown.
+// Accepts a caller-supplied `_id` so keyed flows (issue #1672) can re-insert
+// the same row convergently after a crash: a duplicate `_id` means the row
+// already landed, so the shadow ledger and audit spine (which fired on the
+// first apply) are skipped and `already-applied` is reported.
+/** Convergent-insert outcome for one ledger audit row (issue #1672). */
+export type EmitTxOutcome = "applied" | "already-applied" | "failed";
+
 export async function emitTx(
   db: Db,
   entry: TxInput,
   thresholds?: TxThresholds,
-  turnLengthMinutes?: number
-): Promise<void> {
+  options?: { _id?: ObjectId; turnLengthMinutes?: number }
+): Promise<EmitTxOutcome> {
   try {
     const resolvedThresholds = thresholds ?? (await loadTxThresholds(db));
     const ratesByCurrency = await loadAnchorRateMap(db, [entry]);
@@ -280,19 +287,26 @@ export async function emitTx(
     const flags = evaluateTier1Flags(entryWithAnchor, resolvedThresholds);
     const doc: FinancialTxLogEntry = {
       ...entryWithAnchor,
-      _id: new ObjectId(),
+      _id: options?._id ?? new ObjectId(),
       expiresAt:
-        turnLengthMinutes === undefined
+        options?.turnLengthMinutes === undefined
           ? await computeExpiresAt(db, entryWithAnchor.createdAt)
-          : computeExpiresAtSync(entryWithAnchor.createdAt, turnLengthMinutes),
+          : computeExpiresAtSync(entryWithAnchor.createdAt, options.turnLengthMinutes),
       suspectFlags: flags.length > 0 ? flags : undefined,
       flagged: flags.length > 0,
     };
-    await db.collection<FinancialTxLogEntry>("financialTxLog").insertOne(doc);
+    try {
+      await db.collection<FinancialTxLogEntry>("financialTxLog").insertOne(doc);
+    } catch (insertErr) {
+      if (isDuplicateKeyError(insertErr)) return "already-applied";
+      throw insertErr;
+    }
     await shadowLedgerFromTx(db, [doc]);
     recordAudit(buildAuditEnvelope(doc));
+    return "applied";
   } catch (err) {
     Sentry.captureException(err, { extra: { phase: "emitTx", type: entry.type } });
+    return "failed";
   }
 }
 
