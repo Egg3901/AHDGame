@@ -639,6 +639,10 @@ not establish that those routes are unused. No route was removed. Retirement
 stays gated on fixing and tracing its root cause, confirming live use, and
 preserving the repair history.
 
+The partial copy's `apiAccessLog` contains 146,580 rows and no heal-route
+paths. That log is wired through authenticated public/API middleware, not the
+admin heal handlers, so its absence is also not evidence of non-use.
+
 WP6 now projects only `turnLengthMinutes` for transaction expiry reads. On the
 local copy, the full `gameConfig` document is 10,572 BSON bytes and the
 projected result is 45 bytes. This changes bytes returned per read, not the
@@ -802,6 +806,18 @@ No new TTL or deletion is justified by this inventory. The liquidity-facility
 snapshot's migration-created unique turn index is now also in the recurring
 fund index seed; an empty local reset-world seed recreated it with the same
 name, key, and uniqueness.
+
+The local partial copy shows three bounded latest-state snapshots: 20 stock
+exchange documents (one per exchange key), one investor-ranking document
+(`_id: "global"`), and nine wealth-list documents (one per active exchange
+key). Their writers upsert stable `_id` values, so they do not need TTLs.
+`wealthListHistory` carries the separate 72-turn downsampling policy. Keep
+money-supply, primary-election, trade-flow, federal-budget, election-result,
+and balance snapshots because current readers use them as history or ledger
+inputs. Keep game-health snapshots on the existing 30-day TTL and index-fund
+snapshots on their 72-turn archive/downsample policy. `equityLiquidityFacilitySnapshots`
+has a per-turn writer but no in-repo reader; retain it until its external or
+operational consumer and restore contract are known.
 
 The public budget-history query filtered by `countryId` and sorted descending
 by `turn`. The partial local copy had 577 `federalBudgetSnapshots` rows and
