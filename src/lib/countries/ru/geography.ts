@@ -4,6 +4,7 @@ import { ruRegionCensusData } from "./data/ruRegionCensusData";
 import { ruRegionCensusData1953 } from "./data/ruRegionCensusData1953";
 import { ruRegions } from "./data/ruRegions";
 import { ruRegions1953 } from "./data/ruRegions1953";
+import { ruRegions2027 } from "./data/ruRegions2027";
 import { ruStateMetrics } from "./data/ruStateMetrics";
 import {
   RU_ADJACENCY_MAP,
@@ -29,8 +30,9 @@ import {
  * early revision of Japan's geography generated copies from the snapshot; deep
  * equality passed and Japan had two sources for every region.
  *
- * ⚠ THE PRESET KEYS COME FROM THE SNAPSHOT. Russia authors 2 census
- * eras, 1 metric eras, 0 anchor eras and 3 region eras. The gaps are real:
+ * ⚠ THE PRESET KEYS COME FROM THE SNAPSHOT, plus the authored 2027
+ * Russian Federation substrate. Russia authors 2 census
+ * eras, 1 metric eras, 0 anchor eras and 4 region eras. The gaps are real:
  * an unauthored era inherits, and inventing a key for it would turn a fallback
  * into an authored value.
  */
@@ -54,6 +56,7 @@ const regionBundles = {
   "1953-default": ruRegions1953,
   "1979-default": ruRegions,
   "2019-default": ruRegions,
+  "2027-default": ruRegions2027,
 };
 
 export const RU_GEOGRAPHY: CountryGeography = {
