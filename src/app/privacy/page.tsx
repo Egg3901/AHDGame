@@ -90,17 +90,6 @@ export default function PrivacyPolicyPage() {
                 </p>
               </div>
               <div>
-                <p className="font-semibold text-foreground mb-1">Optional session replay</p>
-                <p>
-                  If you accept non-essential cookies, we may record a sample of interactions with
-                  the game to diagnose confusing flows and technical failures. Form values are
-                  hidden, network request and response bodies are not captured, email addresses in
-                  page text are obscured, and accounts are identified only by an internal opaque
-                  identifier. Replay data is stored on infrastructure operated by Lakeside Games and
-                  is available only to administrators.
-                </p>
-              </div>
-              <div>
                 <p className="font-semibold text-foreground mb-1">Error data</p>
                 <p>
                   Sentry collects error reports when something goes wrong, including browser
