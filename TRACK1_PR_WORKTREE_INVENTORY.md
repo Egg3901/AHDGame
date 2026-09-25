@@ -484,5 +484,26 @@ profiling process currently has its cwd there, so it remains protected until
 that process exits. Track 1 must rebase and reconcile the fund code overlap.
 This PR starts the audited workstream; it does not complete all packages.
 
+**Ops PR #122: CLOSED as superseded; checkout DELETED normally,
+2026-09-25.** Ops `main` now binds the latest AHDClient release dynamically
+and tests the 2.0.5 asset shape. It already handles `.gz` and `.sig` MIME
+types. Reapplying the old PR would restore a stale hard-coded 2.0.5 page.
+The clean `ahdclient-2.0.5-portal` checkout had no process in it and was
+removed with ordinary `git worktree remove`. Its unique local branch ref is
+preserved as provenance; no force deletion was used. The PR received a
+written reason before closure and its remote branch was deleted.
+
+**Ops PR #137: REBASED and verified locally, still OPEN.** The source-pin
+feature remains needed for the exact-SHA #2159 campaign. Its clean worktree
+was rebased onto current Ops `main`; the one source conflict preserved both
+the existing experiment-report response and new pin validator. The zod
+commit became empty because `main` already declares it. Focused worldsim
+source/mode tests passed 13/13, Ops unit tests passed 14/14, syntax and diff
+checks passed. The refreshed remote PR changes three MCP files. Full
+`npm test` is queued as `20260925T012554Z-1021d2c9`. GitHub test and
+analysis jobs failed in two seconds with no steps, matching the repo's
+Actions billing/spending gate; Semgrep is pending. It cannot be merged under
+the Ops contributor CI rule until required checks actually run and pass.
+
 The remaining rows above require final decisions and execution; this document
 does not mark them complete.
