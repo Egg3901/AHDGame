@@ -79,6 +79,44 @@ describe("isClearingBookBreach — clean intervals stay silent", () => {
   });
 });
 
+describe("turn-0 commodity price placeholders", () => {
+  const baseline = {
+    sectors: [
+      {
+        sectorId: "new-healthcare-plant",
+        revenue: 3_255_000,
+        supplyRates: { healthcare_services: 1 },
+        posture: 0,
+        producedUnits: 3_255,
+      },
+    ],
+    balances: bals([["healthcare_services", { supply: 0, demand: 0 }]]),
+    priceRatioByCommodity: priceRatios([["healthcare_services", 1]]),
+    basePrices: COMMODITY_BASE_PRICES,
+    plantsEnabled: true,
+  } as const;
+
+  it("does not compare a new producer with the reset's zero placeholder", () => {
+    const seen: ClearingBookDiagnostic[] = [];
+    computeClearingFactors({
+      ...baseline,
+      initializedLaggedBooks: new Set<CommodityType>(),
+      onBookDiagnostic: (diagnostic) => seen.push(diagnostic),
+    });
+    expect(seen[0]?.invariantBreach).toBe(false);
+  });
+
+  it("still reports the same gap after a market turn established the ledger", () => {
+    const seen: ClearingBookDiagnostic[] = [];
+    computeClearingFactors({
+      ...baseline,
+      initializedLaggedBooks: new Set<CommodityType>(["healthcare_services"]),
+      onBookDiagnostic: (diagnostic) => seen.push(diagnostic),
+    });
+    expect(seen[0]?.invariantBreach).toBe(true);
+  });
+});
+
 describe("describeClearingBookBreach", () => {
   it("is deterministic, so replays cannot duplicate or drop the warning", () => {
     const d = diagnostic("ordnance", "FR", 514, 0.15, 514);

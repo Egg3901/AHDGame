@@ -29,6 +29,7 @@ import { GR_ECONOMY } from "@/lib/countries/gr/economy";
 import { AT_ECONOMY } from "@/lib/countries/at/economy";
 import { FI_ECONOMY } from "@/lib/countries/fi/economy";
 import { PL_ECONOMY } from "@/lib/countries/pl/economy";
+import { PL_JANUARY_1991_PLZ_PER_USD } from "@/lib/countries/pl/data/plFiscal1991";
 import { HU_ECONOMY } from "@/lib/countries/hu/economy";
 import { RO_ECONOMY } from "@/lib/countries/ro/economy";
 import { YU_ECONOMY } from "@/lib/countries/yu/economy";
@@ -434,6 +435,31 @@ export const INITIAL_RATES_1991: Partial<Record<CountryId, number>> = {
   BR: 5.0, // placeholder — cruzeiro hyperinflation makes 1991 rate meaningless
   CN: 5.32, // CNY/USD official 1991 rate
   NG: 9.9, // NGN/USD official 1991 rate (pre-SAP devaluations)
+  PL: PL_JANUARY_1991_PLZ_PER_USD, // January 1991 fixed rate in old złoty
+  // WDI PA.NUS.FCRF, Hungary 1991, official HUF per USD annual average:
+  // https://api.worldbank.org/v2/country/HUN/indicator/PA.NUS.FCRF?date=1991&format=json
+  HU: 74.7353833333333,
+  // CNB historical fixing: 1991 January average, Kčs per USD. The
+  // Czechoslovak currency union continued until February 1993.
+  // https://www.cnb.cz/en/financial-markets/foreign-exchange-market/central-bank-exchange-rate-fixing/central-bank-exchange-rate-fixing/currency_average.html?currency=USD
+  CS: 27.647,
+  // National Bank of Romania authority series: 34.7 old lei per USD at
+  // end-1990, the observed rate immediately before the January 1991 start.
+  // The 1991 annual average (76.39) includes later devaluations and would
+  // misstate the starting rate.
+  // https://www.imf.org/external/pubs/ft/scr/2004/cr04220.pdf (Table 33)
+  RO: 34.7,
+  // The Bulgarian National Bank's first published unified interbank USD
+  // fixing is 28.25 old lev per USD on 19 February 1991. January has no
+  // comparable market fixing, so this is the earliest observable 1991 rate.
+  // https://www.bnb.bg/Statistics/StExternalSector/StExchangeRates/StERForeignCurrencies/index.htm?downloadOper=&group1=second&periodEndDays=01&periodEndMonths=04&periodEndYear=1991&periodStartDays=01&periodStartMonths=01&periodStartYear=1991&search=true&showChart=false&showChartButton=true&valutes=USD
+  BG: 28.25,
+  // IMF reports the 1 January 1991 dinar devaluation from 7 to 9 YUD/DEM.
+  // The Federal Reserve quotes 1 USD = 1.5075 DEM on the first January
+  // trading day; the cross is therefore 13.5675 new dinars per USD.
+  // https://www.elibrary.imf.org/view/book/9781451940589/ch002.xml
+  // https://www.federalreserve.gov/releases/h10/Hist/dat96_ge.htm
+  YU: 9 * 1.5075,
   // 1979-only-modeled countries — placeholders to satisfy forex invariants (not
   // enabled in 1991); mirror the 1979 rate.
   RU: 2.22,

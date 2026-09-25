@@ -36,12 +36,13 @@ export function completedTurnProgress(
     SandboxProgress,
     "currentTurn" | "lastMessage" | "lastWarnings" | "health" | "progressUpdatedAt" | "updatedAt"
   >
-> {
+> &
+  Pick<SandboxProgress, "health"> {
   return {
     currentTurn,
     lastMessage: result.message,
     lastWarnings: result.warnings,
-    health: result.health ?? null,
+    ...(result.health ? { health: result.health } : {}),
     progressUpdatedAt,
     updatedAt: progressUpdatedAt,
   };
@@ -79,7 +80,7 @@ export function buildStatusMirrorUpdate(
     sandbox.currentTurn !== job.currentTurn ||
     sandbox.lastMessage !== job.lastMessage ||
     !warningsEqual(sandbox.lastWarnings, job.lastWarnings) ||
-    !healthEqual(sandbox.health, job.health);
+    (sandbox.health != null && !healthEqual(sandbox.health, job.health));
   if (!changed) return heartbeat;
 
   const progressUpdatedAt = sandbox.progressUpdatedAt ?? sandbox.updatedAt ?? workerHeartbeatAt;
@@ -87,7 +88,7 @@ export function buildStatusMirrorUpdate(
     currentTurn: sandbox.currentTurn,
     lastMessage: sandbox.lastMessage,
     lastWarnings: sandbox.lastWarnings,
-    health: sandbox.health ?? null,
+    ...(sandbox.health != null ? { health: sandbox.health } : {}),
     progressUpdatedAt,
     updatedAt: progressUpdatedAt,
     ...heartbeat,

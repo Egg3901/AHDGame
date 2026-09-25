@@ -1114,6 +1114,7 @@ export type EraCountryConfigOverride = Partial<
     | "regionLabel"
     | "regionLabelPlural"
     | "rulingPartyId"
+    | "headOfStateSelection"
     | "majorPartyIds"
     | "usdExchangeRate"
     | "onePartyRegionalBudget"
@@ -1228,6 +1229,7 @@ export const ERA_COUNTRY_CONFIG_OVERRIDES: Record<
     DE: DE_ERAS["1991-default"]?.config,
     IE: IE_ERAS["1991-default"]?.config,
     CN: CN_ERAS["1991-default"]?.config,
+    PL: PL_ERAS["1991-default"]?.config,
   },
   "1953-default": {
     US: US_ERAS["1953-default"]?.config,

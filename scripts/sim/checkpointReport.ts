@@ -32,6 +32,7 @@ import {
 import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
 import { getWorldEntityPresetManifest } from "@/lib/world/worldEntityManifest";
+import { aggregateGameHealth, gameHealthRunSummary } from "@/lib/turn/rules/gameHealth";
 import { readFileSync, writeFileSync } from "node:fs";
 
 // ── Country grouping ────────────────────────────────────────────────────────
@@ -212,7 +213,7 @@ async function main(): Promise<void> {
       const countryId = String(b.countryId ?? "");
       return {
         countryId,
-        currency: currencyFor(countryId),
+        currency: String(b.currencyCode ?? currencyFor(countryId)),
         gdp,
         revenue: rev,
         spending: spend,
@@ -2856,7 +2857,7 @@ function render() {
 
   // Headline tiles
   html += '<div class="tiles">'
-    + tile(h.errors===0?"good":"bad", h.errors, "engine errors", h.phases+" phases/turn")
+    + tile(h.qualification==="passing"?"good":h.qualification==="unverified"?"warn":"bad", h.errors, "health errors", h.phases+" phases/turn")
     + tile("", (h.medianTurnMs/1000).toFixed(1)+"s", "median turn", h.turn+" turns processed")
     + tile(m.trips===0?"good":"bad", m.mode, "market mode", m.guardEnabled?"guard armed":"guard disarmed")
     + tile(m.trips===0?"good":"bad", m.trips, "guard trips", m.trips?("reverted by "+esc(m.updatedBy)):"capital tier held")

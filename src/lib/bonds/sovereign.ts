@@ -47,7 +47,7 @@ import {
   getSovereignConfidencePremium,
 } from "@/lib/budget/debt";
 import { resolveCountryCurrencyCode } from "@/lib/currency/govBudgetFields";
-import { COUNTRY_CURRENCY_MAP, type CurrencyCode } from "@/lib/constants/currencies";
+import type { CurrencyCode } from "@/lib/constants/currencies";
 import { sovereignCredibilitySpread } from "@/lib/centralBank/marketEffects";
 import {
   debitPoolForPrimary,
@@ -253,6 +253,7 @@ export function applySovereignDebtAdjustment(
 
 function buildSovereignBondDoc(params: {
   countryId: CountryId;
+  currencyCode: CurrencyCode;
   turn: number;
   now: Date;
   issueAmount: number;
@@ -347,6 +348,7 @@ async function issueSovereignBondSeries(
 
   const { bondDoc, annualCouponCost } = buildSovereignBondDoc({
     countryId,
+    currencyCode: resolveCountryCurrencyCode(budget) ?? "USD",
     turn,
     now,
     issueAmount: normalizedIssueAmount,
@@ -579,6 +581,7 @@ export async function issueScheduledSovereignBondSeries(
 
       const { bondDoc } = buildSovereignBondDoc({
         countryId,
+        currencyCode: poolCurrency,
         turn,
         now,
         issueAmount: trancheAmount,

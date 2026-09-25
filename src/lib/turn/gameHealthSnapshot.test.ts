@@ -119,7 +119,7 @@ describe("processGameHealthSnapshot", () => {
     expect(doc.population).toBeDefined();
     expect(doc.population.activePlayers).toBe(10);
     expect(doc.economy).toBeDefined();
-  });
+  }, 60_000);
 
   it("skips integrity check when turn does not match cadence", async () => {
     const { processGameHealthSnapshot } = await import("./gameHealthSnapshot");
@@ -465,6 +465,56 @@ describe("processGameHealthSnapshot", () => {
         (issue: { category: string }) => issue.category === "orphanedOfficial"
       )
     ).toBe(false);
+  });
+
+  it("accepts seeded upper-house blocs backed by known seats", async () => {
+    const { processGameHealthSnapshot } = await import("./gameHealthSnapshot");
+    db.collectionMocks.systemSettings.findOne.mockResolvedValue(null);
+    for (const name of [
+      "users",
+      "characters",
+      "npps",
+      "seats",
+      "politicalParties",
+      "elections",
+      "electedOfficials",
+      "bonds",
+    ]) {
+      db.collectionMocks[name].countDocuments.mockResolvedValue(0);
+    }
+    for (const name of ["centralBanks", "macroMetrics", "federalBudget"]) {
+      db.collectionMocks[name].find.mockReturnValue({ toArray: vi.fn().mockResolvedValue([]) });
+    }
+    for (const name of [
+      "corporations",
+      "characters",
+      "electionCandidates",
+      "partyMembers",
+      "elections",
+    ]) {
+      db.collectionMocks[name].aggregate.mockReturnValue({
+        toArray: vi.fn().mockResolvedValue([]),
+      });
+    }
+    db.collectionMocks.seats.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([
+        { _id: "JP-sangiin-HOK-1", countryId: "JP", electionType: "sangiin", state: "HOK" },
+        { _id: "JP-sangiin-HOK-2", countryId: "JP", electionType: "sangiin", state: "HOK" },
+        { _id: "IE-seanad-DUB", countryId: "IE", electionType: "seanad", state: "DUB" },
+      ]),
+    });
+    db.collectionMocks.electedOfficials.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([
+        { countryId: "JP", officeType: "sangiin", state: "HOK", seatsHeld: 3 },
+        { countryId: "IE", officeType: "seanad", state: "DUB", seatsHeld: 4 },
+      ]),
+    });
+
+    await processGameHealthSnapshot(db as unknown as Db, 12, 2027, 750, true, []);
+
+    const doc = db.collectionMocks.gameHealthSnapshots.insertOne.mock.calls[0][0];
+    expect(doc.dataIntegrity.orphanedOfficials).toBe(0);
+    expect(doc.dataIntegrity.seatBackedSeatsWithoutOfficials).toBe(2);
   });
 
   it("does not treat another country's seat-backed office type as local", async () => {

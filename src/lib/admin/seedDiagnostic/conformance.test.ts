@@ -140,6 +140,27 @@ describe("wouldSilentlyFallback", () => {
 });
 
 describe("era-derived expectations", () => {
+  it("uses worldsim bootstrap clock and maintenance expectations", async () => {
+    const { db } = makeDb({
+      gameState: { preset: "2027-default", startingYear: 2027, currentYear: 2027, currentTurn: 1 },
+      gameConfig: { maintenanceMode: "off" },
+    });
+    const { checks } = await runConformanceChecks(db, {
+      preset: "2027-default",
+      trigger: "worldsim-post-bootstrap",
+    });
+    expect(checks.find((check) => check.id === "gameState.iteration")?.severity).toBe("ok");
+    expect(checks.find((check) => check.id === "config.maintenanceMode")?.severity).toBe("ok");
+  });
+
+  it("checks authored forex fallback rates only for seeded countries", async () => {
+    const { db } = makeDb({});
+    const { checks } = await runConformanceChecks(db, { preset: "2027-default" });
+    expect(checks.some((check) => check.id === "forex.HU.eraRate")).toBe(false);
+    expect(checks.some((check) => check.id === "forex.PL.eraRate")).toBe(false);
+    expect(checks.some((check) => check.id === "forex.YU.eraRate")).toBe(false);
+  });
+
   it("excludes latent BLR/BAL from 1953 seeded countries and budgets", () => {
     const seeded = seededCountryIdsForPreset("1953-default");
     expect(seeded).not.toContain("BLR");
@@ -307,6 +328,27 @@ describe("runConformanceChecks", () => {
     const { checks } = await runConformanceChecks(db, { preset: "1991-default" });
     expect(checks.find((c) => c.id === "gameState.currentTurn")?.severity).toBe("ok");
     expect(checks.find((c) => c.id === "gameState.currentYear")?.severity).toBe("ok");
+  });
+
+  it("requires an authored fiscal baseline for every active 1991 country", async () => {
+    const { db } = makeDb({
+      gameState: {
+        _id: "current",
+        preset: "1991-default",
+        startingYear: 1991,
+        currentTurn: 1,
+        currentYear: 1991,
+      },
+    });
+    const { checks } = await runConformanceChecks(db, { preset: "1991-default" });
+    expect(
+      checks
+        .filter((check) => check.id.endsWith(".authored1991"))
+        .map((check) => check.id)
+        .sort()
+    ).toEqual(
+      ["BG", "CS", "HU", "PL", "RO", "RU", "YU"].map((id) => `budget.${id}.authored1991`).sort()
+    );
   });
 
   it("flags wrong GDP on a national budget as critical", async () => {

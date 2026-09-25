@@ -897,6 +897,25 @@ describe("issueScheduledSovereignBondSeries", () => {
     expect(byMaturity[240].couponRate).toBe(5.75); // +0.75pp
   });
 
+  it("denominates later Irish sovereign issues in the budget's EUR", async () => {
+    const budget = makeBudget({
+      _id: "IE",
+      countryId: "IE",
+      currencyCode: "EUR",
+    });
+    const { db } = setupScheduledMocks({ budget });
+    await issueScheduledSovereignBondSeries(db as unknown as Db, TURN, new Date());
+
+    const bondDocs = db.collectionMocks["bonds"]!.insertMany.mock.calls[0][0] as Omit<
+      Bond,
+      "_id"
+    >[];
+    expect(bondDocs.length).toBeGreaterThan(0);
+    expect(bondDocs.every((bond) => bond.countryId === "IE" && bond.currencyCode === "EUR")).toBe(
+      true
+    );
+  });
+
   it("skips issuance when a non-reconcile sovereign bond already exists for this turn (dedup)", async () => {
     const { db } = setupScheduledMocks({
       existingBondThisTurn: {

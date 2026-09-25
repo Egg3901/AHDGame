@@ -131,6 +131,8 @@ export interface CorporationLookups {
   costOfLivingByState: Map<string, number>;
   // Commodity supply/demand data for margin calculation
   globalCommodityBalances: Map<CommodityType, { supply: number; demand: number }>;
+  /** Price rows that contain a prior turn's real supply ledger (turn > 0). */
+  initializedLaggedBooks?: ReadonlySet<CommodityType>;
   /**
    * Lagged state delivery availability from active freight settlement.  Only
    * physical commodities with a resolved route are present; all others retain

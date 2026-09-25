@@ -544,6 +544,28 @@ export async function seedAllCountryData(
 
   for (const buffer of packBuffers) for (const line of buffer) log(line);
 
+  const { seedSuccessorRegions1991 } = await import("./seed/seedSuccessorRegions1991");
+  await seedSuccessorRegions1991(db, resetReference, preset, log);
+
+  const { seedSuccessorMetrics1991 } = await import("./seed/seedSuccessorMetrics1991");
+  await seedSuccessorMetrics1991(db, resetReference, preset, log);
+
+  const { seedSuccessorDemographics1991 } = await import("./seed/seedSuccessorDemographics1991");
+  await seedSuccessorDemographics1991(db, resetReference, preset, log);
+
+  const { seedSuccessorParties1991 } = await import("./seed/seedSuccessorParties1991");
+  await seedSuccessorParties1991(db, preset, log);
+
+  const { seedSuccessorStatePartyOrg1991 } = await import("./seed/seedSuccessorStatePartyOrg1991");
+  await seedSuccessorStatePartyOrg1991(db, resetReference, preset, log);
+
+  const { ensureDemographicBaselines } = await import("./seed/ensureDemographicBaselines");
+  await ensureDemographicBaselines(db, log);
+
+  const { reconcileModernRegionPopulation } =
+    await import("./seed/reconcileModernRegionPopulation");
+  await reconcileModernRegionPopulation(db, preset, log);
+
   // Stand up the per-region age/sex cohort vectors (the demographic SSOT the turn
   // engine evolves) and stamp turn-0 derived population metrics (sexRatio /
   // dependencyRatio / realizedMigrationRate), now that every country's states and
@@ -660,6 +682,11 @@ export async function bootstrapGameWorld(options: BootstrapOptions) {
       );
     }
   }
+
+  const { seedSuccessorBudgets1991 } = await import("./seed/seedSuccessorBudgets1991");
+  await guarded("seedSuccessorBudgets1991", () =>
+    seedSuccessorBudgets1991(db, resetReference, preset, log)
+  );
 
   // Every command-economy seeder above reads `commandEconomyEnabled` itself and
   // falls back to the legacy single-corp shape via a silent `return` or an empty
@@ -784,6 +811,14 @@ export async function bootstrapGameWorld(options: BootstrapOptions) {
           ? ` (${r.excludedMissingState.map((e) => `${e.countryId}:${e.reason}`).join(", ")})`
           : "")
     );
+  });
+
+  // Currency unions are applied only after every budget, bond, corporation and
+  // wallet seed has written its authored legacy denomination. This one pass
+  // preserves anchor value while making the selected era internally coherent.
+  await guarded("applyEraCurrencyTopology", async () => {
+    const { applyEraCurrencyTopology } = await import("@/lib/admin/seed/applyEraCurrencyTopology");
+    await applyEraCurrencyTopology(db, preset, log);
   });
 
   if (seedOnly) {

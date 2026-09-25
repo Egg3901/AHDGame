@@ -471,6 +471,23 @@ export async function seedPerfIndexes(db: Db, log: (msg: string) => void) {
     { name: "shareOrders_corp_type_status" },
     log
   );
+  // The index-fund quote refresh cancels every open provider quote, then each
+  // fund checks its own open bids. Neither predicate has a corporationId, so
+  // the order-book indexes above become collection scans as history grows.
+  await ensureIndex(
+    db,
+    "shareOrders",
+    { liquidityProvider: 1, status: 1 },
+    { name: "shareOrders_liquidityProvider_status" },
+    log
+  );
+  await ensureIndex(
+    db,
+    "shareOrders",
+    { placerFundId: 1, type: 1, status: 1 },
+    { name: "shareOrders_placerFund_type_status" },
+    log
+  );
   // Consolidated "My Orders" view scans every open order for one character
   // across all corporations (no corporationId predicate), so the corp-prefixed
   // indexes above cannot serve it. See getMyOpenShareOrders.

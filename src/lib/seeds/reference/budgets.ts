@@ -35,6 +35,7 @@ import { SEED_TAX_RATES_1953 } from "@/lib/politicalLegislation/seedTaxRates";
 import { COUNTRY_POLICY_CONFIGS_1953 } from "./basePolicies1953";
 import { COUNTRY_POLICY_CONFIGS_1979 } from "./basePolicies1979";
 import { COUNTRY_POLICY_CONFIGS_1991 } from "./basePolicies1991";
+import { SUCCESSOR_NATIONAL_BUDGETS_1991 } from "./successorBudgets1991";
 import { COUNTRY_POLICY_CONFIGS_1999 } from "./basePolicies1999";
 import { COUNTRY_POLICY_CONFIGS_2007 } from "./basePolicies2007";
 import { COUNTRY_POLICY_CONFIGS_2023 } from "./basePolicies2023";
@@ -218,7 +219,7 @@ type SupportedBudgetCountryId =
   | "BAL";
 type SupportedNationalBudget = Omit<FederalBudget, "updatedAt">;
 
-interface NationalBudgetSeedConfig {
+export interface NationalBudgetSeedConfig {
   budgetId: string;
   countryId: SupportedBudgetCountryId;
   fiscalYear: number;
@@ -654,8 +655,14 @@ function isPoliticalLegislationCountry(countryId: string): boolean {
   return POLITICAL_LEGISLATION_OLD_SCOPES.has(countryId.toLowerCase());
 }
 
+const TRANSITION_1991_BUDGET_COUNTRIES = new Set(["RU", "PL", "CS", "HU", "RO", "BG", "YU"]);
+
 function preferFullAuthoredBaseline(config: NationalBudgetSeedConfig): boolean {
-  return config.fiscalYear === 1953 && isPoliticalLegislationCountry(config.countryId);
+  if (config.fiscalYear === 1953 && isPoliticalLegislationCountry(config.countryId)) return true;
+  // Transition countries have source-anchored 1991 fiscal totals but no
+  // comparable enacted spending-law catalog. Keep their opening allocation
+  // intact; the runtime uses it until era-authored laws are enacted.
+  return config.fiscalYear === 1991 && TRANSITION_1991_BUDGET_COUNTRIES.has(config.countryId);
 }
 
 function preferCategoryBaselineOverrides(config: NationalBudgetSeedConfig): boolean {
@@ -2054,6 +2061,7 @@ const NATIONAL_BUDGET_SEED_CONFIGS: NationalBudgetSeedConfig[] = [
 // NBS (CN). Debt ceiling years pre-date 2011 ceiling-fight era; using the
 // fiscalYear itself as a stand-in. ───────────────────────────────────────
 const NATIONAL_BUDGET_SEED_CONFIGS_1991: NationalBudgetSeedConfig[] = [
+  ...SUCCESSOR_NATIONAL_BUDGETS_1991,
   {
     budgetId: "federal",
     countryId: "US",
@@ -2444,7 +2452,9 @@ const NATIONAL_BUDGET_SEED_CONFIGS_1991: NationalBudgetSeedConfig[] = [
     budgetId: "NG",
     countryId: "NG",
     fiscalYear: 1991,
-    population: 95_000_000,
+    // National Population Commission 1991 census, published by NBS:
+    // https://www.nigerianstat.gov.ng/pdfuploads/annual_abstract_2012.pdf
+    population: 88_992_220,
     gdp: 1_800_000_000_000, // ₦1.8T NGN (1991 current prices, post-SAP naira)
     currencyCode: "NGN",
     economicFactors: {
@@ -5497,7 +5507,11 @@ export function getNationalBudgetSeedConfigsForPreset(preset: string): NationalB
   }
   if (preset === "1999-default") {
     return overlayNationalBudgetConfigs(
-      getNationalBudgetSeedConfigsForPreset("1991-default"),
+      // The seven transition republic budgets are scoped to the 1991 world.
+      // Later presets may reintroduce a country only with a later authored row.
+      getNationalBudgetSeedConfigsForPreset("1991-default").filter(
+        (config) => !TRANSITION_1991_BUDGET_COUNTRIES.has(config.countryId)
+      ),
       NATIONAL_BUDGET_SEED_CONFIGS_1999,
       1999
     );

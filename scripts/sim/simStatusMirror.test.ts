@@ -14,6 +14,38 @@ describe("buildStatusMirrorUpdate", () => {
     qualification: "passing",
   } as const;
 
+  it("retains the last checked health on an unchecked turn", () => {
+    const checkedHealth = {
+      severity: "error" as const,
+      warningCount: 0,
+      errorCount: 1,
+      processingWarningCount: 0,
+      processingErrorCount: 0,
+      integrityWarningCount: 0,
+      integrityErrorCount: 1,
+      integrityChecked: true,
+      qualification: "non-passing" as const,
+    };
+    const checked = completedTurnProgress(
+      10,
+      { message: "Turn 10", warnings: [], health: checkedHealth },
+      new Date("2026-09-20T18:00:10.000Z")
+    );
+    expect(checked.health).toEqual(checkedHealth);
+    const unchecked = completedTurnProgress(
+      11,
+      { message: "Turn 11", warnings: [], health: null },
+      new Date("2026-09-20T18:00:11.000Z")
+    );
+    expect(unchecked).not.toHaveProperty("health");
+    const mirror = buildStatusMirrorUpdate(
+      { ...checked, currentTurn: 10 },
+      { ...unchecked, currentTurn: 11 },
+      new Date("2026-09-20T18:00:12.000Z")
+    );
+    expect(mirror).not.toHaveProperty("health");
+  });
+
   it("keeps worker liveness separate when sandbox progress has not changed", () => {
     const now = new Date("2026-09-20T18:00:20.000Z");
     expect(

@@ -1,4 +1,5 @@
 import type { State } from "@/lib/db/types";
+import { CN_1991_MACROREGION_POPULATION } from "./cnPopulation1991";
 
 /**
  * China macro-regions, 1990 Census + 1991 nominal regional GDP (CNY).
@@ -17,7 +18,7 @@ export const cnRegions1991: State[] = [
     countryId: "CN",
     regionType: "province",
     name: "Dongbei",
-    population: 99_840_000,
+    population: CN_1991_MACROREGION_POPULATION.DB,
     gdp: 220_000,
     houseDistricts: 238,
     stateSenateSeats: 175,
@@ -29,7 +30,7 @@ export const cnRegions1991: State[] = [
     countryId: "CN",
     regionType: "province",
     name: "Huabei",
-    population: 120_000_000,
+    population: CN_1991_MACROREGION_POPULATION.HB,
     gdp: 350_000,
     houseDistricts: 323,
     stateSenateSeats: 235,
@@ -41,7 +42,7 @@ export const cnRegions1991: State[] = [
     countryId: "CN",
     regionType: "province",
     name: "Huadong",
-    population: 312_000_000,
+    population: CN_1991_MACROREGION_POPULATION.HD,
     gdp: 680_000,
     houseDistricts: 922,
     stateSenateSeats: 671,
@@ -53,7 +54,7 @@ export const cnRegions1991: State[] = [
     countryId: "CN",
     regionType: "province",
     name: "Huazhong",
-    population: 152_000_000,
+    population: CN_1991_MACROREGION_POPULATION.HZ,
     gdp: 260_000,
     houseDistricts: 395,
     stateSenateSeats: 287,
@@ -65,7 +66,7 @@ export const cnRegions1991: State[] = [
     countryId: "CN",
     regionType: "province",
     name: "Huanan",
-    population: 113_000_000,
+    population: CN_1991_MACROREGION_POPULATION.HN,
     gdp: 250_000,
     houseDistricts: 316,
     stateSenateSeats: 230,
@@ -77,7 +78,7 @@ export const cnRegions1991: State[] = [
     countryId: "CN",
     regionType: "province",
     name: "Xinan",
-    population: 192_000_000,
+    population: CN_1991_MACROREGION_POPULATION.XN,
     gdp: 220_000,
     houseDistricts: 466,
     stateSenateSeats: 339,
@@ -89,7 +90,7 @@ export const cnRegions1991: State[] = [
     countryId: "CN",
     regionType: "province",
     name: "Xibei",
-    population: 130_000_000,
+    population: CN_1991_MACROREGION_POPULATION.XB,
     gdp: 180_000,
     houseDistricts: 320,
     stateSenateSeats: 232,

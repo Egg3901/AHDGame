@@ -96,7 +96,11 @@ export function aggregateGameHealth(
   const warningCount = processingWarningCount + integrityWarningCount;
   const errorCount = processingErrorCount + integrityErrorCount;
   const severity: GameHealthSeverity =
-    errorCount > 0 ? "error" : warningCount > 0 ? "warning" : "ok";
+    successfulTurns < completedTurns || errorCount > 0
+      ? "error"
+      : warningCount > 0
+        ? "warning"
+        : "ok";
   const qualification: GameHealthQualification = summaries.some(
     (summary) => summary.qualification === "non-passing"
   )

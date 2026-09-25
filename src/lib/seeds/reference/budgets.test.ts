@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   initialNationalBudgets,
   getInitialNationalBudgetsForPreset,
+  getNationalBudgetSeedConfigsForPreset,
 } from "@/lib/seeds/reference/budgets";
 
 describe("national budget seeds carry a signed treasuryBalance", () => {
@@ -18,6 +19,15 @@ describe("national budget seeds carry a signed treasuryBalance", () => {
     for (const budget of budgets) {
       expect(budget.treasuryBalance).toBe(-(budget.debt.principal ?? 0));
     }
+  });
+});
+
+describe("1991 census population", () => {
+  it("uses Nigeria's counted population in the national budget", () => {
+    const nigeria = getNationalBudgetSeedConfigsForPreset("1991-default").find(
+      (budget) => budget.countryId === "NG"
+    );
+    expect(nigeria?.population).toBe(88_992_220);
   });
 });
 

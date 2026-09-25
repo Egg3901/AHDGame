@@ -12,6 +12,8 @@ export const EXPERIMENT_TIMELINE_FIELDS = [
   "seatsTimeline",
   "partyOrgTimeline",
   "corporationsTimeline",
+  "longHorizonTelemetry.approval.points",
+  "longHorizonTelemetry.macro.points",
 ] as const;
 
 type TimelineField = (typeof EXPERIMENT_TIMELINE_FIELDS)[number];
@@ -28,6 +30,11 @@ export interface StoredExperimentReport extends Document {
   seatsTimeline?: unknown[];
   partyOrgTimeline?: unknown[];
   corporationsTimeline?: unknown[];
+  longHorizonTelemetry?: {
+    approval?: { points?: unknown[]; [key: string]: unknown };
+    macro?: { points?: unknown[]; [key: string]: unknown };
+    [key: string]: unknown;
+  };
 }
 
 export interface TimelineChunk extends Document {
@@ -45,6 +52,34 @@ function assertDocumentFits(document: Record<string, unknown>, label: string): v
   }
 }
 
+function timelinePoints(report: Record<string, unknown>, field: TimelineField): unknown {
+  if (!field.startsWith("longHorizonTelemetry.")) return report[field];
+  const telemetry = report.longHorizonTelemetry as Record<string, unknown> | undefined;
+  const section = telemetry?.[field.split(".")[1]] as Record<string, unknown> | undefined;
+  return section?.points;
+}
+
+function reportMetadata(report: Record<string, unknown>): Record<string, unknown> {
+  const metadata = Object.fromEntries(
+    Object.entries(report).filter(
+      ([key]) => !EXPERIMENT_TIMELINE_FIELDS.includes(key as TimelineField)
+    )
+  );
+  const telemetry = metadata.longHorizonTelemetry as Record<string, unknown> | undefined;
+  if (telemetry) {
+    metadata.longHorizonTelemetry = {
+      ...telemetry,
+      approval: telemetry.approval
+        ? { ...(telemetry.approval as Record<string, unknown>), points: [] }
+        : undefined,
+      macro: telemetry.macro
+        ? { ...(telemetry.macro as Record<string, unknown>), points: [] }
+        : undefined,
+    };
+  }
+  return metadata;
+}
+
 /** Split unbounded timelines before the MongoDB driver attempts BSON serialization. */
 export function planTimelineChunks(
   runId: string,
@@ -55,7 +90,7 @@ export function planTimelineChunks(
   const chunks: TimelineChunk[] = [];
 
   for (const field of EXPERIMENT_TIMELINE_FIELDS) {
-    const points = report[field];
+    const points = timelinePoints(report, field);
     if (!Array.isArray(points) || points.length === 0) continue;
 
     let sequence = 0;
@@ -91,12 +126,9 @@ export async function writeExperimentReport(
 ): Promise<void> {
   const generation = randomUUID();
   const chunks = planTimelineChunks(runId, generation, report);
-  const metadata = Object.fromEntries(
-    Object.entries(report).filter(
-      ([key]) => !EXPERIMENT_TIMELINE_FIELDS.includes(key as TimelineField)
-    )
-  );
+  const metadata = reportMetadata(report);
   const stored = {
+    _id: runId,
     runId,
     ...metadata,
     timelineStorage: { version: 1 as const, generation, chunkCount: chunks.length },
@@ -112,14 +144,7 @@ export async function writeExperimentReport(
   );
   try {
     if (chunks.length > 0) await chunkCollection.insertMany(chunks);
-    await reports.updateOne(
-      { _id: runId },
-      {
-        $set: stored,
-        $unset: Object.fromEntries(EXPERIMENT_TIMELINE_FIELDS.map((field) => [field, ""])),
-      },
-      { upsert: true }
-    );
+    await reports.replaceOne({ _id: runId }, stored, { upsert: true });
   } catch (error) {
     await chunkCollection.deleteMany({ runId, generation });
     throw error;
@@ -162,9 +187,24 @@ export function hydrateExperimentReport(
     );
   }
 
-  for (const field of EXPERIMENT_TIMELINE_FIELDS) report[field] = [];
+  const chunkedFields = new Set(chunks.map((chunk) => chunk.field));
+  for (const field of EXPERIMENT_TIMELINE_FIELDS) {
+    if (field.startsWith("longHorizonTelemetry.")) {
+      const section = field.split(".")[1] as "approval" | "macro";
+      if (chunkedFields.has(field) && report.longHorizonTelemetry?.[section]) {
+        report.longHorizonTelemetry[section].points = [];
+      }
+    } else {
+      report[field] = [];
+    }
+  }
   for (const chunk of chunks) {
-    for (const point of chunk.points) report[chunk.field]?.push(point);
+    if (chunk.field.startsWith("longHorizonTelemetry.")) {
+      const section = chunk.field.split(".")[1] as "approval" | "macro";
+      report.longHorizonTelemetry?.[section]?.points?.push(...chunk.points);
+    } else {
+      for (const point of chunk.points) (report[chunk.field] as unknown[])?.push(point);
+    }
   }
   return report;
 }
