@@ -550,6 +550,17 @@ without tracked source changes. These are local test results, not substitutes
 for the still-zero-step hosted Semgrep/test/analysis gates. Both PRs remain
 open, and the exact local result/job IDs were posted to each PR.
 
+**Dynamic AHDGame PR snapshot, 2026-09-25 02:13 UTC.** The open set is now
+#2380 (draft analytics/Sentry, targeted at `main`), #2381 (draft next
+dead-weight package, targeted at `development`), and #2382 (Track 3
+integrations, targeted at `development`). #2381 follows merged #2379 and its
+worktree has new unique performance commits plus uncommitted work; it remains
+active-feature and protected. #2382 is another agent's active feature branch.
+#2380 remains a draft by its author's rollout note pending privacy/consent
+review; its clean separate analytics worktree and the unrelated dirty main
+checkout remain untouched. Each needs its own final merge-or-delete decision,
+and #2380's base must be reconciled with the owner's `development` rule.
+
 The remaining rows above require final decisions and execution; this document
 does not mark them complete.
 
