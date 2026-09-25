@@ -214,4 +214,47 @@ describe("POST /api/characters/[id]/transfer", () => {
     expect(res.status).toBe(403);
     expect(db.collectionMocks.characters.updateOne).not.toHaveBeenCalled();
   });
+
+  it("reaches receipt recovery when a retry finds the sender balance depleted", async () => {
+    await setup();
+    const depletedSender = {
+      _id: senderId,
+      userId: senderUserId,
+      name: "Sender",
+      countryId: "US",
+      funds: 0,
+    };
+    const { getCharacterByUserId } = await import("@/lib/db/characterLookup");
+    vi.mocked(getCharacterByUserId).mockResolvedValue(depletedSender as never);
+    db.collectionMocks.characters.findOne
+      .mockResolvedValueOnce({
+        _id: targetId,
+        name: "Recipient",
+        countryId: "US",
+        funds: 1500,
+      })
+      .mockResolvedValueOnce(depletedSender);
+
+    const transfer = await import("@/lib/character/campaignTransfer");
+    const transferSpy = vi
+      .spyOn(transfer, "transferCharacterCampaignFunds")
+      .mockResolvedValue({ duplicate: true });
+    try {
+      const { POST } = await import("./route");
+      const req = new Request(`http://localhost/api/characters/${targetId.toString()}/transfer`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ amount: 1000, idempotencyKey: "same-transfer" }),
+      });
+      const res = await POST(req, { params: Promise.resolve({ id: targetId.toString() }) });
+      expect(res.status).toBe(200);
+      expect(await res.json()).toMatchObject({ duplicate: true, senderRemainingFunds: 0 });
+      expect(transferSpy).toHaveBeenCalledWith(
+        db,
+        expect.objectContaining({ idempotencyKey: "same-transfer", amountLocal: 1000 })
+      );
+    } finally {
+      transferSpy.mockRestore();
+    }
+  });
 });

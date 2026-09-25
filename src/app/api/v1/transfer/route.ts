@@ -103,10 +103,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "You cannot transfer funds to yourself" }, { status: 400 });
     }
 
-    if (localCampaignBalance(sender, forexEnabled) < transferAmountLocal) {
-      return NextResponse.json({ error: "Insufficient funds" }, { status: 400 });
-    }
-
     const target = await db.collection<Character>("characters").findOne({ _id: targetObjectId });
     if (!target) {
       return NextResponse.json({ error: "Target character not found" }, { status: 404 });
@@ -141,6 +137,8 @@ export async function POST(request: Request) {
     // Exactly-once on every topology (issue #1672): keyed idempotent legs
     // reconcile a crash between the debit and the credit instead of
     // destroying or duplicating money. A replayed key returns duplicate.
+    // Let the keyed debit check funds. A precheck here would reject a replay
+    // after the first attempt debited the sender but before it credited the target.
     const { duplicate: transferDuplicate } = await transferCharacterCampaignFunds(db, {
       senderId: sender._id,
       targetId: targetObjectId,
