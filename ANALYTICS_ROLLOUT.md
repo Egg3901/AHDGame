@@ -4,7 +4,7 @@ Sentry SaaS in the `lakeside-games` US organization is the production error dest
 
 ## Account and deployment state
 
-- PostHog's DPA is signed. The PostHog Cloud US project has $50,000 in startup credits, and its fourteen product billing limits were raised to $100/month each on September 24, 2026.
+- PostHog's DPA was signed and verified in the dashboard. The PostHog Cloud US project has $50,000 in startup credits, and its fourteen product billing limits were raised to $100/month each on September 24, 2026.
 - The product manager added `NEXT_PUBLIC_POSTHOG_KEY` directly to AHD Production in Railway on September 25, 2026. Railway applied the variable and redeployed. Verify the key is present by name in the effective deployment settings, without reading or copying its value.
 - The Ops Credentials portal is still unable to save to Railway. Its repair is independent of this rollout; do not direct the product manager back to that form for this key.
 
