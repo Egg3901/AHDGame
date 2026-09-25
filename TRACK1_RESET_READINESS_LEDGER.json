@@ -2725,6 +2725,11 @@
           "type": "turn_path_regression_fix",
           "ref": "1061e47e43",
           "detail": "The event timeout sweep and broadcast supersession pass a batch-loaded world preset into each resolution, avoiding the per-event gameState query introduced by 2027 currency routing. Three focused files passed 14/14 tests, including a two-event one-query regression; scoped ESLint, Prettier, and diff check passed. Final turn profile and full gates remain pending."
+        },
+        {
+          "type": "partial_source_and_tests",
+          "ref": "d476171e9e",
+          "detail": "Onboarding claim and profile preview share a portable home-currency conversion rule; 2027 EUR profiles display the credited amount and symbol. Action settlement and profile finance labels use the world preset, and the fundraise preview uses its frozen preset-aware campaign rate. Focused reward/action suites passed 24/24 after correcting the 2027 price-level test expectation; scoped ESLint, Prettier, and diff check passed. Remaining era-blind money paths, full gates, and fresh 2027 bootstrap/replay block completion."
         }
       ],
       "blocked_by": [
