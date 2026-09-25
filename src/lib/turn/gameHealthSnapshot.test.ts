@@ -119,7 +119,7 @@ describe("processGameHealthSnapshot", () => {
     expect(doc.population).toBeDefined();
     expect(doc.population.activePlayers).toBe(10);
     expect(doc.economy).toBeDefined();
-  }, 60_000);
+  });
 
   it("skips integrity check when turn does not match cadence", async () => {
     const { processGameHealthSnapshot } = await import("./gameHealthSnapshot");

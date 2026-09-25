@@ -24,11 +24,26 @@ async function setupWorld(db: Db, commandEconomyEnabled: boolean): Promise<void>
 }
 
 async function ruCorps(db: Db) {
-  return db.collection("corporations").find({ countryOwnerId: "RU" }).toArray();
+  return db
+    .collection<{
+      countryOwnerId: string;
+      soe?: unknown;
+      isPrimaryNationalCorporation?: boolean;
+    }>("corporations")
+    .find({ countryOwnerId: "RU" })
+    .toArray();
 }
 
 async function ruSectors(db: Db) {
-  return db.collection("corporateSectors").find({ countryId: "RU" }).toArray();
+  return db
+    .collection<{
+      countryId: string;
+      corporationId: unknown;
+      stateId: unknown;
+      sectorType: unknown;
+    }>("corporateSectors")
+    .find({ countryId: "RU" })
+    .toArray();
 }
 
 describe("seedSuccessorBudgets1991 RU ownership", () => {
@@ -43,25 +58,17 @@ describe("seedSuccessorBudgets1991 RU ownership", () => {
     // Multi-SOE split: the bare sovereign issuer plus one enterprise per
     // commanding-height sector, each carrying the SoeState overlay.
     expect(corps.length).toBeGreaterThan(1);
-    expect(corps.filter((c) => (c as { soe?: unknown }).soe !== undefined).length).toBeGreaterThan(
-      0
-    );
+    expect(corps.filter((c) => c.soe !== undefined).length).toBeGreaterThan(0);
     expect(sectors.length).toBeGreaterThan(0);
     // Every RU producing sector hangs off an RU country-owned corporation.
     const ownerIds = new Set(corps.map((c) => String(c._id)));
     for (const sector of sectors) {
-      expect(ownerIds.has(String((sector as { corporationId: unknown }).corporationId))).toBe(true);
+      expect(ownerIds.has(String(sector.corporationId))).toBe(true);
     }
     // The sovereign issuer itself owns nothing in the split shape.
-    const primary = corps.find(
-      (c) => (c as { isPrimaryNationalCorporation?: boolean }).isPrimaryNationalCorporation
-    );
+    const primary = corps.find((c) => c.isPrimaryNationalCorporation);
     expect(primary).toBeDefined();
-    expect(
-      sectors.filter(
-        (s) => String((s as { corporationId: unknown }).corporationId) === String(primary!._id)
-      )
-    ).toHaveLength(0);
+    expect(sectors.filter((s) => String(s.corporationId) === String(primary!._id))).toHaveLength(0);
     // Limited to RU: no other country's enterprises are written.
     const allCorps = await db.collection("corporations").find({}).toArray();
     expect(allCorps.length).toBe(corps.length);
@@ -84,8 +91,7 @@ describe("seedSuccessorBudgets1991 RU ownership", () => {
 
     // No two producing rows for the same (enterprise, region, sector type).
     const keys = sectorsAfterSecond.map(
-      (s) =>
-        `${String((s as { corporationId: unknown }).corporationId)}|${(s as { stateId: unknown }).stateId}|${(s as { sectorType: unknown }).sectorType}`
+      (s) => `${String(s.corporationId)}|${s.stateId}|${s.sectorType}`
     );
     expect(new Set(keys).size).toBe(keys.length);
   });
@@ -103,9 +109,7 @@ describe("seedSuccessorBudgets1991 RU ownership", () => {
     expect(corps).toHaveLength(1);
     expect(sectors.length).toBeGreaterThan(0);
     for (const sector of sectors) {
-      expect(String((sector as { corporationId: unknown }).corporationId)).toBe(
-        String(corps[0]._id)
-      );
+      expect(String(sector.corporationId)).toBe(String(corps[0]._id));
     }
   });
 
