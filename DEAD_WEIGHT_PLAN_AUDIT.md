@@ -684,6 +684,23 @@ absent. It cannot validate that phase's normal path. WP4 therefore retains
 the production spike-turn, full-turn share-price, and NPP support-phase
 measurements before any batching change.
 
+WP5/6 direct `bondTurn` profiling at turn 1128 on the partial local world
+processed 1,107 bonds and wrote 1,058 bond-history snapshots. It used 922
+commands, returned 6,936 documents, and decoded 14,101,164 BSON bytes.
+`centralBanks` accounted for 69 commands and 5,504,778 bytes. The CPU sample
+showed BSON parsing, garbage collection, and `bondTurnLedger.ts` work. The
+ledger's history writer scanned all active bonds for every updated bond;
+it now builds one ID map. A matched helper replay with 1,058 active bonds
+and prior-interest rows wrote 1,058 identical history snapshots in each
+version, with five commands, 2,116 returned documents, and 89,800 BSON
+bytes in both; the normalized history digest matched. Three sovereign
+issuance reads now project only `primeRate` and `chairInfamy`: across the 24
+local central-bank documents, those fields are 1,297 BSON bytes versus
+1,557,568 bytes for full documents. That is a read-shape comparison, not a
+measured phase speedup. A full-turn CPU profile on the repeatedly modified
+local world did not complete in `corporationTurn` and yielded no CPU file;
+fresh-world full-turn and production p95 checks remain open.
+
 The one-turn profiler has a local-only guard and cannot be run against
 production. A partial production copy is restored to a private localhost Mongo instance
 outside the repository for a profiling turn. It has 380 collections, 3.31 million
