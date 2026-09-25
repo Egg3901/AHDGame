@@ -112,11 +112,14 @@ function buildCharacterUpdateOp(
       : COUNTRY_CURRENCY_MAP[doc.countryId];
   // Euro rows share the DE anchor rate — the same table `seedExchangeRates`
   // uses — so the migrated balance agrees with the seeded FX row in anchor
-  // units. Non-euro paths keep the legacy modern-table rate.
+  // units. RUB rows use the preset's RU row the same way. All other paths
+  // keep the legacy modern-table rate, byte-identical to before.
   const homeRate =
     homeCurrency === "EUR"
       ? (getInitialRates(preset ?? "").DE ?? INITIAL_RATES[doc.countryId] ?? 1)
-      : (INITIAL_RATES[doc.countryId] ?? 1);
+      : homeCurrency === "RUB"
+        ? (getInitialRates(preset ?? "").RU ?? INITIAL_RATES[doc.countryId] ?? 1)
+        : (INITIAL_RATES[doc.countryId] ?? 1);
   const cashOnHand = doc.cashOnHand ?? 0;
   const convertedCash = cashOnHand * homeRate;
   const convertedCampaignFunds = doc.funds * homeRate;
@@ -146,7 +149,8 @@ function buildCharacterUpdateOp(
  *
  * In a 2027-default world euro members seed as EUR at the DE anchor rate, so
  * every euro row agrees on code and rate from bootstrap (anchor conservation:
- * the anchor value is identical to the legacy-row equivalent).
+ * the anchor value is identical to the legacy-row equivalent). RU seeds as
+ * RUB at the preset's RU row the same way.
  */
 export async function seedExchangeRates(db: Db, preset: string): Promise<void> {
   const rates = getInitialRates(preset);

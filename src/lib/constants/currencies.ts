@@ -10,6 +10,7 @@
 import type { CountryId } from "./countries";
 import { STARTING_YEAR, getStartingYearForPreset } from "./turnTime";
 import { isEuroAdopted } from "@/lib/currency/rules/euroAdoption";
+import { isRubleAdopted, RU_2027_RUB_PER_USD } from "@/lib/currency/rules/rubleTransition";
 import { JP_ECONOMY } from "@/lib/countries/jp/economy";
 import { US_ECONOMY } from "@/lib/countries/us/economy";
 import { UK_ECONOMY } from "@/lib/countries/uk/economy";
@@ -62,6 +63,7 @@ export type CurrencyCode =
   | "BGL"
   | "CSK"
   | "SUR"
+  | "RUB"
   | "FRF"
   | "ITL"
   | "ESP"
@@ -90,6 +92,7 @@ export const ZOD_CURRENCY_ENUM: [CurrencyCode, CurrencyCode, ...CurrencyCode[]] 
   "BGL",
   "CSK",
   "SUR",
+  "RUB",
   "FRF",
   "ITL",
   "ESP",
@@ -165,6 +168,7 @@ export const CURRENCY_ANCHOR_COUNTRY: Record<CurrencyCode, CountryId> = {
   BGL: "BG",
   CSK: "CS",
   SUR: "RU", // Soviet ruble — anchor is the USSR/Russia entity (shared by RU + BY + BAL)
+  RUB: "RU", // Modern Russian ruble — same RU anchor, active only in the 2027 preset (see getSeedCurrencyCode)
   FRF: "FR",
   ITL: "IT",
   ESP: "ES",
@@ -230,6 +234,7 @@ export const FOREX_ACTIVE_CURRENCIES: CurrencyCode[] = [
   "BRL",
   "NGN",
   "SUR",
+  "RUB",
   "DDM",
   "FRF",
   "ITL",
@@ -252,6 +257,7 @@ export const ZOD_ACTIVE_CURRENCY_ENUM: [CurrencyCode, CurrencyCode, ...CurrencyC
   "BRL",
   "NGN",
   "SUR",
+  "RUB",
   "DDM",
   "FRF",
   "ITL",
@@ -607,6 +613,11 @@ export const INITIAL_RATES_2027: Partial<Record<CountryId, number>> = {
   // an explicit fallback for the future preset, not a 2027 observation.
   // https://www.ksh.hu/evkonyvek/2025/magyar-statisztikai-zsebkonyv-2025/pdf/statistical_pocketbook_of_hungary_2025.pdf
   HU: 353.2,
+  // Explicit RUB fallback for the future preset, not a 2027 observation:
+  // 1 / 0.01081 USD-per-ruble, the usdExchangeRate authored on RU_2027
+  // (World Bank 2024 nominal GDP USD 2,173,836M over Rosstat 2024 GDP RUB
+  // 201,152,000M). See RU_2027_RUB_PER_USD.
+  RU: RU_2027_RUB_PER_USD,
 };
 
 export function getInitialRates(preset: string): Partial<Record<CountryId, number>> {
@@ -749,6 +760,7 @@ export const CURRENCY_SYMBOLS: Record<CurrencyCode, string> = {
   BGL: "лв",
   CSK: "Kčs",
   SUR: "руб",
+  RUB: "₽",
   FRF: "₣",
   ITL: "₤",
   ESP: "₧",
@@ -802,11 +814,13 @@ export function getEraAwareCurrencySymbol(
  * Seed-time home currency for a country in a preset. Era-blind
  * {@link COUNTRY_CURRENCY_MAP} stays the identity source for every other era;
  * only a 2027-default bootstrap resolves euro members to EUR (see
- * `isEuroAdopted`). Non-euro countries and every other preset pass through
- * unchanged, so 1991 behavior is byte-identical.
+ * `isEuroAdopted`) and RU to RUB (see `isRubleAdopted`). Every other country
+ * and every other preset pass through unchanged, so 1991 behavior is
+ * byte-identical.
  */
 export function getSeedCurrencyCode(countryId: CountryId, preset: string): CurrencyCode {
   if (isEuroAdopted(countryId, preset)) return "EUR";
+  if (isRubleAdopted(countryId, preset)) return "RUB";
   return COUNTRY_CURRENCY_MAP[countryId];
 }
 
@@ -922,6 +936,13 @@ export function eraRateForCurrency(
 ): number | undefined {
   if (!code) return undefined;
   const eraRates = getInitialRates(preset ?? "");
+  // RUB has no COUNTRY_CURRENCY_MAP entry (RU maps to SUR there by design —
+  // the map is era-blind and SUR is the Cold War/1991 identity). Resolve it
+  // from the preset's RU row instead, so 2027 callers never fall to 1.0.
+  if (code === "RUB") {
+    const rate = eraRates.RU ?? INITIAL_RATES.RU;
+    return rate !== undefined && rate > 0 ? rate : undefined;
+  }
   for (const [countryId, assigned] of Object.entries(COUNTRY_CURRENCY_MAP)) {
     if (assigned !== code) continue;
     const rate = eraRates[countryId as CountryId] ?? INITIAL_RATES[countryId as CountryId];

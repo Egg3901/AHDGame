@@ -209,6 +209,45 @@ describe("migrateCharacterBalances", () => {
     }
   });
 
+  it("migrates 2027 RU characters into RUB at the preset RU rate", async () => {
+    const { ObjectId } = await import("mongodb");
+    const { getInitialRates } = await import("@/lib/constants/currencies");
+    const rubRate = getInitialRates("2027-default").RU!;
+    expect(rubRate).toBe(92.5);
+    const charId = new ObjectId();
+    const cursor = mockCursor([{ _id: charId, countryId: "RU", funds: 10000, cashOnHand: 50000 }]);
+    db.collection("characters").find.mockReturnValue(cursor);
+    db.collection("characters").bulkWrite.mockResolvedValue({ modifiedCount: 1 });
+
+    const { migrateCharacterBalances } = await import("./migration");
+    const result = await migrateCharacterBalances(db as unknown as Db, "2027-default");
+
+    expect(result.processed).toBe(1);
+    const set = db.collection("characters").bulkWrite.mock.calls[0][0][0].updateOne.update.$set;
+    // Same-row agreement with seedExchangeRates: RUB code, preset RU rate.
+    expect(set["currencyBalances.personal"]).toEqual({ RUB: 50000 * rubRate });
+    expect(set["currencyBalances.campaign"]).toBe(10000 * rubRate);
+    // Anchor value round-trips: migrated rubles hold exactly the internal
+    // value they were converted from.
+    expect(set["currencyBalances.campaign"] / rubRate).toBeCloseTo(10000, 9);
+    expect(set.funds).toBe(10000);
+  });
+
+  it("keeps 1991 RU characters on SUR at the modern-table rate", async () => {
+    const { ObjectId } = await import("mongodb");
+    const { INITIAL_RATES } = await import("@/lib/constants/currencies");
+    const charId = new ObjectId();
+    const cursor = mockCursor([{ _id: charId, countryId: "RU", funds: 10000, cashOnHand: 50000 }]);
+    db.collection("characters").find.mockReturnValue(cursor);
+    db.collection("characters").bulkWrite.mockResolvedValue({ modifiedCount: 1 });
+
+    const { migrateCharacterBalances } = await import("./migration");
+    await migrateCharacterBalances(db as unknown as Db, "1991-default");
+
+    const set = db.collection("characters").bulkWrite.mock.calls[0][0][0].updateOne.update.$set;
+    expect(set["currencyBalances.personal"]).toEqual({ SUR: 50000 * INITIAL_RATES.RU! });
+  });
+
   it("keeps 1991 characters on era-blind codes and modern-table rates", async () => {
     const { ObjectId } = await import("mongodb");
     const { INITIAL_RATES } = await import("@/lib/constants/currencies");
@@ -269,6 +308,27 @@ describe("seedExchangeRates", () => {
       currencyCode: "NGN",
       rate: 1550,
       baseRate: 1550,
+    });
+  });
+
+  it("seeds RU as RUB at the 2027 preset rate", async () => {
+    db.collection("exchangeRates").bulkWrite.mockResolvedValue({
+      upsertedCount: FOREX_ACTIVE_COUNTRIES.length,
+    });
+
+    const { seedExchangeRates } = await import("./migration");
+    await seedExchangeRates(db as unknown as Db, "2027-default");
+
+    const bulkWriteCall = db.collection("exchangeRates").bulkWrite.mock.calls[0][0];
+    const ruOp = bulkWriteCall.find(
+      (op: { updateOne: { filter: { _id: string } } }) => op.updateOne.filter._id === "RU"
+    );
+    expect(ruOp.updateOne.update.$setOnInsert).toMatchObject({
+      countryId: "RU",
+      currencyCode: "RUB",
+      rate: 92.5,
+      baseRate: 92.5,
+      macroTarget: 92.5,
     });
   });
 
