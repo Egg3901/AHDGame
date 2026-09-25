@@ -354,11 +354,15 @@ merged to `development`; #2385 merged at
 short-turn candidate, and two Campaign 3 snapshot worktrees were removed with
 ordinary `git worktree remove`. The 11 remaining legacy private game repo
 Dependabot PRs were closed as abandoned with individual explanations. Bot
-upstream #45 merged; #122 was rebased and pushed and awaits exact-head local
-gates. Ops #137 and #168 merged; #167 closed as superseded. See the inventory
+upstream #45 and #122 both merged after their exact-head gates. Ops #137 and
+#168 merged; #167 closed as superseded. See the inventory
 for each decision and the current open PRs.
 
-The latest incorporated development tip is still `cc06acd25` while concurrent
-Muse source edits finish. PR #2385 advanced remote `development`; fetch and
-rebase this branch onto the newer exact tip once those edits are committed,
-then rerun all affected gates from that exact SHA.
+**Upstream refresh pending, 2026-09-25:** Remote `origin/development` is now
+`346f0cdde97ee3e237d78fa1f153da7038a14b6a` after merged PRs #2391,
+#2380, #2388, and #2392. Track 1 still contains `6360845e` as its latest
+incorporated ancestor because the Muse Spark 1.3 #1672 share-recovery slice is
+editing this worktree. Merge the new development head after that slice is
+committed and reviewed; then update the exact incorporated SHA above. The
+original fresh base remains `028cb9265e`. Rerun all affected gates after the
+merge from that exact SHA.

@@ -857,8 +857,8 @@ missing from this source. Its checkout was clean and unlocked before ordinary
 **AHDGame `player-qol-round3`: DISCARD uncommitted duplicate after review,
 2026-09-25.** This old zero-unique-commit checkout contains a 35-path draft of
 #2049's UK dual ministry work (26 modified and ten untracked source files).
-Merged PR #2068 (`2c421aa7f7`) closes #2049 with the
-full role-slot index, shared action pool, survivor lifecycle, distinct-person
+Merged PR #2068 (`2c421aa7f7`) closes #2049 with the full role-slot index,
+shared action pool, survivor lifecycle, distinct-person
 voting, migration, and 64 focused tests. Its 39-file reviewed merge replaces
 the draft's helper/migration/rules layout and adds vote, office, and turn
 coverage absent from the draft. The issue's complete contract is in
@@ -869,3 +869,43 @@ decision for real uncommitted work, not a claim of byte identity. The exact ten
 untracked files were checked against an allowlist and deleted; the tracked
 draft was restored in this worktree only. A fresh status was clean before
 ordinary `git worktree remove`.
+
+**AHDGame PR #2391: MERGED into `development`, 2026-09-25.** The security
+repair was rebased over #2387 and merged as `67eda32bb6eea5d108784cb3087938ccb292d08e`.
+Its exact head `a26860b8fd` passed all four test shards, verify, build,
+lint, format, typecheck, Semgrep, CodeQL, and dependency review. Legacy
+share-order/offer test fixtures were updated to isolate the new transfer
+clock. The clean source `redteam-sept25` checkout was removed normally after
+its patch was proven on development; no vulnerability issue was opened.
+
+**AHDGame PR #2380: MERGED into `development`, 2026-09-25.** Consent-gated
+PostHog analytics and the existing Sentry SaaS connection merged as
+`f005b9ecfb19529c055595491ab5835b5e69af04` after all exact-head CI,
+security, build, test, and singleplayer smoke checks passed. No key or player
+data was committed, and no production deployment/configuration changed. The
+clean, unlocked `analytics-sentry` source checkout was removed normally after
+patch equivalence was checked. The dirty main AHDGame checkout belonging to
+the other active integration agent was never touched. Staging consent and
+Sentry delivery checks remain rollout gates.
+
+**AHDGame PR #2388: MERGED into `development`, 2026-09-25.** Dedicated worker
+start command and measured cutover runbook merged as
+`2bb4ee173fc1bc5efd4006bc03b361e6534ad5a9` after exact-head CI and
+startup guards. The `infra-scaling` source worktree is LOCKED by its active
+owner and was not moved or removed. Staging two-turn worker rehearsal and
+Railway configuration are later operational gates, not claims made here.
+
+**AHDGame PR #2392: MERGED into `development`, 2026-09-25.** The central-bank
+rate snapshot for corporation turn merged as
+`346f0cdde97ee3e237d78fa1f153da7038a14b6a` after 34 focused tests
+and all hosted CI checks. The measured same-snapshot 1991 replay reduced
+`corporationTurn` from 1,477 to 1,407 Mongo round trips and 32.9 to 25.6 MB
+BSON; attribution of the full phase delta is limited by replay variation.
+The `turn-perf` source and its baseline checkout are LOCKED by the active
+performance session, so both remain in place. No locked checkout was touched.
+
+**Open AHDGame PR remainder, 2026-09-25:** #2381 is the sole open PR. It is
+an active draft on `perf/dead-weight-next` with WP3/WP7 measurements and CI
+still in progress; its `dead-weight-plan` checkout is dirty. Its final
+merge-or-delete decision requires the owner session to finish its source and
+checks, and Track 1 must then incorporate or discard it before final PR.
