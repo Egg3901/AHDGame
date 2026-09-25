@@ -10,6 +10,14 @@ Read on 2026-09-25 from `Egg3901/AHDGame` at fresh `development` base `028cb9265
 - [#1670](https://github.com/Egg3901/AHDGame/issues/1670) is conditional on publication of the 2025 ACS 1-year detailed tables. The [Census Bureau's current notice](https://www.census.gov/newsroom/press-releases/2026/iphi-acs-media-advisory.html) still says the release date is being determined as of the 2026-09-25 check; its [API catalog](https://www.census.gov/programs-surveys/acs/data/data-via-api.html) lists 1-year data only through 2024. Retain the documented January 2027 education/income projection and do not invent unpublished observations. The owner approved this temporary projection waiver on 2026-09-25: impact is those two dimensions' source year, mitigation is fixed provenance and reproducible generator/tests, monitoring is the official release page, and rollback is a regenerated 2027 substrate with a fresh replay when published. RR-062 records the decision and remains pending 2027 implementation/final evidence; the selected 1991 launch profile is unaffected. The decision was posted on #1670.
 - The instruction to resolve **all 70 open issues** is broader than #2159. The inventory below therefore includes reset blockers, modern 2027 repairs, independent player bugs, research exports, product work, and cross-repository programs. Closing an issue as superseded requires evidence that its full requested outcome is covered or an explicit owner decision, rather than merely removing it from the open count.
 
+Two Track 1 worktree-integration issues were filed after the initial 70-issue
+snapshot: [#2393](https://github.com/Egg3901/AHDGame/issues/2393) authorizes
+the ticket-filing schema/API change found as uncommitted work, and
+[#2394](https://github.com/Egg3901/AHDGame/issues/2394) records the two
+overlapping dirty Discord event-card/chart implementations. Both require
+implementation, source-worktree disposition, focused verification, and the
+same final issue-accounting pass; neither is silently excluded from scope.
+
 ## Dependency and execution order
 
 1. **Freeze inventory and ownership.** Snapshot all 70 issue bodies, comments, labels, and acceptance criteria; map each criterion into the parallel in-repo #2159 ledger. Reconcile open PR/worktree code before interpreting issue status. Record final release configuration and profile once implementation is assembled.
