@@ -8,11 +8,10 @@ import { ensureIndex } from "./helpers";
  * written per keyed flow, so without a TTL the collection grows without
  * bound.
  *
- * The TTL expires receipts `createdAt + 30 days`. That bounds growth while
- * keeping every realistic client-retry and crash-recovery window covered:
- * the key guard on the account documents (`appliedMoneyFlowKeys`, capped at
- * 100 entries) ages out on a similar horizon, so a receipt and its legs
- * expire together rather than one outliving the other.
+ * Expire only terminal receipts, 30 days after their last status update.
+ * An in-progress receipt may be the only durable record of a partially
+ * applied flow. Deleting it before recovery would turn a retry into a new
+ * attempt and could strand or duplicate money.
  */
 export async function seedMoneyFlowIndexes(db: Db, log: (msg: string) => void) {
   log("Money-flow receipt indexes:");
@@ -20,10 +19,11 @@ export async function seedMoneyFlowIndexes(db: Db, log: (msg: string) => void) {
   await ensureIndex(
     db,
     "nonAtomicMoneyFlowReceipts",
-    { createdAt: 1 },
+    { updatedAt: 1 },
     {
-      name: "nonAtomicMoneyFlowReceipts_createdAt_ttl",
+      name: "nonAtomicMoneyFlowReceipts_terminal_updatedAt_ttl",
       expireAfterSeconds: 30 * 24 * 60 * 60,
+      partialFilterExpression: { status: { $in: ["completed", "failed", "compensated"] } },
       background: true,
     },
     log
