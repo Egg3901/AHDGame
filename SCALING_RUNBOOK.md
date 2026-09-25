@@ -88,6 +88,19 @@ before testing two web replicas. Keep the worker at one replica.
   versus two web replicas against staging. Compare latency, errors, Mongo
   connections, and turn duration before changing production replica count.
 
+## Railway configuration follow-up
+
+- Migrate the deprecated Nixpacks builder to Railpack or a Dockerfile and the
+  legacy `railway.toml` settings to Railway Infrastructure as Code before the
+  December 1, 2026 cutoff. Compare effective build, start, health check,
+  memory, and restart settings in staging before changing production.
+- Confirm the production `DEBUG` variable is disabled or scoped so it cannot
+  increase log volume or expose request detail.
+- Evaluate edge caching for fingerprinted static assets and check cache headers
+  before enabling it. Keep authenticated game responses uncached.
+- The web health check allows 300 seconds today. Measure cold-start time before
+  tightening the timeout; a shorter timeout should still cover normal boot.
+
 Railway references: [Scaling](https://docs.railway.com/deployments/scaling),
 [multiple services from one repo](https://docs.railway.com/deployments/monorepo),
 [Config as Code status](https://docs.railway.com/config-as-code).
