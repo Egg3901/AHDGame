@@ -30,6 +30,7 @@ vi.mock("@/lib/financialTxLog/emit", () => ({
 }));
 
 import { creditSellerFundProceeds, settleBuyOrderFill } from "./fillShareOrderSettlement";
+import type { ShareFillAuditPlan } from "./shareFillAudit";
 
 let db: MockDb;
 beforeEach(() => {
@@ -235,6 +236,33 @@ describe("settleBuyOrderFill — fund buy order (peer fill) moves no fund cash",
       updatedAt: new Date(),
     };
 
+    const plan: ShareFillAuditPlan = {
+      version: 1,
+      orderIdHex: orderId.toHexString(),
+      corpIdHex: corporationId.toHexString(),
+      corpCcy: "USD",
+      orderType: "buy",
+      shares: 50,
+      pricePerShare: 9.8,
+      totalAnchor: 490,
+      turn: 7,
+      nowIso: now.toISOString(),
+      preClaimRemaining: 50,
+      filler: {
+        idHex: fillerId.toHexString(),
+        collection: "characters",
+        name: "Seller",
+        homeCurrency: "USD",
+        imperial: false,
+      },
+      fillerAmount: 490,
+      placerKind: "fund",
+      placerIdHex: fundId.toHexString(),
+      placerName: "Index fund",
+      fundTx: false,
+      moneyCommitted: false,
+    };
+
     const result = await settleBuyOrderFill({
       db: db as unknown as Db,
       corporation: corporation(corporationId),
@@ -253,6 +281,8 @@ describe("settleBuyOrderFill — fund buy order (peer fill) moves no fund cash",
       currentTurn: 7,
       now,
       restoreClaimedOrder: vi.fn(),
+      fillKey: "test-fill-key-buy-fund",
+      plan,
     });
 
     expect(result).toBeNull();
