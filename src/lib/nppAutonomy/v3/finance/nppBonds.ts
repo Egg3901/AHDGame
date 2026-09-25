@@ -35,6 +35,19 @@ export type NppBondBuyResult =
     }
   | { ok: false; reason: string };
 
+export type NppBondBuySnapshot = Pick<
+  Bond,
+  | "_id"
+  | "maturityTurn"
+  | "publicFloat"
+  | "currencyCode"
+  | "countryId"
+  | "marketPrice"
+  | "issuerType"
+  | "defaulted"
+  | "issuerName"
+>;
+
 export async function nppBuyBond(
   db: Db,
   npp: Pick<NPP, "_id" | "countryId">,
@@ -42,13 +55,18 @@ export async function nppBuyBond(
   units: number,
   currentTurn: number,
   /** Pre-loaded home FX rate (local per ₳); loaded on demand when omitted. */
-  homeRate?: number
+  homeRate?: number,
+  /** Candidate from the turn sweep. The reservation still checks live float atomically. */
+  bondSnapshot?: NppBondBuySnapshot
 ): Promise<NppBondBuyResult> {
   if (!Number.isInteger(units) || units <= 0) {
     return { ok: false, reason: "Units must be a positive integer." };
   }
 
-  const bond = await db.collection<Bond>("bonds").findOne({ _id: bondId });
+  const bond =
+    bondSnapshot?._id.equals(bondId) === true
+      ? bondSnapshot
+      : await db.collection<Bond>("bonds").findOne({ _id: bondId });
   if (!bond) return { ok: false, reason: "Bond not found." };
   if (bond.maturityTurn <= currentTurn) return { ok: false, reason: "Bond has matured." };
   if ((bond.publicFloat ?? 0) < units) {

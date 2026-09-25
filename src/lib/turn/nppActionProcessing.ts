@@ -671,6 +671,10 @@ async function investNppBondSurplus(
               publicFloat: 1,
               marketPrice: 1,
               couponRate: 1,
+              maturityTurn: 1,
+              issuerType: 1,
+              defaulted: 1,
+              issuerName: 1,
             },
           }
         )
@@ -740,7 +744,7 @@ async function investNppBondSurplus(
 
     // nppBuyBond debits nppInvestmentCashAnchor atomically (guarded); a failed
     // float race leaves the ₳ untouched — no plumbing move needed here anymore.
-    const result = await nppBuyBond(db, npp, bond._id, units, currentTurn, homeRate);
+    const result = await nppBuyBond(db, npp, bond._id, units, currentTurn, homeRate, bond);
     if (result.ok) {
       bond.publicFloat -= units;
     }

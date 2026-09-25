@@ -107,6 +107,27 @@ describe("nppBuyBond", () => {
     );
   });
 
+  it("uses a sweep snapshot without rereading the bond and still refunds a failed reservation", async () => {
+    vi.mocked(reserveBondUnitsForHolder).mockResolvedValue(false);
+    const snapshot = {
+      _id: bondId,
+      marketPrice: MARKET,
+      publicFloat: 1000,
+      maturityTurn: 100,
+      currencyCode: "USD" as const,
+    };
+
+    const result = await nppBuyBond(db, npp, bondId, UNITS, 4, 1, snapshot);
+
+    expect(result.ok).toBe(false);
+    expect(bondsFindOne).not.toHaveBeenCalled();
+    expect(reserveBondUnitsForHolder).toHaveBeenCalledOnce();
+    expect(nppUpdateOne).toHaveBeenCalledWith(
+      { _id: nppId },
+      expect.objectContaining({ $inc: { nppInvestmentCashAnchor: EXPECTED_COST } })
+    );
+  });
+
   it("keeps non-unit RU/SUR local and anchor amounts distinct", async () => {
     const ruNppId = new ObjectId();
     const ruBondId = new ObjectId();

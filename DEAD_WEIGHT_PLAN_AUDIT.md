@@ -623,6 +623,23 @@ same normalized scope/rate/source-bill digest; federal budget tariff-rate and
 revenue totals matched. This is a helper-level replay on a partial local world,
 not a production phase p95 claim. The rest of WP2 remains open.
 
+WP3's direct local `processNppActions` trace at turn 1124 recorded 7,267 Mongo
+commands, 24,394 returned documents, and 14,934,762 BSON bytes on the partial
+local world. The bond-buy core made 132 `bonds.findOne` calls after the sweep
+had already loaded candidate bonds by country. The share-buy and share-sell
+cores made another 242 and 270 `corporations.findOne` calls respectively.
+The bond sweep now passes its projected candidate to `nppBuyBond`; the core
+still obtains a live market-pool quote and retains the guarded NPP debit and
+bond reservation with refund on a failed reservation. A focused test verifies
+the omitted bond read and refund. A matched `processNppActions` replay at turn
+1128 on two copies of the same local snapshot reduced commands from 7,279 to
+7,150 (129 fewer), returned documents from 22,970 to 22,841, and BSON bytes
+from 13,909,605 to 13,009,284. All reported action counters matched. Hashes
+of projected NPP investment cash (3,450 rows), bond float and holders (5,693),
+bond pool cash and lifetime totals (24), and corporation float, shareholders,
+and liquid capital (734) matched. This verifies the local phase behavior; the
+other share command-core reads and production p95 remain open.
+
 The one-turn profiler has a local-only guard and cannot be run against
 production. A partial production copy is restored to a private localhost Mongo instance
 outside the repository for a profiling turn. It has 380 collections, 3.31 million
