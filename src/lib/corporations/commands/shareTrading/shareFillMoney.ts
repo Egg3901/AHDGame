@@ -1082,22 +1082,160 @@ export async function recoverShareFillMoneyByFillKey(
 }
 
 /**
+ * Age grace before a money orphan candidate is eligible: a live route fill
+ * sits between `claimMoneyFlowReceipt`, the plan store, and the money legs
+ * with a fresh `updatedAt` while this pass runs, and the turn lock does not
+ * guard API routes, so the pass must not re-drive it. Candidates younger
+ * than this stay untouched for a later pass and are not reported. The
+ * per-key path (`recoverShareFillMoneyByFillKey`) keeps its immediate
+ * behavior: it is driven by the owning attempt, so it cannot race itself.
+ */
+export const SHARE_FILL_MONEY_ORPHAN_MIN_AGE_MS = 5 * 60 * 1000;
+
+/**
+ * Per-world rotation cursor for the money orphan scan. A head-of-queue scan
+ * re-reads the same stuck prefix every pass: persistently incomplete
+ * receipts (a step builder that keeps throwing, a guard that never clears)
+ * never settle, so later receipts behind a full page of them are never
+ * examined. The scan therefore resumes after the last key it examined,
+ * wrapping to the head when it runs past the tail, so repeated bounded
+ * passes visit every receipt once per cycle.
+ *
+ * Keyed by stable MongoClient identity plus databaseName, never by Db
+ * handle and never module-global state: production `getDb()` calls
+ * `client.db(dbName)` on every invocation and the driver returns a NEW Db
+ * wrapper each time, so a `WeakMap<Db, ...>` would reset rotation on every
+ * cron tick and re-read the same stuck prefix forever. Db handles without a
+ * client identity (in-memory test fakes) fall back to per-handle cursors.
+ * Keyset pagination (`_id` bounds on a sorted scan) survives rows settling
+ * between passes: a settled row simply drops out of the filter while the
+ * cursor stays a valid lower bound.
+ *
+ * Never key by URI or connection string: those are secrets and must not be
+ * retained in module state or logged.
+ *
+ * This mirrors `orphanCursorsFor` in shareFillAudit.ts with its own module
+ * state on purpose: shareFillAudit.ts already imports this module, so
+ * importing its cursor helper back would widen the existing cycle.
+ */
+interface ShareFillMoneyOrphanCursor {
+  moneyAfter?: string;
+}
+
+const shareFillMoneyCursorsByClient = new WeakMap<
+  object,
+  Map<string, ShareFillMoneyOrphanCursor>
+>();
+const shareFillMoneyCursorsByHandle = new WeakMap<object, ShareFillMoneyOrphanCursor>();
+
+function moneyOrphanCursorFor(db: Db): ShareFillMoneyOrphanCursor {
+  const maybeIdentity = db as Partial<{ client: unknown; databaseName: unknown }>;
+  const client = maybeIdentity.client;
+  const databaseName = maybeIdentity.databaseName;
+  if (
+    typeof client === "object" &&
+    client !== null &&
+    typeof databaseName === "string" &&
+    databaseName.length > 0
+  ) {
+    let byDatabase = shareFillMoneyCursorsByClient.get(client);
+    if (!byDatabase) {
+      byDatabase = new Map<string, ShareFillMoneyOrphanCursor>();
+      shareFillMoneyCursorsByClient.set(client, byDatabase);
+    }
+    let cursor = byDatabase.get(databaseName);
+    if (!cursor) {
+      cursor = {};
+      byDatabase.set(databaseName, cursor);
+    }
+    return cursor;
+  }
+  let cursor = shareFillMoneyCursorsByHandle.get(db);
+  if (!cursor) {
+    cursor = {};
+    shareFillMoneyCursorsByHandle.set(db, cursor);
+  }
+  return cursor;
+}
+
+/**
+ * One bounded sorted window of the money orphan queue with wrap-around:
+ * rows after the cursor first, then rows at/before it to fill the window.
+ * Never examines more than `window` rows; an empty window leaves the cursor
+ * untouched. The `_id` sort rides the recurring `{status:1,_id:1}` index
+ * (seeded in `src/lib/admin/seed/indexes/moneyFlow.ts`).
+ */
+async function fetchMoneyReceiptWindow(
+  db: Db,
+  afterKey: string | undefined,
+  window: number
+): Promise<ShareFillMoneyReceipt[]> {
+  const filter = { status: "in_progress", shareFillMoneyPlan: { $exists: true } };
+  if (window <= 0) return [];
+  const tail =
+    afterKey === undefined
+      ? await receiptsEx(db).find(filter).sort({ _id: 1 }).limit(window).toArray()
+      : await receiptsEx(db)
+          .find({ ...filter, _id: { $gt: afterKey } })
+          .sort({ _id: 1 })
+          .limit(window)
+          .toArray();
+  if (tail.length >= window || afterKey === undefined) return tail;
+  const seen = new Set<unknown>(tail.map((doc) => doc._id));
+  const head = await receiptsEx(db)
+    .find({ ...filter, _id: { $lte: afterKey } })
+    .sort({ _id: 1 })
+    .limit(window - tail.length)
+    .toArray();
+  for (const doc of head) {
+    if (!seen.has(doc._id)) tail.push(doc);
+  }
+  return tail;
+}
+
+/** Newest string key in a window, for advancing the cursor. */
+function lastMoneyWindowKey(docs: ShareFillMoneyReceipt[]): string | undefined {
+  for (let index = docs.length - 1; index >= 0; index -= 1) {
+    const id: unknown = docs[index]!._id;
+    if (typeof id === "string") return id;
+  }
+  return undefined;
+}
+
+function isFreshMoneyCandidate(receipt: ShareFillMoneyReceipt, now: Date): boolean {
+  const updatedAt: unknown = (receipt as { updatedAt?: unknown }).updatedAt;
+  // Unknown age (legacy rows without a stamp) stays eligible so old rows
+  // always drain; only provably-fresh rows wait.
+  if (!(updatedAt instanceof Date) || Number.isNaN(updatedAt.getTime())) return false;
+  return now.getTime() - updatedAt.getTime() < SHARE_FILL_MONEY_ORPHAN_MIN_AGE_MS;
+}
+
+/**
  * Bounded money orphan scan for the periodic driver. Recovers every
  * `in_progress` money receipt from its stored plan so money converges
  * before the audit orphan pass runs. Returns per-receipt results; a
  * receipt whose steps throw stays `in_progress` (TTL-visible) for the
  * next pass instead of being guessed at.
+ *
+ * Fairness: the scan rotates over `_id` with a stable per-world cursor and
+ * wraps to the head, so a persistent incomplete prefix cannot starve later
+ * receipts across repeated bounded passes. Fresh candidates (a live fill
+ * mid-write) are skipped by age grace and never reported.
  */
 export async function recoverShareFillMoneyOrphans(
   db: Db,
-  limit = 50
+  limit = 50,
+  now: Date = new Date()
 ): Promise<ShareFillMoneyRecoveryResult[]> {
-  const stuck = await receiptsEx(db)
-    .find({ status: "in_progress", shareFillMoneyPlan: { $exists: true } })
-    .limit(limit)
-    .toArray();
+  const budget = Math.max(0, Math.floor(limit));
+  if (budget === 0) return [];
+  const cursor = moneyOrphanCursorFor(db);
+  const window = await fetchMoneyReceiptWindow(db, cursor.moneyAfter, budget);
+  const windowKey = lastMoneyWindowKey(window);
+  if (windowKey !== undefined) cursor.moneyAfter = windowKey;
   const results: ShareFillMoneyRecoveryResult[] = [];
-  for (const receipt of stuck) {
+  for (const receipt of window) {
+    if (isFreshMoneyCandidate(receipt, now)) continue;
     const stored = receipt.shareFillMoneyPlan;
     if (!isShareFillMoneyPlan(stored)) {
       await failMoneyFlowReceipt(receipts(db), receipt._id, "share-fill-money:plan-never-stored");

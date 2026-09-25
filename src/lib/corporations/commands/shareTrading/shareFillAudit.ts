@@ -987,7 +987,7 @@ export async function runShareFillRecoveryPass(
     // there. Settled/missing skips report nothing: they examined no live
     // prefix.
     const summary = emptyPassSummary("completed");
-    const moneyResults = await recoverShareFillMoneyOrphans(db, limit);
+    const moneyResults = await recoverShareFillMoneyOrphans(db, limit, now);
     for (const money of moneyResults) {
       if (money.action === "skipped-settled" || money.action === "skipped-missing") continue;
       summary.examined += 1;

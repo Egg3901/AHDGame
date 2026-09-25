@@ -12,6 +12,7 @@ import {
   recoverShareFillMoneyOrphans,
   SHARE_FILL_MONEY_INSUFFICIENT_FUNDS,
   SHARE_FILL_MONEY_LIQUIDITY_SHARES,
+  SHARE_FILL_MONEY_ORPHAN_MIN_AGE_MS,
   SHARE_FILL_MONEY_SELLER_SHARES,
   type ShareFillMoneyPlan,
 } from "./shareFillMoney";
@@ -44,6 +45,7 @@ function docKey(id: unknown): string {
 
 function clone<T>(value: T): T {
   if (value instanceof ObjectId) return value;
+  if (value instanceof Date) return new Date(value.getTime()) as unknown as T;
   if (Array.isArray(value)) return value.map(clone) as unknown as T;
   if (value && typeof value === "object") {
     return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, clone(v)])) as T;
@@ -111,6 +113,22 @@ function positionalIndex(doc: Doc, filter: Doc, arrayField: string): number {
 
 function matchesFilter(doc: Doc, filter: Doc): boolean {
   return Object.entries(filter).every(([key, cond]) => {
+    if (
+      key === "_id" &&
+      cond &&
+      typeof cond === "object" &&
+      !(cond instanceof ObjectId) &&
+      !Array.isArray(cond)
+    ) {
+      // Keyset bounds the rotation scan emits (`$gt` tail, `$lte` wrap head).
+      const ops = cond as Doc;
+      const actual = String(doc._id);
+      if ("$gt" in ops && !(actual > String(ops.$gt))) return false;
+      if ("$gte" in ops && !(actual >= String(ops.$gte))) return false;
+      if ("$lt" in ops && !(actual < String(ops.$lt))) return false;
+      if ("$lte" in ops && !(actual <= String(ops.$lte))) return false;
+      if ("$gt" in ops || "$gte" in ops || "$lt" in ops || "$lte" in ops) return true;
+    }
     if (key === "_id") return valueEquals(doc._id, cond);
     if (key === "shareholders" || key === "holdings") {
       const rows = (doc[key] as Doc[] | undefined) ?? [];
@@ -271,19 +289,47 @@ function fakeCollection(db: FakeDb, name: string): Record<string, (...args: neve
     },
     find: (filter: Doc) => {
       const rows = [...coll().values()].filter((doc) => matchesFilter(doc, filter));
+      const sortRows = (spec: Record<string, 1 | -1>): Doc[] => {
+        const [[sortKey, direction]] = Object.entries(spec);
+        return [...rows].sort((a, b) => {
+          const left = String(getPath(a, sortKey!));
+          const right = String(getPath(b, sortKey!));
+          const cmp = left < right ? -1 : left > right ? 1 : 0;
+          return direction === -1 ? -cmp : cmp;
+        });
+      };
       return {
         limit: (n: number) => ({
           toArray: async () => clone(rows.slice(0, n)) as Doc[],
         }),
         toArray: async () => clone(rows) as Doc[],
+        sort: (spec: Record<string, 1 | -1>) => {
+          const sorted = sortRows(spec);
+          return {
+            toArray: async () => clone(sorted) as Doc[],
+            limit: (n: number) => ({
+              toArray: async () => clone(sorted.slice(0, n)) as Doc[],
+            }),
+          };
+        },
       };
     },
   };
 }
 
-function fakeDb(db: FakeDb): Record<string, (...args: never[]) => unknown> {
+function fakeDb(
+  db: FakeDb,
+  overrides?: { client?: object; databaseName?: string }
+): Record<string, (...args: never[]) => unknown> {
   return {
     collection: (name: string) => fakeCollection(db, name),
+    // Stable client identity + database name, mirroring the production
+    // driver's `Db.client` / `Db.databaseName`. Two wrappers sharing both
+    // over one `FakeDb` store model two `getDb()` calls against one world;
+    // omitting them models the legacy handle-keyed fake.
+    ...(overrides?.client
+      ? { client: overrides.client, databaseName: overrides.databaseName ?? "fake-db" }
+      : {}),
   };
 }
 
@@ -353,6 +399,38 @@ function walletOf(db: FakeDb, collection: string, id: ObjectId, field: string): 
 
 function moneyReceipt(db: FakeDb, fillKey: string): Doc | undefined {
   return getColl(db, NON_ATOMIC_MONEY_FLOW_RECEIPTS_COLLECTION).get(`${fillKey}:money`);
+}
+
+/**
+ * Fixed clock for the orphan age grace: every receipt the periodic pass is
+ * expected to touch is backdated to look crashed, not freshly written by a
+ * live fill. Freshness is tested explicitly with injected `now` values,
+ * never with the real clock.
+ */
+const NOW = new Date("2026-09-25T12:00:00.000Z");
+const AGED_AT = new Date(NOW.getTime() - 10 * 60 * 1000);
+
+function seedMoneyReceipt(state: FakeDb, fillKey: string, plan: ShareFillMoneyPlan): void {
+  getColl(state, NON_ATOMIC_MONEY_FLOW_RECEIPTS_COLLECTION).set(`${fillKey}:money`, {
+    _id: `${fillKey}:money`,
+    status: "in_progress",
+    fingerprint: buildShareFillMoneyFingerprint(plan),
+    shareFillMoneyPlan: clone(plan),
+    createdAt: AGED_AT,
+    updatedAt: AGED_AT,
+  });
+}
+
+function backdateMoneyReceipt(state: FakeDb, moneyKey: string, at: Date): void {
+  const receipt = getColl(state, NON_ATOMIC_MONEY_FLOW_RECEIPTS_COLLECTION).get(moneyKey);
+  if (receipt) {
+    receipt.createdAt = new Date(at.getTime());
+    receipt.updatedAt = new Date(at.getTime());
+  }
+}
+
+function moneyReceiptStatus(state: FakeDb, moneyKey: string): unknown {
+  return getColl(state, NON_ATOMIC_MONEY_FLOW_RECEIPTS_COLLECTION).get(moneyKey)?.status;
 }
 
 let fillSeq = 0;
@@ -1011,16 +1089,20 @@ describe("share-fill money recovery and equivalence", () => {
     state.faultAt = 3;
     await expect(executeShareFillMoneyFlow(db as never, plan)).rejects.toThrow("injected-crash");
     state.faultAt = null;
+    // Backdate the crashed receipt past the orphan age grace: the flow
+    // stamps real `new Date()` writes, so without this the pass would
+    // (correctly) treat it as a live in-flight fill and skip it.
+    backdateMoneyReceipt(state, `${plan.fillKey}:money`, AGED_AT);
     // Seed the audit receipt the route minted before money ran.
     getColl(state, NON_ATOMIC_MONEY_FLOW_RECEIPTS_COLLECTION).set(plan.fillKey, {
       _id: plan.fillKey,
       status: "in_progress",
       fingerprint: "audit",
       shareFillPlan: { moneyCommitted: false },
-      createdAt: new Date(),
-      updatedAt: new Date(),
+      createdAt: AGED_AT,
+      updatedAt: AGED_AT,
     });
-    const results = await recoverShareFillMoneyOrphans(db as never, 50);
+    const results = await recoverShareFillMoneyOrphans(db as never, 50, NOW);
     expect(results.some((r) => r.action === "money-recovered")).toBe(true);
     const audit = getColl(state, NON_ATOMIC_MONEY_FLOW_RECEIPTS_COLLECTION).get(plan.fillKey);
     expect((audit?.shareFillPlan as Doc)?.moneyCommitted).toBe(true);
@@ -1034,10 +1116,10 @@ describe("share-fill money recovery and equivalence", () => {
       status: "in_progress",
       fingerprint: "x",
       shareFillMoneyPlan: { version: 999 },
-      createdAt: new Date(),
-      updatedAt: new Date(),
+      createdAt: AGED_AT,
+      updatedAt: AGED_AT,
     });
-    const results = await recoverShareFillMoneyOrphans(db as never, 50);
+    const results = await recoverShareFillMoneyOrphans(db as never, 50, NOW);
     expect(results).toHaveLength(1);
     expect(results[0]?.action).toBe("settled-failed-no-plan");
   });
@@ -1104,5 +1186,182 @@ describe("share-fill money recovery and equivalence", () => {
       expect(walletOf(trial, "characters", SELLER_ID, "currencyBalances.personal.USD")).toBe(1200);
       expect(charShares(trial, CORP_ID, FILLER_ID)).toBe(10);
     }
+  });
+});
+
+describe("money orphan scan fairness and age grace", () => {
+  let state: FakeDb;
+  let db: Record<string, (...args: never[]) => unknown>;
+
+  beforeEach(() => {
+    state = makeFakeDb();
+    db = fakeDb(state);
+  });
+
+  function seedMoneyBaseline(target: FakeDb): void {
+    seedCorp(target, {
+      shareholders: [{ characterId: SELLER_ID, shares: 10000, avgCostPerShare: 90 }],
+    });
+    seedCharacter(target, FILLER_ID, 1000000);
+    seedCharacter(target, SELLER_ID, 200);
+  }
+
+  /**
+   * Persistently incomplete receipt: a sell-fill plan with no filler debit
+   * passes the stored-plan guard but the step builder throws on every pass,
+   * so the receipt stays `in_progress` forever with zero writes. A
+   * head-of-queue scan burns its whole budget on this prefix every pass.
+   */
+  function stuckPlan(fillKey: string): ShareFillMoneyPlan {
+    return sellPlan({ fillKey, fillerDebit: null });
+  }
+
+  function seedWorld(target: FakeDb, prefix: string, stuckCount: number): { stuckKeys: string[] } {
+    seedMoneyBaseline(target);
+    const stuckKeys: string[] = [];
+    for (let i = 0; i < stuckCount; i += 1) {
+      const fillKey = `${prefix}-${String(i).padStart(2, "0")}`;
+      stuckKeys.push(`${fillKey}:money`);
+      seedMoneyReceipt(target, fillKey, stuckPlan(fillKey));
+    }
+    return { stuckKeys };
+  }
+
+  it("reaches a recoverable tail stranded behind more than one page of persistent incomplete receipts", async () => {
+    // Starvation regression: 55 permanently-incomplete receipts sort ahead
+    // of a recoverable tail. An unsorted `.limit(50)` scan re-reads the same
+    // stuck prefix every pass and never reaches it; rotation must.
+    const { stuckKeys } = seedWorld(state, "mstarve", 55);
+    const tailKey = "mstarve-99-tail";
+    seedMoneyReceipt(state, tailKey, sellPlan({ fillKey: tailKey }));
+
+    const first = await recoverShareFillMoneyOrphans(db as never, 50, NOW);
+    expect(first).toHaveLength(50);
+    expect(first.every((r) => r.action === "money-incomplete")).toBe(true);
+    expect(moneyReceiptStatus(state, `${tailKey}:money`)).toBe("in_progress");
+
+    const second = await recoverShareFillMoneyOrphans(db as never, 50, NOW);
+    expect(second.length).toBeLessThanOrEqual(50);
+    expect(second.find((r) => r.moneyKey === `${tailKey}:money`)?.action).toBe("money-recovered");
+    // The tail moved money exactly once; the stuck prefix is untouched.
+    expect(walletOf(state, "characters", FILLER_ID, "currencyBalances.personal.USD")).toBe(
+      1000000 - 1000
+    );
+    expect(charShares(state, CORP_ID, FILLER_ID)).toBe(10);
+    expect(moneyReceiptStatus(state, stuckKeys[0])).toBe("in_progress");
+    expect(moneyReceiptStatus(state, stuckKeys[stuckKeys.length - 1])).toBe("in_progress");
+  });
+
+  it("wraps around to the head when the cursor runs past the tail", async () => {
+    const { stuckKeys } = seedWorld(state, "mwrap", 60);
+
+    const first = await recoverShareFillMoneyOrphans(db as never, 50, NOW);
+    expect(first.map((r) => r.moneyKey)).toEqual(stuckKeys.slice(0, 50));
+
+    // Ten rows sit past the cursor, so the window wraps to the head to fill
+    // the budget: the second pass holds both the unseen tail and head rows.
+    const second = await recoverShareFillMoneyOrphans(db as never, 50, NOW);
+    expect(second).toHaveLength(50);
+    const secondKeys = second.map((r) => r.moneyKey);
+    expect(secondKeys).toContain(stuckKeys[59]);
+    expect(secondKeys).toContain(stuckKeys[0]);
+    // Across the two passes every receipt is visited: the second pass holds
+    // the unseen tail plus wrapped head rows (re-examination is expected;
+    // incomplete receipts never settle).
+    const seen = new Set([...first, ...second].map((r) => r.moneyKey));
+    expect(seen.size).toBe(stuckKeys.length);
+    expect([...seen].sort()).toEqual([...stuckKeys].sort());
+  });
+
+  it("shares rotation across Db wrappers for the same client+database", async () => {
+    // Production regression: `getDb()` returns a NEW Db wrapper on every
+    // call, so cursors keyed by Db handle reset each tick and the scan
+    // re-reads the same stuck prefix forever. Two wrappers over one client,
+    // database, and store must continue one rotation, not restart it.
+    const client = {};
+    const shared = makeFakeDb();
+    const dbA = fakeDb(shared, { client, databaseName: "gamedb" });
+    const dbB = fakeDb(shared, { client, databaseName: "gamedb" });
+    const { stuckKeys } = seedWorld(shared, "mshared", 60);
+
+    const first = await recoverShareFillMoneyOrphans(dbA as never, 50, NOW);
+    expect(first.map((r) => r.moneyKey)).toEqual(stuckKeys.slice(0, 50));
+    // The second tick arrives on a fresh wrapper: it must pick up past the
+    // first pass's cursor and reach the unseen tail.
+    const second = await recoverShareFillMoneyOrphans(dbB as never, 50, NOW);
+    const secondKeys = second.map((r) => r.moneyKey);
+    expect(secondKeys).toContain(stuckKeys[59]);
+    expect(secondKeys).not.toEqual(stuckKeys.slice(0, 50));
+  });
+
+  it("isolates rotation by client and by database (no leakage)", async () => {
+    // Advance one world's cursor deep into its queue, then prove neither key
+    // component leaks: the same database name on a different client, and a
+    // different database name on the same client, both start at their own
+    // head and must NOT reach their tail in one bounded pass.
+    const client = {};
+    const world = makeFakeDb();
+    const worldDb = fakeDb(world, { client, databaseName: "gamedb" });
+    seedWorld(world, "miso", 60);
+    await recoverShareFillMoneyOrphans(worldDb as never, 50, NOW);
+    const advanced = await recoverShareFillMoneyOrphans(worldDb as never, 50, NOW);
+    expect(advanced.map((r) => r.moneyKey)).toContain("miso-59:money");
+
+    const others: Array<{ store: FakeDb; handle: Record<string, (...args: never[]) => unknown> }> =
+      [
+        (() => {
+          const store = makeFakeDb();
+          return { store, handle: fakeDb(store, { client: {}, databaseName: "gamedb" }) };
+        })(),
+        (() => {
+          const store = makeFakeDb();
+          return { store, handle: fakeDb(store, { client, databaseName: "otherdb" }) };
+        })(),
+      ];
+    for (const other of others) {
+      seedWorld(other.store, "miso", 60);
+      const pass = await recoverShareFillMoneyOrphans(other.handle as never, 50, NOW);
+      expect(pass).toHaveLength(50);
+      expect(pass.map((r) => r.moneyKey)).not.toContain("miso-59:money");
+    }
+  });
+
+  it("leaves a fresh in-flight receipt untouched and recovers it once it ages", async () => {
+    expect(SHARE_FILL_MONEY_ORPHAN_MIN_AGE_MS).toBe(5 * 60 * 1000);
+    seedMoneyBaseline(state);
+    seedMoneyReceipt(state, "mflight-aged", sellPlan({ fillKey: "mflight-aged" }));
+    seedMoneyReceipt(state, "mflight-fresh", sellPlan({ fillKey: "mflight-fresh" }));
+    seedMoneyReceipt(state, "mflight-edge", sellPlan({ fillKey: "mflight-edge" }));
+    backdateMoneyReceipt(state, "mflight-fresh:money", NOW);
+    // Exactly at the grace edge counts as aged (the check is strict `<`).
+    backdateMoneyReceipt(
+      state,
+      "mflight-edge:money",
+      new Date(NOW.getTime() - SHARE_FILL_MONEY_ORPHAN_MIN_AGE_MS)
+    );
+
+    const first = await recoverShareFillMoneyOrphans(db as never, 50, NOW);
+    expect(first).toEqual([
+      { moneyKey: "mflight-aged:money", action: "money-recovered" },
+      { moneyKey: "mflight-edge:money", action: "money-recovered" },
+    ]);
+    expect(moneyReceiptStatus(state, "mflight-fresh:money")).toBe("in_progress");
+    // Only the two aged fills moved money; the live fill was never re-driven.
+    expect(walletOf(state, "characters", FILLER_ID, "currencyBalances.personal.USD")).toBe(
+      1000000 - 2 * 1000
+    );
+
+    // Ten minutes later the fresh receipt has aged into eligibility and
+    // converges; re-recovering the older two moves nothing further (keyed
+    // steps converge to already-applied instead of double-moving).
+    const later = await recoverShareFillMoneyOrphans(
+      db as never,
+      50,
+      new Date(NOW.getTime() + 10 * 60 * 1000)
+    );
+    expect(later.find((r) => r.moneyKey === "mflight-fresh:money")?.action).toBe("money-recovered");
+    expect(walletOf(state, "characters", FILLER_ID, "currencyBalances.personal.USD")).toBe(
+      1000000 - 3 * 1000
+    );
   });
 });
