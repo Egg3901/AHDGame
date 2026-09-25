@@ -2551,7 +2551,7 @@
         "approved_on": "2026-09-25",
         "impact": "2027 education and income substrate uses a documented projection rather than unpublished 2025 ACS 1-year observations.",
         "mitigation": "Retain fixed source-year provenance, reproducible generator inputs, and deterministic tests for the projection.",
-        "monitoring": "Check the official ACS release page and API catalog for 2025 1-year detailed tables.",
+        "monitoring": "Track #1 records a dated check of the official ACS release page and API catalog at final validation and weekly thereafter while the waiver is active; attach each result to #1670 and RR-062. Trigger replacement work when 2025 1-year detailed tables and metadata are published.",
         "rollback": "When the 2025 data is published, regenerate the 2027 substrate, compare deltas, and rerun the 2027 repair/release replay before claiming the replacement baseline."
       },
       "blocked_by": [
