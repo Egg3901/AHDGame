@@ -17,80 +17,24 @@
  * money (`liquidCapital` untouched).
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { execFileSync, spawn, type ChildProcess } from "node:child_process";
-import { randomUUID } from "node:crypto";
-import { mkdtemp, rm } from "node:fs/promises";
-import { statfsSync } from "node:fs";
+import type { ChildProcess } from "node:child_process";
 import { createServer } from "node:net";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { MongoClient, ObjectId, type Db, type Document } from "mongodb";
+import {
+  REAL_MONGO_ENABLED,
+  assertOwnedMongod,
+  fixtureProcExited,
+  getFreePort,
+  sleep,
+  startIsolatedMongod,
+  stopIsolatedMongod,
+  waitExit,
+  type IsolatedMongod,
+} from "@/lib/test-utils/realMongoFixture";
 import { releaseCharacterHeldSharesToFloat } from "./releaseCharacterHeldSharesToFloat";
 import { releaseCorporationHeldSharesToFloat } from "./releaseHeldSharesToFloat";
 
-const ENABLED = process.env.AHD_TEST_REAL_MONGO === "1";
-const STARTUP_DEADLINE_MS = 25_000;
-const STOP_GRACE_MS = 10_000;
-const STOP_KILL_MS = 5_000;
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-/** A proc counts as exited on either an exit code or a fatal signal. */
-export function fixtureProcExited(proc: ChildProcess): boolean {
-  return proc.exitCode !== null || proc.signalCode !== null;
-}
-
-export function waitExit(proc: ChildProcess, timeoutMs: number): Promise<boolean> {
-  if (fixtureProcExited(proc)) return Promise.resolve(true);
-  return new Promise((resolve) => {
-    const timer = setTimeout(() => {
-      proc.removeListener("exit", onExit);
-      resolve(fixtureProcExited(proc));
-    }, timeoutMs);
-    function onExit(): void {
-      clearTimeout(timer);
-      resolve(true);
-    }
-    proc.once("exit", onExit);
-  });
-}
-
-/** Allocate an unused loopback port by binding port 0, then releasing it. */
-export async function getFreePort(): Promise<number> {
-  const server = createServer();
-  await new Promise<void>((resolve, reject) => {
-    server.once("error", reject);
-    server.listen(0, "127.0.0.1", () => {
-      server.removeListener("error", reject);
-      resolve();
-    });
-  });
-  const address = server.address();
-  const port = typeof address === "object" && address !== null ? address.port : 0;
-  await new Promise<void>((resolve) => server.close(() => resolve()));
-  if (!port) throw new Error("Could not allocate a loopback port for the isolated mongod.");
-  return port;
-}
-
-/**
- * Prove the answering server IS the owned child before any fixture data
- * write. Throws (fail, never write) when the owner is gone or the pid does
- * not match: the port may hold an unrelated Mongo.
- */
-export async function assertOwnedMongod(proc: ChildProcess, client: MongoClient): Promise<void> {
-  if (proc.pid === undefined || fixtureProcExited(proc)) {
-    throw new Error("Refusing real-mongo fixture: owned mongod is not running.");
-  }
-  const status = (await client.db().admin().serverStatus()) as { pid?: unknown };
-  if (typeof status?.pid !== "number" || status.pid !== proc.pid) {
-    throw new Error(
-      `Refusing real-mongo fixture: server pid ${String(status?.pid)} does not match ` +
-        `owned mongod pid ${String(proc.pid)}.`
-    );
-  }
-}
+const ENABLED = REAL_MONGO_ENABLED;
 
 function holderTotal(doc: Document): number {
   const holders = (doc.shareholders ?? []) as Array<{ shares: number }>;
@@ -140,128 +84,17 @@ describe("share-release mongo fixture guards", () => {
 });
 
 describe.runIf(ENABLED)("release share conservation against isolated mongod", () => {
-  let proc: ChildProcess | null = null;
-  let client: MongoClient | null = null;
+  let fixture: IsolatedMongod | null = null;
   let db: Db;
-  let dbpath = "";
-  // True while no owned mongod exists or its exit is confirmed; the dbpath is
-  // only removed when this holds, never under a possibly-live server.
-  let mongodExited = true;
 
   beforeAll(async () => {
-    const base = tmpdir();
-    const freeBytes = statfsSync(base).bavail * statfsSync(base).bsize;
-    if (freeBytes < 2 * 1024 ** 3) {
-      throw new Error(
-        `Refusing real-mongo fixture: only ${Math.floor(freeBytes / 1024 ** 3)}GB free, need >2GB.`
-      );
-    }
-    try {
-      execFileSync("mongod", ["--version"], { stdio: "ignore" });
-    } catch {
-      throw new Error("AHD_TEST_REAL_MONGO=1 but no mongod binary is available on PATH.");
-    }
-
-    dbpath = await mkdtemp(join(base, "ahd-share-release-"));
-    const dbName = `shareReleaseConservation_${randomUUID().replace(/-/g, "")}`;
-    let uri = "";
-    let lastError: unknown = null;
-    for (let attempt = 0; attempt < 3; attempt += 1) {
-      const port = await getFreePort();
-      const child = spawn(
-        "mongod",
-        [
-          "--port",
-          String(port),
-          "--dbpath",
-          dbpath,
-          "--bind_ip",
-          "127.0.0.1",
-          "--nounixsocket",
-          "--wiredTigerCacheSizeGB",
-          "0.25",
-        ],
-        { stdio: "ignore" }
-      );
-      // Registered synchronously so a failed spawn can never surface as an
-      // unhandled 'error' event.
-      let spawnError: unknown = null;
-      child.once("error", (err) => {
-        spawnError = err;
-      });
-      proc = child;
-      mongodExited = false;
-      uri = `mongodb://127.0.0.1:${port}/${dbName}`;
-      const deadline = Date.now() + STARTUP_DEADLINE_MS;
-      let connected = false;
-      while (Date.now() < deadline) {
-        if (spawnError !== null) {
-          lastError = spawnError;
-          break;
-        }
-        if (fixtureProcExited(child)) {
-          lastError = new Error(
-            `mongod exited during startup (code ${child.exitCode}, signal ${child.signalCode})`
-          );
-          break;
-        }
-        const candidate = new MongoClient(uri, { serverSelectionTimeoutMS: 1000 });
-        try {
-          await candidate.connect();
-          await candidate.db().admin().ping();
-          // Ownership gate: prove the answering server is this child before
-          // ANY fixture data write. On mismatch close and fail, never write.
-          await assertOwnedMongod(child, candidate);
-          client = candidate;
-          connected = true;
-          break;
-        } catch (err) {
-          lastError = err;
-          await candidate.close().catch(() => {});
-          if (err instanceof Error && err.message.startsWith("Refusing real-mongo fixture")) break;
-          await sleep(250);
-        }
-      }
-      if (connected) break;
-      // Never reuse the dbpath under a possibly-live server: kill only the
-      // owned proc, and refuse the next attempt until its exit is confirmed.
-      if (!fixtureProcExited(child)) child.kill("SIGKILL");
-      mongodExited = await waitExit(child, STOP_KILL_MS);
-      proc = null;
-      if (!mongodExited) {
-        throw new Error(
-          `Isolated mongod would not exit after SIGKILL; refusing to reuse its dbpath. ${String(lastError)}`
-        );
-      }
-    }
-    if (!client) {
-      throw new Error(`Isolated mongod failed to start: ${String(lastError)}`);
-    }
-    db = client.db(dbName);
+    fixture = await startIsolatedMongod("ahd-share-release-");
+    db = fixture.db;
   }, 120_000);
 
   afterAll(async () => {
-    await client?.close().catch(() => {});
-    client = null;
-    if (proc) {
-      const owned = proc;
-      proc = null;
-      // Kill only the owned proc, and only while it is still running.
-      if (!fixtureProcExited(owned)) owned.kill("SIGTERM");
-      mongodExited = await waitExit(owned, STOP_GRACE_MS);
-      if (!mongodExited) {
-        if (!fixtureProcExited(owned)) owned.kill("SIGKILL");
-        mongodExited = await waitExit(owned, STOP_KILL_MS);
-      }
-    }
-    if (dbpath) {
-      const path = dbpath;
-      dbpath = "";
-      // A server whose exit was never confirmed may still hold this path.
-      if (mongodExited) {
-        await rm(path, { recursive: true, force: true });
-      }
-    }
+    await stopIsolatedMongod(fixture);
+    fixture = null;
   }, 120_000);
 
   it("conserves duplicate character rows and leaves money alone", async () => {

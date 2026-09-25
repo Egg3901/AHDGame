@@ -23,6 +23,7 @@ import {
   nonConvertibleTradeCurrency,
 } from "@/lib/constants/commandEconomy";
 import { runWithOptionalTransaction } from "@/lib/db/runWithOptionalTransaction";
+import { newCharacterTransferBarrierResponse } from "@/lib/api/newCharacterTransferBarrier";
 import type { CurrencyOrder, GameConfig, GameState, TradeHistoryEntry } from "@/lib/db/types";
 import { recordAudit } from "@/lib/audit/recordAudit";
 
@@ -42,6 +43,11 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const auth = await requireAuthWithCharacter();
     if (!auth.ok) return auth.response;
+
+    // The filler pays the poster at the order's rate — a skewed fill is the
+    // same disguised transfer the barrier covers on direct trades.
+    const barrier = await newCharacterTransferBarrierResponse(auth.user.character);
+    if (barrier) return barrier;
 
     const rateCheck = checkRateLimit(auth.user.userId, 30, 60_000);
     if (!rateCheck.ok) return rateLimitResponse(rateCheck.retryAfter);
