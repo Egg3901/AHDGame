@@ -22,6 +22,18 @@ export async function GET(request: Request) {
           process.env.NEXT_PUBLIC_DOCS_URL ||
           "https://docs.lakesidegames.net/api/public-v1.html",
         openApiUrl: `${baseUrl}/api/public/v1/openapi.json`,
+        integrations: {
+          mcp: {
+            transport: "stdio",
+            command: "npm run --silent api:mcp",
+            credentialEnv: "AHD_API_KEY",
+            access: "read-only public v1 endpoints",
+          },
+          cdn: {
+            staticBaseUrl: "https://cdn.ahousedividedgame.com/static/",
+            authentication: "none",
+          },
+        },
         authentication: "X-API-Key header (public or private scope)",
         // Caller-invariant on purpose: this response is edge-cached publicly, so
         // it must not embed the requesting key's own allowance. A caller reads
