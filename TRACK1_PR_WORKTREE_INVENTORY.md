@@ -745,3 +745,13 @@ currently conflicting; #2386 is the `main` into `staging` ancestry repair
 intended to unblock it, with CI still running. These are active promotion
 steps, not feature-branch cleanup targets; resolve their gate and sequence
 before their final PR/worktree disposition.
+
+**AHDGame short-turn candidate: DELETE as superseded, 2026-09-25.** A
+read-only Muse Spark 1.3 audit of all 20 commits in
+`verify/short-turn-candidate-20260920` compared each behavior with current
+development and Track 1. The 19 patch-unique hashes are historical work that
+landed through squash PRs #2180, #2186, #2189, #2201, #2209, #2210, #2255,
+#2274 and #2283; the twentieth is patch-equivalent by `git cherry`. No
+behavior remains to extract. The worktree is clean, unlocked and process-free.
+It was removed with ordinary `git worktree remove`; the branch ref remains a
+dated candidate artifact for release provenance.
