@@ -12,12 +12,7 @@ import {
   type EquityLiquidityRuleQuotePlan,
 } from "@/lib/indexFunds/equityLiquidity/rules";
 import { boundedParallelMap } from "@/lib/indexFunds/boundedParallelMap";
-import {
-  emitTx,
-  emitTxBulk,
-  loadTxThresholds,
-  type TxInput,
-} from "@/lib/financialTxLog/emit";
+import { emitTx, emitTxBulk, loadTxThresholds, type TxInput } from "@/lib/financialTxLog/emit";
 import { loadTurnLengthMinutes } from "@/lib/financialTxLog/expiresAt";
 
 // Each worker owns one fund's cash, escrow and inventory. Eight overlaps the
