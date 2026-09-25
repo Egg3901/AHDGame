@@ -1,4 +1,5 @@
 import type { Db, ObjectId } from "mongodb";
+import { getGameStatePresetOrDefault } from "@/lib/db/collections/gameState";
 import { getEventInstancesCollection } from "@/lib/db/collections/eventInstances";
 import type { EventInstance } from "@/lib/db/types/events";
 import { STAT_META } from "@/lib/stats/statMeta";
@@ -78,6 +79,7 @@ export async function resolveEvent(
     tier,
     reason,
     statAdjustment,
+    preset: await getGameStatePresetOrDefault(db),
   };
 
   if (handler.applyEffects) {

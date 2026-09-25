@@ -1,7 +1,7 @@
 import { loadCampaignCurrencyRates } from "@/lib/campaigns/campaignCurrency";
 import { ObjectId } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
-import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
+import { getSeedCurrencyCode } from "@/lib/constants/currencies";
 import type { Character } from "@/lib/db/types/character";
 import type { ElectionCandidate } from "@/lib/db/types/election";
 import type { EventEffect } from "@/lib/db/types/events";
@@ -74,7 +74,7 @@ async function applyCountryEffects(
           countryId,
           subjectName: countryId,
           amount: amountLocal,
-          currencyCode: COUNTRY_CURRENCY_MAP[countryId],
+          currencyCode: getSeedCurrencyCode(countryId, ctx.preset ?? ""),
           counterpartyType: "system",
           meta: { kind: ctx.instance.kind, instanceId: ctx.instance._id.toHexString() },
         });
@@ -177,7 +177,8 @@ export async function applyCountryTreasuryDelta(
   countryId: CountryId,
   currentTurn: number,
   deltaAnchor: number,
-  meta: Record<string, unknown>
+  meta: Record<string, unknown>,
+  preset?: string
 ): Promise<void> {
   if (deltaAnchor === 0) return;
   const amountLocal = deltaAnchor;
@@ -194,7 +195,7 @@ export async function applyCountryTreasuryDelta(
     countryId,
     subjectName: countryId,
     amount: amountLocal,
-    currencyCode: COUNTRY_CURRENCY_MAP[countryId],
+    currencyCode: getSeedCurrencyCode(countryId, preset ?? ""),
     counterpartyType: "system",
     meta,
   });
@@ -235,7 +236,7 @@ export async function applyDeclarativeEffects(
 
   const forexEnabled = await isForexEnabled();
   const campaignRates = await loadCampaignCurrencyRates(ctx.db);
-  const homeCurrency = getHomeCurrency(character);
+  const homeCurrency = getHomeCurrency(character, ctx.preset);
   const charUpdates: Record<string, number> = {};
   let favorability = character.favorability ?? 50;
   let infamy = character.infamy ?? 0;
@@ -253,7 +254,7 @@ export async function applyDeclarativeEffects(
         politicalInfluence = Math.max(0, politicalInfluence + effect.delta);
         break;
       case "personalWealth": {
-        const { rate } = await loadCampaignFxRate(ctx.db, character.countryId);
+        const { rate } = await loadCampaignFxRate(ctx.db, character.countryId, ctx.preset);
         const localAmount = forexEnabled
           ? anchorToLocal(effect.deltaAnchor, rate)
           : effect.deltaAnchor;
@@ -276,7 +277,8 @@ export async function applyDeclarativeEffects(
         const localDelta = campaignAnchorToLocal(
           effect.deltaLocal,
           character.countryId,
-          campaignRates
+          campaignRates,
+          ctx.preset
         );
         const campaignField = forexEnabled ? "currencyBalances.campaign" : "funds";
         await ctx.db

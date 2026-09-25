@@ -36,9 +36,10 @@ export function anchorToLocal(anchor: number, rate: number): number {
  */
 export async function loadCampaignFxRate(
   db: Db,
-  countryId: string
+  countryId: string,
+  preset?: string
 ): Promise<{ rate: number; currencyCode: CurrencyCode }> {
-  const currencyCode = getCampaignCurrency(countryId);
+  const currencyCode = getCampaignCurrency(countryId, preset);
   const rateDoc = await db
     .collection<ExchangeRate>("exchangeRates")
     .findOne({ currencyCode }, { projection: { rate: 1 } });

@@ -1,4 +1,8 @@
-import { campaignLocalRate, loadCampaignCurrencyRates } from "@/lib/campaigns/campaignCurrency";
+import {
+  campaignAnchorToLocal,
+  campaignLocalRate,
+  loadCampaignCurrencyRates,
+} from "@/lib/campaigns/campaignCurrency";
 import { withNoStore } from "@/lib/api/withNoStore";
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
@@ -467,6 +471,19 @@ export async function POST(request: Request) {
             startingActions: character.actions,
             rewardAmount: onboardingRewardAmount(gameConfig.startingFunds),
             turnLengthMinutes: gameConfig.turnLengthMinutes,
+            currencyCode: homeCurrency,
+            localStartingFunds: campaignAnchorToLocal(
+              character.funds ?? gameConfig.startingFunds,
+              countryId,
+              campaignRates,
+              worldPreset
+            ),
+            localRewardAmount: campaignAnchorToLocal(
+              onboardingRewardAmount(gameConfig.startingFunds),
+              countryId,
+              campaignRates,
+              worldPreset
+            ),
           }),
         });
       }
