@@ -982,7 +982,7 @@ describe("cron jobs", () => {
       );
     });
 
-    it("runs while the game is paused — recovery is independent of the game clock", async () => {
+    it("skips without touching the database while the game is paused", async () => {
       mockInitializeGameState.mockResolvedValue(undefined);
       mockGetGameState.mockResolvedValue({
         currentTurn: 1,
@@ -995,7 +995,27 @@ describe("cron jobs", () => {
       await initializeCronJobs();
       await findScheduledCallback(SHARE_FILL_RECOVERY_SCHEDULE)();
 
-      expect(mockRunShareFillRecoveryPass).toHaveBeenCalledTimes(1);
+      expect(consoleLogSpy).toHaveBeenCalledWith(
+        expect.stringContaining("[Cron] Share-fill recovery skipped - world inactive")
+      );
+      expect(mockGetDb).not.toHaveBeenCalled();
+      expect(mockRunShareFillRecoveryPass).not.toHaveBeenCalled();
+    });
+
+    it("skips without touching the database when game state is missing", async () => {
+      mockInitializeGameState.mockResolvedValue(undefined);
+      mockGetGameState.mockResolvedValue(null);
+      armCron();
+
+      const { initializeCronJobs, SHARE_FILL_RECOVERY_SCHEDULE } = await import("./cron");
+      await initializeCronJobs();
+      await findScheduledCallback(SHARE_FILL_RECOVERY_SCHEDULE)();
+
+      expect(consoleLogSpy).toHaveBeenCalledWith(
+        expect.stringContaining("[Cron] Share-fill recovery skipped - world inactive")
+      );
+      expect(mockGetDb).not.toHaveBeenCalled();
+      expect(mockRunShareFillRecoveryPass).not.toHaveBeenCalled();
     });
 
     it("skips while a turn holds the lock with a fresh heartbeat", async () => {

@@ -131,13 +131,24 @@ describe("POST /api/singleplayer/turn/advance", () => {
     expect(runShareFillRecoveryPass).toHaveBeenCalledTimes(1);
   });
 
-  it("still completes the advance when the recovery pass fails", async () => {
-    runShareFillRecoveryPass.mockRejectedValue(new Error("recovery unavailable"));
+  it("still completes the advance when the recovery pass reports failed", async () => {
+    // `runShareFillRecoveryPass` never throws by contract: its real failure
+    // mode is a `failed` summary, which must not fail the committed turn.
+    runShareFillRecoveryPass.mockResolvedValue({
+      status: "failed",
+      examined: 0,
+      recovered: 0,
+      alreadyComplete: 0,
+      settledFailed: 0,
+      leftInProgress: 0,
+      incomplete: 0,
+    });
     const response = await POST(
       new Request("http://localhost/api/singleplayer/turn/advance", { method: "POST" })
     );
 
     expect(response.status).toBe(200);
+    expect(runShareFillRecoveryPass).toHaveBeenCalledTimes(1);
     await expect(response.json()).resolves.toMatchObject({ success: true, turn: 2 });
   });
 

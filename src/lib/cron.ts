@@ -600,6 +600,8 @@ export async function initializeCronJobs() {
   // a bounded fair pass. Deferrable by design: while a turn holds the
   // processing lock (fresh OR stale — a stale lock may still be a live but
   // blocked turn, per #1208) the pass is skipped and retried next tick.
+  // With no world or a paused world there is nothing to recover, so the
+  // sweep returns before touching the database.
   // `runShareFillRecoveryPass` never throws and carries its own concurrency
   // guard, so overlapping ticks collapse instead of piling up.
   shareFillRecoveryCron = cron.schedule(
@@ -607,7 +609,11 @@ export async function initializeCronJobs() {
     async () => {
       try {
         const currentState = await getGameState();
-        if (currentState?.isProcessing) {
+        if (!currentState || !currentState.isActive) {
+          console.log("[Cron] Share-fill recovery skipped - world inactive");
+          return;
+        }
+        if (currentState.isProcessing) {
           console.log("[Cron] Share-fill recovery skipped — turn in progress");
           return;
         }

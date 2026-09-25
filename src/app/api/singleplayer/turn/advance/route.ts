@@ -50,13 +50,12 @@ export async function POST(request: Request) {
 
     // Lonely share-fill orphans are re-driven by the periodic cron sweep in
     // multiplayer, but singleplayer runs no cron. Drive one bounded pass here,
-    // after (never inside) the turn. Best-effort: the pass never throws, and
-    // even a driver-level failure must not fail the advance.
-    try {
-      await runShareFillRecoveryPass(db);
-    } catch {
-      // Receipts stay `in_progress` for the next advance.
-    }
+    // after (never inside) the turn. Best-effort by contract:
+    // `runShareFillRecoveryPass` never throws: a `failed` summary leaves
+    // receipts `in_progress` for the next advance and never fails this one,
+    // so no catch here: an outer silent catch would only hide a broken
+    // contract instead of surfacing it through `handleRouteError`.
+    await runShareFillRecoveryPass(db);
 
     const updated = await db
       .collection("characters")

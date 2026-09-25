@@ -98,6 +98,18 @@ function valueEquals(actual: unknown, expected: unknown): boolean {
   return actual === expected;
 }
 
+/** Total-order comparison mirroring Mongo's `_id` sort for string/ObjectId keys. */
+function compareKeyValue(actual: unknown, expected: unknown): number {
+  if (actual instanceof ObjectId && expected instanceof ObjectId) {
+    const a = actual.toHexString();
+    const b = expected.toHexString();
+    return a < b ? -1 : a > b ? 1 : 0;
+  }
+  const a = String(actual);
+  const b = String(expected);
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
 function matchesFilter(doc: Doc, filter: Record<string, unknown>): boolean {
   for (const [key, clause] of Object.entries(filter)) {
     if (clause !== null && typeof clause === "object" && !(clause instanceof ObjectId)) {
@@ -110,6 +122,31 @@ function matchesFilter(doc: Doc, filter: Record<string, unknown>): boolean {
       if ("$gte" in ops) {
         const actual = getPath(doc, key);
         if (typeof actual !== "number" || actual < (ops.$gte as number)) return false;
+        continue;
+      }
+      if ("$gt" in ops) {
+        const actual = doc[key] ?? getPath(doc, key);
+        if (actual === undefined || actual === null) return false;
+        if (compareKeyValue(actual, ops.$gt) <= 0) return false;
+        continue;
+      }
+      if ("$lt" in ops) {
+        const actual = doc[key] ?? getPath(doc, key);
+        if (actual === undefined || actual === null) return false;
+        if (compareKeyValue(actual, ops.$lt) >= 0) return false;
+        continue;
+      }
+      if ("$lte" in ops) {
+        const actual = doc[key] ?? getPath(doc, key);
+        if (actual === undefined || actual === null) return false;
+        if (compareKeyValue(actual, ops.$lte) > 0) return false;
+        continue;
+      }
+      if ("$regex" in ops) {
+        const actual = doc[key] ?? getPath(doc, key);
+        const pattern = ops.$regex as string | RegExp;
+        const re = pattern instanceof RegExp ? pattern : new RegExp(pattern);
+        if (typeof actual !== "string" || !re.test(actual)) return false;
         continue;
       }
       if ("$ne" in ops) {
@@ -158,6 +195,10 @@ function createFakeDb(): FakeDb {
     find: (filter?: Record<string, unknown>) => {
       toArray: () => Promise<Doc[]>;
       limit: (n: number) => { toArray: () => Promise<Doc[]> };
+      sort: (spec: Record<string, 1 | -1>) => {
+        toArray: () => Promise<Doc[]>;
+        limit: (n: number) => { toArray: () => Promise<Doc[]> };
+      };
     };
   } {
     let entry = collections.get(name);
@@ -227,6 +268,16 @@ function createFakeDb(): FakeDb {
       },
       find(filter: Record<string, unknown> = {}) {
         const all = [...store.docs.values()].filter((doc) => matchesFilter(doc, filter));
+        function sortedBy(spec: Record<string, 1 | -1>): Doc[] {
+          const [[sortKey, direction]] = Object.entries(spec);
+          return [...all].sort((a, b) => {
+            const cmp = compareKeyValue(
+              a[sortKey!] ?? getPath(a, sortKey!),
+              b[sortKey!] ?? getPath(b, sortKey!)
+            );
+            return direction === -1 ? -cmp : cmp;
+          });
+        }
         return {
           async toArray() {
             return all.map(clone);
@@ -235,6 +286,21 @@ function createFakeDb(): FakeDb {
             return {
               async toArray() {
                 return all.slice(0, n).map(clone);
+              },
+            };
+          },
+          sort(spec: Record<string, 1 | -1>) {
+            const sorted = sortedBy(spec);
+            return {
+              async toArray() {
+                return sorted.map(clone);
+              },
+              limit(n: number) {
+                return {
+                  async toArray() {
+                    return sorted.slice(0, n).map(clone);
+                  },
+                };
               },
             };
           },
@@ -358,6 +424,46 @@ async function readReceipt(key: string): Promise<Doc | null> {
   return fake.db
     .collection<MoneyFlowReceipt>(NON_ATOMIC_MONEY_FLOW_RECEIPTS_COLLECTION)
     .findOne({ _id: key }) as Promise<Doc | null>;
+}
+
+/**
+ * Starvation fixture: 55 permanently-stuck uncommitted receipts (claim landed
+ * with sharesRemaining 0 against preClaimRemaining 10, money never committed)
+ * followed by a provably-dead uncommitted tail (claim never landed) and a
+ * planless share-fill receipt. Zero-padded keys sort in seed order, so the
+ * dead tail sorts behind the stuck prefix under both insertion order and
+ * `_id` sort.
+ */
+function seedStarveWorld(target: FakeDb): void {
+  for (let i = 0; i < 55; i += 1) {
+    const orderId = new ObjectId();
+    target.seed("shareOrders", { _id: orderId, status: "filled", sharesRemaining: 0 });
+    target.seed(NON_ATOMIC_MONEY_FLOW_RECEIPTS_COLLECTION, {
+      _id: `starve-${String(i).padStart(2, "0")}`,
+      status: "in_progress",
+      fingerprint: "fp",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      shareFillPlan: basePlan({ orderIdHex: orderId.toHexString(), preClaimRemaining: 10 }),
+    });
+  }
+  const deadOrderId = new ObjectId();
+  target.seed("shareOrders", { _id: deadOrderId, status: "open", sharesRemaining: 10 });
+  target.seed(NON_ATOMIC_MONEY_FLOW_RECEIPTS_COLLECTION, {
+    _id: "starve-99-dead",
+    status: "in_progress",
+    fingerprint: "fp",
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    shareFillPlan: basePlan({ orderIdHex: deadOrderId.toHexString(), preClaimRemaining: 10 }),
+  });
+  target.seed(NON_ATOMIC_MONEY_FLOW_RECEIPTS_COLLECTION, {
+    _id: "planless-tail",
+    status: "in_progress",
+    fingerprint: "share-fill:order:filler:shares:10:price:5",
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  });
 }
 
 describe("route claim filter and pipeline", () => {
@@ -1000,11 +1106,72 @@ describe("orphan scan fairness", () => {
     const first = await recoverShareFillOrphans(fake.db, 50);
     expect(first).toHaveLength(50);
     expect(first.every((r) => r.action === "audit-recovered")).toBe(true);
+    // Rotation windows are `_id`-sorted, so the second pass holds whatever
+    // the first did not (not a fixed insertion-order slice). Every receipt
+    // is visited exactly once across the two passes.
     const second = await recoverShareFillOrphans(fake.db, 50);
-    expect(second.map((r) => r.key).sort()).toEqual(keys.slice(50).sort());
+    expect(second).toHaveLength(keys.length - first.length);
     expect(second.every((r) => r.action === "audit-recovered")).toBe(true);
+    expect([...first, ...second].map((r) => r.key).sort()).toEqual([...keys].sort());
     const third = await recoverShareFillOrphans(fake.db, 50);
     expect(third).toHaveLength(0);
+  });
+
+  it("rotates past persistent uncommitted receipts to settle a dead tail and a planless receipt", async () => {
+    // Starvation regression (issue #1672 follow-up): 55 permanently-stuck
+    // uncommitted receipts (claim landed, money unproven, so they can never
+    // settle until keyed money work is repaired) hide a later provably-dead
+    // uncommitted receipt and a planless share-fill receipt. A head-of-queue
+    // scan burns every pass on the stuck prefix; repeated bounded passes
+    // must reach and settle both tails while committed work keeps priority.
+    seedStarveWorld(fake);
+    const committedOrderId = new ObjectId();
+    fake.seed("shareOrders", { _id: committedOrderId, status: "filled", sharesRemaining: 0 });
+    seedReceipt(
+      "committed-tail",
+      basePlan({
+        orderIdHex: committedOrderId.toHexString(),
+        preClaimRemaining: 10,
+        moneyCommitted: true,
+        fillerBalanceAfter: 100,
+      })
+    );
+
+    const first = await recoverShareFillOrphans(fake.db, 50);
+    expect(first.length).toBeLessThanOrEqual(50);
+    expect(first.find((r) => r.key === "committed-tail")?.action).toBe("audit-recovered");
+    // The dead tail sorts behind the stuck prefix: not yet reached on pass one.
+    expect((await readReceipt("starve-99-dead"))?.status).toBe("in_progress");
+
+    const second = await recoverShareFillOrphans(fake.db, 50);
+    expect(second.length).toBeLessThanOrEqual(50);
+    expect((await readReceipt("starve-99-dead"))?.status).toBe("failed");
+    expect((await readReceipt("planless-tail"))?.status).toBe("failed");
+    expect((await readReceipt("committed-tail"))?.status).toBe("completed");
+    // The permanently-stuck prefix is untouched: rotation never settles what
+    // it cannot prove, and settling tails does not disturb it.
+    expect((await readReceipt("starve-00"))?.status).toBe("in_progress");
+    expect((await readReceipt("starve-54"))?.status).toBe("in_progress");
+  });
+
+  it("keeps rotation cursors per database instead of sharing them globally", async () => {
+    // Advance this world's cursor to the tail: two passes settle the dead end.
+    seedStarveWorld(fake);
+    await recoverShareFillOrphans(fake.db, 50);
+    await recoverShareFillOrphans(fake.db, 50);
+    expect((await readReceipt("starve-99-dead"))?.status).toBe("failed");
+
+    // A second world with the same shape starts rotation at its own head: a
+    // single bounded pass must NOT reach its dead tail. A shared global
+    // cursor would leak the first world's position and settle it early.
+    const other = createFakeDb();
+    seedStarveWorld(other);
+    const pass = await recoverShareFillOrphans(other.db, 50);
+    expect(pass.length).toBeLessThanOrEqual(50);
+    const dead = (await other.db
+      .collection<MoneyFlowReceipt>(NON_ATOMIC_MONEY_FLOW_RECEIPTS_COLLECTION)
+      .findOne({ _id: "starve-99-dead" })) as Doc | null;
+    expect(dead?.status).toBe("in_progress");
   });
 });
 

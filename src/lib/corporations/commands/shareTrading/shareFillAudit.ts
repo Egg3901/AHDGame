@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import * as Sentry from "@sentry/nextjs";
-import { ObjectId, type Collection, type Db } from "mongodb";
+import { ObjectId, type Collection, type Db, type Filter } from "mongodb";
 import {
   claimMoneyFlowReceipt,
   failMoneyFlowReceipt,
@@ -623,30 +623,120 @@ export async function prepareShareFillClaim(
 }
 
 /**
+ * Per-world rotation cursors for the orphan scan (issue #1672 starvation
+ * follow-up). A head-of-queue scan re-reads the same stuck prefix every
+ * pass: uncommitted receipts whose claim landed but whose money is unproven
+ * never settle, so later uncommitted receipts (provably dead, claim never
+ * landed) and planless receipts behind a full plan phase are never examined.
+ * Each phase therefore resumes after the last key it examined, wrapping to
+ * the head when it runs past the tail, so repeated bounded passes visit
+ * every receipt once per cycle and settle each phase's drainable rows.
+ *
+ * Keyed by Db handle (WeakMap), never module-global state: tests and worlds
+ * each rotate from their own head. Keyset pagination (`_id` bounds on a
+ * sorted scan) survives rows settling between passes: a settled row simply
+ * drops out of the filter while the cursor stays a valid lower bound.
+ */
+interface ShareFillOrphanCursors {
+  committedAfter?: string;
+  uncommittedAfter?: string;
+  planlessAfter?: string;
+}
+
+const shareFillOrphanCursors = new WeakMap<Db, ShareFillOrphanCursors>();
+
+function orphanCursorsFor(db: Db): ShareFillOrphanCursors {
+  let cursors = shareFillOrphanCursors.get(db);
+  if (!cursors) {
+    cursors = {};
+    shareFillOrphanCursors.set(db, cursors);
+  }
+  return cursors;
+}
+
+/**
+ * One bounded sorted window of a phase with wrap-around: rows after the
+ * cursor first, then rows at/before it to fill the window. Never examines
+ * more than `window` rows; an empty window leaves the cursor untouched.
+ */
+async function fetchReceiptWindow(
+  db: Db,
+  filter: Filter<ShareFillReceipt>,
+  afterKey: string | undefined,
+  window: number
+): Promise<ShareFillReceipt[]> {
+  if (window <= 0) return [];
+  const tail =
+    afterKey === undefined
+      ? await receiptsEx(db).find(filter).sort({ _id: 1 }).limit(window).toArray()
+      : await receiptsEx(db)
+          .find({ ...filter, _id: { $gt: afterKey } })
+          .sort({ _id: 1 })
+          .limit(window)
+          .toArray();
+  if (tail.length >= window || afterKey === undefined) return tail;
+  const seen = new Set<unknown>(tail.map((doc) => doc._id));
+  const head = await receiptsEx(db)
+    .find({ ...filter, _id: { $lte: afterKey } })
+    .sort({ _id: 1 })
+    .limit(window - tail.length)
+    .toArray();
+  for (const doc of head) {
+    if (!seen.has(doc._id)) tail.push(doc);
+  }
+  return tail;
+}
+
+/** Newest string key in a window, for advancing a cursor. Rows with
+ * non-string `_id`s are still examined; they just never become a cursor. */
+function lastWindowKey(docs: ShareFillReceipt[]): string | undefined {
+  for (let index = docs.length - 1; index >= 0; index -= 1) {
+    const id: unknown = docs[index]!._id;
+    if (typeof id === "string") return id;
+  }
+  return undefined;
+}
+
+/** Fingerprint gate for the planless phase, matching the query-level
+ * `$regex`. Keeps foreign-domain receipts (including the
+ * `share-fill-money` money legs) out: `share-fill-money:...` does not match
+ * the `share-fill:` prefix. */
+function isShareFillPlanlessReceipt(doc: ShareFillReceipt): boolean {
+  return (
+    typeof doc._id === "string" &&
+    typeof doc.fingerprint === "string" &&
+    doc.fingerprint.startsWith("share-fill:")
+  );
+}
+
+/**
  * Bounded orphan scan for wiring by a periodic driver (no fill path owns a
  * pass over all orders, and the turn matcher must not scan receipts either).
  * The per-order stamp hook covers any order that sees another fill; this
  * covers lonely orders whose receipt outlives them.
  *
- * Fairness: uncommitted receipts never settle, so a naive head-of-queue scan
- * starves every receipt behind them. Committed plans (actionable work) are
- * therefore visited first; uncommitted plans follow only to settle the
- * provably dead ones (claim never landed). Every pass settles what it can,
- * so repeated passes drain the queue monotonically.
+ * Fairness: uncommitted receipts whose claim landed never settle, so a
+ * head-of-queue scan starves every receipt behind them, and a full plan
+ * phase starves the planless phase. Committed plans (actionable work) keep
+ * priority and are visited first each pass; the uncommitted and planless
+ * phases then rotate via per-world cursors, and the planless phase is
+ * guaranteed at least half of whatever budget the committed phase leaves
+ * (unused planless cap backfills to uncommitted, so an empty planless phase
+ * costs the pass nothing). Every pass settles what it can, so repeated
+ * passes drain every phase monotonically.
  *
- * Reads are batched: one receipts query per phase plus a single `$in` load
- * of the referenced orders, instead of one receipt read plus one order read
- * per row. Audit inserts and settle writes stay per row (distinct
- * deterministic `_id`s per attempt); the pass runs outside `processTurn`,
- * so it is outside the turn round-trip budgets.
+ * Reads are batched: at most two sorted receipts queries per phase plus a
+ * single `$in` load of the referenced orders, instead of one receipt read
+ * plus one order read per row. Audit inserts and settle writes stay per row
+ * (distinct deterministic `_id`s per attempt); the pass runs outside
+ * `processTurn`, so it is outside the turn round-trip budgets.
  *
  * Plan-less receipts (claim insert landed, plan store never did, so the
- * order claim never ran) settle `failed` in the last phase via
- * `recoverShareFillAttempt`: otherwise they stay `in_progress` forever,
- * since no order ever stamps a key whose plan never landed. Failing is
- * truthful because `beginShareFillAttempt` persists the plan before the
- * order claim runs. The fingerprint prefix keeps foreign-domain receipts
- * (including the `share-fill-money` money receipts) out.
+ * order claim never ran) settle `failed` via the shared loaded-receipt
+ * path, which needs no order read for them: otherwise they stay
+ * `in_progress` forever, since no order ever stamps a key whose plan never
+ * landed. Failing is truthful because `beginShareFillAttempt` persists the
+ * plan before the order claim runs.
  *
  * Per-receipt failures are captured with the receipt key only, never plan
  * or order contents, and the receipt stays `in_progress` for the next pass.
@@ -656,52 +746,58 @@ export async function recoverShareFillOrphans(
   limit = 50
 ): Promise<ShareFillRecoveryResult[]> {
   const budget = Math.max(0, Math.floor(limit));
-  const results: ShareFillRecoveryResult[] = [];
-  if (budget === 0) return results;
+  if (budget === 0) return [];
+  const cursors = orphanCursorsFor(db);
 
-  // Phase 1: committed plans first (actionable), then uncommitted plans
-  // (settle provably-dead claims, leave the rest). One `$in` order load
-  // covers both phases.
-  const committed = await receiptsEx(db)
-    .find({ status: "in_progress", "shareFillPlan.moneyCommitted": true })
-    .limit(budget)
-    .toArray();
-  const remainderAfterCommitted = budget - committed.length;
-  const uncommitted =
-    remainderAfterCommitted > 0
-      ? await receiptsEx(db)
-          .find({
-            status: "in_progress",
-            shareFillPlan: { $exists: true },
-            "shareFillPlan.moneyCommitted": { $ne: true },
-          })
-          .limit(remainderAfterCommitted)
-          .toArray()
-      : [];
-  results.push(...(await recoverLoadedReceipts(db, [...committed, ...uncommitted])));
+  // Phase 1: committed plans first (actionable), rotating within the phase.
+  const committed = await fetchReceiptWindow(
+    db,
+    { status: "in_progress", "shareFillPlan.moneyCommitted": true },
+    cursors.committedAfter,
+    budget
+  );
+  const committedKey = lastWindowKey(committed);
+  if (committedKey !== undefined) cursors.committedAfter = committedKey;
+  const rest = budget - committed.length;
 
-  const remainder = budget - results.length;
-  if (remainder <= 0) return results;
+  // Phase 2: claim-before-plan receipts, capped so a planless backlog drains
+  // without starving the uncommitted phase. The fingerprint regex keeps
+  // foreign-domain receipts out at the query; the JS gate below is
+  // defense-in-depth for the shared loaded-receipt path, which would
+  // otherwise settle a foreign planless receipt `failed`.
+  const planlessCap = rest > 0 ? Math.max(1, Math.ceil(rest / 2)) : 0;
+  const planlessFetched = await fetchReceiptWindow(
+    db,
+    {
+      status: "in_progress",
+      shareFillPlan: { $exists: false },
+      fingerprint: { $regex: /^share-fill:/ },
+    },
+    cursors.planlessAfter,
+    planlessCap
+  );
+  const planlessKey = lastWindowKey(planlessFetched);
+  if (planlessKey !== undefined) cursors.planlessAfter = planlessKey;
+  const planless = planlessFetched.filter(isShareFillPlanlessReceipt);
 
-  // Phase 2: claim-before-plan receipts. These carry no plan, so they need
-  // no order read; `recoverShareFillAttempt` settles them without one.
-  const planless = await receiptsEx(db)
-    .find({ status: "in_progress", shareFillPlan: { $exists: false } })
-    .limit(remainder)
-    .toArray();
-  for (const receipt of planless) {
-    if (typeof receipt._id !== "string") continue;
-    if (typeof receipt.fingerprint !== "string" || !receipt.fingerprint.startsWith("share-fill:")) {
-      continue;
-    }
-    try {
-      results.push(await recoverShareFillAttempt(db, receipt._id));
-    } catch (err) {
-      captureRecoveryError(err, receipt._id);
-      results.push({ key: receipt._id, action: "left-in-progress-uncommitted" });
-    }
-  }
-  return results;
+  // Phase 3: uncommitted plans (settle provably-dead claims, leave the
+  // rest), rotating within the phase over the remainder plus any unused
+  // planless cap. One `$in` order load in `recoverLoadedReceipts` covers
+  // all three phases.
+  const uncommitted = await fetchReceiptWindow(
+    db,
+    {
+      status: "in_progress",
+      shareFillPlan: { $exists: true },
+      "shareFillPlan.moneyCommitted": { $ne: true },
+    },
+    cursors.uncommittedAfter,
+    rest - planless.length
+  );
+  const uncommittedKey = lastWindowKey(uncommitted);
+  if (uncommittedKey !== undefined) cursors.uncommittedAfter = uncommittedKey;
+
+  return recoverLoadedReceipts(db, [...committed, ...uncommitted, ...planless]);
 }
 
 /** Sanitized per-receipt failure capture: receipt key only, never plan contents. */
