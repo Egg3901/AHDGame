@@ -5,7 +5,7 @@ Sentry SaaS in the `lakeside-games` US organization is the production error dest
 ## Product manager actions before activation
 
 - Sign PostHog's DPA as an authorized company representative. The PostHog Cloud US project and $50,000 startup credits are already in place. The fourteen product billing limits were raised to $100/month each on September 24, 2026; no cap change is needed.
-- After the DPA is signed and [Ops draft PR #186](https://github.com/Egg3901/LSGD-ops-dash/pull/186) is reviewed and deployed, enter the PostHog public project key through the secure form at `https://ops.lakesidegames.net/settings/posthog`. The form submits it to the deployment setting `NEXT_PUBLIC_POSTHOG_KEY` for AHD's production Main Site and triggers a new build. Never paste the key into chat or the repository.
+- After the DPA is signed, enter the PostHog public project key through the secure Credentials form at `https://ops.lakesidegames.net/settings/credentials`. The form submits it to the deployment setting `NEXT_PUBLIC_POSTHOG_KEY` for AHD's production Main Site and triggers a new build. Never paste the key into chat or the repository.
 
 ## Engineering deployment checks
 
