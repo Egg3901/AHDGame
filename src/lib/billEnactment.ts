@@ -112,6 +112,7 @@ type EnactableBill = Pick<
   // Chamber + tally fields read by the Discord card's vote-split chart. The
   // lifecycle engine hands us the full bill document, so these are present on
   // real enactments even though the Pick above doesn't declare them.
+  sponsorName?: string;
   originChamber?: Bill["originChamber"];
   currentChamber?: Bill["currentChamber"];
   presidentAction?: Bill["presidentAction"];
