@@ -40,6 +40,9 @@ note, not a declaration that reset readiness has passed.
   and their geography dispatchers contain no `2027-default` mapping. Repair
   the modern-era overrides and seed dispatch together; copying earlier-era
   region arrays alone would retain obsolete institutions and party behavior.
+  In `bootstrapGameWorld.ts`, the existing RU and nine-satellite seed stacks
+  deliberately run only for `isEasternBlocEra(preset)`; preserve that Cold War
+  guard and add a separate modern-country seed path for the selected five.
   This decision does not weaken #2289's zero-critical fresh-bootstrap gate.
 - For the 2027 electorate repair, the owner approved a temporary projection
   waiver on 2026-09-25 while the Census Bureau has not announced publication
