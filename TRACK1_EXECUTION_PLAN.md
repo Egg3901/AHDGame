@@ -82,18 +82,23 @@ child issue and the parent tracker in one pass.
    counterfactual crises, telemetry attribution, and reset tooling. Run full
    `verify`, `verify:build`, Semgrep, dependency review, and scoped turn profiling.
    Record failures and rerun only the affected gate after a fix.
-7. **Qualify and rehearse.** On sandbox Mongo, run bootstrap conformance,
-   founding and normal turns, an operational reset/restore rehearsal, and the
-   minimum multi-seed simulation campaign below. Inspect complete time series
-   and issue-owned guardrails. Resolve every unexplained finding in code or
-   record an owner-approved waiver with impact, mitigation, monitoring, and
-   rollback conditions.
-8. **Final replay and accounting.** After the final code/configuration change,
-   run the exact-SHA release replay. Attach sanitized reports and source
-   revisions. Update every touched issue with source/test evidence and
-   remaining criteria. Close children and #2159 only after _all_ applicable
-   final gates pass and update parent counts in the same pass. The single PR
-   then becomes reviewable as a complete release candidate.
+7. **Prepare the final gate.** On sandbox Mongo, prove bootstrap conformance,
+   founding and normal-turn behavior, reset/restore tooling, report retention,
+   and source pinning with deterministic fixtures and the smallest targeted
+   probes justified above. Resolve every finding before freezing the candidate.
+   Open the single PR only after all non-worldsim checks pass and every issue,
+   PR, and worktree has a documented disposition. At that point its only
+   remaining gate is the coordinated final campaign.
+8. **Final campaign and accounting.** On the frozen candidate SHA, run the
+   three 1991 seeds, ten-year continuations, horizon extension, reset rehearsal,
+   2027 repair probe, and exact-SHA release replay as one coordinated campaign.
+   Inspect complete time series and issue-owned guardrails; attach sanitized
+   reports and source revisions. A code/configuration change invalidates the
+   affected campaign evidence and requires a fresh frozen candidate. Update
+   every touched issue with source/test evidence and remaining criteria. Close
+   children and #2159 only after _all_ applicable final gates pass, updating
+   parent counts in the same pass. The PR is prepared for this last gate; it
+   does not claim final validation before the campaign finishes.
 
 ## Dead-weight workstream
 
