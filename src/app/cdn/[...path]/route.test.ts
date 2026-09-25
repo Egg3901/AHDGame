@@ -88,4 +88,17 @@ describe("singleplayer CDN mirror", () => {
     expect(await res.text()).toBe("geo");
     expect(warn).toHaveBeenCalled();
   });
+
+  it("returns 502 if the upstream body fails after headers arrive", async () => {
+    vi.stubEnv("SINGLEPLAYER", "1");
+    vi.spyOn(fsp, "readFile").mockRejectedValue(new Error("ENOENT"));
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.error(new Error("upstream timed out"));
+      },
+    });
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(body, { status: 200 })));
+
+    expect((await call(["static", "maps", "countries-110m.json"])).status).toBe(502);
+  });
 });

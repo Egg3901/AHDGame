@@ -100,15 +100,20 @@ export async function GET(_request: Request, context: { params: Promise<{ path: 
   if (!reader) return new NextResponse(null, { status: 502 });
   const chunks: Uint8Array[] = [];
   let total = 0;
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    total += value.byteLength;
-    if (total > MAX_ASSET_BYTES) {
-      await reader.cancel();
-      return new NextResponse(null, { status: 502 });
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > MAX_ASSET_BYTES) {
+        await reader.cancel();
+        return new NextResponse(null, { status: 502 });
+      }
+      chunks.push(value);
     }
-    chunks.push(value);
+  } catch {
+    // A timeout can fire after the response headers arrive, while streaming.
+    return new NextResponse(null, { status: 502 });
   }
   const body = new Uint8Array(Buffer.concat(chunks));
   // Publish via tmp + rename: a mid-write kill would otherwise leave a
