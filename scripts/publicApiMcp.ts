@@ -152,10 +152,21 @@ export async function handleRpcMessage(
 ): Promise<JsonRpcReply | null> {
   if (typeof message !== "object" || message === null || Array.isArray(message))
     return { id: null, error: { code: -32600, message: "Invalid Request" } };
-  const request = message as { id?: unknown; method?: unknown; params?: unknown };
+  const request = message as {
+    jsonrpc?: unknown;
+    id?: unknown;
+    method?: unknown;
+    params?: unknown;
+  };
   if (request.method === undefined && ("result" in message || "error" in message)) return null;
   if (request.id === undefined || request.id === null) return null;
   const id = request.id;
+  if (typeof id !== "string" && !(typeof id === "number" && Number.isFinite(id))) {
+    return { id: null, error: { code: -32600, message: "Invalid Request" } };
+  }
+  if (request.jsonrpc !== "2.0") {
+    return { id, error: { code: -32600, message: "Invalid Request" } };
+  }
   if (typeof request.method !== "string" || request.method === "")
     return { id, error: { code: -32600, message: "Invalid Request" } };
   const params =

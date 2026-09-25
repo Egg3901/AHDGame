@@ -179,6 +179,18 @@ describe("public API MCP bridge", () => {
       id: 9,
       error: { code: -32600 },
     });
+    expect(
+      await handleRpcMessage({ jsonrpc: "2.0", id: {}, method: "ping" }, context)
+    ).toMatchObject({
+      id: null,
+      error: { code: -32600 },
+    });
+    expect(
+      await handleRpcMessage({ jsonrpc: "1.0", id: 9, method: "ping" }, context)
+    ).toMatchObject({
+      id: 9,
+      error: { code: -32600 },
+    });
   });
 
   it("rejects unknown methods with -32601", async () => {
