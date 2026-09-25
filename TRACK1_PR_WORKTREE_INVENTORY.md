@@ -611,3 +611,48 @@ checks. The game-side supporter, government, and autocomplete routes exist in
 AHDGame; the matching `/api/discord-bot/market` route does not. A read-only
 Muse patch/content audit is in progress to distinguish useful work from
 abandoned or superseded PRs. No bot PR, branch, or worktree has been mutated.
+
+**Bot upstream content audit, 2026-09-25 02:28 UTC.** A read-only Muse Spark
+1.3 contributor compared all five open PR patches with upstream `origin/main`
+`b5f5638` and the owner's older fork `main` `116d7038`. #122 is unique
+supporter-role synchronization and #45 fixes still-live URL/stockpick bugs;
+both are **MERGE candidates** requiring rebase, game API compatibility checks,
+and verification. #40 is **DELETE as superseded**: its default-export command
+would not register in the current loader, its chart dependency is gone
+upstream, and the owner's fork has an evolved `/market` command. #41 is
+**DELETE after preserving its unique candlestick chart fix** in the fork's
+still-broken chart generator; its registration half is superseded. #36 is
+**DELETE after preserving its unique watchlist work**, subject to confirming
+the game API contract; country and autocomplete are superseded. These are
+patch-content decisions, not completed remote dispositions. No bot checkout
+or PR was mutated by the audit. The full evidence is in
+`/tmp/track1-muse-bot-origin-pr-audit-retry.log`.
+
+**Bot upstream PR #40: CLOSED as superseded, 2026-09-25.** The disposition
+reason above was posted on the PR before closing it. Its source branch is
+retained for provenance; no dirty or locked worktree was removed.
+
+**Bot PR #45 implementation checkout.** The PR's unique source commit
+`ecd59e72c` was fetched into an isolated, clean
+`/root/projects/adhd-bot/worktrees/track1-bot-pr45` checkout. A Muse Spark
+1.3 contributor is rebasing and testing it against fresh upstream `main`.
+This checkout is classified active-feature until its PR merges or is closed;
+it is not a duplicate of any existing bot checkout. All existing locked and
+dirty bot checkouts remain untouched.
+
+**Bot PR #122 implementation checkout.** Its unique source commit
+`79b3c4894` was fetched into the isolated, clean
+`/root/projects/adhd-bot/worktrees/track1-bot-pr122` checkout, also
+classified active-feature. A second Muse Spark 1.3 contributor is checking
+the game-side supporter feed contract, rebasing the command onto upstream
+`main`, and running bot checks. No existing bot checkout was repurposed.
+
+**Bot upstream PRs #41 and #36: CLOSED as superseded/abandoned, 2026-09-25.**
+The old chart stack targeted by #41 is absent upstream; its registration fix
+already exists in the owner fork. Its unique candlestick hunk was preserved in
+`/root/misc/archive/adhd-bot-pr41-preserved-2026-09-25.patch`. #36's country
+and autocomplete pieces have evolved upstream replacements; its watchlist
+command lacks a matching game-side bot API and was abandoned in this old
+form. The full #36 patch was preserved at
+`/root/misc/archive/adhd-bot-pr36-preserved-2026-09-25.patch`. Each PR has a
+posted disposition explanation. No locked or dirty checkout was removed.
