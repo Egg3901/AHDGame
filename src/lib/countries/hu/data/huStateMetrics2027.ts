@@ -2,8 +2,8 @@ import type { StateMetrics } from "@/lib/db/types";
 import { withUniformMetricSet } from "@/lib/seeds/shared/uniformStateMetrics";
 
 /**
- * Hungary region initial metrics — ~2024 (Third Republic, Orban government,
- * post-Covid inflation shock digested, EU funds partially frozen). Budapest
+ * Hungary region initial metrics — latest available pre-2027 fallback. These
+ * are authored gameplay estimates, not observed 2027 values. Budapest
  * concentrates services and FDI; the northwest (Gyor) carries the auto
  * industry; the northeast and the Plain trail on income and health.
  * `medianIncome` is annual household forint.
@@ -82,7 +82,7 @@ const BASELINE: Omit<StateMetrics, "_id" | "lastUpdated"> = {
     budgetBalance: mv(-4.5),
     debtToGdp: mv(73),
     corruptionIndex: mv(58),
-    voterTurnout: mv(70), // 2022 parliamentary turnout
+    voterTurnout: mv(70), // authored baseline; 2026 election is the political roster anchor
     publicTrust: mv(44),
     coDeterminationQuality: mv(40),
   },
