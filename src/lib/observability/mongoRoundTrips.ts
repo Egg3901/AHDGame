@@ -261,6 +261,19 @@ export function phaseRoundTrips(phase: string): number {
   return state().counts.get(phase)?.total ?? 0;
 }
 
+/** Largest command sources in a phase, available without BSON byte profiling. */
+export function phaseTopCollectionsByRoundTrips(
+  phase: string,
+  limit = 5
+): Array<{ collection: string; roundTrips: number }> {
+  const rows = state().counts.get(phase)?.byCollection;
+  if (!rows) return [];
+  return [...rows.entries()]
+    .map(([collection, counts]) => ({ collection, roundTrips: counts.roundTrips }))
+    .sort((a, b) => b.roundTrips - a.roundTrips || a.collection.localeCompare(b.collection))
+    .slice(0, limit);
+}
+
 export function totalRoundTrips(): number {
   let total = 0;
   for (const entry of state().counts.values()) total += entry.total;
