@@ -34,7 +34,7 @@ export function completedTurnProgress(
 ): Required<
   Pick<
     SandboxProgress,
-    "currentTurn" | "lastMessage" | "lastWarnings" | "health" | "progressUpdatedAt" | "updatedAt"
+    "currentTurn" | "lastMessage" | "lastWarnings" | "progressUpdatedAt" | "updatedAt"
   >
 > &
   Pick<SandboxProgress, "health"> {

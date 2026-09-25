@@ -154,7 +154,7 @@ export async function purchaseBondUnitsForFund(
           },
         },
         options.thresholds,
-        options.turnLengthMinutes
+        { turnLengthMinutes: options.turnLengthMinutes }
       );
     }
 

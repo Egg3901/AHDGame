@@ -39,7 +39,11 @@ import {
   CYCLE_PRESSURE_BY_REGIME,
   rollCyclePressureRegime,
 } from "@/lib/constants/currencies";
-import { computeRateUpdate, type MacroInputs } from "@/lib/currency/rateCalculation";
+import {
+  computeRateUpdate,
+  type MacroInputs,
+  type RateUpdateResult,
+} from "@/lib/currency/rateCalculation";
 import {
   bandMultiplierFor,
   BW_FLOATING_DRIFT_MULTIPLIER,
@@ -285,7 +289,7 @@ export async function processForexTurn(
     // own anchor (non-euro worlds, and DE itself). Prefers the live DE result
     // when DE already ran; otherwise the pre-loaded DE doc, so a missing DE
     // bank still leaves followers pegged instead of silently floating.
-    const euroPegRate = isEuroFollower ? (euroAnchorRate ?? deDocRate) : null;
+    const euroPegRate: number | null = isEuroFollower ? (euroAnchorRate ?? deDocRate) : null;
     const cyclePressure =
       hardPegActive || euroPegRate != null ? 0 : CYCLE_PRESSURE_BY_REGIME[cycleRegime];
 
@@ -309,7 +313,7 @@ export async function processForexTurn(
     // A pegged follower publishes the anchor's rate and macro target with no
     // independent drift, volume/cycle pressure, or intervention — its
     // per-country bank never draws reserves for a rate it does not set.
-    const update =
+    const update: RateUpdateResult =
       euroPegRate != null
         ? {
             rate: euroPegRate,

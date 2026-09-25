@@ -100,7 +100,7 @@ export async function ensurePrimaryNationalCorporation(
   // preset is read inline (not via loadWorldPreset) to keep this
   // widely-imported module off the heavy readiness-contract import chain.
   const gameState = await db
-    .collection<{ preset?: string | null }>("gameState")
+    .collection<{ _id: string; preset?: string | null }>("gameState")
     .findOne({ _id: "current" }, { projection: { preset: 1 } });
   const preset =
     gameState?.preset && gameState.preset.trim().length > 0

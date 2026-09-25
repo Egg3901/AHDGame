@@ -253,7 +253,6 @@ export function applySovereignDebtAdjustment(
 
 function buildSovereignBondDoc(params: {
   countryId: CountryId;
-  currencyCode: CurrencyCode;
   turn: number;
   now: Date;
   issueAmount: number;
@@ -348,7 +347,6 @@ async function issueSovereignBondSeries(
 
   const { bondDoc, annualCouponCost } = buildSovereignBondDoc({
     countryId,
-    currencyCode: resolveCountryCurrencyCode(budget) ?? "USD",
     turn,
     now,
     issueAmount: normalizedIssueAmount,
@@ -769,7 +767,10 @@ export async function reconcileSovereignDebt(
   if (gap >= BOND_UNIT_FACE_VALUE) {
     const corporationId = countryCorporation?._id ?? new ObjectId();
     const issuerName = countryCorporation?.name ?? getSovereignIssuerName(countryId);
-    const currencyCode = resolveCountryCurrencyCode({ countryId, currencyCode: budget.currencyCode });
+    const currencyCode = resolveCountryCurrencyCode({
+      countryId,
+      currencyCode: budget.currencyCode,
+    });
 
     for (const [maturityStr, fraction] of Object.entries(distribution)) {
       if (!fraction || fraction <= 0) continue;

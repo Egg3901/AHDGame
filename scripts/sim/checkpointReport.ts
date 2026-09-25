@@ -32,7 +32,6 @@ import {
 import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
 import { getWorldEntityPresetManifest } from "@/lib/world/worldEntityManifest";
-import { aggregateGameHealth, gameHealthRunSummary } from "@/lib/turn/rules/gameHealth";
 import { readFileSync, writeFileSync } from "node:fs";
 
 // ── Country grouping ────────────────────────────────────────────────────────
