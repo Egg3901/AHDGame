@@ -10,6 +10,13 @@ seeds, a horizon run, and a release replay. No #2159 sampling gate is waived.
 The seven-start working budget and each start's purpose are in
 `TRACK1_EXECUTION_PLAN.md`.
 
+On 2026-09-25 the owner approved RR-062's documented January 2027
+education/income projection while the 2025 ACS 1-year release remains
+unannounced. RR-062 in the JSON records the approval, impact, mitigation,
+source monitoring, and rollback/rebaseline trigger. This decision clears the
+external publication gate; 2027 implementation and final evidence remain
+open, and the selected reset stays 1991.
+
 | Ledger state                                | Count | Meaning                                                                               |
 | ------------------------------------------- | ----: | ------------------------------------------------------------------------------------- |
 | `open`                                      |    69 | Unchecked parent item; no passing release evidence recorded                           |

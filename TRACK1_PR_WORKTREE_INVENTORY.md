@@ -656,3 +656,55 @@ command lacks a matching game-side bot API and was abandoned in this old
 form. The full #36 patch was preserved at
 `/root/misc/archive/adhd-bot-pr36-preserved-2026-09-25.patch`. Each PR has a
 posted disposition explanation. No locked or dirty checkout was removed.
+
+**Bot upstream PR #45: MERGED, 2026-09-25.** A Muse Spark 1.3 contributor
+rebased its live link-normalization and stockpick fixes onto upstream `main`
+`2d81bab42`, keeping the newer embed layout. Its final source was pushed with
+an exact force-with-lease and merged as `c975e1cfdb7a261e2210a8b86e6562b7e055fdc6`.
+Full local lint, typecheck, test, and build passed on the pushed head; 52
+focused URL/embed tests passed. The merge explanation and evidence were
+posted on the PR. Its clean, unlocked, process-free checkout was removed with
+ordinary `git worktree remove` after repairing an interrupted background
+removal; no unique work or ignored cache was retained.
+
+**Bot upstream PR #122: REBASED merge candidate.** A Muse Spark 1.3
+contributor reconciled its supporter feed with the game API's three tiers,
+added a role-mapping test, and rebased the branch onto upstream `main` after
+#45 merged. The shared baseline test typing and lint repairs are already in
+that base and were dropped as patch-equivalent. The isolated #122 checkout is
+clean and active-feature while final post-rebase gates run; it has not yet
+been pushed or merged. Bot deployment additionally needs command
+registration and the existing configured supporter role IDs.
+
+**Ops PR #137: MERGED, 2026-09-25.** The pinned AHDGame source identity for
+worldsim jobs landed on Ops `main` as
+`dd7bff3126b885654a83de9e9a68011285464cee`. Local full tracked tests
+passed 560/560; the three changed files had zero findings under local
+Semgrep secrets and Ops rules. The owner approved proceeding despite hosted
+private Actions jobs ending before execution. The contribution, evidence,
+and CI limitation were posted on the PR. Its clean unlocked worktree was
+removed normally.
+
+**Ops PR #168: MERGED, 2026-09-25.** Public receipt delivery, distinct
+channel/DM markers, dashboard behavior, and read-only triage landed on Ops
+`main` as `ea36a029e79aa5856395cf29bbb796356b4e3be3`. Local full
+tracked tests passed 559/559; all 18 changed files had zero local Semgrep
+findings. The owner approved the same hosted-CI exception. Its clean
+unlocked worktree was removed normally.
+
+**Ops PR #167: CLOSED as superseded, 2026-09-25.** Its exact read-only
+triage behavior and explicit opt-in test are now in Ops `main` via #168;
+the narrow branch has no remaining unique behavior to merge. The reason was
+posted on #167, and its clean unlocked worktree was removed normally. All
+three removed Ops worktrees had no owner process and no uncommitted files at
+the removal check.
+
+**AHDGame #1672 review checkout: DELETED as superseded, 2026-09-25.** A
+read-only Muse Spark 1.3 audit compared `review/issue-1672-military` with
+`fix/issue-1672-atomic-money-flows`. The review branch diverged at
+`c71d35def5` and had one later tip, `7d30dd304f`; `git cherry` marks that
+tip patch-equivalent to the active branch. It added no unique production
+behavior. After a fresh clean/unlocked/process-free check, its checkout was
+removed with ordinary `git worktree remove`; the branch ref remains for
+provenance. The main #1672 branch remains a MERGE candidate with 55 unique
+commits and unresolved verification/rebase work, not a prunable tree.

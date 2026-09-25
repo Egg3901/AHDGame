@@ -8,13 +8,14 @@ note, not a declaration that reset readiness has passed.
 - Original note: `/root/misc/archive/total-system-analysis-rework-2026-09-24.jpeg`, read on 2026-09-25. The supplied transcription agrees with it.
 - Source branch: `origin/development` fetched on 2026-09-25.
 - Exact base: `028cb9265e76555efa5d73b611cea0f409c3446b`.
-- Latest observed `origin/development` on 2026-09-25 is
+- Latest incorporated `origin/development` on 2026-09-25 is
   `cc06acd25cf259f9f9ede8076ac57552867ebae8` (Track 3 integrations PR
   #2382, after dead-weight expiry #2379, banking hub #2378, and groundwork
-  #2377). This branch is pending a
-  controlled rebase after the two active Muse workers finish. The exact base
-  above records where Track 1 began; it is not a claim that this branch has
-  incorporated the later commits yet.
+  #2377). Track 1 was rebased onto this commit, with the fund-liquidity
+  conflict resolved by retaining both the newer threshold reuse and the
+  crash journal. The exact base above records where Track 1 began; the
+  incorporated commit records its current development ancestry. Refresh
+  again before the final PR if development advances.
 - Worktree: `/root/projects/AHDGame/worktrees/track1-fixer` on
   `track1/total-system-analysis-rework`.
 - The main checkout contains another agent's uncommitted PostHog/Sentry work.
