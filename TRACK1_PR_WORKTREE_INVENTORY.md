@@ -514,5 +514,16 @@ checkout. Track 1 did not remove, clean, reset, or stage it. The new patch
 requires a commit-or-discard decision, review, and merge-or-delete disposition
 before the final inventory pass.
 
+**Ops PR #167: REBASED and focused-tested, still OPEN.** This one-commit
+read-only triage gate was rebased onto current Ops `main` in its clean,
+unlocked worktree and pushed. `node --check` and its focused opt-in test
+passed using the main Ops dependency install through `NODE_PATH` (the
+isolated worktree has none); diff check passed. Hosted test, analysis, and
+Semgrep jobs ended without any steps after the refreshed push, matching the
+same account-level Actions gate. PR #168 contains an equivalent read-only
+gate but remains a larger conflicting delivery branch; #167 is retained as
+the small production-safety unit until one lands. The Ops open set is now
+#186 (renamed to the credentials portal), #168, #167, #162, and #137.
+
 The remaining rows above require final decisions and execution; this document
 does not mark them complete.
