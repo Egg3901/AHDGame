@@ -107,11 +107,7 @@ export function ChairCard({
       ) : chair ? (
         chairMode === "npp" ? (
           <div className="flex min-w-0 items-center gap-3">
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-primary/30 bg-primary/10">
-              <span className="text-sm font-semibold uppercase tracking-wider text-primary">
-                AI
-              </span>
-            </div>
+            <Avatar url={chair.avatarUrl} name={chair.name} size="h-12 w-12" />
             <div className="min-w-0 flex-1">
               <span className="block break-words text-sm font-semibold text-foreground">
                 {chair.name}
