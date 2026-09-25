@@ -1147,6 +1147,14 @@ behavior to Track 1. Keep both source checkouts intact until tests and
 patch-equivalence evidence support normal removal; their dirty state bars
 automated cleanup. The separate Paseo banking/private-central checkout has
 unique banking UI work and is not part of this event-card decision.
+The first selective integration is `150bd7eac1`: chamber vote charts,
+Discord card rendering and metadata stripping, enacted/veto/court tally
+threading, with 75/75 focused tests and scoped lint/format passing. Source A
+still contains unported court confirmation, appointment, chamber-leadership,
+and bill-lifecycle fresh-snapshot patches. Paseo's US-only chart is
+superseded by the integrated per-chamber chart. Both dirty sources stay
+preserved until those remaining patches receive a written merge-or-abandon
+decision and test/performance evidence; #2394 stays partial.
 
 **Fresh cross-repo PR check, 2026-09-25:** AHDGame, adhd-bot, and the
 legacy `a-house-divided` repo currently have no open PRs. Ops has #162
