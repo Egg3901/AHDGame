@@ -1069,6 +1069,30 @@ describe("orphan scan", () => {
 });
 
 describe("orphan scan fairness", () => {
+  it("does not revisit a committed receipt when unused reserve wraps to the head", async () => {
+    const keys = ["only-committed-0", "only-committed-1"];
+    for (const key of keys) {
+      const orderId = new ObjectId();
+      fake.seed("shareOrders", { _id: orderId, status: "filled", sharesRemaining: 0 });
+      seedReceipt(
+        key,
+        basePlan({
+          orderIdHex: orderId.toHexString(),
+          preClaimRemaining: 10,
+          moneyCommitted: true,
+          fillerBalanceAfter: 100,
+        })
+      );
+    }
+
+    // At limit 4, two committed rows fill the committed cap and the other
+    // two slots go unused. Backfill must not wrap onto those same two rows.
+    const results = await recoverShareFillOrphans(fake.db, 4);
+    expect(results).toHaveLength(2);
+    expect(results.map((result) => result.key).sort()).toEqual(keys);
+    expect(results.every((result) => result.action === "audit-recovered")).toBe(true);
+  });
+
   it("reaches committed receipts stranded behind persistent uncommitted ones", async () => {
     // Starvation regression (issue #1672): uncommitted receipts never settle,
     // so a head-of-queue scan burns its whole budget on them and never reaches

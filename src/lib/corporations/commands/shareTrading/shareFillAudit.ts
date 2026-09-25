@@ -865,12 +865,18 @@ export async function recoverShareFillOrphans(
   // later-phase work still drains at full budget.
   const unusedReserve = rest - planless.length - uncommitted.length;
   if (spareReserve > 0 && committed.length === committedCap && unusedReserve > 0) {
-    const extra = await fetchReceiptWindow(
-      db,
-      { status: "in_progress", "shareFillPlan.moneyCommitted": true },
-      cursors.committedAfter,
-      unusedReserve
-    );
+    // The window may wrap when the committed queue contains exactly the
+    // capped rows. Exclude keys already selected on this pass rather than
+    // re-running their audit writes and counting them twice.
+    const alreadySelected = new Set(committed.map((receipt) => receipt._id));
+    const extra = (
+      await fetchReceiptWindow(
+        db,
+        { status: "in_progress", "shareFillPlan.moneyCommitted": true },
+        cursors.committedAfter,
+        unusedReserve
+      )
+    ).filter((receipt) => !alreadySelected.has(receipt._id));
     const extraKey = lastWindowKey(extra);
     if (extraKey !== undefined) cursors.committedAfter = extraKey;
     committed = [...committed, ...extra];
