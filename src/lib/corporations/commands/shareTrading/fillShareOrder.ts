@@ -528,7 +528,7 @@ export async function fillShareOrder(request: Request, { params }: RouteParams) 
       }
       const restoreUpdate: {
         $set: Record<string, unknown>;
-        $unset?: Record<string, unknown>;
+        $unset?: Record<string, "" | 1 | true>;
       } = { $set: restoreFields };
       if (order.lastShareFillKey === undefined) {
         restoreUpdate.$unset = { lastShareFillKey: "" };

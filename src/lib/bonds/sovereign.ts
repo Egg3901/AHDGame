@@ -47,7 +47,7 @@ import {
   getSovereignConfidencePremium,
 } from "@/lib/budget/debt";
 import { resolveCountryCurrencyCode } from "@/lib/currency/govBudgetFields";
-import type { CurrencyCode } from "@/lib/constants/currencies";
+import { COUNTRY_CURRENCY_MAP, type CurrencyCode } from "@/lib/constants/currencies";
 import { sovereignCredibilitySpread } from "@/lib/centralBank/marketEffects";
 import {
   debitPoolForPrimary,

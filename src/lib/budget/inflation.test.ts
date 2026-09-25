@@ -44,7 +44,7 @@ describe("inflation frequency audit (#2337)", () => {
       [3.32, 3.94, 3.94, 3.94],
     ],
   ] as const)("tracks %s at 1, 12, 48, and 240 turns", (_name, startingRate, shock, expected) => {
-    let annualizedRate = startingRate;
+    let annualizedRate: number = startingRate;
     const observed: number[] = [];
     for (let turn = 1; turn <= horizons[horizons.length - 1]; turn++) {
       annualizedRate = calculateInflation({

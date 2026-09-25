@@ -67,11 +67,13 @@ export async function fillBestBuyOrderForMarketSell(input: {
 
     const prepared = await prepareShareFillClaim(db, order);
     order = prepared.order;
+    const escrowAnchor = order.escrowAnchor;
+    if (!(escrowAnchor && escrowAnchor > 0)) continue;
     const remainingShares = order.sharesRemaining - shares;
     const fillFraction = shares / order.sharesRemaining;
-    const proceedsAnchor = order.escrowAnchor * fillFraction;
+    const proceedsAnchor = escrowAnchor * fillFraction;
     if (!Number.isFinite(proceedsAnchor) || proceedsAnchor <= 0) continue;
-    const remainingEscrowAnchor = order.escrowAnchor - proceedsAnchor;
+    const remainingEscrowAnchor = escrowAnchor - proceedsAnchor;
     const remainingEscrowLocal = Math.max(0, order.escrowAmount - shares * order.pricePerShare);
     const proceedsInHomeCurrency = forexEnabled ? proceedsAnchor * sellerFxRate : proceedsAnchor;
     const fillPlan: ShareFillAuditPlan = {
@@ -135,7 +137,7 @@ export async function fillBestBuyOrderForMarketSell(input: {
     const restoreClaimedOrder = async (): Promise<void> => {
       const restoreUpdate: {
         $set: Record<string, unknown>;
-        $unset?: Record<string, unknown>;
+        $unset?: Record<string, "" | 1 | true>;
       } = {
         $set: {
           sharesRemaining: order.sharesRemaining,

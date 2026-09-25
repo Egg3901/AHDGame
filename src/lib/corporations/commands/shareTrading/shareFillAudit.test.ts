@@ -344,7 +344,7 @@ function seedReceipt(key: string, plan: ShareFillAuditPlan | undefined, extra: D
 
 async function readReceipt(key: string): Promise<Doc | null> {
   return fake.db
-    .collection(NON_ATOMIC_MONEY_FLOW_RECEIPTS_COLLECTION)
+    .collection<MoneyFlowReceipt>(NON_ATOMIC_MONEY_FLOW_RECEIPTS_COLLECTION)
     .findOne({ _id: key }) as Promise<Doc | null>;
 }
 
@@ -701,7 +701,7 @@ describe("crash after every audit write", () => {
         expect(attempt.counts("indexFundTransactions").docs).toBe(expected.fund);
         expect(attempt.counts("shareTradeHistory").docs).toBe(1);
         const receipt = (await realDb
-          .collection(NON_ATOMIC_MONEY_FLOW_RECEIPTS_COLLECTION)
+          .collection<MoneyFlowReceipt>(NON_ATOMIC_MONEY_FLOW_RECEIPTS_COLLECTION)
           .findOne({ _id: key })) as Doc | null;
         expect(receipt?.status).toBe("completed");
 
