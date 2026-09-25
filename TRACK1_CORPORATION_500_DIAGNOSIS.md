@@ -64,3 +64,17 @@ An ephemeral Mongo predicate probe also showed that
 `holders`. The portfolio guard prevents a malformed mock or future query
 change from crashing, but the focused mock did not reproduce the production
 query path. It is not the evidenced root-cause fix.
+
+## Cross-check against merged repair PR #2308
+
+The merged PR's incident report confirms the causal chain rather than merely
+suggesting it: the #2240 release replaced persisted `media` and
+`entertainment` strategy keys before migrating production data. The owner
+recorded 917 media and 500 entertainment sector rows, a corporation-turn
+failure at turn 1066, and zero combined-type records in the read-only
+production preflight. PR #2308 restored the two persisted types and their
+strategies, added a route-level error reference and regression, and merged
+later that day. This supports treating the historical crash's source defect
+as repaired in current `development`. The Track 1 Retry state improves the
+remaining user recovery path. The final exact-SHA smoke and issue accounting
+are still required under the owner's one-pass closure rule.
