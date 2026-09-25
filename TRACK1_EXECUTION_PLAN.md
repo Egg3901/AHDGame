@@ -78,6 +78,12 @@ child issue and the parent tracker in one pass.
    Use issue-specific acceptance criteria, deterministic tests, and portable
    rules modules. Every changed turn phase needs projected fat reads, a
    round-trip budget check, and before/after bytes and round trips.
+   For #1672, extract and verify the crash-safe money-flow primitive and
+   independent spend modules from its old 55-commit source branch before
+   reconciling the conflicting fund, share and Euro paths. Account for every
+   retained slice before deleting that clean source checkout. Do this before
+   layering the five later fund performance commits, which touch some of the
+   same files.
 4. **Resolve the remaining open issues.** `TRACK1_ISSUE_AUDIT.md` maps every
    open issue to implementation, proof, dependency, and closure criteria.
    Fix code defects, make explicit decisions for non-code issues, and keep

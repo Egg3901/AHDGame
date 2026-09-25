@@ -709,3 +709,26 @@ behavior. After a fresh clean/unlocked/process-free check, its checkout was
 removed with ordinary `git worktree remove`; the branch ref remains for
 provenance. The main #1672 branch remains a MERGE candidate with 55 unique
 commits and unresolved verification/rebase work, not a prunable tree.
+
+**AHDGame Campaign 3 snapshot checkouts: DELETE as superseded, 2026-09-25.**
+`sim-c3-all-20260917` and `sim-c3-uk-20260917` are clean, unlocked and
+process-free. `git cherry origin/development` finds exactly one patch-unique
+commit common to both: `94523e4794`, which only rewraps the return expression
+and ternary formatting in `cabinetEligibility.ts` without changing behavior.
+The simulation snapshots are historical evidence, not candidate source; their
+other commits are patch-equivalent to development. Both worktrees were removed
+with ordinary `git worktree remove` after the clean/lock/process check. The
+branch refs remain for provenance. This is a written discard decision for the
+formatting-only patch, not an automated removal of unreviewed unique behavior.
+
+**AHDGame #1672 source review, 2026-09-25.** A separate read-only Muse Spark
+1.3 review found the active `muse-1672` branch clean with 55 patch-unique
+commits, 253 changed files and about 86,000 added lines from its merge base.
+Its crash-safe money-flow primitive and several independent spend modules are
+valuable, but the branch as a whole has unverified WIP boundaries, conflicts
+with Track 1 fund/Euro settlement work, and still leaves Euro conversion,
+treasury, privatization and fund wind-up paths outside #1672's acceptance.
+Disposition decision: **extract and merge verified slices into Track 1, then
+delete the superseded source checkout only after every retained slice is
+accounted for**. A wholesale merge or immediate deletion would each discard
+required review. The source worktree stays active until extraction is complete.
