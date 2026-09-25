@@ -2770,6 +2770,16 @@
           "type": "partial_source_and_tests",
           "ref": "d476171e9e",
           "detail": "Onboarding claim and profile preview share a portable home-currency conversion rule; 2027 EUR profiles display the credited amount and symbol. Action settlement and profile finance labels use the world preset, and the fundraise preview uses its frozen preset-aware campaign rate. Focused reward/action suites passed 24/24 after correcting the 2027 price-level test expectation; scoped ESLint, Prettier, and diff check passed. Remaining era-blind money paths, full gates, and fresh 2027 bootstrap/replay block completion."
+        },
+        {
+          "type": "ie_2027_organization_floor",
+          "ref": "8a1709776a",
+          "detail": "The current filtered 2027 IE party roster yields 40 seeded organization rows across eight regions and five vote-share parties; the focused seed suite passed 12/12 plus scoped lint/format. The prior 24-row worldsim finding used older source. Persisted final-SHA bootstrap count is still required."
+        },
+        {
+          "type": "hu_2027_data_checkpoint",
+          "ref": "b0c0908742",
+          "detail": "Muse Spark 1.3 authored HU democratic party, region, demographic, metric, baseline, and seeder data; scoped lint/format passed. This is not wired into 2027 bootstrap or era roster yet, so HU remains absent at runtime. Budget, currency, geography, government and deterministic seed tests are pending."
         }
       ],
       "blocked_by": [

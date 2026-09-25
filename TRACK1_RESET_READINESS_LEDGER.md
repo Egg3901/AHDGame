@@ -17,6 +17,11 @@ source monitoring, and rollback/rebaseline trigger. This decision clears the
 external publication gate; 2027 implementation and final evidence remain
 open, and the selected reset stays 1991.
 
+RR-065 (#2289 and related 2027 country issues) records the deterministic IE
+40-organization check in `8a1709776a` and HU data authored in `b0c0908742`.
+The HU data is not yet wired into the roster or bootstrap. Both remain open
+until exact-release persisted bootstrap and conformance evidence passes.
+
 RR-014 (#1672) records the extracted money-flow primitive, transfer and
 share-fill audit checkpoints, and the later recovery-turn-budget repair.
 The receipt orphan sweep now runs outside `processTurn` with a bounded
