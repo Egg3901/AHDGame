@@ -591,7 +591,6 @@ export async function issueScheduledSovereignBondSeries(
         primeRate,
         countryCorporation,
         democraticSpreadPp,
-        currencyCode: budgetDoc.currencyCode,
       });
       const requestedUnits = Math.floor(bondDoc.totalIssued / BOND_UNIT_FACE_VALUE);
       let placedUnits = requestedUnits;

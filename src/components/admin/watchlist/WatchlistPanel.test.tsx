@@ -127,8 +127,8 @@ describe("WatchlistPanel player search", () => {
   });
 
   it("ignores a stale search response that resolves after a newer one", async () => {
-    let resolveAlpha: ((v: unknown) => void) | null = null;
-    let resolveBeta: ((v: unknown) => void) | null = null;
+    let resolveAlpha: ((v: Response | PromiseLike<Response>) => void) | null = null;
+    let resolveBeta: ((v: Response | PromiseLike<Response>) => void) | null = null;
     const fetchedTerms: string[] = [];
     vi.stubGlobal(
       "fetch",
@@ -137,13 +137,13 @@ describe("WatchlistPanel player search", () => {
           const q = new URL(url, "http://localhost").searchParams.get("q") ?? "";
           fetchedTerms.push(q);
           if (q === "alpha") {
-            return new Promise((resolve) => {
+            return new Promise<Response>((resolve) => {
               resolveAlpha = resolve;
-            }) as Promise<Response>;
+            });
           }
-          return new Promise((resolve) => {
+          return new Promise<Response>((resolve) => {
             resolveBeta = resolve;
-          }) as Promise<Response>;
+          });
         }
         return emptyWatchlist() as Response;
       })
