@@ -505,5 +505,14 @@ analysis jobs failed in two seconds with no steps, matching the repo's
 Actions billing/spending gate; Semgrep is pending. It cannot be merged under
 the Ops contributor CI rule until required checks actually run and pass.
 
+**Dynamic reuse of `dead-weight-plan`, 2026-09-25 01:29 UTC.** After PR
+#2377 merged, another agent repurposed this registered checkout onto
+`perf/dead-weight-expiry-projection` at `61036b34d5fe4b08a4821002ca8af89252461a88`
+and left ten modified performance source/test files. The profiler process has
+ended, but the worktree is now DIRTY active-feature work, not a clean merged
+checkout. Track 1 did not remove, clean, reset, or stage it. The new patch
+requires a commit-or-discard decision, review, and merge-or-delete disposition
+before the final inventory pass.
+
 The remaining rows above require final decisions and execution; this document
 does not mark them complete.
