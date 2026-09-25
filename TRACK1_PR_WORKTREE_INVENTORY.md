@@ -975,3 +975,16 @@ path is the Railway cache mount. Staging #2389 and the production promotion
 repair into development as `48beb50c96`. No older cache behavior should be
 merged. Fresh status is clean, the checkout is unlocked and has no owner
 process. Decision: remove it normally while retaining its branch ref.
+
+**AHDGame `ticket-receipt-api`: DELETE abandoned clean API prototype,
+2026-09-25.** Its sole unique commit `49cd126cb5` widens the ticket schema
+and close request to a structured receipt, a `resolved` pending state, and
+caller-supplied `resolutionDelivered`. The live bot #122 and ops #168 use the
+existing string resolution plus explicit `resolution-delivered` acknowledgement;
+neither consumes the new fields, and no open issue requests this schema
+change. The prototype has no route tests for the new request or delivery
+state. Merging the extra public contract would add an unneeded way for a
+caller to mark a receipt delivered without the bot's acknowledgement. Decision:
+abandon this unconsumed prototype and keep the reviewed existing delivery
+contract. Fresh status is clean, checkout unlocked and process-free; remove
+normally and retain its branch ref as provenance.
