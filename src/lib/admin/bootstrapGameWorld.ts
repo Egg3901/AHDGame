@@ -540,6 +540,21 @@ export async function seedAllCountryData(
       // one-party each and share this one.
       await seedEasternBlocStatePartyOrg(db, resetReference, log, preset);
     })(),
+    pack(async (log) => {
+      if (preset !== "2027-default") return;
+      const {
+        seedHURegions,
+        seedHUParties,
+        seedHUDemographics,
+        seedHUStateMetrics,
+        seedHUBaselines,
+      } = await import("./seed/seedHU");
+      await seedHURegions(db, resetReference, log, preset);
+      await seedHUParties(db, log, preset);
+      await seedHUDemographics(db, resetReference, log, preset);
+      await seedHUStateMetrics(db, resetReference, log, preset);
+      await seedHUBaselines(db, resetReference, log, preset);
+    })(),
   ]);
 
   for (const buffer of packBuffers) for (const line of buffer) log(line);

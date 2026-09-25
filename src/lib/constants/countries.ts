@@ -1117,6 +1117,9 @@ export type EraCountryConfigOverride = Partial<
     | "headOfStateSelection"
     | "majorPartyIds"
     | "usdExchangeRate"
+    | "centralGovernmentLabel"
+    | "exchangeName"
+    | "exchangeKind"
     | "onePartyRegionalBudget"
     | "federalEqualizationGrantPerCapita"
   >
@@ -1218,6 +1221,7 @@ export const ERA_COUNTRY_CONFIG_OVERRIDES: Record<
     GR: GR_ERAS["2027-default"]?.config,
     AT: AT_ERAS["2027-default"]?.config,
     FI: FI_ERAS["2027-default"]?.config,
+    HU: HU_ERAS["2027-default"]?.config,
   },
   "1991-default": {
     UK: UK_ERAS["1991-default"]?.config,
