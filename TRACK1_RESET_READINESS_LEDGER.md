@@ -4,6 +4,12 @@ This ledger mirrors every checkbox in [#2159](https://github.com/Egg3901/AHDGame
 
 The parent currently selects `1991-default`. The 2027-specific items remain required implementation scope even though the final launch qualification uses 1991. A later profile change requires rechecking seed-specific evidence. Checked boxes and closed child issues are claims of prior completion, not proof that the exact release candidate passes.
 
+The owner confirmed on 2026-09-25 that the requested single final validating
+worldsim **run** means one coordinated campaign containing three deterministic
+seeds, a horizon run, and a release replay. No #2159 sampling gate is waived.
+The seven-start working budget and each start's purpose are in
+`TRACK1_EXECUTION_PLAN.md`.
+
 | Ledger state                                | Count | Meaning                                                                               |
 | ------------------------------------------- | ----: | ------------------------------------------------------------------------------------- |
 | `open`                                      |    69 | Unchecked parent item; no passing release evidence recorded                           |

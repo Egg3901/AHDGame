@@ -43,8 +43,9 @@ origin/development..<HEAD>` per AHDGame worktree. The original Muse pass
    found that the one commit on `fix/issue-2059-year-effects` is patch-equivalent
    to content already in `development`.
 
-Recommendation vs execution: EVERYTHING below is a recommendation. Nothing
-was merged, deleted, moved, force-removed, or edited outside this file.
+The tables below began as a Muse snapshot and include proposed dispositions.
+The dated execution record at the end of this document supersedes snapshot
+language where an action has since completed. No locked worktree was touched.
 
 Default branches: AHDGame `development`, a-house-divided `master`,
 LSGD-ops-dash `main`, adhd-bot `main`. Cross-repo dispositions respect each
@@ -70,6 +71,29 @@ owner commits or discards).
 | 2265 | chore(deps): bump @vitest/coverage-v8 4.1.11 -> 5.0.0                 | dependabot/.../coverage-v8-5.0.0 -> development         | 2026-09-21 | PROPOSE merge into `development` after `verify`. Major bump, test-infra only. No worktree.                                                                                                                                                        |
 | 2264 | chore(deps): bump typescript 6.0.2 -> 7.0.2                           | dependabot/.../typescript-7.0.2 -> development          | 2026-09-21 | PROPOSE merge into `development` after typecheck via scheduler; major compiler bump, highest-risk of the five. No worktree.                                                                                                                       |
 | 2263 | chore(deps): bump the next-ecosystem group (3 updates)                | dependabot/.../next-ecosystem-c3a2f73f6e -> development | 2026-09-21 | PROPOSE merge into `development` after `verify:build` via scheduler (Next ecosystem). No worktree.                                                                                                                                                |
+
+**AHDGame PR execution update, 2026-09-25:** #2263 was merged into
+`development` as squash commit `2f827b5d798519e58501be6eb5e9a2d7130300b9`.
+It updates existing React, React DOM, and eslint-config-next versions. #2267
+was merged as squash commit `385b9506e5b8863595335e85a65441ca20fb6469`;
+it updates the existing commitlint CLI. Their PR checks were green, including
+build for #2263, and neither had a worktree. These execution entries supersede
+the earlier proposals in the snapshot table. The Track 1 branch must refresh
+from the new development head before its final PR.
+
+#2264 was **closed and its branch deleted as abandoned**. Its isolated
+TypeScript 7 update failed lint and verify, so it was unsafe to merge into a
+production-bound reset branch. #2265 was **closed and its branch deleted as
+abandoned**: `@vitest/coverage-v8@5.0.0` declares an exact `vitest@5.0.0`
+peer in its PR lockfile, while the repository still uses Vitest 4.1.11. Both
+PRs received a GitHub comment with the reason. Neither had a local worktree.
+
+#2266 was subsequently **merged** as `088cc9ba629b1d41713154afb0148c827147842a`
+after refreshed CI passed lint, format, typecheck, build, all four test shards,
+Semgrep, CodeQL, dependency review, and PR-title validation. As of the fresh
+2026-09-25 PR query, #2377 is the only AHDGame PR from this snapshot still
+open; its worktree is dirty with another agent's active implementation and
+has not been modified by Track 1.
 
 ### A2. Egg3901/a-house-divided (default: `master`) — 13 open, ALL dependabot
 
@@ -166,6 +190,26 @@ Nested `worktrees/` (32 entries at snapshot):
 | track1-fixer (THIS worktree)     | track1/total-system-analysis-rework          | 0 at base             | DIRTY by design: Track 1 plan, ledger, inventory, #2337 work, and Muse #2291 work in progress                                                    | Final: one Track 1 PR into `development`; this is the sole Track 1 checkout.                                                                                                                                                                                |
 | worldsim-readiness-20260922      | fix/worldsim-readiness-20260922              | 0                     | DIRTY (5 modified sim files) but 0 unique commits                                                                                                | BLOCKED (dirty). Final: commit-then-PR, or discard-then-delete.                                                                                                                                                                                             |
 
+**Patch-equivalence decision for two 2026-09-17 Muse trees:** discard their
+uncommitted copies and delete the clean worktrees as superseded. The eight
+modified source files in `muse-1975-budget-invariant` implement the
+authoritative-year wiring already committed to development in `ef33488f2a`
+with year-boundary tests. Five of the eight resulting files are byte-identical
+to this fresh checkout; the remaining three contain the same wiring plus
+newer unrelated development changes. The uncommitted
+`muse-2059-year-effects/src/lib/turn/treasuryTurn.test.ts` is byte-identical
+to the current development file, and `git cherry origin/development` marks
+its one branch commit patch-equivalent. Neither tree is locked or used by a
+process. Their untracked `muse*.log` files are stale worker logs, not source
+or required simulation evidence. This is a recorded discard decision, not a
+force-removal; recheck status immediately before ordinary removal.
+
+**Execution, 2026-09-24 UTC:** both worktrees were checked again, the
+patch-equivalent tracked copies were restored in those two worktrees only,
+and stale local Muse logs were removed. Each then passed a clean-status check
+and was removed with ordinary `git worktree remove`. No branch with unique
+content was deleted.
+
 Orphaned dirs (NOT registered worktrees, `git status` fails inside):
 
 - `worktrees/ipo-partial-float-ticket-1349/`: contains ONLY `tsconfig.tsbuildinfo`
@@ -261,6 +305,15 @@ candidates — supervisor to confirm clean, then `git worktree remove`):
   ticket-robustness (NOTE: also DIRTY: mcp-catalog, support-server/tracker,
   server.js, ticket-receipt.js — same override, BLOCKED).
 
+**Execution update, 2026-09-25:** after fetching `origin/main`, a fresh
+status and `origin/main..HEAD` check showed zero uncommitted changes and zero
+unique commits for canonical-ticket-stage, discord-terminal-workflow,
+preserve-resolution-delivery, public-receipt-context,
+supersede-old-resolution-updates, and ticket-resolution-receipts. Each was
+**deleted** with ordinary `git worktree remove`. These were already merged
+content; no patch was discarded. `receipt-layout` and `ticket-robustness`
+remain dirty and were not touched.
+
 Active-feature with unique commits (leave alone; PR to ops-dash `main`
 where a PR exists, else owner decision):
 
@@ -307,3 +360,48 @@ list`, `git status --porcelain`, `git rev-list --count`, `gh pr list`,
 - Volatile observation: `resolve-open-issues-20260922` was prunable at
   snapshot and removed by a concurrent session ~10 min later. Re-run
   `git worktree list` fresh before acting on anything above.
+
+## F. Executed dispositions after the Muse snapshot
+
+These are actions, not proposed dispositions. The original snapshot above is
+retained to preserve the enumeration and predecision state.
+
+| Item                                                                                                                                                                                                       | Final disposition                                                                                     | Reason and evidence                                                                                                                                                                                                                             |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Duplicate `track-1-total-system-analysis` checkout                                                                                                                                                         | Deleted with ordinary `git worktree remove`; redundant local branch deleted with safe `git branch -d` | Same `028cb9265e` base as `track1-fixer`, clean, zero unique commits. Never leave two checkouts of the same commit for one task.                                                                                                                |
+| AHDGame PR #2263                                                                                                                                                                                           | Merged to `development` as `2f827b5d798519e58501be6eb5e9a2d7130300b9`                                 | React, React DOM and eslint-config-next dependency update; required checks green.                                                                                                                                                               |
+| AHDGame PR #2267                                                                                                                                                                                           | Merged to `development` as `385b9506e5b8863595335e85a65441ca20fb6469`                                 | Commitlint CLI dependency update; required checks green.                                                                                                                                                                                        |
+| AHDGame PR #2266                                                                                                                                                                                           | Merged to `development` as `088cc9ba629b1d41713154afb0148c827147842a`                                 | react-simple-maps v5 update; refreshed CI checks, including build, typecheck and all test shards, green.                                                                                                                                        |
+| AHDGame PR #2264                                                                                                                                                                                           | Closed and remote branch deleted                                                                      | TypeScript 7 update failed verify/lint against this repo; cannot merge broken toolchain.                                                                                                                                                        |
+| AHDGame PR #2265                                                                                                                                                                                           | Closed and remote branch deleted                                                                      | Coverage-v8 5 lockfile requires Vitest 5 while the repo uses Vitest 4.1.11; incompatible peer version.                                                                                                                                          |
+| `muse-1975-budget-invariant`                                                                                                                                                                               | Deleted after explicit discard of duplicate uncommitted source and stale logs                         | Eight source edits already implemented on development in `ef33488f2a` or superseded by later changes; zero patch-unique commits. Clean status checked before ordinary removal.                                                                  |
+| `muse-2059-year-effects`                                                                                                                                                                                   | Deleted after explicit discard of duplicate uncommitted test and stale log                            | Test file byte-identical to development; branch commit patch-equivalent by `git cherry`. Clean status checked before ordinary removal.                                                                                                          |
+| Six clean ops worktrees: `canonical-ticket-stage`, `discord-terminal-workflow`, `preserve-resolution-delivery`, `public-receipt-context`, `supersede-old-resolution-updates`, `ticket-resolution-receipts` | Deleted with ordinary `git worktree remove`                                                           | Fresh `origin/main` contained their content; each was clean with zero unique commits.                                                                                                                                                           |
+| `muse-1976-review`                                                                                                                                                                                         | DELETED as superseded by merged PR #1976 (`273d27d6b98a796a497046667d764cd96eb9f8fe`)                 | The production fix is byte-identical to development. The branch's only test difference is older untyped fixture code; development has improved typed tests.                                                                                     |
+| `muse-1980-review`                                                                                                                                                                                         | DELETED as superseded by merged PR #1980 (`6f9cf949ba5761a3a87552ae63f8cf628b04ded6`)                 | Development contains the ring-fenced bank/escrow metrics plus later vital-signs diagnostics absent from this stale review checkout. The branch carries no unpublished uncommitted work.                                                         |
+| `muse-1982-review`                                                                                                                                                                                         | DELETED as superseded by merged PR #1982 (`3d1d15a9dcad02f7348badd91419927a4b8d22ff`)                 | Development contains the Fundraise rules/UI tests; this old review checkout differs on subsequently evolved code. The branch carries no unpublished uncommitted work.                                                                           |
+| `muse-2060-election-cycle`                                                                                                                                                                                 | DELETED as superseded by merged PR #2061 (`acf5e0c04279550b90e4a84a50c81f5f089e7a95`)                 | The merged PR covers exactly the same 18 paths as this old clean Muse checkout and closes issue #2060. Development's later code is authoritative.                                                                                               |
+| `muse-1968-pair-review`                                                                                                                                                                                    | DELETED clean checkout; branch ref retained as historical provenance                                  | PR #1968 was explicitly closed as superseded: issue #1470 was resolved by merged PRs #1475/#1476 with an owner waiver, while this 14-commit draft failed required typecheck/verify. The branch's unique patches are not silently force-deleted. |
+| `review-968-consumer-alert`                                                                                                                                                                                | DELETED duplicate clean checkout; branch ref retained until #968 patch disposition                    | Its tree is byte-identical to `muse-968-consumer-alert` despite a different final commit hash (`git diff --stat` is empty). Keep one checkout for the still-unmerged alert work, not two.                                                       |
+| Orphan directory `ipo-partial-float-ticket-1349`                                                                                                                                                           | DELETED build artifact directory                                                                      | It was not a registered worktree and contained only a 3.4-MB `tsconfig.tsbuildinfo`; there was no source or uncommitted checkout work to retain.                                                                                                |
+
+**Detached `research-2087-2089`: integrated and DELETED.** Its clean HEAD
+`811e9e807cdc30215304aa8318e02e311a4c66f0` holds a unique 163-line
+investigation report absent from development. The report was copied byte for
+byte into Track 1 at
+`scripts/sim/reports/issue-2087-2089-investigation.md`, retaining its pinned
+source revision and explicit caveat that the sandbox observations were not
+rerun. The copy was byte-verified, committed in `9a082b5c3e`, and the clean
+detached checkout was removed normally. Its unique evidence was retained.
+
+`AHDGame-turn-perf-next` ends at PR #2356's merged commit, but that PR targeted
+`main`, not `development`. It is **not** a reason to delete the checkout as
+already merged to the requested base. `AHDGame-turn-perf` adds five later
+performance commits on top of its production ancestry (index-fund ledger and
+quote batching, indexes, phase telemetry). These need selective integration
+and before/after bytes/round trips into Track 1 rather than merging production
+ancestry wholesale. Both checkouts are clean and remain active-feature until
+their patches have a tested `development` disposition.
+
+The remaining rows above require final decisions and execution; this document
+does not mark them complete.

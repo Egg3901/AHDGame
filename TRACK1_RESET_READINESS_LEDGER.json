@@ -2377,7 +2377,38 @@
       "requirement": "Every country, party, office, chamber, regional government, corporation, bank, budget, currency, and election uses the 2027 source or an explicit documented fallback, never an accidental 2019/1991 carry-forward.",
       "parent_checked": false,
       "status": "open_nonlaunch_profile",
-      "issue_refs": [],
+      "issue_refs": [
+        {
+          "repo": "Egg3901/AHDGame",
+          "number": 2289,
+          "state": "OPEN",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2289"
+        },
+        {
+          "repo": "Egg3901/AHDGame",
+          "number": 2291,
+          "state": "OPEN",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2291"
+        },
+        {
+          "repo": "Egg3901/AHDGame",
+          "number": 2294,
+          "state": "OPEN",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2294"
+        },
+        {
+          "repo": "Egg3901/AHDGame",
+          "number": 2317,
+          "state": "OPEN",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2317"
+        },
+        {
+          "repo": "Egg3901/AHDGame",
+          "number": 2325,
+          "state": "OPEN",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2325"
+        }
+      ],
       "evidence": [
         {
           "type": "tracker_checklist",
@@ -2386,6 +2417,10 @@
         }
       ],
       "blocked_by": [
+        {
+          "type": "issues",
+          "detail": "#2289 country substrate, #2291 euro currency topology, #2294 party roster, #2317 Turkey population, and #2325 regional population reconciliation must all pass bootstrap conformance"
+        },
         {
           "type": "scope",
           "detail": "2027 implementation/evidence required; final launch worldsim targets selected 1991 profile"

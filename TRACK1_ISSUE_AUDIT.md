@@ -35,7 +35,11 @@ The owner's instruction to use the _fewest possible_ worldsims can be met by **n
 
 Thus the practical minimum is **three serial run identities on one final SHA**, with one extended through 2027, _if_ the three shared configurations can satisfy all matrix requirements and the final-release-replay wording is accepted as fulfilled by a campaign begun after the last change. A strict reading of “repeat” requires three more five-year runs after earlier qualification. An isolated 120+ turn 1991 run for [#2271](https://github.com/Egg3901/AHDGame/issues/2271) can be the prefix of the first full-flags run if single-run load conditions are maintained. A 2027 short seed probe remains necessary for issues whose own acceptance criteria explicitly require it even though 2027 is not the selected launch profile. Individual balance issues request 48–240 turn or paired-control reports; reuse shared pinned snapshot/seed treatments where their acceptance measures align, and count every distinct sandbox execution honestly. No concurrent full worldsims on this shared box.
 
-There is a **real decision fork** to raise with the owner: the requested deliverable says “ready for a single final validating worldsim run,” while #2159 requires a multi-seed, multi-horizon program and a sandbox reset rehearsal. The safe interpretation is one final _validation campaign_ consisting of the mandatory serial runs, with all code and non-worldsim evidence complete beforehand. If “one run” means one seed execution, #2159's acceptance criteria would have to change explicitly; the agent should not silently weaken them.
+The owner resolved the interpretation on 2026-09-25: "single final validating
+worldsim run" means one coordinated final campaign containing the required
+three deterministic seeds, horizon run, release replay, and sandbox reset
+rehearsal. #2159's acceptance criteria are unchanged. All code and
+non-worldsim evidence must be complete before that campaign begins.
 
 ## Open issue ledger: all 70
 
@@ -115,5 +119,18 @@ The codes below are execution groups, not status labels: **R** reset/common econ
 | [#2367](https://github.com/Egg3901/AHDGame/issues/2367) UK eligibility               | B     | Merge/reconcile active branch, prove 10% Commons/snap gate, 20% US House, shared tally/projection, and combined #2365 report.                                           |
 
 ## Closure discipline
+
+### Verified carry-forward for #2078
+
+The detector repair is already in `development` via `f605ec35bb` (PR #2307).
+`src/lib/audit/rules/transferFlows.ts` coalesces mirrored rows into transfer
+events, requires a strictly later reverse event, and excludes routine system
+settlements from generic hub detection. The existing `anomalyScan.test.ts`
+fixtures cover a mirrored supply agreement, routine coupon/tax/dues rows, a
+true later return, and a real actor-driven hub. The issue remains open because
+its own 2026-09-22 comment says corrected six-turn sandbox precision and scan
+duration evidence are still missing. Collect that evidence during the shared
+qualification campaign; do not rewrite the landed detector without a new
+failing fixture.
 
 For each row, record source commit, focused test, integration evidence, simulation report where required, remaining acceptance text, and blocker links in the parallel ledger. Update the GitHub issue and parent counts in the **single final validation pass**. Use `Closes #N` only for fully verified criteria; a failed criterion remains open with `status: partial`. The issue count is inventory, not a measure of untouched work.

@@ -89,13 +89,52 @@ child issue and the parent tracker in one pass.
    final gates pass and update parent counts in the same pass. The single PR
    then becomes reviewable as a complete release candidate.
 
+## Dead-weight workstream
+
+The owner's note explicitly calls out "dead weight." Existing PR #2377
+contains an audited 14-package execution map. Its documented corrections
+matter here: 240 seconds is a _per-phase_ timeout; registered phase names
+are not executed phases; the 21,892-command/209.1-MB figures came from one
+local sandbox turn, not production; the 84%/32-phase/3-GB targets lack a
+measured model. Do not make those targets release acceptance gates.
+
+Execute these packages in dependency order within the Track 1 code and
+validation work, retaining each measured before/after result in the final PR:
+
+1. **WP0-WP2:** remeasure a pinned turn, then batch index-fund and
+   corporation-turn reads/writes. For #2271 use isolated 1991 full-flags
+   evidence and require zero index-fund timeouts without changing fund
+   outcomes. Integrate the five later performance commits from the clean
+   `AHDGame-turn-perf` checkout selectively, after proving they are absent
+   from `development`.
+2. **WP3-WP6:** separate NPP command cores, batch banking/vote/support
+   phases, profile CPU-bound phases, and reduce BSON decode from fat
+   collection reads. Preserve phase order, RNG sequence, per-phase resume,
+   rules/shell boundaries, and the read projection/round-trip budgets.
+3. **WP7-WP9:** inventory per-collection retention, election-candidate
+   lifecycle, and recovery/idempotency with fault injection. Delete data
+   only after a migration and rollback are verified; never use cleanup as
+   the fix for settlement invariants.
+4. **WP10-WP13:** consolidate only seams with compatible rules and cadence;
+   retire each heal route after its root cause and replacement are proven;
+   reconcile route naming and measure compiler RSS before setting a heap
+   target. The two-file `corporation/` residue and already unified
+   `billDiscussions` collection are accounted for as source facts, not
+   speculative large savings.
+
+The required proof for turn work is a pinned one-turn profile with bytes,
+documents, and Mongo round trips by phase before/after, then focused
+correctness tests and the 1991 qualification prefix. Wall-clock time from a
+shared box is supporting context only.
+
 ## Worldsim budget
 
 The #2159 acceptance criteria are a floor. A literal single world run cannot
 meet its three-seed early-world and ten-year matrices plus post-change replay.
-"Single final validating worldsim run" therefore means one final **campaign**
-on a frozen SHA, with multiple required deterministic worlds; it is not a
-waiver of the issue's sample size. A changed release SHA invalidates that
+The owner confirmed on 2026-09-25 that "single final validating worldsim
+run" means one coordinated final **campaign** on a frozen SHA, containing
+the required deterministic seeds, horizon run, and release replay. #2159's
+acceptance criteria remain intact. A changed release SHA invalidates that
 campaign.
 
 | Stage                                               |                         New world starts | Coverage and reuse                                                                                                                                                                                                                                        |
@@ -110,8 +149,17 @@ campaign.
 Baseline budget: **seven fresh world starts plus one horizon continuation** and
 one rehearsal/restore operation. Conditional extra starts require a named
 finding and updated ledger. No worldsim is used as an exploratory substitute
-for a targeted test. This budget is provisional until the worker's ability to
-resume a pinned world and retain complete time series is verified.
+for a targeted test. `scripts/sim/runWorld.ts` documents and implements
+same-seed/same-DB continuation from the existing turn, with `--turns` counted
+from that turn and per-turn progress persisted; this supports the shared
+five-year, ten-year, and horizon starts. The budget remains provisional until
+the production worker's pinned-source resume and complete report retention
+are verified in sandbox.
+
+The initial 1991 qualification worlds also supply #2078's corrected six-turn
+anomaly precision and scan-duration window. Its transfer-detector code and
+targeted fixtures are already in development; a separate world start would
+duplicate the matrix without improving coverage.
 
 ## Stop conditions for a launch claim
 
@@ -120,3 +168,51 @@ settlement, candidate-less election, missing crisis family, stale/misattributed
 telemetry, phase budget regression, failed restore, or missing owner-approved
 waiver blocks the final validation decision. A queued or incomplete horizon
 run is insufficient.
+
+## Execution log
+
+- 2026-09-25: Created the isolated `track1-fixer` checkout from fetched
+  `origin/development` at `028cb9265e76555efa5d73b611cea0f409c3446b`.
+  Removed the accidental clean duplicate. Main checkout remains untouched.
+- 2026-09-25: Enumerated the 99 #2159 checklist rows into a separate ledger,
+  inventoried 70 open issues and the PR/worktree surfaces, and preserved the
+  owner's 39-worktree AHDGame classification. See the tracker and inventory.
+- 2026-09-25: Merged AHDGame dependency PRs #2263, #2267 and #2266 into
+  `development` after their required checks passed. Closed incompatible PRs
+  #2264 and #2265 with written reasons. `origin/development` is now newer
+  than the initial Track 1 base; rebase this branch only after concurrent
+  Muse edits are safely checkpointed.
+- 2026-09-25: Completed #2337's 48-turn/year frequency audit and fixed
+  1/12/48/240-turn calibration fixtures. Focused suite: 77 passing. Posted
+  evidence on #2337 and labeled it `status: partial` pending the final pass.
+- 2026-09-25: Removed six clean, zero-unique ops worktrees and eight superseded
+  AHDGame Muse worktrees after individual clean checks. The latter include
+  #1975 and #2059 dirty copies whose uncommitted contents were verified
+  redundant before discard. No force removal or locked worktree mutation.
+- 2026-09-25: Integrated the unique report from one detached research
+  checkout before removing it, and deleted one orphaned build-artifact
+  directory after confirming it held no source. These are separate from the
+  eight superseded Muse checkouts above.
+- 2026-09-25: Rechecked #2078's already-merged transfer detector with 42
+  passing targeted tests. Posted implementation evidence on the issue and
+  labeled it `status: partial`; its corrected six-turn sandbox precision
+  remains an explicit gate in the first qualification world.
+- 2026-09-25: Preserved the unique #2087-#2089 investigation report from a
+  detached research checkout in commit `9a082b5c3e`; the report explicitly
+  distinguishes inspected source facts from sandbox observations not rerun.
+- 2026-09-25: Actual Muse Spark 1.3 contributors implemented preliminary
+  2027 euro seed repair and corporation UI fixes. Focused euro-rule and Build
+  Org suites passed 20 tests together. Follow-up Muse work is completing
+  runtime forex mirroring, conformance tests, and corporation regressions;
+  neither area is yet marked done.
+
+### #2291 completion boundary
+
+The current euro patch is a partial implementation. Issue #2291 requires
+EUR across 2027 budgets, central banks, corporations, balances, bonds,
+exchange rates, and transaction records, plus conservation and a conformance
+failure on any legacy row. The branch still has era-blind
+`COUNTRY_CURRENCY_MAP` uses in seed-generated sovereign issuers
+(`src/lib/seeds/reference/budgets.ts`) and money operations. Test and resolve
+those paths before marking #2291 ready. A passing rule helper suite alone is
+insufficient evidence.

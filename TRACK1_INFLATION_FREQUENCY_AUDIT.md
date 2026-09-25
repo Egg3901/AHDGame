@@ -1,9 +1,9 @@
 # Inflation time-unit audit for #2337
 
-Source: `origin/development` at `028cb9265e76555efa5d73b611cea0f409c3446b`
-plus the `src/lib/budget/inflation.ts` comment and
-`src/lib/budget/inflation.test.ts` calibration test in this PR. No production
-formula or parameter changed.
+Source: `417786c7d0bf4852b2b7c762df2efeae89b5ffbc` on
+`track1/total-system-analysis-rework`, based on `origin/development` at
+`028cb9265e76555efa5d73b611cea0f409c3446b`. No production formula or
+parameter changed.
 
 `TURNS_PER_YEAR` is 48. The ordinary per-turn inflation change limit is 1.5
 percentage points (pp) of the **annualized inflation rate**. Its arithmetic
