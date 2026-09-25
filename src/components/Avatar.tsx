@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Image from "next/image";
 import type { ProfileBorderKey } from "@/lib/db/types";
 import { ProfileBorder } from "@/components/patreon/ProfileBorder";
@@ -31,6 +32,7 @@ export function Avatar({
   borderKey,
   tintColor,
 }: AvatarProps) {
+  const [failedUrl, setFailedUrl] = useState<string | null>(null);
   const initial = (name || "?").charAt(0).toUpperCase();
   const hasBorder = !!borderKey;
   const shape = "rounded-lg";
@@ -39,7 +41,7 @@ export function Avatar({
     <div
       className={`relative flex items-center justify-center overflow-hidden ${shape} bg-gradient-to-br from-primary/20 to-secondary/20 text-xs font-bold shrink-0 ${size} ${hasBorder ? "" : className}`}
     >
-      {url ? (
+      {url && failedUrl !== url ? (
         <Image
           src={url}
           alt={name}
@@ -47,6 +49,7 @@ export function Avatar({
           className="object-cover"
           sizes="64px"
           unoptimized={bypassNextImageOptimization(url)}
+          onError={() => setFailedUrl(url)}
         />
       ) : (
         initial

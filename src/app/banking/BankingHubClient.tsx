@@ -20,6 +20,9 @@ import { useToast } from "@/contexts/ToastContext";
 import { WarningBandBadge } from "@/components/banking/WarningBandBadge";
 import { formatBankMoney, formatRatePercent } from "@/components/banking/formatBankMoney";
 import { PrivateLoanModal } from "@/app/banking/PrivateLoanModal";
+import { PrivateDepositModal } from "@/app/banking/PrivateDepositModal";
+import { CorporationLogo } from "@/components/corporation/CorporationLogo";
+import { Avatar } from "@/components/Avatar";
 import { CHARACTER_LOAN_SPREAD_PP, convertFaceBetweenCurrencies } from "@/lib/banking/lendingMath";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import type { CountryId } from "@/lib/constants/countries";
@@ -53,6 +56,9 @@ type HubPrivateBank = {
   cashReserves: number;
   lendableHeadroom: number;
   requireApproval?: boolean;
+  logoUrl?: string;
+  ceoName: string | null;
+  ceoAvatarUrl: string | null;
   href: string;
 };
 
@@ -126,6 +132,8 @@ export function BankingHubClient() {
   const [data, setData] = useState<HubPayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [depositBank, setDepositBank] = useState<HubPrivateBank | null>(null);
+  const [loanBankId, setLoanBankId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<HubTab>("private");
 
   const load = useCallback(async () => {
@@ -247,7 +255,12 @@ export function BankingHubClient() {
               description="A corporation that owns a financial sector can issue a bank charter from its Bank console."
             />
           ) : (
-            <PrivateBanksTable banks={data.privateBanks} hasCharacter={!!data.characterId} />
+            <PrivateBanksTable
+              banks={data.privateBanks}
+              hasCharacter={!!data.characterId}
+              onDeposit={setDepositBank}
+              onBorrow={(bank) => setLoanBankId(bank.corporationId)}
+            />
           )}
         </section>
       )}
@@ -287,6 +300,32 @@ export function BankingHubClient() {
 
       {data.isAdmin && (
         <AdminUnwindPanel banks={data.privateBanks} onChanged={load} showToast={showToast} />
+      )}
+
+      {depositBank && data.characterId && (
+        <PrivateDepositModal
+          bank={depositBank}
+          availableCash={data.personalCash?.[depositBank.currency] ?? 0}
+          onClose={() => setDepositBank(null)}
+          onChanged={load}
+          showToast={showToast}
+        />
+      )}
+      {loanBankId && data.characterId && (
+        <PrivateLoanModal
+          banks={data.lendingBanks}
+          ceoCorporations={data.ceoCorporations}
+          personalCash={data.personalCash ?? {}}
+          exchangeRates={data.exchangeRates ?? {}}
+          personalIncomeByCurrency={data.personalIncomeByCurrency ?? {}}
+          currentTurn={data.currentTurn ?? 1}
+          loans={data.loans ?? []}
+          hasCharacter
+          initialBankId={loanBankId}
+          onClose={() => setLoanBankId(null)}
+          onChanged={load}
+          showToast={showToast}
+        />
       )}
     </div>
   );
@@ -849,9 +888,13 @@ type PrivateBankSortKey = "name" | "depositApy" | "loanRate" | "health" | "depos
 function PrivateBanksTable({
   banks,
   hasCharacter,
+  onDeposit,
+  onBorrow,
 }: {
   banks: HubPrivateBank[];
   hasCharacter: boolean;
+  onDeposit: (bank: HubPrivateBank) => void;
+  onBorrow: (bank: HubPrivateBank) => void;
 }) {
   const [sort, setSort] = useState<SortState<PrivateBankSortKey>>({
     key: "depositApy",
@@ -940,7 +983,14 @@ function PrivateBanksTable({
         </thead>
         <tbody className="divide-y divide-card-border">
           {sorted.map((bank) => (
-            <PrivateBankRow key={bank.corporationId} bank={bank} estRateLabel={estRateLabel} />
+            <PrivateBankRow
+              key={bank.corporationId}
+              bank={bank}
+              estRateLabel={estRateLabel}
+              hasCharacter={hasCharacter}
+              onDeposit={() => onDeposit(bank)}
+              onBorrow={() => onBorrow(bank)}
+            />
           ))}
         </tbody>
       </table>
@@ -948,7 +998,19 @@ function PrivateBanksTable({
   );
 }
 
-function PrivateBankRow({ bank, estRateLabel }: { bank: HubPrivateBank; estRateLabel: string }) {
+function PrivateBankRow({
+  bank,
+  estRateLabel,
+  hasCharacter,
+  onDeposit,
+  onBorrow,
+}: {
+  bank: HubPrivateBank;
+  estRateLabel: string;
+  hasCharacter: boolean;
+  onDeposit: () => void;
+  onBorrow: () => void;
+}) {
   const customerBank = bank.charterType === "retail" || bank.charterType === "universal";
   const estimatedRate = bank.lendingRatePercent + CHARACTER_LOAN_SPREAD_PP;
 
@@ -959,15 +1021,30 @@ function PrivateBankRow({ bank, estRateLabel }: { bank: HubPrivateBank; estRateL
           href={bank.href}
           className="group flex min-w-0 items-center gap-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
         >
-          <span className="flex h-8 w-10 shrink-0 items-center justify-center overflow-hidden rounded-md border border-card-border bg-card-elevated">
-            <CountryFlag country={bank.countryId} width={32} height={22} title={bank.countryName} />
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-card-border bg-card-elevated">
+            <CorporationLogo
+              key={bank.logoUrl ?? bank.corporationId}
+              logoUrl={bank.logoUrl}
+              name={`${bank.name} logo`}
+              size="h-10 w-10"
+              className="rounded-lg"
+            />
           </span>
           <span className="min-w-0">
             <span className="block truncate font-semibold text-foreground transition-colors group-hover:text-primary">
               {bank.name}
             </span>
-            <span className="block text-xs text-muted">
+            <span className="block truncate text-xs text-muted">
               {bank.countryName} · <span className="font-mono">{bank.currency}</span>
+            </span>
+            <span className="mt-1 flex min-w-0 items-center gap-1.5 text-xs text-muted">
+              <Avatar
+                url={bank.ceoAvatarUrl}
+                name={bank.ceoName ?? "CEO"}
+                size="h-5 w-5"
+                className="rounded-md"
+              />
+              <span className="truncate">{bank.ceoName ?? "CEO vacant"}</span>
             </span>
           </span>
         </Link>
@@ -1018,22 +1095,24 @@ function PrivateBankRow({ bank, estRateLabel }: { bank: HubPrivateBank; estRateL
       </td>
       <td className="px-5 py-3.5">
         <div className="flex items-center justify-end gap-2">
-          {customerBank ? (
+          {customerBank && hasCharacter ? (
             <>
-              <Link
-                href={`${bank.href}#customer-deposit`}
+              <button
+                type="button"
+                onClick={onDeposit}
                 aria-label={`Deposit savings at ${bank.name}`}
                 className="rounded-lg border border-success/35 bg-success/10 px-3 py-1.5 text-xs font-semibold text-success transition-colors hover:bg-success/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-success"
               >
                 Deposit
-              </Link>
-              <Link
-                href={`${bank.href}#customer-loan`}
+              </button>
+              <button
+                type="button"
+                onClick={onBorrow}
                 aria-label={`Apply for a loan at ${bank.name}`}
                 className="rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
               >
                 Borrow
-              </Link>
+              </button>
             </>
           ) : (
             <Link

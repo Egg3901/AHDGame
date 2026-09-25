@@ -122,10 +122,18 @@ export async function buildCentralBankChairData(
     // chairCharacterId would render a player name under the "Autonomous Chair
     // (AI)" badge (M1). chairMode "npp" never resolves to a character.
     const npp = bank.chairNppId
-      ? await db.collection<NPP>("npps").findOne({ _id: bank.chairNppId })
+      ? await db
+          .collection<NPP>("npps")
+          .findOne({ _id: bank.chairNppId }, { projection: { _id: 1, name: 1, avatarUrl: 1 } })
       : null;
     return {
-      chairData: npp ? { characterId: npp._id.toHexString(), name: npp.name } : null,
+      chairData: npp
+        ? {
+            characterId: npp._id.toHexString(),
+            name: npp.name,
+            avatarUrl: npp.avatarUrl,
+          }
+        : null,
       chairMode,
       chairNppId,
     };
