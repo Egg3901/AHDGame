@@ -8,6 +8,7 @@ import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { parseJsonBody } from "@/lib/api/validate";
 import { getNextTicketNumber } from "@/lib/ticketCounter";
 import { getTicketsCollection } from "@/lib/db/collections/tickets";
+import { CONTEXT_QUESTIONS, buildCreationContextRequest } from "@/lib/tickets/contextNeeds";
 import { buildCharacterHref } from "@/lib/utils/profileUrls";
 import type { Ticket, TicketMessage } from "@/lib/db/types/ticket";
 import type { Character, Corporation, User } from "@/lib/db/types";
@@ -300,6 +301,18 @@ export async function POST(request: Request) {
       updatedAt: createdAt,
     };
 
+    // Missing-context prompt at filing time, not after triage: the triage
+    // worker and the model classifier may be disabled or hours delayed, and
+    // the reporter is in the channel right now. Deterministic only — the ops
+    // dashboard refines the same persisted decision with the model later.
+    const contextRequest = buildCreationContextRequest({
+      title: body.title,
+      description: body.description,
+      hasGameIdentity: userId != null,
+      corporationUrl: reporter?.corporationUrl ?? null,
+    });
+    doc.contextRequest = contextRequest;
+
     const result = await coll.insertOne(doc as Ticket);
 
     return NextResponse.json({
@@ -307,6 +320,12 @@ export async function POST(request: Request) {
       ticketNumber,
       reviewAfter: doc.reviewAfter.toISOString(),
       message: "Ticket opened. Thank you!",
+      // The filer (Discord bot) posts these immediately so the reporter is
+      // asked while still in the channel. Keys match the dashboard's
+      // idempotent player-update ledger, so a later dashboard post dedupes.
+      contextNeeded: contextRequest.needed,
+      contextKey: contextRequest.key,
+      contextQuestions: contextRequest.needed.map((need) => CONTEXT_QUESTIONS[need]),
     });
   } catch (error) {
     return handleRouteError(error);
