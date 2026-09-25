@@ -1135,6 +1135,16 @@ commit the reviewed behavior in Track 1, then remove only the redundant
 source checkout after a fresh clean/unlocked/process-free check. Never
 discard or force-remove the uncommitted source while integration is pending.
 
+**Dirty Discord event-card checkouts: MERGE decision, in progress.** Issue
+#2394 records the new event-card/chart work and its turn-path verification
+gate. The `discord-event-cards` and Paseo legislature-channels checkouts
+contain overlapping but byte-distinct uncommitted patches. A Muse Spark 1.3
+contributor is comparing both read-only and porting their useful unique
+behavior to Track 1. Keep both source checkouts intact until tests and
+patch-equivalence evidence support normal removal; their dirty state bars
+automated cleanup. The separate Paseo banking/private-central checkout has
+unique banking UI work and is not part of this event-card decision.
+
 **Fresh cross-repo PR check, 2026-09-25:** AHDGame, adhd-bot, and the
 legacy `a-house-divided` repo currently have no open PRs. Ops has #162
 (`feat/paseo-reliability`, conflicting with `main`, with test, CodeQL, and
