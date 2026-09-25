@@ -175,7 +175,7 @@ export function buildShareFillMoneyFingerprint(plan: ShareFillMoneyPlan): string
   ].join(":");
 }
 
-type ShareFillMoneyReceipt = MoneyFlowReceipt & { shareFillMoneyPlan?: unknown };
+type ShareFillMoneyReceipt = MoneyFlowReceipt & { shareFillMoneyPlan?: ShareFillMoneyPlan };
 
 function receipts(db: Db): Collection<MoneyFlowReceipt> {
   return db.collection<MoneyFlowReceipt>(NON_ATOMIC_MONEY_FLOW_RECEIPTS_COLLECTION);
@@ -1170,7 +1170,10 @@ async function fetchMoneyReceiptWindow(
   afterKey: string | undefined,
   window: number
 ): Promise<ShareFillMoneyReceipt[]> {
-  const filter = { status: "in_progress", shareFillMoneyPlan: { $exists: true } };
+  const filter: Filter<ShareFillMoneyReceipt> = {
+    status: "in_progress",
+    shareFillMoneyPlan: { $exists: true },
+  };
   if (window <= 0) return [];
   const tail =
     afterKey === undefined

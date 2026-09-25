@@ -317,10 +317,19 @@ function fakeCollection(db: FakeDb, name: string): Record<string, (...args: neve
   };
 }
 
-function fakeDb(
-  db: FakeDb,
-  overrides?: { client?: object; databaseName?: string }
-): Record<string, (...args: never[]) => unknown> {
+/**
+ * In-memory stand-in for a Db handle: collection fakes plus the optional
+ * driver identity props (`client` / `databaseName`) the orphan cursor
+ * rotation keys on. Everything downstream casts through `as never`, so this
+ * only has to describe the fake itself, not the real `Db`.
+ */
+type FakeDbHandle = {
+  collection: (name: string) => Record<string, (...args: never[]) => unknown>;
+  client?: object;
+  databaseName?: string;
+};
+
+function fakeDb(db: FakeDb, overrides?: { client?: object; databaseName?: string }): FakeDbHandle {
   return {
     collection: (name: string) => fakeCollection(db, name),
     // Stable client identity + database name, mirroring the production
@@ -485,7 +494,7 @@ function seedSellBaseline(db: FakeDb): void {
 
 describe("share-fill keyed money legs", () => {
   let state: FakeDb;
-  let db: Record<string, (...args: never[]) => unknown>;
+  let db: FakeDbHandle;
 
   beforeEach(() => {
     state = makeFakeDb();
@@ -670,7 +679,7 @@ describe("share-fill keyed money legs", () => {
 
 describe("share-fill money actor variants", () => {
   let state: FakeDb;
-  let db: Record<string, (...args: never[]) => unknown>;
+  let db: FakeDbHandle;
 
   beforeEach(() => {
     state = makeFakeDb();
@@ -866,7 +875,7 @@ describe("share-fill money actor variants", () => {
 
 describe("share-fill buy-fill money legs", () => {
   let state: FakeDb;
-  let db: Record<string, (...args: never[]) => unknown>;
+  let db: FakeDbHandle;
 
   beforeEach(() => {
     state = makeFakeDb();
@@ -1071,7 +1080,7 @@ describe("share-fill buy-fill money legs", () => {
 
 describe("share-fill money recovery and equivalence", () => {
   let state: FakeDb;
-  let db: Record<string, (...args: never[]) => unknown>;
+  let db: FakeDbHandle;
 
   beforeEach(() => {
     state = makeFakeDb();
@@ -1191,7 +1200,7 @@ describe("share-fill money recovery and equivalence", () => {
 
 describe("money orphan scan fairness and age grace", () => {
   let state: FakeDb;
-  let db: Record<string, (...args: never[]) => unknown>;
+  let db: FakeDbHandle;
 
   beforeEach(() => {
     state = makeFakeDb();
@@ -1307,17 +1316,16 @@ describe("money orphan scan fairness and age grace", () => {
     const advanced = await recoverShareFillMoneyOrphans(worldDb as never, 50, NOW);
     expect(advanced.map((r) => r.moneyKey)).toContain("miso-59:money");
 
-    const others: Array<{ store: FakeDb; handle: Record<string, (...args: never[]) => unknown> }> =
-      [
-        (() => {
-          const store = makeFakeDb();
-          return { store, handle: fakeDb(store, { client: {}, databaseName: "gamedb" }) };
-        })(),
-        (() => {
-          const store = makeFakeDb();
-          return { store, handle: fakeDb(store, { client, databaseName: "otherdb" }) };
-        })(),
-      ];
+    const others: Array<{ store: FakeDb; handle: FakeDbHandle }> = [
+      (() => {
+        const store = makeFakeDb();
+        return { store, handle: fakeDb(store, { client: {}, databaseName: "gamedb" }) };
+      })(),
+      (() => {
+        const store = makeFakeDb();
+        return { store, handle: fakeDb(store, { client, databaseName: "otherdb" }) };
+      })(),
+    ];
     for (const other of others) {
       seedWorld(other.store, "miso", 60);
       const pass = await recoverShareFillMoneyOrphans(other.handle as never, 50, NOW);

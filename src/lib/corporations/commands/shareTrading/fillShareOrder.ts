@@ -593,6 +593,10 @@ export async function fillShareOrder(request: Request, { params }: RouteParams) 
                 pricePerShareAnchor: fundFillPriceAnchor,
               }
             : null,
+          // The buyer here is the filling corporation, never a fund, so no
+          // fund holdings credit applies (that leg is for buy-fills into a
+          // fund bid; see fillShareOrderSettlement.ts).
+          buyerHoldingsCredit: null,
           sellerProceeds: order.placerFundId
             ? {
                 collection: "indexFunds",
@@ -715,6 +719,10 @@ export async function fillShareOrder(request: Request, { params }: RouteParams) 
                 pricePerShareAnchor: fundFillPriceAnchor,
               }
             : null,
+          // The buyer here is the filling character (or imperial character),
+          // never a fund, so no fund holdings credit applies (that leg is
+          // for buy-fills into a fund bid; see fillShareOrderSettlement.ts).
+          buyerHoldingsCredit: null,
           sellerProceeds: order.placerFundId
             ? {
                 collection: "indexFunds",
