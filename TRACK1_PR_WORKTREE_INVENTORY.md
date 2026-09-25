@@ -762,3 +762,14 @@ landed through squash PRs #2180, #2186, #2189, #2201, #2209, #2210, #2255,
 behavior remains to extract. The worktree is clean, unlocked and process-free.
 It was removed with ordinary `git worktree remove`; the branch ref remains a
 dated candidate artifact for release provenance.
+
+**Legacy private game repo Dependabot PRs: CLOSED as abandoned, 2026-09-25.**
+The remaining 11 open dependency PRs in `Egg3901/a-house-divided` were
+#4451, #4448, #4447, #4446, #4445, #4444, #4443, #4442, #4435, #4434 and
+#4422. Each received a closure comment and was closed. That private repo is
+retained for internal sync/ops assets; `Egg3901/AHDGame` is the live public
+game and Railway deploy source. Merging dependency bumps into stale private
+`master`/`development` would not update the runtime. Public dependency needs
+must be evaluated against the public repo's current package and lockfile;
+this disposition does not assert those versions have all been adopted. No
+private checkout, dirty file, or locked worktree was touched.
