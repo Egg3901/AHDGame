@@ -19,7 +19,7 @@ import { isForexEnabled } from "@/lib/currency/featureFlag";
 import { buildPersonalBalanceInc } from "@/lib/currency/characterFunds";
 import { energyActionLimits } from "@/lib/stats/statDrift";
 import { STAT_MIN } from "@/lib/stats/statsConstants";
-import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
+import { getSeedCurrencyCode } from "@/lib/constants/currencies";
 import { getWealthBonus, type WealthLevel } from "@/lib/constants/characterWealth";
 import { getEraNominalAmount } from "@/lib/constants/sectorSeedEra";
 import { getGameStatePresetOrDefault } from "@/lib/db/collections/gameState";
@@ -237,9 +237,8 @@ export async function POST(request: Request) {
 
     const forexEnabled = await isForexEnabled();
     const campaignRates = await loadCampaignCurrencyRates(db);
-    const startingRate = campaignLocalRate(countryId, campaignRates);
-    const homeCurrency =
-      COUNTRY_CURRENCY_MAP[countryId as keyof typeof COUNTRY_CURRENCY_MAP] ?? "USD";
+    const startingRate = campaignLocalRate(countryId, campaignRates, worldPreset);
+    const homeCurrency = getSeedCurrencyCode(countryId as CountryId, worldPreset);
 
     // Block character creation in disabled countries (admins bypass for testing)
     if (!isAdmin && !countryAccess.enabledForPlayers) {
@@ -408,8 +407,7 @@ export async function POST(request: Request) {
         .findOne({ userId: userDoc.referredBy });
       if (referrerChar) {
         const referrerCountry = (referrerChar.countryId as string) ?? "US";
-        const referrerCurrency =
-          COUNTRY_CURRENCY_MAP[referrerCountry as keyof typeof COUNTRY_CURRENCY_MAP] ?? "USD";
+        const referrerCurrency = getSeedCurrencyCode(referrerCountry as CountryId, worldPreset);
         const contestStartedAt = gameConfig?.referralContestStartedAt;
         const contestActive =
           contestStartedAt instanceof Date && character.createdAt >= contestStartedAt;

@@ -26,7 +26,8 @@ import {
 import { presidentialRulesetFor } from "@/lib/elections/presidentialRuleset";
 import { buildCampaignStatePresence } from "@/lib/elections/campaignStatePresence";
 import { getCampaignCopyForElection } from "@/lib/campaigns/raceFamilyCopy";
-import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
+import { getSeedCurrencyCode } from "@/lib/constants/currencies";
+import { getGameStatePresetOrDefault } from "@/lib/db/collections/gameState";
 import {
   campaignAnchorToLocal,
   campaignLocalRate,
@@ -138,11 +139,16 @@ export async function getCampaignDetail(
   // the frozen world-seeded currency basis (via campaignAnchorToLocal) so it matches
   // what campaignTurn and upgradeCampaign actually credit/charge (never the live
   // exchangeRates).
-  const campaignCurrencyCode = getCampaignCurrency(electionCountryId);
-  const campaignRates = await loadCampaignCurrencyRates(db);
-  const campaignRate = campaignLocalRate(electionCountryId, campaignRates); // frozen base rate, for the fxRate payload field
+  const [campaignRates, detailPreset] = await Promise.all([
+    loadCampaignCurrencyRates(db),
+    // One route-path read: euro members preview in EUR, matching what
+    // upgradeCampaign/donateToCampaign actually charge.
+    getGameStatePresetOrDefault(db),
+  ]);
+  const campaignCurrencyCode = getCampaignCurrency(electionCountryId, detailPreset);
+  const campaignRate = campaignLocalRate(electionCountryId, campaignRates, detailPreset); // frozen base rate, for the fxRate payload field
   const toLocal = (anchor: number) =>
-    campaignAnchorToLocal(anchor, electionCountryId, campaignRates);
+    campaignAnchorToLocal(anchor, electionCountryId, campaignRates, detailPreset);
   const [isNominee, isRunningMate, partyTreasuryAccess] = await Promise.all([
     user
       ? isCampaignNomineeUser(db, campaign, user.userId, user.character?._id ?? null)
@@ -150,7 +156,7 @@ export async function getCampaignDetail(
     user
       ? isCampaignRunningMateUser(db, campaign, user.userId, user.character?._id ?? null)
       : Promise.resolve(false),
-    getPartyTreasuryAccess(db, campaign, election, user),
+    getPartyTreasuryAccess(db, campaign, election, user, detailPreset),
   ]);
   // A running mate gets an owner-level VIEW of the ticket campaign (canSeeExact),
   // but a narrower action set, enforced client-side and by the server route
@@ -901,7 +907,8 @@ async function getPartyTreasuryAccess(
   db: Db,
   campaign: Campaign,
   election: Election | null,
-  user: AuthUserWithCharacter | null
+  user: AuthUserWithCharacter | null,
+  preset?: string
 ): Promise<CampaignData["partyTreasuryAccess"] | undefined> {
   if (!user?.hasCharacter || !election || !Number.isFinite(Number(campaign.party))) {
     return undefined;
@@ -954,7 +961,6 @@ async function getPartyTreasuryAccess(
     partyName: candidateParty.name,
     role,
     treasury: candidateParty.treasury ?? 0,
-    currencyCode:
-      COUNTRY_CURRENCY_MAP[election.countryId as keyof typeof COUNTRY_CURRENCY_MAP] ?? "USD",
+    currencyCode: getSeedCurrencyCode(election.countryId, preset ?? ""),
   };
 }

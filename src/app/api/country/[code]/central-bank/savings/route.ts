@@ -9,7 +9,7 @@ import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { handleRouteError } from "@/lib/api/errors";
 import type { CentralBank, PortfolioHistory } from "@/lib/db/types";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
-import { COUNTRY_CURRENCY_MAP, FOREX_ACTIVE_COUNTRIES } from "@/lib/constants/currencies";
+import { FOREX_ACTIVE_COUNTRIES, getSeedCurrencyCode } from "@/lib/constants/currencies";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
 import {
   getLifetimeInterestEarnedInCurrency,
@@ -47,21 +47,25 @@ export async function GET(_request: Request, { params }: { params: Promise<{ cod
     }
 
     const db = await getDb();
-    const [forexEnabled, character, bank] = await Promise.all([
+    const [forexEnabled, character, bank, gameState] = await Promise.all([
       isForexEnabled(),
       getCharacterByUserId(db, auth.user.userId),
       db.collection<CentralBank>("centralBanks").findOne({ _id: getBankId(countryId) }),
+      getGameState(),
     ]);
 
     if (!character) {
       return NextResponse.json({ error: "Character not found" }, { status: 404 });
     }
 
-    const nationalCurrency = COUNTRY_CURRENCY_MAP[countryId];
+    // Preset-aware: 2027 euro members read EUR balances/ledgers; every other
+    // preset resolves through the era-blind map exactly as before. gameState
+    // was already loaded here, so no new read.
+    const nationalCurrency = getSeedCurrencyCode(countryId, gameState?.preset ?? "");
     const primeRate = bank?.primeRate ?? DEFAULT_PRIME;
     const inflationRate = bank?.inflationHistory?.at(-1)?.rate ?? 0;
 
-    const [totalNationalSavings, ledger, history, gameState] = await Promise.all([
+    const [totalNationalSavings, ledger, history] = await Promise.all([
       sumSavingsInCurrency(db, nationalCurrency),
       fetchSavingsLedgerForCharacter(db, character._id, nationalCurrency, 75),
       // Most recent 500 turns; sort descending server-side then reverse for the
@@ -80,7 +84,6 @@ export async function GET(_request: Request, { params }: { params: Promise<{ cod
         })
         .toArray()
         .then((arr) => arr.reverse()),
-      getGameState(),
     ]);
     const centralBankPricing = await loadCentralBankPricingAdjustment(
       db,

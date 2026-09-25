@@ -59,6 +59,11 @@ export function unionFoundingCostLocal(params: {
   forexEnabled: boolean;
   campaignRates?: CampaignCurrencyRates;
 }): number {
-  const rate = getFoundingFxRate(params.countryId, params.forexEnabled, params.campaignRates);
+  const rate = getFoundingFxRate(
+    params.countryId,
+    params.forexEnabled,
+    params.campaignRates,
+    params.preset
+  );
   return Math.round(UNION_FOUNDING_COST_CAMPAIGN_FUNDS * rate);
 }

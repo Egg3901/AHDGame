@@ -35,10 +35,11 @@ export function getFoundingConfidenceMultiplier(
 export function getFoundingFxRate(
   countryId: CountryId | null | undefined,
   forexEnabled: boolean,
-  rates?: CampaignCurrencyRates | null
+  rates?: CampaignCurrencyRates | null,
+  preset?: string
 ): number {
   if (!forexEnabled || !countryId) return 1;
-  return campaignLocalRate(countryId, rates);
+  return campaignLocalRate(countryId, rates, preset);
 }
 
 export interface FoundingCostInput {

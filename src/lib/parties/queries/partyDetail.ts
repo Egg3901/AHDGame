@@ -155,8 +155,9 @@ export async function getPartyDetail(db: Db, party: PoliticalParty): Promise<Par
   // (mirrors the turn processors) — never live forex. A party is country-scoped,
   // so one rate applies to every member/NPP.
   const campaignRates = await loadCampaignCurrencyRates(db);
-  const campaignRate = campaignLocalRate(partyCountry, campaignRates);
-  const toLocal = (anchor: number) => campaignAnchorToLocal(anchor, partyCountry, campaignRates);
+  const campaignRate = campaignLocalRate(partyCountry, campaignRates, preset);
+  const toLocal = (anchor: number) =>
+    campaignAnchorToLocal(anchor, partyCountry, campaignRates, preset);
 
   const nationalTaxRate = party.nationalTaxRate ?? 0;
   // GDP-baseline era for income math: the world's reset preset, so historical

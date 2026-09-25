@@ -2,7 +2,8 @@ import type { Db } from "mongodb";
 import { getCharacterByUserId } from "@/lib/db/characterLookup";
 import type { CentralBank } from "@/lib/db/types";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
-import { COUNTRY_CURRENCY_MAP, FOREX_ACTIVE_COUNTRIES } from "@/lib/constants/currencies";
+import { FOREX_ACTIVE_COUNTRIES, getSeedCurrencyCode } from "@/lib/constants/currencies";
+import { getGameStatePresetOrDefault } from "@/lib/db/collections/gameState";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
 import { buildLocSnapshot } from "@/lib/lineOfCredit/buildSnapshot";
 import { fetchLocLedgerForCharacter } from "@/lib/lineOfCredit/ledger";
@@ -41,7 +42,9 @@ export async function loadCountryCentralBankLoc(params: {
     return { ok: false as const, status: 404, error: "Line of credit requires the forex system." };
   }
 
-  const nationalCurrency = COUNTRY_CURRENCY_MAP[countryId];
+  // Preset-aware: 2027 euro members quote EUR. One route-path read; this
+  // query serves a page route, never the turn loop.
+  const nationalCurrency = getSeedCurrencyCode(countryId, await getGameStatePresetOrDefault(db));
   const primeRate = bank?.primeRate ?? DEFAULT_PRIME;
   const snapshot = await buildLocSnapshot(db, character);
   const ledger = snapshot ? await fetchLocLedgerForCharacter(db, character._id, 75) : [];

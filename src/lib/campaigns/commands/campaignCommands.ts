@@ -38,7 +38,8 @@ import {
 } from "@/lib/electionEngine/electionFormulaFactors";
 import { buildRallyAccrualEntry } from "@/lib/turn/elections/supportAccrual";
 import { emitTreasuryTransaction } from "@/lib/treasury/emit";
-import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
+import { getSeedCurrencyCode } from "@/lib/constants/currencies";
+import { getGameStatePresetOrDefault } from "@/lib/db/collections/gameState";
 import { ObjectId, type ClientSession, type Db, type UpdateFilter } from "mongodb";
 import { getGameTime } from "@/lib/time/gameTime";
 import { isCampaignUpgradeGeneralPhase } from "@/lib/elections/phases";
@@ -62,6 +63,9 @@ export async function upgradeCampaign(params: {
 }) {
   const { db, campaignId, user, category, targetId } = params;
   const campaignRates = await loadCampaignCurrencyRates(db);
+  // Frozen-basis era: euro members price in EUR. One route-path read; the turn
+  // phases that price the same costs already carry the preset in memory.
+  const upgradePreset = await getGameStatePresetOrDefault(db);
   const branch = params.branch ?? null;
   const campaign = await getCampaignOrThrow(db, campaignId);
 
@@ -124,7 +128,12 @@ export async function upgradeCampaign(params: {
   // Campaign treasury is stored in the campaign's local currency; the cost
   // table is anchor. Convert at the frozen base rate (matches campaignTurn).
   const countryId = election?.countryId ?? "US";
-  const adjustedFundsLocal = campaignAnchorToLocal(adjustedFunds, countryId, campaignRates);
+  const adjustedFundsLocal = campaignAnchorToLocal(
+    adjustedFunds,
+    countryId,
+    campaignRates,
+    upgradePreset
+  );
   if (campaign.funds < adjustedFundsLocal) {
     throw badRequest("Insufficient funds");
   }
@@ -138,7 +147,7 @@ export async function upgradeCampaign(params: {
   // Bundlers (incomeLumpOnPurchase) credit a one-time cash infusion, in local $.
   const lumpFundsLocal =
     effectType === "incomeLumpOnPurchase" && cost.lumpSum
-      ? campaignAnchorToLocal(cost.lumpSum, countryId, campaignRates)
+      ? campaignAnchorToLocal(cost.lumpSum, countryId, campaignRates, upgradePreset)
       : 0;
 
   // Opposition-research target resolution. Required when unlocking the oppo
@@ -309,6 +318,9 @@ export async function donateToCampaign(params: {
 }) {
   const { db, campaignId, user, amount, partyId } = params;
   const campaignRates = await loadCampaignCurrencyRates(db);
+  // One route-path read: without the preset a 2027 euro donation prices at the
+  // legacy rate while the war chest it debits is EUR-denominated.
+  const donatePreset = await getGameStatePresetOrDefault(db);
   const campaign = await getCampaignOrThrow(db, campaignId);
   const forexEnabled = await isForexEnabled();
   const turnNumber = await getCurrentTurn(db);
@@ -374,7 +386,7 @@ export async function donateToCampaign(params: {
     // at). Party and campaign share a country, so this local amount is correct
     // for BOTH the treasury debit and the campaign credit.
     const amountPartyLocal = forexEnabled
-      ? campaignAnchorToLocal(amount, party.countryId ?? "US", campaignRates)
+      ? campaignAnchorToLocal(amount, party.countryId ?? "US", campaignRates, donatePreset)
       : amount;
 
     if ((party.treasury ?? 0) < amountPartyLocal) {
@@ -471,7 +483,7 @@ export async function donateToCampaign(params: {
       fundEventType: "campaign_donation",
       donorRole: officerRole,
       amount: amountPartyLocal,
-      currencyCode: COUNTRY_CURRENCY_MAP[party.countryId] ?? "USD",
+      currencyCode: getSeedCurrencyCode(party.countryId, donatePreset),
       fromId: party._id,
       fromName: donorName,
       fromType: "party",
@@ -491,6 +503,7 @@ export async function donateToCampaign(params: {
       amount: amountPartyLocal,
       memo: `Campaign donation (${officerRole})`,
       counterparty: { type: "campaign", id: campaignId.toString() },
+      currencyCode: getSeedCurrencyCode(party.countryId, donatePreset),
       now,
     });
 
@@ -518,7 +531,7 @@ export async function donateToCampaign(params: {
   // messages say ₳ — see line 463 below). Campaign funds are decoupled from live
   // forex ; convert at the frozen world-seeded currency basis.
   const amountLocal = forexEnabled
-    ? campaignAnchorToLocal(amount, character.countryId ?? "US", campaignRates)
+    ? campaignAnchorToLocal(amount, character.countryId ?? "US", campaignRates, donatePreset)
     : amount;
   const campaignFundsField = forexEnabled ? "currencyBalances.campaign" : "funds";
   if ((character.currencyBalances?.campaign ?? character.funds ?? 0) < amountLocal) {
@@ -606,7 +619,7 @@ export async function donateToCampaign(params: {
     countryId: character.countryId,
     fundEventType: "campaign_donation",
     amount: amountLocal,
-    currencyCode: COUNTRY_CURRENCY_MAP[character.countryId] ?? "USD",
+    currencyCode: getSeedCurrencyCode(character.countryId, donatePreset),
     fromId: character._id,
     fromName: character.name,
     fromType: "character",
@@ -733,6 +746,7 @@ export async function contributeCampaignStrength(params: {
 }) {
   const { db, campaignId, user, clicks: requestedClicks = 1 } = params;
   const campaignRates = await loadCampaignCurrencyRates(db);
+  const strengthPreset = await getGameStatePresetOrDefault(db);
   const now = new Date();
   const campaign = await getCampaignOrThrow(db, campaignId);
   const election = await db.collection<Election>("elections").findOne({ _id: campaign.electionId });
@@ -781,11 +795,11 @@ export async function contributeCampaignStrength(params: {
   // The strength-cost formula `√(currentCS + strengthAdded)` is anchor-based;
   // convert to the player's LOCAL currency so the gate, the debit, the error
   // message, and the returned cost are all local (player never sees anchor).
-  const homeCurrency = getHomeCurrency(character);
+  const homeCurrency = getHomeCurrency(character, strengthPreset);
   // Campaign funds are decoupled from live forex — the strength cost converts at
   // the frozen world-seeded currency basis.
   const campaignRate = forexEnabled
-    ? campaignLocalRate(character.countryId ?? "US", campaignRates)
+    ? campaignLocalRate(character.countryId ?? "US", campaignRates, strengthPreset)
     : 1;
 
   const currentCS = campaign.campaignStrength ?? 0;

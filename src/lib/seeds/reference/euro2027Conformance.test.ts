@@ -59,7 +59,7 @@ describe("2027 euro seed conformance", () => {
       for (const member of MEMBERS) {
         expect(byCountry.get(member)?.currencyCode, member).toBe("EUR");
       }
-      for (const outsider of ["US", "UK", "SE", "CN", "BR", "NG", "TR"] as const) {
+      for (const outsider of ["US", "UK", "JP", "SE", "CN", "BR", "NG", "TR"] as const) {
         expect(byCountry.get(outsider)?.currencyCode, outsider).toBe(
           COUNTRY_CURRENCY_MAP[outsider]
         );
@@ -207,7 +207,7 @@ describe("2027 euro seed conformance", () => {
         expect(op?.updateOne.update.$setOnInsert.rate, member).toBe(RATES_2027.DE);
       }
       // Non-members keep code and table rate.
-      for (const outsider of ["US", "UK", "SE", "CN"] as const) {
+      for (const outsider of ["US", "UK", "JP", "SE", "CN", "BR", "NG", "TR"] as const) {
         const op = byCountry.get(outsider);
         expect(op?.updateOne.update.$setOnInsert.currencyCode, outsider).toBe(
           COUNTRY_CURRENCY_MAP[outsider]
@@ -302,9 +302,7 @@ describe("2027 euro seed conformance", () => {
           (LEGACY_CODES as readonly string[]).includes(config.currencyCode) &&
           (EUROZONE_2027_MEMBERS as readonly string[]).includes(config.countryId)
       );
-      expect(offenders.map((config) => `${config.countryId}:${config.currencyCode}`)).toEqual(
-        []
-      );
+      expect(offenders.map((config) => `${config.countryId}:${config.currencyCode}`)).toEqual([]);
       const built = getInitialNationalBudgetsForPreset("2027-default").filter(
         (budget) =>
           (LEGACY_CODES as readonly string[]).includes(budget.currencyCode ?? "") &&
@@ -316,9 +314,7 @@ describe("2027 euro seed conformance", () => {
     it("fails if any 2027 sovereign issuer carries a legacy code", () => {
       const entries = generateCountryOwnedSeedData(SEED_STATES, "2027-default");
       const offenders = entries.filter((entry) =>
-        (LEGACY_CODES as readonly string[]).includes(
-          entry.corporation.liquidCurrencyCode ?? ""
-        )
+        (LEGACY_CODES as readonly string[]).includes(entry.corporation.liquidCurrencyCode ?? "")
       );
       expect(
         offenders.map(
@@ -341,10 +337,9 @@ describe("2027 euro seed conformance", () => {
       const { resolveCountryCurrencyCode } = await import("@/lib/currency/govBudgetFields");
       for (const member of MEMBERS) {
         // The seeded 2027 budget row carries EUR; bond issuance must follow it.
-        expect(
-          resolveCountryCurrencyCode({ countryId: member, currencyCode: "EUR" }),
-          member
-        ).toBe("EUR");
+        expect(resolveCountryCurrencyCode({ countryId: member, currencyCode: "EUR" }), member).toBe(
+          "EUR"
+        );
       }
       // Without an explicit code the map fallback is legacy by design —
       // documents why every bond seeder/issuer must pass the budget row.

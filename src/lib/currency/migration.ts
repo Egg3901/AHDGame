@@ -32,7 +32,17 @@ export interface MigrationResult {
  * mirror while `currencyBalances.campaign` becomes the stored home-currency
  * campaign balance.
  */
-export async function migrateCharacterBalances(db: Db): Promise<MigrationResult> {
+export async function migrateCharacterBalances(
+  db: Db,
+  /**
+   * Reset-preset id of the active world (`gameState.preset`). Selects the
+   * seed home currency: a 2027-default run migrates euro members into EUR
+   * at the DE anchor rate, matching `seedExchangeRates`. Omitted (or any
+   * non-euro preset) keeps the legacy era-blind map + modern-table rate,
+   * byte-identical to before.
+   */
+  preset?: string
+): Promise<MigrationResult> {
   const col = db.collection("characters");
   const cursor = col
     .find({})
@@ -56,7 +66,8 @@ export async function migrateCharacterBalances(db: Db): Promise<MigrationResult>
       continue;
     }
     const op = buildCharacterUpdateOp(
-      doc as unknown as { _id: unknown; countryId: CountryId; funds: number; cashOnHand?: number }
+      doc as unknown as { _id: unknown; countryId: CountryId; funds: number; cashOnHand?: number },
+      preset
     );
     batch.push(op);
 
@@ -84,14 +95,28 @@ export async function migrateCharacterBalances(db: Db): Promise<MigrationResult>
  * `migrateCorporationLiquidCapital` applies to corp liquidCapital so
  * characters and corporations stay consistent post-migration.
  */
-function buildCharacterUpdateOp(doc: {
-  _id: unknown;
-  countryId: CountryId;
-  funds: number;
-  cashOnHand?: number;
-}) {
-  const homeCurrency = COUNTRY_CURRENCY_MAP[doc.countryId];
-  const homeRate = INITIAL_RATES[doc.countryId] ?? 1;
+function buildCharacterUpdateOp(
+  doc: {
+    _id: unknown;
+    countryId: CountryId;
+    funds: number;
+    cashOnHand?: number;
+  },
+  preset?: string
+) {
+  // Preset-aware home currency: 2027 euro members migrate into EUR, every
+  // other preset (or an omitted preset) resolves through the era-blind map.
+  const homeCurrency =
+    preset !== undefined
+      ? getSeedCurrencyCode(doc.countryId, preset)
+      : COUNTRY_CURRENCY_MAP[doc.countryId];
+  // Euro rows share the DE anchor rate — the same table `seedExchangeRates`
+  // uses — so the migrated balance agrees with the seeded FX row in anchor
+  // units. Non-euro paths keep the legacy modern-table rate.
+  const homeRate =
+    homeCurrency === "EUR"
+      ? (getInitialRates(preset ?? "").DE ?? INITIAL_RATES[doc.countryId] ?? 1)
+      : (INITIAL_RATES[doc.countryId] ?? 1);
   const cashOnHand = doc.cashOnHand ?? 0;
   const convertedCash = cashOnHand * homeRate;
   const convertedCampaignFunds = doc.funds * homeRate;

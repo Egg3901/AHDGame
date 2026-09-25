@@ -35,6 +35,12 @@ export interface EmitTreasuryTransactionArgs {
   turn?: number;
   /** Created-at stamp. Defaults to `new Date()`. Only override in tests. */
   now?: Date;
+  /**
+   * Explicit record currency. Wins over the era-blind map fallback, so 2027
+   * euro members stamp EUR. Omit to keep the legacy map behavior (1991 and
+   * every caller without a world currency in hand).
+   */
+  currencyCode?: CurrencyCode;
 }
 
 export type BulkTreasuryTransactionArgs = Omit<EmitTreasuryTransactionArgs, "db">;
@@ -63,7 +69,8 @@ function buildTreasuryTransactionDoc(
     return null;
   }
 
-  const currencyCode = (COUNTRY_CURRENCY_MAP[args.countryId as keyof typeof COUNTRY_CURRENCY_MAP] ??
+  const currencyCode = (args.currencyCode ??
+    COUNTRY_CURRENCY_MAP[args.countryId as keyof typeof COUNTRY_CURRENCY_MAP] ??
     "USD") as CurrencyCode;
   return {
     _id: new ObjectId(),

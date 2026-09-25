@@ -1,6 +1,7 @@
 import type { Db } from "mongodb";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
-import { COUNTRY_CURRENCY_MAP, FOREX_ACTIVE_COUNTRIES } from "@/lib/constants/currencies";
+import { FOREX_ACTIVE_COUNTRIES, getSeedCurrencyCode } from "@/lib/constants/currencies";
+import { getGameStatePresetOrDefault } from "@/lib/db/collections/gameState";
 import type { CentralBank, TurnSnapshot } from "@/lib/db/types";
 
 export async function loadForexMonetaryPolicy(params: { db: Db }) {
@@ -9,6 +10,8 @@ export async function loadForexMonetaryPolicy(params: { db: Db }) {
   if (!forexActive) {
     return { ok: false as const, status: 403, error: "Currency exchange is not yet enabled" };
   }
+  // Preset-aware labels: 2027 euro members list EUR. One route-path read.
+  const preset = await getGameStatePresetOrDefault(db);
 
   const banks = await db
     .collection<CentralBank>("centralBanks")
@@ -30,7 +33,7 @@ export async function loadForexMonetaryPolicy(params: { db: Db }) {
         const bank = byCountry.get(countryId);
         return {
           countryId,
-          currencyCode: COUNTRY_CURRENCY_MAP[countryId],
+          currencyCode: getSeedCurrencyCode(countryId, preset),
           primeRate: bank?.primeRate ?? null,
           interestRateHistory: (bank?.interestRateHistory ?? []).map((snapshot: TurnSnapshot) => ({
             turn: snapshot.turn,

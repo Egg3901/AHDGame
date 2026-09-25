@@ -2,7 +2,7 @@ import { currentMoneyGrowth } from "@/lib/moneySupply/rules/growthSignal";
 import { ObjectId, type Db } from "mongodb";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import {
-  COUNTRY_CURRENCY_MAP,
+  getSeedCurrencyCode,
   getCountryIdForCurrency,
   clampForexSpreadStrength,
   FOREX_SPREAD_STRENGTH_DEFAULT,
@@ -232,7 +232,9 @@ export async function loadCountryCentralBankDetail(params: {
   let isChair = false;
   let isExecutive = false;
   let userCashOnHand = 0;
-  const nationalCurrency = COUNTRY_CURRENCY_MAP[countryId] as CurrencyCode;
+  // Preset-aware: 2027 euro members quote EUR. gameState is already loaded
+  // above, so no new read. The EUR anchor lookup below then resolves to DE.
+  const nationalCurrency = getSeedCurrencyCode(countryId, gameState?.preset ?? "");
   let rateMap: Partial<Record<CurrencyCode, number>> | undefined;
   let forexSpreadStrength = FOREX_SPREAD_STRENGTH_DEFAULT;
   let forexSpreadStrengthLastChangedTurn: number | null = null;
@@ -259,7 +261,7 @@ export async function loadCountryCentralBankDetail(params: {
       isChair = true;
     }
     userCashOnHand = getTotalPersonalWealth(myChar, forexEnabled, rateMap);
-    userHomeCurrency = getHomeCurrency(myChar);
+    userHomeCurrency = getHomeCurrency(myChar, gameState?.preset);
     if (forexEnabled) {
       userLobbyLiquid = getPersonalBalance(myChar, nationalCurrency, true);
       userHomeLiquid = getPersonalBalance(myChar, userHomeCurrency, true);
