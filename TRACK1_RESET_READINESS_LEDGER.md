@@ -32,7 +32,10 @@ share-fill audit checkpoints, and the later recovery-turn-budget repair.
 The receipt orphan sweep now runs outside `processTurn` with a bounded
 keyset scan, an in-flight age grace, and separate cron/singleplayer drivers.
 The status/ID sweep index is registered in `317153a065`; its focused test
-passed, while a production-shaped explain plan is still owed.
+passed, while a production-shaped explain plan is still owed. Keyed share-fill
+money and fair orphan recovery are in `539f0f8e13`/`fff64a7940`; the six
+small-spend route flows from source `9c93bf01a0` are in `5e6d1952d6` with
+30 adjacent focused tests passing.
 Other money-flow consumers, integrated gates, and final campaign evidence
 remain open; the GitHub issue stays `status: partial`.
 

@@ -839,6 +839,16 @@
           "type": "share_fill_recovery_index",
           "ref": "317153a065",
           "detail": "Added recurring {status:1,_id:1} receipt index to serve the bounded orphan-sweep keyset sort without a collection-wide sort. The focused index-registration suite passed 2/2, scoped lint/format and diff checks passed. An actual production-shaped explain plan and integrated build remain required."
+        },
+        {
+          "type": "share_fill_keyed_money_recovery",
+          "ref": "539f0f8e13,fff64a7940",
+          "detail": "Share-fill debit/credit legs now use persisted keyed plans and crash-safe recovery. A bounded per-world rotating orphan scan with five-minute live-attempt grace prevents stuck-prefix starvation and route races. Share-money/audit focused suites passed 30/30 and 52/52 after the fairness fix; four CEO-cap route tests passed with the shared-box timeout raised to 120 seconds. Exact query plan, integrated typecheck/build, matcher/cancel/placement and other money-flow families remain pending."
+        },
+        {
+          "type": "small_spend_route_checkpoint",
+          "ref": "5e6d1952d6",
+          "detail": "Ported the six unique keyed route flows from source 9c93bf01a0: party and regional-party donations, election travel, primary campaign, running-mate travel, and home-state surge. Kept Track1's newer primitive and receipt indexes. Nine running-mate route tests, including five fault/retry cases, and 30 adjacent route/primitive tests passed; scoped lint/format passed. Other source commits, integrated gates, and final replay remain pending."
         }
       ],
       "blocked_by": [
