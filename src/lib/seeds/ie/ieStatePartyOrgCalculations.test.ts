@@ -42,6 +42,18 @@ describe("calculateIEStatePartyOrgs", () => {
     expect(rows).toHaveLength(40);
   });
 
+  it("covers every 2027 region with the five parties in the vote-share model", async () => {
+    const names = ieParties
+      .filter((party) => !party.validForPresets || party.validForPresets.includes("2027-default"))
+      .map((party) => party.name);
+    seedParties(names);
+
+    const rows = await calculateIEStatePartyOrgs(db as unknown as Db, "2027-default");
+    expect(rows).toHaveLength(40);
+    expect(new Set(rows.map((row) => row.stateId)).size).toBe(8);
+    expect(new Set(rows.map((row) => row.partyId)).size).toBe(5);
+  });
+
   it("defaults to the 2019-default vote-share table when preset is unset", async () => {
     seedParties(["Fianna Fáil", "Fine Gael", "Sinn Féin", "Labour", "Green Party"]);
     const rows = await calculateIEStatePartyOrgs(db as unknown as Db, "2019-default");
