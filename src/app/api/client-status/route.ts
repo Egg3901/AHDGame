@@ -31,7 +31,7 @@ import {
 import {
   estimateCorpDividendPaidLastTurn,
   fetchLatestCorpHistoryDividendRows,
-} from "@/lib/corporation/dividendIncomeFromHistory";
+} from "@/lib/corporations/dividendIncomeFromHistory";
 import {
   cabinetOfficeTypeForCountry,
   resolveOfficeActionBonus,

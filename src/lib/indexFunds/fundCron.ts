@@ -105,6 +105,8 @@ import {
 } from "@/lib/indexFunds/fundRedemptionQueue";
 import { logIndexFundRedeem, resolveIndexFundHolder } from "@/lib/indexFunds/fundTxLog";
 import { emitTx, emitTxBulk, loadTxThresholds } from "@/lib/financialTxLog/emit";
+import { getCurrentTurn } from "@/lib/turn/currentTurn";
+import { loadFxRatesByCurrency } from "@/lib/currency/corporationCapital";
 import { runWithOptionalTransaction } from "@/lib/db/runWithOptionalTransaction";
 import { TURNS_PER_DAY, MS_PER_TURN } from "@/lib/constants/turnTime";
 import { placeFundShareBuyOrder, cancelFundShareOrder } from "@/lib/indexFunds/fundShareOrders";
@@ -730,11 +732,18 @@ export async function rebalanceFundToTarget(
   });
 
   let sells = 0;
+  const sellInputs =
+    plan.sells.length > 0
+      ? await Promise.all([loadFxRatesByCurrency(db), getCurrentTurn(db), loadTxThresholds(db)])
+      : undefined;
   // Sells first so freed cash funds the buys.
   for (const leg of plan.sells) {
     const refreshed = (await getFundById(db, fund._id)) ?? fund;
     const res = await sellFundHoldingShares(db, refreshed, leg.corporationId, leg.shares, {
       note: "Rebalance: trim overweight",
+      fxByCurrency: sellInputs?.[0],
+      turn: sellInputs?.[1],
+      thresholds: sellInputs?.[2],
     });
     if (res.sharesSold > 0) sells++;
   }
