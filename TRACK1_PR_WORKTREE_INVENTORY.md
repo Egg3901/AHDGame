@@ -917,4 +917,18 @@ byte-identical to merged commit `6360845ec3`; the remaining CDN route and
 test lack the merged version's catch for a stream failure after headers and
 its regression. The merged version is strictly stronger. Decision: discard
 the nine old working copies, verify clean status, and remove the unlocked
-worktree normally. No unpublished fix or patch-unique branch commit is lost.
+worktree normally. This was done after a fresh clean check. No unpublished fix
+or patch-unique branch commit was lost.
+
+**AHDGame `track3-auth`: DELETE patch-equivalent clean checkout, 2026-09-25.**
+Its one scoped-key introspection commit `361e1e7f31` is patch-equivalent to
+development's `8e3eab59ea` (`git cherry` reports `-`), and development also
+contains the later rate-limit isolation `09095d5306`. The source checkout is
+clean, unlocked, and process-free. Decision: remove it normally; its branch
+ref stays as provenance.
+
+**AHDGame `track3-auth-cdn-hardening`: DELETE redundant clean checkout,
+2026-09-25.** It is an unlocked, process-free checkout of the old development
+commit `6360845ec3`; fresh origin/development already contains that commit
+and four later merged PRs. Fresh status showed no changes. Decision: remove
+the redundant checkout normally, keeping Track 1 as the only task checkout.
