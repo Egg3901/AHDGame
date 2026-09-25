@@ -9,8 +9,14 @@ vi.mock("@/lib/notifications", () => ({ createNotifications: vi.fn() }));
 vi.mock("@/lib/congress/governmentVoteBreakdown", () => ({
   computeCabinetNominationTally: vi.fn(),
 }));
+vi.mock("@/lib/discordWebhooks", () => ({
+  sendCountryGameEvent: vi.fn().mockResolvedValue(undefined),
+  DISCORD_COLORS: { scotusRuling: 0x4b2e83 },
+}));
 
-describe("processScotusNominationLifecycle", () => {
+// The first test pays the cold import of the countries-config graph that
+// scotusNominationLifecycle pulls in for the chamber label.
+describe("processScotusNominationLifecycle", { timeout: 60000 }, () => {
   let db: MockDb;
 
   beforeEach(async () => {
@@ -94,8 +100,17 @@ describe("processScotusNominationLifecycle", () => {
     );
 
     expect(db.collectionMocks.scotusNominations!.updateOne).toHaveBeenCalledWith(
-      { _id: nomination._id },
+      { _id: nomination._id, status: "active" },
       expect.objectContaining({ $set: expect.objectContaining({ status: "confirmed" }) })
+    );
+
+    const { sendCountryGameEvent } = await import("@/lib/discordWebhooks");
+    expect(sendCountryGameEvent).toHaveBeenCalledWith(
+      "US",
+      expect.objectContaining({
+        title: "Supreme Court Justice Confirmed",
+        cardVoteSplit: [expect.objectContaining({ votesFor: 55, votesAgainst: 45 })],
+      })
     );
   });
 
@@ -137,8 +152,14 @@ describe("processScotusNominationLifecycle", () => {
     expect(result.confirmed).toBe(0);
     expect(db.collectionMocks.supremeCourtSeats!.updateOne).not.toHaveBeenCalled();
     expect(db.collectionMocks.scotusNominations!.updateOne).toHaveBeenCalledWith(
-      { _id: nomination._id },
+      { _id: nomination._id, status: "active" },
       expect.objectContaining({ $set: expect.objectContaining({ status: "rejected" }) })
+    );
+
+    const { sendCountryGameEvent } = await import("@/lib/discordWebhooks");
+    expect(sendCountryGameEvent).toHaveBeenCalledWith(
+      "US",
+      expect.objectContaining({ title: "Supreme Court Nomination Rejected" })
     );
   });
 });

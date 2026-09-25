@@ -11,7 +11,9 @@ vi.mock("next/link", () => ({
   ),
 }));
 vi.mock("@/components/Avatar", () => ({
-  Avatar: () => <div data-testid="avatar" />,
+  Avatar: ({ url, name }: { url?: string; name: string }) => (
+    <div data-testid="avatar" data-avatar-name={name} data-avatar-url={url} />
+  ),
 }));
 
 const baseProps = {
@@ -33,12 +35,16 @@ describe("ChairCard", () => {
         chair={{
           characterId: "npp-1",
           name: "Technocrat Alpha",
+          avatarUrl: "/portraits/technocrat.png",
         }}
         chairMode="npp"
       />
     );
     expect(screen.getByText("Technocrat Alpha")).toBeTruthy();
     expect(screen.getByText("Autonomous Chair (AI)")).toBeTruthy();
+    expect(screen.getByTestId("avatar").getAttribute("data-avatar-url")).toBe(
+      "/portraits/technocrat.png"
+    );
     // No character link rendered for the npp variant
     expect(screen.queryByRole("link", { name: "Technocrat Alpha" })).toBeNull();
   });

@@ -1,6 +1,7 @@
 import { saveChartAsPNG } from "@/lib/charts/parliamentChart";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import { bundledChartFontCss } from "@/lib/charts/chartFont";
+import { generateVoteSplitChartSvg, type ChamberVoteSplit } from "@/lib/charts/voteSplitChart";
+import { getBaseUrl } from "@/lib/utils/network";
 
 export type DiscordEventCardTone = "positive" | "election" | "warning" | "neutral";
 
@@ -12,6 +13,11 @@ export interface DiscordEventCardInput {
   detailLines?: readonly string[];
   tone?: DiscordEventCardTone;
   chartSvg?: string;
+  /**
+   * Per-chamber aye/nay/abstain split rendered into the chart slot. Ignored
+   * when `chartSvg` is already set.
+   */
+  voteSplit?: readonly ChamberVoteSplit[];
   /** Base64 image data resolved by the server. Never place an untrusted URL in the SVG. */
   portraitDataUrl?: string;
 }
@@ -23,10 +29,11 @@ export interface LegacyDiscordEventEmbed {
   fields?: readonly { name: string; value: string; inline?: boolean }[];
   image?: { url: string };
   thumbnail?: { url: string };
+  /** Internal-only: vote split rendered into the card's chart slot. Never posted raw. */
+  cardVoteSplit?: readonly ChamberVoteSplit[];
 }
 
 const WIDTH = 1200;
-let fontCssCache: string | undefined;
 const XML_ENTITIES: Record<string, string> = {
   "&": "&amp;",
   "<": "&lt;",
@@ -80,22 +87,6 @@ function toneColor(tone: DiscordEventCardTone): string {
   return "#94a3b8";
 }
 
-function bundledFontCss(): string {
-  if (fontCssCache !== undefined) return fontCssCache;
-  try {
-    const regular = readFileSync(join(process.cwd(), "public/fonts/Geist-Regular.ttf")).toString(
-      "base64"
-    );
-    const semibold = readFileSync(join(process.cwd(), "public/fonts/Geist-SemiBold.ttf")).toString(
-      "base64"
-    );
-    fontCssCache = `@font-face{font-family:AHDGeist;src:url(data:font/ttf;base64,${regular});font-weight:400}@font-face{font-family:AHDGeist;src:url(data:font/ttf;base64,${semibold});font-weight:600 900}`;
-  } catch {
-    fontCssCache = "";
-  }
-  return fontCssCache;
-}
-
 function plainDiscordText(value: string): string {
   return value
     .replace(/\[([^\]]+)]\([^)]+\)/g, "$1")
@@ -130,10 +121,17 @@ export function eventCardInputFromEmbed(
   };
 }
 
+/**
+ * Fetch a portrait and return it as a PNG data URL. Relative paths (the
+ * `/api/images/...` form stored on NPP avatars) resolve against the app's own
+ * base URL. Bytes are transcoded through sharp because the SVG rasterizer
+ * (librsvg) cannot decode embedded WebP — the format player avatars are stored
+ * in — which used to leave the OFFICIAL PORTRAIT frame empty.
+ */
 async function loadPortraitDataUrl(urlValue: string | undefined): Promise<string | undefined> {
   if (!urlValue) return undefined;
   try {
-    const url = new URL(urlValue);
+    const url = new URL(urlValue, getBaseUrl());
     if (url.protocol !== "https:") return undefined;
     const host = url.hostname.toLowerCase();
     if (
@@ -153,7 +151,15 @@ async function loadPortraitDataUrl(urlValue: string | undefined): Promise<string
       return undefined;
     const bytes = Buffer.from(await response.arrayBuffer());
     if (bytes.length > 5_000_000) return undefined;
-    return `data:${contentType};base64,${bytes.toString("base64")}`;
+    // Rendered into a 266x300 frame with `slice` — rasterize at 2x, cropped to
+    // the same aspect, so every source format lands as an identical PNG box.
+    const sharp = (await import("sharp")).default;
+    const png = await sharp(bytes)
+      .rotate()
+      .resize(532, 600, { fit: "cover", position: "attention" })
+      .png()
+      .toBuffer();
+    return `data:image/png;base64,${png.toString("base64")}`;
   } catch {
     return undefined;
   }
@@ -162,17 +168,30 @@ async function loadPortraitDataUrl(urlValue: string | undefined): Promise<string
 /** Build a branded, fixed-size SVG that is converted to PNG before Discord delivery. */
 export function buildDiscordEventCardSvg(input: DiscordEventCardInput): string {
   const accent = toneColor(input.tone ?? "neutral");
-  const hasChart = Boolean(input.chartSvg);
-  const hasPortrait = Boolean(input.portraitDataUrl) && !hasChart;
+  const chartSource =
+    input.chartSvg ||
+    (input.voteSplit?.length ? generateVoteSplitChartSvg(input.voteSplit) : undefined);
+  const hasChart = Boolean(chartSource);
+  // Portrait (top-right) and chart (below the copy) occupy disjoint regions —
+  // a confirmation card can show both the nominee and the chamber tally.
+  const hasPortrait = Boolean(input.portraitDataUrl);
   const titleLines = wrap(input.title, hasPortrait ? 20 : 36, hasPortrait ? 3 : 2);
   const summaryLines = wrap(input.summary, hasPortrait ? 40 : 72, 2);
   const details = (input.detailLines ?? [])
     .slice(0, 4)
-    .map((line) => clamp(line, hasPortrait ? 47 : 74));
+    // The chart layout leaves a ~340px column for details, so they clamp tighter.
+    .map((line) => clamp(line, hasPortrait ? 47 : hasChart ? 30 : 74));
   const metadata = (input.metadata ?? []).slice(0, 3).map((item) => clamp(item, 28));
-  const height = hasChart ? 760 : Math.max(hasPortrait ? 640 : 560, 470 + details.length * 52);
-  const chartData = input.chartSvg
-    ? `data:image/svg+xml;base64,${Buffer.from(input.chartSvg).toString("base64")}`
+  const summaryY = 178 + titleLines.length * 66 + 30;
+  const chipY = summaryY + summaryLines.length * 39 + 32;
+  const contentY = chipY + (metadata.length ? 78 : 28);
+  // The chart block starts below the copy so metadata chips can coexist with
+  // it; the card grows to keep the chart pane a constant size.
+  const height = hasChart
+    ? contentY + 436
+    : Math.max(hasPortrait ? 640 : 560, 470 + details.length * 52);
+  const chartData = chartSource
+    ? `data:image/svg+xml;base64,${Buffer.from(chartSource).toString("base64")}`
     : undefined;
 
   const titleSvg = titleLines
@@ -181,14 +200,12 @@ export function buildDiscordEventCardSvg(input: DiscordEventCardInput): string {
         `<text x="84" y="${178 + index * 66}" class="title">${escapeXml(line)}</text>`
     )
     .join("");
-  const summaryY = 178 + titleLines.length * 66 + 30;
   const summarySvg = summaryLines
     .map(
       (line, index) =>
         `<text x="84" y="${summaryY + index * 39}" class="summary">${escapeXml(line)}</text>`
     )
     .join("");
-  const chipY = summaryY + summaryLines.length * 39 + 32;
   let chipX = 84;
   const chipsSvg = metadata
     .map((item) => {
@@ -198,11 +215,10 @@ export function buildDiscordEventCardSvg(input: DiscordEventCardInput): string {
       return svg;
     })
     .join("");
-  const contentY = chipY + (metadata.length ? 78 : 28);
   const chartSvg = chartData
-    ? `<rect x="60" y="286" width="730" height="410" rx="22" fill="#111827"/><image x="78" y="304" width="694" height="374" preserveAspectRatio="xMidYMid meet" href="${chartData}"/>`
+    ? `<rect x="60" y="${contentY}" width="730" height="410" rx="22" fill="#111827"/><image x="78" y="${contentY + 18}" width="694" height="374" preserveAspectRatio="xMidYMid meet" href="${chartData}"/>`
     : "";
-  const detailY = hasChart ? 374 : contentY;
+  const detailY = hasChart ? contentY + 88 : contentY;
   const detailSvg = details
     .map(
       (line, index) =>
@@ -220,7 +236,7 @@ export function buildDiscordEventCardSvg(input: DiscordEventCardInput): string {
     <clipPath id="portraitClip"><rect x="850" y="142" width="266" height="300" rx="28"/></clipPath>
     <clipPath id="copyClip"><rect x="60" y="100" width="${hasPortrait ? 730 : 1060}" height="${height - 120}"/></clipPath>
     <style>
-      ${bundledFontCss()}
+      ${bundledChartFontCss()}
       text { font-family: Geist, "DejaVu Sans", sans-serif; }
       .brand { fill: #f8fafc; font-size: 24px; font-weight: 800; letter-spacing: 4px; }
       .eyebrow { fill: ${accent}; font-size: 23px; font-weight: 800; letter-spacing: 2px; }
@@ -259,6 +275,7 @@ export async function generateLegacyDiscordEventCard(
     .replace(/^-|-$/g, "")
     .slice(0, 48);
   const input = eventCardInputFromEmbed(countryId, embed);
+  input.voteSplit = embed.cardVoteSplit;
   input.portraitDataUrl = await loadPortraitDataUrl(embed.thumbnail?.url);
   return generateDiscordEventCard(input, slug || "event");
 }

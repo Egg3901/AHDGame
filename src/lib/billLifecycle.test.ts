@@ -449,7 +449,14 @@ describe("processBillLifecycle", () => {
       const { awardAchievement } = await import("@/lib/achievements");
 
       expect(applyLegislationEffect).toHaveBeenCalledWith(expect.anything(), bill);
-      expect(onBillEnacted).toHaveBeenCalledWith(expect.anything(), bill, 10);
+      // The lifecycle hands onBillEnacted the bill enriched with this chamber's
+      // fresh tally and vote snapshot, because the in-memory copy predates them
+      // and the Discord vote chart reads them (see turn/billLifecycle/engine).
+      expect(onBillEnacted).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining(bill),
+        10
+      );
       expect(awardAchievement).toHaveBeenCalledWith(
         expect.any(ObjectId),
         "lawmaker",

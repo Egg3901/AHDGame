@@ -32,6 +32,9 @@ import {
 /** Relocation bond uses the longest corporate tenor (7yr = 336 turns). */
 export const RELOCATION_BOND_MATURITY_TURNS: BondMaturityTurns = 336;
 
+/** The bank fields used to quote relocation credit. */
+export type RelocationPrimeBank = Pick<CentralBank, "_id" | "countryId" | "primeRate">;
+
 export interface RelocationBondPreflight {
   /** True when both cooldown and leverage cap allow issuance of this bond */
   ok: boolean;
@@ -65,7 +68,9 @@ export async function previewRelocationBond(
   relocationCostAnchor: number,
   currentTurn: number,
   /** Pre-loaded FX map — reused when the caller already has one (e.g. HQ relocate route). Omit to load fresh. */
-  fxByCurrencyOverride?: ReadonlyMap<CurrencyCode, number>
+  fxByCurrencyOverride?: ReadonlyMap<CurrencyCode, number>,
+  /** Turn-local bank rates. Omit for a fresh quote outside the turn. */
+  bankRatesOverride?: ReadonlyArray<RelocationPrimeBank>
 ): Promise<RelocationBondPreflight> {
   const latestBond = await db
     .collection<Bond>("bonds")
@@ -89,7 +94,12 @@ export async function previewRelocationBond(
     .collection<CorporateSector>("corporateSectors")
     .find({ corporationId: corporation._id })
     .toArray();
-  const centralBanks = await db.collection<CentralBank>("centralBanks").find({}).toArray();
+  const centralBanks =
+    bankRatesOverride ??
+    (await db
+      .collection<CentralBank>("centralBanks")
+      .find({}, { projection: { _id: 1, countryId: 1, primeRate: 1 } })
+      .toArray());
   // Member-aware: shared-bank members (IE → ECB) must resolve the shared doc.
   const primeRateByCountry = buildPrimeRateByCountry(centralBanks);
   // Same equity identity as the ordinary bond-issuance route (plants-aware NPV

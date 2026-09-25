@@ -50,6 +50,14 @@ export function getStoredConsent(): CookieConsentValue | null {
 export function openCookiePreferences() {
   if (typeof window === "undefined") return;
 
+  try {
+    window.localStorage.removeItem(STORAGE_KEY);
+  } catch {
+    // localStorage unavailable
+  }
+  applyFallbackGoogleConsent(null);
+  window.dispatchEvent(new Event(CONSENT_RESET_EVENT));
+
   if (shouldRenderGooglePrivacyMessaging(window.location.pathname, window.location.hostname)) {
     window.googlefc = window.googlefc || {};
     window.googlefc.callbackQueue = window.googlefc.callbackQueue || [];
@@ -58,14 +66,6 @@ export function openCookiePreferences() {
     });
     return;
   }
-
-  try {
-    window.localStorage.removeItem(STORAGE_KEY);
-  } catch {
-    // localStorage unavailable
-  }
-  applyFallbackGoogleConsent(null);
-  window.dispatchEvent(new Event(CONSENT_RESET_EVENT));
 }
 
 function subscribe(callback: () => void) {
@@ -129,9 +129,10 @@ export function CookieConsentBanner() {
         <div className="flex-1 text-sm text-muted leading-relaxed">
           <p className="mb-1 font-semibold text-foreground">We use cookies</p>
           <p>
-            We use essential cookies to keep you signed in and the game running. We may also set an
-            anonymous cookie for traffic analytics. You can reject non-essential cookies at any
-            time. See our{" "}
+            We use essential cookies to keep you signed in and the game running. With your
+            permission, PostHog records how you use the game and we may record a sample of sessions
+            to find confusing flows and technical problems. You can reject optional analytics or
+            change your choice at any time. See our{" "}
             <Link href="/privacy" className="text-primary hover:underline">
               Privacy Policy
             </Link>

@@ -325,7 +325,9 @@ async function issueSovereignBondSeries(
   const budgetId = getNationalBudgetId(countryId);
   const [budget, centralBank, countryCorporation, democraticSpreadPp] = await Promise.all([
     db.collection<FederalBudget>("federalBudget").findOne({ _id: budgetId }),
-    db.collection<CentralBank>("centralBanks").findOne({ _id: getBankId(countryId) }),
+    db
+      .collection<CentralBank>("centralBanks")
+      .findOne({ _id: getBankId(countryId) }, { projection: { primeRate: 1, chairInfamy: 1 } }),
     findPrimaryNationalCorporation(db, countryId),
     loadDemocraticSovereignSpread(db, countryId),
   ]);
@@ -532,7 +534,9 @@ export async function issueScheduledSovereignBondSeries(
     const budgetId = getNationalBudgetId(countryId);
     const [budgetDoc, centralBank, countryCorporation, democraticSpreadPp] = await Promise.all([
       db.collection<FederalBudget>("federalBudget").findOne({ _id: budgetId }),
-      db.collection<CentralBank>("centralBanks").findOne({ _id: getBankId(countryId) }),
+      db
+        .collection<CentralBank>("centralBanks")
+        .findOne({ _id: getBankId(countryId) }, { projection: { primeRate: 1, chairInfamy: 1 } }),
       findPrimaryNationalCorporation(db, countryId),
       loadDemocraticSovereignSpread(db, countryId),
     ]);
@@ -723,7 +727,9 @@ export async function reconcileSovereignDebt(
   const budgetId = getNationalBudgetId(countryId);
   const [budget, centralBank, countryCorporation, democraticSpreadPp] = await Promise.all([
     db.collection<FederalBudget>("federalBudget").findOne({ _id: budgetId }),
-    db.collection<CentralBank>("centralBanks").findOne({ _id: getBankId(countryId) }),
+    db
+      .collection<CentralBank>("centralBanks")
+      .findOne({ _id: getBankId(countryId) }, { projection: { primeRate: 1, chairInfamy: 1 } }),
     findPrimaryNationalCorporation(db, countryId),
     loadDemocraticSovereignSpread(db, countryId),
   ]);

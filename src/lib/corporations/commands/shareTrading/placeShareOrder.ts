@@ -21,6 +21,7 @@ import {
   debitSharesFromCorp,
 } from "@/lib/corporations/shareholderOps";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
+import { newCharacterTransferBarrierResponse } from "@/lib/api/newCharacterTransferBarrier";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
 import {
   buildPersonalBalanceInc,
@@ -131,6 +132,10 @@ export async function placeShareOrder(request: Request, { params }: RouteParams)
     if (!character) {
       return NextResponse.json({ error: "Character not found" }, { status: 404 });
     }
+    // Resting orders move value between players at fill time — same
+    // disguised-transfer surface the new-character barrier covers elsewhere.
+    const barrier = await newCharacterTransferBarrierResponse(character);
+    if (barrier) return barrier;
     const tradeLock = await assertCeoTradeNotBlocked(db, corporation, character._id);
     if (tradeLock.blocked) {
       return NextResponse.json({ error: tradeLock.error }, { status: tradeLock.status });

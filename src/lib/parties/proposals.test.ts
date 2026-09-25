@@ -9,6 +9,8 @@ import {
   applyCampaignerAppointmentEffect,
   applyRemoveOfficeHolderEffect,
   applyTransactionApprovalModeEffect,
+  attemptResolution,
+  castVote,
   checkResolution,
   clampPosition,
   isPositionShiftLocked,
@@ -1228,5 +1230,219 @@ describe("setProposalCooldown — campaignerAppointment", () => {
       50
     );
     expect(updates).toHaveLength(0);
+  });
+});
+
+/**
+ * Vote-stuffing regression: castVote used to $pull then $push in two writes,
+ * so N concurrent votes from one voter appended N entries — and resolution
+ * counts raw array entries, so one committee member could hit the 60%
+ * threshold alone. The write must instead keep exactly one entry per voter
+ * under any interleaving: a conditional push (voter absent) that falls back
+ * to an arrayFilters replace (voter present).
+ */
+describe("castVote — one entry per voter", () => {
+  const PROPOSAL_ID = new ObjectId();
+  const VOTER = new ObjectId();
+
+  function voterSetParty(partyId: ObjectId) {
+    return {
+      _id: partyId,
+      sequentialId: 5,
+      countryId: "US",
+      committeeIds: [
+        new ObjectId(),
+        new ObjectId(),
+        new ObjectId(),
+        new ObjectId(),
+        new ObjectId(),
+        VOTER,
+      ],
+      chairId: new ObjectId(),
+      viceChairId: new ObjectId(),
+      treasurerId: new ObjectId(),
+    };
+  }
+
+  function makeVoteDb(opts: { pushMatched?: number; proposal?: Record<string, unknown> }) {
+    const proposalUpdates: Array<{
+      filter: Record<string, unknown>;
+      update: Record<string, unknown>;
+      options?: Record<string, unknown>;
+    }> = [];
+    let proposalUpdateCall = 0;
+    const collection = vi.fn().mockImplementation((name: string) => {
+      if (name === "committeeProposals") {
+        return {
+          updateOne: vi
+            .fn()
+            .mockImplementation(
+              (
+                filter: Record<string, unknown>,
+                update: Record<string, unknown>,
+                options?: Record<string, unknown>
+              ) => {
+                proposalUpdates.push({ filter, update, options });
+                proposalUpdateCall += 1;
+                const matched = proposalUpdateCall === 1 ? (opts.pushMatched ?? 1) : 1;
+                return Promise.resolve({ matchedCount: matched, modifiedCount: matched });
+              }
+            ),
+          findOne: vi.fn().mockResolvedValue(opts.proposal ?? null),
+        };
+      }
+      if (name === "politicalParties") {
+        return { findOne: vi.fn().mockResolvedValue(voterSetParty(makePartyId())) };
+      }
+      return {};
+    });
+    return { db: { collection } as unknown as Db, proposalUpdates };
+  }
+
+  const openProposal = (votes: unknown[] = []) => ({
+    _id: PROPOSAL_ID,
+    type: "rename",
+    status: "open",
+    partyId: makePartyId(),
+    proposingVotes: votes,
+    rename: { newName: "Renamed Party", newAbbreviation: "RNP" },
+  });
+
+  it("pushes conditionally — never appends when the voter is already present", async () => {
+    const { db, proposalUpdates } = makeVoteDb({
+      pushMatched: 1,
+      proposal: openProposal([{ voterId: VOTER, vote: "yes", votedAt: new Date() }]),
+    });
+    await castVote(db, PROPOSAL_ID, VOTER, "yes", "proposing", 100);
+
+    expect(proposalUpdates).toHaveLength(1);
+    const { filter, update } = proposalUpdates[0]!;
+    expect(filter.status).toBe("open");
+    expect(filter["proposingVotes.voterId"]).toEqual({ $ne: VOTER });
+    expect(update.$push).toBeDefined();
+    // The old implementation's $pull-then-$push pair must be gone.
+    expect(update.$pull).toBeUndefined();
+  });
+
+  it("replaces the existing entry in place when the push misses", async () => {
+    const { db, proposalUpdates } = makeVoteDb({
+      pushMatched: 0,
+      proposal: openProposal([{ voterId: VOTER, vote: "yes", votedAt: new Date() }]),
+    });
+    await castVote(db, PROPOSAL_ID, VOTER, "no", "proposing", 100);
+
+    expect(proposalUpdates).toHaveLength(2);
+    const { filter, update, options } = proposalUpdates[1]!;
+    expect(filter["proposingVotes.voterId"]).toBe(VOTER);
+    const set = update.$set as Record<string, unknown>;
+    expect(set["proposingVotes.$[elem].vote"]).toBe("no");
+    expect(options?.arrayFilters).toEqual([{ "elem.voterId": VOTER }]);
+    expect(update.$push).toBeUndefined();
+  });
+});
+
+/**
+ * Double-resolution regression: attemptResolution computed the outcome on a
+ * read of the open doc, then applied effects — two concurrent deciding votes
+ * both passed that check and both ran the effects (a merge's treasury $inc
+ * ran twice, minting money). Resolution must be claimed atomically before
+ * any effect or status write.
+ */
+/**
+ * Double-resolution regression: attemptResolution computed the outcome on a
+ * read of the open doc, then applied effects — two concurrent deciding votes
+ * both passed that check and both ran the effects (a merge's treasury $inc
+ * ran twice, minting money). Resolution must be claimed atomically before
+ * any effect or status write.
+ */
+describe("attemptResolution — atomic resolution claim", () => {
+  function passingRenameProposal(partyId: ObjectId) {
+    const yesVotes = Array.from({ length: 6 }, () => ({
+      voterId: new ObjectId(),
+      vote: "yes",
+      votedAt: new Date(),
+    }));
+    return {
+      _id: new ObjectId(),
+      type: "rename",
+      status: "open",
+      partyId,
+      proposingVotes: yesVotes,
+      rename: { newName: "Renamed Party", newAbbreviation: "RNP" },
+    } as unknown as CommitteeProposal;
+  }
+
+  function nineVoterParty(partyId: ObjectId) {
+    return {
+      _id: partyId,
+      sequentialId: 5,
+      countryId: "US",
+      committeeIds: Array.from({ length: 6 }, () => new ObjectId()),
+      chairId: new ObjectId(),
+      viceChairId: new ObjectId(),
+      treasurerId: new ObjectId(),
+    };
+  }
+
+  /**
+   * proposalFirstMatched controls the FIRST committeeProposals.updateOne
+   * result — the resolution claim. Later calls (markResolved) always match.
+   */
+  function makeResolutionDb(partyId: ObjectId, opts: { proposalFirstMatched: number }) {
+    const calls: Array<{ collection: string; kind: string; filter: Record<string, unknown> }> = [];
+    let proposalUpdateCall = 0;
+    const collection = vi.fn().mockImplementation((name: string) => {
+      if (name === "committeeProposals") {
+        return {
+          updateOne: vi.fn().mockImplementation((filter: Record<string, unknown>) => {
+            proposalUpdateCall += 1;
+            const kind = proposalUpdateCall === 1 ? "claim" : "status";
+            calls.push({ collection: name, kind, filter });
+            const matched = proposalUpdateCall === 1 ? opts.proposalFirstMatched : 1;
+            return Promise.resolve({ matchedCount: matched, modifiedCount: matched });
+          }),
+        };
+      }
+      if (name === "politicalParties") {
+        return {
+          findOne: vi.fn().mockResolvedValue(nineVoterParty(partyId)),
+          updateOne: vi.fn().mockImplementation((filter: Record<string, unknown>) => {
+            calls.push({ collection: name, kind: "effect", filter });
+            return Promise.resolve({ matchedCount: 1, modifiedCount: 1 });
+          }),
+        };
+      }
+      return {};
+    });
+    return { db: { collection } as unknown as Db, calls };
+  }
+
+  it("claims the open proposal before applying any effect", async () => {
+    const partyId = makePartyId();
+    const proposal = passingRenameProposal(partyId);
+    const { db, calls } = makeResolutionDb(partyId, { proposalFirstMatched: 1 });
+
+    await attemptResolution(db, proposal, 100);
+
+    const claimCall = calls.find((c) => c.kind === "claim");
+    expect(claimCall).toBeDefined();
+    expect(claimCall!.filter.status).toBe("open");
+    expect(claimCall!.filter.resolutionInProgressAt).toEqual({ $exists: false });
+    const firstEffect = calls.findIndex((c) => c.kind === "effect");
+    expect(firstEffect).toBeGreaterThanOrEqual(0);
+    expect(firstEffect).toBeGreaterThan(calls.indexOf(claimCall!));
+    expect(calls.some((c) => c.kind === "status")).toBe(true);
+  });
+
+  it("applies nothing when the claim is already taken", async () => {
+    const partyId = makePartyId();
+    const proposal = passingRenameProposal(partyId);
+    const { db, calls } = makeResolutionDb(partyId, { proposalFirstMatched: 0 });
+
+    await attemptResolution(db, proposal, 100);
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.collection).toBe("committeeProposals");
+    expect(calls[0]!.filter.resolutionInProgressAt).toEqual({ $exists: false });
   });
 });

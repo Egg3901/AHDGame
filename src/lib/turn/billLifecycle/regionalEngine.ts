@@ -386,7 +386,13 @@ async function resolveStateBillVoting(
           },
         }
       );
-      const autoEnactOutcome = await finalizeStateBillEnactment(db, bill, currentTurn);
+      // The snapshot was just persisted above — the in-memory bill predates
+      // it, and onBillEnacted reads it for the Discord vote chart.
+      const autoEnactOutcome = await finalizeStateBillEnactment(
+        db,
+        { ...bill, voteSnapshot },
+        currentTurn
+      );
       budgetGateRejected = !autoEnactOutcome.enacted;
     }
 
