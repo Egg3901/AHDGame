@@ -239,6 +239,19 @@ insufficient evidence.
   partial. Committed the partial 2027 euro repair in `a635fea5f2`; #2291
   remains partial pending all currency-bearing seed and runtime paths.
 
+- 2026-09-25: Preserved 158 real source/test/report changes from the formerly
+  dirty, now clean `worldsim-readiness-20260922` checkout as
+  `afcb2681a6cd6366fb107d720cba9e31d64d214f`. This checkpoint contains
+  1991 successor substrate, 2027 region/currency work, sim report changes,
+  and game-health evidence. It is **not integrated or validated** yet; a
+  queued typecheck and subsequent review determine what can enter Track 1.
+  A literal local connection string was removed from the handoff note before
+  the final checkpoint commit was retained.
+- 2026-09-25: The first scheduled Track 1 typecheck ended by SIGTERM (`-15`)
+  without TypeScript diagnostics while concurrent Muse edits were underway.
+  It is neither a pass nor a source failure. Repeat from a stable source
+  checkpoint after integration.
+
 ### Current source checkpoint
 
 The original fresh base is recorded above. After the three AHDGame dependency
