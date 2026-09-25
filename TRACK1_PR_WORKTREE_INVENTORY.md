@@ -1014,3 +1014,17 @@ delivery path in the merged bot/ops work. Decision: abandon this older
 unqualified mechanic rather than change live buyout eligibility in the reset
 repair. Fresh status is clean, checkout unlocked and process-free; remove it
 normally, retaining the branch ref for provenance.
+
+**AHDGame `worldsim-readiness-20260922`: DELETE extracted clean handoff
+checkout, 2026-09-25.** Its one unique checkpoint `afcb2681a6` preserved
+158 changed source/test/report files and was integrated into Track 1 as
+`609cf2bd7d` (153 paths). The five overlapping paths were reconciled in
+other Track 1 changes: `seedForex.ts` sets all eight 2027 euro members,
+`seedSovereignBondInstruments.ts` resolves the budget currency,
+`currency/migration.ts` seeds euro rows at the German anchor rate, and the
+game-health type plus export are present. The differing implementations are
+intentional rather than missing handoff patches; the preserved branch ref
+still contains the original checkpoint. Fresh checkout status is clean, it
+is unlocked and process-free. Decision: remove this redundant source checkout
+normally. This does not claim its 1991/2027 implementation or reports pass
+the final release gate; outstanding tests and conformance stay in the plan.
