@@ -589,12 +589,12 @@
         {
           "type": "candidate_checkpoint",
           "ref": "afcb2681a6cd6366fb107d720cba9e31d64d214f",
-          "detail": "Clean preserved worktree checkpoint contains authored RU/PL/CS/HU/RO/BG/YU 1991 source and tests; not yet integrated into Track 1 or validated on the final release SHA."
+          "detail": "Clean preserved worktree checkpoint containing authored RU/PL/CS/HU/RO/BG/YU 1991 source and tests was integrated into Track 1 as 609cf2bd7d; final release SHA validation remains pending."
         },
         {
           "type": "read_only_review",
           "ref": "afcb2681a6cd6366fb107d720cba9e31d64d214f",
-          "detail": "Muse read-only review found RU owned-enterprise and policy gaps, turnout-prior inconsistencies, four TypeScript errors, and no fresh zero-critical/repeat-seeding integration test. The #2316 report will use turn 5 of the first planned 1991 seed, adding zero world starts."
+          "detail": "Muse review identified the RU owned-enterprise gap, four TypeScript errors, and absent fresh-bootstrap evidence. RU's old policy absence is intentional because its new-generation law catalog seeds at every preset; turnout metric and future propensity are distinct. The RU ownership fix is 7e30f53bb6 with four focused tests passing; the four reported TypeScript errors were corrected in 9c23912f6f and c065c18730, pending exact-branch full typecheck. The #2316 report will use turn 5 of the first planned 1991 seed, adding zero world starts."
         }
       ],
       "blocked_by": [

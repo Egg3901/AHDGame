@@ -23,6 +23,14 @@ note, not a declaration that reset readiness has passed.
 - Issue #2159 selects `1991-default` for the reset. The owner also requires
   2027 defects to be fixed in this Track. A profile change invalidates the
   1991-specific launch evidence and requires a new qualification.
+- For the 2027 electorate repair, the owner approved a temporary projection
+  waiver on 2026-09-25 while the Census Bureau has not announced publication
+  of the 2025 ACS 1-year detailed tables. Keep the January 2027 education and
+  income projection with explicit source-year provenance, monitor the official
+  release notice, and regenerate the 2027 substrate plus replay its checks when
+  those tables are published. This does not waive implementation or validation
+  of the other 2027 repairs; the selected launch reset remains 1991. The
+  decision and final-gate relationship are tracked under RR-062 and #1670.
 
 ## Completion contract
 

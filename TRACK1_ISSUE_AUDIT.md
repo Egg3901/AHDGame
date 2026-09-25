@@ -120,6 +120,15 @@ The codes below are execution groups, not status labels: **R** reset/common econ
 
 ## Closure discipline
 
+The #2316 seven-country source checkpoint is integrated on Track 1 as
+`609cf2bd7d`. The RU 1991 owned-enterprise repair is `7e30f53bb6`, with four
+focused repeat-seeding and ownership tests passing. The four TypeScript
+findings from the preserved checkpoint were corrected in `9c23912f6f` and
+`c065c18730`; exact-branch full typecheck is queued. Fresh zero-critical
+bootstrap conformance and the required `scripts/sim/` report from the first
+planned 1991 seed remain open. The evidence was posted on #2316; no GitHub
+issue closure is implied.
+
 ### Verified carry-forward for #2078
 
 The detector repair is already in `development` via `f605ec35bb` (PR #2307).
