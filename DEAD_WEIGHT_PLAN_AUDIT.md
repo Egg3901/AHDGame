@@ -740,6 +740,25 @@ snapshot's migration-created unique turn index is now also in the recurring
 fund index seed; an empty local reset-world seed recreated it with the same
 name, key, and uniqueness.
 
+WP12 route inventory found 23 `character` routes and 6 `characters` routes,
+5 `corporation` routes and 110 `corporations` routes, and 363 `country` routes
+and 1 `countries` route. Comparing relative route paths within each pair found
+zero overlaps. The singular and plural namespaces currently expose different
+operations; none is a direct alias eligible for a blanket redirect. Existing
+web callers use both forms, including authenticated character actions under
+`/api/character` and character search or transfers under `/api/characters`.
+Any route consolidation needs endpoint-level caller and response contracts;
+the report's 308-redirect target is not a counted set of redundant routes.
+
+WP13 local compiler probe used `/usr/bin/time -v npm run typecheck` on this
+worktree. After 12 minutes 51 seconds it was still running, so it was
+interrupted; maximum resident set size before interruption was 6,108,172 KB
+(about 5.8 GiB). This is a measured lower bound for this incomplete local
+run, not a completed typecheck peak or a CI memory measurement. CI typecheck
+for the preceding pushed commit passed. The proposed sub-3 GB target is not
+met by this local probe; changing the 8 GB heap ceiling requires a completed
+diagnostic run and a narrower type-level cause.
+
 The one-turn profiler has a local-only guard and cannot be run against
 production. A partial production copy is restored to a private localhost Mongo instance
 outside the repository for a profiling turn. It has 380 collections, 3.31 million
