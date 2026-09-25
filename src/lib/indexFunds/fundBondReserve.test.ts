@@ -248,11 +248,12 @@ describe("deployBondReserveFromCash ledger threading (#992 tranche 6)", () => {
       liquidityTargetEnabled: true,
       turn: 7,
       thresholds: thresholds as never,
+      turnLengthMinutes: 60,
     });
 
     expect(purchaseMock).toHaveBeenCalledTimes(2);
     for (const call of purchaseMock.mock.calls) {
-      expect(call[4]).toMatchObject({ turn: 7, thresholds });
+      expect(call[4]).toMatchObject({ turn: 7, thresholds, turnLengthMinutes: 60 });
     }
     // Preloaded thresholds mean zero settings reads for the pass.
     expect(systemSettingsFindOne).not.toHaveBeenCalled();

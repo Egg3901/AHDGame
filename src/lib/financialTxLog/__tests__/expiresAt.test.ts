@@ -25,6 +25,10 @@ describe("computeExpiresAt (async, reads gameConfig)", () => {
     // 168 turns × 30 min × 60_000 = 302_400_000 ms = 3.5 IRL days
     const expected = new Date(createdAt.getTime() + 168 * 30 * 60_000);
     expect(expiresAt.getTime()).toBe(expected.getTime());
+    expect(db.collectionMocks.gameConfig.findOne).toHaveBeenCalledWith(
+      { _id: "default" },
+      { projection: { turnLengthMinutes: 1 } }
+    );
   });
 
   it("falls back to DEFAULT_TURN_LENGTH_MINUTES when gameConfig missing", async () => {
@@ -79,6 +83,10 @@ describe("loadTurnLengthMinutes", () => {
   it("returns the configured value", async () => {
     db.collectionMocks.gameConfig.findOne.mockResolvedValue({ turnLengthMinutes: 45 });
     expect(await loadTurnLengthMinutes(db as never)).toBe(45);
+    expect(db.collectionMocks.gameConfig.findOne).toHaveBeenCalledWith(
+      { _id: "default" },
+      { projection: { turnLengthMinutes: 1 } }
+    );
   });
 
   it("falls back to default when missing", async () => {

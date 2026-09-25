@@ -3,6 +3,7 @@ import { handleRouteError } from "@/lib/api/errors";
 import { ENDPOINTS } from "@/lib/publicApi/catalog";
 import { publicApiGuard } from "@/lib/publicApi/middleware";
 import { publicApiMaxRequests } from "@/lib/publicApi/tierLimits";
+import { CDN_BASE } from "@/lib/images/cdnUrls";
 
 export { ENDPOINTS } from "@/lib/publicApi/catalog";
 
@@ -22,6 +23,18 @@ export async function GET(request: Request) {
           process.env.NEXT_PUBLIC_DOCS_URL ||
           "https://docs.lakesidegames.net/api/public-v1.html",
         openApiUrl: `${baseUrl}/api/public/v1/openapi.json`,
+        integrations: {
+          mcp: {
+            transport: "stdio",
+            command: "npm run --silent api:mcp",
+            credentialEnv: "AHD_API_KEY",
+            access: "read-only public v1 endpoints and own-key capabilities",
+          },
+          cdn: {
+            staticBaseUrl: `${CDN_BASE}/static/`,
+            authentication: "none",
+          },
+        },
         authentication: "X-API-Key header (public or private scope)",
         // Caller-invariant on purpose: this response is edge-cached publicly, so
         // it must not embed the requesting key's own allowance. A caller reads
@@ -39,6 +52,9 @@ export async function GET(request: Request) {
         stability:
           "v1 is additive-only: fields may be added, existing fields are never removed or renamed.",
         writeEndpoints: ["POST /api/v1/transfer", "POST /api/v1/forex/exchange"],
+        // Self-introspection: a key reads its own scope and allowed operation
+        // classes. Not edge-cached; the response is per-key and no-store.
+        keyIntrospection: "GET /api/v1/key",
         endpoints: ENDPOINTS,
       },
       { headers: guard.headers }

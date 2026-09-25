@@ -92,6 +92,7 @@ function facilityDb(
 beforeEach(() => {
   vi.clearAllMocks();
   orderMocks.cancelFundShareOrder.mockResolvedValue(undefined);
+  ledgerMocks.loadTxThresholds.mockResolvedValue({});
 });
 
 describe("planEquityLiquidityQuotes", () => {
@@ -404,6 +405,13 @@ describe("refreshEquityLiquidityFacility", () => {
     });
 
     expect(peakActiveFunds).toBe(2);
+    expect(ledgerMocks.loadTxThresholds).toHaveBeenCalledTimes(1);
+    expect(orderMocks.cancelFundShareOrder).toHaveBeenCalledWith(
+      db,
+      priorOrders[0]._id,
+      59,
+      expect.objectContaining({ ledgerSink: expect.any(Array) })
+    );
     expect(orderMocks.cancelFundShareOrder.mock.calls.map((call) => call[1])).toEqual([
       priorOrders[0]._id,
       priorOrders[2]._id,
@@ -453,6 +461,11 @@ describe("refreshEquityLiquidityFacility", () => {
     });
 
     expect(orderMocks.cancelFundShareOrder).not.toHaveBeenCalledWith(db, bidOrderId);
+    expect(ledgerMocks.loadTxThresholds).toHaveBeenCalledTimes(1);
+    expect(orderMocks.placeFundShareBuyOrder).toHaveBeenCalledWith(
+      db,
+      expect.objectContaining({ txSink: expect.any(Array), ledgerSink: expect.any(Array) })
+    );
     expect(snapshot).toMatchObject({
       quotePairsPlanned: 1,
       quotePairsPlaced: 0,

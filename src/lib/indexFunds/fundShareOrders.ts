@@ -3,6 +3,7 @@ import type { Corporation, IndexFund, IndexFundTransaction, ShareOrder } from "@
 import { corpLiquidCapitalToAnchor } from "@/lib/currency/corporationCapital";
 import { insertFundTransaction } from "@/lib/indexFunds/fundQueries";
 import { emitTx, type TxInput } from "@/lib/financialTxLog/emit";
+import type { TxThresholds } from "@/lib/db/types/financialTxLog";
 
 /**
  * Index-fund-owned order-book buy orders.
@@ -60,6 +61,10 @@ export interface PlaceFundShareBuyOrderInput {
   fxRate: number;
   /** Game turn stamped on the ledger escrow row (#992 tranche 4). */
   turn: number;
+  /** Reused for a turn pass placing many fund bids. */
+  thresholds?: TxThresholds;
+  /** Reused turn cadence for transaction expiry during a quote pass. */
+  turnLengthMinutes?: number;
   liquidityQuote?: { turn: number; referencePrice: number };
   /**
    * When set, the escrow transaction row is pushed here instead of inserted,
@@ -167,7 +172,7 @@ export async function placeFundShareBuyOrder(
       },
     };
     if (input.ledgerSink) input.ledgerSink.push(ledgerEntry);
-    else await emitTx(db, ledgerEntry);
+    else await emitTx(db, ledgerEntry, input.thresholds, input.turnLengthMinutes);
   } catch (err) {
     // Roll the escrow back if we couldn't persist the order.
     await refundFundCashAnchor(db, fund._id, escrowAnchor);
@@ -267,6 +272,10 @@ export async function cancelFundShareOrder(
     fund?: Pick<IndexFund, "_id" | "name" | "anchorCurrencyCode">;
     /** Caller flushes refund rows after all completed cancellations. */
     ledgerSink?: TxInput[];
+    /** Reused thresholds for a pass cancelling many fund orders. */
+    thresholds?: TxThresholds;
+    /** Reused turn cadence for the refund row's expiry date. */
+    turnLengthMinutes?: number;
   }
 ): Promise<void> {
   // Atomically claim the order so a concurrent fill/cancel can't double-refund.
@@ -327,7 +336,7 @@ export async function cancelFundShareOrder(
           },
         };
         if (options?.ledgerSink) options.ledgerSink.push(ledgerEntry);
-        else await emitTx(db, ledgerEntry);
+        else await emitTx(db, ledgerEntry, options?.thresholds, options?.turnLengthMinutes);
       }
     }
   }

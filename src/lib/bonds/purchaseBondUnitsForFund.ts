@@ -72,6 +72,8 @@ export async function purchaseBondUnitsForFund(
     turn?: number;
     /** Preloaded thresholds for the ledger row; avoids a per-purchase read. */
     thresholds?: TxThresholds;
+    /** Preloaded turn cadence for the transaction expiry date. */
+    turnLengthMinutes?: number;
   }
 ): Promise<PurchaseBondUnitsForFundResult> {
   const wholeUnits = Math.floor(units);
@@ -152,7 +154,7 @@ export async function purchaseBondUnitsForFund(
         },
       };
       if (options.ledgerSink) options.ledgerSink.push(ledgerEntry);
-      else await emitTx(db, ledgerEntry, options.thresholds);
+      else await emitTx(db, ledgerEntry, options.thresholds, options.turnLengthMinutes);
     }
 
     return { ok: true, units: wholeUnits, costAnchor, bondId: bond._id };
