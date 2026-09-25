@@ -2,23 +2,24 @@
 
 Sentry SaaS in the `lakeside-games` US organization is the production error destination. The existing GlitchTip organization and project remain a fallback when `SENTRY_URL` and the GlitchTip DSNs are explicitly set. PostHog Cloud US is for product analytics; Sentry remains the error source of truth.
 
-## Product manager actions before activation
+## Account and deployment state
 
-- Sign PostHog's DPA as an authorized company representative. The PostHog Cloud US project and $50,000 startup credits are already in place. The fourteen product billing limits were raised to $100/month each on September 24, 2026; no cap change is needed.
-- After the DPA is signed, enter the PostHog public project key through the secure Credentials form at `https://ops.lakesidegames.net/settings/credentials`. The form submits it to the deployment setting `NEXT_PUBLIC_POSTHOG_KEY` for AHD Production and triggers a new build. Never paste the key into chat or the repository.
+- PostHog's DPA is signed. The PostHog Cloud US project has $50,000 in startup credits, and its fourteen product billing limits were raised to $100/month each on September 24, 2026.
+- The product manager added `NEXT_PUBLIC_POSTHOG_KEY` directly to AHD Production in Railway on September 25, 2026. Railway applied the variable and redeployed. Verify the key is present by name in the effective deployment settings, without reading or copying its value.
+- The Ops Credentials portal is still unable to save to Railway. Its repair is independent of this rollout; do not direct the product manager back to that form for this key.
 
 ## Engineering deployment checks
 
 - The A House Divided project and DSN already exist in the Lakeside Games Sentry organization. Verify the deployed `SENTRY_DSN` and `NEXT_PUBLIC_SENTRY_DSN` point to that project, `SENTRY_ORG=lakeside-games`, `SENTRY_PROJECT` matches its actual slug, and no GlitchTip `SENTRY_URL` override remains.
 - Source-map upload requires build-time `SENTRY_AUTH_TOKEN`. The optional in-game admin issue feed separately needs server-only `SENTRY_API_TOKEN` with read access. Keep tokens out of the repository and chat.
 - Keep PostHog error tracking disabled, then configure failed-turn, crash, and sustained API-failure alerts in Sentry after staging verification.
-- Ops draft PR #186 cannot run GitHub Actions yet: GitHub reports a failed account payment or an Actions spending limit. Resolve that account-level gate before merging or deploying the portal.
+- Confirm the Ops Credentials portal save failure is tracked separately; it did not block the direct Railway key entry.
 
 ## Current repository integration
 
 PostHog loads only on the hosted multiplayer site after the existing optional analytics consent is accepted. Rejecting or resetting consent opts out and clears the PostHog identity. The Google consent message on ad content does not itself grant PostHog consent; those pages remain untracked unless the AHD analytics choice was accepted elsewhere.
 
-PostHog autocapture, automatic pageviews, session replay, and surveys are disabled. The existing sampled OpenReplay integration remains governed by the same optional consent. Named area events avoid raw URLs and player text; the SDK denies URL and referrer properties. Identification uses an opaque account ID without name or email.
+PostHog autocapture, automatic pageviews, session replay, and surveys are disabled. The sampled OpenReplay integration on the production branch remains governed by the same optional consent. When promoting this change from `development`, retain that existing provider and its privacy disclosure. Named area events avoid raw URLs and player text; the SDK denies URL and referrer properties. Identification uses an opaque account ID without name or email.
 
 | Event                  | Trigger                                                   | Properties                                                                                          |
 | ---------------------- | --------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
