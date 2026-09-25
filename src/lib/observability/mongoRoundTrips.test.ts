@@ -5,6 +5,7 @@ import {
   formatRoundTripReport,
   recordRoundTrip,
   phaseRoundTrips,
+  phaseTopCollectionsByRoundTrips,
   recordDocumentsReturned,
   totalBytesReturned,
   resetRoundTripProfiler,
@@ -46,6 +47,21 @@ describe("round-trip profiler", () => {
     expect(phaseRoundTrips("corporationTurn")).toBe(2);
     expect(totalRoundTrips()).toBe(2);
     expect(formatRoundTripReport()).toBeNull();
+  });
+
+  it("ranks a phase's command sources without BSON profiling", () => {
+    delete process.env.AHD_TURN_ROUNDTRIP_PROFILE;
+    resetRoundTripProfiler();
+    beginPhaseProfiling("indexFunds");
+    recordRoundTrip("shareOrders");
+    recordRoundTrip("indexFunds");
+    recordRoundTrip("shareOrders");
+    endPhaseProfiling("indexFunds");
+
+    expect(phaseTopCollectionsByRoundTrips("indexFunds")).toEqual([
+      { collection: "shareOrders", roundTrips: 2 },
+      { collection: "indexFunds", roundTrips: 1 },
+    ]);
   });
 
   it("attributes commands to the phase that is open", () => {

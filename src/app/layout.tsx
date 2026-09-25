@@ -38,6 +38,7 @@ import { AuthConnectivityGate } from "@/components/AuthConnectivityGate";
 import { StatAllocationGate } from "@/components/stats/StatAllocationGate";
 import { SeasonRecapGate } from "@/components/recap/SeasonRecapGate";
 import { SiteTrafficTracker } from "@/components/SiteTrafficTracker";
+import { OpenReplayProvider } from "@/components/providers/OpenReplayProvider";
 import { CDN_LOGO_URL } from "@/lib/images/staticCdnAssets";
 import {
   buildGoogleTagBootstrapScript,
@@ -391,7 +392,7 @@ export default async function RootLayout({
                             tabIndex={-1}
                           >
                             <SiteTrafficTracker />
-                            {children}
+                            <OpenReplayProvider>{children}</OpenReplayProvider>
                           </main>
                           {!isWikiSubdomain && !isNativeApp && <AdSlot />}
                           {!isWikiSubdomain && !isNativeApp && <AdSenseSlot />}
