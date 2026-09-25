@@ -317,10 +317,14 @@ function fakeCollection(db: FakeDb, name: string): Record<string, (...args: neve
   };
 }
 
-function fakeDb(
-  db: FakeDb,
-  overrides?: { client?: object; databaseName?: string }
-): Record<string, (...args: never[]) => unknown> {
+/** Minimal Db-shaped handle: collection access plus optional driver identity. */
+interface FakeDbHandle {
+  collection: (name: string) => Record<string, (...args: never[]) => unknown>;
+  client?: object;
+  databaseName?: string;
+}
+
+function fakeDb(db: FakeDb, overrides?: { client?: object; databaseName?: string }): FakeDbHandle {
   return {
     collection: (name: string) => fakeCollection(db, name),
     // Stable client identity + database name, mirroring the production
@@ -485,7 +489,7 @@ function seedSellBaseline(db: FakeDb): void {
 
 describe("share-fill keyed money legs", () => {
   let state: FakeDb;
-  let db: Record<string, (...args: never[]) => unknown>;
+  let db: FakeDbHandle;
 
   beforeEach(() => {
     state = makeFakeDb();
@@ -670,7 +674,7 @@ describe("share-fill keyed money legs", () => {
 
 describe("share-fill money actor variants", () => {
   let state: FakeDb;
-  let db: Record<string, (...args: never[]) => unknown>;
+  let db: FakeDbHandle;
 
   beforeEach(() => {
     state = makeFakeDb();
@@ -866,7 +870,7 @@ describe("share-fill money actor variants", () => {
 
 describe("share-fill buy-fill money legs", () => {
   let state: FakeDb;
-  let db: Record<string, (...args: never[]) => unknown>;
+  let db: FakeDbHandle;
 
   beforeEach(() => {
     state = makeFakeDb();
@@ -1071,7 +1075,7 @@ describe("share-fill buy-fill money legs", () => {
 
 describe("share-fill money recovery and equivalence", () => {
   let state: FakeDb;
-  let db: Record<string, (...args: never[]) => unknown>;
+  let db: FakeDbHandle;
 
   beforeEach(() => {
     state = makeFakeDb();
@@ -1191,7 +1195,7 @@ describe("share-fill money recovery and equivalence", () => {
 
 describe("money orphan scan fairness and age grace", () => {
   let state: FakeDb;
-  let db: Record<string, (...args: never[]) => unknown>;
+  let db: FakeDbHandle;
 
   beforeEach(() => {
     state = makeFakeDb();

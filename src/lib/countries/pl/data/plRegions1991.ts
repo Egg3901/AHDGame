@@ -1,7 +1,7 @@
 import type { State } from "@/lib/db/types";
 import { PL_1991_MACROREGION_VOIVODESHIPS } from "./plPopulation1991";
 import { SUCCESSOR_REGIONS_1991 } from "@/lib/seeds/reference/successorRegions1991";
-import { PL_1991_ESTIMATED_REGION_GDP_PLZ } from "@/lib/seeds/reference/plRegionalGdp1991";
+import { PL_1991_ESTIMATED_REGION_GDP_PLZ } from "@/lib/countries/pl/data/plRegionalGdp1991";
 import { PL_1991_MACROREGION_POPULATION } from "./plPopulation1991";
 import { apportionSeats } from "@/lib/seeds/reference/rules/apportionSeats";
 

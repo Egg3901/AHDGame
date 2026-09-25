@@ -154,9 +154,10 @@ export async function purchaseBondUnitsForFund(
         },
       };
       if (options.ledgerSink) options.ledgerSink.push(ledgerEntry);
-      else await emitTx(db, ledgerEntry, options.thresholds, {
-        turnLengthMinutes: options.turnLengthMinutes,
-      });
+      else
+        await emitTx(db, ledgerEntry, options.thresholds, {
+          turnLengthMinutes: options.turnLengthMinutes,
+        });
     }
 
     return { ok: true, units: wholeUnits, costAnchor, bondId: bond._id };

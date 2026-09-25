@@ -3,6 +3,7 @@ import { ObjectId, type Db } from "mongodb";
 import { NextRequest } from "next/server";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import type { Character } from "@/lib/db/types";
+import type { CanvassSpendInput } from "@/lib/canvassing/canvassSpend";
 
 vi.mock("@/lib/campaignTargeting/audience", () => ({
   loadCampaignAudience: vi.fn().mockResolvedValue(null),
@@ -49,11 +50,11 @@ function makeRequest(body: unknown, idempotencyKey?: string): Request {
   });
 }
 
-async function spendCall() {
+async function spendCall(): Promise<CanvassSpendInput> {
   const { applyCanvassSpend } = await import("@/lib/canvassing/canvassSpend");
   const mock = vi.mocked(applyCanvassSpend);
   if (mock.mock.calls.length === 0) throw new Error("applyCanvassSpend was not called");
-  return mock.mock.calls[0][1] as Record<string, unknown>;
+  return mock.mock.calls[0][1];
 }
 
 function authedCharacter(overrides: Partial<Character> = {}): Character {
@@ -314,7 +315,7 @@ describe("POST /api/canvassing — country-aware groups", () => {
     expect(input.totalFundsCostLocal).toBe(100);
     expect(input.totalActionsCost).toBe(1);
     expect(input).not.toHaveProperty("surrogateCampaignId");
-    const turnout = input.turnout as Record<string, unknown>;
+    const turnout = input.turnout;
     expect(turnout.stateId).toBe("JP-13");
     expect(turnout.modifierPath).toBe("modifiers.jp_voterGroups.komeito_faithful");
     expect(turnout.modifierValue).toEqual(expect.any(Number));
@@ -605,7 +606,7 @@ describe("canvassing campaign turnout integration", () => {
       const input = await spendCall();
       expect(input.totalFundsCostLocal).toBe(500);
       expect(input.totalActionsCost).toBe(5);
-      const turnout = input.turnout as Record<string, unknown>;
+      const turnout = input.turnout;
       expect(turnout.stateId).toBe("GA");
       expect(turnout.modifierPath).toBe(`modifiers.${category.key}.${category.groups[0].id}`);
       expect(turnout.modifierValue).toEqual(expect.any(Number));
@@ -673,7 +674,7 @@ describe("canvassing campaign turnout integration", () => {
     const input = await spendCall();
     expect(input.totalFundsCostLocal).toBe(500);
     expect(input.totalActionsCost).toBe(5);
-    const turnout = input.turnout as Record<string, unknown>;
+    const turnout = input.turnout;
     expect(turnout).toMatchObject({
       stateId: "GA",
       lastUpdated: new Date(0),

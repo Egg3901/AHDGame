@@ -584,7 +584,6 @@ const ABSENT_BY_REGISTRY: Array<[string, string, readonly string[]]> = [
     "no row in the seed-diagnostic registry; the seed runner is the authority",
     [
       "US",
-      "RU",
       "DD",
       "FR",
       "IT",
@@ -594,12 +593,8 @@ const ABSENT_BY_REGISTRY: Array<[string, string, readonly string[]]> = [
       "GR",
       "AT",
       "FI",
-      "PL",
-      "HU",
-      "RO",
-      "YU",
-      "BG",
-      "CS",
+      // RU/PL/HU/RO/YU/BG/CS resolve: the branch added their 1991 region
+      // bundles to the seed-diagnostic registry from the country folders.
       "SCO",
       "WAL",
       "BLR",

@@ -587,6 +587,11 @@ export async function fillShareOrder(request: Request, { params }: RouteParams) 
             idHex: buyingCorp._id.toHexString(),
             pricePerShare: order.pricePerShare,
           },
+          // Sell-fill buyers are the filler (a corporation or character),
+          // never a fund, so there is no fund-holdings credit leg here. The
+          // field stays required on the plan; null is its correct value for
+          // this direction (the step builder only reads it on buy-fills).
+          buyerHoldingsCredit: null,
           fundInventoryDebit: order.placerFundId
             ? {
                 fundIdHex: order.placerFundId.toHexString(),
@@ -709,6 +714,9 @@ export async function fillShareOrder(request: Request, { params }: RouteParams) 
             idHex: fillerId.toHexString(),
             pricePerShare: order.pricePerShare,
           },
+          // Same as the corporation-filler site above: sell-fill buyers are
+          // never a fund, so the fund-holdings credit leg is null here.
+          buyerHoldingsCredit: null,
           fundInventoryDebit: order.placerFundId
             ? {
                 fundIdHex: order.placerFundId.toHexString(),

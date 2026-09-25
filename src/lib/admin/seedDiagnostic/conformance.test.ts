@@ -341,14 +341,15 @@ describe("runConformanceChecks", () => {
       },
     });
     const { checks } = await runConformanceChecks(db, { preset: "1991-default" });
+    // The seven transition economies used to lack authored 1991 rows and each
+    // fired its own budget.<cc>.authored1991 critical. Those baselines now
+    // exist (seedSuccessorBudgets1991), so a 1991 world must surface none.
     expect(
       checks
         .filter((check) => check.id.endsWith(".authored1991"))
         .map((check) => check.id)
         .sort()
-    ).toEqual(
-      ["BG", "CS", "HU", "PL", "RO", "RU", "YU"].map((id) => `budget.${id}.authored1991`).sort()
-    );
+    ).toEqual([]);
   });
 
   it("flags wrong GDP on a national budget as critical", async () => {

@@ -1,6 +1,6 @@
 import type { State } from "@/lib/db/types";
 import { SUCCESSOR_REGIONS_1991 } from "@/lib/seeds/reference/successorRegions1991";
-import { BG_1991_ESTIMATED_REGION_GDP_BGL } from "@/lib/seeds/reference/bgRegionalGdp1991";
+import { BG_1991_ESTIMATED_REGION_GDP_BGL } from "@/lib/countries/bg/data/bgRegionalGdp1991";
 import { BG_1991_MACROREGION_POPULATION } from "./bgPopulation1991";
 import { apportionSeats } from "@/lib/seeds/reference/rules/apportionSeats";
 

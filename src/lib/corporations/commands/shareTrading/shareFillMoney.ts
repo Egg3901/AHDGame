@@ -1170,7 +1170,10 @@ async function fetchMoneyReceiptWindow(
   afterKey: string | undefined,
   window: number
 ): Promise<ShareFillMoneyReceipt[]> {
-  const filter = { status: "in_progress", shareFillMoneyPlan: { $exists: true } };
+  const filter: Filter<ShareFillMoneyReceipt> = {
+    status: "in_progress",
+    shareFillMoneyPlan: { $exists: true },
+  };
   if (window <= 0) return [];
   const tail =
     afterKey === undefined

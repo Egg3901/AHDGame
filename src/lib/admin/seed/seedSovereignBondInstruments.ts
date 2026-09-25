@@ -159,7 +159,10 @@ export async function seedSovereignBondInstruments(
     const issuerName = countryCorporation?.name ?? getSovereignIssuerName(countryId);
     // The seeded budget row carries the preset-correct code (EUR for 2027
     // euro members); it wins over the era-blind map fallback.
-    const currencyCode = resolveCountryCurrencyCode({ countryId, currencyCode: budget.currencyCode });
+    const currencyCode = resolveCountryCurrencyCode({
+      countryId,
+      currencyCode: budget.currencyCode,
+    });
 
     const bondDocs: Omit<Bond, "_id">[] = [];
     for (const [maturityStr, fraction] of Object.entries(SOVEREIGN_RECONCILE_DISTRIBUTION)) {

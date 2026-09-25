@@ -1,6 +1,6 @@
 import type { State } from "@/lib/db/types";
 import { SUCCESSOR_REGIONS_1991 } from "@/lib/seeds/reference/successorRegions1991";
-import { HU_1991_ESTIMATED_REGION_GDP_HUF } from "@/lib/seeds/reference/huRegionalGdp1991";
+import { HU_1991_ESTIMATED_REGION_GDP_HUF } from "@/lib/countries/hu/data/huRegionalGdp1991";
 import { HU_1991_REGION_POPULATION } from "./huPopulation1991";
 import { apportionSeats } from "@/lib/seeds/reference/rules/apportionSeats";
 

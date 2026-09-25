@@ -1,6 +1,6 @@
 import type { State } from "@/lib/db/types";
 import { SUCCESSOR_REGIONS_1991 } from "@/lib/seeds/reference/successorRegions1991";
-import { CS_1991_ESTIMATED_REGION_GDP_CSK } from "@/lib/seeds/reference/csRegionalGdp1991";
+import { CS_1991_ESTIMATED_REGION_GDP_CSK } from "@/lib/countries/cs/data/csRegionalGdp1991";
 import { CS_1991_REGION_POPULATION } from "./csPopulation1991";
 import { apportionSeats } from "@/lib/seeds/reference/rules/apportionSeats";
 

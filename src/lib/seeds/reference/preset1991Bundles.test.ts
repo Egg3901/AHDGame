@@ -175,6 +175,14 @@ describe("1991-default seed bundles — coverage", () => {
         "AT",
         "FI",
         "GR",
+        // 1991-authored transition-economy baselines (successorBudgets1991).
+        "RU",
+        "PL",
+        "CS",
+        "HU",
+        "RO",
+        "BG",
+        "YU",
       ])
     );
   });

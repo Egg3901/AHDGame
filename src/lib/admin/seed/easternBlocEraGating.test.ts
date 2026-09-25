@@ -15,6 +15,7 @@ import { seedEasternBlocCountry } from "./seedEasternBloc";
 import { seedRuStatePartyOrg } from "./seedRuStatePartyOrg";
 import { seedDdStatePartyOrg } from "./seedDdStatePartyOrg";
 import { isEasternBlocEra } from "@/lib/seeds/presetSelector";
+import { isPartyValidForPreset } from "@/lib/seeds/ensureDefaultParties";
 
 type Doc = Record<string, unknown>;
 
@@ -227,14 +228,19 @@ describe("seedEasternBlocCountry party era gating", () => {
       parties: huParties,
     });
 
+    // huParties also carries the 2027 roster (validForPresets 2027-default),
+    // so a 1953 reseed prunes those wrong-era defaults alongside MSZMP.
+    const prunedNames = huParties
+      .filter((p) => !isPartyValidForPreset(p, "1953-default"))
+      .map((p) => p.name);
+    expect(prunedNames).toContain("Magyar Szocialista Munkáspárt");
+    expect(prunedNames).not.toContain("Magyar Dolgozók Pártja");
     expect(politicalParties.deleteMany).toHaveBeenCalledWith({
-      $or: [
-        {
-          countryId: "HU",
-          name: "Magyar Szocialista Munkáspárt",
-          isDefault: true,
-        },
-      ],
+      $or: prunedNames.map((name) => ({
+        countryId: "HU",
+        name,
+        isDefault: true,
+      })),
     });
     const updates = calls.get("politicalParties.updateOne") ?? [];
     expect(updates).toHaveLength(1);
@@ -249,14 +255,18 @@ describe("seedEasternBlocCountry party era gating", () => {
       parties: huParties,
     });
 
+    // Same wrong-era pruning as above, mirrored: the 2027 roster goes with MDP.
+    const prunedNames = huParties
+      .filter((p) => !isPartyValidForPreset(p, "1979-default"))
+      .map((p) => p.name);
+    expect(prunedNames).toContain("Magyar Dolgozók Pártja");
+    expect(prunedNames).not.toContain("Magyar Szocialista Munkáspárt");
     expect(politicalParties.deleteMany).toHaveBeenCalledWith({
-      $or: [
-        {
-          countryId: "HU",
-          name: "Magyar Dolgozók Pártja",
-          isDefault: true,
-        },
-      ],
+      $or: prunedNames.map((name) => ({
+        countryId: "HU",
+        name,
+        isDefault: true,
+      })),
     });
     const updates = calls.get("politicalParties.updateOne") ?? [];
     expect(updates).toHaveLength(1);

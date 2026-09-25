@@ -34,6 +34,7 @@ const TURN_PATH_FILES = [
   "src/lib/economy/economicVitalSigns.ts",
   "src/lib/corporations/marketShare.ts",
   "src/lib/indexFunds/fundCron.ts",
+  "src/lib/indexFunds/fundRedemptions.ts",
   "src/lib/indexFunds/nppInvesting.ts",
   "src/lib/ledger/balanceSnapshot.ts",
 ];

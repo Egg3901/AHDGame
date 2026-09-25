@@ -1,6 +1,6 @@
 import type { State } from "@/lib/db/types";
 import { SUCCESSOR_REGIONS_1991 } from "@/lib/seeds/reference/successorRegions1991";
-import { YU_1991_ESTIMATED_REGION_GDP_YUD } from "@/lib/seeds/reference/yuRegionalGdp1991";
+import { YU_1991_ESTIMATED_REGION_GDP_YUD } from "@/lib/countries/yu/data/yuRegionalGdp1991";
 
 /**
  * January 1991 SFRY regions. GDP is a census/output reconstruction, stored in

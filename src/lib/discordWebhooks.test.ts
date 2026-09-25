@@ -186,10 +186,15 @@ describe("buildBillVetoedDiscordEmbed", () => {
     });
     expect(embed.cardVoteSplit).toHaveLength(1);
 
-    const fetchMock = vi.fn(async () => ({ ok: true, status: 200 }));
+    const fetchMock = vi.fn(async (_url: string, init?: { body?: unknown }) => ({
+      ok: true,
+      status: 200,
+    }));
     vi.stubGlobal("fetch", fetchMock);
     await sendDiscordWebhookMultiple("http://hook/game", [embed]);
-    const body = fetchMock.mock.calls[0][1].body as string;
+    const firstCall = fetchMock.mock.calls[0];
+    expect(firstCall).toBeDefined();
+    const body = firstCall?.[1]?.body as string;
     expect(body).not.toContain("cardVoteSplit");
     expect(body).toContain("Tax Bill");
   });
