@@ -1100,13 +1100,19 @@ contains the stronger Railway cache-mount repair (`48beb50c96`) and the
 five #2356 fund-performance commits recorded above. The old OpenReplay
 session-replay patches are superseded by merged #2380 PostHog/Sentry work.
 The remaining ticket receipt route changes from production commits
-`eb1345194c`, `31d1cd64e4`, and `f8d08e65b9` are not in development; they
-need selective integration or an explicit superseding proof from the active
-locked dual-delivery work. Do not merge the production branches wholesale,
-which would drag main ancestry into development. Keep these three clean
-checkouts until the ticket route decision and focused tests are complete;
-then remove each normally and retain branch refs for provenance. No player
-payload or credential was copied in this audit.
+`eb1345194c`, `31d1cd64e4`, and `f8d08e65b9` are now selectively integrated
+as Track 1 commit `8d6dbf0382`. The final production route blobs match the
+Track 1 route blobs, including the `a6f4624d19` status-history projection
+follow-up from the locked dual-delivery branch. Focused ticket route tests
+passed 9/9, adjacent proxy tests 22/22, and scoped lint, formatting, and
+diff checks passed. No player payload or credential was copied. The three
+production checkouts are **deleted as superseded**: their distinct live
+ticket behavior is included in Track 1, their other useful patches are
+already equivalent on development or included elsewhere in Track 1, and
+their old main ancestry should not be merged into development. The branch
+refs remain for provenance. Before removal, each checkout was checked clean,
+unlocked, and process-free at the exact heads above. Ordinary `git worktree
+remove` without `--force` is the only authorized removal method.
 
 **Fresh cross-repo PR check, 2026-09-25:** AHDGame, adhd-bot, and the
 legacy `a-house-divided` repo currently have no open PRs. Ops has #162
