@@ -34,3 +34,33 @@ source map is missing and this predicate weakens the causal match, **the root
 cause is not yet proven**. Keep #2349 partial until a source-mapped or
 equivalent production-path reproduction confirms the failing expression and
 the final candidate passes a corporation-page smoke test.
+
+## Source-history follow-up, 2026-09-25
+
+A real Muse Spark 1.3 read-only source investigation found a stronger match
+than the portfolio guard. Release `eb1345194c` used a combined
+`media_entertainment` strategy map and did not provide `media` and
+`entertainment` entries. In `loadCorporationDetailView`, `buildSectorDetails`
+iterates stored sectors with `sectors.map(...)`, casts each stored
+`sectorType` to `CorporationType`, and calls `getEffectiveStrategyRates`.
+`getStrategy` then calls `strategies.find(...)` without a runtime check. A
+controlled stale-type fixture reproduced the exact `undefined.find` message
+with an `Array.map` frame. The affected route's `/bonds` neighbor does not
+build sector rows, consistent with the observed 200 response there.
+
+PR #2308, merged after the failing release, restored separate `media` and
+`entertainment` strategy entries in current `development`. The existing
+`sectorStrategies.test.ts` exercises both persisted types. This is strong
+source-history evidence for the September 22 failures, but the minified
+production stack has no source map, so it remains an inference rather than a
+source-line identification. A temporary combined-type row could still be
+present if the short-lived product migration ran; the current source has no
+`media_entertainment` strategy entry. Check the live collection through an
+approved aggregate or a controlled snapshot and smoke-test #864 and #955 on
+the final release SHA before declaring #2349 resolved.
+
+An ephemeral Mongo predicate probe also showed that
+`{"holders.corporationId": X}` excludes rows with missing, null, or empty
+`holders`. The portfolio guard prevents a malformed mock or future query
+change from crashing, but the focused mock did not reproduce the production
+query path. It is not the evidenced root-cause fix.
