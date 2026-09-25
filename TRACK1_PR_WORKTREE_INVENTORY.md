@@ -448,6 +448,18 @@ feature work for several #2159 blockers, not a prunable checkout. Track 1
 must review and integrate its final committed result before qualifying the
 release. Its uncommitted contents, branch, and worktree remain untouched.
 
+**Preservation checkpoint, 2026-09-25 00:53 UTC.** The previously dirty
+`worldsim-readiness-20260922` tree had no process in its checkout and no file
+edits in the preceding three hours. Its 65 modified and 93 untracked files
+passed `git diff --check`; no credential-like filenames were staged. They were
+committed in that tree as `5f79f80aa0e097bf181bcefbc805422d5f5331b7`
+(`chore: preserve reset readiness seed and sim work`). ESLint and Prettier
+completed on all 158 staged files in the precommit hook; commitlint checked
+the final conventional title separately. The tree is now clean. This is a
+**commit** decision for real source work, not a merge or validation claim:
+its branch remains active-feature until the patch is reviewed, tested, and
+merged into Track 1/development, then the checkout can be removed normally.
+
 **Dynamic inventory update, 2026-09-25 00:45 UTC.** Fresh `git worktree list`
 shows 30 AHDGame checkouts after the removals above, including new clean-base
 `banking-hub-tables` and `discord-event-cards` feature worktrees created by
