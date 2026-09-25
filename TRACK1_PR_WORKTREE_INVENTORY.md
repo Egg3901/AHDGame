@@ -951,3 +951,16 @@ handler and tests plus stricter finite-ID and `jsonrpc: "2.0"` validation and
 two-file diff confirms the source has no extra handler behavior beyond the
 merged version. The checkout is clean, unlocked, and process-free. Decision:
 remove it normally as superseded, retaining the branch ref for provenance.
+
+**AHDGame release cache and promotion checkouts: DELETE superseded clean
+checkouts, 2026-09-25.** `fix-staging-build-cache` (`94eca6f2a1`), detached
+`staging-build-cache-release` (`82bfd685ec`), and
+`promote-staging-to-main` (`3894576908`) are unlocked, process-free, and have
+clean working trees. The cache repair landed in staging through #2389, in
+production through #2384, and its exact production script plus build hook
+were carried into Track 1 development as `48beb50c96`. The promotion source
+has already merged through #2390 and #2384. These checkouts add no remaining
+source work; their release commits remain available from remote history and
+the named branch refs. Decision: remove all three normally. This also keeps
+one checkout per commit where the old release checkouts would duplicate
+merged history.
