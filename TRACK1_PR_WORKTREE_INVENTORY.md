@@ -527,3 +527,16 @@ the small production-safety unit until one lands. The Ops open set is now
 
 The remaining rows above require final decisions and execution; this document
 does not mark them complete.
+
+**Fresh AHDGame PR snapshot, 2026-09-25 01:34 UTC.** PR #2378 has merged into
+`development` as `66ccb07926980085f556ec60fd620f19ee50d464` and contributes
+the banking hub table interface. Its feature worktree remains owned by the
+other agent; no cleanup is attempted. PR #2379 is a new dead-weight follow-up
+on `perf/dead-weight-expiry-projection`: it projects transaction expiry config
+and reuses fund transaction settings, with focused tests and a matched turn
+replay still being completed by its owner. Its `dead-weight-plan` worktree is
+dirty active-feature work; do not remove it. PR #2380 is the separate active
+PostHog/Sentry integration targeted at `main`; its worktree and the original
+main checkout are outside Track 1 editing ownership. Both new PRs require a
+final merge-or-delete disposition after their active owners finish and checks
+settle. No content from them is silently treated as already in this branch.
