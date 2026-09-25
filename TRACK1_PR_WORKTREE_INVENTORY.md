@@ -746,6 +746,13 @@ intended to unblock it, with CI still running. These are active promotion
 steps, not feature-branch cleanup targets; resolve their gate and sequence
 before their final PR/worktree disposition.
 
+The #2386 ancestry repair merged into `staging` as
+`156d3f7949a0a7052d961d786ab557c902d963f8`, leaving #2384 mergeable
+but awaiting its promotion gate. New draft #2387 targets `development` with
+public API auth/CDN hardening and has an active owner. Its disposition is a
+merge after review and green gates or a documented supersession if another
+branch carries the same behavior; no active source worktree is pruned.
+
 **AHDGame short-turn candidate: DELETE as superseded, 2026-09-25.** A
 read-only Muse Spark 1.3 audit of all 20 commits in
 `verify/short-turn-candidate-20260920` compared each behavior with current
