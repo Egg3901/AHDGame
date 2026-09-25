@@ -632,10 +632,20 @@ export async function prepareShareFillClaim(
  * the head when it runs past the tail, so repeated bounded passes visit
  * every receipt once per cycle and settle each phase's drainable rows.
  *
- * Keyed by Db handle (WeakMap), never module-global state: tests and worlds
- * each rotate from their own head. Keyset pagination (`_id` bounds on a
- * sorted scan) survives rows settling between passes: a settled row simply
- * drops out of the filter while the cursor stays a valid lower bound.
+ * Keyed by stable MongoClient identity plus databaseName, never by Db
+ * handle and never module-global state: production `getDb()` calls
+ * `client.db(dbName)` on every invocation and the driver returns a NEW Db
+ * wrapper each time, so a `WeakMap<Db, ...>` would reset rotation on every
+ * cron tick and re-read the same stuck prefix forever. The pooled
+ * MongoClient instance (`Db.client`) is stable across those calls, and the
+ * database name scopes worlds that share one client. Db handles without a
+ * client identity (in-memory test fakes) fall back to per-handle cursors.
+ * Keyset pagination (`_id` bounds on a sorted scan) survives rows settling
+ * between passes: a settled row simply drops out of the filter while the
+ * cursor stays a valid lower bound.
+ *
+ * Never key by URI or connection string: those are secrets and must not be
+ * retained in module state or logged.
  */
 interface ShareFillOrphanCursors {
   committedAfter?: string;
@@ -643,13 +653,35 @@ interface ShareFillOrphanCursors {
   planlessAfter?: string;
 }
 
-const shareFillOrphanCursors = new WeakMap<Db, ShareFillOrphanCursors>();
+const shareFillOrphanCursorsByClient = new WeakMap<object, Map<string, ShareFillOrphanCursors>>();
+const shareFillOrphanCursorsByHandle = new WeakMap<object, ShareFillOrphanCursors>();
 
 function orphanCursorsFor(db: Db): ShareFillOrphanCursors {
-  let cursors = shareFillOrphanCursors.get(db);
+  const maybeIdentity = db as Partial<{ client: unknown; databaseName: unknown }>;
+  const client = maybeIdentity.client;
+  const databaseName = maybeIdentity.databaseName;
+  if (
+    typeof client === "object" &&
+    client !== null &&
+    typeof databaseName === "string" &&
+    databaseName.length > 0
+  ) {
+    let byDatabase = shareFillOrphanCursorsByClient.get(client);
+    if (!byDatabase) {
+      byDatabase = new Map<string, ShareFillOrphanCursors>();
+      shareFillOrphanCursorsByClient.set(client, byDatabase);
+    }
+    let cursors = byDatabase.get(databaseName);
+    if (!cursors) {
+      cursors = {};
+      byDatabase.set(databaseName, cursors);
+    }
+    return cursors;
+  }
+  let cursors = shareFillOrphanCursorsByHandle.get(db);
   if (!cursors) {
     cursors = {};
-    shareFillOrphanCursors.set(db, cursors);
+    shareFillOrphanCursorsByHandle.set(db, cursors);
   }
   return cursors;
 }
@@ -727,9 +759,11 @@ function isShareFillPlanlessReceipt(doc: ShareFillReceipt): boolean {
  *
  * Reads are batched: at most two sorted receipts queries per phase plus a
  * single `$in` load of the referenced orders, instead of one receipt read
- * plus one order read per row. Audit inserts and settle writes stay per row
- * (distinct deterministic `_id`s per attempt); the pass runs outside
- * `processTurn`, so it is outside the turn round-trip budgets.
+ * plus one order read per row (one extra committed window only when the
+ * reserve below goes unused, so an idle pass still drains at full budget).
+ * Audit inserts and settle writes stay per row (distinct deterministic
+ * `_id`s per attempt); the pass runs outside `processTurn`, so it is
+ * outside the turn round-trip budgets.
  *
  * Plan-less receipts (claim insert landed, plan store never did, so the
  * order claim never ran) settle `failed` via the shared loaded-receipt
@@ -738,23 +772,51 @@ function isShareFillPlanlessReceipt(doc: ShareFillReceipt): boolean {
  * landed. Failing is truthful because `beginShareFillAttempt` persists the
  * plan before the order claim runs.
  *
+ * Age grace: a live route fill sits between `claimMoneyFlowReceipt` and the
+ * plan store (or mid-money-writes) with a fresh `updatedAt` while this pass
+ * runs; the turn lock does not guard API routes, so the pass must not race
+ * it. Candidates younger than `SHARE_FILL_ORPHAN_MIN_AGE_MS` stay untouched
+ * for a later pass and are not reported as examined. The per-order stamp
+ * hook (`recoverShareFillAttempt`) keeps its immediate path: it is driven
+ * by the next fill on the same order, so it cannot race itself.
+ *
  * Per-receipt failures are captured with the receipt key only, never plan
  * or order contents, and the receipt stays `in_progress` for the next pass.
  */
+export const SHARE_FILL_ORPHAN_MIN_AGE_MS = 5 * 60 * 1000;
+
+function isFreshOrphanCandidate(receipt: ShareFillReceipt, now: Date): boolean {
+  const updatedAt: unknown = (receipt as { updatedAt?: unknown }).updatedAt;
+  // Unknown age (legacy rows without a stamp) stays eligible so old rows
+  // always drain; only provably-fresh rows wait.
+  if (!(updatedAt instanceof Date) || Number.isNaN(updatedAt.getTime())) return false;
+  return now.getTime() - updatedAt.getTime() < SHARE_FILL_ORPHAN_MIN_AGE_MS;
+}
+
 export async function recoverShareFillOrphans(
   db: Db,
-  limit = 50
+  limit = 50,
+  now: Date = new Date()
 ): Promise<ShareFillRecoveryResult[]> {
   const budget = Math.max(0, Math.floor(limit));
   if (budget === 0) return [];
   const cursors = orphanCursorsFor(db);
 
   // Phase 1: committed plans first (actionable), rotating within the phase.
-  const committed = await fetchReceiptWindow(
+  // The cap reserves at least two slots on realistically-sized passes so a
+  // persistent committed backlog (e.g. audit rows that never land, staying
+  // `audit-incomplete` forever) cannot starve the uncommitted and planless
+  // phases: with the backlog at or over the cap, `rest` stays >= 2 and each
+  // later phase is guaranteed >= 1 slot every pass, while committed work
+  // keeps the large majority of the budget. Tiny budgets keep absolute
+  // committed priority.
+  const spareReserve = budget >= 4 ? 2 : 0;
+  const committedCap = budget - spareReserve;
+  let committed = await fetchReceiptWindow(
     db,
     { status: "in_progress", "shareFillPlan.moneyCommitted": true },
     cursors.committedAfter,
-    budget
+    committedCap
   );
   const committedKey = lastWindowKey(committed);
   if (committedKey !== undefined) cursors.committedAfter = committedKey;
@@ -797,7 +859,24 @@ export async function recoverShareFillOrphans(
   const uncommittedKey = lastWindowKey(uncommitted);
   if (uncommittedKey !== undefined) cursors.uncommittedAfter = uncommittedKey;
 
-  return recoverLoadedReceipts(db, [...committed, ...uncommitted, ...planless]);
+  // Backfill: when the later phases left reserve slots unused AND the
+  // committed backlog filled its cap (the cap was the binding constraint),
+  // spend the remainder on more committed rows so a pass with no
+  // later-phase work still drains at full budget.
+  const unusedReserve = rest - planless.length - uncommitted.length;
+  if (spareReserve > 0 && committed.length === committedCap && unusedReserve > 0) {
+    const extra = await fetchReceiptWindow(
+      db,
+      { status: "in_progress", "shareFillPlan.moneyCommitted": true },
+      cursors.committedAfter,
+      unusedReserve
+    );
+    const extraKey = lastWindowKey(extra);
+    if (extraKey !== undefined) cursors.committedAfter = extraKey;
+    committed = [...committed, ...extra];
+  }
+
+  return recoverLoadedReceipts(db, [...committed, ...uncommitted, ...planless], now);
 }
 
 /** Sanitized per-receipt failure capture: receipt key only, never plan contents. */
@@ -821,10 +900,15 @@ function captureRecoveryError(err: unknown, key: string): void {
  */
 async function recoverLoadedReceipts(
   db: Db,
-  loaded: ShareFillReceipt[]
+  loaded: ShareFillReceipt[],
+  now: Date
 ): Promise<ShareFillRecoveryResult[]> {
+  // Fresh candidates may be a live fill mid-write (see the age grace on
+  // `recoverShareFillOrphans`): skip them here, before any order read or
+  // settle, so the pass never races a fill and never reports them.
+  const eligible = loaded.filter((receipt) => !isFreshOrphanCandidate(receipt, now));
   const plans = new Map<string, ShareFillAuditPlan>();
-  for (const receipt of loaded) {
+  for (const receipt of eligible) {
     if (typeof receipt._id !== "string") continue;
     if (receipt.status !== "in_progress") continue;
     const plan = isShareFillAuditPlan(receipt.shareFillPlan) ? receipt.shareFillPlan : undefined;
@@ -852,7 +936,7 @@ async function recoverLoadedReceipts(
     }
   }
   const results: ShareFillRecoveryResult[] = [];
-  for (const receipt of loaded) {
+  for (const receipt of eligible) {
     const key = receipt._id;
     if (typeof key !== "string") continue;
     if (receipt.status !== "in_progress") continue;
@@ -882,12 +966,13 @@ async function recoverLoadedReceipts(
  */
 export async function runShareFillRecoveryPass(
   db: Db,
-  limit = 50
+  limit = 50,
+  now: Date = new Date()
 ): Promise<ShareFillRecoveryPassSummary> {
   if (shareFillRecoveryRunning) return emptyPassSummary("skipped-concurrent");
   shareFillRecoveryRunning = true;
   try {
-    const results = await recoverShareFillOrphans(db, limit);
+    const results = await recoverShareFillOrphans(db, limit, now);
     const summary = emptyPassSummary("completed");
     summary.examined = results.length;
     for (const result of results) {

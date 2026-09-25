@@ -178,8 +178,19 @@ interface FakeDb {
 
 const AUDIT_COLLECTIONS = new Set(["financialTxLog", "indexFundTransactions", "shareTradeHistory"]);
 
-function createFakeDb(): FakeDb {
-  const collections = new Map<string, { docs: Map<string, Doc>; insertCount: number }>();
+function createFakeDb(overrides?: {
+  /**
+   * Stable client identity + database name, mirroring the production
+   * driver's `Db.client` / `Db.databaseName`. Two wrappers sharing both
+   * (and the same `collections` store) model two `getDb()` calls against
+   * one world; omitting them models the legacy handle-keyed fake.
+   */
+  client?: object;
+  databaseName?: string;
+  collections?: Map<string, { docs: Map<string, Doc>; insertCount: number }>;
+}): FakeDb {
+  const collections =
+    overrides?.collections ?? new Map<string, { docs: Map<string, Doc>; insertCount: number }>();
   const faults = { failAuditInsertsRemaining: 0, failAtAuditInsertIndex: null as number | null };
   const state = { auditInsertCalls: 0 };
 
@@ -310,7 +321,12 @@ function createFakeDb(): FakeDb {
   }
 
   const fake: FakeDb = {
-    db: { collection: (name: string) => coll(name) } as unknown as Db,
+    db: {
+      collection: (name: string) => coll(name),
+      ...(overrides?.client
+        ? { client: overrides.client, databaseName: overrides.databaseName ?? "fake-db" }
+        : {}),
+    } as unknown as Db,
     collections,
     faults,
     get auditInsertCalls() {
@@ -408,13 +424,21 @@ function seedOrder(overrides: Record<string, unknown> = {}): ShareOrder {
   return order;
 }
 
+/**
+ * Old enough to clear the orphan-scan age grace (`SHARE_FILL_ORPHAN_MIN_AGE_MS`):
+ * every receipt the periodic pass is expected to touch must look crashed,
+ * not freshly written by a live fill. Freshness is tested explicitly with
+ * injected `now` values, never with the real clock.
+ */
+const AGED_AT = new Date("2026-01-01T00:00:00.000Z");
+
 function seedReceipt(key: string, plan: ShareFillAuditPlan | undefined, extra: Doc = {}): void {
   fake.seed(NON_ATOMIC_MONEY_FLOW_RECEIPTS_COLLECTION, {
     _id: key,
     status: "in_progress",
     fingerprint: "fp",
-    createdAt: new Date(),
-    updatedAt: new Date(),
+    createdAt: AGED_AT,
+    updatedAt: AGED_AT,
     ...(plan === undefined ? {} : { shareFillPlan: plan }),
     ...extra,
   });
@@ -442,8 +466,8 @@ function seedStarveWorld(target: FakeDb): void {
       _id: `starve-${String(i).padStart(2, "0")}`,
       status: "in_progress",
       fingerprint: "fp",
-      createdAt: new Date(),
-      updatedAt: new Date(),
+      createdAt: AGED_AT,
+      updatedAt: AGED_AT,
       shareFillPlan: basePlan({ orderIdHex: orderId.toHexString(), preClaimRemaining: 10 }),
     });
   }
@@ -453,16 +477,16 @@ function seedStarveWorld(target: FakeDb): void {
     _id: "starve-99-dead",
     status: "in_progress",
     fingerprint: "fp",
-    createdAt: new Date(),
-    updatedAt: new Date(),
+    createdAt: AGED_AT,
+    updatedAt: AGED_AT,
     shareFillPlan: basePlan({ orderIdHex: deadOrderId.toHexString(), preClaimRemaining: 10 }),
   });
   target.seed(NON_ATOMIC_MONEY_FLOW_RECEIPTS_COLLECTION, {
     _id: "planless-tail",
     status: "in_progress",
     fingerprint: "share-fill:order:filler:shares:10:price:5",
-    createdAt: new Date(),
-    updatedAt: new Date(),
+    createdAt: AGED_AT,
+    updatedAt: AGED_AT,
   });
 }
 
@@ -1014,8 +1038,8 @@ describe("orphan scan", () => {
       _id: "claim-before-plan",
       status: "in_progress",
       fingerprint: "share-fill:order:filler:shares:10:price:5",
-      createdAt: new Date(),
-      updatedAt: new Date(),
+      createdAt: AGED_AT,
+      updatedAt: AGED_AT,
     });
     // Foreign-domain plan-less receipts (other flows, money legs) stay out.
     for (const [id, fingerprint] of [
@@ -1026,8 +1050,8 @@ describe("orphan scan", () => {
         _id: id,
         status: "in_progress",
         fingerprint,
-        createdAt: new Date(),
-        updatedAt: new Date(),
+        createdAt: AGED_AT,
+        updatedAt: AGED_AT,
       });
     }
     const results = await recoverShareFillOrphans(fake.db, 50);
@@ -1172,6 +1196,200 @@ describe("orphan scan fairness", () => {
       .collection<MoneyFlowReceipt>(NON_ATOMIC_MONEY_FLOW_RECEIPTS_COLLECTION)
       .findOne({ _id: "starve-99-dead" })) as Doc | null;
     expect(dead?.status).toBe("in_progress");
+  });
+
+  it("shares rotation across Db wrappers for the same client+database", async () => {
+    // Production regression: `getDb()` returns a NEW Db wrapper on every
+    // call (`client.db()` does not cache), so cursors keyed by Db handle
+    // reset each tick and the scan re-reads the same stuck prefix forever.
+    // Two wrappers over one fake client+database with a shared store must
+    // continue one rotation, not restart it.
+    const client = {};
+    const worldA = createFakeDb({ client, databaseName: "gamedb" });
+    const worldB = createFakeDb({
+      client,
+      databaseName: "gamedb",
+      collections: worldA.collections,
+    });
+    seedStarveWorld(worldA);
+    await recoverShareFillOrphans(worldA.db, 50);
+    // The second tick arrives on a fresh wrapper: it must pick up past the
+    // first pass's cursor and settle the dead tail.
+    const second = await recoverShareFillOrphans(worldB.db, 50);
+    expect(second.length).toBeLessThanOrEqual(50);
+    const dead = (await worldB.db
+      .collection<MoneyFlowReceipt>(NON_ATOMIC_MONEY_FLOW_RECEIPTS_COLLECTION)
+      .findOne({ _id: "starve-99-dead" })) as Doc | null;
+    expect(dead?.status).toBe("failed");
+  });
+
+  it("isolates rotation by client and by database (no leakage)", async () => {
+    // Advance one world's cursors to the tail, then prove neither key
+    // component leaks: the same database name on a different client, and a
+    // different database name on the same client, both start at their own
+    // head and must NOT reach their dead tail in one bounded pass.
+    const client = {};
+    const world = createFakeDb({ client, databaseName: "gamedb" });
+    seedStarveWorld(world);
+    await recoverShareFillOrphans(world.db, 50);
+    await recoverShareFillOrphans(world.db, 50);
+    const advanced = (await world.db
+      .collection<MoneyFlowReceipt>(NON_ATOMIC_MONEY_FLOW_RECEIPTS_COLLECTION)
+      .findOne({ _id: "starve-99-dead" })) as Doc | null;
+    expect(advanced?.status).toBe("failed");
+
+    for (const other of [
+      createFakeDb({ client: {}, databaseName: "gamedb" }),
+      createFakeDb({ client, databaseName: "otherdb" }),
+    ]) {
+      seedStarveWorld(other);
+      const pass = await recoverShareFillOrphans(other.db, 50);
+      expect(pass.length).toBeLessThanOrEqual(50);
+      const dead = (await other.db
+        .collection<MoneyFlowReceipt>(NON_ATOMIC_MONEY_FLOW_RECEIPTS_COLLECTION)
+        .findOne({ _id: "starve-99-dead" })) as Doc | null;
+      expect(dead?.status).toBe("in_progress");
+    }
+  });
+
+  it("reserves capacity for uncommitted and planless phases under a persistent committed backlog", async () => {
+    // Starvation regression: 50 committed receipts whose audit rows never
+    // land stay `audit-incomplete` forever. Without reserved capacity the
+    // committed phase burns the whole budget every pass, and the dead
+    // uncommitted tail plus the planless receipt behind it are never
+    // examined. Total inspected stays within the limit and the committed
+    // phase keeps the large majority of the slots.
+    fake.faults.failAuditInsertsRemaining = 100000;
+    for (let i = 0; i < 50; i += 1) {
+      const orderId = new ObjectId();
+      fake.seed("shareOrders", { _id: orderId, status: "filled", sharesRemaining: 0 });
+      seedReceipt(
+        `bk-${String(i).padStart(2, "0")}`,
+        basePlan({
+          orderIdHex: orderId.toHexString(),
+          preClaimRemaining: 10,
+          moneyCommitted: true,
+          fillerBalanceAfter: 100,
+        })
+      );
+    }
+    const deadOrderId = new ObjectId();
+    fake.seed("shareOrders", { _id: deadOrderId, status: "open", sharesRemaining: 10 });
+    seedReceipt(
+      "bk-dead",
+      basePlan({ orderIdHex: deadOrderId.toHexString(), preClaimRemaining: 10 })
+    );
+    fake.seed(NON_ATOMIC_MONEY_FLOW_RECEIPTS_COLLECTION, {
+      _id: "bk-planless",
+      status: "in_progress",
+      fingerprint: "share-fill:order:filler:shares:10:price:5",
+      createdAt: AGED_AT,
+      updatedAt: AGED_AT,
+    });
+
+    const results = await recoverShareFillOrphans(fake.db, 50);
+    expect(results.length).toBeLessThanOrEqual(50);
+    expect(results.find((r) => r.key === "bk-dead")?.action).toBe(
+      "settled-failed-claim-never-landed"
+    );
+    expect(results.find((r) => r.key === "bk-planless")?.action).toBe("settled-failed-no-plan");
+    expect((await readReceipt("bk-dead"))?.status).toBe("failed");
+    expect((await readReceipt("bk-planless"))?.status).toBe("failed");
+    // Only the two reserved slots went elsewhere; the persistent backlog is
+    // re-examined as incomplete and stays retryable.
+    expect(results.filter((r) => r.action === "audit-incomplete").length).toBe(results.length - 2);
+    expect((await readReceipt("bk-00"))?.status).toBe("in_progress");
+  });
+});
+
+describe("orphan scan age grace", () => {
+  const NOW = new Date("2026-06-01T12:00:00.000Z");
+  const TEN_MINUTES_AGO = new Date(NOW.getTime() - 10 * 60 * 1000);
+  const AT_GRACE_EDGE = new Date(NOW.getTime() - 5 * 60 * 1000);
+
+  function seedPlanlessAt(key: string, at: Date): void {
+    fake.seed(NON_ATOMIC_MONEY_FLOW_RECEIPTS_COLLECTION, {
+      _id: key,
+      status: "in_progress",
+      fingerprint: "share-fill:order:filler:shares:1:price:1",
+      createdAt: at,
+      updatedAt: at,
+    });
+  }
+
+  async function readRawReceipt(key: string): Promise<Doc | null> {
+    return fake.db
+      .collection<MoneyFlowReceipt>(NON_ATOMIC_MONEY_FLOW_RECEIPTS_COLLECTION)
+      .findOne({ _id: key }) as Promise<Doc | null>;
+  }
+
+  it("leaves a fresh in-flight planless receipt untouched and settles aged ones", async () => {
+    // A live route fill between `claimMoneyFlowReceipt` and the plan store
+    // looks exactly like a crashed claim-before-plan receipt except for its
+    // age: the scan must wait it out instead of failing a live attempt.
+    seedPlanlessAt("fresh-planless", NOW);
+    seedPlanlessAt("aged-planless", TEN_MINUTES_AGO);
+    seedPlanlessAt("edge-planless", AT_GRACE_EDGE);
+    const results = await recoverShareFillOrphans(fake.db, 50, NOW);
+    expect(results).toEqual([
+      { key: "aged-planless", action: "settled-failed-no-plan" },
+      { key: "edge-planless", action: "settled-failed-no-plan" },
+    ]);
+    expect((await readRawReceipt("fresh-planless"))?.status).toBe("in_progress");
+    expect((await readReceipt("aged-planless"))?.status).toBe("failed");
+  });
+
+  it("settles the fresh planless receipt on a later pass once it ages", async () => {
+    seedPlanlessAt("late-planless", NOW);
+    expect(await recoverShareFillOrphans(fake.db, 50, NOW)).toEqual([]);
+    const later = new Date(NOW.getTime() + 10 * 60 * 1000);
+    expect(await recoverShareFillOrphans(fake.db, 50, later)).toEqual([
+      { key: "late-planless", action: "settled-failed-no-plan" },
+    ]);
+    expect((await readReceipt("late-planless"))?.status).toBe("failed");
+  });
+
+  it("applies the same grace to committed and uncommitted plans", async () => {
+    // A fresh committed receipt is a fill mid-audit-write and a fresh dead
+    // claim may be a live fill that has not stored its plan yet: neither
+    // may be re-driven or settled, while aged rows proceed on the same pass.
+    const freshOrderId = new ObjectId();
+    fake.seed("shareOrders", { _id: freshOrderId, status: "filled", sharesRemaining: 0 });
+    seedReceipt(
+      "fresh-committed",
+      basePlan({
+        orderIdHex: freshOrderId.toHexString(),
+        preClaimRemaining: 10,
+        moneyCommitted: true,
+        fillerBalanceAfter: 100,
+      }),
+      { createdAt: NOW, updatedAt: NOW }
+    );
+    const agedOrderId = new ObjectId();
+    fake.seed("shareOrders", { _id: agedOrderId, status: "filled", sharesRemaining: 0 });
+    seedReceipt(
+      "aged-committed",
+      basePlan({
+        orderIdHex: agedOrderId.toHexString(),
+        preClaimRemaining: 10,
+        moneyCommitted: true,
+        fillerBalanceAfter: 100,
+      }),
+      { createdAt: TEN_MINUTES_AGO, updatedAt: TEN_MINUTES_AGO }
+    );
+    seedOrder({ sharesRemaining: 10 });
+    seedReceipt("fresh-dead", basePlan({ preClaimRemaining: 10 }), {
+      createdAt: NOW,
+      updatedAt: NOW,
+    });
+
+    const results = await recoverShareFillOrphans(fake.db, 50, NOW);
+    expect(results).toEqual([{ key: "aged-committed", action: "audit-recovered" }]);
+    expect((await readReceipt("fresh-committed"))?.status).toBe("in_progress");
+    expect((await readReceipt("fresh-dead"))?.status).toBe("in_progress");
+    // Only the aged attempt wrote audit rows (sell vs character: 2 tx + history).
+    expect(fake.counts("financialTxLog").docs).toBe(2);
+    expect(fake.counts("shareTradeHistory").docs).toBe(1);
   });
 });
 
