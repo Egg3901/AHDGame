@@ -49,6 +49,7 @@ describe("placeFundShareBuyOrder", () => {
       fxRate: 1,
       turn: 44,
       thresholds: DEFAULT_TX_THRESHOLDS,
+      turnLengthMinutes: 60,
     });
 
     expect(result.ok).toBe(true);
@@ -74,7 +75,8 @@ describe("placeFundShareBuyOrder", () => {
     expect(emitTx).toHaveBeenCalledWith(
       db,
       expect.objectContaining({ type: "stock_order_escrow" }),
-      DEFAULT_TX_THRESHOLDS
+      DEFAULT_TX_THRESHOLDS,
+      60
     );
   });
 
@@ -173,7 +175,7 @@ describe("cancelFundShareOrder", () => {
     });
     (db.collection("indexFunds").findOne as ReturnType<typeof vi.fn>).mockResolvedValue(f);
 
-    await cancelFundShareOrder(db as unknown as Db, orderId, 44, DEFAULT_TX_THRESHOLDS);
+    await cancelFundShareOrder(db as unknown as Db, orderId, 44, DEFAULT_TX_THRESHOLDS, 60);
 
     // Marked cancelled atomically.
     const claimCall = (db.collection("shareOrders").findOneAndUpdate as ReturnType<typeof vi.fn>)
@@ -189,7 +191,8 @@ describe("cancelFundShareOrder", () => {
     expect(emitTx).toHaveBeenCalledWith(
       db,
       expect.objectContaining({ type: "stock_order_refund" }),
-      DEFAULT_TX_THRESHOLDS
+      DEFAULT_TX_THRESHOLDS,
+      60
     );
   });
 

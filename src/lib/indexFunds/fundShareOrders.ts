@@ -63,6 +63,8 @@ export interface PlaceFundShareBuyOrderInput {
   turn: number;
   /** Reused for a turn pass placing many fund bids. */
   thresholds?: TxThresholds;
+  /** Reused turn cadence for transaction expiry during a quote pass. */
+  turnLengthMinutes?: number;
   liquidityQuote?: { turn: number; referencePrice: number };
   /**
    * When set, the escrow transaction row is pushed here instead of inserted,
@@ -169,7 +171,8 @@ export async function placeFundShareBuyOrder(
           escrowAmountAnchor: escrowAnchor,
         },
       },
-      input.thresholds
+      input.thresholds,
+      input.turnLengthMinutes
     );
   } catch (err) {
     // Roll the escrow back if we couldn't persist the order.
@@ -260,7 +263,8 @@ export async function cancelFundShareOrder(
   db: Db,
   orderId: ObjectId,
   turn?: number,
-  thresholds?: TxThresholds
+  thresholds?: TxThresholds,
+  turnLengthMinutes?: number
 ): Promise<void> {
   // Atomically claim the order so a concurrent fill/cancel can't double-refund.
   const claimed = await db
@@ -315,7 +319,8 @@ export async function cancelFundShareOrder(
               escrowAmountAnchor: refundAnchor,
             },
           },
-          thresholds
+          thresholds,
+          turnLengthMinutes
         );
       }
     }

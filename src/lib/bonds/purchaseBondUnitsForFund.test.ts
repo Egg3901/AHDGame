@@ -89,6 +89,7 @@ describe("purchaseBondUnitsForFund", () => {
       const result = await purchaseBondUnitsForFund(db as unknown as Db, fund, bond, 5, {
         turn: 7,
         thresholds: { fund: {} },
+        turnLengthMinutes: 60,
       } as never);
 
       expect(result).toMatchObject({ ok: true, units: 5, costAnchor: 5_000 });
@@ -110,7 +111,8 @@ describe("purchaseBondUnitsForFund", () => {
           counterpartyType: "system",
           counterpartyName: "US Treasury",
         }),
-        { fund: {} }
+        { fund: {} },
+        60
       );
     });
 

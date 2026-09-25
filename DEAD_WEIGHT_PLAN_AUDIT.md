@@ -592,7 +592,10 @@ from fund bond purchases, 342 from bid placement, and 282 from bid refunds.
 It also counted 342 `systemSettings` threshold reads from bid placement and
 282 from bid refunds. The equity liquidity refresh now loads thresholds once
 and passes them to both order paths. This predicts 623 fewer threshold reads
-for an equivalent turn, subject to a matched before/after replay. The trace
+for an equivalent turn. It and the bond reserve pass also load turn cadence
+once each and pass it to transaction emission, predicting 1,039 fewer
+`gameConfig` expiry reads across these paths. Both estimates require a matched
+before/after replay before they count as measured gains. The trace
 instrumentation counts both `findOne` and the underlying `find` hook for each
 call, so the stated counts use only its `findOne` rows.
 

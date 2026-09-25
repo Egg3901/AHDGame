@@ -8,9 +8,11 @@ const orderMocks = vi.hoisted(() => ({
   placeFundShareSellOrder: vi.fn(),
 }));
 const thresholdMocks = vi.hoisted(() => ({ loadTxThresholds: vi.fn() }));
+const cadenceMocks = vi.hoisted(() => ({ loadTurnLengthMinutes: vi.fn() }));
 
 vi.mock("@/lib/indexFunds/fundShareOrders", () => orderMocks);
 vi.mock("@/lib/financialTxLog/emit", () => thresholdMocks);
+vi.mock("@/lib/financialTxLog/expiresAt", () => cadenceMocks);
 
 import {
   EQUITY_LIQUIDITY_MAX_QUOTES_PER_FUND,
@@ -78,6 +80,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   orderMocks.cancelFundShareOrder.mockResolvedValue(undefined);
   thresholdMocks.loadTxThresholds.mockResolvedValue({});
+  cadenceMocks.loadTurnLengthMinutes.mockResolvedValue(60);
 });
 
 describe("planEquityLiquidityQuotes", () => {
@@ -174,10 +177,17 @@ describe("refreshEquityLiquidityFacility", () => {
     });
 
     expect(thresholdMocks.loadTxThresholds).toHaveBeenCalledTimes(1);
-    expect(orderMocks.cancelFundShareOrder).toHaveBeenCalledWith(db, priorOrderId, 58, thresholds);
+    expect(cadenceMocks.loadTurnLengthMinutes).toHaveBeenCalledTimes(1);
+    expect(orderMocks.cancelFundShareOrder).toHaveBeenCalledWith(
+      db,
+      priorOrderId,
+      58,
+      thresholds,
+      60
+    );
     expect(orderMocks.placeFundShareBuyOrder).toHaveBeenCalledWith(
       db,
-      expect.objectContaining({ thresholds })
+      expect.objectContaining({ thresholds, turnLengthMinutes: 60 })
     );
   });
 
@@ -220,11 +230,13 @@ describe("refreshEquityLiquidityFacility", () => {
 
     expect(peakActiveFunds).toBe(2);
     expect(thresholdMocks.loadTxThresholds).toHaveBeenCalledTimes(1);
+    expect(cadenceMocks.loadTurnLengthMinutes).toHaveBeenCalledTimes(1);
     expect(orderMocks.cancelFundShareOrder).toHaveBeenCalledWith(
       db,
       priorOrders[0]._id,
       59,
-      expect.anything()
+      expect.anything(),
+      60
     );
     expect(orderMocks.cancelFundShareOrder.mock.calls.map((call) => call[1])).toEqual([
       priorOrders[0]._id,
@@ -276,9 +288,10 @@ describe("refreshEquityLiquidityFacility", () => {
 
     expect(orderMocks.cancelFundShareOrder).not.toHaveBeenCalledWith(db, bidOrderId);
     expect(thresholdMocks.loadTxThresholds).toHaveBeenCalledTimes(1);
+    expect(cadenceMocks.loadTurnLengthMinutes).toHaveBeenCalledTimes(1);
     expect(orderMocks.placeFundShareBuyOrder).toHaveBeenCalledWith(
       db,
-      expect.objectContaining({ thresholds: expect.anything() })
+      expect.objectContaining({ thresholds: expect.anything(), turnLengthMinutes: 60 })
     );
     expect(snapshot).toMatchObject({
       quotePairsPlanned: 1,
