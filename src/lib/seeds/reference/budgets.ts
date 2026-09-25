@@ -29,6 +29,8 @@ import {
   UK_NATIONAL_DEFAULT_OPTION_INDEXES,
   UK_NATIONAL_DEFAULTS,
 } from "./basePolicies";
+import { getInitialRates } from "@/lib/constants/currencies";
+import { euroConversionFactor, isEuroAdopted } from "@/lib/currency/rules/euroAdoption";
 import { SEED_TAX_RATES_1953 } from "@/lib/politicalLegislation/seedTaxRates";
 import { COUNTRY_POLICY_CONFIGS_1953 } from "./basePolicies1953";
 import { COUNTRY_POLICY_CONFIGS_1979 } from "./basePolicies1979";
@@ -5522,13 +5524,61 @@ export function getNationalBudgetSeedConfigsForPreset(preset: string): NationalB
     );
   }
   if (preset === "2027-default") {
-    return overlayNationalBudgetConfigs(
-      getNationalBudgetSeedConfigsForPreset("2023-default"),
-      NATIONAL_BUDGET_SEED_CONFIGS_2027,
-      2027
+    return convertEuroMemberBudgetsFor2027(
+      overlayNationalBudgetConfigs(
+        getNationalBudgetSeedConfigsForPreset("2023-default"),
+        NATIONAL_BUDGET_SEED_CONFIGS_2027,
+        2027
+      )
     );
   }
   return NATIONAL_BUDGET_SEED_CONFIGS;
+}
+
+/**
+ * Euroize inherited euro-member rows for the 2027 preset. Every absolute-money
+ * field (gdp, otherRevenue, debt principal/ceiling, per-category baselines,
+ * state grants, per-capita policy revenues) scales by the authored cross rate
+ * `R_EUR / R_legacy` from the same table the FX seeder uses, so anchor value
+ * is conserved exactly. Ratios (taxBaseRatios, gdp multipliers, interest
+ * rates, ratings) pass through. Ireland converts at 1.0: code flips, amounts
+ * stay. Non-euro rows and DE (already EUR) are untouched.
+ */
+function convertEuroMemberBudgetsFor2027(
+  configs: NationalBudgetSeedConfig[]
+): NationalBudgetSeedConfig[] {
+  const preset = "2027-default";
+  const rates = getInitialRates(preset);
+  const eurAnchorRate = rates.DE;
+  if (eurAnchorRate == null || eurAnchorRate <= 0) return configs;
+  return configs.map((config) => {
+    if (config.currencyCode === "EUR") return config;
+    if (!isEuroAdopted(config.countryId, preset)) return config;
+    const factor = euroConversionFactor(rates[config.countryId] ?? NaN, eurAnchorRate);
+    const scaledSpending: Record<string, number> = {};
+    for (const [key, value] of Object.entries(config.baselineSpendingByCategory)) {
+      scaledSpending[key] = value * factor;
+    }
+    return {
+      ...config,
+      currencyCode: "EUR" as const,
+      gdp: config.gdp * factor,
+      otherRevenue: config.otherRevenue * factor,
+      debt: {
+        ...config.debt,
+        principal: config.debt.principal * factor,
+        ceiling: config.debt.ceiling * factor,
+      },
+      baselineSpendingByCategory: scaledSpending,
+      baselineStateGrants: config.baselineStateGrants * factor,
+      policyRevenueConfigs: config.policyRevenueConfigs?.map((revenueConfig) => ({
+        ...revenueConfig,
+        annualRevenuePerCapitaByOptionIndex: revenueConfig.annualRevenuePerCapitaByOptionIndex?.map(
+          (perCapita) => perCapita * factor
+        ),
+      })),
+    };
+  });
 }
 
 /** Preserve the last complete era roster while applying newer authored rows. */

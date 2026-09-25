@@ -7,6 +7,7 @@ import {
   FOREX_ACTIVE_COUNTRIES,
   INITIAL_RATES,
   getInitialRates,
+  getSeedCurrencyCode,
   getSeedHardPeg,
 } from "@/lib/constants/currencies";
 import type { CountryId } from "@/lib/constants/countries";
@@ -115,14 +116,22 @@ function buildCharacterUpdateOp(doc: {
 // ── Exchange rate seeding ───────────────────────────────────────────────────────
 
 /**
- * Seed ExchangeRate documents for US, UK, JP.
+ * Seed ExchangeRate documents for every forex-active country.
  * Uses upsert to be idempotent — if documents already exist, they are not overwritten.
+ *
+ * In a 2027-default world euro members seed as EUR at the DE anchor rate, so
+ * every euro row agrees on code and rate from bootstrap (anchor conservation:
+ * the anchor value is identical to the legacy-row equivalent).
  */
 export async function seedExchangeRates(db: Db, preset: string): Promise<void> {
   const rates = getInitialRates(preset);
   const ops = FOREX_ACTIVE_COUNTRIES.map((countryId) => {
-    const rate = rates[countryId]!;
-    const currencyCode = COUNTRY_CURRENCY_MAP[countryId];
+    const currencyCode = getSeedCurrencyCode(countryId, preset);
+    // Euro followers share the anchor's row value, not their legacy rate.
+    const rate =
+      currencyCode === "EUR" && countryId !== "DE"
+        ? (rates.DE ?? rates[countryId]!)
+        : rates[countryId]!;
     const hardPeg = getSeedHardPeg(countryId, preset);
 
     return {

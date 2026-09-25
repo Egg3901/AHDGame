@@ -9,6 +9,7 @@
  */
 import type { CountryId } from "./countries";
 import { STARTING_YEAR, getStartingYearForPreset } from "./turnTime";
+import { isEuroAdopted } from "@/lib/currency/rules/euroAdoption";
 import { JP_ECONOMY } from "@/lib/countries/jp/economy";
 import { US_ECONOMY } from "@/lib/countries/us/economy";
 import { UK_ECONOMY } from "@/lib/countries/uk/economy";
@@ -760,6 +761,18 @@ export function getEraAwareCurrencySymbol(
   }
   if (code === "BRL" && PRE_REAL_PRESETS.has(preset)) return "Cr$";
   return CURRENCY_SYMBOLS[code] ?? code;
+}
+
+/**
+ * Seed-time home currency for a country in a preset. Era-blind
+ * {@link COUNTRY_CURRENCY_MAP} stays the identity source for every other era;
+ * only a 2027-default bootstrap resolves euro members to EUR (see
+ * `isEuroAdopted`). Non-euro countries and every other preset pass through
+ * unchanged, so 1991 behavior is byte-identical.
+ */
+export function getSeedCurrencyCode(countryId: CountryId, preset: string): CurrencyCode {
+  if (isEuroAdopted(countryId, preset)) return "EUR";
+  return COUNTRY_CURRENCY_MAP[countryId];
 }
 
 /** Baseline real-economy values per country for FX macro drift. */

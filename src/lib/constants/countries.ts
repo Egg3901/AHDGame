@@ -1205,6 +1205,19 @@ export const ERA_COUNTRY_CONFIG_OVERRIDES: Record<
   // are ever consulted. DE/IE/CN each carried a `1991-default` config that
   // reached nothing until they were added below — the folder looked right and
   // the value never applied. Adding an era override means editing BOTH places.
+  // 2027 eurozone: FR/IT/ES/GR/AT/FI seed budgets in EUR (see
+  // convertEuroMemberBudgetsFor2027), so their GDP→₳ normalization must be the
+  // euro-anchored value, not the base legacy-currency rate. Each era file shows
+  // the derivation (base × R_legacy/R_EUR from the seeder's rate table). DE is
+  // already EUR and IE converts at 1.0, so neither needs an entry.
+  "2027-default": {
+    FR: FR_ERAS["2027-default"]?.config,
+    IT: IT_ERAS["2027-default"]?.config,
+    ES: ES_ERAS["2027-default"]?.config,
+    GR: GR_ERAS["2027-default"]?.config,
+    AT: AT_ERAS["2027-default"]?.config,
+    FI: FI_ERAS["2027-default"]?.config,
+  },
   "1991-default": {
     UK: UK_ERAS["1991-default"]?.config,
     JP: JP_ERAS["1991-default"]?.config,

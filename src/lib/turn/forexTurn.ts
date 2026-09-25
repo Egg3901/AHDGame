@@ -23,7 +23,9 @@ import type { CurrencyCode } from "@/lib/constants/currencies";
 import {
   FOREX_ACTIVE_COUNTRIES,
   INITIAL_RATES,
+  getCountryIdForCurrency,
   getInitialRates,
+  getSeedCurrencyCode,
   COUNTRY_CURRENCY_MAP,
   LIMIT_ORDER_SPREAD,
   SPREAD_FEE_CENTRAL_BANK_RATIO,
@@ -173,21 +175,46 @@ export async function processForexTurn(
     );
   }
 
+  // Euro live peg: in a 2027 world (or any world whose row already reads
+  // EUR) every non-anchor euro row publishes the anchor's rate instead of
+  // drifting on its own legacy anchor. The anchor precedes every follower in
+  // FOREX_ACTIVE_COUNTRIES, so its post-update rate is already known when a
+  // follower runs; the pre-loaded anchor doc covers the bank-missing
+  // fallback. Membership comes from the seed table (preset) or the
+  // already-loaded row's own code — never a fresh read, so this adds zero DB
+  // round trips.
+  const presetForSeed = preset ?? DEFAULT_SEED_PRESET;
+  const euroAnchorCountry = getCountryIdForCurrency("EUR");
+  let euroAnchorRate: number | null = null;
+  let euroAnchorMacroTarget: number | null = null;
+  const deDoc = rateMap.get(euroAnchorCountry);
+  const deDocRate = deDoc && Number.isFinite(deDoc.rate) && deDoc.rate > 0 ? deDoc.rate : null;
+
   // Update rates for each active country
   for (const countryId of FOREX_ACTIVE_COUNTRIES) {
     const bank = bankMap.get(countryId);
     if (!bank) continue;
 
-    const currencyCode = COUNTRY_CURRENCY_MAP[countryId];
+    const isEuroAnchor = countryId === euroAnchorCountry;
+    const existingRateDoc = rateMap.get(countryId);
+    const isEuroFollower =
+      !isEuroAnchor &&
+      (getSeedCurrencyCode(countryId, presetForSeed) === "EUR" ||
+        existingRateDoc?.currencyCode === "EUR");
+
+    const currencyCode = isEuroFollower ? "EUR" : COUNTRY_CURRENCY_MAP[countryId];
     // Era-aware anchor: pre-modern presets use their own rate table; modern
     // presets resolve to INITIAL_RATES (kept as a defensive fallback for any
     // country missing from an era table so its currency never loses its anchor).
-    // Used ONLY to SEED a brand-new currency row — see below.
-    const seedBaseRate = eraInitialRates[countryId] ?? INITIAL_RATES[countryId];
+    // Used ONLY to SEED a brand-new currency row — see below. Euro followers
+    // seed at the DE anchor, mirroring `seedExchangeRates`.
+    const seedBaseRate = isEuroFollower
+      ? (eraInitialRates.DE ?? INITIAL_RATES.DE)
+      : (eraInitialRates[countryId] ?? INITIAL_RATES[countryId]);
     if (seedBaseRate === undefined || !currencyCode) continue;
 
     // Read or seed the exchange rate document
-    let existingRate = rateMap.get(countryId);
+    let existingRate = existingRateDoc;
 
     // Anchor a LIVE currency to the baseRate it was persisted with — never
     // silently re-anchor a running world to a different rate table. NG exposed
@@ -222,7 +249,10 @@ export async function processForexTurn(
     // Defend against NaN leaking in from either persisted rate or computed
     // volumes — reset to baseRate / 0 rather than propagate forever.
     const safeCurrentRate = finiteOr(existingRate.rate, baseRate);
-    ratesByCurrency[currencyCode] = safeCurrentRate;
+    // Followers publish the anchor's rate below, so their stale pre-peg value
+    // must not sit in the shared EUR slot where a later country's
+    // intervention funding could price reserves off it.
+    if (!isEuroFollower) ratesByCurrency[currencyCode] = safeCurrentRate;
     const safeVolumes = {
       buyVolume24: finiteOr(currencyVolumes.buyVolume24, 0),
       sellVolume24: finiteOr(currencyVolumes.sellVolume24, 0),
@@ -251,7 +281,13 @@ export async function processForexTurn(
       cycleRegime = rollCyclePressureRegime();
       cycleUntil = currentTurn + CYCLE_PRESSURE_TURNS;
     }
-    const cyclePressure = hardPegActive ? 0 : CYCLE_PRESSURE_BY_REGIME[cycleRegime];
+    // The pegged rate this follower publishes, or null when it floats on its
+    // own anchor (non-euro worlds, and DE itself). Prefers the live DE result
+    // when DE already ran; otherwise the pre-loaded DE doc, so a missing DE
+    // bank still leaves followers pegged instead of silently floating.
+    const euroPegRate = isEuroFollower ? (euroAnchorRate ?? deDocRate) : null;
+    const cyclePressure =
+      hardPegActive || euroPegRate != null ? 0 : CYCLE_PRESSURE_BY_REGIME[cycleRegime];
 
     // Bretton Woods float (issue #7): once the stored regime leaves the peg,
     // participating currencies drift faster and their guardrail band widens
@@ -270,26 +306,37 @@ export async function processForexTurn(
         })
       : BW_PEGGED_BAND;
 
-    const update = hardPegActive
-      ? {
-          rate: peggedRate as number,
-          macroTarget: peggedRate as number,
-          volumePressure: 0,
-          cyclePressure: 0,
-        }
-      : computeRateUpdate(
-          safeCurrentRate,
-          baseRate,
-          countryId,
-          macro,
-          safeVolumes,
-          undefined,
-          volatilityMultiplier,
-          cyclePressure,
-          currentYear,
-          bwBand,
-          bwFloats ? BW_FLOATING_DRIFT_MULTIPLIER : 1
-        );
+    // A pegged follower publishes the anchor's rate and macro target with no
+    // independent drift, volume/cycle pressure, or intervention — its
+    // per-country bank never draws reserves for a rate it does not set.
+    const update =
+      euroPegRate != null
+        ? {
+            rate: euroPegRate,
+            macroTarget: euroAnchorMacroTarget ?? euroPegRate,
+            volumePressure: 0,
+            cyclePressure: 0,
+          }
+        : hardPegActive
+          ? {
+              rate: peggedRate as number,
+              macroTarget: peggedRate as number,
+              volumePressure: 0,
+              cyclePressure: 0,
+            }
+          : computeRateUpdate(
+              safeCurrentRate,
+              baseRate,
+              countryId,
+              macro,
+              safeVolumes,
+              undefined,
+              volatilityMultiplier,
+              cyclePressure,
+              currentYear,
+              bwBand,
+              bwFloats ? BW_FLOATING_DRIFT_MULTIPLIER : 1
+            );
 
     // Final sanity: if the pipeline still somehow produced NaN, fall back to the
     // current rate rather than write poison into history.
@@ -300,29 +347,39 @@ export async function processForexTurn(
     // Runs after macro/volume math, skipped under hardPeg. Synthetic volume is
     // blended into the shared volume-pressure channel so intervention obeys
     // the same ±5% cap as organic trades.
-    const interventionOutcome = hardPegActive
-      ? null
-      : await applyIntervention({
-          rate: update.rate,
-          macroTarget: update.macroTarget,
-          baseRate,
-          countryId,
-          currencyCode,
-          policy: existingRate.interventionPolicy ?? null,
-          bank,
-          rates: ratesByCurrency,
-          macro,
-          organicVolumes: safeVolumes,
-          currentTurn,
-          now,
-          volatilityMultiplier,
-          cyclePressure,
-          currentYear,
-        });
+    const interventionOutcome =
+      hardPegActive || euroPegRate != null
+        ? null
+        : await applyIntervention({
+            rate: update.rate,
+            macroTarget: update.macroTarget,
+            baseRate,
+            countryId,
+            currencyCode,
+            policy: existingRate.interventionPolicy ?? null,
+            bank,
+            rates: ratesByCurrency,
+            macro,
+            organicVolumes: safeVolumes,
+            currentTurn,
+            now,
+            volatilityMultiplier,
+            cyclePressure,
+            currentYear,
+          });
 
     if (interventionOutcome) {
       update.rate = interventionOutcome.rate;
       update.macroTarget = interventionOutcome.macroTarget;
+    }
+
+    // DE's published result is the peg every follower copies. Captured
+    // post-intervention so followers track the anchor's actual rate.
+    if (isEuroAnchor) {
+      euroAnchorRate = update.rate;
+      euroAnchorMacroTarget = update.macroTarget;
+    } else if (euroPegRate != null) {
+      ratesByCurrency.EUR = update.rate;
     }
 
     // Build history snapshot — prune to last FOREX_AND_MACRO_CHART_HISTORY_TURNS (5 in-game years)
@@ -345,6 +402,11 @@ export async function processForexTurn(
     const setFields: Record<string, unknown> = {
       rate: update.rate,
       macroTarget: update.macroTarget,
+      // Heal pre-fix rows that still carry a legacy code: the pegged rate is
+      // meaningless under FRF/ITL units. Same updateOne, no extra trip.
+      ...(isEuroFollower && existingRate.currencyCode !== "EUR"
+        ? { currencyCode: "EUR" as CurrencyCode }
+        : {}),
       rateHistory: updatedHistory,
       buyVolume24: currencyVolumes.buyVolume24,
       sellVolume24: currencyVolumes.sellVolume24,
