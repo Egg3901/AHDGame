@@ -84,6 +84,17 @@ export async function requireUserApiKey(
     return { ok: false as const, reason: "insufficient_scope" };
   }
 
+  // The key is only as live as the account behind it. Session auth denies
+  // banned users on every request; without this check a banned player's key
+  // kept working on the private-scope endpoints (transfers, forex) forever,
+  // since banning never touched this collection.
+  const owner = await db
+    .collection("users")
+    .findOne({ _id: keyDoc.userId }, { projection: { isBanned: 1 } });
+  if (!owner || owner.isBanned === true) {
+    return { ok: false as const, reason: "revoked" };
+  }
+
   // Update usage stats (background, don't await). The rejection is swallowed
   // like logApiAccess does: an instrumentation write must never become an
   // unhandledRejection, which the crash handler escalates to a process exit.
@@ -135,6 +146,11 @@ export async function validateUserApiKey(
   });
 
   if (!keyDoc || keyDoc.scope !== inferredScope) return { valid: false };
+
+  const owner = await db
+    .collection("users")
+    .findOne({ _id: keyDoc.userId }, { projection: { isBanned: 1 } });
+  if (!owner || owner.isBanned === true) return { valid: false };
 
   // Update usage stats (background, don't await). The rejection is swallowed
   // like logApiAccess does: an instrumentation write must never become an

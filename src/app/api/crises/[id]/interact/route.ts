@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
+import { parseJsonBody } from "@/lib/api/validate";
 import { handleRouteError } from "@/lib/api/errors";
 import {
   submitCrisisDecision,
@@ -11,6 +13,12 @@ import { isCrisisInteractionEnabled, isCrisisAidBillsEnabled } from "@/lib/crise
 import { submitCrisisAidPledge } from "@/lib/crises/aidPledge";
 import type { CountryId } from "@/lib/constants/countries";
 import { ObjectId } from "mongodb";
+
+const interactSchema = z.object({
+  optionId: z.string().optional(),
+  decline: z.boolean().optional(),
+  pctGdp: z.number().positive().optional(),
+});
 
 export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -29,8 +37,11 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
       return NextResponse.json({ error: "Invalid crisis interaction ID" }, { status: 400 });
     }
 
-    const body = await _req.json();
-    const { optionId } = body;
+    const parsed = await parseJsonBody(_req, interactSchema);
+    if (!parsed.success) {
+      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+    }
+    const { optionId, decline } = parsed.data;
 
     const db = await getDb();
     const character = user.character;
@@ -60,7 +71,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
         return NextResponse.json({ error: "Aid bills are not enabled" }, { status: 403 });
       }
       // Decline: advance via the normal engine path using the provided optionId.
-      if (body.decline === true) {
+      if (decline === true) {
         if (!optionId) {
           return NextResponse.json({ error: "optionId required to decline aid" }, { status: 400 });
         }
@@ -80,9 +91,10 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
           appliedEffects: declined.appliedEffects,
         });
       }
-      // Pledge: validate pctGdp and route to the aid-pledge command.
-      const pctGdp = Number(body.pctGdp);
-      if (!Number.isFinite(pctGdp) || pctGdp <= 0) {
+      // Pledge: route to the aid-pledge command (schema already enforces a
+      // positive finite number).
+      const pctGdp = parsed.data.pctGdp;
+      if (pctGdp == null) {
         return NextResponse.json({ error: "pctGdp required for aid pledge" }, { status: 400 });
       }
       const pledge = await submitCrisisAidPledge(db, {

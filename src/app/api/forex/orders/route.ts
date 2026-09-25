@@ -19,6 +19,7 @@ import {
   nonConvertibleTradeCurrency,
 } from "@/lib/constants/commandEconomy";
 import { runWithOptionalTransaction } from "@/lib/db/runWithOptionalTransaction";
+import { newCharacterTransferBarrierResponse } from "@/lib/api/newCharacterTransferBarrier";
 import type { CurrencyOrder, CurrencyOrderStatus, GameConfig, GameState } from "@/lib/db/types";
 import { recordAudit } from "@/lib/audit/recordAudit";
 
@@ -108,6 +109,11 @@ export async function POST(request: Request) {
 
     const { fromCurrency, toCurrency, amount, limitRate, direction, expiresInTurns } = parsed.data;
     const character = auth.user.character;
+
+    // A resting order is escrowed now and pays the filler later — the same
+    // disguised-transfer surface the barrier already covers on direct trades.
+    const barrier = await newCharacterTransferBarrierResponse(character);
+    if (barrier) return barrier;
 
     const db = await getDb();
     const gs = await db.collection<GameState>("gameState").findOne({ _id: "current" });

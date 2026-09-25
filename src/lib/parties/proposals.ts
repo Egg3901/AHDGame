@@ -812,9 +812,14 @@ async function markResolved(
   status: "passed" | "rejected",
   turn: number
 ): Promise<void> {
+  // The claim in attemptResolution is the real single-resolver guarantee; the
+  // status filter here keeps a stale resolver from overwriting a manual repair.
   await db
     .collection("committeeProposals")
-    .updateOne({ _id: id }, { $set: { status, resolvedAtTurn: turn, updatedAt: new Date() } });
+    .updateOne(
+      { _id: id, status: "open" },
+      { $set: { status, resolvedAtTurn: turn, updatedAt: new Date() } }
+    );
 }
 
 /**
@@ -858,11 +863,9 @@ export async function attemptResolution(
   const pNo = proposal.proposingVotes.filter((v) => v.vote === "no").length;
   const proposingOutcome = checkResolution(pYes, pNo, proposingSize, options);
 
-  if (proposal.type === "merge") {
-    if (proposingOutcome === "rejected") {
-      await markResolved(db, proposal._id, "rejected", currentTurn);
-      return;
-    }
+  // Decide the outcome on reads alone; nothing below writes until the claim.
+  let outcome: "passed" | "rejected" | "open" = proposingOutcome;
+  if (proposal.type === "merge" && proposingOutcome !== "rejected") {
     if (!proposal.merge) return;
 
     const targetParty = await db
@@ -878,32 +881,68 @@ export async function attemptResolution(
     const tNo = (proposal.targetVotes ?? []).filter((v) => v.vote === "no").length;
     const targetOutcome = checkResolution(tYes, tNo, targetSize, options);
 
-    if (targetOutcome === "rejected") {
-      await markResolved(db, proposal._id, "rejected", currentTurn);
-    } else if (proposingOutcome === "passed" && targetOutcome === "passed") {
-      await processMergeProposal(db, proposal, currentTurn);
-      await setProposalCooldown(db, proposal, currentTurn);
-      await markResolved(db, proposal._id, "passed", currentTurn);
-    }
-    // else: still open — both committees haven't reached threshold yet
-  } else {
-    if (proposingOutcome === "rejected") {
-      await markResolved(db, proposal._id, "rejected", currentTurn);
-    } else if (proposingOutcome === "passed") {
-      if (proposal.type === "rename") await applyRenameEffect(db, proposal);
-      if (proposal.type === "positionShift") await applyPositionShiftEffect(db, proposal);
-      if (proposal.type === "electionMethod") await applyElectionMethodEffect(db, proposal);
-      if (proposal.type === "electionDuration") await applyElectionDurationEffect(db, proposal);
-      if (proposal.type === "removeOfficeHolder") await applyRemoveOfficeHolderEffect(db, proposal);
-      if (proposal.type === "transactionApprovalMode") {
-        await applyTransactionApprovalModeEffect(db, proposal);
+    outcome =
+      targetOutcome === "rejected"
+        ? "rejected"
+        : proposingOutcome === "passed" && targetOutcome === "passed"
+          ? "passed"
+          : "open";
+    // still open — both committees haven't reached threshold yet
+  }
+  if (outcome === "open") return;
+
+  // Claim the resolution before any effect or status write. Concurrent votes
+  // (or a stuffed burst) can each compute a resolved outcome against the same
+  // open doc; without a claim every one of them applied the effects — a merge
+  // ran its treasury $inc once per resolver. The claim is deliberately never
+  // released: an effect that failed half-way must not be silently retried, so
+  // a claimed-but-open proposal stays open with resolutionError set for an
+  // operator to finish by hand.
+  const coll = db.collection<CommitteeProposal>("committeeProposals");
+  const claimed = await coll.updateOne(
+    {
+      _id: proposal._id,
+      status: "open",
+      resolutionInProgressAt: { $exists: false },
+    },
+    { $set: { resolutionInProgressAt: new Date(), updatedAt: new Date() } }
+  );
+  if (claimed.matchedCount === 0) return;
+
+  try {
+    if (outcome === "passed") {
+      if (proposal.type === "merge") {
+        await processMergeProposal(db, proposal, currentTurn);
+      } else {
+        if (proposal.type === "rename") await applyRenameEffect(db, proposal);
+        if (proposal.type === "positionShift") await applyPositionShiftEffect(db, proposal);
+        if (proposal.type === "electionMethod") await applyElectionMethodEffect(db, proposal);
+        if (proposal.type === "electionDuration") await applyElectionDurationEffect(db, proposal);
+        if (proposal.type === "removeOfficeHolder")
+          await applyRemoveOfficeHolderEffect(db, proposal);
+        if (proposal.type === "transactionApprovalMode") {
+          await applyTransactionApprovalModeEffect(db, proposal);
+        }
+        if (proposal.type === "campaignerAppointment") {
+          await applyCampaignerAppointmentEffect(db, proposal);
+        }
       }
-      if (proposal.type === "campaignerAppointment") {
-        await applyCampaignerAppointmentEffect(db, proposal);
-      }
       await setProposalCooldown(db, proposal, currentTurn);
-      await markResolved(db, proposal._id, "passed", currentTurn);
     }
+    await markResolved(db, proposal._id, outcome, currentTurn);
+  } catch (error) {
+    await coll
+      .updateOne(
+        { _id: proposal._id },
+        {
+          $set: {
+            resolutionError: error instanceof Error ? error.message : String(error),
+            updatedAt: new Date(),
+          },
+        }
+      )
+      .catch(() => {});
+    throw error;
   }
 }
 
@@ -927,20 +966,42 @@ export async function castVote(
   const now = new Date();
   const newVote: CommitteeProposalVote = { voterId, vote, votedAt: now };
 
-  // Remove any existing vote from this voter, then push the new one (two ops — acceptable for user-driven writes)
-  await db
-    .collection<CommitteeProposal>("committeeProposals")
-    .updateOne(
-      { _id: proposalId, status: "open" },
-      { $pull: { [voteArray]: { voterId } } as Record<string, unknown> }
-    );
-  await db.collection<CommitteeProposal>("committeeProposals").updateOne(
-    { _id: proposalId, status: "open" },
+  const coll = db.collection<CommitteeProposal>("committeeProposals");
+  // Two atomic writes, ordered so the "one entry per voter" invariant holds
+  // under every interleaving. The push only lands when the voter is absent from
+  // the array; if it did not match, the voter is already present (or the
+  // proposal closed) and the arrayFilters $set replaces their entry in place.
+  // The previous $pull-then-$push pair let concurrent votes from one voter
+  // append duplicates — resolution counts raw array entries, so a single
+  // committee member could cross the threshold alone.
+  const pushed = await coll.updateOne(
+    {
+      _id: proposalId,
+      status: "open",
+      [`${voteArray}.voterId`]: { $ne: voterId },
+    } as Record<string, unknown>,
     {
       $push: { [voteArray]: newVote } as Record<string, unknown>,
       $set: { updatedAt: now },
     }
   );
+  if (pushed.matchedCount === 0) {
+    await coll.updateOne(
+      {
+        _id: proposalId,
+        status: "open",
+        [`${voteArray}.voterId`]: voterId,
+      } as Record<string, unknown>,
+      {
+        $set: {
+          [`${voteArray}.$[elem].vote`]: vote,
+          [`${voteArray}.$[elem].votedAt`]: now,
+          updatedAt: now,
+        } as Record<string, unknown>,
+      },
+      { arrayFilters: [{ "elem.voterId": voterId }] }
+    );
+  }
 
   const updated = await db
     .collection<CommitteeProposal>("committeeProposals")

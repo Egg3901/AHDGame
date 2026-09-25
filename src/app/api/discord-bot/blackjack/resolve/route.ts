@@ -19,7 +19,9 @@ const resolveSchema = z.object({
   discordId: z.string().min(1, "discordId is required"),
   gameId: z.string().min(1, "gameId is required"),
   result: z.enum(["win", "loss", "push"]),
-  payoutMultiplier: z.number().positive().optional(),
+  // Bounded: an unbounded client multiplier could size a payout far beyond any
+  // legitimate blackjack table (10x already covers 3:2 naturals with headroom).
+  payoutMultiplier: z.number().positive().max(10).optional(),
 });
 
 // POST /api/discord-bot/blackjack/resolve — Resolves a pending blackjack wager.
@@ -110,30 +112,16 @@ export async function POST(request: Request) {
     let cashChange: number;
     let poolChange: number;
     let payout: number = 0;
+    let winnings = 0;
     const now = new Date();
 
     if (result === "win") {
       // Player wins: return wager + winnings reduced by house edge
       const grossWinnings = Math.floor(wagerAmount * payoutMultiplier);
-      const winnings = Math.floor(grossWinnings * (1 - HOUSE_EDGE));
+      winnings = Math.floor(grossWinnings * (1 - HOUSE_EDGE));
       payout = wagerAmount + winnings; // Return wager + net winnings
       cashChange = payout;
       poolChange = -winnings; // Pool only loses the net winnings, keeps the wager
-
-      // Safety check: ensure pool has enough funds in the player's home currency
-      const poolBalance = fund.currencyBalances?.[homeCurrency as CurrencyCode] ?? fund.balance;
-      if (poolBalance < winnings) {
-        return NextResponse.json(
-          {
-            error: "Prize pool insufficient",
-            message: "The prize pool doesn't have enough funds for this payout. Contact an admin.",
-            poolBalance,
-            requiredPayout: winnings,
-            currency: homeCurrency,
-          },
-          { status: 503 }
-        );
-      }
     } else if (result === "push") {
       // Push (tie): return wager only
       cashChange = wagerAmount;
@@ -183,39 +171,88 @@ export async function POST(request: Request) {
       }
     }
 
-    // Update character's cashOnHand and fund balance atomically
-    const updateResults = await Promise.all([
-      // Update character (add payout back to their cash)
-      db.collection<Character>("characters").updateOne(
+    const poolBalance = fund.currencyBalances?.[homeCurrency as CurrencyCode] ?? fund.balance;
+
+    if (result === "win" && winnings > 0) {
+      // The pool debit is atomic with its sufficiency check. The old code read
+      // the balance, compared in memory, then applied a blind $inc — two
+      // concurrent winning resolves both passed the read and drove the pool
+      // negative, paying out money the pool did not hold.
+      const poolFilter: Record<string, unknown> = { name: "blackjack_prize_pool" };
+      if (forexEnabled && fund.currencyBalances) {
+        poolFilter[`currencyBalances.${homeCurrency}`] = { $gte: winnings };
+      } else {
+        poolFilter.balance = { $gte: winnings };
+      }
+      const poolDebit = await db
+        .collection<DiscordBotFund>("discordBotFunds")
+        .updateOne(poolFilter, fundUpdate);
+      if (poolDebit.matchedCount === 0) {
+        return NextResponse.json(
+          {
+            error: "Prize pool insufficient",
+            message: "The prize pool doesn't have enough funds for this payout. Contact an admin.",
+            poolBalance,
+            requiredPayout: winnings,
+            currency: homeCurrency,
+          },
+          { status: 503 }
+        );
+      }
+
+      const charUpdate = await db.collection<Character>("characters").updateOne(
         { _id: characterId },
         {
           $inc: buildPersonalBalanceInc(cashChange, homeCurrency, forexEnabled),
           $set: { updatedAt: now },
         }
-      ),
-      // Update fund
-      db
-        .collection<DiscordBotFund>("discordBotFunds")
-        .updateOne({ name: "blackjack_prize_pool" }, fundUpdate),
-    ]);
-
-    // Verify updates succeeded
-    if (updateResults[0].matchedCount === 0) {
-      return NextResponse.json(
-        { error: "Failed to update character funds", discordId },
-        { status: 500 }
       );
-    }
+      if (charUpdate.matchedCount === 0) {
+        // Compensate the pool debit; a deleted character must not drain it.
+        const reverseInc = Object.fromEntries(
+          Object.entries(fundUpdate.$inc).map(([k, v]) => [k, -v])
+        );
+        await db
+          .collection<DiscordBotFund>("discordBotFunds")
+          .updateOne({ name: "blackjack_prize_pool" }, { $inc: reverseInc })
+          .catch(() => {});
+        return NextResponse.json(
+          { error: "Failed to update character funds", discordId },
+          { status: 500 }
+        );
+      }
+    } else {
+      // Loss/push only add to the pool (or leave it flat) — no sufficiency
+      // guard needed.
+      const updateResults = await Promise.all([
+        db.collection<Character>("characters").updateOne(
+          { _id: characterId },
+          {
+            $inc: buildPersonalBalanceInc(cashChange, homeCurrency, forexEnabled),
+            $set: { updatedAt: now },
+          }
+        ),
+        db
+          .collection<DiscordBotFund>("discordBotFunds")
+          .updateOne({ name: "blackjack_prize_pool" }, fundUpdate),
+      ]);
 
-    if (updateResults[1].matchedCount === 0) {
-      return NextResponse.json(
-        { error: "Failed to update prize pool", discordId },
-        { status: 500 }
-      );
+      if (updateResults[0].matchedCount === 0) {
+        return NextResponse.json(
+          { error: "Failed to update character funds", discordId },
+          { status: 500 }
+        );
+      }
+
+      if (updateResults[1].matchedCount === 0) {
+        return NextResponse.json(
+          { error: "Failed to update prize pool", discordId },
+          { status: 500 }
+        );
+      }
     }
 
     const newCash = currentCash + cashChange;
-    const poolBalance = fund.currencyBalances?.[homeCurrency as CurrencyCode] ?? fund.balance;
     const newPoolBalance = poolBalance + poolChange;
 
     return NextResponse.json({

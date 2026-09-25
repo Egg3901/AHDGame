@@ -18,6 +18,9 @@ import {
 import { getCountryForCurrency } from "@/lib/currency/marketMaker";
 import { DIRECT_TRADE_SPREAD } from "@/lib/constants/currencies";
 import { runWithOptionalTransaction } from "@/lib/db/runWithOptionalTransaction";
+import { SETTLED_KEYS_FIELD } from "@/lib/banking/moneyMove";
+import { documentHasStamp, settledKeyPush } from "@/lib/bonds/saleRecovery";
+import type { UpdateFilter } from "mongodb";
 import { getGameTime } from "@/lib/time/gameTime";
 import {
   getNewCharacterTransferBarrier,
@@ -111,10 +114,27 @@ export async function POST(request: Request, { params }: RouteParams) {
             );
           if (!claimedOrder) throw badRequest("Trade request is no longer open");
 
+          // The refund carries a settled-key stamp on the character doc so a
+          // later failure can tell "refund landed" from "refund did not land".
+          // That decides the recovery: a refunded order must never reopen (a
+          // retry would refund the escrow twice, or an accept would settle a
+          // trade against money the sender already has back), while an
+          // unrefunded order safely can.
+          const refundStamp = `direct-decline:${order._id.toString()}`;
           try {
-            await db
-              .collection("characters")
-              .updateOne({ _id: order.characterId }, { $inc: refundInc });
+            const refundResult = await db
+              .collection<Character>("characters")
+              .updateOne({ _id: order.characterId, [SETTLED_KEYS_FIELD]: { $ne: refundStamp } }, {
+                $inc: refundInc,
+                $push: settledKeyPush(refundStamp),
+              } as unknown as UpdateFilter<Character>);
+            if (
+              refundResult.matchedCount === 0 &&
+              !(await documentHasStamp(db, "characters", { _id: order.characterId }, refundStamp))
+            ) {
+              throw new Error("Escrow refund did not apply");
+            }
+
             const cancelResult = await db
               .collection<CurrencyOrder>("currencyOrders")
               .updateOne(
@@ -125,12 +145,21 @@ export async function POST(request: Request, { params }: RouteParams) {
               throw badRequest("Trade request is no longer open");
             }
           } catch (error) {
-            await db
-              .collection<CurrencyOrder>("currencyOrders")
-              .updateOne(
-                { _id: order._id, status: "processing" },
-                { $set: { status: "open", updatedAt: new Date() } }
-              );
+            const refundLanded = await documentHasStamp(
+              db,
+              "characters",
+              { _id: order.characterId },
+              refundStamp
+            );
+            await db.collection<CurrencyOrder>("currencyOrders").updateOne(
+              { _id: order._id, status: "processing" },
+              {
+                $set: {
+                  status: refundLanded ? "cancelled" : "open",
+                  updatedAt: new Date(),
+                },
+              }
+            );
             throw error;
           }
         }
