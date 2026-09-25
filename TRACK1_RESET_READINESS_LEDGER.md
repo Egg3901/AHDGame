@@ -35,7 +35,12 @@ The status/ID sweep index is registered in `317153a065`; its focused test
 passed, while a production-shaped explain plan is still owed. Keyed share-fill
 money and fair orphan recovery are in `539f0f8e13`/`fff64a7940`; the six
 small-spend route flows from source `9c93bf01a0` are in `5e6d1952d6` with
-30 adjacent focused tests passing.
+30 adjacent focused tests passing. Commits `ce54b2564b` and `da6e45ca65`
+repair same-key replay after persisted travel/action/pool/balance changes;
+the focused running-mate and travel suites passed 11/11. Commit `8f0f990820`
+adds keyed state-attack settlement and the canvass-spend library; 26 fault and
+retry tests plus 19 state-attack route tests passed. Canvassing route wiring,
+other source slices, and integrated gates are still open.
 Other money-flow consumers, integrated gates, and final campaign evidence
 remain open; the GitHub issue stays `status: partial`.
 

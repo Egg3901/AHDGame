@@ -849,6 +849,16 @@
           "type": "small_spend_route_checkpoint",
           "ref": "5e6d1952d6",
           "detail": "Ported the six unique keyed route flows from source 9c93bf01a0: party and regional-party donations, election travel, primary campaign, running-mate travel, and home-state surge. Kept Track1's newer primitive and receipt indexes. Nine running-mate route tests, including five fault/retry cases, and 30 adjacent route/primitive tests passed; scoped lint/format passed. Other source commits, integrated gates, and final replay remain pending."
+        },
+        {
+          "type": "small_spend_replay_regression",
+          "ref": "ce54b2564b,da6e45ca65",
+          "detail": "Moved completed-receipt replay ahead of post-success state/balance/action/pool preflights for six keyed donation/travel/surge routes. Running-mate and presidential travel regressions use depleted post-success state and same-key conflict; focused route suites passed 11/11 with scoped lint/format. Other route families and integrated gates remain open."
+        },
+        {
+          "type": "state_attack_canvass_checkpoint",
+          "ref": "8f0f990820",
+          "detail": "Ported keyed state-attack actions/funds spend and reusable canvass-spend library from source 593f247372. Fault/retry tests passed 26/26, existing state-attack routes 19/19, scoped lint/format passed. Canvassing route wiring and all remaining source slices are pending."
         }
       ],
       "blocked_by": [
