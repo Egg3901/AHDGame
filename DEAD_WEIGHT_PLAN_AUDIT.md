@@ -630,8 +630,11 @@ had already loaded candidate bonds by country. The share-buy and share-sell
 cores made another 242 and 270 `corporations.findOne` calls respectively.
 The bond sweep now passes its projected candidate to `nppBuyBond`; the core
 still obtains a live market-pool quote and retains the guarded NPP debit and
-bond reservation with refund on a failed reservation. A focused test verifies
-the omitted bond read and refund. A matched `processNppActions` replay at turn
+bond reservation with refund on a failed reservation. The reservation also
+checks the candidate's price, maturity, currency, country, issuer type, and
+default state, so a changed bond fails and refunds instead of trading on a
+stale snapshot. Focused tests verify the omitted bond read, refund, and guard
+on all reservation attempts. A matched `processNppActions` replay at turn
 1128 on two copies of the same local snapshot reduced commands from 7,279 to
 7,150 (129 fewer), returned documents from 22,970 to 22,841, and BSON bytes
 from 13,909,605 to 13,009,284. All reported action counters matched. Hashes

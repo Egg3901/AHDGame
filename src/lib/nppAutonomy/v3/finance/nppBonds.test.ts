@@ -115,6 +115,7 @@ describe("nppBuyBond", () => {
       publicFloat: 1000,
       maturityTurn: 100,
       currencyCode: "USD" as const,
+      defaulted: false,
     };
 
     const result = await nppBuyBond(db, npp, bondId, UNITS, 4, 1, snapshot);
@@ -122,6 +123,14 @@ describe("nppBuyBond", () => {
     expect(result.ok).toBe(false);
     expect(bondsFindOne).not.toHaveBeenCalled();
     expect(reserveBondUnitsForHolder).toHaveBeenCalledOnce();
+    expect(vi.mocked(reserveBondUnitsForHolder).mock.calls[0][5]).toMatchObject({
+      guardFilter: {
+        marketPrice: MARKET,
+        maturityTurn: 100,
+        currencyCode: "USD",
+        defaulted: false,
+      },
+    });
     expect(nppUpdateOne).toHaveBeenCalledWith(
       { _id: nppId },
       expect.objectContaining({ $inc: { nppInvestmentCashAnchor: EXPECTED_COST } })
