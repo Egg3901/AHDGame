@@ -845,3 +845,27 @@ merge-or-delete disposition is contingent on extracting and verifying every
 unique slice in Track 1; it is not safe to prune yet. Bond sale, forex turn
 fills, and queued fund redemptions have explicit superseding implementations
 recorded in that audit.
+
+**AHDGame `player-qol-round3-ci`: DELETE as superseded, 2026-09-25.** Its two
+commits implement #2046's UK PM Commons-seat repair, already closed by merged
+PR #2048 (`7b78045227`). The development implementation has the same
+eligibility guard plus a stronger sequential cabinet-clear path that avoids
+erasing office rows before restoration, and retains an NPP-seat regression
+missing from this source. Its checkout was clean and unlocked before ordinary
+`git worktree remove`; the branch ref remains for provenance.
+
+**AHDGame `player-qol-round3`: DISCARD uncommitted duplicate after review,
+2026-09-25.** This old zero-unique-commit checkout contains a 35-path draft of
+#2049's UK dual ministry work (26 modified and ten untracked source files).
+Merged PR #2068 (`2c421aa7f7`) closes #2049 with the
+full role-slot index, shared action pool, survivor lifecycle, distinct-person
+voting, migration, and 64 focused tests. Its 39-file reviewed merge replaces
+the draft's helper/migration/rules layout and adds vote, office, and turn
+coverage absent from the draft. The issue's complete contract is in
+development. Decision: discard the stale draft's tracked modifications and
+untracked source files, then remove its checkout normally after a fresh clean
+check. No unique branch commit is being deleted. This is a written discard
+decision for real uncommitted work, not a claim of byte identity. The exact ten
+untracked files were checked against an allowlist and deleted; the tracked
+draft was restored in this worktree only. A fresh status was clean before
+ordinary `git worktree remove`.
