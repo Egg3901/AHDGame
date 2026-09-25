@@ -1987,15 +1987,33 @@
       "requirement": "Turn processing time, BSON decoding volume, and per-phase round trips remain within budget (`src/simulation/engine/turnPhaseBudgets.ts`) on the release candidate under full qualification load.",
       "parent_checked": false,
       "status": "open",
-      "issue_refs": [],
+      "issue_refs": [
+        {
+          "repo": "Egg3901/AHDGame",
+          "number": 2271,
+          "state": "OPEN",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2271"
+        }
+      ],
       "evidence": [
         {
           "type": "tracker_checklist",
           "url": "https://github.com/Egg3901/AHDGame/issues/2159",
           "detail": "Unchecked in #2159"
+        },
+        {
+          "type": "merged_pr",
+          "url": "https://github.com/Egg3901/AHDGame/pull/2379",
+          "detail": "Expiry/config read reuse merged as 5c4552f4cb29b6d47917f9beaa6f99f3c9993b59; all hosted checks passed. Matched before/after bytes and round trips and full-load #2271 proof remain required."
         }
       ],
-      "blocked_by": [],
+      "blocked_by": [
+        {
+          "type": "issue",
+          "repo": "Egg3901/AHDGame",
+          "number": 2271
+        }
+      ],
       "final_validation": {
         "state": "pending",
         "evidence": []
