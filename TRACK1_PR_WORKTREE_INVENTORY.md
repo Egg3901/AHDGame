@@ -1107,3 +1107,12 @@ which would drag main ancestry into development. Keep these three clean
 checkouts until the ticket route decision and focused tests are complete;
 then remove each normally and retain branch refs for provenance. No player
 payload or credential was copied in this audit.
+
+**Fresh cross-repo PR check, 2026-09-25:** AHDGame, adhd-bot, and the
+legacy `a-house-divided` repo currently have no open PRs. Ops has #162
+(`feat/paseo-reliability`, conflicting with `main`, with test, CodeQL, and
+Semgrep failures) and draft #186 (credentials portal). #162's source remains
+locked by its active owner; neither checkout was touched. The disposition
+stays merge after its owner resolves conflicts and gates, or delete only
+with a documented supersession decision. #186 remains active draft work and
+requires its own complete gate before merge or an explicit abandon reason.
