@@ -589,3 +589,13 @@ PostHog/Sentry integration targeted at `main`; its worktree and the original
 main checkout are outside Track 1 editing ownership. Both new PRs require a
 final merge-or-delete disposition after their active owners finish and checks
 settle. No content from them is silently treated as already in this branch.
+
+**AHDGame PR #2382: MERGED into `development`, 2026-09-25.** All hosted
+checks were green on clean head `09095d53061c997fc445b1a180da69dc7ecf67f6`.
+The merge commit is `cc06acd25cf259f9f9ede8076ac57552867ebae8`.
+It contributes the scoped read-only API/MCP/CDN/key-introspection surface and
+bounded singleplayer CDN mirror without a production rollout. A contribution
+and evidence explanation was posted before merge. The `track3-integrations`
+checkout was clean, unlocked, and process-free at the removal check and was
+**DELETED** with ordinary `git worktree remove`. Its branch ref remains as
+provenance; no force removal or branch deletion was used.
