@@ -964,7 +964,14 @@
       "requirement": "Every enabled financial product works end to end through player UI, API, settlement, turn processing, accounting, and resulting read models. No enabled facade or knowingly broken product ships.",
       "parent_checked": false,
       "status": "open",
-      "issue_refs": [],
+      "issue_refs": [
+        {
+          "repo": "Egg3901/AHDGame",
+          "number": 2223,
+          "state": "OPEN",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2223"
+        }
+      ],
       "evidence": [
         {
           "type": "tracker_checklist",
@@ -972,7 +979,12 @@
           "detail": "Unchecked in #2159"
         }
       ],
-      "blocked_by": [],
+      "blocked_by": [
+        {
+          "type": "issue",
+          "detail": "#2223 must meet its own remaining acceptance criteria before this broad #2159 gate can pass"
+        }
+      ],
       "final_validation": {
         "state": "pending",
         "evidence": []
@@ -984,7 +996,14 @@
       "requirement": "There is zero unexplained money creation or destruction, stock-flow divergence, negative guarded balance, or unresolved settlement.",
       "parent_checked": false,
       "status": "open",
-      "issue_refs": [],
+      "issue_refs": [
+        {
+          "repo": "Egg3901/AHDGame",
+          "number": 2223,
+          "state": "OPEN",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2223"
+        }
+      ],
       "evidence": [
         {
           "type": "tracker_checklist",
@@ -992,7 +1011,12 @@
           "detail": "Unchecked in #2159"
         }
       ],
-      "blocked_by": [],
+      "blocked_by": [
+        {
+          "type": "issue",
+          "detail": "#2223 must meet its own remaining acceptance criteria before this broad #2159 gate can pass"
+        }
+      ],
       "final_validation": {
         "state": "pending",
         "evidence": []
@@ -1004,15 +1028,32 @@
       "requirement": "Treasury, debt, CPI/inflation, credit, employment, firm entry, market fill, securities liquidity, and bank solvency remain stable under the selected profile.",
       "parent_checked": false,
       "status": "open",
-      "issue_refs": [],
+      "issue_refs": [
+        {
+          "repo": "Egg3901/AHDGame",
+          "number": 2337,
+          "state": "OPEN",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2337"
+        }
+      ],
       "evidence": [
         {
           "type": "tracker_checklist",
           "url": "https://github.com/Egg3901/AHDGame/issues/2159",
           "detail": "Unchecked in #2159"
+        },
+        {
+          "type": "source_and_tests",
+          "ref": "417786c7d0bf4852b2b7c762df2efeae89b5ffbc",
+          "detail": "#2337 frequency audit and 1/12/48/240-turn calibration fixtures passed 77 focused tests; economic stability still requires final campaign evidence."
         }
       ],
-      "blocked_by": [],
+      "blocked_by": [
+        {
+          "type": "issue",
+          "detail": "#2337 must meet its own remaining acceptance criteria before this broad #2159 gate can pass"
+        }
+      ],
       "final_validation": {
         "state": "pending",
         "evidence": []
@@ -1781,15 +1822,32 @@
       "requirement": "A completed turn count is not accepted as a pass when telemetry is incomplete, stale, unattributed, collected from a different checkout, or known to mismeasure the subsystem.",
       "parent_checked": false,
       "status": "open",
-      "issue_refs": [],
+      "issue_refs": [
+        {
+          "repo": "Egg3901/AHDGame",
+          "number": 2078,
+          "state": "OPEN",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2078"
+        }
+      ],
       "evidence": [
         {
           "type": "tracker_checklist",
           "url": "https://github.com/Egg3901/AHDGame/issues/2159",
           "detail": "Unchecked in #2159"
+        },
+        {
+          "type": "source_and_tests",
+          "ref": "f605ec35bb",
+          "detail": "#2078 mirrored-transfer detector repair is already in development; 42 focused tests passed on Track 1. Corrected six-turn sandbox precision and scan duration remain pending."
         }
       ],
-      "blocked_by": [],
+      "blocked_by": [
+        {
+          "type": "issue",
+          "detail": "#2078 must meet its own remaining acceptance criteria before this broad #2159 gate can pass"
+        }
+      ],
       "final_validation": {
         "state": "pending",
         "evidence": []
