@@ -21,6 +21,7 @@ import { getMoneyFlowReceiptsCollection } from "@/lib/db/collections/moneyFlowRe
 import {
   claimMoneyFlowReceipt,
   makeLegStep,
+  MoneyFlowKeyConflictError,
   runMoneyFlowSteps,
   type MoneyFlowLegOutcome,
 } from "@/lib/db/nonAtomicMoneyFlow";
@@ -96,14 +97,6 @@ export async function POST(request: Request, { params }: RouteParams) {
     // Post-Phase-6: `amount`, character campaign balance, and party treasury
     // are ALL in the same local home currency (same country = same currency).
     // No FX conversion needed anywhere along this flow.
-    const balanceLocal = localCampaignBalance(character, forexEnabled);
-    if (amount > balanceLocal) {
-      return NextResponse.json(
-        { error: `Insufficient funds. Available: $${balanceLocal.toLocaleString()}` },
-        { status: 400 }
-      );
-    }
-
     const now = new Date();
     const campaignFundsField = forexEnabled ? "currencyBalances.campaign" : "funds";
 
@@ -120,6 +113,25 @@ export async function POST(request: Request, { params }: RouteParams) {
     const characters = db.collection<Character>("characters");
     const parties = db.collection<PoliticalParty>("politicalParties");
     const receipts = await getMoneyFlowReceiptsCollection(db);
+    const previousReceipt = headerKey ? await receipts.findOne({ _id: flowKey }) : null;
+    if (previousReceipt && previousReceipt.fingerprint !== fingerprint) {
+      throw new MoneyFlowKeyConflictError(flowKey);
+    }
+    if (previousReceipt?.status === "completed") {
+      return NextResponse.json({
+        success: true,
+        message: `Donated $${amount.toLocaleString()} to ${party.name}`,
+        amount,
+        duplicate: true,
+      });
+    }
+    const balanceLocal = localCampaignBalance(character, forexEnabled);
+    if (previousReceipt?.status !== "in_progress" && amount > balanceLocal) {
+      return NextResponse.json(
+        { error: `Insufficient funds. Available: $${balanceLocal.toLocaleString()}` },
+        { status: 400 }
+      );
+    }
     const mapDonationError = (index: number, outcome: MoneyFlowLegOutcome): Error => {
       if (index === 0) return new Error("PARTY_DONATION_FUNDS_CHANGED");
       if (outcome === "missing") return new Error("PARTY_DONATION_PARTY_MISSING");

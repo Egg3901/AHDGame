@@ -14,6 +14,7 @@ import {
   applyKeyedUpdate,
   claimMoneyFlowReceipt,
   makeLegStep,
+  MoneyFlowKeyConflictError,
   runMoneyFlowSteps,
   type MoneyFlowLegOutcome,
   type MoneyFlowStepRef,
@@ -115,29 +116,9 @@ export async function POST(request: Request, { params }: RouteParams) {
       );
     }
 
-    if (candidate.primaryCampaignState === stateId) {
-      return NextResponse.json(
-        { error: "You are already campaigning in this state" },
-        { status: 400 }
-      );
-    }
-
     // Action cost scales by target state's EV count (3-10 actions). EV counts
     // are preset-aware (1990 census for a 1991 game; 48-state map under 1953).
     const actionCost = getTravelActionCost(stateId, gameState?.preset);
-
-    const freshChar = await db
-      .collection<Character>("characters")
-      .findOne({ _id: character._id }, { projection: { actions: 1 } });
-
-    if (!freshChar || freshChar.actions < actionCost) {
-      return NextResponse.json(
-        {
-          error: `Not enough actions. Primary campaigning in ${stateId} costs ${actionCost} actions.`,
-        },
-        { status: 400 }
-      );
-    }
 
     const previousCampaignFilter = candidate.primaryCampaignState
       ? { primaryCampaignState: candidate.primaryCampaignState }
@@ -159,6 +140,39 @@ export async function POST(request: Request, { params }: RouteParams) {
     const characters = db.collection<Character>("characters");
     const candidates = db.collection<ElectionCandidate>("electionCandidates");
     const receipts = await getMoneyFlowReceiptsCollection(db);
+    const previousReceipt = headerKey ? await receipts.findOne({ _id: flowKey }) : null;
+    if (previousReceipt && previousReceipt.fingerprint !== fingerprint) {
+      throw new MoneyFlowKeyConflictError(flowKey);
+    }
+    if (previousReceipt?.status === "completed") {
+      return NextResponse.json({
+        success: true,
+        message: `Now campaigning in ${stateId} during the primary`,
+        primaryCampaignState: stateId,
+        actionsCost: actionCost,
+        duplicate: true,
+      });
+    }
+    const recovering = previousReceipt?.status === "in_progress";
+    if (!recovering && candidate.primaryCampaignState === stateId) {
+      return NextResponse.json(
+        { error: "You are already campaigning in this state" },
+        { status: 400 }
+      );
+    }
+    if (!recovering) {
+      const freshChar = await db
+        .collection<Character>("characters")
+        .findOne({ _id: character._id }, { projection: { actions: 1 } });
+      if (!freshChar || freshChar.actions < actionCost) {
+        return NextResponse.json(
+          {
+            error: `Not enough actions. Primary campaigning in ${stateId} costs ${actionCost} actions.`,
+          },
+          { status: 400 }
+        );
+      }
+    }
     const mapCampaignError = (step: MoneyFlowStepRef, outcome: MoneyFlowLegOutcome): Error => {
       if (step.index === 0) return new Error("INSUFFICIENT_ACTIONS");
       if (outcome === "missing") return new Error("TRAVEL_CONFLICT");

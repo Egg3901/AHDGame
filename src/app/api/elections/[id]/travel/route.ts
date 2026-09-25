@@ -14,6 +14,7 @@ import {
   applyKeyedUpdate,
   claimMoneyFlowReceipt,
   makeLegStep,
+  MoneyFlowKeyConflictError,
   runMoneyFlowSteps,
   type MoneyFlowLegOutcome,
   type MoneyFlowStepRef,
@@ -102,30 +103,11 @@ export async function POST(request: Request, { params }: RouteParams) {
       );
     }
 
-    if (candidate.travelState === stateId) {
-      return NextResponse.json(
-        { error: "You are already campaigning in this state" },
-        { status: 400 }
-      );
-    }
-
     // Cost scales with the target state's electoral-vote count — small states
     // (3-5 EV) cost 3 actions, huge states (>20 EV) cost 10. Mirrors real campaign
     // resource tradeoffs: Wyoming is cheap, California is expensive. EV counts are
     // preset-aware (1990 census for a 1991 game; 48-state map under 1953).
     const actionCost = getTravelActionCost(stateId, gameState?.preset);
-
-    // Read fresh character for current actions
-    const freshChar = await db
-      .collection<Character>("characters")
-      .findOne({ _id: character._id }, { projection: { actions: 1 } });
-
-    if (!freshChar || freshChar.actions < actionCost) {
-      return NextResponse.json(
-        { error: `Not enough actions. Travel to ${stateId} costs ${actionCost} actions.` },
-        { status: 400 }
-      );
-    }
 
     const now = new Date();
     const previousTravelFilter = candidate.travelState
@@ -145,6 +127,37 @@ export async function POST(request: Request, { params }: RouteParams) {
     const characters = db.collection<Character>("characters");
     const candidates = db.collection<ElectionCandidate>("electionCandidates");
     const receipts = await getMoneyFlowReceiptsCollection(db);
+    const previousReceipt = headerKey ? await receipts.findOne({ _id: flowKey }) : null;
+    if (previousReceipt && previousReceipt.fingerprint !== fingerprint) {
+      throw new MoneyFlowKeyConflictError(flowKey);
+    }
+    if (previousReceipt?.status === "completed") {
+      return NextResponse.json({
+        success: true,
+        message: `Now campaigning in ${stateId}`,
+        travelState: stateId,
+        actionsCost: actionCost,
+        duplicate: true,
+      });
+    }
+    const recovering = previousReceipt?.status === "in_progress";
+    if (!recovering && candidate.travelState === stateId) {
+      return NextResponse.json(
+        { error: "You are already campaigning in this state" },
+        { status: 400 }
+      );
+    }
+    if (!recovering) {
+      const freshChar = await db
+        .collection<Character>("characters")
+        .findOne({ _id: character._id }, { projection: { actions: 1 } });
+      if (!freshChar || freshChar.actions < actionCost) {
+        return NextResponse.json(
+          { error: `Not enough actions. Travel to ${stateId} costs ${actionCost} actions.` },
+          { status: 400 }
+        );
+      }
+    }
     const mapTravelError = (step: MoneyFlowStepRef, outcome: MoneyFlowLegOutcome): Error => {
       if (step.index === 0) return new Error("INSUFFICIENT_ACTIONS");
       if (outcome === "missing") return new Error("TRAVEL_CONFLICT");
