@@ -5,6 +5,7 @@ import { CDN_HERO_LINCOLN_URL, CDN_LOGIN_IMAGES, CDN_LOGO_URL } from "@/lib/imag
 import { buildCdnCatalog } from "./cdn";
 
 describe("buildCdnCatalog", () => {
+  const configured = (url: string) => url.replace("https://cdn.ahousedividedgame.com", CDN_BASE);
   it("reports the configured CDN base and the static URL pattern", () => {
     const catalog = buildCdnCatalog();
 
@@ -44,16 +45,23 @@ describe("buildCdnCatalog", () => {
 
     expect(actionCards.slugs).toEqual(ACTION_IMAGE_SLUGS);
     expect(Object.keys(actionCards.urls).sort()).toEqual([...ACTION_IMAGE_SLUGS].sort());
+    for (const url of Object.values(actionCards.urls)) {
+      expect(url.startsWith(`${CDN_BASE}/`)).toBe(true);
+    }
     expect(actionCards.eraGenericSets).toContain("1953");
     expect(actionCards.countryArt["1953"]).toContain("US");
   });
 
-  it("resolves curated assets to absolute URLs", () => {
+  it("resolves curated assets against the configured CDN base", () => {
     const { assets } = buildCdnCatalog();
 
-    expect(assets.logo).toBe(CDN_LOGO_URL);
-    expect(assets.heroFallback).toBe(CDN_HERO_LINCOLN_URL);
-    expect(assets.loginHeroByEra).toEqual(CDN_LOGIN_IMAGES);
+    expect(assets.logo).toBe(configured(CDN_LOGO_URL));
+    expect(assets.heroFallback).toBe(configured(CDN_HERO_LINCOLN_URL));
+    expect(assets.loginHeroByEra).toEqual(
+      Object.fromEntries(
+        Object.entries(CDN_LOGIN_IMAGES).map(([era, url]) => [era, configured(url)])
+      )
+    );
     expect(assets.geoJson).toEqual(CDN_GEO);
     for (const url of [
       assets.logo,
@@ -63,7 +71,7 @@ describe("buildCdnCatalog", () => {
       ...Object.values(assets.geoJson),
       ...Object.values(assets.loginHeroByEra),
     ]) {
-      expect(url).toMatch(/^https:\/\//);
+      expect(url.startsWith(`${CDN_BASE}/`)).toBe(true);
     }
   });
 });

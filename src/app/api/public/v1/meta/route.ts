@@ -3,6 +3,7 @@ import { handleRouteError } from "@/lib/api/errors";
 import { ENDPOINTS } from "@/lib/publicApi/catalog";
 import { publicApiGuard } from "@/lib/publicApi/middleware";
 import { publicApiMaxRequests } from "@/lib/publicApi/tierLimits";
+import { CDN_BASE } from "@/lib/images/cdnUrls";
 
 export { ENDPOINTS } from "@/lib/publicApi/catalog";
 
@@ -30,7 +31,7 @@ export async function GET(request: Request) {
             access: "read-only public v1 endpoints and own-key capabilities",
           },
           cdn: {
-            staticBaseUrl: "https://cdn.ahousedividedgame.com/static/",
+            staticBaseUrl: `${CDN_BASE}/static/`,
             authentication: "none",
           },
         },

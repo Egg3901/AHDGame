@@ -67,6 +67,20 @@ function fileSlug(url: string): string {
   return url.slice(url.lastIndexOf("/") + 1).replace(/\.[a-z0-9]+$/i, "");
 }
 
+const PRODUCTION_CDN_BASE = "https://cdn.ahousedividedgame.com";
+
+function configuredAssetUrl(url: string): string {
+  return url.startsWith(`${PRODUCTION_CDN_BASE}/`)
+    ? `${CDN_BASE}${url.slice(PRODUCTION_CDN_BASE.length)}`
+    : url;
+}
+
+function configuredAssetMap(assets: Record<string, string>): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(assets).map(([name, url]) => [name, configuredAssetUrl(url)])
+  );
+}
+
 export function buildCdnCatalog(): PublicCdnCatalog {
   const staticBase = `${CDN_BASE}/static`;
 
@@ -190,11 +204,11 @@ export function buildCdnCatalog(): PublicCdnCatalog {
       },
     ],
     assets: {
-      logo: CDN_LOGO_URL,
-      heroFallback: CDN_HERO_LINCOLN_URL,
-      loginHeroByEra: { ...CDN_LOGIN_IMAGES },
+      logo: configuredAssetUrl(CDN_LOGO_URL),
+      heroFallback: configuredAssetUrl(CDN_HERO_LINCOLN_URL),
+      loginHeroByEra: configuredAssetMap(CDN_LOGIN_IMAGES),
       actionCards: {
-        urls: { ...CDN_ACTION_IMAGE_URLS },
+        urls: configuredAssetMap(CDN_ACTION_IMAGE_URLS),
         slugs: ACTION_IMAGE_SLUGS,
         eraGenericSets: erasWithGenericSet(),
         countryArt: Object.fromEntries(
@@ -202,8 +216,8 @@ export function buildCdnCatalog(): PublicCdnCatalog {
         ),
       },
       geoJson: { ...CDN_GEO },
-      scotusBuilding: SCOTUS_HERO_IMAGE_URL,
-      techTierPlaceholder: TECH_PLACEHOLDER_IMAGE,
+      scotusBuilding: configuredAssetUrl(SCOTUS_HERO_IMAGE_URL),
+      techTierPlaceholder: configuredAssetUrl(TECH_PLACEHOLDER_IMAGE),
     },
   };
 }

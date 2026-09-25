@@ -8,6 +8,7 @@ vi.mock("@/lib/api/errors", () => ({ handleRouteError: vi.fn() }));
 import { ENDPOINTS } from "./route";
 import { GET } from "./route";
 import { publicApiGuard } from "@/lib/publicApi/middleware";
+import { CDN_BASE } from "@/lib/images/cdnUrls";
 
 function routeFiles(directory: string): string[] {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
@@ -26,7 +27,7 @@ describe("public v1 endpoint catalog", () => {
       credentialEnv: "AHD_API_KEY",
       access: "read-only public v1 endpoints and own-key capabilities",
     });
-    expect(body.integrations.cdn.staticBaseUrl).toBe("https://cdn.ahousedividedgame.com/static/");
+    expect(body.integrations.cdn.staticBaseUrl).toBe(`${CDN_BASE}/static/`);
   });
   it("matches every implemented route exactly", () => {
     const root = join(process.cwd(), "src", "app", "api", "public", "v1");
