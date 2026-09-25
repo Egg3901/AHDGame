@@ -1087,3 +1087,23 @@ passed. The source checkout was rechecked clean, unlocked, and process-free;
 it was removed with ordinary `git worktree remove` (exit 0), retaining its
 branch ref. The full
 integrated build and matched turn-profile gate remain open.
+
+**Production promotion source audit, 2026-09-25:** A read-only Muse Spark 1.3
+patch/file comparison covered `issue-1343-production` (`fed22f9d6c`),
+`ahd-ipo-production` (`efa9450ae5`), and
+`ahd-regional-bill-production` (`5d33de0bc3`). All three are clean and
+unlocked. The source branches carry old main ancestry; their `git cherry`
+plus counts overstate unique feature content. Current development already
+contains equivalent lifecycle events, savings-withdrawal repair, party-tier,
+regional-bill replay, and IPO-reversal/serialization fixes. Track 1 also
+contains the stronger Railway cache-mount repair (`48beb50c96`) and the
+five #2356 fund-performance commits recorded above. The old OpenReplay
+session-replay patches are superseded by merged #2380 PostHog/Sentry work.
+The remaining ticket receipt route changes from production commits
+`eb1345194c`, `31d1cd64e4`, and `f8d08e65b9` are not in development; they
+need selective integration or an explicit superseding proof from the active
+locked dual-delivery work. Do not merge the production branches wholesale,
+which would drag main ancestry into development. Keep these three clean
+checkouts until the ticket route decision and focused tests are complete;
+then remove each normally and retain branch refs for provenance. No player
+payload or credential was copied in this audit.
