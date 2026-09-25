@@ -452,10 +452,10 @@ release. Its uncommitted contents, branch, and worktree remain untouched.
 `worldsim-readiness-20260922` tree had no process in its checkout and no file
 edits in the preceding three hours. Its 65 modified and 93 untracked files
 passed `git diff --check`; no credential-like filenames were staged. They were
-committed in that tree as `5f79f80aa0e097bf181bcefbc805422d5f5331b7`
+committed in that tree as `afcb2681a6cd6366fb107d720cba9e31d64d214f`
 (`chore: preserve reset readiness seed and sim work`). ESLint and Prettier
 completed on all 158 staged files in the precommit hook; commitlint checked
-the final conventional title separately. The tree is now clean. This is a
+the final conventional title separately. The tree is now clean. The checkpoint was amended before push to remove a literal local connection string from its handoff note. This is a
 **commit** decision for real source work, not a merge or validation claim:
 its branch remains active-feature until the patch is reviewed, tested, and
 merged into Track 1/development, then the checkout can be removed normally.
