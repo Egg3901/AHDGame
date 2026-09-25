@@ -525,6 +525,21 @@ gate but remains a larger conflicting delivery branch; #167 is retained as
 the small production-safety unit until one lands. The Ops open set is now
 #186 (renamed to the credentials portal), #168, #167, #162, and #137.
 
+**Ops PR #168: REBASED and focused-tested, still OPEN.** Its clean, unlocked
+checkout had no owner process. A Muse Spark 1.3 contributor resolved the
+in-progress rebase onto Ops `main` `57e2b29`, preserving the newer main
+support/ticket pages plus the PR's receipt delivery, separate channel/DM
+markers, and warm-dashboard behavior. The rebased head
+`8c53bc65fdee1695d80c0c6b57084fd88cdc25ab` was pushed with an explicit
+lease against old head `28f4606c88b99359b4ebc496e9233c9e56fa7dae`.
+Focused syntax, diff, and 72 tests passed. Its full tracked suite is queued
+as `20260925T015507Z-0e175e70`; hosted checks are still subject to the
+account billing/spending gate. The clean worktree was moved, not duplicated,
+from `/root/worktrees/ops-restore-ticket-receipts` to
+`/root/projects/LSGD-ops-dash/worktrees/ops-restore-ticket-receipts` so the
+shared check scheduler can run there. This is a needed merge candidate, not
+a completed merge. A progress comment records the remaining gates on the PR.
+
 The remaining rows above require final decisions and execution; this document
 does not mark them complete.
 
