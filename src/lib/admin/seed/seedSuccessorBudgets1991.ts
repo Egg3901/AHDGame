@@ -1,11 +1,14 @@
 import type { Db } from "mongodb";
 import type { State } from "@/lib/db/types";
 import type { FederalBudget, StateBudget } from "@/lib/db/types/budget";
+import type { GameConfig } from "@/lib/db/types/gameConfig";
 import type { CountryId } from "@/lib/constants/countries";
 import {
+  generateCountryOwnedSeedData,
   generateStateBudgets,
   getInitialNationalBudgetsForPreset,
 } from "@/lib/seeds/reference/budgets";
+import { upsertCountryOwnedCorpEntries } from "./upsertCountryOwnedCorps";
 
 const COUNTRY_IDS = [
   "RU",
@@ -65,5 +68,34 @@ export async function seedSuccessorBudgets1991(
       updateOne: { filter: { _id }, update: { $set: budget }, upsert: true },
     }))
   );
+  // RU ownership (issue #2316): seedRuBudgets returns on 1991, so without
+  // this RU gets budgets but no owned producing SOEs. Reuse the RU
+  // generateCountryOwnedSeedData + upsertCountryOwnedCorpEntries path,
+  // limited to RU states and gated on gameConfig.commandEconomyEnabled,
+  // exactly like the RU seeder. Upserts only, so repeat seeding is stable.
+  const gameConfig = await db
+    .collection<GameConfig>("gameConfig")
+    .findOne({ _id: "default" }, { projection: { commandEconomyEnabled: 1 } });
+  const commandEconomyEnabled = gameConfig?.commandEconomyEnabled === true;
+  const ruStatesForCorps = regions
+    .filter((region) => region.countryId === "RU")
+    .map((region) => ({
+      id: region._id,
+      population: region.population,
+      gdp: region.gdp,
+      countryId: region.countryId,
+    }));
+  const ruCorpData = generateCountryOwnedSeedData(
+    ruStatesForCorps,
+    preset,
+    commandEconomyEnabled,
+    log
+  ).filter((entry) => entry.corporation.countryOwnerId === "RU");
+  await upsertCountryOwnedCorpEntries(db, "RU", ruCorpData);
+  const ruSectorCount = ruCorpData.reduce((n, e) => n + e.sectors.length, 0);
+  if (ruCorpData.length > 0)
+    log(
+      `Seeded ${ruCorpData.length} RU state enterprise(s) with ${ruSectorCount} owned producing sector(s)`
+    );
   log(`Seeded ${budgets.length} transition national and ${stateBudgets.length} regional budgets`);
 }
