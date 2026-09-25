@@ -282,31 +282,6 @@ describe("refreshEquityLiquidityFacility", () => {
     expect(ledgerMocks.emitTxBulk.mock.calls[0][1]).toHaveLength(1);
   });
 
-    orderMocks.placeFundShareSellOrder.mockResolvedValue({ ok: true, orderId: new ObjectId() });
-
-    await refreshEquityLiquidityFacility({
-      db,
-      turn: 58,
-      enabled: true,
-      funds: [provider],
-      listings: [listing(corporationId)],
-      totalListings: 10,
-    });
-
-    expect(ledgerMocks.loadTxThresholds).toHaveBeenCalledTimes(1);
-    expect(cadenceMocks.loadTurnLengthMinutes).toHaveBeenCalledTimes(1);
-    expect(orderMocks.cancelFundShareOrder).toHaveBeenCalledWith(
-      db,
-      priorOrderId,
-      58,
-      expect.objectContaining({ thresholds, turnLengthMinutes: 60, fund: provider })
-    );
-    expect(orderMocks.placeFundShareBuyOrder).toHaveBeenCalledWith(
-      db,
-      expect.objectContaining({ thresholds, turnLengthMinutes: 60, ledgerSink: expect.any(Array) })
-    );
-  });
-
   it("batches completed bid escrow rows for each fund", async () => {
     const bidCorporationId = new ObjectId();
     const bidProvider = fund([bidCorporationId]);
