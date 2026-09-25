@@ -829,6 +829,11 @@
           "type": "share_fill_audit_checkpoint",
           "ref": "325854f8c4,fdc2c6285b,e0657502a4,a1ecae6951",
           "detail": "Extracted the #1672 source share-fill audit plan, conditional order claim, keyed convergent audit rows, and a once-per-turn bounded orphan scan. The Muse Spark 1.3 focused share suites passed 45/45 before the latest development merge; the ported crash/recovery module passed 38/38. This is audit infrastructure only: keyed money settlement, matcher, cancel refunds, remaining flow families, integrated typecheck, performance profile, and final validation are still open."
+        },
+        {
+          "type": "share_fill_recovery_turn_budget_repair",
+          "ref": "5a1cd3daf5,ac21ae83e3,e0cd159fe4,b68461e8bb",
+          "detail": "Moved the receipt orphan scan out of processTurn to a separate bounded cron pass and a post-turn singleplayer pass. Added batched order reads, per-client/database keyset rotation, reserved phase capacity, a five-minute in-flight age grace, and a duplicate-visit guard at wrap-around. Focused audit suite passed 52/52, plus scoped lint/format; earlier cron and route suites passed with an increased timeout on the shared box. This supersedes the once-per-turn scan in the prior checkpoint. Owed: integrated verify/build, matched query and turn round-trip evidence, remaining #1672 money-flow consumers, and the final validation gate."
         }
       ],
       "blocked_by": [

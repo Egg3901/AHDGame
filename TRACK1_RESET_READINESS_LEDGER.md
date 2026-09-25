@@ -17,6 +17,13 @@ source monitoring, and rollback/rebaseline trigger. This decision clears the
 external publication gate; 2027 implementation and final evidence remain
 open, and the selected reset stays 1991.
 
+RR-014 (#1672) records the extracted money-flow primitive, transfer and
+share-fill audit checkpoints, and the later recovery-turn-budget repair.
+The receipt orphan sweep now runs outside `processTurn` with a bounded
+keyset scan, an in-flight age grace, and separate cron/singleplayer drivers.
+Other money-flow consumers, integrated gates, and final campaign evidence
+remain open; the GitHub issue stays `status: partial`.
+
 | Ledger state                                | Count | Meaning                                                                               |
 | ------------------------------------------- | ----: | ------------------------------------------------------------------------------------- |
 | `open`                                      |    69 | Unchecked parent item; no passing release evidence recorded                           |
