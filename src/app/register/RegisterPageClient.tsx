@@ -188,7 +188,7 @@ export default function RegisterPageClient({ heroImageUrl }: { heroImageUrl?: st
         throw new Error(registerData.error || t("errors.registrationFailed"));
       }
 
-      await import("@/lib/analytics/posthogClient")
+      await import("@/lib/analytics/capture")
         .then(({ rememberAccountCreated }) => rememberAccountCreated())
         .catch(() => {});
 

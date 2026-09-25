@@ -429,7 +429,7 @@ export default function CreateCharacterPage() {
       if (!characterRes.ok) {
         throw new Error(characterData.error || "Failed to create character");
       }
-      await import("@/lib/analytics/posthogClient")
+      await import("@/lib/analytics/capture")
         .then(({ rememberNewCharacter }) => {
           if (
             typeof characterData.characterId === "string" &&

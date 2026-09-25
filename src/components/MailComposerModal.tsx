@@ -153,7 +153,7 @@ export function MailComposerModal({ mode, onClose }: MailComposerModalProps) {
 
       dispatch({ type: "SUBMIT_SUCCESS" });
       if (mode.type === "mail") {
-        void import("@/lib/analytics/posthogClient")
+        void import("@/lib/analytics/capture")
           .then(({ captureProductEvent }) => captureProductEvent("message_sent"))
           .catch(() => {});
       }

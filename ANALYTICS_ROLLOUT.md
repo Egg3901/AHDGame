@@ -15,6 +15,33 @@ Sentry SaaS in the `lakeside-games` US organization is the production error dest
 - Keep PostHog error tracking disabled, then configure failed-turn, crash, and sustained API-failure alerts in Sentry after staging verification.
 - Confirm the Ops Credentials portal save failure is tracked separately; it did not block the direct Railway key entry.
 
+## Two destinations behind one wrapper
+
+Product events fan out from a single choke point, `captureProductEvent` in
+`src/lib/analytics/capture.ts`. No call site knows or cares which destinations
+are live, so instrumentation is written once:
+
+- **PostHog** (`src/lib/analytics/posthogClient.ts`) — breadth. Session replay,
+  feature flags, experiments, surveys, error tracking. The daily driver.
+- **Amplitude** (`src/lib/analytics/amplitudeClient.ts`) — depth. Retention
+  curves, behavioural cohorts and funnel decomposition. Opened when there is a
+  hard retention question.
+
+Both are consent-gated. Withdrawing consent stops both, not just PostHog. A
+destination whose key is absent is a silent no-op, so either tool can be
+provisioned independently without suppressing the other, and the fan-out uses
+`Promise.allSettled` so one destination failing never suppresses the other.
+
+Both keys are public project keys supplied as deployment settings, never
+committed or pasted into chat:
+
+- `NEXT_PUBLIC_POSTHOG_KEY` — **present in AHD Production**, added 2026-09-25.
+- `NEXT_PUBLIC_AMPLITUDE_API_KEY` — **not yet provisioned.** Amplitude needs a
+  project created and this key set before it receives anything.
+
+Do not double-instrument: every event in the table below already goes to every
+configured destination.
+
 ## Current repository integration
 
 PostHog loads only on the hosted multiplayer site after the existing optional analytics consent is accepted. Rejecting or resetting consent opts out and clears the PostHog identity. The Google consent message on ad content does not itself grant PostHog consent; those pages remain untracked unless the AHD analytics choice was accepted elsewhere.
