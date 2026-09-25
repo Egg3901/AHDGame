@@ -33,7 +33,8 @@ async function handleGET(request: Request) {
       );
     }
 
-    const rateLimit = checkRateLimit(apiAuth.ownerUserId, 30, 60_000);
+    // Keep introspection separate from the owner's transfer and forex quotas.
+    const rateLimit = checkRateLimit(`api-key-introspection:${apiAuth.keyId}`, 30, 60_000);
     if (!rateLimit.ok) return rateLimitResponse(rateLimit.retryAfter);
 
     // Re-read the caller's own key document for display metadata. Explicit

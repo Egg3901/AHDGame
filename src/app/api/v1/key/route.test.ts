@@ -105,6 +105,8 @@ describe("GET /api/v1/key", () => {
     });
     expect(body.ownerUserId).toBe(OWNER_ID.toString());
     expect(body.allowedOperations).toEqual(["read"]);
+    const { checkRateLimit } = await import("@/lib/api/rateLimit");
+    expect(checkRateLimit).toHaveBeenCalledWith(`api-key-introspection:${KEY_ID}`, 30, 60_000);
     // The lookup must be scoped to the caller's own key id.
     expect(findOne).toHaveBeenCalledWith(
       { _id: KEY_ID, revokedAt: null },
