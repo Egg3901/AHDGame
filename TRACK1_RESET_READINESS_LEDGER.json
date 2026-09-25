@@ -633,6 +633,11 @@
           "type": "issue_state",
           "url": "https://github.com/Egg3901/AHDGame/issues/968",
           "detail": "OPEN"
+        },
+        {
+          "type": "partial_source_and_tests",
+          "ref": "60abe0511f,f958dc75bc,7a1dd68c33",
+          "detail": "Extracted the observation-only corporate no-holder rolling-median alert from the old Muse branch and surfaced it in the admin vital-signs response and deterministic economic experiment report without an extra DB query. The median computation and its tests were already on development; duplicate cherry-picked tests were reverted in c1bded4388. Focused vital-sign/alert suites passed 52/52, admin route 5/5, scoped lint/format and diff check passed. #968's broader P0-P7 market-access, intervention, and stress-test gates remain open."
         }
       ],
       "blocked_by": [

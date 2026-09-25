@@ -809,3 +809,18 @@ extraction was reverted as `0108ff94f2`; its Muse follow-up was stopped
 before any new source edits. This is a disposition for the bond-sale slice,
 not for the still-active 55-commit source checkout: other unique flow
 families there still need individual accounting.
+
+**AHDGame `muse-968-consumer-alert`: MERGED useful slice, checkout removed,
+2026-09-25.** Development already carried the corporate no-holder median
+calculation. Source commit `aaa733686e` cherry-picked only duplicate median
+tests, so that redundant cherry-pick was reverted as `c1bded4388`. Its two
+alert-rule commits landed in Track 1 as `60abe0511f` and `f958dc75bc`, and
+`7a1dd68c33` connected the alert to the admin snapshot API and deterministic
+economic report. Focused tests and scoped lint/format passed. The source
+checkout was clean, unlocked and process-free at removal, and ordinary
+`git worktree remove` succeeded. The branch ref remains as provenance.
+
+**AHDGame promotion #2384: MERGED, 2026-09-25.** The `staging` to `main`
+promotion merged as `d24b542a7c35ea3e9cdd337f82fda885be91c216` after
+#2389 and #2390. #2388's owner retargeted its still-draft dedicated-worker
+PR from `main` to `development`; its final disposition remains outstanding.
