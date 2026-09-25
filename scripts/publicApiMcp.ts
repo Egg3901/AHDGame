@@ -4,6 +4,15 @@ import { ENDPOINTS, type PublicEndpointDefinition } from "../src/lib/publicApi/c
 
 const MAX_RESPONSE_BYTES = 2_000_000;
 const TIMEOUT_MS = 15_000;
+
+/**
+ * MCP spec revisions this bridge speaks. Only the stable lifecycle, ping, and
+ * tools methods are implemented, which behave identically across these.
+ */
+const SUPPORTED_PROTOCOL_VERSIONS = ["2024-11-05", "2025-03-26", "2025-06-18"] as const;
+const DEFAULT_PROTOCOL_VERSION =
+  SUPPORTED_PROTOCOL_VERSIONS[SUPPORTED_PROTOCOL_VERSIONS.length - 1];
+
 const KEY_ENDPOINT: PublicEndpointDefinition = {
   method: "GET",
   path: "/api/v1/key",
@@ -28,11 +37,14 @@ export function endpointUrl(
   let pathname = endpoint.path;
   const query = new URLSearchParams();
   for (const param of endpoint.params) {
-    const value = args[param.name];
-    if (value === undefined || value === null || value === "") {
+    const raw = args[param.name];
+    if (raw === undefined || raw === null || raw === "") {
       if (param.required) throw new Error(`Missing required parameter: ${param.name}`);
       continue;
     }
+    // Clients occasionally send numbers despite the string schema; a finite
+    // number stringifies safely within the length bound.
+    const value = typeof raw === "number" && Number.isFinite(raw) ? String(raw) : raw;
     if (typeof value !== "string" || value.length > 256)
       throw new Error(`Invalid parameter: ${param.name}`);
     if (param.inPath) pathname = pathname.replace(`[${param.name}]`, encodeURIComponent(value));
@@ -80,15 +92,20 @@ export async function callPublicApi(
   return body;
 }
 
-async function main() {
-  const key = process.env.AHD_API_KEY;
-  const base = process.env.AHD_API_BASE_URL || "https://ahousedividedgame.com";
-  if (!key) throw new Error("AHD_API_KEY is required (create a public-scope key in Settings)");
-  const origin = new URL(base);
-  if (origin.protocol !== "https:" && !["localhost", "127.0.0.1"].includes(origin.hostname)) {
-    throw new Error("AHD_API_BASE_URL must use HTTPS outside localhost");
-  }
-  const tools = [
+export interface BridgeTool {
+  name: string;
+  description: string;
+  inputSchema: {
+    type: "object";
+    properties: Record<string, { type: "string" }>;
+    required: string[];
+    additionalProperties: false;
+  };
+  endpoint: PublicEndpointDefinition;
+}
+
+export function buildTools(): BridgeTool[] {
+  return [
     ...ENDPOINTS.filter(
       (endpoint) => !endpoint.path.endsWith("/meta") && !endpoint.path.endsWith("/openapi.json")
     ),
@@ -106,62 +123,130 @@ async function main() {
     },
     endpoint,
   }));
+}
+
+export interface BridgeContext {
+  tools: BridgeTool[];
+  base: string;
+  apiKey: string;
+}
+
+export interface JsonRpcReply {
+  id: unknown;
+  result?: unknown;
+  error?: { code: number; message: string };
+}
+
+const invalidParams = (id: unknown, message: string): JsonRpcReply => ({
+  id,
+  error: { code: -32602, message },
+});
+
+/**
+ * Answers one inbound JSON-RPC message, or returns null when no reply is owed
+ * (notifications and JSON-RPC responses are never answered).
+ */
+export async function handleRpcMessage(
+  message: unknown,
+  context: BridgeContext
+): Promise<JsonRpcReply | null> {
+  if (typeof message !== "object" || message === null || Array.isArray(message))
+    return { id: null, error: { code: -32600, message: "Invalid Request" } };
+  const request = message as { id?: unknown; method?: unknown; params?: unknown };
+  if (request.method === undefined && ("result" in message || "error" in message)) return null;
+  if (request.id === undefined || request.id === null) return null;
+  const id = request.id;
+  if (typeof request.method !== "string" || request.method === "")
+    return { id, error: { code: -32600, message: "Invalid Request" } };
+  const params =
+    typeof request.params === "object" && request.params !== null && !Array.isArray(request.params)
+      ? (request.params as Record<string, unknown>)
+      : undefined;
+  if (request.method === "initialize") {
+    const requested = params?.protocolVersion;
+    const protocolVersion =
+      typeof requested === "string" &&
+      (SUPPORTED_PROTOCOL_VERSIONS as readonly string[]).includes(requested)
+        ? requested
+        : DEFAULT_PROTOCOL_VERSION;
+    return {
+      id,
+      result: {
+        protocolVersion,
+        capabilities: { tools: {} },
+        serverInfo: { name: "ahd-public-api", version: "1.0.1" },
+      },
+    };
+  }
+  if (request.method === "ping") return { id, result: {} };
+  if (request.method === "tools/list") {
+    return {
+      id,
+      result: {
+        tools: context.tools.map(({ name, description, inputSchema }) => ({
+          name,
+          description,
+          inputSchema,
+        })),
+      },
+    };
+  }
+  if (request.method === "tools/call") {
+    if (!params) return invalidParams(id, "Invalid params");
+    const tool = context.tools.find((candidate) => candidate.name === params.name);
+    if (!tool) return invalidParams(id, "Unknown tool");
+    const args = params.arguments;
+    if (args !== undefined && (typeof args !== "object" || args === null || Array.isArray(args)))
+      return invalidParams(id, "Invalid params: arguments must be an object");
+    try {
+      const body = await callPublicApi(
+        tool.endpoint,
+        (args ?? {}) as Record<string, unknown>,
+        context.base,
+        context.apiKey
+      );
+      return { id, result: { content: [{ type: "text", text: body }] } };
+    } catch (error) {
+      return {
+        id,
+        result: {
+          content: [{ type: "text", text: error instanceof Error ? error.message : String(error) }],
+          isError: true,
+        },
+      };
+    }
+  }
+  return { id, error: { code: -32601, message: "Method not found" } };
+}
+
+async function main() {
+  const key = process.env.AHD_API_KEY;
+  const base = process.env.AHD_API_BASE_URL || "https://ahousedividedgame.com";
+  if (!key) throw new Error("AHD_API_KEY is required (create a public-scope key in Settings)");
+  const origin = new URL(base);
+  if (origin.protocol !== "https:" && !["localhost", "127.0.0.1"].includes(origin.hostname)) {
+    throw new Error("AHD_API_BASE_URL must use HTTPS outside localhost");
+  }
+  const tools = buildTools();
   const names = new Set(tools.map((tool) => tool.name));
   if (names.size !== tools.length)
     throw new Error("Public API routes produce duplicate MCP tool names");
+  const context: BridgeContext = { tools, base, apiKey: key };
+  // A client that disappears mid-write must not crash the bridge on EPIPE.
+  process.stdout.on("error", () => process.exit(0));
+  const write = (reply: JsonRpcReply) =>
+    process.stdout.write(JSON.stringify({ jsonrpc: "2.0", ...reply }) + "\n");
   const lines = createInterface({ input: process.stdin });
   for await (const line of lines) {
-    let message: {
-      id?: unknown;
-      method?: string;
-      params?: { name?: string; arguments?: Record<string, unknown>; protocolVersion?: string };
-    };
+    let message: unknown;
     try {
       message = JSON.parse(line);
     } catch {
+      write({ id: null, error: { code: -32700, message: "Parse error" } });
       continue;
     }
-    if (message.id === undefined || message.id === null) continue;
-    const reply = (payload: Record<string, unknown>) =>
-      process.stdout.write(JSON.stringify({ jsonrpc: "2.0", id: message.id, ...payload }) + "\n");
-    if (message.method === "initialize") {
-      reply({
-        result: {
-          protocolVersion: message.params?.protocolVersion || "2024-11-05",
-          capabilities: { tools: {} },
-          serverInfo: { name: "ahd-public-api", version: "1.0.0" },
-        },
-      });
-    } else if (message.method === "tools/list") {
-      reply({
-        result: {
-          tools: tools.map(({ name, description, inputSchema }) => ({
-            name,
-            description,
-            inputSchema,
-          })),
-        },
-      });
-    } else if (message.method === "tools/call") {
-      const tool = tools.find((candidate) => candidate.name === message.params?.name);
-      if (!tool) {
-        reply({ error: { code: -32602, message: "Unknown tool" } });
-        continue;
-      }
-      try {
-        const body = await callPublicApi(tool.endpoint, message.params?.arguments || {}, base, key);
-        reply({ result: { content: [{ type: "text", text: body }] } });
-      } catch (error) {
-        reply({
-          result: {
-            content: [
-              { type: "text", text: error instanceof Error ? error.message : String(error) },
-            ],
-            isError: true,
-          },
-        });
-      }
-    } else reply({ error: { code: -32601, message: "Method not found" } });
+    const reply = await handleRpcMessage(message, context);
+    if (reply) write(reply);
   }
 }
 
