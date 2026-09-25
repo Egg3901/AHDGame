@@ -701,6 +701,45 @@ measured phase speedup. A full-turn CPU profile on the repeatedly modified
 local world did not complete in `corporationTurn` and yielded no CPU file;
 fresh-world full-turn and production p95 checks remain open.
 
+WP8 candidate check on the partial local copy counted 36,267 `withdrawn`
+and 2,342 `active` `electionCandidates` rows; the earlier read-only production
+aggregation in the table above counted 36,140 and 2,337 respectively. For the active-election vote
+query, the existing `electionCandidates_electionId` index examined 3,068
+documents to return 2,338 across 613 election ids. This does not support
+the claim that dead candidate rows are driving vote accumulation, or a new
+compound index for that query. A later attempt to refresh the production
+counts could not connect to Mongo, so the local query plan is not a current
+production plan. Archival remains gated on the historical-results reader contract and
+a production query-plan sample; no candidate rows were deleted.
+
+WP7 first-pass code inventory for the twelve snapshot collections is below.
+"No seed index" means no recurring index entry was found under
+`src/lib/admin/seed/indexes`; a one-time migration may still have created an
+index on an existing world. Readers listed are representative, not a complete
+external-consumer contract.
+
+| Collection                         | Writer                                           | Representative reader                             | Recurring index / retention                                 |
+| ---------------------------------- | ------------------------------------------------ | ------------------------------------------------- | ----------------------------------------------------------- |
+| `moneySupplySnapshots`             | `moneySupply/snapshot.ts`                        | central-bank detail, inflation, market-pool turns | No seed index / no policy                                   |
+| `primarySnapshots`                 | `turn/primaryResolution.ts`                      | wiki election, public election API, Discord race  | Election and recorded-time indexes / no policy              |
+| `tradeFlowSnapshots`               | `turn/commodity/persistence.ts`                  | trade ledger, public history, foreign policy      | Unique turn index / no policy                               |
+| `federalBudgetSnapshots`           | `budget/fiscalYear.ts`                           | budget detail, public history, admin budgets      | No seed index / no policy                                   |
+| `stockExchangeSnapshots`           | `turn/stockExchangeSnapshot.ts`                  | stock-exchange API, public economy                | No seed index / no policy                                   |
+| `investorRankingSnapshots`         | `turn/investorWealthSnapshots.ts`                | public character, Discord lookup, season recap    | No seed index / no policy                                   |
+| `gameHealthSnapshots`              | `turn/gameHealthSnapshot.ts`                     | admin health pages, simulation metrics            | Turn and warning indexes / 30-day TTL                       |
+| `wealthListSnapshots`              | `turn/investorWealthSnapshots.ts`                | stock-exchange wealth list                        | No seed index / no policy                                   |
+| `indexFundSnapshots`               | `indexFunds/fundQueries.ts`                      | fund detail and NAV history                       | Fund and turn index / archive and downsample after 72 turns |
+| `electionResultSnapshots`          | `elections/liveResults/captureResultSnapshot.ts` | election results API                              | Unique election and history indexes / no policy             |
+| `equityLiquidityFacilitySnapshots` | `indexFunds/equityLiquidityFacility.ts`          | No in-repo read found                             | Unique turn index now seeded / no policy                    |
+| `balanceSnapshots`                 | `ledger/balanceSnapshot.ts`                      | ledger reconciliation                             | Unique turn index / no policy                               |
+
+The first retention decision is to keep player-visible history and ledger
+inputs until each reader's restore contract and 30-day growth are measured.
+No new TTL or deletion is justified by this inventory. The liquidity-facility
+snapshot's migration-created unique turn index is now also in the recurring
+fund index seed; an empty local reset-world seed recreated it with the same
+name, key, and uniqueness.
+
 The one-turn profiler has a local-only guard and cannot be run against
 production. A partial production copy is restored to a private localhost Mongo instance
 outside the repository for a profiling turn. It has 380 collections, 3.31 million
