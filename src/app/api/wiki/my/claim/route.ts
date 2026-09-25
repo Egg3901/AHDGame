@@ -5,7 +5,7 @@
  * a deterministic slug derived from the target entity's ObjectId. If a page
  * with that slug already exists, returns the existing slug (idempotent).
  *
- * Body: { target: "player" | "corporation" }
+ * Body: { target: "player" | "corporation" | "party", corporationSequentialId?: number }
  * Returns: { slug, created }
  *
  * Auth: requireBasicAuth (+ active character); blocked when wiki is disabled.
@@ -36,6 +36,7 @@ import {
 
 const claimSchema = z.object({
   target: z.enum(["player", "corporation", "party"]),
+  corporationSequentialId: z.number().int().positive().optional(),
 });
 
 export async function POST(request: Request) {
@@ -82,10 +83,16 @@ export async function POST(request: Request) {
       tags = ["player", "biography"];
       category = "characters";
     } else if (parsed.data.target === "corporation") {
-      // Corporation: caller must be the active CEO of the corp.
-      const corp = await db
-        .collection<Corporation>("corporations")
-        .findOne({ ceoId: user.character._id, userId: userObjectId });
+      // Corporation: caller must be the active CEO of the requested corp.
+      // The optional public ID keeps older callers working while allowing a
+      // CEO of several corporations to claim the page they are viewing.
+      const corp = await db.collection<Corporation>("corporations").findOne({
+        ceoId: user.character._id,
+        userId: userObjectId,
+        ...(parsed.data.corporationSequentialId != null
+          ? { sequentialId: parsed.data.corporationSequentialId }
+          : {}),
+      });
       if (!corp) {
         return NextResponse.json(
           { error: "You are not the CEO of any corporation" },
