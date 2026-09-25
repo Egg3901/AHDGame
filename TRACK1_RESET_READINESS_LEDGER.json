@@ -799,6 +799,11 @@
           "type": "implementation_checkpoint",
           "ref": "1fdffbcec1,c9b411a09e",
           "detail": "Migrated standalone character transfer routes to keyed debit/credit legs, then removed preflight balance checks that would block replay after a landed debit. Helper crash/recovery tests passed 12/12; web route tests passed 5/5 including a depleted-sender retry; scoped lint and format passed. Other #1672 consumers and full validation remain open."
+        },
+        {
+          "type": "partial_source_and_tests",
+          "ref": "108c84d656",
+          "detail": "Muse extracted keyed bond-sale holder claim, pool debit, payout, compensation, and route integration. Primitive tests passed 10/10 and route tests 9/9 under an extended host timeout; scoped lint/format passed. Supervisor review found that same-key retry can still fail before reconciliation on depleted holder units or a changed quote/FX fingerprint. A Muse follow-up is correcting this boundary before bond-sale coverage is claimed."
         }
       ],
       "blocked_by": [
