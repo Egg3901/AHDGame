@@ -97,9 +97,9 @@ export async function nppBuyBond(
         marketPrice: bond.marketPrice,
         maturityTurn: bond.maturityTurn,
         defaulted: bond.defaulted,
-        currencyCode: bond.currencyCode ?? { $exists: false },
-        countryId: bond.countryId ?? { $exists: false },
-        issuerType: bond.issuerType ?? { $exists: false },
+        currencyCode: bond.currencyCode === undefined ? { $exists: false } : bond.currencyCode,
+        countryId: bond.countryId === undefined ? { $exists: false } : bond.countryId,
+        issuerType: bond.issuerType === undefined ? { $exists: false } : bond.issuerType,
       }
     : undefined;
 

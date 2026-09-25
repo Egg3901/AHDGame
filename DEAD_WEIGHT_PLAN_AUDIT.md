@@ -643,6 +643,19 @@ bond pool cash and lifetime totals (24), and corporation float, shareholders,
 and liquid capital (734) matched. This verifies the local phase behavior; the
 other share command-core reads and production p95 remain open.
 
+The share-buy sweep now passes its projected corporation candidate to
+`nppBuyShares`; the live equity-pool quote and guarded NPP debit remain, and
+the guarded share credit requires the selected price, float, currency,
+ownership status, and settlement mode to remain unchanged. A second matched
+`processNppActions` replay at turn 1128 compared the previous commit with this
+change on two fresh copies of the same local snapshot: commands fell from
+7,149 to 6,921 (228 fewer), returned documents from 22,823 to 22,595, and
+BSON bytes from 12,857,039 to 10,761,853. All action counters matched, as did
+digests of NPP investment cash (3,450 rows), bond float and holders (5,693),
+bond-pool balances (24), corporation float/shareholders/liquid capital (734),
+and equity-pool balances (24). The share-sell core and production p95 remain
+open.
+
 The one-turn profiler has a local-only guard and cannot be run against
 production. A partial production copy is restored to a private localhost Mongo instance
 outside the repository for a profiling turn. It has 380 collections, 3.31 million

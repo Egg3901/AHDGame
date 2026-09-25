@@ -755,11 +755,16 @@ async function investNppBondSurplus(
 type StockCandidateCorp = Pick<
   Corporation,
   | "_id"
+  | "countryId"
+  | "isPrivate"
+  | "isNationalized"
+  | "countryOwnerId"
   | "liquidCurrencyCode"
   | "sharePrice"
   | "fundamentalSharePrice"
   | "totalShares"
   | "publicFloat"
+  | "shareBuybackMode"
 >;
 
 /**
@@ -817,10 +822,15 @@ async function investNppStockSurplus(
           {
             projection: {
               liquidCurrencyCode: 1,
+              countryId: 1,
+              isPrivate: 1,
+              isNationalized: 1,
+              countryOwnerId: 1,
               sharePrice: 1,
               fundamentalSharePrice: 1,
               totalShares: 1,
               publicFloat: 1,
+              shareBuybackMode: 1,
             },
           }
         )
@@ -891,7 +901,7 @@ async function investNppStockSurplus(
 
     // nppBuyShares debits nppInvestmentCashAnchor atomically (guarded); a failed
     // float race leaves the ₳ untouched — no plumbing move needed here anymore.
-    const result = await nppBuyShares(db, npp, corp._id, shares, homeRate);
+    const result = await nppBuyShares(db, npp, corp._id, shares, homeRate, corp);
     if (result.ok) {
       corp.publicFloat = (corp.publicFloat ?? 0) - shares;
     }

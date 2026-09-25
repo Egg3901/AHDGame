@@ -117,6 +117,35 @@ describe("nppBuyShares", () => {
     expect(applyFloatBuyCredit).not.toHaveBeenCalled();
   });
 
+  it("uses a sweep snapshot and refunds if the guarded credit sees changed quote inputs", async () => {
+    vi.mocked(creditSharesToNpp).mockResolvedValue(false);
+    const snapshot = {
+      _id: corpId,
+      countryId: "US" as const,
+      sharePrice: SHARE_PRICE,
+      totalShares: 100_000,
+      publicFloat: 5_000,
+      liquidCurrencyCode: "USD" as const,
+    };
+
+    const result = await nppBuyShares(db, npp, corpId, SHARES, 1, snapshot);
+
+    expect(result.ok).toBe(false);
+    expect(corpFindOne).not.toHaveBeenCalled();
+    expect(vi.mocked(creditSharesToNpp).mock.calls[0][6]).toMatchObject({
+      guardFilter: {
+        sharePrice: SHARE_PRICE,
+        totalShares: 100_000,
+        publicFloat: 5_000,
+        liquidCurrencyCode: "USD",
+      },
+    });
+    expect(nppUpdateOne).toHaveBeenCalledWith(
+      { _id: nppId },
+      expect.objectContaining({ $inc: { nppInvestmentCashAnchor: EXPECTED_COST } })
+    );
+  });
+
   it("rejects when funds are insufficient (guard returns null), no credit attempted", async () => {
     nppFindOneAndUpdate.mockResolvedValue(null);
     const res = await nppBuyShares(db, npp, corpId, SHARES, 1);
