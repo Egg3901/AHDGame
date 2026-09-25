@@ -48,6 +48,8 @@ describe("publicApiGuard", () => {
     const body = await result.response.json();
     expect(body.ok).toBe(false);
     expect(result.response.status).toBe(401);
+    // Auth rejections must never be edge-cached and replayed to valid callers.
+    expect(result.response.headers.get("Cache-Control")).toBe("no-store");
   });
 
   it("returns ok with rate-limit headers when user API key is valid", async () => {
@@ -185,5 +187,7 @@ describe("publicApiGuard", () => {
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error("expected guard failure");
     expect(result.response).toBe(mockRlRes);
+    // Same for rate-limit rejections: an edge cache must not replay a 429.
+    expect(result.response.headers.get("Cache-Control")).toBe("no-store");
   });
 });

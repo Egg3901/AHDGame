@@ -84,14 +84,19 @@ export async function requireUserApiKey(
     return { ok: false as const, reason: "insufficient_scope" };
   }
 
-  // Update usage stats (background, don't await)
-  void db.collection("userApiKeys").updateOne(
-    { _id: keyDoc._id },
-    {
-      $set: { lastUsedAt: new Date(), updatedAt: new Date() },
-      $inc: { requestCount: 1 },
-    }
-  );
+  // Update usage stats (background, don't await). The rejection is swallowed
+  // like logApiAccess does: an instrumentation write must never become an
+  // unhandledRejection, which the crash handler escalates to a process exit.
+  void db
+    .collection("userApiKeys")
+    .updateOne(
+      { _id: keyDoc._id },
+      {
+        $set: { lastUsedAt: new Date(), updatedAt: new Date() },
+        $inc: { requestCount: 1 },
+      }
+    )
+    .catch(() => {});
 
   return {
     ok: true as const,
@@ -131,14 +136,19 @@ export async function validateUserApiKey(
 
   if (!keyDoc || keyDoc.scope !== inferredScope) return { valid: false };
 
-  // Update usage stats (background, don't await)
-  void db.collection("userApiKeys").updateOne(
-    { _id: keyDoc._id },
-    {
-      $set: { lastUsedAt: new Date(), updatedAt: new Date() },
-      $inc: { requestCount: 1 },
-    }
-  );
+  // Update usage stats (background, don't await). The rejection is swallowed
+  // like logApiAccess does: an instrumentation write must never become an
+  // unhandledRejection, which the crash handler escalates to a process exit.
+  void db
+    .collection("userApiKeys")
+    .updateOne(
+      { _id: keyDoc._id },
+      {
+        $set: { lastUsedAt: new Date(), updatedAt: new Date() },
+        $inc: { requestCount: 1 },
+      }
+    )
+    .catch(() => {});
 
   return { valid: true, ownerUserId: String(keyDoc.userId), keyId: String(keyDoc._id) };
 }
