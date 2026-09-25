@@ -601,10 +601,19 @@ export const INITIAL_RATES_1979: Partial<Record<CountryId, number>> = {
  * Return the initial exchange rates for the given preset.
  * Falls back to INITIAL_RATES (2019-era) for unknown presets.
  */
+export const INITIAL_RATES_2027: Partial<Record<CountryId, number>> = {
+  ...INITIAL_RATES,
+  // Latest completed annual NBH average, reported by KSH for 2025. This is
+  // an explicit fallback for the future preset, not a 2027 observation.
+  // https://www.ksh.hu/evkonyvek/2025/magyar-statisztikai-zsebkonyv-2025/pdf/statistical_pocketbook_of_hungary_2025.pdf
+  HU: 353.2,
+};
+
 export function getInitialRates(preset: string): Partial<Record<CountryId, number>> {
   if (preset === "1953-default") return INITIAL_RATES_1953;
   if (preset === "1979-default") return INITIAL_RATES_1979;
   if (preset === "1991-default") return INITIAL_RATES_1991;
+  if (preset === "2027-default") return INITIAL_RATES_2027;
   // 1999 and 2007 have no authored table and used to fall through to the 2019
   // one, so a 1999 world started with 2019 money: Nigeria at 1550 naira/USD
   // when the real 1999 rate was about 97, a 16x error on day one. Interpolate

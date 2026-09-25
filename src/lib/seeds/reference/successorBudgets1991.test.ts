@@ -44,11 +44,17 @@ describe("1991 transition national budgets", () => {
   });
 
   it("does not carry transition-only budgets into later world presets", () => {
-    for (const preset of ["1999-default", "2007-default", "2019-default", "2027-default"]) {
+    for (const preset of ["1999-default", "2007-default", "2019-default"]) {
       const later = getNationalBudgetSeedConfigsForPreset(preset);
       expect(later.filter((row) => IDS.includes(row.countryId as (typeof IDS)[number]))).toEqual(
         []
       );
     }
+    const modern = getNationalBudgetSeedConfigsForPreset("2027-default");
+    expect(
+      modern
+        .filter((row) => IDS.includes(row.countryId as (typeof IDS)[number]))
+        .map((row) => row.countryId)
+    ).toEqual(["HU"]);
   });
 });
