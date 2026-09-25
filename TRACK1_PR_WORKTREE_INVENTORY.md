@@ -1028,3 +1028,15 @@ still contains the original checkpoint. Fresh checkout status is clean, it
 is unlocked and process-free. Decision: remove this redundant source checkout
 normally. This does not claim its 1991/2027 implementation or reports pass
 the final release gate; outstanding tests and conformance stay in the plan.
+
+**AHDGame `AHDGame-turn-perf-next`: DELETE duplicate clean performance
+checkout, 2026-09-25.** Its one combined #2356 commit `33a2f5d8e9`
+contains the same 14 scoped source/test/index files, byte for byte, as the
+five successive performance commits ending at `216d506905` in the clean
+`AHDGame-turn-perf` source checkout. A scoped tree diff across all 14 paths
+is empty. Keep the five-commit source for selective integration and its
+per-step measurements; this combined checkout adds no distinct result.
+Fresh status is clean, it is unlocked and process-free. Decision: remove
+normally, retaining the branch ref. The five source commits remain an
+explicit Track 1 merge/performance gate, not a claim they are already in
+development.
