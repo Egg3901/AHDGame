@@ -81,6 +81,15 @@ export default function PrivacyPolicyPage() {
                 </p>
               </div>
               <div>
+                <p className="font-semibold text-foreground mb-1">Product analytics</p>
+                <p>
+                  If you accept optional analytics, PostHog records visits to broad game areas and
+                  selected milestones such as account and character creation. We use an account ID
+                  without your name or email to understand onboarding and feature use. PostHog is
+                  disabled in singleplayer.
+                </p>
+              </div>
+              <div>
                 <p className="font-semibold text-foreground mb-1">Error data</p>
                 <p>
                   Sentry collects error reports when something goes wrong, including browser
@@ -110,6 +119,15 @@ export default function PrivacyPolicyPage() {
                   </code>{" "}
                   with a random identifier. It is used for duplicate-account signals and aggregate
                   first-party traffic statistics. It is not readable by client-side scripts.
+                </p>
+              </div>
+              <div>
+                <p className="font-semibold text-foreground mb-1">Optional product analytics</p>
+                <p>
+                  After you accept optional analytics, PostHog may use browser storage to recognize
+                  visits and connect your game actions across sessions. You can withdraw that choice
+                  through Privacy &amp; cookie settings. PostHog stops collecting new events when
+                  you withdraw consent.
                 </p>
               </div>
               <div>
@@ -201,6 +219,12 @@ export default function PrivacyPolicyPage() {
                       purpose: "Consent collection and revocation where required",
                       url: "https://support.google.com/adsense/answer/10924669",
                       label: "support.google.com/adsense/privacy-messaging",
+                    },
+                    {
+                      name: "PostHog",
+                      purpose: "Optional product analytics",
+                      url: "https://posthog.com/privacy",
+                      label: "posthog.com/privacy",
                     },
                     {
                       name: "Google Analytics",

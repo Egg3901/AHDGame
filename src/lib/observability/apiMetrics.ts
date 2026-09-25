@@ -3,13 +3,13 @@
  *
  * RED = Rate, Errors, Duration. Wrapping a route handler in `withApiMetrics`:
  *   - opens an `http.server` span so the request's duration + status land in
- *     GlitchTip's trace view tagged with `api.route`;
+ *     Sentry's trace view tagged with `api.route`;
  *   - tags the SLO availability signal (`slo.api_availability` = status < 500)
  *     so the API error budget is queryable;
  *   - captures non-2xx responses and thrown errors as Sentry events with the
  *     route name, so a spike in 4xx/5xx on one route is visible and grouped.
  *
- * Apply to the highest-traffic / highest-value routes (check GlitchTip
+ * Apply to the highest-traffic / highest-value routes (check Sentry
  * Performance to pick them) — not every route. It is a thin pass-through: the
  * handler's Response is returned unchanged.
  */
@@ -46,7 +46,7 @@ export function withApiMetrics<Args extends unknown[]>(
       Sentry.setTag(SLO_TAG.API_AVAILABILITY, status < 500 ? "true" : "false");
 
       // This is a METRICS wrapper, not an error reporter: it deliberately emits
-      // NO GlitchTip issue of its own. The error signal already lives elsewhere
+      // NO Sentry issue of its own. The error signal already lives elsewhere
       // — routes throw through handleRouteError (which Sentry.captureException's
       // the real stack) and client fetch failures are captured by fetchJson —
       // so a synthetic "API 500" message here would just double-capture into a

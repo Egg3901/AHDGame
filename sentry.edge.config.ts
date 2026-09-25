@@ -16,16 +16,14 @@ Sentry.init({
 
   // Deploy identifier (full git SHA) injected via next.config.ts.
   release: process.env.SENTRY_RELEASE,
+  environment: process.env.RAILWAY_ENVIRONMENT_NAME || process.env.NODE_ENV,
 
   // Define how likely traces are sampled. Adjust this value in production, or use tracesSampler for greater control.
   tracesSampleRate: isProduction ? 0.02 : 1,
 
-  // Structured logs shipped to GlitchTip's Logs view in every environment.
-  enableLogs: true,
+  enableLogs: false,
 
-  integrations: [Sentry.consoleLoggingIntegration({ levels: ["warn", "error"] })],
-
-  // Enable sending user PII (Personally Identifiable Information)
+  // Do not send default user PII from edge requests.
   // https://docs.sentry.io/platforms/javascript/guides/nextjs/configuration/options/#sendDefaultPii
-  sendDefaultPii: true,
+  sendDefaultPii: false,
 });
