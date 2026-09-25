@@ -115,6 +115,74 @@ describe("fillBestBuyOrderForMarketSell", () => {
     );
   });
 
+  it("marks a final market-sell fill filled at zero remaining with the attempt key", async () => {
+    const corporationId = new ObjectId();
+    const fundId = new ObjectId();
+    const sellerId = new ObjectId();
+    const order: ShareOrder = {
+      _id: new ObjectId(),
+      corporationId,
+      placerFundId: fundId,
+      liquidityProvider: true,
+      type: "buy",
+      shares: 100,
+      sharesRemaining: 40,
+      pricePerShare: 9.8,
+      escrowAmount: 392,
+      escrowAnchor: 196,
+      status: "open",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    db.collection("shareOrders");
+    db.collectionMocks.shareOrders.find.mockReturnValue(createAsyncIterableCursor([order]));
+    db.collectionMocks.shareOrders.findOneAndUpdate.mockResolvedValue({
+      ...order,
+      sharesRemaining: 0,
+      escrowAmount: 0,
+      escrowAnchor: 0,
+      status: "filled",
+    });
+    db.collection("indexFunds");
+    db.collectionMocks.indexFunds.findOne.mockResolvedValue({
+      _id: fundId,
+      name: "Market Fund",
+      status: "active",
+    });
+
+    const result = await fillBestBuyOrderForMarketSell({
+      db: db as unknown as Db,
+      corporation: corporation(corporationId),
+      seller: {
+        id: sellerId,
+        name: "Seller",
+        collectionName: "characters",
+        homeCurrency: "USD",
+        isImperial: false,
+      },
+      shares: 40,
+      forexEnabled: false,
+      sellerFxRate: 1,
+      now: new Date(),
+      turn: 100,
+    });
+
+    expect(result).toMatchObject({ filled: true, shares: 40, proceedsAnchor: 196 });
+    expect(db.collectionMocks.shareOrders.findOneAndUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ _id: order._id, sharesRemaining: 40, escrowAnchor: 196 }),
+      expect.objectContaining({
+        $set: expect.objectContaining({
+          sharesRemaining: 0,
+          escrowAmount: 0,
+          escrowAnchor: 0,
+          status: "filled",
+          lastShareFillKey: expect.any(String),
+        }),
+      }),
+      { returnDocument: "after" }
+    );
+  });
+
   it("falls through when no single escrowed fund bid covers the requested shares", async () => {
     db.collection("shareOrders");
     db.collectionMocks.shareOrders.find.mockReturnValue(createAsyncIterableCursor([]));
