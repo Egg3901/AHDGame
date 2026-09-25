@@ -353,6 +353,31 @@ describe("nppSellShares", () => {
     expect(nppFindOneAndUpdate).not.toHaveBeenCalled();
   });
 
+  it("uses a sweep snapshot and reverses settlement when its guarded debit fails", async () => {
+    vi.mocked(debitSharesFromNpp).mockResolvedValue(-1);
+    const snapshot = {
+      ...baseCorp(),
+      countryId: "US" as const,
+      liquidCurrencyCode: "USD" as const,
+    };
+
+    const result = await nppSellShares(db, npp, corpId, SHARES, CURRENT_TURN, 1, snapshot);
+
+    expect(result.ok).toBe(false);
+    expect(corpFindOne).not.toHaveBeenCalled();
+    expect(vi.mocked(debitSharesFromNpp).mock.calls[0][5]).toMatchObject({
+      requireSufficient: true,
+      guardFilter: {
+        sharePrice: SHARE_PRICE,
+        totalShares: 100_000,
+        publicFloat: 5_000,
+        liquidCurrencyCode: "USD",
+      },
+    });
+    expect(reverseFloatSellDebit).toHaveBeenCalledOnce();
+    expect(nppFindOneAndUpdate).not.toHaveBeenCalled();
+  });
+
   it("rejects when the equity market can't cover the sale, no debit attempted", async () => {
     vi.mocked(settleFloatSellDebit).mockResolvedValue({ ok: false });
     const res = await nppSellShares(db, npp, corpId, SHARES, CURRENT_TURN, 1);

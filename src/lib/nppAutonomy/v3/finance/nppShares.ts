@@ -205,6 +205,23 @@ export type NppShareSellResult =
     }
   | { ok: false; reason: string };
 
+export type NppShareSellSnapshot = Pick<
+  Corporation,
+  | "_id"
+  | "countryId"
+  | "isPrivate"
+  | "isNationalized"
+  | "countryOwnerId"
+  | "liquidCurrencyCode"
+  | "sharePrice"
+  | "fundamentalSharePrice"
+  | "totalShares"
+  | "publicFloat"
+  | "shareBuybackMode"
+  | "shareholders"
+  | "ceoId"
+>;
+
 export async function nppSellShares(
   db: Db,
   npp: Pick<NPP, "_id" | "countryId">,
@@ -212,13 +229,18 @@ export async function nppSellShares(
   shares: number,
   currentTurn: number,
   /** Pre-loaded home FX rate (local per ₳); loaded on demand when omitted. */
-  homeRate?: number
+  homeRate?: number,
+  /** Candidate from the turn sweep; the share debit still checks live state. */
+  corpSnapshot?: NppShareSellSnapshot
 ): Promise<NppShareSellResult> {
   if (!Number.isInteger(shares) || shares <= 0) {
     return { ok: false, reason: "Shares must be a positive integer." };
   }
 
-  const corp = await db.collection<Corporation>("corporations").findOne({ _id: corporationId });
+  const corp =
+    corpSnapshot?._id.equals(corporationId) === true
+      ? corpSnapshot
+      : await db.collection<Corporation>("corporations").findOne({ _id: corporationId });
   if (!corp) return { ok: false, reason: "Corporation not found." };
   if (corp.isPrivate) return { ok: false, reason: "Corporation is private." };
   if (corp.isNationalized) return { ok: false, reason: "Corporation is nationalized." };
@@ -252,6 +274,29 @@ export async function nppSellShares(
   const proceedsAnchor = localToAnchor(proceeds, rate);
   const now = new Date();
 
+  const snapshotGuard: Filter<Corporation> | undefined = corpSnapshot
+    ? {
+        isPrivate: corp.isPrivate === undefined ? { $exists: false } : corp.isPrivate,
+        isNationalized:
+          corp.isNationalized === undefined ? { $exists: false } : corp.isNationalized,
+        countryOwnerId:
+          corp.countryOwnerId === undefined ? { $exists: false } : corp.countryOwnerId,
+        countryId: corp.countryId,
+        liquidCurrencyCode:
+          corp.liquidCurrencyCode === undefined ? { $exists: false } : corp.liquidCurrencyCode,
+        sharePrice: corp.sharePrice,
+        fundamentalSharePrice:
+          corp.fundamentalSharePrice === undefined
+            ? { $exists: false }
+            : corp.fundamentalSharePrice,
+        totalShares: corp.totalShares,
+        publicFloat: corp.publicFloat,
+        shareBuybackMode:
+          corp.shareBuybackMode === undefined ? { $exists: false } : corp.shareBuybackMode,
+        ceoId: corp.ceoId === undefined ? { $exists: false } : corp.ceoId,
+      }
+    : undefined;
+
   // Issuer settles the buyback BEFORE the seller's shares are debited,
   // matching the player sell route's ordering.
   const settled = await settleFloatSellDebit(db, corp, proceeds);
@@ -279,6 +324,7 @@ export async function nppSellShares(
 
   const remaining = await debitSharesFromNpp(db, corporationId, npp._id, shares, corpUpdate, {
     requireSufficient: true,
+    ...(snapshotGuard ? { guardFilter: snapshotGuard } : {}),
   });
   if (remaining < 0) {
     // Float was taken/shares already sold between read and debit — undo the

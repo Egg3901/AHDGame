@@ -1038,11 +1038,16 @@ async function sellNppStockSurplus(
         projection: {
           shareholders: 1,
           ceoId: 1,
+          countryId: 1,
+          isPrivate: 1,
+          isNationalized: 1,
+          countryOwnerId: 1,
           sharePrice: 1,
           fundamentalSharePrice: 1,
           totalShares: 1,
           publicFloat: 1,
           liquidCurrencyCode: 1,
+          shareBuybackMode: 1,
         },
       }
     )
@@ -1102,14 +1107,19 @@ async function sellNppStockSurplus(
       const homeRate = fxByCcy.get(COUNTRY_CURRENCY_MAP[countryId as CountryId] ?? "USD") ?? 1;
 
       // Proceeds credit nppInvestmentCashAnchor (the forex account), not funds.
-      await nppSellShares(
+      const result = await nppSellShares(
         db,
         { _id: holding.nppId, countryId },
         corp._id,
         sharesToSell,
         currentTurn,
-        homeRate
+        homeRate,
+        corp
       );
+      if (result.ok) {
+        corp.publicFloat = (corp.publicFloat ?? 0) + sharesToSell;
+        holding.shares -= sharesToSell;
+      }
     }
   }
 }

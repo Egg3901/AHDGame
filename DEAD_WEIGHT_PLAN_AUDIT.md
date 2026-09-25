@@ -653,8 +653,20 @@ change on two fresh copies of the same local snapshot: commands fell from
 BSON bytes from 12,857,039 to 10,761,853. All action counters matched, as did
 digests of NPP investment cash (3,450 rows), bond float and holders (5,693),
 bond-pool balances (24), corporation float/shareholders/liquid capital (734),
-and equity-pool balances (24). The share-sell core and production p95 remain
-open.
+and equity-pool balances (24).
+
+The share-sell sweep now passes each projected corporation to `nppSellShares`
+and advances its in-memory float and holding after a successful sale. The
+live quote and settlement reads remain; the atomic share debit checks the
+snapshot's price, float, currency, ownership status, and settlement mode,
+and a failed guard reverses the settlement. A third matched
+`processNppActions` replay at turn 1128 compared the previous commit with
+this change on two fresh copies of the same local snapshot: commands fell
+from 6,922 to 6,642 (280 fewer), returned documents from 22,613 to 22,333,
+and BSON bytes from 10,914,098 to 7,750,309. All action counters and the
+same five selected state digests matched. The remaining WP3 acceptance gate
+is a production phase p95 comparison; these partial-world replays establish
+local behavior and command reduction only.
 
 The one-turn profiler has a local-only guard and cannot be run against
 production. A partial production copy is restored to a private localhost Mongo instance
