@@ -1126,14 +1126,17 @@ checkout disappeared from `git worktree list` during this audit; no Track 1
 cleanup command touched it. Its original source disposition is retained
 above.
 
-**Dirty `ticket-filing` checkout: MERGE decision, in progress.** Its
-uncommitted ticket context inference, persisted request type, route response,
-and tests are real unsuperseded work. Issue #2393 authorizes the new ticket
-schema field before integration under AGENTS.md. A Muse Spark 1.3 contributor
-is adapting that source to Track 1's newer ticket delivery route. Decision:
-commit the reviewed behavior in Track 1, then remove only the redundant
-source checkout after a fresh clean/unlocked/process-free check. Never
-discard or force-remove the uncommitted source while integration is pending.
+**Dirty `ticket-filing` checkout: MERGED selectively, then DELETED,
+2026-09-25.** Its uncommitted context inference, persisted request type,
+route response, and tests were real unsuperseded work. Issue #2393 authorized
+the schema field under AGENTS.md. Muse Spark 1.3 adapted that source to Track
+1's newer dual-delivery route as `06e33feb45`; ticket/context suites passed
+19/19, scoped lint and formatting passed. The original source patch was
+preserved as commit `f40e2ee6b9` on its branch before cleanup. A fresh check
+found the checkout clean, unlocked, and process-free, then ordinary `git
+worktree remove` completed with exit 0. The branch ref remains for
+provenance. The AHD API behavior is integrated, but #2393 remains partial
+until the Discord bot companion and integrated final gates are complete.
 
 **Dirty Discord event-card checkouts: MERGE decision, in progress.** Issue
 #2394 records the new event-card/chart work and its turn-path verification
