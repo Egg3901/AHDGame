@@ -20,7 +20,16 @@ import { requirePlayerTransfersEnabled } from "@/lib/api/requirePlayerTransfers"
 import { isForexEnabled } from "@/lib/currency/featureFlag";
 import { localCampaignBalance } from "@/lib/currency/campaignBalance";
 import { emitTreasuryTransaction } from "@/lib/treasury/emit";
+import { randomUUID } from "node:crypto";
+import type { ClientSession } from "mongodb";
 import { runWithOptionalTransaction } from "@/lib/db/runWithOptionalTransaction";
+import { getMoneyFlowReceiptsCollection } from "@/lib/db/collections/moneyFlowReceipts";
+import {
+  claimMoneyFlowReceipt,
+  makeLegStep,
+  runMoneyFlowSteps,
+  type MoneyFlowLegOutcome,
+} from "@/lib/db/nonAtomicMoneyFlow";
 import { isSameCountry } from "@/lib/api/sameCountry";
 
 interface RouteParams {
@@ -123,112 +132,106 @@ export async function POST(request: Request, { params }: RouteParams) {
     const now = new Date();
     const campaignFundsField = forexEnabled ? "currencyBalances.campaign" : "funds";
 
-    await runWithOptionalTransaction(
-      async (session) => {
-        const debitResult = await db.collection<Character>("characters").updateOne(
-          { _id: authUser.character._id, [campaignFundsField]: { $gte: amount } },
-          {
-            $inc: { [campaignFundsField]: -amount },
-            $set: { updatedAt: now },
-          },
-          { session }
-        );
+    // Crash-safe money flow (issue #1672): the debit and credit are keyed
+    // idempotent legs, so a crash between the sequential writes reconciles to
+    // exactly one donation instead of destroying funds. A replayed
+    // `Idempotency-Key` returns the stored outcome without moving money again.
+    const headerKey = request.headers.get("Idempotency-Key");
+    if (headerKey !== null && (headerKey.length === 0 || headerKey.length > 128)) {
+      return NextResponse.json({ error: "Invalid Idempotency-Key header" }, { status: 400 });
+    }
+    const flowKey = headerKey ?? randomUUID();
+    const fingerprint = `${authUser.character._id.toHexString()}:${statePartyKey}:${amount}:${campaignFundsField}`;
+    const characters = db.collection<Character>("characters");
+    const stateParties = db.collection<StatePartyOrg>("statePartyOrg");
+    const receipts = await getMoneyFlowReceiptsCollection(db);
+    const mapDonationError = (index: number, outcome: MoneyFlowLegOutcome): Error => {
+      if (index === 0) return new Error("STATE_PARTY_DONATION_FUNDS_CHANGED");
+      if (outcome === "missing") return new Error("STATE_PARTY_DONATION_TARGET_MISSING");
+      return new Error("STATE_PARTY_DONATION_TARGET_MISSING");
+    };
+    const runDonation = async (session?: ClientSession) => {
+      const opts = session ? { session } : {};
+      const claim = await claimMoneyFlowReceipt(receipts, flowKey, fingerprint, opts);
+      if (claim === "duplicate") return claim;
+      await runMoneyFlowSteps(
+        receipts,
+        flowKey,
+        [
+          makeLegStep(flowKey, {
+            name: "donor-debit",
+            collection: characters,
+            docId: authUser.character._id,
+            field: campaignFundsField,
+            delta: -amount,
+            minBalance: amount,
+            set: { updatedAt: now },
+          }),
+          makeLegStep(flowKey, {
+            name: "state-party-credit",
+            collection: stateParties,
+            docId: statePartyKey,
+            field: "treasury",
+            delta: amount,
+            set: { updatedAt: now },
+          }),
+        ],
+        (step, outcome) => mapDonationError(step.index, outcome),
+        opts
+      );
+      return claim;
+    };
 
-        if (debitResult.modifiedCount === 0) {
-          throw new Error("STATE_PARTY_DONATION_FUNDS_CHANGED");
-        }
-
-        const creditResult = await db
-          .collection<StatePartyOrg>("statePartyOrg")
-          .updateOne(
-            { _id: statePartyKey },
-            { $inc: { treasury: amount }, $set: { updatedAt: now } },
-            { session }
-          );
-
-        if (creditResult.modifiedCount === 0) {
-          throw new Error("STATE_PARTY_DONATION_TARGET_MISSING");
-        }
-      },
-      async () => {
-        const debitResult = await db.collection<Character>("characters").updateOne(
-          { _id: authUser.character._id, [campaignFundsField]: { $gte: amount } },
-          {
-            $inc: { [campaignFundsField]: -amount },
-            $set: { updatedAt: now },
-          }
-        );
-
-        if (debitResult.modifiedCount === 0) {
-          throw new Error("STATE_PARTY_DONATION_FUNDS_CHANGED");
-        }
-
-        try {
-          const creditResult = await db
-            .collection<StatePartyOrg>("statePartyOrg")
-            .updateOne(
-              { _id: statePartyKey },
-              { $inc: { treasury: amount }, $set: { updatedAt: now } }
-            );
-
-          if (creditResult.modifiedCount === 0) {
-            throw new Error("STATE_PARTY_DONATION_TARGET_MISSING");
-          }
-        } catch (error) {
-          await db.collection<Character>("characters").updateOne(
-            { _id: authUser.character._id },
-            {
-              $inc: { [campaignFundsField]: amount },
-              $set: { updatedAt: new Date() },
-            }
-          );
-          throw error;
-        }
-      }
+    const donationClaim = await runWithOptionalTransaction(
+      async (session) => runDonation(session),
+      async () => runDonation()
     );
 
-    await emitTreasuryTransaction({
-      db,
-      countryId,
-      partyId,
-      holderType: "state_party",
-      holderId: statePartyKey,
-      category: "donations",
-      direction: "credit",
-      amount,
-      memo: `Donation from ${character.name}`,
-      counterparty: {
-        type: "character",
-        id: authUser.character._id.toString(),
-        label: character.name,
-      },
-      now,
-    });
+    if (donationClaim === "fresh") {
+      await emitTreasuryTransaction({
+        db,
+        countryId,
+        partyId,
+        holderType: "state_party",
+        holderId: statePartyKey,
+        category: "donations",
+        direction: "credit",
+        amount,
+        memo: `Donation from ${character.name}`,
+        counterparty: {
+          type: "character",
+          id: authUser.character._id.toString(),
+          label: character.name,
+        },
+        now,
+      });
 
-    // Fire-and-forget: log fund flow for admin activity tracking
-    void db.collection("activityLog").insertOne({
-      type: "fund_event",
-      timestamp: new Date(),
-      userId: new ObjectId(authUser.userId),
-      characterId: authUser.character._id,
-      characterName: authUser.character.name,
-      username: authUser.username,
-      countryId,
-      fundEventType: "party_donation",
-      amount,
-      currencyCode: COUNTRY_CURRENCY_MAP[countryId] ?? "USD",
-      fromId: authUser.character._id,
-      fromName: authUser.character.name,
-      fromType: "character",
-      toId: party._id,
-      toName: `${state.name} ${party.name}`,
-      toType: "party",
-    });
+      // Fire-and-forget: log fund flow for admin activity tracking
+      void db.collection("activityLog").insertOne({
+        type: "fund_event",
+        timestamp: new Date(),
+        userId: new ObjectId(authUser.userId),
+        characterId: authUser.character._id,
+        characterName: authUser.character.name,
+        username: authUser.username,
+        countryId,
+        fundEventType: "party_donation",
+        amount,
+        currencyCode: COUNTRY_CURRENCY_MAP[countryId] ?? "USD",
+        fromId: authUser.character._id,
+        fromName: authUser.character.name,
+        fromType: "character",
+        toId: party._id,
+        toName: `${state.name} ${party.name}`,
+        toType: "party",
+      });
+    }
 
     return NextResponse.json({
       success: true,
       message: `Donated to ${state.name} ${party.name}`,
       amount,
+      ...(donationClaim !== "fresh" ? { duplicate: true } : {}),
     });
   } catch (error) {
     if (error instanceof Error && error.message === "STATE_PARTY_DONATION_FUNDS_CHANGED") {

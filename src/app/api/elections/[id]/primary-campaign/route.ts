@@ -7,6 +7,17 @@ import { ELECTION_LIMITS, checkRateLimit, rateLimitResponse } from "@/lib/api/ra
 import { resolveElectionRouteParam } from "@/lib/elections/electionParamResolution";
 import { getElectoralVoteUnits, getTravelActionCost } from "@/lib/constants/states";
 import { runWithOptionalTransaction } from "@/lib/db/runWithOptionalTransaction";
+import { randomUUID } from "node:crypto";
+import type { ClientSession } from "mongodb";
+import { getMoneyFlowReceiptsCollection } from "@/lib/db/collections/moneyFlowReceipts";
+import {
+  applyKeyedUpdate,
+  claimMoneyFlowReceipt,
+  makeLegStep,
+  runMoneyFlowSteps,
+  type MoneyFlowLegOutcome,
+  type MoneyFlowStepRef,
+} from "@/lib/db/nonAtomicMoneyFlow";
 import type { ElectionCandidate, Character, GameState } from "@/lib/db/types";
 import { z } from "zod";
 import { getGameTime } from "@/lib/time/gameTime";
@@ -134,66 +145,73 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     // Reset ticks to 0 when state changes — in-state bonus only applies to the
     // currently-camped state, so a move erases prior accumulation.
-    try {
-      await runWithOptionalTransaction(
-        async (session) => {
-          const debitResult = await db
-            .collection<Character>("characters")
-            .updateOne(
-              { _id: character._id, actions: { $gte: actionCost } },
-              { $inc: { actions: -actionCost }, $set: { updatedAt: now } },
-              { session }
-            );
-          if (debitResult.modifiedCount === 0) throw new Error("INSUFFICIENT_ACTIONS");
-
-          const candidateUpdate = await db
-            .collection<ElectionCandidate>("electionCandidates")
-            .updateOne(
-              { _id: candidate._id, ...previousCampaignFilter },
-              {
-                $set: {
-                  primaryCampaignState: stateId,
-                  primaryCampaignedAt: now,
-                  primaryCampaignTicks: 0,
-                },
-              },
-              { session }
-            );
-          if (candidateUpdate.modifiedCount === 0) throw new Error("TRAVEL_CONFLICT");
-        },
-        async () => {
-          const debitResult = await db
-            .collection<Character>("characters")
-            .updateOne(
-              { _id: character._id, actions: { $gte: actionCost } },
-              { $inc: { actions: -actionCost }, $set: { updatedAt: now } }
-            );
-          if (debitResult.modifiedCount === 0) throw new Error("INSUFFICIENT_ACTIONS");
-
-          try {
-            const candidateUpdate = await db
-              .collection<ElectionCandidate>("electionCandidates")
-              .updateOne(
-                { _id: candidate._id, ...previousCampaignFilter },
+    //
+    // Crash-safe money flow (issue #1672): the actions debit is a keyed
+    // idempotent leg and the campaign-state write a keyed update, so a crash
+    // between the sequential writes reconciles instead of charging for a
+    // move that never landed.
+    const headerKey = request.headers.get("Idempotency-Key");
+    if (headerKey !== null && (headerKey.length === 0 || headerKey.length > 128)) {
+      return NextResponse.json({ error: "Invalid Idempotency-Key header" }, { status: 400 });
+    }
+    const flowKey = headerKey ?? randomUUID();
+    const fingerprint = `${character._id.toHexString()}:${candidate._id.toHexString()}:primary:${stateId}:${actionCost}`;
+    const characters = db.collection<Character>("characters");
+    const candidates = db.collection<ElectionCandidate>("electionCandidates");
+    const receipts = await getMoneyFlowReceiptsCollection(db);
+    const mapCampaignError = (step: MoneyFlowStepRef, outcome: MoneyFlowLegOutcome): Error => {
+      if (step.index === 0) return new Error("INSUFFICIENT_ACTIONS");
+      if (outcome === "missing") return new Error("TRAVEL_CONFLICT");
+      return new Error("TRAVEL_CONFLICT");
+    };
+    const runCampaignMove = async (session?: ClientSession) => {
+      const opts = session ? { session } : {};
+      const claim = await claimMoneyFlowReceipt(receipts, flowKey, fingerprint, opts);
+      if (claim === "duplicate") return claim;
+      await runMoneyFlowSteps(
+        receipts,
+        flowKey,
+        [
+          makeLegStep(flowKey, {
+            name: "actions-debit",
+            collection: characters,
+            docId: character._id,
+            field: "actions",
+            delta: -actionCost,
+            minBalance: actionCost,
+            set: { updatedAt: now },
+          }),
+          {
+            name: "primary-campaign-state",
+            apply: (stepOpts) =>
+              applyKeyedUpdate(
+                flowKey,
                 {
-                  $set: {
-                    primaryCampaignState: stateId,
-                    primaryCampaignedAt: now,
-                    primaryCampaignTicks: 0,
+                  collection: candidates,
+                  filter: { _id: candidate._id, ...previousCampaignFilter },
+                  update: {
+                    $set: {
+                      primaryCampaignState: stateId,
+                      primaryCampaignedAt: now,
+                      primaryCampaignTicks: 0,
+                    },
                   },
-                }
-              );
-            if (candidateUpdate.modifiedCount === 0) throw new Error("TRAVEL_CONFLICT");
-          } catch (error) {
-            await db
-              .collection<Character>("characters")
-              .updateOne(
-                { _id: character._id },
-                { $inc: { actions: actionCost }, $set: { updatedAt: new Date() } }
-              );
-            throw error;
-          }
-        }
+                },
+                stepOpts ?? {}
+              ),
+          },
+        ],
+        mapCampaignError,
+        opts
+      );
+      return claim;
+    };
+
+    let campaignClaim: string;
+    try {
+      campaignClaim = await runWithOptionalTransaction(
+        async (session) => runCampaignMove(session),
+        async () => runCampaignMove()
       );
     } catch (error) {
       if ((error as Error).message === "INSUFFICIENT_ACTIONS") {
@@ -218,6 +236,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       message: `Now campaigning in ${stateId} during the primary`,
       primaryCampaignState: stateId,
       actionsCost: actionCost,
+      ...(campaignClaim !== "fresh" ? { duplicate: true } : {}),
     });
   } catch (error) {
     return handleRouteError(error);
