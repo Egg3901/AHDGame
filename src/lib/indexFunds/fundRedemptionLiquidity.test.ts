@@ -112,6 +112,13 @@ describe("sellFundHoldingShares", () => {
           cashAnchor += update.$inc?.cashAnchor ?? 0;
           return Promise.resolve({ matchedCount: 1 });
         }),
+      // No pending crash journal: the standalone sale journal check reads
+      // this before the first value-moving leg.
+      find: vi.fn().mockReturnValue({
+        project: vi.fn().mockReturnValue({
+          toArray: vi.fn().mockResolvedValue([]),
+        }),
+      }),
     };
 
     const corporationsColl = {
@@ -240,7 +247,17 @@ describe("sellFundHoldingShares", () => {
 
     // Should have incremented cashAnchor by 10 × $10 = 100
     expect(mockDb._getCashAnchor()).toBeCloseTo(100, 2);
-    const updateCall = mockDb._indexFundsColl.updateOne.mock.calls[0];
+    // calls[0] is the standalone crash-journal write (set-if-absent, no
+    // money); the cash credit follows it.
+    const journalCall = mockDb._indexFundsColl.updateOne.mock.calls[0];
+    expect(journalCall[0]).toMatchObject({
+      _id: fundId,
+      pendingLiquiditySale: { $exists: false },
+    });
+    expect(journalCall[1]).toMatchObject({
+      $set: { pendingLiquiditySale: expect.objectContaining({ shares: 10 }) },
+    });
+    const updateCall = mockDb._indexFundsColl.updateOne.mock.calls[1];
     expect(updateCall[0]).toEqual({ _id: fundId });
     expect(updateCall[1]).toMatchObject({ $inc: { cashAnchor: expect.any(Number) } });
   });
