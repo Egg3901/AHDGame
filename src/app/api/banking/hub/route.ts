@@ -26,6 +26,7 @@ import {
 import {
   fxRateMapToRecord,
   loadFxRatesByCurrency,
+  loadValuationFxRates,
   resolveCorpLiquidCurrencyCode,
 } from "@/lib/currency/corporationCapital";
 import { getGameState } from "@/lib/gameState";
@@ -184,7 +185,16 @@ async function handleGET() {
     const personalCash: Partial<Record<CurrencyCode, number>> = {
       ...(character?.currencyBalances?.personal ?? {}),
     };
+    const savingsBalances: Partial<Record<CurrencyCode, number>> = {
+      ...(character?.currencyBalances?.savings ?? {}),
+    };
     let exchangeRates: Partial<Record<CurrencyCode, number>> = {};
+    // Display-only FX for the hero totals: valuation rates back-fill the era
+    // anchor for currencies with no live row, so the total never silently
+    // drops a bloc-currency balance. Transaction paths keep the live map.
+    const displayFxRates: Partial<Record<CurrencyCode, number>> = character
+      ? fxRateMapToRecord(await loadValuationFxRates(db))
+      : {};
     const isAdmin = auth.user.isAdmin === true;
 
     // Always load active charters for the private-bank table (flag on) and for
@@ -344,8 +354,10 @@ async function handleGET() {
       centralBanks,
       privateBanks,
       savings,
+      savingsBalances,
       personalCash,
       exchangeRates,
+      displayFxRates,
       personalIncomeByCurrency,
       currentTurn,
       ceoCorporations,
