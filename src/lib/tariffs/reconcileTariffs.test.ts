@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Db } from "mongodb";
 import { ObjectId } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
+import { createInMemoryDb } from "@/lib/test-utils/inMemoryDb";
+import { withInjectedCrash } from "@/lib/test-utils/faultyDb";
 import { reconcileSignedTariffBills } from "./reconcileTariffs";
 
 vi.mock("@/lib/budget/revenue", () => ({
@@ -172,5 +174,75 @@ describe("reconcileSignedTariffBills", () => {
     const [budgetScopeWrite] = db.collectionMocks.tariffs.updateOne.mock.invocationCallOrder;
     expect(firstBulk).toBeLessThan(budgetScopeWrite);
     expect(budgetScopeWrite).toBeLessThan(secondBulk);
+  });
+
+  it("repairs a partial ordered reconciliation on the next run", async () => {
+    const firstBillId = new ObjectId();
+    const secondBillId = new ObjectId();
+    const bills = [
+      {
+        _id: firstBillId,
+        countryId: "US",
+        status: "signed",
+        enactedAt: new Date("2026-04-25T05:00:00Z"),
+        provisions: [
+          { type: "tariff", scopeType: "origin_country", targetOriginCountryId: "JP", rate: 20 },
+          { type: "tariff", scopeType: "economy_wide", rate: 5 },
+          { type: "tariff", scopeType: "origin_country", targetOriginCountryId: "UK", rate: 40 },
+        ],
+      },
+      {
+        _id: secondBillId,
+        countryId: "US",
+        status: "signed",
+        enactedAt: new Date("2026-04-25T06:00:00Z"),
+        provisions: [
+          { type: "tariff", scopeType: "origin_country", targetOriginCountryId: "JP", rate: 30 },
+        ],
+      },
+    ];
+    const memory = createInMemoryDb();
+    memory.seed("bills", bills);
+    memory.seed("tariffs", [
+      {
+        _id: new ObjectId(),
+        countryId: "US",
+        scopeType: "economy_wide",
+        targetSectorType: null,
+        targetOriginCountryId: null,
+        targetCorporationId: null,
+        rate: 2,
+      },
+    ]);
+    const fault = withInjectedCrash(memory, {
+      collection: "tariffs",
+      op: "bulkWrite",
+      onCall: 1,
+      afterWrite: true,
+    });
+
+    await expect(reconcileSignedTariffBills(fault.db, "US")).rejects.toThrow("crash after");
+    expect(fault.log.filter(({ op }) => op === "bulkWrite")).toHaveLength(1);
+    expect(memory.collection("tariffs").docs).toHaveLength(2);
+
+    // Crash recovery skips the interrupted phase. This replay models the next turn.
+    fault.disarm();
+    await reconcileSignedTariffBills(memory as unknown as Db, "US");
+    const tariffs = memory.collection("tariffs").docs;
+    expect(tariffs).toHaveLength(3);
+    expect(
+      tariffs
+        .map((tariff) => ({
+          scope: tariff.scopeType,
+          origin: tariff.targetOriginCountryId ?? null,
+          rate: tariff.rate,
+          sourceBillId: tariff.sourceBillId?.toString() ?? null,
+        }))
+        .sort((a, b) => `${a.scope}:${a.origin}`.localeCompare(`${b.scope}:${b.origin}`))
+    ).toEqual([
+      { scope: "economy_wide", origin: null, rate: 5, sourceBillId: firstBillId.toString() },
+      { scope: "origin_country", origin: "JP", rate: 30, sourceBillId: secondBillId.toString() },
+      { scope: "origin_country", origin: "UK", rate: 40, sourceBillId: firstBillId.toString() },
+    ]);
   });
 });

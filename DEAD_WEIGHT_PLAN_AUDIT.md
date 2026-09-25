@@ -768,6 +768,12 @@ source ids because the writes set values. Downstream phases in the recovered
 turn can still observe partial tariffs. This is an explicit acceptance risk for
 the WP2 batching change and a reason to retain the phase's recovery gate until
 a fault-injection rehearsal proves the financial effects acceptable.
+An in-memory fault-injection test now crashes after the first ordered tariff
+bulk lands, verifies the partial state, then runs the next scheduled
+reconciliation and checks that the three final tariff scopes have the expected
+rates and source bills without duplicate rows. All four focused tariff
+reconciliation tests pass. This proves next-run repair for that write boundary;
+it does not prove same-turn recovery or cover every corporationTurn side effect.
 
 The one-turn profiler has a local-only guard and cannot be run against
 production. A partial production copy is restored to a private localhost Mongo instance
