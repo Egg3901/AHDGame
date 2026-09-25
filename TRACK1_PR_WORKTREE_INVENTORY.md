@@ -1001,3 +1001,16 @@ are therefore outside the approved reset repair and would alter autonomy
 outcomes without qualification. Fresh status is clean, checkout unlocked and
 process-free. Decision: abandon and remove the checkout normally; retain the
 branch ref so the experiment is recoverable if separately scoped later.
+
+**AHDGame `private-privatization-vote`: DELETE abandoned clean buyout
+mechanic, 2026-09-25.** Its one unique commit `c6ba158db9` opens the public
+take-private vote to private corporations with minority holders and changes
+the corporation action card. No open privatization issue requests this new
+mechanic or supplies its required balance simulation report. It is based on
+older settlement code and omits development's later #1750 bank-NAV buyout
+floor and IPO unplaced-share handling, so a direct merge would regress both
+guards. Its unrelated pending-ticket query change has a separate supported
+delivery path in the merged bot/ops work. Decision: abandon this older
+unqualified mechanic rather than change live buyout eligibility in the reset
+repair. Fresh status is clean, checkout unlocked and process-free; remove it
+normally, retaining the branch ref for provenance.
