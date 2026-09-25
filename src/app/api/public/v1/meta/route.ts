@@ -27,7 +27,7 @@ export async function GET(request: Request) {
             transport: "stdio",
             command: "npm run --silent api:mcp",
             credentialEnv: "AHD_API_KEY",
-            access: "read-only public v1 endpoints",
+            access: "read-only public v1 endpoints and own-key capabilities",
           },
           cdn: {
             staticBaseUrl: "https://cdn.ahousedividedgame.com/static/",

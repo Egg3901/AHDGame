@@ -24,7 +24,7 @@ describe("public v1 endpoint catalog", () => {
     expect(body.integrations.mcp).toMatchObject({
       command: "npm run --silent api:mcp",
       credentialEnv: "AHD_API_KEY",
-      access: "read-only public v1 endpoints",
+      access: "read-only public v1 endpoints and own-key capabilities",
     });
     expect(body.integrations.cdn.staticBaseUrl).toBe("https://cdn.ahousedividedgame.com/static/");
   });

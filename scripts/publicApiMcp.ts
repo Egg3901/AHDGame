@@ -4,8 +4,15 @@ import { ENDPOINTS, type PublicEndpointDefinition } from "../src/lib/publicApi/c
 
 const MAX_RESPONSE_BYTES = 2_000_000;
 const TIMEOUT_MS = 15_000;
+const KEY_ENDPOINT: PublicEndpointDefinition = {
+  method: "GET",
+  path: "/api/v1/key",
+  description: "Inspect this API key's scope and allowed operation classes.",
+  params: [],
+};
 
 export function endpointToolName(endpoint: PublicEndpointDefinition): string {
+  if (endpoint.path === KEY_ENDPOINT.path) return "get_key_capabilities";
   return `get_${endpoint.path
     .replace("/api/public/v1/", "")
     .replace(/\[([^\]]+)\]/g, "$1")
@@ -81,9 +88,12 @@ async function main() {
   if (origin.protocol !== "https:" && !["localhost", "127.0.0.1"].includes(origin.hostname)) {
     throw new Error("AHD_API_BASE_URL must use HTTPS outside localhost");
   }
-  const tools = ENDPOINTS.filter(
-    (endpoint) => !endpoint.path.endsWith("/meta") && !endpoint.path.endsWith("/openapi.json")
-  ).map((endpoint) => ({
+  const tools = [
+    ...ENDPOINTS.filter(
+      (endpoint) => !endpoint.path.endsWith("/meta") && !endpoint.path.endsWith("/openapi.json")
+    ),
+    KEY_ENDPOINT,
+  ].map((endpoint) => ({
     name: endpointToolName(endpoint),
     description: endpoint.description,
     inputSchema: {

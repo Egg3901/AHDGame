@@ -8,6 +8,17 @@ describe("public API MCP bridge", () => {
     expect(new Set(names).size).toBe(names.length);
   });
 
+  it("offers key introspection as a dedicated tool", () => {
+    expect(
+      endpointToolName({
+        method: "GET",
+        path: "/api/v1/key",
+        description: "Key capabilities",
+        params: [],
+      })
+    ).toBe("get_key_capabilities");
+  });
+
   it("builds only catalogued URL parameters", () => {
     const endpoint = ENDPOINTS.find(
       (entry) => entry.path === "/api/public/v1/country/[code]/metrics"
