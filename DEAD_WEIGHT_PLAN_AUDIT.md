@@ -716,6 +716,17 @@ reads per vote) to four. The partial copy at turn 1119 had no votes due at
 turn 1123, so it provides no phase-level timing or command reduction sample;
 production canary telemetry remains the performance acceptance gate.
 
+The share-order matcher now projects open orders and affected corporation
+documents to the fields it consumes. It retains the full `shareholders` array
+because sales are capped against current holdings. On the partial local copy at
+turn 1119, 495 open orders fell from 151,753 to 80,134 BSON bytes, and the 336
+affected corporations fell from 1,675,637 to 1,130,703 bytes. The combined
+reads fell by 616,553 bytes (33.7%) with the document counts unchanged. The
+measurement sums `BSON.calculateObjectSize` for returned documents; it is a
+read-shape comparison, not a phase timing or command-count result. The focused
+`shareOrders.test.ts` suite verifies the projections alongside its settlement
+cases.
+
 WP3's direct local `processNppActions` trace at turn 1124 recorded 7,267 Mongo
 commands, 24,394 returned documents, and 14,934,762 BSON bytes on the partial
 local world. The bond-buy core made 132 `bonds.findOne` calls after the sweep
