@@ -30,6 +30,10 @@ import {
   UK_NATIONAL_DEFAULTS,
 } from "./basePolicies";
 import { getInitialRates } from "@/lib/constants/currencies";
+import {
+  TRANSITION_1991_BUDGET_COUNTRIES,
+  shouldUseFullAuthoredBudgetBaseline,
+} from "./rules/budgetBaselineMode";
 import { euroConversionFactor, isEuroAdopted } from "@/lib/currency/rules/euroAdoption";
 import { SEED_TAX_RATES_1953 } from "@/lib/politicalLegislation/seedTaxRates";
 import { COUNTRY_POLICY_CONFIGS_1953 } from "./basePolicies1953";
@@ -655,14 +659,12 @@ function isPoliticalLegislationCountry(countryId: string): boolean {
   return POLITICAL_LEGISLATION_OLD_SCOPES.has(countryId.toLowerCase());
 }
 
-const TRANSITION_1991_BUDGET_COUNTRIES = new Set(["RU", "PL", "CS", "HU", "RO", "BG", "YU"]);
-
 function preferFullAuthoredBaseline(config: NationalBudgetSeedConfig): boolean {
-  if (config.fiscalYear === 1953 && isPoliticalLegislationCountry(config.countryId)) return true;
-  // Transition countries have source-anchored 1991 fiscal totals but no
-  // comparable enacted spending-law catalog. Keep their opening allocation
-  // intact; the runtime uses it until era-authored laws are enacted.
-  return config.fiscalYear === 1991 && TRANSITION_1991_BUDGET_COUNTRIES.has(config.countryId);
+  return shouldUseFullAuthoredBudgetBaseline({
+    countryId: config.countryId,
+    fiscalYear: config.fiscalYear,
+    politicalLegislationCountry: isPoliticalLegislationCountry(config.countryId),
+  });
 }
 
 function preferCategoryBaselineOverrides(config: NationalBudgetSeedConfig): boolean {
@@ -5573,7 +5575,7 @@ export function getNationalBudgetSeedConfigsForPreset(preset: string): NationalB
       // The seven transition republic budgets are scoped to the 1991 world.
       // Later presets may reintroduce a country only with a later authored row.
       getNationalBudgetSeedConfigsForPreset("1991-default").filter(
-        (config) => !TRANSITION_1991_BUDGET_COUNTRIES.has(config.countryId)
+        (config) => !TRANSITION_1991_BUDGET_COUNTRIES.includes(config.countryId)
       ),
       NATIONAL_BUDGET_SEED_CONFIGS_1999,
       1999

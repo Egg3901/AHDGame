@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest";
 import { getInitialRates, eraRateForCurrency } from "@/lib/constants/currencies";
 import { huRegions2027 } from "@/lib/countries/hu/data/huRegions2027";
 import { PARTY_ROSTERS_2027 } from "@/lib/seeds/partyRosters2027";
-import { getNationalBudgetSeedConfigsForPreset } from "./budgets";
+import {
+  getInitialNationalBudgetsForPreset,
+  getNationalBudgetSeedConfigsForPreset,
+} from "./budgets";
 
 describe("HU 2027 explicit source fallback", () => {
   it("reconciles region totals to the national population and revised GDP", () => {
@@ -23,6 +26,12 @@ describe("HU 2027 explicit source fallback", () => {
       Object.values(budget!.baselineSpendingByCategory).reduce((sum, amount) => sum + amount, 0) +
       budget!.baselineStateGrants;
     expect(operating + budget!.debt.principal * budget!.debt.interestRate).toBe(41_141_000_000_000);
+    const seeded = getInitialNationalBudgetsForPreset("2027-default").find(
+      (row) => row.countryId === "HU"
+    );
+    expect(seeded).toBeDefined();
+    expect(Math.abs(seeded!.revenue.total - 37_082_000_000_000)).toBeLessThan(1_000_000);
+    expect(Math.abs(seeded!.spending.total - 41_141_000_000_000)).toBeLessThan(1_000_000);
   });
 
   it("uses the 2026 parliamentary parties, without obsolete seeded competitors", () => {
