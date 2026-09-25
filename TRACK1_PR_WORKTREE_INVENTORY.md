@@ -528,6 +528,19 @@ the small production-safety unit until one lands. The Ops open set is now
 The remaining rows above require final decisions and execution; this document
 does not mark them complete.
 
+**AHDGame PR #2379: MERGED into `development`, 2026-09-25.** Merge commit
+`5c4552f4cb29b6d47917f9beaa6f99f3c9993b59` contains projected
+transaction-expiry reads and shared settings snapshots for equity liquidity
+and bond-reserve passes. All hosted checks passed on head
+`4ae339b03a39463630cc515803e00e8688fa349a`; a contribution and evidence
+explanation was posted before merge. A matched before/after turn profile is
+still required for the wider dead-weight workstream. Immediately before a
+normal worktree removal, `dead-weight-plan` gained a new uncommitted
+17-line edit to `DEAD_WEIGHT_PLAN_AUDIT.md` from its active owner. Git refused
+removal without force, as intended. This checkout is now DIRTY and must stay
+until its owner commits or explicitly discards the new document edit; Track 1
+did not touch that content.
+
 **Fresh AHDGame PR snapshot, 2026-09-25 01:34 UTC.** PR #2378 has merged into
 `development` as `66ccb07926980085f556ec60fd620f19ee50d464` and contributes
 the banking hub table interface. Its feature worktree remains owned by the

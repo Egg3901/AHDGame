@@ -9,8 +9,8 @@ note, not a declaration that reset readiness has passed.
 - Source branch: `origin/development` fetched on 2026-09-25.
 - Exact base: `028cb9265e76555efa5d73b611cea0f409c3446b`.
 - Latest observed `origin/development` on 2026-09-25 is
-  `66ccb07926980085f556ec60fd620f19ee50d464` (banking hub PR #2378,
-  after the dead-weight groundwork PR #2377). This branch is pending a
+  `5c4552f4cb29b6d47917f9beaa6f99f3c9993b59` (dead-weight expiry PR
+  #2379, after banking hub PR #2378 and groundwork PR #2377). This branch is pending a
   controlled rebase after the two active Muse workers finish. The exact base
   above records where Track 1 began; it is not a claim that this branch has
   incorporated the later commits yet.
