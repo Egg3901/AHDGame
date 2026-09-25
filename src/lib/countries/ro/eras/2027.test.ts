@@ -4,13 +4,6 @@ import { RO_GEOGRAPHY } from "../geography";
 import { RO_2027 } from "./2027";
 import { roRegions2027 } from "../data/roRegions2027";
 
-/**
- * NOTE: `getCountryConfig("RO", "2027-default")` only reflects RO_2027 once
- * the supervisor wires `RO: RO_ERAS["2027-default"]?.config` into
- * ERA_COUNTRY_CONFIG_OVERRIDES (shared file, out of scope here — the HU
- * precedent is commit 2c1f00a926). Until then this suite asserts the
- * folder-owned override object directly, plus everything readable today.
- */
 describe("RO 2027 government and geography", () => {
   it("authors a democratic override for the modern preset", () => {
     expect(RO_2027.preset).toBe("2027-default");
@@ -28,6 +21,8 @@ describe("RO 2027 government and geography", () => {
     expect(config?.exchangeKind).toBe("market");
     expect(config?.centralGovernmentLabel).toBe("National Government");
     expect(config?.usdExchangeRate).toBeCloseTo(0.2166, 12);
+    expect(getCountryConfig("RO", "2027-default").governmentType).toBe("presidential");
+    expect(getCountryConfig("RO", "2027-default").legislature.lowerChamber.seats).toBe(331);
     expect(RO_GEOGRAPHY.regionBundles["2027-default"]).toBe(roRegions2027);
   });
 

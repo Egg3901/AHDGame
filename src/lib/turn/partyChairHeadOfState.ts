@@ -18,7 +18,7 @@
 import { ObjectId, type Db } from "mongodb";
 import type { ElectedOfficial, PoliticalParty } from "@/lib/db/types";
 import {
-  COUNTRY_CONFIGS,
+  getCountryConfig,
   getHeadOfStateOfficeType,
   ALL_COUNTRY_IDS,
   type CountryId,
@@ -35,9 +35,9 @@ export interface ChairHeadOfStateResult {
 }
 
 /** Every country whose ceremonial head of state follows the ruling-party chair. */
-export function partyChairSyncCountries(): CountryId[] {
+export function partyChairSyncCountries(preset?: string): CountryId[] {
   return ALL_COUNTRY_IDS.filter(
-    (id) => COUNTRY_CONFIGS[id].headOfStateSelection === "partyChairSync"
+    (id) => getCountryConfig(id, preset).headOfStateSelection === "partyChairSync"
   );
 }
 
@@ -46,11 +46,15 @@ export function partyChairSyncCountries(): CountryId[] {
  * falls back to the seeded `rulingPartyId`, so a world whose parties predate the
  * label still resolves.
  */
-async function findRulingParty(db: Db, countryId: CountryId): Promise<PoliticalParty | null> {
+async function findRulingParty(
+  db: Db,
+  countryId: CountryId,
+  preset?: string
+): Promise<PoliticalParty | null> {
   const coll = db.collection<PoliticalParty>("politicalParties");
   const ruling = await coll.findOne({ countryId, regimeStatus: "ruling" });
   if (ruling) return ruling;
-  const seeded = COUNTRY_CONFIGS[countryId].rulingPartyId;
+  const seeded = getCountryConfig(countryId, preset).rulingPartyId;
   if (seeded == null) return null;
   return coll.findOne({ countryId, sequentialId: seeded });
 }
@@ -68,12 +72,17 @@ async function findRulingParty(db: Db, countryId: CountryId): Promise<PoliticalP
 export async function syncPartyChairHeadOfState(
   db: Db,
   countryId: CountryId,
-  now: Date = new Date()
+  now: Date = new Date(),
+  preset?: string
 ): Promise<ChairHeadOfStateResult> {
-  const officeType = getHeadOfStateOfficeType(COUNTRY_CONFIGS[countryId]);
+  const config = getCountryConfig(countryId, preset);
+  if (config.headOfStateSelection !== "partyChairSync") {
+    return { countryId, action: "skipped_no_office" };
+  }
+  const officeType = getHeadOfStateOfficeType(config);
   if (!officeType) return { countryId, action: "skipped_no_office" };
 
-  const rulingParty = await findRulingParty(db, countryId);
+  const rulingParty = await findRulingParty(db, countryId, preset);
   if (!rulingParty) return { countryId, action: "skipped_no_ruling_party" };
 
   const officials = db.collection<ElectedOfficial>("electedOfficials");
@@ -120,11 +129,12 @@ export async function syncPartyChairHeadOfState(
 /** Reconcile every chair-synced country. Called from the turn phase and bootstrap. */
 export async function syncAllPartyChairHeadsOfState(
   db: Db,
-  now: Date = new Date()
+  now: Date = new Date(),
+  preset?: string
 ): Promise<ChairHeadOfStateResult[]> {
   const out: ChairHeadOfStateResult[] = [];
-  for (const countryId of partyChairSyncCountries()) {
-    out.push(await syncPartyChairHeadOfState(db, countryId, now));
+  for (const countryId of partyChairSyncCountries(preset)) {
+    out.push(await syncPartyChairHeadOfState(db, countryId, now, preset));
   }
   return out;
 }

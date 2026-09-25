@@ -762,28 +762,13 @@ describe("head-of-state office varies by era preset", () => {
     expect(getHeadOfStateOfficeType(getCountryConfig("ES", "1953-default"))).toBe("caudillo");
   });
 
-  // `partyChairHeadOfState` resolves the selection AND the office from the era-neutral
-  // config, because the turn sync has no preset in hand. That is only safe while no
-  // era override moves either for a chair-synced country. If one ever does, the sync
-  // writes the wrong office key and this is the test that says so.
-  it("keeps chair-synced countries' head-of-state office stable across presets", () => {
-    const presets = ["1953-default", "1979-default", "1991-default", "2019-default"];
-    const chairSynced = ALL_COUNTRY_IDS.filter(
-      (id) => COUNTRY_CONFIGS[id].headOfStateSelection === "partyChairSync"
+  it("moves Poland from party-chair head of state to a president in 1991", () => {
+    expect(getCountryConfig("PL", "1979-default").headOfStateSelection).toBe("partyChairSync");
+    expect(getHeadOfStateOfficeType(getCountryConfig("PL", "1979-default"))).toBe(
+      "chairmanOfStateCouncil"
     );
-    expect(chairSynced.length).toBeGreaterThan(0);
-    const broken: string[] = [];
-    for (const id of chairSynced) {
-      const baseOffice = getHeadOfStateOfficeType(COUNTRY_CONFIGS[id]);
-      for (const preset of presets) {
-        const config = getCountryConfig(id, preset);
-        const office = getHeadOfStateOfficeType(config);
-        if (office !== baseOffice || config.headOfStateSelection !== "partyChairSync") {
-          broken.push(`${id} @${preset}: office ${baseOffice} -> ${office}`);
-        }
-      }
-    }
-    expect(broken, `Chair-sync config moves by era:\n${broken.join("\n")}`).toEqual([]);
+    expect(getCountryConfig("PL", "1991-default").headOfStateSelection).toBeUndefined();
+    expect(getHeadOfStateOfficeType(getCountryConfig("PL", "1991-default"))).toBe("president");
   });
 
   // The invariants above, re-asserted per preset: an era override must not leave a

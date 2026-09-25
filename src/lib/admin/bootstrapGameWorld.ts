@@ -1169,7 +1169,7 @@ export async function bootstrapGameWorld(options: BootstrapOptions) {
   // re-runs this every turn; seeding it here makes a freshly bootstrapped world
   // correct before turn 1 fires, rather than showing "Vacant" until the first tick.
   const { syncAllPartyChairHeadsOfState } = await import("@/lib/turn/partyChairHeadOfState");
-  const chairHosResults = await syncAllPartyChairHeadsOfState(db, now);
+  const chairHosResults = await syncAllPartyChairHeadsOfState(db, now, preset);
   const seated = chairHosResults.filter((r) => r.action !== "noop");
   log(
     `Party-chair head-of-state sync (bootstrap): ${seated.length}/${chairHosResults.length} seated ` +
