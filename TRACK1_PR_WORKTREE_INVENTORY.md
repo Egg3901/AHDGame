@@ -1171,10 +1171,12 @@ requires its own complete gate before merge or an explicit abandon reason.
 one focused companion commit `8e9b2c163` on
 `fix/track1-ticket-filing-context`. The focused branch contains only the
 four context-question files, with no older `client-tester.ts` or receipt
-experiments. Thirty-one focused ticket tests and scoped lint passed. It is
-open as [adhd-bot PR #153](https://github.com/arle-bina/adhd-bot/pull/153),
-mergeable but awaiting the queued build and remote checks. The old branch
-ref remains for provenance; its unrelated commits are abandoned for this
-Track. The source checkout is clean but remains in place until the PR merges
-and a fresh locked/process/dirty check permits ordinary removal. This PR
-supersedes the snapshot statement that Bot has zero open PRs.
+experiments. [adhd-bot PR #153](https://github.com/arle-bina/adhd-bot/pull/153)
+merged to Bot `main` as squash `c45d05a56c82fbb77f16d4cc3184346705d10c81`
+after the shared scheduler build, 31 focused tests, and scoped lint passed.
+The old branch ref remains for provenance; its unrelated commits
+are abandoned for this Track. The source checkout was rechecked clean,
+unlocked, and process-free, then removed with ordinary `git worktree remove`
+(exit 0). The Bot PR and worktree have terminal **merged** dispositions; no
+Bot source checkout remains for this ticket. This supersedes the snapshot
+statement that Bot had zero open PRs and the earlier pending state above.
