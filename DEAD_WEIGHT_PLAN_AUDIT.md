@@ -181,8 +181,9 @@ within a package is dependency order; packages are sequenced in §5.
   sampled turn [measured, stale]. Code at the pinned commit still shows the
   pattern: `getFundById` re-reads inside loops (`fundCron.ts` ~735, 924, 933,
   1008, 1147, 1162, 1802), two identical open-bid scans per fund filtered on
-  `placerFundId` (~783, 822), `refreshEquityLiquidityFacility` invoked twice
-  per run (~1427, 1907) [code].
+  `placerFundId` (~783, 822). `refreshEquityLiquidityFacility` appears in two
+  mutually exclusive branches (disabled cleanup or enabled quotes), so it runs
+  once per turn [code].
 - **Surface:** `src/lib/indexFunds/fundCron.ts` (passes 1, 3, 3c, step 8),
   `equityLiquidityFacility.ts`; collections `indexFunds`, `shareOrders`,
   `indexFundTransactions`, `indexFundSnapshots`; guarded balance writes in
@@ -198,7 +199,7 @@ within a package is dependency order; packages are sequenced in §5.
      contract: it currently sees bids placed or filled while cancellations
      run, which a stale in-memory set would miss.
   4. `bulkWrite` NAV/status/holdings updates; `insertMany` per-fund snapshots.
-  5. Gate `refreshEquityLiquidityFacility` (and any pure repricing) to the
+  5. Assess gating `refreshEquityLiquidityFacility` (and any pure repricing) to the
      daily cross-fund cadence instead of every turn - but only after
      confirming the quote cadence is not load-bearing for same-turn
      settlement.
@@ -582,6 +583,12 @@ so these readings cannot by themselves prove a code-diff speedup.
 | WP7 inventory          | Read-only production `db.stats()` reports 392 collections, 31,156,553 documents, and 16.49 GB logical data. The three largest collections by logical size are `ledgerEntries` (4,390 MB), `actionAuditLog` (2,935 MB), and `financialTxLog` (2,572 MB).                                                                                                                                                                     | Writer/reader inventory, 30-day growth, and restore requirements remain open; no TTL or deletion has been applied.                                                                                                          |
 | WP8 measurement        | Read-only production aggregation found 36,140 withdrawn and 2,337 active `electionCandidates` rows. The `tallyManagement` query `{ electionId, status: "active" }` uses `electionCandidates_electionId` in production `explain(queryPlanner)`. This does not support a global candidate-scan explanation for `voteAccumulation` latency.                                                                                    | Profile election-turn query work and define the historical reader contract before any archive or deletion.                                                                                                                  |
 | WP13 measurement       | `/usr/bin/time -f %M npm run typecheck` completed successfully with peak RSS 7,849,504 KiB (7.49 GiB) in this worktree. The configured 8,192 MiB V8 heap is a limit, not the measured RSS; the proposed under-3-GB target is currently unsupported.                                                                                                                                                                         | Profile TypeScript diagnostics and type instantiation hotspots before changing compiler settings. Elapsed wall time was 1,790.93 s on a heavily contended host and is not a stable compiler benchmark.                      |
+
+WP6 now projects only `turnLengthMinutes` for transaction expiry reads. On the
+local copy, the full `gameConfig` document is 10,572 BSON bytes and the
+projected result is 45 bytes. This changes bytes returned per read, not the
+number of reads; call-site attribution and a matched before/after turn remain
+necessary before claiming a phase-level improvement.
 
 The one-turn profiler has a local-only guard and cannot be run against
 production. A partial production copy is restored to a private localhost Mongo instance
