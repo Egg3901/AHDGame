@@ -11,6 +11,7 @@
     "design:check": "node scripts/build-design-md.mjs --check",
     "build": "next build && tsx scripts/postbuild-quality.ts",
     "start": "next start",
+    "start:turn-worker": "NODE_ENV=production NODE_OPTIONS=\"--max-old-space-size=3072 --max-semi-space-size=64\" tsx scripts/turn-worker.ts",
     "lint": "eslint --cache --cache-location node_modules/.cache/eslint",
     "format": "prettier --write .",
     "format:check": "prettier --check . --cache --cache-location node_modules/.cache/prettier/.prettier-cache",
@@ -131,6 +132,7 @@
     "remark-gfm": "^4.0.1",
     "sharp": "^0.35.4",
     "topojson-client": "^3.1.0",
+    "tsx": "^4.23.15",
     "westminster-svg": "^2.0.0",
     "zod": "^4.4.3"
   },
@@ -174,7 +176,6 @@
     "prettier": "^3.9.6",
     "tailwindcss": "^4",
     "topojson-server": "^3.0.1",
-    "tsx": "^4.23.13",
     "typescript": "6.0.2",
     "vitest": "^4.1.11"
   },
