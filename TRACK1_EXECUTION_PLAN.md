@@ -30,6 +30,13 @@ note, not a declaration that reset readiness has passed.
 - Issue #2159 selects `1991-default` for the reset. The owner also requires
   2027 defects to be fixed in this Track. A profile change invalidates the
   1991-specific launch evidence and requires a new qualification.
+- For #2289, retain HU, PL, RO, BG, and RU in the 2027 effective manifest.
+  These countries are already configured as active election/economy actors;
+  RU and PL also matter to the 1991-to-2027 crisis horizon. Removing them
+  would shrink the modeled world and require broader election, crisis,
+  economy, and conformance exclusions. Build and validate their missing
+  regional, political, economic, military, and currency substrate instead.
+  This decision does not weaken #2289's zero-critical fresh-bootstrap gate.
 - For the 2027 electorate repair, the owner approved a temporary projection
   waiver on 2026-09-25 while the Census Bureau has not announced publication
   of the 2025 ACS 1-year detailed tables. Keep the January 2027 education and
