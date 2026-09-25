@@ -272,6 +272,13 @@ insufficient evidence.
   It is neither a pass nor a source failure. Repeat from a stable source
   checkpoint after integration.
 
+- 2026-09-25: A Muse Spark 1.3 #2291 follow-up wrote additional 2027
+  sovereign/bond/national-corporation currency code and tests, then its
+  provider stream failed after three network retries. The eight edited files
+  passed `git diff --check` and were preserved as partial checkpoint
+  `14864d52ed`. They have not passed the intended focused tests or final
+  conformance, so #2291 remains open. Resume from this checkpoint.
+
 ### Current source checkpoint
 
 The original fresh base is recorded above. After the three AHDGame dependency

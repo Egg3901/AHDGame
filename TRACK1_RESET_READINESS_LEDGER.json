@@ -2499,6 +2499,11 @@
           "type": "candidate_checkpoint",
           "ref": "afcb2681a6cd6366fb107d720cba9e31d64d214f",
           "detail": "Clean preserved worktree checkpoint contains partial 2027 Turkey/regional/currency fixes and a #2325 report; review, integration, and final-SHA bootstrap proof remain pending."
+        },
+        {
+          "type": "partial_checkpoint",
+          "ref": "14864d52ed",
+          "detail": "Actual Muse Spark 1.3 worker extended 2027 euro currency through sovereign budgets, issuers, bond issuance, and national-corporation create paths with conformance fixtures. Provider transport failed before its final review/test pass. This checkpoint is unvalidated and #2291 remains open."
         }
       ],
       "blocked_by": [
