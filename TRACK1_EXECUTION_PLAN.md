@@ -284,6 +284,6 @@ insufficient evidence.
 
 The original fresh base is recorded above. After the three AHDGame dependency
 merges, the latest fetched `origin/development` is
-`088cc9ba629b1d41713154afb0148c827147842a`. This branch still needs a
+`311334422141a8f2374dce525f32a44e5b305ba5` after PR #2377 merged. This branch still needs a
 controlled rebase onto that commit after the current queued typecheck and
 source checkpoint; a later upstream change requires another refresh.

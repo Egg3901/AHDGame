@@ -474,5 +474,15 @@ repository checks or justify touching the active agent's branch. The current
 Ops open set is #186, #168, #167, #162, #137, and #122. This new surface must
 receive final merge-or-delete decisions after its owners finish.
 
+**AHDGame PR #2377: MERGED into `development`, 2026-09-25.** Its merge
+commit is `311334422141a8f2374dce525f32a44e5b305ba5`. It contributes
+measured dead-weight groundwork: production turn-budget evidence, the
+existing fund-bid index in reset seeds, corporation helper relocation, and
+fund sale-input reuse. All PR checks were green; a disposition explanation
+was posted before merge. The `dead-weight-plan` worktree is clean but a
+profiling process currently has its cwd there, so it remains protected until
+that process exits. Track 1 must rebase and reconcile the fund code overlap.
+This PR starts the audited workstream; it does not complete all packages.
+
 The remaining rows above require final decisions and execution; this document
 does not mark them complete.
