@@ -263,6 +263,11 @@ function buildSovereignBondDoc(params: {
   credibilitySpreadPp?: number;
   /** Democratic backsliding premium in percentage points. */
   democraticSpreadPp?: number;
+  /**
+   * Explicit home currency (usually the budget's `currencyCode`). Preferred
+   * over the era-blind map fallback, so 2027 euro members issue in EUR.
+   */
+  currencyCode?: CurrencyCode | string | null;
 }): { bondDoc: Omit<Bond, "_id">; annualCouponCost: number } {
   const { countryId, turn, now, issueAmount, maturityTurns, primeRate, countryCorporation } =
     params;
@@ -298,8 +303,10 @@ function buildSovereignBondDoc(params: {
     restructureExtendedMaturityTurn: null,
     originalMaturityTurn: null,
     originalTotalIssued: null,
-    // Sovereign bonds denominate in the issuing country's currency.
-    currencyCode: resolveCountryCurrencyCode({ countryId }),
+    // Sovereign bonds denominate in the issuing country's currency: the
+    // caller's explicit code (the budget row) wins, the era-blind map is
+    // only the fallback for callers without a budget in hand.
+    currencyCode: resolveCountryCurrencyCode({ countryId, currencyCode: params.currencyCode }),
     createdAt: now,
     updatedAt: now,
   };
@@ -346,6 +353,7 @@ async function issueSovereignBondSeries(
     maturityTurns,
     primeRate,
     countryCorporation,
+    currencyCode: budget.currencyCode,
     // B4: a discredited central bank makes its government borrow dearer. No
     // bank document means no scrutiny to read, so the spread is 0, not a guess.
     credibilitySpreadPp: centralBank ? sovereignCredibilitySpread(centralBank.chairInfamy ?? 0) : 0,
@@ -550,7 +558,9 @@ export async function issueScheduledSovereignBondSeries(
     // the cash it has and the appetite the demand model gives this issuer.
     // No pool for the currency (seeds, pre-migration) keeps full placement.
     const poolCurrency: CurrencyCode =
-      resolveCountryCurrencyCode({ countryId }) ?? COUNTRY_CURRENCY_MAP[countryId] ?? "USD";
+      resolveCountryCurrencyCode({ countryId, currencyCode: budgetDoc.currencyCode }) ??
+      COUNTRY_CURRENCY_MAP[countryId] ??
+      "USD";
     const pool = await readPoolForPrimary(db, poolCurrency);
     let poolCashRemaining = pool ? Math.max(0, pool.cashLocal) : Number.POSITIVE_INFINITY;
     const appetite = pool?.appetiteByCountry?.[countryId];
@@ -576,6 +586,7 @@ export async function issueScheduledSovereignBondSeries(
         primeRate,
         countryCorporation,
         democraticSpreadPp,
+        currencyCode: budgetDoc.currencyCode,
       });
       const requestedUnits = Math.floor(bondDoc.totalIssued / BOND_UNIT_FACE_VALUE);
       let placedUnits = requestedUnits;
@@ -755,7 +766,7 @@ export async function reconcileSovereignDebt(
   if (gap >= BOND_UNIT_FACE_VALUE) {
     const corporationId = countryCorporation?._id ?? new ObjectId();
     const issuerName = countryCorporation?.name ?? getSovereignIssuerName(countryId);
-    const currencyCode = resolveCountryCurrencyCode({ countryId });
+    const currencyCode = resolveCountryCurrencyCode({ countryId, currencyCode: budget.currencyCode });
 
     for (const [maturityStr, fraction] of Object.entries(distribution)) {
       if (!fraction || fraction <= 0) continue;

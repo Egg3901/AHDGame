@@ -23,11 +23,20 @@ const DEFAULT_GROWTH_RATE = 1;
  * Load FX rate for a country's currency. Used by {@link incrementNatCorpSectorRevenue}
  * to convert ₳-denominated seed revenue into the natcorp's local currency before
  * persisting — corporateSectors.revenue is stored in liquidCurrencyCode units.
+ *
+ * Country-scoped, not currency-scoped: post-eurozone several countries share
+ * EUR, so a `{ currencyCode }` query can return another country's row (and a
+ * 2027 legacy code matches no row at all, silently falling back to rate 1).
+ * The seeded row carries `countryId`, which is unique per country.
  */
 async function loadFxRateForCountry(
   db: Db,
   countryId: CountryId
 ): Promise<{ code: CurrencyCode | undefined; rate: number }> {
+  const direct = await db.collection<ExchangeRate>("exchangeRates").findOne({ countryId });
+  if (direct && direct.rate > 0) {
+    return { code: direct.currencyCode, rate: direct.rate };
+  }
   const code = COUNTRY_CURRENCY_MAP[countryId];
   if (!code) return { code: undefined, rate: 1 };
   const doc = await db.collection<ExchangeRate>("exchangeRates").findOne({ currencyCode: code });

@@ -4,6 +4,7 @@ import type { Db } from "mongodb";
 import {
   getNationalBudgetSeedConfigsForPreset,
   getInitialNationalBudgetsForPreset,
+  generateCountryOwnedSeedData,
   NATIONAL_BUDGET_SEED_CONFIGS_2027,
   type NationalBudgetSeedConfig,
 } from "./budgets";
@@ -44,6 +45,14 @@ function preConversionBase(
 }
 
 describe("2027 euro seed conformance", () => {
+  // Minimal roster: the UK sovereign corp only seeds when a UK state with
+  // positive GDP exists (same shape the bootstrap contract test uses). The
+  // euro-member issuer loop is unconditional, so this covers every issuer.
+  const SEED_STATES = [
+    { id: "DC", population: 700_000, gdp: 200_000_000_000, countryId: "US" },
+    { id: "LON", population: 9_000_000, gdp: 600_000_000_000, countryId: "UK" },
+  ];
+
   describe("budget configs", () => {
     it("prices every euro member in EUR and leaves non-members on their home code", () => {
       const byCountry = configsByCountry(getNationalBudgetSeedConfigsForPreset("2027-default"));
@@ -240,6 +249,106 @@ describe("2027 euro seed conformance", () => {
       expect([...fxEur].sort()).toEqual([...MEMBERS].sort());
       // seedForex writes euroAdoptedCountries from this same list.
       expect([...EUROZONE_2027_MEMBERS].sort()).toEqual([...MEMBERS].sort());
+    });
+  });
+
+  describe("sovereign issuer corporations", () => {
+    it("stamps EUR liquidCurrencyCode for every 2027 euro member", () => {
+      const entries = generateCountryOwnedSeedData(SEED_STATES, "2027-default");
+      const byCountry = new Map(
+        entries.map((entry) => [entry.corporation.countryId, entry.corporation])
+      );
+      for (const member of MEMBERS) {
+        expect(byCountry.get(member)?.liquidCurrencyCode, member).toBe("EUR");
+      }
+      // Non-members carry an explicit home code, never undefined.
+      for (const outsider of ["US", "UK", "JP", "BR", "CN", "NG", "SE", "TR"] as const) {
+        expect(byCountry.get(outsider)?.liquidCurrencyCode, outsider).toBe(
+          COUNTRY_CURRENCY_MAP[outsider]
+        );
+      }
+    });
+
+    it("seeds zero-balance issuers, so no conversion can destroy value", () => {
+      const entries = generateCountryOwnedSeedData(SEED_STATES, "2027-default");
+      for (const entry of entries) {
+        if ((EUROZONE_2027_MEMBERS as readonly string[]).includes(entry.corporation.countryId)) {
+          expect(entry.corporation.liquidCapital, entry.corporation.countryId).toBe(0);
+        }
+      }
+    });
+
+    it("keeps 1991 sovereign issuers on era-blind codes", () => {
+      const entries = generateCountryOwnedSeedData(SEED_STATES, "1991-default");
+      const byCountry = new Map(
+        entries.map((entry) => [entry.corporation.countryId, entry.corporation])
+      );
+      for (const [countryId, corp] of byCountry) {
+        expect(corp.liquidCurrencyCode, countryId).toBe(
+          COUNTRY_CURRENCY_MAP[countryId as keyof typeof COUNTRY_CURRENCY_MAP]
+        );
+      }
+    });
+  });
+
+  describe("legacy-code tripwire", () => {
+    // DE never had a legacy row (its home code is the DM-proxy EUR in every
+    // preset); every other member has exactly one obsolete code below.
+    const LEGACY_CODES = ["ATS", "ESP", "FIM", "FRF", "GRD", "ITL", "IEP"] as const;
+
+    it("fails if any 2027 member budget carries a legacy code", () => {
+      const offenders = getNationalBudgetSeedConfigsForPreset("2027-default").filter(
+        (config) =>
+          (LEGACY_CODES as readonly string[]).includes(config.currencyCode) &&
+          (EUROZONE_2027_MEMBERS as readonly string[]).includes(config.countryId)
+      );
+      expect(offenders.map((config) => `${config.countryId}:${config.currencyCode}`)).toEqual(
+        []
+      );
+      const built = getInitialNationalBudgetsForPreset("2027-default").filter(
+        (budget) =>
+          (LEGACY_CODES as readonly string[]).includes(budget.currencyCode ?? "") &&
+          (EUROZONE_2027_MEMBERS as readonly string[]).includes(budget.countryId)
+      );
+      expect(built.map((budget) => `${budget.countryId}:${budget.currencyCode}`)).toEqual([]);
+    });
+
+    it("fails if any 2027 sovereign issuer carries a legacy code", () => {
+      const entries = generateCountryOwnedSeedData(SEED_STATES, "2027-default");
+      const offenders = entries.filter((entry) =>
+        (LEGACY_CODES as readonly string[]).includes(
+          entry.corporation.liquidCurrencyCode ?? ""
+        )
+      );
+      expect(
+        offenders.map(
+          (entry) => `${entry.corporation.countryId}:${entry.corporation.liquidCurrencyCode}`
+        )
+      ).toEqual([]);
+    });
+
+    it("fails if the seed currency map resolves a member to a legacy code", () => {
+      for (const member of MEMBERS) {
+        const code = getSeedCurrencyCode(member, "2027-default");
+        expect((LEGACY_CODES as readonly string[]).includes(code), member).toBe(false);
+        expect(code, member).toBe("EUR");
+      }
+    });
+  });
+
+  describe("bond currency follows the budget", () => {
+    it("prefers the explicit budget code over the era-blind map", async () => {
+      const { resolveCountryCurrencyCode } = await import("@/lib/currency/govBudgetFields");
+      for (const member of MEMBERS) {
+        // The seeded 2027 budget row carries EUR; bond issuance must follow it.
+        expect(
+          resolveCountryCurrencyCode({ countryId: member, currencyCode: "EUR" }),
+          member
+        ).toBe("EUR");
+      }
+      // Without an explicit code the map fallback is legacy by design —
+      // documents why every bond seeder/issuer must pass the budget row.
+      expect(resolveCountryCurrencyCode({ countryId: "FR" })).toBe("FRF");
     });
   });
 });

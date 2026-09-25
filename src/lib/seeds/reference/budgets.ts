@@ -69,7 +69,7 @@ import { brRegionalBudgetInputs } from "@/lib/seeds/br/brBudgets";
 import { cnRegionalBudgetInputs } from "@/lib/seeds/cn/cnBudgets";
 import type { CountryId } from "@/lib/constants/countries";
 import type { CurrencyCode as ActiveCurrencyCode } from "@/lib/constants/currencies";
-import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
+import { COUNTRY_CURRENCY_MAP, getSeedCurrencyCode } from "@/lib/constants/currencies";
 import type { LegalStructureId } from "@/lib/constants/legalStructures";
 import {
   DE_PUBLIC_CORPORATION_OID,
@@ -6082,7 +6082,10 @@ function buildMarketStateEnterpriseCorpEntries(params: {
         userId: new ObjectId(spec.userOid),
         headquartersState: spec.headquartersState,
         liquidCapital: 0,
-        liquidCurrencyCode: COUNTRY_CURRENCY_MAP[spec.countryId] as ActiveCurrencyCode,
+        liquidCurrencyCode: getSeedCurrencyCode(
+          spec.countryId,
+          preset
+        ) as ActiveCurrencyCode,
         marketingBudget: 0,
         marketingStrength: 0,
         logisticsBudget: 0,
@@ -6713,7 +6716,13 @@ export function generateCountryOwnedSeedData(
         userId: new ObjectId(spec.userOid),
         headquartersState: spec.headquartersState,
         liquidCapital: 0,
-        liquidCurrencyCode: COUNTRY_CURRENCY_MAP[spec.countryId] as ActiveCurrencyCode,
+        // Preset-aware: 2027 euro members seed as EUR (zero balance, so no
+        // conversion needed — value conservation holds trivially). Every other
+        // preset resolves through the era-blind map, unchanged.
+        liquidCurrencyCode: getSeedCurrencyCode(
+          spec.countryId,
+          preset
+        ) as ActiveCurrencyCode,
         marketingBudget: 0,
         marketingStrength: 0,
         logisticsBudget: 0,
