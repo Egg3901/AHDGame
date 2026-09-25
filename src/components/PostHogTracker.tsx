@@ -4,13 +4,14 @@ import { useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { useAuthMe } from "@/contexts/AuthDataContext";
 import { CONSENT_EVENT, CONSENT_RESET_EVENT, getStoredConsent } from "@/components/CookieConsent";
+import { getPostHogClient } from "@/lib/analytics/posthogClient";
 import {
   captureFirstTurnIfReady,
   capturePendingAccountCreated,
   capturePendingCharacterCreated,
-  getPostHogClient,
-  stopPostHogCapture,
-} from "@/lib/analytics/posthogClient";
+  captureProductEvent,
+  stopAnalyticsCapture,
+} from "@/lib/analytics/capture";
 
 function productArea(pathname: string): string | null {
   if (pathname === "/") return "landing";
@@ -43,7 +44,7 @@ export function PostHogTracker() {
         previousUserId.current = null;
         lastCapturedPath.current = null;
         lastVisitUser.current = null;
-        void stopPostHogCapture();
+        void stopAnalyticsCapture();
         return;
       }
       void getPostHogClient();
@@ -78,7 +79,7 @@ export function PostHogTracker() {
         lastVisitUser.current = null;
       }
       if (area && lastCapturedPath.current !== pathname) {
-        client.capture("area_viewed", { area });
+        void captureProductEvent("area_viewed", { area });
         lastCapturedPath.current = pathname;
       } else if (!area) {
         lastCapturedPath.current = null;
@@ -109,7 +110,7 @@ export function PostHogTracker() {
         client.identify(userId);
         previousUserId.current = userId;
       }
-      client.capture("game_visit");
+      void captureProductEvent("game_visit");
       lastVisitUser.current = userId;
     });
   }, [accepted, userId]);

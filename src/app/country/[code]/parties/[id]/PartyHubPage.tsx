@@ -705,7 +705,7 @@ function NationalPartyHub({ scope }: { scope: Extract<PartyHubScope, { kind: "na
       {},
       (data) => {
         if (data.pending) return;
-        void import("@/lib/analytics/posthogClient")
+        void import("@/lib/analytics/capture")
           .then(({ captureProductEvent }) => captureProductEvent("party_joined"))
           .catch(() => {});
       }
