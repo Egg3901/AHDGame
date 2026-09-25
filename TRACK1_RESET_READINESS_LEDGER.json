@@ -590,6 +590,11 @@
           "type": "candidate_checkpoint",
           "ref": "afcb2681a6cd6366fb107d720cba9e31d64d214f",
           "detail": "Clean preserved worktree checkpoint contains authored RU/PL/CS/HU/RO/BG/YU 1991 source and tests; not yet integrated into Track 1 or validated on the final release SHA."
+        },
+        {
+          "type": "read_only_review",
+          "ref": "afcb2681a6cd6366fb107d720cba9e31d64d214f",
+          "detail": "Muse read-only review found RU owned-enterprise and policy gaps, turnout-prior inconsistencies, four TypeScript errors, and no fresh zero-critical/repeat-seeding integration test. The #2316 report will use turn 5 of the first planned 1991 seed, adding zero world starts."
         }
       ],
       "blocked_by": [

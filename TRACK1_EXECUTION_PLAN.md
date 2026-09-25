@@ -168,6 +168,15 @@ five-year, ten-year, and horizon starts. The budget remains provisional until
 the production worker's pinned-source resume and complete report retention
 are verified in sandbox.
 
+Issue #2316's pre-merge demographic/balance report uses the fresh bootstrap
+and first five turns of the **first planned 1991 qualification seed**. It adds
+no world start. Save its conformance summary and `scripts/sim/checkpointReport.ts`
+output at turn 5 before continuing that same world through the five-year and
+ten-year gates. The source checkpoint cannot merge into `development` before
+that report exists; integrating and testing it inside this unmerged Track 1
+branch does not claim the report gate has passed. This prefix runs only after
+deterministic zero-critical bootstrap and repeat-seeding tests are green.
+
 Worker source inspection confirms a continuation job can point at the same
 sandbox database: `worker.ts` verifies the pinned worktree before spawn and
 again before report collection, while `runWorld.ts` detects an already
