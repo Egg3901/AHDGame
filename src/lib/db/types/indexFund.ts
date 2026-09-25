@@ -209,6 +209,26 @@ export interface IndexFundRedemptionQueueEntry {
   status: IndexFundRedemptionStatus;
   /** Set while the cron owns this payout. Processing rows require reconciliation after a crash. */
   processingStartedAt?: Date;
+  /**
+   * Crash-recovery journal for the payout attempt that owns this processing
+   * claim (#2223). Written in order: `from` at claim time, `debitAnchor` /
+   * `debitUnits` right after the fund debit lands, `creditApplied` + payout
+   * figures right after the holder credit lands. A stale processing row is
+   * only safe to restore when no fund debit is outstanding for it; the
+   * reaper (`reapStaleRedemptionProcessing`) refunds a journaled debit,
+   * finalizes a journaled credit without moving money again, and reports
+   * marker-less legacy rows for manual reconciliation instead of replaying
+   * them blind.
+   */
+  processingAttempt?: {
+    from: IndexFundRedemptionStatus;
+    debitAnchor?: number;
+    debitUnits?: number;
+    creditApplied?: boolean;
+    payoutUnits?: number;
+    payoutRemainingUnits?: number;
+    payoutNav?: number;
+  };
   createdAt: Date;
   updatedAt: Date;
 }

@@ -396,6 +396,17 @@ async function executeOneHoldingSale(
     return null;
   }
 
+  // Every leg below runs after value already moved (issuer debit + share
+  // debit are committed). On a replica set the caller aborts the enclosing
+  // transaction, so just rethrow; on standalone there is no transaction, so
+  // reverse the completed legs here in reverse order. Without this a crash
+  // between the share debit and the cash credit destroys value (issuer paid,
+  // fund credited nothing), and a crash between the cash credit and the
+  // holdings write double-counts (fund holds both the cash and the shares).
+  const standalone = !options?.session;
+  let cashCredited = false;
+  let holdingsWritten = false;
+  let transactionId: ObjectId | undefined;
   const fxByCurrency = options?.fxByCurrency ?? (await loadFxRatesByCurrency(db));
   const fxRate = fxRateForCorpFromMap(corp, fxByCurrency);
   const proceedsAnchor =
@@ -411,30 +422,96 @@ async function executeOneHoldingSale(
     sale.pricePerShareAnchor
   );
 
-  await db
-    .collection("indexFunds")
-    .updateOne(
-      { _id: fund._id },
-      { $inc: { cashAnchor: proceedsAnchor }, $set: { updatedAt: now } },
-      options?.session ? { session: options.session } : undefined
+  try {
+    const cashResult = await db
+      .collection("indexFunds")
+      .updateOne(
+        { _id: fund._id },
+        { $inc: { cashAnchor: proceedsAnchor }, $set: { updatedAt: now } },
+        options?.session ? { session: options.session } : undefined
+      );
+    if (cashResult.matchedCount !== 1) {
+      throw new Error("Fund disappeared during redemption-liquidity sale");
+    }
+    cashCredited = true;
+
+    await updateFundHoldings(db, fund._id, updatedHoldings, { session: options?.session });
+    holdingsWritten = true;
+
+    transactionId = await insertFundTransaction(
+      db,
+      {
+        fundId: fund._id,
+        kind: "public_float_sell",
+        corporationId: sale.corporationId,
+        shares: sale.sharesToSell,
+        navAnchor: sale.pricePerShareAnchor,
+        amountAnchor: proceedsAnchor,
+        note: options?.note ?? "Redemption liquidity",
+        createdAt: now,
+      },
+      { session: options?.session }
     );
-
-  await updateFundHoldings(db, fund._id, updatedHoldings, { session: options?.session });
-
-  const transactionId = await insertFundTransaction(
-    db,
-    {
-      fundId: fund._id,
-      kind: "public_float_sell",
-      corporationId: sale.corporationId,
-      shares: sale.sharesToSell,
-      navAnchor: sale.pricePerShareAnchor,
-      amountAnchor: proceedsAnchor,
-      note: options?.note ?? "Redemption liquidity",
-      createdAt: now,
-    },
-    { session: options?.session }
-  );
+  } catch (error) {
+    if (!standalone) throw error;
+    const compensationErrors: unknown[] = [];
+    const compensate = async (revert: () => Promise<unknown>) => {
+      try {
+        await revert();
+      } catch (compensationError) {
+        compensationErrors.push(compensationError);
+      }
+    };
+    if (transactionId !== undefined) {
+      const txId = transactionId;
+      await compensate(() => db.collection("indexFundTransactions").deleteOne({ _id: txId }));
+    }
+    if (holdingsWritten) {
+      await compensate(() => updateFundHoldings(db, fund._id, currentHoldings));
+    }
+    if (cashCredited) {
+      await compensate(() =>
+        db
+          .collection("indexFunds")
+          .updateOne(
+            { _id: fund._id },
+            { $inc: { cashAnchor: -proceedsAnchor }, $set: { updatedAt: new Date() } }
+          )
+      );
+    }
+    await compensate(async () => {
+      const restored = await creditSharesToFund(
+        db,
+        corp._id,
+        fund._id,
+        sale.sharesToSell,
+        sale.pricePerShareAnchor,
+        {
+          $inc: {
+            publicFloat: -sale.sharesToSell,
+            ...(orderFlowEligible
+              ? { orderFlowWindowSellValue: -sale.sharesToSell * executionPrice }
+              : {}),
+          },
+          $set: { updatedAt: new Date() },
+        }
+      );
+      if (!restored) throw new Error("Failed to restore fund shares after liquidity sale");
+    });
+    await compensate(() =>
+      reverseFloatSellDebit(db, corp, issuerBuyback, {
+        split: issuerDebit.split,
+        counterparty: options?.settlementCounterparty,
+      })
+    );
+    if (compensationErrors.length > 0) {
+      throw new AggregateError(
+        [error, ...compensationErrors],
+        "Redemption liquidity sale failed and compensation was incomplete"
+      );
+    }
+    throw error;
+  }
 
   // #992 tranche 6: fund-subject ledger leg for the cashAnchor credit above.
   // The contra is the unmodeled public float (single-sided under the shared
@@ -485,6 +562,7 @@ async function executeOneHoldingSale(
     counterparty: options?.settlementCounterparty,
   });
 
+  const committedTransactionId = transactionId;
   const undo = options?.session
     ? undefined
     : async () => {
@@ -497,7 +575,7 @@ async function executeOneHoldingSale(
           }
         };
         await reverse(() =>
-          db.collection("indexFundTransactions").deleteOne({ _id: transactionId })
+          db.collection("indexFundTransactions").deleteOne({ _id: committedTransactionId })
         );
         await reverse(() => updateFundHoldings(db, fund._id, currentHoldings));
         await reverse(() =>

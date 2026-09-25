@@ -1038,12 +1038,195 @@ export async function rebalanceConstituents(
 
 // ── Pass 3c: Process queued redemptions ───────────────────────────────
 
+/**
+ * Age past which a `processing` redemption row is owned by a dead worker.
+ * A single payout claim-to-finalize is milliseconds of sequential writes, so
+ * five minutes means the owner crashed mid-settlement, not that it is slow.
+ */
+export const STALE_REDEMPTION_PROCESSING_MS = 5 * 60 * 1000;
+
+export interface RedemptionReapResult {
+  reaped: number;
+  restored: number;
+  refunded: number;
+  finalized: number;
+  skippedLegacy: number;
+}
+
+/** Refund one queued-redemption fund debit (cash, plus supply for legacy-burn rows). */
+async function refundRedemptionDebit(
+  db: Db,
+  fundId: IndexFund["_id"],
+  paidAmount: number,
+  burnUnits: number
+): Promise<void> {
+  const inc: Record<string, number> = { cashAnchor: paidAmount };
+  if (burnUnits > 0) inc.unitSupply = burnUnits;
+  const result = await db
+    .collection<IndexFund>("indexFunds")
+    .updateOne({ _id: fundId }, { $inc: inc, $set: { updatedAt: new Date() } });
+  if (result.matchedCount !== 1) {
+    throw new Error("Failed to refund queued-redemption debit: fund missing");
+  }
+}
+
+/**
+ * Reconcile this fund's stale `processing` redemption rows after a crash
+ * (#2223). The payout journal on each row (`processingAttempt`) says exactly
+ * how far the dead attempt got:
+ * - no journal (legacy row) — left untouched for manual reconciliation. The
+ *   old code could strand these either side of the holder credit, so replaying
+ *   them blind risks a double payout.
+ * - journaled, no fund debit — nothing moved; restore to the pre-claim status.
+ * - journaled debit, no holder credit — the fund debit is outstanding; refund
+ *   it, then restore to the pre-claim status so the entry is payable again.
+ * - journaled holder credit — both money legs landed; finalize the queue
+ *   bookkeeping (status, paid totals) without moving money again. Audit rows
+ *   (fund transaction, ledger) are evidence only and are NOT re-emitted here:
+ *   the crash may have landed them already, and a duplicate audit row is
+ *   worse than a missing one. A post-finalize crash leaves money and queue
+ *   state correct with at most a missing audit row.
+ *
+ * Reaper claims are atomic (exact `processingStartedAt` match), so concurrent
+ * reapers resolve each row exactly once. Callers must still assume single
+ * cron ownership per fund per turn: the lease only bites rows older than
+ * `staleAfterMs`, and an owner stalled past the lease while its row is
+ * reaped can still finish its own writes.
+ */
+export async function reapStaleRedemptionProcessing(
+  db: Db,
+  fundId: IndexFund["_id"],
+  options?: { staleAfterMs?: number; now?: Date }
+): Promise<RedemptionReapResult> {
+  const result: RedemptionReapResult = {
+    reaped: 0,
+    restored: 0,
+    refunded: 0,
+    finalized: 0,
+    skippedLegacy: 0,
+  };
+  const staleAfterMs = options?.staleAfterMs ?? STALE_REDEMPTION_PROCESSING_MS;
+  const now = options?.now ?? new Date();
+  const queue = db.collection<IndexFundRedemptionQueueEntry>(FUND_REDEMPTION_QUEUE_COLLECTION);
+  const stale = await queue
+    .find({
+      fundId,
+      status: "processing",
+      processingStartedAt: { $lt: new Date(now.getTime() - staleAfterMs) },
+    })
+    .toArray();
+  const skippedIds: string[] = [];
+  for (const row of stale) {
+    // Atomic claim: only one reaper wins per lease period.
+    const claim = await queue.updateOne(
+      { _id: row._id, status: "processing", processingStartedAt: row.processingStartedAt },
+      { $set: { processingStartedAt: now, updatedAt: now } }
+    );
+    if (claim.matchedCount !== 1) continue;
+    const fresh = await queue.findOne({ _id: row._id });
+    if (!fresh || fresh.status !== "processing") continue;
+    const attempt = fresh.processingAttempt;
+    if (!attempt || (attempt.from !== "queued" && attempt.from !== "partial")) {
+      result.skippedLegacy++;
+      skippedIds.push(row._id.toString());
+      continue;
+    }
+    result.reaped++;
+    if (attempt.creditApplied) {
+      const remaining = Math.max(0, attempt.payoutRemainingUnits ?? 0);
+      const nav = attempt.payoutNav ?? 0;
+      await queue.updateOne(
+        { _id: row._id, status: "processing" },
+        {
+          $set: {
+            status: redemptionEntryStatusAfterPayout(remaining),
+            paidAmountAnchor: (fresh.paidAmountAnchor ?? 0) + (attempt.debitAnchor ?? 0),
+            units: remaining,
+            requestedAmountAnchor: remaining * nav,
+            updatedAt: new Date(),
+          },
+          $unset: { processingStartedAt: "", processingAttempt: "" },
+        }
+      );
+      result.finalized++;
+      continue;
+    }
+    if (attempt.debitAnchor !== undefined && attempt.debitAnchor > 0) {
+      await refundRedemptionDebit(db, fundId, attempt.debitAnchor, attempt.debitUnits ?? 0);
+      result.refunded++;
+    }
+    await queue.updateOne(
+      { _id: row._id, status: "processing" },
+      {
+        $set: { status: attempt.from, updatedAt: new Date() },
+        $unset: { processingStartedAt: "", processingAttempt: "" },
+      }
+    );
+    result.restored++;
+  }
+  if (skippedIds.length > 0) {
+    console.warn(
+      `[indexfund-cron] ${skippedIds.length} stale processing redemption(s) left for manual reconciliation (no recovery journal): ${skippedIds.join(", ")}`
+    );
+  }
+  return result;
+}
+
+/**
+ * Credit one queued-redemption payout to its holder. Returns true when the
+ * holder was credited, false when there is no holder to credit (unknown
+ * holder shape, or the holder document is gone). Throws on write failure so
+ * the caller can refund the fund debit.
+ */
+async function creditRedemptionHolder(
+  db: Db,
+  entry: IndexFundRedemptionQueueEntry,
+  paidNative: number,
+  paidAmountAnchor: number,
+  anchorCurrencyCode: CurrencyCode,
+  forexEnabled: boolean
+): Promise<boolean> {
+  const now = new Date();
+  if (entry.characterId) {
+    const inc = buildPersonalBalanceInc(paidNative, anchorCurrencyCode, forexEnabled);
+    const creditResult = await db
+      .collection("characters")
+      .updateOne({ _id: entry.characterId }, { $inc: inc, $set: { updatedAt: now } });
+    return creditResult.matchedCount !== 0;
+  }
+  if (entry.imperialCharacterId) {
+    const inc = buildPersonalBalanceInc(paidNative, anchorCurrencyCode, forexEnabled);
+    const creditResult = await db
+      .collection("imperialCharacters")
+      .updateOne({ _id: entry.imperialCharacterId }, { $inc: inc, $set: { updatedAt: now } });
+    return creditResult.matchedCount !== 0;
+  }
+  if (entry.nppId) {
+    // NPP investment cash stays in anchor (₳): the redeemFxRate wallet
+    // multiplier applies to character/imperial credits only.
+    const creditResult = await db.collection("npps").updateOne(
+      { _id: entry.nppId },
+      {
+        $inc: { nppInvestmentCashAnchor: paidAmountAnchor },
+        $set: { updatedAt: now },
+      }
+    );
+    return creditResult.matchedCount !== 0;
+  }
+  return false;
+}
+
 export async function processQueuedRedemptions(
   db: Db,
   fund: IndexFund,
   forexEnabled: boolean,
-  currentTurn: number
+  currentTurn: number,
+  recovery?: { staleAfterMs?: number }
 ): Promise<number> {
+  // Reconcile the previous pass's interrupted payouts before paying new ones,
+  // so a crashed turn's stranded rows are refunded or finalized exactly once
+  // instead of quarantined in `processing` forever.
+  await reapStaleRedemptionProcessing(db, fund._id, { staleAfterMs: recovery?.staleAfterMs });
   const pending = await listPendingRedemptions(db, fund._id);
   if (pending.length === 0) return 0;
 
@@ -1092,10 +1275,12 @@ export async function processQueuedRedemptions(
   let unservedUnits = pending.reduce((sum, e) => sum + Math.max(0, e.units ?? 0), 0);
 
   for (const pendingEntry of pending) {
-    // Claim before any fund debit or holder credit. If a later write fails, a
-    // processing row is quarantined for manual reconciliation instead of being
-    // paid a second time on the next turn. Automatic replay is unsafe because a
-    // crash can occur on either side of the holder credit.
+    // Claim before any fund debit or holder credit. The claim journals the
+    // pre-claim status on the row (#2223) so a crash later in this payout can
+    // be reconciled: restored when nothing moved, refunded when only the fund
+    // debit landed, finalized when the holder credit landed. Replay stays
+    // unsafe without that journal, which is why the reaper replays journaled
+    // rows but leaves marker-less legacy rows for manual reconciliation.
     const entry = await db
       .collection<IndexFundRedemptionQueueEntry>(FUND_REDEMPTION_QUEUE_COLLECTION)
       .findOneAndUpdate(
@@ -1105,7 +1290,14 @@ export async function processQueuedRedemptions(
           units: pendingEntry.units,
           paidAmountAnchor: pendingEntry.paidAmountAnchor,
         },
-        { $set: { status: "processing", processingStartedAt: new Date(), updatedAt: new Date() } },
+        {
+          $set: {
+            status: "processing",
+            processingStartedAt: new Date(),
+            processingAttempt: { from: pendingEntry.status },
+            updatedAt: new Date(),
+          },
+        },
         { returnDocument: "before" }
       );
     if (!entry) continue;
@@ -1116,7 +1308,7 @@ export async function processQueuedRedemptions(
           { _id: entry._id, status: "processing" },
           {
             $set: { status: entry.status, updatedAt: new Date() },
-            $unset: { processingStartedAt: "" },
+            $unset: { processingStartedAt: "", processingAttempt: "" },
           }
         );
     };
@@ -1129,7 +1321,7 @@ export async function processQueuedRedemptions(
           { _id: entry._id, status: "processing" },
           {
             $set: { status: "paid", updatedAt: new Date() },
-            $unset: { processingStartedAt: "" },
+            $unset: { processingStartedAt: "", processingAttempt: "" },
           }
         );
       continue;
@@ -1223,92 +1415,93 @@ export async function processQueuedRedemptions(
 
     // Guarded debit: only pay out if the fund still holds enough cash. Legacy
     // queued rows also require supply because their units were not burned yet.
-    const debitResult = await db.collection<IndexFund>("indexFunds").updateOne(debitFilter, {
-      $inc: debitInc,
-      $set: { updatedAt: new Date() },
-    });
-    if (debitResult.matchedCount === 0) {
-      await restoreQueueClaim();
-      break;
-    }
-    availableCash -= paidAmount;
-
-    if (entry.characterId) {
-      const inc = buildPersonalBalanceInc(paidNative, fundState.anchorCurrencyCode, forexEnabled);
-      const creditResult = await db
-        .collection("characters")
-        .updateOne({ _id: entry.characterId }, { $inc: inc, $set: { updatedAt: new Date() } });
-      if (creditResult.matchedCount === 0) {
-        // Character gone — refund the fund cash and skip this entry
-        await db.collection<IndexFund>("indexFunds").updateOne(
-          { _id: fund._id },
-          {
-            $inc: {
-              cashAnchor: paidAmount,
-              ...(shouldBurnUnitsNow ? { unitSupply: quote.redeemableUnits } : {}),
-            },
-          }
-        );
+    // The debit-to-credit window below is the interruption boundary (#2223):
+    // any throw between the debit landing and the holder credit landing
+    // refunds the debit and restores the claim, so a partial failure can
+    // neither strand fund cash nor double-pay on retry. Each entry is isolated
+    // (continue, not break) so one entry's transient failure does not starve
+    // the rest of the queue.
+    const burnUnits = shouldBurnUnitsNow ? quote.redeemableUnits : 0;
+    const remainingAfterPay = quote.queuedUnits;
+    let fundDebited = false;
+    try {
+      const debitResult = await db.collection<IndexFund>("indexFunds").updateOne(debitFilter, {
+        $inc: debitInc,
+        $set: { updatedAt: new Date() },
+      });
+      if (debitResult.matchedCount === 0) {
         await restoreQueueClaim();
-        continue;
+        break;
       }
-    } else if (entry.imperialCharacterId) {
-      const inc = buildPersonalBalanceInc(paidNative, fundState.anchorCurrencyCode, forexEnabled);
-      const creditResult = await db
-        .collection("imperialCharacters")
+      fundDebited = true;
+      availableCash -= paidAmount;
+      await db
+        .collection<IndexFundRedemptionQueueEntry>(FUND_REDEMPTION_QUEUE_COLLECTION)
         .updateOne(
-          { _id: entry.imperialCharacterId },
-          { $inc: inc, $set: { updatedAt: new Date() } }
-        );
-      if (creditResult.matchedCount === 0) {
-        await db.collection<IndexFund>("indexFunds").updateOne(
-          { _id: fund._id },
+          { _id: entry._id, status: "processing" },
           {
-            $inc: {
-              cashAnchor: paidAmount,
-              ...(shouldBurnUnitsNow ? { unitSupply: quote.redeemableUnits } : {}),
+            $set: {
+              "processingAttempt.debitAnchor": paidAmount,
+              "processingAttempt.debitUnits": burnUnits,
+              updatedAt: new Date(),
             },
           }
         );
+
+      const holderCredited = await creditRedemptionHolder(
+        db,
+        entry,
+        paidNative,
+        paidAmount,
+        fundState.anchorCurrencyCode,
+        forexEnabled
+      );
+      if (!holderCredited) {
+        // Holder gone (or no holder on the row) — refund the fund debit and
+        // skip this entry without paying it.
+        await refundRedemptionDebit(db, fund._id, paidAmount, burnUnits);
+        availableCash += paidAmount;
         await restoreQueueClaim();
         continue;
       }
-    } else if (entry.nppId) {
-      const creditResult = await db.collection("npps").updateOne(
-        { _id: entry.nppId },
-        {
-          $inc: { nppInvestmentCashAnchor: paidAmount },
-          $set: { updatedAt: new Date() },
-        }
-      );
-      if (creditResult.matchedCount === 0) {
-        await db.collection<IndexFund>("indexFunds").updateOne(
-          { _id: fund._id },
+      await db
+        .collection<IndexFundRedemptionQueueEntry>(FUND_REDEMPTION_QUEUE_COLLECTION)
+        .updateOne(
+          { _id: entry._id, status: "processing" },
           {
-            $inc: {
-              cashAnchor: paidAmount,
-              ...(shouldBurnUnitsNow ? { unitSupply: quote.redeemableUnits } : {}),
+            $set: {
+              "processingAttempt.creditApplied": true,
+              "processingAttempt.payoutUnits": quote.redeemableUnits,
+              "processingAttempt.payoutRemainingUnits": remainingAfterPay,
+              "processingAttempt.payoutNav": redemptionNav,
+              updatedAt: new Date(),
             },
           }
         );
-        await restoreQueueClaim();
-        continue;
-      }
-    } else {
-      await db.collection<IndexFund>("indexFunds").updateOne(
-        { _id: fund._id },
-        {
-          $inc: {
-            cashAnchor: paidAmount,
-            ...(shouldBurnUnitsNow ? { unitSupply: quote.redeemableUnits } : {}),
-          },
+    } catch (payoutError) {
+      if (fundDebited) {
+        try {
+          await refundRedemptionDebit(db, fund._id, paidAmount, burnUnits);
+          availableCash += paidAmount;
+        } catch {
+          // Refund failed: the journaled debit marker stays on the row, so
+          // the reaper (or manual reconciliation) refunds it exactly once
+          // instead of losing the cash.
         }
+      }
+      try {
+        await restoreQueueClaim();
+      } catch {
+        // Claim restore failed: the row stays journaled `processing` for the
+        // reaper rather than being paid twice.
+      }
+      console.warn(
+        `[indexfund-cron] redemption payout for ${entry._id.toString()} failed and was rolled back:`,
+        payoutError instanceof Error ? payoutError.message : payoutError
       );
-      await restoreQueueClaim();
       continue;
     }
 
-    const remainingAfterPay = quote.queuedUnits;
     await db.collection<IndexFundRedemptionQueueEntry>(FUND_REDEMPTION_QUEUE_COLLECTION).updateOne(
       { _id: entry._id, status: "processing" },
       {
@@ -1319,7 +1512,7 @@ export async function processQueuedRedemptions(
           requestedAmountAnchor: remainingAfterPay * redemptionNav,
           updatedAt: new Date(),
         },
-        $unset: { processingStartedAt: "" },
+        $unset: { processingStartedAt: "", processingAttempt: "" },
       }
     );
 
