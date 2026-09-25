@@ -1040,3 +1040,22 @@ Fresh status is clean, it is unlocked and process-free. Decision: remove
 normally, retaining the branch ref. The five source commits remain an
 explicit Track 1 merge/performance gate, not a claim they are already in
 development.
+
+**AHDGame `muse-1724d`: MERGE reviewed dirty UI work, then DELETE its
+checkout, 2026-09-25.** Its two Poll-rule commits `7774723e2d` and
+`2687fd7798` are superseded in source by merged development PR #1973
+(`7f1dacb761`): the current pure quote, route, UI, and tests also thread the
+newer price level. A conflict review preserved the newer behavior, producing
+only the missing Poll changelog (`5cdab5f996`) and an empty provenance
+follow-up (`2008e7c844`); 160 focused Poll tests passed. The checkout's real
+uncommitted `WatchlistPanel.tsx` edit was separately reviewed and ported to
+Track 1 as `bcdfd2d5b1`, with search/select and stale-response tests. Review
+found that public search excludes banned users, so `9dd4e2bd43` restored
+direct user-ID entry and added a banned-account fallback test; 3/3 watchlist
+tests, scoped lint, and format pass. Decision for the dirty source file:
+**commit its behavior to Track 1**, then discard only the redundant working
+copy after confirming the search/select behavior and clean-state restoration.
+The three untracked `muse*.log` files are local provider transcripts, not
+source or game evidence; discard them by exact path. Never force-remove the
+checkout. After a fresh clean, unlocked, process-free check, remove it
+normally while retaining its branch ref for provenance.
