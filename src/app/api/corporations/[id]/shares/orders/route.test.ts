@@ -3,6 +3,9 @@ import { ObjectId } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
+vi.mock("@/lib/api/newCharacterTransferBarrier", () => ({
+  newCharacterTransferBarrierResponse: vi.fn().mockResolvedValue(null),
+}));
 vi.mock("@/lib/api/requireCorporationActions", () => ({
   requireCorporationActionsEnabled: vi.fn().mockResolvedValue(null),
 }));
