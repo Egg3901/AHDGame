@@ -46,14 +46,15 @@ describe("PostHog consent boundary", () => {
   });
 
   it("does not initialize or capture before consent", async () => {
-    const { captureProductEvent } = await import("./posthogClient");
+    const { captureProductEvent } = await import("./capture");
     await captureProductEvent("account_created");
     expect(state.init).not.toHaveBeenCalled();
     expect(state.capture).not.toHaveBeenCalled();
   });
 
   it("stops capture after rejection and resumes only after another opt in", async () => {
-    const { captureProductEvent, stopPostHogCapture } = await import("./posthogClient");
+    const { captureProductEvent } = await import("./capture");
+    const { stopPostHogCapture } = await import("./posthogClient");
     state.consent = "accepted";
     await captureProductEvent("account_created");
     expect(state.capture).toHaveBeenCalledTimes(1);
@@ -71,7 +72,7 @@ describe("PostHog consent boundary", () => {
   });
 
   it("records the first completed turn once for the newly created character", async () => {
-    const { rememberNewCharacter, captureFirstTurnIfReady } = await import("./posthogClient");
+    const { rememberNewCharacter, captureFirstTurnIfReady } = await import("./capture");
     state.consent = "accepted";
     rememberNewCharacter("char1", 10);
     vi.stubGlobal(
@@ -98,8 +99,7 @@ describe("PostHog consent boundary", () => {
   });
 
   it("carries successful signup across a full navigation and captures it once", async () => {
-    const { rememberAccountCreated, capturePendingAccountCreated } =
-      await import("./posthogClient");
+    const { rememberAccountCreated, capturePendingAccountCreated } = await import("./capture");
     state.consent = "accepted";
     rememberAccountCreated();
     await Promise.all([capturePendingAccountCreated(), capturePendingAccountCreated()]);
@@ -112,10 +112,10 @@ describe("PostHog consent boundary", () => {
     const {
       rememberAccountCreated,
       rememberNewCharacter,
-      stopPostHogCapture,
       capturePendingAccountCreated,
       capturePendingCharacterCreated,
-    } = await import("./posthogClient");
+    } = await import("./capture");
+    const { stopPostHogCapture } = await import("./posthogClient");
     state.consent = "accepted";
     rememberAccountCreated();
     rememberNewCharacter("char1", 10);

@@ -109,7 +109,7 @@ export function MailThreadView({ item, onArchive, onSent }: MailThreadViewProps)
       }
 
       onSent?.();
-      void import("@/lib/analytics/posthogClient")
+      void import("@/lib/analytics/capture")
         .then(({ captureProductEvent }) => captureProductEvent("message_sent"))
         .catch(() => {});
     } catch {
