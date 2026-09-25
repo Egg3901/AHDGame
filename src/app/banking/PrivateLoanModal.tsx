@@ -60,6 +60,7 @@ export interface PrivateLoanModalProps {
   currentTurn: number;
   loans: PrivateLoanRecord[];
   hasCharacter: boolean;
+  initialBankId?: string;
   onClose: () => void;
   onChanged: () => Promise<void>;
   showToast: ShowToast;
@@ -76,12 +77,17 @@ export function PrivateLoanModal({
   currentTurn,
   loans,
   hasCharacter,
+  initialBankId,
   onClose,
   onChanged,
   showToast,
 }: PrivateLoanModalProps) {
   const { dialogProps, titleId } = useDialogA11y(onClose);
-  const [bankId, setBankId] = useState(banks[0]?.corporationId ?? "");
+  const [bankId, setBankId] = useState(
+    initialBankId && banks.some((bank) => bank.corporationId === initialBankId)
+      ? initialBankId
+      : (banks[0]?.corporationId ?? "")
+  );
   const [borrowerType, setBorrowerType] = useState<BorrowerType>(
     hasCharacter ? "character" : "corporation"
   );
