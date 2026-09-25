@@ -9,15 +9,16 @@ note, not a declaration that reset readiness has passed.
 - Source branch: `origin/development` fetched on 2026-09-25.
 - Exact base: `028cb9265e76555efa5d73b611cea0f409c3446b`.
 - Latest incorporated `origin/development` on 2026-09-25 is
-  `6360845ec34141570a0be3ba55e5d3bd55efc6aa` (Track 3 public API
-  auth/CDN hardening #2387, after #2385 MCP hardening). Track 1 first rebased
+  `346f0cdde97ee3e237d78fa1f153da7038a14b6a` (through #2392 turn
+  performance, #2388 worker, #2380 analytics, and #2391 security). Track 1 first rebased
   onto `cc06acd25cf259f9f9ede8076ac57552867ebae8`, retaining both the
   newer fund-liquidity threshold reuse and crash journal at that conflict.
   It then merged the newer development head cleanly as
-  `3456be9ac6412df733e76d35b2dc9d46cce30293`. The exact base above
-  records where Track 1 began; the incorporated commit records current
-  development ancestry. Refresh again before the final PR if development
-  advances.
+  `3456be9ac6412df733e76d35b2dc9d46cce30293`, then incorporated the
+  newer development head as merge `90b3bf85c7e871dfe5093625b6febc4daae42601`.
+  The exact base above records where Track 1 began; the incorporated commit
+  records current development ancestry. Refresh again before the final PR if
+  development advances.
 - Worktree: `/root/projects/AHDGame/worktrees/track1-fixer` on
   `track1/total-system-analysis-rework`.
 - The main checkout contains another agent's uncommitted PostHog/Sentry work.
