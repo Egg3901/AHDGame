@@ -16,6 +16,7 @@ import type {
   IChartApi,
   ISeriesApi,
   LineData,
+  Time,
   UTCTimestamp,
 } from "lightweight-charts";
 
@@ -141,7 +142,7 @@ export function MarketOverview({ exchangeFilter }: { exchangeFilter: ExchangeFil
           fontSize: 11,
         },
         grid: { vertLines: { color: border }, horzLines: { color: border } },
-        localization: { timeFormatter: (time) => turnLabel(Number(time)) },
+        localization: { timeFormatter: (time: Time) => turnLabel(Number(time)) },
         crosshair: {
           mode: CrosshairMode.Normal,
           vertLine: { color: muted, style: 2, labelBackgroundColor: muted },
@@ -152,7 +153,7 @@ export function MarketOverview({ exchangeFilter }: { exchangeFilter: ExchangeFil
           borderColor: border,
           timeVisible: true,
           secondsVisible: false,
-          tickMarkFormatter: (time) => turnLabel(Number(time)),
+          tickMarkFormatter: (time: Time) => turnLabel(Number(time)),
         },
       });
       chartRef.current = chart;
