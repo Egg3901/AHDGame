@@ -269,7 +269,6 @@ function StockMarketPageInner({ params }: { params: Promise<{ code: string }> })
   const [bondListings, setBondListings] = useState<BondListing[]>([]);
   const [wealthEntries, setWealthEntries] = useState<WealthEntry[]>([]);
   const [marketHistory, setMarketHistory] = useState<MarketCapPoint[]>([]);
-  const [historyDate, setHistoryDate] = useState<string | null>(null);
   const [funds, setFunds] = useState<FundListItem[]>([]);
   const [fundsError, setFundsError] = useState("");
   const [bondTotalOutstanding, setBondTotalOutstanding] = useState<number | undefined>(undefined);
@@ -362,7 +361,6 @@ function StockMarketPageInner({ params }: { params: Promise<{ code: string }> })
         setBondListings([]);
         setWealthEntries([]);
         setMarketHistory([]);
-        setHistoryDate(null);
         setFunds([]);
         setFundsError("");
         setBondTotalOutstanding(undefined);
@@ -450,7 +448,6 @@ function StockMarketPageInner({ params }: { params: Promise<{ code: string }> })
             const d = json as Record<string, unknown>;
             if (res.ok) {
               setMarketHistory((d.points as typeof marketHistory) ?? []);
-              setHistoryDate((d.newestTurnDate as string | null) ?? null);
             }
           }
           {
@@ -881,18 +878,13 @@ function StockMarketPageInner({ params }: { params: Promise<{ code: string }> })
 
         {/* Market Overview Chart on equity tabs; a compact contextual strip on
             wealth/funds/auctions where a total-market index adds little. */}
+        {/* Candle chart on equity tabs. Owns its range (24H/7D/1M/1Y/ALL);
+            the strip timeframe keeps driving the tables. */}
         {activeTab === "stocks" ||
         activeTab === "stats" ||
         activeTab === "bonds" ||
         activeTab === "commodities" ? (
-          <MarketOverview
-            exchangeFilter={exchangeFilter}
-            timeframe={stockTimeframe}
-            onTimeframeChange={setStockTimeframe}
-            history={marketHistory}
-            newestTurnDate={historyDate}
-            historyLoading={loading}
-          />
+          <MarketOverview exchangeFilter={exchangeFilter} />
         ) : (
           <TabContextStrip
             activeTab={activeTab}
