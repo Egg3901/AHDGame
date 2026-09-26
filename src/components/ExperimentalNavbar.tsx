@@ -132,6 +132,7 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
   activePresidentElectionSeatId: _activePresidentElectionSeatId,
 }: ExperimentalNavbarProps) {
   const t = useTranslations("nav");
+  const experimentVariant = navigationVariant === "b" ? "test" : "control";
   const pathname = usePathname();
   const { pageCountry, userCountry } = useCountryContext(
     homeState?.id,
@@ -1023,10 +1024,10 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
                   type="button"
                   onClick={() => {
                     void captureProductEvent("navigation_profile_opened", {
-                      variant: navigationVariant,
+                      variant: experimentVariant,
                     });
                     if (navigationVariant === "a")
-                      void captureProductEvent("navigation_menu_opened", { variant: "a" });
+                      void captureProductEvent("navigation_menu_opened", { variant: "control" });
                     setMobileProfileOpen((value) => !value);
                     setMobileMenuOpen(navigationVariant === "a");
                   }}
@@ -1049,7 +1050,7 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
                 onClick={() => {
                   if (!mobileMenuOpen)
                     void captureProductEvent("navigation_menu_opened", {
-                      variant: navigationVariant,
+                      variant: experimentVariant,
                     });
                   setMobileProfileOpen(false);
                   setMobileMenuOpen((v) => !v);

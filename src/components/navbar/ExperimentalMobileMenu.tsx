@@ -141,8 +141,8 @@ export function ExperimentalMobileMenu({
   const countryName = useCountryDisplayName();
   const trackDestination = (event: React.MouseEvent<HTMLDivElement>) => {
     if (!(event.target instanceof Element) || !event.target.closest("a[href]")) return;
-    void captureProductEvent("navigation_destination_selected", {
-      variant: navigationVariant,
+    void captureProductEvent("navigation_item_selected", {
+      variant: navigationVariant === "b" ? "test" : "control",
       surface: profileOnly ? "profile" : "menu",
     });
   };

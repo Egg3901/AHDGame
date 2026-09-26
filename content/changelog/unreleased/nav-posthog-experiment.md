@@ -17,4 +17,4 @@ areas: [frontend]
 
 - Added a PostHog experiment that keeps the current navigation as the control.
 - Added a compact mobile section grid and a separate avatar menu for profile actions.
-- Added anonymous menu opening and destination selection events for navigation testing.
+- Added anonymous menu opening and destination selection events for navigation testing, plus a turn completion event when an opted-in player sees a finished turn.
