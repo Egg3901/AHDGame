@@ -884,7 +884,7 @@ function StockMarketPageInner({ params }: { params: Promise<{ code: string }> })
         activeTab === "stats" ||
         activeTab === "bonds" ||
         activeTab === "commodities" ? (
-          <MarketOverview exchangeFilter={exchangeFilter} />
+          <MarketOverview exchangeFilter={exchangeFilter} exchangeMeta={exchangeMeta} />
         ) : (
           <TabContextStrip
             activeTab={activeTab}
