@@ -26,6 +26,7 @@ import { useActiveCharters } from "@/hooks/useActiveCharters";
 import { useActiveReferendumCampaign } from "@/hooks/useActiveReferendumCampaign";
 import { useActivePresidentElection } from "@/hooks/useActivePresidentElection";
 import { CDN_LOGO_URL } from "@/lib/images/staticCdnAssets";
+import { captureProductEvent } from "@/lib/analytics/capture";
 import { SingleplayerEndTurnButton } from "@/components/singleplayer/SingleplayerEndTurnButton";
 import { UniversalSearch } from "./UniversalSearch";
 import { Avatar } from "./Avatar";
@@ -76,6 +77,7 @@ import type {
 } from "@/components/navbar/experimentalNavTypes";
 
 export interface ExperimentalNavbarProps {
+  navigationVariant?: "a" | "b";
   clientShell?: boolean;
   user?: NavLinkRef;
   showProfile?: boolean;
@@ -103,6 +105,7 @@ export interface ExperimentalNavbarProps {
 }
 
 export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
+  navigationVariant = "a",
   clientShell = false,
   user,
   showProfile = false,
@@ -139,6 +142,7 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
   const [open, setOpen] = useState<OpenKey>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [mobileProfileOpen, setMobileProfileOpen] = useState(false);
   const [mobileSubOpen, setMobileSubOpen] = useState<Partial<Record<MobileSubKey, boolean>>>({});
   const [switchingCharacter, setSwitchingCharacter] = useState(false);
   const [switchingImperial, setSwitchingImperial] = useState(false);
@@ -1017,8 +1021,15 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
               {showProfile && user && (
                 <button
                   type="button"
-                  onClick={() => setMobileMenuOpen(true)}
-                  aria-label={t("common.openMenu")}
+                  onClick={() => {
+                    void captureProductEvent("navigation_profile_opened", {
+                      variant: navigationVariant,
+                    });
+                    setMobileProfileOpen((value) => !value);
+                    setMobileMenuOpen(navigationVariant === "a");
+                  }}
+                  aria-label={t("common.profile")}
+                  aria-expanded={navigationVariant === "b" ? mobileProfileOpen : mobileMenuOpen}
                   className="relative flex h-9 w-9 items-center justify-center overflow-hidden rounded-lg border border-card-border bg-card"
                 >
                   <Avatar
@@ -1033,7 +1044,14 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
               )}
               <button
                 type="button"
-                onClick={() => setMobileMenuOpen((v) => !v)}
+                onClick={() => {
+                  if (!mobileMenuOpen)
+                    void captureProductEvent("navigation_menu_opened", {
+                      variant: navigationVariant,
+                    });
+                  setMobileProfileOpen(false);
+                  setMobileMenuOpen((v) => !v);
+                }}
                 aria-label={mobileMenuOpen ? t("common.closeMenu") : t("common.openMenu")}
                 aria-expanded={mobileMenuOpen}
                 aria-controls="experimental-mobile-menu"
@@ -1059,13 +1077,18 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
           </div>
 
           {/* ── Mobile menu panel ────────────────────────────────────────── */}
-          {mobileMenuOpen && (
+          {(mobileMenuOpen || (navigationVariant === "b" && mobileProfileOpen)) && (
             <ExperimentalMobileMenu
+              navigationVariant={navigationVariant}
+              profileOnly={navigationVariant === "b" && mobileProfileOpen}
               navItems={navItems}
               pathname={pathname}
               mobileSubOpen={mobileSubOpen}
               toggleMobileSub={toggleMobileSub}
-              onClose={() => setMobileMenuOpen(false)}
+              onClose={() => {
+                setMobileMenuOpen(false);
+                setMobileProfileOpen(false);
+              }}
               user={user}
               showProfile={showProfile}
               characterProfile={characterProfile}

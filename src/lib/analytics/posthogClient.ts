@@ -51,7 +51,8 @@ export function getPostHogClient(): Promise<PostHogClient | null> {
           blockSelector: "[data-replay-block]",
         },
         disable_surveys: true,
-        advanced_disable_feature_flags: true,
+        // Navigation experiment assignment runs only after analytics consent.
+        advanced_disable_feature_flags: false,
         opt_out_capturing_by_default: true,
         persistence: "localStorage+cookie",
         property_denylist: [
