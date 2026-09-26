@@ -7,5 +7,10 @@ export const dynamic = "force-dynamic";
 export default async function BankingHubPage() {
   const user = await getAuthUser();
   if (!user) redirect("/login");
-  return <BankingHubClient />;
+  // Balances and loan details are excluded from PostHog session replay.
+  return (
+    <div data-replay-block>
+      <BankingHubClient />
+    </div>
+  );
 }

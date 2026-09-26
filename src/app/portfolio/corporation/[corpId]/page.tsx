@@ -41,7 +41,7 @@ function CorporationPublicPortfolioInner() {
 
   if (!corpRouteId) {
     return (
-      <div className="min-h-screen bg-background pb-16">
+      <div className="min-h-screen bg-background pb-16" data-replay-block>
         <main className="mx-auto max-w-5xl px-4 py-8">
           <p className="text-muted">Invalid corporation.</p>
         </main>
@@ -50,7 +50,7 @@ function CorporationPublicPortfolioInner() {
   }
 
   return (
-    <div className="min-h-screen bg-background pb-16">
+    <div className="min-h-screen bg-background pb-16" data-replay-block>
       <main className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 py-8 space-y-8">
         <BackButton fallbackHref={`/corporation/${corpRouteId}`} fallbackLabel="Corporation" />
         {!meLoaded ? (

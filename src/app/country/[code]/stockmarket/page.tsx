@@ -106,7 +106,7 @@ function MarketTableSkeleton() {
  */
 function StockMarketPageFallback() {
   return (
-    <div className="min-h-screen bg-background pb-16">
+    <div className="min-h-screen bg-background pb-16" data-replay-block>
       <main className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-6 space-y-6">
         <div className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
@@ -719,7 +719,7 @@ function StockMarketPageInner({ params }: { params: Promise<{ code: string }> })
   ];
 
   return (
-    <div className="min-h-screen bg-background pb-16">
+    <div className="min-h-screen bg-background pb-16" data-replay-block>
       <StockTicker
         listings={data?.listings ?? []}
         commodities={commodities}
