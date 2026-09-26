@@ -15,7 +15,6 @@ import type {
   HistogramData,
   IChartApi,
   ISeriesApi,
-  ISeriesMarkersPluginApi,
   LineData,
   Time,
   UTCTimestamp,
@@ -56,17 +55,6 @@ interface CandlesResponse {
   totalTurns: number;
 }
 
-interface MarkersResponse {
-  splits: {
-    turn: number;
-    kind: string;
-    corporationId: string;
-    corporationName: string;
-    headline: string;
-  }[];
-  wire: { timestamp: string; type: string; headline: string; href: string | null }[];
-}
-
 type CompareKey = { kind: "venue"; api: string } | { kind: "sector"; sector: CorporationType };
 
 function cssVar(name: string, fallback: string): string {
@@ -94,7 +82,6 @@ export function MarketOverview({ exchangeFilter }: { exchangeFilter: ExchangeFil
   const ma20Ref = useRef<ISeriesApi<"Line"> | null>(null);
   const ma50Ref = useRef<ISeriesApi<"Line"> | null>(null);
   const compareRef = useRef<ISeriesApi<"Line"> | null>(null);
-  const markersRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
 
   const [range, setRange] = useState<RangeKey>("7D");
   const [showMa20, setShowMa20] = useState(false);
@@ -106,6 +93,7 @@ export function MarketOverview({ exchangeFilter }: { exchangeFilter: ExchangeFil
   const [intradayTurns, setIntradayTurns] = useState(0);
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
+  const [chartReady, setChartReady] = useState(false);
 
   const exchangeApi =
     exchangeFilter === "global" ? "global" : (getExchangeApiKey(exchangeFilter) ?? "global");
@@ -139,6 +127,10 @@ export function MarketOverview({ exchangeFilter }: { exchangeFilter: ExchangeFil
       const down = cssVar("--error", "#ef4444");
       const muted = cssVar("--muted", "#8f8f9d");
       const border = cssVar("--card-border", "#2a2a3d");
+      const turnLabel = (time: number): string => {
+        const candle = candlesRef.current.find((row) => row.time === time);
+        return candle ? `T${candle.turn}` : "";
+      };
 
       chart = createChart(container, {
         width: container.clientWidth,
@@ -150,13 +142,19 @@ export function MarketOverview({ exchangeFilter }: { exchangeFilter: ExchangeFil
           fontSize: 11,
         },
         grid: { vertLines: { color: border }, horzLines: { color: border } },
+        localization: { timeFormatter: (time: Time) => turnLabel(Number(time)) },
         crosshair: {
           mode: CrosshairMode.Normal,
           vertLine: { color: muted, style: 2, labelBackgroundColor: muted },
           horzLine: { color: muted, style: 2, labelBackgroundColor: muted },
         },
         rightPriceScale: { borderColor: border },
-        timeScale: { borderColor: border, timeVisible: true, secondsVisible: false },
+        timeScale: {
+          borderColor: border,
+          timeVisible: true,
+          secondsVisible: false,
+          tickMarkFormatter: (time: Time) => turnLabel(Number(time)),
+        },
       });
       chartRef.current = chart;
 
@@ -166,6 +164,7 @@ export function MarketOverview({ exchangeFilter }: { exchangeFilter: ExchangeFil
         wickUpColor: up,
         wickDownColor: down,
         borderVisible: false,
+        priceFormat: { type: "custom", formatter: (price: number) => fmt(price), minMove: 0.01 },
       });
       candleRef.current = candleSeries;
 
@@ -176,6 +175,7 @@ export function MarketOverview({ exchangeFilter }: { exchangeFilter: ExchangeFil
       );
       volumeRef.current = volumeSeries;
       chart.priceScale("").applyOptions({ scaleMargins: { top: 0.84, bottom: 0 } });
+      setChartReady(true);
 
       chart.subscribeCrosshairMove((param) => {
         const tip = tooltipRef.current;
@@ -228,7 +228,6 @@ export function MarketOverview({ exchangeFilter }: { exchangeFilter: ExchangeFil
       ma20Ref.current = null;
       ma50Ref.current = null;
       compareRef.current = null;
-      markersRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -287,13 +286,15 @@ export function MarketOverview({ exchangeFilter }: { exchangeFilter: ExchangeFil
       }))
     );
     chart.timeScale().fitContent();
-  }, [candles]);
+  }, [candles, chartReady]);
 
   /* ---------------- moving-average overlays ---------------- */
   useEffect(() => {
     const chart = chartRef.current;
     if (!chart || candles.length === 0) return;
+    let cancelled = false;
     void import("lightweight-charts").then(({ LineSeries }) => {
+      if (cancelled) return;
       const closes = candles.map((c) => c.close);
       const times = candles.map((c) => c.time as UTCTimestamp);
       const sync = (
@@ -328,79 +329,10 @@ export function MarketOverview({ exchangeFilter }: { exchangeFilter: ExchangeFil
       sync(ma20Ref, showMa20, 20, "#22d3ee");
       sync(ma50Ref, showMa50, 50, "#f59e0b");
     });
-  }, [candles, showMa20, showMa50]);
-
-  /* ---------------- event markers ---------------- */
-  useEffect(() => {
-    const candleSeries = candleRef.current;
-    if (!candleSeries || candles.length === 0) return;
-    const firstTurn = candles[0].turn;
-    const lastTurn = candles[candles.length - 1].turn;
-    const byTurn = new Map(candles.map((c) => [c.turn, c.time as UTCTimestamp]));
-    const times = candles.map((c) => c.time);
-    const nearestTime = (unix: number): UTCTimestamp | null => {
-      let best: number | null = null;
-      for (const t of times) {
-        if (t <= unix) best = t;
-        else break;
-      }
-      return (best ?? null) as UTCTimestamp | null;
+    return () => {
+      cancelled = true;
     };
-    void import("lightweight-charts")
-      .then(({ createSeriesMarkers }) =>
-        fetch(
-          `/api/stock-exchange/markers?exchange=${exchangeApi}&fromTurn=${firstTurn}&toTurn=${lastTurn}`,
-          { cache: "no-store" }
-        )
-          .then((r) => (r.ok ? r.json() : Promise.reject(new Error("markers failed"))))
-          .then((json: MarkersResponse) => ({ json, createSeriesMarkers }))
-      )
-      .then(({ json, createSeriesMarkers }) => {
-        const plugin = markersRef.current ?? createSeriesMarkers(candleSeries, []);
-        markersRef.current = plugin;
-        const up = cssVar("--success", "#22c55e");
-        const down = cssVar("--error", "#ef4444");
-        const primary = cssVar("--primary", "#dc2626");
-        const muted = cssVar("--muted", "#8f8f9d");
-        const markers: {
-          time: UTCTimestamp;
-          position: "aboveBar" | "belowBar";
-          color: string;
-          shape: "arrowUp" | "arrowDown" | "circle";
-          text: string;
-        }[] = [];
-        for (const s of json.splits ?? []) {
-          const t = byTurn.get(s.turn);
-          if (!t) continue;
-          const forward = s.kind === "stock_split";
-          markers.push({
-            time: t,
-            position: forward ? "belowBar" : "aboveBar",
-            color: forward ? up : down,
-            shape: forward ? "arrowUp" : "arrowDown",
-            text: `${s.headline} (T${s.turn})`,
-          });
-        }
-        for (const w of json.wire ?? []) {
-          const t = nearestTime(Math.floor(new Date(w.timestamp).getTime() / 1000));
-          if (!t) continue;
-          const color =
-            w.type === "dividend_changed"
-              ? up
-              : w.type === "corporation_dissolved"
-                ? down
-                : w.type === "corporation_ipo"
-                  ? primary
-                  : muted;
-          markers.push({ time: t, position: "aboveBar", color, shape: "circle", text: w.headline });
-        }
-        markers.sort((a, b) => (a.time as number) - (b.time as number));
-        plugin.setMarkers(markers);
-      })
-      .catch(() => {
-        // Markers are annotation-only; a failed fetch must not break the chart.
-      });
-  }, [candles, exchangeApi]);
+  }, [candles, chartReady, showMa20, showMa50]);
 
   /* ---------------- compare overlay ---------------- */
   const compareLabel = useMemo(() => {
@@ -415,6 +347,7 @@ export function MarketOverview({ exchangeFilter }: { exchangeFilter: ExchangeFil
   useEffect(() => {
     const chart = chartRef.current;
     if (!chart || candles.length === 0) return;
+    let cancelled = false;
     if (!compare) {
       if (compareRef.current) {
         chart.removeSeries(compareRef.current);
@@ -436,7 +369,7 @@ export function MarketOverview({ exchangeFilter }: { exchangeFilter: ExchangeFil
       if (!chart) return;
       if (!compareRef.current) {
         void import("lightweight-charts").then(({ LineSeries }) => {
-          if (!chart || compareRef.current) return;
+          if (cancelled || !chart || compareRef.current) return;
           compareRef.current = chart.addSeries(LineSeries, {
             color: cssVar("--primary", "#dc2626"),
             lineWidth: 2,
@@ -458,13 +391,14 @@ export function MarketOverview({ exchangeFilter }: { exchangeFilter: ExchangeFil
       })
         .then((r) => (r.ok ? r.json() : Promise.reject(new Error("compare failed"))))
         .then((json: CandlesResponse) => {
+          if (cancelled) return;
           const pts = (json.points ?? [])
             .filter((p) => p.time >= base)
             .map((p) => ({ time: p.time, value: p.close }));
           applyLine(normalize(pts));
         })
         .catch(() => {
-          setCompareError(true);
+          if (!cancelled) setCompareError(true);
         });
     } else {
       fetch(
@@ -478,6 +412,7 @@ export function MarketOverview({ exchangeFilter }: { exchangeFilter: ExchangeFil
           (json: {
             points?: { turn: number; createdAt: string; bySector?: Record<string, number> }[];
           }) => {
+            if (cancelled) return;
             const pts = (json.points ?? [])
               .map((p) => ({
                 time: Math.floor(new Date(p.createdAt).getTime() / 1000),
@@ -503,11 +438,13 @@ export function MarketOverview({ exchangeFilter }: { exchangeFilter: ExchangeFil
           }
         )
         .catch(() => {
-          setCompareError(true);
+          if (!cancelled) setCompareError(true);
         });
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [candles, compare, exchangeApi]);
+    return () => {
+      cancelled = true;
+    };
+  }, [candles, chartReady, compare, exchangeApi, turns]);
 
   const last = candles[candles.length - 1];
   const prev = candles.length > 1 ? candles[candles.length - 2] : null;
@@ -658,39 +595,32 @@ export function MarketOverview({ exchangeFilter }: { exchangeFilter: ExchangeFil
           {bucketed && <span>Weekly buckets</span>}
           {!loading && candles.length > 0 && (
             <span>
-              {intradayTurns}/{candles.length} turns with intraday prints
+              {intradayTurns}/{candles.length} {bucketed ? "buckets" : "turns"} with intraday prints
               {intradayTurns === 0 ? " (turn closes only)" : ""}
             </span>
           )}
         </div>
-        {/* Chart container renders unconditionally at fixed heights (no layout
-            shift); loading, error, and empty states overlay it. Conditionally
-            rendering the container instead strands chart creation: on mount the
-            skeleton is showing, the ref is null, and nothing re-runs creation. */}
-        <div className="relative">
-          <div ref={containerRef} className="h-60 sm:h-80 w-full" />
+        <div className="relative h-60 sm:h-80">
+          <div ref={containerRef} className="h-full w-full" />
           <div
             ref={tooltipRef}
             style={{ display: "none" }}
             className="pointer-events-none absolute z-10 rounded-lg border border-card-border bg-card-elevated px-2.5 py-1.5 text-xs shadow-lg whitespace-nowrap"
           />
           {loading && candles.length === 0 && (
-            <div className="absolute inset-0 bg-card">
-              <Skeleton className="h-full w-full" />
-            </div>
+            <Skeleton className="absolute inset-0 h-full w-full" />
           )}
           {!loading && (failed || candles.length === 0) && (
-            <div className="absolute inset-0 flex items-center justify-center bg-card">
-              <p className="text-center text-sm text-muted">
-                No market history available yet for this range.
-              </p>
-            </div>
+            <p className="absolute inset-0 flex items-center justify-center bg-card text-sm text-muted">
+              No market history available yet for this range.
+            </p>
           )}
         </div>
       </div>
       <div className="px-4 py-2 text-[11px] text-muted border-t border-card-border mt-3">
-        Raw market capitalization per turn. High/low include observed 15-minute prints where
-        recorded; turns without prints use turn closes. Hover for O/H/L/C and turnover.
+        Raw market capitalization, grouped weekly for long ranges. High/low include observed
+        intraday prints where recorded; otherwise they use recorded closes. Hover or drag for
+        O/H/L/C and turnover.
       </div>
     </div>
   );
