@@ -10,6 +10,7 @@ import {
 import { CORPORATION_TYPE_LABELS, type CorporationType } from "@/lib/constants/corporations";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import type { ExchangeFilter } from "../types";
+import type { ExchangeMetaEntry } from "../stockMarketRouting";
 import type {
   CandlestickData,
   HistogramData,
@@ -72,7 +73,13 @@ function ma(values: number[], window: number): (number | null)[] {
   });
 }
 
-export function MarketOverview({ exchangeFilter }: { exchangeFilter: ExchangeFilter }) {
+export function MarketOverview({
+  exchangeFilter,
+  exchangeMeta,
+}: {
+  exchangeFilter: ExchangeFilter;
+  exchangeMeta?: Record<string, ExchangeMetaEntry>;
+}) {
   const { formatAmount } = useCurrency();
   const containerRef = useRef<HTMLDivElement>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
@@ -367,6 +374,11 @@ export function MarketOverview({ exchangeFilter }: { exchangeFilter: ExchangeFil
     };
     const applyLine = (data: LineData<UTCTimestamp>[]) => {
       if (!chart) return;
+      if (data.length === 0) {
+        setCompareError(true);
+        compareRef.current?.setData([]);
+        return;
+      }
       if (!compareRef.current) {
         void import("lightweight-charts").then(({ LineSeries }) => {
           if (cancelled || !chart || compareRef.current) return;
@@ -415,25 +427,21 @@ export function MarketOverview({ exchangeFilter }: { exchangeFilter: ExchangeFil
             if (cancelled) return;
             const pts = (json.points ?? [])
               .map((p) => ({
+                turn: p.turn,
                 time: Math.floor(new Date(p.createdAt).getTime() / 1000),
                 value: p.bySector?.[compare.sector] ?? 0,
               }))
-              .filter((p) => p.time >= base && p.value > 0);
+              .filter((p) => Number.isFinite(p.time) && p.value > 0);
             // Weekly buckets mirror the main series on long ranges.
             const bucketedPts =
               turns === 8760 || turns === 0
-                ? Array.from(
-                    pts
-                      .reduce((m, p, i) => {
-                        const k = Math.floor(i / 168);
-                        const arr = m.get(k) ?? [];
-                        arr.push(p);
-                        m.set(k, arr);
-                        return m;
-                      }, new Map<number, { time: number; value: number }[]>())
-                      .values()
-                  ).map((week) => week[week.length - 1])
-                : pts;
+                ? candles.flatMap((c, i) => {
+                    const nextTurn = candles[i + 1]?.turn ?? Infinity;
+                    const week = pts.filter((p) => p.turn >= c.turn && p.turn < nextTurn);
+                    const last = week[week.length - 1];
+                    return last ? [{ time: c.time, value: last.value }] : [];
+                  })
+                : pts.filter((p) => p.time >= base);
             applyLine(normalize(bucketedPts));
           }
         )
@@ -454,9 +462,13 @@ export function MarketOverview({ exchangeFilter }: { exchangeFilter: ExchangeFil
   const venueOptions = useMemo(
     () =>
       [{ apiKey: "global", exchangeName: "Global" }, ...ALL_EXCHANGES].filter(
-        (v) => v.apiKey !== exchangeApi
+        (v) =>
+          v.apiKey !== exchangeApi &&
+          (!exchangeMeta ||
+            v.apiKey === "global" ||
+            Object.values(exchangeMeta).some((entry) => entry.exchangeApi === v.apiKey))
       ),
-    [exchangeApi]
+    [exchangeApi, exchangeMeta]
   );
   const sectorOptions = useMemo(
     () => Object.keys(CORPORATION_TYPE_LABELS) as CorporationType[],
