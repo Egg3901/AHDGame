@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useAuthMe } from "@/contexts/AuthDataContext";
 import { CONSENT_EVENT, CONSENT_RESET_EVENT, getStoredConsent } from "@/components/CookieConsent";
 import { getPostHogClient } from "@/lib/analytics/posthogClient";
+import { useGameEvents } from "@/hooks/useGameEvents";
 import {
   captureFirstTurnIfReady,
   capturePendingAccountCreated,
@@ -35,6 +36,16 @@ export function PostHogTracker() {
   const previousUserId = useRef<string | null>(null);
   const lastCapturedPath = useRef<string | null>(null);
   const lastVisitUser = useRef<string | null>(null);
+
+  // The shared game clock emits this only after a committed turn becomes visible
+  // to a signed-in player. It does not infer completions from elapsed time.
+  useGameEvents(
+    () => {
+      void captureProductEvent("turn_completed");
+    },
+    ["turn_complete"],
+    accepted && !!userId
+  );
 
   useEffect(() => {
     const syncConsent = () => {
