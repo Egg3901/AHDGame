@@ -34,17 +34,45 @@ const baseUser = {
 };
 
 describe("SettingsDropdown", () => {
-  it("shows Profile Settings but not Admin/Mod panels (staff-only)", () => {
+  it("opens from an avatar trigger showing the username initial", () => {
     render(
       <SettingsDropdown user={baseUser} onSignOut={vi.fn()} pageCountry="US" userCountry="US" />
     );
 
-    fireEvent.click(screen.getByLabelText("Settings"));
+    fireEvent.click(screen.getByLabelText("User menu"));
 
     expect(screen.getByText("Profile Settings")).toBeTruthy();
     expect(screen.queryByText("Admin Panel")).toBeNull();
     expect(screen.queryByText("Mod Panel")).toBeNull();
     expect(screen.getByText("Sign Out")).toBeTruthy();
+  });
+
+  it("groups entries under Account and View sections", () => {
+    render(
+      <SettingsDropdown user={baseUser} onSignOut={vi.fn()} pageCountry="US" userCountry="US" />
+    );
+
+    fireEvent.click(screen.getByLabelText("User menu"));
+
+    expect(screen.getByText("Account")).toBeTruthy();
+    expect(screen.getByText("View")).toBeTruthy();
+    expect(screen.getByText("testuser")).toBeTruthy();
+    // Avatar initial appears in the trigger and the signed-in header.
+    expect(screen.getAllByText("T").length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("opens the nation picker and returns via back", () => {
+    render(
+      <SettingsDropdown user={baseUser} onSignOut={vi.fn()} pageCountry="US" userCountry="US" />
+    );
+
+    fireEvent.click(screen.getByLabelText("User menu"));
+    fireEvent.click(screen.getByText("Switch nation view"));
+
+    expect(screen.getByText("Select Nation")).toBeTruthy();
+
+    fireEvent.click(screen.getByText("Back"));
+    expect(screen.getByText("Profile Settings")).toBeTruthy();
   });
 
   it("does not expose account sign-out for the fixed local session", () => {
@@ -57,7 +85,7 @@ describe("SettingsDropdown", () => {
       />
     );
 
-    fireEvent.click(screen.getByLabelText("Settings"));
+    fireEvent.click(screen.getByLabelText("User menu"));
     expect(screen.queryByText("Sign Out")).toBeNull();
   });
 });

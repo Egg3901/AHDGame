@@ -2,7 +2,14 @@
 
 import Link from "next/link";
 import { CountryFlag } from "@/components/CountryFlag";
-import { DROPDOWN_PANEL_CLASS } from "@/components/navbar/dropdownStyles";
+import {
+  DROPDOWN_PANEL_CLASS,
+  MENU_DIVIDER_CLASS,
+  MENU_ROW_ACTIVE_CLASS,
+  MENU_ROW_BASE_CLASS,
+  MENU_ROW_IDLE_CLASS,
+  MENU_SECTION_LABEL_CLASS,
+} from "@/components/navbar/dropdownStyles";
 
 export interface ProfileSwitcherCharacter {
   id: string;
@@ -78,9 +85,9 @@ const ROW_BASE =
 
 const ROW_STYLE: Record<ProfileSwitcherVariant, { row: string; active: string; idle: string }> = {
   desktop: {
-    row: `${ROW_BASE} px-2.5 py-2`,
-    active: "bg-primary/10 font-medium text-foreground",
-    idle: "text-muted hover:bg-background/60 hover:text-foreground",
+    row: MENU_ROW_BASE_CLASS,
+    active: MENU_ROW_ACTIVE_CLASS,
+    idle: MENU_ROW_IDLE_CLASS,
   },
   mobile: {
     row: `${ROW_BASE} px-3 py-2`,
@@ -244,14 +251,12 @@ export function ProfileSwitcher({
       className={`absolute left-0 z-50 mt-2 w-64 overflow-hidden rounded-xl border border-card-border bg-card shadow-modal ${DROPDOWN_PANEL_CLASS}`}
     >
       <div className="px-1.5 pb-1.5">
-        <p className="px-2 pb-1 pt-2.5 text-[11px] font-semibold uppercase tracking-wider text-muted/70">
-          {charactersLabel}
-        </p>
+        <p className={MENU_SECTION_LABEL_CLASS}>{charactersLabel}</p>
         {characters.map(renderCharacterRow)}
         {imperialCharacter && (
           <>
-            <div className="mx-2 my-1 border-t border-card-border/40" />
-            <p className="px-2 py-1 text-[11px] font-semibold uppercase tracking-wider text-amber-400/60">
+            <div className={MENU_DIVIDER_CLASS} />
+            <p className="px-2.5 pb-1 pt-2.5 text-[11px] font-semibold uppercase tracking-wider text-amber-400/60">
               {imperialLabel}
             </p>
             {renderImperialRow()}
