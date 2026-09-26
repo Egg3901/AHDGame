@@ -16,12 +16,13 @@ export type PriceChangeTimeframe = "1h" | "24h" | "48h";
 const SORT_OPTIONS: { field: SortField; label: string }[] = [
   { field: "marketCap", label: "Market Cap" },
   { field: "sharePrice", label: "Price" },
-  { field: "priceChange", label: "ROI %" },
+  { field: "priceChange", label: "Change %" },
   { field: "income", label: "Income" },
   { field: "revenue", label: "Revenue" },
   { field: "publicFloat", label: "Float" },
   { field: "tickerSymbol", label: "Ticker" },
   { field: "name", label: "Name" },
+  { field: "dividend", label: "Dividend" },
 ];
 
 const PAGE_SIZE = 10;
@@ -164,6 +165,8 @@ function getSortValue(row: Row, field: SortField, timeframe: PriceChangeTimefram
         return finitePriceChange(getPriceChangeForTimeframe(row, timeframe));
       case "publicFloat":
         return row.publicFloat;
+      case "dividend":
+        return weightedAverage(row.members, (m) => m.dividendRate ?? 0);
       default:
         return 0;
     }
@@ -180,6 +183,8 @@ function getSortValue(row: Row, field: SortField, timeframe: PriceChangeTimefram
       return finitePriceChange(getPriceChangeForTimeframe(l, timeframe));
     case "publicFloat":
       return l.publicFloat ?? 0;
+    case "dividend":
+      return l.dividendRate ?? 0;
     default:
       return 0;
   }
@@ -196,9 +201,12 @@ function getSortTicker(row: Row): string | undefined {
 export function StockList({
   listings,
   timeframe = "48h",
+  owned,
 }: {
   listings: StockListing[];
   timeframe?: PriceChangeTimeframe;
+  /** Viewer share positions by corporation id (and sequential id). */
+  owned?: Map<string, { shares: number; pnl: number | null }>;
 }) {
   const { formatAmount, formatPrice } = useCurrency();
   const countryName = useCountryDisplayName();
@@ -302,7 +310,7 @@ export function StockList({
 
   const renderNonTradableBadge = () => (
     <div
-      className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-bold bg-amber-500/15 text-amber-400"
+      className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-bold bg-muted/10 text-muted"
       title="State enterprise with no tradable shares"
     >
       Non-tradable
@@ -388,6 +396,33 @@ export function StockList({
                 </span>
               )}
               <span className="truncate">{listing.typeLabel}</span>
+              {(() => {
+                const own =
+                  owned?.get(listing._id) ??
+                  (listing.sequentialId != null
+                    ? owned?.get(String(listing.sequentialId))
+                    : undefined);
+                if (!own) return null;
+                const pnlText =
+                  own.pnl != null
+                    ? `Your unrealized P&L: ${own.pnl >= 0 ? "+" : ""}${formatAmount(own.pnl)}`
+                    : "Shares you own";
+                return (
+                  <span
+                    className="px-1.5 py-0.5 rounded-md bg-primary/15 border border-primary/30 text-primary uppercase text-[9px] tracking-wide font-semibold whitespace-nowrap"
+                    title={`${pnlText}. See Portfolio for the full position.`}
+                  >
+                    You: {own.shares.toLocaleString("en-US")}
+                  </span>
+                );
+              })()}
+            </div>
+            {/* Diligence line: CEO, HQ, sector growth. Plain text (not a link)
+                because this cell already sits inside the corporation link. */}
+            <div className="truncate text-[11px] text-muted/80">
+              {listing.ceo ? `CEO ${listing.ceo.name}` : "No CEO"}
+              {listing.headquartersStateName ? ` · ${listing.headquartersStateName}` : ""}
+              {` · ${listing.avgSectorGrowth >= 0 ? "+" : ""}${listing.avgSectorGrowth.toFixed(1)}% growth`}
             </div>
           </div>
         </Link>
@@ -428,6 +463,11 @@ export function StockList({
             listing.incomeAnchor ?? listing.income,
             (listing.liquidCurrencyCode as CurrencyCode | undefined) ?? undefined
           )}
+        </div>
+      </td>
+      <td className="px-4 py-3 text-right hidden md:table-cell">
+        <div className="font-medium tabular-nums text-foreground">
+          {listing.dividendRate != null ? `${listing.dividendRate.toFixed(1)}%` : "—"}
         </div>
       </td>
       <td className="px-4 py-3 text-right hidden lg:table-cell">
@@ -531,6 +571,11 @@ export function StockList({
               {formatAmount(group.incomeAnchor)}
             </div>
           </td>
+          <td className="px-4 py-3 text-right hidden md:table-cell">
+            <div className="font-medium tabular-nums text-foreground">
+              {weightedAverage(group.members, (m) => m.dividendRate ?? 0).toFixed(1)}%
+            </div>
+          </td>
           <td className="px-4 py-3 text-right hidden lg:table-cell">
             {group.publicFloat > 0 && group.totalShares > 0 ? (
               <div className="inline-flex items-center gap-1.5">
@@ -631,6 +676,10 @@ export function StockList({
                   Income
                   <Tooltip content="Net income per game day (24 turns) after mandatory dividend distributions: operating income − corporate tax + bond coupon income − bond interest expense − dividends paid to shareholders. Matches the corporation page Income/Hr × 24." />
                 </th>
+                <th className="px-4 py-3 font-semibold text-muted uppercase text-[10px] tracking-wider text-right hidden md:table-cell">
+                  Dividend
+                  <Tooltip content="Dividend payout rate: percent of income the CEO distributes to shareholders each turn" />
+                </th>
                 <th className="px-4 py-3 font-semibold text-muted uppercase text-[10px] tracking-wider text-right hidden lg:table-cell">
                   Float
                   <Tooltip content="Shares available for immediate purchase. Zero means no shares are on the open market." />
@@ -640,7 +689,7 @@ export function StockList({
             <tbody className="divide-y divide-card-border">
               {sortedRows.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-4 py-8 text-center text-muted">
+                  <td colSpan={9} className="px-4 py-8 text-center text-muted">
                     No corporations found matching your criteria.
                   </td>
                 </tr>

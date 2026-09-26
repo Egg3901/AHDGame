@@ -52,6 +52,22 @@ describe("PostHog consent boundary", () => {
     expect(state.capture).not.toHaveBeenCalled();
   });
 
+  it("enables sampled, masked session recording with sensitive screens blocked", async () => {
+    const { getPostHogClient } = await import("./posthogClient");
+    state.consent = "accepted";
+    await getPostHogClient();
+    expect(state.init).toHaveBeenCalledTimes(1);
+    const config = state.init.mock.calls[0]?.[1] as Record<string, unknown>;
+    expect(config.disable_session_recording).toBeUndefined();
+    expect(config.session_recording).toMatchObject({
+      sampleRate: 0.1,
+      maskAllInputs: true,
+      recordHeaders: false,
+      recordBody: false,
+      blockSelector: "[data-replay-block]",
+    });
+  });
+
   it("stops capture after rejection and resumes only after another opt in", async () => {
     const { captureProductEvent } = await import("./capture");
     const { stopPostHogCapture } = await import("./posthogClient");
