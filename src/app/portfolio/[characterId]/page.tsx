@@ -89,7 +89,7 @@ export default function CharacterPortfolioPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-background pb-16 pt-8">
+      <div className="min-h-screen bg-background pb-16 pt-8" data-replay-block>
         <div className="mx-auto max-w-5xl px-4 space-y-8">
           <Skeleton className="h-48 w-full rounded-xl" />
           <Skeleton className="h-96 w-full rounded-xl" />
@@ -100,7 +100,7 @@ export default function CharacterPortfolioPage() {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-background pb-16">
+      <div className="min-h-screen bg-background pb-16" data-replay-block>
         <main className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 py-8">
           <BackButton fallbackHref={`/character/${characterId}`} fallbackLabel="Profile" />
           <div className="mt-8 rounded-xl border border-card-border bg-card p-8 text-center">
@@ -118,7 +118,7 @@ export default function CharacterPortfolioPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background pb-16">
+    <div className="min-h-screen bg-background pb-16" data-replay-block>
       <main className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 py-8 space-y-8">
         <div className="space-y-4">
           <BackButton fallbackHref={`/character/${characterId}`} fallbackLabel="Profile" />

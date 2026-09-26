@@ -602,7 +602,7 @@ export default function CorporationDetailPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-background pb-16">
+      <div className="min-h-screen bg-background pb-16" data-replay-block>
         <main className="mx-auto max-w-7xl px-4 sm:px-6 py-8 space-y-8 overflow-x-hidden">
           {/* Breadcrumb */}
           <div className="flex items-center gap-1.5">
@@ -666,7 +666,7 @@ export default function CorporationDetailPage() {
   // National Corporation always routes to its own view regardless of fog state.
   if (corporation?.countryOwnerId) {
     return (
-      <div className="min-h-screen bg-background pb-16">
+      <div className="min-h-screen bg-background pb-16" data-replay-block>
         <main className="mx-auto max-w-7xl px-4 sm:px-6 py-8">
           {/* CEO appointment offer — the appoint-ceo flow sets pendingCeoCharacterId
               and the nominee accepts here (the state-instrument view has no other
@@ -705,7 +705,7 @@ export default function CorporationDetailPage() {
 
   if (error || !corporation || (!financials && !corporation.isPrivate)) {
     return (
-      <div className="min-h-screen bg-background pb-16">
+      <div className="min-h-screen bg-background pb-16" data-replay-block>
         <main className="mx-auto max-w-7xl px-4 sm:px-6 py-8">
           <div className="rounded-xl border border-error/30 bg-error/10 p-6 text-center">
             <h2 className="text-lg font-semibold text-error">{error || "Corporation not found"}</h2>
@@ -803,7 +803,7 @@ export default function CorporationDetailPage() {
   const exchangeLabel = exchangeName ?? "Global";
 
   return (
-    <div className="min-h-screen bg-background pb-16">
+    <div className="min-h-screen bg-background pb-16" data-replay-block>
       <main className="mx-auto max-w-7xl px-4 sm:px-6 py-8 space-y-8 overflow-x-hidden">
         {/* Breadcrumb */}
         <nav className="flex items-center gap-1.5 text-sm text-muted" aria-label="Breadcrumb">

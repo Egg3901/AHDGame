@@ -775,7 +775,7 @@ export function SettingsPageContent() {
   });
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background" data-replay-block>
       <div className="mx-auto max-w-7xl overflow-x-hidden px-4 py-7 md:px-6 md:py-10 lg:px-8">
         {/* OAuth result banner */}
         {oauthBanner && (
@@ -1174,7 +1174,7 @@ function BucketIcon({ id }: { id: SettingsBucketId }) {
 function SettingsPageFallback() {
   const t = useTranslations("settings");
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background" data-replay-block>
       <div className="mx-auto flex min-h-[50vh] max-w-6xl items-center justify-center px-4 py-8 md:px-6 lg:px-8">
         <div className="flex flex-col items-center gap-4">
           <div className="h-10 w-10 animate-spin rounded-full border-2 border-primary border-t-transparent" />
