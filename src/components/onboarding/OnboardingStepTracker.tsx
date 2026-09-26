@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { fetchJson } from "@/lib/observability/fetchJson";
+import { captureProductEvent } from "@/lib/analytics/capture";
 
 /**
  * Invisible page-visit tracker for the two client-recorded onboarding steps.
@@ -12,6 +13,7 @@ import { fetchJson } from "@/lib/observability/fetchJson";
  */
 export function OnboardingStepTracker({ step }: { step: "scout-state" | "read-wire" }) {
   useEffect(() => {
+    void captureProductEvent("onboarding_step_viewed", { step });
     // Best-effort tracking: never surface an error for this. fetchJson still
     // reports network/5xx faults to GlitchTip tagged with the feature.
     void fetchJson("/api/character/me", {
@@ -19,7 +21,9 @@ export function OnboardingStepTracker({ step }: { step: "scout-state" | "read-wi
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ onboardingStep: step }),
-    }).catch(() => undefined);
+    })
+      .then(() => captureProductEvent("onboarding_step_completed", { step }))
+      .catch(() => undefined);
   }, [step]);
 
   return null;

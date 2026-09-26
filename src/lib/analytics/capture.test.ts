@@ -9,6 +9,7 @@ const state = vi.hoisted(() => ({
     optOut: vi.fn(),
     reset: vi.fn(),
     setConfig: vi.fn(),
+    on: vi.fn(),
   },
   amplitude: { init: vi.fn(), track: vi.fn(), setOptOut: vi.fn(), reset: vi.fn() },
 }));
@@ -26,6 +27,7 @@ vi.mock("posthog-js", () => ({
     has_opted_out_capturing: () => false,
     reset: state.posthog.reset,
     set_config: state.posthog.setConfig,
+    on: state.posthog.on,
   },
 }));
 
@@ -72,6 +74,22 @@ describe("analytics fan-out", () => {
 
     expect(state.posthog.capture).not.toHaveBeenCalled();
     expect(state.amplitude.track).not.toHaveBeenCalled();
+  });
+
+  it("mirrors a widget dismissal to both destinations without survey answers", async () => {
+    state.consent = "accepted";
+    const { getPostHogClient } = await import("./posthogClient");
+    await getPostHogClient();
+    const listener = state.posthog.on.mock.calls[0]?.[1] as
+      ((event: { event: string; properties: Record<string, unknown> }) => void) | undefined;
+    expect(listener).toBeDefined();
+    listener?.({
+      event: "survey dismissed",
+      properties: { $survey_questions: [{ response: "private" }, { response: null }] },
+    });
+    await vi.waitFor(() => expect(state.amplitude.track).toHaveBeenCalled());
+    expect(state.posthog.capture).toHaveBeenCalledWith("survey_dismissed", { question_index: 1 });
+    expect(state.amplitude.track).toHaveBeenCalledWith("survey_dismissed", { question_index: 1 });
   });
 
   it("still reaches PostHog when Amplitude has no key configured", async () => {
