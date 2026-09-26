@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, Fragment } from "react";
 import Link from "next/link";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import { Skeleton } from "@/components/ui";
@@ -32,51 +32,74 @@ export function FundTable({
   exchangeFilter,
   timeframe = "24h",
   onCountChange,
+  externalFunds,
+  externalLoading,
+  externalError,
+  corpNames,
 }: {
   countryCode: string;
   exchangeFilter: ExchangeFilter;
   timeframe?: PriceChangeTimeframe;
   onCountChange?: (count: number) => void;
+  /**
+   * Page-shared funds response (also feeds the ticker). When provided, the
+   * table renders it instead of fetching, so the tab and the ticker share one
+   * request. Absent, the table fetches on its own as before.
+   */
+  externalFunds?: FundListItem[];
+  externalLoading?: boolean;
+  externalError?: string;
+  /** Corporation display names by id for the holdings preview rows. */
+  corpNames?: Map<string, string>;
 }) {
-  const [funds, setFunds] = useState<FundListItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const [ownFunds, setOwnFunds] = useState<FundListItem[]>([]);
+  const [ownLoading, setOwnLoading] = useState(true);
+  const [ownError, setOwnError] = useState("");
   const [filter, setFilter] = useState("");
   const [sortField, setSortField] = useState<FundSortField>("aum");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [page, setPage] = useState(1);
+  const [expandedFundId, setExpandedFundId] = useState<string | null>(null);
   const { formatAmount, formatPrice } = useCurrency();
+
+  const usingExternal = externalFunds !== undefined;
+  const funds = externalFunds ?? ownFunds;
+  const loading = usingExternal ? (externalLoading ?? false) : ownLoading;
+  const error = usingExternal ? (externalError ?? "") : ownError;
 
   const exchangeApi = exchangeFilter === "global" ? "global" : exchangeFilter;
 
   const fetchFunds = useCallback(async () => {
-    setLoading(true);
-    setError("");
+    setOwnLoading(true);
+    setOwnError("");
     try {
       const res = await fetch(`/api/investment-funds?exchange=${exchangeApi}`, {
         cache: "no-store",
       });
       if (res.status === 403) {
-        setFunds([]);
+        setOwnFunds([]);
         onCountChange?.(0);
-        setLoading(false);
+        setOwnLoading(false);
         return;
       }
       if (!res.ok) throw new Error("Failed to load funds");
       const data = (await res.json()) as { funds?: FundListItem[] };
       const list = data.funds ?? [];
-      setFunds(list);
+      setOwnFunds(list);
       onCountChange?.(list.length);
-      setLoading(false);
+      setOwnLoading(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load funds");
-      setLoading(false);
+      setOwnError(err instanceof Error ? err.message : "Failed to load funds");
+      setOwnLoading(false);
     }
   }, [exchangeApi, onCountChange]);
 
   useEffect(() => {
+    // With external data the page owns the fetch and the tab count; this
+    // effect only runs the table's own fetch in standalone use.
+    if (usingExternal) return;
     void fetchFunds();
-  }, [fetchFunds]);
+  }, [fetchFunds, usingExternal]);
 
   const sortedFunds = useMemo(() => {
     let list = [...funds];
@@ -278,60 +301,134 @@ export function FundTable({
                         : fund.kind === "sector"
                           ? "Global Sector"
                           : "Global";
+                  const isExpanded = expandedFundId === fund.id;
                   return (
-                    <tr
-                      key={fund.id}
-                      className="group hover:bg-card-elevated/50 transition-colors cursor-pointer"
-                    >
-                      <td className="px-2 py-2.5 sm:px-4 sm:py-3">
-                        <Link href={href} className="font-mono font-bold text-primary tabular-nums">
-                          {fund.tickerSymbol}
-                        </Link>
-                      </td>
-                      <td className="px-2 py-2.5 sm:px-4 sm:py-3">
-                        <Link href={href} className="flex items-center gap-2 sm:gap-3">
-                          <div className="hidden sm:flex h-10 w-10 rounded-lg bg-primary/10 items-center justify-center border border-primary/20 shrink-0 font-mono text-xs font-bold text-primary">
-                            {fund.tickerSymbol.slice(0, 3)}
+                    <Fragment key={fund.id}>
+                      <tr className="group hover:bg-card-elevated/50 transition-colors cursor-pointer">
+                        <td className="px-2 py-2.5 sm:px-4 sm:py-3">
+                          <Link
+                            href={href}
+                            className="font-mono font-bold text-primary tabular-nums"
+                          >
+                            {fund.tickerSymbol}
+                          </Link>
+                        </td>
+                        <td className="px-2 py-2.5 sm:px-4 sm:py-3">
+                          <div className="flex items-center gap-1.5 sm:gap-2">
+                            {fund.topHoldings.length > 0 && (
+                              <button
+                                type="button"
+                                onClick={() => setExpandedFundId(isExpanded ? null : fund.id)}
+                                aria-expanded={isExpanded}
+                                aria-label={`${isExpanded ? "Hide" : "Show"} top holdings of ${fund.name}`}
+                                className="shrink-0 rounded p-1 text-muted hover:text-foreground transition-colors"
+                              >
+                                <svg
+                                  className={`h-3.5 w-3.5 transition-transform duration-200 ${isExpanded ? "rotate-90" : ""}`}
+                                  fill="none"
+                                  viewBox="0 0 24 24"
+                                  stroke="currentColor"
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M9 5l7 7-7 7"
+                                  />
+                                </svg>
+                              </button>
+                            )}
+                            <Link
+                              href={href}
+                              className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1"
+                            >
+                              <div className="hidden sm:flex h-10 w-10 rounded-lg bg-primary/10 items-center justify-center border border-primary/20 shrink-0 font-mono text-xs font-bold text-primary">
+                                {fund.tickerSymbol.slice(0, 3)}
+                              </div>
+                              <div className="flex flex-col min-w-0">
+                                <span className="font-bold text-foreground truncate group-hover:text-primary transition-colors">
+                                  {fund.name}
+                                </span>
+                                <div className="flex items-center gap-2 text-xs text-muted">
+                                  <span className="px-1.5 py-0.5 rounded-md bg-card-elevated border border-card-border uppercase text-[9px] tracking-wide font-semibold">
+                                    {scopeLabel}
+                                  </span>
+                                  {fund.sectorType && (
+                                    <span className="truncate capitalize">{fund.sectorType}</span>
+                                  )}
+                                  <span className="lg:hidden">
+                                    <FundStatusBadge
+                                      status={fund.status}
+                                      backingRatio={fund.backingRatio}
+                                    />
+                                  </span>
+                                </div>
+                              </div>
+                            </Link>
                           </div>
-                          <div className="flex flex-col min-w-0">
-                            <span className="font-bold text-foreground truncate group-hover:text-primary transition-colors">
-                              {fund.name}
-                            </span>
-                            <div className="flex items-center gap-2 text-xs text-muted">
-                              <span className="px-1.5 py-0.5 rounded-md bg-card-elevated border border-card-border uppercase text-[9px] tracking-wide font-semibold">
-                                {scopeLabel}
-                              </span>
-                              {fund.sectorType && (
-                                <span className="truncate capitalize">{fund.sectorType}</span>
-                              )}
-                            </div>
-                          </div>
-                        </Link>
-                      </td>
-                      <td className="px-2 py-2.5 sm:px-4 sm:py-3 text-right">
-                        <Link href={href} className="block font-mono font-bold tabular-nums">
-                          {formatPrice(fund.quotedNav, ccy)}
-                        </Link>
-                      </td>
-                      <td className="px-2 py-2.5 sm:px-4 sm:py-3 text-right">
-                        <Link href={href} className="inline-block">
-                          <NavChangeBadge value={navChangeForTimeframe(fund, timeframe)} />
-                        </Link>
-                      </td>
-                      <td className="px-4 py-3 text-right hidden sm:table-cell">
-                        <Link href={href} className="inline-flex justify-end">
-                          <FundSparkline history={fund.navSparkline} />
-                        </Link>
-                      </td>
-                      <td className="px-4 py-3 text-right hidden md:table-cell">
-                        <Link href={href} className="block font-medium tabular-nums">
-                          {formatAmount(fund.aumAnchor, ccy)}
-                        </Link>
-                      </td>
-                      <td className="px-4 py-3 text-right hidden lg:table-cell">
-                        <FundStatusBadge status={fund.status} backingRatio={fund.backingRatio} />
-                      </td>
-                    </tr>
+                        </td>
+                        <td className="px-2 py-2.5 sm:px-4 sm:py-3 text-right">
+                          <Link href={href} className="block font-mono font-bold tabular-nums">
+                            {formatPrice(fund.quotedNav, ccy)}
+                          </Link>
+                        </td>
+                        <td className="px-2 py-2.5 sm:px-4 sm:py-3 text-right">
+                          <Link href={href} className="inline-block">
+                            <NavChangeBadge value={navChangeForTimeframe(fund, timeframe)} />
+                          </Link>
+                        </td>
+                        <td className="px-4 py-3 text-right hidden sm:table-cell">
+                          <Link href={href} className="inline-flex justify-end">
+                            <FundSparkline history={fund.navSparkline} />
+                          </Link>
+                        </td>
+                        <td className="px-4 py-3 text-right hidden md:table-cell">
+                          <Link href={href} className="block font-medium tabular-nums">
+                            {formatAmount(fund.aumAnchor, ccy)}
+                          </Link>
+                        </td>
+                        <td className="px-4 py-3 text-right hidden lg:table-cell">
+                          <FundStatusBadge status={fund.status} backingRatio={fund.backingRatio} />
+                        </td>
+                      </tr>
+                      {isExpanded && fund.topHoldings.length > 0 && (
+                        <tr>
+                          <td colSpan={7} className="bg-card-elevated/30 px-4 py-3">
+                            <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-muted">
+                              Top holdings
+                            </p>
+                            <ul className="space-y-1.5">
+                              {fund.topHoldings.map((h) => (
+                                <li
+                                  key={h.corporationId}
+                                  className="flex items-center gap-2 text-xs"
+                                >
+                                  <span className="min-w-0 flex-1 truncate text-foreground">
+                                    {corpNames?.get(h.corporationId) ??
+                                      `Corp ${h.corporationId.slice(0, 8)}`}
+                                  </span>
+                                  <div className="h-1.5 w-24 shrink-0 overflow-hidden rounded-full bg-card">
+                                    <div
+                                      className="h-full rounded-full bg-primary/70"
+                                      style={{ width: `${Math.min(100, h.weight * 100)}%` }}
+                                    />
+                                  </div>
+                                  <span className="w-12 shrink-0 text-right tabular-nums text-muted">
+                                    {(h.weight * 100).toFixed(1)}%
+                                  </span>
+                                </li>
+                              ))}
+                            </ul>
+                            <Link
+                              href={href}
+                              className="mt-2 inline-block text-xs font-semibold text-primary hover:underline"
+                            >
+                              Full composition
+                            </Link>
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
                   );
                 })
               )}

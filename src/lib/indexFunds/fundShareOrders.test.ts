@@ -3,6 +3,8 @@ import { ObjectId } from "mongodb";
 import type { Db } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import { DEFAULT_TX_THRESHOLDS } from "@/lib/db/types/financialTxLog";
+import { emitTx } from "@/lib/financialTxLog/emit";
+import type { TxInput } from "@/lib/financialTxLog/emit";
 
 vi.mock("@/lib/currency/corporationCapital", () => ({
   // anchor == local in tests (fxRate 1)
@@ -20,6 +22,7 @@ vi.mock("@/lib/financialTxLog/emit", () => ({
 let db: MockDb;
 
 beforeEach(() => {
+  vi.clearAllMocks();
   db = createMockDb();
 });
 
@@ -31,6 +34,30 @@ function corp() {
 }
 
 describe("placeFundShareBuyOrder", () => {
+  it("defers only a completed bid's escrow ledger row", async () => {
+    const { placeFundShareBuyOrder } = await import("./fundShareOrders");
+    const f = fund();
+    const ledgerSink: TxInput[] = [];
+    (db.collection("indexFunds").updateOne as ReturnType<typeof vi.fn>).mockResolvedValue({
+      matchedCount: 1,
+    });
+
+    await placeFundShareBuyOrder(db as unknown as Db, {
+      fund: f,
+      corp: corp(),
+      shares: 10,
+      limitPriceLocal: 50,
+      fxRate: 1,
+      turn: 44,
+      ledgerSink,
+    });
+
+    expect(emitTx).not.toHaveBeenCalled();
+    expect(ledgerSink).toMatchObject([
+      { type: "stock_order_escrow", amount: -500, subjectId: f._id, turn: 44 },
+    ]);
+  });
+
   it("debits cashAnchor by the anchor escrow and inserts an open buy order with placerFundId", async () => {
     const { placeFundShareBuyOrder } = await import("./fundShareOrders");
     const f = fund();
@@ -102,6 +129,24 @@ describe("placeFundShareBuyOrder", () => {
 });
 
 describe("placeFundShareSellOrder", () => {
+  it("uses preloaded reservations without a per-quote order read", async () => {
+    const { placeFundShareSellOrder } = await import("./fundShareOrders");
+    const c = corp();
+    const f = { ...fund(), holdings: [{ corporationId: c._id, shares: 100 }] };
+
+    const result = await placeFundShareSellOrder(db as unknown as Db, {
+      fund: f,
+      corp: c,
+      shares: 25,
+      limitPriceLocal: 51,
+      reservedOpenShares: 80,
+    });
+
+    expect(result.ok).toBe(false);
+    expect(db.collection("shareOrders").find).not.toHaveBeenCalled();
+    expect(db.collection("shareOrders").insertOne).not.toHaveBeenCalled();
+  });
+
   it("places a bounded fund ask only against unreserved holdings", async () => {
     const { placeFundShareSellOrder } = await import("./fundShareOrders");
     const c = corp();
@@ -160,6 +205,29 @@ describe("placeFundShareSellOrder", () => {
 });
 
 describe("cancelFundShareOrder", () => {
+  it("uses the supplied fund and defers the refund ledger row", async () => {
+    const { cancelFundShareOrder } = await import("./fundShareOrders");
+    const f = fund();
+    const orderId = new ObjectId();
+    const ledgerSink: TxInput[] = [];
+    (db.collection("shareOrders").findOneAndUpdate as ReturnType<typeof vi.fn>).mockResolvedValue({
+      _id: orderId,
+      placerFundId: f._id,
+      corporationId: new ObjectId(),
+      type: "buy",
+      escrowAnchor: 300,
+      status: "open",
+    });
+
+    await cancelFundShareOrder(db as unknown as Db, orderId, 44, { fund: f, ledgerSink });
+
+    expect(db.collection("indexFunds").findOne).not.toHaveBeenCalled();
+    expect(emitTx).not.toHaveBeenCalled();
+    expect(ledgerSink).toMatchObject([
+      { type: "stock_order_refund", amount: 300, subjectId: f._id, turn: 44 },
+    ]);
+  });
+
   it("refunds remaining escrowAnchor to cashAnchor and marks cancelled", async () => {
     const { cancelFundShareOrder } = await import("./fundShareOrders");
     const f = fund();
@@ -175,7 +243,10 @@ describe("cancelFundShareOrder", () => {
     });
     (db.collection("indexFunds").findOne as ReturnType<typeof vi.fn>).mockResolvedValue(f);
 
-    await cancelFundShareOrder(db as unknown as Db, orderId, 44, DEFAULT_TX_THRESHOLDS, 60);
+    await cancelFundShareOrder(db as unknown as Db, orderId, 44, {
+      thresholds: DEFAULT_TX_THRESHOLDS,
+      turnLengthMinutes: 60,
+    });
 
     // Marked cancelled atomically.
     const claimCall = (db.collection("shareOrders").findOneAndUpdate as ReturnType<typeof vi.fn>)

@@ -16,7 +16,7 @@ import type {
   StockListing,
 } from "./types";
 import { StockTicker } from "./components/StockTicker";
-import { ExchangeSelector } from "./components/ExchangeSelector";
+import { ExchangeSelector, type ExchangeCompareRow } from "./components/ExchangeSelector";
 import { WireTicker } from "@/components/news/WireTicker";
 import { MarketOverview } from "./components/MarketOverview";
 import { STARTING_YEAR, TURNS_PER_YEAR } from "@/lib/constants/turnTime";
@@ -29,6 +29,9 @@ import { FoundCorporationModal } from "./components/FoundCorporationModal";
 import { MarketStats } from "./components/MarketStats";
 import { AuctionTable } from "./components/AuctionTable";
 import type { AuctionListing } from "@/lib/nationalization/auctionListing";
+import type { FundTickerInput } from "./components/StockTicker";
+import type { FundListItem } from "@/components/indexFunds/types";
+import type { Holding, BondHolding } from "@/components/portfolio/HoldingsTables";
 import Link from "next/link";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { privateEnterpriseBlockedByYear } from "@/lib/economy/queries/privateEnterpriseRegime";
@@ -42,7 +45,12 @@ import { useAuthMe } from "@/contexts/AuthDataContext";
 import { fetchJson } from "@/lib/observability/fetchJson";
 import { aggregateExchangeTotals } from "@/lib/stockExchange/aggregate";
 
-const STATS_HISTORY_LIMIT = 500;
+/**
+ * Shared history window (newest 2000 turns). One fetch feeds both the overview
+ * chart, which slices per timeframe client-side, and the stats tab, so the two
+ * never hold overlapping copies from different requests.
+ */
+const HISTORY_LIMIT = 2000;
 
 const VALID_TABS: StockTab[] = [
   "stocks",
@@ -143,6 +151,63 @@ function StockMarketPageFallback() {
   );
 }
 
+/**
+ * Slim contextual strip for the non-equity tabs, where the total-market index
+ * chart adds little. Returns null until its tab's data arrives.
+ */
+function TabContextStrip({
+  activeTab,
+  wealthEntries,
+  funds,
+  auctions,
+}: {
+  activeTab: StockTab;
+  wealthEntries: WealthEntry[];
+  funds: FundListItem[];
+  auctions: AuctionListing[];
+}) {
+  const { formatAmount } = useCurrency();
+  const stats: { label: string; value: string }[] = [];
+  if (activeTab === "wealth" && wealthEntries.length > 0) {
+    stats.push(
+      { label: "Ranked players", value: wealthEntries.length.toLocaleString("en-US") },
+      { label: "Top wealth", value: formatAmount(wealthEntries[0].totalWealth) }
+    );
+  } else if (activeTab === "funds" && funds.length > 0) {
+    stats.push(
+      { label: "Index funds", value: funds.length.toLocaleString("en-US") },
+      {
+        label: "Combined AUM",
+        value: formatAmount(funds.reduce((s, f) => s + f.aumAnchor, 0)),
+      }
+    );
+  } else if (activeTab === "auctions" && auctions.length > 0) {
+    const closingSoon = auctions.filter((a) => a.turnsLeft <= 24).length;
+    stats.push(
+      { label: "Open auctions", value: auctions.length.toLocaleString("en-US") },
+      {
+        label: "Closing within 24 turns",
+        value: closingSoon.toLocaleString("en-US"),
+      }
+    );
+  }
+  if (stats.length === 0) return null;
+  return (
+    <div className="rounded-xl border border-card-border bg-card shadow-sm overflow-hidden">
+      <div className="grid grid-cols-2 divide-x divide-card-border">
+        {stats.map((s) => (
+          <div key={s.label} className="px-4 py-3">
+            <span className="text-[10px] uppercase tracking-widest text-muted font-medium block mb-0.5">
+              {s.label}
+            </span>
+            <span className="text-lg font-bold tabular-nums">{s.value}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function StockMarketPage({ params }: { params: Promise<{ code: string }> }) {
   return (
     <Suspense fallback={<StockMarketPageFallback />}>
@@ -204,6 +269,19 @@ function StockMarketPageInner({ params }: { params: Promise<{ code: string }> })
   const [bondListings, setBondListings] = useState<BondListing[]>([]);
   const [wealthEntries, setWealthEntries] = useState<WealthEntry[]>([]);
   const [marketHistory, setMarketHistory] = useState<MarketCapPoint[]>([]);
+  const [historyDate, setHistoryDate] = useState<string | null>(null);
+  const [funds, setFunds] = useState<FundListItem[]>([]);
+  const [fundsError, setFundsError] = useState("");
+  const [bondTotalOutstanding, setBondTotalOutstanding] = useState<number | undefined>(undefined);
+  // Viewer positions for owned-markers (P1). Absent when signed out: the
+  // request 401s, the catch keeps the maps empty, and no chips render.
+  const [myStockHoldings, setMyStockHoldings] = useState<Holding[]>([]);
+  const [myBondHoldings, setMyBondHoldings] = useState<BondHolding[]>([]);
+  // Lazy per-exchange sizes for the compare panel (P14): fetched once when
+  // opened, never on the background poll.
+  const [compareOpen, setCompareOpen] = useState(false);
+  const [compareData, setCompareData] = useState<Record<string, ExchangeCompareRow>>({});
+  const [compareLoading, setCompareLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [showFoundModal, setShowFoundModal] = useState(false);
   const [myCorporation, setMyCorporation] = useState<{
@@ -270,6 +348,9 @@ function StockMarketPageInner({ params }: { params: Promise<{ code: string }> })
     };
   }, [countryKey]);
 
+  const [stockTimeframe, setStockTimeframe] = useState<"1h" | "24h" | "48h">("24h");
+  const [fundCount, setFundCount] = useState<number | undefined>(undefined);
+
   const fetchData = useCallback(
     async (options?: { background?: boolean }) => {
       const background = options?.background === true;
@@ -281,16 +362,22 @@ function StockMarketPageInner({ params }: { params: Promise<{ code: string }> })
         setBondListings([]);
         setWealthEntries([]);
         setMarketHistory([]);
+        setHistoryDate(null);
+        setFunds([]);
+        setFundsError("");
+        setBondTotalOutstanding(undefined);
       }
 
       const exchangeApi =
         exchangeMeta[exchangeFilter]?.exchangeApi ??
         exchangeMeta[exchangeFilter.toUpperCase()]?.exchangeApi ??
         "global";
-      const isStatsTab = activeTab === "stats";
-      const wantsCommodities = activeTab === "commodities" || isStatsTab;
-      const wantsBonds = activeTab === "bonds" || isStatsTab;
-      const wantsWealth = activeTab === "wealth";
+      // Commodities feed the always-visible ticker, so they load on every tab,
+      // not just the commodities tab. History is shared the same way: one
+      // window feeds both the overview chart and the stats tab. Bonds and
+      // wealth are cheap snapshot reads and load eagerly so their tab badges
+      // are populated on first paint; only auctions stay lazy.
+      const fundsExchangeApi = exchangeFilter === "global" ? "global" : exchangeFilter;
 
       try {
         type ApiResult<T = unknown> = { res: Response; json: T };
@@ -303,37 +390,32 @@ function StockMarketPageInner({ params }: { params: Promise<{ code: string }> })
 
         const primaryRequests: Array<Promise<ApiResult>> = [];
         // The always-visible stats strip and stock ticker need listings. This is
-        // a cheap stockExchangeSnapshots document read; the other tab endpoints
-        // are loaded only when the tab actually needs them.
+        // a cheap stockExchangeSnapshots document read; the bonds and wealth
+        // endpoints are loaded only when a tab actually needs them.
         primaryRequests.push(loadExchangeData(`/api/stock-exchange?exchange=${exchangeApi}`));
-        if (wantsCommodities) {
-          primaryRequests.push(
-            loadExchangeData(
-              exchangeApi === "global"
-                ? "/api/commodities"
-                : `/api/commodities?exchange=${exchangeApi}`
-            )
-          );
-        }
-        if (wantsBonds) {
-          primaryRequests.push(
-            loadExchangeData(
-              exchangeApi === "global" ? "/api/bonds" : `/api/bonds?exchange=${exchangeApi}`
-            )
-          );
-        }
-        if (wantsWealth) {
-          primaryRequests.push(
-            loadExchangeData(`/api/stock-exchange/wealth-list?exchange=${exchangeApi}`)
-          );
-        }
-        if (isStatsTab) {
-          primaryRequests.push(
-            loadExchangeData(
-              `/api/stock-exchange/market-cap-history?exchange=${exchangeApi}&limit=${STATS_HISTORY_LIMIT}`
-            )
-          );
-        }
+        primaryRequests.push(
+          loadExchangeData(
+            exchangeApi === "global"
+              ? "/api/commodities"
+              : `/api/commodities?exchange=${exchangeApi}`
+          )
+        );
+        primaryRequests.push(
+          loadExchangeData(
+            exchangeApi === "global" ? "/api/bonds" : `/api/bonds?exchange=${exchangeApi}`
+          )
+        );
+        primaryRequests.push(
+          loadExchangeData(`/api/stock-exchange/wealth-list?exchange=${exchangeApi}`)
+        );
+        primaryRequests.push(
+          loadExchangeData(
+            `/api/stock-exchange/market-cap-history?exchange=${exchangeApi}&limit=${HISTORY_LIMIT}`
+          )
+        );
+        primaryRequests.push(
+          loadExchangeData(`/api/investment-funds?exchange=${fundsExchangeApi}`)
+        );
 
         const primaryResults = await Promise.all(primaryRequests);
         if (primaryResults.length > 0) {
@@ -343,26 +425,47 @@ function StockMarketPageInner({ params }: { params: Promise<{ code: string }> })
           if (listingsRes.ok) setData(listingsJson as ExchangeData);
           else if (!background)
             setError((listingsData.error as string) || "Failed to load exchange data");
-          if (wantsCommodities) {
+          {
             const { res, json } = primaryResults[idx++];
             const d = json as Record<string, unknown>;
             if (res.ok) setCommodities(d.commodities as typeof commodities);
           }
-          if (wantsBonds) {
+          {
             const { res, json } = primaryResults[idx++];
             const d = json as Record<string, unknown>;
-            if (res.ok) setBondListings((d.bonds as typeof bondListings) || []);
+            if (res.ok) {
+              setBondListings((d.bonds as typeof bondListings) || []);
+              setBondTotalOutstanding(
+                typeof d.totalOutstanding === "number" ? d.totalOutstanding : undefined
+              );
+            }
           }
-          if (wantsWealth) {
+          {
             const { res, json } = primaryResults[idx++];
             const d = json as Record<string, unknown>;
             if (res.ok) setWealthEntries((d.entries as typeof wealthEntries) || []);
           }
-          if (isStatsTab) {
+          {
             const { res, json } = primaryResults[idx++];
             const d = json as Record<string, unknown>;
             if (res.ok) {
               setMarketHistory((d.points as typeof marketHistory) ?? []);
+              setHistoryDate((d.newestTurnDate as string | null) ?? null);
+            }
+          }
+          {
+            const { res, json } = primaryResults[idx++];
+            if (res.status === 403) {
+              setFunds([]);
+              setFundCount(0);
+            } else if (res.ok) {
+              const d = json as { funds?: FundListItem[] };
+              const list = d.funds ?? [];
+              setFunds(list);
+              setFundCount(list.length);
+              if (!background) setFundsError("");
+            } else if (!background) {
+              setFundsError("Failed to load funds");
             }
           }
         }
@@ -375,13 +478,35 @@ function StockMarketPageInner({ params }: { params: Promise<{ code: string }> })
         }
       }
     },
-    [activeTab, exchangeFilter, exchangeMeta]
+    [exchangeFilter, exchangeMeta]
   );
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchData();
   }, [fetchData]);
+
+  // Viewer positions, fetched once per page visit (not on the 5-minute poll:
+  // positions change only when the viewer trades). Signed-out or unreachable
+  // viewers simply get no owned-markers; that is an expected state, not a fault.
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch("/api/character/portfolio", { cache: "no-store" });
+        if (!res.ok || cancelled) return;
+        const json = (await res.json()) as { holdings?: unknown; bondHoldings?: unknown };
+        if (cancelled) return;
+        if (Array.isArray(json.holdings)) setMyStockHoldings(json.holdings as Holding[]);
+        if (Array.isArray(json.bondHoldings)) setMyBondHoldings(json.bondHoldings as BondHolding[]);
+      } catch {
+        // Expected when signed out or offline: leave the maps empty.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     const id = window.setInterval(
@@ -465,8 +590,86 @@ function StockMarketPageInner({ params }: { params: Promise<{ code: string }> })
   const totalListed = data?.listings.length ?? 0;
   const unlistedPrivateCount = data?.unlistedPrivateCount ?? 0;
   const profitablePct = totalListed > 0 ? (profitable / totalListed) * 100 : 0;
-  const [stockTimeframe, setStockTimeframe] = useState<"1h" | "24h" | "48h">("24h");
-  const [fundCount, setFundCount] = useState<number | undefined>(undefined);
+  // Ticker inputs derived from the shared funds fetch (P2): the same response
+  // that feeds the Funds tab, so the ticker and the tab cannot disagree.
+  const fundTickerItems: FundTickerInput[] = useMemo(
+    () =>
+      funds.map((f) => ({
+        id: f.id,
+        slug: f.slug,
+        tickerSymbol: f.tickerSymbol,
+        name: f.name,
+        quotedNav: f.quotedNav,
+        navChange24: f.navChange24,
+        countryCode: f.countryId ?? country,
+      })),
+    [funds, country]
+  );
+
+  // Corporation names by id for the fund holdings previews.
+  const corpNameById = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const l of data?.listings ?? []) {
+      m.set(l._id, l.name);
+      if (l.sequentialId != null) m.set(String(l.sequentialId), l.name);
+    }
+    return m;
+  }, [data]);
+
+  const toggleCompare = () => {
+    const next = !compareOpen;
+    setCompareOpen(next);
+    if (next && Object.keys(compareData).length === 0) {
+      setCompareLoading(true);
+      const rows = Object.entries(exchangeMeta);
+      void Promise.all(
+        rows.map(async ([key, meta]) => {
+          try {
+            const res = await fetch(`/api/stock-exchange?exchange=${meta.exchangeApi}`, {
+              cache: "no-store",
+            });
+            if (!res.ok) return null;
+            const json = (await res.json()) as ExchangeData;
+            const totals = aggregateExchangeTotals(json.listings ?? []);
+            return {
+              key,
+              row: { listings: (json.listings ?? []).length, marketCap: totals.marketCap },
+            };
+          } catch {
+            return null;
+          }
+        })
+      ).then((results) => {
+        const nextData: Record<string, ExchangeCompareRow> = {};
+        for (const r of results) {
+          if (r) nextData[r.key] = r.row;
+        }
+        setCompareData(nextData);
+        setCompareLoading(false);
+      });
+    }
+  };
+
+  // Owned-position lookups keyed by corporation/bond id (plus sequential id
+  // for listings, since portfolio holdings key off the ObjectId).
+  const ownedSharesByCorp = useMemo(() => {
+    const m = new Map<string, { shares: number; pnl: number | null }>();
+    for (const h of myStockHoldings) {
+      if (!h || h.shares <= 0) continue;
+      const entry = { shares: h.shares, pnl: h.unrealizedPnl ?? null };
+      m.set(h.corporationId, entry);
+      if (h.sequentialId != null) m.set(String(h.sequentialId), entry);
+    }
+    return m;
+  }, [myStockHoldings]);
+  const ownedBondUnits = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const h of myBondHoldings) {
+      if (!h || h.units <= 0) continue;
+      m.set(h.bondId, h.units);
+    }
+    return m;
+  }, [myBondHoldings]);
 
   const weightedPriceChange =
     stockTimeframe === "1h"
@@ -517,7 +720,11 @@ function StockMarketPageInner({ params }: { params: Promise<{ code: string }> })
 
   return (
     <div className="min-h-screen bg-background pb-16" data-replay-block>
-      <StockTicker listings={data?.listings ?? []} commodities={commodities} />
+      <StockTicker
+        listings={data?.listings ?? []}
+        commodities={commodities}
+        funds={fundTickerItems}
+      />
       <WireTicker />
 
       <main className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-6 space-y-6">
@@ -539,6 +746,10 @@ function StockMarketPageInner({ params }: { params: Promise<{ code: string }> })
             <ExchangeSelector
               exchangeMeta={exchangeMeta}
               exchangeFilter={exchangeFilter}
+              compareData={compareData}
+              compareLoading={compareLoading}
+              compareOpen={compareOpen}
+              onToggleCompare={toggleCompare}
               onSelect={(key) => {
                 const params = new URLSearchParams(searchParams.toString());
                 const qs = params.toString();
@@ -668,13 +879,42 @@ function StockMarketPageInner({ params }: { params: Promise<{ code: string }> })
           )}
         </div>
 
-        {/* Market Overview Chart */}
-        <MarketOverview exchangeFilter={exchangeFilter} />
+        {/* Market Overview Chart on equity tabs; a compact contextual strip on
+            wealth/funds/auctions where a total-market index adds little. */}
+        {activeTab === "stocks" ||
+        activeTab === "stats" ||
+        activeTab === "bonds" ||
+        activeTab === "commodities" ? (
+          <MarketOverview
+            exchangeFilter={exchangeFilter}
+            timeframe={stockTimeframe}
+            onTimeframeChange={setStockTimeframe}
+            history={marketHistory}
+            newestTurnDate={historyDate}
+            historyLoading={loading}
+          />
+        ) : (
+          <TabContextStrip
+            activeTab={activeTab}
+            wealthEntries={wealthEntries}
+            funds={funds}
+            auctions={auctions}
+          />
+        )}
 
         {/* Tabs */}
         <div className="space-y-6">
-          <div className="border-b border-card-border">
-            <nav className="-mb-px flex gap-6 overflow-x-auto" aria-label="Tabs">
+          <div className="border-b border-card-border flex items-end justify-between gap-4">
+            <Link
+              href="/guides/investing"
+              className="order-2 mb-3 shrink-0 text-xs font-semibold text-muted hover:text-primary transition-colors whitespace-nowrap"
+            >
+              How investing works
+            </Link>
+            <nav
+              className="-mb-px flex gap-6 overflow-x-auto order-1 min-w-0 flex-1"
+              aria-label="Tabs"
+            >
               {tabs.map((tab) => (
                 <Tooltip key={tab.key} content={tab.tooltip}>
                   <button
@@ -735,12 +975,22 @@ function StockMarketPageInner({ params }: { params: Promise<{ code: string }> })
                             </label>
                           </div>
                         )}
-                        <StockList listings={visible} timeframe={stockTimeframe} />
+                        <StockList
+                          listings={visible}
+                          timeframe={stockTimeframe}
+                          owned={ownedSharesByCorp}
+                        />
                       </>
                     );
                   })()}
                 {activeTab === "wealth" && <WealthList entries={wealthEntries} />}
-                {activeTab === "bonds" && <BondTable bonds={bondListings} />}
+                {activeTab === "bonds" && (
+                  <BondTable
+                    bonds={bondListings}
+                    totalOutstanding={bondTotalOutstanding}
+                    ownedUnits={ownedBondUnits}
+                  />
+                )}
                 {activeTab === "commodities" && (
                   <CommodityTable commodities={commodities} exchangeFilter={exchangeFilter} />
                 )}
@@ -750,6 +1000,10 @@ function StockMarketPageInner({ params }: { params: Promise<{ code: string }> })
                     exchangeFilter={exchangeFilter}
                     timeframe={stockTimeframe}
                     onCountChange={setFundCount}
+                    externalFunds={funds}
+                    externalLoading={loading && funds.length === 0}
+                    externalError={fundsError}
+                    corpNames={corpNameById}
                   />
                 )}
                 {activeTab === "stats" && (
@@ -758,6 +1012,7 @@ function StockMarketPageInner({ params }: { params: Promise<{ code: string }> })
                     commodities={commodities}
                     bondListings={bondListings}
                     history={marketHistory}
+                    bondTotalOutstanding={bondTotalOutstanding}
                   />
                 )}
                 {activeTab === "auctions" && (

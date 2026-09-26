@@ -9,6 +9,7 @@
     "dev": "next dev",
     "design:build": "node scripts/build-design-md.mjs",
     "design:check": "node scripts/build-design-md.mjs --check",
+    "prebuild": "node scripts/clear-railway-build-cache.mjs",
     "build": "next build && tsx scripts/postbuild-quality.ts",
     "start": "next start",
     "start:turn-worker": "NODE_ENV=production NODE_OPTIONS=\"--max-old-space-size=3072 --max-semi-space-size=64\" tsx scripts/turn-worker.ts",

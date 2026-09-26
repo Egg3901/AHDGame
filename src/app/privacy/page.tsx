@@ -9,7 +9,7 @@ export const metadata: Metadata = publicPageMetadata({
   pathname: "/privacy",
 });
 
-const EFFECTIVE_DATE = "April 30, 2026";
+const EFFECTIVE_DATE = "September 22, 2026";
 
 export default function PrivacyPolicyPage() {
   return (

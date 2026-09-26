@@ -46,7 +46,9 @@ configured destination.
 
 PostHog loads only on the hosted multiplayer site after the existing optional analytics consent is accepted. Rejecting or resetting consent opts out and clears the PostHog identity. The Google consent message on ad content does not itself grant PostHog consent; those pages remain untracked unless the AHD analytics choice was accepted elsewhere.
 
-PostHog autocapture, automatic pageviews, session replay, and surveys are disabled. The sampled OpenReplay integration on the production branch remains governed by the same optional consent. When promoting this change from `development`, retain that existing provider and its privacy disclosure. Named area events avoid raw URLs and player text; the SDK denies URL and referrer properties. Identification uses an opaque account ID without name or email.
+PostHog autocapture, automatic pageviews, session replay, and surveys are disabled. Named area events avoid raw URLs and player text; the SDK denies URL and referrer properties. Identification uses an opaque account ID without name or email. Amplitude receives the same event set via the shared fan-out so retention and funnel questions can be answered without a second instrumentation pass.
+
+OpenReplay session replay has been **removed** and is not part of the production stack. PostHog plus Amplitude are the whole of it. If replay is ever revisited, make that a deliberate decision on its own merits — do not restore the old provider.
 
 | Event                  | Trigger                                                   | Properties                                                                                          |
 | ---------------------- | --------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
