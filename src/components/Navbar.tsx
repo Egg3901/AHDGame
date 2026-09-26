@@ -42,6 +42,7 @@ import {
   partyUrl,
   countryUrl,
 } from "@/lib/urls";
+import { ProfileSwitcher, ImperialMark } from "./navbar/ProfileSwitcher";
 import { viewerIsSingleplayerOwner, visibleStaffNavItems } from "@/components/navbar/staffNavItems";
 import { visibleWorldNavItems } from "@/components/navbar/worldNavItems";
 import {
@@ -214,6 +215,7 @@ export const Navbar = React.memo(function Navbar({
     return region?.adjective ?? homeState?.name;
   })();
   const currentPartyCountry = currentParty?.countryId ?? pageCountry;
+  const activeProfileCharacter = adminCharacters?.find((c) => c.isActive);
 
   // Close the mobile menu automatically once screenshot capture finishes
   const prevCapturing = useRef(false);
@@ -401,109 +403,46 @@ export const Navbar = React.memo(function Navbar({
               <div className="relative" ref={profileDropdownRef}>
                 <button
                   onClick={() => dispatch({ type: "TOGGLE_DROPDOWN", key: "profile" })}
-                  className={`relative flex items-center gap-1 px-2.5 py-1 text-sm transition-colors hover:text-foreground ${isNavActive(pathname, "/profile") ? "font-medium text-foreground after:absolute after:bottom-0 after:left-1 after:right-1 after:h-px after:rounded-full after:bg-primary after:opacity-70" : "text-muted"}`}
+                  className={`relative flex items-center gap-2 px-2.5 py-1 text-sm transition-colors hover:text-foreground ${isNavActive(pathname, "/profile") ? "font-medium text-foreground after:absolute after:bottom-0 after:left-1 after:right-1 after:h-px after:rounded-full after:bg-primary after:opacity-70" : "text-muted"}`}
                   aria-expanded={profileOpen}
                   aria-haspopup="menu"
                 >
-                  {isImperialMode
-                    ? (imperialCharacter?.name ?? t("common.imperial"))
-                    : (adminCharacters?.find((c) => c.isActive)?.name ?? t("common.profile"))}
-                  <svg
-                    className={`h-4 w-4 shrink-0 transition-transform duration-200 ${profileOpen ? "rotate-180" : ""}`}
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                    aria-hidden="true"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M19 9l-7 7-7-7"
-                    />
-                  </svg>
+                  {isImperialMode ? (
+                    <ImperialMark />
+                  ) : (
+                    activeProfileCharacter && (
+                      <CountryFlag country={activeProfileCharacter.countryId} size="sm" />
+                    )
+                  )}
+                  <span className="max-w-36 truncate">
+                    {isImperialMode
+                      ? (imperialCharacter?.name ?? t("common.imperial"))
+                      : (activeProfileCharacter?.name ?? t("common.profile"))}
+                  </span>
+                  <ChevronIcon open={profileOpen} />
                 </button>
                 {profileOpen && (
-                  <div className="absolute left-0 z-50 mt-2 w-52 rounded-xl border border-card-border bg-card shadow-modal overflow-hidden">
-                    <div className="py-1">
-                      {adminCharacters?.map((char) =>
-                        char.isActive && !isImperialMode ? (
-                          <Link
-                            key={char.id}
-                            href="/profile"
-                            onClick={() => dispatch({ type: "CLOSE_DROPDOWN", key: "profile" })}
-                            className="flex items-center justify-between gap-2 px-4 py-2.5 text-sm text-foreground transition-colors hover:bg-background/60"
-                          >
-                            <span className="truncate">{char.name}</span>
-                            <span className="shrink-0 flex items-center gap-1.5 text-xs">
-                              <span className="text-muted/60">{char.countryId}</span>
-                              <span className="text-primary font-medium">{t("common.active")}</span>
-                            </span>
-                          </Link>
-                        ) : isImperialMode ? (
-                          <button
-                            key={char.id}
-                            onClick={() => {
-                              dispatch({ type: "CLOSE_DROPDOWN", key: "profile" });
-                              handleSwitchImperial("character");
-                            }}
-                            disabled={switchingImperial}
-                            className="flex w-full cursor-pointer items-center gap-2 px-4 py-2.5 text-sm text-muted transition-colors hover:bg-background/60 hover:text-foreground disabled:opacity-50"
-                          >
-                            <span className="truncate">{char.name}</span>
-                            <span className="ml-auto shrink-0 text-xs text-muted/60">
-                              {char.countryId}
-                            </span>
-                          </button>
-                        ) : (
-                          <a
-                            key={char.id}
-                            href={`/api/auth/active-character?switch=${char.id}`}
-                            className="flex w-full cursor-pointer items-center gap-2 px-4 py-2.5 text-sm text-muted transition-colors hover:bg-background/60 hover:text-foreground"
-                          >
-                            <span className="truncate">{char.name}</span>
-                            <span className="ml-auto shrink-0 text-xs text-muted/60">
-                              {char.countryId}
-                            </span>
-                          </a>
-                        )
-                      )}
-                      {imperialCharacter && (
-                        <>
-                          <div className="border-t border-card-border/40 my-1" />
-                          {isImperialMode ? (
-                            <Link
-                              href={`/imperial/${imperialCharacter.id}`}
-                              onClick={() => dispatch({ type: "CLOSE_DROPDOWN", key: "profile" })}
-                              className="flex items-center justify-between gap-2 px-4 py-2.5 text-sm text-foreground transition-colors hover:bg-background/60"
-                            >
-                              <span className="truncate">{imperialCharacter.name}</span>
-                              <span className="shrink-0 flex items-center gap-1.5 text-xs">
-                                <span className="text-amber-400/70">{t("common.imperial")}</span>
-                                <span className="text-primary font-medium">
-                                  {t("common.active")}
-                                </span>
-                              </span>
-                            </Link>
-                          ) : (
-                            <button
-                              onClick={() => {
-                                dispatch({ type: "CLOSE_DROPDOWN", key: "profile" });
-                                handleSwitchImperial("imperial");
-                              }}
-                              disabled={switchingImperial}
-                              className="flex w-full cursor-pointer items-center gap-2 px-4 py-2.5 text-sm text-muted transition-colors hover:bg-background/60 hover:text-foreground disabled:opacity-50"
-                            >
-                              <span className="truncate">{imperialCharacter.name}</span>
-                              <span className="ml-auto shrink-0 text-xs text-amber-400/70">
-                                {t("common.imperial")}
-                              </span>
-                            </button>
-                          )}
-                        </>
-                      )}
-                    </div>
-                  </div>
+                  <ProfileSwitcher
+                    variant="desktop"
+                    characters={adminCharacters ?? []}
+                    imperialCharacter={imperialCharacter}
+                    isImperialMode={isImperialMode}
+                    switchingImperial={switchingImperial}
+                    charactersLabel={t("common.characters")}
+                    imperialLabel={t("common.imperial")}
+                    activeLabel={t("common.active")}
+                    characterSwitchHref={(id) =>
+                      `/api/auth/active-character?switch=${encodeURIComponent(id)}`
+                    }
+                    imperialHref={
+                      imperialCharacter ? `/imperial/${imperialCharacter.id}` : undefined
+                    }
+                    onSelectImperial={(target) => {
+                      dispatch({ type: "CLOSE_DROPDOWN", key: "profile" });
+                      handleSwitchImperial(target);
+                    }}
+                    onNavigate={() => dispatch({ type: "CLOSE_DROPDOWN", key: "profile" })}
+                  />
                 )}
               </div>
             ) : (
@@ -853,77 +792,45 @@ export const Navbar = React.memo(function Navbar({
                   className="flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-white/5"
                   aria-expanded={profileOpen}
                 >
-                  {isImperialMode
-                    ? (imperialCharacter?.name ?? t("common.imperial"))
-                    : (adminCharacters?.find((c) => c.isActive)?.name ?? t("common.profile"))}
+                  <span className="flex min-w-0 items-center gap-2">
+                    {isImperialMode ? (
+                      <ImperialMark />
+                    ) : (
+                      activeProfileCharacter && (
+                        <CountryFlag country={activeProfileCharacter.countryId} size="sm" />
+                      )
+                    )}
+                    <span className="truncate">
+                      {isImperialMode
+                        ? (imperialCharacter?.name ?? t("common.imperial"))
+                        : (activeProfileCharacter?.name ?? t("common.profile"))}
+                    </span>
+                  </span>
                   <ChevronIcon open={profileOpen} />
                 </button>
                 {profileOpen && (
-                  <div className="ml-3 mt-0.5 space-y-0.5 border-l border-card-border/60 pl-3">
-                    {adminCharacters?.map((char) =>
-                      char.isActive && !isImperialMode ? (
-                        <Link
-                          key={char.id}
-                          href="/profile"
-                          onClick={closeMobileMenu}
-                          className={`flex items-center justify-between rounded-lg px-3 py-2 text-sm transition-colors hover:bg-white/5 ${isNavActive(pathname, "/profile") ? "bg-white/5 font-medium" : "text-foreground"}`}
-                        >
-                          <span>{char.name}</span>
-                          <span className="text-xs text-primary font-medium">
-                            {t("common.active")}
-                          </span>
-                        </Link>
-                      ) : isImperialMode ? (
-                        <button
-                          key={char.id}
-                          onClick={() => handleSwitchImperial("character")}
-                          disabled={switchingImperial}
-                          className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm text-muted transition-colors hover:bg-white/5 disabled:opacity-50"
-                        >
-                          <span>{char.name}</span>
-                          <span className="text-xs text-muted/60">{char.countryId}</span>
-                        </button>
-                      ) : (
-                        <button
-                          key={char.id}
-                          onClick={() => handleSwitchCharacter(char.id)}
-                          disabled={switchingCharacter}
-                          className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm text-muted transition-colors hover:bg-white/5 disabled:opacity-50"
-                        >
-                          <span>{char.name}</span>
-                          <span className="text-xs text-muted/60">{char.countryId}</span>
-                        </button>
-                      )
-                    )}
-                    {imperialCharacter && (
-                      <>
-                        <div className="border-t border-card-border/40 my-1" />
-                        {isImperialMode ? (
-                          <Link
-                            href={`/imperial/${imperialCharacter.id}`}
-                            onClick={closeMobileMenu}
-                            className="flex items-center justify-between rounded-lg px-3 py-2 text-sm transition-colors hover:bg-white/5 text-foreground"
-                          >
-                            <span>{imperialCharacter.name}</span>
-                            <span className="flex items-center gap-1.5 text-xs">
-                              <span className="text-amber-400/70">{t("common.imperial")}</span>
-                              <span className="text-primary font-medium">{t("common.active")}</span>
-                            </span>
-                          </Link>
-                        ) : (
-                          <button
-                            onClick={() => handleSwitchImperial("imperial")}
-                            disabled={switchingImperial}
-                            className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm text-muted transition-colors hover:bg-white/5 disabled:opacity-50"
-                          >
-                            <span>{imperialCharacter.name}</span>
-                            <span className="text-xs text-amber-400/70">
-                              {t("common.imperial")}
-                            </span>
-                          </button>
-                        )}
-                      </>
-                    )}
+                  <div className="ml-3 mt-0.5 border-l border-card-border/60 pl-3">
+                    <ProfileSwitcher
+                      variant="mobile"
+                      characters={adminCharacters ?? []}
+                      imperialCharacter={imperialCharacter}
+                      isImperialMode={isImperialMode}
+                      switchingCharacter={switchingCharacter}
+                      switchingImperial={switchingImperial}
+                      charactersLabel={t("common.characters")}
+                      imperialLabel={t("common.imperial")}
+                      activeLabel={t("common.active")}
+                      imperialHref={
+                        imperialCharacter ? `/imperial/${imperialCharacter.id}` : undefined
+                      }
+                      onSelectCharacter={(id) => {
+                        handleSwitchCharacter(id);
+                      }}
+                      onSelectImperial={(target) => {
+                        handleSwitchImperial(target);
+                      }}
+                      onNavigate={closeMobileMenu}
+                    />
                   </div>
                 )}
               </div>
