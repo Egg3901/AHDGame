@@ -354,7 +354,7 @@ export async function initializeCronJobs() {
         );
         try {
           void captureServerProductEvent("turn_lock_stuck", {
-            lock_age_ms: lockAgeMs,
+            lock_age_ms: Number.isFinite(lockAgeMs) ? lockAgeMs : -1,
             phase: currentState.processingPhase ?? "unknown",
           });
         } catch {
@@ -367,6 +367,12 @@ export async function initializeCronJobs() {
           Sentry.captureMessage("Stuck turn lock recovered by sweep", {
             level: "warning",
             fingerprint: ["stuck-turn-lock-sweep"],
+            tags: {
+              processingPhase: currentState.processingPhase ?? "unknown",
+              lockAgeMinutes: Number.isFinite(lockAgeMs)
+                ? Math.floor(lockAgeMs / 60_000)
+                : "unknown",
+            },
             extra: {
               lastTouch: lockState.lastTouch?.toISOString() ?? null,
               processingPhase: currentState.processingPhase ?? null,
