@@ -90,6 +90,16 @@ export default function PrivacyPolicyPage() {
                 </p>
               </div>
               <div>
+                <p className="font-semibold text-foreground mb-1">Optional session replay</p>
+                <p>
+                  If you accept optional analytics, we may record a sample of your interactions with
+                  the game to diagnose confusing flows and technical failures. Form values are
+                  hidden, network request and response bodies are not captured, and sensitive
+                  screens such as account, messages, banking, and corporations are excluded from
+                  recording. Accounts are identified only by an internal opaque identifier.
+                </p>
+              </div>
+              <div>
                 <p className="font-semibold text-foreground mb-1">Error data</p>
                 <p>
                   Sentry collects error reports when something goes wrong, including browser

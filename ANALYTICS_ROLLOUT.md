@@ -70,7 +70,7 @@ Sentry keeps browser, server, edge, API, and turn capture paths. The release is 
 1. Build and validate the onboarding funnel and next-day retention dashboard in PostHog.
 2. Validate coverage of the initial first-week action events, then add other action paths needed for D7 and D30 retention analysis. Treat correlations as leads to investigate, not proof of causation.
 3. Add discovery metrics for corporations, banking, and media. Use existing performance telemetry to measure slow corporation pages.
-4. Replay is settled: OpenReplay is removed and PostHog session replay stays off. If a replay capability is ever wanted again, scope it as a fresh decision with its own masking and privacy review rather than reviving OpenReplay.
+4. Replay is ON (executive decision 2026-09-26, reversing the removal-era default-off): PostHog records a 10% sample with input masking on, network bodies off, and account, messaging, and financial screens blocked via `data-replay-block`. OpenReplay stays removed and is not restored. The spend cap is managed in the PostHog dashboard, not in code.
 5. Pilot one UI or tutorial feature flag and experiment with a defined outcome. Flags must have local defaults and stay off the turn's critical path. Scope surveys to specific open product questions.
 
 Before launch, verify accepted, rejected, and withdrawn consent; singleplayer exclusion; event volumes; Sentry error arrival; readable browser stacks; release identity; and alert delivery in staging.

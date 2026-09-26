@@ -93,7 +93,7 @@ function FundDetailPageInner({ params }: { params: Promise<{ country: string; sl
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-background pb-16">
+      <div className="min-h-screen bg-background pb-16" data-replay-block>
         <main className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8 space-y-6">
           <Skeleton className="h-8 w-48" />
           <Skeleton className="h-40 w-full rounded-xl" />
@@ -104,7 +104,7 @@ function FundDetailPageInner({ params }: { params: Promise<{ country: string; sl
 
   if (error || !data) {
     return (
-      <div className="min-h-screen bg-background pb-16">
+      <div className="min-h-screen bg-background pb-16" data-replay-block>
         <main className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8 space-y-6">
           <BackButton fallbackHref={stockMarketHref} fallbackLabel="Funds" />
           <div className="rounded-xl border border-error/20 bg-error/5 p-6 text-center text-error">
@@ -171,7 +171,7 @@ function FundDetailPageInner({ params }: { params: Promise<{ country: string; sl
   ];
 
   return (
-    <div className="min-h-screen bg-background pb-16">
+    <div className="min-h-screen bg-background pb-16" data-replay-block>
       <main className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8 space-y-6">
         {/* Breadcrumb */}
         <div className="flex flex-wrap items-center gap-3">

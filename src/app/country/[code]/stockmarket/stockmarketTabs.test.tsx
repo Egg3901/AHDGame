@@ -110,15 +110,17 @@ describe("stockmarket inactive tabs (#2168)", () => {
     await waitFor(() => {
       expect(fetchedUrls.some((u) => u.startsWith("/api/stock-exchange?"))).toBe(true);
     });
-    // Listings serve the visible stats strip and ticker; other tab data waits.
+    // Only auctions stay lazy (#2168): commodities feed the ticker, history is
+    // shared with the overview chart, and bonds/wealth populate tab badges.
+    expect(fetchedUrls.some((u) => u.includes("/auctions"))).toBe(false);
     for (const endpoint of [
-      "/auctions",
       "/api/bonds",
       "/api/commodities",
       "/wealth-list",
       "/market-cap-history",
+      "/api/investment-funds",
     ]) {
-      expect(fetchedUrls.some((u) => u.includes(endpoint))).toBe(false);
+      expect(fetchedUrls.some((u) => u.includes(endpoint))).toBe(true);
     }
   });
 
