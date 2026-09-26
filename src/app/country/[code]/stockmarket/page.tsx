@@ -498,8 +498,7 @@ function StockMarketPageInner({ params }: { params: Promise<{ code: string }> })
         const json = (await res.json()) as { holdings?: unknown; bondHoldings?: unknown };
         if (cancelled) return;
         if (Array.isArray(json.holdings)) setMyStockHoldings(json.holdings as Holding[]);
-        if (Array.isArray(json.bondHoldings))
-          setMyBondHoldings(json.bondHoldings as BondHolding[]);
+        if (Array.isArray(json.bondHoldings)) setMyBondHoldings(json.bondHoldings as BondHolding[]);
       } catch {
         // Expected when signed out or offline: leave the maps empty.
       }
