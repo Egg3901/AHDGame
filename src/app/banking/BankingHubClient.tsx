@@ -1584,7 +1584,8 @@ function AdminUnwindPanel({
             >
               {banks.map((b) => (
                 <option key={b.corporationId} value={b.corporationId}>
-                  {b.name} ({b.corporationId})
+                  {b.name} ({b.countryName}
+                  {b.sequentialId != null ? ` #${b.sequentialId}` : ""})
                 </option>
               ))}
             </select>

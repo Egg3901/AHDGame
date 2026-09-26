@@ -67,7 +67,11 @@ export function BlacklistEditor({
         showToast(json.error ?? "Could not update blacklist", "error");
         return;
       }
-      showToast("Blacklist saved", "success");
+      const entryCount = corporations.length + characters.length + indexFunds.length;
+      showToast(
+        `Refusal list saved: ${entryCount} ${entryCount === 1 ? "entry" : "entries"}. Listed players cannot deposit or borrow; listed companies cannot borrow.`,
+        "success"
+      );
       updateBlacklistState({ dirty: false });
       await onChanged();
     } finally {

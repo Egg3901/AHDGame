@@ -33,6 +33,7 @@ import {
 } from "@/lib/banking/bankCash";
 import { buildRiskReadout } from "@/lib/banking/riskReadout";
 import { bankBalanceSheet, explainBankCaps } from "@/lib/banking/balanceSheet";
+import { buildBankOutlook } from "@/lib/banking/outlook";
 import { isDepositTakingCharter } from "@/lib/banking/charterKinds";
 import { getCurrentTurn } from "@/lib/currentTurn";
 import {
@@ -197,9 +198,12 @@ async function handleGET(_request: Request, { params }: RouteParams) {
         loans: [],
         interbankLoans: [],
         depositCeiling: null,
+        primeRate: null,
+        outlook: null,
       });
     }
 
+    const currentTurn = await getCurrentTurn(db);
     const currency = (charter?.currency ??
       resolveCorpLiquidCurrencyCode(corporation) ??
       "USD") as CurrencyCode;
@@ -398,6 +402,56 @@ async function handleGET(_request: Request, { params }: RouteParams) {
           }
         : undefined;
 
+    // The household book, by rating, best credit first. This is what the
+    // console used to be unable to show: the book was one lump with one rate,
+    // so "NPC bulk outstanding (implied)" was genuinely all there was to say.
+    // Per-band targets mirror the turn's funding derivation (deposit base
+    // after reserves, less non-household loans) from console-visible inputs,
+    // so each row shows where the stance is steering it, not just where it is.
+    const householdBook = buildHouseholdBook(loans, charter, householdTargetInputs);
+
+    // What is about to kill this bank, and which lever moves it. Only
+    // meaningful for a charter that actually takes deposits.
+    const risk =
+      hasActiveCharter && charter && isDepositTakingCharter(charter)
+        ? buildRiskReadout({
+            cashReserves: sheet?.cashReserves ?? 0,
+            cashBackedDeposits: sheet?.cashBackedDeposits ?? 0,
+            totalLoans: sheet?.totalLoans ?? 0,
+            reserveRatioRequired: reserveRatio ?? 0,
+            confidence: charter.confidence ?? 1,
+            band: charter.warningBand ?? "green",
+          })
+        : null;
+
+    // Next turn if the CEO changes nothing, replayed from the rule modules.
+    // Additive presentation: the turn pipeline never reads this object.
+    const weakestTerm =
+      risk && risk.terms.length > 0
+        ? risk.terms.reduce((a, b) =>
+            a.max > 0 && b.max > 0 ? (a.contribution / a.max <= b.contribution / b.max ? a : b) : a
+          )
+        : null;
+    const outlook =
+      hasActiveCharter && charter && rates && sheet
+        ? await buildBankOutlook(db, {
+            corporationIdHex: corporation._id.toString(),
+            charter,
+            currency,
+            currentTurn,
+            reserveRatio: reserveRatio ?? 0,
+            rates,
+            sheet,
+            loans,
+            interbankLoans,
+            weakestTermLever: weakestTerm
+              ? { key: weakestTerm.key, lever: weakestTerm.lever }
+              : null,
+            currentBand: charter.warningBand ?? "green",
+            playerDepositsAreLiabilities: sheetOptions.playerDepositsAreLiabilities,
+          })
+        : null;
+
     return NextResponse.json({
       privateBankingEnabled: privateEnabled,
       bankPropTradingEnabled: propTradingEnabled,
@@ -417,7 +471,7 @@ async function handleGET(_request: Request, { params }: RouteParams) {
       },
       currency,
       // Drives the charter-switch cooldown countdown in the console.
-      currentTurn: await getCurrentTurn(db),
+      currentTurn,
       legalCharterTypes: legalTypes,
       eligibleTypes,
       eligibilityReasons,
@@ -456,6 +510,14 @@ async function handleGET(_request: Request, { params }: RouteParams) {
                 : (charter.totalDeposits ?? 0),
               totalLoans: charter.totalLoans ?? 0,
               npcDeposits: charter.npcDeposits ?? 0,
+              playerDeposits: charter.playerDeposits ?? 0,
+              pointerDeposits: sheet ? sheet.pointerDeposits : null,
+              cashBackedDeposits: sheet ? sheet.cashBackedDeposits : null,
+              capacityCeiling: sheet ? sheet.capacityCeiling : null,
+              equityCeiling: sheet ? sheet.equityCeiling : null,
+              depositCeilingBinds: sheet ? sheet.depositCeilingBinds : null,
+              bookEquity: sheet ? sheet.bookEquity : null,
+              fundingCapacity: householdTargetInputs?.fundingCapacity ?? null,
               cashReserves: getCashReserves(charter),
               lastBankingIncome: charter.lastBankingIncome ?? 0,
               lastBankingIncomeTurn: charter.lastBankingIncomeTurn ?? null,
@@ -528,7 +590,7 @@ async function handleGET(_request: Request, { params }: RouteParams) {
       // Per-band targets mirror the turn's funding derivation (deposit base
       // after reserves, less non-household loans) from console-visible inputs,
       // so each row shows where the stance is steering it, not just where it is.
-      householdBook: buildHouseholdBook(loans, charter, householdTargetInputs),
+      householdBook,
       // Where the charter is in its life and what that admits. The console
       // shows the stage and disables what the stage refuses, so a player is
       // told "impaired: no new exposure" rather than finding out from an error.
@@ -536,19 +598,9 @@ async function handleGET(_request: Request, { params }: RouteParams) {
         stage: lifecycleStage(charter),
         actions: stageActions(lifecycleStage(charter)),
       },
-      // What is about to kill this bank, and which lever moves it. Only
-      // meaningful for a charter that actually takes deposits.
-      risk:
-        hasActiveCharter && charter && isDepositTakingCharter(charter)
-          ? buildRiskReadout({
-              cashReserves: sheet?.cashReserves ?? 0,
-              cashBackedDeposits: sheet?.cashBackedDeposits ?? 0,
-              totalLoans: sheet?.totalLoans ?? 0,
-              reserveRatioRequired: reserveRatio ?? 0,
-              confidence: charter.confidence ?? 1,
-              band: charter.warningBand ?? "green",
-            })
-          : null,
+      risk,
+      primeRate: outlook?.primeRate ?? null,
+      outlook,
       interbankLoans: interbankLoans.map((loan) => ({
         id: loan._id.toString(),
         lenderCorporationId: loan.lenderCorporationId.toString(),

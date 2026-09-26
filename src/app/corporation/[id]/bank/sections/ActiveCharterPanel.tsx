@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { EmptyState, Tooltip } from "@/components/ui";
 import { formatBankMoney, formatRatePercent } from "@/components/banking/formatBankMoney";
+import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 import { assessCapital, borrowingsFromCharter } from "@/lib/banking/capitalAdequacy";
 import { Eyebrow } from "../components/BankSection";
 import type { BankTab, ConsolePayload, ShowToast } from "../types";
@@ -11,6 +12,7 @@ import { charterLabel } from "../lib/helpers";
 import { StatCell } from "../components/StatCell";
 import { HealthCard } from "./HealthCard";
 import { RiskPanel } from "./RiskPanel";
+import { OutlookStrip } from "./OutlookStrip";
 import { RateOffsetEditor } from "./RateOffsetEditor";
 import { LoanBookTable } from "./LoanBookTable";
 import { BlacklistEditor } from "./BlacklistEditor";
@@ -27,12 +29,14 @@ import { CustomerBankPanel } from "./CustomerBankPanel";
 function LoanApprovalToggle({
   corporationId,
   requireApproval,
+  pendingCount,
   canMutate,
   onChanged,
   showToast,
 }: {
   corporationId: string;
   requireApproval: boolean;
+  pendingCount: number;
   canMutate: boolean;
   onChanged: () => Promise<void>;
   showToast: ShowToast;
@@ -53,7 +57,9 @@ function LoanApprovalToggle({
         return;
       }
       showToast(
-        json.requireApproval ? "New loans now need your approval" : "Loans auto-approve again",
+        json.requireApproval
+          ? `New loans now need your approval${pendingCount > 0 ? `, starting with the ${pendingCount} waiting` : ""}`
+          : "Loans auto-approve again: qualifying requests fund without waiting for you",
         "success"
       );
       await onChanged();
@@ -100,7 +106,7 @@ function LoanApprovalToggle({
  * one turn, not a rate. Earned and paid lines are magnitudes; only the net
  * and the bottom line carry a sign.
  */
-function EarningsBreakdown({ data, onFunding }: { data: ConsolePayload; onFunding: () => void }) {
+function EarningsBreakdown({ data, onTreasury }: { data: ConsolePayload; onTreasury: () => void }) {
   const t = useTranslations("corporations.bankConsole");
   const charter = data.charter!;
   const depositInterest = charter.lastBankingDepositInterest ?? 0;
@@ -114,6 +120,12 @@ function EarningsBreakdown({ data, onFunding }: { data: ConsolePayload; onFundin
   const paid = depositInterest + ibPaid + facility;
   const net = earned - paid;
   const currency = charter.currency;
+  // Headline percentages beside the dollar net: annualised over the book that
+  // produced it, so the CEO reads margin, not just money.
+  const loanBase = Math.max(0, charter.totalLoans);
+  const depositBase = Math.max(0, charter.totalDeposits);
+  const nim = loanBase > 0 ? (net * TURNS_PER_YEAR * 100) / loanBase : null;
+  const costOfFunds = depositBase > 0 ? (paid * TURNS_PER_YEAR * 100) / depositBase : null;
 
   return (
     <section className="rounded-xl border border-card-border bg-card overflow-hidden">
@@ -137,7 +149,7 @@ function EarningsBreakdown({ data, onFunding }: { data: ConsolePayload; onFundin
         />
         <EarningsRow
           label="Interest paid"
-          detail={`deposits ${formatBankMoney(depositInterest, currency)} · interbank paid ${formatBankMoney(ibPaid, currency)} · central-bank facilities ${formatBankMoney(facility, currency)}`}
+          detail={`deposits ${formatBankMoney(depositInterest, currency)} · interbank paid ${formatBankMoney(ibPaid, currency)} · central-bank facilities ${formatBankMoney(facility, currency)}${costOfFunds != null ? ` · cost of funds ${costOfFunds.toFixed(2)}%` : ""}`}
           value={formatBankMoney(paid, currency)}
           tooltip={t("tooltips.interestPaid")}
           aboutLabel={t("about", { label: "Interest paid" })}
@@ -146,7 +158,7 @@ function EarningsBreakdown({ data, onFunding }: { data: ConsolePayload; onFundin
           label="Net interest"
           detail={
             charter.lastBankingIncomeTurn != null
-              ? `banking pass T${charter.lastBankingIncomeTurn}`
+              ? `banking pass T${charter.lastBankingIncomeTurn}${nim != null ? ` · margin ${nim.toFixed(2)}%` : ""}`
               : "awaiting first banking pass"
           }
           value={formatBankMoney(net, currency)}
@@ -175,10 +187,10 @@ function EarningsBreakdown({ data, onFunding }: { data: ConsolePayload; onFundin
           {t("tooltips.takeProfits")}{" "}
           <button
             type="button"
-            onClick={onFunding}
+            onClick={onTreasury}
             className="font-medium text-accent underline-offset-2 hover:underline"
           >
-            Withdraw in Funding
+            Withdraw in Treasury
           </button>
         </p>
       </div>
@@ -208,7 +220,7 @@ function EarningsRow({
           {label}
           <Tooltip content={tooltip} label={aboutLabel} />
         </dt>
-        <dd className="truncate text-xs text-muted">{detail}</dd>
+        <dd className="text-xs text-muted">{detail}</dd>
       </div>
       <dd className={`shrink-0 text-sm font-semibold tabular-nums ${tone ?? "text-foreground"}`}>
         {value}
@@ -232,12 +244,18 @@ export function ActiveCharterPanel({
   const charter = data.charter!;
   const depositTaking = charter.type === "retail" || charter.type === "universal";
   const propEligible = charter.type === "investment" || charter.type === "universal";
-  const playerDeposits = Math.max(0, charter.totalDeposits - charter.npcDeposits);
-  const tradingVisible = propEligible;
+  const playerPointerDeposits = Math.max(
+    0,
+    charter.pointerDeposits ?? Math.max(0, charter.totalDeposits - charter.npcDeposits)
+  );
+  const householdCash = Math.max(0, charter.npcDeposits);
+  const investingVisible = propEligible;
   const [tab, setTab] = useState<BankTab>("overview");
 
-  // Attention routing: the tabs that need the CEO carry the signal, so the
-  // console answers "does anything need me?" before any panel is opened.
+  // Attention routing: each red dot names the job that needs the CEO, so the
+  // console answers "what needs me?" before any panel is opened. Capital and
+  // reserves are different jobs with different levers, so they badge
+  // separately rather than sharing one dot for the whole funding tab.
   const pendingCount = data.loans.filter(
     (l) => l.borrowerType !== "npcBulk" && l.status === "pending"
   ).length;
@@ -247,11 +265,17 @@ export function ActiveCharterPanel({
     borrowings: borrowingsFromCharter(charter),
     propBookMarkValue: charter.propBookMarkValue,
   }).standing;
-  const fundingAttention =
-    capitalStanding !== "adequate" || charter.cashReserves < charter.requiredReserves;
+  const capitalAttention = capitalStanding !== "adequate";
+  const reservesAttention = charter.cashReserves < charter.requiredReserves;
+  const treasuryHints = [
+    capitalAttention ? t("capitalAttention") : null,
+    reservesAttention ? t("reservesAttention") : null,
+  ].filter((hint): hint is string => hint !== null);
+  const treasuryAttention = treasuryHints.length > 0;
 
   const tabs: { id: BankTab; label: string; badge?: number; alert?: boolean; hint?: string }[] = [
     { id: "overview", label: "Overview" },
+    { id: "deposits", label: "Deposits & Rates" },
     {
       id: "lending",
       label: "Lending",
@@ -259,19 +283,36 @@ export function ActiveCharterPanel({
       hint: pendingCount > 0 ? t("pendingDecisions", { count: pendingCount }) : undefined,
     },
     {
-      id: "funding",
-      label: "Funding",
-      alert: fundingAttention,
-      hint: fundingAttention ? t("fundingAttention") : undefined,
+      id: "treasury",
+      label: "Treasury",
+      alert: treasuryAttention,
+      hint: treasuryAttention ? treasuryHints.join(" · ") : undefined,
     },
-    ...(tradingVisible ? [{ id: "trading" as const, label: "Trading" }] : []),
-    { id: "admin", label: "Admin" },
+    ...(investingVisible ? [{ id: "investing" as const, label: "Investing" }] : []),
+    { id: "charter", label: "Charter" },
   ];
+
+  const blacklist = charter.blacklist ? (
+    <BlacklistEditor
+      corporationId={data.corporation.id}
+      blacklist={charter.blacklist}
+      availableFunds={data.blacklistableFunds ?? []}
+      canMutate={canMutate}
+      onChanged={onChanged}
+      showToast={showToast}
+    />
+  ) : null;
 
   return (
     <div className="space-y-6">
       <HealthCard data={data} />
-      {data.risk && <RiskPanel risk={data.risk} currency={charter.currency} />}
+      {data.risk && (
+        <RiskPanel
+          risk={data.risk}
+          currency={charter.currency}
+          pointerDeposits={charter.pointerDeposits}
+        />
+      )}
 
       {/* Customer actions are available alongside bank management. A CEO can
           also use the bank as a personal customer. */}
@@ -310,7 +351,7 @@ export function ActiveCharterPanel({
             {tabItem.alert && (
               <>
                 <span className="h-1.5 w-1.5 rounded-full bg-error" aria-hidden="true" />
-                <span className="sr-only">{t("needsAttention")}</span>
+                <span className="sr-only">{tabItem.hint ?? t("needsAttention")}</span>
               </>
             )}
           </button>
@@ -319,6 +360,7 @@ export function ActiveCharterPanel({
 
       {tab === "overview" && (
         <>
+          <OutlookStrip data={data} />
           <section className="rounded-xl border border-card-border bg-card overflow-hidden">
             <div className="flex items-center gap-1 border-b border-card-border px-4 py-2">
               <Eyebrow kind="monitor" />
@@ -333,14 +375,14 @@ export function ActiveCharterPanel({
                 value={formatBankMoney(charter.postedCapital, charter.currency)}
                 sub={`chartered T${charter.charteredTurn}`}
                 tooltip={t("tooltips.postedCapital")}
-                action={{ label: t("actions.postCapital"), onClick: () => setTab("funding") }}
+                action={{ label: t("actions.postCapital"), onClick: () => setTab("treasury") }}
               />
               <StatCell
                 label="Deposits"
                 value={formatBankMoney(charter.totalDeposits, charter.currency)}
-                sub={`players ${formatBankMoney(playerDeposits, charter.currency)} · households ${formatBankMoney(charter.npcDeposits, charter.currency)}`}
+                sub={`household cash ${formatBankMoney(householdCash, charter.currency)} · player pointers ${formatBankMoney(playerPointerDeposits, charter.currency)} (not cash)`}
                 tooltip={t("tooltips.deposits")}
-                action={{ label: t("actions.adjustRates"), onClick: () => setTab("lending") }}
+                action={{ label: t("actions.adjustRates"), onClick: () => setTab("deposits") }}
               />
               <StatCell
                 label="Deposit ceiling"
@@ -348,9 +390,13 @@ export function ActiveCharterPanel({
                   data.depositCeiling ?? charter.depositCeiling,
                   charter.currency
                 )}
-                sub={`branch share ${((charter.branchCapacityShare ?? data.defaultBranchCapacityShare) * 100).toFixed(0)}%`}
+                sub={
+                  charter.depositCeilingBinds
+                    ? `network share ${((charter.branchCapacityShare ?? data.defaultBranchCapacityShare) * 100).toFixed(0)}% · binds: ${charter.depositCeilingBinds === "equity" ? "12x equity" : "deposit network"}`
+                    : `network share ${((charter.branchCapacityShare ?? data.defaultBranchCapacityShare) * 100).toFixed(0)}%`
+                }
                 tooltip={t("tooltips.depositCeiling")}
-                action={{ label: t("actions.raiseCeiling"), onClick: () => setTab("funding") }}
+                action={{ label: t("actions.raiseCeiling"), onClick: () => setTab("deposits") }}
               />
               <StatCell
                 label="Loans out"
@@ -382,15 +428,15 @@ export function ActiveCharterPanel({
                 }
                 sub="you pay / you charge"
                 tooltip={t("tooltips.rates")}
-                action={{ label: t("actions.adjustRates"), onClick: () => setTab("lending") }}
+                action={{ label: t("actions.adjustRates"), onClick: () => setTab("deposits") }}
               />
             </div>
           </section>
-          <EarningsBreakdown data={data} onFunding={() => setTab("funding")} />
+          <EarningsBreakdown data={data} onTreasury={() => setTab("treasury")} />
         </>
       )}
 
-      {tab === "lending" && (
+      {tab === "deposits" && (
         <div className="space-y-6">
           {depositTaking && data.corridors && (
             <RateOffsetEditor
@@ -398,14 +444,36 @@ export function ActiveCharterPanel({
               corridors={data.corridors}
               depositOffset={charter.depositOffset}
               lendingOffset={charter.lendingOffset}
+              primeRate={data.primeRate ?? data.outlook?.primeRate ?? null}
               canMutate={canMutate}
               onChanged={onChanged}
               showToast={showToast}
             />
           )}
+          {depositTaking && (
+            <CapacityAllocationEditor
+              corporationId={data.corporation.id}
+              currency={charter.currency}
+              branchCapacityShare={charter.branchCapacityShare}
+              depositCeiling={data.depositCeiling ?? charter.depositCeiling}
+              capacityCeiling={charter.capacityCeiling}
+              equityCeiling={charter.equityCeiling}
+              depositCeilingBinds={charter.depositCeilingBinds}
+              canMutate={canMutate}
+              onChanged={onChanged}
+              showToast={showToast}
+            />
+          )}
+          {blacklist}
+        </div>
+      )}
+
+      {tab === "lending" && (
+        <div className="space-y-6">
           <LoanApprovalToggle
             corporationId={data.corporation.id}
             requireApproval={charter.requireApproval}
+            pendingCount={pendingCount}
             canMutate={canMutate}
             onChanged={onChanged}
             showToast={showToast}
@@ -414,46 +482,18 @@ export function ActiveCharterPanel({
             loans={data.loans}
             currency={charter.currency}
             householdBook={data.householdBook}
+            stancePreview={data.outlook?.stancePreview ?? null}
             corporationId={data.corporation.id}
             canMutate={canMutate}
             onChanged={onChanged}
             showToast={showToast}
           />
-          {charter.blacklist ? (
-            <BlacklistEditor
-              corporationId={data.corporation.id}
-              blacklist={charter.blacklist}
-              availableFunds={data.blacklistableFunds ?? []}
-              canMutate={canMutate}
-              onChanged={onChanged}
-              showToast={showToast}
-            />
-          ) : null}
+          {blacklist}
         </div>
       )}
 
-      {tab === "funding" && (
+      {tab === "treasury" && (
         <div className="space-y-6">
-          {depositTaking && (
-            <CapacityAllocationEditor
-              corporationId={data.corporation.id}
-              currency={charter.currency}
-              branchCapacityShare={charter.branchCapacityShare}
-              depositCeiling={data.depositCeiling ?? charter.depositCeiling}
-              canMutate={canMutate}
-              onChanged={onChanged}
-              showToast={showToast}
-            />
-          )}
-          {depositTaking && (
-            <DiscountWindowPanel
-              corporationId={data.corporation.id}
-              currency={charter.currency}
-              canMutate={canMutate}
-              onChanged={onChanged}
-              showToast={showToast}
-            />
-          )}
           <RecapitalizePanel
             corporationId={data.corporation.id}
             currency={charter.currency}
@@ -467,44 +507,59 @@ export function ActiveCharterPanel({
             onChanged={onChanged}
             showToast={showToast}
           />
-        </div>
-      )}
-
-      {tab === "trading" && (
-        <div className="space-y-6">
-          {data.bankPropTradingEnabled ? (
-            <>
-              <PropBookPanel
-                corporationId={data.corporation.id}
-                currency={charter.currency}
-                positions={charter.propBook}
-                markValue={charter.propBookMarkValue}
-                canMutate={canMutate}
-                onChanged={onChanged}
-                showToast={showToast}
-              />
-              <InterbankPanel
-                corporationId={data.corporation.id}
-                currency={charter.currency}
-                depositTaking={depositTaking}
-                interbankDebt={charter.interbankDebt}
-                cbMarginDebt={charter.cbMarginDebt}
-                loans={data.interbankLoans}
-                canMutate={canMutate}
-                onChanged={onChanged}
-                showToast={showToast}
-              />
-            </>
-          ) : (
-            <EmptyState
-              title="Trading is frozen"
-              description="Prop trading and interbank markets are switched off for this world."
+          {depositTaking && (
+            <DiscountWindowPanel
+              corporationId={data.corporation.id}
+              currency={charter.currency}
+              canMutate={canMutate}
+              onChanged={onChanged}
+              showToast={showToast}
+            />
+          )}
+          {data.bankPropTradingEnabled && (
+            <InterbankPanel
+              corporationId={data.corporation.id}
+              currency={charter.currency}
+              depositTaking={depositTaking}
+              interbankDebt={charter.interbankDebt}
+              cbMarginDebt={charter.cbMarginDebt}
+              propBookMarkValue={charter.propBookMarkValue}
+              primeRate={data.primeRate}
+              loans={data.interbankLoans}
+              canMutate={canMutate}
+              onChanged={onChanged}
+              showToast={showToast}
             />
           )}
         </div>
       )}
 
-      {tab === "admin" && (
+      {tab === "investing" && (
+        <div className="space-y-6">
+          {data.bankPropTradingEnabled ? (
+            <PropBookPanel
+              corporationId={data.corporation.id}
+              currency={charter.currency}
+              positions={charter.propBook}
+              markValue={charter.propBookMarkValue}
+              cashReserves={charter.cashReserves}
+              totalLoans={charter.totalLoans}
+              borrowings={borrowingsFromCharter(charter)}
+              propLeverage={data.outlook?.propLeverage ?? null}
+              canMutate={canMutate}
+              onChanged={onChanged}
+              showToast={showToast}
+            />
+          ) : (
+            <EmptyState
+              title="Investing is frozen"
+              description="The bank's own investments and interbank markets are switched off for this world."
+            />
+          )}
+        </div>
+      )}
+
+      {tab === "charter" && (
         <div className="space-y-6">
           <section className="space-y-2 rounded-xl border border-card-border bg-card p-5 text-sm text-muted">
             <Eyebrow kind="reference" />

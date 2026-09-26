@@ -46,6 +46,14 @@ export function resolveEntryAction({
   primaryEnded,
 }: EntryEligibilityInput): EntryAction {
   if (!character) return "none";
+  // The withdrawal API rejects terminal elections. Do not render a button
+  // that can only fail while resolution is catching up with the list view.
+  if (
+    election.status === "completed" ||
+    election.status === "resolved" ||
+    election.status === "cancelled"
+  )
+    return "none";
   if (inThisRace) return "withdraw";
   if (isElectionTypeEntryBlocked(election.electionType)) return "blocked";
 

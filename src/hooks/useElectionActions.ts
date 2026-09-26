@@ -64,6 +64,14 @@ export function useElectionActions({
         return;
       }
 
+      const targetRace = elections.find((e) => e.id === electionId);
+      const raceName = targetRace
+        ? `${targetRace.electionType} race in ${targetRace.state}`
+        : "this race";
+      if (!confirm(`Enter the ${raceName}? This will register your character as a candidate.`)) {
+        return;
+      }
+
       setActionLoading(electionId);
       setMessage("");
       try {
@@ -79,9 +87,11 @@ export function useElectionActions({
           await onSuccess?.();
         } else {
           setMessage(`✗ ${data.error}`);
+          showToast(data.error ?? "Could not enter this race", "error");
         }
       } catch {
         setMessage("✗ Network error");
+        showToast("Network error while entering. Please try again.", "error");
       } finally {
         setActionLoading(null);
       }
@@ -118,9 +128,11 @@ export function useElectionActions({
           await onSuccess?.();
         } else {
           setMessage(`✗ ${data.error}`);
+          showToast(data.error ?? "Could not withdraw from this race", "error");
         }
       } catch {
         setMessage("✗ Network error");
+        showToast("Network error while withdrawing. Please try again.", "error");
       } finally {
         setActionLoading(null);
       }
