@@ -52,6 +52,19 @@ describe("PostHog consent boundary", () => {
     expect(state.capture).not.toHaveBeenCalled();
   });
 
+  it("enables consent-gated surveys on the US host", async () => {
+    const { getPostHogClient } = await import("./posthogClient");
+    state.consent = "accepted";
+    await getPostHogClient();
+    expect(state.init).toHaveBeenCalledWith(
+      "phc_test",
+      expect.objectContaining({
+        api_host: "https://us.i.posthog.com",
+        disable_surveys: false,
+      })
+    );
+  });
+
   it("enables sampled, masked session recording with sensitive screens blocked", async () => {
     const { getPostHogClient } = await import("./posthogClient");
     state.consent = "accepted";

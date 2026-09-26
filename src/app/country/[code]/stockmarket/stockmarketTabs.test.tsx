@@ -109,6 +109,9 @@ function mockFetchFor(url: string) {
   if (url.startsWith("/api/stock-exchange?")) {
     return Promise.resolve({ ok: true, json: async () => ({ listings: [] }) });
   }
+  if (url.startsWith("/api/commodities")) {
+    return Promise.resolve({ ok: true, json: async () => ({ commodities: [] }) });
+  }
   return Promise.resolve({ ok: true, json: async () => ({}) });
 }
 
