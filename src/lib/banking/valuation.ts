@@ -33,10 +33,20 @@ export function bankValuation(
  * Convert realized per-turn bank income into the same going-concern NPV basis
  * used by sector NPVs. Loss-making activities have no positive NPV floor,
  * matching the existing sector valuation convention.
+ *
+ * `boostMultiplier` is the phased stock-market boost
+ * (`bankNpvBoostMultiplier(currentTurn)`); defaults to 1 = legacy. It scales
+ * the capitalized value, never the realized income.
  */
-export function bankNpvFromPerTurnIncome(perTurnIncome: number | null | undefined): number {
+export function bankNpvFromPerTurnIncome(
+  perTurnIncome: number | null | undefined,
+  boostMultiplier = 1
+): number {
   const income =
     typeof perTurnIncome === "number" && Number.isFinite(perTurnIncome) ? perTurnIncome : 0;
   const annualIncome = income * TURNS_PER_YEAR;
-  return annualIncome > 0 ? Math.round(annualIncome / NPV_ANNUAL_DISCOUNT_RATE) : 0;
+  const unboosted = annualIncome > 0 ? Math.round(annualIncome / NPV_ANNUAL_DISCOUNT_RATE) : 0;
+  return unboosted > 0 && boostMultiplier !== 1
+    ? Math.round(unboosted * boostMultiplier)
+    : unboosted;
 }

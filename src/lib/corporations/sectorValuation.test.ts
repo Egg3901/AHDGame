@@ -74,6 +74,23 @@ describe("computeSectorListingValuation", () => {
     expect(valuation.priceAnchor).toBe(Math.round(expectedNpv * SECTOR_FOR_SALE_PRICE_FRACTION));
   });
 
+  it("scales the earnings NPV by the boost multiplier with a default of 1", () => {
+    const sector = {
+      revenue: 1_000_000,
+      profitMargin: 20,
+      currentGrowthCost: 0,
+      realizedRevenue: undefined,
+      countryId: "US" as const,
+    };
+    const corp = { liquidCurrencyCode: undefined, countryId: "US" as const };
+    const base = computeSectorListingValuation(sector, corp, 1);
+    const boosted = computeSectorListingValuation(sector, corp, 1, false, undefined, 1.3);
+    expect(boosted.npvAnchor).toBe(Math.round(base.npvAnchor * 1.3));
+    expect(boosted.priceAnchor).toBe(
+      Math.round(boosted.npvAnchor * SECTOR_FOR_SALE_PRICE_FRACTION)
+    );
+  });
+
   it("price equals 75% of NPV by construction", () => {
     const v = computeSectorListingValuation(
       {
