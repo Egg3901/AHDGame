@@ -21,8 +21,19 @@ import { emitTx } from "@/lib/financialTxLog/emit";
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
 import { escapeRegex } from "@/lib/utils/escapeRegex";
 
-/** Provisional - max propBookMarkValue / equityBase. */
-export const PROP_LEVERAGE_MULTIPLE = 3;
+/**
+ * Leverage math lives in the rules zone (`rules/propLeverage.ts`) so
+ * read-only consumers need no database import to use the same numbers.
+ * Imported for local use and re-exported so every existing import keeps
+ * resolving to the one implementation.
+ */
+import {
+  PROP_LEVERAGE_MULTIPLE,
+  computePropEquityBase,
+  sumPositionMarks,
+} from "@/lib/banking/rules/propLeverage";
+
+export { PROP_LEVERAGE_MULTIPLE, computePropEquityBase, sumPositionMarks };
 
 /** Provisional - max forex mark value per currency as a fraction of equityBase. */
 export const PER_CURRENCY_FOREX_CAP_FRACTION = 0.5;
@@ -137,42 +148,6 @@ async function resolvePositionRef(
   return corporation
     ? { ok: true, ref: corporation._id.toString() }
     : { ok: false, error: "Equity corporation not found" };
-}
-
-/**
- * Equity base for prop leverage: bank cash + prop mark - interbank debt - CB
- * margin debt. Corporations have no CB savings surface (characters do), so
- * nothing is netted for CB-held savings.
- *
- * `postedCapital` is deliberately absent. Posting capital moves cash into
- * `cashReserves` and increments the memo, so adding both counted the same money
- * twice and handed every bank a free slice of leverage headroom equal to its
- * contributed capital.
- */
-export function computePropEquityBase(
-  cashReserves: number,
-  charter: Pick<BankCharter, "propBookMarkValue" | "interbankDebt" | "cbMarginDebt" | "propBook">,
-  markValueOverride?: number
-): number {
-  const liquid = Math.max(0, finiteOrZero(cashReserves));
-  const mark =
-    markValueOverride !== undefined
-      ? Math.max(0, finiteOrZero(markValueOverride))
-      : charter.propBookMarkValue !== undefined
-        ? Math.max(0, finiteOrZero(charter.propBookMarkValue))
-        : sumPositionMarks(charter.propBook);
-  const interbank = Math.max(0, finiteOrZero(charter.interbankDebt ?? 0));
-  const margin = Math.max(0, finiteOrZero(charter.cbMarginDebt ?? 0));
-  return liquid + mark - interbank - margin;
-}
-
-export function sumPositionMarks(positions: PropPosition[] | undefined): number {
-  if (!positions || positions.length === 0) return 0;
-  let total = 0;
-  for (const p of positions) {
-    total += Math.max(0, finiteOrZero(p.markValue ?? p.costBasis));
-  }
-  return total;
 }
 
 function forexMarkByCurrency(positions: PropPosition[]): Map<string, number> {

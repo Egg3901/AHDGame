@@ -1,6 +1,7 @@
 import type { BankCharterType } from "@/lib/db/types/bank";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import type { CreditBandId, LendingProfileId } from "@/lib/banking/creditBands";
+import type { BankOutlook } from "@/lib/banking/outlook";
 
 export type Corridor = { minOffset: number; maxOffset: number };
 
@@ -70,6 +71,10 @@ export type ConsolePayload = {
   corridors: { deposit: Corridor; lending: Corridor } | null;
   reserveRatio: number | null;
   depositCeiling: number | null;
+  /** Central-bank prime rate the console priced off, for effective-rate previews. */
+  primeRate: number | null;
+  /** Next-turn projection from the rule modules. Null without an active charter. */
+  outlook: BankOutlook | null;
   defaultBranchCapacityShare: number;
   /** Catalog for the blacklist fund picker. Absent for viewers who cannot edit. */
   blacklistableFunds?: { slug: string; name: string }[];
@@ -84,6 +89,22 @@ export type ConsolePayload = {
     totalDeposits: number;
     totalLoans: number;
     npcDeposits: number;
+    /** Player savings pointed at the bank (cash or pointer, per the currency). */
+    playerDeposits: number | null;
+    /** Pointer-model savings: labelled at the bank, never arrived as cash. */
+    pointerDeposits: number | null;
+    /** Deposits that arrived as vault cash and sit in every reserve denominator. */
+    cashBackedDeposits: number | null;
+    /** Branch-capacity ceiling before the equity cap. */
+    capacityCeiling: number | null;
+    /** Equity ceiling: 12x book equity. */
+    equityCeiling: number | null;
+    /** Which ceiling binds: branch capacity or 12x equity. */
+    depositCeilingBinds: "capacity" | "equity" | null;
+    /** Owner's claim: ceiling on every distribution. */
+    bookEquity: number | null;
+    /** Household lending base after reserves less non-household loans. */
+    fundingCapacity: number | null;
     cashReserves: number;
     /** Realized net income from the most recent banking pass. */
     lastBankingIncome: number;
@@ -179,7 +200,15 @@ export type ConsolePayload = {
   }>;
 };
 
-export type BankTab = "overview" | "lending" | "funding" | "trading" | "admin";
+/**
+ * Console tabs, organised by the job the CEO is doing rather than the
+ * accounting bucket: deposits and rates, lending, staying funded (treasury),
+ * the bank's own investments, and charter governance.
+ */
+export type BankTab = "overview" | "deposits" | "lending" | "treasury" | "investing" | "charter";
+
+/** Next-turn projection, computed server-side from the rule modules. Null without a charter. */
+export type OutlookPayload = BankOutlook;
 
 export type DiscountWindowQuote = {
   available: boolean;
