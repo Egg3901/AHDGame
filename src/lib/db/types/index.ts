@@ -208,6 +208,7 @@ export type {
 export type { TradeEmbargo } from "./tradeEmbargo";
 export type { TradeEmbargoCooldown } from "./tradeEmbargoCooldown";
 export type { MarketCapHistory } from "./marketCapHistory";
+export type { MarketIndexIntraday } from "./marketIndexIntraday";
 export type { CorporationHistory } from "./corporationHistory";
 export type { SavingsLedgerEntry } from "./savingsLedger";
 export type { LocLedgerEntry, LocLedgerType } from "./locLedger";

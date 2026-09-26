@@ -538,7 +538,16 @@ describe("stockExchangeSnapshot", () => {
 
       await generateStockExchangeSnapshots(100, mockDb);
 
-      expect(mockUpdateOne).toHaveBeenCalledTimes(ALL_EXCHANGES.length + 1);
+      // Snapshot upserts plus one intraday level per venue (shared mock).
+      expect(mockUpdateOne).toHaveBeenCalledTimes(2 * (ALL_EXCHANGES.length + 1));
+      expect(mockUpdateOne).toHaveBeenCalledWith(
+        { _id: "nyse:100" },
+        expect.objectContaining({
+          $max: expect.objectContaining({ high: expect.any(Number) }),
+          $min: expect.objectContaining({ low: expect.any(Number) }),
+        }),
+        { upsert: true }
+      );
       expect(mockUpdateOne).toHaveBeenCalledWith(
         { _id: "nyse" },
         expect.objectContaining({

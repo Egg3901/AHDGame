@@ -63,6 +63,32 @@ vi.mock("@/lib/observability/fetchJson", () => ({
   fetchJson: vi.fn().mockResolvedValue(null),
 }));
 
+// lightweight-charts renders to canvas, which happy-dom cannot do. The page
+// suite asserts tab fetching, not chart internals, so stub the chart surface.
+vi.mock("lightweight-charts", () => {
+  const series = () => ({
+    setData: vi.fn(),
+    applyOptions: vi.fn(),
+  });
+  return {
+    CandlestickSeries: {},
+    HistogramSeries: {},
+    LineSeries: {},
+    CrosshairMode: { Normal: 0 },
+    createChart: () => ({
+      addSeries: () => series(),
+      removeSeries: vi.fn(),
+      applyOptions: vi.fn(),
+      remove: vi.fn(),
+      priceScale: () => ({ applyOptions: vi.fn() }),
+      timeScale: () => ({ fitContent: vi.fn(), applyOptions: vi.fn() }),
+      subscribeCrosshairMove: vi.fn(),
+      unsubscribeCrosshairMove: vi.fn(),
+    }),
+    createSeriesMarkers: () => ({ setMarkers: vi.fn() }),
+  };
+});
+
 import StockMarketPage from "./page";
 
 let searchParams = new URLSearchParams();
