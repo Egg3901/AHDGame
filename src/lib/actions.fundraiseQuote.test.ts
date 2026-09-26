@@ -93,4 +93,12 @@ describe("fundraiseYieldLocal matches the credited local amount", () => {
     const char = makeCharacter({ countryId: "US", donorBaseLevel: 20 });
     expect(fundraiseYieldLocal(char, true)).toBe(fundraiseYieldAnchor(char));
   });
+
+  it("quotes the 2027 DE fundraise credit in EUR at the frozen campaign rate", () => {
+    const char = makeCharacter({ countryId: "DE", donorBaseLevel: 20 });
+    const rates = { EUR: 0.92 };
+    expect(fundraiseYieldLocal(char, true, rates, "2027-default")).toBe(
+      campaignAnchorToLocal(fundraiseYieldAnchor(char), "DE", rates, "2027-default")
+    );
+  });
 });

@@ -65,11 +65,17 @@ async function checkCNCountryLeaderStates(db: Db): Promise<ReadinessCheck> {
   const count = await db
     .collection<{ _id: string }>("countryLeaderStates")
     .countDocuments({ _id: { $regex: "^CN_" } });
+  const characterCount = await db.collection("characters").countDocuments({ countryId: "CN" });
   return {
     name: "CountryLeaderStates",
-    status: count > 0 ? "ok" : "warning",
+    status: count > 0 || characterCount === 0 ? "ok" : "warning",
     count,
-    detail: count > 0 ? `${count} leader confidence state(s)` : "No leader installed yet",
+    detail:
+      count > 0
+        ? `${count} leader confidence state(s)`
+        : characterCount === 0
+          ? "No player character leader to track"
+          : "No leader installed yet",
   };
 }
 
@@ -78,14 +84,17 @@ async function checkCNCountryLeaderStates(db: Db): Promise<ReadinessCheck> {
 /** DE: Landeslisten populated. */
 async function checkDELandeslisten(db: Db): Promise<ReadinessCheck> {
   const count = await db.collection("landeslisten").countDocuments({ countryId: "DE" });
+  const characterCount = await db.collection("characters").countDocuments({ countryId: "DE" });
   return {
     name: "Landeslisten",
-    status: count > 0 ? "ok" : "warning",
+    status: count > 0 || characterCount === 0 ? "ok" : "warning",
     count,
     detail:
       count > 0
         ? `${count} Landeslisten entries`
-        : "No Landeslisten yet (chairs not yet published)",
+        : characterCount === 0
+          ? "No resident party members to populate Landeslisten"
+          : "No Landeslisten yet (chairs not yet published)",
   };
 }
 

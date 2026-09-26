@@ -12,12 +12,14 @@ const ledgerMocks = vi.hoisted(() => ({
   emitTxBulk: vi.fn().mockResolvedValue(undefined),
   loadTxThresholds: vi.fn().mockResolvedValue({}),
 }));
+const cadenceMocks = vi.hoisted(() => ({ loadTurnLengthMinutes: vi.fn() }));
 const fundQueryMocks = vi.hoisted(() => ({
   insertFundTransactionsBulk: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("@/lib/indexFunds/fundShareOrders", () => orderMocks);
 vi.mock("@/lib/financialTxLog/emit", () => ledgerMocks);
+vi.mock("@/lib/financialTxLog/expiresAt", () => cadenceMocks);
 vi.mock("@/lib/indexFunds/fundQueries", () => fundQueryMocks);
 
 import {
@@ -93,6 +95,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   orderMocks.cancelFundShareOrder.mockResolvedValue(undefined);
   ledgerMocks.loadTxThresholds.mockResolvedValue({});
+  cadenceMocks.loadTurnLengthMinutes.mockResolvedValue(60);
 });
 
 describe("planEquityLiquidityQuotes", () => {
@@ -170,6 +173,39 @@ describe("planEquityLiquidityQuotes", () => {
 });
 
 describe("refreshEquityLiquidityFacility", () => {
+  it("shares one threshold snapshot across cancellations and replacements", async () => {
+    const corporationId = new ObjectId();
+    const priorOrderId = new ObjectId();
+    const provider = fund([corporationId]);
+    const { db } = facilityDb([{ _id: priorOrderId, placerFundId: provider._id }]);
+    const thresholds = { testThreshold: 1 };
+    ledgerMocks.loadTxThresholds.mockResolvedValue(thresholds);
+    orderMocks.placeFundShareBuyOrder.mockResolvedValue({ ok: true, orderId: new ObjectId() });
+    orderMocks.placeFundShareSellOrder.mockResolvedValue({ ok: true, orderId: new ObjectId() });
+
+    await refreshEquityLiquidityFacility({
+      db,
+      turn: 58,
+      enabled: true,
+      funds: [provider],
+      listings: [listing(corporationId)],
+      totalListings: 10,
+    });
+
+    expect(ledgerMocks.loadTxThresholds).toHaveBeenCalledTimes(1);
+    expect(cadenceMocks.loadTurnLengthMinutes).toHaveBeenCalledTimes(1);
+    expect(orderMocks.cancelFundShareOrder).toHaveBeenCalledWith(
+      db,
+      priorOrderId,
+      58,
+      expect.objectContaining({ thresholds, turnLengthMinutes: 60, fund: provider })
+    );
+    expect(orderMocks.placeFundShareBuyOrder).toHaveBeenCalledWith(
+      db,
+      expect.objectContaining({ thresholds, turnLengthMinutes: 60, ledgerSink: expect.any(Array) })
+    );
+  });
+
   it("batches completed cancellation refund rows for each fund", async () => {
     const provider = fund([]);
     const priorOrders = [
@@ -220,6 +256,41 @@ describe("refreshEquityLiquidityFacility", () => {
 
     expect(orderMocks.cancelFundShareOrder).toHaveBeenCalledTimes(1);
     expect(ledgerMocks.emitTx).toHaveBeenCalledTimes(1);
+  });
+
+  it("still settles quotes when the turn-cadence preload fails", async () => {
+    // Adapted from Track #1's fail-fast preload test: the merged facility
+    // keeps development's non-fatal preload, so a failed cadence read falls
+    // back to per-row emission instead of aborting the refresh. Thresholds
+    // still load, so the queued refund row still flushes through the bulk path.
+    const provider = fund([]);
+    const order = { _id: new ObjectId(), placerFundId: provider._id };
+    const { db } = facilityDb([order]);
+    cadenceMocks.loadTurnLengthMinutes.mockRejectedValueOnce(new Error("cadence unavailable"));
+    orderMocks.cancelFundShareOrder.mockImplementation(
+      async (_db: Db, _id: ObjectId, _turn: number, options: { ledgerSink: unknown[] }) => {
+        options.ledgerSink.push({ type: "stock_order_refund", amount: 10 });
+      }
+    );
+
+    await refreshEquityLiquidityFacility({
+      db,
+      turn: 59,
+      enabled: false,
+      funds: [provider],
+      listings: [],
+      totalListings: 0,
+    });
+
+    expect(orderMocks.cancelFundShareOrder).toHaveBeenCalledTimes(1);
+    expect(orderMocks.cancelFundShareOrder).toHaveBeenCalledWith(
+      db,
+      order._id,
+      59,
+      expect.objectContaining({ thresholds: expect.anything(), ledgerSink: expect.any(Array) })
+    );
+    expect(ledgerMocks.emitTxBulk).toHaveBeenCalledTimes(1);
+    expect(ledgerMocks.emitTxBulk.mock.calls[0][1]).toHaveLength(1);
   });
 
   it("flushes completed refunds when a later cancellation fails", async () => {
@@ -406,11 +477,16 @@ describe("refreshEquityLiquidityFacility", () => {
 
     expect(peakActiveFunds).toBe(2);
     expect(ledgerMocks.loadTxThresholds).toHaveBeenCalledTimes(1);
+    expect(cadenceMocks.loadTurnLengthMinutes).toHaveBeenCalledTimes(1);
     expect(orderMocks.cancelFundShareOrder).toHaveBeenCalledWith(
       db,
       priorOrders[0]._id,
       59,
-      expect.objectContaining({ ledgerSink: expect.any(Array) })
+      expect.objectContaining({
+        thresholds: expect.anything(),
+        turnLengthMinutes: 60,
+        ledgerSink: expect.any(Array),
+      })
     );
     expect(orderMocks.cancelFundShareOrder.mock.calls.map((call) => call[1])).toEqual([
       priorOrders[0]._id,
@@ -462,6 +538,7 @@ describe("refreshEquityLiquidityFacility", () => {
 
     expect(orderMocks.cancelFundShareOrder).not.toHaveBeenCalledWith(db, bidOrderId);
     expect(ledgerMocks.loadTxThresholds).toHaveBeenCalledTimes(1);
+    expect(cadenceMocks.loadTurnLengthMinutes).toHaveBeenCalledTimes(1);
     expect(orderMocks.placeFundShareBuyOrder).toHaveBeenCalledWith(
       db,
       expect.objectContaining({ txSink: expect.any(Array), ledgerSink: expect.any(Array) })

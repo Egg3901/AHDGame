@@ -1,4 +1,5 @@
 import type { Db, ObjectId } from "mongodb";
+import { getGameStatePresetOrDefault } from "@/lib/db/collections/gameState";
 import { getEventInstancesCollection } from "@/lib/db/collections/eventInstances";
 import type { EventInstance } from "@/lib/db/types/events";
 import { STAT_META } from "@/lib/stats/statMeta";
@@ -21,7 +22,8 @@ export async function resolveEvent(
   optionId: string,
   reason: "player" | "timeout",
   currentTurn: number,
-  hooks?: ResolveEventHooks
+  hooks?: ResolveEventHooks,
+  preset?: string
 ): Promise<EventInstance> {
   const coll = getEventInstancesCollection(db);
   const instance = await coll.findOne({ _id: instanceId });
@@ -78,6 +80,7 @@ export async function resolveEvent(
     tier,
     reason,
     statAdjustment,
+    preset: preset ?? (await getGameStatePresetOrDefault(db)),
   };
 
   if (handler.applyEffects) {

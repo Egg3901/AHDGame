@@ -103,7 +103,7 @@ describe("placeFundShareBuyOrder", () => {
       db,
       expect.objectContaining({ type: "stock_order_escrow" }),
       DEFAULT_TX_THRESHOLDS,
-      60
+      { turnLengthMinutes: 60 }
     );
   });
 
@@ -263,7 +263,7 @@ describe("cancelFundShareOrder", () => {
       db,
       expect.objectContaining({ type: "stock_order_refund" }),
       DEFAULT_TX_THRESHOLDS,
-      60
+      { turnLengthMinutes: 60 }
     );
   });
 

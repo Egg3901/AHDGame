@@ -1,7 +1,7 @@
 import { campaignLocalRate, type CampaignCurrencyRates } from "@/lib/campaigns/rules/currency";
 // src/lib/constants/characterWealth.ts
 import type { CountryId } from "./countries";
-import { COUNTRY_CURRENCY_MAP, type CurrencyCode } from "./currencies";
+import { COUNTRY_CURRENCY_MAP, getSeedCurrencyCode, type CurrencyCode } from "./currencies";
 import { formatLocalAmountFull } from "@/lib/utils/formatters";
 import { getEraNominalAmount } from "./sectorSeedEra";
 
@@ -55,18 +55,26 @@ export const WEALTH_LEVELS: { value: WealthLevel; label: string }[] = [
  * Mirrors the conversion the character-creation route applies at insert time,
  * so previews equal what the player actually receives. Unknown/empty codes fall
  * back to USD at parity (rate 1.0).
+ *
+ * Preset-aware: a 2027-default run resolves euro members to EUR (the
+ * denomination the route grants); an omitted preset keeps the legacy
+ * era-blind map behavior.
  */
 export function resolveStartingCurrency(
   countryIdRaw?: string | null,
-  rates?: CampaignCurrencyRates | null
+  rates?: CampaignCurrencyRates | null,
+  preset?: string
 ): {
   currencyCode: CurrencyCode;
   rate: number;
 } {
   const countryId = (countryIdRaw ?? "").toUpperCase() as CountryId;
   return {
-    currencyCode: COUNTRY_CURRENCY_MAP[countryId] ?? "USD",
-    rate: campaignLocalRate(countryId, rates),
+    currencyCode:
+      preset !== undefined
+        ? (getSeedCurrencyCode(countryId, preset) ?? "USD")
+        : (COUNTRY_CURRENCY_MAP[countryId] ?? "USD"),
+    rate: campaignLocalRate(countryId, rates, preset),
   };
 }
 
@@ -78,9 +86,10 @@ export function resolveStartingCurrency(
 export function convertStartingAnchorToLocal(
   anchorAmount: number,
   countryIdRaw?: string | null,
-  rates?: CampaignCurrencyRates | null
+  rates?: CampaignCurrencyRates | null,
+  preset?: string
 ): number {
-  const { rate } = resolveStartingCurrency(countryIdRaw, rates);
+  const { rate } = resolveStartingCurrency(countryIdRaw, rates, preset);
   return Math.round(anchorAmount * rate);
 }
 
@@ -91,9 +100,10 @@ export function convertStartingAnchorToLocal(
  */
 export function buildWealthOptions(
   countryIdRaw?: string | null,
-  rates?: CampaignCurrencyRates | null
+  rates?: CampaignCurrencyRates | null,
+  preset?: string
 ): { value: WealthLevel; label: string }[] {
-  const { currencyCode, rate } = resolveStartingCurrency(countryIdRaw, rates);
+  const { currencyCode, rate } = resolveStartingCurrency(countryIdRaw, rates, preset);
   return WEALTH_LEVELS.map(({ value, label }) => ({
     value,
     label: `${label} - ${formatLocalAmountFull(Math.round(WEALTH_BONUS[value] * rate), currencyCode)}`,

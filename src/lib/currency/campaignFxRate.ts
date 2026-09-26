@@ -18,8 +18,12 @@ import type { PersonalWealthHolder } from "@/lib/currency/characterFunds";
  * forex is off, and 1 when the rate document is missing, matching
  * `loadCharacterFxRate`'s own fallback.
  */
-export async function loadCampaignFxRate(db: Db, character: PersonalWealthHolder): Promise<number> {
+export async function loadCampaignFxRate(
+  db: Db,
+  character: PersonalWealthHolder,
+  preset?: string
+): Promise<number> {
   if (!(await isForexEnabled())) return 1;
-  const { rate } = await loadCharacterFxRate(db, getHomeCurrency(character));
+  const { rate } = await loadCharacterFxRate(db, getHomeCurrency(character, preset));
   return rate;
 }

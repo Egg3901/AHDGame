@@ -7,6 +7,7 @@ import { ObjectId } from "mongodb";
 import { SINGLEPLAYER_USER_ID } from "@/lib/singleplayer";
 import { getSingleplayerWorldAvailability } from "@/lib/singleplayerOperator";
 import { processTurn } from "@/lib/turnSystem";
+import { runShareFillRecoveryPass } from "@/lib/corporations/commands/shareTrading/shareFillAudit";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 600;
@@ -46,6 +47,15 @@ export async function POST(request: Request) {
     if (result.turn <= 0) {
       return NextResponse.json({ error: result.message }, { status: 500 });
     }
+
+    // Lonely share-fill orphans are re-driven by the periodic cron sweep in
+    // multiplayer, but singleplayer runs no cron. Drive one bounded pass here,
+    // after (never inside) the turn. Best-effort by contract:
+    // `runShareFillRecoveryPass` never throws: a `failed` summary leaves
+    // receipts `in_progress` for the next advance and never fails this one,
+    // so no catch here: an outer silent catch would only hide a broken
+    // contract instead of surfacing it through `handleRouteError`.
+    await runShareFillRecoveryPass(db);
 
     const updated = await db
       .collection("characters")

@@ -642,6 +642,14 @@ async function main() {
       }),
     });
     log(`Bootstrap seed conformance: ${bootstrapConformance.summary}`);
+    if (
+      bootstrapConformance.status === "diagnostic-error" ||
+      (bootstrapConformance.report?.summary.critical ?? 0) > 0
+    ) {
+      throw new Error(
+        `Refusing to advance a world with critical bootstrap findings: ${bootstrapConformance.summary}`
+      );
+    }
 
     // Apply the structural-market rollout tier for this run (if requested).
     // Sim-only: patches the sandbox gameConfig so every turn resolves
@@ -1198,18 +1206,19 @@ async function main() {
       if (result.message.startsWith("Skipped:")) {
         // Another holder has the turn lock. In a dedicated sandbox DB that
         // holder is almost always a dead process from a mid-turn restart, so
-        // don't busy-loop on turn 0 until TURN_LOCK_STALE_MS elapses: back
-        // off, and after 2 minutes of no progress force-clear the lock.
+        // don't busy-loop until TURN_LOCK_STALE_MS elapses. After 2 minutes,
+        // mark the lock abandoned while preserving its phase history. The
+        // turn recovery path needs that history to avoid replaying writes.
         skippedSinceMs ??= Date.now();
         if (Date.now() - skippedSinceMs > 2 * 60 * 1000) {
           log(
-            `Turn lock held with no progress for 2m at turn ${lastTurn} — clearing stale sandbox lock`
+            `Turn lock held with no progress for 2m at turn ${lastTurn} — marking sandbox lock abandoned for phase recovery`
           );
           await db
             .collection<GameState>("gameState")
             .updateOne(
               { _id: "current", isProcessing: true },
-              { $set: { isProcessing: false, processingKind: null, processingPhase: null } }
+              { $set: { processingAbandonedAt: new Date() } }
             );
           skippedSinceMs = null;
         } else {

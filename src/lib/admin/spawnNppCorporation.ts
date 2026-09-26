@@ -30,7 +30,7 @@ import {
   DEFAULT_SECTOR_STARTING_REVENUE,
   DEFAULT_SECTOR_STARTING_WORKERS,
 } from "@/lib/constants/corporations";
-import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
+import { COUNTRY_CURRENCY_MAP, getSeedCurrencyCode } from "@/lib/constants/currencies";
 import {
   getSectorHostFxRate,
   resolveSectorHostCurrencyCode,
@@ -297,8 +297,10 @@ export async function spawnNppCorporation(
     );
   }
 
-  // Get currency for the country
-  const currencyCode = COUNTRY_CURRENCY_MAP[countryId];
+  // Get currency for the country (preset-aware: 2027 euro members spawn EUR corps)
+  const spawnPreset = await loadWorldPreset(db);
+  const currencyCode =
+    getSeedCurrencyCode(countryId, spawnPreset) ?? COUNTRY_CURRENCY_MAP[countryId];
   if (!currencyCode) {
     throw new Error(`No currency configured for country "${countryId}"`);
   }
@@ -337,7 +339,7 @@ export async function spawnNppCorporation(
   //     cash than several 1953 regional sector markets put together. Deflating
   //     by the era's nominal scale keeps the founding book the same share of
   //     the economy it is in a 2019 world. No-op for every modern preset.
-  const preset = await loadWorldPreset(db);
+  const preset = spawnPreset;
   const techGameState = await db.collection<GameState>("gameState").findOne(
     { _id: "current" },
     {

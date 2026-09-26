@@ -97,4 +97,161 @@ describe("grantOnboardingReward", () => {
     const result = await grantOnboardingReward(db as unknown as Db, CHARACTER, 900);
     expect(result.amount).toBe(50_000);
   });
+
+  it("reports the local credited balance and actual currency alongside the anchor amount", async () => {
+    const { grantOnboardingReward } = await import("./reward");
+    const result = await grantOnboardingReward(db as unknown as Db, CHARACTER, 900);
+
+    expect(result).toMatchObject({
+      granted: true,
+      amount: 50_000,
+      localAmount: 100_000,
+      currencyCode: "USD",
+    });
+  });
+});
+
+describe("grantOnboardingReward era routing (issue #2291)", () => {
+  let db: MockDb;
+  const FR_CHARACTER = {
+    _id: new ObjectId(),
+    name: "Test Parisian",
+    countryId: "FR" as const,
+    sequentialId: 7,
+  };
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    db = createMockDb();
+
+    db.collection("gameConfig").findOne.mockResolvedValue({ startingFunds: 250_000 });
+    db.collection("characters").updateOne.mockResolvedValue({ matchedCount: 1, modifiedCount: 1 });
+
+    const { isForexEnabled } = await import("@/lib/currency/featureFlag");
+    vi.mocked(isForexEnabled).mockResolvedValue(true);
+  });
+
+  function mockRateFor(anchorCountry: string, rate: number) {
+    db.collection("exchangeRates").findOne.mockImplementation(async (filter: unknown) =>
+      (filter as { _id?: string })?._id === anchorCountry ? { rate } : null
+    );
+  }
+
+  it("2027-default euro member credits at the EUR anchor (DE) rate and logs EUR", async () => {
+    mockRateFor("DE", 0.92);
+
+    const { grantOnboardingReward } = await import("./reward");
+    const result = await grantOnboardingReward(
+      db as unknown as Db,
+      FR_CHARACTER,
+      900,
+      "2027-default"
+    );
+
+    expect(db.collectionMocks.exchangeRates!.findOne).toHaveBeenCalledWith({ _id: "DE" });
+    expect(result).toMatchObject({
+      granted: true,
+      amount: 50_000,
+      localAmount: 46_000,
+      currencyCode: "EUR",
+    });
+
+    const [, update] = db.collectionMocks.characters!.updateOne.mock.calls[0];
+    expect(update.$inc.funds).toBe(50_000);
+    expect(update.$inc["currencyBalances.campaign"]).toBe(46_000);
+
+    const { emitTx } = await import("@/lib/financialTxLog/emit");
+    const entry = vi.mocked(emitTx).mock.calls[0][1];
+    expect(entry).toMatchObject({ amount: 46_000, anchorAmount: 50_000, currencyCode: "EUR" });
+  });
+
+  it("1991-default keeps the legacy FRF routing for the same character", async () => {
+    mockRateFor("FR", 4.5);
+
+    const { grantOnboardingReward } = await import("./reward");
+    const result = await grantOnboardingReward(
+      db as unknown as Db,
+      FR_CHARACTER,
+      900,
+      "1991-default"
+    );
+
+    expect(db.collectionMocks.exchangeRates!.findOne).toHaveBeenCalledWith({ _id: "FR" });
+    expect(result).toMatchObject({
+      granted: true,
+      amount: 50_000,
+      localAmount: 225_000,
+      currencyCode: "FRF",
+    });
+
+    const { emitTx } = await import("@/lib/financialTxLog/emit");
+    const entry = vi.mocked(emitTx).mock.calls[0][1];
+    expect(entry).toMatchObject({ amount: 225_000, anchorAmount: 50_000, currencyCode: "FRF" });
+  });
+
+  it("2027-default non-member keeps its national currency", async () => {
+    mockRateFor("UK", 0.75);
+    const ukCharacter = { ...FR_CHARACTER, countryId: "UK" as const };
+
+    const { grantOnboardingReward } = await import("./reward");
+    const result = await grantOnboardingReward(
+      db as unknown as Db,
+      ukCharacter,
+      900,
+      "2027-default"
+    );
+
+    expect(db.collectionMocks.exchangeRates!.findOne).toHaveBeenCalledWith({ _id: "UK" });
+    expect(result).toMatchObject({
+      amount: 50_000,
+      localAmount: 37_500,
+      currencyCode: "GBP",
+    });
+  });
+
+  it("omitted preset keeps the legacy era-blind routing", async () => {
+    mockRateFor("FR", 4.5);
+
+    const { grantOnboardingReward } = await import("./reward");
+    const result = await grantOnboardingReward(db as unknown as Db, FR_CHARACTER, 900);
+
+    expect(db.collectionMocks.exchangeRates!.findOne).toHaveBeenCalledWith({ _id: "FR" });
+    expect(result).toMatchObject({ amount: 50_000, localAmount: 225_000, currencyCode: "FRF" });
+  });
+
+  it("sequential double-claim grants once: the loser reports balances but writes nothing", async () => {
+    mockRateFor("DE", 0.92);
+    db.collection("characters").updateOne.mockResolvedValueOnce({
+      matchedCount: 1,
+      modifiedCount: 1,
+    });
+    db.collection("characters").updateOne.mockResolvedValueOnce({
+      matchedCount: 0,
+      modifiedCount: 0,
+    });
+
+    const { grantOnboardingReward } = await import("./reward");
+    const first = await grantOnboardingReward(
+      db as unknown as Db,
+      FR_CHARACTER,
+      900,
+      "2027-default"
+    );
+    const second = await grantOnboardingReward(
+      db as unknown as Db,
+      FR_CHARACTER,
+      900,
+      "2027-default"
+    );
+
+    expect(first.granted).toBe(true);
+    expect(second).toMatchObject({
+      granted: false,
+      amount: 50_000,
+      localAmount: 46_000,
+      currencyCode: "EUR",
+    });
+    const { emitTx } = await import("@/lib/financialTxLog/emit");
+    expect(emitTx).toHaveBeenCalledTimes(1);
+  });
 });

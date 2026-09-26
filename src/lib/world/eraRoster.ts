@@ -233,7 +233,13 @@ const ERA_ROSTER_LITERAL = {
     default: "absent",
     player: ["US", "UK", "DE", "JP", "CN"],
     econ: ["IE", "BR", "NG"],
-    npp: ["RU", "FR", "IT", "ES", "SE", "TR", "AT", "FI", "GR", "PL", "HU", "RO", "BG"],
+    // RU and the four post-Warsaw-Pact democracies remain absent until their
+    // modern regional, fiscal, executive and election bundles are authored.
+    // Listing them as NPP countries previously made the runtime promise a
+    // complete political/economic substrate while bootstrap intentionally
+    // seeded none of it (#2289). Their 2027 party definitions remain inert
+    // reference content and do not make a country present by themselves.
+    npp: ["FR", "IT", "ES", "SE", "TR", "AT", "FI", "GR"],
   },
 } satisfies Record<ShippingPreset, EraRosterSpec>;
 

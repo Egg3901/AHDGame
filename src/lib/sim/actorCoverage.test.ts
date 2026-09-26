@@ -41,8 +41,9 @@ function syntheticSnapshot(): ActorPopulationSnapshot {
 }
 
 describe("actor-coverage registry", () => {
-  it("pins thirteen mechanics covering every issue thread", () => {
+  it("pins fourteen mechanics covering every issue thread", () => {
     expect(ACTOR_GATED_MECHANICS.map((m) => m.id)).toEqual([
+      "forex-orders",
       "presidential-nomination",
       "central-bank-chair-us",
       "central-bank-chair-non-us",
@@ -84,10 +85,10 @@ describe("actor-coverage registry", () => {
 });
 
 describe("evaluateActorCoverage", () => {
-  it("reports pure-NPP vacancies honestly: 10 unreachable, 3 partial, 0 covered", () => {
+  it("reports pure-NPP vacancies honestly: 11 unreachable, 3 partial, 0 covered", () => {
     const manifest = evaluateActorCoverage(pureNppSnapshot(), "1953-01-01T00:00:00.000Z");
     expect(manifest.registryVersion).toBe(ACTOR_COVERAGE_REGISTRY_VERSION);
-    expect(manifest.mechanicCount).toBe(13);
+    expect(manifest.mechanicCount).toBe(14);
     expect(manifest.mode).toBe("pure-npp");
     const byStatus = new Map(manifest.entries.map((e) => [e.id, e.status]));
     expect(byStatus.get("presidential-nomination")).toBe("unreachable");
@@ -105,7 +106,7 @@ describe("evaluateActorCoverage", () => {
     expect(byStatus.get("crisis-decisions")).toBe("partial");
     // No synthetic actors exist, so nothing may read covered in pure NPP mode.
     expect(manifest.entries.filter((e) => e.status === "covered")).toHaveLength(0);
-    expect(uncoveredEntries(manifest)).toHaveLength(13);
+    expect(uncoveredEntries(manifest)).toHaveLength(14);
   });
 
   it("uses the exact uncovered string for the presidential-nomination gate", () => {
@@ -117,15 +118,15 @@ describe("evaluateActorCoverage", () => {
 
   it("covers every mechanic but campaigns once synthetic actors are materialized", () => {
     const manifest = evaluateActorCoverage(syntheticSnapshot(), "1953-01-01T00:00:00.000Z");
-    // 12 covered + 1 partial: campaigns accrue through the production rule
+    // 12 covered + 2 partial: campaigns accrue through the production rule
     // and a flow driver exists, but this run retained no full-sequence
     // purchase, so the manifest stays honest.
     expect(manifest.entries.filter((e) => e.status === "covered")).toHaveLength(12);
-    expect(uncoveredEntries(manifest)).toHaveLength(1);
+    expect(uncoveredEntries(manifest)).toHaveLength(2);
     const campaigns = manifest.entries.find((e) => e.id === "campaigns-player-actions");
     expect(campaigns?.status).toBe("partial");
     expect(campaigns?.reason).toContain("no successful full-sequence purchase");
-    expect(actorCoverageWarnings(manifest)).toHaveLength(1);
+    expect(actorCoverageWarnings(manifest)).toHaveLength(2);
   });
 
   it("marks campaigns covered only on retained flow-driver evidence", () => {
@@ -145,12 +146,12 @@ describe("evaluateActorCoverage", () => {
     const manifest = evaluateActorCoverage(snapshot, "1953-01-01T00:00:00.000Z");
     expect(manifest.registryVersion).toBe(ACTOR_COVERAGE_REGISTRY_VERSION);
     expect(manifest.entries.filter((e) => e.status === "covered")).toHaveLength(13);
-    expect(uncoveredEntries(manifest)).toHaveLength(0);
+    expect(uncoveredEntries(manifest)).toHaveLength(1);
     const campaigns = manifest.entries.find((e) => e.id === "campaigns-player-actions");
     expect(campaigns?.status).toBe("covered");
     expect(campaigns?.reason).toContain("opposition-research flow driver");
     expect(campaigns?.evidence).toContain("oppoFlowSucceeded=true");
-    expect(actorCoverageWarnings(manifest)).toHaveLength(0);
+    expect(actorCoverageWarnings(manifest)).toHaveLength(1);
   });
 
   it("degrades synthetic mode without materialized actors to unreachable, never covered", () => {
@@ -187,7 +188,7 @@ describe("actorCoverageWarnings", () => {
   it("warns truthfully: one warning per uncovered mechanic, naming mode and preset", () => {
     const manifest = evaluateActorCoverage(pureNppSnapshot(), "1953-01-01T00:00:00.000Z");
     const warnings = actorCoverageWarnings(manifest);
-    expect(warnings).toHaveLength(13);
+    expect(warnings).toHaveLength(14);
     for (const warning of warnings) {
       expect(warning).toContain("ACTOR-COVERAGE WARNING");
       expect(warning).toContain("pure-npp");

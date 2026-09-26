@@ -13,6 +13,7 @@ import {
 } from "@/lib/indexFunds/equityLiquidity/rules";
 import { boundedParallelMap } from "@/lib/indexFunds/boundedParallelMap";
 import { emitTx, emitTxBulk, loadTxThresholds, type TxInput } from "@/lib/financialTxLog/emit";
+import { loadTurnLengthMinutes } from "@/lib/financialTxLog/expiresAt";
 import type { TxThresholds } from "@/lib/db/types/financialTxLog";
 
 // Each worker owns one fund's cash, escrow and inventory. Eight overlaps the
@@ -148,13 +149,22 @@ export async function refreshEquityLiquidityFacility(input: {
     .find({ liquidityProvider: true, status: "open" })
     .toArray();
   const fundById = new Map(input.funds.map((fund) => [fund._id.toString(), fund]));
+  // Preload the ledger thresholds and the turn cadence once for the whole
+  // refresh so per-quote rows reuse them instead of reading per row.
   let thresholds: TxThresholds | null = null;
+  let turnLengthMinutes: number | undefined;
   if (priorQuotes.length > 0 || input.enabled) {
     try {
       thresholds = await loadTxThresholds(db);
     } catch {
       // Keep quote settlement running if the optional ledger threshold read fails.
       // The single-row emitter below will retry and report any remaining error.
+    }
+    try {
+      turnLengthMinutes = await loadTurnLengthMinutes(db);
+    } catch {
+      // Same non-fatal fallback as the thresholds above: per-row emission
+      // reloads the cadence when the preload is unavailable.
     }
   }
   const flushLedgerEntries = async (entries: TxInput[]): Promise<void> => {
@@ -179,6 +189,8 @@ export async function refreshEquityLiquidityFacility(input: {
       try {
         for (const order of orders) {
           await cancelFundShareOrder(db, order._id, turn, {
+            thresholds: thresholds ?? undefined,
+            turnLengthMinutes,
             fund: fundById.get(order.placerFundId?.toString() ?? ""),
             ledgerSink: ledgerEntries,
           });
@@ -287,6 +299,8 @@ export async function refreshEquityLiquidityFacility(input: {
               limitPriceLocal: plan.bidPriceLocal,
               fxRate: listing.fxRate,
               turn,
+              thresholds: thresholds ?? undefined,
+              turnLengthMinutes,
               liquidityQuote,
               txSink: transactions,
               ledgerSink: ledgerEntries,

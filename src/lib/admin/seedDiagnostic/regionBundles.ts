@@ -28,6 +28,13 @@ import { CN_GEOGRAPHY } from "@/lib/countries/cn/geography";
 import { IE_GEOGRAPHY } from "@/lib/countries/ie/geography";
 import { NG_GEOGRAPHY } from "@/lib/countries/ng/geography";
 import { BR_GEOGRAPHY } from "@/lib/countries/br/geography";
+import { ruRegions1991 } from "@/lib/countries/ru/data/ruRegions1991";
+import { plRegions1991 } from "@/lib/countries/pl/data/plRegions1991";
+import { csRegions1991 } from "@/lib/countries/cs/data/csRegions1991";
+import { huRegions1991 } from "@/lib/countries/hu/data/huRegions1991";
+import { roRegions1991 } from "@/lib/countries/ro/data/roRegions1991";
+import { bgRegions1991 } from "@/lib/countries/bg/data/bgRegions1991";
+import { yuRegions1991 } from "@/lib/countries/yu/data/yuRegions1991";
 
 export const FULL_ERA_REGION_BUNDLES: Partial<
   Record<CountryId, Partial<Record<ResetPresetId, State[]>>>
@@ -39,6 +46,13 @@ export const FULL_ERA_REGION_BUNDLES: Partial<
   CN: CN_GEOGRAPHY.regionBundles,
   IE: IE_GEOGRAPHY.regionBundles,
   NG: NG_GEOGRAPHY.regionBundles,
+  RU: { "1991-default": ruRegions1991 },
+  PL: { "1991-default": plRegions1991 },
+  CS: { "1991-default": csRegions1991 },
+  HU: { "1991-default": huRegions1991 },
+  RO: { "1991-default": roRegions1991 },
+  BG: { "1991-default": bgRegions1991 },
+  YU: { "1991-default": yuRegions1991 },
 };
 
 /**

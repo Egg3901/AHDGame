@@ -56,9 +56,14 @@ describe("getReadinessExpectations", () => {
             ? "Expected ≥764 (512 Shugiin + 252 Sangiin, pre-1994 Diet)"
             : authored.seatNote
         );
-        expect(derived.nppMin, where).toBe(authored.nppMin);
-        expect(derived.officialMin, where).toBe(authored.officialMin);
-        expect(derived.statePartyOrgMin, where).toBe(authored.statePartyOrgMin);
+        const de2027 = preset === "2027-default" && id === "DE";
+        const de1991 = preset === "1991-default" && id === "DE";
+        const ru1991 = preset === "1991-default" && id === "RU";
+        expect(derived.nppMin, where).toBe(ru1991 ? 0 : de2027 || de1991 ? 177 : authored.nppMin);
+        expect(derived.officialMin, where).toBe(ru1991 ? 0 : authored.officialMin);
+        expect(derived.statePartyOrgMin, where).toBe(
+          de1991 ? 70 : de2027 ? 96 : authored.statePartyOrgMin
+        );
         expect(derived.legislationTypesMin, where).toBe(authored.legislationTypesMin);
         expect(derived.stateMetricsFilter, where).toEqual(authored.stateMetricsFilter);
       }
@@ -80,6 +85,11 @@ describe("getReadinessExpectations", () => {
     expect(soviet.partyRoster).toContain("CPSU");
     expect(modern.partyRoster).not.toContain("CPSU");
     expect(modern.partyMin).toBe(0);
+  });
+
+  it("does not require a Soviet one-party leader-confidence state in 1991 Russia", () => {
+    expect(getReadinessExpectations("RU", "1979-default")!.extras).toHaveLength(2);
+    expect(getReadinessExpectations("RU", "1991-default")!.extras).toHaveLength(1);
   });
 
   it("empties the roster for a country the era does not contain", () => {

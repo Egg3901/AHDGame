@@ -25,6 +25,30 @@ describe("eraRateForCurrency", () => {
     expect(eraRateForCurrency("PLZ", "1953-default")).toBe(24.0);
   });
 
+  it("uses January 1991 old złoty units rather than the redenominated WDI unit", () => {
+    expect(eraRateForCurrency("PLZ", "1991-default")).toBe(9_500);
+  });
+
+  it("uses the 1991 forint exchange rate for the Hungarian successor economy", () => {
+    expect(eraRateForCurrency("HUF", "1991-default")).toBeCloseTo(74.7353833333333, 8);
+  });
+
+  it("uses the 1991 Czechoslovak koruna fixing", () => {
+    expect(eraRateForCurrency("CSK", "1991-default")).toBe(27.647);
+  });
+
+  it("uses the Romanian leu rate observed at the 1991 start", () => {
+    expect(eraRateForCurrency("ROL", "1991-default")).toBe(34.7);
+  });
+
+  it("uses Bulgaria's first 1991 market fixing", () => {
+    expect(eraRateForCurrency("BGL", "1991-default")).toBe(28.25);
+  });
+
+  it("crosses the 1991 Yugoslav dinar peg through the deutsche mark", () => {
+    expect(eraRateForCurrency("YUD", "1991-default")).toBeCloseTo(13.5675, 4);
+  });
+
   it("covers every Warsaw-Pact currency, which is the whole point", () => {
     for (const code of ["PLZ", "CSK", "ROL", "YUD", "BGL", "HUF"] as const) {
       const rate = eraRateForCurrency(code, "1953-default");

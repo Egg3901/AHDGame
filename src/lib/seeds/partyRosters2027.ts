@@ -18,6 +18,7 @@ import type { PartySeed } from "@/lib/seeds/reference/politicalParties";
  * - AT: Federal Ministry of the Interior 2024 results, https://www.bmi.gv.at/412/Nationalratswahlen/Nationalratswahl_2024/
  * - FI: Ministry of Justice 2023 results, https://tulospalvelu.vaalit.fi/EKV-2023/en/
  * - IE: Electoral Commission 2024 results, https://www.electoralcommission.ie/2024-general-election-results/
+ * - HU: National Election Office 2026 results, https://valtor.valasztas.hu/valtort/jsp/ma1.jsp?EA=47
  * - RU: Central Election Commission 2021 Duma results, http://www.vybory.izbirkom.ru/
  */
 
@@ -113,5 +114,10 @@ export const PARTY_ROSTERS_2027: Partial<Record<CountryId, PartySeed[]>> = {
     party("IE", 7, "Independent Ireland", "II", "#163A5F", 2, 3),
     party("IE", 8, "People Before Profit-Solidarity", "PBP-S", "#E91D2D", -5, -4),
     party("IE", 9, "Aontú", "AONTÚ", "#44532A", -2, 4),
+  ],
+  HU: [
+    party("HU", 1, "Tisztelet és Szabadság Párt", "TISZA", "#184D88", 0, -1),
+    party("HU", 2, "Fidesz - Magyar Polgári Szövetség and KDNP", "FIDESZ-KDNP", "#F26722", 2, 4),
+    party("HU", 3, "Mi Hazánk Mozgalom", "MI HAZÁNK", "#4E9A3D", -1, 5),
   ],
 };

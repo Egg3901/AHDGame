@@ -171,6 +171,22 @@ describe("partyChairSyncCountries", () => {
     }
   });
 
+  it("excludes transitioned countries when the era no longer uses party-chair sync", async () => {
+    expect(partyChairSyncCountries("1979-default")).toContain("PL");
+    expect(partyChairSyncCountries("1991-default")).not.toContain("PL");
+    expect(partyChairSyncCountries("2027-default")).not.toContain("RO");
+
+    const db = createMockDb();
+    const result = await syncPartyChairHeadOfState(
+      db as unknown as Db,
+      "PL",
+      new Date("1991-01-01T00:00:00Z"),
+      "1991-default"
+    );
+    expect(result.action).toBe("skipped_no_office");
+    expect(db.collectionMocks.politicalParties).toBeUndefined();
+  });
+
   // A country in the roll but with no isHeadOfState office would sync into nothing.
   it("gives every chair-synced country an office to seat them in", async () => {
     const { COUNTRY_CONFIGS, getHeadOfStateOfficeType } = await import("@/lib/constants/countries");

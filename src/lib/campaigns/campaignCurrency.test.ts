@@ -43,6 +43,33 @@ describe("getCampaignCurrency", () => {
   });
 });
 
+describe("campaign frozen-basis euro handling (#2291)", () => {
+  // A 2027 world seeds EUR rows; the legacy FRF row does not exist there.
+  const euroWorldRates = { EUR: 0.92, FRF: 4.2 };
+
+  it("prices a 2027 euro member in EUR", () => {
+    expect(getCampaignCurrency("FR", "2027-default")).toBe("EUR");
+    expect(campaignLocalRate("FR", euroWorldRates, "2027-default")).toBe(0.92);
+    expect(campaignAnchorToLocal(100_000, "FR", euroWorldRates, "2027-default")).toBe(
+      Math.round(100_000 * 0.92)
+    );
+  });
+
+  it("keeps the legacy code and rate when no preset is given", () => {
+    expect(getCampaignCurrency("FR")).toBe("FRF");
+    expect(campaignLocalRate("FR", euroWorldRates)).toBe(4.2);
+    expect(campaignAnchorToLocal(100_000, "FR", euroWorldRates)).toBe(Math.round(100_000 * 4.2));
+  });
+
+  it("passes a 1991 euro-member world through the legacy map untouched", () => {
+    expect(getCampaignCurrency("FR", "1991-default")).toBe("FRF");
+    expect(campaignLocalRate("FR", euroWorldRates, "1991-default")).toBe(4.2);
+    expect(campaignAnchorToLocal(100_000, "FR", euroWorldRates, "1991-default")).toBe(
+      Math.round(100_000 * 4.2)
+    );
+  });
+});
+
 describe("loadCampaignFxRate", () => {
   let db: MockDb;
   beforeEach(() => {

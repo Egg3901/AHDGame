@@ -28,6 +28,7 @@ import { getBlrModel } from "./blr";
 import { getUaModel } from "./ua";
 import { getCsModel } from "./cs";
 import { getBalModel } from "./bal";
+import { getSuccessor1991Model, type Successor1991CountryId } from "./successor1991";
 
 export { buildModelRegionDemographics } from "./derive";
 export type { CountryLayer1Model } from "./types";
@@ -37,6 +38,12 @@ export type { CountryLayer1Model } from "./types";
  * if the country has no international Layer-1 model. Used by the gated seed path.
  */
 export function getCountryLayer1Model(countryId: string, era: EraId): CountryLayer1Model | null {
+  if (
+    era === "1991" &&
+    (["RU", "PL", "CS", "HU", "RO", "BG", "YU"] as string[]).includes(countryId)
+  ) {
+    return getSuccessor1991Model(countryId as Successor1991CountryId);
+  }
   switch (countryId) {
     case "UK":
       return getUkModel(era);

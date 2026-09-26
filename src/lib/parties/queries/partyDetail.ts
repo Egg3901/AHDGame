@@ -151,17 +151,18 @@ export async function getPartyDetail(db: Db, party: PoliticalParty): Promise<Par
   // processNppFundGeneration); otherwise they contribute $0 to revenue.
   const nppEconomyEnabled = gameConfig?.nppEconomyEnabled !== false;
 
+  // GDP-baseline era for income math: the world's reset preset, so historical
+  // worlds estimate in their own denomination (issue #798).
+  const preset = await getGameStatePresetOrDefault(db);
   // Campaign-fund estimate is LOCAL at the frozen world-seeded currency basis
   // (mirrors the turn processors) — never live forex. A party is country-scoped,
   // so one rate applies to every member/NPP.
   const campaignRates = await loadCampaignCurrencyRates(db);
-  const campaignRate = campaignLocalRate(partyCountry, campaignRates);
-  const toLocal = (anchor: number) => campaignAnchorToLocal(anchor, partyCountry, campaignRates);
+  const campaignRate = campaignLocalRate(partyCountry, campaignRates, preset);
+  const toLocal = (anchor: number) =>
+    campaignAnchorToLocal(anchor, partyCountry, campaignRates, preset);
 
   const nationalTaxRate = party.nationalTaxRate ?? 0;
-  // GDP-baseline era for income math: the world's reset preset, so historical
-  // worlds estimate in their own denomination (issue #798).
-  const preset = await getGameStatePresetOrDefault(db);
   let expectedHourlyIncome = 0;
   for (const member of members) {
     const statePop = statePopMap.get(member.homeState) ?? 0;

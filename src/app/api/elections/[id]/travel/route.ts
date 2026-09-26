@@ -7,6 +7,18 @@ import { ELECTION_LIMITS, checkRateLimit, rateLimitResponse } from "@/lib/api/ra
 import { resolveElectionRouteParam } from "@/lib/elections/electionParamResolution";
 import { getElectoralVoteUnits, getTravelActionCost } from "@/lib/constants/states";
 import { runWithOptionalTransaction } from "@/lib/db/runWithOptionalTransaction";
+import { randomUUID } from "node:crypto";
+import type { ClientSession } from "mongodb";
+import { getMoneyFlowReceiptsCollection } from "@/lib/db/collections/moneyFlowReceipts";
+import {
+  applyKeyedUpdate,
+  claimMoneyFlowReceipt,
+  makeLegStep,
+  MoneyFlowKeyConflictError,
+  runMoneyFlowSteps,
+  type MoneyFlowLegOutcome,
+  type MoneyFlowStepRef,
+} from "@/lib/db/nonAtomicMoneyFlow";
 import type { ElectionCandidate, Character, GameState } from "@/lib/db/types";
 import { z } from "zod";
 
@@ -91,84 +103,108 @@ export async function POST(request: Request, { params }: RouteParams) {
       );
     }
 
-    if (candidate.travelState === stateId) {
-      return NextResponse.json(
-        { error: "You are already campaigning in this state" },
-        { status: 400 }
-      );
-    }
-
     // Cost scales with the target state's electoral-vote count — small states
     // (3-5 EV) cost 3 actions, huge states (>20 EV) cost 10. Mirrors real campaign
     // resource tradeoffs: Wyoming is cheap, California is expensive. EV counts are
     // preset-aware (1990 census for a 1991 game; 48-state map under 1953).
     const actionCost = getTravelActionCost(stateId, gameState?.preset);
 
-    // Read fresh character for current actions
-    const freshChar = await db
-      .collection<Character>("characters")
-      .findOne({ _id: character._id }, { projection: { actions: 1 } });
-
-    if (!freshChar || freshChar.actions < actionCost) {
-      return NextResponse.json(
-        { error: `Not enough actions. Travel to ${stateId} costs ${actionCost} actions.` },
-        { status: 400 }
-      );
-    }
-
     const now = new Date();
     const previousTravelFilter = candidate.travelState
       ? { travelState: candidate.travelState }
       : { travelState: { $exists: false } };
 
+    // Crash-safe money flow (issue #1672): the actions debit is a keyed
+    // idempotent leg and the travel-state write a keyed update, so a crash
+    // between the sequential writes reconciles instead of charging for a
+    // move that never landed.
+    const headerKey = request.headers.get("Idempotency-Key");
+    if (headerKey !== null && (headerKey.length === 0 || headerKey.length > 128)) {
+      return NextResponse.json({ error: "Invalid Idempotency-Key header" }, { status: 400 });
+    }
+    const flowKey = headerKey ?? randomUUID();
+    const fingerprint = `${character._id.toHexString()}:${candidate._id.toHexString()}:travel:${stateId}:${actionCost}`;
+    const characters = db.collection<Character>("characters");
+    const candidates = db.collection<ElectionCandidate>("electionCandidates");
+    const receipts = await getMoneyFlowReceiptsCollection(db);
+    const previousReceipt = headerKey ? await receipts.findOne({ _id: flowKey }) : null;
+    if (previousReceipt && previousReceipt.fingerprint !== fingerprint) {
+      throw new MoneyFlowKeyConflictError(flowKey);
+    }
+    if (previousReceipt?.status === "completed") {
+      return NextResponse.json({
+        success: true,
+        message: `Now campaigning in ${stateId}`,
+        travelState: stateId,
+        actionsCost: actionCost,
+        duplicate: true,
+      });
+    }
+    const recovering = previousReceipt?.status === "in_progress";
+    if (!recovering && candidate.travelState === stateId) {
+      return NextResponse.json(
+        { error: "You are already campaigning in this state" },
+        { status: 400 }
+      );
+    }
+    if (!recovering) {
+      const freshChar = await db
+        .collection<Character>("characters")
+        .findOne({ _id: character._id }, { projection: { actions: 1 } });
+      if (!freshChar || freshChar.actions < actionCost) {
+        return NextResponse.json(
+          { error: `Not enough actions. Travel to ${stateId} costs ${actionCost} actions.` },
+          { status: 400 }
+        );
+      }
+    }
+    const mapTravelError = (step: MoneyFlowStepRef, outcome: MoneyFlowLegOutcome): Error => {
+      if (step.index === 0) return new Error("INSUFFICIENT_ACTIONS");
+      if (outcome === "missing") return new Error("TRAVEL_CONFLICT");
+      return new Error("TRAVEL_CONFLICT");
+    };
+    const runTravel = async (session?: ClientSession) => {
+      const opts = session ? { session } : {};
+      const claim = await claimMoneyFlowReceipt(receipts, flowKey, fingerprint, opts);
+      if (claim === "duplicate") return claim;
+      await runMoneyFlowSteps(
+        receipts,
+        flowKey,
+        [
+          makeLegStep(flowKey, {
+            name: "actions-debit",
+            collection: characters,
+            docId: character._id,
+            field: "actions",
+            delta: -actionCost,
+            minBalance: actionCost,
+            set: { updatedAt: now },
+          }),
+          {
+            name: "travel-state",
+            apply: (stepOpts) =>
+              applyKeyedUpdate(
+                flowKey,
+                {
+                  collection: candidates,
+                  filter: { _id: candidate._id, ...previousTravelFilter },
+                  update: { $set: { travelState: stateId, traveledAt: now } },
+                },
+                stepOpts ?? {}
+              ),
+          },
+        ],
+        mapTravelError,
+        opts
+      );
+      return claim;
+    };
+
+    let travelClaim: string;
     try {
-      await runWithOptionalTransaction(
-        async (session) => {
-          const debitResult = await db
-            .collection<Character>("characters")
-            .updateOne(
-              { _id: character._id, actions: { $gte: actionCost } },
-              { $inc: { actions: -actionCost }, $set: { updatedAt: now } },
-              { session }
-            );
-          if (debitResult.modifiedCount === 0) throw new Error("INSUFFICIENT_ACTIONS");
-
-          const candidateUpdate = await db
-            .collection<ElectionCandidate>("electionCandidates")
-            .updateOne(
-              { _id: candidate._id, ...previousTravelFilter },
-              { $set: { travelState: stateId, traveledAt: now } },
-              { session }
-            );
-          if (candidateUpdate.modifiedCount === 0) throw new Error("TRAVEL_CONFLICT");
-        },
-        async () => {
-          const debitResult = await db
-            .collection<Character>("characters")
-            .updateOne(
-              { _id: character._id, actions: { $gte: actionCost } },
-              { $inc: { actions: -actionCost }, $set: { updatedAt: now } }
-            );
-          if (debitResult.modifiedCount === 0) throw new Error("INSUFFICIENT_ACTIONS");
-
-          try {
-            const candidateUpdate = await db
-              .collection<ElectionCandidate>("electionCandidates")
-              .updateOne(
-                { _id: candidate._id, ...previousTravelFilter },
-                { $set: { travelState: stateId, traveledAt: now } }
-              );
-            if (candidateUpdate.modifiedCount === 0) throw new Error("TRAVEL_CONFLICT");
-          } catch (error) {
-            await db
-              .collection<Character>("characters")
-              .updateOne(
-                { _id: character._id },
-                { $inc: { actions: actionCost }, $set: { updatedAt: new Date() } }
-              );
-            throw error;
-          }
-        }
+      travelClaim = await runWithOptionalTransaction(
+        async (session) => runTravel(session),
+        async () => runTravel()
       );
     } catch (error) {
       if ((error as Error).message === "INSUFFICIENT_ACTIONS") {
@@ -191,6 +227,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       message: `Now campaigning in ${stateId}`,
       travelState: stateId,
       actionsCost: actionCost,
+      ...(travelClaim !== "fresh" ? { duplicate: true } : {}),
     });
   } catch (error) {
     return handleRouteError(error);

@@ -10,6 +10,18 @@ import { isPrimaryEnded } from "@/lib/elections/phases";
 import { getHomeCurrency, loadCharacterFxRate } from "@/lib/currency/characterFunds";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
 import { runWithOptionalTransaction } from "@/lib/db/runWithOptionalTransaction";
+import { randomUUID } from "node:crypto";
+import type { ClientSession } from "mongodb";
+import { getMoneyFlowReceiptsCollection } from "@/lib/db/collections/moneyFlowReceipts";
+import {
+  applyKeyedUpdate,
+  claimMoneyFlowReceipt,
+  makeLegStep,
+  MoneyFlowKeyConflictError,
+  runMoneyFlowSteps,
+  type MoneyFlowLegOutcome,
+  type MoneyFlowStepRef,
+} from "@/lib/db/nonAtomicMoneyFlow";
 import {
   PRIMARY_HOME_SURGE_COST_ACTIONS,
   PRIMARY_HOME_SURGE_COST_FUNDS,
@@ -87,13 +99,6 @@ export async function POST(request: Request, { params }: RouteParams) {
       );
     }
 
-    if (candidate.primarySurgeUsed) {
-      return NextResponse.json(
-        { error: "You have already used your home-state surge this primary cycle" },
-        { status: 409 }
-      );
-    }
-
     const freshChar = await db
       .collection<Character>("characters")
       .findOne(
@@ -110,13 +115,6 @@ export async function POST(request: Request, { params }: RouteParams) {
         { status: 400 }
       );
     }
-    if (freshChar.actions < PRIMARY_HOME_SURGE_COST_ACTIONS) {
-      return NextResponse.json(
-        { error: `Not enough actions. The surge costs ${PRIMARY_HOME_SURGE_COST_ACTIONS}.` },
-        { status: 400 }
-      );
-    }
-
     const forexEnabled = await isForexEnabled();
     const { rate: homeFxRate } = forexEnabled
       ? await loadCharacterFxRate(db, getHomeCurrency(freshChar))
@@ -127,98 +125,114 @@ export async function POST(request: Request, { params }: RouteParams) {
     const costFundsLocal = forexEnabled
       ? PRIMARY_HOME_SURGE_COST_FUNDS * homeFxRate
       : PRIMARY_HOME_SURGE_COST_FUNDS;
-    const balanceLocal = freshChar.currencyBalances?.campaign ?? freshChar.funds ?? 0;
-    if (balanceLocal < costFundsLocal) {
-      return NextResponse.json(
-        {
-          error: `Not enough personal funds. The surge costs $${PRIMARY_HOME_SURGE_COST_FUNDS.toLocaleString()}.`,
-        },
-        { status: 400 }
-      );
-    }
-
     const campaignFundsField = forexEnabled ? "currencyBalances.campaign" : "funds";
 
-    try {
-      await runWithOptionalTransaction(
-        async (session) => {
-          const debitResult = await db.collection<Character>("characters").updateOne(
-            {
-              _id: character._id,
-              actions: { $gte: PRIMARY_HOME_SURGE_COST_ACTIONS },
-              [campaignFundsField]: { $gte: costFundsLocal },
-            },
-            {
-              $inc: {
-                actions: -PRIMARY_HOME_SURGE_COST_ACTIONS,
-                [campaignFundsField]: -costFundsLocal,
-              },
-              $set: { updatedAt: now },
-            },
-            { session }
-          );
-          if (debitResult.modifiedCount === 0) throw new Error("INSUFFICIENT_RESOURCES");
-
-          const candidateUpdate = await db
-            .collection<ElectionCandidate>("electionCandidates")
-            .updateOne(
-              { _id: candidate._id, primarySurgeUsed: { $ne: true } },
-              {
-                $set: {
-                  primarySurgeUsed: true,
-                  primarySurgeBoost: PRIMARY_HOME_SURGE_PCT,
-                  updatedAt: now,
-                },
-              },
-              { session }
-            );
-          if (candidateUpdate.modifiedCount === 0) throw new Error("SURGE_CONFLICT");
-        },
-        async () => {
-          const debitResult = await db.collection<Character>("characters").updateOne(
-            {
-              _id: character._id,
-              actions: { $gte: PRIMARY_HOME_SURGE_COST_ACTIONS },
-              [campaignFundsField]: { $gte: costFundsLocal },
-            },
-            {
-              $inc: {
-                actions: -PRIMARY_HOME_SURGE_COST_ACTIONS,
-                [campaignFundsField]: -costFundsLocal,
-              },
-              $set: { updatedAt: now },
-            }
-          );
-          if (debitResult.modifiedCount === 0) throw new Error("INSUFFICIENT_RESOURCES");
-
-          try {
-            const candidateUpdate = await db
-              .collection<ElectionCandidate>("electionCandidates")
-              .updateOne(
-                { _id: candidate._id, primarySurgeUsed: { $ne: true } },
+    // Crash-safe money flow (issue #1672): the combined actions+funds
+    // debit is one keyed leg (same-document writes must share a leg — two
+    // legs on one document under one key collide on the key guard) and the
+    // surge flag a keyed update, so a crash between the sequential writes
+    // reconciles instead of charging for a surge that never landed.
+    const headerKey = request.headers.get("Idempotency-Key");
+    if (headerKey !== null && (headerKey.length === 0 || headerKey.length > 128)) {
+      return NextResponse.json({ error: "Invalid Idempotency-Key header" }, { status: 400 });
+    }
+    const flowKey = headerKey ?? randomUUID();
+    const fingerprint = `${character._id.toHexString()}:${candidate._id.toHexString()}:surge:${PRIMARY_HOME_SURGE_COST_ACTIONS}:${costFundsLocal}`;
+    const characters = db.collection<Character>("characters");
+    const candidates = db.collection<ElectionCandidate>("electionCandidates");
+    const receipts = await getMoneyFlowReceiptsCollection(db);
+    const previousReceipt = headerKey ? await receipts.findOne({ _id: flowKey }) : null;
+    if (previousReceipt && previousReceipt.fingerprint !== fingerprint) {
+      throw new MoneyFlowKeyConflictError(flowKey);
+    }
+    if (previousReceipt?.status === "completed") {
+      return NextResponse.json({
+        success: true,
+        message: `Home-state surge activated in ${freshChar.homeState}. You gain +${PRIMARY_HOME_SURGE_PCT}% of the vote there until the primary resolves.`,
+        homeState: freshChar.homeState,
+        boostPct: PRIMARY_HOME_SURGE_PCT,
+        cost: PRIMARY_HOME_SURGE_COST_FUNDS,
+        duplicate: true,
+      });
+    }
+    if (previousReceipt?.status !== "in_progress") {
+      if (candidate.primarySurgeUsed) {
+        return NextResponse.json(
+          { error: "You have already used your home-state surge this primary cycle" },
+          { status: 409 }
+        );
+      }
+      if (freshChar.actions < PRIMARY_HOME_SURGE_COST_ACTIONS) {
+        return NextResponse.json(
+          { error: `Not enough actions. The surge costs ${PRIMARY_HOME_SURGE_COST_ACTIONS}.` },
+          { status: 400 }
+        );
+      }
+      const balanceLocal = freshChar.currencyBalances?.campaign ?? freshChar.funds ?? 0;
+      if (balanceLocal < costFundsLocal) {
+        return NextResponse.json(
+          {
+            error: `Not enough personal funds. The surge costs $${PRIMARY_HOME_SURGE_COST_FUNDS.toLocaleString()}.`,
+          },
+          { status: 400 }
+        );
+      }
+    }
+    const mapSurgeError = (step: MoneyFlowStepRef, outcome: MoneyFlowLegOutcome): Error => {
+      if (step.index === 0) return new Error("INSUFFICIENT_RESOURCES");
+      if (outcome === "missing") return new Error("SURGE_CONFLICT");
+      return new Error("SURGE_CONFLICT");
+    };
+    const runSurge = async (session?: ClientSession) => {
+      const opts = session ? { session } : {};
+      const claim = await claimMoneyFlowReceipt(receipts, flowKey, fingerprint, opts);
+      if (claim === "duplicate") return claim;
+      await runMoneyFlowSteps(
+        receipts,
+        flowKey,
+        [
+          makeLegStep(flowKey, {
+            name: "surge-debit",
+            collection: characters,
+            docId: character._id,
+            field: "actions",
+            delta: -PRIMARY_HOME_SURGE_COST_ACTIONS,
+            minBalance: PRIMARY_HOME_SURGE_COST_ACTIONS,
+            extraIncs: { [campaignFundsField]: -costFundsLocal },
+            extraFilter: { [campaignFundsField]: { $gte: costFundsLocal } },
+            set: { updatedAt: now },
+          }),
+          {
+            name: "surge-flag",
+            apply: (stepOpts) =>
+              applyKeyedUpdate(
+                flowKey,
                 {
-                  $set: {
-                    primarySurgeUsed: true,
-                    primarySurgeBoost: PRIMARY_HOME_SURGE_PCT,
-                    updatedAt: now,
+                  collection: candidates,
+                  filter: { _id: candidate._id, primarySurgeUsed: { $ne: true } },
+                  update: {
+                    $set: {
+                      primarySurgeUsed: true,
+                      primarySurgeBoost: PRIMARY_HOME_SURGE_PCT,
+                      updatedAt: now,
+                    },
                   },
-                }
-              );
-            if (candidateUpdate.modifiedCount === 0) throw new Error("SURGE_CONFLICT");
-          } catch (error) {
-            await db.collection<Character>("characters").updateOne(
-              { _id: character._id },
-              {
-                $inc: {
-                  actions: PRIMARY_HOME_SURGE_COST_ACTIONS,
-                  [campaignFundsField]: costFundsLocal,
                 },
-                $set: { updatedAt: new Date() },
-              }
-            );
-            throw error;
-          }
-        }
+                stepOpts ?? {}
+              ),
+          },
+        ],
+        mapSurgeError,
+        opts
+      );
+      return claim;
+    };
+
+    let surgeClaim: string;
+    try {
+      surgeClaim = await runWithOptionalTransaction(
+        async (session) => runSurge(session),
+        async () => runSurge()
       );
     } catch (error) {
       if ((error as Error).message === "INSUFFICIENT_RESOURCES") {
@@ -242,6 +256,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       homeState: freshChar.homeState,
       boostPct: PRIMARY_HOME_SURGE_PCT,
       cost: PRIMARY_HOME_SURGE_COST_FUNDS,
+      ...(surgeClaim !== "fresh" ? { duplicate: true } : {}),
     });
   } catch (error) {
     return handleRouteError(error);

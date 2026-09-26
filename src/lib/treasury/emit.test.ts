@@ -153,4 +153,39 @@ describe("emitTreasuryTransaction", () => {
     });
     expect(inserts[0].turn).toBe(0);
   });
+
+  it("stamps the era-blind map code when no explicit currency is passed", async () => {
+    const { db, inserts } = makeDb();
+    await emitTreasuryTransaction({
+      db,
+      countryId: "FR",
+      partyId: "1",
+      holderType: "party",
+      holderId: "1",
+      category: "transfers",
+      direction: "debit",
+      amount: 100,
+      memo: "legacy path",
+      turn: 1,
+    });
+    expect(inserts[0].currencyCode).toBe("FRF");
+  });
+
+  it("prefers an explicit currency over the era-blind map", async () => {
+    const { db, inserts } = makeDb();
+    await emitTreasuryTransaction({
+      db,
+      countryId: "FR",
+      partyId: "1",
+      holderType: "party",
+      holderId: "1",
+      category: "transfers",
+      direction: "debit",
+      amount: 100,
+      memo: "2027 euro path",
+      turn: 1,
+      currencyCode: "EUR",
+    });
+    expect(inserts[0].currencyCode).toBe("EUR");
+  });
 });

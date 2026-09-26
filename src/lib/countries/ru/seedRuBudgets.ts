@@ -16,6 +16,9 @@ export async function seedRuBudgets(
   log: (msg: string) => void,
   preset: string
 ) {
+  // The 1991 RSFSR budget is seeded with the other transition republics below.
+  // This legacy seeder also creates Soviet enacted laws and command SOEs.
+  if (preset === "1991-default") return;
   if (reset) {
     await db.collection<FederalBudget>("federalBudget").deleteMany({ countryId: "RU" });
     const suStateIds = (

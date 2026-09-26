@@ -535,6 +535,7 @@ export async function runSeed(
       { _id: sid },
       {
         $set: {
+          countryId: "US",
           modifiers: emptyModifiers,
           lastDecayApplied: turnoutNow,
           lastUpdated: turnoutNow,

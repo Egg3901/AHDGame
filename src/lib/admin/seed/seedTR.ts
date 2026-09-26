@@ -35,11 +35,16 @@ export async function seedTRRegions(
   }
   const { trRegions } = await import("@/lib/seeds/tr/trRegions");
   const { trRegions1953 } = await import("@/lib/seeds/tr/trRegions1953");
+  const { trRegions1991 } = await import("@/lib/countries/tr/data/trRegions1991");
+  const { trRegions2019 } = await import("@/lib/countries/tr/data/trRegions2019");
   const { selectPresetBundle } = await import("@/lib/seeds/presetSelector");
   const bundle = selectPresetBundle(
     preset,
     {
-      "2019-default": trRegions,
+      "2019-default": trRegions2019,
+      "1991-default": trRegions1991,
+      "2023-default": trRegions2019,
+      "2027-default": trRegions2019,
       "1953-default": trRegions1953,
       "1979-default": trRegions,
     },

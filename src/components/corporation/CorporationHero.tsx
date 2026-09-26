@@ -4,6 +4,7 @@ import { MONEY_PERIOD_SUFFIX, scaleMoney, type MoneyPeriod } from "@/lib/constan
 import { useState, type CSSProperties, type ReactNode } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { HeroImage } from "@/components/HeroImage";
 import { HeroStatsStrip } from "@/components/ui";
 import { Avatar } from "@/components/Avatar";
@@ -138,6 +139,9 @@ export function CorporationHero({
   const [uploadingBanner, setUploadingBanner] = useState(false);
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [uploadError, setUploadError] = useState("");
+  const [creatingWikiPage, setCreatingWikiPage] = useState(false);
+  const [wikiCreateError, setWikiCreateError] = useState("");
+  const router = useRouter();
 
   async function handleBannerUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -179,6 +183,41 @@ export function CorporationHero({
       setUploadError("Network error");
     } finally {
       setUploadingBanner(false);
+    }
+  }
+
+  // Wiki create flow (#2347): only the CEO of a player corp without a
+  // published page sees this. The claim endpoint is idempotent, so a page
+  // created but still in review resolves to the same slug for editing.
+  async function handleCreateWikiPage() {
+    setCreatingWikiPage(true);
+    setWikiCreateError("");
+    try {
+      const res = await fetch("/api/wiki/my/claim", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          target: "corporation",
+          corporationSequentialId: corporation.sequentialId,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) setWikiCreateError(data.error || "Could not create page");
+      else if (typeof data.slug === "string") {
+        // The request names this corporation; still verify the returned slug
+        // so a malformed or stale response cannot navigate to another page.
+        const expected =
+          typeof corporation.sequentialId === "number"
+            ? corporationWikiSlug(corporation.sequentialId)
+            : null;
+        if (expected != null && data.slug !== expected)
+          setWikiCreateError("Could not confirm this corporation's wiki page. Try again.");
+        else router.push(`/wiki/${data.slug}/edit`);
+      } else setWikiCreateError("Could not create page");
+    } catch {
+      setWikiCreateError("Network error");
+    } finally {
+      setCreatingWikiPage(false);
     }
   }
 
@@ -533,22 +572,48 @@ export function CorporationHero({
                     <span>HQ {corporation.headquartersStateName}</span>
                   </Link>
                 )}
-                {typeof corporation.sequentialId === "number" && (
-                  <Link
-                    href={`/wiki/${corporationWikiSlug(corporation.sequentialId)}`}
-                    className="inline-flex items-center gap-1 rounded-full border border-white/25 bg-black/25 px-2.5 py-0.5 text-xs font-medium text-white/95 backdrop-blur-sm hover:bg-black/40"
-                  >
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      className="h-3 w-3"
-                      viewBox="0 0 20 20"
-                      fill="currentColor"
+                {typeof corporation.sequentialId === "number" &&
+                  corporation.wikiPagePublished === true && (
+                    <Link
+                      href={`/wiki/${corporationWikiSlug(corporation.sequentialId)}`}
+                      className="inline-flex items-center gap-1 rounded-full border border-white/25 bg-black/25 px-2.5 py-0.5 text-xs font-medium text-white/95 backdrop-blur-sm hover:bg-black/40"
                     >
-                      <path d="M9 4.804A7.968 7.968 0 005.5 4c-1.255 0-2.443.29-3.5.804v10A7.969 7.969 0 015.5 14c1.669 0 3.218.51 4.5 1.385A7.962 7.962 0 0114.5 14c1.255 0 2.443.29 3.5.804v-10A7.968 7.968 0 0014.5 4c-1.255 0-2.443.29-3.5.804V12a1 1 0 11-2 0V4.804z" />
-                    </svg>
-                    Wiki
-                  </Link>
-                )}
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        className="h-3 w-3"
+                        viewBox="0 0 20 20"
+                        fill="currentColor"
+                      >
+                        <path d="M9 4.804A7.968 7.968 0 005.5 4c-1.255 0-2.443.29-3.5.804v10A7.969 7.969 0 015.5 14c1.669 0 3.218.51 4.5 1.385A7.962 7.962 0 0114.5 14c1.255 0 2.443.29 3.5.804v-10A7.968 7.968 0 0014.5 4c-1.255 0-2.443.29-3.5.804V12a1 1 0 11-2 0V4.804z" />
+                      </svg>
+                      Wiki
+                    </Link>
+                  )}
+                {typeof corporation.sequentialId === "number" &&
+                  corporation.wikiPagePublished !== true &&
+                  isCeo &&
+                  !corporation.countryOwnerId && (
+                    <button
+                      type="button"
+                      onClick={handleCreateWikiPage}
+                      disabled={creatingWikiPage}
+                      title={
+                        wikiCreateError ||
+                        "No published page yet. Create this corporation's wiki page."
+                      }
+                      className="inline-flex items-center gap-1 rounded-full border border-dashed border-white/25 bg-black/25 px-2.5 py-0.5 text-xs font-medium text-white/95 backdrop-blur-sm hover:bg-black/40 disabled:opacity-50"
+                    >
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        className="h-3 w-3"
+                        viewBox="0 0 20 20"
+                        fill="currentColor"
+                      >
+                        <path d="M9 4.804A7.968 7.968 0 005.5 4c-1.255 0-2.443.29-3.5.804v10A7.969 7.969 0 015.5 14c1.669 0 3.218.51 4.5 1.385A7.962 7.962 0 0114.5 14c1.255 0 2.443.29 3.5.804v-10A7.968 7.968 0 0014.5 4c-1.255 0-2.443.29-3.5.804V12a1 1 0 11-2 0V4.804z" />
+                      </svg>
+                      {creatingWikiPage ? "Creating…" : "Create wiki page"}
+                    </button>
+                  )}
               </div>
 
               <div className="mt-3">

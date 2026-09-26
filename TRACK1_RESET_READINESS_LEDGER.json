@@ -1,0 +1,3860 @@
+{
+  "schema_version": 1,
+  "source": {
+    "issue": 2159,
+    "url": "https://github.com/Egg3901/AHDGame/issues/2159",
+    "title": "tracker(reset): launch the next 1991 or 2027 world",
+    "updated_at": "2026-09-22T04:31:39Z",
+    "base_commit": "028cb9265e76555efa5d73b611cea0f409c3446b"
+  },
+  "selected_profile": "1991-default",
+  "policy": {
+    "github_closure": "No #2159 or linked issue is closed from partial ledger progress. Final validation evaluates every applicable gate against an exact release SHA and effective manifest; only then update GitHub issue state.",
+    "status_meaning": {
+      "open": "Unchecked parent item; no passing release evidence recorded",
+      "claimed_complete_pending_final_validation": "Checked in parent, but final release validation not recorded",
+      "selected_pending_release_validation": "Parent selects 1991; release SHA and manifest not yet frozen",
+      "open_nonlaunch_profile": "2027-specific implementation remains required; final launch qualification is for 1991"
+    },
+    "scope": "1991-default is selected for final launch validation. 2027-default remains in Track 1 implementation scope; its seven profile-specific checklist items must be fixed and evidenced, while 2027 horizon/launch qualification is not the final 1991 release gate."
+  },
+  "issues": {
+    "968": {
+      "title": "feat(economy): complete the market access, liquidity, and stability program",
+      "state": "OPEN",
+      "url": "https://github.com/Egg3901/AHDGame/issues/968",
+      "labels": ["status: partial"]
+    },
+    "991": {
+      "title": "feat(economy): close state-sector coverage and fragile-market entry gaps",
+      "state": "OPEN",
+      "url": "https://github.com/Egg3901/AHDGame/issues/991",
+      "labels": ["enhancement", "status: partial"]
+    },
+    "992": {
+      "title": "fix(economy): close stock-flow reconciliation coverage gaps",
+      "state": "OPEN",
+      "url": "https://github.com/Egg3901/AHDGame/issues/992",
+      "labels": ["enhancement", "status: partial"]
+    },
+    "1328": {
+      "title": "refactor(banking): rebuild accounts, settlement, lifecycle, and monetary governance",
+      "state": "OPEN",
+      "url": "https://github.com/Egg3901/AHDGame/issues/1328",
+      "labels": ["enhancement", "needs-worldsim", "tests", "status: partial"]
+    },
+    "1670": {
+      "title": "Replace projected 2027 electorate fields when ACS 2025 is released",
+      "state": "OPEN",
+      "url": "https://github.com/Egg3901/AHDGame/issues/1670",
+      "labels": ["enhancement"]
+    },
+    "1672": {
+      "title": "Ensure money flows run atomically in production (standalone Mongo has no transaction support)",
+      "state": "OPEN",
+      "url": "https://github.com/Egg3901/AHDGame/issues/1672",
+      "labels": ["bug", "status: partial"]
+    },
+    "1679": {
+      "title": "Complete and publish the 2027 seed for US, UK, JP, DE, and CN",
+      "state": "CLOSED",
+      "url": "https://github.com/Egg3901/AHDGame/issues/1679",
+      "labels": ["enhancement"]
+    },
+    "1992": {
+      "title": "bug(worldsim): persist fresh-bootstrap seed conformance before turn advancement",
+      "state": "CLOSED",
+      "url": "https://github.com/Egg3901/AHDGame/issues/1992",
+      "labels": ["bug"]
+    },
+    "2015": {
+      "title": "Remove the pre-1999 UK Commons winner bonus",
+      "state": "CLOSED",
+      "url": "https://github.com/Egg3901/AHDGame/issues/2015",
+      "labels": ["bug"]
+    },
+    "2054": {
+      "title": "Commodity clearing compares normalized orders with differently scaled supply",
+      "state": "CLOSED",
+      "url": "https://github.com/Egg3901/AHDGame/issues/2054",
+      "labels": ["bug"]
+    },
+    "2071": {
+      "title": "bug(worldsim): concurrent child logs omit run identity and make warnings unattributable",
+      "state": "CLOSED",
+      "url": "https://github.com/Egg3901/AHDGame/issues/2071",
+      "labels": ["bug"]
+    },
+    "2072": {
+      "title": "1991 and 2019 seeds start with broken political integrity records",
+      "state": "OPEN",
+      "url": "https://github.com/Egg3901/AHDGame/issues/2072",
+      "labels": ["bug", "needs-worldsim", "status: partial"]
+    },
+    "2073": {
+      "title": "Modern presets seed RU and DD central banks without fiscal systems",
+      "state": "CLOSED",
+      "url": "https://github.com/Egg3901/AHDGame/issues/2073",
+      "labels": ["bug"]
+    },
+    "2074": {
+      "title": "Worldsim status reports stale turns with fresh heartbeats between checkpoints",
+      "state": "CLOSED",
+      "url": "https://github.com/Egg3901/AHDGame/issues/2074",
+      "labels": ["bug"]
+    },
+    "2080": {
+      "title": "bug(economy): loss-making vital sign hides negative-income firms",
+      "state": "CLOSED",
+      "url": "https://github.com/Egg3901/AHDGame/issues/2080",
+      "labels": ["bug"]
+    },
+    "2083": {
+      "title": "bug(worldsim): pinned jobs collect reports from the shared runtime checkout",
+      "state": "CLOSED",
+      "url": "https://github.com/Egg3901/AHDGame/issues/2083",
+      "labels": ["bug"]
+    },
+    "2087": {
+      "title": "Worldsim inflationIndex is unweighted commodity/base, not household CPI",
+      "state": "CLOSED",
+      "url": "https://github.com/Egg3901/AHDGame/issues/2087",
+      "labels": ["bug", "balance"]
+    },
+    "2088": {
+      "title": "All-NPP service shortages never close; scarcityMult rails at 2.5",
+      "state": "OPEN",
+      "url": "https://github.com/Egg3901/AHDGame/issues/2088",
+      "labels": ["bug", "balance"]
+    },
+    "2090": {
+      "title": "bug(fiscal): founding-election turns advance fiscal years while calendar is frozen",
+      "state": "CLOSED",
+      "url": "https://github.com/Egg3901/AHDGame/issues/2090",
+      "labels": ["bug"]
+    },
+    "2098": {
+      "title": "Concurrent election cycles exhaust regional NPP pools and leave lower chambers candidate-less",
+      "state": "CLOSED",
+      "url": "https://github.com/Egg3901/AHDGame/issues/2098",
+      "labels": ["bug"]
+    },
+    "2099": {
+      "title": "feat(telemetry): retain long-horizon government approval provenance",
+      "state": "OPEN",
+      "url": "https://github.com/Egg3901/AHDGame/issues/2099",
+      "labels": ["enhancement"]
+    },
+    "2100": {
+      "title": "feat(telemetry): retain long-horizon GDP and population provenance",
+      "state": "OPEN",
+      "url": "https://github.com/Egg3901/AHDGame/issues/2100",
+      "labels": ["enhancement"]
+    },
+    "2101": {
+      "title": "bug(elections): Brazil Chamber election cycles collapse 513 seats to five",
+      "state": "CLOSED",
+      "url": "https://github.com/Egg3901/AHDGame/issues/2101",
+      "labels": []
+    },
+    "2104": {
+      "title": "bug(sim): held campaign manifests omit attribution fields and misstate actor requirements",
+      "state": "CLOSED",
+      "url": "https://github.com/Egg3901/AHDGame/issues/2104",
+      "labels": []
+    },
+    "2112": {
+      "title": "bug(sim): held sim jobs with bare-era preset names fail deterministically on claim",
+      "state": "CLOSED",
+      "url": "https://github.com/Egg3901/AHDGame/issues/2112",
+      "labels": ["bug"]
+    },
+    "2113": {
+      "title": "fix: completed presidential election retried every turn when winner lacks ElectionCandidate document",
+      "state": "CLOSED",
+      "url": "https://github.com/Egg3901/AHDGame/issues/2113",
+      "labels": ["bug"]
+    },
+    "2117": {
+      "title": "feat(unions): illicit underground organizing under union ban + government counterplay",
+      "state": "OPEN",
+      "url": "https://github.com/Egg3901/AHDGame/issues/2117",
+      "labels": ["enhancement"]
+    },
+    "2118": {
+      "title": "balance(banking): rebalance banking parameters separately from the structural rebuild",
+      "state": "OPEN",
+      "url": "https://github.com/Egg3901/AHDGame/issues/2118",
+      "labels": ["balance", "status: partial"]
+    },
+    "2119": {
+      "title": "Rebalance action fund costs across all eras",
+      "state": "OPEN",
+      "url": "https://github.com/Egg3901/AHDGame/issues/2119",
+      "labels": ["balance", "status: partial"]
+    },
+    "2120": {
+      "title": "bug(funds): index fund subscribe, rebalance, and redeem round-trip does not work",
+      "state": "OPEN",
+      "url": "https://github.com/Egg3901/AHDGame/issues/2120",
+      "labels": ["bug", "status: partial"]
+    },
+    "2121": {
+      "title": "Validate game metric values at seed time and over the long term",
+      "state": "CLOSED",
+      "url": "https://github.com/Egg3901/AHDGame/issues/2121",
+      "labels": ["bug"]
+    },
+    "2122": {
+      "title": "Investigate why NPP-run corporations underperform",
+      "state": "OPEN",
+      "url": "https://github.com/Egg3901/AHDGame/issues/2122",
+      "labels": ["balance", "status: partial"]
+    },
+    "2124": {
+      "title": "Qualify election turnover across multiplayer and autonomous systems",
+      "state": "OPEN",
+      "url": "https://github.com/Egg3901/AHDGame/issues/2124",
+      "labels": ["bug"]
+    },
+    "2125": {
+      "title": "feat(sectors): give 2-3 more sector types unique turn mechanics like banking",
+      "state": "CLOSED",
+      "url": "https://github.com/Egg3901/AHDGame/issues/2125",
+      "labels": ["enhancement"]
+    },
+    "2150": {
+      "title": "feat(crises): generalize living conflicts into negotiated modern crises",
+      "state": "OPEN",
+      "url": "https://github.com/Egg3901/AHDGame/issues/2150",
+      "labels": ["enhancement", "balance", "needs-worldsim", "ui", "tests"]
+    },
+    "2151": {
+      "title": "feat(uk): make the Troubles and Northern Ireland peace process the flagship modern crisis",
+      "state": "OPEN",
+      "url": "https://github.com/Egg3901/AHDGame/issues/2151",
+      "labels": ["enhancement", "balance", "needs-worldsim", "ui", "tests", "country-content"]
+    },
+    "2152": {
+      "title": "feat(crises): Yugoslav dissolution and the Balkan wars",
+      "state": "OPEN",
+      "url": "https://github.com/Egg3901/AHDGame/issues/2152",
+      "labels": ["enhancement", "balance", "needs-worldsim", "ui", "tests", "country-content"]
+    },
+    "2153": {
+      "title": "feat(crises): transnational terrorism and the War on Terror",
+      "state": "OPEN",
+      "url": "https://github.com/Egg3901/AHDGame/issues/2153",
+      "labels": ["enhancement", "balance", "needs-worldsim", "ui", "tests"]
+    },
+    "2154": {
+      "title": "feat(crises): global financial crash and euro sovereign-debt crisis",
+      "state": "OPEN",
+      "url": "https://github.com/Egg3901/AHDGame/issues/2154",
+      "labels": ["enhancement", "balance", "needs-worldsim", "ui", "tests"]
+    },
+    "2155": {
+      "title": "feat(crises): COVID-era global pandemic",
+      "state": "OPEN",
+      "url": "https://github.com/Egg3901/AHDGame/issues/2155",
+      "labels": ["enhancement", "balance", "needs-worldsim", "ui", "tests"]
+    },
+    "2156": {
+      "title": "feat(crises): Russia–Ukraine security crisis and European war risk",
+      "state": "OPEN",
+      "url": "https://github.com/Egg3901/AHDGame/issues/2156",
+      "labels": ["enhancement", "balance", "needs-worldsim", "ui", "tests", "country-content"]
+    },
+    "2157": {
+      "title": "feat(crises): Arab uprisings, Syrian conflict, and regional displacement",
+      "state": "OPEN",
+      "url": "https://github.com/Egg3901/AHDGame/issues/2157",
+      "labels": ["enhancement", "balance", "needs-worldsim", "ui", "tests", "country-content"]
+    },
+    "2158": {
+      "title": "epic(crises): modern living crises for the 1991–2027 world",
+      "state": "OPEN",
+      "url": "https://github.com/Egg3901/AHDGame/issues/2158",
+      "labels": ["enhancement", "balance", "needs-worldsim", "ui", "tests"]
+    },
+    "2161": {
+      "title": "test(elections): qualify presidential turnover and multiplayer result integrity for reset",
+      "state": "OPEN",
+      "url": "https://github.com/Egg3901/AHDGame/issues/2161",
+      "labels": ["balance", "needs-worldsim", "tests"]
+    },
+    "2166": {
+      "title": "perf(turn): unprojected character loads, N+1 lookups, and unbounded health snapshot aggregation in hourly turn loop",
+      "state": "CLOSED",
+      "url": "https://github.com/Egg3901/AHDGame/issues/2166",
+      "labels": ["bug"]
+    },
+    "2167": {
+      "title": "perf(web): unprojected layout reads and 16-query client-status fanout on every page load",
+      "state": "CLOSED",
+      "url": "https://github.com/Egg3901/AHDGame/issues/2167",
+      "labels": ["bug", "ui"]
+    },
+    "2168": {
+      "title": "perf(pages): unprojected 31KB NPP stance maps and multi-endpoint waterfalls on election and market page loads",
+      "state": "CLOSED",
+      "url": "https://github.com/Egg3901/AHDGame/issues/2168",
+      "labels": ["bug", "ui"]
+    },
+    "2169": {
+      "title": "perf(turn-status): uncached no-store polling storm multiplies database queries during active turn execution",
+      "state": "CLOSED",
+      "url": "https://github.com/Egg3901/AHDGame/issues/2169",
+      "labels": ["bug"]
+    },
+    "2170": {
+      "title": "bug(seeds): 2027 preset omits Supreme Court roster and docket",
+      "state": "CLOSED",
+      "url": "https://github.com/Egg3901/AHDGame/issues/2170",
+      "labels": ["bug", "tests"]
+    },
+    "2171": {
+      "title": "bug(seeds): 2027 registration lanes omit DC Democratic and Republican party organizations",
+      "state": "CLOSED",
+      "url": "https://github.com/Egg3901/AHDGame/issues/2171",
+      "labels": ["bug", "tests"]
+    }
+  },
+  "items": [
+    {
+      "id": "RR-001",
+      "section": "Launch profile",
+      "requirement": "`1991-default`: historical modern-world start, including the full living-crisis program from 1991 onward.",
+      "parent_checked": true,
+      "status": "selected_pending_release_validation",
+      "owner": "Game owner / Track #1",
+      "issue_refs": [],
+      "evidence": [
+        {
+          "type": "tracker_checklist",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2159",
+          "detail": "Checked in #2159"
+        }
+      ],
+      "blocked_by": [],
+      "final_validation": {
+        "state": "pending",
+        "evidence": []
+      }
+    },
+    {
+      "id": "RR-002",
+      "section": "Launch profile",
+      "requirement": "`2027-default`: contemporary start, with current seed data and correct inherited crisis state.",
+      "parent_checked": false,
+      "status": "open",
+      "owner": "Game owner / Track #1",
+      "issue_refs": [],
+      "evidence": [
+        {
+          "type": "tracker_checklist",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2159",
+          "detail": "Unchecked in #2159"
+        }
+      ],
+      "blocked_by": [
+        {
+          "type": "scope",
+          "detail": "2027 implementation is required, while 1991 remains the selected launch profile; see RR-065 through RR-067"
+        }
+      ],
+      "final_validation": {
+        "state": "pending",
+        "evidence": []
+      }
+    },
+    {
+      "id": "RR-003",
+      "section": "Launch profile",
+      "requirement": "Record the selected profile, exact release commit, effective world-entity manifest, and immutable turn-one feature/configuration manifest here.",
+      "parent_checked": false,
+      "status": "open",
+      "owner": "Game owner / Track #1",
+      "issue_refs": [],
+      "evidence": [
+        {
+          "type": "tracker_checklist",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2159",
+          "detail": "Unchecked in #2159"
+        }
+      ],
+      "blocked_by": [
+        {
+          "type": "release_candidate",
+          "detail": "Freeze exact development-derived SHA and immutable effective world manifest after all source, PR, and worktree dispositions"
+        }
+      ],
+      "final_validation": {
+        "state": "pending",
+        "evidence": []
+      }
+    },
+    {
+      "id": "RR-004",
+      "section": "Common reset blockers / Seed and political integrity",
+      "requirement": "#2072",
+      "parent_checked": false,
+      "status": "open",
+      "owner": "Track #1 implementation",
+      "issue_refs": [
+        {
+          "repo": "Egg3901/AHDGame",
+          "number": 2072,
+          "state": "OPEN",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2072"
+        }
+      ],
+      "evidence": [
+        {
+          "type": "tracker_checklist",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2159",
+          "detail": "Unchecked in #2159"
+        },
+        {
+          "type": "issue_state",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2072",
+          "detail": "OPEN"
+        }
+      ],
+      "blocked_by": [
+        {
+          "type": "issue",
+          "repo": "Egg3901/AHDGame",
+          "number": 2072
+        }
+      ],
+      "final_validation": {
+        "state": "pending",
+        "evidence": []
+      }
+    },
+    {
+      "id": "RR-005",
+      "section": "Common reset blockers / Seed and political integrity",
+      "requirement": "#2073",
+      "parent_checked": true,
+      "status": "claimed_complete_pending_final_validation",
+      "owner": "Track #1 implementation",
+      "issue_refs": [
+        {
+          "repo": "Egg3901/AHDGame",
+          "number": 2073,
+          "state": "CLOSED",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2073"
+        }
+      ],
+      "evidence": [
+        {
+          "type": "tracker_checklist",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2159",
+          "detail": "Checked in #2159"
+        },
+        {
+          "type": "issue_state",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2073",
+          "detail": "CLOSED"
+        }
+      ],
+      "blocked_by": [],
+      "final_validation": {
+        "state": "pending",
+        "evidence": []
+      }
+    },
+    {
+      "id": "RR-006",
+      "section": "Common reset blockers / Seed and political integrity",
+      "requirement": "#2090",
+      "parent_checked": true,
+      "status": "claimed_complete_pending_final_validation",
+      "owner": "Track #1 implementation",
+      "issue_refs": [
+        {
+          "repo": "Egg3901/AHDGame",
+          "number": 2090,
+          "state": "CLOSED",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2090"
+        }
+      ],
+      "evidence": [
+        {
+          "type": "tracker_checklist",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2159",
+          "detail": "Checked in #2159"
+        },
+        {
+          "type": "issue_state",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2090",
+          "detail": "CLOSED"
+        }
+      ],
+      "blocked_by": [],
+      "final_validation": {
+        "state": "pending",
+        "evidence": []
+      }
+    },
+    {
+      "id": "RR-007",
+      "section": "Common reset blockers / Seed and political integrity",
+      "requirement": "#2101",
+      "parent_checked": true,
+      "status": "claimed_complete_pending_final_validation",
+      "owner": "Track #1 implementation",
+      "issue_refs": [
+        {
+          "repo": "Egg3901/AHDGame",
+          "number": 2101,
+          "state": "CLOSED",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2101"
+        }
+      ],
+      "evidence": [
+        {
+          "type": "tracker_checklist",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2159",
+          "detail": "Checked in #2159"
+        },
+        {
+          "type": "issue_state",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2101",
+          "detail": "CLOSED"
+        }
+      ],
+      "blocked_by": [],
+      "final_validation": {
+        "state": "pending",
+        "evidence": []
+      }
+    },
+    {
+      "id": "RR-008",
+      "section": "Common reset blockers / Seed and political integrity",
+      "requirement": "#2121",
+      "parent_checked": true,
+      "status": "claimed_complete_pending_final_validation",
+      "owner": "Track #1 implementation",
+      "issue_refs": [
+        {
+          "repo": "Egg3901/AHDGame",
+          "number": 2121,
+          "state": "CLOSED",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2121"
+        }
+      ],
+      "evidence": [
+        {
+          "type": "tracker_checklist",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2159",
+          "detail": "Checked in #2159"
+        },
+        {
+          "type": "issue_state",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2121",
+          "detail": "CLOSED"
+        }
+      ],
+      "blocked_by": [],
+      "final_validation": {
+        "state": "pending",
+        "evidence": []
+      }
+    },
+    {
+      "id": "RR-009",
+      "section": "Common reset blockers / Seed and political integrity",
+      "requirement": "Fresh-bootstrap conformance contains no unexplained missing country systems, orphaned offices, candidate-less founding contests, empty required parties, seat/office mismatches, or wrong-era fallbacks.",
+      "parent_checked": false,
+      "status": "open",
+      "owner": "Track #1 implementation",
+      "issue_refs": [
+        {
+          "repo": "Egg3901/AHDGame",
+          "number": 2316,
+          "state": "OPEN",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2316"
+        }
+      ],
+      "evidence": [
+        {
+          "type": "tracker_checklist",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2159",
+          "detail": "Unchecked in #2159"
+        },
+        {
+          "type": "candidate_checkpoint",
+          "ref": "afcb2681a6cd6366fb107d720cba9e31d64d214f",
+          "detail": "Clean preserved worktree checkpoint containing authored RU/PL/CS/HU/RO/BG/YU 1991 source and tests was integrated into Track 1 as 609cf2bd7d; final release SHA validation remains pending."
+        },
+        {
+          "type": "read_only_review",
+          "ref": "afcb2681a6cd6366fb107d720cba9e31d64d214f",
+          "detail": "Muse review identified the RU owned-enterprise gap, four TypeScript errors, and absent fresh-bootstrap evidence. RU's old policy absence is intentional because its new-generation law catalog seeds at every preset; turnout metric and future propensity are distinct. The RU ownership fix is 7e30f53bb6 with four focused tests passing; the four reported TypeScript errors were corrected in 9c23912f6f and c065c18730, pending exact-branch full typecheck. The #2316 report will use turn 5 of the first planned 1991 seed, adding zero world starts."
+        }
+      ],
+      "blocked_by": [
+        {
+          "type": "issue",
+          "detail": "#2316 1991 successor country substrate must pass fresh-bootstrap conformance and required simulation report before qualifying the selected 1991 profile"
+        }
+      ],
+      "final_validation": {
+        "state": "pending",
+        "evidence": []
+      }
+    },
+    {
+      "id": "RR-010",
+      "section": "Common reset blockers / Economy and banking",
+      "requirement": "#968",
+      "parent_checked": false,
+      "status": "open",
+      "owner": "Track #1 implementation",
+      "issue_refs": [
+        {
+          "repo": "Egg3901/AHDGame",
+          "number": 968,
+          "state": "OPEN",
+          "url": "https://github.com/Egg3901/AHDGame/issues/968"
+        }
+      ],
+      "evidence": [
+        {
+          "type": "tracker_checklist",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2159",
+          "detail": "Unchecked in #2159"
+        },
+        {
+          "type": "issue_state",
+          "url": "https://github.com/Egg3901/AHDGame/issues/968",
+          "detail": "OPEN"
+        },
+        {
+          "type": "partial_source_and_tests",
+          "ref": "60abe0511f,f958dc75bc,7a1dd68c33",
+          "detail": "Extracted the observation-only corporate no-holder rolling-median alert from the old Muse branch and surfaced it in the admin vital-signs response and deterministic economic experiment report without an extra DB query. The median computation and its tests were already on development; duplicate cherry-picked tests were reverted in c1bded4388. Focused vital-sign/alert suites passed 52/52, admin route 5/5, scoped lint/format and diff check passed. #968's broader P0-P7 market-access, intervention, and stress-test gates remain open."
+        }
+      ],
+      "blocked_by": [
+        {
+          "type": "issue",
+          "repo": "Egg3901/AHDGame",
+          "number": 968
+        }
+      ],
+      "final_validation": {
+        "state": "pending",
+        "evidence": []
+      }
+    },
+    {
+      "id": "RR-011",
+      "section": "Common reset blockers / Economy and banking",
+      "requirement": "#991",
+      "parent_checked": false,
+      "status": "open",
+      "owner": "Track #1 implementation",
+      "issue_refs": [
+        {
+          "repo": "Egg3901/AHDGame",
+          "number": 991,
+          "state": "OPEN",
+          "url": "https://github.com/Egg3901/AHDGame/issues/991"
+        }
+      ],
+      "evidence": [
+        {
+          "type": "tracker_checklist",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2159",
+          "detail": "Unchecked in #2159"
+        },
+        {
+          "type": "issue_state",
+          "url": "https://github.com/Egg3901/AHDGame/issues/991",
+          "detail": "OPEN"
+        }
+      ],
+      "blocked_by": [
+        {
+          "type": "issue",
+          "repo": "Egg3901/AHDGame",
+          "number": 991
+        }
+      ],
+      "final_validation": {
+        "state": "pending",
+        "evidence": []
+      }
+    },
+    {
+      "id": "RR-012",
+      "section": "Common reset blockers / Economy and banking",
+      "requirement": "#992",
+      "parent_checked": false,
+      "status": "open",
+      "owner": "Track #1 implementation",
+      "issue_refs": [
+        {
+          "repo": "Egg3901/AHDGame",
+          "number": 992,
+          "state": "OPEN",
+          "url": "https://github.com/Egg3901/AHDGame/issues/992"
+        }
+      ],
+      "evidence": [
+        {
+          "type": "tracker_checklist",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2159",
+          "detail": "Unchecked in #2159"
+        },
+        {
+          "type": "issue_state",
+          "url": "https://github.com/Egg3901/AHDGame/issues/992",
+          "detail": "OPEN"
+        }
+      ],
+      "blocked_by": [
+        {
+          "type": "issue",
+          "repo": "Egg3901/AHDGame",
+          "number": 992
+        }
+      ],
+      "final_validation": {
+        "state": "pending",
+        "evidence": []
+      }
+    },
+    {
+      "id": "RR-013",
+      "section": "Common reset blockers / Economy and banking",
+      "requirement": "#1328",
+      "parent_checked": false,
+      "status": "open",
+      "owner": "Track #1 implementation",
+      "issue_refs": [
+        {
+          "repo": "Egg3901/AHDGame",
+          "number": 1328,
+          "state": "OPEN",
+          "url": "https://github.com/Egg3901/AHDGame/issues/1328"
+        }
+      ],
+      "evidence": [
+        {
+          "type": "tracker_checklist",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2159",
+          "detail": "Unchecked in #2159"
+        },
+        {
+          "type": "issue_state",
+          "url": "https://github.com/Egg3901/AHDGame/issues/1328",
+          "detail": "OPEN"
+        }
+      ],
+      "blocked_by": [
+        {
+          "type": "issue",
+          "repo": "Egg3901/AHDGame",
+          "number": 1328
+        }
+      ],
+      "final_validation": {
+        "state": "pending",
+        "evidence": []
+      }
+    },
+    {
+      "id": "RR-014",
+      "section": "Common reset blockers / Economy and banking",
+      "requirement": "#1672",
+      "parent_checked": false,
+      "status": "open",
+      "owner": "Track #1 implementation",
+      "issue_refs": [
+        {
+          "repo": "Egg3901/AHDGame",
+          "number": 1672,
+          "state": "OPEN",
+          "url": "https://github.com/Egg3901/AHDGame/issues/1672"
+        }
+      ],
+      "evidence": [
+        {
+          "type": "tracker_checklist",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2159",
+          "detail": "Unchecked in #2159"
+        },
+        {
+          "type": "issue_state",
+          "url": "https://github.com/Egg3901/AHDGame/issues/1672",
+          "detail": "OPEN"
+        },
+        {
+          "type": "implementation_checkpoint",
+          "ref": "8949c9da39",
+          "detail": "Ported the keyed non-transaction money-flow primitive, receipt getter and indexes; 13 focused primitive/index tests passed. No consumer coverage or full validation is claimed. The old 55-commit branch is being extracted in verified slices."
+        },
+        {
+          "type": "implementation_checkpoint",
+          "ref": "1fdffbcec1,c9b411a09e",
+          "detail": "Migrated standalone character transfer routes to keyed debit/credit legs, then removed preflight balance checks that would block replay after a landed debit. Helper crash/recovery tests passed 12/12; web route tests passed 5/5 including a depleted-sender retry; scoped lint and format passed. Other #1672 consumers and full validation remain open."
+        },
+        {
+          "type": "partial_source_and_tests",
+          "ref": "108c84d656",
+          "detail": "Historical extraction checkpoint: Muse ported keyed bond-sale holder/pool/payout steps with 10/10 primitive and 9/9 route tests. Supervisor review found retries could fail on depleted holder units or changed quote/FX. More importantly, merged PR #2288 already implements durable bond-sale intents with original stored settlement terms and a repair queue. This duplicate extraction was reverted in 0108ff94f2; it is not candidate coverage."
+        },
+        {
+          "type": "superseded_source_disposition",
+          "ref": "4b5f615115cf1181fadd1afb2cbfd5586aba3f50,0108ff94f2",
+          "detail": "The bond-sale slice of the old #1672 branch is superseded by merged development PR #2288, which records an intent before moving units, stamps claim/pool/payout, resumes frozen terms, and exposes unfinished intents for repair. Track 1 kept development's implementation and removed the duplicate port. #1672 remains open for other standalone flows and exact-branch validation."
+        },
+        {
+          "type": "source_disposition_audit",
+          "ref": "TRACK1_1672_SOURCE_AUDIT.txt",
+          "detail": "Read-only Muse Spark 1.3 diff audit classified all 55 source commits into seven ordered extraction slices. Bond-sale #2288, forex turn-fill #2286, and queued fund-redemption journal supersede three conflicting slices; other unique consumers remain open. The clean source worktree is retained until those slices are implemented and verified."
+        },
+        {
+          "type": "heavy_history_retry_regression",
+          "ref": "src/lib/db/nonAtomicMoneyFlow.ts;src/lib/character/campaignTransfer.test.ts",
+          "detail": "Removed the 100-key eviction that could permit delayed double application on hot accounts. A 150-prior-key regression verifies an old key survives and prevents a second debit/credit after receipt expiry. Focused money-flow tests passed 21/21; document-size monitoring remains required before final validation."
+        },
+        {
+          "type": "share_fill_audit_checkpoint",
+          "ref": "325854f8c4,fdc2c6285b,e0657502a4,a1ecae6951",
+          "detail": "Extracted the #1672 source share-fill audit plan, conditional order claim, keyed convergent audit rows, and a once-per-turn bounded orphan scan. The Muse Spark 1.3 focused share suites passed 45/45 before the latest development merge; the ported crash/recovery module passed 38/38. This is audit infrastructure only: keyed money settlement, matcher, cancel refunds, remaining flow families, integrated typecheck, performance profile, and final validation are still open."
+        },
+        {
+          "type": "share_fill_recovery_turn_budget_repair",
+          "ref": "5a1cd3daf5,ac21ae83e3,e0cd159fe4,b68461e8bb",
+          "detail": "Moved the receipt orphan scan out of processTurn to a separate bounded cron pass and a post-turn singleplayer pass. Added batched order reads, per-client/database keyset rotation, reserved phase capacity, a five-minute in-flight age grace, and a duplicate-visit guard at wrap-around. Focused audit suite passed 52/52, plus scoped lint/format; earlier cron and route suites passed with an increased timeout on the shared box. This supersedes the once-per-turn scan in the prior checkpoint. Owed: integrated verify/build, matched query and turn round-trip evidence, remaining #1672 money-flow consumers, and the final validation gate."
+        },
+        {
+          "type": "share_fill_recovery_index",
+          "ref": "317153a065",
+          "detail": "Added recurring {status:1,_id:1} receipt index to serve the bounded orphan-sweep keyset sort without a collection-wide sort. The focused index-registration suite passed 2/2, scoped lint/format and diff checks passed. An actual production-shaped explain plan and integrated build remain required."
+        },
+        {
+          "type": "share_fill_keyed_money_recovery",
+          "ref": "539f0f8e13,fff64a7940",
+          "detail": "Share-fill debit/credit legs now use persisted keyed plans and crash-safe recovery. A bounded per-world rotating orphan scan with five-minute live-attempt grace prevents stuck-prefix starvation and route races. Share-money/audit focused suites passed 30/30 and 52/52 after the fairness fix; four CEO-cap route tests passed with the shared-box timeout raised to 120 seconds. Exact query plan, integrated typecheck/build, matcher/cancel/placement and other money-flow families remain pending."
+        },
+        {
+          "type": "small_spend_route_checkpoint",
+          "ref": "5e6d1952d6",
+          "detail": "Ported the six unique keyed route flows from source 9c93bf01a0: party and regional-party donations, election travel, primary campaign, running-mate travel, and home-state surge. Kept Track1's newer primitive and receipt indexes. Nine running-mate route tests, including five fault/retry cases, and 30 adjacent route/primitive tests passed; scoped lint/format passed. Other source commits, integrated gates, and final replay remain pending."
+        },
+        {
+          "type": "small_spend_replay_regression",
+          "ref": "ce54b2564b,da6e45ca65",
+          "detail": "Moved completed-receipt replay ahead of post-success state/balance/action/pool preflights for six keyed donation/travel/surge routes. Running-mate and presidential travel regressions use depleted post-success state and same-key conflict; focused route suites passed 11/11 with scoped lint/format. Other route families and integrated gates remain open."
+        },
+        {
+          "type": "state_attack_canvass_checkpoint",
+          "ref": "8f0f990820",
+          "detail": "Ported keyed state-attack actions/funds spend and reusable canvass-spend library from source 593f247372. Fault/retry tests passed 26/26, existing state-attack routes 19/19, scoped lint/format passed. Canvassing route wiring and all remaining source slices are pending."
+        }
+      ],
+      "blocked_by": [
+        {
+          "type": "issue",
+          "repo": "Egg3901/AHDGame",
+          "number": 1672
+        }
+      ],
+      "final_validation": {
+        "state": "pending",
+        "evidence": []
+      }
+    },
+    {
+      "id": "RR-015",
+      "section": "Common reset blockers / Economy and banking",
+      "requirement": "#2118",
+      "parent_checked": false,
+      "status": "open",
+      "owner": "Track #1 implementation",
+      "issue_refs": [
+        {
+          "repo": "Egg3901/AHDGame",
+          "number": 2118,
+          "state": "OPEN",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2118"
+        }
+      ],
+      "evidence": [
+        {
+          "type": "tracker_checklist",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2159",
+          "detail": "Unchecked in #2159"
+        },
+        {
+          "type": "issue_state",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2118",
+          "detail": "OPEN"
+        }
+      ],
+      "blocked_by": [
+        {
+          "type": "issue",
+          "repo": "Egg3901/AHDGame",
+          "number": 2118
+        }
+      ],
+      "final_validation": {
+        "state": "pending",
+        "evidence": []
+      }
+    },
+    {
+      "id": "RR-016",
+      "section": "Common reset blockers / Economy and banking",
+      "requirement": "#2119",
+      "parent_checked": false,
+      "status": "open",
+      "owner": "Track #1 implementation",
+      "issue_refs": [
+        {
+          "repo": "Egg3901/AHDGame",
+          "number": 2119,
+          "state": "OPEN",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2119"
+        }
+      ],
+      "evidence": [
+        {
+          "type": "tracker_checklist",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2159",
+          "detail": "Unchecked in #2159"
+        },
+        {
+          "type": "issue_state",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2119",
+          "detail": "OPEN"
+        }
+      ],
+      "blocked_by": [
+        {
+          "type": "issue",
+          "repo": "Egg3901/AHDGame",
+          "number": 2119
+        }
+      ],
+      "final_validation": {
+        "state": "pending",
+        "evidence": []
+      }
+    },
+    {
+      "id": "RR-017",
+      "section": "Common reset blockers / Economy and banking",
+      "requirement": "#2120",
+      "parent_checked": false,
+      "status": "open",
+      "owner": "Track #1 implementation",
+      "issue_refs": [
+        {
+          "repo": "Egg3901/AHDGame",
+          "number": 2120,
+          "state": "OPEN",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2120"
+        }
+      ],
+      "evidence": [
+        {
+          "type": "tracker_checklist",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2159",
+          "detail": "Unchecked in #2159"
+        },
+        {
+          "type": "issue_state",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2120",
+          "detail": "OPEN"
+        }
+      ],
+      "blocked_by": [
+        {
+          "type": "issue",
+          "repo": "Egg3901/AHDGame",
+          "number": 2120
+        }
+      ],
+      "final_validation": {
+        "state": "pending",
+        "evidence": []
+      }
+    },
+    {
+      "id": "RR-018",
+      "section": "Common reset blockers / Economy and banking",
+      "requirement": "#2122",
+      "parent_checked": false,
+      "status": "open",
+      "owner": "Track #1 implementation",
+      "issue_refs": [
+        {
+          "repo": "Egg3901/AHDGame",
+          "number": 2122,
+          "state": "OPEN",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2122"
+        }
+      ],
+      "evidence": [
+        {
+          "type": "tracker_checklist",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2159",
+          "detail": "Unchecked in #2159"
+        },
+        {
+          "type": "issue_state",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2122",
+          "detail": "OPEN"
+        }
+      ],
+      "blocked_by": [
+        {
+          "type": "issue",
+          "repo": "Egg3901/AHDGame",
+          "number": 2122
+        }
+      ],
+      "final_validation": {
+        "state": "pending",
+        "evidence": []
+      }
+    },
+    {
+      "id": "RR-019",
+      "section": "Common reset blockers / Economy and banking",
+      "requirement": "#2125",
+      "parent_checked": true,
+      "status": "claimed_complete_pending_final_validation",
+      "owner": "Track #1 implementation",
+      "issue_refs": [
+        {
+          "repo": "Egg3901/AHDGame",
+          "number": 2125,
+          "state": "CLOSED",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2125"
+        }
+      ],
+      "evidence": [
+        {
+          "type": "tracker_checklist",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2159",
+          "detail": "Checked in #2159"
+        },
+        {
+          "type": "issue_state",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2125",
+          "detail": "CLOSED"
+        }
+      ],
+      "blocked_by": [],
+      "final_validation": {
+        "state": "pending",
+        "evidence": []
+      }
+    },
+    {
+      "id": "RR-020",
+      "section": "Common reset blockers / Economy and banking",
+      "requirement": "Every enabled financial product works end to end through player UI, API, settlement, turn processing, accounting, and resulting read models. No enabled facade or knowingly broken product ships.",
+      "parent_checked": false,
+      "status": "open",
+      "owner": "Track #1 implementation",
+      "issue_refs": [
+        {
+          "repo": "Egg3901/AHDGame",
+          "number": 2223,
+          "state": "OPEN",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2223"
+        }
+      ],
+      "evidence": [
+        {
+          "type": "tracker_checklist",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2159",
+          "detail": "Unchecked in #2159"
+        }
+      ],
+      "blocked_by": [
+        {
+          "type": "issue",
+          "detail": "#2223 must meet its own remaining acceptance criteria before this broad #2159 gate can pass"
+        }
+      ],
+      "final_validation": {
+        "state": "pending",
+        "evidence": []
+      }
+    },
+    {
+      "id": "RR-021",
+      "section": "Common reset blockers / Economy and banking",
+      "requirement": "There is zero unexplained money creation or destruction, stock-flow divergence, negative guarded balance, or unresolved settlement.",
+      "parent_checked": false,
+      "status": "open",
+      "owner": "Track #1 implementation",
+      "issue_refs": [
+        {
+          "repo": "Egg3901/AHDGame",
+          "number": 2223,
+          "state": "OPEN",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2223"
+        }
+      ],
+      "evidence": [
+        {
+          "type": "tracker_checklist",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2159",
+          "detail": "Unchecked in #2159"
+        }
+      ],
+      "blocked_by": [
+        {
+          "type": "issue",
+          "detail": "#2223 must meet its own remaining acceptance criteria before this broad #2159 gate can pass"
+        }
+      ],
+      "final_validation": {
+        "state": "pending",
+        "evidence": []
+      }
+    },
+    {
+      "id": "RR-022",
+      "section": "Common reset blockers / Economy and banking",
+      "requirement": "Treasury, debt, CPI/inflation, credit, employment, firm entry, market fill, securities liquidity, and bank solvency remain stable under the selected profile.",
+      "parent_checked": false,
+      "status": "open",
+      "owner": "Track #1 implementation",
+      "issue_refs": [
+        {
+          "repo": "Egg3901/AHDGame",
+          "number": 2337,
+          "state": "OPEN",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2337"
+        }
+      ],
+      "evidence": [
+        {
+          "type": "tracker_checklist",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2159",
+          "detail": "Unchecked in #2159"
+        },
+        {
+          "type": "source_and_tests",
+          "ref": "417786c7d0bf4852b2b7c762df2efeae89b5ffbc",
+          "detail": "#2337 frequency audit and 1/12/48/240-turn calibration fixtures passed 77 focused tests; economic stability still requires final campaign evidence."
+        }
+      ],
+      "blocked_by": [
+        {
+          "type": "issue",
+          "detail": "#2337 must meet its own remaining acceptance criteria before this broad #2159 gate can pass"
+        }
+      ],
+      "final_validation": {
+        "state": "pending",
+        "evidence": []
+      }
+    },
+    {
+      "id": "RR-023",
+      "section": "Common reset blockers / Economy and banking",
+      "requirement": "Bank-run, largest-supplier-failure, rate-shock, exchange-closure, synchronized-liquidation, and dormant-money-reactivation stress tests pass their issue-owned guardrails.",
+      "parent_checked": false,
+      "status": "open",
+      "owner": "Track #1 implementation",
+      "issue_refs": [],
+      "evidence": [
+        {
+          "type": "tracker_checklist",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2159",
+          "detail": "Unchecked in #2159"
+        }
+      ],
+      "blocked_by": [
+        {
+          "type": "gate",
+          "detail": "Deterministic stress fixtures, issue-owned quantitative guardrails, and the frozen-SHA campaign must pass"
+        }
+      ],
+      "final_validation": {
+        "state": "pending",
+        "evidence": []
+      }
+    },
+    {
+      "id": "RR-024",
+      "section": "Common reset blockers / Economy and banking",
+      "requirement": "Every remaining quantitative miss has an owner-approved waiver recording impact, mitigation, monitoring, and rollback conditions.",
+      "parent_checked": false,
+      "status": "open",
+      "owner": "Track #1 implementation",
+      "issue_refs": [],
+      "evidence": [
+        {
+          "type": "tracker_checklist",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2159",
+          "detail": "Unchecked in #2159"
+        }
+      ],
+      "blocked_by": [
+        {
+          "type": "gate",
+          "detail": "First collect final quantitative results; every remaining miss then needs an explicit owner-approved waiver with impact, mitigation, monitoring, and rollback"
+        }
+      ],
+      "final_validation": {
+        "state": "pending",
+        "evidence": []
+      }
+    },
+    {
+      "id": "RR-025",
+      "section": "Common reset blockers / Election and political lifecycle",
+      "requirement": "#2015",
+      "parent_checked": true,
+      "status": "claimed_complete_pending_final_validation",
+      "owner": "Track #1 implementation",
+      "issue_refs": [
+        {
+          "repo": "Egg3901/AHDGame",
+          "number": 2015,
+          "state": "CLOSED",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2015"
+        }
+      ],
+      "evidence": [
+        {
+          "type": "tracker_checklist",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2159",
+          "detail": "Checked in #2159"
+        },
+        {
+          "type": "issue_state",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2015",
+          "detail": "CLOSED"
+        }
+      ],
+      "blocked_by": [],
+      "final_validation": {
+        "state": "pending",
+        "evidence": []
+      }
+    },
+    {
+      "id": "RR-026",
+      "section": "Common reset blockers / Election and political lifecycle",
+      "requirement": "#2098",
+      "parent_checked": true,
+      "status": "claimed_complete_pending_final_validation",
+      "owner": "Track #1 implementation",
+      "issue_refs": [
+        {
+          "repo": "Egg3901/AHDGame",
+          "number": 2098,
+          "state": "CLOSED",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2098"
+        }
+      ],
+      "evidence": [
+        {
+          "type": "tracker_checklist",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2159",
+          "detail": "Checked in #2159"
+        },
+        {
+          "type": "issue_state",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2098",
+          "detail": "CLOSED"
+        }
+      ],
+      "blocked_by": [],
+      "final_validation": {
+        "state": "pending",
+        "evidence": []
+      }
+    },
+    {
+      "id": "RR-027",
+      "section": "Common reset blockers / Election and political lifecycle",
+      "requirement": "#2113",
+      "parent_checked": true,
+      "status": "claimed_complete_pending_final_validation",
+      "owner": "Track #1 implementation",
+      "issue_refs": [
+        {
+          "repo": "Egg3901/AHDGame",
+          "number": 2113,
+          "state": "CLOSED",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2113"
+        }
+      ],
+      "evidence": [
+        {
+          "type": "tracker_checklist",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2159",
+          "detail": "Checked in #2159"
+        },
+        {
+          "type": "issue_state",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2113",
+          "detail": "CLOSED"
+        }
+      ],
+      "blocked_by": [],
+      "final_validation": {
+        "state": "pending",
+        "evidence": []
+      }
+    },
+    {
+      "id": "RR-028",
+      "section": "Common reset blockers / Election and political lifecycle",
+      "requirement": "#2124, with current disposition supplied by its active investigation",
+      "parent_checked": false,
+      "status": "open",
+      "owner": "Track #1 implementation",
+      "issue_refs": [
+        {
+          "repo": "Egg3901/AHDGame",
+          "number": 2124,
+          "state": "OPEN",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2124"
+        }
+      ],
+      "evidence": [
+        {
+          "type": "tracker_checklist",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2159",
+          "detail": "Unchecked in #2159"
+        },
+        {
+          "type": "issue_state",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2124",
+          "detail": "OPEN"
+        }
+      ],
+      "blocked_by": [
+        {
+          "type": "issue",
+          "repo": "Egg3901/AHDGame",
+          "number": 2124
+        }
+      ],
+      "final_validation": {
+        "state": "pending",
+        "evidence": []
+      }
+    },
+    {
+      "id": "RR-029",
+      "section": "Common reset blockers / Election and political lifecycle",
+      "requirement": "#2161",
+      "parent_checked": false,
+      "status": "open",
+      "owner": "Track #1 implementation",
+      "issue_refs": [
+        {
+          "repo": "Egg3901/AHDGame",
+          "number": 2161,
+          "state": "OPEN",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2161"
+        }
+      ],
+      "evidence": [
+        {
+          "type": "tracker_checklist",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2159",
+          "detail": "Unchecked in #2159"
+        },
+        {
+          "type": "issue_state",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2161",
+          "detail": "OPEN"
+        }
+      ],
+      "blocked_by": [
+        {
+          "type": "issue",
+          "repo": "Egg3901/AHDGame",
+          "number": 2161
+        }
+      ],
+      "final_validation": {
+        "state": "pending",
+        "evidence": []
+      }
+    },
+    {
+      "id": "RR-030",
+      "section": "Common reset blockers / Election and political lifecycle",
+      "requirement": "#2117",
+      "parent_checked": false,
+      "status": "open",
+      "owner": "Track #1 implementation",
+      "issue_refs": [
+        {
+          "repo": "Egg3901/AHDGame",
+          "number": 2117,
+          "state": "OPEN",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2117"
+        }
+      ],
+      "evidence": [
+        {
+          "type": "tracker_checklist",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2159",
+          "detail": "Unchecked in #2159"
+        },
+        {
+          "type": "issue_state",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2117",
+          "detail": "OPEN"
+        }
+      ],
+      "blocked_by": [
+        {
+          "type": "issue",
+          "repo": "Egg3901/AHDGame",
+          "number": 2117
+        }
+      ],
+      "final_validation": {
+        "state": "pending",
+        "evidence": []
+      }
+    },
+    {
+      "id": "RR-031",
+      "section": "Common reset blockers / Election and political lifecycle",
+      "requirement": "Competitive swing fixtures change recorded control correctly across single-winner, multi-seat, district, proportional, AMS, PR-STV, bloc-list, and regime-constrained systems; incumbent victories preserve control; every active election has valid candidates; and every completed election resolves exactly once.",
+      "parent_checked": false,
+      "status": "open",
+      "owner": "Track #1 implementation",
+      "issue_refs": [],
+      "evidence": [
+        {
+          "type": "tracker_checklist",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2159",
+          "detail": "Unchecked in #2159"
+        }
+      ],
+      "blocked_by": [
+        {
+          "type": "issue",
+          "repo": "Egg3901/AHDGame",
+          "number": 2124
+        },
+        {
+          "type": "issue",
+          "repo": "Egg3901/AHDGame",
+          "number": 2161
+        },
+        {
+          "type": "gate",
+          "detail": "Competitive swing and exactly-once election fixtures plus final campaign evidence"
+        }
+      ],
+      "final_validation": {
+        "state": "pending",
+        "evidence": []
+      }
+    },
+    {
+      "id": "RR-032",
+      "section": "Common reset blockers / Election and political lifecycle",
+      "requirement": "Overlapping upper- and lower-chamber cycles retain valid candidate fields without violating the one-active-candidacy invariant. Multiplayer qualification covers NPP-only, player-vs-NPP, opposing-player, and mixed same-party player/NPP fields. Presidential qualification separately proves popular/EV flips, incumbent holds, contingent resolution, result/apportionment reconciliation, executive seating, and exactly-once finalization.",
+      "parent_checked": false,
+      "status": "open",
+      "owner": "Track #1 implementation",
+      "issue_refs": [],
+      "evidence": [
+        {
+          "type": "tracker_checklist",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2159",
+          "detail": "Unchecked in #2159"
+        }
+      ],
+      "blocked_by": [
+        {
+          "type": "issue",
+          "repo": "Egg3901/AHDGame",
+          "number": 2124
+        },
+        {
+          "type": "issue",
+          "repo": "Egg3901/AHDGame",
+          "number": 2161
+        },
+        {
+          "type": "gate",
+          "detail": "Concurrent-chamber and multiplayer actor matrix, including presidential resolution"
+        }
+      ],
+      "final_validation": {
+        "state": "pending",
+        "evidence": []
+      }
+    },
+    {
+      "id": "RR-033",
+      "section": "Common reset blockers / Election and political lifecycle",
+      "requirement": "Report officeholder replacement, party seat-vector change, unique chamber-control change, tied-control cycles, and incumbent retention separately for every major chamber. Aggregate election counts or candidate churn alone do not prove political turnover.",
+      "parent_checked": false,
+      "status": "open",
+      "owner": "Track #1 implementation",
+      "issue_refs": [],
+      "evidence": [
+        {
+          "type": "tracker_checklist",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2159",
+          "detail": "Unchecked in #2159"
+        }
+      ],
+      "blocked_by": [
+        {
+          "type": "gate",
+          "detail": "Retained per-chamber turnover series and source-linked election events from the final campaign"
+        }
+      ],
+      "final_validation": {
+        "state": "pending",
+        "evidence": []
+      }
+    },
+    {
+      "id": "RR-034",
+      "section": "Common reset blockers / Election and political lifecycle",
+      "requirement": "Compare target-seed turnover with live multiplayer as a reference, without treating the old world as a mandatory balance target. Current live US House history has 307 seat-vector changes and 78 unique top-party flips across 485 cycle transitions, with 182 tied-top cycles.",
+      "parent_checked": false,
+      "status": "open",
+      "owner": "Track #1 implementation",
+      "issue_refs": [],
+      "evidence": [
+        {
+          "type": "tracker_checklist",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2159",
+          "detail": "Unchecked in #2159"
+        }
+      ],
+      "blocked_by": [
+        {
+          "type": "gate",
+          "detail": "Sanitized live reference and comparable frozen-SHA target-seed turnover report"
+        }
+      ],
+      "final_validation": {
+        "state": "pending",
+        "evidence": []
+      }
+    },
+    {
+      "id": "RR-035",
+      "section": "Common reset blockers / Readiness evidence and worldsim reliability",
+      "requirement": "#1992",
+      "parent_checked": true,
+      "status": "claimed_complete_pending_final_validation",
+      "owner": "Track #1 evidence",
+      "issue_refs": [
+        {
+          "repo": "Egg3901/AHDGame",
+          "number": 1992,
+          "state": "CLOSED",
+          "url": "https://github.com/Egg3901/AHDGame/issues/1992"
+        }
+      ],
+      "evidence": [
+        {
+          "type": "tracker_checklist",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2159",
+          "detail": "Checked in #2159"
+        },
+        {
+          "type": "issue_state",
+          "url": "https://github.com/Egg3901/AHDGame/issues/1992",
+          "detail": "CLOSED"
+        }
+      ],
+      "blocked_by": [],
+      "final_validation": {
+        "state": "pending",
+        "evidence": []
+      }
+    },
+    {
+      "id": "RR-036",
+      "section": "Common reset blockers / Readiness evidence and worldsim reliability",
+      "requirement": "#2071",
+      "parent_checked": true,
+      "status": "claimed_complete_pending_final_validation",
+      "owner": "Track #1 evidence",
+      "issue_refs": [
+        {
+          "repo": "Egg3901/AHDGame",
+          "number": 2071,
+          "state": "CLOSED",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2071"
+        }
+      ],
+      "evidence": [
+        {
+          "type": "tracker_checklist",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2159",
+          "detail": "Checked in #2159"
+        },
+        {
+          "type": "issue_state",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2071",
+          "detail": "CLOSED"
+        }
+      ],
+      "blocked_by": [],
+      "final_validation": {
+        "state": "pending",
+        "evidence": []
+      }
+    },
+    {
+      "id": "RR-037",
+      "section": "Common reset blockers / Readiness evidence and worldsim reliability",
+      "requirement": "#2074, unless final-run progress and completion are read from an explicitly authoritative source",
+      "parent_checked": true,
+      "status": "claimed_complete_pending_final_validation",
+      "owner": "Track #1 evidence",
+      "issue_refs": [
+        {
+          "repo": "Egg3901/AHDGame",
+          "number": 2074,
+          "state": "CLOSED",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2074"
+        }
+      ],
+      "evidence": [
+        {
+          "type": "tracker_checklist",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2159",
+          "detail": "Checked in #2159"
+        },
+        {
+          "type": "issue_state",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2074",
+          "detail": "CLOSED"
+        }
+      ],
+      "blocked_by": [],
+      "final_validation": {
+        "state": "pending",
+        "evidence": []
+      }
+    },
+    {
+      "id": "RR-038",
+      "section": "Common reset blockers / Readiness evidence and worldsim reliability",
+      "requirement": "#2080",
+      "parent_checked": true,
+      "status": "claimed_complete_pending_final_validation",
+      "owner": "Track #1 evidence",
+      "issue_refs": [
+        {
+          "repo": "Egg3901/AHDGame",
+          "number": 2080,
+          "state": "CLOSED",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2080"
+        }
+      ],
+      "evidence": [
+        {
+          "type": "tracker_checklist",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2159",
+          "detail": "Checked in #2159"
+        },
+        {
+          "type": "issue_state",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2080",
+          "detail": "CLOSED"
+        }
+      ],
+      "blocked_by": [],
+      "final_validation": {
+        "state": "pending",
+        "evidence": []
+      }
+    },
+    {
+      "id": "RR-039",
+      "section": "Common reset blockers / Readiness evidence and worldsim reliability",
+      "requirement": "#2083",
+      "parent_checked": true,
+      "status": "claimed_complete_pending_final_validation",
+      "owner": "Track #1 evidence",
+      "issue_refs": [
+        {
+          "repo": "Egg3901/AHDGame",
+          "number": 2083,
+          "state": "CLOSED",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2083"
+        }
+      ],
+      "evidence": [
+        {
+          "type": "tracker_checklist",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2159",
+          "detail": "Checked in #2159"
+        },
+        {
+          "type": "issue_state",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2083",
+          "detail": "CLOSED"
+        }
+      ],
+      "blocked_by": [],
+      "final_validation": {
+        "state": "pending",
+        "evidence": []
+      }
+    },
+    {
+      "id": "RR-040",
+      "section": "Common reset blockers / Readiness evidence and worldsim reliability",
+      "requirement": "#2087",
+      "parent_checked": true,
+      "status": "claimed_complete_pending_final_validation",
+      "owner": "Track #1 evidence",
+      "issue_refs": [
+        {
+          "repo": "Egg3901/AHDGame",
+          "number": 2087,
+          "state": "CLOSED",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2087"
+        }
+      ],
+      "evidence": [
+        {
+          "type": "tracker_checklist",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2159",
+          "detail": "Checked in #2159"
+        },
+        {
+          "type": "issue_state",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2087",
+          "detail": "CLOSED"
+        }
+      ],
+      "blocked_by": [],
+      "final_validation": {
+        "state": "pending",
+        "evidence": []
+      }
+    },
+    {
+      "id": "RR-041",
+      "section": "Common reset blockers / Readiness evidence and worldsim reliability",
+      "requirement": "#2088",
+      "parent_checked": false,
+      "status": "open",
+      "owner": "Track #1 evidence",
+      "issue_refs": [
+        {
+          "repo": "Egg3901/AHDGame",
+          "number": 2088,
+          "state": "OPEN",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2088"
+        }
+      ],
+      "evidence": [
+        {
+          "type": "tracker_checklist",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2159",
+          "detail": "Unchecked in #2159"
+        },
+        {
+          "type": "issue_state",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2088",
+          "detail": "OPEN"
+        }
+      ],
+      "blocked_by": [
+        {
+          "type": "issue",
+          "repo": "Egg3901/AHDGame",
+          "number": 2088
+        }
+      ],
+      "final_validation": {
+        "state": "pending",
+        "evidence": []
+      }
+    },
+    {
+      "id": "RR-042",
+      "section": "Common reset blockers / Readiness evidence and worldsim reliability",
+      "requirement": "#2099",
+      "parent_checked": false,
+      "status": "open",
+      "owner": "Track #1 evidence",
+      "issue_refs": [
+        {
+          "repo": "Egg3901/AHDGame",
+          "number": 2099,
+          "state": "OPEN",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2099"
+        }
+      ],
+      "evidence": [
+        {
+          "type": "tracker_checklist",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2159",
+          "detail": "Unchecked in #2159"
+        },
+        {
+          "type": "issue_state",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2099",
+          "detail": "OPEN"
+        }
+      ],
+      "blocked_by": [
+        {
+          "type": "issue",
+          "repo": "Egg3901/AHDGame",
+          "number": 2099
+        }
+      ],
+      "final_validation": {
+        "state": "pending",
+        "evidence": []
+      }
+    },
+    {
+      "id": "RR-043",
+      "section": "Common reset blockers / Readiness evidence and worldsim reliability",
+      "requirement": "#2100",
+      "parent_checked": false,
+      "status": "open",
+      "owner": "Track #1 evidence",
+      "issue_refs": [
+        {
+          "repo": "Egg3901/AHDGame",
+          "number": 2100,
+          "state": "OPEN",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2100"
+        }
+      ],
+      "evidence": [
+        {
+          "type": "tracker_checklist",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2159",
+          "detail": "Unchecked in #2159"
+        },
+        {
+          "type": "issue_state",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2100",
+          "detail": "OPEN"
+        }
+      ],
+      "blocked_by": [
+        {
+          "type": "issue",
+          "repo": "Egg3901/AHDGame",
+          "number": 2100
+        }
+      ],
+      "final_validation": {
+        "state": "pending",
+        "evidence": []
+      }
+    },
+    {
+      "id": "RR-044",
+      "section": "Common reset blockers / Readiness evidence and worldsim reliability",
+      "requirement": "#2104",
+      "parent_checked": true,
+      "status": "claimed_complete_pending_final_validation",
+      "owner": "Track #1 evidence",
+      "issue_refs": [
+        {
+          "repo": "Egg3901/AHDGame",
+          "number": 2104,
+          "state": "CLOSED",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2104"
+        }
+      ],
+      "evidence": [
+        {
+          "type": "tracker_checklist",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2159",
+          "detail": "Checked in #2159"
+        },
+        {
+          "type": "issue_state",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2104",
+          "detail": "CLOSED"
+        }
+      ],
+      "blocked_by": [],
+      "final_validation": {
+        "state": "pending",
+        "evidence": []
+      }
+    },
+    {
+      "id": "RR-045",
+      "section": "Common reset blockers / Readiness evidence and worldsim reliability",
+      "requirement": "#2112",
+      "parent_checked": true,
+      "status": "claimed_complete_pending_final_validation",
+      "owner": "Track #1 evidence",
+      "issue_refs": [
+        {
+          "repo": "Egg3901/AHDGame",
+          "number": 2112,
+          "state": "CLOSED",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2112"
+        }
+      ],
+      "evidence": [
+        {
+          "type": "tracker_checklist",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2159",
+          "detail": "Checked in #2159"
+        },
+        {
+          "type": "issue_state",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2112",
+          "detail": "CLOSED"
+        }
+      ],
+      "blocked_by": [],
+      "final_validation": {
+        "state": "pending",
+        "evidence": []
+      }
+    },
+    {
+      "id": "RR-046",
+      "section": "Common reset blockers / Readiness evidence and worldsim reliability",
+      "requirement": "Egg3901/LSGD-ops-dash#142 restores the canonical election calibration evidence tool",
+      "parent_checked": true,
+      "status": "claimed_complete_pending_final_validation",
+      "owner": "Ops maintainer / Track #1 validation",
+      "issue_refs": [
+        {
+          "repo": "Egg3901/LSGD-ops-dash",
+          "number": 142,
+          "state": "CLOSED",
+          "url": "https://github.com/Egg3901/LSGD-ops-dash/issues/142"
+        }
+      ],
+      "evidence": [
+        {
+          "type": "tracker_checklist",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2159",
+          "detail": "Checked in #2159"
+        },
+        {
+          "type": "issue_state",
+          "url": "https://github.com/Egg3901/LSGD-ops-dash/issues/142",
+          "detail": "CLOSED; calibration tool still requires release-candidate use verification"
+        }
+      ],
+      "blocked_by": [
+        {
+          "type": "verification",
+          "detail": "Confirm external ops-dash #142 closure and tool availability on release candidate"
+        }
+      ],
+      "final_validation": {
+        "state": "pending",
+        "evidence": []
+      }
+    },
+    {
+      "id": "RR-047",
+      "section": "Common reset blockers / Readiness evidence and worldsim reliability",
+      "requirement": "Every qualifying report records the source commit, effective manifest, seed, actor configuration, schema/calculation versions, and complete retained time series.",
+      "parent_checked": false,
+      "status": "open",
+      "owner": "Track #1 evidence",
+      "issue_refs": [],
+      "evidence": [
+        {
+          "type": "tracker_checklist",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2159",
+          "detail": "Unchecked in #2159"
+        }
+      ],
+      "blocked_by": [
+        {
+          "type": "issue",
+          "repo": "Egg3901/AHDGame",
+          "number": 2099
+        },
+        {
+          "type": "issue",
+          "repo": "Egg3901/AHDGame",
+          "number": 2100
+        },
+        {
+          "type": "gate",
+          "detail": "Ops source-pin PR #137 plus complete retained-series and oversized-payload tests on frozen SHA"
+        }
+      ],
+      "final_validation": {
+        "state": "pending",
+        "evidence": []
+      }
+    },
+    {
+      "id": "RR-048",
+      "section": "Common reset blockers / Readiness evidence and worldsim reliability",
+      "requirement": "A completed turn count is not accepted as a pass when telemetry is incomplete, stale, unattributed, collected from a different checkout, or known to mismeasure the subsystem.",
+      "parent_checked": false,
+      "status": "open",
+      "owner": "Track #1 evidence",
+      "issue_refs": [
+        {
+          "repo": "Egg3901/AHDGame",
+          "number": 2078,
+          "state": "OPEN",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2078"
+        }
+      ],
+      "evidence": [
+        {
+          "type": "tracker_checklist",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2159",
+          "detail": "Unchecked in #2159"
+        },
+        {
+          "type": "source_and_tests",
+          "ref": "f605ec35bb",
+          "detail": "#2078 mirrored-transfer detector repair is already in development; 42 focused tests passed on Track 1. Corrected six-turn sandbox precision and scan duration remain pending."
+        }
+      ],
+      "blocked_by": [
+        {
+          "type": "issue",
+          "detail": "#2078 must meet its own remaining acceptance criteria before this broad #2159 gate can pass"
+        }
+      ],
+      "final_validation": {
+        "state": "pending",
+        "evidence": []
+      }
+    },
+    {
+      "id": "RR-049",
+      "section": "Common reset blockers / Performance and latency",
+      "requirement": "#2166",
+      "parent_checked": true,
+      "status": "claimed_complete_pending_final_validation",
+      "owner": "Track #1 implementation",
+      "issue_refs": [
+        {
+          "repo": "Egg3901/AHDGame",
+          "number": 2166,
+          "state": "CLOSED",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2166"
+        }
+      ],
+      "evidence": [
+        {
+          "type": "tracker_checklist",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2159",
+          "detail": "Checked in #2159"
+        },
+        {
+          "type": "issue_state",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2166",
+          "detail": "CLOSED"
+        }
+      ],
+      "blocked_by": [],
+      "final_validation": {
+        "state": "pending",
+        "evidence": []
+      }
+    },
+    {
+      "id": "RR-050",
+      "section": "Common reset blockers / Performance and latency",
+      "requirement": "#2167",
+      "parent_checked": true,
+      "status": "claimed_complete_pending_final_validation",
+      "owner": "Track #1 implementation",
+      "issue_refs": [
+        {
+          "repo": "Egg3901/AHDGame",
+          "number": 2167,
+          "state": "CLOSED",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2167"
+        }
+      ],
+      "evidence": [
+        {
+          "type": "tracker_checklist",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2159",
+          "detail": "Checked in #2159"
+        },
+        {
+          "type": "issue_state",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2167",
+          "detail": "CLOSED"
+        }
+      ],
+      "blocked_by": [],
+      "final_validation": {
+        "state": "pending",
+        "evidence": []
+      }
+    },
+    {
+      "id": "RR-051",
+      "section": "Common reset blockers / Performance and latency",
+      "requirement": "#2168",
+      "parent_checked": true,
+      "status": "claimed_complete_pending_final_validation",
+      "owner": "Track #1 implementation",
+      "issue_refs": [
+        {
+          "repo": "Egg3901/AHDGame",
+          "number": 2168,
+          "state": "CLOSED",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2168"
+        }
+      ],
+      "evidence": [
+        {
+          "type": "tracker_checklist",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2159",
+          "detail": "Checked in #2159"
+        },
+        {
+          "type": "issue_state",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2168",
+          "detail": "CLOSED"
+        }
+      ],
+      "blocked_by": [],
+      "final_validation": {
+        "state": "pending",
+        "evidence": []
+      }
+    },
+    {
+      "id": "RR-052",
+      "section": "Common reset blockers / Performance and latency",
+      "requirement": "#2169",
+      "parent_checked": true,
+      "status": "claimed_complete_pending_final_validation",
+      "owner": "Track #1 implementation",
+      "issue_refs": [
+        {
+          "repo": "Egg3901/AHDGame",
+          "number": 2169,
+          "state": "CLOSED",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2169"
+        }
+      ],
+      "evidence": [
+        {
+          "type": "tracker_checklist",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2159",
+          "detail": "Checked in #2159"
+        },
+        {
+          "type": "issue_state",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2169",
+          "detail": "CLOSED"
+        }
+      ],
+      "blocked_by": [],
+      "final_validation": {
+        "state": "pending",
+        "evidence": []
+      }
+    },
+    {
+      "id": "RR-053",
+      "section": "Common reset blockers / Performance and latency",
+      "requirement": "Turn processing time, BSON decoding volume, and per-phase round trips remain within budget (`src/simulation/engine/turnPhaseBudgets.ts`) on the release candidate under full qualification load.",
+      "parent_checked": false,
+      "status": "open",
+      "owner": "Track #1 implementation",
+      "issue_refs": [
+        {
+          "repo": "Egg3901/AHDGame",
+          "number": 2271,
+          "state": "OPEN",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2271"
+        }
+      ],
+      "evidence": [
+        {
+          "type": "tracker_checklist",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2159",
+          "detail": "Unchecked in #2159"
+        },
+        {
+          "type": "merged_pr",
+          "url": "https://github.com/Egg3901/AHDGame/pull/2379",
+          "detail": "Expiry/config read reuse merged as 5c4552f4cb29b6d47917f9beaa6f99f3c9993b59; all hosted checks passed. Matched before/after bytes and round trips and full-load #2271 proof remain required."
+        }
+      ],
+      "blocked_by": [
+        {
+          "type": "issue",
+          "repo": "Egg3901/AHDGame",
+          "number": 2271
+        }
+      ],
+      "final_validation": {
+        "state": "pending",
+        "evidence": []
+      }
+    },
+    {
+      "id": "RR-054",
+      "section": "Common reset blockers / Performance and latency",
+      "requirement": "Root layout and client status requests avoid unprojected `GameState` deserialization and multi-query fanouts on regular page navigation.",
+      "parent_checked": true,
+      "status": "claimed_complete_pending_final_validation",
+      "owner": "Track #1 implementation",
+      "issue_refs": [],
+      "evidence": [
+        {
+          "type": "tracker_checklist",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2159",
+          "detail": "Checked in #2159"
+        }
+      ],
+      "blocked_by": [],
+      "final_validation": {
+        "state": "pending",
+        "evidence": []
+      }
+    },
+    {
+      "id": "RR-055",
+      "section": "Common reset blockers / Performance and latency",
+      "requirement": "Active turn execution is protected from client polling storms and unindexed clock reconciliation scans.",
+      "parent_checked": false,
+      "status": "open",
+      "owner": "Track #1 implementation",
+      "issue_refs": [],
+      "evidence": [
+        {
+          "type": "tracker_checklist",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2159",
+          "detail": "Unchecked in #2159"
+        }
+      ],
+      "blocked_by": [
+        {
+          "type": "gate",
+          "detail": "Turn/client-poll contention fixture and indexed clock-reconciliation proof under release candidate load"
+        }
+      ],
+      "final_validation": {
+        "state": "pending",
+        "evidence": []
+      }
+    },
+    {
+      "id": "RR-056",
+      "section": "Profile-specific blockers / `1991-default`",
+      "requirement": "#2158",
+      "parent_checked": false,
+      "status": "open",
+      "owner": "Track #1 implementation",
+      "issue_refs": [
+        {
+          "repo": "Egg3901/AHDGame",
+          "number": 2158,
+          "state": "OPEN",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2158"
+        }
+      ],
+      "evidence": [
+        {
+          "type": "tracker_checklist",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2159",
+          "detail": "Unchecked in #2159"
+        },
+        {
+          "type": "issue_state",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2158",
+          "detail": "OPEN"
+        }
+      ],
+      "blocked_by": [
+        {
+          "type": "issue",
+          "repo": "Egg3901/AHDGame",
+          "number": 2158
+        }
+      ],
+      "final_validation": {
+        "state": "pending",
+        "evidence": []
+      }
+    },
+    {
+      "id": "RR-057",
+      "section": "Profile-specific blockers / `1991-default`",
+      "requirement": "Reset-day dependency #2150 is production-ready.",
+      "parent_checked": false,
+      "status": "open",
+      "owner": "Track #1 implementation",
+      "issue_refs": [
+        {
+          "repo": "Egg3901/AHDGame",
+          "number": 2150,
+          "state": "OPEN",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2150"
+        }
+      ],
+      "evidence": [
+        {
+          "type": "tracker_checklist",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2159",
+          "detail": "Unchecked in #2159"
+        },
+        {
+          "type": "issue_state",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2150",
+          "detail": "OPEN"
+        }
+      ],
+      "blocked_by": [
+        {
+          "type": "issue",
+          "repo": "Egg3901/AHDGame",
+          "number": 2150
+        }
+      ],
+      "final_validation": {
+        "state": "pending",
+        "evidence": []
+      }
+    },
+    {
+      "id": "RR-058",
+      "section": "Profile-specific blockers / `1991-default`",
+      "requirement": "Reset-day flagship #2151 opens correctly in 1991.",
+      "parent_checked": false,
+      "status": "open",
+      "owner": "Track #1 implementation",
+      "issue_refs": [
+        {
+          "repo": "Egg3901/AHDGame",
+          "number": 2151,
+          "state": "OPEN",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2151"
+        }
+      ],
+      "evidence": [
+        {
+          "type": "tracker_checklist",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2159",
+          "detail": "Unchecked in #2159"
+        },
+        {
+          "type": "issue_state",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2151",
+          "detail": "OPEN"
+        }
+      ],
+      "blocked_by": [
+        {
+          "type": "issue",
+          "repo": "Egg3901/AHDGame",
+          "number": 2151
+        }
+      ],
+      "final_validation": {
+        "state": "pending",
+        "evidence": []
+      }
+    },
+    {
+      "id": "RR-059",
+      "section": "Profile-specific blockers / `1991-default`",
+      "requirement": "#2152, #2153, #2154, #2155, #2156, and #2157 are production-ready before the qualification run reaches their pressure windows.",
+      "parent_checked": false,
+      "status": "open",
+      "owner": "Track #1 implementation",
+      "issue_refs": [
+        {
+          "repo": "Egg3901/AHDGame",
+          "number": 2152,
+          "state": "OPEN",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2152"
+        },
+        {
+          "repo": "Egg3901/AHDGame",
+          "number": 2153,
+          "state": "OPEN",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2153"
+        },
+        {
+          "repo": "Egg3901/AHDGame",
+          "number": 2154,
+          "state": "OPEN",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2154"
+        },
+        {
+          "repo": "Egg3901/AHDGame",
+          "number": 2155,
+          "state": "OPEN",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2155"
+        },
+        {
+          "repo": "Egg3901/AHDGame",
+          "number": 2156,
+          "state": "OPEN",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2156"
+        },
+        {
+          "repo": "Egg3901/AHDGame",
+          "number": 2157,
+          "state": "OPEN",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2157"
+        }
+      ],
+      "evidence": [
+        {
+          "type": "tracker_checklist",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2159",
+          "detail": "Unchecked in #2159"
+        },
+        {
+          "type": "issue_state",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2152",
+          "detail": "OPEN"
+        },
+        {
+          "type": "issue_state",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2153",
+          "detail": "OPEN"
+        },
+        {
+          "type": "issue_state",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2154",
+          "detail": "OPEN"
+        },
+        {
+          "type": "issue_state",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2155",
+          "detail": "OPEN"
+        },
+        {
+          "type": "issue_state",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2156",
+          "detail": "OPEN"
+        },
+        {
+          "type": "issue_state",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2157",
+          "detail": "OPEN"
+        }
+      ],
+      "blocked_by": [
+        {
+          "type": "issue",
+          "repo": "Egg3901/AHDGame",
+          "number": 2152
+        },
+        {
+          "type": "issue",
+          "repo": "Egg3901/AHDGame",
+          "number": 2153
+        },
+        {
+          "type": "issue",
+          "repo": "Egg3901/AHDGame",
+          "number": 2154
+        },
+        {
+          "type": "issue",
+          "repo": "Egg3901/AHDGame",
+          "number": 2155
+        },
+        {
+          "type": "issue",
+          "repo": "Egg3901/AHDGame",
+          "number": 2156
+        },
+        {
+          "type": "issue",
+          "repo": "Egg3901/AHDGame",
+          "number": 2157
+        }
+      ],
+      "final_validation": {
+        "state": "pending",
+        "evidence": []
+      }
+    },
+    {
+      "id": "RR-060",
+      "section": "Profile-specific blockers / `1991-default`",
+      "requirement": "The running world can reach 2027 without missing a scheduled crisis family, invalid historical actor assumptions, or a required content deployment after launch.",
+      "parent_checked": false,
+      "status": "open",
+      "owner": "Track #1 implementation",
+      "issue_refs": [],
+      "evidence": [
+        {
+          "type": "tracker_checklist",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2159",
+          "detail": "Unchecked in #2159"
+        }
+      ],
+      "blocked_by": [
+        {
+          "type": "issue",
+          "repo": "Egg3901/AHDGame",
+          "number": 2158
+        },
+        {
+          "type": "gate",
+          "detail": "1991-to-2027 horizon continuation on frozen SHA with all seven crisis families and actor manifest"
+        }
+      ],
+      "final_validation": {
+        "state": "pending",
+        "evidence": []
+      }
+    },
+    {
+      "id": "RR-061",
+      "section": "Profile-specific blockers / `2027-default`",
+      "requirement": "Closed seed delivery #1679 is revalidated on the release commit and effective manifest.",
+      "parent_checked": true,
+      "status": "claimed_complete_pending_final_validation",
+      "owner": "Track #1 implementation",
+      "issue_refs": [
+        {
+          "repo": "Egg3901/AHDGame",
+          "number": 1679,
+          "state": "CLOSED",
+          "url": "https://github.com/Egg3901/AHDGame/issues/1679"
+        }
+      ],
+      "evidence": [
+        {
+          "type": "tracker_checklist",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2159",
+          "detail": "Checked in #2159"
+        },
+        {
+          "type": "issue_state",
+          "url": "https://github.com/Egg3901/AHDGame/issues/1679",
+          "detail": "CLOSED"
+        }
+      ],
+      "blocked_by": [
+        {
+          "type": "scope",
+          "detail": "2027 implementation/evidence required; final launch worldsim targets selected 1991 profile"
+        }
+      ],
+      "final_validation": {
+        "state": "pending",
+        "evidence": []
+      }
+    },
+    {
+      "id": "RR-062",
+      "section": "Profile-specific blockers / `2027-default`",
+      "requirement": "#1670 is resolved if ACS 2025 data is available; otherwise its projection status, provenance, and owner-approved waiver are recorded here.",
+      "parent_checked": false,
+      "status": "open_nonlaunch_profile",
+      "owner": "Game owner (projection waiver) / Track #1",
+      "issue_refs": [
+        {
+          "repo": "Egg3901/AHDGame",
+          "number": 1670,
+          "state": "OPEN",
+          "url": "https://github.com/Egg3901/AHDGame/issues/1670"
+        }
+      ],
+      "evidence": [
+        {
+          "type": "tracker_checklist",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2159",
+          "detail": "Unchecked in #2159"
+        },
+        {
+          "type": "issue_state",
+          "url": "https://github.com/Egg3901/AHDGame/issues/1670",
+          "detail": "OPEN"
+        },
+        {
+          "type": "official_source_check",
+          "url": "https://www.census.gov/programs-surveys/acs/news/updates/2026.html",
+          "detail": "2026-09-25: Census says 2025 ACS 1-year release date remains undetermined; its API catalog lists data only through 2024. Keep the documented January 2027 education/income projection."
+        },
+        {
+          "type": "owner_decision",
+          "url": "https://github.com/Egg3901/AHDGame/issues/1670#issuecomment-5825929698",
+          "detail": "2026-09-25: owner approved the documented January 2027 education/income projection waiver, with source monitoring and rollback trigger; selected reset remains 1991."
+        }
+      ],
+      "waiver": {
+        "approved": true,
+        "approved_on": "2026-09-25",
+        "impact": "2027 education and income substrate uses a documented projection rather than unpublished 2025 ACS 1-year observations.",
+        "mitigation": "Retain fixed source-year provenance, reproducible generator inputs, and deterministic tests for the projection.",
+        "monitoring": "Track #1 records a dated check of the official ACS release page and API catalog at final validation and weekly thereafter while the waiver is active; attach each result to #1670 and RR-062. Trigger replacement work when 2025 1-year detailed tables and metadata are published.",
+        "rollback": "When the 2025 data is published, regenerate the 2027 substrate, compare deltas, and rerun the 2027 repair/release replay before claiming the replacement baseline."
+      },
+      "blocked_by": [
+        {
+          "type": "issue",
+          "repo": "Egg3901/AHDGame",
+          "number": 1670
+        },
+        {
+          "type": "scope",
+          "detail": "2027 implementation/evidence required; final launch worldsim targets selected 1991 profile"
+        }
+      ],
+      "final_validation": {
+        "state": "pending",
+        "evidence": []
+      }
+    },
+    {
+      "id": "RR-063",
+      "section": "Profile-specific blockers / `2027-default`",
+      "requirement": "#2170",
+      "parent_checked": true,
+      "status": "claimed_complete_pending_final_validation",
+      "owner": "Track #1 implementation",
+      "issue_refs": [
+        {
+          "repo": "Egg3901/AHDGame",
+          "number": 2170,
+          "state": "CLOSED",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2170"
+        }
+      ],
+      "evidence": [
+        {
+          "type": "tracker_checklist",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2159",
+          "detail": "Checked in #2159"
+        },
+        {
+          "type": "issue_state",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2170",
+          "detail": "CLOSED"
+        }
+      ],
+      "blocked_by": [
+        {
+          "type": "scope",
+          "detail": "2027 implementation/evidence required; final launch worldsim targets selected 1991 profile"
+        }
+      ],
+      "final_validation": {
+        "state": "pending",
+        "evidence": []
+      }
+    },
+    {
+      "id": "RR-064",
+      "section": "Profile-specific blockers / `2027-default`",
+      "requirement": "#2171",
+      "parent_checked": true,
+      "status": "claimed_complete_pending_final_validation",
+      "owner": "Track #1 implementation",
+      "issue_refs": [
+        {
+          "repo": "Egg3901/AHDGame",
+          "number": 2171,
+          "state": "CLOSED",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2171"
+        }
+      ],
+      "evidence": [
+        {
+          "type": "tracker_checklist",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2159",
+          "detail": "Checked in #2159"
+        },
+        {
+          "type": "issue_state",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2171",
+          "detail": "CLOSED"
+        }
+      ],
+      "blocked_by": [
+        {
+          "type": "scope",
+          "detail": "2027 implementation/evidence required; final launch worldsim targets selected 1991 profile"
+        }
+      ],
+      "final_validation": {
+        "state": "pending",
+        "evidence": []
+      }
+    },
+    {
+      "id": "RR-065",
+      "section": "Profile-specific blockers / `2027-default`",
+      "requirement": "Every country, party, office, chamber, regional government, corporation, bank, budget, currency, and election uses the 2027 source or an explicit documented fallback, never an accidental 2019/1991 carry-forward.",
+      "parent_checked": false,
+      "status": "open_nonlaunch_profile",
+      "owner": "Track #1 implementation",
+      "issue_refs": [
+        {
+          "repo": "Egg3901/AHDGame",
+          "number": 2289,
+          "state": "OPEN",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2289"
+        },
+        {
+          "repo": "Egg3901/AHDGame",
+          "number": 2291,
+          "state": "OPEN",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2291"
+        },
+        {
+          "repo": "Egg3901/AHDGame",
+          "number": 2294,
+          "state": "OPEN",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2294"
+        },
+        {
+          "repo": "Egg3901/AHDGame",
+          "number": 2317,
+          "state": "OPEN",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2317"
+        },
+        {
+          "repo": "Egg3901/AHDGame",
+          "number": 2325,
+          "state": "OPEN",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2325"
+        }
+      ],
+      "evidence": [
+        {
+          "type": "tracker_checklist",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2159",
+          "detail": "Unchecked in #2159"
+        },
+        {
+          "type": "partial_source_and_tests",
+          "ref": "a635fea5f2f9c3e93781236886f81179d2952235",
+          "detail": "2027 euro member rules, seed budgets/FX/era and live forex follower peg implemented. Focused euro conformance, adoption, and forex tests passed. #2291 remains partial: central-bank/corporation/bond/balance/transaction topology and bootstrap conformance are not yet proven."
+        },
+        {
+          "type": "candidate_checkpoint",
+          "ref": "afcb2681a6cd6366fb107d720cba9e31d64d214f",
+          "detail": "Clean preserved worktree checkpoint contains partial 2027 Turkey/regional/currency fixes and a #2325 report; review, integration, and final-SHA bootstrap proof remain pending."
+        },
+        {
+          "type": "partial_checkpoint",
+          "ref": "14864d52ed",
+          "detail": "Actual Muse Spark 1.3 worker extended 2027 euro currency through sovereign budgets, issuers, bond issuance, and national-corporation create paths with conformance fixtures. Provider transport failed before its final review/test pass. This checkpoint is unvalidated and #2291 remains open."
+        },
+        {
+          "type": "partial_source_and_tests",
+          "ref": "16baefdba9",
+          "detail": "2027 EUR migration, registration, corporation/sector home currency, campaigns, central-bank/savings queries, and treasury audit routing. Six euro suites passed 69/69 in shared check job 20260925T013650Z-eb9e0858; path-specific matrix passed 125. Era-blind callers and pinned bootstrap/replay still block #2291 and this item."
+        },
+        {
+          "type": "partial_source_and_tests",
+          "ref": "467a9d0e7b",
+          "detail": "Onboarding reward and welcome mail now use the world preset and credited home currency; event substrate personal/campaign/treasury effects use the same preset-aware seams. Focused suites passed 21/21 and neighboring suites 46/46; scoped lint/format passed. Profile reward preview and other banking/trading/credit sites plus full 2027 bootstrap/replay remain open."
+        },
+        {
+          "type": "turn_path_regression_fix",
+          "ref": "1061e47e43",
+          "detail": "The event timeout sweep and broadcast supersession pass a batch-loaded world preset into each resolution, avoiding the per-event gameState query introduced by 2027 currency routing. Three focused files passed 14/14 tests, including a two-event one-query regression; scoped ESLint, Prettier, and diff check passed. Final turn profile and full gates remain pending."
+        },
+        {
+          "type": "partial_source_and_tests",
+          "ref": "d476171e9e",
+          "detail": "Onboarding claim and profile preview share a portable home-currency conversion rule; 2027 EUR profiles display the credited amount and symbol. Action settlement and profile finance labels use the world preset, and the fundraise preview uses its frozen preset-aware campaign rate. Focused reward/action suites passed 24/24 after correcting the 2027 price-level test expectation; scoped ESLint, Prettier, and diff check passed. Remaining era-blind money paths, full gates, and fresh 2027 bootstrap/replay block completion."
+        },
+        {
+          "type": "ie_2027_organization_floor",
+          "ref": "8a1709776a",
+          "detail": "The current filtered 2027 IE party roster yields 40 seeded organization rows across eight regions and five vote-share parties; the focused seed suite passed 12/12 plus scoped lint/format. The prior 24-row worldsim finding used older source. Persisted final-SHA bootstrap count is still required."
+        },
+        {
+          "type": "hu_2027_data_checkpoint",
+          "ref": "b0c0908742",
+          "detail": "Muse Spark 1.3 authored HU democratic party, region, demographic, metric, baseline, and seeder data; scoped lint/format passed. This is not wired into 2027 bootstrap or era roster yet, so HU remains absent at runtime. Budget, currency, geography, government and deterministic seed tests are pending."
+        },
+        {
+          "type": "hu_2027_source_correction",
+          "ref": "949c63c4e2",
+          "detail": "Corrected the authored HU 2027 roster to the official 2026 election (TISZA 141, FIDESZ-KDNP 52, Mi Hazank 6), and reconciled regional estimates to KSH national 2026 population 9.488 million and revised 2025 GDP HUF 87,045.554 billion (follow-up correction to 949c63c4e2). The six regional amounts are documented proportional estimates, not KSH regional observations. Fourteen focused tests passed before the GDP revision; bootstrap, budget/FX alignment and final replay remain pending. Official sources are linked in the code."
+        },
+        {
+          "type": "hu_2027_bootstrap_and_fiscal_checkpoint",
+          "ref": "0586eb438f",
+          "detail": "HU 2027 now has an explicitly wired bootstrap pack, democratic 199-seat country/geography override, 2026-election roster, revised KSH GDP/population fallback, 2025 KSH fiscal revenue/expenditure/debt envelope, and 2025 NBH annual HUF/USD average. Commits 4a616f2a17, 2c1f00a926, df97ecc423, and 0586eb438f. Focused region/config tests passed 14/14; budget/1991 isolation tests passed 5/5; scoped lint/format passed. The seed builder initially underbooked HU 2027 spending by reusing the 1979 law catalog; the portable baseline-selection rule now uses the authored modern envelope and tests its actual revenue/spending totals. Full typecheck, pinned bootstrap, other 2027 countries and final replay remain pending."
+        }
+      ],
+      "blocked_by": [
+        {
+          "type": "issues",
+          "detail": "#2289 country substrate, #2291 euro currency topology, #2294 party roster, #2317 Turkey population, and #2325 regional population reconciliation must all pass bootstrap conformance"
+        },
+        {
+          "type": "scope",
+          "detail": "2027 implementation/evidence required; final launch worldsim targets selected 1991 profile"
+        }
+      ],
+      "final_validation": {
+        "state": "pending",
+        "evidence": []
+      }
+    },
+    {
+      "id": "RR-066",
+      "section": "Profile-specific blockers / `2027-default`",
+      "requirement": "Each living crisis has an authored 2027 initial state: active, settled, dormant, relapsed, or not applicable. A 2027 world does not replay expired opening beats solely because it starts fresh.",
+      "parent_checked": false,
+      "status": "open_nonlaunch_profile",
+      "owner": "Track #1 implementation",
+      "issue_refs": [],
+      "evidence": [
+        {
+          "type": "tracker_checklist",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2159",
+          "detail": "Unchecked in #2159"
+        }
+      ],
+      "blocked_by": [
+        {
+          "type": "scope",
+          "detail": "2027 implementation/evidence required; final launch worldsim targets selected 1991 profile"
+        }
+      ],
+      "final_validation": {
+        "state": "pending",
+        "evidence": []
+      }
+    },
+    {
+      "id": "RR-067",
+      "section": "Profile-specific blockers / `2027-default`",
+      "requirement": "#2150 and every crisis family reachable from the 2027 initial state are production-ready, including participant fallbacks and counterfactual state initialization.",
+      "parent_checked": false,
+      "status": "open_nonlaunch_profile",
+      "owner": "Track #1 implementation",
+      "issue_refs": [
+        {
+          "repo": "Egg3901/AHDGame",
+          "number": 2150,
+          "state": "OPEN",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2150"
+        }
+      ],
+      "evidence": [
+        {
+          "type": "tracker_checklist",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2159",
+          "detail": "Unchecked in #2159"
+        },
+        {
+          "type": "issue_state",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2150",
+          "detail": "OPEN"
+        }
+      ],
+      "blocked_by": [
+        {
+          "type": "issue",
+          "repo": "Egg3901/AHDGame",
+          "number": 2150
+        },
+        {
+          "type": "scope",
+          "detail": "2027 implementation/evidence required; final launch worldsim targets selected 1991 profile"
+        }
+      ],
+      "final_validation": {
+        "state": "pending",
+        "evidence": []
+      }
+    },
+    {
+      "id": "RR-068",
+      "section": "Reset configuration",
+      "requirement": "Freeze and review feature flags, economy tier, labour mode, NPP/autonomy version, calendar settings, financial-product enablement, and crisis enablement for the selected profile.",
+      "parent_checked": false,
+      "status": "open",
+      "owner": "Track #1 release lead",
+      "issue_refs": [],
+      "evidence": [
+        {
+          "type": "tracker_checklist",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2159",
+          "detail": "Unchecked in #2159"
+        }
+      ],
+      "blocked_by": [
+        {
+          "type": "release_candidate",
+          "detail": "Exact release SHA and effective manifest must be frozen before final evidence"
+        }
+      ],
+      "final_validation": {
+        "state": "pending",
+        "evidence": []
+      }
+    },
+    {
+      "id": "RR-069",
+      "section": "Reset configuration",
+      "requirement": "Validate countries, parties, offices, chambers, regional governments, corporations, banks, budgets, currencies, elections, and founding-election behavior against the selected manifest.",
+      "parent_checked": false,
+      "status": "open",
+      "owner": "Track #1 release lead",
+      "issue_refs": [],
+      "evidence": [
+        {
+          "type": "tracker_checklist",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2159",
+          "detail": "Unchecked in #2159"
+        }
+      ],
+      "blocked_by": [
+        {
+          "type": "release_candidate",
+          "detail": "Exact release SHA and effective manifest must be frozen before final evidence"
+        }
+      ],
+      "final_validation": {
+        "state": "pending",
+        "evidence": []
+      }
+    },
+    {
+      "id": "RR-070",
+      "section": "Reset configuration",
+      "requirement": "Confirm existing-world migration/normalization behavior and that reset tooling targets only the intended world.",
+      "parent_checked": false,
+      "status": "open",
+      "owner": "Track #1 release lead",
+      "issue_refs": [],
+      "evidence": [
+        {
+          "type": "tracker_checklist",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2159",
+          "detail": "Unchecked in #2159"
+        }
+      ],
+      "blocked_by": [
+        {
+          "type": "release_candidate",
+          "detail": "Exact release SHA and effective manifest must be frozen before final evidence"
+        }
+      ],
+      "final_validation": {
+        "state": "pending",
+        "evidence": []
+      }
+    },
+    {
+      "id": "RR-071",
+      "section": "Reset configuration",
+      "requirement": "Prepare player-facing reset notes covering the selected start date, playable roles, major system changes, known limitations, and opening crisis situation.",
+      "parent_checked": false,
+      "status": "open",
+      "owner": "Track #1 release lead",
+      "issue_refs": [],
+      "evidence": [
+        {
+          "type": "tracker_checklist",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2159",
+          "detail": "Unchecked in #2159"
+        }
+      ],
+      "blocked_by": [
+        {
+          "type": "release_candidate",
+          "detail": "Exact release SHA and effective manifest must be frozen before final evidence"
+        }
+      ],
+      "final_validation": {
+        "state": "pending",
+        "evidence": []
+      }
+    },
+    {
+      "id": "RR-072",
+      "section": "Operational rehearsal",
+      "requirement": "Rehearse the complete reset against sandbox Mongo using the production procedure and selected profile.",
+      "parent_checked": false,
+      "status": "open",
+      "owner": "Track #1 operations",
+      "issue_refs": [],
+      "evidence": [
+        {
+          "type": "tracker_checklist",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2159",
+          "detail": "Unchecked in #2159"
+        }
+      ],
+      "blocked_by": [
+        {
+          "type": "release_candidate",
+          "detail": "Exact release SHA and effective manifest must be frozen before final evidence"
+        },
+        {
+          "type": "gate",
+          "detail": "Selected-profile manifest and production reset procedure"
+        }
+      ],
+      "final_validation": {
+        "state": "pending",
+        "evidence": []
+      }
+    },
+    {
+      "id": "RR-073",
+      "section": "Operational rehearsal",
+      "requirement": "Capture row-count and invariant checks before and after bootstrap.",
+      "parent_checked": false,
+      "status": "open",
+      "owner": "Track #1 operations",
+      "issue_refs": [],
+      "evidence": [
+        {
+          "type": "tracker_checklist",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2159",
+          "detail": "Unchecked in #2159"
+        }
+      ],
+      "blocked_by": [
+        {
+          "type": "release_candidate",
+          "detail": "Exact release SHA and effective manifest must be frozen before final evidence"
+        },
+        {
+          "type": "gate",
+          "detail": "Selected-profile manifest and production reset procedure"
+        }
+      ],
+      "final_validation": {
+        "state": "pending",
+        "evidence": []
+      }
+    },
+    {
+      "id": "RR-074",
+      "section": "Operational rehearsal",
+      "requirement": "Capture conformance before turn one, complete the founding-election period, and process at least ten normal turns without unexplained health errors.",
+      "parent_checked": false,
+      "status": "open",
+      "owner": "Track #1 operations",
+      "issue_refs": [],
+      "evidence": [
+        {
+          "type": "tracker_checklist",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2159",
+          "detail": "Unchecked in #2159"
+        }
+      ],
+      "blocked_by": [
+        {
+          "type": "release_candidate",
+          "detail": "Exact release SHA and effective manifest must be frozen before final evidence"
+        },
+        {
+          "type": "gate",
+          "detail": "Selected-profile manifest and production reset procedure"
+        }
+      ],
+      "final_validation": {
+        "state": "pending",
+        "evidence": []
+      }
+    },
+    {
+      "id": "RR-075",
+      "section": "Operational rehearsal",
+      "requirement": "Verify login, character creation, office claiming, elections, actions, economy, banking, funds, crises, wire, and admin surfaces.",
+      "parent_checked": false,
+      "status": "open",
+      "owner": "Track #1 operations",
+      "issue_refs": [],
+      "evidence": [
+        {
+          "type": "tracker_checklist",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2159",
+          "detail": "Unchecked in #2159"
+        }
+      ],
+      "blocked_by": [
+        {
+          "type": "release_candidate",
+          "detail": "Exact release SHA and effective manifest must be frozen before final evidence"
+        },
+        {
+          "type": "gate",
+          "detail": "Selected-profile manifest and production reset procedure"
+        }
+      ],
+      "final_validation": {
+        "state": "pending",
+        "evidence": []
+      }
+    },
+    {
+      "id": "RR-076",
+      "section": "Operational rehearsal",
+      "requirement": "Record timing, named operators, commands/runbook references, backups, abort conditions, and rollback procedure.",
+      "parent_checked": false,
+      "status": "open",
+      "owner": "Track #1 operations",
+      "issue_refs": [],
+      "evidence": [
+        {
+          "type": "tracker_checklist",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2159",
+          "detail": "Unchecked in #2159"
+        }
+      ],
+      "blocked_by": [
+        {
+          "type": "release_candidate",
+          "detail": "Exact release SHA and effective manifest must be frozen before final evidence"
+        },
+        {
+          "type": "gate",
+          "detail": "Selected-profile manifest and production reset procedure"
+        }
+      ],
+      "final_validation": {
+        "state": "pending",
+        "evidence": []
+      }
+    },
+    {
+      "id": "RR-077",
+      "section": "Operational rehearsal",
+      "requirement": "Test restore or rollback rather than documenting an unexercised procedure.",
+      "parent_checked": false,
+      "status": "open",
+      "owner": "Track #1 operations",
+      "issue_refs": [],
+      "evidence": [
+        {
+          "type": "tracker_checklist",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2159",
+          "detail": "Unchecked in #2159"
+        }
+      ],
+      "blocked_by": [
+        {
+          "type": "release_candidate",
+          "detail": "Exact release SHA and effective manifest must be frozen before final evidence"
+        },
+        {
+          "type": "gate",
+          "detail": "Selected-profile manifest and production reset procedure"
+        }
+      ],
+      "final_validation": {
+        "state": "pending",
+        "evidence": []
+      }
+    },
+    {
+      "id": "RR-078",
+      "section": "Operational rehearsal",
+      "requirement": "Confirm production monitoring and support coverage for launch.",
+      "parent_checked": false,
+      "status": "open",
+      "owner": "Track #1 operations",
+      "issue_refs": [],
+      "evidence": [
+        {
+          "type": "tracker_checklist",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2159",
+          "detail": "Unchecked in #2159"
+        }
+      ],
+      "blocked_by": [
+        {
+          "type": "release_candidate",
+          "detail": "Exact release SHA and effective manifest must be frozen before final evidence"
+        },
+        {
+          "type": "gate",
+          "detail": "Selected-profile manifest and production reset procedure"
+        }
+      ],
+      "final_validation": {
+        "state": "pending",
+        "evidence": []
+      }
+    },
+    {
+      "id": "RR-079",
+      "section": "Required worldsim program / 1. Bootstrap conformance",
+      "requirement": "Run the exact release candidate and production manifest for the selected profile against sandbox Mongo.",
+      "parent_checked": false,
+      "status": "open",
+      "owner": "Track #1 validation",
+      "issue_refs": [],
+      "evidence": [
+        {
+          "type": "tracker_checklist",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2159",
+          "detail": "Unchecked in #2159"
+        }
+      ],
+      "blocked_by": [
+        {
+          "type": "release_candidate",
+          "detail": "Exact release SHA and effective manifest must be frozen before final evidence"
+        }
+      ],
+      "final_validation": {
+        "state": "pending",
+        "evidence": []
+      }
+    },
+    {
+      "id": "RR-080",
+      "section": "Required worldsim program / 1. Bootstrap conformance",
+      "requirement": "Persist diagnostics and the seed baseline before turn one, complete founding, and process at least ten normal turns.",
+      "parent_checked": false,
+      "status": "open",
+      "owner": "Track #1 validation",
+      "issue_refs": [],
+      "evidence": [
+        {
+          "type": "tracker_checklist",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2159",
+          "detail": "Unchecked in #2159"
+        }
+      ],
+      "blocked_by": [
+        {
+          "type": "release_candidate",
+          "detail": "Exact release SHA and effective manifest must be frozen before final evidence"
+        }
+      ],
+      "final_validation": {
+        "state": "pending",
+        "evidence": []
+      }
+    },
+    {
+      "id": "RR-081",
+      "section": "Required worldsim program / 1. Bootstrap conformance",
+      "requirement": "Pass with zero unexplained error-level integrity findings, orphaned offices, candidate-less contests, missing country systems, wrong-era fallbacks, or configuration mismatches.",
+      "parent_checked": false,
+      "status": "open",
+      "owner": "Track #1 validation",
+      "issue_refs": [],
+      "evidence": [
+        {
+          "type": "tracker_checklist",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2159",
+          "detail": "Unchecked in #2159"
+        }
+      ],
+      "blocked_by": [
+        {
+          "type": "release_candidate",
+          "detail": "Exact release SHA and effective manifest must be frozen before final evidence"
+        }
+      ],
+      "final_validation": {
+        "state": "pending",
+        "evidence": []
+      }
+    },
+    {
+      "id": "RR-082",
+      "section": "Required worldsim program / 2. Early-world matrix",
+      "requirement": "Run at least three deterministic seeds through five in-game years from the selected start year.",
+      "parent_checked": false,
+      "status": "open",
+      "owner": "Track #1 validation",
+      "issue_refs": [],
+      "evidence": [
+        {
+          "type": "tracker_checklist",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2159",
+          "detail": "Unchecked in #2159"
+        }
+      ],
+      "blocked_by": [
+        {
+          "type": "release_candidate",
+          "detail": "Exact release SHA and effective manifest must be frozen before final evidence"
+        },
+        {
+          "type": "gate",
+          "detail": "Bootstrap conformance"
+        }
+      ],
+      "final_validation": {
+        "state": "pending",
+        "evidence": []
+      }
+    },
+    {
+      "id": "RR-083",
+      "section": "Required worldsim program / 2. Early-world matrix",
+      "requirement": "Include an autonomous control, a synthetic-political-actor treatment, and an economy/banking stress treatment.",
+      "parent_checked": false,
+      "status": "open",
+      "owner": "Track #1 validation",
+      "issue_refs": [],
+      "evidence": [
+        {
+          "type": "tracker_checklist",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2159",
+          "detail": "Unchecked in #2159"
+        }
+      ],
+      "blocked_by": [
+        {
+          "type": "release_candidate",
+          "detail": "Exact release SHA and effective manifest must be frozen before final evidence"
+        },
+        {
+          "type": "gate",
+          "detail": "Bootstrap conformance"
+        }
+      ],
+      "final_validation": {
+        "state": "pending",
+        "evidence": []
+      }
+    },
+    {
+      "id": "RR-084",
+      "section": "Required worldsim program / 2. Early-world matrix",
+      "requirement": "Evaluate elections, government formation, treasury, CPI/inflation, employment, firms, market coverage, banking, credit, funds, securities, accounting conservation, and the selected profile's opening crisis state.",
+      "parent_checked": false,
+      "status": "open",
+      "owner": "Track #1 validation",
+      "issue_refs": [],
+      "evidence": [
+        {
+          "type": "tracker_checklist",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2159",
+          "detail": "Unchecked in #2159"
+        }
+      ],
+      "blocked_by": [
+        {
+          "type": "release_candidate",
+          "detail": "Exact release SHA and effective manifest must be frozen before final evidence"
+        },
+        {
+          "type": "gate",
+          "detail": "Bootstrap conformance"
+        }
+      ],
+      "final_validation": {
+        "state": "pending",
+        "evidence": []
+      }
+    },
+    {
+      "id": "RR-085",
+      "section": "Required worldsim program / 3. Ten-year integrated matrix",
+      "requirement": "Run at least three deterministic seeds for 480 year-advancing turns using the selected release configuration.",
+      "parent_checked": false,
+      "status": "open",
+      "owner": "Track #1 validation",
+      "issue_refs": [],
+      "evidence": [
+        {
+          "type": "tracker_checklist",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2159",
+          "detail": "Unchecked in #2159"
+        }
+      ],
+      "blocked_by": [
+        {
+          "type": "release_candidate",
+          "detail": "Exact release SHA and effective manifest must be frozen before final evidence"
+        },
+        {
+          "type": "gate",
+          "detail": "Early-world matrix and all material system fixes"
+        }
+      ],
+      "final_validation": {
+        "state": "pending",
+        "evidence": []
+      }
+    },
+    {
+      "id": "RR-086",
+      "section": "Required worldsim program / 3. Ten-year integrated matrix",
+      "requirement": "Exercise overlapping elections plus targeted economy and banking stress scenarios.",
+      "parent_checked": false,
+      "status": "open",
+      "owner": "Track #1 validation",
+      "issue_refs": [],
+      "evidence": [
+        {
+          "type": "tracker_checklist",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2159",
+          "detail": "Unchecked in #2159"
+        }
+      ],
+      "blocked_by": [
+        {
+          "type": "release_candidate",
+          "detail": "Exact release SHA and effective manifest must be frozen before final evidence"
+        },
+        {
+          "type": "gate",
+          "detail": "Early-world matrix and all material system fixes"
+        }
+      ],
+      "final_validation": {
+        "state": "pending",
+        "evidence": []
+      }
+    },
+    {
+      "id": "RR-087",
+      "section": "Required worldsim program / 3. Ten-year integrated matrix",
+      "requirement": "For `1991-default`, prove the old `audit-allflags-1991-r3` findings no longer represent the release candidate: 36.7% pooled fill, 23.0% country fill, 58.3% empty market cells, 0.2% bond subscription, candidate-less elections, and fiscal integrity errors.",
+      "parent_checked": false,
+      "status": "open",
+      "owner": "Track #1 validation",
+      "issue_refs": [],
+      "evidence": [
+        {
+          "type": "tracker_checklist",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2159",
+          "detail": "Unchecked in #2159"
+        }
+      ],
+      "blocked_by": [
+        {
+          "type": "release_candidate",
+          "detail": "Exact release SHA and effective manifest must be frozen before final evidence"
+        },
+        {
+          "type": "gate",
+          "detail": "Early-world matrix and all material system fixes"
+        }
+      ],
+      "final_validation": {
+        "state": "pending",
+        "evidence": []
+      }
+    },
+    {
+      "id": "RR-088",
+      "section": "Required worldsim program / 3. Ten-year integrated matrix",
+      "requirement": "For `2027-default`, compare against a frozen turn-one baseline and report every inherited older-era fallback rather than silently accepting it.",
+      "parent_checked": false,
+      "status": "open",
+      "owner": "Track #1 validation",
+      "issue_refs": [],
+      "evidence": [
+        {
+          "type": "tracker_checklist",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2159",
+          "detail": "Unchecked in #2159"
+        }
+      ],
+      "blocked_by": [
+        {
+          "type": "release_candidate",
+          "detail": "Exact release SHA and effective manifest must be frozen before final evidence"
+        },
+        {
+          "type": "gate",
+          "detail": "Early-world matrix and all material system fixes"
+        }
+      ],
+      "final_validation": {
+        "state": "pending",
+        "evidence": []
+      }
+    },
+    {
+      "id": "RR-089",
+      "section": "Required worldsim program / 4. Profile horizon",
+      "requirement": "For `1991-default`, complete at least one deterministic synthetic-actor run from 1991 through 2027 after all crisis families are integrated.",
+      "parent_checked": false,
+      "status": "open",
+      "owner": "Track #1 validation",
+      "issue_refs": [],
+      "evidence": [
+        {
+          "type": "tracker_checklist",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2159",
+          "detail": "Unchecked in #2159"
+        }
+      ],
+      "blocked_by": [
+        {
+          "type": "release_candidate",
+          "detail": "Exact release SHA and effective manifest must be frozen before final evidence"
+        },
+        {
+          "type": "gate",
+          "detail": "Ten-year integrated matrix and all selected-profile crisis families"
+        }
+      ],
+      "final_validation": {
+        "state": "pending",
+        "evidence": []
+      }
+    },
+    {
+      "id": "RR-090",
+      "section": "Required worldsim program / 4. Profile horizon",
+      "requirement": "For `2027-default`, complete at least one deterministic synthetic-actor run from 2027 through 2037 with the 2027 initial crisis states.",
+      "parent_checked": false,
+      "status": "open",
+      "owner": "Track #1 validation",
+      "issue_refs": [],
+      "evidence": [
+        {
+          "type": "tracker_checklist",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2159",
+          "detail": "Unchecked in #2159"
+        }
+      ],
+      "blocked_by": [
+        {
+          "type": "release_candidate",
+          "detail": "Exact release SHA and effective manifest must be frozen before final evidence"
+        },
+        {
+          "type": "gate",
+          "detail": "Ten-year integrated matrix and all selected-profile crisis families"
+        }
+      ],
+      "final_validation": {
+        "state": "pending",
+        "evidence": []
+      }
+    },
+    {
+      "id": "RR-091",
+      "section": "Required worldsim program / 4. Profile horizon",
+      "requirement": "Add a second horizon seed if the first exposes seed-sensitive crisis timing, systemic failures, or materially different economic outcomes.",
+      "parent_checked": false,
+      "status": "open",
+      "owner": "Track #1 validation",
+      "issue_refs": [],
+      "evidence": [
+        {
+          "type": "tracker_checklist",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2159",
+          "detail": "Unchecked in #2159"
+        }
+      ],
+      "blocked_by": [
+        {
+          "type": "release_candidate",
+          "detail": "Exact release SHA and effective manifest must be frozen before final evidence"
+        },
+        {
+          "type": "gate",
+          "detail": "Ten-year integrated matrix and all selected-profile crisis families"
+        }
+      ],
+      "final_validation": {
+        "state": "pending",
+        "evidence": []
+      }
+    },
+    {
+      "id": "RR-092",
+      "section": "Required worldsim program / 4. Profile horizon",
+      "requirement": "Report crisis reachability, overlap, escalation, settlement, relapse, reconstruction, player-decision volume, election turnover, fiscal and credit paths, banking failures, displacement, damage, and recovery.",
+      "parent_checked": false,
+      "status": "open",
+      "owner": "Track #1 validation",
+      "issue_refs": [],
+      "evidence": [
+        {
+          "type": "tracker_checklist",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2159",
+          "detail": "Unchecked in #2159"
+        }
+      ],
+      "blocked_by": [
+        {
+          "type": "release_candidate",
+          "detail": "Exact release SHA and effective manifest must be frozen before final evidence"
+        },
+        {
+          "type": "gate",
+          "detail": "Ten-year integrated matrix and all selected-profile crisis families"
+        }
+      ],
+      "final_validation": {
+        "state": "pending",
+        "evidence": []
+      }
+    },
+    {
+      "id": "RR-093",
+      "section": "Required worldsim program / 4. Profile horizon",
+      "requirement": "The applicable horizon run completes before launch; a merely queued run does not satisfy this gate.",
+      "parent_checked": false,
+      "status": "open",
+      "owner": "Track #1 validation",
+      "issue_refs": [],
+      "evidence": [
+        {
+          "type": "tracker_checklist",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2159",
+          "detail": "Unchecked in #2159"
+        }
+      ],
+      "blocked_by": [
+        {
+          "type": "release_candidate",
+          "detail": "Exact release SHA and effective manifest must be frozen before final evidence"
+        },
+        {
+          "type": "gate",
+          "detail": "Ten-year integrated matrix and all selected-profile crisis families"
+        }
+      ],
+      "final_validation": {
+        "state": "pending",
+        "evidence": []
+      }
+    },
+    {
+      "id": "RR-094",
+      "section": "Required worldsim program / 5. Release replay",
+      "requirement": "After the final code or configuration change, repeat bootstrap conformance and the five-year matrix on the exact release SHA. Earlier runs do not qualify a changed release.",
+      "parent_checked": false,
+      "status": "open",
+      "owner": "Track #1 validation",
+      "issue_refs": [],
+      "evidence": [
+        {
+          "type": "tracker_checklist",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2159",
+          "detail": "Unchecked in #2159"
+        }
+      ],
+      "blocked_by": [
+        {
+          "type": "release_candidate",
+          "detail": "Exact release SHA and effective manifest must be frozen before final evidence"
+        },
+        {
+          "type": "gate",
+          "detail": "Final code/configuration freeze and earlier qualification evidence"
+        }
+      ],
+      "final_validation": {
+        "state": "pending",
+        "evidence": []
+      }
+    },
+    {
+      "id": "RR-095",
+      "section": "Required worldsim program / 5. Release replay",
+      "requirement": "Attach sanitized reports and exact source revisions beside every completed simulation checklist item.",
+      "parent_checked": false,
+      "status": "open",
+      "owner": "Track #1 validation",
+      "issue_refs": [],
+      "evidence": [
+        {
+          "type": "tracker_checklist",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2159",
+          "detail": "Unchecked in #2159"
+        }
+      ],
+      "blocked_by": [
+        {
+          "type": "release_candidate",
+          "detail": "Exact release SHA and effective manifest must be frozen before final evidence"
+        },
+        {
+          "type": "gate",
+          "detail": "Final code/configuration freeze and earlier qualification evidence"
+        }
+      ],
+      "final_validation": {
+        "state": "pending",
+        "evidence": []
+      }
+    },
+    {
+      "id": "RR-096",
+      "section": "Live multiplayer comparison",
+      "requirement": "Audit current multiplayer over a fixed recent window for political turnover, treasury cash versus itemized flows, ledger reconciliation, market shortages, price levels, bank outcomes, firm survival, and failed or warning-bearing turn phases.",
+      "parent_checked": false,
+      "status": "open",
+      "owner": "Track #1 analysis",
+      "issue_refs": [],
+      "evidence": [
+        {
+          "type": "tracker_checklist",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2159",
+          "detail": "Unchecked in #2159"
+        }
+      ],
+      "blocked_by": [
+        {
+          "type": "release_candidate",
+          "detail": "Exact release SHA and effective manifest must be frozen before final evidence"
+        }
+      ],
+      "final_validation": {
+        "state": "pending",
+        "evidence": []
+      }
+    },
+    {
+      "id": "RR-097",
+      "section": "Live multiplayer comparison",
+      "requirement": "Explain every material difference between multiplayer and the selected seed as an era effect, a configuration difference, a fixed defect, or a release blocker.",
+      "parent_checked": false,
+      "status": "open",
+      "owner": "Track #1 analysis",
+      "issue_refs": [],
+      "evidence": [
+        {
+          "type": "tracker_checklist",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2159",
+          "detail": "Unchecked in #2159"
+        }
+      ],
+      "blocked_by": [
+        {
+          "type": "release_candidate",
+          "detail": "Exact release SHA and effective manifest must be frozen before final evidence"
+        }
+      ],
+      "final_validation": {
+        "state": "pending",
+        "evidence": []
+      }
+    },
+    {
+      "id": "RR-098",
+      "section": "Live multiplayer comparison",
+      "requirement": "Use current live data as an additional control, not as a substitute for source-pinned sandbox runs. Record the live turn range and observation time with the evidence.",
+      "parent_checked": false,
+      "status": "open",
+      "owner": "Track #1 analysis",
+      "issue_refs": [],
+      "evidence": [
+        {
+          "type": "tracker_checklist",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2159",
+          "detail": "Unchecked in #2159"
+        }
+      ],
+      "blocked_by": [
+        {
+          "type": "release_candidate",
+          "detail": "Exact release SHA and effective manifest must be frozen before final evidence"
+        }
+      ],
+      "final_validation": {
+        "state": "pending",
+        "evidence": []
+      }
+    },
+    {
+      "id": "RR-099",
+      "section": "Live multiplayer comparison",
+      "requirement": "Recheck closed issues whose exact symptom appears in current data. Do not reopen #2054 merely because its now-persisted invariant warning fires; route genuine continuing shortage and fill failures through #2088/#991 unless the canonical-unit fix itself is disproved.",
+      "parent_checked": false,
+      "status": "open",
+      "owner": "Track #1 analysis",
+      "issue_refs": [
+        {
+          "repo": "Egg3901/AHDGame",
+          "number": 991,
+          "state": "OPEN",
+          "url": "https://github.com/Egg3901/AHDGame/issues/991"
+        },
+        {
+          "repo": "Egg3901/AHDGame",
+          "number": 2054,
+          "state": "CLOSED",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2054"
+        },
+        {
+          "repo": "Egg3901/AHDGame",
+          "number": 2088,
+          "state": "OPEN",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2088"
+        }
+      ],
+      "evidence": [
+        {
+          "type": "tracker_checklist",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2159",
+          "detail": "Unchecked in #2159"
+        },
+        {
+          "type": "issue_state",
+          "url": "https://github.com/Egg3901/AHDGame/issues/991",
+          "detail": "OPEN"
+        },
+        {
+          "type": "issue_state",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2054",
+          "detail": "CLOSED"
+        },
+        {
+          "type": "issue_state",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2088",
+          "detail": "OPEN"
+        }
+      ],
+      "blocked_by": [
+        {
+          "type": "issue",
+          "repo": "Egg3901/AHDGame",
+          "number": 991
+        },
+        {
+          "type": "issue",
+          "repo": "Egg3901/AHDGame",
+          "number": 2088
+        },
+        {
+          "type": "release_candidate",
+          "detail": "Exact release SHA and effective manifest must be frozen before final evidence"
+        }
+      ],
+      "final_validation": {
+        "state": "pending",
+        "evidence": []
+      }
+    }
+  ]
+}

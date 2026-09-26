@@ -29,10 +29,17 @@ import {
   UK_NATIONAL_DEFAULT_OPTION_INDEXES,
   UK_NATIONAL_DEFAULTS,
 } from "./basePolicies";
+import { getInitialRates } from "@/lib/constants/currencies";
+import {
+  TRANSITION_1991_BUDGET_COUNTRIES,
+  shouldUseFullAuthoredBudgetBaseline,
+} from "./rules/budgetBaselineMode";
+import { euroConversionFactor, isEuroAdopted } from "@/lib/currency/rules/euroAdoption";
 import { SEED_TAX_RATES_1953 } from "@/lib/politicalLegislation/seedTaxRates";
 import { COUNTRY_POLICY_CONFIGS_1953 } from "./basePolicies1953";
 import { COUNTRY_POLICY_CONFIGS_1979 } from "./basePolicies1979";
 import { COUNTRY_POLICY_CONFIGS_1991 } from "./basePolicies1991";
+import { SUCCESSOR_NATIONAL_BUDGETS_1991 } from "./successorBudgets1991";
 import { COUNTRY_POLICY_CONFIGS_1999 } from "./basePolicies1999";
 import { COUNTRY_POLICY_CONFIGS_2007 } from "./basePolicies2007";
 import { COUNTRY_POLICY_CONFIGS_2023 } from "./basePolicies2023";
@@ -67,7 +74,7 @@ import { brRegionalBudgetInputs } from "@/lib/seeds/br/brBudgets";
 import { cnRegionalBudgetInputs } from "@/lib/seeds/cn/cnBudgets";
 import type { CountryId } from "@/lib/constants/countries";
 import type { CurrencyCode as ActiveCurrencyCode } from "@/lib/constants/currencies";
-import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
+import { COUNTRY_CURRENCY_MAP, getSeedCurrencyCode } from "@/lib/constants/currencies";
 import type { LegalStructureId } from "@/lib/constants/legalStructures";
 import {
   DE_PUBLIC_CORPORATION_OID,
@@ -216,7 +223,7 @@ type SupportedBudgetCountryId =
   | "BAL";
 type SupportedNationalBudget = Omit<FederalBudget, "updatedAt">;
 
-interface NationalBudgetSeedConfig {
+export interface NationalBudgetSeedConfig {
   budgetId: string;
   countryId: SupportedBudgetCountryId;
   fiscalYear: number;
@@ -653,7 +660,11 @@ function isPoliticalLegislationCountry(countryId: string): boolean {
 }
 
 function preferFullAuthoredBaseline(config: NationalBudgetSeedConfig): boolean {
-  return config.fiscalYear === 1953 && isPoliticalLegislationCountry(config.countryId);
+  return shouldUseFullAuthoredBudgetBaseline({
+    countryId: config.countryId,
+    fiscalYear: config.fiscalYear,
+    politicalLegislationCountry: isPoliticalLegislationCountry(config.countryId),
+  });
 }
 
 function preferCategoryBaselineOverrides(config: NationalBudgetSeedConfig): boolean {
@@ -2052,6 +2063,7 @@ const NATIONAL_BUDGET_SEED_CONFIGS: NationalBudgetSeedConfig[] = [
 // NBS (CN). Debt ceiling years pre-date 2011 ceiling-fight era; using the
 // fiscalYear itself as a stand-in. ───────────────────────────────────────
 const NATIONAL_BUDGET_SEED_CONFIGS_1991: NationalBudgetSeedConfig[] = [
+  ...SUCCESSOR_NATIONAL_BUDGETS_1991,
   {
     budgetId: "federal",
     countryId: "US",
@@ -2442,7 +2454,9 @@ const NATIONAL_BUDGET_SEED_CONFIGS_1991: NationalBudgetSeedConfig[] = [
     budgetId: "NG",
     countryId: "NG",
     fiscalYear: 1991,
-    population: 95_000_000,
+    // National Population Commission 1991 census, published by NBS:
+    // https://www.nigerianstat.gov.ng/pdfuploads/annual_abstract_2012.pdf
+    population: 88_992_220,
     gdp: 1_800_000_000_000, // ₦1.8T NGN (1991 current prices, post-SAP naira)
     currencyCode: "NGN",
     economicFactors: {
@@ -2862,6 +2876,69 @@ export const NATIONAL_BUDGET_SEED_CONFIGS_2027: NationalBudgetSeedConfig[] = [
       payrollTax: "us_federal_payroll_tax_rate",
       tariffs: "us_federal_tariff_rate",
       salesTax: "us_federal_sales_tax_rate",
+    },
+  },
+  // Explicit HU 2027 fallback. National population is KSH's 1 Jan 2026
+  // estimate; GDP and general-government revenue/expenditure/debt are the
+  // latest completed 2025 annual series, not observations of 2027. The
+  // functional spending split, tax bases/rates, interest and ceiling are
+  // authored game allocations. The operating split plus modeled debt interest
+  // reconciles to KSH's HUF 41,141 billion general-government expenditure.
+  // https://www.ksh.hu/stadat_files/nep/hu/nep0002.html
+  // https://www.ksh.hu/stadat_files/gdp/en/gdp0094.html
+  // https://www.ksh.hu/s/en/publications/notification-of-balance-and-debt-of-the-general-government-sector-first-edp-notification-in-2026/index.html
+  {
+    budgetId: "HU",
+    countryId: "HU",
+    fiscalYear: 2027,
+    sourceFiscalYear: 2025,
+    population: 9_488_000,
+    gdp: 87_045_554_000_000,
+    currencyCode: "HUF",
+    economicFactors: {
+      gdpGrowth: 0.5,
+      wageGrowth: 6,
+      inflationRate: 4.4,
+      tradeGrowth: 1,
+      lastUpdated: new Date(0),
+    },
+    taxBaseRatios: {
+      taxableIncome: 0.4,
+      corporateProfits: 0.2,
+      wagesAndSalaries: 0.4,
+      importValue: 0.15,
+      taxableSales: 0.7,
+    },
+    // At the authored effective tax bases/rates below, this residual makes
+    // the modeled opening revenue HUF 37,082 billion, KSH's 2025 figure.
+    otherRevenue: 7_399_466_086_000,
+    debt: {
+      principal: 64_912_000_000_000,
+      interestRate: 0.04,
+      ceiling: 81_140_000_000_000,
+      ceilingLastRaisedYear: 2027,
+    },
+    creditRating: "BBB",
+    baselineSpendingByCategory: {
+      healthcare: 7_000_000_000_000,
+      education: 3_000_000_000_000,
+      defense: 1_750_000_000_000,
+      socialSecurity: 12_000_000_000_000,
+      infrastructure: 3_000_000_000_000,
+      other: 9_794_520_000_000,
+    },
+    baselineStateGrants: 2_000_000_000_000,
+    // No 1979 one-party ideological policy stance is carried forward.
+    policyDefaults: {},
+    policyOptionOverrides: {},
+    taxPolicyIds: easternBlocPolicyConfig("hu").taxPolicyIds,
+    taxRateOverrides: {
+      incomeTax: 15,
+      domesticCorporateTax: 9,
+      foreignCorporateTax: 9,
+      payrollTax: 18.5,
+      tariffs: 0,
+      salesTax: 27,
     },
   },
 ];
@@ -5495,7 +5572,11 @@ export function getNationalBudgetSeedConfigsForPreset(preset: string): NationalB
   }
   if (preset === "1999-default") {
     return overlayNationalBudgetConfigs(
-      getNationalBudgetSeedConfigsForPreset("1991-default"),
+      // The seven transition republic budgets are scoped to the 1991 world.
+      // Later presets may reintroduce a country only with a later authored row.
+      getNationalBudgetSeedConfigsForPreset("1991-default").filter(
+        (config) => !TRANSITION_1991_BUDGET_COUNTRIES.includes(config.countryId)
+      ),
       NATIONAL_BUDGET_SEED_CONFIGS_1999,
       1999
     );
@@ -5522,13 +5603,61 @@ export function getNationalBudgetSeedConfigsForPreset(preset: string): NationalB
     );
   }
   if (preset === "2027-default") {
-    return overlayNationalBudgetConfigs(
-      getNationalBudgetSeedConfigsForPreset("2023-default"),
-      NATIONAL_BUDGET_SEED_CONFIGS_2027,
-      2027
+    return convertEuroMemberBudgetsFor2027(
+      overlayNationalBudgetConfigs(
+        getNationalBudgetSeedConfigsForPreset("2023-default"),
+        NATIONAL_BUDGET_SEED_CONFIGS_2027,
+        2027
+      )
     );
   }
   return NATIONAL_BUDGET_SEED_CONFIGS;
+}
+
+/**
+ * Euroize inherited euro-member rows for the 2027 preset. Every absolute-money
+ * field (gdp, otherRevenue, debt principal/ceiling, per-category baselines,
+ * state grants, per-capita policy revenues) scales by the authored cross rate
+ * `R_EUR / R_legacy` from the same table the FX seeder uses, so anchor value
+ * is conserved exactly. Ratios (taxBaseRatios, gdp multipliers, interest
+ * rates, ratings) pass through. Ireland converts at 1.0: code flips, amounts
+ * stay. Non-euro rows and DE (already EUR) are untouched.
+ */
+function convertEuroMemberBudgetsFor2027(
+  configs: NationalBudgetSeedConfig[]
+): NationalBudgetSeedConfig[] {
+  const preset = "2027-default";
+  const rates = getInitialRates(preset);
+  const eurAnchorRate = rates.DE;
+  if (eurAnchorRate == null || eurAnchorRate <= 0) return configs;
+  return configs.map((config) => {
+    if (config.currencyCode === "EUR") return config;
+    if (!isEuroAdopted(config.countryId, preset)) return config;
+    const factor = euroConversionFactor(rates[config.countryId] ?? NaN, eurAnchorRate);
+    const scaledSpending: Record<string, number> = {};
+    for (const [key, value] of Object.entries(config.baselineSpendingByCategory)) {
+      scaledSpending[key] = value * factor;
+    }
+    return {
+      ...config,
+      currencyCode: "EUR" as const,
+      gdp: config.gdp * factor,
+      otherRevenue: config.otherRevenue * factor,
+      debt: {
+        ...config.debt,
+        principal: config.debt.principal * factor,
+        ceiling: config.debt.ceiling * factor,
+      },
+      baselineSpendingByCategory: scaledSpending,
+      baselineStateGrants: config.baselineStateGrants * factor,
+      policyRevenueConfigs: config.policyRevenueConfigs?.map((revenueConfig) => ({
+        ...revenueConfig,
+        annualRevenuePerCapitaByOptionIndex: revenueConfig.annualRevenuePerCapitaByOptionIndex?.map(
+          (perCapita) => perCapita * factor
+        ),
+      })),
+    };
+  });
 }
 
 /** Preserve the last complete era roster while applying newer authored rows. */
@@ -6032,7 +6161,7 @@ function buildMarketStateEnterpriseCorpEntries(params: {
         userId: new ObjectId(spec.userOid),
         headquartersState: spec.headquartersState,
         liquidCapital: 0,
-        liquidCurrencyCode: COUNTRY_CURRENCY_MAP[spec.countryId] as ActiveCurrencyCode,
+        liquidCurrencyCode: getSeedCurrencyCode(spec.countryId, preset) as ActiveCurrencyCode,
         marketingBudget: 0,
         marketingStrength: 0,
         logisticsBudget: 0,
@@ -6663,7 +6792,10 @@ export function generateCountryOwnedSeedData(
         userId: new ObjectId(spec.userOid),
         headquartersState: spec.headquartersState,
         liquidCapital: 0,
-        liquidCurrencyCode: COUNTRY_CURRENCY_MAP[spec.countryId] as ActiveCurrencyCode,
+        // Preset-aware: 2027 euro members seed as EUR (zero balance, so no
+        // conversion needed — value conservation holds trivially). Every other
+        // preset resolves through the era-blind map, unchanged.
+        liquidCurrencyCode: getSeedCurrencyCode(spec.countryId, preset) as ActiveCurrencyCode,
         marketingBudget: 0,
         marketingStrength: 0,
         logisticsBudget: 0,

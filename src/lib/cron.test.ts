@@ -20,6 +20,24 @@ vi.mock("./cron/backupFireGuard", () => ({
   shouldFireBackupTurn: vi.fn(),
 }));
 
+const { mockRunShareFillRecoveryPass, mockGetDb } = vi.hoisted(() => ({
+  mockRunShareFillRecoveryPass: vi.fn(),
+  mockGetDb: vi.fn(),
+}));
+
+// Mock the share-fill recovery driver so sweep tests observe scheduling and
+// gating without running real recovery. The specifier must match cron.ts.
+vi.mock("@/lib/corporations/commands/shareTrading/shareFillAudit", () => ({
+  runShareFillRecoveryPass: mockRunShareFillRecoveryPass,
+}));
+
+// Mock mongodb: the recovery sweep calls getDb() when idle. Other callbacks
+// that reach the real getDb do so inside their own try/catch, so a stubbed
+// handle cannot break their assertions.
+vi.mock("@/lib/mongodb", () => ({
+  getDb: mockGetDb,
+}));
+
 // Mock @sentry/nextjs — withMonitor must forward to the wrapped fn so cron logic still runs.
 vi.mock("@sentry/nextjs", () => ({
   withMonitor: vi.fn((_slug: string, fn: () => unknown | Promise<unknown>) => fn()),
@@ -53,6 +71,16 @@ describe("cron jobs", () => {
     consoleLogSpy = vi.spyOn(console, "log").mockImplementation(() => {});
     consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     vi.clearAllMocks();
+    mockRunShareFillRecoveryPass.mockResolvedValue({
+      status: "completed",
+      examined: 0,
+      recovered: 0,
+      alreadyComplete: 0,
+      settledFailed: 0,
+      leftInProgress: 0,
+      incomplete: 0,
+    });
+    mockGetDb.mockResolvedValue({});
   });
 
   /** The callback registered for `expression`. Throws rather than returning
@@ -163,10 +191,11 @@ describe("cron jobs", () => {
       await initializeCronJobs();
       await initializeCronJobs(); // Call twice to test stop logic
 
-      // Six cron jobs: turn processing, backup turn, stuck turn-lock recovery
-      // sweep, stock exchange refresh, fog of war, player random events sweep.
-      // All share the same mocked handle, so stop() is called once per active job on re-init.
-      expect(mockCronJob.stop).toHaveBeenCalledTimes(6);
+      // Seven cron jobs: turn processing, backup turn, stuck turn-lock recovery
+      // sweep, stock exchange refresh, fog of war, player random events sweep,
+      // and the share-fill recovery sweep. All share the same mocked handle,
+      // so stop() is called once per active job on re-init.
+      expect(mockCronJob.stop).toHaveBeenCalledTimes(7);
     });
 
     it("logs initialization message", async () => {
@@ -907,6 +936,170 @@ describe("cron jobs", () => {
       await findScheduledCallback(STUCK_LOCK_SWEEP_SCHEDULE)();
 
       expect(mockProcessTurn).not.toHaveBeenCalled();
+    });
+  });
+
+  // Share-fill orphan recovery (issue #1672): a periodic sweep outside
+  // processTurn re-drives lonely receipts with a bounded fair pass. It must
+  // never run alongside a turn, and its registration must not leak across
+  // re-init/restart/stop.
+  describe("share-fill recovery sweep", () => {
+    function armCron() {
+      const mockCronJob = { start: vi.fn(), stop: vi.fn(), getStatus: vi.fn() };
+      mockSchedule.mockReturnValue(mockCronJob as any);
+    }
+
+    it("registers on staggered slots clear of turn ticks and the stock refresh", async () => {
+      mockInitializeGameState.mockResolvedValue(undefined);
+      mockGetGameState.mockResolvedValue({ currentTurn: 1, isActive: true });
+      armCron();
+
+      const { initializeCronJobs, SHARE_FILL_RECOVERY_SCHEDULE } = await import("./cron");
+      await initializeCronJobs();
+
+      expect(SHARE_FILL_RECOVERY_SCHEDULE).toBe("7,22,37,52 * * * *");
+      // Throws instead of returning undefined, so a renamed schedule fails loudly.
+      expect(() => findScheduledCallback(SHARE_FILL_RECOVERY_SCHEDULE)).not.toThrow();
+    });
+
+    it("runs the pass with the live db when no turn is in flight", async () => {
+      mockInitializeGameState.mockResolvedValue(undefined);
+      mockGetGameState.mockResolvedValue({
+        currentTurn: 1,
+        isActive: true,
+        isProcessing: false,
+      });
+      armCron();
+
+      const { initializeCronJobs, SHARE_FILL_RECOVERY_SCHEDULE } = await import("./cron");
+      await initializeCronJobs();
+      await findScheduledCallback(SHARE_FILL_RECOVERY_SCHEDULE)();
+
+      expect(mockGetDb).toHaveBeenCalledTimes(1);
+      expect(mockRunShareFillRecoveryPass).toHaveBeenCalledTimes(1);
+      expect(mockRunShareFillRecoveryPass).toHaveBeenCalledWith(
+        await mockGetDb.mock.results[0].value
+      );
+    });
+
+    it("skips without touching the database while the game is paused", async () => {
+      mockInitializeGameState.mockResolvedValue(undefined);
+      mockGetGameState.mockResolvedValue({
+        currentTurn: 1,
+        isActive: false,
+        isProcessing: false,
+      });
+      armCron();
+
+      const { initializeCronJobs, SHARE_FILL_RECOVERY_SCHEDULE } = await import("./cron");
+      await initializeCronJobs();
+      await findScheduledCallback(SHARE_FILL_RECOVERY_SCHEDULE)();
+
+      expect(consoleLogSpy).toHaveBeenCalledWith(
+        expect.stringContaining("[Cron] Share-fill recovery skipped - world inactive")
+      );
+      expect(mockGetDb).not.toHaveBeenCalled();
+      expect(mockRunShareFillRecoveryPass).not.toHaveBeenCalled();
+    });
+
+    it("skips without touching the database when game state is missing", async () => {
+      mockInitializeGameState.mockResolvedValue(undefined);
+      mockGetGameState.mockResolvedValue(null);
+      armCron();
+
+      const { initializeCronJobs, SHARE_FILL_RECOVERY_SCHEDULE } = await import("./cron");
+      await initializeCronJobs();
+      await findScheduledCallback(SHARE_FILL_RECOVERY_SCHEDULE)();
+
+      expect(consoleLogSpy).toHaveBeenCalledWith(
+        expect.stringContaining("[Cron] Share-fill recovery skipped - world inactive")
+      );
+      expect(mockGetDb).not.toHaveBeenCalled();
+      expect(mockRunShareFillRecoveryPass).not.toHaveBeenCalled();
+    });
+
+    it("skips while a turn holds the lock with a fresh heartbeat", async () => {
+      mockInitializeGameState.mockResolvedValue(undefined);
+      mockGetGameState.mockResolvedValue({
+        currentTurn: 1,
+        isActive: true,
+        isProcessing: true,
+        processingHeartbeatAt: new Date(),
+      });
+      armCron();
+
+      const { initializeCronJobs, SHARE_FILL_RECOVERY_SCHEDULE } = await import("./cron");
+      await initializeCronJobs();
+      await findScheduledCallback(SHARE_FILL_RECOVERY_SCHEDULE)();
+
+      expect(consoleLogSpy).toHaveBeenCalledWith(
+        expect.stringContaining("[Cron] Share-fill recovery skipped — turn in progress")
+      );
+      expect(mockGetDb).not.toHaveBeenCalled();
+      expect(mockRunShareFillRecoveryPass).not.toHaveBeenCalled();
+    });
+
+    it("also skips on a stale lock — a stale turn may still be alive, recovery just defers", async () => {
+      // Deliberate difference from the turn crons: those must take over stale
+      // locks, but recovery is deferrable best-effort, so it never contends
+      // with a turn that might still be running (#1208).
+      mockInitializeGameState.mockResolvedValue(undefined);
+      mockGetGameState.mockResolvedValue({
+        currentTurn: 1,
+        isActive: true,
+        isProcessing: true,
+        processingHeartbeatAt: new Date(Date.now() - 25 * 60 * 1000),
+      });
+      armCron();
+
+      const { initializeCronJobs, SHARE_FILL_RECOVERY_SCHEDULE } = await import("./cron");
+      await initializeCronJobs();
+      await findScheduledCallback(SHARE_FILL_RECOVERY_SCHEDULE)();
+
+      expect(mockRunShareFillRecoveryPass).not.toHaveBeenCalled();
+    });
+
+    it("does not leak the registration on re-init, restart, or stop", async () => {
+      // Distinct handles per expression prove the recovery registration
+      // itself is stopped, not just the shared-handle count. The per-test
+      // mockImplementation is reset at the end so later tests keep their
+      // own mockReturnValue behavior.
+      const handles = new Map<string, { stop: ReturnType<typeof vi.fn> }>();
+      mockSchedule.mockImplementation((expression: string) => {
+        const handle = { start: vi.fn(), stop: vi.fn(), getStatus: vi.fn() };
+        handles.set(expression, handle);
+        return handle;
+      });
+      mockInitializeGameState.mockResolvedValue(undefined);
+      mockGetGameState.mockResolvedValue({ currentTurn: 1, isActive: true });
+
+      const {
+        initializeCronJobs,
+        restartCronWithSchedule,
+        stopCronJobs,
+        SHARE_FILL_RECOVERY_SCHEDULE,
+      } = await import("./cron");
+      try {
+        await initializeCronJobs();
+        const firstHandle = handles.get(SHARE_FILL_RECOVERY_SCHEDULE);
+        expect(firstHandle).toBeDefined();
+
+        // Re-init stops the previous registration before replacing it.
+        await initializeCronJobs();
+        expect(firstHandle!.stop).toHaveBeenCalledTimes(1);
+
+        // Restart stops the current registration, then re-inits from null.
+        const currentHandle = handles.get(SHARE_FILL_RECOVERY_SCHEDULE);
+        await restartCronWithSchedule();
+        expect(currentHandle!.stop).toHaveBeenCalledTimes(1);
+
+        // Stop halts the latest registration.
+        const latestHandle = handles.get(SHARE_FILL_RECOVERY_SCHEDULE);
+        stopCronJobs();
+        expect(latestHandle!.stop).toHaveBeenCalledTimes(1);
+      } finally {
+        mockSchedule.mockReset();
+      }
     });
   });
 

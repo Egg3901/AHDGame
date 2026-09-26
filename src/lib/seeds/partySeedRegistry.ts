@@ -41,6 +41,8 @@ import { yuParties } from "@/lib/seeds/yu/yuParties";
 import { uaParties } from "@/lib/seeds/ua/uaParties";
 import { blrParties } from "@/lib/seeds/blr/blrParties";
 import { balParties } from "@/lib/seeds/bal/balParties";
+import { isShippingPreset, tierFor } from "@/lib/world/eraRoster";
+import { SUCCESSOR_PARTIES_1991 } from "@/lib/seeds/reference/successorParties1991";
 
 export const PARTY_SEED_MODULES: Partial<Record<CountryId, readonly PartySeed[]>> = {
   // The US roster lives in the shared reference module rather than a us/ folder.
@@ -83,8 +85,15 @@ export const PARTY_SEED_MODULES: Partial<Record<CountryId, readonly PartySeed[]>
  * distinguish "no parties here" from "country unknown" themselves.
  */
 export function partySeedsForPreset(countryId: CountryId, presetId: string): PartySeed[] {
-  const seeds = PARTY_SEED_MODULES[countryId];
-  if (!seeds) return [];
+  // Authored reference data can lead runtime availability. An absent country
+  // must still seed nothing until the era roster promotes the complete country
+  // pack; otherwise party-only content recreates the half-present world that
+  // the roster contract exists to prevent (#2289).
+  if (isShippingPreset(presetId) && tierFor(presetId, countryId) === "absent") return [];
+  const seeds = [
+    ...(PARTY_SEED_MODULES[countryId] ?? []),
+    ...(presetId === "1991-default" ? (SUCCESSOR_PARTIES_1991[countryId] ?? []) : []),
+  ];
   return seeds.filter((seed) => !seed.validForPresets || seed.validForPresets.includes(presetId));
 }
 

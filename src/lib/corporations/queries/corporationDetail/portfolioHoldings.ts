@@ -112,7 +112,10 @@ export async function loadPortfolioHoldings(
   const GAME_DAYS_PER_YEAR_RATIO = TURNS_PER_YEAR / TURNS_PER_DAY;
   const portfolioFxByCurrency = await loadValuationFxRates(db);
   const heldBondsSummary: HeldBondSummary[] = heldBondsRaw.map((bond) => {
-    const holding = bond.holders.find(
+    // `holders` is required by the Bond type, but legacy rows can arrive
+    // without it; an unguarded `.find` throws a TypeError and 500s the whole
+    // corporation page (#2349). A bond with no holder rows contributes nothing.
+    const holding = (bond.holders ?? []).find(
       (h) => h.corporationId?.toString() === corporation._id.toString()
     );
     const units = holding?.units ?? 0;

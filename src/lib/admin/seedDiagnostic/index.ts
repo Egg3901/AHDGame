@@ -85,7 +85,7 @@ export async function runSeedDiagnostic(
   let note: string | undefined;
 
   if (opts.mode === "conformance") {
-    const result = await runConformanceChecks(db, { preset });
+    const result = await runConformanceChecks(db, { preset, trigger });
     checks = result.checks;
   } else {
     const result = await runDriftChecks(db, { preset, calendarTurn });

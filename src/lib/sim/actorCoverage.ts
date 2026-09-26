@@ -29,7 +29,7 @@ export type SimActorMode = "pure-npp" | "synthetic";
 export type ActorGateStatus = "covered" | "partial" | "unreachable";
 
 /** Registry version stamped into every manifest; bump on entry changes. */
-export const ACTOR_COVERAGE_REGISTRY_VERSION = 2;
+export const ACTOR_COVERAGE_REGISTRY_VERSION = 3;
 
 /** Exact explicit result for the presidential-nomination gate in pure NPP mode. */
 export const UNCOVERED_PRESIDENTIAL_NOMINATION = "uncovered: presidential nomination";
@@ -60,6 +60,28 @@ function seam(path: string, anchor: string): ActorGateSeam {
 }
 
 export const ACTOR_GATED_MECHANICS: readonly ActorGatedMechanic[] = [
+  {
+    id: "forex-orders",
+    label: "Peer forex orders and settlement",
+    requires: "characters funding and submitting currency orders",
+    seams: [
+      seam("src/app/api/forex/orders/route.ts", "Atomic escrow"),
+      seam("src/lib/turn/forexTurn.ts", "Find open/partial limit orders"),
+    ],
+    pureNpp: {
+      status: "unreachable",
+      reason:
+        "pure NPP worlds have no character wallets and the forex order book is " +
+        "character-owned, so rate drift is macro-only and zero orders or fills " +
+        "must not be presented as forex-market qualification.",
+    },
+    synthetic: {
+      status: "partial",
+      reason:
+        "synthetic characters and wallets make the order path reachable, but the " +
+        "harness does not yet guarantee a funded order and retained fill in every run.",
+    },
+  },
   {
     id: "presidential-nomination",
     label: "Presidential nominations",
@@ -441,6 +463,8 @@ function evidenceFor(id: string, s: ActorPopulationSnapshot): string {
     case "central-bank-chair-us":
     case "player-country-offices":
       return `${pop}; preset=${s.preset}`;
+    case "forex-orders":
+      return `${pop}; currency orders require character-owned escrow`;
     case "state-party-leadership":
       return `${pop}; statePartyCandidates=${s.statePartyCandidates}`;
     case "campaigns-player-actions":

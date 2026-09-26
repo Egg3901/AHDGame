@@ -226,6 +226,14 @@ export interface Character {
   };
   /** Pre-forex: lifetime interest credited to savingsOnHand */
   savingsInterestEarnedLifetime?: number;
+  /**
+   * Idempotency keys of standalone-fallback money-flow legs already applied
+   * to this character (see `src/lib/db/nonAtomicMoneyFlow.ts`). Each key is
+   * recorded in the SAME atomic write as its balance change, so a crashed
+   * and retried transfer applies at most once. Capped to the most recent
+   * entries server-side; absent on characters never touched by a keyed leg.
+   */
+  appliedMoneyFlowKeys?: string[];
   /** Tracks which currency savings accounts have been opened (for UX prompts). */
   savingsAccountsOpened?: Partial<Record<CurrencyCode, boolean>>;
   /** How foreign prices are displayed: asset's native currency, player's home, or internal unit */

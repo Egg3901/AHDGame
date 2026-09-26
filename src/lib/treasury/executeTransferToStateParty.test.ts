@@ -126,4 +126,52 @@ describe("executeTransferToStateParty", () => {
     expect(result.ok).toBe(false);
     expect(db.collectionMocks["statePartyOrg"]!.updateOne).not.toHaveBeenCalled();
   });
+
+  it("stamps EUR on every audit row for a 2027 euro member", async () => {
+    const { getGameState } = await import("@/lib/gameState");
+    vi.mocked(getGameState).mockResolvedValue({
+      currentTurn: 100,
+      preset: "2027-default",
+    } as never);
+    const { emitTreasuryTransaction } = await import("@/lib/treasury/emit");
+    // Earlier tests leave this mock rejecting (clearAllMocks keeps
+    // implementations); reset it so this test observes the happy path.
+    vi.mocked(emitTreasuryTransaction).mockResolvedValue(undefined as never);
+    const { emitTx } = await import("@/lib/financialTxLog/emit");
+
+    const { executeTransferToStateParty } = await import("./executeTransferToStateParty");
+    const result = await executeTransferToStateParty({ ...args(), countryId: "FR" });
+
+    expect(result.ok).toBe(true);
+    const treasuryCalls = vi.mocked(emitTreasuryTransaction).mock.calls;
+    expect(treasuryCalls).toHaveLength(2);
+    for (const call of treasuryCalls) {
+      expect(call[0].currencyCode).toBe("EUR");
+    }
+    const txCalls = vi.mocked(emitTx).mock.calls;
+    expect(txCalls).toHaveLength(2);
+    for (const call of txCalls) {
+      expect(call[1].currencyCode).toBe("EUR");
+    }
+    expect(db.collectionMocks["activityLog"]!.insertOne.mock.calls[0][0].currencyCode).toBe("EUR");
+  });
+
+  it("keeps the era-blind code on non-euro presets", async () => {
+    const { getGameState } = await import("@/lib/gameState");
+    vi.mocked(getGameState).mockResolvedValue({
+      currentTurn: 100,
+      preset: "1991-default",
+    } as never);
+    const { emitTreasuryTransaction } = await import("@/lib/treasury/emit");
+    vi.mocked(emitTreasuryTransaction).mockResolvedValue(undefined as never);
+
+    const { executeTransferToStateParty } = await import("./executeTransferToStateParty");
+    const result = await executeTransferToStateParty({ ...args(), countryId: "FR" });
+
+    expect(result.ok).toBe(true);
+    for (const call of vi.mocked(emitTreasuryTransaction).mock.calls) {
+      expect(call[0].currencyCode).toBe("FRF");
+    }
+    expect(db.collectionMocks["activityLog"]!.insertOne.mock.calls[0][0].currencyCode).toBe("FRF");
+  });
 });

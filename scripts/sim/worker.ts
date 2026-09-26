@@ -174,6 +174,13 @@ interface SimJob {
   workerPhase?: string;
 }
 
+interface BootstrapFailureReport {
+  summary?: { critical?: number; ok?: number; warn?: number };
+  checks?: Array<{ id: string; severity: string }>;
+  ranAt?: Date;
+  _id: unknown;
+}
+
 function log(msg: string) {
   console.log(`[sim-worker] ${msg}`);
 }
@@ -323,6 +330,21 @@ async function mirrorSandboxStatus(jobsCol: Collection<SimJob>, job: SimJob) {
   } catch (err) {
     // Best-effort — a missed status mirror tick is not worth failing the job over.
     log(`status mirror failed (non-fatal): ${err instanceof Error ? err.message : String(err)}`);
+  } finally {
+    await client.close();
+  }
+}
+
+async function readFailedBootstrap(job: SimJob): Promise<BootstrapFailureReport | null> {
+  const client = new MongoClient(SIM_MONGODB_URI as string);
+  try {
+    await client.connect();
+    return await client
+      .db(job.dbName)
+      .collection<BootstrapFailureReport>("seedDiagnostics")
+      .findOne({ runId: job._id, trigger: "worldsim-post-bootstrap" } as never, {
+        projection: { summary: 1, checks: 1, ranAt: 1 },
+      });
   } finally {
     await client.close();
   }
@@ -480,12 +502,32 @@ async function processJob(jobsCol: Collection<SimJob>, job: SimJob, slotId: numb
     await mirrorSandboxStatus(jobsCol, job);
 
     if (code !== 0) {
+      const bootstrap = await readFailedBootstrap(job).catch(() => null);
+      const criticalIds = bootstrap?.checks
+        ?.filter((check) => check.severity === "critical")
+        .map((check) => check.id);
+      const bootstrapError =
+        (job.currentTurn ?? 0) <= 1 && criticalIds?.length
+          ? `Bootstrap conformance: ${criticalIds.length} critical finding(s): ${criticalIds.slice(0, 5).join(", ")}${criticalIds.length > 5 ? ` (+${criticalIds.length - 5} more)` : ""}`
+          : null;
       await jobsCol.updateOne(
         { _id: job._id },
         {
           $set: {
             status: "failed",
-            error: `runWorld.ts exited with code ${code}`,
+            error: bootstrapError ?? `runWorld.ts exited with code ${code}`,
+            ...(bootstrap
+              ? {
+                  bootstrapConformance: {
+                    status: "reported",
+                    reportId: String(bootstrap._id),
+                    ranAt: bootstrap.ranAt ?? null,
+                    ok: bootstrap.summary?.ok ?? null,
+                    warn: bootstrap.summary?.warn ?? null,
+                    critical: bootstrap.summary?.critical ?? null,
+                  },
+                }
+              : {}),
             updatedAt: new Date(),
           },
         }

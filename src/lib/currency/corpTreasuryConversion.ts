@@ -23,10 +23,18 @@ export function buildFxLocalPerInternalMap(
 }
 
 export function getFxLocalPerInternalForCorpHome(
-  corporation: Pick<Corporation, "countryId">,
+  corporation: Pick<Corporation, "countryId" | "liquidCurrencyCode">,
   fxByCurrency: Map<CurrencyCode, number>
 ): number {
-  const code = COUNTRY_CURRENCY_MAP[corporation.countryId as CountryId] ?? "USD";
+  // Prefer the stamped home currency: post-seed 2027 euro members carry EUR
+  // while the era-blind map still resolves them to legacy codes (FRF, ...),
+  // which match no FX row and would silently fall back to 1.0. Corps without
+  // a stamped code (pre-migration, 1991) resolve through the map as before.
+  const stamped = corporation.liquidCurrencyCode;
+  const code =
+    (stamped !== undefined && stamped !== null && String(stamped).trim() !== ""
+      ? (stamped as CurrencyCode)
+      : COUNTRY_CURRENCY_MAP[corporation.countryId as CountryId]) ?? "USD";
   return fxByCurrency.get(code) ?? 1.0;
 }
 

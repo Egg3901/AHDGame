@@ -94,6 +94,11 @@ export async function enactRulingBill(
       countryId: input.countryId,
       stateId: input.stateId,
       source: input.source,
+      // Majority/minority seats persisted above; the enacted card renders them
+      // as the vote split (origin "joint" falls back to the legislature label).
+      votesFor: input.votesFor ?? 0,
+      votesAgainst: input.votesAgainst ?? 0,
+      votesAbstain: 0,
     },
     input.currentTurn
   );

@@ -8,7 +8,7 @@ import { evaluateActorCoverage } from "./actorCoverage";
 import { snapshotActorPopulation } from "./syntheticActors";
 
 describe("buildActorCoverageSection", () => {
-  it("renders the full section for a pure-NPP manifest: 0/13 covered, 13 warnings", () => {
+  it("renders the full section for a pure-NPP manifest: 0/14 covered, 14 warnings", () => {
     const manifest = evaluateActorCoverage(
       snapshotActorPopulation({
         mode: "pure-npp",
@@ -23,16 +23,16 @@ describe("buildActorCoverageSection", () => {
     const section = buildActorCoverageSection(manifest);
     expect(section.heading).toBe(ACTOR_COVERAGE_SECTION_HEADING);
     expect(section.mode).toBe("pure-npp");
-    expect(section.mechanicCount).toBe(13);
+    expect(section.mechanicCount).toBe(14);
     expect(section.coveredCount).toBe(0);
-    expect(section.uncoveredCount).toBe(13);
-    expect(section.warnings).toHaveLength(13);
-    expect(section.lines[0]).toContain("0/13 mechanics covered");
+    expect(section.uncoveredCount).toBe(14);
+    expect(section.warnings).toHaveLength(14);
+    expect(section.lines[0]).toContain("0/14 mechanics covered");
     // Warnings render inline, first, so no reader meets a chart before them.
     expect(section.lines.slice(1)).toEqual(section.warnings);
   });
 
-  it("renders one partial warning for campaigns in synthetic mode", () => {
+  it("renders partial warnings for campaigns and unforced forex in synthetic mode", () => {
     const manifest = evaluateActorCoverage(
       snapshotActorPopulation({
         mode: "synthetic",
@@ -49,13 +49,14 @@ describe("buildActorCoverageSection", () => {
       "1953-01-01T00:00:00.000Z"
     );
     const section = buildActorCoverageSection(manifest);
-    // 12 covered + 1 partial (campaigns: accrual but no retained
-    // full-sequence purchase), so the section warns exactly once instead of
-    // reading clean.
+    // 12 covered + 2 partial (campaigns and unforced forex ordering).
     expect(section.coveredCount).toBe(12);
-    expect(section.uncoveredCount).toBe(1);
-    expect(section.warnings).toHaveLength(1);
-    expect(section.warnings[0]).toContain("Campaigns and player actions");
+    expect(section.uncoveredCount).toBe(2);
+    expect(section.warnings).toHaveLength(2);
+    expect(
+      section.warnings.some((warning) => warning.includes("Campaigns and player actions"))
+    ).toBe(true);
+    expect(section.warnings.some((warning) => warning.includes("Peer forex orders"))).toBe(true);
   });
 
   it("passes the synthetic-unseeded degradation through to reports", () => {
@@ -84,7 +85,7 @@ describe("summarizeActorCoverageForVerdict", () => {
     expect(verdict.title).toContain("predates manifest stamping");
   });
 
-  it("reads warn while campaigns stay partial in synthetic mode", () => {
+  it("reads warn while campaigns and forex stay partial in synthetic mode", () => {
     const manifest = evaluateActorCoverage(
       snapshotActorPopulation({
         mode: "synthetic",
@@ -98,8 +99,9 @@ describe("summarizeActorCoverageForVerdict", () => {
     );
     const verdict = summarizeActorCoverageForVerdict(manifest);
     expect(verdict.status).toBe("warn");
-    expect(verdict.title).toContain("1 mechanic(s) partial or unreachable");
+    expect(verdict.title).toContain("2 mechanic(s) partial or unreachable");
     expect(verdict.detail).toContain("Campaigns and player actions");
+    expect(verdict.detail).toContain("Peer forex orders");
   });
 
   it("reads warn (never bad) for partial/unreachable mechanics: harness limits, not engine defects", () => {

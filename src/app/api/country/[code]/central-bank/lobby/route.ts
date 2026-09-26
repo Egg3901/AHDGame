@@ -15,7 +15,7 @@ import {
   atomicallyDebitCharacterCash,
   refundCharacterCash,
 } from "@/lib/financialTxLog/atomicCashGuard";
-import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
+import { getSeedCurrencyCode } from "@/lib/constants/currencies";
 import { autoConvertForPurchase } from "@/lib/currency/autoConvert";
 import { getGameState } from "@/lib/gameState";
 import { getCentralBankScope } from "@/lib/centralBank/helpers";
@@ -89,8 +89,10 @@ export async function POST(request: Request, context: RouteContext) {
 
     // Lobbying is paid in this central bank's national currency (wallet liquid).
     // When the player visits a foreign CB, auto-convert tops up from home currency if enabled.
-    const payCurrency = COUNTRY_CURRENCY_MAP[countryId];
+    // Preset-aware: 2027 euro members pay EUR. gameState was already loaded
+    // below, so this reorders to read it first with no new query.
     const gameState = await getGameState();
+    const payCurrency = getSeedCurrencyCode(countryId, gameState?.preset ?? "");
     const currentTurn = gameState?.currentTurn ?? 0;
 
     if (forexEnabled) {

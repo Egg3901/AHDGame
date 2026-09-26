@@ -106,8 +106,63 @@ import { trRegions } from "@/lib/seeds/tr/trRegions";
 import { grRegions } from "@/lib/seeds/gr/grRegions";
 import { atRegions } from "@/lib/seeds/at/atRegions";
 import { fiRegions } from "@/lib/seeds/fi/fiRegions";
+import { plRegions } from "@/lib/seeds/pl/plRegions";
+import { csRegions } from "@/lib/seeds/cs/csRegions";
+import { huRegions } from "@/lib/seeds/hu/huRegions";
+import { roRegions } from "@/lib/seeds/ro/roRegions";
+import { bgRegions } from "@/lib/seeds/bg/bgRegions";
+import { yuRegions } from "@/lib/seeds/yu/yuRegions";
+import { easternBlocPolicyConfig } from "@/lib/seeds/shared/easternBlocLegislation";
+
+/** Opening transition positions. The shared law catalog supplies option meanings;
+ * these indices replace its 1979 one-party and command-economy defaults. */
+function transitionPolicy1991(
+  prefix: string,
+  regions: CountryPolicyConfig["regions"],
+  economicSystem: number,
+  priceControls: number
+): CountryPolicyConfig {
+  const old = easternBlocPolicyConfig(prefix);
+  return {
+    nationalStateId: `${prefix}_national`,
+    regions,
+    defaults: {
+      ...old.defaults,
+      [`${prefix}_enterprise_levy`]: { economic: 1, social: 0 },
+      [`${prefix}_foreign_trade`]: { economic: 1, social: 0 },
+      [`${prefix}_economic_system`]: { economic: economicSystem === 1 ? 2 : 0, social: 0 },
+      [`${prefix}_political_system`]: { economic: 0, social: -2 },
+      [`${prefix}_price_controls`]: { economic: priceControls === 0 ? 2 : 0, social: 0 },
+    },
+    optionIndexes: {
+      ...old.optionIndexes,
+      [`${prefix}_enterprise_levy`]: 2,
+      [`${prefix}_foreign_trade`]: 1,
+      [`${prefix}_economic_system`]: economicSystem,
+      [`${prefix}_political_system`]: 1,
+      [`${prefix}_price_controls`]: priceControls,
+      [`${prefix}_banking_separation`]: 1,
+      [`${prefix}_infrastructure_investment`]: 2,
+      [`${prefix}_social_security_fund`]: 2,
+      [`${prefix}_defense_appropriations`]: 2,
+      [`${prefix}_public_health_service`]: 2,
+      [`${prefix}_universal_education`]: 2,
+      [`${prefix}_state_administration`]: 2,
+      [`${prefix}_regional_investment_grants`]: 2,
+    },
+  };
+}
 
 export const COUNTRY_POLICY_CONFIGS_1991: Record<string, CountryPolicyConfig> = {
+  // Transition stages are January 1991 scenario positions. Poland and
+  // Czechoslovakia had already liberalised prices; Hungary retained partial
+  // controls. The Balkan states retained more administered prices and firms.
+  pl: transitionPolicy1991("pl", plRegions, 1, 0),
+  cs: transitionPolicy1991("cs", csRegions, 1, 0),
+  hu: transitionPolicy1991("hu", huRegions, 1, 1),
+  ro: transitionPolicy1991("ro", roRegions, 2, 1),
+  bg: transitionPolicy1991("bg", bgRegions, 2, 1),
+  yu: transitionPolicy1991("yu", yuRegions, 2, 1),
   // ═══════════════════════════════════════════════════════════════════════════
   //  UNITED STATES — Bush Sr. administration, January 1991
   // ═══════════════════════════════════════════════════════════════════════════

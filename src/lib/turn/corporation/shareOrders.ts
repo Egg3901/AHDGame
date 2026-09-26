@@ -56,6 +56,13 @@ interface PendingHistoryEmit {
  * `turn` is stamped on every emitted `shareTradeHistory` row.
  */
 export async function fillPendingShareOrders(db: Db, now: Date, turn: number): Promise<void> {
+  // Peer-fill orphan recovery (issue #1672) deliberately does NOT run here:
+  // the receipt scan is a query-per-row N+1 that does not belong on the turn
+  // path. Lonely receipts are re-driven by the periodic
+  // `runShareFillRecoveryPass` driver (cron sweep in multiplayer, post-turn
+  // pass on the singleplayer advance route), and the per-order stamp hook
+  // (`prepareShareFillClaim`) still covers any order that sees another fill.
+
   // Fill decisions and their escrow/history writes only use these order
   // fields; the query filter still applies `status` server-side.
   const openOrders = await db

@@ -12,7 +12,7 @@
 
 import { ObjectId } from "mongodb";
 import type { AnyBulkWriteOperation, Db } from "mongodb";
-import type { EnactedLaw } from "@/lib/db/types/budget";
+import type { EnactedLaw, FederalBudget } from "@/lib/db/types/budget";
 import type { PoliticalMetricsDoc } from "@/lib/db/types/politicalMetrics";
 import type { PoliticalMetricId } from "@/lib/politicalMetrics/types";
 import type { LegislationType, StatePolicyRecord } from "@/lib/db/types/legislation";
@@ -229,6 +229,17 @@ export async function seedPoliticalLegislationBaseline(
     await db.collection<EnactedLaw>("enactedLaws").bulkWrite(lawOps, { ordered: true });
   }
 
+  // Recalibrate from the new 1991 law book on every seed. A prior run's
+  // non-law envelope must not be counted while measuring that book's cost.
+  if (year === 1991) {
+    await db
+      .collection<FederalBudget>("federalBudget")
+      .updateOne(
+        { _id: getNationalBudgetId("RU") },
+        { $unset: { nonLawSpendingGdpShareBaseline: "" } }
+      );
+  }
+
   // One budget sync so day-one budgets reflect the inherited law book
   // (recomputes revenue.lawRevenue AND spending.byCategory from enacted laws).
   // Map through getNationalBudgetId — US lives at `_id: "federal"`, not "US".
@@ -238,6 +249,30 @@ export async function seedPoliticalLegislationBaseline(
     db,
     LAW_COUNTRY_IDS.map((cc) => getNationalBudgetId(cc as CountryId))
   );
+
+  if (year === 1991) {
+    const { SUCCESSOR_1991_GENERAL_GOVERNMENT_GDP_PERCENT } =
+      await import("@/lib/seeds/reference/successorFiscal1991");
+    const budget = await db
+      .collection<FederalBudget>("federalBudget")
+      .findOne({ _id: getNationalBudgetId("RU") });
+    if (!budget) throw new Error("Missing 1991 Russian national budget after law sync");
+    const targetSpending = Math.round(
+      (budget.gdp * SUCCESSOR_1991_GENERAL_GOVERNMENT_GDP_PERCENT.RU.expenditure) / 100
+    );
+    const residual = targetSpending - budget.spending.total;
+    if (residual < 0) {
+      throw new Error(`1991 Russian law spending exceeds the fiscal envelope by ${-residual}`);
+    }
+    await db
+      .collection<FederalBudget>("federalBudget")
+      .updateOne(
+        { _id: budget._id },
+        { $set: { nonLawSpendingGdpShareBaseline: residual / budget.gdp } }
+      );
+    await refreshNationalBudgetRevenue(db, [budget._id]);
+    log(`Calibrated 1991 Russian non-law spending to ${targetSpending} SUR`);
+  }
 
   const residualCount = await seedPoliticalMetricsResiduals(db, year);
 

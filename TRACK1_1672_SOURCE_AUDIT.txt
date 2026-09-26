@@ -1,0 +1,237 @@
+Track #1 audit: REMAINING muse-1672 commits (read-only)
+====================================================
+Date (UTC): 2026-09-25. Auditor: Muse Code powered by Meta Muse Spark.
+Scope: source branch fix/issue-1672-atomic-money-flows, commits 2052b0e008..b2a821ae69
+(55 commits, ~86.8k ins / ~15.4k del across 253 files), tip b2a821ae69.
+Compared against: origin/development (base b222a0a3d, 2026-09-16, #1937) and
+Track1 HEAD 9d2827e6a5 (worktree track1-fixer). Method: git log/show/cat-file
+only. No edits, commits, checkouts, tests, builds, or sims run. No source files
+changed. File-existence checks used as first pass; equivalence judged from
+actual diffs/stats, never from commit messages alone.
+
+ALREADY ACCOUNTED FOR (not remaining)
+--------------------------------------
+- Primitive + receipt collection + index + key bounding: source 2052b0e008
+  (primitive part), 9c93bf01a0 (extension + seedMoneyFlowIndexes), c09f9f0e1f
+  (deriveMoneyFlowKey). Track1 8949c9da39 (= source primitive byte-identical
+  outside comments; verified by diff: 658 vs 1125 lines, non-comment diff
+  empty). c09f9f0e1f primitive half is IN Track1 (deriveMoneyFlowKey with
+  sha256 hash-bounding + keys test present at HEAD). DONE.
+- Character transfers: source 2052b0e008 (consumer part). Track1 1fdffbcec1 +
+  c9b411a09e. DONE.
+- Bond sales 4670f10cbe: DISCARDED, correctly. Development #2288
+  (4b5f615115: saleRecovery.ts 307 lines + frozen-term intent recovery in
+  sell route, 532 lines reworked) is stronger and already live. Do not extract.
+- #2387 (6360845ec3) touches only CDN/publicApi auth; no overlap with any
+  source route. #2286 forex and #2224/#2225 bond-fallback and #2226/#2227
+  fund-fallback and 95c461817d fund-redemption overlaps are detailed per slice.
+
+TRACK1 PRIMITIVE CAVEATS (crash-recovery / TTL / key-history)
+--------------------------------------------------------------
+1. TTL: Track1 be95c93078 is STRICTLY BETTER than source. Source expires ALL
+   receipts at createdAt+30d (in_progress included: recovery evidence deleted
+   mid-window). Track1 expires only terminal receipts at updatedAt+30d and
+   retains in_progress. NEVER re-import the source index file.
+2. appliedMoneyFlowKeys capped at 100 ($slice, "bounds growth, not
+   correctness"): after 100 later flows on the same hot doc (fund/corp pool,
+   character campaign funds), an old key is evicted and a retried old attempt
+   double-applies. Time variant: terminal receipt TTL-expires after 30d while
+   legs may still be in-window, or vice versa. Known residual; hot-account
+   consumers should document it, not silently accept it.
+3. One-leg-per-document rule (documented in primitive): two legs on one doc
+   under one key collide via the $ne guard and the second balance change is
+   SILENTLY skipped. Every extraction must preserve the merged-leg shape.
+4. Terminal keys fail closed (MoneyFlowTerminalError; new key per retry) and
+   fingerprint mismatches throw MoneyFlowKeyConflictError. Routes must mint
+   fresh keys per attempt and validate/forward client Idempotency-Key; port
+   the source route replay/conflict/terminal tests with each slice.
+5. UNCOMPENSATED marker: a revert-less step failing after an applied prefix
+   settles failed+UNCOMPENSATED:<step>:<reason> (fail closed for ops). Source
+   deliberately leaves several writes as post-commit best effort (financial-tx
+   rows, full-retirement flags, zero-unit holder cleanup, bond_issuance /
+   bond_maturity ledger rows). Extraction must preserve that classification,
+   never silently drop those writes, and ops needs a ledger/runbook entry.
+6. No generic orphan sweep exists in the primitive. Orphan/key-only recovery
+   is wired per consumer (forex fills re-driven by turn driver; share fills
+   via shareFillAudit + turn-driver orphan scan). Route-path slices rely on
+   client retry; their in_progress receipts linger by design (TTL ignores
+   them) so collection growth needs monitoring.
+
+PER-COMMIT DISPOSITIONS (grouped into migration slices)
+--------------------------------------------------------
+S3 SMALL-SPEND ROUTES (all UNIQUE, none on dev or Track1; verified missing:
+canvassSpend, campaignDonationSpend, recruitSpend, military/recruitSpend):
+- 9c93bf01a0 (donation routes x2 + election travel/primary/surge; 829/458):
+  UNIQUE. Route-path only, low turn risk. P1.
+- 593f247372 (state-attack + canvassSpend lib; 1240/77): UNIQUE. P1.
+- 84b2504070 (canvass route + central-bank nominate; 521/217): UNIQUE. P1.
+- 7f3031d17f (player ads + playerAdSpend; 910/127): UNIQUE. P1. Possible
+  rebase friction with dev #1967 (shared Advertise cost rules); check at
+  extraction, not asserted here.
+- 412c8b8cf1 (treasury transfer + party/state recruitment; 1921/373): UNIQUE
+  (treasuryTransferSpend, recruitSpend). P1.
+- 65b3358f30 (union busting, bargaining escalation, campaign donate, targeted
+  ads; 3511/471): UNIQUE. P1. Touches campaignTargeting/commands.ts and
+  standingCommands.ts; rebase onto current dev before porting.
+- bd3009d4c0 + 05d9cddc7f (strength, rally, union fund/organize/found;
+  4329/358 + 571/29): UNIQUE incl. command-level tests. P1.
+- 55afb2b28b (state-org build; 1061/459): UNIQUE, keyed leg + terminal upsert
+  with E11000-converge and race-compensate behavior. P1.
+- ac5319fe3f (directAction NPP; 2090/565): UNIQUE, keeps exact historical
+  dual guard incl. zero-cash $gte:0 shape. P1.
+- 5aea706d60 + c71d35def5 + 32035d3f99 (military recruit; 2103/237 +
+  1067/423 + 60/0): UNIQUE (recruitSpend, degraded-arsenal remainder pin).
+  Route-path. P1.
+S4 FOREX (source forexSpend.ts missing on both dev and Track1):
+- da99ffbb13 (order create/fill/market-maker; 1197/348) + 7abdbbe240
+  (cancel/direct/exchange + v1 exchange; 1839/506) + 40ecb296d1 (Idempotency-Key
+  route tests; 1212/98): UNIQUE route surfaces. Dev #2286 (3da287494e, 11
+  files: fillRecovery.ts 803 lines, fill route rework, spreadFees 123 lines)
+  covers ONLY peer/turn limit-fill recovery via intent-based frozen-term
+  recovery, a DIFFERENT mechanism from source keyed legs. No file overlap with
+  source order-create/cancel/direct/exchange/market-maker paths. Extract route
+  surfaces. P1 (route-path).
+- 6e24bb7afa + d1fe7b4adb (turn triggered-limit fills; 1288/153 + 297/70):
+  MECHANISM CONFLICT with live #2286 (dev turn change: stale-claim guard +
+  recoverStaleFillClaims call in forexTurn.ts, verified in diff). Do NOT layer
+  keyed turn fills on top of intent recovery. Decision owed: keep #2286 as
+  canonical for turn fills (recommended; it is merged and tested) and treat
+  this slice as SUPERSEDED for the turn path, or explicitly replace #2286.
+  Started life as WIP with 4 red tests; tip state converged but the conflict
+  stands regardless.
+- 9e8365c075 (expiry refunds; 937/202) + 920da15537 (intervention reserves;
+  1553/73): UNIQUE. Expiry refund is turn-path (forexTurn.ts) with once-only
+  per-order stable key design; intervention likewise. No dev equivalent found.
+  P1, with turn-round-trip measurement (see perf note).
+S5 BONDS (all spend libs missing on dev and Track1):
+- 4670f10cbe: DISCARDED (see above; #2288 canonical).
+- 030770624f (buybacks + fund bond flows purchaseBondUnitsForFund /
+  sellFundBondUnits; 1892/378): UNIQUE. Dev #2224 covers fallback SALES and
+  #2225 fallback CASH CURES only; buyback path and fund bond-unit flows have
+  no dev equivalent. P0 (money + turn-adjacent executors).
+- cbc773d084 (purchases incl. NPP buyers; 1626/358): UNIQUE. Touches
+  turn/npp/nppCorpTreasury.ts: turn-path perf risk. P0.
+- 47bca011f3 + 7e209d501f + 00b3147713 + 71dd962d19 (payoffs, default cash
+  cures, refinance, restructure, empty-remainder recovery; 2461/1529 +
+  3505/317 + 1020/8 + 329/23): UNIQUE and the deepest bond logic (stored resume
+  plan on receipt-claim, empty-remainder retry reports stored outcome,
+  per-bond maturity claims). Dev #2225 compensates fallback cash cures by a
+  different mechanism; source goes further (keyed legs + refinance/restructure
+  executors + bondTurnAutoResolve deterministic per-turn keys). Reconcile with
+  #2225 at extraction; do not stack both blindly. Touches
+  turn/bondTurnAutoResolve.ts: turn-path. P0.
+- 552e987d3a + 2e8fcd5e01 + 42200c49e1 (dissolution primitive + wiring +
+  coverage; 770/0 + 731/146 + 1926/2): UNIQUE. Widest caller fan-out (CEO
+  dissolve, admin force-liquidate, vote effects, cascade deletion, NPP
+  insolvency dissolution). 2e8fcd5e01 began as boundary-red WIP; tip converged.
+  P0 (rare path, catastrophic on crash: multi-payee fan-out with remainder
+  resume).
+- c09f9f0e1f consumer half (350/57 across 21 files): pending WITH its
+  consumers; primitive half already in Track1. No separate action.
+S6 INDEX FUNDS + PENSIONS (all spend libs missing on dev and Track1):
+- 0be512f547 (queued redemptions; 2340/153): MECHANISM CONFLICT with dev
+  95c461817d (journal redemption settlement + ambiguous-recovery quarantine,
+  3183/343 across fundCron/fundRedemptionLiquidity/types + 1625-line recovery
+  tests). Different mechanism, same flow. Decision owed: keep 95c461817d as
+  canonical (recommended; merged, heavily tested) and treat this slice as
+  SUPERSEDED, or explicitly replace. Do not run both.
+- 9da9651c4b (float buys; 2191/321): PARTIAL overlap with dev #2226
+  (compensate fallback float buys, fundCron 273 lines). Source migrates the
+  whole buy path to keyed legs; dev compensates fallbacks. Reconcile; likely
+  extract with #2226 as the fallback net. P0 (fundCron runs every turn).
+- bc0cab7cc3 (equity sales; 3034/386): UNIQUE. P0 (turn cron).
+- e77229ed6d (dividend pass-through; 1984/341, touches turn/corporation/
+  index.ts): UNIQUE. Turn-path. P0.
+- 3b82a4166f + 006c630159 (cross-fund transfers + stored-plan/positional-revert
+  fixes; 1826/352 + 1193/36): PARTIAL overlap with dev #2227 (compensate
+  cross-fund fallbacks, 472 lines). Source adds keyed legs + defect fixes.
+  Reconcile with #2227. P0.
+- 8236570be2 + 22a35798bb (target-rebalance orchestration + crash/bid tests;
+  991/270 + 1163/8): UNIQUE. P0 (turn cron).
+- 051649aec4 (NPP fund investing; 2313/318): UNIQUE. P1 (NPP cadence, still
+  money-moving; behind fund slices in sequence).
+- 52c3634c8b (pension scheme investing + holding write-offs; 3567/182):
+  UNIQUE. P1, sequenced after fund slices; verify no formula drift at
+  extraction (pensions is constants-adjacent; legacy-exact amounts only under
+  #1672, else new issue + sim).
+S7 SHARES (all files missing on dev and Track1; heaviest turn-path slice):
+- 642c3693b1 + 2a575efd09 (shareFillAudit + recovery + conditional order
+  claims + orphan scan wired to turn driver; 1022/442 + 1063/17): UNIQUE audit
+  infra. Extract FIRST within S7; everything below depends on it. P0.
+- eed999d9cf + 789c166182 (fill money legs + guard/plan-crash/round-trip
+  fixes; 2450/670 + 177/83): UNIQUE. Began WIP-red; tip converged. P0.
+- 749a92670b + d24774777b (matcher per-match keyed settlement + plan-less
+  receipt convergence; 2137/515 + 328/168): UNIQUE. HIGHEST turn-path perf
+  risk (per-match receipt + leg writes inside the matcher loop). Requires
+  round-trip/byte measurement vs turnPhaseBudgets before merge. P0 with perf
+  gate.
+- 456d97bb81 + c32016affe (order-cancel refunds incl. fund-bid stored-anchor
+  remainder; 1242/300 + 684/93): UNIQUE. P0 (closes plan-less fill recovery
+  gap; depends on matcher slice).
+- dfcfbd9fc5 (order placement; 3029/846): UNIQUE. P1 within S7, after fills.
+- 7d87246fef + a103d67a0e (float buy/sell, listing cancel, escrow-tranche
+  crash-loop proofs; 2821/1193 + 2100/211): UNIQUE. P1 within S7.
+- 8bcabf24b0 (NPP float buy/sell, touches turn/nppActionProcessing.ts;
+  2234/424): UNIQUE. Turn-path. P1 within S7.
+- b2a821ae69 (offer submit/accept; 2785/498): UNIQUE tip commit. P1 within S7.
+
+RANKING AND MIGRATION SLICES
+-----------------------------
+P0 (turn-path money, in dependency order):
+  Slice 1: share audit + orphan scan (642c3693b1, 2a575efd09).
+  Slice 2: share fills + matcher + cancel refunds (eed999d9cf, 789c166182,
+    749a92670b, d24774777b, 456d97bb81, c32016affe). Perf gate on matcher.
+  Slice 3: share placement/float/offers/NPP (dfcfbd9fc5, 7d87246fef,
+    a103d67a0e, 8bcabf24b0, b2a821ae69).
+  Slice 4: bonds buyback/purchase/payoff/refi/restructure/dissolution
+    (030770624f, cbc773d084, 47bca011f3, 7e209d501f, 00b3147713, 71dd962d19,
+    552e987d3a, 2e8fcd5e01, 42200c49e1). Reconcile payoff/cash-cure overlap
+    with #2225 at extraction. Sale excluded (discarded).
+  Slice 5: funds/pensions remainder (9da9651c4b, bc0cab7cc3, e77229ed6d,
+    3b82a4166f, 006c630159, 8236570be2, 22a35798bb, 051649aec4, 52c3634c8b).
+    Reconcile float-buy/cross-fund overlap with #2226/#2227. Redemptions
+    stay with 95c461817d (no action).
+P1 (route-path + forex remainder):
+  Slice 6: forex route surfaces + expiry + intervention (da99ffbb13,
+    7abdbbe240, 40ecb296d1, 9e8365c075, 920da15537). Turn fills stay with
+    #2286 (no action).
+  Slice 7: small-spend routes batch (9c93bf01a0 routes, 593f247372,
+    84b2504070, 7f3031d17f, 412c8b8cf1, 65b3358f30, bd3009d4c0, 05d9cddc7f,
+    55afb2b28b, ac5319fe3f, 5aea706d60, c71d35def5, 32035d3f99). Bulk-extract;
+    rebase onto current dev (advertise-cost #1967 friction check).
+Turn-path perf note: slices touching forexTurn, shareOrders/shareMatchSettlement,
+  fundCron/fundCrossRebalancing/fundShareOrders, bondTurnAutoResolve,
+  nppCorpTreasury, nppActionProcessing, corporation/index must quote bytes and
+  round trips (one-turn profile + trace-callsites) and check turnPhaseBudgets;
+  keyed legs add receipt + per-leg writes per event. Dev has since parallelized
+  index-fund work (#2268) and touched turn budgets (3bb2bec124); source base is
+  2026-09-16, so every turn-path slice needs a fresh rebase, not a cherry-pick.
+
+ISSUE + SIM REPORT QUESTION
+----------------------------
+All slices above are existing #1672 implementation (crash-safety migrations
+claiming legacy-exact amounts); no new mechanics/balance/schema issue is owed
+as long as extraction changes no formula, eligibility, or amount. Verify at
+each extraction; any drift (notably pension/fund/military-recruit remainder
+rules, cross-fund positional-revert fixes, state-org race semantics) that
+alters player-visible outcomes needs a balance/new-mechanics issue plus a
+worldsim report before merge. No schema changes observed beyond the already-
+ported receipt collection and appliedMoneyFlowKeys/type fields.
+
+WORKTREE DISPOSITION
+---------------------
+KEEP /root/projects/AHDGame/worktrees/muse-1672 (branch
+fix/issue-1672-atomic-money-flows, tip b2a821ae69) as a READ-ONLY reference
+until every P0/P1 slice above is extracted and verified. It is the only copy
+of the converged tip state (several slices began as red WIP and only make
+sense from tip). Do NOT delete, rebase, or merge it; the supervisor removes it
+only after all slices are accounted for in development. The three terminal
+decisions (bond sale discarded, forex turn fills keep #2286, fund redemptions
+keep 95c461817d) are recorded here to prevent re-extraction.
+
+VALIDATION OWED (not run: read-only audit)
+-------------------------------------------
+Focused checks run: none (task forbids tests/builds; only git show/log/
+cat-file/diff reads). No files changed. Shared-scheduler validation still owed
+for each future extraction slice: focused tests + targeted lint at extraction
+time, full typecheck/verify/build via the lakeside-check queue, never direct.

@@ -609,7 +609,8 @@ class InMemoryCollection {
     return this.docs.filter((d) => matchesFilter(d, filter)).length;
   }
 
-  async bulkWrite(ops: Doc[]): Promise<{ modifiedCount: number }> {
+  async bulkWrite(ops: Doc[]): Promise<{ matchedCount: number; modifiedCount: number }> {
+    let matched = 0;
     let modified = 0;
     for (const op of ops) {
       if (op.updateOne) {
@@ -619,6 +620,7 @@ class InMemoryCollection {
           upsert?: boolean;
         };
         const res = await this.updateOne(filter, update, { upsert });
+        matched += res.matchedCount;
         modified += res.modifiedCount;
       } else if (op.insertOne) {
         await this.insertOne((op.insertOne as { document: Doc }).document);
@@ -629,10 +631,12 @@ class InMemoryCollection {
           upsert?: boolean;
         };
         const res = await this.replaceOne(filter, replacement, { upsert });
+        matched += res.matchedCount;
         modified += res.modifiedCount;
       } else if (op.updateMany) {
         const { filter, update } = op.updateMany as { filter: Doc; update: Update };
         const res = await this.updateMany(filter, update);
+        matched += res.matchedCount;
         modified += res.modifiedCount;
       } else if (op.deleteMany) {
         const { filter } = op.deleteMany as { filter: Doc };
@@ -647,7 +651,7 @@ class InMemoryCollection {
         throw new Error(`inMemoryDb: unsupported bulk op ${Object.keys(op).join(",")}`);
       }
     }
-    return { modifiedCount: modified };
+    return { matchedCount: matched, modifiedCount: modified };
   }
 
   /**

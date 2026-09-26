@@ -4,7 +4,12 @@
  */
 
 import type { ClientSession, Db, ObjectId } from "mongodb";
-import type { Corporation, IndexFund, IndexFundHolding } from "@/lib/db/types";
+import type {
+  Corporation,
+  IndexFund,
+  IndexFundHolding,
+  IndexFundPendingLiquiditySale,
+} from "@/lib/db/types";
 import { creditSharesToFund, debitSharesFromFund } from "@/lib/corporations/shareholderOps";
 import {
   isOrderFlowPriceEligible,
@@ -164,7 +169,140 @@ export type SellHoldingsForRedemptionResult = {
   salesExecuted: number;
   /** Standalone-only economic reversal for completed sales, in reverse order. */
   undo?: () => Promise<void>;
+  /**
+   * True when liquidity raising was refused because a previous sale's crash
+   * journal is still pending (#2223, fail-closed). No sale was attempted and
+   * no money moved: reconcile `pendingLiquiditySale` manually, clear it, and
+   * the next pass raises again. Callers keep paying redemptions from cash.
+   */
+  liquidityQuarantined?: boolean;
 };
+
+/**
+ * Thrown when a standalone sale cannot start because a previous sale's crash
+ * journal is still pending. Carries no money movement: the sale never began.
+ * Caught at the `sellFundHolding*` boundary and reported as
+ * `liquidityQuarantined`, never compensated (there is nothing to reverse).
+ */
+export class LiquiditySaleQuarantinedError extends Error {
+  constructor(readonly saleId: string) {
+    super(
+      `Redemption-liquidity sale ${saleId} refused: a previous sale's crash journal is still pending (fail-closed)`
+    );
+    this.name = "LiquiditySaleQuarantinedError";
+  }
+}
+
+/** Fresh projected read of the fund's sale crash journal (standalone only). */
+async function readPendingLiquiditySale(
+  db: Db,
+  fundId: IndexFund["_id"]
+): Promise<IndexFundPendingLiquiditySale | null> {
+  const rows = await db
+    .collection<IndexFund>("indexFunds")
+    .find({ _id: fundId })
+    .project({ pendingLiquiditySale: 1 })
+    .toArray();
+  return (rows[0] as IndexFund | undefined)?.pendingLiquiditySale ?? null;
+}
+
+function quarantinedSaleResult(
+  fund: IndexFund,
+  pending: IndexFundPendingLiquiditySale
+): SellHoldingsForRedemptionResult {
+  console.warn(
+    `[indexfund-liquidity] fund ${fund.slug}: skipping liquidity sale — unreconciled interrupted sale ${pending.saleId} ` +
+      `(${pending.shares} shares, started ${pending.startedAt.toISOString()}) is still journaled. ` +
+      `Reconcile it manually, then clear pendingLiquiditySale on the fund to resume raising.`
+  );
+  return { cashRaisedAnchor: 0, sharesSold: 0, salesExecuted: 0, liquidityQuarantined: true };
+}
+
+/**
+ * Journal a standalone sale before its first value-moving leg. Set-if-absent:
+ * returns false when another sale's journal is still pending, in which case
+ * the caller must quarantine, never overwrite (the pending journal is the
+ * only record of a possibly half-moved sale).
+ */
+async function journalLiquiditySaleStart(
+  db: Db,
+  fundId: IndexFund["_id"],
+  journal: IndexFundPendingLiquiditySale
+): Promise<boolean> {
+  const result = await db
+    .collection<IndexFund>("indexFunds")
+    .updateOne(
+      { _id: fundId, pendingLiquiditySale: { $exists: false } },
+      { $set: { pendingLiquiditySale: journal, updatedAt: new Date() } }
+    );
+  return result.matchedCount === 1;
+}
+
+/**
+ * Clear a sale's crash journal once the sale is economically complete (or
+ * fully unwound). Never throws: a failed clear only leaves the journal in
+ * place, which quarantines the next pass fail-closed — the safe direction.
+ */
+async function clearLiquiditySaleJournal(
+  db: Db,
+  fundId: IndexFund["_id"],
+  saleId: string
+): Promise<void> {
+  try {
+    await db
+      .collection<IndexFund>("indexFunds")
+      .updateOne(
+        { _id: fundId, "pendingLiquiditySale.saleId": saleId },
+        { $unset: { pendingLiquiditySale: "" }, $set: { updatedAt: new Date() } }
+      );
+  } catch (error) {
+    console.error(
+      `[indexfund-liquidity] fund ${fundId.toString()}: failed to clear sale journal ${saleId} after an economically complete sale; ` +
+        `liquidity raising stays quarantined until manual clear:`,
+      error instanceof Error ? error.message : error
+    );
+  }
+}
+
+/**
+ * Manual reconciliation clear for a quarantined liquidity journal (#2223).
+ * Call ONLY after a human has reconciled the journaled sale against the
+ * issuer, the cap table, fund cash, and fund holdings: the journal is the
+ * sole record of a possibly half-moved sale, and clearing it re-enables
+ * liquidity raising for the fund. Conditional (clears only when a journal is
+ * present); returns true when a journal was cleared.
+ *
+ * Supported-configuration safety decision for redemption-liquidity sales:
+ * - Replica set: sales run inside the caller's transaction and the abort
+ *   owns recovery (no journal, fully automatic). This is the supported
+ *   production configuration.
+ * - Standalone with caught errors: each leg is individually guarded and a
+ *   failed sale is automatically compensated in reverse order (fully
+ *   unwound sales clear their own journal). Automatic.
+ * - Standalone process death mid-sale: the legs span too many documents for
+ *   single-document marker atomicity, so the sale is NOT replayed or
+ *   auto-reversed. The surviving journal quarantines this fund's liquidity
+ *   raising fail-closed (redemptions still pay from available cash) until a
+ *   human reconciles the journaled figures and calls this clear. Durable
+ *   quarantine is the accepted safety posture here: a half-moved sale
+ *   replayed blind could double-sell shares or double-credit cash, while a
+ *   quarantined fund merely defers raising (holders are still paid from
+ *   cash, pro-rata). The quarantine is sticky and terminal until this
+ *   clear runs. It never self-heals, so an unreconciled sale cannot
+ *   silently resume.
+ */
+export async function clearPendingLiquiditySale(
+  db: Db,
+  fundId: IndexFund["_id"]
+): Promise<boolean> {
+  const result = await db
+    .collection<IndexFund>("indexFunds")
+    .updateOne(
+      { _id: fundId, pendingLiquiditySale: { $exists: true } },
+      { $unset: { pendingLiquiditySale: "" }, $set: { updatedAt: new Date() } }
+    );
+  return result.matchedCount === 1;
+}
 
 type CorpQuoteRow = Pick<
   Corporation,
@@ -205,6 +343,16 @@ export async function sellFundHoldingsForRedemptionCash(
     : fund.holdings;
   if (holdingsToSell.length === 0) {
     return { cashRaisedAnchor: 0, sharesSold: 0, salesExecuted: 0 };
+  }
+
+  // Fail-closed crash journal (#2223, standalone only): a surviving journal
+  // means a previous sale may have died mid-leg, where the legs span too many
+  // documents for marker atomicity. Raise nothing until a human reconciles
+  // the journaled sale and clears it; redemptions still pay from cash.
+  // Inside a transaction the abort owns recovery, so no journal applies.
+  if (!options?.session) {
+    const pending = await readPendingLiquiditySale(db, fund._id);
+    if (pending) return quarantinedSaleResult(fund, pending);
   }
 
   const corpIds = holdingsToSell.map((h) => h.corporationId);
@@ -272,18 +420,28 @@ export async function sellFundHoldingsForRedemptionCash(
   // above is reused per sale so neither is re-read per item.
   const thresholds = await loadTxThresholds(db);
 
+  // A sale that refuses to start (a raced journal appeared after the entry
+  // check) stops the loop fail-closed; completed sales keep their undos.
+  let quarantined = false;
   for (const sale of plan) {
     if (cashRaisedAnchor >= cashNeededAnchor) break;
 
     const corp = corpMap.get(sale.corporationId.toString());
     if (!corp) continue;
 
-    const saleResult = await executeOneHoldingSale(db, fund, corp, sale, holdings, turn, now, {
-      session: options?.session,
-      note: options?.note,
-      thresholds,
-      fxByCurrency,
-    });
+    let saleResult: Awaited<ReturnType<typeof executeOneHoldingSale>>;
+    try {
+      saleResult = await executeOneHoldingSale(db, fund, corp, sale, holdings, turn, now, {
+        session: options?.session,
+        note: options?.note,
+        thresholds,
+        fxByCurrency,
+      });
+    } catch (error) {
+      if (!(error instanceof LiquiditySaleQuarantinedError)) throw error;
+      quarantined = true;
+      break;
+    }
     if (!saleResult) continue;
 
     cashRaisedAnchor += saleResult.proceedsAnchor;
@@ -293,7 +451,7 @@ export async function sellFundHoldingsForRedemptionCash(
     if (saleResult.undo) saleUndos.push(saleResult.undo);
   }
 
-  return {
+  const result: SellHoldingsForRedemptionResult = {
     cashRaisedAnchor,
     sharesSold,
     salesExecuted,
@@ -318,6 +476,17 @@ export async function sellFundHoldingsForRedemptionCash(
         }
       : {}),
   };
+  if (quarantined) {
+    const pending = await readPendingLiquiditySale(db, fund._id).catch(() => null);
+    if (pending) {
+      console.warn(
+        `[indexfund-liquidity] fund ${fund.slug}: stopping liquidity raising — sale journal ${pending.saleId} appeared mid-pass; ` +
+          `reconcile it manually, then clear pendingLiquiditySale on the fund to resume raising.`
+      );
+    }
+    return { ...result, liquidityQuarantined: true };
+  }
+  return result;
 }
 
 // ── Shared per-sale execution helper ─────────────────────────────────────────
@@ -364,11 +533,53 @@ async function executeOneHoldingSale(
   const orderFlowEligible = isOrderFlowPriceEligible(corp.publicFloat, corp.totalShares);
   const issuerBuyback = sale.sharesToSell * executionPrice;
 
+  const standalone = !options?.session;
+  const fxByCurrency = options?.fxByCurrency ?? (await loadFxRatesByCurrency(db));
+  const fxRate = fxRateForCorpFromMap(corp, fxByCurrency);
+  const proceedsAnchor =
+    Math.round(
+      shareTradeAnchorValue(sale.sharesToSell, { ...corp, sharePrice: executionPrice }, fxRate) *
+        100
+    ) / 100;
+
+  const updatedHoldings = updateHoldingAfterSale(
+    currentHoldings,
+    sale.corporationId,
+    sale.sharesToSell,
+    sale.pricePerShareAnchor
+  );
+
+  // Standalone crash journal (#2223): set before the first value-moving leg
+  // so a process death mid-sale is detectable. The legs below span the
+  // issuer, the cap table, fund cash, and fund holdings — too many documents
+  // for single-document marker atomicity — so an interrupted sale is NOT
+  // replayed or auto-reversed: the next pass quarantines this fund's
+  // liquidity raising until a human reconciles the journaled sale (fail-
+  // closed). Inside a transaction the abort owns recovery, so no journal.
+  // Supported configurations: replica set = fully automatic recovery via
+  // abort; standalone caught errors = automatic compensation below;
+  // standalone process death = journal + quarantine + manual clear.
+  const saleId = `ls-${fund._id.toString()}-${sale.corporationId.toString()}-${now.getTime()}-${sale.sharesToSell}`;
+  const saleJournal: IndexFundPendingLiquiditySale = {
+    saleId,
+    corporationId: sale.corporationId,
+    shares: sale.sharesToSell,
+    proceedsAnchor,
+    startedAt: now,
+  };
+  if (standalone) {
+    const journaled = await journalLiquiditySaleStart(db, fund._id, saleJournal);
+    if (!journaled) throw new LiquiditySaleQuarantinedError(saleId);
+  }
+
   const issuerDebit = await settleFloatSellDebit(db, corp, issuerBuyback, {
     session: options?.session,
     counterparty: options?.settlementCounterparty,
   });
-  if (!issuerDebit.ok) return null;
+  if (!issuerDebit.ok) {
+    if (standalone) await clearLiquiditySaleJournal(db, fund._id, saleId);
+    return null;
+  }
 
   const remaining = await debitSharesFromFund(
     db,
@@ -393,48 +604,124 @@ async function executeOneHoldingSale(
       split: issuerDebit.split,
       counterparty: options?.settlementCounterparty,
     });
+    if (standalone) await clearLiquiditySaleJournal(db, fund._id, saleId);
     return null;
   }
 
-  const fxByCurrency = options?.fxByCurrency ?? (await loadFxRatesByCurrency(db));
-  const fxRate = fxRateForCorpFromMap(corp, fxByCurrency);
-  const proceedsAnchor =
-    Math.round(
-      shareTradeAnchorValue(sale.sharesToSell, { ...corp, sharePrice: executionPrice }, fxRate) *
-        100
-    ) / 100;
+  // Every leg below runs after value already moved (issuer debit + share
+  // debit are committed). On a replica set the caller aborts the enclosing
+  // transaction, so just rethrow; on standalone there is no transaction, so
+  // reverse the completed legs here in reverse order. Without this a crash
+  // between the share debit and the cash credit destroys value (issuer paid,
+  // fund credited nothing), and a crash between the cash credit and the
+  // holdings write double-counts (fund holds both the cash and the shares).
+  // This compensation only covers caught exceptions: a process death past
+  // this point leaves the journal above pending, which quarantines the next
+  // pass fail-closed.
+  let cashCredited = false;
+  let holdingsWritten = false;
+  let transactionId: ObjectId | undefined;
+  try {
+    const cashResult = await db
+      .collection("indexFunds")
+      .updateOne(
+        { _id: fund._id },
+        { $inc: { cashAnchor: proceedsAnchor }, $set: { updatedAt: now } },
+        options?.session ? { session: options.session } : undefined
+      );
+    if (cashResult.matchedCount !== 1) {
+      throw new Error("Fund disappeared during redemption-liquidity sale");
+    }
+    cashCredited = true;
 
-  const updatedHoldings = updateHoldingAfterSale(
-    currentHoldings,
-    sale.corporationId,
-    sale.sharesToSell,
-    sale.pricePerShareAnchor
-  );
+    await updateFundHoldings(db, fund._id, updatedHoldings, { session: options?.session });
+    holdingsWritten = true;
 
-  await db
-    .collection("indexFunds")
-    .updateOne(
-      { _id: fund._id },
-      { $inc: { cashAnchor: proceedsAnchor }, $set: { updatedAt: now } },
-      options?.session ? { session: options.session } : undefined
+    // Economic commit point: shares are gone and cash is credited. Clear the
+    // crash journal before the evidence rows, so a death past here leaves a
+    // complete sale with at most missing audit rows (accepted), while a death
+    // before here leaves the journal pending (quarantine, fail-closed).
+    if (standalone) await clearLiquiditySaleJournal(db, fund._id, saleId);
+
+    transactionId = await insertFundTransaction(
+      db,
+      {
+        fundId: fund._id,
+        kind: "public_float_sell",
+        corporationId: sale.corporationId,
+        shares: sale.sharesToSell,
+        navAnchor: sale.pricePerShareAnchor,
+        amountAnchor: proceedsAnchor,
+        note: options?.note ?? "Redemption liquidity",
+        createdAt: now,
+      },
+      { session: options?.session }
     );
-
-  await updateFundHoldings(db, fund._id, updatedHoldings, { session: options?.session });
-
-  const transactionId = await insertFundTransaction(
-    db,
-    {
-      fundId: fund._id,
-      kind: "public_float_sell",
-      corporationId: sale.corporationId,
-      shares: sale.sharesToSell,
-      navAnchor: sale.pricePerShareAnchor,
-      amountAnchor: proceedsAnchor,
-      note: options?.note ?? "Redemption liquidity",
-      createdAt: now,
-    },
-    { session: options?.session }
-  );
+  } catch (error) {
+    if (!standalone) throw error;
+    const compensationErrors: unknown[] = [];
+    const compensate = async (revert: () => Promise<unknown>) => {
+      try {
+        await revert();
+      } catch (compensationError) {
+        compensationErrors.push(compensationError);
+      }
+    };
+    if (transactionId !== undefined) {
+      const txId = transactionId;
+      await compensate(() => db.collection("indexFundTransactions").deleteOne({ _id: txId }));
+    }
+    if (holdingsWritten) {
+      await compensate(() => updateFundHoldings(db, fund._id, currentHoldings));
+    }
+    if (cashCredited) {
+      await compensate(() =>
+        db
+          .collection("indexFunds")
+          .updateOne(
+            { _id: fund._id },
+            { $inc: { cashAnchor: -proceedsAnchor }, $set: { updatedAt: new Date() } }
+          )
+      );
+    }
+    await compensate(async () => {
+      const restored = await creditSharesToFund(
+        db,
+        corp._id,
+        fund._id,
+        sale.sharesToSell,
+        sale.pricePerShareAnchor,
+        {
+          $inc: {
+            publicFloat: -sale.sharesToSell,
+            ...(orderFlowEligible
+              ? { orderFlowWindowSellValue: -sale.sharesToSell * executionPrice }
+              : {}),
+          },
+          $set: { updatedAt: new Date() },
+        }
+      );
+      if (!restored) throw new Error("Failed to restore fund shares after liquidity sale");
+    });
+    await compensate(() =>
+      reverseFloatSellDebit(db, corp, issuerBuyback, {
+        split: issuerDebit.split,
+        counterparty: options?.settlementCounterparty,
+      })
+    );
+    if (compensationErrors.length > 0) {
+      // Incomplete compensation: the journal stays pending, so the next pass
+      // quarantines this fund fail-closed instead of building on half-moved legs.
+      throw new AggregateError(
+        [error, ...compensationErrors],
+        "Redemption liquidity sale failed and compensation was incomplete"
+      );
+    }
+    // Fully unwound: nothing is outstanding, so the journal can go. A failed
+    // clear only quarantines the next pass, which is the safe direction.
+    await clearLiquiditySaleJournal(db, fund._id, saleId);
+    throw error;
+  }
 
   // #992 tranche 6: fund-subject ledger leg for the cashAnchor credit above.
   // The contra is the unmodeled public float (single-sided under the shared
@@ -485,6 +772,7 @@ async function executeOneHoldingSale(
     counterparty: options?.settlementCounterparty,
   });
 
+  const committedTransactionId = transactionId;
   const undo = options?.session
     ? undefined
     : async () => {
@@ -497,7 +785,7 @@ async function executeOneHoldingSale(
           }
         };
         await reverse(() =>
-          db.collection("indexFundTransactions").deleteOne({ _id: transactionId })
+          db.collection("indexFundTransactions").deleteOne({ _id: committedTransactionId })
         );
         await reverse(() => updateFundHoldings(db, fund._id, currentHoldings));
         await reverse(() =>
@@ -621,16 +909,30 @@ export async function sellFundHoldingShares(
   const turn = options?.turn ?? (await getCurrentTurn(db));
   const now = new Date();
 
-  const saleResult = await executeOneHoldingSale(
-    db,
-    fund,
-    corp,
-    { corporationId, sharesToSell, pricePerShareAnchor },
-    [...fund.holdings],
-    turn,
-    now,
-    { ...options, thresholds: options?.thresholds ?? (await loadTxThresholds(db)), fxByCurrency }
-  );
+  // Same fail-closed journal as the multi-sale path (standalone only).
+  if (!options?.session) {
+    const pending = await readPendingLiquiditySale(db, fund._id);
+    if (pending) return quarantinedSaleResult(fund, pending);
+  }
+
+  let saleResult: Awaited<ReturnType<typeof executeOneHoldingSale>>;
+  try {
+    saleResult = await executeOneHoldingSale(
+      db,
+      fund,
+      corp,
+      { corporationId, sharesToSell, pricePerShareAnchor },
+      [...fund.holdings],
+      turn,
+      now,
+      { ...options, thresholds: options?.thresholds ?? (await loadTxThresholds(db)), fxByCurrency }
+    );
+  } catch (error) {
+    if (!(error instanceof LiquiditySaleQuarantinedError)) throw error;
+    const pending = await readPendingLiquiditySale(db, fund._id).catch(() => null);
+    if (pending) return quarantinedSaleResult(fund, pending);
+    return { cashRaisedAnchor: 0, sharesSold: 0, salesExecuted: 0, liquidityQuarantined: true };
+  }
 
   if (!saleResult) {
     return { cashRaisedAnchor: 0, sharesSold: 0, salesExecuted: 0 };

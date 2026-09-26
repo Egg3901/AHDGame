@@ -6,6 +6,7 @@ import {
   updateCentralBanks,
   createForexIndexes,
 } from "@/lib/currency/migration";
+import { EUROZONE_2027_MEMBERS } from "@/lib/currency/rules/euroAdoption";
 import { seedMoneySupplyBaselines } from "@/lib/moneySupply/seed";
 import { seedFomcBoards } from "@/lib/centralBank/seedFomcBoard";
 import { snapshotMoneySupply } from "@/lib/moneySupply/snapshot";
@@ -54,13 +55,20 @@ export async function seedForex(db: Db, log: (msg: string) => void, preset: stri
   // Flip the feature flag. We only set it; we never clear it on re-run, because
   // turning forex off in a populated world would orphan currencyBalances data.
   const isPre1999Preset = ["1953-default", "1979-default", "1991-default"].includes(preset);
+  // 2027 starts with all eight euro members adopted; other modern presets keep
+  // the legacy DE/IE pair until the bill-adoption path converts them.
+  const euroAdoptedCountries: CountryId[] = isPre1999Preset
+    ? []
+    : preset === "2027-default"
+      ? [...EUROZONE_2027_MEMBERS]
+      : (["DE", "IE"] as CountryId[]);
   const result = await db.collection<GameState>("gameState").updateOne(
     { _id: "current" },
     {
       $set: {
         forexEnabled: true,
         eurozoneEnabled: !isPre1999Preset,
-        euroAdoptedCountries: isPre1999Preset ? [] : (["DE", "IE"] as CountryId[]),
+        euroAdoptedCountries,
         updatedAt: new Date(),
       },
     }

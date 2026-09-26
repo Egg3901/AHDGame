@@ -11,6 +11,12 @@ import {
 const ALL = Object.keys(COUNTRY_CONFIGS) as CountryId[];
 
 describe("S1 — era roster totality", () => {
+  it("does not advertise unauthored modern successor-country substrates in 2027", () => {
+    for (const countryId of ["RU", "PL", "HU", "RO", "BG"] as const) {
+      expect(tierFor("2027-default", countryId), countryId).toBe("absent");
+    }
+  });
+
   it("covers every CountryId across every shipping preset", () => {
     expect(ALL).toHaveLength(29);
     // Deliberate tripwires, not incidental. Adding a preset or a country should

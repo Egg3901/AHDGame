@@ -13,7 +13,10 @@ import { getGameState } from "@/lib/gameState";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { notifyCbExecutiveNominationDiscord } from "@/lib/centralBankChairEvents";
 import { getCentralBankScope } from "@/lib/centralBank/helpers";
-import { runWithOptionalTransaction } from "@/lib/db/runWithOptionalTransaction";
+import { randomUUID } from "node:crypto";
+import { applyNominateSpend } from "@/lib/centralBank/nominateSpend";
+import { getMoneyFlowReceiptsCollection } from "@/lib/db/collections/moneyFlowReceipts";
+import { MoneyFlowKeyConflictError } from "@/lib/db/nonAtomicMoneyFlow";
 
 interface RouteContext {
   params: Promise<{ code: string }>;
@@ -67,25 +70,63 @@ export async function POST(request: Request, context: RouteContext) {
     if (!bank)
       return NextResponse.json(notFound("Central bank not found").toJson(), { status: 404 });
 
+    // Validate target character
+    const targetId = new ObjectId(parsed.data.characterId);
+
+    // Crash-safe spend (issue #1672): the action debit is a keyed idempotent
+    // leg and the nomination push a terminal keyed write, so a crash between
+    // the sequential writes reconciles instead of charging for a nomination
+    // that never landed. `Idempotency-Key` replays the stored outcome
+    // without charging again.
+    const headerKey = request.headers.get("Idempotency-Key");
+    if (headerKey !== null && (headerKey.length === 0 || headerKey.length > 128)) {
+      return NextResponse.json({ error: "Invalid Idempotency-Key header" }, { status: 400 });
+    }
+    const flowKey = headerKey ?? randomUUID();
+    const fingerprint = `${bankId}:${targetId.toHexString()}`;
+    const receipts = await getMoneyFlowReceiptsCollection(db);
+    // A completed retry sees the window, the nominations list, and the action
+    // balance *after* the first request, so read its receipt before those
+    // mutable preconditions. An interrupted flow must likewise reach the
+    // keyed spend for recovery.
+    const previousReceipt = headerKey ? await receipts.findOne({ _id: flowKey }) : null;
+    if (previousReceipt && previousReceipt.fingerprint !== fingerprint) {
+      throw new MoneyFlowKeyConflictError(flowKey);
+    }
+    if (previousReceipt?.status === "completed") {
+      const nominations = (bank.nominations ?? []).map((n) => ({
+        characterId: n.characterId.toString(),
+        characterName: n.characterName,
+        nominatedByName: n.nominatedByName,
+        nominatedAt: n.nominatedAt,
+      }));
+      return NextResponse.json({ success: true, nominations, duplicate: true });
+    }
+    // A retry of an interrupted flow skips the mutable preconditions below:
+    // the first request already passed them, and the state it left behind
+    // (nomination landed, action spent, window advanced) must not fail its
+    // own recovery.
+    const recovering = previousReceipt?.status === "in_progress";
+
     // Check nomination window
-    const gameState = await getGameState();
-    const currentTurn = gameState?.currentTurn ?? 0;
-    if (!isNominationWindowOpen(bank, currentTurn))
-      return NextResponse.json(
-        badRequest(
-          "Nominations are not open. The window opens during the final year of the chair's term or when the seat is vacant."
-        ).toJson(),
-        { status: 400 }
-      );
+    if (!recovering) {
+      const gameState = await getGameState();
+      const currentTurn = gameState?.currentTurn ?? 0;
+      if (!isNominationWindowOpen(bank, currentTurn))
+        return NextResponse.json(
+          badRequest(
+            "Nominations are not open. The window opens during the final year of the chair's term or when the seat is vacant."
+          ).toJson(),
+          { status: 400 }
+        );
+    }
 
     // Max 3 nominations
-    if ((bank.nominations?.length ?? 0) >= 3)
+    if (!recovering && (bank.nominations?.length ?? 0) >= 3)
       return NextResponse.json(badRequest("Maximum of 3 nominations reached").toJson(), {
         status: 400,
       });
 
-    // Validate target character
-    const targetId = new ObjectId(parsed.data.characterId);
     const target = await db.collection<Character>("characters").findOne({ _id: targetId });
     if (!target)
       return NextResponse.json(badRequest("Character not found").toJson(), { status: 400 });
@@ -116,13 +157,13 @@ export async function POST(request: Request, context: RouteContext) {
     const alreadyNominated = (bank.nominations ?? []).some(
       (n) => n.characterId.toString() === targetId.toString()
     );
-    if (alreadyNominated)
+    if (!recovering && alreadyNominated)
       return NextResponse.json(badRequest("Character is already nominated").toJson(), {
         status: 400,
       });
 
     // Caller must have at least 1 action point
-    if ((auth.character.actions ?? 0) < 1)
+    if (!recovering && (auth.character.actions ?? 0) < 1)
       return NextResponse.json(
         badRequest("You need at least 1 action point to nominate").toJson(),
         { status: 400 }
@@ -135,54 +176,15 @@ export async function POST(request: Request, context: RouteContext) {
       nominatedByName: auth.character.name,
       nominatedAt: new Date(),
     };
+    let duplicate = false;
     try {
-      await runWithOptionalTransaction(
-        async (session) => {
-          const debitResult = await db
-            .collection<Character>("characters")
-            .updateOne(
-              { _id: auth.character._id, actions: { $gte: 1 } },
-              { $inc: { actions: -1 } },
-              { session }
-            );
-          if (debitResult.modifiedCount === 0) throw new Error("INSUFFICIENT_ACTIONS");
-
-          const nominationResult = await centralBanks.updateOne(
-            { _id: bankId, "nominations.characterId": { $ne: targetId } },
-            {
-              $push: { nominations: nomination },
-              $set: { updatedAt: new Date() },
-            },
-            { session }
-          );
-          if (nominationResult.modifiedCount === 0) throw new Error("NOMINATION_CONFLICT");
-        },
-        async () => {
-          const debitResult = await db
-            .collection<Character>("characters")
-            .updateOne(
-              { _id: auth.character._id, actions: { $gte: 1 } },
-              { $inc: { actions: -1 } }
-            );
-          if (debitResult.modifiedCount === 0) throw new Error("INSUFFICIENT_ACTIONS");
-
-          try {
-            const nominationResult = await centralBanks.updateOne(
-              { _id: bankId, "nominations.characterId": { $ne: targetId } },
-              {
-                $push: { nominations: nomination },
-                $set: { updatedAt: new Date() },
-              }
-            );
-            if (nominationResult.modifiedCount === 0) throw new Error("NOMINATION_CONFLICT");
-          } catch (error) {
-            await db
-              .collection<Character>("characters")
-              .updateOne({ _id: auth.character._id }, { $inc: { actions: 1 } });
-            throw error;
-          }
-        }
-      );
+      ({ duplicate } = await applyNominateSpend(db, {
+        bankId,
+        nominatorId: auth.character._id,
+        nomination,
+        fingerprint,
+        idempotencyKey: flowKey,
+      }));
     } catch (error) {
       if ((error as Error).message === "INSUFFICIENT_ACTIONS") {
         return NextResponse.json(
@@ -190,7 +192,7 @@ export async function POST(request: Request, context: RouteContext) {
           { status: 400 }
         );
       }
-      if ((error as Error).message === "NOMINATION_CONFLICT") {
+      if ((error as Error).message.startsWith("NOMINATION_CONFLICT")) {
         return NextResponse.json(
           badRequest("This nomination was already submitted. Please refresh.").toJson(),
           { status: 409 }
@@ -214,7 +216,11 @@ export async function POST(request: Request, context: RouteContext) {
       target.avatarUrl
     ).catch((err) => console.error("[central-bank/nominate] Discord webhook failed:", err));
 
-    return NextResponse.json({ success: true, nominations });
+    return NextResponse.json({
+      success: true,
+      nominations,
+      ...(duplicate ? { duplicate: true } : {}),
+    });
   } catch (error) {
     return handleRouteError(error);
   }

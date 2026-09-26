@@ -42,7 +42,7 @@ const DEFAULT_LEANS = {
   youth: { economicLean: -1, socialLean: -1 },
 } as const;
 
-const COMPOSITION = {
+export const EASTERN_BLOC_COMPOSITION = {
   party_nomenklatura: {
     weights: [
       { dim: "income", key: "high", w: 0.4 },
@@ -256,7 +256,7 @@ export function makeEasternBlocModel(
       income: profile.income,
       urbanization: profile.urbanization,
     },
-    composition: COMPOSITION as unknown as CountryLayer1Model["composition"],
+    composition: EASTERN_BLOC_COMPOSITION as unknown as CountryLayer1Model["composition"],
     defaultLeans: DEFAULT_LEANS as unknown as CountryLayer1Model["defaultLeans"],
     census,
   };
