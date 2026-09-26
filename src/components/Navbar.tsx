@@ -428,7 +428,7 @@ export const Navbar = React.memo(function Navbar({
                     imperialCharacter={imperialCharacter}
                     isImperialMode={isImperialMode}
                     switchingImperial={switchingImperial}
-                    charactersLabel={t("common.characters")}
+                    charactersLabel={t("userMenu.characters")}
                     imperialLabel={t("common.imperial")}
                     activeLabel={t("common.active")}
                     characterSwitchHref={(id) =>
@@ -817,7 +817,7 @@ export const Navbar = React.memo(function Navbar({
                       isImperialMode={isImperialMode}
                       switchingCharacter={switchingCharacter}
                       switchingImperial={switchingImperial}
-                      charactersLabel={t("common.characters")}
+                      charactersLabel={t("userMenu.characters")}
                       imperialLabel={t("common.imperial")}
                       activeLabel={t("common.active")}
                       imperialHref={

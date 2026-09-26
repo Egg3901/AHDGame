@@ -8,7 +8,14 @@ import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { useEnabledCountries } from "@/contexts/RegisteredCountriesContext";
 import { CountryFlag } from "@/components/CountryFlag";
 import { countryUrl } from "@/lib/urls";
-import { DROPDOWN_PANEL_CLASS } from "@/components/navbar/dropdownStyles";
+import {
+  DROPDOWN_PANEL_CLASS,
+  MENU_DIVIDER_CLASS,
+  MENU_ICON_CLASS,
+  MENU_ROW_BASE_CLASS,
+  MENU_ROW_IDLE_CLASS,
+  MENU_SECTION_LABEL_CLASS,
+} from "@/components/navbar/dropdownStyles";
 
 interface SettingsDropdownProps {
   user: {
@@ -40,6 +47,29 @@ function getSandboxToggleInfo() {
     isSandbox,
     url: isSandbox ? mainSiteUrl : sandboxUrl,
   };
+}
+
+function AvatarInitial({
+  name,
+  size = "md",
+  highlighted = false,
+}: {
+  name: string;
+  size?: "sm" | "md";
+  highlighted?: boolean;
+}) {
+  const initial = (name.trim().charAt(0) || "?").toUpperCase();
+  const dims = size === "sm" ? "h-8 w-8 text-xs" : "h-9 w-9 text-sm";
+  return (
+    <span
+      aria-hidden="true"
+      className={`flex ${dims} shrink-0 items-center justify-center rounded-full font-semibold text-primary ring-1 transition-colors ${
+        highlighted ? "bg-primary/25 ring-primary/50" : "bg-primary/15 ring-primary/30"
+      }`}
+    >
+      {initial}
+    </span>
+  );
 }
 
 export function SettingsDropdown({
@@ -81,41 +111,30 @@ export function SettingsDropdown({
     };
   }, [isOpen, showNationPicker]);
 
+  const canAccessSandbox =
+    user.isAdmin ||
+    user.isModerator ||
+    ((user.patreonTier === "supporter-plus" || user.patreonTier === "supporter-plus-plus") &&
+      user.isPatronActive);
+  const showSandboxToggle = !user.singleplayer && canAccessSandbox;
+  const { url: sandboxUrl, isSandbox } = getSandboxToggleInfo();
+
   return (
     <div className="relative" ref={dropdownRef}>
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className={`relative flex items-center justify-center rounded-lg p-2 transition-colors hover:bg-card hover:text-foreground ${isOpen ? "text-foreground bg-card" : "text-muted"}`}
-        aria-label={t("common.settings")}
+        className="flex items-center justify-center rounded-full transition-transform active:scale-95"
+        aria-label={t("common.userMenu")}
         aria-expanded={isOpen}
         aria-haspopup="menu"
       >
-        <svg
-          className={`h-5 w-5 transition-transform duration-300 ${isOpen ? "rotate-45" : ""}`}
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-          aria-hidden="true"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
-          />
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-          />
-        </svg>
+        <AvatarInitial name={user.username} highlighted={isOpen} />
       </button>
 
       {isOpen && (
         <div
           role="menu"
-          className={`absolute right-0 z-50 mt-2 w-56 rounded-xl border border-card-border bg-card shadow-modal ${DROPDOWN_PANEL_CLASS}`}
+          className={`absolute right-0 z-50 mt-2 w-64 overflow-hidden rounded-xl border border-card-border bg-card shadow-modal ${DROPDOWN_PANEL_CLASS}`}
         >
           {showNationPicker ? (
             <>
@@ -139,7 +158,7 @@ export function SettingsDropdown({
                   </svg>
                   {t("common.back")}
                 </button>
-                <p className="text-xs font-medium uppercase tracking-wider text-muted">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-muted/70">
                   {t("countrySwitcher.selectNation")}
                 </p>
               </div>
@@ -176,20 +195,24 @@ export function SettingsDropdown({
             </>
           ) : (
             <>
-              <div className="border-b border-card-border/60 px-4 py-2.5">
-                <p className="text-xs uppercase tracking-widest text-muted font-medium">
-                  {t("userMenu.signedInAs")}
-                </p>
-                <p className="truncate text-sm font-semibold text-foreground">{user.username}</p>
+              <div className="flex items-center gap-2.5 border-b border-card-border/60 px-3.5 py-3">
+                <AvatarInitial name={user.username} size="sm" />
+                <div className="min-w-0">
+                  <p className="text-[11px] font-medium uppercase tracking-wider text-muted/70">
+                    {t("userMenu.signedInAs")}
+                  </p>
+                  <p className="truncate text-sm font-semibold text-foreground">{user.username}</p>
+                </div>
               </div>
-              <div className="py-1">
+              <div className="px-1.5 pb-1.5">
+                <p className={MENU_SECTION_LABEL_CLASS}>{t("userMenu.accountSection")}</p>
                 <Link
                   href="/settings"
                   onClick={() => setIsOpen(false)}
-                  className="flex items-center gap-2 px-4 py-2.5 text-sm text-foreground transition-colors hover:bg-background/60"
+                  className={`${MENU_ROW_BASE_CLASS} ${MENU_ROW_IDLE_CLASS}`}
                 >
                   <svg
-                    className="h-4 w-4 text-muted"
+                    className={MENU_ICON_CLASS}
                     fill="none"
                     viewBox="0 0 24 24"
                     stroke="currentColor"
@@ -204,12 +227,13 @@ export function SettingsDropdown({
                   {t("userMenu.profileSettings")}
                 </Link>
 
+                <p className={MENU_SECTION_LABEL_CLASS}>{t("userMenu.viewSection")}</p>
                 <button
                   onClick={() => setShowNationPicker(true)}
-                  className="flex w-full items-center gap-2 px-4 py-2.5 text-sm text-foreground transition-colors hover:bg-background/60"
+                  className={`${MENU_ROW_BASE_CLASS} ${MENU_ROW_IDLE_CLASS} cursor-pointer`}
                 >
                   <svg
-                    className="h-4 w-4 text-muted"
+                    className={MENU_ICON_CLASS}
                     fill="none"
                     viewBox="0 0 24 24"
                     stroke="currentColor"
@@ -224,23 +248,41 @@ export function SettingsDropdown({
                   {t("countrySwitcher.switchNationView")}
                 </button>
 
-                {(() => {
-                  const canAccessSandbox =
-                    user.isAdmin ||
-                    user.isModerator ||
-                    ((user.patreonTier === "supporter-plus" ||
-                      user.patreonTier === "supporter-plus-plus") &&
-                      user.isPatronActive);
-                  if (user.singleplayer || !canAccessSandbox) return null;
-                  const { url, isSandbox } = getSandboxToggleInfo();
-                  return (
-                    <a
-                      href={url}
-                      target="_self"
-                      className="flex items-center gap-2 px-4 py-2.5 text-sm text-foreground transition-colors hover:bg-background/60"
+                {showSandboxToggle && (
+                  <a
+                    href={sandboxUrl}
+                    target="_self"
+                    className={`${MENU_ROW_BASE_CLASS} ${MENU_ROW_IDLE_CLASS}`}
+                  >
+                    <svg
+                      className={MENU_ICON_CLASS}
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"
+                      />
+                    </svg>
+                    {isSandbox ? t("userMenu.switchToMainSite") : t("userMenu.switchToSandbox")}
+                  </a>
+                )}
+
+                {!user.singleplayer && (
+                  <>
+                    <div className={MENU_DIVIDER_CLASS} />
+                    <button
+                      onClick={() => {
+                        setIsOpen(false);
+                        onSignOut();
+                      }}
+                      className={`${MENU_ROW_BASE_CLASS} cursor-pointer text-error hover:bg-background/60`}
                     >
                       <svg
-                        className="h-4 w-4 text-muted"
+                        className="h-4 w-4 shrink-0"
                         fill="none"
                         viewBox="0 0 24 24"
                         stroke="currentColor"
@@ -249,43 +291,24 @@ export function SettingsDropdown({
                           strokeLinecap="round"
                           strokeLinejoin="round"
                           strokeWidth={2}
-                          d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"
+                          d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
                         />
                       </svg>
-                      {isSandbox ? t("userMenu.switchToMainSite") : t("userMenu.switchToSandbox")}
-                    </a>
-                  );
-                })()}
-
-                {!user.singleplayer && (
-                  <button
-                    onClick={() => {
-                      setIsOpen(false);
-                      onSignOut();
-                    }}
-                    className="flex w-full items-center gap-2 px-4 py-2.5 text-sm text-error transition-colors hover:bg-background/60"
-                  >
-                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
-                      />
-                    </svg>
-                    {t("common.signOut")}
-                  </button>
+                      {t("common.signOut")}
+                    </button>
+                  </>
                 )}
-              </div>
 
-              <Link
-                href="/changelog"
-                onClick={() => setIsOpen(false)}
-                className="block border-t border-card-border px-4 py-2 text-center text-xs text-muted hover:text-foreground transition-colors"
-              >
-                v{process.env.NEXT_PUBLIC_APP_VERSION ?? "dev"} ·{" "}
-                {process.env.NEXT_PUBLIC_GIT_COMMIT ?? "dev"}
-              </Link>
+                <div className={MENU_DIVIDER_CLASS} />
+                <Link
+                  href="/changelog"
+                  onClick={() => setIsOpen(false)}
+                  className="block rounded-lg px-2.5 py-1.5 text-center text-xs text-muted/70 hover:text-foreground transition-colors"
+                >
+                  v{process.env.NEXT_PUBLIC_APP_VERSION ?? "dev"} ·{" "}
+                  {process.env.NEXT_PUBLIC_GIT_COMMIT ?? "dev"}
+                </Link>
+              </div>
             </>
           )}
         </div>
