@@ -50,7 +50,7 @@ export function getPostHogClient(): Promise<PostHogClient | null> {
           recordBody: false,
           blockSelector: "[data-replay-block]",
         },
-        disable_surveys: true,
+        disable_surveys: false,
         advanced_disable_feature_flags: true,
         opt_out_capturing_by_default: true,
         persistence: "localStorage+cookie",
