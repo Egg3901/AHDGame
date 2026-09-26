@@ -8,6 +8,8 @@ const state = vi.hoisted(() => ({
   optIn: vi.fn(),
   optOut: vi.fn(),
   reset: vi.fn(),
+  identify: vi.fn(),
+  setConfig: vi.fn(),
 }));
 
 vi.mock("@/components/CookieConsent", () => ({
@@ -25,6 +27,8 @@ vi.mock("posthog-js", () => ({
     }),
     has_opted_out_capturing: () => state.optedOut,
     reset: state.reset,
+    identify: state.identify,
+    set_config: state.setConfig,
   },
 }));
 
@@ -52,7 +56,7 @@ describe("PostHog consent boundary", () => {
     expect(state.capture).not.toHaveBeenCalled();
   });
 
-  it("enables consent-gated surveys on the US host", async () => {
+  it("keeps surveys disabled before an authenticated user is identified", async () => {
     const { getPostHogClient } = await import("./posthogClient");
     state.consent = "accepted";
     await getPostHogClient();
@@ -60,8 +64,22 @@ describe("PostHog consent boundary", () => {
       "phc_test",
       expect.objectContaining({
         api_host: "https://us.i.posthog.com",
-        disable_surveys: false,
+        disable_surveys: true,
       })
+    );
+    expect(state.setConfig).not.toHaveBeenCalledWith({ disable_surveys: false });
+  });
+
+  it("enables surveys only after identifying the stable user ID", async () => {
+    const { getPostHogClient, identifyPostHogUser } = await import("./posthogClient");
+    state.consent = "accepted";
+    const client = await getPostHogClient();
+    expect(client).not.toBeNull();
+    identifyPostHogUser(client!, "stable-user-id");
+    expect(state.identify).toHaveBeenCalledWith("stable-user-id");
+    expect(state.setConfig).toHaveBeenCalledWith({ disable_surveys: false });
+    expect(state.identify.mock.invocationCallOrder[0]).toBeLessThan(
+      state.setConfig.mock.invocationCallOrder[0]
     );
   });
 

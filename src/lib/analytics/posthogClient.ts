@@ -50,7 +50,7 @@ export function getPostHogClient(): Promise<PostHogClient | null> {
           recordBody: false,
           blockSelector: "[data-replay-block]",
         },
-        disable_surveys: false,
+        disable_surveys: true,
         // Navigation experiment assignment runs only after analytics consent.
         advanced_disable_feature_flags: false,
         opt_out_capturing_by_default: true,
@@ -72,6 +72,19 @@ export function getPostHogClient(): Promise<PostHogClient | null> {
     if (!client) clientPromise = null;
   });
   return clientPromise;
+}
+
+/** Survey loading starts only after the SDK has the authenticated account ID. */
+export function identifyPostHogUser(client: PostHogClient, userId: string): void {
+  client.identify(userId);
+  client.set_config({ disable_surveys: false });
+}
+
+/** Keep later anonymous page views from loading surveys after logout. */
+export function resetPostHogUser(client: PostHogClient): void {
+  client.set_config({ disable_surveys: true });
+  client.reset();
+  client.opt_in_capturing();
 }
 
 /**
@@ -102,6 +115,7 @@ export async function stopPostHogCapture(): Promise<void> {
   }
   const client = await clientPromise;
   if (!client) return;
+  client.set_config({ disable_surveys: true });
   client.opt_out_capturing();
   client.reset();
 }
