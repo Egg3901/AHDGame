@@ -15,7 +15,6 @@
       "signOut": "Sign Out",
       "active": "Active",
       "imperial": "Imperial",
-      "characters": "Characters",
       "back": "Back",
       "preview": "Preview",
       "mainNavigation": "Main navigation",
@@ -161,6 +160,8 @@
     },
     "userMenu": {
       "characters": "Characters",
+      "accountSection": "Account",
+      "viewSection": "View",
       "profileSettings": "Profile Settings",
       "signedInAs": "Signed in as",
       "switchToMainSite": "Switch to Main Site",
