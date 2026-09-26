@@ -1025,6 +1025,8 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
                     void captureProductEvent("navigation_profile_opened", {
                       variant: navigationVariant,
                     });
+                    if (navigationVariant === "a")
+                      void captureProductEvent("navigation_menu_opened", { variant: "a" });
                     setMobileProfileOpen((value) => !value);
                     setMobileMenuOpen(navigationVariant === "a");
                   }}

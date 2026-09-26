@@ -42,6 +42,7 @@ import type { ProfileNavItem } from "@/components/navbar/profileNavItems";
 import type { StaffNavItem } from "@/components/navbar/staffNavItems";
 import { MOBILE_MENU_PANEL_CLASS } from "@/components/navbar/dropdownStyles";
 import { bypassNextImageOptimization } from "@/lib/images/bypassImageOptimization";
+import { captureProductEvent } from "@/lib/analytics/capture";
 import { Chevron, NavIcon, isNavActive } from "./experimentalNavPrimitives";
 import type {
   AdminCharacter,
@@ -138,6 +139,13 @@ export function ExperimentalMobileMenu({
 }: ExperimentalMobileMenuProps) {
   const t = useTranslations("nav");
   const countryName = useCountryDisplayName();
+  const trackDestination = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (!(event.target instanceof Element) || !event.target.closest("a[href]")) return;
+    void captureProductEvent("navigation_destination_selected", {
+      variant: navigationVariant,
+      surface: profileOnly ? "profile" : "menu",
+    });
+  };
   if (profileOnly && user) {
     const links = [
       { href: "/profile", label: t("common.profile"), icon: "Profile" },
@@ -152,6 +160,7 @@ export function ExperimentalMobileMenu({
     return (
       <div
         id="experimental-mobile-menu"
+        onClickCapture={trackDestination}
         className="border-t border-card-border bg-card p-3 lg:hidden"
       >
         <div className="mb-2 flex items-center gap-3 border-b border-card-border pb-3">
@@ -218,6 +227,7 @@ export function ExperimentalMobileMenu({
   return (
     <div
       id="experimental-mobile-menu"
+      onClickCapture={trackDestination}
       className={`border-t border-card-border/60 bg-card/70 px-3.5 py-3.5 backdrop-blur-xl lg:hidden ${MOBILE_MENU_PANEL_CLASS}`}
     >
       {/* Search — inline; no autofocus so opening the menu doesn't pop the
