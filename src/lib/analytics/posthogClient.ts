@@ -65,6 +65,24 @@ export function getPostHogClient(): Promise<PostHogClient | null> {
         ],
       });
       posthog.opt_in_capturing();
+      // The hosted PostHog widget owns the close button. Mirror only its
+      // dismissal position through the shared wrapper, without survey answers.
+      posthog.on(
+        "eventCaptured",
+        (captured: { event?: string; properties?: Record<string, unknown> }) => {
+          if (captured.event !== "survey dismissed") return;
+          const questions = captured.properties?.$survey_questions;
+          const questionIndex = Array.isArray(questions)
+            ? questions.filter(
+                (question: { response?: unknown }) =>
+                  question?.response !== undefined && question.response !== null
+              ).length
+            : 0;
+          void import("./capture").then(({ captureProductEvent }) =>
+            captureProductEvent("survey_dismissed", { question_index: questionIndex })
+          );
+        }
+      );
       return posthog;
     })
     .catch(() => null);
@@ -76,7 +94,7 @@ export function getPostHogClient(): Promise<PostHogClient | null> {
 
 /** Survey loading starts only after the SDK has the authenticated account ID. */
 export function identifyPostHogUser(client: PostHogClient, userId: string): void {
-  client.identify(userId);
+  client.identify(userId, { is_player: true });
   client.set_config({ disable_surveys: false });
 }
 
