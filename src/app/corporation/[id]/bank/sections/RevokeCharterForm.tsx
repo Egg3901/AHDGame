@@ -35,7 +35,10 @@ export function RevokeCharterForm({
         showToast(json.error ?? "Could not revoke charter", "error");
         return;
       }
-      showToast("Charter revoked", "success");
+      showToast(
+        "Charter revoked: the book winds up in an orderly way, depositors are paid out, and remaining capital returns to the owner.",
+        "success"
+      );
       await onChanged();
     } finally {
       setBusy(false);

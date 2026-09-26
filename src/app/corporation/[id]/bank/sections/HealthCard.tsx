@@ -92,6 +92,25 @@ export function HealthCard({ data }: { data: ConsolePayload }) {
   const arrears = data.loans.filter((l) => l.status === "arrears" || l.status === "defaulted");
   const arrearsValue = arrears.reduce((sum, l) => sum + l.outstanding, 0);
 
+  // Plain words with the threshold named: "Capital 9.1%, above the 8% minimum"
+  // rather than "capital standing: adequate".
+  const standingLine =
+    capital.standing === "undercapitalized"
+      ? `below the 8% minimum`
+      : capital.standing === "stressed"
+        ? `above the 8% minimum, failing the shock scenario`
+        : `above the 8% minimum`;
+  // NPC deposits are cash in the vault; player savings pointed at the bank are
+  // pointers, not cash. The reserve line names both so the denominator reads
+  // honestly wherever it appears.
+  const npcCash = Math.max(0, charter.npcDeposits);
+  const pointerShare = Math.max(0, charter.pointerDeposits ?? 0);
+  const reserveSub =
+    `cash ${formatBankMoney(npcCash, charter.currency)} NPC` +
+    (pointerShare > 0
+      ? ` · ${formatBankMoney(pointerShare, charter.currency)} player pointers (not cash, not in reserves)`
+      : "");
+
   const toneBorder =
     meaning.tone === "error"
       ? "border-error/40 bg-error/5"
@@ -123,6 +142,7 @@ export function HealthCard({ data }: { data: ConsolePayload }) {
           value={
             capital.riskAssetsAnchor > 0 ? `${(capital.capitalRatio * 100).toFixed(1)}%` : "No risk"
           }
+          sub={capital.riskAssetsAnchor > 0 ? standingLine : undefined}
           tone={
             capital.standing === "undercapitalized"
               ? "error"
@@ -147,6 +167,7 @@ export function HealthCard({ data }: { data: ConsolePayload }) {
           // legacy `reserves` mirror written once per turn, so the headline and
           // the line under it could be two different numbers on the same card.
           value={formatBankMoney(charter.cashReserves, charter.currency)}
+          sub={reserveSub}
           tone={reserveGap == null ? "default" : reserveGap < 0 ? "error" : "success"}
           tooltip={
             requiredReserves == null
@@ -180,11 +201,13 @@ export function HealthCard({ data }: { data: ConsolePayload }) {
 function HealthStat({
   label,
   value,
+  sub,
   tooltip,
   tone,
 }: {
   label: string;
   value: string;
+  sub?: string;
   tooltip: string;
   tone: "success" | "warning" | "error" | "default";
 }) {
@@ -204,6 +227,7 @@ function HealthStat({
         <Tooltip content={tooltip} label={t("about", { label })} />
       </div>
       <div className={`mt-1 text-xl font-semibold tabular-nums ${valueTone}`}>{value}</div>
+      {sub && <div className="mt-0.5 text-xs text-muted">{sub}</div>}
     </div>
   );
 }
