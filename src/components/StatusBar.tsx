@@ -785,7 +785,7 @@ export function StatusBar({ showOnlineStatus = true }: { showOnlineStatus?: bool
                         {Math.round(fav)}%
                       </>
                     }
-                    ariaLabel={`Favorability: ${fav}%`}
+                    ariaLabel={`Favorability: ${Math.round(fav)}%`}
                   >
                     <p className="font-semibold text-foreground mb-2">Favorability</p>
                     <p className="text-[11px] text-muted leading-relaxed">

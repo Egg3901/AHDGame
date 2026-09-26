@@ -127,6 +127,9 @@ export function electionGameYearFromState(
 }
 
 export function isCompetitiveElection(e: ElectionDisplay): boolean {
+  // Primary shares are normalized within each party. Comparing candidates from
+  // different party primaries can make two 100% leaders look tied.
+  if (e.inPrimary) return false;
   const pcts = Object.values(e.polling?.sharesPct ?? {});
   if (pcts.length < 2) return false;
   const sorted = [...pcts].sort((a, b) => b - a);
