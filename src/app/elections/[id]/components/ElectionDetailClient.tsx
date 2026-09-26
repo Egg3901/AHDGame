@@ -207,6 +207,7 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
 
   const handleEnter = async () => {
     if (!election) return;
+    if (!confirm("Enter this race? This will register your character as a candidate.")) return;
     setActionLoading(true);
     try {
       const res = await fetch(`/api/elections/${id}/enter`, { method: "POST" });

@@ -208,7 +208,7 @@ function EarningsRow({
           {label}
           <Tooltip content={tooltip} label={aboutLabel} />
         </dt>
-        <dd className="truncate text-xs text-muted">{detail}</dd>
+        <dd className="text-xs text-muted">{detail}</dd>
       </div>
       <dd className={`shrink-0 text-sm font-semibold tabular-nums ${tone ?? "text-foreground"}`}>
         {value}
