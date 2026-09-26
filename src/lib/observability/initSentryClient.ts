@@ -6,6 +6,7 @@
 import * as Sentry from "@sentry/nextjs";
 
 import { isValuelessNonErrorRejection } from "@/lib/observability/sentryFilters";
+import { scrubSentryEvent } from "@/lib/observability/scrubSentryEvent";
 
 export function initSentryClient(): typeof Sentry.captureRouterTransitionStart {
   // Browser bundles only receive NEXT_PUBLIC_* environment variables.
@@ -29,7 +30,7 @@ export function initSentryClient(): typeof Sentry.captureRouterTransitionStart {
     sendDefaultPii: false,
 
     // Keep production traces useful without making hot polling endpoints expensive.
-    tracesSampleRate: isProduction ? 0.02 : 1.0,
+    tracesSampleRate: isProduction ? 0.1 : 1.0,
     ignoreTransactions: [
       "GET /api/events",
       "GET /api/game/turn/status",
@@ -115,7 +116,7 @@ export function initSentryClient(): typeof Sentry.captureRouterTransitionStart {
       if (message.includes("insertBefore") && message.includes("not a child")) return null;
       if (message.includes("The object can not be found here")) return null;
 
-      return event;
+      return scrubSentryEvent(event);
     },
 
     // Drop navigation transactions that were cancelled because the user hid the tab

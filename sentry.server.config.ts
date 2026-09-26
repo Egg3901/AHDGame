@@ -4,6 +4,7 @@
 
 import * as Sentry from "@sentry/nextjs";
 import { scrubPushRequest } from "@/lib/nativePush/telemetry";
+import { scrubSentryEvent } from "@/lib/observability/scrubSentryEvent";
 
 // RAILWAY_ENVIRONMENT_NAME is injected on all Railway deployments.
 // Disabling locally prevents MongoParseError / MONGODB_URI-missing noise flooding the dashboard.
@@ -12,7 +13,7 @@ const isProduction = railwayEnv === "production";
 const sentryEnabled = !!railwayEnv;
 
 Sentry.init({
-  dsn: process.env.SENTRY_DSN || process.env.NEXT_PUBLIC_SENTRY_DSN,
+  dsn: process.env.SENTRY_DSN,
 
   enabled: sentryEnabled,
 
@@ -22,7 +23,7 @@ Sentry.init({
   environment: process.env.RAILWAY_ENVIRONMENT_NAME || process.env.NODE_ENV,
 
   // Define how likely traces are sampled. Adjust this value in production, or use tracesSampler for greater control.
-  tracesSampleRate: isProduction ? 0.02 : 1,
+  tracesSampleRate: isProduction ? 0.1 : 1,
 
   // SSE at /api/events holds connections open for minutes — excluding avoids skewing Performance stats
   ignoreTransactions: [
@@ -60,6 +61,6 @@ Sentry.init({
       return null;
     }
 
-    return event;
+    return scrubSentryEvent(event);
   },
 });
