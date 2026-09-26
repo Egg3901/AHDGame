@@ -76,9 +76,12 @@ function ReserveGauge({
 export function RiskPanel({
   risk,
   currency,
+  pointerDeposits,
 }: {
   risk: NonNullable<ConsolePayload["risk"]>;
   currency: CurrencyCode;
+  /** Player savings pointed at the bank: excluded from every denominator below. */
+  pointerDeposits?: number | null;
 }) {
   const danger = risk.oneBandFromFailure || (risk.band === "red" && risk.headroomToFailure < 0);
 
@@ -106,6 +109,12 @@ export function RiskPanel({
         failAt={risk.runFailureThreshold}
         currency={currency}
       />
+      <p className="text-[11px] text-muted">
+        Denominators count household cash only
+        {pointerDeposits != null && pointerDeposits > 0
+          ? `: ${formatBankMoney(pointerDeposits, currency)} of player savings pointed here never arrived as cash, so it sits outside reserves, equity, and the run line`
+          : "."}
+      </p>
 
       <div className="rounded-lg border border-card-border/60 p-3">
         <div className="mb-2 text-[10px] uppercase tracking-widest text-muted">
