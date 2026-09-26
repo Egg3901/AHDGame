@@ -13,10 +13,11 @@
 import { ObjectId, type Db, type AnyBulkWriteOperation } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import type { Corporation, CorporationHistory } from "@/lib/db/types";
+import { STOCK_SPLIT_PRICE_SMOOTHING_TURNS } from "@/lib/constants/corporations";
 import {
-  STOCK_SPLIT_PRICE_SMOOTHING_TURNS,
-  SECTOR_RISK_PREMIUM,
-} from "@/lib/constants/corporations";
+  bankNpvBoostMultiplier,
+  sectorRiskPremiumAtTurn,
+} from "@/lib/corporations/rules/marketBoost";
 import { getCountryConfig } from "@/lib/constants/countries";
 import { buildCorporationLookups } from "./buildLookups";
 import {
@@ -175,7 +176,10 @@ export async function recomputeSharePricesAfterBondTurn(
       ? corpCapitalToAnchor(bankEquity(activeBankCharter), activeBankCharter.currency, bankFxRate)
       : 0;
     const bankNpvAnchor = activeBankCharter
-      ? bankNpvFromPerTurnIncome((activeBankCharter.lastBankingIncome ?? 0) / bankFxRate)
+      ? bankNpvFromPerTurnIncome(
+          (activeBankCharter.lastBankingIncome ?? 0) / bankFxRate,
+          bankNpvBoostMultiplier(turn)
+        )
       : 0;
 
     // Revenue-weighted sector growth rate from current sector state (already
@@ -236,7 +240,7 @@ export async function recomputeSharePricesAfterBondTurn(
       (lookups.primeRateSmoothedByCountry.get(corp.countryId) ??
         lookups.primeRateByCountry.get(corp.countryId) ??
         countryPrimeRate) / 100;
-    const riskPremium = SECTOR_RISK_PREMIUM[corp.type as string] ?? SECTOR_RISK_PREMIUM.default;
+    const riskPremium = sectorRiskPremiumAtTurn(corp.type, turn);
 
     // hist.sectorNPV is stored in local currency (converted by marketCapSnapshot);
     // normalize to ₳ to match the formula's anchor space.

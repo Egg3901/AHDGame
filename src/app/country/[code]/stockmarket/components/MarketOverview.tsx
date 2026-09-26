@@ -1,591 +1,679 @@
 "use client";
 
-import { useState, useMemo, useRef, useId } from "react";
-import { Skeleton, Tooltip as InfoTooltip } from "@/components/ui";
-import { getExchangeLabel } from "@/lib/constants/exchangeRegistry";
-import { CORPORATION_TYPE_LABELS } from "@/lib/constants/corporations";
-import type { CorporationType } from "@/lib/constants/corporations";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Skeleton } from "@/components/ui";
+import {
+  ALL_EXCHANGES,
+  getExchangeApiKey,
+  getExchangeLabel,
+} from "@/lib/constants/exchangeRegistry";
+import { CORPORATION_TYPE_LABELS, type CorporationType } from "@/lib/constants/corporations";
 import { useCurrency } from "@/contexts/CurrencyContext";
-import { useGameTurnStatus } from "@/hooks/useGameEvents";
-import { STARTING_YEAR } from "@/lib/constants/turnTime";
-import type { ExchangeFilter, MarketCapPoint } from "../types";
+import type { ExchangeFilter } from "../types";
+import type {
+  CandlestickData,
+  HistogramData,
+  IChartApi,
+  ISeriesApi,
+  ISeriesMarkersPluginApi,
+  LineData,
+  Time,
+  UTCTimestamp,
+} from "lightweight-charts";
 
-const MC_CHART_WIDTH = 700;
-const MC_CHART_HEIGHT = 240;
-const VOL_HEIGHT = 32;
-const VOL_GAP = 6;
-const MC_PAD = { top: 20, right: 24, bottom: 48, left: 72 };
+/* ------------------------------------------------------------------ */
+/* Range model: turns on the wire, labels in the UI.                   */
+/* ------------------------------------------------------------------ */
 
-type Timeframe = "24h" | "48h" | "5y" | "all";
+const RANGES = [
+  { key: "24H", label: "24H", turns: 24 },
+  { key: "7D", label: "7D", turns: 168 },
+  { key: "1M", label: "1M", turns: 720 },
+  { key: "1Y", label: "1Y", turns: 8760 },
+  { key: "ALL", label: "ALL", turns: 0 },
+] as const;
 
-const TIMEFRAME_ORDER: Record<Timeframe, number> = { "24h": 0, "48h": 1, "5y": 2, all: 3 };
+type RangeKey = (typeof RANGES)[number]["key"];
 
-const TIMEFRAME_TURNS: Record<Timeframe, number> = {
-  "24h": 24,
-  "48h": 48,
-  "5y": 240,
-  all: Infinity,
-};
-
-const TIMEFRAME_META: { key: Timeframe; label: string; title: string }[] = [
-  { key: "24h", label: "24h", title: "Last 24 turns (about 6 game-months)" },
-  { key: "48h", label: "48h", title: "Last 48 turns (one game year)" },
-  { key: "5y", label: "5y", title: "Last 240 turns (five game years)" },
-  { key: "all", label: "All", title: "Full recorded history" },
-];
-
-function turnToRealDate(turn: number, newestTurn: number, newestTurnDateIso: string): Date {
-  return new Date(new Date(newestTurnDateIso).getTime() - (newestTurn - turn) * 3_600_000);
+interface CandleDto {
+  turn: number;
+  time: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+  intraday: boolean;
 }
 
-/**
- * Raw history turn to the calendar year the player sees.
- *
- * `calendarOffset` is the world's `preIterationTurns`: the founding phase burns
- * raw turns while the calendar stays pinned to the era start, so the raw counter
- * runs ahead of the date by exactly that many turns forever after. Without it a
- * world with a 48-turn founding cycle labelled its chart axis a whole year ahead
- * of the status bar.
- */
-function turnToGameYear(turn: number, startingYear: number, calendarOffset = 0): number {
-  return startingYear + Math.floor((Math.max(1, turn - calendarOffset) - 1) / 48);
+interface CandlesResponse {
+  exchange: string;
+  turns: number;
+  bucketed: boolean;
+  bucketTurns: number;
+  points: CandleDto[];
+  intradayTurns: number;
+  totalTurns: number;
 }
 
-/** Inverse of {@link turnToGameYear}: the raw turn a calendar year opens on. */
-function gameYearStartTurn(year: number, startingYear: number, calendarOffset = 0): number {
-  return 1 + (year - startingYear) * 48 + calendarOffset;
+interface MarkersResponse {
+  splits: {
+    turn: number;
+    kind: string;
+    corporationId: string;
+    corporationName: string;
+    headline: string;
+  }[];
+  wire: { timestamp: string; type: string; headline: string; href: string | null }[];
 }
 
-function isSameUTCDay(a: Date, b: Date): boolean {
-  return (
-    a.getUTCFullYear() === b.getUTCFullYear() &&
-    a.getUTCMonth() === b.getUTCMonth() &&
-    a.getUTCDate() === b.getUTCDate()
-  );
+type CompareKey = { kind: "venue"; api: string } | { kind: "sector"; sector: CorporationType };
+
+function cssVar(name: string, fallback: string): string {
+  if (typeof document === "undefined") return fallback;
+  const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  return v || fallback;
 }
 
-export function MarketOverview({
-  exchangeFilter,
-  timeframe,
-  onTimeframeChange,
-  history,
-  newestTurnDate,
-  historyLoading,
-}: {
-  exchangeFilter: ExchangeFilter;
-  /**
-   * Page-shared short timeframe (also drives the stats strip, stocks, and
-   * funds tables). The chart maps 1h onto its 24-turn window: one turn of
-   * history is too few points to draw.
-   */
-  timeframe: "1h" | "24h" | "48h";
-  onTimeframeChange: (tf: "24h" | "48h") => void;
-  /** Shared history window fetched once by the page (newest-first sliceable). */
-  history: MarketCapPoint[];
-  newestTurnDate: string | null;
-  historyLoading: boolean;
-}) {
+function ma(values: number[], window: number): (number | null)[] {
+  return values.map((_, i) => {
+    if (i + 1 < window) return null;
+    let sum = 0;
+    for (let j = i - window + 1; j <= i; j++) sum += values[j];
+    return sum / window;
+  });
+}
+
+export function MarketOverview({ exchangeFilter }: { exchangeFilter: ExchangeFilter }) {
   const { formatAmount } = useCurrency();
-  // Preset-aware year axis. Falls back to STARTING_YEAR if status not yet loaded.
-  const turnStatus = useGameTurnStatus();
-  const startingYearRef = turnStatus?.startingYear ?? STARTING_YEAR;
-  const calendarOffset = turnStatus?.preIterationTurns ?? 0;
-  const [sectorFilter, setSectorFilter] = useState<string>("all");
-  // Chart-only extensions beyond the shared strip horizons.
-  const [longTf, setLongTf] = useState<"5y" | "all" | null>(null);
-  const [animDir, setAnimDir] = useState<"compress" | "expand" | null>(null);
-  const [animKey, setAnimKey] = useState(0);
-  const [hoverIdx, setHoverIdx] = useState<number | null>(null);
-  const svgRef = useRef<SVGSVGElement>(null);
-  const prevTfRef = useRef<Timeframe>("48h");
-  const rawId = useId();
-  const gradId = `mc-${rawId.replace(/:/g, "")}`;
+  const containerRef = useRef<HTMLDivElement>(null);
+  const tooltipRef = useRef<HTMLDivElement>(null);
+  const chartRef = useRef<IChartApi | null>(null);
+  const candleRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
+  const volumeRef = useRef<ISeriesApi<"Histogram"> | null>(null);
+  const ma20Ref = useRef<ISeriesApi<"Line"> | null>(null);
+  const ma50Ref = useRef<ISeriesApi<"Line"> | null>(null);
+  const compareRef = useRef<ISeriesApi<"Line"> | null>(null);
+  const markersRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
 
-  const loading = historyLoading;
-  const effective: Timeframe = longTf ?? (timeframe === "1h" ? "24h" : timeframe);
+  const [range, setRange] = useState<RangeKey>("7D");
+  const [showMa20, setShowMa20] = useState(false);
+  const [showMa50, setShowMa50] = useState(false);
+  const [compare, setCompare] = useState<CompareKey | null>(null);
+  const [compareError, setCompareError] = useState(false);
+  const [candles, setCandles] = useState<CandleDto[]>([]);
+  const [bucketed, setBucketed] = useState(false);
+  const [intradayTurns, setIntradayTurns] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [failed, setFailed] = useState(false);
 
-  const handleTimeframeChange = (tf: Timeframe) => {
-    if (tf === effective) return;
-    const goingLonger = TIMEFRAME_ORDER[tf] > TIMEFRAME_ORDER[prevTfRef.current];
-    prevTfRef.current = tf;
-    setAnimDir(goingLonger ? "expand" : "compress");
-    setAnimKey((k) => k + 1);
-    if (tf === "5y" || tf === "all") {
-      setLongTf(tf);
-    } else {
-      setLongTf(null);
-      onTimeframeChange(tf);
-    }
-  };
+  const exchangeApi =
+    exchangeFilter === "global" ? "global" : (getExchangeApiKey(exchangeFilter) ?? "global");
+  const exchangeLabel = exchangeFilter === "global" ? "Global" : getExchangeLabel(exchangeFilter);
 
-  const availableSectors = useMemo(() => {
-    const sectors = new Set<string>();
-    for (const pt of history) {
-      if (pt.bySector) {
-        for (const k of Object.keys(pt.bySector)) sectors.add(k);
-      }
-    }
-    return [...sectors].sort();
-  }, [history]);
+  const turns = RANGES.find((r) => r.key === range)?.turns ?? 168;
+  const candlesRef = useRef<CandleDto[]>([]);
 
-  const slicedHistory = useMemo(() => {
-    const limit = TIMEFRAME_TURNS[effective];
-    const raw = limit === Infinity ? history : history.slice(-limit);
-    // For "all", downsample to ~200 visible points so the SVG stays fast
-    if (effective === "all" && raw.length > 200) {
-      const step = Math.ceil(raw.length / 200);
-      return raw.filter((_, i) => i % step === 0 || i === raw.length - 1);
-    }
-    return raw;
-  }, [history, effective]);
+  const fmt = (n: number | undefined): string =>
+    n === undefined ? "—" : formatAmount(Math.round(n));
 
-  const chartData = useMemo(() => {
-    if (sectorFilter === "all") return slicedHistory;
-    return slicedHistory.map((pt) => ({
-      ...pt,
-      marketCap: pt.bySector?.[sectorFilter as CorporationType] ?? 0,
-    }));
-  }, [slicedHistory, sectorFilter]);
+  /* ---------------- chart lifecycle (mount once) ---------------- */
+  useEffect(() => {
+    let disposed = false;
+    let chart: IChartApi | null = null;
+    let observer: ResizeObserver | null = null;
+    (async () => {
+      const container = containerRef.current;
+      if (!container) return;
+      const { createChart, CandlestickSeries, HistogramSeries, CrosshairMode } =
+        await import("lightweight-charts");
+      if (disposed) return;
 
-  const renderChart = () => {
-    if (loading) {
-      return (
-        <div className="rounded-xl border border-card-border bg-card p-5 shadow-sm">
-          <div className="mb-5">
-            <Skeleton className="h-4 w-32 rounded-md mb-2" />
-            <Skeleton className="h-8 w-48 rounded-md" />
-          </div>
-          <Skeleton className="h-[240px] w-full rounded-lg" />
-        </div>
+      const up = cssVar("--success", "#22c55e");
+      const down = cssVar("--error", "#ef4444");
+      const muted = cssVar("--muted", "#8f8f9d");
+      const border = cssVar("--card-border", "#2a2a3d");
+
+      chart = createChart(container, {
+        width: container.clientWidth,
+        height: container.clientHeight,
+        layout: {
+          background: { color: "transparent" },
+          textColor: muted,
+          fontFamily: "inherit",
+          fontSize: 11,
+        },
+        grid: { vertLines: { color: border }, horzLines: { color: border } },
+        crosshair: {
+          mode: CrosshairMode.Normal,
+          vertLine: { color: muted, style: 2, labelBackgroundColor: muted },
+          horzLine: { color: muted, style: 2, labelBackgroundColor: muted },
+        },
+        rightPriceScale: { borderColor: border },
+        timeScale: { borderColor: border, timeVisible: true, secondsVisible: false },
+      });
+      chartRef.current = chart;
+
+      const candleSeries = chart.addSeries(CandlestickSeries, {
+        upColor: up,
+        downColor: down,
+        wickUpColor: up,
+        wickDownColor: down,
+        borderVisible: false,
+      });
+      candleRef.current = candleSeries;
+
+      const volumeSeries = chart.addSeries(
+        HistogramSeries,
+        { priceScaleId: "", priceFormat: { type: "volume" } },
+        1
       );
-    }
+      volumeRef.current = volumeSeries;
+      chart.priceScale("").applyOptions({ scaleMargins: { top: 0.84, bottom: 0 } });
 
-    if (chartData.length < 2) return null;
+      chart.subscribeCrosshairMove((param) => {
+        const tip = tooltipRef.current;
+        if (!tip || !param.point || !param.time) {
+          if (tip) tip.style.display = "none";
+          return;
+        }
+        const data = param.seriesData.get(candleSeries) as CandlestickData | undefined;
+        if (!data || data.open === undefined) {
+          tip.style.display = "none";
+          return;
+        }
+        const rows = candlesRef.current;
+        const idx = rows.findIndex((c) => c.time === (param.time as number));
+        const prev = idx > 0 ? rows[idx - 1] : null;
+        const chg = prev ? data.close - prev.close : 0;
+        const chgPct = prev && prev.close !== 0 ? (chg / prev.close) * 100 : 0;
+        const vol = idx >= 0 ? rows[idx].volume : 0;
+        const flatNote = idx >= 0 && !rows[idx].intraday ? " · turn closes" : "";
+        tip.innerHTML =
+          `<div class="font-mono font-bold text-foreground">T${idx >= 0 ? rows[idx].turn : ""}</div>` +
+          `<div class="font-mono tabular-nums">O ${fmt(data.open)} H ${fmt(data.high)}<br/>` +
+          `L ${fmt(data.low)} C ${fmt(data.close)}</div>` +
+          `<div class="font-mono tabular-nums ${chg >= 0 ? "text-success" : "text-error"}">` +
+          `${chg >= 0 ? "+" : ""}${fmt(chg)} (${chg >= 0 ? "+" : ""}${chgPct.toFixed(2)}%)</div>` +
+          `<div class="font-mono tabular-nums text-muted">Vol ${fmt(vol)}${flatNote}</div>`;
+        const box = container.getBoundingClientRect();
+        tip.style.display = "block";
+        tip.style.left = `${Math.min(Math.max(param.point.x + 12, 8), Math.max(box.width - 170, 8))}px`;
+        tip.style.top = `${Math.min(Math.max(param.point.y - 10, 8), Math.max(box.height - 120, 8))}px`;
+      });
 
-    const innerW = MC_CHART_WIDTH - MC_PAD.left - MC_PAD.right;
-    const lineZoneH = MC_CHART_HEIGHT - MC_PAD.top - MC_PAD.bottom - VOL_HEIGHT - VOL_GAP;
-    const volZoneTop = MC_PAD.top + lineZoneH + VOL_GAP;
+      observer = new ResizeObserver(() => {
+        if (!container || !chart) return;
+        chart.applyOptions({ width: container.clientWidth, height: container.clientHeight });
+      });
+      observer.observe(container);
+    })();
+    return () => {
+      disposed = true;
+      observer?.disconnect();
+      chart?.remove();
+      chartRef.current = null;
+      candleRef.current = null;
+      volumeRef.current = null;
+      ma20Ref.current = null;
+      ma50Ref.current = null;
+      compareRef.current = null;
+      markersRef.current = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-    const turns = chartData.map((p) => p.turn);
-    const minTurn = turns[0];
-    const maxTurn = turns[turns.length - 1];
-
-    const caps = chartData.map((p) => p.marketCap);
-    // Keep the intra-turn range inside the frame when it is drawn.
-    const rangeVals = chartData.flatMap((p) => [p.high ?? p.marketCap, p.low ?? p.marketCap]);
-    const minCap = Math.min(...caps, ...rangeVals);
-    const maxCap = Math.max(...caps, ...rangeVals);
-    const capPad = (maxCap - minCap) * 0.08 || maxCap * 0.05 || 1;
-    const yMin = Math.max(0, minCap - capPad);
-    const yMax = maxCap + capPad;
-
-    const currentCap = caps[caps.length - 1];
-    const firstCap = caps[0];
-    const change = firstCap > 0 ? ((currentCap - firstCap) / firstCap) * 100 : 0;
-    const isUp = change >= 0;
-    const lineColor = isUp ? "var(--success)" : "var(--error)";
-
-    const xScale = (turn: number) =>
-      MC_PAD.left + ((turn - minTurn) / Math.max(maxTurn - minTurn, 1)) * innerW;
-    const yScale = (val: number) =>
-      MC_PAD.top + lineZoneH - ((val - yMin) / (yMax - yMin)) * lineZoneH;
-
-    const linePath = chartData
-      .map((p, i) => `${i === 0 ? "M" : "L"} ${xScale(p.turn)} ${yScale(p.marketCap)}`)
-      .join(" ");
-
-    const areaPath = [
-      ...chartData.map((p, i) => `${i === 0 ? "M" : "L"} ${xScale(p.turn)} ${yScale(p.marketCap)}`),
-      `L ${xScale(chartData[chartData.length - 1].turn)} ${MC_PAD.top + lineZoneH}`,
-      `L ${xScale(chartData[0].turn)} ${MC_PAD.top + lineZoneH}`,
-      "Z",
-    ].join(" ");
-
-    // Intra-turn range band (absent on pre-range records — then no band).
-    const hasRange = chartData.every((p) => p.high != null && p.low != null);
-    const bandPath = hasRange
-      ? [
-          ...chartData.map(
-            (p, i) => `${i === 0 ? "M" : "L"} ${xScale(p.turn)} ${yScale(p.high as number)}`
-          ),
-          ...[...chartData].reverse().map((p) => `L ${xScale(p.turn)} ${yScale(p.low as number)}`),
-          "Z",
-        ].join(" ")
-      : null;
-
-    const hoverPoint = hoverIdx != null ? chartData[hoverIdx] : null;
-    const handleSvgMove = (e: { clientX: number }) => {
-      const rect = svgRef.current?.getBoundingClientRect();
-      if (!rect || rect.width === 0) return;
-      const x = ((e.clientX - rect.left) / rect.width) * MC_CHART_WIDTH;
-      let best = 0;
-      let bestDist = Infinity;
-      chartData.forEach((p, i) => {
-        const d = Math.abs(xScale(p.turn) - x);
-        if (d < bestDist) {
-          bestDist = d;
-          best = i;
+  /* ---------------- data: candles + volume per range ---------------- */
+  useEffect(() => {
+    let cancelled = false;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-state reset on range/exchange change
+    setLoading(true);
+    setFailed(false);
+    fetch(`/api/stock-exchange/candles?exchange=${exchangeApi}&turns=${turns}`, {
+      cache: "no-store",
+    })
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error("candles failed"))))
+      .then((json: CandlesResponse) => {
+        if (cancelled) return;
+        setCandles(json.points ?? []);
+        setBucketed(json.bucketed);
+        setIntradayTurns(json.intradayTurns ?? 0);
+        setLoading(false);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setFailed(true);
+          setLoading(false);
         }
       });
-      setHoverIdx(best);
+    return () => {
+      cancelled = true;
     };
+  }, [exchangeApi, turns]);
 
-    // Per-turn delta bars (market cap change magnitude)
-    const deltas = chartData.map((p, i) => {
-      if (i === 0) return { abs: 0, up: true };
-      const prev = caps[i - 1];
-      return { abs: Math.abs(p.marketCap - prev), up: p.marketCap >= prev };
-    });
-    const maxDelta = Math.max(...deltas.map((d) => d.abs), 1);
-    const barW = Math.max(1, Math.min(8, (innerW / chartData.length) * 0.75));
-
-    const yTicks = 4;
-    const yTickVals = Array.from(
-      { length: yTicks + 1 },
-      (_, i) => yMin + (i / yTicks) * (yMax - yMin)
+  /* ---------------- push candles + volume into the chart ---------------- */
+  useEffect(() => {
+    candlesRef.current = candles;
+    const candleSeries = candleRef.current;
+    const volumeSeries = volumeRef.current;
+    const chart = chartRef.current;
+    if (!candleSeries || !volumeSeries || !chart) return;
+    const up = cssVar("--success", "#22c55e");
+    const down = cssVar("--error", "#ef4444");
+    candleSeries.setData(
+      candles.map((c): CandlestickData<UTCTimestamp> => ({
+        time: c.time as UTCTimestamp,
+        open: c.open,
+        high: c.high,
+        low: c.low,
+        close: c.close,
+      }))
     );
+    volumeSeries.setData(
+      candles.map((c): HistogramData<UTCTimestamp> => ({
+        time: c.time as UTCTimestamp,
+        value: c.volume,
+        color: c.close >= c.open ? `${up}80` : `${down}80`,
+      }))
+    );
+    chart.timeScale().fitContent();
+  }, [candles]);
 
-    const exchangeLabel = exchangeFilter === "global" ? "Global" : getExchangeLabel(exchangeFilter);
-    const xAxisLabelY = MC_PAD.top + lineZoneH + VOL_HEIGHT + VOL_GAP + 14;
+  /* ---------------- moving-average overlays ---------------- */
+  useEffect(() => {
+    const chart = chartRef.current;
+    if (!chart || candles.length === 0) return;
+    void import("lightweight-charts").then(({ LineSeries }) => {
+      const closes = candles.map((c) => c.close);
+      const times = candles.map((c) => c.time as UTCTimestamp);
+      const sync = (
+        ref: React.MutableRefObject<ISeriesApi<"Line"> | null>,
+        on: boolean,
+        window: number,
+        color: string
+      ) => {
+        if (on && !ref.current) {
+          ref.current = chart.addSeries(LineSeries, {
+            color,
+            lineWidth: 1,
+            priceLineVisible: false,
+            lastValueVisible: false,
+            crosshairMarkerVisible: false,
+          });
+        } else if (!on && ref.current) {
+          chart.removeSeries(ref.current);
+          ref.current = null;
+        }
+        if (on && ref.current) {
+          const values = ma(closes, window);
+          const data: LineData<UTCTimestamp>[] = [];
+          values.forEach((v, i) => {
+            if (v !== null) data.push({ time: times[i], value: v });
+          });
+          ref.current.setData(data);
+        }
+      };
+      // Cyan/amber already carry meaning in the UI (commodity chips); reuse
+      // them so no new palette enters the theme.
+      sync(ma20Ref, showMa20, 20, "#22d3ee");
+      sync(ma50Ref, showMa50, 50, "#f59e0b");
+    });
+  }, [candles, showMa20, showMa50]);
 
-    return (
-      <div className="rounded-xl border border-card-border bg-card p-5 shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-4 mb-5">
-          <div className="flex flex-col gap-1">
-            <h3 className="text-sm font-semibold uppercase tracking-widest text-muted inline-flex items-center">
-              {exchangeLabel} Market Index
-              <InfoTooltip content="Continuity-adjusted index: corporate actions that would otherwise jump the series (delistings, redenominations) are smoothed, so the line tracks market performance rather than raw capitalization. Raw totals are available per turn in the underlying history." />
+  /* ---------------- event markers ---------------- */
+  useEffect(() => {
+    const candleSeries = candleRef.current;
+    if (!candleSeries || candles.length === 0) return;
+    const firstTurn = candles[0].turn;
+    const lastTurn = candles[candles.length - 1].turn;
+    const byTurn = new Map(candles.map((c) => [c.turn, c.time as UTCTimestamp]));
+    const times = candles.map((c) => c.time);
+    const nearestTime = (unix: number): UTCTimestamp | null => {
+      let best: number | null = null;
+      for (const t of times) {
+        if (t <= unix) best = t;
+        else break;
+      }
+      return (best ?? null) as UTCTimestamp | null;
+    };
+    void import("lightweight-charts")
+      .then(({ createSeriesMarkers }) =>
+        fetch(
+          `/api/stock-exchange/markers?exchange=${exchangeApi}&fromTurn=${firstTurn}&toTurn=${lastTurn}`,
+          { cache: "no-store" }
+        )
+          .then((r) => (r.ok ? r.json() : Promise.reject(new Error("markers failed"))))
+          .then((json: MarkersResponse) => ({ json, createSeriesMarkers }))
+      )
+      .then(({ json, createSeriesMarkers }) => {
+        const plugin = markersRef.current ?? createSeriesMarkers(candleSeries, []);
+        markersRef.current = plugin;
+        const up = cssVar("--success", "#22c55e");
+        const down = cssVar("--error", "#ef4444");
+        const primary = cssVar("--primary", "#dc2626");
+        const muted = cssVar("--muted", "#8f8f9d");
+        const markers: {
+          time: UTCTimestamp;
+          position: "aboveBar" | "belowBar";
+          color: string;
+          shape: "arrowUp" | "arrowDown" | "circle";
+          text: string;
+        }[] = [];
+        for (const s of json.splits ?? []) {
+          const t = byTurn.get(s.turn);
+          if (!t) continue;
+          const forward = s.kind === "stock_split";
+          markers.push({
+            time: t,
+            position: forward ? "belowBar" : "aboveBar",
+            color: forward ? up : down,
+            shape: forward ? "arrowUp" : "arrowDown",
+            text: `${s.headline} (T${s.turn})`,
+          });
+        }
+        for (const w of json.wire ?? []) {
+          const t = nearestTime(Math.floor(new Date(w.timestamp).getTime() / 1000));
+          if (!t) continue;
+          const color =
+            w.type === "dividend_changed"
+              ? up
+              : w.type === "corporation_dissolved"
+                ? down
+                : w.type === "corporation_ipo"
+                  ? primary
+                  : muted;
+          markers.push({ time: t, position: "aboveBar", color, shape: "circle", text: w.headline });
+        }
+        markers.sort((a, b) => (a.time as number) - (b.time as number));
+        plugin.setMarkers(markers);
+      })
+      .catch(() => {
+        // Markers are annotation-only; a failed fetch must not break the chart.
+      });
+  }, [candles, exchangeApi]);
+
+  /* ---------------- compare overlay ---------------- */
+  const compareLabel = useMemo(() => {
+    if (!compare) return null;
+    if (compare.kind === "venue") {
+      const info = ALL_EXCHANGES.find((e) => e.apiKey === compare.api);
+      return info ? `${info.exchangeName} %` : null;
+    }
+    return `${CORPORATION_TYPE_LABELS[compare.sector] ?? compare.sector} %`;
+  }, [compare]);
+
+  useEffect(() => {
+    const chart = chartRef.current;
+    if (!chart || candles.length === 0) return;
+    if (!compare) {
+      if (compareRef.current) {
+        chart.removeSeries(compareRef.current);
+        compareRef.current = null;
+      }
+      return;
+    }
+    const base = candles[0].time;
+    const normalize = (series: { time: number; value: number }[]): LineData<UTCTimestamp>[] => {
+      if (series.length === 0) return [];
+      const first = series[0].value;
+      if (!first) return [];
+      return series.map((p) => ({
+        time: p.time as UTCTimestamp,
+        value: ((p.value - first) / first) * 100,
+      }));
+    };
+    const applyLine = (data: LineData<UTCTimestamp>[]) => {
+      if (!chart) return;
+      if (!compareRef.current) {
+        void import("lightweight-charts").then(({ LineSeries }) => {
+          if (!chart || compareRef.current) return;
+          compareRef.current = chart.addSeries(LineSeries, {
+            color: cssVar("--primary", "#dc2626"),
+            lineWidth: 2,
+            priceScaleId: "compare",
+            priceLineVisible: false,
+            lastValueVisible: true,
+            crosshairMarkerVisible: true,
+          });
+          chart.priceScale("compare").applyOptions({ borderVisible: false });
+          compareRef.current.setData(data);
+        });
+      } else {
+        compareRef.current.setData(data);
+      }
+    };
+    if (compare.kind === "venue") {
+      fetch(`/api/stock-exchange/candles?exchange=${compare.api}&turns=${turns}`, {
+        cache: "no-store",
+      })
+        .then((r) => (r.ok ? r.json() : Promise.reject(new Error("compare failed"))))
+        .then((json: CandlesResponse) => {
+          const pts = (json.points ?? [])
+            .filter((p) => p.time >= base)
+            .map((p) => ({ time: p.time, value: p.close }));
+          applyLine(normalize(pts));
+        })
+        .catch(() => {
+          setCompareError(true);
+        });
+    } else {
+      fetch(
+        `/api/stock-exchange/market-cap-history?exchange=${exchangeApi}&limit=${turns === 0 ? 2000 : turns}`,
+        {
+          cache: "no-store",
+        }
+      )
+        .then((r) => (r.ok ? r.json() : Promise.reject(new Error("sector failed"))))
+        .then(
+          (json: {
+            points?: { turn: number; createdAt: string; bySector?: Record<string, number> }[];
+          }) => {
+            const pts = (json.points ?? [])
+              .map((p) => ({
+                time: Math.floor(new Date(p.createdAt).getTime() / 1000),
+                value: p.bySector?.[compare.sector] ?? 0,
+              }))
+              .filter((p) => p.time >= base && p.value > 0);
+            // Weekly buckets mirror the main series on long ranges.
+            const bucketedPts =
+              turns === 8760 || turns === 0
+                ? Array.from(
+                    pts
+                      .reduce((m, p, i) => {
+                        const k = Math.floor(i / 168);
+                        const arr = m.get(k) ?? [];
+                        arr.push(p);
+                        m.set(k, arr);
+                        return m;
+                      }, new Map<number, { time: number; value: number }[]>())
+                      .values()
+                  ).map((week) => week[week.length - 1])
+                : pts;
+            applyLine(normalize(bucketedPts));
+          }
+        )
+        .catch(() => {
+          setCompareError(true);
+        });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [candles, compare, exchangeApi]);
+
+  const last = candles[candles.length - 1];
+  const prev = candles.length > 1 ? candles[candles.length - 2] : null;
+  const lastChg = last && prev ? last.close - prev.close : 0;
+  const lastChgPct = last && prev && prev.close !== 0 ? (lastChg / prev.close) * 100 : 0;
+
+  const venueOptions = useMemo(
+    () =>
+      [{ apiKey: "global", exchangeName: "Global" }, ...ALL_EXCHANGES].filter(
+        (v) => v.apiKey !== exchangeApi
+      ),
+    [exchangeApi]
+  );
+  const sectorOptions = useMemo(
+    () => Object.keys(CORPORATION_TYPE_LABELS) as CorporationType[],
+    []
+  );
+
+  return (
+    <div className="rounded-xl border border-card-border bg-card shadow-sm overflow-hidden">
+      <div className="px-4 pt-4 pb-3 border-b border-card-border">
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <h3 className="text-sm font-semibold uppercase tracking-widest text-muted">
+              {exchangeLabel} Market · Candles
             </h3>
-            <div className="flex items-baseline gap-2">
-              <span className="text-2xl font-extrabold tabular-nums text-foreground tracking-tight">
-                {formatAmount(currentCap)}
-              </span>
-              <span
-                className={`text-sm font-bold tabular-nums px-2 py-0.5 rounded-md ${
-                  isUp ? "text-success bg-success/10" : "text-error bg-error/10"
+            {!loading && last && (
+              <div className="text-sm tabular-nums">
+                <span className="font-mono font-bold text-foreground">
+                  {formatAmount(last.close)}
+                </span>{" "}
+                <span
+                  className={`font-mono font-bold ${lastChg >= 0 ? "text-success" : "text-error"}`}
+                >
+                  {lastChg >= 0 ? "+" : ""}
+                  {formatAmount(Math.round(lastChg))} ({lastChg >= 0 ? "+" : ""}
+                  {lastChgPct.toFixed(2)}%)
+                </span>
+              </div>
+            )}
+          </div>
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {RANGES.map((r) => (
+              <button
+                key={r.key}
+                onClick={() => setRange(r.key)}
+                title={
+                  r.turns === 0
+                    ? "Full recorded history"
+                    : `Last ${r.turns} turns (${r.turns === 24 ? "a day" : r.turns === 168 ? "a week" : r.turns === 720 ? "a month" : "a year"})`
+                }
+                className={`px-2.5 py-1 rounded-md text-xs font-medium border transition-colors whitespace-nowrap ${
+                  range === r.key
+                    ? "bg-primary/10 text-primary border-primary/20"
+                    : "bg-card-elevated border-card-border text-muted hover:text-foreground hover:bg-card-elevated/80"
                 }`}
               >
-                {isUp ? "▲" : "▼"} {Math.abs(change).toFixed(2)}%
-              </span>
-            </div>
-          </div>
-          <div className="flex items-center gap-3 flex-wrap">
-            <div className="flex items-center gap-1">
-              {TIMEFRAME_META.map((tf) => (
-                <button
-                  key={tf.key}
-                  onClick={() => handleTimeframeChange(tf.key)}
-                  title={
-                    timeframe === "1h" && tf.key === "24h"
-                      ? "Tables show the 1-turn change; the chart draws the 24-turn window"
-                      : tf.title
-                  }
-                  className={`px-2.5 py-1 rounded-md text-xs font-medium border transition-colors whitespace-nowrap ${
-                    effective === tf.key
-                      ? "bg-primary/10 text-primary border-primary/20"
-                      : "bg-card-elevated border-card-border text-muted hover:text-foreground hover:bg-card-elevated/80"
-                  }`}
-                >
-                  {tf.label}
-                </button>
-              ))}
-            </div>
-            {availableSectors.length > 1 && (
-              <select
-                value={sectorFilter}
-                onChange={(e) => setSectorFilter(e.target.value)}
-                className="text-xs bg-card-elevated border border-card-border rounded-lg px-3 py-1.5 text-foreground focus:outline-none focus:border-primary transition-colors hover:bg-card-elevated/80"
-              >
-                <option value="all">All Sectors</option>
-                {availableSectors.map((s) => (
-                  <option key={s} value={s}>
-                    {CORPORATION_TYPE_LABELS[s as CorporationType] ?? s}
+                {r.label}
+              </button>
+            ))}
+            <span className="mx-1 h-4 w-px bg-card-border" />
+            <button
+              onClick={() => setShowMa20((v) => !v)}
+              aria-pressed={showMa20}
+              title="20-turn moving average of closes"
+              className={`px-2.5 py-1 rounded-md text-xs font-medium border transition-colors whitespace-nowrap ${
+                showMa20
+                  ? "bg-primary/10 text-primary border-primary/20"
+                  : "bg-card-elevated border-card-border text-muted hover:text-foreground"
+              }`}
+            >
+              MA-20
+            </button>
+            <button
+              onClick={() => setShowMa50((v) => !v)}
+              aria-pressed={showMa50}
+              title="50-turn moving average of closes"
+              className={`px-2.5 py-1 rounded-md text-xs font-medium border transition-colors whitespace-nowrap ${
+                showMa50
+                  ? "bg-primary/10 text-primary border-primary/20"
+                  : "bg-card-elevated border-card-border text-muted hover:text-foreground"
+              }`}
+            >
+              MA-50
+            </button>
+            <span className="mx-1 h-4 w-px bg-card-border" />
+            <select
+              aria-label="Compare with another index"
+              value={
+                compare
+                  ? `${compare.kind}:${compare.kind === "venue" ? compare.api : compare.sector}`
+                  : ""
+              }
+              onChange={(e) => {
+                const v = e.target.value;
+                setCompareError(false);
+                if (!v) {
+                  setCompare(null);
+                  return;
+                }
+                const [kind, key] = v.split(":");
+                setCompare(
+                  kind === "venue"
+                    ? { kind: "venue", api: key }
+                    : { kind: "sector", sector: key as CorporationType }
+                );
+              }}
+              className="px-2 py-1 rounded-md text-xs font-medium border bg-card-elevated border-card-border text-muted hover:text-foreground max-w-44"
+            >
+              <option value="">Compare…</option>
+              <optgroup label="Exchanges">
+                {venueOptions.map((v) => (
+                  <option key={v.apiKey} value={`venue:${v.apiKey}`}>
+                    {v.exchangeName}
                   </option>
                 ))}
-              </select>
-            )}
-          </div>
-        </div>
-        <style>{`
-          @keyframes mkt-compress-in {
-            from { transform: scaleX(1.06); opacity: 0.4; }
-            to   { transform: scaleX(1);    opacity: 1;   }
-          }
-          @keyframes mkt-expand-out {
-            from { transform: scaleX(0.94); opacity: 0.4; }
-            to   { transform: scaleX(1);    opacity: 1;   }
-          }
-        `}</style>
-        <div
-          key={animKey}
-          style={{
-            transformOrigin: "right center",
-            animation: animDir
-              ? `${animDir === "compress" ? "mkt-compress-in" : "mkt-expand-out"} 0.32s cubic-bezier(0.4, 0, 0.2, 1) both`
-              : undefined,
-          }}
-        >
-          <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-muted">
-            <span className="inline-flex items-center gap-1.5">
-              <span
-                className="inline-block h-0.5 w-4 rounded-full"
-                style={{ background: lineColor }}
-              />
-              Market index
-            </span>
-            <span className="inline-flex items-center gap-1.5">
-              <span className="inline-block h-2.5 w-2.5 rounded-[2px] bg-success/60" />
-              <span className="inline-block h-2.5 w-2.5 rounded-[2px] bg-error/60" />
-              Per-turn change
-            </span>
-            {bandPath && (
-              <span className="inline-flex items-center gap-1.5">
-                <span
-                  className="inline-block h-2.5 w-4 rounded-[2px]"
-                  style={{ background: lineColor, opacity: 0.25 }}
-                />
-                Intra-turn range
+              </optgroup>
+              <optgroup label="Sectors">
+                {sectorOptions.map((s) => (
+                  <option key={s} value={`sector:${s}`}>
+                    {CORPORATION_TYPE_LABELS[s]}
+                  </option>
+                ))}
+              </optgroup>
+            </select>
+            {compareLabel && (
+              <span className="text-[11px] text-muted">
+                vs {compareLabel} ·{" "}
+                <button onClick={() => setCompare(null)} className="text-primary hover:underline">
+                  clear
+                </button>
               </span>
             )}
-          </div>
-          <div
-            className="relative"
-            onMouseMove={handleSvgMove}
-            onMouseLeave={() => setHoverIdx(null)}
-          >
-            <svg
-              ref={svgRef}
-              viewBox={`0 0 ${MC_CHART_WIDTH} ${MC_CHART_HEIGHT}`}
-              className="w-full h-auto"
-              style={{ maxHeight: MC_CHART_HEIGHT }}
-            >
-              <defs>
-                <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor={lineColor} stopOpacity="0.18" />
-                  <stop offset="100%" stopColor={lineColor} stopOpacity="0.0" />
-                </linearGradient>
-              </defs>
-
-              {/* Grid lines */}
-              {yTickVals.map((yv, i) => (
-                <line
-                  key={i}
-                  x1={MC_PAD.left}
-                  x2={MC_PAD.left + innerW}
-                  y1={yScale(yv)}
-                  y2={yScale(yv)}
-                  stroke="var(--card-border)"
-                  strokeDasharray="4 4"
-                  strokeWidth="1"
-                />
-              ))}
-
-              {/* Area fill */}
-              <path d={areaPath} fill={`url(#${gradId})`} />
-
-              {/* Intra-turn range band */}
-              {bandPath && <path d={bandPath} fill={lineColor} opacity={0.1} />}
-
-              {/* Line */}
-              <path
-                d={linePath}
-                fill="none"
-                stroke={lineColor}
-                strokeWidth="1.75"
-                strokeLinejoin="round"
-                strokeLinecap="round"
-              />
-
-              {/* Current price dot */}
-              <circle
-                cx={xScale(chartData[chartData.length - 1].turn)}
-                cy={yScale(currentCap)}
-                r="3"
-                fill={lineColor}
-              />
-
-              {/* Hover crosshair */}
-              {hoverPoint && (
-                <g>
-                  <line
-                    x1={xScale(hoverPoint.turn)}
-                    x2={xScale(hoverPoint.turn)}
-                    y1={MC_PAD.top}
-                    y2={MC_PAD.top + lineZoneH}
-                    stroke="var(--muted)"
-                    strokeWidth="1"
-                    strokeDasharray="3 3"
-                    opacity={0.7}
-                  />
-                  <circle
-                    cx={xScale(hoverPoint.turn)}
-                    cy={yScale(hoverPoint.marketCap)}
-                    r="3.5"
-                    fill="var(--card)"
-                    stroke={lineColor}
-                    strokeWidth="2"
-                  />
-                </g>
-              )}
-
-              {/* Delta bars */}
-              {chartData.map((p, i) => {
-                if (i === 0) return null;
-                const { abs, up } = deltas[i];
-                const barH = Math.max(1, (abs / maxDelta) * VOL_HEIGHT);
-                const x = xScale(p.turn);
-                return (
-                  <rect
-                    key={i}
-                    x={x - barW / 2}
-                    y={volZoneTop + VOL_HEIGHT - barH}
-                    width={barW}
-                    height={barH}
-                    fill={up ? "var(--success)" : "var(--error)"}
-                    opacity={0.45}
-                    rx="0.5"
-                  />
-                );
-              })}
-
-              {/* Y-axis labels */}
-              {yTickVals.map((yv, i) => (
-                <text
-                  key={i}
-                  x={MC_PAD.left - 10}
-                  y={yScale(yv) + 4}
-                  textAnchor="end"
-                  fontSize="10"
-                  fontWeight="500"
-                  fill="var(--muted)"
-                >
-                  {formatAmount(yv)}
-                </text>
-              ))}
-
-              {/* X-axis labels — game years for 48h/5y/all, real times for 24h */}
-              {newestTurnDate &&
-                effective !== "24h" &&
-                (() => {
-                  const newestTurn = chartData[chartData.length - 1].turn;
-                  const firstYear = turnToGameYear(minTurn, startingYearRef, calendarOffset);
-                  const lastYear = turnToGameYear(maxTurn, startingYearRef, calendarOffset);
-                  const boundaryTurns: number[] = [];
-                  for (let y = firstYear; y <= lastYear + 1; y++) {
-                    const t = gameYearStartTurn(y, startingYearRef, calendarOffset);
-                    if (t >= minTurn && t <= maxTurn) boundaryTurns.push(t);
-                  }
-                  const MIN_SPACING = 60;
-                  const visible: number[] = [];
-                  for (let i = boundaryTurns.length - 1; i >= 0; i--) {
-                    const t = boundaryTurns[i];
-                    const x = xScale(t);
-                    const nextX =
-                      visible.length > 0 ? xScale(visible[visible.length - 1]) : Infinity;
-                    if (nextX - x >= MIN_SPACING) visible.push(t);
-                  }
-                  visible.reverse();
-                  return visible.map((t) => {
-                    const d = turnToRealDate(t, newestTurn, newestTurnDate);
-                    const month = d.getUTCMonth() + 1;
-                    const day = d.getUTCDate();
-                    const gameYear = turnToGameYear(t, startingYearRef, calendarOffset);
-                    const x = xScale(t);
-                    return (
-                      <g key={t}>
-                        <text
-                          x={x}
-                          y={xAxisLabelY}
-                          textAnchor="middle"
-                          fontSize="10"
-                          fontWeight="500"
-                          fill="var(--muted)"
-                        >
-                          {gameYear}
-                        </text>
-                        <text
-                          x={x}
-                          y={xAxisLabelY + 12}
-                          textAnchor="middle"
-                          fontSize="9"
-                          fill="var(--muted)"
-                          opacity="0.7"
-                        >
-                          ({month}/{day})
-                        </text>
-                      </g>
-                    );
-                  });
-                })()}
-              {newestTurnDate &&
-                effective === "24h" &&
-                (() => {
-                  const newestTurn = chartData[chartData.length - 1].turn;
-                  const tickCount = 4;
-                  const step = Math.max(1, Math.floor(chartData.length / tickCount));
-                  const tickTurns: number[] = [];
-                  for (let i = 0; i < chartData.length; i += step)
-                    tickTurns.push(chartData[i].turn);
-                  if (tickTurns[tickTurns.length - 1] !== chartData[chartData.length - 1].turn) {
-                    tickTurns.push(chartData[chartData.length - 1].turn);
-                  }
-                  const dates = tickTurns.map((t) => turnToRealDate(t, newestTurn, newestTurnDate));
-                  const allSameDay = dates.every((d) => isSameUTCDay(d, dates[0]));
-                  return tickTurns.map((t, i) => {
-                    const d = dates[i];
-                    let label: string;
-                    if (allSameDay) {
-                      const hh = String(d.getUTCHours()).padStart(2, "0");
-                      const mm = String(d.getUTCMinutes()).padStart(2, "0");
-                      label = `${hh}:${mm}`;
-                    } else {
-                      label = `${d.getUTCMonth() + 1}/${d.getUTCDate()}`;
-                    }
-                    return (
-                      <text
-                        key={t}
-                        x={xScale(t)}
-                        y={xAxisLabelY}
-                        textAnchor="middle"
-                        fontSize="10"
-                        fontWeight="500"
-                        fill="var(--muted)"
-                      >
-                        {label}
-                      </text>
-                    );
-                  });
-                })()}
-            </svg>
-            {hoverPoint && (
-              <div
-                className="pointer-events-none absolute z-10 -translate-x-1/2 rounded-lg border border-card-border bg-card-elevated px-2.5 py-1.5 text-xs shadow-lg whitespace-nowrap"
-                style={{
-                  left: `${Math.min(88, Math.max(12, (xScale(hoverPoint.turn) / MC_CHART_WIDTH) * 100))}%`,
-                  top: 0,
-                }}
-              >
-                <div className="font-mono font-bold tabular-nums text-foreground">
-                  {formatAmount(hoverPoint.marketCap)}
-                </div>
-                <div className="text-muted tabular-nums">
-                  T{hoverPoint.turn}
-                  {newestTurnDate &&
-                    ` · ${turnToRealDate(
-                      hoverPoint.turn,
-                      chartData[chartData.length - 1].turn,
-                      newestTurnDate
-                    )
-                      .toISOString()
-                      .slice(0, 10)}`}
-                </div>
-              </div>
+            {compareError && (
+              <span className="text-[11px] text-error">Comparison series unavailable</span>
             )}
           </div>
         </div>
       </div>
-    );
-  };
 
-  return <div className="mb-8">{renderChart()}</div>;
+      <div className="px-4 pt-3">
+        <div className="mb-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-muted">
+          <span className="inline-flex items-center gap-1.5">
+            <span className="inline-block h-2.5 w-2.5 rounded-[2px] bg-success" />
+            <span className="inline-block h-2.5 w-2.5 rounded-[2px] bg-error" />
+            Turn candles · volume
+          </span>
+          {bucketed && <span>Weekly buckets</span>}
+          {!loading && candles.length > 0 && (
+            <span>
+              {intradayTurns}/{candles.length} turns with intraday prints
+              {intradayTurns === 0 ? " (turn closes only)" : ""}
+            </span>
+          )}
+        </div>
+        {loading && candles.length === 0 ? (
+          <Skeleton className="h-60 sm:h-80 w-full" />
+        ) : failed || candles.length === 0 ? (
+          <p className="py-10 text-center text-sm text-muted">
+            No market history available yet for this range.
+          </p>
+        ) : (
+          <div className="relative">
+            <div ref={containerRef} className="h-60 sm:h-80 w-full" />
+            <div
+              ref={tooltipRef}
+              style={{ display: "none" }}
+              className="pointer-events-none absolute z-10 rounded-lg border border-card-border bg-card-elevated px-2.5 py-1.5 text-xs shadow-lg whitespace-nowrap"
+            />
+          </div>
+        )}
+      </div>
+      <div className="px-4 py-2 text-[11px] text-muted border-t border-card-border mt-3">
+        Raw market capitalization per turn. High/low include observed 15-minute prints where
+        recorded; turns without prints use turn closes. Hover for O/H/L/C and turnover.
+      </div>
+    </div>
+  );
 }
