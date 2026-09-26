@@ -6,9 +6,9 @@ export async function captureServerProductEvent(
   const posthogKey = process.env.NEXT_PUBLIC_POSTHOG_KEY;
   const amplitudeKey = process.env.NEXT_PUBLIC_AMPLITUDE_API_KEY;
   const distinctId = "system:turn-processor";
-  await Promise.allSettled([
+  const results = await Promise.allSettled([
     posthogKey
-      ? fetch("https://us.i.posthog.com/capture/", {
+      ? fetch("https://us.i.posthog.com/i/v0/e/", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -32,4 +32,14 @@ export async function captureServerProductEvent(
         })
       : Promise.resolve(),
   ]);
+  for (const [index, result] of results.entries()) {
+    const response = result.status === "fulfilled" ? result.value : undefined;
+    if (result.status === "rejected" || (response && !response.ok)) {
+      console.warn(
+        `[Analytics] ${index === 0 ? "PostHog" : "Amplitude"} rejected ${event}: ${
+          response ? response.status : "network error"
+        }`
+      );
+    }
+  }
 }
