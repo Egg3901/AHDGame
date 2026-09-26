@@ -124,7 +124,13 @@ export function MarketOverview({ exchangeFilter }: { exchangeFilter: ExchangeFil
     let observer: ResizeObserver | null = null;
     (async () => {
       const container = containerRef.current;
-      if (!container) return;
+      // The container renders unconditionally (fixed heights with overlays),
+      // so it is present on mount. A missing container means a render
+      // contract break: fail visibly instead of a permanently blank chart.
+      if (!container) {
+        setFailed(true);
+        return;
+      }
       const { createChart, CandlestickSeries, HistogramSeries, CrosshairMode } =
         await import("lightweight-charts");
       if (disposed) return;
@@ -202,12 +208,16 @@ export function MarketOverview({ exchangeFilter }: { exchangeFilter: ExchangeFil
         tip.style.top = `${Math.min(Math.max(param.point.y - 10, 8), Math.max(box.height - 120, 8))}px`;
       });
 
-      observer = new ResizeObserver(() => {
-        if (!container || !chart) return;
-        chart.applyOptions({ width: container.clientWidth, height: container.clientHeight });
-      });
-      observer.observe(container);
-    })();
+      if (typeof ResizeObserver !== "undefined") {
+        observer = new ResizeObserver(() => {
+          if (!container || !chart) return;
+          chart.applyOptions({ width: container.clientWidth, height: container.clientHeight });
+        });
+        observer.observe(container);
+      }
+    })().catch(() => {
+      if (!disposed) setFailed(true);
+    });
     return () => {
       disposed = true;
       observer?.disconnect();
@@ -653,22 +663,30 @@ export function MarketOverview({ exchangeFilter }: { exchangeFilter: ExchangeFil
             </span>
           )}
         </div>
-        {loading && candles.length === 0 ? (
-          <Skeleton className="h-60 sm:h-80 w-full" />
-        ) : failed || candles.length === 0 ? (
-          <p className="py-10 text-center text-sm text-muted">
-            No market history available yet for this range.
-          </p>
-        ) : (
-          <div className="relative">
-            <div ref={containerRef} className="h-60 sm:h-80 w-full" />
-            <div
-              ref={tooltipRef}
-              style={{ display: "none" }}
-              className="pointer-events-none absolute z-10 rounded-lg border border-card-border bg-card-elevated px-2.5 py-1.5 text-xs shadow-lg whitespace-nowrap"
-            />
-          </div>
-        )}
+        {/* Chart container renders unconditionally at fixed heights (no layout
+            shift); loading, error, and empty states overlay it. Conditionally
+            rendering the container instead strands chart creation: on mount the
+            skeleton is showing, the ref is null, and nothing re-runs creation. */}
+        <div className="relative">
+          <div ref={containerRef} className="h-60 sm:h-80 w-full" />
+          <div
+            ref={tooltipRef}
+            style={{ display: "none" }}
+            className="pointer-events-none absolute z-10 rounded-lg border border-card-border bg-card-elevated px-2.5 py-1.5 text-xs shadow-lg whitespace-nowrap"
+          />
+          {loading && candles.length === 0 && (
+            <div className="absolute inset-0 bg-card">
+              <Skeleton className="h-full w-full" />
+            </div>
+          )}
+          {!loading && (failed || candles.length === 0) && (
+            <div className="absolute inset-0 flex items-center justify-center bg-card">
+              <p className="text-center text-sm text-muted">
+                No market history available yet for this range.
+              </p>
+            </div>
+          )}
+        </div>
       </div>
       <div className="px-4 py-2 text-[11px] text-muted border-t border-card-border mt-3">
         Raw market capitalization per turn. High/low include observed 15-minute prints where
