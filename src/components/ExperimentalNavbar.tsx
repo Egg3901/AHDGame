@@ -17,6 +17,7 @@
  */
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useTranslations } from "next-intl";
 import Link from "next/link";
 import Image from "next/image";
@@ -144,6 +145,7 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
   const [searchOpen, setSearchOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [mobileProfileOpen, setMobileProfileOpen] = useState(false);
+  const [mobilePortalReady, setMobilePortalReady] = useState(false);
   const [mobileSubOpen, setMobileSubOpen] = useState<Partial<Record<MobileSubKey, boolean>>>({});
   const [switchingCharacter, setSwitchingCharacter] = useState(false);
   const [switchingImperial, setSwitchingImperial] = useState(false);
@@ -170,6 +172,25 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
   const toggleMobileSub = useCallback((key: MobileSubKey) => {
     setMobileSubOpen((cur) => ({ ...cur, [key]: !cur[key] }));
   }, []);
+
+  useEffect(() => setMobilePortalReady(true), []);
+
+  useEffect(() => {
+    if (navigationVariant !== "b" || (!mobileMenuOpen && !mobileProfileOpen)) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setMobileMenuOpen(false);
+        setMobileProfileOpen(false);
+      }
+    };
+    document.addEventListener("keydown", onEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener("keydown", onEscape);
+    };
+  }, [navigationVariant, mobileMenuOpen, mobileProfileOpen]);
 
   const toggle = useCallback((key: Exclude<OpenKey, null>) => {
     setExpandedNationSections({});
@@ -1028,8 +1049,13 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
                     });
                     if (navigationVariant === "a")
                       void captureProductEvent("navigation_menu_opened", { variant: "control" });
-                    setMobileProfileOpen((value) => !value);
-                    setMobileMenuOpen(navigationVariant === "a");
+                    if (navigationVariant === "b") {
+                      setMobileProfileOpen((value) => !value);
+                      setMobileMenuOpen(false);
+                    } else {
+                      setMobileProfileOpen((value) => !value);
+                      setMobileMenuOpen(true);
+                    }
                   }}
                   aria-label={t("common.profile")}
                   aria-expanded={navigationVariant === "b" ? mobileProfileOpen : mobileMenuOpen}
@@ -1080,10 +1106,10 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
           </div>
 
           {/* ── Mobile menu panel ────────────────────────────────────────── */}
-          {(mobileMenuOpen || (navigationVariant === "b" && mobileProfileOpen)) && (
+          {navigationVariant === "a" && mobileMenuOpen && (
             <ExperimentalMobileMenu
               navigationVariant={navigationVariant}
-              profileOnly={navigationVariant === "b" && mobileProfileOpen}
+              profileOnly={false}
               navItems={navItems}
               pathname={pathname}
               mobileSubOpen={mobileSubOpen}
@@ -1127,6 +1153,92 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
           )}
         </div>
       </nav>
+      {navigationVariant === "b" &&
+        mobilePortalReady &&
+        (mobileMenuOpen || mobileProfileOpen) &&
+        createPortal(
+          <div className="fixed inset-0 z-[70] lg:hidden" data-feedback-ignore="true">
+            <button
+              type="button"
+              className="absolute inset-0 bg-black/60"
+              aria-label={t("common.closeMenu")}
+              onClick={() => {
+                setMobileMenuOpen(false);
+                setMobileProfileOpen(false);
+              }}
+            />
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-label={mobileProfileOpen ? t("common.profile") : t("common.mainNavigation")}
+              className={
+                mobileProfileOpen
+                  ? "absolute right-3 top-[calc(4rem+env(safe-area-inset-top,0px))] w-[min(19rem,calc(100vw-1.5rem))] overflow-hidden rounded-xl border border-card-border bg-card shadow-2xl"
+                  : "absolute inset-y-0 left-0 flex w-[min(21rem,calc(100vw-3rem))] flex-col border-r border-card-border bg-card shadow-2xl"
+              }
+            >
+              {!mobileProfileOpen && (
+                <div className="flex h-14 shrink-0 items-center justify-between border-b border-card-border px-4">
+                  <span className="font-serif text-base font-semibold text-foreground">
+                    A House Divided
+                  </span>
+                  <button
+                    type="button"
+                    aria-label={t("common.closeMenu")}
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="rounded-lg px-2 py-1 text-xl text-muted hover:bg-white/5 hover:text-foreground"
+                  >
+                    ×
+                  </button>
+                </div>
+              )}
+              <ExperimentalMobileMenu
+                navigationVariant="b"
+                profileOnly={mobileProfileOpen}
+                navItems={navItems}
+                pathname={pathname}
+                mobileSubOpen={mobileSubOpen}
+                toggleMobileSub={toggleMobileSub}
+                onClose={() => {
+                  setMobileMenuOpen(false);
+                  setMobileProfileOpen(false);
+                }}
+                user={user}
+                showProfile={showProfile}
+                characterProfile={characterProfile}
+                profileDisplayName={profileDisplayName}
+                unreadCount={unreadCount}
+                isImperialMode={isImperialMode}
+                adminCharacters={adminCharacters}
+                imperialCharacter={imperialCharacter}
+                switchingCharacter={switchingCharacter}
+                switchingImperial={switchingImperial}
+                handleSwitchCharacter={handleSwitchCharacter}
+                handleSwitchImperial={handleSwitchImperial}
+                currentParty={currentParty}
+                homeState={homeState}
+                activeElection={activeElection}
+                cabinetOffice={cabinetOffice}
+                governorOffice={governorOffice}
+                stateLegislatureLabel={stateLegislatureLabel}
+                pageCountry={pageCountry}
+                userCountry={userCountry}
+                switchableCountries={switchableCountries}
+                worldSubItems={worldSubItems}
+                profileOrgItems={profileOrgItems}
+                staffSubItems={staffSubItems}
+                charterEntry={charterEntry}
+                hasActiveReferendumCampaign={hasActiveReferendumCampaign}
+                unionsEnabled={unionsEnabled}
+                showWiki={showWiki}
+                onOpenFeedback={onOpenFeedback}
+                feedbackCapturing={feedbackCapturing}
+                handleSignOut={handleSignOut}
+              />
+            </div>
+          </div>,
+          document.body
+        )}
     </>
   );
 });
