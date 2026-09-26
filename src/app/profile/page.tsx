@@ -623,7 +623,7 @@ export default async function ProfilePage() {
   const stateLabel = homeState?.name ?? character.homeState;
 
   return (
-    <div className="min-h-screen bg-background pb-16">
+    <div className="min-h-screen bg-background pb-16" data-replay-block>
       <main className="mx-auto max-w-7xl px-4 sm:px-6 py-8 space-y-8 overflow-x-hidden">
         {/* Hero Profile Header */}
         <ProfileHeader

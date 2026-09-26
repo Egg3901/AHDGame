@@ -1,5 +1,10 @@
 import { InboxClient } from "./inbox/InboxClient";
 
 export default function NotificationsPage() {
-  return <InboxClient />;
+  // Message bodies are excluded from PostHog session replay.
+  return (
+    <div data-replay-block>
+      <InboxClient />
+    </div>
+  );
 }
