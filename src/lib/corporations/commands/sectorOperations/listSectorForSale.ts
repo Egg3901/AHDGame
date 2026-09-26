@@ -16,6 +16,7 @@ import type { CorporateSector } from "@/lib/db/types";
 import { getSectorHostFxRate } from "@/lib/currency/corporationCapital";
 import { computeSectorListingValuation } from "@/lib/corporations/sectorValuation";
 import { getGameState } from "@/lib/gameState";
+import { sectorNpvBoostMultiplier } from "@/lib/corporations/rules/marketBoost";
 import { getMarketSystemModeForDb, marketAtLeast } from "@/lib/market/featureFlag";
 import { loadWorldEraUnitScale } from "@/lib/currency/gdpAnchorRate";
 
@@ -81,7 +82,13 @@ export async function listSectorForSale(_request: Request, { params }: RoutePara
     // leaving only abandon/dissolution, both of which pay less than book. The
     // floor is the same `sectorBookValueAnchor` those exits settle at, so there
     // is no arbitrage between selling and salvaging.
-    const gameState = plantsEnabled ? await getGameState(db) : null;
+    // Game state loads unconditionally: the NPV boost below applies in every
+    // market mode, while the book floor stays plants-gated as before.
+    const gameState = await getGameState(db);
+    // Listing quotes ride the same phased NPV boost as the turn path so the
+    // asking price agrees with the corp valuation instead of trailing it.
+    // Below the boost window the multiplier is 1 (legacy quote).
+    const listingTurn = gameState?.currentTurn ?? null;
     const valuation = computeSectorListingValuation(
       sector,
       corporation,
@@ -93,7 +100,8 @@ export async function listSectorForSale(_request: Request, { params }: RoutePara
             currentYear: gameState?.currentYear,
             eraUnitScale: await loadWorldEraUnitScale(db),
           }
-        : undefined
+        : undefined,
+      sectorNpvBoostMultiplier(listingTurn)
     );
 
     if (valuation.priceAnchor <= 0) {

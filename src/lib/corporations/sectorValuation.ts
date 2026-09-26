@@ -73,7 +73,13 @@ export function computeSectorListingValuation(
     currentYear: number | null | undefined;
     /** The world's era unit-basis scale (`getEraUnitScale(preset)`). */
     eraUnitScale: number;
-  }
+  },
+  /**
+   * Phased stock-market boost multiplier on the earnings-derived NPV
+   * (`sectorNpvBoostMultiplier(currentTurn)`). Defaults to 1 = legacy.
+   * The book floor is never boosted: it settles at replacement cost.
+   */
+  npvBoostMultiplier = 1
 ): SectorListingValuation {
   // Sector economic fields are stored in the sector's host-state currency (the
   // market it operates in), not the owning corp's — resolve/convert accordingly.
@@ -91,7 +97,12 @@ export function computeSectorListingValuation(
     fxRate: hostFxRate,
   });
   const yearlyProfitAnchor = dailyProfitAnchor * GAME_DAYS_PER_YEAR;
-  const npvAnchor = yearlyProfitAnchor > 0 ? yearlyProfitAnchor / NPV_ANNUAL_DISCOUNT_RATE : 0;
+  const unboostedNpvAnchor =
+    yearlyProfitAnchor > 0 ? yearlyProfitAnchor / NPV_ANNUAL_DISCOUNT_RATE : 0;
+  const npvAnchor =
+    unboostedNpvAnchor > 0 && npvBoostMultiplier !== 1
+      ? unboostedNpvAnchor * npvBoostMultiplier
+      : unboostedNpvAnchor;
   const earningsPriceAnchor = Math.round(npvAnchor * SECTOR_FOR_SALE_PRICE_FRACTION);
   // Book floor: only under plants, and only ever upward. `SECTOR_FOR_SALE_PRICE_
   // FRACTION` is deliberately NOT applied to it — that fraction is a haircut on
