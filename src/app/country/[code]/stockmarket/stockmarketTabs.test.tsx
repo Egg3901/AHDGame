@@ -75,7 +75,7 @@ vi.mock("lightweight-charts", () => {
     HistogramSeries: {},
     LineSeries: {},
     CrosshairMode: { Normal: 0 },
-    createChart: () => ({
+    createChart: vi.fn(() => ({
       addSeries: () => series(),
       removeSeries: vi.fn(),
       applyOptions: vi.fn(),
@@ -84,12 +84,13 @@ vi.mock("lightweight-charts", () => {
       timeScale: () => ({ fitContent: vi.fn(), applyOptions: vi.fn() }),
       subscribeCrosshairMove: vi.fn(),
       unsubscribeCrosshairMove: vi.fn(),
-    }),
+    })),
     createSeriesMarkers: () => ({ setMarkers: vi.fn() }),
   };
 });
 
 import StockMarketPage from "./page";
+import { createChart } from "lightweight-charts";
 
 let searchParams = new URLSearchParams();
 
@@ -148,6 +149,15 @@ describe("stockmarket inactive tabs (#2168)", () => {
     ]) {
       expect(fetchedUrls.some((u) => u.includes(endpoint))).toBe(true);
     }
+  });
+
+  it("creates the chart on mount (container renders unconditionally)", async () => {
+    // Regression: the chart container used to render only after data arrived,
+    // so the mount effect found a null ref and the chart never appeared.
+    render(<StockMarketPage params={params} />);
+    await waitFor(() => {
+      expect(vi.mocked(createChart)).toHaveBeenCalled();
+    });
   });
 
   it("fetches auctions once the auctions tab is selected", async () => {
