@@ -1109,7 +1109,7 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
           {navigationVariant === "a" && mobileMenuOpen && (
             <ExperimentalMobileMenu
               navigationVariant={navigationVariant}
-              profileOnly={navigationVariant === "b" && mobileProfileOpen}
+              profileOnly={false}
               navItems={navItems}
               pathname={pathname}
               mobileSubOpen={mobileSubOpen}
