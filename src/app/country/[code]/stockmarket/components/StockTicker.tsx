@@ -91,7 +91,9 @@ export function StockTicker({
       // Ticker symbol is the canonical scroll-bar label for a corp; legacy
       // corps without one fall back to the full company name.
       name: s.tickerSymbol ?? s.name,
-      price: s.sharePrice,
+      // formatPrice accepts anchor units, while sharePrice is exchange-local.
+      // Match the stock table's normalized source for the same listing.
+      price: s.sharePriceAnchor ?? s.sharePrice,
       priceChange24h: finitePriceChange(s.priceChange24h),
       link: `/corporation/${s.sequentialId ?? s._id}`,
       isSubsidiary: s.isSubsidiary === true,

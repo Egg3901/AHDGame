@@ -7,7 +7,7 @@ import { Avatar } from "@/components/Avatar";
 import { SubscribeButton } from "@/components/SubscribeButton";
 import { bypassNextImageOptimization } from "@/lib/images/bypassImageOptimization";
 import { getPartyColor } from "@/lib/utils/politics";
-import { RelativeTime } from "@/components/time/LocalTime";
+import { GameMonthTime } from "@/components/time/GameMonthTime";
 import type { NewsCategory, NewsFeedType, ProfileBorderKey } from "@/lib/db/types";
 
 export interface SerializedPost {
@@ -338,7 +338,7 @@ export function NewsPost({
             )}
           </div>
           <div className="flex items-center gap-3 flex-wrap mt-1">
-            <RelativeTime className="text-xs text-muted" value={post.createdAt} />
+            <GameMonthTime className="text-xs text-muted" value={post.createdAt} />
             {post.editedAt && (
               <span className="text-[10px] italic text-muted" title="This post was edited">
                 (edited)
@@ -577,7 +577,7 @@ export function NewsPost({
                   <div className="flex items-center gap-2 mb-1">
                     <span className="text-xs font-medium">{reply.authorName}</span>
                     <PartyBadge party={reply.authorParty} />
-                    <RelativeTime
+                    <GameMonthTime
                       className="ml-auto text-[10px] text-muted"
                       value={reply.createdAt}
                     />

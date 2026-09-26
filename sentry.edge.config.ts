@@ -4,13 +4,14 @@
 // https://docs.sentry.io/platforms/javascript/guides/nextjs/
 
 import * as Sentry from "@sentry/nextjs";
+import { scrubSentryEvent } from "@/lib/observability/scrubSentryEvent";
 
 const railwayEnv = process.env.RAILWAY_ENVIRONMENT_NAME || process.env.RAILWAY_SERVICE_NAME;
 const isProduction = railwayEnv === "production";
 const sentryEnabled = !!railwayEnv;
 
 Sentry.init({
-  dsn: process.env.SENTRY_DSN || process.env.NEXT_PUBLIC_SENTRY_DSN,
+  dsn: process.env.SENTRY_DSN,
 
   enabled: sentryEnabled,
 
@@ -19,11 +20,12 @@ Sentry.init({
   environment: process.env.RAILWAY_ENVIRONMENT_NAME || process.env.NODE_ENV,
 
   // Define how likely traces are sampled. Adjust this value in production, or use tracesSampler for greater control.
-  tracesSampleRate: isProduction ? 0.02 : 1,
+  tracesSampleRate: isProduction ? 0.1 : 1,
 
   enableLogs: false,
 
   // Do not send default user PII from edge requests.
   // https://docs.sentry.io/platforms/javascript/guides/nextjs/configuration/options/#sendDefaultPii
   sendDefaultPii: false,
+  beforeSend: scrubSentryEvent,
 });

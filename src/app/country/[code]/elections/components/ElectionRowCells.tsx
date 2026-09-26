@@ -98,14 +98,11 @@ export function DeadlineCell({ election }: { election: ElectionDisplay }) {
   if (turn == null) return <span className="text-xs text-muted">No deadline</span>;
 
   const timer = clock.formatRemainingTurns(turn);
-  const label = election.inPrimary ? "Primary closes" : "Voting closes";
-
   return (
     <div className="min-w-0">
       <div className={`text-sm font-medium tabular-nums ${getTimerUrgencyStyle(timer.urgency)}`}>
         {timer.text}
       </div>
-      <div className="text-[10px] uppercase tracking-wider text-muted">{label}</div>
     </div>
   );
 }

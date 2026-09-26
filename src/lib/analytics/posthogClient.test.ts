@@ -29,6 +29,7 @@ vi.mock("posthog-js", () => ({
     reset: state.reset,
     identify: state.identify,
     set_config: state.setConfig,
+    on: vi.fn(),
   },
 }));
 
@@ -76,7 +77,7 @@ describe("PostHog consent boundary", () => {
     const client = await getPostHogClient();
     expect(client).not.toBeNull();
     identifyPostHogUser(client!, "stable-user-id");
-    expect(state.identify).toHaveBeenCalledWith("stable-user-id");
+    expect(state.identify).toHaveBeenCalledWith("stable-user-id", { is_player: true });
     expect(state.setConfig).toHaveBeenCalledWith({ disable_surveys: false });
     expect(state.identify.mock.invocationCallOrder[0]).toBeLessThan(
       state.setConfig.mock.invocationCallOrder[0]
