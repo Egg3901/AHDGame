@@ -1,15 +1,19 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { Button, Input } from "@/components/ui";
 import { formatBankMoney } from "@/components/banking/formatBankMoney";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import {
+  MIN_CAPITAL_RATIO,
+  RECAP_GRACE_TURNS,
   assessCapital,
   capitalShortfall,
   type BankBorrowings,
 } from "@/lib/banking/capitalAdequacy";
 import type { ShowToast } from "../types";
+import { turnsToHours } from "../lib/helpers";
 import { Eyebrow } from "../components/BankSection";
 
 export function RecapitalizePanel({
@@ -51,6 +55,8 @@ export function RecapitalizePanel({
     if (shortfall > 0) setAmount(String(shortfall));
   }, [shortfall]);
 
+  const minPercent = (MIN_CAPITAL_RATIO * 100).toFixed(0);
+
   const move = async (direction: "in" | "out") => {
     const a = parseFloat(amount);
     if (!(a > 0)) {
@@ -71,7 +77,9 @@ export function RecapitalizePanel({
         return;
       }
       showToast(
-        json.message ?? (direction === "in" ? "Capital posted" : "Cash withdrawn"),
+        direction === "in"
+          ? `Posted ${formatBankMoney(a, currency)}: it now stands behind depositors and lifts the capital ratio toward the ${minPercent}% minimum.`
+          : `Withdrew ${formatBankMoney(a, currency)} to the treasury: only cash above the reserve requirement can leave, and only while capital clears the ${minPercent}% minimum.`,
         "success"
       );
       setAmount("");
@@ -87,9 +95,19 @@ export function RecapitalizePanel({
         <Eyebrow kind="ceoControl" />
         <h3 className="text-base font-semibold text-foreground">Capital adequacy</h3>
         <p className="text-sm text-muted">
-          Money moved here crosses into the bank and stands behind the depositors. It can only come
-          back out of reserves the bank holds above its requirement, and only while the supervisor
-          rates it adequate.
+          The supervisor requires your own cash, after every borrowed claim on it, to cover at least{" "}
+          {minPercent}% of the loan book plus your own investments. Money moved here crosses into
+          the bank and stands behind the depositors. It can only come back out of reserves the bank
+          holds above its requirement, and only while the supervisor rates it adequate.
+        </p>
+        <p className="mt-2 text-xs text-muted">
+          Falling below {minPercent}% starts a {turnsToHours(RECAP_GRACE_TURNS)} clock to post
+          capital. Missing it revokes the charter: the bank is wound up in an orderly way and
+          remaining capital is returned. That is not a bank failure: depositors are paid out, they
+          do not take a haircut.{" "}
+          <Link href="/wiki/private-banking" className="text-accent underline underline-offset-2">
+            How banking works
+          </Link>
         </p>
       </div>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
@@ -118,11 +136,20 @@ export function RecapitalizePanel({
         </p>
         {shortfall > 0 ? (
           <p className="text-error">
-            Undercapitalized. Post {formatBankMoney(shortfall, currency)} to clear the minimum.
+            Below the {minPercent}% minimum. Post {formatBankMoney(shortfall, currency)} to clear
+            it, within {turnsToHours(RECAP_GRACE_TURNS)} of the breach starting, or the charter is
+            revoked.
+          </p>
+        ) : position.standing === "stressed" ? (
+          <p className="text-muted">
+            Capital {(position.capitalRatio * 100).toFixed(1)}%, above the {minPercent}% minimum but
+            failing the supervisor&apos;s shock scenario: payouts stay barred until the stressed
+            ratio clears. No capital shortfall at current book values.
           </p>
         ) : (
           <p className="text-muted">
-            Standing: {position.standing}. No capital shortfall at current book values.
+            Capital {(position.capitalRatio * 100).toFixed(1)}%, above the {minPercent}% minimum and
+            clearing the shock scenario. No capital shortfall at current book values.
           </p>
         )}
       </div>
