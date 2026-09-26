@@ -161,28 +161,45 @@ export function ExperimentalMobileMenu({
       <div
         id="experimental-mobile-menu"
         onClickCapture={trackDestination}
-        className="border-t border-card-border bg-card p-3 lg:hidden"
+        className="max-h-[min(36rem,calc(100dvh-5rem))] overflow-y-auto bg-card lg:hidden"
       >
-        <div className="mb-2 flex items-center gap-3 border-b border-card-border pb-3">
-          <Avatar
-            url={characterProfile?.avatarUrl}
-            name={profileDisplayName}
-            size="h-10 w-10"
-            borderKey={characterProfile?.borderKey}
-            tintColor={characterProfile?.tintColor}
-          />
-          <div className="min-w-0">
+        <div className="relative h-20 overflow-hidden">
+          {characterProfile?.profileHeaderImageUrl ? (
+            <Image
+              src={characterProfile.profileHeaderImageUrl}
+              alt=""
+              fill
+              sizes="304px"
+              className="object-cover"
+              unoptimized={bypassNextImageOptimization(characterProfile.profileHeaderImageUrl)}
+            />
+          ) : (
+            <div className="absolute inset-0 bg-gradient-to-br from-primary/25 via-card-elevated to-secondary/20" />
+          )}
+          <div className="absolute inset-0 bg-gradient-to-t from-card to-transparent" />
+        </div>
+        <div className="relative flex items-end gap-3 px-3 pb-3">
+          <div className="-mt-5 shrink-0 rounded-lg border-[3px] border-card bg-card">
+            <Avatar
+              url={characterProfile?.avatarUrl}
+              name={profileDisplayName}
+              size="h-12 w-12"
+              borderKey={characterProfile?.borderKey}
+              tintColor={characterProfile?.tintColor}
+            />
+          </div>
+          <div className="min-w-0 pb-0.5">
             <div className="truncate text-sm font-semibold">{profileDisplayName}</div>
             <div className="truncate text-xs text-muted">@{user.username}</div>
           </div>
         </div>
-        <div className="grid grid-cols-2 gap-1">
+        <div className="border-t border-card-border p-1.5">
           {links.map((link) => (
             <Link
               key={link.href}
               href={link.href}
               onClick={onClose}
-              className="flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm text-foreground hover:bg-white/5"
+              className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm text-foreground hover:bg-white/5"
             >
               <NavIcon name={link.icon} />
               {link.label}
@@ -193,7 +210,7 @@ export function ExperimentalMobileMenu({
               key={item.id}
               href={item.href}
               onClick={onClose}
-              className="flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm text-primary hover:bg-white/5"
+              className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm text-primary hover:bg-white/5"
             >
               <NavIcon name="Nation" />
               {t(item.labelKey)}
@@ -216,7 +233,7 @@ export function ExperimentalMobileMenu({
           <button
             type="button"
             onClick={handleSignOut}
-            className="mt-2 w-full border-t border-card-border px-3 py-3 text-left text-sm text-muted"
+            className="w-full border-t border-card-border px-4 py-3 text-left text-sm text-muted"
           >
             {t("userMenu.signOut")}
           </button>
@@ -228,7 +245,11 @@ export function ExperimentalMobileMenu({
     <div
       id="experimental-mobile-menu"
       onClickCapture={trackDestination}
-      className={`border-t border-card-border/60 bg-card/70 px-3.5 py-3.5 backdrop-blur-xl lg:hidden ${MOBILE_MENU_PANEL_CLASS}`}
+      className={
+        navigationVariant === "b"
+          ? "min-h-0 flex-1 overflow-y-auto overscroll-contain px-3.5 py-3.5 lg:hidden"
+          : `border-t border-card-border/60 bg-card/70 px-3.5 py-3.5 backdrop-blur-xl lg:hidden ${MOBILE_MENU_PANEL_CLASS}`
+      }
     >
       {/* Search — inline; no autofocus so opening the menu doesn't pop the
           keyboard / scroll-zoom into the field on mobile (focuses on tap). */}
@@ -368,7 +389,7 @@ export function ExperimentalMobileMenu({
       <div
         className={
           navigationVariant === "b"
-            ? "grid grid-cols-2 gap-1 border-b border-card-border pb-3"
+            ? "flex flex-col gap-0.5 border-b border-card-border pb-3"
             : "flex flex-col gap-0.5"
         }
       >
@@ -378,10 +399,7 @@ export function ExperimentalMobileMenu({
           if (subKey) {
             const isSubOpen = !!mobileSubOpen[subKey];
             return (
-              <div
-                key={item.label}
-                className={navigationVariant === "b" && isSubOpen ? "col-span-2" : ""}
-              >
+              <div key={item.label}>
                 <button
                   type="button"
                   onClick={() => toggleMobileSub(subKey)}
