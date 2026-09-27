@@ -1,5 +1,5 @@
 import type { Db } from "mongodb";
-import type { Election, ElectionCandidate } from "@/lib/db/types";
+import type { Campaign, Election, ElectionCandidate } from "@/lib/db/types";
 import { isCampaignEligibleElection } from "@/lib/campaigns/isCampaignEligible";
 import { ensureCampaignForCandidate } from "@/lib/campaigns/createInitialCampaign";
 
@@ -38,29 +38,44 @@ export async function selfHealMissingCampaigns(db: Db, now: Date = new Date()): 
     elections.filter((e) => isCampaignEligibleElection(e)).map((e) => e._id.toString())
   );
 
-  let healed = 0;
-  for (const candidate of activeCandidates) {
-    if (candidate.isNPP || !candidate.characterId) continue;
-    if (!eligibleElectionIds.has(candidate.electionId.toString())) continue;
+  const eligibleCandidates = activeCandidates.filter(
+    (candidate) =>
+      !candidate.isNPP &&
+      candidate.characterId &&
+      eligibleElectionIds.has(candidate.electionId.toString())
+  );
+  if (eligibleCandidates.length === 0) return 0;
+  const existing = await db
+    .collection<Campaign>("campaigns")
+    .find(
+      {
+        $or: eligibleCandidates.map((candidate) => ({
+          electionId: candidate.electionId,
+          candidateId: candidate.characterId!,
+        })),
+      },
+      { projection: { _id: 1, electionId: 1, candidateId: 1, status: 1 } }
+    )
+    .toArray();
+  const campaignByCandidate = new Map(
+    existing.map((campaign) => [`${campaign.electionId}:${campaign.candidateId}`, campaign])
+  );
 
-    const before = await db
-      .collection("campaigns")
-      .findOne(
-        { electionId: candidate.electionId, candidateId: candidate.characterId },
-        { projection: { _id: 1, status: 1 } }
-      );
-    const needsHeal = !before || before.status === "archived";
+  let healed = 0;
+  for (const candidate of eligibleCandidates) {
+    const before = campaignByCandidate.get(`${candidate.electionId}:${candidate.characterId}`);
+    if (before && before.status !== "archived") continue;
 
     await ensureCampaignForCandidate({
       db,
       electionId: candidate.electionId,
-      candidateId: candidate.characterId,
+      candidateId: candidate.characterId!,
       candidateIsNPP: false,
       party: candidate.party,
       now,
     });
 
-    if (needsHeal) healed++;
+    healed++;
   }
 
   return healed;
