@@ -6,6 +6,7 @@
  * but no federal or state-legislative representation until admission.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { ObjectId } from "mongodb";
 import type { Election } from "@/lib/db/types";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
@@ -22,13 +23,21 @@ const NOW = new Date("2026-04-01T00:00:00Z");
  */
 async function mountUsWorld(
   preset: string,
-  opts: { stateDocs?: Array<Record<string, unknown>>; currentYear?: number } = {}
+  opts: {
+    stateDocs?: Array<Record<string, unknown>>;
+    currentYear?: number;
+    electionDocs?: Election[];
+  } = {}
 ) {
   const inserted: Omit<Election, "_id">[] = [];
   const elections = {
-    find: vi.fn().mockReturnValue({
-      sort: vi.fn().mockReturnThis(),
-      toArray: vi.fn().mockResolvedValue([]),
+    find: vi.fn().mockImplementation((filter: { status?: { $in?: string[] } }) => {
+      const statuses = filter.status?.$in ?? [];
+      const matches = (opts.electionDocs ?? []).filter((e) => statuses.includes(e.status));
+      return {
+        sort: vi.fn().mockReturnThis(),
+        toArray: vi.fn().mockResolvedValue(matches),
+      };
     }),
     findOne: vi.fn().mockResolvedValue(null),
     insertMany: vi.fn().mockImplementation((docs: Omit<Election, "_id">[]) => {
@@ -148,6 +157,32 @@ describe("ensurePerpetualElections US era statehood gate", () => {
     expect(usRaces.filter((e) => e.state === "HI").map((e) => e.electionType)).toEqual([
       "governor",
     ]);
+  });
+
+  it("recovers an admitted state's first State Senate race after older states completed theirs", async () => {
+    const inserted = await mountUsWorld("1953-default", {
+      stateDocs: [{ _id: "WY" }, { _id: "AK", admittedYear: 1959 }, { _id: "HI" }],
+      currentYear: 1962,
+      electionDocs: [
+        {
+          _id: new ObjectId(),
+          countryId: "US",
+          electionType: "stateSenate",
+          state: "WY",
+          cycle: 1,
+          status: "resolved",
+          totalSeats: 30,
+          createdAt: new Date("2025-01-01T00:00:00Z"),
+          updatedAt: new Date("2025-01-02T00:00:00Z"),
+        } as Election,
+      ],
+    });
+
+    const { ensurePerpetualElections } = await import("./perpetualElections");
+    await ensurePerpetualElections(NOW, 1);
+
+    expect(inserted.some((e) => e.state === "AK" && e.electionType === "stateSenate")).toBe(true);
+    expect(inserted.some((e) => e.state === "HI" && e.electionType === "stateSenate")).toBe(false);
   });
 
   it("sizes an admitted state's House race from its live apportionment (#1190)", async () => {

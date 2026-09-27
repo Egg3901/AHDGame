@@ -597,6 +597,25 @@ export async function ensureBetaSenateElections(
     })
     .toArray();
   const liveRegions = new Set(liveElections.map((e) => e.state));
+  const seatHealOps: AnyBulkWriteOperation<Election>[] = liveElections.flatMap((election) => {
+    const authoritative = seatsByRegion.get(election.state);
+    if (!authoritative || election.totalSeats === authoritative) return [];
+    return [
+      {
+        updateOne: {
+          filter: {
+            _id: election._id,
+            totalSeats: election.totalSeats,
+            status: { $in: ["active", "upcoming"] as ElectionStatus[] },
+          },
+          update: { $set: { totalSeats: authoritative, updatedAt: now } },
+        },
+      },
+    ];
+  });
+  if (seatHealOps.length > 0) {
+    await db.collection<Election>("elections").bulkWrite(seatHealOps);
+  }
 
   const completedElections = await db
     .collection<Election>("elections")
@@ -648,7 +667,9 @@ export async function ensureBetaSenateElections(
       cycle: spawn.cycle,
       electionYear: electionToLarpYear(electionType, spawn.cycle, undefined, undefined, ctx),
       status: "active",
-      totalSeats: prev?.totalSeats ?? seatsByRegion.get(regionId) ?? 1,
+      // Region data is authoritative. Carrying a prior cycle forward makes a
+      // corrected apportionment ineffective forever after the first bad race.
+      totalSeats: seatsByRegion.get(regionId) ?? prev?.totalSeats ?? 1,
       startTime,
       primaryEndTime,
       endTime,

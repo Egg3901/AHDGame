@@ -332,8 +332,8 @@ export async function seedSeats(
   const houseSeatsByState = getHouseSeats(preset);
   // Commons likewise uses era-specific regional maps for 1953 and 1991.
   const ukCommonsSeatsByRegion = getUkCommonsSeats(preset);
-  // Japan's Diet was two sizes larger before the 1994 reform (512/252 against
-  // the modern 465/248) and had no era map at all until this branch.
+  // Japan's Diet uses era-specific maps: 466/248 in 1953, 512/252 in 1991,
+  // and the modern 465/248 after the 1994 reform.
   const jpShugiinSeatsByRegion = getJpShugiinSeats(preset);
   const jpSangiinSeatsByRegion = getJpSangiinSeats(preset);
 
