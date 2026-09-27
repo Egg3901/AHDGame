@@ -86,7 +86,7 @@ export async function sendBatchedElectionResults(
   // landtag — sub-national, charted per Land would be noisy). snap_* variants
   // use the same chamber totals as their regular counterparts since a snap
   // election fills the same chamber. Commons is era-sized (625 in 1953, 650 in
-  // 1991), and so is the Diet (512/252 before the 1994 reform).
+  // 1991), and so is the Diet (466/248 in 1953, 512/252 in 1991).
   const preset = await getGameStatePreset(db);
   const ukCommonsTotal = getTotalUkCommonsSeats(preset);
   const jpShugiinTotal = getTotalJpShugiinSeats(preset);
