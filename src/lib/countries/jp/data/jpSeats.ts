@@ -34,6 +34,20 @@ export const JP_SHUGIIN_SEATS: Record<string, number> = {
 
 export const TOTAL_JP_SHUGIIN_SEATS = 465;
 
+/** Shugiin seats per region for `1953-default`. Total = 466. */
+export const JP_SHUGIIN_SEATS_1953: Record<string, number> = {
+  HOK: 21,
+  TOH: 66,
+  KAN: 109,
+  CHU: 78,
+  KNS: 84,
+  CGK: 31,
+  SHI: 18,
+  KYU: 59,
+};
+
+export const TOTAL_JP_SHUGIIN_SEATS_1953 = 466;
+
 /** Sangiin (House of Councillors) seat counts per region. Total = 248. */
 export const JP_SANGIIN_SEATS: Record<string, number> = {
   HOK: 7,
@@ -92,9 +106,11 @@ export const JP_SANGIIN_SEATS_1991: Record<string, number> = {
 
 export const TOTAL_JP_SANGIIN_SEATS_1991 = 252;
 
-/** Shugiin seats per region for the active preset (512 in 1991, else 465). */
+/** Shugiin seats per region for the active preset. */
 export function getJpShugiinSeats(preset: string | undefined): Record<string, number> {
-  return preset === "1991-default" ? JP_SHUGIIN_SEATS_1991 : JP_SHUGIIN_SEATS;
+  if (preset === "1953-default") return JP_SHUGIIN_SEATS_1953;
+  if (preset === "1991-default") return JP_SHUGIIN_SEATS_1991;
+  return JP_SHUGIIN_SEATS;
 }
 
 /** Sangiin seats per region for the active preset (252 in 1991, else 248). */
@@ -121,7 +137,9 @@ export function getJpSangiinClassSeats(
 
 /** National Shugiin size for the active preset. */
 export function getTotalJpShugiinSeats(preset: string | undefined): number {
-  return preset === "1991-default" ? TOTAL_JP_SHUGIIN_SEATS_1991 : TOTAL_JP_SHUGIIN_SEATS;
+  if (preset === "1953-default") return TOTAL_JP_SHUGIIN_SEATS_1953;
+  if (preset === "1991-default") return TOTAL_JP_SHUGIIN_SEATS_1991;
+  return TOTAL_JP_SHUGIIN_SEATS;
 }
 
 /** National Sangiin size for the active preset. */

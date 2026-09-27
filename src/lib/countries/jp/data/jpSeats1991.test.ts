@@ -1,11 +1,14 @@
 import { describe, it, expect } from "vitest";
 import { jpRegions1991 } from "@/lib/countries/jp/data/jpRegions1991";
+import { jpRegions1953 } from "@/lib/countries/jp/data/jpRegions1953";
 import { getCountryConfig } from "@/lib/constants/countries";
 import { seatsForCountry } from "@/lib/constants/presetSeatGroups";
 import { getReadinessExpectations } from "@/lib/constants/readinessExpectations";
 import {
   JP_SHUGIIN_SEATS_1991,
   TOTAL_JP_SHUGIIN_SEATS_1991,
+  JP_SHUGIIN_SEATS_1953,
+  TOTAL_JP_SHUGIIN_SEATS_1953,
   JP_SANGIIN_SEATS_1991,
   TOTAL_JP_SANGIIN_SEATS_1991,
   getJpShugiinSeats,
@@ -63,6 +66,16 @@ describe("JP Diet, 1991-default", () => {
     expect(getJpSangiinSeats("1991-default")).toBe(JP_SANGIIN_SEATS_1991);
     expect(getTotalJpShugiinSeats("1991-default")).toBe(512);
     expect(getTotalJpSangiinSeats("1991-default")).toBe(252);
+  });
+
+  it("uses the authored 466-seat Shugiin map in 1953-default", () => {
+    expect(getJpShugiinSeats("1953-default")).toBe(JP_SHUGIIN_SEATS_1953);
+    expect(getTotalJpShugiinSeats("1953-default")).toBe(TOTAL_JP_SHUGIIN_SEATS_1953);
+    expect(TOTAL_JP_SHUGIIN_SEATS_1953).toBe(466);
+    expect(getCountryConfig("JP", "1953-default").legislature.lowerChamber.seats).toBe(466);
+    for (const region of jpRegions1953) {
+      expect(JP_SHUGIIN_SEATS_1953[region._id], region._id).toBe(region.houseDistricts);
+    }
   });
 
   it("leaves the modern presets on the modern maps", () => {
