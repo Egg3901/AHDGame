@@ -314,6 +314,15 @@ const CHAMBER_KEY_TO_OFFICE_TYPE: Readonly<Record<string, string>> = {
 };
 
 /**
+ * True for full Commons general elections, whether regularly scheduled or
+ * called early. Commons by-elections are deliberately excluded because they
+ * fill only claimed vacancies and must not replace or reschedule the chamber.
+ */
+export function isCommonsGeneralElection(electionType: string): boolean {
+  return electionType === "commons" || electionType === "snap_commons";
+}
+
+/**
  * True for Commons by-election races (#860). These resolve ADDITIVELY: they
  * fill only the vacated seats they claim and must never run the regional
  * delegation sweep that regular multi-seat races use.

@@ -29,8 +29,8 @@
 import { ObjectId } from "mongodb";
 import type { Election, ElectionCandidate, NPP } from "@/lib/db/types";
 import {
-  RACE_PRIORITY,
   canPartyFieldInState,
+  getRacePriority,
   isNPPAvailable,
   shouldDefendPrimary,
 } from "../nppEntryLogic";
@@ -363,9 +363,7 @@ export async function processElectionEntry(ctx: NPPContext): Promise<number> {
   }
 
   incumbentEntries.sort((a, b) => {
-    const aIdx = RACE_PRIORITY.indexOf(a.primary.electionType as (typeof RACE_PRIORITY)[number]);
-    const bIdx = RACE_PRIORITY.indexOf(b.primary.electionType as (typeof RACE_PRIORITY)[number]);
-    return (aIdx === -1 ? 999 : aIdx) - (bIdx === -1 ? 999 : bIdx);
+    return getRacePriority(a.primary.electionType) - getRacePriority(b.primary.electionType);
   });
 
   for (const { npp, primary } of incumbentEntries) {
@@ -514,9 +512,7 @@ export async function processElectionEntry(ctx: NPPContext): Promise<number> {
       });
 
       const sortedPrimaries = [...primaries].sort((a, b) => {
-        const aIdx = RACE_PRIORITY.indexOf(a.electionType as (typeof RACE_PRIORITY)[number]);
-        const bIdx = RACE_PRIORITY.indexOf(b.electionType as (typeof RACE_PRIORITY)[number]);
-        return (aIdx === -1 ? 999 : aIdx) - (bIdx === -1 ? 999 : bIdx);
+        return getRacePriority(a.electionType) - getRacePriority(b.electionType);
       });
 
       for (const primary of sortedPrimaries) {
