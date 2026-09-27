@@ -743,7 +743,7 @@ export async function accumulateVoteTurn(
     // "re-admit everyone when eligible < min(seats, candidates)" fallback let
     // sub-1% candidates collect largest-remainder seats in any race with more
     // seats than candidates (e.g. 12 candidates vs 27-90 UK Commons seats).
-    const minShare = getMultiSeatMinShare(electionType);
+    const minShare = getMultiSeatMinShare(electionType, totalSeats, election.countryId ?? "US");
     const groupKey = (ec: (typeof enriched)[number]) =>
       ec.party && ec.party !== "independent" ? `party:${ec.party}` : `cand:${ec.candidateId}`;
     const votesByGroup = new Map<string, number>();

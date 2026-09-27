@@ -1,66 +1,9 @@
 import { HOUSE_SEATS, UK_COMMONS_SEATS, UK_REGIONAL_COUNCIL_SEATS } from "@/lib/constants";
 import { allocateBlocListSeats } from "./blocListAllocation";
 import { MULTI_SEAT_TYPES } from "@/lib/utils/electionLabels";
+import { getMultiSeatMinShare } from "./rules/seatEligibility";
 
-/**
- * Minimum vote share an eligibility group needs to enter the seat pool. Party
- * candidates are grouped together; independents and party-less candidates are
- * evaluated individually.
- *
- * State Senate and UK Commons use a lower threshold (10%) because these
- * districts elect many seats and typically have more parties splitting the
- * vote. The US House threshold is higher (20%) to reflect the practical reality
- * of two-party dominance in most congressional districts, preventing
- * near-marginal candidates from claiming seats with negligible vote shares via
- * Largest Remainder rounding.
- */
-export function getMultiSeatMinShare(electionType: string): number {
-  if (
-    electionType === "stateSenate" ||
-    electionType === "regionalCouncil" ||
-    electionType === "landtag" ||
-    // UK Commons regions elect large delegations and commonly field several
-    // candidates per party. A 20% party gate creates an excessive cliff in a
-    // competitive five-party race, where a party near one fifth of the vote
-    // can otherwise receive no representation at all.
-    electionType === "commons" ||
-    electionType === "snap_commons" ||
-    // CN Provincial People's Congress: lower threshold so CDL / CNDCA
-    // token candidates with ~2-5% can hold a few seats even when CCP
-    // dominates the field.
-    electionType === "peoplesCongress" ||
-    // IE PR-STV chambers: Dáil constituencies average ~20 seats per region
-    // (~5% Hare quota), Seanad ~7.5 (~13% quota), Local Councils 12-62
-    // (~2-8% quota). A 20% gate would lock out smaller parties (Greens,
-    // SocDems, Aontú) that realistically seat at these district sizes.
-    electionType === "dail" ||
-    electionType === "seanad" ||
-    electionType === "localCouncil" ||
-    // Large-magnitude PR lower chambers (FR/IT/ES/SE/TR, #3239): regional
-    // district magnitudes run ~15-90 seats, so Hare quotas sit well below a
-    // 20% gate — use the same 10% gate as the Dáil family.
-    electionType === "assembleeNationale" ||
-    electionType === "cameraDeputati" ||
-    electionType === "congresoDiputados" ||
-    electionType === "riksdag" ||
-    electionType === "milletMeclisi" ||
-    // AT/FI/GR lower chambers: same regional-PR shape and magnitudes as the
-    // FR/IT/ES family above.
-    electionType === "nationalrat" ||
-    electionType === "eduskunta" ||
-    electionType === "vouli" ||
-    // DD Volkskammer: the National Front's 5-party bloc list (SED + captive
-    // CDU/LDPD/NDPD/DBD, ddParties.ts) guarantees every bloc partner a
-    // representation — the historical system never let a 20% gate zero one
-    // out. Observed founding-cycle vote shares split ~14-30% across the 5
-    // candidates; a 20% gate would exclude 2-3 of them from every region's
-    // allocation pool (issue #3896). Same gate for Land assemblies.
-    electionType === "volkskammerDeputy" ||
-    electionType === "landAssembly"
-  )
-    return 0.1;
-  return 0.2;
-}
+export { getMultiSeatMinShare } from "./rules/seatEligibility";
 
 export interface RankedCandidate {
   id: string;
@@ -226,7 +169,9 @@ export function allocateSeats(
    * `UK_COMMONS_SEATS`; pass `getUkCommonsSeats(preset)` so a 1953 world
    * allocates the 625-seat redistribution (ticket #1058).
    */
-  commonsSeats: Record<string, number> = UK_COMMONS_SEATS
+  commonsSeats: Record<string, number> = UK_COMMONS_SEATS,
+  /** Country scope for rules shared by election types in multiple countries. */
+  countryId?: string
 ): SeatAllocationResult {
   // "senate" is single-seat for the US (one seat per class per state, always
   // totalSeats=1). Nigeria's Senate is a multi-seat-per-zone body (18-21 seats),
@@ -266,7 +211,7 @@ export function allocateSeats(
     // 22% across two candidates clears a 20% gate while a 0.8% fringe
     // candidate can no longer sneak in. Callers without party data fall back
     // to the legacy per-candidate share.
-    const minShare = getMultiSeatMinShare(electionType);
+    const minShare = getMultiSeatMinShare(electionType, authoritativeSeats, countryId);
     const votesByGroup = new Map<string, number>();
     for (const c of ranked) {
       const k = eligibilityGroupKey(c);

@@ -167,10 +167,11 @@ export async function resolveSingleSeatLegislativeIncumbent(
 // can't reuse `getElectionWinnerIdentity`'s argmax-vote test — multi-seat
 // "winning" depends on the seat-allocation formula, not raw vote rank. Instead
 // this reuses the vote-share GATE the real allocator applies before a
-// candidate is eligible for a seat at all (`getMultiSeatMinShare("house")` —
-// 20%): clearing it each cycle is treated as "held at least one seat" that
-// cycle. That's a proxy, not an exact seat re-derivation, and consecutive-term
-// COUNTING only needs a boolean per cycle, not the seat total.
+// candidate is eligible for a seat at all (`getMultiSeatMinShare("house",
+// prior.totalSeats, countryId)`): clearing that cycle's delegation-aware gate is treated
+// as "held at least one seat" that cycle. That's a proxy, not an exact seat
+// re-derivation, and consecutive-term COUNTING only needs a boolean per cycle,
+// not the seat total.
 //
 // One deliberate simplification: the allocator pools a PARTY's nominees before
 // applying that gate, while this measures each candidate's own share. A party
@@ -225,12 +226,11 @@ export async function resolveHouseIncumbentTenures(
     .slice(0, MAX_HOUSE_TENURE_LOOKBACK);
   if (priorsOnSeat.length === 0) return result;
 
-  const minShare = getMultiSeatMinShare("house");
-
   // Newest → oldest: for each prior cycle, which identities cleared the
   // multi-seat vote-share gate (a proxy for "held at least one seat").
   const clearedByCycle: Set<string>[] = [];
   for (const prior of priorsOnSeat) {
+    const minShare = getMultiSeatMinShare("house", prior.totalSeats, countryId);
     const cleared = new Set<string>();
     const tally = await db
       .collection<ElectionVoteTally>("electionVoteTallies")
