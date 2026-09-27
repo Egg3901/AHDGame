@@ -57,7 +57,14 @@ const widenSentryClientFileUpload = process.env.SENTRY_WIDEN_CLIENT_FILE_UPLOAD 
 // Source-map upload is optional so a missing observability credential cannot
 // prevent the application from deploying. The Sentry wrapper disables map
 // generation and upload below when the token is absent.
-const sentryAuthToken = process.env.SENTRY_AUTH_TOKEN;
+const sentryAuthToken = process.env.SENTRY_AUTH_TOKEN?.trim() || undefined;
+if (sentryAuthToken) {
+  process.env.SENTRY_AUTH_TOKEN = sentryAuthToken;
+} else {
+  // sentry-cli also reads this variable directly instead of relying only on
+  // withSentryConfig's authToken option.
+  delete process.env.SENTRY_AUTH_TOKEN;
+}
 if (isProductionBuild && !sentryAuthToken) {
   console.warn("[sentry] SENTRY_AUTH_TOKEN is not set; continuing without source-map upload.");
 }
