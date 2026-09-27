@@ -269,7 +269,13 @@ export async function buildResultsPayload(
   const seatsEstimate =
     !isPresident && tally
       ? (resolvedSeatsEstimate(tally, null) ??
-        computeSeatEstimates(election.electionType, election.totalSeats, tally, rosterIds))
+        computeSeatEstimates(
+          election.electionType,
+          election.totalSeats,
+          tally,
+          rosterIds,
+          election.countryId ?? "US"
+        ))
       : null;
 
   // ── Candidate totals ──────────────────────────────────────────────────

@@ -4,7 +4,7 @@ import { requireAdmin } from "@/lib/api/requireAdmin";
 import { handleRouteError } from "@/lib/api/errors";
 import type { Election, ElectionCandidate, NPP, GameState } from "@/lib/db/types";
 import { MS_PER_TURN } from "@/lib/constants/turnTime";
-import { isNPPAvailable, RACE_PRIORITY } from "@/lib/turn/nppEntryLogic";
+import { getRacePriority, isNPPAvailable } from "@/lib/turn/nppEntryLogic";
 import { primaryOpenFilter } from "@/lib/elections/electionDeadlineFilters";
 
 /**
@@ -129,25 +129,22 @@ export async function GET() {
       const firstParty = parties[0];
       const firstState = openPrimaries[0].state;
       const statePrimaries = openPrimaries.filter((e) => e.state === firstState);
+      const firstCountry = statePrimaries[0]?.countryId ?? "US";
 
       // Simulate the filter from processElectionEntry
-      const availableNPPsRaw = allNPPs.filter((npp) => npp.party === firstParty);
-      const availableInState = availableNPPsRaw.filter(
-        (npp) =>
-          npp.homeState === firstState ||
-          statePrimaries.some((p) => p.electionType === "president" || p.electionType === "commons")
+      const availableNPPsRaw = allNPPs.filter(
+        (npp) => npp.party === firstParty && (npp.countryId ?? "US") === firstCountry
       );
+      const availableInState = availableNPPsRaw.filter((npp) => npp.homeState === firstState);
       const notAssigned = availableInState; // No assignments yet in simulation
       const notInCandidacy = notAssigned.filter((npp) =>
         isNPPAvailable(npp, nppCandidacies, gameNow)
       );
 
       // Sort primaries by priority
-      const sortedPrimaries = [...statePrimaries].sort((a, b) => {
-        const aIdx = RACE_PRIORITY.indexOf(a.electionType as (typeof RACE_PRIORITY)[number]);
-        const bIdx = RACE_PRIORITY.indexOf(b.electionType as (typeof RACE_PRIORITY)[number]);
-        return (aIdx === -1 ? 999 : aIdx) - (bIdx === -1 ? 999 : bIdx);
-      });
+      const sortedPrimaries = [...statePrimaries].sort(
+        (a, b) => getRacePriority(a.electionType) - getRacePriority(b.electionType)
+      );
 
       // Check first primary
       const firstPrimary = sortedPrimaries[0];
@@ -159,12 +156,7 @@ export async function GET() {
       );
 
       // Find matching NPP
-      const matchingNPP = notInCandidacy.find(
-        (n) =>
-          n.homeState === firstState ||
-          firstPrimary?.electionType === "president" ||
-          firstPrimary?.electionType === "commons"
-      );
+      const matchingNPP = notInCandidacy[0];
 
       // Check cooldown
       let cooldownBlocked = false;

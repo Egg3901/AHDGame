@@ -198,6 +198,21 @@ describe("resolveOneGeneralElection", () => {
     expect(spawnCommonsElection).toHaveBeenCalledWith(db, election, NOW);
   });
 
+  it("spawns the next regular Commons cycle when recovering a finalized snap tally", async () => {
+    const election = makeElection({
+      electionType: "snap_commons",
+      state: "Bristol North West",
+      countryId: "UK",
+    });
+    const tally = makeTally(election._id, {}, { finalized: true });
+
+    const { resolveOneGeneralElection } = await import("./generalResolution");
+    await resolveOneGeneralElection(db as unknown as Db, election, tally, CURRENT_TURN, NOW);
+
+    const { spawnCommonsElection } = await import("@/lib/turn/election/electionSpawning");
+    expect(spawnCommonsElection).toHaveBeenCalledWith(db, election, NOW);
+  });
+
   // ── Edge case: no tally ───────────────────────────────────────────────────
 
   it("marks election resolved (not a win) when tally is null", async () => {
@@ -1290,6 +1305,9 @@ describe("resolveOneGeneralElection", () => {
       (c) => String(c[0]?._id) === String(winnerId) && c[1]?.$set?.currentOffice?.type === "commons"
     );
     expect(winnerUpdate).toBeDefined();
+
+    const { spawnCommonsElection } = await import("@/lib/turn/election/electionSpawning");
+    expect(spawnCommonsElection).toHaveBeenCalledWith(db, election, NOW);
   });
 
   it("snap_commons deleteMany wipes 'commons' officials (not 'snap_commons')", async () => {
@@ -1312,6 +1330,9 @@ describe("resolveOneGeneralElection", () => {
     // Should NOT match on the raw snap type
     const deleteWithSnap = deleteCalls.find((c) => c[0]?.officeType === "snap_commons");
     expect(deleteWithSnap).toBeUndefined();
+
+    const { spawnCommonsElection } = await import("@/lib/turn/election/electionSpawning");
+    expect(spawnCommonsElection).toHaveBeenCalledWith(db, election, NOW);
   });
 
   it("snap_shugiin winner is written with officeType 'shugiin', not 'snap_shugiin'", async () => {
