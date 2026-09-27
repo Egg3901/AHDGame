@@ -100,7 +100,7 @@ The moment your primary resolves:
 
 | Office | Strategic key |
 | --- | --- |
-| US House | Multi-seat + 20% threshold; party organization matters for total party seat count, not individual candidacy much. Spread party ads across many districts. |
+| US House | Multi-seat + delegation-aware threshold: 20% in states with 1-4 seats, scaling to 10% at 9+ seats. Party organization matters for total party seat count, not individual candidacy much. Spread party ads across many districts. |
 | US Senate | Single-seat statewide. Broad demographic appeal matters. Attack the opponent's soft groups. |
 | US Governor | Office strength 1.0 means state government approval is the biggest multiplier. If approval is high in your state, you benefit more than the Senator candidate does. |
 | US President | Electoral College + state lean + party-weighted positions + swing-state travel. Very different game from state races. |

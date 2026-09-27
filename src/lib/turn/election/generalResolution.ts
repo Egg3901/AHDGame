@@ -488,7 +488,8 @@ export async function resolveOneGeneralElection(
         // vote. Undefined for every non-bloc-list country, so their allocation
         // is byte-identical.
         runtimeBlocQuota?.shares,
-        commonsSeats
+        commonsSeats,
+        election.countryId ?? "US"
       );
 
     if (isMultiSeat) {
