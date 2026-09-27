@@ -54,10 +54,12 @@ const railwayEnv = process.env.RAILWAY_ENVIRONMENT_NAME;
 const isPreview = !!railwayEnv && railwayEnv !== "production";
 const isProductionBuild = railwayEnv === "production";
 const widenSentryClientFileUpload = process.env.SENTRY_WIDEN_CLIENT_FILE_UPLOAD === "true";
-// Local and preview builds may omit the token; production must upload maps.
+// Source-map upload is optional so a missing observability credential cannot
+// prevent the application from deploying. The Sentry wrapper disables map
+// generation and upload below when the token is absent.
 const sentryAuthToken = process.env.SENTRY_AUTH_TOKEN;
 if (isProductionBuild && !sentryAuthToken) {
-  throw new Error("SENTRY_AUTH_TOKEN is required for production source-map upload");
+  console.warn("[sentry] SENTRY_AUTH_TOKEN is not set; continuing without source-map upload.");
 }
 const sentryOrg = process.env.SENTRY_ORG || "lakeside-games";
 const sentryProject = process.env.SENTRY_PROJECT || "a-house-divided";
