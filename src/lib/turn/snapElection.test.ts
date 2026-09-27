@@ -26,6 +26,12 @@ let db: MockDb;
 
 function setupMocks(opts: {
   currentTurn: number;
+  gameState?: {
+    startingYear?: number;
+    preset?: string;
+    preIterationTurns?: number;
+    preIteration?: { active?: boolean };
+  };
   govDoc: {
     _id: string;
     countryId: string;
@@ -42,7 +48,11 @@ function setupMocks(opts: {
   // gameState
   db.collectionMocks["gameState"] = {
     ...db.collection("gameState"),
-    findOne: vi.fn().mockResolvedValue({ _id: "current", currentTurn: opts.currentTurn }),
+    findOne: vi.fn().mockResolvedValue({
+      _id: "current",
+      currentTurn: opts.currentTurn,
+      ...opts.gameState,
+    }),
   } as MockDb["collectionMocks"][string];
 
   // governmentFormations
@@ -306,6 +316,43 @@ describe("triggerSnapElection", () => {
     expect(result.snapElectionType).toBe("snap_commons");
     const insertCall = db.collectionMocks["elections"]!.insertMany.mock.calls[0]?.[0];
     expect(insertCall[0].electionType).toBe("snap_commons");
+  });
+
+  it("labels a snap election with its resolution year rather than its canonical cycle year", async () => {
+    setupMocks({
+      currentTurn: 1180,
+      gameState: {
+        startingYear: 1953,
+        preset: "1953-default",
+        preIterationTurns: 48,
+        preIteration: { active: false },
+      },
+      govDoc: {
+        _id: "UK",
+        countryId: "UK",
+        status: "formed",
+        pmCharacterId: new ObjectId(),
+        snapElectionsUsed: 0,
+      },
+      regions: [{ _id: "EAE" }],
+      seats: [{ state: "EAE", totalSeats: 47 }],
+      priorElections: [{ state: "EAE", electionType: "commons", cycle: 5 }],
+    });
+    const { getDb } = await import("@/lib/mongodb");
+    vi.mocked(getDb).mockResolvedValue(db as unknown as Db);
+
+    await triggerSnapElection(db as unknown as Db, "UK", new Date(), {
+      reason: "pm-trigger",
+    });
+
+    const inserted = db.collectionMocks["elections"]!.insertMany.mock.calls[0]?.[0]?.[0];
+    expect(inserted).toMatchObject({
+      cycle: 6,
+      startTurn: 1180,
+      primaryEndTurn: 1204,
+      endTurn: 1228,
+      electionYear: 1977,
+    });
   });
 
   it("continues cycle numbering from prior election", async () => {

@@ -21,6 +21,6 @@ areas: [engine]
 - Kept non-UK elections unchanged and added safe fallbacks for old worlds with
   no current UK registration data.
 - Lowered the party-pooled UK Commons and snap-election seat threshold from 20%
-  to 10%; the US House remains at 20%.
+  to 10%; the US House continues to use its separate delegation-size rule.
 - Updated election documentation and added a live-snapshot simulation report
   covering both changes.

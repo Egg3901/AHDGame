@@ -35,6 +35,7 @@ import { CommonsCarveUpPanel } from "@/components/uk/elections/CommonsCarveUpPan
 import { ManifestoFlavorBar } from "@/components/uk/elections/ManifestoFlavorBar";
 import { buildCommonsCarveUpSlices } from "@/lib/uk/elections/commonsCarveUp";
 import { ELECTION_STATE_NAMES } from "@/app/elections/electionsHelpers";
+import { isCommonsGeneralElection } from "@/lib/utils/electionLabels";
 
 import {
   electionsHref,
@@ -239,7 +240,7 @@ export default function ElectionsClient({ code, initialElections }: ElectionsCli
   const manifestoElectionIds = useMemo(() => {
     if (countryId !== "UK") return [];
     return elections
-      .filter((e) => e.electionType === "commons" && e.candidates.length > 0)
+      .filter((e) => isCommonsGeneralElection(e.electionType) && e.candidates.length > 0)
       .map((e) => e.id);
   }, [countryId, elections]);
   const manifestos = useCountryManifestos(code, manifestoElectionIds);
@@ -280,7 +281,7 @@ export default function ElectionsClient({ code, initialElections }: ElectionsCli
     (sectionKey: string) => {
       if (countryId !== "UK" || sectionKey !== "commons") return null;
       const contested = filtered.filter(
-        (e) => e.electionType === "commons" && e.candidates.length > 0
+        (e) => isCommonsGeneralElection(e.electionType) && e.candidates.length > 0
       );
       if (contested.length === 0) return null;
       return (

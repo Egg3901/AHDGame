@@ -46,8 +46,8 @@ import {
 import { DEFAULT_DURATIONS } from "@/lib/turn/perpetualElections";
 import { sendCountryGameEvent, DISCORD_COLORS } from "@/lib/discordWebhooks";
 import { cycleAnchorContextFromGameState } from "@/lib/elections/cycleAnchorContext";
-import { electionToLarpYear } from "@/lib/utils/formatters";
 import type { Election, ElectionStatus, GameState, Seat } from "@/lib/db/types";
+import { snapElectionResolutionYear } from "@/lib/turn/rules/snapElection";
 
 export const SNAP_ELECTION_LIMIT = 2;
 export const SNAP_ELECTION_COOLDOWN_TURNS = 336;
@@ -187,6 +187,13 @@ export async function triggerSnapElection(
   // 3. Spawn fresh snap elections per region.
   const snapElectionType = `snap_${lowerChamberKey}`;
   const snapDur = DEFAULT_DURATIONS[snapElectionType] ?? DEFAULT_DURATIONS.snap_lowerChamber;
+  const primaryEndTurn = currentTurn + snapDur.primaryDurationHours;
+  const endTurn = currentTurn + snapDur.durationHours;
+  const electionYear = snapElectionResolutionYear(endTurn, {
+    startingYear: ctx.startingYear,
+    preIterationActive: ctx.preIterationActive,
+    preIterationTurns: ctx.preIterationTurns,
+  });
 
   const regions = await db
     .collection<{ _id: string }>("states")
@@ -229,7 +236,7 @@ export async function triggerSnapElection(
         state: regionId,
       }),
       cycle,
-      electionYear: electionToLarpYear(snapElectionType, cycle, undefined, undefined, ctx),
+      electionYear,
       status: "active" as ElectionStatus,
       // Read by the perpetual spawner. A PM snap drags the LARP calendar forward
       // for the next regular race; an imposed one must not, because dissolving a
@@ -241,8 +248,8 @@ export async function triggerSnapElection(
       primaryEndTime: new Date(now.getTime() + snapDur.primaryDurationHours * 3_600_000),
       endTime: new Date(now.getTime() + snapDur.durationHours * 3_600_000),
       startTurn: currentTurn,
-      primaryEndTurn: currentTurn + snapDur.primaryDurationHours,
-      endTurn: currentTurn + snapDur.durationHours,
+      primaryEndTurn,
+      endTurn,
       durationHours: snapDur.durationHours,
       primaryDurationHours: snapDur.primaryDurationHours,
       createdAt: now,

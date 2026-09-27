@@ -4,38 +4,24 @@
 
 import type { NPP, Election, ElectionCandidate } from "@/lib/db/types";
 import { isElectionTypeEntryBlocked } from "@/lib/elections/nationwideExecutive";
+import { getRacePriority } from "@/lib/turn/rules/nppElectionPriority";
+
+export {
+  RACE_PRIORITY,
+  getRacePriority,
+  type RaceType,
+} from "@/lib/turn/rules/nppElectionPriority";
 
 /**
- * Priority order for race types (index 0 = highest priority).
- *
  * NPPs pick the highest-priority open primary in their home state. This list
  * only covers races they are still allowed to auto-enter; presidential
  * primaries are intentionally omitted because the runtime blocks them entirely.
  * Commons now sits between house and senate so UK constituency races are
  * considered after lower-chamber U.S. seats but before statewide upper-chamber
  * contests.
+ * Snap variants share their regular counterpart's position; see
+ * `rules/nppElectionPriority`.
  */
-export const RACE_PRIORITY = [
-  "stateSenate",
-  "regionalCouncil",
-  "peoplesCongress",
-  "republicSupremeSoviet",
-  "landAssembly",
-  "sangiin",
-  "house",
-  "milletMeclisi",
-  "commons",
-  "special_commons",
-  "senate",
-  "senato",
-  "shugiin",
-  "npcDelegate",
-  "supremeSovietDeputy",
-  "nationalitiesDeputy",
-  "governor",
-] as const;
-
-export type RaceType = (typeof RACE_PRIORITY)[number];
 
 /**
  * Regional-presence gate for NPP candidate fielding (1953 sim forensics: NPP
@@ -156,12 +142,7 @@ export function selectBestPrimary(
 
   // Sort by priority
   const sorted = [...eligibleElections].sort((a, b) => {
-    const aPriority = RACE_PRIORITY.indexOf(a.electionType as RaceType);
-    const bPriority = RACE_PRIORITY.indexOf(b.electionType as RaceType);
-    // Unknown types go to end
-    const aIdx = aPriority === -1 ? 999 : aPriority;
-    const bIdx = bPriority === -1 ? 999 : bPriority;
-    return aIdx - bIdx;
+    return getRacePriority(a.electionType) - getRacePriority(b.electionType);
   });
 
   // Find first election NPP can enter
@@ -173,12 +154,4 @@ export function selectBestPrimary(
   }
 
   return null;
-}
-
-/**
- * Get the priority index for a race type (lower = higher priority).
- */
-export function getRacePriority(raceType: string): number {
-  const idx = RACE_PRIORITY.indexOf(raceType as RaceType);
-  return idx === -1 ? 999 : idx;
 }

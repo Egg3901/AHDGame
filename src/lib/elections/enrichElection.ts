@@ -736,7 +736,13 @@ export async function _enrichElection(
 
   let seatsEstimate =
     seatedAllocation ??
-    computeSeatEstimates(election.electionType, election.totalSeats, tally, activeCandidateIdSet);
+    computeSeatEstimates(
+      election.electionType,
+      election.totalSeats,
+      tally,
+      activeCandidateIdSet,
+      election.countryId ?? "US"
+    );
 
   // US House with redistricting on: project seats district-by-district using the
   // SAME engine that decides the final result (districtedHouseResolution on the
@@ -1079,7 +1085,8 @@ export async function _enrichElection(
               election.totalSeats,
               t.cumulativeVotes,
               houseSeats,
-              fullCandidateParties
+              fullCandidateParties,
+              election.countryId ?? "US"
             );
           return {
             turn: t.turn,
