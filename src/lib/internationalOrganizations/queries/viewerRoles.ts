@@ -30,16 +30,21 @@ export async function loadViewerOrganizationRoles(params: {
   // collection (the single source of truth). An NPP-held seat carries a null
   // characterId and never matches a player viewer.
   const cabinetCol = await getCabinetMembersCollection(db);
-  let foreignMinisterOf: CountryId | null = null;
-  for (const countryId of COUNTRY_ORDER) {
+  const seats = COUNTRY_ORDER.flatMap((countryId) => {
     const positionId = FOREIGN_AFFAIRS_POSITION_BY_COUNTRY[countryId];
-    if (!positionId) continue;
-    const member = await cabinetCol.findOne({ countryId, positionId });
-    if (member?.characterId?.equals(characterId)) {
-      foreignMinisterOf = countryId;
-      break;
-    }
-  }
+    return positionId ? [{ countryId, positionId }] : [];
+  });
+  const heldSeats = await cabinetCol
+    .find({ characterId, $or: seats }, { projection: { countryId: 1, positionId: 1 } })
+    .toArray();
+  const foreignMinisterOf: CountryId | null =
+    COUNTRY_ORDER.find((countryId) =>
+      heldSeats.some(
+        (seat) =>
+          seat.countryId === countryId &&
+          seat.positionId === FOREIGN_AFFAIRS_POSITION_BY_COUNTRY[countryId]
+      )
+    ) ?? null;
 
   const headOfGovernmentOf = await findCountryHeadedBy(db, characterId);
 

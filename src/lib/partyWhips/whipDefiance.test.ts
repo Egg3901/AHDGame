@@ -9,6 +9,7 @@ describe("buildWhipDefianceSnapshot", () => {
     const db = createMockDb();
     const whipId = new ObjectId();
     const billId = new ObjectId();
+    const secondBillId = new ObjectId();
     const characterId = new ObjectId();
     db.collection("billWhips");
     db.collection("bills");
@@ -34,15 +35,40 @@ describe("buildWhipDefianceSnapshot", () => {
               createdAt: new Date("2026-04-29T12:00:00.000Z"),
               updatedAt: new Date("2026-04-29T12:00:00.000Z"),
             } satisfies Omit<BillWhip, "candidacyId">,
+            {
+              _id: new ObjectId(),
+              targetType: "bill",
+              targetId: secondBillId,
+              chamber: "house",
+              direction: "for",
+              issuedBy: "nationalParty",
+              countryId: "US",
+              partyId: "1",
+              audience: "character",
+              mode: "soft",
+              attemptNumber: 1,
+              createdAt: new Date("2026-04-29T12:00:00.000Z"),
+              updatedAt: new Date("2026-04-29T12:00:00.000Z"),
+            } satisfies Omit<BillWhip, "candidacyId">,
           ] as BillWhip[],
       }),
     });
-    db.collectionMocks["bills"]!.findOne.mockResolvedValue({
-      _id: billId,
-      title: "Infrastructure Act",
-      status: "active",
-      votes: { [characterId.toString()]: "against" },
-    } as unknown as Bill);
+    db.collectionMocks["bills"]!.find.mockReturnValue({
+      toArray: async () => [
+        {
+          _id: billId,
+          title: "Infrastructure Act",
+          status: "active",
+          votes: { [characterId.toString()]: "against" },
+        } as unknown as Bill,
+        {
+          _id: secondBillId,
+          title: "Energy Act",
+          status: "active",
+          votes: { [characterId.toString()]: "against" },
+        } as unknown as Bill,
+      ],
+    });
     db.collectionMocks["characters"]!.find.mockReturnValue({
       project: () => ({
         toArray: async () => [
@@ -72,8 +98,8 @@ describe("buildWhipDefianceSnapshot", () => {
       issuedBy: "nationalParty",
     });
 
-    expect(snapshot.activeCount).toBe(1);
-    expect(snapshot.playerCount).toBe(1);
+    expect(snapshot.activeCount).toBe(2);
+    expect(snapshot.playerCount).toBe(2);
     expect(snapshot.nppCount).toBe(0);
     expect(snapshot.players[0]).toMatchObject({
       voterName: "Dana Roem",
@@ -82,6 +108,9 @@ describe("buildWhipDefianceSnapshot", () => {
       whipDirection: "for",
       mode: "soft",
     });
+    expect(db.collectionMocks["bills"]!.find).toHaveBeenCalledTimes(1);
+    expect(db.collectionMocks["bills"]!.find.mock.calls[0][0]._id.$in).toHaveLength(2);
+    expect(db.collectionMocks["bills"]!.findOne).not.toHaveBeenCalled();
   });
 
   it("clears defiance when the current vote already matches the whip", async () => {
@@ -116,12 +145,16 @@ describe("buildWhipDefianceSnapshot", () => {
           ] as BillWhip[],
       }),
     });
-    db.collectionMocks["bills"]!.findOne.mockResolvedValue({
-      _id: billId,
-      title: "Education Act",
-      status: "active",
-      votes: { [`npp_${nppId.toString()}`]: "against" },
-    } as unknown as Bill);
+    db.collectionMocks["bills"]!.find.mockReturnValue({
+      toArray: async () => [
+        {
+          _id: billId,
+          title: "Education Act",
+          status: "active",
+          votes: { [`npp_${nppId.toString()}`]: "against" },
+        } as unknown as Bill,
+      ],
+    });
     db.collectionMocks["npps"]!.find.mockReturnValue({
       project: () => ({
         toArray: async () => [
