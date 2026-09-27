@@ -16,6 +16,7 @@ import { updatePoliticianPagesAfterElection } from "@/lib/wiki/updatePoliticianP
 import {
   ELECTION_TYPE_SHORT_LABEL,
   MULTI_SEAT_TYPES,
+  isCommonsGeneralElection,
   isSpecialCommonsElection,
   officeKeyForElectionType,
 } from "@/lib/utils/electionLabels";
@@ -119,7 +120,7 @@ export async function resolveOneGeneralElection(
       // was never marked "resolved" (e.g. spawnCommonsElection threw a
       // duplicate-key error on a previous turn). Recover by spawning the next
       // cycle (a no-op if it already exists) and marking this election resolved.
-      if (election.electionType === "commons" && election.state) {
+      if (isCommonsGeneralElection(election.electionType) && election.state) {
         await spawnCommonsElection(db, election, now);
       }
       if (election.electionType === "house") {
@@ -1148,7 +1149,7 @@ export async function resolveOneGeneralElection(
     }
     // Spawn next cycle for election types with dedicated respawn functions
     // (JP shugiin/sangiin are respawned by ensureJPElections in perpetualElections)
-    if (election.electionType === "commons" && election.state) {
+    if (isCommonsGeneralElection(election.electionType) && election.state) {
       await spawnCommonsElection(db, election, now);
     }
     await db

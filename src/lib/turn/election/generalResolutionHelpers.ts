@@ -10,6 +10,7 @@ import type {
 } from "@/lib/db/types";
 import {
   MULTI_SEAT_TYPES,
+  isCommonsGeneralElection,
   isSpecialCommonsElection,
   officeKeyForElectionType,
 } from "@/lib/utils/electionLabels";
@@ -266,7 +267,7 @@ export async function resolveElectionWithNoTally(
   if (election.electionType === "senate") {
     await triggerLeadershipElectionsAfterChamberVote(db, "senate", now);
   }
-  if (election.electionType === "commons" && election.state) {
+  if (isCommonsGeneralElection(election.electionType) && election.state) {
     await spawnCommonsElection(db, election, now);
   }
   await db
@@ -375,7 +376,7 @@ export async function resolveElectionWithZeroVotes(
     await reopenCommonsVacanciesForRetry(db, election._id, now);
   }
   // Spawn next cycle for election types with dedicated respawn functions
-  if (election.electionType === "commons" && election.state) {
+  if (isCommonsGeneralElection(election.electionType) && election.state) {
     await spawnCommonsElection(db, election, now);
   }
   await db
@@ -432,7 +433,7 @@ export async function resolveElectionWithNoRankedCandidates(
       getChamberClass(election)
     );
   }
-  if (election.electionType === "commons" && election.state) {
+  if (isCommonsGeneralElection(election.electionType) && election.state) {
     await spawnCommonsElection(db, election, now);
   }
   // Clear single-seat incumbent when election resolves with no ranked candidates
