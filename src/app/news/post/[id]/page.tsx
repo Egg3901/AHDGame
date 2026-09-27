@@ -7,6 +7,8 @@ import BackButton from "@/components/BackButton";
 import { bypassNextImageOptimization } from "@/lib/images/bypassImageOptimization";
 import { loadNewsPostPublic } from "@/lib/news/loadNewsPostPublic";
 import { getSiteUrl, SITE_BRAND } from "@/lib/siteMetadata";
+import { getGameTime } from "@/lib/time/gameTime";
+import { formatGameMonth } from "@/lib/utils/gameDate";
 
 type Props = { params: Promise<{ id: string }> };
 
@@ -93,6 +95,13 @@ export default async function NewsPostPermalinkPage({ params }: Props) {
   const { id } = await params;
   const post = await loadNewsPostPublic(id);
   if (!post) notFound();
+  const gameTime = await getGameTime();
+  const postedGameMonth = formatGameMonth(post.createdAt, {
+    currentTurn: gameTime.currentTurn,
+    lastTurnProcessed: gameTime.lastTurnProcessed,
+    startingYear: gameTime.startingYear,
+    preIterationTurns: gameTime.preIterationTurns,
+  });
 
   const base = getSiteUrl();
   const absImage = post.imageUrl ? toAbsoluteAssetUrl(base, post.imageUrl) : null;
@@ -121,12 +130,7 @@ export default async function NewsPostPermalinkPage({ params }: Props) {
           <p className="mt-2 text-sm text-muted">
             <span className="font-medium text-foreground">{post.authorName}</span>
             <span className="mx-2">·</span>
-            <time dateTime={post.createdAt.toISOString()}>
-              {post.createdAt.toLocaleString(undefined, {
-                dateStyle: "medium",
-                timeStyle: "short",
-              })}
-            </time>
+            <time dateTime={post.createdAt.toISOString()}>{postedGameMonth}</time>
           </p>
         </header>
 

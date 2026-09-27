@@ -1,6 +1,6 @@
 "use client";
 
-import { useReducer, useEffect, useCallback, useMemo, useRef } from "react";
+import { useReducer, useEffect, useCallback, useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import Image from "next/image";
 import { CDN_LOGO_URL } from "@/lib/images/staticCdnAssets";
@@ -16,6 +16,8 @@ import { ExperimentalNavbar } from "./ExperimentalNavbar";
 import { NavbarTopFlair } from "./NavbarTopFlair";
 import { FeedbackModal } from "./FeedbackModal";
 import { isChromeHiddenPath, isLightweightLayoutPath } from "@/lib/constants/layoutPaths";
+import { getPostHogClient } from "@/lib/analytics/posthogClient";
+import { CONSENT_EVENT, CONSENT_RESET_EVENT, getStoredConsent } from "@/components/CookieConsent";
 
 const ALLOWED_WITHOUT_CHARACTER = [
   "/settings",
@@ -249,9 +251,44 @@ export function NavbarWrapper({
   const { showToast } = useToast();
   const { setStats: setCharacterStats } = useCharacterStats();
   const { navData, loading: authBootstrapLoading } = useAuthMe();
+  const experimentUserId = navData?.user?.id;
   const demographicsToastShown = useRef(false);
   const statusLoadedRef = useRef(false);
   const [state, dispatch] = useReducer(navbarWrapperReducer, initialState);
+  const [navigationVariant, setNavigationVariant] = useState<"a" | "b">("a");
+
+  useEffect(() => {
+    if (!experimentUserId || singleplayer) return;
+    let cancelled = false;
+    let unsubscribe: (() => void) | undefined;
+    const loadVariant = () => {
+      if (getStoredConsent() !== "accepted") {
+        setNavigationVariant("a");
+        unsubscribe?.();
+        return;
+      }
+      void getPostHogClient().then((client) => {
+        if (!client || cancelled || getStoredConsent() !== "accepted") return;
+        client.identify(experimentUserId);
+        unsubscribe?.();
+        unsubscribe = client.onFeatureFlags(() => {
+          if (!cancelled) {
+            const assignment = client.getFeatureFlag("navigation-redesign");
+            setNavigationVariant(assignment === "test" || assignment === "b" ? "b" : "a");
+          }
+        });
+      });
+    };
+    loadVariant();
+    window.addEventListener(CONSENT_EVENT, loadVariant);
+    window.addEventListener(CONSENT_RESET_EVENT, loadVariant);
+    return () => {
+      cancelled = true;
+      unsubscribe?.();
+      window.removeEventListener(CONSENT_EVENT, loadVariant);
+      window.removeEventListener(CONSENT_RESET_EVENT, loadVariant);
+    };
+  }, [experimentUserId, singleplayer]);
 
   const fetchStatusData = useCallback(
     async (layout: string | null | undefined, retryCount = 0) => {
@@ -535,6 +572,7 @@ export function NavbarWrapper({
         <>
           {useExperimentalNav ? (
             <ExperimentalNavbar
+              navigationVariant={navigationVariant}
               clientShell={clientShell}
               user={
                 state.user ?? (singleplayer ? { username: "Admin", singleplayer: true } : undefined)
