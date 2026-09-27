@@ -278,9 +278,12 @@ function voteMatchesWhip(whip: BillWhip, comparableVote: string | null): boolean
   return comparableVote === whip.direction;
 }
 
-async function loadBillTarget(db: Db, whip: BillWhip): Promise<TargetContext | null> {
+async function loadBillTarget(
+  whip: BillWhip,
+  billsById: ReadonlyMap<string, Bill>
+): Promise<TargetContext | null> {
   if (!(whip.targetId instanceof ObjectId)) return null;
-  const bill = await db.collection<Bill>("bills").findOne({ _id: whip.targetId });
+  const bill = billsById.get(whip.targetId.toString());
   if (
     !bill ||
     ![
@@ -464,10 +467,14 @@ async function loadLeadershipTarget(db: Db, whip: BillWhip): Promise<TargetConte
   };
 }
 
-async function loadTargetContext(db: Db, whip: BillWhip): Promise<TargetContext | null> {
+async function loadTargetContext(
+  db: Db,
+  whip: BillWhip,
+  billsById: ReadonlyMap<string, Bill>
+): Promise<TargetContext | null> {
   switch (whip.targetType) {
     case "bill":
-      return loadBillTarget(db, whip);
+      return loadBillTarget(whip, billsById);
     case "speakerElection":
     case "leadershipElection":
       return loadLeadershipTarget(db, whip);
@@ -521,11 +528,26 @@ export async function buildWhipDefianceSnapshot(
     whips.push(whip);
   }
 
+  const billIds = [
+    ...new Map(
+      whips
+        .filter((whip) => whip.targetType === "bill" && whip.targetId instanceof ObjectId)
+        .map((whip) => [whip.targetId.toString(), whip.targetId as ObjectId])
+    ).values(),
+  ];
+  const bills = billIds.length
+    ? await db
+        .collection<Bill>("bills")
+        .find({ _id: { $in: billIds } })
+        .toArray()
+    : [];
+  const billsById = new Map(bills.map((bill) => [bill._id.toString(), bill]));
+
   const players: WhipDefianceItem[] = [];
   const npps: WhipDefianceItem[] = [];
 
   for (const whip of whips) {
-    const target = await loadTargetContext(db, whip);
+    const target = await loadTargetContext(db, whip, billsById);
     if (!target) continue;
 
     const voterIds = parseVoterKeys(

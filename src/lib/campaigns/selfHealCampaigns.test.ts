@@ -67,13 +67,16 @@ describe("selfHealMissingCampaigns", () => {
     );
 
     // Only haveCampaignChar already has a campaign.
-    db.collectionMocks.campaigns!.findOne.mockImplementation((query?: unknown) => {
-      const candidateId = (query as { candidateId?: ObjectId })?.candidateId;
-      if (candidateId && candidateId.toString() === haveCampaignChar.toString()) {
-        return Promise.resolve({ _id: new ObjectId(), status: "active" });
-      }
-      return Promise.resolve(null);
-    });
+    db.collectionMocks.campaigns!.find.mockReturnValue(
+      makeCursor([
+        {
+          _id: new ObjectId(),
+          electionId: presElectionId,
+          candidateId: haveCampaignChar,
+          status: "active",
+        },
+      ])
+    );
   });
 
   it("creates campaigns only for active candidates in eligible elections that lack one", async () => {
@@ -87,6 +90,8 @@ describe("selfHealMissingCampaigns", () => {
     expect(inserted.electionId).toEqual(presElectionId);
     expect(inserted.status).toBe("active");
     expect(healed).toBe(1);
+    expect(db.collectionMocks.campaigns!.find).toHaveBeenCalledTimes(1);
+    expect(db.collectionMocks.campaigns!.findOne).toHaveBeenCalledTimes(2);
   });
 
   it("does nothing when there are no active candidates", async () => {
