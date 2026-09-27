@@ -231,10 +231,10 @@ describe("next-cycle primaries open immediately (no 'Opens in X turns' dead zone
     const currentTurn = exp2.startTurn - 30;
 
     const mock = makeMockDb({
-      states: [{ _id: "TKY" }],
+      states: [{ _id: "KAN" }],
       completed: [
         {
-          state: "TKY",
+          state: "KAN",
           electionType: "sangiin",
           chamberClass: 1,
           cycle: 1,
@@ -249,7 +249,7 @@ describe("next-cycle primaries open immediately (no 'Opens in X turns' dead zone
     const { ensureJPCouncillorElections } = await import("./perpetualElections");
     await ensureJPCouncillorElections(NOW, 1);
 
-    const doc = mock.insertCalls.flat().find((d) => d.state === "TKY" && d.chamberClass === 1)!;
+    const doc = mock.insertCalls.flat().find((d) => d.state === "KAN" && d.chamberClass === 1)!;
     expect(doc).toBeDefined();
     expect(doc.cycle).toBe(2);
     expect(doc.status).toBe("active");

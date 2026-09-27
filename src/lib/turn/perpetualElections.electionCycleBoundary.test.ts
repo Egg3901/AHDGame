@@ -57,7 +57,7 @@ const FAMILIES: FamilySeed[] = [
     electionType: "shugiin",
     regions: [
       { id: "KAN", seats: 10 },
-      { id: "KYO", seats: 8 },
+      { id: "HOK", seats: 8 },
     ],
   },
   {
@@ -65,7 +65,7 @@ const FAMILIES: FamilySeed[] = [
     electionType: "regionalCouncil",
     regions: [
       { id: "KAN", seats: 10 },
-      { id: "KYO", seats: 8 },
+      { id: "HOK", seats: 8 },
     ],
   },
   {

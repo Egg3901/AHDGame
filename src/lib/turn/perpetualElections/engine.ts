@@ -3,7 +3,14 @@ import { AsyncLocalStorage } from "async_hooks";
 import { ObjectId, type AnyBulkWriteOperation, type Db } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { getCountryAccessFromDb, withCountryAccessSnapshot } from "@/lib/countryAccess";
-import type { Election, ElectionCandidate, GameState, Seat, State } from "@/lib/db/types";
+import type {
+  Election,
+  ElectionCandidate,
+  ElectionStatus,
+  GameState,
+  Seat,
+  State,
+} from "@/lib/db/types";
 import { archiveCampaignsForCandidates } from "@/lib/campaigns/archiveWithdrawnCampaigns";
 import { CURRENT_PRESIDENTIAL_RULESET_VERSION } from "@/lib/elections/presidentialRuleset";
 import { US_STATE_FILTER } from "@/lib/utils/electionLabels";
@@ -315,11 +322,15 @@ export async function advanceElectionTimers(
 }
 
 /**
- * Remove duplicate active/upcoming elections, keeping only the oldest one.
- * This prevents issues from race conditions or bugs that create multiple elections.
+ * Cancel duplicate active/upcoming elections, preserving the race in play and
+ * the House's one allowed staged successor.
+ * Candidate and tally history stays attached to a real election document while
+ * active candidacies are withdrawn so the global active-candidate guard does not
+ * strand a player after their duplicate race is retired.
  */
 export async function cleanupDuplicateElections(
-  db: Awaited<ReturnType<typeof import("@/lib/mongodb").getDb>>
+  db: Awaited<ReturnType<typeof import("@/lib/mongodb").getDb>>,
+  now: Date
 ): Promise<void> {
   const liveElections = await db
     .collection<Election>("elections")
@@ -344,25 +355,58 @@ export async function cleanupDuplicateElections(
     groups.get(key)!.push(e);
   }
 
-  // Delete duplicates (keep the oldest).
+  // Cancel duplicates while preserving the race currently in play.
   // House elections intentionally have 2 concurrent live races (one active + one upcoming)
   // so the next cycle is pre-staged while the current cycle is running.
-  const toDelete: import("mongodb").ObjectId[] = [];
+  const toCancel: import("mongodb").ObjectId[] = [];
   for (const [key, elections] of Array.from(groups.entries())) {
-    const maxAllowed = key.includes("_house_") ? 2 : 1;
-    if (elections.length > maxAllowed) {
-      for (let i = maxAllowed; i < elections.length; i++) {
-        toDelete.push(elections[i]._id);
-      }
+    const isHouse = elections[0]?.electionType === "house";
+    const active = elections.filter((election) => election.status === "active");
+    const upcoming = elections.filter((election) => election.status === "upcoming");
+    const keepers: Election[] = [];
+    if (active[0]) keepers.push(active[0]);
+    if (isHouse && upcoming[0]) keepers.push(upcoming[0]);
+    if (keepers.length === 0 && elections[0]) keepers.push(elections[0]);
+
+    const keeperIds = new Set(keepers.map((election) => election._id.toString()));
+    const duplicates = elections.filter((election) => !keeperIds.has(election._id.toString()));
+    if (duplicates.length > 0) {
+      toCancel.push(...duplicates.map((election) => election._id));
       console.log(
-        `[Turn] Found ${elections.length} duplicate ${key} elections, keeping ${maxAllowed}`
+        `[Turn] Found ${elections.length} duplicate ${key} elections, keeping ${keepers.length}`
       );
     }
   }
 
-  if (toDelete.length > 0) {
-    await db.collection("elections").deleteMany({ _id: { $in: toDelete } });
-    console.log(`[Turn] Deleted ${toDelete.length} duplicate election(s)`);
+  if (toCancel.length > 0) {
+    // Withdraw first. If cancellation then fails, the next turn still sees the
+    // live duplicate and retries. The opposite order could strand an active
+    // candidacy on an already-cancelled election.
+    await db
+      .collection("electionCandidates")
+      .updateMany(
+        { electionId: { $in: toCancel }, status: "active" },
+        { $set: { status: "withdrawn", withdrawnAt: now } }
+      );
+    await db.collection("campaigns").updateMany(
+      { electionId: { $in: toCancel }, status: { $ne: "archived" } },
+      {
+        $set: {
+          status: "archived",
+          archivedAt: now,
+          archivedReason: "withdrawn",
+          updatedAt: now,
+        },
+      }
+    );
+    await db.collection<Election>("elections").updateMany(
+      {
+        _id: { $in: toCancel },
+        status: { $in: ["active", "upcoming"] as ElectionStatus[] },
+      },
+      { $set: { status: "cancelled" as ElectionStatus, updatedAt: now } }
+    );
+    console.log(`[Turn] Cancelled ${toCancel.length} duplicate election(s)`);
   }
 }
 
@@ -560,7 +604,7 @@ export async function ensurePerpetualElections(now: Date, currentTurn?: number):
   const db = await getDb();
 
   // First, clean up any duplicate active/upcoming elections
-  await cleanupDuplicateElections(db);
+  await cleanupDuplicateElections(db, now);
 
   // Canonical LARP anchoring requires currentTurn + preset ctx. Explicit
   // param wins for the turn; ctx always comes from gameState.
@@ -679,10 +723,6 @@ export async function ensurePerpetualElections(now: Date, currentTurn?: number):
   // Bootstrap: if no state has ever completed a governor election, we still spawn one per state so governor races exist
   const anyStateHasCompletedGovernor = completedElections.some(
     (e) => e.electionType === "governor"
-  );
-  // Bootstrap: if no state has ever completed a stateSenate election, we still spawn one per state so state senate races exist
-  const anyStateHasCompletedStateSen = completedElections.some(
-    (e) => e.electionType === "stateSenate"
   );
   // Bootstrap/recovery: if no state has ever completed a senate election, seed all classes.
   // Also used for per-class recovery (see below).
@@ -810,12 +850,12 @@ export async function ensurePerpetualElections(now: Date, currentTurn?: number):
     }
 
     // ── State Senate ─────────────────────────────────────────────────────────
-    const hadStateSen = completedElections.some(
-      (e) => e.electionType === "stateSenate" && e.state === stateId
-    );
-    const needStateSen =
-      !liveStateSen.has(stateId) && (hadStateSen || !anyStateHasCompletedStateSen);
-    if (needStateSen) {
+    // `stateIds` is already restricted to states eligible in the active era,
+    // including territories only after their admittedYear. Every eligible state
+    // therefore needs a race even when it has no prior State Senate history.
+    // Requiring either per-state history or a globally empty history stranded
+    // states admitted after the first cycle (AK/HI in a 1953 world) forever.
+    if (!liveStateSen.has(stateId)) {
       const prev = lastCompleted((e) => e.electionType === "stateSenate" && e.state === stateId);
       // US-only stateSenate spawn path (stateIds is already US_STATE_FILTER-scoped).
       const fallbackTotalSeats = stateSenateSeatsById.get(stateId) ?? 40;
