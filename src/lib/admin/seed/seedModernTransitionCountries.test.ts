@@ -10,6 +10,7 @@ import {
   seedModernTransitionStateMetrics,
   seedModernTransitionStatePartyOrg,
   seedPLGovernmentFormation,
+  seedModernTransitionGovernmentFormation,
   type ModernTransitionCountryId,
 } from "./seedModernTransitionCountries";
 import { plParties } from "@/lib/countries/pl/data/plParties";
@@ -223,6 +224,25 @@ describe("Polish 2027 parliamentary formation", () => {
   });
 });
 
+describe("Romanian 2027 parliamentary formation", () => {
+  it("opens a pending Chamber of Deputies cycle with a 166-seat majority", async () => {
+    const { db, collections } = makeDb();
+    await seedModernTransitionGovernmentFormation(db, noop, "2027-default", "RO");
+    expect(collections["governmentFormations"]!.updateOne).toHaveBeenCalledWith(
+      { _id: "RO" },
+      expect.objectContaining({
+        $set: expect.objectContaining({
+          countryId: "RO",
+          status: "pending",
+          totalSeats: 331,
+          majorityThreshold: 166,
+        }),
+      }),
+      { upsert: true }
+    );
+  });
+});
+
 describe("1991 and Cold-War preset isolation", () => {
   const cases: Array<{ preset: string; country: ModernTransitionCountryId }> = [
     { preset: "1991-default", country: "PL" },
@@ -255,8 +275,7 @@ describe("full 2027 driver", () => {
       expect(collections["stateDemographics"]!.updateOne).toHaveBeenCalled();
       expect(collections["macroMetrics"]!.bulkWrite).toHaveBeenCalledTimes(1);
       expect(collections["stateBaselines"]!.updateOne).toHaveBeenCalled();
-      if (country === "PL")
-        expect(collections["governmentFormations"]!.updateOne).toHaveBeenCalledTimes(1);
+      expect(collections["governmentFormations"]!.updateOne).toHaveBeenCalledTimes(1);
     }
   });
 });

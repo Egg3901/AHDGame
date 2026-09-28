@@ -501,17 +501,20 @@ export async function seedModernTransitionStatePartyOrg(
   log(`Seeded ${total} ${countryId} state party org entries across ${parties.length} parties`);
 }
 
-/** Open the 2027 Sejm's parliamentary formation cycle. */
-export async function seedPLGovernmentFormation(
+/** Open the 2027 lower chamber's parliamentary formation cycle. */
+export async function seedModernTransitionGovernmentFormation(
   db: Db,
   log: (msg: string) => void,
-  preset: string
+  preset: string,
+  countryId: ModernTransitionCountryId
 ) {
   if (!isModernTransitionPreset(preset)) return;
   const now = new Date();
+  const totalSeats = countryId === "PL" ? 460 : 331;
+  const majorityThreshold = Math.floor(totalSeats / 2) + 1;
   const formation: Omit<GovernmentFormation, "createdAt" | "updatedAt"> = {
-    _id: "PL",
-    countryId: "PL",
+    _id: countryId,
+    countryId,
     cycle: 1,
     status: "pending",
     formationType: null,
@@ -523,9 +526,9 @@ export async function seedPLGovernmentFormation(
     coalitionId: null,
     coalitionPartyIds: null,
     totalSeatsSupporting: 0,
-    majorityThreshold: 231,
+    majorityThreshold,
     seatsByParty: {},
-    totalSeats: 460,
+    totalSeats,
     activeVoteId: null,
     formedAt: null,
     formedTurn: null,
@@ -534,11 +537,19 @@ export async function seedPLGovernmentFormation(
   await db
     .collection<GovernmentFormation>("governmentFormations")
     .updateOne(
-      { _id: "PL" },
+      { _id: countryId },
       { $set: { ...formation, updatedAt: now }, $setOnInsert: { createdAt: now } },
       { upsert: true }
     );
-  log("Seeded PL government formation document (pending, 460 seats)");
+  log(`Seeded ${countryId} government formation document (pending, ${totalSeats} seats)`);
+}
+
+export async function seedPLGovernmentFormation(
+  db: Db,
+  log: (msg: string) => void,
+  preset: string
+) {
+  await seedModernTransitionGovernmentFormation(db, log, preset, "PL");
 }
 
 /** Full 2027 substrate for one transition country, in dependency order (org last: it reads back the seeded parties). */
@@ -555,5 +566,5 @@ export async function seedModernTransitionCountry(
   await seedModernTransitionStateMetrics(db, reset, log, preset, countryId);
   await seedModernTransitionBaselines(db, reset, log, preset, countryId);
   await seedModernTransitionStatePartyOrg(db, reset, log, preset, countryId);
-  if (countryId === "PL") await seedPLGovernmentFormation(db, log, preset);
+  await seedModernTransitionGovernmentFormation(db, log, preset, countryId);
 }

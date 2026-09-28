@@ -1323,6 +1323,17 @@ export function getExecutiveOfficeKey(countryId: CountryId, preset?: string): st
   return executive.key;
 }
 
+/** The office filled by parliamentary government formation, which may differ
+ * from the first executive office in a semi-presidential country. */
+export function getHeadOfGovernmentOfficeKey(countryId: CountryId, preset?: string): string {
+  const config = getCountryConfig(countryId, preset);
+  const office = config.officeTypes.find(
+    (candidate) =>
+      candidate.isExecutive && !candidate.isSubNational && candidate.label === config.executiveTitle
+  );
+  return office?.key ?? getExecutiveOfficeKey(countryId, preset);
+}
+
 const COUNTRY_NAME_TO_ID: Record<string, CountryId> = Object.fromEntries(
   COUNTRY_ORDER.map((id) => [COUNTRY_CONFIGS[id].name, id])
 );
