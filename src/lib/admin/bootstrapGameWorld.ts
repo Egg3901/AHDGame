@@ -588,6 +588,13 @@ export async function seedAllCountryData(
   const { seedSuccessorStatePartyOrg1991 } = await import("./seed/seedSuccessorStatePartyOrg1991");
   await seedSuccessorStatePartyOrg1991(db, resetReference, preset, log);
 
+  // HU's 1991 successor institutions are parliamentary. Seed their pending
+  // formation after the successor party roster, not in the 2027 HU pack above.
+  if (preset === "1991-default") {
+    const { seedHUGovernmentFormation } = await import("./seed/seedHU");
+    await seedHUGovernmentFormation(db, log, preset);
+  }
+
   const { ensureDemographicBaselines } = await import("./seed/ensureDemographicBaselines");
   await ensureDemographicBaselines(db, log);
 

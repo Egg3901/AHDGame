@@ -60,7 +60,7 @@ describe("HU modern party organization", () => {
   });
 });
 
-describe("HU modern parliamentary formation", () => {
+describe("HU parliamentary formation", () => {
   it("creates a pending formation with the authored 199-seat majority", async () => {
     const mock = createMockDb();
     await seedHUGovernmentFormation(mock as unknown as Db, () => {}, "2027-default");
@@ -73,9 +73,15 @@ describe("HU modern parliamentary formation", () => {
     });
   });
 
-  it("does not seed a 2027 formation into the selected 1991 world", async () => {
+  it("opens the selected 1991 parliamentary formation at 386 seats", async () => {
     const mock = createMockDb();
     await seedHUGovernmentFormation(mock as unknown as Db, () => {}, "1991-default");
-    expect(mock.collectionMocks.governmentFormations).toBeUndefined();
+    const update = mock.collectionMocks.governmentFormations.updateOne.mock.calls[0]![1];
+    expect(update.$set).toMatchObject({
+      countryId: "HU",
+      status: "pending",
+      totalSeats: 386,
+      majorityThreshold: 194,
+    });
   });
 });

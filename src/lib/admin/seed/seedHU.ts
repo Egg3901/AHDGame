@@ -266,13 +266,14 @@ export async function seedHUStatePartyOrg(
   log(`Seeded ${total} HU state party org entries across ${parties.length} parties`);
 }
 
-/** Let the first parliamentary turn form Hungary's 2027 government. */
+/** Open a parliamentary formation cycle for either democratic Hungary preset. */
 export async function seedHUGovernmentFormation(
   db: Db,
   log: (msg: string) => void,
   preset: string
 ) {
-  if (!isModernHuPreset(preset)) return;
+  if (preset !== "1991-default" && !isModernHuPreset(preset)) return;
+  const is1991 = preset === "1991-default";
   const now = new Date();
   const formation: Omit<GovernmentFormation, "createdAt" | "updatedAt"> = {
     _id: "HU",
@@ -288,9 +289,9 @@ export async function seedHUGovernmentFormation(
     coalitionId: null,
     coalitionPartyIds: null,
     totalSeatsSupporting: 0,
-    majorityThreshold: 100,
+    majorityThreshold: is1991 ? 194 : 100,
     seatsByParty: {},
-    totalSeats: 199,
+    totalSeats: is1991 ? 386 : 199,
     activeVoteId: null,
     formedAt: null,
     formedTurn: null,
@@ -303,5 +304,5 @@ export async function seedHUGovernmentFormation(
       { $set: { ...formation, updatedAt: now }, $setOnInsert: { createdAt: now } },
       { upsert: true }
     );
-  log("Seeded HU government formation document (pending, 199 seats)");
+  log(`Seeded HU government formation document (pending, ${formation.totalSeats} seats)`);
 }
