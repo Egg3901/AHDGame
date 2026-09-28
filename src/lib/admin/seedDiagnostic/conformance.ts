@@ -626,7 +626,9 @@ async function checkForex(db: Db, expect: SeedExpectations): Promise<SeedDiagnos
 
   if (expect.preset === "2027-default") {
     const gameState = await db
-      .collection<{ eurozoneEnabled?: boolean; euroAdoptedCountries?: string[] }>("gameState")
+      .collection<{ _id: string; eurozoneEnabled?: boolean; euroAdoptedCountries?: string[] }>(
+        "gameState"
+      )
       .findOne({ _id: "current" });
     const expected = [...EUROZONE_2027_MEMBERS].sort();
     const actual = gameState?.euroAdoptedCountries;
