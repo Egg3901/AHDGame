@@ -41,8 +41,9 @@ describe("2027 worldsim readiness", () => {
       expect(entry?.legacyAccess, countryId).toBe("hidden");
       expect(entry?.status, countryId).not.toBe("dissolved");
     }
-    // These three have 2027 country seed paths. Keep their persisted substrate
-    // tied to the manifest while BG and RU qualification remains open (#2289).
+    // These three have 2027 country political seed paths. Keep their persisted
+    // political substrate tied to the manifest while BG/RU and the fiscal
+    // substrate for all five remain open (#2289).
     for (const countryId of ["PL", "HU", "RO"]) {
       for (const collection of ["states", "politicalParties", "statePartyOrg"]) {
         expect(
@@ -51,8 +52,6 @@ describe("2027 worldsim readiness", () => {
         ).toBeGreaterThan(0);
       }
     }
-    // HU has an authored 2027 fiscal row. PL and RO still need one (#2289).
-    expect(await db.collection("federalBudget").countDocuments({ countryId: "HU" })).toBe(1);
   });
 
   it("seeds euro members with a single EUR denomination", async () => {
