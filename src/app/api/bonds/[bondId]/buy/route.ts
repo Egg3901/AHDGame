@@ -1,3 +1,4 @@
+import { loadEuroMonetaryUnion } from "@/lib/currency/euro/service";
 import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
@@ -152,6 +153,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       // character path. costInCorpCapital is computed via anchor normalization
       // to handle cross-currency buys (A19).
       const corpPurchaseEstimate = estimateCorpWalletSpend({
+        union: await loadEuroMonetaryUnion(db),
         requiredAmount: costLocal,
         availableBalance: corp.liquidCapital ?? 0,
         fromCurrency: corpCurrency,

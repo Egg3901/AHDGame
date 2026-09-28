@@ -201,6 +201,7 @@ export default function SharePurchaseModal({
   const corpAtMarketBuyEstimate =
     buyAsCorp && atMarketSide === "buy"
       ? estimateCorpWalletSpend({
+          union: euroMonetaryUnion,
           requiredAmount: quantity * marketAskPriceLocal,
           availableBalance: myCorporation?.liquidCapital ?? 0,
           fromCurrency: myCorpLiquidCurrency,
@@ -212,6 +213,7 @@ export default function SharePurchaseModal({
   const corpLimitBuyEstimate =
     limitAsCorp && orderSide === "buy"
       ? estimateCorpWalletSpend({
+          union: euroMonetaryUnion,
           requiredAmount: quantity * limitPriceLocal,
           availableBalance: myCorporation?.liquidCapital ?? 0,
           fromCurrency: myCorpLiquidCurrency,
@@ -287,6 +289,7 @@ export default function SharePurchaseModal({
       }
       return Math.floor(
         estimateCorpMaxSpendableTargetAmount({
+          union: euroMonetaryUnion,
           availableBalance: myCorporation?.liquidCapital ?? 0,
           fromCurrency: myCorpLiquidCurrency,
           toCurrency: targetTradeCurrency,
@@ -327,6 +330,7 @@ export default function SharePurchaseModal({
           if (buyAsInvestmentBank) return candidateCost <= myCorpLiquidInternal;
           if (buyAsCorp) {
             const estimate = estimateCorpWalletSpend({
+              union: euroMonetaryUnion,
               requiredAmount: candidateShares * marketAskPriceLocal,
               availableBalance: myCorporation?.liquidCapital ?? 0,
               fromCurrency: myCorpLiquidCurrency,
@@ -384,6 +388,7 @@ export default function SharePurchaseModal({
           const candidateCostInHome = homeRate ? candidateCost * homeRate : candidateCost;
           if (limitAsCorp) {
             const estimate = estimateCorpWalletSpend({
+              union: euroMonetaryUnion,
               requiredAmount: candidateShares * limitPriceLocal,
               availableBalance: myCorporation?.liquidCapital ?? 0,
               fromCurrency: myCorpLiquidCurrency,

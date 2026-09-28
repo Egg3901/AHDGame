@@ -1,3 +1,4 @@
+import { loadEuroMonetaryUnion } from "@/lib/currency/euro/service";
 import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
@@ -548,6 +549,7 @@ export async function fillShareOrder(request: Request, { params }: RouteParams) 
         const buyerFxRate = await getCorpFxRate(db, buyingCorp);
         const fxRates = await loadFxRatesRecord(db);
         const corpPurchaseEstimate = estimateCorpWalletSpend({
+          union: await loadEuroMonetaryUnion(db),
           requiredAmount: totalLocal,
           availableBalance: buyingCorp.liquidCapital ?? 0,
           fromCurrency: buyingCurrency,

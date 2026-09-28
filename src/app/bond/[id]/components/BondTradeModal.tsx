@@ -193,6 +193,7 @@ export function BondTradeModal({
   const corpBuyEstimate =
     account === "corporation" && side === "buy" && hasCorp
       ? estimateCorpWalletSpend({
+          union: euroMonetaryUnion,
           requiredAmount: totalCost,
           availableBalance: corpLiquidBalanceLocal,
           fromCurrency: corpLiquidCurrencyCode,
@@ -274,6 +275,7 @@ export function BondTradeModal({
         ? costPerUnit > 0
           ? Math.floor(
               estimateCorpMaxSpendableTargetAmount({
+                union: euroMonetaryUnion,
                 availableBalance: corpLiquidBalanceLocal,
                 fromCurrency: corpLiquidCurrencyCode,
                 toCurrency: bondCurrency,
@@ -304,6 +306,7 @@ export function BondTradeModal({
     if (candidateUnits <= 0) return true;
     if (account === "corporation") {
       const estimate = estimateCorpWalletSpend({
+        union: euroMonetaryUnion,
         requiredAmount: candidateUnits * costPerUnit,
         availableBalance: corpLiquidBalanceLocal,
         fromCurrency: corpLiquidCurrencyCode,

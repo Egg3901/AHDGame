@@ -1,3 +1,4 @@
+import type { EuroMonetaryUnion } from "./euro/rules";
 /**
  * Corporate wallet-spend estimators — the CLIENT-SAFE half of
  * `corporationCapital`.
@@ -30,6 +31,7 @@ export function estimateCorpWalletSpend(params: {
   fromCurrency?: CurrencyCode | null;
   toCurrency?: CurrencyCode | null;
   rates: Partial<Record<CurrencyCode, number>>;
+  union?: EuroMonetaryUnion;
 }): ExplicitPayEstimate | null {
   const { requiredAmount, availableBalance, fromCurrency, toCurrency, rates } = params;
   if (!Number.isFinite(requiredAmount) || requiredAmount <= 0) {
@@ -61,6 +63,7 @@ export function estimateCorpWalletSpend(params: {
     toCurrency,
     availableBalance,
     rates,
+    union: params.union,
   });
 }
 
@@ -73,6 +76,7 @@ export function estimateCorpMaxSpendableTargetAmount(params: {
   fromCurrency?: CurrencyCode | null;
   toCurrency?: CurrencyCode | null;
   rates: Partial<Record<CurrencyCode, number>>;
+  union?: EuroMonetaryUnion;
 }): number {
   const { availableBalance, fromCurrency, toCurrency, rates } = params;
   if (!Number.isFinite(availableBalance) || availableBalance <= 0) return 0;
@@ -84,5 +88,6 @@ export function estimateCorpMaxSpendableTargetAmount(params: {
     toCurrency,
     balance: availableBalance,
     rates,
+    union: params.union,
   });
 }

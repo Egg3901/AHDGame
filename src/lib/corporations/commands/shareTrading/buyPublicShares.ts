@@ -1,3 +1,4 @@
+import { loadEuroMonetaryUnion } from "@/lib/currency/euro/service";
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { ObjectId } from "mongodb";
@@ -184,6 +185,7 @@ export async function buyPublicShares(request: Request, { params }: RouteParams)
         targetFxRate
       );
       const corpPurchaseEstimate = estimateCorpWalletSpend({
+        union: await loadEuroMonetaryUnion(db),
         requiredAmount: shares * executionPrice,
         availableBalance: buyingCorp.liquidCapital ?? 0,
         fromCurrency: buyingCurrency,

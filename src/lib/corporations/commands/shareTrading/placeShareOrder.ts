@@ -1,3 +1,4 @@
+import { loadEuroMonetaryUnion } from "@/lib/currency/euro/service";
 import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
@@ -247,6 +248,7 @@ export async function placeShareOrder(request: Request, { params }: RouteParams)
             targetFxRate
           );
           const corpPurchaseEstimate = estimateCorpWalletSpend({
+            union: await loadEuroMonetaryUnion(db),
             requiredAmount: shares * executionPrice,
             availableBalance: placerCorp.liquidCapital ?? 0,
             fromCurrency: placerCurrency,
@@ -409,6 +411,7 @@ export async function placeShareOrder(request: Request, { params }: RouteParams)
         const escrowAmount = shares * pricePerShare;
         const escrowAnchor = corpLiquidCapitalToAnchor(escrowAmount, corporation, targetFxRate);
         const escrowEstimate = estimateCorpWalletSpend({
+          union: await loadEuroMonetaryUnion(db),
           requiredAmount: escrowAmount,
           availableBalance: placerCorp.liquidCapital ?? 0,
           fromCurrency: placerCurrency,
