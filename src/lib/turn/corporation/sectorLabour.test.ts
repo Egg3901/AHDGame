@@ -24,6 +24,23 @@ function labour(overrides: Partial<LabourContext> = {}): LabourContext {
 }
 
 describe("resolveSectorLabourProductionEffects", () => {
+  it("applies only capped clandestine slowdown during a budget ban, never a legal strike", () => {
+    const target = { ...sector(42), sectorType: "manufacturing" } as CorporateSector;
+    const effect = resolveSectorLabourProductionEffects(
+      labour({
+        unionsBannedByCountry: new Set(["US"]),
+        undergroundStrengthByCountrySector: new Map([["US:manufacturing", 35]]),
+      }),
+      target,
+      undefined,
+      undefined,
+      "US"
+    );
+    expect(effect.strikeActive).toBe(false);
+    expect(effect.outputFactor).toBeCloseTo(0.92);
+    expect(effect.strikeMarginModifier).toBe(0);
+  });
+
   it("is neutral when there is no strike or industrial action", () => {
     expect(resolveSectorLabourProductionEffects(labour(), sector())).toEqual({
       strikeActive: false,

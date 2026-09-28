@@ -70,6 +70,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       heatText: result.heatText,
       strengthGain: result.strengthGain,
       actionsSpent: result.actionsSpent,
+      crisisExtended: result.crisisExtended,
     });
   } catch (error) {
     return handleRouteError(error);

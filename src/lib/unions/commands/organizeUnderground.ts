@@ -6,6 +6,7 @@ import { isSameCountry } from "@/lib/api/sameCountry";
 import { getCurrentTurn } from "@/lib/currentTurn";
 import { unionApproval } from "@/lib/unions/unionDues";
 import { isUnionsBanned } from "@/lib/labour/unionLaws";
+import { extendUnionBanStrikeFromUnderground } from "@/lib/crises/unionBanStrike";
 import {
   UNDERGROUND_ACTION_COST,
   isUnionExposed,
@@ -27,6 +28,7 @@ export type OrganizeUndergroundResult =
       heatText: UndergroundHeatText;
       strengthGain: number;
       actionsSpent: number;
+      crisisExtended: boolean;
     }
   | { ok: false; status: number; error: string };
 
@@ -206,6 +208,11 @@ export async function organizeUnderground(
     return { ok: false, status: 404, error: "Union not found." };
   }
 
+  const crisisExtended =
+    mode === "mass" && undergroundStrength(updatedUnion) >= 15
+      ? await extendUnionBanStrikeFromUnderground(db, union.countryId as CountryId, currentTurn)
+      : false;
+
   return {
     ok: true,
     status: 200,
@@ -214,5 +221,6 @@ export async function organizeUnderground(
     heatText: undergroundHeatText(updatedUnion),
     strengthGain,
     actionsSpent: UNDERGROUND_ACTION_COST,
+    crisisExtended,
   };
 }
