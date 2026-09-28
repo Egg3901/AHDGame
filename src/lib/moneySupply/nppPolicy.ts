@@ -22,7 +22,7 @@ import { isBankGovernmentControlled } from "@/lib/centralBank/governance";
 import { getStartingYearForPreset } from "@/lib/constants/turnTime";
 import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
 import type { CountryId } from "@/lib/constants/countries";
-import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
+import { getSeedCurrencyCode } from "@/lib/constants/currencies";
 import { executeMonetaryOperation, MONETARY_OPERATION_COOLDOWN_TURNS } from "./operations";
 import { MONEY_SUPPLY_SNAPSHOTS_COLLECTION } from "./snapshot";
 import { isMoneySupplyEnabledFromConfig } from "./featureFlag";
@@ -147,7 +147,7 @@ export async function processNppMonetaryOperations(
     // for the same reason it sets no autonomous rate: monetary policy is the
     // Treasury's, and the technocrat chair holds no authority to act on its own.
     if (isBankGovernmentControlled(bank, countryId, startingYear)) continue;
-    const currencyCode = COUNTRY_CURRENCY_MAP[bank.countryId] ?? "USD";
+    const currencyCode = getSeedCurrencyCode(countryId, gameState?.preset ?? DEFAULT_SEED_PRESET);
     const [budget, bond, moneySupply] = await Promise.all([
       db
         .collection<FederalBudget>("federalBudget")

@@ -71,6 +71,39 @@ beforeEach(() => {
 });
 
 describe("snapshotMoneySupply", () => {
+  it("counts 2027 euro-member money in EUR rather than legacy currency snapshots", async () => {
+    db.collectionMocks.gameState.findOne.mockResolvedValue({ preset: "2027-default" });
+    db.collectionMocks.centralBanks.find.mockReturnValue(
+      cursorWith([
+        {
+          _id: "DE",
+          countryId: "DE",
+          externalBroadMoney: 100,
+          netMoneyCreatedLifetime: 0,
+        },
+      ])
+    );
+    db.collectionMocks.characters.find.mockReturnValue(
+      cursorWith([{ countryId: "FR", funds: 10 }])
+    );
+    db.collectionMocks.npps.find.mockReturnValue(cursorWith([{ countryId: "IT", funds: 20 }]));
+    db.collectionMocks.politicalParties.find.mockReturnValue(
+      cursorWith([{ countryId: "ES", treasury: 30 }])
+    );
+    db.collectionMocks.federalBudget.find.mockReturnValue(cursorWith([]));
+    db.collectionMocks.states.find.mockReturnValue(cursorWith([]));
+
+    await snapshotMoneySupply(db as unknown as Db, 12);
+    const writes = db.collectionMocks[MONEY_SUPPLY_SNAPSHOTS_COLLECTION].replaceOne.mock.calls;
+    expect(writes).toHaveLength(1);
+    expect(writes[0]?.[1]).toMatchObject({
+      currencyCode: "EUR",
+      campaignLiquid: 10,
+      nppLiquid: 20,
+      partyLiquid: 30,
+    });
+  });
+
   it("counts savings held at a private bank once, alongside its separate NPC deposits", async () => {
     db.collectionMocks.characters.find.mockReturnValue(
       cursorWith([{ countryId: "US", currencyBalances: { savings: { USD: 700 } } }])

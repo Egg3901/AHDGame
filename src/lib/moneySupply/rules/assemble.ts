@@ -1,4 +1,8 @@
-import { COUNTRY_CURRENCY_MAP, type CurrencyCode } from "@/lib/constants/currencies";
+import {
+  COUNTRY_CURRENCY_MAP,
+  getSeedCurrencyCode,
+  type CurrencyCode,
+} from "@/lib/constants/currencies";
 import type { CountryId } from "@/lib/constants/countries";
 import { NATIONAL_SCOPE, NATIONAL_SCOPE_IDS } from "@/lib/constants/nationalScope";
 import {
@@ -36,8 +40,10 @@ export function emptyComponents(): MutableComponents {
   };
 }
 
-export function homeCurrency(countryId: CountryId): CurrencyCode {
-  return COUNTRY_CURRENCY_MAP[countryId] ?? "USD";
+export function homeCurrency(countryId: CountryId, preset?: string): CurrencyCode {
+  return preset
+    ? getSeedCurrencyCode(countryId, preset)
+    : (COUNTRY_CURRENCY_MAP[countryId] ?? "USD");
 }
 
 export function addComponent(
@@ -100,7 +106,8 @@ export interface MedianIncomeDoc {
 export function addHouseholdMoneyFromDemography(
   byCurrency: Map<CurrencyCode, MutableComponents>,
   states: DemographicState[],
-  medianIncomeDocs: MedianIncomeDoc[]
+  medianIncomeDocs: MedianIncomeDoc[],
+  preset?: string
 ): void {
   const incomeByStateId = new Map<string, number>();
   const incomeByCountry = new Map<string, number>();
@@ -119,7 +126,7 @@ export function addHouseholdMoneyFromDemography(
     if (!income) continue;
     const households = st.population / PERSONS_PER_HOUSEHOLD;
     const annualIncome = households * income;
-    const currency = homeCurrency(st.countryId as CountryId);
+    const currency = homeCurrency(st.countryId as CountryId, preset);
     addComponent(
       byCurrency,
       currency,
@@ -148,10 +155,11 @@ export interface BankMoneyFields {
  */
 export function addCentralBankMoney(
   byCurrency: Map<CurrencyCode, MutableComponents>,
-  banks: BankMoneyFields[]
+  banks: BankMoneyFields[],
+  preset?: string
 ): void {
   for (const bank of banks) {
-    const currency = homeCurrency(bank.countryId);
+    const currency = homeCurrency(bank.countryId, preset);
     addComponent(
       byCurrency,
       currency,
