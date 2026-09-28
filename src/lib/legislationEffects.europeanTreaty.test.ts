@@ -43,11 +43,11 @@ describe("Maastricht national enactment", () => {
     "records a passed %s bill and preserves it on replay",
     async (action) => {
       const { db, state, membershipId } = world();
-      const bill = {
+      const bill: Parameters<typeof applyLegislationEffect>[1] = {
         _id: new ObjectId(),
         countryId: "UK",
         stateId: "uk_national",
-        provisions: [{ type: "european_treaty" as const, treaty: "maastricht" as const, action }],
+        provisions: [{ type: "european_treaty", treaty: "maastricht", action }],
       };
       await applyLegislationEffect(db as unknown as Db, bill);
       expect(state.europeanIntegration.ratifications.UK).toMatchObject({
