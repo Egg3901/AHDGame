@@ -1,8 +1,13 @@
 import { useSyncExternalStore } from "react";
+import { useGameEvents } from "@/hooks/useGameEvents";
+import type { CountryId } from "@/lib/constants/countries";
+import type { CurrencyCode } from "@/lib/constants/currencies";
 
 export interface WorldFlags {
   preset: string;
   eurozoneEnabled: boolean;
+  euroMemberCurrencies?: CurrencyCode[];
+  euroAdoptionEligibleCountries?: CountryId[];
   /** Era system master switch (era stamps, wire news, era-aware scoring); false until an admin enables it. */
   eraSystemEnabled: boolean;
   /** Live in-game year (null until the fetch resolves or on legacy rows). */
@@ -40,27 +45,45 @@ const DEFAULT_FLAGS: WorldFlags = {
 // consumer (currency provider, every metric card, ...) instead of one request
 // per mounted hook.
 let currentFlags: WorldFlags = DEFAULT_FLAGS;
-let fetchStarted = false;
+let inFlight: Promise<void> | null = null;
 const listeners = new Set<() => void>();
 
+function refreshFlags(): Promise<void> {
+  if (inFlight) return inFlight;
+  inFlight = fetch("/api/world/flags", { cache: "no-store" })
+    .then((response) => {
+      if (!response.ok) throw new Error("World flags unavailable");
+      return response.json();
+    })
+    .then((data: WorldFlags) => {
+      currentFlags = { ...DEFAULT_FLAGS, ...data, loaded: true };
+    })
+    .catch((err) => {
+      console.debug("world flags fetch failed", err);
+      currentFlags = { ...currentFlags, loaded: true };
+    })
+    .finally(() => {
+      inFlight = null;
+      listeners.forEach((listener) => listener());
+    });
+  return inFlight;
+}
+
+function onFocus() {
+  void refreshFlags();
+}
+
 function subscribe(listener: () => void): () => void {
+  const first = listeners.size === 0;
   listeners.add(listener);
-  if (!fetchStarted) {
-    fetchStarted = true;
-    fetch("/api/world/flags")
-      .then((r) => r.json())
-      .then((data: WorldFlags) => {
-        currentFlags = { ...data, loaded: true };
-        listeners.forEach((l) => l());
-      })
-      .catch((err) => {
-        // Silent — falls back to 2019-default behavior; keep the error observable.
-        console.debug("world flags fetch failed", err);
-        currentFlags = { ...currentFlags, loaded: true };
-        listeners.forEach((l) => l());
-      });
+  if (first) {
+    void refreshFlags();
+    window.addEventListener("focus", onFocus);
   }
-  return () => listeners.delete(listener);
+  return () => {
+    listeners.delete(listener);
+    if (listeners.size === 0) window.removeEventListener("focus", onFocus);
+  };
 }
 
 function getSnapshot(): WorldFlags {
@@ -71,9 +94,8 @@ function getServerSnapshot(): WorldFlags {
   return DEFAULT_FLAGS;
 }
 
-/** World era flags, fetched once per page load and shared by all consumers.
- *  Defaults to 2019-default behavior until the fetch resolves, so existing
- *  displays are unaffected on load and in 2019-default games. */
+/** Shared world flags refresh after turns, enacted bills and window focus. */
 export function useWorldFlags(): WorldFlags {
+  useGameEvents(onFocus, ["turn_complete", "bill_enacted"]);
   return useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 }

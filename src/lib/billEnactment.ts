@@ -20,6 +20,7 @@
  * same-currency — no FX conversion needed inside this file.
  */
 
+import { recordEuroAdoption } from "@/lib/currency/euro/adoption";
 import { reconcileEnactedUKDevolution } from "@/lib/countries/uk/devolution/service";
 import type { AnyBulkWriteOperation, Db, ObjectId } from "mongodb";
 import { ObjectId as MongoObjectId } from "mongodb";
@@ -78,7 +79,7 @@ import { getCurrentTurn } from "@/lib/currentTurn";
 import type { GameConfig } from "@/lib/db/types/gameConfig";
 import { getSelectedPolicyOption } from "@/lib/budget/costs";
 import type { CountryId } from "@/lib/constants/countries";
-import { getCountryConfig, EU_EUROZONE_MEMBERS } from "@/lib/constants/countries";
+import { getCountryConfig } from "@/lib/constants/countries";
 import {
   inferCountryIdFromStateId,
   resolveBillCountryId,
@@ -306,30 +307,14 @@ async function applyTaxRateChange(
   }
 }
 
-/**
- * Records a country's Euro adoption vote. When all EU_EUROZONE_MEMBERS have
- * voted, flips gameState.eurozoneEnabled to true.
- *
- * Idempotent: $addToSet is a no-op if the country already voted. Safe to
- * call for non-EU countries — returns early without any DB writes.
- */
-export async function applyEuroAdoptionProvision(db: Db, countryId: CountryId): Promise<void> {
-  if (!EU_EUROZONE_MEMBERS.includes(countryId)) return;
-
-  await db
-    .collection<GameState>("gameState")
-    .updateOne({ _id: "current" }, { $addToSet: { euroAdoptedCountries: countryId } });
-
-  const gs = await db
-    .collection<GameState>("gameState")
-    .findOne({ _id: "current" }, { projection: { euroAdoptedCountries: 1 } });
-  const adopted = gs?.euroAdoptedCountries ?? [];
-
-  if (EU_EUROZONE_MEMBERS.every((m) => adopted.includes(m as CountryId))) {
-    await db
-      .collection<GameState>("gameState")
-      .updateOne({ _id: "current" }, { $set: { eurozoneEnabled: true } });
-  }
+/** Record a signed national authorization and reconcile its monetary settlement. */
+export async function applyEuroAdoptionProvision(
+  db: Db,
+  countryId: CountryId,
+  currentTurn: number,
+  billId: string
+): Promise<void> {
+  await recordEuroAdoption(db, countryId, currentTurn, billId);
 }
 
 /**
@@ -503,7 +488,12 @@ export async function onBillEnacted(
   // Euro adoption: record this country's vote; enable eurozone when all members adopt.
   if (bill.provisions?.some((p) => p.type === "euro_adoption")) {
     const enactingCountryId = await resolveBillCountryId(db, bill as Bill);
-    await applyEuroAdoptionProvision(db, enactingCountryId as CountryId);
+    await applyEuroAdoptionProvision(
+      db,
+      enactingCountryId as CountryId,
+      currentTurn,
+      bill._id.toString()
+    );
   }
 
   // Central bank independence: grant/revoke rate-setting authority.

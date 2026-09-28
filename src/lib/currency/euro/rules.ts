@@ -39,16 +39,25 @@ export interface EuroAdoptionConditions {
   union?: EuroMonetaryUnion;
 }
 
-export function euroAdoptionRefusal(input: EuroAdoptionConditions): string | null {
+/** A passed law can remain contingent on membership at settlement time. */
+export function euroAuthorizationRefusal(
+  input: Pick<EuroAdoptionConditions, "countryId" | "year">
+): string | null {
   if (!Number.isFinite(input.year) || input.year < 1999) {
     return "Euro adoption decisions open in 1999.";
-  }
-  if (!input.europeanMembers.includes(input.countryId)) {
-    return "Euro adoption requires membership in the European organization.";
   }
   const currency = COUNTRY_CURRENCY_MAP[input.countryId];
   if (getCountryIdForCurrency(currency) !== input.countryId) {
     return "A country sharing another issuer's currency must establish its own currency before applying.";
+  }
+  return null;
+}
+
+export function euroAdoptionRefusal(input: EuroAdoptionConditions): string | null {
+  const unavailable = euroAuthorizationRefusal(input);
+  if (unavailable) return unavailable;
+  if (!input.europeanMembers.includes(input.countryId)) {
+    return "Euro adoption requires membership in the European organization.";
   }
   if (input.union?.members[input.countryId])
     return "This country already belongs to the euro area.";
@@ -166,4 +175,39 @@ export function linkedEuroRates(
     linked[member.ledgerCurrency] = rate;
   }
   return linked;
+}
+
+export interface EuroWorldSnapshot {
+  eurozoneEnabled?: boolean;
+  euroAdoptedCountries?: readonly CountryId[];
+  euroMonetaryUnion?: EuroMonetaryUnion;
+}
+
+export function euroConsentedCountries(state: EuroWorldSnapshot): CountryId[] {
+  return [
+    ...new Set([
+      ...(state.euroAdoptedCountries ?? []),
+      ...(state.euroMonetaryUnion
+        ? (Object.keys(state.euroMonetaryUnion.members) as CountryId[])
+        : state.eurozoneEnabled
+          ? EU_EUROZONE_MEMBERS
+          : []),
+    ]),
+  ];
+}
+
+/** Active display currencies never include a merely pending national authorization. */
+export function euroMemberCurrencies(state: EuroWorldSnapshot): CurrencyCode[] {
+  if (state.euroMonetaryUnion) {
+    return [
+      ...new Set(
+        Object.values(state.euroMonetaryUnion.members).flatMap((member) =>
+          member ? [member.ledgerCurrency] : []
+        )
+      ),
+    ];
+  }
+  return state.eurozoneEnabled
+    ? EU_EUROZONE_MEMBERS.map((country) => COUNTRY_CURRENCY_MAP[country])
+    : [];
 }

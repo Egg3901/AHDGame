@@ -6,7 +6,7 @@ import { handleRouteError } from "@/lib/api/errors";
 import { getDb } from "@/lib/mongodb";
 import { getGameState } from "@/lib/gameState";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
-import { getBankId } from "@/lib/centralBank/helpers";
+import { getBankId, getCentralBankScope } from "@/lib/centralBank/helpers";
 import type { CentralBank, FederalBudget, GameConfig } from "@/lib/db/types";
 import { getNationalBudgetId } from "@/lib/bonds/sovereign";
 import {
@@ -51,10 +51,20 @@ export async function POST(request: Request, context: { params: Promise<{ code: 
       return NextResponse.json({ error: "Money-supply policy is not enabled" }, { status: 409 });
     if (!bank || !budget)
       return NextResponse.json({ error: "Monetary authority unavailable" }, { status: 404 });
+    const scope = await getCentralBankScope(db, countryId);
+    const authority =
+      scope.bankId === bank._id
+        ? bank
+        : await db
+            .collection<CentralBank>("centralBanks")
+            .findOne(
+              { _id: scope.bankId },
+              { projection: { chairCharacterId: 1, chairControlsLocked: 1 } }
+            );
     const isChair =
       auth.user.character?._id != null &&
-      bank.chairCharacterId?.toString() === auth.user.character._id.toString();
-    if (!auth.user.isAdmin && (!isChair || bank.chairControlsLocked))
+      authority?.chairCharacterId?.toString() === auth.user.character._id.toString();
+    if (!auth.user.isAdmin && (!isChair || authority?.chairControlsLocked))
       return NextResponse.json({ error: "Only the central-bank chair may act" }, { status: 403 });
     const turn = gameState?.currentTurn ?? 0;
     if (

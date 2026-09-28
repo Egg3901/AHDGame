@@ -11,18 +11,15 @@ import type {
 import { canLegislateBankIndependence } from "@/lib/centralBank/governance";
 import type { Db } from "mongodb";
 import { ObjectId } from "mongodb";
-import type {
-  GameState,
-  LegislationType,
-  SubsidyProvision,
-  EndSubsidyProvision,
-} from "@/lib/db/types";
+import type { LegislationType, SubsidyProvision, EndSubsidyProvision } from "@/lib/db/types";
 import type {
   EmbargoProvision,
   EndEmbargoProvision,
   UnionLawProvision,
 } from "@/lib/db/types/legislation";
-import { EU_EUROZONE_MEMBERS, type CountryId } from "@/lib/constants/countries";
+import { loadEuroAdoptionConditions } from "@/lib/currency/euro/adoption";
+import { euroAdoptionRefusal } from "@/lib/currency/euro/rules";
+import { type CountryId } from "@/lib/constants/countries";
 import type { CorporationType } from "@/lib/constants/corporations";
 import type { CommodityType } from "@/lib/constants/commodities";
 import {
@@ -255,7 +252,7 @@ export async function validateBillProvisions(
       if (category !== "economy") {
         return { ok: false, status: 400, error: "Euro adoption belongs in an economy bill." };
       }
-      if (!sourceCountry || !EU_EUROZONE_MEMBERS.includes(sourceCountry)) {
+      if (!sourceCountry) {
         return { ok: false, status: 400, error: "This country is not eligible for euro adoption." };
       }
       if (validatedEuroAdoptionProvisions.length > 0) {
@@ -265,19 +262,8 @@ export async function validateBillProvisions(
           error: "A bill can contain only one euro-adoption provision.",
         };
       }
-      const state = await db
-        .collection<GameState>("gameState")
-        .findOne(
-          { _id: "current" },
-          { projection: { eurozoneEnabled: 1, euroAdoptedCountries: 1 } }
-        );
-      if (state?.eurozoneEnabled || state?.euroAdoptedCountries?.includes(sourceCountry)) {
-        return {
-          ok: false,
-          status: 400,
-          error: "This country has already adopted or voted to adopt the euro.",
-        };
-      }
+      const refusal = euroAdoptionRefusal(await loadEuroAdoptionConditions(db, sourceCountry));
+      if (refusal) return { ok: false, status: 400, error: refusal };
       validatedEuroAdoptionProvisions.push({ type: "euro_adoption" });
       continue;
     }

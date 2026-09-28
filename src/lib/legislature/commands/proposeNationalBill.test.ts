@@ -68,6 +68,10 @@ describe("proposeNationalBill — origin/current chamber storage", () => {
   }
 
   it("persists an eligible euro adoption provision and charges its legislative cost", async () => {
+    db.collection("gameState").findOne.mockResolvedValue({ currentYear: 1999 });
+    db.collection("organizationMemberships").find.mockReturnValue({
+      toArray: async () => [{ countryId: "DE" }],
+    });
     const { getEnabledCountryIds } = await import("@/lib/countryAccess");
     vi.mocked(getEnabledCountryIds).mockResolvedValueOnce(["DE"]);
     const { authUser } = seatDelegate({ countryId: "DE", officeType: "bundestag" });

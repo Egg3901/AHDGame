@@ -534,6 +534,8 @@ export interface GameState {
   eurozoneEnabled?: boolean;
   /** Value-preserving legacy-unit locks and the explicit common monetary jurisdiction. */
   euroMonetaryUnion?: EuroMonetaryUnion;
+  /** Signed national bills authorizing entry, including authorizations still awaiting settlement. */
+  euroAdoptionAuthorizations?: Partial<Record<CountryId, { billId: string; turn: number }>>;
   /**
    * Countries that have enacted an EuroAdoptionProvision bill. When this
    * includes all EU_EUROZONE_MEMBERS, eurozoneEnabled flips to true.

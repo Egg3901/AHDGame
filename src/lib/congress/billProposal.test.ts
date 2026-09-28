@@ -321,20 +321,29 @@ describe("validateBillProvisions — policy axis zeros (ticket #1116)", () => {
 });
 
 describe("validateBillProvisions: euro adoption", () => {
-  it.each(["DE", "IE"] as const)("retains a standalone adoption vote for %s", async (country) => {
-    const { validateBillProvisions } = await import("./billProposal");
-    const result = await validateBillProvisions(
-      db as unknown as Db,
-      [{ type: "euro_adoption" }],
-      "economy",
-      country
-    );
-    expect(result.ok).toBe(true);
-    if (result.ok) {
-      expect(result.euroAdoptionProvisions).toEqual([{ type: "euro_adoption" }]);
-      expect(result.policyProvisions).toEqual([]);
-    }
+  beforeEach(() => {
+    db.collection("gameState").findOne.mockResolvedValue({ currentYear: 1999 });
+    db.collection("organizationMemberships").find.mockReturnValue({
+      toArray: async () => [{ countryId: "DE" }, { countryId: "IE" }, { countryId: "UK" }],
+    });
   });
+  it.each(["DE", "IE", "UK"] as const)(
+    "retains a standalone adoption vote for %s",
+    async (country) => {
+      const { validateBillProvisions } = await import("./billProposal");
+      const result = await validateBillProvisions(
+        db as unknown as Db,
+        [{ type: "euro_adoption" }],
+        "economy",
+        country
+      );
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.euroAdoptionProvisions).toEqual([{ type: "euro_adoption" }]);
+        expect(result.policyProvisions).toEqual([]);
+      }
+    }
+  );
   it("rejects ineligible countries and missing jurisdiction", async () => {
     const { validateBillProvisions } = await import("./billProposal");
     for (const country of ["US", undefined] as const) {
@@ -376,7 +385,7 @@ describe("validateBillProvisions: euro adoption", () => {
   it.each([{ eurozoneEnabled: true }, { euroAdoptedCountries: ["DE"] }])(
     "rejects a country whose adoption is already recorded",
     async (state) => {
-      db.collection("gameState").findOne.mockResolvedValue(state);
+      db.collection("gameState").findOne.mockResolvedValue({ currentYear: 1999, ...state });
       const { validateBillProvisions } = await import("./billProposal");
       expect(
         (

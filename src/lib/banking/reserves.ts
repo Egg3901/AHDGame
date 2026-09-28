@@ -1,8 +1,9 @@
+import { loadEuroMonetaryUnion, syncEuroMonetaryPolicy } from "@/lib/currency/euro/service";
 import type { Db } from "mongodb";
 import type { CentralBank } from "@/lib/db/types/centralBank";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import { getCountryIdForCurrency } from "@/lib/constants/currencies";
-import { getBankId } from "@/lib/centralBank/helpers";
+import { getBankId, getCentralBankScope } from "@/lib/centralBank/helpers";
 import { loadWorldEraUnitScale } from "@/lib/currency/gdpAnchorRate";
 import { isPrivateBankingEnabled } from "@/lib/banking/featureFlag";
 import {
@@ -69,7 +70,7 @@ export async function setReserveRequirement(
   }
 
   const countryId = getCountryIdForCurrency(currency);
-  const bankId = getBankId(countryId);
+  const { bankId } = await getCentralBankScope(db, countryId);
   const result = await db.collection<CentralBank>("centralBanks").updateOne(
     { _id: bankId },
     {
@@ -84,5 +85,7 @@ export async function setReserveRequirement(
     return { ok: false, error: "Central bank not found for currency" };
   }
 
+  const union = await loadEuroMonetaryUnion(db);
+  if (union && bankId === union.authorityId) await syncEuroMonetaryPolicy(db, union);
   return { ok: true, ratio };
 }

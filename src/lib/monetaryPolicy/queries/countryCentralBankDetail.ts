@@ -54,7 +54,11 @@ import {
 } from "@/lib/turn/centralBankChairSelection";
 import { computeCountryTariffPressure } from "@/lib/tariffs/tariffEffects";
 import { buildFtaCoverageLookup, loadActiveFtaPairs } from "@/lib/tariffs/ftaOverrides";
-import { buildCentralBankBootstrapUpdate, getCentralBankScope } from "@/lib/centralBank/helpers";
+import {
+  buildCentralBankBootstrapUpdate,
+  getCentralBankScope,
+  getBankId,
+} from "@/lib/centralBank/helpers";
 import { isBankGovernmentControlledLive } from "@/lib/centralBank/governance";
 import { boardCanCarryMotions } from "@/lib/centralBank/fomc";
 import { isNationalIssuer } from "@/lib/extraction/contractIssuerAuth";
@@ -189,7 +193,12 @@ export async function loadCountryCentralBankDetail(params: {
     return { ok: false as const, status: 404, error: "Country not found" };
   }
 
-  const { bankId, memberCountries, intorgId } = await getCentralBankScope(db, countryId);
+  const {
+    bankId,
+    memberCountries,
+    intorgId,
+    currencyCode: policyCurrency,
+  } = await getCentralBankScope(db, countryId);
   const bank = await db
     .collection<CentralBank>("centralBanks")
     .findOneAndUpdate(
@@ -201,6 +210,14 @@ export async function loadCountryCentralBankDetail(params: {
   if (!bank) {
     return { ok: false as const, status: 500, error: "Failed to load central bank" };
   }
+
+  const financialBankId = getBankId(countryId);
+  const financialBank =
+    financialBankId === bankId
+      ? bank
+      : await db.collection<CentralBank>("centralBanks").findOne({ _id: financialBankId });
+  if (!financialBank)
+    return { ok: false as const, status: 503, error: "National financial account unavailable" };
 
   // Governance: who sets the rate here. The pre-1997 Bank of England is
   // government-controlled by default; legislation can override either way.
@@ -570,18 +587,18 @@ export async function loadCountryCentralBankDetail(params: {
     ]);
 
   const locRow = locAgg[0];
-  const totalDeposits = bank.nationalSavingsBalance ?? 0;
-  const bankReserves = bank.reserveBalance ?? 0;
+  const totalDeposits = financialBank.nationalSavingsBalance ?? 0;
+  const bankReserves = financialBank.reserveBalance ?? 0;
   const reservePortfolio = buildFullReservePortfolioSummary({
     homeCurrency,
     reserveBalance: bankReserves,
-    spreadFeeReserveBalances: bank.spreadFeeReserveBalances,
+    spreadFeeReserveBalances: financialBank.spreadFeeReserveBalances,
     rates: rateMap,
   });
   const totalLoansOutstanding = (locRow?.totalBalance ?? 0) + (locRow?.totalArrears ?? 0);
   const systemCap = (totalDeposits + bankReserves) * LOC_DEPOSIT_FRACTION;
   const availableCapacity = Math.max(0, systemCap - totalLoansOutstanding);
-  const forexRevenue = bank.forexRevenue ?? 0;
+  const forexRevenue = financialBank.forexRevenue ?? 0;
   const reservePoolTransferLimits = computeReservePoolTransferLimits({
     forexRevenue,
     lendingReserves: bankReserves,
@@ -590,12 +607,12 @@ export async function loadCountryCentralBankDetail(params: {
   });
   const reservePoolTransferCooldownRemaining = turnsUntilReservePoolTransferReady({
     currentTurn,
-    lastTransferTurn: bank.lastReservePoolTransferTurn,
+    lastTransferTurn: financialBank.lastReservePoolTransferTurn,
     isAdmin,
   });
   const reservePoolTransferNextTurn =
-    bank.lastReservePoolTransferTurn != null
-      ? bank.lastReservePoolTransferTurn + RESERVE_POOL_TRANSFER_COOLDOWN_TURNS
+    financialBank.lastReservePoolTransferTurn != null
+      ? financialBank.lastReservePoolTransferTurn + RESERVE_POOL_TRANSFER_COOLDOWN_TURNS
       : null;
   const savingsInterestExpenseLifetime = savingsInterestAgg[0]?.total ?? 0;
   const locInterestAccruedLifetime = locInterestAccrualAgg[0]?.total ?? 0;
@@ -626,6 +643,11 @@ export async function loadCountryCentralBankDetail(params: {
       )
       .toArray(),
   ]);
+
+  const policyFx =
+    policyCurrency === "EUR" && countryId !== "DE"
+      ? await db.collection<ExchangeRate>("exchangeRates").findOne({ _id: "DE" })
+      : fxDocForBreakdown;
 
   const hasBoard = (bank.fomcBoard?.length ?? 0) > 0 && !governmentControlled;
   const hasFunctionalBoard = hasBoard && boardCanCarryMotions(bank.fomcBoard ?? []);
@@ -714,15 +736,17 @@ export async function loadCountryCentralBankDetail(params: {
           ? {
               ...moneySupply,
               annualizedM2GrowthPct: currentMoneyGrowth(moneySupply),
-              operations: bank.monetaryOperations ?? [],
-              lastOperationTurn: bank.lastMonetaryOperationTurn ?? null,
-              lastPolicyEvaluation: bank.lastMonetaryPolicyEvaluation
+              operations: financialBank.monetaryOperations ?? [],
+              lastOperationTurn: financialBank.lastMonetaryOperationTurn ?? null,
+              lastPolicyEvaluation: financialBank.lastMonetaryPolicyEvaluation
                 ? {
-                    ...bank.lastMonetaryPolicyEvaluation,
-                    annualizedM2GrowthPct: currentMoneyGrowth(bank.lastMonetaryPolicyEvaluation),
+                    ...financialBank.lastMonetaryPolicyEvaluation,
+                    annualizedM2GrowthPct: currentMoneyGrowth(
+                      financialBank.lastMonetaryPolicyEvaluation
+                    ),
                     moneyGrowthReliable:
-                      currentMoneyGrowth(bank.lastMonetaryPolicyEvaluation) != null &&
-                      bank.lastMonetaryPolicyEvaluation.moneyGrowthReliable,
+                      currentMoneyGrowth(financialBank.lastMonetaryPolicyEvaluation) != null &&
+                      financialBank.lastMonetaryPolicyEvaluation.moneyGrowthReliable,
                   }
                 : null,
               eligibleBonds: eligibleQeBonds.map((bond) => ({
@@ -732,18 +756,18 @@ export async function loadCountryCentralBankDetail(params: {
             }
           : null,
       intervention: {
-        currencyCode: nationalCurrency,
-        baseRate: fxDocForBreakdown?.baseRate ?? null,
-        currentRate: fxDocForBreakdown?.rate ?? null,
-        policy: fxDocForBreakdown?.interventionPolicy
+        currencyCode: policyCurrency ?? nationalCurrency,
+        baseRate: policyFx?.baseRate ?? null,
+        currentRate: policyFx?.rate ?? null,
+        policy: policyFx?.interventionPolicy
           ? {
-              floor: fxDocForBreakdown.interventionPolicy.floor,
-              ceiling: fxDocForBreakdown.interventionPolicy.ceiling,
-              setByCharacterName: fxDocForBreakdown.interventionPolicy.setByCharacterName,
-              setAtTurn: fxDocForBreakdown.interventionPolicy.setAtTurn,
-              lastAdjustedAtTurn: fxDocForBreakdown.interventionPolicy.lastAdjustedAtTurn,
+              floor: policyFx.interventionPolicy.floor,
+              ceiling: policyFx.interventionPolicy.ceiling,
+              setByCharacterName: policyFx.interventionPolicy.setByCharacterName,
+              setAtTurn: policyFx.interventionPolicy.setAtTurn,
+              lastAdjustedAtTurn: policyFx.interventionPolicy.lastAdjustedAtTurn,
               recentInterventions:
-                isChair || isAdmin ? fxDocForBreakdown.interventionPolicy.recentInterventions : [],
+                isChair || isAdmin ? policyFx.interventionPolicy.recentInterventions : [],
             }
           : null,
         forexRevenue: isChair || isAdmin ? (bank.forexRevenue ?? 0) : null,

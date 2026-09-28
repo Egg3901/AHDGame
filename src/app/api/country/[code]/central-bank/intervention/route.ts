@@ -21,7 +21,7 @@ import {
   INTERVENTION_POLICY_COOLDOWN_TURNS,
 } from "@/lib/constants/currencies";
 import { getGameState } from "@/lib/gameState";
-import { getBankId } from "@/lib/centralBank/helpers";
+import { getCentralBankScope } from "@/lib/centralBank/helpers";
 
 interface RouteContext {
   params: Promise<{ code: string }>;
@@ -57,6 +57,7 @@ interface GuardSuccess {
   ok: true;
   db: Awaited<ReturnType<typeof getDb>>;
   bank: CentralBank;
+  fxCountryId: CountryId;
   rate: ExchangeRate;
   character: { _id: import("mongodb").ObjectId; name: string };
   isAdmin: boolean;
@@ -79,16 +80,16 @@ async function authorizeChair(countryId: CountryId): Promise<GuardSuccess | Guar
   }
 
   const db = await getDb();
-  const bank = await db
-    .collection<CentralBank>("centralBanks")
-    .findOne({ _id: getBankId(countryId) });
+  const scope = await getCentralBankScope(db, countryId);
+  const fxCountryId = scope.currencyCode === "EUR" ? "DE" : countryId;
+  const bank = await db.collection<CentralBank>("centralBanks").findOne({ _id: scope.bankId });
   if (!bank) {
     return {
       ok: false,
       response: NextResponse.json(notFound("Central bank not found").toJson(), { status: 404 }),
     };
   }
-  const rate = await db.collection<ExchangeRate>("exchangeRates").findOne({ _id: countryId });
+  const rate = await db.collection<ExchangeRate>("exchangeRates").findOne({ _id: fxCountryId });
   if (!rate) {
     return {
       ok: false,
@@ -103,7 +104,11 @@ async function authorizeChair(countryId: CountryId): Promise<GuardSuccess | Guar
 
   // Defense-in-depth: even if the chair _id matches, refuse if the chair's
   // character somehow belongs to another country (mismatched/inconsistent data).
-  if (isChair && myChar && !isSameCountry(myChar, { countryId })) {
+  if (
+    isChair &&
+    myChar &&
+    !scope.memberCountries.some((member) => isSameCountry(myChar, { countryId: member }))
+  ) {
     return {
       ok: false,
       response: NextResponse.json(forbidden("Chair must be a citizen of this country").toJson(), {
@@ -141,7 +146,7 @@ async function authorizeChair(countryId: CountryId): Promise<GuardSuccess | Guar
     };
   }
 
-  return { ok: true, db, bank, rate, character: myChar, isAdmin };
+  return { ok: true, db, bank, rate, fxCountryId, character: myChar, isAdmin };
 }
 
 export async function POST(request: Request, context: RouteContext) {
@@ -159,7 +164,7 @@ export async function POST(request: Request, context: RouteContext) {
     const baseRate =
       Number.isFinite(guard.rate.baseRate) && guard.rate.baseRate > 0
         ? guard.rate.baseRate
-        : INITIAL_RATES[countryId];
+        : INITIAL_RATES[guard.fxCountryId];
     if (baseRate == null) throw badRequest("Forex is not active for this country");
 
     const shapeError = assertBandShape(parsed.data, baseRate);
@@ -183,7 +188,7 @@ export async function POST(request: Request, context: RouteContext) {
     await guard.db
       .collection<ExchangeRate>("exchangeRates")
       .updateOne(
-        { _id: countryId },
+        { _id: guard.fxCountryId },
         { $set: { interventionPolicy: policy, updatedAt: new Date() } }
       );
 
@@ -208,7 +213,7 @@ export async function PATCH(request: Request, context: RouteContext) {
     const baseRate =
       Number.isFinite(guard.rate.baseRate) && guard.rate.baseRate > 0
         ? guard.rate.baseRate
-        : INITIAL_RATES[countryId];
+        : INITIAL_RATES[guard.fxCountryId];
     if (baseRate == null) throw badRequest("Forex is not active for this country");
     const shapeError = assertBandShape(parsed.data, baseRate);
     if (shapeError) throw badRequest(shapeError);
@@ -238,7 +243,10 @@ export async function PATCH(request: Request, context: RouteContext) {
     };
     await guard.db
       .collection<ExchangeRate>("exchangeRates")
-      .updateOne({ _id: countryId }, { $set: { interventionPolicy: next, updatedAt: new Date() } });
+      .updateOne(
+        { _id: guard.fxCountryId },
+        { $set: { interventionPolicy: next, updatedAt: new Date() } }
+      );
 
     return NextResponse.json({
       success: true,
@@ -274,7 +282,10 @@ export async function DELETE(_request: Request, context: RouteContext) {
 
     await guard.db
       .collection<ExchangeRate>("exchangeRates")
-      .updateOne({ _id: countryId }, { $set: { interventionPolicy: null, updatedAt: new Date() } });
+      .updateOne(
+        { _id: guard.fxCountryId },
+        { $set: { interventionPolicy: null, updatedAt: new Date() } }
+      );
 
     return NextResponse.json({ success: true });
   } catch (error) {

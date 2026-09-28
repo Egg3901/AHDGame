@@ -18,6 +18,7 @@
  * Runs after inflation recalc so inflation/GDP values are current.
  */
 
+import { loadEuroMonetaryUnion, syncEuroMonetaryPolicy } from "@/lib/currency/euro/service";
 import type { Db } from "mongodb";
 import { ObjectId } from "mongodb";
 import type { CentralBank } from "@/lib/db/types/centralBank";
@@ -167,7 +168,6 @@ export async function processCentralBankChairTurn(
   const nationalDocIdSet = new Set<string>();
 
   for (const bank of banks) {
-    if (bank.monetaryAuthorityId && bank.monetaryAuthorityId !== bank._id) continue;
     const countryId = bank.countryId as CountryId;
     const config = COUNTRY_CONFIGS[countryId];
     if (!config) continue;
@@ -238,7 +238,6 @@ export async function processCentralBankChairTurn(
   }> = [];
 
   for (const bank of banks) {
-    if (bank.monetaryAuthorityId && bank.monetaryAuthorityId !== bank._id) continue;
     const countryId = bank.countryId as CountryId;
     const config = COUNTRY_CONFIGS[countryId];
     if (!config) continue;
@@ -312,6 +311,9 @@ export async function processCentralBankChairTurn(
     // credit or penalize). chairInfamy is still decayed/written above for
     // display transparency.
     if (bank.chairMode === "npp") {
+      // National governors retain their financial office but cannot set a
+      // separate policy rate after delegation to the common authority.
+      if (bank.monetaryAuthorityId && bank.monetaryAuthorityId !== bank._id) continue;
       // A functional FOMC committee (one that can still carry a motion) owns
       // the rate. Skip the single-chair autonomous setter to avoid two systems
       // moving primeRate on the same turn. When the board has decayed below the
@@ -366,6 +368,9 @@ export async function processCentralBankChairTurn(
   if (charBulkOps.length > 0) {
     await db.collection<Character>("characters").bulkWrite(charBulkOps as never);
   }
+
+  const union = await loadEuroMonetaryUnion(db);
+  if (union) await syncEuroMonetaryPolicy(db, union);
 
   return {
     banksProcessed: banks.length,

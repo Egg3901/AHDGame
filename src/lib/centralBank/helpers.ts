@@ -165,7 +165,7 @@ export async function getCentralBankScope(
   if (union && euroPolicyBankId(countryId, union) === union.authorityId) {
     return {
       bankId: union.authorityId,
-      memberCountries: COUNTRY_ORDER.filter(
+      memberCountries: (Object.keys(COUNTRY_CONFIGS) as CountryId[]).filter(
         (country) => euroPolicyBankId(country, union) === union.authorityId
       ),
       intorgId: "EU",

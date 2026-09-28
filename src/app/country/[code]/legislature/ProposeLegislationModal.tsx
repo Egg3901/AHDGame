@@ -51,7 +51,7 @@ import {
   BillFiscalImpactStrip,
   LawProvisionComparison,
 } from "@/components/bills/LawProvisionComparison";
-import { EU_EUROZONE_MEMBERS, type CountryId } from "@/lib/constants/countries";
+import { type CountryId } from "@/lib/constants/countries";
 import { useWorldFlags } from "@/hooks/useWorldFlags";
 import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
 import { getNationalStateId } from "@/lib/policy/nationalStateId";
@@ -189,9 +189,8 @@ export function ProposeLegislationModal({
   const isSubsidyCat = SUBSIDY_BILL_CATEGORIES.has(cat as BillCategory);
   const isNatCat = NATIONALIZATION_BILL_CATEGORIES.has(cat as BillCategory);
   const isElectoralCat = ELECTORAL_LAW_BILL_CATEGORIES.has(cat as BillCategory);
-  const { eurozoneEnabled } = useWorldFlags();
-  const canProposeEuro =
-    cat === "economy" && EU_EUROZONE_MEMBERS.includes(countryId) && !eurozoneEnabled;
+  const { euroAdoptionEligibleCountries = [] } = useWorldFlags();
+  const canProposeEuro = cat === "economy" && euroAdoptionEligibleCountries.includes(countryId);
   const [includeEuroAdoption, setIncludeEuroAdoption] = useState(false);
   const isCentralBankCat = CENTRAL_BANK_INDEPENDENCE_BILL_CATEGORIES.has(cat as BillCategory);
   // Custom (flavor/roleplay) bills carry no provisions and have no in-game effect.
