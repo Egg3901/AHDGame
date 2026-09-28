@@ -729,6 +729,11 @@ export async function bootstrapGameWorld(options: BootstrapOptions) {
   await guarded("seedSuccessorBudgets1991", () =>
     seedSuccessorBudgets1991(db, resetReference, preset, log)
   );
+  const { seedModernTransitionBudgets2027 } =
+    await import("./seed/seedModernTransitionBudgets2027");
+  await guarded("seedModernTransitionBudgets2027", () =>
+    seedModernTransitionBudgets2027(db, resetReference, preset, log)
+  );
 
   // Every command-economy seeder above reads `commandEconomyEnabled` itself and
   // falls back to the legacy single-corp shape via a silent `return` or an empty

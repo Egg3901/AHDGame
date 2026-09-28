@@ -52,6 +52,10 @@ describe("2027 worldsim readiness", () => {
         ).toBeGreaterThan(0);
       }
     }
+    expect(await db.collection("federalBudget").countDocuments({ countryId: "HU" })).toBe(1);
+    for (const countryId of ["PL", "RO"]) {
+      expect(await db.collection("federalBudget").countDocuments({ countryId })).toBe(0);
+    }
   });
 
   it("seeds euro members with a single EUR denomination", async () => {
