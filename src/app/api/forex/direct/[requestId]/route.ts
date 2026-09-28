@@ -1,3 +1,5 @@
+import { euroLedgerCrossRate } from "@/lib/currency/euro/rules";
+import { loadEuroMonetaryUnion } from "@/lib/currency/euro/service";
 // POST: accept or decline a direct trade request
 // Auth: requireAuthWithCharacter
 // Errors: 400, 401, 403 (not target / forex disabled), 404
@@ -185,6 +187,15 @@ export async function POST(request: Request, { params }: RouteParams) {
       }
 
       return NextResponse.json({ success: true, action: "declined" });
+    }
+
+    if (
+      euroLedgerCrossRate(await loadEuroMonetaryUnion(db), order.fromCurrency, order.toCurrency) !=
+      null
+    ) {
+      throw badRequest(
+        "These denominations now share a fixed euro rate. Decline this request to return its escrow."
+      );
     }
 
     // Accepting moves value between the two characters. New characters cannot do so

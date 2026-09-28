@@ -1,3 +1,4 @@
+import { ObjectId } from "mongodb";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import type { Db } from "mongodb";
@@ -959,7 +960,35 @@ describe("euro legacy ledger links", () => {
         makeExchangeRate("DE", "EUR", 0.85, 0.85),
       ],
     });
+    const order = {
+      _id: new ObjectId(),
+      characterId: new ObjectId(),
+      characterName: "Trader",
+      type: "limit",
+      direction: "buy",
+      status: "open",
+      fromCurrency: "GBP",
+      toCurrency: "EUR",
+      amount: 1000,
+      filledAmount: 0,
+      limitRate: 1.2,
+    };
+    db.collectionMocks.currencyOrders.find.mockImplementation((filter: { type?: string }) => ({
+      toArray: async () => (filter.type === "limit" ? [order] : []),
+      sort: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockReturnThis(),
+    }));
     const result = await processForexTurn(db as unknown as Db, 386, "1991-default", 1999);
+    expect(result.limitOrdersFilled).toBe(1);
+    expect(result.totalSpreadRevenue).toBe(0);
+    expect(db.collection("characters").updateOne).toHaveBeenCalledWith(
+      { _id: order.characterId },
+      { $inc: expect.objectContaining({ "currencyBalances.personal.EUR": 1416 }) }
+    );
+    expect(db.collection("tradeHistory").insertOne).toHaveBeenCalledWith(
+      expect.objectContaining({ spread: 0 })
+    );
+
     const anchor = db.collectionMocks.exchangeRates.updateOne.mock.calls.find(
       ([filter]) => filter._id === "DE"
     )?.[1].$set.rate as number;
@@ -978,6 +1007,7 @@ describe("euro legacy ledger links", () => {
     expect(
       db.collectionMocks.exchangeRates.updateOne.mock.calls.some(([filter]) => filter._id === "UK")
     ).toBe(false);
+    expect(db.collection("tradeHistory").insertOne.mock.calls[0][0].rate).toBeCloseTo(0.85 / 0.6);
     expect(result.countriesUpdated).toBe(3);
   });
 });

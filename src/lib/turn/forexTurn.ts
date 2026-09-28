@@ -1,3 +1,4 @@
+import { euroLedgerCrossRate, type EuroMonetaryUnion } from "@/lib/currency/euro/rules";
 /**
  * Forex Turn Phase — updates exchange rates for all active currencies.
  *
@@ -427,7 +428,7 @@ export async function processForexTurn(
   }
 
   // Process triggered limit orders
-  const limitResult = await processTriggeredLimitOrders(db, currentTurn, now);
+  const limitResult = await processTriggeredLimitOrders(db, currentTurn, now, euroUnion);
   totalSpreadRevenue = limitResult.totalSpreadRevenue;
   await sendFillNotifications(db, limitResult.notifications);
 
@@ -855,7 +856,8 @@ interface LimitOrderResult {
 async function processTriggeredLimitOrders(
   db: Db,
   currentTurn: number,
-  now: Date
+  now: Date,
+  union?: EuroMonetaryUnion
 ): Promise<LimitOrderResult> {
   // ── Stuck-order recovery ──────────────────────────────────────────────────
   // Orders left in "processing" from a prior crash are safe to re-attempt:
@@ -902,7 +904,8 @@ async function processTriggeredLimitOrders(
     // Cross rate: how many toCurrency units per 1 fromCurrency unit
     // Both rates are "local currency per 1 internal unit"
     // crossRate = toRate / fromRate
-    const crossRate = toRate / fromRate;
+    const fixedRate = euroLedgerCrossRate(union, order.fromCurrency, order.toCurrency);
+    const crossRate = fixedRate ?? toRate / fromRate;
 
     // If the rate document was malformed this turn (e.g. a NaN cascade like
     // the turn-269 incident upstream), skip the order rather than filling
@@ -918,7 +921,8 @@ async function processTriggeredLimitOrders(
     if (!isFillable) continue;
 
     const remainingAmount = order.amount - order.filledAmount;
-    if (remainingAmount <= 0) continue;
+    if (remainingAmount <= 0 || (fixedRate != null && Math.floor(remainingAmount * crossRate) <= 0))
+      continue;
 
     // ── Atomic claim: open/partial → processing ───────────────────────────
     // This is the idempotency guard. If the process crashes after this point
@@ -935,12 +939,12 @@ async function processTriggeredLimitOrders(
     }
 
     // Calculate spread on the remaining fill
-    const spreadAmount = remainingAmount * LIMIT_ORDER_SPREAD;
+    const spreadAmount = fixedRate == null ? remainingAmount * LIMIT_ORDER_SPREAD : 0;
     const netAmount = remainingAmount - spreadAmount;
     const centralBankShare = spreadAmount * SPREAD_FEE_CENTRAL_BANK_RATIO;
 
     // Convert net fromCurrency to toCurrency at current cross rate
-    const toAmount = netAmount * crossRate;
+    const toAmount = fixedRate == null ? netAmount * crossRate : Math.floor(netAmount * crossRate);
 
     totalSpreadRevenue += centralBankShare;
 
@@ -951,7 +955,7 @@ async function processTriggeredLimitOrders(
     // outflow currency — mirroring distributeSpreadFee's cross-currency routing.
     // Use getBankId so shared-bank countries route to the correct bank document.
     const fromCountryEntry = rates.find((r) => r.currencyCode === order.fromCurrency);
-    if (fromCountryEntry) {
+    if (fromCountryEntry && spreadAmount > 0) {
       const toReserveBalance = Math.floor(spreadAmount * SPREAD_FEE_RESERVE_RATIO);
       const toForexRevenue = centralBankShare - toReserveBalance;
       const fromBankId = getBankId(fromCountryEntry.countryId as Parameters<typeof getBankId>[0]);
