@@ -11,6 +11,7 @@ import { COUNTRY_CONFIGS, getOfficeTypeConfig, type CountryId } from "@/lib/cons
 import { getNationalBudgetId } from "@/lib/bonds/sovereign";
 import type { FederalBudget } from "@/lib/db/types/budget";
 import type { Character, Union } from "@/lib/db/types";
+import type { UnionOrganizer } from "@/lib/db/types/union";
 import {
   undergroundHeat,
   undergroundStrength,
@@ -19,12 +20,16 @@ import {
   RAID_COOLDOWN_TURNS,
   RAID_HEAT_THRESHOLD,
   resolveUndergroundRaid,
+  PROSECUTION_ACTION_COST,
+  PROSECUTION_BAR_TURNS,
+  prosecutionStrengthLoss,
 } from "@/lib/unions/underground";
 
 const bodySchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("posture"), posture: z.enum(["tolerant", "normal", "crackdown"]) }),
   z.object({ action: z.literal("investigate"), unionId: z.string() }),
   z.object({ action: z.literal("raid"), unionId: z.string() }),
+  z.object({ action: z.literal("prosecute"), unionId: z.string(), characterId: z.string() }),
 ]);
 
 function heatBracket(heat: number): "low" | "elevated" | "high" {
@@ -77,9 +82,46 @@ export async function GET(_request: Request, { params }: Context) {
       );
     }
     const turn = await getCurrentTurn(db);
+    const exposed = await db
+      .collection<Union>("unions")
+      .find(
+        { countryId, suspended: true, exposedUntilTurn: { $gte: turn } },
+        { projection: { _id: 1 } }
+      )
+      .toArray();
+    const organizers = exposed.length
+      ? await db
+          .collection<UnionOrganizer>("unionOrganizers")
+          .find(
+            {
+              unionId: { $in: exposed.map((union) => union._id) },
+              undergroundStrength: { $gt: 0 },
+              barredUntilTurn: { $not: { $gte: turn } },
+            },
+            { projection: { unionId: 1, characterId: 1 } }
+          )
+          .toArray()
+      : [];
+    const characters = organizers.length
+      ? await db
+          .collection<Character>("characters")
+          .find(
+            { _id: { $in: organizers.map((organizer) => organizer.characterId) } },
+            { projection: { _id: 1, name: 1 } }
+          )
+          .toArray()
+      : [];
+    const names = new Map(
+      characters.map((candidate) => [candidate._id.toString(), candidate.name])
+    );
     return NextResponse.json({
       posture: budget.unionEnforcementPosture ?? "normal",
       canChangePosture: budget.unionEnforcementPostureChangedTurn !== turn,
+      prosecutionTargets: organizers.map((organizer) => ({
+        unionId: organizer.unionId.toString(),
+        characterId: organizer.characterId.toString(),
+        name: names.get(organizer.characterId.toString()) ?? "Organizer",
+      })),
     });
   } catch (error) {
     return handleRouteError(error);
@@ -158,6 +200,91 @@ export async function POST(request: Request, { params }: Context) {
       countryId,
     });
     if (!union) return NextResponse.json({ error: "Union not found" }, { status: 404 });
+
+    if (parsed.data.action === "prosecute") {
+      if (!union.suspended || !isUnionExposed(union, turn)) {
+        return NextResponse.json(
+          { error: "Only an exposed cell can be prosecuted." },
+          { status: 409 }
+        );
+      }
+      if (!ObjectId.isValid(parsed.data.characterId)) {
+        return NextResponse.json({ error: "Invalid organizer ID" }, { status: 400 });
+      }
+      const organizers = db.collection<UnionOrganizer>("unionOrganizers");
+      const organizer = await organizers.findOne({
+        unionId: union._id,
+        characterId: new ObjectId(parsed.data.characterId),
+      });
+      if (
+        !organizer ||
+        !organizer.undergroundStrength ||
+        organizer.undergroundStrength <= 0 ||
+        (typeof organizer.barredUntilTurn === "number" && organizer.barredUntilTurn >= turn) ||
+        organizer.lastProsecutedTurn === turn
+      ) {
+        return NextResponse.json(
+          { error: "Organizer is not eligible for prosecution." },
+          { status: 409 }
+        );
+      }
+      const spent = await db
+        .collection<Character>("characters")
+        .updateOne(
+          { _id: character._id, actions: { $gte: PROSECUTION_ACTION_COST } },
+          { $inc: { actions: -PROSECUTION_ACTION_COST }, $set: { updatedAt: now } }
+        );
+      if (!spent.modifiedCount) {
+        return NextResponse.json(
+          { error: "Prosecution requires three action points." },
+          { status: 409 }
+        );
+      }
+      const strengthLoss = prosecutionStrengthLoss(organizer.undergroundStrength);
+      const barredUntilTurn = turn + PROSECUTION_BAR_TURNS - 1;
+      let changed;
+      try {
+        changed = await organizers.updateOne(
+          {
+            _id: organizer._id,
+            undergroundStrength: organizer.undergroundStrength,
+            lastProsecutedTurn: organizer.lastProsecutedTurn ?? null,
+            barredUntilTurn: { $not: { $gte: turn } },
+          },
+          {
+            $inc: { undergroundStrength: -strengthLoss },
+            $set: { barredUntilTurn, lastProsecutedTurn: turn, updatedAt: now },
+          }
+        );
+      } catch (error) {
+        const persisted = await organizers.findOne(
+          { _id: organizer._id },
+          { projection: { lastProsecutedTurn: 1 } }
+        );
+        if (persisted?.lastProsecutedTurn !== turn) {
+          await db
+            .collection<Character>("characters")
+            .updateOne({ _id: character._id }, { $inc: { actions: PROSECUTION_ACTION_COST } });
+        }
+        return handleRouteError(error);
+      }
+      if (!changed.modifiedCount) {
+        await db
+          .collection<Character>("characters")
+          .updateOne({ _id: character._id }, { $inc: { actions: PROSECUTION_ACTION_COST } });
+        return NextResponse.json(
+          { error: "Organizer changed before prosecution." },
+          { status: 409 }
+        );
+      }
+      return NextResponse.json({
+        unionId: union._id.toString(),
+        characterId: organizer.characterId.toString(),
+        strengthLoss,
+        barredUntilTurn,
+        actionsSpent: PROSECUTION_ACTION_COST,
+      });
+    }
 
     if (parsed.data.action === "raid") {
       if (

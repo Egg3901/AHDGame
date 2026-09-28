@@ -50,6 +50,12 @@ export const RAID_STRENGTH_DAMAGE = 10;
 export const RAID_HEAT_THRESHOLD = 70;
 export const RAID_BACKFIRE_CHANCE = 15;
 export const RAID_BACKFIRE_STRENGTH = 3;
+export const PROSECUTION_ACTION_COST = 3;
+export const PROSECUTION_BAR_TURNS = 4;
+
+export function prosecutionStrengthLoss(strength: number): number {
+  return Math.round(undergroundStrength({ undergroundStrength: strength }) * 0.5 * 10) / 10;
+}
 
 export function resolveUndergroundRaid(
   strength: number,

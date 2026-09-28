@@ -78,6 +78,24 @@ function stubDb(opts: {
 }
 
 describe("organizeUnderground (command)", () => {
+  it("bars prosecuted organizers through the stated turn and lets the bar expire", async () => {
+    const character = makeCharacter();
+    const union = makeUnion();
+    const barred = stubDb({ union, organizer: { barredUntilTurn: 42 }, turn: 42 });
+    const refused = await organizeUnderground(barred.db, character, union, "quiet");
+    expect(refused.ok).toBe(false);
+    if (!refused.ok) expect(refused.status).toBe(403);
+    expect(barred.characterUpdate).not.toHaveBeenCalled();
+
+    const expired = stubDb({ union, organizer: { barredUntilTurn: 42 }, turn: 43 });
+    const allowed = await organizeUnderground(expired.db, character, union, "quiet");
+    expect(allowed.ok).toBe(true);
+    expect(expired.organizerUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ barredUntilTurn: { $not: { $gte: 43 } } }),
+      expect.anything(),
+      expect.anything()
+    );
+  });
   it("refuses a stale suspended flag when the budget is no longer banned", async () => {
     const character = makeCharacter();
     const union = makeUnion({ suspended: true });
