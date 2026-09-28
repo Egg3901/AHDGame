@@ -452,6 +452,7 @@ const RUNTIME: CollectionEntry[] = [
   { name: "parliamentaryGovernments", category: "runtime" },
   { name: "ukCabinetCooldowns", category: "runtime" },
   { name: "ukGovernment", category: "runtime" },
+  { name: "ukDevolution", category: "runtime" },
 
   // Corporations + markets
   { name: "corporations", category: "runtime" },

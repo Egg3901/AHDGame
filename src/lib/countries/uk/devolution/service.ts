@@ -4,8 +4,8 @@
  * unfinished races without deleting historical election records.
  */
 import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
-import type { Db } from "mongodb";
-import { getStartingYearForPreset } from "@/lib/seeds/presetSelector";
+import type { Db, Filter } from "mongodb";
+import { getStartingYearForPreset } from "@/lib/constants/turnTime";
 import type { GameState } from "@/lib/db/types/gameState";
 import type { Election, ElectedOfficial, StatePolicy } from "@/lib/db/types";
 import { DEFAULT_DURATIONS } from "@/lib/constants/electionDurations";
@@ -21,10 +21,30 @@ export async function readUKDevolutionState(
   db: Db,
   startingYear: number
 ): Promise<UKDevolutionState> {
-  return (
-    (await db.collection<UKDevolutionState>("ukDevolution").findOne({ _id: "UK" })) ??
-    initialUKDevolutionState(startingYear)
-  );
+  const stored = await db.collection<UKDevolutionState>("ukDevolution").findOne({ _id: "UK" });
+  if (stored) return stored;
+  return initialStatePreservingLeaders(db, startingYear);
+}
+
+async function initialStatePreservingLeaders(
+  db: Db,
+  startingYear: number
+): Promise<UKDevolutionState> {
+  const state = initialUKDevolutionState(startingYear);
+  const officials = await db
+    .collection<ElectedOfficial>("electedOfficials")
+    .find(
+      { countryId: "UK", officeType: "governor", state: { $in: [...UK_EXECUTIVE_REGIONS] } },
+      { projection: { state: 1, characterId: 1, nppId: 1, _id: 0 } }
+    )
+    .toArray();
+  for (const official of officials) {
+    const region = official.state as UKExecutiveRegion;
+    if (UK_EXECUTIVE_REGIONS.includes(region) && (official.characterId || official.nppId)) {
+      state.regions[region].active = true;
+    }
+  }
+  return state;
 }
 
 export async function reconcileUKDevolution(
@@ -42,7 +62,7 @@ export async function reconcileUKDevolution(
         { projection: { policyOptionIndex: 1, enactedTurn: 1, enactedByBillId: 1, enactedBy: 1 } }
       ),
   ]);
-  const state = stored ?? initialUKDevolutionState(startingYear);
+  const state = stored ?? (await initialStatePreservingLeaders(db, startingYear));
   const latestCycles: Partial<Record<UKExecutiveRegion, number>> = {};
   for (const election of completedElections) {
     const region = election.state as UKExecutiveRegion;
@@ -69,7 +89,11 @@ export async function reconcileUKDevolution(
 
   const inactive = UK_EXECUTIVE_REGIONS.filter((region) => !next.regions[region].active);
   if (inactive.length > 0) {
-    const filter = { countryId: "UK", officeType: "governor", state: { $in: inactive } };
+    const filter: Filter<ElectedOfficial> = {
+      countryId: "UK",
+      officeType: "governor",
+      state: { $in: inactive },
+    };
     const officials = await db
       .collection<ElectedOfficial>("electedOfficials")
       .find(filter, {
@@ -155,7 +179,8 @@ export async function isUKRegionalExecutiveActive(db: Db, stateId: string): Prom
   const gameState = await db
     .collection<GameState>("gameState")
     .findOne({ _id: "current" }, { projection: { startingYear: 1, preset: 1 } });
-  const initial = initialUKDevolutionState(
+  const initial = await initialStatePreservingLeaders(
+    db,
     gameState?.startingYear ?? getStartingYearForPreset(gameState?.preset ?? DEFAULT_SEED_PRESET)
   );
   return initial.regions[stateId as UKExecutiveRegion].active;

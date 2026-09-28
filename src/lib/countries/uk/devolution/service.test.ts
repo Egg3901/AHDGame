@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { reconcileUKDevolution } from "./service";
 import { initialUKDevolutionState, type UKDevolutionState } from "./rules";
 
-function fixture(stored: UKDevolutionState | null, policy: object | null) {
+function fixture(stored: UKDevolutionState | null, policy: object | null, legacyRegion?: string) {
   const writes: Array<{ collection: string; filter: unknown; update: unknown }> = [];
   const characterId = new ObjectId();
   const nppId = new ObjectId();
@@ -13,7 +13,8 @@ function fixture(stored: UKDevolutionState | null, policy: object | null) {
         name === "ukDevolution" ? stored : name === "statePolicies" ? policy : null
       ),
       find: () => ({
-        toArray: async () => (name === "electedOfficials" ? [{ characterId, nppId }] : []),
+        toArray: async () =>
+          name === "electedOfficials" ? [{ characterId, nppId, state: legacyRegion }] : [],
       }),
       updateMany: async (filter: unknown, update: unknown) => {
         writes.push({ collection: name, filter, update });
@@ -27,6 +28,15 @@ function fixture(stored: UKDevolutionState | null, policy: object | null) {
 }
 
 describe("UK devolution reconciliation", () => {
+  it("preserves already seated leaders as an alternate-history institution", async () => {
+    const { db, writes } = fixture(null, null, "SCO");
+    const state = await reconcileUKDevolution(db, 1991, [], new Date());
+    expect(state.regions.SCO.active).toBe(true);
+    expect(state.regions.WAL.active).toBe(false);
+    const cleanup = writes.find((w) => w.collection === "electedOfficials");
+    expect(cleanup?.filter).toMatchObject({ state: { $in: ["WAL", "NIR", "LON"] } });
+  });
+
   it("ignores seeded policy preferences as authority to found an office", async () => {
     const state = initialUKDevolutionState(1991);
     const { db, writes } = fixture(state, { policyOptionIndex: 3, enactedTurn: 1 });

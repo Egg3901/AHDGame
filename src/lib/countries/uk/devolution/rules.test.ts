@@ -1,9 +1,11 @@
+import { UK_FIRST_MINISTERS_1992 } from "@/lib/constants/historicalSeats";
 import { describe, expect, it } from "vitest";
 import { canonicalTurnsForCycle } from "@/lib/elections/canonicalCycle";
 import { applyUKDevolutionPolicy, executiveCycleAnchor, initialUKDevolutionState } from "./rules";
 
 describe("UK executive settlement", () => {
   it("does not create regional executives in a 1991 starting settlement", () => {
+    expect(UK_FIRST_MINISTERS_1992).toEqual([]);
     expect(Object.values(initialUKDevolutionState(1991).regions).every((r) => !r.active)).toBe(
       true
     );

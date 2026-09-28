@@ -31,7 +31,7 @@ export const LEGISLATION_ERA: Record<string, number | "always"> = {
   uk_climate_net_zero: 1990,
   uk_north_sea_energy: 1974,
   uk_mental_health: 1970,
-  uk_devolution_local_powers: 1991,
+  uk_devolution_local_powers: 1999,
   uk_trident_defence: 1956,
   // DE (18)
   de_digital_infrastructure: 1998,
