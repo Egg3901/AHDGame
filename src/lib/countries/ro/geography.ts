@@ -2,6 +2,7 @@ import type { CountryGeography } from "../contract";
 import { roRegionCensusData1953 } from "@/lib/seeds/ro/roRegionCensusData1953";
 import { roRegions } from "./data/roRegions";
 import { roRegions1953 } from "./data/roRegions1953";
+import { roRegions1991 } from "./data/roRegions1991";
 import { roRegions2027 } from "./data/roRegions2027";
 import {
   RO_ADJACENCY_MAP,
@@ -48,6 +49,7 @@ const populationAnchors = {};
 const regionBundles = {
   "1953-default": roRegions1953,
   "1979-default": roRegions,
+  "1991-default": roRegions1991,
   "2019-default": roRegions,
   "2027-default": roRegions2027,
 };

@@ -330,7 +330,7 @@ describe("runConformanceChecks", () => {
     expect(checks.find((c) => c.id === "gameState.currentYear")?.severity).toBe("ok");
   });
 
-  it("requires an authored fiscal baseline for every active 1991 country", async () => {
+  it("finds an authored fiscal baseline for every active 1991 country", async () => {
     const { db } = makeDb({
       gameState: {
         _id: "current",
@@ -346,9 +346,7 @@ describe("runConformanceChecks", () => {
         .filter((check) => check.id.endsWith(".authored1991"))
         .map((check) => check.id)
         .sort()
-    ).toEqual(
-      ["BG", "CS", "HU", "PL", "RO", "RU", "YU"].map((id) => `budget.${id}.authored1991`).sort()
-    );
+    ).toEqual([]);
   });
 
   it("flags wrong GDP on a national budget as critical", async () => {

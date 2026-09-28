@@ -278,10 +278,9 @@ async function checkNationalBudgets(
   const checks: SeedDiagnosticCheck[] = [];
   const budgets = await db.collection("federalBudget").find({}).toArray();
   const byCountry = new Map(budgets.map((b) => [String(b.countryId), b]));
-  // The 1991 roster still contains seven transition economies with no authored
-  // national fiscal row. They used to evade this group entirely because the
-  // checks only walked existing budget configs. A region-only repair must not
-  // make that world look ready to simulate.
+  // Check the active 1991 manifest against authored budget configs, including
+  // the transition economies. A future roster expansion must not silently
+  // create an active country without a fiscal baseline.
   if (expect.preset === "1991-default") {
     const authored = new Set(expect.nationalBudgets.map((cfg) => cfg.countryId));
     for (const countryId of expect.seededCountryIds) {

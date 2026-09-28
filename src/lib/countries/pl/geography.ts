@@ -2,6 +2,7 @@ import type { CountryGeography } from "../contract";
 import { plRegionCensusData1953 } from "./data/plRegionCensusData1953";
 import { plRegions } from "./data/plRegions";
 import { plRegions1953 } from "./data/plRegions1953";
+import { plRegions1991 } from "./data/plRegions1991";
 import { plRegions2027 } from "./data/plRegions2027";
 import {
   PL_ADJACENCY_MAP,
@@ -48,6 +49,7 @@ const populationAnchors = {};
 const regionBundles = {
   "1953-default": plRegions1953,
   "1979-default": plRegions,
+  "1991-default": plRegions1991,
   "2019-default": plRegions,
   "2027-default": plRegions2027,
 };

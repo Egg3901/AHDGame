@@ -4,6 +4,7 @@ import { ruRegionCensusData } from "./data/ruRegionCensusData";
 import { ruRegionCensusData1953 } from "./data/ruRegionCensusData1953";
 import { ruRegions } from "./data/ruRegions";
 import { ruRegions1953 } from "./data/ruRegions1953";
+import { ruRegions1991 } from "./data/ruRegions1991";
 import { ruRegions2027 } from "./data/ruRegions2027";
 import { ruStateMetrics } from "./data/ruStateMetrics";
 import {
@@ -55,6 +56,7 @@ const populationAnchors = {};
 const regionBundles = {
   "1953-default": ruRegions1953,
   "1979-default": ruRegions,
+  "1991-default": ruRegions1991,
   "2019-default": ruRegions,
   "2027-default": ruRegions2027,
 };

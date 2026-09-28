@@ -2,6 +2,7 @@ import type { CountryGeography } from "../contract";
 import { yuRegionCensusData1953 } from "@/lib/seeds/yu/yuRegionCensusData1953";
 import { yuRegions } from "./data/yuRegions";
 import { yuRegions1953 } from "./data/yuRegions1953";
+import { yuRegions1991 } from "./data/yuRegions1991";
 import {
   YU_ADJACENCY_MAP,
   YU_CONTINENT,
@@ -46,6 +47,7 @@ const populationAnchors = {};
 const regionBundles = {
   "1953-default": yuRegions1953,
   "1979-default": yuRegions,
+  "1991-default": yuRegions1991,
   "2019-default": yuRegions,
 };
 

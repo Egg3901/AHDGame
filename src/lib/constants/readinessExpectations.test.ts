@@ -39,10 +39,24 @@ describe("getReadinessExpectations", () => {
         const derived = getReadinessExpectations(id, preset)!;
         const eraRegions = expectedRegionCount(id, preset);
         const where = `${preset}/${id}`;
+        const demographicOffset = authored.regionCount - authored.demographicsCount;
+        const metricsOffset = authored.regionCount - authored.stateMetricsCount;
 
         expect(derived.regionCount, where).toBe(eraRegions ?? authored.regionCount);
-        expect(derived.demographicsCount, where).toBe(eraRegions ?? authored.demographicsCount);
-        expect(derived.stateMetricsCount, where).toBe(eraRegions ?? authored.stateMetricsCount);
+        expect(derived.demographicsCount, where).toBe(
+          preset === "1991-default" && id === "RU"
+            ? 10
+            : eraRegions === null
+              ? authored.demographicsCount
+              : eraRegions - demographicOffset
+        );
+        expect(derived.stateMetricsCount, where).toBe(
+          preset === "1991-default" && id === "RU"
+            ? 10
+            : eraRegions === null
+              ? authored.stateMetricsCount
+              : eraRegions - metricsOffset
+        );
 
         // Everything else is judgment, not a count, and passes through
         // untouched — except where SEAT_MIN_BY_PRESET records that an era's

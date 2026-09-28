@@ -2,6 +2,7 @@ import type { CountryGeography } from "../contract";
 import { bgRegionCensusData1953 } from "@/lib/seeds/bg/bgRegionCensusData1953";
 import { bgRegions } from "./data/bgRegions";
 import { bgRegions1953 } from "./data/bgRegions1953";
+import { bgRegions1991 } from "./data/bgRegions1991";
 import {
   BG_ADJACENCY_MAP,
   BG_CONTINENT,
@@ -46,6 +47,7 @@ const populationAnchors = {};
 const regionBundles = {
   "1953-default": bgRegions1953,
   "1979-default": bgRegions,
+  "1991-default": bgRegions1991,
   "2019-default": bgRegions,
 };
 
