@@ -87,6 +87,13 @@ export async function organizeUnderground(
     unionId: union._id,
     characterId: character._id,
   });
+  if (typeof existing?.barredUntilTurn === "number" && currentTurn <= existing.barredUntilTurn) {
+    return {
+      ok: false,
+      status: 403,
+      error: "You are barred from underground organizing by prosecution.",
+    };
+  }
   if (existing?.lastUndergroundDriveTurn === currentTurn) {
     return {
       ok: false,
@@ -141,6 +148,7 @@ export async function organizeUnderground(
           { lastUndergroundDriveTurn: null },
           { lastUndergroundDriveTurn: { $ne: currentTurn } },
         ],
+        barredUntilTurn: { $not: { $gte: currentTurn } },
       },
       {
         $inc: { undergroundStrength: strengthGain },

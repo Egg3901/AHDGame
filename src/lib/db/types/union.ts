@@ -202,6 +202,12 @@ export interface UnionOrganizer {
   undergroundStrength?: number;
   /** Illicit unions under ban: turn this organizer last ran an underground drive (one drive per character per turn). */
   lastUndergroundDriveTurn?: number | null;
+  /** Turn through which prosecution bars this organizer from underground drives. */
+  barredUntilTurn?: number | null;
+  /** Last prosecution turn, used as the one-prosecution-per-turn claim. */
+  lastProsecutedTurn?: number | null;
+  /** Unique claim for distinguishing a lost acknowledgment from a competing prosecution. */
+  lastProsecutionId?: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
