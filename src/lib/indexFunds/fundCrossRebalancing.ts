@@ -221,7 +221,7 @@ function buildCorpParticipants(input: {
     if (totalBackingAnchor <= 0) continue;
 
     const maxEquityValueAnchor = totalBackingAnchor * INDEX_FUND_MAX_EQUITY_ALLOCATION;
-    const targetShares = (totalBackingAnchor * targetWeight) / priceAnchor;
+    const targetShares = (maxEquityValueAnchor * targetWeight) / priceAnchor;
     const driftShares = shares - targetShares;
 
     // Skip funds that are effectively at target (tiny drift from rounding).
