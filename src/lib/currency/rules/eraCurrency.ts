@@ -10,6 +10,7 @@ const EURO_ADOPTION_YEAR: Partial<Record<CountryId, number>> = {
   GR: 2001,
   IE: 1999,
   IT: 1999,
+  BG: 2026,
 };
 
 export const MODELED_EURO_MEMBERS = Object.freeze(Object.keys(EURO_ADOPTION_YEAR) as CountryId[]);

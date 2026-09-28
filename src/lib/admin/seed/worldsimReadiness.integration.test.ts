@@ -61,11 +61,21 @@ describe("2027 worldsim readiness", () => {
   it("seeds euro members with a single EUR denomination", async () => {
     for (const countryId of euroMembersAtYear(2027)) {
       const budget = await db.collection("federalBudget").findOne({ countryId });
-      expect(budget?.currencyCode, `federalBudget.${countryId}`).toBe("EUR");
+      // Bulgaria has a 2027 regional GDP seed, but its national fiscal model
+      // is still absent. Do not imply that the currency pass invents one.
+      if (countryId !== "BG") {
+        expect(budget?.currencyCode, `federalBudget.${countryId}`).toBe("EUR");
+      } else {
+        expect(budget, "federalBudget.BG remains unseeded").toBeNull();
+      }
       const rate = await db
         .collection<{ _id: string; currencyCode?: string }>("exchangeRates")
         .findOne({ _id: countryId });
-      expect(rate?.currencyCode, `exchangeRates.${countryId}`).toBe("EUR");
+      if (countryId !== "BG") {
+        expect(rate?.currencyCode, `exchangeRates.${countryId}`).toBe("EUR");
+      } else {
+        expect(rate, "exchangeRates.BG remains outside the forex set").toBeNull();
+      }
       expect(
         await db.collection("corporations").countDocuments({
           countryId,

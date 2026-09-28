@@ -8,15 +8,17 @@ import {
 describe("era currency topology", () => {
   it("uses EUR for every modeled euro member in 2027", () => {
     expect(euroMembersAtYear(2027).sort()).toEqual(
-      ["AT", "DE", "ES", "FI", "FR", "GR", "IE", "IT"].sort()
+      ["AT", "BG", "DE", "ES", "FI", "FR", "GR", "IE", "IT"].sort()
     );
     expect(currencyForCountryAtYear("IE", 2027, "IEP")).toBe("EUR");
     expect(currencyForCountryAtYear("IT", 2027, "ITL")).toBe("EUR");
+    expect(currencyForCountryAtYear("BG", 2027, "BGL")).toBe("EUR");
   });
 
   it("preserves legacy currencies before adoption and non-members after it", () => {
     expect(currencyForCountryAtYear("IE", 1991, "IEP")).toBe("IEP");
     expect(currencyForCountryAtYear("GR", 1999, "GRD")).toBe("GRD");
+    expect(currencyForCountryAtYear("BG", 2025, "BGL")).toBe("BGL");
     expect(currencyForCountryAtYear("SE", 2027, "SEK")).toBe("SEK");
   });
 
