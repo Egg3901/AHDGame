@@ -48,6 +48,7 @@ import {
   currencyConversionScale,
   currencyForCountryAtYear,
 } from "@/lib/currency/rules/eraCurrency";
+import { EUROZONE_2027_MEMBERS } from "@/lib/currency/rules/euroAdoption";
 
 /** Readiness check names that are expected-empty pre-founding / pre-seat. */
 const PRE_FOUNDING_READINESS = new Set(["NPPs", "ElectedOfficials", "GovernmentFormation"]);
@@ -622,6 +623,31 @@ async function checkForex(db: Db, expect: SeedExpectations): Promise<SeedDiagnos
   const byCountry = new Map(rates.map((r) => [String(r.countryId ?? r._id), r] as const));
   const checks: SeedDiagnosticCheck[] = [];
   const year = getStartingYearForPreset(expect.preset);
+
+  if (expect.preset === "2027-default") {
+    const gameState = await db
+      .collection<{ eurozoneEnabled?: boolean; euroAdoptedCountries?: string[] }>("gameState")
+      .findOne({ _id: "current" });
+    const expected = [...EUROZONE_2027_MEMBERS].sort();
+    const actual = gameState?.euroAdoptedCountries;
+    const valid =
+      gameState?.eurozoneEnabled === true &&
+      Array.isArray(actual) &&
+      actual.length === expected.length &&
+      [...actual].sort().every((countryId, index) => countryId === expected[index]);
+    checks.push(
+      valid
+        ? ok("forex.euroAdoption", "global", "euroAdoptedCountries", expected, expected)
+        : critical(
+            "forex.euroAdoption",
+            "global",
+            "euroAdoptedCountries",
+            expected,
+            { eurozoneEnabled: gameState?.eurozoneEnabled ?? null, countries: actual ?? null },
+            "2027 adoption manifest does not match persisted game state"
+          )
+    );
+  }
 
   for (const countryId of expect.forexActiveCountries) {
     const expectedCurrency = currencyForCountryAtYear(

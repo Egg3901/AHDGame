@@ -700,6 +700,30 @@ describe("2027 Bulgarian euro conformance", () => {
       severity: "critical",
     });
   });
+
+  it("rejects an incomplete persisted euro adoption manifest", async () => {
+    const { db } = makeDb({
+      gameState: { eurozoneEnabled: true, euroAdoptedCountries: ["DE", "IE"] },
+    });
+    const { checks } = await runConformanceChecks(db, { preset: "2027-default" });
+    expect(checks.find((check) => check.id === "forex.euroAdoption")).toMatchObject({
+      severity: "critical",
+    });
+  });
+
+  it("accepts the complete persisted 2027 euro adoption manifest", async () => {
+    const { EUROZONE_2027_MEMBERS } = await import("@/lib/currency/rules/euroAdoption");
+    const { db } = makeDb({
+      gameState: {
+        eurozoneEnabled: true,
+        euroAdoptedCountries: [...EUROZONE_2027_MEMBERS],
+      },
+    });
+    const { checks } = await runConformanceChecks(db, { preset: "2027-default" });
+    expect(checks.find((check) => check.id === "forex.euroAdoption")).toMatchObject({
+      severity: "ok",
+    });
+  });
 });
 
 describe("diagnosticErrorReport", () => {
