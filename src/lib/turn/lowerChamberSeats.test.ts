@@ -79,6 +79,16 @@ describe("getLiveLowerChamberSeats", () => {
     db.collection("states").find.mockReturnValue(cursorOf([]));
     expect(await getLiveLowerChamberSeats(db as unknown as Db, "UK")).toBe(650);
   });
+
+  it("reads the durable Bulgarian ordinary Assembly transition", async () => {
+    db.collection("gameState").findOne.mockResolvedValue({ preset: "1991-default" });
+    db.collection("countryGameStates").findOne.mockResolvedValue(null);
+    expect(await getLiveLowerChamberSeats(db as unknown as Db, "BG")).toBe(400);
+    db.collection("countryGameStates").findOne.mockResolvedValue({
+      bgOrdinaryAssemblySinceTurn: 41,
+    });
+    expect(await getLiveLowerChamberSeats(db as unknown as Db, "BG")).toBe(240);
+  });
 });
 
 describe("getLiveUpperChamberSeats", () => {

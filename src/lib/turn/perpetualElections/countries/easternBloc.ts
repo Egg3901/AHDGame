@@ -22,17 +22,6 @@ export async function ensureROElections(now: Date, inFlightTurn?: number): Promi
   );
 }
 
-/** Bulgaria National Assembly. */
-export async function ensureBGElections(now: Date, inFlightTurn?: number): Promise<void> {
-  await ensureEasternBlocAssemblyElections(
-    "BG",
-    "nationalAssembly",
-    "National Assembly",
-    now,
-    inFlightTurn
-  );
-}
-
 /** Yugoslavia Federal Assembly. */
 export async function ensureYUElections(now: Date, inFlightTurn?: number): Promise<void> {
   await ensureEasternBlocAssemblyElections(

@@ -1188,9 +1188,11 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
         );
         phaseResults.leadershipVacated = { positionsVacated: vacatedCount ?? 0 };
 
-        const govResult = await runtime.runPhase("parliamentaryGovernmentFormation", () =>
-          runPostElectionGovernmentPhases(db, gameNow, generalResolved ?? 0)
-        );
+        const govResult = await runtime.runPhase("parliamentaryGovernmentFormation", async () => {
+          const { processBgAssemblyTransition } = await import("@/lib/turn/bgAssemblyTransition");
+          await processBgAssemblyTransition(db, context.gameState, newTurn, gameNow);
+          return runPostElectionGovernmentPhases(db, gameNow, generalResolved ?? 0);
+        });
         const govFormedMap = govResult?.governmentFormed ?? {};
 
         await runtime.runPhase("parliamentaryGovernmentPhases", () =>

@@ -279,6 +279,22 @@ export function canonicalTurnsForCycle(params: CanonicalCycleParams): CanonicalC
 
   // The 1991 successor parliaments have their own post-1990 election dates.
   // Cold War lower chambers retain the existing Volkskammer schedule.
+  const bgOrdinaryAssembly =
+    ctx.preset === "1991-default" && countryId === "BG" && electionType === "nationalAssembly";
+  if (bgOrdinaryAssembly) {
+    // 13 October 1991 is the second October game week. The next ordinary
+    // election was December 1994; later cycles use a four-year approximation.
+    const firstTurn = (1991 - ctx.startingYear) * 48 + 38 + (ctx.preIterationTurns ?? 0);
+    const endTurn =
+      cycle === 1
+        ? firstTurn
+        : (1994 - ctx.startingYear + 1) * 48 + (cycle - 2) * 192 + (ctx.preIterationTurns ?? 0);
+    return {
+      endTurn,
+      primaryEndTurn: endTurn - dur.generalDurationHours,
+      startTurn: cycle === 1 ? 1 : endTurn - dur.durationHours,
+    };
+  }
   const successorAnchor =
     ctx.preset === "1991-default" && countryId === "CS" && electionType === "chamberOfThePeople"
       ? anchors.csFederalAssembly

@@ -4,8 +4,9 @@ import type { CountryEraOverride } from "../../contract";
  * Bulgaria begins 1991 with the multiparty Seventh Grand National Assembly
  * elected in June 1990. It sat with 400 deputies until 2 October 1991; the
  * ordinary 240-seat Assembly first met on 4 November after the 13 October poll.
- * The start preset describes the Grand Assembly. The in-world replacement
- * still requires a dated institution transition rather than a static overlay.
+ * The start preset describes the Grand Assembly. The turn processor changes
+ * the live regional and formation seat counts after the October 1991 election
+ * once the game calendar reaches November.
  *
  * https://www.parliament.bg/en/16
  * https://data.ipu.org/election-summary/HTML/2045_90.htm

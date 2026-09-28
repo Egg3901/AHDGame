@@ -86,7 +86,6 @@ export {
 export { ensureDEElections } from "./perpetualElections/countries/de";
 export {
   ensureBALElections,
-  ensureBGElections,
   ensureBLRElections,
   ensureHUElections,
   ensureROElections,
@@ -95,6 +94,7 @@ export {
 } from "./perpetualElections/countries/easternBloc";
 export { ensureCSElections, ensureCSNationsElections } from "@/lib/countries/cs/elections";
 export { ensurePLElections, ensurePLSenateElections } from "@/lib/countries/pl/elections";
+export { ensureBGElections } from "@/lib/countries/bg/elections";
 export {
   ensureIECathaoirleachElections,
   ensureIEElections,

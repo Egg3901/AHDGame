@@ -3,6 +3,34 @@ import { canonicalTurnsForCycle, pickNextCanonicalCycle, turnToWallClock } from 
 import { electionToLarpYear } from "@/lib/utils/formatters";
 
 describe("canonicalTurnsForCycle", () => {
+  it("schedules the Bulgarian ordinary Assembly election in October 1991", () => {
+    const ctx = { preset: "1991-default", startingYear: 1991 };
+    expect(
+      canonicalTurnsForCycle({ countryId: "BG", electionType: "nationalAssembly", cycle: 1, ctx })
+    ).toEqual({ startTurn: 1, primaryEndTurn: 14, endTurn: 38 });
+    expect(
+      pickNextCanonicalCycle({
+        countryId: "BG",
+        electionType: "nationalAssembly",
+        prevCycle: 0,
+        currentTurn: 1,
+        minPrimaryHours: 12,
+        ctx,
+      })?.endTurn
+    ).toBe(38);
+    expect(
+      canonicalTurnsForCycle({ countryId: "BG", electionType: "nationalAssembly", cycle: 2, ctx })
+        ?.endTurn
+    ).toBe(192);
+    expect(
+      canonicalTurnsForCycle({
+        countryId: "BG",
+        electionType: "nationalAssembly",
+        cycle: 1,
+        ctx: { ...ctx, preIterationTurns: 48 },
+      })?.endTurn
+    ).toBe(86);
+  });
   describe("house", () => {
     it("cycle 1 ends at end of LARP year 2022 (bootstrap)", () => {
       expect(canonicalTurnsForCycle({ electionType: "house", cycle: 1 })).toEqual({

@@ -10,15 +10,18 @@
  * Reported as `max(config base, region sum)`: the chamber never under-reports its
  * config base (so a region's seat-data discrepancy can't shrink an untransferred
  * chamber — e.g. UK regions summing to 648 still report the 650-seat Commons), and
- * grows above the base when a region is added (NI joining → 160 + 71). For every
- * untransferred parliamentary config the result equals `configSeats`, so
+ * grows above the base when a region is added (NI joining → 160 + 71). Bulgaria's
+ * dated 1991 chamber replacement explicitly lowers this floor to 240 after the
+ * ordinary Assembly opens. For other untransferred parliamentary configs the
+ * result equals `configSeats`, so
  * `coalitionThreshold === floor(configSeats / 2) + 1` still holds.
  */
 import type { Db } from "mongodb";
-import type { State } from "@/lib/db/types";
+import type { CountryGameState, State } from "@/lib/db/types";
 import { getCountryConfig, type CountryId } from "@/lib/constants/countries";
 import { isListTierMethod } from "@/lib/elections/electionMethod";
 import { getGameStatePreset } from "@/lib/db/collections/gameState";
+import { BG_ORDINARY_ASSEMBLY_TOTAL_SEATS } from "@/lib/countries/bg/rules/assemblyTransition";
 
 /** Active world preset, when present — drives era-conditional chamber sizes. */
 async function readActivePreset(db: Db): Promise<string | undefined> {
@@ -33,7 +36,8 @@ async function readActivePreset(db: Db): Promise<string | undefined> {
  * their region sum is authoritative — and grows/shrinks when a region transfers.
  */
 export async function getLiveLowerChamberSeats(db: Db, countryId: CountryId): Promise<number> {
-  const config = getCountryConfig(countryId, await readActivePreset(db));
+  const preset = await readActivePreset(db);
+  const config = getCountryConfig(countryId, preset);
   // Hungary's 1991-world config is deliberately frozen at its 386-seat start.
   // Once the 2014 reform stamps the world, the re-apportioned region documents
   // carry the live 199-seat chamber and override that initial config size.
@@ -48,6 +52,14 @@ export async function getLiveLowerChamberSeats(db: Db, countryId: CountryId): Pr
         .toArray();
       const seats = regions.reduce((sum, region) => sum + (region.houseDistricts ?? 0), 0);
       if (seats > 0) return seats;
+    }
+  }
+  if (countryId === "BG" && preset === "1991-default") {
+    const countryState = await db
+      .collection<CountryGameState>("countryGameStates")
+      .findOne({ _id: "BG" }, { projection: { bgOrdinaryAssemblySinceTurn: 1 } });
+    if (countryState?.bgOrdinaryAssemblySinceTurn != null) {
+      return BG_ORDINARY_ASSEMBLY_TOTAL_SEATS;
     }
   }
   if (isListTierMethod(config.electionSystems.lowerChamber)) {
