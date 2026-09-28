@@ -1123,6 +1123,7 @@ export type EraCountryConfigOverride = Partial<
     | "rulingPartyId"
     | "headOfStateSelection"
     | "majorPartyIds"
+    | "currencyCode"
     | "usdExchangeRate"
     | "centralGovernmentLabel"
     | "exchangeName"
