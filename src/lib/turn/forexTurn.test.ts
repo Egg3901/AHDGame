@@ -1011,3 +1011,67 @@ describe("euro legacy ledger links", () => {
     expect(result.countriesUpdated).toBe(3);
   });
 });
+
+it.each([1, 2])(
+  "resumes an expiry interrupted after wallet write %i without crediting twice",
+  async (crashAt) => {
+    const characterId = new ObjectId();
+    const orderId = new ObjectId();
+    let refundState: "pending" | "credited" | undefined = "pending";
+    let balance = 0;
+    let walletWrites = 0;
+    const stamps = new Set<string>();
+    db.collectionMocks.currencyOrders.updateMany.mockImplementation(async (_filter, update) => {
+      if (update.$set?.expiryRefundState === "credited") refundState = "credited";
+      if (update.$unset?.expiryRefundState !== undefined) refundState = undefined;
+      return { modifiedCount: 0 };
+    });
+    db.collectionMocks.currencyOrders.find.mockImplementation(
+      (filter: { expiryRefundState?: unknown }) => ({
+        toArray: async () =>
+          filter.expiryRefundState && refundState
+            ? [
+                {
+                  _id: orderId,
+                  characterId,
+                  fromCurrency: "USD",
+                  amount: 1000,
+                  filledAmount: 200,
+                  expiryRefundState: refundState,
+                },
+              ]
+            : [],
+        sort: vi.fn().mockReturnThis(),
+        limit: vi.fn().mockReturnThis(),
+      })
+    );
+    db.collection("characters").bulkWrite.mockImplementation(async (operations) => {
+      for (const { updateOne } of operations) {
+        if (updateOne.update.$pull) {
+          stamps.delete(updateOne.update.$pull.forexExpiryRefunds);
+          continue;
+        }
+        const stamp = updateOne.filter.forexExpiryRefunds.$ne as string;
+        if (!stamps.has(stamp)) {
+          balance += updateOne.update.$inc["currencyBalances.personal.USD"];
+          stamps.add(stamp);
+        }
+      }
+      walletWrites++;
+      if (walletWrites === crashAt) {
+        throw new Error("Connection lost after refund write");
+      }
+      return { modifiedCount: 0 };
+    });
+    await expect(processForexTurn(db as unknown as Db, 50)).rejects.toThrow("Connection lost");
+    expect(refundState).toBe(crashAt === 1 ? "pending" : "credited");
+    expect(balance).toBe(800);
+    await processForexTurn(db as unknown as Db, 51);
+    expect(balance).toBe(800);
+    expect(refundState).toBeUndefined();
+    expect(stamps.size).toBe(0);
+    await processForexTurn(db as unknown as Db, 52);
+    expect(balance).toBe(800);
+    expect(db.collection("characters").bulkWrite).toHaveBeenCalledTimes(3);
+  }
+);

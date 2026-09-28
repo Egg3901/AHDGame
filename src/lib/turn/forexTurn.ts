@@ -1075,58 +1075,78 @@ async function processTriggeredLimitOrders(
 }
 
 /**
- * Expire open limit/direct orders that have passed their expiresAtTurn.
- * Refunds remaining escrowed fromCurrency back to each character.
- *
- * Crash-safety: status is transitioned (open/partial → expired) atomically
- * BEFORE any refund is issued. The filter on open/partial makes this
- * idempotent — already-expired orders are untouched. If the process crashes
- * after the updateMany but before all refunds complete, the next turn's query
- * (which filters on "open"/"partial") will NOT pick up these orders again,
- * eliminating the double-refund risk.
+ * Expiry claims retain a refund marker until the wallet write completes.
+ * Stamped credits make an interrupted batch safe to retry on the next turn.
  */
 async function expireStaleOrders(db: Db, currentTurn: number, now: Date): Promise<number> {
-  // Step 1: Atomically transition all eligible orders from open/partial → expired.
-  // The status filter makes this idempotent — already-expired orders are untouched.
-  const transitionResult = await db.collection<CurrencyOrder>("currencyOrders").updateMany(
-    {
-      status: { $in: ["open", "partial"] },
-      expiresAtTurn: { $lte: currentTurn },
-    },
-    { $set: { status: "expired" as const, updatedAt: now } }
+  const orders = db.collection<CurrencyOrder>("currencyOrders");
+  const transitionResult = await orders.updateMany(
+    { status: { $in: ["open", "partial"] }, expiresAtTurn: { $lte: currentTurn } },
+    { $set: { status: "expired" as const, expiryRefundState: "pending", updatedAt: now } }
   );
-
-  if (transitionResult.modifiedCount === 0) return 0;
-
-  // Step 2: Fetch the orders that were JUST transitioned (same `updatedAt` timestamp).
-  // Re-querying by status + updatedAt is safe because `now` is a fixed value for this turn
-  // and the transition above wrote it atomically.
-  const justExpired = await db
-    .collection<CurrencyOrder>("currencyOrders")
-    .find({
-      status: "expired",
-      updatedAt: now,
-    })
-    .toArray();
-
-  // Step 3: Issue refunds only for the just-transitioned orders.
-  const refundOps: AnyBulkWriteOperation<Character>[] = [];
-  for (const order of justExpired) {
-    const refundAmount = order.amount - order.filledAmount;
-    if (refundAmount > 0) {
-      const refundInc = buildPersonalBalanceInc(refundAmount, order.fromCurrency, true);
-      refundOps.push({
-        updateOne: {
-          filter: { _id: order.characterId },
-          update: { $inc: refundInc },
+  // Include interrupted earlier turns, even when no new order expires today.
+  // Legacy expired rows without a marker are excluded: their refund status
+  // cannot be inferred safely from the terminal status alone.
+  const pending = await orders
+    .find(
+      { status: "expired", expiryRefundState: { $in: ["pending", "credited"] } },
+      {
+        projection: {
+          characterId: 1,
+          fromCurrency: 1,
+          amount: 1,
+          filledAmount: 1,
+          expiryRefundState: 1,
         },
-      });
-    }
+      }
+    )
+    .toArray();
+  const refundOps: AnyBulkWriteOperation<Character>[] = [];
+  for (const order of pending) {
+    if (order.expiryRefundState === "credited") continue;
+    const refundAmount = order.amount - order.filledAmount;
+    if (refundAmount <= 0) continue;
+    const stamp = `forex-expiry:${String(order._id)}#refund`;
+    refundOps.push({
+      updateOne: {
+        filter: { _id: order.characterId, forexExpiryRefunds: { $ne: stamp } },
+        update: {
+          $inc: buildPersonalBalanceInc(refundAmount, order.fromCurrency, true),
+          $addToSet: { forexExpiryRefunds: stamp },
+        },
+      },
+    });
   }
-  if (refundOps.length > 0) {
-    await db.collection<Character>("characters").bulkWrite(refundOps);
+  if (refundOps.length) await db.collection<Character>("characters").bulkWrite(refundOps);
+  if (pending.length)
+    await orders.updateMany(
+      {
+        _id: { $in: pending.map((order) => order._id) },
+        status: "expired",
+        expiryRefundState: "pending",
+      },
+      { $set: { expiryRefundState: "credited" } }
+    );
+  // Keep recovery receipts outside the capped general payment history. They
+  // cannot age out while a refund is awaiting acknowledgement. The serialized
+  // turn phase releases them only after the order records the credited state.
+  const cleanupOps: AnyBulkWriteOperation<Character>[] = pending.map((order) => ({
+    updateOne: {
+      filter: { _id: order.characterId },
+      update: { $pull: { forexExpiryRefunds: `forex-expiry:${String(order._id)}#refund` } },
+    },
+  }));
+  if (cleanupOps.length) {
+    await db.collection<Character>("characters").bulkWrite(cleanupOps);
+    await orders.updateMany(
+      {
+        _id: { $in: pending.map((order) => order._id) },
+        status: "expired",
+        expiryRefundState: "credited",
+      },
+      { $unset: { expiryRefundState: "" } }
+    );
   }
-
   return transitionResult.modifiedCount;
 }
 
