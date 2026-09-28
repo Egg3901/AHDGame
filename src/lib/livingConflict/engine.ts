@@ -1,6 +1,6 @@
+import { triggerMatches } from "./rules/eventTriggers";
 import type { CrisisEffect } from "@/lib/db/types/crisis";
 import type {
-  ConflictEvent,
   ConflictPhase,
   ConflictRole,
   FiredEvent,
@@ -380,21 +380,6 @@ export function passiveEffectsForRole(
 /** The effects an event applies to a nation in the given role. */
 export function eventEffectsForRole(event: ConflictEvent, role: ConflictRole): CrisisEffect[] {
   return event.effects?.[role] ?? [];
-}
-
-function triggerMatches(event: ConflictEvent, state: LivingConflictState): boolean {
-  const t = event.trigger;
-  if (!t) return event.kind === "authored"; // untriggered authored beats fire on phase entry
-  if (t.campaignStages && !t.campaignStages.includes(state.campaign?.stage ?? "posture")) {
-    return false;
-  }
-  if (t.onPhaseEnter && state.phaseTurns !== 0) return false;
-  if (t.minIntensity !== undefined && state.intensity < t.minIntensity) return false;
-  if (t.maxIntensity !== undefined && state.intensity > t.maxIntensity) return false;
-  if (t.everyTurns !== undefined) {
-    if (state.totalTurns <= 0 || state.totalTurns % t.everyTurns !== 0) return false;
-  }
-  return true;
 }
 
 /**

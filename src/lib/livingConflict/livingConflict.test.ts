@@ -105,8 +105,13 @@ describe("living-conflict engine", () => {
 
     it("produces deterministic, phase-scoped ids", () => {
       const s = openConflict(emptyConflictState("pandemic"), 2000);
-      const [f] = selectEvents(PANDEMIC_DEF, s, 5);
-      expect(f.id).toBe("pandemic:emergence:5:patient_zero");
+      const events = selectEvents(PANDEMIC_DEF, s, 5);
+      expect(events.find((event) => event.event.key === "patient_zero")?.id).toBe(
+        "pandemic:emergence:5:patient_zero"
+      );
+      expect(events.find((event) => event.event.key === "emergence_global_response")?.id).toBe(
+        "pandemic:emergence:5:emergence_global_response"
+      );
     });
 
     it("never emits reactive events from selection", () => {

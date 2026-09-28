@@ -157,6 +157,12 @@ describe("living-conflict turn integration", () => {
       (row) => row.defKey === "russia_ukraine_security"
     );
     expect(state?.hasOpened).toBe(true);
+    const crisis = (stores.get("crises") ?? []).find(
+      (row) => pathValue(row, "globalResponse.conflictKey") === "russia_ukraine_security"
+    );
+    expect(crisis).toBeDefined();
+    expect(pathValue(crisis!, "globalResponse.roleByCountry.UKR")).toBe("belligerent");
+    expect(pathValue(crisis!, "globalResponse.roleByCountry.RU")).toBe("backer_a");
     expect(reads.filter((read) => read.collection === "macroCountries")).toEqual([
       { collection: "macroCountries", projection: { entityId: 1, _id: 0 } },
     ]);

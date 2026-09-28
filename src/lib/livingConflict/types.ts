@@ -133,7 +133,7 @@ export interface EventTrigger {
   minIntensity?: number;
   /** Fires only at or below this intensity. */
   maxIntensity?: number;
-  /** Fires on the turn the phase is entered. */
+  /** Fires on phase entry, in addition to everyTurns when both are set. */
   onPhaseEnter?: boolean;
   /** Fires every N turns the conflict has run (deterministic cadence). */
   everyTurns?: number;
