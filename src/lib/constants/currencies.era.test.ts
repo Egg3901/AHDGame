@@ -2,24 +2,24 @@ import { describe, it, expect } from "vitest";
 import { getEraAwareCurrencySymbol } from "@/lib/constants/currencies";
 
 describe("getEraAwareCurrencySymbol", () => {
-  it("returns DM for EUR/DE in 1991-default when eurozone disabled", () => {
-    expect(getEraAwareCurrencySymbol("EUR", "1991-default", false, "DE")).toBe("DM");
+  it("identifies normalized EUR units for EUR/DE in 1991-default when eurozone disabled", () => {
+    expect(getEraAwareCurrencySymbol("EUR", "1991-default", false, "DE")).toBe("€ eq.");
   });
 
   it("returns IR£ for IEP when eurozone disabled", () => {
     expect(getEraAwareCurrencySymbol("IEP", "1991-default", false, "IE")).toBe("IR£");
   });
 
-  it("returns € for IEP when eurozone enabled", () => {
-    expect(getEraAwareCurrencySymbol("IEP", "2019-default", true, "IE")).toBe("€");
+  it("keeps IEP denominated in Irish pounds after euro adoption", () => {
+    expect(getEraAwareCurrencySymbol("IEP", "2019-default", true, "IE")).toBe("IR£");
   });
 
-  it("returns IEP for legacy EUR/IE callers when eurozone disabled", () => {
-    expect(getEraAwareCurrencySymbol("EUR", "1991-default", false, "IE")).toBe("IEP");
+  it("preserves EUR-equivalent denomination for legacy EUR/IE callers when eurozone disabled", () => {
+    expect(getEraAwareCurrencySymbol("EUR", "1991-default", false, "IE")).toBe("€ eq.");
   });
 
-  it("returns DM for EUR/DE in 1979-default when eurozone disabled", () => {
-    expect(getEraAwareCurrencySymbol("EUR", "1979-default", false, "DE")).toBe("DM");
+  it("identifies normalized EUR units for EUR/DE in 1979-default when eurozone disabled", () => {
+    expect(getEraAwareCurrencySymbol("EUR", "1979-default", false, "DE")).toBe("€ eq.");
   });
 
   it("returns € for EUR/DE in 1991-default when eurozone IS enabled (adopted mid-game)", () => {
@@ -30,16 +30,16 @@ describe("getEraAwareCurrencySymbol", () => {
     expect(getEraAwareCurrencySymbol("EUR", "2019-default", true, "DE")).toBe("€");
   });
 
-  it("returns € when anchorCountryId absent in 1991-default pre-eurozone", () => {
-    expect(getEraAwareCurrencySymbol("EUR", "1991-default", false)).toBe("€");
+  it("identifies normalized EUR even when anchorCountryId absent in 1991-default pre-eurozone", () => {
+    expect(getEraAwareCurrencySymbol("EUR", "1991-default", false)).toBe("€ eq.");
   });
 
-  it("returns Cr$ for BRL in 1991-default (pre-Real)", () => {
-    expect(getEraAwareCurrencySymbol("BRL", "1991-default", false, "BR")).toBe("Cr$");
+  it("identifies normalized BRL for BRL in 1991-default (pre-Real)", () => {
+    expect(getEraAwareCurrencySymbol("BRL", "1991-default", false, "BR")).toBe("BRL eq.");
   });
 
-  it("returns Cr$ for BRL in 1979-default (pre-Real)", () => {
-    expect(getEraAwareCurrencySymbol("BRL", "1979-default", false, "BR")).toBe("Cr$");
+  it("identifies normalized BRL for BRL in 1979-default (pre-Real)", () => {
+    expect(getEraAwareCurrencySymbol("BRL", "1979-default", false, "BR")).toBe("BRL eq.");
   });
 
   it("returns R$ for BRL in 2019-default (Real era)", () => {
