@@ -132,6 +132,7 @@ export function readinessCountryIds(preset: string): CountryId[] {
 export interface NationalBudgetExpectation {
   countryId: string;
   budgetId: string;
+  currencyCode: string;
   gdp: number;
   population: number;
   debtPrincipal: number;
@@ -347,6 +348,7 @@ export function buildSeedExpectations(preset: string): SeedExpectations {
     nationalBudgets: configs.map((c) => ({
       countryId: c.countryId,
       budgetId: c.budgetId,
+      currencyCode: c.currencyCode,
       gdp: c.gdp,
       population: c.population,
       debtPrincipal: c.debt.principal,

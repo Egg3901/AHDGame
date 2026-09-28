@@ -300,7 +300,13 @@ async function checkNationalBudgets(
   }
   const rates = getInitialRates(expect.preset);
   const euroRate = rates.DE;
+  const authoredBudgetCurrency = new Map(
+    expect.nationalBudgets.map((config) => [config.countryId, config.currencyCode])
+  );
   const expectedMoneyScale = (countryId: string): number => {
+    // The 2027 budget configs have already been converted to EUR. Earlier
+    // presets still carry legacy-denominated configs and need this scale.
+    if (authoredBudgetCurrency.get(countryId) === "EUR") return 1;
     const typedCountryId = countryId as CountryId;
     const legacyCurrency = COUNTRY_CURRENCY_MAP[typedCountryId];
     if (currencyForCountryAtYear(typedCountryId, expect.startingYear, legacyCurrency) !== "EUR")

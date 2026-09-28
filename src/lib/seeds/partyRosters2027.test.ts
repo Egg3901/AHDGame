@@ -45,10 +45,18 @@ const OBSOLETE_2027_PARTIES = new Set([
   "Demokratik Sol Parti",
 ]);
 
+function authoredRoster(countryId: CountryId) {
+  return (PARTY_SEED_MODULES[countryId] ?? []).filter(
+    (party) => !party.validForPresets || party.validForPresets.includes(PRESET)
+  );
+}
+
 describe("2027 party rosters (#2294)", () => {
   it("gives every included country a direct roster without an earlier-era fallback", () => {
     for (const countryId of INCLUDED_COUNTRIES) {
-      const direct = partySeedsForPreset(countryId, PRESET);
+      // Authored content may lead runtime availability. RU remains absent from
+      // the active 2027 roster until its full country substrate is seeded.
+      const direct = authoredRoster(countryId);
       const effective = selectPartyRosterForPreset(
         [...(PARTY_SEED_MODULES[countryId] ?? [])],
         PRESET
@@ -62,10 +70,14 @@ describe("2027 party rosters (#2294)", () => {
     }
   });
 
+  it("keeps RU's authored roster inert until its country pack is active", () => {
+    expect(partySeedsForPreset("RU", PRESET)).toEqual([]);
+  });
+
   it("excludes dissolved and renamed organizations from 2027", () => {
     const activeNames = new Set(
       INCLUDED_COUNTRIES.flatMap((countryId) =>
-        partySeedsForPreset(countryId, PRESET).map((party) => party.name)
+        authoredRoster(countryId).map((party) => party.name)
       )
     );
     for (const obsolete of OBSOLETE_2027_PARTIES) expect(activeNames).not.toContain(obsolete);
@@ -73,7 +85,7 @@ describe("2027 party rosters (#2294)", () => {
 
   it("uses unique identities and seed orders within every effective roster", () => {
     for (const countryId of INCLUDED_COUNTRIES) {
-      const roster = partySeedsForPreset(countryId, PRESET);
+      const roster = authoredRoster(countryId);
       expect(new Set(roster.map((party) => party.name)).size, `${countryId} names`).toBe(
         roster.length
       );
