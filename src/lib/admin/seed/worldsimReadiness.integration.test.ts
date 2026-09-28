@@ -61,20 +61,20 @@ describe("2027 worldsim readiness", () => {
   it("seeds euro members with a single EUR denomination", async () => {
     for (const countryId of euroMembersAtYear(2027)) {
       const budget = await db.collection("federalBudget").findOne({ countryId });
-      // Bulgaria has a 2027 regional GDP seed, but its national fiscal model
-      // is still absent. Do not imply that the currency pass invents one.
-      if (countryId !== "BG") {
-        expect(budget?.currencyCode, `federalBudget.${countryId}`).toBe("EUR");
-      } else {
-        expect(budget, "federalBudget.BG remains unseeded").toBeNull();
-      }
+      expect(budget?.currencyCode, `federalBudget.${countryId}`).toBe("EUR");
       const rate = await db
         .collection<{ _id: string; currencyCode?: string }>("exchangeRates")
         .findOne({ _id: countryId });
-      if (countryId !== "BG") {
-        expect(rate?.currencyCode, `exchangeRates.${countryId}`).toBe("EUR");
-      } else {
-        expect(rate, "exchangeRates.BG remains outside the forex set").toBeNull();
+      expect(rate?.currencyCode, `exchangeRates.${countryId}`).toBe("EUR");
+      if (countryId === "BG") {
+        // The authored 2027 forecast anchors EUR 134.592B nominal GDP,
+        // 35.5% debt/GDP and a 4.3% deficit/GDP.
+        expect(budget?.gdp).toBe(134_592_000_000);
+        expect(budget?.debt.principal / budget!.gdp).toBeCloseTo(0.355, 3);
+        expect((budget!.spending.total - budget!.revenue.total) / budget!.gdp).toBeCloseTo(
+          0.043,
+          3
+        );
       }
       expect(
         await db.collection("corporations").countDocuments({
@@ -110,7 +110,7 @@ describe("2027 worldsim readiness", () => {
       result.checks.filter(
         (check) =>
           check.severity === "critical" &&
-          /^budget\.(AT|DE|ES|FI|FR|GR|IE|IT)\.(gdp|debt\.principal)$/.test(check.id)
+          /^budget\.(AT|BG|DE|ES|FI|FR|GR|IE|IT)\.(gdp|debt\.principal)$/.test(check.id)
       )
     ).toEqual([]);
   });

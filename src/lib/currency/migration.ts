@@ -4,7 +4,6 @@
 import type { Db } from "mongodb";
 import {
   COUNTRY_CURRENCY_MAP,
-  FOREX_ACTIVE_COUNTRIES,
   INITIAL_RATES,
   getInitialRates,
   getSeedCurrencyCode,
@@ -154,7 +153,7 @@ function buildCharacterUpdateOp(
  */
 export async function seedExchangeRates(db: Db, preset: string): Promise<void> {
   const rates = getInitialRates(preset);
-  const ops = FOREX_ACTIVE_COUNTRIES.map((countryId) => {
+  const ops = getPresetMonetaryScope(preset).forexCountries.map((countryId) => {
     const currencyCode = getSeedCurrencyCode(countryId, preset);
     // Euro followers share the anchor's row value, not their legacy rate.
     const rate =
