@@ -22,12 +22,10 @@ vi.mock("next/image", () => ({ default: () => null }));
 beforeEach(() => {
   vi.stubGlobal(
     "fetch",
-    vi
-      .fn()
-      .mockResolvedValue({
-        ok: true,
-        json: async () => ({ rates: { EUR: 0.85 }, baseRates: { EUR: 0.85 } }),
-      })
+    vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ rates: { EUR: 0.85 }, baseRates: { EUR: 0.85 } }),
+    })
   );
 });
 afterEach(() => {
