@@ -9,6 +9,15 @@ export const BG_ORDINARY_ASSEMBLY_SEATS = apportionSeats(
   BG_1991_MACROREGION_POPULATION
 );
 
+export function bgAssemblyName(
+  preset: string | undefined,
+  ordinaryAssemblySinceTurn: number | undefined
+): string {
+  return preset === "1991-default" && ordinaryAssemblySinceTurn == null
+    ? "Grand National Assembly"
+    : "National Assembly";
+}
+
 /** The founding vote re-seats the 400-member Grand Assembly; regular votes elect 240. */
 export function bgElectionSeatsForPreset(
   currentRegionSeats: Readonly<Record<string, number>>,

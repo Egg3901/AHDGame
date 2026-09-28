@@ -4,6 +4,7 @@ import { createMockDb } from "@/lib/test-utils/mockDb";
 import { bgRegions1991 } from "@/lib/countries/bg/data/bgRegions1991";
 import {
   BG_ORDINARY_ASSEMBLY_SEATS,
+  bgAssemblyName,
   bgElectionSeatsForPreset,
   canOpenBgOrdinaryAssembly,
 } from "@/lib/countries/bg/rules/assemblyTransition";
@@ -30,6 +31,9 @@ function readyDb() {
 
 describe("1991 Bulgarian ordinary Assembly transition", () => {
   it("apportions exactly 240 seats and requires the full resolved slate in November", () => {
+    expect(bgAssemblyName("1991-default", undefined)).toBe("Grand National Assembly");
+    expect(bgAssemblyName("1991-default", 41)).toBe("National Assembly");
+    expect(bgAssemblyName("1979-default", undefined)).toBe("National Assembly");
     expect(Object.values(BG_ORDINARY_ASSEMBLY_SEATS).reduce((sum, seats) => sum + seats, 0)).toBe(
       240
     );
