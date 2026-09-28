@@ -1,6 +1,7 @@
 import type { Db } from "mongodb";
 import type { State, ElectedOfficial, Election } from "@/lib/db/types";
 import type { GameState } from "@/lib/db/types/gameState";
+import type { GovernmentFormation } from "@/lib/db/types/governmentFormation";
 import { apportionSeats as apportionRegionSeats } from "@/lib/seeds/reference/rules/apportionSeats";
 import { apportionSeats as apportionOfficialSeats } from "@/lib/country/seatApportionment";
 
@@ -110,7 +111,7 @@ export async function runHuAssemblyReform(
   }
 
   await db
-    .collection("governmentFormations")
+    .collection<GovernmentFormation>("governmentFormations")
     .updateOne(
       { _id: "HU" },
       { $set: { totalSeats: HU_REFORM_SEATS, majorityThreshold: 100, updatedAt: now } }

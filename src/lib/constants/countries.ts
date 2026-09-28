@@ -36,7 +36,7 @@ import { NG_ERAS } from "@/lib/countries/ng/eras";
 import { PL_ERAS } from "@/lib/countries/pl/eras";
 import { RO_ERAS } from "@/lib/countries/ro/eras";
 import { RU_ERAS } from "@/lib/countries/ru/eras";
-import { ru1991PresidentialConfig } from "@/lib/countries/ru/eras/1991";
+import { ru1991PresidentialConfig } from "@/lib/countries/ru/runtimeInstitutions";
 import { SE_ERAS } from "@/lib/countries/se/eras";
 import { TR_ERAS } from "@/lib/countries/tr/eras";
 import { UK_ERAS } from "@/lib/countries/uk/eras";
@@ -1101,6 +1101,7 @@ export type EraCountryConfigOverride = Partial<
     CountryConfig,
     | "executiveTitle"
     | "headOfStateTitle"
+    | "executiveRealmPhrase"
     | "governmentType"
     | "governmentTypeLabel"
     | "coalitionThreshold"

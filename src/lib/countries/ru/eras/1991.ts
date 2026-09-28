@@ -1,5 +1,4 @@
 import type { CountryEraOverride } from "../../contract";
-import type { CountryConfig } from "@/lib/constants/countries";
 import { turnToGameMonth } from "@/lib/utils/gameDate";
 
 /** The direct presidential election was June 12; the office changed hands at
@@ -14,32 +13,6 @@ export function ru1991PresidencyStage(
   if (year > 1991 || (year === 1991 && month >= 6)) return "inaugurated";
   if (year === 1991 && month >= 5) return "elected";
   return "chairman";
-}
-
-/** The Congress and prime minister continue after inauguration. This is not
- * the later 1993 constitutional settlement. */
-export function ru1991PresidentialConfig(config: CountryConfig): CountryConfig {
-  return {
-    ...config,
-    headOfStateTitle: "President",
-    headOfStateSelection: undefined,
-    governmentTypeLabel: "Transitional Presidential Republic",
-    electionSystems: { ...config.electionSystems, headOfState: "fptp" },
-    officeTypes: [
-      ...config.officeTypes.filter((office) => office.key !== "chairmanOfSupremeSoviet"),
-      {
-        key: "president",
-        label: "President",
-        labelPlural: "Presidents",
-        isExecutive: true,
-        isHeadOfState: true,
-        isSubNational: false,
-        termYears: 5,
-        actionBonus: 4,
-        partyStrengthWeight: 1,
-      },
-    ],
-  };
 }
 
 /**
