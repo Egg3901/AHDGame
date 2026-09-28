@@ -559,7 +559,7 @@ export async function seedAllCountryData(
       await seedHUStatePartyOrg(db, resetReference, log, preset);
       await seedHUGovernmentFormation(db, log, preset);
     })(),
-    // Modern PL, RO and RU political substrate (2027-default only). The Cold-War
+    // Modern PL, RO, RU and BG political substrate (2027-default only). The Cold-War
     // one-party block above self-guards on isEasternBlocEra, and the 1991
     // successor seeders below self-guard on preset, so this pack only runs
     // where neither does. Scoped to each country's rows throughout.
@@ -569,6 +569,8 @@ export async function seedAllCountryData(
       await seedModernTransitionCountry(db, resetReference, log, preset, "PL");
       await seedModernTransitionCountry(db, resetReference, log, preset, "RO");
       await seedModernTransitionCountry(db, resetReference, log, preset, "RU");
+      const { seedBG2027 } = await import("./seed/seedBG2027");
+      await seedBG2027(db, resetReference, log, preset);
     })(),
   ]);
 
