@@ -595,6 +595,8 @@ export async function seedAllCountryData(
     await seedHUGovernmentFormation(db, log, preset);
     const { seedCSGovernmentFormation1991 } = await import("./seed/seedCSGovernmentFormation1991");
     await seedCSGovernmentFormation1991(db, log, preset);
+    const { seedBGGovernmentFormation1991 } = await import("./seed/seedBGGovernmentFormation1991");
+    await seedBGGovernmentFormation1991(db, log, preset);
   }
 
   const { ensureDemographicBaselines } = await import("./seed/ensureDemographicBaselines");

@@ -1239,6 +1239,7 @@ export const ERA_COUNTRY_CONFIG_OVERRIDES: Record<
     PL: PL_ERAS["1991-default"]?.config,
     HU: HU_ERAS["1991-default"]?.config,
     CS: CS_ERAS["1991-default"]?.config,
+    BG: BG_ERAS["1991-default"]?.config,
   },
   "1953-default": {
     US: US_ERAS["1953-default"]?.config,
