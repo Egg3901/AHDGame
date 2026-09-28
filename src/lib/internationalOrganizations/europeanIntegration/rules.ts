@@ -174,3 +174,12 @@ export function decideBackgroundMaastricht(input: {
     reasons,
   };
 }
+
+/** Common-market access follows current membership, independently of Maastricht consent. */
+export function europeanCommonMarketPairs(members: readonly string[]): string[] {
+  const countries = [...new Set(members.filter(Boolean))].sort();
+  const pairs: string[] = [];
+  for (let i = 0; i < countries.length; i++)
+    for (let j = i + 1; j < countries.length; j++) pairs.push(`${countries[i]}|${countries[j]}`);
+  return pairs;
+}

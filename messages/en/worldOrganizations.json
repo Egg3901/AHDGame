@@ -10,7 +10,8 @@
       "turn": "Turn {turn}",
       "include": "Include a Maastricht treaty decision",
       "ratify": "Ratify Maastricht",
-      "reject": "Reject Maastricht"
+      "reject": "Reject Maastricht",
+      "commonMarket": "Current members share tariff-free market access. This continues if Maastricht is rejected and ends when membership ends."
     }
   }
 }

@@ -11,6 +11,7 @@ export function MaastrichtPanel({ org }: { org: OrgSummary }) {
     <section className="rounded-xl border border-card-border bg-card p-4">
       <h3 className="text-sm font-semibold">{t("title")}</h3>
       <p className="mt-2 text-sm text-muted">{t(state.stage)}</p>
+      <p className="mt-2 text-sm text-muted">{t("commonMarket")}</p>
       {(state.stage === "community" || state.source === "ratified-treaty") && (
         <ul className="mt-3 space-y-3">
           {org.members.map((member) => {
