@@ -150,8 +150,13 @@ describe("GET /api/admin/economy/npp-corp-health", () => {
 
   it("reads a named retained turn's diagnostics", async () => {
     await setupAdmin();
-    db.collectionMocks.corporations.find.mockReturnValue(createAsyncIterableCursor([]));
-    db.collectionMocks.nppOperatorDiagnostics.findOne.mockResolvedValue(null);
+    db.collectionMocks.nppOperatorDiagnostics.findOne.mockResolvedValue({
+      _id: "turn:439",
+      turn: 439,
+      corporationsObserved: 2,
+      bindingGateCounts: { cash_floor: 2 },
+      constraintCounts: { budget_cash_crisis: 2 },
+    });
     const { GET } = await import("./route");
     const response = await GET(
       new Request("http://localhost/api/admin/economy/npp-corp-health?turn=439")
@@ -160,6 +165,37 @@ describe("GET /api/admin/economy/npp-corp-health", () => {
     expect(db.collectionMocks.nppOperatorDiagnostics.findOne).toHaveBeenCalledWith({
       _id: "turn:439",
     });
+    const body = await response.json();
+    expect(body).toMatchObject({
+      health: null,
+      cashMetricsAvailability: "historical-snapshot-unavailable",
+      diagnosticsAvailable: true,
+      diagnostics: {
+        bindingGateCounts: { cash_floor: 2 },
+        bindingConstraintCounts: { budget_cash_crisis: 2 },
+        bindingConstraintLegCounts: { budget: 2 },
+        operatorObservations: 2,
+      },
+      turn: 439,
+    });
+    expect(db.collectionMocks.corporations.find).not.toHaveBeenCalled();
+  });
+
+  it("marks a missing historical diagnostics turn unavailable without reading current cash", async () => {
+    await setupAdmin();
+    db.collectionMocks.nppOperatorDiagnostics.findOne.mockResolvedValue(null);
+    const { GET } = await import("./route");
+    const response = await GET(
+      new Request("http://localhost/api/admin/economy/npp-corp-health?turn=438")
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      health: null,
+      cashMetricsAvailability: "historical-snapshot-unavailable",
+      diagnosticsAvailable: false,
+      turn: 438,
+    });
+    expect(db.collectionMocks.corporations.find).not.toHaveBeenCalled();
   });
 
   it("serves empty nulls when there are no NPP-led corporations or diagnostics", async () => {

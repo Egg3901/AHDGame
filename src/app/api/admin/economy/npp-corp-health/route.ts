@@ -23,7 +23,9 @@ const querySchema = z.object({
 // GET /api/admin/economy/npp-corp-health - Return the issue #2122 regression
 // metric: per-sector cash-negative share and median liquid capital for NPP-led
 // corporations, plus the aggregate binding-gate/binding-constraint counts from
-// the persisted operator diagnostics. The metric is COMPUTED here from live
+// the persisted operator diagnostics. A historical ?turn= request has no matching
+// cash snapshot, so it returns diagnostics only and marks cash unavailable.
+// The current metric is COMPUTED here from live
 // corporation documents (this is a low-frequency admin read, not a turn hot
 // path); the binding counts are read from the turn snapshot the NPP phase
 // already flushed, so no entry/dividend formula is recomputed.
@@ -45,6 +47,28 @@ export async function GET(request: Request) {
     }
 
     const db = await getDb();
+    const diagnosticsCollection = db.collection<
+      NppOperatorAggregate & { _id?: string; turn?: number }
+    >(NPP_OPERATOR_TELEMETRY_COLLECTION);
+    if (parsed.data.turn !== undefined) {
+      const diagnostics = await diagnosticsCollection.findOne({ _id: `turn:${parsed.data.turn}` });
+      const counts = computeNppCorporationHealth({
+        corporations: [],
+        operatorDiagnostics: diagnostics,
+      });
+      return NextResponse.json({
+        health: null,
+        cashMetricsAvailability: "historical-snapshot-unavailable",
+        diagnosticsAvailable: diagnostics !== null,
+        diagnostics: {
+          bindingGateCounts: counts.bindingGateCounts,
+          bindingConstraintCounts: counts.bindingConstraintCounts,
+          bindingConstraintLegCounts: counts.bindingConstraintLegCounts,
+          operatorObservations: counts.operatorObservations,
+        },
+        turn: diagnostics?.turn ?? parsed.data.turn,
+      });
+    }
     // NPP-led corps are exactly the ones the NPP brain operates: `ceoType` is
     // "npp". The query filters on that rather than loading the whole NPP id set.
     const corps = await db
@@ -83,13 +107,7 @@ export async function GET(request: Request) {
       bankCharter: corp.bankCharter ? { status: corp.bankCharter.status } : null,
     }));
 
-    const diagnosticsCollection = db.collection<
-      NppOperatorAggregate & { _id?: string; turn?: number }
-    >(NPP_OPERATOR_TELEMETRY_COLLECTION);
-    const diagnostics =
-      parsed.data.turn == null
-        ? await diagnosticsCollection.findOne({}, { sort: { turn: -1 } })
-        : await diagnosticsCollection.findOne({ _id: `turn:${parsed.data.turn}` });
+    const diagnostics = await diagnosticsCollection.findOne({}, { sort: { turn: -1 } });
 
     const health = computeNppCorporationHealth({
       corporations,
@@ -98,6 +116,8 @@ export async function GET(request: Request) {
 
     return NextResponse.json({
       health,
+      cashMetricsAvailability: "current",
+      diagnosticsAvailable: diagnostics !== null,
       turn: diagnostics?.turn ?? parsed.data.turn ?? null,
     });
   } catch (error) {
