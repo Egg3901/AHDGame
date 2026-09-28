@@ -43,7 +43,7 @@ describe("Romanian election spawner", () => {
       currentTurn: 1,
     });
     await ensureROElections(NOW, 1);
-    const batches = db
+    const batches: SpawnedElection[][] = db
       .collection("elections")
       .insertMany.mock.calls.map((call: unknown[]) => call[0] as SpawnedElection[]);
     expect(batches).toHaveLength(2);
@@ -88,7 +88,9 @@ describe("Romanian election spawner", () => {
       preIteration: { active: true },
     });
     await ensureROElections(NOW, 1);
-    const batches = db.collection("elections").insertMany.mock.calls.map(([docs]) => docs);
+    const batches: SpawnedElection[][] = db
+      .collection("elections")
+      .insertMany.mock.calls.map((call: unknown[]) => call[0] as SpawnedElection[]);
     expect(
       batches[0].reduce((sum: number, e: { totalSeats: number }) => sum + e.totalSeats, 0)
     ).toBe(396);
@@ -105,7 +107,7 @@ describe("Romanian election spawner", () => {
       currentTurn: 1,
     });
     await ensureROElections(NOW, 1);
-    const batches = db
+    const batches: SpawnedElection[][] = db
       .collection("elections")
       .insertMany.mock.calls.map((call: unknown[]) => call[0] as SpawnedElection[]);
     expect(batches).toHaveLength(1);

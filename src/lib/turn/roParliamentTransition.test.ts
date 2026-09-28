@@ -85,7 +85,7 @@ describe("Romania's 1992 parliamentary seat transition", () => {
     expect(
       await processRoParliamentTransition(
         db as unknown as Db,
-        { preset: "1991-default", preIteration: { active: true } },
+        { preset: "1991-default", preIteration: { active: true, startedTurn: 1 } },
         196,
         NOW
       )
