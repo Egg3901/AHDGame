@@ -17,11 +17,12 @@ import { resolveSeedPartyTier } from "@/lib/seeds/defaultPartyTiers";
 import { getGameStatePresetOrDefault } from "@/lib/db/collections/gameState";
 import { withUniformMetricSet } from "@/lib/seeds/shared/uniformStateMetrics";
 
-export type ModernTransitionCountryId = "PL" | "RO";
+export type ModernTransitionCountryId = "PL" | "RO" | "RU";
 
 /**
  * Generic modern (2027-default) seed path for the post-communist transition
- * democracies — Poland and Romania. Cold-War PL/RO (1953/1979) keep their guard
+ * democracies — Poland and Romania — and the Russian Federation. Cold-War
+ * PL/RO/RU (1953/1979) keep their guard
  * in bootstrapGameWorld and seed via seedEasternBlocCountry; this file never
  * runs there. Other modern presets (1991/2019/...) are out of scope: their
  * roster claims stay as they were, exactly like the HU 2027 path in seedHU.
@@ -43,6 +44,7 @@ interface TransitionCountryConfig {
 const TRANSITION_COUNTRIES: Record<ModernTransitionCountryId, TransitionCountryConfig> = {
   PL: { categoryId: "pl_voterGroups", categoryName: "Poland Voter Groups" },
   RO: { categoryId: "ro_voterGroups", categoryName: "Romania Voter Groups" },
+  RU: { categoryId: "ru_voterGroups", categoryName: "Russia Voter Groups" },
 };
 
 /** Display names + turnout for the modern Layer-1 groups (leans come from the model). */
@@ -66,12 +68,17 @@ const GROUP_META: Record<
     hungarian_minority: { name: "Hungarian Minority", turnout: 58 },
     green_youth: { name: "Green Youth", turnout: 46 },
   },
+  RU: {},
 };
 
 async function loadRegionBundle(countryId: ModernTransitionCountryId): Promise<State[]> {
   if (countryId === "PL") {
     const { plRegions2027 } = await import("@/lib/countries/pl/data/plRegions2027");
     return [...plRegions2027];
+  }
+  if (countryId === "RU") {
+    const { ruRegions2027 } = await import("@/lib/countries/ru/data/ruRegions2027");
+    return [...ruRegions2027];
   }
   const { roRegions2027 } = await import("@/lib/countries/ro/data/roRegions2027");
   return [...roRegions2027];
@@ -81,6 +88,10 @@ async function loadPartySeeds(countryId: ModernTransitionCountryId): Promise<Par
   if (countryId === "PL") {
     const { plParties } = await import("@/lib/countries/pl/data/plParties");
     return [...plParties];
+  }
+  if (countryId === "RU") {
+    const { ruParties } = await import("@/lib/countries/ru/data/ruParties");
+    return [...ruParties];
   }
   const { roParties } = await import("@/lib/countries/ro/data/roParties");
   return [...roParties];
@@ -169,6 +180,16 @@ export async function seedModernTransitionDemographics(
 ) {
   if (!isModernTransitionPreset(preset)) {
     log(`[${countryId}] skipping modern demographics (preset ${preset})`);
+    return;
+  }
+  if (countryId === "RU") {
+    // The available RU Layer-1 model is the 1979 Soviet census. Its party
+    // nomenklatura and collective-farmer groups are not a 2027 electorate.
+    if (reset) {
+      await db.collection("stateDemographics").deleteMany({ countryId });
+      await db.collection("stateDemographicTurnout").deleteMany({ countryId });
+    }
+    log("[RU] skipping modern demographics (no contemporary Layer-1 model)");
     return;
   }
   const { categoryId, categoryName } = TRANSITION_COUNTRIES[countryId];
@@ -335,6 +356,13 @@ async function loadMetricsBundle(
     const { roStateMetrics2027 } = await import("@/lib/countries/ro/data/roStateMetrics2027");
     return roStateMetrics2027.map((metric) => {
       const overlay = getRegionMetricPresets("RO", String(metric._id), preset);
+      return overlay ? applyMetricPresetToMetrics(metric, overlay) : metric;
+    });
+  }
+  if (countryId === "RU") {
+    const { ruStateMetrics2027 } = await import("@/lib/countries/ru/data/ruStateMetrics2027");
+    return ruStateMetrics2027.map((metric) => {
+      const overlay = getRegionMetricPresets("RU", String(metric._id), preset);
       return overlay ? applyMetricPresetToMetrics(metric, overlay) : metric;
     });
   }
@@ -509,6 +537,7 @@ export async function seedModernTransitionGovernmentFormation(
   countryId: ModernTransitionCountryId
 ) {
   if (!isModernTransitionPreset(preset)) return;
+  if (countryId === "RU") return; // Presidential formation is seeded by seedRUGovernmentFormation.
   const now = new Date();
   const totalSeats = countryId === "PL" ? 460 : 331;
   const majorityThreshold = Math.floor(totalSeats / 2) + 1;

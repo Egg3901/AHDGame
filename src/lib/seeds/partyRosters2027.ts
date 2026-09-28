@@ -19,7 +19,9 @@ import type { PartySeed } from "@/lib/seeds/reference/politicalParties";
  * - FI: Ministry of Justice 2023 results, https://tulospalvelu.vaalit.fi/EKV-2023/en/
  * - IE: Electoral Commission 2024 results, https://www.electoralcommission.ie/2024-general-election-results/
  * - HU: National Election Office 2026 results, https://valtor.valasztas.hu/valtort/jsp/ma1.jsp?EA=47
- * - RU: Central Election Commission 2021 Duma results, http://www.vybory.izbirkom.ru/
+ * - RU: CEC resolution 53/357-9 (25 Sep 2026) confirms a 450-seat ninth Duma;
+ *   the same five represented parties remain in the 2027 roster.
+ *   https://www.consultant.ru/document/cons_doc_LAW_545293/
  */
 
 function party(

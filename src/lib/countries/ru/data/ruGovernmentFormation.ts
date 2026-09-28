@@ -37,7 +37,7 @@ export async function buildRuGovernmentFormation(
   const totalSeats = regions.reduce((sum, r) => sum + (r.houseDistricts ?? 0), 0);
   const majorityThreshold = Math.floor(totalSeats / 2) + 1;
 
-  if (preset === "1991-default") {
+  if (preset === "1991-default" || preset === "2027-default") {
     return {
       _id: "RU",
       countryId: "RU",

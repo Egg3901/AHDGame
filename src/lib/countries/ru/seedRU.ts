@@ -277,6 +277,7 @@ export async function seedRUGovernmentFormation(
       { $set: { ...formationData, createdAt: now, updatedAt: now } },
       { upsert: true }
     );
-  const chamber = preset === "1991-default" ? "Congress" : "Union";
+  const chamber =
+    preset === "1991-default" ? "Congress" : preset === "2027-default" ? "Duma" : "Union";
   log(`Seeded RU government formation (${doc.status}, ${doc.totalSeats} ${chamber} seats)`);
 }

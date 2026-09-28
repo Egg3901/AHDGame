@@ -16,6 +16,7 @@ import {
 import { plParties } from "@/lib/countries/pl/data/plParties";
 import { roParties } from "@/lib/countries/ro/data/roParties";
 import { selectPartyRosterForPreset } from "@/lib/seeds/ensureDefaultParties";
+import { buildRuGovernmentFormation } from "@/lib/countries/ru/data/ruGovernmentFormation";
 
 function makeDb(
   seedParties: Array<{ name: string; countryId: string; sequentialId: number }> = []
@@ -249,6 +250,8 @@ describe("1991 and Cold-War preset isolation", () => {
     { preset: "1991-default", country: "RO" },
     { preset: "1953-default", country: "PL" },
     { preset: "1979-default", country: "RO" },
+    { preset: "1979-default", country: "RU" },
+    { preset: "1991-default", country: "RU" },
   ];
   for (const { preset, country } of cases) {
     it(`writes nothing for ${country} on ${preset}`, async () => {
@@ -277,5 +280,42 @@ describe("full 2027 driver", () => {
       expect(collections["stateBaselines"]!.updateOne).toHaveBeenCalled();
       expect(collections["governmentFormations"]!.updateOne).toHaveBeenCalledTimes(1);
     }
+  });
+  it("seeds Russia's political substrate without reusing Soviet demographics", async () => {
+    const { db, collections } = makeDb([
+      { name: "United Russia", countryId: "RU", sequentialId: 1 },
+    ]);
+    await seedModernTransitionCountry(db, true, noop, "2027-default", "RU");
+    const regions = collections["states"]!.bulkWrite.mock.calls[0]![0] as Array<{
+      updateOne: { update: { $set: { houseDistricts: number; stateSenateSeats: number } } };
+    }>;
+    expect(regions).toHaveLength(10);
+    expect(regions.reduce((s, r) => s + r.updateOne.update.$set.houseDistricts, 0)).toBe(450);
+    expect(regions.reduce((s, r) => s + r.updateOne.update.$set.stateSenateSeats, 0)).toBe(178);
+    expect(collections["politicalParties"]!.insertOne).toHaveBeenCalledTimes(5);
+    expect(collections["macroMetrics"]!.bulkWrite).toHaveBeenCalledTimes(1);
+    expect(collections["stateBaselines"]!.updateOne).toHaveBeenCalledTimes(10);
+    expect(collections["statePartyOrg"]!.updateOne).toHaveBeenCalledTimes(10);
+    expect(collections["stateDemographics"]!.deleteMany).toHaveBeenCalledWith({ countryId: "RU" });
+    expect(collections["demographicCategories"]).toBeUndefined();
+    expect(collections["governmentFormations"]).toBeUndefined();
+  });
+  it("opens a neutral 2027 Russian Duma formation without a Soviet premier", async () => {
+    const db = {
+      collection: vi.fn(() => ({
+        find: vi.fn(() => ({
+          toArray: vi.fn().mockResolvedValue([{ houseDistricts: 225 }, { houseDistricts: 225 }]),
+        })),
+      })),
+    } as unknown as Db;
+    const formation = await buildRuGovernmentFormation(db, new Date(), "2027-default");
+    expect(formation).toMatchObject({
+      status: "pending",
+      totalSeats: 450,
+      majorityThreshold: 226,
+      governingPartyId: null,
+      pmNppId: null,
+      hosNppId: null,
+    });
   });
 });

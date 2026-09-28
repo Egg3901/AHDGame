@@ -54,8 +54,6 @@ function authoredRoster(countryId: CountryId) {
 describe("2027 party rosters (#2294)", () => {
   it("gives every included country a direct roster without an earlier-era fallback", () => {
     for (const countryId of INCLUDED_COUNTRIES) {
-      // Authored content may lead runtime availability. RU remains absent from
-      // the active 2027 roster until its full country substrate is seeded.
       const direct = authoredRoster(countryId);
       const effective = selectPartyRosterForPreset(
         [...(PARTY_SEED_MODULES[countryId] ?? [])],
@@ -70,8 +68,8 @@ describe("2027 party rosters (#2294)", () => {
     }
   });
 
-  it("keeps RU's authored roster inert until its country pack is active", () => {
-    expect(partySeedsForPreset("RU", PRESET)).toEqual([]);
+  it("exposes RU's authored roster with the active 2027 country pack", () => {
+    expect(partySeedsForPreset("RU", PRESET)).toEqual(authoredRoster("RU"));
   });
 
   it("excludes dissolved and renamed organizations from 2027", () => {
