@@ -576,6 +576,12 @@ const RUNTIME: CollectionEntry[] = [
 
   // Financial ledgers
   { name: "financialTxLog", category: "runtime" },
+  {
+    name: "nonAtomicMoneyFlowReceipts",
+    category: "runtime",
+    notes:
+      "Crash-recovery receipts for standalone-Mongo money flows. Each receipt belongs to this world and must be wiped with its balances on reset.",
+  },
   { name: "locLedger", category: "runtime" },
   { name: "savingsLedger", category: "runtime" },
   { name: "portfolioHistory", category: "runtime" },
