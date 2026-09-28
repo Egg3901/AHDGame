@@ -12,6 +12,7 @@ import { listNuclearPrograms } from "@/lib/db/collections/nuclearPrograms";
 import { getMacroCountriesCollection } from "@/lib/db/collections/macroCountries";
 import { ACTIVE_MACRO_COUNTRY_FILTER } from "@/lib/world/macro/retirement";
 import { getConflictsCollection } from "@/lib/db/collections/conflicts";
+import type { Referendum } from "@/lib/db/types/referendum";
 import { nuclearStandoffPossible } from "@/lib/military/nuclearProgram";
 import { allLivingConflictDefs } from "./registry";
 import { loadConflictState, saveConflictState } from "./driver";
@@ -199,6 +200,25 @@ export async function processLivingConflictsTurn(
   let nuclearPrograms: Awaited<ReturnType<typeof listNuclearPrograms>> | null = null;
   let conflictsProcessed = 0;
   for (const def of defs) {
+    if (def.key === "northern_ireland") {
+      const reunified = await db.collection<Referendum>("referendums").findOne(
+        {
+          countryId: "UK",
+          regionId: "NIR",
+          kind: "reunification",
+          targetCountryId: "IE",
+          status: "completed",
+        },
+        { projection: { _id: 1 } }
+      );
+      if (reunified) {
+        const state = await loadConflictState(db, def.key);
+        if (state.status !== "closed") {
+          await saveConflictState(db, { ...state, status: "closed" });
+        }
+        continue;
+      }
+    }
     if (def.key === "nuclear_incident") {
       const existing = await loadConflictState(db, def.key);
       if (!existing.hasOpened) {

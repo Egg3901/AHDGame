@@ -131,6 +131,58 @@ describe("living-conflict turn integration", () => {
     expect(stateAfter.phaseTurns).toBe(stateBefore.phaseTurns);
   });
 
+  it("opens the Northern Ireland crisis in 1991 and closes it after actual reunification", async () => {
+    const { db, stores } = fakeDb();
+    await processLivingConflictsTurn(db, 1, 1991, true);
+    const northernIreland = () =>
+      (stores.get("livingConflicts") ?? []).find((row) => row.defKey === "northern_ireland");
+    expect(northernIreland()).toMatchObject({
+      hasOpened: true,
+      status: "active",
+      openedYear: 1991,
+    });
+
+    stores.set("referendums", [
+      {
+        countryId: "UK",
+        regionId: "NIR",
+        kind: "reunification",
+        targetCountryId: "IE",
+        status: "completed",
+      },
+    ]);
+    await processLivingConflictsTurn(db, 2, 1991, true);
+    expect(northernIreland()?.status).toBe("closed");
+    const crisisCount = (stores.get("crises") ?? []).filter((row) =>
+      String(row.livingConflictEventId ?? "").startsWith("northern_ireland:")
+    ).length;
+    await processLivingConflictsTurn(db, 3, 1991, true);
+    expect(northernIreland()?.status).toBe("closed");
+    expect(
+      (stores.get("crises") ?? []).filter((row) =>
+        String(row.livingConflictEventId ?? "").startsWith("northern_ireland:")
+      )
+    ).toHaveLength(crisisCount);
+  });
+
+  it("keeps Northern Ireland open while a passed reunification vote awaits consent bills", async () => {
+    const { db, stores } = fakeDb();
+    stores.set("referendums", [
+      {
+        countryId: "UK",
+        regionId: "NIR",
+        kind: "reunification",
+        targetCountryId: "IE",
+        status: "actuating",
+        result: { passed: true },
+      },
+    ]);
+    await processLivingConflictsTurn(db, 1, 1991, true);
+    expect(
+      (stores.get("livingConflicts") ?? []).find((row) => row.defKey === "northern_ireland")
+    ).toMatchObject({ hasOpened: true, status: "active" });
+  });
+
   it("materializes non-Vietnam chains through the same crisis interaction path", async () => {
     const { db, stores } = fakeDb();
     await processLivingConflictsTurn(db, 241, 1960, true);
