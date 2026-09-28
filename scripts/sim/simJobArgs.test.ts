@@ -55,6 +55,21 @@ describe("sim worker runWorld argument emission", () => {
     ]);
   });
 
+  it("preserves explicit campaign price-level control and treatment arms", () => {
+    expect(buildRunWorldArgs({ campaignEraPriceLevelEnabled: false })).toContain(
+      "--campaign-era-price-level=false"
+    );
+    expect(buildRunWorldArgs({ campaignEraPriceLevelEnabled: true })).toContain(
+      "--campaign-era-price-level=true"
+    );
+    expect(buildRunWorldArgs({})).not.toContain("--campaign-era-price-level=false");
+    expect(() =>
+      buildRunWorldArgs({
+        campaignEraPriceLevelEnabled: "true",
+      } as unknown as SimJobExperimentFields)
+    ).toThrow("campaignEraPriceLevelEnabled must be boolean");
+  });
+
   it("rejects non-boolean equity values instead of stringifying them", () => {
     const job = { equityLiquidityFacilityEnabled: "true" } as unknown as SimJobExperimentFields;
     expect(() => buildRunWorldArgs(job)).toThrow("equityLiquidityFacilityEnabled must be boolean");
