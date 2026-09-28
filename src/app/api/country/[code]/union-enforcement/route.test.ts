@@ -16,6 +16,8 @@ vi.mock("@/lib/api/rateLimit", () => ({
 
 const unionId = new ObjectId();
 const characterId = new ObjectId();
+const organizerCharacterId = new ObjectId();
+const organizerId = new ObjectId();
 let db: MockDb;
 
 function request(body: unknown): Request {
@@ -66,7 +68,39 @@ describe("union ban enforcement route", () => {
     await expect(response.json()).resolves.toEqual({
       posture: "crackdown",
       canChangePosture: false,
+      prosecutionTargets: [],
     });
+  });
+
+  it("lists only eligible organizers from exposed domestic cells", async () => {
+    db.collection("unions")
+      .find()
+      .toArray.mockResolvedValue([{ _id: unionId }]);
+    db.collection("unionOrganizers")
+      .find()
+      .toArray.mockResolvedValue([{ unionId, characterId: organizerCharacterId }]);
+    db.collection("characters")
+      .find()
+      .toArray.mockResolvedValue([{ _id: organizerCharacterId, name: "Organizer One" }]);
+    const response = await GET(new Request("http://localhost"), {
+      params: Promise.resolve({ code: "US" }),
+    });
+    expect(response.status).toBe(200);
+    const data = await response.json();
+    expect(data.prosecutionTargets).toEqual([
+      {
+        unionId: unionId.toString(),
+        characterId: organizerCharacterId.toString(),
+        name: "Organizer One",
+      },
+    ]);
+    expect(db.collection("unionOrganizers").find).toHaveBeenCalledWith(
+      expect.objectContaining({
+        undergroundStrength: { $gt: 0 },
+        barredUntilTurn: { $not: { $gte: 42 } },
+      }),
+      expect.anything()
+    );
   });
 
   it("rejects an executive of another country", async () => {
@@ -192,5 +226,207 @@ describe("union ban enforcement route", () => {
     db.collection("federalBudget").findOne.mockResolvedValue({ unionsBanned: false });
     const response = await post({ action: "posture", posture: "normal" });
     expect(response.status).toBe(409);
+  });
+
+  it("prosecutes an organizer in an exposed cell for three actions", async () => {
+    db.collection("unions").findOne.mockResolvedValue({
+      _id: unionId,
+      countryId: "US",
+      suspended: true,
+      exposedUntilTurn: 44,
+    });
+    db.collection("unionOrganizers").findOne.mockResolvedValue({
+      _id: organizerId,
+      unionId,
+      characterId: organizerCharacterId,
+      undergroundStrength: 12,
+    });
+    const response = await post({
+      action: "prosecute",
+      unionId: unionId.toString(),
+      characterId: organizerCharacterId.toString(),
+    });
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      unionId: unionId.toString(),
+      characterId: organizerCharacterId.toString(),
+      strengthLoss: 6,
+      barredUntilTurn: 45,
+      actionsSpent: 3,
+    });
+    expect(db.collection("characters").updateOne).toHaveBeenCalledWith(
+      { _id: characterId, actions: { $gte: 3 } },
+      expect.objectContaining({ $inc: { actions: -3 } })
+    );
+  });
+
+  it("rejects prosecution while the cell is dark without spending", async () => {
+    const response = await post({
+      action: "prosecute",
+      unionId: unionId.toString(),
+      characterId: organizerCharacterId.toString(),
+    });
+    expect(response.status).toBe(409);
+    expect(db.collection("characters").updateOne).not.toHaveBeenCalled();
+  });
+
+  it("refunds a prosecution when the organizer update fails before applying", async () => {
+    db.collection("unions").findOne.mockResolvedValue({
+      _id: unionId,
+      countryId: "US",
+      suspended: true,
+      exposedUntilTurn: 44,
+    });
+    db.collection("unionOrganizers")
+      .findOne.mockResolvedValueOnce({
+        _id: organizerId,
+        unionId,
+        characterId: organizerCharacterId,
+        undergroundStrength: 12,
+      })
+      .mockResolvedValueOnce({ _id: organizerId });
+    db.collection("unionOrganizers").updateOne.mockRejectedValue(new Error("write failed"));
+    const response = await post({
+      action: "prosecute",
+      unionId: unionId.toString(),
+      characterId: organizerCharacterId.toString(),
+    });
+    expect(response.status).toBe(500);
+    expect(db.collection("characters").updateOne).toHaveBeenLastCalledWith(
+      { _id: characterId },
+      { $inc: { actions: 3 } }
+    );
+  });
+
+  it("keeps the charge when prosecution applied but acknowledgment was lost", async () => {
+    let appliedId: string | undefined;
+    db.collection("unions").findOne.mockResolvedValue({
+      _id: unionId,
+      countryId: "US",
+      suspended: true,
+      exposedUntilTurn: 44,
+    });
+    db.collection("unionOrganizers")
+      .findOne.mockResolvedValueOnce({
+        _id: organizerId,
+        unionId,
+        characterId: organizerCharacterId,
+        undergroundStrength: 12,
+      })
+      .mockImplementationOnce(async () => ({ _id: organizerId, lastProsecutionId: appliedId }));
+    db.collection("unionOrganizers").updateOne.mockImplementation(
+      async (_filter: unknown, update: { $set: { lastProsecutionId: string } }) => {
+        appliedId = update.$set.lastProsecutionId;
+        throw new Error("ack lost");
+      }
+    );
+    const response = await post({
+      action: "prosecute",
+      unionId: unionId.toString(),
+      characterId: organizerCharacterId.toString(),
+    });
+    expect(response.status).toBe(500);
+    expect(db.collection("characters").updateOne).toHaveBeenCalledTimes(1);
+  });
+
+  it("refunds when another prosecution won the claim during an error", async () => {
+    db.collection("unions").findOne.mockResolvedValue({
+      _id: unionId,
+      countryId: "US",
+      suspended: true,
+      exposedUntilTurn: 44,
+    });
+    db.collection("unionOrganizers")
+      .findOne.mockResolvedValueOnce({
+        _id: organizerId,
+        unionId,
+        characterId: organizerCharacterId,
+        undergroundStrength: 12,
+      })
+      .mockResolvedValueOnce({ _id: organizerId, lastProsecutionId: "other-request" });
+    db.collection("unionOrganizers").updateOne.mockRejectedValue(new Error("write conflict"));
+    const response = await post({
+      action: "prosecute",
+      unionId: unionId.toString(),
+      characterId: organizerCharacterId.toString(),
+    });
+    expect(response.status).toBe(500);
+    expect(db.collection("characters").updateOne).toHaveBeenLastCalledWith(
+      { _id: characterId },
+      { $inc: { actions: 3 } }
+    );
+  });
+
+  it("does not spend when the executive lacks three actions", async () => {
+    db.collection("unions").findOne.mockResolvedValue({
+      _id: unionId,
+      countryId: "US",
+      suspended: true,
+      exposedUntilTurn: 44,
+    });
+    db.collection("unionOrganizers").findOne.mockResolvedValue({
+      _id: organizerId,
+      unionId,
+      characterId: organizerCharacterId,
+      undergroundStrength: 12,
+    });
+    db.collection("characters").updateOne.mockResolvedValueOnce({ modifiedCount: 0 });
+    const response = await post({
+      action: "prosecute",
+      unionId: unionId.toString(),
+      characterId: organizerCharacterId.toString(),
+    });
+    expect(response.status).toBe(409);
+    expect(db.collection("unionOrganizers").updateOne).not.toHaveBeenCalled();
+  });
+
+  it("rejects a prosecuted organizer before spending again", async () => {
+    db.collection("unions").findOne.mockResolvedValue({
+      _id: unionId,
+      countryId: "US",
+      suspended: true,
+      exposedUntilTurn: 44,
+    });
+    db.collection("unionOrganizers").findOne.mockResolvedValue({
+      _id: organizerId,
+      unionId,
+      characterId: organizerCharacterId,
+      undergroundStrength: 6,
+      barredUntilTurn: 45,
+      lastProsecutedTurn: 42,
+    });
+    const response = await post({
+      action: "prosecute",
+      unionId: unionId.toString(),
+      characterId: organizerCharacterId.toString(),
+    });
+    expect(response.status).toBe(409);
+    expect(db.collection("characters").updateOne).not.toHaveBeenCalled();
+  });
+
+  it("refunds when a competing prosecution wins the organizer claim", async () => {
+    db.collection("unions").findOne.mockResolvedValue({
+      _id: unionId,
+      countryId: "US",
+      suspended: true,
+      exposedUntilTurn: 44,
+    });
+    db.collection("unionOrganizers").findOne.mockResolvedValue({
+      _id: organizerId,
+      unionId,
+      characterId: organizerCharacterId,
+      undergroundStrength: 12,
+    });
+    db.collection("unionOrganizers").updateOne.mockResolvedValue({ modifiedCount: 0 });
+    const response = await post({
+      action: "prosecute",
+      unionId: unionId.toString(),
+      characterId: organizerCharacterId.toString(),
+    });
+    expect(response.status).toBe(409);
+    expect(db.collection("characters").updateOne).toHaveBeenLastCalledWith(
+      { _id: characterId },
+      { $inc: { actions: 3 } }
+    );
   });
 });
