@@ -89,12 +89,12 @@ export {
   ensureBGElections,
   ensureBLRElections,
   ensureHUElections,
-  ensurePLElections,
   ensureROElections,
   ensureUKRElections,
   ensureYUElections,
 } from "./perpetualElections/countries/easternBloc";
 export { ensureCSElections, ensureCSNationsElections } from "@/lib/countries/cs/elections";
+export { ensurePLElections, ensurePLSenateElections } from "@/lib/countries/pl/elections";
 export {
   ensureIECathaoirleachElections,
   ensureIEElections,

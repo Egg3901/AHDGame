@@ -3,6 +3,7 @@ import { plRegions1991 } from "./plRegions1991";
 import { PL_1991_MACROREGION_POPULATION } from "./plPopulation1991";
 import { SUCCESSOR_NOMINAL_GDP_1991 } from "@/lib/seeds/reference/successorGdp1991";
 import { apportionSeats } from "@/lib/seeds/reference/rules/apportionSeats";
+import { PL_1991_MACROREGION_VOIVODESHIPS } from "./plPopulation1991";
 
 describe("1991 Polish regional seed", () => {
   it("covers the census and reproduces the 460/100 legislature", () => {
@@ -19,5 +20,16 @@ describe("1991 Polish regional seed", () => {
 
   it("apportions integer seats with a deterministic total", () => {
     expect(apportionSeats(5, { A: 10, B: 10, C: 10 })).toEqual({ A: 2, B: 2, C: 1 });
+  });
+
+  it("assigns two Senate seats per voivodeship plus Warsaw and Katowice extras", () => {
+    for (const region of plRegions1991) {
+      const voivodeships =
+        PL_1991_MACROREGION_VOIVODESHIPS[
+          region._id as keyof typeof PL_1991_MACROREGION_VOIVODESHIPS
+        ];
+      const extra = region._id === "PL_MAZ" || region._id === "PL_SLK" ? 1 : 0;
+      expect(region.stateSenateSeats).toBe(2 * voivodeships.length + extra);
+    }
   });
 });

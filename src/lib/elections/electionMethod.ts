@@ -43,6 +43,7 @@ export const POSITION_BY_ELECTION_TYPE: Readonly<Record<string, ElectionPosition
   milletMeclisi: "lowerChamber",
   // upper chambers
   senate: "upperChamber",
+  senat: "upperChamber",
   sangiin: "upperChamber",
   seanad: "upperChamber",
   nationalitiesDeputy: "upperChamber",

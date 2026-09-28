@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { getCountryConfig } from "@/lib/constants/countries";
+import { PL_ELECTIONS } from "../elections";
 
 describe("Poland 1991 institutions", () => {
   it("uses the restored bicameral parliamentary republic", () => {
@@ -17,5 +18,12 @@ describe("Poland 1991 institutions", () => {
     const country = getCountryConfig("PL", "1979-default");
     expect(country.governmentType).toBe("onePartyState");
     expect(country.legislature.bicameral).toBe(false);
+  });
+
+  it("runs both parliamentary election phases", () => {
+    expect(PL_ELECTIONS.electionPhases.map((phase) => phase.name)).toEqual([
+      "plSejmElections",
+      "plSenateElections",
+    ]);
   });
 });

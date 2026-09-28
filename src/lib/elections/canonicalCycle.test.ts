@@ -483,6 +483,28 @@ describe("1991 successor parliamentary cycles", () => {
     ).toEqual([1991, 1993, 1997]);
   });
 
+  it("elects the Polish Senate with the Sejm in 1991, 1993, and 1997", () => {
+    for (const cycle of [1, 2, 3]) {
+      expect(
+        canonicalTurnsForCycle({ electionType: "senat", countryId: "PL", cycle, ctx: ctx1991 })
+      ).toEqual(
+        canonicalTurnsForCycle({ electionType: "sejm", countryId: "PL", cycle, ctx: ctx1991 })
+      );
+      expect(electionToLarpYear("senat", cycle, undefined, undefined, ctx1991, "PL")).toBe(
+        [1991, 1993, 1997][cycle - 1]
+      );
+    }
+    expect(
+      pickNextCanonicalCycle({
+        electionType: "senat",
+        countryId: "PL",
+        prevCycle: 0,
+        currentTurn: 1,
+        ctx: ctx1991,
+      })?.cycle
+    ).toBe(1);
+  });
+
   it("keeps the Cold War Polish Sejm on the Volkskammer calendar", () => {
     expect(
       canonicalTurnsForCycle({
@@ -492,6 +514,14 @@ describe("1991 successor parliamentary cycles", () => {
         ctx: { startingYear: 1979, preset: "1979-default" },
       })?.endTurn
     ).toBe(144);
+    expect(
+      canonicalTurnsForCycle({
+        electionType: "senat",
+        countryId: "PL",
+        cycle: 1,
+        ctx: { startingYear: 1979, preset: "1979-default" },
+      })
+    ).toBeNull();
   });
 
   it("elects both Czechoslovak federal chambers together in 1992 on two-year terms", () => {

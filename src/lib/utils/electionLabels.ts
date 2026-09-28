@@ -50,6 +50,7 @@ export const ELECTION_TYPE_LABEL_MAP: Record<string, string> = {
   landAssembly: "Landtag",
   // Eastern bloc Tier-1 unicameral assemblies
   sejm: "Sejm",
+  senat: "Senate",
   chamberOfThePeople: "Chamber of the People",
   chamberOfNations: "Chamber of Nations",
   nationalAssembly: "National Assembly",
@@ -103,6 +104,7 @@ export const ELECTION_TYPE_SHORT_LABEL: Record<string, string> = {
   republicSupremeSoviet: "Republic Soviet",
   // Eastern bloc Tier-1 unicameral assemblies
   sejm: "Sejm",
+  senat: "Senate",
   chamberOfThePeople: "Chamber of the People",
   chamberOfNations: "Chamber of Nations",
   nationalAssembly: "National Assembly",

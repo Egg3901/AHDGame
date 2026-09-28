@@ -249,7 +249,17 @@ export function canonicalTurnsForCycle(params: CanonicalCycleParams): CanonicalC
   if (!dur) return null;
   const anchors = getCycleAnchors(ctx);
 
-  if (ctx.preset === "1991-default" && countryId === "PL" && electionType === "sejm") {
+  // The same election law requires both chambers to vote together and begin
+  // and end their terms together. PL has no Senate in the Cold War presets.
+  // https://libr.sejm.gov.pl/tek01/txt/aktpl/e1991-tekst.html
+  if (countryId === "PL" && electionType === "senat" && ctx.preset !== "1991-default") {
+    return null;
+  }
+  if (
+    ctx.preset === "1991-default" &&
+    countryId === "PL" &&
+    (electionType === "sejm" || electionType === "senat")
+  ) {
     const firstElection = anchors.plSejm;
     if (firstElection == null) return null;
     // The Sejm elected on 27 October 1991 was dissolved early; its successor

@@ -1,10 +1,5 @@
 import { ensureEasternBlocAssemblyElections } from "../shared";
 
-/** Poland Sejm — unicameral one-party assembly (DD regional-delegate pattern). */
-export async function ensurePLElections(now: Date, inFlightTurn?: number): Promise<void> {
-  await ensureEasternBlocAssemblyElections("PL", "sejm", "Sejm", now, inFlightTurn);
-}
-
 /** Hungary National Assembly. */
 export async function ensureHUElections(now: Date, inFlightTurn?: number): Promise<void> {
   await ensureEasternBlocAssemblyElections(
