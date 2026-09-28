@@ -1,6 +1,7 @@
 import { triggerMatches } from "./rules/eventTriggers";
 import type { CrisisEffect } from "@/lib/db/types/crisis";
 import type {
+  ConflictEvent,
   ConflictPhase,
   ConflictRole,
   FiredEvent,
