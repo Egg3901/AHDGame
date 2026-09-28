@@ -432,22 +432,24 @@ export async function listNationalLegislatureBills(
                         : provision.subType === "fund"
                           ? "Fund Organization"
                           : "Leave Organization"
-                      : provision.type === "euro_adoption"
-                        ? "Currency Adoption"
-                        : provision.type === "union_law"
-                          ? "Union Law"
-                          : provision.type === "electoral_law"
-                            ? "Electoral Law"
-                            : provision.type === "central_bank_independence"
-                              ? "Central Bank Independence"
-                              : // Ahead of the subsidy fallback, which is a catch-all.
-                                provision.type === "declare_war"
-                                ? "Declaration of War"
-                                : provision.type === "join_conflict"
-                                  ? "Entry into the Conflict"
-                                  : provision.type === "create_department"
-                                    ? formatCreateDepartmentLabel(provision).legislationTypeName
-                                    : describeSubsidyProvision(provision);
+                      : provision.type === "european_treaty"
+                        ? "Maastricht Treaty"
+                        : provision.type === "euro_adoption"
+                          ? "Currency Adoption"
+                          : provision.type === "union_law"
+                            ? "Union Law"
+                            : provision.type === "electoral_law"
+                              ? "Electoral Law"
+                              : provision.type === "central_bank_independence"
+                                ? "Central Bank Independence"
+                                : // Ahead of the subsidy fallback, which is a catch-all.
+                                  provision.type === "declare_war"
+                                  ? "Declaration of War"
+                                  : provision.type === "join_conflict"
+                                    ? "Entry into the Conflict"
+                                    : provision.type === "create_department"
+                                      ? formatCreateDepartmentLabel(provision).legislationTypeName
+                                      : describeSubsidyProvision(provision);
           return {
             legislationTypeId: provision.type,
             legislationTypeName,

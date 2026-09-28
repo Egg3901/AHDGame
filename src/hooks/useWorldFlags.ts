@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from "react";
 
 export interface WorldFlags {
+  maastrichtEligibleCountries?: string[];
   preset: string;
   eurozoneEnabled: boolean;
   /** Era system master switch (era stamps, wire news, era-aware scoring); false until an admin enables it. */

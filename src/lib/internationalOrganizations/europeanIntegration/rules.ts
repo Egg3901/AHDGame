@@ -5,6 +5,8 @@
  */
 export type EuropeanStage = "community" | "union";
 export interface EuropeanRatification {
+  source?: "national-law" | "background-government";
+  reasons?: string[];
   approved: boolean;
   decisionId: string;
   membershipId?: string;
@@ -110,5 +112,65 @@ export function initialEuropeanIntegration(input: {
     source: legacy ? "legacy-settlement" : "historical-seed",
     establishedTurn: input.currentTurn,
     ratifications: {},
+  };
+}
+
+export interface BackgroundTreatyConditions {
+  countryId: string;
+  membershipId: string;
+  stability: number;
+  tradeExposure: number;
+  fiscalCapacity: number;
+  economicSystem: "market" | "planned";
+}
+
+/**
+ * Background governments review Maastricht once per game year. Consent depends
+ * on economic openness and institutional capacity; calendar time alone cannot
+ * turn a rejection into approval. Domestic legislatures use enacted bills.
+ */
+export function decideBackgroundMaastricht(input: {
+  state: EuropeanIntegrationState;
+  date: string;
+  turn: number;
+  members: readonly string[];
+  country: BackgroundTreatyConditions;
+}): EuropeanRatification | undefined {
+  const { country, state, turn } = input;
+  if (!canRatifyMaastricht(input.date, state.stage) || !input.members.includes(country.countryId))
+    return undefined;
+  const previous = state.ratifications[country.countryId];
+  if (previous?.membershipId === country.membershipId) {
+    // A parliamentary decision is never replaced by background automation.
+    if (
+      previous.source !== "background-government" ||
+      previous.approved ||
+      turn < previous.turn + 48
+    )
+      return undefined;
+  }
+  if (
+    ![country.stability, country.tradeExposure, country.fiscalCapacity].every(
+      (value) => Number.isFinite(value) && value >= 0 && value <= 1
+    )
+  )
+    return undefined;
+  const reasons: string[] = [];
+  if (country.economicSystem !== "market")
+    reasons.push("Economic institutions are not ready for the common market.");
+  if (country.stability < 0.35) reasons.push("Domestic instability prevents treaty commitments.");
+  if (country.fiscalCapacity < 0.15)
+    reasons.push("Fiscal capacity is too weak to implement treaty obligations.");
+  if (country.tradeExposure < 0.15)
+    reasons.push("Limited trade exposure leaves insufficient support for integration.");
+  const approved = reasons.length === 0;
+  if (approved) reasons.push("Trade integration and stable institutions support ratification.");
+  return {
+    approved,
+    decisionId: `maastricht:${country.countryId}:${country.membershipId}:${turn}`,
+    membershipId: country.membershipId,
+    turn,
+    source: "background-government",
+    reasons,
   };
 }

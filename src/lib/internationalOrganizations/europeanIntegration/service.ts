@@ -4,10 +4,14 @@
  */
 import type { Db } from "mongodb";
 import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
+import type { MacroCountryState } from "@/lib/world/macro/types";
+import { ACTIVE_MACRO_COUNTRY_FILTER } from "@/lib/world/macro/retirement";
 import type { GameState } from "@/lib/db/types/gameState";
 import { getStartingYearForPreset } from "@/lib/constants/turnTime";
 import { calendarTurn, turnToGameMonth } from "@/lib/utils/gameDate";
 import {
+  canRatifyMaastricht,
+  decideBackgroundMaastricht,
   initialEuropeanIntegration,
   recordEuropeanRatification,
   reconcileEuropeanTreaty,
@@ -128,6 +132,7 @@ export async function recordEnactedMaastricht(
       countryId,
       decision: {
         approved,
+        source: "national-law",
         decisionId: billId,
         turn,
         membershipId: context.membershipIds[countryId],
@@ -137,5 +142,44 @@ export async function recordEnactedMaastricht(
 }
 
 export async function reconcileEuropeanTreatyLive(db: Db, turn: number): Promise<boolean> {
-  return mutateEuropeanState(db, turn, (context) => reconcileEuropeanTreaty(context));
+  const context = await loadEuropeanTreatyContext(db, turn);
+  if (!context || !canRatifyMaastricht(context.date, context.state.stage)) return false;
+  // One projected read for every background member, never one read per country.
+  const countries = await db
+    .collection<MacroCountryState>("macroCountries")
+    .find(
+      { _id: { $in: context.members }, ...ACTIVE_MACRO_COUNTRY_FILTER },
+      {
+        projection: {
+          entityId: 1,
+          stability: 1,
+          fiscalCapacity: 1,
+          tradeExposure: 1,
+          economicSystem: 1,
+        },
+      }
+    )
+    .toArray();
+  return mutateEuropeanState(db, turn, (latest) => {
+    let state = latest.state;
+    for (const country of countries) {
+      const decision = decideBackgroundMaastricht({
+        ...latest,
+        state,
+        country: {
+          ...country,
+          countryId: country.entityId,
+          membershipId: latest.membershipIds[country.entityId],
+        },
+      });
+      if (decision)
+        state = recordEuropeanRatification({
+          ...latest,
+          state,
+          countryId: country.entityId,
+          decision,
+        });
+    }
+    return reconcileEuropeanTreaty({ ...latest, state });
+  });
 }

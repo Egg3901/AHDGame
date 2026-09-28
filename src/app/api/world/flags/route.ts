@@ -1,3 +1,5 @@
+import { loadEuropeanTreatyContext } from "@/lib/internationalOrganizations/europeanIntegration/service";
+import { canRatifyMaastricht } from "@/lib/internationalOrganizations/europeanIntegration/rules";
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import type { GameState } from "@/lib/db/types";
@@ -20,8 +22,12 @@ export async function GET() {
       },
     }
   );
+  const treaty = await loadEuropeanTreatyContext(db);
+  const maastrichtEligibleCountries =
+    treaty && canRatifyMaastricht(treaty.date, treaty.state.stage) ? treaty.members : [];
   const eraOn = gs?.eraSystemEnabled ?? false;
   return NextResponse.json({
+    maastrichtEligibleCountries,
     preset: gs?.preset ?? DEFAULT_SEED_PRESET,
     eurozoneEnabled: gs?.eurozoneEnabled ?? true,
     eraSystemEnabled: eraOn,

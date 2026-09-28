@@ -91,10 +91,12 @@ describe("enacted Maastricht ratifications", () => {
       joinedTurn: 0,
     }));
     db.collection("gameState").findOne.mockImplementation(async () => structuredClone(world));
-    db.collection("gameState").updateOne.mockImplementation(async (_filter, update) => {
-      Object.assign(world, update.$set);
-      return { matchedCount: 1 };
-    });
+    db.collection("gameState").updateOne.mockImplementation(
+      async (_filter: unknown, update: { $set?: Record<string, unknown> }) => {
+        Object.assign(world, update.$set);
+        return { matchedCount: 1 };
+      }
+    );
     db.collection("organizationMemberships").find.mockReturnValue({ toArray: async () => members });
     const asDb = db as unknown as Db;
     await recordEnactedMaastricht(asDb, "DE", true, "de-law", 55);
@@ -113,4 +115,71 @@ describe("enacted Maastricht ratifications", () => {
     expect(await reconcileEuropeanTreatyLive(asDb, 139)).toBe(false);
     expect(world).toEqual(settled);
   });
+});
+
+it("persists background decisions together while leaving legislative members pending", async () => {
+  const { reconcileEuropeanTreatyLive } = await import("./service");
+  const { ObjectId } = await import("mongodb");
+  const db = createMockDb();
+  const world = {
+    currentTurn: 55,
+    startingYear: 1991,
+    preset: "1991-default",
+    europeanIntegration: {
+      stage: "community",
+      source: "historical-seed",
+      establishedTurn: 1,
+      ratifications: {} as Record<string, { approved: boolean; reasons?: string[] }>,
+    },
+  };
+  db.collection("gameState").findOne.mockImplementation(async () => structuredClone(world));
+  db.collection("gameState").updateOne.mockImplementation(
+    async (_filter: unknown, update: { $set?: Record<string, unknown> }) => {
+      Object.assign(world, update.$set);
+      return { matchedCount: 1 };
+    }
+  );
+  db.collection("organizationMemberships").find.mockReturnValue({
+    toArray: async () =>
+      ["BE", "DK", "UK"].map((countryId) => ({
+        _id: new ObjectId(
+          countryId === "BE"
+            ? "000000000000000000000001"
+            : countryId === "DK"
+              ? "000000000000000000000002"
+              : "000000000000000000000003"
+        ),
+        countryId,
+      })),
+  });
+  db.collection("macroCountries").find.mockReturnValue({
+    toArray: async () => [
+      {
+        entityId: "BE",
+        economicSystem: "market",
+        stability: 0.6,
+        tradeExposure: 0.4,
+        fiscalCapacity: 0.3,
+      },
+      {
+        entityId: "DK",
+        economicSystem: "market",
+        stability: 0.2,
+        tradeExposure: 0.4,
+        fiscalCapacity: 0.3,
+      },
+    ],
+  });
+  await reconcileEuropeanTreatyLive(db as unknown as Db, 55);
+  expect(world.europeanIntegration.ratifications.BE.approved).toBe(true);
+  expect(world.europeanIntegration.ratifications.DK.approved).toBe(false);
+  expect(world.europeanIntegration.ratifications.DK.reasons).toContain(
+    "Domestic instability prevents treaty commitments."
+  );
+  expect(world.europeanIntegration.ratifications.UK).toBeUndefined();
+  expect(world.europeanIntegration.stage).toBe("community");
+  expect(db.collectionMocks.macroCountries.find).toHaveBeenCalledTimes(1);
+  expect(db.collectionMocks.gameState.updateOne).toHaveBeenCalledTimes(1);
+  await reconcileEuropeanTreatyLive(db as unknown as Db, 56);
+  expect(db.collectionMocks.gameState.updateOne).toHaveBeenCalledTimes(1);
 });

@@ -2,8 +2,11 @@
 // Provision validation for bill proposals. Called by the congress/bills POST route.
 // Returns a typed result (ok/error) to preserve the route's logRequest pattern.
 
+import { loadEuropeanTreatyContext } from "@/lib/internationalOrganizations/europeanIntegration/service";
+import { canRatifyMaastricht } from "@/lib/internationalOrganizations/europeanIntegration/rules";
 import { validateElectoralLawProvision } from "@/lib/elections/electoralLaws";
 import type {
+  EuropeanTreatyProvision,
   CentralBankIndependenceProvision,
   ElectoralLawProvision,
 } from "@/lib/db/types/legislation";
@@ -74,6 +77,7 @@ export type ValidatedProvisions =
       unionLawProvisions: UnionLawProvision[];
       electoralLawProvisions: ElectoralLawProvision[];
       centralBankProvisions: CentralBankIndependenceProvision[];
+      europeanTreatyProvisions: EuropeanTreatyProvision[];
     }
   | { ok: false; status: number; error: string };
 
@@ -106,6 +110,7 @@ export async function validateBillProvisions(
   const validatedUnionLawProvisions: UnionLawProvision[] = [];
   const validatedElectoralLawProvisions: ElectoralLawProvision[] = [];
   const validatedCentralBankProvisions: CentralBankIndependenceProvision[] = [];
+  const validatedEuropeanTreatyProvisions: EuropeanTreatyProvision[] = [];
   const isTradeCategory = TARIFF_BILL_CATEGORIES.has(category as BillCategory);
 
   for (const rawP of rawProvisions) {
@@ -115,6 +120,44 @@ export async function validateBillProvisions(
     // accepting one here would let any backbencher take the country to war by
     // hand-rolling a provision. Refused outright rather than validated.
     const rawType = "type" in (rawP as object) ? (rawP as { type: unknown }).type : undefined;
+    if (rawType === "european_treaty") {
+      const provision = rawP as Partial<EuropeanTreatyProvision>;
+      if (
+        category !== "foreign policy" ||
+        provision.treaty !== "maastricht" ||
+        (provision.action !== "ratify" && provision.action !== "reject")
+      )
+        return {
+          ok: false,
+          status: 400,
+          error:
+            "Maastricht decisions require a foreign policy bill with a ratify or reject action.",
+        };
+      if (validatedEuropeanTreatyProvisions.length)
+        return {
+          ok: false,
+          status: 400,
+          error: "A bill can contain only one Maastricht decision.",
+        };
+      const context = await loadEuropeanTreatyContext(db);
+      if (
+        !sourceCountry ||
+        !context ||
+        !context.members.includes(sourceCountry) ||
+        !canRatifyMaastricht(context.date, context.state.stage)
+      )
+        return {
+          ok: false,
+          status: 400,
+          error: "Maastricht ratification is not open to this country.",
+        };
+      validatedEuropeanTreatyProvisions.push({
+        type: "european_treaty",
+        treaty: "maastricht",
+        action: provision.action,
+      });
+      continue;
+    }
     if (rawType === "declare_war") {
       return {
         ok: false,
@@ -477,5 +520,6 @@ export async function validateBillProvisions(
     unionLawProvisions: validatedUnionLawProvisions,
     electoralLawProvisions: validatedElectoralLawProvisions,
     centralBankProvisions: validatedCentralBankProvisions,
+    europeanTreatyProvisions: validatedEuropeanTreatyProvisions,
   };
 }

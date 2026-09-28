@@ -1,3 +1,4 @@
+import type { EuropeanIntegrationState } from "./europeanIntegration/rules";
 import { ensureEuropeanIntegrationState } from "./europeanIntegration/service";
 import { withEuropeanInstitution } from "./europeanIntegration/definition";
 import {
@@ -74,6 +75,7 @@ import {
  */
 
 export interface OrganizationSummary {
+  europeanIntegration?: EuropeanIntegrationState;
   id: InternationalOrganizationId;
   def: InternationalOrganizationDef;
   members: Array<{
@@ -437,6 +439,26 @@ export async function loadOrganizationSummaries(db: Db): Promise<OrganizationSum
     return {
       id,
       def,
+      ...(id === "EU" && europeanIntegration
+        ? {
+            europeanIntegration: {
+              ...europeanIntegration,
+              ratifications: Object.fromEntries(
+                Object.entries(europeanIntegration.ratifications).filter(
+                  ([countryId, decision]) =>
+                    europeanIntegration.stage === "union" ||
+                    (membersByOrg.get(id) ?? []).some(
+                      (member) =>
+                        member.countryId === countryId &&
+                        decision.membershipId ===
+                          (member._id?.toString() ??
+                            `legacy:${countryId}:${member.joinedTurn ?? 0}`)
+                    )
+                )
+              ),
+            },
+          }
+        : {}),
       members: orgMembers,
       pendingMembershipProposals: proposals.filter(
         (p: OrganizationMembershipProposal) => p.organizationId === id

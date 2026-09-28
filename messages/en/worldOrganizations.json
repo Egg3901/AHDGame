@@ -1,0 +1,16 @@
+{
+  "worldOrganizations": {
+    "maastricht": {
+      "title": "Maastricht ratification",
+      "community": "The Community continues until every current member consents and the treaty can take effect.",
+      "union": "The European Union treaty is in effect.",
+      "approved": "Ratified",
+      "rejected": "Rejected",
+      "pending": "Awaiting decision",
+      "turn": "Turn {turn}",
+      "include": "Include a Maastricht treaty decision",
+      "ratify": "Ratify Maastricht",
+      "reject": "Reject Maastricht"
+    }
+  }
+}

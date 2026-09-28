@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  decideBackgroundMaastricht,
   canRatifyMaastricht,
   COMMUNITY_MEMBERS_1991,
   recordEuropeanRatification,
@@ -115,5 +116,51 @@ describe("European treaty decisions", () => {
         members: COMMUNITY_MEMBERS_1991.filter((id) => id !== "UK"),
       }).stage
     ).toBe("union");
+  });
+});
+
+describe("background Maastricht decisions", () => {
+  const country = {
+    countryId: "BE",
+    membershipId: "be-membership",
+    economicSystem: "market" as const,
+    stability: 0.6,
+    tradeExposure: 0.4,
+    fiscalCapacity: 0.3,
+  };
+  const context = { state: initial, date: "1992-02-08", turn: 55, members: ["BE"], country };
+  it("records consent and an explanation when conditions support integration", () => {
+    expect(decideBackgroundMaastricht(context)).toMatchObject({
+      approved: true,
+      source: "background-government",
+      reasons: [expect.any(String)],
+    });
+  });
+  it("rejects on adverse conditions and does not change its answer merely because time passes", () => {
+    const adverse = { ...country, stability: 0.2 };
+    const decision = decideBackgroundMaastricht({ ...context, country: adverse })!;
+    expect(decision.approved).toBe(false);
+    expect(decision.reasons).toContain("Domestic instability prevents treaty commitments.");
+    const state = { ...initial, ratifications: { BE: decision } };
+    expect(
+      decideBackgroundMaastricht({ ...context, state, country: adverse, turn: 56 })
+    ).toBeUndefined();
+    expect(
+      decideBackgroundMaastricht({ ...context, state, country: adverse, turn: 103 })?.approved
+    ).toBe(false);
+    expect(decideBackgroundMaastricht({ ...context, state, turn: 103 })?.approved).toBe(true);
+  });
+  it("never overrides a domestic law or fabricates consent from invalid data", () => {
+    const state = {
+      ...initial,
+      ratifications: {
+        BE: { approved: false, decisionId: "law", turn: 55, membershipId: country.membershipId },
+      },
+    };
+    expect(decideBackgroundMaastricht({ ...context, state, turn: 200 })).toBeUndefined();
+    expect(
+      decideBackgroundMaastricht({ ...context, country: { ...country, stability: NaN } })
+    ).toBeUndefined();
+    expect(decideBackgroundMaastricht({ ...context, date: "1991-01-01" })).toBeUndefined();
   });
 });
