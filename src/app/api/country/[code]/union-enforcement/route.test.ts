@@ -299,6 +299,7 @@ describe("union ban enforcement route", () => {
   });
 
   it("keeps the charge when prosecution applied but acknowledgment was lost", async () => {
+    let appliedId: string | undefined;
     db.collection("unions").findOne.mockResolvedValue({
       _id: unionId,
       countryId: "US",
@@ -312,8 +313,13 @@ describe("union ban enforcement route", () => {
         characterId: organizerCharacterId,
         undergroundStrength: 12,
       })
-      .mockResolvedValueOnce({ _id: organizerId, lastProsecutedTurn: 42 });
-    db.collection("unionOrganizers").updateOne.mockRejectedValue(new Error("ack lost"));
+      .mockImplementationOnce(async () => ({ _id: organizerId, lastProsecutionId: appliedId }));
+    db.collection("unionOrganizers").updateOne.mockImplementation(
+      async (_filter: unknown, update: { $set: { lastProsecutionId: string } }) => {
+        appliedId = update.$set.lastProsecutionId;
+        throw new Error("ack lost");
+      }
+    );
     const response = await post({
       action: "prosecute",
       unionId: unionId.toString(),
@@ -321,6 +327,34 @@ describe("union ban enforcement route", () => {
     });
     expect(response.status).toBe(500);
     expect(db.collection("characters").updateOne).toHaveBeenCalledTimes(1);
+  });
+
+  it("refunds when another prosecution won the claim during an error", async () => {
+    db.collection("unions").findOne.mockResolvedValue({
+      _id: unionId,
+      countryId: "US",
+      suspended: true,
+      exposedUntilTurn: 44,
+    });
+    db.collection("unionOrganizers")
+      .findOne.mockResolvedValueOnce({
+        _id: organizerId,
+        unionId,
+        characterId: organizerCharacterId,
+        undergroundStrength: 12,
+      })
+      .mockResolvedValueOnce({ _id: organizerId, lastProsecutionId: "other-request" });
+    db.collection("unionOrganizers").updateOne.mockRejectedValue(new Error("write conflict"));
+    const response = await post({
+      action: "prosecute",
+      unionId: unionId.toString(),
+      characterId: organizerCharacterId.toString(),
+    });
+    expect(response.status).toBe(500);
+    expect(db.collection("characters").updateOne).toHaveBeenLastCalledWith(
+      { _id: characterId },
+      { $inc: { actions: 3 } }
+    );
   });
 
   it("does not spend when the executive lacks three actions", async () => {

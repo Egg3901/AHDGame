@@ -206,6 +206,8 @@ export interface UnionOrganizer {
   barredUntilTurn?: number | null;
   /** Last prosecution turn, used as the one-prosecution-per-turn claim. */
   lastProsecutedTurn?: number | null;
+  /** Unique claim for distinguishing a lost acknowledgment from a competing prosecution. */
+  lastProsecutionId?: string | null;
   createdAt: Date;
   updatedAt: Date;
 }

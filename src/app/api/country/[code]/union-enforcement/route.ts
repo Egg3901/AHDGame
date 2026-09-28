@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
+import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
@@ -242,6 +243,7 @@ export async function POST(request: Request, { params }: Context) {
       }
       const strengthLoss = prosecutionStrengthLoss(organizer.undergroundStrength);
       const barredUntilTurn = turn + PROSECUTION_BAR_TURNS - 1;
+      const prosecutionId = randomUUID();
       let changed;
       try {
         changed = await organizers.updateOne(
@@ -253,15 +255,20 @@ export async function POST(request: Request, { params }: Context) {
           },
           {
             $inc: { undergroundStrength: -strengthLoss },
-            $set: { barredUntilTurn, lastProsecutedTurn: turn, updatedAt: now },
+            $set: {
+              barredUntilTurn,
+              lastProsecutedTurn: turn,
+              lastProsecutionId: prosecutionId,
+              updatedAt: now,
+            },
           }
         );
       } catch (error) {
         const persisted = await organizers.findOne(
           { _id: organizer._id },
-          { projection: { lastProsecutedTurn: 1 } }
+          { projection: { lastProsecutionId: 1 } }
         );
-        if (persisted?.lastProsecutedTurn !== turn) {
+        if (persisted?.lastProsecutionId !== prosecutionId) {
           await db
             .collection<Character>("characters")
             .updateOne({ _id: character._id }, { $inc: { actions: PROSECUTION_ACTION_COST } });
