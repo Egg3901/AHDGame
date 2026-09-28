@@ -319,3 +319,75 @@ describe("validateBillProvisions — policy axis zeros (ticket #1116)", () => {
     }
   });
 });
+
+describe("validateBillProvisions: euro adoption", () => {
+  it.each(["DE", "IE"] as const)("retains a standalone adoption vote for %s", async (country) => {
+    const { validateBillProvisions } = await import("./billProposal");
+    const result = await validateBillProvisions(
+      db as unknown as Db,
+      [{ type: "euro_adoption" }],
+      "economy",
+      country
+    );
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.euroAdoptionProvisions).toEqual([{ type: "euro_adoption" }]);
+      expect(result.policyProvisions).toEqual([]);
+    }
+  });
+  it("rejects ineligible countries and missing jurisdiction", async () => {
+    const { validateBillProvisions } = await import("./billProposal");
+    for (const country of ["US", undefined] as const) {
+      expect(
+        (
+          await validateBillProvisions(
+            db as unknown as Db,
+            [{ type: "euro_adoption" }],
+            "economy",
+            country
+          )
+        ).ok
+      ).toBe(false);
+    }
+  });
+  it("rejects the wrong category and duplicate adoption provisions", async () => {
+    const { validateBillProvisions } = await import("./billProposal");
+    expect(
+      (
+        await validateBillProvisions(
+          db as unknown as Db,
+          [{ type: "euro_adoption" }],
+          "social",
+          "DE"
+        )
+      ).ok
+    ).toBe(false);
+    expect(
+      (
+        await validateBillProvisions(
+          db as unknown as Db,
+          [{ type: "euro_adoption" }, { type: "euro_adoption" }],
+          "economy",
+          "DE"
+        )
+      ).ok
+    ).toBe(false);
+  });
+  it.each([{ eurozoneEnabled: true }, { euroAdoptedCountries: ["DE"] }])(
+    "rejects a country whose adoption is already recorded",
+    async (state) => {
+      db.collection("gameState").findOne.mockResolvedValue(state);
+      const { validateBillProvisions } = await import("./billProposal");
+      expect(
+        (
+          await validateBillProvisions(
+            db as unknown as Db,
+            [{ type: "euro_adoption" }],
+            "economy",
+            "DE"
+          )
+        ).ok
+      ).toBe(false);
+    }
+  );
+});
