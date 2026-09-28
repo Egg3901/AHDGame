@@ -113,6 +113,21 @@ describe("processUndergroundTurn", () => {
     expect(writes[0].updateOne.update.$set.exposedUntilTurn).toBe(42 + EXPOSURE_LENGTH_TURNS - 1);
   });
 
+  it("uses the country's crackdown posture in the seeded detection roll", async () => {
+    const hot = makeCell({ heat: 30, lastUndergroundDriveTurn: 42 });
+    const { db } = stubDb([hot]);
+    seededRollResult = 15;
+    const normal = await processUndergroundTurn(db, 42, new Set(["US"]));
+    expect(normal.newlyExposed).toBe(0);
+    const crackdown = await processUndergroundTurn(
+      db,
+      42,
+      new Set(["US"]),
+      new Map([["US", "crackdown"]])
+    );
+    expect(crackdown.newlyExposed).toBe(1);
+  });
+
   it("stays dark when the roll misses and never rolls below threshold", async () => {
     const hot = makeCell({ heat: 80, lastUndergroundDriveTurn: 40 });
     const cool = makeCell({ heat: 10, lastUndergroundDriveTurn: 40 });

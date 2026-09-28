@@ -458,6 +458,10 @@ export interface FederalBudget {
    * `LabourContext` via `buildUnionsBannedByCountry` (`src/lib/labour/laborCost.ts`).
    */
   unionsBanned?: boolean;
+  /** Executive enforcement stance while unions are banned. Defaults to normal. */
+  unionEnforcementPosture?: "tolerant" | "normal" | "crackdown";
+  /** Last turn the executive changed the enforcement stance. */
+  unionEnforcementPostureChangedTurn?: number;
   /** EMA-smoothed national GDP — debt-to-GDP / sovereign-default read this so
    *  year-over-year GDP swings can't trip a default threshold (design §5.4). */
   gdpSmoothed?: number;
