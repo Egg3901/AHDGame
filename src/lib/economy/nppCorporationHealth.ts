@@ -81,6 +81,8 @@ export interface NppCorporationHealthReport {
   totals: NppCorporationHealthTotals;
   /** Coarse market-entry-derived gates from the persisted operator diagnostics. */
   bindingGateCounts: Partial<Record<NppOperatorBindingGate, number>>;
+  /** Decision-time sector cohorts from the persisted turn, distinct from current cash rows. */
+  sectorDiagnostics: NppOperatorAggregate["sectorDiagnostics"];
   /** Finer per-leg constraints from the persisted operator diagnostics. */
   bindingConstraintCounts: Partial<Record<NppDecisionConstraint, number>>;
   /** The same constraint counts rolled up to the four decision legs. */
@@ -178,6 +180,7 @@ export function computeNppCorporationHealth(args: {
       medianLiquidCapitalAnchor: median(allCash),
     },
     bindingGateCounts: diagnostics?.bindingGateCounts ?? {},
+    sectorDiagnostics: diagnostics?.sectorDiagnostics ?? {},
     bindingConstraintCounts,
     bindingConstraintLegCounts,
     operatorObservations: diagnostics?.corporationsObserved ?? 0,

@@ -1161,6 +1161,8 @@ export function makeNppCorpDecision(
       sectorUpdates,
       strategy: strategyDecision?.state,
       operatorObservation: buildNppOperatorObservation({
+        sectorType: corp.type,
+        cashNegative: cashLocal < 0,
         passive: true,
         profitable: isProfitable,
         marginPct: corpMargin,
@@ -1975,6 +1977,8 @@ export function makeNppCorpDecision(
     strategy: strategyDecision?.state,
     capacityObservations,
     operatorObservation: buildNppOperatorObservation({
+      sectorType: corp.type,
+      cashNegative: cashLocal < 0,
       passive: false,
       profitable: isProfitable,
       marginPct: corpMargin,
