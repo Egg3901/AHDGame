@@ -16,7 +16,7 @@ export async function seedModernTransitionBudgets2027(
 ): Promise<void> {
   if (preset !== "2027-default") return;
 
-  const authored = new Set(
+  const authored = new Set<string>(
     getNationalBudgetSeedConfigsForPreset(preset)
       .filter((config) => (COUNTRY_IDS as readonly string[]).includes(config.countryId))
       .filter((config) => config.fiscalYear === 2027)
