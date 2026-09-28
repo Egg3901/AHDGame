@@ -1,6 +1,6 @@
 import type { CountryElections } from "../contract";
 import type { CountryElectionPhaseEntry } from "@/lib/turn/countryPhases";
-import { ensureCSElections } from "@/lib/turn/perpetualElections";
+import { ensureCSElections, ensureCSNationsElections } from "@/lib/turn/perpetualElections";
 
 /**
  * Czechoslovakia's elections.
@@ -21,6 +21,7 @@ import { ensureCSElections } from "@/lib/turn/perpetualElections";
  */
 const phases: CountryElectionPhaseEntry[] = [
   { name: "csChamberOfThePeopleElections", fn: ensureCSElections },
+  { name: "csChamberOfNationsElections", fn: ensureCSNationsElections },
 ];
 
 export const CS_ELECTIONS: CountryElections = {

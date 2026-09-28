@@ -89,6 +89,7 @@ export {
   ensureBGElections,
   ensureBLRElections,
   ensureCSElections,
+  ensureCSNationsElections,
   ensureHUElections,
   ensurePLElections,
   ensureROElections,

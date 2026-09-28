@@ -1,4 +1,9 @@
-import { ensureEasternBlocAssemblyElections } from "../shared";
+import {
+  easternBlocElectionsLive,
+  ensureEasternBlocAssemblyElections,
+  ensureRegionalDelegateElections,
+  seatsFromRegionField,
+} from "../shared";
 
 /** Poland Sejm — unicameral one-party assembly (DD regional-delegate pattern). */
 export async function ensurePLElections(now: Date, inFlightTurn?: number): Promise<void> {
@@ -11,6 +16,23 @@ export async function ensureCSElections(now: Date, inFlightTurn?: number): Promi
     "CS",
     "chamberOfThePeople",
     "Chamber of the People",
+    now,
+    inFlightTurn
+  );
+}
+
+/** The 1991 federal Chamber of Nations, apportioned 75/75 by republic. */
+export async function ensureCSNationsElections(now: Date, inFlightTurn?: number): Promise<void> {
+  await ensureRegionalDelegateElections(
+    {
+      countryId: "CS",
+      electionType: "chamberOfNations",
+      seatsForRegions: (regions) => seatsFromRegionField(regions, "stateSenateSeats"),
+      openPrimaryImmediately: true,
+      statusGated: true,
+      electionsLiveGate: easternBlocElectionsLive,
+      label: "Chamber of Nations",
+    },
     now,
     inFlightTurn
   );

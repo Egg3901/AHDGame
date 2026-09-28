@@ -593,6 +593,14 @@ export function electionToLarpYear(
   ) {
     return years.ngGeneral + (cycle - 1) * 4;
   }
+  if (ctx.preset === "1991-default") {
+    if (electionType === "chamberOfThePeople" || electionType === "chamberOfNations") {
+      return (years.csFederalAssembly ?? 1992) + (cycle - 1) * 2;
+    }
+    if (electionType === "nationalAssembly" && countryId === "HU") {
+      return (years.huNationalAssembly ?? 1994) + (cycle - 1) * 4;
+    }
+  }
   switch (electionType) {
     case "house":
       // 2-year cycles

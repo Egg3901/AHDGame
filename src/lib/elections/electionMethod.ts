@@ -29,6 +29,7 @@ export const POSITION_BY_ELECTION_TYPE: Readonly<Record<string, ElectionPosition
   // Eastern bloc Tier-1 unicameral assemblies (DD pattern).
   sejm: "lowerChamber",
   chamberOfThePeople: "lowerChamber",
+  chamberOfNations: "upperChamber",
   nationalAssembly: "lowerChamber",
   grandNationalAssembly: "lowerChamber",
   federalAssembly: "lowerChamber",

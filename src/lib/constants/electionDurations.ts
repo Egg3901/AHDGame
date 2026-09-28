@@ -76,6 +76,7 @@ export const DEFAULT_DURATIONS: Record<
   // Eastern bloc Tier-1 unicameral assemblies (DD pattern, 48h window).
   sejm: { durationHours: 48, primaryDurationHours: 24, generalDurationHours: 24 },
   chamberOfThePeople: { durationHours: 48, primaryDurationHours: 24, generalDurationHours: 24 },
+  chamberOfNations: { durationHours: 48, primaryDurationHours: 24, generalDurationHours: 24 },
   nationalAssembly: { durationHours: 48, primaryDurationHours: 24, generalDurationHours: 24 },
   grandNationalAssembly: { durationHours: 48, primaryDurationHours: 24, generalDurationHours: 24 },
   federalAssembly: { durationHours: 48, primaryDurationHours: 24, generalDurationHours: 24 },

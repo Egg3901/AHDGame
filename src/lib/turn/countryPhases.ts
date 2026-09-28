@@ -84,6 +84,7 @@ import {
   ensureTRSenateElections,
   ensurePLElections,
   ensureCSElections,
+  ensureCSNationsElections,
   ensureHUElections,
   ensureROElections,
   ensureBGElections,
@@ -363,7 +364,10 @@ export const COUNTRY_ELECTION_PHASES: Partial<Record<CountryId, CountryElectionP
   // pattern; NPP-governed / beta-active gate). Ride the DD Volkskammer LARP
   // anchor until dedicated eastern-bloc anchors are authored.
   PL: [{ name: "plSejmElections", fn: ensurePLElections }],
-  CS: [{ name: "csChamberOfThePeopleElections", fn: ensureCSElections }],
+  CS: [
+    { name: "csChamberOfThePeopleElections", fn: ensureCSElections },
+    { name: "csChamberOfNationsElections", fn: ensureCSNationsElections },
+  ],
   HU: [{ name: "huNationalAssemblyElections", fn: ensureHUElections }],
   RO: [{ name: "roGrandNationalAssemblyElections", fn: ensureROElections }],
   BG: [{ name: "bgNationalAssemblyElections", fn: ensureBGElections }],

@@ -92,7 +92,8 @@ const BETA_PARLIAMENT_CYCLES: Record<
       | "frSenat"
       | "ruSupremeSoviet"
       | "ruRepublicSoviet"
-      | "ddVolkskammer";
+      | "ddVolkskammer"
+      | "csFederalAssembly";
     periodHours: number;
   }
 > = {
@@ -148,6 +149,7 @@ const BETA_PARLIAMENT_CYCLES: Record<
   // land. Era-gated OFF outside 1953/1979 via null ddVolkskammer.
   sejm: { anchor: "ddVolkskammer", periodHours: 192 },
   chamberOfThePeople: { anchor: "ddVolkskammer", periodHours: 240 },
+  chamberOfNations: { anchor: "csFederalAssembly", periodHours: 96 },
   nationalAssembly: { anchor: "ddVolkskammer", periodHours: 240 },
   grandNationalAssembly: { anchor: "ddVolkskammer", periodHours: 240 },
   federalAssembly: { anchor: "ddVolkskammer", periodHours: 192 },
@@ -246,6 +248,24 @@ export function canonicalTurnsForCycle(params: CanonicalCycleParams): CanonicalC
   const dur = DEFAULT_DURATIONS[electionType];
   if (!dur) return null;
   const anchors = getCycleAnchors(ctx);
+
+  // The 1991 successor parliaments have their own post-1990 election dates.
+  // Cold War lower chambers retain the existing Volkskammer schedule.
+  const successorAnchor =
+    ctx.preset === "1991-default" && countryId === "CS" && electionType === "chamberOfThePeople"
+      ? anchors.csFederalAssembly
+      : ctx.preset === "1991-default" && countryId === "HU" && electionType === "nationalAssembly"
+        ? anchors.huNationalAssembly
+        : null;
+  if (successorAnchor != null) {
+    const periodHours = electionType === "chamberOfThePeople" ? 96 : 192;
+    const endTurn = successorAnchor + (cycle - 1) * periodHours;
+    return {
+      endTurn,
+      primaryEndTurn: endTurn - dur.generalDurationHours,
+      startTurn: cycle === 1 ? 1 : endTurn - dur.durationHours,
+    };
+  }
 
   // Concurrent-general countries (NG): President + NASS + Governors share ONE
   // 4-year (192-turn) cycle anchored to `ngGeneral`, dropping the US senate-class

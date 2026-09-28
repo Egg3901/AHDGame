@@ -450,6 +450,68 @@ describe("NG concurrent general election (1991-default)", () => {
   });
 });
 
+describe("1991 successor parliamentary cycles", () => {
+  const ctx1991 = { startingYear: 1991, preset: "1991-default" };
+
+  it("elects both Czechoslovak federal chambers together in 1992 on two-year terms", () => {
+    for (const electionType of ["chamberOfThePeople", "chamberOfNations"]) {
+      expect(
+        canonicalTurnsForCycle({ electionType, countryId: "CS", cycle: 1, ctx: ctx1991 })?.endTurn
+      ).toBe(96);
+      expect(
+        canonicalTurnsForCycle({ electionType, countryId: "CS", cycle: 2, ctx: ctx1991 })?.endTurn
+      ).toBe(192);
+    }
+  });
+
+  it("elects the Hungarian National Assembly in 1994 on a four-year term", () => {
+    expect(
+      canonicalTurnsForCycle({
+        electionType: "nationalAssembly",
+        countryId: "HU",
+        cycle: 1,
+        ctx: ctx1991,
+      })?.endTurn
+    ).toBe(192);
+    expect(
+      canonicalTurnsForCycle({
+        electionType: "nationalAssembly",
+        countryId: "HU",
+        cycle: 2,
+        ctx: ctx1991,
+      })?.endTurn
+    ).toBe(384);
+  });
+
+  it("keeps Cold War lower chambers on the Volkskammer calendar and does not elect Nations", () => {
+    const ctx1979 = { startingYear: 1979, preset: "1979-default" };
+    expect(
+      canonicalTurnsForCycle({
+        electionType: "chamberOfThePeople",
+        countryId: "CS",
+        cycle: 1,
+        ctx: ctx1979,
+      })?.endTurn
+    ).toBe(144);
+    expect(
+      canonicalTurnsForCycle({
+        electionType: "nationalAssembly",
+        countryId: "HU",
+        cycle: 1,
+        ctx: ctx1979,
+      })?.endTurn
+    ).toBe(144);
+    expect(
+      canonicalTurnsForCycle({
+        electionType: "chamberOfNations",
+        countryId: "CS",
+        cycle: 1,
+        ctx: ctx1979,
+      })
+    ).toBeNull();
+  });
+});
+
 describe("RU delegate cycles (D3/D11)", () => {
   const ctx1953 = { startingYear: 1953, preset: "1953-default" };
   const ctx1979 = { startingYear: 1979, preset: "1979-default" };
