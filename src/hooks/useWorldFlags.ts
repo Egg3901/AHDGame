@@ -5,6 +5,7 @@ import type { CountryId } from "@/lib/constants/countries";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 
 export interface WorldFlags {
+  maastrichtEligibleCountries?: string[];
   preset: string;
   eurozoneEnabled: boolean;
   euroMonetaryUnion?: EuroMonetaryUnion;

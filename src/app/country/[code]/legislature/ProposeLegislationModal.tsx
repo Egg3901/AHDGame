@@ -1,5 +1,7 @@
 "use client";
 
+import { useWorldFlags } from "@/hooks/useWorldFlags";
+import { EuropeanTreatyProvisionEditor } from "@/components/bills/EuropeanTreatyProvisionEditor";
 import { useState, useEffect, useMemo } from "react";
 import { ladderBounds } from "@/lib/legislature/policyLadder";
 import { Slider } from "@/components/ui";
@@ -168,6 +170,11 @@ export function ProposeLegislationModal({
   const [title, setTitle] = useState("");
   const [summary, setSummary] = useState("");
   const [cat, setCat] = useState(BILL_CATEGORIES[0] as string);
+  const { maastrichtEligibleCountries } = useWorldFlags();
+  const [treatyAction, setTreatyAction] = useState<"" | "ratify" | "reject">("");
+  const canDecideTreaty =
+    cat === "foreign policy" && maastrichtEligibleCountries?.includes(countryId) === true;
+  const includeTreaty = canDecideTreaty && treatyAction !== "";
   const [billChamber, setBillChamber] = useState<string>(
     defaultChamber ?? chambers[0]?.value ?? ""
   );
@@ -228,6 +235,7 @@ export function ProposeLegislationModal({
   // registration regime on a single provision, however many axes it sets.
   const standaloneProvisionCount =
     (canProposeEuro && includeEuroAdoption ? 1 : 0) +
+    (includeTreaty ? 1 : 0) +
     (isCentralBankCat && includeCbIndependence ? 1 : 0) +
     (isElectoralCat && (includeVotingAge || includeRegAccess) ? 1 : 0);
   const hasStandaloneProvision = standaloneProvisionCount > 0;
@@ -429,6 +437,12 @@ export function ProposeLegislationModal({
       if (canProposeEuro && includeEuroAdoption) {
         provisionsPayload.push({ type: "euro_adoption" });
       }
+      if (includeTreaty)
+        provisionsPayload.push({
+          type: "european_treaty",
+          treaty: "maastricht",
+          action: treatyAction,
+        });
       if (isCentralBankCat && includeCbIndependence) {
         provisionsPayload.push({
           type: "central_bank_independence",
@@ -1067,6 +1081,9 @@ export function ProposeLegislationModal({
             </label>
           )}
           {/* Central bank independence — economy bills only. */}
+          {canDecideTreaty && (
+            <EuropeanTreatyProvisionEditor action={treatyAction} onChange={setTreatyAction} />
+          )}
           {isCentralBankCat && (
             <CentralBankProvisionEditor
               include={includeCbIndependence}

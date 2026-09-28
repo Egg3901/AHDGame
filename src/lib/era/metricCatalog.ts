@@ -220,8 +220,8 @@ export const METRIC_ERA_WINDOWS: Record<string, MetricEraWindow> = {
   euCohesionScore: {
     from: 1993,
     news: {
-      title: "The Union Takes Shape",
-      body: "Europe has changed its name and deepened its ambition. Maastricht has turned a common market into a European Union, binding member states not only through trade, but through institutions, rules, expectations, and a widening sense of shared destiny. For Germany, the question is not whether Europe matters, but how closely Berlin will move with it.\n\nThe new union brings opportunity and constraint in equal measure. German governments will be judged by their ability to lead without dominating, compromise without drifting, and align national policy with European purpose. EU cohesion has become a running score of Germany's place inside the continent it helped rebuild.",
+      title: "Europe Weighs Closer Union",
+      body: "The Maastricht debate puts closer European integration before member governments. The Community's common market continues while each member decides whether to ratify a European Union treaty. Rejection can delay or prevent that settlement; the calendar does not decide the outcome.\n\nFor Germany, cooperation with its neighbours remains a test of political trust and economic coordination. European cohesion measures that relationship whether the Community continues or a ratified Union takes its place. The institutions in force depend on the decisions made in this world.",
     },
   },
   rentenStabilitaet: {

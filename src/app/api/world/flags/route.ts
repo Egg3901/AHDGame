@@ -1,7 +1,8 @@
+import { loadEuropeanTreatyContext } from "@/lib/internationalOrganizations/europeanIntegration/service";
+import { canRatifyMaastricht } from "@/lib/internationalOrganizations/europeanIntegration/rules";
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import type { GameState } from "@/lib/db/types";
-import type { OrganizationMembership } from "@/lib/db/types/internationalOrganization";
 import { COUNTRY_ORDER } from "@/lib/constants/countries";
 import {
   euroAdoptionRefusal,
@@ -31,17 +32,16 @@ export async function GET() {
       },
     }
   );
-  const members = await db
-    .collection<OrganizationMembership>("organizationMemberships")
-    .find({ organizationId: "EU" }, { projection: { countryId: 1 } })
-    .toArray();
+  const treaty = await loadEuropeanTreatyContext(db);
+  const maastrichtEligibleCountries =
+    treaty && canRatifyMaastricht(treaty.date, treaty.state.stage) ? treaty.members : [];
   const euroState = { ...gs, eurozoneEnabled: gs?.eurozoneEnabled ?? true };
   const euroAdoptionEligibleCountries = COUNTRY_ORDER.filter(
     (countryId) =>
       !euroAdoptionRefusal({
         countryId,
         year: gs ? (resolveGameYear(gs) ?? 0) : 0,
-        europeanMembers: members.map((member) => member.countryId),
+        europeanMembers: treaty?.members ?? [],
         consentedCountries: euroConsentedCountries(euroState),
         union: gs?.euroMonetaryUnion,
       })
@@ -54,6 +54,7 @@ export async function GET() {
       euroMemberCurrencies: euroMemberCurrencies(euroState),
       euroMonetaryUnion: gs?.euroMonetaryUnion,
       euroAdoptionEligibleCountries,
+      maastrichtEligibleCountries,
       eraSystemEnabled: eraOn,
       currentYear: gs?.currentYear ?? null,
       currentEraId: gs?.currentEraId ?? null,

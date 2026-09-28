@@ -264,6 +264,12 @@ export function moderatedBillText(base: z.ZodString) {
   });
 }
 
+export const europeanTreatyProvisionSchema = z.object({
+  type: z.literal("european_treaty"),
+  treaty: z.literal("maastricht"),
+  action: z.enum(["ratify", "reject"]),
+});
+
 export const proposeBillSchema = z
   .object({
     title: moderatedBillTitle(),
@@ -289,6 +295,7 @@ export const proposeBillSchema = z
           electoralLawProvisionSchema,
           centralBankIndependenceProvisionSchema,
           euroAdoptionProvisionSchema,
+          europeanTreatyProvisionSchema,
           policyProvisionSchema,
         ])
       )

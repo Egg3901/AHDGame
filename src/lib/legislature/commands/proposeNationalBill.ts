@@ -353,6 +353,7 @@ export async function proposeNationalBill(
     electoralLawProvisions: validatedElectoralLawProvisions,
     centralBankProvisions: validatedCentralBankProvisions,
     euroAdoptionProvisions: validatedEuroAdoptionProvisions,
+    europeanTreatyProvisions: validatedEuropeanTreatyProvisions,
   } = validation;
 
   for (const provision of validatedTariffProvisions) {
@@ -504,7 +505,8 @@ export async function proposeNationalBill(
       standaloneProvisionCount:
         validatedCentralBankProvisions.length +
         validatedElectoralLawProvisions.length +
-        validatedEuroAdoptionProvisions.length,
+        validatedEuroAdoptionProvisions.length +
+        validatedEuropeanTreatyProvisions.length,
     })
   );
   const actionCost = BILL_PROPOSE_ACTION_COST;
@@ -566,6 +568,7 @@ export async function proposeNationalBill(
     ...validatedElectoralLawProvisions,
     ...validatedCentralBankProvisions,
     ...validatedEuroAdoptionProvisions,
+    ...validatedEuropeanTreatyProvisions,
   ];
   const stateId = getNationalDocId(countryId) ?? `${countryId.toLowerCase()}_national`;
 
