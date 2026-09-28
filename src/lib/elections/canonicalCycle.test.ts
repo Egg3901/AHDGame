@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { canonicalTurnsForCycle, pickNextCanonicalCycle, turnToWallClock } from "./canonicalCycle";
+import { electionToLarpYear } from "@/lib/utils/formatters";
 
 describe("canonicalTurnsForCycle", () => {
   describe("house", () => {
@@ -452,6 +453,46 @@ describe("NG concurrent general election (1991-default)", () => {
 
 describe("1991 successor parliamentary cycles", () => {
   const ctx1991 = { startingYear: 1991, preset: "1991-default" };
+
+  it("runs the Polish Sejm in 1991, 1993, then the four-year 1997 cycle", () => {
+    expect(
+      canonicalTurnsForCycle({ electionType: "sejm", countryId: "PL", cycle: 1, ctx: ctx1991 })
+        ?.endTurn
+    ).toBe(49);
+    expect(
+      canonicalTurnsForCycle({ electionType: "sejm", countryId: "PL", cycle: 2, ctx: ctx1991 })
+        ?.endTurn
+    ).toBe(144);
+    expect(
+      canonicalTurnsForCycle({ electionType: "sejm", countryId: "PL", cycle: 3, ctx: ctx1991 })
+        ?.endTurn
+    ).toBe(336);
+    expect(
+      pickNextCanonicalCycle({
+        electionType: "sejm",
+        countryId: "PL",
+        prevCycle: 0,
+        currentTurn: 1,
+        ctx: ctx1991,
+      })?.cycle
+    ).toBe(1);
+    expect(
+      [1, 2, 3].map((cycle) =>
+        electionToLarpYear("sejm", cycle, undefined, undefined, ctx1991, "PL")
+      )
+    ).toEqual([1991, 1993, 1997]);
+  });
+
+  it("keeps the Cold War Polish Sejm on the Volkskammer calendar", () => {
+    expect(
+      canonicalTurnsForCycle({
+        electionType: "sejm",
+        countryId: "PL",
+        cycle: 1,
+        ctx: { startingYear: 1979, preset: "1979-default" },
+      })?.endTurn
+    ).toBe(144);
+  });
 
   it("elects both Czechoslovak federal chambers together in 1992 on two-year terms", () => {
     for (const electionType of ["chamberOfThePeople", "chamberOfNations"]) {

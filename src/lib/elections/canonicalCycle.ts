@@ -249,6 +249,24 @@ export function canonicalTurnsForCycle(params: CanonicalCycleParams): CanonicalC
   if (!dur) return null;
   const anchors = getCycleAnchors(ctx);
 
+  if (ctx.preset === "1991-default" && countryId === "PL" && electionType === "sejm") {
+    const firstElection = anchors.plSejm;
+    if (firstElection == null) return null;
+    // The Sejm elected on 27 October 1991 was dissolved early; its successor
+    // was elected on 19 September 1993. Model four-year terms after that.
+    // Polish Election Commission notices, as published by the Sejm:
+    // https://isap.sejm.gov.pl/isap.nsf/DocDetails.xsp?id=WMP19910410288
+    // https://isap.sejm.gov.pl/isap.nsf/DocDetails.xsp?id=wmp19930500470
+    // At the turn-1 reset, the 48-turn year-end anchor offers only 23 primary
+    // turns after turn 1. One bootstrap turn keeps the required 24+24 window.
+    const endTurn = cycle === 1 ? firstElection + 1 : firstElection + 96 + (cycle - 2) * 192;
+    return {
+      endTurn,
+      primaryEndTurn: endTurn - dur.generalDurationHours,
+      startTurn: cycle === 1 ? 1 : endTurn - dur.durationHours,
+    };
+  }
+
   // The 1991 successor parliaments have their own post-1990 election dates.
   // Cold War lower chambers retain the existing Volkskammer schedule.
   const successorAnchor =
