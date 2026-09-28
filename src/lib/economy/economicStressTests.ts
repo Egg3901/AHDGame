@@ -235,7 +235,9 @@ export function liquidationUnabsorbedShare(
   const offered =
     snapshot.firms.marketCapitalizationAnchor * assumptions.liquidationShareOfMarketCap;
   if (offered <= 0) return null;
-  const absorbed = Math.min(offered, snapshot.securities.openOrderDepthAnchor);
+  const bidDepth = snapshot.securities.openBidDepthAnchor;
+  if (bidDepth == null || !Number.isFinite(bidDepth) || bidDepth < 0) return null;
+  const absorbed = Math.min(offered, bidDepth);
   return clamp01(1 - absorbed / offered);
 }
 
@@ -245,9 +247,12 @@ function synchronizedLiquidation(
 ): EconomicStressFinding {
   const offered =
     snapshot.firms.marketCapitalizationAnchor * assumptions.liquidationShareOfMarketCap;
-  const absorbed = Math.min(offered, snapshot.securities.openOrderDepthAnchor);
-  const unabsorbed = Math.max(0, offered - absorbed);
-  const absorptionRate = offered > 0 ? absorbed / offered : null;
+  const bidDepth = snapshot.securities.openBidDepthAnchor;
+  const measuredBidDepth =
+    bidDepth != null && Number.isFinite(bidDepth) && bidDepth >= 0 ? bidDepth : null;
+  const absorbed = measuredBidDepth == null ? null : Math.min(offered, measuredBidDepth);
+  const unabsorbed = absorbed == null ? null : Math.max(0, offered - absorbed);
+  const absorptionRate = offered > 0 && absorbed != null ? absorbed / offered : null;
   return {
     scenario: "synchronized_liquidation",
     severity: severityForFill(absorptionRate),
@@ -258,11 +263,12 @@ function synchronizedLiquidation(
     recoveryTurns: 24,
     indicators: {
       absorptionRate,
+      bidDepthAnchor: measuredBidDepth,
       unabsorbedNotionalAnchor: unabsorbed,
       unabsorbedShare: liquidationUnabsorbedShare(snapshot, assumptions),
     },
     basis:
-      "Unabsorbed offered notional is liquidity exposure, not a forecast realized loss; unabsorbed share is the implied 1 - absorption rate, null when nothing is offered. 24 turns is the declared order-book recovery horizon.",
+      "Only open bid notional can absorb synchronized sell orders. Unabsorbed offered notional is liquidity exposure, not a forecast realized loss; unabsorbed share is null when nothing is offered or bid depth is unavailable in an older snapshot. 24 turns is the declared order-book recovery horizon.",
   };
 }
 

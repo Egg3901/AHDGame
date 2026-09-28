@@ -56,7 +56,7 @@ export default function PrivateSalePanel({
   forceOpen = false,
 }: PrivateSalePanelProps) {
   const {
-    convert,
+    toDisplay,
     toInternal,
     toInternalFrom,
     toLocalOf,
@@ -522,21 +522,21 @@ export default function PrivateSalePanel({
                               [listing._id]: Math.max(0, Number(e.target.value)),
                             }))
                           }
-                          placeholder={`${convert(
+                          placeholder={`${toDisplay(
                             corpCurrencyCode
                               ? toInternalFrom(listing.priceFloor, corpCurrencyCode)
                               : listing.priceFloor
-                          ).toFixed(4)}–${convert(
+                          ).toFixed(4)}–${toDisplay(
                             corpCurrencyCode
                               ? toInternalFrom(listing.priceCeiling, corpCurrencyCode)
                               : listing.priceCeiling
                           ).toFixed(4)}`}
-                          min={convert(
+                          min={toDisplay(
                             corpCurrencyCode
                               ? toInternalFrom(listing.priceFloor, corpCurrencyCode)
                               : listing.priceFloor
                           )}
-                          max={convert(
+                          max={toDisplay(
                             corpCurrencyCode
                               ? toInternalFrom(listing.priceCeiling, corpCurrencyCode)
                               : listing.priceCeiling

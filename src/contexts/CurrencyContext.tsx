@@ -13,7 +13,6 @@ import {
 } from "react";
 import {
   COUNTRY_CURRENCY_MAP,
-  CURRENCY_ANCHOR_COUNTRY,
   FOREX_ACTIVE_CURRENCIES,
   getEraAwareCurrencySymbol,
 } from "@/lib/constants/currencies";
@@ -30,7 +29,7 @@ import {
   formatCurrencyFull,
   type DisplayCurrencyPreference,
 } from "@/lib/utils/formatters";
-import { resolveSourceRate } from "@/lib/currency/resolveSourceRate";
+import { displayQuote, validDisplayRate } from "@/lib/currency/rules/display";
 import { resolveForcedDisplay } from "@/lib/currency/resolveForcedDisplay";
 
 /**
@@ -97,7 +96,7 @@ interface CurrencyContextValue {
   countryId: CountryId | null;
   /** ISO 4217 code for the viewing player's home currency. "USD" when unauthenticated. */
   currencyCode: CurrencyCode;
-  /** Display symbol (e.g. "£", "¥", "$"). */
+  /** Stored home-unit symbol, paired with convert(); inputSymbol follows display preference. */
   currencySymbol: string;
   /**
    * Convert an amount stored in internal units to the player's home currency.
@@ -117,11 +116,13 @@ interface CurrencyContextValue {
    */
   /**
    * Convert a display-currency amount back to internal units.
-   * Inverse of convert(): toInternal(convert(x)) ≈ x.
+   * Uses the same denomination and historical conversion as formatAmount().
    * Use this when a player types a value in their display currency and
    * the API expects internal units.
    */
   toInternal: (displayAmount: number) => number;
+  /** Convert shared accounting to the active input/display denomination. */
+  toDisplay: (internalAmount: number) => number;
   /**
    * Convert an amount from any named currency to internal units.
    * e.g. toInternalFrom(750, "GBP") with rate 0.75 → 1000 ₳.
@@ -234,6 +235,7 @@ const USD_FALLBACK: CurrencyContextValue = {
   convert: (x) => x,
   convertFrom: (x) => x,
   toInternal: (x) => x,
+  toDisplay: (x) => x,
   toInternalFrom: (x) => x,
   toLocalOf: (x) => x,
   formatAmount: (x) => formatFundsCompact(x, "₳"),
@@ -385,17 +387,34 @@ export function CurrencyProvider({ children }: { children: ReactNode }) {
     [effectiveRates, currencyCode]
   );
 
-  const toInternal = useCallback(
-    (displayAmount: number): number => {
-      if (!effectiveRates) return displayAmount;
-      // Must mirror resolveDisplay: whatever currency the UI shows is what the
-      // user's input is assumed to be denominated in. A JP player with pref
-      // pinned to "USD" sees "$156K" and types "50000" thinking USD — we must
-      // divide by the USD rate, not the home-country (JPY) rate.
-      const rate = resolveSourceRate(displayCurrencyPreference, currencyCode, effectiveRates);
-      return rate > 0 ? displayAmount / rate : displayAmount;
+  const quoteDisplay = useCallback(
+    (nativeCurrency?: CurrencyCode, snapshotRates?: RateMap) => {
+      const rates = effectiveRates ? { ...effectiveRates } : null;
+      if (rates && snapshotRates) {
+        for (const code of Object.keys(snapshotRates) as CurrencyCode[]) {
+          if (validDisplayRate(snapshotRates[code])) rates[code] = snapshotRates[code];
+        }
+      }
+      return displayQuote({
+        preference: displayCurrencyPreference,
+        homeCurrency: currencyCode,
+        nativeCurrency,
+        rates,
+        baseRates: effectiveBaseRates,
+        context: worldFlags,
+      });
     },
-    [effectiveRates, currencyCode, displayCurrencyPreference]
+    [effectiveRates, effectiveBaseRates, displayCurrencyPreference, currencyCode, worldFlags]
+  );
+
+  const toDisplay = useCallback(
+    (internalAmount: number): number => internalAmount * quoteDisplay().rate,
+    [quoteDisplay]
+  );
+
+  const toInternal = useCallback(
+    (displayAmount: number): number => displayAmount / quoteDisplay().rate,
+    [quoteDisplay]
   );
 
   const toInternalFrom = useCallback(
@@ -410,12 +429,12 @@ export function CurrencyProvider({ children }: { children: ReactNode }) {
   const toLocalOf = useCallback(
     (displayAmount: number, targetCurrency: CurrencyCode): number => {
       if (!effectiveRates) return displayAmount;
-      const sourceRate = resolveSourceRate(displayCurrencyPreference, currencyCode, effectiveRates);
+      const sourceRate = quoteDisplay().rate;
       const targetRate = effectiveRates[targetCurrency] ?? 1;
       if (sourceRate <= 0) return displayAmount;
       return (displayAmount / sourceRate) * targetRate;
     },
-    [effectiveRates, displayCurrencyPreference, currencyCode]
+    [effectiveRates, quoteDisplay]
   );
 
   const convertFrom = useCallback(
@@ -429,63 +448,15 @@ export function CurrencyProvider({ children }: { children: ReactNode }) {
     [effectiveRates, currencyCode]
   );
 
-  // Shared conversion logic: resolve (value, symbol) pair based on display preference.
-  // All format* functions delegate here, differing only in the final string formatting.
   const resolveDisplay = useCallback(
     (
       internalAmount: number,
       nativeCurrencyCode?: CurrencyCode
     ): { value: number; symbol: string } => {
-      if (displayCurrencyPreference === "internal") {
-        return { value: internalAmount, symbol: "₳" };
-      }
-      if (!effectiveRates) {
-        // Rates not yet loaded or temporarily unavailable — ₳ is loading fallback, not user preference.
-        return { value: internalAmount, symbol: "₳" };
-      }
-      if (displayCurrencyPreference === "home") {
-        return { value: convert(internalAmount), symbol: currencySymbol };
-      }
-      if (displayCurrencyPreference === "local") {
-        if (nativeCurrencyCode && effectiveRates[nativeCurrencyCode] !== undefined) {
-          const rate = effectiveRates[nativeCurrencyCode]!;
-          const symbol =
-            getEraAwareCurrencySymbol(
-              nativeCurrencyCode,
-              worldFlags.preset,
-              worldFlags.eurozoneEnabled,
-              CURRENCY_ANCHOR_COUNTRY[nativeCurrencyCode]
-            ) ?? "$";
-          return { value: internalAmount * rate, symbol };
-        }
-        return { value: convert(internalAmount), symbol: currencySymbol };
-      }
-      // Pinned to a specific CurrencyCode (e.g. "EUR"). Always render that
-      // selected currency. If the live map is sparse, use the base calibration
-      // rate before falling back to a neutral 1:1 internal display; do not
-      // silently switch to home/local currency.
-      const pinned = displayCurrencyPreference as CurrencyCode;
-      const symbol =
-        getEraAwareCurrencySymbol(
-          pinned,
-          worldFlags.preset,
-          worldFlags.eurozoneEnabled,
-          CURRENCY_ANCHOR_COUNTRY[pinned]
-        ) ?? "$";
-      const rate = effectiveRates[pinned] ?? effectiveBaseRates?.[pinned];
-      if (rate !== undefined && Number.isFinite(rate) && rate > 0) {
-        return { value: internalAmount * rate, symbol };
-      }
-      return { value: internalAmount, symbol };
+      const quote = quoteDisplay(nativeCurrencyCode);
+      return { value: internalAmount * quote.rate, symbol: quote.symbol };
     },
-    [
-      displayCurrencyPreference,
-      effectiveRates,
-      effectiveBaseRates,
-      convert,
-      currencySymbol,
-      worldFlags,
-    ]
+    [quoteDisplay]
   );
 
   const formatAmount = useCallback(
@@ -496,79 +467,16 @@ export function CurrencyProvider({ children }: { children: ReactNode }) {
     [resolveDisplay]
   );
 
-  // Mirror of resolveDisplay that uses a snapshot rate map when available.
-  // Same branching as resolveDisplay — internal mode skips conversion, every
-  // other mode converts via snapshotRates[currency] before falling through to
-  // effectiveRates (live) when the snapshot lacks the currency. Lets historical
-  // chart points show the local-currency value at the rate that was actually in
-  // effect then, instead of today's rate getting back-applied to old anchor.
   const resolveDisplayAt = useCallback(
     (
       internalAmount: number,
-      snapshotRates: Partial<Record<CurrencyCode, number>> | undefined,
+      snapshotRates: RateMap | undefined,
       nativeCurrencyCode?: CurrencyCode
     ): { value: number; symbol: string } => {
-      if (displayCurrencyPreference === "internal") {
-        return { value: internalAmount, symbol: "₳" };
-      }
-      if (!effectiveRates) {
-        return { value: internalAmount, symbol: "₳" };
-      }
-      const lookup = (code: CurrencyCode): number | undefined => {
-        const fromSnap = snapshotRates?.[code];
-        if (typeof fromSnap === "number" && Number.isFinite(fromSnap) && fromSnap > 0) {
-          return fromSnap;
-        }
-        const live = effectiveRates[code];
-        return typeof live === "number" && Number.isFinite(live) && live > 0 ? live : undefined;
-      };
-
-      if (displayCurrencyPreference === "home") {
-        const rate = lookup(currencyCode);
-        if (rate !== undefined) return { value: internalAmount * rate, symbol: currencySymbol };
-        return { value: internalAmount, symbol: currencySymbol };
-      }
-      if (displayCurrencyPreference === "local") {
-        if (nativeCurrencyCode) {
-          const rate = lookup(nativeCurrencyCode);
-          if (rate !== undefined) {
-            const symbol =
-              getEraAwareCurrencySymbol(
-                nativeCurrencyCode,
-                worldFlags.preset,
-                worldFlags.eurozoneEnabled,
-                CURRENCY_ANCHOR_COUNTRY[nativeCurrencyCode]
-              ) ?? "$";
-            return { value: internalAmount * rate, symbol };
-          }
-        }
-        const rate = lookup(currencyCode);
-        if (rate !== undefined) return { value: internalAmount * rate, symbol: currencySymbol };
-        return { value: internalAmount, symbol: currencySymbol };
-      }
-      // Pinned to a specific currency code.
-      const pinned = displayCurrencyPreference as CurrencyCode;
-      const symbol =
-        getEraAwareCurrencySymbol(
-          pinned,
-          worldFlags.preset,
-          worldFlags.eurozoneEnabled,
-          CURRENCY_ANCHOR_COUNTRY[pinned]
-        ) ?? "$";
-      const rate = lookup(pinned) ?? effectiveBaseRates?.[pinned];
-      if (rate !== undefined && Number.isFinite(rate) && rate > 0) {
-        return { value: internalAmount * rate, symbol };
-      }
-      return { value: internalAmount, symbol };
+      const quote = quoteDisplay(nativeCurrencyCode, snapshotRates);
+      return { value: internalAmount * quote.rate, symbol: quote.symbol };
     },
-    [
-      displayCurrencyPreference,
-      effectiveRates,
-      effectiveBaseRates,
-      currencyCode,
-      currencySymbol,
-      worldFlags,
-    ]
+    [quoteDisplay]
   );
 
   const formatAmountAtRates = useCallback(
@@ -597,11 +505,12 @@ export function CurrencyProvider({ children }: { children: ReactNode }) {
         internalAmount,
         currencyCode,
         effectiveRates,
-        worldFlags.preset
+        worldFlags.preset,
+        worldFlags.eurozoneEnabled
       );
       return formatFundsCompact(Math.round(value), symbol);
     },
-    [effectiveRates, worldFlags.preset]
+    [effectiveRates, worldFlags.preset, worldFlags.eurozoneEnabled]
   );
 
   const formatAmountChipInFn = useCallback(
@@ -610,11 +519,12 @@ export function CurrencyProvider({ children }: { children: ReactNode }) {
         internalAmount,
         currencyCode,
         effectiveRates,
-        worldFlags.preset
+        worldFlags.preset,
+        worldFlags.eurozoneEnabled
       );
       return formatCurrencyCompactChip(value, symbol);
     },
-    [effectiveRates, worldFlags.preset]
+    [effectiveRates, worldFlags.preset, worldFlags.eurozoneEnabled]
   );
 
   const formatPriceFn = useCallback(
@@ -631,11 +541,12 @@ export function CurrencyProvider({ children }: { children: ReactNode }) {
         internalAmount,
         currencyCode,
         effectiveRates,
-        worldFlags.preset
+        worldFlags.preset,
+        worldFlags.eurozoneEnabled
       );
       return formatSharePrice(value, symbol);
     },
-    [effectiveRates, worldFlags.preset]
+    [effectiveRates, worldFlags.preset, worldFlags.eurozoneEnabled]
   );
 
   const formatFullFn = useCallback(
@@ -679,6 +590,7 @@ export function CurrencyProvider({ children }: { children: ReactNode }) {
       convert,
       convertFrom,
       toInternal,
+      toDisplay,
       toInternalFrom,
       toLocalOf,
       formatAmount,
@@ -687,20 +599,7 @@ export function CurrencyProvider({ children }: { children: ReactNode }) {
       formatAmountChip,
       formatAmountIn: formatAmountInFn,
       formatAmountChipIn: formatAmountChipInFn,
-      // Must match the currency toInternal assumes as the input denomination.
-      // Pinned preferences (e.g. JP player pinned to "USD") show the pinned
-      // symbol so the input prefix reflects what the user is actually typing.
-      inputSymbol:
-        displayCurrencyPreference === "internal" || !effectiveRates
-          ? "₳"
-          : displayCurrencyPreference === "home" || displayCurrencyPreference === "local"
-            ? currencySymbol
-            : (getEraAwareCurrencySymbol(
-                displayCurrencyPreference as CurrencyCode,
-                worldFlags.preset,
-                worldFlags.eurozoneEnabled,
-                CURRENCY_ANCHOR_COUNTRY[displayCurrencyPreference as CurrencyCode]
-              ) ?? currencySymbol),
+      inputSymbol: quoteDisplay().symbol,
       displayCurrencyPreference,
       setDisplayCurrencyPreference,
       formatPrice: formatPriceFn,
@@ -719,6 +618,7 @@ export function CurrencyProvider({ children }: { children: ReactNode }) {
       convert,
       convertFrom,
       toInternal,
+      toDisplay,
       toInternalFrom,
       toLocalOf,
       formatAmount,
@@ -737,7 +637,7 @@ export function CurrencyProvider({ children }: { children: ReactNode }) {
       effectiveBaseRates,
       effectiveRates,
       forexEnabled,
-      worldFlags,
+      quoteDisplay,
     ]
   );
 

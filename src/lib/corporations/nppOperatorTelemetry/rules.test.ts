@@ -10,8 +10,44 @@ import {
 } from "./rules";
 
 describe("NPP operator telemetry", () => {
+  it("retains decision-time cash and binding constraints by sector without corporation ids", () => {
+    const retail = buildNppOperatorObservation({
+      sectorType: "retail",
+      cashNegative: true,
+      passive: false,
+      profitable: false,
+      marginPct: -4,
+      cashCrisis: true,
+      dividendRate: 0,
+      divestedSectors: 0,
+      reinvestments: 0,
+      cashHeadroomAnchor: -10,
+      constraintFlags: { budget_cash_crisis: true },
+    });
+    const energy = { ...retail, sectorType: "energy" as const, cashNegative: false };
+    const report = aggregateNppOperatorObservations([retail, energy]);
+
+    expect(report.sectorDiagnostics).toEqual({
+      retail: {
+        observations: 1,
+        cashNegative: 1,
+        bindingGateCounts: { cash_floor: 1 },
+        constraintCounts: { budget_cash_crisis: 1 },
+      },
+      energy: {
+        observations: 1,
+        cashNegative: 0,
+        bindingGateCounts: { cash_floor: 1 },
+        constraintCounts: { budget_cash_crisis: 1 },
+      },
+    });
+    expect(JSON.stringify(report)).not.toContain("ceoId");
+  });
+
   it("publishes the cash floor as the first binding gate while retaining policy outcomes", () => {
     const observation = buildNppOperatorObservation({
+      sectorType: "retail",
+      cashNegative: false,
       passive: false,
       profitable: true,
       marginPct: 32,
@@ -24,6 +60,8 @@ describe("NPP operator telemetry", () => {
     });
 
     expect(observation).toEqual({
+      sectorType: "retail",
+      cashNegative: false,
       bindingGate: "cash_floor",
       bindingConstraint: null,
       budgetBand: "distress",
@@ -39,6 +77,8 @@ describe("NPP operator telemetry", () => {
   it("uses net profitability before margin and entry gates", () => {
     expect(
       buildNppOperatorObservation({
+        sectorType: "retail",
+        cashNegative: false,
         passive: false,
         profitable: false,
         marginPct: 20,
@@ -55,6 +95,8 @@ describe("NPP operator telemetry", () => {
   it("aggregates a closed gate and policy vocabulary without corporation identifiers", () => {
     const observations = [
       buildNppOperatorObservation({
+        sectorType: "retail",
+        cashNegative: false,
         passive: false,
         profitable: true,
         marginPct: 18,
@@ -66,6 +108,8 @@ describe("NPP operator telemetry", () => {
         cashHeadroomAnchor: 50,
       }),
       buildNppOperatorObservation({
+        sectorType: "retail",
+        cashNegative: false,
         passive: false,
         profitable: true,
         marginPct: 8,
@@ -138,6 +182,8 @@ describe("NPP decision-leg constraint funnel", () => {
 
   it("carries the resolved constraint onto the observation and the aggregate", () => {
     const observation = buildNppOperatorObservation({
+      sectorType: "retail",
+      cashNegative: false,
       passive: false,
       profitable: true,
       marginPct: 30,

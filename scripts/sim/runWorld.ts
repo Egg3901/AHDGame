@@ -305,6 +305,10 @@ const brandLoyaltySlice = hasFlag("brand-loyalty-slice");
 const sectorQuality = hasFlag("quality");
 const demographicsDemand = hasFlag("demographics");
 const allFeatureFlags = hasFlag("all-feature-flags");
+const campaignEraPriceLevelEnabled = parseOptionalBoolean(
+  arg("campaign-era-price-level"),
+  "campaign-era-price-level"
+);
 // Command Economy v2 A/B: --command-economy enables commandEconomyEnabled on the
 // sandbox gameConfig. Unlike the other tier flags this MUST be set BEFORE
 // bootstrap (below), because the multi-SOE split in the budget seed reads the
@@ -885,6 +889,17 @@ async function main() {
       { $set: { economicExperiment: economicExperimentSet, updatedAt: new Date() } }
     );
     log(`Economic experiment overrides: ${JSON.stringify(economicExperimentSet)}`);
+  }
+
+  if (campaignEraPriceLevelEnabled !== undefined) {
+    await db
+      .collection<GameConfig>("gameConfig")
+      .updateOne({ _id: "default" }, { $set: { campaignEraPriceLevelEnabled } }, { upsert: true });
+    await simRuns.updateOne(
+      { _id: runId },
+      { $set: { campaignEraPriceLevelEnabled, updatedAt: new Date() } }
+    );
+    log(`Campaign era price-level override: ${String(campaignEraPriceLevelEnabled)}`);
   }
 
   // Frontier-entry experiment gate (issue #991). gameState, not gameConfig:

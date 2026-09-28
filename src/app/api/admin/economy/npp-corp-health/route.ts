@@ -65,6 +65,7 @@ export async function GET(request: Request) {
           bindingConstraintCounts: counts.bindingConstraintCounts,
           bindingConstraintLegCounts: counts.bindingConstraintLegCounts,
           operatorObservations: counts.operatorObservations,
+          sectorDiagnostics: diagnostics?.sectorDiagnostics ?? {},
         },
         turn: diagnostics?.turn ?? parsed.data.turn,
       });

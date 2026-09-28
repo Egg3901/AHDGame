@@ -22,6 +22,7 @@ export interface SimJobExperimentFields {
   /** Frontier-entry experiment gate (#991). Explicit false is a pinned control
    * arm, not an omission: it must reach runWorld. */
   frontierEntryExperimentEnabled?: boolean;
+  campaignEraPriceLevelEnabled?: boolean;
   allFeatureFlags?: boolean;
   autonomyLevel?: string;
   mode?: string;
@@ -107,6 +108,7 @@ export function buildRunWorldArgs(job: SimJobExperimentFields): string[] {
   booleanFlag(job, "equityLiquidityFacilityEnabled", "equity-liquidity-facility", args);
   booleanFlag(job, "nppMarketCoverageEnabled", "npp-market-coverage", args);
   booleanFlag(job, "nppFragileMarketSupplyEnabled", "npp-fragile-market-supply", args);
+  booleanFlag(job, "campaignEraPriceLevelEnabled", "campaign-era-price-level", args);
   // Frontier-entry experiment gate (#991): spelling owned by
   // frontierEntryExperimentCliArgs, so the worker cannot drift from runWorld's
   // parser. Explicit false survives (control arm); absent emits nothing.

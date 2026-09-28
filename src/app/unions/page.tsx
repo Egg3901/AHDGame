@@ -6,6 +6,7 @@ import { HeroImage } from "@/components/HeroImage";
 import BackButton from "@/components/BackButton";
 import { EmptyState, Skeleton, Tooltip } from "@/components/ui";
 import { UnionEmblem } from "@/components/unions/UnionEmblem";
+import { UnionEnforcementDesk } from "@/components/unions/UnionEnforcementDesk";
 import { FoundUnionModal } from "@/components/unions/FoundUnionModal";
 import { Avatar } from "@/components/Avatar";
 import { formatLocalAmountFull } from "@/lib/utils/formatters";
@@ -246,6 +247,14 @@ export default function UnionsPage() {
           </div>
         </div>
       )}
+
+      {selectedCountry &&
+        bannedCountries.some((country) => country.countryId === selectedCountry) && (
+          <UnionEnforcementDesk
+            countryId={selectedCountry}
+            unions={rows.map((row) => ({ unionId: row.unionId, name: row.name }))}
+          />
+        )}
 
       {!notEnabled && (
         <p className="text-sm text-muted">

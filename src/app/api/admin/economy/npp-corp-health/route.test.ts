@@ -154,6 +154,14 @@ describe("GET /api/admin/economy/npp-corp-health", () => {
       _id: "turn:439",
       turn: 439,
       corporationsObserved: 2,
+      sectorDiagnostics: {
+        retail: {
+          observations: 2,
+          cashNegative: 1,
+          bindingGateCounts: { cash_floor: 2 },
+          constraintCounts: { budget_cash_crisis: 2 },
+        },
+      },
       bindingGateCounts: { cash_floor: 2 },
       constraintCounts: { budget_cash_crisis: 2 },
     });
@@ -175,6 +183,14 @@ describe("GET /api/admin/economy/npp-corp-health", () => {
         bindingConstraintCounts: { budget_cash_crisis: 2 },
         bindingConstraintLegCounts: { budget: 2 },
         operatorObservations: 2,
+        sectorDiagnostics: {
+          retail: {
+            observations: 2,
+            cashNegative: 1,
+            bindingGateCounts: { cash_floor: 2 },
+            constraintCounts: { budget_cash_crisis: 2 },
+          },
+        },
       },
       turn: 439,
     });

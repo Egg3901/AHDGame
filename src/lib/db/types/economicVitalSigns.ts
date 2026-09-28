@@ -135,6 +135,8 @@ export interface EconomicVitalSigns {
     organicTwoSidedListingShare: EconomicMetric;
     medianQuotedSpreadPct: EconomicMetric;
     openOrderDepthAnchor: number;
+    /** Buy-side notional available to absorb sell orders. Older snapshots omit this. */
+    openBidDepthAnchor?: number;
     depthToMarketCap: EconomicMetric;
     organicDepthToMarketCap: EconomicMetric;
     medianFilledOrderExecutionHours: EconomicMetric;

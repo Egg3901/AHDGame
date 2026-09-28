@@ -44,6 +44,13 @@ export const HEAT_DETECTION_THRESHOLD = 30;
 export const HEAT_DECAY_PER_TURN = 2;
 /** Turns an exposed union stays visible once detected. */
 export const EXPOSURE_LENGTH_TURNS = 6;
+export type UnionEnforcementPosture = "tolerant" | "normal" | "crackdown";
+
+/** Policy affects detection only while a union ban is active. */
+export function postureDetectionChance(base: number, posture: UnionEnforcementPosture): number {
+  const adjustment = posture === "crackdown" ? 20 : posture === "tolerant" ? -10 : 0;
+  return Math.max(0, Math.min(100, base + adjustment));
+}
 /** Share of the underground pool that converts to legal strength on repeal. */
 export const REPEAL_UNDERGROUND_HAIRCUT = 0.5;
 

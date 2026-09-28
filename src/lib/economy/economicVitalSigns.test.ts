@@ -493,6 +493,7 @@ describe("computeEconomicVitalSigns", () => {
     expect(snapshot.securities.twoSidedListingShare.value).toBe(0.25);
     expect(snapshot.securities.medianQuotedSpreadPct.value).toBe(40);
     expect(snapshot.securities.openOrderDepthAnchor).toBe(50);
+    expect(snapshot.securities.openBidDepthAnchor).toBe(20);
     expect(snapshot.securities.medianFilledOrderExecutionHours.value).toBe(6);
     expect(snapshot.households.topTenWealthShare.value).toBe(1);
     expect(snapshot.households.wealthGini.value).toBeCloseTo(0.72);

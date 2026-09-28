@@ -42,3 +42,33 @@ describe("resolveForcedDisplay", () => {
     expect(a).toEqual(b);
   });
 });
+
+describe("explicit historical denominations", () => {
+  it("does not pretend an explicit IEP amount is EUR", () => {
+    expect(resolveForcedDisplay(100, "IEP", { IEP: 0.7, EUR: 0.85 }, "1991-default", true)).toEqual(
+      { value: 70, symbol: "IR£" }
+    );
+  });
+  it("labels normalized German units before adoption and euro units afterward", () => {
+    expect(resolveForcedDisplay(100, "EUR", { EUR: 0.85 }, "1991-default", false)).toEqual({
+      value: 85,
+      symbol: "€ eq.",
+    });
+    expect(resolveForcedDisplay(100, "EUR", { EUR: 0.85 }, "1991-default", true)).toEqual({
+      value: 85,
+      symbol: "€",
+    });
+  });
+  it("does not invent a cruzeiro rate for Brazil", () => {
+    expect(resolveForcedDisplay(100, "BRL", { BRL: 5 }, "1991-default")).toEqual({
+      value: 500,
+      symbol: "BRL eq.",
+    });
+  });
+  it.each([0, -1, NaN, Infinity])("does not render an invalid quotation (%s)", (rate) => {
+    expect(resolveForcedDisplay(100, "EUR", { EUR: rate }, "1991-default")).toEqual({
+      value: 100,
+      symbol: "₳",
+    });
+  });
+});
