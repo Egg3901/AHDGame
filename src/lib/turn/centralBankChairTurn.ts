@@ -18,7 +18,10 @@
  * Runs after inflation recalc so inflation/GDP values are current.
  */
 
-import { loadEuroMonetaryUnion, syncEuroMonetaryPolicy } from "@/lib/currency/euro/service";
+import { aggregateEuroPolicyIndicators, euroPolicyBankId } from "@/lib/currency/euro/rules";
+import { getGdpAnchorRate } from "@/lib/currency/gdpAnchorRate";
+import { getEraMonetaryBaseline } from "@/lib/constants/monetaryEra";
+import { syncEuroMonetaryPolicy } from "@/lib/currency/euro/service";
 import type { Db } from "mongodb";
 import { ObjectId } from "mongodb";
 import type { CentralBank } from "@/lib/db/types/centralBank";
@@ -184,7 +187,7 @@ export async function processCentralBankChairTurn(
           .collection<FederalBudget>("federalBudget")
           .find(
             { _id: { $in: Array.from(budgetIdSet) } },
-            { projection: { "economicFactors.inflationRate": 1 } }
+            { projection: { "economicFactors.inflationRate": 1, gdp: 1 } }
           )
           .toArray()
       : [];
@@ -208,7 +211,10 @@ export async function processCentralBankChairTurn(
   // absent → modern anchors (fail-safe).
   const gameState = await db
     .collection<GameState>("gameState")
-    .findOne({ _id: "current" }, { projection: { currentYear: 1, startingYear: 1, preset: 1 } });
+    .findOne(
+      { _id: "current" },
+      { projection: { currentYear: 1, startingYear: 1, preset: 1, euroMonetaryUnion: 1 } }
+    );
   const currentYear = gameState?.currentYear;
   // Era START year, resolved once for the whole sweep rather than per bank:
   // `isBankGovernmentControlledLive` would cost one uncached gameState read per
@@ -219,6 +225,27 @@ export async function processCentralBankChairTurn(
     .collection<GameConfig>("gameConfig")
     .findOne({ _id: "default" }, { projection: { commandEconomyEnabled: 1 } });
   const commandEconomyEnabled = chairGameConfig?.commandEconomyEnabled === true;
+
+  const union = gameState?.euroMonetaryUnion;
+  const commonIndicators = union
+    ? aggregateEuroPolicyIndicators(
+        Object.keys(union.members).map((id) => {
+          const country = id as CountryId;
+          const budget = budgetById.get(getNationalBudgetId(country));
+          const metricId = getNationalDocId(country);
+          const metrics = metricId ? metricsById.get(metricId) : undefined;
+          return {
+            gdpAnchor: (budget?.gdp ?? NaN) * getGdpAnchorRate(country, gameState?.preset),
+            inflationRate: budget?.economicFactors?.inflationRate ?? NaN,
+            gdpGrowth: metrics?.economic?.gdpGrowth?.value ?? NaN,
+            targetInflation: getInflationTarget(country, currentYear),
+            neutralRate:
+              getEraMonetaryBaseline(country, currentYear)?.neutralPrimeRate ??
+              COUNTRY_CONFIGS[country].centralBank.defaultPrimeRate,
+          };
+        })
+      )
+    : undefined;
 
   let chairsPenalized = 0;
   let bankWritesMatched = 0;
@@ -244,12 +271,16 @@ export async function processCentralBankChairTurn(
 
     const budgetId = getNationalBudgetId(countryId);
     const budget = budgetById.get(budgetId);
-    const targetInflation = getInflationTarget(countryId, currentYear);
-    const inflationRate = finiteOr(budget?.economicFactors?.inflationRate, targetInflation);
+    const area = union?.authorityId === bank._id ? commonIndicators : undefined;
+    const delegated = union != null && euroPolicyBankId(countryId, union) !== bank._id;
+    const targetInflation = area?.targetInflation ?? getInflationTarget(countryId, currentYear);
+    const inflationRate =
+      area?.inflationRate ?? finiteOr(budget?.economicFactors?.inflationRate, targetInflation);
 
     const nationalDocId = getNationalDocId(countryId);
     const nationalMetricsDoc = nationalDocId ? metricsById.get(nationalDocId) : null;
-    const gdpGrowth = finiteOr(nationalMetricsDoc?.economic?.gdpGrowth?.value, TARGET_GROWTH);
+    const gdpGrowth =
+      area?.gdpGrowth ?? finiteOr(nationalMetricsDoc?.economic?.gdpGrowth?.value, TARGET_GROWTH);
 
     const currentInfamy = Math.min(100, Math.max(0, finiteOr(bank.chairInfamy, 0)));
 
@@ -313,7 +344,10 @@ export async function processCentralBankChairTurn(
     if (bank.chairMode === "npp") {
       // National governors retain their financial office but cannot set a
       // separate policy rate after delegation to the common authority.
-      if (bank.monetaryAuthorityId && bank.monetaryAuthorityId !== bank._id) continue;
+      if (delegated || (bank.monetaryAuthorityId && bank.monetaryAuthorityId !== bank._id))
+        continue;
+      // Missing member data must not silently reduce common policy to the anchor economy.
+      if (union?.authorityId === bank._id && !commonIndicators) continue;
       // A functional FOMC committee (one that can still carry a motion) owns
       // the rate. Skip the single-chair autonomous setter to avoid two systems
       // moving primeRate on the same turn. When the board has decayed below the
@@ -330,7 +364,8 @@ export async function processCentralBankChairTurn(
         currentTurn,
         currentYear,
         commandEconomyEnabled,
-        startingYear
+        startingYear,
+        area
       );
       continue;
     }
@@ -369,7 +404,6 @@ export async function processCentralBankChairTurn(
     await db.collection<Character>("characters").bulkWrite(charBulkOps as never);
   }
 
-  const union = await loadEuroMonetaryUnion(db);
   if (union) await syncEuroMonetaryPolicy(db, union);
 
   return {

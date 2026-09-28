@@ -211,3 +211,43 @@ export function euroMemberCurrencies(state: EuroWorldSnapshot): CurrencyCode[] {
     ? EU_EUROZONE_MEMBERS.map((country) => COUNTRY_CURRENCY_MAP[country])
     : [];
 }
+
+export interface EuroPolicyIndicators {
+  inflationRate: number;
+  gdpGrowth: number;
+  targetInflation: number;
+  neutralRate: number;
+}
+
+/** GDP weights arrive in shared accounting units, never at current FX quotes. */
+export function aggregateEuroPolicyIndicators(
+  members: readonly (EuroPolicyIndicators & { gdpAnchor: number })[]
+): EuroPolicyIndicators | undefined {
+  if (
+    !members.length ||
+    members.some(
+      (member) =>
+        !Number.isFinite(member.gdpAnchor) ||
+        member.gdpAnchor <= 0 ||
+        ![member.inflationRate, member.gdpGrowth, member.targetInflation, member.neutralRate].every(
+          Number.isFinite
+        )
+    )
+  )
+    return undefined;
+  // Normalize before summing, keeping very large but finite GDP inputs bounded.
+  const scale = Math.max(...members.map((member) => member.gdpAnchor));
+  const totalWeight = members.reduce((sum, member) => sum + member.gdpAnchor / scale, 0);
+  const result: EuroPolicyIndicators = {
+    inflationRate: 0,
+    gdpGrowth: 0,
+    targetInflation: 0,
+    neutralRate: 0,
+  };
+  for (const member of members) {
+    const weight = member.gdpAnchor / scale / totalWeight;
+    for (const key of ["inflationRate", "gdpGrowth", "targetInflation", "neutralRate"] as const)
+      result[key] += member[key] * weight;
+  }
+  return result;
+}

@@ -1,3 +1,4 @@
+import { aggregateEuroPolicyIndicators } from "./rules";
 import { describe, expect, it } from "vitest";
 import {
   euroAdoptionRefusal,
@@ -131,5 +132,38 @@ describe("fixed legacy-unit conversion", () => {
   });
   it.each([undefined, NaN, Infinity, 0, -1])("rejects an invalid common quotation %s", (EUR) => {
     expect(() => linkedEuroRates(founded(), { EUR })).toThrow("unavailable");
+  });
+});
+
+describe("common monetary policy indicators", () => {
+  it("weights all participating economies by GDP in shared accounting units", () => {
+    expect(
+      aggregateEuroPolicyIndicators([
+        { gdpAnchor: 100, inflationRate: 2, gdpGrowth: 4, targetInflation: 2, neutralRate: 3 },
+        { gdpAnchor: 300, inflationRate: 6, gdpGrowth: 0, targetInflation: 2, neutralRate: 5 },
+      ])
+    ).toEqual({ inflationRate: 5, gdpGrowth: 1, targetInflation: 2, neutralRate: 4.5 });
+  });
+  it("refuses incomplete member data instead of silently using the anchor country", () => {
+    expect(aggregateEuroPolicyIndicators([])).toBeUndefined();
+    expect(
+      aggregateEuroPolicyIndicators([
+        { gdpAnchor: 100, inflationRate: NaN, gdpGrowth: 4, targetInflation: 2, neutralRate: 3 },
+      ])
+    ).toBeUndefined();
+  });
+  it("preserves weighting when GDP units are rescaled", () => {
+    const rows = [1, 3].map((gdpAnchor) => ({
+      gdpAnchor,
+      inflationRate: gdpAnchor * 2,
+      gdpGrowth: 2,
+      targetInflation: 2,
+      neutralRate: 3,
+    }));
+    expect(
+      aggregateEuroPolicyIndicators(
+        rows.map((row) => ({ ...row, gdpAnchor: row.gdpAnchor * 1e300 }))
+      )
+    ).toEqual(aggregateEuroPolicyIndicators(rows));
   });
 });
