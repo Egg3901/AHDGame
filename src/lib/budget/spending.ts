@@ -288,9 +288,10 @@ export async function calculateFederalSpending(
   // general-government envelope. Keep the calibrated non-law portion alongside
   // enacted costs so later law changes still move total spending.
   if (hasEnactedSpending) {
-    byCategory.other =
-      (byCategory.other ?? 0) +
-      nonLawSpendingAmount(budget.gdp, budget.nonLawSpendingGdpShareBaseline);
+    const nonLawSpending = nonLawSpendingAmount(budget.gdp, budget.nonLawSpendingGdpShareBaseline);
+    if (nonLawSpending > 0) {
+      byCategory.other = (byCategory.other ?? 0) + nonLawSpending;
+    }
   }
 
   // Config-derived central transfer pools (CN/DE/UK) are credited to regions in
