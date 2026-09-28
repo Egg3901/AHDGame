@@ -21,7 +21,8 @@ vi.mock("@/lib/countryState", () => ({
 describe("processActionRefresh", () => {
   const mockBulkWrite = vi.fn();
   let chairRows: { chairCharacterId: unknown }[] = [];
-  let cabinetRows: { characterId: unknown; countryId: string }[] = [];
+  let cabinetRows: { characterId: unknown; countryId: string; acting?: boolean }[] = [];
+  let congressLeaderRows: { characterId: unknown; role: string }[] = [];
   let electedRows: {
     characterId: unknown;
     officeType: string;
@@ -46,6 +47,7 @@ describe("processActionRefresh", () => {
     vi.clearAllMocks();
     chairRows = [];
     cabinetRows = [];
+    congressLeaderRows = [];
     electedRows = [];
     nppRows = [];
     governmentFormationRows = [];
@@ -122,7 +124,7 @@ describe("processActionRefresh", () => {
         if (name === "congressLeaders") {
           return {
             find: vi.fn().mockReturnValue({
-              toArray: vi.fn().mockResolvedValue([]),
+              toArray: vi.fn().mockResolvedValue(congressLeaderRows),
             }),
           };
         }
@@ -517,6 +519,79 @@ describe("processActionRefresh", () => {
     const update = ops[0].updateOne.update.$set as Record<string, unknown>;
     // 0 + base 4 + bundestag seat 1 + cabinet 1 = 6
     expect(update.actions).toBe(6);
+  });
+
+  it("grants an acting cabinet member the cabinet NI tier without currentOffice", async () => {
+    const { processActionRefresh } = await import("./actionRefresh");
+    cabinetRows = [
+      {
+        characterId: { toString: () => "acting-secretary" },
+        countryId: "US",
+        acting: true,
+      },
+    ];
+    const character: Character = {
+      _id: "acting-secretary" as never,
+      userId: "acting-user" as never,
+      name: "Acting Secretary",
+      countryId: "US",
+      homeState: "NY",
+      policies: { economic: 0, social: 0 },
+      actions: 0,
+      funds: 0,
+      favorability: 50,
+      politicalInfluence: 0,
+      nationalInfluence: 0,
+      donorBaseLevel: 0,
+      infamy: 0,
+      party: "independent",
+      currentOffice: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    } as Character;
+
+    await processActionRefresh([character], null, new Date());
+
+    const update = mockBulkWrite.mock.calls[0][0][0].updateOne.update.$set as Record<
+      string,
+      number
+    >;
+    expect(update.nationalInfluence).toBe(1);
+  });
+
+  it("uses the Speaker NI tier when the Speaker also holds an acting cabinet seat", async () => {
+    const { processActionRefresh } = await import("./actionRefresh");
+    congressLeaderRows = [
+      { characterId: { toString: () => "speaker" }, role: "speaker_of_the_house" },
+    ];
+    cabinetRows = [{ characterId: { toString: () => "speaker" }, countryId: "US", acting: true }];
+    const character: Character = {
+      _id: "speaker" as never,
+      userId: "speaker-user" as never,
+      name: "Speaker",
+      countryId: "US",
+      homeState: "NY",
+      policies: { economic: 0, social: 0 },
+      actions: 0,
+      funds: 0,
+      favorability: 50,
+      politicalInfluence: 0,
+      nationalInfluence: 0,
+      donorBaseLevel: 0,
+      infamy: 0,
+      party: "independent",
+      currentOffice: { type: "house", state: "NY", district: 1 },
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    } as Character;
+
+    await processActionRefresh([character], null, new Date());
+
+    const update = mockBulkWrite.mock.calls[0][0][0].updateOne.update.$set as Record<
+      string,
+      number
+    >;
+    expect(update.nationalInfluence).toBe(2);
   });
 
   it("caps actions at 200", async () => {

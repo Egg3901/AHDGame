@@ -19,13 +19,11 @@ import {
   cabinetOfficeTypeForCountry,
   resolveOfficeActionBonus,
 } from "@/lib/actions/officeActionBonus";
-import {
-  resolveOfficeActionBonusForType,
-  resolveOfficeNiBonus,
-} from "@/lib/actions/officeBonusRegistry";
+import { resolveOfficeActionBonusForType } from "@/lib/actions/officeBonusRegistry";
+import { resolvePositionNiBonus } from "@/lib/actions/positionNiBonus";
 import type { CountryId } from "@/lib/constants/countries";
 import type { SupremeCourtSeat } from "@/lib/db/types/scotus";
-import { JUSTICE_NI_BONUS_PER_TURN } from "@/lib/constants/justiceActions";
+import { getCabinetMembersCollection } from "@/lib/db/collections/cabinetMembers";
 import { logger } from "../observability/logger";
 import {
   governmentApprovalFavorabilityDrain,
@@ -111,22 +109,17 @@ export async function processActionRefresh(
   //        1.5 (deputy leaders / party vc/treasurer), 1.0 (rank-and-file legislators)
   // Office tiers live in `resolveOfficeNiBonus`, which falls back to the
   // per-country office registry so non-US legislators are not silently zeroed.
-  const CONGRESS_LEADER_NI_BONUS: Partial<Record<LeadershipRole, number>> = {
-    majority_leader_senate: 2.0,
-    speaker_of_the_house: 2.0,
-    president_pro_tempore: 2.0,
-    minority_leader_senate: 1.5,
-    majority_leader_house: 1.5,
-    minority_leader_house: 1.5,
-  };
-
   const congressLeaderRows = await db
     .collection<CongressLeader>("congressLeaders")
     .find({ characterId: { $ne: null } }, { projection: { characterId: 1, role: 1 } })
     .toArray();
-  const leaderRoleByCharId = new Map<string, LeadershipRole>();
+  const leaderRolesByCharId = new Map<string, LeadershipRole[]>();
   for (const row of congressLeaderRows) {
-    if (row.characterId) leaderRoleByCharId.set(row.characterId.toString(), row.role);
+    if (!row.characterId) continue;
+    const id = row.characterId.toString();
+    const roles = leaderRolesByCharId.get(id) ?? [];
+    roles.push(row.role);
+    leaderRolesByCharId.set(id, roles);
   }
 
   const partyChairIds = new Set<string>();
@@ -158,8 +151,7 @@ export async function processActionRefresh(
    * seat itself is recovered from `electedOfficials`. Mirrors how the central
    * bank chair bonus stacks on top of an elected-office bonus.
    */
-  const cabinetRows = await db
-    .collection<{ characterId: ObjectId; countryId: string }>("cabinetMembers")
+  const cabinetRows = await getCabinetMembersCollection(db)
     .find({}, { projection: { characterId: 1, countryId: 1 } })
     .toArray();
   const cabinetCountryByCharId = new Map<string, CountryId>();
@@ -255,25 +247,15 @@ export async function processActionRefresh(
      * National influence is never decayed; it represents accumulated reputation.
      */
     const charIdStr = character._id.toString();
-    let positionNiBonus = 0;
-    if (character.currentOffice) {
-      positionNiBonus = Math.max(
-        positionNiBonus,
-        resolveOfficeNiBonus(character.currentOffice.type, character.countryId)
-      );
-    }
-    const leaderRole = leaderRoleByCharId.get(charIdStr);
-    if (leaderRole) {
-      positionNiBonus = Math.max(positionNiBonus, CONGRESS_LEADER_NI_BONUS[leaderRole] ?? 0);
-    }
-    if (partyChairIds.has(charIdStr)) {
-      positionNiBonus = Math.max(positionNiBonus, 2.0);
-    } else if (partySubChairIds.has(charIdStr)) {
-      positionNiBonus = Math.max(positionNiBonus, 1.5);
-    }
-    if (seatedJusticeCharacterIds.has(charIdStr)) {
-      positionNiBonus = Math.max(positionNiBonus, JUSTICE_NI_BONUS_PER_TURN);
-    }
+    const positionNiBonus = resolvePositionNiBonus({
+      currentOfficeType: character.currentOffice?.type,
+      countryId: character.countryId,
+      congressLeadershipRoles: leaderRolesByCharId.get(charIdStr),
+      isPartyChair: partyChairIds.has(charIdStr),
+      isPartySubChair: partySubChairIds.has(charIdStr),
+      isSeatedJustice: seatedJusticeCharacterIds.has(charIdStr),
+      cabinetCountryId: cabinetCountry,
+    });
 
     const nationalGain = calculateNationalInfluenceGain(currentInfluence) + positionNiBonus;
     const newNational = currentNational + nationalGain;
