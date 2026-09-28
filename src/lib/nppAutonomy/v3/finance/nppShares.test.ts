@@ -338,6 +338,25 @@ describe("nppSellShares", () => {
     expect(reverseFloatSellDebit).not.toHaveBeenCalled();
   });
 
+  it("sells EUR equity for a 2027 French NPP at the preloaded EUR rate", async () => {
+    corpFindOne.mockResolvedValue(baseCorp({ countryId: "FR", liquidCurrencyCode: "EUR" }));
+    const result = await nppSellShares(
+      db,
+      { _id: nppId, countryId: "FR" },
+      corpId,
+      SHARES,
+      CURRENT_TURN,
+      0.92,
+      undefined,
+      "2027-default"
+    );
+    expect(result).toMatchObject({
+      ok: true,
+      proceedsAnchor: Math.round((EXPECTED_PROCEEDS / 0.92) * 100) / 100,
+    });
+    expect(corpFindOne).toHaveBeenCalledTimes(1);
+  });
+
   it("vacates the CEO seat when the selling NPP is the CEO selling their entire stake", async () => {
     corpFindOne.mockResolvedValue(baseCorp({ ceoId: nppId }));
     await nppSellShares(db, npp, corpId, SHARES, CURRENT_TURN, 1);

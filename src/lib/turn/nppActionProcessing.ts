@@ -612,9 +612,9 @@ export async function processNppActions(
   if (econActive) {
     await investNppBondSurplus(db, currentTurn, econScopeCountries, preset);
     await investNppStockSurplus(db, currentTurn, econScopeCountries, preset);
-    await sellNppStockSurplus(db, currentTurn, econScopeCountries);
+    await sellNppStockSurplus(db, currentTurn, econScopeCountries, preset);
     await buildNppPartyOrgSurplus(db, currentTurn, econScopeCountries);
-    await foundNppCorporationsSurplus(db, currentTurn, econScopeCountries);
+    await foundNppCorporationsSurplus(db, currentTurn, econScopeCountries, preset);
   }
 
   return result;
@@ -1036,7 +1036,8 @@ async function buildNppPartyOrgSurplus(
 async function sellNppStockSurplus(
   db: Db,
   currentTurn: number,
-  countryScope: CountryId[] | null = null
+  countryScope: CountryId[] | null = null,
+  preset?: string
 ): Promise<void> {
   const corps = await db
     .collection<Corporation>("corporations")
@@ -1114,7 +1115,10 @@ async function sellNppStockSurplus(
 
       const countryId = countryById.get(holding.nppId.toString());
       if (!countryId) continue;
-      const homeRate = fxByCcy.get(COUNTRY_CURRENCY_MAP[countryId as CountryId] ?? "USD") ?? 1;
+      const homeCurrency = preset
+        ? getSeedCurrencyCode(countryId as CountryId, preset)
+        : (COUNTRY_CURRENCY_MAP[countryId as CountryId] ?? "USD");
+      const homeRate = fxByCcy.get(homeCurrency) ?? 1;
 
       // Proceeds credit nppInvestmentCashAnchor (the forex account), not funds.
       const result = await nppSellShares(
@@ -1124,7 +1128,8 @@ async function sellNppStockSurplus(
         sharesToSell,
         currentTurn,
         homeRate,
-        corp
+        corp,
+        preset
       );
       if (result.ok) {
         corp.publicFloat = (corp.publicFloat ?? 0) + sharesToSell;
@@ -1145,7 +1150,8 @@ async function sellNppStockSurplus(
 export async function foundNppCorporationsSurplus(
   db: Db,
   currentTurn: number,
-  countryScope: CountryId[] | null = null
+  countryScope: CountryId[] | null = null,
+  preset?: string
 ): Promise<void> {
   // Founding draws from the personal forex account (₳). Pre-filter the pool by
   // ₳ investment capital; the core enforces exact per-NPP affordability (fee is
@@ -1220,8 +1226,11 @@ export async function foundNppCorporationsSurplus(
       Math.floor(rng() * CORPORATION_TYPES.length)
     ] as CorporationType;
 
-    const homeRate =
-      fxByCcy.get(COUNTRY_CURRENCY_MAP[(npp.countryId ?? "US") as CountryId] ?? "USD") ?? 1;
+    const homeCountry = (npp.countryId ?? "US") as CountryId;
+    const homeCurrency = preset
+      ? getSeedCurrencyCode(homeCountry, preset)
+      : (COUNTRY_CURRENCY_MAP[homeCountry] ?? "USD");
+    const homeRate = fxByCcy.get(homeCurrency) ?? 1;
     await nppFoundCorporation(
       db,
       npp,
@@ -1229,7 +1238,8 @@ export async function foundNppCorporationsSurplus(
       NPP_FOUNDING_FEE,
       currentTurn,
       homeRate,
-      blockedSet
+      blockedSet,
+      preset
     );
   }
 }

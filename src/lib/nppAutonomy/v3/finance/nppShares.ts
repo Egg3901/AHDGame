@@ -235,7 +235,8 @@ export async function nppSellShares(
   /** Pre-loaded home FX rate (local per ₳); loaded on demand when omitted. */
   homeRate?: number,
   /** Candidate from the turn sweep; the share debit still checks live state. */
-  corpSnapshot?: NppShareSellSnapshot
+  corpSnapshot?: NppShareSellSnapshot,
+  preset?: string
 ): Promise<NppShareSellResult> {
   if (!Number.isInteger(shares) || shares <= 0) {
     return { ok: false, reason: "Shares must be a positive integer." };
@@ -252,7 +253,10 @@ export async function nppSellShares(
     return { ok: false, reason: "National corporations are not open for equity trading." };
   }
 
-  const homeCurrency = COUNTRY_CURRENCY_MAP[npp.countryId ?? "US"] ?? "USD";
+  const homeCountry = npp.countryId ?? "US";
+  const homeCurrency = preset
+    ? getSeedCurrencyCode(homeCountry, preset)
+    : (COUNTRY_CURRENCY_MAP[homeCountry] ?? "USD");
   const corpCurrency = corp.liquidCurrencyCode ?? "USD";
   if (corpCurrency !== homeCurrency) {
     return { ok: false, reason: "NPPs only sell shares in their home currency." };
@@ -274,7 +278,7 @@ export async function nppSellShares(
   }
   const orderFlowEligible = isOrderFlowPriceEligible(corp.publicFloat, corp.totalShares);
   const proceeds = Math.round(shares * executionPrice * 100) / 100;
-  const rate = homeRate ?? (await nppHomeFxRate(db, npp.countryId));
+  const rate = homeRate ?? (await nppHomeFxRate(db, npp.countryId, undefined, preset));
   const proceedsAnchor = localToAnchor(proceeds, rate);
   const now = new Date();
 
