@@ -150,6 +150,8 @@ export interface BlendDetailInput {
   totalSeats: number | null;
   electionType: string;
   countryId: CountryId;
+  /** Active world preset for era-specific election methods. */
+  preset?: string;
   isEnded: boolean;
   regionName: string;
   /** Party abbreviation lookup, same contract as the region cards. */
@@ -181,7 +183,7 @@ function isMultiSeat(input: BlendDetailInput): boolean {
   ) {
     return true;
   }
-  const method = getElectionMethod(input.countryId, input.electionType);
+  const method = getElectionMethod(input.countryId, input.electionType, input.preset);
   if (!method) return (input.totalSeats ?? 1) > 1;
   return isMultiSeatMethod(method);
 }
@@ -191,7 +193,8 @@ function isMultiSeat(input: BlendDetailInput): boolean {
  * quota against a Sainte-Lague or AMS race would be a fabrication.
  */
 export function detailQuota(input: BlendDetailInput): number | null {
-  if (getElectionMethod(input.countryId, input.electionType) !== "pr_hareQuota") return null;
+  if (getElectionMethod(input.countryId, input.electionType, input.preset) !== "pr_hareQuota")
+    return null;
   const seats = input.totalSeats ?? 0;
   // Same listed-field denominator as the shares, so the quota the panel quotes
   // is the one the seat arithmetic below actually divides by.
