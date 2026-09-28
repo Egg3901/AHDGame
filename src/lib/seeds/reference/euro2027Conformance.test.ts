@@ -23,9 +23,10 @@ import {
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 
 const MEMBERS = [...EUROZONE_2027_MEMBERS];
-// Bulgaria has a sourced regional GDP anchor but no authored post-1991 national
-// budget. Currency adoption must not synthesize fiscal values for that gap.
-const BUDGET_MEMBERS = MEMBERS.filter((member) => member !== "BG");
+const BUDGET_MEMBERS = MEMBERS;
+// Bulgaria's 2027 budget is authored directly in EUR, unlike the legacy rows
+// that this conversion contract checks.
+const CONVERTED_MEMBERS = MEMBERS.filter((member) => member !== "BG");
 const RATES_2027 = getInitialRates("2027-default");
 const RATES_1991 = getInitialRates("1991-default");
 
@@ -73,7 +74,7 @@ describe("2027 euro seed conformance", () => {
       const configs2027 = configsByCountry(getNationalBudgetSeedConfigsForPreset("2027-default"));
       const configs2023 = getNationalBudgetSeedConfigsForPreset("2023-default");
       const eurAnchorRate = RATES_2027.DE!;
-      for (const member of BUDGET_MEMBERS) {
+      for (const member of CONVERTED_MEMBERS) {
         if (member === "DE") continue; // already EUR, untouched
         const converted = configs2027.get(member)!;
         const base = preConversionBase(member, configs2023);
@@ -108,7 +109,7 @@ describe("2027 euro seed conformance", () => {
       const configs2027 = configsByCountry(getNationalBudgetSeedConfigsForPreset("2027-default"));
       const configs2023 = getNationalBudgetSeedConfigsForPreset("2023-default");
       const eurAnchorRate = RATES_2027.DE!;
-      for (const member of BUDGET_MEMBERS) {
+      for (const member of CONVERTED_MEMBERS) {
         if (member === "DE") continue;
         const converted = configs2027.get(member)!;
         const base = preConversionBase(member, configs2023);
@@ -209,10 +210,6 @@ describe("2027 euro seed conformance", () => {
         expect(op?.updateOne.update.$setOnInsert.currencyCode, member).toBe("EUR");
         expect(op?.updateOne.update.$setOnInsert.rate, member).toBe(RATES_2027.DE);
       }
-      // BG uses the DE EUR anchor without its own forex row: its legacy lev
-      // was never in FOREX_ACTIVE_COUNTRIES, and no national fiscal/CB model
-      // exists yet. Its new region GDP is already converted to EUR.
-      expect(byCountry.has("BG")).toBe(false);
       // Non-members keep code and table rate.
       for (const outsider of ["US", "UK", "JP", "SE", "CN", "BR", "NG", "TR"] as const) {
         const op = byCountry.get(outsider);
@@ -268,7 +265,6 @@ describe("2027 euro seed conformance", () => {
       for (const member of BUDGET_MEMBERS) {
         expect(byCountry.get(member)?.liquidCurrencyCode, member).toBe("EUR");
       }
-      expect(byCountry.has("BG")).toBe(false);
       // Non-members carry an explicit home code, never undefined.
       for (const outsider of ["US", "UK", "JP", "BR", "CN", "NG", "SE", "TR"] as const) {
         expect(byCountry.get(outsider)?.liquidCurrencyCode, outsider).toBe(
