@@ -677,7 +677,7 @@ export interface CountryGameState {
   /** DB-driven country status - overrides CountryConfig.status at runtime */
   status?: CountryStatus;
   /**
-   * Turn this country ceased to exist — absorbed into another state.
+   * Turn this country ceased to exist through absorption or dissolution.
    *
    * The registry could previously only ever ADD: `registeredBase` returns
    * `[...COUNTRY_ORDER, ...activated]`, so a country compiled into the static
@@ -692,7 +692,9 @@ export interface CountryGameState {
    * two enumeration chokepoints are the only readers.
    *
    * Retirement is not deletion. The documents stay for history, the wiki, and
-   * any future restoration; the country simply stops being simulated.
+   * any future restoration; the country simply stops being simulated. The
+   * 1992 SFRY dissolution uses this marker while its successor polities await
+   * their own migration.
    */
   dissolvedTurn?: number | null;
   /**

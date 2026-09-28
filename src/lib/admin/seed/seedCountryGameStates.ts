@@ -168,6 +168,7 @@ export async function seedCountryGameStates(
           createdAt: now,
         },
         ...(cid === "BG" ? { $unset: { bgOrdinaryAssemblySinceTurn: "" } } : {}),
+        ...(cid === "YU" ? { $unset: { dissolvedTurn: "" } } : {}),
       },
       { upsert: true }
     );
