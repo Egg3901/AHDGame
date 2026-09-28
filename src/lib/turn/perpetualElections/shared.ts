@@ -48,7 +48,8 @@ export interface RegionalDelegateSpec {
   seatsForRegions: (
     regions: State[],
     preset: string | undefined,
-    ctx: CycleAnchorContext
+    ctx: CycleAnchorContext,
+    currentYear: number
   ) => Record<string, number>;
   /** Open the primary immediately (short window vs multi-year cycle). CN/BR: true. */
   openPrimaryImmediately: boolean;
@@ -152,18 +153,18 @@ export async function ensureRegionalDelegateElections(
     const gate = spec.electionsLiveGate ?? countryElectionsLive;
     if (!(await gate(db, spec.countryId))) return;
   }
-  const { currentTurn: persistedTurn, ctx } = await getCurrentTurnAndCtx(db);
+  const { currentTurn: persistedTurn, currentYear, ctx } = await getCurrentTurnAndCtx(db);
   const currentTurn = inFlightTurn ?? persistedTurn;
 
   const regions = await db
     .collection<State>("states")
     .find(
       { countryId: spec.countryId },
-      { projection: { _id: 1, houseDistricts: 1, stateSenateSeats: 1 } }
+      { projection: { _id: 1, population: 1, houseDistricts: 1, stateSenateSeats: 1 } }
     )
     .toArray();
   if (regions.length === 0) return;
-  const seatMap = spec.seatsForRegions(regions as State[], ctx.preset, ctx);
+  const seatMap = spec.seatsForRegions(regions as State[], ctx.preset, ctx, currentYear);
 
   const liveElections = await db
     .collection<Election>("elections")

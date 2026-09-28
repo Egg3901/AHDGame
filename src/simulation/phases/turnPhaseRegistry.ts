@@ -1108,11 +1108,6 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
       key: "electionResolutionAndGovernment",
       async execute(context, runtime) {
         const { db, gameNow, newTurn, currentYear, phaseResults } = context;
-        if (currentYear >= 2014 && context.gameState.preset === "1991-default") {
-          await runtime.runPhase("huAssemblyReform", () =>
-            runHuAssemblyReform(db, currentYear, gameNow)
-          );
-        }
         // Group 7 is strictly sequential. Reordering any of these steps corrupts
         // elections by dropping final-turn votes or resolving offices from stale tallies.
         await runtime.runPhase("withdrawInactiveCandidates", () =>
@@ -1188,6 +1183,11 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
         );
         phaseResults.leadershipVacated = { positionsVacated: vacatedCount ?? 0 };
 
+        if (currentYear >= 2014 && context.gameState.preset === "1991-default") {
+          await runtime.runPhase("huAssemblyReform", () =>
+            runHuAssemblyReform(db, currentYear, gameNow)
+          );
+        }
         const govResult = await runtime.runPhase("parliamentaryGovernmentFormation", async () => {
           const { processBgAssemblyTransition } = await import("@/lib/turn/bgAssemblyTransition");
           await processBgAssemblyTransition(db, context.gameState, newTurn, gameNow);
