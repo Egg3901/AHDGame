@@ -63,6 +63,10 @@ export function UnionEnforcementDesk({
         setPosture(data.posture);
         setCanChange(false);
         setResult(`Enforcement posture set to ${data.posture}.`);
+      } else if ("strengthLoss" in data) {
+        setResult(
+          `Raid removed ${data.strengthLoss} cell strength${data.sympathyGain ? `; sympathy restored ${data.sympathyGain}` : ""}. Two action points spent. This cell cannot be raided again for three turns.`
+        );
       } else {
         setResult(`Investigation found ${data.heat} heat. One action point spent.`);
       }
@@ -77,8 +81,8 @@ export function UnionEnforcementDesk({
     <section aria-label="Union enforcement" className="rounded-xl border border-border p-4 text-sm">
       <h2 className="font-semibold">Executive union enforcement</h2>
       <p className="mt-1 text-xs text-muted">
-        Investigate a domestic union for one action point, or change the standing detection posture
-        once per turn.
+        Investigate a domestic union for one action point, raid an exposed or high heat cell for
+        two, or change the standing detection posture once per turn.
       </p>
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <label htmlFor="union-enforcement-posture">Posture</label>
@@ -124,6 +128,14 @@ export function UnionEnforcementDesk({
           className="rounded border border-border px-3 py-1 disabled:opacity-50"
         >
           Investigate
+        </button>
+        <button
+          type="button"
+          disabled={busy || !target}
+          onClick={() => submit({ action: "raid", unionId: target })}
+          className="rounded border border-border px-3 py-1 disabled:opacity-50"
+        >
+          Raid
         </button>
       </div>
       {result && (

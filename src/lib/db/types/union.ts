@@ -158,6 +158,8 @@ export interface Union {
   exposedUntilTurn?: number | null;
   /** Illicit unions under ban: turn this union last took an underground drive, for heat-decay idle checks. */
   lastUndergroundDriveTurn?: number | null;
+  /** Last successful government raid. Further raids wait for the cooldown. */
+  lastUndergroundRaidTurn?: number | null;
   createdAt: Date;
   updatedAt: Date;
 }

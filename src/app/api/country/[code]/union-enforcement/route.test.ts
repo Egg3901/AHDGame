@@ -110,6 +110,48 @@ describe("union ban enforcement route", () => {
     expect(db.collection("characters").updateOne).not.toHaveBeenCalled();
   });
 
+  it("raids a high heat suspended cell for two actions and plants a cooldown", async () => {
+    db.collection("unions").findOne.mockResolvedValue({
+      _id: unionId,
+      countryId: "US",
+      suspended: true,
+      heat: 72,
+      undergroundStrength: 20,
+    });
+    db.collection("unions").updateOne.mockResolvedValue({ modifiedCount: 1 });
+    const response = await post({ action: "raid", unionId: unionId.toString() });
+    expect(response.status).toBe(200);
+    expect(db.collection("characters").updateOne).toHaveBeenCalledWith(
+      { _id: characterId, actions: { $gte: 2 } },
+      expect.objectContaining({ $inc: { actions: -2 } })
+    );
+    expect(db.collection("unions").updateOne).toHaveBeenCalledWith(
+      expect.objectContaining({ suspended: true }),
+      expect.objectContaining({ $set: expect.objectContaining({ lastUndergroundRaidTurn: 42 }) })
+    );
+  });
+
+  it("refuses a cold cell or a cell still in raid cooldown without spending actions", async () => {
+    db.collection("unions").findOne.mockResolvedValue({
+      _id: unionId,
+      countryId: "US",
+      suspended: true,
+      heat: 20,
+      undergroundStrength: 20,
+    });
+    expect((await post({ action: "raid", unionId: unionId.toString() })).status).toBe(409);
+    db.collection("unions").findOne.mockResolvedValue({
+      _id: unionId,
+      countryId: "US",
+      suspended: true,
+      heat: 72,
+      undergroundStrength: 20,
+      lastUndergroundRaidTurn: 41,
+    });
+    expect((await post({ action: "raid", unionId: unionId.toString() })).status).toBe(409);
+    expect(db.collection("characters").updateOne).not.toHaveBeenCalled();
+  });
+
   it("rejects enforcement after repeal", async () => {
     db.collection("federalBudget").findOne.mockResolvedValue({ unionsBanned: false });
     const response = await post({ action: "posture", posture: "normal" });
