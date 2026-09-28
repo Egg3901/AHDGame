@@ -112,7 +112,7 @@ describe("purchaseBondUnitsForFund", () => {
           counterpartyName: "US Treasury",
         }),
         { fund: {} },
-        60
+        { turnLengthMinutes: 60 }
       );
     });
 
