@@ -165,7 +165,9 @@ export const REGION_ROSTERS: Partial<Record<CountryId, Partial<Record<EraId, Ros
   },
   RU: {
     "1953": () => import("@/lib/seeds/ru/ruRegions1953").then((m) => m.ruRegions1953),
+    "1991": () => import("@/lib/countries/ru/data/ruRegions1991").then((m) => m.ruRegions1991),
     "2019": () => import("@/lib/seeds/ru/ruRegions").then((m) => m.ruRegions),
+    "2027": () => import("@/lib/countries/ru/data/ruRegions2027").then((m) => m.ruRegions2027),
   },
   FR: {
     "1953": () => import("@/lib/seeds/fr/frRegions1953").then((m) => m.frRegions1953),
