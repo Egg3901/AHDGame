@@ -66,14 +66,15 @@ const LEGISLATURE_COMPONENTS: Partial<Record<CountryId, ComponentType<{ countryI
 interface Props {
   countryId: CountryId;
   legislatureName?: string;
+  generic?: boolean;
 }
 
-export default function LegislatureClient({ countryId, legislatureName }: Props) {
+export default function LegislatureClient({ countryId, legislatureName, generic }: Props) {
   const config = COUNTRY_CONFIGS[countryId];
   const displayedName = legislatureName ?? config.legislature.name;
   const PageComponent = LEGISLATURE_COMPONENTS[countryId];
 
-  if (PageComponent) {
+  if (PageComponent && !generic) {
     return (
       <Suspense fallback={<LegislatureFallback name={displayedName} />}>
         <PageComponent countryId={countryId} />

@@ -26,3 +26,94 @@ export function ru1991PresidentialConfig(config: CountryConfig): CountryConfig {
     ],
   };
 }
+
+export function ru1993DissolvedCongressConfig(config: CountryConfig): CountryConfig {
+  return {
+    ...config,
+    legislature: {
+      ...config.legislature,
+      name: "Congress of People's Deputies (dissolved)",
+      lowerChamber: { ...config.legislature.lowerChamber, seats: 0, elected: false },
+    },
+    officeTypes: config.officeTypes.filter((office) => office.key !== "congressDeputy"),
+  };
+}
+
+/** The first Duma and Federation Council were each elected for two years.
+ * The 450-seat Duma split 225 single-member seats and 225 list seats; the
+ * first 178-member Council was directly elected, unlike its later delegated
+ * composition. The macroregion model cannot assign its 89 two-seat subjects.
+ * https://www.constitution.ru/en/10003000-06.htm
+ * https://www.constitution.ru/en/10003000-10.htm
+ * https://www.prlib.ru/item/358718
+ * https://data.ipu.org/election-summary/HTML/2263_93.htm
+ */
+export function ru1993FederalAssemblyConfig(config: CountryConfig): CountryConfig {
+  return {
+    ...config,
+    executiveTitle: "Prime Minister",
+    governmentTypeLabel: "Presidential Federation",
+    coalitionThreshold: 226,
+    legislature: {
+      name: "Federal Assembly",
+      path: "/country/ru/legislature",
+      bicameral: true,
+      lowerChamber: {
+        key: "stateDuma",
+        name: "State Duma",
+        shortName: "Duma",
+        seats: 450,
+        description:
+          "First convocation: 225 constituency and 225 party-list deputies, elected for two years in December 1993.",
+        elected: true,
+      },
+      upperChamber: {
+        key: "federationCouncil",
+        name: "Federation Council",
+        shortName: "Federation Council",
+        seats: 178,
+        description:
+          "First convocation: two directly elected members per federal subject, for a two-year term.",
+        elected: true,
+      },
+    },
+    lowerElectionSystem: {
+      termYears: 2,
+      seatsContested: "all",
+      singleMemberConstituencies: false,
+      snapElectionsAllowed: true,
+    },
+    upperElectionSystem: {
+      termYears: 2,
+      seatsContested: "all",
+      singleMemberConstituencies: false,
+      snapElectionsAllowed: false,
+    },
+    electionSystems: { ...config.electionSystems, lowerChamber: "ams", upperChamber: "fptp" },
+    officeTypes: [
+      ...config.officeTypes.filter((office) => office.key !== "congressDeputy"),
+      {
+        key: "dumaDeputy",
+        label: "Duma Deputy",
+        labelPlural: "Duma Deputies",
+        chamberKey: "stateDuma",
+        isExecutive: false,
+        isSubNational: false,
+        termYears: 2,
+        actionBonus: 1,
+        partyStrengthWeight: 0.9,
+      },
+      {
+        key: "federationCouncilMember",
+        label: "Federation Council Member",
+        labelPlural: "Federation Council Members",
+        chamberKey: "federationCouncil",
+        isExecutive: false,
+        isSubNational: false,
+        termYears: 2,
+        actionBonus: 1,
+        partyStrengthWeight: 0.8,
+      },
+    ],
+  };
+}

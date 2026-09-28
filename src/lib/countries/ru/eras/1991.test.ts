@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { getCountryConfig } from "@/lib/constants/countries";
 import { getParliamentaryCountryIds } from "@/lib/turn/parliamentaryGovernment";
 import { ruRegions1991 } from "../data/ruRegions1991";
-import { ru1991PresidencyStage } from "./1991";
+import { ru1991PresidencyStage, ru1993LegislatureStage } from "./1991";
 import { getCountryConfigForRuntime } from "@/lib/constants/countries";
 
 describe("Russian 1991 transitional institutions", () => {
@@ -61,5 +61,36 @@ describe("Russian 1991 transitional institutions", () => {
     expect(getCountryConfigForRuntime("RU", "2027-default", { ruPresidencySinceTurn: 25 })).toEqual(
       getCountryConfig("RU", "2027-default")
     );
+  });
+
+  it("retires Congress in September, elects in December, and convenes in January", () => {
+    expect(ru1993LegislatureStage(128)).toBe("congress");
+    expect(ru1993LegislatureStage(129)).toBe("dissolved");
+    expect(ru1993LegislatureStage(140)).toBe("dissolved");
+    expect(ru1993LegislatureStage(141)).toBe("elected");
+    expect(ru1993LegislatureStage(145)).toBe("federalAssembly");
+    const dissolved = getCountryConfigForRuntime("RU", "1991-default", {
+      ruCongressDissolvedSinceTurn: 129,
+    });
+    expect(dissolved.legislature.lowerChamber.seats).toBe(0);
+    expect(dissolved.officeTypes.some((office) => office.key === "congressDeputy")).toBe(false);
+    const assembly = getCountryConfigForRuntime("RU", "1991-default", {
+      ruCongressDissolvedSinceTurn: 129,
+      ruFederalAssemblySinceTurn: 141,
+    });
+    expect(assembly.legislature.name).toBe("Federal Assembly");
+    expect(assembly.legislature.lowerChamber).toMatchObject({ key: "stateDuma", seats: 450 });
+    expect(assembly.legislature.upperChamber).toMatchObject({
+      key: "federationCouncil",
+      seats: 178,
+      elected: true,
+    });
+    expect(assembly.lowerElectionSystem.termYears).toBe(2);
+    expect(assembly.upperElectionSystem?.termYears).toBe(2);
+    expect(assembly.officeTypes.map((office) => office.key)).toContain("dumaDeputy");
+    expect(assembly.officeTypes.map((office) => office.key)).toContain("federationCouncilMember");
+    expect(assembly.headOfStateTitle).toBe("President");
+    expect(getCountryConfig("RU", "1979-default").legislature.name).not.toBe("Federal Assembly");
+    expect(getCountryConfig("RU", "2027-default").lowerElectionSystem.termYears).toBe(5);
   });
 });

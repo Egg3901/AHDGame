@@ -1199,6 +1199,9 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
           const { processRuPresidencyTransition } =
             await import("@/lib/countries/ru/ruPresidencyTransition");
           await processRuPresidencyTransition(db, context.gameState, newTurn, gameNow);
+          const { processRuLegislatureTransition } =
+            await import("@/lib/countries/ru/ruLegislatureTransition");
+          await processRuLegislatureTransition(db, context.gameState, newTurn, gameNow);
           return runPostElectionGovernmentPhases(db, gameNow, generalResolved ?? 0);
         });
         const govFormedMap = govResult?.governmentFormed ?? {};

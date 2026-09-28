@@ -36,7 +36,11 @@ import { NG_ERAS } from "@/lib/countries/ng/eras";
 import { PL_ERAS } from "@/lib/countries/pl/eras";
 import { RO_ERAS } from "@/lib/countries/ro/eras";
 import { RU_ERAS } from "@/lib/countries/ru/eras";
-import { ru1991PresidentialConfig } from "@/lib/countries/ru/runtimeInstitutions";
+import {
+  ru1991PresidentialConfig,
+  ru1993DissolvedCongressConfig,
+  ru1993FederalAssemblyConfig,
+} from "@/lib/countries/ru/runtimeInstitutions";
 import { SE_ERAS } from "@/lib/countries/se/eras";
 import { TR_ERAS } from "@/lib/countries/tr/eras";
 import { UK_ERAS } from "@/lib/countries/uk/eras";
@@ -1286,18 +1290,32 @@ export function getCountryConfig(id: CountryId, preset?: string): CountryConfig 
   return { ...base, ...override };
 }
 
-/** Resolve a dated 1991 Russian office after the July inauguration marker.
- * Callers without world state continue to receive the January seed config. */
+/** Resolve Russia's dated 1991 presidency and 1993-94 legislature markers.
+ * Callers without world state continue to receive the January 1991 seed config. */
 export function getCountryConfigForRuntime(
   id: CountryId,
   preset: string | undefined,
-  countryState?: { ruPresidencySinceTurn?: number } | null
+  countryState?: {
+    ruPresidencySinceTurn?: number;
+    ruCongressDissolvedSinceTurn?: number;
+    ruFederalAssemblySinceTurn?: number;
+  } | null
 ): CountryConfig {
   const config = getCountryConfig(id, preset);
-  if (id !== "RU" || preset !== "1991-default" || countryState?.ruPresidencySinceTurn == null) {
-    return config;
+  if (id !== "RU" || preset !== "1991-default") return config;
+  const presidential =
+    countryState?.ruPresidencySinceTurn != null ||
+    countryState?.ruCongressDissolvedSinceTurn != null ||
+    countryState?.ruFederalAssemblySinceTurn != null
+      ? ru1991PresidentialConfig(config)
+      : config;
+  if (countryState?.ruFederalAssemblySinceTurn != null) {
+    return ru1993FederalAssemblyConfig(presidential);
   }
-  return ru1991PresidentialConfig(config);
+  if (countryState?.ruCongressDissolvedSinceTurn != null) {
+    return ru1993DissolvedCongressConfig(presidential);
+  }
+  return presidential;
 }
 
 /**

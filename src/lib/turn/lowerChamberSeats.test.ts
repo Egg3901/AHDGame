@@ -111,6 +111,19 @@ describe("getLiveLowerChamberSeats", () => {
     expect(await getLiveLowerChamberSeats(db as unknown as Db, "RO")).toBe(350);
     expect(await getLiveUpperChamberSeats(db as unknown as Db, "RO")).toBe(150);
   });
+
+  it("reads the Russian Congress dissolution and first Duma seat count", async () => {
+    db.collection("gameState").findOne.mockResolvedValue({ preset: "1991-default" });
+    db.collection("countryGameStates").findOne.mockResolvedValue({
+      ruCongressDissolvedSinceTurn: 129,
+    });
+    expect(await getLiveLowerChamberSeats(db as unknown as Db, "RU")).toBe(0);
+    db.collection("countryGameStates").findOne.mockResolvedValue({
+      ruCongressDissolvedSinceTurn: 129,
+      ruFederalAssemblySinceTurn: 145,
+    });
+    expect(await getLiveLowerChamberSeats(db as unknown as Db, "RU")).toBe(450);
+  });
 });
 
 describe("getLiveUpperChamberSeats", () => {
@@ -169,5 +182,17 @@ describe("getLiveUpperChamberSeats", () => {
       ])
     );
     expect(await getLiveUpperChamberSeats(db as unknown as Db, "SE")).toBe(151);
+  });
+
+  it("opens the first Russian Federation Council at 178 seats", async () => {
+    db.collection("gameState").findOne.mockResolvedValue({ preset: "1991-default" });
+    db.collection("countryGameStates").findOne.mockResolvedValue({
+      ruCongressDissolvedSinceTurn: 129,
+    });
+    expect(await getLiveUpperChamberSeats(db as unknown as Db, "RU")).toBe(0);
+    db.collection("countryGameStates").findOne.mockResolvedValue({
+      ruFederalAssemblySinceTurn: 145,
+    });
+    expect(await getLiveUpperChamberSeats(db as unknown as Db, "RU")).toBe(178);
   });
 });

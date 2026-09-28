@@ -228,7 +228,12 @@ async function handleParliamentary(countryId: CountryId) {
     db.collection<{ _id: string; preset?: string }>("gameState").findOne({ _id: "current" }),
     countryId === "RU"
       ? db
-          .collection<{ _id: string; ruPresidencySinceTurn?: number }>("countryGameStates")
+          .collection<{
+            _id: string;
+            ruPresidencySinceTurn?: number;
+            ruCongressDissolvedSinceTurn?: number;
+            ruFederalAssemblySinceTurn?: number;
+          }>("countryGameStates")
           .findOne({ _id: "RU" })
       : Promise.resolve(null),
   ]);

@@ -80,6 +80,16 @@ export async function getLiveLowerChamberSeats(db: Db, countryId: CountryId): Pr
       return seats > 0 ? seats : RO_1992_DEPUTY_SEATS;
     }
   }
+  if (countryId === "RU" && preset === "1991-default") {
+    const countryState = await db
+      .collection<CountryGameState>("countryGameStates")
+      .findOne(
+        { _id: "RU" },
+        { projection: { ruCongressDissolvedSinceTurn: 1, ruFederalAssemblySinceTurn: 1 } }
+      );
+    if (countryState?.ruFederalAssemblySinceTurn != null) return 450;
+    if (countryState?.ruCongressDissolvedSinceTurn != null) return 0;
+  }
   if (isListTierMethod(config.electionSystems.lowerChamber)) {
     return config.legislature.lowerChamber.seats;
   }
@@ -140,6 +150,12 @@ export async function getLiveUpperChamberSeats(db: Db, countryId: CountryId): Pr
       const seats = regions.reduce((sum, region) => sum + (region.stateSenateSeats ?? 0), 0);
       return seats > 0 ? seats : RO_1992_SENATE_SEATS;
     }
+  }
+  if (countryId === "RU" && preset === "1991-default") {
+    const countryState = await db
+      .collection<CountryGameState>("countryGameStates")
+      .findOne({ _id: "RU" }, { projection: { ruFederalAssemblySinceTurn: 1 } });
+    return countryState?.ruFederalAssemblySinceTurn != null ? 178 : 0;
   }
   const config = getCountryConfig(countryId, preset);
   const upper = config.legislature.upperChamber;

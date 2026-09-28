@@ -15,6 +15,24 @@ export function ru1991PresidencyStage(
   return "chairman";
 }
 
+/** Month-level representation of the 1993 constitutional crisis. Congress
+ * ceased operating after the September 21 decree; the December 12 vote chose
+ * the first Federal Assembly under the new constitution. The new chambers
+ * first sat on January 12, 1994. The game calendar cannot express days.
+ * https://www.prlib.ru/news/2038679
+ * https://www.constitution.ru/en/10003000-10.htm
+ * https://data.ipu.org/election-summary/HTML/2263_93.htm
+ */
+export function ru1993LegislatureStage(
+  calendarTurn: number
+): "congress" | "dissolved" | "elected" | "federalAssembly" {
+  const { year, month } = turnToGameMonth(calendarTurn, 1991);
+  if (year >= 1994) return "federalAssembly";
+  if (year === 1993 && month >= 11) return "elected";
+  if (year === 1993 && month >= 8) return "dissolved";
+  return "congress";
+}
+
 /**
  * January 1991 RSFSR, before the presidency was created in April and first
  * elected in June and inaugurated in July. The 1990 Congress of People's Deputies had 1,068 directly

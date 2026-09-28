@@ -169,7 +169,15 @@ export async function seedCountryGameStates(
         },
         ...(cid === "BG" ? { $unset: { bgOrdinaryAssemblySinceTurn: "" } } : {}),
         ...(cid === "YU" ? { $unset: { dissolvedTurn: "" } } : {}),
-        ...(cid === "RU" ? { $unset: { ruPresidencySinceTurn: "" } } : {}),
+        ...(cid === "RU"
+          ? {
+              $unset: {
+                ruPresidencySinceTurn: "",
+                ruCongressDissolvedSinceTurn: "",
+                ruFederalAssemblySinceTurn: "",
+              },
+            }
+          : {}),
       },
       { upsert: true }
     );

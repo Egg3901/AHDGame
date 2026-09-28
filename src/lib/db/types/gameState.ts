@@ -663,6 +663,10 @@ export interface CountryGameState {
   roParliament1992SinceTurn?: number;
   /** RU 1991: raw turn when the July presidential inauguration replaced the Chairman as head of state. */
   ruPresidencySinceTurn?: number;
+  /** RU 1991 world: raw turn of the September 1993 Congress dissolution. */
+  ruCongressDissolvedSinceTurn?: number;
+  /** RU 1991 world: raw turn of the December 1993 first Federal Assembly. */
+  ruFederalAssemblySinceTurn?: number;
   currentTurn: number;
   currentYear: number;
   /** Turn on which the current electoral cycle began */

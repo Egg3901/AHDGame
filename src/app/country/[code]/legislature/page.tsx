@@ -5,6 +5,7 @@ import { getDb } from "@/lib/mongodb";
 import { getGameStatePreset } from "@/lib/db/collections/gameState";
 import { getLiveLowerChamberSeats } from "@/lib/turn/lowerChamberSeats";
 import { bgAssemblyName } from "@/lib/countries/bg/rules/assemblyTransition";
+import { getCountryConfigForRuntime } from "@/lib/constants/countries";
 import LegislatureClient from "./LegislatureClient";
 
 export const dynamic = "force-dynamic";
@@ -25,6 +26,33 @@ async function bgLegislaturePresentation(): Promise<{ name: string; seats: numbe
   return { name: bgAssemblyName(preset, country?.bgOrdinaryAssemblySinceTurn), seats };
 }
 
+async function ruLegislaturePresentation(): Promise<{
+  name: string;
+  seats: number;
+  generic: boolean;
+}> {
+  const db = await getDb();
+  const [preset, country] = await Promise.all([
+    getGameStatePreset(db),
+    db
+      .collection<{
+        _id: string;
+        ruPresidencySinceTurn?: number;
+        ruCongressDissolvedSinceTurn?: number;
+        ruFederalAssemblySinceTurn?: number;
+      }>("countryGameStates")
+      .findOne({ _id: "RU" }),
+  ]);
+  const config = getCountryConfigForRuntime("RU", preset, country);
+  const generic =
+    preset === "1991-default" &&
+    (country?.ruCongressDissolvedSinceTurn != null || country?.ruFederalAssemblySinceTurn != null);
+  const seats = generic
+    ? await getLiveLowerChamberSeats(db, "RU")
+    : config.legislature.lowerChamber.seats;
+  return { name: config.legislature.name, seats, generic };
+}
+
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { code } = await params;
   const id = code.toUpperCase() as CountryId;
@@ -35,6 +63,13 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     return {
       title: `${name} | A House Divided`,
       description: `Bulgaria ${name}, ${seats} deputies`,
+    };
+  }
+  if (id === "RU") {
+    const { name, seats } = await ruLegislaturePresentation();
+    return {
+      title: `${name} | A House Divided`,
+      description: `Russia ${name}, ${seats} lower-chamber seats`,
     };
   }
   return {
@@ -48,5 +83,8 @@ export default async function LegislaturePage({ params }: PageProps) {
   const id = code.toUpperCase() as CountryId;
   if (!COUNTRY_CONFIGS[id]) notFound();
   const bgName = id === "BG" ? (await bgLegislaturePresentation()).name : undefined;
-  return <LegislatureClient countryId={id} legislatureName={bgName} />;
+  const ru = id === "RU" ? await ruLegislaturePresentation() : undefined;
+  return (
+    <LegislatureClient countryId={id} legislatureName={ru?.name ?? bgName} generic={ru?.generic} />
+  );
 }
