@@ -20,3 +20,12 @@ export function partyHref(kind: "character" | "corporation", party: Party): stri
   const seg = party.sequentialId ?? party.id;
   return kind === "character" ? `/character/${seg}` : `/corporation/${seg}`;
 }
+
+/**
+ * Turns run hourly on the live loop, so every "N turns" at a decision point
+ * reads with its clock time: "12 turns (about 12 hours)".
+ */
+export function turnsToHours(turns: number): string {
+  const n = Math.max(0, Math.round(turns));
+  return `${n} turn${n === 1 ? "" : "s"} (about ${n} hour${n === 1 ? "" : "s"})`;
+}

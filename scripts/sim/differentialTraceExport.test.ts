@@ -61,8 +61,13 @@ describe("authoritative differential trace export", () => {
   it("fails before database access unless the CLI targets an isolated sim database", async () => {
     await expect(
       execFileAsync(
-        "npx",
-        ["tsx", "scripts/sim/exportDifferentialTrace.ts", "--db", "production"],
+        process.execPath,
+        [
+          "node_modules/tsx/dist/cli.mjs",
+          "scripts/sim/exportDifferentialTrace.ts",
+          "--db",
+          "production",
+        ],
         { cwd: process.cwd() }
       )
     ).rejects.toMatchObject({

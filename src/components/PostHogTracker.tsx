@@ -4,7 +4,12 @@ import { useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { useAuthMe } from "@/contexts/AuthDataContext";
 import { CONSENT_EVENT, CONSENT_RESET_EVENT, getStoredConsent } from "@/components/CookieConsent";
-import { getPostHogClient } from "@/lib/analytics/posthogClient";
+import {
+  getPostHogClient,
+  identifyPostHogUser,
+  resetPostHogUser,
+} from "@/lib/analytics/posthogClient";
+import { useGameEvents } from "@/hooks/useGameEvents";
 import {
   captureFirstTurnIfReady,
   capturePendingAccountCreated,
@@ -35,6 +40,16 @@ export function PostHogTracker() {
   const previousUserId = useRef<string | null>(null);
   const lastCapturedPath = useRef<string | null>(null);
   const lastVisitUser = useRef<string | null>(null);
+
+  // The shared game clock emits this only after a committed turn becomes visible
+  // to a signed-in player. It does not infer completions from elapsed time.
+  useGameEvents(
+    () => {
+      void captureProductEvent("turn_completed");
+    },
+    ["turn_complete"],
+    accepted && !!userId
+  );
 
   useEffect(() => {
     const syncConsent = () => {
@@ -70,11 +85,10 @@ export function PostHogTracker() {
     void getPostHogClient().then((client) => {
       if (!client || cancelled || getStoredConsent() !== "accepted") return;
       if (userId && previousUserId.current !== userId) {
-        client.identify(userId);
+        identifyPostHogUser(client, userId);
         previousUserId.current = userId;
       } else if (!userId && previousUserId.current) {
-        client.reset();
-        client.opt_in_capturing();
+        resetPostHogUser(client);
         previousUserId.current = null;
         lastVisitUser.current = null;
       }
@@ -107,7 +121,7 @@ export function PostHogTracker() {
     void getPostHogClient().then((client) => {
       if (!client || getStoredConsent() !== "accepted" || lastVisitUser.current === userId) return;
       if (previousUserId.current !== userId) {
-        client.identify(userId);
+        identifyPostHogUser(client, userId);
         previousUserId.current = userId;
       }
       void captureProductEvent("game_visit");

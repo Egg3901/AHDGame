@@ -7,10 +7,45 @@ import { useCurrency } from "@/contexts/CurrencyContext";
 import { Tooltip } from "@/components/ui";
 import type { CommodityData, ExchangeFilter } from "../types";
 import { ShortageHeatMap } from "./ShortageHeatMap";
+import type { CommodityPriceAttribution } from "@/lib/market/priceAttribution";
 
 interface NationalView {
   nationalPrice: number;
   pctVsBase: number;
+}
+
+const ATTRIBUTION_LEGS: {
+  key: keyof Omit<CommodityPriceAttribution, "appliedPrice" | "realBasePrice">;
+  label: string;
+}[] = [
+  { key: "nominalInflation", label: "inflation" },
+  { key: "scarcityMemory", label: "scarcity" },
+  { key: "producerInputCostPassThrough", label: "input costs" },
+  { key: "marketBalance", label: "market balance" },
+  { key: "adjustmentLag", label: "adjustment lag" },
+  { key: "explicitOverride", label: "override" },
+];
+
+/** One-line "why did it move" summary from the engine's additive attribution. */
+function attributionSummary(attr: CommodityPriceAttribution | null | undefined): string | null {
+  if (!attr || attr.appliedPrice === 0) return null;
+  const legs = ATTRIBUTION_LEGS.map(({ key, label }) => ({
+    label,
+    pct: (attr[key] / attr.appliedPrice) * 100,
+  }))
+    .filter((l) => Math.abs(l.pct) >= 0.5)
+    .sort((a, b) => Math.abs(b.pct) - Math.abs(a.pct))
+    .slice(0, 2);
+  if (legs.length === 0) return null;
+  return `Driven by ${legs.map((l) => `${l.label} (${l.pct >= 0 ? "+" : ""}${l.pct.toFixed(1)}%)`).join(", ")}`;
+}
+
+function attributionDetail(attr: CommodityPriceAttribution): string {
+  const lines = ATTRIBUTION_LEGS.map(
+    ({ key, label }) =>
+      `${label}: ${attr[key] >= 0 ? "+" : ""}${attr[key].toFixed(2)} (${((attr[key] / attr.appliedPrice) * 100).toFixed(1)}%)`
+  );
+  return `Price vs real base ${attr.realBasePrice.toFixed(2)}\n${lines.join("\n")}`;
 }
 
 function computeNationalView(commodity: CommodityData): NationalView | null {
@@ -136,6 +171,10 @@ export function CommodityTable({ commodities, exchangeFilter = "global" }: Commo
                 )}
                 {!isNational && (
                   <>
+                    <th className="px-4 py-3 font-semibold text-muted uppercase text-[10px] tracking-wider text-right">
+                      24h Δ
+                      <Tooltip content="Price change over the last 24 turns (one game day)" />
+                    </th>
                     <th className="px-4 py-3 font-semibold text-muted uppercase text-[10px] tracking-wider text-right hidden sm:table-cell">
                       Supply
                       <Tooltip content="Total units produced globally this turn" />
@@ -151,7 +190,7 @@ export function CommodityTable({ commodities, exchangeFilter = "global" }: Commo
             <tbody className="divide-y divide-card-border">
               {filteredCommodities.length === 0 ? (
                 <tr>
-                  <td colSpan={isNational ? 5 : 5} className="px-4 py-8 text-center text-muted">
+                  <td colSpan={isNational ? 5 : 6} className="px-4 py-8 text-center text-muted">
                     No commodities found matching your criteria.
                   </td>
                 </tr>
@@ -162,6 +201,8 @@ export function CommodityTable({ commodities, exchangeFilter = "global" }: Commo
                   const displayPct = national
                     ? national.pctVsBase
                     : (commodity.annualPriceChange ?? commodity.priceChange ?? 0);
+                  const recentPct = commodity.recentPriceChange ?? null;
+                  const why = attributionSummary(commodity.priceAttribution);
 
                   return (
                     <tr
@@ -173,7 +214,9 @@ export function CommodityTable({ commodities, exchangeFilter = "global" }: Commo
                           href={`/commodity/${commodity.commodity}`}
                           className="flex items-center gap-3"
                         >
-                          <div className="h-10 w-10 rounded-lg bg-card-elevated flex items-center justify-center border border-card-border shrink-0 shadow-sm group-hover:border-primary/30 transition-colors">
+                          <div
+                            className={`h-10 w-10 rounded-lg flex items-center justify-center border shrink-0 shadow-sm transition-colors ${commodity.colors}`}
+                          >
                             <span className="text-xl">{commodity.icon}</span>
                           </div>
                           <div className="flex flex-col min-w-0">
@@ -181,6 +224,14 @@ export function CommodityTable({ commodities, exchangeFilter = "global" }: Commo
                               {commodity.label}
                             </span>
                             <span className="text-xs text-muted">per {commodity.unit}</span>
+                            {why && commodity.priceAttribution && (
+                              <span
+                                className="truncate text-[11px] text-muted/80"
+                                title={attributionDetail(commodity.priceAttribution)}
+                              >
+                                {why}
+                              </span>
+                            )}
                           </div>
                         </Link>
                       </td>
@@ -206,6 +257,26 @@ export function CommodityTable({ commodities, exchangeFilter = "global" }: Commo
                           {displayPct.toFixed(2)}%
                         </div>
                       </td>
+                      {!isNational && (
+                        <td className="px-4 py-3 text-right">
+                          {recentPct == null ? (
+                            <span className="text-xs text-muted">—</span>
+                          ) : (
+                            <div
+                              className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-bold ${
+                                recentPct > 0
+                                  ? "bg-success/10 text-success"
+                                  : recentPct < 0
+                                    ? "bg-error/10 text-error"
+                                    : "bg-muted/10 text-muted"
+                              }`}
+                            >
+                              {recentPct > 0 ? "+" : ""}
+                              {recentPct.toFixed(2)}%
+                            </div>
+                          )}
+                        </td>
+                      )}
                       {isNational && (
                         <>
                           <td className="px-4 py-3 text-right hidden sm:table-cell">

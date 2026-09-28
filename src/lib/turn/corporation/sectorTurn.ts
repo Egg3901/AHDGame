@@ -57,6 +57,10 @@ export { computeSectorOutputUnits } from "./sectorOutputUnits";
 export type { SectorTurnEnv, SectorTurnResult } from "./sectorTurnTypes";
 
 import { computeIdleUpkeep } from "./sectorTurn/idleUpkeep";
+import {
+  sectorNpvBoostMultiplier,
+  sectorRevenueBoostMultiplier,
+} from "@/lib/corporations/rules/marketBoost";
 
 /** Process one sector and append its persisted update to the turn collectors. */
 export function processSector(
@@ -409,7 +413,7 @@ export function processSector(
     contractAchievableUnits,
     demandThrottleFactor,
     embargoExportExposure,
-    hourlyRevenue,
+    hourlyRevenue: realizedHourlyRevenue,
     capacityBindingEvent,
   } = resolvePlantsRevenue({
     sector,
@@ -457,6 +461,15 @@ export function processSector(
   if (capacityBindingEvent) {
     pendingCapacityBindingEvents.push(capacityBindingEvent);
   }
+  // Phased stock-market boost, phase A: lift realized operating revenue AFTER
+  // every market-microstructure leg (governor, clearing, embargo) has run, so
+  // those legs keep pricing what the market actually cleared. Nameplate
+  // revenue above (the headcount basis) is deliberately unboosted: this is a
+  // price/realization lift, not extra workers. Maintenance, growth realization
+  // and regulatory legs below all scale with the boosted figure, so margins
+  // are preserved and the lift lands in profit, then NPV, then share price.
+  const hourlyRevenue =
+    realizedHourlyRevenue * sectorRevenueBoostMultiplier(currentTurn, sector.sectorType);
   // (moved to resolvePlantsRevenue: trade-exposure embargo legs)
   // (moved to resolvePlantsRevenue: P3b extraction hard min)
   // (moved to resolvePlantsRevenue: pre-plants counterfactual baseline)
@@ -655,6 +668,7 @@ export function processSector(
     otherOpexAnchorMarginBasis: sector.otherOpexAnchorMarginBasis,
     capitalEnabled: market.capitalEnabled,
     prevCapitalBookAnchor: sector.capitalBookAnchor,
+    npvBoostMultiplier: sectorNpvBoostMultiplier(currentTurn),
   });
   // (moved to decomposePhysicalCosts: inputs bill + financial legs)
   // (moved to decomposePhysicalCosts: calibration solve + residual)

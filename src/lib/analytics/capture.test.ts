@@ -2,7 +2,15 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const state = vi.hoisted(() => ({
   consent: null as "accepted" | "rejected" | null,
-  posthog: { init: vi.fn(), capture: vi.fn(), optIn: vi.fn(), optOut: vi.fn(), reset: vi.fn() },
+  posthog: {
+    init: vi.fn(),
+    capture: vi.fn(),
+    optIn: vi.fn(),
+    optOut: vi.fn(),
+    reset: vi.fn(),
+    setConfig: vi.fn(),
+    on: vi.fn(),
+  },
   amplitude: { init: vi.fn(), track: vi.fn(), setOptOut: vi.fn(), reset: vi.fn() },
 }));
 
@@ -18,6 +26,8 @@ vi.mock("posthog-js", () => ({
     opt_out_capturing: state.posthog.optOut,
     has_opted_out_capturing: () => false,
     reset: state.posthog.reset,
+    set_config: state.posthog.setConfig,
+    on: state.posthog.on,
   },
 }));
 
@@ -66,6 +76,22 @@ describe("analytics fan-out", () => {
     expect(state.amplitude.track).not.toHaveBeenCalled();
   });
 
+  it("mirrors a widget dismissal to both destinations without survey answers", async () => {
+    state.consent = "accepted";
+    const { getPostHogClient } = await import("./posthogClient");
+    await getPostHogClient();
+    const listener = state.posthog.on.mock.calls[0]?.[1] as
+      ((event: { event: string; properties: Record<string, unknown> }) => void) | undefined;
+    expect(listener).toBeDefined();
+    listener?.({
+      event: "survey dismissed",
+      properties: { $survey_questions: [{ response: "private" }, { response: null }] },
+    });
+    await vi.waitFor(() => expect(state.amplitude.track).toHaveBeenCalled());
+    expect(state.posthog.capture).toHaveBeenCalledWith("survey_dismissed", { question_index: 1 });
+    expect(state.amplitude.track).toHaveBeenCalledWith("survey_dismissed", { question_index: 1 });
+  });
+
   it("still reaches PostHog when Amplitude has no key configured", async () => {
     // Amplitude is provisioned separately; a missing key must not suppress the
     // other destination, which is the whole point of the fan-out.
@@ -86,6 +112,7 @@ describe("analytics fan-out", () => {
     await captureProductEvent("party_joined");
 
     await stopAnalyticsCapture();
+    expect(state.posthog.setConfig).toHaveBeenCalledWith({ disable_surveys: true });
     expect(state.posthog.optOut).toHaveBeenCalled();
     expect(state.amplitude.setOptOut).toHaveBeenCalledWith(true);
   });

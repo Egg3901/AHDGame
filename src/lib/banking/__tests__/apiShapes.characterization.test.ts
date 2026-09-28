@@ -16,8 +16,13 @@ import { ObjectId, type Db } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 
 // The console route pulls in most of the banking module graph; under a loaded
-// parallel run its first import can exceed the default budget.
+// parallel run its first import can exceed the default budget. The console
+// outlook widened that graph again (measured first import ~60s on a cold
+// cache), so the two console tests carry a 120s budget. That number is import
+// cost, not execution: nothing here is skipped or narrowed.
 vi.setConfig({ testTimeout: 60_000 });
+
+const CONSOLE_TEST_TIMEOUT_MS = 120_000;
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 vi.mock("@/lib/api/requireAuth", () => ({
@@ -236,141 +241,161 @@ function jsonRequest(url: string, method: string, body: unknown) {
 }
 
 describe("GET /api/banking/corporation/[id]", () => {
-  it("keeps the console payload shape", async () => {
-    await authAs("auth");
-    const { GET } = await import("@/app/api/banking/corporation/[id]/route");
-    const res = await GET(new Request(`http://localhost/api/banking/corporation/${BANK_ID}`), {
-      params: Promise.resolve({ id: BANK_ID.toString() }),
-    });
-    expect(res.status).toBe(200);
-    const body = await res.json();
-    expect(sortedKeys(body)).toEqual([
-      "bankPropTradingEnabled",
-      "blacklistableFunds",
-      "canMutate",
-      "canRevoke",
-      "capitalRequirement",
-      "capitalRequirementByType",
-      "caps",
-      "charter",
-      "corporation",
-      "corridors",
-      "currency",
-      "currentTurn",
-      "defaultBranchCapacityShare",
-      "depositCeiling",
-      "eligibilityReasons",
-      "eligibleTypes",
-      "householdBook",
-      "interbankLoans",
-      "isAdmin",
-      "isCeo",
-      "isChair",
-      "legalCharterTypes",
-      "lifecycle",
-      "loans",
-      "privateBankingEnabled",
-      "rates",
-      "reserveRatio",
-      "risk",
-      "visible",
-    ]);
-    expect(sortedKeys(body.charter)).toEqual([
-      "appliedStressLossFraction",
-      "blacklist",
-      "branchCapacityShare",
-      "capitalRatio",
-      "capitalStanding",
-      "cashReserves",
-      "cbMarginArrears",
-      "cbMarginDebt",
-      "charterSwitchCooldownUntilTurn",
-      "charteredTurn",
-      "confidence",
-      "currency",
-      "depositCeiling",
-      "depositOffset",
-      "discountWindowArrears",
-      "discountWindowDebt",
-      "interbankDebt",
-      "lastBankingDepositInterest",
-      "lastBankingFacilityInterest",
-      "lastBankingIncome",
-      "lastBankingIncomeTurn",
-      "lastBankingInsurancePremium",
-      "lastBankingInterbankInterestPaid",
-      "lastBankingInterbankInterestReceived",
-      "lastBankingLoanInterest",
-      "lastBankingWriteoffs",
-      "lendingOffset",
-      "lendingProfile",
-      "npcDeposits",
-      "panicTurns",
-      "postedCapital",
-      "propBook",
-      "propBookMarkValue",
-      "requireApproval",
-      "requiredReserves",
-      "status",
-      "stressedCapitalRatio",
-      "totalDeposits",
-      "totalLoans",
-      "type",
-      "upstreamCapacity",
-      "warningBand",
-    ]);
-    expect(sortedKeys(body.rates)).toEqual(["depositRatePercent", "lendingRatePercent"]);
-    expect(sortedKeys(body.householdBook)).toEqual([
-      "blendedExpectedDefaultPercent",
-      "blendedRatePercent",
-      "lendingProfile",
-      "rows",
-      "total",
-    ]);
-    expect(body.caps.map((cap: { key: string }) => cap.key)).toEqual([
-      "bookEquity",
-      "requiredReserves",
-      "depositCeiling",
-      "distributable",
-      "runLine",
-    ]);
-  });
+  it(
+    "keeps the console payload shape",
+    async () => {
+      await authAs("auth");
+      const { GET } = await import("@/app/api/banking/corporation/[id]/route");
+      const res = await GET(new Request(`http://localhost/api/banking/corporation/${BANK_ID}`), {
+        params: Promise.resolve({ id: BANK_ID.toString() }),
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(sortedKeys(body)).toEqual([
+        "bankPropTradingEnabled",
+        "blacklistableFunds",
+        "canMutate",
+        "canRevoke",
+        "capitalRequirement",
+        "capitalRequirementByType",
+        "caps",
+        "charter",
+        "corporation",
+        "corridors",
+        "currency",
+        "currentTurn",
+        "defaultBranchCapacityShare",
+        "depositCeiling",
+        "eligibilityReasons",
+        "eligibleTypes",
+        "householdBook",
+        "interbankLoans",
+        "isAdmin",
+        "isCeo",
+        "isChair",
+        "legalCharterTypes",
+        "lifecycle",
+        "loans",
+        "outlook",
+        "primeRate",
+        "privateBankingEnabled",
+        "rates",
+        "reserveRatio",
+        "risk",
+        "visible",
+      ]);
+      expect(sortedKeys(body.charter)).toEqual([
+        "appliedStressLossFraction",
+        "blacklist",
+        "bookEquity",
+        "branchCapacityShare",
+        "capacityCeiling",
+        "capitalRatio",
+        "capitalStanding",
+        "cashBackedDeposits",
+        "cashReserves",
+        "cbMarginArrears",
+        "cbMarginDebt",
+        "charterSwitchCooldownUntilTurn",
+        "charteredTurn",
+        "confidence",
+        "currency",
+        "depositCeiling",
+        "depositCeilingBinds",
+        "depositOffset",
+        "discountWindowArrears",
+        "discountWindowDebt",
+        "equityCeiling",
+        "fundingCapacity",
+        "interbankDebt",
+        "lastBankingDepositInterest",
+        "lastBankingFacilityInterest",
+        "lastBankingIncome",
+        "lastBankingIncomeTurn",
+        "lastBankingInsurancePremium",
+        "lastBankingInterbankInterestPaid",
+        "lastBankingInterbankInterestReceived",
+        "lastBankingLoanInterest",
+        "lastBankingWriteoffs",
+        "lendingOffset",
+        "lendingProfile",
+        "npcDeposits",
+        "panicTurns",
+        "playerDeposits",
+        "pointerDeposits",
+        "postedCapital",
+        "propBook",
+        "propBookMarkValue",
+        "requireApproval",
+        "requiredReserves",
+        "status",
+        "stressedCapitalRatio",
+        "totalDeposits",
+        "totalLoans",
+        "type",
+        "upstreamCapacity",
+        "warningBand",
+      ]);
+      expect(sortedKeys(body.rates)).toEqual(["depositRatePercent", "lendingRatePercent"]);
+      expect(sortedKeys(body.householdBook)).toEqual([
+        "blendedExpectedDefaultPercent",
+        "blendedRatePercent",
+        "lendingProfile",
+        "rows",
+        "total",
+      ]);
+      expect(body.caps.map((cap: { key: string }) => cap.key)).toEqual([
+        "bookEquity",
+        "requiredReserves",
+        "depositCeiling",
+        "distributable",
+        "runLine",
+      ]);
+    },
+    CONSOLE_TEST_TIMEOUT_MS
+  );
 
-  it("keeps the not-visible shape for an unrelated corporation", async () => {
-    await authAs("auth");
-    db.collectionMocks.corporateSectors!.findOne.mockResolvedValue(null);
-    const { GET } = await import("@/app/api/banking/corporation/[id]/route");
-    const res = await GET(
-      new Request(`http://localhost/api/banking/corporation/${BORROWER_CORP_ID}`),
-      { params: Promise.resolve({ id: BORROWER_CORP_ID.toString() }) }
-    );
-    expect(res.status).toBe(200);
-    const body = await res.json();
-    expect(body.visible).toBe(false);
-    expect(sortedKeys(body)).toEqual([
-      "bankPropTradingEnabled",
-      "canMutate",
-      "canRevoke",
-      "capitalRequirement",
-      "charter",
-      "corporation",
-      "corridors",
-      "currency",
-      "depositCeiling",
-      "eligibilityReasons",
-      "eligibleTypes",
-      "interbankLoans",
-      "isAdmin",
-      "isCeo",
-      "isChair",
-      "legalCharterTypes",
-      "loans",
-      "privateBankingEnabled",
-      "rates",
-      "reserveRatio",
-      "visible",
-    ]);
-  });
+  it(
+    "keeps the not-visible shape for an unrelated corporation",
+    async () => {
+      await authAs("auth");
+      db.collectionMocks.corporateSectors!.findOne.mockResolvedValue(null);
+      const { GET } = await import("@/app/api/banking/corporation/[id]/route");
+      const res = await GET(
+        new Request(`http://localhost/api/banking/corporation/${BORROWER_CORP_ID}`),
+        { params: Promise.resolve({ id: BORROWER_CORP_ID.toString() }) }
+      );
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.visible).toBe(false);
+      expect(sortedKeys(body)).toEqual([
+        "bankPropTradingEnabled",
+        "canMutate",
+        "canRevoke",
+        "capitalRequirement",
+        "charter",
+        "corporation",
+        "corridors",
+        "currency",
+        "depositCeiling",
+        "eligibilityReasons",
+        "eligibleTypes",
+        "interbankLoans",
+        "isAdmin",
+        "isCeo",
+        "isChair",
+        "legalCharterTypes",
+        "loans",
+        "outlook",
+        "primeRate",
+        "privateBankingEnabled",
+        "rates",
+        "reserveRatio",
+        "visible",
+      ]);
+    },
+    CONSOLE_TEST_TIMEOUT_MS
+  );
 });
 
 describe("PUT /api/character/savings-holder", () => {

@@ -89,7 +89,11 @@ export async function districtedHouseResolution(
   // Quotas are proportional so a statewide plurality — or a lean-invariant
   // centrist party — can no longer sweep every district; gerrymandering shifts
   // WHICH districts each party holds, not HOW MANY. (ticket 926)
-  const quotas = computePartySeatQuotas(baselines, docs.length, getMultiSeatMinShare("house"));
+  const quotas = computePartySeatQuotas(
+    baselines,
+    docs.length,
+    getMultiSeatMinShare("house", docs.length, args.countryId)
+  );
   const districtWinners = assignPartiesToDistrictsByQuota(
     docs.map((d) => ({ index: d.index, netLean: d.netLean })),
     baselines,

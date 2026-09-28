@@ -1015,11 +1015,11 @@ describe("accumulateVoteTurn — Hamilton seat allocation for multi-seat races",
     expect(leaderSeats).toBeGreaterThan(runnerSeats);
   });
 
-  it("excludes candidate below 20% threshold from house seat allocation", async () => {
+  it("excludes a candidate below the 3-seat House threshold", async () => {
     const { accumulateVoteTurn } = await import("./tallyManagement");
 
     const electionId = new ObjectId();
-    // Fringe gets 5% of 100k = 5000 votes — below 20% threshold for 'house'
+    // Fringe gets 5% of 100k, below the capped 20% gate for a 3-seat delegation.
     const { labelToId } = await setupMultiSeat({
       electionId,
       electionType: "house",
@@ -1039,6 +1039,27 @@ describe("accumulateVoteTurn — Hamilton seat allocation for multi-seat races",
     const major1Seats = seats![labelToId["Major1"]];
     const major2Seats = seats![labelToId["Major2"]];
     expect(major1Seats + major2Seats).toBe(3);
+  });
+
+  it("includes a party above the derived 5-seat House threshold (#2466)", async () => {
+    const { accumulateVoteTurn } = await import("./tallyManagement");
+
+    const electionId = new ObjectId();
+    const { labelToId } = await setupMultiSeat({
+      electionId,
+      electionType: "house",
+      totalSeats: 5,
+      candidateVotes: { Major: 83_000, Minor: 17_000 },
+    });
+
+    await accumulateVoteTurn(electionId, 1, new Date());
+
+    const [, update] = db.collectionMocks.electionVoteTallies.updateOne.mock.calls[0];
+    const seats = (update as { $set: { seatsEstimate: Record<string, number> } }).$set
+      .seatsEstimate;
+
+    expect(seats![labelToId["Major"]]).toBe(4);
+    expect(seats![labelToId["Minor"]]).toBe(1);
   });
 
   it("does not write seatsEstimate for single-seat races (senate)", async () => {

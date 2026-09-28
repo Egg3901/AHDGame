@@ -8,6 +8,8 @@ const state = vi.hoisted(() => ({
   optIn: vi.fn(),
   optOut: vi.fn(),
   reset: vi.fn(),
+  identify: vi.fn(),
+  setConfig: vi.fn(),
 }));
 
 vi.mock("@/components/CookieConsent", () => ({
@@ -25,6 +27,9 @@ vi.mock("posthog-js", () => ({
     }),
     has_opted_out_capturing: () => state.optedOut,
     reset: state.reset,
+    identify: state.identify,
+    set_config: state.setConfig,
+    on: vi.fn(),
   },
 }));
 
@@ -50,6 +55,49 @@ describe("PostHog consent boundary", () => {
     await captureProductEvent("account_created");
     expect(state.init).not.toHaveBeenCalled();
     expect(state.capture).not.toHaveBeenCalled();
+  });
+
+  it("keeps surveys disabled before an authenticated user is identified", async () => {
+    const { getPostHogClient } = await import("./posthogClient");
+    state.consent = "accepted";
+    await getPostHogClient();
+    expect(state.init).toHaveBeenCalledWith(
+      "phc_test",
+      expect.objectContaining({
+        api_host: "https://us.i.posthog.com",
+        disable_surveys: true,
+      })
+    );
+    expect(state.setConfig).not.toHaveBeenCalledWith({ disable_surveys: false });
+  });
+
+  it("enables surveys only after identifying the stable user ID", async () => {
+    const { getPostHogClient, identifyPostHogUser } = await import("./posthogClient");
+    state.consent = "accepted";
+    const client = await getPostHogClient();
+    expect(client).not.toBeNull();
+    identifyPostHogUser(client!, "stable-user-id");
+    expect(state.identify).toHaveBeenCalledWith("stable-user-id", { is_player: true });
+    expect(state.setConfig).toHaveBeenCalledWith({ disable_surveys: false });
+    expect(state.identify.mock.invocationCallOrder[0]).toBeLessThan(
+      state.setConfig.mock.invocationCallOrder[0]
+    );
+  });
+
+  it("enables sampled, masked session recording with sensitive screens blocked", async () => {
+    const { getPostHogClient } = await import("./posthogClient");
+    state.consent = "accepted";
+    await getPostHogClient();
+    expect(state.init).toHaveBeenCalledTimes(1);
+    const config = state.init.mock.calls[0]?.[1] as Record<string, unknown>;
+    expect(config.disable_session_recording).toBeUndefined();
+    expect(config.session_recording).toMatchObject({
+      sampleRate: 0.1,
+      maskAllInputs: true,
+      recordHeaders: false,
+      recordBody: false,
+      blockSelector: "[data-replay-block]",
+    });
   });
 
   it("stops capture after rejection and resumes only after another opt in", async () => {

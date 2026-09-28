@@ -18,19 +18,15 @@ export async function GET() {
       return NextResponse.json({ error: "Admin access required" }, { status: 403 });
     }
 
-    const baseUrl = (process.env.SENTRY_URL || "https://sentry.io").replace(/\/+$/, "");
-    const orgSlug = process.env.SENTRY_URL
-      ? (process.env.GLITCHTIP_ORG_SLUG ?? "ahd")
-      : (process.env.SENTRY_ORG ?? "lakeside-games");
-    const token =
-      process.env.SENTRY_API_TOKEN ||
-      (process.env.SENTRY_URL ? process.env.GLITCHTIP_API_TOKEN : undefined);
+    const baseUrl = process.env.SENTRY_API_URL?.replace(/\/+$/, "");
+    const orgSlug = process.env.SENTRY_ORG ?? "lakeside-games";
+    const token = process.env.SENTRY_API_TOKEN;
 
-    if (!token) {
+    if (!token || !baseUrl) {
       return NextResponse.json({
         configured: false,
         issues: [],
-        message: "SENTRY_API_TOKEN not configured",
+        message: "SENTRY_API_TOKEN or SENTRY_API_URL not configured",
       });
     }
 

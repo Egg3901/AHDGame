@@ -27,6 +27,9 @@ import {
   TURNS_PER_DAY,
   MIN_SHARE_PRICE,
   softCapEffectiveMargin,
+  STOCK_BOOST_FINANCIAL_REVENUE_EXTRA,
+  STOCK_BOOST_REVENUE_TARGET,
+  STOCK_BOOST_SECTOR_NPV_TARGET,
 } from "@/lib/constants/corporations";
 // Effective margin is soft-capped on the high side, so profitMargin:100 (used
 // below as a "zero maintenance" shortcut) now realizes at ~95.2%, not 100%.
@@ -3234,5 +3237,51 @@ describe("affordability brake vs the soft budget constraint", () => {
     const { corp, sector } = unaffordable("RU");
     const r = processSectors(baseLookups([corp], [sector]), 1, new Date(), false, 1953);
     expect(targetFrom(r)).toBeLessThan(6);
+  });
+});
+
+// ── Stock-market boost phasing ─────────────────────────────────────────────
+// Same corp and sector processed at turn 1 (pre-window, legacy) and at a turn
+// past both boost windows: revenue lifts by the revenue target and NPV by
+// revenue × NPV targets, proving the turn path actually applies the ramp.
+
+describe("stock-market boost phasing", () => {
+  const PAST_BOOST_TURNS = 10_000;
+
+  function runAtTurn(turn: number) {
+    const corp = makeCorp();
+    const sector = makeSector(corp._id);
+    const result = processSectors(baseLookups([corp], [sector]), turn, new Date());
+    return {
+      revenue: result.totalRevenueGenerated,
+      sectorNPV: result.corpSnapshots[0]?.sectorNPV ?? 0,
+    };
+  }
+
+  it("holds turn-1 revenue and NPV at legacy values and lifts both past the windows", () => {
+    const legacy = runAtTurn(1);
+    const boosted = runAtTurn(PAST_BOOST_TURNS);
+
+    expect(legacy.revenue).toBeGreaterThan(0);
+    expect(legacy.sectorNPV).toBeGreaterThan(0);
+    expect(boosted.revenue / legacy.revenue).toBeCloseTo(STOCK_BOOST_REVENUE_TARGET, 2);
+    expect(boosted.sectorNPV / legacy.sectorNPV).toBeCloseTo(
+      STOCK_BOOST_REVENUE_TARGET * STOCK_BOOST_SECTOR_NPV_TARGET,
+      2
+    );
+  });
+
+  it("compounds the extra revenue lift on financial sectors", () => {
+    const runFinancialAtTurn = (turn: number) => {
+      const corp = makeCorp({ type: "financial" });
+      const sector = makeSector(corp._id, { sectorType: "financial" });
+      return processSectors(baseLookups([corp], [sector]), turn, new Date()).totalRevenueGenerated;
+    };
+    const legacy = runFinancialAtTurn(1);
+    const boosted = runFinancialAtTurn(PAST_BOOST_TURNS);
+    expect(boosted / legacy).toBeCloseTo(
+      STOCK_BOOST_REVENUE_TARGET * STOCK_BOOST_FINANCIAL_REVENUE_EXTRA,
+      2
+    );
   });
 });

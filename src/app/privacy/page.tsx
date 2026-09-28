@@ -92,12 +92,11 @@ export default function PrivacyPolicyPage() {
               <div>
                 <p className="font-semibold text-foreground mb-1">Optional session replay</p>
                 <p>
-                  If you accept non-essential cookies, we may record a sample of interactions with
+                  If you accept optional analytics, we may record a sample of your interactions with
                   the game to diagnose confusing flows and technical failures. Form values are
-                  hidden, network request and response bodies are not captured, email addresses in
-                  page text are obscured, and accounts are identified only by an internal opaque
-                  identifier. Replay data is stored on infrastructure operated by Lakeside Games and
-                  is available only to administrators.
+                  hidden, network request and response bodies are not captured, and sensitive
+                  screens such as account, messages, banking, and corporations are excluded from
+                  recording. Accounts are identified only by an internal opaque identifier.
                 </p>
               </div>
               <div>

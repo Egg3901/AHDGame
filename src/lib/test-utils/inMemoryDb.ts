@@ -384,6 +384,20 @@ function applyUpdate(doc: Doc, update: Update): void {
           )
         );
       }
+    } else if (op === "$max") {
+      for (const [path, value] of Object.entries(fields as Doc)) {
+        const current = getPath(doc, path);
+        if (current === undefined || (value as number) > (current as number)) {
+          setPath(doc, path, value);
+        }
+      }
+    } else if (op === "$min") {
+      for (const [path, value] of Object.entries(fields as Doc)) {
+        const current = getPath(doc, path);
+        if (current === undefined || (value as number) < (current as number)) {
+          setPath(doc, path, value);
+        }
+      }
     } else {
       throw new Error(`inMemoryDb: unsupported update operator ${op}`);
     }

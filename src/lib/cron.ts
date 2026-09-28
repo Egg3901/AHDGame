@@ -16,6 +16,7 @@ import { runRetention } from "@/lib/retention/retention";
 import { runAltScoring } from "@/lib/altDetection/run";
 import { runAltDigest } from "@/lib/altDetection/digest";
 import { runShareFillRecoveryPass } from "@/lib/corporations/commands/shareTrading/shareFillAudit";
+import { captureServerProductEvent } from "@/lib/analytics/captureServer";
 
 /*
  * Sentry cron-monitor slug for the primary turn cron. Service-suffixed so
@@ -364,6 +365,14 @@ export async function initializeCronJobs() {
             currentState.processingTargetTurn ?? "none"
           }); allowing processTurn to take over.`
         );
+        try {
+          void captureServerProductEvent("turn_lock_stuck", {
+            lock_age_ms: Number.isFinite(lockAgeMs) ? lockAgeMs : -1,
+            phase: currentState.processingPhase ?? "unknown",
+          });
+        } catch {
+          // Telemetry cannot prevent turn recovery.
+        }
         // Telemetry must never gate recovery: if the Sentry SDK is itself the
         // failure mode, a throw here would skip the takeover below and leave
         // the game wedged — the exact outcome this sweep exists to prevent.
@@ -371,6 +380,12 @@ export async function initializeCronJobs() {
           Sentry.captureMessage("Stuck turn lock recovered by sweep", {
             level: "warning",
             fingerprint: ["stuck-turn-lock-sweep"],
+            tags: {
+              processingPhase: currentState.processingPhase ?? "unknown",
+              lockAgeMinutes: Number.isFinite(lockAgeMs)
+                ? Math.floor(lockAgeMs / 60_000)
+                : "unknown",
+            },
             extra: {
               lastTouch: lockState.lastTouch?.toISOString() ?? null,
               processingPhase: currentState.processingPhase ?? null,

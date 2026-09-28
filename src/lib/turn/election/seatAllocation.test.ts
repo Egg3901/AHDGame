@@ -51,8 +51,11 @@ describe("getMultiSeatMinShare", () => {
     expect(getMultiSeatMinShare("localCouncil")).toBe(0.1);
   });
 
-  it("uses 10% for UK Commons while keeping the US House default at 20%", () => {
+  it("uses 10% for UK Commons while keeping the US House safe default at 20%", () => {
     expect(getMultiSeatMinShare("house")).toBe(0.2);
+    expect(getMultiSeatMinShare("house", 5, "US")).toBeCloseTo(1 / 6, 10);
+    expect(getMultiSeatMinShare("house", 9, "US")).toBe(0.1);
+    expect(getMultiSeatMinShare("house", 9, "NG")).toBe(0.2);
     expect(getMultiSeatMinShare("commons")).toBe(0.1);
     expect(getMultiSeatMinShare("snap_commons")).toBe(0.1);
     expect(getMultiSeatMinShare("governor")).toBe(0.2);
@@ -465,6 +468,59 @@ describe("allocateSeats - fallback pool when eligible candidates < seat count", 
 // ── Threshold boundary conditions ────────────────────────────────────────────
 
 describe("allocateSeats - threshold boundary conditions", () => {
+  it("includes a 5-seat House party at one sixth and excludes one just below", () => {
+    const exact = allocateSeats(
+      "house",
+      "UNKNOWN",
+      5,
+      [
+        { id: "major", votes: 5, party: "major" },
+        { id: "minor", votes: 1, party: "minor" },
+      ],
+      6,
+      undefined,
+      undefined,
+      undefined,
+      "US"
+    );
+    const below = allocateSeats(
+      "house",
+      "UNKNOWN",
+      5,
+      [
+        { id: "major", votes: 5001, party: "major" },
+        { id: "minor", votes: 999, party: "minor" },
+      ],
+      6000,
+      undefined,
+      undefined,
+      undefined,
+      "US"
+    );
+
+    expect(exact.seatsEstimate).toEqual({ major: 4, minor: 1 });
+    expect(below.seatsEstimate).toEqual({ major: 5, minor: 0 });
+  });
+
+  it("keeps the legacy 20% gate for non-US house races", () => {
+    const result = allocateSeats(
+      "house",
+      "NG_NC",
+      5,
+      [
+        { id: "major", votes: 830, party: "major" },
+        { id: "minor", votes: 170, party: "minor" },
+      ],
+      1000,
+      undefined,
+      undefined,
+      undefined,
+      "NG"
+    );
+
+    expect(result.seatsEstimate).toEqual({ major: 5, minor: 0 });
+  });
+
   it("includes a Commons party at exactly 10% and excludes one just below", () => {
     const exact = allocateSeats(
       "commons",
@@ -491,19 +547,14 @@ describe("allocateSeats - threshold boundary conditions", () => {
     expect(below.seatsEstimate).toEqual({ major: 10, minor: 0 });
   });
 
-  it("candidate at exactly 20% is eligible for house", () => {
-    // 200/1000 = 0.2 — exactly at threshold — should be eligible.
-    // Use "UNKNOWN" state so authoritativeSeats = totalSeats = 5.
+  it("candidate at exactly 20% remains eligible for a 4-seat house delegation", () => {
+    // 200/1000 = 0.2, exactly at the capped threshold.
     const ranked: RankedCandidate[] = [
       { id: "A", votes: 800 },
       { id: "B", votes: 200 },
     ];
-    const result = allocateSeats("house", "UNKNOWN", 5, ranked, 1000);
-    // authoritativeSeats = HOUSE_SEATS["UNKNOWN"] ?? 5 = 5
-    // 2-seat special case? No — authoritativeSeats=5 ≠ 2.
-    // Both eligible (80% and 20%); minPoolSize = min(5, 2) = 2; eligible.length(2) >= 2 → no fallback
-    // A: 800/1000 * 5 = 4.0 → 4 seats; B: 200/1000 * 5 = 1.0 → 1 seat
-    expect(result.seatsEstimate["A"]).toBe(4);
+    const result = allocateSeats("house", "UNKNOWN", 4, ranked, 1000);
+    expect(result.seatsEstimate["A"]).toBe(3);
     expect(result.seatsEstimate["B"]).toBe(1);
     expect(result.losers).not.toContain("B");
   });

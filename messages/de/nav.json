@@ -32,7 +32,7 @@
         "myCorporation": "Mein Unternehmen",
         "hallOfFame": "Ruhmeshalle",
         "nations": "Nationen",
-        "map": "Karte",
+        "map": "Landeskarte",
         "crises": "Krisen",
         "germanQuestion": "Die deutsche Frage",
         "conflicts": "Konflikte",
@@ -160,6 +160,8 @@
     },
     "userMenu": {
       "characters": "Charaktere",
+      "accountSection": "Konto",
+      "viewSection": "Ansicht",
       "profileSettings": "Profileinstellungen",
       "signedInAs": "Angemeldet als",
       "switchToMainSite": "Zur Hauptseite wechseln",

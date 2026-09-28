@@ -112,12 +112,12 @@ export async function fetchPoliticians(countryId: CountryId): Promise<Politician
   ]);
   const stateNameMap = new Map(stateNameDocs.map((s) => [s._id, s.name]));
 
-  const partyMap = new Map(
-    partyDocs.map((p) => [
-      String(p.sequentialId),
-      { name: p.name, color: p.color, countryId: p.countryId },
-    ])
-  );
+  const partyMap = new Map<string, { name: string; color: string; countryId: CountryId }>();
+  for (const party of partyDocs) {
+    const info = { name: party.name, color: party.color, countryId: party.countryId };
+    partyMap.set(String(party.sequentialId), info);
+    partyMap.set(party._id.toString(), info);
+  }
 
   const playerPoliticians: PoliticianData[] = characters.map((character) => {
     const partyInfo = partyMap.get(character.party);

@@ -26,10 +26,13 @@ import {
   rdMoraleFactor,
   TURNS_PER_DAY,
   MAX_DIVIDEND_RATE,
-  SECTOR_RISK_PREMIUM,
   CEO_SALARY_MAX_REVENUE_MULTIPLE,
   CORP_OVERHEAD_MAX_REVENUE_MULTIPLE,
 } from "@/lib/constants/corporations";
+import {
+  bankNpvBoostMultiplier,
+  sectorRiskPremiumAtTurn,
+} from "@/lib/corporations/rules/marketBoost";
 import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 import {
   anchorToCorpCapital,
@@ -1257,7 +1260,7 @@ export function processSectors(
     const corpPrimeRate =
       (lookups.primeRateByCountry.get(corp.countryId) ??
         getCountryConfig(corp.countryId).centralBank.defaultPrimeRate) / 100;
-    const riskPremium = SECTOR_RISK_PREMIUM[corp.type as string] ?? SECTOR_RISK_PREMIUM.default;
+    const riskPremium = sectorRiskPremiumAtTurn(corp.type, currentTurn);
     const growthNumer = corpGrowthNumerByCorpId.get(id) ?? 0;
     const growthDenom = corpGrowthDenomByCorpId.get(id) ?? 0;
     const activeBankCharter = corp.bankCharter?.status === "active" ? corp.bankCharter : null;
@@ -1268,7 +1271,10 @@ export function processSectors(
       ? corpCapitalToAnchor(bankEquity(activeBankCharter), activeBankCharter.currency, bankFxRate)
       : 0;
     const bankNpvAnchor = activeBankCharter
-      ? bankNpvFromPerTurnIncome((activeBankCharter.lastBankingIncome ?? 0) / bankFxRate)
+      ? bankNpvFromPerTurnIncome(
+          (activeBankCharter.lastBankingIncome ?? 0) / bankFxRate,
+          bankNpvBoostMultiplier(currentTurn)
+        )
       : 0;
     return {
       corpId: id,

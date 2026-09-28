@@ -92,6 +92,7 @@ export async function GET(request: Request) {
 
       return {
         turn: h.turn,
+        createdAt: h.createdAt,
         marketCap,
         rawMarketCap,
         high,

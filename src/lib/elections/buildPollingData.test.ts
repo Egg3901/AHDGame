@@ -259,6 +259,27 @@ describe("buildPollingData — primary phase", () => {
 // shapes that used to diverge.
 
 describe("computeSeatEstimates — parity with allocateSeats (ticket #1032)", () => {
+  it("uses totalSeats for the House delegation-aware threshold (#2466)", () => {
+    const tally = {
+      totalVotes: { major: 830, minor: 170 },
+      candidateParties: { major: "major", minor: "minor" },
+    } as never;
+    const active = new Set(["major", "minor"]);
+
+    expect(computeSeatEstimates("house", 5, tally, active, "US")).toEqual({
+      major: 4,
+      minor: 1,
+    });
+    expect(computeSeatEstimates("house", 4, tally, active, "US")).toEqual({
+      major: 4,
+      minor: 0,
+    });
+    expect(computeSeatEstimates("house", 5, tally, active, "NG")).toEqual({
+      major: 5,
+      minor: 0,
+    });
+  });
+
   /** Runs both engines over the same votes and returns per-party seat totals. */
   function bothEngines(
     region: string,

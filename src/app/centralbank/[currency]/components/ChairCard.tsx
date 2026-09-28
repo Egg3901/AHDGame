@@ -1,4 +1,9 @@
+"use client";
+
 import Link from "next/link";
+import { useGameTurnStatus } from "@/hooks/useGameEvents";
+import { formatGameMonth } from "@/lib/utils/gameDate";
+import { STARTING_YEAR } from "@/lib/constants/turnTime";
 import {
   RESOLVE_SCRUTINY_RELIEF,
   RESOLVE_TURNS_REQUIRED,
@@ -49,6 +54,17 @@ export function ChairCard({
   /** Consecutive turns the corridor stance has been held. */
   resolveStreak?: number;
 }) {
+  const turnStatus = useGameTurnStatus();
+  const appointedGameMonth =
+    chairAppointedAt && turnStatus?.lastTurnProcessed
+      ? formatGameMonth(chairAppointedAt, {
+          currentTurn: turnStatus.currentTurn,
+          lastTurnProcessed: turnStatus.lastTurnProcessed,
+          startingYear: turnStatus.startingYear ?? STARTING_YEAR,
+          preIterationActive: turnStatus.preIterationActive,
+          preIterationTurns: turnStatus.preIterationTurns,
+        })
+      : null;
   const infamy = chairInfamy ?? 0;
   const streak = resolveStreak ?? 0;
   const stanceHeld = streak > 0;
@@ -115,15 +131,8 @@ export function ChairCard({
               <span className="mt-0.5 inline-block rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-primary">
                 Autonomous Chair (AI)
               </span>
-              {chairAppointedAt && (
-                <p className="mt-1 text-xs text-muted">
-                  Appointed{" "}
-                  {new Date(chairAppointedAt).toLocaleDateString(undefined, {
-                    month: "short",
-                    day: "numeric",
-                    year: "numeric",
-                  })}
-                </p>
+              {appointedGameMonth && (
+                <p className="mt-1 text-xs text-muted">Appointed {appointedGameMonth}</p>
               )}
             </div>
           </div>
@@ -151,15 +160,8 @@ export function ChairCard({
               {chair.partyName && (
                 <p className="break-words text-xs text-muted">{chair.partyName}</p>
               )}
-              {chairAppointedAt && (
-                <p className="text-xs text-muted">
-                  Appointed{" "}
-                  {new Date(chairAppointedAt).toLocaleDateString(undefined, {
-                    month: "short",
-                    day: "numeric",
-                    year: "numeric",
-                  })}
-                </p>
+              {appointedGameMonth && (
+                <p className="text-xs text-muted">Appointed {appointedGameMonth}</p>
               )}
             </div>
           </div>

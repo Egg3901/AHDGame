@@ -68,6 +68,10 @@ describe("RACE_PRIORITY", () => {
     expect(commonsIdx).toBeLessThan(senateIdx);
   });
 
+  it("gives snap Commons the same filing priority as regular Commons", () => {
+    expect(getRacePriority("snap_commons")).toBe(getRacePriority("commons"));
+  });
+
   it("should omit president because presidential auto-entry is blocked", () => {
     expect(RACE_PRIORITY).not.toContain("president");
   });

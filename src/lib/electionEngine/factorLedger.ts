@@ -42,6 +42,7 @@ export type FactorKey =
   | "candidateFit"
   | "reach"
   | "campaign"
+  | "tactical"
   | "turnout"
   | "swing"
   | "spoiler"
@@ -55,6 +56,7 @@ export const FACTOR_LABELS: Record<FactorKey, string> = {
   candidateFit: "Policy fit",
   reach: "Name recognition",
   campaign: "Campaign",
+  tactical: "Tactical voting",
   turnout: "Turnout",
   swing: "Persuasion swing",
   spoiler: "Spoiler effect",
@@ -71,6 +73,7 @@ export const FACTOR_ORDER: FactorKey[] = [
   "spoiler",
   "nationalEnvironment",
   "campaign",
+  "tactical",
   "uncertainty",
 ];
 
@@ -151,6 +154,7 @@ interface UnitCandidateRecord {
   independentDelta: number;
   leanDelta: number;
   campaignDelta: number;
+  tacticalDelta: number;
   finalVotes: number;
   /** 1 / strengthMultiplier (votes at neutral turnout). Defaults to 1. */
   neutralFactor: number;
@@ -175,6 +179,7 @@ function emptyRecord(): UnitCandidateRecord {
     independentDelta: 0,
     leanDelta: 0,
     campaignDelta: 0,
+    tacticalDelta: 0,
     finalVotes: 0,
     neutralFactor: 1,
   };
@@ -285,6 +290,11 @@ export class LedgerSink {
     this.recordFor(unitId, candidateId).campaignDelta = voteDelta;
   }
 
+  /** Signed movement among candidates from closing-period local viability. */
+  recordTactical(unitId: string, candidateId: string, voteDelta: number): void {
+    this.recordFor(unitId, candidateId).tacticalDelta = voteDelta;
+  }
+
   /** The integer votes the engine actually added for this unit + candidate. */
   recordFinalVotes(unitId: string, candidateId: string, votes: number): void {
     this.recordFor(unitId, candidateId).finalVotes = votes;
@@ -318,6 +328,7 @@ interface ComponentBreakdown {
   nationalEnvironment: number;
   stateBaselineExtra: number;
   campaign: number;
+  tactical: number;
   finalVotes: number;
 }
 
@@ -340,6 +351,7 @@ function componentsOf(rec: UnitCandidateRecord): ComponentBreakdown {
     nationalEnvironment: rec.referendumDelta,
     stateBaselineExtra: rec.independentDelta + rec.leanDelta,
     campaign: rec.campaignDelta,
+    tactical: rec.tacticalDelta,
     finalVotes: rec.finalVotes,
   };
 }
@@ -355,6 +367,7 @@ function addComponents(a: ComponentBreakdown, b: ComponentBreakdown): void {
   a.nationalEnvironment += b.nationalEnvironment;
   a.stateBaselineExtra += b.stateBaselineExtra;
   a.campaign += b.campaign;
+  a.tactical += b.tactical;
   a.finalVotes += b.finalVotes;
 }
 
@@ -370,6 +383,7 @@ function zeroComponents(): ComponentBreakdown {
     nationalEnvironment: 0,
     stateBaselineExtra: 0,
     campaign: 0,
+    tactical: 0,
     finalVotes: 0,
   };
 }
@@ -402,6 +416,7 @@ function buildFactors(comp: ComponentBreakdown): {
     ["spoiler", comp.spoiler],
     ["nationalEnvironment", comp.nationalEnvironment],
     ["campaign", comp.campaign],
+    ["tactical", comp.tactical],
   ];
   let sum = baseline;
   for (const [, delta] of named) sum += delta;

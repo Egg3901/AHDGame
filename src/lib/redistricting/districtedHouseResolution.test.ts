@@ -176,6 +176,15 @@ async function resolve(
 }
 
 describe("districtedHouseResolution — gerrymandering changes outcomes", () => {
+  it("uses the 5-seat delegation gate when deriving party quotas (#2466)", async () => {
+    const map = Array.from({ length: 5 }, () => ({ left: 8, right: 8, grey: 0 }));
+    const { res } = await resolve(map, {
+      candidateVotes: { d: 830, g: 170 },
+    });
+
+    expect(res!.seatsEstimate).toEqual({ d: 4, g: 1 });
+  });
+
   // Same statewide votes (DEM 55 / GOP 45) over 5 districts, budget L44/R36/G0.
   it("a fair map gives DEM the majority of seats", async () => {
     const fair = [

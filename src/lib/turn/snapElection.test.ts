@@ -26,6 +26,12 @@ let db: MockDb;
 
 function setupMocks(opts: {
   currentTurn: number;
+  gameState?: {
+    startingYear?: number;
+    preset?: string;
+    preIterationTurns?: number;
+    preIteration?: { active?: boolean };
+  };
   govDoc: {
     _id: string;
     countryId: string;
@@ -42,7 +48,11 @@ function setupMocks(opts: {
   // gameState
   db.collectionMocks["gameState"] = {
     ...db.collection("gameState"),
-    findOne: vi.fn().mockResolvedValue({ _id: "current", currentTurn: opts.currentTurn }),
+    findOne: vi.fn().mockResolvedValue({
+      _id: "current",
+      currentTurn: opts.currentTurn,
+      ...opts.gameState,
+    }),
   } as MockDb["collectionMocks"][string];
 
   // governmentFormations
@@ -284,6 +294,31 @@ describe("triggerSnapElection", () => {
     ).rejects.toThrow(/not allowed/i);
   });
 
+  it("fails before mutation when no election regions are configured", async () => {
+    setupMocks({
+      currentTurn: 100,
+      govDoc: {
+        _id: "UK",
+        countryId: "UK",
+        status: "formed",
+        pmCharacterId: new ObjectId(),
+        snapElectionsUsed: 0,
+      },
+      regions: [],
+    });
+
+    await expect(
+      triggerSnapElection(db as unknown as Db, "UK", new Date(), { reason: "pm-trigger" })
+    ).rejects.toThrow(/no election regions/i);
+
+    expect(db.collectionMocks["elections"]!.updateMany).not.toHaveBeenCalled();
+    expect(db.collectionMocks["electionCandidates"]!.updateMany).not.toHaveBeenCalled();
+    expect(db.collectionMocks["electedOfficials"]).toBeUndefined();
+    expect(db.collectionMocks["governmentFormations"]!.updateOne).not.toHaveBeenCalled();
+    const { failInProgressBills } = await import("@/lib/turn/parliamentaryGovernment");
+    expect(failInProgressBills).not.toHaveBeenCalled();
+  });
+
   it("uses snap_commons election type for UK", async () => {
     setupMocks({
       currentTurn: 100,
@@ -306,6 +341,85 @@ describe("triggerSnapElection", () => {
     expect(result.snapElectionType).toBe("snap_commons");
     const insertCall = db.collectionMocks["elections"]!.insertMany.mock.calls[0]?.[0];
     expect(insertCall[0].electionType).toBe("snap_commons");
+  });
+
+  it("vacates the dissolved Commons before government cleanup", async () => {
+    const now = new Date("2026-09-28T12:00:00.000Z");
+    setupMocks({
+      currentTurn: 100,
+      govDoc: {
+        _id: "UK",
+        countryId: "UK",
+        status: "formed",
+        pmCharacterId: new ObjectId(),
+        snapElectionsUsed: 0,
+      },
+      regions: [{ _id: "ENG" }, { _id: "SCT" }],
+      seats: [
+        { state: "ENG", totalSeats: 500 },
+        { state: "SCT", totalSeats: 59 },
+      ],
+    });
+
+    await triggerSnapElection(db as unknown as Db, "UK", now, {
+      reason: "pm-trigger",
+    });
+
+    const officialDelete = db.collectionMocks["electedOfficials"]!.deleteMany;
+    expect(officialDelete).toHaveBeenCalledWith({
+      officeType: "commons",
+      countryId: "UK",
+    });
+    expect(db.collectionMocks["characters"]!.updateMany).toHaveBeenCalledWith(
+      { countryId: "UK", "currentOffice.type": "commons" },
+      { $set: { currentOffice: null, updatedAt: now } }
+    );
+    expect(db.collectionMocks["npps"]!.updateMany).toHaveBeenCalledWith(
+      { countryId: "UK", "currentOffice.type": "commons" },
+      { $set: { currentOffice: null, updatedAt: now } }
+    );
+
+    const { unformGovernmentAndVacatePM } = await import("@/lib/turn/parliamentaryGovernment");
+    expect(officialDelete.mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(unformGovernmentAndVacatePM).mock.invocationCallOrder[0]!
+    );
+  });
+
+  it("labels a snap election with its resolution year rather than its canonical cycle year", async () => {
+    setupMocks({
+      currentTurn: 1180,
+      gameState: {
+        startingYear: 1953,
+        preset: "1953-default",
+        preIterationTurns: 48,
+        preIteration: { active: false },
+      },
+      govDoc: {
+        _id: "UK",
+        countryId: "UK",
+        status: "formed",
+        pmCharacterId: new ObjectId(),
+        snapElectionsUsed: 0,
+      },
+      regions: [{ _id: "EAE" }],
+      seats: [{ state: "EAE", totalSeats: 47 }],
+      priorElections: [{ state: "EAE", electionType: "commons", cycle: 5 }],
+    });
+    const { getDb } = await import("@/lib/mongodb");
+    vi.mocked(getDb).mockResolvedValue(db as unknown as Db);
+
+    await triggerSnapElection(db as unknown as Db, "UK", new Date(), {
+      reason: "pm-trigger",
+    });
+
+    const inserted = db.collectionMocks["elections"]!.insertMany.mock.calls[0]?.[0]?.[0];
+    expect(inserted).toMatchObject({
+      cycle: 6,
+      startTurn: 1180,
+      primaryEndTurn: 1204,
+      endTurn: 1228,
+      electionYear: 1977,
+    });
   });
 
   it("continues cycle numbering from prior election", async () => {
@@ -379,7 +493,7 @@ describe("triggerSnapElection — VONC-active gate (Goal 2)", () => {
     db.collectionMocks["states"] = {
       ...db.collection("states"),
       find: vi.fn().mockReturnValue({
-        toArray: vi.fn().mockResolvedValue([]),
+        toArray: vi.fn().mockResolvedValue([{ _id: "ENG" }]),
         sort: vi.fn().mockReturnThis(),
         project: vi.fn().mockReturnThis(),
       }),
@@ -404,6 +518,7 @@ describe("triggerSnapElection — VONC-active gate (Goal 2)", () => {
     // Zero side effects on gate failure
     expect(db.collectionMocks["elections"].updateMany).not.toHaveBeenCalled();
     expect(db.collectionMocks["bills"].updateMany).not.toHaveBeenCalled();
+    expect(db.collectionMocks["electedOfficials"]).toBeUndefined();
     expect(db.collectionMocks["governmentFormations"].updateOne).not.toHaveBeenCalled();
   });
 
@@ -464,6 +579,10 @@ describe("regime-change snaps", () => {
     });
     expect(result.snapElectionType).toBe("snap_house");
     expect(result.electionsSpawned).toBe(1);
+    expect(db.collectionMocks["electedOfficials"]!.deleteMany).toHaveBeenCalledWith({
+      officeType: "house",
+      $or: [{ countryId: "US" }, { countryId: { $exists: false } }],
+    });
   });
 
   it("runs against a one-party state", async () => {

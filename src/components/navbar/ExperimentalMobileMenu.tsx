@@ -42,6 +42,7 @@ import type { ProfileNavItem } from "@/components/navbar/profileNavItems";
 import type { StaffNavItem } from "@/components/navbar/staffNavItems";
 import { MOBILE_MENU_PANEL_CLASS } from "@/components/navbar/dropdownStyles";
 import { bypassNextImageOptimization } from "@/lib/images/bypassImageOptimization";
+import { captureProductEvent } from "@/lib/analytics/capture";
 import { Chevron, NavIcon, isNavActive } from "./experimentalNavPrimitives";
 import type {
   AdminCharacter,
@@ -54,6 +55,8 @@ import type {
 } from "./experimentalNavTypes";
 
 export interface ExperimentalMobileMenuProps {
+  navigationVariant?: "a" | "b";
+  profileOnly?: boolean;
   navItems: ExperimentalNavItem[];
   pathname: string;
   mobileSubOpen: Partial<Record<MobileSubKey, boolean>>;
@@ -95,6 +98,8 @@ export interface ExperimentalMobileMenuProps {
 }
 
 export function ExperimentalMobileMenu({
+  navigationVariant = "a",
+  profileOnly = false,
   navItems,
   pathname,
   mobileSubOpen,
@@ -134,10 +139,117 @@ export function ExperimentalMobileMenu({
 }: ExperimentalMobileMenuProps) {
   const t = useTranslations("nav");
   const countryName = useCountryDisplayName();
+  const trackDestination = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (!(event.target instanceof Element) || !event.target.closest("a[href]")) return;
+    void captureProductEvent("navigation_item_selected", {
+      variant: navigationVariant === "b" ? "test" : "control",
+      surface: profileOnly ? "profile" : "menu",
+    });
+  };
+  if (profileOnly && user) {
+    const links = [
+      { href: "/profile", label: t("common.profile"), icon: "Profile" },
+      {
+        href: "/notifications",
+        label: `${t("common.notifications")}${unreadCount ? ` (${unreadCount > 9 ? "9+" : unreadCount})` : ""}`,
+        icon: "News",
+      },
+      { href: "/settings", label: t("common.settings"), icon: "Staff" },
+      { href: "/portfolio?tab=currency", label: t("common.wallet"), icon: "Nation" },
+    ];
+    return (
+      <div
+        id="experimental-mobile-menu"
+        onClickCapture={trackDestination}
+        className="max-h-[min(36rem,calc(100dvh-5rem))] overflow-y-auto bg-card lg:hidden"
+      >
+        <div className="relative h-20 overflow-hidden">
+          {characterProfile?.profileHeaderImageUrl ? (
+            <Image
+              src={characterProfile.profileHeaderImageUrl}
+              alt=""
+              fill
+              sizes="304px"
+              className="object-cover"
+              unoptimized={bypassNextImageOptimization(characterProfile.profileHeaderImageUrl)}
+            />
+          ) : (
+            <div className="absolute inset-0 bg-gradient-to-br from-primary/25 via-card-elevated to-secondary/20" />
+          )}
+          <div className="absolute inset-0 bg-gradient-to-t from-card to-transparent" />
+        </div>
+        <div className="relative flex items-end gap-3 px-3 pb-3">
+          <div className="-mt-5 shrink-0 rounded-lg border-[3px] border-card bg-card">
+            <Avatar
+              url={characterProfile?.avatarUrl}
+              name={profileDisplayName}
+              size="h-12 w-12"
+              borderKey={characterProfile?.borderKey}
+              tintColor={characterProfile?.tintColor}
+            />
+          </div>
+          <div className="min-w-0 pb-0.5">
+            <div className="truncate text-sm font-semibold">{profileDisplayName}</div>
+            <div className="truncate text-xs text-muted">@{user.username}</div>
+          </div>
+        </div>
+        <div className="border-t border-card-border p-1.5">
+          {links.map((link) => (
+            <Link
+              key={link.href}
+              href={link.href}
+              onClick={onClose}
+              className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm text-foreground hover:bg-white/5"
+            >
+              <NavIcon name={link.icon} />
+              {link.label}
+            </Link>
+          ))}
+          {profileOrgItems.map((item) => (
+            <Link
+              key={item.id}
+              href={item.href}
+              onClick={onClose}
+              className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm text-primary hover:bg-white/5"
+            >
+              <NavIcon name="Nation" />
+              {t(item.labelKey)}
+            </Link>
+          ))}
+        </div>
+        {((adminCharacters && adminCharacters.length > 1) || imperialCharacter) && (
+          <MobileCharacterSwitcher
+            adminCharacters={adminCharacters}
+            imperialCharacter={imperialCharacter}
+            isImperialMode={isImperialMode}
+            switchingCharacter={switchingCharacter}
+            switchingImperial={switchingImperial}
+            onClose={onClose}
+            handleSwitchCharacter={handleSwitchCharacter}
+            handleSwitchImperial={handleSwitchImperial}
+          />
+        )}
+        {!user.singleplayer && (
+          <button
+            type="button"
+            onClick={handleSignOut}
+            className="w-full border-t border-card-border px-4 py-3 text-left text-sm text-muted"
+          >
+            {t("userMenu.signOut")}
+          </button>
+        )}
+      </div>
+    );
+  }
   return (
     <div
       id="experimental-mobile-menu"
-      className={`border-t border-card-border/60 bg-card/70 px-3.5 py-3.5 backdrop-blur-xl md:hidden ${MOBILE_MENU_PANEL_CLASS}`}
+      onClickCapture={trackDestination}
+      className={
+        navigationVariant === "b"
+          ? "min-h-0 flex-1 overflow-y-auto overscroll-contain px-3.5 py-3.5 lg:hidden"
+          : `border-t border-card-border/60 bg-card/70 px-3.5 py-3.5 backdrop-blur-xl lg:hidden ${MOBILE_MENU_PANEL_CLASS}`
+      }
     >
       {/* Search — inline; no autofocus so opening the menu doesn't pop the
           keyboard / scroll-zoom into the field on mobile (focuses on tap). */}
@@ -146,7 +258,7 @@ export function ExperimentalMobileMenu({
       </div>
 
       {/* Profile card — top of the drawer so it's the first thing you hit. */}
-      {showProfile && user && (
+      {navigationVariant === "a" && showProfile && user && (
         <div className="mb-3.5 overflow-hidden rounded-xl border border-card-border bg-card">
           <div className="relative">
             <div className="relative h-20 overflow-hidden">
@@ -268,8 +380,19 @@ export function ExperimentalMobileMenu({
         </div>
       )}
 
+      {navigationVariant === "b" && (
+        <div className="mb-2 px-1 text-[10px] font-semibold uppercase tracking-widest text-muted">
+          {t("common.mainNavigation")}
+        </div>
+      )}
       {/* Core nav items */}
-      <div className="flex flex-col gap-0.5">
+      <div
+        className={
+          navigationVariant === "b"
+            ? "flex flex-col gap-0.5 border-b border-card-border pb-3"
+            : "flex flex-col gap-0.5"
+        }
+      >
         {navItems.map((item) => {
           const active = isNavActive(pathname, item.href);
           const subKey = item.key as MobileSubKey | undefined;
@@ -281,7 +404,7 @@ export function ExperimentalMobileMenu({
                   type="button"
                   onClick={() => toggleMobileSub(subKey)}
                   aria-expanded={isSubOpen}
-                  className={`flex w-full items-center gap-3 rounded-[10px] px-3.5 py-3 text-[15px] transition-colors hover:bg-white/5 ${
+                  className={`flex w-full items-center gap-2 rounded-[10px] px-3 py-2.5 text-left text-sm transition-colors hover:bg-white/5 ${
                     active || isSubOpen ? "bg-card font-semibold text-foreground" : "text-fg-2"
                   }`}
                 >

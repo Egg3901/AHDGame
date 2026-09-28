@@ -16,6 +16,7 @@ import { migration as supplyListingIndexes } from "./entries/2026-09-17-supply-l
 import { migration as ukDualMinistryRoleSlot } from "./entries/2026-09-17-uk-dual-ministry-role-slot";
 import { migration as electionResultSnapshots } from "./entries/2026-09-20-election-result-snapshots";
 import { migration as federalBudgetSnapshotHistoryIndex } from "./entries/2026-09-25-federal-budget-snapshot-history-index";
+import { migration as marketChartIndexes } from "./entries/2026-09-26-market-chart-indexes";
 import type { Migration } from "./types";
 
 import { migration as bondCurrencyStamp } from "./entries/2026-04-15-bond-currency-stamp";
@@ -287,6 +288,7 @@ export const MIGRATIONS: Migration[] = [
   // is rewritten, and rollback is dropping it.
   electionResultSnapshots,
   federalBudgetSnapshotHistoryIndex,
+  marketChartIndexes,
   turnClockIndexes,
   // True NPP-owned suppliers never had a player who could answer an offer, so
   // awards made before automatic activation shipped remain pending forever.

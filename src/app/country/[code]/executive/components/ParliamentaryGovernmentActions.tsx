@@ -94,23 +94,39 @@ export function ParliamentaryGovernmentActions({
 
   return (
     <>
-      {/* Appoint PM button when government is pending and viewer is eligible */}
-      {governmentStatus === "pending" && viewerMayAppoint && (
-        <div className="flex items-center justify-between rounded-xl border border-primary/20 bg-primary/5 px-4 py-3">
-          <div>
-            <p className="text-sm font-medium text-foreground">Government pending formation</p>
-            <p className="text-xs text-muted">
-              As party or coalition chair, you may nominate a {executiveTitle}.
-            </p>
+      {/* Appoint PM button when government is pending and viewer is eligible,
+          or in parallel with an active no-confidence vote on a formed
+          government (the server accepts those nominations, so the CTA must
+          be visible there too). */}
+      {(governmentStatus === "pending" ||
+        (governmentStatus === "formed" && activeNoConfidenceVote != null)) &&
+        viewerMayAppoint && (
+          <div className="flex items-center justify-between rounded-xl border border-primary/20 bg-primary/5 px-4 py-3">
+            <div>
+              <p className="text-sm font-medium text-foreground">
+                {governmentStatus === "pending"
+                  ? "Government pending formation"
+                  : "Confidence vote in progress"}
+              </p>
+              <p className="text-xs text-muted">
+                {governmentStatus === "pending" ? (
+                  <>As party or coalition chair, you may nominate a {executiveTitle}.</>
+                ) : (
+                  <>
+                    As party or coalition chair, you may nominate an alternative {executiveTitle}{" "}
+                    while the no-confidence vote runs.
+                  </>
+                )}
+              </p>
+            </div>
+            <button
+              onClick={() => setAppointModalOpen(true)}
+              className="shrink-0 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary/90 transition-colors"
+            >
+              Appoint {executiveTitle}
+            </button>
           </div>
-          <button
-            onClick={() => setAppointModalOpen(true)}
-            className="shrink-0 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary/90 transition-colors"
-          >
-            Appoint {executiveTitle}
-          </button>
-        </div>
-      )}
+        )}
 
       {/* Head-of-state nomination when the ceremonial office is vacant (RU
           Chairman of the Presidium — legislatureAppointment countries). */}

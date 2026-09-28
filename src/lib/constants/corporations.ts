@@ -994,6 +994,51 @@ export const SECTOR_RISK_PREMIUM: Record<string, number> = {
   default: 0.05,
 };
 
+// ─── Stock-market boost (phased operating + valuation lift) ─────────────────
+// Two overlapping turn-ramped multipliers that lift the equity market without
+// a one-turn step the ±35% share-price rate limiter would have to absorb:
+//
+//   Phase A (revenue first): sector operating revenue ramps 1.0 →
+//   STOCK_BOOST_REVENUE_TARGET over STOCK_BOOST_REVENUE_RAMP_TURNS turns.
+//   Financial sectors compound an extra STOCK_BOOST_FINANCIAL_REVENUE_EXTRA,
+//   so chartered-bank parents feel the operating lift, not just the valuation.
+//   Headcount is deliberately untouched: nameplate revenue (the worker basis)
+//   is not boosted, only realized operating revenue.
+//
+//   Phase B (valuation follows): sector NPV and bank NPV ramp 1.0 → target
+//   over STOCK_BOOST_NPV_RAMP_TURNS turns, starting one half-ramp after
+//   revenue so cash earnings lead and capitalized values follow. The financial
+//   cost-of-capital premium eases 0.06 → STOCK_BOOST_FINANCIAL_RISK_PREMIUM
+//   over the same window.
+//
+// The pure ramp math lives in `@/lib/corporations/rules/marketBoost`; these
+// are the tuning hooks. Judgment-call magnitudes: validate with a worldsim
+// A/B before treating as final.
+//
+// DEPLOY NOTE: confirm both START turns are above the live `currentTurn` at
+// merge so phase A opens the sequence instead of landing mid-ramp. If the
+// live turn has already passed a START, the lerp still behaves (it lands
+// part-ramped, never stepped), but the phase ordering guarantee is lost.
+
+/** First turn the operating-revenue boost applies (ramps from 1.0). */
+export const STOCK_BOOST_REVENUE_START_TURN = 1350;
+/** Turns to ramp revenue 1.0 → target (192 = 4 game years = ~8 real days). */
+export const STOCK_BOOST_REVENUE_RAMP_TURNS = 192;
+/** Steady-state operating-revenue multiplier (all sectors). */
+export const STOCK_BOOST_REVENUE_TARGET = 1.15;
+/** Extra steady-state revenue multiplier compounding on financial sectors. */
+export const STOCK_BOOST_FINANCIAL_REVENUE_EXTRA = 1.1;
+/** First turn the NPV boost applies (one half revenue-ramp after phase A). */
+export const STOCK_BOOST_NPV_START_TURN = 1446;
+/** Turns to ramp NPV 1.0 → target. */
+export const STOCK_BOOST_NPV_RAMP_TURNS = 192;
+/** Steady-state sector-NPV multiplier. */
+export const STOCK_BOOST_SECTOR_NPV_TARGET = 1.3;
+/** Steady-state bank-income NPV multiplier (chartered banks only). */
+export const STOCK_BOOST_BANK_NPV_TARGET = 1.5;
+/** Financial cost-of-capital risk premium once the NPV window completes. */
+export const STOCK_BOOST_FINANCIAL_RISK_PREMIUM = 0.04;
+
 /**
  * Maximum dividend rate (%). CEOs cannot set above this; turn processing clamps existing values.
  */

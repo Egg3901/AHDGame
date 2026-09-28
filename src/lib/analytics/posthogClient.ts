@@ -39,9 +39,20 @@ export function getPostHogClient(): Promise<PostHogClient | null> {
         capture_dead_clicks: false,
         capture_pageview: false,
         capture_pageleave: false,
-        disable_session_recording: true,
+        // Session replay is ON (executive decision 2026-09-26, reversal of the
+        // removal-era default). Sampled, masked, and blocked on sensitive
+        // screens; see ANALYTICS_ROLLOUT.md step 4 and the privacy policy.
+        // Elements carrying data-replay-block are replaced with placeholders.
+        session_recording: {
+          sampleRate: 0.1,
+          maskAllInputs: true,
+          recordHeaders: false,
+          recordBody: false,
+          blockSelector: "[data-replay-block]",
+        },
         disable_surveys: true,
-        advanced_disable_feature_flags: true,
+        // Navigation experiment assignment runs only after analytics consent.
+        advanced_disable_feature_flags: false,
         opt_out_capturing_by_default: true,
         persistence: "localStorage+cookie",
         property_denylist: [
@@ -54,6 +65,24 @@ export function getPostHogClient(): Promise<PostHogClient | null> {
         ],
       });
       posthog.opt_in_capturing();
+      // The hosted PostHog widget owns the close button. Mirror only its
+      // dismissal position through the shared wrapper, without survey answers.
+      posthog.on(
+        "eventCaptured",
+        (captured: { event?: string; properties?: Record<string, unknown> }) => {
+          if (captured.event !== "survey dismissed") return;
+          const questions = captured.properties?.$survey_questions;
+          const questionIndex = Array.isArray(questions)
+            ? questions.filter(
+                (question: { response?: unknown }) =>
+                  question?.response !== undefined && question.response !== null
+              ).length
+            : 0;
+          void import("./capture").then(({ captureProductEvent }) =>
+            captureProductEvent("survey_dismissed", { question_index: questionIndex })
+          );
+        }
+      );
       return posthog;
     })
     .catch(() => null);
@@ -61,6 +90,19 @@ export function getPostHogClient(): Promise<PostHogClient | null> {
     if (!client) clientPromise = null;
   });
   return clientPromise;
+}
+
+/** Survey loading starts only after the SDK has the authenticated account ID. */
+export function identifyPostHogUser(client: PostHogClient, userId: string): void {
+  client.identify(userId, { is_player: true });
+  client.set_config({ disable_surveys: false });
+}
+
+/** Keep later anonymous page views from loading surveys after logout. */
+export function resetPostHogUser(client: PostHogClient): void {
+  client.set_config({ disable_surveys: true });
+  client.reset();
+  client.opt_in_capturing();
 }
 
 /**
@@ -91,6 +133,7 @@ export async function stopPostHogCapture(): Promise<void> {
   }
   const client = await clientPromise;
   if (!client) return;
+  client.set_config({ disable_surveys: true });
   client.opt_out_capturing();
   client.reset();
 }

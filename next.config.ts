@@ -25,7 +25,11 @@ const gitRevParseHead = (): string | null => {
 // source-map artifacts the Sentry webpack plugin uploads under this release, so
 // stacks symbolicate. Exported via env so the three Sentry configs (which run
 // in separate runtimes) all read the same value.
-const SENTRY_RELEASE = process.env.RAILWAY_GIT_COMMIT_SHA || gitRevParseHead() || "unknown";
+const SENTRY_RELEASE =
+  process.env.RAILWAY_GIT_COMMIT_SHA ||
+  process.env.BUILD_GIT_COMMIT_SHA ||
+  gitRevParseHead() ||
+  "unknown";
 process.env.SENTRY_RELEASE = SENTRY_RELEASE;
 process.env.NEXT_PUBLIC_SENTRY_RELEASE = SENTRY_RELEASE;
 process.env.NEXT_PUBLIC_SENTRY_ENVIRONMENT =
@@ -35,14 +39,10 @@ process.env.NEXT_PUBLIC_SENTRY_ENVIRONMENT =
 // release identifier so the badge and Sentry release can never disagree.
 const gitCommit = SENTRY_RELEASE === "unknown" ? "unknown" : SENTRY_RELEASE.slice(0, 7);
 
-// An unresolvable release on a production Railway build means events tag
-// release=unknown and client stacks stop symbolicating (#2772). Warn loudly at
-// build time — but don't fail the build; the deploy itself is still sound.
+// An unresolvable production release prevents source maps from matching events.
 if (SENTRY_RELEASE === "unknown" && process.env.RAILWAY_ENVIRONMENT_NAME === "production") {
-  console.warn(
-    '[next.config] SENTRY_RELEASE resolved to "unknown" on a production Railway build: ' +
-      "RAILWAY_GIT_COMMIT_SHA is missing and `git rev-parse HEAD` failed. Sentry events " +
-      "from this deploy will not symbolicate or attribute to a commit (#2772)."
+  throw new Error(
+    "Production Sentry release requires RAILWAY_GIT_COMMIT_SHA or BUILD_GIT_COMMIT_SHA"
   );
 }
 
@@ -54,14 +54,22 @@ const railwayEnv = process.env.RAILWAY_ENVIRONMENT_NAME;
 const isPreview = !!railwayEnv && railwayEnv !== "production";
 const isProductionBuild = railwayEnv === "production";
 const widenSentryClientFileUpload = process.env.SENTRY_WIDEN_CLIENT_FILE_UPLOAD === "true";
-// Source-map upload is enabled only when an auth token is present, so local and
-// token-less CI builds behave exactly as before (no upload, no failure). Set
-// SENTRY_AUTH_TOKEN in the Railway build env turns on symbolication.
-const sentryAuthToken = process.env.SENTRY_AUTH_TOKEN;
-// Sentry SaaS is the default. SENTRY_URL remains an explicit GlitchTip fallback.
-const sentryUrl = process.env.SENTRY_URL || undefined;
-const sentryOrg = sentryUrl ? "ahousedivided" : process.env.SENTRY_ORG || "lakeside-games";
-const sentryProject = sentryUrl ? "ahd" : process.env.SENTRY_PROJECT || "a-house-divided";
+// Source-map upload is optional so a missing observability credential cannot
+// prevent the application from deploying. The Sentry wrapper disables map
+// generation and upload below when the token is absent.
+const sentryAuthToken = process.env.SENTRY_AUTH_TOKEN?.trim() || undefined;
+if (sentryAuthToken) {
+  process.env.SENTRY_AUTH_TOKEN = sentryAuthToken;
+} else {
+  // sentry-cli also reads this variable directly instead of relying only on
+  // withSentryConfig's authToken option.
+  delete process.env.SENTRY_AUTH_TOKEN;
+}
+if (isProductionBuild && !sentryAuthToken) {
+  console.warn("[sentry] SENTRY_AUTH_TOKEN is not set; continuing without source-map upload.");
+}
+const sentryOrg = process.env.SENTRY_ORG || "lakeside-games";
+const sentryProject = process.env.SENTRY_PROJECT || "a-house-divided";
 
 const nextConfig: NextConfig = {
   // Don't advertise the framework version via the x-powered-by header.
@@ -215,11 +223,11 @@ const nextConfig: NextConfig = {
           // fundingchoicesmessages.google.com serves the GDPR/EU consent dialog
           // (Google Funding Choices) and must be allowlisted or the message
           // silently fails to render once this policy goes enforcing.
-          // worker-src blob: is required by the consent-gated OpenReplay tracker worker.
+          // worker-src blob: is kept for consent-gated replay/recording workers.
           {
             key: "Content-Security-Policy-Report-Only",
             value:
-              "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'self'; img-src 'self' data: blob: https:; font-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://pagead2.googlesyndication.com https://*.googlesyndication.com https://www.googletagmanager.com https://fundingchoicesmessages.google.com; worker-src 'self' blob:; connect-src 'self' https:; frame-src 'self' https://www.youtube.com https://*.googlesyndication.com https://googleads.g.doubleclick.net https://fundingchoicesmessages.google.com",
+              "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'self'; img-src 'self' data: blob: https:; font-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.posthog.com https://pagead2.googlesyndication.com https://*.googlesyndication.com https://www.googletagmanager.com https://fundingchoicesmessages.google.com; worker-src 'self' blob:; connect-src 'self' https:; frame-src 'self' https://www.youtube.com https://*.googlesyndication.com https://googleads.g.doubleclick.net https://fundingchoicesmessages.google.com",
           },
         ],
       },
@@ -381,14 +389,12 @@ export default withNextIntl(
   withSentryConfig(nextConfig, {
     org: sentryOrg,
     project: sentryProject,
-    sentryUrl,
     authToken: sentryAuthToken,
     // Tie uploaded source-map artifacts to the same release the runtime tags
     // events with, so client stacks symbolicate against the right bundle.
     release: { name: SENTRY_RELEASE },
-    silent: !process.env.CI,
+    silent: false,
     widenClientFileUpload: widenSentryClientFileUpload,
-    // Upload is gated on the auth token so token-less builds are unaffected.
     // Maps are removed from build output after upload.
     sourcemaps: {
       disable: !sentryAuthToken,

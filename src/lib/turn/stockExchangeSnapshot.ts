@@ -36,6 +36,7 @@ import {
   fxRateForSectorHostFromMap,
 } from "@/lib/currency/corporationCapital";
 import { BOND_UNIT_FACE_VALUE } from "@/lib/db/types/bond";
+import { recordIntradayLevels } from "@/lib/stockExchange/intraday";
 import {
   CORPORATION_TYPE_LABELS,
   CEO_INITIAL_SHARES,
@@ -1016,6 +1017,23 @@ export async function generateStockExchangeSnapshots(currentTurn: number, db?: D
         snapshots.map((snapshot) =>
           collection.updateOne({ _id: snapshot._id }, { $set: snapshot }, { upsert: true })
         )
+      );
+
+      // Intraday index levels for real OHLC candles. Raw anchor market cap per
+      // venue, recorded on every rebuild (turn + 15-minute refreshes), so each
+      // turn accumulates observed high/low extremes. Additive only: no pricing
+      // input, and snapshot logic above is untouched.
+      await recordIntradayLevels(
+        database,
+        currentTurn,
+        snapshots.map((snapshot) => ({
+          exchange: snapshot._id,
+          marketCap: snapshot.listings.reduce(
+            (sum, l) => sum + (l.marketCapAnchor ?? l.marketCap),
+            0
+          ),
+        })),
+        now
       );
     }
   );

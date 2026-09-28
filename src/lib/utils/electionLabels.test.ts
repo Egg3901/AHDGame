@@ -4,6 +4,7 @@ import {
   ELECTION_TYPE_LABEL_MAP,
   MULTI_SEAT_TYPES,
   formatElectionTypeLabel,
+  isCommonsGeneralElection,
 } from "./electionLabels";
 
 describe("formatElectionTypeLabel", () => {
@@ -93,6 +94,14 @@ describe("MULTI_SEAT_TYPES snap coverage", () => {
   it("treats snap types as multi-seat (matching their regular counterparts)", () => {
     expect(MULTI_SEAT_TYPES.has("snap_commons")).toBe(true);
     expect(MULTI_SEAT_TYPES.has("snap_shugiin")).toBe(true);
+  });
+});
+
+describe("isCommonsGeneralElection", () => {
+  it("includes regular and snap Commons races but excludes by-elections", () => {
+    expect(isCommonsGeneralElection("commons")).toBe(true);
+    expect(isCommonsGeneralElection("snap_commons")).toBe(true);
+    expect(isCommonsGeneralElection("special_commons")).toBe(false);
   });
 });
 

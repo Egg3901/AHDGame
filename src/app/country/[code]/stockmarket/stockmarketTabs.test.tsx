@@ -63,7 +63,34 @@ vi.mock("@/lib/observability/fetchJson", () => ({
   fetchJson: vi.fn().mockResolvedValue(null),
 }));
 
+// lightweight-charts renders to canvas, which happy-dom cannot do. The page
+// suite asserts tab fetching, not chart internals, so stub the chart surface.
+vi.mock("lightweight-charts", () => {
+  const series = () => ({
+    setData: vi.fn(),
+    applyOptions: vi.fn(),
+  });
+  return {
+    CandlestickSeries: {},
+    HistogramSeries: {},
+    LineSeries: {},
+    CrosshairMode: { Normal: 0 },
+    createChart: vi.fn(() => ({
+      addSeries: () => series(),
+      removeSeries: vi.fn(),
+      applyOptions: vi.fn(),
+      remove: vi.fn(),
+      priceScale: () => ({ applyOptions: vi.fn() }),
+      timeScale: () => ({ fitContent: vi.fn(), applyOptions: vi.fn() }),
+      subscribeCrosshairMove: vi.fn(),
+      unsubscribeCrosshairMove: vi.fn(),
+    })),
+    createSeriesMarkers: () => ({ setMarkers: vi.fn() }),
+  };
+});
+
 import StockMarketPage from "./page";
+import { createChart } from "lightweight-charts";
 
 let searchParams = new URLSearchParams();
 
@@ -81,6 +108,9 @@ function mockFetchFor(url: string) {
   }
   if (url.startsWith("/api/stock-exchange?")) {
     return Promise.resolve({ ok: true, json: async () => ({ listings: [] }) });
+  }
+  if (url.startsWith("/api/commodities")) {
+    return Promise.resolve({ ok: true, json: async () => ({ commodities: [] }) });
   }
   return Promise.resolve({ ok: true, json: async () => ({}) });
 }
@@ -110,16 +140,27 @@ describe("stockmarket inactive tabs (#2168)", () => {
     await waitFor(() => {
       expect(fetchedUrls.some((u) => u.startsWith("/api/stock-exchange?"))).toBe(true);
     });
-    // Listings serve the visible stats strip and ticker; other tab data waits.
+    // Only auctions stay lazy (#2168): commodities feed the ticker, history is
+    // shared with the overview chart, and bonds/wealth populate tab badges.
+    expect(fetchedUrls.some((u) => u.includes("/auctions"))).toBe(false);
     for (const endpoint of [
-      "/auctions",
       "/api/bonds",
       "/api/commodities",
       "/wealth-list",
       "/market-cap-history",
+      "/api/investment-funds",
     ]) {
-      expect(fetchedUrls.some((u) => u.includes(endpoint))).toBe(false);
+      expect(fetchedUrls.some((u) => u.includes(endpoint))).toBe(true);
     }
+  });
+
+  it("creates the chart on mount (container renders unconditionally)", async () => {
+    // Regression: the chart container used to render only after data arrived,
+    // so the mount effect found a null ref and the chart never appeared.
+    render(<StockMarketPage params={params} />);
+    await waitFor(() => {
+      expect(vi.mocked(createChart)).toHaveBeenCalled();
+    });
   });
 
   it("fetches auctions once the auctions tab is selected", async () => {

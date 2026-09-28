@@ -34,17 +34,11 @@ beforeEach(() => {
 describe("loadViewerOrganizationRoles — foreign-minister detection", () => {
   it("recognizes the cabinetMembers FM-seat holder as foreignMinisterOf", async () => {
     const fmCharId = new ObjectId();
-    db.collectionMocks["cabinetMembers"]!.findOne.mockImplementation(
-      async (filter: { countryId?: string; positionId?: string }) =>
-        filter.countryId === "CN" && filter.positionId === "minister_of_foreign_affairs"
-          ? {
-              countryId: "CN",
-              positionId: "minister_of_foreign_affairs",
-              characterId: fmCharId,
-              characterName: "Cassius MacInnis",
-            }
-          : null
-    );
+    db.collectionMocks["cabinetMembers"]!.find.mockReturnValue({
+      toArray: async () => [
+        { countryId: "CN", positionId: "minister_of_foreign_affairs", characterId: fmCharId },
+      ],
+    });
 
     const detail = await loadViewerOrganizationRoles({
       db: db as unknown as Db,
@@ -53,5 +47,7 @@ describe("loadViewerOrganizationRoles — foreign-minister detection", () => {
     });
 
     expect(detail.foreignMinisterOf).toBe("CN");
+    expect(db.collectionMocks["cabinetMembers"]!.find).toHaveBeenCalledTimes(1);
+    expect(db.collectionMocks["cabinetMembers"]!.findOne).not.toHaveBeenCalled();
   });
 });

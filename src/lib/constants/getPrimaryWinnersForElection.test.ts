@@ -23,6 +23,11 @@ describe("getPrimaryWinnersForElection", () => {
     expect(getPrimaryWinnersForElection("JP", "house")).toBe(getPrimaryWinnersForCountry("JP"));
   });
 
+  it("advances the same top three for regular and snap Commons primaries", () => {
+    expect(getPrimaryWinnersForElection("UK", "commons")).toBe(3);
+    expect(getPrimaryWinnersForElection("UK", "snap_commons")).toBe(3);
+  });
+
   // Single-winner executive offices (governor/president/uachtaran) elect exactly
   // one holder, so only one candidate per party may advance from the primary —
   // regardless of the country's legislative primary cap. Without this, the

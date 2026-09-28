@@ -158,6 +158,19 @@ beforeEach(() => {
 });
 
 describe("BankingHubClient", () => {
+  it("keeps bank IDs as option values without showing them in the admin picker", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({ ok: true, json: async () => ({ ...payload, isAdmin: true }) })
+    );
+    render(<BankingHubClient />);
+
+    const picker = (await screen.findByLabelText("Bank to unwind")) as HTMLSelectElement;
+    expect(picker.value).toBe("bank-1");
+    expect(picker.options[0]?.textContent).toBe("Continental Trust (United States #17)");
+    expect(picker.options[0]?.textContent).not.toContain("bank-1");
+  });
+
   it("puts private-bank customer actions in the first screen shortcuts", async () => {
     render(<BankingHubClient />);
 
