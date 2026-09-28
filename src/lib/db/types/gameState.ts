@@ -72,6 +72,8 @@ export interface IterationStampFields {
 }
 
 export interface GameState {
+  europeanIntegration?: import("@/lib/internationalOrganizations/europeanIntegration/rules").EuropeanIntegrationState;
+
   _id: string;
   /** Setup chosen by the local singleplayer launcher; absent on hosted worlds. */
   singleplayerConfig?: SingleplayerConfig;

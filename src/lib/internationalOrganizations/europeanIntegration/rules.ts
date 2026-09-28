@@ -23,7 +23,11 @@ export const COMMUNITY_MEMBERS_1991 = [...COMMUNITY_MEMBERS_1979, "GR", "ES", "P
 
 /** ISO calendar dates compare lexically after strict shape validation. */
 function onOrAfter(date: string, threshold: string): boolean {
-  return /^\d{4}-\d{2}-\d{2}$/.test(date) && date >= threshold;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return false;
+  const [year, month, day] = date.split("-").map(Number);
+  const leap = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+  const days = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  return month >= 1 && month <= 12 && day >= 1 && day <= days[month - 1] && date >= threshold;
 }
 
 export function canRatifyMaastricht(date: string, stage: EuropeanStage): boolean {
@@ -43,7 +47,9 @@ export function recordEuropeanRatification(input: {
   // A replay cannot resurrect a superseded decision or rewrite its provenance.
   if (
     previous &&
-    (previous.decisionId === input.decision.decisionId || previous.turn >= input.decision.turn)
+    (previous.decisionId === input.decision.decisionId ||
+      previous.turn > input.decision.turn ||
+      (previous.turn === input.decision.turn && previous.decisionId >= input.decision.decisionId))
   )
     return input.state;
   return {
@@ -83,4 +89,18 @@ export function withdrawEuropeanRatification(
   const ratifications = { ...state.ratifications };
   delete ratifications[countryId];
   return { ...state, ratifications };
+}
+
+export function initialEuropeanIntegration(input: {
+  startingYear: number;
+  currentTurn: number;
+  hasEuropeanMembers: boolean;
+}): EuropeanIntegrationState {
+  const legacy = input.hasEuropeanMembers || input.currentTurn > 1;
+  return {
+    stage: input.hasEuropeanMembers || input.startingYear >= 1993 ? "union" : "community",
+    source: legacy ? "legacy-settlement" : "historical-seed",
+    establishedTurn: input.currentTurn,
+    ratifications: {},
+  };
 }
