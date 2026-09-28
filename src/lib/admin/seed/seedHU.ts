@@ -6,6 +6,7 @@ import type {
   DemographicCategory,
   StateDemographics,
   StateMetrics,
+  StatePartyOrg,
 } from "@/lib/db/types";
 import type { StateMetricBaseline } from "@/lib/db/types/statePolicy";
 import type { PartySeed } from "@/lib/seeds/reference/politicalParties";
@@ -205,4 +206,61 @@ export async function seedHUBaselines(
       .updateOne({ _id }, { $set: baselineData }, { upsert: true });
   }
   log(`Seeded ${huStateBaselines2027.length} HU baselines (preset: ${preset})`);
+}
+
+/**
+ * Register each modern HU party in each authored region. These neutral
+ * organization values are transitional estimates; the election engine still
+ * needs a presence row to avoid treating every party as a new entrant.
+ */
+export async function seedHUStatePartyOrg(
+  db: Db,
+  reset: boolean,
+  log: (msg: string) => void,
+  preset: string
+) {
+  if (!isModernHuPreset(preset)) {
+    log(`[HU] skipping modern state party org (preset ${preset})`);
+    return;
+  }
+  if (reset) await db.collection("statePartyOrg").deleteMany({ countryId: "HU" });
+
+  const { huRegions2027 } = await import("@/lib/countries/hu/data/huRegions2027");
+  const parties = await db
+    .collection<PoliticalParty>("politicalParties")
+    .find({ countryId: "HU", isDefault: true })
+    .toArray();
+  const now = new Date();
+  let total = 0;
+  for (const region of huRegions2027) {
+    for (const party of parties) {
+      const partyId = String(party.sequentialId);
+      const _id = `${String(region._id)}_${partyId}`;
+      await db.collection<StatePartyOrg>("statePartyOrg").updateOne(
+        { _id },
+        {
+          $set: {
+            countryId: "HU",
+            stateId: String(region._id),
+            partyId,
+            organization: 50,
+            registration: 50,
+            chairId: null,
+            viceChairId: null,
+            treasurerId: null,
+            treasury: 0,
+            stateTaxRate: 0,
+            politicalStrength: 0,
+            hasPresence: true,
+            consecutiveLosses: 0,
+            updatedAt: now,
+          },
+          $setOnInsert: { createdAt: now },
+        },
+        { upsert: true }
+      );
+      total++;
+    }
+  }
+  log(`Seeded ${total} HU state party org entries across ${parties.length} parties`);
 }

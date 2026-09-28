@@ -548,12 +548,14 @@ export async function seedAllCountryData(
         seedHUDemographics,
         seedHUStateMetrics,
         seedHUBaselines,
+        seedHUStatePartyOrg,
       } = await import("./seed/seedHU");
       await seedHURegions(db, resetReference, log, preset);
       await seedHUParties(db, log, preset);
       await seedHUDemographics(db, resetReference, log, preset);
       await seedHUStateMetrics(db, resetReference, log, preset);
       await seedHUBaselines(db, resetReference, log, preset);
+      await seedHUStatePartyOrg(db, resetReference, log, preset);
     })(),
     // Modern PL + RO democratic substrate (2027-default only). The Cold-War
     // one-party block above self-guards on isEasternBlocEra, and the 1991
