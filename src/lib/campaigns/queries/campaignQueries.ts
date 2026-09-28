@@ -24,6 +24,7 @@ import {
   legacyManagersAsList,
 } from "@/lib/campaigns/access";
 import { presidentialRulesetFor } from "@/lib/elections/presidentialRuleset";
+import { CAMPAIGN_STRENGTH_MAX_BONUS } from "@/lib/campaigns/campaignStrength";
 import { buildCampaignStatePresence } from "@/lib/elections/campaignStatePresence";
 import { getCampaignCopyForElection } from "@/lib/campaigns/raceFamilyCopy";
 import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
@@ -212,6 +213,10 @@ export async function getCampaignDetail(
   const statePresence = viewerIsCandidate
     ? await buildCampaignStatePresence(db, { election, character: user!.character! })
     : null;
+  const campaignStrengthMaxBonus =
+    election?.electionType === "president"
+      ? presidentialRulesetFor(election).campaignStrengthMaxBonus
+      : CAMPAIGN_STRENGTH_MAX_BONUS;
 
   const base: CampaignData = {
     id: campaign._id.toString(),
@@ -228,6 +233,11 @@ export async function getCampaignDetail(
     currencyCode: campaignCurrencyCode,
     fxRate: campaignRate,
     campaignStrength: campaign.campaignStrength ?? 0,
+    ...(campaignStrengthMaxBonus !== CAMPAIGN_STRENGTH_MAX_BONUS
+      ? {
+          campaignStrengthMaxBonus,
+        }
+      : {}),
     funds: canSeeExact ? campaign.funds : undefined,
     actions: canSeeExact ? campaign.actions : undefined,
     levels: canSeeExact

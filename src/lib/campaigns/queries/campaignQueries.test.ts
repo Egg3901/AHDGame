@@ -431,6 +431,24 @@ describe("getCampaignDetail", () => {
     expect(detail.levels.fundraising).toBe(2);
   });
 
+  it("returns the current presidential ruleset's campaign-strength cap", async () => {
+    const { db, campaignId, user } = await setUpOwnedCampaign();
+    db.collectionMocks["elections"]!.findOne.mockResolvedValue({
+      _id: new ObjectId(),
+      countryId: "US",
+      state: "US",
+      electionType: "president",
+      cycle: 2028,
+      senateClass: null,
+      status: "active",
+      rulesetVersion: 3,
+    });
+
+    const detail = await getCampaignDetail(db as never, campaignId, user);
+
+    expect(detail.campaignStrengthMaxBonus).toBe(0.25);
+  });
+
   it("lists active player and NPP endorsers, newest first", async () => {
     const { db, campaignId, user } = await setUpOwnedCampaign();
 

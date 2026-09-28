@@ -96,6 +96,8 @@ export interface CampaignData {
   canAppointManagers: boolean;
 
   campaignStrength?: number;
+  /** Race-specific multiplier cap used for honest strength previews. */
+  campaignStrengthMaxBonus?: number;
 
   /**
    * Presidential tickets: the named running mate, resolved from the candidate's
