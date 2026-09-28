@@ -4,6 +4,7 @@ import { ruRegions1991 } from "./ruRegions1991";
 import { ruRegions } from "./ruRegions";
 import { ruStateMetrics2027 } from "./ruStateMetrics2027";
 import { ruStateBaselines2027 } from "./ruStateBaselines2027";
+import { RU_ALL_AGE_CENSUS_2021, RU_ADULT_CENSUS_2021 } from "./ruAdultCensus2021";
 
 // Anchors cited in ruRegions2027: Rosstat 1 Jan 2025 usually-resident
 // population and revised 2024 nominal GDP (millions of rubles).
@@ -11,6 +12,23 @@ const ROSSTAT_POPULATION_2025 = 146_119_928;
 const ROSSTAT_GDP_2024_MRUB = 201_152_000;
 
 describe("Russia 2027 regions", () => {
+  it("projects the 2021 all-age macroregion distribution onto the 2025 national anchor", () => {
+    expect(Object.values(RU_ALL_AGE_CENSUS_2021).reduce((sum, n) => sum + n, 0)).toBe(147_182_123);
+    for (const region of ruRegions2027) {
+      const id = region._id as keyof typeof RU_ALL_AGE_CENSUS_2021;
+      const quota = (ROSSTAT_POPULATION_2025 * RU_ALL_AGE_CENSUS_2021[id]) / 147_182_123;
+      expect(Math.abs(region.population - quota)).toBeLessThan(1);
+      expect(RU_ADULT_CENSUS_2021[id].reduce((sum, n) => sum + n, 0)).toBeLessThan(
+        RU_ALL_AGE_CENSUS_2021[id]
+      );
+    }
+    expect(Object.fromEntries(ruRegions2027.map((r) => [r._id, r.population]))).toMatchObject({
+      CEN: 33_036_428,
+      NCA: 23_022_462,
+      NOR: 4_072_249,
+    });
+  });
+
   it("keeps the ten RSFSR ids and reconciles to the Rosstat anchors", () => {
     expect(ruRegions2027).toHaveLength(10);
     expect(ruRegions2027.map((r) => r._id).sort()).toEqual(ruRegions1991.map((r) => r._id).sort());

@@ -1,5 +1,6 @@
 import type { State } from "@/lib/db/types";
 import { apportionSeats } from "@/lib/seeds/reference/rules/apportionSeats";
+import { RU_ALL_AGE_CENSUS_2021 } from "./ruAdultCensus2021";
 
 /** Russian Federation regions (2027) — presidential federation. The latest
  *  national anchors available for this future preset are Rosstat's 1 Jan 2025
@@ -10,10 +11,12 @@ import { apportionSeats } from "@/lib/seeds/reference/rules/apportionSeats";
  *  https://www.interfax.com/newsroom/top-stories/109666/
  *  https://wabx.net/2025/04/11/russia-raises-2024-gdp-growth-figure-to-4-3/
  *  These ten regional figures are proportional estimates, reconciled exactly
- *  to those national anchors; they are not published Rosstat regional
- *  observations. Population shares follow the authored 1991 economic-region
- *  distribution (`ruPopulation1991.ts`); GDP shares follow the 1995 GRP
- *  weights (`ruRegionalGdp1991.ts`), which is the earliest published
+ *  to those national anchors; they are not published Rosstat 2025 regional
+ *  observations. Population uses the 2021 Rosstat census macroregion shares
+ *  (`ruAdultCensus2021.ts`, all-age table), scaled to the 2025 national anchor
+ *  by largest remainder. This holds each region's 2021 share fixed; it does
+ *  not estimate subsequent regional migration or births. GDP shares follow
+ *  the 1995 GRP weights (`ruRegionalGdp1991.ts`), the earliest published
  *  regional output table. GDP is millions of rubles.
  *
  *  Same ten RSFSR economic-region ids as 1991 (CEN / NWR / NOR / CBE / VOL /
@@ -37,18 +40,10 @@ import { apportionSeats } from "@/lib/seeds/reference/rules/apportionSeats";
  *  single-member tier is plurality, the list tier is PR, and the field
  *  cannot express a mixed system.
  */
-const RU_2027_POPULATION: Record<string, number> = {
-  CEN: 29_861_271,
-  NWR: 9_022_780,
-  NOR: 6_076_989,
-  CBE: 7_646_040,
-  VOL: 24_735_968,
-  NCA: 16_675_723,
-  URA: 20_119_548,
-  WSB: 14_914_363,
-  ESB: 9_112_525,
-  FEA: 7_954_721,
-};
+const RU_2027_POPULATION: Record<string, number> = apportionSeats(
+  146_119_928,
+  RU_ALL_AGE_CENSUS_2021
+);
 
 const RU_2027_GDP_MRUB: Record<string, number> = {
   CEN: 42_165_006,

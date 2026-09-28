@@ -37,6 +37,20 @@ export const RU_ADULT_CENSUS_2021 = {
   FEA: [1027297, 1151825, 851655, 669091, 295544, 308521, 280285, 194612],
 } as const;
 
+/** All-age population from Rosstat census volume 1 table 4, same subjects. */
+export const RU_ALL_AGE_CENSUS_2021 = {
+  CEN: 33_276_581,
+  NWR: 9_815_345,
+  NOR: 4_101_852,
+  CBE: 7_057_951,
+  VOL: 22_731_811,
+  NCA: 23_189_820,
+  URA: 18_416_392,
+  WSB: 14_518_090,
+  ESB: 8_081_232,
+  FEA: 5_993_049,
+} as const;
+
 export const RU_ADULT_COHORT_IDS = [
   "urban_18_34",
   "urban_35_49",
