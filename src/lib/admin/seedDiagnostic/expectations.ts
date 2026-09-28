@@ -358,8 +358,11 @@ export function buildSeedExpectations(preset: string): SeedExpectations {
       inflationRate: c.economicFactors.inflationRate,
     })),
     seededCountryIds,
-    forexRates: getInitialRates(preset),
-    forexActiveCountries: FOREX_ACTIVE_COUNTRIES,
+    forexRates:
+      preset === "2027-default"
+        ? { ...getInitialRates(preset), BG: getInitialRates(preset).DE }
+        : getInitialRates(preset),
+    forexActiveCountries: monetaryScope.forexCountries,
     monetaryCoverage: {
       centralBankCountries: monetaryScope.centralBankCountries,
       exclusions: monetaryScope.exclusions,

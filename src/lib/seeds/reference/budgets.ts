@@ -288,13 +288,15 @@ export interface NationalBudgetSeedConfig {
   }>;
   policyDefaults: Record<string, { economic: number; social: number }>;
   policyOptionOverrides: Record<string, number>;
+  /** Use the forecast baseline without an obsolete era's statute catalog. */
+  skipLegacyLegislation?: boolean;
   /**
    * Political-legislation derivation switch (spec §4.2a): when set, the seeded
    * `federalBudget.taxRates` are written verbatim from this authored table
    * (SEED_TAX_RATES_1953[country]) and the legacy taxPolicyIds/option-index
-   * derivation is skipped entirely. Set ONLY on the 1953 US/UK/RU/DD blocks —
-   * their day-one rates come from the new tax-law catalog, whose baselineRate
-   * values are validated equal to this same table.
+   * derivation is skipped entirely. The 1953 US/UK/RU/DD blocks use this for
+   * their authored tax-law catalog. The 2027 BG forecast uses it while its
+   * obsolete Cold War statute catalog is explicitly excluded.
    */
   seedTaxRatesOverride?: Record<string, number>;
   taxPolicyIds: {
@@ -660,11 +662,14 @@ function isPoliticalLegislationCountry(countryId: string): boolean {
 }
 
 function preferFullAuthoredBaseline(config: NationalBudgetSeedConfig): boolean {
-  return shouldUseFullAuthoredBudgetBaseline({
-    countryId: config.countryId,
-    fiscalYear: config.fiscalYear,
-    politicalLegislationCountry: isPoliticalLegislationCountry(config.countryId),
-  });
+  return (
+    config.skipLegacyLegislation === true ||
+    shouldUseFullAuthoredBudgetBaseline({
+      countryId: config.countryId,
+      fiscalYear: config.fiscalYear,
+      politicalLegislationCountry: isPoliticalLegislationCountry(config.countryId),
+    })
+  );
 }
 
 function preferCategoryBaselineOverrides(config: NationalBudgetSeedConfig): boolean {
@@ -1009,6 +1014,7 @@ function deriveEnactedLaws(
    */
   vacuumYear: number = config.fiscalYear
 ): SeedEnactedLaw[] {
+  if (config.skipLegacyLegislation) return [];
   // Political-legislation v2 owns US/UK/RU/DD on the 1953 preset — seeding the
   // old modern-template catalogs here would leave orphan annualCostPerCapita
   // laws that calculateFederalSpending still prices alongside the v2 book.
@@ -2939,6 +2945,73 @@ export const NATIONAL_BUDGET_SEED_CONFIGS_2027: NationalBudgetSeedConfig[] = [
       payrollTax: 18.5,
       tariffs: 0,
       salesTax: 27,
+    },
+  },
+  // Bulgaria joined the euro on 1 January 2026. This is a 2027 forecast
+  // calibration, not an enacted 2027 budget. The Commission Spring 2026
+  // forecast gives 2.2% real growth, 2.6% HICP, -4.3% general-government
+  // balance and 35.5% debt/GDP. The 2025 Eurostat revenue ratio (38.1% of
+  // GDP) is held flat as a modeling assumption. The nominal GDP anchor is
+  // EUR 134.592B from the BACB March 2026 forecast. Spending categories are
+  // model allocations calibrated to the aggregate forecast, not official
+  // appropriations.
+  // https://economy-finance.ec.europa.eu/economic-surveillance-eu-member-states/country-pages-including-country-reports/bulgaria/economic-forecast-bulgaria_en
+  // https://ec.europa.eu/eurostat/databrowser/view/tec00021/default/table
+  // https://www.bacb.bg/en/files/archive/2026-03-31/88-interim-reports.pdf/7524
+  {
+    budgetId: "BG",
+    countryId: "BG",
+    fiscalYear: 2027,
+    population: 6_423_207,
+    gdp: 134_592_000_000,
+    currencyCode: "EUR",
+    economicFactors: {
+      gdpGrowth: 2.2,
+      wageGrowth: 4.3,
+      inflationRate: 2.6,
+      tradeGrowth: 2.2,
+      lastUpdated: new Date(0),
+    },
+    taxBaseRatios: {
+      taxableIncome: 0.55,
+      corporateProfits: 0.08,
+      wagesAndSalaries: 0.57,
+      importValue: 0.22,
+      taxableSales: 0.45,
+    },
+    otherRevenue: Math.round(134_592_000_000 * 0.0456),
+    debt: {
+      principal: Math.round(134_592_000_000 * 0.355),
+      interestRate: 0.028,
+      ceiling: Math.round(134_592_000_000 * 0.4),
+      ceilingLastRaisedYear: 2027,
+    },
+    creditRating: "BBB",
+    baselineSpendingByCategory: {
+      socialSecurity: Math.round(134_592_000_000 * 0.145),
+      healthcare: Math.round(134_592_000_000 * 0.05),
+      education: Math.round(134_592_000_000 * 0.045),
+      defense: Math.round(134_592_000_000 * 0.03),
+      infrastructure: Math.round(134_592_000_000 * 0.03),
+      other: Math.round(134_592_000_000 * 0.108),
+    },
+    baselineStateGrants: Math.round(134_592_000_000 * 0.006),
+    policyDefaults: {},
+    policyOptionOverrides: {},
+    skipLegacyLegislation: true,
+    seedTaxRatesOverride: {
+      incomeTax: 10,
+      domesticCorporateTax: 10,
+      foreignCorporateTax: 10,
+      payrollTax: 32,
+      tariffs: 0,
+      salesTax: 20,
+    },
+    taxPolicyIds: {
+      incomeTax: "bg_income_tax",
+      domesticCorporateTax: "bg_corporate_tax",
+      payrollTax: "bg_social_insurance",
+      salesTax: "bg_vat",
     },
   },
 ];

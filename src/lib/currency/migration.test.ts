@@ -265,6 +265,33 @@ describe("migrateCharacterBalances", () => {
 });
 
 describe("seedExchangeRates", () => {
+  it("seeds a 2027 BG EUR row at the shared EUR rate only in that preset", async () => {
+    const { seedExchangeRates } = await import("./migration");
+    await seedExchangeRates(db as unknown as Db, "2027-default");
+
+    const ops = db.collection("exchangeRates").bulkWrite.mock.calls[0][0] as Array<{
+      updateOne: { filter: { _id: string }; update: { $setOnInsert: Record<string, unknown> } };
+    }>;
+    const bg = ops.find((op) => op.updateOne.filter._id === "BG");
+    const de = ops.find((op) => op.updateOne.filter._id === "DE");
+    expect(bg?.updateOne.update.$setOnInsert).toMatchObject({
+      countryId: "BG",
+      currencyCode: "EUR",
+      rate: de?.updateOne.update.$setOnInsert.rate,
+      baseRate: de?.updateOne.update.$setOnInsert.baseRate,
+    });
+
+    db.collection("exchangeRates").bulkWrite.mockClear();
+    await seedExchangeRates(db as unknown as Db, "1991-default");
+    expect(
+      db
+        .collection("exchangeRates")
+        .bulkWrite.mock.calls[0][0].some(
+          (op: { updateOne: { filter: { _id: string } } }) => op.updateOne.filter._id === "BG"
+        )
+    ).toBe(false);
+  });
+
   it("inserts an exchange rate document for every forex-active country", async () => {
     db.collection("exchangeRates").bulkWrite.mockResolvedValue({
       upsertedCount: FOREX_ACTIVE_COUNTRIES.length,
@@ -346,6 +373,16 @@ describe("seedExchangeRates", () => {
 });
 
 describe("updateCentralBanks", () => {
+  it("does not create a second BG bank for the 2027 shared euro", async () => {
+    const { updateCentralBanks } = await import("./migration");
+    await updateCentralBanks(db as unknown as Db, "2027-default");
+    const ops = db.collection("centralBanks").bulkWrite.mock.calls[0][0] as Array<{
+      updateOne: { filter: { _id: string } };
+    }>;
+    expect(ops.some((op) => op.updateOne.filter._id === "ECB")).toBe(true);
+    expect(ops.some((op) => op.updateOne.filter._id === "BG")).toBe(false);
+  });
+
   it("upserts only countries with authored fiscal coverage while retaining currency support", async () => {
     db.collection("centralBanks").bulkWrite.mockResolvedValue({ upsertedCount: 1 });
 

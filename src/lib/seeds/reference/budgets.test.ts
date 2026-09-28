@@ -3,7 +3,32 @@ import {
   initialNationalBudgets,
   getInitialNationalBudgetsForPreset,
   getNationalBudgetSeedConfigsForPreset,
+  generateDefaultEnactedLaws,
 } from "@/lib/seeds/reference/budgets";
+
+describe("2027 Bulgarian euro fiscal projection", () => {
+  it("seeds a EUR budget at the Commission debt and deficit ratios", () => {
+    const bg = getInitialNationalBudgetsForPreset("2027-default").find(
+      (budget) => budget.countryId === "BG"
+    );
+    expect(bg).toBeDefined();
+    expect(bg?.currencyCode).toBe("EUR");
+    expect(bg?.fiscalYear).toBe(2027);
+    expect(bg?.debtToGdpRatio).toBeCloseTo(0.355, 6);
+    expect((bg?.surplus ?? 0) / (bg?.gdp ?? 1)).toBeCloseTo(-0.043, 3);
+    expect(bg?.economicFactors.gdpGrowth).toBe(2.2);
+    expect(bg?.economicFactors.inflationRate).toBe(2.6);
+  });
+
+  it("does not project Cold War Bulgarian statutes into 2027", () => {
+    expect(
+      generateDefaultEnactedLaws("2027-default").filter((law) => law.countryId === "BG")
+    ).toEqual([]);
+    expect(
+      generateDefaultEnactedLaws("1979-default").filter((law) => law.countryId === "BG").length
+    ).toBeGreaterThan(0);
+  });
+});
 
 describe("national budget seeds carry a signed treasuryBalance", () => {
   it("sets treasuryBalance = -debt.principal on every default seed entry", () => {

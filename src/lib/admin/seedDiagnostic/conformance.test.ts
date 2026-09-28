@@ -690,6 +690,18 @@ describe("runConformanceChecks — config.maintenanceMode (tri-state)", () => {
   });
 });
 
+describe("2027 Bulgarian euro conformance", () => {
+  it("marks a surviving BGL exchange-rate row critical", async () => {
+    const { db } = makeDb({
+      exchangeRates: [{ _id: "BG", countryId: "BG", currencyCode: "BGL", rate: 1.06 }],
+    });
+    const { checks } = await runConformanceChecks(db, { preset: "2027-default" });
+    expect(checks.find((check) => check.id === "forex.BG.currency")).toMatchObject({
+      severity: "critical",
+    });
+  });
+});
+
 describe("diagnosticErrorReport", () => {
   it("produces a single critical diagnostic_error check", () => {
     const report = diagnosticErrorReport("boom", { preset: "1953-default" });

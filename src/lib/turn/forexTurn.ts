@@ -446,6 +446,28 @@ export async function processForexTurn(
     countriesUpdated++;
   }
 
+  // Bulgaria's 2027 EUR row is a country-addressable alias of the DE-anchored
+  // shared currency. It must follow the ECB rate after the anchor's turn update;
+  // running a second autonomous BG currency loop would create two euro prices.
+  if (preset === "2027-default") {
+    const eur = await db
+      .collection<ExchangeRate>("exchangeRates")
+      .findOne({ _id: "DE" }, { projection: { rate: 1, macroTarget: 1, rateHistory: 1 } });
+    if (eur) {
+      await db.collection<ExchangeRate>("exchangeRates").updateOne(
+        { _id: "BG", currencyCode: "EUR" },
+        {
+          $set: {
+            rate: eur.rate,
+            macroTarget: eur.macroTarget,
+            rateHistory: eur.rateHistory,
+            updatedAt: now,
+          },
+        }
+      );
+    }
+  }
+
   // Process triggered limit orders
   const limitResult = await processTriggeredLimitOrders(db, currentTurn, now);
   totalSpreadRevenue = limitResult.totalSpreadRevenue;
