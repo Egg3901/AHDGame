@@ -593,6 +593,8 @@ export async function seedAllCountryData(
   if (preset === "1991-default") {
     const { seedHUGovernmentFormation } = await import("./seed/seedHU");
     await seedHUGovernmentFormation(db, log, preset);
+    const { seedCSGovernmentFormation1991 } = await import("./seed/seedCSGovernmentFormation1991");
+    await seedCSGovernmentFormation1991(db, log, preset);
   }
 
   const { ensureDemographicBaselines } = await import("./seed/ensureDemographicBaselines");
