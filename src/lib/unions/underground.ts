@@ -44,6 +44,29 @@ export const HEAT_DETECTION_THRESHOLD = 30;
 export const HEAT_DECAY_PER_TURN = 2;
 /** Turns an exposed union stays visible once detected. */
 export const EXPOSURE_LENGTH_TURNS = 6;
+export const RAID_ACTION_COST = 2;
+export const RAID_COOLDOWN_TURNS = 3;
+export const RAID_STRENGTH_DAMAGE = 10;
+export const RAID_HEAT_THRESHOLD = 70;
+export const RAID_BACKFIRE_CHANCE = 15;
+export const RAID_BACKFIRE_STRENGTH = 3;
+
+export function resolveUndergroundRaid(
+  strength: number,
+  roll: number
+): {
+  strengthLoss: number;
+  sympathyGain: number;
+} {
+  const strengthLoss = Math.min(
+    undergroundStrength({ undergroundStrength: strength }),
+    RAID_STRENGTH_DAMAGE
+  );
+  return {
+    strengthLoss,
+    sympathyGain: roll <= RAID_BACKFIRE_CHANCE ? RAID_BACKFIRE_STRENGTH : 0,
+  };
+}
 export type UnionEnforcementPosture = "tolerant" | "normal" | "crackdown";
 
 /** Policy affects detection only while a union ban is active. */
