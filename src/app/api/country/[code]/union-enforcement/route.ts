@@ -185,20 +185,35 @@ export async function POST(request: Request, { params }: Context) {
         undergroundStrength(union),
         Math.floor(Math.random() * 100) + 1
       );
-      const changed = await db.collection<Union>("unions").updateOne(
-        {
-          _id: union._id,
-          countryId,
-          suspended: true,
-          undergroundStrength: union.undergroundStrength,
-          lastUndergroundRaidTurn: union.lastUndergroundRaidTurn ?? null,
-          $or: [{ exposedUntilTurn: { $gte: turn } }, { heat: { $gte: RAID_HEAT_THRESHOLD } }],
-        },
-        {
-          $inc: { undergroundStrength: outcome.sympathyGain - loss },
-          $set: { lastUndergroundRaidTurn: turn, updatedAt: now },
+      let changed;
+      try {
+        changed = await db.collection<Union>("unions").updateOne(
+          {
+            _id: union._id,
+            countryId,
+            suspended: true,
+            undergroundStrength: union.undergroundStrength,
+            lastUndergroundRaidTurn: union.lastUndergroundRaidTurn ?? null,
+            $or: [{ exposedUntilTurn: { $gte: turn } }, { heat: { $gte: RAID_HEAT_THRESHOLD } }],
+          },
+          {
+            $inc: { undergroundStrength: outcome.sympathyGain - loss },
+            $set: { lastUndergroundRaidTurn: turn, updatedAt: now },
+          }
+        );
+      } catch (error) {
+        // A standalone Mongo deployment cannot wrap these collections in a transaction.
+        // If the write failed before applying, return the executive's spent points.
+        const persisted = await db
+          .collection<Union>("unions")
+          .findOne({ _id: union._id, countryId }, { projection: { lastUndergroundRaidTurn: 1 } });
+        if (persisted?.lastUndergroundRaidTurn !== turn) {
+          await db
+            .collection<Character>("characters")
+            .updateOne({ _id: character._id }, { $inc: { actions: RAID_ACTION_COST } });
         }
-      );
+        return handleRouteError(error);
+      }
       if (!changed.modifiedCount) {
         await db
           .collection<Character>("characters")

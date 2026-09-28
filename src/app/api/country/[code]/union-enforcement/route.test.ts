@@ -152,6 +152,42 @@ describe("union ban enforcement route", () => {
     expect(db.collection("characters").updateOne).not.toHaveBeenCalled();
   });
 
+  it("refunds action points when the raid write throws before applying", async () => {
+    db.collection("unions")
+      .findOne.mockResolvedValueOnce({
+        _id: unionId,
+        countryId: "US",
+        suspended: true,
+        heat: 72,
+        undergroundStrength: 20,
+      })
+      .mockResolvedValueOnce({ _id: unionId, countryId: "US" });
+    db.collection("unions").updateOne.mockRejectedValue(new Error("write failed"));
+    const response = await post({ action: "raid", unionId: unionId.toString() });
+    expect(response.status).toBe(500);
+    expect(db.collection("characters").updateOne).toHaveBeenCalledTimes(2);
+    expect(db.collection("characters").updateOne).toHaveBeenLastCalledWith(
+      { _id: characterId },
+      { $inc: { actions: 2 } }
+    );
+  });
+
+  it("does not refund when the raid write applied before reporting an error", async () => {
+    db.collection("unions")
+      .findOne.mockResolvedValueOnce({
+        _id: unionId,
+        countryId: "US",
+        suspended: true,
+        heat: 72,
+        undergroundStrength: 20,
+      })
+      .mockResolvedValueOnce({ _id: unionId, countryId: "US", lastUndergroundRaidTurn: 42 });
+    db.collection("unions").updateOne.mockRejectedValue(new Error("ack lost"));
+    const response = await post({ action: "raid", unionId: unionId.toString() });
+    expect(response.status).toBe(500);
+    expect(db.collection("characters").updateOne).toHaveBeenCalledTimes(1);
+  });
+
   it("rejects enforcement after repeal", async () => {
     db.collection("federalBudget").findOne.mockResolvedValue({ unionsBanned: false });
     const response = await post({ action: "posture", posture: "normal" });
