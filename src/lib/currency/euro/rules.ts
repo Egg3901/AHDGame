@@ -35,6 +35,7 @@ export interface EuroAdoptionConditions {
   countryId: CountryId;
   year: number;
   europeanMembers: readonly string[];
+  europeanStage?: "community" | "union";
   consentedCountries: readonly CountryId[];
   union?: EuroMonetaryUnion;
 }
@@ -56,6 +57,8 @@ export function euroAuthorizationRefusal(
 export function euroAdoptionRefusal(input: EuroAdoptionConditions): string | null {
   const unavailable = euroAuthorizationRefusal(input);
   if (unavailable) return unavailable;
+  if (input.europeanStage === "community")
+    return "Euro adoption requires a ratified European Union settlement.";
   if (!input.europeanMembers.includes(input.countryId)) {
     return "Euro adoption requires membership in the European organization.";
   }
@@ -80,6 +83,7 @@ export function planEuroSettlement(input: {
   turn: number;
   preset: string;
   europeanMembers: readonly string[];
+  europeanStage?: "community" | "union";
   consentedCountries: readonly CountryId[];
   rates: Partial<Record<CurrencyCode, number>>;
   existing?: EuroMonetaryUnion;
@@ -88,6 +92,13 @@ export function planEuroSettlement(input: {
 }): { union: EuroMonetaryUnion | undefined; addedCountries: CountryId[]; pending: boolean } {
   const consent = [...new Set(input.consentedCountries)];
   const legacy = input.legacyEnabled === true && !input.existing;
+  if (!legacy && input.europeanStage === "community") {
+    return {
+      union: input.existing,
+      addedCountries: [],
+      pending: consent.some((country) => !input.existing?.members[country]),
+    };
+  }
   const candidates = legacy ? [...new Set([...EU_EUROZONE_MEMBERS, ...consent])] : consent;
   const available = legacy || (Number.isFinite(input.year) && input.year >= 1999);
   const eligible = candidates.filter(

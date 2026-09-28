@@ -66,3 +66,26 @@ it("publishes settled conversion terms for purchase quotations", async () => {
   });
   expect((await (await GET()).json()).euroMonetaryUnion).toEqual(union);
 });
+
+it("does not offer euro adoption in an unratified Community after 1999", async () => {
+  const db = createMockDb();
+  vi.mocked(getDb).mockResolvedValue(db as unknown as Db);
+  db.collection("gameState").findOne.mockResolvedValue({
+    currentYear: 1999,
+    currentTurn: 385,
+    startingYear: 1991,
+    eurozoneEnabled: false,
+    europeanIntegration: {
+      stage: "community",
+      source: "historical-seed",
+      establishedTurn: 1,
+      ratifications: {},
+    },
+  });
+  db.collection("organizationMemberships").find.mockReturnValue({
+    toArray: async () => ["DE", "IE", "UK"].map((countryId) => ({ countryId })),
+  });
+  const flags = await (await GET()).json();
+  expect(flags.euroAdoptionEligibleCountries).toEqual([]);
+  expect(flags.maastrichtEligibleCountries).toContain("UK");
+});

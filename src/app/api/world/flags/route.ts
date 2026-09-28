@@ -42,6 +42,7 @@ export async function GET() {
         countryId,
         year: gs ? (resolveGameYear(gs) ?? 0) : 0,
         europeanMembers: treaty?.members ?? [],
+        europeanStage: treaty?.state.stage,
         consentedCountries: euroConsentedCountries(euroState),
         union: gs?.euroMonetaryUnion,
       })

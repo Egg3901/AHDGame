@@ -30,6 +30,7 @@ export async function loadEuroAdoptionConditions(
           eurozoneEnabled: 1,
           euroAdoptedCountries: 1,
           euroMonetaryUnion: 1,
+          europeanIntegration: 1,
         },
       }
     ),
@@ -42,6 +43,7 @@ export async function loadEuroAdoptionConditions(
     countryId,
     year: state ? (resolveGameYear(state) ?? 0) : 0,
     europeanMembers: members.map((member) => member.countryId),
+    europeanStage: state?.europeanIntegration?.stage,
     consentedCountries: euroConsentedCountries(state ?? {}),
     union: state?.euroMonetaryUnion,
   };

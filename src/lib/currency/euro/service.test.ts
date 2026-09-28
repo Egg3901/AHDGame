@@ -1,3 +1,4 @@
+import type { EuropeanIntegrationState } from "@/lib/internationalOrganizations/europeanIntegration/rules";
 import { describe, expect, it } from "vitest";
 import type { Db } from "mongodb";
 import { createMockDb } from "@/lib/test-utils/mockDb";
@@ -16,6 +17,7 @@ function world() {
     eurozoneEnabled: boolean;
     euroAdoptedCountries: ("DE" | "IE" | "UK")[];
     euroMonetaryUnion?: EuroMonetaryUnion;
+    europeanIntegration?: EuropeanIntegrationState;
   } = {
     _id: "current",
     currentYear: 1999,
@@ -139,4 +141,19 @@ describe("euro settlement persistence", () => {
     expect(union?.revision).toBe(1);
     expect(w.db.collectionMocks.gameState.updateOne).toHaveBeenCalledTimes(2);
   });
+});
+
+it("settles stored monetary consent only after the treaty stage becomes a Union", async () => {
+  const w = world();
+  w.state.europeanIntegration = {
+    stage: "community",
+    source: "historical-seed",
+    establishedTurn: 1,
+    ratifications: {},
+  };
+  expect(await reconcileEuroMonetaryUnion(w.db as unknown as Db, 385)).toBeUndefined();
+  expect(w.db.collectionMocks.gameState.updateOne).not.toHaveBeenCalled();
+  expect(w.db.collectionMocks.centralBanks.bulkWrite).not.toHaveBeenCalled();
+  w.state.europeanIntegration.stage = "union";
+  expect((await reconcileEuroMonetaryUnion(w.db as unknown as Db, 386))?.members.UK).toBeDefined();
 });

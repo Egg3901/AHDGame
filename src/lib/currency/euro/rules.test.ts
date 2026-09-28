@@ -167,3 +167,24 @@ describe("common monetary policy indicators", () => {
     ).toEqual(aggregateEuroPolicyIndicators(rows));
   });
 });
+
+it("keeps euro authorization pending while Maastricht is unratified", () => {
+  expect(
+    euroAdoptionRefusal({ ...initial, countryId: "UK", europeanStage: "community" })
+  ).toContain("ratified");
+  expect(planEuroSettlement({ ...initial, europeanStage: "community" })).toMatchObject({
+    union: undefined,
+    addedCountries: [],
+    pending: true,
+  });
+  expect(planEuroSettlement({ ...initial, europeanStage: "union" }).union).toBeDefined();
+  const existing = founded();
+  expect(
+    planEuroSettlement({
+      ...initial,
+      existing,
+      europeanStage: "community",
+      consentedCountries: ["DE", "IE", "UK"],
+    })
+  ).toMatchObject({ union: existing, addedCountries: [], pending: true });
+});
