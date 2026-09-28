@@ -21,7 +21,7 @@ import {
   INTERVENTION_POLICY_COOLDOWN_TURNS,
 } from "@/lib/constants/currencies";
 import { getGameState } from "@/lib/gameState";
-import { getCentralBankScope } from "@/lib/centralBank/helpers";
+import { getMonetaryPolicyScope } from "@/lib/centralBank/helpers";
 
 interface RouteContext {
   params: Promise<{ code: string }>;
@@ -80,7 +80,7 @@ async function authorizeChair(countryId: CountryId): Promise<GuardSuccess | Guar
   }
 
   const db = await getDb();
-  const scope = await getCentralBankScope(db, countryId);
+  const scope = await getMonetaryPolicyScope(db, countryId);
   const fxCountryId = scope.currencyCode === "EUR" ? "DE" : countryId;
   const bank = await db.collection<CentralBank>("centralBanks").findOne({ _id: scope.bankId });
   if (!bank) {

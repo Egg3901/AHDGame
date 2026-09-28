@@ -26,7 +26,7 @@ export async function syncEuroMonetaryPolicy(db: Db, union: EuroMonetaryUnion): 
   const authority = await banks.findOne(
     { _id: union.authorityId },
     {
-      projection: { primeRate: 1, primeRateSmoothed: 1, bankReserveRequirement: 1, chairInfamy: 1 },
+      projection: { primeRate: 1, primeRateSmoothed: 1, bankReserveRequirement: 1 },
     }
   );
   if (!authority || !Number.isFinite(authority.primeRate))
@@ -36,7 +36,7 @@ export async function syncEuroMonetaryPolicy(db: Db, union: EuroMonetaryUnion): 
     primeRate: authority.primeRate,
   };
   const unset: Record<string, ""> = {};
-  for (const field of ["primeRateSmoothed", "bankReserveRequirement", "chairInfamy"] as const) {
+  for (const field of ["primeRateSmoothed", "bankReserveRequirement"] as const) {
     if (typeof authority[field] === "number" && Number.isFinite(authority[field]))
       set[field] = authority[field];
     else unset[field] = "";

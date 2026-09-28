@@ -6,7 +6,7 @@ import { handleRouteError } from "@/lib/api/errors";
 import { getDb } from "@/lib/mongodb";
 import { getGameState } from "@/lib/gameState";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
-import { getBankId, getCentralBankScope } from "@/lib/centralBank/helpers";
+import { getBankId, getMonetaryPolicyScope } from "@/lib/centralBank/helpers";
 import type { CentralBank, FederalBudget, GameConfig } from "@/lib/db/types";
 import { getNationalBudgetId } from "@/lib/bonds/sovereign";
 import {
@@ -51,7 +51,7 @@ export async function POST(request: Request, context: { params: Promise<{ code: 
       return NextResponse.json({ error: "Money-supply policy is not enabled" }, { status: 409 });
     if (!bank || !budget)
       return NextResponse.json({ error: "Monetary authority unavailable" }, { status: 404 });
-    const scope = await getCentralBankScope(db, countryId);
+    const scope = await getMonetaryPolicyScope(db, countryId);
     const authority =
       scope.bankId === bank._id
         ? bank

@@ -14,7 +14,7 @@ vi.mock("@/lib/centralBank/helpers", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/centralBank/helpers")>();
   return {
     ...actual,
-    getCentralBankScope: () => mockGetCentralBankScope(),
+    getMonetaryPolicyScope: () => mockGetCentralBankScope(),
   };
 });
 vi.mock("@/lib/turn/currentTurn", () => ({

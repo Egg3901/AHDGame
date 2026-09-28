@@ -20,7 +20,7 @@ vi.mock("@/lib/api/requireAuth", () => ({
 }));
 vi.mock("@/lib/centralBank/helpers", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/centralBank/helpers")>();
-  return { ...actual, getCentralBankScope: () => mockGetCentralBankScope() };
+  return { ...actual, getMonetaryPolicyScope: () => mockGetCentralBankScope() };
 });
 vi.mock("@/lib/turn/currentTurn", () => ({
   getCurrentTurn: (...args: unknown[]) => mockGetCurrentTurn(...args),

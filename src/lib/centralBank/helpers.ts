@@ -161,17 +161,6 @@ export async function getCentralBankScope(
   intorgId?: string;
   currencyCode?: CurrencyCode;
 }> {
-  const union = await loadEuroMonetaryUnion(db);
-  if (union && euroPolicyBankId(countryId, union) === union.authorityId) {
-    return {
-      bankId: union.authorityId,
-      memberCountries: (Object.keys(COUNTRY_CONFIGS) as CountryId[]).filter(
-        (country) => euroPolicyBankId(country, union) === union.authorityId
-      ),
-      intorgId: "EU",
-      currencyCode: "EUR",
-    };
-  }
   const intorgId = COUNTRY_CONFIGS[countryId]?.centralBank.centralBankIntorgId;
   const bankId = getBankId(countryId);
   if (!intorgId) return { bankId, memberCountries: [countryId] };
@@ -196,4 +185,23 @@ export async function getCentralBankScope(
           : [countryId],
     intorgId,
   };
+}
+
+/** Monetary policy follows euro settlement; national offices and accounts keep their own bank. */
+export async function getMonetaryPolicyScope(
+  db: Db,
+  countryId: CountryId
+): ReturnType<typeof getCentralBankScope> {
+  const union = await loadEuroMonetaryUnion(db);
+  if (union && euroPolicyBankId(countryId, union) === union.authorityId) {
+    return {
+      bankId: union.authorityId,
+      memberCountries: (Object.keys(COUNTRY_CONFIGS) as CountryId[]).filter(
+        (country) => euroPolicyBankId(country, union) === union.authorityId
+      ),
+      intorgId: "EU",
+      currencyCode: "EUR",
+    };
+  }
+  return getCentralBankScope(db, countryId);
 }

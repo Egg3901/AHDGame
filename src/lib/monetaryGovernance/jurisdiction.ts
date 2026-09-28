@@ -15,7 +15,7 @@ import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
 import type { CentralBank } from "@/lib/db/types/centralBank";
 import { FOMC_COMMITTEE_COUNTRY_IDS } from "@/lib/db/types/centralBank";
 import {
-  getCentralBankScope,
+  getMonetaryPolicyScope,
   getConfiguredSharedBankMemberCountries,
 } from "@/lib/centralBank/helpers";
 
@@ -37,7 +37,7 @@ export async function resolveJurisdiction(
   db: Db,
   countryId: CountryId
 ): Promise<JurisdictionResolution> {
-  const scope = await getCentralBankScope(db, countryId);
+  const scope = await getMonetaryPolicyScope(db, countryId);
   const bankId = scope.bankId;
   const configured = getConfiguredSharedBankMemberCountries(bankId);
   const members = [...new Set<CountryId>([...scope.memberCountries, ...configured])];

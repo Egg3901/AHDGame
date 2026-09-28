@@ -13,7 +13,7 @@ import { parseJsonBody } from "@/lib/api/validate";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import type { CentralBank } from "@/lib/db/types/centralBank";
 import type { ExchangeRate } from "@/lib/db/types/exchangeRate";
-import { getCentralBankScope } from "@/lib/centralBank/helpers";
+import { getMonetaryPolicyScope } from "@/lib/centralBank/helpers";
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
 import { recordAudit } from "@/lib/audit/recordAudit";
 import { createSystemNewsPost } from "@/lib/news";
@@ -44,7 +44,7 @@ export async function GET(_request: Request, context: RouteContext) {
       return NextResponse.json(notFound("Country not found").toJson(), { status: 404 });
 
     const db = await getDb();
-    const scope = await getCentralBankScope(db, countryId);
+    const scope = await getMonetaryPolicyScope(db, countryId);
     const fxCountryId = scope.currencyCode === "EUR" ? "DE" : countryId;
     const fx = await db
       .collection<ExchangeRate>("exchangeRates")
@@ -80,7 +80,7 @@ export async function POST(request: Request, context: RouteContext) {
     if (!config) return NextResponse.json(notFound("Country not found").toJson(), { status: 404 });
 
     const db = await getDb();
-    const scope = await getCentralBankScope(db, countryId);
+    const scope = await getMonetaryPolicyScope(db, countryId);
     const fxCountryId = scope.currencyCode === "EUR" ? "DE" : countryId;
     const bank = await db
       .collection<CentralBank>("centralBanks")

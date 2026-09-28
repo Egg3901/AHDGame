@@ -192,6 +192,9 @@ export interface BankData {
   gdpGrowthHistory: TurnSnapshot[];
   savingsFlowHistory: TurnSnapshot[];
   isChair: boolean;
+  isPolicyChair?: boolean;
+  policyChairControlsLocked?: boolean;
+  monetaryAuthority?: { countryId: string; bankId: string; name: string };
   isAdmin: boolean;
   chairControlsLocked?: boolean;
   /** True when a committee is seated, so the rate moves by vote and not by decree. */

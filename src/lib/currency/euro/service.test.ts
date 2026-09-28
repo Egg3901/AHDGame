@@ -35,7 +35,7 @@ function world() {
       reserveBalance: 1000,
     },
     { _id: "IE", countryId: "IE", primeRate: 5, reserveBalance: 2000, bankReserveRequirement: 0.2 },
-    { _id: "UK", countryId: "UK", primeRate: 6, reserveBalance: 3000 },
+    { _id: "UK", countryId: "UK", primeRate: 6, reserveBalance: 3000, chairInfamy: 12 },
   ];
   const rates = [
     { currencyCode: "EUR", rate: 0.85 },
@@ -88,6 +88,7 @@ describe("euro settlement persistence", () => {
     expect(w.banks.map((bank) => bank.reserveBalance)).toEqual([1000, 2000, 3000]);
     expect(w.banks.map((bank) => bank.primeRate)).toEqual([3, 3, 3]);
     expect(w.banks[1].bankReserveRequirement).toBeUndefined();
+    expect(w.banks[2].chairInfamy).toBe(12);
     const scope = await resolveJurisdiction(w.asDb, "UK");
     expect(scope.institutionId).toBe("ECB");
     expect(scope.currency).toBe("EUR");
