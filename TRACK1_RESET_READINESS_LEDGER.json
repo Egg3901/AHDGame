@@ -318,6 +318,12 @@
       "state": "CLOSED",
       "url": "https://github.com/Egg3901/AHDGame/issues/2171",
       "labels": ["bug", "tests"]
+    },
+    "2488": {
+      "title": "bug(1991 seed): successor countries inherit Cold War one-party institutions",
+      "state": "OPEN",
+      "url": "https://github.com/Egg3901/AHDGame/issues/2488",
+      "labels": ["bug"]
     }
   },
   "items": [
@@ -426,6 +432,45 @@
           "type": "issue",
           "repo": "Egg3901/AHDGame",
           "number": 2072
+        }
+      ],
+      "final_validation": {
+        "state": "pending",
+        "evidence": []
+      }
+    },
+    {
+      "id": "RR-100",
+      "section": "Common reset blockers / Seed and political integrity",
+      "requirement": "#2488",
+      "parent_checked": false,
+      "status": "open",
+      "owner": "Track #1 implementation",
+      "issue_refs": [
+        {
+          "repo": "Egg3901/AHDGame",
+          "number": 2488,
+          "state": "OPEN",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2488"
+        }
+      ],
+      "evidence": [
+        {
+          "type": "tracker_checklist",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2159",
+          "detail": "Unchecked in #2159"
+        },
+        {
+          "type": "partial_implementation",
+          "url": "https://github.com/Egg3901/AHDGame/pull/2397",
+          "detail": "1991 successor institutions and dated transitions are under review; historical formulas, successor sovereignty, and exact-source bootstrap/horizon evidence remain open"
+        }
+      ],
+      "blocked_by": [
+        {
+          "type": "issue",
+          "repo": "Egg3901/AHDGame",
+          "number": 2488
         }
       ],
       "final_validation": {
@@ -2247,23 +2292,23 @@
       "id": "RR-055",
       "section": "Common reset blockers / Performance and latency",
       "requirement": "Active turn execution is protected from client polling storms and unindexed clock reconciliation scans.",
-      "parent_checked": false,
-      "status": "open",
+      "parent_checked": true,
+      "status": "claimed_complete_pending_final_validation",
       "owner": "Track #1 implementation",
       "issue_refs": [],
       "evidence": [
         {
           "type": "tracker_checklist",
           "url": "https://github.com/Egg3901/AHDGame/issues/2159",
-          "detail": "Unchecked in #2159"
-        }
-      ],
-      "blocked_by": [
+          "detail": "Checked in #2159 after merged PR #2180 and 26 fresh focused tests on development ad9ec21959"
+        },
         {
-          "type": "gate",
-          "detail": "Turn/client-poll contention fixture and indexed clock-reconciliation proof under release candidate load"
+          "type": "merged_pr",
+          "url": "https://github.com/Egg3901/AHDGame/pull/2180",
+          "detail": "Projected 500 ms turn-status coalescing and seed/migration compound clock index; 50 concurrent active-turn polls use one DB read in focused test"
         }
       ],
+      "blocked_by": [],
       "final_validation": {
         "state": "pending",
         "evidence": []
@@ -2540,8 +2585,8 @@
       "id": "RR-061",
       "section": "Profile-specific blockers / `2027-default`",
       "requirement": "Closed seed delivery #1679 is revalidated on the release commit and effective manifest.",
-      "parent_checked": true,
-      "status": "claimed_complete_pending_final_validation",
+      "parent_checked": false,
+      "status": "open_nonlaunch_profile",
       "owner": "Track #1 implementation",
       "issue_refs": [
         {
@@ -2555,7 +2600,7 @@
         {
           "type": "tracker_checklist",
           "url": "https://github.com/Egg3901/AHDGame/issues/2159",
-          "detail": "Checked in #2159"
+          "detail": "Unchecked in #2159; closed issue #1679 still requires exact-release replay"
         },
         {
           "type": "issue_state",
@@ -2566,7 +2611,7 @@
       "blocked_by": [
         {
           "type": "scope",
-          "detail": "2027 implementation/evidence required; final launch worldsim targets selected 1991 profile"
+          "detail": "Freeze the release commit/effective 2027 manifest and rerun seed conformance; final launch worldsim targets selected 1991 profile"
         }
       ],
       "final_validation": {
@@ -2578,8 +2623,8 @@
       "id": "RR-062",
       "section": "Profile-specific blockers / `2027-default`",
       "requirement": "#1670 is resolved if ACS 2025 data is available; otherwise its projection status, provenance, and owner-approved waiver are recorded here.",
-      "parent_checked": false,
-      "status": "open_nonlaunch_profile",
+      "parent_checked": true,
+      "status": "claimed_complete_pending_final_validation",
       "owner": "Game owner (projection waiver) / Track #1",
       "issue_refs": [
         {
@@ -2593,7 +2638,7 @@
         {
           "type": "tracker_checklist",
           "url": "https://github.com/Egg3901/AHDGame/issues/2159",
-          "detail": "Unchecked in #2159"
+          "detail": "Checked in #2159 for the documented, owner-approved projection waiver; external data replacement remains tracked in #1670"
         },
         {
           "type": "issue_state",

@@ -2,6 +2,8 @@
 
 This ledger mirrors every checkbox in [#2159](https://github.com/Egg3901/AHDGame/issues/2159) as a separate `RR-###` item. The machine-readable source is [`TRACK1_RESET_READINESS_LEDGER.json`](./TRACK1_RESET_READINESS_LEDGER.json). It was seeded from #2159 as updated on 2026-09-22T04:31:39Z and code base `028cb9265e76555efa5d73b611cea0f409c3446b`.
 
+The 2026-09-28 tracker reconciliation added RR-100 for the new #2488 seed blocker. RR-055 now records verified polling/clock-index protection from merged PR #2180; RR-061 remains unchecked because closed #1679 has no exact-release replay; RR-062 records the owner-approved #1670 projection waiver. The ledger now matches all 100 parent checklist entries: 27 checked and 73 unchecked.
+
 The parent currently selects `1991-default`. The 2027-specific items remain required implementation scope even though the final launch qualification uses 1991. A later profile change requires rechecking seed-specific evidence. Checked boxes and closed child issues are claims of prior completion, not proof that the exact release candidate passes.
 
 The owner confirmed on 2026-09-25 that the requested single final validating
@@ -47,7 +49,7 @@ remain open; the GitHub issue stays `status: partial`.
 | Ledger state                                | Count | Meaning                                                                               |
 | ------------------------------------------- | ----: | ------------------------------------------------------------------------------------- |
 | `open`                                      |    69 | Unchecked parent item; no passing release evidence recorded                           |
-| `claimed_complete_pending_final_validation` |    25 | Checked in parent, but final release validation not recorded                          |
+| `claimed_complete_pending_final_validation` |    26 | Checked in parent, but final release validation not recorded                          |
 | `selected_pending_release_validation`       |     1 | Parent selects 1991; release SHA and manifest not yet frozen                          |
 | `open_nonlaunch_profile`                    |     4 | 2027-specific implementation remains required; final launch qualification is for 1991 |
 
