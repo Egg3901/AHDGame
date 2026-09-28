@@ -51,18 +51,16 @@ export async function GET(_request: Request, { params }: Context) {
       );
     }
     const db = await getDb();
-    const budget = await db
-      .collection<FederalBudget>("federalBudget")
-      .findOne(
-        { _id: getNationalBudgetId(countryId) },
-        {
-          projection: {
-            unionsBanned: 1,
-            unionEnforcementPosture: 1,
-            unionEnforcementPostureChangedTurn: 1,
-          },
-        }
-      );
+    const budget = await db.collection<FederalBudget>("federalBudget").findOne(
+      { _id: getNationalBudgetId(countryId) },
+      {
+        projection: {
+          unionsBanned: 1,
+          unionEnforcementPosture: 1,
+          unionEnforcementPostureChangedTurn: 1,
+        },
+      }
+    );
     if (!budget?.unionsBanned) {
       return NextResponse.json(
         { error: "Union enforcement is available only during an active ban." },
