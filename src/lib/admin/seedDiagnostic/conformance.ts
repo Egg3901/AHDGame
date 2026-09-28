@@ -637,13 +637,19 @@ async function checkForex(db: Db, expect: SeedExpectations): Promise<SeedDiagnos
       [...actual].sort().every((countryId, index) => countryId === expected[index]);
     checks.push(
       valid
-        ? ok("forex.euroAdoption", "global", "euroAdoptedCountries", expected, expected)
+        ? ok(
+            "forex.euroAdoption",
+            "global",
+            "euroAdoptedCountries",
+            expected.join(","),
+            expected.join(",")
+          )
         : critical(
             "forex.euroAdoption",
             "global",
             "euroAdoptedCountries",
-            expected,
-            { eurozoneEnabled: gameState?.eurozoneEnabled ?? null, countries: actual ?? null },
+            expected.join(","),
+            `enabled=${String(gameState?.eurozoneEnabled ?? null)}; countries=${Array.isArray(actual) ? [...actual].sort().join(",") : "missing"}`,
             "2027 adoption manifest does not match persisted game state"
           )
     );
