@@ -153,11 +153,11 @@ describe("era-derived expectations", () => {
     expect(checks.find((check) => check.id === "config.maintenanceMode")?.severity).toBe("ok");
   });
 
-  it("checks authored forex fallback rates only for seeded countries", async () => {
+  it("checks forex fallback rates for included 2027 countries", async () => {
     const { db } = makeDb({});
     const { checks } = await runConformanceChecks(db, { preset: "2027-default" });
-    expect(checks.some((check) => check.id === "forex.HU.eraRate")).toBe(false);
-    expect(checks.some((check) => check.id === "forex.PL.eraRate")).toBe(false);
+    expect(checks.some((check) => check.id === "forex.HU.eraRate")).toBe(true);
+    expect(checks.some((check) => check.id === "forex.PL.eraRate")).toBe(true);
     expect(checks.some((check) => check.id === "forex.YU.eraRate")).toBe(false);
   });
 

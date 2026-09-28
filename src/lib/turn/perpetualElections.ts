@@ -87,10 +87,10 @@ export { ensureDEElections } from "./perpetualElections/countries/de";
 export {
   ensureBALElections,
   ensureBLRElections,
-  ensureHUElections,
   ensureUKRElections,
   ensureYUElections,
 } from "./perpetualElections/countries/easternBloc";
+export { ensureHUElections } from "@/lib/countries/hu/perpetualElections";
 export { ensureCSElections, ensureCSNationsElections } from "@/lib/countries/cs/elections";
 export { ensurePLElections, ensurePLSenateElections } from "@/lib/countries/pl/elections";
 export { ensureBGElections } from "@/lib/countries/bg/elections";
