@@ -10,6 +10,7 @@ import type {
   StatePartyOrg,
 } from "@/lib/db/types";
 import type { StateMetricBaseline } from "@/lib/db/types/statePolicy";
+import type { GovernmentFormation } from "@/lib/db/types/governmentFormation";
 import type { PartySeed } from "@/lib/seeds/reference/politicalParties";
 import { getNextSequentialId } from "@/lib/db/sequentialId";
 import { resolveSeedPartyTier } from "@/lib/seeds/defaultPartyTiers";
@@ -500,6 +501,46 @@ export async function seedModernTransitionStatePartyOrg(
   log(`Seeded ${total} ${countryId} state party org entries across ${parties.length} parties`);
 }
 
+/** Open the 2027 Sejm's parliamentary formation cycle. */
+export async function seedPLGovernmentFormation(
+  db: Db,
+  log: (msg: string) => void,
+  preset: string
+) {
+  if (!isModernTransitionPreset(preset)) return;
+  const now = new Date();
+  const formation: Omit<GovernmentFormation, "createdAt" | "updatedAt"> = {
+    _id: "PL",
+    countryId: "PL",
+    cycle: 1,
+    status: "pending",
+    formationType: null,
+    lostMajority: false,
+    pmCharacterId: null,
+    pmNppId: null,
+    pmName: null,
+    governingPartyId: null,
+    coalitionId: null,
+    coalitionPartyIds: null,
+    totalSeatsSupporting: 0,
+    majorityThreshold: 231,
+    seatsByParty: {},
+    totalSeats: 460,
+    activeVoteId: null,
+    formedAt: null,
+    formedTurn: null,
+    collapsedAt: null,
+  };
+  await db
+    .collection<GovernmentFormation>("governmentFormations")
+    .updateOne(
+      { _id: "PL" },
+      { $set: { ...formation, updatedAt: now }, $setOnInsert: { createdAt: now } },
+      { upsert: true }
+    );
+  log("Seeded PL government formation document (pending, 460 seats)");
+}
+
 /** Full 2027 substrate for one transition country, in dependency order (org last: it reads back the seeded parties). */
 export async function seedModernTransitionCountry(
   db: Db,
@@ -514,4 +555,5 @@ export async function seedModernTransitionCountry(
   await seedModernTransitionStateMetrics(db, reset, log, preset, countryId);
   await seedModernTransitionBaselines(db, reset, log, preset, countryId);
   await seedModernTransitionStatePartyOrg(db, reset, log, preset, countryId);
+  if (countryId === "PL") await seedPLGovernmentFormation(db, log, preset);
 }
