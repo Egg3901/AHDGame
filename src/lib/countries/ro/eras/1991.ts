@@ -11,8 +11,10 @@ import type { CountryEraOverride } from "../../contract";
  * https://legislatie.just.ro/public/DetaliiDocument/92287
  *
  * The constitution took effect in December 1991 and a new parliamentary
- * election followed in 1992. The runtime transition to that constitutional
- * election law and its changed chamber sizes remains to be modeled.
+ * election followed in 1992. This config records the 1991 starting chamber;
+ * the turn transition supplies the 1992 seat counts at election resolution.
+ * The 1992 electoral law's national compensation and minority-seat mechanics
+ * remain an approximation in the regional PR resolver.
  */
 export const RO_1991: CountryEraOverride = {
   preset: "1991-default",

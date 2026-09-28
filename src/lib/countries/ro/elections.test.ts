@@ -5,6 +5,7 @@ import { roRegions1991 } from "@/lib/countries/ro/data/roRegions1991";
 import { canonicalTurnsForCycle } from "@/lib/elections/canonicalCycle";
 import { getElectionMethod } from "@/lib/elections/electionMethod";
 import { ensureROElections } from "./elections";
+import { RO_1992_DEPUTY_SEATS, RO_1992_SENATE_SEATS } from "./rules/parliament1992";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 vi.mock("@/lib/discordWebhooks", async (importOriginal) => ({
@@ -34,7 +35,7 @@ beforeEach(async () => {
 });
 
 describe("Romanian election spawner", () => {
-  it("spawns 1992 deputy and Senate races using each chamber's regional seats", async () => {
+  it("spawns 1992 deputy and Senate races at the post-constitution chamber sizes", async () => {
     db.collection("gameState").findOne.mockResolvedValue({
       _id: "current",
       preset: "1991-default",
@@ -60,8 +61,12 @@ describe("Romanian election spawner", () => {
         (e) => e.electionType === "senat" && e.electionYear === 1992 && e.endTurn === 96
       )
     ).toBe(true);
-    expect(deputies.reduce((sum, e) => sum + e.totalSeats, 0)).toBe(396);
-    expect(senators.reduce((sum, e) => sum + e.totalSeats, 0)).toBe(119);
+    expect(deputies.reduce((sum: number, e: { totalSeats: number }) => sum + e.totalSeats, 0)).toBe(
+      RO_1992_DEPUTY_SEATS
+    );
+    expect(senators.reduce((sum: number, e: { totalSeats: number }) => sum + e.totalSeats, 0)).toBe(
+      RO_1992_SENATE_SEATS
+    );
     expect(
       canonicalTurnsForCycle({
         electionType: "senat",
@@ -72,6 +77,24 @@ describe("Romanian election spawner", () => {
     ).toBe(288);
     expect(getElectionMethod("RO", "chamberOfDeputies")).toBe("pr_hareQuota");
     expect(getElectionMethod("RO", "senat")).toBe("pr_hareQuota");
+  });
+
+  it("keeps the 396/119 constituent chambers during the founding election", async () => {
+    db.collection("gameState").findOne.mockResolvedValue({
+      _id: "current",
+      preset: "1991-default",
+      startingYear: 1991,
+      currentTurn: 1,
+      preIteration: { active: true },
+    });
+    await ensureROElections(NOW, 1);
+    const batches = db.collection("elections").insertMany.mock.calls.map(([docs]) => docs);
+    expect(
+      batches[0].reduce((sum: number, e: { totalSeats: number }) => sum + e.totalSeats, 0)
+    ).toBe(396);
+    expect(
+      batches[1].reduce((sum: number, e: { totalSeats: number }) => sum + e.totalSeats, 0)
+    ).toBe(119);
   });
 
   it("preserves the Cold War Grand National Assembly route", async () => {

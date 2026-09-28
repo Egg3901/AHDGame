@@ -22,6 +22,10 @@ import { getCountryConfig, type CountryId } from "@/lib/constants/countries";
 import { isListTierMethod } from "@/lib/elections/electionMethod";
 import { getGameStatePreset } from "@/lib/db/collections/gameState";
 import { BG_ORDINARY_ASSEMBLY_TOTAL_SEATS } from "@/lib/countries/bg/rules/assemblyTransition";
+import {
+  RO_1992_DEPUTY_SEATS,
+  RO_1992_SENATE_SEATS,
+} from "@/lib/countries/ro/rules/parliament1992";
 
 /** Active world preset, when present — drives era-conditional chamber sizes. */
 async function readActivePreset(db: Db): Promise<string | undefined> {
@@ -60,6 +64,20 @@ export async function getLiveLowerChamberSeats(db: Db, countryId: CountryId): Pr
       .findOne({ _id: "BG" }, { projection: { bgOrdinaryAssemblySinceTurn: 1 } });
     if (countryState?.bgOrdinaryAssemblySinceTurn != null) {
       return BG_ORDINARY_ASSEMBLY_TOTAL_SEATS;
+    }
+  }
+  if (countryId === "RO" && preset === "1991-default") {
+    const countryState = await db
+      .collection<CountryGameState>("countryGameStates")
+      .findOne({ _id: "RO" }, { projection: { roParliament1992SinceTurn: 1 } });
+    if (countryState?.roParliament1992SinceTurn != null) {
+      const regions = await db
+        .collection<State>("states")
+        .find({ countryId })
+        .project<{ houseDistricts?: number }>({ houseDistricts: 1 })
+        .toArray();
+      const seats = regions.reduce((sum, region) => sum + (region.houseDistricts ?? 0), 0);
+      return seats > 0 ? seats : RO_1992_DEPUTY_SEATS;
     }
   }
   if (isListTierMethod(config.electionSystems.lowerChamber)) {
@@ -109,6 +127,20 @@ function isUpperChamberRegionApportioned(countryId: CountryId, preset?: string):
  */
 export async function getLiveUpperChamberSeats(db: Db, countryId: CountryId): Promise<number> {
   const preset = await readActivePreset(db);
+  if (countryId === "RO" && preset === "1991-default") {
+    const countryState = await db
+      .collection<CountryGameState>("countryGameStates")
+      .findOne({ _id: "RO" }, { projection: { roParliament1992SinceTurn: 1 } });
+    if (countryState?.roParliament1992SinceTurn != null) {
+      const regions = await db
+        .collection<State>("states")
+        .find({ countryId })
+        .project<{ stateSenateSeats?: number }>({ stateSenateSeats: 1 })
+        .toArray();
+      const seats = regions.reduce((sum, region) => sum + (region.stateSenateSeats ?? 0), 0);
+      return seats > 0 ? seats : RO_1992_SENATE_SEATS;
+    }
+  }
   const config = getCountryConfig(countryId, preset);
   const upper = config.legislature.upperChamber;
   if (!upper) return 0;

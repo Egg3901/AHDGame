@@ -89,6 +89,28 @@ describe("getLiveLowerChamberSeats", () => {
     });
     expect(await getLiveLowerChamberSeats(db as unknown as Db, "BG")).toBe(240);
   });
+
+  it("reads both Romanian chambers from the durable 1992 transition marker", async () => {
+    db.collection("gameState").findOne.mockResolvedValue({ preset: "1991-default" });
+    db.collection("countryGameStates").findOne.mockResolvedValue({ _id: "RO" });
+    db.collection("states").find.mockReturnValue(cursorOf([]));
+    expect(await getLiveLowerChamberSeats(db as unknown as Db, "RO")).toBe(396);
+    expect(await getLiveUpperChamberSeats(db as unknown as Db, "RO")).toBe(119);
+    db.collection("countryGameStates").findOne.mockResolvedValue({
+      _id: "RO",
+      roParliament1992SinceTurn: 96,
+    });
+    expect(await getLiveLowerChamberSeats(db as unknown as Db, "RO")).toBe(341);
+    expect(await getLiveUpperChamberSeats(db as unknown as Db, "RO")).toBe(143);
+    db.collection("states").find.mockReturnValue(
+      cursorOf([
+        { houseDistricts: 200, stateSenateSeats: 80 },
+        { houseDistricts: 150, stateSenateSeats: 70 },
+      ])
+    );
+    expect(await getLiveLowerChamberSeats(db as unknown as Db, "RO")).toBe(350);
+    expect(await getLiveUpperChamberSeats(db as unknown as Db, "RO")).toBe(150);
+  });
 });
 
 describe("getLiveUpperChamberSeats", () => {

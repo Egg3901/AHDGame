@@ -8,21 +8,28 @@ import {
   ensureRegionalDelegateElections,
   seatsFromRegionField,
 } from "@/lib/turn/perpetualElections/shared";
+import { roElectionSeatsForPreset } from "./rules/parliament1992";
 
 /** Romania's constituent bicameral parliament in 1991; Cold War assembly otherwise. */
 export async function ensureROElections(now: Date, inFlightTurn?: number): Promise<void> {
   const db = await getDb();
   const { ctx } = await getCurrentTurnAndCtx(db);
   if (ctx.preset === "1991-default") {
-    for (const [electionType, field, label] of [
-      ["chamberOfDeputies", "houseDistricts", "Assembly of Deputies"],
-      ["senat", "stateSenateSeats", "Senate"],
+    for (const [electionType, field, label, chamber] of [
+      ["chamberOfDeputies", "houseDistricts", "Assembly of Deputies", "deputies"],
+      ["senat", "stateSenateSeats", "Senate", "senate"],
     ] as const) {
       await ensureRegionalDelegateElections(
         {
           countryId: "RO",
           electionType,
-          seatsForRegions: (regions) => seatsFromRegionField(regions, field),
+          seatsForRegions: (regions, preset, cycleContext) =>
+            roElectionSeatsForPreset(
+              seatsFromRegionField(regions, field),
+              chamber,
+              preset,
+              cycleContext.preIterationActive === true
+            ),
           openPrimaryImmediately: true,
           statusGated: true,
           electionsLiveGate: easternBlocElectionsLive,

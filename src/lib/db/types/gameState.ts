@@ -659,6 +659,8 @@ export interface CountryGameState {
   _id: CountryId;
   /** BG 1991: raw turn when the elected 240-seat ordinary Assembly replaced the Grand Assembly. */
   bgOrdinaryAssemblySinceTurn?: number;
+  /** RO 1991 world: raw turn when the 341/143 parliament replaced the 396/119 constituent chambers. */
+  roParliament1992SinceTurn?: number;
   /** RU 1991: raw turn when the July presidential inauguration replaced the Chairman as head of state. */
   ruPresidencySinceTurn?: number;
   currentTurn: number;
