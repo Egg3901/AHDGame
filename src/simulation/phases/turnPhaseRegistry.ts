@@ -131,6 +131,7 @@ import { snapshotEconomicVitalSigns } from "@/lib/economy/economicVitalSigns";
 import { runAutoReelectionEntry } from "@/lib/turn/autoReelectionEntry";
 import { withdrawInactiveCandidates } from "@/lib/turn/withdrawInactiveCandidates";
 import { stateEffectsAndNationalAggregationPhase } from "./stateEffectsPhase";
+import { runHuAssemblyReform } from "@/lib/turn/huAssemblyReform";
 import type { TurnPhaseAdapter } from "@/simulation/engine/types";
 
 export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
@@ -1106,7 +1107,12 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
     {
       key: "electionResolutionAndGovernment",
       async execute(context, runtime) {
-        const { db, gameNow, newTurn, phaseResults } = context;
+        const { db, gameNow, newTurn, currentYear, phaseResults } = context;
+        if (currentYear >= 2014 && context.gameState.preset === "1991-default") {
+          await runtime.runPhase("huAssemblyReform", () =>
+            runHuAssemblyReform(db, currentYear, gameNow)
+          );
+        }
         // Group 7 is strictly sequential. Reordering any of these steps corrupts
         // elections by dropping final-turn votes or resolving offices from stale tallies.
         await runtime.runPhase("withdrawInactiveCandidates", () =>

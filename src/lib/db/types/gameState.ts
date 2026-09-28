@@ -637,6 +637,8 @@ export interface GameState {
    * run quietly stands up every active-but-empty branch and stamps without posting.
    */
   lastMilitaryBranchYearProcessed?: number;
+  /** 1991-world Hungarian Assembly resized from 386 to 199 seats in 2014. */
+  huAssemblyReformedAtYear?: number;
   /**
    * Cabinet seat ids brought into existence early by a create_department bill,
    * regardless of their era `yearEnabled` (e.g. "secretary_of_education" after the

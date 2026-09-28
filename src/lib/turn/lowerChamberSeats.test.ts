@@ -56,6 +56,18 @@ describe("getLiveLowerChamberSeats", () => {
     expect(deSeats).not.toBe(299);
   });
 
+  it("tracks the 1991 Hungarian Assembly from 386 seats to 199 after its reform", async () => {
+    db.collection("gameState").findOne.mockResolvedValue({ preset: "1991-default" });
+    db.collection("states").find.mockReturnValue(cursorOf([{ houseDistricts: 199 }]));
+    expect(await getLiveLowerChamberSeats(db as unknown as Db, "HU")).toBe(386);
+
+    db.collection("gameState").findOne.mockResolvedValue({
+      preset: "1991-default",
+      huAssemblyReformedAtYear: 2014,
+    });
+    expect(await getLiveLowerChamberSeats(db as unknown as Db, "HU")).toBe(199);
+  });
+
   it("uses the 1953 Commons size (625) when the world preset is 1953-default", async () => {
     db.collection("gameState").findOne.mockResolvedValue({ preset: "1953-default" });
     db.collection("states").find.mockReturnValue(cursorOf([]));

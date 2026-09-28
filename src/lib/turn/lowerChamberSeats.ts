@@ -34,6 +34,22 @@ async function readActivePreset(db: Db): Promise<string | undefined> {
  */
 export async function getLiveLowerChamberSeats(db: Db, countryId: CountryId): Promise<number> {
   const config = getCountryConfig(countryId, await readActivePreset(db));
+  // Hungary's 1991-world config is deliberately frozen at its 386-seat start.
+  // Once the 2014 reform stamps the world, the re-apportioned region documents
+  // carry the live 199-seat chamber and override that initial config size.
+  if (countryId === "HU") {
+    const reform = await db
+      .collection<{ _id: string; huAssemblyReformedAtYear?: number }>("gameState")
+      .findOne({ _id: "current" }, { projection: { huAssemblyReformedAtYear: 1 } });
+    if (reform?.huAssemblyReformedAtYear) {
+      const regions = await db
+        .collection<State>("states")
+        .find({ countryId }, { projection: { houseDistricts: 1 } })
+        .toArray();
+      const seats = regions.reduce((sum, region) => sum + (region.houseDistricts ?? 0), 0);
+      if (seats > 0) return seats;
+    }
+  }
   if (isListTierMethod(config.electionSystems.lowerChamber)) {
     return config.legislature.lowerChamber.seats;
   }
