@@ -4,7 +4,7 @@ import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import { roRegions1991 } from "@/lib/countries/ro/data/roRegions1991";
 import { canonicalTurnsForCycle } from "@/lib/elections/canonicalCycle";
 import { getElectionMethod } from "@/lib/elections/electionMethod";
-import { ensureROElections } from "./easternBloc";
+import { ensureROElections } from "./elections";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 vi.mock("@/lib/discordWebhooks", async (importOriginal) => ({
