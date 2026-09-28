@@ -130,14 +130,14 @@ export async function GET(request: Request) {
     const db = await getDb();
     const currentTurn = await getCurrentTurn(db);
 
-    // This GET is public — it must not mutate state. Minister (temporary)
-    // embargoes are read straight from the store; legislated (durable) embargoes
+    // This public GET does not mutate state. Minister, crisis and organization
+    // embargoes are read from the store; legislated (durable) embargoes
     // are derived read-only from signed bills via the same pure resolver the turn
     // uses to materialize them. (The turn's reconcile is what writes the
     // legislation rows the clearing engine enforces; this endpoint never writes.)
     const activeOr = [{ expiresTurn: { $exists: false } }, { expiresTurn: { $gte: currentTurn } }];
     const ministerFilter = {
-      origin: "minister",
+      origin: { $in: ["minister", "crisis", "organization"] },
       $and: [
         { $or: activeOr },
         ...(country ? [{ $or: [{ sourceCountry: country }, { targetCountry: country }] }] : []),

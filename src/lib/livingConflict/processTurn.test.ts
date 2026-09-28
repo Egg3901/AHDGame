@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ObjectId, type Db } from "mongodb";
 import type { Crisis, CrisisInteraction } from "@/lib/db/types/crisis";
+import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
 import type { LivingConflictState } from "./types";
 
 vi.mock("@/lib/crises/featureFlag", () => ({
@@ -28,12 +29,17 @@ function matches(row: Record<string, unknown>, query: Record<string, unknown>): 
     if (expected && typeof expected === "object" && !(expected instanceof ObjectId)) {
       if ("$exists" in expected) return (actual !== undefined) === expected.$exists;
     }
+    if (expected === null) return actual == null;
     return equalValue(actual, expected);
   });
 }
 
 function fakeDb() {
-  const stores = new Map<string, Record<string, unknown>[]>();
+  const reads: { collection: string; projection?: Record<string, number> }[] = [];
+  const stores = new Map<string, Record<string, unknown>[]>([
+    ["states", Object.keys(COUNTRY_CONFIGS).map((countryId) => ({ countryId }))],
+    ["macroCountries", ["SVN", "NVN", "CD", "EG", "SY"].map((entityId) => ({ entityId }))],
+  ]);
   const rows = (name: string) => {
     const found = stores.get(name) ?? [];
     stores.set(name, found);
@@ -42,7 +48,11 @@ function fakeDb() {
   const db = {
     collection(name: string) {
       return {
-        find(query: Record<string, unknown> = {}) {
+        find(
+          query: Record<string, unknown> = {},
+          options?: { projection?: Record<string, number> }
+        ) {
+          reads.push({ collection: name, projection: options?.projection });
           return {
             async toArray() {
               return rows(name).filter((row) => matches(row, query));
@@ -74,7 +84,7 @@ function fakeDb() {
       };
     },
   } as unknown as Db;
-  return { db, stores };
+  return { db, stores, reads };
 }
 
 describe("living-conflict turn integration", () => {
@@ -121,6 +131,58 @@ describe("living-conflict turn integration", () => {
     expect(stateAfter.phaseTurns).toBe(stateBefore.phaseTurns);
   });
 
+  it("opens the Northern Ireland crisis in 1991 and closes it after actual reunification", async () => {
+    const { db, stores } = fakeDb();
+    await processLivingConflictsTurn(db, 1, 1991, true);
+    const northernIreland = () =>
+      (stores.get("livingConflicts") ?? []).find((row) => row.defKey === "northern_ireland");
+    expect(northernIreland()).toMatchObject({
+      hasOpened: true,
+      status: "active",
+      openedYear: 1991,
+    });
+
+    stores.set("referendums", [
+      {
+        countryId: "UK",
+        regionId: "NIR",
+        kind: "reunification",
+        targetCountryId: "IE",
+        status: "completed",
+      },
+    ]);
+    await processLivingConflictsTurn(db, 2, 1991, true);
+    expect(northernIreland()?.status).toBe("closed");
+    const crisisCount = (stores.get("crises") ?? []).filter((row) =>
+      String(row.livingConflictEventId ?? "").startsWith("northern_ireland:")
+    ).length;
+    await processLivingConflictsTurn(db, 3, 1991, true);
+    expect(northernIreland()?.status).toBe("closed");
+    expect(
+      (stores.get("crises") ?? []).filter((row) =>
+        String(row.livingConflictEventId ?? "").startsWith("northern_ireland:")
+      )
+    ).toHaveLength(crisisCount);
+  });
+
+  it("keeps Northern Ireland open while a passed reunification vote awaits consent bills", async () => {
+    const { db, stores } = fakeDb();
+    stores.set("referendums", [
+      {
+        countryId: "UK",
+        regionId: "NIR",
+        kind: "reunification",
+        targetCountryId: "IE",
+        status: "actuating",
+        result: { passed: true },
+      },
+    ]);
+    await processLivingConflictsTurn(db, 1, 1991, true);
+    expect(
+      (stores.get("livingConflicts") ?? []).find((row) => row.defKey === "northern_ireland")
+    ).toMatchObject({ hasOpened: true, status: "active" });
+  });
+
   it("materializes non-Vietnam chains through the same crisis interaction path", async () => {
     const { db, stores } = fakeDb();
     await processLivingConflictsTurn(db, 241, 1960, true);
@@ -133,6 +195,64 @@ describe("living-conflict turn integration", () => {
     expect(crises.every((crisis) => crisis.interactionDefinition?.decisionTree.length === 1)).toBe(
       true
     );
+  });
+
+  it("retains a background sovereign actor even without domestic state rows", async () => {
+    const { db, stores, reads } = fakeDb();
+    stores.set(
+      "states",
+      ["RU", "US", "UK", "DE"].map((countryId) => ({ countryId }))
+    );
+    stores.set("macroCountries", [{ entityId: "UKR" }]);
+    await processLivingConflictsTurn(db, 1057, 2013, true);
+    const state = (stores.get("livingConflicts") ?? []).find(
+      (row) => row.defKey === "russia_ukraine_security"
+    );
+    expect(state?.hasOpened).toBe(true);
+    const crisis = (stores.get("crises") ?? []).find(
+      (row) => pathValue(row, "globalResponse.conflictKey") === "russia_ukraine_security"
+    );
+    expect(crisis).toBeDefined();
+    expect(pathValue(crisis!, "globalResponse.roleByCountry.UKR")).toBe("belligerent");
+    expect(pathValue(crisis!, "globalResponse.roleByCountry.RU")).toBe("backer_a");
+    expect(reads.filter((read) => read.collection === "macroCountries")).toEqual([
+      { collection: "macroCountries", projection: { entityId: 1, _id: 0 } },
+    ]);
+    expect(reads.filter((read) => read.collection === "states")).toEqual([
+      { collection: "states", projection: { countryId: 1, _id: 0 } },
+    ]);
+  });
+
+  it.each([[], [{ entityId: "UKR", retiredAt: new Date("2012-01-01") }]])(
+    "does not open a crisis for a missing or retired background belligerent: %j",
+    async (...macroCountries: Record<string, unknown>[]) => {
+      const { db, stores } = fakeDb();
+      stores.set(
+        "states",
+        ["RU", "US", "UK", "DE"].map((countryId) => ({ countryId }))
+      );
+      stores.set("macroCountries", macroCountries);
+      await processLivingConflictsTurn(db, 1057, 2013, true);
+      expect(
+        (stores.get("livingConflicts") ?? []).find(
+          (row) => row.defKey === "russia_ukraine_security"
+        )
+      ).toBeUndefined();
+      expect(
+        (stores.get("crises") ?? []).some(
+          (row) => pathValue(row, "globalResponse.conflictKey") === "russia_ukraine_security"
+        )
+      ).toBe(false);
+    }
+  );
+
+  it("does not invent participants from static country configs in an empty world", async () => {
+    const { db, stores } = fakeDb();
+    stores.set("states", []);
+    stores.set("macroCountries", []);
+    const result = await processLivingConflictsTurn(db, 1057, 2013, true);
+    expect(result.eventsOpened).toBe(0);
+    expect(stores.get("livingConflicts") ?? []).toEqual([]);
   });
 
   it("opens the nuclear alert only after two countries field credible arsenals", async () => {

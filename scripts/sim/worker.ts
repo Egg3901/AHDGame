@@ -139,6 +139,7 @@ interface SimJob {
   // Frontier-entry experiment gate (issue #991, gameState flag). Explicit
   // false is a pinned control arm, not an omission: it must reach runWorld.
   frontierEntryExperimentEnabled?: boolean;
+  campaignEraPriceLevelEnabled?: boolean;
   allFeatureFlags?: boolean;
   autonomyLevel?: string;
   /** Simulation actor mode (#1993). Omitted means pure NPP autonomy.

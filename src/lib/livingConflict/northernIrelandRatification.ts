@@ -14,10 +14,25 @@ const FAILURE: ReadonlySet<BillStatus> = new Set([
 ]);
 
 export function northernIrelandRatificationDeltas(
-  bills: Array<Pick<Bill, "countryId" | "status">>,
+  bills: Array<
+    Pick<Bill, "countryId" | "status"> & Partial<Pick<Bill, "proposedTurn" | "proposedAt">>
+  >,
   state: LivingConflictState
 ): Record<string, number> {
-  const relevant = bills.filter((bill) => bill.countryId === "UK" || bill.countryId === "IE");
+  const latest = new Map<string, (typeof bills)[number]>();
+  for (const bill of bills) {
+    if (bill.countryId !== "UK" && bill.countryId !== "IE") continue;
+    const previous = latest.get(bill.countryId);
+    if (
+      !previous ||
+      (bill.proposedTurn ?? -1) > (previous.proposedTurn ?? -1) ||
+      ((bill.proposedTurn ?? -1) === (previous.proposedTurn ?? -1) &&
+        (bill.proposedAt?.getTime() ?? 0) > (previous.proposedAt?.getTime() ?? 0))
+    ) {
+      latest.set(bill.countryId, bill);
+    }
+  }
+  const relevant = [...latest.values()];
   const authorizedCountries = new Set(
     relevant.filter((bill) => SUCCESS.has(bill.status)).map((bill) => bill.countryId)
   );
@@ -47,7 +62,7 @@ export async function reconcileNorthernIrelandRatification(
     .collection<Bill>("bills")
     .find(
       { category: "northern_ireland_peace", countryId: { $in: ["UK", "IE"] } },
-      { projection: { countryId: 1, status: 1 } }
+      { projection: { countryId: 1, status: 1, proposedTurn: 1, proposedAt: 1 } }
     )
     .toArray();
   const deltas = northernIrelandRatificationDeltas(bills, state);

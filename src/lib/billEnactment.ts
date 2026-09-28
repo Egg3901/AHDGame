@@ -20,6 +20,7 @@
  * same-currency — no FX conversion needed inside this file.
  */
 
+import { reconcileEnactedUKDevolution } from "@/lib/countries/uk/devolution/service";
 import type { AnyBulkWriteOperation, Db, ObjectId } from "mongodb";
 import { ObjectId as MongoObjectId } from "mongodb";
 import type {
@@ -892,6 +893,9 @@ async function processProvisionEnactment(
       { $set: statePolicy },
       { upsert: true }
     );
+  if (stateId === "uk_national" && provision.legislationTypeId === "uk_devolution_local_powers") {
+    await reconcileEnactedUKDevolution(db, new Date());
+  }
 
   // Apply tax rate changes if this is tax legislation
   if (lt?.taxRateChange && policyOption?.rate !== undefined) {

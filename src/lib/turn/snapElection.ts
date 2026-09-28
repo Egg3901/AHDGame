@@ -10,11 +10,12 @@
  *      dissolved.
  *   3. Spawns fresh `snap_${lowerChamberKey}` elections per region, starting
  *      immediately with a 48h window (24h primary + 24h general).
- *   4. Increments `snapElectionsUsed` and stamps `lastSnapElectionTurn`.
- *   5. Vacates the sitting PM and unforms the government via
+ *   4. Vacates every member of the dissolved lower chamber.
+ *   5. Increments `snapElectionsUsed` and stamps `lastSnapElectionTurn`.
+ *   6. Vacates the sitting PM and unforms the government via
  *      `unformGovernmentAndVacatePM` — status → "pending", cabinet and PM
  *      `currentOffice` cleared, 96-turn vacancy clock re-armed.
- *   6. Updates government cycle/seat counters via
+ *   7. Updates government cycle/seat counters via
  *      `resetParliamentaryGovernmentAfterElection` (now takes the
  *      no-sitting-PM branch).
  *
@@ -46,7 +47,16 @@ import {
 import { DEFAULT_DURATIONS } from "@/lib/turn/perpetualElections";
 import { sendCountryGameEvent, DISCORD_COLORS } from "@/lib/discordWebhooks";
 import { cycleAnchorContextFromGameState } from "@/lib/elections/cycleAnchorContext";
-import type { Election, ElectionStatus, GameState, Seat } from "@/lib/db/types";
+import type {
+  Character,
+  ElectedOfficial,
+  Election,
+  ElectionStatus,
+  GameState,
+  NPP,
+  Seat,
+} from "@/lib/db/types";
+import { officialsCountryScope } from "@/lib/db/electedOfficialScope";
 import { snapElectionResolutionYear } from "@/lib/turn/rules/snapElection";
 
 export const SNAP_ELECTION_LIMIT = 2;
@@ -83,6 +93,39 @@ export class SnapElectionError extends Error {
     super(message);
     this.name = "SnapElectionError";
   }
+}
+
+/**
+ * Remove every member of a lower chamber when it is dissolved. The shared
+ * country scope includes only the countries with known legacy untagged rows.
+ */
+export async function vacateDissolvedLowerChamber(
+  db: Db,
+  countryId: CountryId,
+  lowerChamberKey: string,
+  now: Date
+): Promise<void> {
+  await db.collection<ElectedOfficial>("electedOfficials").deleteMany({
+    officeType: lowerChamberKey,
+    ...officialsCountryScope(countryId),
+  });
+
+  await Promise.all([
+    db.collection<Character>("characters").updateMany(
+      {
+        countryId,
+        "currentOffice.type": lowerChamberKey,
+      },
+      { $set: { currentOffice: null, updatedAt: now } }
+    ),
+    db.collection<NPP>("npps").updateMany(
+      {
+        countryId,
+        "currentOffice.type": lowerChamberKey,
+      },
+      { $set: { currentOffice: null, updatedAt: now } }
+    ),
+  ]);
 }
 
 export async function triggerSnapElection(
@@ -146,6 +189,17 @@ export async function triggerSnapElection(
     }
   }
 
+  // A dissolution without replacement races would strand the country with no
+  // lower chamber. Validate the region set before cancelling elections,
+  // failing bills, or vacating any offices.
+  const regions = await db
+    .collection<{ _id: string }>("states")
+    .find({ countryId }, { projection: { _id: 1 } })
+    .toArray();
+  if (regions.length === 0) {
+    throw new SnapElectionError(`No election regions configured for ${countryId}`);
+  }
+
   // 1. Cancel active/upcoming regular lower-chamber elections for this country.
   //    Capture the affected election ids first so we can withdraw the candidate
   //    rows attached to them — leaving them `active` orphans the rows and
@@ -194,11 +248,6 @@ export async function triggerSnapElection(
     preIterationActive: ctx.preIterationActive,
     preIterationTurns: ctx.preIterationTurns,
   });
-
-  const regions = await db
-    .collection<{ _id: string }>("states")
-    .find({ countryId }, { projection: { _id: 1 } })
-    .toArray();
 
   const seats = await db
     .collection<Seat>("seats")
@@ -263,7 +312,12 @@ export async function triggerSnapElection(
       .insertMany(snapElections.map(withCampaignRules) as Election[]);
   }
 
-  // 4. Increment counters. Auto-snap still increments so operators can see
+  // 4. Dissolution immediately ends every lower-chamber mandate. This must
+  //    happen before government cleanup so cabinet members cannot be restored
+  //    to seats that no longer exist.
+  await vacateDissolvedLowerChamber(db, countryId, lowerChamberKey, now);
+
+  // 5. Increment counters. Auto-snap still increments so operators can see
   //    that an auto-snap fired; the only difference is that the limit was
   //    not enforced on entry.
   //
@@ -282,12 +336,12 @@ export async function triggerSnapElection(
     }
   );
 
-  // 5. Vacate the sitting PM and unform the government. Must run BEFORE the
+  // 6. Vacate the sitting PM and unform the government. Must run BEFORE the
   //    reset below so the reset takes the no-sitting-PM branch and only
   //    touches cycle/seat fields.
   await unformGovernmentAndVacatePM(db, countryId, now, { reason: "snap" });
 
-  // 6. Reset government cycle/seat counters.
+  // 7. Reset government cycle/seat counters.
   await resetParliamentaryGovernmentAfterElection(db, countryId, now);
 
   const chamberName = config.legislature.lowerChamber.name;

@@ -93,7 +93,7 @@ const baseProps = {
   party: baseParty,
   user: { username: "egg3901", isAdmin: false, isModerator: false },
   memberSince: "July 22, 2026",
-  officeLabel: "Private Citizen",
+  officeLabels: ["Private Citizen"],
   stateLabel: "Northern Districts",
   countrySlug: "dd",
 };
@@ -118,6 +118,25 @@ describe("ProfileHeader region badge", () => {
     );
 
     expect(screen.getByRole("link", { name: "XY_Z" })).toBeTruthy();
+  });
+});
+
+describe("ProfileHeader office badges", () => {
+  it("shows each current leadership and office label", () => {
+    render(
+      <ProfileHeader
+        {...baseProps}
+        officeLabels={[
+          "Speaker of the House",
+          "Acting Secretary of the Treasury",
+          "Representative (CA, District 15)",
+        ]}
+      />
+    );
+
+    expect(screen.getByText("Speaker of the House")).toBeTruthy();
+    expect(screen.getByText("Acting Secretary of the Treasury")).toBeTruthy();
+    expect(screen.getByText("Representative (CA, District 15)")).toBeTruthy();
   });
 });
 

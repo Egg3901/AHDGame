@@ -140,7 +140,7 @@ function trees(key: string): RoleDecisionTrees {
         responseOpt(
           "sanctions",
           "Coordinate targeted sanctions",
-          "Raise the cost of continued attacks while preserving relief channels.",
+          "Restrict arms trade with the belligerents while preserving food and medical relief channels.",
           { sanctions: 4, restraint: 1 }
         ),
         responseOpt(
@@ -283,6 +283,12 @@ const outcomes: GlobalResponseOutcome[] = [
     description: "Sanctions and conditional recognition alter the incentives of the factions.",
     priority: 20,
     conditions: [{ axis: "sanctions", min: 5 }],
+    tradeSanction: {
+      participationAxis: "sanctions",
+      targetRole: "belligerent",
+      commodity: "ordnance",
+      durationTurns: 48,
+    },
     intensityDelta: -4,
     trackDeltas: { settlementMomentum: 8, legitimacy: 4, violence: -3 },
     campaignDelta: { civilianStrain: 3, settlementMomentum: 9 },

@@ -56,9 +56,9 @@ describe("planFundCrossRebalancing", () => {
       ],
     });
 
-    // Seller total backing = $100k holdings, target value = $10k, target
-    // shares = 100, excess = 900. Buyer total backing = $1M cash, target
-    // shares = 1,000, deficit = 1,000. Transfer is capped by seller excess.
+    // The 10% constituent weight applies to each fund's 75% equity bucket.
+    // Seller target = 75 shares, buyer target = 750 shares, so the buyer's
+    // deficit caps this transfer at 750 shares.
     const plans = planFundCrossRebalancing({
       funds: [seller, buyer],
       corps: [corp],
@@ -68,8 +68,8 @@ describe("planFundCrossRebalancing", () => {
     expect(plans).toHaveLength(1);
     expect(plans[0].sellerFundId.toString()).toBe(seller._id.toString());
     expect(plans[0].buyerFundId.toString()).toBe(buyer._id.toString());
-    expect(plans[0].shares).toBe(900);
-    expect(plans[0].valueAnchor).toBeCloseTo(90_000, 0);
+    expect(plans[0].shares).toBe(750);
+    expect(plans[0].valueAnchor).toBeCloseTo(75_000, 0);
   });
 
   it("limits transfer by buyer cash", () => {
@@ -99,7 +99,38 @@ describe("planFundCrossRebalancing", () => {
     });
 
     expect(plans).toHaveLength(1);
-    expect(plans[0].shares).toBe(10); // buyer total backing = $10k, target = 10 shares
+    expect(plans[0].shares).toBe(7); // 10% of the buyer's $7.5k equity bucket
+  });
+
+  it("sells holdings above the equity-bucket target into an underweight fund", () => {
+    const corp = makeCorp();
+    const seller = makeFund({
+      name: "Seller",
+      cashAnchor: 60_000,
+      holdings: [{ corporationId: corp._id, shares: 400, avgCostPerShareAnchor: 100 }],
+      targetConstituents: [
+        { corporationId: corp._id, targetWeight: 0.5, marketCapAnchor: 1_000_000 },
+      ],
+    });
+    const buyer = makeFund({
+      name: "Buyer",
+      cashAnchor: 100_000,
+      targetConstituents: [
+        { corporationId: corp._id, targetWeight: 0.5, marketCapAnchor: 1_000_000 },
+      ],
+    });
+
+    // The seller has $100k backing and $40k in this stock. The ordinary
+    // rebalance target is 50% of its $75k equity bucket, or $37.5k.
+    const plans = planFundCrossRebalancing({
+      funds: [seller, buyer],
+      corps: [corp],
+      exchangeRates: {},
+    });
+
+    expect(plans).toHaveLength(1);
+    expect(plans[0].shares).toBe(25);
+    expect(plans[0].valueAnchor).toBe(2_500);
   });
 
   it("limits transfer by buyer equity headroom", () => {
@@ -140,11 +171,10 @@ describe("planFundCrossRebalancing", () => {
   });
 
   it("caps a buyer's cumulative equity spend across multiple corps in one pass", () => {
-    // Buyer is underweight in two distinct corps. Per-corp each deficit is 50
-    // shares, but the buyer's fund-level equity headroom is only 75 shares of
-    // value ($7.5k of $10k backing at the 75% cap). Without cross-corp tracking
-    // the planner would buy 50 + 50 = 100 shares and breach the cap; it must
-    // instead stop at 75 across both corps.
+    // Buyer is underweight in two distinct corps. Each 50% constituent target
+    // is 37.5 shares of its $7.5k equity bucket, rounded down to 37 shares.
+    // Another $1k holding leaves only $6.5k of equity headroom, so the
+    // combined 74-share deficit must stop at 65 shares.
     const corpA = makeCorp();
     const corpB = makeCorp();
 
@@ -161,11 +191,18 @@ describe("planFundCrossRebalancing", () => {
       targetConstituents: [{ corporationId: corpB._id, targetWeight: 0, marketCapAnchor: 0 }],
     });
 
-    // $10k cash, no holdings → backing $10k, equity cap 75 shares of value.
+    // $9k cash + $1k existing holdings → backing $10k, headroom $6.5k.
     const buyer = makeFund({
       name: "Buyer",
-      cashAnchor: 10_000,
-      holdings: [],
+      cashAnchor: 9_000,
+      holdings: [
+        {
+          corporationId: new ObjectId(),
+          shares: 10,
+          avgCostPerShareAnchor: 100,
+          lastValueAnchor: 1_000,
+        },
+      ],
       targetConstituents: [
         { corporationId: corpA._id, targetWeight: 0.5, marketCapAnchor: 1_000_000 },
         { corporationId: corpB._id, targetWeight: 0.5, marketCapAnchor: 1_000_000 },
@@ -185,8 +222,8 @@ describe("planFundCrossRebalancing", () => {
       .filter((p) => p.buyerFundId.toString() === buyer._id.toString())
       .reduce((sum, p) => sum + p.valueAnchor, 0);
 
-    expect(buyerShares).toBe(75);
-    expect(buyerSpend).toBeCloseTo(7_500, 0);
+    expect(buyerShares).toBe(65);
+    expect(buyerSpend).toBeCloseTo(6_500, 0);
   });
 
   it("does not match funds with different anchor currencies", () => {

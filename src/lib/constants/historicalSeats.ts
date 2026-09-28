@@ -1280,25 +1280,10 @@ export const UK_COMMONS_1987: HistoricalSeat[] = [
   { state: "NIR", officeType: "commons", party: "uk_independent", seatsHeld: 1 },
 ];
 
-// ─── UK First Ministers + Mayor of London — January 1992 (anachronistic) ──
-// Devolution didn't exist in 1992 (Scottish/Welsh devolution 1999, NI 1998)
-// and the Mayor of London office didn't exist until 2000. The 1991-default
-// preset still models these offices because the game's office structure is
-// preset-agnostic — Phase 1 wires the `governor` officeType for these
-// regions and Phase 2 spawns elections on a 4-year cycle. Party-stamped
-// to the regional Westminster majority circa 1992:
-//   - SCO: Labour (uk_labour) — Labour swept Scotland in 1992
-//   - WAL: Labour (uk_labour) — Labour dominant in Wales
-//   - NIR: UUP (uk_uup) — Ulster Unionist Party was the dominant
-//          unionist party in NI pre-1998. UUP is a 1991-only default
-//          party (see `ukParties.ts` validForPresets).
-//   - LON: Labour (uk_labour) — Labour-leaning region in 1992
-export const UK_FIRST_MINISTERS_1992: HistoricalSeat[] = [
-  { state: "SCO", officeType: "governor", party: "uk_labour" },
-  { state: "WAL", officeType: "governor", party: "uk_labour" },
-  { state: "NIR", officeType: "governor", party: "uk_uup" },
-  { state: "LON", officeType: "governor", party: "uk_labour" },
-];
+// No devolved executives existed at the 1991 starting settlement. Existing
+// saves retain their seated leaders through the devolution compatibility path;
+// new worlds require a founding law before these offices can hold elections.
+export const UK_FIRST_MINISTERS_1992: HistoricalSeat[] = [];
 
 // ─── UK 1992: Regional Council Compositions ────────────────────────────────
 // Devolution didn't exist in 1992 (Scotland 1999, Wales 1999, NI 1998), so

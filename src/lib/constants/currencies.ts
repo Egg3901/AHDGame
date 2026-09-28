@@ -107,7 +107,7 @@ export const COUNTRY_CURRENCY_MAP: Record<CountryId, CurrencyCode> = {
   DE: DE_ECONOMY.currencyCode,
   // Irish pound (Saorstát/IEP). Distinct from EUR so 1953 Bretton Woods par
   // (1:1 GBP) can have its own exchangeRates doc without colliding with DE's DM/EUR rate.
-  // Display shows "€" when gameState.eurozoneEnabled (see getEraAwareCurrencySymbol).
+  // Euro displays convert with the EUR rate; the stored IEP denomination stays intact.
   IE: IE_ECONOMY.currencyCode,
   BR: BR_ECONOMY.currencyCode,
   CN: CN_ECONOMY.currencyCode,
@@ -389,7 +389,7 @@ export const INITIAL_RATES: Partial<Record<CountryId, number>> = {
   UK: 0.75,
   JP: 106.0,
   DE: 0.92, // EUR starts near USD parity (ECB policy rate similar to Fed baseline)
-  IE: 0.92, // IEP — euro-era parity with EUR (display € when eurozoneEnabled)
+  IE: 0.92, // IEP code carries a normalized euro-scale accounting unit in modern presets.
   BR: 5.0, // BRL — ~5 BRL per USD
   CN: 7.2, // CNY — ~7.2 CNY per USD
   NG: 1550, // NGN — approximate naira per USD reference point
@@ -733,32 +733,23 @@ const PRE_EUROZONE_PRESETS = new Set<string>(["1953-default", "1979-default", "1
 const PRE_REAL_PRESETS = new Set<string>(["1953-default", "1979-default", "1991-default"]);
 
 /**
- * Returns the player-visible currency symbol for `code` in the given game
- * context, accounting for historical currency regimes in early-era presets.
- *
- * Internal codes: DE stays on EUR (DM proxy pre-euro); IE uses IEP. Display:
- * - EUR + DE → "DM" in pre-eurozone presets when eurozone is off
- * - IEP → "€" when eurozone is on; "IR£" otherwise
- * - BRL → "Cr$" in pre-Real presets
- *
- * `anchorCountryId` picks the right pre-euro label for EUR. When absent,
- * EUR always falls back to "€".
+ * Symbol for an amount already denominated in `code`. A symbol-only call must
+ * never relabel IEP as EUR, or normalized EUR/BRL units as marks/cruzeiros.
+ * Local historical presentation with amount conversion lives in currency/rules/display.
  */
 export function getEraAwareCurrencySymbol(
   code: CurrencyCode,
   preset: string,
   eurozoneEnabled: boolean,
-  anchorCountryId?: CountryId
+  _anchorCountryId?: CountryId
 ): string {
-  if (code === "IEP") {
-    return eurozoneEnabled ? "€" : CURRENCY_SYMBOLS.IEP;
-  }
-  if (code === "EUR" && !eurozoneEnabled && PRE_EUROZONE_PRESETS.has(preset)) {
-    if (anchorCountryId === "DE") return "DM";
-    // Legacy callers that still pass IE with EUR code (pre-IEP split).
-    if (anchorCountryId === "IE") return "IEP";
-  }
-  if (code === "BRL" && PRE_REAL_PRESETS.has(preset)) return "Cr$";
+  // 1953 stores actual marks; 1979/1991 store EUR-equivalent German units.
+  if (code === "EUR" && preset === "1953-default") return "DM";
+  if (code === "EUR" && !eurozoneEnabled && PRE_EUROZONE_PRESETS.has(preset)) return "€ eq.";
+  // Modern presets seeded IEP as a normalized euro-scale accounting unit.
+  if (code === "IEP" && !PRE_EUROZONE_PRESETS.has(preset)) return "€ eq.";
+  if (code === "BRL" && preset === "1953-default") return "Cr$";
+  if (code === "BRL" && PRE_REAL_PRESETS.has(preset)) return "BRL eq.";
   return CURRENCY_SYMBOLS[code] ?? code;
 }
 

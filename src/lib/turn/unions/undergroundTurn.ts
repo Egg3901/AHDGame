@@ -10,6 +10,8 @@ import {
   rollUndergroundDetectionOutcome,
   undergroundDetectionChance,
   undergroundHeat,
+  postureDetectionChance,
+  type UnionEnforcementPosture,
 } from "@/lib/unions/underground";
 
 export interface UndergroundTurnResult {
@@ -37,7 +39,8 @@ export interface UndergroundTurnResult {
 export async function processUndergroundTurn(
   db: Db,
   currentTurn: number,
-  bannedCountryIds: ReadonlySet<CountryId> = new Set<CountryId>()
+  bannedCountryIds: ReadonlySet<CountryId> = new Set<CountryId>(),
+  postures: ReadonlyMap<CountryId, UnionEnforcementPosture> = new Map()
 ): Promise<UndergroundTurnResult> {
   const bannedCountries = Array.from(bannedCountryIds);
   const undergroundFilter =
@@ -79,7 +82,10 @@ export async function processUndergroundTurn(
       set.heat = nextHeat;
     }
     if (!isUnionExposed(cell, currentTurn) && nextHeat >= HEAT_DETECTION_THRESHOLD) {
-      const chance = undergroundDetectionChance(nextHeat);
+      const chance = postureDetectionChance(
+        undergroundDetectionChance(nextHeat),
+        postures.get(cell.countryId) ?? "normal"
+      );
       const roll = seededRoll(
         cell._id.toString(),
         currentTurn,
