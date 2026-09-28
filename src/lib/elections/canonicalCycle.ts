@@ -248,6 +248,25 @@ export function canonicalTurnsForCycle(params: CanonicalCycleParams): CanonicalC
   const dur = DEFAULT_DURATIONS[electionType];
   if (!dur) return null;
   const anchors = getCycleAnchors(ctx);
+  // Romania's 1990 constituent chambers stood until the September 1992
+  // election. Subsequent parliamentary terms are modeled on a four-year cycle.
+  // The 1992 seat redistribution (341 deputies, 143 senators) still needs a
+  // timed regional/chamber transition; the current regions retain 396/119.
+  // https://legislatie.just.ro/public/DetaliiDocument/94779
+  // https://legislatie.just.ro/public/DetaliiDocument/94780
+  if (
+    countryId === "RO" &&
+    ctx.preset === "1991-default" &&
+    (electionType === "chamberOfDeputies" || electionType === "senat")
+  ) {
+    const endTurn =
+      (1992 - ctx.startingYear + 1) * 48 + (ctx.preIterationTurns ?? 0) + (cycle - 1) * 192;
+    return {
+      endTurn,
+      primaryEndTurn: endTurn - dur.generalDurationHours,
+      startTurn: cycle === 1 ? 1 : endTurn - dur.durationHours,
+    };
+  }
 
   // The same election law requires both chambers to vote together and begin
   // and end their terms together. PL has no Senate in the Cold War presets.

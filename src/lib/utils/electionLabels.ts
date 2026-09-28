@@ -55,6 +55,7 @@ export const ELECTION_TYPE_LABEL_MAP: Record<string, string> = {
   chamberOfNations: "Chamber of Nations",
   nationalAssembly: "National Assembly",
   grandNationalAssembly: "Grand National Assembly",
+  chamberOfDeputies: "Assembly of Deputies",
   federalAssembly: "Federal Assembly",
   // IE offices
   dail: "Dáil Éireann",
@@ -109,6 +110,7 @@ export const ELECTION_TYPE_SHORT_LABEL: Record<string, string> = {
   chamberOfNations: "Chamber of Nations",
   nationalAssembly: "National Assembly",
   grandNationalAssembly: "Grand National Assembly",
+  chamberOfDeputies: "Deputies",
   federalAssembly: "Federal Assembly",
   // IE offices
   dail: "Dáil",
@@ -243,6 +245,7 @@ export const MULTI_SEAT_TYPES: ReadonlySet<string> = new Set([
   "chamberOfNations",
   "nationalAssembly",
   "grandNationalAssembly",
+  "chamberOfDeputies",
   "federalAssembly",
   "sejmDeputy",
   "assemblyDeputy",
@@ -316,6 +319,7 @@ const CHAMBER_KEY_TO_OFFICE_TYPE: Readonly<Record<string, string>> = {
   chamberOfNations: "nationsDeputy",
   nationalAssembly: "assemblyDelegate",
   grandNationalAssembly: "assemblyDeputy",
+  chamberOfDeputies: "deputy",
   federalAssembly: "assemblyDelegate",
 };
 

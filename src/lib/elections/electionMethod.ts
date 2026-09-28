@@ -32,6 +32,7 @@ export const POSITION_BY_ELECTION_TYPE: Readonly<Record<string, ElectionPosition
   chamberOfNations: "upperChamber",
   nationalAssembly: "lowerChamber",
   grandNationalAssembly: "lowerChamber",
+  chamberOfDeputies: "lowerChamber",
   federalAssembly: "lowerChamber",
   dail: "lowerChamber",
   // Beta-country parliamentary lower chambers (FR/IT/ES/SE/TR): resolve with
@@ -101,5 +102,11 @@ export function getElectionMethod(
   if (!countryId) return undefined;
   const position = positionForElectionType(electionType);
   if (!position) return undefined;
+  // Both post-communist Romanian eras use regional proportional elections for
+  // these chamber keys. The Cold War chamber has a different key, so this
+  // country/type route is safe for callers that lack a preset argument.
+  if (countryId === "RO" && (electionType === "chamberOfDeputies" || electionType === "senat")) {
+    return "pr_hareQuota";
+  }
   return getCountryConfig(countryId).electionSystems[position];
 }

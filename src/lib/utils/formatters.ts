@@ -594,6 +594,9 @@ export function electionToLarpYear(
     return years.ngGeneral + (cycle - 1) * 4;
   }
   if (ctx.preset === "1991-default") {
+    if (countryId === "RO" && (electionType === "chamberOfDeputies" || electionType === "senat")) {
+      return 1992 + (cycle - 1) * 4;
+    }
     if ((electionType === "sejm" || electionType === "senat") && countryId === "PL") {
       return cycle === 1 ? (years.plSejm ?? 1991) : (years.plSejm ?? 1991) + 2 + (cycle - 2) * 4;
     }

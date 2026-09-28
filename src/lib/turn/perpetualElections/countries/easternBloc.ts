@@ -1,4 +1,11 @@
-import { ensureEasternBlocAssemblyElections } from "../shared";
+import { getDb } from "@/lib/mongodb";
+import { getCurrentTurnAndCtx } from "../engine";
+import {
+  easternBlocElectionsLive,
+  ensureEasternBlocAssemblyElections,
+  ensureRegionalDelegateElections,
+  seatsFromRegionField,
+} from "../shared";
 
 /** Hungary National Assembly. */
 export async function ensureHUElections(now: Date, inFlightTurn?: number): Promise<void> {
@@ -11,8 +18,31 @@ export async function ensureHUElections(now: Date, inFlightTurn?: number): Promi
   );
 }
 
-/** Romania Grand National Assembly. */
+/** Romania's constituent bicameral parliament in 1991; Cold War assembly otherwise. */
 export async function ensureROElections(now: Date, inFlightTurn?: number): Promise<void> {
+  const db = await getDb();
+  const { ctx } = await getCurrentTurnAndCtx(db);
+  if (ctx.preset === "1991-default") {
+    for (const [electionType, field, label] of [
+      ["chamberOfDeputies", "houseDistricts", "Assembly of Deputies"],
+      ["senat", "stateSenateSeats", "Senate"],
+    ] as const) {
+      await ensureRegionalDelegateElections(
+        {
+          countryId: "RO",
+          electionType,
+          seatsForRegions: (regions) => seatsFromRegionField(regions, field),
+          openPrimaryImmediately: true,
+          statusGated: true,
+          electionsLiveGate: easternBlocElectionsLive,
+          label,
+        },
+        now,
+        inFlightTurn
+      );
+    }
+    return;
+  }
   await ensureEasternBlocAssemblyElections(
     "RO",
     "grandNationalAssembly",
