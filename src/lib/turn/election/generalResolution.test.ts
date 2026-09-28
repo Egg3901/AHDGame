@@ -175,6 +175,11 @@ describe("resolveOneGeneralElection", () => {
       makeCursor(ids.map((id) => ({ _id: id, userId: new ObjectId() })))
     );
     db.collection("countryState");
+    db.collection("gameState");
+    db.collectionMocks.gameState!.findOne.mockResolvedValue({
+      _id: "current",
+      preset: "1991-default",
+    });
     db.collectionMocks.countryState!.findOne.mockResolvedValue({
       _id: "BG",
       governmentType: "parliamentaryRepublic",
@@ -194,6 +199,49 @@ describe("resolveOneGeneralElection", () => {
     expect(officials.map(({ party, seatsHeld }) => [party, seatsHeld])).toEqual([
       ["A", 3],
       ["B", 2],
+    ]);
+  });
+
+  it("seats a 2027 Bulgarian regional race by proportional Hare allocation", async () => {
+    const election = makeElection({
+      countryId: "BG",
+      electionType: "nationalAssembly",
+      state: "BG31",
+      cycle: 1,
+      electionYear: 2030,
+      totalSeats: 5,
+      status: "completed",
+    });
+    const ids = [new ObjectId(), new ObjectId(), new ObjectId()];
+    const votes = [100, 60, 45];
+    const parties = ["A", "B", "C"];
+    const candidates = ids.map((id, index) => {
+      const candidate = makeCandidate(election._id, { characterId: id, party: parties[index] });
+      candidate._id = id;
+      return candidate;
+    });
+    const tally = makeTally(
+      election._id,
+      Object.fromEntries(ids.map((id, index) => [id.toString(), votes[index]]))
+    );
+    db.collectionMocks.electionCandidates!.find.mockReturnValue(makeCursor(candidates));
+    db.collectionMocks.characters!.find.mockReturnValue(
+      makeCursor(ids.map((id) => ({ _id: id, userId: new ObjectId() })))
+    );
+    db.collection("gameState");
+    db.collectionMocks.gameState!.findOne.mockResolvedValue({
+      _id: "current",
+      preset: "2027-default",
+    });
+
+    await resolveBulgarianElection(db as unknown as Db, election, tally, CURRENT_TURN, NOW);
+    const officials = db.collectionMocks.electedOfficials!.insertOne.mock.calls.map(
+      (call) => call[0] as { party: string; seatsHeld: number }
+    );
+    expect(officials.map(({ party, seatsHeld }) => [party, seatsHeld])).toEqual([
+      ["A", 2],
+      ["B", 2],
+      ["C", 1],
     ]);
   });
 

@@ -105,11 +105,30 @@ export async function resolveOneGeneralElection(
   }
 
   try {
+    // BG changes from the 1991 transitional assembly to modern party-list PR.
+    // The base config is the 1979 single-party FPTP chamber, so read the live
+    // preset before method dispatch instead of silently using that default.
+    const bgPreset =
+      election.countryId === "BG"
+        ? (await (await getGameStateCollection(db)).findOne({ _id: "current" }))?.preset
+        : undefined;
+    if (election.countryId === "BG" && !bgPreset) {
+      throw new Error("Bulgaria election resolution requires the active preset");
+    }
+    const electionMethod = getElectionMethod(election.countryId, election.electionType, bgPreset);
+    if (
+      election.countryId === "BG" &&
+      election.electionType === "nationalAssembly" &&
+      bgPreset === "2027-default" &&
+      electionMethod !== "pr_hareQuota"
+    ) {
+      throw new Error("Bulgaria 2027 Assembly requires parliamentary proportional representation");
+    }
     // Phase 4: Sainte-Laguë chambers (DE Landtag) use proportional allocation
     // (5% Land-level threshold) instead of FPTP. Dispatch on the configured
     // method — `pr_sainteLague` is unique to the DE Landtag — before any other
     // logic runs.
-    if (getElectionMethod(election.countryId, election.electionType) === "pr_sainteLague") {
+    if (electionMethod === "pr_sainteLague") {
       const { resolveDELandtagElection } = await import("./germanyLandtag");
       if (!tally?.finalized) {
         await resolveDELandtagElection(db, election, now);
@@ -1218,7 +1237,7 @@ export async function resolveOneGeneralElection(
     // so other AMS chambers (SCO Holyrood, WAL Senedd) do NOT trigger the
     // Bundestag-specific reconciler.
     if (
-      getElectionMethod(election.countryId, election.electionType) === "ams" &&
+      electionMethod === "ams" &&
       (election.electionType === "bundestag" || election.electionType === "snap_bundestag")
     ) {
       try {

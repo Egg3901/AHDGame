@@ -6,6 +6,25 @@ import {
   seatsFromRegionField,
 } from "@/lib/turn/perpetualElections/shared";
 import { bgElectionSeatsForPreset } from "./rules/assemblyTransition";
+import { getElectionMethod } from "@/lib/elections/electionMethod";
+
+export function bgAssemblySeatMapForPreset(
+  regions: Parameters<typeof seatsFromRegionField>[0],
+  preset: string | undefined,
+  preIterationActive: boolean
+): Record<string, number> {
+  if (
+    preset === "2027-default" &&
+    getElectionMethod("BG", "nationalAssembly", preset) !== "pr_hareQuota"
+  ) {
+    throw new Error("Bulgaria 2027 Assembly requires parliamentary proportional representation");
+  }
+  return bgElectionSeatsForPreset(
+    seatsFromRegionField(regions, "houseDistricts"),
+    preset,
+    preIterationActive
+  );
+}
 
 /** Bulgaria's regional National Assembly election. */
 export async function ensureBGElections(now: Date, inFlightTurn?: number): Promise<void> {
@@ -14,11 +33,7 @@ export async function ensureBGElections(now: Date, inFlightTurn?: number): Promi
       countryId: "BG",
       electionType: "nationalAssembly",
       seatsForRegions: (regions, preset, ctx) =>
-        bgElectionSeatsForPreset(
-          seatsFromRegionField(regions, "houseDistricts"),
-          preset,
-          ctx.preIterationActive === true
-        ),
+        bgAssemblySeatMapForPreset(regions, preset, ctx.preIterationActive === true),
       openPrimaryImmediately: true,
       minPrimaryHours: 12,
       statusGated: true,

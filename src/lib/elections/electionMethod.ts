@@ -84,8 +84,8 @@ export function isListTierMethod(m: ElectionMethod | undefined): boolean {
 
 /**
  * The configured election method for a (country, electionType). Returns the
- * static config default today; a future in-game layer can consult per-game
- * state here before falling back to config. Returns undefined when the country
+ * preset config when supplied, or the base country config when omitted.
+ * A future in-game layer can consult per-game state. Returns undefined when the country
  * does not configure that position (caller decides the fallback).
  *
  * `countryId` is intentionally widened to accept `null | undefined`: legacy US
@@ -97,7 +97,8 @@ export function isListTierMethod(m: ElectionMethod | undefined): boolean {
  */
 export function getElectionMethod(
   countryId: CountryId | null | undefined,
-  electionType: string
+  electionType: string,
+  preset?: string
 ): ElectionMethod | undefined {
   if (!countryId) return undefined;
   const position = positionForElectionType(electionType);
@@ -108,5 +109,5 @@ export function getElectionMethod(
   if (countryId === "RO" && (electionType === "chamberOfDeputies" || electionType === "senat")) {
     return "pr_hareQuota";
   }
-  return getCountryConfig(countryId).electionSystems[position];
+  return getCountryConfig(countryId, preset).electionSystems[position];
 }
