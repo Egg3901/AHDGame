@@ -147,6 +147,56 @@ beforeEach(async () => {
 // ── resolveOneGeneralElection ─────────────────────────────────────────────────
 
 describe("resolveOneGeneralElection", () => {
+  it("seats the 1991 Bulgarian regional list by D'Hondt", async () => {
+    const election = makeElection({
+      countryId: "BG",
+      electionType: "nationalAssembly",
+      state: "BG_SOF",
+      cycle: 1,
+      electionYear: 1991,
+      totalSeats: 5,
+      status: "completed",
+    });
+    const ids = [new ObjectId(), new ObjectId(), new ObjectId()];
+    const votes = [100, 80, 30];
+    const parties = ["A", "B", "C"];
+    const candidates = ids.map((id, index) => {
+      const candidate = makeCandidate(election._id, { characterId: id, party: parties[index] });
+      candidate._id = id;
+      return candidate;
+    });
+    const tally = makeTally(
+      election._id,
+      Object.fromEntries(ids.map((id, index) => [id.toString(), votes[index]]))
+    );
+    db.collectionMocks.electionCandidates!.find.mockReturnValue(makeCursor(candidates));
+    db.collectionMocks.characters!.find.mockReturnValue(
+      makeCursor(ids.map((id) => ({ _id: id, userId: new ObjectId() })))
+    );
+    db.collection("countryState");
+    db.collectionMocks.countryState!.findOne.mockResolvedValue({
+      _id: "BG",
+      governmentType: "parliamentaryRepublic",
+    });
+
+    const { resolveOneGeneralElection } = await import("./generalResolution");
+    await resolveOneGeneralElection(
+      db as unknown as Db,
+      election,
+      tally,
+      CURRENT_TURN,
+      NOW,
+      new Set(["A", "B", "C"])
+    );
+    const officials = db.collectionMocks.electedOfficials!.insertOne.mock.calls.map(
+      (call) => call[0] as { party: string; seatsHeld: number }
+    );
+    expect(officials.map(({ party, seatsHeld }) => [party, seatsHeld])).toEqual([
+      ["A", 3],
+      ["B", 2],
+    ]);
+  });
+
   // ── Edge case: already-finalized tally ──────────────────────────────────────
 
   it("recovers gracefully when tally is already finalized — marks election resolved without re-writing officials", async () => {

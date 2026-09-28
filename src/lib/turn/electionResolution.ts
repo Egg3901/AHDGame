@@ -14,6 +14,7 @@ import { recordAuditBulk } from "@/lib/audit/recordAudit";
 import type { ActionAuditInput } from "@/lib/db/types/actionAuditLog";
 import { resolvePresidentialWinnerCandidateId } from "@/lib/elections/presidentialResolutionDisplay";
 import { TALLY_WITH_LATEST_SNAPSHOT_ONLY } from "@/lib/electionEngine/tallyProjections";
+import { readBgOrdinaryEligibleParties } from "@/lib/turn/election/bgOrdinaryEligibility";
 
 export { HOUSE_SEATS, UK_COMMONS_SEATS };
 export { spawnHouseElection, spawnCommonsElection };
@@ -62,6 +63,21 @@ export async function resolveGeneralElections(
   ]);
   const currentTurn = gameStateDoc?.currentTurn ?? 0;
   const tallyMap = new Map(tallies.map((t) => [t.electionId.toString(), t]));
+  const bgOrdinaryRaces =
+    gameStateDoc?.preset === "1991-default"
+      ? completedElections.filter(
+          (e) => e.countryId === "BG" && e.electionType === "nationalAssembly" && e.cycle === 1
+        )
+      : [];
+  let bgEligibleParties: ReadonlySet<string> | null = null;
+  if (bgOrdinaryRaces.length > 0) {
+    bgEligibleParties = await readBgOrdinaryEligibleParties(db);
+    if (!bgEligibleParties) {
+      console.warn(
+        "[Turn] Deferring Bulgaria 1991 Assembly resolution until all regional tallies are valid"
+      );
+    }
+  }
 
   let resolved = 0;
   const allNewsOutcomes: ElectionNewsOutcome[] = [];
@@ -103,8 +119,18 @@ export async function resolveGeneralElections(
       const chunkResults = await Promise.all(
         chunk.map(async (election) => {
           try {
+            if (bgOrdinaryRaces.includes(election) && !bgEligibleParties) {
+              return { election, result: null };
+            }
             const tally = tallyMap.get(election._id.toString());
-            const result = await resolveOneGeneralElection(db, election, tally, currentTurn, now);
+            const result = await resolveOneGeneralElection(
+              db,
+              election,
+              tally,
+              currentTurn,
+              now,
+              bgOrdinaryRaces.includes(election) ? bgEligibleParties : null
+            );
             return { election, result };
           } catch (err) {
             console.error(

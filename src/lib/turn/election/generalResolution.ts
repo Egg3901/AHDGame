@@ -46,6 +46,7 @@ import { notifyGovernorOfSenateVacancy } from "@/lib/governors/senateVacancy";
 import { maybeApplyIndependenceDesireHook } from "@/lib/turn/election/independenceDesireHook";
 import { getExecutiveOfficeKeys } from "@/lib/elections/executiveOffice";
 import { getElectionMethod } from "@/lib/elections/electionMethod";
+import { bgDhondtSeats } from "@/lib/countries/bg/rules/ordinaryElection";
 import type { ElectionNewsOutcome } from "./electionNotifications";
 import { voidDebateSessionsForElection } from "@/lib/debate/debateSessionLifecycle";
 import {
@@ -74,8 +75,18 @@ export async function resolveOneGeneralElection(
   election: Election,
   tally: ElectionVoteTally | null | undefined,
   currentTurn: number,
-  now: Date
+  now: Date,
+  bgEligibleParties: ReadonlySet<string> | null = null
 ): Promise<OneElectionResult> {
+  if (
+    election.countryId === "BG" &&
+    election.electionType === "nationalAssembly" &&
+    election.cycle === 1 &&
+    election.electionYear === 1991 &&
+    !bgEligibleParties
+  ) {
+    throw new Error("Bulgaria 1991 Assembly requires the nationwide party threshold");
+  }
   const newsOutcomes: ElectionNewsOutcome[] = [];
 
   // Atomic claim: prevent concurrent resolution from corrupting office data.
@@ -476,8 +487,43 @@ export async function resolveOneGeneralElection(
           (await getCountryState(db, election.countryId)).governmentType
         )
       : null;
+    const bgAllocation =
+      bgEligibleParties &&
+      election.countryId === "BG" &&
+      election.electionType === "nationalAssembly" &&
+      election.cycle === 1
+        ? (() => {
+            const seatsEstimate = bgDhondtSeats(
+              ranked.map((candidate) => {
+                const row = candidateMap.get(candidate.id);
+                if (!row?.party) throw new Error("Bulgaria list candidate has no party");
+                return {
+                  id: candidate.id,
+                  party: row.party,
+                  votes: candidate.votes,
+                  listOrder: row.enteredAt?.getTime() ?? 0,
+                };
+              }),
+              totalSeats,
+              bgEligibleParties
+            );
+            return {
+              isMultiSeat: true,
+              authoritativeSeats: totalSeats,
+              seatsEstimate,
+              winners: Object.entries(seatsEstimate).filter(([, seats]) => seats > 0) as [
+                string,
+                number,
+              ][],
+              losers: Object.entries(seatsEstimate)
+                .filter(([, seats]) => seats === 0)
+                .map(([id]) => id),
+            };
+          })()
+        : null;
     const { isMultiSeat, seatsEstimate, winners, losers } =
       districted ??
+      bgAllocation ??
       allocateSeats(
         election.electionType,
         election.state,
