@@ -389,7 +389,7 @@ export const INITIAL_RATES: Partial<Record<CountryId, number>> = {
   UK: 0.75,
   JP: 106.0,
   DE: 0.92, // EUR starts near USD parity (ECB policy rate similar to Fed baseline)
-  IE: 0.92, // IEP — euro-era parity with EUR (display € when eurozoneEnabled)
+  IE: 0.92, // IEP code carries a normalized euro-scale accounting unit in modern presets.
   BR: 5.0, // BRL — ~5 BRL per USD
   CN: 7.2, // CNY — ~7.2 CNY per USD
   NG: 1550, // NGN — approximate naira per USD reference point
@@ -743,7 +743,12 @@ export function getEraAwareCurrencySymbol(
   eurozoneEnabled: boolean,
   _anchorCountryId?: CountryId
 ): string {
+  // 1953 stores actual marks; 1979/1991 store EUR-equivalent German units.
+  if (code === "EUR" && preset === "1953-default") return "DM";
   if (code === "EUR" && !eurozoneEnabled && PRE_EUROZONE_PRESETS.has(preset)) return "€ eq.";
+  // Modern presets seeded IEP as a normalized euro-scale accounting unit.
+  if (code === "IEP" && !PRE_EUROZONE_PRESETS.has(preset)) return "€ eq.";
+  if (code === "BRL" && preset === "1953-default") return "Cr$";
   if (code === "BRL" && PRE_REAL_PRESETS.has(preset)) return "BRL eq.";
   return CURRENCY_SYMBOLS[code] ?? code;
 }

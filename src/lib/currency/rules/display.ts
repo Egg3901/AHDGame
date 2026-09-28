@@ -47,8 +47,15 @@ export function displayQuote(params: {
   const live = rates[code];
   const rate = validDisplayRate(live) ? live : baseRates?.[code];
   if (!validDisplayRate(rate)) return { rate: 1, symbol: "₳" };
-  if (local && code === "EUR" && !context.eurozoneEnabled && PRE_EURO_PRESETS.has(context.preset)) {
-    return { rate: rate * MARKS_PER_EURO_ACCOUNTING_UNIT, symbol: "DM" };
+  if (local && code === "EUR") {
+    // Rate calibration is not uniform across presets: 1953 stores marks,
+    // while 1979/1991 already divide the mark rate by 1.95583.
+    const marksPerLedgerUnit =
+      context.preset === "1953-default" ? 1 : MARKS_PER_EURO_ACCOUNTING_UNIT;
+    if (!context.eurozoneEnabled && PRE_EURO_PRESETS.has(context.preset)) {
+      return { rate: rate * marksPerLedgerUnit, symbol: "DM" };
+    }
+    return { rate: (rate * marksPerLedgerUnit) / MARKS_PER_EURO_ACCOUNTING_UNIT, symbol: "€" };
   }
   return {
     rate,

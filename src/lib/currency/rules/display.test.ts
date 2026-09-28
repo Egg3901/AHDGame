@@ -5,7 +5,7 @@ const early: CurrencyDisplayContext = { preset: "1991-default", eurozoneEnabled:
 const rates = { EUR: 0.85, IEP: 0.7, GBP: 0.6, BRL: 5, USD: 1.1 };
 
 describe("currency denomination and display", () => {
-  it.each(["1953-default", "1979-default", "1991-default"])(
+  it.each(["1979-default", "1991-default"])(
     "converts normalized German units to marks in %s",
     (preset) => {
       const quote = displayQuote({
@@ -108,4 +108,22 @@ describe("currency denomination and display", () => {
       ).toEqual({ rate: 1, symbol: "₳" });
     }
   );
+});
+
+describe("1953 ledger calibration", () => {
+  it("preserves actual marks before adoption and converts their display after adoption", () => {
+    const params = {
+      preference: "home" as const,
+      homeCurrency: "EUR" as const,
+      rates: { EUR: 4.2 },
+      context: { preset: "1953-default", eurozoneEnabled: false },
+    };
+    expect(displayQuote(params)).toEqual({ rate: 4.2, symbol: "DM" });
+    const adopted = displayQuote({
+      ...params,
+      context: { ...params.context, eurozoneEnabled: true },
+    });
+    expect(adopted.symbol).toBe("€");
+    expect(adopted.rate).toBeCloseTo(4.2 / 1.95583);
+  });
 });

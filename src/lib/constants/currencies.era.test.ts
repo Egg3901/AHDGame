@@ -10,8 +10,8 @@ describe("getEraAwareCurrencySymbol", () => {
     expect(getEraAwareCurrencySymbol("IEP", "1991-default", false, "IE")).toBe("IR£");
   });
 
-  it("keeps IEP denominated in Irish pounds after euro adoption", () => {
-    expect(getEraAwareCurrencySymbol("IEP", "2019-default", true, "IE")).toBe("IR£");
+  it("identifies modern IEP-code balances as normalized euro-scale units", () => {
+    expect(getEraAwareCurrencySymbol("IEP", "2019-default", true, "IE")).toBe("€ eq.");
   });
 
   it("preserves EUR-equivalent denomination for legacy EUR/IE callers when eurozone disabled", () => {
@@ -52,4 +52,10 @@ describe("getEraAwareCurrencySymbol", () => {
     expect(getEraAwareCurrencySymbol("USD", "1991-default", false, "US")).toBe("$");
     expect(getEraAwareCurrencySymbol("NGN", "1991-default", false, "NG")).toBe("₦");
   });
+});
+
+it("preserves the actual marks and cruzeiros used by the 1953 seed", () => {
+  expect(getEraAwareCurrencySymbol("EUR", "1953-default", false, "DE")).toBe("DM");
+  expect(getEraAwareCurrencySymbol("EUR", "1953-default", true, "DE")).toBe("DM");
+  expect(getEraAwareCurrencySymbol("BRL", "1953-default", false, "BR")).toBe("Cr$");
 });
