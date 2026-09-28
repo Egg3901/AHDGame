@@ -19,13 +19,18 @@ function world() {
     euroAdoptedCountries: [],
   };
   db.collection("gameState").findOne.mockImplementation(async () => structuredClone(state));
-  db.collection("gameState").updateOne.mockImplementation(async (_filter, update) => {
-    const country = update.$addToSet?.euroAdoptedCountries;
-    if (country && !state.euroAdoptedCountries.includes(country))
-      state.euroAdoptedCountries.push(country);
-    Object.assign(state, update.$set);
-    return { matchedCount: 1 };
-  });
+  db.collection("gameState").updateOne.mockImplementation(
+    async (
+      _filter: unknown,
+      update: { $set?: Record<string, unknown>; $addToSet?: { euroAdoptedCountries?: string } }
+    ) => {
+      const country = update.$addToSet?.euroAdoptedCountries;
+      if (country && !state.euroAdoptedCountries.includes(country))
+        state.euroAdoptedCountries.push(country);
+      Object.assign(state, update.$set);
+      return { matchedCount: 1 };
+    }
+  );
   db.collection("organizationMemberships").find.mockReturnValue({
     toArray: async () => ["DE", "IE", "UK"].map((countryId) => ({ countryId })),
   });
@@ -40,7 +45,7 @@ function world() {
     toArray: async () => ["ECB", "IE", "UK"].map((_id) => ({ _id })),
   });
   db.collection("centralBanks").findOne.mockResolvedValue({ _id: "ECB", primeRate: 3 });
-  db.collection("centralBanks").bulkWrite.mockImplementation(async (ops) => ({
+  db.collection("centralBanks").bulkWrite.mockImplementation(async (ops: unknown[]) => ({
     matchedCount: ops.length,
   }));
   return { db, asDb: db as unknown as Db, state };

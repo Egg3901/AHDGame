@@ -40,7 +40,7 @@ export async function GET() {
     (countryId) =>
       !euroAdoptionRefusal({
         countryId,
-        year: gs ? resolveGameYear(gs) : 0,
+        year: gs ? (resolveGameYear(gs) ?? 0) : 0,
         europeanMembers: members.map((member) => member.countryId),
         consentedCountries: euroConsentedCountries(euroState),
         union: gs?.euroMonetaryUnion,

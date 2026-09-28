@@ -280,6 +280,7 @@ describe("GET /api/country/[code]/fomc governance contract", () => {
   });
 
   it("command flag on: RU chair is still command-blocked", async () => {
+    mockGetCentralBankScope.mockResolvedValue({ bankId: "RU", memberCountries: ["RU"] });
     mockRequireAuth.mockResolvedValue({
       ok: true,
       user: {

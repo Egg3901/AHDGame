@@ -178,11 +178,13 @@ describe("euro monetary-operation authority", () => {
       db.collection("gameState").findOne.mockResolvedValue({ euroMonetaryUnion: union });
       db.collection("gameConfig").findOne.mockResolvedValue({ moneySupplyEnabled: true });
       db.collection("federalBudget").findOne.mockResolvedValue({ gdp: 1000000 });
-      db.collection("centralBanks").findOne.mockImplementation(async ({ _id }) => ({
-        _id,
-        countryId: _id === "ECB" ? "DE" : "UK",
-        chairCharacterId: _id === "ECB" ? (commonChair ? CHAIR_ID : "common-chair") : CHAIR_ID,
-      }));
+      db.collection("centralBanks").findOne.mockImplementation(
+        async ({ _id }: { _id: string }) => ({
+          _id,
+          countryId: _id === "ECB" ? "DE" : "UK",
+          chairCharacterId: _id === "ECB" ? (commonChair ? CHAIR_ID : "common-chair") : CHAIR_ID,
+        })
+      );
       const response = await POST(
         request({ type: "liquidity_injection", amount: 1000 }),
         context("UK")

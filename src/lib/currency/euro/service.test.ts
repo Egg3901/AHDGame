@@ -43,29 +43,40 @@ function world() {
     { currencyCode: "GBP", rate: 0.6 },
   ];
   db.collection("gameState").findOne.mockImplementation(async () => structuredClone(state));
-  db.collection("gameState").updateOne.mockImplementation(async (_filter, update) => {
-    Object.assign(state, update.$set);
-    return { matchedCount: 1 };
-  });
+  db.collection("gameState").updateOne.mockImplementation(
+    async (_filter: unknown, update: { $set?: Record<string, unknown> }) => {
+      Object.assign(state, update.$set);
+      return { matchedCount: 1 };
+    }
+  );
   db.collection("organizationMemberships").find.mockReturnValue({
     toArray: async () => [{ countryId: "DE" }, { countryId: "IE" }, { countryId: "UK" }],
   });
   db.collection("exchangeRates").find.mockReturnValue({ toArray: async () => rates });
   db.collection("centralBanks").find.mockReturnValue({ toArray: async () => banks });
-  db.collection("centralBanks").findOne.mockImplementation(async (filter) =>
+  db.collection("centralBanks").findOne.mockImplementation(async (filter: { _id: string }) =>
     banks.find((bank) => bank._id === filter._id)
   );
-  db.collection("centralBanks").bulkWrite.mockImplementation(async (ops) => {
-    for (const {
-      updateOne: { filter, update },
-    } of ops) {
-      const bank = banks.find((bank) => bank._id === filter._id);
-      if (!bank) continue;
-      Object.assign(bank, update.$set);
-      for (const key of Object.keys(update.$unset ?? {})) delete bank[key];
+  db.collection("centralBanks").bulkWrite.mockImplementation(
+    async (
+      ops: {
+        updateOne: {
+          filter: { _id: string };
+          update: { $set?: Record<string, unknown>; $unset?: Record<string, unknown> };
+        };
+      }[]
+    ) => {
+      for (const {
+        updateOne: { filter, update },
+      } of ops) {
+        const bank = banks.find((bank) => bank._id === filter._id);
+        if (!bank) continue;
+        Object.assign(bank, update.$set);
+        for (const key of Object.keys(update.$unset ?? {})) delete bank[key];
+      }
+      return { matchedCount: ops.length };
     }
-    return { matchedCount: ops.length };
-  });
+  );
   return { db, asDb: db as unknown as Db, state, banks, rates };
 }
 

@@ -110,7 +110,7 @@ export async function reconcileEuroMonetaryUnion(
         .toArray(),
     ]);
     const plan = planEuroSettlement({
-      year: resolveGameYear(state),
+      year: resolveGameYear(state) ?? 0,
       turn,
       preset: state.preset ?? DEFAULT_SEED_PRESET,
       europeanMembers: members.map((member) => member.countryId),

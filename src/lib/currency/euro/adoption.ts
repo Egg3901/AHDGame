@@ -40,7 +40,7 @@ export async function loadEuroAdoptionConditions(
   ]);
   return {
     countryId,
-    year: state ? resolveGameYear(state) : 0,
+    year: state ? (resolveGameYear(state) ?? 0) : 0,
     europeanMembers: members.map((member) => member.countryId),
     consentedCountries: euroConsentedCountries(state ?? {}),
     union: state?.euroMonetaryUnion,
