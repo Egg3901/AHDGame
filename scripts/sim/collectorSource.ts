@@ -13,6 +13,7 @@
  */
 
 import { execFileSync } from "child_process";
+import { resolve } from "path";
 import { buildActorCoverageSection, summarizeActorCoverageForVerdict } from "@/lib/sim/actorReport";
 import type { ActorCoverageManifest } from "@/lib/sim/actorCoverage";
 import { sourceProvenanceFlags, type VerifiedSimSource } from "./simSource";
@@ -79,6 +80,19 @@ export function parseCollectorSourceArgs(argv: string[]): {
  * treats a missing SHA on a pinned job as fail-closed, never as a pass. */
 export function resolveCollectorCommit(cwd: string): string | null {
   try {
+    const topLevel = execFileSync("git", ["rev-parse", "--show-toplevel"], {
+      cwd,
+      encoding: "utf8",
+    }).trim();
+    const requested = resolve(cwd);
+    const actual = resolve(topLevel);
+    if (
+      process.platform === "win32"
+        ? requested.toLowerCase() !== actual.toLowerCase()
+        : requested !== actual
+    ) {
+      return null;
+    }
     const head = execFileSync("git", ["rev-parse", "HEAD"], { cwd, encoding: "utf8" }).trim();
     return /^[0-9a-f]{40}$/.test(head) ? head : null;
   } catch {

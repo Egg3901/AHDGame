@@ -38,33 +38,30 @@ describe("presidential ruleset seam (rules freeze)", () => {
     expect(v2).toEqual(v1);
   });
 
-  it("v3 differs from v1 ONLY by its three intended structural flips; every other knob still matches", () => {
-    // Two subsystems have landed their structural v3 flips: the calendar rework
-    // (primaryCalendar -> "stretched") and the nomination rework
-    // (conventionEnabled -> true, suspendTransferMode -> "affinity"). All three
-    // are structural (which path a race takes, not magnitude), safe mid-race,
-    // 1964+ spawns only. This guard pins those three as intended while asserting
-    // EVERY OTHER v3 knob remains at v1 identity -- so an accidental flip of an
-    // UNTOUCHED knob (momentum cap, transfer/endorsement magnitudes, surrogate
-    // weights) still fails the test.
+  it("v3 carries its intended structural and presidential-general calibrations", () => {
     const v1 = presidentialRulesetFor({ rulesetVersion: 1 });
     const v3 = presidentialRulesetFor({ rulesetVersion: 3 });
 
-    // The three intended divergences.
     expect(v1.primaryCalendar).toBe("compressed");
     expect(v3.primaryCalendar).toBe("stretched");
     expect(v1.conventionEnabled).toBe(false);
     expect(v3.conventionEnabled).toBe(true);
     expect(v1.suspendTransferMode).toBe("flat");
     expect(v3.suspendTransferMode).toBe("affinity");
+    expect(v3.campaignStrengthMaxBonus).toBe(0.25);
+    expect(v3.applyExplicitLeanMultiplier).toBe(false);
+    expect(v3.tacticalMovementRate).toBe(0.05);
+    expect(v3.incumbentApprovalStateWeight).toBe(0.5);
 
-    // Everything else must still equal v1, knob by knob -- crucially the
-    // magnitude knobs the nomination rework deliberately left at identity.
     const {
       version: _v1ver,
       primaryCalendar: _v1cal,
       conventionEnabled: _v1conv,
       suspendTransferMode: _v1mode,
+      campaignStrengthMaxBonus: _v1strength,
+      applyExplicitLeanMultiplier: _v1lean,
+      tacticalMovementRate: _v1tactical,
+      incumbentApprovalStateWeight: _v1approval,
       ...v1Rest
     } = v1;
     const {
@@ -72,6 +69,10 @@ describe("presidential ruleset seam (rules freeze)", () => {
       primaryCalendar: _v3cal,
       conventionEnabled: _v3conv,
       suspendTransferMode: _v3mode,
+      campaignStrengthMaxBonus: _v3strength,
+      applyExplicitLeanMultiplier: _v3lean,
+      tacticalMovementRate: _v3tactical,
+      incumbentApprovalStateWeight: _v3approval,
       ...v3Rest
     } = v3;
     expect(v3Rest).toEqual(v1Rest);

@@ -1,9 +1,10 @@
 /**
  * How the presidential election is decided and who is on track to win. Votes
  * accumulate per state (and per Maine and Nebraska district) each turn through
- * accumulatePresidentVoteTurn using the swing-flow model; a state's partisan lean
- * nudges candidates by at most 20% (leanVoteMultiplier), independents pay
- * INDEPENDENT_VOTE_PENALTY, and the tally started by initPresidentVoteTally
+ * accumulatePresidentVoteTurn using the swing-flow model. Frozen legacy
+ * rulesets retain the post-distribution lean nudge; current rules rely on the
+ * demographic substrate and add bounded local tactical movement. Independents
+ * pay INDEPENDENT_VOTE_PENALTY, and the tally started by initPresidentVoteTally
  * resolves the Electoral College.
  */
 
@@ -20,7 +21,6 @@ import { ObjectId } from "mongodb";
 import type { Db } from "mongodb";
 import type {
   Campaign,
-  DemographicCategory,
   Election,
   ElectionCandidate,
   ElectionVoteTally,
@@ -37,6 +37,7 @@ import {
   resolveTurnWindow,
   PARTY_STRENGTH_BY_OFFICE,
 } from "@/lib/electionEngine";
+import { ELECTION_DAY_TURNS, RAMP_TURNS } from "@/lib/electionEngine/voteCalculations";
 import { distributeVotesBySwingFlow } from "@/lib/electionEngine/voteDistributionSwingFlow";
 import {
   createLedgerSink,
@@ -79,7 +80,15 @@ import {
   capTurnSliceToRemainingElectorate,
 } from "@/lib/electionEngine/resolvedTurnout";
 import { campaignStrengthVoteMultiplier } from "@/lib/campaigns/campaignStrength";
-import { presidentialRulesetFor } from "@/lib/elections/presidentialRuleset";
+import {
+  presidentialRulesetFor,
+  type PresidentialRuleset,
+} from "@/lib/elections/presidentialRuleset";
+import {
+  applyTacticalMovement,
+  blendIncumbentApproval,
+  isClosingVotingTurn,
+} from "@/lib/elections/presidentialGeneralRules";
 import { getGroundGameSwingBonus, getGroundGameGotvBonus } from "@/lib/campaigns/opsEffects";
 import { loadPartyGroupFavorability } from "@/lib/governorOffice/address/partyGroupFavorabilityLoader";
 import { buildGranularElectorateSubstrate } from "@/lib/demographics/granularElectorate";
@@ -290,9 +299,10 @@ export interface PresidentVoteTurnCalibration {
    * Which approval feeds the directional incumbency driver.
    *   "national" — legacy: one stored national approval, identical in every unit.
    *   "state"    — the approval of the state the votes are being cast in.
-   * Defaults to "national" so production is unchanged.
+   *   "blend"    — ruleset-weighted national/state blend.
+   * Defaults to the frozen ruleset behavior.
    */
-  incumbentApprovalSource?: "national" | "state";
+  incumbentApprovalSource?: "national" | "state" | "blend";
   /** Override `INCUMBENCY_APPROVAL_PIVOT` for this run. */
   incumbencyApprovalPivot?: number;
   /**
@@ -308,6 +318,19 @@ export interface PresidentVoteTurnCalibration {
    * to A/B the channel against the identical live inputs.
    */
   referendumScale?: number;
+  /**
+   * Dry-run-only presidential-general knobs for deterministic A/B simulation.
+   * Production calls ignore this field even if it is supplied accidentally.
+   */
+  rulesetOverride?: Partial<
+    Pick<
+      PresidentialRuleset,
+      | "campaignStrengthMaxBonus"
+      | "applyExplicitLeanMultiplier"
+      | "tacticalMovementRate"
+      | "incumbentApprovalStateWeight"
+    >
+  >;
 }
 
 /** What a dry run hands back: enough to score winners and measure share deltas. */
@@ -346,10 +369,13 @@ export async function accumulatePresidentVoteTurn(
   // may recompute a recorded turn.
   if (!calibration?.dryRun && tally.turnSnapshots?.some((s) => s.turn === turnNumber)) return;
 
-  // Rules freeze: the race runs under the ruleset it was stamped with at
-  // spawn (legacy races resolve to v1), so mid-cycle deploys cannot change
-  // how a live presidency is decided.
-  const ruleset = presidentialRulesetFor(election);
+  // Rules family: legacy races resolve to v1. The active v3 family receives
+  // v3 balance corrections prospectively; accumulated ballots are untouched.
+  const stampedRuleset = presidentialRulesetFor(election);
+  const ruleset =
+    calibration?.dryRun && calibration.rulesetOverride
+      ? { ...stampedRuleset, ...calibration.rulesetOverride }
+      : stampedRuleset;
 
   // Live (census-updated, era-gated) EV units for per-unit accumulation; must
   // match the unit set initPresidentVoteTally bucketed (P1d-2). The state set
@@ -892,13 +918,19 @@ export async function accumulatePresidentVoteTurn(
         // Reg maps (third parties absent) degrade to the no-Reg baseline.
         regByParty,
         // Approval-scaled directional incumbency for the President's own race.
-        // Calibration: "state" swaps the single national number for this
-        // state's own government approval, so the incumbent is rewarded and
-        // punished where he actually governed well or badly. Production
-        // default stays "national" until the replay harness clears it.
+        // Calibration overrides let the replay harness isolate either source.
+        // Production uses the ruleset-weighted national/state blend.
         incumbentPartyId: incumbentExec?.partyId,
         incumbentApproval:
-          calibration?.incumbentApprovalSource === "state" ? approvalPct : incumbentExec?.approval,
+          calibration?.incumbentApprovalSource === "state"
+            ? approvalPct
+            : calibration?.incumbentApprovalSource === "national"
+              ? incumbentExec?.approval
+              : blendIncumbentApproval(
+                  incumbentExec?.approval,
+                  approvalPct,
+                  ruleset.incumbentApprovalStateWeight
+                ),
         incumbencyApprovalPivot: calibration?.incumbencyApprovalPivot,
         incumbentConsecutiveTerms,
         democraticHealth: democraticHealthOptions,
@@ -961,6 +993,7 @@ export async function accumulatePresidentVoteTurn(
     // also drives the vote multiplier.
     const swingReferenceLean = districtLean ?? stateLean;
     const isSwingState = Math.abs(swingReferenceLean) < 0.5;
+    const turnVotesAfterBonuses: Record<string, number> = {};
 
     for (const ec of enriched) {
       const isSuspended = suspendedElectionCandidateIds.has(ec.candidateId);
@@ -976,7 +1009,7 @@ export async function accumulatePresidentVoteTurn(
         votes = Math.round(votes * INDEPENDENT_VOTE_PENALTY);
       }
       const afterIndependent = votes;
-      if (lean !== 0) {
+      if (ruleset.applyExplicitLeanMultiplier && lean !== 0) {
         const posForLean =
           ec.partyEcon != null && ec.partySocial != null
             ? (ec.partyEcon + ec.partySocial) / 2
@@ -1041,9 +1074,10 @@ export async function accumulatePresidentVoteTurn(
       }
 
       // Ledger: attribute the integer-pipeline stage deltas. The independent
-      // structural haircut and the state partisan-lean multiplier fold into
+      // structural haircut and any frozen-ruleset lean multiplier fold into
       // stateBaseline; ground game + VP + governor endorsement + campaign
-      // strength fold into campaign.
+      // strength fold into campaign. Tactical movement is recorded after every
+      // candidate's pre-movement turn total is known.
       ledgerSink.recordIndependentPenalty(
         unit.unitId,
         ec.candidateId,
@@ -1051,8 +1085,33 @@ export async function accumulatePresidentVoteTurn(
       );
       ledgerSink.recordLean(unit.unitId, ec.candidateId, afterLean - afterIndependent);
       ledgerSink.recordCampaign(unit.unitId, ec.candidateId, votes - afterLean);
-      ledgerSink.recordFinalVotes(unit.unitId, ec.candidateId, votes);
+      turnVotesAfterBonuses[ec.candidateId] = votes;
+    }
 
+    const tacticalCandidates = enriched
+      .filter((ec) => !suspendedElectionCandidateIds.has(ec.candidateId))
+      .map((ec) => ({
+        id: ec.candidateId,
+        economicPosition: ec.partyEcon == null ? ec.charEP : (ec.charEP * 3 + ec.partyEcon) / 4,
+        socialPosition: ec.partySocial == null ? ec.charSP : (ec.charSP * 3 + ec.partySocial) / 4,
+      }));
+    const tacticalActive =
+      ruleset.tacticalMovementRate > 0 &&
+      isClosingVotingTurn(totalTurns, turnIndex, RAMP_TURNS, ELECTION_DAY_TURNS);
+    const tacticalVotes = tacticalActive
+      ? applyTacticalMovement({
+          turnVotes: turnVotesAfterBonuses,
+          priorVotes: tally.totalVotesByUnit[unit.unitId] ?? {},
+          candidates: tacticalCandidates,
+          movementRate: ruleset.tacticalMovementRate,
+        })
+      : turnVotesAfterBonuses;
+
+    for (const ec of enriched) {
+      const beforeTactical = turnVotesAfterBonuses[ec.candidateId] ?? 0;
+      const votes = tacticalVotes[ec.candidateId] ?? 0;
+      ledgerSink.recordTactical(unit.unitId, ec.candidateId, votes - beforeTactical);
+      ledgerSink.recordFinalVotes(unit.unitId, ec.candidateId, votes);
       unitTotals[ec.candidateId] = (unitTotals[ec.candidateId] ?? 0) + votes;
       newTotalVotes[ec.candidateId] = (newTotalVotes[ec.candidateId] ?? 0) + votes;
     }

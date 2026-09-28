@@ -18,6 +18,7 @@ import {
 } from "@/lib/campaigns/dto/campaignView";
 import {
   CAMPAIGN_STRENGTH_CONTRIBUTION_NPI_MULTIPLIER,
+  CAMPAIGN_STRENGTH_MAX_BONUS,
   campaignStrengthBoostPercent,
   campaignStrengthContributionActions,
   campaignStrengthContributionCost,
@@ -415,6 +416,7 @@ export function buildCampaignBlendViewModel(inp: CampaignBlendInput): CampaignBl
   const { campaign, me, currentTurn, wire, runningMateName, rail, expandedCategory } = inp;
 
   const symbol = symbolFor(campaign.currencyCode);
+  const campaignStrengthMaxBonus = campaign.campaignStrengthMaxBonus ?? CAMPAIGN_STRENGTH_MAX_BONUS;
   /**
    * Newest first. The array is stored oldest-first because every writer
    * `$push`es onto the end, so it has to be reversed for display: a ledger that
@@ -482,7 +484,10 @@ export function buildCampaignBlendViewModel(inp: CampaignBlendInput): CampaignBl
     vitals.push({
       label: "Strength",
       value: formatStrength(campaign.campaignStrength),
-      sub: `+${campaignStrengthBoostPercent(campaign.campaignStrength).toFixed(1)}% vote boost`,
+      sub: `+${campaignStrengthBoostPercent(
+        campaign.campaignStrength,
+        campaignStrengthMaxBonus
+      ).toFixed(1)}% vote boost`,
       color: BLEND.accent,
     });
   }
@@ -701,12 +706,17 @@ export function buildCampaignBlendViewModel(inp: CampaignBlendInput): CampaignBl
     campaign.campaignStrength != null
       ? {
           strength: formatStrength(currentStrength),
-          boostPct: campaignStrengthBoostPercent(currentStrength).toFixed(1),
+          boostPct: campaignStrengthBoostPercent(currentStrength, campaignStrengthMaxBonus).toFixed(
+            1
+          ),
           strengthAdded,
           costFunds,
           costActions,
           costText: `${money(costFunds, symbol)} and ${costActions} action${costActions === 1 ? "" : "s"}`,
-          newBoostPct: campaignStrengthBoostPercent(currentStrength + strengthAdded).toFixed(1),
+          newBoostPct: campaignStrengthBoostPercent(
+            currentStrength + strengthAdded,
+            campaignStrengthMaxBonus
+          ).toFixed(1),
           blockedReason: strengthBlockedReason,
           canContribute:
             strengthBlockedReason === null &&

@@ -4,27 +4,15 @@ import { SUSPEND_ENDORSE_TRANSFER_MAX_FRACTION } from "@/lib/campaigns/constants
 /**
  * Presidential ruleset version seam (the retrospective's "rules freeze" gate).
  *
- * A presidential race is stamped with the CURRENT version when it spawns and
- * keeps that ruleset for its whole cycle: deploys during a live race can no
- * longer change how it counts. The 1956 ballot record is why this exists --
- * the electorate model changed mid-race and the totals moved with the code.
+ * A presidential race is stamped with its rules family when it spawns. Older
+ * v1/v2 races retain their historical behavior; the active v3 family receives
+ * the current calibrated v3 rules prospectively without rewriting ballots
+ * already cast.
  *
- * Races that predate the stamp (the 1953/1956 records and the open 1960 race)
- * resolve to v1, the live behavior they opened under. Mechanics and balance
- * changes ship by ADDING a version whose values differ, so they take effect
- * on the next spawned cycle and never mid-race -- "grandfather the active
- * race; convert, do not confiscate".
- *
- * v3 is the presidential-rework version. It ships BEHAVIORALLY IDENTICAL to
- * v1/v2 (every field below at its current/identity value): the seam and the
- * full knob set land as pure infrastructure with zero behavior change. Each
- * rework subsystem then flips ONLY its own v3 knob to the active value in the
- * same PR that adds the code consuming it, so v3 is always coherent with the
- * merged engine. Magnitude knobs (momentum cap, endorsement/transfer
- * fractions, surrogate weights) stay at identity until calibrated against the
- * 1960 general via the dry-run replays at turn 384; structural knobs
- * (calendar spacing, convention) flip with their code and only affect the
- * 1964 cycle onward.
+ * Unstamped races resolve to v1, the behavior they opened under. New mechanics
+ * normally ship by adding a version. The active race is already v3, however,
+ * and the v3 balance corrections below intentionally apply only to ballots
+ * cast after deployment. They never rewrite its accumulated tally.
  */
 export const CURRENT_PRESIDENTIAL_RULESET_VERSION = 3;
 
@@ -35,6 +23,12 @@ export interface PresidentialRuleset {
    * (1 = the multiplier approaches 2x; 0.25 would cap it near 1.25x).
    */
   campaignStrengthMaxBonus: number;
+  /** Apply the legacy post-distribution state/district lean multiplier. */
+  applyExplicitLeanMultiplier: boolean;
+  /** Closing-period share of locally nonviable candidates' new ballots that move tactically. */
+  tacticalMovementRate: number;
+  /** Weight on state approval in the presidential incumbency signal (0 = national only). */
+  incumbentApprovalStateWeight: number;
 
   // ── Primary calendar + momentum ───────────────────────────────────────────
   /**
@@ -91,12 +85,14 @@ export interface PresidentialRuleset {
 }
 
 /**
- * Identity baseline: the exact live behavior of the 1953/1956/1960 era. Every
- * knob here reproduces current production. V1, V2, and V3 all start from this;
- * subsystem PRs override individual v3 fields as their code lands.
+ * Identity baseline for legacy v1/v2 races. V3 starts here and overrides the
+ * mechanics that belong to the presidential rework.
  */
 const IDENTITY: Omit<PresidentialRuleset, "version"> = {
   campaignStrengthMaxBonus: 1,
+  applyExplicitLeanMultiplier: true,
+  tacticalMovementRate: 0,
+  incumbentApprovalStateWeight: 0,
   primaryCalendar: "compressed",
   primaryMomentumCapPoints: 0,
   primaryMomentumDecay: 0.5,
@@ -115,13 +111,12 @@ const V1: PresidentialRuleset = { version: 1, ...IDENTITY };
 const V2: PresidentialRuleset = { version: 2, ...IDENTITY };
 
 /**
- * v3 is the presidential-rework version. It is mutated field-by-field by the
+ * v3 is the presidential-rework version. It is updated field-by-field by the
  * rework subsystem PRs (each flip paired with the code that reads it).
  *
  * primaryCalendar → "stretched": the primary-calendar subsystem's structural
- * flip. Spacing only (timing, not magnitude), so it is safe to land during the
- * live 1960 race — that race is v1 (unstamped) and keeps the compressed table;
- * "stretched" applies only to races spawned under v3 (1964 onward). The
+ * flip. Spacing only (timing, not magnitude), so it applies only to races
+ * spawned under v3. The
  * momentum magnitude knobs (primaryMomentumCapPoints/Decay) stay at identity:
  * momentum computes and persists but multiplies x1 until calibrated at t384.
  *
@@ -136,6 +131,10 @@ const V2: PresidentialRuleset = { version: 2, ...IDENTITY };
 const V3: PresidentialRuleset = {
   version: 3,
   ...IDENTITY,
+  campaignStrengthMaxBonus: 0.25,
+  applyExplicitLeanMultiplier: false,
+  tacticalMovementRate: 0.05,
+  incumbentApprovalStateWeight: 0.5,
   primaryCalendar: "stretched",
   conventionEnabled: true,
   suspendTransferMode: "affinity",
