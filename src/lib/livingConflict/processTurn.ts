@@ -9,6 +9,8 @@ import type {
 import { createCrisisFromTemplate } from "@/lib/crises/createCrisisFromTemplate";
 import { logWireEvent } from "@/lib/wireEvent";
 import { listNuclearPrograms } from "@/lib/db/collections/nuclearPrograms";
+import { getMacroCountriesCollection } from "@/lib/db/collections/macroCountries";
+import { ACTIVE_MACRO_COUNTRY_FILTER } from "@/lib/world/macro/retirement";
 import { getConflictsCollection } from "@/lib/db/collections/conflicts";
 import { nuclearStandoffPossible } from "@/lib/military/nuclearProgram";
 import { allLivingConflictDefs } from "./registry";
@@ -176,15 +178,21 @@ export async function processLivingConflictsTurn(
     db.collection<{ _id: string; value?: number }>("coldWarTension").findOne({ _id: "current" }),
     getConflictsCollection(db).find({ status: "active" }).toArray(),
   ]);
-  const countryRows = await db
-    .collection<{ countryId?: string }>("states")
-    .find({}, { projection: { countryId: 1 } })
-    .toArray();
-  const availableCountryIds = new Set(
-    countryRows.length > 0
-      ? countryRows.map((row) => row.countryId).filter((id): id is string => Boolean(id))
-      : Object.keys(COUNTRY_CONFIGS)
-  );
+  const [countryRows, macroCountries] = await Promise.all([
+    db
+      .collection<{ countryId?: string }>("states")
+      .find({}, { projection: { countryId: 1, _id: 0 } })
+      .toArray(),
+    getMacroCountriesCollection(db).then((collection) =>
+      collection
+        .find(ACTIVE_MACRO_COUNTRY_FILTER, { projection: { entityId: 1, _id: 0 } })
+        .toArray()
+    ),
+  ]);
+  const availableCountryIds = new Set([
+    ...countryRows.map((row) => row.countryId).filter((id): id is string => Boolean(id)),
+    ...macroCountries.map((country) => country.entityId),
+  ]);
   const vietnamExternalPressure = vietnamWorldPressure(tension?.value ?? 0, activeWars);
   let eventsOpened = 0;
   const defs = allLivingConflictDefs().filter((def) => def.autoOpen !== false);

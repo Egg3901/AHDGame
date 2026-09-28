@@ -34,35 +34,7 @@ export function emptyConflictState(defKey: string): LivingConflictState {
   };
 }
 
-/** Resolve authored participants against the countries that exist in this world. */
-export function resolveConflictParticipants(
-  def: LivingConflictDef,
-  availableCountryIds: ReadonlySet<string>
-): LivingConflictDef["participants"] {
-  const resolveOne = (countryId: string | undefined): string | undefined => {
-    if (!countryId) return undefined;
-    if (availableCountryIds.has(countryId)) return countryId;
-    return (def.participantFallbacks?.[countryId] ?? []).find((candidate) =>
-      availableCountryIds.has(candidate)
-    );
-  };
-  const resolveMany = (countryIds: string[]): string[] => [
-    ...new Set(countryIds.map(resolveOne).filter((value): value is string => Boolean(value))),
-  ];
-
-  return {
-    belligerents: resolveMany(def.participants.belligerents),
-    ...(resolveOne(def.participants.backerA)
-      ? { backerA: resolveOne(def.participants.backerA) }
-      : {}),
-    ...(resolveOne(def.participants.backerB)
-      ? { backerB: resolveOne(def.participants.backerB) }
-      : {}),
-    neighbors: resolveMany(def.participants.neighbors),
-    blocMembers: resolveMany(def.participants.blocMembers),
-    bystanders: resolveMany(def.participants.bystanders),
-  };
-}
+export { resolveConflictParticipants } from "./rules/participants";
 
 function trackBounds(def: LivingConflictDef, key: string): { min: number; max: number } {
   const authored = def.tracks?.[key];

@@ -1,4 +1,5 @@
 import type { Db } from "mongodb";
+import { hasRequiredBelligerents } from "./rules/participants";
 import type { ConflictRole, FiredEvent, LivingConflictDef, LivingConflictState } from "./types";
 import {
   applyCommitment,
@@ -120,7 +121,7 @@ export async function driveConflictTurn(
   const wasOpen = state.hasOpened;
 
   if (!state.hasOpened) {
-    if (!inWindow(def, year)) {
+    if (!inWindow(def, year) || !hasRequiredBelligerents(def, participants)) {
       return { state, events: [] };
     }
     if (def.minimumOpeningPressure !== undefined && externalPressure < def.minimumOpeningPressure) {
