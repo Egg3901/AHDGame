@@ -55,6 +55,6 @@ describe("1991 transition national budgets", () => {
       modern
         .filter((row) => IDS.includes(row.countryId as (typeof IDS)[number]))
         .map((row) => row.countryId)
-    ).toEqual(["HU"]);
+    ).toEqual(["HU", "BG"]);
   });
 });
