@@ -1,3 +1,5 @@
+import { euroLedgerCrossRate, euroLedgerSpendForTarget } from "./euro/rules";
+import { loadEuroMonetaryUnion } from "./euro/service";
 // src/lib/currency/autoConvert.ts
 import type { Db, ObjectId } from "mongodb";
 import type { ExchangeRate } from "@/lib/db/types";
@@ -24,9 +26,11 @@ import {
 function spendAmountWithRoundingBuffer(
   shortfall: number,
   crossRate: number,
-  sourceBal: number
+  sourceBal: number,
+  fixedSettlement = false
 ): number {
   if (!Number.isFinite(crossRate) || crossRate <= 0) return Math.max(0, sourceBal);
+  if (fixedSettlement) return Math.min(sourceBal, euroLedgerSpendForTarget(shortfall, crossRate));
   const idealSpend = shortfall / ((1 - MARKET_MAKER_SPREAD) * crossRate);
   // One source unit converts to ~crossRate target units. Step at least far
   // enough to absorb a full target-unit of round-down loss.
@@ -131,6 +135,7 @@ export async function topUpPersonalBalanceInCurrency(
   let fromAmountTotal = 0;
   let needed = false;
 
+  const union = await loadEuroMonetaryUnion(db);
   for (let iter = 0; iter < 48; iter++) {
     const doc = (await db.collection(collectionName).findOne({ _id: character._id })) as
       (PersonalWealthHolder & { _id: ObjectId }) | null;
@@ -174,8 +179,14 @@ export async function topUpPersonalBalanceInCurrency(
         };
       }
 
-      const crossRate = getCrossRate(fromExRate.rate, toExRate.rate);
-      const spendAmount = spendAmountWithRoundingBuffer(shortfall, crossRate, sourceBal);
+      const fixedRate = euroLedgerCrossRate(union, code, targetCurrency);
+      const crossRate = fixedRate ?? getCrossRate(fromExRate.rate, toExRate.rate);
+      const spendAmount = spendAmountWithRoundingBuffer(
+        shortfall,
+        crossRate,
+        sourceBal,
+        fixedRate != null
+      );
       if (spendAmount <= 0) continue;
 
       const tradeResult = await executeMarketMakerTrade(db, {
@@ -330,9 +341,10 @@ export async function autoConvertForPurchase(
     };
   }
 
-  const [fromExRate, toExRate] = await Promise.all([
+  const [fromExRate, toExRate, union] = await Promise.all([
     db.collection<ExchangeRate>("exchangeRates").findOne({ _id: fromCountryId }),
     db.collection<ExchangeRate>("exchangeRates").findOne({ _id: toCountryId }),
+    loadEuroMonetaryUnion(db),
   ]);
 
   if (!fromExRate || !toExRate) {
@@ -346,15 +358,24 @@ export async function autoConvertForPurchase(
     };
   }
 
-  const crossRate = getCrossRate(fromExRate.rate, toExRate.rate);
+  const fixedRate = euroLedgerCrossRate(union, homeCurrency, requiredCurrency);
+  const crossRate = fixedRate ?? getCrossRate(fromExRate.rate, toExRate.rate);
 
   // Check if player has enough home currency
   const homeBalance = getPersonalBalance(character, homeCurrency, forexEnabled);
   // Use the rounding-aware buffer so a sub-unit shortfall (e.g. $0.13)
   // doesn't bottom out at 0 delivered when the natural idealSpend rounds to
   // 0 source units. Cap to homeBalance so we never overspend the wallet.
-  const requiredHomeAmount = spendAmountWithRoundingBuffer(shortfall, crossRate, homeBalance);
-  const homeNeededRaw = shortfall / ((1 - MARKET_MAKER_SPREAD) * crossRate);
+  const requiredHomeAmount = spendAmountWithRoundingBuffer(
+    shortfall,
+    crossRate,
+    homeBalance,
+    fixedRate != null
+  );
+  const homeNeededRaw =
+    fixedRate != null
+      ? euroLedgerSpendForTarget(shortfall, crossRate)
+      : shortfall / ((1 - MARKET_MAKER_SPREAD) * crossRate);
   if (homeBalance < homeNeededRaw) {
     return {
       needed: true,
@@ -444,9 +465,10 @@ export async function convertForExplicitPay(
     };
   }
 
-  const [fromExRate, toExRate] = await Promise.all([
+  const [fromExRate, toExRate, union] = await Promise.all([
     db.collection<ExchangeRate>("exchangeRates").findOne({ _id: fromCountryId }),
     db.collection<ExchangeRate>("exchangeRates").findOne({ _id: toCountryId }),
+    loadEuroMonetaryUnion(db),
   ]);
 
   if (!fromExRate || !toExRate) {
@@ -463,8 +485,12 @@ export async function convertForExplicitPay(
   // How much payCurrency is needed to produce requiredAmount in requiredCurrency?
   // toAmount = fromAmount * (1 - spread) * crossRate
   // => fromAmount = toAmount / ((1 - spread) * crossRate)
-  const crossRate = getCrossRate(fromExRate.rate, toExRate.rate);
-  const requiredPayAmount = requiredAmount / ((1 - MARKET_MAKER_SPREAD) * crossRate);
+  const fixedRate = euroLedgerCrossRate(union, payCurrency, requiredCurrency);
+  const crossRate = fixedRate ?? getCrossRate(fromExRate.rate, toExRate.rate);
+  const requiredPayAmount =
+    fixedRate != null
+      ? euroLedgerSpendForTarget(requiredAmount, crossRate)
+      : requiredAmount / ((1 - MARKET_MAKER_SPREAD) * crossRate);
 
   const payBalance = getPersonalBalance(character, payCurrency, true);
   if (payBalance < requiredPayAmount) {

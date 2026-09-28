@@ -1,3 +1,4 @@
+import { planEuroSettlement } from "@/lib/currency/euro/rules";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Db } from "mongodb";
 import { createMockDb } from "@/lib/test-utils/mockDb";
@@ -45,4 +46,23 @@ describe("world euro flags", () => {
     expect(flags.euroMemberCurrencies).not.toContain("GBP");
     expect(flags.euroAdoptionEligibleCountries).toContain("UK");
   });
+});
+
+it("publishes settled conversion terms for purchase quotations", async () => {
+  const db = createMockDb();
+  vi.mocked(getDb).mockResolvedValue(db as unknown as Db);
+  const union = planEuroSettlement({
+    year: 1999,
+    turn: 385,
+    preset: "1991-default",
+    europeanMembers: ["DE", "IE", "UK"],
+    consentedCountries: ["DE", "IE", "UK"],
+    rates: { EUR: 0.8, IEP: 0.7, GBP: 0.6 },
+  }).union;
+  db.collection("gameState").findOne.mockResolvedValue({
+    currentYear: 1999,
+    eurozoneEnabled: true,
+    euroMonetaryUnion: union,
+  });
+  expect((await (await GET()).json()).euroMonetaryUnion).toEqual(union);
 });

@@ -251,3 +251,57 @@ export function aggregateEuroPolicyIndicators(
   }
   return result;
 }
+
+/** Legacy ledger denominations within one settled euro area have a fixed cross rate. */
+export function euroLedgerCrossRate(
+  union: EuroMonetaryUnion | undefined,
+  from: CurrencyCode,
+  to: CurrencyCode
+): number | undefined {
+  if (!union) return undefined;
+  const members = Object.values(union.members);
+  const fromMember = members.find((member) => member?.ledgerCurrency === from);
+  const toMember = members.find((member) => member?.ledgerCurrency === to);
+  const fromRatio = fromMember?.ledgerUnitsPerAnchorUnit;
+  const toRatio = toMember?.ledgerUnitsPerAnchorUnit;
+  if (
+    fromRatio == null ||
+    toRatio == null ||
+    !Number.isFinite(fromRatio) ||
+    !Number.isFinite(toRatio) ||
+    fromRatio <= 0 ||
+    toRatio <= 0
+  )
+    return undefined;
+  const rate = toRatio / fromRatio;
+  return Number.isFinite(rate) && rate > 0 ? rate : undefined;
+}
+
+/** Historical pre-accession trades keep their original issuer. */
+export function euroTradeCurrency(
+  union: EuroMonetaryUnion | undefined,
+  ledgerCurrency: CurrencyCode,
+  tradeTurn: number
+): CurrencyCode {
+  const member =
+    union && Object.values(union.members).find((value) => value?.ledgerCurrency === ledgerCurrency);
+  return member && (member.source === "legacy-settlement" || tradeTurn >= member.joinedTurn)
+    ? "EUR"
+    : ledgerCurrency;
+}
+
+/** Source spend that covers a target amount under whole-unit settlement. */
+export function euroLedgerSpendForTarget(targetAmount: number, crossRate: number): number {
+  if (
+    !Number.isFinite(targetAmount) ||
+    targetAmount < 0 ||
+    !Number.isFinite(crossRate) ||
+    crossRate <= 0
+  )
+    return Number.NaN;
+  const targetUnits = Math.ceil(targetAmount);
+  const spend = targetUnits / crossRate;
+  return Math.floor(spend * crossRate) >= targetUnits
+    ? spend
+    : spend + Math.max(Number.MIN_VALUE, Math.abs(spend) * Number.EPSILON);
+}

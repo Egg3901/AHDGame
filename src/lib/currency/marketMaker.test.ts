@@ -4,6 +4,7 @@ import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import { ObjectId } from "mongodb";
 import type { Db } from "mongodb";
 import {
+  executeMarketMakerTrade,
   getCountryForCurrency,
   distributeConversionSpread,
   distributeConversionSpreadsBatch,
@@ -389,4 +390,37 @@ describe("executeMarketMakerTrade", () => {
       [`currencyBalances.personal.GBP`]: { $gte: stored },
     });
   });
+});
+
+it("converts euro ledger denominations at their locked quote without FX fees or rounding gains", async () => {
+  const { planEuroSettlement } = await import("./euro/rules");
+  const union = planEuroSettlement({
+    year: 1999,
+    turn: 385,
+    preset: "1991-default",
+    europeanMembers: ["DE", "IE", "UK"],
+    consentedCountries: ["DE", "IE", "UK"],
+    rates: { EUR: 0.8, IEP: 0.7, GBP: 0.6 },
+  }).union;
+  const db = createMockDb();
+  db.collection("gameState").findOne.mockResolvedValue({ euroMonetaryUnion: union });
+  db.collection("characters").findOne.mockResolvedValue({
+    currencyBalances: { personal: { GBP: 10000 } },
+  });
+  db.collection("characters").updateOne.mockResolvedValue({ modifiedCount: 1 });
+  // A stale FX materialization must not change the accepted conversion ratio.
+  db.collection("exchangeRates").findOne.mockResolvedValue({ rate: 99, forexSpreadStrength: 1.5 });
+  const result = await executeMarketMakerTrade(db as unknown as Db, {
+    characterId: new ObjectId(),
+    countryId: "UK",
+    fromCurrency: "GBP",
+    toCurrency: "EUR",
+    amount: 1000,
+    turn: 386,
+  });
+  expect(result.success).toBe(true);
+  expect(result.spreadCharged).toBe(0);
+  expect(result.toAmount).toBe(1333);
+  expect(result.toAmount * (0.6 / 0.8)).toBeLessThanOrEqual(1000);
+  expect(db.collectionMocks.centralBanks?.updateOne).toBeUndefined();
 });

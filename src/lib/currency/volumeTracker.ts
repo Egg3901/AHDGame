@@ -25,6 +25,7 @@
  * See docs/design/currency-exchange.md "Player Volume Pressure" section.
  */
 
+import { euroTradeCurrency, type EuroMonetaryUnion } from "./euro/rules";
 import type { Db } from "mongodb";
 import type { ExchangeRate, TradeHistoryEntry } from "@/lib/db/types";
 import type { CurrencyCode } from "@/lib/constants/currencies";
@@ -36,7 +37,8 @@ export type CurrencyVolumeMap = Record<CurrencyCode, VolumeInputs>;
 
 export async function computeCurrencyVolumes(
   db: Db,
-  currentTurn: number
+  currentTurn: number,
+  union?: EuroMonetaryUnion
 ): Promise<CurrencyVolumeMap> {
   const lookbackStart = Math.max(1, currentTurn - VOLUME_LOOKBACK_TURNS);
 
@@ -57,8 +59,9 @@ export async function computeCurrencyVolumes(
   }
 
   for (const trade of trades) {
-    const from = trade.fromCurrency;
-    const to = trade.toCurrency;
+    const from = euroTradeCurrency(union, trade.fromCurrency, trade.turn);
+    const to = euroTradeCurrency(union, trade.toCurrency, trade.turn);
+    if (from === to) continue;
 
     // Normalize the trade's notional to internal units via fromCurrency rate.
     // Derivation: `amount` is in `from` units; `from_rate` is "from per internal",
@@ -66,7 +69,7 @@ export async function computeCurrencyVolumes(
     // (amount * crossRate) / to_rate, i.e. the same internal value of the trade
     // regardless of which side you compute from — so both legs attribute the
     // same amount of directional pressure to their respective currencies.
-    const fromRate = rateByCode.get(from) ?? 1;
+    const fromRate = rateByCode.get(trade.fromCurrency) ?? 1;
     const internalValue = fromRate > 0 ? trade.amount / fromRate : trade.amount;
 
     if (volumes[from]) {

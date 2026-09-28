@@ -1,3 +1,4 @@
+import { planEuroSettlement } from "./euro/rules";
 import { describe, expect, it } from "vitest";
 import {
   estimateExplicitPayCoverage,
@@ -150,4 +151,46 @@ describe("purchaseAffordability", () => {
 
     expect(foundRequirement).not.toBeNull();
   });
+});
+
+it("quotes the same fee-free euro settlement as purchase execution", () => {
+  const union = planEuroSettlement({
+    year: 1999,
+    turn: 385,
+    preset: "1991-default",
+    europeanMembers: ["DE", "IE", "UK"],
+    consentedCountries: ["DE", "IE", "UK"],
+    rates: { EUR: 0.8, IEP: 0.7, GBP: 0.6 },
+  }).union;
+  const rates = { GBP: 99, EUR: 99 };
+  const explicit = estimateExplicitPayCoverage({
+    requiredAmount: 1000,
+    fromCurrency: "GBP",
+    toCurrency: "EUR",
+    availableBalance: 750,
+    rates,
+    union,
+  });
+  expect(explicit?.canAfford).toBe(true);
+  expect(explicit?.spreadFee).toBe(0);
+  expect(explicit?.deliveredAmount).toBe(1000);
+  const implicit = estimateImplicitAutoConvertCoverage({
+    requiredAmount: 1000,
+    targetCurrency: "EUR",
+    balances: { GBP: 750 },
+    rates,
+    union,
+  });
+  expect(implicit?.spendableInTarget).toBe(1000);
+  expect(implicit?.spreadFees.GBP).toBe(0);
+  expect(
+    estimateExplicitPayCoverage({
+      requiredAmount: 1000.1,
+      fromCurrency: "GBP",
+      toCurrency: "EUR",
+      availableBalance: 750,
+      rates,
+      union,
+    })?.canAfford
+  ).toBe(false);
 });

@@ -52,6 +52,7 @@ export async function GET() {
       preset: gs?.preset ?? DEFAULT_SEED_PRESET,
       eurozoneEnabled: euroState.eurozoneEnabled,
       euroMemberCurrencies: euroMemberCurrencies(euroState),
+      euroMonetaryUnion: gs?.euroMonetaryUnion,
       euroAdoptionEligibleCountries,
       eraSystemEnabled: eraOn,
       currentYear: gs?.currentYear ?? null,

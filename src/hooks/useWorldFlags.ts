@@ -1,3 +1,4 @@
+import type { EuroMonetaryUnion } from "@/lib/currency/euro/rules";
 import { useSyncExternalStore } from "react";
 import { useGameEvents } from "@/hooks/useGameEvents";
 import type { CountryId } from "@/lib/constants/countries";
@@ -6,6 +7,7 @@ import type { CurrencyCode } from "@/lib/constants/currencies";
 export interface WorldFlags {
   preset: string;
   eurozoneEnabled: boolean;
+  euroMonetaryUnion?: EuroMonetaryUnion;
   euroMemberCurrencies?: CurrencyCode[];
   euroAdoptionEligibleCountries?: CountryId[];
   /** Era system master switch (era stamps, wire news, era-aware scoring); false until an admin enables it. */

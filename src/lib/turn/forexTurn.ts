@@ -153,7 +153,7 @@ export async function processForexTurn(
   const commandEconomyEnabled = gameConfig?.commandEconomyEnabled === true;
 
   // Compute volumes for all currencies in one pass
-  const volumes = await computeCurrencyVolumes(db, currentTurn);
+  const volumes = await computeCurrencyVolumes(db, currentTurn, euroUnion);
 
   // Pre-fetch all existing exchange rates in one query
   const existingRateDocs = await db

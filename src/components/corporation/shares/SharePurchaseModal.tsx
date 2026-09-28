@@ -6,6 +6,7 @@ import type { CorporationDetail, MarketOrder, MyShareOrder } from "../Corporatio
 import PrivateSalePanel from "./PrivateSalePanel";
 import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
 import type { CurrencyCode } from "@/lib/constants/currencies";
+import { useWorldFlags } from "@/hooks/useWorldFlags";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import { requestCharacterStatsRefetch } from "@/lib/characterStatsSync";
 import { formatCurrencyFaceAmount } from "@/lib/currency/formatCurrencyFaceAmount";
@@ -80,6 +81,7 @@ export default function SharePurchaseModal({
     formatPrice,
     forexRates,
   } = useCurrency();
+  const { euroMonetaryUnion } = useWorldFlags();
 
   const corpCurrencyCode = corporation.liquidCurrencyCode as CurrencyCode | undefined;
 
@@ -221,6 +223,7 @@ export default function SharePurchaseModal({
   const explicitPayEstimate =
     !buyAsCorp && !buyAsInvestmentBank && myCurrencyBalances && !shouldUseImplicitAutoConvert
       ? estimateExplicitPayCoverage({
+          union: euroMonetaryUnion,
           requiredAmount: buyCostInHome,
           fromCurrency: selectedPayCurrency,
           toCurrency: homeCurrencyCode,
@@ -232,6 +235,7 @@ export default function SharePurchaseModal({
   const implicitAutoConvertEstimate =
     !buyAsCorp && !buyAsInvestmentBank && myCurrencyBalances && shouldUseImplicitAutoConvert
       ? estimateImplicitAutoConvertCoverage({
+          union: euroMonetaryUnion,
           requiredAmount: buyCostInHome,
           targetCurrency: homeCurrencyCode,
           balances: myCurrencyBalances,
@@ -248,6 +252,7 @@ export default function SharePurchaseModal({
             return (
               total +
               estimateMaxConvertibleAmount({
+                union: euroMonetaryUnion,
                 fromCurrency: code,
                 toCurrency: homeCurrencyCode,
                 balance,
@@ -260,6 +265,7 @@ export default function SharePurchaseModal({
   const maxExplicitSpendableInHome =
     !buyAsCorp && !buyAsInvestmentBank && myCurrencyBalances && !shouldUseImplicitAutoConvert
       ? estimateMaxConvertibleAmount({
+          union: euroMonetaryUnion,
           fromCurrency: selectedPayCurrency,
           toCurrency: homeCurrencyCode,
           balance: selectedPayBalance,
@@ -332,6 +338,7 @@ export default function SharePurchaseModal({
           if (!myCurrencyBalances) return candidateCost <= myCashOnHand;
           if (shouldUseImplicitAutoConvert) {
             const estimate = estimateImplicitAutoConvertCoverage({
+              union: euroMonetaryUnion,
               requiredAmount: candidateCostInHome,
               targetCurrency: homeCurrencyCode,
               balances: myCurrencyBalances,
@@ -343,6 +350,7 @@ export default function SharePurchaseModal({
             return selectedPayBalance >= candidateCostInHome;
           }
           const estimate = estimateExplicitPayCoverage({
+            union: euroMonetaryUnion,
             requiredAmount: candidateCostInHome,
             fromCurrency: selectedPayCurrency,
             toCurrency: homeCurrencyCode,

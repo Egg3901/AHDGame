@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import { useClickOutside } from "@/hooks/useClickOutside";
+import { useWorldFlags } from "@/hooks/useWorldFlags";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import { CURRENCY_SYMBOLS, FOREX_ACTIVE_CURRENCIES } from "@/lib/constants/currencies";
 import type { CurrencyCode } from "@/lib/constants/currencies";
@@ -119,6 +120,7 @@ export function SharePurchaseAtMarketView({
   corpCurrency,
 }: SharePurchaseAtMarketViewProps) {
   const { formatAmount, toInternalFrom, forexRates, ratesLoading } = useCurrency();
+  const { euroMonetaryUnion } = useWorldFlags();
   const exchangeRates = forexRates;
   const loadingRates = ratesLoading && !forexRates;
 
@@ -144,6 +146,7 @@ export function SharePurchaseAtMarketView({
         }
         if (!exchangeRates) return true;
         const estimate = estimateExplicitPayCoverage({
+          union: euroMonetaryUnion,
           requiredAmount: costInHome,
           fromCurrency: c,
           toCurrency: homeCurrencyCode,
