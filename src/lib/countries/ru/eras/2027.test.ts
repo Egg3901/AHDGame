@@ -41,10 +41,11 @@ describe("RU 2027 government and geography", () => {
     }
   });
 
-  it("keeps the 1991 preset on its inherited one-party configuration", () => {
+  it("keeps the 1991 Congress distinct from the modern Federal Assembly", () => {
     const config = getCountryConfig("RU", "1991-default");
-    expect(config.governmentType).toBe("onePartyState");
-    expect(config.legislature.lowerChamber.seats).toBe(559);
+    expect(config.governmentType).toBe("parliamentaryRepublic");
+    expect(config.legislature.lowerChamber.seats).toBe(1_068);
+    expect(config.legislature.bicameral).toBe(false);
     expect(config.exchangeKind).toBe("stateRegister");
   });
 });

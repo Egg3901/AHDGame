@@ -70,7 +70,7 @@ describe("seedRUGovernmentFormation", () => {
       }
     );
     const log = vi.fn();
-    await seedRUGovernmentFormation(db as never, log);
+    await seedRUGovernmentFormation(db as never, log, "1979-default");
 
     expect(upserts).toHaveLength(1);
     const set = (upserts[0].update as { $set: Doc }).$set;
@@ -88,17 +88,37 @@ describe("seedRUGovernmentFormation", () => {
 
   it("degrades to pending when no Premier official exists yet", async () => {
     const { db, upserts } = makeDb(RU_STATES_1953, null);
-    await seedRUGovernmentFormation(db as never, vi.fn());
+    await seedRUGovernmentFormation(db as never, vi.fn(), "1979-default");
     const set = (upserts[0].update as { $set: Doc }).$set;
     expect(set.status).toBe("pending");
     expect(set.pmNppId).toBeNull();
     expect(set.hosNppId).toBeNull();
   });
 
+  it("opens a neutral 1,068-seat RSFSR formation in 1991 even if stale Soviet officials exist", async () => {
+    const { db, upserts } = makeDb([{ _id: "CEN", houseDistricts: 1_068 }], {
+      countryId: "RU",
+      officeType: "premier",
+      nppId: new ObjectId(),
+    });
+    await seedRUGovernmentFormation(db as never, vi.fn(), "1991-default");
+    const set = (upserts[0].update as { $set: Doc }).$set;
+    expect(set).toMatchObject({
+      status: "pending",
+      formationType: null,
+      governingPartyId: null,
+      totalSeats: 1_068,
+      majorityThreshold: 535,
+      totalSeatsSupporting: 0,
+      pmNppId: null,
+      hosNppId: null,
+    });
+  });
+
   it("skips entirely when the preset seeds no RU regions", async () => {
     const { db, upserts } = makeDb([], null);
     const log = vi.fn();
-    await seedRUGovernmentFormation(db as never, log);
+    await seedRUGovernmentFormation(db as never, log, "1979-default");
     expect(upserts).toHaveLength(0);
     expect(log).toHaveBeenCalledWith(expect.stringContaining("skipped"));
   });

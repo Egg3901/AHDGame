@@ -1033,7 +1033,7 @@ export async function bootstrapGameWorld(options: BootstrapOptions) {
 
     // Formation docs must follow the executive seed so the Premier / President
     // NPP exists to link (RU starts FORMED; BR links the seeded PTB president).
-    await seedRUGovernmentFormation(db, log);
+    await seedRUGovernmentFormation(db, log, preset);
     await seedBRGovernmentFormation(db, log);
   }
 
