@@ -68,7 +68,16 @@ const GROUP_META: Record<
     hungarian_minority: { name: "Hungarian Minority", turnout: 58 },
     green_youth: { name: "Green Youth", turnout: 46 },
   },
-  RU: {},
+  RU: {
+    urban_18_34: { name: "Urban 18-34", turnout: 55 },
+    urban_35_49: { name: "Urban 35-49", turnout: 55 },
+    urban_50_64: { name: "Urban 50-64", turnout: 55 },
+    urban_65_plus: { name: "Urban 65+", turnout: 55 },
+    rural_18_34: { name: "Rural 18-34", turnout: 55 },
+    rural_35_49: { name: "Rural 35-49", turnout: 55 },
+    rural_50_64: { name: "Rural 50-64", turnout: 55 },
+    rural_65_plus: { name: "Rural 65+", turnout: 55 },
+  },
 };
 
 async function loadRegionBundle(countryId: ModernTransitionCountryId): Promise<State[]> {
@@ -180,16 +189,6 @@ export async function seedModernTransitionDemographics(
 ) {
   if (!isModernTransitionPreset(preset)) {
     log(`[${countryId}] skipping modern demographics (preset ${preset})`);
-    return;
-  }
-  if (countryId === "RU") {
-    // The available RU Layer-1 model is the 1979 Soviet census. Its party
-    // nomenklatura and collective-farmer groups are not a 2027 electorate.
-    if (reset) {
-      await db.collection("stateDemographics").deleteMany({ countryId });
-      await db.collection("stateDemographicTurnout").deleteMany({ countryId });
-    }
-    log("[RU] skipping modern demographics (no contemporary Layer-1 model)");
     return;
   }
   const { categoryId, categoryName } = TRANSITION_COUNTRIES[countryId];

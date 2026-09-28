@@ -281,7 +281,7 @@ describe("full 2027 driver", () => {
       expect(collections["governmentFormations"]!.updateOne).toHaveBeenCalledTimes(1);
     }
   });
-  it("seeds Russia's political substrate without reusing Soviet demographics", async () => {
+  it("seeds Russia's adult-census demographics without Soviet groups", async () => {
     const { db, collections } = makeDb([
       { name: "United Russia", countryId: "RU", sequentialId: 1 },
     ]);
@@ -297,7 +297,13 @@ describe("full 2027 driver", () => {
     expect(collections["stateBaselines"]!.updateOne).toHaveBeenCalledTimes(10);
     expect(collections["statePartyOrg"]!.updateOne).toHaveBeenCalledTimes(10);
     expect(collections["stateDemographics"]!.deleteMany).toHaveBeenCalledWith({ countryId: "RU" });
-    expect(collections["demographicCategories"]).toBeUndefined();
+    expect(collections["demographicCategories"]!.updateOne).toHaveBeenCalledTimes(1);
+    expect(collections["stateDemographics"]!.updateOne).toHaveBeenCalledTimes(10);
+    const category = collections["demographicCategories"]!.updateOne.mock.calls[0]![1].$set as {
+      groups: Array<{ id: string }>;
+    };
+    expect(category.groups).toHaveLength(8);
+    expect(category.groups.map((group) => group.id)).not.toContain("party_nomenklatura");
     expect(collections["governmentFormations"]).toBeUndefined();
   });
   it("opens a neutral 2027 Russian Duma formation without a Soviet premier", async () => {
