@@ -102,6 +102,10 @@ export function UnionEnforcementDesk({
         Investigate a domestic union for one action point, raid an exposed or high heat cell for
         two, or change the standing detection posture once per turn.
       </p>
+      <p className="mt-1 text-xs text-muted">
+        Crackdown costs the treasury 0.1% of GDP per year and reduces government approval by two
+        points while active.
+      </p>
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <label htmlFor="union-enforcement-posture">Posture</label>
         <select

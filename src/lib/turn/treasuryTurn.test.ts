@@ -77,6 +77,36 @@ describe("processTreasuryTurn", () => {
     expect(upd).not.toHaveProperty("debt.principal");
   });
 
+  it("charges crackdown administration once per treasury turn and stops after repeal", async () => {
+    mockBudgets([
+      budgetDoc({
+        gdp: 48_000_000,
+        unionsBanned: true,
+        unionEnforcementPosture: "crackdown",
+        revenue: { total: 0 },
+      }),
+    ]);
+    const { processTreasuryTurn } = await import("./treasuryTurn");
+    await processTreasuryTurn(10);
+    expect(db.collectionMocks.federalBudget.updateOne.mock.calls[0][1].$set.treasuryBalance).toBe(
+      -1_000
+    );
+
+    db.collectionMocks.federalBudget.updateOne.mockClear();
+    mockBudgets([
+      budgetDoc({
+        gdp: 48_000_000,
+        unionsBanned: false,
+        unionEnforcementPosture: "crackdown",
+        revenue: { total: 0 },
+      }),
+    ]);
+    await processTreasuryTurn(11);
+    expect(db.collectionMocks.federalBudget.updateOne.mock.calls[0][1].$set.treasuryBalance).toBe(
+      0
+    );
+  });
+
   it("accrues debt-service on the bond stock while negative (the spiral)", async () => {
     // Cash and stock are independent (refs #1975): the spiral accrues live
     // debt-service on the bond-owned principal, never on the cash balance.

@@ -1001,6 +1001,14 @@ export default function SectorDetailPage() {
                 onSave={handleSaveWage}
               />
             )}
+            {labourFullEnabled && sector.undergroundUnrest && (
+              <div
+                role="status"
+                className="rounded-xl border border-warning/40 bg-warning/10 p-4 text-sm text-warning"
+              >
+                Underground labor unrest is elevated in this sector while unions are banned.
+              </div>
+            )}
             {labourFullEnabled && (
               <UnionBustingPanel
                 sector={sector}
