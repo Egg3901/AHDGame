@@ -75,4 +75,34 @@ describe("Northern Ireland ratification reconciliation", () => {
     );
     expect(deltas).toEqual({ ratificationAuthorization: 0, ratificationFailureCount: 0 });
   });
+
+  it("uses each parliament's latest attempt instead of combining contradictory outcomes", () => {
+    const deltas = northernIrelandRatificationDeltas(
+      [
+        { countryId: "UK", status: "failed", proposedTurn: 220 },
+        { countryId: "UK", status: "signed", proposedTurn: 200 },
+        { countryId: "IE", status: "signed", proposedTurn: 210 },
+      ] as Bill[],
+      state
+    );
+    expect(deltas).toMatchObject({
+      ratificationAuthorization: 1,
+      ratificationFailureCount: 1,
+    });
+  });
+
+  it("allows a later successful bill to replace a failed attempt", () => {
+    const deltas = northernIrelandRatificationDeltas(
+      [
+        { countryId: "UK", status: "failed", proposedTurn: 200 },
+        { countryId: "UK", status: "signed", proposedTurn: 220 },
+        { countryId: "IE", status: "signed", proposedTurn: 210 },
+      ] as Bill[],
+      state
+    );
+    expect(deltas).toMatchObject({
+      ratificationAuthorization: 2,
+      ratificationFailureCount: 0,
+    });
+  });
 });
