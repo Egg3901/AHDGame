@@ -14,3 +14,8 @@ areas: [engine]
 - Preserve existing principal when fixing the conversion relationship.
 - Link member quotations to the same-turn common quotation.
 - Resolve participating countries through one monetary jurisdiction.
+
+- Keep national governors and financial accounts while the common authority sets policy.
+- Use locked conversion terms without FX fees for personal and corporate euro ledger exchanges.
+- Consolidate external euro trading pressure and retain pre-accession trade attribution.
+- Preserve outstanding order conditions and make interrupted expiry refunds recoverable.
