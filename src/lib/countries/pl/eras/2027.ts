@@ -127,6 +127,10 @@ export const PL_2027: CountryEraOverride = {
         partyStrengthWeight: 0,
       },
     ],
+    currencyCode: "PLN",
+    // 2024 NBP average PLN per USD, matching the 2024 PLN regional GDP anchor.
+    // https://nbp.pl/wp-content/uploads/2025/06/Financial-Statements-of-Narodowy-Bank-Polski-as-at-31-December-2024.pdf
+    usdExchangeRate: 1 / 3.9812,
     tagline: "A Central European parliamentary republic following the 2023 election.",
     descriptor:
       "The Prime Minister governs with the confidence of the 460-seat Sejm, elected by proportional vote, alongside the 100-seat Senate and a directly elected President.",

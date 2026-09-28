@@ -20,7 +20,8 @@ describe("RO 2027 government and geography", () => {
     expect(config?.headOfStateTitle).toBe("President");
     expect(config?.exchangeKind).toBe("market");
     expect(config?.centralGovernmentLabel).toBe("National Government");
-    expect(config?.usdExchangeRate).toBeCloseTo(0.2166, 12);
+    expect(config?.usdExchangeRate).toBeCloseTo(1 / 4.5984, 12);
+    expect(config?.currencyCode).toBe("RON");
     expect(getCountryConfig("RO", "2027-default").governmentType).toBe("presidential");
     expect(getCountryConfig("RO", "2027-default").legislature.lowerChamber.seats).toBe(331);
     expect(RO_GEOGRAPHY.regionBundles["2027-default"]).toBe(roRegions2027);

@@ -59,6 +59,8 @@ export type CurrencyCode =
   | "HUF"
   | "PLZ"
   | "ROL"
+  | "PLN"
+  | "RON"
   | "YUD"
   | "BGL"
   | "CSK"
@@ -88,6 +90,8 @@ export const ZOD_CURRENCY_ENUM: [CurrencyCode, CurrencyCode, ...CurrencyCode[]] 
   "HUF",
   "PLZ",
   "ROL",
+  "PLN",
+  "RON",
   "YUD",
   "BGL",
   "CSK",
@@ -164,6 +168,8 @@ export const CURRENCY_ANCHOR_COUNTRY: Record<CurrencyCode, CountryId> = {
   HUF: "HU",
   PLZ: "PL",
   ROL: "RO",
+  PLN: "PL",
+  RON: "RO",
   YUD: "YU",
   BGL: "BG",
   CSK: "CS",
@@ -609,6 +615,12 @@ export const INITIAL_RATES_1979: Partial<Record<CountryId, number>> = {
  */
 export const INITIAL_RATES_2027: Partial<Record<CountryId, number>> = {
   ...INITIAL_RATES,
+  // 2024 annual USD averages from the issuing central banks. The modern
+  // regional GDP anchors are also observed in 2024 PLN and RON, respectively.
+  // https://nbp.pl/wp-content/uploads/2025/06/Financial-Statements-of-Narodowy-Bank-Polski-as-at-31-December-2024.pdf
+  // https://muzeu.bnr.ro/uploads/2025-03-07monthlybulletinno.012025_documentpdf_545_1743160358.pdf
+  PL: 3.9812,
+  RO: 4.5984,
   // ECB irrevocable parity: 1 EUR = 1.95583 BGN from 1 January 2026.
   // The 2027 game EUR anchor is 0.92 EUR per internal unit, so this legacy
   // cross-rate yields exactly 1/1.95583 when BGN figures become EUR.
@@ -761,6 +773,8 @@ export const CURRENCY_SYMBOLS: Record<CurrencyCode, string> = {
   HUF: "Ft",
   PLZ: "zł",
   ROL: "lei",
+  PLN: "zł",
+  RON: "lei",
   YUD: "din",
   BGL: "лв",
   CSK: "Kčs",
@@ -819,13 +833,15 @@ export function getEraAwareCurrencySymbol(
  * Seed-time home currency for a country in a preset. Era-blind
  * {@link COUNTRY_CURRENCY_MAP} stays the identity source for every other era;
  * only a 2027-default bootstrap resolves euro members to EUR (see
- * `isEuroAdopted`) and RU to RUB (see `isRubleAdopted`). Every other country
+ * `isEuroAdopted`), RU to RUB, PL to PLN and RO to RON. Every other country
  * and every other preset pass through unchanged, so 1991 behavior is
  * byte-identical.
  */
 export function getSeedCurrencyCode(countryId: CountryId, preset: string): CurrencyCode {
   if (isEuroAdopted(countryId, preset)) return "EUR";
   if (isRubleAdopted(countryId, preset)) return "RUB";
+  if (preset === "2027-default" && countryId === "PL") return "PLN";
+  if (preset === "2027-default" && countryId === "RO") return "RON";
   return COUNTRY_CURRENCY_MAP[countryId];
 }
 
@@ -941,11 +957,12 @@ export function eraRateForCurrency(
 ): number | undefined {
   if (!code) return undefined;
   const eraRates = getInitialRates(preset ?? "");
-  // RUB has no COUNTRY_CURRENCY_MAP entry (RU maps to SUR there by design —
-  // the map is era-blind and SUR is the Cold War/1991 identity). Resolve it
-  // from the preset's RU row instead, so 2027 callers never fall to 1.0.
-  if (code === "RUB") {
-    const rate = eraRates.RU ?? INITIAL_RATES.RU;
+  // Modern codes have no era-blind COUNTRY_CURRENCY_MAP entry; that map keeps
+  // each predecessor's Cold War/1991 identity. PLN/RON are valid only in 2027.
+  if ((code === "PLN" || code === "RON") && preset !== "2027-default") return undefined;
+  if (code === "RUB" || code === "PLN" || code === "RON") {
+    const countryId = CURRENCY_ANCHOR_COUNTRY[code];
+    const rate = eraRates[countryId] ?? INITIAL_RATES[countryId];
     return rate !== undefined && rate > 0 ? rate : undefined;
   }
   for (const [countryId, assigned] of Object.entries(COUNTRY_CURRENCY_MAP)) {

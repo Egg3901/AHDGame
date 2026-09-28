@@ -17,10 +17,8 @@ import type { CountryEraOverride } from "../../contract";
  * can test it. `headOfStateSelection` is cleared (direct election replaces
  * the base `partyChairSync`), as is the one-party `rulingPartyId`.
  *
- * usdExchangeRate is USD per leu implied by the 2024 anchors: World Bank
- * nominal GDP USD 382.56B (https://data.worldbank.org/country/romania)
- * over INSSE 2024 GDP RON 1,766,067.6M
- * (https://insse.ro/cms/sites/default/files/com_presa/com_pdf/pib_tr4e2024_1.pdf).
+ * The region GDP anchor is in modern RON, and the 2024 NBR annual-average
+ * exchange rate below prices the same year against the game's USD anchor.
  */
 export const RO_2027: CountryEraOverride = {
   preset: "2027-default",
@@ -129,7 +127,10 @@ export const RO_2027: CountryEraOverride = {
     ],
     rulingPartyId: undefined,
     majorPartyIds: ["psd", "aur", "pnl", "usr"],
-    usdExchangeRate: 0.2166,
+    currencyCode: "RON",
+    // NBR 2024 annual average: 4.5984 RON per USD, aligned to regional GDP.
+    // https://muzeu.bnr.ro/uploads/2025-03-07monthlybulletinno.012025_documentpdf_545_1743160358.pdf
+    usdExchangeRate: 1 / 4.5984,
     exchangeName: "Bucharest Stock Exchange",
     exchangeKind: "market",
     centralGovernmentLabel: "National Government",
