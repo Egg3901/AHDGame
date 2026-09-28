@@ -68,3 +68,49 @@ describe("European institutional initialization", () => {
     );
   });
 });
+
+describe("enacted Maastricht ratifications", () => {
+  it("settles only after every current membership has a passed authorization and the effective date arrives", async () => {
+    const { recordEnactedMaastricht, reconcileEuropeanTreatyLive } = await import("./service");
+    const { ObjectId } = await import("mongodb");
+    const db = createMockDb();
+    const world = {
+      currentTurn: 55,
+      startingYear: 1991,
+      preset: "1991-default",
+      europeanIntegration: {
+        stage: "community",
+        source: "historical-seed",
+        establishedTurn: 1,
+        ratifications: {},
+      },
+    };
+    const members = ["DE", "IE", "UK"].map((countryId) => ({
+      _id: new ObjectId(),
+      countryId,
+      joinedTurn: 0,
+    }));
+    db.collection("gameState").findOne.mockImplementation(async () => structuredClone(world));
+    db.collection("gameState").updateOne.mockImplementation(async (_filter, update) => {
+      Object.assign(world, update.$set);
+      return { matchedCount: 1 };
+    });
+    db.collection("organizationMemberships").find.mockReturnValue({ toArray: async () => members });
+    const asDb = db as unknown as Db;
+    await recordEnactedMaastricht(asDb, "DE", true, "de-law", 55);
+    await recordEnactedMaastricht(asDb, "IE", true, "ie-law", 56);
+    expect(await reconcileEuropeanTreatyLive(asDb, 137)).toBe(false);
+    await recordEnactedMaastricht(asDb, "UK", true, "uk-law", 57);
+    expect(await reconcileEuropeanTreatyLive(asDb, 136)).toBe(false);
+    // A new membership identity cannot reuse the country's old authorization.
+    members[2]._id = new ObjectId();
+    members[2].joinedTurn = 100;
+    expect(await reconcileEuropeanTreatyLive(asDb, 137)).toBe(false);
+    await recordEnactedMaastricht(asDb, "UK", true, "uk-new-law", 138);
+    expect(await reconcileEuropeanTreatyLive(asDb, 138)).toBe(true);
+    expect(world.europeanIntegration.stage).toBe("union");
+    const settled = structuredClone(world);
+    expect(await reconcileEuropeanTreatyLive(asDb, 139)).toBe(false);
+    expect(world).toEqual(settled);
+  });
+});

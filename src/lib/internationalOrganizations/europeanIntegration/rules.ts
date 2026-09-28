@@ -7,9 +7,11 @@ export type EuropeanStage = "community" | "union";
 export interface EuropeanRatification {
   approved: boolean;
   decisionId: string;
+  membershipId?: string;
   turn: number;
 }
 export interface EuropeanIntegrationState {
+  revision?: number;
   stage: EuropeanStage;
   source: "historical-seed" | "legacy-settlement" | "ratified-treaty";
   establishedTurn: number;
@@ -63,13 +65,19 @@ export function reconcileEuropeanTreaty(input: {
   date: string;
   turn: number;
   members: readonly string[];
+  membershipIds?: Readonly<Record<string, string>>;
 }): EuropeanIntegrationState {
   if (input.state.stage === "union" || !onOrAfter(input.date, "1993-11-01")) return input.state;
   const members = [...new Set(input.members)];
   // An empty organization cannot ratify a treaty through vacuous unanimity.
   if (
     members.length < 2 ||
-    !members.every((member) => input.state.ratifications[member]?.approved === true)
+    !members.every(
+      (member) =>
+        input.state.ratifications[member]?.approved === true &&
+        (!input.membershipIds ||
+          input.state.ratifications[member]?.membershipId === input.membershipIds[member])
+    )
   )
     return input.state;
   return {

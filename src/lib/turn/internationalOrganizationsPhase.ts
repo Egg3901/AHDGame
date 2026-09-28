@@ -1,4 +1,7 @@
-import { ensureEuropeanIntegrationState } from "@/lib/internationalOrganizations/europeanIntegration/service";
+import {
+  ensureEuropeanIntegrationState,
+  reconcileEuropeanTreatyLive,
+} from "@/lib/internationalOrganizations/europeanIntegration/service";
 import { withEuropeanInstitution } from "@/lib/internationalOrganizations/europeanIntegration/definition";
 import { ObjectId, type Db } from "mongodb";
 import {
@@ -199,6 +202,7 @@ export async function processInternationalOrganizationsTurn(
   autonomousVotesCast: number;
   closeTimeBallotsCast?: number;
 }> {
+  await reconcileEuropeanTreatyLive(db, currentTurn);
   // Auto-found orgs whose founding year has arrived BEFORE any vote/proposal
   // handling, so a newly founded org exists for this turn's steps.
   const organizationsFounded = await foundDueOrganizations(db, currentTurn);
