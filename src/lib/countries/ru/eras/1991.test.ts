@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import { getCountryConfig } from "@/lib/constants/countries";
 import { getParliamentaryCountryIds } from "@/lib/turn/parliamentaryGovernment";
 import { ruRegions1991 } from "../data/ruRegions1991";
+import { ru1991PresidencyStage } from "./1991";
+import { getCountryConfigForRuntime } from "@/lib/constants/countries";
 
 describe("Russian 1991 transitional institutions", () => {
   it("models the elected RSFSR Congress rather than the USSR Supreme Soviet", () => {
@@ -31,5 +33,33 @@ describe("Russian 1991 transitional institutions", () => {
     expect(getCountryConfig("RU", "1979-default").governmentType).toBe("onePartyState");
     expect(getCountryConfig("RU", "1979-default").legislature.bicameral).toBe(true);
     expect(getCountryConfig("RU", "2027-default").legislature.lowerChamber.key).toBe("stateDuma");
+  });
+
+  it("distinguishes the June election from the July inauguration", () => {
+    expect(ru1991PresidencyStage(1)).toBe("chairman");
+    expect(ru1991PresidencyStage(20)).toBe("chairman");
+    expect(ru1991PresidencyStage(21)).toBe("elected");
+    expect(ru1991PresidencyStage(24)).toBe("elected");
+    expect(ru1991PresidencyStage(25)).toBe("inaugurated");
+    expect(ru1991PresidencyStage(48)).toBe("inaugurated");
+  });
+
+  it("selects the presidential office only after the runtime marker", () => {
+    const initial = getCountryConfigForRuntime("RU", "1991-default", null);
+    const elected = getCountryConfigForRuntime("RU", "1991-default", {
+      ruPresidencySinceTurn: 25,
+    });
+    expect(initial.headOfStateTitle).toBe("Chairman of the Supreme Soviet");
+    expect(elected.headOfStateTitle).toBe("President");
+    expect(elected.headOfStateSelection).toBeUndefined();
+    expect(elected.officeTypes.find((office) => office.isHeadOfState)?.key).toBe("president");
+    expect(elected.legislature).toEqual(initial.legislature);
+    expect(elected.officeTypes.some((office) => office.key === "primeMinister")).toBe(true);
+    expect(getCountryConfigForRuntime("RU", "1979-default", { ruPresidencySinceTurn: 25 })).toEqual(
+      getCountryConfig("RU", "1979-default")
+    );
+    expect(getCountryConfigForRuntime("RU", "2027-default", { ruPresidencySinceTurn: 25 })).toEqual(
+      getCountryConfig("RU", "2027-default")
+    );
   });
 });

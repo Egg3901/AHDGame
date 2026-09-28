@@ -1193,6 +1193,9 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
           await processBgAssemblyTransition(db, context.gameState, newTurn, gameNow);
           const { processYuDissolution } = await import("@/lib/turn/yuDissolution");
           await processYuDissolution(db, context.gameState, newTurn, gameNow);
+          const { processRuPresidencyTransition } =
+            await import("@/lib/turn/ruPresidencyTransition");
+          await processRuPresidencyTransition(db, context.gameState, newTurn, gameNow);
           return runPostElectionGovernmentPhases(db, gameNow, generalResolved ?? 0);
         });
         const govFormedMap = govResult?.governmentFormed ?? {};

@@ -35,6 +35,21 @@ export async function resolveHeadOfStateAppointmentVote(
   const vote = await votesColl.findOne({ _id: voteId });
   if (!vote || vote.status !== "active" || vote.office !== "headOfState") return;
 
+  // The elected presidency supersedes the legislature's Chairman appointment
+  // after the July 1991 inauguration checkpoint.
+  if (countryId === "RU") {
+    const ru = await db
+      .collection("countryGameStates")
+      .findOne({ _id: "RU" }, { projection: { ruPresidencySinceTurn: 1 } });
+    if (ru?.ruPresidencySinceTurn != null) {
+      await votesColl.updateOne(
+        { _id: voteId, status: "active" },
+        { $set: { status: "cancelled", closedAt: now, updatedAt: now } }
+      );
+      return;
+    }
+  }
+
   const tally = await computeParliamentaryGovernmentTally(
     db,
     countryId,

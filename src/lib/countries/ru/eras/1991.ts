@@ -1,8 +1,50 @@
 import type { CountryEraOverride } from "../../contract";
+import type { CountryConfig } from "@/lib/constants/countries";
+import { turnToGameMonth } from "@/lib/utils/gameDate";
+
+/** The direct presidential election was June 12; the office changed hands at
+ * the July 10 inauguration. The game calendar resolves dates by month.
+ * https://www.prlib.ru/section/2121879
+ * https://www.prlib.ru/node/405940
+ */
+export function ru1991PresidencyStage(
+  calendarTurn: number
+): "chairman" | "elected" | "inaugurated" {
+  const { year, month } = turnToGameMonth(calendarTurn, 1991);
+  if (year > 1991 || (year === 1991 && month >= 6)) return "inaugurated";
+  if (year === 1991 && month >= 5) return "elected";
+  return "chairman";
+}
+
+/** The Congress and prime minister continue after inauguration. This is not
+ * the later 1993 constitutional settlement. */
+export function ru1991PresidentialConfig(config: CountryConfig): CountryConfig {
+  return {
+    ...config,
+    headOfStateTitle: "President",
+    headOfStateSelection: undefined,
+    governmentTypeLabel: "Transitional Presidential Republic",
+    electionSystems: { ...config.electionSystems, headOfState: "fptp" },
+    officeTypes: [
+      ...config.officeTypes.filter((office) => office.key !== "chairmanOfSupremeSoviet"),
+      {
+        key: "president",
+        label: "President",
+        labelPlural: "Presidents",
+        isExecutive: true,
+        isHeadOfState: true,
+        isSubNational: false,
+        termYears: 5,
+        actionBonus: 4,
+        partyStrengthWeight: 1,
+      },
+    ],
+  };
+}
 
 /**
  * January 1991 RSFSR, before the presidency was created in April and first
- * filled in June. The 1990 Congress of People's Deputies had 1,068 directly
+ * elected in June and inaugurated in July. The 1990 Congress of People's Deputies had 1,068 directly
  * elected members and chose the 252-member Supreme Soviet from among them.
  * The Congress is the public electoral chamber in this one-chamber game model;
  * treating the inner Supreme Soviet as a separately elected upper chamber

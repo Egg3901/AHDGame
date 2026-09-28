@@ -36,6 +36,7 @@ import { NG_ERAS } from "@/lib/countries/ng/eras";
 import { PL_ERAS } from "@/lib/countries/pl/eras";
 import { RO_ERAS } from "@/lib/countries/ro/eras";
 import { RU_ERAS } from "@/lib/countries/ru/eras";
+import { ru1991PresidentialConfig } from "@/lib/countries/ru/eras/1991";
 import { SE_ERAS } from "@/lib/countries/se/eras";
 import { TR_ERAS } from "@/lib/countries/tr/eras";
 import { UK_ERAS } from "@/lib/countries/uk/eras";
@@ -1282,6 +1283,20 @@ export function getCountryConfig(id: CountryId, preset?: string): CountryConfig 
   const override = preset ? ERA_COUNTRY_CONFIG_OVERRIDES[preset]?.[id] : undefined;
   if (!override) return base;
   return { ...base, ...override };
+}
+
+/** Resolve a dated 1991 Russian office after the July inauguration marker.
+ * Callers without world state continue to receive the January seed config. */
+export function getCountryConfigForRuntime(
+  id: CountryId,
+  preset: string | undefined,
+  countryState?: { ruPresidencySinceTurn?: number } | null
+): CountryConfig {
+  const config = getCountryConfig(id, preset);
+  if (id !== "RU" || preset !== "1991-default" || countryState?.ruPresidencySinceTurn == null) {
+    return config;
+  }
+  return ru1991PresidentialConfig(config);
 }
 
 /**
