@@ -57,7 +57,7 @@ const repEcon = {
 };
 const costScaleAnchors = {
   gdpLow: 1800000000000,
-  popLow: 95000000,
+  popLow: 88992220,
   scaleLow: 0.04,
   gdpHigh: 144000000000000,
   popHigh: 200000000,
