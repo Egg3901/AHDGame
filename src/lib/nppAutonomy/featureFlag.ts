@@ -36,11 +36,23 @@ export function nppAutonomyLevelAtLeast(level: NppAutonomyLevel, min: NppAutonom
  * with the legacy boolean `nppAutonomyEnabled === true` reads as "v0".
  */
 export async function getNppAutonomyLevel(db: Db): Promise<NppAutonomyLevel> {
+  return (await getNppAutonomyWorldContext(db)).level;
+}
+
+/** Read the level and world preset in the same gameState round trip. */
+export async function getNppAutonomyWorldContext(
+  db: Db
+): Promise<{ level: NppAutonomyLevel; preset?: string }> {
   const doc = await db
     .collection<GameState>("gameState")
-    .findOne({ _id: "current" }, { projection: { nppAutonomyLevel: 1, nppAutonomyEnabled: 1 } });
-  if (doc?.nppAutonomyLevel) return doc.nppAutonomyLevel;
-  return doc?.nppAutonomyEnabled === true ? "v0" : "off";
+    .findOne(
+      { _id: "current" },
+      { projection: { nppAutonomyLevel: 1, nppAutonomyEnabled: 1, preset: 1 } }
+    );
+  return {
+    level: doc?.nppAutonomyLevel ?? (doc?.nppAutonomyEnabled === true ? "v0" : "off"),
+    preset: doc?.preset,
+  };
 }
 
 /** Global gate: is the smarter-NPP autonomy system switched on at all (any level)? */

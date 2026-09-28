@@ -33,7 +33,7 @@ import {
   reverseFloatSellDebit,
   settleFloatSellDebit,
 } from "@/lib/corporations/shareEscrowSettlement";
-import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
+import { COUNTRY_CURRENCY_MAP, getSeedCurrencyCode } from "@/lib/constants/currencies";
 import { nppHomeFxRate, localToAnchor } from "./nppEconomicAccount";
 
 export type NppShareBuyResult =
@@ -70,7 +70,8 @@ export async function nppBuyShares(
   /** Pre-loaded home FX rate (local per ₳); loaded on demand when omitted. */
   homeRate?: number,
   /** Candidate from the turn sweep; the share credit still checks live state. */
-  corpSnapshot?: NppShareBuySnapshot
+  corpSnapshot?: NppShareBuySnapshot,
+  preset?: string
 ): Promise<NppShareBuyResult> {
   if (!Number.isInteger(shares) || shares <= 0) {
     return { ok: false, reason: "Shares must be a positive integer." };
@@ -92,7 +93,10 @@ export async function nppBuyShares(
     return { ok: false, reason: `Only ${publicFloat} shares available in public float.` };
   }
 
-  const homeCurrency = COUNTRY_CURRENCY_MAP[npp.countryId ?? "US"] ?? "USD";
+  const homeCountry = npp.countryId ?? "US";
+  const homeCurrency = preset
+    ? getSeedCurrencyCode(homeCountry, preset)
+    : (COUNTRY_CURRENCY_MAP[homeCountry] ?? "USD");
   const corpCurrency = corp.liquidCurrencyCode ?? "USD";
   if (corpCurrency !== homeCurrency) {
     return { ok: false, reason: "NPPs only buy shares in their home currency." };
@@ -102,7 +106,7 @@ export async function nppBuyShares(
   const orderFlowEligible = isOrderFlowPriceEligible(corp.publicFloat, corp.totalShares);
   const cost = Math.round(shares * executionPrice * 100) / 100;
   // Share price is LOCAL; the economic account is ₳ — convert at the FX boundary.
-  const rate = homeRate ?? (await nppHomeFxRate(db, npp.countryId));
+  const rate = homeRate ?? (await nppHomeFxRate(db, npp.countryId, undefined, preset));
   const costAnchor = localToAnchor(cost, rate);
   const now = new Date();
 

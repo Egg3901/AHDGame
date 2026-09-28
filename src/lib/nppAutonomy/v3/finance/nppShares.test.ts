@@ -117,6 +117,28 @@ describe("nppBuyShares", () => {
     expect(applyFloatBuyCredit).not.toHaveBeenCalled();
   });
 
+  it("accepts EUR equity for a 2027 French NPP", async () => {
+    corpFindOne.mockResolvedValue({
+      _id: corpId,
+      sharePrice: SHARE_PRICE,
+      totalShares: 100_000,
+      publicFloat: 5_000,
+      liquidCurrencyCode: "EUR",
+    });
+    vi.mocked(creditSharesToNpp).mockResolvedValue(true);
+    const result = await nppBuyShares(
+      db,
+      { _id: nppId, countryId: "FR" },
+      corpId,
+      SHARES,
+      0.92,
+      undefined,
+      "2027-default"
+    );
+    expect(result.ok).toBe(true);
+    expect(corpFindOne).toHaveBeenCalledTimes(1);
+  });
+
   it("uses a sweep snapshot and refunds if the guarded credit sees changed quote inputs", async () => {
     vi.mocked(creditSharesToNpp).mockResolvedValue(false);
     const snapshot = {
