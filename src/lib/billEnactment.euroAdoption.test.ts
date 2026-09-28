@@ -1,8 +1,13 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import type { Db } from "mongodb";
 import { createMockDb } from "@/lib/test-utils/mockDb";
-import { applyEuroAdoptionProvision } from "@/lib/billEnactment";
+import {
+  applyEuroAdoptionProvision,
+  applyCentralBankIndependenceProvision,
+} from "@/lib/billEnactment";
 import type { EuroMonetaryUnion } from "@/lib/currency/euro/rules";
+
+vi.mock("@/lib/news", () => ({ createSystemNewsPost: vi.fn().mockResolvedValue(undefined) }));
 
 function world() {
   const db = createMockDb();
@@ -92,4 +97,18 @@ describe("enacted euro adoption", () => {
     expect(w.state.euroMonetaryUnion).toBeUndefined();
     expect(w.state.eurozoneEnabled).toBe(false);
   });
+});
+
+it("does not reclaim monetary authority through a pre-accession independence bill", async () => {
+  const w = world();
+  await applyEuroAdoptionProvision(w.asDb, "DE", 385, "de-law");
+  await applyEuroAdoptionProvision(w.asDb, "IE", 386, "ie-law");
+  await applyEuroAdoptionProvision(w.asDb, "UK", 387, "uk-law");
+  await applyCentralBankIndependenceProvision(
+    w.asDb,
+    { type: "central_bank_independence", action: "revoke" },
+    "UK",
+    388
+  );
+  expect(w.db.collectionMocks.centralBanks.updateOne).not.toHaveBeenCalled();
 });

@@ -400,3 +400,28 @@ describe("validateBillProvisions: euro adoption", () => {
     }
   );
 });
+
+it("rejects a national rate-setting independence proposal after euro accession", async () => {
+  const { planEuroSettlement } = await import("@/lib/currency/euro/rules");
+  const { validateBillProvisions } = await import("./billProposal");
+  const union = planEuroSettlement({
+    year: 1999,
+    turn: 385,
+    preset: "1991-default",
+    europeanMembers: ["DE", "IE", "UK"],
+    consentedCountries: ["DE", "IE", "UK"],
+    rates: { EUR: 0.8, IEP: 0.7, GBP: 0.6 },
+  }).union;
+  db.collection("gameState").findOne.mockResolvedValue({ euroMonetaryUnion: union });
+  const result = await validateBillProvisions(
+    db as unknown as Db,
+    [{ type: "central_bank_independence", action: "revoke" }],
+    "economy",
+    "UK"
+  );
+  expect(result).toMatchObject({
+    ok: false,
+    status: 400,
+    error: expect.stringContaining("shared institution"),
+  });
+});

@@ -314,7 +314,7 @@ export async function loadCountryCentralBankDetail(params: {
   }
 
   const rateScale = getRateScale(policyBank.primeRate);
-  const recentHistory = bank.rateHistory.slice(-20).reverse();
+  const recentHistory = policyBank.rateHistory.slice(-20).reverse();
 
   const currentInflation = budgetDoc?.economicFactors?.inflationRate ?? 2.5;
   const currentTurn = gameState?.currentTurn ?? 0;
@@ -702,7 +702,7 @@ export async function loadCountryCentralBankDetail(params: {
       nominations,
       lobbyingTotals,
       rateHistory: recentHistory,
-      interestRateHistory: bank.interestRateHistory ?? [],
+      interestRateHistory: policyBank.interestRateHistory ?? [],
       inflationHistory: bank.inflationHistory ?? [],
       gdpGrowthHistory: bank.gdpGrowthHistory ?? [],
       savingsFlowHistory: bank.savingsFlowHistory ?? [],

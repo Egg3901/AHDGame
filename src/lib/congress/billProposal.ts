@@ -1,3 +1,4 @@
+import { loadEuroMonetaryUnion } from "@/lib/currency/euro/service";
 // src/lib/congress/billProposal.ts
 // Provision validation for bill proposals. Called by the congress/bills POST route.
 // Returns a typed result (ok/error) to preserve the route's logRequest pattern.
@@ -295,7 +296,11 @@ export async function validateBillProvisions(
           error: 'Central-bank-independence action must be "grant" or "revoke".',
         };
       }
-      if (sourceCountry && !canLegislateBankIndependence(sourceCountry)) {
+      if (
+        sourceCountry &&
+        (!canLegislateBankIndependence(sourceCountry) ||
+          (await loadEuroMonetaryUnion(db))?.members[sourceCountry])
+      ) {
         return {
           ok: false,
           status: 400,

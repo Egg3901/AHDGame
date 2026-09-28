@@ -1,3 +1,4 @@
+import { loadEuroMonetaryUnion } from "@/lib/currency/euro/service";
 /**
  * Bill Enactment Hook
  *
@@ -332,6 +333,15 @@ export async function applyCentralBankIndependenceProvision(
   countryId: CountryId,
   currentTurn: number
 ): Promise<void> {
+  // A proposal may predate accession. Its later enactment cannot reclaim
+  // monetary authority or create a competing national policy committee.
+  if ((await loadEuroMonetaryUnion(db))?.members[countryId]) {
+    await createSystemNewsPost(
+      `${getCountryConfig(countryId)?.name ?? countryId} enacted a central-bank independence law, but rate-setting remains with the common euro authority.`,
+      "legislation"
+    ).catch(() => {});
+    return;
+  }
   const governmentControlled = provision.action === "revoke";
   const banks = db.collection<CentralBank>("centralBanks");
   const bankId = getBankId(countryId);
