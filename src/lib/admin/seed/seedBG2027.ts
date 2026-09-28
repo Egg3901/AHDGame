@@ -26,20 +26,11 @@ export async function seedBG2027(
     await db.collection("stateDemographicTurnout").deleteMany({ countryId: "BG" });
     await db.collection("demographicCategories").deleteMany({ _id: "bg_voterGroups" as never });
     await db.collection("macroMetrics").deleteMany({ countryId: "BG" });
-    await db
-      .collection("stateBaselines")
-      .deleteMany({
-        _id: {
-          $in: [
-            "BG_SOF",
-            "BG_NOR",
-            "BG_COA",
-            "BG_THR",
-            "BG_SW",
-            ...bgRegions2027.map((r) => r._id),
-          ],
-        } as never,
-      });
+    await db.collection("stateBaselines").deleteMany({
+      _id: {
+        $in: ["BG_SOF", "BG_NOR", "BG_COA", "BG_THR", "BG_SW", ...bgRegions2027.map((r) => r._id)],
+      } as never,
+    });
   }
   const ops = bgRegions2027.map(({ _id, ...data }) => ({
     updateOne: { filter: { _id }, update: { $set: data }, upsert: true },
