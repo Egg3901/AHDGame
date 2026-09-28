@@ -71,7 +71,7 @@ export default function SharePurchaseModal({
 }: SharePurchaseModalProps) {
   const { dialogProps, titleId } = useDialogA11y(onClose);
   const {
-    convert,
+    toDisplay,
     toInternal,
     toInternalFrom,
     toLocalOf,
@@ -87,7 +87,7 @@ export default function SharePurchaseModal({
   const [quantity, setQuantity] = useState(0);
   // sharePrice is in corp-local currency post-forex; normalize to ₳ before converting to display currency.
   const [limitPrice, setLimitPrice] = useState(() =>
-    convert(
+    toDisplay(
       corpCurrencyCode
         ? toInternalFrom(corporation.sharePrice, corpCurrencyCode)
         : corporation.sharePrice

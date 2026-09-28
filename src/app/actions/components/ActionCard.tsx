@@ -52,7 +52,19 @@ const ActionCard = memo(function ActionCard({
   onConvertCashAmountChange,
   onConvertCashExecute,
 }: ActionCardProps) {
-  const { formatAmount, convert, toInternal, inputSymbol, baseRates } = useCurrency();
+  const {
+    formatAmount,
+    toDisplay,
+    toInternal,
+    toInternalFrom,
+    toLocalOf,
+    currencyCode,
+    inputSymbol,
+    baseRates,
+  } = useCurrency();
+  const personalAnchor = forexEnabled
+    ? toInternalFrom(displayPersonalWealth, currencyCode)
+    : displayPersonalWealth;
   const politicalLocal = (amount: number) =>
     forexEnabled ? campaignAnchorToLocal(amount, character.countryId ?? "US", baseRates) : amount;
   // Self-funding confirm step: the player must acknowledge the Infamy cost
@@ -99,7 +111,7 @@ const ActionCard = memo(function ActionCard({
     effectiveFundLabel = `+${formatCurrencyFaceAmount(fundraiseYield, campaignCurrency)}`;
   else if (isConvertCash) {
     effectiveFundLabel =
-      displayPersonalWealth > 0 ? `${formatAmount(displayPersonalWealth)} available` : "No cash";
+      displayPersonalWealth > 0 ? `${formatAmount(personalAnchor)} available` : "No cash";
   } else effectiveFundLabel = card.fundLabel(character);
 
   const didFlash = flash?.type === card.type;
@@ -366,14 +378,19 @@ const ActionCard = memo(function ActionCard({
               {convertCashOpen &&
                 (() => {
                   // Display cash in the player's chosen currency; inputs work in that unit.
-                  const displayCash = Math.floor(convert(displayPersonalWealth));
+                  const displayCash = Math.floor(toDisplay(personalAnchor));
                   const parsed = Number(convertCashAmount) || 0;
-                  const valid = parsed > 0 && parsed <= displayCash;
-                  // Post-Phase-6: the route reads/writes convertCash in the
-                  // player's LOCAL home currency, so the preview math stays in
-                  // local. Infamy still scales off the anchor magnitude.
-                  // Shared conversion leg: the preview credits exactly what execution debits.
-                  const previewFunds = valid ? convertCashConversion(parsed) : 0;
+                  // The route debits local ledger units, while the input follows
+                  // the player's chosen display currency.
+                  const localDonation = Math.round(toLocalOf(parsed, currencyCode));
+                  const valid =
+                    parsed > 0 &&
+                    parsed <= displayCash &&
+                    localDonation > 0 &&
+                    localDonation <= displayPersonalWealth;
+                  const previewFunds = valid
+                    ? toDisplay(toInternalFrom(convertCashConversion(localDonation), currencyCode))
+                    : 0;
                   const previewInfamy = valid
                     ? calculateConvertCashInfamy(Math.round(toInternal(parsed)))
                     : 0;
@@ -458,7 +475,7 @@ const ActionCard = memo(function ActionCard({
                             <button
                               onClick={() => {
                                 setConvertConfirming(false);
-                                onConvertCashExecute(Math.round(parsed));
+                                onConvertCashExecute(localDonation);
                               }}
                               disabled={!!executing}
                               className="flex-1 rounded-lg bg-red-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-red-500 transition-all disabled:opacity-50"

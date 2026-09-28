@@ -49,7 +49,19 @@ const ActionCardCompact = memo(function ActionCardCompact({
   onConvertCashAmountChange,
   onConvertCashExecute,
 }: ActionCardProps) {
-  const { formatAmount, baseRates } = useCurrency();
+  const {
+    formatAmount,
+    baseRates,
+    toDisplay,
+    toInternal,
+    toInternalFrom,
+    toLocalOf,
+    currencyCode,
+    inputSymbol,
+  } = useCurrency();
+  const personalAnchor = forexEnabled
+    ? toInternalFrom(displayPersonalWealth, currencyCode)
+    : displayPersonalWealth;
   const politicalLocal = (amount: number) =>
     forexEnabled ? campaignAnchorToLocal(amount, character.countryId ?? "US", baseRates) : amount;
   // Self-funding confirm step: acknowledge the Infamy cost before submitting.
@@ -95,7 +107,7 @@ const ActionCardCompact = memo(function ActionCardCompact({
     effectiveFundLabel = `+${formatCurrencyFaceAmount(fundraiseYield, campaignCurrency)}`;
   else if (isConvertCash) {
     effectiveFundLabel =
-      displayPersonalWealth > 0 ? `${formatAmount(displayPersonalWealth)} available` : "No cash";
+      displayPersonalWealth > 0 ? `${formatAmount(personalAnchor)} available` : "No cash";
   } else effectiveFundLabel = card.fundLabel(character);
 
   const noDonor = card.requiresDonorBase && !isFundraiseEligible(character.donorBaseLevel);
@@ -291,17 +303,26 @@ const ActionCardCompact = memo(function ActionCardCompact({
               )}
               {convertCashOpen &&
                 (() => {
-                  const cash = displayPersonalWealth;
+                  const cash = Math.floor(toDisplay(personalAnchor));
                   const parsed = Number(convertCashAmount) || 0;
-                  const valid = parsed > 0 && parsed <= cash;
-                  const previewInfamy = valid ? calculateConvertCashInfamy(parsed) : 0;
+                  const localDonation = Math.round(toLocalOf(parsed, currencyCode));
+                  const valid =
+                    parsed > 0 &&
+                    parsed <= cash &&
+                    localDonation > 0 &&
+                    localDonation <= displayPersonalWealth;
+                  const previewInfamy = valid
+                    ? calculateConvertCashInfamy(Math.round(toInternal(parsed)))
+                    : 0;
                   // Shared conversion leg: the preview credits exactly what execution debits.
-                  const previewFunds = valid ? convertCashConversion(parsed) : 0;
+                  const previewFunds = valid
+                    ? toInternalFrom(convertCashConversion(localDonation), currencyCode)
+                    : 0;
                   return (
                     <div className="flex items-center gap-1 animate-in slide-in-from-right-2 duration-200 flex-wrap sm:flex-nowrap">
                       <div className="relative flex-1 sm:flex-none">
                         <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-white/50">
-                          $
+                          {inputSymbol}
                         </span>
                         <input
                           type="number"
@@ -331,7 +352,7 @@ const ActionCardCompact = memo(function ActionCardCompact({
                         <button
                           onClick={() => {
                             setConvertConfirming(false);
-                            onConvertCashExecute(parsed);
+                            onConvertCashExecute(localDonation);
                           }}
                           disabled={!!executing}
                           title={`Self-funding raises Infamy by +${previewInfamy}%. Infamy decays 5% per turn.`}
