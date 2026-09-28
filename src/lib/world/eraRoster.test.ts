@@ -11,9 +11,9 @@ import {
 const ALL = Object.keys(COUNTRY_CONFIGS) as CountryId[];
 
 describe("S1 — era roster totality", () => {
-  it("does not advertise unauthored modern successor-country substrates in 2027", () => {
+  it("keeps the five modern successor countries in the 2027 world without player access", () => {
     for (const countryId of ["RU", "PL", "HU", "RO", "BG"] as const) {
-      expect(tierFor("2027-default", countryId), countryId).toBe("absent");
+      expect(tierFor("2027-default", countryId), countryId).toBe("npp");
     }
   });
 

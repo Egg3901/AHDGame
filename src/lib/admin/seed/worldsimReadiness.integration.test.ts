@@ -1,6 +1,8 @@
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import type { Db } from "mongodb";
 import { euroMembersAtYear } from "@/lib/currency/rules/eraCurrency";
+import { tierFor } from "@/lib/world/eraRoster";
+import { getWorldEntityPresetManifest } from "@/lib/world/worldEntityManifest";
 
 vi.mock("@/lib/mongodb", async () => {
   const fixture = await import("@/lib/test-utils/__fixtures__/bootstrapProbe");
@@ -31,15 +33,26 @@ describe("2027 worldsim readiness", () => {
     );
   });
 
-  it("does not seed unsupported countries into the active world", async () => {
+  it("includes the five successor countries in the effective world", async () => {
+    const manifest = getWorldEntityPresetManifest("2027-default");
     for (const countryId of ["RU", "PL", "HU", "RO", "BG"]) {
-      for (const collection of ["states", "politicalParties", "npps", "federalBudget"]) {
+      expect(tierFor("2027-default", countryId as "RU"), countryId).toBe("npp");
+      const entry = manifest.entries.find((row) => row.countryId === countryId);
+      expect(entry?.legacyAccess, countryId).toBe("hidden");
+      expect(entry?.status, countryId).not.toBe("dissolved");
+    }
+    // These three have 2027 country seed paths. Keep their persisted substrate
+    // tied to the manifest while BG and RU qualification remains open (#2289).
+    for (const countryId of ["PL", "HU", "RO"]) {
+      for (const collection of ["states", "politicalParties", "statePartyOrg"]) {
         expect(
           await db.collection(collection).countDocuments({ countryId }),
           `${collection}.${countryId}`
-        ).toBe(0);
+        ).toBeGreaterThan(0);
       }
     }
+    // HU has an authored 2027 fiscal row. PL and RO still need one (#2289).
+    expect(await db.collection("federalBudget").countDocuments({ countryId: "HU" })).toBe(1);
   });
 
   it("seeds euro members with a single EUR denomination", async () => {
