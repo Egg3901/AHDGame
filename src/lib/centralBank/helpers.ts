@@ -1,3 +1,6 @@
+import { loadEuroMonetaryUnion } from "@/lib/currency/euro/service";
+import { euroPolicyBankId } from "@/lib/currency/euro/rules";
+import type { CurrencyCode } from "@/lib/constants/currencies";
 import type { Db } from "mongodb";
 import { COUNTRY_CONFIGS, COUNTRY_ORDER, type CountryId } from "@/lib/constants/countries";
 import { INTERNATIONAL_ORGANIZATIONS } from "@/lib/constants/internationalOrganizations";
@@ -47,12 +50,18 @@ export async function vacateFomcChairSeat(db: Db, bankId: string): Promise<void>
  * member.
  */
 export function buildPrimeRateByCountry(
-  banks: ReadonlyArray<Pick<CentralBank, "countryId" | "primeRate"> & { _id: string }>
+  banks: ReadonlyArray<
+    Pick<CentralBank, "countryId" | "primeRate" | "monetaryAuthorityId"> & { _id: string }
+  >
 ): Map<CountryId, number> {
   const rateByBankId = new Map(banks.map((bank) => [String(bank._id), bank.primeRate]));
+  const authorityByBankId = new Map(
+    banks.map((bank) => [String(bank._id), bank.monetaryAuthorityId])
+  );
   const map = new Map<CountryId, number>();
   for (const countryId of COUNTRY_ORDER) {
-    const rate = rateByBankId.get(getBankId(countryId));
+    const bankId = getBankId(countryId);
+    const rate = rateByBankId.get(authorityByBankId.get(bankId) ?? bankId);
     if (typeof rate === "number" && Number.isFinite(rate)) map.set(countryId, rate);
   }
   // Defensive: keep any doc whose countryId is not covered by COUNTRY_ORDER
@@ -146,7 +155,23 @@ export function buildCentralBankBootstrapUpdate(
 export async function getCentralBankScope(
   db: Db,
   countryId: CountryId
-): Promise<{ bankId: string; memberCountries: CountryId[]; intorgId?: string }> {
+): Promise<{
+  bankId: string;
+  memberCountries: CountryId[];
+  intorgId?: string;
+  currencyCode?: CurrencyCode;
+}> {
+  const union = await loadEuroMonetaryUnion(db);
+  if (union && euroPolicyBankId(countryId, union) === union.authorityId) {
+    return {
+      bankId: union.authorityId,
+      memberCountries: COUNTRY_ORDER.filter(
+        (country) => euroPolicyBankId(country, union) === union.authorityId
+      ),
+      intorgId: "EU",
+      currencyCode: "EUR",
+    };
+  }
   const intorgId = COUNTRY_CONFIGS[countryId]?.centralBank.centralBankIntorgId;
   const bankId = getBankId(countryId);
   if (!intorgId) return { bankId, memberCountries: [countryId] };

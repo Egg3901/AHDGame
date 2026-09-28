@@ -55,6 +55,8 @@ import { buildPersonalBalanceInc } from "@/lib/currency/characterFunds";
 import { recoverStaleFillClaims } from "@/lib/forex/fillRecovery";
 import { sendSystemMail } from "@/lib/mail/systemMail";
 import { getBankId } from "@/lib/centralBank/helpers";
+import { reconcileEuroMonetaryUnion } from "@/lib/currency/euro/service";
+import { linkedEuroRates } from "@/lib/currency/euro/rules";
 import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
 
 export interface ForexTurnResult {
@@ -137,6 +139,8 @@ export async function processForexTurn(
   // — the same lookup `seedExchangeRates` used at world creation.
   const eraInitialRates = getInitialRates(preset ?? DEFAULT_SEED_PRESET);
 
+  const euroUnion = await reconcileEuroMonetaryUnion(db, currentTurn);
+
   // Load all central bank data in one query
   const banks = await db.collection<CentralBank>("centralBanks").find({}).toArray();
   const bankMap = new Map(banks.map((b) => [b.countryId, b]));
@@ -175,6 +179,9 @@ export async function processForexTurn(
 
   // Update rates for each active country
   for (const countryId of FOREX_ACTIVE_COUNTRIES) {
+    // Member units follow the common quote in a second pass. They cannot drift
+    // independently or spend national reserves defending an obsolete FX band.
+    if (euroUnion?.members[countryId] && countryId !== euroUnion.anchorCountryId) continue;
     const bank = bankMap.get(countryId);
     if (!bank) continue;
 
@@ -377,7 +384,46 @@ export async function processForexTurn(
       await persistInterventionSideEffects(db, countryId, bank, interventionOutcome);
     }
 
+    if (euroUnion && countryId === euroUnion.anchorCountryId)
+      ratesByCurrency[currencyCode] = update.rate;
     countriesUpdated++;
+  }
+
+  if (euroUnion) {
+    const linked = linkedEuroRates(euroUnion, ratesByCurrency);
+    const writes: AnyBulkWriteOperation<ExchangeRate>[] = [];
+    for (const member of Object.values(euroUnion.members)) {
+      if (!member || member.countryId === euroUnion.anchorCountryId) continue;
+      const existing = rateMap.get(member.countryId);
+      const rate = linked[member.ledgerCurrency];
+      if (!existing || rate === undefined)
+        throw new Error("A euro member quotation is unavailable");
+      const volume = volumes[member.ledgerCurrency] ?? { buyVolume24: 0, sellVolume24: 0 };
+      writes.push({
+        updateOne: {
+          filter: { _id: member.countryId },
+          update: {
+            $set: {
+              rate,
+              macroTarget: rate,
+              rateHistory: [...existing.rateHistory, { turn: currentTurn, rate }].slice(
+                -FOREX_AND_MACRO_CHART_HISTORY_TURNS
+              ),
+              buyVolume24: volume.buyVolume24,
+              sellVolume24: volume.sellVolume24,
+              interventionPolicy: null,
+              updatedAt: now,
+            },
+          },
+        },
+      });
+    }
+    if (writes.length) {
+      const result = await db.collection<ExchangeRate>("exchangeRates").bulkWrite(writes);
+      if (result.matchedCount !== writes.length)
+        throw new Error("A euro member quotation could not be persisted");
+      countriesUpdated += writes.length;
+    }
   }
 
   // Process triggered limit orders

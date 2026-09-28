@@ -349,6 +349,7 @@ export async function processCentralBankChairSelection(
     const bank =
       banks.find((b) => b._id === bankId) ?? banks.find((b) => b.countryId === countryId);
     if (!bank) continue;
+    if (bank.monetaryAuthorityId && bank.monetaryAuthorityId !== bank._id) continue;
     const scope = await getCentralBankScope(db, countryId);
 
     // A pending pick that the nominee never answers must not freeze the seat

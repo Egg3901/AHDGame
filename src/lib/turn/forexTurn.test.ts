@@ -925,3 +925,59 @@ describe("Bretton Woods float band (issue #7)", () => {
     expect(ukRate()).toBeCloseTo(base * 1.8, 10);
   });
 });
+
+describe("euro legacy ledger links", () => {
+  it("uses the current anchor quote for UK and Irish units without independent intervention", async () => {
+    const { planEuroSettlement } = await import("@/lib/currency/euro/rules");
+    const union = planEuroSettlement({
+      year: 1999,
+      turn: 385,
+      preset: "1991-default",
+      europeanMembers: ["DE", "IE", "UK"],
+      consentedCountries: ["DE", "IE", "UK"],
+      rates: { EUR: 0.85, IEP: 0.7, GBP: 0.6 },
+    }).union;
+    const banks = [
+      makeCentralBank("UK"),
+      makeCentralBank("IE"),
+      makeCentralBank("DE", { _id: "ECB" }),
+    ];
+    db.collection("gameState").findOne.mockResolvedValue({
+      _id: "current",
+      eurozoneEnabled: true,
+      euroAdoptedCountries: ["DE", "IE", "UK"],
+      euroMonetaryUnion: union,
+    });
+    db.collectionMocks.centralBanks.find.mockReturnValue({ toArray: async () => banks });
+    db.collectionMocks.centralBanks.findOne.mockResolvedValue(banks[2]);
+    db.collectionMocks.centralBanks.bulkWrite.mockResolvedValue({ matchedCount: 2 });
+    db.collectionMocks.exchangeRates.bulkWrite.mockResolvedValue({ matchedCount: 2 });
+    db.collectionMocks.exchangeRates.find.mockReturnValue({
+      toArray: async () => [
+        makeExchangeRate("UK", "GBP", 0.6, 0.6),
+        makeExchangeRate("IE", "IEP", 0.7, 0.7),
+        makeExchangeRate("DE", "EUR", 0.85, 0.85),
+      ],
+    });
+    const result = await processForexTurn(db as unknown as Db, 386, "1991-default", 1999);
+    const anchor = db.collectionMocks.exchangeRates.updateOne.mock.calls.find(
+      ([filter]) => filter._id === "DE"
+    )?.[1].$set.rate as number;
+    expect(Number.isFinite(anchor)).toBe(true);
+    const writes = db.collectionMocks.exchangeRates.bulkWrite.mock.calls[0][0];
+    const british = writes.find(
+      (op: { updateOne: { filter: { _id: string } } }) => op.updateOne.filter._id === "UK"
+    ).updateOne.update.$set;
+    const irish = writes.find(
+      (op: { updateOne: { filter: { _id: string } } }) => op.updateOne.filter._id === "IE"
+    ).updateOne.update.$set;
+    expect(british.rate).toBeCloseTo((anchor * 0.6) / 0.85);
+    expect(irish.rate).toBeCloseTo((anchor * 0.7) / 0.85);
+    expect(british.interventionPolicy).toBeNull();
+    expect(british.rateHistory.at(-1)).toEqual({ turn: 386, rate: british.rate });
+    expect(
+      db.collectionMocks.exchangeRates.updateOne.mock.calls.some(([filter]) => filter._id === "UK")
+    ).toBe(false);
+    expect(result.countriesUpdated).toBe(3);
+  });
+});

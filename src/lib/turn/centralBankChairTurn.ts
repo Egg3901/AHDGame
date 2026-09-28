@@ -129,6 +129,7 @@ export async function processCentralBankChairTurn(
         | "fomcBoard"
         | "governmentControlled"
         | "chairNppId"
+        | "monetaryAuthorityId"
       >
     >({
       _id: 1,
@@ -148,6 +149,7 @@ export async function processCentralBankChairTurn(
       // history; unprojected it reads as undefined and every automated move
       // would be recorded against the anonymous system actor instead.
       chairNppId: 1,
+      monetaryAuthorityId: 1,
     })
     .toArray();
   if (banks.length === 0) {
@@ -165,6 +167,7 @@ export async function processCentralBankChairTurn(
   const nationalDocIdSet = new Set<string>();
 
   for (const bank of banks) {
+    if (bank.monetaryAuthorityId && bank.monetaryAuthorityId !== bank._id) continue;
     const countryId = bank.countryId as CountryId;
     const config = COUNTRY_CONFIGS[countryId];
     if (!config) continue;
@@ -235,6 +238,7 @@ export async function processCentralBankChairTurn(
   }> = [];
 
   for (const bank of banks) {
+    if (bank.monetaryAuthorityId && bank.monetaryAuthorityId !== bank._id) continue;
     const countryId = bank.countryId as CountryId;
     const config = COUNTRY_CONFIGS[countryId];
     if (!config) continue;

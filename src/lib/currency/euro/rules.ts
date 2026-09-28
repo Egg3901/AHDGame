@@ -1,0 +1,169 @@
+/**
+ * Euro adoption records national consent and fixes legacy ledger units to the
+ * common currency without changing principal. National financial accounts remain
+ * separate from the shared monetary authority selected by euroPolicyBankId.
+ */
+import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
+import {
+  COUNTRY_CURRENCY_MAP,
+  getCountryIdForCurrency,
+  type CurrencyCode,
+} from "@/lib/constants/currencies";
+import { EU_EUROZONE_MEMBERS } from "@/lib/constants/countries";
+
+export interface EuroMember {
+  countryId: CountryId;
+  ledgerCurrency: CurrencyCode;
+  /** Fixed legacy ledger units per one unit of the anchor's persisted FX quotation. */
+  ledgerUnitsPerAnchorUnit: number;
+  joinedTurn: number;
+  source: "enacted-law" | "legacy-settlement";
+}
+
+export interface EuroMonetaryUnion {
+  authorityId: "ECB";
+  anchorCountryId: "DE";
+  anchorCurrency: "EUR";
+  /** The 1953 ledger stores marks; later presets store EUR or EUR-equivalent units. */
+  anchorUnitsPerEuro: number;
+  establishedTurn: number;
+  revision: number;
+  members: Partial<Record<CountryId, EuroMember>>;
+}
+
+export interface EuroAdoptionConditions {
+  countryId: CountryId;
+  year: number;
+  europeanMembers: readonly string[];
+  consentedCountries: readonly CountryId[];
+  union?: EuroMonetaryUnion;
+}
+
+export function euroAdoptionRefusal(input: EuroAdoptionConditions): string | null {
+  if (!Number.isFinite(input.year) || input.year < 1999) {
+    return "Euro adoption decisions open in 1999.";
+  }
+  if (!input.europeanMembers.includes(input.countryId)) {
+    return "Euro adoption requires membership in the European organization.";
+  }
+  const currency = COUNTRY_CURRENCY_MAP[input.countryId];
+  if (getCountryIdForCurrency(currency) !== input.countryId) {
+    return "A country sharing another issuer's currency must establish its own currency before applying.";
+  }
+  if (input.union?.members[input.countryId])
+    return "This country already belongs to the euro area.";
+  if (input.consentedCountries.includes(input.countryId))
+    return "This country has already authorized adoption.";
+  return null;
+}
+
+function positiveRate(rate: number | undefined): rate is number {
+  return typeof rate === "number" && Number.isFinite(rate) && rate > 0;
+}
+
+/**
+ * Build an immutable, value-preserving settlement from actual legislative consent.
+ * The game's existing DE/IE founding compact remains pending until both consent;
+ * later eligible members, including the UK, do not need to refound the union.
+ */
+export function planEuroSettlement(input: {
+  year: number;
+  turn: number;
+  preset: string;
+  europeanMembers: readonly string[];
+  consentedCountries: readonly CountryId[];
+  rates: Partial<Record<CurrencyCode, number>>;
+  existing?: EuroMonetaryUnion;
+  /** Preserve an enabled old save as an already-authorized settlement. */
+  legacyEnabled?: boolean;
+}): { union: EuroMonetaryUnion | undefined; addedCountries: CountryId[]; pending: boolean } {
+  const consent = [...new Set(input.consentedCountries)];
+  const legacy = input.legacyEnabled === true && !input.existing;
+  const candidates = legacy ? [...new Set([...EU_EUROZONE_MEMBERS, ...consent])] : consent;
+  const available = legacy || (Number.isFinite(input.year) && input.year >= 1999);
+  const eligible = candidates.filter(
+    (country) =>
+      available &&
+      (legacy || input.europeanMembers.includes(country)) &&
+      getCountryIdForCurrency(COUNTRY_CURRENCY_MAP[country]) === country
+  );
+  if (
+    !input.existing &&
+    !legacy &&
+    (input.year < 1999 ||
+      !Number.isFinite(input.year) ||
+      !EU_EUROZONE_MEMBERS.every((country) => eligible.includes(country)))
+  ) {
+    return { union: undefined, addedCountries: [], pending: true };
+  }
+  const anchorRate = input.rates.EUR;
+  if (!positiveRate(anchorRate))
+    return { union: input.existing, addedCountries: [], pending: true };
+  const union: EuroMonetaryUnion = input.existing
+    ? structuredClone(input.existing)
+    : {
+        authorityId: "ECB",
+        anchorCountryId: "DE",
+        anchorCurrency: "EUR",
+        anchorUnitsPerEuro: input.preset === "1953-default" ? 1.95583 : 1,
+        establishedTurn: input.turn,
+        revision: 0,
+        members: {},
+      };
+  const addedCountries: CountryId[] = [];
+  let pending = false;
+  for (const countryId of eligible) {
+    if (union.members[countryId]) continue;
+    const ledgerCurrency = COUNTRY_CURRENCY_MAP[countryId];
+    const rate = input.rates[ledgerCurrency];
+    if (!positiveRate(rate)) {
+      pending = true;
+      continue;
+    }
+    const ratio = rate / anchorRate;
+    if (!positiveRate(ratio)) {
+      pending = true;
+      continue;
+    }
+    union.members[countryId] = {
+      countryId,
+      ledgerCurrency,
+      ledgerUnitsPerAnchorUnit: ratio,
+      joinedTurn: input.turn,
+      source: legacy ? "legacy-settlement" : "enacted-law",
+    };
+    addedCountries.push(countryId);
+  }
+  // Never publish a partly materialized founding compact because a rate was missing.
+  if (!input.existing && !EU_EUROZONE_MEMBERS.every((country) => union.members[country])) {
+    return { union: undefined, addedCountries: [], pending: true };
+  }
+  if (addedCountries.length > 0) union.revision += 1;
+  return { union, addedCountries, pending };
+}
+
+/** Resolve the authority without merging the members' national financial accounts. */
+export function euroPolicyBankId(countryId: CountryId, union?: EuroMonetaryUnion): string {
+  const issuer = getCountryIdForCurrency(COUNTRY_CURRENCY_MAP[countryId]);
+  if (union?.members[issuer]) return union.authorityId;
+  return COUNTRY_CONFIGS[countryId]?.centralBank.sharedBankId ?? countryId;
+}
+
+/** Apply links after the anchor's turn update, independent of country iteration order. */
+export function linkedEuroRates(
+  union: EuroMonetaryUnion,
+  rates: Partial<Record<CurrencyCode, number>>
+): Partial<Record<CurrencyCode, number>> {
+  const anchor = rates[union.anchorCurrency];
+  if (!positiveRate(anchor)) throw new Error("The euro anchor quotation is unavailable");
+  const linked: Partial<Record<CurrencyCode, number>> = {};
+  for (const member of Object.values(union.members)) {
+    if (!member || !positiveRate(member.ledgerUnitsPerAnchorUnit)) {
+      throw new Error("The euro conversion settlement is invalid");
+    }
+    const rate = anchor * member.ledgerUnitsPerAnchorUnit;
+    if (!positiveRate(rate)) throw new Error("The linked euro quotation is invalid");
+    linked[member.ledgerCurrency] = rate;
+  }
+  return linked;
+}

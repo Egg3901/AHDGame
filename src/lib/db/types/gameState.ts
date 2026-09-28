@@ -1,3 +1,4 @@
+import type { EuroMonetaryUnion } from "@/lib/currency/euro/rules";
 import type { ObjectId } from "mongodb";
 import type { CountryId, CountryStatus } from "../../constants/countries";
 import type { TurnPhaseTelemetryMap } from "./turnPhaseTelemetry";
@@ -531,6 +532,8 @@ export interface GameState {
    * Defaults to true when absent so existing 2019-default rows are unaffected.
    */
   eurozoneEnabled?: boolean;
+  /** Value-preserving legacy-unit locks and the explicit common monetary jurisdiction. */
+  euroMonetaryUnion?: EuroMonetaryUnion;
   /**
    * Countries that have enacted an EuroAdoptionProvision bill. When this
    * includes all EU_EUROZONE_MEMBERS, eurozoneEnabled flips to true.
