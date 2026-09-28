@@ -5,6 +5,7 @@ import { bgRegions2027 } from "@/lib/countries/bg/data/bgRegions2027";
 import { bgParties } from "@/lib/countries/bg/data/bgParties";
 import { selectPartyRosterForPreset } from "@/lib/seeds/ensureDefaultParties";
 import { seedBG2027 } from "./seedBG2027";
+import { getInitialRates, getSeedCurrencyCode } from "@/lib/constants/currencies";
 
 function mockDb() {
   const calls: Record<string, ReturnType<typeof vi.fn>> = {};
@@ -28,7 +29,14 @@ describe("BG 2027 political substrate", () => {
     expect(bgRegions2027).toHaveLength(6);
     expect(bgRegions2027.reduce((sum, r) => sum + r.population, 0)).toBe(6_423_207);
     expect(bgRegions2027.reduce((sum, r) => sum + r.houseDistricts, 0)).toBe(240);
-    expect(bgRegions2027.reduce((sum, r) => sum + r.gdp, 0)).toBe(204_907);
+    expect(bgRegions2027.reduce((sum, r) => sum + r.gdp, 0)).toBeCloseTo(204_907 / 1.95583, 7);
+    expect(getCountryConfig("BG", "2027-default").currencyCode).toBe("EUR");
+    expect(getSeedCurrencyCode("BG", "2027-default")).toBe("EUR");
+    expect(getCountryConfig("BG", "2027-default").usdExchangeRate).toBeCloseTo(
+      1 / getInitialRates("2027-default").DE!,
+      12
+    );
+    expect(getCountryConfig("BG", "1979-default").currencyCode).toBe("BGL");
     expect(
       selectPartyRosterForPreset(bgParties, "2027-default").map((p) => p.abbreviation)
     ).toEqual(["PB", "GERB-SDS", "PP-DB", "DPS", "V"]);

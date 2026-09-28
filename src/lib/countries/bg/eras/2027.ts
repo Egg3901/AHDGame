@@ -86,5 +86,9 @@ export const BG_2027: CountryEraOverride = {
       },
     ],
     majorPartyIds: ["pb", "gerb-sds", "pp-db", "dps", "v"],
+    currencyCode: "EUR",
+    // Regional GDP is stored in EUR. Match the 2027 EUR/anchor seed rate;
+    // the base BG config's 1.0 belonged to the earlier lev-denominated seed.
+    usdExchangeRate: 1 / 0.92,
   },
 };

@@ -9,7 +9,7 @@
  */
 import type { CountryId } from "./countries";
 import { STARTING_YEAR, getStartingYearForPreset } from "./turnTime";
-import { isEuroAdopted } from "@/lib/currency/rules/euroAdoption";
+import { BGN_PER_EUR, isEuroAdopted } from "@/lib/currency/rules/euroAdoption";
 import { isRubleAdopted, RU_2027_RUB_PER_USD } from "@/lib/currency/rules/rubleTransition";
 import { JP_ECONOMY } from "@/lib/countries/jp/economy";
 import { US_ECONOMY } from "@/lib/countries/us/economy";
@@ -609,6 +609,11 @@ export const INITIAL_RATES_1979: Partial<Record<CountryId, number>> = {
  */
 export const INITIAL_RATES_2027: Partial<Record<CountryId, number>> = {
   ...INITIAL_RATES,
+  // ECB irrevocable parity: 1 EUR = 1.95583 BGN from 1 January 2026.
+  // The 2027 game EUR anchor is 0.92 EUR per internal unit, so this legacy
+  // cross-rate yields exactly 1/1.95583 when BGN figures become EUR.
+  // https://www.ecb.europa.eu/press/pr/date/2026/html/ecb.pr260101~c830245e42.en.html
+  BG: BGN_PER_EUR * 0.92,
   // Latest completed annual NBH average, reported by KSH for 2025. This is
   // an explicit fallback for the future preset, not a 2027 observation.
   // https://www.ksh.hu/evkonyvek/2025/magyar-statisztikai-zsebkonyv-2025/pdf/statistical_pocketbook_of_hungary_2025.pdf

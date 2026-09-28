@@ -18,12 +18,13 @@ const RATES: Record<string, number> = {
   AT: 13.4,
   FI: 3.9,
   IE: 0.92,
+  BG: 1.95583 * 0.92,
 };
 
 describe("euroAdoption rules", () => {
-  it("covers exactly the eight euro members", () => {
+  it("covers the seeded euro members", () => {
     expect([...EUROZONE_2027_MEMBERS].sort()).toEqual(
-      ["AT", "DE", "ES", "FI", "FR", "GR", "IE", "IT"].sort()
+      ["AT", "BG", "DE", "ES", "FI", "FR", "GR", "IE", "IT"].sort()
     );
   });
 
@@ -43,6 +44,7 @@ describe("euroAdoption rules", () => {
     expect(euroAdoptionYear("DE")).toBe(1999);
     expect(euroAdoptionYear("FI")).toBe(1999);
     expect(euroAdoptionYear("GR")).toBe(2001);
+    expect(euroAdoptionYear("BG")).toBe(2026);
     expect(euroAdoptionYear("UK")).toBeNull();
     expect(euroAdoptionYear("US")).toBeNull();
   });
@@ -57,6 +59,7 @@ describe("euroAdoption rules", () => {
       // Cross-rate check, not the official ECB parity (FRF 6.55957).
       expect(eur).toBeCloseTo((legacy * RATES.DE) / RATES[m], 9);
     }
+    expect(euroConversionFactor(RATES.BG, RATES.DE)).toBeCloseTo(1 / 1.95583, 12);
     // France lands near real 2019 magnitudes, not shrunk 30% by ECB parity.
     const frEur = convertLegacyToEuro(11_733_333_333_333, RATES.FR, RATES.DE);
     expect(frEur).toBeGreaterThan(2_000_000_000_000);

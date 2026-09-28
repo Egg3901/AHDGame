@@ -23,6 +23,9 @@ import {
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 
 const MEMBERS = [...EUROZONE_2027_MEMBERS];
+// Bulgaria has a sourced regional GDP anchor but no authored post-1991 national
+// budget. Currency adoption must not synthesize fiscal values for that gap.
+const BUDGET_MEMBERS = MEMBERS.filter((member) => member !== "BG");
 const RATES_2027 = getInitialRates("2027-default");
 const RATES_1991 = getInitialRates("1991-default");
 
@@ -56,7 +59,7 @@ describe("2027 euro seed conformance", () => {
   describe("budget configs", () => {
     it("prices every euro member in EUR and leaves non-members on their home code", () => {
       const byCountry = configsByCountry(getNationalBudgetSeedConfigsForPreset("2027-default"));
-      for (const member of MEMBERS) {
+      for (const member of BUDGET_MEMBERS) {
         expect(byCountry.get(member)?.currencyCode, member).toBe("EUR");
       }
       for (const outsider of ["US", "UK", "JP", "SE", "CN", "BR", "NG", "TR"] as const) {
@@ -70,7 +73,7 @@ describe("2027 euro seed conformance", () => {
       const configs2027 = configsByCountry(getNationalBudgetSeedConfigsForPreset("2027-default"));
       const configs2023 = getNationalBudgetSeedConfigsForPreset("2023-default");
       const eurAnchorRate = RATES_2027.DE!;
-      for (const member of MEMBERS) {
+      for (const member of BUDGET_MEMBERS) {
         if (member === "DE") continue; // already EUR, untouched
         const converted = configs2027.get(member)!;
         const base = preConversionBase(member, configs2023);
@@ -105,7 +108,7 @@ describe("2027 euro seed conformance", () => {
       const configs2027 = configsByCountry(getNationalBudgetSeedConfigsForPreset("2027-default"));
       const configs2023 = getNationalBudgetSeedConfigsForPreset("2023-default");
       const eurAnchorRate = RATES_2027.DE!;
-      for (const member of MEMBERS) {
+      for (const member of BUDGET_MEMBERS) {
         if (member === "DE") continue;
         const converted = configs2027.get(member)!;
         const base = preConversionBase(member, configs2023);
@@ -139,7 +142,7 @@ describe("2027 euro seed conformance", () => {
     it("built 2027 budgets (federalBudget rows) carry EUR for members", () => {
       const budgets = getInitialNationalBudgetsForPreset("2027-default");
       const byCountry = new Map(budgets.map((budget) => [budget.countryId, budget]));
-      for (const member of MEMBERS) {
+      for (const member of BUDGET_MEMBERS) {
         expect(byCountry.get(member)?.currencyCode, member).toBe("EUR");
       }
     });
@@ -201,11 +204,15 @@ describe("2027 euro seed conformance", () => {
       await seedExchangeRates(db as unknown as Db, "2027-default");
 
       const byCountry = new Map(seedOps().map((op) => [op.updateOne.filter._id, op]));
-      for (const member of MEMBERS) {
+      for (const member of BUDGET_MEMBERS) {
         const op = byCountry.get(member);
         expect(op?.updateOne.update.$setOnInsert.currencyCode, member).toBe("EUR");
         expect(op?.updateOne.update.$setOnInsert.rate, member).toBe(RATES_2027.DE);
       }
+      // BG uses the DE EUR anchor without its own forex row: its legacy lev
+      // was never in FOREX_ACTIVE_COUNTRIES, and no national fiscal/CB model
+      // exists yet. Its new region GDP is already converted to EUR.
+      expect(byCountry.has("BG")).toBe(false);
       // Non-members keep code and table rate.
       for (const outsider of ["US", "UK", "JP", "SE", "CN", "BR", "NG", "TR"] as const) {
         const op = byCountry.get(outsider);
@@ -236,7 +243,7 @@ describe("2027 euro seed conformance", () => {
   });
 
   describe("three-way agreement", () => {
-    it("budget EUR set, FX EUR set, and euroAdoptedCountries source agree on the eight", () => {
+    it("budget EUR set and euro adoption agree where budgets exist", () => {
       const budgetEur = new Set(
         getNationalBudgetSeedConfigsForPreset("2027-default")
           .filter((config) => config.currencyCode === "EUR")
@@ -245,7 +252,7 @@ describe("2027 euro seed conformance", () => {
       const fxEur = new Set(
         MEMBERS.filter((member) => getSeedCurrencyCode(member, "2027-default") === "EUR")
       );
-      expect([...budgetEur].sort()).toEqual([...MEMBERS].sort());
+      expect([...budgetEur].sort()).toEqual([...BUDGET_MEMBERS].sort());
       expect([...fxEur].sort()).toEqual([...MEMBERS].sort());
       // seedForex writes euroAdoptedCountries from this same list.
       expect([...EUROZONE_2027_MEMBERS].sort()).toEqual([...MEMBERS].sort());
@@ -253,14 +260,15 @@ describe("2027 euro seed conformance", () => {
   });
 
   describe("sovereign issuer corporations", () => {
-    it("stamps EUR liquidCurrencyCode for every 2027 euro member", () => {
+    it("stamps EUR liquidCurrencyCode for every budgeted 2027 euro member", () => {
       const entries = generateCountryOwnedSeedData(SEED_STATES, "2027-default");
       const byCountry = new Map(
         entries.map((entry) => [entry.corporation.countryId, entry.corporation])
       );
-      for (const member of MEMBERS) {
+      for (const member of BUDGET_MEMBERS) {
         expect(byCountry.get(member)?.liquidCurrencyCode, member).toBe("EUR");
       }
+      expect(byCountry.has("BG")).toBe(false);
       // Non-members carry an explicit home code, never undefined.
       for (const outsider of ["US", "UK", "JP", "BR", "CN", "NG", "SE", "TR"] as const) {
         expect(byCountry.get(outsider)?.liquidCurrencyCode, outsider).toBe(
@@ -294,7 +302,7 @@ describe("2027 euro seed conformance", () => {
   describe("legacy-code tripwire", () => {
     // DE never had a legacy row (its home code is the DM-proxy EUR in every
     // preset); every other member has exactly one obsolete code below.
-    const LEGACY_CODES = ["ATS", "ESP", "FIM", "FRF", "GRD", "ITL", "IEP"] as const;
+    const LEGACY_CODES = ["ATS", "BGL", "ESP", "FIM", "FRF", "GRD", "ITL", "IEP"] as const;
 
     it("fails if any 2027 member budget carries a legacy code", () => {
       const offenders = getNationalBudgetSeedConfigsForPreset("2027-default").filter(

@@ -1,13 +1,16 @@
 import type { State } from "@/lib/db/types";
 import { apportionSeats } from "@/lib/seeds/reference/rules/apportionSeats";
+import { BGN_PER_EUR } from "@/lib/currency/rules/euroAdoption";
 
 /**
  * Six NUTS II statistical regions. Population: NSI, 31 December 2025;
- * GDP: NSI, 2024 current-price million BGN (latest regional release).
+ * GDP: NSI, 2024 current-price million BGN (latest regional release),
+ * converted to million EUR at the irrevocable 1.95583 BGN/EUR rate.
  * The 240 game seats are apportioned by population; actual parliamentary
  * elections use 31 multi-member constituencies, a separate engine gap.
  * https://www.nsi.bg/en/file/35195/population_and_demographic_processes%20EN.pdf
  * https://www.nsi.bg/en/statistical-data/141/429
+ * https://www.ecb.europa.eu/press/pr/date/2026/html/ecb.pr260101~c830245e42.en.html
  */
 const rows = [
   ["BG31", "Northwestern", 647_273, 13_289],
@@ -27,7 +30,7 @@ export const bgRegions2027: State[] = rows.map(([id, name, population, gdp]) => 
   regionType: "region",
   name,
   population,
-  gdp,
+  gdp: gdp / BGN_PER_EUR,
   houseDistricts: seats[id]!,
   stateSenateSeats: 0,
   region: name,
