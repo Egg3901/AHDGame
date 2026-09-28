@@ -1,3 +1,5 @@
+import { usesUKDevolution } from "@/lib/countries/uk/devolution/rules";
+import { isUKRegionalExecutiveActive } from "@/lib/countries/uk/devolution/service";
 import type { Db, ObjectId } from "mongodb";
 import type { ElectedOfficial, GovernorOfficeState } from "@/lib/db/types";
 import { getRegionalExecutiveOfficeKey, type CountryId } from "@/lib/constants/countries";
@@ -12,6 +14,11 @@ export async function getOfficeHolderRow(
   stateId: string,
   characterId: ObjectId
 ): Promise<ElectedOfficial | null> {
+  if (
+    usesUKDevolution(countryId) &&
+    !(await isUKRegionalExecutiveActive(db, stateId.toUpperCase()))
+  )
+    return null;
   return db.collection<ElectedOfficial>("electedOfficials").findOne({
     officeType: getRegionalExecutiveOfficeKey(countryId),
     state: stateId.toUpperCase(),
@@ -30,6 +37,11 @@ export async function getCurrentOfficeHolder(
   countryId: CountryId,
   stateId: string
 ): Promise<ElectedOfficial | null> {
+  if (
+    usesUKDevolution(countryId) &&
+    !(await isUKRegionalExecutiveActive(db, stateId.toUpperCase()))
+  )
+    return null;
   return db.collection<ElectedOfficial>("electedOfficials").findOne({
     officeType: getRegionalExecutiveOfficeKey(countryId),
     state: stateId.toUpperCase(),

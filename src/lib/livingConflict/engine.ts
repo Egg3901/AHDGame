@@ -1,3 +1,4 @@
+import { triggerMatches } from "./rules/eventTriggers";
 import type { CrisisEffect } from "@/lib/db/types/crisis";
 import type {
   ConflictEvent,
@@ -34,35 +35,7 @@ export function emptyConflictState(defKey: string): LivingConflictState {
   };
 }
 
-/** Resolve authored participants against the countries that exist in this world. */
-export function resolveConflictParticipants(
-  def: LivingConflictDef,
-  availableCountryIds: ReadonlySet<string>
-): LivingConflictDef["participants"] {
-  const resolveOne = (countryId: string | undefined): string | undefined => {
-    if (!countryId) return undefined;
-    if (availableCountryIds.has(countryId)) return countryId;
-    return (def.participantFallbacks?.[countryId] ?? []).find((candidate) =>
-      availableCountryIds.has(candidate)
-    );
-  };
-  const resolveMany = (countryIds: string[]): string[] => [
-    ...new Set(countryIds.map(resolveOne).filter((value): value is string => Boolean(value))),
-  ];
-
-  return {
-    belligerents: resolveMany(def.participants.belligerents),
-    ...(resolveOne(def.participants.backerA)
-      ? { backerA: resolveOne(def.participants.backerA) }
-      : {}),
-    ...(resolveOne(def.participants.backerB)
-      ? { backerB: resolveOne(def.participants.backerB) }
-      : {}),
-    neighbors: resolveMany(def.participants.neighbors),
-    blocMembers: resolveMany(def.participants.blocMembers),
-    bystanders: resolveMany(def.participants.bystanders),
-  };
-}
+export { resolveConflictParticipants } from "./rules/participants";
 
 function trackBounds(def: LivingConflictDef, key: string): { min: number; max: number } {
   const authored = def.tracks?.[key];
@@ -408,21 +381,6 @@ export function passiveEffectsForRole(
 /** The effects an event applies to a nation in the given role. */
 export function eventEffectsForRole(event: ConflictEvent, role: ConflictRole): CrisisEffect[] {
   return event.effects?.[role] ?? [];
-}
-
-function triggerMatches(event: ConflictEvent, state: LivingConflictState): boolean {
-  const t = event.trigger;
-  if (!t) return event.kind === "authored"; // untriggered authored beats fire on phase entry
-  if (t.campaignStages && !t.campaignStages.includes(state.campaign?.stage ?? "posture")) {
-    return false;
-  }
-  if (t.onPhaseEnter && state.phaseTurns !== 0) return false;
-  if (t.minIntensity !== undefined && state.intensity < t.minIntensity) return false;
-  if (t.maxIntensity !== undefined && state.intensity > t.maxIntensity) return false;
-  if (t.everyTurns !== undefined) {
-    if (state.totalTurns <= 0 || state.totalTurns % t.everyTurns !== 0) return false;
-  }
-  return true;
 }
 
 /**

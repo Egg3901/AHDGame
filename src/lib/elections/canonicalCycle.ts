@@ -399,11 +399,13 @@ export function canonicalTurnsForCycle(params: CanonicalCycleParams): CanonicalC
       // cycle for the same reason RU's do: the regional soviets were elected on
       // the republic cycle, not on a separate schedule of their own.
       const govAnchor =
-        countryId === "RU" || countryId === "UKR" || countryId === "BLR" || countryId === "BAL"
-          ? anchors.ruRepublicSoviet
-          : countryId === "DD"
-            ? anchors.ddVolkskammer
-            : anchors.governorStateSenate;
+        electionType === "governor" && customCycle1EndTurn !== undefined
+          ? customCycle1EndTurn
+          : countryId === "RU" || countryId === "UKR" || countryId === "BLR" || countryId === "BAL"
+            ? anchors.ruRepublicSoviet
+            : countryId === "DD"
+              ? anchors.ddVolkskammer
+              : anchors.governorStateSenate;
       if (govAnchor == null) return null;
       const endTurn = cycle === 1 ? govAnchor : govAnchor + (cycle - 1) * dur.durationHours;
       return {

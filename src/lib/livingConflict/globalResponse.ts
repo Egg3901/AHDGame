@@ -1,3 +1,4 @@
+import { applyCrisisTradeSanctions } from "./sanctions/apply";
 import type { Db, ObjectId } from "mongodb";
 import type { FederalBudget } from "@/lib/db/types/budget";
 import type { GovernmentApproval } from "@/lib/db/types/governmentApproval";
@@ -458,7 +459,13 @@ export async function resolveGlobalResponse(
     .collection<CrisisInteraction>("crisisInteractions")
     .findOne({ crisisId });
   if (!interaction) return null;
-  if (interaction.globalResponseOutcome) return interaction.globalResponseOutcome;
+  if (interaction.globalResponseOutcome) {
+    const prior = crisis.globalResponse.outcomes.find(
+      (candidate) => candidate.outcomeId === interaction.globalResponseOutcome?.outcomeId
+    );
+    if (prior) await applyCrisisTradeSanctions(db, crisis, interaction, prior);
+    return interaction.globalResponseOutcome;
+  }
 
   const scores = scoresForGlobalResponse(crisis, interaction);
   const outcome = selectGlobalResponseOutcome(
@@ -488,6 +495,10 @@ export async function resolveGlobalResponse(
     }
     return response;
   });
+
+  // Materialize before claiming resolution so a failed write can retry. The
+  // deterministic embargo identity makes concurrent/repeated resolution safe.
+  await applyCrisisTradeSanctions(db, crisis, interaction, outcome);
 
   const claimed = await db.collection<CrisisInteraction>("crisisInteractions").updateOne(
     { _id: interaction._id, globalResponseOutcome: { $exists: false } },
