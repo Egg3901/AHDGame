@@ -9,6 +9,7 @@ import type {
   StatePartyOrg,
 } from "@/lib/db/types";
 import type { StateMetricBaseline } from "@/lib/db/types/statePolicy";
+import type { GovernmentFormation } from "@/lib/db/types/governmentFormation";
 import type { PartySeed } from "@/lib/seeds/reference/politicalParties";
 import { getNextSequentialId } from "@/lib/db/sequentialId";
 import { resolveSeedPartyTier } from "@/lib/seeds/defaultPartyTiers";
@@ -263,4 +264,44 @@ export async function seedHUStatePartyOrg(
     }
   }
   log(`Seeded ${total} HU state party org entries across ${parties.length} parties`);
+}
+
+/** Let the first parliamentary turn form Hungary's 2027 government. */
+export async function seedHUGovernmentFormation(
+  db: Db,
+  log: (msg: string) => void,
+  preset: string
+) {
+  if (!isModernHuPreset(preset)) return;
+  const now = new Date();
+  const formation: Omit<GovernmentFormation, "createdAt" | "updatedAt"> = {
+    _id: "HU",
+    countryId: "HU",
+    cycle: 1,
+    status: "pending",
+    formationType: null,
+    lostMajority: false,
+    pmCharacterId: null,
+    pmNppId: null,
+    pmName: null,
+    governingPartyId: null,
+    coalitionId: null,
+    coalitionPartyIds: null,
+    totalSeatsSupporting: 0,
+    majorityThreshold: 100,
+    seatsByParty: {},
+    totalSeats: 199,
+    activeVoteId: null,
+    formedAt: null,
+    formedTurn: null,
+    collapsedAt: null,
+  };
+  await db
+    .collection<GovernmentFormation>("governmentFormations")
+    .updateOne(
+      { _id: "HU" },
+      { $set: { ...formation, updatedAt: now }, $setOnInsert: { createdAt: now } },
+      { upsert: true }
+    );
+  log("Seeded HU government formation document (pending, 199 seats)");
 }

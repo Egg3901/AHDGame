@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { Db } from "mongodb";
 import { createMockDb } from "@/lib/test-utils/mockDb";
-import { seedHURegions, seedHUStatePartyOrg } from "./seedHU";
+import { seedHUGovernmentFormation, seedHURegions, seedHUStatePartyOrg } from "./seedHU";
 
 function regionDb() {
   const bulkWrite = vi.fn().mockResolvedValue({});
@@ -57,5 +57,25 @@ describe("HU modern party organization", () => {
     const mock = createMockDb();
     await seedHUStatePartyOrg(mock as unknown as Db, true, () => {}, "1991-default");
     expect(mock.collectionMocks.statePartyOrg).toBeUndefined();
+  });
+});
+
+describe("HU modern parliamentary formation", () => {
+  it("creates a pending formation with the authored 199-seat majority", async () => {
+    const mock = createMockDb();
+    await seedHUGovernmentFormation(mock as unknown as Db, () => {}, "2027-default");
+    const update = mock.collectionMocks.governmentFormations.updateOne.mock.calls[0]![1];
+    expect(update.$set).toMatchObject({
+      countryId: "HU",
+      status: "pending",
+      totalSeats: 199,
+      majorityThreshold: 100,
+    });
+  });
+
+  it("does not seed a 2027 formation into the selected 1991 world", async () => {
+    const mock = createMockDb();
+    await seedHUGovernmentFormation(mock as unknown as Db, () => {}, "1991-default");
+    expect(mock.collectionMocks.governmentFormations).toBeUndefined();
   });
 });
