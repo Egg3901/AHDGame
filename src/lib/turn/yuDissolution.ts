@@ -51,7 +51,7 @@ export async function processYuDissolution(
     }
   );
   await countries.updateOne(
-    { _id: "YU", dissolvedTurn: { $exists: false } },
+    { _id: "YU", dissolvedTurn: null },
     { $set: { dissolvedTurn: currentTurn, updatedAt: now } }
   );
   return true;
