@@ -20,6 +20,10 @@ import {
   resolveOfficeActionBonus,
 } from "@/lib/actions/officeActionBonus";
 import { getActionBreakdown } from "@/lib/actions/actionBreakdown";
+import { resolvePositionNiBonus } from "@/lib/actions/positionNiBonus";
+import { resolveProfilePositionLabels } from "@/lib/profilePositionLabels";
+import { getCabinetMembersCollection } from "@/lib/db/collections/cabinetMembers";
+import { resolveGameYear } from "@/lib/era/era";
 import { fundraiseYieldLocal } from "@/lib/actions";
 import { resolveStartingCountryId } from "@/lib/utils/profileDemographics";
 import { formatElectionTypeLabel } from "@/lib/utils/electionLabels";
@@ -36,6 +40,9 @@ import type {
   User,
   PoliticalParty,
   StatePartyOrg,
+  CongressLeader,
+  SupremeCourtSeat,
+  ElectedOfficial,
 } from "@/lib/db/types";
 import type { Corporation } from "@/lib/db/types/corporation";
 import { isPatreonActive } from "@/lib/db/types";
@@ -509,6 +516,8 @@ async function getCharacterById(characterId: string) {
             isCommandingGeneral: false,
           }),
       gameDateAnchor: gameState ? gameDateAnchorFromState(gameState) : undefined,
+      gameYear: gameState ? resolveGameYear(gameState) : null,
+      enabledCabinetSeats: gameState?.manuallyEnabledSeats,
       gamePreset: gameState?.preset,
     };
   } catch (error) {
@@ -586,6 +595,8 @@ export default async function CharacterPage({ params }: PageProps) {
     generalPosting,
     isCommandingGeneral,
     gameDateAnchor,
+    gameYear,
+    enabledCabinetSeats,
     gamePreset,
   } = data;
 
@@ -605,7 +616,6 @@ export default async function CharacterPage({ params }: PageProps) {
   const nationalInfluence = character.nationalInfluence ?? 0;
   const infamy = character.infamy ?? 0;
   const influenceDecay = calculatePoliticalInfluenceDecay(influence).toFixed(2);
-  const nationalGainPerTurn = calculateNationalInfluenceGain(influence).toFixed(2);
   const infamyPenalty = infamy > 20 ? ((infamy - 20) * 0.05).toFixed(2) : null;
   const favAboveThresholdPenalty = calculateFavorabilityAboveThresholdPenalty(favorability);
   const favDecayDisplay = favAboveThresholdPenalty > 0 ? favAboveThresholdPenalty.toFixed(1) : null;
@@ -628,40 +638,62 @@ export default async function CharacterPage({ params }: PageProps) {
   // joins this batch instead of adding a trailing round trip (O2). Gated by the
   // same condition its consumer uses; an empty result when not needed is inert.
   const needsPartyPool = !!(character.party && character.party !== "independent" && party);
-  const [chairBankRow, cabinetSeat, poolAgg] = await Promise.all([
-    apDb
-      .collection("centralBanks")
-      .findOne({ chairCharacterId: character._id }, { projection: { _id: 1 } }),
-    apDb
-      .collection("cabinetMembers")
-      .findOne({ characterId: character._id }, { projection: { countryId: 1, positionId: 1 } }),
-    needsPartyPool
-      ? apDb
-          .collection<Character>("characters")
-          .aggregate<{ totalInfluence: number; memberCount: number }>([
-            {
-              $match: {
-                party: character.party,
-                countryId: character.countryId ?? "US",
-                isBanned: { $ne: true },
+  const [chairBankRow, cabinetSeats, congressLeadershipRows, justiceSeat, poolAgg] =
+    await Promise.all([
+      apDb
+        .collection("centralBanks")
+        .findOne({ chairCharacterId: character._id }, { projection: { _id: 1 } }),
+      getCabinetMembersCollection(apDb)
+        .find(
+          { characterId: character._id },
+          { projection: { countryId: 1, positionId: 1, acting: 1 } }
+        )
+        .toArray(),
+      apDb
+        .collection<CongressLeader>("congressLeaders")
+        .find({ characterId: character._id }, { projection: { role: 1 } })
+        .toArray(),
+      apDb
+        .collection<SupremeCourtSeat>("supremeCourtSeats")
+        .findOne({ justiceCharacterId: character._id }, { projection: { _id: 1 } }),
+      needsPartyPool
+        ? apDb
+            .collection<Character>("characters")
+            .aggregate<{ totalInfluence: number; memberCount: number }>([
+              {
+                $match: {
+                  party: character.party,
+                  countryId: character.countryId ?? "US",
+                  isBanned: { $ne: true },
+                },
               },
-            },
-            {
-              $group: {
-                _id: null,
-                totalInfluence: { $sum: "$partyInfluence" },
-                memberCount: { $sum: 1 },
+              {
+                $group: {
+                  _id: null,
+                  totalInfluence: { $sum: "$partyInfluence" },
+                  memberCount: { $sum: 1 },
+                },
               },
-            },
-          ])
-          .toArray()
-      : Promise.resolve([] as { totalInfluence: number; memberCount: number }[]),
-  ]);
+            ])
+            .toArray()
+        : Promise.resolve([] as { totalInfluence: number; memberCount: number }[]),
+    ]);
+  const cabinetSeat = cabinetSeats[0] ?? null;
   const electedSeat =
     character.currentOffice && CABINET_OFFICE_TYPES.has(character.currentOffice.type)
-      ? await apDb
-          .collection<{ officeType: string }>("electedOfficials")
-          .findOne({ characterId: character._id }, { projection: { officeType: 1 } })
+      ? await apDb.collection<ElectedOfficial>("electedOfficials").findOne(
+          { characterId: character._id },
+          {
+            projection: {
+              officeType: 1,
+              state: 1,
+              seatsHeld: 1,
+              senateClass: 1,
+              constituency: 1,
+              constituencyId: 1,
+            },
+          }
+        )
       : null;
   const officeActionBonus = resolveOfficeActionBonus({
     currentOfficeType: character.currentOffice?.type,
@@ -674,6 +706,47 @@ export default async function CharacterPage({ params }: PageProps) {
     countryId: (character.countryId ?? "US") as CountryId,
   });
   const chairActionBonus = chairBankRow ? (gameConfig?.chairActionBonus ?? 3) : 0;
+  const positionNiBonus = resolvePositionNiBonus({
+    currentOfficeType: character.currentOffice?.type,
+    countryId: (character.countryId ?? "US") as CountryId,
+    congressLeadershipRoles: congressLeadershipRows.map((row) => row.role),
+    isPartyChair: party?.chairId?.toString() === character._id.toString(),
+    isPartySubChair:
+      party?.viceChairId?.toString() === character._id.toString() ||
+      party?.treasurerId?.toString() === character._id.toString(),
+    isSeatedJustice: justiceSeat != null,
+    cabinetCountryId: cabinetSeat
+      ? ((cabinetSeat.countryId ?? character.countryId ?? "US") as CountryId)
+      : undefined,
+  });
+  const nationalGainPerTurn = (calculateNationalInfluenceGain(influence) + positionNiBonus).toFixed(
+    2
+  );
+  const profileBaseOffice =
+    character.currentOffice && CABINET_OFFICE_TYPES.has(character.currentOffice.type)
+      ? electedSeat
+        ? {
+            type: electedSeat.officeType,
+            state: electedSeat.state ?? character.homeState,
+            seatsHeld: electedSeat.seatsHeld,
+            senateClass: electedSeat.senateClass,
+            constituency: electedSeat.constituency,
+            constituencyId: electedSeat.constituencyId,
+          }
+        : null
+      : character.currentOffice;
+  const profileOfficeLabels = resolveProfilePositionLabels({
+    baseOfficeLabel: getOfficeLabel(profileBaseOffice, character.countryId),
+    hasBaseOffice: profileBaseOffice != null,
+    congressLeadershipRoles: congressLeadershipRows.map((row) => row.role),
+    cabinetPositions: cabinetSeats.map((seat) => ({
+      countryId: seat.countryId,
+      positionId: seat.positionId,
+      acting: seat.acting === true,
+    })),
+    gameYear,
+    enabledCabinetSeats,
+  });
   const totalActionsPerTurn = baseActionsPerTurn + officeActionBonus + chairActionBonus;
   const actionHoarding = character.actions > ACTION_HOARDING_THRESHOLD;
 
@@ -932,7 +1005,7 @@ export default async function CharacterPage({ params }: PageProps) {
           party={party}
           user={{ username, isAdmin, isModerator }}
           memberSince={memberSince}
-          officeLabel={officeLabel}
+          officeLabels={profileOfficeLabels}
           stateLabel={stateName}
           countrySlug={countrySlug}
           patreonHighlightColor={patreonHighlightColor}
