@@ -4,7 +4,7 @@ import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import { getDb } from "@/lib/mongodb";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
-import { POST } from "./route";
+import { GET, POST } from "./route";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 vi.mock("@/lib/api/requireAuth", () => ({ requireAuthWithCharacter: vi.fn() }));
@@ -53,6 +53,22 @@ beforeEach(() => {
 });
 
 describe("union ban enforcement route", () => {
+  it("reports the persisted posture only to the country's executive", async () => {
+    db.collection("federalBudget").findOne.mockResolvedValue({
+      unionsBanned: true,
+      unionEnforcementPosture: "crackdown",
+      unionEnforcementPostureChangedTurn: 42,
+    });
+    const response = await GET(new Request("http://localhost"), {
+      params: Promise.resolve({ code: "US" }),
+    });
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      posture: "crackdown",
+      canChangePosture: false,
+    });
+  });
+
   it("rejects an executive of another country", async () => {
     const response = await post({ action: "posture", posture: "crackdown" }, "UK");
     expect(response.status).toBe(403);
