@@ -36,10 +36,10 @@ describe("RO 2027 government and geography", () => {
     }
   });
 
-  it("keeps the 1991 preset on its inherited configuration", () => {
+  it("keeps the 1991 constituent parliament distinct from the modern chambers", () => {
     const config = getCountryConfig("RO", "1991-default");
-    expect(config.governmentType).toBe("onePartyState");
-    expect(config.legislature.lowerChamber.seats).toBe(369);
-    expect(config.exchangeKind).toBe("stateRegister");
+    expect(config.governmentType).toBe("presidential");
+    expect(config.legislature.lowerChamber.seats).toBe(396);
+    expect(config.legislature.upperChamber?.seats).toBe(119);
   });
 });
