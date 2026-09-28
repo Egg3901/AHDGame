@@ -12,6 +12,7 @@ import { ObjectId } from "mongodb";
 import type { Db } from "mongodb";
 import type { Election, ElectionVoteTally } from "@/lib/db/types";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
+import { resolveOneGeneralElection as resolveBulgarianElection } from "./generalResolution";
 
 // ── Module mocks ─────────────────────────────────────────────────────────────
 
@@ -179,8 +180,7 @@ describe("resolveOneGeneralElection", () => {
       governmentType: "parliamentaryRepublic",
     });
 
-    const { resolveOneGeneralElection } = await import("./generalResolution");
-    await resolveOneGeneralElection(
+    await resolveBulgarianElection(
       db as unknown as Db,
       election,
       tally,
