@@ -1110,6 +1110,7 @@ export type EraCountryConfigOverride = Partial<
     | "governmentTypeLabel"
     | "coalitionThreshold"
     | "legislature"
+    | "subNationalChamber"
     | "lowerElectionSystem"
     | "upperElectionSystem"
     | "electionSystems"
@@ -1128,6 +1129,7 @@ export type EraCountryConfigOverride = Partial<
     | "exchangeKind"
     | "onePartyRegionalBudget"
     | "federalEqualizationGrantPerCapita"
+    | "priorityProfile"
   >
 >;
 
