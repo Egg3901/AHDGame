@@ -30,6 +30,7 @@ function matchesCondition(actual: unknown, cond: unknown): boolean {
     if ("$ne" in ops) return !equalValue(actual, ops.$ne);
     return false;
   }
+  if (cond === null) return actual == null;
   return equalValue(actual, cond);
 }
 
@@ -108,6 +109,12 @@ async function setupWorld(
 ): Promise<{ db: MockDb; crises: Row[]; conflicts: Row[] }> {
   const db = createMockDb();
   seedStaleGameState(db, persistedYear);
+  makeStateful("states", db).push(
+    ...["US", "RU", "UK", "DE", "IE", "CN"].map((countryId) => ({ countryId }))
+  );
+  makeStateful("macroCountries", db).push(
+    ...["EG", "SY", "NVN", "SVN"].map((entityId) => ({ entityId }))
+  );
   const crises = makeStateful("crises", db);
   const conflicts = makeStateful("livingConflicts", db);
   const { getDb } = await import("@/lib/mongodb");
