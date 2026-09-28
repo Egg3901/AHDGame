@@ -63,7 +63,11 @@ function campaignDb(collections: Record<string, Record<string, unknown>>) {
             ...collections[name],
             find: vi.fn(() => ({ toArray: async () => [{ currencyCode: "USD", baseRate: 1 }] })),
           }
-        : collections[name]
+        : name === "gameState"
+          ? (collections[name] ?? {
+              findOne: vi.fn().mockResolvedValue({ preset: "1991-default" }),
+            })
+          : collections[name]
     ),
   };
 }
