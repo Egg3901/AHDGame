@@ -173,7 +173,7 @@ const GDP_BASELINE_TABLE: Record<GdpBaselineCountry, Record<EraId, number>> = {
     // explicit 2027 bundle, so every cell below is bundle-native.
     "1953": 57,
     "1979": 568,
-    "1991": 1_931,
+    "1991": 1_911,
     "1999": 7_341,
     "2007": 21_028,
     "2019": 98_268,
