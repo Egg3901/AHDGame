@@ -13,6 +13,12 @@ vi.mock("@/lib/discordWebhooks", async (importOriginal) => ({
 }));
 
 const NOW = new Date("2026-01-01T00:00:00.000Z");
+type SpawnedElection = {
+  electionType: string;
+  electionYear: number;
+  endTurn: number;
+  totalSeats: number;
+};
 let db: MockDb;
 
 beforeEach(async () => {
@@ -36,7 +42,9 @@ describe("Romanian election spawner", () => {
       currentTurn: 1,
     });
     await ensureROElections(NOW, 1);
-    const batches = db.collection("elections").insertMany.mock.calls.map(([docs]) => docs);
+    const batches = db
+      .collection("elections")
+      .insertMany.mock.calls.map((call: unknown[]) => call[0] as SpawnedElection[]);
     expect(batches).toHaveLength(2);
     const deputies = batches[0];
     const senators = batches[1];
@@ -44,22 +52,16 @@ describe("Romanian election spawner", () => {
     expect(senators).toHaveLength(roRegions1991.length);
     expect(
       deputies.every(
-        (e: { electionType: string; electionYear: number; endTurn: number }) =>
-          e.electionType === "chamberOfDeputies" && e.electionYear === 1992 && e.endTurn === 96
+        (e) => e.electionType === "chamberOfDeputies" && e.electionYear === 1992 && e.endTurn === 96
       )
     ).toBe(true);
     expect(
       senators.every(
-        (e: { electionType: string; electionYear: number; endTurn: number }) =>
-          e.electionType === "senat" && e.electionYear === 1992 && e.endTurn === 96
+        (e) => e.electionType === "senat" && e.electionYear === 1992 && e.endTurn === 96
       )
     ).toBe(true);
-    expect(deputies.reduce((sum: number, e: { totalSeats: number }) => sum + e.totalSeats, 0)).toBe(
-      396
-    );
-    expect(senators.reduce((sum: number, e: { totalSeats: number }) => sum + e.totalSeats, 0)).toBe(
-      119
-    );
+    expect(deputies.reduce((sum, e) => sum + e.totalSeats, 0)).toBe(396);
+    expect(senators.reduce((sum, e) => sum + e.totalSeats, 0)).toBe(119);
     expect(
       canonicalTurnsForCycle({
         electionType: "senat",
@@ -80,11 +82,11 @@ describe("Romanian election spawner", () => {
       currentTurn: 1,
     });
     await ensureROElections(NOW, 1);
-    const batches = db.collection("elections").insertMany.mock.calls.map(([docs]) => docs);
+    const batches = db
+      .collection("elections")
+      .insertMany.mock.calls.map((call: unknown[]) => call[0] as SpawnedElection[]);
     expect(batches).toHaveLength(1);
-    expect(
-      batches[0].every((e: { electionType: string }) => e.electionType === "grandNationalAssembly")
-    ).toBe(true);
+    expect(batches[0].every((e) => e.electionType === "grandNationalAssembly")).toBe(true);
   });
 
   it("does not revive the Cold War assembly in a modern preset", async () => {

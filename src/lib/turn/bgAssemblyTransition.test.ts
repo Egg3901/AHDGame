@@ -112,7 +112,7 @@ describe("1991 Bulgarian ordinary Assembly transition", () => {
     expect(
       await processBgAssemblyTransition(
         frozen as unknown as Db,
-        { preset: "1991-default", preIteration: { active: true } },
+        { preset: "1991-default", preIteration: { active: true, startedTurn: 1 } },
         100,
         new Date()
       )

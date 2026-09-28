@@ -54,7 +54,7 @@ describe("SFRY 1992 political retirement", () => {
     expect(
       await processYuDissolution(
         db as unknown as Db,
-        { preset: "1991-default", preIteration: { active: true } },
+        { preset: "1991-default", preIteration: { active: true, startedTurn: 1 } },
         100,
         new Date()
       )

@@ -26,7 +26,7 @@ describe("formatElectionTypeLabel", () => {
   // without also giving them a position (see electionMethod.test.ts), which
   // would change live election resolution, so the fallback presents them.
   it.each([
-    ["senat", "Senat"],
+    ["senat", "Senate"],
     ["senato", "Senato"],
     ["senado", "Senado"],
     ["chamber", "Chamber"],

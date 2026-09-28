@@ -21,7 +21,7 @@ describe("Poland 1991 institutions", () => {
   });
 
   it("runs both parliamentary election phases", () => {
-    expect(PL_ELECTIONS.electionPhases.map((phase) => phase.name)).toEqual([
+    expect(PL_ELECTIONS.electionPhases?.map((phase) => phase.name)).toEqual([
       "plSejmElections",
       "plSenateElections",
     ]);
