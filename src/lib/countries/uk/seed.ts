@@ -967,61 +967,7 @@ export async function seedUKGovernors2020(db: Db, reset: boolean, log: (msg: str
   );
 }
 
-/**
- * Admin-only destructive re-seed of UK devolved-executive NPP officials
- * for the 1991/1992 preset.
- *
- * Same shape as the 2020 variant — recycled `governor` officeType for
- * SCO/WAL/NIR/LON. Anachronistic for 1991 (devolution didn't exist until
- * 1998-99, Mayor of London until 2000), but the game models these offices
- * across both presets. Party-stamping reflects the regional Westminster
- * majority in 1992 (Labour for SCO/WAL/LON; UUP for NIR — the 1991-only
- * `uk_uup` default is seeded under the 1991-default preset, so the NIR
- * FM seat can party-stamp to UUP directly without folding to DUP).
- *
- * NOT called from `bootstrapGameWorld` — the bootstrap path seeds these
- * officials via the `UK_FIRST_MINISTERS_1992` historical-seat array
- * embedded in `getPresetSeats("1991-default")`. This function exists
- * only as the `/api/admin/seed` target `"ukGovernors1992"` for
- * destructive re-seed operations.
- */
-export async function seedUKGovernors1992(db: Db, reset: boolean, log: (msg: string) => void) {
-  if (reset) {
-    const officials = await db
-      .collection<ElectedOfficial>("electedOfficials")
-      .find({ countryId: "UK", officeType: "governor", isNPP: true })
-      .project<{ nppId?: ObjectId }>({ nppId: 1 })
-      .toArray();
-    const nppIds = officials.map((o) => o.nppId).filter((id): id is ObjectId => id != null);
-
-    await db
-      .collection<ElectedOfficial>("electedOfficials")
-      .deleteMany({ countryId: "UK", officeType: "governor", isNPP: true });
-
-    if (nppIds.length > 0) {
-      await db.collection<NPP>("npps").updateMany(
-        { _id: { $in: nppIds }, "currentOffice.type": "governor" },
-        {
-          $set: {
-            retiredAt: new Date(),
-            currentOffice: null,
-            updatedAt: new Date(),
-          },
-        }
-      );
-    }
-
-    log(
-      `Reset: deleted ${officials.length} UK FM/Mayor NPP officials, retired ${nppIds.length} NPPs`
-    );
-  }
-
-  const { UK_FIRST_MINISTERS_1992 } = await import("@/lib/constants/historicalSeats");
-  const { seedFromSeats } = await import("@/lib/npp/seedHistorical");
-  const result = await seedFromSeats(db, UK_FIRST_MINISTERS_1992, "winners", {
-    presetId: "1991-default",
-  });
-  log(
-    `Seeded UK First Ministers + Mayor of London (1992): ${result.nppsCreated} NPPs, ${result.officialsCreated} officials`
-  );
+/** Historical 1991 worlds have no devolved executive seats to seed. */
+export async function seedUKGovernors1992(_db: Db, _reset: boolean, log: (msg: string) => void) {
+  log("No UK devolved executives in the 1991 starting settlement; existing leaders are preserved.");
 }

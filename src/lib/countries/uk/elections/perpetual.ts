@@ -344,7 +344,8 @@ export async function ensureUKRegionalCouncilElections(
  *   - First Minister of Scotland / Wales / Northern Ireland (SCO/WAL/NIR)
  *   - Mayor of London (LON)
  *
- * 4-year cycle anchored to the preset's `governorStateSenate` year.
+ * Existing institutions retain their preset cycle. A newly enacted devolution
+ * settlement establishes the first race and anchors later four-year cycles.
  * English non-London regions have no devolved executive and are skipped.
  */
 export async function ensureUKGovernorElections(now: Date, inFlightTurn?: number): Promise<void> {
