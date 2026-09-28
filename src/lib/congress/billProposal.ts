@@ -5,18 +5,24 @@
 import { validateElectoralLawProvision } from "@/lib/elections/electoralLaws";
 import type {
   CentralBankIndependenceProvision,
+  EuroAdoptionProvision,
   ElectoralLawProvision,
 } from "@/lib/db/types/legislation";
 import { canLegislateBankIndependence } from "@/lib/centralBank/governance";
 import type { Db } from "mongodb";
 import { ObjectId } from "mongodb";
-import type { LegislationType, SubsidyProvision, EndSubsidyProvision } from "@/lib/db/types";
+import type {
+  GameState,
+  LegislationType,
+  SubsidyProvision,
+  EndSubsidyProvision,
+} from "@/lib/db/types";
 import type {
   EmbargoProvision,
   EndEmbargoProvision,
   UnionLawProvision,
 } from "@/lib/db/types/legislation";
-import type { CountryId } from "@/lib/constants/countries";
+import { EU_EUROZONE_MEMBERS, type CountryId } from "@/lib/constants/countries";
 import type { CorporationType } from "@/lib/constants/corporations";
 import type { CommodityType } from "@/lib/constants/commodities";
 import {
@@ -74,6 +80,7 @@ export type ValidatedProvisions =
       unionLawProvisions: UnionLawProvision[];
       electoralLawProvisions: ElectoralLawProvision[];
       centralBankProvisions: CentralBankIndependenceProvision[];
+      euroAdoptionProvisions: EuroAdoptionProvision[];
     }
   | { ok: false; status: number; error: string };
 
@@ -106,6 +113,7 @@ export async function validateBillProvisions(
   const validatedUnionLawProvisions: UnionLawProvision[] = [];
   const validatedElectoralLawProvisions: ElectoralLawProvision[] = [];
   const validatedCentralBankProvisions: CentralBankIndependenceProvision[] = [];
+  const validatedEuroAdoptionProvisions: EuroAdoptionProvision[] = [];
   const isTradeCategory = TARIFF_BILL_CATEGORIES.has(category as BillCategory);
 
   for (const rawP of rawProvisions) {
@@ -240,6 +248,37 @@ export async function validateBillProvisions(
       const res = validateElectoralLawProvision(rawP, category);
       if (!res.ok) return { ok: false, status: 400, error: res.error };
       validatedElectoralLawProvisions.push(res.provision);
+      continue;
+    }
+
+    if ("type" in (rawP as object) && (rawP as { type: unknown }).type === "euro_adoption") {
+      if (category !== "economy") {
+        return { ok: false, status: 400, error: "Euro adoption belongs in an economy bill." };
+      }
+      if (!sourceCountry || !EU_EUROZONE_MEMBERS.includes(sourceCountry)) {
+        return { ok: false, status: 400, error: "This country is not eligible for euro adoption." };
+      }
+      if (validatedEuroAdoptionProvisions.length > 0) {
+        return {
+          ok: false,
+          status: 400,
+          error: "A bill can contain only one euro-adoption provision.",
+        };
+      }
+      const state = await db
+        .collection<GameState>("gameState")
+        .findOne(
+          { _id: "current" },
+          { projection: { eurozoneEnabled: 1, euroAdoptedCountries: 1 } }
+        );
+      if (state?.eurozoneEnabled || state?.euroAdoptedCountries?.includes(sourceCountry)) {
+        return {
+          ok: false,
+          status: 400,
+          error: "This country has already adopted or voted to adopt the euro.",
+        };
+      }
+      validatedEuroAdoptionProvisions.push({ type: "euro_adoption" });
       continue;
     }
 
@@ -477,5 +516,6 @@ export async function validateBillProvisions(
     unionLawProvisions: validatedUnionLawProvisions,
     electoralLawProvisions: validatedElectoralLawProvisions,
     centralBankProvisions: validatedCentralBankProvisions,
+    euroAdoptionProvisions: validatedEuroAdoptionProvisions,
   };
 }

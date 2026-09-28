@@ -235,6 +235,10 @@ export const centralBankIndependenceProvisionSchema = z.object({
   action: z.enum(["grant", "revoke"]),
 });
 
+export const euroAdoptionProvisionSchema = z.object({
+  type: z.literal("euro_adoption"),
+});
+
 export const unionLawProvisionSchema = z.object({
   type: z.literal("union_law"),
   bias: z.number().min(-50).max(50),
@@ -284,6 +288,7 @@ export const proposeBillSchema = z
           unionLawProvisionSchema,
           electoralLawProvisionSchema,
           centralBankIndependenceProvisionSchema,
+          euroAdoptionProvisionSchema,
           policyProvisionSchema,
         ])
       )
