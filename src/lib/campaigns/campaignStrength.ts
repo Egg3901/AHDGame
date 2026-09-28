@@ -115,8 +115,11 @@ export function campaignStrengthVoteMultiplier(
   return 1 + maxBonus * (1 - Math.exp(-strength / CAMPAIGN_STRENGTH_TAU));
 }
 
-export function campaignStrengthBoostPercent(campaignStrength: number | null | undefined): number {
-  return (campaignStrengthVoteMultiplier(campaignStrength) - 1) * 100;
+export function campaignStrengthBoostPercent(
+  campaignStrength: number | null | undefined,
+  maxBonus: number = CAMPAIGN_STRENGTH_MAX_BONUS
+): number {
+  return (campaignStrengthVoteMultiplier(campaignStrength, maxBonus) - 1) * 100;
 }
 
 export function calculateCampaignStrengthLeaderPullbacks(
