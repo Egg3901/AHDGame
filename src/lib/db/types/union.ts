@@ -66,6 +66,8 @@ export interface Union {
   treasury: number;
   /** Cumulative frozen cash confiscated by underground raids and removed from circulation. */
   undergroundFinesSeized?: number;
+  /** Last turn whose underground heat and detection step was applied to this cell. */
+  undergroundProcessedTurn?: number;
   /**
    * Uncapped organizing power, the sum of every organize drive any character
    * has ever run on this union, less decay. Distinct from `membershipPressure`:
