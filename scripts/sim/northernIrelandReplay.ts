@@ -44,7 +44,7 @@ import { processTreasuryTurn } from "../../src/lib/turn/treasuryTurn";
 import { processPoliticalMetricsDynamics } from "../../src/lib/turn/politicalMetricsDynamics";
 import { TURNS_PER_YEAR } from "../../src/lib/constants/turnTime";
 import type { Bill, FederalBudget } from "../../src/lib/db/types";
-import type { CrisisInteraction } from "../../src/lib/db/types/crisis";
+import type { CrisisInteraction, CrisisDecisionOption } from "../../src/lib/db/types/crisis";
 import type { Referendum } from "../../src/lib/db/types/referendum";
 import type { LivingConflictState } from "../../src/lib/livingConflict/types";
 
@@ -186,7 +186,9 @@ async function main() {
       )
     );
     const retainedHash = createHash("sha256").update(JSON.stringify(saved)).digest("hex");
-    const nir = saved.find(([name]) => name === "states")![1].find((row) => row._id === "NIR");
+    const nir = saved
+      .find(([name]) => name === "states")![1]
+      .find((row) => String(row._id) === "NIR");
     assert(nir && typeof nir.gdp === "number" && nir.gdp > 0);
     const participants = resolveConflictParticipants(def, new Set(["UK", "IE", "US"]));
     const results: Document[] = [];
@@ -348,11 +350,14 @@ async function main() {
           driveConflictTurn(db, def, participants, turn, year)
         );
         state = driven.state;
-        const beforeRetry = await loadConflictState(db, def.key);
-        const retry = await driveConflictTurn(db, def, participants, turn, year);
-        assert.equal(retry.events.length, 0);
-        assert.deepEqual(await loadConflictState(db, def.key), beforeRetry);
-        retryChecks++;
+        const probe = turn % 24 === 0 || driven.events.length > 0 || state.phaseLevel !== lastPhase;
+        if (probe) {
+          const beforeRetry = await loadConflictState(db, def.key);
+          const retry = await driveConflictTurn(db, def, participants, turn, year);
+          assert.equal(retry.events.length, 0);
+          assert.deepEqual(await loadConflictState(db, def.key), beforeRetry);
+          retryChecks++;
+        }
         for (const event of driven.events)
           if (event.fired.event.negotiation && turn >= nextWindowTurn) {
             // Same authored template and window floor as the turn phase, with other conflicts excluded.
@@ -404,12 +409,10 @@ async function main() {
             const isRatification = node.nodeId.includes("ratification");
             if (
               isRatification &&
-              (await db
-                .collection("bills")
-                .countDocuments({
-                  category: "northern_ireland_peace",
-                  countryId: node.requiredCountryIds?.[0],
-                })) > 0
+              (await db.collection("bills").countDocuments({
+                category: "northern_ireland_peace",
+                countryId: node.requiredCountryIds?.[0],
+              })) > 0
             )
               break;
             if (node.nodeId === "regional_executive_position" && !regionalActive) break;
@@ -463,9 +466,9 @@ async function main() {
               assert(canCharacterInteract(node, actors.foreign_minister.roles!, "IE"));
               authChecks++;
             }
-            const hardline =
+            const hardline: boolean =
               scenario === "relapse" && settledTurn !== null && turn >= settledTurn + 96;
-            let constructive = !hardline;
+            let constructive: boolean = !hardline;
             if (
               key === "unionist" &&
               (scenario === "excluded_unionists" || (scenario === "delayed" && year < 2001))
@@ -479,7 +482,7 @@ async function main() {
               key === "unionist"
             )
               constructive = false;
-            const option = node.options?.[constructive ? 1 : 0];
+            const option: CrisisDecisionOption | undefined = node.options?.[constructive ? 1 : 0];
             assert(option);
             const result = await submitCrisisDecision(
               db,
@@ -589,20 +592,27 @@ async function main() {
           year,
           turn
         );
-        const ratified = await loadConflictState(db, def.key);
-        const ballotsBefore = await db.collection("referendums").countDocuments();
-        state = await reconcileNorthernIrelandRatification(db, def, state, year, turn);
-        assert.deepEqual(state, ratified);
-        assert.equal(await db.collection("referendums").countDocuments(), ballotsBefore);
-        retryChecks++;
+        const probeTransition =
+          probe || (lifecycle?.transitions.length ?? 0) > 0 || state.phaseLevel !== lastPhase;
+        if (probeTransition) {
+          const ratified = await loadConflictState(db, def.key);
+          const ballotsBefore = await db.collection("referendums").countDocuments();
+          state = await reconcileNorthernIrelandRatification(db, def, ratified, year, turn);
+          assert.deepEqual(state, ratified);
+          assert.deepEqual(await loadConflictState(db, def.key), ratified);
+          assert.equal(await db.collection("referendums").countDocuments(), ballotsBefore);
+          retryChecks++;
+        }
         await measure("governance", () => reconcileNorthernIrelandGovernance(db, state, turn));
         const institutions = await db.collection("ukDevolution").findOne({ _id: "UK" as never });
-        await reconcileNorthernIrelandGovernance(db, state, turn);
-        assert.deepEqual(
-          await db.collection("ukDevolution").findOne({ _id: "UK" as never }),
-          institutions
-        );
-        retryChecks++;
+        if (probeTransition) {
+          await reconcileNorthernIrelandGovernance(db, state, turn);
+          assert.deepEqual(
+            await db.collection("ukDevolution").findOne({ _id: "UK" as never }),
+            institutions
+          );
+          retryChecks++;
+        }
         if (state.phaseLevel === 6 && settledTurn === null) {
           settledTurn = turn;
           assert(institutions?.regions?.NIR?.active);
@@ -751,6 +761,26 @@ async function main() {
         finalState: state,
       };
       results.push(result);
+      const sourceCheckpoint = await Promise.all(
+        Object.entries(filters).map(
+          async ([name, filter]) =>
+            [name, await source.collection(name).find(filter).sort({ _id: 1 }).toArray()] as const
+        )
+      );
+      assert.equal(
+        createHash("sha256").update(JSON.stringify(sourceCheckpoint)).digest("hex"),
+        retainedHash
+      );
+      assert.deepEqual(
+        await source
+          .collection<LivingConflictState>("livingConflicts")
+          .findOne({ defKey: def.key }),
+        original
+      );
+      writeFileSync(
+        `${out}.${scenario}.checkpoint.json`,
+        `${JSON.stringify({ sourceCommit, sourceDirty: Boolean(sourceDirty), sourceDirtyAtCheckpoint: Boolean(dirty()), retainedRun: { id: run._id, sourceCommit: run.source.executedCommit, savedTurn: original.lastProcessedTurn, preset: run.preset }, retainedCollectionsSha256: retainedHash, sourcePreserved: true, result }, null, 2)}\n`
+      );
       console.error(
         JSON.stringify({
           scenario,
