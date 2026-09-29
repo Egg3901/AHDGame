@@ -627,6 +627,29 @@ async function main() {
         if (settledTurn !== null && state.phaseLevel === 7 && suspendedTurn === null) {
           suspendedTurn = turn;
           assert.equal(institutions?.regions?.NIR?.active, false);
+          const formerExecutive = await db
+            .collection("characters")
+            .findOne({ _id: actors.regional._id });
+          assert(
+            !formerExecutive?.currentOffice,
+            "Suspension clears the seated synthetic executive's office"
+          );
+          assert.equal(
+            await db
+              .collection("electedOfficials")
+              .countDocuments({ countryId: "UK", state: "NIR", officeType: "governor" }),
+            0
+          );
+          assert.equal(
+            await db
+              .collection("elections")
+              .countDocuments({
+                countryId: "UK",
+                state: "NIR",
+                status: { $in: ["active", "upcoming"] },
+              }),
+            0
+          );
         }
         if (state.rejectedPeaceReferendumId && referendumRejectedTurn === null) {
           referendumRejectedTurn = turn;
