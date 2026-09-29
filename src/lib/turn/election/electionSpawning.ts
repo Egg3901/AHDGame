@@ -12,6 +12,7 @@ import {
 } from "@/lib/elections/cycleAnchorContext";
 import { electionToLarpYear } from "@/lib/utils/formatters";
 import { generateLandeslistenForCycle } from "@/lib/elections/germanyLandesliste";
+import { snapElectionResolutionYear } from "@/lib/turn/rules/snapElection";
 import { snapAnchorEndTime } from "@/lib/elections/snapShift";
 
 /**
@@ -212,7 +213,10 @@ export async function spawnCommonsElection(
     state: fromElection.state,
     electionType: "commons",
     cycle: spawn.cycle,
-    electionYear: electionToLarpYear("commons", spawn.cycle, undefined, undefined, ctx),
+    electionYear:
+      priorEndTurn != null
+        ? snapElectionResolutionYear(spawn.endTurn, ctx)
+        : electionToLarpYear("commons", spawn.cycle, undefined, undefined, ctx),
     seatId: getSeatIdFromElection({
       countryId: "UK",
       electionType: "commons",
