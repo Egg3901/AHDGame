@@ -5,9 +5,14 @@ import type { CountryId } from "@/lib/constants/countries";
 import { applyUnionLawProvision, isUnionsBanned } from "@/lib/labour/unionLaws";
 import { spendFromTreasury } from "@/lib/budget/treasurySpend";
 import { unionApproval } from "@/lib/unions/unionDues";
+import { countryUndergroundIntensity } from "@/lib/unions/undergroundEffects";
 import { ALL_CRISIS_TEMPLATES } from "./templates";
 import { createCrisisFromTemplate } from "./createCrisisFromTemplate";
-import { UNION_BAN_STRIKE_NODES, UNION_BAN_STRIKE_TEMPLATE_KEY } from "./unionBanStrikeCopy";
+import {
+  UNION_BAN_STRIKE_DURATION_TURNS,
+  UNION_BAN_STRIKE_NODES,
+  UNION_BAN_STRIKE_TEMPLATE_KEY,
+} from "./unionBanStrikeCopy";
 import { announceUnionBanStrikeEnd, announceUnionBanStrikeStart } from "./unionBanStrikeWire";
 
 /**
@@ -92,6 +97,25 @@ export const UNION_BAN_EXECUTIVE_COSTS: Record<
 
 /** Fraction of the ban's remaining effects that survives a ride-it-out choice. */
 export const RIDE_OUT_EFFECT_RETENTION = 0.5;
+export const RIDE_OUT_MAX_UNDERGROUND_RESISTANCE = 0.25;
+export const NEGOTIATION_MAX_UNDERGROUND_COST_MULTIPLIER = 2;
+export const ARMY_UNDERGROUND_SYMPATHY_GAIN = 4;
+
+/** Cells can keep a wildcat strike alive for six extra turns, one per turn. */
+export const UNDERGROUND_CRISIS_EXTENSION_LIMIT = 6;
+
+export function rideOutEffectRetention(intensity: number): number {
+  return (
+    RIDE_OUT_EFFECT_RETENTION +
+    Math.max(0, Math.min(1, intensity)) * RIDE_OUT_MAX_UNDERGROUND_RESISTANCE
+  );
+}
+
+export function negotiationCostMultiplier(intensity: number): number {
+  return (
+    1 + Math.max(0, Math.min(1, intensity)) * (NEGOTIATION_MAX_UNDERGROUND_COST_MULTIPLIER - 1)
+  );
+}
 
 /** Share of GDP a failed round of negotiation costs the treasury. */
 export const NEGOTIATION_ATTEMPT_COST_PCT_GDP = 0.0005;
@@ -147,6 +171,31 @@ export async function getActiveUnionBanStrike(db: Db, countryId: string): Promis
     countryIds: countryId,
     status: "active",
   });
+}
+
+/** One successful mass drive may prolong the live crisis once per turn, with a six-turn cap. */
+export async function extendUnionBanStrikeFromUnderground(
+  db: Db,
+  countryId: CountryId,
+  currentTurn: number
+): Promise<boolean> {
+  const result = await db.collection<Crisis>("crises").updateOne(
+    {
+      templateKey: UNION_BAN_STRIKE_TEMPLATE_KEY,
+      countryIds: countryId,
+      status: "active",
+      durationTurns: {
+        $gte: UNION_BAN_STRIKE_DURATION_TURNS,
+        $lt: UNION_BAN_STRIKE_DURATION_TURNS + UNDERGROUND_CRISIS_EXTENSION_LIMIT,
+      },
+      lastUndergroundExtensionTurn: { $ne: currentTurn },
+    },
+    {
+      $inc: { durationTurns: 1 },
+      $set: { lastUndergroundExtensionTurn: currentTurn },
+    }
+  );
+  return result.modifiedCount > 0;
 }
 
 export type UnionBanStrikeSkipReason =
@@ -315,6 +364,17 @@ async function respondWithArmy(
   currentTurn: number
 ): Promise<UnionBanStrikeResponseResult> {
   await endUnionBanStrike(db, crisis, currentTurn, "troops");
+  // Troops restore production at once, but create new clandestine sympathy.
+  // Budget law is authoritative even when the Union.suspended mirror is stale.
+  if (await isUnionsBanned(db, countryId as CountryId)) {
+    await db.collection<Union>("unions").updateMany(
+      { countryId: countryId as CountryId },
+      {
+        $inc: { undergroundStrength: ARMY_UNDERGROUND_SYMPATHY_GAIN },
+        $set: { updatedAt: new Date() },
+      }
+    );
+  }
   await chargeExecutive(db, characterId, countryId, UNION_BAN_EXECUTIVE_COSTS.army);
   return {};
 }
@@ -341,7 +401,9 @@ async function respondWithNegotiation(
     .findOne({ countryId: countryId as CountryId }, { projection: { gdp: 1, gdpSmoothed: 1 } });
   const gdp =
     budget?.gdpSmoothed && budget.gdpSmoothed > 0 ? budget.gdpSmoothed : (budget?.gdp ?? 0);
-  const concession = gdp > 0 ? gdp * NEGOTIATION_ATTEMPT_COST_PCT_GDP : 0;
+  const intensity = await countryUndergroundIntensity(db, countryId as CountryId);
+  const concession =
+    gdp > 0 ? gdp * NEGOTIATION_ATTEMPT_COST_PCT_GDP * negotiationCostMultiplier(intensity) : 0;
   if (concession > 0) {
     await spendFromTreasury(db, countryId, concession, { resyncDerived: true });
   }
@@ -366,11 +428,12 @@ async function respondByRidingItOut(
   characterId: ObjectId,
   countryId: string
 ): Promise<UnionBanStrikeResponseResult> {
+  const intensity = await countryUndergroundIntensity(db, countryId as CountryId);
   await db
     .collection<Crisis>("crises")
     .updateOne(
       { _id: crisis._id },
-      { $set: { effects: diminishEffects(crisis.effects, RIDE_OUT_EFFECT_RETENTION) } }
+      { $set: { effects: diminishEffects(crisis.effects, rideOutEffectRetention(intensity)) } }
     );
   await chargeExecutive(db, characterId, countryId, UNION_BAN_EXECUTIVE_COSTS.rideOut);
   return {};

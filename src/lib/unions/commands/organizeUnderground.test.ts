@@ -43,6 +43,7 @@ interface Stub {
   characterUpdate: ReturnType<typeof vi.fn>;
   unionUpdate: ReturnType<typeof vi.fn>;
   organizerUpdate: ReturnType<typeof vi.fn>;
+  crisisUpdate: ReturnType<typeof vi.fn>;
 }
 
 function stubDb(opts: {
@@ -55,6 +56,7 @@ function stubDb(opts: {
   const characterUpdate = vi.fn().mockResolvedValue({ modifiedCount: 1 });
   const unionUpdate = vi.fn().mockResolvedValue(opts.unionAfter ?? { ...opts.union });
   const organizerUpdate = vi.fn().mockResolvedValue({});
+  const crisisUpdate = vi.fn().mockResolvedValue({ modifiedCount: 1 });
   const db = {
     collection: (name: string) => {
       if (name === "characters") return { updateOne: characterUpdate };
@@ -71,10 +73,11 @@ function stubDb(opts: {
       if (name === "gameState") {
         return { findOne: vi.fn().mockResolvedValue({ currentTurn: opts.turn ?? 42 }) };
       }
+      if (name === "crises") return { updateOne: crisisUpdate };
       throw new Error(`unexpected collection ${name}`);
     },
   } as unknown as Db;
-  return { db, characterUpdate, unionUpdate, organizerUpdate };
+  return { db, characterUpdate, unionUpdate, organizerUpdate, crisisUpdate };
 }
 
 describe("organizeUnderground (command)", () => {
@@ -230,6 +233,36 @@ describe("organizeUnderground (command)", () => {
     if (!result.ok) return;
     expect(result.strengthGain).toBe(UNDERGROUND_MASS_STRENGTH_GAIN / 2);
     expect(result.statusLabel).toBe("exposed");
+  });
+
+  it("a strong mass drive extends an active ban-strike crisis without a legal strike", async () => {
+    const character = makeCharacter();
+    const union = makeUnion({ undergroundStrength: 12 });
+    const { db, crisisUpdate } = stubDb({
+      union,
+      unionAfter: { ...union, undergroundStrength: 21 },
+    });
+    const result = await organizeUnderground(db, character, union, "mass");
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.crisisExtended).toBe(true);
+    expect(crisisUpdate).toHaveBeenCalledTimes(1);
+    expect(crisisUpdate.mock.calls[0][0]).toMatchObject({
+      countryIds: "US",
+      status: "active",
+      lastUndergroundExtensionTurn: { $ne: 42 },
+    });
+  });
+
+  it("a quiet drive never touches the wildcat crisis", async () => {
+    const character = makeCharacter();
+    const union = makeUnion({ undergroundStrength: 20 });
+    const { db, crisisUpdate } = stubDb({ union });
+    const result = await organizeUnderground(db, character, union, "quiet");
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.crisisExtended).toBe(false);
+    expect(crisisUpdate).not.toHaveBeenCalled();
   });
 
   it("refunds actions when the union vanishes between read and write", async () => {

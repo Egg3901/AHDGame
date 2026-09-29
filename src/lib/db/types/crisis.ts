@@ -421,6 +421,8 @@ export interface Crisis {
   startTurn: number;
   endTurn: number | null;
   durationTurns: number | null;
+  /** Last turn a mass underground drive prolonged a union-ban general strike. */
+  lastUndergroundExtensionTurn?: number;
   effects: CrisisEffect[];
   wireMessageOnStart: string;
   wireMessageOnEnd: string | null;
