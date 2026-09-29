@@ -32,32 +32,13 @@ import { BOND_MATURITY_LABELS } from "@/lib/db/types/bond";
 import { getEraContext } from "@/lib/era/context";
 import { isLegislationTypeActive } from "@/lib/era/legislationCatalog";
 import { legislatureUrl } from "@/lib/urls";
+import type { SearchResult } from "@/lib/search/types";
 
 /**
  * Maximum accepted `q` length (after trimming). Longer queries are rejected
  * with HTTP 400 before any auth, rate-limit, or database work.
  */
 export const MAX_UNIVERSAL_SEARCH_QUERY_LENGTH = 200;
-
-export interface SearchResult {
-  type:
-    | "politician"
-    | "seat"
-    | "region"
-    | "election"
-    | "corporation"
-    | "bill"
-    | "page"
-    | "commodity"
-    | "currency"
-    | "bond"
-    | "admin";
-  id: string;
-  title: string;
-  subtitle: string;
-  href: string;
-  icon: string;
-}
 
 /**
  * Pure resolver: takes the already-loaded generated-office definitions rather
@@ -143,6 +124,7 @@ async function handleGET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const query = searchParams.get("q")?.trim() || "";
+    const isResultsPage = searchParams.get("view") === "page";
 
     // Return empty results for empty or too-short queries. A 1-character query
     // forces a near-full scan of every searched collection.
@@ -1006,7 +988,7 @@ async function handleGET(request: Request) {
       return 5;
     };
     const rankedResults = [...results].sort((a, b) => scoreResult(a) - scoreResult(b));
-    const limitedResults = rankedResults.slice(0, 10);
+    const limitedResults = rankedResults.slice(0, isResultsPage ? 50 : 10);
 
     return NextResponse.json({ results: limitedResults });
   } catch (error) {
