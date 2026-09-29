@@ -82,6 +82,15 @@ describe("Hungary's 2014 mixed parliamentary formula", () => {
     expect(result.listSeats.a).toBeGreaterThan(result.listSeats.z);
   });
 
+  it("uses the national ballot serial when equal D'Hondt quotients meet the last mandate", () => {
+    const result = allocateHungaryMixed2014(districts([{ partyId: "a", votes: 1 }]), [
+      { partyId: "z", votes: 100, ballotOrder: 1 },
+      { partyId: "a", votes: 100, ballotOrder: 2 },
+    ]);
+    expect(result.listSeats.z).toBe(47);
+    expect(result.listSeats.a).toBe(46);
+  });
+
   it("reserves a preferential minority mandate before allocating the remaining list seats", () => {
     const result = allocateHungaryMixed2014(
       districts([{ partyId: "a", votes: 1 }]),
