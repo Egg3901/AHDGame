@@ -1,3 +1,4 @@
+import type { Filter } from "mongodb";
 import { northernIrelandAssemblySuspended } from "@/lib/countries/uk/northernIreland/service";
 import { getDb } from "@/lib/mongodb";
 import type { StateBill, State, ElectedOfficial, Character } from "@/lib/db/types";
@@ -159,7 +160,7 @@ export async function processStateBillTimers(
   let billsProcessed = 0;
   const notificationInputs: NotificationInput[] = [];
   const { chamberVote, executiveAssent, override } = config.stages;
-  const authorityFilter = (await northernIrelandAssemblySuspended(db))
+  const authorityFilter: Filter<StateBill> = (await northernIrelandAssemblySuspended(db))
     ? { $nor: [{ countryId: "UK", stateId: "NIR" }] }
     : {};
 

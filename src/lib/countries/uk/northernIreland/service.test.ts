@@ -1,4 +1,4 @@
-import { ObjectId } from "mongodb";
+import { ObjectId, type Db } from "mongodb";
 import { describe, expect, it, vi } from "vitest";
 import { createMockDb } from "@/lib/test-utils/mockDb";
 import { emptyConflictState } from "@/lib/livingConflict/engine";
@@ -41,7 +41,7 @@ describe("NI governance shell", () => {
         { electionType: "regionalCouncil", cycle: 4 },
       ]),
     });
-    await reconcileNorthernIrelandGovernance(db, conflict, 100);
+    await reconcileNorthernIrelandGovernance(db as unknown as Db, conflict, 100);
     expect(db.collectionMocks.ukDevolution!.updateOne).toHaveBeenCalledWith(
       { _id: "UK" },
       expect.objectContaining({
@@ -67,7 +67,7 @@ describe("NI governance shell", () => {
       toArray: vi.fn().mockResolvedValue([{ _id: id, electionType: "governor", cycle: 2 }]),
     });
     await reconcileNorthernIrelandGovernance(
-      db,
+      db as unknown as Db,
       { ...conflict, phaseLevel: 7, status: "negotiating" },
       200
     );
@@ -83,7 +83,7 @@ describe("NI governance shell", () => {
     db.collectionMocks.gameState!.findOne.mockResolvedValue({ startingYear: 2027 });
     db.collectionMocks.ukDevolution!.findOne.mockResolvedValue(initialUKDevolutionState(2027));
     await reconcileNorthernIrelandGovernance(
-      db,
+      db as unknown as Db,
       { ...conflict, phaseLevel: 1, status: "active" },
       10
     );
@@ -91,12 +91,12 @@ describe("NI governance shell", () => {
   });
   it("blocks only the suspended NI chamber and preserves legacy behavior", async () => {
     const db = fixture();
-    expect(await northernIrelandAssemblyAllows(db, "UK", "NIR")).toBe(true);
+    expect(await northernIrelandAssemblyAllows(db as unknown as Db, "UK", "NIR")).toBe(true);
     db.collectionMocks.ukDevolution!.findOne.mockResolvedValue({
       ...initialUKDevolutionState(1991),
       northernIrelandPeace: { posture: "suspended", changedTurn: 10 },
     });
-    expect(await northernIrelandAssemblyAllows(db, "UK", "NIR")).toBe(false);
-    expect(await northernIrelandAssemblyAllows(db, "UK", "SCO")).toBe(true);
+    expect(await northernIrelandAssemblyAllows(db as unknown as Db, "UK", "NIR")).toBe(false);
+    expect(await northernIrelandAssemblyAllows(db as unknown as Db, "UK", "SCO")).toBe(true);
   });
 });
