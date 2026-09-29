@@ -3,45 +3,21 @@
  * balances. Euro settlement fixes internal rates and uses common external quotes.
  */
 import { resolveEuroConversionQuotes } from "./euro/quotes";
-import { euroLedgerCrossRate, euroLedgerSpendForTarget } from "./euro/rules";
+import { euroLedgerCrossRate } from "./euro/rules";
 import { loadEuroMonetaryUnion } from "./euro/service";
-// src/lib/currency/autoConvert.ts
+import { purchaseConversionRequired, purchaseConversionSpend } from "./rules/purchaseConversion";
 import type { Db, ObjectId } from "mongodb";
 import type { ExchangeRate } from "@/lib/db/types";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import type { CountryId } from "@/lib/constants/countries";
 import type { PersonalWealthHolder } from "@/lib/currency/characterFunds";
-import { FOREX_ACTIVE_CURRENCIES, MARKET_MAKER_SPREAD } from "@/lib/constants/currencies";
+import { FOREX_ACTIVE_CURRENCIES } from "@/lib/constants/currencies";
 import { getPersonalBalance, getHomeCurrency } from "@/lib/currency/characterFunds";
 import {
   executeMarketMakerTrade,
   getCountryForCurrency,
   getCrossRate,
 } from "@/lib/currency/marketMaker";
-
-/**
- * Compute the source-currency spend that, after Math.round inside
- * executeMarketMakerTrade, will deliver at least `shortfall` target units —
- * capped to the available source balance. The naive idealSpend can land a
- * fraction below shortfall once spread + cross-rate are rounded to integers
- * (e.g. 0.19 EUR → 0 USD), which would leave a buyer "$0.13 short" with
- * plenty of EUR left to spend. The buffer scales with crossRate so it works
- * for both EUR↔USD (rate ~0.7) and JPY→USD (rate ~0.01).
- */
-function spendAmountWithRoundingBuffer(
-  shortfall: number,
-  crossRate: number,
-  sourceBal: number,
-  fixedSettlement = false
-): number {
-  if (!Number.isFinite(crossRate) || crossRate <= 0) return Math.max(0, sourceBal);
-  if (fixedSettlement) return Math.min(sourceBal, euroLedgerSpendForTarget(shortfall, crossRate));
-  const idealSpend = shortfall / ((1 - MARKET_MAKER_SPREAD) * crossRate);
-  // One source unit converts to ~crossRate target units. Step at least far
-  // enough to absorb a full target-unit of round-down loss.
-  const buffer = Math.max(1, Math.ceil(1 / crossRate));
-  return Math.min(sourceBal, idealSpend + buffer);
-}
 
 interface AutoConvertParams {
   character: PersonalWealthHolder & { _id: ObjectId };
@@ -192,11 +168,12 @@ export async function topUpPersonalBalanceInCurrency(
 
       const fixedRate = euroLedgerCrossRate(union, code, targetCurrency);
       const crossRate = fixedRate ?? getCrossRate(fromExRate.rate, toExRate.rate);
-      const spendAmount = spendAmountWithRoundingBuffer(
+      const spendAmount = purchaseConversionSpend(
         shortfall,
         crossRate,
         sourceBal,
-        fixedRate != null
+        fixedRate != null,
+        fromExRate.forexSpreadStrength
       );
       if (spendAmount <= 0) continue;
 
@@ -383,16 +360,19 @@ export async function autoConvertForPurchase(
   // Use the rounding-aware buffer so a sub-unit shortfall (e.g. $0.13)
   // doesn't bottom out at 0 delivered when the natural idealSpend rounds to
   // 0 source units. Cap to homeBalance so we never overspend the wallet.
-  const requiredHomeAmount = spendAmountWithRoundingBuffer(
+  const requiredHomeAmount = purchaseConversionSpend(
     shortfall,
     crossRate,
     homeBalance,
-    fixedRate != null
+    fixedRate != null,
+    fromExRate.forexSpreadStrength
   );
-  const homeNeededRaw =
-    fixedRate != null
-      ? euroLedgerSpendForTarget(shortfall, crossRate)
-      : shortfall / ((1 - MARKET_MAKER_SPREAD) * crossRate);
+  const homeNeededRaw = purchaseConversionRequired(
+    shortfall,
+    crossRate,
+    fixedRate != null,
+    fromExRate.forexSpreadStrength
+  );
   if (homeBalance < homeNeededRaw) {
     return {
       needed: true,
@@ -510,10 +490,12 @@ export async function convertForExplicitPay(
   // => fromAmount = toAmount / ((1 - spread) * crossRate)
   const fixedRate = euroLedgerCrossRate(union, payCurrency, requiredCurrency);
   const crossRate = fixedRate ?? getCrossRate(fromExRate.rate, toExRate.rate);
-  const requiredPayAmount =
-    fixedRate != null
-      ? euroLedgerSpendForTarget(requiredAmount, crossRate)
-      : requiredAmount / ((1 - MARKET_MAKER_SPREAD) * crossRate);
+  const requiredPayAmount = purchaseConversionRequired(
+    requiredAmount,
+    crossRate,
+    fixedRate != null,
+    fromExRate.forexSpreadStrength
+  );
 
   const payBalance = getPersonalBalance(character, payCurrency, true);
   if (payBalance < requiredPayAmount) {
