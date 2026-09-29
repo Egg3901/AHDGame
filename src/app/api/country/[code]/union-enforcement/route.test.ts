@@ -55,6 +55,46 @@ beforeEach(() => {
 });
 
 describe("union ban enforcement route", () => {
+  it("permits the seated intelligence delegate but rejects an unseated character", async () => {
+    vi.mocked(requireAuthWithCharacter).mockResolvedValue({
+      ok: true,
+      user: { userId: "director", character: { _id: characterId, countryId: "US" } },
+    } as never);
+    db.collection("cabinetMembers").findOne.mockResolvedValue({
+      positionId: "director_of_intelligence",
+      characterId,
+    });
+    expect(
+      (await GET(new Request("http://localhost"), { params: Promise.resolve({ code: "US" }) }))
+        .status
+    ).toBe(200);
+    expect((await post({ action: "posture", posture: "crackdown" })).status).toBe(200);
+    expect(db.collection("cabinetMembers").findOne).toHaveBeenCalledWith({
+      countryId: "US",
+      positionId: "director_of_intelligence",
+    });
+
+    db.collection("cabinetMembers").findOne.mockResolvedValue(null);
+    expect((await post({ action: "posture", posture: "normal" })).status).toBe(403);
+  });
+
+  it("lets an acting delegate read but blocks enforcement mutations", async () => {
+    vi.mocked(requireAuthWithCharacter).mockResolvedValue({
+      ok: true,
+      user: { userId: "director", character: { _id: characterId, countryId: "US" } },
+    } as never);
+    db.collection("cabinetMembers").findOne.mockResolvedValue({
+      positionId: "director_of_intelligence",
+      characterId,
+      acting: true,
+    });
+    expect(
+      (await GET(new Request("http://localhost"), { params: Promise.resolve({ code: "US" }) }))
+        .status
+    ).toBe(200);
+    expect((await post({ action: "posture", posture: "crackdown" })).status).toBe(403);
+  });
+
   it("reports the persisted posture only to the country's executive", async () => {
     db.collection("federalBudget").findOne.mockResolvedValue({
       unionsBanned: true,
@@ -151,6 +191,7 @@ describe("union ban enforcement route", () => {
       suspended: true,
       heat: 72,
       undergroundStrength: 20,
+      treasury: 100,
     });
     db.collection("unions").updateOne.mockResolvedValue({ modifiedCount: 1 });
     const response = await post({ action: "raid", unionId: unionId.toString() });
@@ -160,9 +201,13 @@ describe("union ban enforcement route", () => {
       expect.objectContaining({ $inc: { actions: -2 } })
     );
     expect(db.collection("unions").updateOne).toHaveBeenCalledWith(
-      expect.objectContaining({ suspended: true }),
-      expect.objectContaining({ $set: expect.objectContaining({ lastUndergroundRaidTurn: 42 }) })
+      expect.objectContaining({ suspended: true, treasury: 100 }),
+      expect.objectContaining({
+        $inc: expect.objectContaining({ treasury: -10, undergroundFinesSeized: 10 }),
+        $set: expect.objectContaining({ lastUndergroundRaidTurn: 42 }),
+      })
     );
+    expect((await response.json()).fineSeized).toBe(10);
   });
 
   it("refuses a cold cell or a cell still in raid cooldown without spending actions", async () => {

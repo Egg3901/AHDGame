@@ -82,7 +82,7 @@ export function UnionEnforcementDesk({
           );
         } else {
           setResult(
-            `Raid removed ${data.strengthLoss} cell strength${data.sympathyGain ? `; sympathy restored ${data.sympathyGain}` : ""}. Two action points spent. This cell cannot be raided again for three turns.`
+            `Raid removed ${data.strengthLoss} cell strength and confiscated ${data.fineSeized ?? 0} from the frozen treasury${data.sympathyGain ? `; sympathy restored ${data.sympathyGain}` : ""}. Two action points spent. This cell cannot be raided again for three turns.`
           );
         }
       } else {
@@ -97,7 +97,7 @@ export function UnionEnforcementDesk({
 
   return (
     <section aria-label="Union enforcement" className="rounded-xl border border-border p-4 text-sm">
-      <h2 className="font-semibold">Executive union enforcement</h2>
+      <h2 className="font-semibold">Government union enforcement</h2>
       <p className="mt-1 text-xs text-muted">
         Investigate a domestic union for one action point, raid an exposed or high heat cell for
         two, or change the standing detection posture once per turn.
