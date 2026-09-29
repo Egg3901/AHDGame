@@ -315,4 +315,34 @@ describe("processSoeOperations", () => {
     expect(calls.length).toBeGreaterThan(0);
     expect(calls[0][0]).toEqual({ countryId: "DD" });
   });
+
+  it("loads the 2027 EUR treasury denomination once for two French SOEs", async () => {
+    db.collectionMocks.corporations.find.mockReturnValue(
+      cursor(
+        [new ObjectId(), new ObjectId()].map((_id) => ({
+          _id,
+          countryId: "FR",
+          countryOwnerId: "FR",
+          ownershipState: "stateOwned",
+          isNationalized: true,
+          liquidCapital: -1000,
+          liquidCurrencyCode: "EUR",
+        }))
+      )
+    );
+    db.collectionMocks.corporateSectors.find.mockReturnValue(cursor([]));
+    db.collectionMocks.macroMetrics.find.mockReturnValue(cursor([]));
+    db.collectionMocks.politicalMetrics.find.mockReturnValue(cursor([]));
+    db.collectionMocks.federalBudget.findOne.mockResolvedValue({
+      countryId: "FR",
+      currencyCode: "EUR",
+    });
+
+    const { processSoeOperations } = await import("./soeOperations");
+    const result = await processSoeOperations(db as unknown as Db, NOW);
+
+    expect(result.soeCorps).toBe(2);
+    expect(db.collectionMocks.federalBudget.findOne).toHaveBeenCalledTimes(1);
+    expect(db.collectionMocks.federalBudget.updateOne).toHaveBeenCalledTimes(2);
+  });
 });
