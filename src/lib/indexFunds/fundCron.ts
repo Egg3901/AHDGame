@@ -361,6 +361,29 @@ export function recomputeNav(
   return Number.isFinite(nav) && nav > 0 ? nav : null;
 }
 
+/** Publish settled bond marks, including when a later reserve purchase fails. */
+export async function refreshFundNavAfterBondDeployment(
+  db: Db,
+  fundId: IndexFund["_id"],
+  bondPrincipalAnchor: number,
+  openOrdersEscrowAnchor: number
+): Promise<void> {
+  const fund = await getFundById(db, fundId);
+  if (!fund) throw new Error("bond fund disappeared after deployment");
+  const nav = recomputeNav(fund, { bondPrincipalAnchor, openOrdersEscrowAnchor });
+  if (nav === null) throw new Error("invalid NAV after bond deployment");
+  const backing = calculateBackingRatio({
+    cashAnchor: fund.cashAnchor,
+    holdingsValueAnchor: computeHoldingsValueAnchor(fund),
+    bondPrincipalAnchor,
+    openOrdersEscrowAnchor,
+    queuedRedemptionUnits: 0,
+    quotedNav: nav,
+    unitSupply: fund.unitSupply,
+  });
+  await updateFundNav(db, fundId, { quotedNav: nav, backingRatio: backing.backingRatio });
+}
+
 // ── Pass 3 helper: Absorb public float ────────────────────────────────
 
 /**
@@ -1654,12 +1677,37 @@ export async function runIndexFundCron(
         );
         if (bondDeploy.deployedAnchor > 0) {
           result.bondDeployments++;
+          await refreshFundNavAfterBondDeployment(
+            db,
+            preparation.fund._id,
+            preparation.bondPrincipalAnchor + bondDeploy.markedValueAnchor,
+            openOrdersEscrowByFundId.get(preparation.fund._id.toString()) ?? 0
+          );
         }
       }
       navReadyFundIds.push(preparation.fund._id);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       result.errors.push(`Fund ${preparation.fund.slug}: ${message}`);
+      // Earlier purchases can settle before a later issue or receipt fails.
+      // Re-read the book and cash so the pre-deployment quote is not left live.
+      try {
+        const settledBondValue = await sumFundBondHoldingsValueAnchor(
+          db,
+          preparation.fund,
+          exchangeRates
+        );
+        await refreshFundNavAfterBondDeployment(
+          db,
+          preparation.fund._id,
+          settledBondValue,
+          openOrdersEscrowByFundId.get(preparation.fund._id.toString()) ?? 0
+        );
+      } catch (refreshError) {
+        result.errors.push(
+          `Fund ${preparation.fund.slug} post-bond NAV: ${refreshError instanceof Error ? refreshError.message : String(refreshError)}`
+        );
+      }
     }
   }
 
