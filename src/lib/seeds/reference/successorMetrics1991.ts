@@ -1,4 +1,5 @@
 import type { StateMetrics } from "@/lib/db/types";
+import { demographicAnchor1991 } from "./successorDemographicAnchors1991";
 import { makeEasternBlocStateMetrics } from "@/lib/seeds/shared/easternBlocMetrics";
 import { SUCCESSOR_NOMINAL_GDP_1991 } from "./successorGdp1991";
 import { SUCCESSOR_REGION_POPULATION_1991 } from "./successorPopulation1991";
@@ -141,7 +142,10 @@ export const SUCCESSOR_STATE_METRICS_1991: StateMetrics[] = (
   const overrides = Object.fromEntries(
     states.map((state) => {
       const relative = (state.gdp * 1_000_000) / state.population / nationalGdpPerResident;
-      const regionalUrban = clamp(profile.urban + 8 * Math.log(relative), 20, 95);
+      const regionalUrban =
+        countryId === "RU" && state._id.startsWith("SU_")
+          ? demographicAnchor1991(countryId, state._id).urban
+          : clamp(profile.urban + 8 * Math.log(relative), 20, 95);
       return [
         state._id,
         {
