@@ -1,13 +1,14 @@
 import type { SuccessorTerritory } from "./territory";
 
 /** Physical custody is distinct from the public-finance allocation. An
- * enterprise or unit may have a book value, but moving it never credits cash
+ * enterprise or unit may have a known book value, but moving it never credits cash
  * or rewrites a creditor's contract. */
 export interface SuccessionCustodyAsset {
   assetId: string;
   kind: "public-enterprise" | "conventional-force" | "strategic-force";
   homeRegionId: string | null;
-  valueMinor: number;
+  /** Optional book value in shared accounting units; absence never means zero. */
+  valueMinor?: number;
 }
 
 export interface SuccessionCustodyAssignment {
@@ -16,13 +17,14 @@ export interface SuccessionCustodyAssignment {
   custodianEntityId: string;
   /** Background successors receive aggregate capacity, never domestic offices. */
   disposition: "retain-detailed" | "aggregate-background";
-  valueMinor: number;
+  valueMinor?: number;
 }
 
 /**
  * Local enterprises and conventional forces follow territory. Strategic forces
- * and assets without a fixed home require an explicit custodian in the approved terms. A background successor
- * receives aggregate custody rather than a playable corporation or unit.
+ * and assets without a fixed home require an explicit custodian in the approved
+ * terms. A background successor receives aggregate custody rather than a
+ * playable corporation or unit.
  */
 export function planSuccessionCustody(input: {
   sourceEntityId: string;
@@ -64,8 +66,8 @@ export function planSuccessionCustody(input: {
       !asset.assetId.trim() ||
       seenAssets.has(asset.assetId) ||
       (asset.homeRegionId !== null && !regionOwner.has(asset.homeRegionId)) ||
-      !Number.isSafeInteger(asset.valueMinor) ||
-      asset.valueMinor < 0
+      (asset.valueMinor !== undefined &&
+        (!Number.isSafeInteger(asset.valueMinor) || asset.valueMinor < 0))
     )
       throw new Error("Custody asset is duplicated or outside source territory");
     seenAssets.add(asset.assetId);
@@ -83,7 +85,7 @@ export function planSuccessionCustody(input: {
       custodianEntityId,
       disposition:
         custodianEntityId === input.sourceEntityId ? "retain-detailed" : "aggregate-background",
-      valueMinor: asset.valueMinor,
+      ...(asset.valueMinor !== undefined && { valueMinor: asset.valueMinor }),
     };
   });
 }

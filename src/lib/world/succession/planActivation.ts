@@ -1,3 +1,5 @@
+import type { ClientSession, Db } from "mongodb";
+import type { CountryId } from "@/lib/constants/countries";
 import type { WorldEntityManifestEntry } from "@/lib/world/worldEntityManifest";
 import type { MacroCountryState } from "@/lib/world/macro/types";
 import { buildSuccessorMacroCountry, type SuccessorMacroTerms } from "./buildSuccessorMacro";
@@ -8,6 +10,7 @@ import {
   type SuccessionFinancialPlan,
 } from "./rules/financialSettlement";
 import type { SuccessionRegion, SuccessorTerritory } from "./rules/territory";
+import { loadLiveSuccessionInventory } from "./loadLiveInventory";
 import {
   planSuccessionCustody,
   type SuccessionCustodyAsset,
@@ -221,4 +224,19 @@ export function planSuccessionActivation(input: SuccessionActivationInput): {
     macroCountries,
     custodyAssignments,
   };
+}
+
+/** Build the same preflight from the current detailed world under one snapshot.
+ * The eventual application must pass its transaction session here before any
+ * writes, then publish the receipt inside that transaction. */
+export async function planLiveSuccessionActivation(
+  db: Db,
+  sourceCountryId: CountryId,
+  input: Omit<SuccessionActivationInput, "sourceRegions" | "custodyAssets">,
+  session?: ClientSession
+): Promise<ReturnType<typeof planSuccessionActivation>> {
+  if (input.source.entityId !== sourceCountryId)
+    throw new Error("Live inventory source does not match the approved federation");
+  const inventory = await loadLiveSuccessionInventory(db, sourceCountryId, session);
+  return planSuccessionActivation({ ...input, ...inventory });
 }

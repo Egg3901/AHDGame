@@ -92,7 +92,7 @@ describe("background country expansion", () => {
       expect(opening.find((entry) => entry.entityId === entityId)).toMatchObject({
         status: "sovereign",
         simulationTier: "full-autonomous",
-        legacyAccess: "hidden",
+        legacyAccess: "economy-preview",
       });
     }
   });

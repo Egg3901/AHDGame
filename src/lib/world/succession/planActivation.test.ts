@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vitest";
+import type { Db } from "mongodb";
 import { tier3Entry } from "@/lib/world/registry/builders";
+import { createInMemoryDb } from "@/lib/test-utils/inMemoryDb";
 import { planSuccessionFinances } from "./rules/financialSettlement";
-import { planSuccessionActivation, type SuccessionActivationInput } from "./planActivation";
+import {
+  planLiveSuccessionActivation,
+  planSuccessionActivation,
+  type SuccessionActivationInput,
+} from "./planActivation";
 
 function entry(
   entityId: string,
@@ -236,5 +242,26 @@ describe("federation settlement activation", () => {
     expect(planSuccessionActivation(proposal).custodyAssignments.at(-1)?.custodianEntityId).toBe(
       "RU"
     );
+  });
+
+  it("derives territorial totals from live source records before activation", async () => {
+    const proposal = input(true);
+    const mem = createInMemoryDb();
+    mem.seed("states", [
+      { _id: "region-0", countryId: "RU", population: 10, gdp: 100 },
+      { _id: "region-1", countryId: "RU", population: 11, gdp: 101 },
+    ]);
+    const { sourceRegions: _ignoredRegions, custodyAssets: _ignoredAssets, ...approved } = proposal;
+    const plan = await planLiveSuccessionActivation(mem as unknown as Db, "RU", approved);
+    expect(plan.macroCountries[0].population).toBe(11);
+    expect(plan.custodyAssignments).toEqual([]);
+
+    await mem.collection("states").updateOne({ _id: "region-1" }, { $set: { population: 12 } });
+    await expect(
+      planLiveSuccessionActivation(mem as unknown as Db, "RU", approved)
+    ).rejects.toThrow("totals differ from live source regions");
+    await expect(
+      planLiveSuccessionActivation(mem as unknown as Db, "CS", approved)
+    ).rejects.toThrow("source does not match");
   });
 });

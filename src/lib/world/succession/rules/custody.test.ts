@@ -96,4 +96,23 @@ describe("federation physical custody", () => {
       })
     ).toThrow("unknown or local asset");
   });
+
+  it("keeps an unvalued live asset unvalued rather than inventing a zero book value", () => {
+    expect(
+      planSuccessionCustody({
+        sourceEntityId: "RU",
+        territories,
+        assets: [
+          { assetId: "unvalued-factory", kind: "public-enterprise", homeRegionId: "SU_UKR" },
+        ],
+      })
+    ).toEqual([
+      {
+        assetId: "unvalued-factory",
+        kind: "public-enterprise",
+        custodianEntityId: "UKR",
+        disposition: "aggregate-background",
+      },
+    ]);
+  });
 });
