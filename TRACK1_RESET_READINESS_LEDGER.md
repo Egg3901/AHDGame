@@ -4,6 +4,8 @@ This ledger mirrors every checkbox in [#2159](https://github.com/Egg3901/AHDGame
 
 The 2026-09-28 tracker reconciliation added RR-100 for the new #2488 seed blocker. RR-055 now records verified polling/clock-index protection from merged PR #2180; RR-061 remains unchecked because closed #1679 has no exact-release replay; RR-062 records the owner-approved #1670 projection waiver. The ledger now matches all 100 parent checklist entries: 27 checked and 73 unchecked.
 
+On 2026-09-29, RR-030 records merged #2117 slices #2524 and #2526 plus open #2528 and #2539; RR-065 records merged currency slices #2520, #2523, and #2525; RR-100 records open Hungary #2488 slices #2529 and #2540. These are partial implementation evidence. Their release validation remains pending, and the parent checklist remains 27 checked and 73 unchecked.
+
 The parent currently selects `1991-default`. The 2027-specific items remain required implementation scope even though the final launch qualification uses 1991. A later profile change requires rechecking seed-specific evidence. Checked boxes and closed child issues are claims of prior completion, not proof that the exact release candidate passes.
 
 The owner confirmed on 2026-09-25 that the requested single final validating

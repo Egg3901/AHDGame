@@ -464,6 +464,16 @@
           "type": "partial_implementation",
           "url": "https://github.com/Egg3901/AHDGame/pull/2397",
           "detail": "1991 successor institutions and dated transitions are under review; historical formulas, successor sovereignty, and exact-source bootstrap/horizon evidence remain open"
+        },
+        {
+          "type": "candidate_pr",
+          "url": "https://github.com/Egg3901/AHDGame/pull/2529",
+          "detail": "Open PR for Hungary 2014 106/93 mixed formula and modeled mandates; literal district filing, independent list vote, NPP slates, and release replay remain pending."
+        },
+        {
+          "type": "candidate_pr",
+          "url": "https://github.com/Egg3901/AHDGame/pull/2540",
+          "detail": "Open stacked PR for Hungary player district filing and separate list tallies; NPP slates, independent voter list choice, six regional containers, and release replay remain pending."
         }
       ],
       "blocked_by": [
@@ -1465,6 +1475,28 @@
           "type": "issue_state",
           "url": "https://github.com/Egg3901/AHDGame/issues/2117",
           "detail": "OPEN"
+        },
+        {
+          "type": "partial_implementation",
+          "url": "https://github.com/Egg3901/AHDGame/pull/2524",
+          "detail": "Merged to development after exact-head CI: capped underground slowdown and ban-strike crisis wiring. Final release validation remains pending.",
+          "ref": "0547d6148692e4958add5522d134b713c01bcbd2"
+        },
+        {
+          "type": "partial_implementation",
+          "url": "https://github.com/Egg3901/AHDGame/pull/2526",
+          "detail": "Merged to development after exact-head CI: delegated enforcement and raid-fine treasury sink. Final release validation remains pending.",
+          "ref": "dc51deadd9d52c801d257089fa607de4dfca2259"
+        },
+        {
+          "type": "candidate_pr",
+          "url": "https://github.com/Egg3901/AHDGame/pull/2528",
+          "detail": "Open PR for character-wide prosecution bar across union actions and enforcement of cells founded during a ban; exact-head CI and merge pending."
+        },
+        {
+          "type": "candidate_pr",
+          "url": "https://github.com/Egg3901/AHDGame/pull/2539",
+          "detail": "Open PR for detection recent-drive count and global per-character underground-drive rate; exact-head CI and merge pending."
         }
       ],
       "blocked_by": [
@@ -2855,6 +2887,24 @@
           "type": "hu_2027_bootstrap_and_fiscal_checkpoint",
           "ref": "0586eb438f",
           "detail": "HU 2027 now has an explicitly wired bootstrap pack, democratic 199-seat country/geography override, 2026-election roster, revised KSH GDP/population fallback, 2025 KSH fiscal revenue/expenditure/debt envelope, and 2025 NBH annual HUF/USD average. Commits 4a616f2a17, 2c1f00a926, df97ecc423, and 0586eb438f. Focused region/config tests passed 14/14; budget/1991 isolation tests passed 5/5; scoped lint/format passed. The seed builder initially underbooked HU 2027 spending by reusing the 1979 law catalog; the portable baseline-selection rule now uses the authored modern envelope and tests its actual revenue/spending totals. Full typecheck, pinned bootstrap, other 2027 countries and final replay remain pending."
+        },
+        {
+          "type": "partial_implementation",
+          "url": "https://github.com/Egg3901/AHDGame/pull/2520",
+          "detail": "Merged to Track1 after exact-head CI: persisted 2027 euro membership conformance; full currency/value conservation and release replay remain pending.",
+          "ref": "5d4662ed5cd6ebbb9170fc280f307b2c7a634e20"
+        },
+        {
+          "type": "partial_implementation",
+          "url": "https://github.com/Egg3901/AHDGame/pull/2523",
+          "detail": "Merged to Track1 after exact-head CI: 2027 EUR money-supply snapshots, NPP monetary policy, treasury advances, and bank advance routing. Full conversion/replay remain pending.",
+          "ref": "e88fa668457df0526835bbaa54d18973650a4e9c"
+        },
+        {
+          "type": "partial_implementation",
+          "url": "https://github.com/Egg3901/AHDGame/pull/2525",
+          "detail": "Merged to development after exact-head CI: sovereign bond issuance uses persisted budget currency. Track1 integration and final replay remain pending.",
+          "ref": "c4f3fe33041d41aaf45ab8a8f4f781c97b74173b"
         }
       ],
       "blocked_by": [
