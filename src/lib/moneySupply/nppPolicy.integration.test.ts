@@ -59,3 +59,69 @@ describe("monetary policy after accounting transition", () => {
     }
   );
 });
+
+describe("common monetary authority", () => {
+  it.each(["player", "npp"] as const)(
+    "uses the %s common chair for all member operations",
+    async (chairMode) => {
+      vi.mocked(executeMonetaryOperation).mockClear();
+      const db = createInMemoryDb();
+      db.seed("gameConfig", [{ _id: "default", moneySupplyEnabled: true }]);
+      db.seed("gameState", [
+        {
+          _id: "current",
+          startingYear: 1991,
+          preset: "1991-default",
+          euroMonetaryUnion: {
+            authorityId: "ECB",
+            members: {
+              DE: { countryId: "DE", ledgerCurrency: "EUR", ledgerUnitsPerAnchorUnit: 1 },
+              UK: { countryId: "UK", ledgerCurrency: "GBP", ledgerUnitsPerAnchorUnit: 0.8 },
+            },
+          },
+        },
+      ]);
+      db.seed("centralBanks", [
+        { _id: "ECB", countryId: "DE", chairMode, reserveBalance: 1000 },
+        { _id: "BOE", countryId: "UK", chairMode: "npp", reserveBalance: 1000 },
+      ]);
+      db.seed("federalBudget", [
+        { _id: "DE", gdp: 10000, economicFactors: { inflationRate: 0, gdpGrowth: 0 } },
+        { _id: "UK", gdp: 10000, economicFactors: { inflationRate: 1, gdpGrowth: 1 } },
+      ]);
+      db.seed(
+        "bonds",
+        ["DE", "UK"].map((countryId) => ({
+          _id: `bond-${countryId}`,
+          issuerType: "sovereign",
+          countryId,
+          matured: false,
+          defaulted: false,
+          publicFloat: 100,
+          centralBankHoldings: 100,
+          maturityTurn: 200,
+        }))
+      );
+      const bonds = db.collection("bonds");
+      const findBonds = bonds.find.bind(bonds);
+      vi.spyOn(bonds, "find").mockImplementation((filter) => {
+        const cursor = findBonds(filter);
+        return Object.assign(cursor, { next: async () => (await cursor.toArray())[0] ?? null });
+      });
+      await processNppMonetaryOperations(db as unknown as Db, 500, 2001);
+      expect(executeMonetaryOperation).toHaveBeenCalledTimes(chairMode === "npp" ? 2 : 0);
+      if (chairMode === "npp") {
+        expect(executeMonetaryOperation).toHaveBeenCalledWith(
+          expect.anything(),
+          expect.objectContaining({ countryId: "UK", actorName: "ECB Monetary Committee" })
+        );
+        const evaluations = db
+          .collection("centralBanks")
+          .docs.map((bank) => bank.lastMonetaryPolicyEvaluation);
+        expect(evaluations[0].inflation).toBe(evaluations[1].inflation);
+        expect(evaluations[0].gdpGrowth).toBe(evaluations[1].gdpGrowth);
+        expect(evaluations[0].moneyGrowthReliable).toBe(false);
+      }
+    }
+  );
+});
