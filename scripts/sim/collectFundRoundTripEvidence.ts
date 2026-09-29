@@ -9,7 +9,12 @@ import { MongoClient } from "mongodb";
 import { execFileSync } from "child_process";
 import { resolveCollectorCommit } from "./collectorSource";
 import { evaluateFundRoundTrip, type EvidenceInput } from "./fundRoundTripEvidence";
-import { assertEvidenceExtractorSource, assertFreshPinnedFundRun } from "./fundRoundTripProvenance";
+import {
+  assertEvidenceExtractorSource,
+  assertFreshPinnedFundRun,
+  type FundRunJob,
+  type FundSimRun,
+} from "./fundRoundTripProvenance";
 import { sumFundBondHoldingsByFundId } from "@/lib/bonds/fundBondHoldings";
 import type {
   IndexFund,
@@ -78,9 +83,9 @@ async function main() {
     const db = sandboxClient.db(dbName);
     const job = await opsClient
       .db(process.env.OPS_DB_NAME || "a-house-divided")
-      .collection("simJobs")
+      .collection<FundRunJob>("simJobs")
       .findOne({ _id: runId as never });
-    const run = await db.collection("simRuns").findOne({ _id: runId as never });
+    const run = await db.collection<FundSimRun>("simRuns").findOne({ _id: runId as never });
     const runCount = await db.collection("simRuns").countDocuments({});
     assertFreshPinnedFundRun(job, run, runCount, dbName, requestedCommit);
     if (!job || !run) throw new Error("Missing pinned simulation records");

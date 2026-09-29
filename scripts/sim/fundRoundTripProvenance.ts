@@ -6,6 +6,7 @@ export type FundRunJob = {
   preset?: string;
   turns?: number;
   currentTurn?: number;
+  nppFundRedemptionEnabled?: boolean;
   sourceWorktree?: string;
   sourceCommit?: string;
   sourceCommitVerified?: string;
@@ -27,6 +28,7 @@ export type FundSimRun = {
   effectiveConfigInitial?: {
     capturedAtTurn?: number;
     gameState?: { currentTurn?: number; preset?: string };
+    gameConfig?: { nppFundRedemptionEnabled?: boolean };
   };
   source?: { worktree?: string; requestedCommit?: string; executedCommit?: string };
 };
@@ -61,6 +63,7 @@ export function assertFreshPinnedFundRun(
   requestedCommit: string
 ): asserts job is FundRunJob {
   const baseline = run?.effectiveConfigInitial?.capturedAtTurn;
+  const turns = job?.turns;
   if (
     !job ||
     !run ||
@@ -79,10 +82,11 @@ export function assertFreshPinnedFundRun(
     run.effectiveConfigInitial?.gameState?.preset !== job.preset ||
     run.bootstrapConformance?.status !== "reported" ||
     !run.bootstrapConformance.reportId ||
-    !Number.isInteger(job.turns) ||
-    (job.turns ?? 0) <= 0 ||
-    job.currentTurn !== baseline + job.turns ||
-    run.currentTurn !== baseline + job.turns ||
+    typeof turns !== "number" ||
+    !Number.isInteger(turns) ||
+    turns <= 0 ||
+    job.currentTurn !== baseline + turns ||
+    run.currentTurn !== baseline + turns ||
     !job.sourceWorktree ||
     run.source?.worktree !== job.sourceWorktree ||
     job.metricsSource?.worktree !== job.sourceWorktree ||
