@@ -98,3 +98,24 @@ describe("Northern Ireland peace process", () => {
     expect(restored.status).toBe("settled");
   });
 });
+
+it("allows a counterfactual early ceasefire and a delayed agreement without a forced date", () => {
+  const ceasefire = applyConflictOutcome(NORTHERN_IRELAND_DEF, opened(), {
+    nextConflictPhase: "backchannels",
+    trackDeltas: { violence: -40, unionistConsent: 30, nationalistConsent: 30 },
+  });
+  const early = evaluateConflictTransitions(NORTHERN_IRELAND_DEF, ceasefire, 1991).state;
+  expect(phaseFor(NORTHERN_IRELAND_DEF, early.phaseLevel)?.key).toBe("ceasefire");
+  const talks = applyConflictOutcome(NORTHERN_IRELAND_DEF, early, {
+    nextConflictPhase: "multiparty_talks",
+    trackDeltas: {
+      settlementMomentum: 100,
+      unionistConsent: 100,
+      nationalistConsent: 100,
+      domesticConsent: 100,
+    },
+  });
+  const delayed = evaluateConflictTransitions(NORTHERN_IRELAND_DEF, talks, 2010).state;
+  expect(phaseFor(NORTHERN_IRELAND_DEF, delayed.phaseLevel)?.key).toBe("agreement");
+  expect(delayed.status).toBe("settled");
+});

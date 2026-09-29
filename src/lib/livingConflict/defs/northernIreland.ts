@@ -56,6 +56,7 @@ function negotiationTree(): CrisisDecisionNode[] {
         "The Prime Minister and Northern Ireland Secretary must decide whether security policy serves a political process or replaces it.",
       requiredRoles: ["headOfState", "cabinet"],
       requiredCountryIds: ["UK"],
+      requiredCabinetPositionIds: ["northern_ireland"],
       timeLimitMinutes: 24 * 60,
       options: [
         trajectory(
@@ -84,6 +85,7 @@ function negotiationTree(): CrisisDecisionNode[] {
         "The Irish government can coordinate principles and guarantees with London or turn constitutional disagreement into a veto.",
       requiredRoles: ["headOfState", "cabinet"],
       requiredCountryIds: ["IE"],
+      requiredCabinetPositionIds: ["minister_for_foreign_affairs"],
       timeLimitMinutes: 24 * 60,
       options: [
         trajectory(
@@ -208,6 +210,7 @@ function ratificationTree(): CrisisDecisionNode[] {
         "The UK government must decide whether to place the negotiated settlement before Parliament.",
       requiredRoles: ["headOfState", "cabinet"],
       requiredCountryIds: ["UK"],
+      requiredCabinetPositionIds: ["northern_ireland"],
       timeLimitMinutes: 24 * 60,
       options: [
         trajectory(
@@ -243,6 +246,7 @@ function ratificationTree(): CrisisDecisionNode[] {
         "The Irish government must decide whether to place its constitutional and institutional commitments before the Dáil.",
       requiredRoles: ["headOfState", "cabinet"],
       requiredCountryIds: ["IE"],
+      requiredCabinetPositionIds: ["minister_for_foreign_affairs"],
       timeLimitMinutes: 24 * 60,
       options: [
         trajectory(

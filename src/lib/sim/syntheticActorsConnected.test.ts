@@ -633,7 +633,9 @@ describe("connected authorization (real isNationalIssuer / resolveCharacterRoles
 
 async function plantChoiceCrisis(db: Db, count: number): Promise<ObjectId[]> {
   const crisisId = new ObjectId();
-  await db.collection("crises").insertOne({ _id: crisisId, countryId: "US", scope: "national" });
+  await db
+    .collection("crises")
+    .insertOne({ _id: crisisId, countryIds: ["US"], regionIds: [], scope: "country" });
   const ids: ObjectId[] = [];
   for (let i = 0; i < count; i++) {
     const id = new ObjectId();

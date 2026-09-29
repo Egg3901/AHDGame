@@ -1,3 +1,5 @@
+import { canCharacterInteract, canRespondToCrisis } from "./rules/authorization";
+export { canCharacterInteract } from "./rules/authorization";
 import { ObjectId, type Db } from "mongodb";
 import type {
   Crisis,
@@ -55,7 +57,9 @@ async function debitTreasury(db: Db, countryId: string, amount: number): Promise
  * check (interact) agree. Office type strings are the canonical `OfficeType`
  * discriminants from `@/lib/db/types/character`.
  */
-export function deriveCharacterRoles(office?: { type?: string } | null): string[] {
+export function deriveCharacterRoles(
+  office?: { type?: string; positionId?: string } | null
+): string[] {
   const roles = ["any"];
   const type = office?.type;
   // Heads of government / executive decision-makers who can resolve crises.
@@ -77,6 +81,7 @@ export function deriveCharacterRoles(office?: { type?: string } | null): string[
     type === "parliamentaryCabinet"
   ) {
     roles.push("cabinet");
+    if (office?.positionId) roles.push(`cabinet:${office.positionId}`);
   }
   if (type === "governor" || type === "ministerPresident") {
     roles.push("stateGovernor");
@@ -101,7 +106,11 @@ export function deriveCharacterRoles(office?: { type?: string } | null): string[
  */
 export async function resolveCharacterRoles(
   db: Db,
-  character: { _id: ObjectId; currentOffice?: { type?: string } | null; countryId?: string }
+  character: {
+    _id: ObjectId;
+    currentOffice?: { type?: string; positionId?: string } | null;
+    countryId?: string;
+  }
 ): Promise<string[]> {
   const roles = deriveCharacterRoles(character.currentOffice);
   if (!roles.includes("headOfState") && character.countryId) {
@@ -127,6 +136,16 @@ export async function resolveCharacterRoles(
         roles.push("headOfState");
       }
     }
+  }
+  // Parliamentary ministers can retain a legislative currentOffice.
+  if (character.countryId && !roles.includes("cabinet")) {
+    const cabinet = await db
+      .collection<{ positionId: string }>("cabinetMembers")
+      .findOne(
+        { countryId: character.countryId, characterId: character._id },
+        { projection: { positionId: 1 } }
+      );
+    if (cabinet?.positionId) roles.push("cabinet", `cabinet:${cabinet.positionId}`);
   }
   const ledParty = await db
     .collection<{ abbreviation: string }>("politicalParties")
@@ -399,35 +418,6 @@ export async function getCrisisInteraction(
   return db.collection<CrisisInteraction>("crisisInteractions").findOne({ crisisId });
 }
 
-/**
- * Check if a character has the required role to interact with a node.
- */
-export function canCharacterInteract(
-  node: CrisisDecisionNode,
-  characterRoles: string[],
-  countryId?: string,
-  regionId?: string
-): boolean {
-  if (
-    node.requiredCountryIds?.length &&
-    (!countryId || !node.requiredCountryIds.includes(countryId))
-  ) {
-    return false;
-  }
-  if (node.requiredRegionIds?.length && (!regionId || !node.requiredRegionIds.includes(regionId))) {
-    return false;
-  }
-  if (node.requiredRoles.includes("any")) return true;
-  const roleMatches = node.requiredRoles.some((role) => characterRoles.includes(role));
-  if (!roleMatches) return false;
-  if (node.requiredRoles.includes("partyLeader") && node.requiredPartyAbbreviations?.length) {
-    return node.requiredPartyAbbreviations.some((abbreviation) =>
-      characterRoles.includes(`partyLeader:${abbreviation}`)
-    );
-  }
-  return true;
-}
-
 function deadlineForNode(node: CrisisDecisionNode | null): Date | null {
   if (node?.timeLimitMinutes) {
     return new Date(Date.now() + node.timeLimitMinutes * 60_000);
@@ -467,6 +457,9 @@ export async function submitCrisisDecision(
   }
 
   const crisis = await db.collection<Crisis>("crises").findOne({ _id: interaction.crisisId });
+  if (crisis && !canRespondToCrisis(crisis, currentNode, countryId, regionId)) {
+    throw forbidden("You are not authorized to make this decision for this country or region");
+  }
 
   // ── Multi-responder (global) choice nodes: each country's head of state
   //    answers for their own nation. The chosen option's effects are applied
