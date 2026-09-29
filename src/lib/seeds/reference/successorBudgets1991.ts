@@ -5,10 +5,16 @@ import { SUCCESSOR_1991_GENERAL_GOVERNMENT_GDP_PERCENT } from "./successorFiscal
 import { PL_1991_BUDGET_LAW_MILLION_PLZ } from "@/lib/countries/pl/data/plFiscal1991";
 import { easternBlocPolicyConfig } from "@/lib/seeds/shared/easternBlocLegislation";
 import { allocateTransitionFiscal1991 } from "./rules/allocateTransitionFiscal1991";
+import {
+  SOVIET_UNION_1991_GDP_MILLION_RUB,
+  SOVIET_UNION_1991_POPULATION,
+} from "@/lib/countries/ru/data/sovietUnionRegions1991";
 
 /**
  * January 1991 transition fiscal openings. GDP and population use this era's
- * authored national/regional series. Five general-government totals come from
+ * authored national/regional series. RU is the whole Union at the opening:
+ * its fiscal ratio is a transparent Russian proxy applied to Union output,
+ * not an observed all-Union budget. Five general-government totals come from
  * IMF WP/94/104 Table 1; Russia and Yugoslavia are separately documented in
  * successorFiscal1991. Poland instead uses its enacted national Budget Act,
  * so its national budget is smaller than the IMF general-government total.
@@ -72,11 +78,17 @@ export const SUCCESSOR_NATIONAL_BUDGETS_1991: NationalBudgetSeedConfig[] = (
   Object.keys(opening) as Array<keyof typeof opening>
 ).map((countryId) => {
   const profile = opening[countryId];
-  const gdp = SUCCESSOR_NOMINAL_GDP_1991[countryId];
-  const population = Object.values(SUCCESSOR_REGION_POPULATION_1991[countryId]).reduce(
-    (sum, count) => sum + count,
-    0
-  );
+  const gdp =
+    countryId === "RU"
+      ? SOVIET_UNION_1991_GDP_MILLION_RUB * 1_000_000
+      : SUCCESSOR_NOMINAL_GDP_1991[countryId];
+  const population =
+    countryId === "RU"
+      ? SOVIET_UNION_1991_POPULATION
+      : Object.values(SUCCESSOR_REGION_POPULATION_1991[countryId]).reduce(
+          (sum, count) => sum + count,
+          0
+        );
   const fiscal = SUCCESSOR_1991_GENERAL_GOVERNMENT_GDP_PERCENT[countryId];
   const plLaw = countryId === "PL" ? PL_1991_BUDGET_LAW_MILLION_PLZ : null;
   const revenueTotal = plLaw ? plLaw.revenue * 1_000_000 : Math.round((gdp * fiscal.revenue) / 100);
