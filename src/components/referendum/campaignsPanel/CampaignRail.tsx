@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import type { ReferendumStatus } from "@/lib/db/types/referendum";
+import type { ReferendumStatus, ReferendumKind } from "@/lib/db/types/referendum";
 import { DeclarePositionControl } from "./DeclarePositionControl";
 import { GroundGameControl } from "./GroundGameControl";
 
@@ -14,7 +14,7 @@ interface Props {
   regionId: string;
   referendumId: string;
   status: ReferendumStatus;
-  kind: "independence" | "reunification";
+  kind: ReferendumKind;
   yesShare: number;
   campaignCloseTurn: number | null;
   currentTurn: number;

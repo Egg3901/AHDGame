@@ -295,7 +295,7 @@ const ratificationEvent: ConflictEvent = {
   affects: ["belligerent"],
   trigger: { onPhaseEnter: true, everyTurns: 24 },
   headline: "The Northern Ireland settlement faces ratification",
-  body: "The negotiated text now requires separate, contestable authorization in Westminster and the Dáil.",
+  body: "The negotiated text requires authorization in Westminster and the Dáil, then a public Northern Ireland referendum.",
   negotiation: { windowTurns: 8, decisionTree: ratificationTree() },
 };
 
@@ -331,10 +331,17 @@ export const NORTHERN_IRELAND_DEF: LivingConflictDef = {
     decommissioning: { initial: 5 },
     institutionalStability: { initial: 10 },
     domesticConsent: { initial: 30 },
+    referendumRatification: { initial: 0, min: 0, max: 1 },
     ratificationAuthorization: { initial: 0, min: 0, max: 2 },
     ratificationFailureCount: { initial: 0, min: 0, max: 2 },
   },
   scheduledPressures: [
+    {
+      key: "peace_implementation",
+      everyTurns: 6,
+      phaseKeys: ["power_sharing"],
+      trackDeltas: { violence: -3, decommissioning: 1 },
+    },
     {
       key: "political_exhaustion",
       fromYear: 1991,
@@ -350,6 +357,46 @@ export const NORTHERN_IRELAND_DEF: LivingConflictDef = {
     },
   ],
   transitions: [
+    {
+      key: "authorization_withdrawn",
+      fromPhase: "power_sharing",
+      toPhase: "multiparty_talks",
+      toStatus: "negotiating",
+      priority: 100,
+      conditions: [{ track: "ratificationAuthorization", max: 1 }],
+    },
+    {
+      key: "public_mandate_absent",
+      fromPhase: "power_sharing",
+      toPhase: "agreement",
+      toStatus: "negotiating",
+      priority: 100,
+      conditions: [{ track: "referendumRatification", max: 0 }],
+    },
+    {
+      key: "violent_relapse",
+      fromPhase: "fragile_settlement",
+      toPhase: "armed_stalemate",
+      toStatus: "active",
+      priority: 110,
+      conditions: [{ track: "violence", min: 90 }],
+    },
+    {
+      key: "parliament_rejects_agreement",
+      fromPhase: "agreement",
+      toPhase: "multiparty_talks",
+      toStatus: "negotiating",
+      priority: 100,
+      conditions: [{ track: "ratificationFailureCount", min: 1 }],
+    },
+    {
+      key: "settlement_violence_relapse",
+      fromPhase: "power_sharing",
+      toPhase: "fragile_settlement",
+      toStatus: "negotiating",
+      priority: 110,
+      conditions: [{ track: "violence", min: 82 }],
+    },
     {
       key: "open_backchannels",
       fromPhase: "armed_stalemate",
@@ -382,10 +429,10 @@ export const NORTHERN_IRELAND_DEF: LivingConflictDef = {
       ],
     },
     {
-      key: "ratify_agreement",
+      key: "negotiate_agreement",
       fromPhase: "multiparty_talks",
       toPhase: "agreement",
-      toStatus: "settled",
+      toStatus: "negotiating",
       conditions: [
         { track: "settlementMomentum", min: 78 },
         { track: "unionistConsent", min: 60 },
@@ -400,6 +447,7 @@ export const NORTHERN_IRELAND_DEF: LivingConflictDef = {
       toStatus: "settled",
       conditions: [
         { track: "ratificationAuthorization", min: 2 },
+        { track: "referendumRatification", min: 1 },
         { track: "decommissioning", min: 45 },
         { track: "institutionalStability", min: 45 },
       ],
@@ -434,6 +482,9 @@ export const NORTHERN_IRELAND_DEF: LivingConflictDef = {
       toPhase: "power_sharing",
       toStatus: "settled",
       conditions: [
+        { track: "ratificationAuthorization", min: 2 },
+        { track: "referendumRatification", min: 1 },
+        { track: "violence", max: 55 },
         { track: "institutionalStability", min: 50 },
         { track: "domesticConsent", min: 55 },
       ],

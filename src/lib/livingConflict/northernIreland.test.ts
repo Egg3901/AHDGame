@@ -65,7 +65,7 @@ describe("Northern Ireland peace process", () => {
       domesticConsent: 30,
     });
     expect(phaseFor(NORTHERN_IRELAND_DEF, state.phaseLevel)?.key).toBe("agreement");
-    expect(state.status).toBe("settled");
+    expect(state.status).toBe("negotiating");
   });
 
   it("can remain delayed when consent and momentum do not converge", () => {
@@ -89,7 +89,12 @@ describe("Northern Ireland peace process", () => {
     const settlement = applyConflictOutcome(NORTHERN_IRELAND_DEF, opened(), {
       nextConflictPhase: "power_sharing",
       nextConflictStatus: "settled",
-      trackDeltas: { institutionalStability: 10 },
+      trackDeltas: {
+        institutionalStability: 10,
+        violence: -30,
+        ratificationAuthorization: 2,
+        referendumRatification: 1,
+      },
     });
     const relapse = evaluateConflictTransitions(NORTHERN_IRELAND_DEF, settlement, 2002).state;
     expect(phaseFor(NORTHERN_IRELAND_DEF, relapse.phaseLevel)?.key).toBe("fragile_settlement");
@@ -117,5 +122,5 @@ it("allows a counterfactual early ceasefire and a delayed agreement without a fo
   });
   const delayed = evaluateConflictTransitions(NORTHERN_IRELAND_DEF, talks, 2010).state;
   expect(phaseFor(NORTHERN_IRELAND_DEF, delayed.phaseLevel)?.key).toBe("agreement");
-  expect(delayed.status).toBe("settled");
+  expect(delayed.status).toBe("negotiating");
 });

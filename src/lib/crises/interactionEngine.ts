@@ -1,3 +1,4 @@
+import { applyLivingConflictFallback } from "@/lib/livingConflict/fallbackTrajectory";
 import { canCharacterInteract, canRespondToCrisis } from "./rules/authorization";
 export { canCharacterInteract } from "./rules/authorization";
 import { ObjectId, type Db } from "mongodb";
@@ -781,6 +782,14 @@ export async function autoResolveCrisisInteraction(db: Db, interactionId: Object
     currentNode.options?.find((o) => o.optionId === "decline") ?? currentNode.options?.[0];
 
   const resolutionPath = [...interaction.resolutionPath];
+
+  if (defaultOption?.action?.kind === "livingConflictTrajectory") {
+    await applyLivingConflictFallback(
+      db,
+      `${interactionId}:${currentNode.nodeId}`,
+      defaultOption.action
+    );
+  }
 
   if (defaultOption?.effects.length) {
     await applyEffectsForCrisis(db, interaction.crisisId, defaultOption.effects);
