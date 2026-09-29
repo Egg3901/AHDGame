@@ -1,3 +1,7 @@
+import { loadEuropeanTreatyContext } from "@/lib/internationalOrganizations/europeanIntegration/service";
+import { selectNationalEuropeanDecision } from "@/lib/internationalOrganizations/europeanIntegration/rules/nationalDecisions";
+import { euroConsentedCountries } from "@/lib/currency/euro/rules";
+import { proposeNppEuropeanBill } from "@/lib/nppAutonomy/proposeNppEuropeanBill";
 /**
  * NPP Autonomous Bill Sponsorship (SP2)
  *
@@ -346,6 +350,7 @@ async function loadGovernmentDirectives(
   agenda?: GoverningAgendaItem[];
   fiscalStance?: PersistedFiscalStance;
   governingPartyId?: string | null;
+  europeanGovernmentParty?: string;
   seatsByParty?: Record<string, number>;
   /** V5: the domains the government currently holds a persistent goal on. */
   goalDomains?: ReadonlySet<string>;
@@ -358,6 +363,9 @@ async function loadGovernmentDirectives(
         governingAgenda: 1,
         fiscalStance: 1,
         governingPartyId: 1,
+        pmNppId: 1,
+        pmCharacterId: 1,
+        presidentNppId: 1,
         governingGoals: 1,
       },
     }
@@ -378,6 +386,10 @@ async function loadGovernmentDirectives(
     agenda: items && items.length > 0 ? items : undefined,
     fiscalStance: gov.fiscalStance ?? undefined,
     governingPartyId: gov.governingPartyId,
+    europeanGovernmentParty:
+      gov.governingPartyId && !gov.pmCharacterId && (gov.pmNppId || gov.presidentNppId)
+        ? gov.governingPartyId
+        : undefined,
     seatsByParty,
     goalDomains: goalDomains && goalDomains.size > 0 ? goalDomains : undefined,
   };
@@ -446,6 +458,11 @@ async function loadNationalLegislationTypes(
 // ── Per-party sponsorship attempt ────────────────────────────────────────────
 
 interface PartySponsorshipAttempt {
+  europeanContext?: Awaited<ReturnType<typeof loadEuropeanTreatyContext>>;
+  europeanGovernmentParty?: string;
+  euroState?: GameState | null;
+  parties?: NPPContext["partyByCompositeKey"];
+
   db: Db;
   countryId: CountryId;
   officials: ElectedOfficial[];
@@ -539,6 +556,44 @@ async function attemptPartySponsorship(a: PartySponsorshipAttempt): Promise<numb
     return 0;
   }
 
+  if (tag === "gov" && party === a.europeanGovernmentParty && a.europeanContext && a.euroState) {
+    const context = a.europeanContext;
+    const platform = a.parties?.get(`${countryId}:${party}`);
+    const decision = selectNationalEuropeanDecision({
+      countryId,
+      date: context.date,
+      members: context.members,
+      membershipId: context.membershipIds[countryId],
+      state: context.state,
+      policy: {
+        economic: platform?.economicPosition ?? npp.policies?.economic ?? 0,
+        social: platform?.socialPosition ?? npp.policies?.social ?? 0,
+      },
+      inflationRate: a.signal.inflationRate,
+      euro: {
+        countryId,
+        year: Number(context.date.slice(0, 4)),
+        europeanMembers: context.members,
+        europeanStage: context.state.stage,
+        consentedCountries: euroConsentedCountries(a.euroState),
+        union: a.euroState.euroMonetaryUnion,
+      },
+    });
+    if (
+      decision &&
+      (await proposeNppEuropeanBill(
+        db,
+        countryId,
+        npp,
+        sponsorOfficial,
+        decision,
+        currentTurn,
+        a.now
+      ))
+    )
+      return 1;
+  }
+
   const recentLegislationTypeIds = await recentNppSponsoredLegislationTypeIds(
     db,
     countryId,
@@ -606,12 +661,24 @@ export async function processNppBillSponsorship(ctx: NPPContext): Promise<number
     db
       .collection<GameConfig>("gameConfig")
       .findOne({ _id: "default" }, { projection: { commandEconomyEnabled: 1 } }),
-    db
-      .collection<GameState>("gameState")
-      .findOne({ _id: "current" }, { projection: { currentYear: 1 } }),
+    db.collection<GameState>("gameState").findOne(
+      { _id: "current" },
+      {
+        projection: {
+          currentYear: 1,
+          europeanIntegration: 1,
+          eurozoneEnabled: 1,
+          euroAdoptedCountries: 1,
+          euroMonetaryUnion: 1,
+        },
+      }
+    ),
   ]);
   const commandEconomyEnabled = cmdConfig?.commandEconomyEnabled === true;
   const currentYear = cmdGameState?.currentYear;
+  const europeanContext = cmdGameState?.europeanIntegration
+    ? await loadEuropeanTreatyContext(db, currentTurn)
+    : null;
 
   // v3 full-agency: scales the deterministic sponsor's personal cooldown by
   // their own legislativeActivityMult (see PartySponsorshipAttempt.v3Active).
@@ -744,6 +811,10 @@ export async function processNppBillSponsorship(ctx: NPPContext): Promise<number
       });
 
       const shared = {
+        europeanContext,
+        europeanGovernmentParty: directives.europeanGovernmentParty,
+        euroState: cmdGameState,
+        parties: ctx.partyByCompositeKey,
         db,
         countryId,
         officials,
@@ -767,7 +838,7 @@ export async function processNppBillSponsorship(ctx: NPPContext): Promise<number
       // consumes shortage/overhang-driven direction instead of inflation/debt.
       countryBillsProposed += await attemptPartySponsorship({
         ...shared,
-        party: majorityParty,
+        party: directives.europeanGovernmentParty ?? majorityParty,
         agenda: directives.agenda,
         fiscalStance: directives.fiscalStance,
         goalDomains: directives.goalDomains,

@@ -17,3 +17,6 @@ areas: [fullstack]
 - National legislatures can ratify or reject Maastricht after its decision opens.
 - Background governments assess treaty commitments against their economic and institutional conditions, with visible outcomes and reasons.
 - Rejoining the Community requires fresh consent; replaying a seed or turn does not replace a recorded decision.
+
+- NPC-led national governments may sponsor Maastricht and euro decisions according to party policy and economic conditions. Ordinary parliamentary votes, sponsorship limits and government-formation freezes still apply.
+- Euro accession requires a ratified Union settlement; dates alone do not create membership.

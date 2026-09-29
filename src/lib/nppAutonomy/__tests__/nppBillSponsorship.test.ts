@@ -10,6 +10,7 @@
 
 import { describe, it, expect, vi } from "vitest";
 import { ObjectId } from "mongodb";
+import { getLowerChamberOfficeType } from "@/lib/legislature/chamberOfficeType";
 import { selectNppBill, buildConditionsSignal } from "../selectNppBill";
 import { processNppBillSponsorship } from "../../turn/npp/billSponsorship";
 import type { NPPContext } from "../../turn/npp/context";
@@ -95,6 +96,7 @@ function makeLegType(id: string, domain: string, economic = 2, social = 0): Legi
 interface MockDbOptions {
   /** Whether the autonomy flag is enabled globally */
   nppAutonomyEnabled?: boolean;
+  europeanStage?: "community" | "union";
   /** Whether the country is enabled for players (true = autonomy NOT active) */
   enabledForPlayers?: boolean;
   /** Number of active nppSponsored bills (for throttle test) */
@@ -122,6 +124,7 @@ interface MockDbOptions {
 function makeMockDb(opts: MockDbOptions = {}) {
   const {
     nppAutonomyEnabled = true,
+    europeanStage,
     enabledForPlayers = false,
     activeNppBillCount = 0,
     lastNppBillVotingEndsOnTurn = null,
@@ -151,7 +154,32 @@ function makeMockDb(opts: MockDbOptions = {}) {
     collection: (name: string) => {
       if (name === "gameState") {
         return {
-          findOne: async () => ({ nppAutonomyEnabled, nppAutonomyLevel, currentTurn: 100 }),
+          findOne: async () => ({
+            nppAutonomyEnabled,
+            nppAutonomyLevel,
+            currentTurn: 100,
+            startingYear: 1991,
+            preset: "1991-default",
+            currentYear: 1993,
+            ...(europeanStage
+              ? {
+                  europeanIntegration: {
+                    stage: europeanStage,
+                    source: "historical-seed",
+                    revision: 0,
+                    establishedTurn: 1,
+                    ratifications: {},
+                  },
+                }
+              : {}),
+          }),
+        };
+      }
+      if (name === "organizationMemberships") {
+        return {
+          find: () => ({
+            toArray: async () => [{ _id: new ObjectId(), countryId: "UK", joinedTurn: 1 }],
+          }),
         };
       }
       if (name === "electedOfficials") {
@@ -812,5 +840,64 @@ describe("selectNppBill", () => {
 
     expect(result).not.toBeNull();
     expect(result!.option.effectDirection).toBe(1);
+  });
+});
+
+describe("European government decisions", () => {
+  it.each([
+    { name: "NPC government", player: false, pending: false, cap: 0, cooldown: null, expected: 1 },
+    {
+      name: "player government",
+      player: true,
+      pending: false,
+      cap: 0,
+      cooldown: null,
+      expected: 0,
+    },
+    {
+      name: "government formation",
+      player: false,
+      pending: true,
+      cap: 0,
+      cooldown: null,
+      expected: 0,
+    },
+    { name: "bill cap", player: false, pending: false, cap: 100, cooldown: null, expected: 0 },
+    {
+      name: "sponsorship cooldown",
+      player: false,
+      pending: false,
+      cap: 0,
+      cooldown: 99,
+      expected: 0,
+    },
+  ])("respects $name", async ({ player, pending, cap, cooldown, expected }) => {
+    const npp = makeNpp();
+    const official = makeOfficial(npp._id, "UK", getLowerChamberOfficeType("UK"), "1", 400);
+    const { db, insertSpy } = makeMockDb({
+      europeanStage: "community",
+      governmentType: "parliamentary",
+      activeNppBillCount: cap,
+      lastNppBillVotingEndsOnTurn: cooldown,
+      governmentFormation: {
+        _id: "UK",
+        status: pending ? "pending" : "formed",
+        governingPartyId: "1",
+        pmNppId: player ? null : npp._id,
+        pmCharacterId: player ? new ObjectId() : null,
+      },
+      electedOfficials: [official],
+    });
+    const ctx = makeCtx(db, [official], new Map([[String(npp._id), npp]]));
+    expect(await processNppBillSponsorship(ctx)).toBe(expected);
+    expect(insertSpy).toHaveBeenCalledTimes(expected);
+    if (expected)
+      expect(insertSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          status: "active",
+          votesFor: 0,
+          provisions: [{ type: "european_treaty", treaty: "maastricht", action: "ratify" }],
+        })
+      );
   });
 });

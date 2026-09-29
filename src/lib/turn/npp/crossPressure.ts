@@ -1,3 +1,4 @@
+import { europeanIntegrationSupport } from "@/lib/internationalOrganizations/europeanIntegration/rules/nationalDecisions";
 /**
  * Cross-pressure resolver - pure functions that decide how an NPP votes on a
  * federal bill. No DB access, no random. Replaces the RNG-based ideology +
@@ -211,6 +212,16 @@ export function computeIdeologyForce(
   bill: CrossPressureBill,
   legislationType: LegislationType | null = null
 ): number {
+  const european = bill.provisions?.find(
+    (provision) => provision.type === "european_treaty" || provision.type === "euro_adoption"
+  );
+  if (european) {
+    const support = europeanIntegrationSupport({
+      economic: npp.policies?.economic ?? 0,
+      social: npp.policies?.social ?? 0,
+    });
+    return european.type === "european_treaty" && european.action === "reject" ? -support : support;
+  }
   const alignment = computePolicyAlignment(npp, bill, legislationType);
   if (alignment == null) return 0;
   return clamp100(alignment * 100);
