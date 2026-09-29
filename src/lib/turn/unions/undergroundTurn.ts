@@ -86,7 +86,10 @@ export async function processUndergroundTurn(
         : 0;
     // The count is a two-turn weighted window: every successful drive adds one,
     // and older activity loses half its weight after each detection roll.
-    if (recentDriveCount > 0) set.recentUndergroundDriveCount = recentDriveCount / 2;
+    if (recentDriveCount > 0) {
+      const remainingDrivePressure = recentDriveCount / 2;
+      set.recentUndergroundDriveCount = remainingDrivePressure >= 0.5 ? remainingDrivePressure : 0;
+    }
     if (nextHeat !== (typeof cell.heat === "number" ? cell.heat : 0)) {
       set.heat = nextHeat;
     }
