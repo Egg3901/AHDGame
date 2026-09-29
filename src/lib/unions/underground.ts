@@ -8,7 +8,8 @@
  * efficiency and real heat risk.
  *
  * No new collections. All state is shadow fields on the existing `Union` doc
- * (`undergroundStrength`, `heat`, `exposedUntilTurn`, `lastUndergroundDriveTurn`)
+ * (`undergroundStrength`, `heat`, `exposedUntilTurn`, `lastUndergroundDriveTurn`,
+ * `recentUndergroundDriveCount`)
  * plus per-organizer banked weight on `UnionOrganizer`. Everything in this
  * file is pure so the command, the turn step, and the UI copy all share one
  * rulebook without separately reconstructing it.
@@ -42,6 +43,8 @@ export const UNDERGROUND_MASS_HEAT = 12;
 export const HEAT_DETECTION_THRESHOLD = 30;
 /** Heat bled per idle turn (no drive that turn). Steady slow work stays dark. */
 export const HEAT_DECAY_PER_TURN = 2;
+/** Recent drives add at most 20 percentage points to the detection roll. */
+export const DETECTION_CHANCE_PER_RECENT_DRIVE = 4;
 /** Turns an exposed union stays visible once detected. */
 export const EXPOSURE_LENGTH_TURNS = 6;
 export const RAID_ACTION_COST = 2;
@@ -174,16 +177,17 @@ export function resolveUndergroundDrive(inputs: {
 
 /**
  * Detection chance 0-100 for a union at this heat. Zero below threshold,
- * then linear per point over threshold up to the cap. Recent-drive and
- * open-case bonuses arrive with the govt enforcement pass; heat alone
- * drives V1.
+ * then linear per point over threshold, plus a bounded bonus for recent
+ * drives. The entire chance stays under the same cap.
  */
-export function undergroundDetectionChance(heat: number): number {
+export function undergroundDetectionChance(heat: number, recentDriveCount = 0): number {
   const h = Math.max(0, Math.min(100, Number.isFinite(heat) ? heat : 0));
   if (h < HEAT_DETECTION_THRESHOLD) return 0;
+  const drives = Number.isFinite(recentDriveCount) ? Math.max(0, Math.min(5, recentDriveCount)) : 0;
   return Math.min(
     DETECTION_CHANCE_MAX,
-    (h - HEAT_DETECTION_THRESHOLD + 1) * DETECTION_CHANCE_PER_HEAT
+    (h - HEAT_DETECTION_THRESHOLD + 1) * DETECTION_CHANCE_PER_HEAT +
+      drives * DETECTION_CHANCE_PER_RECENT_DRIVE
   );
 }
 

@@ -33,7 +33,7 @@ const SPEC_WINDOWS: Record<string, number> = {
   demographicDecline: 1990,
   foreignWorkerIntegration: 1990,
   mentalHealthAccess: 1970,
-  devolutionSatisfaction: 1999,
+  devolutionSatisfaction: 1979,
   antiSocialBehaviourRate: 1998,
   schuldenbremseHeadroom: 2009,
   eastWestConvergence: 1990,

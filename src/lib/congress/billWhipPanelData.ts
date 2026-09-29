@@ -6,6 +6,7 @@ import { getPartyHex } from "@/lib/utils/politics";
 import { getOfficeTypeForChamber } from "@/lib/legislature/chamberOfficeType";
 import { getChamberLeaderRole } from "@/lib/partyWhips/constraints";
 import { resolveWhipIssuerRole } from "@/lib/partyWhips/issuerRole";
+import { getBillWhipWindowStart } from "@/lib/congress/billWhipPhase";
 
 export { resolveWhipIssuerRole };
 
@@ -152,6 +153,7 @@ export async function buildBillWhipPanelData(
   );
   if (chambersWithPartyMembers.size === 0) return null;
 
+  const whipWindowStart = getBillWhipWindowStart(bill);
   const whips = await db
     .collection<BillWhip>("billWhips")
     .find({
@@ -160,6 +162,7 @@ export async function buildBillWhipPanelData(
       partyId: partyIdStr,
       issuedBy: "nationalParty",
       chamber: { $in: activeChambers },
+      ...(whipWindowStart ? { createdAt: { $gte: whipWindowStart } } : {}),
     })
     .toArray();
 

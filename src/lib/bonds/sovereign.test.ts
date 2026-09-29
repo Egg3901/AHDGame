@@ -14,6 +14,7 @@ import {
   getNationalBudgetId,
   getSovereignIssuerName,
   issueScheduledSovereignBondSeries,
+  issueAdminSovereignBondSeries,
   reconcileSovereignDebt,
   SOVEREIGN_BOND_TERM_PREMIUMS,
   shouldIssueQuarterlySovereignBondSeries,
@@ -452,6 +453,24 @@ describe("reconcileSovereignDebt", () => {
     expect(maturities).toEqual([48, 96, 240]);
   });
 
+  it("reconciles a French EUR budget with EUR bonds rather than historical FRF", async () => {
+    const db = buildMockDb(0, {
+      _id: getNationalBudgetId(COUNTRY_CONFIGS.FR.id),
+      countryId: COUNTRY_CONFIGS.FR.id,
+      currencyCode: "EUR",
+    });
+    await reconcileSovereignDebt(db as unknown as Db, {
+      countryId: COUNTRY_CONFIGS.FR.id,
+      turn: 240,
+      now: new Date(),
+    });
+    const inserted = db.collectionMocks["bonds"]!.insertOne.mock.calls.map(
+      ([doc]) => doc as Omit<Bond, "_id">
+    );
+    expect(inserted).toHaveLength(3);
+    expect(inserted.every((bond) => bond.currencyCode === "EUR")).toBe(true);
+  });
+
   it("applies term premiums to each tranche yield", async () => {
     const db = buildMockDb(0); // $10B gap
     const result = await reconcileSovereignDebt(db as unknown as Db, {
@@ -880,6 +899,45 @@ describe("issueScheduledSovereignBondSeries", () => {
       getNationalBudgetId(COUNTRY_CONFIGS.US.id),
       getNationalBudgetId(COUNTRY_CONFIGS.DE.id),
     ]);
+  });
+
+  it("keeps 2027 French bond face, currency and primary pool in the EUR budget unit", async () => {
+    const frBudget = makeBudget({
+      _id: getNationalBudgetId(COUNTRY_CONFIGS.FR.id),
+      countryId: COUNTRY_CONFIGS.FR.id,
+      currencyCode: "EUR",
+      surplus: -400_000_000_000,
+    });
+    const { db } = setupScheduledMocks({ budgets: [frBudget] });
+    await issueScheduledSovereignBondSeries(db as unknown as Db, TURN, new Date());
+    const bondDocs = db.collectionMocks["bonds"]!.insertMany.mock.calls.flatMap(
+      ([docs]) => docs as Omit<Bond, "_id">[]
+    );
+    expect(bondDocs).toHaveLength(3);
+    expect(bondDocs.every((bond) => bond.currencyCode === "EUR")).toBe(true);
+    expect(bondDocs.reduce((sum, bond) => sum + bond.totalIssued, 0)).toBeGreaterThan(0);
+    expect(db.collection("bondMarketPools").findOne).toHaveBeenCalledWith(
+      { _id: "EUR" },
+      expect.anything()
+    );
+  });
+
+  it("uses the persisted EUR budget for an admin French sovereign issue", async () => {
+    const frBudget = makeBudget({
+      _id: getNationalBudgetId(COUNTRY_CONFIGS.FR.id),
+      countryId: COUNTRY_CONFIGS.FR.id,
+      currencyCode: "EUR",
+    });
+    const { db } = setupScheduledMocks({ budget: frBudget });
+    await issueAdminSovereignBondSeries(db as unknown as Db, {
+      countryId: COUNTRY_CONFIGS.FR.id,
+      turn: TURN,
+      now: new Date(),
+      faceValue: 10_000_000,
+      useQuarterDeficit: false,
+    });
+    const inserted = db.collectionMocks["bonds"]!.insertOne.mock.calls[0][0] as Omit<Bond, "_id">;
+    expect(inserted.currencyCode).toBe("EUR");
   });
 
   it("uses term premiums per maturity", async () => {

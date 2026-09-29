@@ -13,6 +13,8 @@ import type { AnyBulkWriteOperation, Db } from "mongodb";
 import { findMergedRegionMetricsMany } from "@/lib/macroMetrics/merge";
 import type { StateMetrics, MetricCategoryId, State } from "@/lib/db/types";
 import type { GovernmentApproval } from "@/lib/db/types/governmentApproval";
+import type { FederalBudget } from "@/lib/db/types/budget";
+import { enforcementApprovalModifier } from "@/lib/unions/enforcementCosts";
 import type { StateApprovalHistory } from "@/lib/db/types/stateApproval";
 import { type CountryId } from "@/lib/constants/countries";
 import { actingAppointmentsEnabled } from "@/lib/cabinet/actingEligibility";
@@ -780,6 +782,13 @@ export async function snapshotApprovalHistory(
     .find({ countryId })
     .toArray();
   const cabinetMods = buildCabinetApprovalModifiers(cabinetMembers, countryId);
+  const unionBudget = await db
+    .collection<FederalBudget>("federalBudget")
+    .findOne({ countryId }, { projection: { unionsBanned: 1, unionEnforcementPosture: 1 } });
+  const unionEnforcementMod = enforcementApprovalModifier(
+    unionBudget?.unionsBanned === true,
+    unionBudget?.unionEnforcementPosture
+  );
 
   // The war block now contributes one modifier per term rather than one netted
   // total, so its positive terms compete for POSITIVE_MODIFIER_NET_CAP alongside
@@ -794,6 +803,7 @@ export async function snapshotApprovalHistory(
     ...orgStatementMods,
     ...war.modifiers,
     ...cabinetMods,
+    ...(unionEnforcementMod ? [unionEnforcementMod] : []),
   ];
   const allNationalMods = [PUBLIC_EXPECTATIONS_MODIFIER, ...nationalMods];
   approval = applyModifiers(approval, allNationalMods);

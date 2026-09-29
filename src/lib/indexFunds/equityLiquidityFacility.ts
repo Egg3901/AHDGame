@@ -2,6 +2,7 @@ import { ObjectId, type Db } from "mongodb";
 import type { Corporation, IndexFund, IndexFundTransaction, ShareOrder } from "@/lib/db/types";
 import { insertFundTransactionsBulk } from "@/lib/indexFunds/fundQueries";
 import { computeHoldingsValueAnchor } from "@/lib/indexFunds/fundAllocation";
+import { loadOpenOrdersEscrowByFundId } from "@/lib/indexFunds/fundValuation";
 import {
   cancelFundShareOrder,
   placeFundShareBuyOrder,
@@ -9,6 +10,7 @@ import {
 } from "@/lib/indexFunds/fundShareOrders";
 import {
   planEquityLiquidityQuoteRules,
+  equityLiquidityBidHeadroom,
   type EquityLiquidityRuleQuotePlan,
 } from "@/lib/indexFunds/equityLiquidity/rules";
 import { boundedParallelMap } from "@/lib/indexFunds/boundedParallelMap";
@@ -93,10 +95,12 @@ export function planEquityLiquidityQuotes(input: {
   listings: EquityLiquidityListing[];
   totalListings: number;
   turn: number;
+  bidHeadroomByFundId?: Map<string, number>;
 }): EquityLiquidityQuotePlan[] {
   const plans: EquityLiquidityRuleQuotePlan[] = planEquityLiquidityQuoteRules({
     turn: input.turn,
     totalListings: input.totalListings,
+    bidHeadroomByFundId: input.bidHeadroomByFundId,
     // Bond funds hold no equities and never quote on the equity book.
     funds: input.funds
       .filter((fund) => fund.kind !== "bond")
@@ -142,6 +146,8 @@ export async function refreshEquityLiquidityFacility(input: {
   funds: IndexFund[];
   listings: EquityLiquidityListing[];
   totalListings: number;
+  /** Present on the cron path so quote bids cannot consume the bond/cash reserve. */
+  bondValueByFundId?: Map<string, number>;
 }): Promise<EquityLiquidityFacilitySnapshot> {
   const { db, turn } = input;
   const priorQuotes = await db
@@ -223,7 +229,33 @@ export async function refreshEquityLiquidityFacility(input: {
   };
 
   if (input.enabled) {
-    const plans = planEquityLiquidityQuotes(input);
+    let quoteFunds = input.funds;
+    let bidHeadroomByFundId: Map<string, number> | undefined;
+    if (input.bondValueByFundId) {
+      const ids = input.funds.map((fund) => fund._id);
+      // Prior facility orders have just been cancelled. Read their refunded
+      // cash and any other open bid escrow before budgeting fresh quotes.
+      quoteFunds = await db
+        .collection<IndexFund>("indexFunds")
+        .find({ _id: { $in: ids } })
+        .toArray();
+      const openEscrow = await loadOpenOrdersEscrowByFundId(db, ids);
+      bidHeadroomByFundId = new Map(
+        quoteFunds.map((fund) => {
+          const id = fund._id.toString();
+          return [
+            id,
+            equityLiquidityBidHeadroom({
+              cashAnchor: fund.cashAnchor,
+              bondValueAnchor: input.bondValueByFundId?.get(id) ?? 0,
+              holdingValueAnchor: computeHoldingsValueAnchor(fund),
+              openBidEscrowAnchor: openEscrow.get(id) ?? 0,
+            }),
+          ];
+        })
+      );
+    }
+    const plans = planEquityLiquidityQuotes({ ...input, funds: quoteFunds, bidHeadroomByFundId });
     snapshot.bidQuotesPlanned = plans.length;
     snapshot.askQuotesPlanned = plans.filter((plan) => plan.askShares > 0).length;
     snapshot.quotePairsPlanned = snapshot.askQuotesPlanned;

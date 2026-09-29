@@ -18,7 +18,7 @@ import type {
   CorporateSector,
   Union,
 } from "@/lib/db/types";
-import type { UnionEndorsement } from "@/lib/db/types/union";
+import type { UnionEndorsement, UnionOrganizer } from "@/lib/db/types/union";
 import { CORPORATION_TYPE_LABELS } from "@/lib/constants/corporations";
 import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
 import { isLabourFullMode } from "@/lib/labour/featureFlag";
@@ -228,9 +228,29 @@ export async function GET(_request: Request, { params }: RouteParams) {
             .find({ campaignId: { $in: ratifyingCampaignIds } })
             .toArray()
         : Promise.resolve([]),
-      ratifyingCampaignIds.length ? getAuthUserWithCharacter() : Promise.resolve(null),
+      getAuthUserWithCharacter(),
     ]);
     const viewerCharacterId = viewer?.character?._id ?? null;
+    // Public union detail cannot reveal a cell's strength or exposure.
+    // Any domestic character may start a drive; existing organizers and the
+    // union's player leader may read the cell's vague status.
+    const canOrganizeUnderground = viewer?.character?.countryId === union.countryId;
+    const viewerIsOrganizer =
+      canOrganizeUnderground && viewerCharacterId
+        ? await db.collection<UnionOrganizer>("unionOrganizers").findOne({
+            unionId: union._id,
+            characterId: viewerCharacterId,
+            undergroundStrength: { $gt: 0 },
+          })
+        : null;
+    const canSeeUnderground =
+      !!viewerIsOrganizer ||
+      !!(
+        canOrganizeUnderground &&
+        viewerCharacterId &&
+        union.ownerType !== "npp" &&
+        union.ownerId?.toString() === viewerCharacterId.toString()
+      );
 
     const corpIds = [...new Set(sectors.map((s) => s.corporationId.toString()))].map(
       (s) => new ObjectId(s)
@@ -290,7 +310,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
     const activeServices = normalizeServiceIds(union.activeServices);
     const representedHeadcount = representedSectors.reduce((sum, s) => sum + (s.workers ?? 0), 0);
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       union: {
         id: union._id.toString(),
         name: union.name ?? genericUnionName(union.countryId, union.sectorType),
@@ -338,17 +358,18 @@ export async function GET(_request: Request, { params }: RouteParams) {
         // through. Exact heat never leaves the server; the UI renders only
         // the vague bracket. Null while legal, so the page cannot render a
         // dead underground panel next to the live organize loop.
-        underground: suspended
-          ? {
-              strength: undergroundStrength(union),
-              status: undergroundStatus(union, currentTurn),
-              heatText: undergroundHeatText(union),
-              exposedUntilTurn: union.exposedUntilTurn ?? null,
-              actionCost: UNDERGROUND_ACTION_COST,
-              quietGain: UNDERGROUND_QUIET_STRENGTH_GAIN,
-              massGain: UNDERGROUND_MASS_STRENGTH_GAIN,
-            }
-          : null,
+        underground:
+          suspended && canOrganizeUnderground
+            ? {
+                strength: canSeeUnderground ? undergroundStrength(union) : null,
+                status: canSeeUnderground ? undergroundStatus(union, currentTurn) : null,
+                heatText: canSeeUnderground ? undergroundHeatText(union) : null,
+                exposedUntilTurn: canSeeUnderground ? (union.exposedUntilTurn ?? null) : null,
+                actionCost: UNDERGROUND_ACTION_COST,
+                quietGain: UNDERGROUND_QUIET_STRENGTH_GAIN,
+                massGain: UNDERGROUND_MASS_STRENGTH_GAIN,
+              }
+            : null,
         currentTurn,
       },
       sectors: sectors.map((s) => ({
@@ -476,6 +497,8 @@ export async function GET(_request: Request, { params }: RouteParams) {
         createdAt: e.createdAt,
       })),
     });
+    response.headers.set("Cache-Control", "private, no-store");
+    return response;
   } catch (error) {
     return handleRouteError(error);
   }

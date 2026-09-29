@@ -15,6 +15,10 @@ import type {
 import { createNotification, createNotifications } from "@/lib/notifications";
 import { isSameCountry } from "@/lib/api/sameCountry";
 import { isUnionsBanned, UNIONS_BANNED_MESSAGE } from "@/lib/labour/unionLaws";
+import {
+  isUnionProsecutionBarred,
+  UNION_PROSECUTION_MESSAGE,
+} from "@/lib/unions/unionProsecutionBar";
 import { loadUnionVoteWeights } from "@/lib/unions/unionLeadershipVote";
 import {
   isRatificationOpen,
@@ -169,6 +173,9 @@ export async function castRatificationBallot(
   vote: "ratify" | "reject",
   currentTurn: number
 ): Promise<CastRatificationResult> {
+  if (await isUnionProsecutionBarred(db, character._id)) {
+    return { ok: false, status: 403, error: UNION_PROSECUTION_MESSAGE };
+  }
   const turnBusy = await rejectIfTurnProcessing(db);
   if (turnBusy) return turnBusy as CastRatificationResult;
   if (!ObjectId.isValid(campaignId) || !ObjectId.isValid(unionRouteId)) {

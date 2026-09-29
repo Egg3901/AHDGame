@@ -14,6 +14,7 @@ import type { ScopedVoteOfficial } from "@/lib/congress/billVoting";
 import {
   buildChamberSeatMap,
   buildOverrideDisplay,
+  didVetoOverridePass,
   tallyOverrideByChamber,
   type ChamberSeatMap,
 } from "@/lib/congress/vetoOverrideTally";
@@ -274,17 +275,7 @@ async function closeOverrideStage(
     // this concluded override against a new chamber composition (#0982).
     const overrideDisplaySnapshot = buildOverrideDisplay(bill.vetoOverrideVotes, seatData);
 
-    const seatsByChamber: Record<string, number> = {
-      house: seatData.houseSeats,
-      senate: seatData.senateSeats,
-    };
-    const forByChamber: Record<string, number> = {
-      house: tally.houseFor,
-      senate: tally.senateFor,
-    };
-    const overridePassed = stage.chambers.every(
-      (ch) => (forByChamber[ch] ?? 0) >= Math.ceil((2 / 3) * (seatsByChamber[ch] ?? 0))
-    );
+    const overridePassed = didVetoOverridePass(tally, seatData, stage.chambers);
 
     if (overridePassed) {
       const enacted = await claimStatusTransition(

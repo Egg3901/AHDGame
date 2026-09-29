@@ -10,6 +10,29 @@ export const EQUITY_LIQUIDITY_MAX_STRESS_LOSS_SHARE = 0.005;
 export const EQUITY_LIQUIDITY_MIN_NOTIONAL_ANCHOR = 100;
 export const EQUITY_LIQUIDITY_TARGET_NOTIONAL_ANCHOR = 50_000;
 export const EQUITY_LIQUIDITY_TARGET_MARKET_CAP_SHARE = 0.005;
+export const EQUITY_LIQUIDITY_MIN_RESERVE_SHARE = 0.25;
+export const EQUITY_LIQUIDITY_MIN_CASH_SHARE = 0.05;
+
+/** Cash that can be committed to equity bids while both fund buffers survive a fill. */
+export function equityLiquidityBidHeadroom(input: {
+  cashAnchor: number;
+  bondValueAnchor: number;
+  holdingValueAnchor: number;
+  openBidEscrowAnchor: number;
+}): number {
+  const cash = positive(input.cashAnchor);
+  const bonds = positive(input.bondValueAnchor);
+  const equities = positive(input.holdingValueAnchor);
+  const escrow = positive(input.openBidEscrowAnchor);
+  const backing = cash + bonds + equities + escrow;
+  return Math.max(
+    0,
+    Math.min(
+      cash + bonds - EQUITY_LIQUIDITY_MIN_RESERVE_SHARE * backing,
+      cash - EQUITY_LIQUIDITY_MIN_CASH_SHARE * backing
+    )
+  );
+}
 
 export interface EquityLiquidityRuleFund {
   id: string;
@@ -58,6 +81,7 @@ export function planEquityLiquidityQuoteRules(input: {
   listings: EquityLiquidityRuleListing[];
   totalListings: number;
   turn: number;
+  bidHeadroomByFundId?: Map<string, number>;
 }): EquityLiquidityRuleQuotePlan[] {
   const fundById = new Map(input.funds.map((fund) => [fund.id, fund]));
   const slotsByFund = new Map<string, number>();
@@ -72,7 +96,11 @@ export function planEquityLiquidityQuoteRules(input: {
         : 0;
     remainingCashRisk.set(
       fund.id,
-      Math.min(positive(fund.cashAnchor) * EQUITY_LIQUIDITY_MAX_CASH_SHARE, stressBoundNotional)
+      Math.min(
+        positive(fund.cashAnchor) * EQUITY_LIQUIDITY_MAX_CASH_SHARE,
+        stressBoundNotional,
+        input.bidHeadroomByFundId?.get(fund.id) ?? Number.POSITIVE_INFINITY
+      )
     );
   }
 

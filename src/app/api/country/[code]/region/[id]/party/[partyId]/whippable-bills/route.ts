@@ -17,6 +17,7 @@ import {
 import { resolveWhipIssuerRole } from "@/lib/congress/billWhipPanelData";
 import { getOfficeTypeForChamber } from "@/lib/legislature/chamberOfficeType";
 import { getGameState } from "@/lib/gameState";
+import { isBillWhipInCurrentPhase } from "@/lib/congress/billWhipPhase";
 
 interface RouteParams {
   params: Promise<{ code: string; id: string; partyId: string }>;
@@ -200,7 +201,12 @@ export async function GET(_request: Request, { params }: RouteParams) {
       .toArray();
 
     const whipsByBillChamber = new Map<string, BillWhip[]>();
+    const activeFederalBillsById = new Map(
+      activeFederalBills.map((bill) => [bill._id.toString(), bill])
+    );
     for (const whip of existingWhips) {
+      const federalBill = activeFederalBillsById.get(whip.targetId.toString());
+      if (federalBill && !isBillWhipInCurrentPhase(federalBill, whip)) continue;
       const key = `${whip.targetId}_${whip.chamber}`;
       if (!whipsByBillChamber.has(key)) {
         whipsByBillChamber.set(key, []);

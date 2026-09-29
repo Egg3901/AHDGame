@@ -2202,7 +2202,7 @@ export const UNION_BAN_GENERAL_STRIKE_TEMPLATE: CrisisTemplate = {
             optionId: "response_negotiate",
             label: "Open Talks",
             description:
-              "Bring the strike committees in and try to buy an end to it. A settlement is not guaranteed, each round costs the treasury, and you can come back and try again.",
+              "Bring the strike committees in and try to buy an end to it. A settlement is not guaranteed, each round costs the treasury, and stronger underground cells demand more. You can come back and try again.",
             // Loops back to this node: a failed round leaves the strike running
             // and the decision open. The action hook closes the interaction when
             // the talks actually settle it.
@@ -2214,7 +2214,7 @@ export const UNION_BAN_GENERAL_STRIKE_TEMPLATE: CrisisTemplate = {
             optionId: "response_ride_it_out",
             label: "Ride It Out",
             description:
-              "Concede nothing and wait. Pickets thin as savings run out and some plants restart on their own, so the damage halves from here. It still runs to the end and you bleed support the whole way.",
+              "Concede nothing and wait. Some plants restart, but strong underground cells keep more of the disruption alive. The strike still runs to the end and you bleed support the whole way.",
             nextNodeId: "terminal_ride_it_out",
             action: { kind: "unionBanStrikeResponse", response: "rideOut" },
             effects: [
