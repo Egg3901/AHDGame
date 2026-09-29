@@ -21,10 +21,21 @@ export function accumulateHuBallots(
   listVotes: Record<string, number>;
 } {
   const districts = huDistrictIds(regionId);
+  const activeCandidateIds = new Set(candidates.map((candidate) => candidate.candidateId));
+  const activePartyIds = new Set(candidates.map((candidate) => candidate.partyId));
   const constituencyVotes = Object.fromEntries(
-    districts.map((id) => [id, { ...(previousDistricts[id] ?? {}) }])
+    districts.map((id) => [
+      id,
+      Object.fromEntries(
+        Object.entries(previousDistricts[id] ?? {}).filter(([candidateId]) =>
+          activeCandidateIds.has(candidateId)
+        )
+      ),
+    ])
   );
-  const listVotes = { ...previousLists };
+  const listVotes = Object.fromEntries(
+    Object.entries(previousLists).filter(([partyId]) => activePartyIds.has(partyId))
+  );
   for (const candidate of candidates) {
     if (!Number.isSafeInteger(candidate.votes) || candidate.votes < 0) {
       throw new Error("Invalid Hungarian turn vote");
