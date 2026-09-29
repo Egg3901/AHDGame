@@ -2,6 +2,7 @@
  * Bond turns settle coupons and principal while preserving holder denominations.
  * processBondTurn shares one monetary quote snapshot across payout conversions.
  */
+import { euroSettlementRates } from "@/lib/currency/euro/rules";
 import { purchaseSpreadRate } from "@/lib/currency/rules/purchaseConversion";
 import { loadConversionQuoteContext } from "@/lib/currency/euro/quotes";
 import { getDb } from "@/lib/mongodb";
@@ -153,10 +154,22 @@ export async function processBondTurn(turn: number): Promise<BondTurnResult> {
 
   // FX rates for converting ₳-denominated coupon/face values into each corp's
   // liquidCapital home currency before $inc. Loaded once per turn.
-  const fxByCurrency = await loadFxRatesByCurrency(db);
   const quoteContext = forexEnabled
     ? await loadConversionQuoteContext(db, gameState?.euroMonetaryUnion)
     : undefined;
+  const fxByCurrency = quoteContext
+    ? euroSettlementRates(
+        quoteContext.union,
+        Object.fromEntries(
+          [...quoteContext.quotes].map(([currency, quote]) => [currency, quote.rate])
+        )
+      )
+    : await loadFxRatesByCurrency(db);
+  if (quoteContext?.union && !fxByCurrency.has(quoteContext.union.anchorCurrency)) {
+    throw new Error("Bond settlement requires the common monetary anchor quote.");
+  }
+  // USD remains the shared accounting anchor when no explicit quote is stored.
+  if (!fxByCurrency.has("USD")) fxByCurrency.set("USD", 1);
   const spreadStrengths = Object.fromEntries(
     [...(quoteContext?.quotes ?? [])].map(([currency, quote]) => [
       currency,

@@ -1,4 +1,4 @@
-import { aggregateEuroPolicyIndicators, euroCurrencyRate } from "./rules";
+import { aggregateEuroPolicyIndicators, euroCurrencyRate, euroSettlementRates } from "./rules";
 import { describe, expect, it } from "vitest";
 import {
   euroAdoptionRefusal,
@@ -196,4 +196,27 @@ it("derives external member quotes from the anchor and fails closed without it",
   expect(euroCurrencyRate(union, "USD", { USD: 1 })).toBe(1);
   expect(euroCurrencyRate(undefined, "GBP", { GBP: 0.6 })).toBe(0.6);
   expect(euroCurrencyRate(union, "IEP", { EUR: Number.NaN })).toBeUndefined();
+});
+
+describe("euro settlement quote snapshots", () => {
+  it("replaces stale member quotes while preserving independent quotes", () => {
+    const union = founded();
+    const rates = { EUR: 2, IEP: 99, USD: 1, JPY: 100 };
+    const snapshot = euroSettlementRates(union, rates);
+    expect(snapshot.get("IEP")).toBeCloseTo(2 * (0.7 / 0.85));
+    expect(snapshot.get("EUR")).toBe(2);
+    expect(snapshot.get("JPY")).toBe(100);
+    expect(snapshot.get("USD")).toBe(1);
+    expect(rates.IEP).toBe(99);
+  });
+
+  it("does not substitute stale member quotes when the anchor is missing", () => {
+    expect([...euroSettlementRates(founded(), { IEP: 99, USD: 1 })]).toEqual([["USD", 1]]);
+  });
+
+  it("preserves absent currencies and rejects invalid independent quotes", () => {
+    const rates = euroSettlementRates(undefined, { USD: 1, GBP: Number.NaN, JPY: -5 });
+    expect([...rates]).toEqual([["USD", 1]]);
+    expect(rates.has("EUR")).toBe(false);
+  });
 });

@@ -331,3 +331,16 @@ export function euroCurrencyRate(
       : rates[currency];
   return positiveRate(rate) ? rate : undefined;
 }
+
+/** A live settlement snapshot preserves missing quotes and common member parity. */
+export function euroSettlementRates(
+  union: EuroMonetaryUnion | undefined,
+  rates: Partial<Record<CurrencyCode, number>>
+): Map<CurrencyCode, number> {
+  const result = new Map<CurrencyCode, number>();
+  for (const currency of Object.keys(rates) as CurrencyCode[]) {
+    const rate = euroCurrencyRate(union, currency, rates);
+    if (rate != null) result.set(currency, rate);
+  }
+  return result;
+}

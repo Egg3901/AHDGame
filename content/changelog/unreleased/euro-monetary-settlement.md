@@ -22,3 +22,5 @@ areas: [engine]
 
 - Apply the common spread policy and anchor quotation to external member conversions.
 - Match purchase affordability, automatic conversion and corporate funding to the source authority spread.
+
+Corporate bond payouts share the common quote snapshot with personal conversions, preserving locked member parity even when national quote caches lag. Settlement waits if the common anchor is unavailable.

@@ -822,6 +822,104 @@ describe("processBondTurn", () => {
     expect(holderPayOp).toBeDefined();
   });
 
+  it.each([true, false])(
+    "settles member coupons only with a valid common anchor (available=%s)",
+    async (anchorAvailable) => {
+      const holderCorpId = new ObjectId();
+      const issuerCorpId = new ObjectId();
+      const bond = {
+        _id: new ObjectId(),
+        couponRate: 5,
+        currencyCode: "EUR",
+        maturityTurn: 100,
+        matured: false,
+        defaulted: false,
+        isCorporate: false,
+        holders: [{ corporationId: holderCorpId, units: 3 }],
+        publicFloat: 0,
+        corporationId: issuerCorpId,
+      };
+
+      vi.mocked(getBondCountryId).mockReturnValue("DE");
+      db.collection("gameState");
+      db.collectionMocks["gameState"]!.findOne.mockResolvedValue({
+        _id: "current",
+        forexEnabled: true,
+        euroMonetaryUnion: {
+          authorityId: "ECB",
+          anchorCountryId: "DE",
+          anchorCurrency: "EUR",
+          anchorUnitsPerEuro: 1,
+          establishedTurn: 1,
+          revision: 1,
+          members: {
+            DE: {
+              countryId: "DE",
+              ledgerCurrency: "EUR",
+              ledgerUnitsPerAnchorUnit: 1,
+              joinedTurn: 1,
+              source: "enacted-law",
+            },
+            IE: {
+              countryId: "IE",
+              ledgerCurrency: "IEP",
+              ledgerUnitsPerAnchorUnit: 0.75,
+              joinedTurn: 1,
+              source: "enacted-law",
+            },
+          },
+        },
+      });
+      mockBondFinds([bond], [{ _id: bond._id, marketPrice: 1.01 }]);
+
+      db.collection("exchangeRates");
+      db.collectionMocks["exchangeRates"]!.find.mockReturnValue({
+        toArray: vi.fn().mockResolvedValue([
+          { currencyCode: "EUR", rate: anchorAvailable ? 2 : 0 },
+          { currencyCode: "IEP", rate: 99 },
+        ]),
+      });
+
+      db.collectionMocks["corporations"]!.find.mockReturnValue(
+        makeCursor([
+          {
+            _id: holderCorpId,
+            countryId: "IE",
+            liquidCurrencyCode: "IEP",
+            liquidCapital: 1_000_000,
+          },
+        ])
+      );
+      db.collectionMocks["centralBanks"]!.find.mockReturnValue(
+        makeCursor([{ countryId: "US", primeRate: 2.75 }])
+      );
+      db.collectionMocks["bondHistory"]!.aggregate.mockReturnValue({
+        toArray: vi.fn().mockResolvedValue([]),
+      });
+
+      if (!anchorAvailable) {
+        await expect(processBondTurn(10)).rejects.toThrow("common monetary anchor quote");
+        expect(db.collectionMocks["corporations"]!.bulkWrite).not.toHaveBeenCalled();
+        return;
+      }
+      await processBondTurn(10);
+
+      // Thirty EUR coupon units become 22.5 legacy IEP units, with no internal spread.
+      const corpBulkWrite = db.collectionMocks["corporations"]!.bulkWrite;
+      const allOps = corpBulkWrite.mock.calls.flatMap(
+        (call: unknown[]) => call[0] as unknown[]
+      ) as Array<{
+        updateOne?: { filter?: { _id?: ObjectId }; update?: { $inc?: { liquidCapital?: number } } };
+      }>;
+      const holderPayOp = allOps.find(
+        (op) =>
+          op.updateOne?.filter?._id?.toString() === holderCorpId.toString() &&
+          op.updateOne?.update?.$inc?.liquidCapital === 22.5
+      );
+      expect(holderPayOp).toBeDefined();
+    }
+  );
+
   it("charges corporate issuer for public float coupon costs", async () => {
     // Public float units incur coupon cost for the issuing corporation
     const issuerCorpId = new ObjectId();
