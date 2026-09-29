@@ -62,7 +62,11 @@ import {
 import { getGameState } from "@/lib/gameState";
 import { sumSectorBookValueAnchor } from "@/lib/corporations/sectorProfitBasis";
 import { readStateOwnershipConcentration, sociMultiplier } from "./concentration";
-import { creditTreasuryProceedsFromAnchor, debitTreasuryCompensation } from "./treasury";
+import {
+  creditTreasuryProceedsFromAnchor,
+  debitTreasuryCompensation,
+  loadTreasuryCurrency,
+} from "./treasury";
 import type { CompensationTier } from "./constants";
 import { NATIONALIZATION_REVENUE_HAIRCUT } from "./constants";
 import { applyNationalizationConsequences } from "./consequences/apply";
@@ -955,13 +959,14 @@ export async function payShareholders(
   // Public float → the national treasury (no value dropped). Same unified
   // treasury the rest of the nationalization money flows move (spec §5).
   if (allocation.publicFloatRow && allocation.publicFloatRow.payout > 0) {
-    await creditTreasuryProceedsFromAnchor(
+    const treasuryCurrency = ledger ? await loadTreasuryCurrency(db, target.countryId) : null;
+    const creditedLocal = await creditTreasuryProceedsFromAnchor(
       db,
       target.countryId,
       allocation.publicFloatRow.payout,
       now
     );
-    if (ledger)
+    if (ledger && creditedLocal > 0 && treasuryCurrency)
       ledgerEntries.push({
         type: "share_buyout_payout",
         turn: ledger.turn,
@@ -969,8 +974,8 @@ export async function payShareholders(
         subjectType: "government",
         countryId: target.countryId,
         subjectName: `${target.countryId} treasury`,
-        amount: Math.round(floatLocal),
-        currencyCode: floatCurrency,
+        amount: creditedLocal,
+        currencyCode: treasuryCurrency,
         counterpartyType: "corporation",
         counterpartyId: target._id,
         counterpartyName: target.name,
