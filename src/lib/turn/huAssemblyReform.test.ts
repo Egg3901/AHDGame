@@ -84,6 +84,34 @@ describe("2014 Hungarian Assembly reform", () => {
     expect(db.collection("gameState").updateOne).not.toHaveBeenCalled();
   });
 
+  it("uses the mixed result's regional capacities rather than population quotas", async () => {
+    const { db } = setup();
+    const baseline = hu2014RegionSeats(huRegions1991);
+    const first = String(huRegions1991[0]._id);
+    const second = String(huRegions1991[1]._id);
+    db.collection("elections").find.mockReturnValue({
+      toArray: async () =>
+        huRegions1991.map((region) => ({
+          state: String(region._id),
+          totalSeats:
+            baseline[String(region._id)] +
+            (region._id === first ? -1 : region._id === second ? 1 : 0),
+        })),
+    });
+    expect(await runHuAssemblyReform(db as unknown as Db, 2014, now)).toBe(true);
+    const regionOps = db.collection("states").bulkWrite.mock.calls[0]![0] as Array<{
+      updateOne: { filter: { _id: string }; update: { $set: { houseDistricts: number } } };
+    }>;
+    expect(
+      regionOps.find((op) => op.updateOne.filter._id === first)?.updateOne.update.$set
+        .houseDistricts
+    ).toBe(baseline[first] - 1);
+    expect(
+      regionOps.find((op) => op.updateOne.filter._id === second)?.updateOne.update.$set
+        .houseDistricts
+    ).toBe(baseline[second] + 1);
+  });
+
   it.each(["1979-default", "2027-default"])("does not rewrite the %s world", async (preset) => {
     const { db } = setup(preset);
     expect(await runHuAssemblyReform(db as unknown as Db, 2014, now)).toBe(false);

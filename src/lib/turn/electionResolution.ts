@@ -1,6 +1,6 @@
 import { getDb } from "@/lib/mongodb";
 import type { ObjectId } from "mongodb";
-import type { Election, ElectionVoteTally, GameState } from "@/lib/db/types";
+import type { Election, ElectionVoteTally, GameState, State } from "@/lib/db/types";
 import { generateElectionNews } from "@/lib/news";
 import { HOUSE_SEATS, UK_COMMONS_SEATS } from "@/lib/constants";
 import { spawnHouseElection, spawnCommonsElection } from "@/lib/turn/election/electionSpawning";
@@ -15,6 +15,8 @@ import type { ActionAuditInput } from "@/lib/db/types/actionAuditLog";
 import { resolvePresidentialWinnerCandidateId } from "@/lib/elections/presidentialResolutionDisplay";
 import { TALLY_WITH_LATEST_SNAPSHOT_ONLY } from "@/lib/electionEngine/tallyProjections";
 import { readBgOrdinaryEligibleParties } from "@/lib/turn/election/bgOrdinaryEligibility";
+import { readHuMixedElectionPlan } from "@/lib/countries/hu/readMixedElectionPlan";
+import type { HuMixedPlan } from "@/lib/countries/hu/rules/mixedElectionPlan";
 
 export { HOUSE_SEATS, UK_COMMONS_SEATS };
 export { spawnHouseElection, spawnCommonsElection };
@@ -78,6 +80,22 @@ export async function resolveGeneralElections(
       );
     }
   }
+  const huMixedCycles = new Set(
+    gameStateDoc?.preset === "1991-default"
+      ? completedElections
+          .filter(
+            (e) =>
+              e.countryId === "HU" &&
+              e.electionType === "nationalAssembly" &&
+              (e.electionYear ?? 0) >= 2014
+          )
+          .map((e) => e.cycle)
+      : []
+  );
+  const huMixedPlans = new Map<number, HuMixedPlan | null>();
+  for (const cycle of huMixedCycles) {
+    huMixedPlans.set(cycle, await readHuMixedElectionPlan(db, cycle));
+  }
 
   let resolved = 0;
   const allNewsOutcomes: ElectionNewsOutcome[] = [];
@@ -122,6 +140,26 @@ export async function resolveGeneralElections(
             if (bgOrdinaryRaces.includes(election) && !bgEligibleParties) {
               return { election, result: null };
             }
+            const huPlan = huMixedPlans.get(election.cycle);
+            const isHuMixed =
+              huMixedCycles.has(election.cycle) &&
+              election.countryId === "HU" &&
+              election.electionType === "nationalAssembly";
+            if (isHuMixed && !huPlan) return { election, result: null };
+            if (isHuMixed && huPlan) {
+              const capacity = huPlan.regionCapacity[election.state];
+              if (!(capacity > 0))
+                throw new Error("Hungary mixed race has no regional seat capacity");
+              if (election.totalSeats !== capacity) {
+                await db
+                  .collection<Election>("elections")
+                  .updateOne(
+                    { _id: election._id, status: "completed" },
+                    { $set: { totalSeats: capacity, updatedAt: now } }
+                  );
+                election.totalSeats = capacity;
+              }
+            }
             const tally = tallyMap.get(election._id.toString());
             const result = await resolveOneGeneralElection(
               db,
@@ -129,7 +167,8 @@ export async function resolveGeneralElections(
               tally,
               currentTurn,
               now,
-              bgOrdinaryRaces.includes(election) ? bgEligibleParties : null
+              bgOrdinaryRaces.includes(election) ? bgEligibleParties : null,
+              isHuMixed ? huPlan?.candidateSeatsByElection[election._id.toString()] : undefined
             );
             return { election, result };
           } catch (err) {
@@ -150,6 +189,27 @@ export async function resolveGeneralElections(
         allNewsOutcomes.push(...result.newsOutcomes);
       }
     }
+  }
+
+  // Regional capacity can change when national list mandates move between
+  // regions. Reconcile only after every race in the cycle has resolved.
+  for (const [cycle, plan] of huMixedPlans) {
+    if (!plan) continue;
+    const pending = await db.collection<Election>("elections").countDocuments({
+      countryId: "HU",
+      electionType: "nationalAssembly",
+      cycle,
+      status: { $ne: "resolved" },
+    });
+    if (pending > 0) continue;
+    await db.collection<State>("states").bulkWrite(
+      Object.entries(plan.regionCapacity).map(([regionId, houseDistricts]) => ({
+        updateOne: {
+          filter: { _id: regionId, countryId: "HU" as const },
+          update: { $set: { houseDistricts } },
+        },
+      }))
+    );
   }
 
   const resolvedPresidentIds = resolvedElections

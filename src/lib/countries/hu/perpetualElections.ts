@@ -12,7 +12,9 @@ export async function ensureHUElections(now: Date, inFlightTurn?: number): Promi
       countryId: "HU",
       electionType: "nationalAssembly",
       seatsForRegions: (regions, preset, _ctx, currentYear) =>
-        preset === "1991-default" && currentYear >= HU_REFORM_YEAR
+        preset === "1991-default" &&
+        currentYear >= HU_REFORM_YEAR &&
+        regions.reduce((sum, region) => sum + (region.houseDistricts ?? 0), 0) !== 199
           ? hu2014RegionSeats(regions)
           : seatsFromRegionField(regions, "houseDistricts"),
       openPrimaryImmediately: true,

@@ -25,11 +25,9 @@ export function hu2014RegionSeats(regions: State[]): Record<string, number> {
 /**
  * The 1991 world starts with the 386-seat Assembly elected in 1990. The 2014
  * reform reduced it to 199 seats. Keep the elected 1990 Assembly seated until
- * every 2014 regional election resolves, then reapportion the live regions and
- * reconcile the new elected delegations to their magnitudes.
- * The regional election remains an aggregate approximation of the statutory
- * 106 constituency and 93 national-list mandates; that formula needs a
- * constituency ballot and a separate national-list vote stream.
+ * every 2014 regional election resolves, then apply the regional capacity
+ * yielded by the 106 constituency and 93 national-list mandate calculation.
+ * Reconcile the new elected delegations to those capacities.
  * The guard is stamped last so a failed partial write can be retried.
  *
  * https://static.valasztas.hu/dyn/pv14/szavossz/en/l50_e.html
@@ -52,7 +50,6 @@ export async function runHuAssemblyReform(
   const orderedRegions = [...regions].sort((left, right) =>
     String(left._id).localeCompare(String(right._id))
   );
-  const regionSeats = hu2014RegionSeats(orderedRegions);
   const resolved = await db
     .collection<Election>("elections")
     .find(
@@ -71,11 +68,11 @@ export async function runHuAssemblyReform(
   if (
     resolved.length !== orderedRegions.length ||
     resolvedByRegion.size !== orderedRegions.length ||
-    orderedRegions.some(
-      (region) => resolvedByRegion.get(String(region._id)) !== regionSeats[String(region._id)]
-    )
+    resolved.reduce((sum, election) => sum + (election.totalSeats ?? 0), 0) !== HU_REFORM_SEATS ||
+    orderedRegions.some((region) => !(resolvedByRegion.get(String(region._id))! > 0))
   )
     return false;
+  const regionSeats = Object.fromEntries(resolvedByRegion) as Record<string, number>;
   const stateOps = orderedRegions.map((region) => ({
     updateOne: {
       filter: { _id: region._id },
