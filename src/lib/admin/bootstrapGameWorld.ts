@@ -200,6 +200,7 @@ import { seedEasternBlocCountry, seedEasternBlocBudget } from "@/lib/admin/seed/
 import { seedEasternBlocStatePartyOrg } from "@/lib/admin/seed/seedEasternBlocStatePartyOrg";
 import { seedCountryGameStates } from "@/lib/admin/seed/seedCountryGameStates";
 import { seedMacroCountries } from "@/lib/world/macro";
+import { WORLD_ENTITY_STATES_COLLECTION } from "@/lib/world/succession/runtimeEntities";
 import { getHuSeedConfig } from "@/lib/seeds/hu/huSeed";
 import { getPlSeedConfig } from "@/lib/seeds/pl/plSeed";
 import { getRoSeedConfig } from "@/lib/seeds/ro/roSeed";
@@ -779,6 +780,7 @@ export async function bootstrapGameWorld(options: BootstrapOptions) {
   // rather than an orphaned principal with zero instruments (#3370 P3).
   await guarded("seedSovereignBondInstruments", () => seedSovereignBondInstruments(db, log, 0));
   await seedCountryGameStates(db, preset, getStartingYearForPreset(preset), log);
+  await db.collection(WORLD_ENTITY_STATES_COLLECTION).deleteMany({});
   await seedMacroCountries(db, preset, log);
   await reconcileSignedTariffBills(db);
 
