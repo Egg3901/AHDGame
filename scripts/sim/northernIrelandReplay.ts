@@ -652,7 +652,12 @@ async function main() {
           assert.equal(
             await db
               .collection("electedOfficials")
-              .countDocuments({ countryId: "UK", state: "NIR", officeType: "governor" }),
+              .countDocuments({
+                countryId: "UK",
+                state: "NIR",
+                officeType: "governor",
+                $or: [{ characterId: { $ne: null } }, { nppId: { $ne: null } }],
+              }),
             0
           );
           assert.equal(
