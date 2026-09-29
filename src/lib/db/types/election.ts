@@ -186,6 +186,8 @@ export interface ElectionCandidate {
   targetedAdsRevision?: number;
   _id: ObjectId;
   electionId: ObjectId;
+  /** Hungarian post-2014 National Assembly district selected at filing. */
+  constituencyId?: string;
   /** Denormalized from Election.countryId so party IDs are not ambiguous across countries. */
   countryId?: CountryId;
   characterId: ObjectId;

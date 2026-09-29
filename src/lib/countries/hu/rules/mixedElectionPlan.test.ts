@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { huRegions1991 } from "@/lib/countries/hu/data/huRegions1991";
 import { buildHuMixedPlan, type HuRaceVotes } from "./mixedElectionPlan";
+import { huDistrictIds } from "./constituencies2014";
 
 const regions = huRegions1991.map((region) => ({
   id: String(region._id),
@@ -16,6 +17,21 @@ const races: HuRaceVotes[] = regions.map((region, index) => ({
 }));
 
 describe("live 2014 Hungary mixed election plan", () => {
+  it("uses persisted district and list ballots when all six races have them", () => {
+    const literal = races.map((race) => ({
+      ...race,
+      constituencyVotes: Object.fromEntries(
+        huDistrictIds(race.regionId).map((districtId) => [
+          districtId,
+          { [race.candidates[0].candidateId]: 100, [race.candidates[1].candidateId]: 1 },
+        ])
+      ),
+      listVotes: { a: 1, b: 1000 },
+    }));
+    const plan = buildHuMixedPlan(regions, literal);
+    expect(plan.result.constituencySeats.a).toBe(106);
+    expect(plan.result.listSeats.b).toBeGreaterThan(plan.result.listSeats.a ?? 0);
+  });
   it("turns six regional campaign tallies into 106 district ballots and 93 national list seats", () => {
     const plan = buildHuMixedPlan(regions, races);
     expect(Object.values(plan.result.constituencyWinners)).toHaveLength(106);

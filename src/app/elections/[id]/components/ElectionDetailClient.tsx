@@ -32,6 +32,7 @@ import { BlendScope } from "@/components/blend/BlendScope";
 import { buildWithdrawalConfirmMessage } from "@/lib/elections/withdrawalWarning";
 import { captureProductEvent } from "@/lib/analytics/capture";
 import { getStoredConsent } from "@/components/CookieConsent";
+import { huDistrictIds } from "@/lib/countries/hu/rules/constituencies2014";
 
 interface ElectionDetailClientProps {
   id: string;
@@ -259,12 +260,33 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
   const [huDistrictId, setHuDistrictId] = useState("");
   const handleEnter = async () => {
     if (!election) return;
+    let constituencyId: string | undefined;
+    if (
+      election.countryId === "HU" &&
+      election.electionType === "nationalAssembly" &&
+      election.hungarianModernAssembly?.ruleVersion === "mixed-2011-v1"
+    ) {
+      const districts = huDistrictIds(election.state);
+      const answer = window.prompt(`Choose your constituency number (1-${districts.length}).`);
+      if (answer === null) return;
+      const number = Number(answer.trim());
+      if (!Number.isInteger(number) || number < 1 || number > districts.length) {
+        showToast("Choose a valid constituency number in this region.", "error");
+        return;
+      }
+      constituencyId = districts[number - 1];
+    }
     if (!confirm("Enter this race? This will register your character as a candidate.")) return;
     setActionLoading(true);
     try {
       const res = await fetch(`/api/elections/${id}/enter`, {
         method: "POST",
-        ...((election.hungarianAssemblyRound?.round === 1 ||
+        ...(constituencyId
+          ? {
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ constituencyId }),
+            }
+          : (election.hungarianAssemblyRound?.round === 1 ||
           election.bulgarianFoundingRound?.round === 1 ||
           Boolean(election.bulgarianFoundingRound?.newNominationDistrictIds?.length)) &&
         huDistrictId

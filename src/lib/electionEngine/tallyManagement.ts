@@ -50,6 +50,7 @@ import {
 } from "./singleSeatIncumbency";
 import { getFundsByPartyForElection } from "./fundsByParty";
 import { TALLY_WITH_SNAPSHOT_TURNS_ONLY } from "./tallyProjections";
+import { accumulateHuBallots } from "@/lib/countries/hu/rules/accumulateBallots2014";
 import {
   isHeadOfGovernmentRace,
   resolvePresidentApproval,
@@ -864,6 +865,31 @@ export async function accumulateVoteTurn(
       ),
     });
   }
+  const huBallots =
+    electionCountryId === "HU" &&
+    election.electionType === "nationalAssembly" &&
+    (election.electionYear ?? 0) >= 2014 &&
+    preset === "1991-default"
+      ? accumulateHuBallots(
+          stateId,
+          enriched.map((ec) => {
+            const filing = candidates.find((candidate) => candidate._id.toString() === ec.candidateId);
+            const organization = partyOrgByParty.get(ec.party) ?? 50;
+            return {
+              candidateId: ec.candidateId,
+              partyId: ec.party,
+              constituencyId: filing?.constituencyId,
+              votes: Math.max(
+                0,
+                newTotals[ec.candidateId] - (tally.totalVotes[ec.candidateId] ?? 0)
+              ),
+              listAppeal: 0.9 + Math.min(100, Math.max(0, organization)) / 500,
+            };
+          }),
+          tally.huConstituencyVotes,
+          tally.huListVotes
+        )
+      : null;
   let councilTotals: ReturnType<typeof russianCouncilVoteTotals> | null = null;
   if (isBoundCouncil) {
     const rawVotes = Object.fromEntries(
@@ -1071,6 +1097,12 @@ export async function accumulateVoteTurn(
       ...(isHuBound ? { hungarianAssemblyBallot: true as const } : {}),
       ...(isBgFounding ? { bulgarianFoundingBallot: true as const } : {}),
       totalVotes: newTotals,
+      ...(huBallots
+        ? {
+            huConstituencyVotes: huBallots.constituencyVotes,
+            huListVotes: huBallots.listVotes,
+          }
+        : {}),
       candidateNames: cleanedNames,
       candidateParties: cleanedParties,
       ...(election.allocationMethod === "sntv"
