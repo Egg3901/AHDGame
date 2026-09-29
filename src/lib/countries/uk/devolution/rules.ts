@@ -57,6 +57,15 @@ export function applyUKDevolutionPolicy(
   next.lastPolicyBillId = policy.billId;
   for (const region of UK_EXECUTIVE_REGIONS) {
     const current = state.regions[region];
+    // A generic national devolution law cannot replace the separately required
+    // bilateral and public mandate for an active Northern Ireland process.
+    if (
+      region === "NIR" &&
+      state.northernIrelandPeace?.posture !== undefined &&
+      state.northernIrelandPeace.posture !== "power_sharing" &&
+      policy.optionIndex <= 3
+    )
+      continue;
     if (policy.optionIndex === 6) {
       next.regions[region] = { ...current, active: false };
     } else if (policy.optionIndex <= 3 && !current.active) {

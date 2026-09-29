@@ -167,14 +167,22 @@ export async function vacateUKRegionalExecutives(
       await db
         .collection("characters")
         .updateMany(
-          { _id: { $in: characters }, currentOffice: "governor" },
+          {
+            _id: { $in: characters },
+            "currentOffice.type": "governor",
+            "currentOffice.state": { $in: [...inactive] },
+          },
           { $set: { currentOffice: null, updatedAt: now } }
         );
     if (npps.length)
       await db
         .collection("npps")
         .updateMany(
-          { _id: { $in: npps }, currentOffice: "governor" },
+          {
+            _id: { $in: npps },
+            "currentOffice.type": "governor",
+            "currentOffice.state": { $in: [...inactive] },
+          },
           { $set: { currentOffice: null, updatedAt: now } }
         );
     await db.collection<ElectedOfficial>("electedOfficials").updateMany(filter, {

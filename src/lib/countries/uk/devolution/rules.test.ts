@@ -6,6 +6,20 @@ import { canonicalTurnsForCycle } from "@/lib/elections/canonicalCycle";
 import { applyUKDevolutionPolicy, executiveCycleAnchor, initialUKDevolutionState } from "./rules";
 
 describe("UK executive settlement", () => {
+  it("does not let a general devolution law bypass Northern Ireland public ratification", () => {
+    const state = {
+      ...initialUKDevolutionState(1991),
+      northernIrelandPeace: { posture: "unsettled" as const, changedTurn: 1 },
+    };
+    const next = applyUKDevolutionPolicy(
+      state,
+      { billId: "general-law", optionIndex: 1, enactedTurn: 10 },
+      {},
+      72
+    );
+    expect(next.regions.SCO.active).toBe(true);
+    expect(next.regions.NIR.active).toBe(false);
+  });
   it("opens the political decision before institutions exist", () => {
     expect(isLegislationTypeActive("uk_devolution_local_powers", 1978)).toBe(false);
     for (const year of [1979, 1991, 1997]) {
