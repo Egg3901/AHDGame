@@ -24,6 +24,7 @@ import { estimatePerTurnCurrencyIncomeHomeFace } from "@/lib/lineOfCredit/curren
 import { getHomeCurrency } from "@/lib/currency/characterFunds";
 import { roundSavingsAmount } from "@/lib/currency/savingsInterest";
 import { getCountryIdForCurrency } from "@/lib/constants/currencies";
+import { getBankId } from "@/lib/centralBank/helpers";
 import { getCurrentTurn } from "@/lib/currentTurn";
 import { getGameState } from "@/lib/gameState";
 import {
@@ -56,8 +57,8 @@ export async function estimateTurnsToPayOffLocIdealized(
   const arrears: Partial<Record<CurrencyCode, number>> = { ...(loc.arrears ?? {}) };
 
   const resolvePrime = (currency: CurrencyCode): number => {
-    const cid = getCountryIdForCurrency(currency);
-    return primeByCountryId.get(cid) ?? DEFAULT_PRIME;
+    const bankId = getBankId(getCountryIdForCurrency(currency));
+    return primeByCountryId.get(bankId) ?? DEFAULT_PRIME;
   };
 
   const gameState = await getGameState(db);
@@ -87,8 +88,8 @@ export async function estimateTurnsToPayOffLocIdealized(
       { projection: { creditCompositeSnapshot: 1 } }
     );
 
-  const homeCid = getCountryIdForCurrency(home);
-  const primeHome = primeByCountryId.get(homeCid) ?? DEFAULT_PRIME;
+  const homeBankId = getBankId(getCountryIdForCurrency(home));
+  const primeHome = primeByCountryId.get(homeBankId) ?? DEFAULT_PRIME;
 
   const composite = computeLocBorrowerComposite({
     corpComposite: corp?.creditCompositeSnapshot ?? null,
