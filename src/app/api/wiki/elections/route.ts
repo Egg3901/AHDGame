@@ -65,19 +65,17 @@ export async function GET(request: Request) {
     const [elections, states, gameState] = await Promise.all([
       db.collection<Election>("elections").find(filter).sort({ endTime: -1 }).limit(500).toArray(),
       db.collection<State>("states").find({}).project({ _id: 1, name: 1 }).toArray(),
-      db
-        .collection<GameState>("gameState")
-        .findOne(
-          { _id: "current" },
-          {
-            projection: {
-              startingYear: 1,
-              preset: 1,
-              preIterationTurns: 1,
-              "preIteration.active": 1,
-            },
-          }
-        ),
+      db.collection<GameState>("gameState").findOne(
+        { _id: "current" },
+        {
+          projection: {
+            startingYear: 1,
+            preset: 1,
+            preIterationTurns: 1,
+            "preIteration.active": 1,
+          },
+        }
+      ),
     ]);
 
     const ctx = cycleAnchorContextFromGameState(gameState);
