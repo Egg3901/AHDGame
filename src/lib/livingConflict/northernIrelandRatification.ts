@@ -132,6 +132,12 @@ export async function reconcileNorthernIrelandRatification(
       rejectionId,
     }
   );
+  // The turn driver owns ordinary phase advancement. Reconciliation only
+  // advances in response to newly recorded parliamentary or public consent.
+  // Preserve identity and timestamp on an idle retry, as well as avoiding I/O.
+  if (!plan.newlyRejected && Object.values(plan.deltas).every((delta) => delta === 0)) {
+    return state;
+  }
   let tracked = applyTrackDeltas(def, state, plan.deltas);
   if (plan.newlyRejected) {
     tracked = {
@@ -145,12 +151,6 @@ export async function reconcileNorthernIrelandRatification(
   } else {
     tracked = evaluateConflictTransitions(def, tracked, currentYear).state;
   }
-  if (
-    Object.values(plan.deltas).some((delta) => delta !== 0) ||
-    plan.newlyRejected ||
-    tracked.phaseLevel !== state.phaseLevel ||
-    tracked.status !== state.status
-  )
-    await saveConflictState(db, tracked);
+  await saveConflictState(db, tracked);
   return tracked;
 }

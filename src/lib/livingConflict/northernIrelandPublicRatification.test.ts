@@ -88,6 +88,16 @@ describe("Northern Ireland public ratification", () => {
     expect(rows[0].campaignCloseTurn).toBe(69);
   });
 
+  it("preserves idle state identity and timestamp without writing or advancing another phase", async () => {
+    const { db, mock } = setup();
+    const opened = await reconcileNorthernIrelandRatification(db, def, agreement(), 1998, 20);
+    mock.collection("livingConflicts").updateOne.mockClear();
+    const retry = await reconcileNorthernIrelandRatification(db, def, opened, 1998, 20);
+    expect(retry).toBe(opened);
+    expect(retry.updatedAt).toBe(opened.updatedAt);
+    expect(mock.collection("livingConflicts").updateOne).not.toHaveBeenCalled();
+  });
+
   it("requires a counted public majority on the exact authorized agreement", async () => {
     const { db, rows } = setup();
     const opened = await reconcileNorthernIrelandRatification(db, def, agreement(), 1998, 20);
