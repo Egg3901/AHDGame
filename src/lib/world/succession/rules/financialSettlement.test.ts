@@ -23,8 +23,13 @@ describe("negotiated succession finances", () => {
     expect(plan.assetAllocation).toEqual({ CZ2: 67, SK: 34 });
     expect(plan.debtResponsibility).toEqual({ CZ2: 667, SK: 333 });
     expect(plan.servicingIssuerId).toBe("CS");
+    expect(plan.servicingEntityKind).toBe("legacy-administration");
     expect(plan.creditorDebtMinor).toBe(1000);
     expect(plan.assetBasis).toBe("population");
+  });
+  it("keeps a continuing successor as its own issuer", () => {
+    const plan = planSuccessionFinances({ ...terms, servicingIssuerId: "CZ2" });
+    expect(plan.servicingEntityKind).toBe("continuing-state");
   });
   it("allows different negotiated asset and debt shares including a zero share", () => {
     const plan = planSuccessionFinances({
