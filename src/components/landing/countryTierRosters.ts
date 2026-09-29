@@ -73,14 +73,19 @@ export const ECONOMIC_POWER_FEATURE_IDS_BY_PRESET: Readonly<Record<string, reado
   "1991-default": [
     "040", // AT
     "076", // BR
+    "100", // BG
     "156", // CN
     "246", // FI
     "250", // FR
     "276", // DE
     "300", // GR
+    "348", // HU
     "372", // IE
     "380", // IT
     "566", // NG
+    "616", // PL
+    "642", // RO
+    "643", // RU
     "724", // ES
     "752", // SE
     "792", // TR

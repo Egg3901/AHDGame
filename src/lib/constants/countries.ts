@@ -36,7 +36,7 @@ import { NG_ERAS } from "@/lib/countries/ng/eras";
 import { PL_ERAS } from "@/lib/countries/pl/eras";
 import { RO_ERAS } from "@/lib/countries/ro/eras";
 import { RU_ERAS } from "@/lib/countries/ru/eras";
-import { RU_RUSSIAN_1991 } from "@/lib/countries/ru/eras/1991";
+import { RU_RUSSIAN_1991 } from "@/lib/countries/ru/russian1991Config";
 import {
   ru1991PresidentialConfig,
   ru1993DissolvedCongressConfig,
@@ -1104,6 +1104,8 @@ export function canonicalRegionId(countryId: CountryId | string, regionParam: st
 export type EraCountryConfigOverride = Partial<
   Pick<
     CountryConfig,
+    | "name"
+    | "flagEmoji"
     | "executiveTitle"
     | "headOfStateTitle"
     | "executiveRealmPhrase"

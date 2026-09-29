@@ -23,10 +23,7 @@ describe("1991 Soviet party organization seed", () => {
 
     await seedSuccessorStatePartyOrg1991(mem as unknown as Db, false, "1991-default", () => {});
 
-    const ruOrgs = await mem
-      .collection<{ countryId: string; stateId: string }>("statePartyOrg")
-      .find({ countryId: "RU" })
-      .toArray();
+    const ruOrgs = await mem.collection("statePartyOrg").find({ countryId: "RU" }).toArray();
     const regionIds = new Set(ruOrgs.map((row) => row.stateId));
     expect(regionIds.size).toBe(24);
     expect(regionIds).toContain("SU_UKR");

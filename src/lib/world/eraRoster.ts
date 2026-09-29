@@ -165,8 +165,31 @@ const ERA_ROSTER_LITERAL = {
   "1991-default": {
     default: "absent",
     player: ["US", "UK", "JP"],
-    econ: ["DE", "FR", "IT", "ES", "SE", "TR", "CN", "NG", "BR", "IE", "AT", "FI", "GR"],
-    npp: ["RU", "PL", "CS", "HU", "RO", "BG", "YU"],
+    // Detailed 1991 seed packs run autonomous economies, but opening political
+    // offices are not ready for player access in these seven countries.
+    econ: [
+      "DE",
+      "FR",
+      "IT",
+      "ES",
+      "SE",
+      "TR",
+      "CN",
+      "NG",
+      "BR",
+      "IE",
+      "AT",
+      "FI",
+      "GR",
+      "RU",
+      "PL",
+      "CS",
+      "HU",
+      "RO",
+      "BG",
+      "YU",
+    ],
+    npp: [],
   },
   // CS dissolved 31 Dec 1992, and BAL is coherent only as a Soviet
   // union-republic grouping — both go absent here. YU, as Serbia and
