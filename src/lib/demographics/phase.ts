@@ -27,7 +27,7 @@ import {
   ECON_PULL_NEUTRAL,
   labourShortageMigrationBonusPct,
 } from "./flows/internationalMigration";
-import { planBilateralMigration, transferBilateralCohorts } from "./flows/bilateralMigration";
+import { planBilateralMigration, transferBilateralCohorts } from "./flows/rules/bilateralMigration";
 import { getLabourSystemMode, labourAtLeast } from "@/lib/labour/featureFlag";
 import { labourMigrationWageFactor } from "@/lib/labour/laborCost";
 import { LIFE_EXPECTANCY_MID, PREVENTABLE_MORTALITY_MID } from "./flows/mortality";
