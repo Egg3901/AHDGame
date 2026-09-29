@@ -1,11 +1,13 @@
 import type { WorldEntityManifestEntry } from "@/lib/world/worldEntityManifest";
 import type { MacroCountryState } from "@/lib/world/macro/types";
 import { buildSuccessorMacroCountry, type SuccessorMacroTerms } from "./buildSuccessorMacro";
+import { evaluateSuccessionApproval, type SuccessionApprovalInput } from "./rules/decision";
 import type { SuccessionFinancialPlan } from "./rules/financialSettlement";
 import type { SuccessionRegion, SuccessorTerritory } from "./rules/territory";
 
 export interface SuccessionActivationInput {
   settlementId: string;
+  approval: SuccessionApprovalInput;
   source: WorldEntityManifestEntry;
   successors: readonly WorldEntityManifestEntry[];
   /** Live source regions read for this settlement, before any territory moves. */
@@ -24,6 +26,7 @@ export function planSuccessionActivation(input: SuccessionActivationInput): {
 } {
   const {
     settlementId,
+    approval,
     source,
     successors,
     sourceRegions,
@@ -32,8 +35,11 @@ export function planSuccessionActivation(input: SuccessionActivationInput): {
     macroTerms,
     now,
   } = input;
+  const decision = evaluateSuccessionApproval(approval);
   if (
     !settlementId.trim() ||
+    approval.settlementId !== settlementId ||
+    decision.status !== "ready" ||
     finances.settlementId !== settlementId ||
     finances.servicingIssuerId !== source.entityId ||
     source.status !== "sovereign" ||
@@ -81,6 +87,8 @@ export function planSuccessionActivation(input: SuccessionActivationInput): {
   const continuing = territoryById.has(source.entityId);
   const expectedTargets = territories.length - (continuing ? 1 : 0);
   if (
+    approval.requiredParticipants.length !== territories.length ||
+    approval.requiredParticipants.some((id) => !territoryById.has(id)) ||
     territoryById.size !== territories.length ||
     successorById.size !== successors.length ||
     successors.length !== expectedTargets ||

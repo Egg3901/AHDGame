@@ -33,6 +33,20 @@ function input(continuing: boolean): SuccessionActivationInput {
   }));
   return {
     settlementId: "approved-1",
+    approval: {
+      settlementId: "approved-1",
+      revision: 1,
+      availableFromYear: 1991,
+      currentYear: 1991,
+      requiredParticipants: ids,
+      parentMandate: { settlementId: "approved-1", revision: 1 },
+      consents: ids.map((entityId) => ({
+        entityId,
+        settlementId: "approved-1",
+        revision: 1,
+        choice: "approve" as const,
+      })),
+    },
     source: entry(sourceId, "sovereign"),
     successors: ids.filter((id) => id !== sourceId).map((id) => entry(id, "emergent", sourceId)),
     sourceRegions: territories.map((territory) => ({
@@ -106,6 +120,24 @@ describe("federation settlement activation", () => {
     const proposal = input(false);
     delete proposal.finances.assetAllocation.SK;
     expect(() => planSuccessionActivation(proposal)).toThrow("Financial allocations");
+  });
+
+  it("does not activate before the parent mandate and all matching consents", () => {
+    const noMandate = input(false);
+    noMandate.approval.parentMandate = null;
+    expect(() => planSuccessionActivation(noMandate)).toThrow("approved settlement");
+
+    const missingConsent = input(false);
+    missingConsent.approval.consents = missingConsent.approval.consents.slice(1);
+    expect(() => planSuccessionActivation(missingConsent)).toThrow("approved settlement");
+
+    const wrongParticipants = input(false);
+    wrongParticipants.approval.requiredParticipants = ["CZ2", "RU"];
+    wrongParticipants.approval.consents = [
+      wrongParticipants.approval.consents[0],
+      { entityId: "RU", settlementId: "approved-1", revision: 1, choice: "approve" },
+    ];
+    expect(() => planSuccessionActivation(wrongParticipants)).toThrow("Settlement territory");
   });
 
   it("refuses to activate only part of a federation or invent output", () => {
