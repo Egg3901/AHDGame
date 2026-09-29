@@ -63,7 +63,15 @@ function stubDb(opts: {
       if (name === "unions") return { findOneAndUpdate: unionUpdate };
       if (name === "unionOrganizers") {
         return {
-          findOne: vi.fn().mockResolvedValue(opts.organizer ?? null),
+          findOne: vi.fn().mockImplementation((query: Record<string, unknown>) => {
+            if ("barredUntilTurn" in query) {
+              const bar = opts.organizer?.barredUntilTurn;
+              return Promise.resolve(
+                typeof bar === "number" && bar >= (opts.turn ?? 42) ? opts.organizer : null
+              );
+            }
+            return Promise.resolve(opts.organizer ?? null);
+          }),
           findOneAndUpdate: organizerUpdate,
         };
       }
@@ -81,6 +89,35 @@ function stubDb(opts: {
 }
 
 describe("organizeUnderground (command)", () => {
+  it("applies an organizer prosecution bar across unions before spending", async () => {
+    const character = makeCharacter();
+    const union = makeUnion();
+    const state = stubDb({ union, organizer: { barredUntilTurn: 45 }, turn: 42 });
+    expect(await organizeUnderground(state.db, character, union, "quiet")).toMatchObject({
+      ok: false,
+      status: 403,
+    });
+    expect(state.characterUpdate).not.toHaveBeenCalled();
+  });
+
+  it("limits a character to one drive globally across unions", async () => {
+    const character = makeCharacter();
+    const firstUnion = makeUnion();
+    const secondUnion = makeUnion({ _id: new ObjectId() });
+    const state = stubDb({ union: firstUnion });
+    state.characterUpdate
+      .mockResolvedValueOnce({ modifiedCount: 1 })
+      .mockResolvedValueOnce({ modifiedCount: 0 });
+
+    expect((await organizeUnderground(state.db, character, firstUnion, "quiet")).ok).toBe(true);
+    const second = await organizeUnderground(state.db, character, secondUnion, "quiet");
+    expect(second).toMatchObject({ ok: false, status: 409 });
+    expect(state.unionUpdate).toHaveBeenCalledTimes(1);
+    expect(state.characterUpdate.mock.calls[1][0]).toMatchObject({
+      lastUndergroundDriveTurn: { $ne: 42 },
+    });
+  });
+
   it("bars prosecuted organizers through the stated turn and lets the bar expire", async () => {
     const character = makeCharacter();
     const union = makeUnion();
@@ -189,6 +226,9 @@ describe("organizeUnderground (command)", () => {
     expect(results.filter((result) => result.ok)).toHaveLength(1);
     expect(results.filter((result) => !result.ok)[0]).toMatchObject({ status: 409 });
     expect(unionUpdate).toHaveBeenCalledTimes(1);
+    expect(characterUpdate.mock.calls[0][0]).toMatchObject({
+      lastUndergroundDriveTurn: { $ne: 42 },
+    });
     // Two spends and one refund for the losing request.
     expect(characterUpdate).toHaveBeenCalledTimes(3);
   });
@@ -212,11 +252,25 @@ describe("organizeUnderground (command)", () => {
     expect(characterUpdate).toHaveBeenCalled();
     const [, unionWrite] = unionUpdate.mock.calls[0] as unknown as [
       unknown,
-      { $inc: Record<string, number> },
+      Array<{ $set: object }>,
     ];
-    expect(unionWrite.$inc.undergroundStrength).toBe(UNDERGROUND_QUIET_STRENGTH_GAIN);
-    expect(unionWrite.$inc).not.toHaveProperty("treasury");
-    expect(unionWrite.$inc).not.toHaveProperty("strength");
+    expect(unionWrite).toEqual([
+      {
+        $set: expect.objectContaining({
+          undergroundStrength: {
+            $add: [{ $ifNull: ["$undergroundStrength", 0] }, UNDERGROUND_QUIET_STRENGTH_GAIN],
+          },
+          heat: {
+            $min: [100, { $max: [0, { $add: [{ $ifNull: ["$heat", 0] }, 4] }] }],
+          },
+          recentUndergroundDriveCount: {
+            $add: [{ $ifNull: ["$recentUndergroundDriveCount", 0] }, 1],
+          },
+        }),
+      },
+    ]);
+    expect(unionWrite[0].$set).not.toHaveProperty("treasury");
+    expect(unionWrite[0].$set).not.toHaveProperty("strength");
     expect(organizerUpdate).toHaveBeenCalled();
   });
 

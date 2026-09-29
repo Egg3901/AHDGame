@@ -112,6 +112,7 @@ export async function applyUnionLawProvision(
             heat: "",
             exposedUntilTurn: "",
             lastUndergroundDriveTurn: "",
+            recentUndergroundDriveCount: "",
           },
         }
       );
@@ -154,6 +155,7 @@ export async function applyUnionLawProvision(
                   heat: "",
                   exposedUntilTurn: "",
                   lastUndergroundDriveTurn: "",
+                  recentUndergroundDriveCount: "",
                 },
               },
             },

@@ -128,6 +128,32 @@ describe("processUndergroundTurn", () => {
     expect(crackdown.newlyExposed).toBe(1);
   });
 
+  it("recent drives increase detection and decay after the roll", async () => {
+    const active = makeCell({
+      heat: 30,
+      lastUndergroundDriveTurn: 42,
+      recentUndergroundDriveCount: 4,
+    });
+    const { db, bulkWrite } = stubDb([active]);
+    seededRollResult = 15;
+    const result = await processUndergroundTurn(db, 42);
+    expect(result.newlyExposed).toBe(1);
+    const writes = bulkWrite.mock.calls[0][0] as Array<{
+      updateOne: { update: { $set: Record<string, unknown> } };
+    }>;
+    expect(writes[0].updateOne.update.$set.recentUndergroundDriveCount).toBe(2);
+  });
+
+  it("clears the fractional drive tail after the recent window", async () => {
+    const settled = makeCell({ recentUndergroundDriveCount: 0.5 });
+    const { db, bulkWrite } = stubDb([settled]);
+    await processUndergroundTurn(db, 42);
+    const writes = bulkWrite.mock.calls[0][0] as Array<{
+      updateOne: { update: { $set: Record<string, unknown> } };
+    }>;
+    expect(writes[0].updateOne.update.$set.recentUndergroundDriveCount).toBe(0);
+  });
+
   it("stays dark when the roll misses and never rolls below threshold", async () => {
     const hot = makeCell({ heat: 80, lastUndergroundDriveTurn: 40 });
     const cool = makeCell({ heat: 10, lastUndergroundDriveTurn: 40 });
