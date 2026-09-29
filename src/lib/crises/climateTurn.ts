@@ -1,7 +1,14 @@
 import type { Db } from "mongodb";
+import type { CountryId } from "@/lib/constants/countries";
 import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 import { NATIONAL_SCOPE_IDS } from "@/lib/constants/nationalScope";
-import { advanceClimateExposure, populationWeightedEmissions } from "./rules/climateFeedback";
+import { spendingProvider } from "@/lib/metricEngine/spendingProvider";
+import { loadActiveAgencyNudgesByCountry } from "@/lib/internationalOrganizations/agency";
+import {
+  advanceClimateExposure,
+  effectiveEmissions,
+  populationWeightedEmissions,
+} from "./rules/climateFeedback";
 
 export interface ClimateFeedbackState {
   _id: "world";
@@ -12,6 +19,7 @@ export interface ClimateFeedbackState {
 
 interface PopulationRow {
   _id: string;
+  countryId?: CountryId;
   population?: number;
   regionType?: string;
 }
@@ -21,20 +29,20 @@ interface EmissionsRow {
   environment?: { carbonEmissions?: { value?: number } };
 }
 
-/** One global atmosphere, sampled annually so one country cannot change only its own climate. */
+/** One global atmosphere; live mitigation effort changes the annual sample for everyone. */
 export async function processClimateFeedbackTurn(db: Db, turn: number): Promise<number> {
   const collection = db.collection<ClimateFeedbackState>("climateFeedbackState");
   const prior = await collection.findOne({ _id: "world" });
   const oldPressure = prior?.pressure ?? 0;
   if (turn % TURNS_PER_YEAR !== 0 || (prior && prior.lastMeasuredTurn >= turn)) return oldPressure;
 
-  const [regions, metrics] = await Promise.all([
+  const [regions, metrics, spending, agencies] = await Promise.all([
     db
       .collection<PopulationRow>("states")
       .find(
         { regionType: { $nin: ["nation", "constituency"] } },
         {
-          projection: { _id: 1, population: 1 },
+          projection: { _id: 1, countryId: 1, population: 1 },
         }
       )
       .toArray(),
@@ -42,17 +50,33 @@ export async function processClimateFeedbackTurn(db: Db, turn: number): Promise<
       .collection<EmissionsRow>("stateMetrics")
       .find({}, { projection: { _id: 1, "environment.carbonEmissions.value": 1 } })
       .toArray(),
+    spendingProvider(db),
+    loadActiveAgencyNudgesByCountry(db, turn),
   ]);
-  const populationById = new Map(
+  const regionById = new Map(
     regions
       .filter((region) => !NATIONAL_SCOPE_IDS.has(region._id))
-      .map((region) => [region._id, region.population ?? 0])
+      .map((region) => [region._id, region])
   );
   const measured = populationWeightedEmissions(
-    metrics.map((metric) => ({
-      population: populationById.get(metric._id) ?? 0,
-      tonsPerCapita: metric.environment?.carbonEmissions?.value ?? Number.NaN,
-    }))
+    metrics.map((metric) => {
+      const region = regionById.get(metric._id);
+      const seedEmissions = metric.environment?.carbonEmissions?.value;
+      const agencyNudge = region?.countryId
+        ? (agencies.get(region.countryId)?.get("carbonEmissions") ?? 0)
+        : 0;
+      return {
+        population: region?.population ?? 0,
+        tonsPerCapita:
+          typeof seedEmissions === "number" && Number.isFinite(seedEmissions)
+            ? effectiveEmissions(
+                seedEmissions,
+                spending.perCapitaByRegion.get(metric._id)?.environment ?? 0,
+                agencyNudge
+              )
+            : Number.NaN,
+      };
+    })
   );
   if (measured === null) return oldPressure;
 

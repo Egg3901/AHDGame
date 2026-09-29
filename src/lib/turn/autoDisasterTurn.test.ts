@@ -37,6 +37,7 @@ it("spawns for a due country when the flag is on", async () => {
   db.collectionMocks["crises"]!.findOne.mockResolvedValue(null);
   // states.find: one region
   db.collectionMocks["states"]!.find.mockReturnValue({
+    project: vi.fn().mockReturnThis(),
     toArray: vi.fn().mockResolvedValue([{ _id: "S1", countryId: "BR", regionType: "region" }]),
   });
 
@@ -49,6 +50,7 @@ it("spawns for a due country when the flag is on", async () => {
 
 it("keeps measuring climate while crisis spawning is paused", async () => {
   db.collection("states").find.mockReturnValue({
+    project: vi.fn().mockReturnThis(),
     toArray: vi.fn().mockResolvedValue([{ _id: "S1", population: 10 }]),
   });
   db.collection("stateMetrics").find.mockReturnValue({

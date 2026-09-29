@@ -1,3 +1,6 @@
+import { fundingResponse } from "@/lib/metricEngine/spendingChannel";
+import { ENV_SPEND_HALF_SAT } from "@/lib/metricEngine/registry/environment";
+
 /** Bounded, global climate exposure derived from population-weighted emissions. */
 export interface EmissionsRegion {
   population: number;
@@ -15,6 +18,23 @@ const PRESSURE_RECOVERY_PER_YEAR = 0.002;
 
 const clamp = (value: number, lower: number, upper: number) =>
   Math.max(lower, Math.min(upper, value));
+
+/** Budget effort and funded climate programmes change physical emissions. */
+export function effectiveEmissions(
+  seedTonsPerCapita: number,
+  environmentSpendPerCapita: number,
+  agencyNudge = 0
+): number {
+  const spending = Number.isFinite(environmentSpendPerCapita)
+    ? Math.max(0, environmentSpendPerCapita)
+    : 0;
+  const programme = Number.isFinite(agencyNudge) ? agencyNudge : 0;
+  return clamp(
+    seedTonsPerCapita - fundingResponse(spending, ENV_SPEND_HALF_SAT, 100) * 0.02 + programme,
+    0,
+    60
+  );
+}
 
 /** An absent region metric is omitted rather than silently read as zero emissions. */
 export function populationWeightedEmissions(regions: readonly EmissionsRegion[]): number | null {

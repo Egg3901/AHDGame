@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   advanceClimateExposure,
   climateLossMultiplier,
+  effectiveEmissions,
   populationWeightedEmissions,
   weatherDisasterCadence,
   WEATHER_DISASTER_KEYS,
@@ -17,6 +18,13 @@ describe("bounded climate feedback", () => {
       ])
     ).toBe(8);
     expect(populationWeightedEmissions([{ population: 5, tonsPerCapita: Number.NaN }])).toBeNull();
+  });
+
+  it("turns enacted environment spending and funded programmes into lower emissions", () => {
+    expect(effectiveEmissions(12, 0)).toBe(12);
+    expect(effectiveEmissions(12, 200)).toBe(11);
+    expect(effectiveEmissions(12, 200, -1.5)).toBe(9.5);
+    expect(effectiveEmissions(0.5, 1_000_000, -1.5)).toBe(0);
   });
 
   it("accumulates excess emissions gradually, recovers slowly, and remains bounded", () => {

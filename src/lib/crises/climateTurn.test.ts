@@ -14,12 +14,23 @@ describe("global climate feedback turn", () => {
       }
     );
     db.collection("states").find.mockReturnValue({
+      project: vi.fn().mockReturnThis(),
       toArray: vi.fn().mockResolvedValue([
-        { _id: "A", population: 10 },
-        { _id: "B", population: 30 },
+        { _id: "A", countryId: "BR", population: 10 },
+        { _id: "B", countryId: "BR", population: 30 },
         { _id: "federal", population: 40 },
       ]),
     });
+    db.collection("federalBudget")
+      .find()
+      .toArray.mockResolvedValue([
+        {
+          _id: "br_federal",
+          countryId: "BR",
+          gdp: 960_000,
+          spending: { byCategory: { environment: 8_000 } },
+        },
+      ]);
     db.collection("stateMetrics").find.mockReturnValue({
       toArray: vi.fn().mockResolvedValue([
         { _id: "A", environment: { carbonEmissions: { value: 2 } } },
@@ -29,11 +40,11 @@ describe("global climate feedback turn", () => {
     });
 
     expect(await processClimateFeedbackTurn(db as unknown as Db, 47)).toBe(0);
-    expect(await processClimateFeedbackTurn(db as unknown as Db, 48)).toBeCloseTo(0.024);
-    expect((stored as { globalTonsPerCapita: number } | null)?.globalTonsPerCapita).toBe(8);
-    expect(await processClimateFeedbackTurn(db as unknown as Db, 48)).toBeCloseTo(0.024);
+    expect(await processClimateFeedbackTurn(db as unknown as Db, 48)).toBeCloseTo(0.018);
+    expect((stored as { globalTonsPerCapita: number } | null)?.globalTonsPerCapita).toBe(7);
+    expect(await processClimateFeedbackTurn(db as unknown as Db, 48)).toBeCloseTo(0.018);
     expect(db.collectionMocks.climateFeedbackState!.updateOne).toHaveBeenCalledTimes(1);
-    expect(await processClimateFeedbackTurn(db as unknown as Db, 96)).toBeCloseTo(0.048);
+    expect(await processClimateFeedbackTurn(db as unknown as Db, 96)).toBeCloseTo(0.036);
   });
 
   it("preserves old saves when no comparable carbon observations exist", async () => {
