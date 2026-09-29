@@ -2,6 +2,7 @@ import { HOUSE_SEATS, UK_COMMONS_SEATS, UK_REGIONAL_COUNCIL_SEATS } from "@/lib/
 import { allocateBlocListSeats } from "./blocListAllocation";
 import { MULTI_SEAT_TYPES } from "@/lib/utils/electionLabels";
 import { getMultiSeatMinShare } from "./rules/seatEligibility";
+import type { ElectionMethod } from "@/lib/constants/countries";
 
 export { getMultiSeatMinShare } from "./rules/seatEligibility";
 
@@ -17,6 +18,22 @@ export interface RankedCandidate {
    * per-candidate behavior for callers that don't pass a party.
    */
   party?: string;
+}
+
+/** Single non-transferable vote: the top candidates each win one seat. */
+export function sntvSeats(
+  candidates: ReadonlyArray<Pick<RankedCandidate, "id" | "votes">>,
+  totalSeats: number
+): Record<string, number> {
+  const seats: Record<string, number> = {};
+  for (const { id } of candidates) seats[id] = 0;
+  for (const { id } of candidates
+    .filter((candidate) => candidate.votes > 0)
+    .sort((a, b) => b.votes - a.votes || a.id.localeCompare(b.id))
+    .slice(0, totalSeats)) {
+    seats[id] = 1;
+  }
+  return seats;
 }
 
 /**
@@ -171,7 +188,8 @@ export function allocateSeats(
    */
   commonsSeats: Record<string, number> = UK_COMMONS_SEATS,
   /** Country scope for rules shared by election types in multiple countries. */
-  countryId?: string
+  countryId?: string,
+  allocationMethod?: ElectionMethod
 ): SeatAllocationResult {
   // "senate" is single-seat for the US (one seat per class per state, always
   // totalSeats=1). Nigeria's Senate is a multi-seat-per-zone body (18-21 seats),
@@ -197,7 +215,11 @@ export function allocateSeats(
 
   const seatsEstimate: Record<string, number> = {};
 
-  if (isMultiSeat && blocListShares) {
+  if (isMultiSeat && allocationMethod === "sntv") {
+    // One vote per voter, one seat per candidate. Party totals and vote-share
+    // thresholds have no role in a single non-transferable vote race.
+    Object.assign(seatsEstimate, sntvSeats(ranked, authoritativeSeats));
+  } else if (isMultiSeat && blocListShares) {
     // Bloc-list chamber: the quota decides the party split outright, so none of
     // the eligibility and threshold machinery below applies. There
     // is no cross-party contest to threshold.

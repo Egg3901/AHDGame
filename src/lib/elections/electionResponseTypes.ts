@@ -105,6 +105,7 @@ export interface ElectionResponse {
   id: string;
   seatId: string | null;
   electionType: string;
+  allocationMethod?: import("@/lib/constants/countries").ElectionMethod;
   state: string;
   countryId: string;
   senateClass: number | null;

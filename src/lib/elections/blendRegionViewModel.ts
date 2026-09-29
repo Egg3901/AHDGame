@@ -328,6 +328,7 @@ export function isMultiSeatRace(election: ElectionDisplay, countryId: CountryId)
     return true;
   }
   const method =
+    election.allocationMethod ??
     getElectionMethod(election.countryId as CountryId | undefined, election.electionType) ??
     getElectionMethod(countryId, election.electionType);
   if (!method) return (election.totalSeats ?? 1) > 1;
@@ -336,6 +337,7 @@ export function isMultiSeatRace(election: ElectionDisplay, countryId: CountryId)
 
 function methodOf(election: ElectionDisplay, countryId: CountryId): ElectionMethod | undefined {
   return (
+    election.allocationMethod ??
     getElectionMethod(election.countryId as CountryId | undefined, election.electionType) ??
     getElectionMethod(countryId, election.electionType)
   );

@@ -176,7 +176,8 @@ export async function buildNationalElectionNight(
             seats,
             tally as unknown as ElectionVoteTally,
             activeIds,
-            election.countryId ?? "US"
+            election.countryId ?? "US",
+            sibling.allocationMethod
           )
         ) ?? {};
       for (const [cid, seatCount] of Object.entries(estimate)) {

@@ -1,6 +1,6 @@
 import type { ObjectId } from "mongodb";
 import type { SenateClass } from "./officials";
-import type { CountryId } from "../../constants/countries";
+import type { CountryId, ElectionMethod } from "../../constants/countries";
 
 /**
  * Known US election types. Still valid values for `Election.electionType`.
@@ -30,6 +30,8 @@ export type UKElectionType =
 export type ElectionStatus = "upcoming" | "active" | "completed" | "resolved" | "cancelled";
 
 export interface Election {
+  /** Allocation rule fixed when the race opens, so reform only changes later races. */
+  allocationMethod?: ElectionMethod;
   /** Missing means legacy campaigning for this entire race. */
   campaignRulesVersion?: number;
   _id: ObjectId;

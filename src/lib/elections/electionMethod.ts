@@ -70,7 +70,7 @@ export function positionForElectionType(electionType: string): ElectionPosition 
 
 /** Methods that allocate multiple seats across a multi-member constituency. */
 export function isMultiSeatMethod(m: ElectionMethod): boolean {
-  return m === "pr_hareQuota" || m === "pr_sainteLague" || m === "ams";
+  return m === "pr_hareQuota" || m === "pr_sainteLague" || m === "ams" || m === "sntv";
 }
 
 /** Methods that carry a separate party-list tier NOT captured by region
@@ -94,10 +94,11 @@ export function isListTierMethod(m: ElectionMethod | undefined): boolean {
  */
 export function getElectionMethod(
   countryId: CountryId | null | undefined,
-  electionType: string
+  electionType: string,
+  preset?: string
 ): ElectionMethod | undefined {
   if (!countryId) return undefined;
   const position = positionForElectionType(electionType);
   if (!position) return undefined;
-  return getCountryConfig(countryId).electionSystems[position];
+  return getCountryConfig(countryId, preset).electionSystems[position];
 }

@@ -741,7 +741,8 @@ export async function _enrichElection(
       election.totalSeats,
       tally,
       activeCandidateIdSet,
-      election.countryId ?? "US"
+      election.countryId ?? "US",
+      election.allocationMethod
     );
 
   // US House with redistricting on: project seats district-by-district using the
@@ -1086,7 +1087,8 @@ export async function _enrichElection(
               t.cumulativeVotes,
               houseSeats,
               fullCandidateParties,
-              election.countryId ?? "US"
+              election.countryId ?? "US",
+              election.allocationMethod
             );
           return {
             turn: t.turn,
@@ -1368,6 +1370,7 @@ export async function _enrichElection(
     id: election._id.toString(),
     seatId: election.seatId ?? null,
     electionType: election.electionType,
+    allocationMethod: election.allocationMethod,
     state: election.state,
     countryId,
     senateClass: election.senateClass ?? null,

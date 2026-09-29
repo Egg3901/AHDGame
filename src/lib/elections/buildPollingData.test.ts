@@ -259,6 +259,16 @@ describe("buildPollingData — primary phase", () => {
 // shapes that used to diverge.
 
 describe("computeSeatEstimates — parity with allocateSeats (ticket #1032)", () => {
+  it("projects 1991 Japan SNTV by candidate rather than party vote share", () => {
+    const votes = { a: 500, b: 400, c: 300, d: 100 };
+    const tally = {
+      totalVotes: votes,
+      candidateParties: { a: "LDP", b: "LDP", c: "JSP", d: "LDP" },
+    } as never;
+    expect(
+      computeSeatEstimates("shugiin", 3, tally, new Set(Object.keys(votes)), "JP", "sntv")
+    ).toEqual({ a: 1, b: 1, c: 1, d: 0 });
+  });
   it("uses totalSeats for the House delegation-aware threshold (#2466)", () => {
     const tally = {
       totalVotes: { major: 830, minor: 170 },

@@ -1,6 +1,7 @@
 import { allocateSeats } from "@/lib/turn/election/seatAllocation";
 import { MULTI_SEAT_TYPES } from "@/lib/utils/electionLabels";
 import { HOUSE_SEATS } from "@/lib/constants";
+import type { ElectionMethod } from "@/lib/constants/countries";
 
 /**
  * Derives seat counts from cumulative vote totals for a single turn snapshot.
@@ -17,7 +18,8 @@ export function seatEstimateForVoteTotals(
   cumulativeVotes: Record<string, number>,
   houseSeats: Record<string, number> = HOUSE_SEATS,
   candidateParties?: Record<string, string>,
-  countryId?: string
+  countryId?: string,
+  allocationMethod?: ElectionMethod
 ): Record<string, number> | undefined {
   if (!totalSeats || totalSeats <= 1 || !MULTI_SEAT_TYPES.has(electionType)) return undefined;
 
@@ -44,7 +46,8 @@ export function seatEstimateForVoteTotals(
     houseSeats,
     undefined,
     undefined,
-    countryId
+    countryId,
+    allocationMethod
   );
   return Object.keys(seatsEstimate).length > 0 ? seatsEstimate : undefined;
 }
