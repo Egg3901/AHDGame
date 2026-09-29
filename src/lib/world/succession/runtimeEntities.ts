@@ -5,12 +5,24 @@ import {
 } from "@/lib/world/worldEntityManifest";
 
 export const WORLD_ENTITY_STATES_COLLECTION = "worldEntityStates";
+export const FEDERATION_SETTLEMENT_APPLICATIONS_COLLECTION = "federationSettlementApplications";
+
+export interface FederationSettlementApplicationRecord {
+  _id: string;
+  presetId: string;
+  settlementId: string;
+  revision: number;
+  sourceEntityId: string;
+  status: "applied";
+  appliedOnTurn: number;
+  appliedAt: Date;
+}
 
 export interface RuntimeWorldEntityState {
   _id: string;
   presetId: string;
   entityId: string;
-  settlementId: string;
+  applicationId: string;
   appliedOnTurn: number;
   entry: WorldEntityManifestEntry;
 }
@@ -18,7 +30,8 @@ export interface RuntimeWorldEntityState {
 /** A runtime state can replace only the matching entity in its opening preset. */
 export function overlayRuntimeWorldEntities(
   presetId: string,
-  states: readonly RuntimeWorldEntityState[]
+  states: readonly RuntimeWorldEntityState[],
+  appliedApplicationIds: ReadonlySet<string>
 ): WorldEntityManifestEntry[] {
   const opening = getWorldEntityPresetManifest(presetId).entries;
   const byId = new Map(opening.map((entry) => [entry.entityId, entry]));
@@ -29,7 +42,7 @@ export function overlayRuntimeWorldEntities(
       state.entry.presetId !== presetId ||
       state.entityId !== state.entry.entityId ||
       state._id !== `${presetId}:${state.entityId}` ||
-      !state.settlementId.trim() ||
+      !appliedApplicationIds.has(state.applicationId) ||
       !Number.isSafeInteger(state.appliedOnTurn) ||
       state.appliedOnTurn < 1 ||
       !byId.has(state.entityId) ||
@@ -47,9 +60,17 @@ export async function loadRuntimeWorldEntities(
   db: Db,
   presetId: string
 ): Promise<WorldEntityManifestEntry[]> {
+  const applications = await db
+    .collection<FederationSettlementApplicationRecord>(
+      FEDERATION_SETTLEMENT_APPLICATIONS_COLLECTION
+    )
+    .find({ presetId, status: "applied" }, { projection: { _id: 1 } })
+    .toArray();
+  if (applications.length === 0) return overlayRuntimeWorldEntities(presetId, [], new Set());
+  const appliedIds = new Set(applications.map((application) => application._id));
   const states = await db
     .collection<RuntimeWorldEntityState>(WORLD_ENTITY_STATES_COLLECTION)
-    .find({ presetId })
+    .find({ presetId, applicationId: { $in: [...appliedIds] } })
     .toArray();
-  return overlayRuntimeWorldEntities(presetId, states);
+  return overlayRuntimeWorldEntities(presetId, states, appliedIds);
 }

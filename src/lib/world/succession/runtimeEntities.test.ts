@@ -8,7 +8,7 @@ function appliedEstonia(): RuntimeWorldEntityState {
     _id: "1991-default:EE",
     presetId: "1991-default",
     entityId: "EE",
-    settlementId: "soviet-revision-1",
+    applicationId: "1991-default:soviet-revision-1:1",
     appliedOnTurn: 44,
     entry: {
       ...getWorldEntityOrThrow("1991-default", "EE"),
@@ -22,7 +22,12 @@ function appliedEstonia(): RuntimeWorldEntityState {
 
 describe("runtime world entity overlay", () => {
   it("shows applied sovereignty on the map without mutating the opening manifest", () => {
-    const entries = overlayRuntimeWorldEntities("1991-default", [appliedEstonia()]);
+    const state = appliedEstonia();
+    const entries = overlayRuntimeWorldEntities(
+      "1991-default",
+      [state],
+      new Set([state.applicationId])
+    );
     expect(entries.find((entry) => entry.entityId === "EE")?.status).toBe("sovereign");
     expect(getWorldEntityMapSnapshot("1991-default", entries).byFeatureId["233"]).toMatchObject({
       entityId: "EE",
@@ -33,19 +38,29 @@ describe("runtime world entity overlay", () => {
 
   it("rejects a stale preset, duplicate state or unknown target", () => {
     const state = appliedEstonia();
-    expect(() => overlayRuntimeWorldEntities("1999-default", [state])).toThrow("Invalid runtime");
-    expect(() => overlayRuntimeWorldEntities("1991-default", [state, state])).toThrow(
+    const applied = new Set([state.applicationId]);
+    expect(() => overlayRuntimeWorldEntities("1999-default", [state], applied)).toThrow(
+      "Invalid runtime"
+    );
+    expect(() => overlayRuntimeWorldEntities("1991-default", [state, state], applied)).toThrow(
       "Invalid runtime"
     );
     expect(() =>
-      overlayRuntimeWorldEntities("1991-default", [
-        {
-          ...state,
-          _id: "1991-default:XX",
-          entityId: "XX",
-          entry: { ...state.entry, entityId: "XX" },
-        },
-      ])
+      overlayRuntimeWorldEntities(
+        "1991-default",
+        [
+          {
+            ...state,
+            _id: "1991-default:XX",
+            entityId: "XX",
+            entry: { ...state.entry, entityId: "XX" },
+          },
+        ],
+        applied
+      )
     ).toThrow("Invalid runtime");
+    expect(() => overlayRuntimeWorldEntities("1991-default", [state], new Set())).toThrow(
+      "Invalid runtime"
+    );
   });
 });
