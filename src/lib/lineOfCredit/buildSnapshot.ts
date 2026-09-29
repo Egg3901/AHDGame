@@ -29,6 +29,7 @@ import {
 } from "@/lib/lineOfCredit/netWorth";
 import { estimatePerTurnCurrencyIncomeHomeFace } from "@/lib/lineOfCredit/currencyIncomeEstimate";
 import { getHomeCurrency } from "@/lib/currency/characterFunds";
+import { getGameState } from "@/lib/gameState";
 import { loadCentralBankPricingAdjustment } from "@/lib/monetaryPolicy/centralBankPricing";
 
 const DEFAULT_PRIME = 2.5;
@@ -126,7 +127,8 @@ export async function buildLocSnapshot(db: Db, character: Character): Promise<Lo
   const debtToAssetsRatio =
     grossInternal > 0 ? locDebtInternal / grossInternal : locDebtInternal > 0 ? 1 : 0;
 
-  const home = getHomeCurrency(character);
+  const gameState = await getGameState(db);
+  const home = getHomeCurrency(character, gameState?.preset);
   const homeCountryId = getCountryIdForCurrency(home);
   // Resolve the actual bank document ID — Eurozone countries share `_id: "ECB"`
   // via `sharedBankId`. Without this, `findOne({ _id: "DE" })` returns null and
@@ -175,7 +177,12 @@ export async function buildLocSnapshot(db: Db, character: Character): Promise<Lo
     totalOutstandingInternal
   );
 
-  const incomeGuess = await estimatePerTurnCurrencyIncomeHomeFace(db, character, rates);
+  const incomeGuess = await estimatePerTurnCurrencyIncomeHomeFace(
+    db,
+    character,
+    rates,
+    gameState ?? undefined
+  );
   const incomeScore = incomeScoreFromPerTurnCurrency(incomeGuess);
   const nwScore = netWorthScoreFromInternal(netInternal);
 
