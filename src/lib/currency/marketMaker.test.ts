@@ -473,3 +473,57 @@ it.each([true, false])(
     } else expect(db.collection("characters").updateOne).not.toHaveBeenCalled();
   }
 );
+
+it("reuses one projected quote snapshot for multiple turn payouts", async () => {
+  const { loadConversionQuoteContext } = await import("./euro/quotes");
+  const { planEuroSettlement } = await import("./euro/rules");
+  const union = planEuroSettlement({
+    year: 1999,
+    turn: 385,
+    preset: "1991-default",
+    europeanMembers: ["DE", "IE", "UK"],
+    consentedCountries: ["DE", "IE", "UK"],
+    rates: { EUR: 0.8, IEP: 0.7, GBP: 0.6 },
+  }).union;
+  const db = createMockDb();
+  db.collection("characters").findOne.mockResolvedValue({
+    currencyBalances: { personal: { GBP: 10000 } },
+  });
+  db.collection("characters").updateOne.mockResolvedValue({ modifiedCount: 1 });
+  db.collection("exchangeRates")
+    .find()
+    .toArray.mockResolvedValue([
+      { currencyCode: "EUR", rate: 1.6, forexSpreadStrength: 1.5 },
+      { currencyCode: "GBP", rate: 99, forexSpreadStrength: 0.5 },
+      { currencyCode: "USD", rate: 1 },
+    ]);
+  db.collection("exchangeRates").find.mockClear();
+  const quoteContext = await loadConversionQuoteContext(db as unknown as Db, union);
+  for (let i = 0; i < 2; i++) {
+    const result = await executeMarketMakerTrade(db as unknown as Db, {
+      characterId: new ObjectId(),
+      countryId: "UK",
+      fromCurrency: "GBP",
+      toCurrency: "USD",
+      amount: 1000,
+      turn: 386,
+      quoteContext,
+    });
+    expect(result.success).toBe(true);
+    expect(result.effectiveRate).toBeCloseTo(1 / 1.2);
+  }
+  expect(db.collection("exchangeRates").find).toHaveBeenCalledTimes(1);
+  expect(db.collection("exchangeRates").find).toHaveBeenCalledWith(
+    {},
+    {
+      projection: {
+        currencyCode: 1,
+        rate: 1,
+        forexSpreadStrength: 1,
+        forexSpreadStrengthLastChangedTurn: 1,
+      },
+    }
+  );
+  expect(db.collection("exchangeRates").findOne).not.toHaveBeenCalled();
+  expect(db.collection("gameState").findOne).not.toHaveBeenCalled();
+});

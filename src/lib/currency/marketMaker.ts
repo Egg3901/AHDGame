@@ -2,7 +2,7 @@
  * Market-maker conversion exchanges balances at live quotes with a spread fee.
  * executeMarketMakerTrade uses fixed, fee-free settlement within the euro area.
  */
-import { resolveEuroConversionQuotes } from "./euro/quotes";
+import { resolveEuroConversionQuotes, type ConversionQuoteContext } from "./euro/quotes";
 import { euroLedgerCrossRate } from "./euro/rules";
 import { loadEuroMonetaryUnion } from "./euro/service";
 import type { AnyBulkWriteOperation, Db, ObjectId } from "mongodb";
@@ -35,6 +35,8 @@ interface MarketMakerTradeParams {
   source?: TradeSource;
   /** Optional reference to the originating entity (corp id, bond id, etc.). */
   sourceRef?: string;
+  /** One quote snapshot per turn phase, avoiding quote reads for each payout. */
+  quoteContext?: ConversionQuoteContext;
 }
 
 interface MarketMakerTradeResult {
@@ -253,17 +255,24 @@ export async function executeMarketMakerTrade(
   }
   const spendAmount = spendResolution.spend;
 
-  const [rawFromExRate, rawToExRate, union] = await Promise.all([
-    db.collection<ExchangeRate>("exchangeRates").findOne({ _id: fromCountryId }),
-    db.collection<ExchangeRate>("exchangeRates").findOne({ _id: toCountryId }),
-    loadEuroMonetaryUnion(db),
-  ]);
+  const [rawFromExRate, rawToExRate, union] = params.quoteContext
+    ? ([
+        params.quoteContext.quotes.get(fromCurrency) ?? null,
+        params.quoteContext.quotes.get(toCurrency) ?? null,
+        params.quoteContext.union,
+      ] as const)
+    : await Promise.all([
+        db.collection<ExchangeRate>("exchangeRates").findOne({ _id: fromCountryId }),
+        db.collection<ExchangeRate>("exchangeRates").findOne({ _id: toCountryId }),
+        loadEuroMonetaryUnion(db),
+      ]);
 
   const [fromExRate, toExRate] = await resolveEuroConversionQuotes(
     db,
     rawFromExRate,
     rawToExRate,
-    union
+    union,
+    params.quoteContext?.quotes
   );
   if (!fromExRate || !toExRate) {
     return {

@@ -4,29 +4,28 @@
  * leaves national financial account identities unchanged.
  */
 import type { Db } from "mongodb";
+import type { CurrencyCode } from "@/lib/constants/currencies";
 import type { ExchangeRate } from "@/lib/db/types";
 import { euroCurrencyRate, euroLedgerCrossRate, type EuroMonetaryUnion } from "./rules";
 
-export async function resolveEuroConversionQuotes(
+export type ConversionQuote = Pick<
+  ExchangeRate,
+  "currencyCode" | "rate" | "forexSpreadStrength" | "forexSpreadStrengthLastChangedTurn"
+>;
+export interface ConversionQuoteContext {
+  quotes: ReadonlyMap<CurrencyCode, ConversionQuote>;
+  union?: EuroMonetaryUnion;
+}
+
+/** Turn callers load one projected quote snapshot for all payout conversions. */
+export async function loadConversionQuoteContext(
   db: Db,
-  from: ExchangeRate | null,
-  to: ExchangeRate | null,
-  union: EuroMonetaryUnion | undefined
-): Promise<[ExchangeRate | null, ExchangeRate | null]> {
-  if (
-    !from ||
-    !to ||
-    !union ||
-    euroLedgerCrossRate(union, from.currencyCode, to.currencyCode) != null
-  )
-    return [from, to];
-  const isMember = (quote: ExchangeRate) =>
-    Object.values(union.members).some((member) => member?.ledgerCurrency === quote.currencyCode);
-  if (!isMember(from) && !isMember(to)) return [from, to];
-  const anchor =
-    [from, to].find((quote) => quote.currencyCode === union.anchorCurrency) ??
-    (await db.collection<ExchangeRate>("exchangeRates").findOne(
-      { _id: union.anchorCountryId },
+  union?: EuroMonetaryUnion
+): Promise<ConversionQuoteContext> {
+  const quotes = await db
+    .collection<ConversionQuote>("exchangeRates")
+    .find(
+      {},
       {
         projection: {
           currencyCode: 1,
@@ -35,8 +34,47 @@ export async function resolveEuroConversionQuotes(
           forexSpreadStrengthLastChangedTurn: 1,
         },
       }
-    ));
-  const resolve = (quote: ExchangeRate): ExchangeRate | null => {
+    )
+    .toArray();
+  return { quotes: new Map(quotes.map((quote) => [quote.currencyCode, quote])), union };
+}
+
+export async function resolveEuroConversionQuotes(
+  db: Db,
+  from: ConversionQuote | null,
+  to: ConversionQuote | null,
+  union: EuroMonetaryUnion | undefined,
+  preloaded?: ReadonlyMap<CurrencyCode, ConversionQuote>
+): Promise<[ConversionQuote | null, ConversionQuote | null]> {
+  if (
+    !from ||
+    !to ||
+    !union ||
+    euroLedgerCrossRate(union, from.currencyCode, to.currencyCode) != null
+  )
+    return [from, to];
+  const isMember = (quote: ConversionQuote) =>
+    Object.values(union.members).some((member) => member?.ledgerCurrency === quote.currencyCode);
+  if (!isMember(from) && !isMember(to)) return [from, to];
+  const existingAnchor = [from, to].find((quote) => quote.currencyCode === union.anchorCurrency);
+  const anchor =
+    existingAnchor ??
+    (preloaded
+      ? preloaded.get(union.anchorCurrency)
+      : await db
+          .collection<ExchangeRate>("exchangeRates")
+          .findOne(
+            { _id: union.anchorCountryId },
+            {
+              projection: {
+                currencyCode: 1,
+                rate: 1,
+                forexSpreadStrength: 1,
+                forexSpreadStrengthLastChangedTurn: 1,
+              },
+            }
+          ));
+  const resolve = (quote: ConversionQuote): ConversionQuote | null => {
     if (!isMember(quote)) return quote;
     const rate = euroCurrencyRate(union, quote.currencyCode, {
       [union.anchorCurrency]: anchor?.rate,
