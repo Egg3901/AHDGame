@@ -1,5 +1,6 @@
 import type { Db, AnyBulkWriteOperation } from "mongodb";
 import type { State } from "@/lib/db/types/state";
+import type { OrganizationMembership } from "@/lib/db/types/internationalOrganization";
 import type { GameConfig } from "@/lib/db/types/gameConfig";
 import type { RegionDemographics } from "@/lib/db/types/regionDemographics";
 import type { StateMetrics } from "@/lib/db/types/stateMetrics";
@@ -18,6 +19,7 @@ import { advanceCohort, type CohortInputs, type CohortFlowTallies } from "./coho
 import { derivePopulationMetrics } from "./populationMetrics";
 import {
   migrantAgeSexProfile,
+  MAX_NET_MIGRATION_PCT_PER_YEAR,
   economicPullFactor,
   applyEconomicPull,
   capNetMigrants,
@@ -25,6 +27,7 @@ import {
   ECON_PULL_NEUTRAL,
   labourShortageMigrationBonusPct,
 } from "./flows/internationalMigration";
+import { planBilateralMigration, transferBilateralCohorts } from "./flows/bilateralMigration";
 import { getLabourSystemMode, labourAtLeast } from "@/lib/labour/featureFlag";
 import { labourMigrationWageFactor } from "@/lib/labour/laborCost";
 import { LIFE_EXPECTANCY_MID, PREVENTABLE_MORTALITY_MID } from "./flows/mortality";
@@ -124,8 +127,9 @@ const METRIC_BOUNDS = {
  * breaker — design §4.4) over the intermediate vectors; readouts are derived from
  * the FINAL vectors. International net is per-region from its own `migrationRate`
  * metric; gateway-weighted NATIONAL international allocation remains a later
- * refinement. Returns the region count + the internal-migration circuit-breaker
- * trip count (surfaced in the turn log).
+ * refinement. Current EU membership pairs origin and destination demand through
+ * conserved age×sex transfers; unmatched demand keeps the rest-of-world cap.
+ * Returns the region count + internal-migration circuit-breaker trips.
  */
 export async function runDemographicFlows(
   db: Db,
@@ -149,8 +153,8 @@ export async function runDemographicFlows(
     "economic.labourWageIndex.value": 1,
     "economic.labourTightness.value": 1,
   } as Record<string, 1>;
-  const [demos, states, macroMetrics, gameState, labourConfig, politicalInputs] = await Promise.all(
-    [
+  const [demos, states, macroMetrics, gameState, labourConfig, politicalInputs, euMemberships] =
+    await Promise.all([
       db.collection<RegionDemographics>("regionDemographics").find({}).toArray(),
       db.collection<State>("states").find({}).toArray(),
       db.collection("macroMetrics").find({}).project<MetricsDoc>(METRICS_PROJECTION).toArray(),
@@ -174,8 +178,11 @@ export async function runDemographicFlows(
       // above carries no political values, so without this every region would
       // share one mortality curve.
       loadPoliticalMacroInputs(db),
-    ]
-  );
+      db
+        .collection<OrganizationMembership>("organizationMemberships")
+        .find({ organizationId: "EU" }, { projection: { countryId: 1, status: 1 } })
+        .toArray(),
+    ]);
 
   // Configurable age thresholds (defaults 18 / 18 / 64; future laws write gameState).
   // Voting age is resolved per country because electoral-law enactment writes the
@@ -272,13 +279,47 @@ export async function runDemographicFlows(
     preps.push({ demo, before, m, countryId: demo.countryId, cappedNet, conscription });
   }
 
-  // Pass 1b: global conservation (design 2026-06-16). The modeled bloc is a subset of
-  // the real world, so a small net inflow from the unmodeled rest-of-world is legitimate
-  // — but every region adding net inflow independently would inflate world population.
-  // Scale POSITIVE nets so the bloc nets at most WORLD_NET_MIGRATION_PCT_PER_YEAR; outflows
-  // and a net-emigrating bloc are untouched.
+  // Member free movement pairs a modeled origin with a modeled destination.
+  // Residual net demand retains the existing rest-of-world circuit breaker.
+  const memberIds = new Set(
+    euMemberships
+      .filter((member) => member.status === "active" || member.status === "founding")
+      .map((member) => member.countryId)
+  );
+  const memberPopulation = new Map<string, number>();
+  for (const prep of preps) {
+    if (!memberIds.has(prep.countryId)) continue;
+    memberPopulation.set(
+      prep.countryId,
+      (memberPopulation.get(prep.countryId) ?? 0) +
+        (stateById.get(prep.demo._id)?.population ?? totalPopulation(prep.before))
+    );
+  }
+  const memberCountries = [...memberPopulation.keys()].sort();
+  const migrationPlan = planBilateralMigration(
+    preps.map((prep) => ({
+      regionId: prep.demo._id,
+      countryId: prep.countryId,
+      netPeople: prep.cappedNet,
+    })),
+    memberCountries.flatMap((originCountryId) =>
+      memberCountries
+        .filter((destinationCountryId) => destinationCountryId !== originCountryId)
+        .map((destinationCountryId) => ({
+          originCountryId,
+          destinationCountryId,
+          capacityPeople:
+            (Math.min(
+              memberPopulation.get(originCountryId)!,
+              memberPopulation.get(destinationCountryId)!
+            ) *
+              MAX_NET_MIGRATION_PCT_PER_YEAR) /
+            (100 * TURNS_PER_YEAR),
+        }))
+    )
+  );
   const migrationScale = worldMigrationScale(
-    preps.map((p) => p.cappedNet),
+    Object.values(migrationPlan.unmatchedByRegion),
     blocPop,
     TURNS_PER_YEAR
   );
@@ -286,7 +327,8 @@ export async function runDemographicFlows(
   // Pass 1c: advance each cohort with the bounded net.
   const works: RegionWork[] = [];
   for (const p of preps) {
-    const netInternationalMigrants = p.cappedNet >= 0 ? p.cappedNet * migrationScale : p.cappedNet;
+    const unmatched = migrationPlan.unmatchedByRegion[p.demo._id] ?? p.cappedNet;
+    const netInternationalMigrants = unmatched >= 0 ? unmatched * migrationScale : unmatched;
     // Bridge A — mortality is SUBSTITUTED: healthcare.* is absent for playable
     // regions, so without this every playable country shares one curve.
     const politicalLife = politicalInputs.legacyUnit(p.demo._id, "healthcare.lifeExpectancy");
@@ -329,8 +371,26 @@ export async function runDemographicFlows(
     });
   }
 
-  // ── Stage 2: per-country INTERNAL migration (cross-region, zero-sum, N1/F-B) ──
+  // Paired country flows transfer identical age and sex cells, preserving modeled population.
   const profile = migrantAgeSexProfile(0.5);
+  const workById = new Map(works.map((work) => [work.id, work]));
+  for (const route of migrationPlan.routes) {
+    const origin = workById.get(route.originRegionId);
+    const destination = workById.get(route.destinationRegionId);
+    if (!origin || !destination) continue;
+    const moved = transferBilateralCohorts(
+      origin.vector,
+      destination.vector,
+      route.people,
+      profile
+    );
+    origin.vector = moved.origin;
+    destination.vector = moved.destination;
+    origin.flows.netMigration -= moved.moved;
+    destination.flows.netMigration += moved.moved;
+  }
+
+  // ── Stage 2: per-country INTERNAL migration (cross-region, zero-sum, N1/F-B) ──
   let circuitBreakerTrips = 0;
   const byCountry = new Map<string, RegionWork[]>();
   for (const w of works) {
