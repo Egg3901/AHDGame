@@ -54,6 +54,7 @@ export async function processUndergroundTurn(
         heat: 1,
         exposedUntilTurn: 1,
         lastUndergroundDriveTurn: 1,
+        recentUndergroundDriveCount: 1,
       },
     })
     .toArray();
@@ -78,12 +79,20 @@ export async function processUndergroundTurn(
     // safety), so this is what caps runaway heat back to 100.
     const nextHeat = droveThisTurn ? heat : decayUndergroundHeat(heat);
     const set: Record<string, unknown> = {};
+    const recentDriveCount =
+      typeof cell.recentUndergroundDriveCount === "number" &&
+      Number.isFinite(cell.recentUndergroundDriveCount)
+        ? Math.max(0, cell.recentUndergroundDriveCount)
+        : 0;
+    // The count is a two-turn weighted window: every successful drive adds one,
+    // and older activity loses half its weight after each detection roll.
+    if (recentDriveCount > 0) set.recentUndergroundDriveCount = recentDriveCount / 2;
     if (nextHeat !== (typeof cell.heat === "number" ? cell.heat : 0)) {
       set.heat = nextHeat;
     }
     if (!isUnionExposed(cell, currentTurn) && nextHeat >= HEAT_DETECTION_THRESHOLD) {
       const chance = postureDetectionChance(
-        undergroundDetectionChance(nextHeat),
+        undergroundDetectionChance(nextHeat, recentDriveCount),
         postures.get(cell.countryId) ?? "normal"
       );
       const roll = seededRoll(
