@@ -36,8 +36,8 @@ function input(continuing: boolean): SuccessionActivationInput {
     approval: {
       settlementId: "approved-1",
       revision: 1,
-      availableFromYear: 1991,
-      currentYear: 1991,
+      availableFromYear: continuing ? 1991 : 1992,
+      currentYear: continuing ? 1991 : 1992,
       requiredParticipants: ids,
       parentMandate: { settlementId: "approved-1", revision: 1 },
       consents: ids.map((entityId) => ({
@@ -163,6 +163,20 @@ describe("federation settlement activation", () => {
       { entityId: "RU", settlementId: "approved-1", revision: 1, choice: "approve" },
     ];
     expect(() => planSuccessionActivation(wrongParticipants)).toThrow("Settlement territory");
+  });
+
+  it("opens federation decisions without forcing the historical outcome", () => {
+    const tooEarly = input(false);
+    tooEarly.approval.currentYear = 1991;
+    expect(() => planSuccessionActivation(tooEarly)).toThrow("approved settlement");
+
+    const backdated = input(false);
+    backdated.approval.availableFromYear = 1991;
+    expect(() => planSuccessionActivation(backdated)).toThrow("approved settlement");
+
+    const delayed = input(false);
+    delayed.approval.currentYear = 2001;
+    expect(planSuccessionActivation(delayed).sourceEntity.status).toBe("dissolved");
   });
 
   it("refuses to activate only part of a federation or invent output", () => {

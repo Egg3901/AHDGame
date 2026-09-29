@@ -1,6 +1,7 @@
 import type { WorldEntityManifestEntry } from "@/lib/world/worldEntityManifest";
 import type { MacroCountryState } from "@/lib/world/macro/types";
 import { buildSuccessorMacroCountry, type SuccessorMacroTerms } from "./buildSuccessorMacro";
+import { earliestFederationDecisionYear } from "./availability";
 import { evaluateSuccessionApproval, type SuccessionApprovalInput } from "./rules/decision";
 import {
   allocateSuccessionAmount,
@@ -42,10 +43,14 @@ export function planSuccessionActivation(input: SuccessionActivationInput): {
     now,
   } = input;
   const decision = evaluateSuccessionApproval(approval);
+  const earliestDecisionYear = earliestFederationDecisionYear(source.presetId, source.entityId);
   if (
     !settlementId.trim() ||
     approval.settlementId !== settlementId ||
     decision.status !== "ready" ||
+    (earliestDecisionYear !== null &&
+      (approval.availableFromYear < earliestDecisionYear ||
+        approval.currentYear < earliestDecisionYear)) ||
     finances.settlementId !== settlementId ||
     finances.servicingIssuerId !== source.entityId ||
     source.status !== "sovereign" ||
