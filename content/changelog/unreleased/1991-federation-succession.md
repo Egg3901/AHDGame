@@ -21,4 +21,6 @@ areas: [backend]
 
 - Derive successor aggregate economies from the population and output actually assigned in a settlement, converting output at an explicit rate and retaining source provenance.
 
+- Preflight successor activation against the same territorial and financial plan, so a target cannot become sovereign under the wrong federation or receive an unrelated aggregate economy.
+
 - Model a legacy settlement administration for a vanished parent issuer. Successors fund its contractual payment by agreed shares; budget shortfalls create contribution arrears and actual cash limits creditor payment. Continuing states keep their own debt service. Runtime transfer and collection remain gated.
