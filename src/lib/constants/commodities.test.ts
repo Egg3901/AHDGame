@@ -946,6 +946,35 @@ describe("computeRawSupplyDemand — plants tier (real production, P3b)", () => 
     expect(totalSplit).toBeCloseTo(produced, 4);
   });
 
+  it("attributes the ledger's standard chemical mix to the owning corporation", () => {
+    const produced = 1_000;
+    const res = plants([
+      {
+        sectorType: "chemical_industries",
+        revenue: 1_000_000,
+        stateId: "S1",
+        corporationId: "corp-chemical",
+        strategyId: "standard",
+        producedUnits: produced,
+      },
+    ]);
+    const output = res.supplyByCorporation.get("corp-chemical")!;
+    const rates: Partial<Record<CommodityType, number>> = {};
+    for (const flow of SECTOR_SUPPLY.chemical_industries ?? []) {
+      rates[flow.commodity] = flow.rate;
+    }
+
+    expect(output.get("chemicals")).toBeCloseTo(
+      produced * commodityMixWeight(rates, COMMODITY_BASE_PRICES, "chemicals"),
+      6
+    );
+    expect(output.get("plastics")).toBeCloseTo(
+      produced * commodityMixWeight(rates, COMMODITY_BASE_PRICES, "plastics"),
+      6
+    );
+    expect(output.get("chemicals")! + output.get("plastics")!).toBeCloseTo(produced, 6);
+  });
+
   it("input demand scales with capacity utilization, not nameplate", () => {
     const fullRun = plants([
       {
@@ -1125,6 +1154,37 @@ describe("plants extraction supply vs depletion (H2 — two sectors)", () => {
     ]);
     expect(rare(withoutFraction, "B")).toBeCloseTo(rare(withFraction, "A"), 6);
     expect(rare(withoutFraction, "B")).toBeCloseTo(rare(legacy, "C"), 6);
+  });
+
+  it("attributes extraction only after realization and capacity rationing", () => {
+    const sector = {
+      sectorType: "extraction",
+      revenue: 1_000_000,
+      stateId: "MINE",
+      sectorId: "mine-1",
+      corporationId: "corp-mine",
+      extractionRealizedFraction: 0.5,
+    };
+    const full = plants([{ ...sector, extractionRealizedFraction: 1 }]);
+    const rationed = computeRawSupplyDemand(
+      [sector],
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      new Map([["mine-1", { rare_earth: 0.4 }]]),
+      false,
+      undefined,
+      false,
+      true
+    );
+    const attributed = rationed.supplyByCorporation.get("corp-mine")!.get("rare_earth")!;
+
+    expect(attributed).toBeCloseTo(
+      full.supplyByCorporation.get("corp-mine")!.get("rare_earth")! * 0.5 * 0.4,
+      6
+    );
+    expect(attributed).toBeCloseTo(rationed.byState.get("MINE")!.get("rare_earth")!.supply, 6);
   });
 });
 
