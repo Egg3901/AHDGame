@@ -76,6 +76,10 @@ describe("union ban enforcement route", () => {
 
     db.collection("cabinetMembers").findOne.mockResolvedValue(null);
     expect((await post({ action: "posture", posture: "normal" })).status).toBe(403);
+    expect(
+      (await GET(new Request("http://localhost"), { params: Promise.resolve({ code: "US" }) }))
+        .status
+    ).toBe(403);
   });
 
   it("lets an acting delegate read but blocks enforcement mutations", async () => {
@@ -98,6 +102,7 @@ describe("union ban enforcement route", () => {
   it("reports the persisted posture only to the country's executive", async () => {
     db.collection("federalBudget").findOne.mockResolvedValue({
       unionsBanned: true,
+      gdp: 48_000_000,
       unionEnforcementPosture: "crackdown",
       unionEnforcementPostureChangedTurn: 42,
     });
@@ -108,6 +113,9 @@ describe("union ban enforcement route", () => {
     await expect(response.json()).resolves.toEqual({
       posture: "crackdown",
       canChangePosture: false,
+      crackdownCostPerTurn: 1_000,
+      crackdownApprovalPenalty: 2,
+      exposedUnionIds: [],
       prosecutionTargets: [],
     });
   });
@@ -127,6 +135,7 @@ describe("union ban enforcement route", () => {
     });
     expect(response.status).toBe(200);
     const data = await response.json();
+    expect(data.exposedUnionIds).toEqual([unionId.toString()]);
     expect(data.prosecutionTargets).toEqual([
       {
         unionId: unionId.toString(),
