@@ -119,7 +119,8 @@ export function SharePurchaseAtMarketView({
   homeCurrencyCode,
   corpCurrency,
 }: SharePurchaseAtMarketViewProps) {
-  const { formatAmount, toInternalFrom, forexRates, ratesLoading } = useCurrency();
+  const { formatAmount, toInternalFrom, forexRates, forexSpreadStrengths, ratesLoading } =
+    useCurrency();
   const { euroMonetaryUnion } = useWorldFlags();
   const exchangeRates = forexRates;
   const loadingRates = ratesLoading && !forexRates;
@@ -147,6 +148,7 @@ export function SharePurchaseAtMarketView({
         if (!exchangeRates) return true;
         const estimate = estimateExplicitPayCoverage({
           union: euroMonetaryUnion,
+          spreadStrengths: forexSpreadStrengths,
           requiredAmount: costInHome,
           fromCurrency: c,
           toCurrency: homeCurrencyCode,

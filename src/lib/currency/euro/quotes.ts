@@ -25,19 +25,17 @@ export async function resolveEuroConversionQuotes(
   if (!isMember(from) && !isMember(to)) return [from, to];
   const anchor =
     [from, to].find((quote) => quote.currencyCode === union.anchorCurrency) ??
-    (await db
-      .collection<ExchangeRate>("exchangeRates")
-      .findOne(
-        { _id: union.anchorCountryId },
-        {
-          projection: {
-            currencyCode: 1,
-            rate: 1,
-            forexSpreadStrength: 1,
-            forexSpreadStrengthLastChangedTurn: 1,
-          },
-        }
-      ));
+    (await db.collection<ExchangeRate>("exchangeRates").findOne(
+      { _id: union.anchorCountryId },
+      {
+        projection: {
+          currencyCode: 1,
+          rate: 1,
+          forexSpreadStrength: 1,
+          forexSpreadStrengthLastChangedTurn: 1,
+        },
+      }
+    ));
   const resolve = (quote: ExchangeRate): ExchangeRate | null => {
     if (!isMember(quote)) return quote;
     const rate = euroCurrencyRate(union, quote.currencyCode, {
@@ -52,4 +50,18 @@ export async function resolveEuroConversionQuotes(
     };
   };
   return [resolve(from), resolve(to)];
+}
+
+/** Purchase estimates resolve the source authority from these projected settings. */
+export async function loadForexSpreadStrengths(db: Db) {
+  const rows = await db
+    .collection<ExchangeRate>("exchangeRates")
+    .find(
+      {},
+      {
+        projection: { currencyCode: 1, forexSpreadStrength: 1 },
+      }
+    )
+    .toArray();
+  return Object.fromEntries(rows.map((row) => [row.currencyCode, row.forexSpreadStrength]));
 }

@@ -43,8 +43,15 @@ export function BondTradeModal({
   onSuccess: () => void;
 }) {
   const { dialogProps, titleId } = useDialogA11y(onClose);
-  const { formatAmount, formatPrice, formatFull, forexRates, ratesLoading, toInternalFrom } =
-    useCurrency();
+  const {
+    formatAmount,
+    formatPrice,
+    formatFull,
+    forexRates,
+    forexSpreadStrengths,
+    ratesLoading,
+    toInternalFrom,
+  } = useCurrency();
   const { euroMonetaryUnion } = useWorldFlags();
   const unitsInputId = useId();
   const [side, setSide] = useState<"buy" | "sell">("buy");
@@ -114,6 +121,7 @@ export function BondTradeModal({
         if (!exchangeRates) return true;
         const estimate = estimateExplicitPayCoverage({
           union: euroMonetaryUnion,
+          spreadStrengths: forexSpreadStrengths,
           requiredAmount: cost,
           fromCurrency: code,
           toCurrency: bondCurrency,
@@ -194,6 +202,7 @@ export function BondTradeModal({
     account === "corporation" && side === "buy" && hasCorp
       ? estimateCorpWalletSpend({
           union: euroMonetaryUnion,
+          spreadStrengths: forexSpreadStrengths,
           requiredAmount: totalCost,
           availableBalance: corpLiquidBalanceLocal,
           fromCurrency: corpLiquidCurrencyCode,
@@ -205,6 +214,7 @@ export function BondTradeModal({
     isCharacterBuy && !shouldUseImplicitAutoConvert
       ? estimateExplicitPayCoverage({
           union: euroMonetaryUnion,
+          spreadStrengths: forexSpreadStrengths,
           requiredAmount: totalCost,
           fromCurrency: selectedPayCurrency,
           toCurrency: bondCurrency,
@@ -216,6 +226,7 @@ export function BondTradeModal({
     isCharacterBuy && shouldUseImplicitAutoConvert
       ? estimateImplicitAutoConvertCoverage({
           union: euroMonetaryUnion,
+          spreadStrengths: forexSpreadStrengths,
           requiredAmount: totalCost,
           targetCurrency: bondCurrency,
           balances: personalBalances ?? {},
@@ -232,6 +243,7 @@ export function BondTradeModal({
               total +
               estimateMaxConvertibleAmount({
                 union: euroMonetaryUnion,
+                spreadStrengths: forexSpreadStrengths,
                 fromCurrency: code,
                 toCurrency: bondCurrency,
                 balance,
@@ -244,6 +256,7 @@ export function BondTradeModal({
     isCharacterBuy && !shouldUseImplicitAutoConvert
       ? estimateMaxConvertibleAmount({
           union: euroMonetaryUnion,
+          spreadStrengths: forexSpreadStrengths,
           fromCurrency: selectedPayCurrency,
           toCurrency: bondCurrency,
           balance: selectedPayBalance,
@@ -276,6 +289,7 @@ export function BondTradeModal({
           ? Math.floor(
               estimateCorpMaxSpendableTargetAmount({
                 union: euroMonetaryUnion,
+                spreadStrengths: forexSpreadStrengths,
                 availableBalance: corpLiquidBalanceLocal,
                 fromCurrency: corpLiquidCurrencyCode,
                 toCurrency: bondCurrency,
@@ -307,6 +321,7 @@ export function BondTradeModal({
     if (account === "corporation") {
       const estimate = estimateCorpWalletSpend({
         union: euroMonetaryUnion,
+        spreadStrengths: forexSpreadStrengths,
         requiredAmount: candidateUnits * costPerUnit,
         availableBalance: corpLiquidBalanceLocal,
         fromCurrency: corpLiquidCurrencyCode,
@@ -325,6 +340,7 @@ export function BondTradeModal({
     if (shouldUseImplicitAutoConvert) {
       const estimate = estimateImplicitAutoConvertCoverage({
         union: euroMonetaryUnion,
+        spreadStrengths: forexSpreadStrengths,
         requiredAmount: candidateCost,
         targetCurrency: bondCurrency,
         balances: personalBalances,
@@ -337,6 +353,7 @@ export function BondTradeModal({
     }
     const estimate = estimateExplicitPayCoverage({
       union: euroMonetaryUnion,
+      spreadStrengths: forexSpreadStrengths,
       requiredAmount: candidateCost,
       fromCurrency: selectedPayCurrency,
       toCurrency: bondCurrency,

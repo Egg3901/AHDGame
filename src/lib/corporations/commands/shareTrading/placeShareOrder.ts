@@ -1,3 +1,8 @@
+/**
+ * Share orders reserve funding for purchases and expose shares for sale.
+ * placeShareOrder prices corporate currency conversion using the source authority.
+ */
+import { loadForexSpreadStrengths } from "@/lib/currency/euro/quotes";
 import { loadEuroMonetaryUnion } from "@/lib/currency/euro/service";
 import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
@@ -249,6 +254,7 @@ export async function placeShareOrder(request: Request, { params }: RouteParams)
           );
           const corpPurchaseEstimate = estimateCorpWalletSpend({
             union: await loadEuroMonetaryUnion(db),
+            spreadStrengths: await loadForexSpreadStrengths(db),
             requiredAmount: shares * executionPrice,
             availableBalance: placerCorp.liquidCapital ?? 0,
             fromCurrency: placerCurrency,
@@ -412,6 +418,7 @@ export async function placeShareOrder(request: Request, { params }: RouteParams)
         const escrowAnchor = corpLiquidCapitalToAnchor(escrowAmount, corporation, targetFxRate);
         const escrowEstimate = estimateCorpWalletSpend({
           union: await loadEuroMonetaryUnion(db),
+          spreadStrengths: await loadForexSpreadStrengths(db),
           requiredAmount: escrowAmount,
           availableBalance: placerCorp.liquidCapital ?? 0,
           fromCurrency: placerCurrency,

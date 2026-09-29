@@ -80,6 +80,7 @@ export default function SharePurchaseModal({
     formatAmount,
     formatPrice,
     forexRates,
+    forexSpreadStrengths,
   } = useCurrency();
   const { euroMonetaryUnion } = useWorldFlags();
 
@@ -202,6 +203,7 @@ export default function SharePurchaseModal({
     buyAsCorp && atMarketSide === "buy"
       ? estimateCorpWalletSpend({
           union: euroMonetaryUnion,
+          spreadStrengths: forexSpreadStrengths,
           requiredAmount: quantity * marketAskPriceLocal,
           availableBalance: myCorporation?.liquidCapital ?? 0,
           fromCurrency: myCorpLiquidCurrency,
@@ -214,6 +216,7 @@ export default function SharePurchaseModal({
     limitAsCorp && orderSide === "buy"
       ? estimateCorpWalletSpend({
           union: euroMonetaryUnion,
+          spreadStrengths: forexSpreadStrengths,
           requiredAmount: quantity * limitPriceLocal,
           availableBalance: myCorporation?.liquidCapital ?? 0,
           fromCurrency: myCorpLiquidCurrency,
@@ -226,6 +229,7 @@ export default function SharePurchaseModal({
     !buyAsCorp && !buyAsInvestmentBank && myCurrencyBalances && !shouldUseImplicitAutoConvert
       ? estimateExplicitPayCoverage({
           union: euroMonetaryUnion,
+          spreadStrengths: forexSpreadStrengths,
           requiredAmount: buyCostInHome,
           fromCurrency: selectedPayCurrency,
           toCurrency: homeCurrencyCode,
@@ -238,6 +242,7 @@ export default function SharePurchaseModal({
     !buyAsCorp && !buyAsInvestmentBank && myCurrencyBalances && shouldUseImplicitAutoConvert
       ? estimateImplicitAutoConvertCoverage({
           union: euroMonetaryUnion,
+          spreadStrengths: forexSpreadStrengths,
           requiredAmount: buyCostInHome,
           targetCurrency: homeCurrencyCode,
           balances: myCurrencyBalances,
@@ -255,6 +260,7 @@ export default function SharePurchaseModal({
               total +
               estimateMaxConvertibleAmount({
                 union: euroMonetaryUnion,
+                spreadStrengths: forexSpreadStrengths,
                 fromCurrency: code,
                 toCurrency: homeCurrencyCode,
                 balance,
@@ -268,6 +274,7 @@ export default function SharePurchaseModal({
     !buyAsCorp && !buyAsInvestmentBank && myCurrencyBalances && !shouldUseImplicitAutoConvert
       ? estimateMaxConvertibleAmount({
           union: euroMonetaryUnion,
+          spreadStrengths: forexSpreadStrengths,
           fromCurrency: selectedPayCurrency,
           toCurrency: homeCurrencyCode,
           balance: selectedPayBalance,
@@ -290,6 +297,7 @@ export default function SharePurchaseModal({
       return Math.floor(
         estimateCorpMaxSpendableTargetAmount({
           union: euroMonetaryUnion,
+          spreadStrengths: forexSpreadStrengths,
           availableBalance: myCorporation?.liquidCapital ?? 0,
           fromCurrency: myCorpLiquidCurrency,
           toCurrency: targetTradeCurrency,
@@ -331,6 +339,7 @@ export default function SharePurchaseModal({
           if (buyAsCorp) {
             const estimate = estimateCorpWalletSpend({
               union: euroMonetaryUnion,
+              spreadStrengths: forexSpreadStrengths,
               requiredAmount: candidateShares * marketAskPriceLocal,
               availableBalance: myCorporation?.liquidCapital ?? 0,
               fromCurrency: myCorpLiquidCurrency,
@@ -343,6 +352,7 @@ export default function SharePurchaseModal({
           if (shouldUseImplicitAutoConvert) {
             const estimate = estimateImplicitAutoConvertCoverage({
               union: euroMonetaryUnion,
+              spreadStrengths: forexSpreadStrengths,
               requiredAmount: candidateCostInHome,
               targetCurrency: homeCurrencyCode,
               balances: myCurrencyBalances,
@@ -355,6 +365,7 @@ export default function SharePurchaseModal({
           }
           const estimate = estimateExplicitPayCoverage({
             union: euroMonetaryUnion,
+            spreadStrengths: forexSpreadStrengths,
             requiredAmount: candidateCostInHome,
             fromCurrency: selectedPayCurrency,
             toCurrency: homeCurrencyCode,
@@ -389,6 +400,7 @@ export default function SharePurchaseModal({
           if (limitAsCorp) {
             const estimate = estimateCorpWalletSpend({
               union: euroMonetaryUnion,
+              spreadStrengths: forexSpreadStrengths,
               requiredAmount: candidateShares * limitPriceLocal,
               availableBalance: myCorporation?.liquidCapital ?? 0,
               fromCurrency: myCorpLiquidCurrency,

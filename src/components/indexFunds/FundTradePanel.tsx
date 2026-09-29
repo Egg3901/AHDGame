@@ -50,8 +50,15 @@ export function FundTradePanel({
   onSuccess: () => void;
   defaultMode?: Mode;
 }) {
-  const { formatFull, forexEnabled, forexRates, ratesLoading, toInternalFrom, formatPrice } =
-    useCurrency();
+  const {
+    formatFull,
+    forexEnabled,
+    forexRates,
+    forexSpreadStrengths,
+    ratesLoading,
+    toInternalFrom,
+    formatPrice,
+  } = useCurrency();
   const { euroMonetaryUnion } = useWorldFlags();
   const fundCurrency = anchorCurrencyCode as CurrencyCode;
 
@@ -158,6 +165,7 @@ export function FundTradePanel({
     showPaymentControls && !shouldUseImplicitAutoConvert
       ? estimateExplicitPayCoverage({
           union: euroMonetaryUnion,
+          spreadStrengths: forexSpreadStrengths,
           requiredAmount: totalCostNative,
           fromCurrency: selectedPayCurrency,
           toCurrency: fundCurrency,
@@ -170,6 +178,7 @@ export function FundTradePanel({
     showPaymentControls && shouldUseImplicitAutoConvert
       ? estimateImplicitAutoConvertCoverage({
           union: euroMonetaryUnion,
+          spreadStrengths: forexSpreadStrengths,
           requiredAmount: totalCostNative,
           targetCurrency: fundCurrency,
           balances: personalBalances ?? {},
@@ -192,6 +201,7 @@ export function FundTradePanel({
         if (!exchangeRates) return true;
         const estimate = estimateExplicitPayCoverage({
           union: euroMonetaryUnion,
+          spreadStrengths: forexSpreadStrengths,
           requiredAmount: cost,
           fromCurrency: code,
           toCurrency: fundCurrency,

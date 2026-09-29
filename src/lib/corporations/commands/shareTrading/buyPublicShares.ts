@@ -1,3 +1,8 @@
+/**
+ * Public share purchases exchange funding for available shares.
+ * buyPublicShares uses source-authority spread settings for corporate conversion.
+ */
+import { loadForexSpreadStrengths } from "@/lib/currency/euro/quotes";
 import { loadEuroMonetaryUnion } from "@/lib/currency/euro/service";
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
@@ -186,6 +191,7 @@ export async function buyPublicShares(request: Request, { params }: RouteParams)
       );
       const corpPurchaseEstimate = estimateCorpWalletSpend({
         union: await loadEuroMonetaryUnion(db),
+        spreadStrengths: await loadForexSpreadStrengths(db),
         requiredAmount: shares * executionPrice,
         availableBalance: buyingCorp.liquidCapital ?? 0,
         fromCurrency: buyingCurrency,

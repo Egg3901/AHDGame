@@ -3,8 +3,16 @@
  * purchaseConversionSpend covers rounding losses without exceeding the wallet;
  * fixed euro settlement charges no spread.
  */
-import { MARKET_MAKER_SPREAD, clampForexSpreadStrength } from "@/lib/constants/currencies";
-import { euroLedgerSpendForTarget } from "../euro/rules";
+import {
+  MARKET_MAKER_SPREAD,
+  clampForexSpreadStrength,
+  type CurrencyCode,
+} from "@/lib/constants/currencies";
+import {
+  euroLedgerSpendForTarget,
+  euroLedgerCrossRate,
+  type EuroMonetaryUnion,
+} from "../euro/rules";
 
 export function purchaseConversionRequired(
   target: number,
@@ -28,4 +36,17 @@ export function purchaseConversionSpend(
   const required = purchaseConversionRequired(target, crossRate, fixedSettlement, spreadStrength);
   const buffer = fixedSettlement ? 0 : Math.max(1, Math.ceil(1 / crossRate));
   return Math.min(balance, required + buffer);
+}
+
+export function purchaseSpreadRate(
+  from: CurrencyCode,
+  to: CurrencyCode,
+  union?: EuroMonetaryUnion,
+  strengths?: Partial<Record<CurrencyCode, number>> | null
+): number {
+  if (from === to || euroLedgerCrossRate(union, from, to) != null) return 0;
+  const member =
+    union && Object.values(union.members).some((entry) => entry?.ledgerCurrency === from);
+  const policyCurrency = member && union ? union.anchorCurrency : from;
+  return MARKET_MAKER_SPREAD * clampForexSpreadStrength(strengths?.[policyCurrency]);
 }

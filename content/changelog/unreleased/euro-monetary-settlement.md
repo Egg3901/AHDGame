@@ -21,3 +21,4 @@ areas: [engine]
 - Preserve outstanding order conditions and make interrupted expiry refunds recoverable.
 
 - Apply the common spread policy and anchor quotation to external member conversions.
+- Match purchase affordability, automatic conversion and corporate funding to the source authority spread.

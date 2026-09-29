@@ -1,3 +1,4 @@
+import { loadForexSpreadStrengths } from "@/lib/currency/euro/quotes";
 import { loadEuroMonetaryUnion } from "@/lib/currency/euro/service";
 import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
@@ -154,6 +155,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       // to handle cross-currency buys (A19).
       const corpPurchaseEstimate = estimateCorpWalletSpend({
         union: await loadEuroMonetaryUnion(db),
+        spreadStrengths: await loadForexSpreadStrengths(db),
         requiredAmount: costLocal,
         availableBalance: corp.liquidCapital ?? 0,
         fromCurrency: corpCurrency,
