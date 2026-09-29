@@ -255,6 +255,10 @@ const indexFundBondLiquidityEnabled = parseOptionalBoolean(
   arg("index-fund-bond-liquidity"),
   "index-fund-bond-liquidity"
 );
+const nppFundRedemptionEnabled = parseOptionalBoolean(
+  arg("npp-fund-redemption"),
+  "npp-fund-redemption"
+);
 // #1001 controlled comparison: seeds the gated tranche-consolidation flag on
 // the sandbox gameConfig. Absent keeps the scheduler default (off).
 const sovereignIssuanceConsolidationEnabled = parseOptionalBoolean(
@@ -865,6 +869,7 @@ async function main() {
     canonicalFreightBillingEnabled,
     shortageResponsiveSourcingEnabled,
     indexFundBondLiquidityEnabled,
+    nppFundRedemptionEnabled,
     sovereignIssuanceConsolidationEnabled,
     domesticSovereignBondCoverageEnabled,
     equityLiquidityFacilityEnabled,

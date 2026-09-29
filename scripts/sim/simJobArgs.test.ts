@@ -30,6 +30,7 @@ describe("sim worker runWorld argument emission", () => {
       canonicalFreightBillingEnabled: true,
       shortageResponsiveSourcingEnabled: false,
       indexFundBondLiquidityEnabled: true,
+      nppFundRedemptionEnabled: false,
       equityLiquidityFacilityEnabled: true,
       nppMarketCoverageEnabled: false,
       nppFragileMarketSupplyEnabled: true,
@@ -45,6 +46,7 @@ describe("sim worker runWorld argument emission", () => {
       "--canonical-freight-billing=true",
       "--shortage-responsive-sourcing=false",
       "--index-fund-bond-liquidity=true",
+      "--npp-fund-redemption=false",
       "--equity-liquidity-facility=true",
       "--npp-market-coverage=false",
       "--npp-fragile-market-supply=true",
@@ -68,6 +70,21 @@ describe("sim worker runWorld argument emission", () => {
         campaignEraPriceLevelEnabled: "true",
       } as unknown as SimJobExperimentFields)
     ).toThrow("campaignEraPriceLevelEnabled must be boolean");
+  });
+
+  it("transports both NPP redemption arms and rejects invalid values", () => {
+    expect(buildRunWorldArgs({ nppFundRedemptionEnabled: true })).toContain(
+      "--npp-fund-redemption=true"
+    );
+    expect(buildRunWorldArgs({ nppFundRedemptionEnabled: false })).toContain(
+      "--npp-fund-redemption=false"
+    );
+    expect(buildRunWorldArgs({}).some((arg) => arg.startsWith("--npp-fund-redemption="))).toBe(
+      false
+    );
+    expect(() =>
+      buildRunWorldArgs({ nppFundRedemptionEnabled: "true" } as unknown as SimJobExperimentFields)
+    ).toThrow("nppFundRedemptionEnabled must be boolean");
   });
 
   it("rejects non-boolean equity values instead of stringifying them", () => {
