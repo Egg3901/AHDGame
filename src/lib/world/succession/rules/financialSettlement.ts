@@ -24,6 +24,7 @@ export interface SuccessionFinancialTerms {
 export interface SuccessionFinancialPlan {
   settlementId: string;
   servicingIssuerId: string;
+  servicingEntityKind: "continuing-state" | "legacy-administration";
   creditorDebtMinor: number;
   financialAssetsMinor: number;
   assetAllocation: Record<string, number>;
@@ -119,6 +120,9 @@ export function planSuccessionFinances(terms: SuccessionFinancialTerms): Success
   return {
     settlementId: terms.settlementId,
     servicingIssuerId: terms.servicingIssuerId,
+    servicingEntityKind: Object.hasOwn(populations, terms.servicingIssuerId)
+      ? "continuing-state"
+      : "legacy-administration",
     creditorDebtMinor: terms.creditorDebtMinor,
     financialAssetsMinor: terms.financialAssetsMinor,
     assetAllocation: allocateSuccessionAmount(terms.financialAssetsMinor, assetWeights),

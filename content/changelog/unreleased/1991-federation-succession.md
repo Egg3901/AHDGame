@@ -16,3 +16,5 @@ areas: [backend]
 - Assign existing territories without inventing new population or economic output.
 
 - Bind territorial and financial plans to the approved revision, deriving default shares from the population actually transferred.
+
+- Model a legacy settlement administration for a vanished parent issuer. Successors fund its contractual payment by agreed shares; budget shortfalls create contribution arrears and actual cash limits creditor payment. Continuing states keep their own debt service. Runtime transfer and collection remain gated.
