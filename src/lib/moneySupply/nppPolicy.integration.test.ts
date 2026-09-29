@@ -61,9 +61,13 @@ describe("monetary policy after accounting transition", () => {
 });
 
 describe("common monetary authority", () => {
-  it.each(["player", "npp"] as const)(
-    "uses the %s common chair for all member operations",
-    async (chairMode) => {
+  it.each([
+    ["player", false],
+    ["npp", false],
+    ["npp", true],
+  ] as const)(
+    "uses the %s common chair with comparable common money=%s",
+    async (chairMode, comparableMoney) => {
       vi.mocked(executeMonetaryOperation).mockClear();
       const db = createInMemoryDb();
       db.seed("gameConfig", [{ _id: "default", moneySupplyEnabled: true }]);
@@ -74,9 +78,20 @@ describe("common monetary authority", () => {
           preset: "1991-default",
           euroMonetaryUnion: {
             authorityId: "ECB",
+            establishedTurn: 400,
             members: {
-              DE: { countryId: "DE", ledgerCurrency: "EUR", ledgerUnitsPerAnchorUnit: 1 },
-              UK: { countryId: "UK", ledgerCurrency: "GBP", ledgerUnitsPerAnchorUnit: 0.8 },
+              DE: {
+                countryId: "DE",
+                ledgerCurrency: "EUR",
+                ledgerUnitsPerAnchorUnit: 1,
+                joinedTurn: 400,
+              },
+              UK: {
+                countryId: "UK",
+                ledgerCurrency: "GBP",
+                ledgerUnitsPerAnchorUnit: 0.8,
+                joinedTurn: 400,
+              },
             },
           },
         },
@@ -102,6 +117,22 @@ describe("common monetary authority", () => {
           maturityTurn: 200,
         }))
       );
+      if (comparableMoney) {
+        db.seed(
+          "moneySupplySnapshots",
+          [488, 500].flatMap((turn) =>
+            ["EUR", "GBP"].map((currencyCode) => ({
+              _id: `${turn}:${currencyCode}`,
+              turn,
+              currencyCode,
+              accountingVersion: MONEY_ACCOUNTING_VERSION,
+              m2: (turn === 488 ? 100 : 200) * (currencyCode === "GBP" ? 0.8 : 1),
+            }))
+          )
+        );
+      }
+      const snapshots = db.collection("moneySupplySnapshots");
+      const moneyReads = vi.spyOn(snapshots, "find");
       const bonds = db.collection("bonds");
       const findBonds = bonds.find.bind(bonds);
       vi.spyOn(bonds, "find").mockImplementation((filter) => {
@@ -120,7 +151,10 @@ describe("common monetary authority", () => {
           .docs.map((bank) => bank.lastMonetaryPolicyEvaluation);
         expect(evaluations[0].inflation).toBe(evaluations[1].inflation);
         expect(evaluations[0].gdpGrowth).toBe(evaluations[1].gdpGrowth);
-        expect(evaluations[0].moneyGrowthReliable).toBe(false);
+        expect(evaluations[0].moneyGrowthReliable).toBe(comparableMoney);
+        expect(evaluations[0].annualizedM2GrowthPct).toBe(evaluations[1].annualizedM2GrowthPct);
+        if (comparableMoney) expect(evaluations[0].annualizedM2GrowthPct).toBeGreaterThan(0);
+        expect(moneyReads).toHaveBeenCalledTimes(1);
       }
     }
   );

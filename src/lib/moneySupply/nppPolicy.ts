@@ -5,6 +5,7 @@
  */
 import { aggregateEuroPolicyIndicators, euroPolicyBankId } from "@/lib/currency/euro/rules";
 import { getGdpAnchorRate } from "@/lib/currency/gdpAnchorRate";
+import { euroMoneyGrowth } from "./rules/euroGrowth";
 import { currentMoneyGrowth } from "./rules/growthSignal";
 import { MONEY_ACCOUNTING_VERSION } from "./calculate";
 import type { Db } from "mongodb";
@@ -21,7 +22,7 @@ import type {
 import { getInflationTarget } from "@/lib/budget/inflation";
 import { getNationalBudgetId } from "@/lib/bonds/sovereign";
 import { isBankGovernmentControlled } from "@/lib/centralBank/governance";
-import { getStartingYearForPreset } from "@/lib/constants/turnTime";
+import { getStartingYearForPreset, TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
 import type { CountryId } from "@/lib/constants/countries";
 import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
@@ -178,6 +179,31 @@ export async function processNppMonetaryOperations(
         })
       )
     : undefined;
+  const commonMoneyGrowth = union
+    ? euroMoneyGrowth(
+        union,
+        await db
+          .collection<MoneySupplySnapshot>(MONEY_SUPPLY_SNAPSHOTS_COLLECTION)
+          .find(
+            {
+              currencyCode: {
+                $in: [
+                  ...new Set(
+                    Object.values(union.members).flatMap((member) =>
+                      member ? [member.ledgerCurrency] : []
+                    )
+                  ),
+                ],
+              },
+              turn: { $gte: Math.max(0, turn - TURNS_PER_YEAR), $lte: turn },
+              accountingVersion: MONEY_ACCOUNTING_VERSION,
+            },
+            { projection: { currencyCode: 1, turn: 1, accountingVersion: 1, m2: 1 } }
+          )
+          .toArray(),
+        turn
+      )
+    : null;
   let banksProcessed = 0;
   let operationsExecuted = 0;
   let evaluationsRecorded = 0;
@@ -213,12 +239,14 @@ export async function processNppMonetaryOperations(
         .sort({ maturityTurn: -1 })
         .limit(1)
         .next(),
-      db
-        .collection<MoneySupplySnapshot>(MONEY_SUPPLY_SNAPSHOTS_COLLECTION)
-        .findOne(
-          { currencyCode, turn: { $lte: turn } },
-          { sort: { turn: -1 }, projection: { accountingVersion: 1, annualizedM2GrowthPct: 1 } }
-        ),
+      member
+        ? Promise.resolve(null)
+        : db
+            .collection<MoneySupplySnapshot>(MONEY_SUPPLY_SNAPSHOTS_COLLECTION)
+            .findOne(
+              { currencyCode, turn: { $lte: turn } },
+              { sort: { turn: -1 }, projection: { accountingVersion: 1, annualizedM2GrowthPct: 1 } }
+            ),
     ]);
     if (!budget) continue;
     const inflation =
@@ -227,9 +255,7 @@ export async function processNppMonetaryOperations(
     const targetInflation =
       (member ? common?.targetInflation : undefined) ?? getInflationTarget(countryId, currentYear);
     const gdpGrowth = (member ? common?.gdpGrowth : budget.economicFactors?.gdpGrowth) ?? 2;
-    // National-denomination snapshots do not constitute a comparable area-wide
-    // observation. Use common inflation and growth until that series exists.
-    const moneyGrowth = member ? null : currentMoneyGrowth(moneySupply);
+    const moneyGrowth = member ? commonMoneyGrowth : currentMoneyGrowth(moneySupply);
     const decision = chooseNppMonetaryOperation({
       inflation,
       targetInflation,

@@ -24,3 +24,5 @@ areas: [engine]
 - Match purchase affordability, automatic conversion and corporate funding to the source authority spread.
 
 Corporate bond payouts share the common quote snapshot with personal conversions, preserving locked member parity even when national quote caches lag. Settlement waits if the common anchor is unavailable.
+
+Common monetary operations use comparable member money stocks at locked ledger ratios. Shared currencies count once, and accession requires a fresh comparison window. Member observations load in one bounded projected batch.
