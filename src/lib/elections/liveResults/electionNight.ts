@@ -123,9 +123,9 @@ export async function buildNationalElectionNight(
     .collection<Election>("elections")
     .find(
       { countryId: election.countryId, electionType, cycle: election.cycle },
-      { projection: { state: 1, totalSeats: 1, status: 1 } }
+      { projection: { state: 1, totalSeats: 1, status: 1, allocationMethod: 1 } }
     )
-    .toArray()) as Pick<Election, "_id" | "state" | "totalSeats" | "status">[];
+    .toArray()) as Pick<Election, "_id" | "state" | "totalSeats" | "status" | "allocationMethod">[];
   if (siblings.length < 2) return null;
 
   const tallies = await db
