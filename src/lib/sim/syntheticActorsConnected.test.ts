@@ -552,7 +552,7 @@ beforeEach(() => {
 });
 
 describe("connected state-party resolution (real processCompletedElections)", () => {
-  it("seats the synthetic member in every office through the representative path", async () => {
+  it("seats the synthetic member as chair through the representative path", async () => {
     const db = fakeDb();
     plantRealOrg(db);
     await materializeSyntheticActors(db, { seed: SEED, runId: "run-1", turn: 0, now: NOW });
@@ -561,21 +561,21 @@ describe("connected state-party resolution (real processCompletedElections)", ()
     // Seeded elections run to turn 24; resolving AT the end turn exercises
     // the real tally (candidates + self-votes), not the no-candidate branch.
     const resolved = await processCompletedElections(24, NOW);
-    expect(resolved).toBe(3);
+    expect(resolved).toBe(1);
 
-    for (const position of ["chair", "viceChair", "treasurer"] as const) {
+    for (const position of ["chair"] as const) {
       const election = await db.collection("statePartyElections").findOne({ position });
       expect(election?.status).toBe("completed");
       expect(election?.winnerId).toEqual(member.characterId);
     }
     const org = await db.collection<StatePartyOrg>("statePartyOrg").findOne({ _id: "CA_1" });
     expect(org?.chairId).toEqual(member.characterId);
-    expect(org?.viceChairId).toEqual(member.characterId);
-    expect(org?.treasurerId).toEqual(member.characterId);
+    expect(org?.viceChairId).toBeNull();
+    expect(org?.treasurerId).toBeNull();
     // Candidacies terminalize so the next cycle can declare again.
     expect(
       await db.collection("statePartyCandidates").countDocuments({ status: "completed" })
-    ).toBe(3);
+    ).toBe(1);
   });
 
   it("leaves the org vacant when the tally is empty (honest no-candidate branch)", async () => {
@@ -586,7 +586,7 @@ describe("connected state-party resolution (real processCompletedElections)", ()
     // and keep the incumbent (null) rather than seating anyone.
     (db as unknown as FakeDb).store.set("statePartyVotes", new Map());
     const resolved = await processCompletedElections(24, NOW);
-    expect(resolved).toBe(3);
+    expect(resolved).toBe(1);
     const org = await db.collection<StatePartyOrg>("statePartyOrg").findOne({ _id: "CA_1" });
     expect(org?.chairId).toBeNull();
     expect(org?.viceChairId).toBeNull();
