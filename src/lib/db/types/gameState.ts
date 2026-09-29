@@ -661,12 +661,26 @@ export interface CountryGameState {
   bgOrdinaryAssemblySinceTurn?: number;
   /** RO 1991 world: raw turn when the 341/143 parliament replaced the 396/119 constituent chambers. */
   roParliament1992SinceTurn?: number;
+  /** RU 1991: ratified succession changed the playable RU slot from USSR to Russia. */
+  ruSovietSuccessionSinceTurn?: number;
+  /** RU 1991: enacted authority to establish the post-Soviet presidential office. */
+  ruPresidencyMandateSinceTurn?: number;
+  /** RU 1991: the first presidential election has a certified result. */
+  ruPresidencyElectionCertifiedSinceTurn?: number;
+  /** RU 1991: enacted authority to replace Congress with the Federal Assembly. */
+  ruFederalAssemblyMandateSinceTurn?: number;
+  /** RU 1991: the first Federal Assembly election has a certified result. */
+  ruFederalAssemblyElectionCertifiedSinceTurn?: number;
   /** RU 1991: raw turn when the July presidential inauguration replaced the Chairman as head of state. */
   ruPresidencySinceTurn?: number;
   /** RU 1991 world: raw turn of the September 1993 Congress dissolution. */
   ruCongressDissolvedSinceTurn?: number;
   /** RU 1991 world: raw turn of the December 1993 first Federal Assembly. */
   ruFederalAssemblySinceTurn?: number;
+  /** YU 1991: enacted mandate to settle the federation's political succession. */
+  yuSuccessionMandateSinceTurn?: number;
+  /** YU 1991: successor sovereignty and obligations were applied before office retirement. */
+  yuSettlementAppliedSinceTurn?: number;
   currentTurn: number;
   currentYear: number;
   /** Turn on which the current electoral cycle began */

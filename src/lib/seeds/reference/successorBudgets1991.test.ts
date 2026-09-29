@@ -7,6 +7,10 @@ import {
 import { SUCCESSOR_NOMINAL_GDP_1991 } from "./successorGdp1991";
 import { SUCCESSOR_1991_GENERAL_GOVERNMENT_GDP_PERCENT } from "./successorFiscal1991";
 import { PL_1991_BUDGET_LAW_MILLION_PLZ } from "@/lib/countries/pl/data/plFiscal1991";
+import {
+  SOVIET_UNION_1991_GDP_MILLION_RUB,
+  SOVIET_UNION_1991_POPULATION,
+} from "@/lib/countries/ru/data/sovietUnionRegions1991";
 
 const IDS = ["RU", "PL", "CS", "HU", "RO", "BG", "YU"] as const;
 
@@ -16,7 +20,15 @@ describe("1991 transition national budgets", () => {
     for (const id of IDS) {
       const budget = budgets.find((entry) => entry.countryId === id);
       expect(budget, id).toBeDefined();
-      expect(budget!.gdp, id).toBe(SUCCESSOR_NOMINAL_GDP_1991[id]);
+      expect(budget!.gdp, id).toBe(
+        id === "RU" ? SOVIET_UNION_1991_GDP_MILLION_RUB * 1_000_000 : SUCCESSOR_NOMINAL_GDP_1991[id]
+      );
+      if (id === "RU") {
+        const config = getNationalBudgetSeedConfigsForPreset("1991-default").find(
+          (entry) => entry.countryId === "RU"
+        );
+        expect(config?.population).toBe(SOVIET_UNION_1991_POPULATION);
+      }
       expect(budget!.taxRates.incomeTax, id).toBeGreaterThan(0);
       const fiscal = SUCCESSOR_1991_GENERAL_GOVERNMENT_GDP_PERCENT[id];
       const expectedRevenue =

@@ -95,8 +95,8 @@ describe("seedRUGovernmentFormation", () => {
     expect(set.hosNppId).toBeNull();
   });
 
-  it("opens a neutral 1,068-seat RSFSR formation in 1991 even if stale Soviet officials exist", async () => {
-    const { db, upserts } = makeDb([{ _id: "CEN", houseDistricts: 1_068 }], {
+  it("opens a neutral 2,250-seat Soviet formation in 1991 even if stale officials exist", async () => {
+    const { db, upserts } = makeDb([{ _id: "CEN", houseDistricts: 2_250 }], {
       countryId: "RU",
       officeType: "premier",
       nppId: new ObjectId(),
@@ -107,8 +107,8 @@ describe("seedRUGovernmentFormation", () => {
       status: "pending",
       formationType: null,
       governingPartyId: null,
-      totalSeats: 1_068,
-      majorityThreshold: 535,
+      totalSeats: 2_250,
+      majorityThreshold: 1_126,
       totalSeatsSupporting: 0,
       pmNppId: null,
       hosNppId: null,

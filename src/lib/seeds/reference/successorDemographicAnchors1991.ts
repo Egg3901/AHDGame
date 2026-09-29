@@ -41,7 +41,32 @@ export const YU_REGION_DEMOGRAPHIC_ANCHORS_1991: Record<string, DemographicAncho
   YU_MKD: { young: 26.4904, senior: 7.4105, urban: 57.928 },
 };
 
+/** Republic-specific WDI 1991 controls, rather than applying Russia's
+ * demographic structure across the whole Soviet Union. See WDI indicator
+ * links above with each republic's ISO3 code. */
+export const SOVIET_REPUBLIC_DEMOGRAPHIC_ANCHORS_1991: Record<string, DemographicAnchor1991> = {
+  SU_UKR: { young: 21.5205, senior: 12.2476, urban: 67.6913 },
+  SU_BLR: { young: 22.9803, senior: 10.9487, urban: 67.0063 },
+  SU_EE: { young: 22.11, senior: 11.8241, urban: 70.9559 },
+  SU_LV: { young: 21.4972, senior: 12.0181, urban: 70.4978 },
+  SU_LT: { young: 22.5089, senior: 11.083, urban: 67.613 },
+  SU_MD: { young: 27.5761, senior: 8.6107, urban: 46.9095 },
+  SU_GE: { young: 25.5712, senior: 9.1815, urban: 54.9029 },
+  SU_AM: { young: 30.4181, senior: 5.3175, urban: 67.549 },
+  SU_AZ: { young: 34.011, senior: 4.1233, urban: 53.2415 },
+  SU_KZ: { young: 31.5589, senior: 5.8431, urban: 57.1543 },
+  SU_TM: { young: 41.1891, senior: 3.5953, urban: 44.8948 },
+  SU_UZ: { young: 39.8777, senior: 3.6026, urban: 41.0845 },
+  SU_TJ: { young: 43.9741, senior: 3.5108, urban: 31.296 },
+  SU_KG: { young: 37.5755, senior: 4.9587, urban: 37.7077 },
+};
+
 export function demographicAnchor1991(countryId: string, regionId: string): DemographicAnchor1991 {
+  if (countryId === "RU" && regionId.startsWith("SU_")) {
+    const anchor = SOVIET_REPUBLIC_DEMOGRAPHIC_ANCHORS_1991[regionId];
+    if (!anchor) throw new Error(`Missing Soviet republic 1991 demographic anchor for ${regionId}`);
+    return anchor;
+  }
   if (countryId === "YU") {
     const anchor = YU_REGION_DEMOGRAPHIC_ANCHORS_1991[regionId];
     if (!anchor) throw new Error(`Missing Yugoslav 1991 demographic anchor for ${regionId}`);

@@ -111,21 +111,21 @@ describe("S1 — era roster totality", () => {
     expect(tierFor("1979-default", "DD")).not.toBe("absent");
   });
 
-  it("RU existed in 1991 — npp, never absent", () => {
-    // `absent` is a claim the polity did not exist. Russia plainly did; the
-    // missing 1991 seed data is a deferred waiver, not non-existence.
-    expect(tierFor("1991-default", "RU")).toBe("npp");
+  it("the seven detailed 1991 federation and transition countries run autonomous economies", () => {
+    for (const country of ["RU", "PL", "CS", "HU", "RO", "BG", "YU"] as const) {
+      expect(tierFor("1991-default", country)).toBe("econ");
+    }
   });
 
   it("dissolved federations go absent from the preset after they ceased", () => {
     // CS dissolved 31 Dec 1992; YU, as Serbia and Montenegro, survived to 2006.
-    // Both are registered countries, so they step from `npp` to `absent`.
+    // Both are registered countries, so they step from `econ` to `absent`.
     // (BAL is not here: it is unregistered, so it steps from `latent` to
     // `absent` instead — covered by the latent case above.)
-    expect(tierFor("1991-default", "CS")).toBe("npp");
+    expect(tierFor("1991-default", "CS")).toBe("econ");
     expect(tierFor("1999-default", "CS")).toBe("absent");
 
-    expect(tierFor("1991-default", "YU")).toBe("npp");
+    expect(tierFor("1991-default", "YU")).toBe("econ");
     expect(tierFor("1999-default", "YU")).toBe("npp");
     expect(tierFor("2007-default", "YU")).toBe("absent");
   });

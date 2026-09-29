@@ -5,10 +5,11 @@ import { calendarTurn } from "@/lib/utils/gameDate";
 import { ru1993LegislatureStage } from "@/lib/countries/ru/eras/1991";
 import { RU_1991_ECONOMIC_REGION_POPULATION } from "@/lib/countries/ru/data/ruPopulation1991";
 import { apportionSeats } from "@/lib/seeds/reference/rules/apportionSeats";
+import { hasAuthorizedPostSovietTransition } from "./rules/postSovietTransition";
 
-/** Retire the 1990 Congress in September 1993 and open the first Federal
- * Assembly at its January 1994 first sitting, after the December 12 vote. A raw
- * turn marker makes each step idempotent across worker retries.
+/** A ratified post-Soviet constitutional mandate may retire Congress from
+ * September 1993 and open the Federal Assembly from January 1994. Raw turn
+ * markers keep each enacted step idempotent across worker retries.
  * https://www.prlib.ru/news/2038679
  * https://www.constitution.ru/en/10003000-10.htm
  */
@@ -29,9 +30,25 @@ export async function processRuLegislatureTransition(
   const countries = db.collection<CountryGameState>("countryGameStates");
   const country = await countries.findOne(
     { _id: "RU" },
-    { projection: { ruCongressDissolvedSinceTurn: 1, ruFederalAssemblySinceTurn: 1 } }
+    {
+      projection: {
+        ruSovietSuccessionSinceTurn: 1,
+        ruFederalAssemblyMandateSinceTurn: 1,
+        ruFederalAssemblyElectionCertifiedSinceTurn: 1,
+        ruCongressDissolvedSinceTurn: 1,
+        ruFederalAssemblySinceTurn: 1,
+      },
+    }
   );
   if (!country) return "none";
+  if (
+    !hasAuthorizedPostSovietTransition(
+      currentTurn,
+      country.ruSovietSuccessionSinceTurn,
+      country.ruFederalAssemblyMandateSinceTurn
+    )
+  )
+    return "none";
 
   if (country.ruCongressDissolvedSinceTurn == null) {
     await db.collection<ElectedOfficial>("electedOfficials").deleteMany({
@@ -48,6 +65,12 @@ export async function processRuLegislatureTransition(
     if (stage !== "federalAssembly") return "dissolved";
   }
   if (stage !== "federalAssembly" || country.ruFederalAssemblySinceTurn != null) return "none";
+  if (
+    !Number.isSafeInteger(country.ruFederalAssemblyElectionCertifiedSinceTurn) ||
+    (country.ruFederalAssemblyElectionCertifiedSinceTurn ?? 0) <= 0 ||
+    (country.ruFederalAssemblyElectionCertifiedSinceTurn ?? Infinity) > currentTurn
+  )
+    return "none";
 
   // The ten game macroregions are not the 89 federal subjects. Apportion only
   // the Duma's 225 single-member tier by population; the other 225 are list

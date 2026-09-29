@@ -26,11 +26,20 @@ describe("Russian 1991 presidential office transition", () => {
   it("retires only the Chairman and records the office change once", async () => {
     const writes: Array<[string, unknown]> = [];
     let marked = false;
+    let ratified = false;
+    let certified = false;
     const db = {
       collection: (name: string) => ({
         findOne: async () =>
           name === "countryGameStates"
-            ? { _id: "RU", ...(marked ? { ruPresidencySinceTurn: 25 } : {}) }
+            ? {
+                _id: "RU",
+                ...(ratified
+                  ? { ruSovietSuccessionSinceTurn: 24, ruPresidencyMandateSinceTurn: 25 }
+                  : {}),
+                ...(certified ? { ruPresidencyElectionCertifiedSinceTurn: 25 } : {}),
+                ...(marked ? { ruPresidencySinceTurn: 25 } : {}),
+              }
             : null,
         deleteMany: async (filter: unknown) => {
           writes.push([name, filter]);
@@ -45,6 +54,16 @@ describe("Russian 1991 presidential office transition", () => {
       }),
     } as unknown as Db;
     const now = new Date("2026-01-01T00:00:00Z");
+    expect(await processRuPresidencyTransition(db, { preset: "1991-default" }, 25, now)).toBe(
+      false
+    );
+    expect(writes).toHaveLength(0);
+    ratified = true;
+    expect(await processRuPresidencyTransition(db, { preset: "1991-default" }, 25, now)).toBe(
+      false
+    );
+    expect(writes).toHaveLength(0);
+    certified = true;
     expect(await processRuPresidencyTransition(db, { preset: "1991-default" }, 25, now)).toBe(true);
     expect(await processRuPresidencyTransition(db, { preset: "1991-default" }, 26, now)).toBe(
       false

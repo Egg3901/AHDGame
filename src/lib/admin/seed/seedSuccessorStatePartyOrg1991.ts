@@ -2,6 +2,7 @@ import type { Db } from "mongodb";
 import type { PoliticalParty, StatePartyOrg } from "@/lib/db/types";
 import { SUCCESSOR_REGIONS_1991 } from "@/lib/seeds/reference/successorRegions1991";
 import { SUCCESSOR_PARTIES_1991 } from "@/lib/seeds/reference/successorParties1991";
+import { sovietUnionRegions1991 } from "@/lib/countries/ru/data/sovietUnionRegions1991";
 
 /**
  * January 1991 founding footprints. The nationally organized transition parties
@@ -30,13 +31,18 @@ export async function seedSuccessorStatePartyOrg1991(
   let count = 0;
   for (const countryId of countries) {
     const roster = SUCCESSOR_PARTIES_1991[countryId] ?? [];
-    const regions = SUCCESSOR_REGIONS_1991[countryId] ?? [];
+    const regions =
+      countryId === "RU" ? sovietUnionRegions1991 : (SUCCESSOR_REGIONS_1991[countryId] ?? []);
     for (const seed of roster) {
       const party = parties.find(
         (entry) => entry.countryId === countryId && entry.name === seed.name
       );
       if (!party) throw new Error(`Missing 1991 ${countryId} party: ${seed.name}`);
       for (const region of regions) {
+        // Democratic Russia and the Democratic Party of Russia organized in
+        // the RSFSR, while the CPSU remained a Union-wide organization.
+        if (countryId === "RU" && seed.abbreviation !== "CPSU" && region._id.startsWith("SU_"))
+          continue;
         if (countryId === "YU" && !yugoslavPartyPresent(seed.abbreviation, region._id)) continue;
         const strength = seed.regimeStatus === "ruling" ? 70 : 35;
         const partyId = String(party.sequentialId);

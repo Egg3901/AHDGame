@@ -2,10 +2,14 @@ import type { Db } from "mongodb";
 import type { CountryGameState, ElectedOfficial, Election, GameState } from "@/lib/db/types";
 import type { GovernmentFormation } from "@/lib/db/types/governmentFormation";
 import { calendarTurn } from "@/lib/utils/gameDate";
-import { yuDissolutionDue } from "@/lib/countries/yu/rules/succession";
+import {
+  yuDissolutionDue,
+  yuPoliticalRetirementAuthorized,
+} from "@/lib/countries/yu/rules/succession";
 
 /**
- * Retire the SFRY's Tier-1 political institutions at the April 1992 boundary.
+ * Retire SFRY federal institutions after the historical decision window opens
+ * and a ratified settlement has actually materialized successor countries.
  * Every write before dissolvedTurn is idempotent, so a failed attempt resumes
  * on the next turn. Region records remain intact as historical source data;
  * allocating them to sovereign republics and activating FRY is a separate
@@ -27,8 +31,25 @@ export async function processYuDissolution(
   if (!due) return false;
 
   const countries = db.collection<CountryGameState>("countryGameStates");
-  const yu = await countries.findOne({ _id: "YU" }, { projection: { dissolvedTurn: 1 } });
+  const yu = await countries.findOne(
+    { _id: "YU" },
+    {
+      projection: {
+        yuSuccessionMandateSinceTurn: 1,
+        yuSettlementAppliedSinceTurn: 1,
+        dissolvedTurn: 1,
+      },
+    }
+  );
   if (!yu || yu.dissolvedTurn != null) return false;
+  if (
+    !yuPoliticalRetirementAuthorized(
+      currentTurn,
+      yu.yuSuccessionMandateSinceTurn,
+      yu.yuSettlementAppliedSinceTurn
+    )
+  )
+    return false;
 
   await db
     .collection<Election>("elections")

@@ -36,6 +36,7 @@ import { NG_ERAS } from "@/lib/countries/ng/eras";
 import { PL_ERAS } from "@/lib/countries/pl/eras";
 import { RO_ERAS } from "@/lib/countries/ro/eras";
 import { RU_ERAS } from "@/lib/countries/ru/eras";
+import { RU_RUSSIAN_1991 } from "@/lib/countries/ru/russian1991Config";
 import {
   ru1991PresidentialConfig,
   ru1993DissolvedCongressConfig,
@@ -1103,6 +1104,8 @@ export function canonicalRegionId(countryId: CountryId | string, regionParam: st
 export type EraCountryConfigOverride = Partial<
   Pick<
     CountryConfig,
+    | "name"
+    | "flagEmoji"
     | "executiveTitle"
     | "headOfStateTitle"
     | "executiveRealmPhrase"
@@ -1294,12 +1297,13 @@ export function getCountryConfig(id: CountryId, preset?: string): CountryConfig 
   return { ...base, ...override };
 }
 
-/** Resolve Russia's dated 1991 presidency and 1993-94 legislature markers.
- * Callers without world state continue to receive the January 1991 seed config. */
+/** Resolve the Soviet-to-Russian settlement, then the elected Russian offices.
+ * Callers without world state receive the January 1991 Soviet seed config. */
 export function getCountryConfigForRuntime(
   id: CountryId,
   preset: string | undefined,
   countryState?: {
+    ruSovietSuccessionSinceTurn?: number;
     ruPresidencySinceTurn?: number;
     ruCongressDissolvedSinceTurn?: number;
     ruFederalAssemblySinceTurn?: number;
@@ -1307,12 +1311,22 @@ export function getCountryConfigForRuntime(
 ): CountryConfig {
   const config = getCountryConfig(id, preset);
   if (id !== "RU" || preset !== "1991-default") return config;
+  // Existing saves may already carry a later Russian office marker from the
+  // old scheduler. Preserve that alternate history even without the newer
+  // explicit succession marker; fresh worlds have none of these fields.
+  const russian =
+    countryState?.ruSovietSuccessionSinceTurn != null ||
+    countryState?.ruPresidencySinceTurn != null ||
+    countryState?.ruCongressDissolvedSinceTurn != null ||
+    countryState?.ruFederalAssemblySinceTurn != null
+      ? { ...config, ...RU_RUSSIAN_1991.config }
+      : config;
   const presidential =
     countryState?.ruPresidencySinceTurn != null ||
     countryState?.ruCongressDissolvedSinceTurn != null ||
     countryState?.ruFederalAssemblySinceTurn != null
-      ? ru1991PresidentialConfig(config)
-      : config;
+      ? ru1991PresidentialConfig(russian)
+      : russian;
   if (countryState?.ruFederalAssemblySinceTurn != null) {
     return ru1993FederalAssemblyConfig(presidential);
   }
@@ -1335,6 +1349,9 @@ export const ERA_COUNTRY_NAMES: Record<string, Partial<Record<CountryId, string>
   },
   "1979-default": {
     DE: "West Germany",
+    RU: "Soviet Union",
+  },
+  "1991-default": {
     RU: "Soviet Union",
   },
 };

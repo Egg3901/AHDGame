@@ -16,10 +16,10 @@ import type { ElectedOfficial, State } from "@/lib/db/types";
  * Byelorussia and the Baltics are their own countries now and took their
  * districts with them). The static config coalitionThreshold stays nominal.
  *
- * In 1991 the region bundle contains the 1,068-seat RSFSR Congress, but the
- * preset has no historical Russian executive officials. Open a neutral pending
+ * In 1991 the region bundle contains the 2,250-seat Soviet Union Congress, but the
+ * preset has no historical Soviet executive officials. Open a neutral pending
  * formation rather than assigning the already contested government to the
- * Cold War CPSU row. The known Silayev cabinet needs its own authored seat
+ * Cold War CPSU row. The known Pavlov cabinet needs its own authored seat
  * roster; pending describes the game bootstrap, not a historical vacancy.
  * Returns null when the preset seeds no RU regions.
  */

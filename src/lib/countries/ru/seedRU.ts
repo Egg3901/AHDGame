@@ -254,7 +254,7 @@ export async function seedRUBaselines(
 
 /**
  * Seed the RU governmentFormations doc. Cold War presets link the seated
- * Soviet Premier; the 1991 RSFSR preset opens a neutral pending formation
+ * Soviet Premier; the 1991 Union preset opens a neutral pending formation
  * because its historical executive roster has not been authored.
  */
 export async function seedRUGovernmentFormation(
