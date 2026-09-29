@@ -254,7 +254,7 @@ export function ExperimentalMobileMenu({
       {/* Search — inline; no autofocus so opening the menu doesn't pop the
           keyboard / scroll-zoom into the field on mobile (focuses on tap). */}
       <div className="mb-3.5">
-        <UniversalSearch />
+        <UniversalSearch onNavigate={onClose} />
       </div>
 
       {/* Profile card — top of the drawer so it's the first thing you hit. */}

@@ -531,7 +531,10 @@ export const Navbar = React.memo(function Navbar({
               }`}
               style={{ pointerEvents: searchOpen ? "auto" : "none" }}
             >
-              <UniversalSearch open={searchOpen} />
+              <UniversalSearch
+                open={searchOpen}
+                onNavigate={() => dispatch({ type: "SET_POPOVER", key: "search", open: false })}
+              />
             </div>
 
             <button

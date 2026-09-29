@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useCallback, useId, useRef, type KeyboardEvent } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
+import type { SearchResult } from "@/lib/search/types";
 
 // Animated glow styles for admin search results
 const adminGlowStyles = `
@@ -51,30 +52,11 @@ const adminGlowStyles = `
   }
 `;
 
-interface SearchResult {
-  type:
-    | "politician"
-    | "seat"
-    | "region"
-    | "election"
-    | "corporation"
-    | "bill"
-    | "page"
-    | "commodity"
-    | "currency"
-    | "bond"
-    | "admin";
-  id: string;
-  title: string;
-  subtitle: string;
-  href: string;
-  icon: string;
-}
-
 interface UniversalSearchProps {
   // When true, focus the input on transition — used by the navbar to grab focus
   // once the leftward reveal animation plays so the user can type immediately.
   open?: boolean;
+  onNavigate?: () => void;
 }
 
 // Message ids under nav.search.types, resolved via t() at render time.
@@ -107,25 +89,27 @@ const TYPE_BADGE: Record<SearchResult["type"], string> = {
   admin: "bg-red-500/15 text-red-400",
 };
 
-export function UniversalSearch({ open }: UniversalSearchProps = {}) {
+export function UniversalSearch({ open, onNavigate }: UniversalSearchProps = {}) {
   const t = useTranslations("nav");
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
-  const [focusedIndex, setFocusedIndex] = useState(0);
+  const [focusedIndex, setFocusedIndex] = useState(-1);
   const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0, width: 0 });
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
+  const [portalContainer, setPortalContainer] = useState<Element | null>(null);
 
   const router = useRouter();
+  const resultListId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const keyboardSelectionRef = useRef(false);
+  const attachInput = useCallback((input: HTMLInputElement | null) => {
+    inputRef.current = input;
+    setPortalContainer(input ? (input.closest('[role="dialog"]') ?? document.body) : null);
+  }, []);
 
   useEffect(() => {
     if (open) {
@@ -138,12 +122,12 @@ export function UniversalSearch({ open }: UniversalSearchProps = {}) {
     if (debounceTimerRef.current) {
       clearTimeout(debounceTimerRef.current);
     }
+    abortControllerRef.current?.abort();
+    keyboardSelectionRef.current = false;
 
-    if (!query.trim()) {
+    if (query.trim().length < 2) {
       setResults([]);
-      setIsOpen(false);
       setLoading(false);
-      abortControllerRef.current?.abort();
       return;
     }
 
@@ -160,8 +144,7 @@ export function UniversalSearch({ open }: UniversalSearchProps = {}) {
         const data = await response.json();
         if (controller.signal.aborted) return;
         setResults(data.results || []);
-        setIsOpen(true);
-        setFocusedIndex(0);
+        setFocusedIndex(-1);
       } catch (error) {
         if ((error as { name?: string })?.name === "AbortError") return;
         console.error("Search failed:", error);
@@ -175,12 +158,14 @@ export function UniversalSearch({ open }: UniversalSearchProps = {}) {
       if (debounceTimerRef.current) {
         clearTimeout(debounceTimerRef.current);
       }
+      abortControllerRef.current?.abort();
     };
   }, [query]);
 
-  // Position the dropdown relative to the input. The dropdown is portalled into
-  // <body>, so position:fixed is viewport-relative. Clamp into the viewport so
-  // it never overflows left/right on narrow screens or near the edge.
+  // Keep popups inside a surrounding dialog so the mobile drawer cannot cover
+  // them or hide them from assistive technology. Otherwise portal into <body>.
+  // Fixed positioning is viewport-relative. Clamp into the viewport so the
+  // dropdown never overflows left/right on narrow screens or near the edge.
   useEffect(() => {
     if (!isOpen || !inputRef.current) return;
     const computePosition = () => {
@@ -196,25 +181,22 @@ export function UniversalSearch({ open }: UniversalSearchProps = {}) {
       setDropdownPosition({ top: rect.bottom + margin, left, width });
     };
     computePosition();
+    const revealPositionTimer = window.setTimeout(computePosition, 320);
     window.addEventListener("scroll", computePosition, true);
     window.addEventListener("resize", computePosition, true);
     return () => {
+      window.clearTimeout(revealPositionTimer);
       window.removeEventListener("scroll", computePosition, true);
       window.removeEventListener("resize", computePosition, true);
     };
-  }, [isOpen, results.length]);
+  }, [isOpen, open, results.length]);
 
   // Click outside handler
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
-      if (
-        dropdownRef.current &&
-        !dropdownRef.current.contains(event.target as Node) &&
-        inputRef.current &&
-        !inputRef.current.contains(event.target as Node)
-      ) {
-        setIsOpen(false);
-      }
+      const target = event.target as Node;
+      if (dropdownRef.current?.contains(target) || inputRef.current?.contains(target)) return;
+      setIsOpen(false);
     }
 
     document.addEventListener("mousedown", handleClickOutside);
@@ -223,43 +205,60 @@ export function UniversalSearch({ open }: UniversalSearchProps = {}) {
     };
   }, []);
 
-  // Keyboard handler — only active while the combobox has focus so arrow keys
-  // elsewhere on the page aren't hijacked.
-  useEffect(() => {
-    function handleKeyDown(event: KeyboardEvent) {
-      if (!isOpen || results.length === 0) return;
-      if (document.activeElement !== inputRef.current) return;
-
-      if (event.key === "ArrowDown") {
-        event.preventDefault();
-        setFocusedIndex((prev) => (prev + 1) % results.length);
-      } else if (event.key === "ArrowUp") {
-        event.preventDefault();
-        setFocusedIndex((prev) => (prev - 1 + results.length) % results.length);
-      } else if (event.key === "Enter") {
-        event.preventDefault();
-        const selectedResult = results[focusedIndex];
-        if (selectedResult) {
-          router.push(selectedResult.href);
-          setIsOpen(false);
-          setQuery("");
-        }
-      } else if (event.key === "Escape") {
-        event.preventDefault();
-        setIsOpen(false);
-      }
-    }
-
-    document.addEventListener("keydown", handleKeyDown);
-    return () => {
-      document.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [isOpen, results, focusedIndex, router]);
+  const submitSearch = () => {
+    const submittedQuery = query.trim();
+    if (!submittedQuery) return;
+    if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+    abortControllerRef.current?.abort();
+    setIsOpen(false);
+    setFocusedIndex(-1);
+    setQuery("");
+    router.push(`/search?q=${encodeURIComponent(submittedQuery)}`);
+    onNavigate?.();
+  };
 
   const handleResultClick = (href: string) => {
     router.push(href);
     setIsOpen(false);
+    setFocusedIndex(-1);
     setQuery("");
+    keyboardSelectionRef.current = false;
+    onNavigate?.();
+  };
+
+  const handleInputKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === "Escape") {
+      if (isOpen) {
+        event.preventDefault();
+        setIsOpen(false);
+        setFocusedIndex(-1);
+        keyboardSelectionRef.current = false;
+      }
+      return;
+    }
+
+    if (event.key === "ArrowDown" && results.length > 0) {
+      event.preventDefault();
+      keyboardSelectionRef.current = true;
+      setIsOpen(true);
+      setFocusedIndex((previous) => (previous + 1) % results.length);
+      return;
+    }
+
+    if (event.key === "ArrowUp" && results.length > 0) {
+      event.preventDefault();
+      keyboardSelectionRef.current = true;
+      setIsOpen(true);
+      setFocusedIndex((previous) => (previous <= 0 ? results.length - 1 : previous - 1));
+      return;
+    }
+
+    if (event.key === "Enter") {
+      event.preventDefault();
+      const selectedResult = keyboardSelectionRef.current ? results[focusedIndex] : undefined;
+      if (selectedResult) handleResultClick(selectedResult.href);
+      else submitSearch();
+    }
   };
 
   // Check if there are any admin results
@@ -284,15 +283,28 @@ export function UniversalSearch({ open }: UniversalSearchProps = {}) {
           />
         </svg>
         <input
-          ref={inputRef}
+          ref={attachInput}
           type="text"
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
+          maxLength={200}
+          onChange={(e) => {
+            keyboardSelectionRef.current = false;
+            setFocusedIndex(-1);
+            setResults([]);
+            setIsOpen(true);
+            setQuery(e.target.value);
+          }}
+          onFocus={() => setIsOpen(true)}
+          onClick={() => setIsOpen(true)}
+          onKeyDown={handleInputKeyDown}
           placeholder={t("search.placeholder")}
           aria-label={t("search.ariaLabel")}
           role="combobox"
           aria-expanded={isOpen}
-          aria-controls="search-results"
+          aria-controls={`${resultListId}-results`}
+          aria-activedescendant={
+            isOpen && focusedIndex >= 0 ? `${resultListId}-result-${focusedIndex}` : undefined
+          }
           aria-autocomplete="list"
           // text-base (16px) on mobile prevents iOS Safari from auto-zooming
           // into the input on focus; text-sm (14px) keeps the desktop density.
@@ -309,13 +321,13 @@ export function UniversalSearch({ open }: UniversalSearchProps = {}) {
         )}
       </div>
 
-      {mounted &&
+      {portalContainer &&
         isOpen &&
         results.length > 0 &&
         createPortal(
           <div
             ref={dropdownRef}
-            id="search-results"
+            id={`${resultListId}-results`}
             role="listbox"
             style={{
               position: "fixed",
@@ -328,10 +340,14 @@ export function UniversalSearch({ open }: UniversalSearchProps = {}) {
             {results.map((result, index) => (
               <button
                 key={`${result.type}-${result.id}`}
+                id={`${resultListId}-result-${index}`}
                 role="option"
                 aria-selected={index === focusedIndex}
                 onClick={() => handleResultClick(result.href)}
-                onMouseEnter={() => setFocusedIndex(index)}
+                onMouseEnter={() => {
+                  keyboardSelectionRef.current = false;
+                  setFocusedIndex(index);
+                }}
                 className={`w-full flex items-center gap-3 px-3 py-2.5 text-left transition-colors border-b last:border-b-0 ${
                   result.type === "admin"
                     ? `admin-result-item ${
@@ -362,10 +378,10 @@ export function UniversalSearch({ open }: UniversalSearchProps = {}) {
               </button>
             ))}
           </div>,
-          document.body
+          portalContainer
         )}
 
-      {mounted &&
+      {portalContainer &&
         isOpen &&
         !loading &&
         results.length === 0 &&
@@ -383,10 +399,10 @@ export function UniversalSearch({ open }: UniversalSearchProps = {}) {
           >
             <p className="text-sm text-muted">{t("search.noResults", { query })}</p>
           </div>,
-          document.body
+          portalContainer
         )}
 
-      {mounted &&
+      {portalContainer &&
         isOpen &&
         !loading &&
         results.length === 0 &&
@@ -435,7 +451,7 @@ export function UniversalSearch({ open }: UniversalSearchProps = {}) {
               ))}
             </div>
           </div>,
-          document.body
+          portalContainer
         )}
     </div>
   );
