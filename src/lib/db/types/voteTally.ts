@@ -57,6 +57,8 @@ export interface ElectionVoteTally {
   huConstituencyVotes?: Record<string, Record<string, number>>;
   /** HU post-2014: partyId -> separate national-list ballots. */
   huListVotes?: Record<string, number>;
+  /** HU post-2014: districtId -> partyId -> active nominee candidateId. */
+  huDistrictSlate?: Record<string, Record<string, string>>;
   candidateNames: Record<string, string>;
   candidateParties: Record<string, string>;
   /** Candidate kind at ballot time for bounded SNTV slate projections. */

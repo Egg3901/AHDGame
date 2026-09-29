@@ -27,10 +27,28 @@ describe("live 2014 Hungary mixed election plan", () => {
         ])
       ),
       listVotes: { a: 1, b: 1000 },
+      districtSlate: Object.fromEntries(
+        huDistrictIds(race.regionId).map((districtId) => [
+          districtId,
+          { a: race.candidates[0].candidateId, b: race.candidates[1].candidateId },
+        ])
+      ),
     }));
     const plan = buildHuMixedPlan(regions, literal);
     expect(plan.result.constituencySeats.a).toBe(106);
     expect(plan.result.listSeats.b).toBeGreaterThan(plan.result.listSeats.a ?? 0);
+    const broken = literal.map((race, index) =>
+      index === 0
+        ? {
+            ...race,
+            districtSlate: {
+              ...race.districtSlate,
+              [huDistrictIds(race.regionId)[0]]: { a: race.candidates[1].candidateId },
+            },
+          }
+        : race
+    );
+    expect(() => buildHuMixedPlan(regions, broken)).toThrow("invalid nominee");
   });
   it("turns six regional campaign tallies into 106 district ballots and 93 national list seats", () => {
     const plan = buildHuMixedPlan(regions, races);
