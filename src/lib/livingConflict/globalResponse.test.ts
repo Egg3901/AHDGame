@@ -22,6 +22,7 @@ import {
 } from "./globalResponse";
 import { EQUIPMENT_TRACK_MAX } from "@/lib/military/arsenal";
 import { VIETNAM_DEF } from "./defs/vietnam";
+import { YUGOSLAVIA_DEF } from "./defs/yugoslavia";
 import { allLivingConflictDefs } from "./registry";
 
 const outcomes: GlobalResponseOutcome[] = [
@@ -300,6 +301,23 @@ describe("prepareGlobalResponseOption — capacity refusals", () => {
 
     expect(capability.domesticSupport).toBe(60);
   });
+
+  it.each(["intervene", "peacekeeping"])(
+    "enforces the authored Yugoslavia %s capacity on the command path",
+    async (optionId) => {
+      const response = YUGOSLAVIA_DEF.phases[0].events[0].response!;
+      const option = Object.values(response.decisionTrees)
+        .flatMap((tree) => tree.options ?? [])
+        .find((candidate) => candidate.optionId === optionId)!;
+      const crisis = {
+        ...CRISIS,
+        globalResponse: { ...CRISIS.globalResponse!, conflictKey: YUGOSLAVIA_DEF.key },
+      };
+      await expect(
+        prepareGlobalResponseOption(dbWithNoMilitary(), crisis, "US", option)
+      ).rejects.toMatchObject({ status: 400 });
+    }
+  );
 });
 
 describe("loadCampaignCapability — national logistics", () => {

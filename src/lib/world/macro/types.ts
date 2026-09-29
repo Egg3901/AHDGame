@@ -1,3 +1,4 @@
+import type { CrisisEconomicExposure } from "@/lib/livingConflict/rules/economicExposure";
 import type { CommodityType, ExtractableResource } from "@/lib/constants/commodities";
 import type { CorporationType } from "@/lib/constants/corporations";
 import type { WorldEntityId } from "@/lib/world/worldEntityManifest";
@@ -49,6 +50,7 @@ export interface MacroCountryDataQuality {
  * only aggregate capacity and the held market contribution.
  */
 export interface MacroCountryState {
+  livingConflictExposure?: CrisisEconomicExposure;
   _id: WorldEntityId;
   entityId: WorldEntityId;
   presetId: string;

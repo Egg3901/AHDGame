@@ -182,15 +182,28 @@ describe("Yugoslav dissolution living conflict", () => {
     }
   );
 
-  it("substitutes surviving powers when historical actors do not exist", () => {
+  it("represents missing local authorities without conscripting unrelated countries", () => {
     const participants = resolveConflictParticipants(
       YUGOSLAVIA_DEF,
       new Set(["CS", "CN", "FR", "AT", "IT", "GR", "DE", "TR"])
     );
 
-    expect(participants.belligerents).toEqual(["CS"]);
+    expect(participants.belligerents).toEqual([]);
     expect(participants.backerA).toBe("FR");
-    expect(participants.backerB).toBe("CN");
+    expect(participants.backerB).toBeUndefined();
+    expect(participants.representedActors).toHaveLength(6);
+    expect(participants.representedActors?.every((actor) => !actor.countryId)).toBe(true);
+  });
+
+  it("binds surviving successor governments while retaining absent regional actors", () => {
+    const participants = resolveConflictParticipants(YUGOSLAVIA_DEF, new Set(["US", "RS", "HR"]));
+    expect(participants.belligerents).toEqual(["HR", "RS"]);
+    expect(
+      participants.representedActors?.find((actor) => actor.id === "serbian_authorities")?.countryId
+    ).toBe("RS");
+    expect(
+      participants.representedActors?.find((actor) => actor.id === "bosnian_authorities")?.countryId
+    ).toBeUndefined();
   });
 
   it("offers sanctions, peacekeeping, relief, mediation, and military choices", () => {

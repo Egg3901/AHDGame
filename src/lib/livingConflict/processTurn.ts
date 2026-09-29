@@ -133,9 +133,18 @@ async function materializeEvent(
     : [...new Set(negotiation!.decisionTree.flatMap((node) => node.requiredCountryIds ?? []))];
   if (countryIds.length === 0) return { opened: false, blockedByActiveWindow: false };
   const campaign = normalizeCampaignState((await loadConflictState(db, def.key)).campaign);
+  const template = eventTemplate(driven, countryIds);
+  if (participants.representedActors?.length) {
+    template.description += ` Local parties: ${participants.representedActors
+      .map(
+        (actor) =>
+          `${actor.name}${actor.countryId ? ` (${actor.countryId})` : " (represented conflict actor)"}`
+      )
+      .join(", ")}.`;
+  }
 
   await createCrisisFromTemplate(db, {
-    template: eventTemplate(driven, countryIds),
+    template,
     scope: "country",
     countryIds,
     regionIds: [],
