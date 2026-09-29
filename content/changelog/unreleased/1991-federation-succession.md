@@ -19,4 +19,6 @@ areas: [backend]
 
 - Pin all 15 Soviet republic populations and economic shares to the World Bank's pre-start source table, with a complete partition conservation check.
 
+- Derive successor aggregate economies from the population and output actually assigned in a settlement, converting output at an explicit rate and retaining source provenance.
+
 - Model a legacy settlement administration for a vanished parent issuer. Successors fund its contractual payment by agreed shares; budget shortfalls create contribution arrears and actual cash limits creditor payment. Continuing states keep their own debt service. Runtime transfer and collection remain gated.
