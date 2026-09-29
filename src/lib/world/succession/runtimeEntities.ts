@@ -37,6 +37,8 @@ export function validateAppliedEntityStates(
 ): ReadonlySet<string> {
   const byApplication = new Map<string, FederationSettlementApplicationRecord>();
   const expected = new Set<string>();
+  const appliedSources = new Set<string>();
+  const appliedEntities = new Set<string>();
   for (const application of applications) {
     if (
       application.presetId !== presetId ||
@@ -53,18 +55,22 @@ export function validateAppliedEntityStates(
       typeof application.sourceEntityId !== "string" ||
       !application.entityIds.includes(application.sourceEntityId) ||
       new Set(application.entityIds).size !== application.entityIds.length ||
+      appliedSources.has(application.sourceEntityId) ||
       byApplication.has(application._id)
     )
       throw new Error("Invalid applied federation settlement receipt");
     byApplication.set(application._id, application);
+    appliedSources.add(application.sourceEntityId);
     for (const entityId of application.entityIds) {
       if (
         typeof entityId !== "string" ||
         !entityId.trim() ||
-        expected.has(`${application._id}:${entityId}`)
+        expected.has(`${application._id}:${entityId}`) ||
+        appliedEntities.has(entityId)
       )
         throw new Error("Invalid applied federation settlement receipt");
       expected.add(`${application._id}:${entityId}`);
+      appliedEntities.add(entityId);
     }
   }
   const found = new Set<string>();

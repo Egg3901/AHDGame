@@ -85,6 +85,20 @@ describe("runtime world entity overlay", () => {
     ).toThrow("mismatched entity states");
   });
 
+  it("does not accept a second applied revision over the same federation", () => {
+    const first = application();
+    const second = {
+      ...first,
+      _id: "1991-default:soviet-revision-2:2",
+      settlementId: "soviet-revision-2",
+      revision: 2,
+      entityIds: ["RU", "LV"],
+    };
+    expect(() => validateAppliedEntityStates("1991-default", [first, second], [])).toThrow(
+      "Invalid applied federation settlement receipt"
+    );
+  });
+
   it("rejects a stale preset, duplicate state or unknown target", () => {
     const state = appliedEstonia();
     const applied = new Set([state.applicationId]);
