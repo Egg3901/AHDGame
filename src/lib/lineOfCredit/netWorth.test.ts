@@ -60,4 +60,35 @@ describe("computePlayerNetWorthInternal", () => {
     // 100 units × ¥1,000 face = ¥100,000 local, which should normalize to 1,000 internal.
     expect(result).toBe(1000);
   });
+
+  it("values 2027 French EUR shares using the corporation's persisted denomination", async () => {
+    const characterId = new ObjectId();
+    db.collectionMocks["corporations"]!.find.mockReturnValue(
+      makeCursor([
+        {
+          _id: new ObjectId(),
+          countryId: "FR",
+          liquidCurrencyCode: "EUR",
+          sharePrice: 12,
+          shareholders: [{ characterId, shares: 10 }],
+        },
+      ])
+    );
+    db.collectionMocks["bonds"]!.find.mockReturnValue(makeCursor([]));
+    const { getPublicShareQuote } = await import("@/lib/corporations/marketQuote");
+    vi.mocked(getPublicShareQuote).mockReturnValue(12);
+
+    const { computePlayerNetWorthInternal } = await import("./netWorth");
+    const value = await computePlayerNetWorthInternal(
+      db as unknown as Db,
+      { _id: characterId, countryId: "FR" } as never,
+      true,
+      { EUR: 1.2 }
+    );
+
+    expect(value).toBe(100);
+    expect(db.collectionMocks["corporations"]!.find().project).toHaveBeenCalledWith(
+      expect.objectContaining({ liquidCurrencyCode: 1 })
+    );
+  });
 });
