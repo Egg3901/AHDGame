@@ -363,7 +363,18 @@ describe("fundCron — settled bond NAV", () => {
       holdings: [],
       unitSupply: 500,
       quotedNav: 101,
-    } as IndexFund);
+      slug: "bond-nav-regression",
+      name: "Bond NAV regression",
+      tickerSymbol: "BNAV",
+      scope: "global",
+      kind: "bond",
+      anchorCurrencyCode: "USD",
+      status: "active",
+      reserveUnits: 500,
+      targetConstituents: [],
+      createdAt: new Date(0),
+      updatedAt: new Date(0),
+    });
 
     await refreshFundNavAfterBondDeployment(createMockDb() as never, fundId, 50_000, 0);
 
