@@ -68,7 +68,10 @@ import {
   sellFundHoldingsForRedemptionCash,
   sellFundHoldingShares,
 } from "@/lib/indexFunds/fundRedemptionLiquidity";
-import { computeHoldingsValueAnchor } from "@/lib/indexFunds/fundAllocation";
+import {
+  computeHoldingsValueAnchor,
+  INDEX_FUND_RESERVE_CASH_BUFFER_FRACTION,
+} from "@/lib/indexFunds/fundAllocation";
 import { deployBondReserveFromCash } from "@/lib/indexFunds/fundBondReserve";
 import {
   domesticCoverageEnabled,
@@ -366,22 +369,83 @@ export async function refreshFundNavAfterBondDeployment(
   db: Db,
   fundId: IndexFund["_id"],
   bondPrincipalAnchor: number,
-  openOrdersEscrowAnchor: number
+  openOrdersEscrowAnchor: number,
+  queuedRedemptionUnits = 0
 ): Promise<void> {
   const fund = await getFundById(db, fundId);
   if (!fund) throw new Error("bond fund disappeared after deployment");
-  const nav = recomputeNav(fund, { bondPrincipalAnchor, openOrdersEscrowAnchor });
+  const nav = recomputeNav(fund, {
+    bondPrincipalAnchor,
+    openOrdersEscrowAnchor,
+    queuedRedemptionUnits,
+  });
   if (nav === null) throw new Error("invalid NAV after bond deployment");
   const backing = calculateBackingRatio({
     cashAnchor: fund.cashAnchor,
     holdingsValueAnchor: computeHoldingsValueAnchor(fund),
     bondPrincipalAnchor,
     openOrdersEscrowAnchor,
-    queuedRedemptionUnits: 0,
+    queuedRedemptionUnits,
     quotedNav: nav,
     unitSupply: fund.unitSupply,
   });
   await updateFundNav(db, fundId, { quotedNav: nav, backingRatio: backing.backingRatio });
+}
+
+/** Restore cash depleted by redemptions or older reserve purchases using real bond sales. */
+export async function restoreFundCashBuffer(
+  db: Db,
+  fund: IndexFund,
+  bondPrincipalAnchor: number,
+  exchangeRates: Partial<Record<string, number>>,
+  currentTurn: number
+): Promise<{ fund: IndexFund; bondPrincipalAnchor: number }> {
+  let workingFund = fund;
+  let backing = fund.cashAnchor + computeHoldingsValueAnchor(fund) + bondPrincipalAnchor;
+  let shortfall = Math.max(0, backing * INDEX_FUND_RESERVE_CASH_BUFFER_FRACTION - fund.cashAnchor);
+  if (shortfall <= 0.01) return { fund, bondPrincipalAnchor };
+  // Committed bids still back NAV but are not spendable allocation reserves.
+  // Release them before paying a dealer spread to restore the cash buffer.
+  const bids = await db
+    .collection<ShareOrder>("shareOrders")
+    .find({ placerFundId: fund._id, type: "buy", status: "open" })
+    .toArray();
+  let released = 0;
+  for (const bid of bids) {
+    if (released * (1 - INDEX_FUND_RESERVE_CASH_BUFFER_FRACTION) >= shortfall) break;
+    await cancelFundShareOrder(db, bid._id, currentTurn, { fund });
+    released += bid.escrowAnchor ?? 0;
+  }
+  if (released > 0) {
+    workingFund = (await getFundById(db, fund._id)) ?? fund;
+    backing =
+      workingFund.cashAnchor + computeHoldingsValueAnchor(workingFund) + bondPrincipalAnchor;
+    shortfall = Math.max(
+      0,
+      backing * INDEX_FUND_RESERVE_CASH_BUFFER_FRACTION - workingFund.cashAnchor
+    );
+  }
+  if (shortfall <= 0.01 || bondPrincipalAnchor <= 0)
+    return { fund: workingFund, bondPrincipalAnchor };
+  const sale = await sellFundBondHoldingsForCash(db, workingFund, shortfall, new Date(), {
+    turn: currentTurn,
+  });
+  if (sale.proceedsAnchor <= 0) return { fund: workingFund, bondPrincipalAnchor };
+  const updatedBonds = await sumFundBondHoldingsValueAnchor(db, fund, exchangeRates);
+  const [escrow, queue] = await Promise.all([
+    loadOpenOrdersEscrowByFundId(db, [fund._id]),
+    loadQueuedRedemptionUnitsByFundId(db, [fund._id]),
+  ]);
+  await refreshFundNavAfterBondDeployment(
+    db,
+    fund._id,
+    updatedBonds,
+    escrow.get(String(fund._id)) ?? 0,
+    queue.get(String(fund._id)) ?? 0
+  );
+  const updated = await getFundById(db, fund._id);
+  if (!updated) throw new Error("Fund disappeared after cash buffer restoration");
+  return { fund: updated, bondPrincipalAnchor: updatedBonds };
 }
 
 // ── Pass 3 helper: Absorb public float ────────────────────────────────
@@ -1939,12 +2003,28 @@ export async function runIndexFundCron(
   // mutation has settled. Disabling the gate cancels and refunds prior bids in
   // the same pass, providing an immediate rollback path.
   try {
-    const quoteFunds = (await listActiveFunds(db)).filter(
-      (fund) => !queuedUnitsByFundId.has(fund._id.toString())
+    const activeQuoteFunds = await listActiveFunds(db);
+    const quoteBondValueByFundId = await sumFundBondHoldingsByFundId(
+      db,
+      activeQuoteFunds,
+      exchangeRates
     );
-    const quoteBondValueByFundId = equityLiquidityEnabled
-      ? await sumFundBondHoldingsByFundId(db, quoteFunds, exchangeRates)
-      : undefined;
+    const quoteFunds: IndexFund[] = [];
+    const currentQueuedUnits = await loadQueuedRedemptionUnitsByFundId(
+      db,
+      activeQuoteFunds.map((fund) => fund._id)
+    );
+    for (const fund of activeQuoteFunds) {
+      const restored = await restoreFundCashBuffer(
+        db,
+        fund,
+        quoteBondValueByFundId.get(String(fund._id)) ?? 0,
+        exchangeRates,
+        currentTurn
+      );
+      quoteBondValueByFundId.set(String(fund._id), restored.bondPrincipalAnchor);
+      if (!currentQueuedUnits.has(String(fund._id))) quoteFunds.push(restored.fund);
+    }
     const fxByCurrency = new Map<CurrencyCode, number>(
       Object.entries(exchangeRates)
         .filter(([, rate]) => typeof rate === "number" && rate > 0)
