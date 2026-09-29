@@ -184,11 +184,10 @@ describe("union ban enforcement route", () => {
     expect(db.collection("characters").updateOne).not.toHaveBeenCalled();
   });
 
-  it("raids a high heat suspended cell for two actions and plants a cooldown", async () => {
+  it("raids a high heat cell created during a ban even without a suspension mirror", async () => {
     db.collection("unions").findOne.mockResolvedValue({
       _id: unionId,
       countryId: "US",
-      suspended: true,
       heat: 72,
       undergroundStrength: 20,
       treasury: 100,
@@ -201,7 +200,7 @@ describe("union ban enforcement route", () => {
       expect.objectContaining({ $inc: { actions: -2 } })
     );
     expect(db.collection("unions").updateOne).toHaveBeenCalledWith(
-      expect.objectContaining({ suspended: true, treasury: 100 }),
+      expect.objectContaining({ treasury: 100 }),
       expect.objectContaining({
         $inc: expect.objectContaining({ treasury: -10, undergroundFinesSeized: 10 }),
         $set: expect.objectContaining({ lastUndergroundRaidTurn: 42 }),

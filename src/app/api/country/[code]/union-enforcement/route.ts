@@ -114,10 +114,7 @@ export async function GET(_request: Request, { params }: Context) {
     const turn = await getCurrentTurn(db);
     const exposed = await db
       .collection<Union>("unions")
-      .find(
-        { countryId, suspended: true, exposedUntilTurn: { $gte: turn } },
-        { projection: { _id: 1 } }
-      )
+      .find({ countryId, exposedUntilTurn: { $gte: turn } }, { projection: { _id: 1 } })
       .toArray();
     const organizers = exposed.length
       ? await db
@@ -228,7 +225,7 @@ export async function POST(request: Request, { params }: Context) {
     if (!union) return NextResponse.json({ error: "Union not found" }, { status: 404 });
 
     if (parsed.data.action === "prosecute") {
-      if (!union.suspended || !isUnionExposed(union, turn)) {
+      if (!isUnionExposed(union, turn)) {
         return NextResponse.json(
           { error: "Only an exposed cell can be prosecuted." },
           { status: 409 }
@@ -320,7 +317,6 @@ export async function POST(request: Request, { params }: Context) {
 
     if (parsed.data.action === "raid") {
       if (
-        !union.suspended ||
         (!isUnionExposed(union, turn) && undergroundHeat(union) < RAID_HEAT_THRESHOLD) ||
         (typeof union.lastUndergroundRaidTurn === "number" &&
           turn < union.lastUndergroundRaidTurn + RAID_COOLDOWN_TURNS)
@@ -351,7 +347,6 @@ export async function POST(request: Request, { params }: Context) {
           {
             _id: union._id,
             countryId,
-            suspended: true,
             undergroundStrength: union.undergroundStrength,
             treasury: union.treasury,
             lastUndergroundRaidTurn: union.lastUndergroundRaidTurn ?? null,
