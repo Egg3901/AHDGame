@@ -9,7 +9,7 @@
   },
   "selected_profile": "1991-default",
   "policy": {
-    "github_closure": "No #2159 or linked issue is closed from partial ledger progress. Final validation evaluates every applicable gate against an exact release SHA and effective manifest; only then update GitHub issue state.",
+    "github_closure": "Close a linked implementation issue when its own acceptance criteria and issue-level proof pass; keep its parent item checked only for that completed issue. #2159 itself and release-candidate gates remain open until final validation against the exact release SHA and effective manifest.",
     "status_meaning": {
       "open": "Unchecked parent item; no passing release evidence recorded",
       "claimed_complete_pending_final_validation": "Checked in parent, but final release validation not recorded",
@@ -177,7 +177,7 @@
     },
     "2117": {
       "title": "feat(unions): illicit underground organizing under union ban + government counterplay",
-      "state": "OPEN",
+      "state": "CLOSED",
       "url": "https://github.com/Egg3901/AHDGame/issues/2117",
       "labels": ["enhancement"]
     },
@@ -1454,14 +1454,14 @@
       "id": "RR-030",
       "section": "Common reset blockers / Election and political lifecycle",
       "requirement": "#2117",
-      "parent_checked": false,
-      "status": "open",
+      "parent_checked": true,
+      "status": "claimed_complete_pending_final_validation",
       "owner": "Track #1 implementation",
       "issue_refs": [
         {
           "repo": "Egg3901/AHDGame",
           "number": 2117,
-          "state": "OPEN",
+          "state": "CLOSED",
           "url": "https://github.com/Egg3901/AHDGame/issues/2117"
         }
       ],
@@ -1469,43 +1469,30 @@
         {
           "type": "tracker_checklist",
           "url": "https://github.com/Egg3901/AHDGame/issues/2159",
-          "detail": "Unchecked in #2159"
+          "detail": "#2117 checked after issue-level acceptance; 28/100 checked."
         },
         {
           "type": "issue_state",
           "url": "https://github.com/Egg3901/AHDGame/issues/2117",
-          "detail": "OPEN"
+          "detail": "CLOSED on 2026-09-29 after issue-level acceptance."
         },
         {
-          "type": "partial_implementation",
-          "url": "https://github.com/Egg3901/AHDGame/pull/2524",
-          "detail": "Merged to development after exact-head CI: capped underground slowdown and ban-strike crisis wiring. Final release validation remains pending.",
-          "ref": "0547d6148692e4958add5522d134b713c01bcbd2"
+          "type": "issue_acceptance",
+          "url": "https://github.com/Egg3901/AHDGame/issues/2117#issuecomment-5882931069",
+          "detail": "Development bf4cc992: 31/31 focused suites and 321/321 tests, plus isolated real-Mongo replay/CAS 1/1 on 8b53d615. Test-only #2553 did not alter product code."
         },
         {
-          "type": "partial_implementation",
-          "url": "https://github.com/Egg3901/AHDGame/pull/2526",
-          "detail": "Merged to development after exact-head CI: delegated enforcement and raid-fine treasury sink. Final release validation remains pending.",
-          "ref": "dc51deadd9d52c801d257089fa607de4dfca2259"
+          "type": "merged_implementation",
+          "url": "https://github.com/Egg3901/AHDGame/pull/2546",
+          "detail": "Final replay-safe lifecycle PR merged at 8b53d615 after exact-head full CI/security/verify. Other issue PRs #2511, #2522, #2524, #2526, #2528, #2539, #2544, #2547, #2549, and #2551 also merged."
         },
         {
-          "type": "candidate_pr",
-          "url": "https://github.com/Egg3901/AHDGame/pull/2528",
-          "detail": "Open PR for character-wide prosecution bar across union actions and enforcement of cells founded during a ban; exact-head CI and merge pending."
-        },
-        {
-          "type": "candidate_pr",
-          "url": "https://github.com/Egg3901/AHDGame/pull/2539",
-          "detail": "Open PR for detection recent-drive count and global per-character underground-drive rate; exact-head CI and merge pending."
+          "type": "test_harness",
+          "url": "https://github.com/Egg3901/AHDGame/pull/2553",
+          "detail": "Sector-detail import timer correction merged at bf4cc992 after exact-head full CI/security/verify."
         }
       ],
-      "blocked_by": [
-        {
-          "type": "issue",
-          "repo": "Egg3901/AHDGame",
-          "number": 2117
-        }
-      ],
+      "blocked_by": [],
       "final_validation": {
         "state": "pending",
         "evidence": []

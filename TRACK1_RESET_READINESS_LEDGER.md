@@ -2,9 +2,9 @@
 
 This ledger mirrors every checkbox in [#2159](https://github.com/Egg3901/AHDGame/issues/2159) as a separate `RR-###` item. The machine-readable source is [`TRACK1_RESET_READINESS_LEDGER.json`](./TRACK1_RESET_READINESS_LEDGER.json). It was seeded from #2159 as updated on 2026-09-22T04:31:39Z and code base `028cb9265e76555efa5d73b611cea0f409c3446b`.
 
-The 2026-09-28 tracker reconciliation added RR-100 for the new #2488 seed blocker. RR-055 now records verified polling/clock-index protection from merged PR #2180; RR-061 remains unchecked because closed #1679 has no exact-release replay; RR-062 records the owner-approved #1670 projection waiver. The ledger now matches all 100 parent checklist entries: 27 checked and 73 unchecked.
+The 2026-09-28 tracker reconciliation added RR-100 for the new #2488 seed blocker. RR-055 now records verified polling/clock-index protection from merged PR #2180; RR-061 remains unchecked because closed #1679 has no exact-release replay; RR-062 records the owner-approved #1670 projection waiver. The ledger now matches all 100 parent checklist entries: 28 checked and 72 unchecked.
 
-On 2026-09-29, RR-030 records merged #2117 slices #2524 and #2526 plus open #2528 and #2539; RR-065 records merged currency slices #2520, #2523, and #2525; RR-100 records open Hungary #2488 slices #2529 and #2540. These are partial implementation evidence. Their release validation remains pending, and the parent checklist remains 27 checked and 73 unchecked.
+On 2026-09-29, RR-030 records closed #2117 after 31 focused suites and 321 tests passed on development `bf4cc992`, plus isolated Mongo replay/CAS proof. Its direct parent item is checked; release-candidate simulation and rehearsal remain pending. RR-065 records merged currency slices #2520, #2523, and #2525; RR-100 records open Hungary #2488 slices #2529 and #2540. Those issues remain partial. The parent checklist is 28 checked and 72 unchecked.
 
 The parent currently selects `1991-default`. The 2027-specific items remain required implementation scope even though the final launch qualification uses 1991. A later profile change requires rechecking seed-specific evidence. Checked boxes and closed child issues are claims of prior completion, not proof that the exact release candidate passes.
 
@@ -50,8 +50,8 @@ remain open; the GitHub issue stays `status: partial`.
 
 | Ledger state                                | Count | Meaning                                                                               |
 | ------------------------------------------- | ----: | ------------------------------------------------------------------------------------- |
-| `open`                                      |    69 | Unchecked parent item; no passing release evidence recorded                           |
-| `claimed_complete_pending_final_validation` |    26 | Checked in parent, but final release validation not recorded                          |
+| `open`                                      |    68 | Unchecked parent item; no passing release evidence recorded                           |
+| `claimed_complete_pending_final_validation` |    27 | Checked in parent, but final release validation not recorded                          |
 | `selected_pending_release_validation`       |     1 | Parent selects 1991; release SHA and manifest not yet frozen                          |
 | `open_nonlaunch_profile`                    |     4 | 2027-specific implementation remains required; final launch qualification is for 1991 |
 
@@ -59,7 +59,7 @@ remain open; the GitHub issue stays `status: partial`.
 
 For each item, record the exact command/report or source revision in `evidence`, clear `blocked_by` only when the dependency is actually satisfied, and set `final_validation.state` to `passed`, `failed`, or `waived`. A waiver needs owner approval plus impact, mitigation, monitoring, and rollback conditions. Evidence for simulations must identify source SHA, effective manifest, seed, actors, calculation/schema versions, and retained series.
 
-Keep #2159 and linked implementation issues open during partial work. The final validation pass is the only point that resolves GitHub issues, and only if all their acceptance criteria are satisfied. Apply the selected profile, common gates, release replay, rehearsal, and completed horizon run to the exact release SHA. A closed historical child issue remains subject to release-candidate regression checks.
+Keep #2159 and each linked implementation issue open during its partial work. Close a child issue when its own acceptance criteria and issue-level proof pass, then check only its direct #2159 item. Apply the selected profile, common gates, release replay, rehearsal, and completed horizon run to the exact release SHA before closing #2159. Closed child issues remain subject to release-candidate regression checks.
 
 ## Dependency order
 
@@ -67,7 +67,7 @@ Keep #2159 and linked implementation issues open during partial work. The final 
 2. Prove bootstrap conformance and rehearse the reset against sandbox Mongo.
 3. Run the early-world matrix, then the ten-year matrix, then the selected-profile horizon. Use targeted tests and deterministic harness runs before any full-world campaign.
 4. After the final code/configuration change, replay bootstrap and the five-year matrix on the exact release SHA.
-5. Validate live comparison, operations, player communication, and every remaining item. Resolve GitHub issues only after this pass.
+5. Validate live comparison, operations, player communication, and every remaining item. Close #2159 only after this pass; close child issues individually when their issue-level acceptance passes.
 
 ## External dependency
 
