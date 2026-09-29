@@ -111,6 +111,14 @@ describe("computeNppCorporationHealth", () => {
   it("passes the persisted operator diagnostics through and rolls constraints up to legs", () => {
     const diagnostics: NppOperatorAggregate = {
       corporationsObserved: 7,
+      sectorDiagnostics: {
+        retail: {
+          observations: 7,
+          cashNegative: 3,
+          bindingGateCounts: { cash_floor: 3, no_enterable_market: 4 },
+          constraintCounts: { budget_cash_crisis: 2, growth_unaffordable: 3 },
+        },
+      },
       bindingGateCounts: { cash_floor: 3, no_enterable_market: 4 },
       constraintCounts: {
         budget_cash_crisis: 2,

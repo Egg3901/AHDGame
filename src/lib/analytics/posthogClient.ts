@@ -6,6 +6,11 @@ import { ACCOUNT_CREATED_KEY, FIRST_TURN_KEY } from "./storageKeys";
 type PostHogClient = typeof import("posthog-js").default;
 
 let clientPromise: Promise<PostHogClient | null> | null = null;
+let identifiedAccountId: string | null = null;
+const pendingEvents: Array<{
+  event: string;
+  properties?: Record<string, string | number | boolean>;
+}> = [];
 
 /**
  * PostHog transport layer.
@@ -56,6 +61,9 @@ export function getPostHogClient(): Promise<PostHogClient | null> {
         opt_out_capturing_by_default: true,
         persistence: "localStorage+cookie",
         property_denylist: [
+          "$ip",
+          "ip",
+          "email",
           "$current_url",
           "$pathname",
           "$referrer",
@@ -93,13 +101,24 @@ export function getPostHogClient(): Promise<PostHogClient | null> {
 }
 
 /** Survey loading starts only after the SDK has the authenticated account ID. */
-export function identifyPostHogUser(client: PostHogClient, userId: string): void {
-  client.identify(userId, { is_player: true });
+export function identifyPostHogUser(
+  client: PostHogClient,
+  userId: string,
+  properties?: { signup_date?: string; nation?: string; party?: string }
+): void {
+  identifiedAccountId = userId;
+  client.identify(userId, { is_player: true, ...properties });
+  for (const pending of pendingEvents.splice(0)) {
+    if (pending.properties) client.capture(pending.event, pending.properties);
+    else client.capture(pending.event);
+  }
   client.set_config({ disable_surveys: false });
 }
 
 /** Keep later anonymous page views from loading surveys after logout. */
 export function resetPostHogUser(client: PostHogClient): void {
+  identifiedAccountId = null;
+  pendingEvents.length = 0;
   client.set_config({ disable_surveys: true });
   client.reset();
   client.opt_in_capturing();
@@ -115,7 +134,13 @@ export async function capturePostHogEvent(
   properties?: Record<string, string | number | boolean>
 ): Promise<void> {
   const client = await getPostHogClient();
-  if (client && getStoredConsent() === "accepted") {
+  if (client && !identifiedAccountId && getStoredConsent() === "accepted") {
+    // Hydration can fire a game event before the auth tracker identifies the
+    // account. Keep a small bounded queue so it is never sent anonymously.
+    if (pendingEvents.length < 50) pendingEvents.push({ event, properties });
+    return;
+  }
+  if (client && identifiedAccountId && getStoredConsent() === "accepted") {
     // Preserve the original call arity so an event without properties is sent
     // exactly as it was before the fan-out wrapper existed.
     if (properties) client.capture(event, properties);
@@ -125,9 +150,19 @@ export async function capturePostHogEvent(
 
 /** Called when consent is withdrawn; no further events or recordings are sent. */
 export async function stopPostHogCapture(): Promise<void> {
+  identifiedAccountId = null;
+  pendingEvents.length = 0;
   try {
     window.localStorage.removeItem(ACCOUNT_CREATED_KEY);
     window.localStorage.removeItem(FIRST_TURN_KEY);
+    window.localStorage.removeItem("ahd:pending-war-declaration");
+    window.localStorage.removeItem("ahd:last-tracked-turn");
+    for (let index = window.localStorage.length - 1; index >= 0; index--) {
+      const key = window.localStorage.key(index);
+      if (key?.startsWith("ahd:bill-passed:") || key?.startsWith("ahd:election-won:")) {
+        window.localStorage.removeItem(key);
+      }
+    }
   } catch {
     // Analytics storage is optional.
   }

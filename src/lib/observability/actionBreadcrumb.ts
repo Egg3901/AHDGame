@@ -14,6 +14,7 @@ import { addClientBreadcrumb } from "@/lib/observability/sentryClientLazy";
  *                  Keep values scalar — no nested objects, no PII.
  */
 export function trackAction(label: string, metadata?: Record<string, unknown>): void {
+  window.dispatchEvent(new Event("ahd:game-action"));
   addClientBreadcrumb({
     category: "game.action",
     message: label,

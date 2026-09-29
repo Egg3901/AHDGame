@@ -1947,6 +1947,8 @@ export function computeRawSupplyDemand(
     sectorType: string;
     revenue: number;
     stateId: string;
+    /** Optional owner used to attribute this sector's realized ledger supply. */
+    corporationId?: string | { toString(): string };
     sectorId?: string;
     isNatcorp?: boolean;
     strategyId?: string;
@@ -2105,6 +2107,8 @@ export function computeRawSupplyDemand(
 ): {
   global: Map<CommodityType, { supply: number; demand: number }>;
   byState: Map<string, Map<CommodityType, { supply: number; demand: number }>>;
+  /** Corporation id -> commodity -> realized units contributed to global supply. */
+  supplyByCorporation: Map<string, Map<CommodityType, number>>;
   /**
    * commodity → demand units removed by the PLANTS_LEDGER_DEMAND_SUPPLY_CAP
    * pass this turn (#1460). Recorded, never applied. A capped commodity reports
@@ -2115,7 +2119,23 @@ export function computeRawSupplyDemand(
 } {
   const global = new Map<CommodityType, { supply: number; demand: number }>();
   const byState = new Map<string, Map<CommodityType, { supply: number; demand: number }>>();
+  const supplyByCorporation = new Map<string, Map<CommodityType, number>>();
   const demandTruncated = new Map<CommodityType, number>();
+  const recordCorporationSupply = (
+    corporationId: string | { toString(): string } | undefined,
+    commodity: CommodityType,
+    units: number
+  ): void => {
+    if (corporationId == null || !Number.isFinite(units) || units <= 0) return;
+    const id = corporationId.toString();
+    if (!id) return;
+    let output = supplyByCorporation.get(id);
+    if (!output) {
+      output = new Map<CommodityType, number>();
+      supplyByCorporation.set(id, output);
+    }
+    output.set(commodity, (output.get(commodity) ?? 0) + units);
+  };
 
   // Era ledger scale for every dollars-to-units leg (see `ledgerUnitScale` doc).
   // Garbage-tolerant like `safeUnitScale`: non-finite/non-positive means 1.
@@ -2272,6 +2292,7 @@ export function computeRawSupplyDemand(
         if (units > 0) {
           global.get(commodity)!.supply += units;
           stateMap.get(commodity)!.supply += units;
+          recordCorporationSupply(sector.corporationId, commodity, units);
           recordOutputDemandDelta(sector, st, commodity, units);
         }
         continue;
@@ -2316,6 +2337,7 @@ export function computeRawSupplyDemand(
       g.supply += units;
       const s = stateMap.get(commodity)!;
       s.supply += units;
+      recordCorporationSupply(sector.corporationId, commodity, units);
       recordOutputDemandDelta(sector, st, commodity, units);
     }
 
@@ -2549,5 +2571,5 @@ export function computeRawSupplyDemand(
 
   applyUnownedCommodityDrift(global, currentTurn);
 
-  return { global, byState, demandTruncated };
+  return { global, byState, supplyByCorporation, demandTruncated };
 }

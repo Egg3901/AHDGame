@@ -218,9 +218,9 @@ export async function imposeEmbargo(
 }
 
 /**
- * Lift an active minister embargo by id. Only minister-origin embargoes can be
- * lifted this way (durable/legislation embargoes are repealed via the bill that
- * created them). Verifies the embargo belongs to `sourceCountry`.
+ * Lift a temporary minister or crisis embargo by id. Legislation and
+ * organization restrictions require their own repeal process. Verifies the
+ * embargo belongs to `sourceCountry`. Crisis rows retain a replay tombstone.
  */
 export async function liftEmbargo(
   db: Db,
@@ -232,6 +232,12 @@ export async function liftEmbargo(
   if (!embargo) return { ok: false, error: "Embargo not found." };
   if (embargo.sourceCountry !== sourceCountry) {
     return { ok: false, error: "This embargo belongs to another country." };
+  }
+  if (embargo.origin === "crisis") {
+    // Retain provenance as a tombstone: replaying crisis resolution must not
+    // recreate a restriction the government deliberately lifted.
+    await col.updateOne({ _id: embargoId }, { $set: { expiresTurn: -1 } });
+    return { ok: true, embargoId };
   }
   if (embargo.origin !== "minister") {
     return { ok: false, error: "Durable embargoes must be repealed through legislation." };

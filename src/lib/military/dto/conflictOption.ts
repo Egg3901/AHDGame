@@ -13,4 +13,6 @@ export interface ConflictOption {
   name: string;
   sideALabel: string;
   sideBLabel: string;
+  /** Declaration bill, when this conflict began through a player proposal. */
+  declaredByBillId?: string;
 }

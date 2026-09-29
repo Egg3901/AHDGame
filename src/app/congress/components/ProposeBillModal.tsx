@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { ladderBounds } from "@/lib/legislature/policyLadder";
 import { useToast } from "@/contexts/ToastContext";
+import { captureProductEvent } from "@/lib/analytics/capture";
 import { reserveManpowerLabel } from "@/lib/military/manpower";
 import {
   BILL_CATEGORIES,
@@ -639,6 +640,7 @@ export function ProposeBillModal({
         return;
       }
       showToast("Bill proposed — voting is now open.");
+      void captureProductEvent("bill_drafted");
       onSuccess();
       onClose();
     } finally {

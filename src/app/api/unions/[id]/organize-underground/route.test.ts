@@ -47,6 +47,7 @@ beforeEach(() => {
     heatText: "cold",
     strengthGain: 9,
     actionsSpent: 10,
+    crisisExtended: true,
   });
 });
 
@@ -86,6 +87,7 @@ describe("POST /api/unions/[id]/organize-underground", () => {
       status: "dark",
       strengthGain: 9,
       actionsSpent: 10,
+      crisisExtended: true,
     });
   });
 });

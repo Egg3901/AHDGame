@@ -28,6 +28,7 @@ import {
   type LabourContext,
 } from "@/lib/labour/laborCost";
 import { buildUnionEffectsById } from "@/lib/unions/unionLookups";
+import { loadUndergroundStrengthByCountrySector } from "@/lib/unions/undergroundEffects";
 import { loadCollectiveAgreementEffects } from "@/lib/unions/collectiveAgreementEffects";
 import { loadIndustrialActionOutputFactors } from "@/lib/unions/industrialActionEffects";
 import {
@@ -208,14 +209,20 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
   // sector inside processSectors from sectorType + currentYear). Inert (no
   // economic change) when the mode is off, the default.
   const fullEnabled = labourAtLeast(labourMode, "full");
-  const [unionsById, collectiveAgreementEffects, industrialActionOutputFactorBySectorId] =
-    fullEnabled
-      ? await Promise.all([
-          buildUnionEffectsById(db, turn ?? gameState?.currentTurn ?? 0),
-          loadCollectiveAgreementEffects(db, turn ?? gameState?.currentTurn ?? 0),
-          loadIndustrialActionOutputFactors(db),
-        ])
-      : [undefined, undefined, undefined];
+  const bannedUnionCountryIds = buildUnionsBannedByCountry(lookups.federalBudgets);
+  const [
+    unionsById,
+    collectiveAgreementEffects,
+    industrialActionOutputFactorBySectorId,
+    undergroundStrengthByCountrySector,
+  ] = fullEnabled
+    ? await Promise.all([
+        buildUnionEffectsById(db, turn ?? gameState?.currentTurn ?? 0),
+        loadCollectiveAgreementEffects(db, turn ?? gameState?.currentTurn ?? 0),
+        loadIndustrialActionOutputFactors(db),
+        loadUndergroundStrengthByCountrySector(db, bannedUnionCountryIds),
+      ])
+    : [undefined, undefined, undefined, undefined];
   const labour: LabourContext = {
     wagesEnabled: labourAtLeast(labourMode, "wages"),
     minWageRatioByCountry: buildMinWageRatioByCountry(lookups.federalBudgets),
@@ -227,7 +234,8 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     // Union ban (player suggestion #93): read at the "unions" tier (the same
     // tier the unionization/strike machinery runs at), unlike the bias map
     // above whose reads are gated at "full".
-    unionsBannedByCountry: buildUnionsBannedByCountry(lookups.federalBudgets),
+    unionsBannedByCountry: bannedUnionCountryIds,
+    undergroundStrengthByCountrySector,
     // Union dues v1: gated read, only fetched when fullEnabled, so a union
     // document's mere existence never has an effect at a lower tier. Resolved
     // per-sector via `CorporateSector.representingUnionId`, not by
@@ -1285,16 +1293,8 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
       lookups.exchangeRatesByCurrency,
       now,
       makeSeededRng(`marketCapCandle:${turn}${CORP_TURN_RNG_SALT}`),
-      lookups.sectorsByCorp,
       dividendIncomeReceivedByCorpId,
-      dividendTaxPaidByCountry,
-      {
-        plantsEnabled: market.plantsEnabled,
-        eraUnitScale: lookups.eraUnitScale,
-        stateResourcesByState: lookups.stateResourceCapacityByState,
-        currentYear,
-        commandEconomyEnabled,
-      }
+      dividendTaxPaidByCountry
     );
   }
   mark("snapshotMarketCap");

@@ -19,12 +19,16 @@ import {
   trendWorkerExpectation,
 } from "@/lib/labour/strikes";
 import {
-  decayUnionizationUnderBan,
   realWageIndex,
   trendUnionization,
   unionPremium,
   unionizationDriftTarget,
 } from "@/lib/labour/unionization";
+import {
+  undergroundDensityAfterBanTurn,
+  undergroundOutputFactor,
+  undergroundSectorKey,
+} from "@/lib/unions/undergroundEffects";
 import { servicesStrikeSoftening } from "@/lib/unions/unionServices";
 import {
   accumulateLabourDemand,
@@ -58,18 +62,24 @@ export function resolveSectorLabourProductionEffects(
   labour: LabourContext,
   sector: Pick<
     CorporateSector,
-    "_id" | "strikeStartedAtTurn" | "labourStaffingFactor" | "wageLevel"
+    "_id" | "sectorType" | "strikeStartedAtTurn" | "labourStaffingFactor" | "wageLevel"
   >,
   stateLabourTightness?: number,
-  stateDemandWageIndex?: number
+  stateDemandWageIndex?: number,
+  sectorCountryId?: string
 ): SectorLabourProductionEffects {
   const protectedByAgreement =
     labour.noStrikeProtectedSectorIds?.has(sector._id.toString()) === true;
+  const banned =
+    sectorCountryId !== undefined && labour.unionsBannedByCountry?.has(sectorCountryId) === true;
   // Settlement takes effect before this turn's revenue is calculated. The
   // strike state machine clears persisted state later in the same sector pass,
   // but labor peace must also suppress the production hit immediately.
   const strikeActive =
-    labour.unionsEnabled === true && sector.strikeStartedAtTurn != null && !protectedByAgreement;
+    labour.unionsEnabled === true &&
+    sector.strikeStartedAtTurn != null &&
+    !protectedByAgreement &&
+    !banned;
   const rawIndustrialActionFactor =
     labour.unionsEnabled === true
       ? labour.industrialActionOutputFactorBySectorId?.get(sector._id.toString())
@@ -79,6 +89,12 @@ export function resolveSectorLabourProductionEffects(
       ? Math.max(0, Math.min(1, rawIndustrialActionFactor))
       : 1;
   const strikeFactor = strikeActive ? 1 - STRIKE_REVENUE_THROTTLE : 1;
+  const undergroundStrength =
+    banned && labour.fullEnabled
+      ? (labour.undergroundStrengthByCountrySector?.get(
+          undergroundSectorKey(sectorCountryId, sector.sectorType)
+        ) ?? 0)
+      : 0;
 
   // Phase 2 labour rationing. A state's sectors cannot collectively staff more
   // people than the state has, so each fills the same pro rata share of what it
@@ -104,7 +120,11 @@ export function resolveSectorLabourProductionEffects(
 
   return {
     strikeActive,
-    outputFactor: strikeFactor * industrialActionFactor * staffingFactor,
+    outputFactor:
+      strikeFactor *
+      industrialActionFactor *
+      staffingFactor *
+      undergroundOutputFactor(undergroundStrength),
     strikeMarginModifier: strikeActive ? STRIKE_MARGIN_PENALTY_PP : 0,
     staffingFactor,
   };
@@ -240,6 +260,12 @@ export function resolveSectorLabourEconomics({
   );
   const unionsBanned =
     labour.unionsEnabled && labour.unionsBannedByCountry?.has(sectorCountryId) === true;
+  const undergroundStrength =
+    unionsBanned && labour.fullEnabled
+      ? (labour.undergroundStrengthByCountrySector?.get(
+          undergroundSectorKey(sectorCountryId, sector.sectorType)
+        ) ?? 0)
+      : 0;
   const unionPremiumPercent =
     labour.unionsEnabled && !unionsBanned ? unionPremium(sector.unionization ?? 0) : 0;
   const wageMultiplier =
@@ -291,7 +317,7 @@ export function resolveSectorLabourEconomics({
       ? labour.unionsById?.get(sector.representingUnionId.toString())
       : undefined;
   let newUnionization = unionsBanned
-    ? decayUnionizationUnderBan(sector.unionization ?? 0)
+    ? undergroundDensityAfterBanTurn(sector.unionization ?? 0, undergroundStrength)
     : trendUnionization(
         sector.unionization ?? 0,
         unionizationDriftTarget({

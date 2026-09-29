@@ -1,3 +1,10 @@
+import { reconcileUKDevolution } from "@/lib/countries/uk/devolution/service";
+import {
+  executiveCycleAnchor,
+  usesUKDevolution,
+  type UKExecutiveRegion,
+} from "@/lib/countries/uk/devolution/rules";
+import { yearOfTurn } from "@/lib/utils/gameDate";
 import { withCampaignRules } from "@/lib/campaignTargeting/rules";
 import { ObjectId, type AnyBulkWriteOperation, type Db } from "mongodb";
 import { getDb } from "@/lib/mongodb";
@@ -914,6 +921,10 @@ export async function ensureRegionalGovernorElections(
     .sort({ updatedAt: -1 })
     .toArray();
 
+  const ukInstitutions = usesUKDevolution(countryId)
+    ? await reconcileUKDevolution(db, ctx.startingYear, completedElections, now)
+    : null;
+
   function lastCompleted(stateId: string): Election | undefined {
     return completedElections.find((e) => e.state === stateId);
   }
@@ -924,13 +935,15 @@ export async function ensureRegionalGovernorElections(
   const toInsert: Omit<Election, "_id">[] = [];
 
   for (const stateId of stateIds) {
+    const institution = ukInstitutions?.regions[stateId as UKExecutiveRegion];
+    if (ukInstitutions && !institution?.active) continue;
     if (liveGov.has(stateId)) continue;
 
     const prev = lastCompleted(stateId);
 
     // A region joining mid-cycle (NI reunifying → Cathaoirleach) syncs to a live
     // peer governor race so they resolve together, instead of opening its own.
-    if (!prev && liveElections[0]) {
+    if (!ukInstitutions && !prev && liveElections[0]) {
       toInsert.push(mirrorPeerRaceTiming(countryId, liveElections[0], stateId, "governor", 1, now));
       continue;
     }
@@ -938,10 +951,14 @@ export async function ensureRegionalGovernorElections(
     const spawn = pickNextCanonicalCycle({
       electionType: "governor",
       countryId,
-      prevCycle: prev?.cycle ?? 0,
+      prevCycle: Math.max(prev?.cycle ?? 0, institution ? institution.firstCycle - 1 : 0),
       currentTurn,
       priorEndTurn: null,
-      ctx,
+      customCycle1EndTurn: institution ? executiveCycleAnchor(institution, dur) : undefined,
+      ctx:
+        institution?.firstElectionEndTurn !== undefined
+          ? { ...ctx, preIterationActive: false }
+          : ctx,
     });
     if (!spawn) continue;
 
@@ -954,14 +971,12 @@ export async function ensureRegionalGovernorElections(
       state: stateId,
       seatId: getSeatIdFromElection({ countryId, electionType: "governor", state: stateId }),
       cycle: spawn.cycle,
-      electionYear: electionToLarpYear(
-        "governor",
-        spawn.cycle,
-        undefined,
-        undefined,
-        ctx,
-        countryId
-      ),
+      electionYear:
+        institution?.firstElectionEndTurn !== undefined
+          ? yearOfTurn(spawn.endTurn, ctx.startingYear, {
+              preIterationTurns: ctx.preIterationTurns,
+            })
+          : electionToLarpYear("governor", spawn.cycle, undefined, undefined, ctx, countryId),
       status: "active",
       totalSeats: 1,
       startTime: now,

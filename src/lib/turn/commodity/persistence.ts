@@ -1,6 +1,7 @@
-import type { Db } from "mongodb";
+import type { Db, ObjectId } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
 import type { CommodityType } from "@/lib/constants/commodities";
+import type { CorporationHistory } from "@/lib/db/types";
 import { marketAtLeast } from "@/lib/market/featureFlag";
 import { buildCommodityFlowDocs, COMMODITY_FLOW_RETENTION_TURNS } from "@/lib/market/flowLedger";
 import { clearAllCommodities } from "@/lib/trade/snapshot";
@@ -15,6 +16,8 @@ export interface TurnPersistenceInputs {
   marketSystemMode: Parameters<typeof marketAtLeast>[0];
   global: GlobalLedger;
   byCountry: CountryLedger;
+  corporationIds: readonly ObjectId[];
+  supplyByCorporation: ReadonlyMap<string, ReadonlyMap<CommodityType, number>>;
   demandTruncated: Map<CommodityType, number>;
   appliedGlobalPrices: Map<CommodityType, number>;
   appliedStatePrices: Map<CommodityType, Record<string, number>>;
@@ -27,6 +30,39 @@ export interface TurnPersistenceInputs {
   tradeClearing: ReturnType<typeof clearAllCommodities>;
   reachableBooks: ReturnType<typeof buildReachableBooks>;
   countries: CountryId[];
+}
+
+export function serializeCorporationCommodityOutput(
+  supply: ReadonlyMap<CommodityType, number> | undefined
+): Record<string, number> {
+  const output: Record<string, number> = {};
+  if (!supply) return output;
+  for (const [commodity, units] of supply) {
+    if (!Number.isFinite(units) || units <= 0) continue;
+    const rounded = Math.round(units * 100) / 100;
+    if (rounded > 0) output[commodity] = rounded;
+  }
+  return output;
+}
+
+export function buildCorporationCommodityOutputOps(
+  corporationIds: readonly ObjectId[],
+  supplyByCorporation: ReadonlyMap<string, ReadonlyMap<CommodityType, number>>,
+  turn: number
+) {
+  return corporationIds.map((corporationId) => ({
+    updateMany: {
+      filter: { corporationId, turn },
+      update: {
+        $set: {
+          commodityOutput: serializeCorporationCommodityOutput(
+            supplyByCorporation.get(corporationId.toString())
+          ),
+          commodityOutputBasis: "plants-ledger-v1" as const,
+        },
+      },
+    },
+  }));
 }
 
 /**
@@ -45,6 +81,8 @@ export async function persistTurnOutputs(
     marketSystemMode,
     global,
     byCountry,
+    corporationIds,
+    supplyByCorporation,
     demandTruncated,
     appliedGlobalPrices,
     appliedStatePrices,
@@ -167,6 +205,18 @@ export async function persistTurnOutputs(
       { $set: { ...tradeSnapshot, books: serializeReachableBooks(reachableBooks) } },
       { upsert: true }
     );
+
+  // The ledger is the sole authority for corporation commodity output. It has
+  // now applied real plant production, extraction realization/capacity, output
+  // mixes, embargoes, policy, and diversions. Overwrite every current-turn row,
+  // including non-producers with {}, so retries cannot retain a stale snapshot.
+  if (corporationIds.length > 0) {
+    await db
+      .collection<CorporationHistory>("corporationHistory")
+      .bulkWrite(buildCorporationCommodityOutputOps(corporationIds, supplyByCorporation, turn), {
+        ordered: false,
+      });
+  }
 
   return { tradeClearedVolume: tradeSnapshot.world.clearedVolume };
 }

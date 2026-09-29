@@ -19,6 +19,8 @@ describe("recordNppOperatorObservationsBestEffort", () => {
     const now = new Date("2026-09-20T00:00:00.000Z");
     await recordNppOperatorObservationsBestEffort(db, 100, now, [
       buildNppOperatorObservation({
+        sectorType: "retail",
+        cashNegative: true,
         passive: false,
         profitable: true,
         marginPct: 20,
@@ -36,11 +38,19 @@ describe("recordNppOperatorObservationsBestEffort", () => {
       { _id: "turn:100" },
       {
         $set: expect.objectContaining({
-          schemaVersion: 1,
+          schemaVersion: 2,
           turn: 100,
           generatedAt: now,
           corporationsObserved: 1,
           bindingGateCounts: { entered: 1 },
+          sectorDiagnostics: {
+            retail: {
+              observations: 1,
+              cashNegative: 1,
+              bindingGateCounts: { entered: 1 },
+              constraintCounts: {},
+            },
+          },
           divestedSectors: 1,
           reinvestments: 2,
         }),

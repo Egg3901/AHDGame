@@ -1,5 +1,6 @@
 import { ObjectId } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
+import type { CommodityType } from "@/lib/constants/commodities";
 import type {
   CampaignCapabilitySnapshot,
   CampaignCommitment,
@@ -299,6 +300,13 @@ export interface GlobalResponseOutcomeCondition {
   max?: number;
 }
 
+export interface CrisisTradeSanction {
+  participationAxis: string;
+  targetRole: GlobalResponseRole;
+  commodity: CommodityType;
+  durationTurns: number;
+}
+
 export interface GlobalResponseOutcome {
   outcomeId: string;
   label: string;
@@ -322,6 +330,8 @@ export interface GlobalResponseOutcome {
   nextCampaignStage?: CampaignStage;
   /** Discrete change to the shared Cold War tension ledger. */
   tensionDelta?: number;
+  /** Enforceable trade restriction for governments that explicitly participated. */
+  tradeSanction?: CrisisTradeSanction;
   wireMessage: string;
 }
 
@@ -411,6 +421,8 @@ export interface Crisis {
   startTurn: number;
   endTurn: number | null;
   durationTurns: number | null;
+  /** Last turn a mass underground drive prolonged a union-ban general strike. */
+  lastUndergroundExtensionTurn?: number;
   effects: CrisisEffect[];
   wireMessageOnStart: string;
   wireMessageOnEnd: string | null;

@@ -37,6 +37,7 @@ const conflictsSpy = vi.hoisted(() => vi.fn().mockReturnValue(false));
 vi.mock("@/contexts/AuthDataContext", async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   useConflictsEnabled: () => conflictsSpy(),
+  useAuthMe: () => ({ user: { id: "stable-account-id" } }),
 }));
 
 vi.mock("next/navigation", () => ({

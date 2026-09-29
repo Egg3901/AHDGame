@@ -21,7 +21,7 @@ interface EmbargoItem {
   direction: "export" | "import" | "both";
   mode: "block" | "cap";
   cap: number | null;
-  origin: "minister" | "legislation";
+  origin: "minister" | "legislation" | "organization" | "crisis";
   expiresTurn: number | null;
 }
 
@@ -207,11 +207,17 @@ export function TradeEmbargoPanel({ countryId, canAct, actionsRemaining }: Props
                   <div className="min-w-0">
                     <p className="truncate text-sm text-foreground">{summaryOf(e)}</p>
                     <p className="text-[11px] text-muted">
-                      {e.origin === "legislation" ? "By law" : "Ministerial"}
+                      {e.origin === "legislation"
+                        ? "By law"
+                        : e.origin === "crisis"
+                          ? "Crisis decision"
+                          : e.origin === "organization"
+                            ? "Organization resolution"
+                            : "Ministerial"}
                       {e.expiresTurn != null ? ` · expires turn ${e.expiresTurn}` : " · no expiry"}
                     </p>
                   </div>
-                  {e.origin === "minister" ? (
+                  {e.origin === "minister" || e.origin === "crisis" ? (
                     <Button
                       variant="secondary"
                       size="sm"
@@ -223,7 +229,9 @@ export function TradeEmbargoPanel({ countryId, canAct, actionsRemaining }: Props
                     </Button>
                   ) : (
                     <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-muted/70">
-                      Repeal via bill
+                      {e.origin === "organization"
+                        ? "Repeal through organization"
+                        : "Repeal via bill"}
                     </span>
                   )}
                 </li>
@@ -247,7 +255,13 @@ export function TradeEmbargoPanel({ countryId, canAct, actionsRemaining }: Props
                     {resolveCountryName(e.sourceCountry)}: {summaryOf(e)}
                   </p>
                   <p className="text-[11px] text-muted">
-                    {e.origin === "legislation" ? "By law" : "Ministerial"}
+                    {e.origin === "legislation"
+                      ? "By law"
+                      : e.origin === "crisis"
+                        ? "Crisis decision"
+                        : e.origin === "organization"
+                          ? "Organization resolution"
+                          : "Ministerial"}
                   </p>
                 </li>
               ))}

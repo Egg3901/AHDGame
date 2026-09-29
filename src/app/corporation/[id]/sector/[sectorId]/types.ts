@@ -50,6 +50,8 @@ export interface SectorData {
    */
   representingUnionId?: string | null;
   representingUnionName?: string | null;
+  /** Public signal only: strong underground organizing during an active ban. */
+  undergroundUnrest?: boolean;
   createdAt: string;
   /** Active for-sale listing, null when not on the secondary market */
   forSale?: {

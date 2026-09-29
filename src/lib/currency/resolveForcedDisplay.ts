@@ -1,5 +1,7 @@
+import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
 import type { CurrencyCode } from "@/lib/constants/currencies";
-import { CURRENCY_SYMBOLS } from "@/lib/constants/currencies";
+import { getEraAwareCurrencySymbol } from "@/lib/constants/currencies";
+import { validDisplayRate } from "@/lib/currency/rules/display";
 import { COUNTRY_CONFIGS, getCountryConfig, type CountryId } from "@/lib/constants/countries";
 
 type RateMap = Partial<Record<CurrencyCode, number>>;
@@ -52,12 +54,16 @@ export function resolveForcedDisplay(
   currencyCode: CurrencyCode,
   rates: RateMap | null,
   /** Active world preset, so the BASELINE fallback is the era's rate, not 2019's. */
-  preset?: string
+  preset?: string,
+  eurozoneEnabled = false
 ): { value: number; symbol: string } {
   const rate = rates?.[currencyCode] ?? localPerAnchorFor(preset)[currencyCode];
-  if (rate === undefined) {
+  if (!validDisplayRate(rate)) {
     // Unknown currency with no baseline either — last-resort anchor passthrough.
     return { value: internalAmount, symbol: "₳" };
   }
-  return { value: internalAmount * rate, symbol: CURRENCY_SYMBOLS[currencyCode] ?? "$" };
+  return {
+    value: internalAmount * rate,
+    symbol: getEraAwareCurrencySymbol(currencyCode, preset ?? DEFAULT_SEED_PRESET, eurozoneEnabled),
+  };
 }

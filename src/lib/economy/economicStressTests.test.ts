@@ -40,7 +40,8 @@ const snapshot = {
   securities: {
     equityNotionalAnchor48Turns: 480,
     activeTradedListingShare: value(0.4),
-    openOrderDepthAnchor: 20,
+    openOrderDepthAnchor: 80,
+    openBidDepthAnchor: 20,
   },
   firms: { marketCapitalizationAnchor: 1_000 },
   money: { dormantModeledBalanceShare48: value(0.3) },
@@ -129,8 +130,32 @@ describe("runEconomicStressTests", () => {
   it("does not describe unabsorbed liquidation notional as a realized loss", () => {
     const finding = runEconomicStressTests(snapshot)[3]!;
     expect(finding.indicators.absorptionRate).toBe(0.2);
+    expect(finding.indicators.bidDepthAnchor).toBe(20);
     expect(finding.balanceSheetLossAnchor).toBe(80);
     expect(finding.basis).toContain("liquidity exposure");
+  });
+
+  it("does not treat ask depth as capacity to absorb synchronized sells", () => {
+    const asksOnly = {
+      ...snapshot,
+      securities: { ...snapshot.securities, openBidDepthAnchor: 0 },
+    } as EconomicVitalSigns;
+    const finding = runEconomicStressTests(asksOnly)[3]!;
+    expect(finding.indicators.absorptionRate).toBe(0);
+    expect(finding.indicators.unabsorbedShare).toBe(1);
+    expect(finding.balanceSheetLossAnchor).toBe(100);
+  });
+
+  it("marks old snapshots without bid depth as unmeasured", () => {
+    const legacy = {
+      ...snapshot,
+      securities: { ...snapshot.securities, openBidDepthAnchor: undefined },
+    } as EconomicVitalSigns;
+    const finding = runEconomicStressTests(legacy)[3]!;
+    expect(finding.indicators.absorptionRate).toBeNull();
+    expect(finding.indicators.unabsorbedShare).toBeNull();
+    expect(finding.balanceSheetLossAnchor).toBeNull();
+    expect(finding.severity).toBe("moderate");
   });
 
   it("reports liquidation unmet demand as the implied unabsorbed share", () => {
@@ -167,7 +192,11 @@ describe("runEconomicStressTests", () => {
   it("reports zero liquidation unabsorbed share when depth absorbs the offer", () => {
     const deep = {
       ...snapshot,
-      securities: { ...snapshot.securities, openOrderDepthAnchor: 10_000 },
+      securities: {
+        ...snapshot.securities,
+        openOrderDepthAnchor: 10_000,
+        openBidDepthAnchor: 10_000,
+      },
     } as EconomicVitalSigns;
     const finding = runEconomicStressTests(deep)[3]!;
     expect(finding.indicators.absorptionRate).toBe(1);

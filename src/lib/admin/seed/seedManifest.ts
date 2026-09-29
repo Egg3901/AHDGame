@@ -452,6 +452,7 @@ const RUNTIME: CollectionEntry[] = [
   { name: "parliamentaryGovernments", category: "runtime" },
   { name: "ukCabinetCooldowns", category: "runtime" },
   { name: "ukGovernment", category: "runtime" },
+  { name: "ukDevolution", category: "runtime" },
 
   // Corporations + markets
   { name: "corporations", category: "runtime" },
@@ -990,6 +991,11 @@ const RUNTIME: CollectionEntry[] = [
   { name: "corporationShareInvites", category: "runtime" },
   { name: "wealthListHistory", category: "runtime" },
   { name: "wealthListSnapshots", category: "runtime" },
+  {
+    name: "analyticsRecords",
+    category: "runtime",
+    notes: "Current world wealth high-water mark for PostHog.",
+  },
   {
     name: "seedDiagnostics",
     category: "runtime",

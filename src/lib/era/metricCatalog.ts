@@ -186,11 +186,11 @@ export const METRIC_ERA_WINDOWS: Record<string, MetricEraWindow> = {
 
   // ── Country-scoped windows (gate ONLY the listed countries) ────────────────
   devolutionSatisfaction: {
-    from: 1999,
+    from: 1979,
     countries: ["UK"],
     news: {
-      title: "Power Devolved",
-      body: "Power has moved north and west from Westminster. A Scottish Parliament and a Welsh Senedd now stand as more than symbols, carrying real authority and raising expectations that decisions can be made closer to the people they affect. The old union has not ended, but it has been rearranged.\n\nWith new chambers come new arguments. Citizens will ask whether devolution brings dignity, efficiency, fairness, or simply another layer of politics. Devolution satisfaction has become a measure of whether the nations feel heard inside the United Kingdom, or merely managed from a shorter distance.",
+      title: "The Devolution Debate",
+      body: "The balance of power between Westminster and the regions is on the political agenda. Proposals for devolved governments offer a choice about where domestic decisions should be made. Parliament can establish a settlement, amend existing powers or retain central control.\n\nCitizens will judge whether regional government brings representation, effective services and accountability. The passage of time does not settle the argument: the institutions that emerge depend on enacted laws and the choices made in this world.",
     },
   },
   antiSocialBehaviourRate: {

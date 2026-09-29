@@ -1,4 +1,9 @@
 import { describe, it, expect, vi } from "vitest";
+
+vi.mock("@/lib/unions/unionProsecutionBar", () => ({
+  isUnionProsecutionBarred: vi.fn().mockResolvedValue(false),
+  UNION_PROSECUTION_MESSAGE: "You are barred from union actions by prosecution.",
+}));
 import { ObjectId } from "mongodb";
 import type { Db } from "mongodb";
 import type { Character, CorporateSector, Union } from "@/lib/db/types";
@@ -11,6 +16,7 @@ import {
 } from "./unionActions";
 import { MAX_DUES_FRACTION_OF_WAGE, maxDuesForWage } from "@/lib/unions/unionDues";
 import { annualWageFromDaily } from "@/lib/unions/unionServices";
+import { isUnionProsecutionBarred } from "@/lib/unions/unionProsecutionBar";
 
 function makeCharacter(overrides: Partial<Character> = {}): Character {
   return { _id: new ObjectId(), name: "TestChar", ...overrides } as unknown as Character;
@@ -316,6 +322,21 @@ describe("setUnionDues", () => {
 });
 
 describe("resolveOwnedUnion suspension gate", () => {
+  it("blocks a prosecuted leader before mutating the union", async () => {
+    const character = makeCharacter();
+    const union = makeUnion(character._id);
+    const { db, updateOne } = duesDb(union, [makeSector()]);
+    vi.mocked(isUnionProsecutionBarred).mockResolvedValueOnce(true);
+
+    const result = await setUnionDues(db, character, union._id.toString(), 10);
+    expect(result).toEqual({
+      ok: false,
+      status: 403,
+      error: "You are barred from union actions by prosecution.",
+    });
+    expect(updateOne).not.toHaveBeenCalled();
+  });
+
   it("a suspended union rejects leader actions, matching the read surfaces", async () => {
     const character = makeCharacter();
     const union = makeUnion(character._id, { suspended: true });

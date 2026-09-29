@@ -34,7 +34,7 @@ interface EmbargoItem {
   direction: "export" | "import" | "both";
   mode: "block" | "cap";
   cap: number | null;
-  origin: "minister" | "legislation";
+  origin: "minister" | "legislation" | "organization" | "crisis";
   expiresTurn: number | null;
 }
 
@@ -266,7 +266,13 @@ export default function RestrictionsView({ ledger }: { ledger: WorldTradeLedger 
                           <div className="min-w-0 flex-1">
                             <p className="truncate text-sm text-foreground">{summary}</p>
                             <p className="text-[11px] text-muted">
-                              {e.origin === "legislation" ? "By law" : "Ministerial"}
+                              {e.origin === "legislation"
+                                ? "By law"
+                                : e.origin === "crisis"
+                                  ? "Crisis decision"
+                                  : e.origin === "organization"
+                                    ? "Organization resolution"
+                                    : "Ministerial"}
                               {e.expiresTurn != null
                                 ? ` · expires turn ${e.expiresTurn}`
                                 : " · until repealed"}

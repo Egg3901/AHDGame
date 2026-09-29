@@ -191,6 +191,8 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
             mothballed: 1,
             embargoSuspended: 1,
             embargoExportExposure: 1,
+            militaryDivertedFraction: 1,
+            militaryDivertedTurn: 1,
           },
         }
       )
@@ -504,7 +506,7 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
   }
 
   // Compute raw supply/demand in units (retail demand scaled by GDP growth)
-  const { global, byState, demandTruncated } = computeRawSupplyDemand(
+  const { global, byState, supplyByCorporation, demandTruncated } = computeRawSupplyDemand(
     sectorData,
     gdpGrowthData,
     stateGdpMap,
@@ -831,6 +833,8 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
       marketSystemMode,
       global,
       byCountry,
+      corporationIds: allCorporations.map((corporation) => corporation._id),
+      supplyByCorporation,
       demandTruncated,
       appliedGlobalPrices,
       appliedStatePrices,

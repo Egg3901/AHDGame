@@ -1,22 +1,13 @@
 import type { Db, ObjectId } from "mongodb";
-import type {
-  Corporation,
-  CorporateSector,
-  MarketCapHistory,
-  CorporationHistory,
-} from "@/lib/db/types";
+import type { Corporation, MarketCapHistory, CorporationHistory } from "@/lib/db/types";
 import type { CorporationType } from "@/lib/constants/corporations";
-import { buildCommodityOutputSnapshot } from "@/lib/corporations/corpCommoditySnapshot";
-import type { CorpCommodityFlowContext } from "@/lib/corporations/corpCommodityFlows";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import { logWireEvent, wireHeadlineCorpCreditRating } from "@/lib/wireEvent";
 import { createNotifications } from "@/lib/notifications";
 import type { CorpSnapshot } from "./types";
 import { ALL_EXCHANGES, getExchangeApiKey } from "@/lib/constants/exchangeRegistry";
 import {
-  fxRateForSectorHostFromMap,
   resolveCorpLiquidCurrencyCode,
-  resolveSectorHostCurrencyCode,
   type CorpCapitalCurrencyInfo,
 } from "@/lib/currency/corporationCapital";
 import { readCorpEconomicAnchor, writeCorpEconomicLocal } from "@/lib/currency/corpEconomyFields";
@@ -103,7 +94,6 @@ export async function snapshotMarketCap(
   // (see turnPhaseRegistry.ts / turn/corporation/index.ts) per the "never
   // Math.random() in turn paths" doctrine (src/lib/events/substrate/rng.ts).
   rng: () => number = Math.random,
-  sectorsByCorp?: Map<string, CorporateSector[]>,
   // Net dividend income (local ccy, per-turn) each corp received from holdings
   // this turn — reporting only (cash already credited in Phase 3c). Persisted so
   // the Financials can surface a "Dividend income (holdings)" P&L line (#3109).
@@ -113,11 +103,7 @@ export async function snapshotMarketCap(
   // because the row is INSERTED in Phase 8; the Phase-3c writer that produced it
   // ran before the row existed, so its updateOne no-op'd (#3115). Home-country
   // domestic federal tax, so it lands in federal/combined + the domestic split.
-  dividendTaxPaidByCountry?: Map<string, Map<string, number>>,
-  // World context the commodity-output snapshot needs to report the SAME
-  // production the world supply ledger books (ticket #1177). `isNatcorp` is
-  // resolved per corp below, so it is not part of this.
-  commodityContext?: Omit<CorpCommodityFlowContext, "isNatcorp">
+  dividendTaxPaidByCountry?: Map<string, Map<string, number>>
 ): Promise<void> {
   let globalCap = 0;
   // Aggregate fundamental valuation, and the slice of globalCap it accounts
@@ -453,32 +439,6 @@ export async function snapshotMarketCap(
         ...(sourceCorp?.averageQuality != null
           ? { averageQuality: sourceCorp.averageQuality }
           : {}),
-        ...((): {
-          commodityOutput?: Record<string, number>;
-          commodityOutputBasis?: "plants-ledger-v1";
-        } => {
-          if (!sectorsByCorp) return {};
-          const sectors = sectorsByCorp.get(id);
-          if (!sectors?.length) return {};
-          // Sector revenue is booked in its HOST currency; the nameplate legs
-          // of the derivation run in ₳, the basis COMMODITY_BASE_PRICES use.
-          const commodityOutput = buildCommodityOutputSnapshot(
-            sectors.map((sector) => ({
-              ...sector,
-              revenueAnchor: readCorpEconomicAnchor(
-                sector.revenue,
-                resolveSectorHostCurrencyCode(sector, sourceCorp),
-                fxRateForSectorHostFromMap(sector, sourceCorp, fxByCurrency)
-              ),
-              capacityUnits: sector.operatingCapacityUnits ?? sector.capitalStock ?? null,
-            })),
-            turn,
-            { ...commodityContext, isNatcorp: !!sourceCorp?.countryOwnerId }
-          );
-          return Object.keys(commodityOutput).length > 0
-            ? { commodityOutput, commodityOutputBasis: "plants-ledger-v1" }
-            : {};
-        })(),
         marketCap: Math.round(localPrice * s.totalShares),
         liquidCapital: Math.round(s.liquidCapital),
         // SOE backing reconciliation (#2043): ₳-anchor snapshot fields to the

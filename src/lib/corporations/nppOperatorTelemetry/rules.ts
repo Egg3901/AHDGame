@@ -1,7 +1,8 @@
 import type { NppMarketEntryReason } from "@/lib/db/types/marketFormation";
+import type { CorporationType } from "@/lib/constants/corporations";
 import { firstRejectingGate } from "@/lib/corporations/capacityDecisionTelemetry/rules";
 
-export const NPP_OPERATOR_TELEMETRY_SCHEMA_VERSION = 1 as const;
+export const NPP_OPERATOR_TELEMETRY_SCHEMA_VERSION = 2 as const;
 
 export type NppOperatorBindingGate =
   "passive" | "cash_floor" | "unprofitable" | NppMarketEntryReason;
@@ -114,6 +115,9 @@ export function resolveNppDecisionConstraint(
 }
 
 export interface NppOperatorObservation {
+  sectorType: CorporationType;
+  /** Decision-time cash after this decision's cash movement, before later turn income. */
+  cashNegative: boolean;
   bindingGate: NppOperatorBindingGate;
   /**
    * Finer per-leg constraint: the first of the four decision legs that bound
@@ -131,6 +135,17 @@ export interface NppOperatorObservation {
 
 export interface NppOperatorAggregate {
   corporationsObserved: number;
+  sectorDiagnostics: Partial<
+    Record<
+      CorporationType,
+      {
+        observations: number;
+        cashNegative: number;
+        bindingGateCounts: Partial<Record<NppOperatorBindingGate, number>>;
+        constraintCounts: Partial<Record<NppDecisionConstraint, number>>;
+      }
+    >
+  >;
   bindingGateCounts: Partial<Record<NppOperatorBindingGate, number>>;
   /**
    * Counts over {@link NppDecisionConstraint}. Corporations whose every leg is
@@ -156,6 +171,8 @@ function increment<K extends string>(counts: Partial<Record<K, number>>, key: K)
 }
 
 export function buildNppOperatorObservation(args: {
+  sectorType: CorporationType;
+  cashNegative: boolean;
   passive: boolean;
   profitable: boolean;
   marginPct: number;
@@ -189,6 +206,8 @@ export function buildNppOperatorObservation(args: {
         : (args.entryReason ?? "no_enterable_market");
   const dividendRate = Math.max(0, finite(args.dividendRate));
   return {
+    sectorType: args.sectorType,
+    cashNegative: args.cashNegative,
     bindingGate,
     bindingConstraint: resolveNppDecisionConstraint(args.constraintFlags ?? {}),
     budgetBand,
@@ -206,6 +225,7 @@ export function aggregateNppOperatorObservations(
 ): NppOperatorAggregate {
   const result: NppOperatorAggregate = {
     corporationsObserved: 0,
+    sectorDiagnostics: {},
     bindingGateCounts: {},
     constraintCounts: {},
     budgetBandCounts: {},
@@ -218,6 +238,18 @@ export function aggregateNppOperatorObservations(
   };
   for (const observation of observations) {
     result.corporationsObserved++;
+    const sector = (result.sectorDiagnostics[observation.sectorType] ??= {
+      observations: 0,
+      cashNegative: 0,
+      bindingGateCounts: {},
+      constraintCounts: {},
+    });
+    sector.observations++;
+    if (observation.cashNegative) sector.cashNegative++;
+    increment(sector.bindingGateCounts, observation.bindingGate);
+    if (observation.bindingConstraint) {
+      increment(sector.constraintCounts, observation.bindingConstraint);
+    }
     increment(result.bindingGateCounts, observation.bindingGate);
     if (observation.bindingConstraint) {
       increment(result.constraintCounts, observation.bindingConstraint);

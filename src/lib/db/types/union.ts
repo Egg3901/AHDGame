@@ -64,6 +64,10 @@ export interface Union {
   pendingLeaderCharacterId?: ObjectId | null;
   /** Spendable balance (home-country currency-equivalent, ₳-anchor), funds recruit/strike actions. Trickles up per turn proportional to `membershipPressure` (the "dues" analog). */
   treasury: number;
+  /** Cumulative frozen cash confiscated by underground raids and removed from circulation. */
+  undergroundFinesSeized?: number;
+  /** Last turn whose underground heat and detection step was applied to this cell. */
+  undergroundProcessedTurn?: number;
   /**
    * Uncapped organizing power, the sum of every organize drive any character
    * has ever run on this union, less decay. Distinct from `membershipPressure`:
@@ -158,6 +162,12 @@ export interface Union {
   exposedUntilTurn?: number | null;
   /** Illicit unions under ban: turn this union last took an underground drive, for heat-decay idle checks. */
   lastUndergroundDriveTurn?: number | null;
+  /** Recent drive pressure, halved after each detection roll and incremented by each drive. */
+  recentUndergroundDriveCount?: number;
+  /** Last successful government raid. Further raids wait for the cooldown. */
+  lastUndergroundRaidTurn?: number | null;
+  /** Identifies the applied raid for safe action-point compensation after a lost acknowledgment. */
+  lastUndergroundRaidId?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -200,6 +210,12 @@ export interface UnionOrganizer {
   undergroundStrength?: number;
   /** Illicit unions under ban: turn this organizer last ran an underground drive (one drive per character per turn). */
   lastUndergroundDriveTurn?: number | null;
+  /** Turn through which prosecution bars this organizer from underground drives. */
+  barredUntilTurn?: number | null;
+  /** Last prosecution turn, used as the one-prosecution-per-turn claim. */
+  lastProsecutedTurn?: number | null;
+  /** Unique claim for distinguishing a lost acknowledgment from a competing prosecution. */
+  lastProsecutionId?: string | null;
   createdAt: Date;
   updatedAt: Date;
 }

@@ -22,7 +22,9 @@ export interface TradeEmbargo {
   mode: "block" | "cap";
   /** Cap in commodity units when mode === "cap". */
   cap?: number;
-  origin: "minister" | "legislation" | "organization";
+  origin: "minister" | "legislation" | "organization" | "crisis";
+  sourceCrisisId?: ObjectId;
+  sourceOutcomeId?: string;
   /** Turn the embargo lifts; undefined = durable (until repealed). */
   expiresTurn?: number;
   createdTurn: number;

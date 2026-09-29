@@ -1115,6 +1115,130 @@ describe("resolveOneGeneralElection", () => {
     expect(officials.find((official) => official.party === "2")?.seatsHeld).toBe(90);
   });
 
+  it.each([
+    {
+      governmentType: "onePartyState",
+      rulingVotes: 90_000,
+      challengerVotes: 10_000,
+      seats: [83, 17],
+    },
+    {
+      governmentType: "onePartyState",
+      rulingVotes: 10_000,
+      challengerVotes: 90_000,
+      seats: [83, 17],
+    },
+    {
+      governmentType: "parliamentaryRepublic",
+      rulingVotes: 90_000,
+      challengerVotes: 10_000,
+      seats: [90, 10],
+    },
+    {
+      governmentType: "parliamentaryRepublic",
+      rulingVotes: 10_000,
+      challengerVotes: 90_000,
+      seats: [10, 90],
+    },
+  ])(
+    "records DD $governmentType seats and player/NPP offices after a $rulingVotes/$challengerVotes vote",
+    async ({ governmentType, rulingVotes, challengerVotes, seats }) => {
+      const election = makeElection({
+        countryId: "DD",
+        electionType: "volkskammerDeputy",
+        state: "BEO",
+        totalSeats: 100,
+      });
+      const rulingNppId = new ObjectId();
+      const challengerCharacterId = new ObjectId();
+      const ruling = makeCandidate(election._id, {
+        isNPP: true,
+        nppId: rulingNppId,
+        party: "1",
+        characterName: "Ruling NPP",
+      });
+      const challenger = makeCandidate(election._id, {
+        characterId: challengerCharacterId,
+        party: "2",
+        characterName: "Player Challenger",
+      });
+      const tally = makeTally(election._id, {
+        [ruling._id.toString()]: rulingVotes,
+        [challenger._id.toString()]: challengerVotes,
+      });
+      db.collectionMocks.electionCandidates!.find.mockReturnValue(makeCursor([ruling, challenger]));
+      db.collectionMocks.npps!.find.mockReturnValue(
+        makeCursor([{ _id: rulingNppId, currentOffice: null }])
+      );
+      db.collectionMocks.characters!.find.mockReturnValue(
+        makeCursor([{ _id: challengerCharacterId, userId: new ObjectId(), currentOffice: null }])
+      );
+      db.collection("countryState");
+      db.collectionMocks.countryState!.findOne.mockResolvedValue({
+        _id: "DD",
+        governmentType,
+        rulingPartyId: "1",
+        opsVoteMultipliers: null,
+        hasLeaderConfidenceModel: false,
+      });
+
+      const { resolveOneGeneralElection } = await import("./generalResolution");
+      const result = await resolveOneGeneralElection(
+        db as unknown as Db,
+        election,
+        tally,
+        CURRENT_TURN,
+        NOW
+      );
+      expect(result.resolved).toBe(true);
+      expect(db.collectionMocks.electedOfficials!.deleteMany).toHaveBeenCalledWith(
+        expect.objectContaining({ officeType: "volkskammerDeputy", state: "BEO" })
+      );
+      const officialRows = db.collectionMocks.electedOfficials!.insertOne.mock.calls.map(
+        (call) =>
+          call[0] as { party: string; seatsHeld: number; characterId?: ObjectId; nppId?: ObjectId }
+      );
+      expect(officialRows).toHaveLength(2);
+      expect(officialRows.map((row) => row.seatsHeld).sort((a, b) => b - a)).toEqual(
+        [...seats].sort((a, b) => b - a)
+      );
+      expect(officialRows.find((row) => row.party === "1")).toMatchObject({
+        seatsHeld: seats[0],
+        nppId: rulingNppId,
+      });
+      expect(officialRows.find((row) => row.party === "2")).toMatchObject({
+        seatsHeld: seats[1],
+        characterId: challengerCharacterId,
+      });
+      expect(db.collectionMocks.npps!.updateOne).toHaveBeenCalledWith(
+        { _id: rulingNppId },
+        expect.objectContaining({
+          $set: expect.objectContaining({
+            currentOffice: expect.objectContaining({
+              type: "volkskammerDeputy",
+              seatsHeld: seats[0],
+            }),
+          }),
+        })
+      );
+      expect(db.collectionMocks.characters!.updateOne).toHaveBeenCalledWith(
+        { _id: challengerCharacterId },
+        expect.objectContaining({
+          $set: expect.objectContaining({
+            currentOffice: expect.objectContaining({
+              type: "volkskammerDeputy",
+              seatsHeld: seats[1],
+            }),
+          }),
+        })
+      );
+      expect(db.collectionMocks.elections!.updateOne).toHaveBeenCalledWith(
+        { _id: election._id },
+        expect.objectContaining({ $set: expect.objectContaining({ status: "resolved" }) })
+      );
+    }
+  );
+
   // ── President: delegates to resolvePresidentElection ────────────────────
 
   it("president election delegates to resolvePresidentElection and marks election resolved", async () => {
