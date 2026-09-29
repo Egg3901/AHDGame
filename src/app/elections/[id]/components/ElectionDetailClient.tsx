@@ -28,6 +28,7 @@ import type { ElectionResultsResponse } from "@/lib/elections/liveResults/types"
 import { BLEND } from "@/components/blend/tokens";
 import { BlendScope } from "@/components/blend/BlendScope";
 import { buildWithdrawalConfirmMessage } from "@/lib/elections/withdrawalWarning";
+import { huDistrictIds } from "@/lib/countries/hu/rules/constituencies2014";
 
 interface ElectionDetailClientProps {
   id: string;
@@ -207,10 +208,35 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
 
   const handleEnter = async () => {
     if (!election) return;
+    let constituencyId: string | undefined;
+    if (
+      election.countryId === "HU" &&
+      (election.electionType as string) === "nationalAssembly" &&
+      cycleCtx.preset === "1991-default" &&
+      (election.electionYear ?? 0) >= 2014
+    ) {
+      const districts = huDistrictIds(election.state);
+      const answer = window.prompt(`Choose your constituency number (1-${districts.length}).`);
+      if (answer === null) return;
+      const number = Number(answer.trim());
+      if (!Number.isInteger(number) || number < 1 || number > districts.length) {
+        showToast("Choose a valid constituency number in this region.", "error");
+        return;
+      }
+      constituencyId = districts[number - 1];
+    }
     if (!confirm("Enter this race? This will register your character as a candidate.")) return;
     setActionLoading(true);
     try {
-      const res = await fetch(`/api/elections/${id}/enter`, { method: "POST" });
+      const res = await fetch(`/api/elections/${id}/enter`, {
+        method: "POST",
+        ...(constituencyId
+          ? {
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ constituencyId }),
+            }
+          : {}),
+      });
       const data = await res.json();
       if (res.ok) {
         showToast(data.message ?? "Entered race", "success");

@@ -6,7 +6,7 @@ import { recordAudit } from "@/lib/audit/recordAudit";
 import { checkRateLimit, ELECTION_LIMITS, rateLimitResponse } from "@/lib/api/rateLimit";
 import { logRequest } from "@/lib/api/requestLog";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
-import type { Character, ElectionCandidate, PoliticalParty } from "@/lib/db/types";
+import type { Character, ElectionCandidate, PoliticalParty, GameState } from "@/lib/db/types";
 import {
   canFieldExecutiveCandidate,
   canFieldLegislativeCandidate,
@@ -26,6 +26,7 @@ import {
   isNationwideDirectExecutiveElection,
 } from "@/lib/elections/nationwideExecutive";
 import { isActiveElectionCandidateDuplicateKey } from "@/lib/elections/duplicateKey";
+import { isHuDistrictInRegion } from "@/lib/countries/hu/rules/constituencies2014";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -218,6 +219,30 @@ export async function POST(request: Request, { params }: RouteParams) {
       );
     }
 
+    let huConstituencyId: string | undefined;
+    if (
+      electionCountry === "HU" &&
+      election.electionType === "nationalAssembly" &&
+      (election.electionYear ?? 0) >= 2014
+    ) {
+      const gameState = await db
+        .collection<GameState>("gameState")
+        .findOne({ _id: "current" }, { projection: { preset: 1 } });
+      if (gameState?.preset === "1991-default") {
+        const body = await request.json().catch(() => null);
+        const selected =
+          body && typeof body === "object" && "constituencyId" in body ? body.constituencyId : null;
+        if (typeof selected !== "string" || !isHuDistrictInRegion(selected, election.state)) {
+          logRequest("POST", path, 400, Date.now() - start);
+          return NextResponse.json(
+            { error: "Choose a Hungarian constituency in your home region." },
+            { status: 400 }
+          );
+        }
+        huConstituencyId = selected;
+      }
+    }
+
     // A seated Senator may only run for re-election to the exact Senate class
     // they currently hold. They cannot abandon their class mid-term to contest
     // a different Senate seat (e.g. a Class II Senator filing for Class I or
@@ -340,6 +365,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       characterId: character._id,
       characterName: character.name,
       party: character.party,
+      ...(huConstituencyId ? { constituencyId: huConstituencyId } : {}),
       status: "active",
       support: DEFAULT_CANDIDATE_SUPPORT,
       enteredAt: now,

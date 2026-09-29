@@ -31,6 +31,10 @@ export interface ElectionVoteTally {
   electionId: ObjectId;
   state: string;
   totalVotes: Record<string, number>;
+  /** HU post-2014: districtId -> candidateId -> constituency ballots. */
+  huConstituencyVotes?: Record<string, Record<string, number>>;
+  /** HU post-2014: partyId -> separate national-list ballots. */
+  huListVotes?: Record<string, number>;
   candidateNames: Record<string, string>;
   candidateParties: Record<string, string>;
   turnSnapshots: VoteTurnSnapshot[];
