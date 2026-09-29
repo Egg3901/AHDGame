@@ -13,6 +13,7 @@ export interface HuRaceVotes {
   candidates: ReadonlyArray<{ candidateId: string; partyId: string; votes: number }>;
   constituencyVotes?: Record<string, Record<string, number>>;
   listVotes?: Record<string, number>;
+  districtSlate?: Record<string, Record<string, string>>;
 }
 
 export interface HuMixedPlan {
@@ -83,6 +84,9 @@ export function buildHuMixedPlan(
     if (literal && districts.some((district) => !race.constituencyVotes?.[district])) {
       throw new Error(`Hungary mixed election has missing constituency ballot in ${region.id}`);
     }
+    if (race.districtSlate && districts.some((district) => !race.districtSlate?.[district])) {
+      throw new Error(`Hungary mixed election has missing district slate in ${region.id}`);
+    }
     const candidateDistrictVotes: Record<string, Record<string, number>> = {};
     for (const candidate of race.candidates) {
       if (
@@ -127,6 +131,27 @@ export function buildHuMixedPlan(
       }
     }
     for (const districtId of districts) {
+      if (race.districtSlate) {
+        for (const [partyId, candidateId] of Object.entries(race.districtSlate[districtId])) {
+          const nominee = race.candidates.find(
+            (candidate) => candidate.candidateId === candidateId
+          );
+          if (!nominee || nominee.partyId !== partyId) {
+            throw new Error("Hungary district slate has invalid nominee");
+          }
+        }
+        for (const [candidateId, votes] of Object.entries(
+          race.constituencyVotes?.[districtId] ?? {}
+        )) {
+          if (votes <= 0) continue;
+          const nominee = race.candidates.find(
+            (candidate) => candidate.candidateId === candidateId
+          );
+          if (!nominee || race.districtSlate[districtId][nominee.partyId] !== candidateId) {
+            throw new Error("Hungary district ballot differs from filed slate");
+          }
+        }
+      }
       const votesByParty: Record<string, number> = {};
       for (const candidate of race.candidates) {
         const partyId = ballotParty(candidate);

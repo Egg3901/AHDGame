@@ -44,6 +44,7 @@ import {
 import { getFundsByPartyForElection } from "./fundsByParty";
 import { TALLY_WITH_SNAPSHOT_TURNS_ONLY } from "./tallyProjections";
 import { accumulateHuBallots } from "@/lib/countries/hu/rules/accumulateBallots2014";
+import { allocateHuListTurnVotes } from "@/lib/countries/hu/rules/listBallots2014";
 import {
   isHeadOfGovernmentRace,
   resolvePresidentApproval,
@@ -735,18 +736,30 @@ export async function accumulateVoteTurn(
           stateId,
           enriched.map((ec) => {
             const filing = candidates.find((c) => c._id.toString() === ec.candidateId);
-            const organization = partyOrgByParty.get(ec.party) ?? 50;
             return {
               candidateId: ec.candidateId,
               partyId: ec.party,
               constituencyId: filing?.constituencyId,
+              isNPP: filing?.isNPP,
               votes: Math.max(
                 0,
                 newTotals[ec.candidateId] - (tally.totalVotes[ec.candidateId] ?? 0)
               ),
-              listAppeal: 0.9 + Math.min(100, Math.max(0, organization)) / 500,
             };
           }),
+          allocateHuListTurnVotes(
+            Math.round(effEffectiveTurnPool),
+            [...new Set(enriched.map((ec) => ec.party))]
+              .filter((partyId) => partyId !== "independent")
+              .map((partyId) => {
+                const org = statePartyOrgs.find((row) => row.partyId === partyId);
+                return {
+                  partyId,
+                  registration: org?.registration,
+                  organization: org?.organization,
+                };
+              })
+          ),
           tally.huConstituencyVotes,
           tally.huListVotes
         )
@@ -860,6 +873,7 @@ export async function accumulateVoteTurn(
           ? {
               huConstituencyVotes: huBallots.constituencyVotes,
               huListVotes: huBallots.listVotes,
+              huDistrictSlate: huBallots.districtSlate,
             }
           : {}),
         candidateNames: cleanedNames,
