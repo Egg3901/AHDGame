@@ -211,7 +211,7 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
     let constituencyId: string | undefined;
     if (
       election.countryId === "HU" &&
-      election.electionType === "nationalAssembly" &&
+      (election.electionType as string) === "nationalAssembly" &&
       cycleCtx.preset === "1991-default" &&
       (election.electionYear ?? 0) >= 2014
     ) {
