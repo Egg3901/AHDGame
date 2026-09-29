@@ -8,7 +8,7 @@ import {
 
 const terms: SuccessionFinancialTerms = {
   settlementId: "cs-negotiation-1",
-  servicingIssuerId: "CS",
+  sourceEntityId: "CS",
   participants: [
     { entityId: "CZ2", population: 10_000_000 },
     { entityId: "SK", population: 5_000_000 },
@@ -27,9 +27,17 @@ describe("negotiated succession finances", () => {
     expect(plan.creditorDebtMinor).toBe(1000);
     expect(plan.assetBasis).toBe("population");
   });
-  it("keeps a continuing successor as its own issuer", () => {
-    const plan = planSuccessionFinances({ ...terms, servicingIssuerId: "CZ2" });
+  it("keeps a continuing parent as its own issuer", () => {
+    const plan = planSuccessionFinances({
+      ...terms,
+      sourceEntityId: "RU",
+      participants: [
+        { entityId: "RU", population: 10_000_000 },
+        { entityId: "UKR", population: 5_000_000 },
+      ],
+    });
     expect(plan.servicingEntityKind).toBe("continuing-state");
+    expect(plan.servicingIssuerId).toBe("RU");
   });
   it("allows different negotiated asset and debt shares including a zero share", () => {
     const plan = planSuccessionFinances({

@@ -23,7 +23,7 @@ function proposal(): FederationSettlementInput {
       { regionId: "CS_C", population: 10, annualGdpAnchor: 10 },
     ],
     assignments: { CS_A: "CZ2", CS_B: "CZ2", CS_C: "SK" },
-    finances: { servicingIssuerId: "CS", financialAssetsMinor: 100, creditorDebtMinor: 200 },
+    finances: { sourceEntityId: "CS", financialAssetsMinor: 100, creditorDebtMinor: 200 },
   };
 }
 
