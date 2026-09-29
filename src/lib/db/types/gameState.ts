@@ -473,6 +473,18 @@ export interface GameState {
   legislationDemographicEffectsV2Enabled?: boolean;
   legislationDemographicEffectsV2EnabledBy?: string;
   legislationDemographicEffectsV2EnabledAt?: string;
+  /** Reset-era metrics engine. Absent and invalid values run the live v1 path. */
+  metricsSystemVersion?: "v1" | "v2";
+  metricsSystemVersionBy?: string;
+  metricsSystemVersionAt?: string;
+  /** Reset-era legislation catalog and proposal flow, including its modal. */
+  legislationSystemVersion?: "v1" | "v2";
+  legislationSystemVersionBy?: string;
+  legislationSystemVersionAt?: string;
+  /** Reset-era Cabinet portfolios, treasury, and ministerial actions. */
+  cabinetSystemVersion?: "v1" | "v2";
+  cabinetSystemVersionBy?: string;
+  cabinetSystemVersionAt?: string;
   /**
    * Master gate for the new-player onboarding checklist (profile checklist
    * card, page-visit step tracking, welcome mail, completion reward). When

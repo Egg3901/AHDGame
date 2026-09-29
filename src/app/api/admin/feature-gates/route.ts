@@ -15,6 +15,14 @@ import {
   foreignPolicyModeFrom,
   foreignPolicyStageFrom,
 } from "@/lib/nppAutonomy/foreignPolicyRollout";
+import { RESET_V2_READY } from "@/lib/resetVersions/availability";
+import {
+  RESET_SYSTEMS,
+  RESET_SYSTEM_VERSION_FIELDS,
+  resetSystemVersionsFrom,
+  type ResetSystem,
+  type ResetSystemVersion,
+} from "@/lib/resetVersions/rules";
 
 /**
  * Unified admin control surface for the game's feature gates. Reads/writes the
@@ -72,6 +80,8 @@ type FeatureGateBooleanKey = (typeof FEATURE_GATE_BOOLEAN_KEYS)[number];
  */
 export const FEATURE_GATE_DEFAULT_ON: ReadonlySet<string> = new Set(["nppCorpStrategyEnabled"]);
 
+export const FEATURE_GATE_VERSION_SYSTEMS = RESET_SYSTEMS;
+
 const bodySchema = z.discriminatedUnion("kind", [
   z.object({
     kind: z.literal("boolean"),
@@ -94,6 +104,11 @@ const bodySchema = z.discriminatedUnion("kind", [
     kind: z.literal("npp-entry-viability-mode"),
     value: z.enum(["off", "observe", "enforce"]),
   }),
+  z.object({
+    kind: z.literal("reset-system-version"),
+    system: z.enum(RESET_SYSTEMS),
+    value: z.enum(["v1", "v2"]),
+  }),
 ]);
 
 interface FeatureGatesState {
@@ -102,6 +117,8 @@ interface FeatureGatesState {
   nppForeignPolicyMode: NppForeignPolicyMode;
   nppForeignPolicyStage: NppForeignPolicyStage;
   nppEntryViabilityMode: NppEntryViabilityMode;
+  resetSystemVersions: Record<ResetSystem, ResetSystemVersion>;
+  resetV2Ready: Readonly<Record<ResetSystem, boolean>>;
 }
 
 async function readState(): Promise<FeatureGatesState> {
@@ -134,6 +151,8 @@ async function readState(): Promise<FeatureGatesState> {
     nppForeignPolicyMode,
     nppForeignPolicyStage,
     nppEntryViabilityMode,
+    resetSystemVersions: resetSystemVersionsFrom(doc, RESET_V2_READY),
+    resetV2Ready: RESET_V2_READY,
   };
 }
 
@@ -157,6 +176,19 @@ export async function POST(request: Request) {
     const parsed = await parseJsonBody(request, bodySchema);
     if (!parsed.success) {
       return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+    }
+
+    if (
+      parsed.data.kind === "reset-system-version" &&
+      parsed.data.value === "v2" &&
+      !RESET_V2_READY[parsed.data.system]
+    ) {
+      return NextResponse.json(
+        {
+          error: `${parsed.data.system} v2 is not available until its complete runtime path ships.`,
+        },
+        { status: 409 }
+      );
     }
 
     const db = await getDb();
@@ -197,11 +229,16 @@ export async function POST(request: Request) {
       set.nppForeignPolicyStage = stage;
       set.nppForeignPolicyStageBy = auth.admin.username;
       set.nppForeignPolicyStageAt = nowIso;
-    } else {
+    } else if (parsed.data.kind === "npp-entry-viability-mode") {
       const mode = parsed.data.value as NppEntryViabilityMode;
       set.nppEntryViabilityMode = mode;
       set.nppEntryViabilityModeBy = auth.admin.username;
       set.nppEntryViabilityModeAt = nowIso;
+    } else {
+      const key = RESET_SYSTEM_VERSION_FIELDS[parsed.data.system];
+      set[key] = parsed.data.value;
+      set[`${key}By`] = auth.admin.username;
+      set[`${key}At`] = nowIso;
     }
 
     const update: Record<string, unknown> = { $set: set };

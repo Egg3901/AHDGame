@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { FEATURE_GATE_BOOLEAN_KEYS } from "@/app/api/admin/feature-gates/route";
-import { BOOLEAN_GATES } from "./FeatureGatesPanel";
+import {
+  FEATURE_GATE_BOOLEAN_KEYS,
+  FEATURE_GATE_VERSION_SYSTEMS,
+} from "@/app/api/admin/feature-gates/route";
+import { BOOLEAN_GATES, VERSION_GATES } from "./FeatureGatesPanel";
 
 /**
  * The admin panel keeps its own list of boolean gates, because each one needs a
@@ -34,5 +37,15 @@ describe("feature gate parity", () => {
     expect(new Set(FEATURE_GATE_BOOLEAN_KEYS).size).toBe(FEATURE_GATE_BOOLEAN_KEYS.length);
     const panelKeys = BOOLEAN_GATES.map((g) => g.key);
     expect(new Set(panelKeys).size).toBe(panelKeys.length);
+  });
+
+  it("shows every versioned reset system with an explanation", () => {
+    expect(VERSION_GATES.map((gate) => gate.system).sort()).toEqual(
+      [...FEATURE_GATE_VERSION_SYSTEMS].sort()
+    );
+    for (const gate of VERSION_GATES) {
+      expect(gate.label.trim()).not.toBe("");
+      expect(gate.desc.trim()).not.toBe("");
+    }
   });
 });

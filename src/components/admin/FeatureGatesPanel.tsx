@@ -3,11 +3,30 @@
 import { useCallback, useEffect, useState } from "react";
 import { DEFAULT_GAME_STATE_FLAGS } from "@/lib/seeds/reference/featureFlagDefaults";
 import { gameConfig as gameConfigDefaults } from "@/lib/seeds/reference/gameConfig";
+import type { ResetSystem, ResetSystemVersion } from "@/lib/resetVersions/rules";
 
 type NppAutonomyLevel = "off" | "v0" | "v1" | "v2" | "v3" | "v4" | "v5";
 type NppForeignPolicyMode = "off" | "shadow" | "active";
 type NppForeignPolicyStage = "votes" | "proposals" | "trade" | "support" | "war";
 type NppEntryViabilityMode = "off" | "observe" | "enforce";
+
+export const VERSION_GATES: { system: ResetSystem; label: string; desc: string }[] = [
+  {
+    system: "metrics",
+    label: "Metrics",
+    desc: "v1 keeps the live metric calculations and displays. v2 will use the reset-era metric model.",
+  },
+  {
+    system: "legislation",
+    label: "Legislation",
+    desc: "v1 keeps the live law catalog and proposal modal. v2 will switch both the laws and the Guided Path proposal modal together.",
+  },
+  {
+    system: "cabinet",
+    label: "Cabinet",
+    desc: "v1 keeps the live Cabinet behavior. v2 will switch to portfolios, departmental funding, and revised ministerial actions.",
+  },
+];
 
 interface BooleanGate {
   key: string;
@@ -351,6 +370,8 @@ interface GatesState {
   nppForeignPolicyMode: NppForeignPolicyMode;
   nppForeignPolicyStage: NppForeignPolicyStage;
   nppEntryViabilityMode: NppEntryViabilityMode;
+  resetSystemVersions: Record<ResetSystem, ResetSystemVersion>;
+  resetV2Ready: Record<ResetSystem, boolean>;
 }
 
 function DefaultBadge() {
@@ -436,7 +457,9 @@ export function FeatureGatesPanel() {
         data.nppAutonomyLevel &&
         data.nppForeignPolicyMode &&
         data.nppForeignPolicyStage &&
-        data.nppEntryViabilityMode
+        data.nppEntryViabilityMode &&
+        data.resetSystemVersions &&
+        data.resetV2Ready
       ) {
         setState({
           booleans: data.booleans,
@@ -444,6 +467,8 @@ export function FeatureGatesPanel() {
           nppForeignPolicyMode: data.nppForeignPolicyMode,
           nppForeignPolicyStage: data.nppForeignPolicyStage,
           nppEntryViabilityMode: data.nppEntryViabilityMode,
+          resetSystemVersions: data.resetSystemVersions,
+          resetV2Ready: data.resetV2Ready,
         });
       }
     } catch {
@@ -543,6 +568,59 @@ export function FeatureGatesPanel() {
           {error}
         </p>
       ) : null}
+
+      <div className="mb-5 space-y-3" aria-label="Reset-era system versions">
+        {VERSION_GATES.map((gate) => {
+          const version = state.resetSystemVersions[gate.system];
+          const v2Ready = state.resetV2Ready[gate.system];
+          return (
+            <div
+              key={gate.system}
+              className="rounded-lg border border-card-border bg-background/40 p-4"
+            >
+              <div className="mb-1 flex items-center justify-between gap-2">
+                <span className="text-sm font-semibold">{gate.label}</span>
+                <span className="text-[10px] uppercase tracking-wider text-muted">
+                  {version === "v1" ? "v1 live" : "v2 reset"}
+                </span>
+              </div>
+              <p className="mb-3 text-xs text-muted">{gate.desc}</p>
+              <div className="inline-flex gap-1 rounded-lg border border-card-border bg-card p-1">
+                {(["v1", "v2"] as const).map((choice) => (
+                  <button
+                    key={choice}
+                    type="button"
+                    disabled={savingKey === gate.system || (choice === "v2" && !v2Ready)}
+                    title={
+                      choice === "v2" && !v2Ready
+                        ? "Available after the complete v2 runtime path is released"
+                        : undefined
+                    }
+                    onClick={() =>
+                      void post(
+                        { kind: "reset-system-version", system: gate.system, value: choice },
+                        gate.system
+                      )
+                    }
+                    className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-50 ${
+                      version === choice
+                        ? "bg-primary text-white"
+                        : "text-muted hover:bg-background hover:text-foreground"
+                    }`}
+                  >
+                    {choice}
+                  </button>
+                ))}
+              </div>
+              {!v2Ready ? (
+                <p className="mt-2 text-[11px] text-muted">
+                  v2 is staged and cannot be enabled until this system is fully wired and verified.
+                </p>
+              ) : null}
+            </div>
+          );
+        })}
+      </div>
 
       {/* NPP autonomy level selector */}
       <div className="mb-5 rounded-lg border border-card-border bg-background/40 p-4">
