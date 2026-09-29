@@ -3,6 +3,7 @@ import { ObjectId } from "mongodb";
 import {
   buildChamberSeatMap,
   buildOverrideDisplay,
+  didVetoOverridePass,
   tallyOverrideByChamber,
 } from "./vetoOverrideTally";
 
@@ -90,5 +91,38 @@ describe("buildOverrideDisplay", () => {
       house: { for: 290, against: 0, seats: 435 },
       senate: { for: 0, against: 40, seats: 100 },
     });
+  });
+});
+
+describe("didVetoOverridePass", () => {
+  it("requires two-thirds of the seats in both chambers", () => {
+    expect(
+      didVetoOverridePass(
+        { houseFor: 290, houseAgainst: 145, senateFor: 67, senateAgainst: 33 },
+        { houseSeats: 435, senateSeats: 100, seatMap: new Map() }
+      )
+    ).toBe(true);
+    expect(
+      didVetoOverridePass(
+        { houseFor: 289, houseAgainst: 146, senateFor: 67, senateAgainst: 33 },
+        { houseSeats: 435, senateSeats: 100, seatMap: new Map() }
+      )
+    ).toBe(false);
+  });
+
+  it("fails closed when a required chamber has no recognized seats", () => {
+    expect(
+      didVetoOverridePass(
+        { houseFor: 0, houseAgainst: 0, senateFor: 67, senateAgainst: 33 },
+        { houseSeats: 0, senateSeats: 100, seatMap: new Map() }
+      )
+    ).toBe(false);
+    expect(
+      didVetoOverridePass(
+        { houseFor: 290, houseAgainst: 145, senateFor: 67, senateAgainst: 33 },
+        { houseSeats: 435, senateSeats: 100, seatMap: new Map() },
+        []
+      )
+    ).toBe(false);
   });
 });

@@ -44,6 +44,7 @@ import { getGameTime } from "@/lib/time/gameTime";
 import { isLeadershipElectionClosed } from "@/lib/congress/leadershipElections";
 import { impeachmentStageChamberKey } from "@/lib/impeachment/impeachmentTally";
 import type { Impeachment } from "@/lib/db/types/impeachment";
+import { getBillWhipWindowStart } from "@/lib/congress/billWhipPhase";
 import type {
   Bill,
   BillWhip,
@@ -330,6 +331,7 @@ export async function POST(request: Request, { params }: RouteParams) {
           status: 404,
         });
       }
+      whipWindowStart = getBillWhipWindowStart(bill);
       billStateId = bill.stateId;
     } else if (targetType === "speakerElection") {
       const speakerElection = isUSCongressLeadershipTarget

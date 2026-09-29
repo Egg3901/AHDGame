@@ -95,24 +95,16 @@ describe("GET /api/congress/bills", () => {
     // put this test *below* it — the only one in the file that could time out.
   });
 
-  it("filters chamber tabs by currentChamber, plus concurrent bills, so passed bills move to the next chamber list", async () => {
+  it("includes concurrent and veto override bills in both chamber tabs and prioritizes overrides", async () => {
     const { getDb } = await import("@/lib/mongodb");
-    const billsFindResult = {
-      toArray: vi.fn().mockResolvedValue([]),
-      project: vi.fn().mockReturnThis(),
-      sort: vi.fn().mockReturnValue({
-        skip: vi.fn().mockReturnValue({
-          limit: vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue([]) }),
-        }),
-      }),
-    };
-    const billsFind = vi.fn().mockReturnValue(billsFindResult);
+    const billsAggregate = vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue([]) });
 
     vi.mocked(getDb).mockResolvedValue({
       collection: vi.fn().mockImplementation((name: string) => {
         if (name === "bills") {
           return {
-            find: billsFind,
+            find: vi.fn().mockReturnValue(mockEmptyCollection().find()),
+            aggregate: billsAggregate,
             countDocuments: vi.fn().mockResolvedValue(0),
             findOne: vi.fn().mockResolvedValue(null),
           };
@@ -126,15 +118,19 @@ describe("GET /api/congress/bills", () => {
     const res = await GET(req);
 
     expect(res.status).toBe(200);
-    // Follows currentChamber — plus concurrent bills, which sit on both floors at
-    // once and carry the LOWER chamber in that field, so filtering on it alone
-    // would hide them from the Senate tab entirely.
-    expect(billsFind).toHaveBeenCalledWith(
-      expect.objectContaining({
-        $or: expect.arrayContaining([{ currentChamber: "senate" }, { status: "active_both" }]),
-      })
-    );
-    expect(billsFind).not.toHaveBeenCalledWith(
+    const pipeline = billsAggregate.mock.calls[0]![0];
+    expect(pipeline[0]).toEqual({
+      $match: expect.objectContaining({
+        $or: expect.arrayContaining([
+          { currentChamber: "senate" },
+          { status: { $in: ["active_both", "veto_override"] } },
+        ]),
+      }),
+    });
+    expect(pipeline).toContainEqual({
+      $sort: { __overridePriority: -1, __phaseStartedAt: -1, proposedAt: -1 },
+    });
+    expect(pipeline[0].$match).not.toEqual(
       expect.objectContaining({ originChamber: expect.anything() })
     );
   });

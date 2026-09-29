@@ -37,6 +37,27 @@ export interface OverrideChamberDisplay {
 }
 
 /**
+ * Resolve the two-thirds-of-seats rule for every required chamber. A missing
+ * or empty chamber fails closed instead of producing a zero threshold that
+ * would pass without a vote.
+ */
+export function didVetoOverridePass(
+  tally: OverrideChamberTally,
+  seatData: ChamberSeatMap,
+  requiredChambers: readonly string[] = ["house", "senate"]
+): boolean {
+  return (
+    requiredChambers.length > 0 &&
+    requiredChambers.every((chamber) => {
+      if (chamber !== "house" && chamber !== "senate") return false;
+      const seats = chamber === "house" ? seatData.houseSeats : seatData.senateSeats;
+      const votesFor = chamber === "house" ? tally.houseFor : tally.senateFor;
+      return seats > 0 && votesFor >= Math.ceil((2 / 3) * seats);
+    })
+  );
+}
+
+/**
  * Build the per-chamber seat totals and a voter→seat map from a list of house/senate
  * officials. Non-legislative office types are ignored. Votes are keyed by player
  * characterId or `npp_<nppId>`, so both keys are indexed.

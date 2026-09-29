@@ -18,6 +18,8 @@ interface BillVoteIndicatorProps {
   stateOverrideVoteUrl?: string;
   /** Raw state bill status from API — selects override vs chamber vote URL */
   rawStateBillStatus?: string;
+  /** National presidential-veto ballot: no abstention, POST the override action. */
+  nationalOverrideVote?: boolean;
   /** What Aye and Nay would do to the viewer's positions; shown above the buttons. */
   shiftPreview?: VoteShiftPreviewData | null;
 }
@@ -31,6 +33,7 @@ export function BillVoteIndicator({
   stateVoteUrl,
   stateOverrideVoteUrl,
   rawStateBillStatus,
+  nationalOverrideVote = false,
   shiftPreview,
 }: BillVoteIndicatorProps) {
   const [voting, setVoting] = useState(false);
@@ -50,7 +53,12 @@ export function BillVoteIndicator({
           : isState && stateVoteUrl
             ? stateVoteUrl
             : `/api/congress/bills/${billId}`;
-      const body = isState ? JSON.stringify({ vote }) : JSON.stringify({ action: "vote", vote });
+      const body = isState
+        ? JSON.stringify({ vote })
+        : JSON.stringify({
+            action: nationalOverrideVote ? "veto_override_vote" : "vote",
+            vote,
+          });
       const res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -90,7 +98,7 @@ export function BillVoteIndicator({
         {indicator}
         {canVote && (
           <div className="flex gap-1 shrink-0">
-            {(omitAbstain
+            {(omitAbstain || nationalOverrideVote
               ? (["for", "against"] as const)
               : (["for", "against", "abstain"] as const)
             ).map((voteOption) => (
@@ -116,7 +124,15 @@ export function BillVoteIndicator({
                         : "border-card-border text-muted hover:bg-muted/10"
                 }`}
               >
-                {voteOption === "for" ? "Aye" : voteOption === "against" ? "Nay" : "Abstain"}
+                {nationalOverrideVote
+                  ? voteOption === "for"
+                    ? "Override"
+                    : "Sustain"
+                  : voteOption === "for"
+                    ? "Aye"
+                    : voteOption === "against"
+                      ? "Nay"
+                      : "Abstain"}
               </button>
             ))}
           </div>
