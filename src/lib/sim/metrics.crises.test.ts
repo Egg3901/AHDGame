@@ -94,10 +94,12 @@ it("counts only living-crisis decisions while retaining the overall disaster tot
       { _id: disasterId, status: "active" },
     ]),
   });
-  db.collection("crisisInteractions").countDocuments.mockImplementation(async (query) => {
-    expect(query.crisisId.$in).toEqual([livingId]);
-    return query.resolvedAt === null ? 1 : 0;
-  });
+  db.collection("crisisInteractions").countDocuments.mockImplementation(
+    async (query: { crisisId: { $in: ObjectId[] }; resolvedAt: unknown }) => {
+      expect(query.crisisId.$in).toEqual([livingId]);
+      return query.resolvedAt === null ? 1 : 0;
+    }
+  );
   const metrics = await collectCrisisMetrics(db as unknown as Db);
   expect(metrics).toMatchObject({
     totalSpawned: 2,

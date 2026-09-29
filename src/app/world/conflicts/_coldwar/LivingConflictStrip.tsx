@@ -1,10 +1,10 @@
 import Link from "next/link";
-import { getTranslations } from "next-intl/server";
+import { useTranslations } from "next-intl";
 import type { LivingConflictView } from "@/lib/livingConflict/rules/publicView";
 
-export async function LivingConflictStrip({ conflicts }: { conflicts: LivingConflictView[] }) {
+export function LivingConflictStrip({ conflicts }: { conflicts: LivingConflictView[] }) {
+  const t = useTranslations("worldConflicts.livingCrises");
   if (conflicts.length === 0) return null;
-  const t = await getTranslations("worldConflicts.livingCrises");
   return (
     <section style={{ margin: "0 auto 18px", maxWidth: 1340 }} aria-label={t("title")}>
       <div

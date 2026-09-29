@@ -1,4 +1,5 @@
 ---
+date: "2026-09-29"
 title: "Living crisis decisions and public commitments"
 badges: [patch]
 areas: [fullstack]
