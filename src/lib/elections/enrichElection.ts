@@ -1042,6 +1042,12 @@ export async function _enrichElection(
 
       const fullCandidateNames: Record<string, string> = {};
       const fullCandidateParties: Record<string, string> = {};
+      const candidateIsNPP = {
+        ...Object.fromEntries(
+          candidates.map((candidate) => [candidate._id.toString(), Boolean(candidate.isNPP)])
+        ),
+        ...resolvedTally.candidateIsNPP,
+      };
       // For an ended/finalized election, a candidate's live party can differ from
       // the party they ran under (they may have switched since). Prefer the tally
       // snapshot, then the candidacy-row (ballot) party — never the live
@@ -1088,7 +1094,8 @@ export async function _enrichElection(
               houseSeats,
               fullCandidateParties,
               election.countryId ?? "US",
-              election.allocationMethod
+              election.allocationMethod,
+              candidateIsNPP
             );
           return {
             turn: t.turn,

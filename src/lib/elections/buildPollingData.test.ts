@@ -269,6 +269,40 @@ describe("computeSeatEstimates — parity with allocateSeats (ticket #1032)", ()
       computeSeatEstimates("shugiin", 3, tally, new Set(Object.keys(votes)), "JP", "sntv")
     ).toEqual({ a: 1, b: 1, c: 1, d: 0 });
   });
+  it("projects bounded NPP slates with the same seats as final resolution", () => {
+    const votes = { ldp: 600, jsp: 400, player: 250 };
+    const tally = {
+      totalVotes: votes,
+      candidateParties: { ldp: "LDP", jsp: "JSP", player: "LDP" },
+      candidateIsNPP: { ldp: true, jsp: true, player: false },
+    } as never;
+    const projection = computeSeatEstimates(
+      "shugiin",
+      4,
+      tally,
+      new Set(Object.keys(votes)),
+      "JP",
+      "sntv"
+    );
+    const resolution = allocateSeats(
+      "shugiin",
+      "KAN",
+      4,
+      [
+        { id: "ldp", votes: 600, isNPP: true },
+        { id: "jsp", votes: 400, isNPP: true },
+        { id: "player", votes: 250, isNPP: false },
+      ],
+      1250,
+      undefined,
+      undefined,
+      undefined,
+      "JP",
+      "sntv"
+    ).seatsEstimate;
+    expect(projection).toEqual(resolution);
+    expect(projection).toEqual({ ldp: 2, jsp: 1, player: 1 });
+  });
   it("uses totalSeats for the House delegation-aware threshold (#2466)", () => {
     const tally = {
       totalVotes: { major: 830, minor: 170 },

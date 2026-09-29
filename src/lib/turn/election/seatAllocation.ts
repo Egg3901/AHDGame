@@ -9,6 +9,8 @@ export { getMultiSeatMinShare } from "./rules/seatEligibility";
 export interface RankedCandidate {
   id: string;
   votes: number;
+  /** NPP entries represent bounded slates; player entries represent one person. */
+  isNPP?: boolean;
   /**
    * Party identifier (optional). When present, the minimum-share eligibility
    * gate is computed on the PARTY's aggregate share — all same-party
@@ -20,18 +22,44 @@ export interface RankedCandidate {
   party?: string;
 }
 
-/** Single non-transferable vote: the top candidates each win one seat. */
+/** Rank individual ballots, expanding each NPP entry into a bounded virtual slate. */
 export function sntvSeats(
-  candidates: ReadonlyArray<Pick<RankedCandidate, "id" | "votes">>,
+  candidates: ReadonlyArray<Pick<RankedCandidate, "id" | "votes" | "isNPP">>,
   totalSeats: number
 ): Record<string, number> {
   const seats: Record<string, number> = {};
   for (const { id } of candidates) seats[id] = 0;
-  for (const { id } of candidates
-    .filter((candidate) => candidate.votes > 0)
-    .sort((a, b) => b.votes - a.votes || a.id.localeCompare(b.id))
-    .slice(0, totalSeats)) {
-    seats[id] = 1;
+  if (totalSeats <= 0) return seats;
+
+  const nppVotes = candidates.reduce((sum, c) => sum + (c.isNPP ? Math.max(0, c.votes) : 0), 0);
+  const virtualBallot: Array<{ id: string; slot: number; votes: number }> = [];
+  for (const candidate of candidates) {
+    if (candidate.votes <= 0) continue;
+    if (!candidate.isNPP) {
+      virtualBallot.push({ id: candidate.id, slot: 0, votes: candidate.votes });
+      continue;
+    }
+    // Each NPP is a slate representative, not a single MP. Nomination count
+    // follows its share of the NPP vote with 25% overcapacity so the chamber
+    // can fill while players can displace individual virtual candidates.
+    const slateSize = Math.min(
+      totalSeats,
+      Math.max(1, Math.ceil((1.25 * totalSeats * candidate.votes) / nppVotes))
+    );
+    for (let slot = 0; slot < slateSize; slot++) {
+      // A deterministic range of individual candidate strengths conserves
+      // the slate's aggregate vote and permits interleaving between parties.
+      const weight = slateSize === 1 ? 1 : 1.5 - slot / (slateSize - 1);
+      virtualBallot.push({
+        id: candidate.id,
+        slot,
+        votes: (candidate.votes * weight) / slateSize,
+      });
+    }
+  }
+  virtualBallot.sort((a, b) => b.votes - a.votes || a.id.localeCompare(b.id) || a.slot - b.slot);
+  for (const { id } of virtualBallot.slice(0, totalSeats)) {
+    seats[id]++;
   }
   return seats;
 }
@@ -216,8 +244,8 @@ export function allocateSeats(
   const seatsEstimate: Record<string, number> = {};
 
   if (isMultiSeat && allocationMethod === "sntv") {
-    // One vote per voter, one seat per candidate. Party totals and vote-share
-    // thresholds have no role in a single non-transferable vote race.
+    // Player candidates win at most one seat; NPP entries represent finite
+    // slates of virtual individuals. There is no proportional seat quota.
     Object.assign(seatsEstimate, sntvSeats(ranked, authoritativeSeats));
   } else if (isMultiSeat && blocListShares) {
     // Bloc-list chamber: the quota decides the party split outright, so none of

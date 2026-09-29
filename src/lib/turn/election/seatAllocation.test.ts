@@ -52,6 +52,47 @@ describe("1991 Japan single non-transferable vote", () => {
     );
     expect(result.seatsEstimate).toEqual({ only: 1 });
   });
+
+  it("uses bounded NPP slates while a player candidate can win only one seat", () => {
+    const ranked: RankedCandidate[] = [
+      { id: "ldp-slate", votes: 600, isNPP: true },
+      { id: "jsp-slate", votes: 400, isNPP: true },
+      { id: "player", votes: 250, isNPP: false },
+    ];
+    const result = allocateSeats(
+      "shugiin",
+      "KAN",
+      4,
+      ranked,
+      1250,
+      undefined,
+      undefined,
+      undefined,
+      "JP",
+      "sntv"
+    );
+    expect(result.seatsEstimate).toEqual({ "ldp-slate": 2, "jsp-slate": 1, player: 1 });
+  });
+
+  it("fills a large 1991 region with finite virtual NPP candidates", () => {
+    const ranked: RankedCandidate[] = [45_000, 30_000, 15_000, 7_000, 3_000].map(
+      (votes, index) => ({ id: `slate-${index}`, votes, isNPP: true })
+    );
+    const result = allocateSeats(
+      "shugiin",
+      "KAN",
+      145,
+      ranked,
+      100_000,
+      undefined,
+      undefined,
+      undefined,
+      "JP",
+      "sntv"
+    );
+    expect(Object.values(result.seatsEstimate).reduce((sum, seats) => sum + seats, 0)).toBe(145);
+    expect(result.winners).toHaveLength(5);
+  });
 });
 
 describe("allocateSeats — preset-aware house seats", () => {

@@ -738,7 +738,11 @@ export async function accumulateVoteTurn(
     if (totalVotesCast === 0) return undefined;
     if (election.allocationMethod === "sntv") {
       return sntvSeats(
-        enriched.map((ec) => ({ id: ec.candidateId, votes: newTotals[ec.candidateId] ?? 0 })),
+        enriched.map((ec) => ({
+          id: ec.candidateId,
+          votes: newTotals[ec.candidateId] ?? 0,
+          isNPP: ec.isNPP,
+        })),
         totalSeats
       );
     }
@@ -838,6 +842,13 @@ export async function accumulateVoteTurn(
         totalVotes: newTotals,
         candidateNames: cleanedNames,
         candidateParties: cleanedParties,
+        ...(election.allocationMethod === "sntv"
+          ? {
+              candidateIsNPP: Object.fromEntries(
+                enriched.map((ec) => [ec.candidateId, Boolean(ec.isNPP)])
+              ),
+            }
+          : {}),
         ...(seatsEstimate ? { seatsEstimate } : {}),
         updatedAt: now,
       },

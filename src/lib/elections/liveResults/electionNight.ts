@@ -134,13 +134,20 @@ export async function buildNationalElectionNight(
     .project<
       Pick<
         ElectionVoteTally,
-        "electionId" | "state" | "totalVotes" | "candidateParties" | "seatsEstimate" | "finalized"
+        | "electionId"
+        | "state"
+        | "totalVotes"
+        | "candidateParties"
+        | "candidateIsNPP"
+        | "seatsEstimate"
+        | "finalized"
       >
     >({
       electionId: 1,
       state: 1,
       totalVotes: 1,
       candidateParties: 1,
+      candidateIsNPP: 1,
       seatsEstimate: 1,
       finalized: 1,
     })

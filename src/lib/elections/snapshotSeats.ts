@@ -19,7 +19,8 @@ export function seatEstimateForVoteTotals(
   houseSeats: Record<string, number> = HOUSE_SEATS,
   candidateParties?: Record<string, string>,
   countryId?: string,
-  allocationMethod?: ElectionMethod
+  allocationMethod?: ElectionMethod,
+  candidateIsNPP?: Record<string, boolean>
 ): Record<string, number> | undefined {
   if (!totalSeats || totalSeats <= 1 || !MULTI_SEAT_TYPES.has(electionType)) return undefined;
 
@@ -30,6 +31,7 @@ export function seatEstimateForVoteTotals(
       // Enables party-aggregate min-share eligibility in allocateSeats;
       // omitted → legacy per-candidate threshold.
       party: candidateParties?.[id],
+      isNPP: candidateIsNPP?.[id],
     }))
     .filter((r) => r.votes > 0)
     .sort((a, b) => b.votes - a.votes);

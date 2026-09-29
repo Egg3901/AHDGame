@@ -372,7 +372,12 @@ export async function resolveOneGeneralElection(
       // `party` lets allocateSeats compute its minimum-share eligibility on the
       // PARTY aggregate share (same-party candidates pooled) instead of the
       // per-candidate share — see RankedCandidate.party.
-      .map((id) => ({ id, votes: effectiveVotes[id] ?? 0, party: candidateMap.get(id)?.party }))
+      .map((id) => ({
+        id,
+        votes: effectiveVotes[id] ?? 0,
+        party: candidateMap.get(id)?.party,
+        isNPP: candidateMap.get(id)?.isNPP,
+      }))
       .filter(({ id }) => candidateMap.has(id) && !ineligibleCandidateIds.has(id))
       .sort((a, b) => b.votes - a.votes);
 

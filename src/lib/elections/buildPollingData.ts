@@ -54,7 +54,11 @@ export function computeSeatEstimates(
 
   if (allocationMethod === "sntv") {
     return sntvSeats(
-      [...activeCandidateIdSet].map((id) => ({ id, votes: activeVotes[id] ?? 0 })),
+      [...activeCandidateIdSet].map((id) => ({
+        id,
+        votes: activeVotes[id] ?? 0,
+        isNPP: tally.candidateIsNPP?.[id],
+      })),
       totalSeats
     );
   }
