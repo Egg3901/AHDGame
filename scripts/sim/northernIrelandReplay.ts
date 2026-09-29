@@ -8,6 +8,7 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { BSON, MongoClient, ObjectId, type Db, type Document } from "mongodb";
 import { NORTHERN_IRELAND_DEF as def } from "../../src/lib/livingConflict/defs/northernIreland";
 import {
@@ -181,9 +182,10 @@ async function main() {
     const saved = await Promise.all(
       Object.entries(filters).map(
         async ([name, filter]) =>
-          [name, await source.collection(name).find(filter).toArray()] as const
+          [name, await source.collection(name).find(filter).sort({ _id: 1 }).toArray()] as const
       )
     );
+    const retainedHash = createHash("sha256").update(JSON.stringify(saved)).digest("hex");
     const nir = saved.find(([name]) => name === "states")![1].find((row) => row._id === "NIR");
     assert(nir && typeof nir.gdp === "number" && nir.gdp > 0);
     const participants = resolveConflictParticipants(def, new Set(["UK", "IE", "US"]));
@@ -641,13 +643,11 @@ async function main() {
             0
           );
           assert.equal(
-            await db
-              .collection("elections")
-              .countDocuments({
-                countryId: "UK",
-                state: "NIR",
-                status: { $in: ["active", "upcoming"] },
-              }),
+            await db.collection("elections").countDocuments({
+              countryId: "UK",
+              state: "NIR",
+              status: { $in: ["active", "upcoming"] },
+            }),
             0
           );
         }
@@ -753,6 +753,17 @@ async function main() {
       original,
       "Source remains unchanged"
     );
+    const retainedAfter = await Promise.all(
+      Object.entries(filters).map(
+        async ([name, filter]) =>
+          [name, await source.collection(name).find(filter).sort({ _id: 1 }).toArray()] as const
+      )
+    );
+    assert.equal(
+      createHash("sha256").update(JSON.stringify(retainedAfter)).digest("hex"),
+      retainedHash,
+      "Every copied source collection remains unchanged"
+    );
     const summarize = (values: number[]) => ({
       samples: values.length,
       mean: values.reduce((s, n) => s + n, 0) / values.length,
@@ -776,6 +787,7 @@ async function main() {
       scope:
         "Isolated NI subsystem continuation; retained regional economy, policy and demographic rows; synthetic actors, votes and strategies; other economy, general elections and full world phases held fixed; annual political/fiscal samples, per-turn conflict/ratification/governance/referendum phases",
       retainedRegionalGdpMillions: nir.gdp,
+      retainedCollectionsSha256: retainedHash,
       results,
       performance: Object.fromEntries(
         Object.entries(measurements).map(([name, values]) => [
