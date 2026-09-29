@@ -931,7 +931,7 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
                   }`}
                   style={{ pointerEvents: searchOpen ? "auto" : "none" }}
                 >
-                  <UniversalSearch open={searchOpen} />
+                  <UniversalSearch open={searchOpen} onNavigate={() => setSearchOpen(false)} />
                 </div>
 
                 {/* Search toggle */}
