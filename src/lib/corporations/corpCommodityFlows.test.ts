@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { computeCorpCommodityFlows } from "./corpCommodityFlows";
 import {
   COMMODITY_BASE_PRICES,
+  SECTOR_SUPPLY,
   commodityMixWeight,
   dollarsToUnits,
 } from "@/lib/constants/commodities";
@@ -208,6 +209,35 @@ describe("computeCorpCommodityFlows — plants-tier physical production (ticket 
     );
   });
 
+  it("uses the ledger's standard chemical output mix", () => {
+    const { commodities } = computeCorpCommodityFlows(
+      [
+        mkSector({
+          sectorType: "chemical_industries",
+          producedUnits: 1_000,
+          capacityUnits: 1_000,
+        }),
+      ],
+      10,
+      new Map(),
+      stateInfo,
+      new Map(),
+      plants
+    );
+    const rates = Object.fromEntries(
+      (SECTOR_SUPPLY.chemical_industries ?? []).map((flow) => [flow.commodity, flow.rate])
+    );
+
+    expect(commodities.find((row) => row.commodity === "chemicals")!.outputUnits).toBeCloseTo(
+      1_000 * commodityMixWeight(rates, COMMODITY_BASE_PRICES, "chemicals"),
+      1
+    );
+    expect(commodities.find((row) => row.commodity === "plastics")!.outputUnits).toBeCloseTo(
+      1_000 * commodityMixWeight(rates, COMMODITY_BASE_PRICES, "plastics"),
+      1
+    );
+  });
+
   it("normalizes host-currency revenue to the anchor before deriving nameplate units", () => {
     // A French sector books revenue in francs. Dividing francs by an anchor
     // base price inflated its output by the FX rate.
@@ -221,6 +251,51 @@ describe("computeCorpCommodityFlows — plants-tier physical production (ticket 
     const steel = commodities.find((c) => c.commodity === "steel")!;
     expect(steel.outputUnits).toBeCloseTo(
       dollarsToUnits(100_000 * 0.4, COMMODITY_BASE_PRICES.steel),
+      1
+    );
+  });
+
+  it("preserves custom and transitioning strategy output mixes", () => {
+    const custom = computeCorpCommodityFlows(
+      [
+        mkSector({
+          sectorType: "chemical_industries",
+          strategyId: "specialty_chemicals",
+          producedUnits: 1_000,
+          capacityUnits: 1_000,
+        }),
+      ],
+      10,
+      new Map(),
+      stateInfo,
+      new Map(),
+      plants
+    ).commodities;
+    expect(custom.find((row) => row.commodity === "pharmaceuticals")?.outputUnits).toBeGreaterThan(
+      0
+    );
+    expect(custom.find((row) => row.commodity === "plastics")?.outputUnits ?? 0).toBe(0);
+
+    const transitioning = computeCorpCommodityFlows(
+      [
+        mkSector({
+          sectorType: "chemical_industries",
+          strategyId: "plastics",
+          transitionFromStrategyId: "standard",
+          transitionStartTurn: 10,
+          producedUnits: 1_000,
+          capacityUnits: 1_000,
+        }),
+      ],
+      10,
+      new Map(),
+      stateInfo,
+      new Map(),
+      plants
+    ).commodities;
+    const transitionRates = { chemicals: 0.5, plastics: 0.15 };
+    expect(transitioning.find((row) => row.commodity === "plastics")!.outputUnits).toBeCloseTo(
+      1_000 * commodityMixWeight(transitionRates, COMMODITY_BASE_PRICES, "plastics"),
       1
     );
   });
@@ -352,8 +427,10 @@ describe("computeCorpCommodityFlows — plants-tier physical production (ticket 
     );
 
     const iron = commodities.find((c) => c.commodity === "iron")!;
+    const ironRate = SECTOR_SUPPLY.extraction?.find((flow) => flow.commodity === "iron")?.rate;
+    expect(ironRate).toBeDefined();
     expect(iron.outputUnits).toBeCloseTo(
-      dollarsToUnits(100_000 * 0.25, COMMODITY_BASE_PRICES.iron),
+      dollarsToUnits(100_000 * ironRate!, COMMODITY_BASE_PRICES.iron),
       1
     );
   });
