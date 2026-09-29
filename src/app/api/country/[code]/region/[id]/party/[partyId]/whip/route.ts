@@ -48,6 +48,7 @@ import { inferWhipIssuerRole } from "@/lib/partyWhips/issuerRole";
 import { impeachmentStageChamberKey } from "@/lib/impeachment/impeachmentTally";
 import { getGameState } from "@/lib/gameState";
 import type { Impeachment } from "@/lib/db/types/impeachment";
+import { getBillWhipWindowStart } from "@/lib/congress/billWhipPhase";
 
 interface RouteParams {
   params: Promise<{ code: string; id: string; partyId: string }>;
@@ -142,6 +143,7 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     // Validate target exists and is active
     const targetOid = new ObjectId(targetId);
+    let whipWindowStart: Date | undefined;
     if (targetType === "bill") {
       const bill =
         chamber === subNationalChamber
@@ -159,6 +161,9 @@ export async function POST(request: Request, { params }: RouteParams) {
             });
       if (!bill) {
         return NextResponse.json({ error: "Bill not found or voting not open" }, { status: 404 });
+      }
+      if (chamber !== subNationalChamber) {
+        whipWindowStart = getBillWhipWindowStart(bill as Bill);
       }
     } else if (targetType === "cabinetNomination") {
       const nomination = await db.collection("cabinetNominations").findOne<CabinetNomination>({
@@ -230,6 +235,7 @@ export async function POST(request: Request, { params }: RouteParams) {
         chamber,
         partyId: partyKey,
         stateId,
+        ...(whipWindowStart ? { createdAt: { $gte: whipWindowStart } } : {}),
       })
       .toArray();
 

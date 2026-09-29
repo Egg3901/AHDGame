@@ -168,6 +168,7 @@ async function main() {
                 "canonicalFreightBillingEnabled",
                 "shortageResponsiveSourcingEnabled",
                 "indexFundBondLiquidityEnabled",
+                "nppFundRedemptionEnabled",
                 ...SOVEREIGN_DEMAND_EXPERIMENT_FIELDS,
                 "equityLiquidityFacilityEnabled",
                 "nppMarketCoverageEnabled",

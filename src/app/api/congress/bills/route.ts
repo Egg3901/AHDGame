@@ -20,6 +20,11 @@ import { buildBillDisplays } from "./billDisplays";
 import { nationalBillListTallies } from "@/lib/legislature/queries/nationalBillQueries";
 import type { ScopedVoteOfficial } from "@/lib/congress/billVoting";
 import {
+  buildChamberSeatMap,
+  buildOverrideDisplay,
+  type OverrideChamberDisplay,
+} from "@/lib/congress/vetoOverrideTally";
+import {
   checkDuplicateProvisions,
   checkDuplicateTariffProvisions,
   checkCurrentPolicyLevel,
@@ -85,6 +90,7 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const chamber = searchParams.get("chamber") ?? undefined;
+    const viewedChamber = chamber === "house" || chamber === "senate" ? chamber : undefined;
     const statusFilter = searchParams.get("status") ?? undefined;
     const page = Math.max(1, parseInt(searchParams.get("page") ?? "1", 10));
     const limit = 50;
@@ -105,18 +111,40 @@ export async function GET(request: Request) {
       // A concurrent bill is on the floor in BOTH chambers, and `currentChamber`
       // names only the lower one — so the Senate tab would not list the bill the
       // Senate is currently being asked to vote on.
-      else query.$or = [{ currentChamber: chamber }, { status: "active_both" }];
+      else
+        query.$or = [
+          { currentChamber: chamber },
+          { status: { $in: ["active_both", "veto_override"] } },
+        ];
     }
     if (statusFilter && statusFilter !== "all") query.status = statusFilter;
 
     const [bills, parties, legislationTypesList, total] = await Promise.all([
       db
         .collection<Bill>("bills")
-        .find(query)
-        .project<Bill>({ fullText: 0 })
-        .sort({ proposedAt: -1 })
-        .skip(skip)
-        .limit(limit)
+        .aggregate<Bill>([
+          { $match: query },
+          {
+            $addFields: {
+              // A veto opens a new live ballot. Put that phase at the top of
+              // both chamber lists without rewriting the bill's introduction date.
+              __overridePriority: {
+                $cond: [{ $eq: ["$status", "veto_override"] }, 1, 0],
+              },
+              __phaseStartedAt: {
+                $cond: [
+                  { $eq: ["$status", "veto_override"] },
+                  { $ifNull: ["$overrideVotingStartedAt", "$updatedAt"] },
+                  "$proposedAt",
+                ],
+              },
+            },
+          },
+          { $sort: { __overridePriority: -1, __phaseStartedAt: -1, proposedAt: -1 } },
+          { $skip: skip },
+          { $limit: limit },
+          { $project: { fullText: 0, __overridePriority: 0, __phaseStartedAt: 0 } },
+        ])
         .toArray(),
       // Congress bills are US-only - filter parties by countryId to avoid cross-country collisions
       db.collection<PoliticalParty>("politicalParties").find({ countryId: "US" }).toArray(),
@@ -145,6 +173,8 @@ export async function GET(request: Request) {
         }
       )
       .toArray();
+    const overrideSeatMap = buildChamberSeatMap(chamberOfficials);
+    const overrideDisplayByBill = new Map<string, OverrideChamberDisplay>();
     for (const bill of bills) {
       const { origin, other } = nationalBillListTallies(
         bill,
@@ -159,6 +189,12 @@ export async function GET(request: Request) {
       bill.otherChamberVotesFor = other.for;
       bill.otherChamberVotesAgainst = other.against;
       bill.otherChamberVotesAbstain = other.abstain;
+      if (bill.status === "veto_override") {
+        overrideDisplayByBill.set(
+          bill._id.toString(),
+          buildOverrideDisplay(bill.vetoOverrideVotes, overrideSeatMap)
+        );
+      }
     }
 
     // Use shared terminal statuses constant
@@ -178,6 +214,8 @@ export async function GET(request: Request) {
         const [official, activeBill] = await Promise.all([
           db.collection<ElectedOfficial>("electedOfficials").findOne({
             characterId: new ObjectId(myCharacterId),
+            // Legacy national officials predate countryId and are US rows.
+            $or: [{ countryId: "US" }, { countryId: { $exists: false } }],
             officeType: { $in: ["house", "senate"] },
           }),
           db.collection<Bill>("bills").findOne({
@@ -244,6 +282,8 @@ export async function GET(request: Request) {
       myVoteMap,
       myCharacterId,
       myChamber,
+      viewedChamber,
+      overrideDisplayByBill,
       myPolicies,
     });
 
