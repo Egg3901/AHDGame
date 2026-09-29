@@ -66,7 +66,7 @@ vi.mock("./nationalCorporation", () => ({
 }));
 vi.mock("./treasury", () => ({
   debitTreasuryCompensation: vi.fn().mockResolvedValue(0),
-  creditTreasuryProceeds: vi.fn().mockResolvedValue(undefined),
+  creditTreasuryProceedsFromAnchor: vi.fn().mockResolvedValue(undefined),
 }));
 vi.mock("./consequences/apply", () => ({
   applyNationalizationConsequences: vi

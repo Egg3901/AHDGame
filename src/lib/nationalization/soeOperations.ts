@@ -28,7 +28,7 @@ import {
   resolveSectorMandate,
   type MandateContribution,
 } from "./soeMandates";
-import { coverSoeOperatingLoss, debitTreasurySoeCapex } from "./treasury";
+import { coverSoeOperatingLoss, debitTreasurySoeCapex, loadTreasuryCurrency } from "./treasury";
 import {
   resolveSectorHostCurrencyCode,
   fxRateForSectorHostFromMap,
@@ -402,6 +402,19 @@ export async function processSoeOperations(
   const soeCorps = corps.filter((c) => isStateOwned(c));
   if (soeCorps.length === 0) return { soeCorps: 0, backing: [] };
 
+  // One budget denomination read per owning country, not per SOE. A 2027
+  // euro treasury can back many firms in the same turn.
+  const ownerCountryIds = Array.from(
+    new Set(soeCorps.map((c) => (c.countryOwnerId ?? c.countryId) as CountryId))
+  );
+  const treasuryCurrencyByCountry = new Map(
+    await Promise.all(
+      ownerCountryIds.map(
+        async (countryId) => [countryId, await loadTreasuryCurrency(db, countryId)] as const
+      )
+    )
+  );
+
   const corpIds = soeCorps.map((c) => c._id);
   const sectors = await db
     .collection<CorporateSector>("corporateSectors")
@@ -521,7 +534,15 @@ export async function processSoeOperations(
   // and it never touches `liquidCapital`, so an SOE cannot divert it into a
   // build order of its own choosing. The P3b exploit stays closed.
   if (plantsEnabled) {
-    await applyStateCapexGrants(db, soeCorps, sectorsByCorpId, fxByCurrency, currentYear, now);
+    await applyStateCapexGrants(
+      db,
+      soeCorps,
+      sectorsByCorpId,
+      fxByCurrency,
+      treasuryCurrencyByCountry,
+      currentYear,
+      now
+    );
   }
 
   // Treasury-backing: an SOE with negative liquidCapital is covered — but only
@@ -601,7 +622,14 @@ export async function processSoeOperations(
     // the owner's books show the profit estimate (ticket #1269). The debit is
     // unconditional: an unaffordable cover pushes the treasury negative
     // (national debt) rather than being withheld — soft-budget semantics.
-    await coverSoeOperatingLoss(db, b.countryId, b.coveredAnchor, fxByCurrency, now);
+    await coverSoeOperatingLoss(
+      db,
+      b.countryId,
+      b.coveredAnchor,
+      fxByCurrency,
+      now,
+      treasuryCurrencyByCountry.get(b.countryId)
+    );
     // Credit only what the treasury actually paid. Below plants that is the
     // whole hole (liquidCapital → 0, as before); under plants an over-built SOE
     // is left negative by the residual it spent on capacity.
@@ -827,6 +855,7 @@ async function applyStateCapexGrants(
   soeCorps: readonly Corporation[],
   sectorsByCorpId: ReadonlyMap<string, CorporateSector[]>,
   fxByCurrency: ReadonlyMap<CurrencyCode, number>,
+  treasuryCurrencyByCountry: ReadonlyMap<CountryId, CurrencyCode>,
   currentYear: number | null | undefined,
   now: Date
 ): Promise<void> {
@@ -859,6 +888,13 @@ async function applyStateCapexGrants(
   if (ops.length === 0) return;
   await db.collection<CorporateSector>("corporateSectors").bulkWrite(ops);
   for (const [countryId, grantAnchor] of grantByCountry) {
-    await debitTreasurySoeCapex(db, countryId, grantAnchor, fxByCurrency, now);
+    await debitTreasurySoeCapex(
+      db,
+      countryId,
+      grantAnchor,
+      fxByCurrency,
+      now,
+      treasuryCurrencyByCountry.get(countryId)
+    );
   }
 }
