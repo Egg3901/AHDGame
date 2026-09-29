@@ -30,6 +30,7 @@ import {
   getInternationalActionSummary,
 } from "@/lib/internationalOrganizations/withdrawalBills";
 import { NATIONALIZATION_BILL_CATEGORIES, type BillCategory } from "@shared/constants/legislation";
+import type { OverrideChamberDisplay } from "@/lib/congress/vetoOverrideTally";
 
 /** Display row for a nationalization provision on a state-ownership bill. */
 function natProvisionDisplay(
@@ -71,12 +72,27 @@ export function buildBillDisplays(
     myVoteMap: Map<string, { origin: string | null; other: string | null }>;
     myCharacterId: string | null;
     myChamber: "house" | "senate" | null;
+    viewedChamber?: "house" | "senate";
+    overrideDisplayByBill?: ReadonlyMap<string, OverrideChamberDisplay>;
     /** The viewer's own positions, for the Aye/Nay shift preview. */
     myPolicies?: AxisPositions | null;
   }
 ): BillDisplay[] {
-  const { partyMap, legislationTypeMap, myVoteMap, myCharacterId, myChamber, myPolicies } = ctx;
+  const {
+    partyMap,
+    legislationTypeMap,
+    myVoteMap,
+    myCharacterId,
+    myChamber,
+    viewedChamber,
+    overrideDisplayByBill,
+    myPolicies,
+  } = ctx;
   return bills.map((b) => {
+    const billId = b._id.toString();
+    const overrideDisplay = overrideDisplayByBill?.get(billId);
+    const viewedOverride = viewedChamber ? overrideDisplay?.[viewedChamber] : undefined;
+    const isViewedOverride = b.status === "veto_override" && viewedChamber != null;
     const canVoteOrigin =
       !!myCharacterId &&
       (b.status === "active_both"
@@ -148,7 +164,7 @@ export function buildBillDisplays(
             ]
           : undefined));
     return {
-      id: b._id.toString(),
+      id: billId,
       title: b.title,
       summary: b.summary,
       ...(b.adminProposed ? { adminProposed: true } : {}),
@@ -167,6 +183,17 @@ export function buildBillDisplays(
       otherChamberVotesFor: b.otherChamberVotesFor ?? 0,
       otherChamberVotesAgainst: b.otherChamberVotesAgainst ?? 0,
       otherChamberVotesAbstain: b.otherChamberVotesAbstain ?? 0,
+      ...(isViewedOverride
+        ? {
+            overrideVotesFor: viewedOverride?.for ?? 0,
+            overrideVotesAgainst: viewedOverride?.against ?? 0,
+            overrideSeats: viewedOverride?.seats ?? 0,
+            overrideChamber: viewedChamber,
+            overrideVotingStartedAt: b.overrideVotingStartedAt?.toISOString() ?? null,
+            overrideVotingEndsAt: b.overrideVotingEndsAt?.toISOString() ?? null,
+            overrideVotingEndsOnTurn: b.overrideVotingEndsOnTurn ?? null,
+          }
+        : {}),
       category: b.category ?? "general",
       legislationTypeId: (() => {
         const firstPolicy = b.provisions?.find(isPolicyProvision);
@@ -229,8 +256,13 @@ export function buildBillDisplays(
         "for" | "against" | "abstain" | null,
       myOtherChamberVote: (myVoteMap.get(b._id.toString())?.other ?? null) as
         "for" | "against" | "abstain" | null,
+      myOverrideVote:
+        isViewedOverride && myCharacterId
+          ? (b.vetoOverrideVotes?.[myCharacterId] ?? null)
+          : undefined,
       canVoteOrigin,
       canVoteOther,
+      canVetoOverride: isViewedOverride && myCharacterId != null && myChamber === viewedChamber,
       voteShiftPreview: buildVoteShiftPreview({
         provisions: (b.provisions ?? []).filter(isPolicyProvision),
         ledger: b.policyShiftLedger,
@@ -246,7 +278,7 @@ export function buildBillDisplays(
             ? b.otherChamberWhippedFromVote?.[myCharacterId]
             : b.whippedFromVote?.[myCharacterId]
           : undefined,
-        canVote: canVoteOrigin || canVoteOther,
+        canVote: !isViewedOverride && (canVoteOrigin || canVoteOther),
       }),
       requiresExecutiveAction: billRequiresExecutiveAction(b),
       failedAt: b.failedAt?.toISOString() ?? null,

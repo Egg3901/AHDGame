@@ -395,7 +395,7 @@ const FUND_FLOW_KINDS = [
 ] as const;
 
 async function collectFunds(db: Db, currentTurn: number): Promise<FundTelemetry> {
-  const [txs, queue, positions, funds, gs] = await Promise.all([
+  const [txs, queue, positions, funds, config] = await Promise.all([
     db
       .collection("indexFundTransactions")
       .find({}, { projection: { kind: 1, turn: 1, amountAnchor: 1 } })
@@ -415,7 +415,7 @@ async function collectFunds(db: Db, currentTurn: number): Promise<FundTelemetry>
       .collection("indexFunds")
       .find({}, { projection: { _id: 1 } })
       .toArray(),
-    db.collection("gameState").findOne({ _id: "current" as never }),
+    db.collection("gameConfig").findOne({ _id: "default" as never }),
   ]);
   if (txs.length === 0 && queue.length === 0 && positions.length === 0) {
     return emptyFunds(
@@ -471,7 +471,7 @@ async function collectFunds(db: Db, currentTurn: number): Promise<FundTelemetry>
     }
   }
 
-  const rawFlag = (gs as Record<string, unknown> | null)?.["nppFundRedemptionEnabled"];
+  const rawFlag = (config as Record<string, unknown> | null)?.["nppFundRedemptionEnabled"];
   return {
     available: true,
     note: `Lifetime legs plus trailing turns ${from}-${to} cover every IndexFundTransactionKind present in the data; unrecognized kinds aggregate under "other" (count 0 = none seen). Window end = max(currentTurn, max tx turn), so future-dated rows can shift the window. Orphans = positions whose fundId has no indexFunds row.`,

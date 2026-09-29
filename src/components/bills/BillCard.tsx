@@ -62,6 +62,10 @@ export function BillCard({
     bill.status === "veto_override" ||
     bill.status === "cabinet_review" ||
     bill.status === "override_shugiin";
+  const isNationalOverride =
+    timelineVariant === "national" &&
+    bill.status === "veto_override" &&
+    bill.overrideChamber != null;
 
   // Bill DB status only transitions on the hourly turn cron; between `votingEndsAt`
   // passing and the next turn, treat voting as closed so the badge matches the
@@ -76,11 +80,18 @@ export function BillCard({
     bill.status === "active_other" ||
     bill.status === "cabinet_review" ||
     bill.status === "override_shugiin" ||
+    isNationalOverride ||
     (timelineVariant === "state" && bill.status === "veto_override");
-  const activeVotingDeadline =
-    bill.status === "active_other" ? bill.otherChamberVotingEndsAt : bill.votingEndsAt;
-  const activeVotingDeadlineTurn =
-    bill.status === "active_other" ? bill.otherChamberVotingEndsOnTurn : bill.votingEndsOnTurn;
+  const activeVotingDeadline = isNationalOverride
+    ? (bill.overrideVotingEndsAt ?? null)
+    : bill.status === "active_other"
+      ? bill.otherChamberVotingEndsAt
+      : bill.votingEndsAt;
+  const activeVotingDeadlineTurn = isNationalOverride
+    ? (bill.overrideVotingEndsOnTurn ?? null)
+    : bill.status === "active_other"
+      ? bill.otherChamberVotingEndsOnTurn
+      : bill.votingEndsOnTurn;
   const clock = useGameClock();
   // A concurrent bill leaves `active_both` only once BOTH chambers' clocks have
   // run out — the lifecycle ANDs the two deadline pairs — so the card has to
@@ -130,15 +141,22 @@ export function BillCard({
   // the card has no viewer chamber to pick by, so it shows the lower house and
   // leaves the full picture to the detail page.
   const showOther = bill.status === "active_other";
-  const votes = showOther
+  const votes = isNationalOverride
     ? {
-        for: bill.otherChamberVotesFor,
-        abstain: bill.otherChamberVotesAbstain,
-        against: bill.otherChamberVotesAgainst,
+        for: bill.overrideVotesFor ?? 0,
+        abstain: 0,
+        against: bill.overrideVotesAgainst ?? 0,
       }
-    : { for: bill.votesFor, abstain: bill.votesAbstain, against: bill.votesAgainst };
+    : showOther
+      ? {
+          for: bill.otherChamberVotesFor,
+          abstain: bill.otherChamberVotesAbstain,
+          against: bill.otherChamberVotesAgainst,
+        }
+      : { for: bill.votesFor, abstain: bill.votesAbstain, against: bill.votesAgainst };
   const cast = votes.for + votes.abstain + votes.against;
   const pass = votes.for > votes.against;
+  const eligible = isNationalOverride ? (bill.overrideSeats ?? 0) : cast || 1;
 
   const href = detailHref ?? `/congress/bills/${bill.id}`;
   // votingDeadlinePassed shows a muted "Voting Closed" pill; the fallback branch
@@ -146,7 +164,9 @@ export function BillCard({
   const pillStatus = votingDeadlinePassed && isVoting ? "Voting Closed" : bill.status;
 
   const railFooter = isVotingOpen
-    ? null
+    ? isNationalOverride
+      ? `Two-thirds of ${eligible} seats required`
+      : null
     : votingDeadlinePassed
       ? "Voting closed"
       : bill.status === "signed"
@@ -210,7 +230,9 @@ export function BillCard({
             )}
           </span>
           <span className="text-card-border">·</span>
-          <span className="italic text-muted">{chamberLabel(bill.currentChamber)}</span>
+          <span className="italic text-muted">
+            {chamberLabel(isNationalOverride ? bill.overrideChamber! : bill.currentChamber)}
+          </span>
           <span className="text-card-border">·</span>
           <LocalTime
             className="text-muted/70"
@@ -221,10 +243,15 @@ export function BillCard({
         <div className="mt-3">
           <BillVoteIndicator
             billId={bill.id}
-            myVote={bill.myVote}
-            canVote={(bill.canVoteOrigin || bill.canVoteOther) && !votingDeadlinePassed}
+            myVote={isNationalOverride ? (bill.myOverrideVote ?? null) : bill.myVote}
+            canVote={
+              (isNationalOverride
+                ? (bill.canVetoOverride ?? false)
+                : bill.canVoteOrigin || bill.canVoteOther) && !votingDeadlinePassed
+            }
             onVoted={onVoted}
-            omitAbstain={bill.status === "cabinet_review"}
+            omitAbstain={bill.status === "cabinet_review" || isNationalOverride}
+            nationalOverrideVote={isNationalOverride}
             stateVoteUrl={stateVoteUrl}
             stateOverrideVoteUrl={stateOverrideVoteUrl}
             rawStateBillStatus={timelineVariant === "state" ? rawStateBillStatus : undefined}
@@ -235,7 +262,7 @@ export function BillCard({
 
       {/* Right: The Count rail */}
       <Link href={href} className="block">
-        <TheCountRail votes={votes} eligible={cast || 1} footer={railFooter ?? undefined} />
+        <TheCountRail votes={votes} eligible={eligible || 1} footer={railFooter ?? undefined} />
       </Link>
     </div>
   );

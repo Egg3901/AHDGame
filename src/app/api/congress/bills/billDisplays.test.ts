@@ -75,4 +75,49 @@ describe("buildBillDisplays — voteShiftPreview", () => {
     expect(row!.canVoteOrigin).toBe(false);
     expect(row!.voteShiftPreview ?? null).toBeNull();
   });
+
+  it("presents a veto override as a fresh chamber-specific ballot", () => {
+    const vetoed = {
+      ...bill,
+      status: "veto_override",
+      currentChamber: "senate",
+      votesFor: 220,
+      votesAgainst: 180,
+      otherChamberVotesFor: 70,
+      otherChamberVotesAgainst: 30,
+      vetoOverrideVotes: {},
+      overrideVotingStartedAt: new Date("2026-08-12T00:00:00Z"),
+      overrideVotingEndsAt: new Date("2026-08-13T00:00:00Z"),
+      overrideVotingEndsOnTurn: 300,
+    } as unknown as Bill;
+
+    const [row] = buildBillDisplays([vetoed], {
+      partyMap: new Map(),
+      legislationTypeMap: new Map(),
+      myVoteMap: new Map([[vetoed._id.toString(), { origin: "for", other: "against" }]]),
+      myCharacterId: viewerId.toString(),
+      myChamber: "house",
+      viewedChamber: "house",
+      overrideDisplayByBill: new Map([
+        [
+          vetoed._id.toString(),
+          {
+            house: { for: 0, against: 0, seats: 435 },
+            senate: { for: 0, against: 0, seats: 100 },
+          },
+        ],
+      ]),
+      myPolicies: { economic: 1, social: 0 },
+    });
+
+    expect(row).toMatchObject({
+      overrideChamber: "house",
+      overrideVotesFor: 0,
+      overrideVotesAgainst: 0,
+      overrideSeats: 435,
+      myOverrideVote: null,
+      canVetoOverride: true,
+    });
+    expect(row!.voteShiftPreview ?? null).toBeNull();
+  });
 });

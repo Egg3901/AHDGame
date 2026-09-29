@@ -150,7 +150,8 @@ describe("#2120 fund telemetry", () => {
       { kind: "future_kind", turn: 98, amountAnchor: 7 },
     ];
     const db = fakeDb({
-      gameState: [{ currentTurn: 100, nppFundRedemptionEnabled: true }],
+      gameState: [{ currentTurn: 100, nppFundRedemptionEnabled: false }],
+      gameConfig: [{ _id: "default", nppFundRedemptionEnabled: true }],
       indexFundTransactions: txs,
       indexFundRedemptionQueue: [
         { status: "queued", units: 10, requestedAmountAnchor: 100, paidAmountAnchor: 0 },
@@ -188,6 +189,16 @@ describe("#2120 fund telemetry", () => {
     expect(t.funds.redemptionQueue.unresolvedPaidAnchor).toBe(10);
     expect(t.funds.orphanPositions).toEqual({ count: 1, units: 7 });
     expect(t.funds.flags.nppFundRedemptionEnabled).toEqual({ requested: true, available: true });
+  });
+
+  it("reads the redemption flag from gameConfig for an explicit off arm", async () => {
+    const db = fakeDb({
+      gameState: [{ currentTurn: 10, nppFundRedemptionEnabled: true }],
+      gameConfig: [{ _id: "default", nppFundRedemptionEnabled: false }],
+      indexFundTransactions: [{ kind: "subscription", turn: 10, amountAnchor: 100 }],
+    });
+    const t = await collectEconomyTelemetry(db);
+    expect(t.funds.flags.nppFundRedemptionEnabled).toEqual({ requested: false, available: true });
   });
 });
 
