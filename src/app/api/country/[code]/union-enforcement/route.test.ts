@@ -266,11 +266,12 @@ describe("union ban enforcement route", () => {
         lastUndergroundRaidTurn: 42,
         lastUndergroundRaidId: appliedRaidId,
       }));
-    db.collection("unions").updateOne.mockImplementationOnce(async (_filter, update) => {
-      appliedRaidId = (update as { $set: { lastUndergroundRaidId: string } }).$set
-        .lastUndergroundRaidId;
-      throw new Error("ack lost");
-    });
+    db.collection("unions").updateOne.mockImplementationOnce(
+      async (_filter: unknown, update: { $set: { lastUndergroundRaidId: string } }) => {
+        appliedRaidId = update.$set.lastUndergroundRaidId;
+        throw new Error("ack lost");
+      }
+    );
     const response = await post({ action: "raid", unionId: unionId.toString() });
     expect(response.status).toBe(500);
     expect(db.collection("characters").updateOne).toHaveBeenCalledTimes(1);
