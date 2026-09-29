@@ -137,6 +137,8 @@ export interface EventTrigger {
   onPhaseEnter?: boolean;
   /** Fires every N turns the conflict has run (deterministic cadence). */
   everyTurns?: number;
+  /** Every named-track condition must hold for either timing path. */
+  trackConditions?: ConflictTrackCondition[];
   /** Restrict this beat to campaign stages. Omitted keeps legacy behavior. */
   campaignStages?: CampaignStage[];
 }
@@ -285,6 +287,10 @@ export interface LivingConflictState {
   /** Named negotiated-crisis tracks. Absent on legacy documents and normalized on read. */
   tracks?: Record<string, number>;
   /** Turns spent on the current phase (drives minDwellTurns). */
+  /** Last public rejection applied to this peace process, saved with its consequences. */
+  rejectedPeaceReferendumId?: string;
+  /** Recent actor-free expiry receipts, persisted with the trajectory write. */
+  fallbackResolutionIds?: string[];
   phaseTurns: number;
   /** Turns since the conflict opened (drives everyTurns cadences). */
   totalTurns: number;

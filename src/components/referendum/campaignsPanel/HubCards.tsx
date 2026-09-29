@@ -1,6 +1,7 @@
 import Link from "next/link";
+import { referendumKindLabel } from "@/lib/referendum/sideLabels";
 import { CountryFlag } from "@/components/CountryFlag";
-import type { ReferendumStatus } from "@/lib/db/types/referendum";
+import type { ReferendumStatus, ReferendumKind } from "@/lib/db/types/referendum";
 import type { PollPoint } from "@/lib/referendum/pollSnapshot";
 import { referendumDetailUrl } from "@/lib/urls";
 import { computeReferendumMomentum } from "@/lib/referendum/momentum";
@@ -12,7 +13,7 @@ import { MomentumIndicator } from "./MomentumIndicator";
 export interface HubCampaign {
   regionId: string;
   regionName: string;
-  kind: "independence" | "reunification";
+  kind: ReferendumKind;
   status: ReferendumStatus;
   yesShare: number;
   pollHistory: PollPoint[];
@@ -22,7 +23,7 @@ export interface HubCampaign {
 }
 
 export function kindLabel(kind: HubCampaign["kind"]): string {
-  return kind === "reunification" ? "Reunification referendum" : "Independence referendum";
+  return `${referendumKindLabel(kind)} referendum`;
 }
 
 /** Turns-to-vote → "Vote in N turns" / "—". */

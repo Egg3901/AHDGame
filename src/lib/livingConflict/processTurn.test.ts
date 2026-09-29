@@ -54,6 +54,9 @@ function fakeDb() {
         ) {
           reads.push({ collection: name, projection: options?.projection });
           return {
+            sort() {
+              return this;
+            },
             async toArray() {
               return rows(name).filter((row) => matches(row, query));
             },

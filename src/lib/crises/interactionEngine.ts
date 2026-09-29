@@ -1,3 +1,4 @@
+import { applyLivingConflictFallback } from "@/lib/livingConflict/fallbackTrajectory";
 import { canCharacterInteract, canRespondToCrisis } from "./rules/authorization";
 export { canCharacterInteract } from "./rules/authorization";
 import { ObjectId, type Db } from "mongodb";
@@ -240,6 +241,9 @@ export function isMultiResponderNode(
   node: CrisisDecisionNode
 ): boolean {
   if (node.type !== "choice") return false;
+  // Authored negotiations address one government at each successive node.
+  // Their crisis spans both countries, but one response advances the sequence.
+  if (node.requiredCountryIds?.length === 1) return false;
   if (crisis.scope === "global") return true;
   // A country-scoped crisis addressed to MORE THAN ONE nation is also answered
   // per country: the chained Vietnam rungs put the same question to both
@@ -781,6 +785,14 @@ export async function autoResolveCrisisInteraction(db: Db, interactionId: Object
     currentNode.options?.find((o) => o.optionId === "decline") ?? currentNode.options?.[0];
 
   const resolutionPath = [...interaction.resolutionPath];
+
+  if (defaultOption?.action?.kind === "livingConflictTrajectory") {
+    await applyLivingConflictFallback(
+      db,
+      `${interactionId}:${currentNode.nodeId}`,
+      defaultOption.action
+    );
+  }
 
   if (defaultOption?.effects.length) {
     await applyEffectsForCrisis(db, interaction.crisisId, defaultOption.effects);

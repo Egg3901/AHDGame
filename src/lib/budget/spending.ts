@@ -6,6 +6,12 @@
  * performs same-currency arithmetic only; cross-country aggregation does not
  * happen here. No FX conversion is required.
  */
+import { usesUKDevolution } from "@/lib/countries/uk/devolution/rules";
+import { loadNorthernIrelandSignal } from "@/lib/countries/uk/northernIreland/service";
+import {
+  NI_SECURITY_SPENDING_KEY,
+  northernIrelandSecurityCost,
+} from "@/lib/countries/uk/northernIreland/rules";
 import type { Db } from "mongodb";
 import type { EnactedLaw, FederalBudget, StateBudget } from "@/lib/db/types/budget";
 import type { State } from "@/lib/db/types/state";
@@ -315,6 +321,21 @@ export async function calculateFederalSpending(
       const allocated = rb[transferGrantField] ?? 0;
       return sum + (lapses ? Math.min(allocated, rb.enactedBillCosts ?? 0) : allocated);
     }, 0);
+  }
+
+  // A standing regional security requirement, accrued by the ordinary treasury
+  // phase with every other spending line. It is recomputed, never a cash patch.
+  if (usesUKDevolution(budgetCountryId)) {
+    const signal = await loadNorthernIrelandSignal(db);
+    if (signal?.hasOpened && signal.status !== "closed") {
+      const region = await db
+        .collection<State>("states")
+        .findOne({ _id: "NIR", countryId: budgetCountryId }, { projection: { gdp: 1 } });
+      byCategory[NI_SECURITY_SPENDING_KEY] = northernIrelandSecurityCost(
+        signal,
+        (region?.gdp ?? 0) * 1_000_000
+      );
+    }
   }
 
   return normalizeFederalSpending({
