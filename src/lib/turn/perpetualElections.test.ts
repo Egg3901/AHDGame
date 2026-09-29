@@ -1196,6 +1196,81 @@ describe("perpetualElections", () => {
       );
     });
 
+    it("labels the post-snap Commons race by its shifted deadline, including the founding offset", async () => {
+      const now = new Date("2026-09-29T14:00:00Z");
+      const snapEnd = new Date(now.getTime() - MS);
+      const resolved = {
+        _id: new ObjectId(),
+        countryId: "UK",
+        electionType: "snap_commons",
+        state: "LON",
+        cycle: 6,
+        status: "resolved",
+        endTurn: 1228,
+        endTime: snapEnd,
+        updatedAt: snapEnd,
+      } as Election;
+      const mock = makeUKMockDb(["LON"], [], [resolved], 1229);
+      mock.gameStateCollection.findOne.mockResolvedValue({
+        currentTurn: 1229,
+        startingYear: 1953,
+        preset: "1953-default",
+        preIterationTurns: 48,
+      });
+      await mountUKDb(mock);
+      const { ensureUKElections } = await import("./perpetualElections");
+      await ensureUKElections(now);
+      const inserted = mock.insertCalls.flat();
+      expect(inserted[0].endTurn).toBe(1468);
+      expect(inserted[0].electionYear).toBe(1982);
+    });
+
+    it("repairs an existing post-snap race's label without changing its deadline", async () => {
+      const now = new Date("2026-09-29T23:00:00Z");
+      const snapEnd = new Date(now.getTime() - 10 * MS);
+      const resolved = {
+        _id: new ObjectId(),
+        countryId: "UK",
+        electionType: "snap_commons",
+        state: "LON",
+        cycle: 6,
+        status: "resolved",
+        endTurn: 1228,
+        endTime: snapEnd,
+        updatedAt: snapEnd,
+      } as Election;
+      const live = {
+        _id: new ObjectId(),
+        countryId: "UK",
+        electionType: "commons",
+        state: "LON",
+        cycle: 7,
+        status: "active",
+        endTurn: 1467,
+        electionYear: 1985,
+        totalSeats: 91,
+      } as Election;
+      const mock = makeUKMockDb(["LON"], [live], [resolved], 1238);
+      mock.gameStateCollection.findOne.mockResolvedValue({
+        currentTurn: 1238,
+        startingYear: 1953,
+        preset: "1953-default",
+        preIterationTurns: 48,
+      });
+      await mountUKDb(mock);
+      const { ensureUKElections } = await import("./perpetualElections");
+      await ensureUKElections(now);
+      expect(mock.electionsCollection.bulkWrite).toHaveBeenCalledWith([
+        {
+          updateOne: {
+            filter: { _id: live._id },
+            update: { $set: { electionYear: 1982, updatedAt: now } },
+          },
+        },
+      ]);
+      expect(mock.insertCalls.flat()).toHaveLength(0);
+    });
+
     it("does NOT let an admin-accelerated regular commons drag the LARP calendar — cycle formula preserves canonical anchor", async () => {
       // Admin accelerated cycle 1 to resolve early at turn 100 (canonical was 267).
       // Canonical cycle 2 must still end at 267 + 240 = 507 regardless of the admin edit.

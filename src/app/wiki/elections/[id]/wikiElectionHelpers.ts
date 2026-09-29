@@ -26,6 +26,12 @@ export function typeLabel(type: string, plural = false): string {
       return plural ? "House" : "House";
     case "stateSenate":
       return plural ? "State Senate" : "State Senate";
+    case "snap_commons":
+      return "Snap Commons";
+    case "snap_bundestag":
+      return "Snap Bundestag";
+    case "snap_shugiin":
+      return "Snap Shūgiin";
     case "commons":
       return plural ? "Commons" : "Commons";
     case "regionalCouncil":
@@ -70,6 +76,12 @@ export function generateOverview(election: ElectionDetail, totalVotes: number): 
         return `${election.stateName} United States House of Representatives Election`;
       case "stateSenate":
         return `${election.stateName} State Senate Election`;
+      case "snap_commons":
+        return `${election.stateName} Snap Commons Election`;
+      case "snap_bundestag":
+        return `${election.stateName} Snap Bundestag Election`;
+      case "snap_shugiin":
+        return `${election.stateName} Snap Shūgiin Election`;
       case "commons":
         return `${election.stateName} Commons Election`;
       case "regionalCouncil":

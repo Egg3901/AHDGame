@@ -15,6 +15,7 @@ import {
   getUKRegionalCouncilCycle1EndTurn,
   getUKRegionalCouncilElectionYear,
 } from "@/lib/elections/ukRegionalCouncilStagger";
+import { snapElectionResolutionYear } from "@/lib/turn/rules/snapElection";
 import { snapAnchorEndTime } from "@/lib/elections/snapShift";
 import {
   endTimeToLarpTurn,
@@ -76,7 +77,7 @@ export async function ensureUKElections(now: Date, inFlightTurn?: number): Promi
   // world (or any other era mismatch). Same pattern as NG houseDistricts
   // force-heal — without this, projections keep reading the wrong totalSeats
   // until the next cycle, even after allocateSeats is era-aware (#1058).
-  const seatHealOps = liveElections.flatMap((e) => {
+  const seatHealOps: AnyBulkWriteOperation<Election>[] = liveElections.flatMap((e) => {
     const expected = e.state ? commonsSeatsByRegion[e.state] : undefined;
     if (expected == null || e.totalSeats === expected) return [];
     return [
@@ -88,13 +89,6 @@ export async function ensureUKElections(now: Date, inFlightTurn?: number): Promi
       },
     ];
   });
-  if (seatHealOps.length > 0) {
-    await db.collection<Election>("elections").bulkWrite(seatHealOps);
-    console.log(
-      `[Turn] ensureUKElections: healed totalSeats on ${seatHealOps.length} live Commons race(s)`
-    );
-  }
-
   const liveCommons = new Set(liveElections.map((e) => e.state));
 
   const completedElections = await db
@@ -109,6 +103,28 @@ export async function ensureUKElections(now: Date, inFlightTurn?: number): Promi
 
   function lastCompleted(regionId: string): Election | undefined {
     return completedElections.find((e) => e.state === regionId);
+  }
+
+  // Existing post-snap races can retain the old canonical cycle's year even
+  // though their deadline shifted. Repair only the label, preserving timers.
+  for (const live of liveElections) {
+    const prev = lastCompleted(live.state);
+    if (
+      live.electionType !== "commons" ||
+      live.endTurn == null ||
+      !snapAnchorEndTime(prev, "snap_commons") ||
+      live.cycle !== (prev?.cycle ?? 0) + 1
+    )
+      continue;
+    const electionYear = snapElectionResolutionYear(live.endTurn, ctx);
+    if (live.electionYear === electionYear) continue;
+    seatHealOps.push({
+      updateOne: { filter: { _id: live._id }, update: { $set: { electionYear, updatedAt: now } } },
+    });
+  }
+  if (seatHealOps.length > 0) {
+    await db.collection<Election>("elections").bulkWrite(seatHealOps);
+    console.log(`[Turn] ensureUKElections: healed ${seatHealOps.length} Commons field(s)`);
   }
 
   const dur = DEFAULT_DURATIONS.commons.durationHours;
@@ -155,7 +171,10 @@ export async function ensureUKElections(now: Date, inFlightTurn?: number): Promi
       state: regionId,
       seatId: getSeatIdFromElection({ countryId: "UK", electionType: "commons", state: regionId }),
       cycle: spawn.cycle,
-      electionYear: electionToLarpYear("commons", spawn.cycle, undefined, undefined, ctx),
+      electionYear:
+        priorEndTurn != null
+          ? snapElectionResolutionYear(spawn.endTurn, ctx)
+          : electionToLarpYear("commons", spawn.cycle, undefined, undefined, ctx),
       status,
       totalSeats: commonsSeatsByRegion[regionId] ?? prev?.totalSeats ?? 1,
       startTime,
