@@ -621,6 +621,12 @@ async function main(): Promise<void> {
     contingent: presidentialRaces.filter((race) => race.contingent).length,
     playerWins: presidentialRaces.filter((race) => race.winnerIsNPP === false).length,
     nppWins: presidentialRaces.filter((race) => race.winnerIsNPP === true).length,
+    actorMix: Object.fromEntries(
+      ["npp-only", "player-only", "mixed", "unknown"].map((mix) => [
+        mix,
+        presidentialRaces.filter((race) => race.actorMix === mix).length,
+      ])
+    ),
   };
 
   // Governors: sub-national executive control, counted per country per party.
@@ -1434,7 +1440,15 @@ async function main(): Promise<void> {
   // warn, not pass silently.
   const simRunDoc = (
     await db.collection("simRuns").find({}).sort({ startedAt: -1 }).limit(1).toArray()
-  )[0] as { actorCoverage?: ActorCoverageManifest } | undefined;
+  )[0] as
+    | {
+        actorCoverage?: ActorCoverageManifest;
+        runId?: string;
+        seed?: string;
+        preset?: string;
+        source?: { requestedCommit?: string; executedCommit?: string };
+      }
+    | undefined;
   const { summarizeActorCoverageForVerdict } = await import("@/lib/sim/actorReport");
   const actorCoverageVerdict = summarizeActorCoverageForVerdict(simRunDoc?.actorCoverage ?? null);
   // Seed provenance (#1992): the fresh-bootstrap conformance report plus the
@@ -1459,6 +1473,15 @@ async function main(): Promise<void> {
     seedBaselineDoc,
     maxTurn
   );
+  const presidentialProvenance = {
+    telemetryVersion: 1,
+    runId: simRunDoc?.runId ?? null,
+    seed: simRunDoc?.seed ?? null,
+    preset: simRunDoc?.preset ?? (presetId || null),
+    requestedReleaseSha: simRunDoc?.source?.requestedCommit ?? null,
+    executedReleaseSha: simRunDoc?.source?.executedCommit ?? null,
+    featureManifest: (bootstrapConformanceDoc?.featureManifest as Record<string, unknown>) ?? null,
+  };
   const verdict = buildVerdict({
     health,
     market,
@@ -1518,6 +1541,7 @@ async function main(): Promise<void> {
     marginVariation,
     control,
     presidentialQualification,
+    presidentialProvenance,
     governors,
     changelog,
     narrative,
@@ -3138,11 +3162,17 @@ function render() {
   if (D.presidentialQualification) {
     const P = D.presidentialQualification;
     html += '<h2>Presidential qualification</h2>';
+    if (D.presidentialProvenance) {
+      const V = D.presidentialProvenance;
+      html += '<div class="note">Telemetry v'+esc(V.telemetryVersion)+' · run '+esc(V.runId || 'unknown')+' · seed '+esc(V.seed || 'unknown')+' · preset '+esc(V.preset || 'unknown')+' · requested release '+esc(V.requestedReleaseSha || 'unknown')+' · executed release '+esc(V.executedReleaseSha || 'unknown')+' · feature manifest '+esc(V.featureManifest ? JSON.stringify(V.featureManifest) : 'unavailable')+'</div>';
+    }
     html += '<div class="note">Party alternations come from the per-turn office snapshot, including the seeded presidency. Race margins and reconciliation use stored election-time results and final tallies. Missing snapshots remain visible as gaps.</div>';
     html += '<div class="card">' + P.partyAlternations + ' party alternation(s); ' + P.reconciled + '/' + P.races.length + ' races reconcile; ' + P.playerWins + ' player wins; ' + P.nppWins + ' NPP wins; ' + P.contingent + ' contingent resolutions.</div>';
-    html += '<div class="card scroll"><table><thead><tr><th>Year</th><th>Winner</th><th>Popular margin</th><th>EV margin</th><th>Resolution</th><th>Reconciliation</th></tr></thead><tbody>';
+    html += '<div class="note">Actor mix: ' + P.actorMix['npp-only'] + ' NPP-only, ' + P.actorMix['player-only'] + ' player-only, ' + P.actorMix.mixed + ' mixed, ' + P.actorMix.unknown + ' unknown. Per-race election-time apportionment is included in the report data.</div>';
+    html += '<div class="card scroll"><table><thead><tr><th>Year</th><th>Actors</th><th>Winner</th><th>Popular margin</th><th>EV margin</th><th>Resolution</th><th>Reconciliation</th></tr></thead><tbody>';
     for (const race of P.races) {
       html += '<tr><td>' + esc(race.electionYear ?? race.electionId) + '</td>'
+        + '<td>' + esc(race.actorMix) + '</td>'
         + '<td>' + esc(race.winnerParty ?? 'unknown') + '</td>'
         + '<td>' + (race.popularMarginPct === null ? 'unknown' : race.popularMarginPct.toFixed(1) + 'pt') + '</td>'
         + '<td>' + (race.evMargin === null ? 'unknown' : race.evMargin) + '</td>'

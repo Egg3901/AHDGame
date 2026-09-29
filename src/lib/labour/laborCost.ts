@@ -77,11 +77,13 @@ export interface LabourContext {
    * Union ban (player suggestion #93): countries whose `FederalBudget` has
    * `unionsBanned: true` (an enacted union-ban law). Read at the `unions`
    * tier and above: while banned, a country's sectors decay unionization
-   * toward 0 (`decayUnionizationUnderBan`), skip the union wage premium, and
+   * toward underground cell strength, skip the union wage premium, and
    * can't trigger strikes (active ones force-resolve). See
    * `buildUnionsBannedByCountry` below and `src/lib/labour/unionLaws.ts`.
    */
   unionsBannedByCountry?: ReadonlySet<string>;
+  /** Strongest clandestine cell per banned country and industry. No legal union powers follow from it. */
+  undergroundStrengthByCountrySector?: ReadonlyMap<string, number>;
 }
 
 /** Inert context, labor folded into maintenance exactly as before the system. */

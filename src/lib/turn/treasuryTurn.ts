@@ -10,6 +10,7 @@ import { ensureFederalBudget } from "@/lib/turn/ensureFederalBudget";
 import { getCentralBankScope } from "@/lib/centralBank/helpers";
 import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
 import { getRegisteredCountryIdSet } from "@/lib/country/registeredCountries";
+import { enforcementTreasuryCostPerTurn } from "@/lib/unions/enforcementCosts";
 
 /**
  * Per-turn fiscal accrual (spec §4). For each country's federalBudget, move a
@@ -90,7 +91,12 @@ export async function processTreasuryTurn(_turn: number): Promise<{ countriesPro
     const debtServiceTurn =
       bondPrincipal > 0 ? (bondPrincipal * terms.interestRate) / TURNS_PER_YEAR : 0;
 
-    const next = Math.round(current + primaryPerTurn - debtServiceTurn);
+    const enforcementCost = enforcementTreasuryCostPerTurn(
+      b.gdp ?? 0,
+      b.unionsBanned === true,
+      b.unionEnforcementPosture
+    );
+    const next = Math.round(current + primaryPerTurn - debtServiceTurn - enforcementCost);
 
     // Ticket #1102: walk any enacted tax-rate change one step toward its
     // target, so a large move arrives over several turns instead of shocking

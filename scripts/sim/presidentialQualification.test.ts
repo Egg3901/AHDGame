@@ -45,6 +45,8 @@ describe("qualifyPresidentialRace", () => {
       winnerParty: "1",
       winnerIsNPP: false,
       contingent: false,
+      actorMix: "mixed",
+      electionTimeApportionment: { AA: 3, BB: 2 },
       reconciliation: [],
     });
   });
@@ -70,5 +72,44 @@ describe("qualifyPresidentialRace", () => {
         totalVotesByUnit: { ...tally.totalVotesByUnit, AA: { a: 39, b: 10 } },
       }).reconciliation
     ).toContain("unit votes differ for AA/a");
+  });
+
+  it.each([
+    ["npp-only", true, true],
+    ["player-only", false, false],
+    ["mixed", false, true],
+  ] as const)("records the %s actor mix", (mix, firstNpp, secondNpp) => {
+    const result = qualifyPresidentialRace(
+      "race",
+      {
+        ...snapshot,
+        candidates: snapshot.candidates.map((candidate, index) => ({
+          ...candidate,
+          isNPP: index === 0 ? firstNpp : secondNpp,
+        })),
+      },
+      tally
+    );
+    expect(result.actorMix).toBe(mix);
+    expect(result.electionTimeApportionment).toEqual({ AA: 3, BB: 2 });
+  });
+
+  it("rejects extra stored candidates, units, and votes omitted by the election-time snapshot", () => {
+    const result = qualifyPresidentialRace("race", snapshot, {
+      ...tally,
+      totalVotes: { ...tally.totalVotes, hidden: 7 },
+      totalVotesByUnit: {
+        ...tally.totalVotesByUnit,
+        AA: { ...tally.totalVotesByUnit.AA, hidden: 7 },
+        CC: { hidden: 2 },
+      },
+    });
+    expect(result.reconciliation).toEqual(
+      expect.arrayContaining([
+        "candidate hidden missing from election-time result",
+        "stored unit CC missing from election-time result",
+        "stored vote AA/hidden missing from election-time result",
+      ])
+    );
   });
 });

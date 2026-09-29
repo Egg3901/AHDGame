@@ -145,3 +145,48 @@ export async function captureFirstTurnIfReady(characterId: string): Promise<void
     firstTurnCaptureInFlight.delete(characterId);
   }
 }
+
+/** A declaration is a bill first; emit only after the resulting war exists. */
+const warDeclarationCaptureInFlight = new Set<string>();
+
+export async function capturePendingWarDeclaration(
+  accountId: string,
+  force = false
+): Promise<void> {
+  if (getStoredConsent() !== "accepted" || warDeclarationCaptureInFlight.has(accountId)) return;
+  warDeclarationCaptureInFlight.add(accountId);
+  try {
+    const raw = window.localStorage.getItem("ahd:pending-war-declaration");
+    if (!raw) return;
+    const pending = JSON.parse(raw) as {
+      accountId?: string;
+      billId?: string;
+      declarer?: string;
+      defender?: string;
+      lastCheckedAt?: number;
+    };
+    if (pending.accountId !== accountId || !pending.billId) return;
+    if (!force && Date.now() - (pending.lastCheckedAt ?? 0) < 10 * 60 * 1000) return;
+    const response = await fetch("/api/world/conflicts", { cache: "no-store" });
+    if (!response.ok) return;
+    const payload = (await response.json()) as {
+      conflicts?: Array<{ declaredByBillId?: string }>;
+    };
+    if (!payload.conflicts?.some((conflict) => conflict.declaredByBillId === pending.billId)) {
+      window.localStorage.setItem(
+        "ahd:pending-war-declaration",
+        JSON.stringify({ ...pending, lastCheckedAt: Date.now() })
+      );
+      return;
+    }
+    await captureProductEvent("war_declared", {
+      attacker_nation: pending.declarer ?? "unknown",
+      defender_nation: pending.defender ?? "unknown",
+    });
+    window.localStorage.removeItem("ahd:pending-war-declaration");
+  } catch {
+    // A later turn can retry.
+  } finally {
+    warDeclarationCaptureInFlight.delete(accountId);
+  }
+}

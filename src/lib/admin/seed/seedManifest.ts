@@ -992,6 +992,11 @@ const RUNTIME: CollectionEntry[] = [
   { name: "wealthListHistory", category: "runtime" },
   { name: "wealthListSnapshots", category: "runtime" },
   {
+    name: "analyticsRecords",
+    category: "runtime",
+    notes: "Current world wealth high-water mark for PostHog.",
+  },
+  {
     name: "seedDiagnostics",
     category: "runtime",
     notes:

@@ -2,6 +2,9 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { trackAction } from "@/lib/observability/actionBreadcrumb";
+import { captureProductEvent } from "@/lib/analytics/capture";
+import { getStoredConsent } from "@/components/CookieConsent";
+import { useAuthMe } from "@/contexts/AuthDataContext";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useToast } from "@/contexts/ToastContext";
@@ -41,6 +44,7 @@ function BillDetailContent() {
   const params = useParams<{ id: string }>();
   const id = typeof params?.id === "string" ? params.id : undefined;
   const { showToast } = useToast();
+  const { user } = useAuthMe();
   const preset = useActivePreset();
   const [bill, setBill] = useState<BillDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -72,12 +76,31 @@ function BillDetailContent() {
     fetchBill();
   }, [fetchBill]);
 
+  useEffect(() => {
+    if (
+      !bill ||
+      bill.status !== "signed" ||
+      bill.sponsorId !== user?.character?.id ||
+      getStoredConsent() !== "accepted"
+    )
+      return;
+    const key = `ahd:bill-passed:${bill.id}`;
+    try {
+      if (window.localStorage.getItem(key)) return;
+      window.localStorage.setItem(key, "1");
+      void captureProductEvent("bill_passed", { bill_id: bill.id });
+    } catch {
+      // Analytics storage is optional.
+    }
+  }, [bill, user?.character?.id]);
+
   if (!id) {
     // Params not resolved yet — show the same skeleton as the data fetch.
     return <BillDetailSkeleton />;
   }
 
   async function handleVote(chamberIsOther: boolean, vote: "for" | "against" | "abstain") {
+    if (!id) return;
     setError("");
     setMessage("");
     setVoting(true);
@@ -94,6 +117,7 @@ function BillDetailContent() {
         return;
       }
       setMessage(d.message);
+      void captureProductEvent("bill_voted", { bill_id: id, vote });
       showToast(d.message);
       fetchBill();
     } finally {

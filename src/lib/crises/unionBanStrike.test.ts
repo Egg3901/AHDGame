@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import type { Db } from "mongodb";
 import { ALL_CRISIS_TEMPLATES, UNION_BAN_GENERAL_STRIKE_TEMPLATE } from "./templates";
 import {
   UNION_BAN_STRIKE_DURATION_TURNS,
@@ -11,6 +12,12 @@ import {
   NEGOTIATE_MAX_CHANCE,
   NEGOTIATE_MIN_CHANCE,
   RIDE_OUT_EFFECT_RETENTION,
+  RIDE_OUT_MAX_UNDERGROUND_RESISTANCE,
+  NEGOTIATION_MAX_UNDERGROUND_COST_MULTIPLIER,
+  UNDERGROUND_CRISIS_EXTENSION_LIMIT,
+  extendUnionBanStrikeFromUnderground,
+  negotiationCostMultiplier,
+  rideOutEffectRetention,
   UNION_BAN_EXECUTIVE_COSTS,
   UNION_BAN_SEGMENTS,
   diminishEffects,
@@ -105,6 +112,33 @@ describe("diminishEffects", () => {
       expect(effect.value).toBeCloseTo(effects[i].value * RIDE_OUT_EFFECT_RETENTION);
       expect(effect.label).toBe(effects[i].label);
     });
+  });
+});
+
+describe("underground crisis resistance", () => {
+  it("raises ride-out retention and negotiation price within bounds", () => {
+    expect(rideOutEffectRetention(0)).toBe(RIDE_OUT_EFFECT_RETENTION);
+    expect(rideOutEffectRetention(1)).toBe(
+      RIDE_OUT_EFFECT_RETENTION + RIDE_OUT_MAX_UNDERGROUND_RESISTANCE
+    );
+    expect(rideOutEffectRetention(100)).toBe(rideOutEffectRetention(1));
+    expect(negotiationCostMultiplier(0)).toBe(1);
+    expect(negotiationCostMultiplier(1)).toBe(NEGOTIATION_MAX_UNDERGROUND_COST_MULTIPLIER);
+  });
+
+  it("claims at most one crisis extension per turn and never exceeds six extra turns", async () => {
+    const updateOne = vi.fn().mockResolvedValue({ modifiedCount: 1 });
+    const db = { collection: () => ({ updateOne }) } as unknown as Db;
+    expect(await extendUnionBanStrikeFromUnderground(db, "US", 42)).toBe(true);
+    expect(updateOne).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: "active",
+        countryIds: "US",
+        durationTurns: { $gte: 24, $lt: 24 + UNDERGROUND_CRISIS_EXTENSION_LIMIT },
+        lastUndergroundExtensionTurn: { $ne: 42 },
+      }),
+      { $inc: { durationTurns: 1 }, $set: { lastUndergroundExtensionTurn: 42 } }
+    );
   });
 });
 

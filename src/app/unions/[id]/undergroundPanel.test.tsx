@@ -8,8 +8,8 @@
  * dark / suspected / exposed terms with a vague heat bracket (never a
  * number), and routes drive results through the same error-alert affordance
  * as the legal loop. The last case pins the fallback: a suspended union
- * whose route has not shipped the snapshot yet still renders the disabled
- * legal button rather than a blank panel.
+ * whose viewer cannot see the snapshot still explains why legal organizing
+ * is unavailable without exposing the hidden cell state.
  */
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { render, screen, waitFor, fireEvent } from "@testing-library/react";
@@ -192,7 +192,7 @@ describe("underground organize panel", () => {
     expect(screen.getByText(/not enough action points/i)).toBeTruthy();
   });
 
-  it("falls back to the disabled legal button when the route ships no snapshot", async () => {
+  it("keeps a visitor without cell access out of the legal organize loop", async () => {
     const { fetch } = mockFetch({
       actions: 20,
       union: { ...UNION, underground: null } as unknown as typeof UNION,
@@ -200,10 +200,10 @@ describe("underground organize panel", () => {
     global.fetch = fetch;
     render(<UnionPage params={PARAMS} />);
 
-    const btn = (await screen.findByRole("button", {
-      name: /run organize drive/i,
-    })) as HTMLButtonElement;
-    expect(btn.disabled).toBe(true);
+    expect(
+      await screen.findByText(/Underground cell details are available to characters/i)
+    ).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /run organize drive/i })).toBeNull();
     expect(screen.queryByRole("heading", { name: /organize underground/i })).toBeNull();
   });
 });

@@ -8,6 +8,8 @@ import { useEnabledCountryIds } from "@/lib/hooks/useEnabledCountryIds";
 import { fetchJson } from "@/lib/observability/fetchJson";
 import { BILL_PROPOSE_ACTION_COST } from "@shared/constants/legislation";
 import { useCountryDisplayName } from "@/contexts/RegisteredCountriesContext";
+import { useAuthMe } from "@/contexts/AuthDataContext";
+import { getStoredConsent } from "@/components/CookieConsent";
 
 /**
  * The executive's declaration of war.
@@ -32,6 +34,7 @@ export function DeclareWarPanel({
   canAct: boolean;
 }) {
   const resolveCountryName = useCountryDisplayName();
+  const { user } = useAuthMe();
   const [target, setTarget] = useState<string>("");
   const [goal, setGoal] = useState<string>("");
   const [busy, setBusy] = useState(false);
@@ -95,6 +98,22 @@ export function DeclareWarPanel({
         const body = (await res.json().catch(() => null)) as { error?: string } | null;
         setError(body?.error ?? "The declaration could not be filed.");
         return;
+      }
+      const body = (await res.json()) as { billId?: string };
+      if (body.billId && typeof user?.id === "string" && getStoredConsent() === "accepted") {
+        try {
+          window.localStorage.setItem(
+            "ahd:pending-war-declaration",
+            JSON.stringify({
+              accountId: user.id,
+              billId: body.billId,
+              declarer: countryId,
+              defender: target,
+            })
+          );
+        } catch {
+          // Analytics storage is optional.
+        }
       }
       setFiled(true);
     } catch {
