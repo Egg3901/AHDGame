@@ -28,7 +28,10 @@ describe("Maastricht national enactment", () => {
     };
     db.collection("gameState").findOne.mockImplementation(async () => structuredClone(state));
     db.collection("gameState").updateOne.mockImplementation(
-      async (_filter, update: { $set: { europeanIntegration: EuropeanIntegrationState } }) => {
+      async (
+        _filter: unknown,
+        update: { $set: { europeanIntegration: EuropeanIntegrationState } }
+      ) => {
         state.europeanIntegration = update.$set.europeanIntegration;
         return { matchedCount: 1 };
       }
