@@ -6,7 +6,7 @@ import type { SuccessorTerritory } from "./territory";
 export interface SuccessionCustodyAsset {
   assetId: string;
   kind: "public-enterprise" | "conventional-force" | "strategic-force";
-  homeRegionId: string;
+  homeRegionId: string | null;
   valueMinor: number;
 }
 
@@ -21,14 +21,14 @@ export interface SuccessionCustodyAssignment {
 
 /**
  * Local enterprises and conventional forces follow territory. Strategic forces
- * require an explicit custodian in the approved terms. A background successor
+ * and assets without a fixed home require an explicit custodian in the approved terms. A background successor
  * receives aggregate custody rather than a playable corporation or unit.
  */
 export function planSuccessionCustody(input: {
   sourceEntityId: string;
   territories: readonly SuccessorTerritory[];
   assets: readonly SuccessionCustodyAsset[];
-  strategicCustodians?: Readonly<Record<string, string>>;
+  negotiatedCustodians?: Readonly<Record<string, string>>;
 }): SuccessionCustodyAssignment[] {
   const regionOwner = new Map<string, string>();
   const successorIds = new Set(input.territories.map((territory) => territory.entityId));
@@ -48,28 +48,35 @@ export function planSuccessionCustody(input: {
     }
   }
   const seenAssets = new Set<string>();
-  const strategic = input.strategicCustodians ?? {};
-  for (const assetId of Object.keys(strategic)) {
+  const negotiated = input.negotiatedCustodians ?? {};
+  for (const assetId of Object.keys(negotiated)) {
     if (
-      !input.assets.some((asset) => asset.assetId === assetId && asset.kind === "strategic-force")
+      !input.assets.some(
+        (asset) =>
+          asset.assetId === assetId &&
+          (asset.kind === "strategic-force" || asset.homeRegionId === null)
+      )
     )
-      throw new Error("Strategic custody names an unknown or conventional asset");
+      throw new Error("Negotiated custody names an unknown or local asset");
   }
   return input.assets.map((asset) => {
     if (
       !asset.assetId.trim() ||
       seenAssets.has(asset.assetId) ||
-      !regionOwner.has(asset.homeRegionId) ||
+      (asset.homeRegionId !== null && !regionOwner.has(asset.homeRegionId)) ||
       !Number.isSafeInteger(asset.valueMinor) ||
       asset.valueMinor < 0
     )
       throw new Error("Custody asset is duplicated or outside source territory");
     seenAssets.add(asset.assetId);
-    const localOwner = regionOwner.get(asset.homeRegionId)!;
+    const localOwner =
+      asset.homeRegionId === null ? undefined : regionOwner.get(asset.homeRegionId);
     const custodianEntityId =
-      asset.kind === "strategic-force" ? strategic[asset.assetId] : localOwner;
+      asset.kind === "strategic-force" || asset.homeRegionId === null
+        ? negotiated[asset.assetId]
+        : localOwner;
     if (!custodianEntityId || !successorIds.has(custodianEntityId))
-      throw new Error("Strategic custody requires an approved successor custodian");
+      throw new Error("Shared or strategic custody requires an approved successor custodian");
     return {
       assetId: asset.assetId,
       kind: asset.kind,

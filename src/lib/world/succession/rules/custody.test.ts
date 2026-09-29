@@ -32,7 +32,7 @@ describe("federation physical custody", () => {
           valueMinor: 5,
         },
       ],
-      strategicCustodians: { "strategic-u": "RU" },
+      negotiatedCustodians: { "strategic-u": "RU" },
     });
     expect(plan.map((row) => [row.assetId, row.custodianEntityId, row.disposition])).toEqual([
       ["factory-r", "RU", "retain-detailed"],
@@ -51,10 +51,10 @@ describe("federation physical custody", () => {
       valueMinor: 5,
     };
     const input = { sourceEntityId: "RU", territories, assets: [strategic] };
-    expect(() => planSuccessionCustody(input)).toThrow("Strategic custody requires");
+    expect(() => planSuccessionCustody(input)).toThrow("Shared or strategic custody requires");
     expect(() =>
-      planSuccessionCustody({ ...input, strategicCustodians: { "strategic-u": "EE" } })
-    ).toThrow("Strategic custody requires");
+      planSuccessionCustody({ ...input, negotiatedCustodians: { "strategic-u": "EE" } })
+    ).toThrow("Shared or strategic custody requires");
     expect(() =>
       planSuccessionCustody({
         ...input,
@@ -65,8 +65,35 @@ describe("federation physical custody", () => {
       planSuccessionCustody({
         ...input,
         assets: [strategic, strategic],
-        strategicCustodians: { "strategic-u": "RU" },
+        negotiatedCustodians: { "strategic-u": "RU" },
       })
     ).toThrow("duplicated");
+  });
+
+  it("requires agreed custody for shared mobile forces and rejects diversion of local units", () => {
+    const mobile = {
+      assetId: "fleet",
+      kind: "conventional-force" as const,
+      homeRegionId: null,
+      valueMinor: 4,
+    };
+    const input = { sourceEntityId: "RU", territories, assets: [mobile] };
+    expect(() => planSuccessionCustody(input)).toThrow("Shared or strategic custody requires");
+    expect(planSuccessionCustody({ ...input, negotiatedCustodians: { fleet: "UKR" } })).toEqual([
+      {
+        assetId: "fleet",
+        kind: "conventional-force",
+        custodianEntityId: "UKR",
+        disposition: "aggregate-background",
+        valueMinor: 4,
+      },
+    ]);
+    expect(() =>
+      planSuccessionCustody({
+        ...input,
+        assets: [{ ...mobile, homeRegionId: "CEN" }],
+        negotiatedCustodians: { fleet: "UKR" },
+      })
+    ).toThrow("unknown or local asset");
   });
 });
