@@ -27,6 +27,11 @@ const BASE: ModifiersInput = {
 };
 
 describe("buildModifiers", () => {
+  it("shows the same standing conflict offset consumed by the turn phase", () => {
+    const result = buildModifiers({ ...BASE, livingConflict: -3.5 });
+    expect(result.target).toBe(43.5);
+    expect(result.livingConflict).toBe(-3.5);
+  });
   it("composes the national target from points plus residual plus cabinet plus labour", () => {
     expect(buildModifiers({ ...BASE }).target).toBe(47);
   });

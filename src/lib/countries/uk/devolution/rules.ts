@@ -16,6 +16,13 @@ export interface UKDevolutionState {
   _id: "UK";
   regions: Record<UKExecutiveRegion, RegionalExecutiveInstitution>;
   lastPolicyBillId?: string;
+  /** Optional live peace-process ownership. Missing preserves existing worlds. */
+  northernIrelandPeace?: {
+    posture: "unsettled" | "power_sharing" | "suspended";
+    changedTurn: number;
+    assemblyFirstCycle?: number;
+    assemblyFirstElectionEndTurn?: number;
+  };
 }
 
 export interface EnactedDevolutionPolicy {

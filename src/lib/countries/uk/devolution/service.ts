@@ -88,62 +88,8 @@ export async function reconcileUKDevolution(
   if (stored && next === state) return state;
 
   const inactive = UK_EXECUTIVE_REGIONS.filter((region) => !next.regions[region].active);
-  if (inactive.length > 0) {
-    const filter: Filter<ElectedOfficial> = {
-      countryId: "UK",
-      officeType: "governor",
-      state: { $in: inactive },
-    };
-    const officials = await db
-      .collection<ElectedOfficial>("electedOfficials")
-      .find(filter, {
-        projection: { characterId: 1, nppId: 1, _id: 0 },
-      })
-      .toArray();
-    const characters = officials.flatMap((official) =>
-      official.characterId ? [official.characterId] : []
-    );
-    const npps = officials.flatMap((official) => (official.nppId ? [official.nppId] : []));
-    await db.collection("elections").updateMany(
-      {
-        countryId: "UK",
-        electionType: "governor",
-        state: { $in: inactive },
-        status: { $in: ["active", "upcoming"] },
-      },
-      { $set: { status: "cancelled", updatedAt: now } }
-    );
-    if (characters.length)
-      await db
-        .collection("characters")
-        .updateMany(
-          { _id: { $in: characters }, currentOffice: "governor" },
-          { $set: { currentOffice: null, updatedAt: now } }
-        );
-    if (npps.length)
-      await db
-        .collection("npps")
-        .updateMany(
-          { _id: { $in: npps }, currentOffice: "governor" },
-          { $set: { currentOffice: null, updatedAt: now } }
-        );
-    await db.collection<ElectedOfficial>("electedOfficials").updateMany(filter, {
-      $set: {
-        characterId: null,
-        nppId: null,
-        isNPP: false,
-        updatedAt: now,
-      },
-      $unset: { characterName: "", party: "" },
-    });
-    await db.collection("governorOfficeState").updateMany(
-      { countryId: "UK", stateId: { $in: inactive } },
-      {
-        $set: { characterId: null, characterName: "", gubernatorialActions: 0, updatedAt: now },
-        $unset: { devolutionPolicy: "" },
-      }
-    );
-  }
+  await vacateUKRegionalExecutives(db, inactive, now);
+
   await db
     .collection<UKDevolutionState>("ukDevolution")
     .updateOne({ _id: "UK" }, { $set: next }, { upsert: true });
@@ -184,4 +130,68 @@ export async function isUKRegionalExecutiveActive(db: Db, stateId: string): Prom
     gameState?.startingYear ?? getStartingYearForPreset(gameState?.preset ?? DEFAULT_SEED_PRESET)
   );
   return initial.regions[stateId as UKExecutiveRegion].active;
+}
+
+/** Withdraw authority without deleting election history; also used by peace suspension. */
+export async function vacateUKRegionalExecutives(
+  db: Db,
+  inactive: readonly UKExecutiveRegion[],
+  now: Date
+): Promise<void> {
+  if (inactive.length > 0) {
+    const filter: Filter<ElectedOfficial> = {
+      countryId: "UK",
+      officeType: "governor",
+      state: { $in: [...inactive] },
+    };
+    const officials = await db
+      .collection<ElectedOfficial>("electedOfficials")
+      .find(filter, {
+        projection: { characterId: 1, nppId: 1, _id: 0 },
+      })
+      .toArray();
+    const characters = officials.flatMap((official) =>
+      official.characterId ? [official.characterId] : []
+    );
+    const npps = officials.flatMap((official) => (official.nppId ? [official.nppId] : []));
+    await db.collection("elections").updateMany(
+      {
+        countryId: "UK",
+        electionType: "governor",
+        state: { $in: [...inactive] },
+        status: { $in: ["active", "upcoming"] },
+      },
+      { $set: { status: "cancelled", updatedAt: now } }
+    );
+    if (characters.length)
+      await db
+        .collection("characters")
+        .updateMany(
+          { _id: { $in: characters }, currentOffice: "governor" },
+          { $set: { currentOffice: null, updatedAt: now } }
+        );
+    if (npps.length)
+      await db
+        .collection("npps")
+        .updateMany(
+          { _id: { $in: npps }, currentOffice: "governor" },
+          { $set: { currentOffice: null, updatedAt: now } }
+        );
+    await db.collection<ElectedOfficial>("electedOfficials").updateMany(filter, {
+      $set: {
+        characterId: null,
+        nppId: null,
+        isNPP: false,
+        updatedAt: now,
+      },
+      $unset: { characterName: "", party: "" },
+    });
+    await db.collection("governorOfficeState").updateMany(
+      { countryId: "UK", stateId: { $in: [...inactive] } },
+      {
+        $set: { characterId: null, characterName: "", gubernatorialActions: 0, updatedAt: now },
+        $unset: { devolutionPolicy: "" },
+      }
+    );
+  }
 }

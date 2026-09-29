@@ -1,3 +1,4 @@
+import { northernIrelandAssemblyAllows } from "@/lib/countries/uk/northernIreland/service";
 import { ObjectId, type Db } from "mongodb";
 import type { AuthUserWithCharacter } from "@/lib/auth";
 import {
@@ -43,6 +44,15 @@ export async function castStateBillVote(
   // (e.g. "AZ"); callers may pass either case depending on URL formatting.
   // Normalize here so the same command works regardless.
   stateId = stateId.toUpperCase();
+  if (!(await northernIrelandAssemblyAllows(db, countryId, stateId))) {
+    return {
+      status: 403,
+      body: {
+        error:
+          "Northern Ireland's devolved institutions are suspended pending a ratified settlement.",
+      },
+    };
+  }
   const now = new Date();
   const character = user.character;
   if (!character) {
@@ -161,6 +171,15 @@ export async function castStateBillOverrideVote(
   vote: "for" | "against"
 ): Promise<LegislatureCommandResult> {
   stateId = stateId.toUpperCase();
+  if (!(await northernIrelandAssemblyAllows(db, countryId, stateId))) {
+    return {
+      status: 403,
+      body: {
+        error:
+          "Northern Ireland's devolved institutions are suspended pending a ratified settlement.",
+      },
+    };
+  }
   const character = user.character;
   if (!character) {
     return { status: 400, body: { error: "No character found" } };
@@ -253,6 +272,15 @@ export async function takeStateBillGovernorAction(
   // (resolveStateBillVoting) auto-enacts the bill instead of routing it here,
   // so there is no parliamentary carve-out at this stage.
   stateId = stateId.toUpperCase();
+  if (!(await northernIrelandAssemblyAllows(db, countryId, stateId))) {
+    return {
+      status: 403,
+      body: {
+        error:
+          "Northern Ireland's devolved institutions are suspended pending a ratified settlement.",
+      },
+    };
+  }
   const character = user.character;
   if (!character) {
     return { status: 400, body: { error: "No character found" } };

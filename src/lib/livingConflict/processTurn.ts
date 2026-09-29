@@ -20,6 +20,7 @@ import { normalizeCampaignState } from "./campaign";
 import { migrateLegacyVietnamState } from "./vietnamCompat";
 import { vietnamWorldPressure } from "./worldPressure";
 import { resolveConflictParticipants } from "./engine";
+import { reconcileNorthernIrelandGovernance } from "@/lib/countries/uk/northernIreland/service";
 import { reconcileNorthernIrelandRatification } from "./northernIrelandRatification";
 import {
   allParticipants,
@@ -262,8 +263,10 @@ export async function processLivingConflictsTurn(
         db,
         def,
         result.state,
-        currentYear ?? undefined
+        currentYear ?? undefined,
+        currentTurn
       );
+      await reconcileNorthernIrelandGovernance(db, result.state, currentTurn);
     }
     let retryPhaseEntry = false;
     for (const event of result.events) {
