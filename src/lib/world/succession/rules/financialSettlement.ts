@@ -10,8 +10,8 @@ export interface SuccessionParticipant {
 
 export interface SuccessionFinancialTerms {
   settlementId: string;
-  /** Existing contract issuer, retained even if it becomes a settlement administration. */
-  servicingIssuerId: string;
+  /** Existing federation contract issuer. Never reassigned to a successor. */
+  sourceEntityId: string;
   participants: readonly SuccessionParticipant[];
   /** Shared accounting minor units, never a successor's newly chosen currency. */
   financialAssetsMinor: number;
@@ -112,15 +112,15 @@ export function allocateSuccessionAmount(
 }
 
 export function planSuccessionFinances(terms: SuccessionFinancialTerms): SuccessionFinancialPlan {
-  if (!terms.settlementId.trim() || !terms.servicingIssuerId.trim())
+  if (!terms.settlementId.trim() || !terms.sourceEntityId.trim())
     throw new Error("Settlement and servicing issuer identities are required");
   const populations = participantWeights(terms.participants);
   const assetWeights = agreedWeights(populations, terms.assetSharesBps);
   const debtWeights = agreedWeights(populations, terms.debtSharesBps);
   return {
     settlementId: terms.settlementId,
-    servicingIssuerId: terms.servicingIssuerId,
-    servicingEntityKind: Object.hasOwn(populations, terms.servicingIssuerId)
+    servicingIssuerId: terms.sourceEntityId,
+    servicingEntityKind: Object.hasOwn(populations, terms.sourceEntityId)
       ? "continuing-state"
       : "legacy-administration",
     creditorDebtMinor: terms.creditorDebtMinor,

@@ -4,7 +4,7 @@ import { planLegacyDebtService } from "./legacyService";
 
 const finances = planSuccessionFinances({
   settlementId: "cs-1992",
-  servicingIssuerId: "CS",
+  sourceEntityId: "CS",
   participants: [
     { entityId: "CZ2", population: 10 },
     { entityId: "SK", population: 5 },
@@ -57,7 +57,7 @@ describe("legacy settlement administration service", () => {
   it("respects negotiated debt shares and never creates duplicate creditor principal", () => {
     const negotiated = planSuccessionFinances({
       settlementId: "yu-1992",
-      servicingIssuerId: "YU",
+      sourceEntityId: "YU",
       participants: [
         { entityId: "SI", population: 2 },
         { entityId: "HR", population: 5 },
@@ -80,7 +80,7 @@ describe("legacy settlement administration service", () => {
   it("does not replace a continuing state's own debt service", () => {
     const continuing = planSuccessionFinances({
       settlementId: "soviet-1991",
-      servicingIssuerId: "RU",
+      sourceEntityId: "RU",
       participants: [
         { entityId: "RU", population: 10 },
         { entityId: "UKR", population: 4 },
