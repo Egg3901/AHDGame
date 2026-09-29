@@ -341,6 +341,7 @@ export async function POST(request: Request, { params }: Context) {
         Math.floor(Math.random() * 100) + 1
       );
       const fineSeized = undergroundRaidFine(union.treasury);
+      const raidId = randomUUID();
       let changed;
       try {
         changed = await db.collection<Union>("unions").updateOne(
@@ -359,7 +360,7 @@ export async function POST(request: Request, { params }: Context) {
                 ? { treasury: -fineSeized, undergroundFinesSeized: fineSeized }
                 : {}),
             },
-            $set: { lastUndergroundRaidTurn: turn, updatedAt: now },
+            $set: { lastUndergroundRaidTurn: turn, lastUndergroundRaidId: raidId, updatedAt: now },
           }
         );
       } catch (error) {
@@ -367,8 +368,8 @@ export async function POST(request: Request, { params }: Context) {
         // If the write failed before applying, return the executive's spent points.
         const persisted = await db
           .collection<Union>("unions")
-          .findOne({ _id: union._id, countryId }, { projection: { lastUndergroundRaidTurn: 1 } });
-        if (persisted?.lastUndergroundRaidTurn !== turn) {
+          .findOne({ _id: union._id, countryId }, { projection: { lastUndergroundRaidId: 1 } });
+        if (persisted?.lastUndergroundRaidId !== raidId) {
           await db
             .collection<Character>("characters")
             .updateOne({ _id: character._id }, { $inc: { actions: RAID_ACTION_COST } });

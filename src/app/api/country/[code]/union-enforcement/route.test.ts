@@ -251,6 +251,7 @@ describe("union ban enforcement route", () => {
   });
 
   it("does not refund when the raid write applied before reporting an error", async () => {
+    let appliedRaidId: string | undefined;
     db.collection("unions")
       .findOne.mockResolvedValueOnce({
         _id: unionId,
@@ -259,11 +260,44 @@ describe("union ban enforcement route", () => {
         heat: 72,
         undergroundStrength: 20,
       })
-      .mockResolvedValueOnce({ _id: unionId, countryId: "US", lastUndergroundRaidTurn: 42 });
-    db.collection("unions").updateOne.mockRejectedValue(new Error("ack lost"));
+      .mockImplementationOnce(async () => ({
+        _id: unionId,
+        countryId: "US",
+        lastUndergroundRaidTurn: 42,
+        lastUndergroundRaidId: appliedRaidId,
+      }));
+    db.collection("unions").updateOne.mockImplementationOnce(async (_filter, update) => {
+      appliedRaidId = (update as { $set: { lastUndergroundRaidId: string } }).$set
+        .lastUndergroundRaidId;
+      throw new Error("ack lost");
+    });
     const response = await post({ action: "raid", unionId: unionId.toString() });
     expect(response.status).toBe(500);
     expect(db.collection("characters").updateOne).toHaveBeenCalledTimes(1);
+  });
+
+  it("refunds when another raid won the claim before this write lost its acknowledgment", async () => {
+    db.collection("unions")
+      .findOne.mockResolvedValueOnce({
+        _id: unionId,
+        countryId: "US",
+        heat: 72,
+        undergroundStrength: 20,
+      })
+      .mockResolvedValueOnce({
+        _id: unionId,
+        countryId: "US",
+        lastUndergroundRaidTurn: 42,
+        lastUndergroundRaidId: "another-raid",
+      });
+    db.collection("unions").updateOne.mockRejectedValue(new Error("ack lost from losing raid"));
+    const response = await post({ action: "raid", unionId: unionId.toString() });
+    expect(response.status).toBe(500);
+    expect(db.collection("characters").updateOne).toHaveBeenCalledTimes(2);
+    expect(db.collection("characters").updateOne).toHaveBeenLastCalledWith(
+      { _id: characterId },
+      { $inc: { actions: 2 } }
+    );
   });
 
   it("rejects enforcement after repeal", async () => {

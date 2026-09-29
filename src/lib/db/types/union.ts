@@ -162,6 +162,8 @@ export interface Union {
   lastUndergroundDriveTurn?: number | null;
   /** Last successful government raid. Further raids wait for the cooldown. */
   lastUndergroundRaidTurn?: number | null;
+  /** Identifies the applied raid for safe action-point compensation after a lost acknowledgment. */
+  lastUndergroundRaidId?: string;
   createdAt: Date;
   updatedAt: Date;
 }
