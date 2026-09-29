@@ -21,12 +21,16 @@ export async function seedGameConfig(
           metadata: { error: String(error) },
         });
       });
-  const { _id, ...configData } = gameConfig;
+  const { _id, campaignEraPriceLevelEnabled, ...configData } = gameConfig;
   const extra: Pick<GameConfig, "seedYear"> = preset
     ? { seedYear: parseInt(eraForPreset(preset), 10) }
     : {};
   await db
     .collection<GameConfig>("gameConfig")
-    .updateOne({ _id }, { $set: { ...configData, ...extra } }, { upsert: true });
+    .updateOne(
+      { _id },
+      { $set: { ...configData, ...extra }, $setOnInsert: { campaignEraPriceLevelEnabled } },
+      { upsert: true }
+    );
   log("Seeded game config");
 }

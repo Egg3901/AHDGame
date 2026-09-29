@@ -1,3 +1,4 @@
+import { loadCampaignPriceLevel } from "@/lib/campaigns/campaignCurrency";
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import type { GameState } from "@/lib/db/types";
@@ -23,6 +24,7 @@ export async function GET() {
   const eraOn = gs?.eraSystemEnabled ?? false;
   return NextResponse.json({
     preset: gs?.preset ?? DEFAULT_SEED_PRESET,
+    campaignPriceLevel: await loadCampaignPriceLevel(db),
     eurozoneEnabled: gs?.eurozoneEnabled ?? true,
     eraSystemEnabled: eraOn,
     currentYear: gs?.currentYear ?? null,

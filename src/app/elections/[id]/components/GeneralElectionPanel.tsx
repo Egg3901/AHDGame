@@ -1,5 +1,6 @@
 "use client";
 
+import { useWorldFlags } from "@/hooks/useWorldFlags";
 import { useCurrency } from "@/contexts/CurrencyContext";
 
 import React, { useState, useCallback, useEffect, useMemo } from "react";
@@ -102,6 +103,7 @@ export function GeneralElectionPanel({
 }) {
   const router = useRouter();
   const { baseRates: campaignRates } = useCurrency();
+  const { campaignPriceLevel } = useWorldFlags();
   const { showToast } = useToast();
   const [endorsedCandidateId, setEndorsedCandidateId] = useState<string | null>(
     initialEndorsedId ?? null
@@ -185,7 +187,7 @@ export function GeneralElectionPanel({
       campaignStrengthOverrides[supportingCampaignId] ?? target?.campaignStrength ?? 0;
     const strengthPerClick =
       contributor.nationalInfluence * CAMPAIGN_STRENGTH_CONTRIBUTION_NPI_MULTIPLIER;
-    const fundsRate = campaignLocalRate(countryId, campaignRates);
+    const fundsRate = campaignLocalRate(countryId, campaignRates) * campaignPriceLevel;
     return {
       currentCS,
       strengthPerClick,
@@ -206,6 +208,7 @@ export function GeneralElectionPanel({
     campaignStrengthOverrides,
     countryId,
     campaignRates,
+    campaignPriceLevel,
   ]);
 
   /** Cost of `clicks` contributions, or null when the player can't afford them. */

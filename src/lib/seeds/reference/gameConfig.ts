@@ -102,10 +102,9 @@ export const gameConfig: GameConfig = {
   // Autonomous NPP fund redemption (#2120) ships dark: enabling it changes
   // simulated NPP portfolios and fund liquidity and needs a worldsim report.
   nppFundRedemptionEnabled: false,
-  // Era price-level deflator for campaign finance (#2119) ships dark: enabling
-  // it re-prices every action cost and income stream per era and needs a
-  // worldsim report before any world turns it on.
-  campaignEraPriceLevelEnabled: false,
+  // Fresh worlds price campaign costs and generated income in their reset era.
+  // Existing persisted false/absent flags retain their previous price basis.
+  campaignEraPriceLevelEnabled: true,
   regionalConditionsOverviewEnabled: true,
 
   // Market launch guard: armed by default now that the market boots at the top

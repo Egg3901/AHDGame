@@ -25,7 +25,11 @@ import { applyNppIdiosyncrasy } from "@/lib/nppAutonomy/v3/nppIdiosyncrasy";
 import { politeFloatLimit } from "@/lib/nppAutonomy/playerImpactBudget";
 import { advertiseFavorabilityGain, campaignInfluenceGain } from "@/lib/actions";
 import { loadFxRatesByCurrency } from "@/lib/currency/corporationCapital";
-import { campaignLocalRate, loadCampaignCurrencyRates } from "@/lib/campaigns/campaignCurrency";
+import {
+  campaignLocalRate,
+  loadCampaignCurrencyRates,
+  loadCampaignPriceLevel,
+} from "@/lib/campaigns/campaignCurrency";
 import { COUNTRY_CURRENCY_MAP, type CurrencyCode } from "@/lib/constants/currencies";
 import { loadTxThresholds, emitTxBulk } from "@/lib/financialTxLog/emit";
 import type { FinancialTxLogEntry } from "@/lib/db/types/financialTxLog";
@@ -278,7 +282,9 @@ export async function processNppActions(
   // Income, action costs and soft caps share the same frozen world basis.
   // Investment sweeps below continue using live FX for market-priced assets.
   const campaignRates = await loadCampaignCurrencyRates(db);
-  const rateForCountry = (countryId: string): number => campaignLocalRate(countryId, campaignRates);
+  const priceLevel = await loadCampaignPriceLevel(db);
+  const rateForCountry = (countryId: string): number =>
+    campaignLocalRate(countryId, campaignRates) * priceLevel;
 
   // Parties, loaded ONCE up front and keyed "countryId:sequentialId". This query
   // used to run after the NPP loop purely to resolve treasury-flush targets; it
